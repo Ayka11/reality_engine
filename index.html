@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reality Engine v3</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.10.0/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:#080810}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+#re{display:grid;grid-template-rows:38px 1fr 32px;height:100vh;background:#080810;overflow:hidden;font-family:system-ui,sans-serif;color:#c0bfe0}
+#top{display:flex;align-items:center;gap:5px;padding:0 8px;background:#0e0e1a;border-bottom:0.5px solid #1e1e30;overflow-x:auto;flex-shrink:0}
+.lb{font-size:10px;padding:2px 8px;border:0.5px solid #1e1e30;border-radius:20px;cursor:pointer;background:transparent;color:#555;white-space:nowrap}
+.lb.on{border-color:#5a4ab0;color:#9080e8;background:#14122a}
+.tb{font-size:12px;padding:2px 6px;border:0.5px solid #1e1e30;border-radius:5px;cursor:pointer;background:transparent;color:#555}
+.tb.on{background:#16162a;color:#c0bfe0;border-color:#3a3a60}
+.sp{width:0.5px;height:16px;background:#1e1e30;flex-shrink:0;margin:0 2px}
+#mid{display:grid;grid-template-columns:118px 1fr 200px;min-height:0;overflow:hidden}
+#lp{padding:6px;background:#0e0e1a;border-right:0.5px solid #1e1e30;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
+.pl{font-size:9px;color:#333;letter-spacing:.06em;text-transform:uppercase;margin-top:5px;padding:0 1px}
+.pb{font-size:10px;padding:3px 6px;border:0.5px solid #1e1e30;border-radius:5px;cursor:pointer;background:#0e0e1a;color:#666;text-align:left;width:100%}
+.pb:hover{background:#161628;color:#bbb}
+.pb.on{border-color:#5a4ab0;color:#9080e8;background:#14122a}
+#cw{position:relative;overflow:hidden;background:#050508;cursor:crosshair}
+#gc{display:block;width:100%;height:100%}
+#ov{position:absolute;top:6px;left:6px;font-size:9px;font-family:monospace;color:#3a3a60;pointer-events:none;line-height:1.6}
+#rp{padding:6px;background:#0e0e1a;border-left:0.5px solid #1e1e30;display:flex;flex-direction:column;gap:5px;overflow-y:auto}
+.rl{font-size:9px;color:#333;letter-spacing:.06em;text-transform:uppercase}
+.cp{display:flex;justify-content:space-between;font-size:10px;padding:1px 0;border-bottom:0.5px solid #111122}
+.cp span:first-child{color:#555}
+.cv{font-weight:500;color:#a0a0c0;font-family:monospace;font-size:10px}
+#hc{width:100%;height:80px;border-radius:5px;border:0.5px solid #1e1e30;background:#050508}
+#entlist{display:flex;flex-direction:column;gap:2px;max-height:120px;overflow-y:auto}
+.ent{font-size:9px;font-family:monospace;padding:2px 4px;border-radius:3px;cursor:pointer;border:0.5px solid transparent}
+.ent:hover{background:#161628}
+.ent.sel{border-color:#5a4ab0;background:#14122a}
+#elg{display:flex;flex-direction:column;gap:1px;max-height:80px;overflow-y:auto}
+.ev{font-family:monospace;font-size:9px;color:#333;cursor:pointer;padding:1px 3px;border-radius:3px}
+.ev:hover{background:#161628;color:#aaa}
+#mlaws{display:flex;flex-direction:column;gap:3px}
+.mlaw{font-size:9px;padding:3px 5px;border:0.5px solid #1e1e30;border-radius:4px;display:flex;justify-content:space-between;align-items:center}
+.mlaw span{color:#555}
+.mlaw input[type=range]{width:60px;accent-color:#7c6fcd}
+#bot{display:flex;align-items:center;gap:6px;padding:0 8px;background:#0e0e1a;border-top:0.5px solid #1e1e30;font-size:10px;overflow-x:auto;flex-shrink:0}
+.st{color:#444;white-space:nowrap}.sv{font-weight:500;color:#aaa;font-family:monospace}
+#pb{padding:2px 10px;border:0.5px solid #3a3a60;border-radius:5px;cursor:pointer;background:transparent;font-size:10px;color:#c0bfe0}
+input[type=range]{accent-color:#7c6fcd}
+</style>
+</head>
+<body>
+<h2 class="sr-only">Reality Engine v3 — Entity emergence, metabolism, reproduction, mutation, meta-laws</h2>
+<div id="re">
+<div id="top">
+  <button class="lb on" data-l="0">Energy</button>
+  <button class="lb" data-l="1">Density</button>
+  <button class="lb" data-l="2">Info</button>
+  <button class="lb" data-l="3">Entropy</button>
+  <button class="lb" data-l="4">Temp</button>
+  <button class="lb" data-l="5">Bio</button>
+  <button class="lb" data-l="6">Entities</button>
+  <button class="lb" data-l="7">τ-field</button>
+  <div class="sp"></div>
+  <button class="tb on" data-t="paint"><i class="ti ti-pencil"></i></button>
+  <button class="tb" data-t="inject"><i class="ti ti-plus"></i></button>
+  <button class="tb" data-t="heat"><i class="ti ti-flame"></i></button>
+  <button class="tb" data-t="erase"><i class="ti ti-eraser"></i></button>
+  <button class="tb" data-t="inspect"><i class="ti ti-eye"></i></button>
+  <div class="sp"></div>
+  <span style="font-size:9px;color:#333">Sz</span>
+  <input type="range" id="bs" min="1" max="4" value="2" step="1" style="width:50px">
+  <span style="font-size:9px;color:#333">Str</span>
+  <input type="range" id="bv" min="50" max="1000" value="400" step="50" style="width:50px">
+  <span style="font-size:9px;color:#777" id="bvo">400</span>
+</div>
+
+<div id="mid">
+<div id="lp">
+  <span class="pl">Presets</span>
+  <button class="pb" data-p="primordial"><i class="ti ti-universe"></i> Primordial soup</button>
+  <button class="pb" data-p="burst"><i class="ti ti-flame"></i> Energy burst</button>
+  <button class="pb" data-p="life"><i class="ti ti-dna"></i> Life seed</button>
+  <button class="pb" data-p="eco"><i class="ti ti-leaf"></i> Ecosystem</button>
+  <button class="pb" data-p="storm"><i class="ti ti-storm"></i> Entropy storm</button>
+  <button class="pb" data-p="clear"><i class="ti ti-square"></i> Clear</button>
+  <div style="height:0.5px;background:#1e1e30;margin:3px 0"></div>
+  <span class="pl">Processes</span>
+  <button class="pb" id="pt" data-proc="thermo">Thermodynamics</button>
+  <button class="pb" id="pb2" data-proc="bio">Biology</button>
+  <button class="pb" id="pg" data-proc="geo">Geology</button>
+  <button class="pb" id="pi" data-proc="info">Information</button>
+  <div style="height:0.5px;background:#1e1e30;margin:3px 0"></div>
+  <span class="pl">Meta-laws</span>
+  <div id="mlaws">
+    <div class="mlaw"><span>Diffusion</span><input type="range" id="ml0" min="1" max="20" value="10" step="1"></div>
+    <div class="mlaw"><span>Entropy rate</span><input type="range" id="ml1" min="1" max="20" value="5" step="1"></div>
+    <div class="mlaw"><span>Bio threshold</span><input type="range" id="ml2" min="1" max="20" value="8" step="1"></div>
+    <div class="mlaw"><span>Mutation rate</span><input type="range" id="ml3" min="0" max="20" value="3" step="1"></div>
+    <div class="mlaw"><span>Repro energy</span><input type="range" id="ml4" min="1" max="20" value="10" step="1"></div>
+  </div>
+</div>
+
+<div id="cw">
+  <canvas id="gc"></canvas>
+  <div id="ov"></div>
+</div>
+
+<div id="rp">
+  <span class="rl">Cell inspector</span>
+  <div id="props"><div style="font-size:10px;color:#333">Click a cell</div></div>
+  <span class="rl">Cell history</span>
+  <canvas id="hc" width="180" height="80"></canvas>
+  <div style="display:flex;gap:5px;font-size:9px;flex-wrap:wrap;margin-top:1px">
+    <span style="color:#5070ff">─ E</span>
+    <span style="color:#e07020">─ T</span>
+    <span style="color:#9050d0">─ I</span>
+    <span style="color:#c03030">─ S</span>
+    <span style="color:#20a050">─ B</span>
+  </div>
+  <span class="rl">Entities <span id="entcount" style="color:#5a4ab0">0</span></span>
+  <div id="entlist"><div style="font-size:9px;color:#333">None yet</div></div>
+  <span class="rl">Causal log</span>
+  <div id="elg"><div style="font-size:9px;color:#333">No events</div></div>
+  <span class="rl">World history</span>
+  <canvas id="whc" width="180" height="50" style="width:100%;border-radius:4px;border:0.5px solid #1e1e30;background:#050508"></canvas>
+</div>
+</div>
+
+<div id="bot">
+  <button id="pb"><i class="ti ti-player-play"></i> Play</button>
+  <input type="range" id="spd" min="1" max="15" value="3" step="1" style="width:55px">
+  <span class="st">×</span><span class="sv" id="spdo">3</span>
+  <div class="sp"></div>
+  <span class="st">Tick:</span><span class="sv" id="tko">0</span>
+  <span class="st">E:</span><span class="sv" id="eo">0</span>
+  <span class="st">Ent:</span><span class="sv" id="eco2">0</span>
+  <span class="st">Born:</span><span class="sv" id="bno">0</span>
+  <span class="st">Dead:</span><span class="sv" id="dno">0</span>
+  <span class="st">FPS:</span><span class="sv" id="fo">0</span>
+  <div style="flex:1"></div>
+  <button class="tb" id="savebtn" title="Export CSV"><i class="ti ti-download"></i></button>
+  <button class="tb" id="replaybtn" title="Replay"><i class="ti ti-rotate"></i></button>
+</div>
+</div>
+
+<script>
+const W=40,H=30,SZ=W*H;
+const NF=13;
+const FE=0,FD=1,FI=2,FS=3,FT=4,FP=5,FTau=6,FCid=7,FBio=8,FProc=9,FMem=10,FEid=11,FAge=12;
+
+let buf=new Float32Array(SZ*NF);
+let bbuf=new Float32Array(SZ*NF);
+
+let entities=new Map();
+let entIdSeq=1;
+let totalBorn=0,totalDead=0;
+
+let causalLog=[];
+let worldHistory=[];
+let eventCount=0;
+
+let layer=0,tool='paint',playing=false,tick=0;
+let selX=-1,selY=-1,painting=false;
+let lastTs=0,fps=0,fc=0,fpt=0;
+let activeProcs=new Set();
+let selEnt=null;
+
+let histE=[],histT=[],histI=[],histS=[],histB=[];
+let whE=[],whEnt=[],whS=[];
+
+const canvas=document.getElementById('gc');
+const ctx=canvas.getContext('2d');
+const hc=document.getElementById('hc');
+const hx=hc.getContext('2d');
+const whc=document.getElementById('whc');
+const wx=whc.getContext('2d');
+const wrap=document.getElementById('cw');
+
+function iidx(x,y){return(y*W+x)*NF}
+function cl(v,a,b){return Math.max(a,Math.min(b,v))}
+function g(x,y,f){const i=iidx(x,y);return buf[i+f]||0}
+function s(x,y,f,v){const i=iidx(x,y);buf[i+f]=cl(v,-99999,99999)}
+function ga(x,y,f,v){const i=iidx(x,y);buf[i+f]=cl((buf[i+f]||0)+v,-99999,99999)}
+function gb(x,y,f){const i=iidx(x,y);return bbuf[i+f]||0}
+
+function ml(id){const el=document.getElementById('ml'+id);return el?el.value/10:1}
+
+function nb6(x,y){const r=[];if(x>0)r.push([x-1,y]);if(x<W-1)r.push([x+1,y]);if(y>0)r.push([x,y-1]);if(y<H-1)r.push([x,y+1]);return r}
+
+const LFIELD=[FE,FD,FI,FS,FT,FBio,FEid,FTau];
+const LMAX=[1000,1,500,1,800,1,50,20];
+
+function colorOf(lyr,t){
+  t=cl(t,0,1);
+  if(lyr===0){if(t<.15)return[0,0,Math.round(t/.15*160)];if(t<.4){const s=(t-.15)/.25;return[0,Math.round(s*160),Math.round(160-s*160)]}if(t<.7){const s=(t-.4)/.3;return[Math.round(s*240),Math.round(160-s*60),0]}const s=(t-.7)/.3;return[240,Math.round(100+s*155),Math.round(s*240)]}
+  if(lyr===1){const v=Math.round(t*180);return[0,v,Math.round(v*.4)]}
+  if(lyr===2){if(t<.4)return[Math.round(t/.4*80),0,Math.round(t/.4*120)];const s=(t-.4)/.6;return[Math.round(80+s*160),Math.round(s*30),Math.round(120+s*120)]}
+  if(lyr===3)return[Math.round(t*200),Math.round(t*30),Math.round(30+t*50)];
+  if(lyr===4){if(t<.5)return[Math.round(t*2*240),0,Math.round((1-t*2)*180)];const s=(t-.5)/.5;return[240,Math.round(s*200),0]}
+  if(lyr===5)return[Math.round(t*30),Math.round(t*200),Math.round(t*60)];
+  if(lyr===6){const eid=t;if(eid<=0)return[0,0,0];const h=(eid*137.5)%360;const r2=Math.sin(h*Math.PI/180)*.5+.5;const g2=Math.sin((h+120)*Math.PI/180)*.5+.5;const b2=Math.sin((h+240)*Math.PI/180)*.5+.5;return[Math.round(r2*200),Math.round(g2*200),Math.round(b2*200)]}
+  if(lyr===7){return[Math.round(t*50),Math.round(t*100),Math.round(t*220)]}
+  return[80,80,100];
+}
+
+function resize(){canvas.width=wrap.clientWidth;canvas.height=wrap.clientHeight;}
+new ResizeObserver(resize).observe(wrap);resize();
+
+function drawGrid(){
+  const cw=canvas.width,ch=canvas.height;
+  ctx.fillStyle='#050508';ctx.fillRect(0,0,cw,ch);
+  const cs=Math.min(cw/W,ch/H);
+  const ox=(cw-cs*W)/2,oy=(ch-cs*H)/2;
+  const fi=LFIELD[layer];const mx=LMAX[layer];
+  const imgd=ctx.createImageData(cw,ch);const d=imgd.data;
+
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const raw=layer===6?g(x,y,FEid):g(x,y,fi);
+    if(raw<(layer===6?0.5:0.001))continue;
+    const t=layer===6?raw:Math.min(raw/mx,1);
+    const[r2,g2,b2]=colorOf(layer,t);
+    const px=Math.floor(ox+x*cs),py=Math.floor(oy+y*cs);
+    const pw=Math.max(1,Math.ceil(cs)-1),ph=Math.max(1,Math.ceil(cs)-1);
+    for(let dy=0;dy<ph&&py+dy<ch;dy++)for(let dx=0;dx<pw&&px+dx<cw;dx++){
+      const pi=((py+dy)*cw+(px+dx))*4;
+      d[pi]=r2;d[pi+1]=g2;d[pi+2]=b2;d[pi+3]=255;
+    }
+  }
+
+  entities.forEach((ent)=>{
+    const cx2=Math.floor(ox+ent.cx*cs+cs/2),cy2=Math.floor(oy+ent.cy*cs+cs/2);
+    for(let dy=-1;dy<=1;dy++)for(let dx2=-1;dx2<=1;dx2++){
+      const pi=((cy2+dy)*cw+(cx2+dx2))*4;
+      if(pi>=0&&pi<d.length-3){d[pi]=255;d[pi+1]=255;d[pi+2]=255;d[pi+3]=200;}
+    }
+  });
+
+  if(selX>=0&&selY>=0){
+    const px=Math.floor(ox+selX*cs),py=Math.floor(oy+selY*cs);
+    const pw=Math.ceil(cs)-1,ph=Math.ceil(cs)-1;
+    for(let dx=0;dx<pw&&px+dx<cw;dx++){
+      const p1=(py*cw+(px+dx))*4;const p2=((py+ph)*cw+(px+dx))*4;
+      if(p1>=0&&p1<d.length-3){d[p1]=255;d[p1+1]=255;d[p1+2]=255;d[p1+3]=255;}
+      if(p2>=0&&p2<d.length-3){d[p2]=255;d[p2+1]=255;d[p2+2]=255;d[p2+3]=255;}
+    }
+    for(let dy=0;dy<ph&&py+dy<ch;dy++){
+      const p1=((py+dy)*cw+px)*4;const p2=((py+dy)*cw+(px+pw))*4;
+      if(p1>=0&&p1<d.length-3){d[p1]=255;d[p1+1]=255;d[p1+2]=255;d[p1+3]=255;}
+      if(p2>=0&&p2<d.length-3){d[p2]=255;d[p2+1]=255;d[p2+2]=255;d[p2+3]=255;}
+    }
+  }
+  ctx.putImageData(imgd,0,0);
+
+  ctx.font='8px monospace';ctx.fillStyle='rgba(80,70,180,0.7)';
+  entities.forEach((ent,eid)=>{
+    const cx2=Math.floor(ox+ent.cx*cs+cs/2),cy2=Math.floor(oy+ent.cy*cs+cs/2);
+    ctx.fillText('#'+eid,cx2-8,cy2-4);
+  });
+}
+
+function entropyTick(dt){
+  const er=ml(1)*0.00008;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const e2=g(x,y,FE),t=g(x,y,FT);
+    const dS=(er+e2*0.00004+t*0.00001)*dt*60;
+    s(x,y,FS,cl(g(x,y,FS)+dS,0,1));
+    s(x,y,FE,cl(e2*(1-g(x,y,FS)*0.0002*dt*60),0,9999));
+    s(x,y,FAge,g(x,y,FAge)+dt);
+    s(x,y,FTau,g(x,y,FTau)+dt*(1+e2*0.0008+g(x,y,FS)*0.2));
+  }
+}
+
+function diffuseTick(dt){
+  bbuf.set(buf);
+  const dr=ml(0)*0.01;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const ns=nb6(x,y);const nc=ns.length;
+    let lapE=0,lapD=0,lapT=0;
+    for(const[nx,ny]of ns){lapE+=gb(nx,ny,FE);lapD+=gb(nx,ny,FD);lapT+=gb(nx,ny,FT);}
+    lapE-=nc*gb(x,y,FE);lapD-=nc*gb(x,y,FD);lapT-=nc*gb(x,y,FT);
+    s(x,y,FE,cl(gb(x,y,FE)+dr*lapE*dt,0,9999));
+    s(x,y,FD,cl(gb(x,y,FD)+dr*0.3*lapD*dt,0,1));
+    s(x,y,FT,cl(gb(x,y,FT)+dr*0.8*lapT*dt+g(x,y,FE)*0.002*dt,0,2000));
+  }
+}
+
+const PROCS={
+  thermo:{tick(dt){diffuseTick(dt);}},
+  bio:{tick(dt){
+    const thr=ml(2)*8;
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const e2=g(x,y,FE),d=g(x,y,FD),sv=g(x,y,FS),info=g(x,y,FI);
+      const sup=cl(1-sv*0.9,0,1);
+      if(e2>thr&&d>0.2&&sup>0.1){
+        ga(x,y,FI,0.3*sup*dt);
+        ga(x,y,FBio,0.015*sup*dt);
+      } else {
+        s(x,y,FI,cl(info*(1-0.002*dt*60),0,999));
+        s(x,y,FBio,cl(g(x,y,FBio)*(1-0.003*dt*60),0,1));
+      }
+    }
+  }},
+  geo:{tick(dt){
+    bbuf.set(buf);
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      if(y<H-1){const d=gb(x,y,FD),db=gb(x,y+1,FD);if(db<d){const fl=0.04*(d-db)*dt*60;ga(x,y,FD,-fl);ga(x,y+1,FD,fl);}}
+      ga(x,y,FD,-g(x,y,FE)*0.00008*dt*60);
+    }
+  }},
+  info:{tick(dt){
+    bbuf.set(buf);
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const ns=nb6(x,y);let lapI=0;
+      for(const[nx,ny]of ns)lapI+=gb(nx,ny,FI);
+      lapI-=ns.length*gb(x,y,FI);
+      s(x,y,FI,cl(gb(x,y,FI)+0.04*lapI*dt-g(x,y,FS)*0.2*dt,0,999));
+    }
+  }}
+};
+
+function detectStructures(){
+  const thr=ml(2)*8;
+  const visited=new Uint8Array(SZ);
+  const toRemove=new Set();
+
+  entities.forEach((ent,eid)=>{
+    let totalE=0,totalI=0,totalS=0,alive=0;
+    ent.cells=ent.cells.filter(([cx,cy])=>{
+      if(cx<0||cx>=W||cy<0||cy>=H)return false;
+      const e2=g(cx,cy,FE),sv=g(cx,cy,FS),info=g(cx,cy,FI);
+      totalE+=e2;totalI+=info;totalS+=sv;
+      if(e2>thr*0.3&&sv<0.8){alive++;return true;}
+      s(cx,cy,FEid,0);return false;
+    });
+    ent.metabolism=totalE/(ent.cells.length||1);
+    ent.stability=1-totalS/(ent.cells.length||1);
+    ent.memory=cl(ent.memory*0.98+totalI*0.001,0,1);
+    ent.age+=1;
+    if(ent.cells.length<2||ent.stability<0.05){
+      ent.cells.forEach(([cx,cy])=>s(cx,cy,FEid,0));
+      toRemove.add(eid);totalDead++;return;
+    }
+    const cx2=ent.cells.reduce((a,[x2])=>a+x2,0)/ent.cells.length;
+    const cy2=ent.cells.reduce((a,[,y2])=>a+y2,0)/ent.cells.length;
+    ent.cx=cx2;ent.cy=cy2;
+    ent.cells.forEach(([cx3,cy3])=>{s(cx3,cy3,FEid,eid);visited[cy3*W+cx3]=1;});
+
+    const repThr=ml(4)*50;
+    if(ent.metabolism>repThr&&ent.stability>0.5&&ent.cells.length>=4&&Math.random()<0.002){
+      reproduce(ent,eid);
+    }
+  });
+  toRemove.forEach(eid=>entities.delete(eid));
+
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    if(visited[y*W+x])continue;
+    if(g(x,y,FEid)>0){s(x,y,FEid,0);}
+    const e2=g(x,y,FE),sv=g(x,y,FS),bio=g(x,y,FBio),info=g(x,y,FI),d=g(x,y,FD);
+    if(e2>ml(2)*12&&bio>0.3&&info>30&&sv<0.4&&d>0.15){
+      const cluster=floodFill(x,y,5);
+      if(cluster.length>=3){spawnEntity(cluster);}
+    }
+  }
+}
+
+function floodFill(sx,sy,maxR){
+  const thr=ml(2)*6;
+  const cells=[];const q=[[sx,sy]];const vis=new Set();
+  while(q.length&&cells.length<16){
+    const[cx,cy]=q.shift();
+    const key=cy*W+cx;if(vis.has(key))continue;vis.add(key);
+    if(g(cx,cy,FEid)>0)continue;
+    if(g(cx,cy,FE)>thr&&g(cx,cy,FBio)>0.15){
+      cells.push([cx,cy]);
+      for(const[nx,ny]of nb6(cx,cy)){const nk=ny*W+nx;if(!vis.has(nk))q.push([nx,ny]);}
+    }
+  }
+  return cells;
+}
+
+function spawnEntity(cells){
+  const eid=entIdSeq++;
+  const mut=ml(3)*0.03;
+  const mutParam=(base)=>cl(base*(1+(Math.random()*2-1)*mut),0,2);
+  const ent={
+    id:eid,cells:[...cells],
+    cx:cells.reduce((a,[x])=>a+x,0)/cells.length,
+    cy:cells.reduce((a,[,y])=>a+y,0)/cells.length,
+    metabolism:0,stability:1,memory:0,age:0,
+    genome:{diffusion:mutParam(1),bioThresh:mutParam(ml(2)),reproThresh:mutParam(ml(4))}
+  };
+  cells.forEach(([cx,cy])=>s(cx,cy,FEid,eid));
+  entities.set(eid,ent);totalBorn++;
+  logCausal(tick,ent.cx|0,ent.cy|0,'entity_birth',eid);
+}
+
+function reproduce(parent,peid){
+  const ns=nb6(parent.cx|0,parent.cy|0);
+  const free=ns.filter(([nx,ny])=>g(nx,ny,FEid)<0.5&&g(nx,ny,FE)>ml(2)*5);
+  if(!free.length)return;
+  const[ox,oy]=free[Math.floor(Math.random()*free.length)];
+  const seed=[[ox,oy]];
+  const mut=ml(3)*0.05;
+  const mutP=(v)=>cl(v*(1+(Math.random()*2-1)*mut),0.1,3);
+  const child={
+    id:entIdSeq++,cells:seed,cx:ox,cy:oy,
+    metabolism:0,stability:1,memory:parent.memory*0.5,age:0,
+    genome:{
+      diffusion:mutP(parent.genome.diffusion),
+      bioThresh:mutP(parent.genome.bioThresh),
+      reproThresh:mutP(parent.genome.reproThresh)
+    }
+  };
+  s(ox,oy,FEid,child.id);
+  s(ox,oy,FE,cl(g(parent.cx|0,parent.cy|0,FE)*0.3,0,9999));
+  entities.set(child.id,child);totalBorn++;
+  logCausal(tick,ox,oy,'reproduction',child.id);
+}
+
+function logCausal(t,x,y,type,extra){
+  eventCount++;
+  const parent=causalLog.length?causalLog[causalLog.length-1].id:null;
+  causalLog.push({id:eventCount,tick:t,x,y,type,extra,parent});
+  if(causalLog.length>400)causalLog.shift();
+}
+
+function energyCausalScan(){
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const prev=gb(x,y,FE),cur=g(x,y,FE);
+    if(Math.abs(cur-prev)>60){
+      logCausal(tick,x,y,'energy_spike',Math.round(cur-prev));
+      s(x,y,FCid,eventCount);
+    }
+  }
+}
+
+function simStep(dt){
+  bbuf.set(buf);
+  // Base diffusion: run when no processes active OR thermo is active
+  if(activeProcs.size===0||activeProcs.has('thermo'))diffuseTick(dt);
+  // Run non-thermo processes (thermo is already handled above via diffuseTick)
+  activeProcs.forEach(p=>{if(p!=='thermo'&&PROCS[p])PROCS[p].tick(dt);});
+  entropyTick(dt);
+  energyCausalScan();
+  if(tick%5===0)detectStructures();
+  tick++;
+
+  if(tick%20===0){
+    let totE=0;for(let i=0;i<SZ;i++)totE+=buf[i*NF+FE];
+    let totS=0;for(let i=0;i<SZ;i++)totS+=buf[i*NF+FS];
+    whE.push(totE/SZ);whEnt.push(entities.size);whS.push(totS/SZ*1000);
+    if(whE.length>90){whE.shift();whEnt.shift();whS.shift();}
+  }
+
+  if(selX>=0){
+    const push=(arr,v,mx2)=>{arr.push(cl(v,0,mx2));if(arr.length>120)arr.shift();};
+    push(histE,g(selX,selY,FE),1000);push(histT,g(selX,selY,FT),800);
+    push(histI,g(selX,selY,FI),500);push(histS,g(selX,selY,FS)*800,800);
+    push(histB,g(selX,selY,FBio)*800,800);
+  }
+}
+
+function getCellAt(e){
+  const r=canvas.getBoundingClientRect();
+  const cx=(e.clientX-r.left)*(canvas.width/r.width);
+  const cy=(e.clientY-r.top)*(canvas.height/r.height);
+  const cs=Math.min(canvas.width/W,canvas.height/H);
+  const ox=(canvas.width-cs*W)/2,oy=(canvas.height-cs*H)/2;
+  const x=Math.floor((cx-ox)/cs),y=Math.floor((cy-oy)/cs);
+  if(x<0||x>=W||y<0||y>=H)return null;
+  return{x,y};
+}
+
+function paintAt(x,y){
+  const bs=+document.getElementById('bs').value;
+  const str=+document.getElementById('bv').value;
+  const fi=[FE,FD,FI,FS,FT,FBio,FEid,FTau][layer];
+  const mx=[9999,1,999,1,2000,1,50,20][layer];
+  for(let dy=-bs;dy<=bs;dy++)for(let dx=-bs;dx<=bs;dx++){
+    const nx=x+dx,ny=y+dy;
+    if(nx<0||nx>=W||ny<0||ny>=H||dx*dx+dy*dy>bs*bs)continue;
+    if(tool==='erase'){[FE,FD,FI,FS,FT,FBio].forEach(f=>s(nx,ny,f,0));continue;}
+    if(tool==='heat'){s(nx,ny,FT,cl(g(nx,ny,FT)+str,0,2000));continue;}
+    const v=tool==='inject'?cl(g(nx,ny,fi)+str,0,mx):str;
+    s(nx,ny,fi,cl(v,0,mx));
+  }
+}
+
+canvas.addEventListener('pointerdown',e=>{
+  const c=getCellAt(e);if(!c)return;
+  painting=true;canvas.setPointerCapture(e.pointerId);
+  if(tool==='inspect'){selX=c.x;selY=c.y;histE=[];histT=[];histI=[];histS=[];histB=[];}
+  else paintAt(c.x,c.y);
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!painting)return;const c=getCellAt(e);if(!c)return;
+  if(tool==='inspect'){selX=c.x;selY=c.y;}else paintAt(c.x,c.y);
+});
+canvas.addEventListener('pointerup',()=>{painting=false;});
+
+function updateRightPanel(){
+  if(selX<0)return;
+  const x=selX,y=selY;
+  const eid=Math.round(g(x,y,FEid));
+  const ent=eid>0?entities.get(eid):null;
+  document.getElementById('props').innerHTML=`
+    <div class="cp"><span>Pos</span><span class="cv">${x},${y}</span></div>
+    <div class="cp"><span>Energy</span><span class="cv" style="color:#5070ff">${g(x,y,FE).toFixed(1)}</span></div>
+    <div class="cp"><span>Temp</span><span class="cv" style="color:#e07020">${g(x,y,FT).toFixed(1)}</span></div>
+    <div class="cp"><span>Density</span><span class="cv">${g(x,y,FD).toFixed(3)}</span></div>
+    <div class="cp"><span>Info</span><span class="cv" style="color:#9050d0">${g(x,y,FI).toFixed(1)}</span></div>
+    <div class="cp"><span>Entropy</span><span class="cv" style="color:#c03030">${g(x,y,FS).toFixed(4)}</span></div>
+    <div class="cp"><span>Bio</span><span class="cv" style="color:#20a050">${g(x,y,FBio).toFixed(3)}</span></div>
+    <div class="cp"><span>Local τ</span><span class="cv">${g(x,y,FTau).toFixed(2)}</span></div>
+    <div class="cp"><span>Memory</span><span class="cv">${g(x,y,FMem).toFixed(3)}</span></div>
+    ${ent?`<div class="cp"><span>Entity #${eid}</span><span class="cv" style="color:#9080e8">age ${ent.age}</span></div>
+    <div class="cp"><span>Stability</span><span class="cv">${ent.stability.toFixed(3)}</span></div>
+    <div class="cp"><span>Metabolism</span><span class="cv">${ent.metabolism.toFixed(1)}</span></div>
+    <div class="cp"><span>Memory</span><span class="cv">${ent.memory.toFixed(3)}</span></div>
+    <div class="cp"><span>Genome</span><span class="cv" style="font-size:8px">${Object.values(ent.genome).map(v=>v.toFixed(2)).join(' ')}</span></div>`:''}`;
+  drawHist();
+}
+
+function drawHist(){
+  const w=hc.width=hc.offsetWidth||180,h=80;
+  hx.fillStyle='#050508';hx.fillRect(0,0,w,h);
+  const all=[...histE,...histT,...histI,...histS,...histB];
+  if(all.length<2)return;
+  const mx=Math.max(...all,1);
+  [[histE,'#5070ff'],[histT,'#e07020'],[histI,'#9050d0'],[histS,'#c03030'],[histB,'#20a050']].forEach(([arr,col])=>{
+    if(arr.length<2)return;
+    hx.beginPath();hx.strokeStyle=col;hx.lineWidth=1.2;
+    arr.forEach((v,i)=>{const px=i/(arr.length-1)*w,py=h-(v/mx)*(h-3)-2;i===0?hx.moveTo(px,py):hx.lineTo(px,py);});
+    hx.stroke();
+  });
+}
+
+function drawWorldHistory(){
+  const w=whc.width=whc.offsetWidth||180,h=50;
+  wx.fillStyle='#050508';wx.fillRect(0,0,w,h);
+  if(whE.length<2)return;
+  const mxE=Math.max(...whE,1),mxEnt=Math.max(...whEnt,1),mxS=Math.max(...whS,1);
+  [[whE,mxE,'#5070ff'],[whEnt.map(v=>v*10),mxEnt*10,'#9080e8'],[whS,mxS,'#c03030']].forEach(([arr,mx,col])=>{
+    wx.beginPath();wx.strokeStyle=col;wx.lineWidth=1;
+    arr.forEach((v,i)=>{const px=i/(arr.length-1)*w,py=h-(v/mx)*(h-3)-2;i===0?wx.moveTo(px,py):wx.lineTo(px,py);});
+    wx.stroke();
+  });
+  wx.fillStyle='rgba(255,255,255,.2)';wx.font='7px monospace';
+  wx.fillText('E ent S',3,8);
+}
+
+function updateEntityList(){
+  const el=document.getElementById('entlist');
+  document.getElementById('entcount').textContent=entities.size;
+  if(!entities.size){el.innerHTML='<div style="font-size:9px;color:#333">None yet — play Life seed + Biology</div>';return;}
+  const arr=[...entities.values()].sort((a,b)=>b.metabolism-a.metabolism).slice(0,12);
+  el.innerHTML=arr.map(ent=>`<div class="ent${selEnt===ent.id?' sel':''}" data-eid="${ent.id}">#${ent.id} <span style="color:#9080e8">s:${ent.stability.toFixed(2)}</span> <span style="color:#5070ff">m:${ent.metabolism.toFixed(0)}</span> <span style="color:#666">a:${ent.age}</span></div>`).join('');
+  el.querySelectorAll('.ent').forEach(d=>{
+    d.addEventListener('click',()=>{
+      const eid=+d.dataset.eid;const ent=entities.get(eid);
+      if(ent){selX=ent.cx|0;selY=ent.cy|0;selEnt=eid;histE=[];histT=[];histI=[];histS=[];histB=[];}
+    });
+  });
+}
+
+function updateCausalLog(){
+  const el=document.getElementById('elg');
+  const recent=causalLog.slice(-6).reverse();
+  if(!recent.length){el.innerHTML='<div style="font-size:9px;color:#333">No events</div>';return;}
+  el.innerHTML=recent.map(e=>`<div class="ev" data-x="${e.x}" data-y="${e.y}">${e.type==='entity_birth'?'<span style="color:#20a050">birth</span>':e.type==='reproduction'?'<span style="color:#9080e8">repro</span>':'<span style="color:#5070ff">spike</span>'} #${e.id} t:${e.tick} (${e.x},${e.y})</div>`).join('');
+  el.querySelectorAll('.ev').forEach(d=>{
+    d.addEventListener('click',()=>{selX=+d.dataset.x;selY=+d.dataset.y;histE=[];histT=[];histI=[];histS=[];histB=[];});
+  });
+}
+
+function updateOv(){
+  document.getElementById('ov').textContent=`τ-field active | processes: ${[...activeProcs].join(',')||'base'} | metalaws: D=${ml(0).toFixed(1)} S=${ml(1).toFixed(1)} B=${ml(2).toFixed(1)} M=${ml(3).toFixed(1)}`;
+}
+
+function loop(ts){
+  requestAnimationFrame(loop);
+  const spd=+document.getElementById('spd').value;
+  const dt=Math.min((ts-lastTs)/1000,.05);lastTs=ts;
+  fc++;if(ts-fpt>700){fps=Math.round(fc*1000/(ts-fpt));fc=0;fpt=ts;}
+  if(playing)for(let s2=0;s2<spd;s2++)simStep(dt);
+  drawGrid();drawWorldHistory();
+  if(selX>=0&&tick%4===0)updateRightPanel();
+  if(tick%12===0){updateEntityList();updateCausalLog();updateOv();}
+  let totE=0;for(let i=0;i<SZ;i++)totE+=buf[i*NF+FE];
+  document.getElementById('tko').textContent=tick;
+  document.getElementById('eo').textContent=Math.round(totE).toLocaleString();
+  document.getElementById('eco2').textContent=entities.size;
+  document.getElementById('bno').textContent=totalBorn;
+  document.getElementById('dno').textContent=totalDead;
+  document.getElementById('fo').textContent=fps;
+}
+
+document.getElementById('pb').addEventListener('click',()=>{
+  playing=!playing;
+  document.getElementById('pb').innerHTML=playing?'<i class="ti ti-player-pause"></i> Pause':'<i class="ti ti-player-play"></i> Play';
+});
+document.getElementById('spd').addEventListener('input',e=>document.getElementById('spdo').textContent=e.target.value);
+document.getElementById('bv').addEventListener('input',e=>document.getElementById('bvo').textContent=e.target.value);
+
+document.querySelectorAll('.lb').forEach(b=>{
+  b.addEventListener('click',()=>{document.querySelectorAll('.lb').forEach(x=>x.classList.remove('on'));b.classList.add('on');layer=+b.dataset.l;});
+});
+document.querySelectorAll('.tb[data-t]').forEach(b=>{
+  b.addEventListener('click',()=>{document.querySelectorAll('.tb[data-t]').forEach(x=>x.classList.remove('on'));b.classList.add('on');tool=b.dataset.t;});
+});
+document.querySelectorAll('[data-proc]').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const p=b.dataset.proc;
+    if(activeProcs.has(p)){activeProcs.delete(p);b.classList.remove('on');}
+    else{activeProcs.add(p);b.classList.add('on');}
+  });
+});
+
+function applyPreset(p){
+  buf.fill(0);entities.clear();causalLog=[];eventCount=0;tick=0;totalBorn=0;totalDead=0;
+  histE=[];histT=[];histI=[];histS=[];histB=[];whE=[];whEnt=[];whS=[];selEnt=null;
+  const cx=W>>1,cy=H>>1;
+  if(p==='burst'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const d=Math.sqrt((x-cx)**2+(y-cy)**2);if(d<8){const gv=Math.exp(-d*d/16);s(x,y,FE,800*gv);s(x,y,FT,400*gv);s(x,y,FD,0.7*gv);}}}
+  else if(p==='life'){for(let i=0;i<30;i++){const x=4+Math.floor(Math.random()*(W-8)),y=4+Math.floor(Math.random()*(H-8));const e=180+Math.random()*500;s(x,y,FE,e);s(x,y,FD,0.3+Math.random()*0.5);s(x,y,FI,e*0.25);s(x,y,FT,80+Math.random()*150);s(x,y,FBio,0.3+Math.random()*0.5);s(x,y,FS,Math.random()*0.15);}}
+  else if(p==='eco'){for(let y=H-5;y<H;y++)for(let x=0;x<W;x++){s(x,y,FD,0.6+Math.random()*0.3);s(x,y,FE,25+Math.random()*50);s(x,y,FT,30+Math.random()*30);}for(let i=0;i<20;i++){const x=Math.floor(Math.random()*W),y=4+Math.floor(Math.random()*(H-9));const e=200+Math.random()*400;s(x,y,FE,e);s(x,y,FD,0.4+Math.random()*0.4);s(x,y,FI,e*0.2);s(x,y,FBio,0.4+Math.random()*0.5);s(x,y,FS,Math.random()*0.2);}}
+  else if(p==='storm'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){s(x,y,FE,Math.random()*600);s(x,y,FS,0.2+Math.random()*0.6);s(x,y,FT,Math.random()*300);s(x,y,FD,Math.random()*0.7);}}
+  else if(p==='primordial'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){s(x,y,FE,50+Math.random()*300);s(x,y,FD,0.1+Math.random()*0.4);s(x,y,FT,20+Math.random()*100);s(x,y,FI,Math.random()*50);s(x,y,FS,Math.random()*0.2);s(x,y,FBio,Math.random()*0.3);}}
+}
+
+document.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click',()=>applyPreset(b.dataset.p)));
+
+document.getElementById('savebtn').addEventListener('click',()=>{
+  const rows=['tick,x,y,energy,density,information,entropy,temperature,bio,entity_id'];
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const eid=Math.round(g(x,y,FEid));
+    if(g(x,y,FE)>0.1||eid>0)rows.push([tick,x,y,g(x,y,FE).toFixed(2),g(x,y,FD).toFixed(3),g(x,y,FI).toFixed(2),g(x,y,FS).toFixed(4),g(x,y,FT).toFixed(2),g(x,y,FBio).toFixed(3),eid].join(','));
+  }
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));a.download=`reality-v3-t${tick}.csv`;a.click();
+});
+
+document.getElementById('replaybtn').addEventListener('click',()=>{
+  playing=false;tick=0;
+  document.getElementById('pb').innerHTML='<i class="ti ti-player-play"></i> Play';
+});
+
+requestAnimationFrame(ts=>{lastTs=ts;fpt=ts;requestAnimationFrame(loop);});
+</script>
+</body>
+</html>
