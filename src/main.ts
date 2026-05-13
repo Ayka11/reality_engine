@@ -3,14 +3,13 @@ import { VoxelRenderer, LayerName } from './render/VoxelRenderer';
 import { Presets, PresetName } from './world/Presets';
 import { F } from './core/CellState';
 import { PROCESS_LIBRARY } from './process/ProcessDef';
-import { EntityLayer } from './entity/EntityLayer';
+import { MAT, MATERIAL_LIBRARY, MatId } from './materials/MaterialDef';
+import { EventType } from './world/WorldEvents';
 
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
 const canvas   = document.getElementById('gc') as HTMLCanvasElement;
 const renderer = new VoxelRenderer(canvas, sim.grid.W, sim.grid.H, sim.grid.D);
-const entities = new EntityLayer();
-
 // Async GPU init
 sim.initGPU().then(ok => {
   const badge = document.getElementById('gpubadge')!;
@@ -23,6 +22,7 @@ let playing = false;
 let selX = -1, selY = -1, selZ = 0;
 let painting = false;
 let tool: 'paint' | 'inject' | 'erase' | 'inspect' = 'paint';
+let activeMaterial: MatId = MAT.VACUUM;
 let paintModeOn = true;
 let histBuffers: Record<string, number[]> = { e: [], t: [], i: [], s: [], b: [] };
 let lastTs = 0, fpsSmooth = 0, frameCount = 0, fpsTimer = 0;
@@ -34,6 +34,10 @@ const LAYER_INFO: Record<LayerName, string> = {
   entropy:      'Disorder. Always increases. Degrades energy and information. Enables aging.',
   temperature:  'Thermal energy. Coupled to energy. Drives phase transitions.',
   bioPotential: 'Emergence potential. Peaks where info, energy, density, and low entropy align.',
+  material:     'Material type. Each material has unique conductivity, heat capacity, erosion resistance, and bio-affinity.',
+  chemistry:    'Chemical state: gas (blue-grey), liquid (blue), solid (grey), organic (green), reactive (orange).',
+  signal:       'Entity communication signal. Written by entities to propagate information between clusters.',
+  memory:       'Geological/information memory trace. Persists for hundreds of ticks after high-information events.',
 };
 
 // ── Layer buttons ─────────────────────────────────────────────────────────────
@@ -71,6 +75,24 @@ function setPaintMode(on: boolean) {
 paintBtn.addEventListener('click', () => setPaintMode(!paintModeOn));
 document.addEventListener('keydown', e => { if (e.key === 'p' || e.key === 'P') setPaintMode(!paintModeOn); });
 setPaintMode(true); // boot into paint mode (left-click paints, right-drag orbits)
+
+// ── Material palette ──────────────────────────────────────────────────────────
+function renderMaterialPalette() {
+  const el = document.getElementById('materialPalette')!;
+  if (!el) return;
+  el.innerHTML = MATERIAL_LIBRARY.map(m => {
+    const [r,g,b] = m.color.map(v => Math.round(v*255));
+    const active = m.id === activeMaterial;
+    return `<div class="mat-swatch ${active?'active':''}" data-mat="${m.id}" title="${m.name}"
+      style="background:rgb(${r},${g},${b});outline:${active?'2px solid #fff':'1px solid #333'}"></div>`;
+  }).join('');
+  el.querySelectorAll<HTMLDivElement>('.mat-swatch').forEach(s => {
+    s.addEventListener('click', () => {
+      activeMaterial = parseInt(s.dataset.mat!) as MatId;
+      renderMaterialPalette();
+    });
+  });
+}
 
 // ── Preset buttons ────────────────────────────────────────────────────────────
 document.querySelectorAll<HTMLButtonElement>('.preset-btn').forEach(btn => {
@@ -123,9 +145,11 @@ function paintAt(x: number, y: number, z: number) {
 
     if (tool === 'erase') {
       cell.energy = 0; cell.temperature = 0; cell.density = 0;
-      cell.information = 0; cell.entropy = 0;
+      cell.information = 0; cell.entropy = 0; cell.materialId = MAT.VACUUM;
       continue;
     }
+    // Always write material when a non-vacuum material is selected
+    if (activeMaterial !== MAT.VACUUM) cell.materialId = activeMaterial;
     const add = tool === 'inject';
     if      (lyr === 'energy')       cell.energy      = add ? Math.min(cell.energy + str, 9999)      : str;
     else if (lyr === 'density')      cell.density     = add ? Math.min(cell.density + str/1000, 1)   : str/1000;
@@ -224,10 +248,66 @@ function updateEventLog() {
   });
 }
 
+// ── AI Agents ─────────────────────────────────────────────────────────────────
+function updateAgentPanel() {
+  const el = document.getElementById('agentList')!;
+  if (!el) return;
+  const all = sim.agents.getAgents();
+  document.getElementById('agentCount')!.textContent = String(all.length);
+  el.innerHTML = all.slice(0, 10).map(a => {
+    const bCol: Record<string, string> = {
+      explorer: '#7c9fff', harvester: '#4caf7d', signaler: '#c084fc',
+      builder: '#ef8f3f', destroyer: '#f47b7b',
+    };
+    const col = bCol[a.behavior] ?? '#888';
+    return `<div style="display:flex;gap:5px;font-size:9px;padding:2px 3px;border-radius:4px;background:#1a1a22;align-items:center">
+      <span style="width:6px;height:6px;border-radius:50%;background:${col};flex-shrink:0"></span>
+      <span style="color:${col}">${a.behavior.slice(0,4)}</span>
+      <span style="color:#555">A#${a.id} age:${a.age}</span>
+      <span style="color:#888">E:${Math.round(a.energy)}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Scientific Mode ───────────────────────────────────────────────────────────
+let scrubberIdx = 0;
+
+function renderSciPanel() {
+  const panel = document.getElementById('sciPanel')!;
+  if (!panel) return;
+  const snaps = sim.recorder.snapList;
+  const recBtn = document.getElementById('recBtn')!;
+  recBtn.textContent = sim.recorder.recording ? '⏹ Stop Rec' : '⏺ Record';
+  recBtn.style.color = sim.recorder.recording ? '#f47b7b' : '#aaa';
+
+  const scrubber = document.getElementById('scrubber') as HTMLInputElement;
+  scrubber.max = String(Math.max(0, snaps.length - 1));
+  scrubber.value = String(Math.min(scrubberIdx, snaps.length - 1));
+
+  const snap = snaps[scrubberIdx];
+  const snapInfo = document.getElementById('snapInfo')!;
+  if (snap) {
+    snapInfo.textContent =
+      `Snapshot ${scrubberIdx + 1}/${snaps.length} | t:${snap.tick} | E:${Math.round(snap.metrics.totalEnergy).toLocaleString()} | S:${snap.metrics.avgEntropy.toFixed(4)}`;
+  } else {
+    snapInfo.textContent = 'No snapshots yet';
+  }
+}
+
+// ── World Events ──────────────────────────────────────────────────────────────
+function renderWorldEventLog() {
+  const el = document.getElementById('worldEventLog')!;
+  if (!el) return;
+  const evs = sim.worldEvents.recent(6);
+  el.innerHTML = evs.length
+    ? evs.map(e => `<div class="wev"><span class="wev-type">${e.label}</span><span class="wev-tick">t:${e.tick}</span></div>`).join('')
+    : '<div style="font-size:10px;color:#555">No events yet</div>';
+}
+
 // ── Entity panel ──────────────────────────────────────────────────────────────
 function updateEntityPanel() {
   const list = document.getElementById('entityList')!;
-  const all  = entities.all;
+  const all  = sim.entityMarkers();
   document.getElementById('entityCount')!.textContent = String(all.length);
   document.getElementById('entOut')!.textContent      = String(all.length);
 
@@ -277,19 +357,40 @@ function renderLawPanel() {
   });
 }
 
+const PROC_CAT_COLOR: Record<string, string> = {
+  thermodynamic: '#ef8f3f', biological: '#4caf7d', geological: '#a0855a',
+  informational: '#7c9fff', physical: '#c084fc',
+};
+const STAB_COLOR = (s: number) => s > 0.3 ? '#4caf7d' : s < -0.2 ? '#f47b7b' : '#aaa';
+
 function renderProcGrid() {
-  const grid = document.getElementById('procGrid')!;
+  const container = document.getElementById('procGrid')!;
   const curMask = sim.laws.activeProcessMask;
-  grid.innerHTML = PROCESS_LIBRARY.map(p => {
+  container.innerHTML = PROCESS_LIBRARY.map(p => {
     const on = (curMask & (1 << p.id)) !== 0;
-    return `<div class="proc-row" title="${p.description}" data-procid="${p.id}">
-      <span class="proc-led ${on?'on':'off'}"></span>
-      <span class="proc-row-name" style="color:${on?'#ccc':'#444'}">${p.label}</span>
+    const catCol = PROC_CAT_COLOR[p.category] ?? '#888';
+    const stabBar = Math.round(Math.abs(p.stabilityImpact) * 16);
+    const stabCol = STAB_COLOR(p.stabilityImpact);
+    const inputs  = p.inputs.map(i => `<span class="proc-field-tag in">${i}</span>`).join('');
+    const outputs = p.outputs.map(o => `<span class="proc-field-tag out">${o}</span>`).join('');
+    return `<div class="proc-card ${on?'active':''}" data-procid="${p.id}" title="${p.description}">
+      <div class="proc-card-header">
+        <span class="proc-led ${on?'on':'off'}"></span>
+        <span class="proc-card-label" style="color:${on?catCol:'#555'}">${p.label}</span>
+        <span class="proc-cat-badge" style="background:${catCol}22;color:${catCol}">${p.category.slice(0,5)}</span>
+      </div>
+      <div class="proc-card-body">
+        <div class="proc-io-row">${inputs}<span class="proc-arrow">→</span>${outputs}</div>
+        <div class="proc-stab-row">
+          <span style="color:${stabCol};font-size:9px">stab ${p.stabilityImpact > 0 ? '+' : ''}${p.stabilityImpact.toFixed(1)}</span>
+          <span class="proc-stab-bar" style="width:${stabBar}px;background:${stabCol}"></span>
+        </div>
+      </div>
     </div>`;
   }).join('');
-  grid.querySelectorAll<HTMLDivElement>('.proc-row').forEach(row => {
-    row.addEventListener('click', () => {
-      const pid = parseInt(row.dataset.procid!);
+  container.querySelectorAll<HTMLDivElement>('.proc-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const pid = parseInt(card.dataset.procid!);
       const nowOn = (sim.laws.activeProcessMask & (1 << pid)) !== 0;
       sim.laws.toggleProcess(pid, !nowOn);
       renderProcGrid();
@@ -328,8 +429,55 @@ document.getElementById('obStart')!.addEventListener('click', () => {
 // ── Async game loop ───────────────────────────────────────────────────────────
 renderLawPanel();
 renderProcGrid();
+renderMaterialPalette();
 
-let entityTick = 0;
+// Agent controls
+document.getElementById('seedAgentsBtn')?.addEventListener('click', () => {
+  sim.agents.seed(sim.grid, 8);
+});
+document.getElementById('clearAgentsBtn')?.addEventListener('click', () => {
+  sim.agents.clear();
+  updateAgentPanel();
+});
+
+// Scientific mode
+const recBtn = document.getElementById('recBtn')!;
+const scrubber = document.getElementById('scrubber') as HTMLInputElement;
+const restoreBtn = document.getElementById('restoreBtn')!;
+const exportCsvBtn = document.getElementById('exportCsvBtn')!;
+
+recBtn?.addEventListener('click', () => {
+  if (sim.recorder.recording) sim.recorder.stopRecording();
+  else sim.recorder.startRecording();
+  renderSciPanel();
+});
+
+scrubber?.addEventListener('input', () => {
+  scrubberIdx = parseInt(scrubber.value);
+  renderSciPanel();
+});
+
+restoreBtn?.addEventListener('click', () => {
+  const ok = sim.recorder.restoreSnapshot(sim.grid, scrubberIdx);
+  if (ok) { sim.syncToGPU(); }
+});
+
+exportCsvBtn?.addEventListener('click', () => {
+  const csv = sim.recorder.exportCSV();
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `reality-metrics-${sim.tick}.csv`;
+  a.click();
+});
+
+// World event trigger buttons
+document.querySelectorAll<HTMLButtonElement>('[data-event]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    sim.triggerEvent(btn.dataset.event as EventType);
+    renderWorldEventLog();
+  });
+});
 
 async function loop(ts: number) {
   const dt = Math.min((ts - lastTs) / 1000, 0.05);
@@ -345,26 +493,16 @@ async function loop(ts: number) {
     await sim.step(dt, nSteps);
   }
 
-  // Entity detection every 15 ticks
-  entityTick++;
-  if (entityTick % 15 === 0) {
-    entities.update(sim.grid);
-    updateEntityPanel();
-  }
+  // Entity panel refresh every 15 ticks
+  if (sim.tick % 15 === 0) { updateEntityPanel(); updateAgentPanel(); }
 
-  // 3D render with entity markers
-  renderer.render(sim.grid, entities.all.map(e => ({
-    id: e.id,
-    centroid: e.centroid,
-    stability: e.stability,
-    age: e.age,
-    color: e.color,
-  })));
+  // 3D render with entity markers from engine
+  renderer.render(sim.grid, sim.entityMarkers());
 
   // Right-panel updates
   if (selX >= 0 && sim.tick % 3 === 0) updateCellPanel();
-  if (sim.tick % 12 === 0) updateEventLog();
-  if (sim.tick % 20 === 0) { renderLawPanel(); renderProcGrid(); }
+  if (sim.tick % 12 === 0) { updateEventLog(); renderWorldEventLog(); }
+  if (sim.tick % 20 === 0) { renderLawPanel(); renderProcGrid(); renderSciPanel(); }
 
   // Bottom bar
   const totalE    = sim.grid.totalField(F.ENERGY);

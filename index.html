@@ -39,6 +39,9 @@
     cursor: pointer; background: #1a1a22; color: #888; text-align: left; width: 100%; }
   .preset-btn:hover { background: #252535; color: #e0dff5; }
   #layerinfo { font-size: 10px; color: #555; line-height: 1.6; }
+  #materialPalette { display: flex; flex-wrap: wrap; gap: 3px; }
+  .mat-swatch { width: 16px; height: 16px; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
+  .mat-swatch:hover { transform: scale(1.2); }
 
   /* ── Canvas area ── */
   #canvaswrap { position: relative; overflow: hidden; background: #0a0a12; cursor: crosshair; }
@@ -89,15 +92,42 @@
     cursor: pointer; background: transparent; color: #555; width: 100%; text-align: center; }
   #addLawBtn:hover { color: #e0dff5; border-color: #7c6fcd; }
 
-  /* ── Process panel ── */
-  .proc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
-  .proc-row { display: flex; align-items: center; gap: 4px; font-size: 9px; cursor: pointer;
-    padding: 2px 3px; border-radius: 4px; }
-  .proc-row:hover { background: #1e1e2e; }
+  /* ── Process panel — card grid ── */
+  .proc-grid { display: flex; flex-direction: column; gap: 3px; }
   .proc-led { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
   .proc-led.on  { background: #4caf7d; box-shadow: 0 0 4px #4caf7d66; }
   .proc-led.off { background: #333; }
-  .proc-row-name { color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .proc-card { border: 1px solid #2a2a35; border-radius: 6px; padding: 5px 7px; cursor: pointer;
+    transition: border-color .15s, background .15s; background: #111115; }
+  .proc-card:hover { background: #1a1a22; border-color: #3a3a55; }
+  .proc-card.active { background: #12151f; border-color: #2a3a55; }
+  .proc-card-header { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+  .proc-card-label { font-size: 10px; font-weight: 500; flex: 1; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .proc-cat-badge { font-size: 8px; padding: 1px 4px; border-radius: 3px; flex-shrink: 0; }
+  .proc-card-body { display: flex; flex-direction: column; gap: 2px; }
+  .proc-io-row { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+  .proc-field-tag { font-size: 8px; padding: 0 4px; border-radius: 3px; line-height: 1.6; }
+  .proc-field-tag.in  { background: #1a2030; color: #7c9fff; border: 1px solid #2a3a55; }
+  .proc-field-tag.out { background: #1a2a1a; color: #4caf7d; border: 1px solid #1a3a1a; }
+  .proc-arrow { font-size: 9px; color: #555; }
+  .proc-stab-row { display: flex; align-items: center; gap: 4px; margin-top: 1px; }
+  .proc-stab-bar { height: 3px; border-radius: 2px; min-width: 1px; flex-shrink: 0; }
+
+  /* ── Scientific Mode ── */
+  .sci-btn { font-size: 9px; padding: 2px 6px; border: 1px solid #2a2a35; border-radius: 4px;
+    cursor: pointer; background: #141418; color: #aaa; }
+  .sci-btn:hover { background: #1e1e2e; color: #e0dff5; border-color: #444; }
+
+  /* ── World Events ── */
+  .wev { display: flex; justify-content: space-between; font-size: 10px; padding: 2px 4px;
+    border-radius: 4px; background: #12121a; }
+  .wev-type { color: #c084fc; font-weight: 500; }
+  .wev-tick { color: #444; font-family: monospace; }
+  .wev-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+  .wev-btn { font-size: 14px; padding: 3px 6px; border: 1px solid #2a2a35; border-radius: 6px;
+    cursor: pointer; background: #141418; color: #aaa; }
+  .wev-btn:hover { background: #1e1e2e; border-color: #5a3a6a; color: #e0dff5; }
 
   /* ── Bottombar ── */
   #bottombar { display: flex; align-items: center; gap: 10px; padding: 0 12px;
@@ -133,6 +163,10 @@
     <button class="layer-btn"        data-layer="entropy">Entropy</button>
     <button class="layer-btn"        data-layer="temperature">Temperature</button>
     <button class="layer-btn"        data-layer="bioPotential">Bio</button>
+    <button class="layer-btn"        data-layer="material">Material</button>
+    <button class="layer-btn"        data-layer="chemistry">Chemistry</button>
+    <button class="layer-btn"        data-layer="signal">Signal</button>
+    <button class="layer-btn"        data-layer="memory">Memory</button>
     <div class="sep"></div>
     <button class="tool-btn active" data-tool="paint"  ><i class="ti ti-pencil"></i></button>
     <button class="tool-btn"        data-tool="inject" ><i class="ti ti-plus"></i></button>
@@ -153,7 +187,7 @@
   <div id="middle">
     <!-- Left: presets + layer info -->
     <div id="leftpanel">
-      <span class="plabel">Presets</span>
+      <span class="plabel">Presets — Classic</span>
       <button class="preset-btn" data-preset="burst"        ><i class="ti ti-flame"></i> Energy burst</button>
       <button class="preset-btn" data-preset="wave"         ><i class="ti ti-waves"></i> Wave</button>
       <button class="preset-btn" data-preset="life"         ><i class="ti ti-dna"></i> Life seed</button>
@@ -161,6 +195,27 @@
       <button class="preset-btn" data-preset="entropy_storm"><i class="ti ti-storm"></i> Entropy storm</button>
       <button class="preset-btn" data-preset="ecosystem"    ><i class="ti ti-leaf"></i> Ecosystem</button>
       <button class="preset-btn" data-preset="clear"        ><i class="ti ti-square"></i> Clear</button>
+      <span class="plabel">Cosmic</span>
+      <button class="preset-btn" data-preset="plasma_universe"   ><i class="ti ti-planet"></i> Plasma Universe</button>
+      <button class="preset-btn" data-preset="frozen_world"      ><i class="ti ti-snowflake"></i> Frozen World</button>
+      <button class="preset-btn" data-preset="high_gravity"      ><i class="ti ti-arrows-down"></i> High Gravity</button>
+      <button class="preset-btn" data-preset="low_entropy_vacuum"><i class="ti ti-point"></i> Vacuum Seeds</button>
+      <button class="preset-btn" data-preset="nebula"            ><i class="ti ti-stars"></i> Nebula</button>
+      <button class="preset-btn" data-preset="proto_planet"      ><i class="ti ti-circle"></i> Proto Planet</button>
+      <button class="preset-btn" data-preset="star_formation"    ><i class="ti ti-sun"></i> Star Formation</button>
+      <span class="plabel">Biological</span>
+      <button class="preset-btn" data-preset="fungal_ecosystem"  ><i class="ti ti-mushroom"></i> Fungal Net</button>
+      <button class="preset-btn" data-preset="ocean_biosphere"   ><i class="ti ti-droplet"></i> Ocean Biosphere</button>
+      <button class="preset-btn" data-preset="toxic_ecosystem"   ><i class="ti ti-biohazard"></i> Toxic Ecosystem</button>
+      <button class="preset-btn" data-preset="self_replicating_field"><i class="ti ti-reload"></i> Self-Replicating</button>
+      <span class="plabel">Civilizational</span>
+      <button class="preset-btn" data-preset="abandoned_megacity"><i class="ti ti-building"></i> Megacity Ruins</button>
+      <button class="preset-btn" data-preset="machine_ecology"   ><i class="ti ti-cpu"></i> Machine Ecology</button>
+      <button class="preset-btn" data-preset="energy_economy"    ><i class="ti ti-bolt"></i> Energy Economy</button>
+      <button class="preset-btn" data-preset="causality_collapse"><i class="ti ti-alert-triangle"></i> Causality Collapse</button>
+      <div style="height:1px;background:#2a2a35;margin:4px 0"></div>
+      <span class="plabel">Material Brush</span>
+      <div id="materialPalette"></div>
       <div style="height:1px;background:#2a2a35;margin:4px 0"></div>
       <span class="plabel">About layer</span>
       <div id="layerinfo"></div>
@@ -207,6 +262,17 @@
       <div id="eventlog"><div style="font-size:10px;color:#555">No events yet</div></div>
 
       <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
+      <span class="rp-label">World Events</span>
+      <div id="worldEventLog" style="display:flex;flex-direction:column;gap:2px;"></div>
+      <div class="wev-btns">
+        <button class="wev-btn" data-event="meteor_strike"   title="Meteor Strike">☄</button>
+        <button class="wev-btn" data-event="solar_flare"     title="Solar Flare">☀</button>
+        <button class="wev-btn" data-event="radiation_storm" title="Radiation Storm">☢</button>
+        <button class="wev-btn" data-event="mutation_wave"   title="Mutation Wave">🧬</button>
+        <button class="wev-btn" data-event="entropy_collapse" title="Entropy Collapse">❄</button>
+        <button class="wev-btn" data-event="tectonic_shift"  title="Tectonic Shift">⛰</button>
+      </div>
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
       <span class="rp-label">Entities <span id="entityCount" style="color:#4caf7d;font-family:monospace">0</span></span>
       <div id="entityList" style="display:flex;flex-direction:column;gap:3px;max-height:120px;overflow-y:auto;"></div>
 
@@ -218,8 +284,29 @@
 
       <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
 
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
+      <span class="rp-label">AI Agents <span id="agentCount" style="color:#7c9fff;font-family:monospace">0</span></span>
+      <div style="display:flex;gap:4px;">
+        <button id="seedAgentsBtn" class="sci-btn">+ Seed 8</button>
+        <button id="clearAgentsBtn" class="sci-btn">Clear</button>
+      </div>
+      <div id="agentList" style="display:flex;flex-direction:column;gap:2px;max-height:100px;overflow-y:auto;"></div>
+
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
       <span class="rp-label">Active processes</span>
       <div id="procGrid" class="proc-grid"></div>
+
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
+      <span class="rp-label">Scientific Mode</span>
+      <div id="sciPanel" style="display:flex;flex-direction:column;gap:4px;">
+        <div style="display:flex;gap:4px;">
+          <button id="recBtn" class="sci-btn">⏺ Record</button>
+          <button id="restoreBtn" class="sci-btn">↩ Restore</button>
+          <button id="exportCsvBtn" class="sci-btn">CSV</button>
+        </div>
+        <input type="range" id="scrubber" min="0" max="0" value="0" style="width:100%;accent-color:#c084fc;">
+        <div id="snapInfo" style="font-size:9px;color:#555;font-family:monospace;">No snapshots yet</div>
+      </div>
     </div>
   </div>
 

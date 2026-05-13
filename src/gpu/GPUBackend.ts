@@ -1,4 +1,6 @@
+import { CELL_FIELDS } from '../core/CellState';
 import { PhysicsParams } from '../laws/MetaLaw';
+import { MAT_COUNT } from '../materials/MaterialDef';
 
 // ─── WGSL compute shader ──────────────────────────────────────────────────────
 const SHADER = /* wgsl */`
@@ -18,7 +20,15 @@ struct Cell {
   wave_phase:   f32,  // 12
   wave_amp:     f32,  // 13
   gravity_pot:  f32,  // 14
-  material:     f32,  // 15
+  material_id:  f32,  // 15 — material type (MAT enum)
+  chem_state:   f32,  // 16 — chemical state (CHEM enum)
+  signal:       f32,  // 17 — entity communication signal
+  mem_field:    f32,  // 18 — information memory trace
+  agent_mark:   f32,  // 19 — AI agent occupancy
+  entity_id:    f32,  // 20 — entity membership id
+  spare1:       f32,  // 21
+  spare2:       f32,  // 22
+  spare3:       f32,  // 23
 }
 
 // Flat storage layout (4-byte aligned, no padding needed)
@@ -45,9 +55,24 @@ struct SimParams {
   timeEnergyBoost: f32,        // [19]
 }
 
-@group(0) @binding(0) var<storage, read>       src:    array<Cell>;
-@group(0) @binding(1) var<storage, read_write> dst:    array<Cell>;
-@group(0) @binding(2) var<storage, read>       params: SimParams;
+// Material coefficients: MAT_COUNT × 7 floats
+// [0]=conductivity [1]=heatCapacity [2]=elasticity [3]=erosionResistance
+// [4]=crystallizationRate [5]=bioAffinity [6]=radiationAbsorption
+struct MatCoeffs {
+  conductivity:        f32,
+  heatCapacity:        f32,
+  elasticity:          f32,
+  erosionResistance:   f32,
+  crystallizationRate: f32,
+  bioAffinity:         f32,
+  radiationAbsorption: f32,
+  _pad:                f32,  // pad to 32 bytes (8 × f32)
+}
+
+@group(0) @binding(0) var<storage, read>       src:     array<Cell>;
+@group(0) @binding(1) var<storage, read_write> dst:     array<Cell>;
+@group(0) @binding(2) var<storage, read>       params:  SimParams;
+@group(0) @binding(3) var<storage, read>       matBuf:  array<MatCoeffs>;
 
 fn cidx(x: u32, y: u32, z: u32) -> u32 {
   return z * params.H * params.W + y * params.W + x;
@@ -68,6 +93,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   let dt = params.dt;
   let ix = i32(x); let iy = i32(y); let iz = i32(z);
+
+  // ── Material coefficients for this cell ───────────────────────────────────
+  let matIdx = clamp(u32(c.material_id), 0u, 13u);
+  let mat = matBuf[matIdx];
 
   // ── 6-neighbor Laplacians ──────────────────────────────────────────────────
   var lapE = 0.0; var lapT = 0.0; var lapD = 0.0; var lapI = 0.0;
@@ -109,13 +138,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   // ── PROC 0: Energy Diffusion ───────────────────────────────────────────────
   if (active(1u)) {
-    o.energy = clamp(c.energy + params.energyDiffusion * dt * lapE, 0.0, 9999.0);
+    o.energy = clamp(c.energy + params.energyDiffusion * mat.conductivity * dt * lapE, 0.0, 9999.0);
   }
 
   // ── PROC 1: Thermal Flow ───────────────────────────────────────────────────
   if (active(2u)) {
     let heat = c.energy * params.tempEnergyCoupling * dt;
-    o.temperature = max(0.0, c.temperature + params.tempDiffusion * dt * lapT + heat);
+    let tDiff = params.tempDiffusion / max(mat.heatCapacity, 0.1);
+    o.temperature = max(0.0, c.temperature + tDiff * dt * lapT + heat);
   }
 
   // ── PROC 2: Density Flow ───────────────────────────────────────────────────
@@ -148,7 +178,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let bio = (c.information / 200.0) * 0.4
             + min(c.energy / 500.0, 1.0) * 0.3
             + c.density * 0.2
-            + (1.0 - c.entropy) * 0.1;
+            + (1.0 - c.entropy) * 0.1
+            + mat.bioAffinity;
     o.bio_potential = clamp(bio, 0.0, 1.0);
   }
 
@@ -197,15 +228,17 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // ── PROC 11: Crystallization ──────────────────────────────────────────────
   if (active(2048u)) {
     if (c.entropy < 0.18 && c.density > 0.38) {
-      o.density = min(1.0, c.density + 0.003 * (0.18 - c.entropy) * dt * 60.0);
-      o.entropy = max(0.0, c.entropy - 0.0015 * dt * 60.0);
+      let cRate = 0.003 * mat.crystallizationRate;
+      o.density = min(1.0, c.density + cRate * (0.18 - c.entropy) * dt * 60.0);
+      o.entropy = max(0.0, c.entropy - cRate * 0.5 * dt * 60.0);
     }
   }
 
   // ── PROC 12: Radiation Pressure ───────────────────────────────────────────
   if (active(4096u)) {
     if (c.energy > 400.0) {
-      o.density = max(0.0, c.density - (c.energy - 400.0) * 0.00008 * dt * 60.0);
+      let absorbed = mat.radiationAbsorption;
+      o.density = max(0.0, c.density - (c.energy - 400.0) * 0.00008 * (1.0 - absorbed) * dt * 60.0);
       o.energy  = max(0.0, o.energy - (c.energy - 400.0) * 0.0001 * dt * 60.0);
     }
   }
@@ -231,8 +264,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (active(32768u)) {
     let flow = abs(c.field_x) + abs(c.field_y) + abs(c.field_z);
     if (c.density > 0.65 && flow > 8.0) {
-      o.density     = max(0.0, c.density - 0.0018 * dt * 60.0);
-      o.information = max(0.0, c.information - 0.4 * dt);
+      let resistance = mat.erosionResistance;
+      o.density     = max(0.0, c.density - 0.0018 * (1.0 - resistance) * dt * 60.0);
+      o.information = max(0.0, c.information - 0.4 * (1.0 - resistance) * dt);
     }
   }
 
@@ -253,6 +287,7 @@ export class GPUBackend {
   private srcBuf: GPUBuffer | null = null;
   private dstBuf: GPUBuffer | null = null;
   private paramsBuf: GPUBuffer | null = null;
+  private matBuf: GPUBuffer | null = null;
   private stagingBuf: GPUBuffer | null = null;
   private bindGroup: GPUBindGroup | null = null;
 
@@ -265,7 +300,7 @@ export class GPUBackend {
   async init(W: number, H: number, D: number): Promise<boolean> {
     this.W = W; this.H = H; this.D = D;
     this.cellCount = W * H * D;
-    this.bufSize = this.cellCount * 16 * 4; // 16 f32 × 4 bytes
+    this.bufSize = this.cellCount * CELL_FIELDS * 4; // CELL_FIELDS f32 × 4 bytes
 
     if (!navigator.gpu) {
       console.warn('[GPU] WebGPU not supported — CPU fallback active');
@@ -292,6 +327,12 @@ export class GPUBackend {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
+    // Material coefficient buffer: MAT_COUNT × 8 floats (7 coeffs + 1 pad) × 4 bytes
+    this.matBuf = this.device.createBuffer({
+      size: Math.max(256, MAT_COUNT * 8 * 4),
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
     const mod = this.device.createShaderModule({ code: SHADER });
     this.pipeline = await this.device.createComputePipelineAsync({
       layout: 'auto',
@@ -304,11 +345,22 @@ export class GPUBackend {
         { binding: 0, resource: { buffer: this.srcBuf } },
         { binding: 1, resource: { buffer: this.dstBuf } },
         { binding: 2, resource: { buffer: this.paramsBuf } },
+        { binding: 3, resource: { buffer: this.matBuf } },
       ],
     });
 
     console.log(`[GPU] WebGPU ready — ${adapter.info?.device ?? 'unknown device'}`);
     return true;
+  }
+
+  uploadMaterials(data: Float32Array): void {
+    if (!this.device || !this.matBuf) return;
+    // data is MAT_COUNT × 7 floats; pad each entry to 8 floats for GPU alignment
+    const padded = new Float32Array(MAT_COUNT * 8);
+    for (let i = 0; i < MAT_COUNT; i++) {
+      for (let j = 0; j < 7; j++) padded[i * 8 + j] = data[i * 7 + j];
+    }
+    this.device.queue.writeBuffer(this.matBuf, 0, padded.buffer, 0, padded.byteLength);
   }
 
   upload(data: Float32Array): void {
@@ -377,6 +429,7 @@ export class GPUBackend {
     this.dstBuf?.destroy();
     this.stagingBuf?.destroy();
     this.paramsBuf?.destroy();
+    this.matBuf?.destroy();
     this.device?.destroy();
     this.device = null;
   }

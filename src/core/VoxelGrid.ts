@@ -28,6 +28,10 @@ export class VoxelGrid {
     return new CellState(this.buffer, this.idx(x, y, z));
   }
 
+  cellAt(linearIdx: number): CellState {
+    return new CellState(this.buffer, linearIdx * CELL_FIELDS);
+  }
+
   cellBack(x: number, y: number, z: number): CellState {
     return new CellState(this.backBuffer, this.idx(x, y, z));
   }

@@ -2,16 +2,30 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
+import { MATERIAL_LIBRARY } from '../materials/MaterialDef';
 
-export type LayerName = 'energy' | 'density' | 'information' | 'entropy' | 'temperature' | 'bioPotential';
+export type LayerName = 'energy' | 'density' | 'information' | 'entropy' | 'temperature' | 'bioPotential' | 'material' | 'chemistry' | 'signal' | 'memory';
 
 const LAYER_FIELD: Record<LayerName, number> = {
   energy: F.ENERGY, density: F.DENSITY, information: F.INFORMATION,
   entropy: F.ENTROPY, temperature: F.TEMPERATURE, bioPotential: F.BIO_POTENTIAL,
+  material: F.MATERIAL_ID, chemistry: F.CHEM_STATE,
+  signal: F.SIGNAL, memory: F.MEM_FIELD,
 };
 const LAYER_MAX: Record<LayerName, number> = {
   energy: 1000, density: 1, information: 500, entropy: 1, temperature: 800, bioPotential: 1,
+  material: 13, chemistry: 4, signal: 100, memory: 1,
 };
+
+// Pre-build material color palette from MaterialDef
+const MAT_COLORS: [number, number, number][] = MATERIAL_LIBRARY.map(m => m.color);
+const CHEM_COLORS: [number, number, number][] = [
+  [0.3, 0.3, 0.6],  // 0 gas — blue-grey
+  [0.2, 0.5, 0.8],  // 1 liquid — blue
+  [0.6, 0.6, 0.6],  // 2 solid — grey
+  [0.2, 0.7, 0.2],  // 3 organic — green
+  [0.9, 0.4, 0.1],  // 4 reactive — orange
+];
 
 // Returns normalized [0..1] RGB
 function layerColor(layer: LayerName, t: number): [number, number, number] {
@@ -30,6 +44,22 @@ function layerColor(layer: LayerName, t: number): [number, number, number] {
       const s = (t - 0.5) * 2; return [1, s * 0.78, 0];
     }
     case 'bioPotential': return [t * 0.19, t * 0.9, t * 0.35];
+    case 'material': {
+      const c = MAT_COLORS[Math.min(Math.round(t * 13), 13)] ?? [0.1,0.1,0.1];
+      return [c[0] * (0.4 + t * 0.6), c[1] * (0.4 + t * 0.6), c[2] * (0.4 + t * 0.6)];
+    }
+    case 'chemistry': {
+      const c = CHEM_COLORS[Math.min(Math.round(t * 4), 4)] ?? [0.3,0.3,0.3];
+      return c;
+    }
+    case 'signal': {
+      if (t < 0.5) { const s = t / 0.5; return [0, s * 0.5, s]; }
+      const s = (t - 0.5) / 0.5; return [s, 0.5 + s * 0.5, 1];
+    }
+    case 'memory': {
+      if (t < 0.4) { const s = t / 0.4; return [0, s * 0.3, s * 0.8]; }
+      const s = (t - 0.4) / 0.6; return [s * 0.7, 0.3 + s * 0.4, 0.8 - s * 0.5];
+    }
   }
 }
 
@@ -171,13 +201,30 @@ export class VoxelRenderer {
 
     for (let i = 0; i < n; i++) {
       const v = buf[i * CELL_FIELDS + fi];
-      const t = v / maxV;
       const ci = i * 3;
-      if (t < thr) {
-        cols[ci] = 0; cols[ci + 1] = 0; cols[ci + 2] = 0;
+      // Material and chemistry use discrete lookups; others use normalized gradient
+      if (this.layer === 'material') {
+        const matIdx = Math.min(Math.floor(v), 13);
+        if (matIdx === 0) { cols[ci] = 0; cols[ci+1] = 0; cols[ci+2] = 0; }
+        else {
+          const mc = MAT_COLORS[matIdx];
+          cols[ci] = mc[0]; cols[ci+1] = mc[1]; cols[ci+2] = mc[2];
+        }
+      } else if (this.layer === 'chemistry') {
+        const chemIdx = Math.min(Math.floor(v), 4);
+        if (chemIdx === 0 && v < 0.5) { cols[ci] = 0; cols[ci+1] = 0; cols[ci+2] = 0; }
+        else {
+          const cc = CHEM_COLORS[chemIdx];
+          cols[ci] = cc[0]; cols[ci+1] = cc[1]; cols[ci+2] = cc[2];
+        }
       } else {
-        const [r, g, b] = layerColor(this.layer, Math.min(t, 1));
-        cols[ci] = r; cols[ci + 1] = g; cols[ci + 2] = b;
+        const t = v / maxV;
+        if (t < thr) {
+          cols[ci] = 0; cols[ci + 1] = 0; cols[ci + 2] = 0;
+        } else {
+          const [r, g, b] = layerColor(this.layer, Math.min(t, 1));
+          cols[ci] = r; cols[ci + 1] = g; cols[ci + 2] = b;
+        }
       }
     }
     this.colorAttr.needsUpdate = true;
