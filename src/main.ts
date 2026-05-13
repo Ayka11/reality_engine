@@ -38,6 +38,7 @@ const LAYER_INFO: Record<LayerName, string> = {
   chemistry:    'Chemical state: gas (blue-grey), liquid (blue), solid (grey), organic (green), reactive (orange).',
   signal:       'Entity communication signal. Written by entities to propagate information between clusters.',
   memory:       'Geological/information memory trace. Persists for hundreds of ticks after high-information events.',
+  diff:         'World diff: orange = energy gained since last snapshot, blue = energy lost. Use scrubber to compare.',
 };
 
 // ── Layer buttons ─────────────────────────────────────────────────────────────
@@ -271,28 +272,165 @@ function updateAgentPanel() {
 
 // ── Scientific Mode ───────────────────────────────────────────────────────────
 let scrubberIdx = 0;
+let replayTimer: ReturnType<typeof setInterval> | null = null;
+let replayPlaying = false;
 
 function renderSciPanel() {
-  const panel = document.getElementById('sciPanel')!;
-  if (!panel) return;
   const snaps = sim.recorder.snapList;
   const recBtn = document.getElementById('recBtn')!;
-  recBtn.textContent = sim.recorder.recording ? '⏹ Stop Rec' : '⏺ Record';
+  recBtn.textContent = sim.recorder.recording ? '⏹ Stop' : '⏺ Record';
   recBtn.style.color = sim.recorder.recording ? '#f47b7b' : '#aaa';
 
   const scrubber = document.getElementById('scrubber') as HTMLInputElement;
   scrubber.max = String(Math.max(0, snaps.length - 1));
-  scrubber.value = String(Math.min(scrubberIdx, snaps.length - 1));
+  scrubberIdx = Math.min(scrubberIdx, Math.max(0, snaps.length - 1));
+  scrubber.value = String(scrubberIdx);
 
   const snap = snaps[scrubberIdx];
   const snapInfo = document.getElementById('snapInfo')!;
   if (snap) {
     snapInfo.textContent =
-      `Snapshot ${scrubberIdx + 1}/${snaps.length} | t:${snap.tick} | E:${Math.round(snap.metrics.totalEnergy).toLocaleString()} | S:${snap.metrics.avgEntropy.toFixed(4)}`;
+      `[${scrubberIdx + 1}/${snaps.length}] t:${snap.tick} | E:${Math.round(snap.metrics.totalEnergy).toLocaleString()} | S:${snap.metrics.avgEntropy.toFixed(4)}`;
   } else {
-    snapInfo.textContent = 'No snapshots yet';
+    snapInfo.textContent = 'No snapshots — click ⏺ Record then Play';
   }
+
+  drawMetricsChart();
+  drawCausalGraph();
 }
+
+// ── Metrics chart: sparklines of all recorded snapshots ───────────────────────
+function drawMetricsChart() {
+  const canvas = document.getElementById('metricsChart') as HTMLCanvasElement;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d')!;
+  const w = canvas.width = canvas.offsetWidth || 200;
+  const h = canvas.height;
+  ctx.fillStyle = '#0a0a12'; ctx.fillRect(0, 0, w, h);
+
+  const snaps = sim.recorder.snapList;
+  if (snaps.length < 2) { ctx.fillStyle = '#333'; ctx.font = '9px monospace'; ctx.fillText('record to populate', 4, h/2); return; }
+
+  const n = snaps.length;
+  const maxE = Math.max(...snaps.map(s => s.metrics.totalEnergy), 1);
+
+  // Scrubber tick line
+  const sx = (scrubberIdx / (n - 1)) * w;
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, h); ctx.stroke();
+
+  const drawLine = (vals: number[], max: number, col: string, yScale = 0.85) => {
+    ctx.beginPath(); ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+    vals.forEach((v, i) => {
+      const px = (i / (n - 1)) * w;
+      const py = h - (v / max) * h * yScale - 2;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+  };
+
+  drawLine(snaps.map(s => s.metrics.totalEnergy), maxE, '#ef8f3f');
+  drawLine(snaps.map(s => s.metrics.avgEntropy),   1,    '#f47b7b');
+  drawLine(snaps.map(s => s.metrics.avgInfo),       Math.max(...snaps.map(s => s.metrics.avgInfo), 1), '#c084fc');
+  drawLine(snaps.map(s => s.metrics.avgBio),        1,    '#4caf7d');
+}
+
+// ── Causal graph: DAG of the last 80 causal events ────────────────────────────
+let _hoveredCausalId = -1;
+
+function drawCausalGraph() {
+  const canvas = document.getElementById('causalCanvas') as HTMLCanvasElement;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d')!;
+  const w = canvas.width = canvas.offsetWidth || 200;
+  const h = canvas.height;
+  ctx.fillStyle = '#0a0a12'; ctx.fillRect(0, 0, w, h);
+
+  const evs = sim.causal.recent(80).reverse(); // oldest first
+  if (evs.length < 2) { ctx.fillStyle = '#333'; ctx.font = '9px monospace'; ctx.fillText('no causal events yet', 4, h/2); return; }
+
+  const minTick = evs[0].tick;
+  const maxTick = evs[evs.length - 1].tick;
+  const tickRange = Math.max(1, maxTick - minTick);
+
+  // Map event → pixel
+  const evPos = new Map<number, [number, number]>();
+  const PAD = 8;
+  for (const ev of evs) {
+    const px = PAD + ((ev.tick - minTick) / tickRange) * (w - PAD * 2);
+    // Y from cell XYZ projected: use x + y as "horizontal spatial" position
+    const spatial = (ev.x + ev.y * sim.grid.W) / (sim.grid.W * sim.grid.H);
+    const py = PAD + spatial * (h - PAD * 2);
+    evPos.set(ev.id, [px, py]);
+  }
+
+  const typeCol: Record<string, string> = {
+    energy_spike: '#ef8f3f', info_bloom: '#c084fc', entropy_burst: '#f47b7b',
+    bio_emergence: '#4caf7d', phase_transition: '#7c9fff',
+  };
+
+  // Draw edges (parentId → child)
+  ctx.lineWidth = 0.8;
+  for (const ev of evs) {
+    if (ev.parentId == null) continue;
+    const a = evPos.get(ev.parentId);
+    const b = evPos.get(ev.id);
+    if (!a || !b) continue;
+    ctx.strokeStyle = typeCol[ev.type] + '55';
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  }
+
+  // Draw nodes
+  for (const ev of evs) {
+    const pos = evPos.get(ev.id);
+    if (!pos) continue;
+    const [px, py] = pos;
+    const r = ev.id === _hoveredCausalId ? 5 : 3;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fillStyle = typeCol[ev.type] ?? '#888';
+    ctx.fill();
+  }
+
+  // Tick labels at bottom
+  ctx.fillStyle = '#333'; ctx.font = '8px monospace';
+  ctx.fillText(`t:${minTick}`, PAD, h - 2);
+  ctx.fillText(`t:${maxTick}`, w - 40, h - 2);
+}
+
+// Causal graph click → jump inspector to that event's cell
+(function wireCausalCanvas() {
+  const canvas = document.getElementById('causalCanvas') as HTMLCanvasElement;
+  if (!canvas) return;
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top)  * (canvas.height / rect.height);
+
+    const evs = sim.causal.recent(80).reverse();
+    if (evs.length < 2) return;
+    const minTick = evs[0].tick, maxTick = evs[evs.length - 1].tick;
+    const tickRange = Math.max(1, maxTick - minTick);
+    const PAD = 8, w = canvas.width, h = canvas.height;
+
+    let bestDist = 14, bestEv = null as typeof evs[0] | null;
+    for (const ev of evs) {
+      const px = PAD + ((ev.tick - minTick) / tickRange) * (w - PAD * 2);
+      const spatial = (ev.x + ev.y * sim.grid.W) / (sim.grid.W * sim.grid.H);
+      const py = PAD + spatial * (h - PAD * 2);
+      const d = Math.hypot(mx - px, my - py);
+      if (d < bestDist) { bestDist = d; bestEv = ev; }
+    }
+    if (bestEv) {
+      _hoveredCausalId = bestEv.id;
+      selX = bestEv.x; selY = bestEv.y; selZ = bestEv.z; clearHist();
+      const chain = sim.causal.chainFrom(bestEv.id);
+      document.getElementById('causalInfo')!.textContent =
+        `#${bestEv.id} ${bestEv.type} Δ${bestEv.delta > 0 ? '+' : ''}${bestEv.delta} chain:${chain.length}`;
+      drawCausalGraph();
+    }
+  });
+})();
 
 // ── World Events ──────────────────────────────────────────────────────────────
 function renderWorldEventLog() {
@@ -440,11 +578,15 @@ document.getElementById('clearAgentsBtn')?.addEventListener('click', () => {
   updateAgentPanel();
 });
 
-// Scientific mode
-const recBtn = document.getElementById('recBtn')!;
-const scrubber = document.getElementById('scrubber') as HTMLInputElement;
-const restoreBtn = document.getElementById('restoreBtn')!;
+// Scientific mode controls
+const recBtn       = document.getElementById('recBtn')!;
+const scrubber     = document.getElementById('scrubber') as HTMLInputElement;
+const restoreBtn   = document.getElementById('restoreBtn')!;
 const exportCsvBtn = document.getElementById('exportCsvBtn')!;
+const diffBtn      = document.getElementById('diffBtn')!;
+const replayPlayBtn = document.getElementById('replayPlayBtn')!;
+const replayBackBtn = document.getElementById('replayBackBtn')!;
+const replayFwdBtn  = document.getElementById('replayFwdBtn')!;
 
 recBtn?.addEventListener('click', () => {
   if (sim.recorder.recording) sim.recorder.stopRecording();
@@ -454,21 +596,83 @@ recBtn?.addEventListener('click', () => {
 
 scrubber?.addEventListener('input', () => {
   scrubberIdx = parseInt(scrubber.value);
+  _applyDiffIfActive();
   renderSciPanel();
 });
 
 restoreBtn?.addEventListener('click', () => {
   const ok = sim.recorder.restoreSnapshot(sim.grid, scrubberIdx);
-  if (ok) { sim.syncToGPU(); }
+  if (ok) { playing = false; sim.syncToGPU(); }
 });
 
 exportCsvBtn?.addEventListener('click', () => {
   const csv = sim.recorder.exportCSV();
   const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `reality-metrics-${sim.tick}.csv`;
-  a.click();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `reality-metrics-${sim.tick}.csv`; a.click();
+});
+
+// Diff layer toggle
+let _diffActive = false;
+function _applyDiffIfActive() {
+  if (!_diffActive) return;
+  const prev = scrubberIdx > 0 ? scrubberIdx - 1 : 0;
+  const diff = sim.recorder.diffAt(prev, scrubberIdx);
+  renderer.setDiffBuffer(diff);
+}
+diffBtn?.addEventListener('click', () => {
+  _diffActive = !_diffActive;
+  diffBtn.style.color = _diffActive ? '#ef8f3f' : '#aaa';
+  if (_diffActive) {
+    _applyDiffIfActive();
+    renderer.layer = 'diff';
+    document.querySelectorAll('.layer-btn').forEach(b => b.classList.remove('active'));
+  } else {
+    renderer.setDiffBuffer(null);
+    renderer.layer = 'energy';
+    document.querySelector<HTMLButtonElement>('[data-layer="energy"]')?.classList.add('active');
+  }
+});
+
+// Replay controls
+replayBackBtn?.addEventListener('click', () => {
+  scrubberIdx = Math.max(0, scrubberIdx - 1);
+  const ok = sim.recorder.restoreSnapshot(sim.grid, scrubberIdx);
+  if (ok) sim.syncToGPU();
+  _applyDiffIfActive(); renderSciPanel();
+});
+replayFwdBtn?.addEventListener('click', () => {
+  const n = sim.recorder.snapList.length;
+  scrubberIdx = Math.min(n - 1, scrubberIdx + 1);
+  const ok = sim.recorder.restoreSnapshot(sim.grid, scrubberIdx);
+  if (ok) sim.syncToGPU();
+  _applyDiffIfActive(); renderSciPanel();
+});
+replayPlayBtn?.addEventListener('click', () => {
+  if (replayPlaying) {
+    // pause
+    clearInterval(replayTimer!); replayTimer = null; replayPlaying = false;
+    replayPlayBtn.textContent = '▶ Replay';
+  } else {
+    // play
+    const n = sim.recorder.snapList.length;
+    if (n < 2) return;
+    if (scrubberIdx >= n - 1) scrubberIdx = 0;
+    replayPlaying = true; replayPlayBtn.textContent = '⏸ Pause';
+    playing = false; // pause live sim
+    replayTimer = setInterval(() => {
+      const total = sim.recorder.snapList.length;
+      scrubberIdx++;
+      if (scrubberIdx >= total) {
+        scrubberIdx = total - 1;
+        clearInterval(replayTimer!); replayTimer = null; replayPlaying = false;
+        replayPlayBtn.textContent = '▶ Replay';
+      }
+      const ok = sim.recorder.restoreSnapshot(sim.grid, scrubberIdx);
+      if (ok) sim.syncToGPU();
+      _applyDiffIfActive(); renderSciPanel();
+    }, 120); // ~8fps playback
+  }
 });
 
 // World event trigger buttons
@@ -501,8 +705,9 @@ async function loop(ts: number) {
 
   // Right-panel updates
   if (selX >= 0 && sim.tick % 3 === 0) updateCellPanel();
-  if (sim.tick % 12 === 0) { updateEventLog(); renderWorldEventLog(); }
-  if (sim.tick % 20 === 0) { renderLawPanel(); renderProcGrid(); renderSciPanel(); }
+  if (sim.tick % 12 === 0) { updateEventLog(); renderWorldEventLog(); drawCausalGraph(); }
+  if (sim.tick % 20 === 0) { renderLawPanel(); renderProcGrid(); }
+  if (sim.tick % 30 === 0) { renderSciPanel(); }
 
   // Bottom bar
   const totalE    = sim.grid.totalField(F.ENERGY);

@@ -167,6 +167,7 @@
     <button class="layer-btn"        data-layer="chemistry">Chemistry</button>
     <button class="layer-btn"        data-layer="signal">Signal</button>
     <button class="layer-btn"        data-layer="memory">Memory</button>
+    <button class="layer-btn"        data-layer="diff">Diff</button>
     <div class="sep"></div>
     <button class="tool-btn active" data-tool="paint"  ><i class="ti ti-pencil"></i></button>
     <button class="tool-btn"        data-tool="inject" ><i class="ti ti-plus"></i></button>
@@ -299,13 +300,37 @@
       <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
       <span class="rp-label">Scientific Mode</span>
       <div id="sciPanel" style="display:flex;flex-direction:column;gap:4px;">
-        <div style="display:flex;gap:4px;">
-          <button id="recBtn" class="sci-btn">⏺ Record</button>
-          <button id="restoreBtn" class="sci-btn">↩ Restore</button>
-          <button id="exportCsvBtn" class="sci-btn">CSV</button>
+        <!-- Record + export row -->
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+          <button id="recBtn"      class="sci-btn">⏺ Record</button>
+          <button id="exportCsvBtn" class="sci-btn">↓ CSV</button>
+          <button id="diffBtn"     class="sci-btn">⊕ Diff</button>
         </div>
+        <!-- Timeline scrubber -->
         <input type="range" id="scrubber" min="0" max="0" value="0" style="width:100%;accent-color:#c084fc;">
+        <!-- Replay controls -->
+        <div style="display:flex;gap:4px;align-items:center;">
+          <button id="replayBackBtn"  class="sci-btn">◀</button>
+          <button id="replayPlayBtn"  class="sci-btn">▶ Replay</button>
+          <button id="replayFwdBtn"   class="sci-btn">▶▶</button>
+          <button id="restoreBtn"     class="sci-btn">↩ Restore</button>
+        </div>
         <div id="snapInfo" style="font-size:9px;color:#555;font-family:monospace;">No snapshots yet</div>
+
+        <!-- Metrics chart -->
+        <span class="rp-label" style="margin-top:4px;">Metrics over time</span>
+        <canvas id="metricsChart" height="60" style="width:100%;border-radius:5px;border:1px solid #2a2a35;background:#0a0a12;"></canvas>
+        <div style="display:flex;gap:6px;font-size:8px;flex-wrap:wrap;">
+          <span style="color:#ef8f3f">─ Energy</span>
+          <span style="color:#f47b7b">─ Entropy</span>
+          <span style="color:#c084fc">─ Info</span>
+          <span style="color:#4caf7d">─ Bio</span>
+        </div>
+
+        <!-- Causal graph -->
+        <span class="rp-label" style="margin-top:4px;">Causal graph</span>
+        <canvas id="causalCanvas" height="90" style="width:100%;border-radius:5px;border:1px solid #2a2a35;background:#0a0a12;cursor:pointer;"></canvas>
+        <div id="causalInfo" style="font-size:9px;color:#555;font-family:monospace;">Click a node to inspect</div>
       </div>
     </div>
   </div>

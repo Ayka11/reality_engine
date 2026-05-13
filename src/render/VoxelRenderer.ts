@@ -4,15 +4,15 @@ import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import { MATERIAL_LIBRARY } from '../materials/MaterialDef';
 
-export type LayerName = 'energy' | 'density' | 'information' | 'entropy' | 'temperature' | 'bioPotential' | 'material' | 'chemistry' | 'signal' | 'memory';
+export type LayerName = 'energy' | 'density' | 'information' | 'entropy' | 'temperature' | 'bioPotential' | 'material' | 'chemistry' | 'signal' | 'memory' | 'diff';
 
-const LAYER_FIELD: Record<LayerName, number> = {
+const LAYER_FIELD: Record<Exclude<LayerName, 'diff'>, number> = {
   energy: F.ENERGY, density: F.DENSITY, information: F.INFORMATION,
   entropy: F.ENTROPY, temperature: F.TEMPERATURE, bioPotential: F.BIO_POTENTIAL,
   material: F.MATERIAL_ID, chemistry: F.CHEM_STATE,
   signal: F.SIGNAL, memory: F.MEM_FIELD,
 };
-const LAYER_MAX: Record<LayerName, number> = {
+const LAYER_MAX: Record<Exclude<LayerName, 'diff'>, number> = {
   energy: 1000, density: 1, information: 500, entropy: 1, temperature: 800, bioPotential: 1,
   material: 13, chemistry: 4, signal: 100, memory: 1,
 };
@@ -60,6 +60,7 @@ function layerColor(layer: LayerName, t: number): [number, number, number] {
       if (t < 0.4) { const s = t / 0.4; return [0, s * 0.3, s * 0.8]; }
       const s = (t - 0.4) / 0.6; return [s * 0.7, 0.3 + s * 0.4, 0.8 - s * 0.5];
     }
+    default: return [t, t, t];
   }
 }
 
@@ -90,9 +91,10 @@ export class VoxelRenderer {
   private _W: number; private _H: number; private _D: number;
 
   layer: LayerName = 'energy';
-  threshold = 0.015;   // voxels below this normalized value are hidden
-  paintMode = false;   // true → OrbitControls disabled, left-click paints
-  paintAltitude = 0;   // which grid Z layer to paint on (altitude)
+  threshold = 0.015;
+  paintMode = false;
+  paintAltitude = 0;
+  private _diffBuf: Float32Array | null = null;
 
   constructor(canvas: HTMLCanvasElement, W: number, H: number, D: number) {
     this.domElement = canvas;
@@ -190,40 +192,57 @@ export class VoxelRenderer {
     this.renderer.setSize(w, h, false);
   }
 
+  setDiffBuffer(buf: Float32Array | null): void { this._diffBuf = buf; }
+
   render(grid: VoxelGrid, entities: EntityMarker[] = []): void {
     // ── Update voxel colors ───────────────────────────────────────────────────
     const buf   = grid.buffer;
-    const fi    = LAYER_FIELD[this.layer];
-    const maxV  = LAYER_MAX[this.layer];
     const cols  = this.colorAttr.array as Float32Array;
     const n     = grid.size;
     const thr   = this.threshold;
 
-    for (let i = 0; i < n; i++) {
-      const v = buf[i * CELL_FIELDS + fi];
-      const ci = i * 3;
-      // Material and chemistry use discrete lookups; others use normalized gradient
-      if (this.layer === 'material') {
-        const matIdx = Math.min(Math.floor(v), 13);
-        if (matIdx === 0) { cols[ci] = 0; cols[ci+1] = 0; cols[ci+2] = 0; }
-        else {
-          const mc = MAT_COLORS[matIdx];
-          cols[ci] = mc[0]; cols[ci+1] = mc[1]; cols[ci+2] = mc[2];
-        }
-      } else if (this.layer === 'chemistry') {
-        const chemIdx = Math.min(Math.floor(v), 4);
-        if (chemIdx === 0 && v < 0.5) { cols[ci] = 0; cols[ci+1] = 0; cols[ci+2] = 0; }
-        else {
-          const cc = CHEM_COLORS[chemIdx];
-          cols[ci] = cc[0]; cols[ci+1] = cc[1]; cols[ci+2] = cc[2];
-        }
-      } else {
-        const t = v / maxV;
-        if (t < thr) {
-          cols[ci] = 0; cols[ci + 1] = 0; cols[ci + 2] = 0;
+    if (this.layer === 'diff') {
+      // World diff: blue = decreased, red = increased, black = no change
+      const db = this._diffBuf;
+      const fi = F.ENERGY; // show energy delta
+      const scale = 500;   // ±500 maps to full saturation
+      for (let i = 0; i < n; i++) {
+        const ci = i * 3;
+        const d = db ? db[i * CELL_FIELDS + fi] : 0;
+        const t = Math.min(1, Math.abs(d) / scale);
+        if (t < 0.02) { cols[ci] = 0; cols[ci+1] = 0; cols[ci+2] = 0; }
+        else if (d > 0) { cols[ci] = t; cols[ci+1] = t * 0.3; cols[ci+2] = 0; }   // warm: gain
+        else            { cols[ci] = 0; cols[ci+1] = t * 0.4; cols[ci+2] = t; }   // cool: loss
+      }
+    } else {
+      const fi   = LAYER_FIELD[this.layer as Exclude<LayerName, 'diff'>];
+      const maxV = LAYER_MAX[this.layer as Exclude<LayerName, 'diff'>];
+
+      for (let i = 0; i < n; i++) {
+        const v = buf[i * CELL_FIELDS + fi];
+        const ci = i * 3;
+        if (this.layer === 'material') {
+          const matIdx = Math.min(Math.floor(v), 13);
+          if (matIdx === 0) { cols[ci] = 0; cols[ci+1] = 0; cols[ci+2] = 0; }
+          else {
+            const mc = MAT_COLORS[matIdx];
+            cols[ci] = mc[0]; cols[ci+1] = mc[1]; cols[ci+2] = mc[2];
+          }
+        } else if (this.layer === 'chemistry') {
+          const chemIdx = Math.min(Math.floor(v), 4);
+          if (chemIdx === 0 && v < 0.5) { cols[ci] = 0; cols[ci+1] = 0; cols[ci+2] = 0; }
+          else {
+            const cc = CHEM_COLORS[chemIdx];
+            cols[ci] = cc[0]; cols[ci+1] = cc[1]; cols[ci+2] = cc[2];
+          }
         } else {
-          const [r, g, b] = layerColor(this.layer, Math.min(t, 1));
-          cols[ci] = r; cols[ci + 1] = g; cols[ci + 2] = b;
+          const t = v / maxV;
+          if (t < thr) {
+            cols[ci] = 0; cols[ci + 1] = 0; cols[ci + 2] = 0;
+          } else {
+            const [r, g, b] = layerColor(this.layer as Exclude<LayerName, 'diff' | 'material' | 'chemistry'>, Math.min(t, 1));
+            cols[ci] = r; cols[ci + 1] = g; cols[ci + 2] = b;
+          }
         }
       }
     }

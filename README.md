@@ -1,12 +1,50 @@
 # Reality Engine v3 — Meta-Law Physics Simulator
 
-A real-time 3D voxel physics simulation where the laws of physics themselves evolve. Paint energy and matter onto a 64×64×32 grid, watch thermodynamics, chemistry, geology, and life emerge from first principles, and observe self-organizing entities and AI agents appear spontaneously.
+> *"A universe you can paint — where physics evolves."*
 
-**Live demo:** http://localhost:5173 (run locally with `npm run dev`)
+---
+
+## What Is This
+
+Reality Engine is an **interactive physics sandbox** where the rules of physics are themselves simulated objects that compete, mutate, and go extinct — not a game with fixed mechanics, but a laboratory for emergent complexity.
+
+You paint energy and matter onto a 64 × 64 × 32 voxel grid. Thermodynamics, chemistry, geology, and life emerge from first principles. The laws governing them evolve in real time through a MetaLaw system — each law has fitness, age, and mutation rate. Laws that produce complexity survive. Laws that produce chaos go dormant.
+
+**This is not a game about matter. It is a game about the rules that govern matter.**
+
+---
+
+## Who It's For
+
+| Audience | Why it's interesting |
+|---|---|
+| **Game developers** | Reference for emergent systems, procedural world simulation |
+| **Researchers** | Toy model for studying self-organization, information physics, causal chains |
+| **Students** | Visual, interactive thermodynamics and complexity theory |
+| **Curious people** | Press a preset, press play, watch a universe be born |
+
+---
+
+## Three Levels of Use
+
+**Casual** — load a preset, press play, watch a universe evolve. No setup needed.
+
+**Interactive** — paint materials and energy by hand. Trigger world events (meteors, solar flares, mutation waves). Seed AI agents. Watch the world react.
+
+**Scientific** — enable recording, scrub through the timeline, compare snapshots via world diff (orange = energy gained, blue = lost), inspect the causal graph to trace which event caused which, export metrics as CSV.
 
 ---
 
 ## Getting Started
+
+```bash
+git clone https://github.com/Ayka11/reality_engine.git
+cd reality_engine
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173** in Chrome or Edge (WebGPU required for GPU acceleration; Firefox falls back to CPU automatically).
 
 ```bash
 git clone https://github.com/Ayka11/reality_engine.git
@@ -93,6 +131,7 @@ Click **Play** in the bottom bar. The speed slider sets steps per animation fram
 | **Chemistry** | Gas/liquid/solid/organic/reactive | Auto-derived chemical state |
 | **Signal** | Black → cyan → white | Entity communication signal |
 | **Memory** | Dark blue → cyan | Long-lived information memory trace |
+| **Diff** | Blue (loss) ↔ Orange (gain) | Energy delta between adjacent snapshots — activate via ⊕ Diff in Scientific Mode |
 
 **Paint tools** (pencil icons in top bar):
 
@@ -239,12 +278,45 @@ Neighboring cells with extreme time differences create energy gradients (frame-d
 
 ## Scientific Mode
 
-The **Scientific Mode** panel (right panel, bottom) provides:
+The **Scientific Mode** panel (right panel, bottom) provides four tools:
 
-- **⏺ Record** — start capturing snapshots every 30 ticks (configurable)
-- **Timeline scrubber** — scroll through up to 60 captured snapshots
-- **↩ Restore** — restore the grid to the state at the selected snapshot
-- **CSV export** — download `tick, totalEnergy, avgEntropy, avgInfo, avgBio` as a CSV file for external analysis
+### 1. Timeline Scrubber + Deterministic Replay
+- **⏺ Record** — starts capturing full grid snapshots every 30 ticks (up to 60 snapshots = 1,800 ticks of history)
+- **Scrubber slider** — jump to any recorded snapshot; live metrics update instantly
+- **▶ Replay / ⏸ Pause** — plays through all snapshots at ~8fps, restoring the grid at each frame (deterministic replay of recorded history)
+- **◀ / ▶▶** — step one snapshot backward or forward
+- **↩ Restore** — restore the grid permanently to the selected snapshot and resume live simulation from that point
+
+### 2. World Diff Viewer
+- Click **⊕ Diff** to switch the 3D view into **diff mode**
+- The view shows the energy delta between the previous and current snapshot:
+  - **Orange/red** = energy gained (growth, energy injection, reactions)
+  - **Blue/cyan** = energy lost (diffusion, consumption, decay)
+  - **Black** = no significant change (< 2% of ±500 threshold)
+- Moving the scrubber updates the diff in real time
+- Click **⊕ Diff** again to return to the previous layer
+
+### 3. Metrics Chart
+- Live sparkline across all recorded snapshots showing:
+  - **Orange** — total energy (normalized)
+  - **Red** — average entropy
+  - **Purple** — average information
+  - **Green** — average bio potential
+- A vertical line marks the current scrubber position
+- Updates every 30 ticks during live recording
+
+### 4. Causal Graph Visualization
+- Renders the last 80 causal events as a DAG:
+  - **X axis** — tick time (left = past, right = present)
+  - **Y axis** — spatial position (cell x + y projected)
+  - **Edges** — parentId relationships (which event caused which)
+  - **Node colors** — event type: orange=energy_spike, purple=info_bloom, red=entropy_burst, green=bio_emergence, blue=phase_transition
+- **Click any node** to jump the Cell Inspector to that cell and see the full causal chain length
+- Updates every 12 ticks automatically
+
+### 5. CSV Export
+- **↓ CSV** — download `tick, totalEnergy, avgEntropy, avgInfo, avgBio` for all recorded snapshots
+- Open in Excel, Python, or any data tool for offline analysis
 
 ---
 
