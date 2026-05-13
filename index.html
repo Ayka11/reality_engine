@@ -303,6 +303,30 @@
       <div id="procGrid" class="proc-grid"></div>
 
       <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
+      <span class="rp-label">⬡ Scene Script <span style="color:#333;font-weight:400;text-transform:none;letter-spacing:0"> — world.sphere / box / noise / tick…</span></span>
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+        <select id="templateSelect" style="font-size:10px;background:#141418;color:#888;border:1px solid #2a2a35;border-radius:4px;padding:2px 4px;flex:1;min-width:0;">
+          <option value="">─ templates ─</option>
+          <option value="ocean">Primordial Ocean</option>
+          <option value="volcano">Energy Volcano</option>
+          <option value="life">Life Explosion</option>
+          <option value="cambrian">Cambrian Explosion</option>
+          <option value="infoage">Information Age</option>
+        </select>
+        <button id="runScriptBtn"   class="sci-btn" style="color:#4caf7d;border-color:#1a3a1a;">▶ Run</button>
+        <button id="clearScriptBtn" class="sci-btn">✕</button>
+      </div>
+      <textarea id="scriptArea" rows="7"
+        style="width:100%;font-family:'Consolas','Fira Mono',monospace;font-size:10px;
+        background:#08080f;color:#b8c8f0;border:1px solid #2a2a35;border-radius:5px;
+        padding:7px;resize:vertical;line-height:1.6;tab-size:2;"
+        placeholder="world.preset('life')&#10;world.tick(100)&#10;world.print('Done!')"></textarea>
+      <div id="scriptLog"
+        style="font-family:monospace;font-size:9px;color:#666;min-height:18px;
+        max-height:55px;overflow-y:auto;background:#080812;padding:4px 6px;
+        border-radius:4px;border:1px solid #1a1a25;white-space:pre-wrap;line-height:1.5;"></div>
+
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
       <span class="rp-label">Scientific Mode</span>
       <div id="sciPanel" style="display:flex;flex-direction:column;gap:4px;">
         <!-- Record + export row -->

@@ -2,6 +2,7 @@ import { SimulationEngine } from './simulation/SimulationEngine';
 import { VoxelRenderer, LayerName } from './render/VoxelRenderer';
 import { Entity } from './simulation/EntityLayer';
 import { Presets, PresetName } from './world/Presets';
+import { ScriptEngine, SCRIPT_TEMPLATES } from './world/ScriptEngine';
 import { F } from './core/CellState';
 import { PROCESS_LIBRARY } from './process/ProcessDef';
 import { MAT, MATERIAL_LIBRARY, MatId } from './materials/MaterialDef';
@@ -589,6 +590,37 @@ document.getElementById('obStart')!.addEventListener('click', () => {
 renderLawPanel();
 renderProcGrid();
 renderMaterialPalette();
+
+// ── Script Engine ──────────────────────────────────────────────────────────────
+const scriptEngine = new ScriptEngine(sim);
+const scriptArea    = document.getElementById('scriptArea')    as HTMLTextAreaElement;
+const scriptLog     = document.getElementById('scriptLog')!;
+const templateSel   = document.getElementById('templateSelect') as HTMLSelectElement;
+
+templateSel?.addEventListener('change', () => {
+  const key = templateSel.value;
+  if (key && SCRIPT_TEMPLATES[key]) {
+    scriptArea.value = SCRIPT_TEMPLATES[key];
+    templateSel.value = '';
+  }
+});
+
+document.getElementById('runScriptBtn')?.addEventListener('click', () => {
+  const code = scriptArea.value.trim();
+  if (!code) return;
+  scriptLog.textContent = '⏳ Running…';
+  // Defer one frame so the UI updates before potentially-heavy sync ticks
+  setTimeout(() => {
+    const { log } = scriptEngine.run(code);
+    scriptLog.textContent = log.join('\n');
+    scriptLog.style.color = log.some(l => l.startsWith('✗')) ? '#f47b7b' : '#4caf7d';
+  }, 16);
+});
+
+document.getElementById('clearScriptBtn')?.addEventListener('click', () => {
+  scriptArea.value = '';
+  scriptLog.textContent = '';
+});
 
 // Mutation strength slider
 const mutStrEl = document.getElementById('mutStrength') as HTMLInputElement | null;

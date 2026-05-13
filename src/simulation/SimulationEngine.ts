@@ -114,6 +114,22 @@ export class SimulationEngine {
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
   }
 
+  // Synchronous CPU-only step used by ScriptEngine (bypasses GPU/await)
+  syncTick(n: number): void {
+    const dt = 0.016;
+    for (let s = 0; s < n; s++) {
+      this.fieldPhysics.tick(this.grid, dt, this.laws.params, this.laws.activeProcessMask);
+      this.entropyLayer.tick(this.grid, dt, this.laws.params, this.laws.activeProcessMask);
+      this.chemLayer.tick(this.grid, dt);
+      this.entityLayer.tick(this.grid, dt);
+      this.temporalLayer.tick(this.grid, dt);
+      this.infoPhysics.tick(this.grid, dt);
+      this.agents.tick(this.grid, dt);
+      this.laws.tick(this._worldMetrics());
+      this._tick++;
+    }
+  }
+
   private _worldMetrics(): WorldMetrics {
     const { grid } = this;
     const n = grid.size;

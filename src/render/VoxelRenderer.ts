@@ -18,48 +18,41 @@ const LAYER_MAX: Record<Exclude<LayerName, 'diff'>, number> = {
   material: 13, chemistry: 4, signal: 100, memory: 1,
 };
 
-// Pre-build material color palette from MaterialDef
 const MAT_COLORS: [number, number, number][] = MATERIAL_LIBRARY.map(m => m.color);
 const CHEM_COLORS: [number, number, number][] = [
-  [0.3, 0.3, 0.6],  // 0 gas — blue-grey
-  [0.2, 0.5, 0.8],  // 1 liquid — blue
-  [0.6, 0.6, 0.6],  // 2 solid — grey
-  [0.2, 0.7, 0.2],  // 3 organic — green
-  [0.9, 0.4, 0.1],  // 4 reactive — orange
+  [0.3, 0.3, 0.6], [0.2, 0.5, 0.8], [0.6, 0.6, 0.6], [0.2, 0.7, 0.2], [0.9, 0.4, 0.1],
 ];
 
-// Returns normalized [0..1] RGB
 function layerColor(layer: LayerName, t: number): [number, number, number] {
   switch (layer) {
     case 'energy': {
       if (t < 0.15) return [0, 0, t / 0.15 * 0.7];
-      if (t < 0.4)  { const s = (t - 0.15) / 0.25; return [0, s * 0.7, 0.7 - s * 0.7]; }
-      if (t < 0.7)  { const s = (t - 0.4)  / 0.3;  return [s, 0.7 - s * 0.23, 0]; }
-      const s = (t - 0.7) / 0.3; return [1, 0.47 + s * 0.53, s];
+      if (t < 0.4)  { const s = (t-.15)/.25; return [0, s*.7, .7-s*.7]; }
+      if (t < 0.7)  { const s = (t-.4)/.3;   return [s, .7-s*.23, 0]; }
+      const s = (t-.7)/.3; return [1, .47+s*.53, s];
     }
-    case 'density':      return [t * 0.24, t * 0.78, t * 0.24];
-    case 'information':  return [t * 0.75, t * 0.08, t];
-    case 'entropy':      return [t * 0.8 + 0.1, t * 0.18, 0.2 + t * 0.1];
+    case 'density':      return [t*.24, t*.78, t*.24];
+    case 'information':  return [t*.75, t*.08, t];
+    case 'entropy':      return [t*.8+.1, t*.18, .2+t*.1];
     case 'temperature': {
-      if (t < 0.5) return [t * 2, 0, 1 - t * 2];
-      const s = (t - 0.5) * 2; return [1, s * 0.78, 0];
+      if (t < 0.5) return [t*2, 0, 1-t*2];
+      const s = (t-.5)*2; return [1, s*.78, 0];
     }
-    case 'bioPotential': return [t * 0.19, t * 0.9, t * 0.35];
+    case 'bioPotential': return [t*.19, t*.9, t*.35];
     case 'material': {
-      const c = MAT_COLORS[Math.min(Math.round(t * 13), 13)] ?? [0.1,0.1,0.1];
-      return [c[0] * (0.4 + t * 0.6), c[1] * (0.4 + t * 0.6), c[2] * (0.4 + t * 0.6)];
+      const c = MAT_COLORS[Math.min(Math.round(t*13), 13)] ?? [.1,.1,.1];
+      return [c[0]*(.4+t*.6), c[1]*(.4+t*.6), c[2]*(.4+t*.6)];
     }
     case 'chemistry': {
-      const c = CHEM_COLORS[Math.min(Math.round(t * 4), 4)] ?? [0.3,0.3,0.3];
-      return c;
+      return CHEM_COLORS[Math.min(Math.round(t*4), 4)] ?? [.3,.3,.3];
     }
     case 'signal': {
-      if (t < 0.5) { const s = t / 0.5; return [0, s * 0.5, s]; }
-      const s = (t - 0.5) / 0.5; return [s, 0.5 + s * 0.5, 1];
+      if (t < .5) { const s=t/.5; return [0, s*.5, s]; }
+      const s=(t-.5)/.5; return [s, .5+s*.5, 1];
     }
     case 'memory': {
-      if (t < 0.4) { const s = t / 0.4; return [0, s * 0.3, s * 0.8]; }
-      const s = (t - 0.4) / 0.6; return [s * 0.7, 0.3 + s * 0.4, 0.8 - s * 0.5];
+      if (t < .4) { const s=t/.4; return [0, s*.3, s*.8]; }
+      const s=(t-.4)/.6; return [s*.7, .3+s*.4, .8-s*.5];
     }
     default: return [t, t, t];
   }
@@ -67,29 +60,31 @@ function layerColor(layer: LayerName, t: number): [number, number, number] {
 
 export interface EntityMarker {
   id: string;
-  centroid: [number, number, number]; // grid (x, y, z)
-  stability: number;                  // 0..1
+  centroid: [number, number, number];
+  stability: number;
   age: number;
-  color: [number, number, number];    // RGB 0..1
+  color: [number, number, number];
 }
 
 // ── Coordinate mapping ────────────────────────────────────────────────────────
 // Grid:  x=0..W-1, y=0..H-1, z=0..D-1 (z = altitude layer)
 // THREE: X=gridX,  Y=gridZ (altitude),  Z=gridY
-// This makes z-layers stack upward in THREE, giving a natural landscape view.
+
+const MAX_INSTANCES = 131072; // full grid max
 
 export class VoxelRenderer {
   readonly domElement: HTMLCanvasElement;
 
-  private renderer: THREE.WebGLRenderer;
-  private scene:    THREE.Scene;
-  camera:           THREE.PerspectiveCamera;
-  private controls: OrbitControls;
-  private cloud:    THREE.Points;
-  private colorAttr: THREE.BufferAttribute;
+  private renderer:    THREE.WebGLRenderer;
+  private scene:       THREE.Scene;
+  camera:              THREE.PerspectiveCamera;
+  private controls:    OrbitControls;
+  private mesh:        THREE.InstancedMesh;
+  private dummy =      new THREE.Object3D();
+  private _col =       new THREE.Color();
   private entityGroup: THREE.Group;
   private agentGroup:  THREE.Group;
-  private _ro: ResizeObserver;
+  private _ro:         ResizeObserver;
   private _W: number; private _H: number; private _D: number;
 
   layer: LayerName = 'energy';
@@ -104,82 +99,61 @@ export class VoxelRenderer {
 
     // ── Renderer ──────────────────────────────────────────────────────────────
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setClearColor(0x0a0a12);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setClearColor(0x06060d);
 
     // ── Scene ─────────────────────────────────────────────────────────────────
     this.scene = new THREE.Scene();
+    this.scene.fog = new THREE.FogExp2(0x06060d, 0.008);
 
     // ── Camera ────────────────────────────────────────────────────────────────
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 600);
-    this.camera.position.set(W * 1.5, D * 2.2, H * 1.5);
+    this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
+    this.camera.position.set(W * 1.4, D * 2.5, H * 1.4);
 
     // ── OrbitControls ─────────────────────────────────────────────────────────
     this.controls = new OrbitControls(this.camera, canvas);
-    this.controls.target.set(W / 2, D / 2, H / 2);
+    this.controls.target.set(W/2, D/2, H/2);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.06;
     this.controls.minDistance = 8;
     this.controls.maxDistance = 400;
-    // Paint-first: right-click = orbit, middle = pan, left is free for painting
-    (this.controls.mouseButtons as any) = {
-      LEFT: -1,
-      MIDDLE: THREE.MOUSE.PAN,
-      RIGHT: THREE.MOUSE.ROTATE,
+    (this.controls.mouseButtons as unknown as Record<string,unknown>) = {
+      LEFT: -1, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE,
     };
 
-    // ── World bounds wireframe ─────────────────────────────────────────────────
-    const worldBox = new THREE.Box3(
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(W, D, H)
-    );
-    this.scene.add(new THREE.Box3Helper(worldBox, new THREE.Color(0x2a2a40)));
+    // ── Lighting ──────────────────────────────────────────────────────────────
+    this.scene.add(new THREE.AmbientLight(0x445566, 1.4));
+    const sun = new THREE.DirectionalLight(0xfff4e0, 1.8);
+    sun.position.set(W * 0.8, D * 2.5, H * 0.4);
+    this.scene.add(sun);
+    const fill = new THREE.DirectionalLight(0x334488, 0.5);
+    fill.position.set(-W * 0.5, D, H * 0.8);
+    this.scene.add(fill);
 
-    // Grid floor helper
-    const grid = new THREE.GridHelper(Math.max(W, H), 8, 0x1a1a28, 0x1a1a28);
-    grid.position.set(W / 2, 0, H / 2);
+    // ── World bounds helper ───────────────────────────────────────────────────
+    const worldBox = new THREE.Box3(new THREE.Vector3(0,0,0), new THREE.Vector3(W,D,H));
+    this.scene.add(new THREE.Box3Helper(worldBox, new THREE.Color(0x1a1a28)));
+
+    const grid = new THREE.GridHelper(Math.max(W,H), 8, 0x1a1a28, 0x1a1a28);
+    grid.position.set(W/2, 0, H/2);
     this.scene.add(grid);
 
-    // Axes
-    const axes = new THREE.AxesHelper(6);
-    this.scene.add(axes);
+    this.scene.add(new THREE.AxesHelper(6));
 
-    // ── Point cloud: positions are static (x=gridX, y=gridZ, z=gridY) ────────
-    const count = W * H * D;
-    const positions = new Float32Array(count * 3);
-    const colors    = new Float32Array(count * 3);
+    // ── Instanced voxel mesh ──────────────────────────────────────────────────
+    const geo = new THREE.BoxGeometry(0.88, 0.88, 0.88);
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: false });
+    this.mesh = new THREE.InstancedMesh(geo, mat, MAX_INSTANCES);
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(
+      new Float32Array(MAX_INSTANCES * 3), 3
+    );
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.count = 0;
+    this.scene.add(this.mesh);
 
-    let pi = 0;
-    for (let gz = 0; gz < D; gz++)      // altitude
-    for (let gy = 0; gy < H; gy++)      // south-north
-    for (let gx = 0; gx < W; gx++) {   // east-west
-      positions[pi++] = gx + 0.5;
-      positions[pi++] = gz + 0.5;       // altitude → THREE Y (up)
-      positions[pi++] = gy + 0.5;
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    this.colorAttr = new THREE.BufferAttribute(colors, 3);
-    geo.setAttribute('color', this.colorAttr);
-
-    const mat = new THREE.PointsMaterial({
-      size: 0.78,
-      sizeAttenuation: true,
-      vertexColors: true,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-
-    this.cloud = new THREE.Points(geo, mat);
-    this.scene.add(this.cloud);
-
-    // ── Entity group ──────────────────────────────────────────────────────────
+    // ── Entity & agent groups ─────────────────────────────────────────────────
     this.entityGroup = new THREE.Group();
     this.scene.add(this.entityGroup);
-
-    // ── Agent group ───────────────────────────────────────────────────────────
     this.agentGroup = new THREE.Group();
     this.scene.add(this.agentGroup);
 
@@ -201,66 +175,70 @@ export class VoxelRenderer {
   setDiffBuffer(buf: Float32Array | null): void { this._diffBuf = buf; }
 
   render(grid: VoxelGrid, entities: EntityMarker[] = [], agents: AgentMarker[] = []): void {
-    // ── Update voxel colors ───────────────────────────────────────────────────
-    const buf   = grid.buffer;
-    const cols  = this.colorAttr.array as Float32Array;
-    const n     = grid.size;
-    const thr   = this.threshold;
+    const buf  = grid.buffer;
+    const { W, H, D } = grid;
+    const thr  = this.threshold;
+    let count  = 0;
+    const dummy = this.dummy;
 
     if (this.layer === 'diff') {
-      // World diff: blue = decreased, red = increased, black = no change
       const db = this._diffBuf;
-      const fi = F.ENERGY; // show energy delta
-      const scale = 500;   // ±500 maps to full saturation
-      for (let i = 0; i < n; i++) {
-        const ci = i * 3;
-        const d = db ? db[i * CELL_FIELDS + fi] : 0;
+      const scale = 500;
+      for (let gz = 0; gz < D && count < MAX_INSTANCES - 1; gz++)
+      for (let gy = 0; gy < H && count < MAX_INSTANCES - 1; gy++)
+      for (let gx = 0; gx < W && count < MAX_INSTANCES - 1; gx++) {
+        const i = gz*H*W + gy*W + gx;
+        const d = db ? db[i * CELL_FIELDS + F.ENERGY] : 0;
         const t = Math.min(1, Math.abs(d) / scale);
-        if (t < 0.02) { cols[ci] = 0; cols[ci+1] = 0; cols[ci+2] = 0; }
-        else if (d > 0) { cols[ci] = t; cols[ci+1] = t * 0.3; cols[ci+2] = 0; }   // warm: gain
-        else            { cols[ci] = 0; cols[ci+1] = t * 0.4; cols[ci+2] = t; }   // cool: loss
+        if (t < 0.02) continue;
+        let r = 0, g = 0, b = 0;
+        if (d > 0) { r = t; g = t * 0.3; }
+        else       { g = t * 0.4; b = t; }
+        dummy.position.set(gx+0.5, gz+0.5, gy+0.5);
+        dummy.updateMatrix();
+        this.mesh.setMatrixAt(count, dummy.matrix);
+        this.mesh.setColorAt(count, this._col.setRGB(r, g, b));
+        count++;
       }
     } else {
-      const fi   = LAYER_FIELD[this.layer as Exclude<LayerName, 'diff'>];
-      const maxV = LAYER_MAX[this.layer as Exclude<LayerName, 'diff'>];
+      const fi   = LAYER_FIELD[this.layer as Exclude<LayerName,'diff'>];
+      const maxV = LAYER_MAX[this.layer as Exclude<LayerName,'diff'>];
 
-      for (let i = 0; i < n; i++) {
+      for (let gz = 0; gz < D && count < MAX_INSTANCES - 1; gz++)
+      for (let gy = 0; gy < H && count < MAX_INSTANCES - 1; gy++)
+      for (let gx = 0; gx < W && count < MAX_INSTANCES - 1; gx++) {
+        const i = gz*H*W + gy*W + gx;
         const v = buf[i * CELL_FIELDS + fi];
-        const ci = i * 3;
+        if (v < thr * maxV) continue;
+
+        let r: number, g: number, b: number;
         if (this.layer === 'material') {
           const matIdx = Math.min(Math.floor(v), 13);
-          if (matIdx === 0) { cols[ci] = 0; cols[ci+1] = 0; cols[ci+2] = 0; }
-          else {
-            const mc = MAT_COLORS[matIdx];
-            cols[ci] = mc[0]; cols[ci+1] = mc[1]; cols[ci+2] = mc[2];
-          }
+          if (matIdx === 0) continue;
+          const mc = MAT_COLORS[matIdx];
+          [r,g,b] = [mc[0],mc[1],mc[2]];
         } else if (this.layer === 'chemistry') {
-          const chemIdx = Math.min(Math.floor(v), 4);
-          if (chemIdx === 0 && v < 0.5) { cols[ci] = 0; cols[ci+1] = 0; cols[ci+2] = 0; }
-          else {
-            const cc = CHEM_COLORS[chemIdx];
-            cols[ci] = cc[0]; cols[ci+1] = cc[1]; cols[ci+2] = cc[2];
-          }
+          const ci = Math.min(Math.floor(v), 4);
+          if (ci === 0 && v < 0.5) continue;
+          [r,g,b] = CHEM_COLORS[ci];
         } else {
-          const t = v / maxV;
-          if (t < thr) {
-            cols[ci] = 0; cols[ci + 1] = 0; cols[ci + 2] = 0;
-          } else {
-            const [r, g, b] = layerColor(this.layer as Exclude<LayerName, 'diff' | 'material' | 'chemistry'>, Math.min(t, 1));
-            cols[ci] = r; cols[ci + 1] = g; cols[ci + 2] = b;
-          }
+          [r,g,b] = layerColor(this.layer as Exclude<LayerName,'diff'|'material'|'chemistry'>, Math.min(v/maxV,1));
+          if (r < 0.01 && g < 0.01 && b < 0.01) continue;
         }
+
+        dummy.position.set(gx+0.5, gz+0.5, gy+0.5);
+        dummy.updateMatrix();
+        this.mesh.setMatrixAt(count, dummy.matrix);
+        this.mesh.setColorAt(count, this._col.setRGB(r, g, b));
+        count++;
       }
     }
-    this.colorAttr.needsUpdate = true;
 
-    // ── Paint-altitude guide plane (subtle horizontal ring) ───────────────────
-    // (skip visual for MVP — altitude shown via z-slice label)
+    this.mesh.count = count;
+    this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
 
-    // ── Entity markers ────────────────────────────────────────────────────────
     this._syncEntities(entities);
-
-    // ── Agent markers ─────────────────────────────────────────────────────────
     this._syncAgents(agents);
 
     this.controls.update();
@@ -268,108 +246,74 @@ export class VoxelRenderer {
   }
 
   private _syncEntities(entities: EntityMarker[]): void {
-    // Remove stale children
     while (this.entityGroup.children.length > entities.length) {
       const m = this.entityGroup.children[0] as THREE.Mesh;
-      m.geometry.dispose();
-      (m.material as THREE.Material).dispose();
+      m.geometry.dispose(); (m.material as THREE.Material).dispose();
       this.entityGroup.remove(m);
     }
-    // Add missing children
-    const sGeo = new THREE.SphereGeometry(0.6, 8, 6);
+    const sGeo = new THREE.SphereGeometry(0.65, 8, 6);
     while (this.entityGroup.children.length < entities.length) {
-      const m = new THREE.Mesh(sGeo, new THREE.MeshBasicMaterial({
-        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-      }));
-      this.entityGroup.add(m);
+      this.entityGroup.add(new THREE.Mesh(sGeo,
+        new THREE.MeshLambertMaterial({ transparent: true, depthWrite: true })));
     }
-    // Update positions + colors
     entities.forEach((e, idx) => {
       const m = this.entityGroup.children[idx] as THREE.Mesh;
-      // grid (x, y, z) → THREE (x, z, y)
-      m.position.set(e.centroid[0] + 0.5, e.centroid[2] + 0.5, e.centroid[1] + 0.5);
+      m.position.set(e.centroid[0]+0.5, e.centroid[2]+0.5, e.centroid[1]+0.5);
       const r = Math.min(1 + e.stability * 0.4, 2);
       m.scale.setScalar(r);
-      const mat = m.material as THREE.MeshBasicMaterial;
+      const mat = m.material as THREE.MeshLambertMaterial;
       mat.color.setRGB(e.color[0], e.color[1], e.color[2]);
       mat.opacity = 0.55 + e.stability * 0.45;
     });
   }
 
   private _syncAgents(agents: AgentMarker[]): void {
-    // Remove excess
     while (this.agentGroup.children.length > agents.length) {
       const m = this.agentGroup.children[0] as THREE.Mesh;
-      m.geometry.dispose();
-      (m.material as THREE.Material).dispose();
+      m.geometry.dispose(); (m.material as THREE.Material).dispose();
       this.agentGroup.remove(m);
     }
-    // Add missing
-    const sGeo = new THREE.SphereGeometry(0.35, 6, 5);
+    const sGeo = new THREE.SphereGeometry(0.38, 7, 6);
     while (this.agentGroup.children.length < agents.length) {
-      const mat = new THREE.MeshBasicMaterial({
-        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-      });
-      this.agentGroup.add(new THREE.Mesh(sGeo, mat));
+      this.agentGroup.add(new THREE.Mesh(sGeo,
+        new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
     }
-    // Update positions + behavior color
     agents.forEach((a, idx) => {
       const m = this.agentGroup.children[idx] as THREE.Mesh;
-      // grid (x, y, z) → THREE (x, z, y)
-      m.position.set(a.position[0] + 0.5, a.position[2] + 0.5, a.position[1] + 0.5);
-      const [r, g, b] = AGENT_COLORS[a.behavior];
+      m.position.set(a.position[0]+0.5, a.position[2]+0.5, a.position[1]+0.5);
+      const [r,g,b] = AGENT_COLORS[a.behavior];
       const mat = m.material as THREE.MeshBasicMaterial;
       mat.color.setRGB(r, g, b);
-      mat.opacity = 0.75 + Math.min(a.energy / 600, 0.25);
+      mat.opacity = 0.75 + Math.min(a.energy/600, 0.25);
     });
   }
 
-  // Returns the grid cell under the mouse on the current paint altitude plane.
-  // Returns null if the ray misses or hits out of bounds.
   pickGridCell(e: PointerEvent): { x: number; y: number; z: number } | null {
     const rect = this.domElement.getBoundingClientRect();
     const nx = ((e.clientX - rect.left) / rect.width)  * 2 - 1;
     const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(nx, ny), this.camera);
-
-    // Horizontal plane at THREE Y = paintAltitude + 0.5
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(this.paintAltitude + 0.5));
+    const plane = new THREE.Plane(new THREE.Vector3(0,1,0), -(this.paintAltitude+0.5));
     const hit = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
     if (!hit) return null;
-
     const gx = Math.floor(hit.x);
-    const gy = Math.floor(hit.z);  // THREE Z → grid Y
-    const gz = this.paintAltitude;
-
+    const gy = Math.floor(hit.z);
     if (gx < 0 || gx >= this._W || gy < 0 || gy >= this._H) return null;
-    return { x: gx, y: gy, z: gz };
+    return { x: gx, y: gy, z: this.paintAltitude };
   }
 
   setPaintMode(enabled: boolean): void {
     this.paintMode = enabled;
-    if (enabled) {
-      // Paint mode: left-click is free for painting, right-click orbits
-      (this.controls.mouseButtons as any) = {
-        LEFT: -1,
-        MIDDLE: THREE.MOUSE.PAN,
-        RIGHT: THREE.MOUSE.ROTATE,
-      };
-    } else {
-      // Explore mode: standard left=rotate, middle=zoom, right=pan
-      (this.controls.mouseButtons as any) = {
-        LEFT: THREE.MOUSE.ROTATE,
-        MIDDLE: THREE.MOUSE.DOLLY,
-        RIGHT: THREE.MOUSE.PAN,
-      };
-    }
+    (this.controls.mouseButtons as unknown as Record<string,unknown>) = enabled
+      ? { LEFT: -1, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE }
+      : { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   }
 
   resetCamera(): void {
     const { _W: W, _H: H, _D: D } = this;
-    this.camera.position.set(W * 1.5, D * 2.2, H * 1.5);
-    this.controls.target.set(W / 2, D / 2, H / 2);
+    this.camera.position.set(W*1.4, D*2.5, H*1.4);
+    this.controls.target.set(W/2, D/2, H/2);
     this.controls.update();
   }
 
