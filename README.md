@@ -46,15 +46,6 @@ npm run dev
 
 Open **http://localhost:5173** in Chrome or Edge (WebGPU required for GPU acceleration; Firefox falls back to CPU automatically).
 
-```bash
-git clone https://github.com/Ayka11/reality_engine.git
-cd reality_engine
-npm install
-npm run dev
-```
-
-Open **http://localhost:5173** in Chrome or Edge (WebGPU required for GPU acceleration; Firefox falls back to CPU automatically).
-
 ---
 
 ## How to Use the App
@@ -235,22 +226,23 @@ The World Events log (right panel) shows the last 6 events with timestamps.
 
 ## AI Agents
 
-Autonomous agents occupy individual cells and run a sense→act loop each tick. Seed them via the **+ Seed 8** button.
+Autonomous agents occupy individual cells and run a sense→act loop each tick. Seed them via the **+ Seed 8** button in the Agent panel. Each agent appears as a **colored 3D sphere** in the voxel view.
 
-| Behavior | Action |
-|---|---|
-| Explorer | Moves toward highest-energy neighboring cell |
-| Harvester | Extracts energy from its current cell into its internal pool |
-| Signaler | Broadcasts SIGNAL field and expends energy to do so |
-| Builder | Increases INFORMATION and BIO_POTENTIAL in its cell |
-| Destroyer | Increases entropy and drains energy; gains energy from damage |
+| Behavior | Color | Action |
+|---|---|---|
+| Explorer | Blue | Moves toward highest-energy neighboring cell; passively harvests while moving |
+| Harvester | Green | Extracts energy aggressively; moves to richest neighbor every 4 ticks |
+| Signaler | Purple | Broadcasts SIGNAL field outward; moves toward high-signal neighbors |
+| Builder | Orange | Increases INFORMATION and BIO_POTENTIAL; reduces entropy in its cell |
+| Destroyer | Red | Increases entropy and drains energy; gains energy from damage; roams randomly |
 
 All agents:
-- Consume 2 energy/tick to survive
-- Replicate when energy > 200 (child may randomly change behavior)
-- Die and leave an energy trace when energy hits 0
-- Are marked in the AGENT_MARK field (visible in the Chemistry layer)
-- Are capped at 64 agents total
+- Consume **0.4 energy/tick** base metabolism (very low — designed to survive on sparse worlds)
+- Spawn starts with an energy injection patch so early agents always have something to harvest
+- Replicate when energy > 300 (child inherits behavior with 15% chance of random mutation)
+- Die and deposit their remaining energy as a ghost patch at their last cell
+- Are marked in the AGENT_MARK field (visible in Chemistry layer)
+- Capped at 64 agents total
 
 ---
 
@@ -365,6 +357,8 @@ Seven default laws activate/deactivate based on world metrics and mutate over ti
 
 Laws mutate every ~100 ticks (thresholds drift ±8%, params drift ±15%). Use **⚡ Mutate** to spawn aggressive variants or **Spawn random mutation** to create new laws.
 
+**Manual process toggles persist** — clicking a process card in the Process Library locks it on or off independently of what MetaLaw recomputes. Your toggles survive every law activation/deactivation cycle until you click the card again.
+
 ---
 
 ## Architecture
@@ -407,7 +401,7 @@ src/
 │   └── EntityLayer.ts      — Legacy flood-fill entity detection (kept for reference)
 │
 ├── render/
-│   └── VoxelRenderer.ts    — Three.js point cloud, 10 layer modes, entity spheres
+│   └── VoxelRenderer.ts    — Three.js point cloud, 11 layer modes, entity + agent spheres
 │
 └── world/
     ├── Presets.ts          — 22 preset world states (7 classic + 15 new)
