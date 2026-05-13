@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reality Engine v3 — Meta-Law Simulator</title>
+<link rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.10.0/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0d0d0f; color: #e0dff5;
+    font-family: system-ui, sans-serif; }
+  #app { display: grid; grid-template-rows: 44px 1fr 38px; height: 100vh; }
+
+  /* ── Topbar ── */
+  #topbar { display: flex; align-items: center; gap: 8px; padding: 0 12px;
+    background: #141418; border-bottom: 1px solid #2a2a35; overflow-x: auto; flex-shrink: 0; }
+  .layer-btn { font-size: 11px; padding: 3px 10px; border: 1px solid #2a2a35; border-radius: 20px;
+    cursor: pointer; background: transparent; color: #777; white-space: nowrap; }
+  .layer-btn.active { border-color: #7c6fcd; color: #b0a8f8; background: #1a1830; }
+  .tool-btn { font-size: 14px; padding: 4px 8px; border: 1px solid #2a2a35; border-radius: 7px;
+    cursor: pointer; background: transparent; color: #777; }
+  .tool-btn.active { background: #1e1e2e; color: #e0dff5; border-color: #444; }
+  .sep { width: 1px; height: 20px; background: #2a2a35; flex-shrink: 0; }
+  label { font-size: 11px; color: #555; white-space: nowrap; }
+  input[type=range] { accent-color: #7c6fcd; }
+  #gpubadge { font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 600;
+    border: 1px solid #2a3a2a; background: #0a180a; color: #4caf7d; white-space: nowrap; }
+  #gpubadge.cpu { border-color: #3a2a1a; background: #180f0a; color: #ef8f3f; }
+
+  /* ── Middle layout ── */
+  #middle { display: grid; grid-template-columns: 148px 1fr 230px; min-height: 0; overflow: hidden; }
+
+  /* ── Left panel ── */
+  #leftpanel { padding: 8px; background: #141418; border-right: 1px solid #2a2a35;
+    display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
+  .plabel { font-size: 10px; color: #555; letter-spacing: .06em; text-transform: uppercase; margin-top: 6px; }
+  .preset-btn { font-size: 11px; padding: 5px 7px; border: 1px solid #2a2a35; border-radius: 7px;
+    cursor: pointer; background: #1a1a22; color: #888; text-align: left; width: 100%; }
+  .preset-btn:hover { background: #252535; color: #e0dff5; }
+  #layerinfo { font-size: 10px; color: #555; line-height: 1.6; }
+
+  /* ── Canvas area ── */
+  #canvaswrap { position: relative; overflow: hidden; background: #0a0a12; cursor: crosshair; }
+  #gc { display: block; width: 100%; height: 100%; }
+  #zslice-wrap { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 6px; background: rgba(20,20,24,.88);
+    padding: 4px 10px; border-radius: 20px; border: 1px solid #2a2a35; }
+  #zslice-wrap label { font-size: 10px; color: #777; }
+  #zslice { width: 80px; }
+
+  /* ── Right panel ── */
+  #rightpanel { padding: 8px; background: #141418; border-left: 1px solid #2a2a35;
+    display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+  .rp-label { font-size: 10px; color: #555; letter-spacing: .06em; text-transform: uppercase; }
+  .cell-prop { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0;
+    border-bottom: 1px solid #1e1e2e; }
+  .cell-prop span:first-child { color: #777; }
+  .cell-val { font-weight: 500; color: #e0dff5; font-family: monospace; }
+  #histcanvas { width: 100%; height: 80px; border-radius: 6px; border: 1px solid #2a2a35;
+    background: #0a0a12; }
+  .hist-legend { display: flex; gap: 6px; font-size: 9px; flex-wrap: wrap; }
+  .ev { font-family: monospace; font-size: 10px; color: #555; cursor: pointer;
+    padding: 2px 4px; border-radius: 4px; }
+  .ev:hover { background: #1e1e2e; color: #e0dff5; }
+
+  /* ── MetaLaw panel ── */
+  .law-card {
+    border: 1px solid #2a2a35; border-radius: 6px; padding: 5px 7px;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .law-header { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+  .law-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .law-name { font-size: 11px; font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .law-status { font-size: 9px; padding: 1px 5px; border-radius: 10px; font-weight: 600; }
+  .law-status.on  { background: #0a1f0a; color: #4caf7d; border: 1px solid #1a3a1a; }
+  .law-status.off { background: #1a1a22; color: #555;    border: 1px solid #2a2a35; }
+  .law-meta { font-size: 9px; color: #444; font-family: monospace; }
+  .law-procs { display: flex; gap: 3px; flex-wrap: wrap; }
+  .proc-tag { font-size: 8px; padding: 1px 4px; border-radius: 3px;
+    background: #1e1e2e; color: #7c9fff; border: 1px solid #2a3a55; white-space: nowrap; }
+  .proc-tag.inactive { color: #444; border-color: #2a2a35; background: #141418; }
+  .law-btns { display: flex; gap: 3px; }
+  .law-btn { font-size: 9px; padding: 1px 5px; border: 1px solid #2a2a35; border-radius: 4px;
+    cursor: pointer; background: transparent; color: #666; }
+  .law-btn:hover { color: #e0dff5; border-color: #555; }
+  .law-btn.danger:hover { color: #f47b7b; border-color: #5a2a2a; }
+  #addLawBtn { font-size: 10px; padding: 4px 8px; border: 1px dashed #3a3a4a; border-radius: 6px;
+    cursor: pointer; background: transparent; color: #555; width: 100%; text-align: center; }
+  #addLawBtn:hover { color: #e0dff5; border-color: #7c6fcd; }
+
+  /* ── Process panel ── */
+  .proc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+  .proc-row { display: flex; align-items: center; gap: 4px; font-size: 9px; cursor: pointer;
+    padding: 2px 3px; border-radius: 4px; }
+  .proc-row:hover { background: #1e1e2e; }
+  .proc-led { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .proc-led.on  { background: #4caf7d; box-shadow: 0 0 4px #4caf7d66; }
+  .proc-led.off { background: #333; }
+  .proc-row-name { color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Bottombar ── */
+  #bottombar { display: flex; align-items: center; gap: 10px; padding: 0 12px;
+    background: #141418; border-top: 1px solid #2a2a35; font-size: 12px; overflow-x: auto; }
+  .stat  { color: #666; white-space: nowrap; }
+  .statv { font-weight: 500; color: #e0dff5; font-family: monospace; }
+  #playbtn { padding: 3px 14px; border: 1px solid #3a3a5a; border-radius: 7px; cursor: pointer;
+    background: transparent; font-size: 12px; color: #e0dff5; }
+
+  /* ── Onboarding ── */
+  #onboard { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; background: rgba(10,10,18,.93); z-index: 10; }
+  .ob-card { background: #141418; border: 1px solid #2a2a35; border-radius: 12px;
+    padding: 24px; max-width: 320px; text-align: center; }
+  .ob-title { font-size: 18px; font-weight: 500; margin-bottom: 4px; }
+  .ob-sub { font-size: 11px; color: #666; margin-bottom: 14px; }
+  .ob-steps { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; text-align: left; }
+  .ob-step { font-size: 12px; color: #aaa; display: flex; gap: 10px; }
+  .ob-num { background: #1a1830; color: #7c9fff; border-radius: 50%; width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; }
+  .ob-start { width: 100%; padding: 10px; border: 1px solid #3a3a5a; border-radius: 8px;
+    cursor: pointer; background: transparent; color: #e0dff5; font-size: 13px; }
+  .ob-start:hover { background: #1e1e2e; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ── Top toolbar ── -->
+  <div id="topbar">
+    <button class="layer-btn active" data-layer="energy">Energy</button>
+    <button class="layer-btn"        data-layer="density">Density</button>
+    <button class="layer-btn"        data-layer="information">Information</button>
+    <button class="layer-btn"        data-layer="entropy">Entropy</button>
+    <button class="layer-btn"        data-layer="temperature">Temperature</button>
+    <button class="layer-btn"        data-layer="bioPotential">Bio</button>
+    <div class="sep"></div>
+    <button class="tool-btn active" data-tool="paint"  ><i class="ti ti-pencil"></i></button>
+    <button class="tool-btn"        data-tool="inject" ><i class="ti ti-plus"></i></button>
+    <button class="tool-btn"        data-tool="erase"  ><i class="ti ti-eraser"></i></button>
+    <button class="tool-btn"        data-tool="inspect"><i class="ti ti-eye"></i></button>
+    <div class="sep"></div>
+    <button class="tool-btn" id="paintModeBtn" title="Toggle: Explore (orbit) vs Paint (draw) — shortcut P">
+      <i class="ti ti-planet"></i> Explore
+    </button>
+    <div class="sep"></div>
+    <label>Brush <input type="range" id="brushSize" min="1" max="6" value="2" step="1"> <span id="bsOut">2</span></label>
+    <label>Str <input type="range" id="brushStr" min="50" max="1000" value="400" step="50"> <span id="bStrOut">400</span></label>
+    <div style="flex:1"></div>
+    <span id="gpubadge" class="cpu">CPU</span>
+  </div>
+
+  <!-- ── Main 3-column layout ── -->
+  <div id="middle">
+    <!-- Left: presets + layer info -->
+    <div id="leftpanel">
+      <span class="plabel">Presets</span>
+      <button class="preset-btn" data-preset="burst"        ><i class="ti ti-flame"></i> Energy burst</button>
+      <button class="preset-btn" data-preset="wave"         ><i class="ti ti-waves"></i> Wave</button>
+      <button class="preset-btn" data-preset="life"         ><i class="ti ti-dna"></i> Life seed</button>
+      <button class="preset-btn" data-preset="vortex"       ><i class="ti ti-tornado"></i> Vortex</button>
+      <button class="preset-btn" data-preset="entropy_storm"><i class="ti ti-storm"></i> Entropy storm</button>
+      <button class="preset-btn" data-preset="ecosystem"    ><i class="ti ti-leaf"></i> Ecosystem</button>
+      <button class="preset-btn" data-preset="clear"        ><i class="ti ti-square"></i> Clear</button>
+      <div style="height:1px;background:#2a2a35;margin:4px 0"></div>
+      <span class="plabel">About layer</span>
+      <div id="layerinfo"></div>
+    </div>
+
+    <!-- Center: canvas -->
+    <div id="canvaswrap">
+      <canvas id="gc"></canvas>
+      <div id="zslice-wrap">
+        <label>Z slice</label>
+        <input type="range" id="zslice" min="0" max="31" value="0" step="1">
+        <span id="zOut" style="font-size:10px;color:#aaa;min-width:20px">0</span>
+      </div>
+      <div id="onboard">
+        <div class="ob-card">
+          <div class="ob-title">Reality Engine v3</div>
+          <div class="ob-sub">Meta-Law Physics Simulator</div>
+          <div class="ob-steps">
+            <div class="ob-step"><div class="ob-num">1</div><span>Left-click paints voxels — right-drag orbits the 3D view — scroll zooms</span></div>
+            <div class="ob-step"><div class="ob-num">2</div><span>Laws govern which processes run and evolve over time via MetaLaw system</span></div>
+            <div class="ob-step"><div class="ob-num">3</div><span>Watch thermodynamics, life, geology, and information physics emerge</span></div>
+          </div>
+          <button class="ob-start" id="obStart">Start simulation →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: inspector + MetaLaw panel -->
+    <div id="rightpanel">
+      <span class="rp-label">Selected cell</span>
+      <div id="cellprops"><div style="font-size:11px;color:#555">Click a cell to inspect</div></div>
+
+      <span class="rp-label">Cell history</span>
+      <canvas id="histcanvas" width="200" height="80"></canvas>
+      <div class="hist-legend">
+        <span style="color:#7c9fff">─ E</span>
+        <span style="color:#ef8f3f">─ T</span>
+        <span style="color:#c084fc">─ I</span>
+        <span style="color:#f47b7b">─ S</span>
+        <span style="color:#4caf7d">─ Bio</span>
+      </div>
+
+      <span class="rp-label">Causality log</span>
+      <div id="eventlog"><div style="font-size:10px;color:#555">No events yet</div></div>
+
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
+      <span class="rp-label">Entities <span id="entityCount" style="color:#4caf7d;font-family:monospace">0</span></span>
+      <div id="entityList" style="display:flex;flex-direction:column;gap:3px;max-height:120px;overflow-y:auto;"></div>
+
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
+
+      <span class="rp-label">Meta-Laws</span>
+      <div id="lawList" style="display:flex;flex-direction:column;gap:4px;"></div>
+      <button id="addLawBtn"><i class="ti ti-dna-2"></i> Spawn random mutation</button>
+
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
+
+      <span class="rp-label">Active processes</span>
+      <div id="procGrid" class="proc-grid"></div>
+    </div>
+  </div>
+
+  <!-- ── Bottombar ── -->
+  <div id="bottombar">
+    <button id="playbtn"><i class="ti ti-player-play"></i> Play</button>
+    <input type="range" id="speedSlider" min="1" max="16" value="4" step="1">
+    <span class="stat">Speed:</span><span class="statv" id="speedOut">4x</span>
+    <div class="sep"></div>
+    <span class="stat">Tick:</span><span class="statv" id="tickOut">0</span>
+    <span class="stat">Energy:</span><span class="statv" id="energyOut">0</span>
+    <span class="stat">Entropy:</span><span class="statv" id="entropyOut">0.0000</span>
+    <span class="stat">Laws:</span><span class="statv" id="lawsOut">0/0</span>
+    <span class="stat">Entities:</span><span class="statv" id="entOut">0</span>
+    <span class="stat">FPS:</span><span class="statv" id="fpsOut">0</span>
+    <div style="flex:1"></div>
+    <button class="tool-btn" id="saveBtn" title="Save world"><i class="ti ti-download"></i></button>
+  </div>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
