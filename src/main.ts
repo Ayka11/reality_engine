@@ -1,5 +1,6 @@
 import { SimulationEngine } from './simulation/SimulationEngine';
 import { VoxelRenderer, LayerName } from './render/VoxelRenderer';
+import { Entity } from './simulation/EntityLayer';
 import { Presets, PresetName } from './world/Presets';
 import { F } from './core/CellState';
 import { PROCESS_LIBRARY } from './process/ProcessDef';
@@ -443,20 +444,31 @@ function renderWorldEventLog() {
 }
 
 // ── Entity panel ──────────────────────────────────────────────────────────────
+function entityStageColor(e: Entity): string {
+  return e.stage === 'juvenile' ? '#4caf7d' : e.stage === 'mature' ? '#ef8f3f' : '#c084fc';
+}
+
 function updateEntityPanel() {
   const list = document.getElementById('entityList')!;
-  const all  = sim.entityMarkers();
+  const all  = sim.entityLayer.getEntities();
+  const stats = sim.entityStats();
   document.getElementById('entityCount')!.textContent = String(all.length);
   document.getElementById('entOut')!.textContent      = String(all.length);
+  document.getElementById('genOut')!.textContent      = String(stats.totalSpawned);
+  document.getElementById('extinctOut')!.textContent  = String(stats.extinct);
 
   list.innerHTML = all.slice(0, 12).map(e => {
-    const [r,g,b] = e.color.map(v => Math.round(v*255));
-    return `<div style="display:flex;align-items:center;gap:5px;font-size:9px;padding:2px 3px;border-radius:4px;background:#1a1a22">
-      <span style="width:7px;height:7px;border-radius:50%;background:rgb(${r},${g},${b});flex-shrink:0"></span>
-      <span style="color:#888;">E#${e.id}</span>
-      <span style="color:#555;">age:${e.age}</span>
-      <span style="color:#4caf7d;">${(e.stability*100).toFixed(0)}%</span>
-      <span style="color:#555;font-family:monospace;">(${Math.round(e.centroid[0])},${Math.round(e.centroid[1])},${Math.round(e.centroid[2])})</span>
+    const [r,g,b] = e.colorRgb.map(v => Math.round(v * 255));
+    const stageCol = entityStageColor(e);
+    const reproPct = Math.round(e.reproCounter * 100);
+    const reproBar = `<span style="display:inline-block;width:${reproPct * 0.3}px;height:3px;background:#4caf7d44;border-radius:2px;vertical-align:middle;max-width:30px"></span>`;
+    return `<div style="display:flex;align-items:center;gap:4px;font-size:9px;padding:2px 4px;border-radius:4px;background:#1a1a22;flex-wrap:wrap;">
+      <span style="color:rgb(${r},${g},${b});font-family:monospace;font-size:11px;flex-shrink:0">${e.symbol}</span>
+      <span style="color:#666">#${e.id}</span>
+      <span style="color:${stageCol}">${e.stage.slice(0,3)}</span>
+      <span style="color:#555">a:${Math.round(e.age)}</span>
+      <span style="color:#4caf7d">${(e.reproCounter*100).toFixed(0)}%</span>${reproBar}
+      <span style="color:#888">×${e.children}</span>
     </div>`;
   }).join('');
 }
@@ -469,6 +481,9 @@ function renderLawPanel() {
       .map(pid => PROCESS_LIBRARY.find(p => p.id === pid)?.label ?? '')
       .filter(Boolean).slice(0, 4);
     const isCore = ['law_thermo','law_gravity','law_info'].includes(law.id);
+    const ovr = sim.laws.getLawOverride(law.id);
+    const ovrLabel = ovr === 'auto' ? '⬡ Auto' : ovr === 'on' ? '🔒 ON' : '🔒 OFF';
+    const ovrColor = ovr === 'on' ? '#4caf7d' : ovr === 'off' ? '#f47b7b' : '#555';
     return `
     <div class="law-card" style="border-color:${law.active ? law.color+'44' : '#2a2a35'}">
       <div class="law-header">
@@ -479,7 +494,8 @@ function renderLawPanel() {
       <div class="law-meta">age:${law.age} fit:${law.fitness.toFixed(2)} μ:${law.mutationRate.toFixed(4)}</div>
       <div class="law-procs">${procNames.map(n=>`<span class="proc-tag">${n}</span>`).join('')}</div>
       <div class="law-btns">
-        <button class="law-btn" data-action="mutate" data-id="${law.id}">⚡ Mutate</button>
+        <button class="law-btn" data-action="override" data-id="${law.id}" style="color:${ovrColor};border-color:${ovrColor}44">${ovrLabel}</button>
+        <button class="law-btn" data-action="mutate" data-id="${law.id}">⚡</button>
         ${!isCore?`<button class="law-btn danger" data-action="remove" data-id="${law.id}">✕</button>`:''}
       </div>
     </div>`;
@@ -488,9 +504,14 @@ function renderLawPanel() {
   list.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.id!;
-      if (btn.dataset.action === 'mutate') sim.laws.spawnMutation(id);
-      if (btn.dataset.action === 'remove') sim.laws.removeLaw(id);
-      renderLawPanel();
+      if (btn.dataset.action === 'override') {
+        const cur = sim.laws.getLawOverride(id);
+        const next = cur === 'auto' ? 'on' : cur === 'on' ? 'off' : 'auto';
+        sim.laws.setLawOverride(id, next);
+        renderLawPanel();
+      }
+      if (btn.dataset.action === 'mutate') { sim.laws.spawnMutation(id); renderLawPanel(); }
+      if (btn.dataset.action === 'remove') { sim.laws.removeLaw(id); renderLawPanel(); }
     });
   });
 }
@@ -568,6 +589,14 @@ document.getElementById('obStart')!.addEventListener('click', () => {
 renderLawPanel();
 renderProcGrid();
 renderMaterialPalette();
+
+// Mutation strength slider
+const mutStrEl = document.getElementById('mutStrength') as HTMLInputElement | null;
+mutStrEl?.addEventListener('input', () => {
+  const v = parseInt(mutStrEl.value) / 100;
+  sim.setEntityMutationStrength(v);
+  document.getElementById('mutStrOut')!.textContent = v.toFixed(1) + '×';
+});
 
 // Agent controls
 document.getElementById('seedAgentsBtn')?.addEventListener('click', () => {

@@ -88,8 +88,10 @@ export class LawEngine {
   tick(metrics: WorldMetrics): void {
     let dirty = false;
     for (const law of this.laws) {
-      const shouldBeActive = law.conditions.length === 0
-        || law.conditions.every(c => evalCond(c, metrics));
+      const _override = this._lawOverride.get(law.id);
+      const shouldBeActive = _override === 'on' ? true
+        : _override === 'off' ? false
+        : (law.conditions.length === 0 || law.conditions.every(c => evalCond(c, metrics)));
 
       if (shouldBeActive !== law.active) {
         law.active = shouldBeActive;
@@ -139,6 +141,10 @@ export class LawEngine {
         (this._params as unknown as Record<string, number>)[k] = v as number;
       }
     }
+
+    // Manual overrides always win — applied last so laws can't undo them
+    for (const pid of this._manualOn)  this._mask |= (1 << pid);
+    for (const pid of this._manualOff) this._mask &= ~(1 << pid);
   }
 
   get activeProcessMask(): number { return this._mask; }
@@ -185,8 +191,31 @@ export class LawEngine {
     this._recompute();
   }
 
+  // Per-law activation overrides (independent of conditions)
+  private _lawOverride: Map<string, 'auto' | 'on' | 'off'> = new Map();
+
+  setLawOverride(id: string, state: 'auto' | 'on' | 'off'): void {
+    if (state === 'auto') this._lawOverride.delete(id);
+    else this._lawOverride.set(id, state);
+  }
+
+  getLawOverride(id: string): 'auto' | 'on' | 'off' {
+    return this._lawOverride.get(id) ?? 'auto';
+  }
+
+  // Manual overrides survive MetaLaw recomputes
+  private _manualOn  = new Set<number>();
+  private _manualOff = new Set<number>();
+
   toggleProcess(procId: number, on: boolean): void {
+    if (on) { this._manualOn.add(procId);  this._manualOff.delete(procId); }
+    else    { this._manualOff.add(procId); this._manualOn.delete(procId);  }
     if (on) this._mask |= (1 << procId);
     else    this._mask &= ~(1 << procId);
+  }
+
+  clearManualOverrides(): void {
+    this._manualOn.clear(); this._manualOff.clear();
+    this._recompute();
   }
 }

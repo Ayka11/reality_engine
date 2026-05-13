@@ -10,9 +10,11 @@ export interface EntityGenome {
   memoryDecay: number;       // 0..1 — how fast memory field fades
 }
 
-type LifeStage = 'juvenile' | 'mature' | 'elder';
+export type LifeStage = 'juvenile' | 'mature' | 'elder';
 
-interface Entity {
+const SYMBOLS = ['@', '#', '*', 'O', 'X', '&', '%', '$'] as const;
+
+export interface Entity {
   id: number;
   cells: number[];           // linear indices into the grid
   centroid: [number, number, number];
@@ -22,9 +24,14 @@ interface Entity {
   stage: LifeStage;
   memoryBuffer: Float32Array; // rolling average of last 8 energy readings
   memPtr: number;
+  symbol: string;
+  colorRgb: [number, number, number];
+  children: number;
+  reproCounter: number;      // energy / reproThreshold — 0..1 display gauge
 }
 
 let _nextId = 1;
+let _extinctCount = 0;
 
 function defaultGenome(): EntityGenome {
   return {
@@ -99,6 +106,10 @@ function centroid(cells: number[], W: number, H: number): [number, number, numbe
 export class EntityLayer {
   private entities: Map<number, Entity> = new Map();
   private bioThreshold = 0.05;
+  mutationStrength = 1.0;
+
+  get extinctCount(): number { return _extinctCount; }
+  get totalSpawned(): number { return _nextId - 1; }
 
   tick(grid: VoxelGrid, dt: number): void {
     const { W, H, D, buffer: buf } = grid;
@@ -151,8 +162,28 @@ export class EntityLayer {
           age: 0, energy: 0, stage: 'juvenile',
           memoryBuffer: new Float32Array(8),
           memPtr: 0,
+          symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+          colorRgb: [
+            0.3 + Math.random() * 0.7,
+            0.3 + Math.random() * 0.7,
+            0.3 + Math.random() * 0.7,
+          ],
+          children: 0,
+          reproCounter: 0,
         };
         nextEntities.set(id, ent);
+      }
+    }
+
+    // Count extinction for entities whose blob disappeared
+    for (const [id] of this.entities) {
+      if (!nextEntities.has(id)) {
+        _extinctCount++;
+        const dead = this.entities.get(id)!;
+        for (const i of dead.cells) {
+          const base = i * CELL_FIELDS;
+          buf[base + F.ENERGY] = Math.min(9999, buf[base + F.ENERGY] + dead.energy * 0.3 / Math.max(1, dead.cells.length));
+        }
       }
     }
     this.entities = nextEntities;
@@ -167,6 +198,7 @@ export class EntityLayer {
         poolEnergy += buf[i * CELL_FIELDS + F.ENERGY];
       }
       ent.energy = poolEnergy;
+      ent.reproCounter = Math.min(1, ent.energy / Math.max(1, genome.reproThreshold));
 
       // Lifecycle stage
       ent.age += 1;
@@ -255,10 +287,12 @@ export class EntityLayer {
 
     // Only spawn if target is low-bio
     if (buf[childBase + F.BIO_POTENTIAL] < 0.02) {
-      const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate);
+      const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate * this.mutationStrength);
       buf[childBase + F.BIO_POTENTIAL] = 0.15;
       buf[childBase + F.ENERGY]        = parent.genome.reproThreshold * 0.3;
       buf[childBase + F.INFORMATION]   = 5;
+
+      parent.children++;
 
       // Register new entity immediately
       const id = _nextId++;
@@ -269,6 +303,14 @@ export class EntityLayer {
         age: 0, energy: buf[childBase + F.ENERGY], stage: 'juvenile',
         memoryBuffer: new Float32Array(8),
         memPtr: 0,
+        symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+        colorRgb: [
+          Math.max(0.2, parent.colorRgb[0] + (Math.random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[1] + (Math.random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[2] + (Math.random() - 0.5) * 0.3),
+        ],
+        children: 0,
+        reproCounter: 0,
       });
 
       // Drain energy from parent
@@ -286,5 +328,6 @@ export class EntityLayer {
   clear(): void {
     this.entities.clear();
     _nextId = 1;
+    _extinctCount = 0;
   }
 }

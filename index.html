@@ -275,6 +275,11 @@
       </div>
       <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
       <span class="rp-label">Entities <span id="entityCount" style="color:#4caf7d;font-family:monospace">0</span></span>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+        <span style="font-size:9px;color:#555">Mutation</span>
+        <input type="range" id="mutStrength" min="0" max="300" value="100" step="10" style="width:70px;accent-color:#4caf7d;">
+        <span id="mutStrOut" style="font-size:10px;color:#888;font-family:monospace;">1.0×</span>
+      </div>
       <div id="entityList" style="display:flex;flex-direction:column;gap:3px;max-height:120px;overflow-y:auto;"></div>
 
       <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
@@ -346,6 +351,8 @@
     <span class="stat">Entropy:</span><span class="statv" id="entropyOut">0.0000</span>
     <span class="stat">Laws:</span><span class="statv" id="lawsOut">0/0</span>
     <span class="stat">Entities:</span><span class="statv" id="entOut">0</span>
+    <span class="stat">Gen:</span><span class="statv" id="genOut">0</span>
+    <span class="stat">Extinct:</span><span class="statv" id="extinctOut">0</span>
     <span class="stat">FPS:</span><span class="statv" id="fpsOut">0</span>
     <div style="flex:1"></div>
     <button class="tool-btn" id="saveBtn" title="Save world"><i class="ti ti-download"></i></button>

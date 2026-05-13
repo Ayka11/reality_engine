@@ -25,10 +25,10 @@ export class SimulationEngine {
   readonly recorder: Recorder;
   readonly agents: AgentSystem;
 
+  readonly entityLayer: EntityLayer;
   private fieldPhysics: FieldPhysics;
   private entropyLayer: EntropyLayer;
   private chemLayer: ChemLayer;
-  private entityLayer: EntityLayer;
   private temporalLayer: TemporalLayer;
   private infoPhysics: InfoPhysics;
   private prevEnergy: Float32Array;
@@ -159,6 +159,17 @@ export class SimulationEngine {
   }
 
   agentMarkers() { return this.agents.agentMarkers(); }
+
+  entityStats() {
+    return {
+      totalSpawned: this.entityLayer.totalSpawned,
+      extinct: this.entityLayer.extinctCount,
+    };
+  }
+
+  setEntityMutationStrength(v: number): void {
+    this.entityLayer.mutationStrength = v;
+  }
 
   totalField(fieldIdx: number): number { return this.grid.totalField(fieldIdx); }
 
