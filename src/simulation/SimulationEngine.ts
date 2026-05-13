@@ -158,6 +158,8 @@ export class SimulationEngine {
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
   }
 
+  agentMarkers() { return this.agents.agentMarkers(); }
+
   totalField(fieldIdx: number): number { return this.grid.totalField(fieldIdx); }
 
   entityMarkers() {

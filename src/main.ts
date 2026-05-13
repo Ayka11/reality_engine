@@ -700,8 +700,8 @@ async function loop(ts: number) {
   // Entity panel refresh every 15 ticks
   if (sim.tick % 15 === 0) { updateEntityPanel(); updateAgentPanel(); }
 
-  // 3D render with entity markers from engine
-  renderer.render(sim.grid, sim.entityMarkers());
+  // 3D render with entity + agent markers from engine
+  renderer.render(sim.grid, sim.entityMarkers(), sim.agentMarkers());
 
   // Right-panel updates
   if (selX >= 0 && sim.tick % 3 === 0) updateCellPanel();

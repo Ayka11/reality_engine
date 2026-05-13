@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import { MATERIAL_LIBRARY } from '../materials/MaterialDef';
+import { AgentMarker, AGENT_COLORS } from '../simulation/AgentSystem';
 
 export type LayerName = 'energy' | 'density' | 'information' | 'entropy' | 'temperature' | 'bioPotential' | 'material' | 'chemistry' | 'signal' | 'memory' | 'diff';
 
@@ -87,6 +88,7 @@ export class VoxelRenderer {
   private cloud:    THREE.Points;
   private colorAttr: THREE.BufferAttribute;
   private entityGroup: THREE.Group;
+  private agentGroup:  THREE.Group;
   private _ro: ResizeObserver;
   private _W: number; private _H: number; private _D: number;
 
@@ -177,6 +179,10 @@ export class VoxelRenderer {
     this.entityGroup = new THREE.Group();
     this.scene.add(this.entityGroup);
 
+    // ── Agent group ───────────────────────────────────────────────────────────
+    this.agentGroup = new THREE.Group();
+    this.scene.add(this.agentGroup);
+
     // ── Resize ────────────────────────────────────────────────────────────────
     this._ro = new ResizeObserver(() => this._onResize());
     this._ro.observe(canvas.parentElement!);
@@ -194,7 +200,7 @@ export class VoxelRenderer {
 
   setDiffBuffer(buf: Float32Array | null): void { this._diffBuf = buf; }
 
-  render(grid: VoxelGrid, entities: EntityMarker[] = []): void {
+  render(grid: VoxelGrid, entities: EntityMarker[] = [], agents: AgentMarker[] = []): void {
     // ── Update voxel colors ───────────────────────────────────────────────────
     const buf   = grid.buffer;
     const cols  = this.colorAttr.array as Float32Array;
@@ -254,6 +260,9 @@ export class VoxelRenderer {
     // ── Entity markers ────────────────────────────────────────────────────────
     this._syncEntities(entities);
 
+    // ── Agent markers ─────────────────────────────────────────────────────────
+    this._syncAgents(agents);
+
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
@@ -284,6 +293,34 @@ export class VoxelRenderer {
       const mat = m.material as THREE.MeshBasicMaterial;
       mat.color.setRGB(e.color[0], e.color[1], e.color[2]);
       mat.opacity = 0.55 + e.stability * 0.45;
+    });
+  }
+
+  private _syncAgents(agents: AgentMarker[]): void {
+    // Remove excess
+    while (this.agentGroup.children.length > agents.length) {
+      const m = this.agentGroup.children[0] as THREE.Mesh;
+      m.geometry.dispose();
+      (m.material as THREE.Material).dispose();
+      this.agentGroup.remove(m);
+    }
+    // Add missing
+    const sGeo = new THREE.SphereGeometry(0.35, 6, 5);
+    while (this.agentGroup.children.length < agents.length) {
+      const mat = new THREE.MeshBasicMaterial({
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      this.agentGroup.add(new THREE.Mesh(sGeo, mat));
+    }
+    // Update positions + behavior color
+    agents.forEach((a, idx) => {
+      const m = this.agentGroup.children[idx] as THREE.Mesh;
+      // grid (x, y, z) → THREE (x, z, y)
+      m.position.set(a.position[0] + 0.5, a.position[2] + 0.5, a.position[1] + 0.5);
+      const [r, g, b] = AGENT_COLORS[a.behavior];
+      const mat = m.material as THREE.MeshBasicMaterial;
+      mat.color.setRGB(r, g, b);
+      mat.opacity = 0.75 + Math.min(a.energy / 600, 0.25);
     });
   }
 
