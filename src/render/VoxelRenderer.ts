@@ -115,10 +115,18 @@ export class VoxelRenderer {
     this.controls.target.set(W/2, D/2, H/2);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.06;
-    this.controls.minDistance = 8;
-    this.controls.maxDistance = 400;
+    this.controls.minDistance = 4;
+    this.controls.maxDistance = 500;
+    this.controls.enablePan = true;
+    this.controls.panSpeed = 1.2;
+    this.controls.rotateSpeed = 0.8;
+    this.controls.zoomSpeed = 1.2;
+    // Touch: one-finger rotate, two-finger dolly+pan
+    (this.controls.touches as unknown as Record<string,unknown>) = {
+      ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN,
+    };
     (this.controls.mouseButtons as unknown as Record<string,unknown>) = {
-      LEFT: -1, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE,
+      LEFT: -1, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE,
     };
 
     // ── Lighting ──────────────────────────────────────────────────────────────
@@ -306,8 +314,26 @@ export class VoxelRenderer {
   setPaintMode(enabled: boolean): void {
     this.paintMode = enabled;
     (this.controls.mouseButtons as unknown as Record<string,unknown>) = enabled
-      ? { LEFT: -1, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE }
-      : { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+      ? { LEFT: -1,                   MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
+      : { LEFT: THREE.MOUSE.ROTATE,   MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    (this.controls.touches as unknown as Record<string,unknown>) = enabled
+      ? { ONE: -1,                      TWO: THREE.TOUCH.DOLLY_PAN }
+      : { ONE: THREE.TOUCH.ROTATE,      TWO: THREE.TOUCH.DOLLY_PAN };
+  }
+
+  panCamera(dx: number, dy: number): void {
+    const offset = new THREE.Vector3();
+    offset.copy(this.camera.position).sub(this.controls.target);
+    const dist = offset.length();
+    const right = new THREE.Vector3();
+    right.crossVectors(this.camera.getWorldDirection(new THREE.Vector3()), this.camera.up).normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+    const panScale = dist * 0.0012;
+    this.controls.target.addScaledVector(right, -dx * panScale);
+    this.controls.target.addScaledVector(up,     dy * panScale);
+    this.camera.position.addScaledVector(right, -dx * panScale);
+    this.camera.position.addScaledVector(up,     dy * panScale);
+    this.controls.update();
   }
 
   resetCamera(): void {

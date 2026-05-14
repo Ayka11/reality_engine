@@ -82,4 +82,27 @@ export class Recorder {
     grid.buffer.set(snap.buffer);
     return true;
   }
+
+  exportRecording(): string {
+    if (!this.snapshots.length) return JSON.stringify({ error: 'No snapshots recorded' });
+    const sparse = (buf: Float32Array) => {
+      const cells: Array<[number, number[]]> = [];
+      const count = buf.length / CELL_FIELDS;
+      for (let i = 0; i < count; i++) {
+        const o = i * CELL_FIELDS;
+        if (buf[o] < 1) continue; // skip near-zero energy cells
+        cells.push([i, Array.from(buf.subarray(o, o + CELL_FIELDS)).map(v => parseFloat(v.toFixed(3)))]);
+      }
+      return cells;
+    };
+    return JSON.stringify({
+      version: 3,
+      exported: new Date().toISOString(),
+      snapshots: this.snapshots.map(s => ({
+        tick:    s.tick,
+        metrics: s.metrics,
+        cells:   sparse(s.buffer),
+      })),
+    });
+  }
 }

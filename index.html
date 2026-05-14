@@ -174,13 +174,14 @@
     <button class="tool-btn"        data-tool="erase"  ><i class="ti ti-eraser"></i></button>
     <button class="tool-btn"        data-tool="inspect"><i class="ti ti-eye"></i></button>
     <div class="sep"></div>
-    <button class="tool-btn" id="paintModeBtn" title="Toggle: Explore (orbit) vs Paint (draw) — shortcut P">
+    <button class="tool-btn" id="paintModeBtn" title="P: toggle Paint/Explore · In Explore: left-drag orbits · In Paint: right-drag orbits · WASD/arrows pan · Scroll zooms">
       <i class="ti ti-planet"></i> Explore
     </button>
     <div class="sep"></div>
     <label>Brush <input type="range" id="brushSize" min="1" max="6" value="2" step="1"> <span id="bsOut">2</span></label>
     <label>Str <input type="range" id="brushStr" min="50" max="1000" value="400" step="50"> <span id="bStrOut">400</span></label>
     <div style="flex:1"></div>
+    <button class="tool-btn" id="resetCamBtn" title="Reset camera to default view">⌂</button>
     <span id="gpubadge" class="cpu">CPU</span>
   </div>
 
@@ -215,6 +216,16 @@
       <button class="preset-btn" data-preset="energy_economy"    ><i class="ti ti-bolt"></i> Energy Economy</button>
       <button class="preset-btn" data-preset="causality_collapse"><i class="ti ti-alert-triangle"></i> Causality Collapse</button>
       <div style="height:1px;background:#2a2a35;margin:4px 0"></div>
+      <span class="plabel">Terrain Generator</span>
+      <select id="biomeSelect" style="width:100%;font-size:10px;background:#161620;
+        color:#888;border:1px solid #2a2a35;border-radius:5px;padding:3px;margin-bottom:3px"></select>
+      <input type="number" id="biomeSeed" value="42" min="0" max="99999"
+        style="width:100%;font-size:10px;background:#161620;color:#888;
+        border:1px solid #2a2a35;border-radius:5px;padding:3px;margin-bottom:3px">
+      <button class="preset-btn" id="btnGenTerrain">⛰ Generate terrain</button>
+      <button class="preset-btn" id="btnSpawnAgents">🤖 Spawn 5 agents</button>
+      <button class="preset-btn" id="btnToggleClimate">🌬 Climate: OFF</button>
+      <div style="height:1px;background:#2a2a35;margin:4px 0"></div>
       <span class="plabel">Material Brush</span>
       <div id="materialPalette"></div>
       <div style="height:1px;background:#2a2a35;margin:4px 0"></div>
@@ -235,7 +246,7 @@
           <div class="ob-title">Reality Engine v3</div>
           <div class="ob-sub">Meta-Law Physics Simulator</div>
           <div class="ob-steps">
-            <div class="ob-step"><div class="ob-num">1</div><span>Left-click paints voxels — right-drag orbits the 3D view — scroll zooms</span></div>
+            <div class="ob-step"><div class="ob-num">1</div><span>Left-click paints voxels · Right-drag or P key orbits · Scroll/pinch zooms · Middle-drag zooms · WASD/arrows pan</span></div>
             <div class="ob-step"><div class="ob-num">2</div><span>Laws govern which processes run and evolve over time via MetaLaw system</span></div>
             <div class="ob-step"><div class="ob-num">3</div><span>Watch thermodynamics, life, geology, and information physics emerge</span></div>
           </div>
@@ -327,6 +338,23 @@
         border-radius:4px;border:1px solid #1a1a25;white-space:pre-wrap;line-height:1.5;"></div>
 
       <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
+      <span class="rp-label">⬡ Node Graph <span style="color:#333;font-weight:400;text-transform:none;letter-spacing:0"> — dbl-click to toggle · drag to move</span></span>
+      <canvas id="nodeGraph" height="190" style="width:100%;border-radius:5px;border:1px solid #2a2a35;background:#08080f;cursor:pointer;display:block;"></canvas>
+
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
+
+      <span class="rp-label">Live Metrics</span>
+      <canvas id="p2metricsCanvas" style="width:100%;height:120px;
+        border-radius:5px;border:1px solid #2a2a35;background:#06060d;display:block;"></canvas>
+
+      <span class="rp-label">Timeline <span id="timelineSnapCount" style="color:#4caf7d;font-family:monospace">0</span> snaps</span>
+      <div id="timelineSnapList" style="max-height:90px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;"></div>
+      <div style="display:flex;gap:4px;margin-top:3px;">
+        <button class="sci-btn" id="btnSaveTimeline" style="flex:1">💾 Save snap</button>
+        <button class="sci-btn" id="btnExportTimeline" style="flex:1">↓ CSV</button>
+      </div>
+
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
       <span class="rp-label">Scientific Mode</span>
       <div id="sciPanel" style="display:flex;flex-direction:column;gap:4px;">
         <!-- Record + export row -->
@@ -361,6 +389,29 @@
         <canvas id="causalCanvas" height="90" style="width:100%;border-radius:5px;border:1px solid #2a2a35;background:#0a0a12;cursor:pointer;"></canvas>
         <div id="causalInfo" style="font-size:9px;color:#555;font-family:monospace;">Click a node to inspect</div>
       </div>
+
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
+      <span class="rp-label">Export</span>
+
+      <span style="font-size:9px;color:#666;display:block;margin-bottom:3px;">Unreal Engine</span>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+        <button id="exportUsdBtn"      class="sci-btn">↓ USD</button>
+        <button id="exportLiveLinkBtn" class="sci-btn">↓ LiveLink</button>
+        <button id="unrealGuideBtn"    class="sci-btn">? Guide</button>
+      </div>
+
+      <span style="font-size:9px;color:#666;display:block;margin-bottom:3px;">Blender</span>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+        <button id="blendVoxBtn" class="sci-btn">↓ Voxels.py</button>
+        <button id="blendBioBtn" class="sci-btn">↓ Bio.py</button>
+        <button id="blendCsvBtn" class="sci-btn">↓ CSV</button>
+      </div>
+
+      <span style="font-size:9px;color:#666;display:block;margin-bottom:3px;">Recording</span>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        <button id="exportRecordingBtn" class="sci-btn">↓ Full JSON</button>
+      </div>
+      <div id="exportStatus" style="font-size:9px;color:#555;font-family:monospace;min-height:14px;margin-top:3px;"></div>
     </div>
   </div>
 

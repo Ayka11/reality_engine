@@ -3,10 +3,17 @@ import { VoxelRenderer, LayerName } from './render/VoxelRenderer';
 import { Entity } from './simulation/EntityLayer';
 import { Presets, PresetName } from './world/Presets';
 import { ScriptEngine, SCRIPT_TEMPLATES } from './world/ScriptEngine';
+import { NodeGraph } from './ui/NodeGraph';
+import { UnrealBridge } from './export/UnrealBridge';
+import { BlenderBridge } from './export/BlenderBridge';
 import { F } from './core/CellState';
 import { PROCESS_LIBRARY } from './process/ProcessDef';
 import { MAT, MATERIAL_LIBRARY, MatId } from './materials/MaterialDef';
 import { EventType } from './world/WorldEvents';
+import { TerrainGenerator, BIOME_LIST } from './world/TerrainGenerator';
+import { ClimateSystem } from './simulation/ClimateSystem';
+import { Timeline } from './world/Timeline';
+import { MetricsPanel } from './ui/MetricsPanel';
 
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
@@ -76,7 +83,11 @@ function setPaintMode(on: boolean) {
   canvas.style.cursor = on ? 'crosshair' : 'grab';
 }
 paintBtn.addEventListener('click', () => setPaintMode(!paintModeOn));
-document.addEventListener('keydown', e => { if (e.key === 'p' || e.key === 'P') setPaintMode(!paintModeOn); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'p' || e.key === 'P') setPaintMode(!paintModeOn);
+  if (e.key === 'r' || e.key === 'R') renderer.resetCamera();
+});
+document.getElementById('resetCamBtn')?.addEventListener('click', () => renderer.resetCamera());
 setPaintMode(true); // boot into paint mode (left-click paints, right-drag orbits)
 
 // ── Material palette ──────────────────────────────────────────────────────────
@@ -744,6 +755,132 @@ document.querySelectorAll<HTMLButtonElement>('[data-event]').forEach(btn => {
   });
 });
 
+// ── Node Graph ────────────────────────────────────────────────────────────────
+const nodeGraphCanvas = document.getElementById('nodeGraph') as HTMLCanvasElement | null;
+const nodeGraph = nodeGraphCanvas ? new NodeGraph(nodeGraphCanvas, sim) : null;
+nodeGraph?.draw();
+
+// ── Export bridges ────────────────────────────────────────────────────────────
+const unrealBridge  = new UnrealBridge(sim.grid);
+const blenderBridge = new BlenderBridge(sim.grid);
+
+function _exportStatus(msg: string, ok = true) {
+  const el = document.getElementById('exportStatus');
+  if (el) { el.textContent = msg; el.style.color = ok ? '#4caf7d' : '#f47b7b'; }
+}
+
+document.getElementById('exportUsdBtn')?.addEventListener('click', () => {
+  unrealBridge.downloadUSD();
+  _exportStatus('USD exported');
+});
+document.getElementById('exportLiveLinkBtn')?.addEventListener('click', () => {
+  unrealBridge.downloadLiveLink();
+  _exportStatus('LiveLink JSON exported');
+});
+document.getElementById('unrealGuideBtn')?.addEventListener('click', () => {
+  alert(UnrealBridge.getInstructions());
+});
+
+document.getElementById('blendVoxBtn')?.addEventListener('click', () => {
+  blenderBridge.downloadBlenderScript('voxels');
+  _exportStatus('Blender voxels.py exported');
+});
+document.getElementById('blendBioBtn')?.addEventListener('click', () => {
+  blenderBridge.downloadBlenderScript('bio_clusters');
+  _exportStatus('Blender bio.py exported');
+});
+document.getElementById('blendCsvBtn')?.addEventListener('click', () => {
+  blenderBridge.downloadCSV();
+  _exportStatus('Point cloud CSV exported');
+});
+
+document.getElementById('exportRecordingBtn')?.addEventListener('click', () => {
+  const snaps = sim.recorder.snapList;
+  if (!snaps.length) { _exportStatus('No snapshots — hit ⏺ Record first', false); return; }
+  const json = sim.recorder.exportRecording();
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `reality-recording-${sim.tick}.json`;
+  a.click();
+  _exportStatus(`Recording exported (${snaps.length} snapshots)`);
+});
+
+// ── Phase 2: Terrain, Climate, Timeline, Metrics ─────────────────────────────
+const terrain  = new TerrainGenerator(sim.grid);
+const climate  = new ClimateSystem(sim.grid);
+const timeline = new Timeline(sim.grid, () => sim.agents.getAgents().length);
+const p2metricsEl = document.getElementById('p2metricsCanvas') as HTMLCanvasElement | null;
+const p2metrics   = p2metricsEl ? new MetricsPanel(p2metricsEl, timeline) : null;
+let climateActive = false;
+
+// Biome selector
+const biomeSelect = document.getElementById('biomeSelect') as HTMLSelectElement | null;
+if (biomeSelect) {
+  for (const b of BIOME_LIST) {
+    const o = document.createElement('option'); o.value = b; o.textContent = b;
+    biomeSelect.appendChild(o);
+  }
+}
+
+document.getElementById('btnGenTerrain')?.addEventListener('click', () => {
+  const biome = (biomeSelect?.value ?? 'earth') as typeof BIOME_LIST[number];
+  const seed  = parseInt((document.getElementById('biomeSeed') as HTMLInputElement)?.value ?? '42');
+  const msg   = terrain.generate(biome, seed);
+  sim.syncToGPU();
+  document.getElementById('scriptLog')!.textContent = msg;
+});
+
+document.getElementById('btnSpawnAgents')?.addEventListener('click', () => {
+  sim.agents.seed(sim.grid, 5);
+  document.getElementById('scriptLog')!.textContent = `Agents: ${sim.agents.getAgents().length} alive`;
+});
+
+document.getElementById('btnToggleClimate')?.addEventListener('click', () => {
+  climateActive = !climateActive;
+  const btn = document.getElementById('btnToggleClimate')!;
+  btn.textContent = `🌬 Climate: ${climateActive ? 'ON' : 'OFF'}`;
+});
+
+function updateTimelineSnapList(): void {
+  const el = document.getElementById('timelineSnapList');
+  if (!el) return;
+  document.getElementById('timelineSnapCount')!.textContent = String(timeline.snapshots.length);
+  el.innerHTML = [...timeline.snapshots].reverse().map((s, ri) => {
+    const i = timeline.snapshots.length - 1 - ri;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;
+        font-size:9px;padding:2px 4px;border-radius:3px;cursor:pointer;
+        background:#12121a;border:1px solid #1a1a25"
+      data-snap-idx="${i}">
+      <span style="color:#888">${s.label}</span>
+      <span style="color:#555">E:${Math.round(s.totalEnergy/1000)}k</span>
+    </div>`;
+  }).join('');
+  el.querySelectorAll<HTMLDivElement>('[data-snap-idx]').forEach(d => {
+    d.addEventListener('click', () => {
+      const idx = parseInt(d.dataset.snapIdx!);
+      if (timeline.restore(idx)) { playing = false; sim.syncToGPU(); }
+    });
+  });
+}
+
+document.getElementById('btnSaveTimeline')?.addEventListener('click', () => {
+  timeline.saveSnapshot(`Manual t${sim.tick}`);
+  updateTimelineSnapList();
+});
+document.getElementById('btnExportTimeline')?.addEventListener('click', () => timeline.exportCSV());
+
+// ── Keyboard camera navigation ─────────────────────────────────────────────────
+const _keys: Record<string, boolean> = {};
+document.addEventListener('keydown', e => { _keys[e.code] = true; });
+document.addEventListener('keyup',   e => { _keys[e.code] = false; });
+
+function _applyKeyNav(): void {
+  const dx = (_keys['KeyD'] || _keys['ArrowRight'] ? 1 : 0) - (_keys['KeyA'] || _keys['ArrowLeft'] ? 1 : 0);
+  const dy = (_keys['KeyW'] || _keys['ArrowUp']    ? 1 : 0) - (_keys['KeyS'] || _keys['ArrowDown'] ? 1 : 0);
+  if (dx !== 0 || dy !== 0) renderer.panCamera(dx * 4, dy * 4);
+}
+
 async function loop(ts: number) {
   const dt = Math.min((ts - lastTs) / 1000, 0.05);
   lastTs = ts;
@@ -753,9 +890,13 @@ async function loop(ts: number) {
     frameCount = 0; fpsTimer = ts;
   }
 
+  _applyKeyNav();
+
   if (playing) {
     const nSteps = parseInt(speedSl.value);
     await sim.step(dt, nSteps);
+    if (climateActive) climate.tick(dt * nSteps);
+    timeline.autoSave(sim.tick);
   }
 
   // Entity panel refresh every 15 ticks
@@ -767,8 +908,9 @@ async function loop(ts: number) {
   // Right-panel updates
   if (selX >= 0 && sim.tick % 3 === 0) updateCellPanel();
   if (sim.tick % 12 === 0) { updateEventLog(); renderWorldEventLog(); drawCausalGraph(); }
-  if (sim.tick % 20 === 0) { renderLawPanel(); renderProcGrid(); }
+  if (sim.tick % 20 === 0) { renderLawPanel(); renderProcGrid(); nodeGraph?.draw(); }
   if (sim.tick % 30 === 0) { renderSciPanel(); }
+  if (sim.tick % 20 === 0) { p2metrics?.draw(); updateTimelineSnapList(); }
 
   // Bottom bar
   const totalE    = sim.grid.totalField(F.ENERGY);
