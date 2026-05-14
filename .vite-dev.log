@@ -22,3 +22,12 @@ To eliminate this warning, add "type": "module" to C:\Users\User\package.json.
 [2m11:29:45 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
 [2m11:38:41 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
 [2m11:46:45 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
+[2m2:43:44 PM[22m [36m[1m[vite][22m[39m changed tsconfig file detected: C:\Users\User\Desktop\reality\tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m2:46:46 PM[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+Re-optimizing dependencies because lockfile has changed
+[2m2:46:46 PM[22m [36m[1m[vite][22m[39m server restarted.
+[2m3:12:21 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
+[2m3:12:30 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
+[2m3:12:36 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
+[2m3:12:52 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
+[2m3:35:49 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
