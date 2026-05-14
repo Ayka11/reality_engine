@@ -114,6 +114,38 @@
   .proc-stab-row { display: flex; align-items: center; gap: 4px; margin-top: 1px; }
   .proc-stab-bar { height: 3px; border-radius: 2px; min-width: 1px; flex-shrink: 0; }
 
+  /* Creator Studio */
+  .creator-shell { display:grid; grid-template-columns:155px minmax(360px,1fr) 190px; height:430px;
+    border:1px solid #2a2a35; border-radius:6px; overflow:hidden; background:#08080f; }
+  .creator-palette, .creator-inspector { min-width:0; padding:8px; background:#111118;
+    display:flex; flex-direction:column; gap:6px; overflow:auto; }
+  .creator-palette { border-right:1px solid #2a2a35; }
+  .creator-inspector { border-left:1px solid #2a2a35; }
+  .creator-title { font-size:11px; font-weight:700; color:#e0dff5; }
+  .creator-sub, .creator-empty, .creator-status { font-size:9px; color:#666; line-height:1.35; }
+  .creator-group { margin-top:6px; font-size:9px; color:#555; text-transform:uppercase; letter-spacing:.06em; }
+  .creator-template { width:100%; display:flex; align-items:center; gap:6px; padding:4px 5px;
+    border:1px solid #2a2a35; border-radius:5px; background:#15151f; color:#aaa; font-size:10px;
+    cursor:pointer; text-align:left; }
+  .creator-template:hover { color:#f2f2ff; border-color:#555; }
+  .creator-template span { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  #creatorCanvas { width:100%; height:100%; display:block; cursor:pointer; }
+  .creator-node-head { border-left:3px solid #555; padding-left:7px; display:flex; flex-direction:column; gap:2px; }
+  .creator-node-head strong { font-size:12px; color:#f2f2ff; }
+  .creator-node-head span, .creator-inspector p { font-size:9px; color:#666; line-height:1.35; }
+  .creator-check { display:flex; align-items:center; gap:6px; font-size:10px; color:#aaa; }
+  .creator-param-list { display:flex; flex-direction:column; gap:5px; }
+  .creator-param-list label { display:flex; flex-direction:column; gap:2px; font-size:9px; color:#777; }
+  .creator-param-list input { min-width:0; border:1px solid #2a2a35; border-radius:4px;
+    background:#08080f; color:#ddd; font-size:10px; padding:4px; }
+  .creator-compile { width:100%; border:1px solid #246b4a; border-radius:5px; background:#123525;
+    color:#80f0b0; font-size:10px; padding:7px; cursor:pointer; }
+  .creator-compile:hover { border-color:#22ff88; color:#d8ffe8; }
+  .creator-package-row { display:flex; gap:5px; }
+  .creator-small-btn { flex:1; border:1px solid #2a2a35; border-radius:5px; background:#15151f;
+    color:#aaa; font-size:9px; padding:6px 4px; cursor:pointer; }
+  .creator-small-btn:hover { color:#f2f2ff; border-color:#555; }
+
   /* ── Scientific Mode ── */
   .sci-btn { font-size: 9px; padding: 2px 6px; border: 1px solid #2a2a35; border-radius: 4px;
     cursor: pointer; background: #141418; color: #aaa; }
@@ -172,6 +204,10 @@
     <button class="tool-btn active" data-tool="paint"  ><i class="ti ti-pencil"></i></button>
     <button class="tool-btn"        data-tool="inject" ><i class="ti ti-plus"></i></button>
     <button class="tool-btn"        data-tool="erase"  ><i class="ti ti-eraser"></i></button>
+    <button class="tool-btn"        data-tool="smooth" title="Smooth"><i class="ti ti-blur"></i></button>
+    <button class="tool-btn"        data-tool="noise"  title="Noise"><i class="ti ti-wave-sine"></i></button>
+    <button class="tool-btn"        data-tool="erode"  title="Erode"><i class="ti ti-wind"></i></button>
+    <button class="tool-btn"        data-tool="pattern" title="Pattern"><i class="ti ti-grid-dots"></i></button>
     <button class="tool-btn"        data-tool="inspect"><i class="ti ti-eye"></i></button>
     <div class="sep"></div>
     <button class="tool-btn" id="paintModeBtn" title="P: toggle Paint/Explore · In Explore: left-drag orbits · In Paint: right-drag orbits · WASD/arrows pan · Scroll zooms">
@@ -180,6 +216,12 @@
     <div class="sep"></div>
     <label>Brush <input type="range" id="brushSize" min="1" max="6" value="2" step="1"> <span id="bsOut">2</span></label>
     <label>Str <input type="range" id="brushStr" min="50" max="1000" value="400" step="50"> <span id="bStrOut">400</span></label>
+    <select id="brushFalloff" title="Brush falloff" style="background:#141418;color:#aaa;border:1px solid #2a2a35;border-radius:5px;font-size:11px;padding:3px;">
+      <option value="smooth">Smooth</option>
+      <option value="linear">Linear</option>
+      <option value="sphere">Sphere</option>
+      <option value="sharp">Sharp</option>
+    </select>
     <div style="flex:1"></div>
     <button class="tool-btn" id="resetCamBtn" title="Reset camera to default view">⌂</button>
     <span id="gpubadge" class="cpu">CPU</span>
@@ -210,6 +252,18 @@
       <button class="preset-btn" data-preset="ocean_biosphere"   ><i class="ti ti-droplet"></i> Ocean Biosphere</button>
       <button class="preset-btn" data-preset="toxic_ecosystem"   ><i class="ti ti-biohazard"></i> Toxic Ecosystem</button>
       <button class="preset-btn" data-preset="self_replicating_field"><i class="ti ti-reload"></i> Self-Replicating</button>
+      <span class="plabel">Sculpt Fields</span>
+      <label style="font-size:10px;color:#777">Energy <input id="sculptEnergy" type="range" min="0" max="100" value="100"></label>
+      <label style="font-size:10px;color:#777">Density <input id="sculptDensity" type="range" min="0" max="100" value="50"></label>
+      <label style="font-size:10px;color:#777">Temp <input id="sculptTemp" type="range" min="0" max="100" value="0"></label>
+      <label style="font-size:10px;color:#777">Bio <input id="sculptBio" type="range" min="0" max="100" value="0"></label>
+      <label style="font-size:10px;color:#777">Info <input id="sculptInfo" type="range" min="0" max="100" value="0"></label>
+      <label style="font-size:10px;color:#777">Entropy <input id="sculptEntropy" type="range" min="0" max="100" value="0"></label>
+      <div style="display:flex;gap:4px;">
+        <button class="sci-btn" id="sculptUndoBtn" style="flex:1">Undo</button>
+        <button class="sci-btn" id="sculptRedoBtn" style="flex:1">Redo</button>
+      </div>
+      <div id="sculptStatus" style="font-size:9px;color:#555;font-family:monospace;line-height:1.35;">Sculpt ready</div>
       <span class="plabel">Civilizational</span>
       <button class="preset-btn" data-preset="abandoned_megacity"><i class="ti ti-building"></i> Megacity Ruins</button>
       <button class="preset-btn" data-preset="machine_ecology"   ><i class="ti ti-cpu"></i> Machine Ecology</button>
@@ -342,6 +396,10 @@
       <canvas id="nodeGraph" height="190" style="width:100%;border-radius:5px;border:1px solid #2a2a35;background:#08080f;cursor:pointer;display:block;"></canvas>
 
       <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
+      <span class="rp-label">Creator Studio</span>
+      <div id="creatorStudio"></div>
+
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
 
       <span class="rp-label">Live Metrics</span>
       <canvas id="p2metricsCanvas" style="width:100%;height:120px;
@@ -351,6 +409,7 @@
       <div id="timelineSnapList" style="max-height:90px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;"></div>
       <div style="display:flex;gap:4px;margin-top:3px;">
         <button class="sci-btn" id="btnSaveTimeline" style="flex:1">💾 Save snap</button>
+        <button class="sci-btn" id="btnExportRealityPackage" style="flex:1;color:#80f0b0;border-color:#246b4a;">↓ .reality</button>
         <button class="sci-btn" id="btnExportTimeline" style="flex:1">↓ CSV</button>
       </div>
 
@@ -521,9 +580,14 @@
     <span class="stat">Entities:</span><span class="statv" id="entOut">0</span>
     <span class="stat">Gen:</span><span class="statv" id="genOut">0</span>
     <span class="stat">Extinct:</span><span class="statv" id="extinctOut">0</span>
+    <span class="stat">Chunks:</span><span class="statv" id="chunksOut">0</span>
+    <span class="stat">Mem:</span><span class="statv" id="chunkMemOut">0 MB</span>
     <span class="stat">FPS:</span><span class="statv" id="fpsOut">0</span>
     <div style="flex:1"></div>
     <button class="tool-btn" id="saveBtn" title="Save world"><i class="ti ti-download"></i></button>
+    <button class="tool-btn" id="loadBtn" title="Load world"><i class="ti ti-upload"></i></button>
+    <button class="tool-btn" id="autoSaveBtn" title="Auto-save"><i class="ti ti-clock"></i></button>
+    <input id="worldLoadInput" type="file" accept=".reality,application/zip" style="display:none">
   </div>
 </div>
 <script type="module" src="/src/main.ts"></script>

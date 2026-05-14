@@ -1,4 +1,4 @@
-import { VoxelGrid } from '../core/VoxelGrid';
+import { SparseVoxelGrid } from '../core/SparseVoxelGrid';
 import { WORLD } from '../core/WorldConstants';
 import { F, CELL_FIELDS } from '../core/CellState';
 import { FieldPhysics } from './FieldPhysics';
@@ -17,7 +17,7 @@ import { Recorder } from './Recorder';
 import { AgentSystem } from './AgentSystem';
 
 export class SimulationEngine {
-  readonly grid: VoxelGrid;
+  readonly grid: SparseVoxelGrid;
   readonly causal: CausalGraph;
   readonly laws: LawEngine;
   readonly gpu: GPUBackend;
@@ -36,7 +36,7 @@ export class SimulationEngine {
   private _gpuReady = false;
 
   constructor() {
-    this.grid = new VoxelGrid(WORLD.W, WORLD.H, WORLD.D);
+    this.grid = new SparseVoxelGrid(WORLD.W, WORLD.H, WORLD.D);
     this.causal = new CausalGraph();
     this.laws = new LawEngine();
     this.gpu = new GPUBackend();
@@ -64,6 +64,10 @@ export class SimulationEngine {
   get tick() { return this._tick; }
   get gpuActive() { return this._gpuReady; }
 
+  restoreTick(tick: number): void {
+    this._tick = Math.max(0, Math.floor(tick));
+  }
+
   // nSteps allows batching multiple physics ticks per animation frame
   async step(dt: number, nSteps = 1): Promise<void> {
     const clampedDt = Math.min(dt, 0.05);
@@ -73,6 +77,7 @@ export class SimulationEngine {
       this.gpu.submitCompute(nSteps);
       const data = await this.gpu.readback();
       if (data.length > 0) this.grid.buffer.set(data);
+      this.grid.syncDenseToChunks();
       this.chemLayer.tick(this.grid, clampedDt * nSteps);
       this.entityLayer.tick(this.grid, clampedDt * nSteps);
       this.temporalLayer.tick(this.grid, clampedDt * nSteps);
@@ -90,6 +95,7 @@ export class SimulationEngine {
         this.infoPhysics.tick(this.grid, clampedDt);
         this.agents.tick(this.grid, clampedDt);
       }
+      this.grid.syncDenseToChunks();
     }
 
     this._detectCausality();
@@ -105,12 +111,17 @@ export class SimulationEngine {
 
     // Keep GPU in sync after CPU changes (presets, painting)
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+    if (this._tick % 500 === 0) {
+      this.grid.markEmptyChunksInactive();
+      this.grid.cullInactive();
+    }
 
     this._tick += nSteps;
   }
 
   // Called after user paints/erases so GPU buffer stays consistent
   syncToGPU(): void {
+    this.grid.syncDenseToChunks();
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
   }
 
@@ -128,6 +139,7 @@ export class SimulationEngine {
       this.laws.tick(this._worldMetrics());
       this._tick++;
     }
+    this.grid.syncDenseToChunks();
   }
 
   private _worldMetrics(): WorldMetrics {
@@ -209,6 +221,7 @@ export class SimulationEngine {
     this.recorder.clearSnapshots();
     this.prevEnergy.fill(0);
     this._tick = 0;
+    this.grid.syncDenseToChunks();
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
   }
 }

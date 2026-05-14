@@ -1,5 +1,6 @@
 import { MetaLaw, LawCondition, WorldMetrics, PhysicsParams, DEFAULT_PARAMS } from './MetaLaw';
 import { PROC, PROCESS_LIBRARY, defaultProcessMask } from '../process/ProcessDef';
+import type { GraphExecutionPlan } from '../creator';
 
 function evalCond(c: LawCondition, m: WorldMetrics): boolean {
   const v = m[c.metric];
@@ -143,6 +144,11 @@ export class LawEngine {
     }
 
     // Manual overrides always win — applied last so laws can't undo them
+    if (this._graphProcessIds) {
+      this._mask = 0;
+      for (const pid of this._graphProcessIds) this._mask |= (1 << pid);
+    }
+
     for (const pid of this._manualOn)  this._mask |= (1 << pid);
     for (const pid of this._manualOff) this._mask &= ~(1 << pid);
   }
@@ -206,6 +212,7 @@ export class LawEngine {
   // Manual overrides survive MetaLaw recomputes
   private _manualOn  = new Set<number>();
   private _manualOff = new Set<number>();
+  private _graphProcessIds: Set<number> | null = null;
 
   toggleProcess(procId: number, on: boolean): void {
     if (on) { this._manualOn.add(procId);  this._manualOff.delete(procId); }
@@ -216,6 +223,16 @@ export class LawEngine {
 
   clearManualOverrides(): void {
     this._manualOn.clear(); this._manualOff.clear();
+    this._recompute();
+  }
+
+  applyGraphPlan(plan: GraphExecutionPlan): void {
+    this._graphProcessIds = new Set(plan.activeProcessIds);
+    this._recompute();
+  }
+
+  clearGraphPlan(): void {
+    this._graphProcessIds = null;
     this._recompute();
   }
 }

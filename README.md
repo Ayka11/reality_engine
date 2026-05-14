@@ -34,6 +34,29 @@ npm install
 npm run dev
 ```
 
+## Distributed Simulation (Prototype v1)
+
+This workspace includes an early Distributed Simulation scaffold under `src/distributed`.
+
+- `ChunkOrchestrator.ts`: manages chunk ownership and simple rebalancing.
+- `WorkerManager.ts`: spawns inline Web Workers and dispatches chunk simulation tasks.
+- `Partitioner.ts`: creates simple static partitions for chunk keys.
+- `WebRTCManager.ts`: basic WebRTC DataChannel scaffolding for peer-to-peer sync (signalling not included).
+- `DistributedEngine.ts`: composes the above pieces and provides `assignInitialPartition` and `tick()` hooks.
+
+How to try locally:
+
+1. Open the app with `npm run dev`.
+2. In the running app click the **Spawn Worker** button to create a worker.
+3. Click **Assign Partition** to assign an 8-chunk test partition to the local node.
+
+Notes & Next steps:
+
+- WebRTC signalling is not implemented — use your own signalling server to exchange SDP/ICE between peers.
+- Chunk boundary serialization and deterministic replay need implementation for production.
+- Next planned features: WebRTC signalling helper, delta compression for chunk transfer, layer-aware distribution, Kubernetes deployment examples.
+
+
 Open **http://localhost:5173** in Chrome or Edge (WebGPU for GPU acceleration; Firefox falls back to CPU automatically).
 
 ---

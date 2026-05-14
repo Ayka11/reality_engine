@@ -19,16 +19,29 @@ import { CivilizationSystem } from './simulation/CivilizationSystem';
 import { MultiScaleSystem } from './simulation/MultiScaleSystem';
 import { MetaLawEvolution } from './simulation/MetaLawEvolution';
 import { SceneDirector } from './ai/SceneDirector';
+import './director/browserDemo';
 import { CosmologicalSim } from './simulation/CosmologicalSim';
 import { LanguageSystem } from './simulation/LanguageEmergence';
 import { EconomicSystem } from './simulation/EconomicSystem';
 import { MultiplayerSync } from './network/MultiplayerSync';
 import { ScientificAPI } from './export/ScientificAPI';
+import { GraphCompiler, RealityGraph } from './creator';
+import { LawProcessEditor } from './ui/LawProcessEditor';
+import { SaveManager, WorldSaveSystem } from './world/save';
+import { SculptManager, type BrushFalloff, type SculptToolId } from './sculpt';
+import { DistributedEngine } from './distributed/DistributedEngine';
 
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
 const canvas   = document.getElementById('gc') as HTMLCanvasElement;
 const renderer = new VoxelRenderer(canvas, sim.grid.W, sim.grid.H, sim.grid.D);
+const realityCreatorGraph = new RealityGraph();
+const realityCreatorCompiler = new GraphCompiler();
+(window as unknown as { realityEngine?: SimulationEngine; realityCreator?: { graph: RealityGraph; compiler: GraphCompiler } }).realityEngine = sim;
+(window as unknown as { realityCreator?: { graph: RealityGraph; compiler: GraphCompiler } }).realityCreator = {
+  graph: realityCreatorGraph,
+  compiler: realityCreatorCompiler,
+};
 // Async GPU init
 sim.initGPU().then(ok => {
   const badge = document.getElementById('gpubadge')!;
@@ -40,7 +53,7 @@ sim.initGPU().then(ok => {
 let playing = false;
 let selX = -1, selY = -1, selZ = 0;
 let painting = false;
-let tool: 'paint' | 'inject' | 'erase' | 'inspect' = 'paint';
+let tool: 'paint' | 'inject' | 'erase' | 'inspect' | 'smooth' | 'noise' | 'erode' | 'pattern' | 'stamp' = 'paint';
 let activeMaterial: MatId = MAT.VACUUM;
 let paintModeOn = true;
 let histBuffers: Record<string, number[]> = { e: [], t: [], i: [], s: [], b: [] };
@@ -95,6 +108,20 @@ function setPaintMode(on: boolean) {
 paintBtn.addEventListener('click', () => setPaintMode(!paintModeOn));
 document.addEventListener('keydown', e => {
   if (e.key === 'p' || e.key === 'P') setPaintMode(!paintModeOn);
+  if (e.key === 'b' || e.key === 'B') setPaintMode(true);
+  if (e.key === '[') {
+    bsEl.value = String(Math.max(parseInt(bsEl.min), parseInt(bsEl.value) - 1));
+    document.getElementById('bsOut')!.textContent = bsEl.value;
+  }
+  if (e.key === ']') {
+    bsEl.value = String(Math.min(parseInt(bsEl.max), parseInt(bsEl.value) + 1));
+    document.getElementById('bsOut')!.textContent = bsEl.value;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    const stroke = e.shiftKey ? sculptManager.redo() : sculptManager.undo();
+    if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `${e.shiftKey ? 'Redo' : 'Undo'} ${stroke.tool}` : 'Sculpt history empty';
+  }
   if (e.key === 'r' || e.key === 'R') renderer.resetCamera();
 });
 document.getElementById('resetCamBtn')?.addEventListener('click', () => renderer.resetCamera());
@@ -131,10 +158,41 @@ const bsEl    = document.getElementById('brushSize')   as HTMLInputElement;
 const bStrEl  = document.getElementById('brushStr')    as HTMLInputElement;
 const zSlice  = document.getElementById('zslice')      as HTMLInputElement;
 const speedSl = document.getElementById('speedSlider') as HTMLInputElement;
+const falloffEl = document.getElementById('brushFalloff') as HTMLSelectElement;
+const sculptStatusEl = document.getElementById('sculptStatus');
+const sculptManager = new SculptManager(sim.grid, () => sim.syncToGPU());
 
 bsEl.addEventListener('input',    () => document.getElementById('bsOut')!.textContent    = bsEl.value);
 bStrEl.addEventListener('input',  () => document.getElementById('bStrOut')!.textContent  = bStrEl.value);
 speedSl.addEventListener('input', () => document.getElementById('speedOut')!.textContent = speedSl.value + 'x');
+falloffEl.addEventListener('change', () => {
+  sculptManager.currentBrush.falloff = falloffEl.value as BrushFalloff;
+});
+
+function readSculptFields() {
+  sculptManager.currentBrush.fields = {
+    energy: parseInt((document.getElementById('sculptEnergy') as HTMLInputElement).value) / 100,
+    density: parseInt((document.getElementById('sculptDensity') as HTMLInputElement).value) / 100,
+    temperature: parseInt((document.getElementById('sculptTemp') as HTMLInputElement).value) / 100,
+    bio: parseInt((document.getElementById('sculptBio') as HTMLInputElement).value) / 100,
+    information: parseInt((document.getElementById('sculptInfo') as HTMLInputElement).value) / 100,
+    entropy: parseInt((document.getElementById('sculptEntropy') as HTMLInputElement).value) / 100,
+  };
+}
+
+['sculptEnergy','sculptDensity','sculptTemp','sculptBio','sculptInfo','sculptEntropy'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', readSculptFields);
+});
+readSculptFields();
+
+document.getElementById('sculptUndoBtn')?.addEventListener('click', () => {
+  const stroke = sculptManager.undo();
+  if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `Undo ${stroke.tool}` : 'Nothing to undo';
+});
+document.getElementById('sculptRedoBtn')?.addEventListener('click', () => {
+  const stroke = sculptManager.redo();
+  if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `Redo ${stroke.tool}` : 'Nothing to redo';
+});
 
 zSlice.max = String(sim.grid.D - 1);
 zSlice.addEventListener('input', () => {
@@ -153,36 +211,39 @@ document.getElementById('playbtn')!.addEventListener('click', () => {
 });
 
 // ── 3D Painting ───────────────────────────────────────────────────────────────
-function paintAt(x: number, y: number, z: number) {
+async function paintAt(x: number, y: number, z: number, event?: PointerEvent) {
   const bs  = parseInt(bsEl.value);
   const str = parseInt(bStrEl.value);
-  const grid = sim.grid;
+  sculptManager.currentBrush.radius = bs;
+  sculptManager.currentBrush.strength = Math.max(0.1, str / 50);
+  sculptManager.currentBrush.falloff = falloffEl.value as BrushFalloff;
 
-  for (let dz = -bs; dz <= bs; dz++)
-  for (let dy = -bs; dy <= bs; dy++)
-  for (let dx = -bs; dx <= bs; dx++) {
-    if (dx*dx + dy*dy + dz*dz > bs*bs) continue;
-    const nx = x+dx, ny = y+dy, nz = z+dz;
-    if (!grid.inBounds(nx, ny, nz)) continue;
-    const cell = grid.cell(nx, ny, nz);
-    const lyr  = renderer.layer;
-
-    if (tool === 'erase') {
-      cell.energy = 0; cell.temperature = 0; cell.density = 0;
-      cell.information = 0; cell.entropy = 0; cell.materialId = MAT.VACUUM;
-      continue;
-    }
-    // Always write material when a non-vacuum material is selected
-    if (activeMaterial !== MAT.VACUUM) cell.materialId = activeMaterial;
-    const add = tool === 'inject';
-    if      (lyr === 'energy')       cell.energy      = add ? Math.min(cell.energy + str, 9999)      : str;
-    else if (lyr === 'density')      cell.density     = add ? Math.min(cell.density + str/1000, 1)   : str/1000;
-    else if (lyr === 'information')  cell.information = add ? Math.min(cell.information + str/2, 999): str/2;
-    else if (lyr === 'entropy')      cell.entropy     = add ? Math.min(cell.entropy + str/1000, 1)   : str/1000;
-    else if (lyr === 'temperature')  cell.temperature = add ? Math.min(cell.temperature + str, 2000) : str;
-    else if (lyr === 'bioPotential') cell.bioPotential = add ? Math.min(cell.bioPotential + str/1000, 1) : str/1000;
+  if (event?.altKey) {
+    const cell = sim.grid.cell(x, y, z);
+    const max = Math.max(cell.energy / 600, cell.density, cell.temperature / 600, cell.bioPotential, cell.information / 200, cell.entropy, 0.001);
+    (document.getElementById('sculptEnergy') as HTMLInputElement).value = String(Math.min(100, Math.round(cell.energy / 600 / max * 100)));
+    (document.getElementById('sculptDensity') as HTMLInputElement).value = String(Math.min(100, Math.round(cell.density / max * 100)));
+    (document.getElementById('sculptTemp') as HTMLInputElement).value = String(Math.min(100, Math.round(cell.temperature / 600 / max * 100)));
+    (document.getElementById('sculptBio') as HTMLInputElement).value = String(Math.min(100, Math.round(cell.bioPotential / max * 100)));
+    (document.getElementById('sculptInfo') as HTMLInputElement).value = String(Math.min(100, Math.round(cell.information / 200 / max * 100)));
+    (document.getElementById('sculptEntropy') as HTMLInputElement).value = String(Math.min(100, Math.round(cell.entropy / max * 100)));
+    readSculptFields();
+    if (sculptStatusEl) sculptStatusEl.textContent = `Sampled ${x},${y},${z}`;
+    return;
   }
-  sim.syncToGPU();
+
+  let sculptTool: SculptToolId = tool === 'paint' || tool === 'inject' ? 'inject' : tool === 'inspect' ? 'inject' : tool;
+  if (event?.shiftKey) sculptTool = 'smooth';
+  if (event?.ctrlKey) sculptTool = 'erase';
+
+  const stroke = await sculptManager.onMouseDrag([x, y, z], sculptTool, {
+    materialId: activeMaterial,
+    layer: renderer.layer,
+    additive: sculptTool !== 'erase',
+  });
+  if (sculptStatusEl) {
+    sculptStatusEl.textContent = `${stroke.tool} r${stroke.radius} chunks:${stroke.affectedChunks.length} hist:${sculptManager.brushEngine.historyLength}`;
+  }
 }
 
 canvas.addEventListener('pointerdown', e => {
@@ -192,14 +253,14 @@ canvas.addEventListener('pointerdown', e => {
   const hit = renderer.pickGridCell(e);
   if (!hit) return;
   if (tool === 'inspect') { selX = hit.x; selY = hit.y; selZ = hit.z; clearHist(); }
-  else paintAt(hit.x, hit.y, hit.z);
+  else void paintAt(hit.x, hit.y, hit.z, e);
 });
 canvas.addEventListener('pointermove', e => {
   if (!painting || !paintModeOn) return;
   const hit = renderer.pickGridCell(e);
   if (!hit) return;
   if (tool === 'inspect') { selX = hit.x; selY = hit.y; }
-  else paintAt(hit.x, hit.y, hit.z);
+  else void paintAt(hit.x, hit.y, hit.z, e);
 });
 canvas.addEventListener('pointerup', () => { painting = false; });
 
@@ -587,16 +648,54 @@ document.getElementById('addLawBtn')!.addEventListener('click', () => {
 });
 
 // ── Save world ────────────────────────────────────────────────────────────────
-document.getElementById('saveBtn')!.addEventListener('click', () => {
-  const g = sim.grid;
-  const blob = new Blob(
-    [JSON.stringify({ W: g.W, H: g.H, D: g.D, buffer: Array.from(g.buffer) })],
-    { type: 'application/json' }
-  );
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `reality-world-${sim.tick}.json`;
-  a.click();
+document.getElementById('saveBtn')!.addEventListener('click', async () => {
+  const name = prompt('Quick save name', `World_${sim.tick}`) ?? `World_${sim.tick}`;
+  const savedName = await saveSystem.quickSave(name.trim() || `World_${sim.tick}`);
+  document.getElementById('exportStatus')!.textContent = `Quick saved: ${savedName}`;
+});
+
+document.getElementById('loadBtn')?.addEventListener('click', async () => {
+  const saves = await saveSystem.listQuickSaves();
+  if (!saves.length) {
+    (document.getElementById('worldLoadInput') as HTMLInputElement | null)?.click();
+    return;
+  }
+  const latest = saves[0];
+  const ok = confirm(`Load latest quick save "${latest.name}" from ${new Date(latest.timestamp).toLocaleString()}?\n\nCancel opens a .reality file picker.`);
+  if (ok) {
+    await saveSystem.loadQuickSave(latest.id);
+    document.getElementById('exportStatus')!.textContent = `Loaded quick save: ${latest.name}`;
+  } else {
+    (document.getElementById('worldLoadInput') as HTMLInputElement | null)?.click();
+  }
+});
+
+document.getElementById('autoSaveBtn')?.addEventListener('click', () => {
+  if (saveManager.enabled) saveManager.stopAutoSave();
+  else saveManager.startAutoSave(120000);
+  const btn = document.getElementById('autoSaveBtn')!;
+  btn.style.color = saveManager.enabled ? '#80f0b0' : '';
+});
+
+document.getElementById('worldLoadInput')?.addEventListener('change', () => {
+  const input = document.getElementById('worldLoadInput') as HTMLInputElement;
+  const file = input.files?.[0];
+  if (file) void saveSystem.importRealityPackage(file);
+  input.value = '';
+});
+
+document.addEventListener('keydown', event => {
+  if (!(event.ctrlKey || event.metaKey)) return;
+  if (event.key.toLowerCase() === 's') {
+    event.preventDefault();
+    void saveSystem.quickSave(`World_${sim.tick}`).then(name => {
+      document.getElementById('exportStatus')!.textContent = `Quick saved: ${name}`;
+    });
+  }
+  if (event.key.toLowerCase() === 'o') {
+    event.preventDefault();
+    document.getElementById('loadBtn')?.click();
+  }
 });
 
 // ── Onboarding ────────────────────────────────────────────────────────────────
@@ -769,6 +868,70 @@ document.querySelectorAll<HTMLButtonElement>('[data-event]').forEach(btn => {
 const nodeGraphCanvas = document.getElementById('nodeGraph') as HTMLCanvasElement | null;
 const nodeGraph = nodeGraphCanvas ? new NodeGraph(nodeGraphCanvas, sim) : null;
 nodeGraph?.draw();
+// Distributed engine (optional)
+const distributed = new DistributedEngine(sim.grid);
+(window as any).realityDistributed = distributed;
+
+// Add a small status panel and spawn worker button
+const distRoot = document.createElement('div');
+distRoot.id = 'distributedStatus';
+distRoot.style.position = 'fixed';
+distRoot.style.left = '12px';
+distRoot.style.bottom = '12px';
+distRoot.style.padding = '10px';
+distRoot.style.background = 'rgba(6,6,12,0.9)';
+distRoot.style.color = '#dfe8ff';
+distRoot.style.border = '1px solid #1f2a3a';
+distRoot.style.zIndex = '9999';
+distRoot.innerHTML = `
+  <div style="font-weight:600;margin-bottom:6px">Distributed Status</div>
+  <div id="distNodes">Nodes: 1 (local)</div>
+  <div id="distChunks">Owned chunks: 0</div>
+  <div style="margin-top:8px">
+    <button id="spawnWorkerBtn">Spawn Worker</button>
+    <button id="assignPartitionBtn">Assign Partition</button>
+  </div>
+`;
+document.body.appendChild(distRoot);
+
+document.getElementById('spawnWorkerBtn')?.addEventListener('click', () => {
+  distributed.workers.spawnWorker();
+  (document.getElementById('distNodes') as HTMLElement).textContent = `Nodes: ${distributed.orchestrator.nodes.size} (workers:${distributed.workers ? (distributed as any).workers ? 'local' : '' : ''})`;
+});
+
+document.getElementById('assignPartitionBtn')?.addEventListener('click', () => {
+  // assign a simple grid partition (chunk keys) near origin
+  const keys: string[] = [];
+  for (let cz=0; cz<2; cz++) for (let cy=0; cy<2; cy++) for (let cx=0; cx<2; cx++) keys.push(`${cx},${cy},${cz}`);
+  distributed.assignInitialPartition(keys);
+  (document.getElementById('distChunks') as HTMLElement).textContent = `Owned chunks: ${distributed.getLocalOwnedChunks().length}`;
+});
+const creatorRoot = document.getElementById('creatorStudio');
+const creatorEditor = creatorRoot ? new LawProcessEditor(creatorRoot, {
+  lawEngine: sim.laws,
+  simulation: sim,
+  thumbnailCanvas: canvas,
+}) : null;
+void creatorEditor;
+let civSystem: CivilizationSystem;
+let saveSystem: WorldSaveSystem;
+let saveManager: SaveManager;
+
+canvas.addEventListener('dragover', event => {
+  event.preventDefault();
+  canvas.style.outline = '2px solid #22ff88';
+});
+canvas.addEventListener('dragleave', () => {
+  canvas.style.outline = '';
+});
+canvas.addEventListener('drop', event => {
+  event.preventDefault();
+  canvas.style.outline = '';
+  const file = event.dataTransfer?.files?.[0];
+  if (file && file.name.endsWith('.reality')) {
+    void saveSystem.importRealityPackage(file);
+  }
+});
 
 // ── Export bridges ────────────────────────────────────────────────────────────
 const unrealBridge  = new UnrealBridge(sim.grid);
@@ -826,9 +989,27 @@ let climateActive = false;
 
 // ── Phase 3: FieldAnimator, CivSystem, MultiScale, MetaLawEvolution ──────────
 const fieldAnim   = new FieldAnimator(renderer.scene, sim.grid);
-const civSystem   = new CivilizationSystem(sim.grid);
+civSystem = new CivilizationSystem(sim.grid);
 const multiScale  = new MultiScaleSystem(sim.grid);
 const metaLawEvol = new MetaLawEvolution(sim.laws, sim.grid);
+saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
+  graphProvider: () => creatorEditor?.graph.toJSON(),
+  graphLoader: graph => {
+    creatorEditor?.loadGraph(graph);
+  },
+  syncToGPU: () => sim.syncToGPU(),
+  getTick: () => sim.tick,
+  setTick: tick => sim.restoreTick(tick),
+  getEntities: () => sim.entityLayer.getEntities(),
+  getCivs: () => civSystem.civs,
+  loadCivs: civs => {
+    civSystem.civs = civs.map(civ => structuredClone(civ));
+  },
+  getCausalLog: () => sim.causal.recent(24),
+  thumbnailCanvas: canvas,
+});
+saveManager = new SaveManager(saveSystem);
+(window as unknown as { realitySave?: WorldSaveSystem }).realitySave = saveSystem;
 
 // ── Phase 4: AI Director, Cosmological, Language, Economy, Multiplayer, Science
 const director  = new SceneDirector(sim, civSystem, metaLawEvol);
@@ -891,6 +1072,9 @@ function updateTimelineSnapList(): void {
 document.getElementById('btnSaveTimeline')?.addEventListener('click', () => {
   timeline.saveSnapshot(`Manual t${sim.tick}`);
   updateTimelineSnapList();
+});
+document.getElementById('btnExportRealityPackage')?.addEventListener('click', () => {
+  void creatorEditor?.exportPackage();
 });
 document.getElementById('btnExportTimeline')?.addEventListener('click', () => timeline.exportCSV());
 
@@ -1108,6 +1292,8 @@ async function loop(ts: number) {
   document.getElementById('energyOut')!.textContent  = Math.round(totalE).toLocaleString();
   document.getElementById('entropyOut')!.textContent = totalS.toFixed(4);
   document.getElementById('lawsOut')!.textContent    = `${activeLaws}/${sim.laws.laws.length}`;
+  document.getElementById('chunksOut')!.textContent  = `${sim.grid.activeChunkCount}/${sim.grid.chunks.size}`;
+  document.getElementById('chunkMemOut')!.textContent = `${(sim.grid.memoryBytes / 1048576).toFixed(1)} MB`;
   document.getElementById('fpsOut')!.textContent     = String(fpsSmooth);
 
   requestAnimationFrame(loop);
