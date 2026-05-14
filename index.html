@@ -425,8 +425,88 @@
         <button id="exportRecordingBtn" class="sci-btn">↓ Full JSON</button>
       </div>
       <div id="exportStatus" style="font-size:9px;color:#555;font-family:monospace;min-height:14px;margin-top:3px;"></div>
+
+      <!-- ── Phase 4: Scientific API export ── -->
+      <span style="font-size:9px;color:#666;display:block;margin-top:4px;margin-bottom:3px;">Scientific (NumPy / Jupyter / GraphML)</span>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        <button id="btnSciExportAll"      class="sci-btn" style="color:#c084fc;border-color:#3a2a55;">↓ All 3</button>
+        <button id="btnSciExportField"    class="sci-btn">↓ Field JSON</button>
+        <button id="btnSciExportNotebook" class="sci-btn">↓ .ipynb</button>
+        <button id="btnSciExportGraph"    class="sci-btn">↓ GraphML</button>
+      </div>
+
+      <div style="height:1px;background:#2a2a35;margin:4px 0"></div>
+
+      <!-- AI Scene Director -->
+      <span class="rp-label">AI Scene Director</span>
+      <div id="directorLog" style="height:110px;overflow-y:auto;font-size:10px;
+        color:#9098c0;background:#08080f;border-radius:6px;padding:6px;
+        font-family:monospace;line-height:1.55;border:0.5px solid #2a2a35;">
+        Ask the director anything about your world…
+      </div>
+      <div style="display:flex;gap:4px;margin-top:2px;">
+        <input id="directorInput" type="text" placeholder="What's happening in my world?"
+          style="flex:1;font-size:10px;padding:4px 7px;background:#0c0c16;
+          color:#e0dff5;border:0.5px solid #2a2a35;border-radius:5px;outline:none;">
+        <button class="sci-btn" id="btnAskDirector" style="color:#c084fc;border-color:#3a2a55;">Ask</button>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:2px;">
+        <button class="sci-btn" id="btnAutoDirector" style="flex:1">Auto: OFF</button>
+        <button class="sci-btn" id="btnRunDirectorCode" style="flex:1">▶ Run code</button>
+      </div>
+      <div id="directorCode" style="font-size:9px;font-family:monospace;color:#6080ff;
+        max-height:55px;overflow-y:auto;background:#080818;padding:4px 6px;
+        border-radius:4px;border:1px solid #1a1a35;white-space:pre-wrap;display:none;"></div>
+      <div style="display:flex;gap:4px;margin-top:2px;align-items:center;">
+        <input id="directorApiKey" type="password" placeholder="Anthropic API key (sk-ant-…)"
+          style="flex:1;font-size:9px;padding:3px 6px;background:#0c0c16;
+          color:#888;border:0.5px solid #2a2a35;border-radius:5px;outline:none;">
+        <button class="sci-btn" id="btnSetApiKey">Set</button>
+      </div>
+
+      <div style="height:1px;background:#2a2a35;margin:4px 0"></div>
+
+      <!-- Cosmological Sim -->
+      <span class="rp-label">Cosmological Sim (256³)</span>
+      <button class="sci-btn" id="btnBigBang" style="color:#ef8f3f;border-color:#3a2a1a;margin-bottom:2px;">💥 Big Bang</button>
+      <div id="cosmoStats" style="font-size:9px;color:#555;font-family:monospace;padding:2px 0;">not seeded</div>
+
+      <div style="height:1px;background:#2a2a35;margin:4px 0"></div>
+
+      <!-- Language Emergence -->
+      <span class="rp-label">Language Emergence</span>
+      <div id="langStats" style="font-size:9px;color:#555;font-family:monospace;padding:2px 0;word-break:break-all;">—</div>
+
+      <!-- Economy -->
+      <span class="rp-label">Economy</span>
+      <div id="econStats" style="font-size:9px;color:#555;font-family:monospace;padding:2px 0;">—</div>
+
+      <div style="height:1px;background:#2a2a35;margin:4px 0"></div>
+
+      <!-- Multiplayer -->
+      <span class="rp-label">Multiplayer (same-browser tabs)</span>
+      <button class="sci-btn" id="btnMultiplayer" style="margin-bottom:2px;">🔗 Connect</button>
+      <div id="multiplayStats" style="font-size:9px;color:#555;font-family:monospace;padding:2px 0;">offline</div>
+
     </div>
   </div>
+
+  <!-- ── Phase 4 panels injected at bottom of right panel ── -->
+  <style>
+    .p4-panel { display:flex;flex-direction:column;gap:5px;padding:8px;
+      background:#141418;border-left:1px solid #2a2a35;overflow-y:auto; }
+    .p4-label { font-size:10px;color:#555;letter-spacing:.06em;text-transform:uppercase;margin-top:4px; }
+    .p4-log { height:110px;overflow-y:auto;font-size:10px;color:#9098c0;
+      background:#08080f;border-radius:6px;padding:6px;font-family:monospace;
+      line-height:1.55;border:0.5px solid #2a2a35; }
+    .p4-code { font-size:9px;font-family:monospace;color:#6080ff;
+      max-height:55px;overflow-y:auto;background:#080818;padding:4px 6px;
+      border-radius:4px;border:1px solid #1a1a35;white-space:pre-wrap; }
+    .p4-stat { font-size:9px;color:#555;font-family:monospace;padding:2px 0;word-break:break-all; }
+    .pb { font-size:9px;padding:2px 7px;border:1px solid #2a2a35;border-radius:4px;
+      cursor:pointer;background:#141418;color:#aaa; }
+    .pb:hover { background:#1e1e2e;color:#e0dff5;border-color:#444; }
+  </style>
 
   <!-- ── Bottombar ── -->
   <div id="bottombar">

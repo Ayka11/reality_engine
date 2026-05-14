@@ -18,6 +18,12 @@ import { FieldAnimator } from './render/FieldAnimator';
 import { CivilizationSystem } from './simulation/CivilizationSystem';
 import { MultiScaleSystem } from './simulation/MultiScaleSystem';
 import { MetaLawEvolution } from './simulation/MetaLawEvolution';
+import { SceneDirector } from './ai/SceneDirector';
+import { CosmologicalSim } from './simulation/CosmologicalSim';
+import { LanguageSystem } from './simulation/LanguageEmergence';
+import { EconomicSystem } from './simulation/EconomicSystem';
+import { MultiplayerSync } from './network/MultiplayerSync';
+import { ScientificAPI } from './export/ScientificAPI';
 
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
@@ -824,6 +830,14 @@ const civSystem   = new CivilizationSystem(sim.grid);
 const multiScale  = new MultiScaleSystem(sim.grid);
 const metaLawEvol = new MetaLawEvolution(sim.laws, sim.grid);
 
+// ── Phase 4: AI Director, Cosmological, Language, Economy, Multiplayer, Science
+const director  = new SceneDirector(sim, civSystem, metaLawEvol);
+const cosmoSim  = new CosmologicalSim();
+const langSys   = new LanguageSystem(sim);
+const econSys   = new EconomicSystem(sim, civSystem);
+const multiplay = new MultiplayerSync(sim);
+const sciAPI    = new ScientificAPI(sim);
+
 // Biome selector
 const biomeSelect = document.getElementById('biomeSelect') as HTMLSelectElement | null;
 if (biomeSelect) {
@@ -917,6 +931,122 @@ function updateCivPanel(): void {
   if (mleEl) mleEl.textContent = `cycle:${metaLawEvol.cycleCount} ${metaLawEvol.lastAction}`;
 }
 
+// ── Phase 4 UI ────────────────────────────────────────────────────────────────
+
+// AI Director
+let lastDirectorCode: string | null = null;
+
+document.getElementById('btnAskDirector')?.addEventListener('click', async () => {
+  const input = document.getElementById('directorInput') as HTMLInputElement;
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  const log = document.getElementById('directorLog')!;
+  log.innerHTML += `<div style="color:#888">You: ${msg}</div>`;
+  const result = await director.ask(msg);
+  log.innerHTML += `<div style="color:#c0c8f0;margin-top:3px">Director: ${result.text}</div><br>`;
+  log.scrollTop = log.scrollHeight;
+  if (result.code) {
+    lastDirectorCode = result.code;
+    const codeEl = document.getElementById('directorCode')!;
+    codeEl.style.display = 'block';
+    codeEl.textContent = result.code.slice(0, 200) + (result.code.length > 200 ? '…' : '');
+  }
+});
+
+document.getElementById('directorInput')?.addEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.key === 'Enter') document.getElementById('btnAskDirector')?.click();
+});
+
+document.getElementById('btnRunDirectorCode')?.addEventListener('click', () => {
+  if (!lastDirectorCode) return;
+  const { log } = scriptEngine.run(lastDirectorCode);
+  document.getElementById('directorLog')!.innerHTML +=
+    `<div style="color:#4caf7d">Executed: ${log.join(' ') || 'done'}</div>`;
+});
+
+let autoDirectOn = false;
+document.getElementById('btnAutoDirector')?.addEventListener('click', () => {
+  autoDirectOn = !autoDirectOn;
+  document.getElementById('btnAutoDirector')!.textContent = `Auto: ${autoDirectOn ? 'ON' : 'OFF'}`;
+  if (autoDirectOn) director.startAutoDirecting(25000);
+  else director.stopAutoDirecting();
+});
+
+document.getElementById('btnSetApiKey')?.addEventListener('click', () => {
+  const inp = document.getElementById('directorApiKey') as HTMLInputElement;
+  if (inp.value.trim()) { director.setApiKey(inp.value.trim()); inp.value = ''; }
+});
+
+// Cosmological sim
+document.getElementById('btnBigBang')?.addEventListener('click', () => {
+  cosmoSim.bigBang();
+  cosmoSim.seedGalaxies(8);
+  updateCosmoPanel();
+  document.getElementById('scriptLog')!.textContent = 'Cosmological Big Bang seeded — 256×256×64 sparse grid';
+});
+
+function updateCosmoPanel(): void {
+  const el = document.getElementById('cosmoStats');
+  if (!el) return;
+  const s = cosmoSim.getStats();
+  el.textContent = `cells:${s.filledCells} E:${s.totalEnergy.toLocaleString()} galaxies:${s.galaxies} t:${s.tick}`;
+}
+
+// Language system
+function updateLangPanel(): void {
+  const el = document.getElementById('langStats');
+  if (!el) return;
+  const s = langSys.getStats();
+  el.textContent = `vocab:${s.vocabularySize} comms:${s.communicationEvents} ${s.recentWords || '—'}`;
+}
+
+// Economic system
+function updateEconPanel(): void {
+  const el = document.getElementById('econStats');
+  if (!el) return;
+  const s = econSys.getStats();
+  el.textContent = `markets:${s.markets} GDP:${s.globalGDP.toLocaleString()} GINI:${s.gini} avgP:${s.avgPrice}`;
+}
+
+// Multiplayer
+document.getElementById('btnMultiplayer')?.addEventListener('click', () => {
+  const btn = document.getElementById('btnMultiplayer')!;
+  if (!multiplay.connected) {
+    const uid = multiplay.connect();
+    btn.textContent = `Disconnect (${uid})`;
+    btn.style.color = '#4caf7d';
+    document.getElementById('scriptLog')!.textContent = `Connected as ${uid} — open another tab to collaborate`;
+  } else {
+    multiplay.disconnect();
+    btn.textContent = '🔗 Multiplayer';
+    btn.style.color = '';
+    document.getElementById('scriptLog')!.textContent = 'Disconnected from multiplayer';
+  }
+});
+
+function updateMultiplayPanel(): void {
+  const el = document.getElementById('multiplayStats');
+  if (!el) return;
+  const s = multiplay.getStats();
+  el.textContent = `peers:${s.peers}${s.isHost ? ' (host)' : ''} ${s.connected ? 'connected' : 'offline'}`;
+}
+
+// Scientific export
+document.getElementById('btnSciExportAll')?.addEventListener('click', () => {
+  const msg = sciAPI.downloadAll();
+  _exportStatus(msg);
+});
+document.getElementById('btnSciExportField')?.addEventListener('click', () => {
+  _exportStatus(sciAPI.downloadField());
+});
+document.getElementById('btnSciExportNotebook')?.addEventListener('click', () => {
+  _exportStatus(sciAPI.downloadNotebook());
+});
+document.getElementById('btnSciExportGraph')?.addEventListener('click', () => {
+  _exportStatus(sciAPI.downloadCausalGraph());
+});
+
 // ── Keyboard camera navigation ─────────────────────────────────────────────────
 const _keys: Record<string, boolean> = {};
 document.addEventListener('keydown', e => { _keys[e.code] = true; });
@@ -947,6 +1077,9 @@ async function loop(ts: number) {
     multiScale.tick();
     metaLawEvol.tick(sim.tick);
     civSystem.tick();
+    langSys.tick();
+    econSys.tick(dt);
+    if (sim.tick % 5 === 0) cosmoSim.step(dt * 5);
   }
 
   fieldAnim.update(sim.tick, dt);
@@ -962,7 +1095,10 @@ async function loop(ts: number) {
   if (sim.tick % 12 === 0) { updateEventLog(); renderWorldEventLog(); drawCausalGraph(); }
   if (sim.tick % 20 === 0) { renderLawPanel(); renderProcGrid(); nodeGraph?.draw(); }
   if (sim.tick % 30 === 0) { renderSciPanel(); }
-  if (sim.tick % 20 === 0) { p2metrics?.draw(); updateTimelineSnapList(); updateCivPanel(); }
+  if (sim.tick % 20 === 0) {
+    p2metrics?.draw(); updateTimelineSnapList(); updateCivPanel();
+    updateCosmoPanel(); updateLangPanel(); updateEconPanel(); updateMultiplayPanel();
+  }
 
   // Bottom bar
   const totalE    = sim.grid.totalField(F.ENERGY);
