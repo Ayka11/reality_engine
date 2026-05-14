@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 export default defineConfig({
   build: { target: 'esnext' },
-  optimizeDeps: { exclude: [] }
+  optimizeDeps: { exclude: [] },
+  preview: { allowedHosts: 'all' }
 })
