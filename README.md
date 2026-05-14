@@ -1,6 +1,6 @@
-# Reality Engine v3 — Meta-Law Physics Simulator
+# Reality Engine v4 — Meta-Law Physics Simulator
 
-> *"A universe you can paint — where physics evolves."*
+> *"A universe you can paint — where physics evolves, civilizations rise, and an AI director watches over it all."*
 
 ---
 
@@ -9,6 +9,8 @@
 Reality Engine is an **interactive 3D physics sandbox** where the rules of physics are themselves simulated objects that compete, mutate, and go extinct. You paint energy and matter onto a 64 × 64 × 32 voxel grid. Thermodynamics, chemistry, geology, and life emerge from first principles. The laws governing them evolve in real time through a MetaLaw system — each law has fitness, age, and mutation rate. Laws that produce complexity survive. Laws that produce chaos go dormant.
 
 **This is not a game about matter. It is a game about the rules that govern matter.**
+
+Phase 4 adds an **AI Scene Director** (Claude API), a **256³ cosmological simulation**, **proto-language emergence**, an **economic system**, **cross-tab multiplayer**, and **scientific data exports**.
 
 ---
 
@@ -76,8 +78,11 @@ Use the **Z-Slice slider** (bottom-center) to choose which altitude layer you pa
 - **Spawn 5 agents** — seed AI agents into the current world
 - **Seed civs from bio zones** — spawn civilizations from high bio-potential regions
 - **Climate: ON/OFF** — toggle wind advection and precipitation
+- **💥 Big Bang** — seed the parallel 256³ cosmological simulation
+- **AI Scene Director** — type a question or command; Claude analyzes the world and writes runnable scripts
+- **🔗 Connect** — enable cross-tab multiplayer (open a second browser tab to the same URL)
 - **Save snap / Restore** — save any world state and restore it later
-- **CSV** — download tick-by-tick metrics
+- **CSV / Scientific exports** — download tick-by-tick metrics, NumPy field data, Jupyter notebooks
 
 ---
 
@@ -164,8 +169,6 @@ When Chrome/Edge with WebGPU is available, the simulation can be rendered as **s
 - **72 march steps** at 0.55 step size — enough for the 64×64×32 grid at oblique angles
 - **7 layer modes** — energy, density, information, entropy, temperature, bio-potential, signal
 
-Switching layers in the raymarcher updates `layerInfo.fieldIdx` and `layerInfo.fieldMax` in the uniform buffer — no shader recompile needed.
-
 ---
 
 ## Field Animator
@@ -194,7 +197,7 @@ Switching layers in the raymarcher updates `layerInfo.fieldIdx` and `layerInfo.f
 | **Diplomacy** | Overlap > 5 cells → war; isolated civs may form alliances; wars end randomly |
 | **Collapse** | Civs with population < 1 or zero energy are removed |
 
-History log and live civ list (name, tech level, population, war/ally count) shown in the right panel. Click **Seed civs from bio zones** to bootstrap from the current grid.
+History log and live civ list (name, tech level, population, war/ally count) shown in the right panel.
 
 ---
 
@@ -206,7 +209,7 @@ History log and live civ list (name, tech level, population, war/ally count) sho
 - **Micro chemistry** — cells with `bioPotential > 0.3` run an organic catalysis pass: bio + energy → information
 - **Upscale coupling** — macro energy averages are nudged back into cell values with strength 0.0015 per update — a gentle pressure toward macro-level equilibrium
 
-Macro stats (average E / S / Bio / T across all macro voxels) are displayed in the right panel in real time.
+Macro stats (average E / S / Bio / T) shown in the right panel.
 
 ---
 
@@ -220,6 +223,129 @@ Macro stats (average E / S / Bio / T across all macro voxels) are displayed in t
 4. Mutations inherit parent condition thresholds and param overrides, then drift ±50% aggressively
 
 The cycle count and last action ("culled N, spawned M from Law X") are shown in the right panel.
+
+---
+
+## AI Scene Director (Phase 4)
+
+**SceneDirector** embeds Claude into the simulation. It reads a live world-state summary (energy totals, entropy, agents, civs, active laws, recent causal events) and sends it with every request.
+
+### Setup
+Enter your Anthropic API key in the **Director panel** (right panel → AI Scene Director → password field → Set). The key is stored in `localStorage` and never leaves the browser. Uses `claude-haiku-4-5-20251001` by default for low latency.
+
+### What you can ask
+| Type of request | What Claude does |
+|---|---|
+| **Describe** | Gives a vivid scientific + poetic narrative of the current simulation state |
+| **Do something** | Returns a description + a `world.*` JS script block you can run with **▶ Run code** |
+| **Predict** | Reasons about upcoming dynamics based on current field values |
+| **Analyze** | Correlates field states, civ relations, law fitness |
+
+### Auto-directing mode
+Toggle **Auto: ON** — Claude fires every 25 seconds with a random prompt ("Something interesting is about to happen. Make it so.", "The entropy is getting high. Seed some new order.", etc.). Actions and their descriptions accumulate in the world log.
+
+### How scripts are executed
+The **▶ Run code** button passes the returned JS to `scriptEngine.run()` — the same engine used by the Scene Script DSL panel — so all `world.*` commands work identically.
+
+---
+
+## Cosmological Simulation (Phase 4)
+
+**CosmologicalSim** runs a parallel **256 × 256 × 64** universe using a sparse Map-based grid. Only non-empty cells are stored, so the 4M-cell grid stays memory-efficient.
+
+| Feature | Details |
+|---|---|
+| **Big Bang** | Singularity at center (energy=9999, temp=5000) + 500 dark-energy seeds scattered randomly |
+| **Galaxy seeding** | 8 galaxies at random positions; each is a Gaussian energy+density+temperature sphere |
+| **Dark energy** | Cells with dark_energy > 0.05 multiply their energy each tick — accelerating expansion |
+| **Entropy** | Increases monotonically every tick across all filled cells |
+| **Galaxy aging** | Star count decays slowly with age |
+| **Sparse diffusion** | Laplacian diffusion over only the filled cells — scales with activity, not grid volume |
+
+Stats shown: filled cells count, total energy, galaxy count, cosmological tick.
+
+**This runs alongside** the main simulation — click **💥 Big Bang** then let the main simulation play; the cosmological sim steps every 5 ticks.
+
+---
+
+## Language Emergence (Phase 4)
+
+**LanguageSystem** grows a proto-vocabulary from agent proximity signals.
+
+- **Signal encoding** — each agent's state (energy, signal field value, behavior type) is encoded as a 4-integer vector
+- **Signal propagation** — the encoded signal is written into the information field in a 5×5 radius around the sender
+- **Lexicon building** — when two agents are within distance 5, they exchange signals; patterns seen ≥ 5 times across the population become vocabulary words
+- **Communication effect** — when a known word is received, the receiver's information field is boosted by +8
+- **Throttled** — runs every 5 simulation ticks to avoid O(n²) overhead
+
+Stats shown: vocabulary size, total communication events, 5 most recent words with meaning type (danger / abundance / contact / neutral).
+
+---
+
+## Economic System (Phase 4)
+
+**EconomicSystem** creates emergent markets between civilizations.
+
+| Mechanic | Details |
+|---|---|
+| **Market spawning** | Markets appear at the midpoint between pairs of civs every 200 ticks (max 6 markets) |
+| **Scarcity pricing** | `price = (max − supply) / scale × demandFactor`; high field values → low price |
+| **Trade** | Nearby civs (within 15 cells) exchange a fraction of GDP; seller gains, buyer loses |
+| **Tech transfer** | Each trade transfers 0.1% of the buyer's tech level to the seller |
+| **GDP tracking** | Per-civ GDP initialized from `population × techLevel`, updated by trade flows |
+| **GINI inequality** | Computed as `√(variance) / mean` across all civs — rises as economies diverge |
+
+Stats shown: market count, global GDP, GINI coefficient, average energy price.
+
+---
+
+## Multiplayer — Collaborative Worlds (Phase 4)
+
+**MultiplayerSync** lets multiple browser tabs share the same world in real time via the [BroadcastChannel API](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel) — no server required, works entirely in the browser.
+
+### How to use
+1. Open the simulation in two browser tabs at the same URL
+2. Click **🔗 Connect** in one tab — it announces itself and requests full world state
+3. The first tab to exist becomes **host** and sends the full buffer to the new joiner
+4. Paint in either tab — delta cell changes sync to all peers within 500 ms
+5. Click again to disconnect
+
+| Feature | Details |
+|---|---|
+| **Full state sync** | On join, host serializes the full 3M-float grid and sends it via BroadcastChannel |
+| **Delta sync** | During play, only painted/changed cells are broadcast (up to 100 cells per 500 ms interval) |
+| **Peer cursors** | Each peer's cursor position and tool are visible with a color-coded label |
+| **Host election** | First tab that receives a `join` message becomes host automatically |
+| **Graceful leave** | Disconnect broadcasts `leave` so peers can remove stale cursors |
+
+> Note: BroadcastChannel is same-origin only (same URL, same browser). For cross-device multiplayer, a WebSocket server would be needed.
+
+---
+
+## Scientific Export (Phase 4)
+
+**ScientificAPI** exports simulation data in formats compatible with standard scientific toolchains.
+
+| Export | File | Contents |
+|---|---|---|
+| **Field JSON** | `re_field_tN.json` | NumPy-compatible — shape `[D, H, W, 24]`, dtype `float32`, field index map, tick + timestamp |
+| **Jupyter notebook** | `re_analysis_tN.ipynb` | 4 cells: data load + reshape, 4-panel field plot (energy/entropy/info/bio), correlation matrix, ready to run |
+| **GraphML** | `re_causality_tN.graphml` | Last 100 causal events as a directed graph; nodes have `tick` + `type`, edges have `delta` weight |
+| **All 3** | — | Downloads all three files simultaneously |
+
+### Using the Jupyter notebook
+```bash
+pip install numpy matplotlib jupyter
+jupyter lab re_analysis_tN.ipynb
+# Run all cells → produces reality_fields.png
+```
+
+### Using the GraphML in Gephi / NetworkX
+```python
+import networkx as nx
+G = nx.read_graphml('re_causality_tN.graphml')
+print(nx.info(G))
+```
 
 ---
 
@@ -355,6 +481,8 @@ Commands: `fill`, `sphere`, `box`, `layer`, `noise`, `gradient`, `preset`, `spaw
 
 Five built-in templates in the dropdown: Primordial Ocean, Volcanic Eruption, Life Explosion, Information Age, Entropy Storm, Galaxy Arms.
 
+The **AI Director** also generates and executes these scripts — click **▶ Run code** after asking it to do something.
+
 ---
 
 ## Export
@@ -367,6 +495,11 @@ Five built-in templates in the dropdown: Primordial Ocean, Volcanic Eruption, Li
 - **Voxels.py** — paste into Blender Scripting tab; creates point cloud with energy_color attribute
 - **Bio.py** — biological cluster export with bio-potential coloring
 - **CSV** — point cloud CSV for Blender's Import Point Cloud add-on
+
+### Scientific (Phase 4)
+- **Field JSON** — NumPy-compatible `[D,H,W,24]` float32 array with field index map
+- **.ipynb** — Jupyter notebook with ready-to-run analysis code (field plots, correlation matrix)
+- **GraphML** — Causality DAG for Gephi, NetworkX, or yEd
 
 ---
 
@@ -411,8 +544,6 @@ Seven default laws activate/deactivate based on world metrics and mutate every ~
 | Life Law | avgBio > 0.25 and avgEntropy < 0.45 | Metabolism, signal propagation |
 | Geology | avgDensity > 0.5 | Erosion, phase transition, crystallization |
 
-Use **Mutate** or **Spawn random mutation** to create law variants. The MetaLaw evolution cycle count and last cull result appear in the right panel.
-
 ---
 
 ## Architecture
@@ -421,8 +552,9 @@ Use **Mutate** or **Spawn random mutation** to create law variants. The MetaLaw 
 src/
 ├── core/
 │   ├── CellState.ts          — 24-field cell (F enum, getters/setters)
-│   ├── VoxelGrid.ts          — Double-buffered Float32Array grid
-│   └── WorldConstants.ts     — Grid size (64x64x32)
+│   ├── VoxelGrid.ts          — Double-buffered Float32Array grid (64×64×32)
+│   ├── SparseGrid.ts         — Map-based sparse grid for cosmological scale (256³)
+│   └── WorldConstants.ts     — Grid size constants
 │
 ├── simulation/
 │   ├── SimulationEngine.ts   — Main loop: GPU/CPU dispatch, all layer ticks
@@ -437,7 +569,18 @@ src/
 │   ├── ClimateSystem.ts      — Wind advection, precipitation, pressure evolution
 │   ├── CivilizationSystem.ts — Up to 12 civs, territory, tech, diplomacy
 │   ├── MultiScaleSystem.ts   — 1/8 macro grid + micro chemistry + bidirectional coupling
-│   └── MetaLawEvolution.ts   — Evolutionary cull of bottom 20% laws every 500 ticks
+│   ├── MetaLawEvolution.ts   — Evolutionary cull of bottom 20% laws every 500 ticks
+│   ├── CosmologicalSim.ts    — 256×256×64 sparse universe: Big Bang, galaxies, dark energy
+│   ├── LanguageEmergence.ts  — Agent proximity → signal patterns → vocabulary words
+│   └── EconomicSystem.ts     — Markets at civ contact zones, scarcity pricing, GDP/GINI
+│
+├── ai/
+│   └── SceneDirector.ts      — Claude API AI director: world analysis, script generation,
+│                               auto-directing mode, API key via localStorage
+│
+├── network/
+│   └── MultiplayerSync.ts    — BroadcastChannel cross-tab multiplayer: delta sync,
+│                               peer cursors, host full-state broadcast
 │
 ├── chemistry/
 │   └── ChemLayer.ts          — State derivation + 4 reaction rules
@@ -464,11 +607,12 @@ src/
 │
 ├── export/
 │   ├── UnrealBridge.ts       — USD export + LiveLink JSON
-│   └── BlenderBridge.ts      — Python script + CSV point cloud generators
+│   ├── BlenderBridge.ts      — Python script + CSV point cloud generators
+│   └── ScientificAPI.ts      — NumPy JSON + Jupyter .ipynb + GraphML causality export
 │
 ├── world/
 │   ├── Presets.ts            — 22 preset world states
-│   ├── ScriptEngine.ts       — Scene Script DSL
+│   ├── ScriptEngine.ts       — Scene Script DSL (world.sphere / box / noise / tick…)
 │   ├── WorldEvents.ts        — 6 event types, auto-fire scheduler
 │   ├── TerrainGenerator.ts   — 8 procedural biomes with FBM noise
 │   └── Timeline.ts           — Sparse auto-save snapshots, restore, CSV export
@@ -482,7 +626,7 @@ src/
 
 WebGPU (Chrome 113+, Edge 113+) runs physics in a WGSL compute shader:
 - 131,072 cells processed in parallel with workgroup_size(8, 8, 1)
-- Material coefficients at binding 3 — 14 x 8-float padded buffer
+- Material coefficients at binding 3 — 14 × 8-float padded buffer
 - Multi-step batching — N steps per encoder submission, no CPU roundtrip per step
 - 16-process bitmask gating per tick
 - CPU TypeScript fallback — badge shows GPU / CPU mode
@@ -504,21 +648,37 @@ WebGPU (Chrome 113+, Edge 113+) runs physics in a WGSL compute shader:
 2. Click **Seed civs from bio zones** — watch territory expand in the civ panel
 3. Tech levels rise; wars and alliances appear in the history log
 
-**Alien crystal evolution**
-1. Select Crystalline biome > Generate > Play at 8x > switch to Information layer
-2. Crystal clusters grow as information accumulates at low-entropy nodes
+**Agent-guided language**
+1. Load Life seed > Spawn 5 agents (several times) > Play at 4x
+2. Watch the Language stats panel — vocabulary size grows as agent pairs exchange signals
+3. Communication events boost the information field in agent zones
 
-**Agent vs entity competition**
-1. Click Self-Replicating > Play > Spawn 5 agents
-2. Harvester agents drain entity energy; Builder agents reinforce bio-potential
+**AI Director intervention**
+1. Load any preset > Play > open the AI Scene Director panel
+2. Enter your API key > ask "What's happening in my world?"
+3. Ask "Make something dramatic happen" > click ▶ Run code to execute the script
 
-**Scientific recording**
-1. Start any preset > click Record > Play at 4x for 200 ticks
-2. Stop > drag scrubber > click CSV to export metrics
+**Cosmological parallel universe**
+1. Click 💥 Big Bang > Play at 8x
+2. Watch the cosmological stats: filled cells expand as energy diffuses, galaxy count rises after seedGalaxies
+
+**Cross-tab collaboration**
+1. Open the same localhost:5173 URL in two browser tabs
+2. Click 🔗 Connect in one tab; it syncs world state to the second
+3. Paint energy in one tab — appears in the other within ~500ms
+
+**Scientific analysis**
+1. Run any preset for 500+ ticks
+2. Click ↓ All 3 in the Scientific export section
+3. Open the `.ipynb` in JupyterLab — run all cells to produce field plots and correlation matrix
 
 **MetaLaw evolution**
 1. Start Energy Economy > Play at 16x > watch the MetaLaw evolution log in the right panel
 2. After 500 ticks, the first cull happens — weak laws are replaced by mutants of successful ones
+
+**Alien crystal evolution**
+1. Select Crystalline biome > Generate > Play at 8x > switch to Information layer
+2. Crystal clusters grow as information accumulates at low-entropy nodes
 
 ---
 
@@ -528,6 +688,8 @@ WebGPU (Chrome 113+, Edge 113+) runs physics in a WGSL compute shader:
 - **Vite** — dev server + bundler
 - **Three.js** — instanced mesh voxels, PBR materials, UnrealBloomPass, OrbitControls
 - **WebGPU** — WGSL compute shaders for parallel physics; WGSL fragment shader for volumetric rendering
+- **Claude API** — `claude-haiku-4-5-20251001` for the AI Scene Director (browser-side, `anthropic-dangerous-direct-browser-access` header)
+- **BroadcastChannel** — same-origin cross-tab multiplayer without a server
 
 ---
 
