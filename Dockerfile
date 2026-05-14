@@ -11,6 +11,8 @@ COPY . .
 
 RUN npm run build
 
+RUN npm install -g serve
+
 EXPOSE 7860
 
-CMD ["sh", "-c", "node server/signalling-server.js & npx vite preview --host 0.0.0.0 --port 7860"]
+CMD ["sh", "-c", "node server/signalling-server.js & serve dist -p 7860"]
