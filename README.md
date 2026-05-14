@@ -1,3 +1,14 @@
+---
+title: Reality Engine Meta Law Simulator
+emoji: 🌌
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+license: mit
+pinned: false
+---
+
 # Reality Engine v4 — Meta-Law Physics Simulator
 
 > *"A universe you can paint — where physics evolves, civilizations rise, and an AI director watches over it all."*
