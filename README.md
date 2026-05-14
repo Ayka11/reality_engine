@@ -74,6 +74,7 @@ Use the **Z-Slice slider** (bottom-center) to choose which altitude layer you pa
 
 ### Step 4 — Explore systems
 - **Spawn 5 agents** — seed AI agents into the current world
+- **Seed civs from bio zones** — spawn civilizations from high bio-potential regions
 - **Climate: ON/OFF** — toggle wind advection and precipitation
 - **Save snap / Restore** — save any world state and restore it later
 - **CSV** — download tick-by-tick metrics
@@ -151,6 +152,77 @@ When **Climate: ON**, a wind and precipitation model runs on top of the field si
 
 ---
 
+## Volumetric Raymarcher (WebGPU)
+
+When Chrome/Edge with WebGPU is available, the simulation can be rendered as **soft glowing volumes** via a full WGSL raymarcher:
+
+- **Ray-AABB intersection** — rays are clipped to the grid bounding box before marching
+- **Trilinear interpolation** — samples the field at sub-voxel precision for smooth volumes
+- **Emissive bloom** — cells above 55% intensity glow with 1.6× emissive boost
+- **Animated sun** — directional light orbits slowly over time
+- **Exponential fog** — distance fog with configurable density
+- **72 march steps** at 0.55 step size — enough for the 64×64×32 grid at oblique angles
+- **7 layer modes** — energy, density, information, entropy, temperature, bio-potential, signal
+
+Switching layers in the raymarcher updates `layerInfo.fieldIdx` and `layerInfo.fieldMax` in the uniform buffer — no shader recompile needed.
+
+---
+
+## Field Animator
+
+**FieldAnimator** detects bio-clusters every 60 ticks using BFS on cells with `bioPotential > 0.32`, then instantiates animated Three.js creature groups at each cluster centroid:
+
+- Up to **8 creatures** tracked simultaneously
+- Each creature has **7 body parts**: body, head, left/right arms, left/right legs, tail — all MeshStandardMaterial
+- **Animation driven by field energy**: breathing (body scale), head bobbing, arm swing, alternating leg stride, tail wag
+- Speed of animation scales with average cluster energy
+- Creatures smoothly lerp toward their current cluster position each frame
+- All geometry and materials are disposed when clusters disappear
+
+---
+
+## Civilization System
+
+**CivilizationSystem** seeds up to **12 civilizations** from high bio-potential zones and simulates territorial expansion, technology research, and inter-civ diplomacy:
+
+| Mechanic | Details |
+|---|---|
+| **Spawning** | Samples 300 random cells per tick; spawns where `bioPotential > 0.35` |
+| **Territory** | Expands one adjacent cell per 20 ticks while energy allows; max 200 + techLevel×40 cells |
+| **Growth** | Population and energy derived from bio-potential in territory |
+| **Tech** | Tech level 0–10; chance of advance grows with energy and population |
+| **Diplomacy** | Overlap > 5 cells → war; isolated civs may form alliances; wars end randomly |
+| **Collapse** | Civs with population < 1 or zero energy are removed |
+
+History log and live civ list (name, tech level, population, war/ally count) shown in the right panel. Click **Seed civs from bio zones** to bootstrap from the current grid.
+
+---
+
+## Multi-Scale Physics
+
+**MultiScaleSystem** runs a 1/8-resolution **macro grid** alongside the full voxel simulation, updated every 20 ticks:
+
+- **Downscale** — averages energy, entropy, bio-potential, and temperature from every 8×8×8 block of cells into a macro voxel
+- **Micro chemistry** — cells with `bioPotential > 0.3` run an organic catalysis pass: bio + energy → information
+- **Upscale coupling** — macro energy averages are nudged back into cell values with strength 0.0015 per update — a gentle pressure toward macro-level equilibrium
+
+Macro stats (average E / S / Bio / T across all macro voxels) are displayed in the right panel in real time.
+
+---
+
+## Meta-Law Evolution
+
+**MetaLawEvolution** runs an evolutionary cull every **500 ticks** on top of the existing law fitness system:
+
+1. All laws are ranked by fitness (accrued by being active during high-complexity world states)
+2. The **bottom 20%** of non-core laws (excluding Thermodynamics, Gravity, Information Physics) are removed
+3. **Mutations are spawned** from the top-performing survivors
+4. Mutations inherit parent condition thresholds and param overrides, then drift ±50% aggressively
+
+The cycle count and last action ("culled N, spawned M from Law X") are shown in the right panel.
+
+---
+
 ## Layer Modes
 
 | Layer | Color scheme | What it shows |
@@ -224,12 +296,12 @@ Six catastrophic events fire automatically every 400-1200 ticks, or triggered ma
 
 | Icon | Event | Effect |
 |---|---|---|
-| Meteor Strike | 5-cell impact: energy+3000, temp+2000, magma material |
-| Solar Flare | Top 30% altitude: energy+200-500, entropy surge |
-| Radiation Storm | Whole-grid entropy increase |
-| Mutation Wave | Bio cells: bioPotential+0.15-0.35, organic state set |
-| Entropy Collapse | 6-cell radius: entropy drops, crystal material |
-| Tectonic Shift | One altitude layer shifts laterally, energy transferred |
+| ☄ | Meteor Strike | 5-cell impact: energy+3000, temp+2000, magma material |
+| ☀ | Solar Flare | Top 30% altitude: energy+200-500, entropy surge |
+| ☢ | Radiation Storm | Whole-grid entropy increase |
+| 🧬 | Mutation Wave | Bio cells: bioPotential+0.15-0.35, organic state set |
+| ❄ | Entropy Collapse | 6-cell radius: entropy drops, crystal material |
+| ⛰ | Tectonic Shift | One altitude layer shifts laterally, energy transferred |
 
 ---
 
@@ -327,7 +399,7 @@ Manual toggles persist across MetaLaw recomputation cycles.
 
 ## Meta-Laws
 
-Seven default laws activate/deactivate based on world metrics and mutate every ~100 ticks:
+Seven default laws activate/deactivate based on world metrics and mutate every ~100 ticks. MetaLawEvolution culls the weakest every 500 ticks and spawns mutations from top performers.
 
 | Law | Activates when | Controls |
 |---|---|---|
@@ -339,7 +411,7 @@ Seven default laws activate/deactivate based on world metrics and mutate every ~
 | Life Law | avgBio > 0.25 and avgEntropy < 0.45 | Metabolism, signal propagation |
 | Geology | avgDensity > 0.5 | Erosion, phase transition, crystallization |
 
-Use **Mutate** or **Spawn random mutation** to create law variants.
+Use **Mutate** or **Spawn random mutation** to create law variants. The MetaLaw evolution cycle count and last cull result appear in the right panel.
 
 ---
 
@@ -362,7 +434,10 @@ src/
 │   ├── InfoPhysics.ts        — Coherence, decay, memory, resonance, info to energy
 │   ├── Recorder.ts           — Snapshot ring buffer, CSV export, diff
 │   ├── AgentSystem.ts        — AI agents: 5 behaviors, sense/act/replicate
-│   └── ClimateSystem.ts      — Wind advection, precipitation, pressure evolution
+│   ├── ClimateSystem.ts      — Wind advection, precipitation, pressure evolution
+│   ├── CivilizationSystem.ts — Up to 12 civs, territory, tech, diplomacy
+│   ├── MultiScaleSystem.ts   — 1/8 macro grid + micro chemistry + bidirectional coupling
+│   └── MetaLawEvolution.ts   — Evolutionary cull of bottom 20% laws every 500 ticks
 │
 ├── chemistry/
 │   └── ChemLayer.ts          — State derivation + 4 reaction rules
@@ -381,8 +456,11 @@ src/
 │   └── MaterialDef.ts        — 14 materials, 7 coefficients each
 │
 ├── render/
-│   └── VoxelRenderer.ts      — Three.js instanced mesh, 11 layer modes,
-│                               entity + agent spheres, touch + keyboard nav
+│   ├── VoxelRenderer.ts      — Three.js instanced mesh, PBR materials, UnrealBloom,
+│   │                           11 layer modes, entity + agent spheres, touch + keyboard nav
+│   ├── RaymarchRenderer.ts   — WebGPU WGSL volumetric raymarcher, trilinear interpolation,
+│   │                           emissive bloom, animated sun, fog, ray-AABB
+│   └── FieldAnimator.ts      — BFS bio-cluster detection → animated creature groups (7 parts)
 │
 ├── export/
 │   ├── UnrealBridge.ts       — USD export + LiveLink JSON
@@ -415,11 +493,16 @@ WebGPU (Chrome 113+, Edge 113+) runs physics in a WGSL compute shader:
 
 **Watch life emerge**
 1. Click Life seed > Play at 4x > wait 200 ticks > switch to Bio layer
-2. Entity panel populates; glowing spheres mark cluster centroids
+2. Entity panel populates; glowing spheres mark cluster centroids; animated creatures appear at large clusters
 
 **Procedural world + climate**
 1. Select Earth biome > Generate terrain > Play > toggle Climate ON
 2. Wind redistributes surface heat; precipitation fills valleys over time
+
+**Civilization rise and fall**
+1. Select Forest or Ocean biome > Generate terrain > Play at 4x > wait 300 ticks
+2. Click **Seed civs from bio zones** — watch territory expand in the civ panel
+3. Tech levels rise; wars and alliances appear in the history log
 
 **Alien crystal evolution**
 1. Select Crystalline biome > Generate > Play at 8x > switch to Information layer
@@ -433,14 +516,18 @@ WebGPU (Chrome 113+, Edge 113+) runs physics in a WGSL compute shader:
 1. Start any preset > click Record > Play at 4x for 200 ticks
 2. Stop > drag scrubber > click CSV to export metrics
 
+**MetaLaw evolution**
+1. Start Energy Economy > Play at 16x > watch the MetaLaw evolution log in the right panel
+2. After 500 ticks, the first cull happens — weak laws are replaced by mutants of successful ones
+
 ---
 
 ## Stack
 
 - **TypeScript** — strict mode
 - **Vite** — dev server + bundler
-- **Three.js** — instanced mesh voxels, OrbitControls, raycasting
-- **WebGPU** — WGSL compute shaders for parallel physics
+- **Three.js** — instanced mesh voxels, PBR materials, UnrealBloomPass, OrbitControls
+- **WebGPU** — WGSL compute shaders for parallel physics; WGSL fragment shader for volumetric rendering
 
 ---
 

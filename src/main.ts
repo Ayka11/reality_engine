@@ -14,6 +14,10 @@ import { TerrainGenerator, BIOME_LIST } from './world/TerrainGenerator';
 import { ClimateSystem } from './simulation/ClimateSystem';
 import { Timeline } from './world/Timeline';
 import { MetricsPanel } from './ui/MetricsPanel';
+import { FieldAnimator } from './render/FieldAnimator';
+import { CivilizationSystem } from './simulation/CivilizationSystem';
+import { MultiScaleSystem } from './simulation/MultiScaleSystem';
+import { MetaLawEvolution } from './simulation/MetaLawEvolution';
 
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
@@ -814,6 +818,12 @@ const p2metricsEl = document.getElementById('p2metricsCanvas') as HTMLCanvasElem
 const p2metrics   = p2metricsEl ? new MetricsPanel(p2metricsEl, timeline) : null;
 let climateActive = false;
 
+// ── Phase 3: FieldAnimator, CivSystem, MultiScale, MetaLawEvolution ──────────
+const fieldAnim   = new FieldAnimator(renderer.scene, sim.grid);
+const civSystem   = new CivilizationSystem(sim.grid);
+const multiScale  = new MultiScaleSystem(sim.grid);
+const metaLawEvol = new MetaLawEvolution(sim.laws, sim.grid);
+
 // Biome selector
 const biomeSelect = document.getElementById('biomeSelect') as HTMLSelectElement | null;
 if (biomeSelect) {
@@ -870,6 +880,43 @@ document.getElementById('btnSaveTimeline')?.addEventListener('click', () => {
 });
 document.getElementById('btnExportTimeline')?.addEventListener('click', () => timeline.exportCSV());
 
+// Phase 3 UI
+document.getElementById('btnSeedCivs')?.addEventListener('click', () => {
+  civSystem.seedFromGrid();
+  document.getElementById('scriptLog')!.textContent = `Civilizations: ${civSystem.civs.length} founded`;
+  updateCivPanel();
+});
+
+function updateCivPanel(): void {
+  const el = document.getElementById('civList');
+  if (!el) return;
+  document.getElementById('civCount')!.textContent = String(civSystem.civs.length);
+  el.innerHTML = civSystem.civs.slice(0, 8).map(c => {
+    const [r, g, b] = c.color.map(v => Math.round(v * 255));
+    const dipEntries = Object.entries(c.diplomacy);
+    const atWar  = dipEntries.filter(([,v]) => v === 'war').length;
+    const allies = dipEntries.filter(([,v]) => v === 'ally').length;
+    return `<div style="display:flex;gap:4px;font-size:9px;padding:2px 4px;border-radius:4px;background:#1a1a22;align-items:center;flex-wrap:wrap;">
+      <span style="width:7px;height:7px;border-radius:50%;background:rgb(${r},${g},${b});flex-shrink:0"></span>
+      <span style="color:rgb(${r},${g},${b});font-weight:500">${c.name}</span>
+      <span style="color:#555">t${c.techLevel}</span>
+      <span style="color:#888">pop:${Math.round(c.population)}</span>
+      ${atWar ? `<span style="color:#f47b7b">⚔${atWar}</span>` : ''}
+      ${allies ? `<span style="color:#4caf7d">↔${allies}</span>` : ''}
+    </div>`;
+  }).join('');
+  const log = document.getElementById('civLog');
+  if (log) log.innerHTML = civSystem.historyLog.slice(0, 8).map(l =>
+    `<div style="font-size:9px;color:#555;font-family:monospace">${l}</div>`).join('');
+
+  const ms = multiScale.getMacroStats();
+  const msEl = document.getElementById('macroStats');
+  if (msEl) msEl.textContent = `E:${ms.energy.toFixed(0)} S:${ms.entropy.toFixed(3)} Bio:${ms.bio.toFixed(3)} T:${ms.temp.toFixed(0)}`;
+
+  const mleEl = document.getElementById('metaEvolLog');
+  if (mleEl) mleEl.textContent = `cycle:${metaLawEvol.cycleCount} ${metaLawEvol.lastAction}`;
+}
+
 // ── Keyboard camera navigation ─────────────────────────────────────────────────
 const _keys: Record<string, boolean> = {};
 document.addEventListener('keydown', e => { _keys[e.code] = true; });
@@ -897,7 +944,12 @@ async function loop(ts: number) {
     await sim.step(dt, nSteps);
     if (climateActive) climate.tick(dt * nSteps);
     timeline.autoSave(sim.tick);
+    multiScale.tick();
+    metaLawEvol.tick(sim.tick);
+    civSystem.tick();
   }
+
+  fieldAnim.update(sim.tick, dt);
 
   // Entity panel refresh every 15 ticks
   if (sim.tick % 15 === 0) { updateEntityPanel(); updateAgentPanel(); }
@@ -910,7 +962,7 @@ async function loop(ts: number) {
   if (sim.tick % 12 === 0) { updateEventLog(); renderWorldEventLog(); drawCausalGraph(); }
   if (sim.tick % 20 === 0) { renderLawPanel(); renderProcGrid(); nodeGraph?.draw(); }
   if (sim.tick % 30 === 0) { renderSciPanel(); }
-  if (sim.tick % 20 === 0) { p2metrics?.draw(); updateTimelineSnapList(); }
+  if (sim.tick % 20 === 0) { p2metrics?.draw(); updateTimelineSnapList(); updateCivPanel(); }
 
   // Bottom bar
   const totalE    = sim.grid.totalField(F.ENERGY);

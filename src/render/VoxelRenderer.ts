@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import { MATERIAL_LIBRARY } from '../materials/MaterialDef';
@@ -76,7 +80,8 @@ export class VoxelRenderer {
   readonly domElement: HTMLCanvasElement;
 
   private renderer:    THREE.WebGLRenderer;
-  private scene:       THREE.Scene;
+  private _scene:      THREE.Scene;
+  private composer:    EffectComposer;
   camera:              THREE.PerspectiveCamera;
   private controls:    OrbitControls;
   private mesh:        THREE.InstancedMesh;
@@ -103,12 +108,23 @@ export class VoxelRenderer {
     this.renderer.setClearColor(0x06060d);
 
     // ── Scene ─────────────────────────────────────────────────────────────────
-    this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x06060d, 0.008);
+    this._scene = new THREE.Scene();
+    this._scene.fog = new THREE.FogExp2(0x06060d, 0.008);
 
     // ── Camera ────────────────────────────────────────────────────────────────
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
     this.camera.position.set(W * 1.4, D * 2.5, H * 1.4);
+
+    // ── PBR Environment ──────────────────────────────────────────────────────
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this._scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+
+    // ── Post-processing: bloom ────────────────────────────────────────────────
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this._scene, this.camera));
+    const bloom = new UnrealBloomPass(new THREE.Vector2(800, 600), 0.55, 0.5, 0.72);
+    this.composer.addPass(bloom);
 
     // ── OrbitControls ─────────────────────────────────────────────────────────
     this.controls = new OrbitControls(this.camera, canvas);
@@ -130,27 +146,27 @@ export class VoxelRenderer {
     };
 
     // ── Lighting ──────────────────────────────────────────────────────────────
-    this.scene.add(new THREE.AmbientLight(0x445566, 1.4));
+    this._scene.add(new THREE.AmbientLight(0x445566, 1.4));
     const sun = new THREE.DirectionalLight(0xfff4e0, 1.8);
     sun.position.set(W * 0.8, D * 2.5, H * 0.4);
-    this.scene.add(sun);
+    this._scene.add(sun);
     const fill = new THREE.DirectionalLight(0x334488, 0.5);
     fill.position.set(-W * 0.5, D, H * 0.8);
-    this.scene.add(fill);
+    this._scene.add(fill);
 
     // ── World bounds helper ───────────────────────────────────────────────────
     const worldBox = new THREE.Box3(new THREE.Vector3(0,0,0), new THREE.Vector3(W,D,H));
-    this.scene.add(new THREE.Box3Helper(worldBox, new THREE.Color(0x1a1a28)));
+    this._scene.add(new THREE.Box3Helper(worldBox, new THREE.Color(0x1a1a28)));
 
-    const grid = new THREE.GridHelper(Math.max(W,H), 8, 0x1a1a28, 0x1a1a28);
-    grid.position.set(W/2, 0, H/2);
-    this.scene.add(grid);
+    const gridHelper = new THREE.GridHelper(Math.max(W,H), 8, 0x1a1a28, 0x1a1a28);
+    gridHelper.position.set(W/2, 0, H/2);
+    this._scene.add(gridHelper);
 
-    this.scene.add(new THREE.AxesHelper(6));
+    this._scene.add(new THREE.AxesHelper(6));
 
     // ── Instanced voxel mesh ──────────────────────────────────────────────────
     const geo = new THREE.BoxGeometry(0.88, 0.88, 0.88);
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: false });
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: false, roughness: 0.7, metalness: 0.05 });
     this.mesh = new THREE.InstancedMesh(geo, mat, MAX_INSTANCES);
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(
       new Float32Array(MAX_INSTANCES * 3), 3
@@ -161,9 +177,9 @@ export class VoxelRenderer {
 
     // ── Entity & agent groups ─────────────────────────────────────────────────
     this.entityGroup = new THREE.Group();
-    this.scene.add(this.entityGroup);
+    this._scene.add(this.entityGroup);
     this.agentGroup = new THREE.Group();
-    this.scene.add(this.agentGroup);
+    this._scene.add(this.agentGroup);
 
     // ── Resize ────────────────────────────────────────────────────────────────
     this._ro = new ResizeObserver(() => this._onResize());
@@ -178,7 +194,10 @@ export class VoxelRenderer {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
+    this.composer.setSize(w, h);
   }
+
+  get scene(): THREE.Scene { return this._scene; }
 
   setDiffBuffer(buf: Float32Array | null): void { this._diffBuf = buf; }
 
@@ -250,7 +269,7 @@ export class VoxelRenderer {
     this._syncAgents(agents);
 
     this.controls.update();
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
   }
 
   private _syncEntities(entities: EntityMarker[]): void {
@@ -262,14 +281,14 @@ export class VoxelRenderer {
     const sGeo = new THREE.SphereGeometry(0.65, 8, 6);
     while (this.entityGroup.children.length < entities.length) {
       this.entityGroup.add(new THREE.Mesh(sGeo,
-        new THREE.MeshLambertMaterial({ transparent: true, depthWrite: true })));
+        new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.2, transparent: true, depthWrite: true })));
     }
     entities.forEach((e, idx) => {
       const m = this.entityGroup.children[idx] as THREE.Mesh;
       m.position.set(e.centroid[0]+0.5, e.centroid[2]+0.5, e.centroid[1]+0.5);
       const r = Math.min(1 + e.stability * 0.4, 2);
       m.scale.setScalar(r);
-      const mat = m.material as THREE.MeshLambertMaterial;
+      const mat = m.material as THREE.MeshStandardMaterial;
       mat.color.setRGB(e.color[0], e.color[1], e.color[2]);
       mat.opacity = 0.55 + e.stability * 0.45;
     });
