@@ -35,6 +35,11 @@ import { WorldHealth } from './ux/WorldHealth';
 import { Explainer } from './ux/Explainer';
 import { SMART_BRUSHES } from './ux/SmartBrushes';
 
+// ── UX System imports ─────────────────────────────────────────────────────────
+import { initializeUXSystem } from './ui/UXIntegration';
+import { applySemanticControls } from './composer/semanticMapper';
+import './ui/ux-system.css';
+
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
 const canvas   = document.getElementById('gc') as HTMLCanvasElement;
@@ -46,6 +51,44 @@ const realityCreatorCompiler = new GraphCompiler();
   graph: realityCreatorGraph,
   compiler: realityCreatorCompiler,
 };
+
+// ── Initialize UX System ──────────────────────────────────────────────────────
+const { appModeManager, renderSwitch, composerWizard } = initializeUXSystem();
+appModeManager.setMode('create');  // Start in Create mode for first-time UX
+
+// Wire worldGenerated event to engine
+window.addEventListener('worldGenerated', (evt: any) => {
+  const { biome, seed, semanticControls } = evt.detail;
+  console.log('🌍 Generating world:', { biome, seed, semanticControls });
+  
+  // Apply semantic controls to physics engine
+  const physicsParams = applySemanticControls(semanticControls);
+  console.log('⚙️ Applied physics params:', physicsParams);
+  
+  // Optionally apply terrain biome
+  if (biome && BIOME_LIST.includes(biome as any)) {
+    Presets.apply(sim.grid, biome as PresetName);
+    console.log('🏔️ Applied biome preset:', biome);
+  }
+  
+  // Sync to GPU and start simulation
+  sim.syncToGPU();
+  playing = true;
+  document.getElementById('playbtn')!.innerHTML = '<i class="ti ti-player-pause"></i> Pause';
+});
+
+// Wire render mode changes to viewport
+renderSwitch.onChange((mode) => {
+  console.log('🎨 Switched render mode:', mode);
+  document.getElementById('modeIndicator')?.setAttribute('data-mode', mode);
+});
+
+// Wire app mode changes
+appModeManager.onChange((mode) => {
+  console.log('📱 Switched app mode:', mode);
+  document.getElementById('modeIndicator')?.setAttribute('data-app-mode', mode);
+});
+
 // Async GPU init
 sim.initGPU().then(ok => {
   const badge = document.getElementById('gpubadge')!;
@@ -54,7 +97,7 @@ sim.initGPU().then(ok => {
 });
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let playing = false;
+let playing = false;  // Must be defined before UX system uses it
 let selX = -1, selY = -1, selZ = 0;
 let painting = false;
 let activeSmartBrush: string | null = null;
