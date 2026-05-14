@@ -9,6 +9,7 @@
     "deploy": "netlify deploy --prod --dir=dist"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "@types/three": "^0.184.1",
     "@webgpu/types": "^0.1.70",
     "typescript": "^5.4.0",

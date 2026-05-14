@@ -9,7 +9,7 @@
     "noUnusedParameters": true,
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["@webgpu/types"]
+    "types": ["@webgpu/types", "node"]
   },
   "include": ["src"]
 }
