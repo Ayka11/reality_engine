@@ -479,6 +479,99 @@ Real-time sparkline across the last 200 checkpoints:
 
 ---
 
+## Development & Troubleshooting
+
+This section lists the recommended development environment, common commands, and troubleshooting steps for issues such as "API not found" (LLM endpoints, signalling servers, CORS, etc.).
+
+Prerequisites
+- `Node.js` >= 18 and `npm` (or `pnpm`/`yarn`).
+- `git` for source control.
+- Chrome or Edge recommended for WebGPU features; Firefox will fall back to CPU.
+
+Quick start
+1. Clone, install, run dev server:
+
+```bash
+git clone https://github.com/Ayka11/reality_engine.git
+cd reality_engine
+npm install
+npm run dev
+```
+
+2. Open the URL Vite reports (usually `http://localhost:5173`).
+
+TypeScript / build / formatting
+- Type-check: `npx tsc --noEmit`
+- Build (if configured): `npm run build`
+- Format (if you use Prettier): `npx prettier --write .`
+
+AI / LLM (Ollama) — "API not found" troubleshooting
+
+The `PromptEngine` can be configured to call a local Ollama HTTP API or a remote LLM. If you see `API not found` or `404` when probing `http://localhost:11434`, do the following:
+
+1. Install Ollama (docs: https://ollama.ai/docs) and ensure your model is installed (e.g. `deepseek-r1`, `llama3`).
+2. Start Ollama / the HTTP server (some installs require `ollama daemon` or `ollama serve`).
+3. Verify with the CLI and HTTP:
+
+```bash
+ollama list
+curl http://localhost:11434/api/info
+```
+
+4. If `curl` returns `404`:
+- Confirm the Ollama version and its HTTP endpoints; older/newer releases may differ.
+- Make sure the daemon is running and listening to the expected port.
+- If using a non-default port, update the `baseUrl` in `PromptEngine`/`OllamaProvider`.
+
+Configure `PromptEngine` (example)
+
+```ts
+import { PromptEngine } from './src/director/PromptEngine';
+
+const promptEngine = new PromptEngine({ kind: 'ollama', opts: { baseUrl: 'http://localhost:11434', model: 'deepseek-r1' } });
+```
+
+Signalling & WebRTC (cross-device multiplayer)
+
+For peers across devices, you need a signalling server to exchange SDP and ICE candidates. Example minimal signalling server (Node + `ws`):
+
+`server/signalling-server.js`
+```js
+const WebSocket = require('ws');
+const wss = new WebSocket.Server({ port: 8888 });
+wss.on('connection', ws => {
+    ws.on('message', msg => {
+        // naive relay: broadcast to all other peers
+        for (const client of wss.clients) {
+            if (client !== ws && client.readyState === WebSocket.OPEN) client.send(msg);
+        }
+    });
+});
+console.log('Signalling server listening on ws://localhost:8888');
+```
+
+Run it locally:
+
+```bash
+node server/signalling-server.js
+```
+
+Then adapt `src/distributed/WebRTCManager.ts` to POST offers/answers and ICE candidates via that signalling server. The repository includes a `WebRTCManager` scaffold — you must implement signalling exchange in your app code.
+
+Common troubleshooting checklist
+- LLM `404` / `API not found`: Ollama not running, wrong port, or API shape mismatch — check `ollama list` and server logs.
+- WebRTC peers never connect: signalling server not exchanging SDP/ICE, or firewall/NAT blocking ports.
+- CORS issues: ensure remote LLM or signalling server allows requests from your dev origin, or use a local proxy.
+- BroadcastChannel works only same-origin (cross-tab). For cross-device, use WebSocket or WebRTC with signalling.
+
+Production & deployment notes
+- Build the static app (`npm run build`) and serve via a CDN or static host.
+- For distributed workers, run headless worker processes (Node/Rust) that claim chunk ownership and expose a secure chunk API.
+- Never expose local-only LLM endpoints or signalling servers publicly without authentication.
+
+If you run into a specific "API not found" error, paste the exact request URL and the response body or browser console network trace and I will help debug the issue.
+
+
 ## Causal Graph
 
 The last 80 causal events rendered as a DAG in the right panel. X axis = tick time, Y axis = spatial position, edges show parentId → child relationships. Click any node to jump the inspector to that cell.
