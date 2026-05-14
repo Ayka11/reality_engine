@@ -222,7 +222,12 @@
       <option value="sphere">Sphere</option>
       <option value="sharp">Sharp</option>
     </select>
+    <div class="sep"></div>
+    <select id="smartBrushSel" title="Smart brush" style="font-size:10px;background:#141418;color:#888;border:1px solid #2a2a35;border-radius:5px;padding:3px 6px;cursor:pointer;max-width:130px">
+      <option value="">Smart brush…</option>
+    </select>
     <div style="flex:1"></div>
+    <button class="tool-btn" id="btnOpenComposer" title="World Composer — build a world in 6 steps" style="border-color:#7c6fcd;color:#9d96f0">✦ Compose</button>
     <button class="tool-btn" id="resetCamBtn" title="Reset camera to default view">⌂</button>
     <span id="gpubadge" class="cpu">CPU</span>
   </div>
@@ -313,6 +318,7 @@
     <div id="rightpanel">
       <span class="rp-label">Selected cell</span>
       <div id="cellprops"><div style="font-size:11px;color:#555">Click a cell to inspect</div></div>
+      <div id="cellExplainer" style="display:none;margin-top:4px"></div>
 
       <span class="rp-label">Cell history</span>
       <canvas id="histcanvas" width="200" height="80"></canvas>
@@ -349,6 +355,13 @@
 
       <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
 
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
+      <span class="rp-label">World Health</span>
+      <div id="healthBars" style="margin-bottom:4px"></div>
+      <div id="healthSemanticRow" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px"></div>
+      <div id="healthAlerts" style="display:flex;flex-direction:column;gap:2px;margin-bottom:4px"></div>
+
+      <div style="height:1px;background:#2a2a35;margin:2px 0"></div>
       <span class="rp-label">Meta-Laws</span>
       <div id="lawList" style="display:flex;flex-direction:column;gap:4px;"></div>
       <button id="addLawBtn"><i class="ti ti-dna-2"></i> Spawn random mutation</button>
@@ -591,5 +604,25 @@
   </div>
 </div>
 <script type="module" src="/src/main.ts"></script>
+
+<!-- ── World Composer Wizard Modal ── -->
+<div id="composerModal" style="display:none;position:fixed;inset:0;background:rgba(6,6,13,.96);z-index:200;align-items:center;justify-content:center">
+  <div style="background:#111118;border:0.5px solid #2a2a35;border-radius:14px;width:min(820px,95vw);max-height:90vh;overflow:hidden;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:0.5px solid #2a2a35">
+      <div>
+        <div style="font-size:15px;font-weight:500;color:#e0dff5">✦ World Composer</div>
+        <div style="font-size:11px;color:#555;margin-top:2px">Build your universe in 6 steps</div>
+      </div>
+      <button id="closeComposerBtn" style="background:none;border:none;color:#555;font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div id="composerSteps" style="display:flex;border-bottom:0.5px solid #2a2a35"></div>
+    <div id="composerContent" style="flex:1;overflow-y:auto;padding:20px;min-height:300px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-top:0.5px solid #2a2a35;background:#0d0d14">
+      <button id="composerBackBtn" style="padding:6px 14px;border:0.5px solid #2a2a35;border-radius:6px;background:transparent;color:#888;cursor:pointer">← Back</button>
+      <div id="composerSelDisplay" style="font-size:10px;color:#555;font-family:monospace;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <button id="composerNextBtn" style="padding:6px 16px;border:0.5px solid #7c6fcd;border-radius:6px;background:#1a1830;color:#9d96f0;cursor:pointer;font-weight:500">Next →</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

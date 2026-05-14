@@ -30,6 +30,10 @@ import { LawProcessEditor } from './ui/LawProcessEditor';
 import { SaveManager, WorldSaveSystem } from './world/save';
 import { SculptManager, type BrushFalloff, type SculptToolId } from './sculpt';
 import { DistributedEngine } from './distributed/DistributedEngine';
+import { WorldComposer, WORLD_ARCHETYPES, PHYSICS_PROFILES, WORLD_GOALS, ENV_HAZARDS, EVOLUTION_MODES } from './ux/WorldComposer';
+import { WorldHealth } from './ux/WorldHealth';
+import { Explainer } from './ux/Explainer';
+import { SMART_BRUSHES } from './ux/SmartBrushes';
 
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
@@ -53,6 +57,8 @@ sim.initGPU().then(ok => {
 let playing = false;
 let selX = -1, selY = -1, selZ = 0;
 let painting = false;
+let activeSmartBrush: string | null = null;
+let worldHealth: WorldHealth;
 let tool: 'paint' | 'inject' | 'erase' | 'inspect' | 'smooth' | 'noise' | 'erode' | 'pattern' | 'stamp' = 'paint';
 let activeMaterial: MatId = MAT.VACUUM;
 let paintModeOn = true;
@@ -217,6 +223,13 @@ async function paintAt(x: number, y: number, z: number, event?: PointerEvent) {
   sculptManager.currentBrush.radius = bs;
   sculptManager.currentBrush.strength = Math.max(0.1, str / 50);
   sculptManager.currentBrush.falloff = falloffEl.value as BrushFalloff;
+
+  // Smart brush intercept
+  if (activeSmartBrush && SMART_BRUSHES[activeSmartBrush]) {
+    SMART_BRUSHES[activeSmartBrush].paint(sim.grid, x, y, bs + 1, selZ);
+    sim.syncToGPU();
+    return;
+  }
 
   if (event?.altKey) {
     const cell = sim.grid.cell(x, y, z);
@@ -1011,6 +1024,10 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
 saveManager = new SaveManager(saveSystem);
 (window as unknown as { realitySave?: WorldSaveSystem }).realitySave = saveSystem;
 
+// Phase 5 init (needs civSystem to be set)
+worldHealth = new WorldHealth(sim, civSystem);
+initWorldComposer();
+
 // ── Phase 4: AI Director, Cosmological, Language, Economy, Multiplayer, Science
 const director  = new SceneDirector(sim, civSystem, metaLawEvol);
 const cosmoSim  = new CosmologicalSim();
@@ -1231,6 +1248,237 @@ document.getElementById('btnSciExportGraph')?.addEventListener('click', () => {
   _exportStatus(sciAPI.downloadCausalGraph());
 });
 
+// ── Phase 5: WorldComposer, WorldHealth, Explainer, SmartBrushes ─────────────
+
+// Smart brushes dropdown
+(function initSmartBrushes() {
+  const sel = document.getElementById('smartBrushSel') as HTMLSelectElement | null;
+  if (!sel) return;
+  for (const [name, brush] of Object.entries(SMART_BRUSHES)) {
+    const o = document.createElement('option');
+    o.value = name;
+    o.textContent = `${brush.icon} ${name}`;
+    sel.appendChild(o);
+  }
+  sel.addEventListener('change', () => {
+    activeSmartBrush = sel.value || null;
+    if (activeSmartBrush) {
+      document.getElementById('scriptLog')!.textContent =
+        `Smart brush: ${SMART_BRUSHES[activeSmartBrush].desc}`;
+    }
+  });
+})();
+
+// WorldHealth panel (civSystem set after phase 3 init, declared in state section above)
+function updateHealthPanel(): void {
+  const data = worldHealth.compute();
+  const BARS: [string, number, string][] = [
+    ['Stability',      data.stability,      '#6080ff'],
+    ['Emergence',      data.emergencePot,   '#40c060'],
+    ['Extinction risk',data.extinctionRisk, '#e04040'],
+    ['Mutation',       data.mutationActivity,'#c060e0'],
+  ];
+  const barsEl = document.getElementById('healthBars');
+  if (barsEl) {
+    barsEl.innerHTML = BARS.map(([label, val, color]) => `
+      <div style="margin-bottom:4px">
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:#666;margin-bottom:1px">
+          <span>${label}</span><span>${val}%</span></div>
+        <div style="height:3px;border-radius:2px;background:#1a1a22;overflow:hidden">
+          <div style="height:100%;width:${val}%;background:${color};border-radius:2px;transition:width .3s"></div>
+        </div>
+      </div>`).join('');
+  }
+  const semEl = document.getElementById('healthSemanticRow');
+  if (semEl) {
+    const avgS = parseFloat(data.avgEntropy);
+    const avgB = parseFloat(data.avgBio);
+    const avgE = parseFloat(data.avgInfo);
+    const sem = [WorldHealth.semanticEntropy(avgS), WorldHealth.semanticBio(avgB), WorldHealth.semanticEnergy(avgE)];
+    semEl.innerHTML = sem.map(s =>
+      `<span style="font-size:9px;padding:2px 7px;border-radius:12px;background:${s.color}22;color:${s.color};border:0.5px solid ${s.color}55">${s.label}</span>`
+    ).join('');
+  }
+  const alertsEl = document.getElementById('healthAlerts');
+  if (alertsEl) {
+    const C: Record<string, string> = { critical:'#e04040', warn:'#ef8030', info:'#6080ff', success:'#40c060' };
+    alertsEl.innerHTML = data.alerts.map(a =>
+      `<div style="font-size:9px;padding:3px 7px;border-radius:4px;background:${C[a.level]}18;color:${C[a.level]};border-left:2px solid ${C[a.level]}">${a.msg}</div>`
+    ).join('');
+  }
+}
+
+// Explainer
+const explainer = new Explainer(sim);
+function updateExplainerPanel(): void {
+  if (selX < 0) return;
+  const expl = explainer.explain(selX, selY, selZ);
+  const el = document.getElementById('cellExplainer');
+  if (!el) return;
+  el.style.display = 'block';
+  el.innerHTML = `<div style="font-size:9px;color:#555;margin-bottom:5px">Why is (${selX},${selY},${selZ}) this way?</div>` +
+    expl.map(e => `
+      <div style="margin-bottom:5px;padding:5px 7px;background:#0e0e18;border-radius:6px;border:0.5px solid #2a2a35">
+        <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+          <span style="font-size:10px;color:#888">${e.icon} ${e.field}</span>
+          <span style="font-size:10px;font-family:monospace;color:#ccc">${e.value}</span>
+        </div>
+        <div style="font-size:9px;color:#666;line-height:1.5">${e.why}</div>
+      </div>`).join('');
+}
+
+// WorldComposer wizard
+let worldComposer: WorldComposer;
+let composerStep = 0;
+const COMPOSER_STEPS = ['World Type','Physics','Goals','Hazards','Evolution','Generate'];
+
+function initWorldComposer(): void {
+  worldComposer = new WorldComposer(sim, civSystem);
+  const modal = document.getElementById('composerModal')!;
+  document.getElementById('btnOpenComposer')?.addEventListener('click', () => {
+    composerStep = 0;
+    modal.style.display = 'flex';
+    renderComposerStep();
+  });
+  document.getElementById('closeComposerBtn')?.addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+  document.getElementById('composerNextBtn')?.addEventListener('click', () => {
+    if (composerStep < COMPOSER_STEPS.length - 1) { composerStep++; renderComposerStep(); }
+    else _composerGenerate();
+  });
+  document.getElementById('composerBackBtn')?.addEventListener('click', () => {
+    if (composerStep > 0) { composerStep--; renderComposerStep(); }
+  });
+}
+
+function renderComposerStep(): void {
+  if (!worldComposer) return;
+  const sel = worldComposer.selection;
+
+  // Step pills
+  const stepsEl = document.getElementById('composerSteps')!;
+  stepsEl.innerHTML = COMPOSER_STEPS.map((s, i) => `
+    <div onclick="window._gotoComposerStep(${i})" style="flex:1;padding:9px 4px;text-align:center;font-size:10px;cursor:pointer;
+      color:${i===composerStep?'#9d96f0':i<composerStep?'#4caf7d':'#444'};
+      border-bottom:2px solid ${i===composerStep?'#7c6fcd':i<composerStep?'#2a6644':'transparent'};
+      background:${i===composerStep?'#1a1830':'transparent'}">
+      ${i<composerStep?'✓ ':''}<b>${s}</b></div>`).join('');
+
+  const selDisplay = [sel.archetype, sel.physics, sel.goal, sel.hazards.join('+'), sel.evolution].filter(Boolean).join(' › ');
+  document.getElementById('composerSelDisplay')!.textContent = selDisplay;
+
+  const content = document.getElementById('composerContent')!;
+  const nextBtn  = document.getElementById('composerNextBtn')!;
+  const backBtn  = document.getElementById('composerBackBtn') as HTMLButtonElement;
+  backBtn.style.opacity = composerStep === 0 ? '0.3' : '1';
+  nextBtn.textContent   = composerStep === COMPOSER_STEPS.length - 1 ? '✦ Generate' : 'Next →';
+
+  if (composerStep === 0) {
+    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">Choose the fundamental nature of your world</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">
+        ${Object.entries(WORLD_ARCHETYPES).map(([name, arch]) => `
+          <div onclick="window._composerSelectArchetype('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
+            border:0.5px solid ${sel.archetype===name?'#7c6fcd':'#2a2a35'};
+            background:${sel.archetype===name?'#1a1830':'#0e0e18'}">
+            <div style="font-size:20px;margin-bottom:5px">${arch.icon}</div>
+            <div style="font-size:11px;font-weight:500;color:#c0b8f0;margin-bottom:3px">${name}</div>
+            <div style="font-size:9px;color:#666;line-height:1.5">${arch.desc}</div>
+          </div>`).join('')}
+      </div>`;
+
+  } else if (composerStep === 1) {
+    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">Define the physical constants of your universe</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
+        ${Object.entries(PHYSICS_PROFILES).map(([name, p]) => `
+          <div onclick="window._composerSelectPhysics('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
+            border:0.5px solid ${sel.physics===name?'#6080ff':'#2a2a35'};
+            background:${sel.physics===name?'#141828':'#0e0e18'}">
+            <div style="font-size:12px;font-weight:500;color:#9090e0;margin-bottom:3px">${name}</div>
+            <div style="font-size:9px;color:#666">${p.desc}</div>
+          </div>`).join('')}
+      </div>`;
+
+  } else if (composerStep === 2) {
+    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">What should this world become?</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
+        ${Object.entries(WORLD_GOALS).map(([name, g]) => `
+          <div onclick="window._composerSelectGoal('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
+            border:0.5px solid ${sel.goal===name?'#40c060':'#2a2a35'};
+            background:${sel.goal===name?'#0d2010':'#0e0e18'}">
+            <div style="font-size:18px;margin-bottom:4px">${g.icon}</div>
+            <div style="font-size:11px;font-weight:500;color:#80e080;margin-bottom:3px">${name}</div>
+            <div style="font-size:9px;color:#666">${g.desc}</div>
+          </div>`).join('')}
+      </div>`;
+
+  } else if (composerStep === 3) {
+    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">Add environmental hazards — multi-select (optional)</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px">
+        ${Object.entries(ENV_HAZARDS).map(([name, h]) => `
+          <div onclick="window._composerToggleHazard('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
+            border:0.5px solid ${sel.hazards.includes(name)?'#e06040':'#2a2a35'};
+            background:${sel.hazards.includes(name)?'#1e0d08':'#0e0e18'}">
+            <div style="font-size:11px;font-weight:500;color:#e08060;margin-bottom:3px">${name}</div>
+            <div style="font-size:9px;color:#666">${h.desc}</div>
+          </div>`).join('')}
+      </div>`;
+
+  } else if (composerStep === 4) {
+    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">How should life and laws evolve?</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
+        ${Object.entries(EVOLUTION_MODES).map(([name, e]) => `
+          <div onclick="window._composerSelectEvo('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
+            border:0.5px solid ${sel.evolution===name?'#c060e0':'#2a2a35'};
+            background:${sel.evolution===name?'#180d20':'#0e0e18'}">
+            <div style="font-size:11px;font-weight:500;color:#c080e0;margin-bottom:3px">${name}</div>
+            <div style="font-size:9px;color:#666">${e.desc}</div>
+          </div>`).join('')}
+      </div>`;
+
+  } else {
+    const arch = WORLD_ARCHETYPES[sel.archetype ?? ''];
+    content.innerHTML = `<div style="text-align:center;padding:20px 0">
+        <div style="font-size:44px;margin-bottom:10px">${arch?.icon ?? '✦'}</div>
+        <div style="font-size:18px;font-weight:500;color:#e0dff5;margin-bottom:6px">${sel.archetype ?? 'No archetype selected'}</div>
+        <div style="font-size:11px;color:#666;margin-bottom:20px;max-width:380px;margin-left:auto;margin-right:auto">${arch?.desc ?? ''}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:380px;margin:0 auto 20px;text-align:left">
+          ${([['Physics',sel.physics,'#6080ff'],['Goal',sel.goal??'None','#40c060'],
+             ['Hazards',sel.hazards.join(', ')||'None','#e06040'],
+             ['Evolution',sel.evolution??'None','#c060e0']] as [string,string,string][])
+            .map(([k,v,c]) => `<div style="padding:9px;background:#0e0e18;border-radius:8px;border:0.5px solid #2a2a35">
+              <div style="font-size:9px;color:#555;margin-bottom:2px">${k}</div>
+              <div style="font-size:10px;color:${c}">${v}</div>
+            </div>`).join('')}
+        </div>
+        <button onclick="window._composerGenerate()" style="padding:11px 36px;border:0.5px solid #7c6fcd;border-radius:8px;cursor:pointer;background:#1a1830;color:#9d96f0;font-size:14px;font-weight:500">
+          ✦ Generate World
+        </button>
+      </div>`;
+  }
+}
+
+function _composerGenerate(): void {
+  if (!worldComposer) return;
+  const msg = worldComposer.generate();
+  document.getElementById('composerModal')!.style.display = 'none';
+  document.getElementById('scriptLog')!.textContent = msg;
+  playing = true;
+}
+
+const _win = window as unknown as Record<string, unknown>;
+_win._gotoComposerStep       = (i: number) => { composerStep = i; renderComposerStep(); };
+_win._composerSelectArchetype = (n: string) => { worldComposer.selection.archetype = n; renderComposerStep(); };
+_win._composerSelectPhysics   = (n: string) => { worldComposer.selection.physics   = n; renderComposerStep(); };
+_win._composerSelectGoal      = (n: string) => { worldComposer.selection.goal      = n; renderComposerStep(); };
+_win._composerToggleHazard    = (n: string) => {
+  const h = worldComposer.selection.hazards;
+  const i = h.indexOf(n); if (i >= 0) h.splice(i, 1); else h.push(n);
+  renderComposerStep();
+};
+_win._composerSelectEvo       = (n: string) => { worldComposer.selection.evolution = n; renderComposerStep(); };
+_win._composerGenerate        = _composerGenerate;
+
 // ── Keyboard camera navigation ─────────────────────────────────────────────────
 const _keys: Record<string, boolean> = {};
 document.addEventListener('keydown', e => { _keys[e.code] = true; });
@@ -1282,7 +1530,9 @@ async function loop(ts: number) {
   if (sim.tick % 20 === 0) {
     p2metrics?.draw(); updateTimelineSnapList(); updateCivPanel();
     updateCosmoPanel(); updateLangPanel(); updateEconPanel(); updateMultiplayPanel();
+    if (worldHealth) updateHealthPanel();
   }
+  if (selX >= 0 && sim.tick % 10 === 0) updateExplainerPanel();
 
   // Bottom bar
   const totalE    = sim.grid.totalField(F.ENERGY);
