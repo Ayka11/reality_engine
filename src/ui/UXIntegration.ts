@@ -193,20 +193,20 @@ export function createSemanticControlsPanel(onUpdate: (controls: any) => void) {
   };
 
   sliders.stability?.addEventListener('input', (e) => {
-    const span = panel.querySelector('#stability-value');
-    updateValueDisplay(e.target as HTMLInputElement, span!);
+    const span = panel.querySelector('#stability-value') as HTMLElement | null;
+    if (span) updateValueDisplay(e.target as HTMLInputElement, span);
     updateControls();
   });
 
   sliders.evolution?.addEventListener('input', (e) => {
-    const span = panel.querySelector('#speed-value');
-    updateValueDisplay(e.target as HTMLInputElement, span!);
+    const span = panel.querySelector('#speed-value') as HTMLElement | null;
+    if (span) updateValueDisplay(e.target as HTMLInputElement, span);
     updateControls();
   });
 
   sliders.chaos?.addEventListener('input', (e) => {
-    const span = panel.querySelector('#chaos-value');
-    updateValueDisplay(e.target as HTMLInputElement, span!);
+    const span = panel.querySelector('#chaos-value') as HTMLElement | null;
+    if (span) updateValueDisplay(e.target as HTMLInputElement, span);
     updateControls();
   });
 
@@ -300,11 +300,11 @@ export function createAppModeTabs(onModeChange: (mode: string) => void) {
 // 7. PLACEHOLDER IMPLEMENTATIONS (replace with real generators)
 // ============================================================================
 
-function renderPresetQuickSelect(container: HTMLElement, composer: any) {
+function renderPresetQuickSelect(_container: HTMLElement, _composer: any) {
   // TODO: Implement preset UI
 }
 
-function renderBiomePicker(container: HTMLElement, composer: any) {
+function renderBiomePicker(_container: HTMLElement, _composer: any) {
   // TODO: Implement biome selector UI
 }
 
@@ -316,7 +316,7 @@ function renderSemanticDialer(container: HTMLElement, composer: any) {
   container.appendChild(panel);
 }
 
-function renderReview(container: HTMLElement, composer: any) {
+function renderReview(_container: HTMLElement, _composer: any) {
   // TODO: Implement review/confirm UI
 }
 

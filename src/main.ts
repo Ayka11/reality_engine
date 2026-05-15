@@ -53,7 +53,7 @@ const realityCreatorCompiler = new GraphCompiler();
 };
 
 // ── Initialize UX System ──────────────────────────────────────────────────────
-const { appModeManager, renderSwitch, composerWizard } = initializeUXSystem();
+const { appModeManager, renderModeSwitch } = initializeUXSystem();
 appModeManager.setMode('create');  // Start in Create mode for first-time UX
 
 // Wire worldGenerated event to engine
@@ -78,7 +78,7 @@ window.addEventListener('worldGenerated', (evt: any) => {
 });
 
 // Wire render mode changes to viewport
-renderSwitch.onChange((mode) => {
+renderModeSwitch.onChange((mode) => {
   console.log('🎨 Switched render mode:', mode);
   document.getElementById('modeIndicator')?.setAttribute('data-mode', mode);
 });

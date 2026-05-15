@@ -199,7 +199,7 @@ export function applySemanticControls(controls: SemanticControls): PhysicsParame
   // Dominant force
   const forceAmplifier = FORCE_AMPLIFIERS[controls.dominantForce];
   Object.entries(forceAmplifier).forEach(([key, value]) => {
-    if (key in params) {
+    if (key in params && value !== undefined) {
       params[key as keyof PhysicsParameters] =
         (params[key as keyof PhysicsParameters] as number) * value;
     }

@@ -222,6 +222,7 @@ let lastTs=0,fps=0,fc=0,fpt=0;
 let activeProcs=new Set(['thermo','bio']);
 let activeBrush=null;
 let histE=[],histT=[],histI=[],histS=[],histB=[];
+let currentAppMode='create',currentPanel='world';
 
 // Physics constants (adjustable by laws & composer)
 let DIFFUSION=0.09,ENTROPY_BASE=0.0004,INFO_RATE=0.35,BIO_THRESH=0.25;
@@ -462,6 +463,130 @@ const PANELS={
         <div id="scriptLog" style="font-size:9px;color:var(--sub);margin-top:4px;max-height:50px;overflow-y:auto;font-family:monospace"></div>
       </div>
     </div>`,
+
+  science:()=>`
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Law Ecosystem</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:5px">Laws sorted by fitness. Toggle + tune each independently.</div>
+        <div id="sciLawList">${renderSciLaws()}</div>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <button onclick="addCustomLaw()" class="brush-btn" style="flex:1">+ Add law</button>
+          <button onclick="resetAllFitness()" class="brush-btn" style="flex:1">↺ Reset</button>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Physics Parameters</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div class="ctrl-row"><span class="ctrl-label" style="font-size:9px">Diffusion (DIFF)</span><input type="range" min="0.01" max="0.3" step="0.001" value="${DIFFUSION}" oninput="DIFFUSION=+this.value;document.getElementById('sciDiffOut').textContent=(+this.value).toFixed(3)"><span class="ctrl-val" id="sciDiffOut">${DIFFUSION}</span></div>
+        <div class="ctrl-row"><span class="ctrl-label" style="font-size:9px">Entropy (ENT)</span><input type="range" min="0.00001" max="0.003" step="0.00001" value="${ENTROPY_BASE}" oninput="ENTROPY_BASE=+this.value;document.getElementById('sciEntOut').textContent=(+this.value).toFixed(5)"><span class="ctrl-val" id="sciEntOut">${ENTROPY_BASE.toFixed(5)}</span></div>
+        <div class="ctrl-row"><span class="ctrl-label" style="font-size:9px">Info growth (INFO)</span><input type="range" min="0.05" max="2.0" step="0.05" value="${INFO_RATE}" oninput="INFO_RATE=+this.value;document.getElementById('sciInfoOut').textContent=this.value"><span class="ctrl-val" id="sciInfoOut">${INFO_RATE}</span></div>
+        <div class="ctrl-row"><span class="ctrl-label" style="font-size:9px">Bio threshold (BIO)</span><input type="range" min="0.05" max="0.8" step="0.05" value="${BIO_THRESH}" oninput="BIO_THRESH=+this.value;document.getElementById('sciBioOut').textContent=this.value"><span class="ctrl-val" id="sciBioOut">${BIO_THRESH}</span></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Law Fitness Chart</span><span class="arrow">▾</span></div>
+      <div class="section-body" style="padding:4px">
+        <canvas id="lawChart" style="width:100%;display:block;border-radius:4px;border:0.5px solid var(--border)"></canvas>
+        <div style="font-size:8px;color:var(--sub);margin-top:3px;text-align:center">Each line = one law over time</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Data Export</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <button class="brush-btn" style="width:100%;margin-bottom:3px" onclick="window.scienceMode&&window.scienceMode.exportCSV()">📄 Metrics CSV</button>
+        <button class="brush-btn" style="width:100%;margin-bottom:3px" onclick="window.scienceMode&&window.scienceMode.exportJupyter()">📓 Jupyter Notebook (.ipynb)</button>
+        <button class="brush-btn" style="width:100%;margin-bottom:3px" onclick="window.scienceMode&&window.scienceMode.exportJSON()">🗂️ Recording JSON</button>
+        <button class="brush-btn" style="width:100%" onclick="saveWorld()">💾 Save .reality</button>
+      </div>
+    </div>`,
+
+  cinema:()=>`
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>🎬 AI Scene Director</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div id="dirLog" style="height:100px;overflow-y:auto;font-size:9px;color:var(--sub);background:#09090f;border:0.5px solid var(--border);border-radius:4px;padding:6px;font-family:monospace;line-height:1.6;margin-bottom:5px">Director ready. Describe what you want cinematically.</div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <input id="dirInput" type="text" placeholder="Make something dramatic happen..." style="flex:1;font-size:10px;padding:4px 8px;background:#0c0c18;color:var(--text);border:0.5px solid var(--border);border-radius:5px;outline:none" onkeydown="if(event.key==='Enter')window.cinemaMode&&window.cinemaMode.askDirector()">
+          <button onclick="window.cinemaMode&&window.cinemaMode.askDirector()" class="brush-btn" style="border-color:var(--warn);color:var(--warn)">Ask</button>
+        </div>
+        <div style="display:flex;gap:4px">
+          <button onclick="window.cinemaMode&&window.cinemaMode.narrate()" class="brush-btn" style="flex:1">🎙️ Narrate</button>
+          <button id="autoDirBtn" onclick="window.cinemaMode&&window.cinemaMode.toggleAuto()" class="brush-btn" style="flex:1">Auto: OFF</button>
+        </div>
+        <div id="dirCode" style="font-size:9px;font-family:monospace;color:#6080ff;max-height:45px;overflow-y:auto;margin-top:4px;display:none;background:#09090f;padding:3px 5px;border-radius:3px"></div>
+        <button id="btnRunDir" onclick="window.cinemaMode&&window.cinemaMode.runScript()" style="width:100%;margin-top:3px;padding:3px;border:0.5px solid var(--accent);border-radius:5px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:9px;display:none">▶ Execute director script</button>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>🎞️ Timeline</span><span class="arrow">▾</span></div>
+      <div class="section-body" style="padding:4px">
+        <canvas id="timelineCanvas" style="width:100%;cursor:pointer;border:0.5px solid var(--border);border-radius:4px"></canvas>
+        <div style="display:flex;gap:3px;margin-top:5px;flex-wrap:wrap">
+          <button onclick="window.cinemaMode&&window.cinemaMode.addSimKF()" class="brush-btn" style="flex:1">⬡ Sim KF</button>
+          <button onclick="window.cinemaMode&&window.cinemaMode.addMarker()" class="brush-btn" style="flex:1">📍 Marker</button>
+        </div>
+        <div class="ctrl-row" style="margin-top:5px">
+          <span class="ctrl-label" style="font-size:9px">Total ticks</span>
+          <input type="number" id="totalTicks" value="1000" min="100" max="10000" step="100" style="width:70px;font-size:10px;background:#0c0c18;color:var(--sub);border:0.5px solid var(--border);border-radius:4px;padding:2px 5px" oninput="window.cinemaMode&&(window.cinemaMode.timeline.totalTicks=+this.value,window.cinemaMode.timeline.draw())">
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>⏺ Recording</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="display:flex;gap:4px">
+          <button onclick="window.cinemaMode&&window.cinemaMode.startRec()" class="brush-btn" style="flex:1;color:#e04848;border-color:#e04848">● Record</button>
+          <button onclick="window.cinemaMode&&window.cinemaMode.stopRec()" class="brush-btn" style="flex:1">■ Stop</button>
+        </div>
+        <div id="recStatus" style="font-size:9px;color:var(--sub);margin-top:3px;font-family:monospace">idle</div>
+        <button onclick="window.cinemaMode&&window.cinemaMode.exportFramePNG()" class="brush-btn" style="width:100%;margin-top:4px">🖼️ Export frame PNG</button>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>📤 Export</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <button class="brush-btn" style="width:100%;margin-bottom:3px" onclick="window.cinemaMode&&window.cinemaMode.exportAlembic()">🗂️ Alembic recording (.json)</button>
+        <button class="brush-btn" style="width:100%;margin-bottom:3px" onclick="window.cinemaMode&&window.cinemaMode.exportSRT()">💬 Markers as subtitles (.srt)</button>
+        <button class="brush-btn" style="width:100%" onclick="saveWorld()">💾 Save .reality</button>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>🎨 Render Settings</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div class="ctrl-row"><span class="ctrl-label" style="font-size:9px">Brightness</span><input type="range" id="brightBoost" min="0.5" max="3" step="0.1" value="1" oninput="window.cinemaMode&&window.cinemaMode.setBrightness(+this.value);document.getElementById('brightOut').textContent=this.value"><span class="ctrl-val" id="brightOut">1.0</span></div>
+        <div class="ctrl-row"><span class="ctrl-label" style="font-size:9px">Saturation</span><input type="range" id="satBoost" min="0.5" max="3" step="0.1" value="1" oninput="window.cinemaMode&&window.cinemaMode.setSaturation(+this.value);document.getElementById('satOut').textContent=this.value"><span class="ctrl-val" id="satOut">1.0</span></div>
+        <div style="font-size:8px;color:var(--sub);margin-top:5px">3D renderer with bloom/fog/FOV coming in Sprint 6</div>
+      </div>
+    </div>`,
+
+  gamedev:()=>`
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Agent Spawner</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <button class="brush-btn" style="width:100%;margin-bottom:4px" onclick="spawnAgents(5)">🧬 Spawn 5 agents</button>
+        <button class="brush-btn" style="width:100%;margin-bottom:8px" onclick="spawnAgents(20)">🧬 Spawn 20 agents</button>
+        <div class="ctrl-row"><span class="ctrl-label">Mutation rate</span><input type="range" min="1" max="100" value="10" step="1" oninput="document.getElementById('gdMutOut').textContent=this.value+'%'"><span class="ctrl-val" id="gdMutOut">10%</span></div>
+        <div id="gdAgentStats" style="margin-top:8px;font-size:9px;color:var(--sub)">No agents yet</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>📜 Ruleset Editor</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:5px">Rules fire when conditions are met. Score: <span id="gdScore" style="color:var(--success);font-family:monospace">0</span></div>
+        <div id="gdRuleList">${renderGameRules()}</div>
+        <button onclick="window.gamedevMode&&window.gamedevMode.addRule()" class="brush-btn" style="width:100%;margin-top:5px">+ Add rule</button>
+        <button onclick="window.gamedevMode&&window.gamedevMode.reset();document.getElementById('gdScore').textContent='0'" class="brush-btn" style="width:100%;margin-top:3px">↺ Reset game</button>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>🏆 Playtest</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div id="gdLog" style="height:80px;overflow-y:auto;font-size:9px;color:var(--sub);background:#09090f;border:0.5px solid var(--border);border-radius:4px;padding:5px;font-family:monospace;line-height:1.5">Playtest log…</div>
+        <button onclick="window.gamedevMode&&window.gamedevMode.exportRuleset()" class="brush-btn" style="width:100%;margin-top:5px">📄 Export ruleset (.json)</button>
+      </div>
+    </div>`,
 };
 
 function renderLaws(){
@@ -480,6 +605,36 @@ function renderLaws(){
     </div>`).join('');
 }
 
+function renderSciLaws(){
+  return LAWS.map((l,i)=>`
+    <div class="law-row">
+      <div class="law-dot" style="background:${l.color};opacity:${l.active?1:.35}"></div>
+      <div style="flex:1">
+        <div style="font-size:9px;color:${l.active?'var(--text)':'var(--sub)'};">${l.name}</div>
+        <div style="font-size:8px;color:var(--sub)">${l.desc}</div>
+        ${l.active?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:3px">
+          <div><div style="font-size:7px;color:var(--sub)">Fitness</div><input type="range" min="0" max="1" step="0.01" value="${Math.min(l.fitness,1).toFixed(2)}" style="width:100%;height:2px;accent-color:${l.color}" oninput="LAWS[${i}].fitness=+this.value"></div>
+          <div><div style="font-size:7px;color:var(--sub)">Strength</div><input type="range" min="0.001" max="1" step="0.001" value="${Math.min(l.strength,1).toFixed(3)}" style="width:100%;height:2px;accent-color:${l.color}" oninput="LAWS[${i}].strength=+this.value"></div>
+        </div>`:''}
+      </div>
+      <button class="law-toggle" style="background:${l.active?l.color:'#2a2a35'}" onclick="toggleLaw(${i})"></button>
+    </div>`).join('');
+}
+function renderGameRules(){
+  if(!window.gamedevMode||!window.gamedevMode.ruleset)
+    return '<div style="font-size:9px;color:var(--sub)">No rules yet. Click + Add rule.</div>';
+  const rules=window.gamedevMode.ruleset.rules||[];
+  if(!rules.length) return '<div style="font-size:9px;color:var(--sub)">No rules yet. Click + Add rule.</div>';
+  return rules.map((r,i)=>`
+    <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px;font-size:9px">
+      <span style="color:${r.active?'var(--success)':'var(--sub)'}">●</span>
+      <span style="flex:1;color:var(--text)">${r.name}</span>
+      <span style="color:var(--sub);font-family:monospace">${r.firedCount||0}x</span>
+      <button onclick="window.gamedevMode.ruleset.rules[${i}].active=!window.gamedevMode.ruleset.rules[${i}].active;document.getElementById('gdRuleList').innerHTML=renderGameRules()" style="font-size:8px;padding:1px 4px;border:0.5px solid var(--border);border-radius:3px;cursor:pointer;background:transparent;color:var(--sub)">toggle</button>
+    </div>`).join('');
+}
+function resetAllFitness(){LAWS.forEach(l=>l.fitness=0.5);setIconPanel('science');}
+window.resetAllFitness=resetAllFitness;
 function updateLawFitness(i,v){LAWS[i].fitness=+v;}
 window.toggleLaw=function(i){
   LAWS[i].active=!LAWS[i].active;
@@ -702,11 +857,11 @@ window.applyPreset=function(p){
 };
 
 // ── UI HELPERS ────────────────────────────────────────────────────────────
-let currentPanel='world';
 function setIconPanel(id){
   currentPanel=id;
   document.querySelectorAll('.icon-btn[data-panel]').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
   document.getElementById('left').innerHTML=PANELS[id]?.()||'';
+  document.dispatchEvent(new CustomEvent('panelRendered',{detail:{panel:id}}));
 }
 window.setIconPanel=setIconPanel;
 
@@ -776,8 +931,11 @@ document.querySelectorAll('.mode-btn[data-mode]').forEach(btn=>{
   btn.addEventListener('click',()=>{
     document.querySelectorAll('.mode-btn[data-mode]').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
+    currentAppMode=btn.dataset.mode;
     const modes={create:'Create Mode',science:'Science Mode',cinema:'Cinema Mode',game:'Game Dev Mode'};
     document.getElementById('modeLabel').textContent=modes[btn.dataset.mode]||'';
+    const panelMap={create:'world',science:'science',cinema:'cinema',game:'gamedev'};
+    setIconPanel(panelMap[btn.dataset.mode]||'world');
   });
 });
 
@@ -822,6 +980,8 @@ function loop(ts){
   drawGrid();
   if(tick%3===0&&selX>=0){explainCell(selX,selY);drawHist();}
   if(tick%15===0)updateHealth();
+  if(tick%5===0&&currentAppMode==='science'&&window.scienceMode)window.scienceMode.onTick(tick,buf,W,H,NF);
+  if(currentAppMode==='cinema'&&window.cinemaMode)window.cinemaMode.onTick(tick,buf);
   let totE=0,totS=0;for(let i=0;i<SZ;i++){totE+=buf[i*NF+FE];totS+=buf[i*NF+FS];}
   document.getElementById('tkOut').textContent=tick;
   document.getElementById('eOut').textContent=Math.round(totE).toLocaleString();
@@ -838,5 +998,6 @@ applyPreset('proto');
 updateHealth();
 requestAnimationFrame(ts=>{lastTs=ts;fpt=ts;requestAnimationFrame(loop);});
 </script>
+<script type="module" src="/src/connector.ts"></script>
 </body>
 </html>
