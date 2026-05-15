@@ -50,11 +50,21 @@ input[type=range]{width:80px;accent-color:var(--accent);height:3px}
 /* CANVAS */
 #cw{position:relative;overflow:hidden;display:flex;flex-direction:column}
 #viewWrap{flex:1;min-height:0;position:relative;overflow:hidden;background:#07070e;cursor:crosshair}
-#gc{display:block;width:100%;height:100%}
+#c2d,#c3d{position:absolute;top:0;left:0;width:100%;height:100%;display:block}
+#c3d{display:none}
 .ctab{padding:5px 14px;font-size:9px;cursor:pointer;border-bottom:2px solid transparent;color:var(--sub);flex-shrink:0;user-select:none;transition:all .15s}
 .ctab.on{color:#a09af0;border-bottom-color:var(--accent);background:#1a1830}
-.cbtn1{padding:3px 10px;border:0.5px solid var(--border);border-radius:5px;cursor:pointer;background:#0e0e18;color:var(--sub);font-size:9px;transition:all .15s}
+/* Composer classes */
+.cbox{background:var(--panel);border:0.5px solid var(--border);border-radius:12px;width:min(860px,96%);max-height:92vh;display:flex;flex-direction:column;overflow:hidden}
+.csteps{display:flex;border-bottom:0.5px solid var(--border)}
+.cstep{flex:1;padding:8px 4px;text-align:center;font-size:9px;cursor:pointer;border-bottom:2px solid transparent;color:var(--sub);transition:all .15s}
+.cstep.active{color:#a09af0;border-color:var(--accent);background:#1a1830}
+.cstep.done{color:var(--success)}
+.cbody{flex:1;overflow-y:auto;padding:16px 18px}
+.cfoot{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;border-top:0.5px solid var(--border);background:#0d0d14}
+.cbtn1{padding:4px 12px;border:0.5px solid var(--border);border-radius:5px;cursor:pointer;background:#0e0e18;color:var(--sub);font-size:9px;transition:all .15s}
 .cbtn1:hover{border-color:var(--accent);color:#a09af0}
+.cbtn2{padding:4px 16px;border:0.5px solid var(--accent);border-radius:6px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:10px;font-weight:500}
 /* RIGHT PANEL */
 #right{background:var(--panel);border-left:0.5px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
 .rpanel{padding:8px 10px;border-bottom:0.5px solid var(--border)}
@@ -136,7 +146,7 @@ input[type=range]#spd{width:55px}
 
 <!-- TOP BAR -->
 <div id="topbar">
-  <button class="compose-btn" onclick="openComposer()">✦ Compose World</button>
+  <button class="compose-btn" onclick="openComp()">✦ Compose World</button>
   <div class="tbsep"></div>
   <button class="mode-btn active" data-mode="create">Create</button>
   <button class="mode-btn" data-mode="science">Science</button>
@@ -169,14 +179,15 @@ input[type=range]#spd{width:55px}
 
 <!-- CENTER CANVAS -->
 <div id="cw">
-  <div id="tabs" style="display:flex;background:var(--panel);border-bottom:0.5px solid var(--border);flex-shrink:0">
+  <div id="tabs" style="display:flex;background:var(--p2);border-bottom:1px solid var(--bd);flex-shrink:0">
     <div class="ctab on" id="tab3d" onclick="setRenderMode('3d',this)">🔲 3D Volumetric</div>
     <div class="ctab" id="tab2d" onclick="setRenderMode('2d',this)">⬛ 2D Multi-Slice</div>
     <div class="ctab" id="tabHybrid" onclick="setRenderMode('hybrid',this)">⟐ Hybrid</div>
-    <div class="ctab" id="tabMetrics" onclick="setRenderMode('metrics',this)">📈 Metrics</div>
+    <div class="ctab" id="tabMetrics" onclick="setView('metrics',this)">📈 Metrics</div>
   </div>
   <div id="viewWrap">
-  <canvas id="gc"></canvas>
+  <canvas id="c3d"></canvas>
+  <canvas id="c2d"></canvas>
   <div id="metricsView" style="display:none;position:absolute;inset:0;background:#07070e;padding:14px;overflow-y:auto;font-size:10px;font-family:monospace;color:var(--sub)">
     <div style="font-size:12px;color:var(--text);margin-bottom:10px;font-family:system-ui">📈 World Metrics</div>
     <div id="metricsContent"></div>
@@ -185,25 +196,28 @@ input[type=range]#spd{width:55px}
 
   <!-- COMPOSER MODAL -->
   <div id="comp">
-    <div class="comp-box">
-      <div class="comp-hdr">
-        <div><div class="comp-title">World Composer</div><div class="comp-sub">Design your universe in 5 steps</div></div>
-        <button onclick="closeComposer()" style="background:none;border:none;color:var(--sub);font-size:18px;cursor:pointer">✕</button>
+    <div class="cbox">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <div>
+          <div style="font-size:16px;font-weight:600">World Composer</div>
+          <div style="font-size:10px;color:var(--sub)">High-level → Semantic → Generate</div>
+        </div>
+        <button onclick="closeComp()" style="background:none;border:none;font-size:24px;color:var(--sub);cursor:pointer;line-height:1">✕</button>
       </div>
-      <div class="comp-steps" id="compSteps"></div>
-      <div class="comp-body" id="compBody"></div>
-      <div style="padding:10px 18px;border-top:0.5px solid var(--border);background:#0d0d16">
-        <div style="font-size:9px;color:var(--sub);margin-bottom:6px">Preview Render Mode</div>
-        <div style="display:flex;gap:6px">
-          <button onclick="previewRenderMode('3d')" class="cbtn1">🔲 3D Volumetric</button>
-          <button onclick="previewRenderMode('2d')" class="cbtn1">⬛ 2D Multi-Slice</button>
-          <button onclick="previewRenderMode('hybrid')" class="cbtn1">⟐ Hybrid</button>
+      <div class="csteps" id="csteps"></div>
+      <div class="cbody" id="cbody"></div>
+      <div style="padding:12px 20px;background:#0a0a14;border-top:1px solid var(--bd);flex-shrink:0">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:6px">Preview in Render Mode</div>
+        <div style="display:flex;gap:8px">
+          <button onclick="previewRenderMode('3d')" id="prev3d" class="cbtn1">🔲 3D Volumetric</button>
+          <button onclick="previewRenderMode('2d')" id="prev2d" class="cbtn1">⬛ 2D Multi-Slice</button>
+          <button onclick="previewRenderMode('hybrid')" id="prevHybrid" class="cbtn1">⟐ Hybrid</button>
         </div>
       </div>
-      <div class="comp-footer">
-        <button class="cb1" id="compBack">← Back</button>
-        <div class="comp-sel-display" id="compSel"></div>
-        <button class="cb2" id="compNext">Next →</button>
+      <div class="cfoot">
+        <button class="cbtn1" id="cback">← Back</button>
+        <div id="cseldisp" style="font-size:9.5px;color:var(--sub);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px"></div>
+        <button class="cbtn2" id="cnext">Next →</button>
       </div>
     </div>
   </div>
@@ -265,8 +279,10 @@ let currentAppMode='create',currentPanel='world',currentRenderMode='3d';
 // Physics constants (adjustable by laws & composer)
 let DIFFUSION=0.09,ENTROPY_BASE=0.0004,INFO_RATE=0.35,BIO_THRESH=0.25;
 
-const canvas=document.getElementById('gc');
+const canvas=document.getElementById('c2d');
 const ctx=canvas.getContext('2d');
+const canvas3d=document.getElementById('c3d');
+const ctx3d=canvas3d.getContext('2d');
 const hc=document.getElementById('hc');
 const hx=hc.getContext('2d');
 const wrap=document.getElementById('viewWrap');
@@ -277,10 +293,17 @@ function get(x,y,f){if(x<0||x>=W||y<0||y>=H)return 0;return buf[idx(x,y)+f]}
 function set_(x,y,f,v){if(x<0||x>=W||y<0||y>=H)return;buf[idx(x,y)+f]=clamp(v,-9999,9999)}
 function add_(x,y,f,v){if(x<0||x>=W||y<0||y>=H)return;buf[idx(x,y)+f]=clamp(buf[idx(x,y)+f]+v,-9999,9999)}
 
-function resize(){
-  const w=wrap.clientWidth,h=wrap.clientHeight;
+function resize2D(){
+  const w=currentRenderMode==='hybrid'?Math.floor(wrap.clientWidth/2):wrap.clientWidth;
+  const h=wrap.clientHeight;
   if(w>0&&h>0){canvas.width=w;canvas.height=h;}
 }
+function resize3D(){
+  const w=currentRenderMode==='hybrid'?Math.ceil(wrap.clientWidth/2):wrap.clientWidth;
+  const h=wrap.clientHeight;
+  if(w>0&&h>0){canvas3d.width=w;canvas3d.height=h;}
+}
+function resize(){resize2D();resize3D();}
 new ResizeObserver(resize).observe(wrap);
 requestAnimationFrame(resize);
 
@@ -329,7 +352,11 @@ function _drawFlat(){
   ctx.putImageData(id,0,0);
 }
 
-function _isoTiles(originX,originY,TW,TH,MAX_H){
+function _isoTiles(cx_,cw_,ch_){
+  const TW=Math.max(8,Math.floor(cw_/W*1.4))|0;
+  const TH=Math.max(4,(TW/2))|0;
+  const MAX_H=Math.min(60,Math.floor(ch_*0.3/H*5));
+  const originX=cw_/2,originY=ch_*0.55;
   for(let diag=0;diag<W+H-1;diag++){
     for(let xi=0;xi<W;xi++){
       const x=xi,y=diag-xi;
@@ -341,44 +368,40 @@ function _isoTiles(originX,originY,TW,TH,MAX_H){
       const[r,g,bl]=colorOf(FE,t);
       const sx=originX+(x-y)*TW/2;
       const sy=originY+(x+y)*TH/2;
-      // top face
-      ctx.fillStyle=`rgb(${r},${g},${bl})`;
-      ctx.beginPath();
-      ctx.moveTo(sx,sy-h);ctx.lineTo(sx+TW/2,sy+TH/2-h);
-      ctx.lineTo(sx,sy+TH-h);ctx.lineTo(sx-TW/2,sy+TH/2-h);
-      ctx.closePath();ctx.fill();
+      cx_.fillStyle=`rgb(${r},${g},${bl})`;
+      cx_.beginPath();
+      cx_.moveTo(sx,sy-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
+      cx_.lineTo(sx,sy+TH-h);cx_.lineTo(sx-TW/2,sy+TH/2-h);
+      cx_.closePath();cx_.fill();
       if(h>2){
-        ctx.fillStyle=`rgb(${r*.5|0},${g*.5|0},${bl*.5|0})`;
-        ctx.beginPath();
-        ctx.moveTo(sx,sy+TH-h);ctx.lineTo(sx+TW/2,sy+TH/2-h);
-        ctx.lineTo(sx+TW/2,sy+TH/2);ctx.lineTo(sx,sy+TH);
-        ctx.closePath();ctx.fill();
-        ctx.fillStyle=`rgb(${r*.7|0},${g*.7|0},${bl*.7|0})`;
-        ctx.beginPath();
-        ctx.moveTo(sx,sy+TH-h);ctx.lineTo(sx-TW/2,sy+TH/2-h);
-        ctx.lineTo(sx-TW/2,sy+TH/2);ctx.lineTo(sx,sy+TH);
-        ctx.closePath();ctx.fill();
+        cx_.fillStyle=`rgb(${r*.5|0},${g*.5|0},${bl*.5|0})`;
+        cx_.beginPath();
+        cx_.moveTo(sx,sy+TH-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
+        cx_.lineTo(sx+TW/2,sy+TH/2);cx_.lineTo(sx,sy+TH);
+        cx_.closePath();cx_.fill();
+        cx_.fillStyle=`rgb(${r*.7|0},${g*.7|0},${bl*.7|0})`;
+        cx_.beginPath();
+        cx_.moveTo(sx,sy+TH-h);cx_.lineTo(sx-TW/2,sy+TH/2-h);
+        cx_.lineTo(sx-TW/2,sy+TH/2);cx_.lineTo(sx,sy+TH);
+        cx_.closePath();cx_.fill();
       }
       if(b>0.1){
-        ctx.fillStyle=`rgba(48,200,96,${b*0.35})`;
-        ctx.beginPath();
-        ctx.moveTo(sx,sy-h);ctx.lineTo(sx+TW/2,sy+TH/2-h);
-        ctx.lineTo(sx,sy+TH-h);ctx.lineTo(sx-TW/2,sy+TH/2-h);
-        ctx.closePath();ctx.fill();
+        cx_.fillStyle=`rgba(48,200,96,${b*0.35})`;
+        cx_.beginPath();
+        cx_.moveTo(sx,sy-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
+        cx_.lineTo(sx,sy+TH-h);cx_.lineTo(sx-TW/2,sy+TH/2-h);
+        cx_.closePath();cx_.fill();
       }
     }
   }
 }
 
 function _drawIso(){
-  const cw=canvas.width,ch=canvas.height;
-  ctx.fillStyle='#07070e';ctx.fillRect(0,0,cw,ch);
-  const TW=Math.max(8,Math.floor(cw/W*1.4))|0;
-  const TH=Math.max(4,(TW/2))|0;
-  const MAX_H=Math.min(60,Math.floor(ch*0.3/H*5));
-  _isoTiles(cw/2,ch*0.55,TW,TH,MAX_H);
-  ctx.font='bold 9px system-ui';ctx.fillStyle='rgba(160,154,240,.6)';
-  ctx.fillText('3D Volumetric',8,16);
+  const cw=canvas3d.width,ch=canvas3d.height;
+  ctx3d.fillStyle='#07070e';ctx3d.fillRect(0,0,cw,ch);
+  _isoTiles(ctx3d,cw,ch);
+  ctx3d.font='bold 9px system-ui';ctx3d.fillStyle='rgba(160,154,240,.6)';
+  ctx3d.fillText('3D Volumetric',8,16);
 }
 
 function _drawMultiSlice(){
@@ -407,29 +430,15 @@ function _drawMultiSlice(){
   }
 }
 
+function draw2D(){_drawFlat();}
+
 function _drawHybrid(){
-  const cw=canvas.width,ch=canvas.height;
-  const hw=Math.floor(cw/2);
-  ctx.fillStyle='#07070e';ctx.fillRect(0,0,cw,ch);
-  // left: flat 2D
-  ctx.save();
-  ctx.beginPath();ctx.rect(0,0,hw,ch);ctx.clip();
-  _drawFlat();
-  ctx.restore();
-  // right: iso 3D — origin shifted to right half center
-  ctx.save();
-  ctx.beginPath();ctx.rect(hw,0,hw,ch);ctx.clip();
-  const TW=Math.max(6,Math.floor(hw/W*1.4))|0;
-  const TH=Math.max(3,(TW/2))|0;
-  const MAX_H=Math.min(40,Math.floor(ch*0.3/H*4));
-  _isoTiles(hw+hw/2,ch*0.55,TW,TH,MAX_H);
-  ctx.restore();
-  // divider
-  ctx.strokeStyle='#3a3a5a';ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(hw,0);ctx.lineTo(hw,ch);ctx.stroke();
+  // each canvas renders its own half independently
+  _drawFlat();    // c2d renders left half (flat)
+  _drawIso();     // c3d renders right half (iso)
+  // label on c2d (left side)
   ctx.font='9px system-ui';ctx.fillStyle='rgba(160,154,240,.55)';
   ctx.fillText('2D',4,14);
-  ctx.fillText('3D',hw+4,14);
 }
 
 // ── SIMULATION ────────────────────────────────────────────────────────────
@@ -827,15 +836,18 @@ const HAZARDS={
 let compStep=0,compSel={arch:null,physics:'Balanced',goal:null,hazards:[],evo:null};
 const COMP_STEPS=['World Type','Physics Mood','Evolution Goal','Hazards','Generate'];
 
-function openComposer(){document.getElementById('comp').classList.add('open');compStep=0;renderComp();}
-function closeComposer(){document.getElementById('comp').classList.remove('open');}
+function openComp(){document.getElementById('comp').classList.add('open');compStep=0;renderComp();}
+function openComposer(){openComp();}
+function closeComp(){document.getElementById('comp').classList.remove('open');}
+function closeComposer(){closeComp();}
+window.openComposer=openComp;window.closeComposer=closeComp;
 
 function renderComp(){
-  document.getElementById('compSteps').innerHTML=COMP_STEPS.map((s,i)=>`
-    <div class="comp-step${i===compStep?' active':i<compStep?' done':''}" onclick="compStep=${i};renderComp()">${i<compStep?'✓ ':''}${s}</div>`).join('');
-  document.getElementById('compSel').textContent=
+  document.getElementById('csteps').innerHTML=COMP_STEPS.map((s,i)=>`
+    <div class="cstep${i===compStep?' active':i<compStep?' done':''}" onclick="compStep=${i};renderComp()">${i<compStep?'✓ ':''}${s}</div>`).join('');
+  document.getElementById('cseldisp').textContent=
     [compSel.arch,compSel.physics,compSel.goal,compSel.hazards.join('+')].filter(Boolean).join(' › ');
-  const body=document.getElementById('compBody');
+  const body=document.getElementById('cbody');
   if(compStep===0){
     body.innerHTML=`<div style="font-size:10px;color:var(--sub);margin-bottom:12px">Choose the fundamental nature of your world</div><div class="card-grid">${Object.entries(ARCHETYPES).map(([n,a])=>`<div class="wcard${compSel.arch===n?' sel':''}" onclick="compSel.arch='${n}';renderComp()"><div class="wcard-icon">${a.icon}</div><div class="wcard-name">${n}</div><div class="wcard-desc">${a.desc}</div></div>`).join('')}</div>`;
   }else if(compStep===1){
@@ -860,11 +872,11 @@ function renderComp(){
       <button onclick="generateWorld()" style="padding:10px 36px;border:0.5px solid var(--accent);border-radius:8px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:13px;font-weight:500">✦ Generate World</button>
     </div>`;
   }
-  document.getElementById('compBack').style.opacity=compStep===0?'0.3':'1';
-  document.getElementById('compNext').textContent=compStep===COMP_STEPS.length-1?'Generate →':'Next →';
+  document.getElementById('cback').style.opacity=compStep===0?'0.3':'1';
+  document.getElementById('cnext').textContent=compStep===COMP_STEPS.length-1?'Generate →':'Next →';
 }
-document.getElementById('compNext').addEventListener('click',()=>{if(compStep<COMP_STEPS.length-1){compStep++;renderComp();}else generateWorld();});
-document.getElementById('compBack').addEventListener('click',()=>{if(compStep>0){compStep--;renderComp();}});
+document.getElementById('cnext').addEventListener('click',()=>{if(compStep<COMP_STEPS.length-1){compStep++;renderComp();}else generateWorld();});
+document.getElementById('cback').addEventListener('click',()=>{if(compStep>0){compStep--;renderComp();}});
 
 function generateWorld(){
   const arch=ARCHETYPES[compSel.arch];if(!arch){log('Select a world type first');return;}
@@ -883,9 +895,9 @@ function generateWorld(){
     set_(x,y,FT,Math.max(0,n*300));
     set_(x,y,FS,0.02+Math.random()*0.05);
   }
-  closeComposer();
   if(currentRenderMode==='metrics')setRenderMode('3d',document.getElementById('tab3d'));
-  log(`World "${compSel.arch}" generated → ${arch.desc}`);
+  closeComp();
+  log(`World "${compSel.arch||'Custom'}" generated → ${arch.desc}`);
   playing=true;
   document.getElementById('pb').textContent='⏸ Pause';
   setIconPanel('world');
@@ -944,11 +956,13 @@ function drawHist(){
 
 // ── CANVAS INTERACTION ────────────────────────────────────────────────────
 function getCellAt(e){
-  const r=canvas.getBoundingClientRect();
-  const cx=(e.clientX-r.left)*(canvas.width/r.width);
-  const cy=(e.clientY-r.top)*(canvas.height/r.height);
-  const cs=Math.min(canvas.width/W,canvas.height/H);
-  const ox=(canvas.width-cs*W)/2,oy=(canvas.height-cs*H)/2;
+  const r=wrap.getBoundingClientRect();
+  let cx=e.clientX-r.left;
+  const cy=e.clientY-r.top;
+  const eff_w=currentRenderMode==='hybrid'?Math.floor(r.width/2):r.width;
+  if(cx>eff_w)return null; // right half (3D iso) — no cell pick
+  const cs=Math.min(eff_w/W,r.height/H);
+  const ox=(eff_w-cs*W)/2,oy=(r.height-cs*H)/2;
   const x=Math.floor((cx-ox)/cs),y=Math.floor((cy-oy)/cs);
   if(x<0||x>=W||y<0||y>=H)return null;return{x,y};
 }
@@ -966,17 +980,17 @@ function paintAt(x,y){
     else if(tool==='paint')set_(nx,ny,fi,clamp(str,0,mx));
   }
 }
-canvas.addEventListener('pointerdown',e=>{
+wrap.addEventListener('pointerdown',e=>{
   const c=getCellAt(e);if(!c)return;
-  painting=true;canvas.setPointerCapture(e.pointerId);
+  painting=true;wrap.setPointerCapture(e.pointerId);
   if(tool==='inspect'){selX=c.x;selY=c.y;histE=[];histT=[];histI=[];histS=[];histB=[];explainCell(c.x,c.y);}
   else paintAt(c.x,c.y);
 });
-canvas.addEventListener('pointermove',e=>{
+wrap.addEventListener('pointermove',e=>{
   if(!painting)return;const c=getCellAt(e);if(!c)return;
   if(tool==='inspect'){selX=c.x;selY=c.y;}else paintAt(c.x,c.y);
 });
-canvas.addEventListener('pointerup',()=>{painting=false;});
+wrap.addEventListener('pointerup',()=>{painting=false;});
 
 // ── PRESETS ───────────────────────────────────────────────────────────────
 window.applyPreset=function(p){
@@ -1005,18 +1019,37 @@ function setRenderMode(mode,btn){
   currentRenderMode=mode;
   document.querySelectorAll('#tabs .ctab').forEach(t=>t.classList.remove('on'));
   if(btn)btn.classList.add('on');
-  const gc=document.getElementById('gc');
-  const mv=document.getElementById('metricsView');
-  if(gc)gc.style.display=mode!=='metrics'?'block':'none';
-  if(mv)mv.style.display=mode==='metrics'?'block':'none';
+
+  const c3d=document.getElementById('c3d');
+  const c2d=document.getElementById('c2d');
+  const metricsView=document.getElementById('metricsView');
+
+  // For hybrid: side-by-side with left/right positioning
+  if(mode==='hybrid'){
+    c2d.style.cssText='position:absolute;top:0;left:0;width:50%;height:100%;display:block';
+    c3d.style.cssText='position:absolute;top:0;left:50%;width:50%;height:100%;display:block';
+  } else {
+    c2d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='metrics'?'none':'block');
+    c3d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='3d'?'block':'none');
+  }
+  if(metricsView)metricsView.style.display=mode==='metrics'?'block':'none';
   if(mode==='metrics')updateMetricsView();
-  log(`Render mode: ${mode.toUpperCase()}`);
+
+  resize();
+
+  if((mode==='2d'||mode==='hybrid')&&c2d.style.display!=='none'){resize2D();draw2D();}
+  if((mode==='3d'||mode==='hybrid')&&c3d.style.display!=='none'){resize3D();}
+
+  log(`Switched to ${mode.toUpperCase()} render mode`);
 }
 window.setRenderMode=setRenderMode;
+window.setView=setRenderMode;
 
 function previewRenderMode(mode){
-  const idMap={'3d':'tab3d','2d':'tab2d','hybrid':'tabHybrid','metrics':'tabMetrics'};
-  setRenderMode(mode,document.getElementById(idMap[mode]));
+  const idMap={
+    '3d':'tab3d','2d':'tab2d','hybrid':'tabHybrid','metrics':'tabMetrics'
+  };
+  setRenderMode(mode,document.getElementById(idMap[mode])||null);
 }
 window.previewRenderMode=previewRenderMode;
 
@@ -1137,8 +1170,8 @@ window.saveWorld=function(){
 };
 
 function log(msg){document.getElementById('plog').textContent=msg;}
-window.openComposer=openComposer;
-window.closeComposer=closeComposer;
+window.openComposer=openComp;
+window.closeComposer=closeComp;
 window.saveWorld=window.saveWorld;
 
 // ── MAIN LOOP ─────────────────────────────────────────────────────────────
