@@ -17,7 +17,11 @@ import { KeyframeTimeline }    from './modes/cinema/KeyframeTimeline'
 import { CameraPathEditor }    from './modes/cinema/CameraPathEditor'
 import { SceneDirector }       from './modes/cinema/SceneDirector'
 import { VideoRecorder }       from './modes/cinema/VideoRecorder'
-import { RulesetEngine }       from './modes/gamedev/RulesetEditor'
+import { GameRulesetEngine } from './modes/gamedev/GameRulesetEngine'
+import { BehaviorFSMCanvas, PRESET_BEHAVIORS }   from './modes/gamedev/EntityBehaviorEditor'
+import { PrefabSystem }                           from './modes/gamedev/PrefabSystem'
+import { AIGameDesigner }                         from './modes/gamedev/AIGameDesigner'
+import { buildGameDevModePanel }                  from './modes/GameDevModePanel'
 
 // ── Inline sim constants (must match index.html) ──────────────────────────
 const win = window as unknown as Record<string, unknown>
@@ -266,45 +270,266 @@ const cinemaMode = {
 }
 
 // ── Game Dev Mode ─────────────────────────────────────────────────────────
-const ruleset = new RulesetEngine()
+const gameRuleset    = new GameRulesetEngine()
+const behaviorEditor = new BehaviorFSMCanvas()
+const prefabSystem   = new PrefabSystem()
+const gameDesigner   = new AIGameDesigner()
 
-// Seed default rules
-ruleset.rules = ruleset.defaultRules()
+gameRuleset.loadPreset('ecosystem')   // sensible default
+
+let activePrefab:        typeof prefabSystem.library[0] | null = null
+let lastDesignerRuleset: string | null = null
+let gdPaused = false
+
+function updateGameUI(): void {
+  const gs = gameRuleset.state
+  const scoreEl = document.getElementById('scoreDisplay')
+  const livesEl = document.getElementById('livesDisplay')
+  const msgEl   = document.getElementById('gameMessage')
+  const objEl   = document.getElementById('objectivesDisplay')
+  const actObjEl = document.getElementById('activeObjectives')
+
+  if (scoreEl) scoreEl.textContent = `Score: ${gs.score}`
+  if (livesEl) livesEl.textContent = `Lives: ${'❤️'.repeat(Math.max(0, gs.lives))}`
+  if (msgEl)   msgEl.textContent   = gs.message
+
+  const objHTML = gs.objectives.map(o => `
+    <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
+      <span style="font-size:11px">${o.completed ? '✅' : '⬜'}</span>
+      <div style="flex:1">
+        <div style="font-size:9px;color:${o.completed ? 'var(--ok)' : 'var(--tx)'}">${o.name}</div>
+        <div style="height:3px;background:#1a1a28;border-radius:2px;margin-top:2px">
+          <div style="height:100%;width:${(o.progress * 100).toFixed(0)}%;
+            background:${o.completed ? 'var(--ok)' : 'var(--ac)'};border-radius:2px;transition:width .3s"></div>
+        </div>
+      </div>
+      <span style="font-size:8px;color:var(--sub)">${(o.progress * 100).toFixed(0)}%</span>
+    </div>`).join('')
+  if (objEl)    objEl.innerHTML    = objHTML
+  if (actObjEl) actObjEl.innerHTML = objHTML
+}
+
+function renderPrefabLibrary(): void {
+  const el = document.getElementById('prefabLibrary')
+  if (!el) return
+  el.innerHTML = prefabSystem.library.map((p, i) => `
+    <div onclick="window.gamedevMode.setActivePrefab(${i})"
+      title="${p.description}"
+      style="padding:5px 3px;border:1px solid ${activePrefab === p ? 'var(--ac)' : 'var(--bd)'};
+      border-radius:4px;cursor:pointer;background:#0c0c18;text-align:center">
+      <div style="font-size:16px">${p.icon}</div>
+      <div style="font-size:7px;color:var(--sub);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+    </div>`).join('')
+}
 
 const gamedevMode = {
-  ruleset,
+  gameRuleset,
+  behaviorEditor,
+  prefabSystem,
+  gameDesigner,
 
-  addRule(): void {
-    const r = ruleset.addRule()
-    const name = prompt('Rule name:', r.name)
-    if (name) r.name = name
-    r.active = true
-    const el = document.getElementById('gdRuleList')
-    if (el && typeof win['renderGameRules'] === 'function')
-      el.innerHTML = (win['renderGameRules'] as ()=>string)()
+  // Expose for connector calls from main loop
+  onTick(simTick: number, buf: Float32Array): void {
+    if (simTick % 10 === 0) {
+      const msgs = gameRuleset.tick(simTick, buf, getW(), getH(), 1, getNF(), 0)
+      msgs.forEach(msg => {
+        const logEl = document.getElementById('gdLog')
+        if (logEl) logEl.textContent = `[${simTick}] ${msg}\n` + logEl.textContent.slice(0, 500)
+      })
+      updateGameUI()
+      // Render popups on canvas
+      this._renderPopups()
+    }
   },
 
-  tick(simTick: number, buf: Float32Array): void {
-    const msgs = ruleset.tick(simTick, buf, getW(), getH(), 1, getNF())
-    msgs.forEach(msg => {
-      const logEl = document.getElementById('gdLog')
-      if (logEl) {
-        logEl.textContent = `[${simTick}] ${msg}\n` + logEl.textContent.slice(0, 400)
-      }
-    })
-    const scoreEl = document.getElementById('gdScore')
-    if (scoreEl) scoreEl.textContent = String(ruleset.score)
+  // ── Playtest ────────────────────────────────────────────────────────
+
+  startPlaytest(): void {
+    gameRuleset.playtestMode = true
+    gdPaused = false
+    ;(win['playing'] as boolean | undefined)
+    win['playing'] = true
+    updateGameUI()
   },
 
-  reset(): void { ruleset.score = 0; ruleset.gameOver = false },
+  resetPlaytest(): void {
+    gameRuleset.reset()
+    updateGameUI()
+  },
 
-  exportRuleset(): void {
-    const json = ruleset.serialize()
+  pausePlaytest(): void {
+    gdPaused = !gdPaused
+    win['playing'] = !gdPaused
+  },
+
+  loadPreset(preset: 'survival' | 'ecosystem' | 'civilization' | 'custom'): void {
+    gameRuleset.loadPreset(preset)
+    updateGameUI()
+  },
+
+  // ── Objectives ──────────────────────────────────────────────────────
+
+  addObjective(id: string): void {
+    gameRuleset.addObjective(id)
+    updateGameUI()
+  },
+
+  setTimeLimit(v: number | null): void {
+    gameRuleset.state.timeLimit = v
+  },
+
+  // ── Entity Behaviors ─────────────────────────────────────────────────
+
+  loadBehaviorPreset(id: string): void {
+    const preset = PRESET_BEHAVIORS.find(b => b.id === id)
+    if (!preset) return
+    const canvas = document.getElementById('behaviorCanvas') as HTMLCanvasElement | null
+    if (canvas) behaviorEditor.init(canvas, preset)
+  },
+
+  spawnWithBehavior(n: number): void {
+    const genome = behaviorEditor.compileToGenome()
+    const W = getW(), H = getH()
+    const buf = getBuf()
+    const NF  = getNF()
+    // Inject energy clusters at random positions (visual spawn)
+    for (let k = 0; k < n; k++) {
+      const x = 4 + Math.floor(Math.random() * (W - 8))
+      const y = 4 + Math.floor(Math.random() * (H - 8))
+      const base = (y * W + x) * NF
+      buf[base + 0]  = 200 + Math.random() * 200   // energy
+      buf[base + 1]  = 0.4 + Math.random() * 0.3   // density
+      buf[base + 10] = 0.4 + Math.random() * 0.3   // bio
+    }
+    const behaviorName = behaviorEditor.fsm?.name ?? 'default'
+    console.log(`[GameDev] Spawned ${n} agents with ${behaviorName} behavior`, genome)
+    const logEl = document.getElementById('gdLog')
+    if (logEl) logEl.textContent = `Spawned ${n} × ${behaviorName}\n` + logEl.textContent.slice(0, 400)
+  },
+
+  // ── Prefabs ──────────────────────────────────────────────────────────
+
+  capturePrefab(): void {
+    const name   = prompt('Prefab name:', 'My Prefab')
+    if (!name) return
+    const buf    = getBuf()
+    const canvas = document.getElementById('canvas') as HTMLCanvasElement | null
+    const W = getW(), H = getH(), NF = getNF()
+    const cx = Math.max(0, Math.floor(W / 2))
+    const cy = Math.max(0, Math.floor(H / 2))
+    prefabSystem.capture(cx, cy, 0, 3, buf, W, H, 1, NF, name, canvas)
+    renderPrefabLibrary()
+  },
+
+  setActivePrefab(i: number): void {
+    activePrefab = prefabSystem.library[i] ?? null
+    const nameEl = document.getElementById('activePrefabName')
+    if (nameEl) nameEl.textContent = activePrefab?.name ?? 'none'
+    renderPrefabLibrary()
+    // Set global tool flag so inline sim paint handler can call stampActivePrefab
+    win['tool']         = 'stamp_prefab'
+    win['activePrefab'] = activePrefab
+  },
+
+  stampAt(x: number, y: number): void {
+    if (!activePrefab) return
+    prefabSystem.stamp(activePrefab, x, y, 0, getBuf(), getW(), getH(), 1, getNF(), 'add')
+  },
+
+  // ── AI Game Designer ─────────────────────────────────────────────────
+
+  async askDesigner(): Promise<void> {
+    const input  = document.getElementById('gameDesignerInput') as HTMLInputElement | null
+    const logEl  = document.getElementById('gameDesignerLog')
+    const prompt = input?.value?.trim()
+    if (!prompt) return
+    if (input)  input.value  = ''
+    if (logEl)  logEl.innerHTML += `<div style="color:#888">You: ${prompt}</div>`
+
+    const summary = this._worldSummary()
+    const result  = await gameDesigner.ask(prompt, summary, gameRuleset.state)
+
+    if (logEl) {
+      logEl.innerHTML += `<div style="color:#c0c8f0">🤖 ${result.advice.replace(/\n/g,'<br>')}</div>`
+      logEl.scrollTop  = logEl.scrollHeight
+    }
+    if (result.rulesetJSON) {
+      lastDesignerRuleset = result.rulesetJSON
+      const applyBtn = document.getElementById('btnApplyRuleset')
+      if (applyBtn) applyBtn.style.display = 'block'
+    }
+  },
+
+  suggestObjective(): void {
+    void this.askDesigner()
+    const input = document.getElementById('gameDesignerInput') as HTMLInputElement | null
+    if (input) input.value = 'Suggest an objective for this world state'
+  },
+
+  applyDesignerRuleset(): void {
+    if (!lastDesignerRuleset) return
+    try {
+      const data = JSON.parse(lastDesignerRuleset)
+      if (data.objectives)  gameRuleset.state.objectives = data.objectives
+      if (data.timeLimit !== undefined) gameRuleset.state.timeLimit = data.timeLimit
+      if (data.lives     !== undefined) gameRuleset.state.lives     = data.lives
+      if (data.message)                 gameRuleset.state.message   = data.message
+      updateGameUI()
+      const applyBtn = document.getElementById('btnApplyRuleset')
+      if (applyBtn) applyBtn.style.display = 'none'
+    } catch (e) {
+      console.error('[GameDev] Ruleset parse error:', e)
+    }
+  },
+
+  // ── Level Export ────────────────────────────────────────────────────
+
+  exportLevel(): void {
+    const json = gameRuleset.exportLevel()
     const blob = new Blob([json], { type: 'application/json' })
     const a    = document.createElement('a')
     a.href     = URL.createObjectURL(blob)
-    a.download = 'reality_ruleset.json'
+    a.download = `reality_level_t${getTick()}.level.json`
     a.click()
+  },
+
+  _buildPanel(): string {
+    return buildGameDevModePanel()
+  },
+
+  shareLevel(): void {
+    try {
+      const payload = btoa(JSON.stringify({
+        type:       'level',
+        objectives: gameRuleset.state.objectives.map(o => ({ id:o.id, name:o.name, type:o.type, target:o.target, description:o.description })),
+        message:    gameRuleset.state.message,
+      })).slice(0, 200)
+      const url = new URL(window.location.href)
+      url.hash  = payload
+      void navigator.clipboard.writeText(url.toString())
+      const logEl = document.getElementById('gdLog')
+      if (logEl) logEl.textContent = 'Level link copied to clipboard!\n' + logEl.textContent.slice(0, 400)
+    } catch { /* clipboard denied */ }
+  },
+
+  // ── private helpers ──────────────────────────────────────────────────
+
+  _worldSummary(): string {
+    const m  = metrics.snapshot()
+    return `tick=${getTick()}, energy=${m.energy.toFixed(1)}, entropy=${m.entropy.toFixed(4)}, info=${m.info.toFixed(1)}, bio=${m.bio.toFixed(3)}, agents=0`
+  },
+
+  _renderPopups(): void {
+    const canvas = document.getElementById('canvas') as HTMLCanvasElement | null
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx)   return
+    gameRuleset.state.popups.forEach((p, i) => {
+      ctx.font      = 'bold 13px system-ui'
+      ctx.textAlign = 'center'
+      ctx.fillStyle = p.color + 'dd'
+      ctx.fillText(p.text, canvas.width / 2, 55 + i * 22)
+    })
   },
 }
 
@@ -322,6 +547,15 @@ document.addEventListener('panelRendered', (e: Event) => {
         (win['LAWS'] as {name:string;fitness:number;active:boolean;color:string}[] | undefined)
           ?.map(l => ({ nm: l.name, fit: l.fitness, on: l.active, col: l.color })) ?? []
       chart.draw(lawCanvas, laws)
+    }
+  }
+  if (panel === 'gamedev') {
+    renderPrefabLibrary()
+    updateGameUI()
+    // Auto-load first behavior preset into canvas if one is available
+    const bCanvas = document.getElementById('behaviorCanvas') as HTMLCanvasElement | null
+    if (bCanvas && PRESET_BEHAVIORS.length) {
+      behaviorEditor.init(bCanvas, PRESET_BEHAVIORS[0])
     }
   }
 })

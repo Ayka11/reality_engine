@@ -561,30 +561,10 @@ const PANELS={
       </div>
     </div>`,
 
-  gamedev:()=>`
+  gamedev:()=>window.gamedevMode?window.gamedevMode._buildPanel():`
     <div class="section">
-      <div class="section-hdr" onclick="toggleSection(this)"><span>Agent Spawner</span><span class="arrow">▾</span></div>
-      <div class="section-body">
-        <button class="brush-btn" style="width:100%;margin-bottom:4px" onclick="spawnAgents(5)">🧬 Spawn 5 agents</button>
-        <button class="brush-btn" style="width:100%;margin-bottom:8px" onclick="spawnAgents(20)">🧬 Spawn 20 agents</button>
-        <div class="ctrl-row"><span class="ctrl-label">Mutation rate</span><input type="range" min="1" max="100" value="10" step="1" oninput="document.getElementById('gdMutOut').textContent=this.value+'%'"><span class="ctrl-val" id="gdMutOut">10%</span></div>
-        <div id="gdAgentStats" style="margin-top:8px;font-size:9px;color:var(--sub)">No agents yet</div>
-      </div>
-    </div>
-    <div class="section">
-      <div class="section-hdr" onclick="toggleSection(this)"><span>📜 Ruleset Editor</span><span class="arrow">▾</span></div>
-      <div class="section-body">
-        <div style="font-size:9px;color:var(--sub);margin-bottom:5px">Rules fire when conditions are met. Score: <span id="gdScore" style="color:var(--success);font-family:monospace">0</span></div>
-        <div id="gdRuleList">${renderGameRules()}</div>
-        <button onclick="window.gamedevMode&&window.gamedevMode.addRule()" class="brush-btn" style="width:100%;margin-top:5px">+ Add rule</button>
-        <button onclick="window.gamedevMode&&window.gamedevMode.reset();document.getElementById('gdScore').textContent='0'" class="brush-btn" style="width:100%;margin-top:3px">↺ Reset game</button>
-      </div>
-    </div>
-    <div class="section">
-      <div class="section-hdr" onclick="toggleSection(this)"><span>🏆 Playtest</span><span class="arrow">▾</span></div>
-      <div class="section-body">
-        <div id="gdLog" style="height:80px;overflow-y:auto;font-size:9px;color:var(--sub);background:#09090f;border:0.5px solid var(--border);border-radius:4px;padding:5px;font-family:monospace;line-height:1.5">Playtest log…</div>
-        <button onclick="window.gamedevMode&&window.gamedevMode.exportRuleset()" class="brush-btn" style="width:100%;margin-top:5px">📄 Export ruleset (.json)</button>
+      <div class="section-body" style="color:var(--sub);font-size:9px;padding:8px">
+        Loading Game Dev tools…
       </div>
     </div>`,
 };
@@ -820,6 +800,7 @@ function getCellAt(e){
 function paintAt(x,y){
   const bs=parseInt(document.getElementById('bsize')?.value||2);
   const str=parseInt(document.getElementById('bstr')?.value||400);
+  if(tool==='stamp_prefab'&&window.gamedevMode){window.gamedevMode.stampAt(x,y);return;}
   if(activeBrush&&BRUSHES[activeBrush]){BRUSHES[activeBrush].paint(x,y,bs+1);return;}
   const fi=[FE,FD,FI,FS,FT,FBio][layer]??FE;
   const mx=[9999,1,999,1,2000,1][layer]??9999;
@@ -982,6 +963,7 @@ function loop(ts){
   if(tick%15===0)updateHealth();
   if(tick%5===0&&currentAppMode==='science'&&window.scienceMode)window.scienceMode.onTick(tick,buf,W,H,NF);
   if(currentAppMode==='cinema'&&window.cinemaMode)window.cinemaMode.onTick(tick,buf);
+  if(currentAppMode==='game'&&window.gamedevMode)window.gamedevMode.onTick(tick,buf);
   let totE=0,totS=0;for(let i=0;i<SZ;i++){totE+=buf[i*NF+FE];totS+=buf[i*NF+FS];}
   document.getElementById('tkOut').textContent=tick;
   document.getElementById('eOut').textContent=Math.round(totE).toLocaleString();
