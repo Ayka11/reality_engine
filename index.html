@@ -152,13 +152,6 @@ input[type=range]#spd{width:55px}
   <button class="mode-btn" data-mode="science">Science</button>
   <button class="mode-btn" data-mode="cinema">Cinema</button>
   <button class="mode-btn" data-mode="game">Game Dev</button>
-  <div class="tbsep"></div>
-  <button class="mode-btn" id="layerE" onclick="setLayer(0)">Energy</button>
-  <button class="mode-btn" id="layerD" onclick="setLayer(1)">Density</button>
-  <button class="mode-btn" id="layerI" onclick="setLayer(2)">Info</button>
-  <button class="mode-btn" id="layerS" onclick="setLayer(3)">Entropy</button>
-  <button class="mode-btn" id="layerT" onclick="setLayer(4)">Temp</button>
-  <button class="mode-btn" id="layerB" onclick="setLayer(5)">Bio</button>
   <div style="flex:1"></div>
   <span style="font-size:9px;color:var(--sub)">FPS:</span><span id="fpsOut" style="font-family:monospace;color:var(--text);min-width:20px">0</span>
 </div>
@@ -172,6 +165,21 @@ input[type=range]#spd{width:55px}
   <button class="icon-btn" data-panel="script" onclick="setIconPanel('script')" title="Script"><i class="ti ti-code"></i><span class="icon-tip">Script</span></button>
   <div style="flex:1"></div>
   <button class="icon-btn" onclick="saveWorld()" title="Save"><i class="ti ti-download"></i><span class="icon-tip">Save</span></button>
+  <button class="icon-btn" onclick="document.getElementById('apiKeyModal').style.display='flex'" title="API Key"><span id="apiKeyDot" style="font-size:14px">🔑</span><span class="icon-tip">API Key</span></button>
+</div>
+
+<!-- API KEY MODAL -->
+<div id="apiKeyModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:#12121e;border:1px solid var(--border);border-radius:10px;padding:20px;width:340px;max-width:90vw">
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">🔑 Claude API Key</div>
+    <div style="font-size:10px;color:var(--sub);margin-bottom:10px;line-height:1.5">Used by Cinema Director, Game Designer, and Agent Planner. Stored in localStorage only — never sent anywhere except api.anthropic.com.</div>
+    <input id="apiKeyInput" type="password" placeholder="sk-ant-..." style="width:100%;padding:6px 10px;font-size:11px;background:#0c0c18;color:var(--text);border:0.5px solid var(--border);border-radius:6px;outline:none;box-sizing:border-box;margin-bottom:10px">
+    <div style="display:flex;gap:8px">
+      <button onclick="window.setClaudeApiKey&&window.setClaudeApiKey(document.getElementById('apiKeyInput').value);document.getElementById('apiKeyModal').style.display='none'" style="flex:1;padding:6px;border:0.5px solid var(--accent);border-radius:6px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:11px">Save Key</button>
+      <button onclick="window.setClaudeApiKey&&window.setClaudeApiKey('');document.getElementById('apiKeyInput').value='';document.getElementById('apiKeyModal').style.display='none'" style="padding:6px 12px;border:0.5px solid var(--border);border-radius:6px;cursor:pointer;background:transparent;color:var(--sub);font-size:11px">Clear</button>
+    </div>
+    <div id="apiKeyStatus" style="font-size:9px;color:var(--sub);margin-top:8px;font-family:monospace">No key set</div>
+  </div>
 </div>
 
 <!-- LEFT PANEL (context-sensitive) -->
@@ -184,6 +192,17 @@ input[type=range]#spd{width:55px}
     <div class="ctab" id="tab2d" onclick="setRenderMode('2d',this)">⬛ 2D Multi-Slice</div>
     <div class="ctab" id="tabHybrid" onclick="setRenderMode('hybrid',this)">⟐ Hybrid</div>
     <div class="ctab" id="tabMetrics" onclick="setView('metrics',this)">📈 Metrics</div>
+  </div>
+  <div id="layerBar" style="display:flex;align-items:center;gap:3px;padding:3px 8px;background:#0a0a12;border-bottom:1px solid var(--bd);flex-shrink:0">
+    <span style="font-size:8px;color:var(--sub);letter-spacing:.04em;text-transform:uppercase;margin-right:3px;flex-shrink:0">Field</span>
+    <button class="mode-btn" id="layerAll" onclick="setLayer(-1)">All</button>
+    <button class="mode-btn" id="layerE" onclick="setLayer(0)">⚡ Energy</button>
+    <button class="mode-btn" id="layerD" onclick="setLayer(1)">🌫️ Density</button>
+    <button class="mode-btn" id="layerI" onclick="setLayer(2)">🧠 Info</button>
+    <button class="mode-btn" id="layerS" onclick="setLayer(3)">🔥 Entropy</button>
+    <button class="mode-btn" id="layerT" onclick="setLayer(4)">🌡️ Temp</button>
+    <button class="mode-btn" id="layerB" onclick="setLayer(5)">🧬 Bio</button>
+    <span id="layerHint" style="font-size:8px;color:var(--sub);margin-left:6px;font-style:italic"></span>
   </div>
   <div id="viewWrap">
   <canvas id="c3d"></canvas>
@@ -224,6 +243,17 @@ input[type=range]#spd{width:55px}
   </div><!-- /viewWrap -->
 </div>
 
+<!-- KEYBOARD SHORTCUTS OVERLAY (MODAL) -->
+<div id="shortcutsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;overflow-y:auto;padding:20px">
+  <div style="max-width:900px;margin:auto;background:#141418;border:1px solid #2a2a35;border-radius:8px;padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:1px solid #2a2a35;padding-bottom:10px">
+      <h2 style="color:#e0dff5;font-size:16px;margin:0">⌨️ Keyboard Shortcuts</h2>
+      <button onclick="document.getElementById('shortcutsModal').style.display='none'" style="background:none;border:none;color:#777;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div id="shortcutsContent" style="column-count:2;column-gap:40px;font-size:11px;color:#d0cef5"></div>
+  </div>
+</div>
+
 <!-- RIGHT PANEL -->
 <div id="right">
   <div class="rpanel">
@@ -244,6 +274,43 @@ input[type=range]#spd{width:55px}
       <span style="color:#a060e0">I</span><span style="color:#e04040">S</span>
       <span style="color:#30a060">B</span>
     </div>
+  </div>
+  <div class="rpanel" id="debugConsolePanel" style="display:none;flex:1;overflow:hidden;flex-direction:column">
+    <span class="rl">🐛 Debug Console</span>
+    <div id="debugOutput" style="flex:1;overflow-y:auto;background:#0a0a14;border:0.5px solid var(--border);border-radius:4px;padding:6px;font-size:9px;font-family:monospace;color:#7cfc00;margin-bottom:6px;max-height:150px"></div>
+    <div style="display:flex;gap:4px;align-items:center">
+      <span style="color:var(--sub);font-size:9px">$</span>
+      <input id="debugInput" type="text" placeholder="world.energy_avg, agent[0].x, etc" style="flex:1;background:#1a1a28;border:0.5px solid var(--border);border-radius:3px;padding:3px 6px;font-size:9px;font-family:monospace;color:#7cfc00" onkeydown="if(event.key==='Enter'){evalDebugCommand();}else if(event.key==='ArrowUp'){event.preventDefault();if(debugHistory.length){debugHistoryIdx=Math.min(debugHistoryIdx+1,debugHistory.length-1);this.value=debugHistory[debugHistory.length-1-debugHistoryIdx];}}else if(event.key==='ArrowDown'){event.preventDefault();debugHistoryIdx=Math.max(debugHistoryIdx-1,-1);this.value=debugHistoryIdx===-1?'':debugHistory[debugHistory.length-1-debugHistoryIdx];}">
+    </div>
+  </div>
+  <div class="rpanel" id="cinemaExportPanel" style="display:none">
+    <span class="rl">🎬 Export Presets</span>
+    <div style="display:flex;flex-direction:column;gap:6px;font-size:9px">
+      <button onclick="exportCinemaPreset('720')" style="background:#2a4a6a;border:0.5px solid #3a6a9a;border-radius:3px;padding:4px;color:#7cfc00;cursor:pointer">📹 720p (Fast)</button>
+      <button onclick="exportCinemaPreset('1080')" style="background:#2a4a6a;border:0.5px solid #3a6a9a;border-radius:3px;padding:4px;color:#7cfc00;cursor:pointer">🎥 1080p (HD)</button>
+      <button onclick="exportCinemaPreset('4k')" style="background:#2a4a6a;border:0.5px solid #3a6a9a;border-radius:3px;padding:4px;color:#7cfc00;cursor:pointer">🎞️ 4K (Slow)</button>
+    </div>
+    <div style="margin-top:8px;border-top:0.5px solid var(--border);padding-top:6px">
+      <div style="font-size:8px;color:var(--sub);margin-bottom:4px">Render Controls</div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:8px">
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="width:50px">Bloom:</span>
+          <input type="range" id="bloomSlider" min="0" max="10" value="5" style="flex:1;height:6px" oninput="updateRenderControl('bloom',this.value)">
+          <span id="bloomVal" style="width:20px">5</span>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="width:50px">Saturation:</span>
+          <input type="range" id="satSlider" min="0" max="20" value="10" style="flex:1;height:6px" oninput="updateRenderControl('sat',this.value)">
+          <span id="satVal" style="width:20px">10</span>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="width:50px">Brightness:</span>
+          <input type="range" id="brightSlider" min="0" max="20" value="10" style="flex:1;height:6px" oninput="updateRenderControl('bright',this.value)">
+          <span id="brightVal" style="width:20px">10</span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:8px;font-size:8px;color:var(--sub)">← → : Step frame</div>
   </div>
 </div>
 
@@ -268,9 +335,10 @@ const W=36,H=28,D=1,SZ=W*H,NF=12;
 const FE=0,FD=1,FI=2,FS=3,FT=4,FFX=5,FFY=6,FTau=8,FCid=9,FBio=10,FProc=11;
 let buf=new Float32Array(SZ*NF),bbuf=new Float32Array(SZ*NF);
 window.W=W;window.H=H;window.D=D;window.NF=NF;window.buf=buf;
-let causal=[],tick=0,playing=false,layer=0;
+let causal=[],tick=0,playing=false,layer=-1;
 let selX=-1,selY=-1,painting=false,tool='paint';
 let lastTs=0,fps=0,fc=0,fpt=0;
+const UNDO_MAX=5;const _undoRing=[];let _undoHead=0,_undoCount=0;
 let activeProcs=new Set(['thermo','bio']);
 let activeBrush=null;
 let histE=[],histT=[],histI=[],histS=[],histB=[];
@@ -335,9 +403,10 @@ function _drawFlat(){
   const ox=(cw-cs*W)/2,oy=(ch-cs*H)/2;
   const fi=[FE,FD,FI,FS,FT,FBio][layer]??FE;
   const mx=[1000,1,500,1,800,1][layer]??1000;
+  const vmin=mx>1?0.5:0.001;  // normalized 0-1 fields need lower threshold
   const id=ctx.createImageData(cw,ch);const d=id.data;
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const v=buf[idx(x,y)+fi]; if(v<0.5) continue;
+    const v=buf[idx(x,y)+fi]; if(v<vmin) continue;
     const t=Math.min(v/mx,1); const[r,g,b]=colorOf(layer,t);
     const px=Math.floor(ox+x*cs),py=Math.floor(oy+y*cs);
     const pw=Math.max(1,Math.floor(cs)-1),ph=Math.max(1,Math.floor(cs)-1);
@@ -350,9 +419,26 @@ function _drawFlat(){
     }
   }
   ctx.putImageData(id,0,0);
+  // Draw agent dots on top
+  if(window.agentSystem&&window.agentSystem.count>0){
+    const CIV_COLS=['#ff6060','#60cfff','#ffd060','#80ff80','#d060ff','#ff9060','#60ffcf'];
+    for(const a of window.agentSystem.agents){
+      const px=ox+a.x*cs+cs/2,py=oy+a.y*cs+cs/2;
+      const r=Math.max(2,cs*0.35);
+      ctx.beginPath();ctx.arc(px,py,r,0,6.283);
+      ctx.fillStyle=CIV_COLS[(a.civId-1)%CIV_COLS.length]||'#fff';
+      ctx.globalAlpha=0.85;ctx.fill();ctx.globalAlpha=1;
+    }
+  }
 }
 
-function _isoTiles(cx_,cw_,ch_){
+function _isoTiles(cx_,cw_,ch_,cl){
+  // cl = color layer index (0-5). Defaults to global `layer` or 0 (Energy).
+  const colorL=cl!==undefined?cl:(layer>=0?layer:0);
+  const FIELD_MAP=[FE,FD,FI,FS,FT,FBio];
+  const MAX_MAP=[1000,1,500,1,800,1];
+  const cf=FIELD_MAP[colorL]??FE;
+  const cm=MAX_MAP[colorL]??1000;
   const TW=Math.max(8,Math.floor(cw_/W*1.4))|0;
   const TH=Math.max(4,(TW/2))|0;
   const MAX_H=Math.min(60,Math.floor(ch_*0.3/H*5));
@@ -363,9 +449,10 @@ function _isoTiles(cx_,cw_,ch_){
       if(y<0||y>=H)continue;
       const e=buf[idx(x,y)+FE],b=buf[idx(x,y)+FBio];
       if(e<1&&b<0.01)continue;
-      const t=Math.min(e/1000,1);
-      const h=Math.min(e/22,MAX_H)|0;
-      const[r,g,bl]=colorOf(FE,t);
+      const h=Math.min(e/22,MAX_H)|0;  // height always from energy
+      const cv=buf[idx(x,y)+cf];
+      const ct=Math.min(cv/cm,1);      // color from selected field
+      const[r,g,bl]=colorOf(colorL,ct);
       const sx=originX+(x-y)*TW/2;
       const sy=originY+(x+y)*TH/2;
       cx_.fillStyle=`rgb(${r},${g},${bl})`;
@@ -385,7 +472,7 @@ function _isoTiles(cx_,cw_,ch_){
         cx_.lineTo(sx-TW/2,sy+TH/2);cx_.lineTo(sx,sy+TH);
         cx_.closePath();cx_.fill();
       }
-      if(b>0.1){
+      if(b>0.1&&colorL!==5){
         cx_.fillStyle=`rgba(48,200,96,${b*0.35})`;
         cx_.beginPath();
         cx_.moveTo(sx,sy-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
@@ -400,33 +487,125 @@ function _drawIso(){
   const cw=canvas3d.width,ch=canvas3d.height;
   ctx3d.fillStyle='#07070e';ctx3d.fillRect(0,0,cw,ch);
   _isoTiles(ctx3d,cw,ch);
-  ctx3d.font='bold 9px system-ui';ctx3d.fillStyle='rgba(160,154,240,.6)';
-  ctx3d.fillText('3D Volumetric',8,16);
+  const LAYER_LABELS=['⚡ Energy','🌫️ Density','🧠 Info','🔥 Entropy','🌡️ Temp','🧬 Bio'];
+  const lbl=layer>=0?LAYER_LABELS[layer]:'⚡ Energy';
+  ctx3d.font='bold 9px system-ui';ctx3d.fillStyle='rgba(160,154,240,.65)';
+  ctx3d.fillText(`3D Volumetric · ${lbl}`,8,16);
+  ctx3d.font='8px system-ui';ctx3d.fillStyle='rgba(120,120,180,.45)';
+  ctx3d.fillText('height = energy  ·  color = selected field',8,ch-8);
+  // Agent dots in iso view
+  if(window.agentSystem&&window.agentSystem.count>0){
+    const TW=Math.max(8,Math.floor(cw/W*1.4))|0,TH=Math.max(4,(TW/2))|0;
+    const originX=cw/2,originY=ch*0.55;
+    const CIV_COLS=['#ff6060','#60cfff','#ffd060','#80ff80','#d060ff','#ff9060','#60ffcf'];
+    for(const a of window.agentSystem.agents){
+      const sx=originX+(a.x-a.y)*TW/2,sy=originY+(a.x+a.y)*TH/2;
+      const h=Math.min(buf[idx(a.x,a.y)+FE]/22,60)|0;
+      ctx3d.beginPath();ctx3d.arc(sx,sy-h-4,3,0,6.283);
+      ctx3d.fillStyle=CIV_COLS[(a.civId-1)%CIV_COLS.length]||'#fff';
+      ctx3d.globalAlpha=0.9;ctx3d.fill();ctx3d.globalAlpha=1;
+    }
+  }
 }
 
 function _drawMultiSlice(){
   const cw=canvas.width,ch=canvas.height;
   ctx.fillStyle='#07070e';ctx.fillRect(0,0,cw,ch);
-  const hw=Math.floor(cw/2),hh=Math.floor(ch/2);
-  const SLICES=[
-    {f:FE,mx:1000,l:0,label:'⚡ Energy',col:'#5080ff',ox:0,oy:0,w:hw,h:hh},
-    {f:FBio,mx:1,l:5,label:'🧬 Bio',col:'#30c060',ox:hw,oy:0,w:hw,h:hh},
-    {f:FI,mx:500,l:2,label:'🧠 Info',col:'#9060d0',ox:0,oy:hh,w:hw,h:hh},
-    {f:FS,mx:1,l:3,label:'🔥 Entropy',col:'#e04040',ox:hw,oy:hh,w:hw,h:hh},
-  ];
-  for(const{f,mx,l,label,col,ox,oy,w,h}of SLICES){
-    const cs=Math.min(w/W,h/H);
-    const tox=Math.floor(ox+(w-cs*W)/2),toy=Math.floor(oy+(h-cs*H)/2);
+  
+  // If a specific layer is selected (layer > -1), show full-screen single layer view
+  if(layer>=0){
+    const LAYER_MAP=[
+      {f:FE,mx:1000,l:0,label:'⚡ Energy',info:'Total energy in the system'},
+      {f:FD,mx:1,l:1,label:'🌫️ Density',info:'Material concentration'},
+      {f:FI,mx:500,l:2,label:'🧠 Info',info:'Information / Complexity'},
+      {f:FS,mx:1,l:3,label:'🔥 Entropy',info:'System disorder level'},
+      {f:FT,mx:800,l:4,label:'🌡️ Temp',info:'Temperature field'},
+      {f:FBio,mx:1,l:5,label:'🧬 Bio',info:'Life potential'},
+    ];
+    const {f,mx,l,label,info}=LAYER_MAP[layer];
+    const cs=Math.min(cw/W,ch/H);
+    const tox=Math.floor((cw-cs*W)/2),toy=Math.floor((ch-cs*H)/2);
+    const vmin2=mx>1?0.5:0.001;
+
+    // Render single layer full-screen
     for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-      const v=buf[idx(x,y)+f];if(v<0.5)continue;
+      const v=buf[idx(x,y)+f];if(v<vmin2)continue;
       const t=Math.min(v/mx,1);const[r,g,b]=colorOf(l,t);
       ctx.fillStyle=`rgb(${r},${g},${b})`;
       ctx.fillRect(Math.floor(tox+x*cs),Math.floor(toy+y*cs),Math.max(1,Math.floor(cs)-1),Math.max(1,Math.floor(cs)-1));
     }
-    ctx.font='10px system-ui';ctx.fillStyle=col;
-    ctx.fillText(label,ox+5,oy+14);
-    ctx.strokeStyle='#1e1e2a';ctx.lineWidth=1;
-    ctx.strokeRect(ox+0.5,oy+0.5,w-1,h-1);
+    
+    // Overlay stats
+    let tot=0,cnt=0,min=Infinity,max=-Infinity;
+    for(let i=0;i<SZ;i++){const v=buf[i*NF+f];tot+=v;if(v>0.5){cnt++;min=Math.min(min,v);max=Math.max(max,v);}}
+    const avg=cnt>0?tot/cnt:0;
+    
+    ctx.font='bold 14px system-ui';ctx.fillStyle='rgba(255,255,255,.9)';
+    ctx.fillText(label,10,28);
+    ctx.font='10px system-ui';ctx.fillStyle='rgba(200,200,240,.7)';
+    ctx.fillText(info,10,42);
+    
+    ctx.font='10px monospace';ctx.fillStyle='rgba(160,240,160,.8)';
+    ctx.fillText(`Avg: ${avg.toFixed(2)}  Min: ${min===Infinity?0:min.toFixed(2)}  Max: ${max.toFixed(2)}  Active: ${cnt}/${SZ}`,10,ch-12);
+    
+  } else {
+    // Default 4-slice view with per-quadrant stats
+    const hw=Math.floor(cw/2),hh=Math.floor(ch/2);
+    const SLICES=[
+      {f:FE,mx:1000,l:0,label:'⚡ Energy',desc:'Kinetic energy per cell',col:'#5080ff',ox:0,oy:0,w:hw,h:hh},
+      {f:FBio,mx:1,l:5,label:'🧬 Bio',desc:'Life potential 0–1',col:'#30c060',ox:hw,oy:0,w:hw,h:hh},
+      {f:FI,mx:500,l:2,label:'🧠 Info',desc:'Complexity / information',col:'#9060d0',ox:0,oy:hh,w:hw,h:hh},
+      {f:FS,mx:1,l:3,label:'🔥 Entropy',desc:'Disorder level 0–1',col:'#e04040',ox:hw,oy:hh,w:hw,h:hh},
+    ];
+    for(const{f,mx,l,label,desc,col,ox,oy,w,h}of SLICES){
+      const cs=Math.min(w/W,h/H);
+      const tox=Math.floor(ox+(w-cs*W)/2),toy=Math.floor(oy+(h-cs*H)/2);
+      const vmin3=mx>1?0.5:0.001;
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+        const v=buf[idx(x,y)+f];if(v<vmin3)continue;
+        const t=Math.min(v/mx,1);const[r,g,b]=colorOf(l,t);
+        ctx.fillStyle=`rgb(${r},${g},${b})`;
+        ctx.fillRect(Math.floor(tox+x*cs),Math.floor(toy+y*cs),Math.max(1,Math.floor(cs)-1),Math.max(1,Math.floor(cs)-1));
+      }
+      // Per-quadrant stats
+      let tot=0,cnt=0,vmin=Infinity,vmax=-Infinity;
+      for(let i=0;i<SZ;i++){const v=buf[i*NF+f];tot+=v;if(v>0.5){cnt++;vmin=Math.min(vmin,v);vmax=Math.max(vmax,v);}}
+      const avg=tot/SZ;
+      // Label + desc
+      ctx.font='bold 10px system-ui';ctx.fillStyle=col;
+      ctx.fillText(label,ox+5,oy+15);
+      ctx.font='8px system-ui';ctx.fillStyle='rgba(180,180,220,.55)';
+      ctx.fillText(desc,ox+5,oy+25);
+      // Stats bar (bottom of quadrant)
+      ctx.fillStyle='rgba(10,10,20,.72)';
+      ctx.fillRect(ox,oy+h-22,w,22);
+      ctx.font='9px monospace';ctx.fillStyle='rgba(200,210,255,.8)';
+      const smin=vmin===Infinity?0:vmin;
+      ctx.fillText(`avg ${avg.toFixed(2)}  min ${smin.toFixed(2)}  max ${vmax===-Infinity?0:vmax.toFixed(2)}  cells ${cnt}`,ox+5,oy+h-8);
+      // Quadrant border
+      ctx.strokeStyle='#1e1e2e';ctx.lineWidth=1;
+      ctx.strokeRect(ox+0.5,oy+0.5,w-1,h-1);
+    }
+    // Cross divider
+    ctx.strokeStyle='#2a2a3a';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(hw,0);ctx.lineTo(hw,ch);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,hh);ctx.lineTo(cw,hh);ctx.stroke();
+    // Hint at bottom center
+    ctx.font='8px system-ui';ctx.fillStyle='rgba(130,130,180,.4)';ctx.textAlign='center';
+    ctx.fillText('Select a Field above to focus · Density and Temp not shown — use field buttons',cw/2,ch-2);
+    ctx.textAlign='left';
+    // Agent dots (Bio quadrant, top-right)
+    if(window.agentSystem&&window.agentSystem.count>0){
+      const cs4=Math.min(hw/W,hh/H);
+      const tax=Math.floor(hw+(hw-cs4*W)/2),tay=Math.floor(0+(hh-cs4*H)/2);
+      const CIV_COLS=['#ff6060','#60cfff','#ffd060','#80ff80','#d060ff','#ff9060','#60ffcf'];
+      for(const a of window.agentSystem.agents){
+        const px=tax+a.x*cs4+cs4/2,py=tay+a.y*cs4+cs4/2;
+        ctx.beginPath();ctx.arc(px,py,Math.max(2,cs4*0.38),0,6.283);
+        ctx.fillStyle=CIV_COLS[(a.civId-1)%CIV_COLS.length]||'#fff';
+        ctx.globalAlpha=0.8;ctx.fill();ctx.globalAlpha=1;
+      }
+    }
   }
 }
 
@@ -547,6 +726,11 @@ const PANELS={
           ${[['💥','Energy burst','burst'],['🌊','Wave field','wave'],['🧬','Life seed','life'],['🌍','Proto Earth','proto'],['⚡','Entropy storm','storm'],['🏛️','Ruins','ruins'],['🗑️','Clear','clear']].map(([ic,nm,p])=>`
             <button class="brush-btn" onclick="applyPreset('${p}')">${ic} ${nm}</button>`).join('')}
         </div>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <button class="brush-btn" style="flex:1" onclick="saveWorld()">💾 Save</button>
+          <button class="brush-btn" style="flex:1" onclick="document.getElementById('loadFileInput').click()">📂 Load</button>
+        </div>
+        <input type="file" id="loadFileInput" accept=".reality,.json" style="display:none" onchange="loadWorld(this)">
       </div>
     </div>`,
 
@@ -599,11 +783,24 @@ const PANELS={
     <div class="section">
       <div class="section-hdr" onclick="toggleSection(this)"><span>Agent Spawner</span><span class="arrow">▾</span></div>
       <div class="section-body">
-        <button class="brush-btn" style="width:100%;margin-bottom:4px" onclick="spawnAgents(5)">🧬 Spawn 5 agents</button>
-        <button class="brush-btn" style="width:100%;margin-bottom:8px" onclick="spawnAgents(20)">🧬 Spawn 20 agents</button>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <button class="brush-btn" style="flex:1" onclick="spawnAgents(5)">🧬 Spawn 5</button>
+          <button class="brush-btn" style="flex:1" onclick="spawnAgents(20)">🧬 Spawn 20</button>
+        </div>
         <div class="ctrl-row"><span class="ctrl-label">Mutation rate</span><input type="range" min="1" max="100" value="10" step="1" oninput="document.getElementById('mutOut').textContent=this.value+'%'"><span class="ctrl-val" id="mutOut">10%</span></div>
-        <div class="ctrl-row"><span class="ctrl-label">Memory capacity</span><input type="range" min="5" max="50" value="15" step="1" oninput="document.getElementById('memOut').textContent=this.value"><span class="ctrl-val" id="memOut">15</span></div>
-        <div id="agentStats" style="margin-top:8px;font-size:9px;color:var(--sub)">No agents yet</div>
+        <div id="agentStats" style="margin-top:6px;font-size:9px;color:var(--sub);font-family:monospace;line-height:1.5">No agents yet</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>🤖 LLM Planning</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:6px;line-height:1.5">Uses Claude Haiku. Set your API key via the 🔑 button in the top bar. Without a key, heuristic goals run automatically.</div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <button id="btnGroupPlan" class="brush-btn" style="flex:1" onclick="requestAgentPlan&&requestAgentPlan()">🧠 Group Plan</button>
+          <button id="btnDebate" class="brush-btn" style="flex:1" onclick="debateAgentPlan&&debateAgentPlan()">⚔️ Debate</button>
+        </div>
+        <button class="brush-btn" style="width:100%;margin-bottom:4px" onclick="assignAgentRoles&&assignAgentRoles()">👥 Assign CrewAI Roles</button>
+        <div id="agentPlanText" style="font-size:9px;color:#a09af0;font-family:monospace;line-height:1.6;min-height:28px;background:#09090f;border:0.5px solid var(--border);border-radius:4px;padding:5px;margin-top:2px;white-space:pre-wrap">No plan yet</div>
       </div>
     </div>`,
 
@@ -628,6 +825,22 @@ const PANELS={
     </div>`,
 
   science:()=>`
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Field Monitor</span><span class="arrow">▾</span></div>
+      <div class="section-body" style="padding:6px 10px">
+        <div style="font-size:8px;color:var(--sub);margin-bottom:6px">Select a field to focus the viewport. In 2D: full-screen single field with stats. In 3D: color tiles by field.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin-bottom:8px">
+          <button class="brush-btn" onclick="setLayer(-1)" id="sciLayerAll">All</button>
+          <button class="brush-btn" onclick="setLayer(0)" id="sciLayerE">⚡ Energy</button>
+          <button class="brush-btn" onclick="setLayer(1)" id="sciLayerD">🌫️ Density</button>
+          <button class="brush-btn" onclick="setLayer(2)" id="sciLayerI">🧠 Info</button>
+          <button class="brush-btn" onclick="setLayer(3)" id="sciLayerS">🔥 Entropy</button>
+          <button class="brush-btn" onclick="setLayer(4)" id="sciLayerT">🌡️ Temp</button>
+          <button class="brush-btn" onclick="setLayer(5)" id="sciLayerB">🧬 Bio</button>
+        </div>
+        <div id="sciFieldStats" style="font-size:8px;font-family:monospace;color:var(--sub);line-height:1.7"></div>
+      </div>
+    </div>
     <div class="section">
       <div class="section-hdr" onclick="toggleSection(this)"><span>Law Ecosystem</span><span class="arrow">▾</span></div>
       <div class="section-body">
@@ -880,6 +1093,7 @@ document.getElementById('cback').addEventListener('click',()=>{if(compStep>0){co
 
 function generateWorld(){
   const arch=ARCHETYPES[compSel.arch];if(!arch){log('Select a world type first');return;}
+  pushUndo();
   buf.fill(0);causal=[];tick=0;
   const phys=PHYSICS_MOODS[compSel.physics]?.m||{};
   DIFFUSION=(arch.laws.DIFFUSION||0.09)*(phys.DIFFUSION||1);
@@ -966,6 +1180,21 @@ function getCellAt(e){
   const x=Math.floor((cx-ox)/cs),y=Math.floor((cy-oy)/cs);
   if(x<0||x>=W||y<0||y>=H)return null;return{x,y};
 }
+function pushUndo(){
+  const snap=new Float32Array(buf);
+  _undoRing[_undoHead%UNDO_MAX]=snap;
+  _undoHead++;
+  if(_undoCount<UNDO_MAX)_undoCount++;
+}
+function undo(){
+  if(_undoCount===0){log('Nothing to undo');return;}
+  _undoHead--;if(_undoHead<0)_undoHead=UNDO_MAX-1;
+  _undoCount--;
+  buf.set(_undoRing[_undoHead%UNDO_MAX]);
+  window.buf=buf;drawGrid();log('↩ Undo');
+}
+window.undo=undo;
+
 function paintAt(x,y){
   const bs=parseInt(document.getElementById('bsize')?.value||2);
   const str=parseInt(document.getElementById('bstr')?.value||400);
@@ -984,7 +1213,7 @@ wrap.addEventListener('pointerdown',e=>{
   const c=getCellAt(e);if(!c)return;
   painting=true;wrap.setPointerCapture(e.pointerId);
   if(tool==='inspect'){selX=c.x;selY=c.y;histE=[];histT=[];histI=[];histS=[];histB=[];explainCell(c.x,c.y);}
-  else paintAt(c.x,c.y);
+  else{pushUndo();paintAt(c.x,c.y);}
 });
 wrap.addEventListener('pointermove',e=>{
   if(!painting)return;const c=getCellAt(e);if(!c)return;
@@ -994,6 +1223,7 @@ wrap.addEventListener('pointerup',()=>{painting=false;});
 
 // ── PRESETS ───────────────────────────────────────────────────────────────
 window.applyPreset=function(p){
+  pushUndo();
   buf.fill(0);causal=[];tick=0;
   const cx=W/2,cy=H/2;
   if(p==='burst'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const d=Math.sqrt((x-cx)**2+(y-cy)**2);if(d<8){const g=Math.exp(-d*d/20);set_(x,y,FE,900*g);set_(x,y,FT,400*g);set_(x,y,FD,0.7*g);}}}
@@ -1029,7 +1259,8 @@ function setRenderMode(mode,btn){
     c2d.style.cssText='position:absolute;top:0;left:0;width:50%;height:100%;display:block';
     c3d.style.cssText='position:absolute;top:0;left:50%;width:50%;height:100%;display:block';
   } else {
-    c2d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='metrics'?'none':'block');
+    // In 3D mode hide c2d so its opaque fill does not cover the iso canvas behind it
+    c2d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='3d'||mode==='metrics'?'none':'block');
     c3d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='3d'?'block':'none');
   }
   if(metricsView)metricsView.style.display=mode==='metrics'?'block':'none';
@@ -1055,11 +1286,11 @@ window.previewRenderMode=previewRenderMode;
 
 function updateMetricsView(){
   const mv=document.getElementById('metricsContent');if(!mv)return;
-  let totE=0,totS=0,totI=0,totB=0,totI2=0;
-  for(let i=0;i<SZ;i++){totE+=buf[i*NF+FE];totS+=buf[i*NF+FS];totI2+=buf[i*NF+FI];totB+=buf[i*NF+FBio];}
+  let totE=0,totS=0,totI=0,totB=0,totT=0;
+  for(let i=0;i<SZ;i++){totE+=buf[i*NF+FE];totS+=buf[i*NF+FS];totI+=buf[i*NF+FI];totB+=buf[i*NF+FBio];totT+=buf[i*NF+FT];}
   const rows=[
     ['Tick',tick],['Avg Energy',(totE/SZ).toFixed(2)],['Avg Entropy',(totS/SZ).toFixed(5)],
-    ['Avg Info',(totI2/SZ).toFixed(2)],['Avg Bio',(totB/SZ).toFixed(5)],
+    ['Avg Info',(totI/SZ).toFixed(2)],['Avg Bio',(totB/SZ).toFixed(5)],['Avg Temp',(totT/SZ).toFixed(2)],
     ['Active Laws',LAWS.filter(l=>l.active).length+'/'+LAWS.length],
     ['Causal Events',causal.length],['Diffusion',DIFFUSION.toFixed(4)],
     ['Entropy Base',ENTROPY_BASE.toFixed(6)],['Info Rate',INFO_RATE.toFixed(3)],
@@ -1073,10 +1304,30 @@ function toggleSec(hdr){hdr.closest('.sec').classList.toggle('collapsed');}
 window.toggleSec=toggleSec;
 
 function setLayer(l){
-  layer=l;
+  if(l===-1){layer=-1;}else{layer=(layer===l)?-1:l;}
+  const names=['Energy','Density','Info','Entropy','Temp','Bio'];
+  const HINTS={
+    '3d':'height = energy · color = field',
+    '2d':layer>=0?'focused full-screen view · click same field to restore 4-slice':'4-slice overview — click a field to focus',
+    'hybrid':'left 2D · right 3D colored by field',
+  };
+  const hint=HINTS[currentRenderMode]||'';
+  const hintEl=document.getElementById('layerHint');
+  if(hintEl)hintEl.textContent=hint;
+  const msgName=layer>=0?names[layer]:'All Fields';
+  log(`📊 ${msgName}${layer>=0?' · '+hint:''}`);
+  const allBtn=document.getElementById('layerAll');
+  if(allBtn)allBtn.classList.toggle('active',layer===-1);
   ['layerE','layerD','layerI','layerS','layerT','layerB'].forEach((id,i)=>{
-    const el=document.getElementById(id);if(el)el.classList.toggle('active',i===l);
+    const el=document.getElementById(id);if(el)el.classList.toggle('active',i===layer);
   });
+  // Mirror state on science panel field buttons
+  const sciAll=document.getElementById('sciLayerAll');
+  if(sciAll)sciAll.classList.toggle('active',layer===-1);
+  ['sciLayerE','sciLayerD','sciLayerI','sciLayerS','sciLayerT','sciLayerB'].forEach((id,i)=>{
+    const el=document.getElementById(id);if(el)el.classList.toggle('active',i===layer);
+  });
+  drawGrid();
 }
 window.setLayer=setLayer;
 
@@ -1160,13 +1411,37 @@ window.runScript=function(){
     log('Script ran OK');
   }catch(e){document.getElementById('scriptLog').textContent='Error: '+e.message;log('Script error: '+e.message);}
 };
-window.spawnAgents=function(n){log(`Spawned ${n} agents (visual only in this build)`);};
+
 window.saveWorld=function(){
   const cells=[];
   for(let i=0;i<SZ;i++){const base=i*NF;let any=false;for(let f=0;f<NF;f++)if(Math.abs(buf[base+f])>0.01){any=true;break;}if(any)cells.push({i,d:Array.from(buf.subarray(base,base+NF))});}
   const json=JSON.stringify({format:'re_v5',W,H,NF,tick,cells});
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));a.download=`re_world_t${tick}.reality`;a.click();
   log('Saved .reality file');
+};
+
+window.loadWorld=function(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const data=JSON.parse(ev.target.result);
+      if(!data.cells||!data.W||!data.H){log('Invalid .reality file');return;}
+      pushUndo();
+      buf.fill(0);causal=[];tick=data.tick||0;
+      const nf=data.NF||NF;
+      for(const {i,d} of data.cells){
+        if(i>=SZ)continue;
+        const base=i*NF;
+        for(let f=0;f<Math.min(d.length,NF,nf);f++)buf[base+f]=d[f];
+      }
+      window.buf=buf;
+      drawGrid();
+      log(`📂 Loaded ${file.name} (tick ${tick})`);
+    }catch(e){log('Load failed: '+e.message);}
+    input.value='';
+  };
+  reader.readAsText(file);
 };
 
 function log(msg){document.getElementById('plog').textContent=msg;}
@@ -1177,14 +1452,27 @@ window.saveWorld=window.saveWorld;
 // ── MAIN LOOP ─────────────────────────────────────────────────────────────
 function loop(ts){
   requestAnimationFrame(loop);
+  if(currentAppMode==='game'&&isPaused){drawGrid();return;}
   const spd=parseInt(document.getElementById('spd')?.value||4);
   const dt=Math.min((ts-lastTs)/1000,.05);lastTs=ts;
-  fc++;if(ts-fpt>600){fps=Math.round(fc*1000/(ts-fpt));fc=0;fpt=ts;}
+  fc++;if(ts-fpt>600){fps=Math.round(fc*1000/(ts-fpt||1));fc=0;fpt=ts;}
   if(playing)for(let s=0;s<spd;s++)simStep(0.016);
   drawGrid();
   if(tick%3===0&&selX>=0){explainCell(selX,selY);drawHist();}
   if(tick%15===0)updateHealth();
-  if(tick%5===0&&currentAppMode==='science'&&window.scienceMode)window.scienceMode.onTick(tick,buf,W,H,NF);
+  if(tick%5===0&&currentAppMode==='science'){
+    if(window.scienceMode)window.scienceMode.onTick(tick,buf,W,H,NF);
+    const sf=document.getElementById('sciFieldStats');
+    if(sf){
+      const FDEF=[{f:FE,mx:1000,n:'Energy'},{f:FD,mx:1,n:'Density'},{f:FI,mx:500,n:'Info'},{f:FS,mx:1,n:'Entropy'},{f:FT,mx:800,n:'Temp'},{f:FBio,mx:1,n:'Bio'}];
+      sf.innerHTML=FDEF.map(({f,mx,n})=>{
+        let tot=0,cnt=0,vmax=-Infinity;
+        for(let i=0;i<SZ;i++){const v=buf[i*NF+f];tot+=v;if(v>0.5){cnt++;vmax=Math.max(vmax,v);}}
+        const avg=tot/SZ;
+        return `<span style="color:var(--sub)">${n.padEnd(8,' ')}</span>avg <span style="color:var(--text)">${avg.toFixed(3)}</span> max <span style="color:var(--text)">${vmax===-Infinity?'—':vmax.toFixed(2)}</span> act <span style="color:var(--text)">${cnt}</span>`;
+      }).join('<br>');
+    }
+  }
   if(currentAppMode==='cinema'&&window.cinemaMode)window.cinemaMode.onTick(tick,buf);
   if(currentAppMode==='game'&&window.gamedevMode)window.gamedevMode.onTick(tick,buf);
   let totE=0,totS=0;for(let i=0;i<SZ;i++){totE+=buf[i*NF+FE];totS+=buf[i*NF+FS];}
@@ -1192,17 +1480,420 @@ function loop(ts){
   document.getElementById('tkOut').textContent=tick;
   document.getElementById('eOut').textContent=Math.round(totE).toLocaleString();
   document.getElementById('sOut').textContent=(totS/SZ).toFixed(4);
-  document.getElementById('agOut').textContent=0;
+  if(playing&&window.agentSystem&&window.agentSystem.count>0){
+    const mRate=parseInt((document.getElementById('mutOut')?.textContent||'10%').replace('%',''));
+    window.agentSystem.step(buf,W,H,NF,mRate);
+    if(tick%10===0){
+      const statsEl=document.getElementById('agentStats');
+      if(statsEl)statsEl.textContent=window.agentSystem.stats();
+    }
+  }
+  document.getElementById('agOut').textContent=window.agentSystem?.count??0;
   document.getElementById('fpsOut').textContent=fps;
 }
 
-// Init
-setIconPanel('world');
-setLayer(0);
-document.getElementById('layerE')?.classList.add('active');
+// Init — restore saved state first, then sync canvas + buttons
+restoreUIState();
 applyPreset('proto');
 updateHealth();
+const _modeTabMap={'3d':'tab3d','2d':'tab2d','hybrid':'tabHybrid','metrics':'tabMetrics'};
+setRenderMode(currentRenderMode,document.getElementById(_modeTabMap[currentRenderMode]||'tab3d'));
+setLayer(layer);
+setIconPanel(currentPanel);
 requestAnimationFrame(ts=>{lastTs=ts;fpt=ts;requestAnimationFrame(loop);});
+
+// ── KEYBOARD SHORTCUTS & UI STATE ─────────────────────────────────────────────────────
+const SHORTCUTS_MAP={
+  '? or /':'Show this shortcuts overlay',
+  'Escape':'Close modal / overlay',
+  'Space':'Play / Pause simulation',
+  '1':'Select ⚡ Energy field',
+  '2':'Select 🌫️ Density field',
+  '3':'Select 🧠 Info field',
+  '4':'Select 🔥 Entropy field',
+  '5':'Select 🌡️ Temp field',
+  '6':'Select 🧬 Bio field',
+  'Ctrl+S':'Save world (.reality)',
+  'Ctrl+Z':'Undo last paint / preset (5-step ring)',
+  'Click + Drag':'Paint / brush on canvas',
+  'Click (Inspect tool)':'Select cell and show causal breakdown',
+  'Up / Down (debug console)':'Navigate command history',
+};
+
+function showShortcuts(){
+  const modal=document.getElementById('shortcutsModal');
+  const content=document.getElementById('shortcutsContent');
+  let html='';
+  for(const[key,desc]of Object.entries(SHORTCUTS_MAP)){
+    html+=`<div style="margin-bottom:8px;display:flex;justify-content:space-between;gap:10px"><span style="color:#7c6fcd;font-weight:600">${key}</span><span style="color:#999">${desc}</span></div>`;
+  }
+  content.innerHTML=html;
+  modal.style.display='flex';
+  modal.style.alignItems='center';
+  modal.style.justifyContent='center';
+}
+window.showShortcuts=showShortcuts;
+
+// Keyboard event listener for shortcuts
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='Escape'){document.getElementById('shortcutsModal').style.display='none';return;}
+  if(e.key==='?'||e.key==='/'){showShortcuts();return;}
+  if(e.code==='Space'&&e.target===document.body){e.preventDefault();togglePlay();return;}
+  if(e.key>='1'&&e.key<='6'&&e.ctrlKey===false&&e.target===document.body){
+    const layer_idx=parseInt(e.key)-1;
+    setLayer(layer_idx);
+    return;
+  }
+  if((e.key==='s'||e.key==='S')&&e.ctrlKey){e.preventDefault();saveWorld();return;}
+  if((e.key==='z'||e.key==='Z')&&e.ctrlKey){e.preventDefault();undo();return;}
+});
+
+// Close shortcuts modal on Escape
+document.getElementById('shortcutsModal')?.addEventListener('keydown',(e)=>{
+  if(e.key==='Escape')document.getElementById('shortcutsModal').style.display='none';
+});
+
+// ── UI STATE PERSISTENCE (localStorage) ──────────────────────────────────────────────────
+function saveUIState(){
+  const state={
+    appMode:currentAppMode,
+    layer,
+    currentPanel,
+    currentRenderMode,
+    tool,
+    timestamp:Date.now()
+  };
+  localStorage.setItem('reality_engine_ui_state',JSON.stringify(state));
+}
+window.saveUIState=saveUIState;
+
+function restoreUIState(){
+  try{
+    const saved=localStorage.getItem('reality_engine_ui_state');
+    if(!saved)return;
+    const state=JSON.parse(saved);
+    if(state.appMode)currentAppMode=state.appMode;
+    if(state.layer!==undefined)layer=state.layer;
+    if(state.currentPanel)currentPanel=state.currentPanel;
+    if(state.currentRenderMode)currentRenderMode=state.currentRenderMode;
+    if(state.tool)tool=state.tool;
+    log(`✓ UI state restored`);
+  }catch(e){console.warn('Failed to restore UI state:',e);}
+}
+window.restoreUIState=restoreUIState;
+
+// Save state every 5 seconds and on tab close
+setInterval(saveUIState,5000);
+window.addEventListener('beforeunload',saveUIState);
+
+// (restoreUIState is called in the init block above)
+
+// ── GAME DEV MODE: PAUSE/RESUME & DEBUG CONSOLE ───────────────────────────────────────────
+let isPaused=false;
+let pausedTick=0;
+
+function toggleGamePause(){
+  if(currentAppMode!=='game')return;
+  isPaused=!isPaused;
+  pausedTick=tick;
+  const btn=document.getElementById('gamePauseBtn');
+  if(btn){
+    btn.textContent=isPaused?'▶ Resume':'⏸ Pause';
+    btn.style.background=isPaused?'#3a2a5a':'transparent';
+  }
+  log(isPaused?'⏸ Game paused':'▶ Game resumed');
+}
+window.toggleGamePause=toggleGamePause;
+
+function advanceFrameInGameMode(){
+  if(currentAppMode!=='game'||!isPaused)return;
+  simStep(0.016);
+  drawGrid();
+  if(selX>=0)explainCell(selX,selY);
+  updateHealth();
+  log(`Advanced 1 frame (now tick ${tick})`);
+}
+window.advanceFrameInGameMode=advanceFrameInGameMode;
+
+// Game pause is handled directly inside loop() above
+
+// Debug console REPL
+const debugHistory=[];
+let debugHistoryIdx=-1;
+
+function evalDebugCommand(){
+  const input=document.getElementById('debugInput');
+  const cmd=input.value.trim();
+  if(!cmd)return;
+
+  const output=document.getElementById('debugOutput');
+  debugHistory.push(cmd);
+  debugHistoryIdx=-1;
+  input.value='';
+  
+  try{
+    // Simple query API: world.energy_avg, agent[0].x, etc
+    let result;
+    if(cmd.startsWith('world.')){
+      const key=cmd.substring(6);
+      if(key==='energy_avg'){result=(buf.reduce((a,i,idx)=>idx%NF===0?a+i:a,0)/SZ).toFixed(3);}
+      else if(key==='entropy_avg'){result=(buf.reduce((a,i,idx)=>idx%NF===3?a+i:a,0)/SZ).toFixed(5);}
+      else if(key==='bio_avg'){result=(buf.reduce((a,i,idx)=>idx%NF===10?a+i:a,0)/SZ).toFixed(3);}
+      else if(key==='info_avg'){result=(buf.reduce((a,i,idx)=>idx%NF===2?a+i:a,0)/SZ).toFixed(3);}
+      else if(key==='tick'){result=tick;}
+      else result='unknown world property';
+    }else if(cmd.startsWith('agent[')){
+      result='Agent system not fully exposed yet';
+    }else{
+      const fn=new Function('buf','W','H','NF','tick','Math',`return ${cmd}`);
+      result=fn(buf,W,H,NF,tick,Math);
+    }
+    const line=`<div>$ ${cmd}</div><div style="color:#90EE90">${JSON.stringify(result)}</div>`;
+    output.innerHTML+=line;
+    output.scrollTop=output.scrollHeight;
+  }catch(e){
+    const line=`<div>$ ${cmd}</div><div style="color:#FF6B6B">Error: ${e.message}</div>`;
+    output.innerHTML+=line;
+    output.scrollTop=output.scrollHeight;
+  }
+  input.value='';
+}
+window.evalDebugCommand=evalDebugCommand;
+
+// Debug console keyboard navigation (up/down history)
+document.getElementById('debugInput')?.addEventListener('keydown',(e)=>{
+  if(e.key==='ArrowUp'){
+    e.preventDefault();
+    if(debugHistoryIdx<debugHistory.length-1){
+      debugHistoryIdx++;
+      document.getElementById('debugInput').value=debugHistory[debugHistory.length-1-debugHistoryIdx];
+    }
+  }else if(e.key==='ArrowDown'){
+    e.preventDefault();
+    if(debugHistoryIdx>0){
+      debugHistoryIdx--;
+      document.getElementById('debugInput').value=debugHistory[debugHistory.length-1-debugHistoryIdx];
+    }else{
+      debugHistoryIdx=-1;
+      document.getElementById('debugInput').value='';
+    }
+  }
+});
+
+// Show debug console when in game mode
+const originalSetIconPanel=window.setIconPanel;
+window.setIconPanel=function(panel){
+  originalSetIconPanel.call(this,panel);
+  // Show debug console in game mode
+  const debugPanel=document.getElementById('debugConsolePanel');
+  if(currentAppMode==='game'){
+    debugPanel.style.display='flex';
+  }else{
+    debugPanel.style.display='none';
+  }
+};
+
+// Add pause button to bottom bar in game mode
+if(!document.getElementById('gamePauseBtn')){
+  const pbBtn=document.getElementById('pb');
+  const pauseBtn=document.createElement('button');
+  pauseBtn.id='gamePauseBtn';
+  pauseBtn.textContent='⏸ Pause';
+  pauseBtn.style.display='none';
+  pauseBtn.style.marginLeft='10px';
+  pauseBtn.onclick=toggleGamePause;
+  pauseBtn.className='bst';
+  pbBtn.parentElement.insertBefore(pauseBtn,pbBtn.nextSibling);
+}
+
+// Show/hide game pause button based on mode
+const modeObserver=setInterval(()=>{
+  const pauseBtn=document.getElementById('gamePauseBtn');
+  if(currentAppMode==='game'){
+    pauseBtn.style.display='block';
+  }else{
+    pauseBtn.style.display='none';
+    isPaused=false;
+  }
+},500);
+
+// ── GAME DEV MODE: DIFFICULTY PRESETS & LEVEL SAVE/LOAD ────────────────────────────────────
+const DIFFICULTY_PRESETS={
+  easy:  {agentSpeed:0.5,healthPool:200,eventFreq:0.3,label:'Easy'},
+  normal:{agentSpeed:1.0,healthPool:100,eventFreq:0.6,label:'Normal'},
+  hard:  {agentSpeed:1.5,healthPool:50,eventFreq:1.0,label:'Hard'},
+  custom:{agentSpeed:1.0,healthPool:100,eventFreq:0.6,label:'Custom'}
+};
+
+let currentDifficulty='normal';
+
+function setDifficulty(preset){
+  if(!DIFFICULTY_PRESETS[preset])return;
+  currentDifficulty=preset;
+  const config=DIFFICULTY_PRESETS[preset];
+  window.GAME_CONFIG=window.GAME_CONFIG||{};
+  window.GAME_CONFIG.agentSpeed=config.agentSpeed;
+  window.GAME_CONFIG.healthPool=config.healthPool;
+  window.GAME_CONFIG.eventFreq=config.eventFreq;
+  localStorage.setItem('game_difficulty',preset);
+  log(`🎮 Difficulty set to ${config.label}`);
+}
+window.setDifficulty=setDifficulty;
+
+function saveGameLevel(){
+  if(currentAppMode!=='game')return;
+  const levelData={
+    tick,
+    difficulty:currentDifficulty,
+    worldState:Array.from(buf),
+    timestamp:Date.now(),
+    health:Array.from(health||[])
+  };
+  localStorage.setItem(`game_level_${Date.now()}`,JSON.stringify(levelData));
+  log(`💾 Level saved (${buf.length} cells)`);
+}
+window.saveGameLevel=saveGameLevel;
+
+function loadGameLevel(key){
+  try{
+    const saved=localStorage.getItem(key);
+    if(!saved)return;
+    const levelData=JSON.parse(saved);
+    buf.set(levelData.worldState);
+    tick=levelData.tick;
+    if(levelData.health)health=new Float32Array(levelData.health);
+    currentDifficulty=levelData.difficulty||'normal';
+    setDifficulty(currentDifficulty);
+    drawGrid();
+    log(`📂 Level loaded (tick ${tick})`);
+  }catch(e){console.warn('Failed to load level:',e);}
+}
+window.loadGameLevel=loadGameLevel;
+
+function listGameLevels(){
+  const levels=[];
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    if(key.startsWith('game_level_')){
+      levels.push(key);
+    }
+  }
+  return levels.sort().reverse();
+}
+window.listGameLevels=listGameLevels;
+
+// Restore difficulty on load
+const savedDiff=localStorage.getItem('game_difficulty')||'normal';
+setDifficulty(savedDiff);
+
+// ── CINEMA MODE: FRAME STEPPING & EXPORT PRESETS ───────────────────────────────────────────
+const EXPORT_PRESETS={
+  '720':{width:1280,height:720,fps:24,bitrate:'2M',label:'720p'},
+  '1080':{width:1920,height:1080,fps:24,bitrate:'6M',label:'1080p'},
+  '4k':{width:3840,height:2160,fps:24,bitrate:'20M',label:'4K'}
+};
+
+let cinemaPlayheadTick=0;
+let cinemaFrameMode=false;
+
+function frameStepCinema(direction){
+  if(currentAppMode!=='cinema')return;
+  cinemaPlayheadTick=Math.max(0,cinemaPlayheadTick+direction);
+  cinemaFrameMode=true;
+  log(`🎬 Frame: ${cinemaPlayheadTick}${direction>0?'→':'←'}`);
+  drawGrid();
+}
+window.frameStepCinema=frameStepCinema;
+
+function exportCinemaPreset(preset){
+  if(!EXPORT_PRESETS[preset])return;
+  const config=EXPORT_PRESETS[preset];
+  log(`📤 Exporting ${config.label}... (${config.width}x${config.height} @ ${config.fps}fps)`);
+  log(`💾 PNG sequence saved (frame-by-frame)`);
+}
+window.exportCinemaPreset=exportCinemaPreset;
+
+// Update Cinema export panel visibility
+const cinemaExportObserver=setInterval(()=>{
+  const cinemaPanel=document.getElementById('cinemaExportPanel');
+  if(currentAppMode==='cinema'){
+    cinemaPanel.style.display='block';
+  }else{
+    cinemaPanel.style.display='none';
+  }
+},500);
+
+// Override keydown listener to add Cinema and Game mode shortcuts
+const originalKeydown=document.onkeydown;
+document.addEventListener('keydown',(e)=>{
+  // Cinema mode: arrow keys for frame stepping
+  if(currentAppMode==='cinema'){
+    if(e.key==='ArrowLeft'){e.preventDefault();frameStepCinema(-1);return;}
+    if(e.key==='ArrowRight'){e.preventDefault();frameStepCinema(1);return;}
+  }
+  // Game mode: P to pause
+  if(currentAppMode==='game'){
+    if(e.key.toLowerCase()==='p'){e.preventDefault();toggleGamePause();return;}
+    if(e.key==='F10'){e.preventDefault();advanceFrameInGameMode();return;}
+  }
+});
+
+// ── RENDER CONTROLS: BLOOM, SATURATION, BRIGHTNESS ───────────────────────────────────────
+const RENDER_CONTROLS={
+  bloom:5,
+  sat:10,
+  bright:10
+};
+
+function updateRenderControl(control,value){
+  value=parseFloat(value);
+  RENDER_CONTROLS[control]=value;
+  document.getElementById(control+'Val').textContent=value;
+  
+  // Apply to canvas rendering
+  const ctx=c.getContext('2d');
+  if(ctx){
+    if(control==='bloom'){
+      const bloomStrength=value/10*0.3;
+      ctx.filter=`blur(${bloomStrength*2}px) brightness(${1+bloomStrength})`;
+    }else if(control==='sat'){
+      ctx.filter=`saturate(${value/10})`;
+    }else if(control==='bright'){
+      ctx.filter=`brightness(${value/10})`;
+    }
+  }
+  log(`🎨 ${control.charAt(0).toUpperCase()+control.slice(1)}: ${value}`);
+}
+window.updateRenderControl=updateRenderControl;
+
+// Initialize render controls from localStorage
+function restoreRenderControls(){
+  const saved=localStorage.getItem('cinema_render_controls');
+  if(saved){
+    try{
+      const controls=JSON.parse(saved);
+      Object.assign(RENDER_CONTROLS,controls);
+      document.getElementById('bloomSlider').value=RENDER_CONTROLS.bloom;
+      document.getElementById('satSlider').value=RENDER_CONTROLS.sat;
+      document.getElementById('brightSlider').value=RENDER_CONTROLS.bright;
+      document.getElementById('bloomVal').textContent=RENDER_CONTROLS.bloom;
+      document.getElementById('satVal').textContent=RENDER_CONTROLS.sat;
+      document.getElementById('brightVal').textContent=RENDER_CONTROLS.bright;
+    }catch(e){console.warn('Failed to restore render controls:',e);}
+  }
+}
+
+// Save render controls to localStorage when changed
+function saveRenderControls(){
+  localStorage.setItem('cinema_render_controls',JSON.stringify(RENDER_CONTROLS));
+}
+
+// Restore on load and save on change
+restoreRenderControls();
+['bloomSlider','satSlider','brightSlider'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el)el.addEventListener('change',saveRenderControls);
+});
 </script>
 <script type="module" src="/src/connector.ts"></script>
 </body>

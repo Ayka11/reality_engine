@@ -12,6 +12,9 @@
 import { MetricsAPI }          from './scientific/MetricsAPI'
 import { LawFitnessChart }     from './scientific/LawFitnessChart'
 import { CausalInspector, renderExplanation } from './scientific/CausalInspector'
+import { SolverClient, SIMULATION_CATALOG, buildSolverPanel } from './scientific/SolverClient'
+import { AgentSystem } from './modes/agents/AgentSystem'
+import { AgentPlanner } from './modes/agents/AgentPlanner'
 import { DeterministicEngine } from './simulation/DeterministicEngine'
 import { KeyframeTimeline }    from './modes/cinema/KeyframeTimeline'
 import { CameraPathEditor }    from './modes/cinema/CameraPathEditor'
@@ -28,6 +31,10 @@ const win = window as unknown as Record<string, unknown>
 function getW():   number { return (win['W']  as number) || 36 }
 function getH():   number { return (win['H']  as number) || 28 }
 function getNF():  number { return (win['NF'] as number) || 12 }
+
+// ── Agent System ─────────────────────────────────────────────────────────
+const agentSystem  = new AgentSystem()
+const agentPlanner = new AgentPlanner()
 
 // ── Science Mode ──────────────────────────────────────────────────────────
 const metrics    = new MetricsAPI()
@@ -533,6 +540,103 @@ const gamedevMode = {
   },
 }
 
+// ── Scientific Solver ─────────────────────────────────────────────────────
+const solverClient = new SolverClient()
+let solverStatus: 'checking' | 'online' | 'offline' = 'checking'
+let selectedSolverId = ''
+let sciLiveMode = false
+let sciLiveInterval: ReturnType<typeof setInterval> | null = null
+
+// Check microservice on startup (non-blocking)
+solverClient.checkStatus().then(ok => {
+  solverStatus = ok ? 'online' : 'offline'
+}).catch(() => { solverStatus = 'offline' })
+
+win['onSciSolverSelect'] = (id: string) => {
+  selectedSolverId = id
+  const sim = SIMULATION_CATALOG.find(s => s.id === id)
+  const descEl = document.getElementById('sciSolverDesc')
+  const eqEl   = document.getElementById('sciSolverEq')
+  const parEl  = document.getElementById('sciSolverParams')
+  if (descEl) descEl.textContent = sim?.desc ?? ''
+  if (eqEl)   eqEl.textContent   = sim?.equation ?? ''
+  if (parEl && sim) {
+    parEl.innerHTML = sim.params.map(p => `
+      <div style="display:flex;align-items:center;gap:5px">
+        <span style="font-size:9px;color:var(--sub);flex:1">${p.label}</span>
+        <input type="range" id="sp_${p.key}" min="${p.min}" max="${p.max}"
+          step="${p.step}" value="${p.default}" style="width:60px;accent-color:var(--accent)"
+          oninput="document.getElementById('spv_${p.key}').textContent=this.value">
+        <span style="font-size:9px;font-family:monospace;min-width:34px;text-align:right;
+          color:var(--tx)" id="spv_${p.key}">${p.default}</span>
+      </div>`).join('')
+  }
+}
+
+win['runSciSolver'] = async () => {
+  if (!selectedSolverId) return
+  const statusEl = document.getElementById('sciSolverStatus')
+  const runBtn   = document.getElementById('btnSciRun')
+  if (statusEl) { statusEl.textContent = '⏳ Computing…'; statusEl.style.color = 'var(--warn)' }
+  if (runBtn)   runBtn.setAttribute('disabled', '')
+
+  // Gather extra params from sliders
+  const extra: Record<string, unknown> = {}
+  document.querySelectorAll('[id^="sp_"]').forEach(el => {
+    const key = (el.id as string).replace('sp_', '')
+    extra[key] = parseFloat((el as HTMLInputElement).value)
+  })
+
+  const buf = getBuf(); const W = getW(); const H = getH(); const NF = getNF()
+  const req = solverClient.buildRequest(selectedSolverId, buf, W, H, NF, extra)
+
+  // Try microservice first; fall back to inline run notification
+  const result = await solverClient.solve(req)
+
+  if (runBtn) runBtn.removeAttribute('disabled')
+
+  if (!result.ok) {
+    if (statusEl) { statusEl.textContent = `✗ ${result.error}`; statusEl.style.color = 'var(--err)' }
+    return
+  }
+
+  solverClient.applyResult(result, buf, W, H, NF)
+  const solverName = result.solver ?? selectedSolverId
+  if (statusEl) { statusEl.textContent = `✓ ${solverName}`; statusEl.style.color = 'var(--ok)' }
+
+  const infoEl = document.getElementById('sciSolverInfo')
+  if (infoEl && result.params) {
+    infoEl.style.display = 'block'
+    infoEl.textContent   = Object.entries(result.params)
+      .map(([k, v]) => `${k}: ${typeof v === 'number' ? (v as number).toFixed(4) : v}`).join('  ·  ')
+  }
+
+  // log to bottom bar
+  if (win['log']) (win['log'] as (m: string) => void)(`🔬 ${solverName}`)
+}
+
+win['toggleSciLive'] = () => {
+  sciLiveMode = !sciLiveMode
+  const btn = document.getElementById('btnSciLive')
+  if (sciLiveMode) {
+    if (btn) { btn.style.borderColor = 'var(--ok)'; btn.style.color = 'var(--ok)' }
+    sciLiveInterval = setInterval(async () => {
+      if (!sciLiveMode || !(win['playing'] as boolean)) return
+      if (win['runSciSolver']) await (win['runSciSolver'] as () => Promise<void>)()
+    }, 3000)
+  } else {
+    if (btn) { btn.style.borderColor = ''; btn.style.color = '' }
+    if (sciLiveInterval) { clearInterval(sciLiveInterval); sciLiveInterval = null }
+  }
+}
+
+// Re-check solver status when science panel is opened
+function _refreshSolverUI() {
+  solverClient.checkStatus().then(ok => {
+    solverStatus = ok ? 'online' : 'offline'
+  })
+}
+
 // ── Panel canvas init ─────────────────────────────────────────────────────
 document.addEventListener('panelRendered', (e: Event) => {
   const panel = (e as CustomEvent<{panel:string}>).detail.panel
@@ -548,6 +652,14 @@ document.addEventListener('panelRendered', (e: Event) => {
           ?.map(l => ({ nm: l.name, fit: l.fitness, on: l.active, col: l.color })) ?? []
       chart.draw(lawCanvas, laws)
     }
+    // Inject solver panel after the existing section content
+    const leftPanel = document.getElementById('left')
+    if (leftPanel && !document.getElementById('sciSolverSel')) {
+      const solverDiv = document.createElement('div')
+      solverDiv.innerHTML = buildSolverPanel(solverStatus)
+      leftPanel.appendChild(solverDiv)
+    }
+    _refreshSolverUI()
   }
   if (panel === 'gamedev') {
     renderPrefabLibrary()
@@ -560,10 +672,80 @@ document.addEventListener('panelRendered', (e: Event) => {
   }
 })
 
+// ── Agent window API ─────────────────────────────────────────────────────
+
+win['agentSystem'] = agentSystem
+
+// Called from index.html spawn buttons and from Game Dev mode
+win['spawnAgents'] = (n: number) => {
+  const W = getW(), H = getH()
+  agentSystem.spawn(Math.floor(W / 2), Math.floor(H / 2), n)
+  const statsEl = document.getElementById('agentStats')
+  if (statsEl) statsEl.textContent = agentSystem.stats()
+  console.log(`[AgentSystem] Spawned ${n} agents (total: ${agentSystem.count})`)
+}
+
+// Request LLM plan — called from agents panel "Plan" button
+win['requestAgentPlan'] = async () => {
+  const btn = document.getElementById('btnGroupPlan') as HTMLButtonElement | null
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Planning…' }
+  const ctx = getSimContext()
+  const plan = await agentPlanner.groupPlan(agentSystem.getSurvivors(), ctx)
+  agentSystem.applyPlan(plan)
+  const planEl = document.getElementById('agentPlanText')
+  if (planEl) planEl.textContent = plan
+  if (btn) { btn.disabled = false; btn.textContent = '🧠 Group Plan' }
+}
+
+// AutoGen-style two-agent debate — called from agents panel "Debate" button
+win['debateAgentPlan'] = async () => {
+  const btn = document.getElementById('btnDebate') as HTMLButtonElement | null
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Debating…' }
+  const ctx = getSimContext()
+  const result = await agentPlanner.debatePlan(ctx)
+  agentSystem.applyPlan(result.consensus)
+  const planEl = document.getElementById('agentPlanText')
+  if (planEl) {
+    planEl.textContent = `Strategist: ${result.strategist}\nTactician: ${result.tactician}\nConsensus: ${result.consensus}`
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '⚔️ Debate' }
+}
+
+// Assign CrewAI-style roles — each agent gets its own role plan
+win['assignAgentRoles'] = () => {
+  agentPlanner.assignRoles(agentSystem.agents)
+  const planEl = document.getElementById('agentPlanText')
+  const roles  = agentPlanner.getRoleNames().join(' · ')
+  if (planEl) planEl.textContent = `Roles: ${roles}`
+}
+
+// Global Claude API key — sets key for all AI modules at once
+win['setClaudeApiKey'] = (key: string) => {
+  director.setApiKey(key)
+  gameDesigner.setApiKey(key)
+  agentPlanner.setApiKey(key)
+  localStorage.setItem('reality_claude_key', key)
+  const dot = document.getElementById('apiKeyDot') as HTMLElement | null
+  if (dot) { dot.textContent = key ? '●' : '🔑'; dot.style.color = key ? '#4caf80' : '' }
+  const status = document.getElementById('apiKeyStatus') as HTMLElement | null
+  if (status) status.textContent = key ? `Key set (${key.slice(0,8)}…)` : 'No key set'
+}
+
+// Restore saved API key on load
+const _savedKey = localStorage.getItem('reality_claude_key')
+if (_savedKey) {
+  director.setApiKey(_savedKey)
+  gameDesigner.setApiKey(_savedKey)
+  agentPlanner.setApiKey(_savedKey)
+  // sync UI once DOM is ready
+  requestAnimationFrame(() => { (win['setClaudeApiKey'] as ((k: string) => void))(_savedKey) })
+}
+
 // ── Expose on window ──────────────────────────────────────────────────────
-win['scienceMode'] = scienceMode
-win['cinemaMode']  = cinemaMode
-win['gamedevMode'] = gamedevMode
-win['metrics']     = metrics   // direct console access: window.metrics.get('entropy','avg',200)
+win['scienceMode']   = scienceMode
+win['cinemaMode']    = cinemaMode
+win['gamedevMode']   = gamedevMode
+win['metrics']       = metrics
+win['solverClient']  = solverClient   // window.solverClient.solve({...}) from console
 
 console.log('%c[Reality Engine] Connector ready — window.scienceMode / .cinemaMode / .gamedevMode', 'color:#a09af0')

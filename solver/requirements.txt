@@ -1,0 +1,22 @@
+# Reality Engine — Solver Microservice Requirements
+# ──────────────────────────────────────────────────
+# Minimal (always required)
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+numpy>=1.24.0
+pydantic>=2.0.0
+
+# ── Optional heavy solvers ────────────────────────────────────────────────────
+# FEniCSx (finite element — heat, fluid, electric)
+# Install via conda: conda install -c conda-forge fenics-dolfinx mpi4py
+# Or: pip install fenics-dolfinx (Linux only)
+# fenics-dolfinx
+# mpi4py
+
+# MFEM Python bindings (high-order FEM)
+# pip install mfem
+# mfem
+
+# Note: Elmer, MOOSE, and GROMACS are system packages — install via apt/conda:
+#   sudo apt install elmer gromacs
+#   conda install -c conda-forge moose

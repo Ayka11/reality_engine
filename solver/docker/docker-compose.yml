@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  solver:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: reality-engine-solver:latest
+    container_name: reality_solver
+    ports:
+      - "8765:8765"
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Set MOOSE_DIR if you have MOOSE installed inside the container
+      # - MOOSE_DIR=/opt/moose
+    volumes:
+      # Mount solver source for hot-reload during development
+      - ../:/app
+    command: >
+      uvicorn reality_solver_api:app
+      --host 0.0.0.0
+      --port 8765
+      --reload
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8765/status')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: lightweight NumPy-only solver (no dolfinx, faster image)
+  solver-lite:
+    image: python:3.11-slim
+    container_name: reality_solver_lite
+    ports:
+      - "8766:8765"
+    volumes:
+      - ../:/app
+    working_dir: /app
+    command: >
+      sh -c "pip install fastapi uvicorn numpy pydantic -q &&
+             uvicorn reality_solver_api:app --host 0.0.0.0 --port 8765"
+    profiles:
+      - lite

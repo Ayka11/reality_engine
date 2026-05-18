@@ -24,6 +24,8 @@ pinned: false
 
 Reality Engine is an **interactive physics sandbox** where the rules of physics are themselves simulated objects — they compete, mutate, and go extinct. Paint energy and matter onto a voxel grid. Thermodynamics, chemistry, geology, and life emerge from first principles. The laws governing them evolve in real time through a **MetaLaw system**: each law has fitness, strength, and mutation rate. Laws that produce complexity survive. Laws that produce chaos go dormant.
 
+**Autonomous AI agents** (Utility AI + FSM + genome-based evolution) inhabit the simulation. A built-in **LLM planner** (Claude Haiku) assigns collective goals via LangChain-style chaining, AutoGen two-agent debate, and CrewAI role delegation. A **Python microservice** runs NumPy / SciPy solvers for flow fields, population forecasts, and evolutionary fitness landscapes.
+
 **This is not a game about matter. It is a game about the rules that govern matter.**
 
 ---
@@ -51,7 +53,7 @@ The four tabs at the top of the viewport switch how the simulation is visualized
 | **🔲 3D Volumetric** | Isometric height-map — energy becomes pillar height, bio shows as green glow | Default view, best for exploring structure |
 | **⬛ 2D Multi-Slice** | Four-quadrant view: Energy, Bio, Info, Entropy simultaneously | Comparing multiple fields at once |
 | **⟐ Hybrid** | Left half = flat 2D, right half = isometric 3D — two canvases side by side | Seeing cause-and-effect across representations |
-| **📈 Metrics** | Live numerical dashboard: tick, avg energy/entropy/info/bio, active laws | Quick snapshot without reading the canvas |
+| **📈 Metrics** | Live numerical dashboard: tick, avg energy/entropy/info/bio/temp, active laws | Quick snapshot without reading the canvas |
 
 **Switching modes:**
 1. Click any tab — the view switches instantly without pausing simulation
@@ -125,6 +127,42 @@ Select a brush from the left panel, then **click and drag** on the canvas:
 - *Strength* 50–1000: intensity per stroke
 - Tools: Paint (set value), Inject (add to existing), Erase (zero all fields), Inspect (click to read cell)
 
+#### Field Selector (Field Bar)
+
+The **Field** bar lives below the render-mode tabs, always visible. It has an **All** button plus six field buttons. What each button does depends on which render mode is active:
+
+| Button | 3D Volumetric | 2D Multi-Slice | Hybrid |
+|---|---|---|---|
+| **All** | Color = Energy (default) | 4-slice overview | 2D: 4-slice · 3D: Energy |
+| **⚡ Energy** | Tiles colored by energy | Full-screen energy + stats | Same, split |
+| **🌫️ Density** | Tiles colored by density | Full-screen density + stats | Same, split |
+| **🧠 Info** | Tiles colored by info | Full-screen info + stats | Same, split |
+| **🔥 Entropy** | Tiles colored by entropy | Full-screen entropy + stats | Same, split |
+| **🌡️ Temp** | Tiles colored by temperature | Full-screen temp + stats | Same, split |
+| **🧬 Bio** | Tiles colored by bio | Full-screen bio + stats | Same, split |
+
+> **In all modes, tile height in 3D always represents energy.** Only the color changes.
+
+**How to use:**
+1. Click any field button — the viewport updates immediately
+2. The button highlights (active = white border + lavender tint)
+3. A hint label appears to the right of the buttons explaining what the selection does in the current render mode
+4. Click the same button again to toggle back to **All** (multi-slice / default energy color)
+
+**2D Multi-Slice — reading the 4-slice view:**
+- Default (All) shows four quadrants: Energy (top-left), Bio (top-right), Info (bottom-left), Entropy (bottom-right)
+- Each quadrant shows a **stats bar** at the bottom: `avg · min · max · active cells`
+- A hint at the bottom of the canvas shows Density and Temp are not in the default 4-slice — use the field buttons to access them
+- Click a field button to show that one field full-screen with larger statistics
+
+**2D Multi-Slice — monitoring entropy and info:**
+- **🔥 Entropy** (bottom-right quadrant) shows disorder 0–1. Values below 0.1 = highly ordered (icy/crystalline). 0.3–0.6 = turbulent. Above 0.6 = critical collapse territory
+- **🧠 Info** (bottom-left quadrant) tracks complexity — it grows where energy + density co-exist and entropy is low. Watch it rise alongside Bio for emergence events
+
+**Science Mode — Field Monitor panel:**
+- The top section in the Science left panel shows a **Field Monitor** with the same field buttons plus a live table: avg / max / active-cell-count per field, updated every 5 ticks
+- Use this for numerical observation without reading the canvas
+
 #### Scene Script
 
 Left panel → Script tab. JavaScript runs directly against the live buffer:
@@ -155,6 +193,59 @@ Left panel → World panel. Click pills to snap physics to a preset regime:
 #### Quick Presets
 
 Left panel → Presets section: Energy Burst, Wave Field, Life Seed, Proto Earth, Entropy Storm, Ruins, Clear.
+
+**Save / Load worlds:** Use `💾 Save` to download a `.reality` JSON file. Use `📂 Load` to restore a saved file — it snapshots the full buffer state at the saved tick.
+
+**Undo:** `Ctrl+Z` reverts the last paint stroke, preset, or world generation (5-step ring buffer).
+
+---
+
+### 🤖 Agents Mode
+
+Accessed via the **robot icon** in the left icon bar. Agents are autonomous entities that live on the simulation grid and act according to Utility AI.
+
+#### Agent Architecture
+
+| Component | Role |
+|---|---|
+| **Utility AI** | Each tick, score 5 candidate moves (N/S/E/W/stay) by weighted field values |
+| **FSM states** | `seek_energy`, `seek_info`, `flee_entropy`, `explore`, `reproduce`, `rest`, `idle` |
+| **Genome** | Weight vector (seekEnergyW, seekInfoW, fleeEntropyW, bioW, exploreW, reprodThresh, maxAge) |
+| **Memory ring** | 48-cell visited-cell history prevents circling |
+| **Civilization ID** | Each spawn group gets a unique civId; territory written to FCid field |
+
+#### Spawning Agents
+
+Click **🧬 Spawn 5** or **🧬 Spawn 20** in the Agents panel. Agents appear near grid center. The bottom bar `Agents:` counter updates live. Agent dots are drawn on the canvas — colored by civilization.
+
+**Mutation rate** slider controls how much offspring genomes drift from the parent (1%–100%).
+
+Max population cap: **200 agents**. Agents die from starvation (`energy < 0.005`) or old age (genome `maxAge` ≈ 200–1200 ticks).
+
+#### LLM Planning (Claude Haiku)
+
+The **LLM Planning** section uses Claude Haiku to generate goal text that biases all agent genome weights:
+
+| Button | Pattern | What It Does |
+|---|---|---|
+| **🧠 Group Plan** | LangChain-style chain | Asks Claude for one collective survival goal based on current world state |
+| **⚔️ Debate** | AutoGen two-agent | Strategist + Tactician agents debate; Claude writes a consensus plan |
+| **👥 Assign CrewAI Roles** | CrewAI role delegation | Assigns each agent a role: Scout · Harvester · Guardian · Architect · Breeder |
+
+Without an API key, heuristic goals run automatically (based on world averages).
+
+**To set your API key:** Click the **🔑** button in the top-right of the icon bar, enter your `sk-ant-...` key, and click Save. The key is stored in `localStorage` only — never sent anywhere except `api.anthropic.com`.
+
+#### Agent Solvers (Python Microservice)
+
+When the FastAPI microservice is running, four additional solvers appear in the Science Mode solver panel:
+
+| Solver | Algorithm | Output |
+|---|---|---|
+| **Agent Flow Field** | Gradient descent on E + I - S potential | FFX/FFY flow vectors + FBio heatmap |
+| **Population Forecast** | Logistic reaction-diffusion (∂ρ/∂t = D∇²ρ + rρ(1-ρ/K)) | FBio forecast |
+| **Multi-Agent Coordination** | 5-role utility maps (Scout/Harvester/Guardian/Architect/Breeder) | FCid role map + FI shared knowledge |
+| **Evolutionary Fitness Landscape** | Weighted fitness surface + energy gradient bonus | FBio fitness + FI update |
 
 ---
 
@@ -201,6 +292,89 @@ A canvas plot below the law list. Each colored line = one active law's fitness o
 | 🗂️ Recording JSON | Sparse keyframes (`reality_engine_scientific_v2`) | Custom analysis, replay |
 | 💾 Save .reality | Full world state | Re-load in Create Mode |
 
+#### Scientific Solvers Panel
+
+Science Mode has a **Scientific Solvers** section in the left panel that connects the Reality Engine to external PDE / molecular-dynamics solvers. The results replace field data in the live simulation — producing far more physically realistic patterns than the built-in diffusion model.
+
+**Architecture:**
+```
+Reality Engine (browser)
+    ↕  HTTP POST / WebSocket JSON
+Python microservice  localhost:8765
+    ↕
+FEniCSx / MOOSE / Elmer / GROMACS / NumPy
+    ↕
+Float32Array result → voxel grid
+```
+
+**Every solver has a built-in NumPy fallback** — zero extra install needed for basic use.
+
+##### Available Simulations
+
+| Simulation | Solver | Writes To | Description |
+|---|---|---|---|
+| Turing Patterns | NumPy (built-in) | Info + Bio | Gray-Scott spots/stripes/labyrinths |
+| Wave Propagation | NumPy (built-in) | Energy | 2D acoustic / EM wave equation |
+| Heat Diffusion | NumPy / FEniCSx | Temp | Steady-state Laplace heat |
+| Fluid Flow (Stokes) | NumPy / FEniCSx | Flow X/Y | Pressure-driven incompressible flow |
+| Thermal Convection | NumPy | Temp + Flow | Buoyancy-driven convective heat |
+| Phase Separation | NumPy / MOOSE | Density | Cahn-Hilliard spinodal decomposition |
+| Electric Potential | NumPy / FEniCSx | Info | Electrostatic Laplace from charge density |
+| Entropy Production | NumPy (built-in) | Entropy | Irreversible entropy from energy gradients |
+| Molecular Dynamics | NumPy / GROMACS | Energy + Density | Langevin particle simulation → voxel bins |
+| Coupled Heat+Flow | NumPy / Elmer | Temp + Flow | Boussinesq buoyancy convection |
+| Magnetostatics | NumPy / Elmer | Info | Magnetic vector potential from currents |
+| Protein CG Dynamics | NumPy / GROMACS | Bio + Info | Coarse-grained bead-spring folding |
+
+##### How to use
+
+1. Switch to **Science Mode** (top bar)
+2. Open the **Scientific Solvers** section in the left panel
+3. Select a simulation from the dropdown
+4. Adjust parameters with the sliders
+5. Click **▶ Run Simulation** — the field updates immediately
+6. Click **↻ Live** to re-run every 3 seconds while the simulation is playing
+
+##### Starting the microservice
+
+All built-in NumPy solvers run without the microservice. For FEniCSx/MOOSE/Elmer/GROMACS, start the Python API:
+
+```bash
+# Option 1: direct
+cd solver
+pip install fastapi uvicorn numpy
+uvicorn reality_solver_api:app --port 8765 --reload
+
+# Option 2: shell script (shows capability check)
+bash solver/start.sh
+
+# Option 3: Docker (includes FEniCSx)
+docker-compose -f solver/docker/docker-compose.yml up
+
+# Option 4: Docker lite (NumPy only, fast to start)
+docker-compose -f solver/docker/docker-compose.yml --profile lite up solver-lite
+```
+
+##### Installing optional heavy solvers
+
+```bash
+# FEniCSx — accurate FEM for heat, fluid, electric
+conda install -c conda-forge fenics-dolfinx mpi4py
+
+# Elmer — coupled multiphysics (heat + fluid, EM)
+sudo apt install elmer          # Ubuntu/Debian
+brew install elmer              # macOS
+
+# MOOSE — materials science (phase field, grain growth)
+conda install -c conda-forge moose
+
+# GROMACS — molecular dynamics
+sudo apt install gromacs        # Ubuntu/Debian
+conda install -c conda-forge gromacs
+```
+
+The API status dot in the panel header turns **green (●)** when the microservice is reachable and shows which backends are available.
+
 #### Console API (browser DevTools)
 
 ```js
@@ -218,6 +392,12 @@ window.scienceMode.explainCell(x, y, buf)     // full causal breakdown HTML
 window.scienceMode.exportCSV()
 window.scienceMode.exportJupyter()
 window.scienceMode.exportJSON()
+
+// Run a solver directly from DevTools
+await window.solverClient.checkStatus()       // { online: true, capabilities: {...} }
+const req = window.solverClient.buildRequest('numpy_turing_patterns', buf, W, H, NF, { steps: 1200 })
+const res = await window.solverClient.solve(req)
+window.solverClient.applyResult(res, buf, W, H, NF)
 
 // Direct buffer (live — mutations are immediate)
 window.buf          // Float32Array, W×H×NF cells
@@ -426,18 +606,22 @@ src/
 
 ### Field Layout (NF=12)
 
-| Index | Name | Description |
-|---|---|---|
-| 0 | `FE` — Energy | Heat / kinetic energy source |
-| 1 | `FD` — Density | Matter concentration |
-| 2 | `FI` — Information | Complexity / emergent signal |
-| 3 | `FS` — Entropy | Disorder / decay |
-| 4 | `FT` — Temperature | Thermal energy |
-| 5–7 | Pressure, FX, FY | Force vectors |
-| 8 | `FTau` — Time dilation | Local time rate |
-| 9 | `FCid` — Civilization ID | Agent civilization tag |
-| 10 | `FBio` — Bio potential | Life readiness |
-| 11 | `FProc` — Process flags | Active process bitmask |
+| Index | Name | Description | Range |
+|---|---|---|---|
+| 0 | `FE` — Energy | Heat / kinetic energy source | 0 – 9999 |
+| 1 | `FD` — Density | Matter concentration | 0 – 1 |
+| 2 | `FI` — Information | Complexity / emergent signal | 0 – 999 |
+| 3 | `FS` — Entropy | Disorder / decay | 0 – 1 |
+| 4 | `FT` — Temperature | Thermal energy | 0 – 2000 |
+| 5 | `FFX` — Flow X | Fluid / force X vector | –500 – 500 |
+| 6 | `FFY` — Flow Y | Fluid / force Y vector | –500 – 500 |
+| 7 | (reserved) | Unused | — |
+| 8 | `FTau` — Time dilation | Local time rate | 0 – ∞ |
+| 9 | `FCid` — Civilization ID | Agent civilization tag | int |
+| 10 | `FBio` — Bio potential | Life readiness | 0 – 1 |
+| 11 | `FProc` — Process flags | Active process bitmask | int |
+
+> **Note**: Density (`FD`), Entropy (`FS`), and Bio (`FBio`) are normalized 0–1. Energy (`FE`), Info (`FI`), and Temperature (`FT`) are unbounded positive floats.
 
 ---
 
@@ -492,6 +676,57 @@ Built-in laws and their physical effect:
 
 ---
 
+## Keyboard Shortcuts
+
+| Key | Action |
+|---|---|
+| `?` or `/` | Show keyboard shortcuts overlay |
+| `Escape` | Close any modal or overlay |
+| `Space` | Play / Pause simulation |
+| `1` | Select ⚡ Energy field |
+| `2` | Select 🌫️ Density field |
+| `3` | Select 🧠 Info field |
+| `4` | Select 🔥 Entropy field |
+| `5` | Select 🌡️ Temp field |
+| `6` | Select 🧬 Bio field |
+| `Ctrl+S` | Save world (.reality) |
+| `Ctrl+Z` | Undo last paint / preset (5-step ring) |
+| Click + Drag | Paint / brush on canvas |
+| Click (Inspect tool) | Select cell → causal breakdown in right panel |
+| ↑ / ↓ (Debug console) | Navigate command history |
+
+> Field shortcuts only fire when the canvas area has focus (not when a text input is active).
+
+---
+
+## Troubleshooting
+
+### 3D view appears blank on first load
+The isometric canvas (`#c3d`) must be initialized by clicking any render tab, or it will start hidden. Fixed in current build — a hard-refresh (**Ctrl+Shift+R**) is enough to get the latest code.
+
+### Entropy / Density / Bio fields look invisible in 2D mode
+Previously a display-threshold bug: cells with value < 50% of max were skipped. For 0–1 normalized fields this made anything below 0.5 invisible. Fixed — the threshold is now 0.001 for normalized fields.
+
+### Switching from 2D back to 3D shows blank or stale image
+Previously the 2D canvas (opaque dark fill) covered the isometric 3D canvas. Fixed — in 3D mode the flat canvas is now hidden.
+
+### Game Dev pause doesn't stop simulation
+Previously broken: the `window.loop` override was never called because the RAF held a closure reference to the original function. Fixed — the pause check is now inside the main `loop()` directly.
+
+### Scientific Solvers panel not visible in Science Mode
+The panel is injected dynamically by `connector.ts` when the `panelRendered` event fires.
+1. Hard-refresh (Ctrl+Shift+R)
+2. Click **Science** in the top bar
+3. Scroll to the bottom of the left panel
+
+### Microservice offline (status dot red or yellow)
+```bash
+cd solver
+py -3 -m uvicorn reality_solver_api:app --port 8765 --reload
+```
+
+---
+
 ## Development
 
 ```bash
@@ -522,12 +757,13 @@ npx tsc --noEmit # Type check (must produce zero errors)
 reality/
 ├── index.html              # Main app — simulation + UI + two-canvas viewport
 ├── src/
-│   ├── connector.ts         # Module bridge → window.scienceMode/cinemaMode/gamedevMode/metrics
+│   ├── connector.ts         # Module bridge → window.* APIs for all modes + agents
 │   ├── main.ts              # UX system entry point
 │   ├── scientific/
 │   │   ├── MetricsAPI.ts
 │   │   ├── LawFitnessChart.ts
-│   │   └── CausalInspector.ts
+│   │   ├── CausalInspector.ts
+│   │   └── SolverClient.ts  # HTTP client for Python microservice solvers
 │   ├── simulation/
 │   │   └── DeterministicEngine.ts
 │   ├── core/
@@ -535,18 +771,26 @@ reality/
 │   ├── modes/
 │   │   ├── ScienceModePanel.ts
 │   │   ├── GameDevModePanel.ts
+│   │   ├── agents/
+│   │   │   ├── AgentSystem.ts   # Utility AI + FSM + genome-based agent simulation
+│   │   │   └── AgentPlanner.ts  # LLM goal planner (LangChain/CrewAI/AutoGen patterns)
 │   │   ├── cinema/
 │   │   │   ├── KeyframeTimeline.ts
-│   │   │   ├── CameraPathEditor.ts
 │   │   │   ├── SceneDirector.ts
 │   │   │   └── VideoRecorder.ts
 │   │   └── gamedev/
-│   │       ├── EntityBehaviorEditor.ts
 │   │       ├── GameRulesetEngine.ts
 │   │       ├── PrefabSystem.ts
 │   │       └── AIGameDesigner.ts
 │   └── ui/
 │       └── UXIntegration.ts
+├── solver/                  # Python FastAPI microservice (localhost:8765)
+│   ├── reality_solver_api.py  # @register decorator + /solve endpoint
+│   └── solvers/
+│       ├── physics_solvers.py    # FEM heat, wave, fluid, magneto-hydro
+│       ├── quantum_solvers.py    # Schrödinger, Bell states, quantum walk
+│       ├── complex_solvers.py    # Reaction-diffusion, cellular automata, fractals
+│       └── agent_solvers.py     # Flow field, population forecast, multi-agent, fitness
 ├── vite.config.ts
 ├── tsconfig.json
 └── netlify.toml            # COOP/COEP headers for SharedArrayBuffer
