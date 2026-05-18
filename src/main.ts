@@ -30,7 +30,7 @@ import { LawProcessEditor } from './ui/LawProcessEditor';
 import { SaveManager, WorldSaveSystem } from './world/save';
 import { SculptManager, type BrushFalloff, type SculptToolId } from './sculpt';
 import { DistributedEngine } from './distributed/DistributedEngine';
-import { WorldComposer, WORLD_ARCHETYPES, PHYSICS_PROFILES, WORLD_GOALS, ENV_HAZARDS, EVOLUTION_MODES } from './ux/WorldComposer';
+import { WorldComposer, PHI_ARCHETYPES, FIELD_BALANCES, COMPLEXITY_MODES, SPACETIME_PROFILES } from './ux/WorldComposer';
 import { WorldHealth } from './ux/WorldHealth';
 import { Explainer } from './ux/Explainer';
 import { SMART_BRUSHES } from './ux/SmartBrushes';
@@ -1370,21 +1370,21 @@ function updateExplainerPanel(): void {
       </div>`).join('');
 }
 
-// WorldComposer wizard
+// WorldComposer instance (UI is driven from index.html inline script; this provides the TS engine)
 let worldComposer: WorldComposer;
 let composerStep = 0;
-const COMPOSER_STEPS = ['World Type','Physics','Goals','Hazards','Evolution','Generate'];
+const COMPOSER_STEPS = ['Φ Potential','ρ·E·I Fields','C Complexity','dτ·dV Dynamics','Generate'];
 
 function initWorldComposer(): void {
   worldComposer = new WorldComposer(sim, civSystem);
-  const modal = document.getElementById('composerModal')!;
+  const modal = document.getElementById('composerModal');
   document.getElementById('btnOpenComposer')?.addEventListener('click', () => {
     composerStep = 0;
-    modal.style.display = 'flex';
+    if (modal) modal.style.display = 'flex';
     renderComposerStep();
   });
   document.getElementById('closeComposerBtn')?.addEventListener('click', () => {
-    modal.style.display = 'none';
+    if (modal) modal.style.display = 'none';
   });
   document.getElementById('composerNextBtn')?.addEventListener('click', () => {
     if (composerStep < COMPOSER_STEPS.length - 1) { composerStep++; renderComposerStep(); }
@@ -1398,104 +1398,94 @@ function initWorldComposer(): void {
 function renderComposerStep(): void {
   if (!worldComposer) return;
   const sel = worldComposer.selection;
+  const stepsEl = document.getElementById('composerSteps');
+  if (stepsEl) {
+    stepsEl.innerHTML = COMPOSER_STEPS.map((s, i) => `
+      <div onclick="window._gotoComposerStep(${i})" style="flex:1;padding:9px 4px;text-align:center;font-size:10px;cursor:pointer;
+        color:${i===composerStep?'#9d96f0':i<composerStep?'#4caf7d':'#444'};
+        border-bottom:2px solid ${i===composerStep?'#7c6fcd':i<composerStep?'#2a6644':'transparent'};
+        background:${i===composerStep?'#1a1830':'transparent'}">
+        ${i<composerStep?'✓ ':''}<b>${s}</b></div>`).join('');
+  }
 
-  // Step pills
-  const stepsEl = document.getElementById('composerSteps')!;
-  stepsEl.innerHTML = COMPOSER_STEPS.map((s, i) => `
-    <div onclick="window._gotoComposerStep(${i})" style="flex:1;padding:9px 4px;text-align:center;font-size:10px;cursor:pointer;
-      color:${i===composerStep?'#9d96f0':i<composerStep?'#4caf7d':'#444'};
-      border-bottom:2px solid ${i===composerStep?'#7c6fcd':i<composerStep?'#2a6644':'transparent'};
-      background:${i===composerStep?'#1a1830':'transparent'}">
-      ${i<composerStep?'✓ ':''}<b>${s}</b></div>`).join('');
+  const selDisplay = [sel.phi, sel.fields, sel.complexity, sel.spacetime].filter(Boolean).join(' · ');
+  const selEl = document.getElementById('composerSelDisplay');
+  if (selEl) selEl.textContent = selDisplay;
 
-  const selDisplay = [sel.archetype, sel.physics, sel.goal, sel.hazards.join('+'), sel.evolution].filter(Boolean).join(' › ');
-  document.getElementById('composerSelDisplay')!.textContent = selDisplay;
-
-  const content = document.getElementById('composerContent')!;
-  const nextBtn  = document.getElementById('composerNextBtn')!;
-  const backBtn  = document.getElementById('composerBackBtn') as HTMLButtonElement;
-  backBtn.style.opacity = composerStep === 0 ? '0.3' : '1';
-  nextBtn.textContent   = composerStep === COMPOSER_STEPS.length - 1 ? '✦ Generate' : 'Next →';
+  const content = document.getElementById('composerContent');
+  const nextBtn  = document.getElementById('composerNextBtn');
+  const backBtn  = document.getElementById('composerBackBtn') as HTMLButtonElement | null;
+  if (backBtn) backBtn.style.opacity = composerStep === 0 ? '0.3' : '1';
+  if (nextBtn) nextBtn.textContent = composerStep === COMPOSER_STEPS.length - 1 ? '✦ Generate' : 'Next →';
+  if (!content) return;
 
   if (composerStep === 0) {
-    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">Choose the fundamental nature of your world</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">
-        ${Object.entries(WORLD_ARCHETYPES).map(([name, arch]) => `
-          <div onclick="window._composerSelectArchetype('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
-            border:0.5px solid ${sel.archetype===name?'#7c6fcd':'#2a2a35'};
-            background:${sel.archetype===name?'#1a1830':'#0e0e18'}">
-            <div style="font-size:20px;margin-bottom:5px">${arch.icon}</div>
+    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">Configure Φ — the fundamental potential substrate</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
+        ${Object.entries(PHI_ARCHETYPES).map(([name, a]) => `
+          <div onclick="window._composerSelectPhi('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
+            border:0.5px solid ${sel.phi===name?'#7c6fcd':'#2a2a35'};background:${sel.phi===name?'#1a1830':'#0e0e18'}">
+            <div style="font-size:20px;margin-bottom:5px">${a.icon}</div>
             <div style="font-size:11px;font-weight:500;color:#c0b8f0;margin-bottom:3px">${name}</div>
-            <div style="font-size:9px;color:#666;line-height:1.5">${arch.desc}</div>
+            <div style="font-size:9px;color:#666;line-height:1.5">${a.desc}</div>
+            <div style="font-size:8px;color:#444;font-family:monospace;margin-top:4px">Φ=${a.phiStrength.toFixed(2)} κ=${a.coupling.toFixed(2)}</div>
           </div>`).join('')}
       </div>`;
-
   } else if (composerStep === 1) {
-    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">Define the physical constants of your universe</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
-        ${Object.entries(PHYSICS_PROFILES).map(([name, p]) => `
-          <div onclick="window._composerSelectPhysics('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
-            border:0.5px solid ${sel.physics===name?'#6080ff':'#2a2a35'};
-            background:${sel.physics===name?'#141828':'#0e0e18'}">
-            <div style="font-size:12px;font-weight:500;color:#9090e0;margin-bottom:3px">${name}</div>
-            <div style="font-size:9px;color:#666">${p.desc}</div>
+    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">Set the ρ·E·I field balance</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
+        ${Object.entries(FIELD_BALANCES).map(([name, f]) => `
+          <div onclick="window._composerSelectFields('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
+            border:0.5px solid ${sel.fields===name?'#6080ff':'#2a2a35'};background:${sel.fields===name?'#141828':'#0e0e18'}">
+            <div style="font-size:20px;margin-bottom:5px">${f.icon}</div>
+            <div style="font-size:11px;font-weight:500;color:#9090e0;margin-bottom:3px">${name}</div>
+            <div style="font-size:9px;color:#666">${f.desc}</div>
+            <div style="font-size:8px;color:#444;font-family:monospace;margin-top:4px">ρ=${f.rho} E=${f.E} I=${f.I}</div>
           </div>`).join('')}
       </div>`;
-
   } else if (composerStep === 2) {
-    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">What should this world become?</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
-        ${Object.entries(WORLD_GOALS).map(([name, g]) => `
-          <div onclick="window._composerSelectGoal('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
-            border:0.5px solid ${sel.goal===name?'#40c060':'#2a2a35'};
-            background:${sel.goal===name?'#0d2010':'#0e0e18'}">
-            <div style="font-size:18px;margin-bottom:4px">${g.icon}</div>
+    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">Define C — complexity dynamics</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
+        ${Object.entries(COMPLEXITY_MODES).map(([name, c]) => `
+          <div onclick="window._composerSelectComplexity('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
+            border:0.5px solid ${sel.complexity===name?'#40c060':'#2a2a35'};background:${sel.complexity===name?'#0d2010':'#0e0e18'}">
+            <div style="font-size:20px;margin-bottom:5px">${c.icon}</div>
             <div style="font-size:11px;font-weight:500;color:#80e080;margin-bottom:3px">${name}</div>
-            <div style="font-size:9px;color:#666">${g.desc}</div>
+            <div style="font-size:9px;color:#666">${c.desc}</div>
+            <div style="font-size:8px;color:#444;font-family:monospace;margin-top:4px">growth=${c.growth} stab=${c.stability}</div>
           </div>`).join('')}
       </div>`;
-
   } else if (composerStep === 3) {
-    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">Add environmental hazards — multi-select (optional)</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px">
-        ${Object.entries(ENV_HAZARDS).map(([name, h]) => `
-          <div onclick="window._composerToggleHazard('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
-            border:0.5px solid ${sel.hazards.includes(name)?'#e06040':'#2a2a35'};
-            background:${sel.hazards.includes(name)?'#1e0d08':'#0e0e18'}">
-            <div style="font-size:11px;font-weight:500;color:#e08060;margin-bottom:3px">${name}</div>
-            <div style="font-size:9px;color:#666">${h.desc}</div>
+    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">Shape dτ·dV — process time and spatial character</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
+        ${Object.entries(SPACETIME_PROFILES).map(([name, s]) => `
+          <div onclick="window._composerSelectSpacetime('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
+            border:0.5px solid ${sel.spacetime===name?'#e09030':'#2a2a35'};background:${sel.spacetime===name?'#1e1408':'#0e0e18'}">
+            <div style="font-size:20px;margin-bottom:5px">${s.icon}</div>
+            <div style="font-size:11px;font-weight:500;color:#e0b060;margin-bottom:3px">${name}</div>
+            <div style="font-size:9px;color:#666">${s.desc}</div>
+            <div style="font-size:8px;color:#444;font-family:monospace;margin-top:4px">dτ=${s.timeDil} noise=${s.sNoise}</div>
           </div>`).join('')}
       </div>`;
-
-  } else if (composerStep === 4) {
-    content.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:12px">How should life and laws evolve?</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
-        ${Object.entries(EVOLUTION_MODES).map(([name, e]) => `
-          <div onclick="window._composerSelectEvo('${name}')" style="padding:11px;border-radius:8px;cursor:pointer;
-            border:0.5px solid ${sel.evolution===name?'#c060e0':'#2a2a35'};
-            background:${sel.evolution===name?'#180d20':'#0e0e18'}">
-            <div style="font-size:11px;font-weight:500;color:#c080e0;margin-bottom:3px">${name}</div>
-            <div style="font-size:9px;color:#666">${e.desc}</div>
-          </div>`).join('')}
-      </div>`;
-
   } else {
-    const arch = WORLD_ARCHETYPES[sel.archetype ?? ''];
-    content.innerHTML = `<div style="text-align:center;padding:20px 0">
-        <div style="font-size:44px;margin-bottom:10px">${arch?.icon ?? '✦'}</div>
-        <div style="font-size:18px;font-weight:500;color:#e0dff5;margin-bottom:6px">${sel.archetype ?? 'No archetype selected'}</div>
-        <div style="font-size:11px;color:#666;margin-bottom:20px;max-width:380px;margin-left:auto;margin-right:auto">${arch?.desc ?? ''}</div>
+    const phi  = PHI_ARCHETYPES[sel.phi ?? ''];
+    const fld  = FIELD_BALANCES[sel.fields]  ?? FIELD_BALANCES['Balanced'];
+    const cplx = COMPLEXITY_MODES[sel.complexity] ?? COMPLEXITY_MODES['Emergent'];
+    const st   = SPACETIME_PROFILES[sel.spacetime] ?? SPACETIME_PROFILES['Standard'];
+    const est  = phi ? (phi.phiStrength*(fld.rho+fld.E+fld.I)/3*cplx.growth*st.timeDil).toFixed(3) : '—';
+    content.innerHTML = `<div style="text-align:center;padding:16px 0">
+        <div style="font-size:13px;font-family:monospace;color:#a09af0;margin-bottom:4px">𝒓 = ∫ Φ · ρ · E · I · C  dV dτ</div>
+        <div style="font-size:11px;color:#666;margin-bottom:16px">Integral estimate ≈ <span style="color:#d0cef5;font-family:monospace">${est}</span></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:380px;margin:0 auto 20px;text-align:left">
-          ${([['Physics',sel.physics,'#6080ff'],['Goal',sel.goal??'None','#40c060'],
-             ['Hazards',sel.hazards.join(', ')||'None','#e06040'],
-             ['Evolution',sel.evolution??'None','#c060e0']] as [string,string,string][])
+          ${([['Φ Potential',sel.phi??'—','#a09af0'],['ρ·E·I Fields',sel.fields,'#6080ff'],
+             ['C Complexity',sel.complexity,'#40c060'],['dτ·dV',sel.spacetime,'#e09030']] as [string,string,string][])
             .map(([k,v,c]) => `<div style="padding:9px;background:#0e0e18;border-radius:8px;border:0.5px solid #2a2a35">
               <div style="font-size:9px;color:#555;margin-bottom:2px">${k}</div>
               <div style="font-size:10px;color:${c}">${v}</div>
             </div>`).join('')}
         </div>
         <button onclick="window._composerGenerate()" style="padding:11px 36px;border:0.5px solid #7c6fcd;border-radius:8px;cursor:pointer;background:#1a1830;color:#9d96f0;font-size:14px;font-weight:500">
-          ✦ Generate World
+          ✦ Generate Reality
         </button>
       </div>`;
   }
@@ -1504,22 +1494,19 @@ function renderComposerStep(): void {
 function _composerGenerate(): void {
   if (!worldComposer) return;
   const msg = worldComposer.generate();
-  document.getElementById('composerModal')!.style.display = 'none';
-  document.getElementById('scriptLog')!.textContent = msg;
+  const modal = document.getElementById('composerModal');
+  if (modal) modal.style.display = 'none';
+  const log = document.getElementById('scriptLog');
+  if (log) log.textContent = msg;
   playing = true;
 }
 
 const _win = window as unknown as Record<string, unknown>;
-_win._gotoComposerStep       = (i: number) => { composerStep = i; renderComposerStep(); };
-_win._composerSelectArchetype = (n: string) => { worldComposer.selection.archetype = n; renderComposerStep(); };
-_win._composerSelectPhysics   = (n: string) => { worldComposer.selection.physics   = n; renderComposerStep(); };
-_win._composerSelectGoal      = (n: string) => { worldComposer.selection.goal      = n; renderComposerStep(); };
-_win._composerToggleHazard    = (n: string) => {
-  const h = worldComposer.selection.hazards;
-  const i = h.indexOf(n); if (i >= 0) h.splice(i, 1); else h.push(n);
-  renderComposerStep();
-};
-_win._composerSelectEvo       = (n: string) => { worldComposer.selection.evolution = n; renderComposerStep(); };
+_win._gotoComposerStep        = (i: number) => { composerStep = i; renderComposerStep(); };
+_win._composerSelectPhi       = (n: string) => { worldComposer.selection.phi        = n; renderComposerStep(); };
+_win._composerSelectFields    = (n: string) => { worldComposer.selection.fields     = n; renderComposerStep(); };
+_win._composerSelectComplexity= (n: string) => { worldComposer.selection.complexity = n; renderComposerStep(); };
+_win._composerSelectSpacetime = (n: string) => { worldComposer.selection.spacetime  = n; renderComposerStep(); };
 _win._composerGenerate        = _composerGenerate;
 
 // ── Keyboard camera navigation ─────────────────────────────────────────────────

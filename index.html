@@ -147,6 +147,7 @@ input[type=range]#spd{width:55px}
 <!-- TOP BAR -->
 <div id="topbar">
   <button class="compose-btn" onclick="openComp()">✦ Compose World</button>
+  <button class="compose-btn" onclick="generateWorld()" style="border-color:#40c080;color:#50d090;background:#0d1f17;margin-left:4px" title="Generate with current settings">⚡ Quick Generate</button>
   <div class="tbsep"></div>
   <button class="mode-btn active" data-mode="create">Create</button>
   <button class="mode-btn" data-mode="science">Science</button>
@@ -218,8 +219,8 @@ input[type=range]#spd{width:55px}
     <div class="cbox">
       <div style="padding:14px 20px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
         <div>
-          <div style="font-size:16px;font-weight:600">World Composer</div>
-          <div style="font-size:10px;color:var(--sub)">High-level → Semantic → Generate</div>
+          <div style="font-size:16px;font-weight:600">Integral Reality Composer</div>
+          <div style="font-size:10px;color:var(--sub)">𝒓 = ∫ Φ · ρ · E · I · C  dV dτ</div>
         </div>
         <button onclick="closeComp()" style="background:none;border:none;font-size:24px;color:var(--sub);cursor:pointer;line-height:1">✕</button>
       </div>
@@ -375,15 +376,51 @@ function resize(){resize2D();resize3D();}
 new ResizeObserver(resize).observe(wrap);
 requestAnimationFrame(resize);
 
-// ── COLOR MAP ─────────────────────────────────────────────────────────────
+// ── COLOR MAP — vivid physically-meaningful palettes ────────────────────────
 function colorOf(l,t){
   t=clamp(t,0,1);
-  if(l===0){if(t<.15)return[0,0,Math.round(t/.15*180)];if(t<.4){const s=(t-.15)/.25;return[0,Math.round(s*180),Math.round(180-s*180)]}if(t<.7){const s=(t-.4)/.3;return[Math.round(s*255),Math.round(180-s*60),0]}const s=(t-.7)/.3;return[255,Math.round(120+s*135),Math.round(s*255)]}
-  if(l===1)return t<.4?[0,Math.round(t/.4*80),20]:[Math.round((t-.4)/.6*200),Math.round(80+(t-.4)/.6*120),20];
-  if(l===2)return t<.3?[Math.round(t/.3*60),0,Math.round(t/.3*80)]:[Math.round(60+(t-.3)/.7*190),Math.round((t-.3)/.7*160),Math.round(80+(t-.3)/.7*160)];
-  if(l===3)return[Math.round(t*220),Math.round(t*40),40];
-  if(l===4)return t<.5?[Math.round(t*2*255),0,Math.round((1-t*2)*200)]:[255,Math.round((t-.5)/.5*200),0];
-  if(l===5)return[Math.round(t*40),Math.round(t*210),Math.round(t*80)];
+  // Energy: indigo → electric blue → cyan → orange → white-hot
+  if(l===0){
+    if(t<0.12){const s=t/0.12;return[s*30|0,s*20|0,(40+s*160)|0];}
+    if(t<0.35){const s=(t-0.12)/0.23;return[(30-s*30)|0,(20+s*160)|0,(200+s*55)|0];}
+    if(t<0.62){const s=(t-0.35)/0.27;return[(s*255)|0,(180-s*20)|0,(255-s*255)|0];}
+    if(t<0.85){const s=(t-0.62)/0.23;return[255,(160+s*75)|0,(s*80)|0];}
+    const s=(t-0.85)/0.15;return[255,(235+s*20)|0,(80+s*175)|0];
+  }
+  // Density: black → deep teal → cyan-white
+  if(l===1){
+    if(t<0.25){const s=t/0.25;return[0,(s*50)|0,(s*40)|0];}
+    if(t<0.65){const s=(t-0.25)/0.4;return[(s*20)|0,(50+s*130)|0,(40+s*110)|0];}
+    const s=(t-0.65)/0.35;return[(20+s*100)|0,(180+s*75)|0,(150+s*105)|0];
+  }
+  // Info: dark navy → violet → electric cyan → white
+  if(l===2){
+    if(t<0.15){const s=t/0.15;return[(s*40)|0,0,(s*120)|0];}
+    if(t<0.45){const s=(t-0.15)/0.3;return[(40+s*120)|0,(s*40)|0,(120+s*135)|0];}
+    if(t<0.78){const s=(t-0.45)/0.33;return[(160-s*60)|0,(40+s*100)|0,255];}
+    const s=(t-0.78)/0.22;return[(100+s*155)|0,(140+s*115)|0,255];
+  }
+  // Entropy: black → crimson → hot orange → yellow → white
+  if(l===3){
+    if(t<0.2){const s=t/0.2;return[(s*200)|0,0,(s*20)|0];}
+    if(t<0.5){const s=(t-0.2)/0.3;return[(200+s*55)|0,(s*110)|0,0];}
+    if(t<0.8){const s=(t-0.5)/0.3;return[255,(110+s*145)|0,(s*60)|0];}
+    const s=(t-0.8)/0.2;return[255,255,(60+s*195)|0];
+  }
+  // Temperature: black → deep red → orange → yellow → white
+  if(l===4){
+    if(t<0.2){const s=t/0.2;return[(s*210)|0,(s*10)|0,0];}
+    if(t<0.5){const s=(t-0.2)/0.3;return[(210+s*45)|0,(10+s*130)|0,0];}
+    if(t<0.8){const s=(t-0.5)/0.3;return[255,(140+s*115)|0,(s*80)|0];}
+    const s=(t-0.8)/0.2;return[255,255,(80+s*175)|0];
+  }
+  // Bio: black → deep emerald → lime → white-green
+  if(l===5){
+    if(t<0.15){const s=t/0.15;return[0,(s*80)|0,(s*30)|0];}
+    if(t<0.5){const s=(t-0.15)/0.35;return[(s*20)|0,(80+s*175)|0,(30+s*60)|0];}
+    if(t<0.85){const s=(t-0.5)/0.35;return[(20+s*110)|0,255,(90+s*90)|0];}
+    const s=(t-0.85)/0.15;return[(130+s*125)|0,255,(180+s*75)|0];
+  }
   return[80,80,80];
 }
 
@@ -433,7 +470,6 @@ function _drawFlat(){
 }
 
 function _isoTiles(cx_,cw_,ch_,cl){
-  // cl = color layer index (0-5). Defaults to global `layer` or 0 (Energy).
   const colorL=cl!==undefined?cl:(layer>=0?layer:0);
   const FIELD_MAP=[FE,FD,FI,FS,FT,FBio];
   const MAX_MAP=[1000,1,500,1,800,1];
@@ -443,60 +479,133 @@ function _isoTiles(cx_,cw_,ch_,cl){
   const TH=Math.max(4,(TW/2))|0;
   const MAX_H=Math.min(60,Math.floor(ch_*0.3/H*5));
   const originX=cw_/2,originY=ch_*0.55;
+  const glows=[];
   for(let diag=0;diag<W+H-1;diag++){
     for(let xi=0;xi<W;xi++){
       const x=xi,y=diag-xi;
       if(y<0||y>=H)continue;
       const e=buf[idx(x,y)+FE],b=buf[idx(x,y)+FBio];
       if(e<1&&b<0.01)continue;
-      const h=Math.min(e/22,MAX_H)|0;  // height always from energy
+      const h=Math.min(e/22,MAX_H)|0;
       const cv=buf[idx(x,y)+cf];
-      const ct=Math.min(cv/cm,1);      // color from selected field
+      const ct=Math.min(cv/cm,1);
       const[r,g,bl]=colorOf(colorL,ct);
       const sx=originX+(x-y)*TW/2;
       const sy=originY+(x+y)*TH/2;
+      // Top face (brightest — overhead light)
       cx_.fillStyle=`rgb(${r},${g},${bl})`;
-      cx_.beginPath();
-      cx_.moveTo(sx,sy-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
-      cx_.lineTo(sx,sy+TH-h);cx_.lineTo(sx-TW/2,sy+TH/2-h);
-      cx_.closePath();cx_.fill();
+      cx_.beginPath();cx_.moveTo(sx,sy-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
+      cx_.lineTo(sx,sy+TH-h);cx_.lineTo(sx-TW/2,sy+TH/2-h);cx_.closePath();cx_.fill();
       if(h>2){
-        cx_.fillStyle=`rgb(${r*.5|0},${g*.5|0},${bl*.5|0})`;
-        cx_.beginPath();
-        cx_.moveTo(sx,sy+TH-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
-        cx_.lineTo(sx+TW/2,sy+TH/2);cx_.lineTo(sx,sy+TH);
-        cx_.closePath();cx_.fill();
-        cx_.fillStyle=`rgb(${r*.7|0},${g*.7|0},${bl*.7|0})`;
-        cx_.beginPath();
-        cx_.moveTo(sx,sy+TH-h);cx_.lineTo(sx-TW/2,sy+TH/2-h);
-        cx_.lineTo(sx-TW/2,sy+TH/2);cx_.lineTo(sx,sy+TH);
-        cx_.closePath();cx_.fill();
+        // Right face — darkest (occluded)
+        cx_.fillStyle=`rgb(${r*.42|0},${g*.42|0},${bl*.42|0})`;
+        cx_.beginPath();cx_.moveTo(sx,sy+TH-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
+        cx_.lineTo(sx+TW/2,sy+TH/2);cx_.lineTo(sx,sy+TH);cx_.closePath();cx_.fill();
+        // Left face — medium (ambient bounce)
+        cx_.fillStyle=`rgb(${r*.62|0},${g*.62|0},${bl*.62|0})`;
+        cx_.beginPath();cx_.moveTo(sx,sy+TH-h);cx_.lineTo(sx-TW/2,sy+TH/2-h);
+        cx_.lineTo(sx-TW/2,sy+TH/2);cx_.lineTo(sx,sy+TH);cx_.closePath();cx_.fill();
       }
+      // Bio overlay (green life glow on top face)
       if(b>0.1&&colorL!==5){
-        cx_.fillStyle=`rgba(48,200,96,${b*0.35})`;
-        cx_.beginPath();
-        cx_.moveTo(sx,sy-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
-        cx_.lineTo(sx,sy+TH-h);cx_.lineTo(sx-TW/2,sy+TH/2-h);
-        cx_.closePath();cx_.fill();
+        cx_.fillStyle=`rgba(40,220,100,${(b*0.28).toFixed(2)})`;
+        cx_.beginPath();cx_.moveTo(sx,sy-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
+        cx_.lineTo(sx,sy+TH-h);cx_.lineTo(sx-TW/2,sy+TH/2-h);cx_.closePath();cx_.fill();
       }
+      // Collect for emissive glow pass
+      if(ct>0.28||(b>0.18&&colorL!==5))glows.push({sx,sy,h,ct,r,g,bl,b,TW,TH});
     }
   }
+  // Emissive glow pass — 'screen' compositing for additive hot glow
+  if(glows.length){
+    cx_.save();cx_.globalCompositeOperation='screen';
+    for(const gd of glows){
+      const{sx,sy,h,ct,r,g,bl,b,TW,TH}=gd;
+      const ga=ct>0.28?(ct-0.28)/0.72*0.5:0;
+      const ba=b>0.18?(b-0.18)/0.82*0.38:0;
+      const alpha=Math.max(ga,ba);if(alpha<0.03)continue;
+      cx_.globalAlpha=alpha;
+      cx_.fillStyle=`rgb(${Math.min(255,r+50)},${Math.min(255,g+35)},${Math.min(255,bl+25)})`;
+      cx_.beginPath();cx_.moveTo(sx,sy-h-2);cx_.lineTo(sx+TW/2+2,sy+TH/2-h);
+      cx_.lineTo(sx,sy+TH-h+1);cx_.lineTo(sx-TW/2-2,sy+TH/2-h);cx_.closePath();cx_.fill();
+    }
+    cx_.restore();cx_.globalAlpha=1;
+  }
+}
+
+// ── PARTICLE SYSTEM ───────────────────────────────────────────────────────
+let _particles=[];
+function _tickParticles(){
+  for(let i=_particles.length-1;i>=0;i--){
+    const p=_particles[i];
+    p.x+=p.vx;p.y+=p.vy;p.vy*=0.97;
+    p.life--;if(p.life<=0)_particles.splice(i,1);
+  }
+}
+function _spawnIsoParticles(originX,originY,TW,TH){
+  if(_particles.length>=220)return;
+  for(let i=0;i<8;i++){
+    const x=Math.floor(Math.random()*W),y=Math.floor(Math.random()*H);
+    const e=buf[idx(x,y)+FE],b=buf[idx(x,y)+FBio],inf=buf[idx(x,y)+FI];
+    if(e<1&&b<0.02&&inf<10)continue;
+    const sx=originX+(x-y)*TW/2,sy=originY+(x+y)*TH/2;
+    const h=Math.min(e/22,60)|0;
+    if(e>200&&Math.random()<0.3){
+      _particles.push({x:sx+(Math.random()-.5)*TW,y:sy-h,vx:(Math.random()-.5)*.7,vy:-1-Math.random()*1.4,
+        life:20+Math.random()*25|0,maxLife:45,r:255,g:150+Math.random()*90|0,b:40,size:1.5+Math.random()*.8});
+    }
+    if(b>0.09&&Math.random()<0.25){
+      _particles.push({x:sx+(Math.random()-.5)*TW*.6,y:sy-h,vx:(Math.random()-.5)*.4,vy:-.5-Math.random()*.7,
+        life:35+Math.random()*30|0,maxLife:65,r:40,g:235,b:110,size:1.1+Math.random()*1.1});
+    }
+    if(inf>35&&Math.random()<0.2){
+      _particles.push({x:sx+(Math.random()-.5)*TW,y:sy-h-3,vx:(Math.random()-.5)*.8,vy:-.35-Math.random()*.5,
+        life:18+Math.random()*18|0,maxLife:36,r:80+Math.random()*80|0,b:255,g:155,size:1+Math.random()*.9});
+    }
+  }
+}
+function _drawParticles(cx_){
+  if(!_particles.length)return;
+  cx_.save();cx_.globalCompositeOperation='screen';
+  for(const p of _particles){
+    const a=(p.life/p.maxLife)*.8;cx_.globalAlpha=a;
+    cx_.fillStyle=`rgb(${p.r},${p.g},${p.b})`;
+    cx_.beginPath();cx_.arc(p.x,p.y,p.size*(0.4+p.life/p.maxLife*.6),0,6.283);cx_.fill();
+  }
+  cx_.restore();cx_.globalAlpha=1;
+}
+function _drawAtmosphere(cx_,cw,ch){
+  // Vignette — depth darkening at edges
+  const vig=cx_.createRadialGradient(cw*.5,ch*.48,ch*.22,cw*.5,ch*.48,ch*.78);
+  vig.addColorStop(0,'rgba(0,0,0,0)');vig.addColorStop(1,'rgba(4,4,16,.72)');
+  cx_.fillStyle=vig;cx_.fillRect(0,0,cw,ch);
+  // World-state mood tint (sampled cheaply)
+  let totS=0,totB=0,totE=0;
+  for(let i=0;i<SZ;i++){totS+=buf[i*NF+FS];totB+=buf[i*NF+FBio];totE+=buf[i*NF+FE];}
+  const avgS=totS/SZ,avgB=totB/SZ,avgE=totE/SZ;
+  let mr=0,mg=0,mb=0,ma=0;
+  if(avgS>0.55){mr=50;mg=0;mb=0;ma=(avgS-.55)/.45*.14;}
+  else if(avgB>0.06){mr=0;mg=22;mb=0;ma=Math.min((avgB-.06)/.94*.12,.1);}
+  else if(avgE<25){mr=0;mg=0;mb=35;ma=.08;}
+  if(ma>.005){cx_.fillStyle=`rgba(${mr},${mg},${mb},${ma.toFixed(3)})`;cx_.fillRect(0,0,cw,ch);}
 }
 
 function _drawIso(){
   const cw=canvas3d.width,ch=canvas3d.height;
   ctx3d.fillStyle='#07070e';ctx3d.fillRect(0,0,cw,ch);
+  const TW=Math.max(8,Math.floor(cw/W*1.4))|0,TH=Math.max(4,(TW/2))|0;
+  const originX=cw/2,originY=ch*0.55;
   _isoTiles(ctx3d,cw,ch);
+  _spawnIsoParticles(originX,originY,TW,TH);
+  _drawParticles(ctx3d);
+  _drawAtmosphere(ctx3d,cw,ch);
   const LAYER_LABELS=['⚡ Energy','🌫️ Density','🧠 Info','🔥 Entropy','🌡️ Temp','🧬 Bio'];
   const lbl=layer>=0?LAYER_LABELS[layer]:'⚡ Energy';
   ctx3d.font='bold 9px system-ui';ctx3d.fillStyle='rgba(160,154,240,.65)';
   ctx3d.fillText(`3D Volumetric · ${lbl}`,8,16);
   ctx3d.font='8px system-ui';ctx3d.fillStyle='rgba(120,120,180,.45)';
   ctx3d.fillText('height = energy  ·  color = selected field',8,ch-8);
-  // Agent dots in iso view
   if(window.agentSystem&&window.agentSystem.count>0){
-    const TW=Math.max(8,Math.floor(cw/W*1.4))|0,TH=Math.max(4,(TW/2))|0;
-    const originX=cw/2,originY=ch*0.55;
     const CIV_COLS=['#ff6060','#60cfff','#ffd060','#80ff80','#d060ff','#ff9060','#60ffcf'];
     for(const a of window.agentSystem.agents){
       const sx=originX+(a.x-a.y)*TW/2,sy=originY+(a.x+a.y)*TH/2;
@@ -1010,44 +1119,41 @@ window.addCustomLaw=function(){
   log(`Added law: ${name}`);
 };
 
-// ── COMPOSER ──────────────────────────────────────────────────────────────
-const ARCHETYPES={
-  'Dead Moon':        {icon:'🌑',desc:'Barren. Geology only.',             laws:{DIFFUSION:0.04,ENTROPY_BASE:0.0001,INFO_RATE:0},      procs:['geo']},
-  'Ocean World':      {icon:'🌊',desc:'Global ocean. Life possible.',      laws:{DIFFUSION:0.12,ENTROPY_BASE:0.0003,INFO_RATE:0.2},    procs:['thermo','bio']},
-  'Fungal Planet':    {icon:'🍄',desc:'Dense info networks.',              laws:{DIFFUSION:0.06,ENTROPY_BASE:0.0002,INFO_RATE:0.8},    procs:['bio','info']},
-  'Crystal Universe': {icon:'💎',desc:'Ultra-low entropy. Perfect order.', laws:{DIFFUSION:0.02,ENTROPY_BASE:0.00001,INFO_RATE:0.3},   procs:['geo']},
-  'Entropy Collapse': {icon:'🌪️',desc:'Max chaos. Watch order fight.',     laws:{DIFFUSION:0.18,ENTROPY_BASE:0.002,INFO_RATE:0.1},    procs:['thermo','emerge']},
-  'Proto Earth':      {icon:'🌍',desc:'Volcanic, primed for life.',        laws:{DIFFUSION:0.1,ENTROPY_BASE:0.0004,INFO_RATE:0.4},    procs:['thermo','geo','bio','emerge']},
-  'Neural Biosphere': {icon:'🧠',desc:'Consciousness substrate.',          laws:{DIFFUSION:0.08,ENTROPY_BASE:0.0002,INFO_RATE:2.0},   procs:['bio','info','emerge']},
-  'Post-Human Ruins': {icon:'🏛️',desc:'Decaying structures. Memory of civ.',laws:{DIFFUSION:0.07,ENTROPY_BASE:0.0008,INFO_RATE:0.6}, procs:['bio','info']},
+// ── INTEGRAL REALITY COMPOSER ────────────────────────────────────────────
+const PHI_ARCHETYPES={
+  'Harmonic':    {icon:'♪', desc:'Ordered, resonant substrate — physics obeys harmonics',   phiStrength:0.9, coupling:0.7},
+  'Chaotic':     {icon:'🌪️',desc:'Turbulent creative potential — laws shift unpredictably', phiStrength:0.3, coupling:1.4},
+  'Crystalline': {icon:'💎',desc:'Low entropy, high coherence — near-perfect order',         phiStrength:0.95,coupling:0.4},
+  'Living':      {icon:'🧬',desc:'Self-organizing vital field — life emerges naturally',     phiStrength:0.75,coupling:1.1},
+  'Void':        {icon:'⚫',desc:'Null potential — sparse, nearly empty reality',            phiStrength:0.1, coupling:0.2},
+  'Resonant':    {icon:'〜',desc:'Wave-interference dominated — standing patterns form',    phiStrength:0.8, coupling:0.9},
 };
-const PHYSICS_MOODS={
-  'Balanced':            {icon:'⚖️',m:{}},
-  'High Gravity':        {icon:'🪨',m:{DIFFUSION:0.5}},
-  'Slow Time':           {icon:'⏳',m:{tickMult:0.3}},
-  'Hyper Diffusion':     {icon:'💨',m:{DIFFUSION:2.5}},
-  'Information Dominant':{icon:'🧠',m:{INFO_RATE:3}},
-  'Chaotic Laws':        {icon:'🎲',m:{ENTROPY_BASE:3}},
-  'Low Entropy':         {icon:'🔮',m:{ENTROPY_BASE:0.1}},
+const FIELD_BALANCES={
+  'Energy Dominant':   {icon:'⚡',desc:'High-energy — heat and radiation rule',             rho:0.4, E:0.95,I:0.5},
+  'Information Dense': {icon:'🧠',desc:'Complexity via information — patterns proliferate', rho:0.6, E:0.55,I:0.95},
+  'Balanced':          {icon:'⚖️',desc:'Even distribution — all fields contribute equally', rho:0.7, E:0.7, I:0.7},
+  'Mass Dominant':     {icon:'🪨',desc:'Dense matter — gravity wells, slow diffusion',      rho:0.95,E:0.4, I:0.3},
+  'Sparse':            {icon:'✦', desc:'Low density — information flows freely',            rho:0.25,E:0.4, I:0.8},
+  'Pure Info':         {icon:'∞', desc:'Information dominates — substrate of pure mind',   rho:0.2, E:0.3, I:1.0},
 };
-const EVO_GOALS={
-  'Emergent Life':     {icon:'🧬',spawnAgents:8},
-  'Stable Ecosystem':  {icon:'🌿',spawnAgents:5},
-  'Expanding Civ':     {icon:'🏛️',spawnAgents:10},
-  'High Complexity':   {icon:'🌀',spawnAgents:10},
-  'Extinction Cycles': {icon:'💀',spawnAgents:20},
-  'Pure Physics':      {icon:'⚛️',spawnAgents:0},
+const COMPLEXITY_MODES={
+  'Emergent':    {icon:'📈',desc:'Complexity rises — structures self-organize over time',   growth:1.3,stability:0.6,agents:8},
+  'Stable':      {icon:'🌿',desc:'Balanced complexity — ecology in homeostasis',            growth:0.7,stability:0.9,agents:5},
+  'Explosive':   {icon:'💥',desc:'Unbounded growth — complexity cascades to collapse',     growth:2.1,stability:0.3,agents:15},
+  'Collapsing':  {icon:'📉',desc:'Complexity decays — entropy wins, structures dissolve',  growth:0.4,stability:0.2,agents:3},
+  'Oscillating': {icon:'〰️',desc:'Cyclic rise and fall — extinction and rebirth loops',   growth:1.0,stability:0.5,agents:20},
 };
-const HAZARDS={
-  'Meteor Showers': {icon:'☄️'},
-  'Solar Storms':   {icon:'☀️'},
-  'Acid Rain':      {icon:'🌧️'},
-  'Tectonic Rifts': {icon:'⛰️'},
-  'High Radiation': {icon:'☢️'},
+const SPACETIME_PROFILES={
+  'Standard':        {icon:'⚖️',desc:'Normal causal flow — balanced dτ and dV',           timeDil:1.0,sNoise:1.0,hazards:[]},
+  'Slow Time':       {icon:'⏳',desc:'Time dilation — processes unfold across epochs',    timeDil:0.3,sNoise:1.0,hazards:[]},
+  'Fractal Space':   {icon:'🔷',desc:'Self-similar geometry — micro-macro coupling',      timeDil:1.0,sNoise:2.0,hazards:[]},
+  'High Radiation':  {icon:'☢️',desc:'Entropy injection — entropy rises continuously',    timeDil:1.0,sNoise:1.0,hazards:['radiation']},
+  'Meteor Zone':     {icon:'☄️',desc:'Kinetic impacts — periodic high-energy shocks',     timeDil:1.0,sNoise:1.2,hazards:['meteors','solar']},
+  'Frozen Topology': {icon:'❄️',desc:'Cold slow dynamics — order preserved longer',       timeDil:0.5,sNoise:0.5,hazards:['freeze']},
 };
 
-let compStep=0,compSel={arch:null,physics:'Balanced',goal:null,hazards:[],evo:null};
-const COMP_STEPS=['World Type','Physics Mood','Evolution Goal','Hazards','Generate'];
+let compStep=0,compSel={phi:'Harmonic',fields:'Balanced',complexity:'Emergent',spacetime:'Standard'};
+const COMP_STEPS=['Φ Potential','ρ·E·I Fields','C Complexity','dτ·dV Dynamics','Generate'];
 
 function openComp(){document.getElementById('comp').classList.add('open');compStep=0;renderComp();}
 function openComposer(){openComp();}
@@ -1059,30 +1165,62 @@ function renderComp(){
   document.getElementById('csteps').innerHTML=COMP_STEPS.map((s,i)=>`
     <div class="cstep${i===compStep?' active':i<compStep?' done':''}" onclick="compStep=${i};renderComp()">${i<compStep?'✓ ':''}${s}</div>`).join('');
   document.getElementById('cseldisp').textContent=
-    [compSel.arch,compSel.physics,compSel.goal,compSel.hazards.join('+')].filter(Boolean).join(' › ');
+    [compSel.phi,compSel.fields,compSel.complexity,compSel.spacetime].filter(Boolean).join(' · ');
   const body=document.getElementById('cbody');
   if(compStep===0){
-    body.innerHTML=`<div style="font-size:10px;color:var(--sub);margin-bottom:12px">Choose the fundamental nature of your world</div><div class="card-grid">${Object.entries(ARCHETYPES).map(([n,a])=>`<div class="wcard${compSel.arch===n?' sel':''}" onclick="compSel.arch='${n}';renderComp()"><div class="wcard-icon">${a.icon}</div><div class="wcard-name">${n}</div><div class="wcard-desc">${a.desc}</div></div>`).join('')}</div>`;
+    body.innerHTML=`
+      <div style="font-size:10px;color:var(--sub);margin-bottom:3px">Configure <b style="color:#a09af0">Φ</b> — the fundamental potential substrate of your reality</div>
+      <div style="font-size:9px;color:#444;margin-bottom:12px;font-style:italic">Φ determines coupling strength across the integrand — the "laws behind your laws"</div>
+      <div class="card-grid">${Object.entries(PHI_ARCHETYPES).map(([n,a])=>`<div class="wcard${compSel.phi===n?' sel':''}" onclick="compSel.phi='${n}';renderComp()">
+        <div class="wcard-icon">${a.icon}</div><div class="wcard-name">${n}</div><div class="wcard-desc">${a.desc}</div>
+        <div style="margin-top:5px;font-size:8px;color:#444;font-family:monospace">Φ=${a.phiStrength.toFixed(2)}  κ=${a.coupling.toFixed(2)}</div>
+      </div>`).join('')}</div>`;
   }else if(compStep===1){
-    body.innerHTML=`<div style="font-size:10px;color:var(--sub);margin-bottom:12px">Define the physics personality of your universe</div><div class="card-grid">${Object.entries(PHYSICS_MOODS).map(([n,p])=>`<div class="wcard${compSel.physics===n?' sel':''}" onclick="compSel.physics='${n}';renderComp()"><div class="wcard-icon">${p.icon}</div><div class="wcard-name">${n}</div></div>`).join('')}</div>`;
+    body.innerHTML=`
+      <div style="font-size:10px;color:var(--sub);margin-bottom:3px">Set the <b style="color:#a09af0">ρ·E·I</b> field balance — density, energy, information</div>
+      <div style="font-size:9px;color:#444;margin-bottom:12px;font-style:italic">These three fields set the integrand magnitude across the spatial volume dV</div>
+      <div class="card-grid">${Object.entries(FIELD_BALANCES).map(([n,f])=>`<div class="wcard${compSel.fields===n?' sel':''}" onclick="compSel.fields='${n}';renderComp()">
+        <div class="wcard-icon">${f.icon}</div><div class="wcard-name">${n}</div><div class="wcard-desc">${f.desc}</div>
+        <div style="margin-top:5px;font-size:8px;color:#444;font-family:monospace">ρ=${f.rho}  E=${f.E}  I=${f.I}</div>
+      </div>`).join('')}</div>`;
   }else if(compStep===2){
-    body.innerHTML=`<div style="font-size:10px;color:var(--sub);margin-bottom:12px">What should this world become?</div><div class="card-grid">${Object.entries(EVO_GOALS).map(([n,g])=>`<div class="wcard${compSel.goal===n?' sel':''}" onclick="compSel.goal='${n}';renderComp()"><div class="wcard-icon">${g.icon}</div><div class="wcard-name">${n}</div></div>`).join('')}</div>`;
+    body.innerHTML=`
+      <div style="font-size:10px;color:var(--sub);margin-bottom:3px">Define <b style="color:#a09af0">C</b> — complexity dynamics across process time</div>
+      <div style="font-size:9px;color:#444;margin-bottom:12px;font-style:italic">C governs how emergent complexity grows, stabilizes, or collapses as dτ evolves</div>
+      <div class="card-grid">${Object.entries(COMPLEXITY_MODES).map(([n,c])=>`<div class="wcard${compSel.complexity===n?' sel':''}" onclick="compSel.complexity='${n}';renderComp()">
+        <div class="wcard-icon">${c.icon}</div><div class="wcard-name">${n}</div><div class="wcard-desc">${c.desc}</div>
+        <div style="margin-top:5px;font-size:8px;color:#444;font-family:monospace">growth=${c.growth}  stab=${c.stability}</div>
+      </div>`).join('')}</div>`;
   }else if(compStep===3){
-    body.innerHTML=`<div style="font-size:10px;color:var(--sub);margin-bottom:12px">Add environmental hazards (optional, multi-select)</div><div class="card-grid">${Object.entries(HAZARDS).map(([n,h])=>`<div class="wcard${compSel.hazards.includes(n)?' sel':''}" onclick="const ix=compSel.hazards.indexOf('${n}');if(ix>=0)compSel.hazards.splice(ix,1);else compSel.hazards.push('${n}');renderComp()"><div class="wcard-icon">${h.icon}</div><div class="wcard-name">${n}</div></div>`).join('')}</div>`;
+    body.innerHTML=`
+      <div style="font-size:10px;color:var(--sub);margin-bottom:3px">Shape <b style="color:#a09af0">dτ·dV</b> — process time and spatial character</div>
+      <div style="font-size:9px;color:#444;margin-bottom:12px;font-style:italic">Controls the integration measure — how reality flows through time and how space is structured</div>
+      <div class="card-grid">${Object.entries(SPACETIME_PROFILES).map(([n,s])=>`<div class="wcard${compSel.spacetime===n?' sel':''}" onclick="compSel.spacetime='${n}';renderComp()">
+        <div class="wcard-icon">${s.icon}</div><div class="wcard-name">${n}</div><div class="wcard-desc">${s.desc}</div>
+        <div style="margin-top:5px;font-size:8px;color:#444;font-family:monospace">dτ=${s.timeDil}  dV-noise=${s.sNoise}</div>
+      </div>`).join('')}</div>`;
   }else if(compStep===4){
-    const arch=ARCHETYPES[compSel.arch];
-    body.innerHTML=`<div style="text-align:center;padding:16px 0">
-      <div style="font-size:40px;margin-bottom:8px">${arch?.icon||'🌍'}</div>
-      <div style="font-size:18px;font-weight:500;margin-bottom:6px">${compSel.arch||'No archetype'}</div>
-      <div style="font-size:10px;color:var(--sub);margin-bottom:20px;max-width:340px;margin-left:auto;margin-right:auto">${arch?.desc||''}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:360px;margin:0 auto 24px;text-align:left">
-        ${[['Physics',compSel.physics,'#6080ff'],['Goal',compSel.goal||'None','#40c060'],['Hazards',compSel.hazards.join(', ')||'None','#e06040']].map(([k,v,c])=>`
+    const phi=PHI_ARCHETYPES[compSel.phi];
+    const fld=FIELD_BALANCES[compSel.fields]||FIELD_BALANCES['Balanced'];
+    const cplx=COMPLEXITY_MODES[compSel.complexity]||COMPLEXITY_MODES['Emergent'];
+    const st=SPACETIME_PROFILES[compSel.spacetime]||SPACETIME_PROFILES['Standard'];
+    const integralEst=phi?(phi.phiStrength*(fld.rho+fld.E+fld.I)/3*cplx.growth*st.timeDil).toFixed(3):'—';
+    body.innerHTML=`<div style="text-align:center;padding:12px 0">
+      <div style="font-size:13px;font-family:monospace;color:#a09af0;margin-bottom:2px">𝒓 = ∫ Φ · ρ · E · I · C  dV dτ</div>
+      <div style="font-size:10px;color:var(--sub);margin-bottom:16px">Integral estimate ≈ <span style="color:#d0cef5;font-family:monospace">${integralEst}</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:400px;margin:0 auto 20px;text-align:left">
+        ${[
+          ['Φ Potential',  phi?compSel.phi:'Not set',  phi?.icon||'?', '#a09af0'],
+          ['ρ·E·I Fields', compSel.fields,             fld.icon,       '#6080ff'],
+          ['C Complexity', compSel.complexity,         cplx.icon,      '#40c060'],
+          ['dτ·dV',        compSel.spacetime,          st.icon,        '#e09030'],
+        ].map(([k,v,ic,c])=>`
           <div style="padding:8px;background:#0e0e18;border-radius:8px;border:0.5px solid var(--border)">
             <div style="font-size:9px;color:var(--sub);margin-bottom:2px">${k}</div>
-            <div style="font-size:10px;color:${c}">${v}</div>
+            <div style="font-size:11px;color:${c}">${ic} ${v}</div>
           </div>`).join('')}
       </div>
-      <button onclick="generateWorld()" style="padding:10px 36px;border:0.5px solid var(--accent);border-radius:8px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:13px;font-weight:500">✦ Generate World</button>
+      <button onclick="generateWorld()" style="padding:10px 36px;border:0.5px solid var(--accent);border-radius:8px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:13px;font-weight:500">✦ Generate Reality</button>
     </div>`;
   }
   document.getElementById('cback').style.opacity=compStep===0?'0.3':'1';
@@ -1091,31 +1229,99 @@ function renderComp(){
 document.getElementById('cnext').addEventListener('click',()=>{if(compStep<COMP_STEPS.length-1){compStep++;renderComp();}else generateWorld();});
 document.getElementById('cback').addEventListener('click',()=>{if(compStep>0){compStep--;renderComp();}});
 
+function evolveLawsTowardIntegral(sel){
+  const phi=PHI_ARCHETYPES[sel.phi];
+  const fld=FIELD_BALANCES[sel.fields];
+  const cplx=COMPLEXITY_MODES[sel.complexity];
+  if(!phi||!fld||!cplx) return;
+  for(const law of LAWS){
+    if(law.name==='Energy Diffusion') law.fitness=Math.min(1,fld.E*phi.coupling*0.8);
+    if(law.name==='Entropy Growth')   law.fitness=Math.min(1,Math.max(0.05,1-phi.phiStrength));
+    if(law.name==='Info Bloom')       law.fitness=Math.min(1,fld.I*phi.phiStrength);
+    if(law.name==='Bio Emergence')    law.fitness=Math.min(1,cplx.growth*0.45);
+  }
+  const ll=document.getElementById('lawList');if(ll)ll.innerHTML=renderLaws();
+}
+
 function generateWorld(){
-  const arch=ARCHETYPES[compSel.arch];if(!arch){log('Select a world type first');return;}
+  const phi=PHI_ARCHETYPES[compSel.phi];if(!phi){log('Select Φ Potential first');return;}
+  const fld=FIELD_BALANCES[compSel.fields]||FIELD_BALANCES['Balanced'];
+  const cplx=COMPLEXITY_MODES[compSel.complexity]||COMPLEXITY_MODES['Emergent'];
+  const st=SPACETIME_PROFILES[compSel.spacetime]||SPACETIME_PROFILES['Standard'];
   pushUndo();
   buf.fill(0);causal=[];tick=0;
-  const phys=PHYSICS_MOODS[compSel.physics]?.m||{};
-  DIFFUSION=(arch.laws.DIFFUSION||0.09)*(phys.DIFFUSION||1);
-  ENTROPY_BASE=(arch.laws.ENTROPY_BASE||0.0004)*(phys.ENTROPY_BASE||1);
-  INFO_RATE=(arch.laws.INFO_RATE||0.35)*(phys.INFO_RATE||1);
-  activeProcs=new Set(arch.procs||[]);
+  // Map Φ·ρ·E·I·C → engine constants
+  // DIFFUSION: coupling drives energy spread; denser fields slow it slightly
+  DIFFUSION=0.09*phi.coupling*(0.4+fld.rho*0.6);
+  // ENTROPY_BASE: lerp from near-zero (ordered Φ) to high (chaotic Φ), scaled by C growth
+  ENTROPY_BASE=(0.00005+0.00295*(1-phi.phiStrength))*(1+cplx.growth*0.3);
+  // INFO_RATE: information growth driven by I field strength and Φ coherence
+  INFO_RATE=0.35*fld.I*phi.phiStrength*1.5;
+  // BIO_THRESH: bio threshold scales with density range so sparse worlds can still support life
+  BIO_THRESH=Math.max(0.03,(0.35/cplx.growth)*fld.rho*0.75);
+  // Activate processes based on field balance
+  activeProcs=new Set(['thermo','bio','info','emerge','geo']);
+  if(fld.I<0.5) activeProcs.delete('info');
+  if(fld.E<0.4) activeProcs.delete('thermo');
+  // Fill grid — dV noise shaped by sNoise
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const n=(Math.sin(x*0.4+y*0.3)*Math.cos(x*0.3-y*0.5)+1)/2;
-    const nz=(Math.sin(x*0.7)*Math.cos(y*0.6)+1)/2;
-    set_(x,y,FE,Math.max(0,(n*0.7+nz*0.3)*600+20));
-    set_(x,y,FD,Math.max(0,n*0.8));
-    set_(x,y,FI,Math.max(0,nz*100));
-    set_(x,y,FT,Math.max(0,n*300));
-    set_(x,y,FS,0.02+Math.random()*0.05);
+    const nz=(Math.sin(x*0.7*st.sNoise)*Math.cos(y*0.6*st.sNoise)+1)/2;
+    set_(x,y,FE,Math.max(0,(n*0.7+nz*0.3)*600*fld.E*phi.phiStrength+20));
+    set_(x,y,FD,Math.max(0,n*fld.rho));
+    set_(x,y,FI,Math.max(0,nz*100*fld.I*phi.phiStrength));
+    set_(x,y,FT,Math.max(0,n*300*fld.E));
+    set_(x,y,FS,Math.max(0,0.02+(1-phi.phiStrength)*0.1+Math.random()*0.03));
+    set_(x,y,FBio,Math.max(0,nz*fld.I*phi.phiStrength*0.5));
+  }
+  // Spawn agents scaled by C and dτ
+  const nA=Math.round(cplx.agents*st.timeDil*1.5);
+  if(nA>0&&window.spawnAgents) window.spawnAgents(nA);
+  // Auto-tune meta-laws toward integral balance
+  evolveLawsTowardIntegral(compSel);
+  // Wire dτ → simulation speed (timeDil 1.0 = 4x default; 0.3 = slow; 2.0 = fast)
+  const spdEl=document.getElementById('spd');
+  if(spdEl){const sv=Math.max(1,Math.min(20,Math.round(4*st.timeDil)));spdEl.value=String(sv);const spdOut=document.getElementById('spdOut');if(spdOut)spdOut.textContent=sv+'x';}
+  // Wire C growth → ongoing MetaLaw evolution rate (stored for loop pickup)
+  window._composerGrowth=cplx.growth;
+  // Apply dτ hazards
+  _clearComposerHazards();
+  if(st.hazards.length){
+    window._composerHazardInterval=setInterval(()=>{
+      for(const h of st.hazards){
+        if(h==='meteors')  _hazardMeteors();
+        if(h==='solar')    _hazardSolar();
+        if(h==='radiation')_hazardRadiation();
+        if(h==='freeze')   _hazardFreeze();
+      }
+    },5000);
   }
   if(currentRenderMode==='metrics')setRenderMode('3d',document.getElementById('tab3d'));
   closeComp();
-  log(`World "${compSel.arch||'Custom'}" generated → ${arch.desc}`);
+  drawGrid();
+  log(`∫ Φ=${compSel.phi} · ${compSel.fields} · C=${compSel.complexity} → reality generated`);
   playing=true;
   document.getElementById('pb').textContent='⏸ Pause';
   setIconPanel('world');
 }
+function _clearComposerHazards(){if(window._composerHazardInterval){clearInterval(window._composerHazardInterval);window._composerHazardInterval=null;}}
+function _hazardMeteors(){
+  for(let i=0;i<2+Math.floor(Math.random()*2);i++){
+    const mx=Math.floor(Math.random()*W),my=Math.floor(Math.random()*H),r=2+Math.floor(Math.random()*3);
+    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+      if(dx*dx+dy*dy>r*r)continue;
+      const g=Math.exp(-(dx*dx+dy*dy)/(r*r)*2);
+      const nx=Math.max(0,Math.min(W-1,mx+dx)),ny=Math.max(0,Math.min(H-1,my+dy));
+      set_(nx,ny,FE,Math.min(9999,get(nx,ny,FE)+g*800));
+      set_(nx,ny,FT,Math.min(2000,get(nx,ny,FT)+g*500));
+      set_(nx,ny,FS,Math.min(1,get(nx,ny,FS)+g*0.3));
+    }
+  }
+}
+function _hazardSolar(){for(let y=0;y<H;y++)for(let x=0;x<W;x++){set_(x,y,FE,Math.min(9999,get(x,y,FE)+50+Math.random()*150));set_(x,y,FT,Math.min(2000,get(x,y,FT)+30));}}
+function _hazardRadiation(){for(let y=0;y<H;y++)for(let x=0;x<W;x++){set_(x,y,FS,Math.min(1,get(x,y,FS)+0.003*Math.random()));}}
+function _hazardFreeze(){for(let y=0;y<H;y++)for(let x=0;x<W;x++){set_(x,y,FT,Math.max(0,get(x,y,FT)-20));}}
+
 
 // ── HEALTH PANEL ──────────────────────────────────────────────────────────
 function updateHealth(){
@@ -1457,9 +1663,15 @@ function loop(ts){
   const dt=Math.min((ts-lastTs)/1000,.05);lastTs=ts;
   fc++;if(ts-fpt>600){fps=Math.round(fc*1000/(ts-fpt||1));fc=0;fpt=ts;}
   if(playing)for(let s=0;s<spd;s++)simStep(0.016);
+  _tickParticles();
   drawGrid();
   if(tick%3===0&&selX>=0){explainCell(selX,selY);drawHist();}
-  if(tick%15===0)updateHealth();
+  if(tick%15===0){updateHealth();}
+  // Ongoing MetaLaw evolution driven by C complexity growth rate (set by Composer)
+  if(playing&&window._composerGrowth&&tick>0){
+    const evRate=Math.round(120/Math.max(0.2,window._composerGrowth));
+    if(tick%evRate===0)evolveLawsTowardIntegral(compSel);
+  }
   if(tick%5===0&&currentAppMode==='science'){
     if(window.scienceMode)window.scienceMode.onTick(tick,buf,W,H,NF);
     const sf=document.getElementById('sciFieldStats');

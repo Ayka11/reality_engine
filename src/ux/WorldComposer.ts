@@ -2,54 +2,58 @@ import { SimulationEngine } from '../simulation/SimulationEngine';
 import { CivilizationSystem } from '../simulation/CivilizationSystem';
 import { F } from '../core/CellState';
 
-// ── World Archetypes ──────────────────────────────────────────────────────────
-export interface ArchetypeBase {
-  energy: number; density: number; info: number;
-  entropy: number; temp: number; bio: number;
+// ── Integral Reality Archetypes ───────────────────────────────────────────────
+export interface PhiArchetype {
+  icon: string; desc: string; phiStrength: number; coupling: number;
 }
-export interface Archetype {
-  desc: string; icon: string; base: ArchetypeBase;
-}
-export const WORLD_ARCHETYPES: Record<string, Archetype> = {
-  'Dead Moon':         { icon:'🌑', desc:'Barren, low entropy, no life. Geology only.',                     base:{ energy:80,  density:0.7, info:0,   entropy:0.05, temp:20,  bio:0   } },
-  'Ocean World':       { icon:'🌊', desc:'Global ocean. High density at depth. Life possible.',             base:{ energy:150, density:0.6, info:40,  entropy:0.08, temp:80,  bio:0.2 } },
-  'Fungal Planet':     { icon:'🍄', desc:'Dense information networks. Slow but deep biology.',              base:{ energy:200, density:0.5, info:200, entropy:0.1,  temp:60,  bio:0.6 } },
-  'Machine Ecology':   { icon:'⚙️',  desc:'High energy, structured order. Information dominant.',            base:{ energy:600, density:0.8, info:400, entropy:0.03, temp:200, bio:0.1 } },
-  'Crystal Universe':  { icon:'💎', desc:'Ultra-low entropy. Perfect order. Energy locked in crystals.',    base:{ energy:800, density:0.9, info:300, entropy:0.01, temp:10,  bio:0   } },
-  'Entropy Collapse':  { icon:'🌪️', desc:'Heat death approaching. Maximum chaos. Watch structures fight it.',base:{ energy:300, density:0.4, info:50,  entropy:0.8,  temp:400, bio:0.1 } },
-  'Proto Earth':       { icon:'🌋', desc:'Volcanic, energetic, primed for life emergence.',                  base:{ energy:400, density:0.6, info:60,  entropy:0.15, temp:250, bio:0.15} },
-  'Neural Biosphere':  { icon:'🧠', desc:'Life evolved into information. Consciousness substrate.',          base:{ energy:300, density:0.4, info:600, entropy:0.06, temp:100, bio:0.9 } },
-  'Gas Giant':         { icon:'🪐', desc:'Massive energy flows. No solid surface. Weather dominates.',      base:{ energy:700, density:0.3, info:20,  entropy:0.2,  temp:500, bio:0   } },
-  'Post-Human Ruins':  { icon:'🏛️', desc:'High information residue. Decaying structures. Memory of civilization.',base:{ energy:150, density:0.5, info:350, entropy:0.4, temp:80, bio:0.3 } },
+export const PHI_ARCHETYPES: Record<string, PhiArchetype> = {
+  'Harmonic':    { icon:'♪',  desc:'Ordered, resonant substrate',            phiStrength:0.9,  coupling:0.7  },
+  'Chaotic':     { icon:'🌪️', desc:'Turbulent creative potential',           phiStrength:0.3,  coupling:1.4  },
+  'Crystalline': { icon:'💎', desc:'Low entropy, high coherence',             phiStrength:0.95, coupling:0.4  },
+  'Living':      { icon:'🧬', desc:'Self-organizing vital field',            phiStrength:0.75, coupling:1.1  },
+  'Void':        { icon:'⚫', desc:'Null potential — sparse reality',         phiStrength:0.1,  coupling:0.2  },
+  'Resonant':    { icon:'〜', desc:'Wave-interference dominated',            phiStrength:0.8,  coupling:0.9  },
 };
 
-// ── Physics Profiles ──────────────────────────────────────────────────────────
-export interface PhysicsProfile { desc: string; energyMult?: number; infoMult?: number; entropyMult?: number; }
-export const PHYSICS_PROFILES: Record<string, PhysicsProfile> = {
-  'Balanced':              { desc:'Default physical constants' },
-  'High Gravity':          { desc:'Matter compresses, density dominates',     energyMult:0.8 },
-  'Slow Time':             { desc:'Everything happens at 30% speed',          energyMult:0.3 },
-  'Low Entropy':           { desc:'Order preserved longer, structures stable', entropyMult:0.2 },
-  'Hyper Diffusion':       { desc:'Energy spreads instantly, no local hotspots',energyMult:1.4 },
-  'Chaotic Laws':          { desc:'Laws evolve rapidly, physics unstable',     entropyMult:1.5 },
-  'Stable Matter':         { desc:'Dense, ordered, resistant to change',       entropyMult:0.1 },
-  'Information Dominant':  { desc:'Information field overpowers physical fields', infoMult:3.0 },
+export interface FieldBalance {
+  icon: string; desc: string; rho: number; E: number; I: number;
+}
+export const FIELD_BALANCES: Record<string, FieldBalance> = {
+  'Energy Dominant':   { icon:'⚡', desc:'High-energy — heat and radiation rule',             rho:0.4,  E:0.95, I:0.5  },
+  'Information Dense': { icon:'🧠', desc:'Complexity via information',                        rho:0.6,  E:0.55, I:0.95 },
+  'Balanced':          { icon:'⚖️', desc:'Even distribution — all fields contribute equally', rho:0.7,  E:0.7,  I:0.7  },
+  'Mass Dominant':     { icon:'🪨', desc:'Dense matter — gravity wells, slow diffusion',      rho:0.95, E:0.4,  I:0.3  },
+  'Sparse':            { icon:'✦',  desc:'Low density — information flows freely',            rho:0.25, E:0.4,  I:0.8  },
+  'Pure Info':         { icon:'∞',  desc:'Information dominates — substrate of pure mind',   rho:0.2,  E:0.3,  I:1.0  },
 };
 
-// ── World Goals ───────────────────────────────────────────────────────────────
-export interface WorldGoal {
-  desc: string; icon: string;
-  spawnAgents?: number; spawnCivs?: boolean;
+export interface ComplexityMode {
+  icon: string; desc: string; growth: number; stability: number; agents: number;
 }
-export const WORLD_GOALS: Record<string, WorldGoal> = {
-  'Emergent Life':         { icon:'🧬', desc:'Tune world for maximum bio potential emergence',      spawnAgents:8 },
-  'Stable Ecosystem':      { icon:'🌿', desc:'Balance entropy and order for long-running ecology',  spawnAgents:5 },
-  'Expanding Civilization':{ icon:'🏙️', desc:'Prime conditions for civilization emergence and growth',spawnAgents:10, spawnCivs:true },
-  'Infinite Storm':        { icon:'⚡', desc:'Perpetual high-energy turbulence, no equilibrium' },
-  'Information Network':   { icon:'🕸️', desc:'Build a world where information is the primary resource',spawnAgents:15 },
-  'High Complexity Growth':{ icon:'📈', desc:'Maximize emergence of novel structures over time',    spawnAgents:10, spawnCivs:true },
-  'Extinction Cycles':     { icon:'🔄', desc:'Life rises and collapses repeatedly — evolutionary pressure',spawnAgents:20 },
+export const COMPLEXITY_MODES: Record<string, ComplexityMode> = {
+  'Emergent':    { icon:'📈', desc:'Complexity rises — structures self-organize',            growth:1.3, stability:0.6, agents:8  },
+  'Stable':      { icon:'🌿', desc:'Balanced complexity — ecology in homeostasis',           growth:0.7, stability:0.9, agents:5  },
+  'Explosive':   { icon:'💥', desc:'Unbounded growth — complexity cascades to collapse',    growth:2.1, stability:0.3, agents:15 },
+  'Collapsing':  { icon:'📉', desc:'Complexity decays — entropy wins',                      growth:0.4, stability:0.2, agents:3  },
+  'Oscillating': { icon:'〰️', desc:'Cyclic rise and fall — extinction and rebirth loops',  growth:1.0, stability:0.5, agents:20 },
 };
+
+export interface SpacetimeProfile {
+  icon: string; desc: string; timeDil: number; sNoise: number; hazards: string[];
+}
+export const SPACETIME_PROFILES: Record<string, SpacetimeProfile> = {
+  'Standard':        { icon:'⚖️', desc:'Normal causal flow',           timeDil:1.0, sNoise:1.0, hazards:[]                      },
+  'Slow Time':       { icon:'⏳', desc:'Time dilation',                timeDil:0.3, sNoise:1.0, hazards:[]                      },
+  'Fractal Space':   { icon:'🔷', desc:'Self-similar geometry',        timeDil:1.0, sNoise:2.0, hazards:[]                      },
+  'High Radiation':  { icon:'☢️', desc:'Entropy injection',            timeDil:1.0, sNoise:1.0, hazards:['radiation']           },
+  'Meteor Zone':     { icon:'☄️', desc:'Kinetic impacts',              timeDil:1.0, sNoise:1.2, hazards:['meteors','solar']     },
+  'Frozen Topology': { icon:'❄️', desc:'Cold slow dynamics',           timeDil:0.5, sNoise:0.5, hazards:['freeze']              },
+};
+
+// ── Integral Composer Selection ────────────────────────────────────────────────
+export interface ComposerSelection {
+  phi: string | null; fields: string; complexity: string; spacetime: string;
+}
 
 // ── Environment Hazards ───────────────────────────────────────────────────────
 type HazardFn = (grid: SimulationEngine['grid']) => void;
@@ -124,30 +128,10 @@ function _hazardFreezing(grid: SimulationEngine['grid']): void {
   }
 }
 
-// ── Evolution Modes ───────────────────────────────────────────────────────────
-export interface EvoMode { desc: string; agentSpawnMult?: number; }
-export const EVOLUTION_MODES: Record<string, EvoMode> = {
-  'Rapid Mutation':          { desc:'Fast genetic drift',                  agentSpawnMult:1 },
-  'Slow Evolution':          { desc:'Gradual, stable change',              agentSpawnMult:1 },
-  'Civilization Bias':       { desc:'Agents lean toward cooperation',      agentSpawnMult:1 },
-  'Biological Dominance':    { desc:'Life spreads aggressively',           agentSpawnMult:3 },
-  'Extinction Cycles':       { desc:'Periodic die-offs',                   agentSpawnMult:2 },
-  'Self-Organizing Systems': { desc:'Information drives order',            agentSpawnMult:1 },
-};
-
 // ── WorldComposer ─────────────────────────────────────────────────────────────
-export interface ComposerSelection {
-  archetype: string | null;
-  physics: string;
-  goal: string | null;
-  hazards: string[];
-  evolution: string | null;
-}
-
 export class WorldComposer {
   readonly selection: ComposerSelection = {
-    archetype: null, physics: 'Balanced',
-    goal: null, hazards: [], evolution: null,
+    phi: null, fields: 'Balanced', complexity: 'Emergent', spacetime: 'Standard',
   };
   private activeHazardInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -158,55 +142,55 @@ export class WorldComposer {
 
   generate(): string {
     const { sim, selection } = this;
-    const arch = WORLD_ARCHETYPES[selection.archetype ?? ''];
-    if (!arch) return 'Select a world archetype first';
-
-    const phys = PHYSICS_PROFILES[selection.physics] ?? {};
-    const goal = selection.goal ? WORLD_GOALS[selection.goal] : null;
-    const evo  = selection.evolution ? EVOLUTION_MODES[selection.evolution] : null;
+    const phi  = PHI_ARCHETYPES[selection.phi ?? ''];
+    if (!phi) return 'Select a Φ Potential first';
+    const fld  = FIELD_BALANCES[selection.fields]  ?? FIELD_BALANCES['Balanced'];
+    const cplx = COMPLEXITY_MODES[selection.complexity] ?? COMPLEXITY_MODES['Emergent'];
+    const st   = SPACETIME_PROFILES[selection.spacetime] ?? SPACETIME_PROFILES['Standard'];
     const { grid } = sim;
     const { W, H, D, buffer: buf } = grid;
 
-    // 1. Fill grid
+    // Fill grid — dV noise shaped by sNoise
     for (let z = 0; z < D; z++) {
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
-          const heightFactor  = z / D;
-          const noiseFactor   = (Math.sin(x * 0.4) * Math.cos(y * 0.3) + 1) / 2;
+          const n  = (Math.sin(x * 0.4) * Math.cos(y * 0.3) + 1) / 2;
+          const nz = (Math.sin(x * 0.7 * st.sNoise) * Math.cos(y * 0.6 * st.sNoise) + 1) / 2;
           const bi = grid.idx(x, y, z);
-          buf[bi + F.ENERGY]        = arch.base.energy  * (0.5 + noiseFactor * 0.8) * (phys.energyMult  ?? 1);
-          buf[bi + F.DENSITY]       = Math.min(1, arch.base.density * (0.7 + heightFactor * 0.3));
-          buf[bi + F.INFORMATION]   = arch.base.info    * noiseFactor               * (phys.infoMult    ?? 1);
-          buf[bi + F.ENTROPY]       = arch.base.entropy                              * (phys.entropyMult ?? 1);
-          buf[bi + F.TEMPERATURE]   = arch.base.temp    * (0.5 + noiseFactor * 0.6);
-          buf[bi + F.BIO_POTENTIAL] = arch.base.bio     * noiseFactor;
+          buf[bi + F.ENERGY]        = Math.max(0, (n*0.7+nz*0.3) * 600 * fld.E * phi.phiStrength + 20);
+          buf[bi + F.DENSITY]       = Math.max(0, n * fld.rho);
+          buf[bi + F.INFORMATION]   = Math.max(0, nz * 100 * fld.I * phi.phiStrength);
+          buf[bi + F.ENTROPY]       = Math.max(0, 0.02 + (1 - phi.phiStrength) * 0.1);
+          buf[bi + F.TEMPERATURE]   = Math.max(0, n * 300 * fld.E);
+          buf[bi + F.BIO_POTENTIAL] = Math.max(0, nz * fld.I * 0.5);
         }
       }
     }
 
-    // 2. Spawn agents
-    const nAgents = Math.round((goal?.spawnAgents ?? 0) * (evo?.agentSpawnMult ?? 1));
-    if (nAgents > 0) {
-      sim.agents.seed(grid, nAgents);
-    }
+    // Spawn agents scaled by C and dτ
+    const nAgents = Math.round(cplx.agents * st.timeDil * 1.5);
+    if (nAgents > 0) sim.agents.seed(grid, nAgents);
 
-    // 3. Spawn civs
-    if (goal?.spawnCivs && this.civSystem) {
+    // Spawn civs for high-complexity modes
+    if (cplx.growth >= 1.3 && this.civSystem) {
       this.civSystem.seedFromGrid();
     }
 
-    // 4. Setup hazards
+    // Apply spacetime hazards
     this._clearHazards();
-    if (selection.hazards.length > 0) {
+    if (st.hazards.length > 0) {
       this.activeHazardInterval = setInterval(() => {
-        for (const name of selection.hazards) {
-          ENV_HAZARDS[name]?.fn(sim.grid);
+        for (const h of st.hazards) {
+          if (h === 'radiation') _hazardRadiation(sim.grid);
+          if (h === 'meteors')   _hazardMeteors(sim.grid);
+          if (h === 'solar')     _hazardSolarStorm(sim.grid);
+          if (h === 'freeze')    _hazardFreezing(sim.grid);
         }
       }, 5000);
     }
 
     sim.syncToGPU();
-    return `World "${selection.archetype}" generated — ${arch.desc}`;
+    return `∫ Φ=${selection.phi} · ${selection.fields} · C=${selection.complexity} → reality generated`;
   }
 
   _clearHazards(): void {

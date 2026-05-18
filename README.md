@@ -30,6 +30,41 @@ Reality Engine is an **interactive physics sandbox** where the rules of physics 
 
 ---
 
+## Visual Rendering (Phase 1 — Complete)
+
+The 3D Volumetric view renders an isometric voxel world with three layers of visual effects stacked on top of each other:
+
+### Enhanced Color Palettes
+Every field uses a physically meaningful 4-stop gradient instead of a flat 2-stop color map:
+
+| Field | Low | Mid | High | Peak |
+|---|---|---|---|---|
+| ⚡ Energy | Indigo | Electric blue | Cyan → Orange | White-hot |
+| 🧠 Info | Deep navy | Violet | Electric cyan | White |
+| 🧬 Bio | Deep emerald | Lime green | Bright green | White-green |
+| 🔥 Entropy | Black | Crimson | Hot orange → Yellow | White |
+| 🌡️ Temp | Deep red | Orange | Yellow | White |
+| 🌫️ Density | Black | Teal | Cyan | White |
+
+### Emissive Glow (Two-Pass Rendering)
+Tiles above 28% intensity get a second draw pass using **screen (additive) compositing** — the same technique used in HDR bloom. High-energy zones glow orange-white; bio-rich areas pulse green. Side faces use 42%/62% brightness for proper depth shading (down from the old 50%/70%).
+
+### Particle System
+Three classes of ambient particles float upward from field hotspots:
+- **Orange energy sparks** — from cells with energy > 200 (threshold calibrated to fresh generated worlds)
+- **Green bio spores** — from cells with bio > 0.09
+- **Blue/violet info sparks** — from cells with info > 35
+
+Up to 220 particles live at once. Each particle ages, fades, and is removed when its lifetime expires. All particles render with screen compositing so they add light rather than paint over tiles.
+
+### Atmospheric Vignette + World-State Mood Tint
+A radial vignette gradient darkens the viewport edges to create depth. On top of that, a **world-state mood tint** reacts to live field averages:
+- Entropy crisis (avgS > 0.55) → faint red wash, intensifying toward collapse
+- Life-bearing world (avgB > 0.06) → faint green wash, proportional to bio density
+- Energy-dead world (avgE < 25) → cold blue tint
+
+---
+
 ## Quick Start
 
 ```bash
@@ -76,34 +111,68 @@ Each mode loads its own left-panel tools. The simulation keeps running in all mo
 
 The default sandbox — paint matter, tune laws, run scripts, compose worlds.
 
-#### World Composer Wizard
+#### Integral Reality Composer
 
-1. Click **✦ Compose World** in the top bar
-2. **Step 1 — World Type**: Choose an archetype. Each archetype sets physics constants and active processes:
+The World Composer is aligned with the governing formula:
 
-| Archetype | Character | Best For |
+> **𝒓 = ∫ Φ · ρ · E · I · C  dV dτ**
+
+Each step maps directly to one term. All steps have defaults pre-selected so you can click **⚡ Quick Generate** in the top bar to generate instantly, or open the wizard to customize each dimension.
+
+**Quick Generate** (top bar button): generates the world with whatever the composer currently has selected — no wizard required.
+
+**Step-by-step wizard** — click **✦ Compose World**:
+
+1. **Φ Potential** — the fundamental substrate. Sets coupling strength across the entire integrand.
+
+| Archetype | Icon | Character |
 |---|---|---|
-| 🌑 Dead Moon | Barren, geology only | Pure physics experiments |
-| 🌊 Ocean World | Global liquid, life possible | Bio emergence |
-| 🍄 Fungal Planet | Dense info networks | Information dynamics |
-| 💎 Crystal Universe | Ultra-low entropy, perfect order | Stability studies |
-| 🌪️ Entropy Collapse | Max chaos | Watching order fight disorder |
-| 🌍 Proto Earth | Volcanic, primed for life | Default recommended start |
-| 🧠 Neural Biosphere | Consciousness substrate | AI/agents experiments |
-| 🏛️ Post-Human Ruins | Decaying structures | Long-duration decay studies |
+| Harmonic | ♪ | Ordered, resonant — physics obeys harmonics (default) |
+| Chaotic | 🌪️ | Turbulent — laws shift unpredictably |
+| Crystalline | 💎 | Ultra-low entropy, near-perfect order |
+| Living | 🧬 | Self-organizing vital field — life emerges naturally |
+| Void | ⚫ | Sparse, nearly empty reality |
+| Resonant | 〜 | Wave-interference dominated — standing patterns form |
 
-3. **Step 2 — Physics Mood**: Multiplies the archetype's constants:
-   - *Balanced* — no change (safe default)
-   - *High Gravity* — diffusion ×0.5 (tighter clusters)
-   - *Hyper Diffusion* — diffusion ×2.5 (fast spreading)
-   - *Information Dominant* — INFO_RATE ×3 (rapid complexity)
-   - *Chaotic Laws* — entropy ×3 (accelerated decay)
-   - *Low Entropy* — entropy ×0.1 (near-crystalline)
+2. **ρ·E·I Fields** — density, energy, information balance. Controls the integrand magnitude across dV.
 
-4. **Step 3 — Evolution Goal**: Sets agent count and narrative intent (Emergent Life, Stable Ecosystem, Expanding Civ, etc.)
-5. **Step 4 — Hazards** (optional): Add recurring disturbances — Meteor Showers, Solar Storms, Acid Rain, Tectonic Rifts, High Radiation
-6. **Step 5 — Preview in Render Mode**: Click 3D/2D/Hybrid to preview the current selection before committing
-7. Click **✦ Generate World** — the simulation fills, plays, and the panel returns to World
+| Balance | Icon | Character |
+|---|---|---|
+| Balanced | ⚖️ | Even distribution — all fields contribute equally (default) |
+| Energy Dominant | ⚡ | Heat and radiation rule |
+| Information Dense | 🧠 | Patterns proliferate |
+| Mass Dominant | 🪨 | Dense matter — gravity wells, slow diffusion |
+| Sparse | ✦ | Low density — information flows freely |
+| Pure Info | ∞ | Information dominates — substrate of pure mind |
+
+3. **C Complexity** — emergence rate. Governs how complexity grows, stabilizes, or collapses over process time dτ. Also sets ongoing MetaLaw evolution rate — higher growth = faster law adaptation.
+
+| Mode | Icon | Character |
+|---|---|---|
+| Emergent | 📈 | Structures self-organize over time (default) |
+| Stable | 🌿 | Ecology in homeostasis |
+| Explosive | 💥 | Unbounded growth — cascades to collapse |
+| Collapsing | 📉 | Entropy wins, structures dissolve |
+| Oscillating | 〰️ | Cyclic extinction and rebirth |
+
+4. **dτ·dV Dynamics** — process time and spatial structure. Also wires directly to the simulation **Speed** slider: `timeDil=1.0` → 4× speed (default); `timeDil=0.3` (Slow Time) → 1× speed; faster dynamics run quicker.
+
+| Profile | Icon | timeDil | Spatial noise |
+|---|---|---|---|
+| Standard | ⚖️ | 1.0 | 1.0 (default) |
+| Slow Time | ⏳ | 0.3 | 1.0 |
+| Fractal Space | 🔷 | 1.0 | 2.0 |
+| High Radiation | ☢️ | 1.0 | 1.0 + radiation hazard |
+| Meteor Zone | ☄️ | 1.0 | 1.2 + impact hazards |
+| Frozen Topology | ❄️ | 0.5 | 0.5 |
+
+5. **Generate** — shows the integral estimate `≈ Φ · avg(ρ,E,I) · C · dτ` and the final configuration. Click **✦ Generate Reality** (or the footer **Generate →** button).
+
+After generation:
+- Simulation starts playing immediately
+- MetaLaw fitness values are tuned to match the chosen configuration
+- MetaLaws continue evolving periodically at a rate driven by C complexity growth
+- Hazard intervals start automatically if the spacetime profile includes them
 
 #### Smart Brushes
 
