@@ -129,7 +129,7 @@ export class AgentSystem {
       }
 
       // Passive energy drain
-      a.energy -= 0.0012
+      a.energy -= 0.0006
 
       // Build effective weights (base + plan bias)
       const ew = clamp01((a.genome.seekEnergyW  + (a.planBias.seekEnergyW  ?? 0)))

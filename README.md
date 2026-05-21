@@ -9,11 +9,12 @@ license: mit
 pinned: false
 ---
 
-# Reality Engine v5 — Meta-Law Physics Simulator
+# Reality Engine v6 — Meta-Law Physics Simulator
 
 > *"A universe you can paint — where physics evolves, civilizations rise, and an AI director watches over it all."*
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
+[![Three.js](https://img.shields.io/badge/Three.js-r165-green)](https://threejs.org/)
 [![Vite](https://img.shields.io/badge/Vite-5.x-purple)](https://vitejs.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![HuggingFace](https://img.shields.io/badge/🤗-Live%20Demo-yellow)](https://huggingface.co/spaces/Aygun1489/Reality_Engine_Meta_Law_SImulator)
@@ -22,46 +23,11 @@ pinned: false
 
 ## What Is This
 
-Reality Engine is an **interactive physics sandbox** where the rules of physics are themselves simulated objects — they compete, mutate, and go extinct. Paint energy and matter onto a voxel grid. Thermodynamics, chemistry, geology, and life emerge from first principles. The laws governing them evolve in real time through a **MetaLaw system**: each law has fitness, strength, and mutation rate. Laws that produce complexity survive. Laws that produce chaos go dormant.
+Reality Engine is an **interactive physics sandbox** where the rules of physics are themselves simulated objects — they compete, mutate, and go extinct. Paint energy and matter onto a voxel grid. Thermodynamics, chemistry, geology, and life emerge from first principles. The laws governing them evolve in real time through a **MetaLaw system**: each law has fitness, strength, and mutation rate. Laws that produce complexity survive. Laws that collapse into chaos go dormant.
 
 **Autonomous AI agents** (Utility AI + FSM + genome-based evolution) inhabit the simulation. A built-in **LLM planner** (Claude Haiku) assigns collective goals via LangChain-style chaining, AutoGen two-agent debate, and CrewAI role delegation. A **Python microservice** runs NumPy / SciPy solvers for flow fields, population forecasts, and evolutionary fitness landscapes.
 
 **This is not a game about matter. It is a game about the rules that govern matter.**
-
----
-
-## Visual Rendering (Phase 1 — Complete)
-
-The 3D Volumetric view renders an isometric voxel world with three layers of visual effects stacked on top of each other:
-
-### Enhanced Color Palettes
-Every field uses a physically meaningful 4-stop gradient instead of a flat 2-stop color map:
-
-| Field | Low | Mid | High | Peak |
-|---|---|---|---|---|
-| ⚡ Energy | Indigo | Electric blue | Cyan → Orange | White-hot |
-| 🧠 Info | Deep navy | Violet | Electric cyan | White |
-| 🧬 Bio | Deep emerald | Lime green | Bright green | White-green |
-| 🔥 Entropy | Black | Crimson | Hot orange → Yellow | White |
-| 🌡️ Temp | Deep red | Orange | Yellow | White |
-| 🌫️ Density | Black | Teal | Cyan | White |
-
-### Emissive Glow (Two-Pass Rendering)
-Tiles above 28% intensity get a second draw pass using **screen (additive) compositing** — the same technique used in HDR bloom. High-energy zones glow orange-white; bio-rich areas pulse green. Side faces use 42%/62% brightness for proper depth shading (down from the old 50%/70%).
-
-### Particle System
-Three classes of ambient particles float upward from field hotspots:
-- **Orange energy sparks** — from cells with energy > 200 (threshold calibrated to fresh generated worlds)
-- **Green bio spores** — from cells with bio > 0.09
-- **Blue/violet info sparks** — from cells with info > 35
-
-Up to 220 particles live at once. Each particle ages, fades, and is removed when its lifetime expires. All particles render with screen compositing so they add light rather than paint over tiles.
-
-### Atmospheric Vignette + World-State Mood Tint
-A radial vignette gradient darkens the viewport edges to create depth. On top of that, a **world-state mood tint** reacts to live field averages:
-- Entropy crisis (avgS > 0.55) → faint red wash, intensifying toward collapse
-- Life-bearing world (avgB > 0.06) → faint green wash, proportional to bio density
-- Energy-dead world (avgE < 25) → cold blue tint
 
 ---
 
@@ -79,23 +45,126 @@ Or open the **[live demo on Hugging Face](https://huggingface.co/spaces/Aygun148
 
 ---
 
-## Render Modes
+## 3D PBR Renderer (Phase 2 — Complete)
 
-The four tabs at the top of the viewport switch how the simulation is visualized. These are independent of the four editor modes (Create / Science / Cinema / Game Dev).
+The 3D Volumetric view is powered by a **Three.js PBR renderer** running on a sparse 128×128×64 chunk grid (up to ~200 active chunks out of 2048 total). Voxels look like real materials based on their field values.
 
-| Tab | What You See | When to Use |
-|---|---|---|
-| **🔲 3D Volumetric** | Isometric height-map — energy becomes pillar height, bio shows as green glow | Default view, best for exploring structure |
-| **⬛ 2D Multi-Slice** | Four-quadrant view: Energy, Bio, Info, Entropy simultaneously | Comparing multiple fields at once |
-| **⟐ Hybrid** | Left half = flat 2D, right half = isometric 3D — two canvases side by side | Seeing cause-and-effect across representations |
-| **📈 Metrics** | Live numerical dashboard: tick, avg energy/entropy/info/bio/temp, active laws | Quick snapshot without reading the canvas |
+### Material Intelligence
 
-**Switching modes:**
-1. Click any tab — the view switches instantly without pausing simulation
-2. In the **World Composer**, use the *Preview in Render Mode* buttons before generating to see how your world will look
-3. Generating a world while in Metrics mode auto-switches to 3D Volumetric
+Every cell is classified into one of 10 physical material types based on live field values:
 
-> **Note:** Painting and cell inspection work in 3D, 2D, and Hybrid modes. In Hybrid, clicking the left (2D) half paints cells; the right (3D) half is view-only.
+| Material | Icon | Field Conditions | Properties |
+|---|---|---|---|
+| **Plasma** | 🔴 | Temperature > 800 | Emissive orange-white glow, intensity 4× |
+| **Crystal** | 💎 | Energy > 600, Entropy < 0.05 | Transparent ice-blue, low roughness, emissive teal |
+| **Organic** | 🌿 | Bio > 0.55 | Rough green, soft green glow |
+| **Neural** | 🧠 | Info > 300, Density > 0.2 | Purple-violet, pulsing neural glow |
+| **Energy** | ⚡ | Energy > 400, Density > 0.5 | Orange fire, 2.5× emissive |
+| **Metal** | ⚙️ | Density > 0.7, Temperature > 200 | Reflective silver, low roughness |
+| **Water** | 🌊 | Density > 0.4, Temperature < 100 | Transparent blue, mild emissive |
+| **Rock** | 🪨 | Density > 0.75, Energy < 50 | Rough brown-grey, no glow |
+| **Road** | 🛣️ | Default urban surface | Dark grey, near-matte |
+| **Void** | ⬛ | Energy < 1, Density < 0.05 | Fully transparent — empty space |
+
+Classification uses priority ordering: Plasma is checked first (prevents false positives), Void last. Each material gets its own **PBR InstancedMesh** with correct roughness, metalness, and emissive values — no per-frame color baking.
+
+### Energy Glow Blending
+
+High-energy cells of any type get an additional orange energy glow blended proportionally: `min(E / 800, 1)`. At full energy (800+), cells shift noticeably toward orange-white regardless of base material.
+
+### Particle System
+
+Two ambient particle layers float above the simulation:
+
+| Layer | Count | Color | Source |
+|---|---|---|---|
+| Smoke | 1200 | Warm grey, slow-rising | General atmosphere |
+| Sparks | 400 | Orange-red, fast | Energy hotspots |
+
+Particles are GPU points with custom size and opacity. Both layers toggle with the **✨ Particles** button in the 3D Controls panel.
+
+### Time-of-Day Atmosphere
+
+The **Time of day** slider (0–24h) moves a sun arc across the sky and adjusts:
+- **DirectionalLight** position and color (warm noon → cool dusk → dark midnight)
+- **AmbientLight** intensity
+- **ACES filmic tonemapping** exposure (0.6 at midnight → 1.4 at noon)
+- **FogExp2** density and tint
+
+### Camera Presets
+
+Five camera presets in the **3D Controls** right panel:
+
+| Preset | View |
+|---|---|
+| **Orbit** | Default — user-controlled orbit around scene center |
+| **Top** | Orthographic-style top-down at 90° elevation |
+| **ISO** | Cinematic isometric — 45° yaw, 35° elevation |
+| **Street** | Low street-level view at ground height |
+| **Fly ✈** | Autonomous smooth orbit path, `flyAngle += dt × 0.22` |
+
+### Material Mode Selector
+
+Three visualization modes in the **layer bar** (next to field buttons):
+
+| Mode | What you see |
+|---|---|
+| **Field** | Classic color-ramp coloring by selected field value |
+| **PBR** | Material-classified — each voxel looks like its real material |
+| **Height** | Height-map gradient by Z-coordinate |
+
+### Z-Slice Cutting Plane
+
+The **Z-Slice** slider (0–63) cuts the world at a given Z level, hiding everything above. Use it to look inside mountains, read underground strata, or focus on a floor of a building. Value 63 = show all (no cut).
+
+---
+
+## Visual Rendering (Phase 1 — Complete)
+
+The 2D canvas modes keep all Phase 1 effects: 4-stop color palettes per field, emissive glow on high-energy tiles, 220-particle bio/energy/info spark system, atmospheric vignette, and world-state mood tint (red wash on entropy crisis, green on life, blue on energy death).
+
+---
+
+## Scene Composer (Cinema Mode)
+
+Open Cinema Mode → the **🎬 Scene Composer** panel appears in the left sidebar. It is a drag-and-drop cinematic scene builder: pick components, toggle them on/off, then click **▶ Apply All** to paint field values into the live 3D chunk grid.
+
+### Scene Components
+
+| Component | Icon | Description | Key Fields |
+|---|---|---|---|
+| **Downtown Core** | 🏙️ | Dense energy towers, high info, neural activity | E 400–700, I 280, D 0.9 |
+| **Park District** | 🌳 | NW quadrant — lush bio, low entropy, cool | Bio 0.7+, S 0.01, T 50 |
+| **Industrial Zone** | 🏭 | SE quadrant — max energy, high entropy, metallic | E 650, T 450, S 0.55 |
+| **Road Grid** | 🛣️ | Info arteries every 16 units across the world | I 200, D 0.6 |
+| **Ocean Layer** | 🌊 | Fills lower Z-levels with water | D 0.85, T 18, S 0.01 |
+| **Crystal Ridge** | 💎 | Diagonal vein — ultra-low entropy, high energy | E 680, S 0.004, I 520 |
+| **Life Cluster** | 🧬 | 24 random bio blooms with organic energy | Bio 0.7, E 220, I 100 |
+| **Storm Front** | ⛈️ | Top strip — turbulent high entropy, kinetic | E 800, T 1200, S 0.95 |
+| **Coastal City** | 🌅 | NE urban gradient meeting ocean coast | Mixed urban + water |
+| **Mountain Ridge** | 🏔️ | Rocky base with crystal snow caps at altitude | D 0.88, crystal peaks |
+
+**Workflow:**
+1. Click **+ Add component...** dropdown — pick a component
+2. Enable/disable each component with the ✓/○ toggle
+3. × to remove
+4. Click **▶ Apply All** — sends paint commands to the 3D chunk worker
+
+Each component also has `apply2D()` for inline 2D simulation buffer compatibility.
+
+---
+
+## 3D Controls Panel
+
+Always visible in the **right panel**. Controls the Three.js renderer in real time:
+
+| Control | What it does |
+|---|---|
+| Camera buttons (Orbit/Top/ISO/Street/✈ Fly) | Switch camera preset instantly |
+| 🌅 Time of day slider (0–24h) | Moves sun, adjusts exposure and fog tint |
+| 🌫️ Fog density slider (0–0.06) | Atmospheric density (0 = clear, 0.06 = thick) |
+| ✂️ Z-Slice slider (0–63) | Cross-section cutting plane |
+| ✨ Particles ON/OFF | Toggle smoke and spark particle layers |
 
 ---
 
@@ -168,12 +237,6 @@ Each step maps directly to one term. All steps have defaults pre-selected so you
 
 5. **Generate** — shows the integral estimate `≈ Φ · avg(ρ,E,I) · C · dτ` and the final configuration. Click **✦ Generate Reality** (or the footer **Generate →** button).
 
-After generation:
-- Simulation starts playing immediately
-- MetaLaw fitness values are tuned to match the chosen configuration
-- MetaLaws continue evolving periodically at a rate driven by C complexity growth
-- Hazard intervals start automatically if the spacetime profile includes them
-
 #### Smart Brushes
 
 Select a brush from the left panel, then **click and drag** on the canvas:
@@ -191,130 +254,28 @@ Select a brush from the left panel, then **click and drag** on the canvas:
 
 **Raw paint** (no brush selected): paints whichever field is active in the layer selector (Energy / Density / Info / Entropy / Temp / Bio).
 
-**Brush settings** (left panel → Brush Settings):
-- *Size* 1–5: radius in cells
-- *Strength* 50–1000: intensity per stroke
-- Tools: Paint (set value), Inject (add to existing), Erase (zero all fields), Inspect (click to read cell)
-
-#### Field Selector (Field Bar)
-
-The **Field** bar lives below the render-mode tabs, always visible. It has an **All** button plus six field buttons. What each button does depends on which render mode is active:
-
-| Button | 3D Volumetric | 2D Multi-Slice | Hybrid |
-|---|---|---|---|
-| **All** | Color = Energy (default) | 4-slice overview | 2D: 4-slice · 3D: Energy |
-| **⚡ Energy** | Tiles colored by energy | Full-screen energy + stats | Same, split |
-| **🌫️ Density** | Tiles colored by density | Full-screen density + stats | Same, split |
-| **🧠 Info** | Tiles colored by info | Full-screen info + stats | Same, split |
-| **🔥 Entropy** | Tiles colored by entropy | Full-screen entropy + stats | Same, split |
-| **🌡️ Temp** | Tiles colored by temperature | Full-screen temp + stats | Same, split |
-| **🧬 Bio** | Tiles colored by bio | Full-screen bio + stats | Same, split |
-
-> **In all modes, tile height in 3D always represents energy.** Only the color changes.
-
-**How to use:**
-1. Click any field button — the viewport updates immediately
-2. The button highlights (active = white border + lavender tint)
-3. A hint label appears to the right of the buttons explaining what the selection does in the current render mode
-4. Click the same button again to toggle back to **All** (multi-slice / default energy color)
-
-**2D Multi-Slice — reading the 4-slice view:**
-- Default (All) shows four quadrants: Energy (top-left), Bio (top-right), Info (bottom-left), Entropy (bottom-right)
-- Each quadrant shows a **stats bar** at the bottom: `avg · min · max · active cells`
-- A hint at the bottom of the canvas shows Density and Temp are not in the default 4-slice — use the field buttons to access them
-- Click a field button to show that one field full-screen with larger statistics
-
-**2D Multi-Slice — monitoring entropy and info:**
-- **🔥 Entropy** (bottom-right quadrant) shows disorder 0–1. Values below 0.1 = highly ordered (icy/crystalline). 0.3–0.6 = turbulent. Above 0.6 = critical collapse territory
-- **🧠 Info** (bottom-left quadrant) tracks complexity — it grows where energy + density co-exist and entropy is low. Watch it rise alongside Bio for emergence events
-
-**Science Mode — Field Monitor panel:**
-- The top section in the Science left panel shows a **Field Monitor** with the same field buttons plus a live table: avg / max / active-cell-count per field, updated every 5 ticks
-- Use this for numerical observation without reading the canvas
-
-#### Scene Script
-
-Left panel → Script tab. JavaScript runs directly against the live buffer:
-
-```js
-// Paint a volcano at center
-const cx = W/2, cy = H/2;
-for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-  const d = Math.sqrt((x-cx)**2 + (y-cy)**2);
-  const g = Math.exp(-d*d/40);
-  set_(x, y, 0, g * 900);  // energy
-  set_(x, y, 4, g * 600);  // temperature
-}
-```
-
-Available: `buf`, `W`, `H`, `NF`, `SZ`, `set_(x,y,field,value)`, `add_(x,y,field,delta)`, `get(x,y,field)`, `Math`.
-
-Load templates from the dropdown: *Primordial Ocean*, *Volcano*, *Life Explosion*, *Galaxy Spiral*.
-
-#### World Mood Controls
-
-Left panel → World panel. Click pills to snap physics to a preset regime:
-
-- **Stability**: Fragile / Dynamic / Balanced / Self-Repairing → sets `ENTROPY_BASE`
-- **Entropy Regime**: Low (Order) / Medium / High (Chaos) / Extreme
-- **Life Bias**: Suppressed / Neutral / Fertile / Aggressive → sets `INFO_RATE`
-
 #### Quick Presets
 
-Left panel → Presets section: Energy Burst, Wave Field, Life Seed, Proto Earth, Entropy Storm, Ruins, Clear.
+Left panel → Presets section. World chunk presets (3D volumetric grid):
+
+| Preset | Description |
+|---|---|
+| Energy Burst | Sphere of E=900, T=500, D=0.8 at center |
+| Life | 60 random organic clusters across the grid |
+| Proto Earth | Sinusoidal density gradient with warm surface |
+| 🏙️ Town | Full 128×128×64 city — radial zoning, roads, parks, industry, river |
+
+**Town preset** — realistic city layout on the 3D chunk grid:
+- **Downtown** (r < 14): E=700, D=0.9, I=400, T=180
+- **Inner city** (14–30): E=400, D=0.75, roads at 16-unit grid
+- **Parks** (NW arc): Bio=0.8, low entropy, cool T
+- **Industrial** (SE arc): E=600, T=400, S=0.4
+- **River**: Water material diagonal strip
+- Physics: DIFF=0.12, ENT=0.00015, INFO=0.45, BIO=0.32
 
 **Save / Load worlds:** Use `💾 Save` to download a `.reality` JSON file. Use `📂 Load` to restore a saved file — it snapshots the full buffer state at the saved tick.
 
 **Undo:** `Ctrl+Z` reverts the last paint stroke, preset, or world generation (5-step ring buffer).
-
----
-
-### 🤖 Agents Mode
-
-Accessed via the **robot icon** in the left icon bar. Agents are autonomous entities that live on the simulation grid and act according to Utility AI.
-
-#### Agent Architecture
-
-| Component | Role |
-|---|---|
-| **Utility AI** | Each tick, score 5 candidate moves (N/S/E/W/stay) by weighted field values |
-| **FSM states** | `seek_energy`, `seek_info`, `flee_entropy`, `explore`, `reproduce`, `rest`, `idle` |
-| **Genome** | Weight vector (seekEnergyW, seekInfoW, fleeEntropyW, bioW, exploreW, reprodThresh, maxAge) |
-| **Memory ring** | 48-cell visited-cell history prevents circling |
-| **Civilization ID** | Each spawn group gets a unique civId; territory written to FCid field |
-
-#### Spawning Agents
-
-Click **🧬 Spawn 5** or **🧬 Spawn 20** in the Agents panel. Agents appear near grid center. The bottom bar `Agents:` counter updates live. Agent dots are drawn on the canvas — colored by civilization.
-
-**Mutation rate** slider controls how much offspring genomes drift from the parent (1%–100%).
-
-Max population cap: **200 agents**. Agents die from starvation (`energy < 0.005`) or old age (genome `maxAge` ≈ 200–1200 ticks).
-
-#### LLM Planning (Claude Haiku)
-
-The **LLM Planning** section uses Claude Haiku to generate goal text that biases all agent genome weights:
-
-| Button | Pattern | What It Does |
-|---|---|---|
-| **🧠 Group Plan** | LangChain-style chain | Asks Claude for one collective survival goal based on current world state |
-| **⚔️ Debate** | AutoGen two-agent | Strategist + Tactician agents debate; Claude writes a consensus plan |
-| **👥 Assign CrewAI Roles** | CrewAI role delegation | Assigns each agent a role: Scout · Harvester · Guardian · Architect · Breeder |
-
-Without an API key, heuristic goals run automatically (based on world averages).
-
-**To set your API key:** Click the **🔑** button in the top-right of the icon bar, enter your `sk-ant-...` key, and click Save. The key is stored in `localStorage` only — never sent anywhere except `api.anthropic.com`.
-
-#### Agent Solvers (Python Microservice)
-
-When the FastAPI microservice is running, four additional solvers appear in the Science Mode solver panel:
-
-| Solver | Algorithm | Output |
-|---|---|---|
-| **Agent Flow Field** | Gradient descent on E + I - S potential | FFX/FFY flow vectors + FBio heatmap |
-| **Population Forecast** | Logistic reaction-diffusion (∂ρ/∂t = D∇²ρ + rρ(1-ρ/K)) | FBio forecast |
-| **Multi-Agent Coordination** | 5-role utility maps (Scout/Harvester/Guardian/Architect/Breeder) | FCid role map + FI shared knowledge |
-| **Evolutionary Fitness Landscape** | Weighted fitness surface + energy gradient bonus | FBio fitness + FI update |
 
 ---
 
@@ -330,12 +291,17 @@ Every active law shows:
 - **Toggle** (colored dot): enable / disable without losing tuned values
 - **Color-coded fitness line**: updated on the Law Fitness Chart in real time
 
-**To add a custom law:**
-1. Click **+ Add law** at the bottom of the law list
-2. Name it, then write a fitness expression: e.g. `bio*3 + info/200 - entropy*2`
-3. The expression is evaluated against live field averages each tick
+#### Node Law Editor
 
-**To reset all fitness values:** Click **↺ Reset** (sets all to 0.5).
+A visual canvas graph editor for composing law pipelines:
+
+- **Nodes** represent physics operations (Diffusion, Entropy, Bio Growth, Info Rate, etc.)
+- **Edges** (drag from node port to node port) connect outputs to inputs
+- **Compile** applies the pipeline to the chunk worker's physics parameters
+- **Shortcuts**: Delete/Backspace removes selected node; Escape cancels; double-click node header toggles active; double-click body edits a parameter; right-click an edge removes it
+- **Property panel**: click a node to see sliders for all numeric parameters inline below the canvas
+
+**🏙️ Town Physics button** — snaps physics to realistic city parameters: DIFF=0.12, ENT=0.00015, INFO=0.45, BIO=0.32, processes: thermo+bio+info.
 
 #### Physics Parameters (fine control)
 
@@ -346,365 +312,282 @@ Every active law shows:
 | `INFO` — Info growth | 0.05–2.0 | Rate information forms in fertile zones |
 | `BIO` — Bio threshold | 0.05–0.8 | Min density for bio potential to rise |
 
-> Tip: Lower `ENT` + higher `INFO` → complex info structures persist longer. Higher `DIFF` → energy equilibrates quickly, harder to maintain hotspots.
+#### Reality Monitor
 
-#### Law Fitness Chart
+Live ΨR integral chart below the node editor. Shows 4 running series:
+- **Energy** (orange), **Entropy** (red), **Info** (cyan), **Bio** (green)
+- Scrolls rightward as ticks accumulate
 
-A canvas plot below the law list. Each colored line = one active law's fitness over time. The lines update every 5 ticks. Flat lines = stable laws. Oscillating = competing laws. Declining = law losing fitness (may go dormant).
+#### Scientific Solvers Panel
+
+Science Mode has a **Scientific Solvers** section that connects to external PDE solvers:
+
+| Simulation | Solver | Writes To |
+|---|---|---|
+| Turing Patterns | NumPy (built-in) | Info + Bio |
+| Wave Propagation | NumPy (built-in) | Energy |
+| Heat Diffusion | NumPy / FEniCSx | Temp |
+| Fluid Flow (Stokes) | NumPy / FEniCSx | Flow X/Y |
+| Thermal Convection | NumPy | Temp + Flow |
+| Phase Separation | NumPy / MOOSE | Density |
+| Electric Potential | NumPy / FEniCSx | Info |
+| Entropy Production | NumPy (built-in) | Entropy |
+| Molecular Dynamics | NumPy / GROMACS | Energy + Density |
+| Coupled Heat+Flow | NumPy / Elmer | Temp + Flow |
+| Magnetostatics | NumPy / Elmer | Info |
+| Protein CG Dynamics | NumPy / GROMACS | Bio + Info |
 
 #### Data Export
 
 | Button | Output | Use With |
 |---|---|---|
-| 📄 Metrics CSV | Time-series of all 9 fields | `pandas.read_csv()`, R, Excel |
+| 📄 Metrics CSV | Time-series of all fields | `pandas.read_csv()`, R, Excel |
 | 📓 Jupyter Notebook | `.ipynb` with 4 pre-written cells | Jupyter Lab — plots + correlation matrix |
 | 🗂️ Recording JSON | Sparse keyframes (`reality_engine_scientific_v2`) | Custom analysis, replay |
 | 💾 Save .reality | Full world state | Re-load in Create Mode |
-
-#### Scientific Solvers Panel
-
-Science Mode has a **Scientific Solvers** section in the left panel that connects the Reality Engine to external PDE / molecular-dynamics solvers. The results replace field data in the live simulation — producing far more physically realistic patterns than the built-in diffusion model.
-
-**Architecture:**
-```
-Reality Engine (browser)
-    ↕  HTTP POST / WebSocket JSON
-Python microservice  localhost:8765
-    ↕
-FEniCSx / MOOSE / Elmer / GROMACS / NumPy
-    ↕
-Float32Array result → voxel grid
-```
-
-**Every solver has a built-in NumPy fallback** — zero extra install needed for basic use.
-
-##### Available Simulations
-
-| Simulation | Solver | Writes To | Description |
-|---|---|---|---|
-| Turing Patterns | NumPy (built-in) | Info + Bio | Gray-Scott spots/stripes/labyrinths |
-| Wave Propagation | NumPy (built-in) | Energy | 2D acoustic / EM wave equation |
-| Heat Diffusion | NumPy / FEniCSx | Temp | Steady-state Laplace heat |
-| Fluid Flow (Stokes) | NumPy / FEniCSx | Flow X/Y | Pressure-driven incompressible flow |
-| Thermal Convection | NumPy | Temp + Flow | Buoyancy-driven convective heat |
-| Phase Separation | NumPy / MOOSE | Density | Cahn-Hilliard spinodal decomposition |
-| Electric Potential | NumPy / FEniCSx | Info | Electrostatic Laplace from charge density |
-| Entropy Production | NumPy (built-in) | Entropy | Irreversible entropy from energy gradients |
-| Molecular Dynamics | NumPy / GROMACS | Energy + Density | Langevin particle simulation → voxel bins |
-| Coupled Heat+Flow | NumPy / Elmer | Temp + Flow | Boussinesq buoyancy convection |
-| Magnetostatics | NumPy / Elmer | Info | Magnetic vector potential from currents |
-| Protein CG Dynamics | NumPy / GROMACS | Bio + Info | Coarse-grained bead-spring folding |
-
-##### How to use
-
-1. Switch to **Science Mode** (top bar)
-2. Open the **Scientific Solvers** section in the left panel
-3. Select a simulation from the dropdown
-4. Adjust parameters with the sliders
-5. Click **▶ Run Simulation** — the field updates immediately
-6. Click **↻ Live** to re-run every 3 seconds while the simulation is playing
-
-##### Starting the microservice
-
-All built-in NumPy solvers run without the microservice. For FEniCSx/MOOSE/Elmer/GROMACS, start the Python API:
-
-```bash
-# Option 1: direct
-cd solver
-pip install fastapi uvicorn numpy
-uvicorn reality_solver_api:app --port 8765 --reload
-
-# Option 2: shell script (shows capability check)
-bash solver/start.sh
-
-# Option 3: Docker (includes FEniCSx)
-docker-compose -f solver/docker/docker-compose.yml up
-
-# Option 4: Docker lite (NumPy only, fast to start)
-docker-compose -f solver/docker/docker-compose.yml --profile lite up solver-lite
-```
-
-##### Installing optional heavy solvers
-
-```bash
-# FEniCSx — accurate FEM for heat, fluid, electric
-conda install -c conda-forge fenics-dolfinx mpi4py
-
-# Elmer — coupled multiphysics (heat + fluid, EM)
-sudo apt install elmer          # Ubuntu/Debian
-brew install elmer              # macOS
-
-# MOOSE — materials science (phase field, grain growth)
-conda install -c conda-forge moose
-
-# GROMACS — molecular dynamics
-sudo apt install gromacs        # Ubuntu/Debian
-conda install -c conda-forge gromacs
-```
-
-The API status dot in the panel header turns **green (●)** when the microservice is reachable and shows which backends are available.
-
-#### Console API (browser DevTools)
-
-```js
-// Query metrics
-window.metrics.get('entropy', 'avg', 200)    // avg over last 200 samples
-window.metrics.get('bio', 'max', 100)         // peak bio potential
-window.metrics.getSeries('energy', 500)       // raw number[] array
-window.metrics.snapshot()                     // all 9 fields, latest value
-window.metrics.exportCSV()                    // CSV string
-
-// Causal inspector
-window.scienceMode.explainCell(x, y, buf)     // full causal breakdown HTML
-
-// Exports
-window.scienceMode.exportCSV()
-window.scienceMode.exportJupyter()
-window.scienceMode.exportJSON()
-
-// Run a solver directly from DevTools
-await window.solverClient.checkStatus()       // { online: true, capabilities: {...} }
-const req = window.solverClient.buildRequest('numpy_turing_patterns', buf, W, H, NF, { steps: 1200 })
-const res = await window.solverClient.solve(req)
-window.solverClient.applyResult(res, buf, W, H, NF)
-
-// Direct buffer (live — mutations are immediate)
-window.buf          // Float32Array, W×H×NF cells
-window.W, window.H  // grid dimensions (36×28)
-window.NF           // fields per cell (12)
-window.tick         // current simulation tick
-```
 
 ---
 
 ### 🎬 Cinema Mode
 
-AI-directed cinematics with timeline recording and video export. Switch to Cinema Mode using the top bar.
+AI-directed cinematics with Scene Composer, timeline recording, and video export.
+
+#### 🎬 Scene Composer
+
+Drag-and-drop scene builder — each component auto-configures field values and materials across the 3D chunk grid. Components can be layered: add Downtown Core + Park District + Ocean Layer for a realistic coastal city.
+
+See **[Scene Composer](#scene-composer-cinema-mode)** section above for full component list.
 
 #### AI Scene Director
 
 The left panel has a chat log and input field.
 
 **To use:**
-1. Type a cinematic direction: *"Make the bio zone collapse dramatically"* or *"Create a peaceful emergence moment"*
+1. Type a cinematic direction — see built-in keywords below, or anything descriptive
 2. Click **Ask** (or press Enter)
-3. The director (Claude Haiku) responds with:
-   - **Narration** — descriptive text for the moment
-   - **Script** — executable JavaScript that modifies the simulation
-   - **Camera hint** — suggested focus point
-   - **Marker label** — text for the timeline
+3. The director responds with vivid narration and **immediately applies** the effect to the simulation
+4. The generated script remains visible — click **▶ Execute director script** to re-apply it
+5. Click **🎙️ Narrate** to describe the current simulation state without a prompt
+6. Click **Auto: ON** to enable auto-directing (~28 second intervals)
 
-4. If a script appears in the blue code box, click **▶ Execute director script** to run it
-5. Click **🎙️ Narrate** to get a description of the *current* simulation state without a prompt
-6. Click **Auto: ON** to enable auto-directing — the AI fires every ~28 seconds and applies changes automatically
+**Built-in scene keywords (no API key needed):**
 
-> **Requires a Claude API key.** Set it in the AI Scene Director input. Without a key, the director uses pre-written fallback templates.
+| Keyword | Scene Applied |
+|---|---|
+| `volcano`, `lava`, `erupt`, `fire` | Volcanic energy eruption from center — radial energy + entropy burst |
+| `explosion`, `burst`, `blast`, `shock` | Full-field shockwave — scattered energy and maximum entropy |
+| `ocean`, `water`, `wave`, `flood` | Lower-field ocean — steady energy, near-zero entropy, rising info |
+| `life`, `bio`, `forest`, `grow`, `nature` | Bio bloom — 35 scattered nodes of life energy and information |
+| `freeze`, `ice`, `cold`, `winter`, `snow` | Glacial collapse — drains 85% energy and 95% entropy field-wide |
+| `chaos`, `storm`, `entropy`, `disorder` | Entropy storm — 45 random high-entropy energy bursts across grid |
+| `order`, `crystal`, `calm`, `harmony` | Crystalline order — entropy drops to 8%, information rises |
+| `desert`, `arid`, `dry`, `sand` | Desert — low uniform energy, zero bio, near-zero entropy |
+| `city`, `urban`, `civilization`, `town` | City rising — 30 high-energy info+bio nodes across the grid |
+| `space`, `void`, `cosmos`, `galaxy` | Cosmic void — clears energy, leaves 8 stellar hotspots |
+| `energy`, `power`, `surge`, `boost` | Energy surge — 20 high-power nodes ignite across the field |
+
+> **With a Claude API key** (set via 🔑), the director generates fully custom narration, scripts, and camera hints for any prompt. Without a key, the built-in keyword engine handles all 11 scenarios above and provides a generic fallback for unrecognized prompts.
 
 #### Timeline
 
-A 3-track NLA-style canvas (SIM / CAM / MRK tracks):
-
-| Track | What it records | How to add |
-|---|---|---|
-| SIM | Sparse simulation keyframe (full field snapshot) | Click **⬡ Sim KF** |
-| MRK | Named marker / event label | Click **📍 Marker** |
-
-- **Scrub**: Click anywhere on the timeline canvas to jump to that tick
-- **Total ticks**: Set the timeline length with the number input (default 1000)
+A 3-track NLA-style canvas (SIM / CAM / MRK tracks). Click **⬡ Sim KF** to snapshot, **📍 Marker** to add a labeled event. Click the timeline canvas to scrub to any tick.
 
 #### Recording
 
-1. Click **● Record** — starts capturing frames (shown in green in rec status)
-2. Run the simulation as desired
-3. Click **■ Stop** — finalizes the recording
-4. Download options:
-   - 🗂️ **Alembic recording (.json)** — full sparse keyframe archive
-   - 💬 **Markers as subtitles (.srt)** — for video editing software
-   - 🖼️ **Export frame PNG** — single frame at current tick
+Click **● Record** → run simulation → **■ Stop** → download:
+- 🗂️ **Alembic recording (.json)** — full sparse keyframe archive
+- 💬 **Markers as subtitles (.srt)** — for video editing software
+- 🖼️ **Export frame PNG** — single frame at current tick
 
-#### Render Settings
+---
 
-| Slider | Effect |
+### 🤖 Agents Mode
+
+Accessed via the robot icon in the left icon bar. Agents are autonomous entities with Utility AI + FSM + genome-based evolution.
+
+#### Agent Architecture
+
+| Component | Role |
 |---|---|
-| Brightness | Multiplies all rendered color values |
-| Saturation | Boosts or mutes color saturation |
+| **Utility AI** | Each tick, score 5 candidate moves (N/S/E/W/stay) by weighted field values |
+| **FSM states** | `seek_energy`, `seek_info`, `flee_entropy`, `explore`, `reproduce`, `rest`, `idle` |
+| **Genome** | Weight vector (seekEnergyW, seekInfoW, fleeEntropyW, bioW, exploreW, reprodThresh, maxAge) |
+| **Memory ring** | 48-cell visited-cell history prevents circling |
+
+#### LLM Planning (Claude Haiku)
+
+| Button | Pattern | What It Does |
+|---|---|---|
+| **🧠 Group Plan** | LangChain-style chain | Asks Claude for one collective survival goal |
+| **⚔️ Debate** | AutoGen two-agent | Strategist + Tactician debate; Claude writes consensus |
+| **👥 Assign CrewAI Roles** | CrewAI role delegation | Assigns roles: Scout · Harvester · Guardian · Architect · Breeder |
 
 ---
 
 ### 🎮 Game Dev Mode
 
-Turn any simulation into a scored game with objectives, entity behaviors, prefabs, and AI design assistance. Switch to Game Dev Mode using the top bar.
+Turn any simulation into a scored game with objectives, entity behaviors, prefabs, and AI design assistance.
 
 #### AI Game Designer
 
-A chat interface powered by Claude Haiku.
+Ask the AI Game Designer for design advice — type any request and click **Ask**:
 
-**To use:**
-1. Type a design request: *"Design a survival level where players fight entropy"* or *"Suggest objectives for a civilization-building mode"*
-2. Click **Ask** (or press Enter)
-3. The designer responds with:
-   - Game mechanic advice
-   - A JSON ruleset you can apply directly (shown if detected)
-
-4. Click **💡 Suggest** for an unprompted objective recommendation based on the current world state
-5. If a JSON ruleset is returned, the **✓ Apply ruleset** button appears — click it to load objectives, lives, and time limit automatically
-
-> **Requires a Claude API key.** Without one, the designer uses 2 built-in template suggestions (Survival Challenge, Civilization Builder).
-
-#### Playtest Controls
-
-| Button | Action |
+| Message type | What you get |
 |---|---|
-| **▶ Start** | Begin timed playtest, start objectives tracking |
-| **↺ Reset** | Clear score, reset lives, restart objectives |
-| **⏸ Pause** | Freeze playtest timer without stopping simulation |
+| *"Design a survival level"* | Full survival ruleset with entropy + tick objectives — **Apply ruleset** button appears |
+| *"Create a civilization challenge"* | Info network + population objectives applied |
+| *"Suggest an ecosystem level"* | Bio potential + survival objectives applied |
+| *"How do I fight entropy?"* | Conversational strategy tip — no ruleset applied |
+| *"Give me civilization advice"* | Tactical guidance on info/agent balance |
+| Any message without "design/create/challenge/objective" | Conversational response without applying anything |
 
-**Score** is shown in the section header. **Lives** (❤️❤️❤️) deplete when entropy exceeds critical threshold (avg entropy > 0.95).
+> The **Apply ruleset** button only appears when you explicitly ask for a level, challenge, or objectives — not on every message. **💡 Suggest** pre-fills the input with a context-aware suggestion and sends it automatically.
 
-**Load preset** — dropdown loads pre-built objectives + rules:
-- ⚔️ **Survival**: Keep entropy low for 500 ticks
-- 🌿 **Ecosystem**: Grow bio potential above threshold
-- 🏛️ **Civilization**: Spawn 10 agents + build info network
-- ✏️ **Custom**: Blank slate
+#### Playtest Presets
+
+| Preset | Description |
+|---|---|
+| ⚔️ Survival | Keep entropy low for 500 ticks |
+| 🌿 Ecosystem | Grow bio potential above threshold |
+| 🏛️ Civilization | Spawn 10 agents + build info network |
+| 🏙️ Town | 5-objective city challenge: survive 1000 ticks, grow parks, reduce entropy, high info, spawn 25 citizens |
+| ✏️ Custom | Blank slate |
 
 #### Objectives
 
-Add individual objectives from the dropdown:
-
 | Objective | Win Condition |
 |---|---|
-| ⏱ Survive 500 ticks | Simulation must run 500 ticks without losing all lives |
-| 🧬 Reach bio > 0.5 | Average bio potential across grid exceeds 0.5 |
-| 🤖 Spawn 10 agents | 10 or more agents alive simultaneously |
-| 🌀 Reduce entropy < 0.2 | Average entropy drops below 0.2 |
-| 🧠 Info avg > 100 | Average information field exceeds 100 |
+| ⏱ Survive 500 ticks | Run 500 ticks without losing all lives |
+| 🏅 City milestone 1000 | Reach tick 1000 |
+| 🧬 Reach bio > 0.5 | Average bio potential exceeds 0.5 |
+| 🌳 Bio flourish > 0.7 | Bio exceeds 0.7 |
+| 🤖 Spawn 10 agents | 10+ agents simultaneously |
+| 👥 Spawn 25 citizens | 25+ agents simultaneously |
+| 🌀 Entropy < 0.2 | Average entropy drops below 0.2 |
+| 🏗️ City entropy < 0.12 | Entropy drops below 0.12 |
+| 🧠 Info avg > 100 | Average information exceeds 100 |
+| 📡 Info grid > 300 | Average information exceeds 300 |
 
-Progress bars appear for each active objective. All objectives complete = win (+500 bonus points).
+#### Entity Behaviors (FSM Editor)
 
-**Time limit**: Set a tick deadline. Reaching it without completing objectives = game over.
-
-#### Entity Behaviors (Finite State Machine Editor)
-
-A visual FSM canvas showing 7 agent states:
-
-| State | Behavior |
-|---|---|
-| 🔵 idle | Agents rest and recover energy |
-| 🟡 seek_energy | Move toward high-energy cells |
-| 🟣 seek_info | Move toward high-information zones |
-| 🔴 flee_entropy | Move away from high-entropy areas |
-| 🟢 reproduce | Create offspring when energy threshold met |
-| 🟦 explore | Random walk, map territory |
-| ⚪ rest | Low-activity energy conservation |
-
-**Select a preset** from the dropdown:
-- 🦅 **Predator** — starts in `seek_energy`, aggressive transitions
-- 🔭 **Explorer** — starts in `explore`, wide-roaming
-- 🛡️ **Survivor** — starts in `rest`, high flee_entropy weight
-
-Click states on the FSM canvas to see transition conditions in the info box below.
-
-**Spawn agents:**
-- **🧬 Spawn 5** / **🧬 Spawn 20** — creates agents with the currently selected behavior genome
+Visual 7-state FSM canvas. Presets: 🦅 Predator · 🔭 Explorer · 🛡️ Survivor.
 
 #### Prefab Library
 
-Reusable cell cluster templates you can stamp anywhere.
-
-**Built-in prefabs:**
-| Prefab | Contents |
-|---|---|
-| 🌱 Life Bloom | High bio + info cluster, Gaussian-weighted |
-| ⚡ Energy Source | Hot energy core |
-| 💎 Crystal Node | Low-entropy, high-information, ordered |
-
-**Capture a custom prefab:**
-1. Position the view over the cluster you want to save
-2. Click **📷 Capture prefab** — prompts for a name, captures a radius-3 sphere of cells
-3. The prefab appears in the grid with a JPEG thumbnail
-
-**Stamp a prefab:**
-1. Click a prefab in the grid to select it (shown under *Active:*)
-2. Click anywhere on the simulation canvas — the prefab is stamped at that position
-3. Stamping uses `set` mode by default (overwrites), or `add` mode (additive blend)
+Capture a cluster → stamp it anywhere. Built-ins: Life Bloom, Energy Source, Crystal Node.
 
 #### Level Export
 
 | Button | Output |
 |---|---|
-| **💾 Export level (.level.json)** | Objectives, rules, lives, time limit as JSON (`reality_engine_level_v1`) |
-| **🌍 Export world (.reality)** | Full simulation state (sparse cells) |
-| **🔗 Copy shareable link** | URL hash encoding the current objectives, openable in any browser |
+| **💾 Export level (.level.json)** | Objectives, rules, lives, time limit |
+| **🌍 Export world (.reality)** | Full simulation state |
+| **🔗 Copy shareable link** | URL hash encoding current objectives |
+
+---
+
+## Render Modes
+
+The four tabs at the top of the viewport:
+
+| Tab | What You See |
+|---|---|
+| **🔲 3D Volumetric** | Three.js PBR renderer — 10 material types, particles, atmosphere |
+| **⬛ 2D Multi-Slice** | Four-quadrant view: Energy, Bio, Info, Entropy simultaneously |
+| **⟐ Hybrid** | Left: 4-field 2D overview (Energy/Bio/Info/Entropy) · Right: 3D PBR |
+| **📈 Metrics** | Live numerical dashboard |
 
 ---
 
 ## Architecture
 
 ```
-index.html          ← Self-contained voxel simulation (W=36 × H=28 × NF=12)
-                      Inline <script>: physics loop, render loop, UI panels
-                      Two-canvas viewport: #c2d (flat/multi-slice) + #c3d (isometric)
-                      World Composer Wizard with archetype + physics mood + hazards
+index.html          ← Inline sim (W=36×H=28×NF=12) + World Composer + all UI
+                      Two-canvas viewport: #c2d (2D) + #c3d (Three.js PBR)
 
-src/connector.ts    ← Module bridge: imports all TS classes, exposes on window.*
-                      Listens to 'panelRendered' events to init canvases after panel injection
+src/connector.ts    ← Module bridge — all TS classes exposed on window.*
+                      RAF loop with dt, SceneComposer injection on cinema panel
+                      window.setMatMode / setTimeOfDay / setFogDensity /
+                       setCameraPreset / setZSlice / setShowParticles /
+                       addSceneComp / applyScene / clearScene / toggleComp
 
 src/
+  core/
+    ChunkGrid.ts           Sparse 128×128×64 grid, 8×8×8 chunks, Map<key,Float32Array>
+    ChunkSimWorker.ts      Web Worker — iterates only active chunks, zero-copy ArrayBuffer
+  render/
+    ChunkRenderer.ts       Three.js PBR — 9 InstancedMesh (one per MatType), custom
+                           emissive GLSL shader, 1600 particles, OrbitControls,
+                           fly camera, time-of-day sun arc, FogExp2, ACES tonemapping
+    VoxelMaterials.ts      classifyVoxel() → MatType, getMat(), blendEnergyGlow(),
+                           LAYER_PALS (6 color ramps), lerpPalette()
   scientific/
-    MetricsAPI.ts          9 ring-buffered metrics (2000 pts each), queryable
+    MetricsAPI.ts          9 ring-buffered metrics (2000 pts each)
     LawFitnessChart.ts     Canvas chart, per-law fitness over time
-    CausalInspector.ts     Per-cell causal explanation (causes, processes, forecast)
+    CausalInspector.ts     Per-cell causal explanation
+    SolverClient.ts        HTTP client for Python microservice solvers
   simulation/
     DeterministicEngine.ts XORshift32 RNG, sparse frame recording, multi-format export
   modes/
     ScienceModePanel.ts    HTML builder for science mode left panel
     GameDevModePanel.ts    HTML builder for game dev mode left panel (6 sections)
     cinema/
+      SceneComposer.ts     10 scene components — apply2D() + chunkPaints()
+                           SceneComposerUI — add/remove/toggle/applyAll/buildHTML
       KeyframeTimeline.ts  3-track NLA canvas (SIM/CAM/MRK), scrubable playhead
       CameraPathEditor.ts  Cubic-eased spline camera path
       SceneDirector.ts     Claude API (Haiku) — narration + script + camera hint
       VideoRecorder.ts     WebCodecs VideoEncoder (VP8) + PNG fallback
     gamedev/
-      EntityBehaviorEditor.ts  7-state BehaviorFSM visual editor + agent genome compiler
-      GameRulesetEngine.ts     Score/lives/objectives engine (5 objective types)
-      PrefabSystem.ts          Capture clusters → library → stamp anywhere
+      EntityBehaviorEditor.ts  7-state BehaviorFSM visual editor + genome compiler
+      GameRulesetEngine.ts     Score/lives/objectives engine (10 objective types)
+      PrefabSystem.ts          Capture → library → stamp anywhere
       AIGameDesigner.ts        Claude API (Haiku) — game mechanic design + JSON rulesets
-  core/
-    SimWorker.ts         Web Worker simulation (W=32×H=24×D=10×NF=12), Transferable buffer
+    agents/
+      AgentSystem.ts       Utility AI + FSM + genome-based agents
+      AgentPlanner.ts      LLM goal planner (LangChain/CrewAI/AutoGen patterns)
+  ui/
+    RealityMonitor.ts      ΨR integral + 4 live field charts
+    NodeLawEditor.ts       Canvas node graph editor — compile to chunk worker params
+solver/              Python FastAPI microservice (localhost:8765)
 ```
 
-### Field Layout (NF=12)
+### Field Layout (NF=14 — Chunk Grid)
 
 | Index | Name | Description | Range |
 |---|---|---|---|
-| 0 | `FE` — Energy | Heat / kinetic energy source | 0 – 9999 |
-| 1 | `FD` — Density | Matter concentration | 0 – 1 |
-| 2 | `FI` — Information | Complexity / emergent signal | 0 – 999 |
-| 3 | `FS` — Entropy | Disorder / decay | 0 – 1 |
-| 4 | `FT` — Temperature | Thermal energy | 0 – 2000 |
-| 5 | `FFX` — Flow X | Fluid / force X vector | –500 – 500 |
-| 6 | `FFY` — Flow Y | Fluid / force Y vector | –500 – 500 |
-| 7 | (reserved) | Unused | — |
-| 8 | `FTau` — Time dilation | Local time rate | 0 – ∞ |
-| 9 | `FCid` — Civilization ID | Agent civilization tag | int |
-| 10 | `FBio` — Bio potential | Life readiness | 0 – 1 |
-| 11 | `FProc` — Process flags | Active process bitmask | int |
+| 0 | `E` — Energy | Heat / kinetic energy | 0 – 9999 |
+| 1 | `D` — Density | Matter concentration | 0 – 1 |
+| 2 | `I` — Information | Complexity / emergent signal | 0 – 999 |
+| 3 | `S` — Entropy | Disorder / decay | 0 – 1 |
+| 4 | `T` — Temperature | Thermal energy | 0 – 2000 |
+| 5 | `P` — Pressure | Local pressure | 0 – ∞ |
+| 6 | `FX` — Flow X | Fluid / force X vector | –500 – 500 |
+| 7 | `FY` — Flow Y | Fluid / force Y vector | –500 – 500 |
+| 8 | `TAU` — Time dilation | Local time rate | 0 – ∞ |
+| 9 | `CID` — Causality ID | Causal event ID | int |
+| 10 | `BIO` — Bio potential | Life readiness | 0 – 1 |
+| 11 | `MAT` — Material ID | Material type index | int |
+| 12 | `WAVE` — Wave amplitude | Wave field | 0 – 1 |
+| 13 | `PROC` — Process activity | Active process flags | int |
 
-> **Note**: Density (`FD`), Entropy (`FS`), and Bio (`FBio`) are normalized 0–1. Energy (`FE`), Info (`FI`), and Temperature (`FT`) are unbounded positive floats.
+The inline 2D simulation uses NF=12 (no MAT/WAVE fields). The 3D chunk grid uses NF=14.
 
 ---
 
-## Physics Engine
+## Physics Engine (Chunk Worker)
 
-Each simulation tick (dt ≈ 0.016s) applies in order:
+Each tick applies across all active 8×8×8 chunks:
 
-1. **Diffusion** — energy, density, temperature, information each spread to 4 neighbours via Laplacian scaled by `DIFFUSION`
-2. **Thermodynamics** — `FE` drives `FT` up; `FT` diffuses independently
-3. **Entropy growth** — `FS` increases every tick: `dS = (ENT_BASE + E×4e-5 + T×1.5e-5) × dt × 60`
-4. **Energy drain** — `FE -= E × FS × 2e-4 × dt × 60` (entropy destroys energy)
-5. **Information** — grows when energy and density are high, decays when entropy is high
-6. **Bio emergence** — `FBio` rises when `FE > 80`, `FD > BIO_THRESH`, `FS < 0.9`, driving info up
-7. **Causal logging** — cells with `|ΔE| > 55` per tick are logged as causal events
+1. **Laplacian diffusion** — E, T, D, I each spread to 6 face-neighbors (cubic lattice)
+2. **Thermodynamics** — E drives T up; controlled by `DIFF`
+3. **Entropy growth** — `dS = (ENT + E×4e-5 + T×1.5e-5) × dt × 60`
+4. **Energy drain** — `E -= E × S × 2e-4 × dt × 60`
+5. **Info growth** — rises when E > 80, D > BIO threshold, S < 0.9
+6. **Bio emergence** — `BIO` rises when E + D + sup > 0; decays otherwise
+7. **Time dilation** — `TAU += dt × (1 + E×0.0008 + S×0.2)`
+8. **Causal logging** — |ΔE| > 55 per tick → causal event logged
+9. **Chunk pruning** — every 100 ticks removes empty chunks
 
 ---
 
@@ -716,8 +599,6 @@ Laws are first-class objects:
 { name, type, active, fitness, strength, color, desc }
 ```
 
-Built-in laws and their physical effect:
-
 | Law | Controls |
 |---|---|
 | Energy Diffusion | `DIFFUSION` constant |
@@ -726,22 +607,50 @@ Built-in laws and their physical effect:
 | Bio Emergence | `BIO_THRESH` constant |
 | Thermal Coupling | Temperature coupling strength |
 | Causal Threshold | Min ΔE to log a causal event |
-| Density Gravity | Density diffusion rate (needs thermo) |
-| Neural Plasticity | Agent learning rate (needs agents) |
+| Density Gravity | Density diffusion rate |
+| Neural Plasticity | Agent learning rate |
 
 ---
 
-## Data Export Reference
+## Console API
 
-| Format | Function | Use With |
-|---|---|---|
-| **Metrics CSV** | `scienceMode.exportCSV()` | `pandas.read_csv()`, R, Excel |
-| **Jupyter .ipynb** | `scienceMode.exportJupyter()` | Jupyter Lab — 4 cells: plots, correlation, complexity |
-| **Recording JSON** | `scienceMode.exportJSON()` | Sparse keyframes, format `reality_engine_scientific_v2` |
-| **Alembic .json** | `cinemaMode.exportAlembic()` | Per-keyframe cell archive, `reality_engine_alembic_v1` |
-| **SRT subtitles** | `cinemaMode.exportSRT()` | Timeline markers → video editor subtitles |
-| **Level JSON** | `gamedevMode.exportLevel()` | Objectives + rules, `reality_engine_level_v1` |
-| **World .reality** | `saveWorld()` | Full sparse world state |
+```js
+// 3D renderer
+window.setMatMode('field' | 'material' | 'height')
+window.setTimeOfDay(12)            // 0–24h
+window.setFogDensity(0.02)         // 0–0.06
+window.setCameraPreset('orbit' | 'top' | 'iso' | 'street' | 'fly')
+window.setZSlice(32)               // 0–63, 63 = show all
+window.setShowParticles(false)
+
+// Scene Composer
+window.addSceneComp('downtown')    // adds a component
+window.toggleComp('park')          // enable/disable
+window.removeComp('storm')         // remove
+window.applyScene()                // paint all enabled components to chunk grid
+window.clearScene()                // remove all active components
+
+// Chunk worker
+window.applyChunkPreset('town')    // load 3D town layout
+window.tickChunkWorker(playing, speed)
+
+// Science metrics
+window.metrics.snapshot()          // all fields, latest value
+window.metrics.exportCSV()
+window.scienceMode.exportCSV()
+window.scienceMode.exportJupyter()
+
+// Agents
+window.spawnAgents(20)
+window.requestAgentPlan()          // LLM group plan
+window.debateAgentPlan()           // AutoGen debate
+window.assignAgentRoles()          // CrewAI roles
+
+// Debug
+window.buf          // Float32Array — inline 2D sim buffer
+window.W, window.H  // 36 × 28
+window.tick         // current simulation tick
+```
 
 ---
 
@@ -752,43 +661,30 @@ Built-in laws and their physical effect:
 | `?` or `/` | Show keyboard shortcuts overlay |
 | `Escape` | Close any modal or overlay |
 | `Space` | Play / Pause simulation |
-| `1` | Select ⚡ Energy field |
-| `2` | Select 🌫️ Density field |
-| `3` | Select 🧠 Info field |
-| `4` | Select 🔥 Entropy field |
-| `5` | Select 🌡️ Temp field |
-| `6` | Select 🧬 Bio field |
+| `1`–`6` | Select field (Energy / Density / Info / Entropy / Temp / Bio) |
 | `Ctrl+S` | Save world (.reality) |
 | `Ctrl+Z` | Undo last paint / preset (5-step ring) |
+| `Delete` / `Backspace` | Remove selected node in Node Law Editor |
 | Click + Drag | Paint / brush on canvas |
 | Click (Inspect tool) | Select cell → causal breakdown in right panel |
-| ↑ / ↓ (Debug console) | Navigate command history |
-
-> Field shortcuts only fire when the canvas area has focus (not when a text input is active).
 
 ---
 
 ## Troubleshooting
 
-### 3D view appears blank on first load
-The isometric canvas (`#c3d`) must be initialized by clicking any render tab, or it will start hidden. Fixed in current build — a hard-refresh (**Ctrl+Shift+R**) is enough to get the latest code.
+### 3D view blank after mode switch
+Switching modes used to call `canvas.width = w` which resets the WebGL context. Fixed — resize now calls `renderer.setSize()` correctly.
 
-### Entropy / Density / Bio fields look invisible in 2D mode
-Previously a display-threshold bug: cells with value < 50% of max were skipped. For 0–1 normalized fields this made anything below 0.5 invisible. Fixed — the threshold is now 0.001 for normalized fields.
-
-### Switching from 2D back to 3D shows blank or stale image
-Previously the 2D canvas (opaque dark fill) covered the isometric 3D canvas. Fixed — in 3D mode the flat canvas is now hidden.
-
-### Game Dev pause doesn't stop simulation
-Previously broken: the `window.loop` override was never called because the RAF held a closure reference to the original function. Fixed — the pause check is now inside the main `loop()` directly.
+### 3D view frozen when simulation is paused
+Previously the render call was gated on `playing === true`. Fixed — an unconditional `requestAnimationFrame` RAF loop always runs, independent of the simulation.
 
 ### Scientific Solvers panel not visible in Science Mode
-The panel is injected dynamically by `connector.ts` when the `panelRendered` event fires.
-1. Hard-refresh (Ctrl+Shift+R)
-2. Click **Science** in the top bar
-3. Scroll to the bottom of the left panel
+The panel is injected dynamically when the `panelRendered` event fires. Hard-refresh (Ctrl+Shift+R) → click **Science**.
 
-### Microservice offline (status dot red or yellow)
+### Scene Composer not visible in Cinema Mode
+Same dynamic injection. Click **Cinema** mode — the panel appears at the bottom of the left sidebar.
+
+### Microservice offline (status dot red)
 ```bash
 cd solver
 py -3 -m uvicorn reality_solver_api:app --port 8765 --reload
@@ -805,65 +701,19 @@ npm run preview  # Preview production build locally
 npx tsc --noEmit # Type check (must produce zero errors)
 ```
 
-### Adding a New Mode
-
-1. Create `src/modes/yourmode/YourModePanel.ts` — export `buildYourModePanel(): string`
-2. Add your panel to the `PANELS` object in `index.html`:
-   ```js
-   yourmode: () => window.yourMode?window.yourMode._buildPanel():`<div>Loading...</div>`
-   ```
-3. Add the panel/mode mapping in the mode button handler:
-   ```js
-   const panelMap = { ..., yourmode: 'yourmode' };
-   ```
-4. Wire it up in `src/connector.ts` — import your classes, expose on `window`, listen for `panelRendered`
-
 ---
 
-## Project Structure
+## Data Export Reference
 
-```
-reality/
-├── index.html              # Main app — simulation + UI + two-canvas viewport
-├── src/
-│   ├── connector.ts         # Module bridge → window.* APIs for all modes + agents
-│   ├── main.ts              # UX system entry point
-│   ├── scientific/
-│   │   ├── MetricsAPI.ts
-│   │   ├── LawFitnessChart.ts
-│   │   ├── CausalInspector.ts
-│   │   └── SolverClient.ts  # HTTP client for Python microservice solvers
-│   ├── simulation/
-│   │   └── DeterministicEngine.ts
-│   ├── core/
-│   │   └── SimWorker.ts
-│   ├── modes/
-│   │   ├── ScienceModePanel.ts
-│   │   ├── GameDevModePanel.ts
-│   │   ├── agents/
-│   │   │   ├── AgentSystem.ts   # Utility AI + FSM + genome-based agent simulation
-│   │   │   └── AgentPlanner.ts  # LLM goal planner (LangChain/CrewAI/AutoGen patterns)
-│   │   ├── cinema/
-│   │   │   ├── KeyframeTimeline.ts
-│   │   │   ├── SceneDirector.ts
-│   │   │   └── VideoRecorder.ts
-│   │   └── gamedev/
-│   │       ├── GameRulesetEngine.ts
-│   │       ├── PrefabSystem.ts
-│   │       └── AIGameDesigner.ts
-│   └── ui/
-│       └── UXIntegration.ts
-├── solver/                  # Python FastAPI microservice (localhost:8765)
-│   ├── reality_solver_api.py  # @register decorator + /solve endpoint
-│   └── solvers/
-│       ├── physics_solvers.py    # FEM heat, wave, fluid, magneto-hydro
-│       ├── quantum_solvers.py    # Schrödinger, Bell states, quantum walk
-│       ├── complex_solvers.py    # Reaction-diffusion, cellular automata, fractals
-│       └── agent_solvers.py     # Flow field, population forecast, multi-agent, fitness
-├── vite.config.ts
-├── tsconfig.json
-└── netlify.toml            # COOP/COEP headers for SharedArrayBuffer
-```
+| Format | Function | Use With |
+|---|---|---|
+| **Metrics CSV** | `scienceMode.exportCSV()` | `pandas.read_csv()`, R, Excel |
+| **Jupyter .ipynb** | `scienceMode.exportJupyter()` | Jupyter Lab — 4 cells: plots, correlation, complexity |
+| **Recording JSON** | `scienceMode.exportJSON()` | Sparse keyframes, `reality_engine_scientific_v2` |
+| **Alembic .json** | `cinemaMode.exportAlembic()` | Per-keyframe cell archive, `reality_engine_alembic_v1` |
+| **SRT subtitles** | `cinemaMode.exportSRT()` | Timeline markers → video editor subtitles |
+| **Level JSON** | `gamedevMode.exportLevel()` | Objectives + rules, `reality_engine_level_v1` |
+| **World .reality** | `saveWorld()` | Full sparse world state |
 
 ---
 

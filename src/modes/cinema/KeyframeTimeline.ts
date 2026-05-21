@@ -47,8 +47,8 @@ export class KeyframeTimeline {
   attach(canvas: HTMLCanvasElement): void {
     this.canvas = canvas
     canvas.addEventListener('mousedown', e => this.onMouse(e, 'down'))
-    canvas.addEventListener('mousemove', e => this.onMouse(e, 'move'))
-    canvas.addEventListener('mouseup',   e => this.onMouse(e, 'up'))
+    document.addEventListener('mousemove', e => this.onMouse(e, 'move'))
+    document.addEventListener('mouseup',   e => this.onMouse(e, 'up'))
     this.draw()
   }
 

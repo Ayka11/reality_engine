@@ -35,6 +35,11 @@ import { WorldHealth } from './ux/WorldHealth';
 import { Explainer } from './ux/Explainer';
 import { SMART_BRUSHES } from './ux/SmartBrushes';
 
+// ── Chunk system imports ───────────────────────────────────────────────────────
+import { ChunkRenderer } from './render/ChunkRenderer';
+import { RealityMonitor, buildRealityMonitorHTML, updateMonitorPanels } from './ui/RealityMonitor';
+import { NodeLawEditor } from './ui/NodeLawEditor';
+
 // ── UX System imports ─────────────────────────────────────────────────────────
 import { initializeUXSystem } from './ui/UXIntegration';
 import { applySemanticControls } from './composer/semanticMapper';
@@ -51,6 +56,88 @@ const realityCreatorCompiler = new GraphCompiler();
   graph: realityCreatorGraph,
   compiler: realityCreatorCompiler,
 };
+
+// ── Chunk system — Three.js renderer + sparse worker ─────────────────────────
+const c3dCanvas = document.getElementById('c3d') as HTMLCanvasElement;
+const chunkRenderer = new ChunkRenderer(c3dCanvas);
+const monitor    = new RealityMonitor();
+const nodeEditor = new NodeLawEditor();
+
+// Shadow map: chunkKey → Float32Array (our copy of worker state for monitor sampling)
+const localChunks = new Map<number, Float32Array>();
+let chunkTick = 0, chunkEvCount = 0;
+let workerBusy = false;
+
+const chunkWorker = new Worker(
+  new URL('./core/ChunkSimWorker.ts', import.meta.url),
+  { type: 'module' }
+);
+
+let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25;
+
+chunkWorker.onmessage = (e: MessageEvent) => {
+  const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data;
+  workerBusy = false;
+
+  if (cmd === 'frame' && ab) {
+    chunkTick    = wTick ?? chunkTick;
+    chunkEvCount = wEv   ?? chunkEvCount;
+
+    // Merge dirty chunks into shadow map
+    const NF_W = 14, CF = 512 * NF_W;
+    const u32 = new Uint32Array(ab as ArrayBuffer);
+    const f32 = new Float32Array(ab as ArrayBuffer);
+    const num = u32[0];
+    let off = 1;
+    for (let c = 0; c < num; c++) {
+      const key = u32[off];
+      localChunks.set(key, f32.slice(off + 1, off + 1 + CF));
+      off += 1 + CF;
+    }
+
+    // Push dirty payload to renderer
+    chunkRenderer.applyWorkerFrame(ab as ArrayBuffer);
+
+    // Update bottom-bar chunk stats
+    if (stats) {
+      const el = document.getElementById('chunkStats');
+      if (el) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`;
+    }
+  }
+};
+
+// Seed initial world in worker
+chunkWorker.postMessage({ cmd: 'generate', data: { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw } });
+
+// Compile node graph and push params to worker
+function chunkWorkerCompile() {
+  const pipeline = nodeEditor.compile();
+  const params   = { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw };
+  nodeEditor.applyPipeline(pipeline, params);
+  DIFF_cw = params.DIFF; ENT_cw = params.ENT; INFO_cw = params.INFO; BIO_cw = params.BIO;
+  chunkWorker.postMessage({ cmd: 'setParams', data: params });
+  const log = document.getElementById('ngCompileLog');
+  if (log) log.textContent = `Compiled → DIFF:${DIFF_cw.toFixed(4)} ENT:${ENT_cw.toFixed(5)}`;
+}
+
+nodeEditor.onCompile = () => chunkWorkerCompile();
+(window as unknown as Record<string, unknown>).chunkWorkerCompile = chunkWorkerCompile;
+(window as unknown as Record<string, unknown>).nodeLawEditor      = nodeEditor;
+
+// Initialize node editor canvas once the science panel opens (DOM may not exist yet)
+function tryInitNodeEditor() {
+  const canvas = document.getElementById('ngCanvas') as HTMLCanvasElement | null;
+  if (canvas && !nodeEditor.canvas) nodeEditor.init(canvas);
+  else if (canvas) nodeEditor.draw();
+}
+
+// Inject monitor HTML into the panel placeholder
+function tryInitMonitorPanel() {
+  const panel = document.getElementById('realityMonitorPanel');
+  if (panel && panel.querySelector('#psiRCanvas') === null) {
+    panel.innerHTML = buildRealityMonitorHTML();
+  }
+}
 
 // ── Initialize UX System ──────────────────────────────────────────────────────
 const { appModeManager, renderModeSwitch } = initializeUXSystem();
@@ -1542,7 +1629,16 @@ async function loop(ts: number) {
     langSys.tick();
     econSys.tick(dt);
     if (sim.tick % 5 === 0) cosmoSim.step(dt * 5);
+
+    // Tick chunk worker (non-blocking — skip if previous frame not yet returned)
+    if (!workerBusy) {
+      workerBusy = true;
+      chunkWorker.postMessage({ cmd: 'tick', data: { speed: Math.min(nSteps, 3) } });
+    }
   }
+
+  // Render Three.js chunk view
+  chunkRenderer.render();
 
   fieldAnim.update(sim.tick, dt);
 
@@ -1563,6 +1659,32 @@ async function loop(ts: number) {
     if (worldHealth) updateHealthPanel();
   }
   if (selX >= 0 && sim.tick % 10 === 0) updateExplainerPanel();
+
+  // Chunk system UI updates
+  if (sim.tick % 10 === 0) {
+    tryInitMonitorPanel();
+    tryInitNodeEditor();
+
+    if (localChunks.size > 0) {
+      const agentCount = sim.agents.getAgents().filter((a: any) => a.alive !== false).length;
+      monitor.sample(chunkTick, localChunks, agentCount, chunkEvCount);
+
+      // Law fitness data from existing law engine
+      const lawsForRadar = sim.laws.laws.map(l => ({
+        nm:  l.name,
+        fit: l.fitness,
+        on:  l.active,
+        col: l.color,
+      }));
+      updateMonitorPanels(monitor, lawsForRadar);
+
+      // Node editor tick
+      if (nodeEditor.canvas) {
+        const last = monitor.samples[monitor.samples.length - 1];
+        if (last) nodeEditor.tick({ energy: last.energy, entropy: last.entropy, info: last.info, bio: last.bio });
+      }
+    }
+  }
 
   // Bottom bar
   const totalE    = sim.grid.totalField(F.ENERGY);

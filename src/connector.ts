@@ -25,9 +25,183 @@ import { BehaviorFSMCanvas, PRESET_BEHAVIORS }   from './modes/gamedev/EntityBeh
 import { PrefabSystem }                           from './modes/gamedev/PrefabSystem'
 import { AIGameDesigner }                         from './modes/gamedev/AIGameDesigner'
 import { buildGameDevModePanel }                  from './modes/GameDevModePanel'
+import { ChunkRenderer }                          from './render/ChunkRenderer'
+import { RealityMonitor, buildRealityMonitorHTML, updateMonitorPanels } from './ui/RealityMonitor'
+import { NodeLawEditor }                          from './ui/NodeLawEditor'
+import { sceneComposer }                          from './modes/cinema/SceneComposer'
+
+// ── Window alias — must be declared before any top-level win[...] usage ──────
+const win = window as unknown as Record<string, unknown>
+
+// ── Chunk system — Three.js PBR renderer + 128×128×64 sparse worker ─────────
+
+const c3dCanvas = document.getElementById('c3d') as HTMLCanvasElement
+const chunkRenderer = new ChunkRenderer(c3dCanvas)
+const monitor       = new RealityMonitor()
+const nodeEditor    = new NodeLawEditor()
+
+const localChunks = new Map<number, Float32Array>()
+let chunkTick = 0, chunkEvCount = 0, workerBusy = false
+let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
+
+const chunkWorker = new Worker(
+  new URL('./core/ChunkSimWorker.ts', import.meta.url),
+  { type: 'module' }
+)
+
+chunkWorker.onmessage = (e: MessageEvent) => {
+  const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data
+  workerBusy = false
+
+  if (cmd === 'frame' && ab) {
+    chunkTick    = wTick    ?? chunkTick
+    chunkEvCount = wEv      ?? chunkEvCount
+    const NF_W = 14, CF = 512 * NF_W
+    const u32 = new Uint32Array(ab as ArrayBuffer)
+    const f32 = new Float32Array(ab as ArrayBuffer)
+    const num = u32[0]
+    let off = 1
+    for (let c = 0; c < num; c++) {
+      const key = u32[off]
+      localChunks.set(key, f32.slice(off + 1, off + 1 + CF))
+      off += 1 + CF
+    }
+    chunkRenderer.applyWorkerFrame(ab as ArrayBuffer)
+    const el = document.getElementById('chunkStats')
+    if (el && stats) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`
+  }
+}
+
+// Seed world on startup — generate sparse base then apply proto preset for visible data
+chunkWorker.postMessage({ cmd: 'generate', data: { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw } })
+chunkWorker.postMessage({ cmd: 'preset', data: { name: 'proto' } })
+
+// Self-contained render loop — always runs so 3D view shows even when paused
+let _rafLast = 0
+;(function rafLoop(ts: number) {
+  const dt = Math.min((ts - _rafLast) / 1000, 0.1)
+  _rafLast = ts
+  chunkRenderer.render(dt)
+  requestAnimationFrame(rafLoop)
+})(0)
+
+// Resize helper exposed to HTML — called by resize3D() on window/mode resize
+win['resizeChunkRenderer'] = (hybrid: boolean) => {
+  const parent = c3dCanvas.parentElement!
+  const w = hybrid ? Math.ceil(parent.clientWidth / 2) : parent.clientWidth
+  const h = parent.clientHeight
+  if (w > 0 && h > 0) {
+    chunkRenderer.renderer.setSize(w, h, false)
+    chunkRenderer.camera.aspect = w / h
+    chunkRenderer.camera.updateProjectionMatrix()
+  }
+}
+
+function chunkWorkerCompile() {
+  const pipeline = nodeEditor.compile()
+  const params   = { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw }
+  nodeEditor.applyPipeline(pipeline, params)
+  DIFF_cw = params.DIFF; ENT_cw = params.ENT; INFO_cw = params.INFO; BIO_cw = params.BIO
+  chunkWorker.postMessage({ cmd: 'setParams', data: params })
+  const log = document.getElementById('ngCompileLog')
+  if (log) log.textContent = `Compiled → DIFF:${DIFF_cw.toFixed(4)} ENT:${ENT_cw.toFixed(5)}`
+}
+nodeEditor.onCompile = () => chunkWorkerCompile()
+nodeEditor.onSelect  = (node) => {
+  const el = document.getElementById('ngNodeProps')
+  if (!el) return
+  if (!node) { el.style.display = 'none'; return }
+  const numEntries = Object.entries(node.params).filter(([, v]) => typeof v === 'number')
+  if (!numEntries.length) { el.style.display = 'none'; return }
+  el.style.display = 'block'
+  el.innerHTML = `<div style="font-size:9px;color:${node.color};margin-bottom:4px;font-weight:600">${node.label}</div>` +
+    numEntries.map(([k, v]) => {
+      const max = k === 'fitness' ? 1 : k === 'strength' ? 1 : k === 'factor' ? 5 : k === 'blend' ? 1 : 10
+      return `<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
+        <span style="font-size:9px;color:var(--sub);min-width:52px">${k}</span>
+        <input type="range" style="flex:1;accent-color:${node.color};height:3px"
+          min="0" max="${max}" step="0.0001" value="${v}"
+          data-node="${node.id}" data-param="${k}"
+          oninput="this.nextElementSibling.textContent=parseFloat(this.value).toFixed(4);
+            var ne=window.nodeLawEditor;if(ne&&ne.selected)ne.selected.params[this.dataset.param]=parseFloat(this.value);"
+          onchange="if(window.chunkWorkerCompile)window.chunkWorkerCompile()">
+        <span style="font-size:9px;font-family:monospace;min-width:42px;text-align:right;color:var(--tx)">${(v as number).toFixed(4)}</span>
+      </div>`
+    }).join('')
+}
+win['chunkWorkerCompile'] = chunkWorkerCompile
+win['nodeLawEditor']      = nodeEditor
+win['applyChunkPreset']   = (name: string) => {
+  chunkWorker.postMessage({ cmd: 'preset', data: { name } })
+  if (name === 'town') {
+    DIFF_cw = 0.12; ENT_cw = 0.00015; INFO_cw = 0.45; BIO_cw = 0.32
+    chunkWorker.postMessage({ cmd: 'setParams', data: { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw, procs: ['thermo', 'bio', 'info'] } })
+  }
+}
+
+// 3D renderer controls — called from HTML UI controls
+win['setMatMode']      = (m: string) => chunkRenderer.setMatMode(m as 'field'|'material'|'height')
+win['setTimeOfDay']    = (h: number) => chunkRenderer.setTimeOfDay(h)
+win['setFogDensity']   = (d: number) => chunkRenderer.setFogDensity(d)
+win['setCameraPreset'] = (p: string) => chunkRenderer.setCameraPreset(p as 'orbit'|'top'|'iso'|'street'|'fly')
+win['setZSlice']       = (z: number) => chunkRenderer.setZSlice(z)
+win['setShowParticles']= (v: boolean) => { chunkRenderer.showParticles = v }
+win['setChunkLayer']   = (l: number) => chunkRenderer.setLayer(l)
+win['paintChunkAt']    = (x: number, y: number, z: number, f: number, v: number, r: number, mode?: string) => {
+  chunkWorker.postMessage({ cmd: 'paint', data: { x, y, z, f, v, r, mode: mode ?? 'add' } })
+}
+
+// Scene Composer APIs
+sceneComposer.setOnApply((cmds) => {
+  for (const cmd of cmds) {
+    chunkWorker.postMessage({ cmd: 'paint', data: cmd })
+  }
+})
+win['addSceneComp'] = (id: string)  => { sceneComposer.addComponent(id) }
+win['removeComp']   = (id: string)  => { sceneComposer.removeComponent(id) }
+win['toggleComp']   = (id: string)  => { sceneComposer.toggleComp(id) }
+win['applyScene']   = ()            => { sceneComposer.applyAll() }
+win['clearScene']   = ()            => { sceneComposer.active = []; (sceneComposer as any)._refreshUI() }
+
+// Science mode town configuration — realistic city physics
+win['sciTownMode'] = () => {
+  DIFF_cw = 0.12; ENT_cw = 0.00015; INFO_cw = 0.45; BIO_cw = 0.32
+  chunkWorker.postMessage({ cmd: 'setParams', data: { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw, procs: ['thermo', 'bio', 'info'] } })
+  const log = document.getElementById('ngCompileLog')
+  if (log) log.textContent = 'Town physics: DIFF=0.12 · ENT=0.00015 · INFO=0.45 · BIO=0.32 · procs: thermo+bio+info'
+}
+
+function tryInitMonitorPanel() {
+  const panel = document.getElementById('realityMonitorPanel')
+  if (panel && !panel.querySelector('#psiRCanvas')) panel.innerHTML = buildRealityMonitorHTML()
+}
+
+function tryInitNodeEditor() {
+  const canvas = document.getElementById('ngCanvas') as HTMLCanvasElement | null
+  if (canvas && !nodeEditor.canvas) nodeEditor.init(canvas)
+  else if (canvas) nodeEditor.draw()
+}
+
+// Tick chunk worker alongside inline sim (called from HTML's simStep loop)
+win['tickChunkWorker'] = (playing: boolean, speed: number) => {
+  if (!playing || workerBusy) return
+  workerBusy = true
+  chunkWorker.postMessage({ cmd: 'tick', data: { speed: Math.min(speed, 3) } })
+
+  if (localChunks.size > 0) {
+    const laws: { nm: string; fit: number; on: boolean; col: string }[] =
+      (win['LAWS'] as { name: string; fitness: number; active: boolean; color: string }[] | undefined)
+        ?.map(l => ({ nm: l.name, fit: l.fitness, on: l.active, col: l.color })) ?? []
+    monitor.sample(chunkTick, localChunks, 0, chunkEvCount)
+    updateMonitorPanels(monitor, laws)
+    const last = monitor.samples[monitor.samples.length - 1]
+    if (last && nodeEditor.canvas) {
+      nodeEditor.tick({ energy: last.energy, entropy: last.entropy, info: last.info, bio: last.bio })
+    }
+  }
+}
 
 // ── Inline sim constants (must match index.html) ──────────────────────────
-const win = window as unknown as Record<string, unknown>
 function getW():   number { return (win['W']  as number) || 36 }
 function getH():   number { return (win['H']  as number) || 28 }
 function getNF():  number { return (win['NF'] as number) || 12 }
@@ -173,30 +347,50 @@ const cinemaMode = {
     const input = document.getElementById('dirInput') as HTMLInputElement | null
     const prompt = input?.value?.trim()
     if (!prompt) return
+    
     const log = document.getElementById('dirLog')
-    if (log) log.textContent = '⏳ Director thinking...'
-
-    const res = await director.ask(prompt, getSimContext())
-
-    if (log) {
-      log.textContent = res.narration
-    }
     const codeEl = document.getElementById('dirCode')
     const runBtn = document.getElementById('btnRunDir')
-    if (codeEl && res.script) {
-      codeEl.textContent = res.script
-      codeEl.style.display = 'block'
-      if (runBtn) runBtn.style.display = 'block'
-    }
-    timeline.addMarker(getTick(), res.markerLabel, 120)
-    timeline.draw()
+    
+    // Clear input immediately
     if (input) input.value = ''
+    
+    // Show loading state
+    if (log) log.textContent = '⏳ Director thinking...'
+    if (codeEl) codeEl.style.display = 'none'
+    if (runBtn) runBtn.style.display = 'none'
+
+    try {
+      const res = await director.ask(prompt, getSimContext())
+
+      if (log) {
+        log.textContent = res.narration
+      }
+      if (codeEl && res.script) {
+        codeEl.textContent = res.script
+        codeEl.style.display = 'block'
+        if (runBtn) runBtn.style.display = 'block'
+        this.runScript()
+        if (log) log.textContent += '\n▶ Applied to simulation.'
+      }
+      timeline.addMarker(getTick(), res.markerLabel, 120)
+      timeline.draw()
+    } catch (err) {
+      console.error('Director error:', err)
+      if (log) log.textContent = `Error: ${String(err)}. Make sure API key is set.`
+    }
   },
 
   async narrate(): Promise<void> {
     const log = document.getElementById('dirLog')
-    const res = await director.ask('Describe what is visually happening right now', getSimContext())
-    if (log) log.textContent = res.narration
+    if (log) log.textContent = '⏳ Director thinking...'
+    try {
+      const res = await director.ask('Describe what is visually happening right now', getSimContext())
+      if (log) log.textContent = res.narration
+    } catch (err) {
+      console.error('Narrate error:', err)
+      if (log) log.textContent = `Error: ${String(err)}. Make sure API key is set.`
+    }
   },
 
   toggleAuto(): void {
@@ -450,27 +644,50 @@ const gamedevMode = {
     const logEl  = document.getElementById('gameDesignerLog')
     const prompt = input?.value?.trim()
     if (!prompt) return
+    
+    // Clear input immediately
     if (input)  input.value  = ''
     if (logEl)  logEl.innerHTML += `<div style="color:#888">You: ${prompt}</div>`
 
-    const summary = this._worldSummary()
-    const result  = await gameDesigner.ask(prompt, summary, gameRuleset.state)
+    // Show loading indicator
+    if (logEl)  logEl.innerHTML += `<div style="color:#666;font-style:italic">🤖 Thinking...</div>`
+    if (logEl)  logEl.scrollTop  = logEl.scrollHeight
 
-    if (logEl) {
-      logEl.innerHTML += `<div style="color:#c0c8f0">🤖 ${result.advice.replace(/\n/g,'<br>')}</div>`
-      logEl.scrollTop  = logEl.scrollHeight
-    }
-    if (result.rulesetJSON) {
-      lastDesignerRuleset = result.rulesetJSON
-      const applyBtn = document.getElementById('btnApplyRuleset')
-      if (applyBtn) applyBtn.style.display = 'block'
+    try {
+      const summary = this._worldSummary()
+      const result  = await gameDesigner.ask(prompt, summary, gameRuleset.state)
+
+      if (logEl) {
+        // Remove the "thinking" message and add response
+        const thinkingDiv = logEl.lastElementChild
+        if (thinkingDiv?.textContent?.includes('Thinking')) {
+          thinkingDiv.remove()
+        }
+        logEl.innerHTML += `<div style="color:#c0c8f0">🤖 ${result.advice.replace(/\n/g,'<br>')}</div>`
+        logEl.scrollTop  = logEl.scrollHeight
+      }
+      if (result.rulesetJSON) {
+        lastDesignerRuleset = result.rulesetJSON
+        const applyBtn = document.getElementById('btnApplyRuleset')
+        if (applyBtn) applyBtn.style.display = 'block'
+      }
+    } catch (err) {
+      console.error('Designer error:', err)
+      if (logEl) {
+        const thinkingDiv = logEl.lastElementChild
+        if (thinkingDiv?.textContent?.includes('Thinking')) {
+          thinkingDiv.remove()
+        }
+        logEl.innerHTML += `<div style="color:#ff6b6b">❌ Error: ${String(err)}. Check your API key.</div>`
+        logEl.scrollTop = logEl.scrollHeight
+      }
     }
   },
 
   suggestObjective(): void {
-    void this.askDesigner()
     const input = document.getElementById('gameDesignerInput') as HTMLInputElement | null
     if (input) input.value = 'Suggest an objective for this world state'
+    void this.askDesigner()
   },
 
   applyDesignerRuleset(): void {
@@ -643,6 +860,13 @@ document.addEventListener('panelRendered', (e: Event) => {
   if (panel === 'cinema') {
     const tCanvas = document.getElementById('timelineCanvas') as HTMLCanvasElement | null
     if (tCanvas) timeline.attach(tCanvas)
+    // Inject SceneComposer panel if not already present
+    const leftPanel = document.getElementById('left')
+    if (leftPanel && !document.getElementById('scActiveList')) {
+      const div = document.createElement('div')
+      div.innerHTML = sceneComposer.buildHTML()
+      leftPanel.appendChild(div)
+    }
   }
   if (panel === 'science') {
     const lawCanvas = document.getElementById('lawChart') as HTMLCanvasElement | null
@@ -660,6 +884,9 @@ document.addEventListener('panelRendered', (e: Event) => {
       leftPanel.appendChild(solverDiv)
     }
     _refreshSolverUI()
+    // Init Reality Monitor + Node Law Editor (may be first time panel opens)
+    tryInitMonitorPanel()
+    setTimeout(tryInitNodeEditor, 50) // slight delay so canvas is in layout
   }
   if (panel === 'gamedev') {
     renderPrefabLibrary()
@@ -688,27 +915,45 @@ win['spawnAgents'] = (n: number) => {
 // Request LLM plan — called from agents panel "Plan" button
 win['requestAgentPlan'] = async () => {
   const btn = document.getElementById('btnGroupPlan') as HTMLButtonElement | null
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Planning…' }
-  const ctx = getSimContext()
-  const plan = await agentPlanner.groupPlan(agentSystem.getSurvivors(), ctx)
-  agentSystem.applyPlan(plan)
   const planEl = document.getElementById('agentPlanText')
-  if (planEl) planEl.textContent = plan
-  if (btn) { btn.disabled = false; btn.textContent = '🧠 Group Plan' }
+  if (agentSystem.count === 0) {
+    if (planEl) planEl.textContent = '⚠ Spawn agents first (click Spawn 5 or Spawn 20)'
+    return
+  }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Planning…' }
+  try {
+    const ctx = getSimContext()
+    const plan = await agentPlanner.groupPlan(agentSystem.getSurvivors(), ctx)
+    agentSystem.applyPlan(plan)
+    if (planEl) planEl.textContent = plan
+  } catch (err) {
+    if (planEl) planEl.textContent = `Error: ${String(err)}`
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🧠 Group Plan' }
+  }
 }
 
 // AutoGen-style two-agent debate — called from agents panel "Debate" button
 win['debateAgentPlan'] = async () => {
   const btn = document.getElementById('btnDebate') as HTMLButtonElement | null
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Debating…' }
-  const ctx = getSimContext()
-  const result = await agentPlanner.debatePlan(ctx)
-  agentSystem.applyPlan(result.consensus)
   const planEl = document.getElementById('agentPlanText')
-  if (planEl) {
-    planEl.textContent = `Strategist: ${result.strategist}\nTactician: ${result.tactician}\nConsensus: ${result.consensus}`
+  if (agentSystem.count === 0) {
+    if (planEl) planEl.textContent = '⚠ Spawn agents first (click Spawn 5 or Spawn 20)'
+    return
   }
-  if (btn) { btn.disabled = false; btn.textContent = '⚔️ Debate' }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Debating…' }
+  try {
+    const ctx = getSimContext()
+    const result = await agentPlanner.debatePlan(ctx)
+    agentSystem.applyPlan(result.consensus)
+    if (planEl) {
+      planEl.textContent = `Strategist: ${result.strategist}\nTactician: ${result.tactician}\nConsensus: ${result.consensus}`
+    }
+  } catch (err) {
+    if (planEl) planEl.textContent = `Error: ${String(err)}`
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⚔️ Debate' }
+  }
 }
 
 // Assign CrewAI-style roles — each agent gets its own role plan

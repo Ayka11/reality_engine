@@ -85,32 +85,86 @@ Keep suggestions concrete and achievable. Think like an indie game designer. Be 
   // ── private ─────────────────────────────────────────────────────────
 
   private _fallback(msg: string, gs: { score: number; lives: number }): DesignerResult {
-    void msg
-    const templates: DesignerResult[] = [
-      {
-        advice: 'Try a survival challenge: keep entropy below 0.2 while growing bio potential. Entropy will creep up — you\'ll need to inject energy to fight it.',
-        rulesetJSON: JSON.stringify({
-          objectives: [
-            { id:'reduce_ent', name:'Entropy below 0.2', type:'reduce_entropy', target:0.2, description:'Keep entropy under control' },
-            { id:'survive_500', name:'Survive 500 ticks', type:'tick_count', target:500, description:'Keep the simulation running' },
-          ],
-          timeLimit: 800, lives: 3, message: 'Fight entropy — keep life alive!',
-        }, null, 2),
-        objective: 'Entropy below 0.2',
-      },
-      {
-        advice: 'Build a civilization: grow information to 100+ average while keeping 10 agents alive. Information networks emerge when bio and energy are balanced.',
-        rulesetJSON: JSON.stringify({
-          objectives: [
-            { id:'max_info',  name:'Info avg > 100',  type:'max_info',      target:100, description:'Build an information network' },
-            { id:'spawn_10',  name:'Spawn 10 agents', type:'spawn_agents',  target:10,  description:'Have 10 agents alive at once' },
-          ],
-          timeLimit: null, lives: 5, message: 'Build an information civilization!',
-        }, null, 2),
-        objective: 'Info avg > 100',
-      },
-    ]
-    const pick = templates[gs.score % templates.length]
-    return pick
+    const lo = msg.toLowerCase()
+    const wantsRuleset = /ruleset|objective|mission|challenge|goal|win|level|create|design|make|suggest|give me/.test(lo)
+
+    const isSurvival = /surviv|entropy|danger|threat|hard|difficult|enemy/.test(lo)
+    const isCiv      = /civil|city|urban|info|knowledge|network|complex/.test(lo)
+    const isEco      = /eco|nature|bio|life|forest|organism|balance|ecosystem/.test(lo)
+    const isExplore  = /explor|discover|travel|scout|expand|territory/.test(lo)
+
+    if (wantsRuleset && isSurvival) return {
+      advice: 'Survival challenge: fight entropy while keeping agents alive. Energy drains fast — inject fuel into low-entropy zones to stabilize the field.',
+      rulesetJSON: JSON.stringify({
+        objectives: [
+          { id:'reduce_ent', name:'Entropy below 0.2', type:'reduce_entropy', target:0.2, description:'Keep entropy under control' },
+          { id:'survive_500', name:'Survive 500 ticks', type:'tick_count', target:500, description:'Keep the simulation running' },
+        ],
+        timeLimit: 800, lives: 3, message: 'Fight entropy — keep life alive!',
+      }, null, 2),
+      objective: 'Entropy below 0.2',
+    }
+
+    if (wantsRuleset && isCiv) return {
+      advice: 'Information civilization challenge: grow knowledge networks while sustaining a population of 10+ agents simultaneously.',
+      rulesetJSON: JSON.stringify({
+        objectives: [
+          { id:'max_info', name:'Info avg > 100', type:'max_info', target:100, description:'Build an information network' },
+          { id:'spawn_10', name:'10 agents alive', type:'spawn_agents', target:10, description:'Sustain a population' },
+        ],
+        timeLimit: null, lives: 5, message: 'Build an information civilization!',
+      }, null, 2),
+      objective: 'Info avg > 100',
+    }
+
+    if (wantsRuleset && isEco) return {
+      advice: 'Ecosystem challenge: cultivate bio potential while keeping entropy low. Nature needs balance — energy and order must coexist.',
+      rulesetJSON: JSON.stringify({
+        objectives: [
+          { id:'grow_life', name:'Bio potential > 0.5', type:'reach_bio', target:0.5, description:'Grow the ecosystem' },
+          { id:'survive_300', name:'Survive 300 ticks', type:'tick_count', target:300, description:'Sustain the simulation' },
+        ],
+        timeLimit: 600, lives: 4, message: 'Let life flourish!',
+      }, null, 2),
+      objective: 'Bio potential > 0.5',
+    }
+
+    if (wantsRuleset) return {
+      advice: 'Here\'s a balanced starter challenge: reach 500 ticks while growing bio potential and keeping entropy in check.',
+      rulesetJSON: JSON.stringify({
+        objectives: [
+          { id:'survive_500', name:'Survive 500 ticks', type:'tick_count', target:500, description:'Keep the simulation running' },
+          { id:'grow_life', name:'Bio potential > 0.3', type:'reach_bio', target:0.3, description:'Establish life in the field' },
+        ],
+        timeLimit: null, lives: 3, message: 'Build, grow, survive!',
+      }, null, 2),
+      objective: 'Survive 500 ticks',
+    }
+
+    // Conversational advice — no ruleset applied
+    if (isSurvival) return {
+      advice: `Survival tip: entropy is your main enemy. Paint low-entropy areas using the brush (field FS=3, value 0.01). Keep energy avg above 200 for agents to stay alive. Try "Design a survival level" to get a full ruleset.`,
+      rulesetJSON: null, objective: null,
+    }
+    if (isCiv) return {
+      advice: `Civilization advice: information grows when bio potential and energy coexist. Paint bio clusters near high-energy zones, then spawn 20 agents. Say "Create a civilization challenge" for a full ruleset.`,
+      rulesetJSON: null, objective: null,
+    }
+    if (isEco) return {
+      advice: `Ecosystem tip: aim for energy 200–400, entropy < 0.15, and scattered bio potential > 0.3. Try the "Ecosystem" preset in Playtest. Say "Design an ecosystem level" for objectives.`,
+      rulesetJSON: null, objective: null,
+    }
+    if (isExplore) return {
+      advice: `Explorer tip: set high exploreW (0.8) and seekInfoW (0.7) in Entity Behaviors, then use the Explorer preset. Spawn 20 agents for maximum territory coverage.`,
+      rulesetJSON: null, objective: null,
+    }
+
+    // Generic conversational response
+    const hint = gs.lives < 2
+      ? `You're low on lives — reduce entropy first by painting energy into calm zones.`
+      : gs.score > 100
+        ? `Great progress with score ${gs.score}! Add an information objective for more challenge.`
+        : `Try asking for a specific scenario: "design a survival level", "suggest ecosystem objectives", or "create a civilization challenge". The simulation has energy, entropy, info, and bio fields — mix them for interesting gameplay.`
+    return { advice: hint, rulesetJSON: null, objective: null }
   }
 }

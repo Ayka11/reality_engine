@@ -38,11 +38,16 @@ export interface GameState {
 }
 
 export const OBJECTIVES_PRESETS: Omit<GameObjective, 'current'|'progress'|'completed'>[] = [
-  { id:'survive_500', name:'Survive 500 ticks',     description:'Keep the simulation running',    type:'tick_count',     target:500  },
-  { id:'grow_life',   name:'Reach bio > 0.5',        description:'Grow bio potential to 0.5 avg',  type:'reach_bio',      target:0.5  },
-  { id:'spawn_10',    name:'Spawn 10 agents',         description:'Have 10 agents alive at once',   type:'spawn_agents',   target:10   },
-  { id:'reduce_ent',  name:'Entropy below 0.2',       description:'Keep entropy under control',     type:'reduce_entropy', target:0.2  },
-  { id:'max_info',    name:'Info avg > 100',           description:'Build an information network',   type:'max_info',       target:100  },
+  { id:'survive_500',  name:'Survive 500 ticks',      description:'Keep the simulation running',           type:'tick_count',     target:500   },
+  { id:'survive_1000', name:'City milestone 1000',    description:'Run a stable city for 1000 ticks',      type:'tick_count',     target:1000  },
+  { id:'grow_life',    name:'Reach bio > 0.5',         description:'Grow bio potential to 0.5 avg',         type:'reach_bio',      target:0.5   },
+  { id:'grow_parks',   name:'Bio flourish > 0.7',      description:'Parks and green zones thriving',        type:'reach_bio',      target:0.7   },
+  { id:'spawn_10',     name:'Spawn 10 agents',          description:'Have 10 agents alive at once',          type:'spawn_agents',   target:10    },
+  { id:'spawn_25',     name:'Spawn 25 citizens',        description:'Grow the city population',              type:'spawn_agents',   target:25    },
+  { id:'reduce_ent',   name:'Entropy below 0.2',        description:'Keep entropy under control',            type:'reduce_entropy', target:0.2   },
+  { id:'low_entropy',  name:'City entropy below 0.12',  description:'Ultra-stable city infrastructure',      type:'reduce_entropy', target:0.12  },
+  { id:'max_info',     name:'Info avg > 100',            description:'Build an information network',          type:'max_info',       target:100   },
+  { id:'high_info',    name:'Info grid > 300',           description:'Dense urban communication network',     type:'max_info',       target:300   },
 ]
 
 // Field indices (mirrors inline sim)
@@ -62,7 +67,7 @@ export class GameRulesetEngine {
 
   // ── Presets ───────────────────────────────────────────────────────────
 
-  loadPreset(preset: 'survival' | 'ecosystem' | 'civilization' | 'custom'): void {
+  loadPreset(preset: 'survival' | 'ecosystem' | 'civilization' | 'town' | 'custom'): void {
     this.state.score     = 0
     this.state.lives     = 3
     this.state.gameOver  = false
@@ -89,6 +94,12 @@ export class GameRulesetEngine {
         this.state.objectives = [makeObj('max_info'), makeObj('spawn_10')]
         this.state.timeLimit  = null
         this.state.message    = 'Build an information civilization!'
+        break
+      case 'town':
+        this.state.objectives = [makeObj('low_entropy'), makeObj('high_info'), makeObj('grow_parks'), makeObj('spawn_25'), makeObj('survive_1000')]
+        this.state.timeLimit  = null
+        this.state.lives      = 5
+        this.state.message    = 'Build a thriving, sustainable city! Balance energy, entropy, parks, and citizens.'
         break
       case 'custom':
         this.state.objectives = []

@@ -63,6 +63,7 @@ export function buildGameDevModePanel(): string {
     <div id="gameMessage" style="font-size:9px;color:var(--warn);margin-top:5px;font-style:italic"></div>
     <select style="width:100%;margin-top:6px" onchange="window.gamedevMode&&window.gamedevMode.loadPreset(this.value);this.value=''">
       <option value="">Load preset...</option>
+      <option value="town">🏙️ Town</option>
       <option value="survival">⚔️ Survival</option>
       <option value="ecosystem">🌿 Ecosystem</option>
       <option value="civilization">🏛️ Civilization</option>
@@ -79,10 +80,15 @@ export function buildGameDevModePanel(): string {
       onchange="window.gamedevMode&&window.gamedevMode.addObjective(this.value);this.value=''">
       <option value="">+ Add objective...</option>
       <option value="survive_500">⏱ Survive 500 ticks</option>
+      <option value="survive_1000">🏅 City milestone 1000</option>
       <option value="grow_life">🧬 Reach bio > 0.5</option>
+      <option value="grow_parks">🌳 Bio flourish > 0.7</option>
       <option value="spawn_10">🤖 Spawn 10 agents</option>
-      <option value="reduce_ent">🌀 Reduce entropy < 0.2</option>
+      <option value="spawn_25">👥 Spawn 25 citizens</option>
+      <option value="reduce_ent">🌀 Entropy < 0.2</option>
+      <option value="low_entropy">🏗️ City entropy < 0.12</option>
       <option value="max_info">🧠 Info avg > 100</option>
+      <option value="high_info">📡 Info grid > 300</option>
     </select>
     <div id="activeObjectives"></div>
     <div class="crow" style="margin-top:4px">

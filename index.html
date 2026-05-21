@@ -7,12 +7,14 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.10.0/tabler-icons.min.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#09090f;--panel:#111119;--border:#252535;--accent:#7c6fcd;--text:#d0cef5;--sub:#666;--success:#3db872;--warn:#e09030;--danger:#e04848;--info:#5080e0;--err:#e04848;--ok:#3db872;--tx:#d0cef5;--bd:#252535;--p2:#111119}
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:12px}
-#app{display:grid;grid-template-columns:52px 200px 1fr 220px;grid-template-rows:42px 1fr 30px;height:100vh;border:0.5px solid var(--border);overflow:hidden}
+:root{--bg:#09090f;--panel:#111119;--border:#252535;--accent:#7c6fcd;--text:#d0cef5;--sub:#666;--success:#3db872;--warn:#e09030;--danger:#e04848;--info:#5080e0;--err:#e04848;--ok:#3db872;--tx:#d0cef5;--bd:#252535;--p2:#111119;--lw:220px;--rw:240px}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:13px}
+#app{display:grid;grid-template-columns:52px var(--lw) 1fr var(--rw);grid-template-rows:46px 1fr 38px;height:100vh;border:0.5px solid var(--border);overflow:hidden}
+.rsz-bar{position:absolute;top:46px;bottom:38px;width:5px;cursor:col-resize;z-index:100;background:transparent;transition:background .15s}
+.rsz-bar:hover,.rsz-bar.active{background:var(--accent)}
 /* TOP BAR */
-#topbar{grid-column:1/-1;display:flex;align-items:center;gap:6px;padding:0 10px;background:var(--panel);border-bottom:0.5px solid var(--border)}
-.mode-btn{font-size:10px;padding:3px 10px;border:0.5px solid var(--border);border-radius:20px;cursor:pointer;background:transparent;color:var(--sub);white-space:nowrap;transition:all .15s}
+#topbar{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:0 12px;background:var(--panel);border-bottom:0.5px solid var(--border)}
+.mode-btn{font-size:11px;padding:4px 12px;border:0.5px solid var(--border);border-radius:20px;cursor:pointer;background:transparent;color:var(--sub);white-space:nowrap;transition:all .15s}
 .mode-btn.active{border-color:var(--accent);color:#a09af0;background:#1a1830}
 .tbsep{width:0.5px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0}
 .compose-btn{padding:3px 14px;border:0.5px solid var(--accent);border-radius:20px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:10px;font-weight:500}
@@ -24,35 +26,41 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .icon-tip{position:absolute;left:44px;background:#1a1a28;border:0.5px solid var(--border);border-radius:5px;padding:3px 7px;font-size:9px;color:var(--text);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s;z-index:20}
 .icon-btn:hover .icon-tip{opacity:1}
 /* LEFT PANEL */
-#left{background:var(--panel);border-right:0.5px solid var(--border);overflow-y:auto;display:flex;flex-direction:column;gap:0}
+#left{background:var(--panel);border-right:0.5px solid var(--border);overflow-y:auto;display:flex;flex-direction:column;gap:0;scroll-behavior:smooth}
+#left::-webkit-scrollbar,#right::-webkit-scrollbar{width:5px}
+#left::-webkit-scrollbar-track,#right::-webkit-scrollbar-track{background:transparent}
+#left::-webkit-scrollbar-thumb,#right::-webkit-scrollbar-thumb{background:#2a2a45;border-radius:3px}
+#left::-webkit-scrollbar-thumb:hover,#right::-webkit-scrollbar-thumb:hover{background:#4040658}
+#left,#right{scrollbar-width:thin;scrollbar-color:#2a2a45 transparent}
 .section{border-bottom:0.5px solid var(--border)}
-.section-hdr{display:flex;align-items:center;justify-content:space-between;padding:7px 10px 7px;cursor:pointer;user-select:none}
-.section-hdr span{font-size:9px;color:var(--sub);letter-spacing:.06em;text-transform:uppercase}
-.section-hdr .arrow{font-size:9px;color:var(--sub);transition:transform .2s}
-.section-body{padding:8px 10px}
+.section-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer;user-select:none;background:#0e0e1a;transition:background .15s}
+.section-hdr:hover{background:#131320}
+.section-hdr span{font-size:11px;color:var(--tx);letter-spacing:.04em;text-transform:uppercase;font-weight:500}
+.section-hdr .arrow{font-size:10px;color:var(--sub);transition:transform .2s}
+.section-body{padding:10px 12px}
 .section.collapsed .section-body{display:none}
 .section.collapsed .arrow{transform:rotate(-90deg)}
 /* Controls */
-.ctrl-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.ctrl-label{font-size:10px;color:var(--sub);flex:1}
-.ctrl-val{font-size:10px;font-family:monospace;color:var(--text);min-width:32px;text-align:right}
-input[type=range]{width:80px;accent-color:var(--accent);height:3px}
-.pill-row{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px}
-.pill{font-size:9px;padding:2px 7px;border-radius:20px;cursor:pointer;border:0.5px solid var(--border);color:var(--sub);transition:all .15s}
+.ctrl-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.ctrl-label{font-size:11px;color:var(--tx);flex:1}
+.ctrl-val{font-size:11px;font-family:monospace;color:var(--text);min-width:36px;text-align:right}
+input[type=range]{width:80px;accent-color:var(--accent);height:4px}
+.pill-row{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.pill{font-size:10px;padding:3px 9px;border-radius:20px;cursor:pointer;border:0.5px solid var(--border);color:var(--sub);transition:all .15s}
 .pill:hover{border-color:var(--accent);color:var(--text)}
 .pill.on{border-color:var(--accent);color:#a09af0;background:#1a1830}
 /* Law rows */
-.law-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;padding:4px 6px;border-radius:5px;background:#0e0e18;border:0.5px solid var(--border)}
-.law-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.law-name{font-size:9px;color:var(--sub);flex:1}
-.law-fit{font-size:9px;font-family:monospace;min-width:28px;text-align:right}
-.law-toggle{width:18px;height:10px;border-radius:5px;cursor:pointer;border:none;flex-shrink:0;transition:background .15s}
+.law-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:6px 8px;border-radius:6px;background:#0e0e18;border:0.5px solid var(--border)}
+.law-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.law-name{font-size:11px;color:var(--tx);flex:1}
+.law-fit{font-size:10px;font-family:monospace;min-width:30px;text-align:right}
+.law-toggle{width:22px;height:12px;border-radius:6px;cursor:pointer;border:none;flex-shrink:0;transition:background .15s}
 /* CANVAS */
 #cw{position:relative;overflow:hidden;display:flex;flex-direction:column}
-#viewWrap{flex:1;min-height:0;position:relative;overflow:hidden;background:#07070e;cursor:crosshair}
+#viewWrap{flex:1;min-height:0;position:relative;overflow:hidden;cursor:crosshair;background:#0d0d1f;background-image:linear-gradient(rgba(100,100,180,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(100,100,180,.07) 1px,transparent 1px);background-size:28px 28px}
 #c2d,#c3d{position:absolute;top:0;left:0;width:100%;height:100%;display:block}
 #c3d{display:none}
-.ctab{padding:5px 14px;font-size:9px;cursor:pointer;border-bottom:2px solid transparent;color:var(--sub);flex-shrink:0;user-select:none;transition:all .15s}
+.ctab{padding:6px 16px;font-size:11px;cursor:pointer;border-bottom:2px solid transparent;color:var(--sub);flex-shrink:0;user-select:none;transition:all .15s}
 .ctab.on{color:#a09af0;border-bottom-color:var(--accent);background:#1a1830}
 /* Composer classes */
 .cbox{background:var(--panel);border:0.5px solid var(--border);border-radius:12px;width:min(860px,96%);max-height:92vh;display:flex;flex-direction:column;overflow:hidden}
@@ -67,8 +75,8 @@ input[type=range]{width:80px;accent-color:var(--accent);height:3px}
 .cbtn2{padding:4px 16px;border:0.5px solid var(--accent);border-radius:6px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:10px;font-weight:500}
 /* RIGHT PANEL */
 #right{background:var(--panel);border-left:0.5px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
-.rpanel{padding:8px 10px;border-bottom:0.5px solid var(--border)}
-.rl{font-size:9px;color:var(--sub);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;display:block}
+.rpanel{padding:10px 12px;border-bottom:0.5px solid var(--border)}
+.rl{font-size:10px;color:var(--sub);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;display:block;font-weight:600}
 /* Health bars */
 .hbar{margin-bottom:5px}
 .hbar-hdr{display:flex;justify-content:space-between;font-size:9px;margin-bottom:2px}
@@ -93,10 +101,11 @@ input[type=range]{width:80px;accent-color:var(--accent);height:3px}
 /* History graph */
 #hc{width:100%;height:70px;border-radius:5px;border:0.5px solid var(--border);background:#07070e;display:block}
 /* BOTTOM BAR */
-#bot{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--panel);border-top:0.5px solid var(--border);font-size:10px}
-#pb{padding:2px 12px;border:0.5px solid #3a3a5a;border-radius:5px;cursor:pointer;background:transparent;font-size:10px;color:var(--text)}
-.bst{color:var(--sub)}.bsv{font-weight:500;color:var(--text);font-family:monospace}
-input[type=range]#spd{width:55px}
+#bot{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:0 12px;background:var(--panel);border-top:0.5px solid var(--border);font-size:11px}
+#pb{padding:4px 16px;border:0.5px solid #5a5a8a;border-radius:6px;cursor:pointer;background:#1a1828;font-size:11px;color:#c0b8f8;font-weight:500;transition:all .15s}
+#pb:hover{background:#22203a;border-color:var(--accent)}
+.bst{color:var(--sub);font-size:11px}.bsv{font-weight:600;color:var(--text);font-family:monospace;font-size:11px}
+input[type=range]#spd{width:60px}
 /* COMPOSER MODAL */
 #comp{display:none;position:absolute;inset:0;background:rgba(7,7,14,.96);z-index:50;align-items:center;justify-content:center}
 #comp.open{display:flex}
@@ -121,28 +130,31 @@ input[type=range]#spd{width:55px}
 .cb1{padding:4px 14px;border:0.5px solid var(--border);border-radius:6px;cursor:pointer;background:transparent;color:var(--sub);font-size:10px}
 .cb2{padding:4px 16px;border:0.5px solid var(--accent);border-radius:6px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:10px;font-weight:500}
 /* brush selector */
-.brush-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px}
-.brush-btn{font-size:9px;padding:4px 5px;border:0.5px solid var(--border);border-radius:5px;cursor:pointer;background:#0e0e18;color:var(--sub);text-align:left;transition:all .15s}
-.brush-btn:hover{border-color:var(--accent);color:var(--text)}
+.brush-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.brush-btn{font-size:11px;padding:5px 7px;border:0.5px solid var(--border);border-radius:6px;cursor:pointer;background:#0e0e18;color:var(--sub);text-align:left;transition:all .15s}
+.brush-btn:hover{border-color:var(--accent);color:var(--text);background:#111122}
 .brush-btn.active{border-color:var(--accent);color:#a09af0;background:#1a1830}
 /* Plog */
-#plog{position:absolute;top:6px;left:50%;transform:translateX(-50%);background:rgba(17,17,25,.92);border:0.5px solid var(--border);border-radius:6px;padding:3px 10px;font-size:9px;color:#888;pointer-events:none;white-space:nowrap;z-index:10;font-family:monospace}
+#plog{position:absolute;top:8px;left:50%;transform:translateX(-50%);background:rgba(17,17,25,.95);border:0.5px solid var(--border);border-radius:8px;padding:4px 14px;font-size:11px;color:#9890d0;pointer-events:none;white-space:nowrap;z-index:10;font-family:monospace;box-shadow:0 2px 12px rgba(0,0,0,.5)}
 /* Game Dev panel classes */
 .sec{border-bottom:0.5px solid var(--border)}
-.sechdr{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;cursor:pointer;user-select:none;font-size:9px;color:var(--sub);letter-spacing:.06em;text-transform:uppercase}
-.sechdr .sarr{font-size:9px;color:var(--sub);transition:transform .2s}
-.secbody{padding:8px 10px}
+.sechdr{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer;user-select:none;font-size:11px;color:var(--tx);letter-spacing:.04em;text-transform:uppercase;font-weight:500;background:#0e0e1a;transition:background .15s}
+.sechdr:hover{background:#131320}
+.sechdr .sarr{font-size:10px;color:var(--sub);transition:transform .2s}
+.secbody{padding:10px 12px}
 .sec.collapsed .secbody{display:none}
 .sec.collapsed .sarr{transform:rotate(-90deg)}
-.bb{padding:4px 9px;border:0.5px solid var(--border);border-radius:5px;cursor:pointer;background:#0e0e18;color:var(--sub);font-size:9px;transition:all .15s;white-space:nowrap}
-.bb:hover{border-color:var(--accent);color:#a09af0}
-.crow{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.clbl{font-size:10px;color:var(--sub);flex:1}
-.cvl{font-size:10px;font-family:monospace;color:var(--text);min-width:32px;text-align:right}
+.bb{padding:5px 10px;border:0.5px solid var(--border);border-radius:6px;cursor:pointer;background:#0e0e18;color:var(--sub);font-size:11px;transition:all .15s;white-space:nowrap}
+.bb:hover{border-color:var(--accent);color:#a09af0;background:#111122}
+.crow{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.clbl{font-size:11px;color:var(--tx);flex:1}
+.cvl{font-size:11px;font-family:monospace;color:var(--text);min-width:32px;text-align:right}
 </style>
 </head>
 <body>
 <div id="app" style="position:relative">
+<div id="rszL" class="rsz-bar" style="left:calc(52px + var(--lw) - 2px)"></div>
+<div id="rszR" class="rsz-bar" style="right:calc(var(--rw) - 3px)"></div>
 
 <!-- TOP BAR -->
 <div id="topbar">
@@ -194,16 +206,21 @@ input[type=range]#spd{width:55px}
     <div class="ctab" id="tabHybrid" onclick="setRenderMode('hybrid',this)">⟐ Hybrid</div>
     <div class="ctab" id="tabMetrics" onclick="setView('metrics',this)">📈 Metrics</div>
   </div>
-  <div id="layerBar" style="display:flex;align-items:center;gap:3px;padding:3px 8px;background:#0a0a12;border-bottom:1px solid var(--bd);flex-shrink:0">
-    <span style="font-size:8px;color:var(--sub);letter-spacing:.04em;text-transform:uppercase;margin-right:3px;flex-shrink:0">Field</span>
-    <button class="mode-btn" id="layerAll" onclick="setLayer(-1)">All</button>
-    <button class="mode-btn" id="layerE" onclick="setLayer(0)">⚡ Energy</button>
-    <button class="mode-btn" id="layerD" onclick="setLayer(1)">🌫️ Density</button>
-    <button class="mode-btn" id="layerI" onclick="setLayer(2)">🧠 Info</button>
-    <button class="mode-btn" id="layerS" onclick="setLayer(3)">🔥 Entropy</button>
-    <button class="mode-btn" id="layerT" onclick="setLayer(4)">🌡️ Temp</button>
-    <button class="mode-btn" id="layerB" onclick="setLayer(5)">🧬 Bio</button>
-    <span id="layerHint" style="font-size:8px;color:var(--sub);margin-left:6px;font-style:italic"></span>
+  <div id="layerBar" style="display:flex;align-items:center;gap:4px;padding:4px 10px;background:#0a0a14;border-bottom:1px solid var(--bd);flex-shrink:0">
+    <span style="font-size:10px;color:var(--sub);letter-spacing:.04em;text-transform:uppercase;margin-right:4px;flex-shrink:0;font-weight:600">Field</span>
+    <button class="mode-btn" id="layerAll" onclick="setLayer(-1)" style="padding:3px 9px;font-size:10px">All</button>
+    <button class="mode-btn" id="layerE" onclick="setLayer(0)" style="padding:3px 9px;font-size:10px">⚡ Energy</button>
+    <button class="mode-btn" id="layerD" onclick="setLayer(1)" style="padding:3px 9px;font-size:10px">🌫️ Density</button>
+    <button class="mode-btn" id="layerI" onclick="setLayer(2)" style="padding:3px 9px;font-size:10px">🧠 Info</button>
+    <button class="mode-btn" id="layerS" onclick="setLayer(3)" style="padding:3px 9px;font-size:10px">🔥 Entropy</button>
+    <button class="mode-btn" id="layerT" onclick="setLayer(4)" style="padding:3px 9px;font-size:10px">🌡️ Temp</button>
+    <button class="mode-btn" id="layerB" onclick="setLayer(5)" style="padding:3px 9px;font-size:10px">🧬 Bio</button>
+    <span id="layerHint" style="font-size:10px;color:var(--sub);margin-left:6px;font-style:italic"></span>
+    <div style="height:16px;width:1px;background:var(--bd);margin:0 6px;flex-shrink:0"></div>
+    <span style="font-size:10px;color:var(--sub);letter-spacing:.04em;text-transform:uppercase;margin-right:4px;flex-shrink:0;font-weight:600">3D</span>
+    <button class="mode-btn" id="matField"   onclick="setMatMode3D('field',this)"   style="padding:3px 9px;font-size:10px">Field</button>
+    <button class="mode-btn" id="matMaterial" onclick="setMatMode3D('material',this)" style="padding:3px 9px;font-size:10px">PBR</button>
+    <button class="mode-btn" id="matHeight"  onclick="setMatMode3D('height',this)"   style="padding:3px 9px;font-size:10px">Height</button>
   </div>
   <div id="viewWrap">
   <canvas id="c3d"></canvas>
@@ -257,6 +274,53 @@ input[type=range]#spd{width:55px}
 
 <!-- RIGHT PANEL -->
 <div id="right">
+  <div class="rpanel" id="ctrl3DPanel">
+    <span class="rl">3D Controls</span>
+
+    <!-- Camera presets -->
+    <div style="margin-bottom:8px">
+      <div style="font-size:10px;color:var(--sub);margin-bottom:5px;font-weight:600">Camera</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="camBtn pill on" id="cam_orbit"  onclick="setCam3D('orbit',this)">Orbit</button>
+        <button class="camBtn pill"    id="cam_top"    onclick="setCam3D('top',this)">Top</button>
+        <button class="camBtn pill"    id="cam_iso"    onclick="setCam3D('iso',this)">ISO</button>
+        <button class="camBtn pill"    id="cam_street" onclick="setCam3D('street',this)">Street</button>
+        <button class="camBtn pill"    id="cam_fly"    onclick="setCam3D('fly',this)">✈ Fly</button>
+      </div>
+    </div>
+
+    <!-- Time of day -->
+    <div class="ctrl-row" style="margin-bottom:4px">
+      <span class="ctrl-label">🌅 Time of day</span>
+      <span class="ctrl-val" id="todVal">12h</span>
+    </div>
+    <input type="range" min="0" max="24" step="0.25" value="12" style="width:100%;margin-bottom:6px"
+      oninput="document.getElementById('todVal').textContent=parseFloat(this.value).toFixed(1)+'h';
+        window.setTimeOfDay&&window.setTimeOfDay(parseFloat(this.value))">
+
+    <!-- Fog density -->
+    <div class="ctrl-row" style="margin-bottom:4px">
+      <span class="ctrl-label">🌫️ Fog density</span>
+      <span class="ctrl-val" id="fogVal">0.012</span>
+    </div>
+    <input type="range" min="0" max="0.06" step="0.001" value="0.012" style="width:100%;margin-bottom:6px"
+      oninput="document.getElementById('fogVal').textContent=parseFloat(this.value).toFixed(3);
+        window.setFogDensity&&window.setFogDensity(parseFloat(this.value))">
+
+    <!-- Z-slice -->
+    <div class="ctrl-row" style="margin-bottom:4px">
+      <span class="ctrl-label">✂️ Z-Slice</span>
+      <span class="ctrl-val" id="zSliceVal">All</span>
+    </div>
+    <input type="range" min="0" max="63" step="1" value="63" style="width:100%;margin-bottom:6px"
+      oninput="var v=parseInt(this.value);document.getElementById('zSliceVal').textContent=v===63?'All':v;
+        window.setZSlice&&window.setZSlice(v)">
+
+    <!-- Particles toggle -->
+    <button id="btnParticles" onclick="toggleParticles3D(this)"
+      class="pill on" style="width:100%;text-align:center;padding:3px 0">✨ Particles ON</button>
+  </div>
+
   <div class="rpanel">
     <span class="rl">World Health</span>
     <div id="hbars"></div>
@@ -265,12 +329,12 @@ input[type=range]#spd{width:55px}
   </div>
   <div class="rpanel">
     <span class="rl">Cell Inspector</span>
-    <div id="inspector"><div style="font-size:9px;color:var(--sub)">Click a cell to explain it</div></div>
+    <div id="inspector"><div style="font-size:11px;color:var(--sub)">Click a cell to inspect it</div></div>
   </div>
   <div class="rpanel">
     <span class="rl">History</span>
     <canvas id="hc" width="200" height="70"></canvas>
-    <div style="display:flex;gap:5px;margin-top:4px;font-size:9px">
+    <div style="display:flex;gap:6px;margin-top:5px;font-size:11px;font-weight:600">
       <span style="color:#6080ff">E</span><span style="color:#ef8030">T</span>
       <span style="color:#a060e0">I</span><span style="color:#e04040">S</span>
       <span style="color:#30a060">B</span>
@@ -325,6 +389,8 @@ input[type=range]#spd{width:55px}
   <span class="bst" style="margin-left:6px">Energy:</span><span class="bsv" id="eOut">0</span>
   <span class="bst" style="margin-left:6px">Entropy:</span><span class="bsv" id="sOut">0</span>
   <span class="bst" style="margin-left:6px">Agents:</span><span class="bsv" id="agOut">0</span>
+  <div class="tbsep"></div>
+  <span class="bst">Chunks:</span><span class="bsv" id="chunkStats">—</span>
   <div style="flex:1"></div>
   <span style="font-size:9px;color:var(--sub)" id="modeLabel">Create Mode</span>
 </div>
@@ -351,7 +417,7 @@ let DIFFUSION=0.09,ENTROPY_BASE=0.0004,INFO_RATE=0.35,BIO_THRESH=0.25;
 const canvas=document.getElementById('c2d');
 const ctx=canvas.getContext('2d');
 const canvas3d=document.getElementById('c3d');
-const ctx3d=canvas3d.getContext('2d');
+let ctx3d=null; // c3d is now owned by Three.js ChunkRenderer — 2D context disabled
 const hc=document.getElementById('hc');
 const hx=hc.getContext('2d');
 const wrap=document.getElementById('viewWrap');
@@ -368,9 +434,8 @@ function resize2D(){
   if(w>0&&h>0){canvas.width=w;canvas.height=h;}
 }
 function resize3D(){
-  const w=currentRenderMode==='hybrid'?Math.ceil(wrap.clientWidth/2):wrap.clientWidth;
-  const h=wrap.clientHeight;
-  if(w>0&&h>0){canvas3d.width=w;canvas3d.height=h;}
+  // Three.js owns the WebGL canvas — never set canvas3d.width/height; that resets the GL context
+  if(window.resizeChunkRenderer)window.resizeChunkRenderer(currentRenderMode==='hybrid');
 }
 function resize(){resize2D();resize3D();}
 new ResizeObserver(resize).observe(wrap);
@@ -435,28 +500,23 @@ function drawGrid(){
 
 function _drawFlat(){
   const cw=canvas.width,ch=canvas.height;
-  ctx.fillStyle='#07070e';ctx.fillRect(0,0,cw,ch);
+  ctx.clearRect(0,0,cw,ch);
   const cs=Math.min(cw/W,ch/H);
   const ox=(cw-cs*W)/2,oy=(ch-cs*H)/2;
   const fi=[FE,FD,FI,FS,FT,FBio][layer]??FE;
   const mx=[1000,1,500,1,800,1][layer]??1000;
-  const vmin=mx>1?0.5:0.001;  // normalized 0-1 fields need lower threshold
-  const id=ctx.createImageData(cw,ch);const d=id.data;
+  const vmin=mx>1?0.5:0.001;
+  const pw=Math.max(1,Math.floor(cs)-1),ph=Math.max(1,Math.floor(cs)-1);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const v=buf[idx(x,y)+fi]; if(v<vmin) continue;
-    const t=Math.min(v/mx,1); const[r,g,b]=colorOf(layer,t);
-    const px=Math.floor(ox+x*cs),py=Math.floor(oy+y*cs);
-    const pw=Math.max(1,Math.floor(cs)-1),ph=Math.max(1,Math.floor(cs)-1);
-    for(let dy=0;dy<ph;dy++)for(let dx=0;dx<pw;dx++){
-      const pi=(py+dy)*cw+(px+dx);d[pi*4]=r;d[pi*4+1]=g;d[pi*4+2]=b;d[pi*4+3]=255;
-    }
-    if(x===selX&&y===selY){
-      for(let dx=0;dx<pw;dx++){const pi=py*cw+px+dx;d[pi*4]=d[pi*4+1]=d[pi*4+2]=255;if(py+ph-1>=0){const pi2=(py+ph-1)*cw+px+dx;d[pi2*4]=d[pi2*4+1]=d[pi2*4+2]=255;}}
-      for(let dy=0;dy<ph;dy++){const pi=(py+dy)*cw+px;d[pi*4]=d[pi*4+1]=d[pi*4+2]=255;if(px+pw-1<cw){const pi2=(py+dy)*cw+px+pw-1;d[pi2*4]=d[pi2*4+1]=d[pi2*4+2]=255;}}
-    }
+    const v=buf[idx(x,y)+fi];if(v<vmin)continue;
+    const t=Math.min(v/mx,1);const[r,g,b]=colorOf(layer,t);
+    ctx.fillStyle=`rgb(${r},${g},${b})`;
+    ctx.fillRect(Math.floor(ox+x*cs),Math.floor(oy+y*cs),pw,ph);
   }
-  ctx.putImageData(id,0,0);
-  // Draw agent dots on top
+  if(selX>=0){
+    ctx.strokeStyle='#fff';ctx.lineWidth=1;
+    ctx.strokeRect(Math.floor(ox+selX*cs)+0.5,Math.floor(oy+selY*cs)+0.5,pw,ph);
+  }
   if(window.agentSystem&&window.agentSystem.count>0){
     const CIV_COLS=['#ff6060','#60cfff','#ffd060','#80ff80','#d060ff','#ff9060','#60ffcf'];
     for(const a of window.agentSystem.agents){
@@ -591,35 +651,36 @@ function _drawAtmosphere(cx_,cw,ch){
 }
 
 function _drawIso(){
-  const cw=canvas3d.width,ch=canvas3d.height;
-  ctx3d.fillStyle='#07070e';ctx3d.fillRect(0,0,cw,ch);
+  // Draw isometric view of inline sim on c2d (c3d is WebGL-only, no 2D context)
+  const cw=canvas.width,ch=canvas.height;
+  ctx.clearRect(0,0,cw,ch);
   const TW=Math.max(8,Math.floor(cw/W*1.4))|0,TH=Math.max(4,(TW/2))|0;
   const originX=cw/2,originY=ch*0.55;
-  _isoTiles(ctx3d,cw,ch);
+  _isoTiles(ctx,cw,ch);
   _spawnIsoParticles(originX,originY,TW,TH);
-  _drawParticles(ctx3d);
-  _drawAtmosphere(ctx3d,cw,ch);
+  _drawParticles(ctx);
+  _drawAtmosphere(ctx,cw,ch);
   const LAYER_LABELS=['⚡ Energy','🌫️ Density','🧠 Info','🔥 Entropy','🌡️ Temp','🧬 Bio'];
   const lbl=layer>=0?LAYER_LABELS[layer]:'⚡ Energy';
-  ctx3d.font='bold 9px system-ui';ctx3d.fillStyle='rgba(160,154,240,.65)';
-  ctx3d.fillText(`3D Volumetric · ${lbl}`,8,16);
-  ctx3d.font='8px system-ui';ctx3d.fillStyle='rgba(120,120,180,.45)';
-  ctx3d.fillText('height = energy  ·  color = selected field',8,ch-8);
+  ctx.font='bold 9px system-ui';ctx.fillStyle='rgba(160,154,240,.65)';
+  ctx.fillText(`3D Volumetric · ${lbl}`,8,16);
+  ctx.font='8px system-ui';ctx.fillStyle='rgba(120,120,180,.45)';
+  ctx.fillText('height = energy  ·  color = selected field',8,ch-8);
   if(window.agentSystem&&window.agentSystem.count>0){
     const CIV_COLS=['#ff6060','#60cfff','#ffd060','#80ff80','#d060ff','#ff9060','#60ffcf'];
     for(const a of window.agentSystem.agents){
       const sx=originX+(a.x-a.y)*TW/2,sy=originY+(a.x+a.y)*TH/2;
       const h=Math.min(buf[idx(a.x,a.y)+FE]/22,60)|0;
-      ctx3d.beginPath();ctx3d.arc(sx,sy-h-4,3,0,6.283);
-      ctx3d.fillStyle=CIV_COLS[(a.civId-1)%CIV_COLS.length]||'#fff';
-      ctx3d.globalAlpha=0.9;ctx3d.fill();ctx3d.globalAlpha=1;
+      ctx.beginPath();ctx.arc(sx,sy-h-4,3,0,6.283);
+      ctx.fillStyle=CIV_COLS[(a.civId-1)%CIV_COLS.length]||'#fff';
+      ctx.globalAlpha=0.9;ctx.fill();ctx.globalAlpha=1;
     }
   }
 }
 
 function _drawMultiSlice(){
   const cw=canvas.width,ch=canvas.height;
-  ctx.fillStyle='#07070e';ctx.fillRect(0,0,cw,ch);
+  ctx.clearRect(0,0,cw,ch);
   
   // If a specific layer is selected (layer > -1), show full-screen single layer view
   if(layer>=0){
@@ -721,12 +782,10 @@ function _drawMultiSlice(){
 function draw2D(){_drawFlat();}
 
 function _drawHybrid(){
-  // each canvas renders its own half independently
-  _drawFlat();    // c2d renders left half (flat)
-  _drawIso();     // c3d renders right half (iso)
-  // label on c2d (left side)
-  ctx.font='9px system-ui';ctx.fillStyle='rgba(160,154,240,.55)';
-  ctx.fillText('2D',4,14);
+  _drawMultiSlice();  // c2d renders left half (4-field overview)
+  // c3d renders right half (Three.js PBR) — handled by connector.ts RAF loop
+  ctx.font='9px system-ui';ctx.fillStyle='rgba(160,154,240,.7)';
+  ctx.fillText('◧ 2D Fields',4,14);
 }
 
 // ── SIMULATION ────────────────────────────────────────────────────────────
@@ -832,7 +891,7 @@ const PANELS={
       <div class="section-hdr" onclick="toggleSection(this)"><span>Presets</span><span class="arrow">▾</span></div>
       <div class="section-body">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
-          ${[['💥','Energy burst','burst'],['🌊','Wave field','wave'],['🧬','Life seed','life'],['🌍','Proto Earth','proto'],['⚡','Entropy storm','storm'],['🏛️','Ruins','ruins'],['🗑️','Clear','clear']].map(([ic,nm,p])=>`
+          ${[['💥','Energy burst','burst'],['🌊','Wave field','wave'],['🧬','Life seed','life'],['🌍','Proto Earth','proto'],['🏙️','Town','town'],['⚡','Entropy storm','storm'],['🏛️','Ruins','ruins'],['🗑️','Clear','clear']].map(([ic,nm,p])=>`
             <button class="brush-btn" onclick="applyPreset('${p}')">${ic} ${nm}</button>`).join('')}
         </div>
         <div style="display:flex;gap:4px;margin-top:6px">
@@ -978,6 +1037,33 @@ const PANELS={
       </div>
     </div>
     <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Reality Integral Monitor</span><span class="arrow">▾</span></div>
+      <div class="section-body" style="padding:6px 10px">
+        <div id="realityMonitorPanel">
+          <div style="font-size:9px;color:var(--sub)">Start simulation to populate ΨR monitor</div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Node Law Editor</span><span class="arrow">▾</span></div>
+      <div class="section-body" style="padding:4px">
+        <div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap">
+          <button class="brush-btn" onclick="window.nodeLawEditor&&window.nodeLawEditor.addNode('source')">+ Source</button>
+          <button class="brush-btn" onclick="window.nodeLawEditor&&window.nodeLawEditor.addNode('law')">+ Law</button>
+          <button class="brush-btn" onclick="window.nodeLawEditor&&window.nodeLawEditor.addNode('transform')">+ Transform</button>
+          <button class="brush-btn" onclick="window.nodeLawEditor&&window.nodeLawEditor.addNode('output')">+ Output</button>
+          <button class="brush-btn" onclick="window.nodeLawEditor&&window.nodeLawEditor.addNode('monitor')">+ Monitor</button>
+          <button class="brush-btn" style="color:var(--danger)" onclick="window.nodeLawEditor&&window.nodeLawEditor.removeSelected()">✕ Del</button>
+          <button class="brush-btn" style="color:#7c6fcd" onclick="window.nodeLawEditor&&window.chunkWorkerCompile&&window.chunkWorkerCompile()">⚡ Compile</button>
+          <button class="brush-btn" style="color:#50d0a0" onclick="window.sciTownMode&&window.sciTownMode()" title="Set realistic city physics params">🏙️ Town Physics</button>
+        </div>
+        <canvas id="ngCanvas" style="width:100%;height:280px;border-radius:5px;border:1px solid var(--border);background:#07070e;display:block;touch-action:none"></canvas>
+        <div id="ngCompileLog" style="font-size:9px;color:var(--sub);margin-top:3px;font-family:monospace"></div>
+        <div id="ngNodeProps" style="margin-top:4px;padding:5px 6px;background:#0a0a14;border-radius:5px;border:0.5px solid var(--border);display:none"></div>
+        <div style="font-size:8px;color:#333;margin-top:3px">Dbl-click header: toggle · Dbl-click body: edit param · Right-click edge: delete · Del key: remove node</div>
+      </div>
+    </div>
+    <div class="section">
       <div class="section-hdr" onclick="toggleSection(this)"><span>Data Export</span><span class="arrow">▾</span></div>
       <div class="section-body">
         <button class="brush-btn" style="width:100%;margin-bottom:3px" onclick="window.scienceMode&&window.scienceMode.exportCSV()">📄 Metrics CSV</button>
@@ -991,7 +1077,7 @@ const PANELS={
     <div class="section">
       <div class="section-hdr" onclick="toggleSection(this)"><span>🎬 AI Scene Director</span><span class="arrow">▾</span></div>
       <div class="section-body">
-        <div id="dirLog" style="height:100px;overflow-y:auto;font-size:9px;color:var(--sub);background:#09090f;border:0.5px solid var(--border);border-radius:4px;padding:6px;font-family:monospace;line-height:1.6;margin-bottom:5px">Director ready. Describe what you want cinematically.</div>
+        <div id="dirLog" style="min-height:60px;max-height:120px;overflow-y:auto;font-size:10px;color:#c0c8f0;background:#09090f;border:0.5px solid var(--border);border-radius:4px;padding:8px;line-height:1.6;margin-bottom:5px">Director ready — type a prompt and click <b>Ask</b>. Set 🔑 API key for AI responses.</div>
         <div style="display:flex;gap:4px;margin-bottom:4px">
           <input id="dirInput" type="text" placeholder="Make something dramatic happen..." style="flex:1;font-size:10px;padding:4px 8px;background:#0c0c18;color:var(--text);border:0.5px solid var(--border);border-radius:5px;outline:none" onkeydown="if(event.key==='Enter')window.cinemaMode&&window.cinemaMode.askDirector()">
           <button onclick="window.cinemaMode&&window.cinemaMode.askDirector()" class="brush-btn" style="border-color:var(--warn);color:var(--warn)">Ask</button>
@@ -1414,6 +1500,11 @@ function paintAt(x,y){
     else if(tool==='inject')add_(nx,ny,fi,str);
     else if(tool==='paint')set_(nx,ny,fi,clamp(str,0,mx));
   }
+  if(window.paintChunkAt){
+    const x3=Math.round(x/W*127),y3=Math.round(y/H*127),z3=32;
+    const f3=[0,1,2,3,4,10][layer<0?0:layer]??0;
+    window.paintChunkAt(x3,y3,z3,f3,tool==='erase'?0:str,Math.max(3,bs*3),tool==='erase'?'set':'add');
+  }
 }
 wrap.addEventListener('pointerdown',e=>{
   const c=getCellAt(e);if(!c)return;
@@ -1436,10 +1527,30 @@ window.applyPreset=function(p){
   else if(p==='wave'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){set_(x,y,FE,400+400*Math.sin(x*.7)*Math.cos(y*.5));set_(x,y,FD,.4+.3*Math.sin(x*.3+y*.3));set_(x,y,FT,150+100*Math.cos(x*.4));}}
   else if(p==='life'){for(let i=0;i<25;i++){const x=4+Math.floor(Math.random()*(W-8)),y=4+Math.floor(Math.random()*(H-8));const e=150+Math.random()*500;set_(x,y,FE,e);set_(x,y,FD,.3+Math.random()*.5);set_(x,y,FI,e*.3);set_(x,y,FT,80+Math.random()*180);set_(x,y,FBio,.2+Math.random()*.5);}}
   else if(p==='proto'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const n=(Math.sin(x*.4)*Math.cos(y*.3)+1)/2;set_(x,y,FE,50+n*400);set_(x,y,FD,.2+n*.6);set_(x,y,FT,30+n*250);set_(x,y,FS,0.05+Math.random()*.1);if(n>.6){set_(x,y,FBio,n*.4);set_(x,y,FI,n*80);}}}
+  else if(p==='town'){
+    const cx=W/2,cy=H/2,RS=Math.floor(W/6),RW=1;
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const dx=x-cx,dy=y-cy,r=Math.sqrt(dx*dx+dy*dy),ang=Math.atan2(dy,dx);
+      const road=Math.abs(x%RS)<RW||Math.abs(y%RS)<RW;
+      const park=ang>2.1&&ang<3.5&&r>W*0.17&&r<W*0.37;
+      const ind=ang>-0.5&&ang<1.1&&r>W*0.14&&r<W*0.34;
+      if(road){set_(x,y,FE,350+Math.random()*200);set_(x,y,FD,0.2);set_(x,y,FI,200+Math.random()*100);set_(x,y,FT,30);}
+      else if(park){set_(x,y,FE,80+Math.random()*60);set_(x,y,FD,0.15);set_(x,y,FBio,0.6+Math.random()*0.3);set_(x,y,FT,18);}
+      else if(ind){set_(x,y,FE,600+Math.random()*300);set_(x,y,FD,0.8);set_(x,y,FS,0.18+Math.random()*0.18);set_(x,y,FT,100+Math.random()*180);}
+      else if(r<W*0.11){set_(x,y,FE,700+Math.random()*250);set_(x,y,FD,0.85);set_(x,y,FI,350+Math.random()*150);set_(x,y,FT,60+Math.random()*50);set_(x,y,FBio,0.1);}
+      else if(r<W*0.23){set_(x,y,FE,380+Math.random()*200);set_(x,y,FD,0.55);set_(x,y,FI,160+Math.random()*100);set_(x,y,FT,38+Math.random()*25);set_(x,y,FBio,0.18);}
+      else if(r<W*0.4){set_(x,y,FE,140+Math.random()*120);set_(x,y,FD,0.3);set_(x,y,FI,55+Math.random()*60);set_(x,y,FT,22+Math.random()*15);set_(x,y,FBio,0.35);}
+      else{set_(x,y,FE,40+Math.random()*50);set_(x,y,FD,0.1);set_(x,y,FBio,0.55+Math.random()*0.3);set_(x,y,FT,18);}
+    }
+    // Also seed the 3D chunk worker with town preset
+    if(window.applyChunkPreset)window.applyChunkPreset('town');
+  }
   else if(p==='storm'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){set_(x,y,FE,Math.random()*700);set_(x,y,FS,.2+Math.random()*.7);set_(x,y,FT,Math.random()*350);set_(x,y,FD,Math.random()*.8);}}
   else if(p==='ruins'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const n=(Math.sin(x*.5)*Math.cos(y*.4)+1)/2;if(n>.5){set_(x,y,FE,50+n*150);set_(x,y,FI,n*300);set_(x,y,FD,.3+n*.3);set_(x,y,FS,.2+Math.random()*.4);}}}
   else if(p==='clear'){buf.fill(0);}
   log(`Preset: ${p}`);
+  const _cpre=['burst','wave','life','proto','gaia'];
+  if(_cpre.includes(p)&&window.applyChunkPreset)window.applyChunkPreset(p);
 };
 
 // ── UI HELPERS ────────────────────────────────────────────────────────────
@@ -1460,13 +1571,13 @@ function setRenderMode(mode,btn){
   const c2d=document.getElementById('c2d');
   const metricsView=document.getElementById('metricsView');
 
-  // For hybrid: side-by-side with left/right positioning
+  // For hybrid: 2D left half, Three.js right half
   if(mode==='hybrid'){
     c2d.style.cssText='position:absolute;top:0;left:0;width:50%;height:100%;display:block';
     c3d.style.cssText='position:absolute;top:0;left:50%;width:50%;height:100%;display:block';
   } else {
-    // In 3D mode hide c2d so its opaque fill does not cover the iso canvas behind it
-    c2d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='3d'||mode==='metrics'?'none':'block');
+    // 3D mode: c2d draws iso on top, c3d (Three.js particles) visible behind via clearRect
+    c2d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='metrics'?'none':'block');
     c3d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='3d'?'block':'none');
   }
   if(metricsView)metricsView.style.display=mode==='metrics'?'block':'none';
@@ -1509,6 +1620,26 @@ window.toggleSection=toggleSection;
 function toggleSec(hdr){hdr.closest('.sec').classList.toggle('collapsed');}
 window.toggleSec=toggleSec;
 
+// 3D Controls
+function setMatMode3D(m,btn){
+  window.setMatMode&&window.setMatMode(m);
+  document.querySelectorAll('#matField,#matMaterial,#matHeight').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+}
+function setCam3D(preset,btn){
+  window.setCameraPreset&&window.setCameraPreset(preset);
+  document.querySelectorAll('.camBtn').forEach(b=>b.classList.remove('on'));
+  if(btn)btn.classList.add('on');
+}
+function toggleParticles3D(btn){
+  const on=btn.classList.toggle('on');
+  window.setShowParticles&&window.setShowParticles(on);
+  btn.textContent=(on?'✨ Particles ON':'✨ Particles OFF');
+}
+window.setMatMode3D=setMatMode3D;
+window.setCam3D=setCam3D;
+window.toggleParticles3D=toggleParticles3D;
+
 function setLayer(l){
   if(l===-1){layer=-1;}else{layer=(layer===l)?-1:l;}
   const names=['Energy','Density','Info','Entropy','Temp','Bio'];
@@ -1533,6 +1664,7 @@ function setLayer(l){
   ['sciLayerE','sciLayerD','sciLayerI','sciLayerS','sciLayerT','sciLayerB'].forEach((id,i)=>{
     const el=document.getElementById(id);if(el)el.classList.toggle('active',i===layer);
   });
+  if(window.setChunkLayer)window.setChunkLayer(layer<0?0:layer);
   drawGrid();
 }
 window.setLayer=setLayer;
@@ -1585,6 +1717,7 @@ window.setMoodPill=setMoodPill;
 
 function togglePlay(){
   playing=!playing;
+  if(currentAppMode==='game')isPaused=!playing;
   document.getElementById('pb').textContent=playing?'⏸ Pause':'▶ Play';
 }
 
@@ -1662,12 +1795,14 @@ function loop(ts){
   const spd=parseInt(document.getElementById('spd')?.value||4);
   const dt=Math.min((ts-lastTs)/1000,.05);lastTs=ts;
   fc++;if(ts-fpt>600){fps=Math.round(fc*1000/(ts-fpt||1));fc=0;fpt=ts;}
-  if(playing)for(let s=0;s<spd;s++)simStep(0.016);
+  if(playing){
+    const _t0=performance.now();
+    for(let s=0;s<spd;s++){simStep(0.016);if(performance.now()-_t0>8)break;}
+  }
   _tickParticles();
   drawGrid();
   if(tick%3===0&&selX>=0){explainCell(selX,selY);drawHist();}
   if(tick%15===0){updateHealth();}
-  // Ongoing MetaLaw evolution driven by C complexity growth rate (set by Composer)
   if(playing&&window._composerGrowth&&tick>0){
     const evRate=Math.round(120/Math.max(0.2,window._composerGrowth));
     if(tick%evRate===0)evolveLawsTowardIntegral(compSel);
@@ -1687,14 +1822,18 @@ function loop(ts){
   }
   if(currentAppMode==='cinema'&&window.cinemaMode)window.cinemaMode.onTick(tick,buf);
   if(currentAppMode==='game'&&window.gamedevMode)window.gamedevMode.onTick(tick,buf);
-  let totE=0,totS=0;for(let i=0;i<SZ;i++){totE+=buf[i*NF+FE];totS+=buf[i*NF+FS];}
+  if(tick%3===0&&window.tickChunkWorker)window.tickChunkWorker(playing,spd);
   window.tick=tick;
   document.getElementById('tkOut').textContent=tick;
-  document.getElementById('eOut').textContent=Math.round(totE).toLocaleString();
-  document.getElementById('sOut').textContent=(totS/SZ).toFixed(4);
+  if(tick%10===0){
+    let totE=0,totS=0;for(let i=0;i<SZ;i++){totE+=buf[i*NF+FE];totS+=buf[i*NF+FS];}
+    document.getElementById('eOut').textContent=Math.round(totE).toLocaleString();
+    document.getElementById('sOut').textContent=(totS/SZ).toFixed(4);
+  }
   if(playing&&window.agentSystem&&window.agentSystem.count>0){
     const mRate=parseInt((document.getElementById('mutOut')?.textContent||'10%').replace('%',''));
-    window.agentSystem.step(buf,W,H,NF,mRate);
+    const agSteps=Math.min(spd,3);
+    for(let _s=0;_s<agSteps;_s++)window.agentSystem.step(buf,W,H,NF,mRate);
     if(tick%10===0){
       const statsEl=document.getElementById('agentStats');
       if(statsEl)statsEl.textContent=window.agentSystem.stats();
@@ -1746,9 +1885,44 @@ function showShortcuts(){
 }
 window.showShortcuts=showShortcuts;
 
+// Resizable panels
+(function(){
+  const root=document.documentElement;
+  function initResizer(id,side){
+    const bar=document.getElementById(id);
+    if(!bar)return;
+    let dragging=false,startX=0,startW=0;
+    bar.addEventListener('mousedown',(e)=>{
+      dragging=true;
+      startX=e.clientX;
+      startW=parseInt(getComputedStyle(root).getPropertyValue(side==='lw'?'--lw':'--rw'))||( side==='lw'?220:240);
+      bar.classList.add('active');
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove',(e)=>{
+      if(!dragging)return;
+      const delta=side==='lw'?e.clientX-startX:startX-e.clientX;
+      const w=Math.min(400,Math.max(160,startW+delta));
+      root.style.setProperty(side==='lw'?'--lw':'--rw',w+'px');
+      bar.style.left=side==='lw'?`calc(52px + ${w}px - 2px)`:'';
+      bar.style.right=side==='rw'?`calc(${w}px - 3px)`:'';
+    });
+    document.addEventListener('mouseup',()=>{
+      if(!dragging)return;
+      dragging=false;
+      bar.classList.remove('active');
+    });
+  }
+  initResizer('rszL','lw');
+  initResizer('rszR','rw');
+})();
+
 // Keyboard event listener for shortcuts
 document.addEventListener('keydown',(e)=>{
-  if(e.key==='Escape'){document.getElementById('shortcutsModal').style.display='none';return;}
+  const tgt=e.target;
+  const inInput=tgt instanceof HTMLInputElement||tgt instanceof HTMLTextAreaElement||(tgt instanceof HTMLElement&&tgt.isContentEditable);
+  if(e.key==='Escape'){document.getElementById('shortcutsModal').style.display='none';if(inInput&&tgt.blur)tgt.blur();return;}
+  if(inInput)return;
   if(e.key==='?'||e.key==='/'){showShortcuts();return;}
   if(e.code==='Space'&&e.target===document.body){e.preventDefault();togglePlay();return;}
   if(e.key>='1'&&e.key<='6'&&e.ctrlKey===false&&e.target===document.body){
@@ -1918,15 +2092,9 @@ if(!document.getElementById('gamePauseBtn')){
   pbBtn.parentElement.insertBefore(pauseBtn,pbBtn.nextSibling);
 }
 
-// Show/hide game pause button based on mode
+// gamePauseBtn kept hidden — game pause is unified into the main pb button
 const modeObserver=setInterval(()=>{
-  const pauseBtn=document.getElementById('gamePauseBtn');
-  if(currentAppMode==='game'){
-    pauseBtn.style.display='block';
-  }else{
-    pauseBtn.style.display='none';
-    isPaused=false;
-  }
+  if(currentAppMode!=='game')isPaused=false;
 },500);
 
 // ── GAME DEV MODE: DIFFICULTY PRESETS & LEVEL SAVE/LOAD ────────────────────────────────────
@@ -2035,15 +2203,14 @@ const cinemaExportObserver=setInterval(()=>{
   }
 },500);
 
-// Override keydown listener to add Cinema and Game mode shortcuts
-const originalKeydown=document.onkeydown;
+// Cinema / Game mode shortcuts — skip when typing in an input field
 document.addEventListener('keydown',(e)=>{
-  // Cinema mode: arrow keys for frame stepping
+  const tgt=e.target;
+  if(tgt instanceof HTMLInputElement||tgt instanceof HTMLTextAreaElement||(tgt instanceof HTMLElement&&tgt.isContentEditable))return;
   if(currentAppMode==='cinema'){
     if(e.key==='ArrowLeft'){e.preventDefault();frameStepCinema(-1);return;}
     if(e.key==='ArrowRight'){e.preventDefault();frameStepCinema(1);return;}
   }
-  // Game mode: P to pause
   if(currentAppMode==='game'){
     if(e.key.toLowerCase()==='p'){e.preventDefault();toggleGamePause();return;}
     if(e.key==='F10'){e.preventDefault();advanceFrameInGameMode();return;}
