@@ -2,6 +2,7 @@ import { VoxelGrid } from '../core/VoxelGrid';
 import { F } from '../core/CellState';
 import { MAT } from '../materials/MaterialDef';
 import { CHEM } from '../chemistry/ChemLayer';
+import { HeightmapImporter } from './HeightmapImporter';
 
 export type PresetName =
   | 'burst' | 'wave' | 'life' | 'vortex' | 'entropy_storm' | 'ecosystem' | 'clear'
@@ -11,7 +12,7 @@ export type PresetName =
   | 'nebula' | 'proto_planet' | 'star_formation'
   | 'abandoned_megacity' | 'machine_ecology' | 'energy_economy'
   | 'self_replicating_field' | 'causality_collapse'
-  | 'gaia';
+  | 'gaia' | 'world_machine_test';
 
 export class Presets {
   static apply(grid: VoxelGrid, name: PresetName): void {
@@ -404,6 +405,7 @@ export class Presets {
              cell.density = 0.6;
              cell.bioPotential = 0.6;
              cell.information = 50;
+             cell.materialId = MAT.BIOMASS;
              cell.set(F.CHEM_STATE, CHEM.ORGANIC);
            }
         }
@@ -415,5 +417,23 @@ export class Presets {
         cell.set(F.CHEM_STATE, CHEM.GAS);
       }
     }
+  }
+
+  private static _worldMachineTest(grid: VoxelGrid) {
+    // Simulate an imported World Machine heightmap using procedural noise
+    const width = grid.W, height = grid.H;
+    const heightData = new Float32Array(width * height);
+    const weightData = new Float32Array(width * height);
+
+    for (let i = 0; i < width * height; i++) {
+        const x = i % width, y = Math.floor(i / width);
+        // Procedural mountain
+        const d = Math.sqrt((x - width/2)**2 + (y - height/2)**2);
+        heightData[i] = Math.max(0.1, 0.8 * Math.exp(-d*d / 200) + 0.1 * Math.random());
+        weightData[i] = heightData[i] > 0.4 ? 0.2 : 0.8; // High areas are rock, low are grass
+    }
+
+    // Use the importer
+    HeightmapImporter.importWithWeights(grid, heightData, weightData, width, height, { heightScale: grid.D * 0.8 });
   }
 }

@@ -4,6 +4,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import { MATERIAL_LIBRARY } from '../materials/MaterialDef';
@@ -92,6 +93,8 @@ export class VoxelRenderer {
   private agentGroup:  THREE.Group;
   private _ro:         ResizeObserver;
   private _W: number; private _H: number; private _D: number;
+  private _loader =    new GLTFLoader();
+  private staticAssets: THREE.Group;
 
   layer: LayerName = 'energy';
   threshold = 0.015;
@@ -221,6 +224,9 @@ export class VoxelRenderer {
     this._scene.add(this.entityGroup);
     this.agentGroup = new THREE.Group();
     this._scene.add(this.agentGroup);
+
+    this.staticAssets = new THREE.Group();
+    this._scene.add(this.staticAssets);
 
     // ── Resize ────────────────────────────────────────────────────────────────
     this._ro = new ResizeObserver(() => this._onResize());
@@ -418,6 +424,24 @@ export class VoxelRenderer {
     this.camera.position.set(W*1.4, D*2.5, H*1.4);
     this.controls.target.set(W/2, D/2, H/2);
     this.controls.update();
+  }
+
+  loadStaticAsset(url: string, position: [number, number, number], scale: number = 1): void {
+    this._loader.load(url, (gltf) => {
+      const model = gltf.scene;
+      model.position.set(position[0]+0.5, position[2]+0.5, position[1]+0.5);
+      model.scale.setScalar(scale);
+      this.staticAssets.add(model);
+      console.log(`Loaded glTF asset from ${url}`);
+    }, undefined, (err) => {
+      console.error(`Failed to load glTF asset from ${url}:`, err);
+    });
+  }
+
+  clearStaticAssets(): void {
+    while(this.staticAssets.children.length > 0) {
+      this.staticAssets.remove(this.staticAssets.children[0]);
+    }
   }
 
   destroy(): void {
