@@ -164,6 +164,7 @@ input[type=range]#spd{width:55px}
   <button class="icon-btn" data-panel="brush" onclick="setIconPanel('brush')" title="Brushes"><i class="ti ti-brush"></i><span class="icon-tip">Brushes</span></button>
   <button class="icon-btn" data-panel="agents" onclick="setIconPanel('agents')" title="Agents"><i class="ti ti-robot"></i><span class="icon-tip">Agents</span></button>
   <button class="icon-btn" data-panel="script" onclick="setIconPanel('script')" title="Script"><i class="ti ti-code"></i><span class="icon-tip">Script</span></button>
+  <button class="icon-btn" data-panel="assets" onclick="setIconPanel('assets')" title="Assets"><i class="ti ti-box"></i><span class="icon-tip">Assets</span></button>
   <div style="flex:1"></div>
   <button class="icon-btn" onclick="saveWorld()" title="Save"><i class="ti ti-download"></i><span class="icon-tip">Save</span></button>
   <button class="icon-btn" onclick="document.getElementById('apiKeyModal').style.display='flex'" title="API Key"><span id="apiKeyDot" style="font-size:14px">🔑</span><span class="icon-tip">API Key</span></button>
@@ -345,6 +346,7 @@ let activeBrush=null;
 let histE=[],histT=[],histI=[],histS=[],histB=[];
 let currentAppMode='create',currentPanel='world',currentRenderMode='3d';
 window.voxelRenderer = null;
+window.physics = null;
 
 // Physics constants (adjustable by laws & composer)
 let DIFFUSION=0.09,ENTROPY_BASE=0.0004,INFO_RATE=0.35,BIO_THRESH=0.25;
@@ -595,6 +597,14 @@ function _drawIso(){
   if(window.VoxelRenderer && !window.voxelRenderer) {
     window.voxelRenderer = new window.VoxelRenderer(canvas3d, W, H, D);
     log("Three.js VoxelRenderer initialized");
+  }
+
+  if(window.PhysicsEngine && !window.physics) {
+    window.physics = new window.PhysicsEngine({
+      buffer: buf, W, H, D,
+      inBounds: (x,y,z) => x>=0&&x<W&&y>=0&&y<H&&z===0,
+      cell: (x,y,z) => ({ density: buf[(y*W+x)*NF + 1] })
+    });
   }
 
   if(window.voxelRenderer) {
@@ -1083,6 +1093,23 @@ const PANELS={
     <div class="section">
       <div class="section-body" style="color:var(--sub);font-size:9px;padding:8px">
         Loading Game Dev tools…
+      </div>
+    </div>`,
+  assets:()=>`
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>3D Asset Spawner</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:8px">Place procedural glTF structures from Houdini/Blender.</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <input id="assetUrl" type="text" placeholder="glTF URL..." value="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb" style="width:100%;font-size:9px;background:#0a0a14;color:#c0c8f0;border:0.5px solid var(--border);border-radius:4px;padding:4px">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+             <input id="ax" type="number" placeholder="X" value="18" style="width:100%;font-size:9px;background:#0a0a14;color:#c0c8f0;border:0.5px solid var(--border);border-radius:4px;padding:4px">
+             <input id="ay" type="number" placeholder="Y" value="14" style="width:100%;font-size:9px;background:#0a0a14;color:#c0c8f0;border:0.5px solid var(--border);border-radius:4px;padding:4px">
+             <input id="az" type="number" placeholder="Z" value="0" style="width:100%;font-size:9px;background:#0a0a14;color:#c0c8f0;border:0.5px solid var(--border);border-radius:4px;padding:4px">
+          </div>
+          <button onclick="window.loadAsset(document.getElementById('assetUrl').value, +document.getElementById('ax').value, +document.getElementById('ay').value, +document.getElementById('az').value)" class="brush-btn" style="width:100%">📦 Spawn Asset</button>
+          <button onclick="window.voxelRenderer && window.voxelRenderer.clearStaticAssets()" class="brush-btn" style="width:100%;border-color:var(--danger);color:var(--danger)">🧹 Clear Assets</button>
+        </div>
       </div>
     </div>`,
 };
@@ -1713,7 +1740,12 @@ function loop(ts){
   const spd=parseInt(document.getElementById('spd')?.value||4);
   const dt=Math.min((ts-lastTs)/1000,.05);lastTs=ts;
   fc++;if(ts-fpt>600){fps=Math.round(fc*1000/(ts-fpt||1));fc=0;fpt=ts;}
-  if(playing)for(let s=0;s<spd;s++)simStep(0.016);
+  if(playing){
+    for(let s=0;s<spd;s++) {
+      simStep(0.016);
+      if(window.physics) window.physics.step(0.016);
+    }
+  }
   _tickParticles();
   drawGrid();
   if(tick%3===0&&selX>=0){explainCell(selX,selY);drawHist();}

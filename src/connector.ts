@@ -28,8 +28,10 @@ import { buildGameDevModePanel }                  from './modes/GameDevModePanel
 import { VoxelRenderer }                          from './render/VoxelRenderer'
 import { Presets }                                from './world/Presets'
 import { F }                                      from './core/CellState'
+import { PhysicsEngine }                          from './simulation/PhysicsEngine'
 
 (window as any).VoxelRenderer = VoxelRenderer;
+(window as any).PhysicsEngine = PhysicsEngine;
 (window as any).F = F;
 
 // ── Inline sim constants (must match index.html) ──────────────────────────
@@ -753,6 +755,12 @@ win['cinemaMode']    = cinemaMode
 win['gamedevMode']   = gamedevMode
 win['metrics']       = metrics
 win['solverClient']  = solverClient   // window.solverClient.solve({...}) from console
+
+win['loadAsset'] = (url: string, x: number, y: number, z: number, scale: number = 1) => {
+  if (win['voxelRenderer']) {
+    (win['voxelRenderer'] as any).loadStaticAsset(url, [x, y, z], scale)
+  }
+}
 
 win['applyAdvancedPreset'] = (name: string) => {
   const buf = getBuf()

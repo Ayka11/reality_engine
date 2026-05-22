@@ -42,6 +42,7 @@ export class Presets {
       case 'self_replicating_field': this._selfReplicatingField(grid); break;
       case 'causality_collapse':   this._causalityCollapse(grid);  break;
       case 'gaia':                 this._gaia(grid);               break;
+      case 'world_machine_test':   this._worldMachineTest(grid);   break;
     }
   }
 
@@ -423,17 +424,31 @@ export class Presets {
     // Simulate an imported World Machine heightmap using procedural noise
     const width = grid.W, height = grid.H;
     const heightData = new Float32Array(width * height);
-    const weightData = new Float32Array(width * height);
+    const rockWeight = new Float32Array(width * height);
+    const grassWeight = new Float32Array(width * height);
+    const sandWeight = new Float32Array(width * height);
 
     for (let i = 0; i < width * height; i++) {
         const x = i % width, y = Math.floor(i / width);
         // Procedural mountain
         const d = Math.sqrt((x - width/2)**2 + (y - height/2)**2);
-        heightData[i] = Math.max(0.1, 0.8 * Math.exp(-d*d / 200) + 0.1 * Math.random());
-        weightData[i] = heightData[i] > 0.4 ? 0.2 : 0.8; // High areas are rock, low are grass
+        const h = Math.max(0.1, 0.8 * Math.exp(-d*d / 200) + 0.1 * Math.random());
+        heightData[i] = h;
+
+        // Complex weight mapping
+        if (h > 0.6) { rockWeight[i] = 1.0; }
+        else if (h > 0.3) { grassWeight[i] = 1.0; }
+        else { sandWeight[i] = 1.0; }
     }
 
-    // Use the importer
-    HeightmapImporter.importWithWeights(grid, heightData, weightData, width, height, { heightScale: grid.D * 0.8 });
+    // Use the importer with multi-material support
+    HeightmapImporter.importWithWeights(grid, heightData, width, height, {
+      heightScale: grid.D * 0.8,
+      weights: [
+        { materialId: MAT.STONE, weight: rockWeight },
+        { materialId: MAT.BIOMASS, weight: grassWeight },
+        { materialId: MAT.SAND, weight: sandWeight }
+      ]
+    });
   }
 }

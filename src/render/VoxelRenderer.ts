@@ -310,11 +310,19 @@ export class VoxelRenderer {
         // Visual properties based on material or energy
         let rough = 0.7, metal = 0.2, emissive = 0.0;
         const e = buf[i * CELL_FIELDS + F.ENERGY];
+        const chem = buf[i * CELL_FIELDS + F.CHEM_STATE];
+
         if (e > 500) emissive = (e - 500) / 500;
+
+        if (chem === 1) { // LIQUID (Water)
+            rough = 0.05;
+            metal = 0.3;
+        }
 
         if (this.layer === 'material') {
           const matIdx = Math.min(Math.floor(v), 13);
           if (matIdx === 4) { rough = 0.2; metal = 0.9; } // Metal
+          if (matIdx === 1) { rough = 0.85; metal = 0.0; } // Stone
           if (matIdx === 6 || matIdx === 3) { rough = 0.1; metal = 0.1; } // Ice/Crystal
           if (matIdx === 11 || matIdx === 5) { emissive += 0.5; } // Plasma/Magma
         }
