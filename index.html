@@ -332,8 +332,8 @@ input[type=range]#spd{width:55px}
 
 <script>
 // ── SIMULATION STATE ──────────────────────────────────────────────────────
-const W=36,H=28,D=1,SZ=W*H,NF=12;
-const FE=0,FD=1,FI=2,FS=3,FT=4,FFX=5,FFY=6,FTau=8,FCid=9,FBio=10,FProc=11;
+const W=36,H=28,D=1,SZ=W*H,NF=24;
+const FE=0,FD=1,FI=2,FS=3,FT=4,FBio=11;
 let buf=new Float32Array(SZ*NF),bbuf=new Float32Array(SZ*NF);
 window.W=W;window.H=H;window.D=D;window.NF=NF;window.buf=buf;
 let causal=[],tick=0,playing=false,layer=-1;
@@ -344,6 +344,7 @@ let activeProcs=new Set(['thermo','bio']);
 let activeBrush=null;
 let histE=[],histT=[],histI=[],histS=[],histB=[];
 let currentAppMode='create',currentPanel='world',currentRenderMode='3d';
+window.voxelRenderer = null;
 
 // Physics constants (adjustable by laws & composer)
 let DIFFUSION=0.09,ENTROPY_BASE=0.0004,INFO_RATE=0.35,BIO_THRESH=0.25;
@@ -591,6 +592,38 @@ function _drawAtmosphere(cx_,cw,ch){
 }
 
 function _drawIso(){
+  if(window.VoxelRenderer && !window.voxelRenderer) {
+    window.voxelRenderer = new window.VoxelRenderer(canvas3d, W, H, D);
+    log("Three.js VoxelRenderer initialized");
+  }
+
+  if(window.voxelRenderer) {
+    const LAYER_MAP=['energy','density','information','entropy','temperature','bioPotential'];
+    window.voxelRenderer.layer = layer >= 0 ? LAYER_MAP[layer] : 'energy';
+
+    const mockGrid = {
+      buffer: buf,
+      W: W, H: H, D: D,
+      totalField: (f) => 0,
+      activeChunkCount: 0,
+      chunks: new Map(),
+      memoryBytes: 0,
+      inBounds: (x,y,z) => x>=0&&x<W&&y>=0&&y<H&&z>=0&&z<D
+    };
+
+    const agents = (window.agentSystem && window.agentSystem.agents) ? window.agentSystem.agents.map(a => ({
+      // VoxelRenderer expects Y as altitude, so we map agent Y to Three.js Z (Z-forward)
+      // and keep altitude (Y) at 0 for now.
+      position: [a.x, 0, a.y],
+      energy: a.energy,
+      behavior: a.state || 'idle',
+      id: a.id
+    })) : [];
+
+    window.voxelRenderer.render(mockGrid, [], agents);
+    return;
+  }
+
   const cw=canvas3d.width,ch=canvas3d.height;
   ctx3d.fillStyle='#07070e';ctx3d.fillRect(0,0,cw,ch);
   const TW=Math.max(8,Math.floor(cw/W*1.4))|0,TH=Math.max(4,(TW/2))|0;
@@ -832,7 +865,7 @@ const PANELS={
       <div class="section-hdr" onclick="toggleSection(this)"><span>Presets</span><span class="arrow">▾</span></div>
       <div class="section-body">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
-          ${[['💥','Energy burst','burst'],['🌊','Wave field','wave'],['🧬','Life seed','life'],['🌍','Proto Earth','proto'],['⚡','Entropy storm','storm'],['🏛️','Ruins','ruins'],['🗑️','Clear','clear']].map(([ic,nm,p])=>`
+          ${[['💥','Energy burst','burst'],['🌊','Wave field','wave'],['🧬','Life seed','life'],['🌍','Proto Earth','proto'],['⚡','Entropy storm','storm'],['🏛️','Ruins','ruins'],['🌿','Gaia','gaia'],['🗑️','Clear','clear']].map(([ic,nm,p])=>`
             <button class="brush-btn" onclick="applyPreset('${p}')">${ic} ${nm}</button>`).join('')}
         </div>
         <div style="display:flex;gap:4px;margin-top:6px">
@@ -1430,6 +1463,14 @@ wrap.addEventListener('pointerup',()=>{painting=false;});
 // ── PRESETS ───────────────────────────────────────────────────────────────
 window.applyPreset=function(p){
   pushUndo();
+  if(window.applyAdvancedPreset){
+    try {
+      window.applyAdvancedPreset(p==='proto'?'proto_planet':p);
+      causal=[];tick=0;
+      log(`Advanced Preset: ${p}`);
+      return;
+    } catch(e) { console.warn('Advanced preset failed, falling back:', e); }
+  }
   buf.fill(0);causal=[];tick=0;
   const cx=W/2,cy=H/2;
   if(p==='burst'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const d=Math.sqrt((x-cx)**2+(y-cy)**2);if(d<8){const g=Math.exp(-d*d/20);set_(x,y,FE,900*g);set_(x,y,FT,400*g);set_(x,y,FD,0.7*g);}}}
@@ -1438,6 +1479,16 @@ window.applyPreset=function(p){
   else if(p==='proto'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const n=(Math.sin(x*.4)*Math.cos(y*.3)+1)/2;set_(x,y,FE,50+n*400);set_(x,y,FD,.2+n*.6);set_(x,y,FT,30+n*250);set_(x,y,FS,0.05+Math.random()*.1);if(n>.6){set_(x,y,FBio,n*.4);set_(x,y,FI,n*80);}}}
   else if(p==='storm'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){set_(x,y,FE,Math.random()*700);set_(x,y,FS,.2+Math.random()*.7);set_(x,y,FT,Math.random()*350);set_(x,y,FD,Math.random()*.8);}}
   else if(p==='ruins'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const n=(Math.sin(x*.5)*Math.cos(y*.4)+1)/2;if(n>.5){set_(x,y,FE,50+n*150);set_(x,y,FI,n*300);set_(x,y,FD,.3+n*.3);set_(x,y,FS,.2+Math.random()*.4);}}}
+  else if(p==='gaia'){
+    // Fallback simple gaia if advanced not loaded
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const dx=x-cx,dy=y-cy;
+      const d=Math.sqrt(dx*dx+dy*dy);
+      if(d<6){set_(x,y,FE,800*(1-d/6));set_(x,y,FT,1200*(1-d/6));set_(x,y,FD,0.9);}
+      else if(d<12){set_(x,y,FE,200);set_(x,y,FD,0.7);}
+      else if(d<15){set_(x,y,FD,0.1);set_(x,y,FE,50);}
+    }
+  }
   else if(p==='clear'){buf.fill(0);}
   log(`Preset: ${p}`);
 };

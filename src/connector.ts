@@ -25,6 +25,12 @@ import { BehaviorFSMCanvas, PRESET_BEHAVIORS }   from './modes/gamedev/EntityBeh
 import { PrefabSystem }                           from './modes/gamedev/PrefabSystem'
 import { AIGameDesigner }                         from './modes/gamedev/AIGameDesigner'
 import { buildGameDevModePanel }                  from './modes/GameDevModePanel'
+import { VoxelRenderer }                          from './render/VoxelRenderer'
+import { Presets }                                from './world/Presets'
+import { F }                                      from './core/CellState'
+
+(window as any).VoxelRenderer = VoxelRenderer;
+(window as any).F = F;
 
 // ── Inline sim constants (must match index.html) ──────────────────────────
 const win = window as unknown as Record<string, unknown>
@@ -747,5 +753,30 @@ win['cinemaMode']    = cinemaMode
 win['gamedevMode']   = gamedevMode
 win['metrics']       = metrics
 win['solverClient']  = solverClient   // window.solverClient.solve({...}) from console
+
+win['applyAdvancedPreset'] = (name: string) => {
+  const buf = getBuf()
+  const W = getW(), H = getH(), NF = getNF()
+  const grid = {
+    buffer: buf, W, H, D: 1,
+    cell: (x: number, y: number, z: number) => {
+      const off = (z * H * W + y * W + x) * NF
+      return {
+        get: (f: number) => buf[off + f],
+        set: (f: number, v: number) => { buf[off + f] = v },
+        set energy(v: number) { buf[off + F.ENERGY] = v },
+        set density(v: number) { buf[off + F.DENSITY] = v },
+        set information(v: number) { buf[off + F.INFORMATION] = v },
+        set entropy(v: number) { buf[off + F.ENTROPY] = v },
+        set temperature(v: number) { buf[off + F.TEMPERATURE] = v },
+        set bioPotential(v: number) { buf[off + F.BIO_POTENTIAL] = v },
+        set materialId(v: number) { buf[off + F.MATERIAL_ID] = v },
+      }
+    },
+    clear: () => buf.fill(0),
+    inBounds: (x: number, y: number, z: number) => x >= 0 && x < W && y >= 0 && y < H && z === 0
+  } as any
+  Presets.apply(grid, name as any)
+}
 
 console.log('%c[Reality Engine] Connector ready — window.scienceMode / .cinemaMode / .gamedevMode', 'color:#a09af0')

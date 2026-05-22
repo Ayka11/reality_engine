@@ -9,6 +9,7 @@
     "deploy": "netlify deploy --prod --dir=dist"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/node": "^20.0.0",
     "@types/three": "^0.184.1",
     "@webgpu/types": "^0.1.70",
@@ -16,7 +17,6 @@
     "vite": "^5.2.0"
   },
   "dependencies": {
-    "ws": "^8.17.0",
     "@types/pako": "^2.0.4",
     "@xyflow/react": "^12.10.2",
     "bitecs": "^0.3.40",
@@ -26,6 +26,7 @@
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "three": "^0.164.0",
+    "ws": "^8.17.0",
     "zustand": "^5.0.13"
   }
 }

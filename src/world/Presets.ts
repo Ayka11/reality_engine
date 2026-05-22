@@ -10,7 +10,8 @@ export type PresetName =
   | 'fungal_ecosystem' | 'ocean_biosphere' | 'toxic_ecosystem'
   | 'nebula' | 'proto_planet' | 'star_formation'
   | 'abandoned_megacity' | 'machine_ecology' | 'energy_economy'
-  | 'self_replicating_field' | 'causality_collapse';
+  | 'self_replicating_field' | 'causality_collapse'
+  | 'gaia';
 
 export class Presets {
   static apply(grid: VoxelGrid, name: PresetName): void {
@@ -39,6 +40,7 @@ export class Presets {
       case 'energy_economy':       this._energyEconomy(grid);      break;
       case 'self_replicating_field': this._selfReplicatingField(grid); break;
       case 'causality_collapse':   this._causalityCollapse(grid);  break;
+      case 'gaia':                 this._gaia(grid);               break;
     }
   }
 
@@ -373,6 +375,45 @@ export class Presets {
       const cell=grid.cell(x,y,z);
       cell.energy=9000+Math.random()*999; cell.temperature=9000;
       cell.density=0.9; cell.entropy=0.95;
+    }
+  }
+
+  private static _gaia(grid: VoxelGrid) {
+    const cx=grid.W/2, cy=grid.H/2, cz=grid.D/2;
+    for (let z=0; z<grid.D; z++) for (let y=0; y<grid.H; y++) for (let x=0; x<grid.W; x++) {
+      const dx=x-cx, dy=y-cy, dz=z-cz;
+      const d=Math.sqrt(dx*dx + dy*dy + dz*dz*2);
+      const cell = grid.cell(x,y,z);
+
+      if (d < 6) { // Core
+        cell.energy = 800 * (1 - d/6);
+        cell.temperature = 1200 * (1 - d/6);
+        cell.density = 0.9;
+        cell.materialId = MAT.METAL;
+      } else if (d < 12) { // Mantle/Crust
+        cell.energy = 200;
+        cell.temperature = 400 * (1 - d/12);
+        cell.density = 0.7;
+        cell.materialId = MAT.STONE;
+        if (d > 10.5) { // Surface
+           if (Math.random() < 0.6) { // Ocean
+             cell.density = 0.8;
+             cell.set(F.CHEM_STATE, CHEM.LIQUID);
+             cell.bioPotential = 0.3;
+           } else { // Land
+             cell.density = 0.6;
+             cell.bioPotential = 0.6;
+             cell.information = 50;
+             cell.set(F.CHEM_STATE, CHEM.ORGANIC);
+           }
+        }
+      } else if (d < 15) { // Atmosphere
+        cell.density = 0.1 * (1 - d/15);
+        cell.energy = 50;
+        cell.information = 20 * (1 - d/15);
+        cell.entropy = 0.05;
+        cell.set(F.CHEM_STATE, CHEM.GAS);
+      }
     }
   }
 }

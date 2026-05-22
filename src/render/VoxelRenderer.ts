@@ -77,6 +77,7 @@ export interface EntityMarker {
 const MAX_INSTANCES = 131072; // full grid max
 
 export class VoxelRenderer {
+  static isVoxelRenderer = true;
   readonly domElement: HTMLCanvasElement;
 
   private renderer:    THREE.WebGLRenderer;
@@ -166,11 +167,51 @@ export class VoxelRenderer {
 
     // ── Instanced voxel mesh ──────────────────────────────────────────────────
     const geo = new THREE.BoxGeometry(0.88, 0.88, 0.88);
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: false, roughness: 0.7, metalness: 0.05 });
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: false,
+      roughness: 0.7,
+      metalness: 0.2,
+      envMapIntensity: 1.0
+    });
+
+    // Add custom shader logic for material-specific properties
+    mat.onBeforeCompile = (shader) => {
+      shader.vertexShader = `
+        attribute vec3 instanceProps; // x: roughness, y: metalness, z: emissive
+        varying vec3 vInstanceProps;
+        ${shader.vertexShader}
+      `.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+         vInstanceProps = instanceProps;`
+      );
+
+      shader.fragmentShader = `
+        varying vec3 vInstanceProps;
+        ${shader.fragmentShader}
+      `.replace(
+        '#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>
+         roughnessFactor = vInstanceProps.x;`
+      ).replace(
+        '#include <metalnessmap_fragment>',
+        `#include <metalnessmap_fragment>
+         metalnessFactor = vInstanceProps.y;`
+      ).replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+         totalEmissiveRadiance = diffuseColor.rgb * vInstanceProps.z;`
+      );
+    };
+
     this.mesh = new THREE.InstancedMesh(geo, mat, MAX_INSTANCES);
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(
       new Float32Array(MAX_INSTANCES * 3), 3
     );
+
+    // Custom attribute for roughness/metalness/emissive
+    const propAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_INSTANCES * 3), 3);
+    geo.setAttribute('instanceProps', propAttr);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.count = 0;
     this.scene.add(this.mesh);
@@ -207,6 +248,7 @@ export class VoxelRenderer {
     const thr  = this.threshold;
     let count  = 0;
     const dummy = this.dummy;
+    const propAttr = this.mesh.geometry.getAttribute('instanceProps') as THREE.InstancedBufferAttribute;
 
     if (this.layer === 'diff') {
       const db = this._diffBuf;
@@ -225,6 +267,7 @@ export class VoxelRenderer {
         dummy.updateMatrix();
         this.mesh.setMatrixAt(count, dummy.matrix);
         this.mesh.setColorAt(count, this._col.setRGB(r, g, b));
+        propAttr.setXYZ(count, 0.7, 0.2, 0.0);
         count++;
       }
     } else {
@@ -257,6 +300,20 @@ export class VoxelRenderer {
         dummy.updateMatrix();
         this.mesh.setMatrixAt(count, dummy.matrix);
         this.mesh.setColorAt(count, this._col.setRGB(r, g, b));
+
+        // Visual properties based on material or energy
+        let rough = 0.7, metal = 0.2, emissive = 0.0;
+        const e = buf[i * CELL_FIELDS + F.ENERGY];
+        if (e > 500) emissive = (e - 500) / 500;
+
+        if (this.layer === 'material') {
+          const matIdx = Math.min(Math.floor(v), 13);
+          if (matIdx === 4) { rough = 0.2; metal = 0.9; } // Metal
+          if (matIdx === 6 || matIdx === 3) { rough = 0.1; metal = 0.1; } // Ice/Crystal
+          if (matIdx === 11 || matIdx === 5) { emissive += 0.5; } // Plasma/Magma
+        }
+
+        propAttr.setXYZ(count, rough, metal, emissive);
         count++;
       }
     }
@@ -264,6 +321,7 @@ export class VoxelRenderer {
     this.mesh.count = count;
     this.mesh.instanceMatrix.needsUpdate = true;
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    propAttr.needsUpdate = true;
 
     this._syncEntities(entities);
     this._syncAgents(agents);
