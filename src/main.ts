@@ -1548,6 +1548,15 @@ async function loop(ts: number) {
   if (playing) {
     const nSteps = parseInt(speedSl.value);
     await sim.step(dt, nSteps);
+
+    const infinityChunkKeys = [...sim.grid.chunks.values()].map(chunk => ({
+      x: chunk.cx,
+      y: chunk.cy,
+      z: chunk.cz,
+      level: 0,
+    }));
+
+    infinityScale.update(infinityChunkKeys);
     if (climateActive) climate.tick(dt * nSteps);
     timeline.autoSave(sim.tick);
     multiScale.tick();

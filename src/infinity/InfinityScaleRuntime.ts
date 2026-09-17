@@ -14,11 +14,19 @@ import {
 } from "../ChunkStore";
 import type { ScaleTelemetry } from "../ScaleTelemetry";
 
+export interface InfinityScaleDiagnostics {
+  gradientNorm?: number;
+  residual?: number;
+}
+
 /**
- * Runtime bridge for Reality Engine Infinity Scale v2.0.
+ * Runtime bridge between the existing SparseVoxelGrid and Infinity Scale.
  *
- * Keeps Infinity Scale separate from SimulationEngine while exposing
- * a simple API for the application and future UI/telemetry panels.
+ * Important:
+ * - SparseVoxelGrid remains the authoritative chunk storage.
+ * - Infinity Scale plans residency/LOD around the current observer.
+ * - No physical grid chunks are deleted by this runtime.
+ * - AMR is applied only when real solver diagnostics are supplied.
  */
 export class InfinityScaleRuntime {
   readonly scale: InfinityScaleV2;
@@ -40,8 +48,8 @@ export class InfinityScaleRuntime {
       y: Math.trunc(observer.y),
       z: Math.trunc(observer.z),
     };
+
     this.scale.setObserver(this.observer);
-    this.lastRecords = [];
   }
 
   getObserver(): Vec3i {
@@ -53,6 +61,7 @@ export class InfinityScaleRuntime {
       this.observer,
       chunks,
     );
+
     return [...this.lastRecords];
   }
 
@@ -65,7 +74,34 @@ export class InfinityScaleRuntime {
       gradientNorm,
       residual,
     );
+
     return [...this.lastRecords];
+  }
+
+  /**
+   * Update Infinity Scale from the actual simulation chunk coordinates.
+   *
+   * The supplied chunks come from SparseVoxelGrid.chunks.
+   * Infinity Scale does not become a second authoritative chunk store.
+   */
+  update(
+    chunks: ChunkKey[],
+    diagnostics?: InfinityScaleDiagnostics,
+  ): ResidencyRecord[] {
+    const records = this.plan(chunks);
+
+    if (
+      diagnostics &&
+      Number.isFinite(diagnostics.gradientNorm) &&
+      Number.isFinite(diagnostics.residual)
+    ) {
+      return this.updateAMR(
+        diagnostics.gradientNorm as number,
+        diagnostics.residual as number,
+      );
+    }
+
+    return records;
   }
 
   telemetry(): ScaleTelemetry {

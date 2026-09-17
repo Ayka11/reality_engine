@@ -21,9 +21,9 @@ export class ChunkResidencyManager {
     this.scale.setObserver(observer);
     return chunkKeys.map(chunk => {
       const distance = Math.max(
-        Math.abs(chunk.x),
-        Math.abs(chunk.y),
-        Math.abs(chunk.z),
+        Math.abs(chunk.x - observer.x),
+        Math.abs(chunk.y - observer.y),
+        Math.abs(chunk.z - observer.z),
       );
       return {
         key: chunkKeyString(chunk),
