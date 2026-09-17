@@ -36,6 +36,10 @@ export class ChunkResidencyManager {
     });
   }
 
+  updateAMRFromGradient(records: ResidencyRecord[], gradientNorm: number): ResidencyRecord[] {
+    return records.map(r => ({ ...r, amr: this.scale.selectAMRFromGradient(gradientNorm) }));
+  }
+
   updateAMR(records: ResidencyRecord[], gradientNorm: number, residual: number): ResidencyRecord[] {
     return records.map(r => ({ ...r, amr: this.scale.selectAMR(gradientNorm, residual) }));
   }

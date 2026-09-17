@@ -155,6 +155,13 @@ export class InfinityScaleV2 {
     return this.config.lodLevels - 1;
   }
 
+  selectAMRFromGradient(gradientNorm: number): number {
+    const score = Math.abs(gradientNorm);
+    if (score > 1.0) return Math.min(2, this.config.amrLevels - 1);
+    if (score > 0.1) return Math.min(1, this.config.amrLevels - 1);
+    return 0;
+  }
+
   selectAMR(gradientNorm: number, residual: number): number {
     const score = Math.max(Math.abs(gradientNorm), Math.abs(residual));
     if (score > 1.0) return Math.min(2, this.config.amrLevels - 1);

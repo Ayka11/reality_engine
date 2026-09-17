@@ -4,14 +4,17 @@ import {
   type Vec3i,
   type ChunkKey,
 } from "../InfinityScaleV2";
+
 import {
   ChunkResidencyManager,
   type ResidencyRecord,
 } from "../ChunkResidencyManager";
+
 import {
   MemoryChunkStore,
   type ChunkStore,
 } from "../ChunkStore";
+
 import type { ScaleTelemetry } from "../ScaleTelemetry";
 
 export interface InfinityScaleDiagnostics {
@@ -26,7 +29,9 @@ export interface InfinityScaleDiagnostics {
  * - SparseVoxelGrid remains the authoritative chunk storage.
  * - Infinity Scale plans residency/LOD around the current observer.
  * - No physical grid chunks are deleted by this runtime.
- * - AMR is applied only when real solver diagnostics are supplied.
+ * - AMR uses a real solver residual when available.
+ * - When no residual is available, AMR falls back to the real
+ *   spatial gradient diagnostic.
  */
 export class InfinityScaleRuntime {
   readonly scale: InfinityScaleV2;
@@ -65,15 +70,32 @@ export class InfinityScaleRuntime {
     return [...this.lastRecords];
   }
 
+  /**
+   * Update AMR using the available scientific diagnostics.
+   *
+   * If a real solver residual is supplied, the existing residual-aware
+   * AMR logic is used.
+   *
+   * If no real residual is available, the gradient-only AMR path is used.
+   *
+   * No artificial residual value is injected.
+   */
   updateAMR(
     gradientNorm: number,
-    residual: number,
+    residual?: number,
   ): ResidencyRecord[] {
-    this.lastRecords = this.residency.updateAMR(
-      this.lastRecords,
-      gradientNorm,
-      residual,
-    );
+    if (Number.isFinite(residual)) {
+      this.lastRecords = this.residency.updateAMR(
+        this.lastRecords,
+        gradientNorm,
+        residual as number,
+      );
+    } else {
+      this.lastRecords = this.residency.updateAMRFromGradient(
+        this.lastRecords,
+        gradientNorm,
+      );
+    }
 
     return [...this.lastRecords];
   }
@@ -92,12 +114,13 @@ export class InfinityScaleRuntime {
 
     if (
       diagnostics &&
-      Number.isFinite(diagnostics.gradientNorm) &&
-      Number.isFinite(diagnostics.residual)
+      Number.isFinite(diagnostics.gradientNorm)
     ) {
       return this.updateAMR(
         diagnostics.gradientNorm as number,
-        diagnostics.residual as number,
+        Number.isFinite(diagnostics.residual)
+          ? diagnostics.residual as number
+          : undefined,
       );
     }
 

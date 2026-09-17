@@ -6,7 +6,8 @@ import { ScriptEngine, SCRIPT_TEMPLATES } from './world/ScriptEngine';
 import { NodeGraph } from './ui/NodeGraph';
 import { UnrealBridge } from './export/UnrealBridge';
 import { BlenderBridge } from './export/BlenderBridge';
-import { F } from './core/CellState';
+import { F, CELL_FIELDS } from './core/CellState';
+import { computeSparseGridFieldDiagnostics } from './scientific/FieldDiagnostics';
 import { PROCESS_LIBRARY } from './process/ProcessDef';
 import { MAT, MATERIAL_LIBRARY, MatId } from './materials/MaterialDef';
 import { EventType } from './world/WorldEvents';
@@ -1524,6 +1525,14 @@ function _applyKeyNav(): void {
   if (dx !== 0 || dy !== 0) renderer.panCamera(dx * 4, dy * 4);
 }
 
+function _computeInfinityScaleDiagnostics() {
+  return computeSparseGridFieldDiagnostics(
+    sim.grid,
+    CELL_FIELDS,
+    F.ENERGY,
+  );
+}
+
 function _updateInfinityObserver(): void {
   const observer = {
     x: selX >= 0 ? Math.trunc(selX) : 0,
@@ -1556,7 +1565,16 @@ async function loop(ts: number) {
       level: 0,
     }));
 
-    infinityScale.update(infinityChunkKeys);
+    const infinityDiagnostics =
+      _computeInfinityScaleDiagnostics();
+
+    infinityScale.update(
+      infinityChunkKeys,
+      {
+        gradientNorm:
+          infinityDiagnostics.gradientRMS,
+      },
+    );
     if (climateActive) climate.tick(dt * nSteps);
     timeline.autoSave(sim.tick);
     multiScale.tick();
