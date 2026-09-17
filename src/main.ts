@@ -34,6 +34,7 @@ import { WorldComposer, PHI_ARCHETYPES, FIELD_BALANCES, COMPLEXITY_MODES, SPACET
 import { WorldHealth } from './ux/WorldHealth';
 import { Explainer } from './ux/Explainer';
 import { SMART_BRUSHES } from './ux/SmartBrushes';
+import { createInfinityScaleRuntime } from './infinity/InfinityScaleRuntime';
 
 // ── UX System imports ─────────────────────────────────────────────────────────
 import { initializeUXSystem } from './ui/UXIntegration';
@@ -46,11 +47,14 @@ const canvas   = document.getElementById('gc') as HTMLCanvasElement;
 const renderer = new VoxelRenderer(canvas, sim.grid.W, sim.grid.H, sim.grid.D);
 const realityCreatorGraph = new RealityGraph();
 const realityCreatorCompiler = new GraphCompiler();
+const infinityScale = createInfinityScaleRuntime();
+infinityScale.setObserver({ x: 0, y: 0, z: 0 });
 (window as unknown as { realityEngine?: SimulationEngine; realityCreator?: { graph: RealityGraph; compiler: GraphCompiler } }).realityEngine = sim;
 (window as unknown as { realityCreator?: { graph: RealityGraph; compiler: GraphCompiler } }).realityCreator = {
   graph: realityCreatorGraph,
   compiler: realityCreatorCompiler,
 };
+(window as unknown as { realityInfinityScale?: typeof infinityScale }).realityInfinityScale = infinityScale;
 
 // ── Initialize UX System ──────────────────────────────────────────────────────
 const { appModeManager, renderModeSwitch } = initializeUXSystem();
@@ -1520,6 +1524,15 @@ function _applyKeyNav(): void {
   if (dx !== 0 || dy !== 0) renderer.panCamera(dx * 4, dy * 4);
 }
 
+function _updateInfinityObserver(): void {
+  const observer = {
+    x: selX >= 0 ? Math.trunc(selX) : 0,
+    y: selY >= 0 ? Math.trunc(selY) : 0,
+    z: selZ >= 0 ? Math.trunc(selZ) : 0,
+  };
+  infinityScale.setObserver(observer);
+}
+
 async function loop(ts: number) {
   const dt = Math.min((ts - lastTs) / 1000, 0.05);
   lastTs = ts;
@@ -1530,6 +1543,7 @@ async function loop(ts: number) {
   }
 
   _applyKeyNav();
+  _updateInfinityObserver();
 
   if (playing) {
     const nSteps = parseInt(speedSl.value);
@@ -1580,3 +1594,4 @@ async function loop(ts: number) {
 }
 
 requestAnimationFrame(ts => { lastTs = ts; fpsTimer = ts; requestAnimationFrame(loop); });
+
