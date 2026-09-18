@@ -80,31 +80,6 @@ export class InfinityScaleRuntime {
    *
    * No artificial residual value is injected.
    */
-  /**
-   * Assign AMR independently to each planned chunk using its
-   * local spatial-gradient indicator.
-   *
-   * This is an AMR planning/tagging stage. It does not yet
-   * allocate a refined physical grid.
-   */
-  updateAMRByChunkGradient(
-    records: ResidencyRecord[],
-    gradients: Map<string, number>,
-  ): ResidencyRecord[] {
-    this.lastRecords = records.map((record) => {
-      const key =
-        `${record.chunk.x}:${record.chunk.y}:${record.chunk.z}`;
-
-      const gradient = gradients.get(key) ?? 0;
-
-      return {
-        ...record,
-        amr: this.scale.selectAMRFromGradient(gradient),
-      };
-    });
-
-    return [...this.lastRecords];
-  }
   updateAMR(
     gradientNorm: number,
     residual?: number,

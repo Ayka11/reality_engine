@@ -46,9 +46,36 @@ import './ui/ux-system.css';
 const sim      = new SimulationEngine();
 const canvas   = document.getElementById('gc') as HTMLCanvasElement;
 
-
-
-
+(() => {
+  const panel = document.getElementById('infinityDiagnosticsPanel');
+  if (panel) {
+    panel.style.display = 'block';
+    panel.style.visibility = 'visible';
+    panel.style.opacity = '1';
+  } else {
+    const testPanel = document.createElement('div');
+    testPanel.id = 'infinityDiagnosticsPanel';
+    testPanel.textContent = 'INFINITY SCALE — diagnostics panel test';
+    Object.assign(testPanel.style, {
+      position: 'fixed',
+      right: '12px',
+      top: '80px',
+      width: '250px',
+      padding: '12px',
+      zIndex: '999999',
+      background: 'rgba(10,10,20,0.96)',
+      color: '#ffffff',
+      border: '2px solid #7c6fcd',
+      borderRadius: '8px',
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+    });
+    document.body.appendChild(testPanel);
+  }
+})();
 const renderer = new VoxelRenderer(canvas, sim.grid.W, sim.grid.H, sim.grid.D);
 const realityCreatorGraph = new RealityGraph();
 const realityCreatorCompiler = new GraphCompiler();
@@ -1554,11 +1581,12 @@ let _latestInfinityDiagnostics = {
   validSamples: 0,
 };
 
+let _infinityDiagnosticsError = "";
 
 try {
   _latestInfinityDiagnostics = _computeInfinityScaleDiagnostics();
 } catch (error) {
-  // _infinityDiagnosticsError =
+  _infinityDiagnosticsError =
     error instanceof Error ? error.message : String(error);
 
   console.error(

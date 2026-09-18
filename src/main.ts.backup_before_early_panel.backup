@@ -45,10 +45,6 @@ import './ui/ux-system.css';
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
 const canvas   = document.getElementById('gc') as HTMLCanvasElement;
-
-
-
-
 const renderer = new VoxelRenderer(canvas, sim.grid.W, sim.grid.H, sim.grid.D);
 const realityCreatorGraph = new RealityGraph();
 const realityCreatorCompiler = new GraphCompiler();
@@ -1554,11 +1550,12 @@ let _latestInfinityDiagnostics = {
   validSamples: 0,
 };
 
+let _infinityDiagnosticsError = "";
 
 try {
   _latestInfinityDiagnostics = _computeInfinityScaleDiagnostics();
 } catch (error) {
-  // _infinityDiagnosticsError =
+  _infinityDiagnosticsError =
     error instanceof Error ? error.message : String(error);
 
   console.error(

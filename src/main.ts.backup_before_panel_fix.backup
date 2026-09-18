@@ -45,10 +45,6 @@ import './ui/ux-system.css';
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
 const canvas   = document.getElementById('gc') as HTMLCanvasElement;
-
-
-
-
 const renderer = new VoxelRenderer(canvas, sim.grid.W, sim.grid.H, sim.grid.D);
 const realityCreatorGraph = new RealityGraph();
 const realityCreatorCompiler = new GraphCompiler();
@@ -1546,26 +1542,7 @@ function _computeInfinityScaleDiagnostics() {
  * All displayed field values come from the real SparseVoxelGrid.
  * AMR values come from the real Infinity Scale residency records.
  */
-let _latestInfinityDiagnostics = {
-  gradientRMS: 0,
-  gradientMax: 0,
-  fieldMin: 0,
-  fieldMax: 0,
-  validSamples: 0,
-};
-
-
-try {
-  _latestInfinityDiagnostics = _computeInfinityScaleDiagnostics();
-} catch (error) {
-  // _infinityDiagnosticsError =
-    error instanceof Error ? error.message : String(error);
-
-  console.error(
-    "[Reality Engine] Infinity Scale diagnostics failed:",
-    error,
-  );
-}
+let _latestInfinityDiagnostics = _computeInfinityScaleDiagnostics();
 
 function _ensureInfinityDiagnosticsPanel(): HTMLElement {
   const existing = document.getElementById('infinityDiagnosticsPanel');
