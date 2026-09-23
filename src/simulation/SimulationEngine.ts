@@ -20,6 +20,12 @@ import type {
   InfinityScaleExecutionPlan,
 } from '../infinity/InfinityScaleExecutionAdapter';
 import { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
+import {
+  advanceInfinityScaleGlobalFrame,
+  assertInfinityScaleGlobalFramePlan,
+  beginInfinityScaleGlobalFrame,
+  type InfinityScaleGlobalExecutionFrame,
+} from '../infinity/InfinityScaleGlobalExecutionFrame';
 
 export class SimulationEngine {
   readonly grid: SparseVoxelGrid;
@@ -254,16 +260,35 @@ export class SimulationEngine {
       this.grid.syncDenseToChunks();
     }
 
-    this._detectCausality(
-      this._infinityExecutionPlan && this._infinityExecutionPlan.mode !== 'advisory'
-        ? new InfinityScaleChunkExecutionContext(
-            this._infinityExecutionPlan,
-            this.grid.W,
-            this.grid.H,
-            this.grid.D,
-          )
-        : null,
-    );
+    const selectivePlan =
+      this._infinityExecutionPlan &&
+      this._infinityExecutionPlan.mode !== 'advisory'
+        ? this._infinityExecutionPlan
+        : null;
+    const frame: InfinityScaleGlobalExecutionFrame | null = selectivePlan
+      ? beginInfinityScaleGlobalFrame(
+          selectivePlan,
+          this._tick,
+          this._tick + nSteps,
+        )
+      : null;
+    let frameState = frame
+      ? advanceInfinityScaleGlobalFrame(frame, 'local-execution')
+      : null;
+
+    const executionContext = selectivePlan
+      ? new InfinityScaleChunkExecutionContext(
+          selectivePlan,
+          this.grid.W,
+          this.grid.H,
+          this.grid.D,
+        )
+      : null;
+    if (frameState && executionContext) {
+      assertInfinityScaleGlobalFramePlan(frameState, selectivePlan, executionContext);
+    }
+
+    this._detectCausality(executionContext);
 
     const eventContext =
       this._infinityExecutionPlan && this._infinityExecutionPlan.mode !== 'advisory'
@@ -274,13 +299,20 @@ export class SimulationEngine {
             this.grid.D,
           )
         : null;
+    if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'local-commit');
+    if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'boundary-reconciliation');
+
+    if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'global-metrics');
+    const metrics = this._worldMetrics();
+
+    if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'global-control');
+    this.laws.tick(metrics);
     this.worldEvents.autoTick(this.grid, this._tick, eventContext);
 
-    // Scientific recorder
+    if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'observation');
     this.recorder.tick(this.grid, this._tick);
 
-    // Law engine uses global metrics to evolve which laws are active
-    this.laws.tick(this._worldMetrics());
+    if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'finalize');
 
     // Keep GPU in sync after CPU changes (presets, painting)
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
