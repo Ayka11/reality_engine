@@ -114,7 +114,7 @@ export class EntityLayer {
   private lastChunkConnectivity: EntityChunkConnectivityResult | null = null;
   private readonly chunkReconciliation = new EntityChunkReconciliation();
   private lastChunkReconciliation: EntityReconciliationPlan | null = null;
-  private pendingBoundaryComponents = new Map<number, {
+  private pendingBoundaryComponents = new Map<string, {
     sourceEntityIds: number[];
     centroid: [number, number, number];
     cellCount: number;
@@ -134,14 +134,24 @@ export class EntityLayer {
       fullDomainCovered,
     );
 
-    this.pendingBoundaryComponents.clear();
+    const activePendingKeys = new Set<string>();
     for (const proposal of this.lastChunkReconciliation.proposals) {
       if (proposal.continuity !== 'pending') continue;
-      this.pendingBoundaryComponents.set(proposal.componentId, {
+      const ancestry = proposal.sourceEntityIds.length > 0
+        ? proposal.sourceEntityIds.join(',')
+        : 'component:' + proposal.componentId;
+      const key = 'boundary:' + ancestry;
+      activePendingKeys.add(key);
+      this.pendingBoundaryComponents.set(key, {
         sourceEntityIds: [...proposal.sourceEntityIds],
         centroid: [...proposal.centroid],
         cellCount: proposal.cellCount,
       });
+    }
+    for (const key of this.pendingBoundaryComponents.keys()) {
+      if (key.startsWith('boundary:') && !activePendingKeys.has(key)) {
+        this.pendingBoundaryComponents.delete(key);
+      }
     }
     return this.lastChunkConnectivity;
   }
@@ -155,7 +165,7 @@ export class EntityLayer {
   }
 
   getPendingBoundaryComponents(): Array<{
-    componentId: number;
+    componentId: string;
     sourceEntityIds: number[];
     centroid: [number, number, number];
     cellCount: number;
