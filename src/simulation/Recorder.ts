@@ -1,5 +1,13 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS } from '../core/CellState';
+import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
+
+export interface SelectiveObservationSnapshot {
+  tick: number;
+  cellCount: number;
+  cells: Array<[number, number[]]>;
+  metrics: { totalEnergy: number; avgEntropy: number; avgInfo: number; avgBio: number };
+}
 
 export interface Snapshot {
   tick: number;
@@ -14,6 +22,7 @@ export class Recorder {
   private _intervalTicks: number;
   private _lastSnapTick = 0;
   private _nextSnapTick = 0;
+  private selectiveSnapshots: SelectiveObservationSnapshot[] = [];
 
   constructor(maxSnapshots = 60, intervalTicks = 30) {
     this.maxSnapshots = maxSnapshots;
@@ -23,6 +32,7 @@ export class Recorder {
   get recording() { return this._recording; }
   get count() { return this.snapshots.length; }
   get snapList(): Snapshot[] { return this.snapshots; }
+  get selectiveSnapList(): SelectiveObservationSnapshot[] { return this.selectiveSnapshots; }
 
   startRecording(): void {
     this._recording = true;
@@ -33,6 +43,7 @@ export class Recorder {
   stopRecording(): void  { this._recording = false; }
   clearSnapshots(): void {
     this.snapshots = [];
+    this.selectiveSnapshots = [];
     this._lastSnapTick = 0;
     this._nextSnapTick = Math.max(1, this._intervalTicks);
   }
@@ -52,6 +63,60 @@ export class Recorder {
     this._lastSnapTick = currentTick;
     this._capture(grid, currentTick);
 
+    do {
+      this._nextSnapTick += interval;
+    } while (this._nextSnapTick <= currentTick);
+  }
+
+  tickSelective(
+    grid: VoxelGrid,
+    currentTick: number,
+    context: InfinityScaleChunkExecutionContext,
+  ): void {
+    if (!this._recording) return;
+
+    const interval = Math.max(1, this._intervalTicks);
+    if (this._nextSnapTick <= 0) this._nextSnapTick = interval;
+    if (currentTick < this._nextSnapTick) return;
+
+    const cells: Array<[number, number[]]> = [];
+    let totalEnergy = 0, sumEntropy = 0, sumInfo = 0, sumBio = 0;
+    let count = 0;
+
+    for (const range of context.simulationRanges) {
+      for (let z = range.minZ; z <= range.maxZ; z++)
+      for (let y = range.minY; y <= range.maxY; y++)
+      for (let x = range.minX; x <= range.maxX; x++) {
+        const cell = grid.cell(x, y, z);
+        const index = z * grid.H * grid.W + y * grid.W + x;
+        const base = index * CELL_FIELDS;
+        const values = Array.from(grid.buffer.subarray(base, base + CELL_FIELDS));
+        cells.push([index, values]);
+
+        totalEnergy += values[0];
+        sumEntropy += values[3];
+        sumInfo += values[4];
+        sumBio += values[5];
+        count++;
+      }
+    }
+
+    this.selectiveSnapshots.push({
+      tick: currentTick,
+      cellCount: count,
+      cells,
+      metrics: {
+        totalEnergy,
+        avgEntropy: count ? sumEntropy / count : 0,
+        avgInfo: count ? sumInfo / count : 0,
+        avgBio: count ? sumBio / count : 0,
+      },
+    });
+    if (this.selectiveSnapshots.length > this.maxSnapshots) {
+      this.selectiveSnapshots.shift();
+    }
+
+    this._lastSnapTick = currentTick;
     do {
       this._nextSnapTick += interval;
     } while (this._nextSnapTick <= currentTick);
@@ -126,6 +191,7 @@ export class Recorder {
         metrics: s.metrics,
         cells:   sparse(s.buffer),
       })),
+      selectiveSnapshots: this.selectiveSnapshots,
     });
   }
 }
