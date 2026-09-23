@@ -8,6 +8,7 @@ import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExe
 export interface EntityChunkComponent {
   id: number;
   cells: number[];
+  centroid: [number, number, number];
   touchesSimulationBoundary: boolean;
   touchesReadBoundary: boolean;
 }
@@ -83,12 +84,14 @@ export class EntityChunkConnectivity {
         out = {
           id: root,
           cells: [],
+          centroid: [0, 0, 0],
           touchesSimulationBoundary: false,
           touchesReadBoundary: false,
         };
         merged.set(root, out);
       }
       out.cells.push(...pieces[i].cells);
+      out.centroid = this.centroid(out.cells, grid);
       out.touchesSimulationBoundary ||= pieces[i].touchesSimulationBoundary;
       out.touchesReadBoundary ||= pieces[i].touchesReadBoundary;
     }
@@ -198,6 +201,16 @@ export class EntityChunkConnectivity {
     }
 
     return pieceIds;
+  }
+
+  private centroid(cells: number[], grid: VoxelGrid): [number, number, number] {
+    let sx = 0, sy = 0, sz = 0;
+    for (const index of cells) {
+      const c = this.coords(index, grid);
+      sx += c.x; sy += c.y; sz += c.z;
+    }
+    const n = Math.max(1, cells.length);
+    return [sx / n, sy / n, sz / n];
   }
 
   private index(x: number, y: number, z: number, grid: VoxelGrid): number {
