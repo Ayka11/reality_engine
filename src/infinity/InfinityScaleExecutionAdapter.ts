@@ -66,6 +66,10 @@ export class InfinityScaleExecutionAdapter {
     this.capabilities = { ...capabilities };
   }
 
+  getCapabilities(): InfinityScaleExecutionCapabilities {
+    return { ...this.capabilities };
+  }
+
   constructor() {
     this.plan = {
       revision: 0,
