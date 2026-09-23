@@ -216,15 +216,9 @@ export class EntityLayer {
     grid: VoxelGrid,
     context: InfinityScaleChunkExecutionContext,
   ): boolean {
-    const connectivity = this.chunkConnectivity.analyze(grid, context);
-    const fullDomainCovered =
-      context.simulationCellCount >= grid.size &&
-      context.readCellCount === 0;
-    const plan = this.chunkReconciliation.plan(
-      connectivity.components,
-      this.getEntities(),
-      fullDomainCovered,
-    );
+    const plan = this.lastChunkReconciliation;
+    const connectivity = this.lastChunkConnectivity;
+    if (!plan || !connectivity) return false;
     const records = this.chunkReconciliation.commitRecords(
       plan,
       connectivity.components,
