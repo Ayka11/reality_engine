@@ -20,6 +20,9 @@ import type {
   InfinityScaleExecutionPlan,
 } from '../infinity/InfinityScaleExecutionAdapter';
 import { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
+import { InfinityScaleLODState } from '../infinity/InfinityScaleLODState';
+import { InfinityScaleLODTransfer } from '../infinity/InfinityScaleLODTransfer';
+import { InfinityScaleLODBoundarySnapshot } from '../infinity/InfinityScaleLODBoundarySnapshot';
 import {
   advanceInfinityScaleGlobalFrame,
   assertInfinityScaleGlobalFramePlan,
@@ -47,6 +50,7 @@ export class SimulationEngine {
   private _tick = 0;
   private _gpuReady = false;
   private _infinityExecutionPlan: InfinityScaleExecutionPlan | null = null;
+  private readonly infinityScaleLODState: InfinityScaleLODState;
 
   constructor() {
     this.grid = new SparseVoxelGrid(WORLD.W, WORLD.H, WORLD.D);
@@ -63,6 +67,7 @@ export class SimulationEngine {
     this.temporalLayer = new TemporalLayer();
     this.infoPhysics = new InfoPhysics();
     this.prevEnergy = new Float32Array(this.grid.size);
+    this.infinityScaleLODState = new InfinityScaleLODState(32);
   }
 
   async initGPU(): Promise<boolean> {
@@ -200,6 +205,10 @@ export class SimulationEngine {
       for (let s = 0; s < nSteps; s++) {
         this.grid.snapshot();
         const executionContext = frameContext;
+        const boundarySnapshot =
+          executionContext && selectivePlan
+            ? this.captureInfinityScaleBoundarySnapshot(executionContext)
+            : undefined;
         if (executionContext && selectivePlan) {
           this.fieldPhysics.tickChunks(
             this.grid,
@@ -219,11 +228,13 @@ export class SimulationEngine {
             this.grid,
             clampedDt,
             executionContext,
+            boundarySnapshot,
           );
           this.temporalLayer.tickChunks(
             this.grid,
             clampedDt,
             executionContext,
+            boundarySnapshot,
           );
           this.chemLayer.tickChunks(
             this.grid,
@@ -452,4 +463,104 @@ export class SimulationEngine {
     this.grid.syncDenseToChunks();
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
   }
+  /**
+   * Builds an immutable LOD boundary snapshot from the pre-tick dense state.
+   *
+   * Only mixed-LOD dependency chunks are materialized. Level-0 dependencies
+   * are copied directly; coarser dependencies are restricted from their
+   * corresponding base-resolution blocks. The snapshot is read-only for all
+   * local solvers and is discarded after the tick.
+   */
+  private captureInfinityScaleBoundarySnapshot(
+    context: InfinityScaleChunkExecutionContext,
+  ): InfinityScaleLODBoundarySnapshot | undefined {
+    const specs = context.boundaryTransferSpecs.filter(
+      spec => spec.sourceLevel !== spec.targetLevel,
+    );
+    if (specs.length === 0) return undefined;
+
+    const targetKeys = [...new Set(specs.map(spec => spec.targetChunk))];
+    for (const key of targetKeys) {
+      const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
+      if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
+
+      const level = Number(match[1]);
+      const cx = Number(match[2]);
+      const cy = Number(match[3]);
+      const cz = Number(match[4]);
+      const scale = 2 ** level;
+      const state = this.infinityScaleLODState.ensureChunk(key, level);
+
+      for (let lz = 0; lz < 32; lz++) {
+        for (let ly = 0; ly < 32; ly++) {
+          for (let lx = 0; lx < 32; lx++) {
+            const baseX = cx * 32 * scale + lx * scale;
+            const baseY = cy * 32 * scale + ly * scale;
+            const baseZ = cz * 32 * scale + lz * scale;
+
+            if (level === 0) {
+              if (
+                baseX < 0 || baseX >= this.grid.W ||
+                baseY < 0 || baseY >= this.grid.H ||
+                baseZ < 0 || baseZ >= this.grid.D
+              ) continue;
+              const cell = this.grid.cellBack(baseX, baseY, baseZ);
+              const offset = ((lz * 32 * 32) + ly * 32 + lx) * CELL_FIELDS;
+              for (let field = 0; field < CELL_FIELDS; field++) {
+                state.cells[offset + field] = cell.get(field);
+              }
+              continue;
+            }
+
+            const fineCells: Float32Array[] = [];
+            let complete = true;
+            for (let dz = 0; dz < scale && complete; dz++) {
+              for (let dy = 0; dy < scale && complete; dy++) {
+                for (let dx = 0; dx < scale; dx++) {
+                  const x = baseX + dx;
+                  const y = baseY + dy;
+                  const z = baseZ + dz;
+                  if (
+                    x < 0 || x >= this.grid.W ||
+                    y < 0 || y >= this.grid.H ||
+                    z < 0 || z >= this.grid.D
+                  ) {
+                    complete = false;
+                    break;
+                  }
+                  const cell = this.grid.cellBack(x, y, z);
+                  const values = new Float32Array(CELL_FIELDS);
+                  for (let field = 0; field < CELL_FIELDS; field++) {
+                    values[field] = cell.get(field);
+                  }
+                  fineCells.push(values);
+                }
+              }
+            }
+            if (!complete) continue;
+
+            const coarse = new Array<number>(CELL_FIELDS).fill(0);
+            InfinityScaleLODTransfer.restrict(
+              fineCells,
+              coarse,
+              0,
+              level,
+            );
+            const offset = ((lz * 32 * 32) + ly * 32 + lx) * CELL_FIELDS;
+            for (let field = 0; field < CELL_FIELDS; field++) {
+              state.cells[offset + field] = coarse[field];
+            }
+          }
+        }
+      }
+    }
+
+    return InfinityScaleLODBoundarySnapshot.capture(
+      this.infinityScaleLODState,
+      specs,
+      this._tick,
+      32,
+    );
+  }
+
 }
