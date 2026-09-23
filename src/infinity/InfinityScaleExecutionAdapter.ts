@@ -21,6 +21,12 @@ export interface InfinityScaleExecutionPlan {
   requestedSimulationCount: number;
   selectedSimulationCount: number;
   maxSimulatingChunks: number;
+  /**
+   * One-cell stencil dependencies expressed as neighboring chunk keys.
+   * These are read dependencies only; they are not additional simulation work.
+   */
+  boundaryReadChunks: string[];
+  boundaryReadCount: number;
 }
 
 /**
@@ -44,6 +50,8 @@ export class InfinityScaleExecutionAdapter {
       requestedSimulationCount: 0,
       selectedSimulationCount: 0,
       maxSimulatingChunks: 0,
+      boundaryReadChunks: [],
+      boundaryReadCount: 0,
     };
   }
 
@@ -52,6 +60,27 @@ export class InfinityScaleExecutionAdapter {
       .filter(chunk => chunk.simulationEligible)
       .sort((a, b) => a.distance - b.distance)
       .slice(0, frame.maxSimulatingChunks);
+
+    const simulationKeys = new Set(selected.map(chunk => chunk.key));
+    const boundaryReadKeys = new Set<string>();
+
+    // FieldPhysics uses a 6-neighbor stencil. A future selective solver must
+    // therefore read the one-chunk halo around each simulated chunk. The halo
+    // is a dependency set, not extra simulation budget.
+    for (const chunk of selected) {
+      const level = chunk.chunk.level;
+      const x = chunk.chunk.x;
+      const y = chunk.chunk.y;
+      const z = chunk.chunk.z;
+      for (const [dx, dy, dz] of [
+        [-1, 0, 0], [1, 0, 0],
+        [0, -1, 0], [0, 1, 0],
+        [0, 0, -1], [0, 0, 1],
+      ]) {
+        const key = `${level}:${x + dx},${y + dy},${z + dz}`;
+        if (!simulationKeys.has(key)) boundaryReadKeys.add(key);
+      }
+    }
 
     this.plan = {
       revision: frame.revision,
@@ -67,6 +96,8 @@ export class InfinityScaleExecutionAdapter {
       requestedSimulationCount: frame.simulating.length,
       selectedSimulationCount: selected.length,
       maxSimulatingChunks: frame.maxSimulatingChunks,
+      boundaryReadChunks: [...boundaryReadKeys].sort(),
+      boundaryReadCount: boundaryReadKeys.size,
     };
 
     return this.getPlan();
@@ -77,6 +108,7 @@ export class InfinityScaleExecutionAdapter {
       ...this.plan,
       observer: { ...this.plan.observer },
       chunks: this.plan.chunks.map(chunk => ({ ...chunk })),
+      boundaryReadChunks: [...this.plan.boundaryReadChunks],
     };
   }
 
