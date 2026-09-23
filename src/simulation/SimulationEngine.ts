@@ -65,6 +65,8 @@ export class SimulationEngine {
         this._infinityExecutionPlan = {
           ...this._infinityExecutionPlan,
           mode: 'selective-gpu-ready',
+          selectiveGpuReady: true,
+          gpuPhysicsReady: true,
         };
       }
     }
