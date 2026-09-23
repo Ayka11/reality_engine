@@ -43,7 +43,7 @@ export class EntityChunkConnectivity {
     const pieceByCell = new Map<number, number>();
 
     for (const range of context.simulationRanges) {
-      const pieceIds = this.labelRange(grid, range, pieces, pieceByCell);
+      const pieceIds = this.labelRange(grid, range, context, pieces, pieceByCell);
       void pieceIds;
     }
 
@@ -105,6 +105,7 @@ export class EntityChunkConnectivity {
   private labelRange(
     grid: VoxelGrid,
     range: ExecutionCellRange,
+    context: InfinityScaleChunkExecutionContext,
     pieces: Piece[],
     pieceByCell: Map<number, number>,
   ): number[] {
@@ -161,7 +162,10 @@ export class EntityChunkConnectivity {
                 ny < range.minY || ny > range.maxY ||
                 nz < range.minZ || nz > range.maxZ
               ) {
-                if (contextContainsReadBoundaryPlaceholder()) {
+                if (
+                  context.containsReadCell(nx, ny, nz) &&
+                  !context.containsSimulationCell(nx, ny, nz)
+                ) {
                   touchesReadBoundary = true;
                 }
                 continue;
@@ -253,13 +257,4 @@ function rangeVolume(range: ExecutionCellRange): number {
     Math.max(0, range.maxY - range.minY + 1) *
     Math.max(0, range.maxZ - range.minZ + 1)
   );
-}
-
-/**
- * The read-only boundary status is resolved by EntityChunkLayer at the next
- * integration step. Keeping this hook explicit prevents accidental writes
- * outside the simulation owner set.
- */
-function contextContainsReadBoundaryPlaceholder(): boolean {
-  return false;
 }
