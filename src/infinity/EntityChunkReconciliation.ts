@@ -4,10 +4,11 @@ import type { EntityChunkComponent } from "./EntityChunkConnectivity";
 export interface EntityReconciliationProposal {
   componentId: number;
   existingEntityId: number | null;
+  sourceEntityIds: number[];
   centroid: [number, number, number];
   cellCount: number;
   safeToCommit: boolean;
-  continuity: "new" | "retained" | "pending";
+  continuity: "new" | "retained" | "pending" | "split" | "merge";
 }
 
 export interface EntityReconciliationCommit {
@@ -21,7 +22,8 @@ export interface EntityReconciliationCommitRecord {
   entityId: number | null;
   centroid: [number, number, number];
   cells: number[];
-  continuity: "new" | "retained";
+  continuity: "new" | "retained" | "split" | "merge";
+  sourceEntityIds: number[];
 }
 
 export interface EntityReconciliationPlan {
@@ -55,6 +57,7 @@ export class EntityChunkReconciliation {
         proposals.push({
           componentId: component.id,
           existingEntityId: null,
+          sourceEntityIds: [],
           centroid,
           cellCount: component.cells.length,
           safeToCommit: false,
@@ -65,6 +68,7 @@ export class EntityChunkReconciliation {
 
       let best: Entity | null = null;
       let bestDistance = 5;
+      const sourceEntityIds: number[] = [];
 
       for (const entity of entities) {
         if (used.has(entity.id)) continue;
@@ -72,6 +76,8 @@ export class EntityChunkReconciliation {
         const dy = centroid[1] - entity.centroid[1];
         const dz = centroid[2] - entity.centroid[2];
         const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const overlap = entity.cells.some(index => component.cells.includes(index));
+        if (overlap) sourceEntityIds.push(entity.id);
         if (distance < bestDistance) {
           bestDistance = distance;
           best = entity;
@@ -83,10 +89,19 @@ export class EntityChunkReconciliation {
       proposals.push({
         componentId: component.id,
         existingEntityId: best?.id ?? null,
+        sourceEntityIds,
         centroid,
         cellCount: component.cells.length,
         safeToCommit: true,
-        continuity: best ? "retained" : "new",
+        continuity: sourceEntityIds.length > 1
+          ? "merge"
+          : best && sourceEntityIds.length === 0
+            ? "retained"
+            : sourceEntityIds.length === 1 && best?.id === sourceEntityIds[0]
+              ? "retained"
+              : sourceEntityIds.length === 1
+                ? "split"
+                : "new",
       });
     }
 
@@ -131,7 +146,8 @@ export class EntityChunkReconciliation {
         entityId: proposal.existingEntityId,
         centroid: component.centroid,
         cells: [...component.cells],
-        continuity: proposal.continuity as "new" | "retained",
+        continuity: proposal.continuity as "new" | "retained" | "split" | "merge",
+        sourceEntityIds: [...proposal.sourceEntityIds],
       };
     });
   }
