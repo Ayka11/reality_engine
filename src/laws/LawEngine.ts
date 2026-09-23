@@ -101,12 +101,21 @@ export class LawEngine {
 
       law.age += elapsedTicks;
 
-      // Fitness: reward laws that are active during high-complexity states
+      // Fitness and mutation are simulation-time processes. When a render
+      // frame batches multiple ticks, advance their decay/probability over the
+      // full elapsed interval instead of applying one update per frame.
       const complexity = metrics.avgInfo / 500 + metrics.avgBio;
-      law.fitness = law.fitness * 0.999 + (law.active ? complexity * 0.001 : 0);
+      const fitnessRetention = Math.pow(0.999, Math.max(1, elapsedTicks));
+      law.fitness =
+        law.fitness * fitnessRetention +
+        (law.active ? complexity * (1 - fitnessRetention) : 0);
 
-      // Mutation: slowly drift law thresholds and param overrides
-      if (law.mutationRate > 0 && Math.random() < law.mutationRate) {
+      // Probability of at least one mutation across elapsedTicks independent
+      // opportunities: 1 - (1-r)^n.
+      if (
+        law.mutationRate > 0 &&
+        Math.random() < 1 - Math.pow(1 - law.mutationRate, Math.max(1, elapsedTicks))
+      ) {
         this._mutate(law);
         dirty = true;
       }
