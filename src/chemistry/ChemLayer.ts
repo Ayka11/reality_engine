@@ -1,5 +1,6 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
+import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 
 export const CHEM = {
   GAS:      0,
@@ -12,13 +13,31 @@ export type ChemState = typeof CHEM[keyof typeof CHEM];
 
 export class ChemLayer {
   tick(grid: VoxelGrid, dt: number): void {
+    this.tickRegion(grid, dt, null);
+  }
+
+  tickChunks(
+    grid: VoxelGrid,
+    dt: number,
+    context: InfinityScaleChunkExecutionContext,
+  ): void {
+    this.tickRegion(grid, dt, context);
+  }
+
+  private tickRegion(
+    grid: VoxelGrid,
+    dt: number,
+    context: InfinityScaleChunkExecutionContext | null,
+  ): void {
     const { W, H, D, buffer: buf } = grid;
     const WH = W * H;
+    const densityTransfers = context ? new Map<number, number>() : null;
 
     for (let z = 0; z < D; z++)
     for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       const i    = z * WH + y * W + x;
+      if (context && !context.containsSimulationCell(x, y, z)) continue;
       const base = i * CELL_FIELDS;
 
       const energy  = buf[base + F.ENERGY];
@@ -77,10 +96,21 @@ export class ChemLayer {
           const nb = ni * CELL_FIELDS;
           if (buf[nb + F.CHEM_STATE] === CHEM.SOLID) {
             const transfer = 0.002 * dt * 60;
-            buf[nb + F.DENSITY]   = Math.max(0, buf[nb + F.DENSITY] - transfer);
-            buf[base + F.DENSITY] = Math.min(1, density + transfer * 0.5);
+            if (densityTransfers) {
+              densityTransfers.set(ni, (densityTransfers.get(ni) ?? 0) - transfer);
+              densityTransfers.set(i, (densityTransfers.get(i) ?? 0) + transfer * 0.5);
+            } else {
+              buf[nb + F.DENSITY]   = Math.max(0, buf[nb + F.DENSITY] - transfer);
+              buf[base + F.DENSITY] = Math.min(1, density + transfer * 0.5);
+            }
           }
         }
+      }
+    }
+    if (densityTransfers) {
+      for (const [index, delta] of densityTransfers) {
+        const base = index * CELL_FIELDS;
+        buf[base + F.DENSITY] = Math.max(0, Math.min(1, buf[base + F.DENSITY] + delta));
       }
     }
   }
