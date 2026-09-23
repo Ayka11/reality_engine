@@ -172,6 +172,11 @@ export class SimulationEngine {
           this.chemLayer.tickChunks(this.grid, clampedDt, executionContext);
           this.agents.tickChunks(this.grid, clampedDt, executionContext);
           this.entityLayer.tickChunks(this.grid, clampedDt, executionContext);
+
+          // Causality is sampled at the same temporal boundary as the
+          // simulation tick, so batched frames do not collapse multiple
+          // energy transitions into one synthetic event.
+          this._detectCausality(executionContext);
           this._tick++;
           this.gpu.upload(this.grid.buffer);
         }
@@ -229,6 +234,9 @@ export class SimulationEngine {
             clampedDt,
             executionContext,
           );
+
+          // Keep causality aligned with each selective CPU simulation tick.
+          this._detectCausality(executionContext);
           this._tick++;
         } else {
           this.fieldPhysics.tick(
@@ -266,7 +274,11 @@ export class SimulationEngine {
       this.entityLayer.applyChunkReconciliation(this.grid, frameContext);
     }
 
-    this._detectCausality(frameContext);
+    // Selective execution already samples causality per simulation tick.
+    // Legacy full-domain execution keeps its historical post-batch sampling.
+    if (!frameContext) {
+      this._detectCausality(null);
+    }
 
     // Boundary reconciliation is the single commit barrier for deferred
     // cross-workset state. The plan must remain identical from frame start
