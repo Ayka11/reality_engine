@@ -186,6 +186,7 @@ export class InfinityScaleExecutionAdapter {
       maxSimulatingChunks: frame.maxSimulatingChunks,
       boundaryReadChunks: [...boundaryReadKeys].sort(),
       boundaryReadCount: boundaryReadKeys.size,
+      boundaryReadRelations: boundaryReadRelations.map(relation => ({ ...relation })),
       simulationCellCount: geometry.simulationCellCount,
       boundaryReadCellCount: geometry.readCellCount,
       localExecutionLayers: [
