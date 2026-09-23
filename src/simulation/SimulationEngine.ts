@@ -86,13 +86,25 @@ export class SimulationEngine {
    * boundaries and synchronization are implemented.
    */
   setInfinityScaleExecutionPlan(plan: InfinityScaleExecutionPlan | null): void {
-    this._infinityExecutionPlan = plan
-      ? {
-          ...plan,
-          observer: { ...plan.observer },
-          chunks: plan.chunks.map(chunk => ({ ...chunk })),
-        }
-      : null;
+    if (!plan) {
+      this._infinityExecutionPlan = null;
+      return;
+    }
+
+    // The engine accepts a GPU plan only when the runtime capability handshake
+    // actually reports an initialized GPU. It never promotes CPU plans itself.
+    if (plan.mode === 'selective-gpu-ready' && !this._gpuReady) {
+      throw new Error(
+        'Infinity Scale GPU execution plan requires initialized GPU capability',
+      );
+    }
+
+    this._infinityExecutionPlan = {
+      ...plan,
+      observer: { ...plan.observer },
+      chunks: plan.chunks.map(chunk => ({ ...chunk })),
+      boundaryReadChunks: [...plan.boundaryReadChunks],
+    };
   }
 
   get infinityScaleExecutionPlan(): InfinityScaleExecutionPlan | null {
