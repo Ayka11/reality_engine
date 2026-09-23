@@ -52,7 +52,7 @@ export class InfinityScaleExecutionAdapter {
   constructor() {
     this.plan = {
       revision: 0,
-      mode: "advisory",
+      mode: "selective-cpu-ready",
       observer: { x: 0, y: 0, z: 0 },
       chunks: [],
       simulationBudget: 0,
@@ -101,7 +101,7 @@ export class InfinityScaleExecutionAdapter {
     const geometry = new InfinityScaleChunkExecutionContext(
       {
         revision: frame.revision,
-        mode: "advisory",
+        mode: "selective-cpu-ready",
         observer: frame.observer,
         chunks: selected.map(chunk => ({
           key: chunk.key,
@@ -149,11 +149,9 @@ export class InfinityScaleExecutionAdapter {
         "ChemLayer",
         "AgentSystem",
       ],
-      globalExecutionLayers: [
-        "EntityLayer",
-      ],
-      selectiveCpuReady: false,
-      entityExecutionReady: false,
+      globalExecutionLayers: [],
+      selectiveCpuReady: true,
+      entityExecutionReady: true,
       agentMigrationReady: true,
     };
 
