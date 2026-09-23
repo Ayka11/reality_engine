@@ -1,5 +1,6 @@
 import type { InfinityScaleFramePlan } from "./InfinityScaleFramePlan";
 import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
+import { WORLD } from "../core/WorldConstants";
 
 export type InfinityScaleExecutionMode =
   | "advisory"
@@ -107,9 +108,9 @@ export class InfinityScaleExecutionAdapter {
         simulationCellCount: 0,
         boundaryReadCellCount: 0,
       },
-      512,
-      512,
-      256,
+      WORLD.W,
+      WORLD.H,
+      WORLD.D,
     );
 
     this.plan = {
