@@ -154,6 +154,11 @@ export class SimulationEngine {
             clampedDt,
             executionContext,
           );
+          this.agents.tickChunks(
+            this.grid,
+            clampedDt,
+            executionContext,
+          );
         } else {
           this.fieldPhysics.tick(
             this.grid,
@@ -171,7 +176,6 @@ export class SimulationEngine {
           this.temporalLayer.tick(this.grid, clampedDt);
         }
         this.entityLayer.tick(this.grid, clampedDt);
-        this.agents.tick(this.grid, clampedDt);
       }
       this.grid.syncDenseToChunks();
     }
