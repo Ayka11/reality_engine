@@ -20,6 +20,16 @@ export interface InfinityScaleBoundaryReadRelation {
   relation: InfinityScaleBoundaryRelation;
 }
 
+export interface InfinityScaleBoundaryTransferSpec {
+  sourceChunk: string;
+  targetChunk: string;
+  relation: InfinityScaleBoundaryRelation;
+  sourceLevel: number;
+  targetLevel: number;
+  refinementRatio: number;
+  operation: "copy" | "prolongation" | "restriction";
+}
+
 /**
  * Safe execution geometry for the current dense SparseVoxelGrid.
  *
@@ -86,6 +96,33 @@ export class InfinityScaleChunkExecutionContext {
   containsReadCell(x: number, y: number, z: number): boolean {
     if (this.containsSimulationCell(x, y, z)) return true;
     return this.readRanges.some(range => this.contains(range, x, y, z));
+  }
+
+  getBoundaryTransferSpecs(sourceChunk?: string): InfinityScaleBoundaryTransferSpec[] {
+    const relations = sourceChunk === undefined
+      ? this.boundaryReadRelations
+      : this.boundaryRelationsBySource.get(sourceChunk) ?? [];
+
+    return relations.map(relation => {
+      const sourceLevel = chunkLevel(relation.sourceChunk);
+      const targetLevel = chunkLevel(relation.targetChunk);
+      const refinementRatio = 2 ** Math.abs(sourceLevel - targetLevel);
+
+      return {
+        sourceChunk: relation.sourceChunk,
+        targetChunk: relation.targetChunk,
+        relation: relation.relation,
+        sourceLevel,
+        targetLevel,
+        refinementRatio,
+        operation:
+          relation.relation === "same-level"
+            ? "copy"
+            : relation.relation === "coarse-to-fine"
+              ? "prolongation"
+              : "restriction",
+      };
+    });
   }
 
   getBoundaryRelations(sourceChunk?: string): InfinityScaleBoundaryReadRelation[] {
