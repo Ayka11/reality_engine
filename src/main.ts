@@ -1687,10 +1687,12 @@ function _updateInfinityDiagnosticsPanel(): void {
 }
 
 function _updateInfinityObserver(): void {
+  // InfinityScaleRuntime accepts global cell coordinates. It performs the
+  // cell-to-chunk conversion internally when replanning residency.
   const observer = {
-    x: selX >= 0 ? Math.floor(selX / sim.grid.chunkSize) : 0,
-    y: selY >= 0 ? Math.floor(selY / sim.grid.chunkSize) : 0,
-    z: selZ >= 0 ? Math.floor(selZ / sim.grid.chunkSize) : 0,
+    x: selX >= 0 ? Math.trunc(selX) : 0,
+    y: selY >= 0 ? Math.trunc(selY) : 0,
+    z: selZ >= 0 ? Math.trunc(selZ) : 0,
   };
   infinityScale.setObserver(observer);
 }
