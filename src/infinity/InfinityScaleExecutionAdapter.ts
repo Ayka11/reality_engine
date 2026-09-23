@@ -41,6 +41,7 @@ export interface InfinityScaleExecutionPlan {
   selectiveCpuReady: boolean;
   selectiveGpuReady: boolean;
   gpuPhysicsReady: boolean;
+  lodBoundaryTransferReady: boolean;
   entityExecutionReady: boolean;
   agentMigrationReady: boolean;
 }
@@ -57,6 +58,7 @@ export interface InfinityScaleExecutionCapabilities {
   selectiveCpuReady: boolean;
   selectiveGpuReady: boolean;
   gpuPhysicsReady: boolean;
+  lodBoundaryTransferReady: boolean;
 }
 
 export class InfinityScaleExecutionAdapter {
@@ -65,6 +67,7 @@ export class InfinityScaleExecutionAdapter {
     selectiveCpuReady: true,
     selectiveGpuReady: false,
     gpuPhysicsReady: false,
+    lodBoundaryTransferReady: false,
   };
 
   setCapabilities(capabilities: InfinityScaleExecutionCapabilities): void {
@@ -95,6 +98,7 @@ export class InfinityScaleExecutionAdapter {
       selectiveCpuReady: this.capabilities.selectiveCpuReady,
       selectiveGpuReady: this.capabilities.selectiveGpuReady,
       gpuPhysicsReady: this.capabilities.gpuPhysicsReady,
+      lodBoundaryTransferReady: this.capabilities.lodBoundaryTransferReady,
       entityExecutionReady: true,
       agentMigrationReady: true,
     };
@@ -163,10 +167,16 @@ export class InfinityScaleExecutionAdapter {
       );
     }
 
+    const hasMixedLodBoundary = boundaryReadRelations.some(
+      relation => relation.relation !== "same-level",
+    );
+    const lodBoundaryReady =
+      !hasMixedLodBoundary || this.capabilities.lodBoundaryTransferReady;
+
     const mode: InfinityScaleExecutionMode =
-      this.capabilities.selectiveGpuReady && this.capabilities.gpuPhysicsReady
+      lodBoundaryReady && this.capabilities.selectiveGpuReady && this.capabilities.gpuPhysicsReady
         ? "selective-gpu-ready"
-        : this.capabilities.selectiveCpuReady
+        : lodBoundaryReady && this.capabilities.selectiveCpuReady
           ? "selective-cpu-ready"
           : "advisory";
 
@@ -207,6 +217,7 @@ export class InfinityScaleExecutionAdapter {
       selectiveCpuReady: this.capabilities.selectiveCpuReady,
       selectiveGpuReady: this.capabilities.selectiveGpuReady,
       gpuPhysicsReady: this.capabilities.gpuPhysicsReady,
+      lodBoundaryTransferReady: this.capabilities.lodBoundaryTransferReady,
       entityExecutionReady: true,
       agentMigrationReady: true,
     };
