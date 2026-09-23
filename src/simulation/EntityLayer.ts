@@ -279,6 +279,110 @@ export class EntityLayer {
     return this.lastChunkReconciliation!;
   }
 
+  tickChunks(
+    grid: VoxelGrid,
+    dt: number,
+    context: InfinityScaleChunkExecutionContext,
+  ): void {
+    if (!this.applyChunkReconciliation(grid, context)) return;
+
+    const { W, H, D, buffer: buf } = grid;
+    for (const entity of this.entities.values()) {
+      if (entity.cells.length === 0) continue;
+      if (entity.cells.some(index => {
+        const z = Math.floor(index / (W * H));
+        const rem = index - z * W * H;
+        const y = Math.floor(rem / W);
+        const x = rem - y * W;
+        return !context.containsSimulationCell(x, y, z);
+      })) continue;
+
+      const { genome, cells } = entity;
+      let poolEnergy = 0;
+      for (const index of cells) {
+        poolEnergy += buf[index * CELL_FIELDS + F.ENERGY];
+      }
+      entity.energy = poolEnergy;
+      entity.reproCounter = Math.min(
+        1,
+        poolEnergy / Math.max(1, genome.reproThreshold),
+      );
+
+      entity.age += 1;
+      entity.stage =
+        entity.age < 60 ? 'juvenile' :
+        entity.age < 400 ? 'mature' : 'elder';
+
+      const drain = genome.metabolismRate * cells.length * dt * 60;
+      const drainPer = drain / Math.max(1, cells.length);
+      for (const index of cells) {
+        const base = index * CELL_FIELDS;
+        buf[base + F.ENERGY] = Math.max(0, buf[base + F.ENERGY] - drainPer);
+        buf[base + F.BIO_POTENTIAL] = Math.min(
+          1,
+          buf[base + F.BIO_POTENTIAL] +
+            genome.bioAffinity * 0.001 * dt * 60,
+        );
+      }
+
+      entity.memoryBuffer[entity.memPtr % 8] =
+        entity.energy / Math.max(1, cells.length);
+      entity.memPtr++;
+      const memAvg =
+        entity.memoryBuffer.reduce((a, b) => a + b, 0) / 8;
+
+      for (const index of cells) {
+        const base = index * CELL_FIELDS;
+        const cur = buf[base + F.MEM_FIELD];
+        buf[base + F.MEM_FIELD] =
+          cur * (1 - genome.memoryDecay * dt) +
+          (memAvg / 1000) * genome.memoryDecay * dt;
+
+        if (entity.stage !== 'juvenile') {
+          const sig =
+            genome.signalStrength *
+            (entity.energy / Math.max(1, cells.length)) / 200;
+          buf[base + F.SIGNAL] = Math.min(
+            100,
+            buf[base + F.SIGNAL] + sig * dt * 60,
+          );
+        }
+
+        buf[base + F.ENTITY_ID] = entity.id;
+
+        if (entity.stage === 'elder') {
+          buf[base + F.BIO_POTENTIAL] = Math.max(
+            0,
+            buf[base + F.BIO_POTENTIAL] - 0.001 * dt * 60,
+          );
+        }
+      }
+
+      if (
+        entity.stage === 'mature' &&
+        entity.energy > genome.reproThreshold &&
+        cells.length >= 4
+      ) {
+        this._spawnChild(grid, entity, W, H, D, context);
+      }
+    }
+
+    // Signal decay is local to the simulation ownership set.
+    for (const range of context.simulationRanges) {
+      for (let z = range.minZ; z <= range.maxZ; z++) {
+        for (let y = range.minY; y <= range.maxY; y++) {
+          for (let x = range.minX; x <= range.maxX; x++) {
+            const base = (z * W * H + y * W + x) * CELL_FIELDS;
+            buf[base + F.SIGNAL] = Math.max(
+              0,
+              buf[base + F.SIGNAL] - 0.5 * dt * 60,
+            );
+          }
+        }
+      }
+    }
+  }
+
   get extinctCount(): number { return _extinctCount; }
   get totalSpawned(): number { return _nextId - 1; }
 
@@ -436,7 +540,14 @@ export class EntityLayer {
     }
   }
 
-  private _spawnChild(grid: VoxelGrid, parent: Entity, W: number, H: number, D: number): void {
+  private _spawnChild(
+    grid: VoxelGrid,
+    parent: Entity,
+    W: number,
+    H: number,
+    D: number,
+    context: InfinityScaleChunkExecutionContext | null = null,
+  ): void {
     // Pick a random parent cell and try to seed child in a random adjacent empty location
     const srcIdx = parent.cells[Math.floor(Math.random() * parent.cells.length)];
     const WH = W * H;
@@ -456,8 +567,12 @@ export class EntityLayer {
     const childBase = (nz * WH + ny * W + nx) * CELL_FIELDS;
     const buf = grid.buffer;
 
-    // Only spawn if target is low-bio
-    if (buf[childBase + F.BIO_POTENTIAL] < 0.02) {
+    // Selective execution may only create child state inside the current
+    // simulation ownership set.
+    if (
+      buf[childBase + F.BIO_POTENTIAL] < 0.02 &&
+      (!context || context.containsSimulationCell(nx, ny, nz))
+    ) {
       const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate * this.mutationStrength);
       buf[childBase + F.BIO_POTENTIAL] = 0.15;
       buf[childBase + F.ENERGY]        = parent.genome.reproThreshold * 0.3;
