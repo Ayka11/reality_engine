@@ -112,7 +112,7 @@ export class InfinityScaleExecutionAdapter {
     // may touch one coarser parent or multiple finer children; emit every
     // logical neighbor whose dense footprint can intersect that face.
     for (const chunk of selected) {
-      for (const key of this.resolveFaceNeighbors(chunk, selected)) {
+      for (const key of this.resolveFaceNeighbors(chunk, frame.chunks)) {
         if (!simulationKeys.has(key)) boundaryReadKeys.add(key);
       }
     }
@@ -200,7 +200,7 @@ export class InfinityScaleExecutionAdapter {
 
   private resolveFaceNeighbors(
     chunk: InfinityScaleFramePlan["chunks"][number],
-    selected: InfinityScaleFramePlan["chunks"],
+    candidates: InfinityScaleFramePlan["chunks"],
   ): string[] {
     const out = new Set<string>();
     const level = chunk.chunk.level;
@@ -219,7 +219,7 @@ export class InfinityScaleExecutionAdapter {
     ];
 
     for (const [x, y, z] of faces) {
-      const containing = selected.filter(other => {
+      const containing = candidates.filter(other => {
         const s = 2 ** other.chunk.level;
         const ox = other.chunk.x * s;
         const oy = other.chunk.y * s;
