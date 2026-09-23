@@ -139,6 +139,21 @@ export class EntityLayer {
     return this.lastChunkReconciliation?.commitReady === true;
   }
 
+  /**
+   * Analyze the bounded execution workset without mutating entity identity.
+   *
+   * This is the synchronization barrier before EntityLayer can become a
+   * selective execution layer. Boundary-connected components remain pending
+   * until their complete connected component is resident in the workset.
+   */
+  prepareChunkExecution(
+    grid: VoxelGrid,
+    context: InfinityScaleChunkExecutionContext,
+  ): EntityReconciliationPlan {
+    this.analyzeChunks(grid, context);
+    return this.lastChunkReconciliation!;
+  }
+
   get extinctCount(): number { return _extinctCount; }
   get totalSpawned(): number { return _nextId - 1; }
 
