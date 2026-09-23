@@ -74,12 +74,28 @@ export class InfinityScaleLODTransfer {
     source: ReadonlyArray<number>,
     target: number[],
   ): InfinityScaleLODTransferResult {
-    if (source.length !== target.length) {
-      throw new Error("Infinity Scale same-level transfer requires equal cell vectors");
+    if (source.length !== CELL_FIELDS || target.length !== CELL_FIELDS) {
+      throw new Error(
+        `Infinity Scale cell transfer requires exactly ${CELL_FIELDS} fields`,
+      );
     }
 
     const transferredFields: number[] = [];
     const skippedFields: number[] = [];
+
+    for (const target of targets) {
+      if (target.length !== CELL_FIELDS) {
+        throw new Error(
+          `Infinity Scale prolongation target requires exactly ${CELL_FIELDS} fields`,
+        );
+      }
+    }
+
+    if (source.length !== CELL_FIELDS) {
+      throw new Error(
+        `Infinity Scale prolongation source requires exactly ${CELL_FIELDS} fields`,
+      );
+    }
 
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
@@ -165,6 +181,20 @@ export class InfinityScaleLODTransfer {
     if (sources.length !== expected) {
       throw new Error(
         `Infinity Scale restriction requires ${expected} source cells; received ${sources.length}`,
+      );
+    }
+
+    for (const source of sources) {
+      if (source.length !== CELL_FIELDS) {
+        throw new Error(
+          `Infinity Scale restriction source requires exactly ${CELL_FIELDS} fields`,
+        );
+      }
+    }
+
+    if (target.length !== CELL_FIELDS) {
+      throw new Error(
+        `Infinity Scale restriction target requires exactly ${CELL_FIELDS} fields`,
       );
     }
 
