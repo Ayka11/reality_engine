@@ -159,16 +159,6 @@ export class SimulationEngine {
             clampedDt,
             executionContext,
           );
-          this.entityLayer.prepareChunkExecution(
-            this.grid,
-            executionContext,
-          );
-          // Commit only ownership-safe closed components. Boundary entities
-          // remain pending and are never treated as extinct by a partial workset.
-          this.entityLayer.applyChunkReconciliation(
-            this.grid,
-            executionContext,
-          );
           this.entityLayer.tickChunks(
             this.grid,
             clampedDt,
