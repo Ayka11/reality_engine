@@ -22,6 +22,8 @@ export class InfinityScaleChunkExecutionContext {
   readonly simulationCellCount: number;
   readonly readCellCount: number;
   readonly overlappingSimulationRangeCount: number;
+  readonly overlappingReadRangeCount: number;
+  readonly uniqueBoundaryReadCellCount: number;
 
   constructor(
     plan: InfinityScaleExecutionPlan,
@@ -41,11 +43,15 @@ export class InfinityScaleChunkExecutionContext {
     this.readRanges = plan.boundaryReadChunks.map(key =>
       this.chunkRange(key),
     );
+    this.overlappingReadRangeCount = this.countOverlappingRanges(this.readRanges);
 
     this.simulationCellCount = this.countUniqueCells(this.simulationRanges);
-    this.readCellCount = this.readRanges.reduce(
-      (sum, range) => sum + this.rangeVolume(range), 0,
+    this.uniqueBoundaryReadCellCount = this.countUniqueCells(
+      this.readRanges.filter((range) => !this.isFullyContainedBySimulation(range)),
     );
+    // readCellCount is the unique halo footprint, excluding cells already
+    // owned by simulation. This is the actual boundary transfer footprint.
+    this.readCellCount = this.uniqueBoundaryReadCellCount;
   }
 
   containsSimulationCell(x: number, y: number, z: number): boolean {
@@ -75,6 +81,15 @@ export class InfinityScaleChunkExecutionContext {
       minZ: Math.max(0, z),
       maxZ: Math.min(this.gridDepth - 1, z + this.chunkSize - 1),
     };
+  }
+
+  private isFullyContainedBySimulation(range: ExecutionCellRange): boolean {
+    for (let z = range.minZ; z <= range.maxZ; z++)
+    for (let y = range.minY; y <= range.maxY; y++)
+    for (let x = range.minX; x <= range.maxX; x++) {
+      if (!this.containsSimulationCell(x, y, z)) return false;
+    }
+    return true;
   }
 
   private countOverlappingRanges(ranges: ExecutionCellRange[]): number {
