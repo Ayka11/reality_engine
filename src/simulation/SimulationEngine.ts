@@ -182,12 +182,6 @@ export class SimulationEngine {
           clampedDt * nSteps,
           executionContext!,
         );
-        const migrationRequests = this.agents.consumeMigrationRequests();
-        this.agents.applyMigrationRequests(
-          this.grid,
-          migrationRequests,
-          executionContext!,
-        );
         this.entityLayer.tickChunks(
           this.grid,
           clampedDt * nSteps,
@@ -277,6 +271,16 @@ export class SimulationEngine {
         }
       }
       this.grid.syncDenseToChunks();
+    }
+
+    // Agent migrations cross ownership boundaries only at the frame barrier.
+    if (frameContext) {
+      const migrationRequests = this.agents.consumeMigrationRequests();
+      this.agents.applyMigrationRequests(
+        this.grid,
+        migrationRequests,
+        frameContext,
+      );
     }
 
     this._detectCausality(frameContext);
