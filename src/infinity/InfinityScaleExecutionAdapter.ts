@@ -14,6 +14,17 @@ export interface InfinityScaleExecutionChunk {
   distance: number;
 }
 
+export type InfinityScaleBoundaryRelation =
+  | "same-level"
+  | "coarse-to-fine"
+  | "fine-to-coarse";
+
+export interface InfinityScaleBoundaryReadRelation {
+  sourceChunk: string;
+  targetChunk: string;
+  relation: InfinityScaleBoundaryRelation;
+}
+
 export interface InfinityScaleExecutionPlan {
   revision: number;
   mode: InfinityScaleExecutionMode;
@@ -29,6 +40,7 @@ export interface InfinityScaleExecutionPlan {
    */
   boundaryReadChunks: string[];
   boundaryReadCount: number;
+  boundaryReadRelations: InfinityScaleBoundaryReadRelation[];
   simulationCellCount: number;
   boundaryReadCellCount: number;
   localExecutionLayers: string[];
@@ -82,6 +94,7 @@ export class InfinityScaleExecutionAdapter {
       maxSimulatingChunks: 0,
       boundaryReadChunks: [],
       boundaryReadCount: 0,
+      boundaryReadRelations: [],
       simulationCellCount: 0,
       boundaryReadCellCount: 0,
       localExecutionLayers: [],
@@ -107,13 +120,17 @@ export class InfinityScaleExecutionAdapter {
 
     const simulationKeys = new Set(selected.map(chunk => chunk.key));
     const boundaryReadKeys = new Set<string>();
+    const boundaryReadRelations: InfinityScaleBoundaryReadRelation[] = [];
 
     // Resolve the six face neighbors in physical space. At mixed LOD, a face
     // may touch one coarser parent or multiple finer children; emit every
     // logical neighbor whose dense footprint can intersect that face.
     for (const chunk of selected) {
-      for (const key of this.resolveFaceNeighbors(chunk, frame.chunks)) {
-        if (!simulationKeys.has(key)) boundaryReadKeys.add(key);
+      for (const dependency of this.resolveFaceNeighbors(chunk, frame.chunks)) {
+        boundaryReadKeys.add(dependency.targetChunk);
+        if (!simulationKeys.has(dependency.targetChunk)) {
+          boundaryReadRelations.push(dependency);
+        }
       }
     }
 
@@ -134,6 +151,11 @@ export class InfinityScaleExecutionAdapter {
         maxSimulatingChunks: frame.maxSimulatingChunks,
         boundaryReadChunks: [...boundaryReadKeys].sort(),
         boundaryReadCount: boundaryReadKeys.size,
+        boundaryReadRelations: boundaryReadRelations.sort((a, b) =>
+          a.sourceChunk.localeCompare(b.sourceChunk) ||
+          a.targetChunk.localeCompare(b.targetChunk) ||
+          a.relation.localeCompare(b.relation),
+        ),
         simulationCellCount: 0,
         boundaryReadCellCount: 0,
       },
@@ -201,8 +223,8 @@ export class InfinityScaleExecutionAdapter {
   private resolveFaceNeighbors(
     chunk: InfinityScaleFramePlan["chunks"][number],
     candidates: InfinityScaleFramePlan["chunks"],
-  ): string[] {
-    const out = new Set<string>();
+  ): InfinityScaleBoundaryReadRelation[] {
+    const out = new Map<string, InfinityScaleBoundaryReadRelation>();
     const level = chunk.chunk.level;
     const scale = 2 ** level;
     const baseX = chunk.chunk.x * scale;
@@ -232,7 +254,20 @@ export class InfinityScaleExecutionAdapter {
       });
 
       if (containing.length) {
-        for (const other of containing) out.add(other.key);
+        for (const other of containing) {
+          const relation: InfinityScaleBoundaryRelation =
+            other.chunk.level === level
+              ? "same-level"
+              : level < other.chunk.level
+                ? "coarse-to-fine"
+                : "fine-to-coarse";
+          const key = `${other.key}|${relation}`;
+          out.set(key, {
+            sourceChunk: chunk.key,
+            targetChunk: other.key,
+            relation,
+          });
+        }
         continue;
       }
 
@@ -241,10 +276,15 @@ export class InfinityScaleExecutionAdapter {
       const nx = Math.floor(x / scale);
       const ny = Math.floor(y / scale);
       const nz = Math.floor(z / scale);
-      out.add(`${level}:${nx},${ny},${nz}`);
+      const targetChunk = `${level}:${nx},${ny},${nz}`;
+      out.set(`${targetChunk}|same-level`, {
+        sourceChunk: chunk.key,
+        targetChunk,
+        relation: "same-level",
+      });
     }
 
-    return [...out];
+    return [...out.values()];
   }
 
   getPlan(): InfinityScaleExecutionPlan {
@@ -253,6 +293,7 @@ export class InfinityScaleExecutionAdapter {
       observer: { ...this.plan.observer },
       chunks: this.plan.chunks.map(chunk => ({ ...chunk })),
       boundaryReadChunks: [...this.plan.boundaryReadChunks],
+      boundaryReadRelations: this.plan.boundaryReadRelations.map(relation => ({ ...relation })),
     };
   }
 
