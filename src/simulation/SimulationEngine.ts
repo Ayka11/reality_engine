@@ -24,6 +24,7 @@ import {
   advanceInfinityScaleGlobalFrame,
   assertInfinityScaleGlobalFramePlan,
   beginInfinityScaleGlobalFrame,
+  validateInfinityScaleGlobalFrameCommit,
   type InfinityScaleGlobalExecutionFrame,
 } from '../infinity/InfinityScaleGlobalExecutionFrame';
 
@@ -291,9 +292,14 @@ export class SimulationEngine {
     this._detectCausality(frameContext);
 
     // Boundary reconciliation is the single commit barrier for deferred
-    // cross-workset state. Chemistry transfers are committed only after all
-    // local chunk work has completed.
+    // cross-workset state. The plan must remain identical from frame start
+    // through commit; a changed ownership set is rejected rather than merged
+    // against stale local results.
     if (frameState && frameContext) {
+      if (!selectivePlan) {
+        throw new Error('Infinity Scale frame lost its execution plan');
+      }
+      validateInfinityScaleGlobalFrameCommit(frameState, selectivePlan);
       this.chemLayer.commitPendingDensityTransfers(this.grid, frameContext);
       frameState = advanceInfinityScaleGlobalFrame(frameState, 'local-commit');
       frameState = advanceInfinityScaleGlobalFrame(frameState, 'boundary-reconciliation');
