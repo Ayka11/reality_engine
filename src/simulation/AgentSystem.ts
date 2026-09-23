@@ -53,7 +53,16 @@ export class AgentSystem {
   private pendingMigrations: AgentMigrationRequest[] = [];
 
   consumeMigrationRequests(): AgentMigrationRequest[] {
-    const requests = this.pendingMigrations.map(request => ({
+    const deduped = new Map<string, AgentMigrationRequest>();
+    for (const request of this.pendingMigrations) {
+      const key = [
+        request.agentId,
+        request.from.join(','),
+        request.to.join(','),
+      ].join('|');
+      deduped.set(key, request);
+    }
+    const requests = [...deduped.values()].map(request => ({
       ...request,
       from: [...request.from] as [number, number, number],
       to: [...request.to] as [number, number, number],
