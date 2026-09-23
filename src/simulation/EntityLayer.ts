@@ -2,7 +2,7 @@ import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 import { EntityChunkConnectivity, type EntityChunkConnectivityResult } from '../infinity/EntityChunkConnectivity';
-import { EntityChunkReconciliation, type EntityReconciliationPlan } from '../infinity/EntityChunkReconciliation';
+import { EntityChunkReconciliation, type EntityReconciliationPlan, type EntityReconciliationCommitRecord } from '../infinity/EntityChunkReconciliation';
 
 export interface EntityGenome {
   metabolismRate: number;    // 0.1..2.0 — energy consumed per tick
@@ -141,6 +141,19 @@ export class EntityLayer {
 
   canCommitChunkReconciliation(): boolean {
     return this.lastChunkReconciliation?.commitReady === true;
+  }
+
+  getChunkReconciliationCommitRecords(
+    grid: VoxelGrid,
+    context: InfinityScaleChunkExecutionContext,
+  ): EntityReconciliationCommitRecord[] | null {
+    const connectivity = this.chunkConnectivity.analyze(grid, context);
+    const plan = this.chunkReconciliation.plan(
+      connectivity.components,
+      this.getEntities(),
+      context.simulationCellCount >= grid.size && context.readCellCount === 0,
+    );
+    return this.chunkReconciliation.commitRecords(plan, connectivity.components);
   }
 
   /**
