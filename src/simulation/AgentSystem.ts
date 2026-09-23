@@ -113,11 +113,18 @@ export class AgentSystem {
       // Replicate when well-fed
       if (agent.energy > 300 && this.agents.size < this.maxAgents) {
         agent.energy *= 0.55;
+        const childX = Math.max(0, Math.min(grid.W - 1, agent.x + Math.round(Math.random() * 4 - 2)));
+        const childY = Math.max(0, Math.min(grid.H - 1, agent.y + Math.round(Math.random() * 4 - 2)));
+        const childZ = Math.max(0, Math.min(grid.D - 1, agent.z + Math.round(Math.random() * 2 - 1)));
+        if (context && !context.containsSimulationCell(childX, childY, childZ)) {
+          agent.energy /= 0.55;
+          continue;
+        }
         const childBehavior = Math.random() < 0.15 ? randomBehavior() : agent.behavior;
         this._spawn(
-          Math.max(0, Math.min(grid.W-1, agent.x + Math.round(Math.random()*4-2))),
-          Math.max(0, Math.min(grid.H-1, agent.y + Math.round(Math.random()*4-2))),
-          Math.max(0, Math.min(grid.D-1, agent.z + Math.round(Math.random()*2-1))),
+          childX,
+          childY,
+          childZ,
           childBehavior, agent.energy * 0.6,
         );
         agent.children++;
@@ -190,8 +197,10 @@ export class AgentSystem {
         if (e > bestE) { bestE=e; bx=nx; by=ny; bz=nz; }
       }
       if (bx !== agent.x || by !== agent.y || bz !== agent.z) {
-        grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
-        agent.x=bx; agent.y=by; agent.z=bz;
+        if (!context || context.containsSimulationCell(bx, by, bz)) {
+          grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
+          agent.x=bx; agent.y=by; agent.z=bz;
+        }
       }
     }
   }
