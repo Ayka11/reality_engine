@@ -216,6 +216,7 @@ export class SimulationEngine {
             this.laws.params,
             this.laws.activeProcessMask,
             executionContext,
+            boundarySnapshot,
           );
           this.entropyLayer.tickChunks(
             this.grid,
