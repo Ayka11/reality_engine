@@ -347,11 +347,18 @@ export class SimulationEngine {
     for (let x = 0; x < W; x++) {
       const cell = grid.cell(x, y, z);
       const lin  = z * H * W + y * W + x;
+      const owned = !context || context.containsSimulationCell(x, y, z);
       const delta = cell.energy - this.prevEnergy[lin];
-      if (Math.abs(delta) > WORLD.CAUSALITY_THRESHOLD) {
+
+      // Causality is a simulation-owned write: selective execution may only
+      // emit events and mutate CAUSALITY_ID for cells in its simulation set.
+      // The energy baseline is still refreshed for every cell so inactive
+      // cells do not accumulate a false spike while outside the workset.
+      if (owned && Math.abs(delta) > WORLD.CAUSALITY_THRESHOLD) {
         this.causal.log(this._tick, x, y, z, lin, 'energy_spike', Math.round(delta));
         cell.set(F.CAUSALITY_ID, this.causal.recent(1)[0]?.id ?? 0);
       }
+
       this.prevEnergy[lin] = cell.energy;
     }
   }
