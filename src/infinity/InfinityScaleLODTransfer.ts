@@ -83,20 +83,6 @@ export class InfinityScaleLODTransfer {
     const transferredFields: number[] = [];
     const skippedFields: number[] = [];
 
-    for (const target of targets) {
-      if (target.length !== CELL_FIELDS) {
-        throw new Error(
-          `Infinity Scale prolongation target requires exactly ${CELL_FIELDS} fields`,
-        );
-      }
-    }
-
-    if (source.length !== CELL_FIELDS) {
-      throw new Error(
-        `Infinity Scale prolongation source requires exactly ${CELL_FIELDS} fields`,
-      );
-    }
-
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
       if (policy === "intensive" || policy === "discrete") {
@@ -137,6 +123,20 @@ export class InfinityScaleLODTransfer {
       throw new Error(
         `Infinity Scale prolongation requires ${expected} target cells; received ${targets.length}`,
       );
+    }
+
+    if (source.length !== CELL_FIELDS) {
+      throw new Error(
+        `Infinity Scale prolongation source requires exactly ${CELL_FIELDS} fields`,
+      );
+    }
+
+    for (const target of targets) {
+      if (target.length !== CELL_FIELDS) {
+        throw new Error(
+          `Infinity Scale prolongation target requires exactly ${CELL_FIELDS} fields`,
+        );
+      }
     }
 
     const transferredFields: number[] = [];
