@@ -1,5 +1,7 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
+import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
+import { EntityChunkConnectivity, type EntityChunkConnectivityResult } from '../infinity/EntityChunkConnectivity';
 
 export interface EntityGenome {
   metabolismRate: number;    // 0.1..2.0 — energy consumed per tick
@@ -107,6 +109,20 @@ export class EntityLayer {
   private entities: Map<number, Entity> = new Map();
   private bioThreshold = 0.05;
   mutationStrength = 1.0;
+  private readonly chunkConnectivity = new EntityChunkConnectivity(this.bioThreshold);
+  private lastChunkConnectivity: EntityChunkConnectivityResult | null = null;
+
+  analyzeChunks(
+    grid: VoxelGrid,
+    context: InfinityScaleChunkExecutionContext,
+  ): EntityChunkConnectivityResult {
+    this.lastChunkConnectivity = this.chunkConnectivity.analyze(grid, context);
+    return this.lastChunkConnectivity;
+  }
+
+  getChunkConnectivityDiagnostics(): EntityChunkConnectivityResult | null {
+    return this.lastChunkConnectivity;
+  }
 
   get extinctCount(): number { return _extinctCount; }
   get totalSpawned(): number { return _nextId - 1; }
