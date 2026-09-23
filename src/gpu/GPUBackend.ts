@@ -451,11 +451,10 @@ export class GPUBackend {
     if (ranges.length > 256) throw new Error('GPU selective execution supports at most 256 ranges per dispatch');
     this.device.queue.writeBuffer(this.rangeBuf, 0, table.buffer, 0, table.byteLength);
 
-    const params = new ArrayBuffer(PARAMS_FLOATS * 4);
-    const u32 = new Uint32Array(params);
-    u32[20] = context ? ranges.length : 0;
-    u32[21] = context ? totalCells : 0;
-    this.device.queue.writeBuffer(this.paramsBuf!, 80, new Uint32Array(params, 80, 2).buffer);
+    const rangeMeta = new Uint32Array(2);
+    rangeMeta[0] = context ? ranges.length : 0;
+    rangeMeta[1] = context ? totalCells : 0;
+    this.device.queue.writeBuffer(this.paramsBuf!, 80, rangeMeta.buffer, 0, rangeMeta.byteLength);
 
     const enc = this.device.createCommandEncoder();
     for (let s = 0; s < nSteps; s++) {
