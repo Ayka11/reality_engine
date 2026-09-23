@@ -204,19 +204,26 @@ export class EntityLayer {
         entity = this.entities.get(record.entityId);
         if (!entity) return false;
       } else {
+        const source = record.sourceEntityIds.length > 0
+          ? record.sourceEntityIds
+              .map(id => this.entities.get(id))
+              .find(candidate => !!candidate)
+          : undefined;
         const id = _nextId++;
         entity = {
           id,
           cells: [],
           centroid: record.centroid,
-          genome: defaultGenome(),
-          age: 0,
+          genome: source ? { ...source.genome } : defaultGenome(),
+          age: source && record.continuity === 'split' ? source.age : 0,
           energy: 0,
-          stage: 'juvenile',
-          memoryBuffer: new Float32Array(8),
-          memPtr: 0,
-          symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
-          colorRgb: [
+          stage: source && record.continuity === 'split' ? source.stage : 'juvenile',
+          memoryBuffer: source && record.continuity === 'split'
+            ? new Float32Array(source.memoryBuffer)
+            : new Float32Array(8),
+          memPtr: source && record.continuity === 'split' ? source.memPtr : 0,
+          symbol: source?.symbol ?? SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+          colorRgb: source ? [...source.colorRgb] as [number, number, number] : [
             0.3 + Math.random() * 0.7,
             0.3 + Math.random() * 0.7,
             0.3 + Math.random() * 0.7,
