@@ -82,6 +82,9 @@ export class SimulationEngine {
       selectiveCpuReady: true,
       selectiveGpuReady: this._gpuReady,
       gpuPhysicsReady: this._gpuReady,
+      // Mixed-LOD prolongation/restriction is described by the execution
+      // contract but is not yet applied to field values by the dense solver.
+      lodBoundaryTransferReady: false,
     };
   }
 
