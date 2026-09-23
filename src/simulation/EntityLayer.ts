@@ -120,9 +120,13 @@ export class EntityLayer {
     context: InfinityScaleChunkExecutionContext,
   ): EntityChunkConnectivityResult {
     this.lastChunkConnectivity = this.chunkConnectivity.analyze(grid, context);
+    const fullDomainCovered =
+      context.simulationCellCount >= grid.size &&
+      context.readCellCount === 0;
     this.lastChunkReconciliation = this.chunkReconciliation.plan(
       this.lastChunkConnectivity.components,
       this.getEntities(),
+      fullDomainCovered,
     );
     return this.lastChunkConnectivity;
   }
