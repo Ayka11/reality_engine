@@ -299,8 +299,11 @@ export class SimulationEngine {
     const metrics = this._worldMetrics();
 
     if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'global-control');
-    this.laws.tick(metrics);
-    this.worldEvents.autoTick(this.grid, this._tick, eventContext);
+    // LawEngine and WorldEvents are frame-level global control systems.
+    // Advance their elapsed-time state by the complete batched interval rather
+    // than aging them once per render frame.
+    this.laws.tick(metrics, nSteps);
+    this.worldEvents.autoTick(this.grid, this._tick, eventContext, nSteps);
 
     if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'observation');
     this.recorder.tick(this.grid, this._tick);
