@@ -11,7 +11,18 @@ export const CHEM = {
 } as const;
 export type ChemState = typeof CHEM[keyof typeof CHEM];
 
+export interface ChemDensityTransfer {
+  targetCell: number;
+  delta: number;
+}
+
 export class ChemLayer {
+  private pendingDensityTransfers = new Map<number, number>();
+
+  getPendingDensityTransferCount(): number {
+    return this.pendingDensityTransfers.size;
+  }
+
   tick(grid: VoxelGrid, dt: number): void {
     this.tickRegion(grid, dt, null);
   }
@@ -32,6 +43,20 @@ export class ChemLayer {
     const { W, H, D, buffer: buf } = grid;
     const WH = W * H;
     const densityTransfers = context ? new Map<number, number>() : null;
+
+    if (context) {
+      for (const [index, delta] of this.pendingDensityTransfers) {
+        const z = Math.floor(index / WH);
+        const rem = index - z * WH;
+        const y = Math.floor(rem / W);
+        const x = rem - y * W;
+        if (context.containsSimulationCell(x, y, z)) {
+          const base = index * CELL_FIELDS;
+          buf[base + F.DENSITY] = Math.max(0, Math.min(1, buf[base + F.DENSITY] + delta));
+          this.pendingDensityTransfers.delete(index);
+        }
+      }
+    }
 
     for (let z = 0; z < D; z++)
     for (let y = 0; y < H; y++)
@@ -97,7 +122,17 @@ export class ChemLayer {
           if (buf[nb + F.CHEM_STATE] === CHEM.SOLID) {
             const transfer = 0.002 * dt * 60;
             if (densityTransfers) {
-              densityTransfers.set(ni, (densityTransfers.get(ni) ?? 0) - transfer);
+              const nx = ni % W;
+              const ny = Math.floor((ni % WH) / W);
+              const nz = Math.floor(ni / WH);
+              if (context?.containsSimulationCell(nx, ny, nz)) {
+                densityTransfers.set(ni, (densityTransfers.get(ni) ?? 0) - transfer);
+              } else {
+                this.pendingDensityTransfers.set(
+                  ni,
+                  (this.pendingDensityTransfers.get(ni) ?? 0) - transfer,
+                );
+              }
               densityTransfers.set(i, (densityTransfers.get(i) ?? 0) + transfer * 0.5);
             } else {
               buf[nb + F.DENSITY]   = Math.max(0, buf[nb + F.DENSITY] - transfer);
