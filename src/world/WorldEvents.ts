@@ -2,6 +2,7 @@ import { VoxelGrid } from '../core/VoxelGrid';
 import { F } from '../core/CellState';
 import { MAT } from '../materials/MaterialDef';
 import { CHEM } from '../chemistry/ChemLayer';
+import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 
 export type EventType =
   | 'meteor_strike'
@@ -40,14 +41,19 @@ export class WorldEvents {
   private history: WorldEvent[] = [];
   private _nextAuto = 600; // ticks until next random event
 
-  trigger(grid: VoxelGrid, type: EventType, tick: number): WorldEvent {
+  trigger(
+    grid: VoxelGrid,
+    type: EventType,
+    tick: number,
+    context: InfinityScaleChunkExecutionContext | null = null,
+  ): WorldEvent {
     switch (type) {
-      case 'meteor_strike':    this._meteorStrike(grid);    break;
-      case 'solar_flare':      this._solarFlare(grid);      break;
-      case 'radiation_storm':  this._radiationStorm(grid);  break;
-      case 'mutation_wave':    this._mutationWave(grid);    break;
-      case 'entropy_collapse': this._entropyCollapse(grid); break;
-      case 'tectonic_shift':   this._tectonicShift(grid);  break;
+      case 'meteor_strike':    this._meteorStrike(grid, context);    break;
+      case 'solar_flare':      this._solarFlare(grid, context);      break;
+      case 'radiation_storm':  this._radiationStorm(grid, context);  break;
+      case 'mutation_wave':    this._mutationWave(grid, context);    break;
+      case 'entropy_collapse': this._entropyCollapse(grid, context); break;
+      case 'tectonic_shift':   this._tectonicShift(grid, context);  break;
     }
     const ev: WorldEvent = {
       type, tick,
@@ -60,7 +66,11 @@ export class WorldEvents {
   }
 
   // Fires random events at intervals — call from SimulationEngine.step()
-  autoTick(grid: VoxelGrid, tick: number): WorldEvent | null {
+  autoTick(
+    grid: VoxelGrid,
+    tick: number,
+    context: InfinityScaleChunkExecutionContext | null = null,
+  ): WorldEvent | null {
     this._nextAuto--;
     if (this._nextAuto > 0) return null;
     // Randomize next interval: 400..1200 ticks
@@ -70,14 +80,14 @@ export class WorldEvents {
       'mutation_wave','entropy_collapse','tectonic_shift',
     ];
     const type = types[Math.floor(Math.random() * types.length)];
-    return this.trigger(grid, type, tick);
+    return this.trigger(grid, type, tick, context);
   }
 
   recent(n: number): WorldEvent[] { return this.history.slice(0, n); }
 
   // ── Event implementations ─────────────────────────────────────────────────
 
-  private _meteorStrike(grid: VoxelGrid) {
+  private _meteorStrike(grid: VoxelGrid, context: InfinityScaleChunkExecutionContext | null = null) {
     const ix = Math.floor(Math.random() * grid.W);
     const iy = Math.floor(Math.random() * grid.H);
     const iz = grid.D - 1;
@@ -97,11 +107,12 @@ export class WorldEvents {
     }
   }
 
-  private _solarFlare(grid: VoxelGrid) {
+  private _solarFlare(grid: VoxelGrid, context: InfinityScaleChunkExecutionContext | null = null) {
     const topLayers = Math.floor(grid.D * 0.3);
     for (let z = grid.D - topLayers; z < grid.D; z++)
     for (let y = 0; y < grid.H; y++)
     for (let x = 0; x < grid.W; x++) {
+      if (context && !context.containsSimulationCell(x, y, z)) continue;
       const cell = grid.cell(x, y, z);
       cell.energy      = Math.min(9999, cell.energy + 200 + Math.random()*300);
       cell.temperature = Math.min(9999, cell.temperature + 150 + Math.random()*200);
@@ -109,9 +120,14 @@ export class WorldEvents {
     }
   }
 
-  private _radiationStorm(grid: VoxelGrid) {
+  private _radiationStorm(grid: VoxelGrid, context: InfinityScaleChunkExecutionContext | null = null) {
     const n = grid.size;
     for (let i = 0; i < n; i++) {
+      const z = Math.floor(i / (grid.W * grid.H));
+      const rem = i - z * grid.W * grid.H;
+      const y = Math.floor(rem / grid.W);
+      const x = rem - y * grid.W;
+      if (context && !context.containsSimulationCell(x, y, z)) continue;
       const cell = grid.cellAt(i);
       cell.entropy     = Math.min(1, cell.entropy + 0.02 + Math.random()*0.04);
       cell.energy      = Math.min(9999, cell.energy + Math.random()*30);
@@ -119,10 +135,11 @@ export class WorldEvents {
     }
   }
 
-  private _mutationWave(grid: VoxelGrid) {
+  private _mutationWave(grid: VoxelGrid, context: InfinityScaleChunkExecutionContext | null = null) {
     const n = grid.size;
     for (let i = 0; i < n; i++) {
       const cell = grid.cellAt(i);
+      if (context && !context.containsSimulationCell(x, y, z)) continue;
       if (cell.bioPotential > 0.1) {
         cell.bioPotential = Math.min(1, cell.bioPotential + 0.15 + Math.random()*0.2);
         cell.information  = Math.min(999, cell.information + 30 + Math.random()*50);
@@ -131,13 +148,14 @@ export class WorldEvents {
     }
   }
 
-  private _entropyCollapse(grid: VoxelGrid) {
+  private _entropyCollapse(grid: VoxelGrid, context: InfinityScaleChunkExecutionContext | null = null) {
     // Random region — entropy drops sharply, crystallization occurs
     const cx = Math.floor(4 + Math.random()*(grid.W-8));
     const cy = Math.floor(4 + Math.random()*(grid.H-8));
     const cz = Math.floor(Math.random()*grid.D);
     for (let dz=-6;dz<=6;dz++) for (let dy=-6;dy<=6;dy++) for (let dx=-6;dx<=6;dx++) {
       if (dx*dx+dy*dy+dz*dz>36 || !grid.inBounds(cx+dx,cy+dy,cz+dz)) continue;
+      if (context && !context.containsSimulationCell(cx+dx, cy+dy, cz+dz)) continue;
       const cell = grid.cell(cx+dx,cy+dy,cz+dz);
       cell.entropy  = Math.max(0, cell.entropy  - 0.3 - Math.random()*0.2);
       cell.density  = Math.min(1, cell.density  + 0.1);
@@ -146,7 +164,7 @@ export class WorldEvents {
     }
   }
 
-  private _tectonicShift(grid: VoxelGrid) {
+  private _tectonicShift(grid: VoxelGrid, context: InfinityScaleChunkExecutionContext | null = null) {
     // Shear a horizontal slice — shift density and energy by one column
     const shiftZ = Math.floor(Math.random() * grid.D);
     const shift  = Math.random() < 0.5 ? 1 : -1;
