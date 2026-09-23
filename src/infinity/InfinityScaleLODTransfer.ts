@@ -260,6 +260,18 @@ export class InfinityScaleLODTransfer {
       );
     }
 
+    const expectedReadOperation =
+      spec.relation === "same-level"
+        ? "copy"
+        : spec.relation === "coarse-to-fine"
+          ? "restriction"
+          : "prolongation";
+    if (spec.readOperation !== expectedReadOperation) {
+      throw new Error(
+        `Infinity Scale boundary read operation mismatch: ${spec.readOperation} !== ${expectedReadOperation}`,
+      );
+    }
+
     const expectedRatio = 2 ** Math.abs(spec.sourceLevel - spec.targetLevel);
     if (spec.refinementRatio !== expectedRatio) {
       throw new Error(

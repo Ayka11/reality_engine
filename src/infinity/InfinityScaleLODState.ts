@@ -75,8 +75,12 @@ export class InfinityScaleLODState {
     baseX: number,
     baseY: number,
     baseZ: number,
-  ): Float32Array {
-    const state = this.ensureChunk(key, level);
+  ): Float32Array | null {
+    const state = this.states.get(key);
+    if (!state) return null;
+    if (state.level !== level) {
+      throw new Error(`Infinity Scale LOD chunk level mismatch for ${key}`);
+    }
     const [cx, cy, cz] = parseChunkKey(key);
     const scale = state.scale;
 

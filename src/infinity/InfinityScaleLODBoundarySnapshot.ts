@@ -4,6 +4,7 @@ import {
   type InfinityScaleLODChunkState,
 } from "./InfinityScaleLODState";
 import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
+import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
 
 export interface InfinityScaleLODTransferSample {
   sourceChunk: string;
@@ -44,6 +45,7 @@ export class InfinityScaleLODBoundarySnapshot {
     state: InfinityScaleLODState,
     specs: InfinityScaleBoundaryTransferSpec[],
     revision: number,
+    chunkSize = 32,
   ): InfinityScaleLODBoundarySnapshot {
     const sourceKeys = new Set<string>();
     for (const spec of specs) sourceKeys.add(spec.targetChunk);
@@ -54,7 +56,7 @@ export class InfinityScaleLODBoundarySnapshot {
       if (source) chunks.push(source);
     }
 
-    return new InfinityScaleLODBoundarySnapshot(specs.map(spec => ({ ...spec })), chunks, revision);
+    return new InfinityScaleLODBoundarySnapshot(specs.map(spec => ({ ...spec })), chunks, revision, chunkSize);
   }
 
   hasSourceChunk(key: string): boolean {
@@ -76,31 +78,74 @@ export class InfinityScaleLODBoundarySnapshot {
     const [x, y, z] = targetCell;
     const [cx, cy, cz] = parseChunkKey(spec.targetChunk);
     const originScale = source.scale;
-    const originX = cx * 32 * originScale;
-    const originY = cy * 32 * originScale;
-    const originZ = cz * 32 * originScale;
+    const originX = cx * this.chunkSize * originScale;
+    const originY = cy * this.chunkSize * originScale;
+    const originZ = cz * this.chunkSize * originScale;
 
     const lx = Math.floor((x - originX) / originScale);
     const ly = Math.floor((y - originY) / originScale);
     const lz = Math.floor((z - originZ) / originScale);
 
     if (
-      lx < 0 || lx >= 32 ||
-      ly < 0 || ly >= 32 ||
-      lz < 0 || lz >= 32
+      lx < 0 || lx >= this.chunkSize ||
+      ly < 0 || ly >= this.chunkSize ||
+      lz < 0 || lz >= this.chunkSize
     ) return null;
 
-    const offset = ((lz * 32 * 32) + ly * 32 + lx) * CELL_FIELDS;
+    const offset = ((lz * this.chunkSize * this.chunkSize) + ly * this.chunkSize + lx) * CELL_FIELDS;
     const out = new Float32Array(CELL_FIELDS);
 
-    if (spec.operation === "copy" || spec.operation === "prolongation") {
+    if (spec.readOperation === "copy" || spec.readOperation === "prolongation") {
       out.set(source.cells.subarray(offset, offset + CELL_FIELDS));
       return out;
     }
 
-    // A restriction sample requires a complete fine block. A single base
-    // target coordinate cannot safely synthesize that block from a coarse
-    // source, so fail closed rather than inventing a value.
+    if (spec.readOperation === "restriction") {
+      const [sx, sy, sz] = parseChunkKey(spec.sourceChunk);
+      const localScale = 2 ** spec.sourceLevel;
+      const localOriginX = sx * this.chunkSize * localScale;
+      const localOriginY = sy * this.chunkSize * localScale;
+      const localOriginZ = sz * this.chunkSize * localScale;
+      const localCellX = Math.max(0, Math.min(this.chunkSize - 1, Math.floor((x - localOriginX) / localScale)));
+      const localCellY = Math.max(0, Math.min(this.chunkSize - 1, Math.floor((y - localOriginY) / localScale)));
+      const localCellZ = Math.max(0, Math.min(this.chunkSize - 1, Math.floor((z - localOriginZ) / localScale)));
+      const coarseBaseX = localOriginX + localCellX * localScale;
+      const coarseBaseY = localOriginY + localCellY * localScale;
+      const coarseBaseZ = localOriginZ + localCellZ * localScale;
+      const ratio = spec.refinementRatio;
+      const fineCells: Float32Array[] = [];
+      const sourceScale = source.scale;
+
+      for (let dz = 0; dz < ratio; dz++) {
+        for (let dy = 0; dy < ratio; dy++) {
+          for (let dx = 0; dx < ratio; dx++) {
+            const fx = coarseBaseX + dx * sourceScale;
+            const fy = coarseBaseY + dy * sourceScale;
+            const fz = coarseBaseZ + dz * sourceScale;
+            const flx = Math.floor((fx - originX) / sourceScale);
+            const fly = Math.floor((fy - originY) / sourceScale);
+            const flz = Math.floor((fz - originZ) / sourceScale);
+            if (
+              flx < 0 || flx >= this.chunkSize ||
+              fly < 0 || fly >= this.chunkSize ||
+              flz < 0 || flz >= this.chunkSize
+            ) return null;
+
+            const fineOffset = ((flz * this.chunkSize * this.chunkSize) + fly * this.chunkSize + flx) * CELL_FIELDS;
+            const cell = new Float32Array(CELL_FIELDS);
+            cell.set(source.cells.subarray(fineOffset, fineOffset + CELL_FIELDS));
+            fineCells.push(cell);
+          }
+        }
+      }
+
+      const restricted = new Float32Array(CELL_FIELDS);
+      const numeric = new Array<number>(CELL_FIELDS).fill(0);
+      InfinityScaleLODTransfer.restrict(fineCells, numeric, spec.targetLevel, spec.sourceLevel);
+      restricted.set(numeric);
+      return restricted;
+    }
+
     return null;
   }
 
