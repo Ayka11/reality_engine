@@ -73,6 +73,7 @@ struct MatCoeffs {
 @group(0) @binding(1) var<storage, read_write> dst:     array<Cell>;
 @group(0) @binding(2) var<storage, read>       params:  SimParams;
 @group(0) @binding(3) var<storage, read>       matBuf:  array<MatCoeffs>;
+@group(0) @binding(4) var<storage, read>       ranges:  array<ExecutionRange>;
 
 fn cidx(x: u32, y: u32, z: u32) -> u32 {
   return z * params.H * params.W + y * params.W + x;
@@ -84,8 +85,30 @@ fn active(flag: u32) -> bool {
 
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let x = gid.x; let y = gid.y; let z = gid.z;
-  if (x >= params.W || y >= params.H || z >= params.D) { return; }
+  var x = gid.x; var y = gid.y; var z = gid.z;
+  if (params.selectiveRangeCount > 0u) {
+    if (gid.x >= params.selectiveCellCount) { return; }
+    var linear = gid.x;
+    var found = false;
+    for (var r = 0u; r < params.selectiveRangeCount; r++) {
+      let range = ranges[r];
+      let w = range.maxX - range.minX + 1u;
+      let h = range.maxY - range.minY + 1u;
+      let d = range.maxZ - range.minZ + 1u;
+      let volume = w * h * d;
+      if (linear < volume) {
+        x = range.minX + (linear % w);
+        y = range.minY + ((linear / w) % h);
+        z = range.minZ + (linear / (w * h));
+        found = true;
+        break;
+      }
+      linear -= volume;
+    }
+    if (!found) { return; }
+  } else {
+    if (x >= params.W || y >= params.H || z >= params.D) { return; }
+  }
 
   let i = cidx(x, y, z);
   let c = src[i];
@@ -279,7 +302,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // Byte layout of SimParams in the storage buffer (matches WGSL struct)
-const PARAMS_FLOATS = 20; // 20 × 4 bytes = 80 bytes
+const PARAMS_FLOATS = 22; // 22 × 4 bytes = 88 bytes; buffer is allocated at 256 bytes
 
 export class GPUBackend {
   private device: GPUDevice | null = null;
@@ -290,6 +313,7 @@ export class GPUBackend {
   private matBuf: GPUBuffer | null = null;
   private stagingBuf: GPUBuffer | null = null;
   private bindGroup: GPUBindGroup | null = null;
+  private rangeBuf: GPUBuffer | null = null;
 
   W = 0; H = 0; D = 0;
   private cellCount = 0;
@@ -332,6 +356,10 @@ export class GPUBackend {
       size: Math.max(256, MAT_COUNT * 8 * 4),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
+    this.rangeBuf = this.device.createBuffer({
+      size: 256 * 6 * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
 
     const mod = this.device.createShaderModule({ code: SHADER });
     this.pipeline = await this.device.createComputePipelineAsync({
@@ -346,6 +374,7 @@ export class GPUBackend {
         { binding: 1, resource: { buffer: this.dstBuf } },
         { binding: 2, resource: { buffer: this.paramsBuf } },
         { binding: 3, resource: { buffer: this.matBuf } },
+        { binding: 4, resource: { buffer: this.rangeBuf } },
       ],
     });
 
@@ -394,26 +423,43 @@ export class GPUBackend {
     this.device.queue.writeBuffer(this.paramsBuf, 0, ab);
   }
 
-  // GPU selective dispatch is not enabled yet. The optional execution
-  // context is accepted by the contract boundary so the caller can make the
-  // capability decision explicitly without silently changing GPU semantics.
-  submitCompute(nSteps: number, _context: InfinityScaleChunkExecutionContext | null = null): void {
-    if (!this.device || !this.pipeline || !this.bindGroup || !this.srcBuf || !this.dstBuf) return;
-    const enc = this.device.createCommandEncoder();
-    const wx = Math.ceil(this.W / 8);
-    const wy = Math.ceil(this.H / 8);
+  submitCompute(nSteps: number, context: InfinityScaleChunkExecutionContext | null = null): void {
+    if (!this.device || !this.pipeline || !this.bindGroup || !this.srcBuf || !this.dstBuf || !this.rangeBuf) return;
 
+    const ranges = context?.simulationRanges ?? [{
+      minX: 0, maxX: this.W - 1, minY: 0, maxY: this.H - 1, minZ: 0, maxZ: this.D - 1,
+    }];
+    const table = new Uint32Array(ranges.length * 6);
+    let totalCells = 0;
+    ranges.forEach((range, index) => {
+      const base = index * 6;
+      table[base] = range.minX; table[base + 1] = range.maxX;
+      table[base + 2] = range.minY; table[base + 3] = range.maxY;
+      table[base + 4] = range.minZ; table[base + 5] = range.maxZ;
+      totalCells += (range.maxX - range.minX + 1) *
+        (range.maxY - range.minY + 1) *
+        (range.maxZ - range.minZ + 1);
+    });
+    if (ranges.length > 256) throw new Error('GPU selective execution supports at most 256 ranges per dispatch');
+    this.device.queue.writeBuffer(this.rangeBuf, 0, table.buffer, 0, table.byteLength);
+
+    const params = new ArrayBuffer(PARAMS_FLOATS * 4);
+    const u32 = new Uint32Array(params);
+    u32[20] = context ? ranges.length : 0;
+    u32[21] = context ? totalCells : 0;
+    this.device.queue.writeBuffer(this.paramsBuf!, 80, new Uint32Array(params, 80, 8).buffer);
+
+    const enc = this.device.createCommandEncoder();
     for (let s = 0; s < nSteps; s++) {
+      enc.copyBufferToBuffer(this.srcBuf, 0, this.dstBuf, 0, this.bufSize);
       const pass = enc.beginComputePass();
       pass.setPipeline(this.pipeline);
       pass.setBindGroup(0, this.bindGroup);
-      pass.dispatchWorkgroups(wx, wy, this.D);
+      const count = context ? totalCells : this.cellCount;
+      pass.dispatchWorkgroups(Math.ceil(count / 64), 1, 1);
       pass.end();
-      // Swap dst → src for next step (srcBuf always contains latest state)
       enc.copyBufferToBuffer(this.dstBuf, 0, this.srcBuf, 0, this.bufSize);
     }
-
-    // Copy final result from srcBuf to staging for CPU readback
     enc.copyBufferToBuffer(this.srcBuf, 0, this.stagingBuf!, 0, this.bufSize);
     this.device.queue.submit([enc.finish()]);
   }
@@ -432,6 +478,7 @@ export class GPUBackend {
     this.stagingBuf?.destroy();
     this.paramsBuf?.destroy();
     this.matBuf?.destroy();
+    this.rangeBuf?.destroy();
     this.device?.destroy();
     this.device = null;
   }
