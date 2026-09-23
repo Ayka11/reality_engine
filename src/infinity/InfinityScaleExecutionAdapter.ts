@@ -150,9 +150,16 @@ export class InfinityScaleExecutionAdapter {
       WORLD.D,
     );
 
+    const mode: InfinityScaleExecutionMode =
+      this.capabilities.selectiveGpuReady && this.capabilities.gpuPhysicsReady
+        ? "selective-gpu-ready"
+        : this.capabilities.selectiveCpuReady
+          ? "selective-cpu-ready"
+          : "advisory";
+
     this.plan = {
       revision: frame.revision,
-      mode: "selective-cpu-ready",
+      mode,
       observer: { ...frame.observer },
       chunks: selected.map(chunk => ({
         key: chunk.key,
@@ -175,11 +182,17 @@ export class InfinityScaleExecutionAdapter {
         "TemporalLayer",
         "ChemLayer",
         "AgentSystem",
+        "EntityLayer",
+        "Causality",
       ],
-      globalExecutionLayers: [],
-      selectiveCpuReady: true,
-      selectiveGpuReady: false,
-      gpuPhysicsReady: false,
+      globalExecutionLayers: [
+        "Recorder",
+        "LawEngine",
+        "WorldEvents",
+      ],
+      selectiveCpuReady: this.capabilities.selectiveCpuReady,
+      selectiveGpuReady: this.capabilities.selectiveGpuReady,
+      gpuPhysicsReady: this.capabilities.gpuPhysicsReady,
       entityExecutionReady: true,
       agentMigrationReady: true,
     };
