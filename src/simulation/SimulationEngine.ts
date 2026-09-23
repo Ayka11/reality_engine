@@ -317,7 +317,8 @@ export class SimulationEngine {
       this.grid.cullInactive();
     }
 
-    this._tick += nSteps;
+    // _tick has already advanced in the selective per-tick loop or in the
+    // legacy batched CPU/GPU path. Do not advance it again at the frame tail.
   }
 
   // Called after user paints/erases so GPU buffer stays consistent
