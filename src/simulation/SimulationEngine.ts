@@ -130,6 +130,12 @@ export class SimulationEngine {
   async step(dt: number, nSteps = 1): Promise<void> {
     const clampedDt = Math.min(dt, 0.05);
 
+    const selectivePlan =
+      this._infinityExecutionPlan &&
+      this._infinityExecutionPlan.mode !== 'advisory'
+        ? this._infinityExecutionPlan
+        : null;
+
     const frame: InfinityScaleGlobalExecutionFrame | null = selectivePlan
       ? beginInfinityScaleGlobalFrame(selectivePlan, this._tick, this._tick + nSteps)
       : null;
@@ -273,17 +279,9 @@ export class SimulationEngine {
       this.grid.syncDenseToChunks();
     }
 
-    this._detectCausality(executionContext);
+    this._detectCausality(frameContext);
 
-    const eventContext =
-      this._infinityExecutionPlan && this._infinityExecutionPlan.mode !== 'advisory'
-        ? new InfinityScaleChunkExecutionContext(
-            this._infinityExecutionPlan,
-            this.grid.W,
-            this.grid.H,
-            this.grid.D,
-          )
-        : null;
+    const eventContext = frameContext;
     if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'local-commit');
     if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'boundary-reconciliation');
 
