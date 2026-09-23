@@ -107,8 +107,8 @@ export class InfinityScaleLODTransfer {
    * Coarse-to-fine baseline prolongation.
    *
    * A coarse cell is represented as a piecewise-constant value over each of
-   * its refinementRatio^3 child cells. This is deterministic and conservative
-   * for the intensive field representation used by the current simulator.
+   * its refinementRatio^3 child cells. This is deterministic for the current
+   * field-transfer policy; conservation is not assumed for every field.
    */
   static prolongate(
     source: ReadonlyArray<number>,
