@@ -24,6 +24,7 @@ export class InfinityScaleChunkExecutionContext {
   readonly overlappingSimulationRangeCount: number;
   readonly overlappingReadRangeCount: number;
   readonly uniqueBoundaryReadCellCount: number;
+  readonly levelRangeScales: number[];
 
   constructor(
     plan: InfinityScaleExecutionPlan,
@@ -36,6 +37,7 @@ export class InfinityScaleChunkExecutionContext {
       this.chunkRange(chunk.key),
     );
     this.overlappingSimulationRangeCount = this.countOverlappingRanges(rawSimulationRanges);
+    this.levelRangeScales = plan.chunks.map(chunk => 2 ** chunkLevel(chunk.key));
     // Ownership is a set of cells, not a sum of overlapping LOD ranges. Keep
     // the execution geometry explicit, while exposing overlap diagnostics so
     // callers can reject ambiguous multi-LOD ownership before dispatch.
@@ -69,19 +71,34 @@ export class InfinityScaleChunkExecutionContext {
       throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
     }
 
-    const x = Number(match[2]) * this.chunkSize;
-    const y = Number(match[3]) * this.chunkSize;
-    const z = Number(match[4]) * this.chunkSize;
+    const level = Number(match[1]);
+    if (!Number.isInteger(level) || level < 0 || level > 30) {
+      throw new Error(`Invalid Infinity Scale LOD level: ${match[1]}`);
+    }
+
+    // Level 0 is the base 32³ chunk. Each higher level represents a
+    // coarser spatial cell whose footprint doubles per level.
+    const scale = 2 ** level;
+    const extent = this.chunkSize * scale;
+    const x = Number(match[2]) * extent;
+    const y = Number(match[3]) * extent;
+    const z = Number(match[4]) * extent;
 
     return {
       minX: Math.max(0, x),
-      maxX: Math.min(this.gridWidth - 1, x + this.chunkSize - 1),
+      maxX: Math.min(this.gridWidth - 1, x + extent - 1),
       minY: Math.max(0, y),
-      maxY: Math.min(this.gridHeight - 1, y + this.chunkSize - 1),
+      maxY: Math.min(this.gridHeight - 1, y + extent - 1),
       minZ: Math.max(0, z),
-      maxZ: Math.min(this.gridDepth - 1, z + this.chunkSize - 1),
+      maxZ: Math.min(this.gridDepth - 1, z + extent - 1),
     };
   }
+
+function chunkLevel(key: string): number {
+  const match = /^(\d+):/.exec(key);
+  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
+  return Number(match[1]);
+}
 
   private isFullyContainedBySimulation(range: ExecutionCellRange): boolean {
     for (let z = range.minZ; z <= range.maxZ; z++)
