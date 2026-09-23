@@ -139,7 +139,12 @@ export class EntityLayer {
       if (proposal.continuity !== 'pending') continue;
       const ancestry = proposal.sourceEntityIds.length > 0
         ? proposal.sourceEntityIds.join(',')
-        : 'component:' + proposal.componentId;
+        : [
+            Math.round(proposal.centroid[0] * 4) / 4,
+            Math.round(proposal.centroid[1] * 4) / 4,
+            Math.round(proposal.centroid[2] * 4) / 4,
+            proposal.cellCount,
+          ].join(',');
       const key = 'boundary:' + ancestry;
       activePendingKeys.add(key);
       this.pendingBoundaryComponents.set(key, {
@@ -162,6 +167,10 @@ export class EntityLayer {
 
   getChunkReconciliationDiagnostics(): EntityReconciliationPlan | null {
     return this.lastChunkReconciliation;
+  }
+
+  getPendingBoundaryCount(): number {
+    return this.pendingBoundaryComponents.size;
   }
 
   getPendingBoundaryComponents(): Array<{
