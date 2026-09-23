@@ -1,5 +1,6 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
+import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 
 // Local time field (F.LOCAL_TIME) controls how fast a cell's physics ticks
 // relative to global dt. Dense/high-energy cells age faster; vacuum cells age slower.
@@ -7,9 +8,31 @@ import { CELL_FIELDS, F } from '../core/CellState';
 
 export class TemporalLayer {
   tick(grid: VoxelGrid, dt: number): void {
+    this.tickRegion(grid, dt, null);
+  }
+
+  tickChunks(
+    grid: VoxelGrid,
+    dt: number,
+    context: InfinityScaleChunkExecutionContext,
+  ): void {
+    this.tickRegion(grid, dt, context);
+  }
+
+  private tickRegion(
+    grid: VoxelGrid,
+    dt: number,
+    context: InfinityScaleChunkExecutionContext | null,
+  ): void {
     const { buffer: buf, size } = grid;
 
     for (let i = 0; i < size; i++) {
+      const z = Math.floor(i / (grid.W * grid.H));
+      const rem = i - z * grid.W * grid.H;
+      const y = Math.floor(rem / grid.W);
+      const x = rem - y * grid.W;
+      if (context && !context.containsSimulationCell(x, y, z)) continue;
+
       const base = i * CELL_FIELDS;
       const energy  = buf[base + F.ENERGY];
       const density = buf[base + F.DENSITY];
@@ -32,7 +55,50 @@ export class TemporalLayer {
     }
 
     // Temporal diffusion — smooth out extreme time gradients between neighbors
-    this._diffuseTime(grid, dt);
+    if (context) {
+      this._diffuseTimeChunks(grid, dt, context);
+    } else {
+      this._diffuseTime(grid, dt);
+    }
+  }
+
+  private _diffuseTimeChunks(
+    grid: VoxelGrid,
+    dt: number,
+    context: InfinityScaleChunkExecutionContext,
+  ): void {
+    const { W, H, D, buffer: buf } = grid;
+    const WH = W * H;
+    const α = 0.02 * dt * 60;
+
+    for (let z = 1; z < D - 1; z++)
+    for (let y = 1; y < H - 1; y++)
+    for (let x = 1; x < W - 1; x++) {
+      if (!context.containsSimulationCell(x, y, z)) continue;
+
+      const i = z * WH + y * W + x;
+      const base = i * CELL_FIELDS;
+      const lt = buf[base + F.LOCAL_TIME];
+      const neighbors = [
+        buf[(i - 1) * CELL_FIELDS + F.LOCAL_TIME],
+        buf[(i + 1) * CELL_FIELDS + F.LOCAL_TIME],
+        buf[(i - W) * CELL_FIELDS + F.LOCAL_TIME],
+        buf[(i + W) * CELL_FIELDS + F.LOCAL_TIME],
+        buf[(i - WH) * CELL_FIELDS + F.LOCAL_TIME],
+        buf[(i + WH) * CELL_FIELDS + F.LOCAL_TIME],
+      ];
+      const avg = neighbors.reduce((a, b) => a + b, 0) / 6;
+      buf[base + F.LOCAL_TIME] = lt + α * (avg - lt);
+
+      const gradient = avg - lt;
+      if (Math.abs(gradient) > 0.5) {
+        buf[base + F.ENERGY] = Math.max(
+          0,
+          buf[base + F.ENERGY] -
+            Math.sign(gradient) * Math.abs(gradient) * 0.01 * dt * 60,
+        );
+      }
+    }
   }
 
   private _diffuseTime(grid: VoxelGrid, dt: number): void {
