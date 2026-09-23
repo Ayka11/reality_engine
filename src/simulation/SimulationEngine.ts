@@ -15,7 +15,10 @@ import { TemporalLayer } from './TemporalLayer';
 import { InfoPhysics } from './InfoPhysics';
 import { Recorder } from './Recorder';
 import { AgentSystem } from './AgentSystem';
-import type { InfinityScaleExecutionPlan } from '../infinity/InfinityScaleExecutionAdapter';
+import type {
+  InfinityScaleExecutionCapabilities,
+  InfinityScaleExecutionPlan,
+} from '../infinity/InfinityScaleExecutionAdapter';
 import { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 
 export class SimulationEngine {
@@ -75,6 +78,14 @@ export class SimulationEngine {
 
   get tick() { return this._tick; }
   get gpuActive() { return this._gpuReady; }
+
+  getInfinityScaleExecutionCapabilities(): InfinityScaleExecutionCapabilities {
+    return {
+      selectiveCpuReady: true,
+      selectiveGpuReady: this._gpuReady,
+      gpuPhysicsReady: this._gpuReady,
+    };
+  }
 
   /**
    * Receives the bounded Infinity Scale work contract.
