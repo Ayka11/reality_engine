@@ -1,4 +1,5 @@
 import type { InfinityScaleFramePlan } from "./InfinityScaleFramePlan";
+import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 
 export type InfinityScaleExecutionMode =
   | "advisory"
@@ -27,6 +28,8 @@ export interface InfinityScaleExecutionPlan {
    */
   boundaryReadChunks: string[];
   boundaryReadCount: number;
+  simulationCellCount: number;
+  boundaryReadCellCount: number;
 }
 
 /**
@@ -52,6 +55,8 @@ export class InfinityScaleExecutionAdapter {
       maxSimulatingChunks: 0,
       boundaryReadChunks: [],
       boundaryReadCount: 0,
+      simulationCellCount: 0,
+      boundaryReadCellCount: 0,
     };
   }
 
@@ -82,6 +87,31 @@ export class InfinityScaleExecutionAdapter {
       }
     }
 
+    const geometry = new InfinityScaleChunkExecutionContext(
+      {
+        revision: frame.revision,
+        mode: "advisory",
+        observer: frame.observer,
+        chunks: selected.map(chunk => ({
+          key: chunk.key,
+          lod: chunk.lod,
+          amr: chunk.amr,
+          distance: chunk.distance,
+        })),
+        simulationBudget: frame.maxSimulatingChunks,
+        requestedSimulationCount: frame.simulating.length,
+        selectedSimulationCount: selected.length,
+        maxSimulatingChunks: frame.maxSimulatingChunks,
+        boundaryReadChunks: [...boundaryReadKeys].sort(),
+        boundaryReadCount: boundaryReadKeys.size,
+        simulationCellCount: 0,
+        boundaryReadCellCount: 0,
+      },
+      512,
+      512,
+      256,
+    );
+
     this.plan = {
       revision: frame.revision,
       mode: "advisory",
@@ -98,6 +128,8 @@ export class InfinityScaleExecutionAdapter {
       maxSimulatingChunks: frame.maxSimulatingChunks,
       boundaryReadChunks: [...boundaryReadKeys].sort(),
       boundaryReadCount: boundaryReadKeys.size,
+      simulationCellCount: geometry.simulationCellCount,
+      boundaryReadCellCount: geometry.readCellCount,
     };
 
     return this.getPlan();
