@@ -53,6 +53,14 @@ struct SimParams {
   gravityDensityCoupling: f32, // [17]
   timeBaseRate: f32,           // [18]
   timeEnergyBoost: f32,        // [19]
+  selectiveRangeCount: u32,     // [20]
+  selectiveCellCount: u32,      // [21]
+}
+
+struct ExecutionRange {
+  minX: u32, maxX: u32,
+  minY: u32, maxY: u32,
+  minZ: u32, maxZ: u32,
 }
 
 // Material coefficients: MAT_COUNT × 7 floats
