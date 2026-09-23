@@ -38,6 +38,7 @@ import { SMART_BRUSHES } from './ux/SmartBrushes';
 import { createInfinityScaleRuntime } from './infinity/InfinityScaleRuntime';
 import { InfinityScaleBridge } from './infinity/InfinityScaleBridge';
 import { InfinityScaleSpatialAdapter } from './infinity/InfinityScaleSpatialAdapter';
+import { InfinityScaleExecutionAdapter } from './infinity/InfinityScaleExecutionAdapter';
 
 // ── UX System imports ─────────────────────────────────────────────────────────
 import { initializeUXSystem } from './ui/UXIntegration';
@@ -58,6 +59,7 @@ const infinityScale = createInfinityScaleRuntime();
 const infinityScaleBridge = new InfinityScaleBridge(infinityScale);
 // SparseVoxelGrid chunks are 32^3 cells, matching Infinity Scale v2 level-0 chunks.
 const infinitySpatialAdapter = new InfinityScaleSpatialAdapter(sim.grid.chunkSize, sim.grid.chunkSize);
+const infinityScaleExecution = new InfinityScaleExecutionAdapter();
 infinityScale.setObserver({ x: 0, y: 0, z: 0 });
 (window as unknown as { realityEngine?: SimulationEngine; realityCreator?: { graph: RealityGraph; compiler: GraphCompiler } }).realityEngine = sim;
 (window as unknown as { realityCreator?: { graph: RealityGraph; compiler: GraphCompiler } }).realityCreator = {
@@ -1559,6 +1561,8 @@ let _latestInfinityDiagnostics = {
   validSamples: 0,
 };
 let _latestInfinityFramePlan = infinityScaleBridge.update([]);
+let _latestInfinityExecutionPlan = infinityScaleExecution.update(_latestInfinityFramePlan);
+sim.setInfinityScaleExecutionPlan(_latestInfinityExecutionPlan);
 
 
 try {
@@ -1655,6 +1659,12 @@ function _updateInfinityDiagnosticsPanel(): void {
     <div style="display:flex;justify-content:space-between;">
       <span>Visible</span><span>${framePlan.visibleCount}</span>
     </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span>Execution</span><span style="color:#d7ddff;">${_latestInfinityExecutionPlan.mode}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span>Exec workset</span><span>${_latestInfinityExecutionPlan.selectedSimulationCount}/${_latestInfinityExecutionPlan.maxSimulatingChunks}</span>
+    </div>
 
     <div style="color:#6f7b99;margin:7px 0 4px;">ENERGY FIELD</div>
     <div style="display:flex;justify-content:space-between;">
@@ -1733,6 +1743,8 @@ async function loop(ts: number) {
           _latestInfinityDiagnostics.gradientRMS,
       },
     );
+    _latestInfinityExecutionPlan = infinityScaleExecution.update(_latestInfinityFramePlan);
+    sim.setInfinityScaleExecutionPlan(_latestInfinityExecutionPlan);
     if (climateActive) climate.tick(dt * nSteps);
     timeline.autoSave(sim.tick);
     multiScale.tick();
