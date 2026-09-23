@@ -28,6 +28,7 @@ export class InfinityScaleLODBoundarySnapshot {
     readonly specs: InfinityScaleBoundaryTransferSpec[],
     chunkStates: InfinityScaleLODChunkState[],
     readonly revision: number,
+    readonly chunkSize = 32,
   ) {
     for (const state of chunkStates) {
       this.chunks.set(state.key, {
