@@ -35,6 +35,34 @@ export class ChemLayer {
     this.tickRegion(grid, dt, context);
   }
 
+  /**
+   * Commits deferred density transfers after local chunk simulation.
+   * This is the chemistry portion of the Infinity Scale boundary barrier.
+   */
+  commitPendingDensityTransfers(
+    grid: VoxelGrid,
+    context: InfinityScaleChunkExecutionContext,
+  ): number {
+    const { W, H, buffer: buf } = grid;
+    const WH = W * H;
+    let committed = 0;
+    for (const [index, delta] of [...this.pendingDensityTransfers]) {
+      const z = Math.floor(index / WH);
+      const rem = index - z * WH;
+      const y = Math.floor(rem / W);
+      const x = rem - y * W;
+      if (!context.containsSimulationCell(x, y, z)) continue;
+      const base = index * CELL_FIELDS;
+      buf[base + F.DENSITY] = Math.max(
+        0,
+        Math.min(1, buf[base + F.DENSITY] + delta),
+      );
+      this.pendingDensityTransfers.delete(index);
+      committed++;
+    }
+    return committed;
+  }
+
   private tickRegion(
     grid: VoxelGrid,
     dt: number,
@@ -43,20 +71,6 @@ export class ChemLayer {
     const { W, H, D, buffer: buf } = grid;
     const WH = W * H;
     const densityTransfers = context ? new Map<number, number>() : null;
-
-    if (context) {
-      for (const [index, delta] of this.pendingDensityTransfers) {
-        const z = Math.floor(index / WH);
-        const rem = index - z * WH;
-        const y = Math.floor(rem / W);
-        const x = rem - y * W;
-        if (context.containsSimulationCell(x, y, z)) {
-          const base = index * CELL_FIELDS;
-          buf[base + F.DENSITY] = Math.max(0, Math.min(1, buf[base + F.DENSITY] + delta));
-          this.pendingDensityTransfers.delete(index);
-        }
-      }
-    }
 
     for (let z = 0; z < D; z++)
     for (let y = 0; y < H; y++)
