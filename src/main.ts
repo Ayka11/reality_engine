@@ -1746,6 +1746,9 @@ async function loop(ts: number) {
   // Entity panel refresh every 15 ticks
   if (sim.tick % 15 === 0) { updateEntityPanel(); updateAgentPanel(); }
 
+  // Infinity Scale controls render eligibility without mutating simulation state.
+  renderer.setInfinityScaleFramePlan(_latestInfinityFramePlan);
+
   // 3D render with entity + agent markers from engine
   renderer.render(sim.grid, sim.entityMarkers(), sim.agentMarkers());
 
