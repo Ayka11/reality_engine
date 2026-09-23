@@ -157,6 +157,114 @@ export class EntityLayer {
   }
 
   /**
+   * Applies only ownership-safe reconciliation records.
+   *
+   * Existing entities are retained only when every currently-owned cell is
+   * inside the simulation workset; otherwise the transaction is rejected.
+   * New entities are created from closed components. Partial worksets never
+   * trigger extinction.
+   */
+  applyChunkReconciliation(
+    grid: VoxelGrid,
+    context: InfinityScaleChunkExecutionContext,
+  ): boolean {
+    const connectivity = this.chunkConnectivity.analyze(grid, context);
+    const fullDomainCovered =
+      context.simulationCellCount >= grid.size &&
+      context.readCellCount === 0;
+    const plan = this.chunkReconciliation.plan(
+      connectivity.components,
+      this.getEntities(),
+      fullDomainCovered,
+    );
+    if (!plan.commitReady) return false;
+
+    const records = this.chunkReconciliation.commitRecords(
+      plan,
+      connectivity.components,
+    );
+    if (!records) return false;
+
+    for (const record of records) {
+      if (record.entityId === null) continue;
+      const entity = this.entities.get(record.entityId);
+      if (!entity) return false;
+      if (entity.cells.some(index => {
+        const z = Math.floor(index / (grid.W * grid.H));
+        const rem = index - z * grid.W * grid.H;
+        const y = Math.floor(rem / grid.W);
+        const cellX = rem - y * grid.W;
+        return !context.containsSimulationCell(cellX, y, z);
+      })) return false;
+    }
+
+    const retained = new Set<number>();
+    for (const record of records) {
+      let entity: Entity | undefined;
+      if (record.entityId !== null) {
+        entity = this.entities.get(record.entityId);
+        if (!entity) return false;
+      } else {
+        const id = _nextId++;
+        entity = {
+          id,
+          cells: [],
+          centroid: record.centroid,
+          genome: defaultGenome(),
+          age: 0,
+          energy: 0,
+          stage: 'juvenile',
+          memoryBuffer: new Float32Array(8),
+          memPtr: 0,
+          symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+          colorRgb: [
+            0.3 + Math.random() * 0.7,
+            0.3 + Math.random() * 0.7,
+            0.3 + Math.random() * 0.7,
+          ],
+          children: 0,
+          reproCounter: 0,
+        };
+        this.entities.set(id, entity);
+      }
+
+      entity.cells = [...record.cells];
+      entity.centroid = [...record.centroid];
+      retained.add(entity.id);
+
+      let energy = 0;
+      for (const index of entity.cells) {
+        energy += grid.buffer[index * CELL_FIELDS + F.ENERGY];
+        grid.buffer[index * CELL_FIELDS + F.ENTITY_ID] = entity.id;
+      }
+      entity.energy = energy;
+      entity.reproCounter = Math.min(
+        1,
+        energy / Math.max(1, entity.genome.reproThreshold),
+      );
+    }
+
+    if (fullDomainCovered) {
+      for (const [id, entity] of [...this.entities]) {
+        if (!retained.has(id)) {
+          _extinctCount++;
+          for (const index of entity.cells) {
+            const base = index * CELL_FIELDS;
+            grid.buffer[base + F.ENERGY] = Math.min(
+              9999,
+              grid.buffer[base + F.ENERGY] +
+                entity.energy * 0.3 / Math.max(1, entity.cells.length),
+            );
+          }
+          this.entities.delete(id);
+        }
+      }
+    }
+
+    return true;
+  }
+
+  /**
    * Analyze the bounded execution workset without mutating entity identity.
    *
    * This is the synchronization barrier before EntityLayer can become a
