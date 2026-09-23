@@ -15,6 +15,13 @@ export interface EntityReconciliationCommit {
   extinctEntityIds: number[];
 }
 
+export interface EntityReconciliationCommitRecord {
+  componentId: number;
+  entityId: number;
+  centroid: [number, number, number];
+  cells: number[];
+}
+
 export interface EntityReconciliationPlan {
   proposals: EntityReconciliationProposal[];
   unresolvedBoundaryComponents: number;
@@ -100,6 +107,28 @@ export class EntityChunkReconciliation {
       unmatchedClosedComponentCount: closed.filter(p => p.existingEntityId === null).length,
       extinctEntityIds,
     };
+  }
+
+  commitRecords(
+    plan: EntityReconciliationPlan,
+    components: EntityChunkComponent[],
+  ): EntityReconciliationCommitRecord[] | null {
+    if (!plan.commitReady) return null;
+
+    const byId = new Map(components.map(component => [component.id, component]));
+    return plan.proposals.map(proposal => {
+      const component = byId.get(proposal.componentId);
+      if (!component) throw new Error(
+        `Missing component ${proposal.componentId} during reconciliation commit`,
+      );
+
+      return {
+        componentId: proposal.componentId,
+        entityId: proposal.existingEntityId ?? -(proposal.componentId + 1),
+        centroid: component.centroid,
+        cells: [...component.cells],
+      };
+    });
   }
 
   buildCommit(plan: EntityReconciliationPlan): EntityReconciliationCommit | null {
