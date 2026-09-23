@@ -96,8 +96,12 @@ export class WorldEvents {
     for (let dy = -4; dy <= 4; dy++)
     for (let dx = -4; dx <= 4; dx++) {
       const d = Math.sqrt(dx*dx+dy*dy+dz*dz);
-      if (d > 5 || !grid.inBounds(ix+dx,iy+dy,iz+dz)) continue;
-      const cell = grid.cell(ix+dx, iy+dy, iz+dz);
+      const x = ix + dx;
+      const y = iy + dy;
+      const z = iz + dz;
+      if (d > 5 || !grid.inBounds(x, y, z)) continue;
+      if (context && !context.containsSimulationCell(x, y, z)) continue;
+      const cell = grid.cell(x, y, z);
       const g = 1 - d/5;
       cell.energy      = Math.min(9999, cell.energy + 3000*g);
       cell.temperature = Math.min(9999, cell.temperature + 2000*g);
