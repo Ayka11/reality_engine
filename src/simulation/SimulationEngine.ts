@@ -190,7 +190,6 @@ export class SimulationEngine {
           this.infoPhysics.tick(this.grid, clampedDt);
           this.temporalLayer.tick(this.grid, clampedDt);
         }
-        this.entityLayer.tick(this.grid, clampedDt);
       }
       this.grid.syncDenseToChunks();
     }
