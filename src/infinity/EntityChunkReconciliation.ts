@@ -48,9 +48,6 @@ export class EntityChunkReconciliation {
     entities: Entity[],
     fullDomainCovered = false,
   ): EntityReconciliationPlan {
-    const proposals: EntityReconciliationProposal[] = [];
-    const used = new Set<number>();
-
     const componentSourceIds = new Map<number, number[]>();
     const sourceComponentCounts = new Map<number, number>();
 
@@ -108,11 +105,13 @@ export class EntityChunkReconciliation {
         .map(id => entities.find(entity => entity.id === id))
         .filter((entity): entity is Entity => !!entity);
 
-      // Prefer an overlapping entity for continuity. A centroid-only match is
-      // only a fallback when the component has no cell-level predecessor.
+      // Prefer an overlapping entity for continuity. If the source entity is
+      // already retained by another component, this component becomes a
+      // split child and must receive a new identity at commit time.
       if (overlapping.length > 0) {
         const preferred = overlapping.find(entity => !used.has(entity.id));
         if (preferred) best = preferred;
+        else best = null;
       }
 
       if (best) used.add(best.id);
