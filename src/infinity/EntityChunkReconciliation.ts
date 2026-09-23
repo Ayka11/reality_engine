@@ -13,6 +13,9 @@ export interface EntityReconciliationPlan {
   proposals: EntityReconciliationProposal[];
   unresolvedBoundaryComponents: number;
   commitReady: boolean;
+  closedComponentCount: number;
+  unmatchedClosedComponentCount: number;
+  extinctEntityIds: number[];
 }
 
 /**
@@ -69,10 +72,24 @@ export class EntityChunkReconciliation {
       });
     }
 
+    const unresolvedBoundaryComponents = proposals.filter(p => !p.safeToCommit).length;
+    const closed = proposals.filter(p => p.safeToCommit);
+    const matchedIds = new Set(
+      closed
+        .map(p => p.existingEntityId)
+        .filter((id): id is number => id !== null),
+    );
+    const extinctEntityIds = entities
+      .filter(entity => !matchedIds.has(entity.id))
+      .map(entity => entity.id);
+
     return {
       proposals,
-      unresolvedBoundaryComponents: proposals.filter(p => !p.safeToCommit).length,
-      commitReady: proposals.every(p => p.safeToCommit),
+      unresolvedBoundaryComponents,
+      commitReady: unresolvedBoundaryComponents === 0,
+      closedComponentCount: closed.length,
+      unmatchedClosedComponentCount: closed.filter(p => p.existingEntityId === null).length,
+      extinctEntityIds,
     };
   }
 
