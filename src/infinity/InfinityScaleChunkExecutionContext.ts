@@ -28,6 +28,7 @@ export interface InfinityScaleBoundaryTransferSpec {
   targetLevel: number;
   refinementRatio: number;
   operation: "copy" | "prolongation" | "restriction";
+  readOperation: "copy" | "prolongation" | "restriction";
 }
 
 /**
@@ -124,6 +125,15 @@ export class InfinityScaleChunkExecutionContext {
             : relation.relation === "coarse-to-fine"
               ? "prolongation"
               : "restriction",
+        // Boundary sampling flows from the dependency (targetChunk) into the
+        // locally executing sourceChunk, so the read operation is the inverse
+        // of the geometric source→target transfer direction.
+        readOperation:
+          relation.relation === "same-level"
+            ? "copy"
+            : relation.relation === "coarse-to-fine"
+              ? "restriction"
+              : "prolongation",
       };
     });
   }
