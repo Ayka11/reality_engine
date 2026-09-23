@@ -357,7 +357,7 @@ export class EntityLayer {
     dt: number,
     context: InfinityScaleChunkExecutionContext,
   ): void {
-    if (!this.applyChunkReconciliation(grid, context)) return;
+    this.analyzeChunks(grid, context);
 
     const { W, H, D, buffer: buf } = grid;
     for (const entity of this.entities.values()) {
