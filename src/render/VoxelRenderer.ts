@@ -8,6 +8,7 @@ import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import { MATERIAL_LIBRARY } from '../materials/MaterialDef';
 import { AgentMarker, AGENT_COLORS } from '../simulation/AgentSystem';
+import type { InfinityScaleFramePlan } from '../infinity/InfinityScaleFramePlan';
 
 export type LayerName = 'energy' | 'density' | 'information' | 'entropy' | 'temperature' | 'bioPotential' | 'material' | 'chemistry' | 'signal' | 'memory' | 'diff';
 
@@ -97,6 +98,7 @@ export class VoxelRenderer {
   paintMode = false;
   paintAltitude = 0;
   private _diffBuf: Float32Array | null = null;
+  private _infinityRenderKeys: Set<string> | null = null;
 
   constructor(canvas: HTMLCanvasElement, W: number, H: number, D: number) {
     this.domElement = canvas;
@@ -201,6 +203,28 @@ export class VoxelRenderer {
 
   setDiffBuffer(buf: Float32Array | null): void { this._diffBuf = buf; }
 
+  /**
+   * Apply the current Infinity Scale render eligibility plan.
+   * The plan is advisory for rendering only; it never mutates simulation state.
+   */
+  setInfinityScaleFramePlan(plan: InfinityScaleFramePlan | null): void {
+    if (!plan) {
+      this._infinityRenderKeys = null;
+      return;
+    }
+    this._infinityRenderKeys = new Set(
+      plan.chunks.filter(chunk => chunk.renderEligible).map(chunk => chunk.key),
+    );
+  }
+
+  private _isInfinityRenderEligible(gx: number, gy: number, gz: number): boolean {
+    if (!this._infinityRenderKeys) return true;
+    const cx = Math.floor(gx / 32);
+    const cy = Math.floor(gy / 32);
+    const cz = Math.floor(gz / 32);
+    return this._infinityRenderKeys.has(`${cx},${cy},${cz},0`);
+  }
+
   render(grid: VoxelGrid, entities: EntityMarker[] = [], agents: AgentMarker[] = []): void {
     const buf  = grid.buffer;
     const { W, H, D } = grid;
@@ -214,6 +238,7 @@ export class VoxelRenderer {
       for (let gz = 0; gz < D && count < MAX_INSTANCES - 1; gz++)
       for (let gy = 0; gy < H && count < MAX_INSTANCES - 1; gy++)
       for (let gx = 0; gx < W && count < MAX_INSTANCES - 1; gx++) {
+        if (!this._isInfinityRenderEligible(gx, gy, gz)) continue;
         const i = gz*H*W + gy*W + gx;
         const d = db ? db[i * CELL_FIELDS + F.ENERGY] : 0;
         const t = Math.min(1, Math.abs(d) / scale);
@@ -234,6 +259,7 @@ export class VoxelRenderer {
       for (let gz = 0; gz < D && count < MAX_INSTANCES - 1; gz++)
       for (let gy = 0; gy < H && count < MAX_INSTANCES - 1; gy++)
       for (let gx = 0; gx < W && count < MAX_INSTANCES - 1; gx++) {
+        if (!this._isInfinityRenderEligible(gx, gy, gz)) continue;
         const i = gz*H*W + gy*W + gx;
         const v = buf[i * CELL_FIELDS + fi];
         if (v < thr * maxV) continue;
