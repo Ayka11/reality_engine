@@ -1665,6 +1665,9 @@ function _updateInfinityDiagnosticsPanel(): void {
     <div style="display:flex;justify-content:space-between;">
       <span>Exec workset</span><span>${_latestInfinityExecutionPlan.selectedSimulationCount}/${_latestInfinityExecutionPlan.maxSimulatingChunks}</span>
     </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span>Stencil halo</span><span>${_latestInfinityExecutionPlan.boundaryReadCount}</span>
+    </div>
 
     <div style="color:#6f7b99;margin:7px 0 4px;">ENERGY FIELD</div>
     <div style="display:flex;justify-content:space-between;">
