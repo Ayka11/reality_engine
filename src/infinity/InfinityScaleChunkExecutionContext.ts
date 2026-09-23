@@ -24,7 +24,7 @@ export interface InfinityScaleBoundaryReadRelation {
  * Safe execution geometry for the current dense SparseVoxelGrid.
  *
  * It translates logical 32^3 Infinity Scale chunks into dense-cell ranges and
- * explicitly includes the one-chunk stencil halo. The context is descriptive
+ * explicitly includes the LOD-aware boundary read footprint. The context is descriptive
  * until every simulation layer supports selective execution.
  */
 export class InfinityScaleChunkExecutionContext {
@@ -102,9 +102,8 @@ export class InfinityScaleChunkExecutionContext {
   ): InfinityScaleBoundaryReadRelation[] {
     const relations: InfinityScaleBoundaryReadRelation[] = [];
     for (const [sourceChunk, sourceRelations] of this.boundaryRelationsBySource) {
-      if (!this.chunkRange(sourceChunk) || !this.contains(this.chunkRange(sourceChunk), x, y, z)) {
-        continue;
-      }
+      const sourceRange = this.chunkRange(sourceChunk);
+      if (!this.contains(sourceRange, x, y, z)) continue;
       relations.push(...sourceRelations.map(relation => ({ ...relation })));
     }
     return relations;
