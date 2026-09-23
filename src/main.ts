@@ -36,6 +36,8 @@ import { WorldHealth } from './ux/WorldHealth';
 import { Explainer } from './ux/Explainer';
 import { SMART_BRUSHES } from './ux/SmartBrushes';
 import { createInfinityScaleRuntime } from './infinity/InfinityScaleRuntime';
+import { InfinityScaleBridge } from './infinity/InfinityScaleBridge';
+import { InfinityScaleSpatialAdapter } from './infinity/InfinityScaleSpatialAdapter';
 
 // ── UX System imports ─────────────────────────────────────────────────────────
 import { initializeUXSystem } from './ui/UXIntegration';
@@ -53,6 +55,9 @@ const renderer = new VoxelRenderer(canvas, sim.grid.W, sim.grid.H, sim.grid.D);
 const realityCreatorGraph = new RealityGraph();
 const realityCreatorCompiler = new GraphCompiler();
 const infinityScale = createInfinityScaleRuntime();
+const infinityScaleBridge = new InfinityScaleBridge(infinityScale);
+// SparseVoxelGrid chunks are 32^3 cells, matching Infinity Scale v2 level-0 chunks.
+const infinitySpatialAdapter = new InfinityScaleSpatialAdapter(sim.grid.chunkSize, sim.grid.chunkSize);
 infinityScale.setObserver({ x: 0, y: 0, z: 0 });
 (window as unknown as { realityEngine?: SimulationEngine; realityCreator?: { graph: RealityGraph; compiler: GraphCompiler } }).realityEngine = sim;
 (window as unknown as { realityCreator?: { graph: RealityGraph; compiler: GraphCompiler } }).realityCreator = {
@@ -1553,6 +1558,7 @@ let _latestInfinityDiagnostics = {
   fieldMax: 0,
   validSamples: 0,
 };
+let _latestInfinityFramePlan = infinityScaleBridge.update([]);
 
 
 try {
@@ -1611,6 +1617,7 @@ function _updateInfinityDiagnosticsPanel(): void {
   const d = _latestInfinityDiagnostics;
   const observer = infinityScale.getObserver();
   const records = infinityScale.residencyRecords();
+  const framePlan = _latestInfinityFramePlan;
 
   let amr0 = 0;
   let amr1 = 0;
@@ -1641,6 +1648,12 @@ function _updateInfinityDiagnosticsPanel(): void {
     </div>
     <div style="display:flex;justify-content:space-between;">
       <span>Planned records</span><span>${records.length}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span>Simulating</span><span style="color:#8eceab;">${framePlan.simulationCount}/${framePlan.maxSimulatingChunks}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span>Visible</span><span>${framePlan.visibleCount}</span>
     </div>
 
     <div style="color:#6f7b99;margin:7px 0 4px;">ENERGY FIELD</div>
@@ -1675,9 +1688,9 @@ function _updateInfinityDiagnosticsPanel(): void {
 
 function _updateInfinityObserver(): void {
   const observer = {
-    x: selX >= 0 ? Math.trunc(selX) : 0,
-    y: selY >= 0 ? Math.trunc(selY) : 0,
-    z: selZ >= 0 ? Math.trunc(selZ) : 0,
+    x: selX >= 0 ? Math.floor(selX / sim.grid.chunkSize) : 0,
+    y: selY >= 0 ? Math.floor(selY / sim.grid.chunkSize) : 0,
+    z: selZ >= 0 ? Math.floor(selZ / sim.grid.chunkSize) : 0,
   };
   infinityScale.setObserver(observer);
 }
@@ -1708,7 +1721,9 @@ async function loop(ts: number) {
     _latestInfinityDiagnostics =
       _computeInfinityScaleDiagnostics();
 
-    infinityScale.update(
+    // Convert the real SparseVoxelGrid chunk set into the Infinity Scale
+    // execution plan. No physical chunks are allocated or deleted here.
+    _latestInfinityFramePlan = infinityScaleBridge.update(
       infinityChunkKeys,
       {
         gradientNorm:
