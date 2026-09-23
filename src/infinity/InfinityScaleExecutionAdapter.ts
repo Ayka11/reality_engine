@@ -92,6 +92,12 @@ export class InfinityScaleExecutionAdapter {
       entityExecutionReady: true,
       agentMigrationReady: true,
     };
+
+    if (geometry.overlappingSimulationRangeCount > 0) {
+      throw new Error(
+        `Infinity Scale execution contains overlapping simulation ownership ranges: ${geometry.overlappingSimulationRangeCount}`,
+      );
+    }
   }
 
   update(
