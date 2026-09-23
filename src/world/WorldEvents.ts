@@ -70,8 +70,9 @@ export class WorldEvents {
     grid: VoxelGrid,
     tick: number,
     context: InfinityScaleChunkExecutionContext | null = null,
+    elapsedTicks = 1,
   ): WorldEvent | null {
-    this._nextAuto--;
+    this._nextAuto -= Math.max(1, Math.floor(elapsedTicks));
     if (this._nextAuto > 0) return null;
     // Randomize next interval: 400..1200 ticks
     this._nextAuto = 400 + Math.floor(Math.random() * 800);
@@ -138,6 +139,10 @@ export class WorldEvents {
   private _mutationWave(grid: VoxelGrid, context: InfinityScaleChunkExecutionContext | null = null) {
     const n = grid.size;
     for (let i = 0; i < n; i++) {
+      const z = Math.floor(i / (grid.W * grid.H));
+      const rem = i - z * grid.W * grid.H;
+      const y = Math.floor(rem / grid.W);
+      const x = rem - y * grid.W;
       const cell = grid.cellAt(i);
       if (context && !context.containsSimulationCell(x, y, z)) continue;
       if (cell.bioPotential > 0.1) {
