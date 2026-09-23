@@ -94,7 +94,11 @@ export class InfinityScaleExecutionAdapter {
     };
   }
 
-  update(frame: InfinityScaleFramePlan): InfinityScaleExecutionPlan {
+  update(
+    frame: InfinityScaleFramePlan,
+    capabilities: InfinityScaleExecutionCapabilities = this.capabilities,
+  ): InfinityScaleExecutionPlan {
+    this.setCapabilities(capabilities);
     const selected = frame.chunks
       .filter(chunk => chunk.simulationEligible)
       .sort((a, b) => a.distance - b.distance)
