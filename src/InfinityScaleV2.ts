@@ -217,7 +217,7 @@ export class InfinityScaleV2 {
     const optionalVisible = [...visible]
       .filter(key => !mandatory.has(key))
       .map(key => {
-        const [level, coords] = key.split(":");
+        const coords = key.slice(key.indexOf(":") + 1);
         const [x, y, z] = coords.split(",").map(Number);
         const dx = x - observerX;
         const dy = y - observerY;
