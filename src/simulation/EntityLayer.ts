@@ -135,6 +135,10 @@ export class EntityLayer {
     return this.lastChunkReconciliation;
   }
 
+  canCommitChunkReconciliation(): boolean {
+    return this.lastChunkReconciliation?.commitReady === true;
+  }
+
   get extinctCount(): number { return _extinctCount; }
   get totalSpawned(): number { return _nextId - 1; }
 
