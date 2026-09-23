@@ -7,6 +7,7 @@ export interface EntityReconciliationProposal {
   centroid: [number, number, number];
   cellCount: number;
   safeToCommit: boolean;
+  continuity: "new" | "retained" | "pending";
 }
 
 export interface EntityReconciliationCommit {
@@ -20,6 +21,7 @@ export interface EntityReconciliationCommitRecord {
   entityId: number | null;
   centroid: [number, number, number];
   cells: number[];
+  continuity: "new" | "retained";
 }
 
 export interface EntityReconciliationPlan {
@@ -56,6 +58,7 @@ export class EntityChunkReconciliation {
           centroid,
           cellCount: component.cells.length,
           safeToCommit: false,
+          continuity: "pending",
         });
         continue;
       }
@@ -83,6 +86,7 @@ export class EntityChunkReconciliation {
         centroid,
         cellCount: component.cells.length,
         safeToCommit: true,
+        continuity: best ? "retained" : "new",
       });
     }
 
@@ -127,6 +131,7 @@ export class EntityChunkReconciliation {
         entityId: proposal.existingEntityId,
         centroid: component.centroid,
         cells: [...component.cells],
+        continuity: proposal.continuity as "new" | "retained",
       };
     });
   }
