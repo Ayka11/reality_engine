@@ -201,11 +201,16 @@ export class SimulationEngine {
         : null,
     );
 
-    // Automatic world events currently mutate global state and therefore
-    // remain outside the selective execution transaction.
-    if (!this._infinityExecutionPlan || this._infinityExecutionPlan.mode === 'advisory') {
-      this.worldEvents.autoTick(this.grid, this._tick);
-    }
+    const eventContext =
+      this._infinityExecutionPlan && this._infinityExecutionPlan.mode !== 'advisory'
+        ? new InfinityScaleChunkExecutionContext(
+            this._infinityExecutionPlan,
+            this.grid.W,
+            this.grid.H,
+            this.grid.D,
+          )
+        : null;
+    this.worldEvents.autoTick(this.grid, this._tick, eventContext);
 
     // Scientific recorder
     this.recorder.tick(this.grid, this._tick);
