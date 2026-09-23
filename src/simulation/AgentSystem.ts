@@ -91,7 +91,31 @@ export class AgentSystem {
     dt: number,
     context: InfinityScaleChunkExecutionContext,
   ): void {
+    this.pendingMigrations = [];
     this.tickRegion(grid, dt, context);
+  }
+
+  applyMigrationRequests(
+    grid: VoxelGrid,
+    requests: AgentMigrationRequest[],
+    context: InfinityScaleChunkExecutionContext,
+  ): number {
+    let applied = 0;
+    for (const request of requests) {
+      const agent = this.agents.get(request.agentId);
+      if (!agent) continue;
+      if (!context.containsSimulationCell(request.to[0], request.to[1], request.to[2])) continue;
+      if (
+        Math.abs(agent.x - request.from[0]) > 0 ||
+        Math.abs(agent.y - request.from[1]) > 0 ||
+        Math.abs(agent.z - request.from[2]) > 0
+      ) continue;
+      agent.x = request.to[0];
+      agent.y = request.to[1];
+      agent.z = request.to[2];
+      applied++;
+    }
+    return applied;
   }
 
   private tickRegion(
