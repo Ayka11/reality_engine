@@ -69,20 +69,18 @@ export class SimulationEngine {
     this._gpuReady = await this.gpu.init(WORLD.W, WORLD.H, WORLD.D);
     if (this._gpuReady) {
       const selectiveGpu =
-        !!this._infinityExecutionPlan &&
-        this._infinityExecutionPlan.mode === 'selective-gpu-ready';
+        !!selectivePlan &&
+        selectivePlan.mode === 'selective-gpu-ready';
 
       if (selectiveGpu) {
         // A batched frame still advances lifecycle systems one simulation tick
         // at a time. This preserves agent age, entity lifecycle, chemistry
         // ordering and migration generation semantics instead of collapsing
         // nSteps into one oversized CPU update.
-        const executionContext = new InfinityScaleChunkExecutionContext(
-          this._infinityExecutionPlan!,
-          this.grid.W,
-          this.grid.H,
-          this.grid.D,
-        );
+        const executionContext = frameContext;
+        if (!executionContext) {
+          throw new Error('Infinity Scale selective GPU execution requires an active frame context');
+        }
 
         for (let s = 0; s < nSteps; s++) {
           this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
@@ -116,15 +114,11 @@ export class SimulationEngine {
       // CPU fallback — runs each step serially
       for (let s = 0; s < nSteps; s++) {
         this.grid.snapshot();
-        const executionContext = this._infinityExecutionPlan
-          ? new InfinityScaleChunkExecutionContext(
-              this._infinityExecutionPlan,
-              this.grid.W,
-              this.grid.H,
-              this.grid.D,
-            )
-          : null;
-        if (executionContext && this._infinityExecutionPlan?.mode !== 'advisory') {
+        // A selective frame owns one immutable execution context for all
+        // ticks. Do not rebuild it from the mutable active plan between ticks:
+        // that would let a mid-frame plan change mix ownership domains.
+        const executionContext = frameContext;
+        if (executionContext && selectivePlan) {
           this.fieldPhysics.tickChunks(
             this.grid,
             clampedDt,
