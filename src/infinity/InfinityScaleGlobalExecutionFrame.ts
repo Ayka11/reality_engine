@@ -56,6 +56,12 @@ function fingerprintPlan(plan: InfinityScaleExecutionPlan): string {
     ...plan.chunks.map(chunk => chunk.key).sort(),
     "|",
     ...plan.boundaryReadChunks.slice().sort(),
+    "|relations",
+    ...plan.boundaryReadRelations
+      .map(relation =>
+        `${relation.sourceChunk}>${relation.targetChunk}:${relation.relation}`,
+      )
+      .sort(),
   ].join("|");
 }
 
