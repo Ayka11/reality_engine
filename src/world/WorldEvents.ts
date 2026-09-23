@@ -174,30 +174,61 @@ export class WorldEvents {
   }
 
   private _tectonicShift(grid: VoxelGrid, context: InfinityScaleChunkExecutionContext | null = null) {
-    // Shear a horizontal slice — shift density and energy by one column
+    // Shear a horizontal slice — shift density and energy by one column.
+    // In selective execution, reads may come from the boundary-read set but
+    // writes remain strictly simulation-owned. Snapshot the source row first
+    // so ownership boundaries cannot cause sequential read-after-write drift.
     const shiftZ = Math.floor(Math.random() * grid.D);
-    const shift  = Math.random() < 0.5 ? 1 : -1;
+    const shift = Math.random() < 0.5 ? 1 : -1;
+
     for (let y = 0; y < grid.H; y++) {
-      const srcX = shift > 0 ? grid.W - 1 : 0;
-      const srcCell = grid.cell(srcX, y, shiftZ);
-      const savedE = srcCell.energy, savedD = srcCell.density;
-      for (let x = grid.W - 1; x >= 0; x--) {
+      const row = new Array<{
+        energy: number;
+        density: number;
+        temperature: number;
+        materialId: number;
+      }>(grid.W);
+
+      for (let x = 0; x < grid.W; x++) {
+        if (context && !context.containsReadCell(x, y, shiftZ)) continue;
+        const src = grid.cell(x, y, shiftZ);
+        row[x] = {
+          energy: src.energy,
+          density: src.density,
+          temperature: src.temperature,
+          materialId: src.materialId,
+        };
+      }
+
+      for (let x = 0; x < grid.W; x++) {
         const nx = x + shift;
         if (!grid.inBounds(nx, y, shiftZ)) continue;
         if (context && !context.containsSimulationCell(nx, y, shiftZ)) continue;
-        const src = grid.cell(x, y, shiftZ);
+
+        const src = row[x];
+        // A destination may only consume a source that was visible in the
+        // frame's read set. Otherwise defer/skip rather than reading foreign
+        // ownership state directly.
+        if (!src) continue;
+
         const dst = grid.cell(nx, y, shiftZ);
-        dst.energy  = src.energy;
+        dst.energy = src.energy;
         dst.density = src.density;
         dst.temperature = src.temperature;
-        dst.materialId  = src.materialId;
+        dst.materialId = src.materialId;
       }
-      // Fill vacated column
+
       const fillX = shift > 0 ? 0 : grid.W - 1;
-      if (!context || context.containsSimulationCell(fillX, y, shiftZ)) {
+      const fillSourceX = shift > 0 ? grid.W - 1 : 0;
+      if (
+        (!context ||
+          (context.containsSimulationCell(fillX, y, shiftZ) &&
+           context.containsReadCell(fillSourceX, y, shiftZ))) &&
+        row[fillSourceX]
+      ) {
         const fill = grid.cell(fillX, y, shiftZ);
-        fill.energy = savedE * 0.5; fill.density = savedD * 0.5;
+        fill.energy = row[fillSourceX].energy * 0.5;
+        fill.density = row[fillSourceX].density * 0.5;
       }
     }
-  }
-}
+  }}
