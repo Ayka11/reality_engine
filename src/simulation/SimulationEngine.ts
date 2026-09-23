@@ -130,6 +130,19 @@ export class SimulationEngine {
   async step(dt: number, nSteps = 1): Promise<void> {
     const clampedDt = Math.min(dt, 0.05);
 
+    const frame: InfinityScaleGlobalExecutionFrame | null = selectivePlan
+      ? beginInfinityScaleGlobalFrame(selectivePlan, this._tick, this._tick + nSteps)
+      : null;
+    let frameState = frame
+      ? advanceInfinityScaleGlobalFrame(frame, 'local-execution')
+      : null;
+    const frameContext = selectivePlan
+      ? new InfinityScaleChunkExecutionContext(selectivePlan, this.grid.W, this.grid.H, this.grid.D)
+      : null;
+    if (frameState && frameContext) {
+      assertInfinityScaleGlobalFramePlan(frameState, selectivePlan!, frameContext);
+    }
+
     if (this._gpuReady) {
       const selectiveGpu =
         !!this._infinityExecutionPlan &&
@@ -258,34 +271,6 @@ export class SimulationEngine {
         }
       }
       this.grid.syncDenseToChunks();
-    }
-
-    const selectivePlan =
-      this._infinityExecutionPlan &&
-      this._infinityExecutionPlan.mode !== 'advisory'
-        ? this._infinityExecutionPlan
-        : null;
-    const frame: InfinityScaleGlobalExecutionFrame | null = selectivePlan
-      ? beginInfinityScaleGlobalFrame(
-          selectivePlan,
-          this._tick,
-          this._tick + nSteps,
-        )
-      : null;
-    let frameState = frame
-      ? advanceInfinityScaleGlobalFrame(frame, 'local-execution')
-      : null;
-
-    const executionContext = selectivePlan
-      ? new InfinityScaleChunkExecutionContext(
-          selectivePlan,
-          this.grid.W,
-          this.grid.H,
-          this.grid.D,
-        )
-      : null;
-    if (frameState && executionContext) {
-      assertInfinityScaleGlobalFramePlan(frameState, selectivePlan, executionContext);
     }
 
     this._detectCausality(executionContext);
