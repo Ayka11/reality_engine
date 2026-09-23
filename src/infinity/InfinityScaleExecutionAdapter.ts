@@ -224,26 +224,61 @@ export class InfinityScaleExecutionAdapter {
     const baseX = chunk.chunk.x * scale;
     const baseY = chunk.chunk.y * scale;
     const baseZ = chunk.chunk.z * scale;
+    const maxX = baseX + scale - 1;
+    const maxY = baseY + scale - 1;
+    const maxZ = baseZ + scale - 1;
 
-    const faces: Array<[number, number, number]> = [
-      [baseX - 1, baseY, baseZ],
-      [baseX + scale, baseY, baseZ],
-      [baseX, baseY - 1, baseZ],
-      [baseX, baseY + scale, baseZ],
-      [baseX, baseY, baseZ - 1],
-      [baseX, baseY, baseZ + scale],
+    type Face = {
+      axis: "x" | "y" | "z";
+      coordinate: number;
+      minU: number;
+      maxU: number;
+      minV: number;
+      maxV: number;
+    };
+
+    // A face is represented by its full 2-D footprint in base-cell space.
+    // This is essential for mixed LOD: a coarse face may touch several fine
+    // children, and point sampling can silently miss all but one of them.
+    const faces: Face[] = [
+      { axis: "x", coordinate: baseX - 1, minU: baseY, maxU: maxY, minV: baseZ, maxV: maxZ },
+      { axis: "x", coordinate: maxX + 1, minU: baseY, maxU: maxY, minV: baseZ, maxV: maxZ },
+      { axis: "y", coordinate: baseY - 1, minU: baseX, maxU: maxX, minV: baseZ, maxV: maxZ },
+      { axis: "y", coordinate: maxY + 1, minU: baseX, maxU: maxX, minV: baseZ, maxV: maxZ },
+      { axis: "z", coordinate: baseZ - 1, minU: baseX, maxU: maxX, minV: baseY, maxV: maxY },
+      { axis: "z", coordinate: maxZ + 1, minU: baseX, maxU: maxX, minV: baseY, maxV: maxY },
     ];
 
-    for (const [x, y, z] of faces) {
+    for (const face of faces) {
       const containing = candidates.filter(other => {
-        const s = 2 ** other.chunk.level;
-        const ox = other.chunk.x * s;
-        const oy = other.chunk.y * s;
-        const oz = other.chunk.z * s;
+        const otherScale = 2 ** other.chunk.level;
+        const ox = other.chunk.x * otherScale;
+        const oy = other.chunk.y * otherScale;
+        const oz = other.chunk.z * otherScale;
+        const otherMaxX = ox + otherScale - 1;
+        const otherMaxY = oy + otherScale - 1;
+        const otherMaxZ = oz + otherScale - 1;
+
+        if (face.axis === "x") {
+          return (
+            (face.coordinate === ox || face.coordinate === otherMaxX + 1) &&
+            face.minU <= otherMaxY && face.maxU >= oy &&
+            face.minV <= otherMaxZ && face.maxV >= oz
+          );
+        }
+
+        if (face.axis === "y") {
+          return (
+            (face.coordinate === oy || face.coordinate === otherMaxY + 1) &&
+            face.minU <= otherMaxX && face.maxU >= ox &&
+            face.minV <= otherMaxZ && face.maxV >= oz
+          );
+        }
+
         return (
-          x >= ox && x < ox + s &&
-          y >= oy && y < oy + s &&
-          z >= oz && z < oz + s
+          (face.coordinate === oz || face.coordinate === otherMaxZ + 1) &&
+          face.minU <= otherMaxX && face.maxU >= ox &&
+          face.minV <= otherMaxY && face.maxV >= oy
         );
       });
 
@@ -253,8 +288,8 @@ export class InfinityScaleExecutionAdapter {
             other.chunk.level === level
               ? "same-level"
               : level < other.chunk.level
-                ? "coarse-to-fine"
-                : "fine-to-coarse";
+                ? "fine-to-coarse"
+                : "coarse-to-fine";
           const key = `${other.key}|${relation}`;
           out.set(key, {
             sourceChunk: chunk.key,
@@ -265,11 +300,20 @@ export class InfinityScaleExecutionAdapter {
         continue;
       }
 
-      // No selected owner at the face: request the same-level logical halo.
-      // The execution context converts it to the dense read footprint.
-      const nx = Math.floor(x / scale);
-      const ny = Math.floor(y / scale);
-      const nz = Math.floor(z / scale);
+      // No explicit frame chunk owns this face. Request the logical same-level
+      // halo at the face coordinate. floorDiv semantics are required for
+      // negative coordinates so -1 maps to chunk -1 rather than zero.
+      const floorDiv = (value: number, divisor: number): number =>
+        Math.floor(value / divisor);
+
+      let nx = chunk.chunk.x;
+      let ny = chunk.chunk.y;
+      let nz = chunk.chunk.z;
+
+      if (face.axis === "x") nx = floorDiv(face.coordinate, scale);
+      if (face.axis === "y") ny = floorDiv(face.coordinate, scale);
+      if (face.axis === "z") nz = floorDiv(face.coordinate, scale);
+
       const targetChunk = `${level}:${nx},${ny},${nz}`;
       out.set(`${targetChunk}|same-level`, {
         sourceChunk: chunk.key,
