@@ -48,8 +48,23 @@ export interface InfinityScaleExecutionPlan {
  * execute its existing full-domain stencil until chunk-local boundary and
  * synchronization semantics are implemented.
  */
+export interface InfinityScaleExecutionCapabilities {
+  selectiveCpuReady: boolean;
+  selectiveGpuReady: boolean;
+  gpuPhysicsReady: boolean;
+}
+
 export class InfinityScaleExecutionAdapter {
   private plan: InfinityScaleExecutionPlan;
+  private capabilities: InfinityScaleExecutionCapabilities = {
+    selectiveCpuReady: true,
+    selectiveGpuReady: false,
+    gpuPhysicsReady: false,
+  };
+
+  setCapabilities(capabilities: InfinityScaleExecutionCapabilities): void {
+    this.capabilities = { ...capabilities };
+  }
 
   constructor() {
     this.plan = {
@@ -67,9 +82,9 @@ export class InfinityScaleExecutionAdapter {
       boundaryReadCellCount: 0,
       localExecutionLayers: [],
       globalExecutionLayers: [],
-      selectiveCpuReady: true,
-      selectiveGpuReady: false,
-      gpuPhysicsReady: false,
+      selectiveCpuReady: this.capabilities.selectiveCpuReady,
+      selectiveGpuReady: this.capabilities.selectiveGpuReady,
+      gpuPhysicsReady: this.capabilities.gpuPhysicsReady,
       entityExecutionReady: true,
       agentMigrationReady: true,
     };
