@@ -113,10 +113,10 @@ export class EntityChunkReconciliation {
     plan: EntityReconciliationPlan,
     components: EntityChunkComponent[],
   ): EntityReconciliationCommitRecord[] | null {
-    if (!plan.commitReady) return null;
-
     const byId = new Map(components.map(component => [component.id, component]));
-    return plan.proposals.map(proposal => {
+    return plan.proposals
+      .filter(proposal => proposal.safeToCommit)
+      .map(proposal => {
       const component = byId.get(proposal.componentId);
       if (!component) throw new Error(
         `Missing component ${proposal.componentId} during reconciliation commit`,
