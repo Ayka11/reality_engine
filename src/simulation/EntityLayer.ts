@@ -114,6 +114,11 @@ export class EntityLayer {
   private lastChunkConnectivity: EntityChunkConnectivityResult | null = null;
   private readonly chunkReconciliation = new EntityChunkReconciliation();
   private lastChunkReconciliation: EntityReconciliationPlan | null = null;
+  private pendingBoundaryComponents = new Map<number, {
+    sourceEntityIds: number[];
+    centroid: [number, number, number];
+    cellCount: number;
+  }>();
 
   analyzeChunks(
     grid: VoxelGrid,
@@ -128,6 +133,16 @@ export class EntityLayer {
       this.getEntities(),
       fullDomainCovered,
     );
+
+    this.pendingBoundaryComponents.clear();
+    for (const proposal of this.lastChunkReconciliation.proposals) {
+      if (proposal.continuity !== 'pending') continue;
+      this.pendingBoundaryComponents.set(proposal.componentId, {
+        sourceEntityIds: [...proposal.sourceEntityIds],
+        centroid: [...proposal.centroid],
+        cellCount: proposal.cellCount,
+      });
+    }
     return this.lastChunkConnectivity;
   }
 
@@ -137,6 +152,20 @@ export class EntityLayer {
 
   getChunkReconciliationDiagnostics(): EntityReconciliationPlan | null {
     return this.lastChunkReconciliation;
+  }
+
+  getPendingBoundaryComponents(): Array<{
+    componentId: number;
+    sourceEntityIds: number[];
+    centroid: [number, number, number];
+    cellCount: number;
+  }> {
+    return [...this.pendingBoundaryComponents.entries()].map(([componentId, value]) => ({
+      componentId,
+      sourceEntityIds: [...value.sourceEntityIds],
+      centroid: [...value.centroid],
+      cellCount: value.cellCount,
+    }));
   }
 
   canCommitChunkReconciliation(): boolean {
