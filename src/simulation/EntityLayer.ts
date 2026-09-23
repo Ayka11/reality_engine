@@ -227,6 +227,9 @@ export class EntityLayer {
         this.entities.set(id, entity);
       }
 
+      // Continuity contract: a retained entity keeps genome, age, stage,
+      // memory buffer, children and other lifecycle state. Only spatial
+      // ownership and aggregate energy are replaced by reconciliation.
       entity.cells = [...record.cells];
       entity.centroid = [...record.centroid];
       retained.add(entity.id);
