@@ -21,6 +21,7 @@ export class InfinityScaleChunkExecutionContext {
   readonly readRanges: ExecutionCellRange[];
   readonly simulationCellCount: number;
   readonly readCellCount: number;
+  readonly overlappingSimulationRangeCount: number;
 
   constructor(
     plan: InfinityScaleExecutionPlan,
@@ -29,16 +30,19 @@ export class InfinityScaleChunkExecutionContext {
     readonly gridDepth: number,
     readonly chunkSize = 32,
   ) {
-    this.simulationRanges = plan.chunks.map(chunk =>
+    const rawSimulationRanges = plan.chunks.map(chunk =>
       this.chunkRange(chunk.key),
     );
+    this.overlappingSimulationRangeCount = this.countOverlappingRanges(rawSimulationRanges);
+    // Ownership is a set of cells, not a sum of overlapping LOD ranges. Keep
+    // the execution geometry explicit, while exposing overlap diagnostics so
+    // callers can reject ambiguous multi-LOD ownership before dispatch.
+    this.simulationRanges = rawSimulationRanges;
     this.readRanges = plan.boundaryReadChunks.map(key =>
       this.chunkRange(key),
     );
 
-    this.simulationCellCount = this.simulationRanges.reduce(
-      (sum, range) => sum + this.rangeVolume(range), 0,
-    );
+    this.simulationCellCount = this.countUniqueCells(this.simulationRanges);
     this.readCellCount = this.readRanges.reduce(
       (sum, range) => sum + this.rangeVolume(range), 0,
     );
@@ -71,6 +75,36 @@ export class InfinityScaleChunkExecutionContext {
       minZ: Math.max(0, z),
       maxZ: Math.min(this.gridDepth - 1, z + this.chunkSize - 1),
     };
+  }
+
+  private countOverlappingRanges(ranges: ExecutionCellRange[]): number {
+    let overlaps = 0;
+    for (let i = 0; i < ranges.length; i++) {
+      for (let j = i + 1; j < ranges.length; j++) {
+        if (this.rangesOverlap(ranges[i], ranges[j])) overlaps++;
+      }
+    }
+    return overlaps;
+  }
+
+  private countUniqueCells(ranges: ExecutionCellRange[]): number {
+    const seen = new Set<number>();
+    for (const range of ranges) {
+      for (let z = range.minZ; z <= range.maxZ; z++)
+      for (let y = range.minY; y <= range.maxY; y++)
+      for (let x = range.minX; x <= range.maxX; x++) {
+        seen.add(z * this.gridHeight * this.gridWidth + y * this.gridWidth + x);
+      }
+    }
+    return seen.size;
+  }
+
+  private rangesOverlap(a: ExecutionCellRange, b: ExecutionCellRange): boolean {
+    return (
+      a.minX <= b.maxX && a.maxX >= b.minX &&
+      a.minY <= b.maxY && a.maxY >= b.minY &&
+      a.minZ <= b.maxZ && a.maxZ >= b.minZ
+    );
   }
 
   private contains(range: ExecutionCellRange, x: number, y: number, z: number): boolean {
