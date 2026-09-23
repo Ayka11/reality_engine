@@ -1,5 +1,9 @@
 import type { InfinityScaleFramePlan } from "./InfinityScaleFramePlan";
 import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
+import type {
+  InfinityScaleBoundaryRelation,
+  InfinityScaleBoundaryReadRelation,
+} from "./InfinityScaleChunkExecutionContext";
 import { WORLD } from "../core/WorldConstants";
 
 export type InfinityScaleExecutionMode =
@@ -12,17 +16,6 @@ export interface InfinityScaleExecutionChunk {
   lod: number;
   amr: number;
   distance: number;
-}
-
-export type InfinityScaleBoundaryRelation =
-  | "same-level"
-  | "coarse-to-fine"
-  | "fine-to-coarse";
-
-export interface InfinityScaleBoundaryReadRelation {
-  sourceChunk: string;
-  targetChunk: string;
-  relation: InfinityScaleBoundaryRelation;
 }
 
 export interface InfinityScaleExecutionPlan {
