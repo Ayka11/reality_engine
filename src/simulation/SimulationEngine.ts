@@ -102,16 +102,57 @@ export class SimulationEngine {
     const clampedDt = Math.min(dt, 0.05);
 
     if (this._gpuReady) {
+      const selectiveGpu =
+        !!this._infinityExecutionPlan &&
+        this._infinityExecutionPlan.mode === 'selective-gpu-ready';
+      const executionContext = selectiveGpu
+        ? new InfinityScaleChunkExecutionContext(
+            this._infinityExecutionPlan!,
+            this.grid.W,
+            this.grid.H,
+            this.grid.D,
+          )
+        : null;
+
       this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
-      this.gpu.submitCompute(nSteps);
+      this.gpu.submitCompute(nSteps, executionContext);
       const data = await this.gpu.readback();
       if (data.length > 0) this.grid.buffer.set(data);
       this.grid.syncDenseToChunks();
-      this.chemLayer.tick(this.grid, clampedDt * nSteps);
-      this.entityLayer.tick(this.grid, clampedDt * nSteps);
-      this.temporalLayer.tick(this.grid, clampedDt * nSteps);
-      this.infoPhysics.tick(this.grid, clampedDt * nSteps);
-      this.agents.tick(this.grid, clampedDt * nSteps);
+
+      if (selectiveGpu) {
+        // GPU owns FieldPhysics/Entropy/InfoPhysics-equivalent scalar updates
+        // for simulation ranges. CPU retains ownership of layers whose state
+        // is not represented by the GPU cell kernel.
+        this.chemLayer.tickChunks(
+          this.grid,
+          clampedDt * nSteps,
+          executionContext!,
+        );
+        this.agents.tickChunks(
+          this.grid,
+          clampedDt * nSteps,
+          executionContext!,
+        );
+        const migrationRequests = this.agents.consumeMigrationRequests();
+        this.agents.applyMigrationRequests(
+          this.grid,
+          migrationRequests,
+          executionContext!,
+        );
+        this.entityLayer.tickChunks(
+          this.grid,
+          clampedDt * nSteps,
+          executionContext!,
+        );
+      } else {
+        // Legacy full-domain GPU path.
+        this.chemLayer.tick(this.grid, clampedDt * nSteps);
+        this.entityLayer.tick(this.grid, clampedDt * nSteps);
+        this.temporalLayer.tick(this.grid, clampedDt * nSteps);
+        this.infoPhysics.tick(this.grid, clampedDt * nSteps);
+        this.agents.tick(this.grid, clampedDt * nSteps);
+      }
     } else {
       // CPU fallback — runs each step serially
       for (let s = 0; s < nSteps; s++) {
