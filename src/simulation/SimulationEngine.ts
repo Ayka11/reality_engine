@@ -224,17 +224,12 @@ export class SimulationEngine {
             clampedDt,
             executionContext,
           );
-          const migrationRequests = this.agents.consumeMigrationRequests();
-          this.agents.applyMigrationRequests(
-            this.grid,
-            migrationRequests,
-            executionContext,
-          );
           this.entityLayer.tickChunks(
             this.grid,
             clampedDt,
             executionContext,
           );
+          this._tick++;
         } else {
           this.fieldPhysics.tick(
             this.grid,
