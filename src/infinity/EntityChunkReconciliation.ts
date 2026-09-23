@@ -52,10 +52,6 @@ export class EntityChunkReconciliation {
     const sourceComponentCounts = new Map<number, number>();
 
     for (const component of components) {
-      if (component.touchesReadBoundary) {
-        componentSourceIds.set(component.id, []);
-        continue;
-      }
       const sourceIds: number[] = [];
       for (const entity of entities) {
         if (entity.cells.some(index => component.cells.includes(index))) {
@@ -78,7 +74,7 @@ export class EntityChunkReconciliation {
         proposals.push({
           componentId: component.id,
           existingEntityId: null,
-          sourceEntityIds: [],
+          sourceEntityIds,
           centroid,
           cellCount: component.cells.length,
           safeToCommit: false,
