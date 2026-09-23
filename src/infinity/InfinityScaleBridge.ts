@@ -44,7 +44,9 @@ export class InfinityScaleBridge {
         distance,
         simulationEligible: record.state === "simulating",
         renderEligible:
-          record.state === "visible" || record.state === "background",
+          record.state === "visible" ||
+          record.state === "background" ||
+          record.state === "simulating",
       };
     });
 
