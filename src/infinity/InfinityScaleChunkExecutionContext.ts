@@ -172,6 +172,38 @@ export class InfinityScaleChunkExecutionContext {
     return this.boundaryReadRelations.map(relation => ({ ...relation }));
   }
 
+  getBoundaryTransferSpecsForCell(
+    x: number,
+    y: number,
+    z: number,
+  ): InfinityScaleBoundaryTransferSpec[] {
+    const relations = this.getBoundaryRelationsForCell(x, y, z);
+    return relations.map(relation => {
+      const sourceLevel = chunkLevel(relation.sourceChunk);
+      const targetLevel = chunkLevel(relation.targetChunk);
+      return {
+        sourceChunk: relation.sourceChunk,
+        targetChunk: relation.targetChunk,
+        relation: relation.relation,
+        sourceLevel,
+        targetLevel,
+        refinementRatio: 2 ** Math.abs(sourceLevel - targetLevel),
+        operation:
+          relation.relation === "same-level"
+            ? "copy"
+            : relation.relation === "coarse-to-fine"
+              ? "prolongation"
+              : "restriction",
+        readOperation:
+          relation.relation === "same-level"
+            ? "copy"
+            : relation.relation === "coarse-to-fine"
+              ? "restriction"
+              : "prolongation",
+      };
+    });
+  }
+
   getBoundaryRelationsForCell(
     x: number,
     y: number,
