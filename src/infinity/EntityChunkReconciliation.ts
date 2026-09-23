@@ -121,20 +121,24 @@ export class EntityChunkReconciliation {
         (sourceComponentCounts.get(sourceEntityIds[0]) ?? 0) > 1;
       const mergeSource = sourceEntityIds.length > 1;
 
+      const continuity = mergeSource
+        ? "merge"
+        : splitSource
+          ? "split"
+          : best
+            ? "retained"
+            : "new";
       proposals.push({
         componentId: component.id,
         existingEntityId: best?.id ?? null,
         sourceEntityIds,
         centroid,
         cellCount: component.cells.length,
-        safeToCommit: true,
-        continuity: mergeSource
-          ? "merge"
-          : splitSource
-            ? "split"
-            : best
-              ? "retained"
-              : "new",
+        // A merge changes more than one entity identity. Until the whole
+        // domain is covered, defer it rather than extinguishing a source
+        // entity whose other cells may be outside this workset.
+        safeToCommit: continuity !== "merge" || fullDomainCovered,
+        continuity,
       });
     }
 
