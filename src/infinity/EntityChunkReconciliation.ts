@@ -17,7 +17,7 @@ export interface EntityReconciliationCommit {
 
 export interface EntityReconciliationCommitRecord {
   componentId: number;
-  entityId: number;
+  entityId: number | null;
   centroid: [number, number, number];
   cells: number[];
 }
@@ -124,7 +124,7 @@ export class EntityChunkReconciliation {
 
       return {
         componentId: proposal.componentId,
-        entityId: proposal.existingEntityId ?? -(proposal.componentId + 1),
+        entityId: proposal.existingEntityId,
         centroid: component.centroid,
         cells: [...component.cells],
       };
