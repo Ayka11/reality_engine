@@ -159,6 +159,10 @@ export class SimulationEngine {
             clampedDt,
             executionContext,
           );
+          this.entityLayer.prepareChunkExecution(
+            this.grid,
+            executionContext,
+          );
         } else {
           this.fieldPhysics.tick(
             this.grid,
