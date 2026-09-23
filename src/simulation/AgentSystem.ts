@@ -15,6 +15,14 @@ export interface Agent {
   children: number;
 }
 
+export interface AgentMigrationRequest {
+  agentId: number;
+  from: [number, number, number];
+  to: [number, number, number];
+  behavior: AgentBehavior;
+  energy: number;
+}
+
 export interface AgentMarker {
   id: string;
   position: [number, number, number]; // grid coords
@@ -42,6 +50,17 @@ export const AGENT_COLORS: Record<AgentBehavior, [number, number, number]> = {
 export class AgentSystem {
   private agents: Map<number, Agent> = new Map();
   readonly maxAgents = 64;
+  private pendingMigrations: AgentMigrationRequest[] = [];
+
+  consumeMigrationRequests(): AgentMigrationRequest[] {
+    const requests = this.pendingMigrations.map(request => ({
+      ...request,
+      from: [...request.from] as [number, number, number],
+      to: [...request.to] as [number, number, number],
+    }));
+    this.pendingMigrations = [];
+    return requests;
+  }
 
   // Seed agents + inject local energy so they survive from a cold start
   seed(grid: VoxelGrid, count = 8): void {
@@ -200,6 +219,14 @@ export class AgentSystem {
         if (!context || context.containsSimulationCell(bx, by, bz)) {
           grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
           agent.x=bx; agent.y=by; agent.z=bz;
+        } else {
+          this.pendingMigrations.push({
+            agentId: agent.id,
+            from: [agent.x, agent.y, agent.z],
+            to: [bx, by, bz],
+            behavior: agent.behavior,
+            energy: agent.energy,
+          });
         }
       }
     }
@@ -252,9 +279,17 @@ export class AgentSystem {
       const nx = Math.max(0, Math.min(grid.W-1, agent.x+dx));
       const ny = Math.max(0, Math.min(grid.H-1, agent.y+dy));
       if (nx !== agent.x || ny !== agent.y) {
-        grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
         if (!context || context.containsSimulationCell(nx, ny, agent.z)) {
+          grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
           agent.x=nx; agent.y=ny;
+        } else {
+          this.pendingMigrations.push({
+            agentId: agent.id,
+            from: [agent.x, agent.y, agent.z],
+            to: [nx, ny, agent.z],
+            behavior: agent.behavior,
+            energy: agent.energy,
+          });
         }
       }
     }
