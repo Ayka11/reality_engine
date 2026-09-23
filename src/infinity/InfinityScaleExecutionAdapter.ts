@@ -98,6 +98,10 @@ export class InfinityScaleExecutionAdapter {
         `Infinity Scale execution contains overlapping simulation ownership ranges: ${geometry.overlappingSimulationRangeCount}`,
       );
     }
+
+    // Boundary halos are allowed to overlap: they are read dependencies, not
+    // owners. The execution context deduplicates their cell footprint, so the
+    // plan's boundary-read budget represents unique transferred cells.
   }
 
   update(
