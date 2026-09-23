@@ -175,6 +175,7 @@ export class WorldEvents {
       for (let x = grid.W - 1; x >= 0; x--) {
         const nx = x + shift;
         if (!grid.inBounds(nx, y, shiftZ)) continue;
+        if (context && !context.containsSimulationCell(nx, y, shiftZ)) continue;
         const src = grid.cell(x, y, shiftZ);
         const dst = grid.cell(nx, y, shiftZ);
         dst.energy  = src.energy;
@@ -184,8 +185,10 @@ export class WorldEvents {
       }
       // Fill vacated column
       const fillX = shift > 0 ? 0 : grid.W - 1;
-      const fill = grid.cell(fillX, y, shiftZ);
-      fill.energy = savedE * 0.5; fill.density = savedD * 0.5;
+      if (!context || context.containsSimulationCell(fillX, y, shiftZ)) {
+        const fill = grid.cell(fillX, y, shiftZ);
+        fill.energy = savedE * 0.5; fill.density = savedD * 0.5;
+      }
     }
   }
 }
