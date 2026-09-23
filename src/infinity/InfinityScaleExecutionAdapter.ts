@@ -143,10 +143,10 @@ export class InfinityScaleExecutionAdapter {
         "InfoPhysics",
         "TemporalLayer",
         "ChemLayer",
+        "AgentSystem",
       ],
       globalExecutionLayers: [
         "EntityLayer",
-        "AgentSystem",
       ],
       selectiveCpuReady: false,
     };
