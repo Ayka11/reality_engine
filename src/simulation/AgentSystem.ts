@@ -124,7 +124,7 @@ export class AgentSystem {
       applied++;
     }
     if (applied > 0) {
-      const appliedIds = new Set(
+      const appliedKeys = new Set(
         requests
           .filter(request => {
             const agent = this.agents.get(request.agentId);
@@ -134,11 +134,20 @@ export class AgentSystem {
               agent.y === request.to[1] &&
               agent.z === request.to[2];
           })
-          .map(request => request.agentId),
+          .map(request => [
+            request.agentId,
+            request.from.join(','),
+            request.to.join(','),
+          ].join('|')),
       );
-      this.pendingMigrations = this.pendingMigrations.filter(
-        request => !appliedIds.has(request.agentId),
-      );
+      this.pendingMigrations = this.pendingMigrations.filter(request => {
+        const key = [
+          request.agentId,
+          request.from.join(','),
+          request.to.join(','),
+        ].join('|');
+        return !appliedKeys.has(key);
+      });
     }
     return applied;
   }
