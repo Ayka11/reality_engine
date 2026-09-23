@@ -4,6 +4,7 @@ import { WORLD } from '../core/WorldConstants';
 import { PhysicsParams } from '../laws/MetaLaw';
 import { PROC } from '../process/ProcessDef';
 import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
+import type { InfinityScaleLODBoundarySnapshot } from '../infinity/InfinityScaleLODBoundarySnapshot';
 
 function on(mask: number, proc: number) { return (mask & (1 << proc)) !== 0; }
 
@@ -22,8 +23,9 @@ export class FieldPhysics {
     p: Readonly<PhysicsParams>,
     mask: number,
     context: InfinityScaleChunkExecutionContext,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
-    this.tickRegion(grid, dt, p, mask, context);
+    this.tickRegion(grid, dt, p, mask, context, boundarySnapshot);
   }
 
   private tickRegion(
@@ -32,6 +34,7 @@ export class FieldPhysics {
     p: Readonly<PhysicsParams>,
     mask: number,
     context: InfinityScaleChunkExecutionContext | null,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
     const {W, H, D} = grid;
 
@@ -52,7 +55,17 @@ export class FieldPhysics {
       let fxSum = 0, fySum = 0, fzSum = 0;
 
       for (const [nx, ny, nz] of nbrs) {
-        const nb = grid.cellBack(nx, ny, nz);
+        const nb = this.readNeighbor(
+          grid,
+          nx,
+          ny,
+          nz,
+          x,
+          y,
+          z,
+          context,
+          boundarySnapshot,
+        );
         lapE += nb.energy;
         lapT += nb.temperature;
         lapD += nb.density;
@@ -133,4 +146,33 @@ export class FieldPhysics {
       }
     }
   }
+  private readNeighbor(
+    grid: VoxelGrid,
+    nx: number,
+    ny: number,
+    nz: number,
+    ownerX: number,
+    ownerY: number,
+    ownerZ: number,
+    context: InfinityScaleChunkExecutionContext | null,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
+  ) {
+    if (context && boundarySnapshot && !context.containsSimulationCell(nx, ny, nz)) {
+      const specs = context.getBoundaryTransferSpecsForCell(ownerX, ownerY, ownerZ);
+      for (const spec of specs) {
+        const sample = boundarySnapshot.read(spec, [nx, ny, nz]);
+        if (sample) {
+          return {
+            energy: sample[F.ENERGY],
+            temperature: sample[F.TEMPERATURE],
+            density: sample[F.DENSITY],
+            information: sample[F.INFORMATION],
+            get: (field: number) => sample[field] ?? 0,
+          };
+        }
+      }
+    }
+    return grid.cellBack(nx, ny, nz);
+  }
+
 }
