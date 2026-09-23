@@ -222,7 +222,7 @@ export class VoxelRenderer {
     const cx = Math.floor(gx / 32);
     const cy = Math.floor(gy / 32);
     const cz = Math.floor(gz / 32);
-    return this._infinityRenderKeys.has(`${cx},${cy},${cz},0`);
+    return this._infinityRenderKeys.has(`0:${cx},${cy},${cz}`);
   }
 
   render(grid: VoxelGrid, entities: EntityMarker[] = [], agents: AgentMarker[] = []): void {
