@@ -15,6 +15,7 @@ import { TemporalLayer } from './TemporalLayer';
 import { InfoPhysics } from './InfoPhysics';
 import { Recorder } from './Recorder';
 import { AgentSystem } from './AgentSystem';
+import type { InfinityScaleExecutionPlan } from '../infinity/InfinityScaleExecutionAdapter';
 
 export class SimulationEngine {
   readonly grid: SparseVoxelGrid;
@@ -34,6 +35,7 @@ export class SimulationEngine {
   private prevEnergy: Float32Array;
   private _tick = 0;
   private _gpuReady = false;
+  private _infinityExecutionPlan: InfinityScaleExecutionPlan | null = null;
 
   constructor() {
     this.grid = new SparseVoxelGrid(WORLD.W, WORLD.H, WORLD.D);
@@ -63,6 +65,32 @@ export class SimulationEngine {
 
   get tick() { return this._tick; }
   get gpuActive() { return this._gpuReady; }
+
+  /**
+   * Receives the bounded Infinity Scale work contract.
+   *
+   * The current dense solver remains full-domain by design. This contract is
+   * observable and ready for selective dispatch once chunk-local stencil
+   * boundaries and synchronization are implemented.
+   */
+  setInfinityScaleExecutionPlan(plan: InfinityScaleExecutionPlan | null): void {
+    this._infinityExecutionPlan = plan
+      ? {
+          ...plan,
+          observer: { ...plan.observer },
+          chunks: plan.chunks.map(chunk => ({ ...chunk })),
+        }
+      : null;
+  }
+
+  get infinityScaleExecutionPlan(): InfinityScaleExecutionPlan | null {
+    if (!this._infinityExecutionPlan) return null;
+    return {
+      ...this._infinityExecutionPlan,
+      observer: { ...this._infinityExecutionPlan.observer },
+      chunks: this._infinityExecutionPlan.chunks.map(chunk => ({ ...chunk })),
+    };
+  }
 
   restoreTick(tick: number): void {
     this._tick = Math.max(0, Math.floor(tick));
