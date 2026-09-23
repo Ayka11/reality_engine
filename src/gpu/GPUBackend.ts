@@ -437,6 +437,7 @@ export class GPUBackend {
     const ranges = context?.simulationRanges ?? [{
       minX: 0, maxX: this.W - 1, minY: 0, maxY: this.H - 1, minZ: 0, maxZ: this.D - 1,
     }];
+    if (context && ranges.length === 0) return;
     const table = new Uint32Array(ranges.length * 6);
     let totalCells = 0;
     ranges.forEach((range, index) => {
