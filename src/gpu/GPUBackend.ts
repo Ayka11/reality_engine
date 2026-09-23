@@ -447,7 +447,7 @@ export class GPUBackend {
     const u32 = new Uint32Array(params);
     u32[20] = context ? ranges.length : 0;
     u32[21] = context ? totalCells : 0;
-    this.device.queue.writeBuffer(this.paramsBuf!, 80, new Uint32Array(params, 80, 8).buffer);
+    this.device.queue.writeBuffer(this.paramsBuf!, 80, new Uint32Array(params, 80, 2).buffer);
 
     const enc = this.device.createCommandEncoder();
     for (let s = 0; s < nSteps; s++) {
