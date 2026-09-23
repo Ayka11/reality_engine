@@ -93,15 +93,6 @@ export class InfinityScaleExecutionAdapter {
       agentMigrationReady: true,
     };
 
-    if (geometry.overlappingSimulationRangeCount > 0) {
-      throw new Error(
-        `Infinity Scale execution contains overlapping simulation ownership ranges: ${geometry.overlappingSimulationRangeCount}`,
-      );
-    }
-
-    // Boundary halos are allowed to overlap: they are read dependencies, not
-    // owners. The execution context deduplicates their cell footprint, so the
-    // plan's boundary-read budget represents unique transferred cells.
   }
 
   update(
@@ -117,20 +108,11 @@ export class InfinityScaleExecutionAdapter {
     const simulationKeys = new Set(selected.map(chunk => chunk.key));
     const boundaryReadKeys = new Set<string>();
 
-    // FieldPhysics uses a 6-neighbor stencil. A future selective solver must
-    // therefore read the one-chunk halo around each simulated chunk. The halo
-    // is a dependency set, not extra simulation budget.
+    // Resolve the six face neighbors in physical space. At mixed LOD, a face
+    // may touch one coarser parent or multiple finer children; emit every
+    // logical neighbor whose dense footprint can intersect that face.
     for (const chunk of selected) {
-      const level = chunk.chunk.level;
-      const x = chunk.chunk.x;
-      const y = chunk.chunk.y;
-      const z = chunk.chunk.z;
-      for (const [dx, dy, dz] of [
-        [-1, 0, 0], [1, 0, 0],
-        [0, -1, 0], [0, 1, 0],
-        [0, 0, -1], [0, 0, 1],
-      ]) {
-        const key = `${level}:${x + dx},${y + dy},${z + dz}`;
+      for (const key of this.resolveFaceNeighbors(chunk, selected)) {
         if (!simulationKeys.has(key)) boundaryReadKeys.add(key);
       }
     }
@@ -159,6 +141,12 @@ export class InfinityScaleExecutionAdapter {
       WORLD.H,
       WORLD.D,
     );
+
+    if (geometry.overlappingSimulationRangeCount > 0) {
+      throw new Error(
+        `Infinity Scale execution contains overlapping simulation ownership ranges: ${geometry.overlappingSimulationRangeCount}`,
+      );
+    }
 
     const mode: InfinityScaleExecutionMode =
       this.capabilities.selectiveGpuReady && this.capabilities.gpuPhysicsReady
@@ -208,6 +196,55 @@ export class InfinityScaleExecutionAdapter {
     };
 
     return this.getPlan();
+  }
+
+  private resolveFaceNeighbors(
+    chunk: InfinityScaleFramePlan["chunks"][number],
+    selected: InfinityScaleFramePlan["chunks"],
+  ): string[] {
+    const out = new Set<string>();
+    const level = chunk.chunk.level;
+    const scale = 2 ** level;
+    const baseX = chunk.chunk.x * scale;
+    const baseY = chunk.chunk.y * scale;
+    const baseZ = chunk.chunk.z * scale;
+
+    const faces: Array<[number, number, number]> = [
+      [baseX - 1, baseY, baseZ],
+      [baseX + scale, baseY, baseZ],
+      [baseX, baseY - 1, baseZ],
+      [baseX, baseY + scale, baseZ],
+      [baseX, baseY, baseZ - 1],
+      [baseX, baseY, baseZ + scale],
+    ];
+
+    for (const [x, y, z] of faces) {
+      const containing = selected.filter(other => {
+        const s = 2 ** other.chunk.level;
+        const ox = other.chunk.x * s;
+        const oy = other.chunk.y * s;
+        const oz = other.chunk.z * s;
+        return (
+          x >= ox && x < ox + s &&
+          y >= oy && y < oy + s &&
+          z >= oz && z < oz + s
+        );
+      });
+
+      if (containing.length) {
+        for (const other of containing) out.add(other.key);
+        continue;
+      }
+
+      // No selected owner at the face: request the same-level logical halo.
+      // The execution context converts it to the dense read footprint.
+      const nx = Math.floor(x / scale);
+      const ny = Math.floor(y / scale);
+      const nz = Math.floor(z / scale);
+      out.add(`${level}:${nx},${ny},${nz}`);
+    }
+
+    return [...out];
   }
 
   getPlan(): InfinityScaleExecutionPlan {
