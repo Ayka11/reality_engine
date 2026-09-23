@@ -68,20 +68,100 @@ export class SimulationEngine {
   async initGPU(): Promise<boolean> {
     this._gpuReady = await this.gpu.init(WORLD.W, WORLD.H, WORLD.D);
     if (this._gpuReady) {
+      this.gpu.upload(this.grid.buffer);
+      this.gpu.uploadMaterials(buildMaterialBuffer());
+    }
+    return this._gpuReady;
+  }
+
+  get tick() { return this._tick; }
+  get gpuActive() { return this._gpuReady; }
+
+  getInfinityScaleExecutionCapabilities(): InfinityScaleExecutionCapabilities {
+    return {
+      selectiveCpuReady: true,
+      selectiveGpuReady: this._gpuReady,
+      gpuPhysicsReady: this._gpuReady,
+    };
+  }
+
+  /**
+   * Receives the bounded Infinity Scale work contract.
+   *
+   * The current dense solver remains full-domain by design. This contract is
+   * observable and ready for selective dispatch once chunk-local stencil
+   * boundaries and synchronization are implemented.
+   */
+  setInfinityScaleExecutionPlan(plan: InfinityScaleExecutionPlan | null): void {
+    if (!plan) {
+      this._infinityExecutionPlan = null;
+      return;
+    }
+
+    // The engine accepts a GPU plan only when the runtime capability handshake
+    // actually reports an initialized GPU. It never promotes CPU plans itself.
+    if (plan.mode === 'selective-gpu-ready' && !this._gpuReady) {
+      throw new Error(
+        'Infinity Scale GPU execution plan requires initialized GPU capability',
+      );
+    }
+
+    this._infinityExecutionPlan = {
+      ...plan,
+      observer: { ...plan.observer },
+      chunks: plan.chunks.map(chunk => ({ ...chunk })),
+      boundaryReadChunks: [...plan.boundaryReadChunks],
+    };
+  }
+
+  get infinityScaleExecutionPlan(): InfinityScaleExecutionPlan | null {
+    if (!this._infinityExecutionPlan) return null;
+    return {
+      ...this._infinityExecutionPlan,
+      observer: { ...this._infinityExecutionPlan.observer },
+      chunks: this._infinityExecutionPlan.chunks.map(chunk => ({ ...chunk })),
+    };
+  }
+
+  restoreTick(tick: number): void {
+    this._tick = Math.max(0, Math.floor(tick));
+  }
+
+  // nSteps allows batching multiple physics ticks per animation frame
+  async step(dt: number, nSteps = 1): Promise<void> {
+    const clampedDt = Math.min(dt, 0.05);
+
+    const selectivePlan =
+      this._infinityExecutionPlan &&
+      this._infinityExecutionPlan.mode !== 'advisory'
+        ? this._infinityExecutionPlan
+        : null;
+
+    const frame: InfinityScaleGlobalExecutionFrame | null = selectivePlan
+      ? beginInfinityScaleGlobalFrame(selectivePlan, this._tick, this._tick + nSteps)
+      : null;
+    let frameState = frame
+      ? advanceInfinityScaleGlobalFrame(frame, 'local-execution')
+      : null;
+    const frameContext = selectivePlan
+      ? new InfinityScaleChunkExecutionContext(selectivePlan, this.grid.W, this.grid.H, this.grid.D)
+      : null;
+    if (frameState && frameContext) {
+      assertInfinityScaleGlobalFramePlan(frameState, selectivePlan!, frameContext);
+    }
+
+    if (this._gpuReady) {
       const selectiveGpu =
         !!selectivePlan &&
         selectivePlan.mode === 'selective-gpu-ready';
 
       if (selectiveGpu) {
-        // A batched frame still advances lifecycle systems one simulation tick
-        // at a time. This preserves agent age, entity lifecycle, chemistry
-        // ordering and migration generation semantics instead of collapsing
-        // nSteps into one oversized CPU update.
         const executionContext = frameContext;
         if (!executionContext) {
           throw new Error('Infinity Scale selective GPU execution requires an active frame context');
         }
 
+        // Preserve per-tick lifecycle semantics inside a batched frame.
         for (let s = 0; s < nSteps; s++) {
           this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
           this.gpu.submitCompute(1, executionContext);
@@ -92,31 +172,22 @@ export class SimulationEngine {
           this.chemLayer.tickChunks(this.grid, clampedDt, executionContext);
           this.agents.tickChunks(this.grid, clampedDt, executionContext);
           this.entityLayer.tickChunks(this.grid, clampedDt, executionContext);
-
-          // CPU-owned state must be visible to the next GPU tick.
+          this._tick++;
           this.gpu.upload(this.grid.buffer);
         }
       } else {
-        // Legacy full-domain GPU path may retain its batched kernel semantics.
-        this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
-        this.gpu.submitCompute(nSteps, null);
-        const data = await this.gpu.readback();
-        if (data.length > 0) this.grid.buffer.set(data);
-        this.grid.syncDenseToChunks();
-
+        // Legacy full-domain GPU path.
         this.chemLayer.tick(this.grid, clampedDt * nSteps);
         this.entityLayer.tick(this.grid, clampedDt * nSteps);
         this.temporalLayer.tick(this.grid, clampedDt * nSteps);
         this.infoPhysics.tick(this.grid, clampedDt * nSteps);
         this.agents.tick(this.grid, clampedDt * nSteps);
+        this._tick += nSteps;
       }
     } else {
       // CPU fallback — runs each step serially
       for (let s = 0; s < nSteps; s++) {
         this.grid.snapshot();
-        // A selective frame owns one immutable execution context for all
-        // ticks. Do not rebuild it from the mutable active plan between ticks:
-        // that would let a mid-frame plan change mix ownership domains.
         const executionContext = frameContext;
         if (executionContext && selectivePlan) {
           this.fieldPhysics.tickChunks(
@@ -133,11 +204,37 @@ export class SimulationEngine {
             this.laws.activeProcessMask,
             executionContext,
           );
-          this.infoPhysics.tickChunks(this.grid, clampedDt, executionContext);
-          this.temporalLayer.tickChunks(this.grid, clampedDt, executionContext);
-          this.chemLayer.tickChunks(this.grid, clampedDt, executionContext);
-          this.agents.tickChunks(this.grid, clampedDt, executionContext);
-          this.entityLayer.tickChunks(this.grid, clampedDt, executionContext);
+          this.infoPhysics.tickChunks(
+            this.grid,
+            clampedDt,
+            executionContext,
+          );
+          this.temporalLayer.tickChunks(
+            this.grid,
+            clampedDt,
+            executionContext,
+          );
+          this.chemLayer.tickChunks(
+            this.grid,
+            clampedDt,
+            executionContext,
+          );
+          this.agents.tickChunks(
+            this.grid,
+            clampedDt,
+            executionContext,
+          );
+          const migrationRequests = this.agents.consumeMigrationRequests();
+          this.agents.applyMigrationRequests(
+            this.grid,
+            migrationRequests,
+            executionContext,
+          );
+          this.entityLayer.tickChunks(
+            this.grid,
+            clampedDt,
+            executionContext,
+          );
         } else {
           this.fieldPhysics.tick(
             this.grid,
@@ -156,6 +253,7 @@ export class SimulationEngine {
         }
       }
       this.grid.syncDenseToChunks();
+      if (!selectivePlan) this._tick += nSteps;
     }
 
     // Agent migrations cross ownership boundaries only at the frame barrier.
