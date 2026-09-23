@@ -91,7 +91,6 @@ export class AgentSystem {
     dt: number,
     context: InfinityScaleChunkExecutionContext,
   ): void {
-    this.pendingMigrations = [];
     this.tickRegion(grid, dt, context);
   }
 
@@ -114,6 +113,23 @@ export class AgentSystem {
       agent.y = request.to[1];
       agent.z = request.to[2];
       applied++;
+    }
+    if (applied > 0) {
+      const appliedIds = new Set(
+        requests
+          .filter(request => {
+            const agent = this.agents.get(request.agentId);
+            return !!agent &&
+              context.containsSimulationCell(agent.x, agent.y, agent.z) &&
+              agent.x === request.to[0] &&
+              agent.y === request.to[1] &&
+              agent.z === request.to[2];
+          })
+          .map(request => request.agentId),
+      );
+      this.pendingMigrations = this.pendingMigrations.filter(
+        request => !appliedIds.has(request.agentId),
+      );
     }
     return applied;
   }
