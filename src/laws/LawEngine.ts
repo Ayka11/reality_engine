@@ -86,7 +86,7 @@ export class LawEngine {
     ];
   }
 
-  tick(metrics: WorldMetrics): void {
+  tick(metrics: WorldMetrics, elapsedTicks = 1): void {
     let dirty = false;
     for (const law of this.laws) {
       const _override = this._lawOverride.get(law.id);
@@ -99,7 +99,7 @@ export class LawEngine {
         dirty = true;
       }
 
-      law.age++;
+      law.age += elapsedTicks;
 
       // Fitness: reward laws that are active during high-complexity states
       const complexity = metrics.avgInfo / 500 + metrics.avgBio;
