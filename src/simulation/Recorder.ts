@@ -13,6 +13,7 @@ export class Recorder {
   private _recording = false;
   private _intervalTicks: number;
   private _lastSnapTick = 0;
+  private _nextSnapTick = 0;
 
   constructor(maxSnapshots = 60, intervalTicks = 30) {
     this.maxSnapshots = maxSnapshots;
@@ -23,15 +24,37 @@ export class Recorder {
   get count() { return this.snapshots.length; }
   get snapList(): Snapshot[] { return this.snapshots; }
 
-  startRecording(): void { this._recording = true; }
+  startRecording(): void {
+    this._recording = true;
+    if (this._nextSnapTick <= this._lastSnapTick) {
+      this._nextSnapTick = this._lastSnapTick + Math.max(1, this._intervalTicks);
+    }
+  }
   stopRecording(): void  { this._recording = false; }
-  clearSnapshots(): void { this.snapshots = []; this._lastSnapTick = 0; }
+  clearSnapshots(): void {
+    this.snapshots = [];
+    this._lastSnapTick = 0;
+    this._nextSnapTick = Math.max(1, this._intervalTicks);
+  }
 
   tick(grid: VoxelGrid, currentTick: number): void {
     if (!this._recording) return;
-    if (currentTick - this._lastSnapTick < this._intervalTicks) return;
+
+    const interval = Math.max(1, this._intervalTicks);
+    if (this._nextSnapTick <= 0) this._nextSnapTick = interval;
+    if (currentTick < this._nextSnapTick) return;
+
+    // The recorder is invoked at frame boundaries, so a batched step may
+    // cross one or more nominal snapshot ticks. We cannot reconstruct an
+    // intermediate state that was never captured; capture the first observed
+    // post-boundary state, then keep the schedule anchored to simulation time
+    // instead of drifting by interval from the capture frame.
     this._lastSnapTick = currentTick;
     this._capture(grid, currentTick);
+
+    do {
+      this._nextSnapTick += interval;
+    } while (this._nextSnapTick <= currentTick);
   }
 
   private _capture(grid: VoxelGrid, tick: number): void {
