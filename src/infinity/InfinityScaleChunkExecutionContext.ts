@@ -9,6 +9,17 @@ export interface ExecutionCellRange {
   maxZ: number;
 }
 
+export type InfinityScaleBoundaryRelation =
+  | "same-level"
+  | "coarse-to-fine"
+  | "fine-to-coarse";
+
+export interface InfinityScaleBoundaryReadRelation {
+  sourceChunk: string;
+  targetChunk: string;
+  relation: InfinityScaleBoundaryRelation;
+}
+
 /**
  * Safe execution geometry for the current dense SparseVoxelGrid.
  *
@@ -25,6 +36,12 @@ export class InfinityScaleChunkExecutionContext {
   readonly overlappingReadRangeCount: number;
   readonly uniqueBoundaryReadCellCount: number;
   readonly levelRangeScales: number[];
+  readonly boundaryReadRelations: InfinityScaleBoundaryReadRelation[];
+
+  private readonly boundaryRelationsBySource = new Map<
+    string,
+    InfinityScaleBoundaryReadRelation[]
+  >();
 
   constructor(
     plan: InfinityScaleExecutionPlan,
@@ -45,6 +62,12 @@ export class InfinityScaleChunkExecutionContext {
     this.readRanges = plan.boundaryReadChunks.map(key =>
       this.chunkRange(key),
     );
+    this.boundaryReadRelations = plan.boundaryReadRelations.map(relation => ({ ...relation }));
+    for (const relation of this.boundaryReadRelations) {
+      const existing = this.boundaryRelationsBySource.get(relation.sourceChunk) ?? [];
+      existing.push({ ...relation });
+      this.boundaryRelationsBySource.set(relation.sourceChunk, existing);
+    }
     this.overlappingReadRangeCount = this.countOverlappingRanges(this.readRanges);
 
     this.simulationCellCount = this.countUniqueCells(this.simulationRanges);
@@ -63,6 +86,28 @@ export class InfinityScaleChunkExecutionContext {
   containsReadCell(x: number, y: number, z: number): boolean {
     if (this.containsSimulationCell(x, y, z)) return true;
     return this.readRanges.some(range => this.contains(range, x, y, z));
+  }
+
+  getBoundaryRelations(sourceChunk?: string): InfinityScaleBoundaryReadRelation[] {
+    if (sourceChunk !== undefined) {
+      return (this.boundaryRelationsBySource.get(sourceChunk) ?? []).map(relation => ({ ...relation }));
+    }
+    return this.boundaryReadRelations.map(relation => ({ ...relation }));
+  }
+
+  getBoundaryRelationsForCell(
+    x: number,
+    y: number,
+    z: number,
+  ): InfinityScaleBoundaryReadRelation[] {
+    const relations: InfinityScaleBoundaryReadRelation[] = [];
+    for (const [sourceChunk, sourceRelations] of this.boundaryRelationsBySource) {
+      if (!this.chunkRange(sourceChunk) || !this.contains(this.chunkRange(sourceChunk), x, y, z)) {
+        continue;
+      }
+      relations.push(...sourceRelations.map(relation => ({ ...relation })));
+    }
+    return relations;
   }
 
   private chunkRange(key: string): ExecutionCellRange {
