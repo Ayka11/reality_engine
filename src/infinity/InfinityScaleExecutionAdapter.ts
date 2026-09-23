@@ -34,6 +34,7 @@ export interface InfinityScaleExecutionPlan {
   localExecutionLayers: string[];
   globalExecutionLayers: string[];
   selectiveCpuReady: boolean;
+  entityExecutionReady: boolean;
 }
 
 /**
@@ -64,6 +65,7 @@ export class InfinityScaleExecutionAdapter {
       localExecutionLayers: [],
       globalExecutionLayers: [],
       selectiveCpuReady: false,
+      entityExecutionReady: false,
     };
   }
 
@@ -149,6 +151,7 @@ export class InfinityScaleExecutionAdapter {
         "EntityLayer",
       ],
       selectiveCpuReady: false,
+      entityExecutionReady: false,
     };
 
     return this.getPlan();
