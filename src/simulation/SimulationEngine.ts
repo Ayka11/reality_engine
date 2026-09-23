@@ -16,6 +16,7 @@ import { InfoPhysics } from './InfoPhysics';
 import { Recorder } from './Recorder';
 import { AgentSystem } from './AgentSystem';
 import type { InfinityScaleExecutionPlan } from '../infinity/InfinityScaleExecutionAdapter';
+import { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 
 export class SimulationEngine {
   readonly grid: SparseVoxelGrid;
@@ -115,7 +116,30 @@ export class SimulationEngine {
       // CPU fallback — runs each step serially
       for (let s = 0; s < nSteps; s++) {
         this.grid.snapshot();
-        this.fieldPhysics.tick(this.grid, clampedDt, this.laws.params, this.laws.activeProcessMask);
+        const executionContext = this._infinityExecutionPlan
+          ? new InfinityScaleChunkExecutionContext(
+              this._infinityExecutionPlan,
+              this.grid.W,
+              this.grid.H,
+              this.grid.D,
+            )
+          : null;
+        if (executionContext && this._infinityExecutionPlan?.mode !== 'advisory') {
+          this.fieldPhysics.tickChunks(
+            this.grid,
+            clampedDt,
+            this.laws.params,
+            this.laws.activeProcessMask,
+            executionContext,
+          );
+        } else {
+          this.fieldPhysics.tick(
+            this.grid,
+            clampedDt,
+            this.laws.params,
+            this.laws.activeProcessMask,
+          );
+        }
         this.entropyLayer.tick(this.grid, clampedDt, this.laws.params, this.laws.activeProcessMask);
         this.chemLayer.tick(this.grid, clampedDt);
         this.entityLayer.tick(this.grid, clampedDt);
