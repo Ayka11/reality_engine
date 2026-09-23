@@ -111,6 +111,7 @@ export class SimulationEngine {
       observer: { ...plan.observer },
       chunks: plan.chunks.map(chunk => ({ ...chunk })),
       boundaryReadChunks: [...plan.boundaryReadChunks],
+      boundaryReadRelations: plan.boundaryReadRelations.map(relation => ({ ...relation })),
     };
   }
 
@@ -120,6 +121,8 @@ export class SimulationEngine {
       ...this._infinityExecutionPlan,
       observer: { ...this._infinityExecutionPlan.observer },
       chunks: this._infinityExecutionPlan.chunks.map(chunk => ({ ...chunk })),
+      boundaryReadChunks: [...this._infinityExecutionPlan.boundaryReadChunks],
+      boundaryReadRelations: this._infinityExecutionPlan.boundaryReadRelations.map(relation => ({ ...relation })),
     };
   }
 
@@ -259,6 +262,16 @@ export class SimulationEngine {
       if (!selectivePlan) this._tick += nSteps;
     }
 
+    // Validate the immutable frame contract before any deferred boundary
+    // mutation. A changed ownership plan must fail atomically, before agents,
+    // entities, or chemistry can publish cross-workset state.
+    if (frameState && frameContext) {
+      if (!selectivePlan) {
+        throw new Error('Infinity Scale frame lost its execution plan');
+      }
+      validateInfinityScaleGlobalFrameCommit(frameState, selectivePlan);
+    }
+
     // Agent migrations cross ownership boundaries only at the frame barrier.
     if (frameContext) {
       const migrationRequests = this.agents.consumeMigrationRequests();
@@ -281,14 +294,9 @@ export class SimulationEngine {
     }
 
     // Boundary reconciliation is the single commit barrier for deferred
-    // cross-workset state. The plan must remain identical from frame start
-    // through commit; a changed ownership set is rejected rather than merged
-    // against stale local results.
+    // cross-workset state. The plan was validated before mutation; now all
+    // deferred local writes become visible together.
     if (frameState && frameContext) {
-      if (!selectivePlan) {
-        throw new Error('Infinity Scale frame lost its execution plan');
-      }
-      validateInfinityScaleGlobalFrameCommit(frameState, selectivePlan);
       this.chemLayer.commitPendingDensityTransfers(this.grid, frameContext);
       frameState = advanceInfinityScaleGlobalFrame(frameState, 'local-commit');
       frameState = advanceInfinityScaleGlobalFrame(frameState, 'boundary-reconciliation');
