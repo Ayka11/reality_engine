@@ -1,6 +1,7 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
+import type { InfinityScaleLODBoundarySnapshot } from '../infinity/InfinityScaleLODBoundarySnapshot';
 
 // Information physics treats the INFORMATION field as a physical quantity with:
 // - Coherence: information clusters resist entropy when signals align
@@ -17,14 +18,16 @@ export class InfoPhysics {
     grid: VoxelGrid,
     dt: number,
     context: InfinityScaleChunkExecutionContext,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
-    this.tickRegion(grid, dt, context);
+    this.tickRegion(grid, dt, context, boundarySnapshot);
   }
 
   private tickRegion(
     grid: VoxelGrid,
     dt: number,
     context: InfinityScaleChunkExecutionContext | null,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
     const { W, H, D, buffer: buf } = grid;
     const WH = W * H;
@@ -78,8 +81,22 @@ export class InfoPhysics {
       ];
       for (const ni of neighbors) {
         if (ni < 0) continue;
-        const nInfo = buf[ni * CELL_FIELDS + F.INFORMATION];
-        if (Math.abs(nInfo - info) < info * 0.3) {
+        const nz = Math.floor(ni / WH);
+        const nrem = ni - nz * WH;
+        const ny = Math.floor(nrem / W);
+        const nx = nrem - ny * W;
+        let nInfo = buf[ni * CELL_FIELDS + F.INFORMATION];
+        if (context && boundarySnapshot && !context.containsSimulationCell(nx, ny, nz)) {
+          const specs = context.getBoundaryTransferSpecsForCell(x, y, z);
+          for (const spec of specs) {
+            const sample = boundarySnapshot.read(spec, [nx, ny, nz]);
+            if (sample) {
+              nInfo = sample[F.INFORMATION];
+              break;
+            }
+          }
+        }
+        if (Math.abs(nInfo - info) < info * 0.3)
           resonanceSum += nInfo;
           resonanceCount++;
         }
