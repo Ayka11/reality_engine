@@ -31,6 +31,9 @@ export interface InfinityScaleExecutionPlan {
   boundaryReadCount: number;
   simulationCellCount: number;
   boundaryReadCellCount: number;
+  localExecutionLayers: string[];
+  globalExecutionLayers: string[];
+  selectiveCpuReady: boolean;
 }
 
 /**
@@ -58,6 +61,9 @@ export class InfinityScaleExecutionAdapter {
       boundaryReadCount: 0,
       simulationCellCount: 0,
       boundaryReadCellCount: 0,
+      localExecutionLayers: [],
+      globalExecutionLayers: [],
+      selectiveCpuReady: false,
     };
   }
 
@@ -131,6 +137,18 @@ export class InfinityScaleExecutionAdapter {
       boundaryReadCount: boundaryReadKeys.size,
       simulationCellCount: geometry.simulationCellCount,
       boundaryReadCellCount: geometry.readCellCount,
+      localExecutionLayers: [
+        "FieldPhysics",
+        "EntropyLayer",
+        "InfoPhysics",
+        "TemporalLayer",
+        "ChemLayer",
+      ],
+      globalExecutionLayers: [
+        "EntityLayer",
+        "AgentSystem",
+      ],
+      selectiveCpuReady: false,
     };
 
     return this.getPlan();
