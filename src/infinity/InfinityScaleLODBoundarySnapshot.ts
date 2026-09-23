@@ -101,27 +101,22 @@ export class InfinityScaleLODBoundarySnapshot {
     }
 
     if (spec.readOperation === "restriction") {
-      const [sx, sy, sz] = parseChunkKey(spec.sourceChunk);
-      const localScale = 2 ** spec.sourceLevel;
-      const localOriginX = sx * this.chunkSize * localScale;
-      const localOriginY = sy * this.chunkSize * localScale;
-      const localOriginZ = sz * this.chunkSize * localScale;
-      const localCellX = Math.max(0, Math.min(this.chunkSize - 1, Math.floor((x - localOriginX) / localScale)));
-      const localCellY = Math.max(0, Math.min(this.chunkSize - 1, Math.floor((y - localOriginY) / localScale)));
-      const localCellZ = Math.max(0, Math.min(this.chunkSize - 1, Math.floor((z - localOriginZ) / localScale)));
-      const coarseBaseX = localOriginX + localCellX * localScale;
-      const coarseBaseY = localOriginY + localCellY * localScale;
-      const coarseBaseZ = localOriginZ + localCellZ * localScale;
+      // The dependency is finer than the local coarse owner. For a
+      // stencil coordinate outside local ownership, the fine ghost block
+      // begins at that dependency coordinate, aligned to the fine grid.
+      const sourceScale = source.scale;
+      const fineBaseX = Math.floor(x / sourceScale) * sourceScale;
+      const fineBaseY = Math.floor(y / sourceScale) * sourceScale;
+      const fineBaseZ = Math.floor(z / sourceScale) * sourceScale;
       const ratio = spec.refinementRatio;
       const fineCells: Float32Array[] = [];
-      const sourceScale = source.scale;
 
       for (let dz = 0; dz < ratio; dz++) {
         for (let dy = 0; dy < ratio; dy++) {
           for (let dx = 0; dx < ratio; dx++) {
-            const fx = coarseBaseX + dx * sourceScale;
-            const fy = coarseBaseY + dy * sourceScale;
-            const fz = coarseBaseZ + dz * sourceScale;
+            const fx = fineBaseX + dx * sourceScale;
+            const fy = fineBaseY + dy * sourceScale;
+            const fz = fineBaseZ + dz * sourceScale;
             const flx = Math.floor((fx - originX) / sourceScale);
             const fly = Math.floor((fy - originY) / sourceScale);
             const flz = Math.floor((fz - originZ) / sourceScale);
