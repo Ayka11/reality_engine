@@ -51,8 +51,32 @@ export class EntityChunkReconciliation {
     const proposals: EntityReconciliationProposal[] = [];
     const used = new Set<number>();
 
+    const componentSourceIds = new Map<number, number[]>();
+    const sourceComponentCounts = new Map<number, number>();
+
+    for (const component of components) {
+      if (component.touchesReadBoundary) {
+        componentSourceIds.set(component.id, []);
+        continue;
+      }
+      const sourceIds: number[] = [];
+      for (const entity of entities) {
+        if (entity.cells.some(index => component.cells.includes(index))) {
+          sourceIds.push(entity.id);
+        }
+      }
+      componentSourceIds.set(component.id, sourceIds);
+      for (const id of sourceIds) {
+        sourceComponentCounts.set(id, (sourceComponentCounts.get(id) ?? 0) + 1);
+      }
+    }
+
+    const proposals: EntityReconciliationProposal[] = [];
+    const used = new Set<number>();
+
     for (const component of components) {
       const centroid = component.centroid;
+      const sourceEntityIds = componentSourceIds.get(component.id) ?? [];
       if (component.touchesReadBoundary) {
         proposals.push({
           componentId: component.id,
@@ -68,23 +92,35 @@ export class EntityChunkReconciliation {
 
       let best: Entity | null = null;
       let bestDistance = 5;
-      const sourceEntityIds: number[] = [];
-
       for (const entity of entities) {
         if (used.has(entity.id)) continue;
         const dx = centroid[0] - entity.centroid[0];
         const dy = centroid[1] - entity.centroid[1];
         const dz = centroid[2] - entity.centroid[2];
         const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        const overlap = entity.cells.some(index => component.cells.includes(index));
-        if (overlap) sourceEntityIds.push(entity.id);
         if (distance < bestDistance) {
           bestDistance = distance;
           best = entity;
         }
       }
 
+      const overlapping = sourceEntityIds
+        .map(id => entities.find(entity => entity.id === id))
+        .filter((entity): entity is Entity => !!entity);
+
+      // Prefer an overlapping entity for continuity. A centroid-only match is
+      // only a fallback when the component has no cell-level predecessor.
+      if (overlapping.length > 0) {
+        const preferred = overlapping.find(entity => !used.has(entity.id));
+        if (preferred) best = preferred;
+      }
+
       if (best) used.add(best.id);
+
+      const splitSource =
+        sourceEntityIds.length === 1 &&
+        (sourceComponentCounts.get(sourceEntityIds[0]) ?? 0) > 1;
+      const mergeSource = sourceEntityIds.length > 1;
 
       proposals.push({
         componentId: component.id,
@@ -93,15 +129,13 @@ export class EntityChunkReconciliation {
         centroid,
         cellCount: component.cells.length,
         safeToCommit: true,
-        continuity: sourceEntityIds.length > 1
+        continuity: mergeSource
           ? "merge"
-          : best && sourceEntityIds.length === 0
-            ? "retained"
-            : sourceEntityIds.length === 1 && best?.id === sourceEntityIds[0]
+          : splitSource
+            ? "split"
+            : best
               ? "retained"
-              : sourceEntityIds.length === 1
-                ? "split"
-                : "new",
+              : "new",
       });
     }
 
