@@ -35,6 +35,7 @@ export class EntityChunkReconciliation {
   plan(
     components: EntityChunkComponent[],
     entities: Entity[],
+    fullDomainCovered = false,
   ): EntityReconciliationPlan {
     const proposals: EntityReconciliationProposal[] = [];
     const used = new Set<number>();
@@ -85,9 +86,11 @@ export class EntityChunkReconciliation {
         .map(p => p.existingEntityId)
         .filter((id): id is number => id !== null),
     );
-    const extinctEntityIds = entities
-      .filter(entity => !matchedIds.has(entity.id))
-      .map(entity => entity.id);
+    const extinctEntityIds = fullDomainCovered
+      ? entities
+          .filter(entity => !matchedIds.has(entity.id))
+          .map(entity => entity.id)
+      : [];
 
     return {
       proposals,
