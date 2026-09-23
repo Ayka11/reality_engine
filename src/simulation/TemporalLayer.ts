@@ -1,6 +1,7 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
+import type { InfinityScaleLODBoundarySnapshot } from '../infinity/InfinityScaleLODBoundarySnapshot';
 
 // Local time field (F.LOCAL_TIME) controls how fast a cell's physics ticks
 // relative to global dt. Dense/high-energy cells age faster; vacuum cells age slower.
@@ -15,14 +16,16 @@ export class TemporalLayer {
     grid: VoxelGrid,
     dt: number,
     context: InfinityScaleChunkExecutionContext,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
-    this.tickRegion(grid, dt, context);
+    this.tickRegion(grid, dt, context, boundarySnapshot);
   }
 
   private tickRegion(
     grid: VoxelGrid,
     dt: number,
     context: InfinityScaleChunkExecutionContext | null,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
     const { buffer: buf, size } = grid;
 
@@ -56,7 +59,7 @@ export class TemporalLayer {
 
     // Temporal diffusion — smooth out extreme time gradients between neighbors
     if (context) {
-      this._diffuseTimeChunks(grid, dt, context);
+      this._diffuseTimeChunks(grid, dt, context, boundarySnapshot);
     } else {
       this._diffuseTime(grid, dt);
     }
@@ -66,6 +69,7 @@ export class TemporalLayer {
     grid: VoxelGrid,
     dt: number,
     context: InfinityScaleChunkExecutionContext,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
     const { W, H, D, buffer: buf } = grid;
     const WH = W * H;
@@ -79,14 +83,29 @@ export class TemporalLayer {
       const i = z * WH + y * W + x;
       const base = i * CELL_FIELDS;
       const lt = buf[base + F.LOCAL_TIME];
-      const neighbors = [
-        buf[(i - 1) * CELL_FIELDS + F.LOCAL_TIME],
-        buf[(i + 1) * CELL_FIELDS + F.LOCAL_TIME],
-        buf[(i - W) * CELL_FIELDS + F.LOCAL_TIME],
-        buf[(i + W) * CELL_FIELDS + F.LOCAL_TIME],
-        buf[(i - WH) * CELL_FIELDS + F.LOCAL_TIME],
-        buf[(i + WH) * CELL_FIELDS + F.LOCAL_TIME],
+      const neighbors: number[] = [];
+      const neighborCoords: Array<[number, number, number]> = [
+        [x - 1, y, z],
+        [x + 1, y, z],
+        [x, y - 1, z],
+        [x, y + 1, z],
+        [x, y, z - 1],
+        [x, y, z + 1],
       ];
+      for (const [nx, ny, nz] of neighborCoords) {
+        const ni = nz * WH + ny * W + nx;
+        let value = buf[ni * CELL_FIELDS + F.LOCAL_TIME];
+        if (boundarySnapshot && !context.containsSimulationCell(nx, ny, nz)) {
+          for (const spec of context.getBoundaryTransferSpecsForCell(x, y, z)) {
+            const sample = boundarySnapshot.read(spec, [nx, ny, nz]);
+            if (sample) {
+              value = sample[F.LOCAL_TIME];
+              break;
+            }
+          }
+        }
+        neighbors.push(value);
+      }
       const avg = neighbors.reduce((a, b) => a + b, 0) / 6;
       buf[base + F.LOCAL_TIME] = lt + α * (avg - lt);
 
