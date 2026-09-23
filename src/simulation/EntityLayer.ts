@@ -177,29 +177,28 @@ export class EntityLayer {
       this.getEntities(),
       fullDomainCovered,
     );
-    if (!plan.commitReady) return false;
-
     const records = this.chunkReconciliation.commitRecords(
       plan,
       connectivity.components,
     );
     if (!records) return false;
 
-    for (const record of records) {
-      if (record.entityId === null) continue;
+    const safeRecords = records.filter(record => {
+      if (record.entityId === null) return true;
       const entity = this.entities.get(record.entityId);
       if (!entity) return false;
-      if (entity.cells.some(index => {
+      return !entity.cells.some(index => {
+
         const z = Math.floor(index / (grid.W * grid.H));
         const rem = index - z * grid.W * grid.H;
         const y = Math.floor(rem / grid.W);
         const cellX = rem - y * grid.W;
         return !context.containsSimulationCell(cellX, y, z);
-      })) return false;
-    }
+      });
+    });
 
     const retained = new Set<number>();
-    for (const record of records) {
+    for (const record of safeRecords) {
       let entity: Entity | undefined;
       if (record.entityId !== null) {
         entity = this.entities.get(record.entityId);
@@ -244,7 +243,7 @@ export class EntityLayer {
       );
     }
 
-    if (fullDomainCovered) {
+    if (fullDomainCovered && plan.commitReady) {
       for (const [id, entity] of [...this.entities]) {
         if (!retained.has(id)) {
           _extinctCount++;
