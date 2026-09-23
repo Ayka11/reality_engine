@@ -26,12 +26,19 @@ export class InfinityScaleBridge {
   ): InfinityScaleFramePlan {
     const records = this.runtime.update(chunks, diagnostics);
     const observer = this.runtime.getObserver();
+    // Runtime observer is expressed in global cell coordinates; residency records
+    // are expressed in level-0 chunk coordinates.
+    const observerChunk = {
+      x: Math.floor(observer.x / this.runtime.scale.config.chunkSize),
+      y: Math.floor(observer.y / this.runtime.scale.config.chunkSize),
+      z: Math.floor(observer.z / this.runtime.scale.config.chunkSize),
+    };
 
     const planned: InfinityScaleChunkPlan[] = records.map((record) => {
       const distance = Math.max(
-        Math.abs(record.chunk.x - observer.x),
-        Math.abs(record.chunk.y - observer.y),
-        Math.abs(record.chunk.z - observer.z),
+        Math.abs(record.chunk.x - observerChunk.x),
+        Math.abs(record.chunk.y - observerChunk.y),
+        Math.abs(record.chunk.z - observerChunk.z),
       );
 
       return {
