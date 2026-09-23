@@ -281,10 +281,16 @@ export class SimulationEngine {
 
     this._detectCausality(frameContext);
 
-    const eventContext = frameContext;
-    if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'local-commit');
-    if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'boundary-reconciliation');
+    // Boundary reconciliation is the single commit barrier for deferred
+    // cross-workset state. Chemistry transfers are committed only after all
+    // local chunk work has completed.
+    if (frameState && frameContext) {
+      this.chemLayer.commitPendingDensityTransfers(this.grid, frameContext);
+      frameState = advanceInfinityScaleGlobalFrame(frameState, 'local-commit');
+      frameState = advanceInfinityScaleGlobalFrame(frameState, 'boundary-reconciliation');
+    }
 
+    const eventContext = frameContext;
     if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'global-metrics');
     const metrics = this._worldMetrics();
 
