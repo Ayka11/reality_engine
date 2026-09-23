@@ -254,6 +254,22 @@ export class EntityLayer {
     }
 
     if (fullDomainCovered && plan.commitReady) {
+      // Merge resolution: the selected primary retains its lifecycle state;
+      // secondary source identities are retired only after full-domain proof.
+      const mergedSourceIds = new Set<number>();
+      for (const record of safeRecords) {
+        if (record.continuity !== 'merge' || record.entityId === null) continue;
+        for (const sourceId of record.sourceEntityIds) {
+          if (sourceId !== record.entityId) mergedSourceIds.add(sourceId);
+        }
+      }
+      for (const sourceId of mergedSourceIds) {
+        const source = this.entities.get(sourceId);
+        if (!source) continue;
+        _extinctCount++;
+        this.entities.delete(sourceId);
+      }
+
       for (const [id, entity] of [...this.entities]) {
         if (!retained.has(id)) {
           _extinctCount++;
