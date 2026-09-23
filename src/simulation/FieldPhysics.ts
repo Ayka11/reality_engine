@@ -3,16 +3,43 @@ import { F } from '../core/CellState';
 import { WORLD } from '../core/WorldConstants';
 import { PhysicsParams } from '../laws/MetaLaw';
 import { PROC } from '../process/ProcessDef';
+import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 
 function on(mask: number, proc: number) { return (mask & (1 << proc)) !== 0; }
 
 export class FieldPhysics {
   tick(grid: VoxelGrid, dt: number, p: Readonly<PhysicsParams>, mask: number): void {
+    this.tickRegion(grid, dt, p, mask, null);
+  }
+
+  /**
+   * Chunk-local field update. The snapshot remains globally owned by the caller;
+   * halo cells are read through grid.cellBack(), while only simulation cells are written.
+   */
+  tickChunks(
+    grid: VoxelGrid,
+    dt: number,
+    p: Readonly<PhysicsParams>,
+    mask: number,
+    context: InfinityScaleChunkExecutionContext,
+  ): void {
+    this.tickRegion(grid, dt, p, mask, context);
+  }
+
+  private tickRegion(
+    grid: VoxelGrid,
+    dt: number,
+    p: Readonly<PhysicsParams>,
+    mask: number,
+    context: InfinityScaleChunkExecutionContext | null,
+  ): void {
     const {W, H, D} = grid;
 
     for (let z = 0; z < D; z++)
     for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
+      if (context && !context.containsSimulationCell(x, y, z)) continue;
+
       const cell = grid.cell(x, y, z);
       const back = grid.cellBack(x, y, z);
       const nbrs = grid.neighbors6(x, y, z);
