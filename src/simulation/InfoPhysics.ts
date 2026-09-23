@@ -1,5 +1,6 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
+import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 
 // Information physics treats the INFORMATION field as a physical quantity with:
 // - Coherence: information clusters resist entropy when signals align
@@ -9,6 +10,22 @@ import { CELL_FIELDS, F } from '../core/CellState';
 
 export class InfoPhysics {
   tick(grid: VoxelGrid, dt: number): void {
+    this.tickRegion(grid, dt, null);
+  }
+
+  tickChunks(
+    grid: VoxelGrid,
+    dt: number,
+    context: InfinityScaleChunkExecutionContext,
+  ): void {
+    this.tickRegion(grid, dt, context);
+  }
+
+  private tickRegion(
+    grid: VoxelGrid,
+    dt: number,
+    context: InfinityScaleChunkExecutionContext | null,
+  ): void {
     const { W, H, D, buffer: buf } = grid;
     const WH = W * H;
     const dtN = dt * 60; // normalized to 60 fps
@@ -17,6 +34,7 @@ export class InfoPhysics {
     for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       const i    = z * WH + y * W + x;
+      if (context && !context.containsSimulationCell(x, y, z)) continue;
       const base = i * CELL_FIELDS;
 
       const info    = buf[base + F.INFORMATION];
