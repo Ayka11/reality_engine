@@ -281,6 +281,11 @@ export class SimulationEngine {
         migrationRequests,
         frameContext,
       );
+
+      // Entity reconciliation is a boundary commit, not a local behavior step.
+      // tickChunks() has already analyzed the owned workset; identities are
+      // committed only after all local systems have finished.
+      this.entityLayer.applyChunkReconciliation(this.grid, frameContext);
     }
 
     this._detectCausality(frameContext);
