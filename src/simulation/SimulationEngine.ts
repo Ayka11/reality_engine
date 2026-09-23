@@ -132,6 +132,18 @@ export class SimulationEngine {
             this.laws.activeProcessMask,
             executionContext,
           );
+          this.entropyLayer.tickChunks(
+            this.grid,
+            clampedDt,
+            this.laws.params,
+            this.laws.activeProcessMask,
+            executionContext,
+          );
+          this.infoPhysics.tickChunks(
+            this.grid,
+            clampedDt,
+            executionContext,
+          );
         } else {
           this.fieldPhysics.tick(
             this.grid,
@@ -139,12 +151,17 @@ export class SimulationEngine {
             this.laws.params,
             this.laws.activeProcessMask,
           );
+          this.entropyLayer.tick(
+            this.grid,
+            clampedDt,
+            this.laws.params,
+            this.laws.activeProcessMask,
+          );
+          this.infoPhysics.tick(this.grid, clampedDt);
         }
-        this.entropyLayer.tick(this.grid, clampedDt, this.laws.params, this.laws.activeProcessMask);
         this.chemLayer.tick(this.grid, clampedDt);
         this.entityLayer.tick(this.grid, clampedDt);
         this.temporalLayer.tick(this.grid, clampedDt);
-        this.infoPhysics.tick(this.grid, clampedDt);
         this.agents.tick(this.grid, clampedDt);
       }
       this.grid.syncDenseToChunks();
