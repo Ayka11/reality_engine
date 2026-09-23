@@ -28,6 +28,7 @@ export interface InfinityScaleGlobalExecutionFrame {
   boundaryReadCellCount: number;
   committed: boolean;
   finalized: boolean;
+  ownershipFingerprint: string;
 }
 
 export function beginInfinityScaleGlobalFrame(
@@ -45,7 +46,32 @@ export function beginInfinityScaleGlobalFrame(
     boundaryReadCellCount: plan.boundaryReadCellCount,
     committed: false,
     finalized: false,
+    ownershipFingerprint: fingerprintPlan(plan),
   };
+}
+
+function fingerprintPlan(plan: InfinityScaleExecutionPlan): string {
+  return [
+    plan.revision,
+    ...plan.chunks.map(chunk => chunk.key).sort(),
+    "|",
+    ...plan.boundaryReadChunks.slice().sort(),
+  ].join("|");
+}
+
+export function validateInfinityScaleGlobalFrameCommit(
+  frame: InfinityScaleGlobalExecutionFrame,
+  plan: InfinityScaleExecutionPlan,
+): void {
+  if (frame.planRevision !== plan.revision) {
+    throw new Error("Infinity Scale commit rejected: plan revision changed");
+  }
+  if (frame.ownershipFingerprint !== fingerprintPlan(plan)) {
+    throw new Error("Infinity Scale commit rejected: ownership geometry changed");
+  }
+  if (frame.finalized) {
+    throw new Error("Infinity Scale commit rejected: frame already finalized");
+  }
 }
 
 export function advanceInfinityScaleGlobalFrame(
