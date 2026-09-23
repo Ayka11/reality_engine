@@ -60,6 +60,13 @@ export class SimulationEngine {
     if (this._gpuReady) {
       this.gpu.upload(this.grid.buffer);
       this.gpu.uploadMaterials(buildMaterialBuffer());
+      if (this._infinityExecutionPlan &&
+          this._infinityExecutionPlan.mode === 'selective-cpu-ready') {
+        this._infinityExecutionPlan = {
+          ...this._infinityExecutionPlan,
+          mode: 'selective-gpu-ready',
+        };
+      }
     }
     return this._gpuReady;
   }
