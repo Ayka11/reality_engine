@@ -83,7 +83,7 @@ fn active(flag: u32) -> bool {
   return (params.activeProcesses & flag) != 0u;
 }
 
-@compute @workgroup_size(8, 8, 1)
+@compute @workgroup_size(64, 1, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   var x = gid.x; var y = gid.y; var z = gid.z;
   if (params.selectiveRangeCount > 0u) {
