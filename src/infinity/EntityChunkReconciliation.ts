@@ -31,7 +31,7 @@ export class EntityChunkReconciliation {
     const used = new Set<number>();
 
     for (const component of components) {
-      const centroid = this.centroidFromCells(component.cells);
+      const centroid = component.centroid;
       if (component.touchesReadBoundary) {
         proposals.push({
           componentId: component.id,
@@ -76,16 +76,5 @@ export class EntityChunkReconciliation {
     };
   }
 
-  private centroidFromCells(cells: number[]): [number, number, number] {
-    // EntityChunkComponent currently carries linear indices. The reconciliation
-    // layer intentionally does not assume a fixed world width; callers can
-    // replace this with grid-aware centroid calculation before commit.
-    if (cells.length === 0) return [0, 0, 0];
 
-    // The exact coordinate conversion belongs to the grid-aware integration
-    // layer. Returning the linear-index centroid keeps this pure planner safe
-    // but prevents it from being used as a false identity match.
-    const mean = cells.reduce((sum, value) => sum + value, 0) / cells.length;
-    return [mean, 0, 0];
-  }
 }
