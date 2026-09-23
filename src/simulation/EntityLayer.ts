@@ -2,6 +2,7 @@ import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 import { EntityChunkConnectivity, type EntityChunkConnectivityResult } from '../infinity/EntityChunkConnectivity';
+import { EntityChunkReconciliation, type EntityReconciliationPlan } from '../infinity/EntityChunkReconciliation';
 
 export interface EntityGenome {
   metabolismRate: number;    // 0.1..2.0 — energy consumed per tick
@@ -111,17 +112,27 @@ export class EntityLayer {
   mutationStrength = 1.0;
   private readonly chunkConnectivity = new EntityChunkConnectivity(this.bioThreshold);
   private lastChunkConnectivity: EntityChunkConnectivityResult | null = null;
+  private readonly chunkReconciliation = new EntityChunkReconciliation();
+  private lastChunkReconciliation: EntityReconciliationPlan | null = null;
 
   analyzeChunks(
     grid: VoxelGrid,
     context: InfinityScaleChunkExecutionContext,
   ): EntityChunkConnectivityResult {
     this.lastChunkConnectivity = this.chunkConnectivity.analyze(grid, context);
+    this.lastChunkReconciliation = this.chunkReconciliation.plan(
+      this.lastChunkConnectivity.components,
+      this.getEntities(),
+    );
     return this.lastChunkConnectivity;
   }
 
   getChunkConnectivityDiagnostics(): EntityChunkConnectivityResult | null {
     return this.lastChunkConnectivity;
+  }
+
+  getChunkReconciliationDiagnostics(): EntityReconciliationPlan | null {
+    return this.lastChunkReconciliation;
   }
 
   get extinctCount(): number { return _extinctCount; }
