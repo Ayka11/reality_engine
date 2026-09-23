@@ -1711,12 +1711,13 @@ async function loop(ts: number) {
     const nSteps = parseInt(speedSl.value);
     await sim.step(dt, nSteps);
 
-    const infinityChunkKeys = [...sim.grid.chunks.values()].map(chunk => ({
-      x: chunk.cx,
-      y: chunk.cy,
-      z: chunk.cz,
-      level: 0,
-    }));
+    const infinityChunkKeys = infinitySpatialAdapter.physicalChunksToLogical(
+      [...sim.grid.chunks.values()].map(chunk => ({
+        x: chunk.cx,
+        y: chunk.cy,
+        z: chunk.cz,
+      })),
+    );
 
     _latestInfinityDiagnostics =
       _computeInfinityScaleDiagnostics();
