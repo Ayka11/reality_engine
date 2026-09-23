@@ -9,6 +9,12 @@ export interface EntityReconciliationProposal {
   safeToCommit: boolean;
 }
 
+export interface EntityReconciliationCommit {
+  retainedEntityIds: number[];
+  newComponentIds: number[];
+  extinctEntityIds: number[];
+}
+
 export interface EntityReconciliationPlan {
   proposals: EntityReconciliationProposal[];
   unresolvedBoundaryComponents: number;
@@ -93,5 +99,17 @@ export class EntityChunkReconciliation {
     };
   }
 
+  buildCommit(plan: EntityReconciliationPlan): EntityReconciliationCommit | null {
+    if (!plan.commitReady) return null;
 
+    return {
+      retainedEntityIds: plan.proposals
+        .map(p => p.existingEntityId)
+        .filter((id): id is number => id !== null),
+      newComponentIds: plan.proposals
+        .filter(p => p.existingEntityId === null)
+        .map(p => p.componentId),
+      extinctEntityIds: [...plan.extinctEntityIds],
+    };
+  }
 }
