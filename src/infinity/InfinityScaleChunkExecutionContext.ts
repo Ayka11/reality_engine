@@ -47,6 +47,10 @@ export class InfinityScaleChunkExecutionContext {
   readonly uniqueBoundaryReadCellCount: number;
   readonly levelRangeScales: number[];
   readonly boundaryReadRelations: InfinityScaleBoundaryReadRelation[];
+  readonly boundaryTransferSpecs: InfinityScaleBoundaryTransferSpec[];
+  readonly sameLevelTransferCount: number;
+  readonly prolongationTransferCount: number;
+  readonly restrictionTransferCount: number;
 
   private readonly boundaryRelationsBySource = new Map<
     string,
@@ -73,6 +77,10 @@ export class InfinityScaleChunkExecutionContext {
       this.chunkRange(key),
     );
     this.boundaryReadRelations = plan.boundaryReadRelations.map(relation => ({ ...relation }));
+    this.boundaryTransferSpecs = this.buildBoundaryTransferSpecs();
+    this.sameLevelTransferCount = this.boundaryTransferSpecs.filter(spec => spec.operation === "copy").length;
+    this.prolongationTransferCount = this.boundaryTransferSpecs.filter(spec => spec.operation === "prolongation").length;
+    this.restrictionTransferCount = this.boundaryTransferSpecs.filter(spec => spec.operation === "restriction").length;
     for (const relation of this.boundaryReadRelations) {
       const existing = this.boundaryRelationsBySource.get(relation.sourceChunk) ?? [];
       existing.push({ ...relation });
@@ -96,6 +104,28 @@ export class InfinityScaleChunkExecutionContext {
   containsReadCell(x: number, y: number, z: number): boolean {
     if (this.containsSimulationCell(x, y, z)) return true;
     return this.readRanges.some(range => this.contains(range, x, y, z));
+  }
+
+  private buildBoundaryTransferSpecs(): InfinityScaleBoundaryTransferSpec[] {
+    return this.boundaryReadRelations.map(relation => {
+      const sourceLevel = chunkLevel(relation.sourceChunk);
+      const targetLevel = chunkLevel(relation.targetChunk);
+      const refinementRatio = 2 ** Math.abs(sourceLevel - targetLevel);
+      return {
+        sourceChunk: relation.sourceChunk,
+        targetChunk: relation.targetChunk,
+        relation: relation.relation,
+        sourceLevel,
+        targetLevel,
+        refinementRatio,
+        operation:
+          relation.relation === "same-level"
+            ? "copy"
+            : relation.relation === "coarse-to-fine"
+              ? "prolongation"
+              : "restriction",
+      };
+    });
   }
 
   getBoundaryTransferSpecs(sourceChunk?: string): InfinityScaleBoundaryTransferSpec[] {
