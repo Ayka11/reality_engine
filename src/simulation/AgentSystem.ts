@@ -1,5 +1,6 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
+import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 
 export type AgentBehavior = 'explorer' | 'harvester' | 'signaler' | 'builder' | 'destroyer';
 
@@ -63,9 +64,26 @@ export class AgentSystem {
   }
 
   tick(grid: VoxelGrid, dt: number): void {
+    this.tickRegion(grid, dt, null);
+  }
+
+  tickChunks(
+    grid: VoxelGrid,
+    dt: number,
+    context: InfinityScaleChunkExecutionContext,
+  ): void {
+    this.tickRegion(grid, dt, context);
+  }
+
+  private tickRegion(
+    grid: VoxelGrid,
+    dt: number,
+    context: InfinityScaleChunkExecutionContext | null,
+  ): void {
     const dead: number[] = [];
 
     for (const [id, agent] of this.agents) {
+      if (context && !context.containsSimulationCell(agent.x, agent.y, agent.z)) continue;
       agent.age++;
 
       const base = this._base(grid, agent.x, agent.y, agent.z);
@@ -82,11 +100,11 @@ export class AgentSystem {
       if (agent.energy <= 0) { dead.push(id); continue; }
 
       switch (agent.behavior) {
-        case 'explorer':  this._explore(grid, agent, dt);  break;
-        case 'harvester': this._harvest(grid, agent, dt);  break;
-        case 'signaler':  this._signal(grid, agent, dt);   break;
-        case 'builder':   this._build(grid, agent, dt);    break;
-        case 'destroyer': this._destroy(grid, agent, dt);  break;
+        case 'explorer':  this._explore(grid, agent, dt, context);  break;
+        case 'harvester': this._harvest(grid, agent, dt, context);  break;
+        case 'signaler':  this._signal(grid, agent, dt, context);   break;
+        case 'builder':   this._build(grid, agent, dt, context);    break;
+        case 'destroyer': this._destroy(grid, agent, dt, context);  break;
       }
 
       // Stamp presence
@@ -126,7 +144,7 @@ export class AgentSystem {
     this.agents.set(id, { id, x, y, z, energy, age: 0, behavior, memory: 0, signal: 0, children: 0 });
   }
 
-  private _explore(grid: VoxelGrid, agent: Agent, dt: number): void {
+  private _explore(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null): void {
     const { W, H, D, buffer: buf } = grid;
     let bestE = -1, bx = agent.x, by = agent.y, bz = agent.z;
     const dirs = [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]] as const;
@@ -140,7 +158,11 @@ export class AgentSystem {
     if (bx !== agent.x || by !== agent.y || bz !== agent.z) {
       // Clear old mark
       grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
-      agent.x=bx; agent.y=by; agent.z=bz;
+      if (!context || context.containsSimulationCell(bx, by, bz)) {
+        if (!context || context.containsSimulationCell(bx, by, bz)) {
+          agent.x=bx; agent.y=by; agent.z=bz;
+        }
+      }
     }
     // Explorers passively harvest a tiny amount while moving
     const base = this._base(grid, agent.x, agent.y, agent.z);
@@ -149,7 +171,7 @@ export class AgentSystem {
     agent.energy = Math.min(500, agent.energy + take);
   }
 
-  private _harvest(grid: VoxelGrid, agent: Agent, dt: number): void {
+  private _harvest(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null): void {
     // Harvest locally, then move to richest neighbor
     const base = this._base(grid, agent.x, agent.y, agent.z);
     const take = Math.min(20 * dt * 60, grid.buffer[base + F.ENERGY]);
@@ -174,7 +196,7 @@ export class AgentSystem {
     }
   }
 
-  private _signal(grid: VoxelGrid, agent: Agent, dt: number): void {
+  private _signal(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null): void {
     const base = this._base(grid, agent.x, agent.y, agent.z);
     agent.signal = Math.min(100, agent.signal + 8 * dt * 60);
     grid.buffer[base + F.SIGNAL] = Math.min(100,
@@ -192,13 +214,15 @@ export class AgentSystem {
       }
       if (bx !== agent.x || by !== agent.y) {
         grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
-        agent.x = bx; agent.y = by;
+        if (!context || context.containsSimulationCell(bx, by, agent.z)) {
+          agent.x = bx; agent.y = by;
+        }
       }
     }
     agent.energy -= agent.signal * 0.005 * dt * 60;
   }
 
-  private _build(grid: VoxelGrid, agent: Agent, dt: number): void {
+  private _build(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null): void {
     const base = this._base(grid, agent.x, agent.y, agent.z);
     grid.buffer[base + F.INFORMATION]   = Math.min(999, grid.buffer[base + F.INFORMATION]   + 5  * dt * 60);
     grid.buffer[base + F.BIO_POTENTIAL] = Math.min(1,   grid.buffer[base + F.BIO_POTENTIAL] + 0.015 * dt * 60);
@@ -206,7 +230,7 @@ export class AgentSystem {
     agent.energy -= 0.8 * dt * 60;
   }
 
-  private _destroy(grid: VoxelGrid, agent: Agent, dt: number): void {
+  private _destroy(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null): void {
     const base = this._base(grid, agent.x, agent.y, agent.z);
     const stolenE = Math.min(15 * dt * 60, grid.buffer[base + F.ENERGY]);
     grid.buffer[base + F.ENERGY]  = Math.max(0, grid.buffer[base + F.ENERGY] - stolenE);
@@ -220,7 +244,9 @@ export class AgentSystem {
       const ny = Math.max(0, Math.min(grid.H-1, agent.y+dy));
       if (nx !== agent.x || ny !== agent.y) {
         grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
-        agent.x=nx; agent.y=ny;
+        if (!context || context.containsSimulationCell(nx, ny, agent.z)) {
+          agent.x=nx; agent.y=ny;
+        }
       }
     }
   }
