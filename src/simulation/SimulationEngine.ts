@@ -163,6 +163,12 @@ export class SimulationEngine {
             this.grid,
             executionContext,
           );
+          // Commit only ownership-safe closed components. Boundary entities
+          // remain pending and are never treated as extinct by a partial workset.
+          this.entityLayer.applyChunkReconciliation(
+            this.grid,
+            executionContext,
+          );
         } else {
           this.fieldPhysics.tick(
             this.grid,
