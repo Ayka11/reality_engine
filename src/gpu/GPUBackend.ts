@@ -1,7 +1,6 @@
 import { CELL_FIELDS } from '../core/CellState';
 import { PhysicsParams } from '../laws/MetaLaw';
 import { MAT_COUNT } from '../materials/MaterialDef';
-import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 
 // ─── WGSL compute shader ──────────────────────────────────────────────────────
 const SHADER = /* wgsl */`
@@ -85,10 +84,7 @@ fn active(flag: u32) -> bool {
 
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let x = gid.x + params.originX;
-  let y = gid.y + params.originY;
-  let z = gid.z + params.originZ;
-  if (gid.x >= params.dispatchW || gid.y >= params.dispatchH || gid.z >= params.dispatchD) { return; }
+  let x = gid.x; let y = gid.y; let z = gid.z;
   if (x >= params.W || y >= params.H || z >= params.D) { return; }
 
   let i = cidx(x, y, z);
@@ -283,7 +279,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // Byte layout of SimParams in the storage buffer (matches WGSL struct)
-const PARAMS_FLOATS = 26; // 26 × 4 bytes = 104 bytes; rounded by WebGPU to 256 bytes
+const PARAMS_FLOATS = 20; // 20 × 4 bytes = 80 bytes
 
 export class GPUBackend {
   private device: GPUDevice | null = null;
@@ -395,53 +391,29 @@ export class GPUBackend {
     f32[17] = p.gravityDensityCoupling;
     f32[18] = p.timeBaseRate;
     f32[19] = p.timeEnergyBoost;
-    // Full-domain defaults; selective dispatch overwrites [20..25].
-    u32[20] = 0; u32[21] = 0; u32[22] = 0;
-    u32[23] = this.W; u32[24] = this.H; u32[25] = this.D;
     this.device.queue.writeBuffer(this.paramsBuf, 0, ab);
   }
 
-  // Dispatch N compute steps. In selective mode each owned chunk is
-  // dispatched separately; source neighbors remain globally readable through
-  // the stencil while writes stay inside the owned chunk.
-  submitCompute(
-    nSteps: number,
-    context: InfinityScaleChunkExecutionContext | null = null,
-  ): void {
+  // GPU selective dispatch is not enabled yet. The optional execution
+  // context is accepted by the contract boundary so the caller can make the
+  // capability decision explicitly without silently changing GPU semantics.
+  submitCompute(nSteps: number, _context: InfinityScaleChunkExecutionContext | null = null): void {
     if (!this.device || !this.pipeline || !this.bindGroup || !this.srcBuf || !this.dstBuf) return;
     const enc = this.device.createCommandEncoder();
-    const ranges = context
-      ? context.simulationRanges
-      : [{ minX: 0, maxX: this.W - 1, minY: 0, maxY: this.H - 1, minZ: 0, maxZ: this.D - 1 }];
+    const wx = Math.ceil(this.W / 8);
+    const wy = Math.ceil(this.H / 8);
 
     for (let s = 0; s < nSteps; s++) {
-      enc.copyBufferToBuffer(this.srcBuf, 0, this.dstBuf, 0, this.bufSize);
-      for (const range of ranges) {
-        const width = range.maxX - range.minX + 1;
-        const height = range.maxY - range.minY + 1;
-        const depth = range.maxZ - range.minZ + 1;
-        const params = new ArrayBuffer(PARAMS_FLOATS * 4);
-        const u32 = new Uint32Array(params);
-        u32[20] = range.minX;
-        u32[21] = range.minY;
-        u32[22] = range.minZ;
-        u32[23] = width;
-        u32[24] = height;
-        u32[25] = depth;
-        enc.writeBuffer?.(this.paramsBuf!, 0, params);
-        const pass = enc.beginComputePass();
-        pass.setPipeline(this.pipeline);
-        pass.setBindGroup(0, this.bindGroup);
-        pass.dispatchWorkgroups(
-          Math.ceil(width / 8),
-          Math.ceil(height / 8),
-          depth,
-        );
-        pass.end();
-      }
+      const pass = enc.beginComputePass();
+      pass.setPipeline(this.pipeline);
+      pass.setBindGroup(0, this.bindGroup);
+      pass.dispatchWorkgroups(wx, wy, this.D);
+      pass.end();
+      // Swap dst → src for next step (srcBuf always contains latest state)
       enc.copyBufferToBuffer(this.dstBuf, 0, this.srcBuf, 0, this.bufSize);
     }
 
+    // Copy final result from srcBuf to staging for CPU readback
     enc.copyBufferToBuffer(this.srcBuf, 0, this.stagingBuf!, 0, this.bufSize);
     this.device.queue.submit([enc.finish()]);
   }
