@@ -306,7 +306,13 @@ export class SimulationEngine {
     this.worldEvents.autoTick(this.grid, this._tick, eventContext, nSteps);
 
     if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'observation');
-    this.recorder.tick(this.grid, this._tick);
+    if (frameContext) {
+      // Infinity Scale observation stores only simulation-owned cells. Full
+      // snapshots remain available for non-selective execution.
+      this.recorder.tickSelective(this.grid, this._tick, frameContext);
+    } else {
+      this.recorder.tick(this.grid, this._tick);
+    }
 
     if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'finalize');
 
