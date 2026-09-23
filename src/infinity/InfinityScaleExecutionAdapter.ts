@@ -65,9 +65,9 @@ export class InfinityScaleExecutionAdapter {
       boundaryReadCellCount: 0,
       localExecutionLayers: [],
       globalExecutionLayers: [],
-      selectiveCpuReady: false,
-      entityExecutionReady: false,
-      agentMigrationReady: false,
+      selectiveCpuReady: true,
+      entityExecutionReady: true,
+      agentMigrationReady: true,
     };
   }
 
@@ -125,7 +125,7 @@ export class InfinityScaleExecutionAdapter {
 
     this.plan = {
       revision: frame.revision,
-      mode: "advisory",
+      mode: "selective-cpu-ready",
       observer: { ...frame.observer },
       chunks: selected.map(chunk => ({
         key: chunk.key,
