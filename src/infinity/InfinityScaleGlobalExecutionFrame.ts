@@ -117,6 +117,9 @@ export function assertInfinityScaleGlobalFramePlan(
   }
 
   if (context) {
+    if (fingerprintPlan(plan) !== frame.ownershipFingerprint) {
+      throw new Error("Infinity Scale frame ownership changed");
+    }
     if (context.simulationCellCount !== frame.simulationCellCount) {
       throw new Error("Infinity Scale simulation geometry changed during frame");
     }
