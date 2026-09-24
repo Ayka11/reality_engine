@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "deploy": "netlify deploy --prod --dir=dist",
     "validate:infinity-scale:evidence": "npx --yes tsx scripts/validate-infinity-scale-release-evidence.ts",
-    "emit:infinity-scale:release-evidence": "npx --yes tsx scripts/emit-infinity-scale-release-evidence.ts"
+    "emit:infinity-scale:release-evidence": "npx --yes tsx scripts/emit-infinity-scale-release-evidence.ts",
+    "package:infinity-scale:rc": "npx --yes tsx scripts/build-infinity-scale-release-package.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
