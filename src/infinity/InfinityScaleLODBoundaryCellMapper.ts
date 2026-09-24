@@ -15,82 +15,59 @@ interface ChunkRange {
   maxZ: number;
 }
 
+export function mapInfinityScaleBoundaryCell(
+  spec: InfinityScaleBoundaryTransferSpec,
+  targetCell: [number, number, number],
+  chunkSize = 32,
+): InfinityScaleBoundaryCellMapping {
+  const targetScale = 2 ** spec.targetLevel;
+  const sourceScale = 2 ** spec.sourceLevel;
+
+  if (spec.relation === "same-level") return { targetCell, sourceCells: [targetCell] };
+  const ratio = spec.refinementRatio;
+  if (!Number.isInteger(ratio) || ratio < 2) throw new Error("Mixed-LOD boundary mapping requires refinement ratio >= 2");
+  if (ratio !== Math.max(sourceScale, targetScale) / Math.min(sourceScale, targetScale)) {
+    throw new Error("Mixed-LOD boundary mapping has inconsistent refinement ratio");
+  }
+  const sourceRange = rangeForChunk(spec.sourceChunk, chunkSize);
+  const targetRange = rangeForChunk(spec.targetChunk, chunkSize);
+  const axis = sharedFaceAxis(targetRange, sourceRange);
+  if (axis === null) throw new Error(`Mixed-LOD boundary mapping requires adjacent chunks: ${spec.sourceChunk} -> ${spec.targetChunk}`);
+
+  if (sourceScale > targetScale) {
+    const sourceCell: [number, number, number] = [
+      floorToScale(targetCell[0], sourceScale),
+      floorToScale(targetCell[1], sourceScale),
+      floorToScale(targetCell[2], sourceScale),
+    ];
+    sourceCell[axis] = sourceFaceCoordinate(sourceRange, targetRange, axis, sourceScale);
+    return { targetCell, sourceCells: [sourceCell] };
+  }
+
+  const sourceNormal = sourceFaceCoordinate(sourceRange, targetRange, axis, sourceScale);
+  const sourceCells: Array<[number, number, number]> = [];
+  const tangentialAxes = ([0, 1, 2] as const).filter(value => value !== axis);
+  const origins = new Map<number, number>();
+  for (const tangentialAxis of tangentialAxes) origins.set(tangentialAxis, floorToScale(targetCell[tangentialAxis], targetScale));
+  for (let a = 0; a < ratio; a++) for (let b = 0; b < ratio; b++) {
+    const cell: [number, number, number] = [0, 0, 0];
+    cell[axis] = sourceNormal;
+    cell[tangentialAxes[0]] = (origins.get(tangentialAxes[0]) ?? 0) + a * sourceScale;
+    cell[tangentialAxes[1]] = (origins.get(tangentialAxes[1]) ?? 0) + b * sourceScale;
+    sourceCells.push(cell);
+  }
+  if (sourceCells.length !== ratio ** 2) throw new Error("Mixed-LOD boundary mapping produced incomplete face footprint");
+  return { targetCell, sourceCells };
+}
+
 export class InfinityScaleLODBoundaryCellMapper {
   constructor(
     private readonly state: InfinityScaleLODState,
     private readonly chunkSize = 32,
   ) {}
 
-  map(
-    spec: InfinityScaleBoundaryTransferSpec,
-    targetCell: [number, number, number],
-  ): InfinityScaleBoundaryCellMapping {
-    const targetScale = 2 ** spec.targetLevel;
-    const sourceScale = 2 ** spec.sourceLevel;
-
-    if (spec.relation === "same-level") {
-      return { targetCell, sourceCells: [targetCell] };
-    }
-
-    const ratio = spec.refinementRatio;
-    if (!Number.isInteger(ratio) || ratio < 2) {
-      throw new Error("Mixed-LOD boundary mapping requires refinement ratio >= 2");
-    }
-    if (ratio !== Math.max(sourceScale, targetScale) / Math.min(sourceScale, targetScale)) {
-      throw new Error("Mixed-LOD boundary mapping has inconsistent refinement ratio");
-    }
-
-    const sourceRange = this.rangeForChunk(spec.sourceChunk);
-    const targetRange = this.rangeForChunk(spec.targetChunk);
-    const axis = sharedFaceAxis(targetRange, sourceRange);
-    if (axis === null) {
-      throw new Error(
-        `Mixed-LOD boundary mapping requires adjacent chunks: ${spec.sourceChunk} -> ${spec.targetChunk}`,
-      );
-    }
-
-    if (sourceScale > targetScale) {
-      // Coarse source -> fine target: map every fine boundary cell to the
-      // coarse source cell touching the shared face.
-      const sourceCell: [number, number, number] = [
-        floorToScale(targetCell[0], sourceScale),
-        floorToScale(targetCell[1], sourceScale),
-        floorToScale(targetCell[2], sourceScale),
-      ];
-      sourceCell[axis] = sourceFaceCoordinate(sourceRange, targetRange, axis, sourceScale);
-      return { targetCell, sourceCells: [sourceCell] };
-    }
-
-    // Fine source -> coarse target: map the coarse boundary cell to the
-    // complete fine face footprint represented by ratio^2 source cells.
-    const sourceNormal = sourceFaceCoordinate(sourceRange, targetRange, axis, sourceScale);
-    const sourceCells: Array<[number, number, number]> = [];
-    const step = sourceScale;
-
-    const tangentialAxes = ([0, 1, 2] as const).filter(value => value !== axis);
-    const origins = new Map<number, number>();
-    for (const tangentialAxis of tangentialAxes) {
-      origins.set(
-        tangentialAxis,
-        floorToScale(targetCell[tangentialAxis], targetScale),
-      );
-    }
-
-    for (let a = 0; a < ratio; a++) {
-      for (let b = 0; b < ratio; b++) {
-        const cell: [number, number, number] = [0, 0, 0];
-        cell[axis] = sourceNormal;
-        cell[tangentialAxes[0]] = (origins.get(tangentialAxes[0]) ?? 0) + a * step;
-        cell[tangentialAxes[1]] = (origins.get(tangentialAxes[1]) ?? 0) + b * step;
-        sourceCells.push(cell);
-      }
-    }
-
-    if (sourceCells.length !== ratio ** 2) {
-      throw new Error("Mixed-LOD boundary mapping produced incomplete face footprint");
-    }
-
-    return { targetCell, sourceCells };
+  map(spec: InfinityScaleBoundaryTransferSpec, targetCell: [number, number, number]): InfinityScaleBoundaryCellMapping {
+    return mapInfinityScaleBoundaryCell(spec, targetCell, this.chunkSize);
   }
 
   enumerateTargetFaceCells(
