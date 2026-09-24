@@ -18,73 +18,56 @@ export interface InfinityScaleBoundaryGeometry {
 }
 
 /**
- * Validates that a mixed-LOD transfer describes an actual shared face and
- * that the local cell is on that face. This is intentionally independent of
- * field transfer so it can be reused by execution validation.
+ * Validates that a target cell belongs to the canonical shared face.
+ * Face topology is resolved exclusively by the canonical boundary mapper.
  */
 export function validateInfinityScaleBoundaryGeometry(
   spec: InfinityScaleBoundaryTransferSpec,
   targetCell: [number, number, number],
   chunkSize = 32,
 ): InfinityScaleBoundaryGeometry | null {
-  const source = chunkRange(spec.sourceChunk, chunkSize);
-  const target = chunkRange(spec.targetChunk, chunkSize);
+  const face = resolveInfinityScaleBoundaryFaceGeometry(spec, chunkSize);
+  if (!face) return null;
+
   const [x, y, z] = targetCell;
-  const sourceScale = 2 ** spec.sourceLevel;
-  const targetScale = 2 ** spec.targetLevel;
+  const onFace =
+    face.axis === 0
+      ? x === face.coordinate && y >= face.minU && y <= face.maxU && z >= face.minV && z <= face.maxV
+      : face.axis === 1
+        ? y === face.coordinate && x >= face.minU && x <= face.maxU && z >= face.minV && z <= face.maxV
+        : z === face.coordinate && x >= face.minU && x <= face.maxU && y >= face.minV && y <= face.maxV;
 
-  if (source.maxX + 1 === target.minX && x === source.maxX &&
-      y >= target.minY && y <= target.maxY &&
-      z >= target.minZ && z <= target.maxZ) {
-    return { axis: "x", direction: 1, sourceScale, targetScale, refinementRatio: spec.refinementRatio };
-  }
-  if (target.maxX + 1 === source.minX && x === source.minX &&
-      y >= target.minY && y <= target.maxY &&
-      z >= target.minZ && z <= target.maxZ) {
-    return { axis: "x", direction: -1, sourceScale, targetScale, refinementRatio: spec.refinementRatio };
-  }
-  if (source.maxY + 1 === target.minY && y === source.maxY &&
-      x >= target.minX && x <= target.maxX &&
-      z >= target.minZ && z <= target.maxZ) {
-    return { axis: "y", direction: 1, sourceScale, targetScale, refinementRatio: spec.refinementRatio };
-  }
-  if (target.maxY + 1 === source.minY && y === source.minY &&
-      x >= target.minX && x <= target.maxX &&
-      z >= target.minZ && z <= target.maxZ) {
-    return { axis: "y", direction: -1, sourceScale, targetScale, refinementRatio: spec.refinementRatio };
-  }
-  if (source.maxZ + 1 === target.minZ && z === source.maxZ &&
-      x >= target.minX && x <= target.maxX &&
-      y >= target.minY && y <= target.maxY) {
-    return { axis: "z", direction: 1, sourceScale, targetScale, refinementRatio: spec.refinementRatio };
-  }
-  if (target.maxZ + 1 === source.minZ && z === source.minZ &&
-      x >= target.minX && x <= target.maxX &&
-      y >= target.minY && y <= target.maxY) {
-    return { axis: "z", direction: -1, sourceScale, targetScale, refinementRatio: spec.refinementRatio };
-  }
+  if (!onFace) return null;
 
-  return null;
-}
+  const direction: -1 | 1 =
+    face.axis === 0
+      ? face.coordinate === face.minU && face.coordinate !== face.maxU ? -1 : -1
+      : face.axis === 1
+        ? -1
+        : -1;
 
-function chunkRange(key: string, chunkSize: number) {
-  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
-  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
-
-  const level = Number(match[1]);
-  const scale = 2 ** level;
-  const extent = chunkSize * scale;
-  const cx = Number(match[2]);
-  const cy = Number(match[3]);
-  const cz = Number(match[4]);
+  // The canonical face coordinate is on the target side. The source lies
+  // outside that face. Resolve direction from the target chunk bounds without
+  // maintaining an independent source/target adjacency algorithm.
+  const targetLevel = spec.targetLevel;
+  const targetScale = 2 ** targetLevel;
+  const match = /^(\\d+):(-?\\d+),(-?\\d+),(-?\\d+)$/.exec(spec.targetChunk);
+  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${spec.targetChunk}`);
+  const extent = chunkSize * targetScale;
+  const tx = Number(match[2]) * extent;
+  const ty = Number(match[3]) * extent;
+  const tz = Number(match[4]) * extent;
+  const targetMin = [tx, ty, tz];
+  const targetMax = [tx + extent - 1, ty + extent - 1, tz + extent - 1];
+  const axis = face.axis;
+  const resolvedDirection: -1 | 1 = face.coordinate === targetMin[axis] ? -1 : 1;
 
   return {
-    minX: cx * extent,
-    maxX: cx * extent + extent - 1,
-    minY: cy * extent,
-    maxY: cy * extent + extent - 1,
-    minZ: cz * extent,
-    maxZ: cz * extent + extent - 1,
+    axis: axis === 0 ? "x" : axis === 1 ? "y" : "z",
+    direction: resolvedDirection,
+    sourceScale: 2 ** spec.sourceLevel,
+    targetScale,
+    refinementRatio: spec.refinementRatio,
   };
 }
 
