@@ -595,6 +595,7 @@ export class SimulationEngine {
       32,
     );
     snapshot.assertCoverage();
+    snapshot.assertFaceCoverage(context);
     return snapshot;
   }
 }
