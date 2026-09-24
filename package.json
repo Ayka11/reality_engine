@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "netlify deploy --prod --dir=dist"
+    "deploy": "netlify deploy --prod --dir=dist",
+    "hf:smoke": "node scripts/hf-smoke-check.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
