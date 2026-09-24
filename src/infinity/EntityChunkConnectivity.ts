@@ -20,6 +20,7 @@ export interface EntityChunkConnectivityResult {
   closedComponentCount: number;
   boundaryComponentCount: number;
   openReadComponentCount: number;
+  mixedLodComponentCount: number;
 }
 
 /**
@@ -104,9 +105,10 @@ export class EntityChunkConnectivity {
     const components = [...merged.values()];
     return {
       components,
-      closedComponentCount: components.filter(c => !c.touchesReadBoundary).length,
+      closedComponentCount: components.filter(c => !c.touchesReadBoundary && !c.touchesMixedLODBoundary).length,
       boundaryComponentCount: components.filter(c => c.touchesSimulationBoundary).length,
       openReadComponentCount: components.filter(c => c.touchesReadBoundary).length,
+      mixedLodComponentCount: components.filter(c => c.touchesMixedLODBoundary).length,
     };
   }
 
