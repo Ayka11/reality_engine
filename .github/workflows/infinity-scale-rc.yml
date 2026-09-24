@@ -1,12 +1,16 @@
 name: Infinity Scale RC Validation
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - infinity-scale-real-diagnostics
   pull_request:
     branches:
       - infinity-scale-real-diagnostics
+
+permissions:
+  contents: read
 
 jobs:
   validate:
