@@ -26,6 +26,7 @@ import { runInfinityScaleAdaptiveExecutionGraphCompilerRegression } from "./Infi
 import { runInfinityScaleGPUExecutionPlanAdapterRegression } from "./InfinityScaleGPUExecutionPlanAdapter.regression";
 import { runInfinityScaleAdaptiveTransactionGateRegression } from "./InfinityScaleAdaptiveTransactionGate.regression";
 import { runInfinityScalePredictiveAdaptivePipelineRegression } from "./InfinityScalePredictiveAdaptivePipeline.regression";
+import { runInfinityScaleAdaptiveTelemetryRecorderRegression } from "./InfinityScaleAdaptiveTelemetryRecorder.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -60,6 +61,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["gpu-execution-plan-adapter", runInfinityScaleGPUExecutionPlanAdapterRegression],
     ["adaptive-transaction-gate", runInfinityScaleAdaptiveTransactionGateRegression],
     ["predictive-adaptive-pipeline", runInfinityScalePredictiveAdaptivePipelineRegression],
+    ["adaptive-telemetry-recorder", runInfinityScaleAdaptiveTelemetryRecorderRegression],
   ];
 
   const results: InfinityScaleRegressionResult[] = [];
