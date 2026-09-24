@@ -23,7 +23,20 @@ export function mapInfinityScaleBoundaryCell(
   const targetScale = 2 ** spec.targetLevel;
   const sourceScale = 2 ** spec.sourceLevel;
 
-  if (spec.relation === "same-level") return { targetCell, sourceCells: [targetCell] };
+  if (spec.relation === "same-level") {
+    const sourceRange = rangeForChunk(spec.sourceChunk, chunkSize);
+    const targetRange = rangeForChunk(spec.targetChunk, chunkSize);
+    const axis = sharedFaceAxis(targetRange, sourceRange);
+    if (axis === null) throw new Error(`Same-level boundary mapping requires adjacent chunks: ${spec.sourceChunk} -> ${spec.targetChunk}`);
+    const sourceCell: [number, number, number] = [...targetCell];
+    const targetIsLower = axis === 0
+      ? targetRange.maxX < sourceRange.minX
+      : axis === 1
+        ? targetRange.maxY < sourceRange.minY
+        : targetRange.maxZ < sourceRange.minZ;
+    sourceCell[axis] += targetIsLower ? 1 : -1;
+    return { targetCell, sourceCells: [sourceCell] };
+  }
   const ratio = spec.refinementRatio;
   if (!Number.isInteger(ratio) || ratio < 2) throw new Error("Mixed-LOD boundary mapping requires refinement ratio >= 2");
   if (ratio !== Math.max(sourceScale, targetScale) / Math.min(sourceScale, targetScale)) {
