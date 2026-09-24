@@ -1,6 +1,7 @@
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import type { EntityChunkConnectivityResult } from "./EntityChunkConnectivity";
+import type { EntityReconciliationPlan } from "./EntityChunkReconciliation";
 
 export interface InfinityScaleMixedLODValidation {
   ready: boolean;
@@ -11,6 +12,7 @@ export interface InfinityScaleMixedLODValidation {
   unresolvedTopology: boolean;
   topologyRepresentationReady: boolean;
   ambiguousTopologyComponentCount: number;
+  reconciliationReady: boolean;
   reasons: string[];
 }
 
@@ -26,6 +28,7 @@ export function validateInfinityScaleMixedLOD(
   plan: InfinityScaleExecutionPlan,
   context: InfinityScaleChunkExecutionContext,
   entityTopology?: EntityChunkConnectivityResult,
+  reconciliation?: EntityReconciliationPlan,
 ): InfinityScaleMixedLODValidation {
   const mixed = context.boundaryTransferSpecs.filter(
     spec => spec.sourceLevel !== spec.targetLevel,
@@ -42,6 +45,7 @@ export function validateInfinityScaleMixedLOD(
     !["coarse-to-fine", "fine-to-coarse"].includes(spec.relation),
   );
   const reasons: string[] = [];
+  const reconciliationReady = mixed.length === 0 || reconciliation?.commitReady === true;
   const topologyRepresentationReady = mixed.length === 0 || !!entityTopology;
   const ambiguousTopologyComponentCount = entityTopology
     ? entityTopology.components.filter(component => {
@@ -80,18 +84,23 @@ export function validateInfinityScaleMixedLOD(
   if (ambiguousTopologyComponentCount > 0) {
     reasons.push(`ambiguous mixed-LOD entity identity topology: ${ambiguousTopologyComponentCount}`);
   }
-  if (mixed.length > 0 && entityTopology && entityTopology.mixedLodComponentCount > 0) {
+  if (mixed.length > 0 && entityTopology && entityTopology.mixedLodComponentCount > 0 && !reconciliationReady) {
     reasons.push("mixed-LOD entity components remain boundary-owned and require deferred identity commit");
+  }
+  if (mixed.length > 0 && !reconciliationReady) {
+    reasons.push("entity reconciliation transaction is not commit-ready");
   }
 
   const ready =
-    plan.boundaryReadRelations.length === 0 ||
-    (mixed.length === 0 || topologyRepresentationReady) &&
-    (mixed.length === 0 || !unresolvedTopology) &&
-    (mixed.length === 0 || invalid.length === 0) &&
+    mixed.length === 0 ||
+    (
+      topologyRepresentationReady &&
+      reconciliationReady &&
+      invalid.length === 0 &&
       unsupported.length === 0 &&
       context.overlappingSimulationRangeCount === 0 &&
-      !unresolvedTopology);
+      !unresolvedTopology
+    );
 
   return {
     ready,
@@ -102,6 +111,7 @@ export function validateInfinityScaleMixedLOD(
     unresolvedTopology,
     topologyRepresentationReady,
     ambiguousTopologyComponentCount,
+    reconciliationReady,
     reasons,
   };
 }
