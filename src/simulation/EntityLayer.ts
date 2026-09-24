@@ -203,6 +203,7 @@ export class EntityLayer {
       connectivity.components,
       this.getEntities(),
       context.simulationCellCount >= grid.size && context.readCellCount === 0,
+      connectivity,
     );
     return this.chunkReconciliation.commitRecords(plan, connectivity.components);
   }
