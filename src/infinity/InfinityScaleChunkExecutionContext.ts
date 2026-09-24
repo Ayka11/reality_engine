@@ -279,7 +279,7 @@ export class InfinityScaleChunkExecutionContext {
   }
 
 function chunkLevel(key: string): number {
-  const match = /^(\\d+):/.exec(key);
+  const match = /^(\d+):/.exec(key);
   if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
   return Number(match[1]);
 }
