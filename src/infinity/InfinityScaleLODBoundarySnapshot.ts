@@ -235,7 +235,11 @@ export class InfinityScaleLODBoundarySnapshot {
     // interface. Move one base cell into the source side before mapping it
     // into the coarse chunk.
     if (spec.relation === "coarse-to-fine") {
-      const sourceCell = shiftAcrossFace(targetCell, face, -face.direction);
+      const sourceCell = [
+        Math.floor(shiftAcrossFace(targetCell, face, -face.direction)[0] / sourceScale) * sourceScale,
+        Math.floor(shiftAcrossFace(targetCell, face, -face.direction)[1] / sourceScale) * sourceScale,
+        Math.floor(shiftAcrossFace(targetCell, face, -face.direction)[2] / sourceScale) * sourceScale,
+      ] as [number, number, number];
       const lx = Math.floor((sourceCell[0] - sourceRange.minX) / sourceScale);
       const ly = Math.floor((sourceCell[1] - sourceRange.minY) / sourceScale);
       const lz = Math.floor((sourceCell[2] - sourceRange.minZ) / sourceScale);
