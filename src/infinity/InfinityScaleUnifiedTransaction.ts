@@ -204,59 +204,16 @@ function countMissingMixedLODUpdates(
   let missing = 0;
 
   for (const spec of mixedSpecs) {
-    const target = chunkRangeForContext(transaction.context, spec.targetChunk);
-    const source = chunkRangeForContext(transaction.context, spec.sourceChunk);
-    const scale = 2 ** spec.targetLevel;
-    const pushFace = (
-      axis: 0 | 1 | 2,
-      coordinate: number,
-      minU: number,
-      maxU: number,
-      minV: number,
-      maxV: number,
-    ) => {
-      for (let v = minV; v <= maxV; v += scale) {
-        for (let u = minU; u <= maxU; u += scale) {
-          const cell: [number, number, number] =
-            axis === 0 ? [coordinate, u, v] :
-            axis === 1 ? [u, coordinate, v] :
-            [u, v, coordinate];
-          mapper.map(spec, cell);
-          if (!stagedKeys.has(`${spec.sourceChunk}|${spec.targetChunk}|${cell.join(",")}`)) missing++;
-        }
-      }
-    };
-    const xo0 = Math.max(target.minX, source.minX), xo1 = Math.min(target.maxX, source.maxX);
-    const yo0 = Math.max(target.minY, source.minY), yo1 = Math.min(target.maxY, source.maxY);
-    const zo0 = Math.max(target.minZ, source.minZ), zo1 = Math.min(target.maxZ, source.maxZ);
-    if (target.maxX + 1 === source.minX) pushFace(0, target.maxX, yo0, yo1, zo0, zo1);
-    else if (source.maxX + 1 === target.minX) pushFace(0, target.minX, yo0, yo1, zo0, zo1);
-    else if (target.maxY + 1 === source.minY) pushFace(1, target.maxY, xo0, xo1, zo0, zo1);
-    else if (source.maxY + 1 === target.minY) pushFace(1, target.minY, xo0, xo1, zo0, zo1);
-    else if (target.maxZ + 1 === source.minZ) pushFace(2, target.maxZ, xo0, xo1, yo0, yo1);
-    else if (source.maxZ + 1 === target.minZ) pushFace(2, target.minZ, xo0, xo1, yo0, yo1);
+    for (const cell of mapper.enumerateTargetFaceCells(
+      spec,
+      transaction.context.gridWidth,
+      transaction.context.gridHeight,
+      transaction.context.gridDepth,
+    )) {
+      mapper.map(spec, cell);
+      if (!stagedKeys.has(`${spec.sourceChunk}|${spec.targetChunk}|${cell.join(",")}`)) missing++;
+    }
   }
-  return missing;
+
 }
 
-function chunkRangeForContext(
-  context: InfinityScaleChunkExecutionContext,
-  key: string,
-) {
-  const match = /^(\\d+):(-?\\d+),(-?\\d+),(-?\\d+)$/.exec(key);
-  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
-  const level = Number(match[1]);
-  const scale = 2 ** level;
-  const extent = context.chunkSize * scale;
-  const cx = Number(match[2]);
-  const cy = Number(match[3]);
-  const cz = Number(match[4]);
-  return {
-    minX: Math.max(0, cx * extent),
-    maxX: Math.min(context.gridWidth - 1, cx * extent + extent - 1),
-    minY: Math.max(0, cy * extent),
-    maxY: Math.min(context.gridHeight - 1, cy * extent + extent - 1),
-    minZ: Math.max(0, cz * extent),
-    maxZ: Math.min(context.gridDepth - 1, cz * extent + extent - 1),
-  };
-}
