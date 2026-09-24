@@ -6,6 +6,10 @@ import type { InfinityScaleAdaptiveMutation } from "./InfinityScaleAdaptiveTrans
 import type { InfinityScaleGPUExecutionBudget } from "./InfinityScaleGPUExecutionPlanAdapter";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
+import { InfinityScaleClosedLoopAdaptiveController, type InfinityScaleClosedLoopAdaptiveInput, type InfinityScaleClosedLoopAdaptiveRecommendation } from "./InfinityScaleClosedLoopAdaptiveController";
+import { buildInfinityScaleAdaptiveMutationPlan } from "./InfinityScaleAdaptiveMutationPlanBuilder";
+import { InfinityScaleClosedLoopExecutablePlanner } from "./InfinityScaleClosedLoopExecutablePlanner";
+import type { InfinityScaleSpatialConstraintNode } from "./InfinityScaleSpatialConstraintClosure";
 
 export interface InfinityScaleAdaptiveRuntimeStep {
   stateRevision: number;
@@ -17,6 +21,11 @@ export interface InfinityScaleAdaptiveRuntimeStep {
   transferExecutions?: InfinityScaleAdaptiveTransferExecution[];
 }
 
+export interface InfinityScaleClosedLoopRuntimeRegion extends Omit<InfinityScaleClosedLoopAdaptiveInput, "currentLOD"> {
+  currentLOD?: number;
+  topology: InfinityScaleSpatialConstraintNode;
+}
+
 export interface InfinityScaleAdaptiveRuntimeResult extends InfinityScalePredictiveAdaptivePipelineResult {
   committed: boolean;
   stateRevision: number;
@@ -24,8 +33,15 @@ export interface InfinityScaleAdaptiveRuntimeResult extends InfinityScalePredict
   lodByRegion: Record<string, number>;
 }
 
+export interface InfinityScaleClosedLoopRuntimeResult extends InfinityScaleAdaptiveRuntimeResult {
+  recommendations: InfinityScaleClosedLoopAdaptiveRecommendation[];
+  executablePlanHash: string;
+}
+
 export class InfinityScaleAdaptiveRuntime {
   private readonly pipeline = new InfinityScalePredictiveAdaptivePipeline();
+  private readonly closedLoopController = new InfinityScaleClosedLoopAdaptiveController();
+  private readonly executablePlanner = new InfinityScaleClosedLoopExecutablePlanner();
   private readonly lodState: InfinityScaleLODState;
   private stateRevision = 0;
   private topologyRevision = 0;
@@ -56,12 +72,56 @@ export class InfinityScaleAdaptiveRuntime {
       if (committed) { this.stateRevision++; if (result.topologyChanged) this.topologyRevision++; }
     }
 
+    return { ...pipeline, committed, stateRevision: this.stateRevision, topologyRevision: this.topologyRevision, lodByRegion: this.snapshotLOD() };
+  }
+
+  stepClosedLoop(
+    regions: InfinityScaleClosedLoopRuntimeRegion[],
+    gpuBudget: InfinityScaleGPUExecutionBudget,
+    conservationValid: boolean,
+    gpuComplete: boolean,
+    frame?: InfinityScaleGlobalExecutionFrame,
+    plan?: InfinityScaleExecutionPlan,
+    transferExecutions: InfinityScaleAdaptiveTransferExecution[] = [],
+  ): InfinityScaleClosedLoopRuntimeResult {
+    const recommendations = regions
+      .map(region => this.closedLoopController.observeAndRecommend({
+        ...region,
+        currentLOD: region.currentLOD ?? this.getLOD(region.regionId) ?? region.topology.currentLOD,
+        error: region.runtimeError,
+      }))
+      .sort((a, b) => a.regionId.localeCompare(b.regionId));
+
+    const mutationPlan = buildInfinityScaleAdaptiveMutationPlan(recommendations);
+    const executablePlan = this.executablePlanner.compile(mutationPlan, regions.map(region => ({
+      ...region.topology,
+      currentLOD: region.currentLOD ?? this.getLOD(region.regionId) ?? region.topology.currentLOD,
+    })));
+
+    const runtime = this.step({
+      stateRevision: this.stateRevision,
+      topologyRevision: this.topologyRevision,
+      mutations: executablePlan.mutations,
+      gpuBudget,
+      conservationValid,
+      gpuComplete,
+      transferExecutions,
+    }, frame, plan);
+
+    return {
+      ...runtime,
+      recommendations,
+      executablePlanHash: executablePlan.deterministicHash,
+    };
+  }
+
+  private snapshotLOD(): Record<string, number> {
     const lodByRegion: Record<string, number> = {};
     for (const key of this.lodState.keys().sort()) {
       const chunk = this.lodState.getChunk(key);
       if (chunk) lodByRegion[key] = chunk.level;
     }
-    return { ...pipeline, committed, stateRevision: this.stateRevision, topologyRevision: this.topologyRevision, lodByRegion };
+    return lodByRegion;
   }
 
   bindToObserver(cell: { x: number; y: number; z: number }): void { this.scale.setObserver(cell); }
