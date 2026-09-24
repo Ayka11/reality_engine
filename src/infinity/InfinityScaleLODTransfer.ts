@@ -155,6 +155,11 @@ export class InfinityScaleLODTransfer {
 
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
+      if (policy === "circular") {
+        skippedFields.push(field);
+        continue;
+      }
+
       if (policy !== "intensive" && policy !== "extensive" && policy !== "discrete") {
         skippedFields.push(field);
         continue;
@@ -305,10 +310,25 @@ export class InfinityScaleLODTransfer {
     const violations: number[] = [];
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
-      if (policy !== "intensive" && policy !== "extensive") continue;
-      const expectedValue = policy === "intensive"
-        ? source[field] ?? 0
-        : (source[field] ?? 0);
+      if (policy !== "intensive" && policy !== "extensive" && policy !== "circular") continue;
+      if (policy === "circular") {
+        const phase = source[field] ?? 0;
+        const expected = Math.atan2(Math.sin(phase), Math.cos(phase));
+        for (const target of targets) {
+          const actual = target[field] ?? 0;
+          const error = Math.abs(Math.atan2(
+            Math.sin(actual - expected),
+            Math.cos(actual - expected),
+          ));
+          if (error > tolerance) {
+            if (!violations.includes(field)) violations.push(field);
+            break;
+          }
+        }
+        continue;
+      }
+
+      const expectedValue = source[field] ?? 0;
       for (const target of targets) {
         if (target.length !== CELL_FIELDS) {
           throw new Error("Infinity Scale prolongation target dimensions are invalid");
