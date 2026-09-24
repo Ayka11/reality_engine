@@ -253,6 +253,7 @@ export class SimulationEngine {
             this.grid,
             clampedDt,
             executionContext,
+            boundarySnapshot,
           );
 
           // Keep causality aligned with each selective CPU simulation tick.
