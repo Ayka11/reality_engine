@@ -1,5 +1,5 @@
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
-import { InfinityScaleLODBoundaryCellMapper } from "./InfinityScaleLODBoundaryCellMapper";
+import { InfinityScaleLODBoundaryCellMapper, resolveInfinityScaleBoundaryFaceGeometry } from "./InfinityScaleLODBoundaryCellMapper";
 import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
 import { CELL_FIELDS } from "../core/CellState";
 
@@ -84,6 +84,17 @@ export function runInfinityScaleLODBoundaryCellMapperRegression(): void {
       if (mapping.targetCell.join(",") !== targetCell.join(",")) {
         throw new Error(`${test.name}: target cell identity changed`);
       }
+    }
+  }
+
+  // Canonical face geometry must agree with target-face enumeration.
+  for (const test of cases) {
+    const face = resolveInfinityScaleBoundaryFaceGeometry(test.transfer, 4);
+    const cells = mapper.enumerateTargetFaceCells(test.transfer, 8, 8, 8);
+    if (!face || cells.length === 0) throw new Error(`${test.name}: missing canonical face geometry`);
+    for (const cell of cells) {
+      const onFace = face.axis === 0 ? cell[0] === face.coordinate : face.axis === 1 ? cell[1] === face.coordinate : cell[2] === face.coordinate;
+      if (!onFace) throw new Error(`${test.name}: enumerated cell escaped canonical face`);
     }
   }
 
