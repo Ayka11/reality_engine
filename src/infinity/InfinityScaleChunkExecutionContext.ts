@@ -31,13 +31,6 @@ export interface InfinityScaleBoundaryTransferSpec {
   readOperation: "copy" | "prolongation" | "restriction";
 }
 
-/**
- * Safe execution geometry for the current dense SparseVoxelGrid.
- *
- * It translates logical 32^3 Infinity Scale chunks into dense-cell ranges and
- * explicitly includes the LOD-aware boundary read footprint. The context is descriptive
- * until every simulation layer supports selective execution.
- */
 export class InfinityScaleChunkExecutionContext {
   readonly simulationRanges: ExecutionCellRange[];
   readonly readRanges: ExecutionCellRange[];
@@ -70,13 +63,8 @@ export class InfinityScaleChunkExecutionContext {
     );
     this.overlappingSimulationRangeCount = this.countOverlappingRanges(rawSimulationRanges);
     this.levelRangeScales = plan.chunks.map(chunk => 2 ** chunkLevel(chunk.key));
-    // Ownership is a set of cells, not a sum of overlapping LOD ranges. Keep
-    // the execution geometry explicit, while exposing overlap diagnostics so
-    // callers can reject ambiguous multi-LOD ownership before dispatch.
     this.simulationRanges = rawSimulationRanges;
-    this.readRanges = plan.boundaryReadChunks.map(key =>
-      this.chunkRange(key),
-    );
+    this.readRanges = plan.boundaryReadChunks.map(key => this.chunkRange(key));
     this.boundaryReadRelations = plan.boundaryReadRelations.map(relation => ({ ...relation }));
     this.boundaryTransferSpecs = this.buildBoundaryTransferSpecs();
     this.sameLevelTransferCount = this.boundaryTransferSpecs.filter(spec => spec.operation === "copy").length;
@@ -93,8 +81,6 @@ export class InfinityScaleChunkExecutionContext {
     this.uniqueBoundaryReadCellCount = this.countUniqueCells(
       this.readRanges.filter((range) => !this.isFullyContainedBySimulation(range)),
     );
-    // readCellCount is the unique halo footprint, excluding cells already
-    // owned by simulation. This is the actual boundary transfer footprint.
     this.readCellCount = this.uniqueBoundaryReadCellCount;
   }
 
@@ -125,9 +111,6 @@ export class InfinityScaleChunkExecutionContext {
             : relation.relation === "coarse-to-fine"
               ? "prolongation"
               : "restriction",
-        // Boundary sampling flows from the dependency (targetChunk) into the
-        // locally executing sourceChunk, so the read operation is the inverse
-        // of the geometric source→target transfer direction.
         readOperation:
           relation.relation === "same-level"
             ? "copy"
@@ -161,6 +144,12 @@ export class InfinityScaleChunkExecutionContext {
             : relation.relation === "coarse-to-fine"
               ? "prolongation"
               : "restriction",
+        readOperation:
+          relation.relation === "same-level"
+            ? "copy"
+            : relation.relation === "coarse-to-fine"
+              ? "restriction"
+              : "prolongation",
       };
     });
   }
@@ -210,12 +199,56 @@ export class InfinityScaleChunkExecutionContext {
     z: number,
   ): InfinityScaleBoundaryReadRelation[] {
     const relations: InfinityScaleBoundaryReadRelation[] = [];
+
     for (const [sourceChunk, sourceRelations] of this.boundaryRelationsBySource) {
       const sourceRange = this.chunkRange(sourceChunk);
       if (!this.contains(sourceRange, x, y, z)) continue;
-      relations.push(...sourceRelations.map(relation => ({ ...relation })));
+
+      for (const relation of sourceRelations) {
+        const targetRange = this.chunkRange(relation.targetChunk);
+        if (this.isAdjacentToTargetBoundary(sourceRange, targetRange, x, y, z)) {
+          relations.push({ ...relation });
+        }
+      }
     }
+
     return relations;
+  }
+
+  /**
+   * A transfer relation is usable for a local cell only when that cell lies
+   * on the source chunk face adjacent to the target chunk footprint.
+   *
+   * This prevents a mixed-LOD relation from being attached to every cell in a
+   * large source chunk merely because the source and target chunks are
+   * related somewhere along one face.
+   */
+  private isAdjacentToTargetBoundary(
+    source: ExecutionCellRange,
+    target: ExecutionCellRange,
+    x: number,
+    y: number,
+    z: number,
+  ): boolean {
+    const xOverlap = x >= target.minX && x <= target.maxX;
+    const yOverlap = y >= target.minY && y <= target.maxY;
+    const zOverlap = z >= target.minZ && z <= target.maxZ;
+
+    const xFace =
+      (source.maxX + 1 === target.minX && x === source.maxX) ||
+      (target.maxX + 1 === source.minX && x === source.minX);
+    const yFace =
+      (source.maxY + 1 === target.minY && y === source.maxY) ||
+      (target.maxY + 1 === source.minY && y === source.minY);
+    const zFace =
+      (source.maxZ + 1 === target.minZ && z === source.maxZ) ||
+      (target.maxZ + 1 === source.minZ && z === source.minZ);
+
+    return (
+      (xFace && yOverlap && zOverlap) ||
+      (yFace && xOverlap && zOverlap) ||
+      (zFace && xOverlap && yOverlap)
+    );
   }
 
   private chunkRange(key: string): ExecutionCellRange {
@@ -229,8 +262,6 @@ export class InfinityScaleChunkExecutionContext {
       throw new Error(`Invalid Infinity Scale LOD level: ${match[1]}`);
     }
 
-    // Level 0 is the base 32³ chunk. Each higher level represents a
-    // coarser spatial cell whose footprint doubles per level.
     const scale = 2 ** level;
     const extent = this.chunkSize * scale;
     const x = Number(match[2]) * extent;
@@ -247,12 +278,7 @@ export class InfinityScaleChunkExecutionContext {
     };
   }
 
-function chunkLevel(key: string): number {
-  const match = /^(\d+):/.exec(key);
-  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
-  return Number(match[1]);
-}
-
+  function_chunkLevel_placeholder
   private isFullyContainedBySimulation(range: ExecutionCellRange): boolean {
     for (let z = range.minZ; z <= range.maxZ; z++)
     for (let y = range.minY; y <= range.maxY; y++)
@@ -297,20 +323,6 @@ function chunkLevel(key: string): number {
       x >= range.minX && x <= range.maxX &&
       y >= range.minY && y <= range.maxY &&
       z >= range.minZ && z <= range.maxZ
-    );
-  }
-
-  private rangeVolume(range: ExecutionCellRange): number {
-    if (
-      range.maxX < range.minX ||
-      range.maxY < range.minY ||
-      range.maxZ < range.minZ
-    ) return 0;
-
-    return (
-      (range.maxX - range.minX + 1) *
-      (range.maxY - range.minY + 1) *
-      (range.maxZ - range.minZ + 1)
     );
   }
 }
