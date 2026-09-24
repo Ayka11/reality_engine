@@ -44,3 +44,6 @@ jobs:
 
       - name: Reproducible RC package check
         run: npm run package:infinity-scale:rc
+
+      - name: Release provenance integrity
+        run: npm run validate:infinity-scale:integrity
