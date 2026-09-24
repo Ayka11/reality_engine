@@ -57,6 +57,7 @@ import { runInfinityScaleFullPipelineReplayRegression } from "./InfinityScaleFul
 import { runInfinityScaleFailureReplayRegression } from "./InfinityScaleFailureReplay.regression";
 import { runInfinityScaleRuntimeReplayRegression } from "./InfinityScaleRuntimeReplay.regression";
 import { runInfinityScaleReleaseValidationRegression } from "./InfinityScaleReleaseValidation.regression";
+import { runInfinityScaleReleaseCandidateRegression } from "./InfinityScaleReleaseCandidate.regression";
 
 export interface InfinityScaleRegressionResult { name: string; passed: boolean; }
 
@@ -122,6 +123,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["failure-replay", runInfinityScaleFailureReplayRegression],
     ["runtime-replay", runInfinityScaleRuntimeReplayRegression],
     ["release-validation", runInfinityScaleReleaseValidationRegression],
+    ["release-candidate-manifest", runInfinityScaleReleaseCandidateRegression],
   ];
   const results: InfinityScaleRegressionResult[] = [];
   for (const [name, test] of tests) {
