@@ -8,6 +8,7 @@ import type {
   InfinityScaleChunkExecutionContext,
 } from "./InfinityScaleChunkExecutionContext";
 import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
+import { mapInfinityScaleBoundaryCell } from "./InfinityScaleLODBoundaryCellMapper";
 
 export interface InfinityScaleLODTransferSample {
   sourceChunk: string;
@@ -178,58 +179,30 @@ export class InfinityScaleLODBoundarySnapshot {
     const source = this.chunks.get(spec.sourceChunk);
     if (!source) return null;
 
-    const sourceRange = chunkRangeForKey(spec.sourceChunk, this.chunkSize);
-    const targetRange = chunkRangeForKey(spec.targetChunk, this.chunkSize);
-    const sourceScale = 2 ** spec.sourceLevel;
-    const targetScale = 2 ** spec.targetLevel;
-    const [x, y, z] = targetCell;
-    const face = resolveBoundaryReadFace(sourceRange, targetRange, x, y, z);
-    if (!face) return null;
-
-    const out = new Float32Array(CELL_FIELDS);
-
-    // The solver asks for the dependency cell across the interface.
-    // For fine->coarse, that dependency is a fine face footprint matching
-    // the coarse cell's tangential extent, so restrict exactly ratio^2 cells.
-    if (spec.relation === "fine-to-coarse") {
-      const ratio = spec.refinementRatio;
-      const sourceFaceOrigin = shiftAcrossFace([x, y, z], face, 1);
-      const axis = face.axis === "x" ? 0 : face.axis === "y" ? 1 : 2;
-      const tangentialAxes = axis === 0 ? [1, 2] : axis === 1 ? [0, 2] : [0, 1];
-
-      sourceFaceOrigin[tangentialAxes[0]] =
-        Math.floor(sourceFaceOrigin[tangentialAxes[0]] / targetScale) * targetScale;
-      sourceFaceOrigin[tangentialAxes[1]] =
-        Math.floor(sourceFaceOrigin[tangentialAxes[1]] / targetScale) * targetScale;
-
-      const sources: Float32Array[] = [];
-      for (let b = 0; b < ratio; b++) {
-        for (let a = 0; a < ratio; a++) {
-          const coords: [number, number, number] = [...sourceFaceOrigin];
-          coords[tangentialAxes[0]] += a * sourceScale;
-          coords[tangentialAxes[1]] += b * sourceScale;
-          const lx = Math.floor((coords[0] - sourceRange.minX) / sourceScale);
-          const ly = Math.floor((coords[1] - sourceRange.minY) / sourceScale);
-          const lz = Math.floor((coords[2] - sourceRange.minZ) / sourceScale);
-          if (
-            lx < 0 || lx >= this.chunkSize ||
-            ly < 0 || ly >= this.chunkSize ||
-            lz < 0 || lz >= this.chunkSize
-          ) return null;
-          const offset =
-            ((lz * this.chunkSize * this.chunkSize) + ly * this.chunkSize + lx) * CELL_FIELDS;
-          const cell = new Float32Array(CELL_FIELDS);
-          cell.set(source.cells.subarray(offset, offset + CELL_FIELDS));
-          sources.push(cell);
-        }
-      }
-      InfinityScaleLODTransfer.restrictFace(
-        sources,
-        out,
-        spec.sourceLevel,
-        spec.targetLevel,
-      );
+    const mapping = mapInfinityScaleBoundaryCell(spec, targetCell, this.chunkSize);
+    const sources: Float32Array[] = [];
+    for (const coords of mapping.sourceCells) {
+      const sourceRange = chunkRangeForKey(spec.sourceChunk, this.chunkSize);
+      const sourceScale = 2 ** spec.sourceLevel;
+      const lx = Math.floor((coords[0] - sourceRange.minX) / sourceScale);
+      const ly = Math.floor((coords[1] - sourceRange.minY) / sourceScale);
+      const lz = Math.floor((coords[2] - sourceRange.minZ) / sourceScale);
+      if (lx < 0 || lx >= this.chunkSize || ly < 0 || ly >= this.chunkSize || lz < 0 || lz >= this.chunkSize) return null;
+      const offset = ((lz * this.chunkSize * this.chunkSize) + ly * this.chunkSize + lx) * CELL_FIELDS;
+      const cell = new Float32Array(CELL_FIELDS);
+      cell.set(source.cells.subarray(offset, offset + CELL_FIELDS));
+      sources.push(cell);
+    }
+    if (spec.relation === "same-level") {
+      out.set(sources[0]);
       return out;
+    }
+    if (spec.relation === "coarse-to-fine") {
+      InfinityScaleLODTransfer.prolongate(sources[0], out, spec.sourceLevel, spec.targetLevel);
+      return out;
+    }
+    InfinityScaleLODTransfer.restrictFace(sources, out, spec.sourceLevel, spec.targetLevel);
+    return out;
     }
 
     // For coarse->fine, the dependency is one coarse cell touching the
