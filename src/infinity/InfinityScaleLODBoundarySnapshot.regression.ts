@@ -175,7 +175,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(2, 0);
-    const fine = key(0, 4);
+    const fine = key(0, 8);
     for (let dz = 0; dz < 4; dz++)
       for (let dy = 0; dy < 4; dy++)
         for (let dx = 0; dx < 4; dx++)
@@ -230,10 +230,10 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 4);
-    write(state, fine, 0, 4, 0, 0, 55);
+    const fine = key(0, 8);
+    write(state, fine, 0, 8, 0, 0, 55);
 
-    const s = spec(coarse, fine, "fine-to-coarse", 1, 0);
+    const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 14, CHUNK);
     const coverage = snapshot.getCoverage();
     if (!coverage.complete || coverage.missingSourceChunks.length !== 0) {
@@ -270,7 +270,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 4);
+    const fine = key(0, 8);
     state.ensureChunk(coarse, 1);
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 16, CHUNK);
@@ -303,10 +303,10 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 4);
+    const fine = key(0, 8);
     state.ensureChunk(coarse, 1);
 
-    const s = spec(coarse, fine, "fine-to-coarse", 1, 0);
+    const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 15, CHUNK);
     const coverage = snapshot.getCoverage();
     if (coverage.complete || coverage.missingSourceChunks[0] !== fine) {
@@ -321,10 +321,10 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 4);
+    const fine = key(0, 8);
     write(state, fine, 0, 4, 0, 0, 91);
 
-    const s = spec(coarse, fine, "fine-to-coarse", 1, 0);
+    const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 13, CHUNK);
     const coverage = snapshot.getCoverage();
     if (!coverage.complete || coverage.requiredSourceChunks.length !== 1 ||
@@ -345,7 +345,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 4);
+    const fine = key(0, 8);
     let value = 1;
     for (let z = 0; z < 2; z++) {
       for (let y = 0; y < 2; y++) {
@@ -354,7 +354,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
       }
     }
 
-    const s = spec(coarse, fine, "fine-to-coarse", 1, 0);
+    const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 11, CHUNK);
     const out = assertNotNull(snapshot.read(s, [3, 1, 1]), "fine-to-coarse face restriction");
 
