@@ -59,6 +59,7 @@ export interface InfinityScaleExecutionCapabilities {
   selectiveGpuReady: boolean;
   gpuPhysicsReady: boolean;
   lodBoundaryTransferReady: boolean;
+  mixedLodExecutionReady: boolean;
 }
 
 export class InfinityScaleExecutionAdapter {
@@ -68,6 +69,7 @@ export class InfinityScaleExecutionAdapter {
     selectiveGpuReady: false,
     gpuPhysicsReady: false,
     lodBoundaryTransferReady: false,
+    mixedLodExecutionReady: false,
   };
 
   setCapabilities(capabilities: InfinityScaleExecutionCapabilities): void {
@@ -99,6 +101,7 @@ export class InfinityScaleExecutionAdapter {
       selectiveGpuReady: this.capabilities.selectiveGpuReady,
       gpuPhysicsReady: this.capabilities.gpuPhysicsReady,
       lodBoundaryTransferReady: this.capabilities.lodBoundaryTransferReady,
+      mixedLodExecutionReady: this.capabilities.mixedLodExecutionReady,
       entityExecutionReady: true,
       agentMigrationReady: true,
     };
@@ -171,7 +174,11 @@ export class InfinityScaleExecutionAdapter {
       relation => relation.relation !== "same-level",
     );
     const lodBoundaryReady =
-      !hasMixedLodBoundary || this.capabilities.lodBoundaryTransferReady;
+      !hasMixedLodBoundary ||
+      (
+        this.capabilities.lodBoundaryTransferReady &&
+        this.capabilities.mixedLodExecutionReady
+      );
 
     const mode: InfinityScaleExecutionMode =
       lodBoundaryReady && this.capabilities.selectiveGpuReady && this.capabilities.gpuPhysicsReady
@@ -218,6 +225,7 @@ export class InfinityScaleExecutionAdapter {
       selectiveGpuReady: this.capabilities.selectiveGpuReady,
       gpuPhysicsReady: this.capabilities.gpuPhysicsReady,
       lodBoundaryTransferReady: this.capabilities.lodBoundaryTransferReady,
+      mixedLodExecutionReady: this.capabilities.mixedLodExecutionReady,
       entityExecutionReady: true,
       agentMigrationReady: true,
     };
