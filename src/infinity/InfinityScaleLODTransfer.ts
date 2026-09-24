@@ -258,6 +258,43 @@ export class InfinityScaleLODTransfer {
     };
   }
 
+  /**
+   * Deterministic numerical invariant for a fine->coarse restriction.
+   *
+   * Intensive fields must equal the arithmetic volume average; extensive
+   * fields must preserve the sum over the represented fine-cell volume.
+   * This is a pure invariant check and does not mutate either input.
+   */
+  static validateRestrictionInvariant(
+    sources: ReadonlyArray<ReadonlyArray<number>>,
+    target: ReadonlyArray<number>,
+    sourceLevel: number,
+    targetLevel: number,
+    tolerance = 1e-6,
+  ): { valid: boolean; violations: number[] } {
+    const refinementRatio = this.validateLevels(sourceLevel, targetLevel, "restriction");
+    const expected = refinementRatio ** 3;
+    if (sources.length !== expected || target.length !== CELL_FIELDS) {
+      throw new Error("Infinity Scale restriction invariant dimensions are invalid");
+    }
+
+    const violations: number[] = [];
+    for (let field = 0; field < CELL_FIELDS; field++) {
+      const policy = this.policy(field);
+      if (policy !== "intensive" && policy !== "extensive") continue;
+
+      let sum = 0;
+      for (const source of sources) sum += source[field] ?? 0;
+      const expectedValue = policy === "intensive" ? sum / sources.length : sum;
+      const scale = Math.max(1, Math.abs(expectedValue), Math.abs(target[field] ?? 0));
+      if (Math.abs((target[field] ?? 0) - expectedValue) > tolerance * scale) {
+        violations.push(field);
+      }
+    }
+
+    return { valid: violations.length === 0, violations };
+  }
+
   static validateSpec(spec: InfinityScaleBoundaryTransferSpec): void {
     const expectedOperation =
       spec.relation === "same-level"
