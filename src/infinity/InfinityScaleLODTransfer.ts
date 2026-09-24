@@ -288,6 +288,86 @@ export class InfinityScaleLODTransfer {
    * Round-trip invariant for an intensive field under baseline
    * coarse-to-fine prolongation: every child must reproduce the coarse value.
    */
+  /**
+   * Restricts a face footprint rather than a full volumetric refinement block.
+   * This is used for ghost/boundary state: the footprint contains ratio^2
+   * tangential source cells, so volumetric extensive quantities are sampled
+   * consistently instead of being summed across a partial volume.
+   */
+  static restrictFace(
+    sources: ReadonlyArray<ReadonlyArray<number>>,
+    target: number[],
+    sourceLevel: number,
+    targetLevel: number,
+  ): InfinityScaleLODTransferResult {
+    const refinementRatio = this.validateLevels(sourceLevel, targetLevel, "restriction");
+    const expected = refinementRatio ** 2;
+    if (sources.length !== expected || target.length !== CELL_FIELDS) {
+      throw new Error(
+        `Infinity Scale face restriction requires ${expected} source cells; received ${sources.length}`,
+      );
+    }
+    for (const source of sources) {
+      if (source.length !== CELL_FIELDS) {
+        throw new Error(`Infinity Scale face restriction source requires exactly ${CELL_FIELDS} fields`);
+      }
+    }
+
+    const transferredFields: number[] = [];
+    const skippedFields: number[] = [];
+    for (let field = 0; field < CELL_FIELDS; field++) {
+      const policy = this.policy(field);
+      if (policy === "circular") {
+        let sumSin = 0;
+        let sumCos = 0;
+        for (const source of sources) {
+          const phase = source[field] ?? 0;
+          sumSin += Math.sin(phase);
+          sumCos += Math.cos(phase);
+        }
+        target[field] = Math.atan2(sumSin, sumCos);
+        transferredFields.push(field);
+      } else if (
+        policy === "intensive" ||
+        policy === "extensive" ||
+        policy === "discrete"
+      ) {
+        if (policy === "discrete") {
+          const counts = new Map<number, number>();
+          for (const source of sources) {
+            const value = source[field] ?? 0;
+            counts.set(value, (counts.get(value) ?? 0) + 1);
+          }
+          let selected = 0;
+          let selectedCount = -1;
+          for (const [value, count] of counts) {
+            if (count > selectedCount || (count === selectedCount && value < selected)) {
+              selected = value;
+              selectedCount = count;
+            }
+          }
+          target[field] = selected;
+        } else {
+          let sum = 0;
+          for (const source of sources) sum += source[field] ?? 0;
+          target[field] = sum / sources.length;
+        }
+        transferredFields.push(field);
+      } else {
+        skippedFields.push(field);
+      }
+    }
+
+    return {
+      operation: "restriction",
+      sourceLevel,
+      targetLevel,
+      refinementRatio,
+      transferredFields,
+      skippedFields,
+    };
+  }
+
   static validateProlongationInvariant(
     source: ReadonlyArray<number>,
     targets: ReadonlyArray<ReadonlyArray<number>>,
