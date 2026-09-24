@@ -2,8 +2,7 @@ import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter
 import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import type { EntityChunkConnectivityResult } from "./EntityChunkConnectivity";
 import type { EntityReconciliationPlan } from "./EntityChunkReconciliation";
-import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
-import { validateInfinityScaleBoundaryGeometry } from "./InfinityScaleLODBoundaryGeometry";
+import { validateInfinityScaleBoundaryChunks } from "./InfinityScaleLODBoundaryGeometry";
 
 export interface InfinityScaleMixedLODValidation {
   ready: boolean;
@@ -36,16 +35,9 @@ export function validateInfinityScaleMixedLOD(
   const mixed = context.boundaryTransferSpecs.filter(
     spec => spec.sourceLevel !== spec.targetLevel,
   );
-  const invalidGeometry = mixed.filter(spec => {
-    // Validate the actual face geometry represented by the transfer relation.
-    // The origin of a transfer spec is not itself sufficient evidence that
-    // source/target chunks share a valid boundary.
-    return validateInfinityScaleBoundaryGeometry(
-      spec,
-      boundaryProbeCell(spec, context),
-      context.chunkSize,
-    ) === null;
-  });
+  const invalidGeometry = mixed.filter(spec =>
+    !validateInfinityScaleBoundaryChunks(spec, context.chunkSize),
+  );
   const invalid = mixed.filter(spec =>
     spec.refinementRatio < 2 ||
     !Number.isInteger(spec.refinementRatio) ||
@@ -135,44 +127,3 @@ export function validateInfinityScaleMixedLOD(
 }
 
 
-function boundaryProbeCell(
-  spec: {
-    sourceChunk: string;
-    targetChunk: string;
-  },
-  context: InfinityScaleChunkExecutionContext,
-): [number, number, number] {
-  const sourceRange = context.simulationRanges.find((range) =>
-    context.getBoundaryRelations().some(
-      relation =>
-        relation.sourceChunk === spec.sourceChunk &&
-        relation.targetChunk === spec.targetChunk,
-    ),
-  );
-  if (sourceRange) {
-    return [
-      sourceRange.minX,
-      sourceRange.minY,
-      sourceRange.minZ,
-    ];
-  }
-
-  // Fall back to the first source chunk face represented by the plan.
-  const relation = context.getBoundaryRelations().find(
-    item =>
-      item.sourceChunk === spec.sourceChunk &&
-      item.targetChunk === spec.targetChunk,
-  );
-  if (!relation) return [0, 0, 0];
-
-  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(relation.sourceChunk);
-  if (!match) return [0, 0, 0];
-  const level = Number(match[1]);
-  const scale = 2 ** level;
-  const extent = context.chunkSize * scale;
-  return [
-    Number(match[2]) * extent,
-    Number(match[3]) * extent,
-    Number(match[4]) * extent,
-  ];
-}
