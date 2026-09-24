@@ -239,6 +239,32 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     }
   }
 
+  // Context relation lookup must be expressed in target simulation-cell
+  // coordinates, including coarse->fine and fine->coarse interfaces.
+  {
+    const plan = {
+      revision: 1, mode: "selective-cpu-ready" as const, observer: [0, 0, 0] as [number,number,number],
+      chunks: [{ key: "1:0,0,0", lod: 1, distance: 0 }],
+      simulationBudget: 1, requestedSimulationCount: 1, selectedSimulationCount: 1,
+      maxSimulatingChunks: 1, boundaryReadChunks: ["0:8,0,0"], boundaryReadCount: 1,
+      boundaryReadRelations: [{ sourceChunk: "0:8,0,0", targetChunk: "1:0,0,0", relation: "fine-to-coarse" as const }],
+      simulationCellCount: 64, boundaryReadCellCount: 64, localExecutionLayers: 1, globalExecutionLayers: 1,
+      selectiveCpuReady: true, selectiveGpuReady: false, gpuPhysicsReady: false,
+      lodBoundaryTransferReady: true, mixedLodExecutionReady: true,
+      entityExecutionReady: false, agentMigrationReady: false,
+    };
+    const context = new (require("./InfinityScaleChunkExecutionContext").InfinityScaleChunkExecutionContext)(
+      plan, 12, 8, 8, 4,
+    );
+    const relations = context.getBoundaryRelationsForCell(7, 2, 2);
+    if (relations.length !== 1 || relations[0].sourceChunk !== "0:8,0,0") {
+      throw new Error("Infinity Scale regression failed: target-cell boundary relation lookup");
+    }
+    if (context.getBoundaryRelationsForCell(6, 2, 2).length !== 0) {
+      throw new Error("Infinity Scale regression failed: non-boundary target cell received relation");
+    }
+  }
+
   // Missing dependency must remain a hard coverage failure.
   {
     const state = new InfinityScaleLODState(CHUNK);
