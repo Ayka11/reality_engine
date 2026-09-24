@@ -278,7 +278,12 @@ export class InfinityScaleChunkExecutionContext {
     };
   }
 
-  function_chunkLevel_placeholder
+function chunkLevel(key: string): number {
+  const match = /^(\\d+):/.exec(key);
+  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
+  return Number(match[1]);
+}
+
   private isFullyContainedBySimulation(range: ExecutionCellRange): boolean {
     for (let z = range.minZ; z <= range.maxZ; z++)
     for (let y = range.minY; y <= range.maxY; y++)
