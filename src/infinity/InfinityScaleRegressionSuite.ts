@@ -38,6 +38,8 @@ import { runInfinityScaleFinalAdaptiveResolutionValidationRegression } from "./I
 import { runInfinityScaleAdaptiveRuntimeRegression } from "./InfinityScaleAdaptiveRuntime.regression";
 import { runInfinityScaleAdaptiveGlobalFrameBridgeRegression } from "./InfinityScaleAdaptiveGlobalFrameBridge.regression";
 import { runInfinityScaleAdaptiveLODTransactionBridgeRegression } from "./InfinityScaleAdaptiveLODTransactionBridge.regression";
+import { runInfinityScaleAdaptiveGPUCompletionRegression } from "./InfinityScaleAdaptiveGPUCompletion.regression";
+import { runInfinityScaleAdaptiveFeedbackLoopRegression } from "./InfinityScaleAdaptiveFeedbackLoop.regression";
 
 export interface InfinityScaleRegressionResult { name: string; passed: boolean; }
 
@@ -84,6 +86,8 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["adaptive-runtime-integration", runInfinityScaleAdaptiveRuntimeRegression],
     ["adaptive-global-frame-bridge", runInfinityScaleAdaptiveGlobalFrameBridgeRegression],
     ["adaptive-lod-transaction-bridge", runInfinityScaleAdaptiveLODTransactionBridgeRegression],
+    ["adaptive-gpu-completion", runInfinityScaleAdaptiveGPUCompletionRegression],
+    ["adaptive-feedback-loop", runInfinityScaleAdaptiveFeedbackLoopRegression],
   ];
   const results: InfinityScaleRegressionResult[] = [];
   for (const [name, test] of tests) {
