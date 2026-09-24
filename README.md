@@ -1,10 +1,10 @@
 ---
-title: Reality Engine Meta Law Simulator
+title: Reality Engine Meta Law Simulator — CPU Edition
 emoji: 🌌
 colorFrom: blue
 colorTo: purple
-sdk: docker
-app_port: 7860
+sdk: static
+app_file: dist/index.html
 license: mit
 pinned: false
 ---
