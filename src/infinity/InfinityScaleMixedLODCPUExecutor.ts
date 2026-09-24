@@ -177,51 +177,16 @@ export class InfinityScaleMixedLODCPUExecutor {
     targetRange: ExecutionCellRange,
     spec: InfinityScaleBoundaryTransferSpec,
   ): Array<[number, number, number]> {
-    const sourceRange = this.rangeForChunk(spec.sourceChunk);
-    const targetScale = 2 ** spec.targetLevel;
-    const cells: Array<[number, number, number]> = [];
-
-    const xOverlapMin = Math.max(targetRange.minX, sourceRange.minX);
-    const xOverlapMax = Math.min(targetRange.maxX, sourceRange.maxX);
-    const yOverlapMin = Math.max(targetRange.minY, sourceRange.minY);
-    const yOverlapMax = Math.min(targetRange.maxY, sourceRange.maxY);
-    const zOverlapMin = Math.max(targetRange.minZ, sourceRange.minZ);
-    const zOverlapMax = Math.min(targetRange.maxZ, sourceRange.maxZ);
-
-    const pushFace = (
-      axis: 0 | 1 | 2,
-      coordinate: number,
-      minU: number,
-      maxU: number,
-      minV: number,
-      maxV: number,
-    ) => {
-      for (let v = minV; v <= maxV; v += targetScale) {
-        for (let u = minU; u <= maxU; u += targetScale) {
-          const cell: [number, number, number] =
-            axis === 0 ? [coordinate, u, v] :
-            axis === 1 ? [u, coordinate, v] :
-            [u, v, coordinate];
-          cells.push(cell);
-        }
-      }
-    };
-
-    if (targetRange.maxX + 1 === sourceRange.minX) {
-      pushFace(0, targetRange.maxX, yOverlapMin, yOverlapMax, zOverlapMin, zOverlapMax);
-    } else if (sourceRange.maxX + 1 === targetRange.minX) {
-      pushFace(0, targetRange.minX, yOverlapMin, yOverlapMax, zOverlapMin, zOverlapMax);
-    } else if (targetRange.maxY + 1 === sourceRange.minY) {
-      pushFace(1, targetRange.maxY, xOverlapMin, xOverlapMax, zOverlapMin, zOverlapMax);
-    } else if (sourceRange.maxY + 1 === targetRange.minY) {
-      pushFace(1, targetRange.minY, xOverlapMin, xOverlapMax, zOverlapMin, zOverlapMax);
-    } else if (targetRange.maxZ + 1 === sourceRange.minZ) {
-      pushFace(2, targetRange.maxZ, xOverlapMin, xOverlapMax, yOverlapMin, yOverlapMax);
-    } else if (sourceRange.maxZ + 1 === targetRange.minZ) {
-      pushFace(2, targetRange.minZ, xOverlapMin, xOverlapMax, yOverlapMin, yOverlapMax);
-    }
-
-    return cells;
+    return this.boundaryMapper.enumerateTargetFaceCells(
+      spec,
+      this.context.gridWidth,
+      this.context.gridHeight,
+      this.context.gridDepth,
+    ).filter(([x, y, z]) =>
+      x >= targetRange.minX && x <= targetRange.maxX &&
+      y >= targetRange.minY && y <= targetRange.maxY &&
+      z >= targetRange.minZ && z <= targetRange.maxZ
+    );
   }
 
   private rangeTouches(a: ExecutionCellRange, b: ExecutionCellRange): boolean {
