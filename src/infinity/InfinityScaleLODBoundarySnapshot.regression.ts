@@ -190,10 +190,10 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 4);
+    const fine = key(0, 8);
 
-    // Coarse X+ face cell at local (3, 1, 1) carries a unique value.
-    write(state, coarse, 1, 2, 2, 2, 77);
+    // Coarse X+ face cell at base coordinate (6, 2, 2) carries a unique value.
+    write(state, coarse, 1, 6, 2, 2, 77);
 
     const s = spec(coarse, fine, "coarse-to-fine", 1, 0);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 12, CHUNK);
@@ -202,7 +202,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     for (const y of [2, 3]) {
       for (const z of [2, 3]) {
         const out = assertNotNull(
-          snapshot.read(s, [4, y, z]),
+          snapshot.read(s, [8, y, z]),
           `coarse-to-fine face cell 4,${y},${z}`,
         );
         values.push(out[F.ENERGY]);
