@@ -131,6 +131,14 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   if (!moved || moved.x !== 10 || moved.y !== 2 || moved.z !== 2) {
     throw new Error("Unified transaction did not commit agent migration");
   }
+  const oldMarker = grid.buffer[grid.idx(9, 2, 2) + F.AGENT_MARK];
+  const newMarker = grid.buffer[grid.idx(10, 2, 2) + F.AGENT_MARK];
+  if (oldMarker !== 0 || newMarker !== agentId) {
+    throw new Error("Unified transaction left inconsistent agent markers");
+  }
+  if (agents.peekMigrationRequests().length !== 0) {
+    throw new Error("Committed migration requests were not acknowledged");
+  }
 
   const entity = entityLayer.getEntities().find(candidate =>
     candidate.cells.includes(entityIndex),
