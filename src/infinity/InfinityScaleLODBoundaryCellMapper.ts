@@ -47,7 +47,7 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
   return null;
 }
 
-export function isInfinityScaleBoundaryCell(
+export function isInfinityScaleSourceBoundaryCell(
   spec: InfinityScaleBoundaryTransferSpec,
   targetCell: [number, number, number],
   chunkSize = 32,
@@ -69,6 +69,9 @@ export function isInfinityScaleBoundaryCell(
   const sourceCoordinate = source.maxZ < face.coordinate ? source.maxZ : source.minZ;
   return z === sourceCoordinate && x >= face.minU && x <= face.maxU && y >= face.minV && y <= face.maxV;
 }
+
+/** Backward-compatible alias; new solver code should use the explicit source-side name. */
+export const isInfinityScaleBoundaryCell = isInfinityScaleSourceBoundaryCell;
 
 export function mapInfinityScaleBoundaryCell(
   spec: InfinityScaleBoundaryTransferSpec,
