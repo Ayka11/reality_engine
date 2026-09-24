@@ -36,6 +36,7 @@ import { runInfinityScaleCrossPolicyComparisonRegression } from "./InfinityScale
 import { runInfinityScaleReproducibilityManifestRegression } from "./InfinityScaleReproducibilityManifest.regression";
 import { runInfinityScaleExperimentRunRegistryRegression } from "./InfinityScaleExperimentRunRegistry.regression";
 import { runInfinityScaleBenchmarkMatrixRegression } from "./InfinityScaleBenchmarkMatrix.regression";
+import { runInfinityScaleScientificEvaluationReportRegression } from "./InfinityScaleScientificEvaluationReport.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -80,6 +81,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["reproducibility-manifest", runInfinityScaleReproducibilityManifestRegression],
     ["experiment-run-registry", runInfinityScaleExperimentRunRegistryRegression],
     ["benchmark-matrix", runInfinityScaleBenchmarkMatrixRegression],
+    ["scientific-evaluation-report", runInfinityScaleScientificEvaluationReportRegression],
   ];
 
   const results: InfinityScaleRegressionResult[] = [];
