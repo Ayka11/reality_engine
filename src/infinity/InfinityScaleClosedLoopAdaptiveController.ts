@@ -40,7 +40,7 @@ export class InfinityScaleClosedLoopAdaptiveController {
     const transition = this.transitionState.get(input.regionId);
     const penalty = transition && input.epoch <= transition.epoch + 1 ? transition.penalty : 0;
     const transitionAdjustedError = clamp01(input.runtimeError + penalty);
-    const feedbackPrediction = this.feedback.observeError(input.regionId, input.epoch, transitionAdjustedError, 1);
+    const feedbackPrediction = input.causalAttribution\n      ? this.feedback.observeCausalError(input.regionId, input.epoch, input.causalAttribution.predictiveError, {\n          numericalResidual: input.causalAttribution.numericalResidual,\n          transitionEffect: input.causalAttribution.lodTransitionEffect,\n          transferEffect: input.causalAttribution.transferEffect,\n          attributionHash: input.causalAttribution.deterministicHash,\n        }, 1)\n      : this.feedback.observeError(input.regionId, input.epoch, transitionAdjustedError, 1);
     const recommendation = this.controller.recommend({
       ...input,
       error: transitionAdjustedError,
