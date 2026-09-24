@@ -223,6 +223,30 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     }
   }
 
+  // Snapshot coverage must materialize the dependency source chunk, not the
+  // simulation target chunk. This catches source/target inversion at capture time.
+  {
+    const state = new InfinityScaleLODState(CHUNK);
+    const coarse = key(1, 0);
+    const fine = key(0, 4);
+    write(state, fine, 0, 4, 0, 0, 91);
+
+    const s = spec(coarse, fine, "fine-to-coarse", 1, 0);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 13, CHUNK);
+    const coverage = snapshot.getCoverage();
+    if (!coverage.complete || coverage.requiredSourceChunks.length !== 1 ||
+        coverage.requiredSourceChunks[0] !== fine) {
+      throw new Error(
+        `Infinity Scale regression failed: snapshot dependency coverage is [${coverage.requiredSourceChunks.join(",")}]`,
+      );
+    }
+    if (!snapshot.hasSourceChunk(fine) || snapshot.hasSourceChunk(coarse)) {
+      throw new Error(
+        "Infinity Scale regression failed: snapshot captured target chunk instead of source dependency",
+      );
+    }
+  }
+
   // Mixed-LOD face restriction must aggregate exactly ratio^2 fine cells,
   // not the ratio^3 volume used by interior restriction.
   {
