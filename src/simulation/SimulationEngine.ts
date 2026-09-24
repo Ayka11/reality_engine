@@ -628,7 +628,7 @@ export class SimulationEngine {
                     complete = false;
                     break;
                   }
-                  const cell = this.grid.cellBack(x, y, z);
+                  const cell = this.grid.cell(x, y, z);
                   const values = new Float32Array(CELL_FIELDS);
                   for (let field = 0; field < CELL_FIELDS; field++) {
                     values[field] = cell.get(field);
