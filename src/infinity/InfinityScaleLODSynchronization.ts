@@ -190,8 +190,13 @@ export class InfinityScaleLODSynchronization {
     }
 
     this.staged.clear();
+    // A successful commit mutates hierarchical state. Advance the state
+    // revision so every other transaction captured before this commit becomes
+    // stale and cannot write over the new state.
+    const committedRevision = this.state.beginRevision();
     return {
       ...result,
+      revision: committedRevision,
       updates: result.updates.map(update => ({
         ...update,
         value: new Float32Array(update.value),
