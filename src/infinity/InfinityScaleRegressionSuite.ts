@@ -11,6 +11,7 @@ import { runInfinityScaleMixedLODMultiFrameRegression } from "./InfinityScaleMix
 import { runInfinityScaleExecutionAdapterBoundaryRegression } from "./InfinityScaleExecutionAdapter.regression";
 import { runInfinityScaleChunkExecutionContextBoundaryRegression } from "./InfinityScaleChunkExecutionContext.regression";
 import { runInfinityScaleLODTransferInvariantRegression } from "./InfinityScaleLODTransfer.regression";
+import { runInfinityScaleGPUBoundaryTransferContractRegression } from "./InfinityScaleGPUBoundaryTransferContract.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -26,6 +27,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["mixed-lod-cpu-restriction", runInfinityScaleMixedLODCPURegression],
     ["mixed-lod-cpu-prolongation", runInfinityScaleMixedLODCPUProlongationRegression],
     ["lod-transfer-physical-invariants", runInfinityScaleLODTransferInvariantRegression],
+    ["gpu-boundary-transfer-contract", runInfinityScaleGPUBoundaryTransferContractRegression],
     ["unified-transaction", runInfinityScaleUnifiedTransactionRegression],
     ["lod-reset-invalidation", runInfinityScaleLODResetInvalidationRegression],
     ["lod-multi-frame", runInfinityScaleLODMultiFrameRegression],
