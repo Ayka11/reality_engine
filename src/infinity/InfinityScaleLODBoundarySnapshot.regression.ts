@@ -239,6 +239,23 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     }
   }
 
+  // Missing dependency must remain a hard coverage failure.
+  {
+    const state = new InfinityScaleLODState(CHUNK);
+    const coarse = key(1, 0);
+    const fine = key(0, 4);
+    state.ensureChunk(coarse, 1);
+
+    const s = spec(coarse, fine, "fine-to-coarse", 1, 0);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 15, CHUNK);
+    const coverage = snapshot.getCoverage();
+    if (coverage.complete || coverage.missingSourceChunks[0] !== fine) {
+      throw new Error(
+        "Infinity Scale regression failed: missing source dependency was not reported",
+      );
+    }
+  }
+
   // Snapshot coverage must materialize the dependency source chunk, not the
   // simulation target chunk. This catches source/target inversion at capture time.
   {
