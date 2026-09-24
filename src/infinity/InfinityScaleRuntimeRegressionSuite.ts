@@ -1,5 +1,6 @@
 import { runSimulationEngineInfinityScaleSelectiveCPURegression } from "../simulation/SimulationEngine.infinityScale.regression";
 import { runSimulationEngineMixedLODMultiFrameRegression } from "../simulation/SimulationEngine.mixedLOD.regression";
+import { runInfinityScaleUnifiedTransactionRegression } from "./InfinityScaleUnifiedTransaction.regression";
 
 export interface InfinityScaleRuntimeRegressionResult {
   name: string;
@@ -10,6 +11,7 @@ export async function runInfinityScaleRuntimeRegressionSuite(): Promise<Infinity
   const tests: Array<[string, () => Promise<void>]> = [
     ["simulation-engine-selective-cpu", runSimulationEngineInfinityScaleSelectiveCPURegression],
     ["simulation-engine-mixed-lod-multi-frame", runSimulationEngineMixedLODMultiFrameRegression],
+    ["unified-transaction-runtime-barrier", async () => { runInfinityScaleUnifiedTransactionRegression(); }],
   ];
 
   const results: InfinityScaleRuntimeRegressionResult[] = [];
