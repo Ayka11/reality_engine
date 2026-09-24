@@ -177,55 +177,80 @@ export class InfinityScaleLODBoundarySnapshot {
     const source = this.chunks.get(spec.targetChunk);
     if (!source) return null;
 
+    const sourceRange = chunkRangeForKey(spec.sourceChunk, this.chunkSize);
+    const targetRange = chunkRangeForKey(spec.targetChunk, this.chunkSize);
+    const sourceScale = 2 ** spec.sourceLevel;
+    const targetScale = 2 ** spec.targetLevel;
     const [x, y, z] = targetCell;
-    const [cx, cy, cz] = parseChunkKey(spec.targetChunk);
-    const originScale = source.scale;
-    const originX = cx * this.chunkSize * originScale;
-    const originY = cy * this.chunkSize * originScale;
-    const originZ = cz * this.chunkSize * originScale;
 
-    const lx = Math.floor((x - originX) / originScale);
-    const ly = Math.floor((y - originY) / originScale);
-    const lz = Math.floor((z - originZ) / originScale);
+    const face = resolveBoundaryFace(sourceRange, targetRange, x, y, z);
+    if (!face) return null;
 
-    if (
-      lx < 0 || lx >= this.chunkSize ||
-      ly < 0 || ly >= this.chunkSize ||
-      lz < 0 || lz >= this.chunkSize
-    ) return null;
-
-    const offset = ((lz * this.chunkSize * this.chunkSize) + ly * this.chunkSize + lx) * CELL_FIELDS;
     const out = new Float32Array(CELL_FIELDS);
 
     if (spec.readOperation === "copy" || spec.readOperation === "prolongation") {
+      // The local cell is on the source face. Read the adjacent dependency
+      // cell across that face, then map it into the dependency chunk's LOD.
+      const neighbor = shiftAcrossFace(
+        [x, y, z],
+        face,
+        1,
+      );
+      const lx = Math.floor((neighbor[0] - targetRange.minX) / sourceScale);
+      const ly = Math.floor((neighbor[1] - targetRange.minY) / sourceScale);
+      const lz = Math.floor((neighbor[2] - targetRange.minZ) / sourceScale);
+
+      if (
+        lx < 0 || lx >= this.chunkSize ||
+        ly < 0 || ly >= this.chunkSize ||
+        lz < 0 || lz >= this.chunkSize
+      ) return null;
+
+      const offset =
+        ((lz * this.chunkSize * this.chunkSize) +
+          ly * this.chunkSize +
+          lx) * CELL_FIELDS;
       out.set(source.cells.subarray(offset, offset + CELL_FIELDS));
       return out;
     }
 
     if (spec.readOperation === "restriction") {
-      const sourceScale = source.scale;
-      const fineBaseX = Math.floor(x / sourceScale) * sourceScale;
-      const fineBaseY = Math.floor(y / sourceScale) * sourceScale;
-      const fineBaseZ = Math.floor(z / sourceScale) * sourceScale;
+      // The local source cell is coarse. Its face-adjacent neighbor on the
+      // fine dependency side occupies targetScale^3 base-space volume.
+      // Aggregate exactly the ratio^3 fine cells covering that neighbor cell.
+      const localOrigin: [number, number, number] = [
+        Math.floor(x / targetScale) * targetScale,
+        Math.floor(y / targetScale) * targetScale,
+        Math.floor(z / targetScale) * targetScale,
+      ];
+      const neighborOrigin = shiftAcrossFace(
+        localOrigin,
+        face,
+        targetScale,
+      );
       const ratio = spec.refinementRatio;
       const fineCells: Float32Array[] = [];
 
       for (let dz = 0; dz < ratio; dz++) {
         for (let dy = 0; dy < ratio; dy++) {
           for (let dx = 0; dx < ratio; dx++) {
-            const fx = fineBaseX + dx * sourceScale;
-            const fy = fineBaseY + dy * sourceScale;
-            const fz = fineBaseZ + dz * sourceScale;
-            const flx = Math.floor((fx - originX) / sourceScale);
-            const fly = Math.floor((fy - originY) / sourceScale);
-            const flz = Math.floor((fz - originZ) / sourceScale);
+            const fx = neighborOrigin[0] + dx * sourceScale;
+            const fy = neighborOrigin[1] + dy * sourceScale;
+            const fz = neighborOrigin[2] + dz * sourceScale;
+            const flx = Math.floor((fx - targetRange.minX) / sourceScale);
+            const fly = Math.floor((fy - targetRange.minY) / sourceScale);
+            const flz = Math.floor((fz - targetRange.minZ) / sourceScale);
+
             if (
               flx < 0 || flx >= this.chunkSize ||
               fly < 0 || fly >= this.chunkSize ||
               flz < 0 || flz >= this.chunkSize
             ) return null;
 
-            const fineOffset = ((flz * this.chunkSize * this.chunkSize) + fly * this.chunkSize + flz * 0 + flx) * CELL_FIELDS;
+            const fineOffset =
+              ((flz * this.chunkSize * this.chunkSize) +
+                fly * this.chunkSize +
+                flx) * CELL_FIELDS;
             const cell = new Float32Array(CELL_FIELDS);
             cell.set(source.cells.subarray(fineOffset, fineOffset + CELL_FIELDS));
             fineCells.push(cell);
@@ -233,11 +258,15 @@ export class InfinityScaleLODBoundarySnapshot {
         }
       }
 
-      const restricted = new Float32Array(CELL_FIELDS);
       const numeric = new Array<number>(CELL_FIELDS).fill(0);
-      InfinityScaleLODTransfer.restrict(fineCells, numeric, spec.targetLevel, spec.sourceLevel);
-      restricted.set(numeric);
-      return restricted;
+      InfinityScaleLODTransfer.restrict(
+        fineCells,
+        numeric,
+        spec.sourceLevel,
+        spec.targetLevel,
+      );
+      out.set(numeric);
+      return out;
     }
 
     return null;
@@ -256,4 +285,68 @@ function parseChunkKey(key: string): [number, number, number] {
   const match = /^(?:\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
   if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
   return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+interface BoundaryFace {
+  axis: "x" | "y" | "z";
+  direction: -1 | 1;
+}
+
+function chunkRangeForKey(
+  key: string,
+  chunkSize: number,
+): { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number } {
+  const [level, cx, cy, cz] = (() => {
+    const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
+    if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
+    return [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4])];
+  })();
+  const scale = 2 ** level;
+  const extent = chunkSize * scale;
+  return {
+    minX: cx * extent,
+    maxX: cx * extent + extent - 1,
+    minY: cy * extent,
+    maxY: cy * extent + extent - 1,
+    minZ: cz * extent,
+    maxZ: cz * extent + extent - 1,
+  };
+}
+
+function resolveBoundaryFace(
+  source: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number },
+  target: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number },
+  x: number,
+  y: number,
+  z: number,
+): BoundaryFace | null {
+  if (source.maxX + 1 === target.minX && x === source.maxX &&
+      y >= target.minY && y <= target.maxY &&
+      z >= target.minZ && z <= target.maxZ) return { axis: "x", direction: 1 };
+  if (target.maxX + 1 === source.minX && x === source.minX &&
+      y >= target.minY && y <= target.maxY &&
+      z >= target.minZ && z <= target.maxZ) return { axis: "x", direction: -1 };
+  if (source.maxY + 1 === target.minY && y === source.maxY &&
+      x >= target.minX && x <= target.maxX &&
+      z >= target.minZ && z <= target.maxZ) return { axis: "y", direction: 1 };
+  if (target.maxY + 1 === source.minY && y === source.minY &&
+      x >= target.minX && x <= target.maxX &&
+      z >= target.minZ && z <= target.maxZ) return { axis: "y", direction: -1 };
+  if (source.maxZ + 1 === target.minZ && z === source.maxZ &&
+      x >= target.minX && x <= target.maxX &&
+      y >= target.minY && y <= target.maxY) return { axis: "z", direction: 1 };
+  if (target.maxZ + 1 === source.minZ && z === source.minZ &&
+      x >= target.minX && x <= target.maxX &&
+      y >= target.minY && y <= target.maxY) return { axis: "z", direction: -1 };
+  return null;
+}
+
+function shiftAcrossFace(
+  point: [number, number, number],
+  face: BoundaryFace,
+  distance: number,
+): [number, number, number] {
+  const shifted: [number, number, number] = [...point];
+  shifted[face.axis === "x" ? 0 : face.axis === "y" ? 1 : 2] += face.direction * distance;
+  return shifted;
 }
