@@ -265,6 +265,40 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     }
   }
 
+  // Face coverage must count invalid reads deterministically and expose
+  // the first failing dependency instead of silently passing the boundary.
+  {
+    const state = new InfinityScaleLODState(CHUNK);
+    const coarse = key(1, 0);
+    const fine = key(0, 4);
+    state.ensureChunk(coarse, 1);
+    const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 16, CHUNK);
+    const coverage = snapshot.validateFaceCoverage(
+      new InfinityScaleChunkExecutionContext(
+        {
+          revision: 16, mode: "selective-cpu-ready", observer: [0, 0, 0],
+          chunks: [{ key: coarse, lod: 1, distance: 0 }],
+          simulationBudget: 1, requestedSimulationCount: 1, selectedSimulationCount: 1,
+          maxSimulatingChunks: 1, boundaryReadChunks: [fine], boundaryReadCount: 1,
+          boundaryReadRelations: [{ sourceChunk: fine, targetChunk: coarse, relation: "fine-to-coarse" }],
+          simulationCellCount: 64, boundaryReadCellCount: 16,
+          localExecutionLayers: 1, globalExecutionLayers: 1,
+          selectiveCpuReady: true, selectiveGpuReady: false, gpuPhysicsReady: false,
+          lodBoundaryTransferReady: true, mixedLodExecutionReady: true,
+          entityExecutionReady: false, agentMigrationReady: false,
+        },
+        8, 8, 8, 4,
+      ),
+    );
+    if (coverage.complete || coverage.invalidBoundaryReads === 0 || !coverage.firstInvalidRead) {
+      throw new Error("Infinity Scale regression failed: invalid boundary coverage was not reported");
+    }
+    if (coverage.firstInvalidRead.sourceChunk !== fine) {
+      throw new Error("Infinity Scale regression failed: first invalid read lost source dependency");
+    }
+  }
+
   // Missing dependency must remain a hard coverage failure.
   {
     const state = new InfinityScaleLODState(CHUNK);
