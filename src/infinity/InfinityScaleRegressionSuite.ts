@@ -9,6 +9,7 @@ import { runInfinityScaleLODResetInvalidationRegression } from "./InfinityScaleL
 import { runInfinityScaleLODMultiFrameRegression } from "./InfinityScaleLODMultiFrame.regression";
 import { runInfinityScaleMixedLODMultiFrameRegression } from "./InfinityScaleMixedLODMultiFrame.regression";
 import { runInfinityScaleExecutionAdapterBoundaryRegression } from "./InfinityScaleExecutionAdapter.regression";
+import { runInfinityScaleChunkExecutionContextBoundaryRegression } from "./InfinityScaleChunkExecutionContext.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -19,6 +20,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
   const tests: Array<[string, () => void]> = [
     ["canonical-boundary-mapper", runInfinityScaleLODBoundaryCellMapperRegression],
     ["execution-adapter-canonical-boundary", runInfinityScaleExecutionAdapterBoundaryRegression],
+    ["chunk-context-canonical-boundary", runInfinityScaleChunkExecutionContextBoundaryRegression],
     ["lod-boundary-transfer-and-convergence", runInfinityScaleLODBoundaryRegression],
     ["mixed-lod-cpu-restriction", runInfinityScaleMixedLODCPURegression],
     ["mixed-lod-cpu-prolongation", runInfinityScaleMixedLODCPUProlongationRegression],
