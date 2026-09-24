@@ -13,6 +13,7 @@ import { runInfinityScaleChunkExecutionContextBoundaryRegression } from "./Infin
 import { runInfinityScaleLODTransferInvariantRegression } from "./InfinityScaleLODTransfer.regression";
 import { runInfinityScaleGPUBoundaryTransferContractRegression } from "./InfinityScaleGPUBoundaryTransferContract.regression";
 import { runInfinityScaleAdaptiveStabilityRegression } from "./InfinityScaleAdaptiveStability.regression";
+import { runInfinityScaleAdaptiveEndToEndRegression } from "./InfinityScaleAdaptiveEndToEnd.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -34,6 +35,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["lod-multi-frame", runInfinityScaleLODMultiFrameRegression],
     ["mixed-lod-multi-frame", runInfinityScaleMixedLODMultiFrameRegression],
     ["adaptive-stability-anti-thrashing", runInfinityScaleAdaptiveStabilityRegression],
+    ["adaptive-end-to-end", runInfinityScaleAdaptiveEndToEndRegression],
   ];
 
   const results: InfinityScaleRegressionResult[] = [];
