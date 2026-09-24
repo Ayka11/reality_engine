@@ -28,6 +28,7 @@ import { runInfinityScaleAdaptiveTransactionGateRegression } from "./InfinitySca
 import { runInfinityScalePredictiveAdaptivePipelineRegression } from "./InfinityScalePredictiveAdaptivePipeline.regression";
 import { runInfinityScaleAdaptiveTelemetryRecorderRegression } from "./InfinityScaleAdaptiveTelemetryRecorder.regression";
 import { runInfinityScaleAdaptiveScientificMetricsRegression } from "./InfinityScaleAdaptiveScientificMetrics.regression";
+import { runInfinityScaleReactivePredictiveEvaluationRegression } from "./InfinityScaleReactivePredictiveEvaluation.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -64,6 +65,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["predictive-adaptive-pipeline", runInfinityScalePredictiveAdaptivePipelineRegression],
     ["adaptive-telemetry-recorder", runInfinityScaleAdaptiveTelemetryRecorderRegression],
     ["adaptive-scientific-metrics", runInfinityScaleAdaptiveScientificMetricsRegression],
+    ["reactive-predictive-evaluation", runInfinityScaleReactivePredictiveEvaluationRegression],
   ];
 
   const results: InfinityScaleRegressionResult[] = [];
