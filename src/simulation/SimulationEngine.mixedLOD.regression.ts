@@ -38,7 +38,9 @@ export async function runSimulationEngineMixedLODMultiFrameRegression(): Promise
   // 32^3 fine chunk without overlapping simulation ownership.
   const engine = new SimulationEngine(128, 64, 32);
   engine.grid.cell(20, 20, 16).set(F.ENERGY, 100);
-  engine.grid.cell(70, 20, 16).set(F.ENERGY, 50);
+  // Place the source directly on the fine chunk's inner boundary so the
+  // coarse solver must consume it through the mixed-LOD boundary snapshot.
+  engine.grid.cell(64, 20, 16).set(F.ENERGY, 500);
 
   engine.setInfinityScaleExecutionPlan(mixedPlan());
 
@@ -55,6 +57,16 @@ export async function runSimulationEngineMixedLODMultiFrameRegression(): Promise
   }
   if (!Number.isFinite(firstBoundaryEnergy) || !Number.isFinite(secondBoundaryEnergy)) {
     throw new Error("Mixed-LOD runtime produced non-finite boundary state");
+  }
+  if (firstBoundaryEnergy <= 0) {
+    throw new Error(
+      `Expected first-frame coarse boundary to receive fine-side influence, received ${firstBoundaryEnergy}`,
+    );
+  }
+  if (secondBoundaryEnergy === firstBoundaryEnergy) {
+    throw new Error(
+      "Expected second frame to consume an updated fine-side boundary state",
+    );
   }
 
   const validation = engine.getInfinityScaleMixedLODValidation();
