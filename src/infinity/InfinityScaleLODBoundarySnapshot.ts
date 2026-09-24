@@ -219,14 +219,14 @@ export class InfinityScaleLODBoundarySnapshot {
       // fine dependency side occupies targetScale^3 base-space volume.
       // Aggregate exactly the ratio^3 fine cells covering that neighbor cell.
       const localOrigin: [number, number, number] = [
-        Math.floor(x / targetScale) * targetScale,
-        Math.floor(y / targetScale) * targetScale,
-        Math.floor(z / targetScale) * targetScale,
+        Math.floor(x / sourceScale) * sourceScale,
+        Math.floor(y / sourceScale) * sourceScale,
+        Math.floor(z / sourceScale) * sourceScale,
       ];
       const neighborOrigin = shiftAcrossFace(
         localOrigin,
         face,
-        targetScale,
+        sourceScale,
       );
       const ratio = spec.refinementRatio;
       const fineCells: Float32Array[] = [];
