@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "validate:infinity-scale": "tsx scripts/validate-infinity-scale.ts",
+    "validate:infinity-scale": "npx --yes tsx scripts/validate-infinity-scale.ts",
     "preview": "vite preview",
     "deploy": "netlify deploy --prod --dir=dist"
   },
@@ -14,8 +14,7 @@
     "@types/three": "^0.184.1",
     "@webgpu/types": "^0.1.70",
     "typescript": "^5.4.0",
-    "vite": "^5.2.0",
-    "tsx": "^4.19.0"
+    "vite": "^5.2.0"
   },
   "dependencies": {
     "ws": "^8.17.0",
