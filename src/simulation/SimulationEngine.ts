@@ -149,18 +149,16 @@ export class SimulationEngine {
       );
     }
     if (plan.mode !== 'advisory') {
+      // Mixed-LOD capability depends on frame-local entity/topology evidence,
+      // which does not exist until a concrete execution context is built.
+      // Installation therefore records the contract; step() performs the
+      // authoritative runtime readiness gate immediately before execution.
       const hasMixedLodBoundary = plan.boundaryReadRelations.some(
         relation => relation.relation !== 'same-level',
       );
-      if (
-        hasMixedLodBoundary &&
-        (
-          !capabilities.lodBoundaryTransferReady ||
-          !capabilities.mixedLodExecutionReady
-        )
-      ) {
+      if (hasMixedLodBoundary && plan.mode === 'selective-gpu-ready') {
         throw new Error(
-          'Infinity Scale mixed-LOD execution plan is no longer transaction-ready',
+          'Infinity Scale mixed-LOD GPU execution is not enabled by the current runtime',
         );
       }
     }
