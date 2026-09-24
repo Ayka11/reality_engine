@@ -1,9 +1,6 @@
 import { runInfinityScaleLODBoundaryCellMapperRegression } from "./InfinityScaleLODBoundaryCellMapper.regression";
 import { runInfinityScaleLODBoundaryRegression } from "./InfinityScaleLODBoundarySnapshot.regression";
-import {
-  runInfinityScaleMixedLODCPURegression,
-  runInfinityScaleMixedLODCPUProlongationRegression,
-} from "./InfinityScaleMixedLODCPUExecutor.regression";
+import { runInfinityScaleMixedLODCPURegression, runInfinityScaleMixedLODCPUProlongationRegression } from "./InfinityScaleMixedLODCPUExecutor.regression";
 import { runInfinityScaleUnifiedTransactionRegression } from "./InfinityScaleUnifiedTransaction.regression";
 import { runInfinityScaleLODResetInvalidationRegression } from "./InfinityScaleLODState.regression";
 import { runInfinityScaleLODMultiFrameRegression } from "./InfinityScaleLODMultiFrame.regression";
@@ -38,11 +35,9 @@ import { runInfinityScaleExperimentRunRegistryRegression } from "./InfinityScale
 import { runInfinityScaleBenchmarkMatrixRegression } from "./InfinityScaleBenchmarkMatrix.regression";
 import { runInfinityScaleScientificEvaluationReportRegression } from "./InfinityScaleScientificEvaluationReport.regression";
 import { runInfinityScaleFinalAdaptiveResolutionValidationRegression } from "./InfinityScaleFinalAdaptiveResolutionValidation.regression";
+import { runInfinityScaleAdaptiveRuntimeRegression } from "./InfinityScaleAdaptiveRuntime.regression";
 
-export interface InfinityScaleRegressionResult {
-  name: string;
-  passed: boolean;
-}
+export interface InfinityScaleRegressionResult { name: string; passed: boolean; }
 
 export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult[] {
   const tests: Array<[string, () => void]> = [
@@ -84,14 +79,12 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["benchmark-matrix", runInfinityScaleBenchmarkMatrixRegression],
     ["scientific-evaluation-report", runInfinityScaleScientificEvaluationReportRegression],
     ["final-adaptive-resolution-validation", runInfinityScaleFinalAdaptiveResolutionValidationRegression],
+    ["adaptive-runtime-integration", runInfinityScaleAdaptiveRuntimeRegression],
   ];
-
   const results: InfinityScaleRegressionResult[] = [];
   for (const [name, test] of tests) {
-    try {
-      test();
-      results.push({ name, passed: true });
-    } catch (error) {
+    try { test(); results.push({ name, passed: true }); }
+    catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Infinity Scale regression failed [${name}]: ${message}`);
     }
