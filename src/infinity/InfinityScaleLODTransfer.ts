@@ -13,6 +13,7 @@ import type {
 export type InfinityScaleLODFieldPolicy =
   | "intensive"
   | "extensive"
+  | "circular"
   | "discrete"
   | "unsupported";
 
@@ -47,7 +48,6 @@ export class InfinityScaleLODTransfer {
     F.FIELD_Z,
     F.LOCAL_TIME,
     F.BIO_POTENTIAL,
-    F.WAVE_PHASE,
     F.WAVE_AMP,
     F.GRAVITY_POT,
     F.SIGNAL,
@@ -62,10 +62,17 @@ export class InfinityScaleLODTransfer {
     F.ENTITY_ID,
   ];
 
+  /**
+   * Circular phase policy: phase is represented in radians and must be
+   * aggregated through unit phasors, never by arithmetic averaging.
+   */
+  static circularFields: number[] = [F.WAVE_PHASE];
+
   static policy(field: number): InfinityScaleLODFieldPolicy {
     if (field === F.ENERGY || field === F.INFORMATION || field === F.MEM_FIELD) {
       return "extensive";
     }
+    if (this.circularFields.includes(field)) return "circular";
     if (this.continuousFields.includes(field)) return "intensive";
     if (this.discreteFields.includes(field)) return "discrete";
     return "unsupported";
@@ -207,6 +214,19 @@ export class InfinityScaleLODTransfer {
 
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
+
+      if (policy === "circular") {
+        let sumSin = 0;
+        let sumCos = 0;
+        for (const source of sources) {
+          const phase = source[field] ?? 0;
+          sumSin += Math.sin(phase);
+          sumCos += Math.cos(phase);
+        }
+        target[field] = Math.atan2(sumSin, sumCos);
+        transferredFields.push(field);
+        continue;
+      }
 
       if (policy === "intensive") {
         let sum = 0;
