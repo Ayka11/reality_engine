@@ -56,7 +56,7 @@ export class InfinityScaleLODBoundarySnapshot {
     chunkSize = 32,
   ): InfinityScaleLODBoundarySnapshot {
     const sourceKeys = new Set<string>();
-    for (const spec of specs) sourceKeys.add(spec.targetChunk);
+    for (const spec of specs) sourceKeys.add(spec.sourceChunk);
 
     const chunks: InfinityScaleLODChunkState[] = [];
     for (const key of sourceKeys) {
@@ -77,7 +77,7 @@ export class InfinityScaleLODBoundarySnapshot {
   }
 
   getCoverage(): InfinityScaleLODBoundaryCoverage {
-    const requiredSourceChunks = [...new Set(this.specs.map(spec => spec.targetChunk))].sort();
+    const requiredSourceChunks = [...new Set(this.specs.map(spec => spec.sourceChunk))].sort();
     const missingSourceChunks = requiredSourceChunks.filter(key => !this.chunks.has(key));
     return {
       requiredSourceChunks,
@@ -174,7 +174,7 @@ export class InfinityScaleLODBoundarySnapshot {
     spec: InfinityScaleBoundaryTransferSpec,
     targetCell: [number, number, number],
   ): Float32Array | null {
-    const source = this.chunks.get(spec.targetChunk);
+    const source = this.chunks.get(spec.sourceChunk);
     if (!source) return null;
 
     const sourceRange = chunkRangeForKey(spec.sourceChunk, this.chunkSize);
