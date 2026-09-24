@@ -3,6 +3,7 @@ import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import { InfinityScaleLODBoundarySnapshot } from "./InfinityScaleLODBoundarySnapshot";
 import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
 import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
+import { InfinityScaleLODBoundaryCellMapper } from "./InfinityScaleLODBoundaryCellMapper";
 import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 
@@ -69,6 +70,31 @@ function spec(
  * framework, so it can be invoked by any host without adding a test runtime.
  */
 export function runInfinityScaleLODBoundaryRegression(): void {
+  // Cross-layer contract: the immutable snapshot and state-backed mapper must
+  // resolve the same canonical fine->coarse footprint.
+  {
+    const state = new InfinityScaleLODState(CHUNK);
+    const coarse = key(1, 0);
+    const fine = key(0, 8);
+    let value = 10;
+    for (let z = 0; z < 2; z++) {
+      for (let y = 0; y < 2; y++) {
+        const cell = new Float32Array(CELL_FIELDS);
+        cell[F.ENERGY] = value++;
+        state.writeBaseCell(fine, 0, 8, y, z, cell);
+      }
+    }
+    const transfer = spec(fine, coarse, "fine-to-coarse", 0, 1);
+    const mapper = new InfinityScaleLODBoundaryCellMapper(state, CHUNK);
+    const mapping = mapper.map(transfer, [7, 0, 0]);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [transfer], 101, CHUNK);
+    const out = assertNotNull(snapshot.read(transfer, [7, 0, 0]), "canonical cross-layer snapshot read");
+    const mapped = mapper.resolveValues(transfer, [7, 0, 0]);
+    if (mapping.sourceCells.length !== mapped.length || out[F.ENERGY] !== 46) {
+      throw new Error("Infinity Scale regression failed: canonical mapper/snapshot contract");
+    }
+  }
+
   // Fine local chunk at x=[0..3], coarse neighbor at x=[4..11].
   {
     const state = new InfinityScaleLODState(CHUNK);
