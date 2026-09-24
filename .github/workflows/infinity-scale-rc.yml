@@ -41,3 +41,6 @@ jobs:
 
       - name: Release evidence validation
         run: npm run validate:infinity-scale:evidence
+
+      - name: Reproducible RC package check
+        run: npm run package:infinity-scale:rc
