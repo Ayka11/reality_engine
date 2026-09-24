@@ -13,6 +13,7 @@ import {
   type InfinityScaleResolutionCandidate,
 } from "./InfinityScaleResolutionUtility";
 import { InfinityScaleResolutionGoalRegistry } from "./InfinityScaleResolutionGoalRegistry";
+import type { InfinityScaleCausalAdaptiveAttribution } from "./InfinityScaleCausalAdaptiveAttribution";
 
 export interface InfinityScalePredictiveAdaptiveInput {
   regionId: string;
@@ -26,7 +27,7 @@ export interface InfinityScalePredictiveAdaptiveInput {
   estimatedMemoryBytes: number;
   estimatedGPUWork: number;
   physicalCriticality: number;
-  budget: InfinityScaleResolutionBudget;
+  budget: InfinityScaleResolutionBudget;\n  causalAttribution?: InfinityScaleCausalAdaptiveAttribution;
 }
 
 export interface InfinityScalePredictiveAdaptiveRecommendation {
