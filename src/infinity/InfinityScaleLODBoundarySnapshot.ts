@@ -331,34 +331,6 @@ function resolveBoundaryReadFace(
   if (target.maxZ + 1 === source.minZ && z === source.minZ && x >= target.minX && x <= target.maxX && y >= target.minY && y <= target.maxY) return { axis: "z", direction: -1 };
   return null;
 }
-function resolveBoundaryFace(
-  source: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number },
-  target: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number },
-  x: number,
-  y: number,
-  z: number,
-): BoundaryFace | null {
-  if (source.maxX + 1 === target.minX && x === source.maxX &&
-      y >= target.minY && y <= target.maxY &&
-      z >= target.minZ && z <= target.maxZ) return { axis: "x", direction: 1 };
-  if (target.maxX + 1 === source.minX && x === source.minX &&
-      y >= target.minY && y <= target.maxY &&
-      z >= target.minZ && z <= target.maxZ) return { axis: "x", direction: -1 };
-  if (source.maxY + 1 === target.minY && y === source.maxY &&
-      x >= target.minX && x <= target.maxX &&
-      z >= target.minZ && z <= target.maxZ) return { axis: "y", direction: 1 };
-  if (target.maxY + 1 === source.minY && y === source.minY &&
-      x >= target.minX && x <= target.maxX &&
-      z >= target.minZ && z <= target.maxZ) return { axis: "y", direction: -1 };
-  if (source.maxZ + 1 === target.minZ && z === source.maxZ &&
-      x >= target.minX && x <= target.maxX &&
-      y >= target.minY && y <= target.maxY) return { axis: "z", direction: 1 };
-  if (target.maxZ + 1 === source.minZ && z === source.minZ &&
-      x >= target.minX && x <= target.maxX &&
-      y >= target.minY && y <= target.maxY) return { axis: "z", direction: -1 };
-  return null;
-}
-
 function shiftAcrossFace(
   point: [number, number, number],
   face: BoundaryFace,
