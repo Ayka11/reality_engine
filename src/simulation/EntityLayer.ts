@@ -1,6 +1,7 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
+import type { InfinityScaleLODBoundarySnapshot } from '../infinity/InfinityScaleLODBoundarySnapshot';
 import { EntityChunkConnectivity, type EntityChunkConnectivityResult } from '../infinity/EntityChunkConnectivity';
 import { EntityChunkReconciliation, type EntityReconciliationPlan, type EntityReconciliationCommitRecord } from '../infinity/EntityChunkReconciliation';
 
@@ -123,8 +124,9 @@ export class EntityLayer {
   analyzeChunks(
     grid: VoxelGrid,
     context: InfinityScaleChunkExecutionContext,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): EntityChunkConnectivityResult {
-    this.lastChunkConnectivity = this.chunkConnectivity.analyze(grid, context);
+    this.lastChunkConnectivity = this.chunkConnectivity.analyze(grid, context, boundarySnapshot);
     const fullDomainCovered =
       context.simulationCellCount >= grid.size &&
       context.readCellCount === 0;
@@ -194,8 +196,9 @@ export class EntityLayer {
   getChunkReconciliationCommitRecords(
     grid: VoxelGrid,
     context: InfinityScaleChunkExecutionContext,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): EntityReconciliationCommitRecord[] | null {
-    const connectivity = this.chunkConnectivity.analyze(grid, context);
+    const connectivity = this.chunkConnectivity.analyze(grid, context, boundarySnapshot);
     const plan = this.chunkReconciliation.plan(
       connectivity.components,
       this.getEntities(),
@@ -341,8 +344,9 @@ export class EntityLayer {
   prepareChunkExecution(
     grid: VoxelGrid,
     context: InfinityScaleChunkExecutionContext,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): EntityReconciliationPlan {
-    this.analyzeChunks(grid, context);
+    this.analyzeChunks(grid, context, boundarySnapshot);
     return this.lastChunkReconciliation!;
   }
 
@@ -350,8 +354,9 @@ export class EntityLayer {
     grid: VoxelGrid,
     dt: number,
     context: InfinityScaleChunkExecutionContext,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
-    this.analyzeChunks(grid, context);
+    this.analyzeChunks(grid, context, boundarySnapshot);
 
     const { W, H, D, buffer: buf } = grid;
     for (const entity of this.entities.values()) {
