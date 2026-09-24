@@ -17,6 +17,7 @@ import { runInfinityScaleAdaptiveEndToEndRegression } from "./InfinityScaleAdapt
 import { runInfinityScalePredictionEngineRegression } from "./InfinityScalePredictionEngine.regression";
 import { runInfinityScaleResolutionGoalRegistryRegression } from "./InfinityScaleResolutionGoalRegistry.regression";
 import { runInfinityScaleResolutionUtilityRegression } from "./InfinityScaleResolutionUtility.regression";
+import { runInfinityScalePredictiveAdaptiveControllerRegression } from "./InfinityScalePredictiveAdaptiveController.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -42,6 +43,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["predictive-resolution-engine", runInfinityScalePredictionEngineRegression],
     ["goal-directed-resolution-registry", runInfinityScaleResolutionGoalRegistryRegression],
     ["resolution-utility-budget-optimizer", runInfinityScaleResolutionUtilityRegression],
+    ["predictive-adaptive-controller", runInfinityScalePredictiveAdaptiveControllerRegression],
   ];
 
   const results: InfinityScaleRegressionResult[] = [];
