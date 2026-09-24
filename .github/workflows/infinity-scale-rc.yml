@@ -30,8 +30,5 @@ jobs:
       - name: Production build
         run: npm run build
 
-      - name: Regression source validation
-        run: |
-          node --input-type=module <<'NODE'
-          console.log("Infinity Scale regression suite is registered in src/infinity/InfinityScaleRegressionSuite.ts");
-          NODE
+      - name: Infinity Scale release validation
+        run: npx --yes tsx scripts/validate-infinity-scale.ts
