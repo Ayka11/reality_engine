@@ -295,6 +295,41 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     );
   }
 
+  // Circular phase regression: arithmetic averaging of +179° and -179°
+  // would incorrectly approach 0°, while phasor averaging stays near pi.
+  {
+    const sources = Array.from({ length: 8 }, (_, i) => {
+      const out = cell(i + 1);
+      out[F.WAVE_PHASE] = i % 2 === 0 ? (179 * Math.PI) / 180 : (-179 * Math.PI) / 180;
+      return out;
+    });
+    const target = new Array<number>(24).fill(0);
+    InfinityScaleLODTransfer.restrict(sources, target, 0, 1);
+
+    const expected = Math.PI;
+    const phaseError = Math.abs(
+      Math.atan2(
+        Math.sin(target[F.WAVE_PHASE] - expected),
+        Math.cos(target[F.WAVE_PHASE] - expected),
+      ),
+    );
+    if (phaseError > 1e-6) {
+      throw new Error(
+        `Infinity Scale regression failed: circular phase error ${phaseError}`,
+      );
+    }
+
+    const invariant = InfinityScaleLODTransfer.validateRestrictionInvariant(
+      sources,
+      target,
+      0,
+      1,
+    );
+    if (!invariant.valid && invariant.violations.includes(F.WAVE_PHASE)) {
+      throw new Error("Infinity Scale regression failed: phase treated as arithmetic field");
+    }
+  }
+
   // Negative-side face: fine local x=[4..7], coarse neighbor x=[0..3].
   {
     const state = new InfinityScaleLODState(CHUNK);
