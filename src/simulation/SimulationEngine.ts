@@ -202,6 +202,36 @@ export class SimulationEngine {
       : null;
     if (frameState && frameContext) {
       assertInfinityScaleGlobalFramePlan(frameState, selectivePlan!, frameContext);
+
+      // Revalidate the installed plan at the frame boundary. Capability and
+      // ownership state may have changed after plan installation; a stale
+      // selective contract must fail before any local simulation writes.
+      const currentCapabilities = this.getInfinityScaleExecutionCapabilities();
+      const hasMixedLodBoundary = selectivePlan!.boundaryReadRelations.some(
+        relation => relation.relation !== 'same-level',
+      );
+      if (
+        hasMixedLodBoundary &&
+        (
+          !currentCapabilities.lodBoundaryTransferReady ||
+          !currentCapabilities.mixedLodExecutionReady
+        )
+      ) {
+        throw new Error(
+          'Infinity Scale selective frame rejected: mixed-LOD capabilities changed after plan installation',
+        );
+      }
+      if (
+        selectivePlan!.mode === 'selective-gpu-ready' &&
+        (
+          !currentCapabilities.selectiveGpuReady ||
+          !currentCapabilities.gpuPhysicsReady
+        )
+      ) {
+        throw new Error(
+          'Infinity Scale selective frame rejected: GPU capabilities changed after plan installation',
+        );
+      }
     }
 
     if (this._gpuReady) {
