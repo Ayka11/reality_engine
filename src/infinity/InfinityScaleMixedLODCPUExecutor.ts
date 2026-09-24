@@ -15,6 +15,7 @@ import type {
   InfinityScaleBoundaryTransferSpec,
 } from "./InfinityScaleChunkExecutionContext";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
+import { InfinityScaleLODBoundaryCellMapper } from "./InfinityScaleLODBoundaryCellMapper";
 
 export interface InfinityScaleCPUCellExecution {
   chunk: string;
@@ -54,6 +55,11 @@ export class InfinityScaleMixedLODCPUExecutor {
     private readonly state: InfinityScaleLODState,
     private readonly context: InfinityScaleChunkExecutionContext,
   ) {}
+
+  private readonly boundaryMapper = new InfinityScaleLODBoundaryCellMapper(
+    this.state,
+    this.context.chunkSize,
+  );
 
   execute(
     frame: InfinityScaleGlobalExecutionFrame,
@@ -107,14 +113,14 @@ export class InfinityScaleMixedLODCPUExecutor {
     }
 
     let stagedBoundaryUpdates = 0;
-    if (resolveBoundarySources) {
-      for (const spec of this.context.boundaryTransferSpecs) {
-        const targetRange = this.rangeForChunk(spec.sourceChunk);
-        for (const targetCell of this.boundaryCells(targetRange, spec)) {
-          const sources = resolveBoundarySources(spec, targetCell);
-          transaction.synchronization.stageTransfer(spec, targetCell, sources);
-          stagedBoundaryUpdates++;
-        }
+    for (const spec of this.context.boundaryTransferSpecs) {
+      const targetRange = this.rangeForChunk(spec.sourceChunk);
+      for (const targetCell of this.boundaryCells(targetRange, spec)) {
+        const sources = resolveBoundarySources
+          ? resolveBoundarySources(spec, targetCell)
+          : this.boundaryMapper.resolveValues(spec, targetCell);
+        transaction.synchronization.stageTransfer(spec, targetCell, sources);
+        stagedBoundaryUpdates++;
       }
     }
 
