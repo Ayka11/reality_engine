@@ -22,7 +22,7 @@ export class InfinityScaleRuntimePredictionFeedback {
     return { regionId, epoch: sample.epoch, observedError: sample.error, prediction };
   }
 
-  observeError(regionId: string, epoch: number, error: number, horizon = 1): InfinityScaleRuntimePredictionFeedback {
+  observeCausalError(regionId: string, epoch: number, physicalError: number, attribution: { numericalResidual?: number; transitionEffect?: number; transferEffect?: number; attributionHash?: string }, horizon = 1): InfinityScaleRuntimePredictionFeedback {\n    this.engine.observeCausal(regionId, epoch, physicalError, attribution);\n    return { regionId, epoch, observedError: physicalError, prediction: this.engine.predict(regionId, horizon) };\n  }\n\n  observeError(regionId: string, epoch: number, error: number, horizon = 1): InfinityScaleRuntimePredictionFeedback {
     this.engine.observe(regionId, epoch, error);
     return { regionId, epoch, observedError: error, prediction: this.engine.predict(regionId, horizon) };
   }
