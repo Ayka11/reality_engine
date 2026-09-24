@@ -30,6 +30,7 @@ import { runInfinityScaleAdaptiveTelemetryRecorderRegression } from "./InfinityS
 import { runInfinityScaleAdaptiveScientificMetricsRegression } from "./InfinityScaleAdaptiveScientificMetrics.regression";
 import { runInfinityScaleReactivePredictiveEvaluationRegression } from "./InfinityScaleReactivePredictiveEvaluation.regression";
 import { runInfinityScaleControlledBenchmarkRegression } from "./InfinityScaleControlledBenchmark.regression";
+import { runInfinityScaleGoalDirectedBenchmarkRegression } from "./InfinityScaleGoalDirectedBenchmark.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -68,6 +69,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["adaptive-scientific-metrics", runInfinityScaleAdaptiveScientificMetricsRegression],
     ["reactive-predictive-evaluation", runInfinityScaleReactivePredictiveEvaluationRegression],
     ["controlled-benchmark-scenarios", runInfinityScaleControlledBenchmarkRegression],
+    ["goal-directed-benchmark", runInfinityScaleGoalDirectedBenchmarkRegression],
   ];
 
   const results: InfinityScaleRegressionResult[] = [];
