@@ -46,7 +46,7 @@ export function runInfinityScaleFailureReplay(): InfinityScaleFailureReplayResul
     incompleteDeterministic: incompleteA.deterministic === incompleteB.deterministic &&
       incompleteA.firstPipelineHash === incompleteB.firstPipelineHash &&
       incompleteA.firstGPUPlanHash === incompleteB.firstGPUPlanHash,
-    commitBlocked: !deferredA.deterministic && !incompleteA.deterministic,
+    commitBlocked: !deferredA.firstCommitReady && !incompleteA.firstCommitReady,
     deferredCount: 1,
     incompleteCount: 1,
   };
