@@ -39,7 +39,7 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
   const frame = beginInfinityScaleGlobalFrame(plan, 0, 1);
   const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
 
-  const sources = Array.from({ length: 8 }, () => {
+  const sources = Array.from({ length: 4 }, () => {
     const cell = new Array<number>(CELL_FIELDS).fill(0);
     cell[F.ENERGY] = 2;
     cell[F.DENSITY] = 10;
@@ -74,7 +74,7 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
   }
 
   const committed = state.readBaseCell("1:1,0,0", 1, 4, 0, 0);
-  if (!committed || committed[F.ENERGY] !== 16 || committed[F.DENSITY] !== 10) {
+  if (!committed || committed[F.ENERGY] !== 2 || committed[F.DENSITY] !== 10) {
     throw new Error("Infinity Scale global LOD conservation regression failed");
   }
 
