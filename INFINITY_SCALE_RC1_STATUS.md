@@ -28,6 +28,10 @@ The workflow was also registered on the repository default branch so GitHub can 
 
 As of the current repository inspection, GitHub reports **no workflow run** for the latest branch commit. Therefore this document intentionally does not mark the RC as PASS.
 
+## Release evidence artifact
+
+The CI workflow now writes `infinity-scale-rc-package.json` and `infinity-scale-rc-release-record.json` and uploads them as the `infinity-scale-rc1-release-evidence` artifact. The release record is derived from the deterministic commit-bound package identity and does not include a wall-clock timestamp in its identity.
+
 ## Release status
 
 - Architecture: READY
@@ -38,6 +42,8 @@ As of the current repository inspection, GitHub reports **no workflow run** for 
 - Release validation harness: READY
 - RC manifest: READY
 - CI workflow: REGISTERED
+- Commit-bound provenance: READY
+- RC release evidence artifact: CONFIGURED
 - Automated CI execution: PENDING
 - RC-1 release approval: PENDING CI evidence
 
