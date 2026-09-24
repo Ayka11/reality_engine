@@ -156,17 +156,17 @@ export function validateInfinityScaleBoundaryCoverage(
         if (!isOnFace(source, target, face, x, y, z)) continue;
         faceCellCount++;
 
-        const key = mapBoundaryCell(spec, face, [x, y, z], source, target, chunkSize);
-        if (!key) {
+        const mapping = mapBoundaryCell(spec, face, [x, y, z], source, target, chunkSize);
+        if (!mapping) {
           unmappedCellCount++;
           firstUnmappedCell ??= [x, y, z];
           continue;
         }
 
-        if (spec.readOperation === "restriction" && mapped.has(key)) {
+        if (spec.readOperation === "restriction" && mapped.has(mapping.key)) {
           duplicateCellCount++;
         }
-        mapped.add(key);
+        mapped.add(mapping.key);
       }
     }
   }
@@ -193,7 +193,7 @@ function mapBoundaryCell(
   source: ReturnType<typeof chunkRange>,
   target: ReturnType<typeof chunkRange>,
   chunkSize: number,
-): string | null {
+): { key: string } | null {
   const sourceScale = 2 ** spec.sourceLevel;
   const targetScale = 2 ** spec.targetLevel;
   const [x, y, z] = cell;
@@ -203,17 +203,21 @@ function mapBoundaryCell(
     const lx = Math.floor((shifted[0] - target.minX) / targetScale);
     const ly = Math.floor((shifted[1] - target.minY) / targetScale);
     const lz = Math.floor((shifted[2] - target.minZ) / targetScale);
-    return inChunk(lx, ly, lz, chunkSize) ? `${lx},${ly},${lz}` : null;
+    return inChunk(lx, ly, lz, chunkSize) ? { key: `${lx},${ly},${lz}` } : null;
   }
 
   if (spec.readOperation === "restriction") {
+    if (sourceScale <= targetScale || sourceScale % targetScale !== 0) return null;
+
     const localOrigin: [number, number, number] = [
       Math.floor(x / sourceScale) * sourceScale,
       Math.floor(y / sourceScale) * sourceScale,
       Math.floor(z / sourceScale) * sourceScale,
     ];
     const neighborOrigin = shift(localOrigin, face, sourceScale);
-    const ratio = spec.refinementRatio;
+    const ratio = sourceScale / targetScale;
+
+    // Verify the complete fine-side footprint and preserve tangential alignment.
     for (let dz = 0; dz < ratio; dz++) {
       for (let dy = 0; dy < ratio; dy++) {
         for (let dx = 0; dx < ratio; dx++) {
@@ -224,10 +228,18 @@ function mapBoundaryCell(
           const ly = Math.floor((fy - target.minY) / targetScale);
           const lz = Math.floor((fz - target.minZ) / targetScale);
           if (!inChunk(lx, ly, lz, chunkSize)) return null;
+
+          if (face.axis === "x" && (fx < target.minX || fx > target.maxX)) return null;
+          if (face.axis === "y" && (fy < target.minY || fy > target.maxY)) return null;
+          if (face.axis === "z" && (fz < target.minZ || fz > target.maxZ)) return null;
         }
       }
     }
-    return `${Math.floor((neighborOrigin[0] - target.minX) / targetScale)},${Math.floor((neighborOrigin[1] - target.minY) / targetScale)},${Math.floor((neighborOrigin[2] - target.minZ) / targetScale)}`;
+
+    const lx = Math.floor((neighborOrigin[0] - target.minX) / targetScale);
+    const ly = Math.floor((neighborOrigin[1] - target.minY) / targetScale);
+    const lz = Math.floor((neighborOrigin[2] - target.minZ) / targetScale);
+    return { key: `${lx},${ly},${lz}` };
   }
 
   return null;
