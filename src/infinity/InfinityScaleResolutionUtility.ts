@@ -13,7 +13,7 @@ export interface InfinityScaleResolutionCandidate {
   estimatedNewCells: number;
   estimatedTransferDescriptors: number;
   estimatedMemoryBytes: number;
-  estimatedGPUWork: number;
+  estimatedGPUWork: number;\n  causalPhysicalBenefit?: number;\n  causalTransitionDisturbance?: number;
 }
 
 export interface InfinityScaleResolutionUtilityConfig {
