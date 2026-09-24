@@ -185,6 +185,44 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     assertEqual(out[F.ENERGY], 23, "coarse-to-fine ratio 4 energy");
   }
 
+  // Mixed-LOD coarse -> fine must map one coarse face cell to the
+  // correct fine boundary cells without collapsing the tangential mapping.
+  {
+    const state = new InfinityScaleLODState(CHUNK);
+    const coarse = key(1, 0);
+    const fine = key(0, 4);
+
+    // Coarse X+ face cell at local (3, 1, 1) carries a unique value.
+    write(state, coarse, 1, 3, 1, 1, 77);
+
+    const s = spec(coarse, fine, "coarse-to-fine", 1, 0);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 12, CHUNK);
+
+    const values: number[] = [];
+    for (const y of [2, 3]) {
+      for (const z of [2, 3]) {
+        const out = assertNotNull(
+          snapshot.read(s, [4, y, z]),
+          `coarse-to-fine face cell 4,${y},${z}`,
+        );
+        values.push(out[F.ENERGY]);
+      }
+    }
+
+    if (values.length !== 4 || values.some(value => value !== 77)) {
+      throw new Error(
+        `Infinity Scale regression failed: coarse-to-fine face mapping produced [${values.join(",")}]`,
+      );
+    }
+
+    const outside = snapshot.read(s, [4, 4, 4]);
+    if (outside !== null) {
+      throw new Error(
+        "Infinity Scale regression failed: coarse-to-fine read accepted a non-face target cell",
+      );
+    }
+  }
+
   // Mixed-LOD face restriction must aggregate exactly ratio^2 fine cells,
   // not the ratio^3 volume used by interior restriction.
   {
