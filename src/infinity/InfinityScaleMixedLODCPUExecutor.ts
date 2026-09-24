@@ -115,7 +115,7 @@ export class InfinityScaleMixedLODCPUExecutor {
 
     let stagedBoundaryUpdates = 0;
     for (const spec of this.context.boundaryTransferSpecs) {
-      const targetRange = this.rangeForChunk(spec.sourceChunk);
+      const targetRange = this.rangeForChunk(spec.targetChunk);
       for (const targetCell of this.boundaryCells(targetRange, spec)) {
         const sources = resolveBoundarySources
           ? resolveBoundarySources(spec, targetCell)
