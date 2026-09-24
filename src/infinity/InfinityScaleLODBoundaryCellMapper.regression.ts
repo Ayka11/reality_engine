@@ -121,6 +121,28 @@ export function runInfinityScaleLODBoundaryCellMapperRegression(): void {
     throw new Error(`ratio-4: expected 16 source face cells, got ${ratio4Mapping.sourceCells.length}`);
   }
 
+  // Canonical alignment: coarse source cells must land on scale-aligned
+  // origins, while fine source face coordinates remain exact fine cells.
+  {
+    const coarseToFine = spec("1:0,0,0", "0:8,0,0", 1, 0, "coarse-to-fine");
+    state.ensureChunk(coarseToFine.sourceChunk, 1);
+    state.ensureChunk(coarseToFine.targetChunk, 0);
+    const coarseMapping = mapper.map(coarseToFine, [8, 3, 3]);
+    if (coarseMapping.sourceCells[0].join(",") !== "6,2,2") {
+      throw new Error(
+        `coarse-to-fine alignment mismatch: ${coarseMapping.sourceCells[0].join(",")}`,
+      );
+    }
+
+    const fineToCoarse = spec("0:4,0,0", "1:0,0,0", 0, 1, "fine-to-coarse");
+    const fineMapping = mapper.map(fineToCoarse, [6, 2, 2]);
+    if (fineMapping.sourceCells[0][0] !== 4) {
+      throw new Error(
+        `fine-to-coarse face alignment mismatch: ${fineMapping.sourceCells[0].join(",")}`,
+      );
+    }
+  }
+
   // Negative-coordinate boundary must remain geometrically valid.
   const negative = spec("0:-4,0,0", "1:-1,0,0", 0, 1, "fine-to-coarse");
   state.ensureChunk(negative.sourceChunk, 0);
