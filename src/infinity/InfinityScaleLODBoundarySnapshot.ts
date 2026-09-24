@@ -217,9 +217,4 @@ export class InfinityScaleLODBoundarySnapshot {
   }
 }
 
-function parseChunkKey(key: string): [number, number, number] {
-  const match = /^(?:\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
-  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
-}
 
