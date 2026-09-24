@@ -143,8 +143,8 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     throw new Error("Unified transaction did not mark itself committed");
   }
 
-  // A second transaction with a conflicting destination must be rejected
-  // before any LOD/entity/agent mutation occurs.
+  // A second transaction with two divergent destinations for the same agent
+  // must be rejected before any LOD/entity/agent mutation occurs.
   const frame2: InfinityScaleGlobalExecutionFrame = {
     ...frame,
     revision: 4,
@@ -169,6 +169,12 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     to: [11, 2, 2],
     behavior: moved.behavior,
     energy: moved.energy,
+  }, {
+    agentId,
+    from: [10, 2, 2],
+    to: [9, 2, 2],
+    behavior: moved.behavior,
+    energy: moved.energy,
   }]);
 
   const conflict = validateInfinityScaleUnifiedTransaction(transaction2, frame2);
@@ -178,9 +184,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
 
   frame2.phase = "boundary-reconciliation";
   const conflictAfterPhase = validateInfinityScaleUnifiedTransaction(transaction2, frame2);
-  if (!conflictAfterPhase.readyToCommit) {
-    throw new Error(
-      `Expected second valid migration transaction after phase transition: ${conflictAfterPhase.reasons.join("; ")}`,
-    );
+  if (conflictAfterPhase.readyToCommit || conflictAfterPhase.migrationConflicts === 0) {
+    throw new Error("Expected divergent agent migrations to remain blocked at commit phase");
   }
 }
