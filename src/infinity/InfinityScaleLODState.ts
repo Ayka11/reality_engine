@@ -19,8 +19,37 @@ export interface InfinityScaleLODChunkState {
  */
 export class InfinityScaleLODState {
   private readonly states = new Map<string, InfinityScaleLODChunkState>();
+  private revision = 0;
 
   constructor(readonly chunkSize = 32) {}
+
+  getRevision(): number {
+    return this.revision;
+  }
+
+  beginRevision(): number {
+    this.revision += 1;
+    return this.revision;
+  }
+
+  assertRevision(expectedRevision: number): void {
+    if (expectedRevision !== this.revision) {
+      throw new Error(
+        `Infinity Scale LOD state revision mismatch: expected ${expectedRevision}, current ${this.revision}`,
+      );
+    }
+  }
+
+  cloneChunk(key: string): InfinityScaleLODChunkState | undefined {
+    const state = this.states.get(key);
+    if (!state) return undefined;
+    return {
+      key: state.key,
+      level: state.level,
+      scale: state.scale,
+      cells: new Float32Array(state.cells),
+    };
+  }
 
   ensureChunk(key: string, level: number): InfinityScaleLODChunkState {
     const existing = this.states.get(key);
