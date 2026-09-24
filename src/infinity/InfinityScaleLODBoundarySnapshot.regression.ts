@@ -73,10 +73,10 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const fine = key(0, 0);
-    const coarse = key(1, 1);
-    for (let z = 2; z < 4; z++)
-      for (let y = 2; y < 4; y++)
-        write(state, coarse, 1, 4, y, z, 7);
+    const coarse = key(1, 0);
+    for (let z = 0; z < 2; z++)
+      for (let y = 0; y < 2; y++)
+        write(state, fine, 0, 8, y, z, 7);
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 1, CHUNK);
@@ -322,7 +322,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
     const fine = key(0, 8);
-    write(state, fine, 0, 4, 0, 0, 91);
+    write(state, fine, 0, 8, 0, 0, 91);
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 13, CHUNK);
@@ -350,7 +350,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     for (let z = 0; z < 2; z++) {
       for (let y = 0; y < 2; y++) {
         const v = value++;
-        write(state, fine, 0, 4, y, z, v);
+        write(state, fine, 0, 8, y, z, v);
       }
     }
 
