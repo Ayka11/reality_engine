@@ -35,6 +35,8 @@ export interface EntityReconciliationPlan {
   closedComponentCount: number;
   unmatchedClosedComponentCount: number;
   extinctEntityIds: number[];
+  mixedLodTopologyResolved: boolean;
+  ambiguousMixedLodComponents: number[];
 }
 
 /**
@@ -221,6 +223,8 @@ export class EntityChunkReconciliation {
         .filter(p => p.existingEntityId === null)
         .map(p => p.componentId),
       extinctEntityIds: [...plan.extinctEntityIds],
+      mixedLodTopologyResolved: plan.mixedLodTopologyResolved,
+      ambiguousMixedLodComponents: [...plan.ambiguousMixedLodComponents],
     };
   }
 }
