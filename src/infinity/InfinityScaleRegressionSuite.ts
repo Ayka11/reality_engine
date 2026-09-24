@@ -55,6 +55,7 @@ import { runInfinityScaleCausalGPUBudgetRegression } from "./InfinityScaleCausal
 import { runInfinityScaleDeterministicReplayRegression } from "./InfinityScaleDeterministicReplay.regression";
 import { runInfinityScaleFullPipelineReplayRegression } from "./InfinityScaleFullPipelineReplay.regression";
 import { runInfinityScaleFailureReplayRegression } from "./InfinityScaleFailureReplay.regression";
+import { runInfinityScaleRuntimeReplayRegression } from "./InfinityScaleRuntimeReplay.regression";
 
 export interface InfinityScaleRegressionResult { name: string; passed: boolean; }
 
@@ -118,6 +119,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["deterministic-replay", runInfinityScaleDeterministicReplayRegression],
     ["full-pipeline-replay", runInfinityScaleFullPipelineReplayRegression],
     ["failure-replay", runInfinityScaleFailureReplayRegression],
+    ["runtime-replay", runInfinityScaleRuntimeReplayRegression],
   ];
   const results: InfinityScaleRegressionResult[] = [];
   for (const [name, test] of tests) {
