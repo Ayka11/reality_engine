@@ -71,13 +71,13 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     const state = new InfinityScaleLODState(CHUNK);
     const fine = key(0, 0);
     const coarse = key(1, 1);
-    for (let z = 4; z < 6; z++)
-      for (let y = 4; y < 6; y++)
+    for (let z = 2; z < 4; z++)
+      for (let y = 2; y < 4; y++)
         write(state, coarse, 1, 4, y, z, 7);
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 1, CHUNK);
-    const out = assertNotNull(snapshot.read(s, [3, 4, 4]), "fine-to-coarse +X");
+    const out = assertNotNull(snapshot.read(s, [3, 2, 2]), "fine-to-coarse +X");
     assertEqual(out[F.ENERGY], 7, "fine-to-coarse +X energy");
     assertEqual(out[F.DENSITY], 70, "fine-to-coarse +X density");
   }
@@ -102,7 +102,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     write(state, coarse, 1, -4, 4, 4, 13);
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 3, CHUNK);
-    const out = assertNotNull(snapshot.read(s, [0, 4, 4]), "fine-to-coarse -X");
+    const out = assertNotNull(snapshot.read(s, [0, 2, 2]), "fine-to-coarse -X");
     assertEqual(out[F.ENERGY], 13, "fine-to-coarse -X energy");
   }
 }
