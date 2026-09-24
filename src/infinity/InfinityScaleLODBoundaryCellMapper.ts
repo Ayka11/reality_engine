@@ -46,10 +46,10 @@ export class InfinityScaleLODBoundaryCellMapper {
 
     // The source is finer. A coarse target cell receives the complete fine
     // footprint represented by ratio^3 source cells.
-    const origin: [number, number, number] = [
-      targetCell[0] * targetScale,
-      targetCell[1] * targetScale,
-      targetCell[2] * targetScale,
+    const coarseOrigin: [number, number, number] = [
+      floorToScale(targetCell[0], targetScale),
+      floorToScale(targetCell[1], targetScale),
+      floorToScale(targetCell[2], targetScale),
     ];
     const sourceCells: Array<[number, number, number]> = [];
     const step = sourceScale;
@@ -58,9 +58,9 @@ export class InfinityScaleLODBoundaryCellMapper {
       for (let y = 0; y < ratio; y++) {
         for (let x = 0; x < ratio; x++) {
           sourceCells.push([
-            origin[0] + x * step,
-            origin[1] + y * step,
-            origin[2] + z * step,
+            coarseOrigin[0] + x * step,
+            coarseOrigin[1] + y * step,
+            coarseOrigin[2] + z * step,
           ]);
         }
       }
