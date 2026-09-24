@@ -5,6 +5,7 @@ import {
   runInfinityScaleMixedLODCPUProlongationRegression,
 } from "./InfinityScaleMixedLODCPUExecutor.regression";
 import { runInfinityScaleUnifiedTransactionRegression } from "./InfinityScaleUnifiedTransaction.regression";
+import { runInfinityScaleLODResetInvalidationRegression } from "./InfinityScaleLODState.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -18,6 +19,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["mixed-lod-cpu-restriction", runInfinityScaleMixedLODCPURegression],
     ["mixed-lod-cpu-prolongation", runInfinityScaleMixedLODCPUProlongationRegression],
     ["unified-transaction", runInfinityScaleUnifiedTransactionRegression],
+    ["lod-reset-invalidation", runInfinityScaleLODResetInvalidationRegression],
   ];
 
   const results: InfinityScaleRegressionResult[] = [];
