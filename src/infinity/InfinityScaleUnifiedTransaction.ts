@@ -92,6 +92,25 @@ export function validateInfinityScaleUnifiedTransaction(
   const lodValidation = transaction.lod.synchronization.validate();
   if (!lodValidation.readyToCommit) reasons.push("LOD synchronization is not ready");
 
+  const mixedSpecs = transaction.context.boundaryTransferSpecs.filter(
+    spec => spec.sourceLevel !== spec.targetLevel,
+  );
+  if (mixedSpecs.length > 0) {
+    const staged = transaction.lod.synchronization.getStagedUpdates();
+    const stagedKeys = new Set(
+      staged.map(update => `${update.sourceChunk}|${update.targetChunk}|${update.targetCell.join(",")}`),
+    );
+    const missingBoundaryUpdates = mixedSpecs.reduce((count, spec) => {
+      const targetCells = boundaryTargetCells(transaction.context, spec);
+      return count + targetCells.filter(
+        cell => !stagedKeys.has(`${spec.sourceChunk}|${spec.targetChunk}|${cell.join(",")}`),
+      ).length;
+    }, 0);
+    if (missingBoundaryUpdates > 0) {
+      reasons.push(`missing mixed-LOD boundary updates: ${missingBoundaryUpdates}`);
+    }
+  }
+
   const entityReady = !transaction.entityCommitRequested || transaction.entityLayer.canCommitChunkReconciliation();
   if (!entityReady) reasons.push("entity reconciliation is not commit-ready");
 
@@ -102,7 +121,7 @@ export function validateInfinityScaleUnifiedTransaction(
     readyToCommit: reasons.length === 0 && lodValidation.readyToCommit && entityReady && migrationConflicts === 0,
     migrationConflicts,
     entityReady,
-    lodReady: lodValidation.readyToCommit,
+    lodReady: lodValidation.readyToCommit && !reasons.some(reason => reason.startsWith("missing mixed-LOD boundary updates")),
     reasons,
   };
 }
@@ -160,4 +179,50 @@ function countMigrationConflicts(
     if (!agent || agent.x !== request.from[0] || agent.y !== request.from[1] || agent.z !== request.from[2]) conflicts++;
   }
   return conflicts;
+}
+
+
+function boundaryTargetCells(
+  context: InfinityScaleChunkExecutionContext,
+  spec: InfinityScaleChunkExecutionContext["boundaryTransferSpecs"][number],
+): Array<[number, number, number]> {
+  const range = (key: string) => {
+    const match = /^(\\d+):(-?\\d+),(-?\\d+),(-?\\d+)$/.exec(key);
+    if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
+    const level = Number(match[1]);
+    const scale = 2 ** level;
+    const extent = context.chunkSize * scale;
+    const cx = Number(match[2]);
+    const cy = Number(match[3]);
+    const cz = Number(match[4]);
+    return {
+      minX: Math.max(0, cx * extent),
+      maxX: Math.min(context.gridWidth - 1, cx * extent + extent - 1),
+      minY: Math.max(0, cy * extent),
+      maxY: Math.min(context.gridHeight - 1, cy * extent + extent - 1),
+      minZ: Math.max(0, cz * extent),
+      maxZ: Math.min(context.gridDepth - 1, cz * extent + extent - 1),
+    };
+  };
+  const target = range(spec.targetChunk);
+  const source = range(spec.sourceChunk);
+  const scale = 2 ** spec.targetLevel;
+  const cells: Array<[number, number, number]> = [];
+  const pushFace = (axis: 0 | 1 | 2, coordinate: number, minU: number, maxU: number, minV: number, maxV: number) => {
+    for (let v = minV; v <= maxV; v += scale) {
+      for (let u = minU; u <= maxU; u += scale) {
+        cells.push(axis === 0 ? [coordinate, u, v] : axis === 1 ? [u, coordinate, v] : [u, v, coordinate]);
+      }
+    }
+  };
+  const xo0 = Math.max(target.minX, source.minX), xo1 = Math.min(target.maxX, source.maxX);
+  const yo0 = Math.max(target.minY, source.minY), yo1 = Math.min(target.maxY, source.maxY);
+  const zo0 = Math.max(target.minZ, source.minZ), zo1 = Math.min(target.maxZ, source.maxZ);
+  if (target.maxX + 1 === source.minX) pushFace(0, target.maxX, yo0, yo1, zo0, zo1);
+  else if (source.maxX + 1 === target.minX) pushFace(0, target.minX, yo0, yo1, zo0, zo1);
+  else if (target.maxY + 1 === source.minY) pushFace(1, target.maxY, xo0, xo1, zo0, zo1);
+  else if (source.maxY + 1 === target.minY) pushFace(1, target.minY, xo0, xo1, zo0, zo1);
+  else if (target.maxZ + 1 === source.minZ) pushFace(2, target.maxZ, xo0, xo1, yo0, yo1);
+  else if (source.maxZ + 1 === target.minZ) pushFace(2, target.minZ, xo0, xo1, yo0, yo1);
+  return cells;
 }
