@@ -203,6 +203,9 @@ export class SimulationEngine {
     let frameState = frame
       ? advanceInfinityScaleGlobalFrame(frame, 'local-execution')
       : null;
+    const frameContext = selectivePlan
+      ? new InfinityScaleChunkExecutionContext(selectivePlan, this.grid.W, this.grid.H, this.grid.D)
+      : null;
     const lodTransaction =
       frameState && selectivePlan
         ? beginInfinityScaleGlobalLODTransaction(
@@ -223,9 +226,6 @@ export class SimulationEngine {
             frameContext,
           )
         : null;
-    const frameContext = selectivePlan
-      ? new InfinityScaleChunkExecutionContext(selectivePlan, this.grid.W, this.grid.H, this.grid.D)
-      : null;
     if (frameState && frameContext) {
       assertInfinityScaleGlobalFramePlan(frameState, selectivePlan!, frameContext);
 
