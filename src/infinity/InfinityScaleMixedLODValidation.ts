@@ -97,7 +97,7 @@ export function validateInfinityScaleMixedLOD(
     !topologyRepresentationReady ||
     ambiguousTopologyComponentCount > 0 ||
     !entityTopology ||
-    entityTopology.mixedLodComponentCount > 0
+    (entityTopology.mixedLodComponentCount > 0 && !reconciliationReady)
   );
   if (mixed.length > 0 && !topologyRepresentationReady) {
     reasons.push("entity mixed-LOD topology evidence is not available");
