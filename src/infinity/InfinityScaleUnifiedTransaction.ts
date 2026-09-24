@@ -93,23 +93,9 @@ export function validateInfinityScaleUnifiedTransaction(
   const lodValidation = transaction.lod.synchronization.validate();
   if (!lodValidation.readyToCommit) reasons.push("LOD synchronization is not ready");
 
-  const mixedSpecs = transaction.context.boundaryTransferSpecs.filter(
-    spec => spec.sourceLevel !== spec.targetLevel,
-  );
-  if (mixedSpecs.length > 0) {
-    const staged = transaction.lod.synchronization.getStagedUpdates();
-    const stagedKeys = new Set(
-      staged.map(update => `${update.sourceChunk}|${update.targetChunk}|${update.targetCell.join(",")}`),
-    );
-    const missingBoundaryUpdates = mixedSpecs.reduce((count, spec) => {
-      const targetCells = boundaryTargetCells(transaction.context, spec);
-      return count + targetCells.filter(
-        cell => !stagedKeys.has(`${spec.sourceChunk}|${spec.targetChunk}|${cell.join(",")}`),
-      ).length;
-    }, 0);
-    if (missingBoundaryUpdates > 0) {
-      reasons.push(`missing mixed-LOD boundary updates: ${missingBoundaryUpdates}`);
-    }
+  const missingBoundaryUpdates = countMissingMixedLODUpdates(transaction);
+  if (missingBoundaryUpdates > 0) {
+    reasons.push(`missing mixed-LOD boundary updates: ${missingBoundaryUpdates}`);
   }
 
   const entityReady = !transaction.entityCommitRequested || transaction.entityLayer.canCommitChunkReconciliation();
