@@ -49,6 +49,7 @@ import { runInfinityScalePostCommitObservationRegression } from "./InfinityScale
 import { runInfinityScaleClosedLoopPostCommitFeedbackRegression } from "./InfinityScaleClosedLoopPostCommitFeedback.regression";
 import { runInfinityScaleCausalAdaptiveAttributionRegression } from "./InfinityScaleCausalAdaptiveAttribution.regression";
 import { runInfinityScaleCausalPredictionHistoryRegression } from "./InfinityScaleCausalPredictionHistory.regression";
+import { runInfinityScaleCausalStabilityRegression } from "./InfinityScaleCausalStability.regression";
 
 export interface InfinityScaleRegressionResult { name: string; passed: boolean; }
 
@@ -106,6 +107,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["closed-loop-post-commit-feedback", runInfinityScaleClosedLoopPostCommitFeedbackRegression],
     ["causal-adaptive-attribution", runInfinityScaleCausalAdaptiveAttributionRegression],
     ["causal-prediction-history", runInfinityScaleCausalPredictionHistoryRegression],
+    ["causal-stability", runInfinityScaleCausalStabilityRegression],
   ];
   const results: InfinityScaleRegressionResult[] = [];
   for (const [name, test] of tests) {
