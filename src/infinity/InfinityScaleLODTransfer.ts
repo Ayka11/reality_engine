@@ -2,6 +2,9 @@ import { CELL_FIELDS, F } from "../core/CellState";
 import type {
   InfinityScaleBoundaryTransferSpec,
 } from "./InfinityScaleChunkExecutionContext";
+import {
+  getInfinityScaleFieldSemantics,
+} from "./InfinityScaleFieldSemantics";
 
 /**
  * Field policy used by the LOD transfer operator.
@@ -69,13 +72,7 @@ export class InfinityScaleLODTransfer {
   static circularFields: number[] = [F.WAVE_PHASE];
 
   static policy(field: number): InfinityScaleLODFieldPolicy {
-    if (field === F.ENERGY || field === F.INFORMATION || field === F.MEM_FIELD) {
-      return "extensive";
-    }
-    if (this.circularFields.includes(field)) return "circular";
-    if (this.continuousFields.includes(field)) return "intensive";
-    if (this.discreteFields.includes(field)) return "discrete";
-    return "unsupported";
+    return getInfinityScaleFieldSemantics(field).policy;
   }
 
   /**
