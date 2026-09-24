@@ -141,8 +141,7 @@ export class InfinityScaleMixedLODCPUExecutor {
 
     let stagedBoundaryUpdates = 0;
     for (const spec of this.context.boundaryTransferSpecs) {
-      const targetRange = this.rangeForChunk(spec.targetChunk);
-      for (const targetCell of this.boundaryCells(targetRange, spec)) {
+      for (const targetCell of this.boundaryCells(spec)) {
         const sources = resolveBoundarySources
           ? resolveBoundarySources(spec, targetCell)
           : this.boundaryMapper.resolveValues(spec, targetCell);
@@ -173,7 +172,6 @@ export class InfinityScaleMixedLODCPUExecutor {
   }
 
   private boundaryCells(
-    targetRange: ExecutionCellRange,
     spec: InfinityScaleBoundaryTransferSpec,
   ): Array<[number, number, number]> {
     return this.boundaryMapper.enumerateTargetFaceCells(
@@ -185,14 +183,6 @@ export class InfinityScaleMixedLODCPUExecutor {
       x >= targetRange.minX && x <= targetRange.maxX &&
       y >= targetRange.minY && y <= targetRange.maxY &&
       z >= targetRange.minZ && z <= targetRange.maxZ
-    );
-  }
-
-  private rangeTouches(a: ExecutionCellRange, b: ExecutionCellRange): boolean {
-    return (
-      a.minX <= b.maxX + 1 && a.maxX + 1 >= b.minX &&
-      a.minY <= b.maxY + 1 && a.maxY + 1 >= b.minY &&
-      a.minZ <= b.maxZ + 1 && a.maxZ + 1 >= b.minZ
     );
   }
 }
