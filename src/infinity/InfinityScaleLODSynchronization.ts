@@ -69,7 +69,7 @@ export class InfinityScaleLODSynchronization {
       );
       target.set(children[0]);
     } else {
-      InfinityScaleLODTransfer.restrict(
+      InfinityScaleLODTransfer.restrictFace(
         sourceCells,
         target as unknown as number[],
         spec.sourceLevel,
@@ -124,11 +124,12 @@ export class InfinityScaleLODSynchronization {
         let expected = 0;
         if (semantics.conservation === "sum") {
           for (const source of sources) expected += source[field] ?? 0;
-          if (update.relation === "coarse-to-fine") {
-            expected /= update.sourceCells.length === 1 ? 1 : update.sourceCells.length;
-          }
           if (update.relation === "coarse-to-fine" && sources.length === 1) {
-            expected /= Math.max(1, refinementRatio(update));
+            expected /= Math.max(1, refinementRatio(update) ** 3);
+          } else if (update.relation === "fine-to-coarse") {
+            // Boundary restriction samples a face footprint (ratio^2), not a
+            // complete volume. The face operator therefore uses the mean.
+            expected /= sources.length;
           }
         } else if (semantics.conservation === "average") {
           for (const source of sources) expected += source[field] ?? 0;
