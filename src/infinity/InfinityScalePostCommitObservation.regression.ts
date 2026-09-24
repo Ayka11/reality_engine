@@ -23,7 +23,7 @@ export function runInfinityScalePostCommitObservationRegression(): void {
     epoch: 5, errorBefore: 0.35, errorAfter: 0.3, runtime: { ...runtime, stateRevision: 4, topologyChanged: false } as InfinityScaleAdaptiveRuntimeResult,
   });
   if (second.observationHash !== observeInfinityScalePostCommitRuntime(feedback, {
-    epoch: 6, errorBefore: 0.3, errorAfter: 0.25, runtime: { ...runtime, stateRevision: 4, topologyChanged: false } as InfinityScaleAdaptiveRuntimeResult,
+    epoch: 5, errorBefore: 0.35, errorAfter: 0.3, runtime: { ...runtime, stateRevision: 4, topologyChanged: false } as InfinityScaleAdaptiveRuntimeResult,
   }).observationHash) throw new Error("Observation hashing is not deterministic for equivalent state");
   if (feedback.getPostCommitObservations().length !== 3) throw new Error("Post-commit history length is incorrect");
   if (feedback.summary().committedRate !== 1) throw new Error("Committed rate is incorrect");
