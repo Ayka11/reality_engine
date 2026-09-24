@@ -93,8 +93,6 @@ export class InfinityScaleLODSynchronization {
     let invalidUpdateCount = 0;
     let topologyValid = true;
     const seenTargets = new Set<string>();
-    const conservationErrorFields: number[] = [];
-
     for (const update of this.staged.values()) {
       if (update.value.length !== CELL_FIELDS || !update.value.every(Number.isFinite)) {
         invalidUpdateCount++;
