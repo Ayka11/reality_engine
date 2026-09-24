@@ -63,7 +63,7 @@ export class InfinityScaleLODBoundaryCellMapper {
 
     // Fine source -> coarse target: map the coarse boundary cell to the
     // complete fine face footprint represented by ratio^2 source cells.
-    const sourceNormal = sourceFaceCoordinate(sourceRange, targetRange, axis);
+    const sourceNormal = sourceFaceCoordinate(sourceRange, targetRange, axis, sourceScale);
     const sourceCells: Array<[number, number, number]> = [];
     const step = sourceScale;
 
