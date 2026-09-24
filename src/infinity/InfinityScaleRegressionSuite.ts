@@ -43,6 +43,7 @@ import { runInfinityScaleAdaptiveFeedbackLoopRegression } from "./InfinityScaleA
 import { runInfinityScaleRuntimePredictionFeedbackRegression } from "./InfinityScaleRuntimePredictionFeedback.regression";
 import { runInfinityScaleClosedLoopAdaptiveControllerRegression } from "./InfinityScaleClosedLoopAdaptiveController.regression";
 import { runInfinityScaleAdaptiveMutationPlanBuilderRegression } from "./InfinityScaleAdaptiveMutationPlanBuilder.regression";
+import { runInfinityScaleClosedLoopExecutablePlannerRegression } from "./InfinityScaleClosedLoopExecutablePlanner.regression";
 
 export interface InfinityScaleRegressionResult { name: string; passed: boolean; }
 
@@ -94,6 +95,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["runtime-prediction-feedback", runInfinityScaleRuntimePredictionFeedbackRegression],
     ["closed-loop-adaptive-controller", runInfinityScaleClosedLoopAdaptiveControllerRegression],
     ["adaptive-mutation-plan-builder", runInfinityScaleAdaptiveMutationPlanBuilderRegression],
+    ["closed-loop-executable-planner", runInfinityScaleClosedLoopExecutablePlannerRegression],
   ];
   const results: InfinityScaleRegressionResult[] = [];
   for (const [name, test] of tests) {
