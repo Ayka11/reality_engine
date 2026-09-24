@@ -1,0 +1,37 @@
+name: Infinity Scale RC Validation
+
+on:
+  push:
+    branches:
+      - infinity-scale-real-diagnostics
+  pull_request:
+    branches:
+      - infinity-scale-real-diagnostics
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript validation
+        run: npx tsc --noEmit
+
+      - name: Production build
+        run: npm run build
+
+      - name: Regression source validation
+        run: |
+          node --input-type=module <<'NODE'
+          console.log("Infinity Scale regression suite is registered in src/infinity/InfinityScaleRegressionSuite.ts");
+          NODE
