@@ -265,6 +265,45 @@ export class InfinityScaleLODTransfer {
    * fields must preserve the sum over the represented fine-cell volume.
    * This is a pure invariant check and does not mutate either input.
    */
+  /**
+   * Round-trip invariant for an intensive field under baseline
+   * coarse-to-fine prolongation: every child must reproduce the coarse value.
+   */
+  static validateProlongationInvariant(
+    source: ReadonlyArray<number>,
+    targets: ReadonlyArray<ReadonlyArray<number>>,
+    sourceLevel: number,
+    targetLevel: number,
+    tolerance = 1e-6,
+  ): { valid: boolean; violations: number[] } {
+    const refinementRatio = this.validateLevels(sourceLevel, targetLevel, "prolongation");
+    const expected = refinementRatio ** 3;
+    if (targets.length !== expected || source.length !== CELL_FIELDS) {
+      throw new Error("Infinity Scale prolongation invariant dimensions are invalid");
+    }
+
+    const violations: number[] = [];
+    for (let field = 0; field < CELL_FIELDS; field++) {
+      const policy = this.policy(field);
+      if (policy !== "intensive" && policy !== "extensive") continue;
+      const expectedValue = policy === "intensive"
+        ? source[field] ?? 0
+        : (source[field] ?? 0);
+      for (const target of targets) {
+        if (target.length !== CELL_FIELDS) {
+          throw new Error("Infinity Scale prolongation target dimensions are invalid");
+        }
+        const scale = Math.max(1, Math.abs(expectedValue), Math.abs(target[field] ?? 0));
+        if (Math.abs((target[field] ?? 0) - expectedValue) > tolerance * scale) {
+          if (!violations.includes(field)) violations.push(field);
+          break;
+        }
+      }
+    }
+
+    return { valid: violations.length === 0, violations };
+  }
+
   static validateRestrictionInvariant(
     sources: ReadonlyArray<ReadonlyArray<number>>,
     target: ReadonlyArray<number>,
