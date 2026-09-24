@@ -57,7 +57,7 @@ export class InfinityScaleLODBoundaryCellMapper {
         floorToScale(targetCell[1], sourceScale),
         floorToScale(targetCell[2], sourceScale),
       ];
-      sourceCell[axis] = sourceFaceCoordinate(sourceRange, targetRange, axis);
+      sourceCell[axis] = sourceFaceCoordinate(sourceRange, targetRange, axis, sourceScale);
       return { targetCell, sourceCells: [sourceCell] };
     }
 
@@ -232,8 +232,22 @@ function sourceFaceCoordinate(
   source: ChunkRange,
   target: ChunkRange,
   axis: 0 | 1 | 2,
+  sourceScale: number,
 ): number {
-  if (axis === 0) return source.minX > target.maxX ? source.minX : source.maxX;
-  if (axis === 1) return source.minY > target.maxY ? source.minY : source.maxY;
-  return source.minZ > target.maxZ ? source.minZ : source.maxZ;
+  if (axis === 0) {
+    const boundary = source.minX > target.maxX ? source.minX : source.maxX;
+    return source.minX > target.maxX
+      ? boundary
+      : floorToScale(boundary, sourceScale);
+  }
+  if (axis === 1) {
+    const boundary = source.minY > target.maxY ? source.minY : source.maxY;
+    return source.minY > target.maxY
+      ? boundary
+      : floorToScale(boundary, sourceScale);
+  }
+  const boundary = source.minZ > target.maxZ ? source.minZ : source.maxZ;
+  return source.minZ > target.maxZ
+    ? boundary
+    : floorToScale(boundary, sourceScale);
 }
