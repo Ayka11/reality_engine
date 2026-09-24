@@ -1,4 +1,5 @@
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
+import { validateInfinityScaleBoundaryGeometry } from "./InfinityScaleLODBoundaryGeometry";
 
 export interface ExecutionCellRange {
   minX: number;
@@ -200,11 +201,10 @@ export class InfinityScaleChunkExecutionContext {
   ): InfinityScaleBoundaryReadRelation[] {
     const relations: InfinityScaleBoundaryReadRelation[] = [];
 
-    for (const [sourceChunk, sourceRelations] of this.boundaryRelationsBySource) {
-      const sourceRange = this.chunkRange(sourceChunk);
+    for (const sourceRelations of this.boundaryRelationsBySource.values()) {
       for (const relation of sourceRelations) {
-        const targetRange = this.chunkRange(relation.targetChunk);
-        if (this.isAdjacentToTargetBoundary(sourceRange, targetRange, x, y, z)) {
+        const spec = this.relationToTransferSpec(relation);
+        if (validateInfinityScaleBoundaryGeometry(spec, [x, y, z], this.chunkSize)) {
           relations.push({ ...relation });
         }
       }
@@ -213,43 +213,32 @@ export class InfinityScaleChunkExecutionContext {
     return relations;
   }
 
-  /**
-   * A transfer relation is usable for a target simulation cell only when that
-   * cell lies on the target chunk face adjacent to the source dependency.
-   * This keeps relation lookup in target-cell coordinates, matching the
-   * solver's boundary-read contract.
-  private isAdjacentToTargetBoundary(
-    source: ExecutionCellRange,
-    target: ExecutionCellRange,
-    x: number,
-    y: number,
-    z: number,
-  ): boolean {
-    const xTangential = y >= source.minY && y <= source.maxY &&
-      z >= source.minZ && z <= source.maxZ;
-    const yTangential = x >= source.minX && x <= source.maxX &&
-      z >= source.minZ && z <= source.maxZ;
-    const zTangential = x >= source.minX && x <= source.maxX &&
-      y >= source.minY && y <= source.maxY;
-
-    const xFace =
-      x >= target.minX && x <= target.maxX &&
-      ((source.maxX + 1 === target.minX && x === target.minX) ||
-       (target.maxX + 1 === source.minX && x === target.maxX));
-    const yFace =
-      y >= target.minY && y <= target.maxY &&
-      ((source.maxY + 1 === target.minY && y === target.minY) ||
-       (target.maxY + 1 === source.minY && y === target.maxY));
-    const zFace =
-      z >= target.minZ && z <= target.maxZ &&
-      ((source.maxZ + 1 === target.minZ && z === target.minZ) ||
-       (target.maxZ + 1 === source.minZ && z === target.maxZ));
-
-    return (
-      (xFace && xTangential) ||
-      (yFace && yTangential) ||
-      (zFace && zTangential)
-    );
+  private relationToTransferSpec(
+    relation: InfinityScaleBoundaryReadRelation,
+  ): InfinityScaleBoundaryTransferSpec {
+    const sourceLevel = chunkLevel(relation.sourceChunk);
+    const targetLevel = chunkLevel(relation.targetChunk);
+    const refinementRatio = 2 ** Math.abs(sourceLevel - targetLevel);
+    return {
+      sourceChunk: relation.sourceChunk,
+      targetChunk: relation.targetChunk,
+      relation: relation.relation,
+      sourceLevel,
+      targetLevel,
+      refinementRatio,
+      operation:
+        relation.relation === "same-level"
+          ? "copy"
+          : relation.relation === "coarse-to-fine"
+            ? "prolongation"
+            : "restriction",
+      readOperation:
+        relation.relation === "same-level"
+          ? "copy"
+          : relation.relation === "coarse-to-fine"
+            ? "restriction"
+            : "prolongation",
+    };
   }
 
   private chunkRange(key: string): ExecutionCellRange {
