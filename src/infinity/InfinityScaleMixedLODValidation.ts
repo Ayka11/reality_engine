@@ -1,5 +1,6 @@
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
+import type { EntityChunkConnectivityResult } from "./EntityChunkConnectivity";
 
 export interface InfinityScaleMixedLODValidation {
   ready: boolean;
@@ -8,6 +9,8 @@ export interface InfinityScaleMixedLODValidation {
   unsupportedRelationCount: number;
   overlappingSimulationRanges: number;
   unresolvedTopology: boolean;
+  topologyRepresentationReady: boolean;
+  ambiguousTopologyComponentCount: number;
   reasons: string[];
 }
 
@@ -22,6 +25,7 @@ export interface InfinityScaleMixedLODValidation {
 export function validateInfinityScaleMixedLOD(
   plan: InfinityScaleExecutionPlan,
   context: InfinityScaleChunkExecutionContext,
+  entityTopology?: EntityChunkConnectivityResult,
 ): InfinityScaleMixedLODValidation {
   const mixed = context.boundaryTransferSpecs.filter(
     spec => spec.sourceLevel !== spec.targetLevel,
@@ -38,6 +42,16 @@ export function validateInfinityScaleMixedLOD(
     !["coarse-to-fine", "fine-to-coarse"].includes(spec.relation),
   );
   const reasons: string[] = [];
+  const topologyRepresentationReady = mixed.length === 0 || !!entityTopology;
+  const ambiguousTopologyComponentCount = entityTopology
+    ? entityTopology.components.filter(component => {
+        if (!component.touchesMixedLODBoundary) return false;
+        const ids = entityTopology.mixedLodTopology
+          .filter(sample => component.cells.includes(sample.localCell) && sample.occupied)
+          .map(sample => sample.sourceEntityId);
+        return new Set(ids).size > 1;
+      }).length
+    : 0;
 
   if (context.overlappingSimulationRangeCount > 0) {
     reasons.push(
@@ -54,15 +68,27 @@ export function validateInfinityScaleMixedLOD(
   // ENTITY_ID majority reduction cannot prove topology continuity across an
   // LOD boundary. Keep the global capability blocked until an entity-specific
   // boundary representation is implemented.
-  const unresolvedTopology = mixed.length > 0;
-  if (unresolvedTopology) {
-    reasons.push("entity topology continuity across mixed-LOD boundaries is unresolved");
+  const unresolvedTopology = mixed.length > 0 && (
+    !topologyRepresentationReady ||
+    ambiguousTopologyComponentCount > 0 ||
+    !entityTopology ||
+    entityTopology.mixedLodComponentCount > 0
+  );
+  if (mixed.length > 0 && !topologyRepresentationReady) {
+    reasons.push("entity mixed-LOD topology evidence is not available");
+  }
+  if (ambiguousTopologyComponentCount > 0) {
+    reasons.push(`ambiguous mixed-LOD entity identity topology: ${ambiguousTopologyComponentCount}`);
+  }
+  if (mixed.length > 0 && entityTopology && entityTopology.mixedLodComponentCount > 0) {
+    reasons.push("mixed-LOD entity components remain boundary-owned and require deferred identity commit");
   }
 
   const ready =
     plan.boundaryReadRelations.length === 0 ||
-    (mixed.length > 0 &&
-      invalid.length === 0 &&
+    (mixed.length === 0 || topologyRepresentationReady) &&
+    (mixed.length === 0 || !unresolvedTopology) &&
+    (mixed.length === 0 || invalid.length === 0) &&
       unsupported.length === 0 &&
       context.overlappingSimulationRangeCount === 0 &&
       !unresolvedTopology);
@@ -74,6 +100,8 @@ export function validateInfinityScaleMixedLOD(
     unsupportedRelationCount: unsupported.length,
     overlappingSimulationRanges: context.overlappingSimulationRangeCount,
     unresolvedTopology,
+    topologyRepresentationReady,
+    ambiguousTopologyComponentCount,
     reasons,
   };
 }
