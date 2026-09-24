@@ -4,10 +4,7 @@ import type { VoxelGrid } from "../core/VoxelGrid";
 import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
-import {
-  InfinityScaleGlobalLODTransaction,
-  commitInfinityScaleGlobalLODTransaction,
-} from "./InfinityScaleGlobalLODTransaction";
+import { InfinityScaleGlobalLODTransaction, commitInfinityScaleGlobalLODTransaction } from "./InfinityScaleGlobalLODTransaction";
 
 export interface InfinityScaleUnifiedTransaction {
   frameRevision: number;
@@ -32,9 +29,8 @@ export interface InfinityScaleUnifiedTransactionValidation {
 }
 
 /**
- * Frame-level transaction coordinating LOD state, entity identity and agent
- * migration. Local execution may stage all three domains; only the global
- * boundary-reconciliation phase may commit them.
+ * Frame-level commit barrier for LOD state, entity identity and agent migration.
+ * Validation must pass before any domain is mutated.
  */
 export function beginInfinityScaleUnifiedTransaction(
   frame: InfinityScaleGlobalExecutionFrame,
@@ -45,9 +41,7 @@ export function beginInfinityScaleUnifiedTransaction(
   grid: VoxelGrid,
   context: InfinityScaleChunkExecutionContext,
 ): InfinityScaleUnifiedTransaction {
-  if (frame.planRevision !== plan.revision) {
-    throw new Error("Unified transaction rejected: frame/plan revision mismatch");
-  }
+  if (frame.planRevision !== plan.revision) throw new Error("Unified transaction rejected: frame/plan revision mismatch");
   return {
     frameRevision: frame.revision,
     planRevision: plan.revision,
@@ -63,23 +57,14 @@ export function beginInfinityScaleUnifiedTransaction(
   };
 }
 
-export function stageInfinityScaleEntityCommit(
-  transaction: InfinityScaleUnifiedTransaction,
-): void {
+export function stageInfinityScaleEntityCommit(transaction: InfinityScaleUnifiedTransaction): void {
   if (transaction.committed) throw new Error("Unified transaction already committed");
   transaction.entityCommitRequested = true;
 }
 
-export function stageInfinityScaleAgentMigrations(
-  transaction: InfinityScaleUnifiedTransaction,
-  requests: AgentMigrationRequest[],
-): void {
+export function stageInfinityScaleAgentMigrations(transaction: InfinityScaleUnifiedTransaction, requests: AgentMigrationRequest[]): void {
   if (transaction.committed) throw new Error("Unified transaction already committed");
-  const seen = new Set(
-    transaction.stagedMigrations.map(request =>
-      migrationKey(request),
-    ),
-  );
+  const seen = new Set(transaction.stagedMigrations.map(migrationKey));
   for (const request of requests) {
     const key = migrationKey(request);
     if (!seen.has(key)) {
@@ -98,38 +83,23 @@ export function validateInfinityScaleUnifiedTransaction(
   frame: InfinityScaleGlobalExecutionFrame,
 ): InfinityScaleUnifiedTransactionValidation {
   const reasons: string[] = [];
-
-  if (frame.revision !== transaction.frameRevision) {
-    reasons.push("frame revision changed");
-  }
-  if (frame.phase !== "boundary-reconciliation") {
-    reasons.push(`invalid commit phase: ${frame.phase}`);
-  }
+  if (frame.revision !== transaction.frameRevision) reasons.push("frame revision changed");
+  if (frame.planRevision !== transaction.planRevision) reasons.push("frame plan revision changed");
+  if (frame.phase !== "boundary-reconciliation") reasons.push(`invalid commit phase: ${frame.phase}`);
   if (transaction.committed) reasons.push("transaction already committed");
+  if (transaction.lod.stateRevision !== transaction.stateRevision) reasons.push("LOD state revision changed");
 
   const lodValidation = transaction.lod.synchronization.validate();
   if (!lodValidation.readyToCommit) reasons.push("LOD synchronization is not ready");
 
-  const entityReady =
-    !transaction.entityCommitRequested ||
-    transaction.entityLayer.canCommitChunkReconciliation();
+  const entityReady = !transaction.entityCommitRequested || transaction.entityLayer.canCommitChunkReconciliation();
   if (!entityReady) reasons.push("entity reconciliation is not commit-ready");
 
-  const migrationConflicts = countMigrationConflicts(
-    transaction.stagedMigrations,
-    transaction.context,
-    transaction.agentSystem,
-  );
-  if (migrationConflicts > 0) {
-    reasons.push(`agent migration conflicts: ${migrationConflicts}`);
-  }
+  const migrationConflicts = countMigrationConflicts(transaction.stagedMigrations, transaction.context, transaction.agentSystem);
+  if (migrationConflicts > 0) reasons.push(`agent migration conflicts: ${migrationConflicts}`);
 
   return {
-    readyToCommit:
-      reasons.length === 0 &&
-      lodValidation.readyToCommit &&
-      entityReady &&
-      migrationConflicts === 0,
+    readyToCommit: reasons.length === 0 && lodValidation.readyToCommit && entityReady && migrationConflicts === 0,
     migrationConflicts,
     entityReady,
     lodReady: lodValidation.readyToCommit,
@@ -143,42 +113,29 @@ export function commitInfinityScaleUnifiedTransaction(
 ): void {
   const validation = validateInfinityScaleUnifiedTransaction(transaction, frame);
   if (!validation.readyToCommit) {
-    throw new Error(
-      `Infinity Scale unified transaction rejected: ${validation.reasons.join("; ")}`,
-    );
+    throw new Error(`Infinity Scale unified transaction rejected: ${validation.reasons.join("; ")}`);
   }
 
-  // All domains are prevalidated before the first mutation. The commit phase
-  // itself is deliberately deterministic: LOD boundary state, entity identity,
-  // then agent positions.
+  // Preflight is complete. Domain commits occur only at the global barrier.
+  // AgentSystem acknowledges exactly the requests it successfully applies,
+  // preventing failed transactions from silently consuming pending migrations.
   commitInfinityScaleGlobalLODTransaction(transaction.lod, frame);
 
   if (transaction.entityCommitRequested) {
-    if (!transaction.entityLayer.applyChunkReconciliation(
-      transaction.grid,
-      transaction.context,
-    )) {
+    if (!transaction.entityLayer.applyChunkReconciliation(transaction.grid, transaction.context)) {
       throw new Error("Infinity Scale unified transaction entity commit failed");
     }
   }
 
   if (transaction.stagedMigrations.length > 0) {
-    transaction.agentSystem.applyMigrationRequests(
-      transaction.grid,
-      transaction.stagedMigrations,
-      transaction.context,
-    );
+    transaction.agentSystem.applyMigrationRequests(transaction.grid, transaction.stagedMigrations, transaction.context);
   }
 
   transaction.committed = true;
 }
 
 function migrationKey(request: AgentMigrationRequest): string {
-  return [
-    request.agentId,
-    request.from.join(","),
-    request.to.join(","),
-  ].join("|");
+  return [request.agentId, request.from.join(","), request.to.join(",")].join("|");
 }
 
 function countMigrationConflicts(
@@ -188,31 +145,19 @@ function countMigrationConflicts(
 ): number {
   const byAgent = new Map<number, AgentMigrationRequest>();
   let conflicts = 0;
-
   for (const request of requests) {
-    if (!context.containsSimulationCell(request.to[0], request.to[1], request.to[2])) {
-      conflicts++;
-    }
+    if (!context.containsSimulationCell(request.to[0], request.to[1], request.to[2])) conflicts++;
     const previous = byAgent.get(request.agentId);
     if (previous && (
       previous.to[0] !== request.from[0] ||
       previous.to[1] !== request.from[1] ||
       previous.to[2] !== request.from[2]
-    )) {
-      conflicts++;
-    }
+    )) conflicts++;
     byAgent.set(request.agentId, request);
   }
-
   for (const request of requests) {
     const agent = agents.getAgents().find(candidate => candidate.id === request.agentId);
-    if (!agent ||
-        agent.x !== request.from[0] ||
-        agent.y !== request.from[1] ||
-        agent.z !== request.from[2]) {
-      conflicts++;
-    }
+    if (!agent || agent.x !== request.from[0] || agent.y !== request.from[1] || agent.z !== request.from[2]) conflicts++;
   }
-
   return conflicts;
 }
