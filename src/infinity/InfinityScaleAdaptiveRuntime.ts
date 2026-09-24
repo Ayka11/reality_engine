@@ -1,11 +1,11 @@
 import { InfinityScaleV2 } from "../InfinityScaleV2";
-import {
-  InfinityScalePredictiveAdaptivePipeline,
-  type InfinityScalePredictiveAdaptivePipelineInput,
-  type InfinityScalePredictiveAdaptivePipelineResult,
-} from "./InfinityScalePredictiveAdaptivePipeline";
+import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import { InfinityScaleAdaptiveLODTransactionBridge } from "./InfinityScaleAdaptiveLODTransactionBridge";
+import { InfinityScalePredictiveAdaptivePipeline, type InfinityScalePredictiveAdaptivePipelineResult } from "./InfinityScalePredictiveAdaptivePipeline";
 import type { InfinityScaleAdaptiveMutation } from "./InfinityScaleAdaptiveTransferCompiler";
 import type { InfinityScaleGPUExecutionBudget } from "./InfinityScaleGPUExecutionPlanAdapter";
+import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
+import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
 
 export interface InfinityScaleAdaptiveRuntimeStep {
   stateRevision: number;
@@ -16,8 +16,7 @@ export interface InfinityScaleAdaptiveRuntimeStep {
   gpuComplete: boolean;
 }
 
-export interface InfinityScaleAdaptiveRuntimeResult
-  extends InfinityScalePredictiveAdaptivePipelineResult {
+export interface InfinityScaleAdaptiveRuntimeResult extends InfinityScalePredictiveAdaptivePipelineResult {
   committed: boolean;
   stateRevision: number;
   topologyRevision: number;
@@ -26,33 +25,33 @@ export interface InfinityScaleAdaptiveRuntimeResult
 
 export class InfinityScaleAdaptiveRuntime {
   private readonly pipeline = new InfinityScalePredictiveAdaptivePipeline();
+  private readonly lodState: InfinityScaleLODState;
   private stateRevision = 0;
   private topologyRevision = 0;
-  private lodByRegion = new Map<string, number>();
 
-  constructor(private readonly scale: InfinityScaleV2) {}
-
-  getStateRevision(): number {
-    return this.stateRevision;
+  constructor(
+    private readonly scale: InfinityScaleV2,
+    lodState = new InfinityScaleLODState(),
+  ) {
+    this.lodState = lodState;
   }
 
-  getTopologyRevision(): number {
-    return this.topologyRevision;
-  }
-
+  getStateRevision(): number { return this.stateRevision; }
+  getTopologyRevision(): number { return this.topologyRevision; }
   getLOD(regionId: string): number | undefined {
-    return this.lodByRegion.get(regionId);
+    return this.lodState.getChunk(regionId)?.level;
   }
+  getLODState(): InfinityScaleLODState { return this.lodState; }
 
-  step(step: InfinityScaleAdaptiveRuntimeStep): InfinityScaleAdaptiveRuntimeResult {
-    if (step.stateRevision !== this.stateRevision) {
-      throw new Error("Adaptive runtime state revision is stale");
-    }
-    if (step.topologyRevision !== this.topologyRevision) {
-      throw new Error("Adaptive runtime topology revision is stale");
-    }
+  step(
+    step: InfinityScaleAdaptiveRuntimeStep,
+    frame?: InfinityScaleGlobalExecutionFrame,
+    plan?: InfinityScaleExecutionPlan,
+  ): InfinityScaleAdaptiveRuntimeResult {
+    if (step.stateRevision !== this.stateRevision) throw new Error("Adaptive runtime state revision is stale");
+    if (step.topologyRevision !== this.topologyRevision) throw new Error("Adaptive runtime topology revision is stale");
 
-    const input: InfinityScalePredictiveAdaptivePipelineInput = {
+    const pipeline = this.pipeline.run({
       stateRevision: this.stateRevision,
       topologyRevision: this.topologyRevision,
       expectedStateRevision: this.stateRevision,
@@ -61,30 +60,27 @@ export class InfinityScaleAdaptiveRuntime {
       gpuBudget: step.gpuBudget,
       conservationValid: step.conservationValid,
       gpuComplete: step.gpuComplete,
-    };
+    });
 
-    const pipeline = this.pipeline.run(input);
     let committed = false;
-
     if (pipeline.commitReady) {
-      for (const mutation of step.mutations) {
-        if (mutation.fromLOD === mutation.toLOD) continue;
-        const current = this.lodByRegion.get(mutation.regionId);
-        if (current !== undefined && current !== mutation.fromLOD) {
-          throw new Error(`LOD state conflict for region: ${mutation.regionId}`);
-        }
+      if (!frame || !plan) {
+        throw new Error("Adaptive runtime commit requires a global execution frame and execution plan");
       }
+      const bridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, this.lodState);
+      bridge.begin(frame);
+      const result = bridge.commit(frame, step.mutations);
+      committed = result.committed;
+      if (committed) {
+        this.stateRevision++;
+        if (result.topologyChanged) this.topologyRevision++;
+      }
+    }
 
-      for (const mutation of step.mutations) {
-        if (mutation.fromLOD === mutation.toLOD) continue;
-        this.lodByRegion.set(mutation.regionId, mutation.toLOD);
-      }
-
-      this.stateRevision++;
-      if (step.mutations.some(mutation => mutation.fromLOD !== mutation.toLOD)) {
-        this.topologyRevision++;
-      }
-      committed = true;
+    const lodByRegion: Record<string, number> = {};
+    for (const key of this.lodState.keys().sort()) {
+      const chunk = this.lodState.getChunk(key);
+      if (chunk) lodByRegion[key] = chunk.level;
     }
 
     return {
@@ -92,7 +88,7 @@ export class InfinityScaleAdaptiveRuntime {
       committed,
       stateRevision: this.stateRevision,
       topologyRevision: this.topologyRevision,
-      lodByRegion: Object.fromEntries([...this.lodByRegion.entries()].sort()),
+      lodByRegion,
     };
   }
 
