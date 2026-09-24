@@ -12,10 +12,10 @@ import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExe
 export function runInfinityScaleMixedLODCPURegression(): void {
   const state = new InfinityScaleLODState(4);
   const coarseKey = "1:0,0,0";
-  const fineKey = "0:8,0,0";
+  const fineKeys = ["0:8,0,0", "0:8,4,0", "0:8,0,4", "0:8,4,4"];
 
   state.ensureChunk(coarseKey, 1);
-  state.ensureChunk(fineKey, 0);
+  for (const fineKey of fineKeys) state.ensureChunk(fineKey, 0);
 
   for (let z = 0; z < 4; z++) {
     for (let y = 0; y < 4; y++) {
@@ -24,11 +24,23 @@ export function runInfinityScaleMixedLODCPURegression(): void {
         coarse[0] = 8;
         coarse[1] = 3;
         state.writeBaseCell(coarseKey, 1, x * 2, y * 2, z * 2, coarse);
+      }
+    }
+  }
 
-        const fine = new Float32Array(CELL_FIELDS);
-        fine[0] = 1;
-        fine[1] = 5;
-        state.writeBaseCell(fineKey, 0, 8 + x, y, z, fine);
+  for (const fineKey of fineKeys) {
+    const parts = fineKey.split(":")[1].split(",").map(Number);
+    const baseX = parts[0] * 4;
+    const baseY = parts[1] * 4;
+    const baseZ = parts[2] * 4;
+    for (let z = 0; z < 4; z++) {
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          const fine = new Float32Array(CELL_FIELDS);
+          fine[0] = 1;
+          fine[1] = 5;
+          state.writeBaseCell(fineKey, 0, baseX + x, baseY + y, baseZ + z, fine);
+        }
       }
     }
   }
@@ -44,13 +56,13 @@ export function runInfinityScaleMixedLODCPURegression(): void {
     requestedSimulationCount: 1,
     selectedSimulationCount: 1,
     maxSimulatingChunks: 1,
-    boundaryReadChunks: [fineKey],
-    boundaryReadCount: 1,
-    boundaryReadRelations: [{
-      sourceChunk: fineKey,
+    boundaryReadChunks: [...fineKeys],
+    boundaryReadCount: fineKeys.length,
+    boundaryReadRelations: fineKeys.map(sourceChunk => ({
+      sourceChunk,
       targetChunk: coarseKey,
-      relation: "fine-to-coarse",
-    }],
+      relation: "fine-to-coarse" as const,
+    })),
     simulationCellCount: 64,
     boundaryReadCellCount: 64,
     localExecutionLayers: 1,
@@ -96,9 +108,9 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   if (result.executedCells !== 64) {
     throw new Error(`Expected 64 executed coarse cells, received ${result.executedCells}`);
   }
-  if (result.stagedBoundaryUpdates !== 4) {
+  if (result.stagedBoundaryUpdates !== 16) {
     throw new Error(
-      `Expected 4 face boundary updates for the covered fine face, received ${result.stagedBoundaryUpdates}`,
+      `Expected 16 boundary updates from four fine neighbors, received ${result.stagedBoundaryUpdates}`,
     );
   }
   if (!result.transactionReady) {
@@ -106,7 +118,7 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   }
 
   const staged = transaction.synchronization.getStagedUpdates();
-  if (staged.length !== 4 || staged.some(update => update.sourceCells.length !== 4)) {
+  if (staged.length !== 16 || staged.some(update => update.sourceCells.length !== 4)) {
     throw new Error("Expected ratio-2 face restriction to use exactly four source cells");
   }
 
