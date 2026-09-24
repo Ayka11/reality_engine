@@ -14,6 +14,8 @@ import { runInfinityScaleLODTransferInvariantRegression } from "./InfinityScaleL
 import { runInfinityScaleGPUBoundaryTransferContractRegression } from "./InfinityScaleGPUBoundaryTransferContract.regression";
 import { runInfinityScaleAdaptiveStabilityRegression } from "./InfinityScaleAdaptiveStability.regression";
 import { runInfinityScaleAdaptiveEndToEndRegression } from "./InfinityScaleAdaptiveEndToEnd.regression";
+import { runInfinityScalePredictionEngineRegression } from "./InfinityScalePredictionEngine.regression";
+import { runInfinityScaleResolutionGoalRegistryRegression } from "./InfinityScaleResolutionGoalRegistry.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -36,6 +38,8 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["mixed-lod-multi-frame", runInfinityScaleMixedLODMultiFrameRegression],
     ["adaptive-stability-anti-thrashing", runInfinityScaleAdaptiveStabilityRegression],
     ["adaptive-end-to-end", runInfinityScaleAdaptiveEndToEndRegression],
+    ["predictive-resolution-engine", runInfinityScalePredictionEngineRegression],
+    ["goal-directed-resolution-registry", runInfinityScaleResolutionGoalRegistryRegression],
   ];
 
   const results: InfinityScaleRegressionResult[] = [];
