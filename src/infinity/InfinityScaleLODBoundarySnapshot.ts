@@ -14,6 +14,12 @@ export interface InfinityScaleLODTransferSample {
   value: Float32Array;
 }
 
+export interface InfinityScaleLODBoundaryCoverage {
+  requiredSourceChunks: string[];
+  missingSourceChunks: string[];
+  complete: boolean;
+}
+
 /**
  * Immutable read-only boundary snapshot.
  *
@@ -56,11 +62,42 @@ export class InfinityScaleLODBoundarySnapshot {
       if (source) chunks.push(source);
     }
 
-    return new InfinityScaleLODBoundarySnapshot(specs.map(spec => ({ ...spec })), chunks, revision, chunkSize);
+    return new InfinityScaleLODBoundarySnapshot(
+      specs.map(spec => ({ ...spec })),
+      chunks,
+      revision,
+      chunkSize,
+    );
   }
 
   hasSourceChunk(key: string): boolean {
     return this.chunks.has(key);
+  }
+
+  /**
+   * Returns an explicit coverage report for every source chunk required by
+   * the immutable transfer contract. A missing source is a hard execution
+   * error; local solvers must not silently fall back to mutable or stale state.
+   */
+  getCoverage(): InfinityScaleLODBoundaryCoverage {
+    const requiredSourceChunks = [...new Set(this.specs.map(spec => spec.targetChunk))].sort();
+    const missingSourceChunks = requiredSourceChunks.filter(
+      key => !this.chunks.has(key),
+    );
+    return {
+      requiredSourceChunks,
+      missingSourceChunks,
+      complete: missingSourceChunks.length === 0,
+    };
+  }
+
+  assertCoverage(): void {
+    const coverage = this.getCoverage();
+    if (!coverage.complete) {
+      throw new Error(
+        `Infinity Scale mixed-LOD boundary snapshot is incomplete; missing source chunks: ${coverage.missingSourceChunks.join(", ")}`,
+      );
+    }
   }
 
   /**
@@ -101,9 +138,6 @@ export class InfinityScaleLODBoundarySnapshot {
     }
 
     if (spec.readOperation === "restriction") {
-      // The dependency is finer than the local coarse owner. For a
-      // stencil coordinate outside local ownership, the fine ghost block
-      // begins at that dependency coordinate, aligned to the fine grid.
       const sourceScale = source.scale;
       const fineBaseX = Math.floor(x / sourceScale) * sourceScale;
       const fineBaseY = Math.floor(y / sourceScale) * sourceScale;
