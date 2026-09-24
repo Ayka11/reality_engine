@@ -36,6 +36,7 @@ import { runInfinityScaleBenchmarkMatrixRegression } from "./InfinityScaleBenchm
 import { runInfinityScaleScientificEvaluationReportRegression } from "./InfinityScaleScientificEvaluationReport.regression";
 import { runInfinityScaleFinalAdaptiveResolutionValidationRegression } from "./InfinityScaleFinalAdaptiveResolutionValidation.regression";
 import { runInfinityScaleAdaptiveRuntimeRegression } from "./InfinityScaleAdaptiveRuntime.regression";
+import { runInfinityScaleAdaptiveGlobalFrameBridgeRegression } from "./InfinityScaleAdaptiveGlobalFrameBridge.regression";
 
 export interface InfinityScaleRegressionResult { name: string; passed: boolean; }
 
@@ -80,6 +81,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["scientific-evaluation-report", runInfinityScaleScientificEvaluationReportRegression],
     ["final-adaptive-resolution-validation", runInfinityScaleFinalAdaptiveResolutionValidationRegression],
     ["adaptive-runtime-integration", runInfinityScaleAdaptiveRuntimeRegression],
+    ["adaptive-global-frame-bridge", runInfinityScaleAdaptiveGlobalFrameBridgeRegression],
   ];
   const results: InfinityScaleRegressionResult[] = [];
   for (const [name, test] of tests) {
