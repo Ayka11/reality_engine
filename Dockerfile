@@ -1,18 +1,17 @@
-# HuggingFace Spaces - Reality Engine deployment
-FROM node:18-slim
+# Hugging Face Spaces Docker deployment
+FROM node:20-bookworm-slim
 
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-
 RUN npm ci
 
 COPY . .
 
 RUN npm run build
+RUN npm install --global serve
 
-RUN npm install -g serve
-
+ENV PORT=7860
 EXPOSE 7860
 
-CMD ["sh", "-c", "node server/signalling-server.js & serve dist -p 7860"]
+CMD ["sh", "-c", "node server/signalling-server.js & exec serve dist -l 7860"]
