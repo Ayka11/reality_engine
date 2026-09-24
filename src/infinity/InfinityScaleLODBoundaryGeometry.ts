@@ -1,5 +1,33 @@
 import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
 
+export function validateInfinityScaleBoundaryChunks(
+  spec: InfinityScaleBoundaryTransferSpec,
+  chunkSize = 32,
+): boolean {
+  const source = chunkRange(spec.sourceChunk, chunkSize);
+  const target = chunkRange(spec.targetChunk, chunkSize);
+  return (
+    (source.maxX + 1 === target.minX &&
+      Math.max(source.minY, target.minY) <= Math.min(source.maxY, target.maxY) &&
+      Math.max(source.minZ, target.minZ) <= Math.min(source.maxZ, target.maxZ)) ||
+    (target.maxX + 1 === source.minX &&
+      Math.max(source.minY, target.minY) <= Math.min(source.maxY, target.maxY) &&
+      Math.max(source.minZ, target.minZ) <= Math.min(source.maxZ, target.maxZ)) ||
+    (source.maxY + 1 === target.minY &&
+      Math.max(source.minX, target.minX) <= Math.min(source.maxX, target.maxX) &&
+      Math.max(source.minZ, target.minZ) <= Math.min(source.maxZ, target.maxZ)) ||
+    (target.maxY + 1 === source.minY &&
+      Math.max(source.minX, target.minX) <= Math.min(source.maxX, target.maxX) &&
+      Math.max(source.minZ, target.minZ) <= Math.min(source.maxZ, target.maxZ)) ||
+    (source.maxZ + 1 === target.minZ &&
+      Math.max(source.minX, target.minX) <= Math.min(source.maxX, target.maxX) &&
+      Math.max(source.minY, target.minY) <= Math.min(source.maxY, target.maxY)) ||
+    (target.maxZ + 1 === source.minZ &&
+      Math.max(source.minX, target.minX) <= Math.min(source.maxX, target.maxX) &&
+      Math.max(source.minY, target.minY) <= Math.min(source.maxY, target.maxY))
+  );
+}
+
 export interface InfinityScaleBoundaryGeometry {
   axis: "x" | "y" | "z";
   direction: -1 | 1;
