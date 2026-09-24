@@ -2,15 +2,16 @@ import type { InfinityScalePredictiveAdaptiveInput, InfinityScalePredictiveAdapt
 import { InfinityScalePredictiveAdaptiveController } from "./InfinityScalePredictiveAdaptiveController";
 import type { InfinityScaleAdaptiveFeedbackSample } from "./InfinityScaleAdaptiveFeedbackLoop";
 import { InfinityScaleRuntimePredictionFeedback, type InfinityScaleRuntimePredictionFeedback as RuntimePrediction } from "./InfinityScaleRuntimePredictionFeedback";
+import type { InfinityScaleCausalAdaptiveAttribution } from "./InfinityScaleCausalAdaptiveAttribution";
 
 export interface InfinityScaleClosedLoopAdaptiveInput extends InfinityScalePredictiveAdaptiveInput {
-  runtimeError: number;
+  runtimeError: number;\n  causalAttribution?: InfinityScaleCausalAdaptiveAttribution;
 }
 
 export interface InfinityScaleClosedLoopAdaptiveRecommendation extends InfinityScalePredictiveAdaptiveRecommendation {
   feedbackPrediction: RuntimePrediction;
   transitionAdjustedError: number;
-  transitionPenalty: number;
+  transitionPenalty: number;\n  causalPredictiveError: number;\n  causalAttributionHash?: string;
 }
 
 export interface InfinityScaleClosedLoopPostCommitInput {
