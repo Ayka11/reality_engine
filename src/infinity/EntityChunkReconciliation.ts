@@ -70,7 +70,7 @@ export class EntityChunkReconciliation {
     for (const component of components) {
       const centroid = component.centroid;
       const sourceEntityIds = componentSourceIds.get(component.id) ?? [];
-      if (component.touchesReadBoundary) {
+      if (component.touchesReadBoundary || component.touchesMixedLODBoundary) {
         proposals.push({
           componentId: component.id,
           existingEntityId: null,
