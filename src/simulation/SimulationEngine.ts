@@ -23,6 +23,7 @@ import { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChu
 import { InfinityScaleLODState } from '../infinity/InfinityScaleLODState';
 import { InfinityScaleLODTransfer } from '../infinity/InfinityScaleLODTransfer';
 import { InfinityScaleLODBoundarySnapshot } from '../infinity/InfinityScaleLODBoundarySnapshot';
+import { validateInfinityScaleMixedLOD, type InfinityScaleMixedLODValidation } from '../infinity/InfinityScaleMixedLODValidation';
 import {
   advanceInfinityScaleGlobalFrame,
   assertInfinityScaleGlobalFramePlan,
@@ -81,6 +82,18 @@ export class SimulationEngine {
 
   get tick() { return this._tick; }
   get gpuActive() { return this._gpuReady; }
+
+  getInfinityScaleMixedLODValidation(): InfinityScaleMixedLODValidation | null {
+    const plan = this._infinityExecutionPlan;
+    if (!plan) return null;
+    const context = new InfinityScaleChunkExecutionContext(
+      plan,
+      this.grid.W,
+      this.grid.H,
+      this.grid.D,
+    );
+    return validateInfinityScaleMixedLOD(plan, context);
+  }
 
   getInfinityScaleExecutionCapabilities(): InfinityScaleExecutionCapabilities {
     return {
