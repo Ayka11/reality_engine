@@ -247,6 +247,7 @@ export class SimulationEngine {
             this.grid,
             clampedDt,
             executionContext,
+            boundarySnapshot,
           );
           this.entityLayer.tickChunks(
             this.grid,
