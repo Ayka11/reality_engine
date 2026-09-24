@@ -1,5 +1,6 @@
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
+import type { InfinityScaleExecutionCapabilities } from "./InfinityScaleExecutionAdapter";
 
 /**
  * Transactional control-plane contract for one Infinity Scale simulation frame.
@@ -29,6 +30,7 @@ export interface InfinityScaleGlobalExecutionFrame {
   committed: boolean;
   finalized: boolean;
   ownershipFingerprint: string;
+  capabilityFingerprint: string;
 }
 
 export function beginInfinityScaleGlobalFrame(
@@ -47,7 +49,32 @@ export function beginInfinityScaleGlobalFrame(
     committed: false,
     finalized: false,
     ownershipFingerprint: fingerprintPlan(plan),
+    capabilityFingerprint: fingerprintCapabilities(plan),
   };
+}
+
+function fingerprintCapabilities(plan: InfinityScaleExecutionPlan): string {
+  return [
+    plan.mode,
+    plan.selectiveCpuReady,
+    plan.selectiveGpuReady,
+    plan.gpuPhysicsReady,
+    plan.lodBoundaryTransferReady,
+    plan.entityExecutionReady,
+    plan.agentMigrationReady,
+  ].join("|");
+}
+
+export function fingerprintRuntimeCapabilities(
+  capabilities: InfinityScaleExecutionCapabilities,
+): string {
+  return [
+    capabilities.selectiveCpuReady,
+    capabilities.selectiveGpuReady,
+    capabilities.gpuPhysicsReady,
+    capabilities.lodBoundaryTransferReady,
+    capabilities.mixedLodExecutionReady,
+  ].join("|");
 }
 
 function fingerprintPlan(plan: InfinityScaleExecutionPlan): string {
@@ -68,6 +95,7 @@ function fingerprintPlan(plan: InfinityScaleExecutionPlan): string {
 export function validateInfinityScaleGlobalFrameCommit(
   frame: InfinityScaleGlobalExecutionFrame,
   plan: InfinityScaleExecutionPlan,
+  capabilities?: InfinityScaleExecutionCapabilities,
 ): void {
   if (frame.planRevision !== plan.revision) {
     throw new Error("Infinity Scale commit rejected: plan revision changed");
@@ -77,6 +105,15 @@ export function validateInfinityScaleGlobalFrameCommit(
   }
   if (frame.finalized) {
     throw new Error("Infinity Scale commit rejected: frame already finalized");
+  }
+  if (capabilities && frame.capabilityFingerprint !== fingerprintCapabilities({
+    ...plan,
+    selectiveCpuReady: capabilities.selectiveCpuReady,
+    selectiveGpuReady: capabilities.selectiveGpuReady,
+    gpuPhysicsReady: capabilities.gpuPhysicsReady,
+    lodBoundaryTransferReady: capabilities.lodBoundaryTransferReady,
+  })) {
+    throw new Error("Infinity Scale commit rejected: execution capabilities changed");
   }
 }
 
