@@ -73,12 +73,12 @@ function spec(
 export function runInfinityScaleLODBoundaryRegression(): void {
   // Geometry validation must use the same canonical face definition as the mapper.
   {
-    const s = spec(key(0, 8), key(1, 0), "fine-to-coarse", 0, 1);
-    const valid = validateInfinityScaleBoundaryGeometry(s, [7, 2, 2], CHUNK);
-    if (!valid || valid.axis !== "x" || valid.direction !== 1) {
+    const s = spec(key(0, 0), key(1, 1), "fine-to-coarse", 0, 1);
+    const valid = validateInfinityScaleBoundaryGeometry(s, [8, 2, 2], CHUNK);
+    if (!valid || valid.axis !== "x" || valid.direction !== -1) {
       throw new Error("Infinity Scale regression failed: canonical boundary geometry validation");
     }
-    const interior = validateInfinityScaleBoundaryGeometry(s, [6, 2, 2], CHUNK);
+    const interior = validateInfinityScaleBoundaryGeometry(s, [9, 2, 2], CHUNK);
     if (interior !== null) {
       throw new Error("Infinity Scale regression failed: interior target cell accepted as boundary");
     }
