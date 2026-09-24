@@ -49,4 +49,17 @@ jobs:
         run: npm run validate:infinity-scale:integrity
 
       - name: Emit deterministic RC package record
-        run: npm run package:infinity-scale:rc
+        run: npm run package:infinity-scale:rc > infinity-scale-rc-package.json
+
+      - name: Emit release record
+        run: |
+          node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('infinity-scale-rc-package.json','utf8')); const r={releaseCandidate:p.package, packageVersion:p.packageVersion, sourceCommit:p.sourceCommit, branch:p.reproducibility.branch, validationHash:p.reproducibility.validationHash, provenanceHash:p.reproducibility.provenanceHash, status:p.status}; fs.writeFileSync('infinity-scale-rc-release-record.json', JSON.stringify(r,null,2)+'\\n');"
+
+      - name: Upload RC release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: infinity-scale-rc1-release-evidence
+          path: |
+            infinity-scale-rc-package.json
+            infinity-scale-rc-release-record.json
+          if-no-files-found: error
