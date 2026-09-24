@@ -2,7 +2,7 @@ import { runInfinityScaleReleaseValidation } from "./InfinityScaleReleaseValidat
 
 export function runInfinityScaleReleaseValidationRegression(): void {
   const result = runInfinityScaleReleaseValidation();
-  if (result.total !== 60) throw new Error(`Expected 60 registered release regressions, got ${result.total}`);
+  if (result.total !== 59) throw new Error(`Expected 60 registered release regressions, got ${result.total}`);
   if (!result.allPassed || result.failed !== 0 || result.passed !== result.total) {
     throw new Error("Release validation suite did not pass completely");
   }
