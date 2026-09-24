@@ -151,6 +151,70 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     throw new Error("Unified transaction did not mark itself committed");
   }
 
+  // Negative integrity test: remove one mixed-LOD staged update and ensure
+  // the unified barrier refuses to commit an incomplete boundary.
+  const integrityFrame: InfinityScaleGlobalExecutionFrame = {
+    ...frame,
+    revision: 5,
+    phase: "local-execution",
+    committed: false,
+    finalized: false,
+  };
+  const integrityPlan = { ...plan, revision: 5 };
+  const integrityState = new InfinityScaleLODState(4);
+  integrityState.ensureChunk(coarseKey, 1);
+  integrityState.ensureChunk(fineKey, 0);
+  const integrityContext = new InfinityScaleChunkExecutionContext(
+    integrityPlan,
+    12,
+    8,
+    8,
+    4,
+  );
+  const integrityLod = beginInfinityScaleGlobalLODTransaction(
+    integrityFrame,
+    integrityPlan,
+    integrityState,
+  );
+  const integrityTx = beginInfinityScaleUnifiedTransaction(
+    integrityFrame,
+    integrityPlan,
+    integrityLod,
+    entityLayer,
+    agents,
+    grid,
+    integrityContext,
+  );
+
+  const { InfinityScaleMixedLODCPUExecutor } = require("./InfinityScaleMixedLODCPUExecutor") as typeof import("./InfinityScaleMixedLODCPUExecutor");
+  const executor = new InfinityScaleMixedLODCPUExecutor(integrityState, integrityContext);
+  executor.stageBoundaryTransfers(integrityLod);
+  const staged = integrityLod.synchronization.getStagedUpdates();
+  if (staged.length < 2) {
+    throw new Error("Expected multiple staged mixed-LOD boundary updates for integrity regression");
+  }
+  integrityLod.synchronization.rollback();
+  for (const update of staged.slice(0, staged.length - 1)) {
+    integrityLod.synchronization.stageTransfer(
+      {
+        sourceChunk: update.sourceChunk,
+        targetChunk: update.targetChunk,
+        relation: update.relation,
+        sourceLevel: Number(update.sourceChunk.split(":")[0]),
+        targetLevel: Number(update.targetChunk.split(":")[0]),
+        refinementRatio: 2,
+        operation: update.relation === "coarse-to-fine" ? "prolongation" : "restriction",
+        readOperation: update.relation === "coarse-to-fine" ? "restriction" : "prolongation",
+      },
+      update.targetCell,
+      update.sourceCells,
+    );
+  }
+  const incomplete = validateInfinityScaleUnifiedTransaction(integrityTx, integrityFrame);
+  if (incomplete.readyToCommit || !incomplete.reasons.some(reason => reason.includes("missing mixed-LOD boundary updates"))) {
+    throw new Error("Expected incomplete mixed-LOD boundary staging to block unified commit");
+  }
+
   // A second transaction with two divergent destinations for the same agent
   // must be rejected before any LOD/entity/agent mutation occurs.
   const frame2: InfinityScaleGlobalExecutionFrame = {
