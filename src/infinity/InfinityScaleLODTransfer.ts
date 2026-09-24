@@ -96,7 +96,7 @@ export class InfinityScaleLODTransfer {
 
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
-      if (policy === "intensive" || policy === "discrete") {
+      if (policy === "intensive" || policy === "extensive" || policy === "circular" || policy === "discrete") {
         target[field] = source[field];
         transferredFields.push(field);
       } else {
@@ -156,7 +156,8 @@ export class InfinityScaleLODTransfer {
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
       if (policy === "circular") {
-        skippedFields.push(field);
+        for (const target of targets) target[field] = source[field];
+        transferredFields.push(field);
         continue;
       }
 
@@ -165,7 +166,10 @@ export class InfinityScaleLODTransfer {
         continue;
       }
 
-      for (const target of targets) target[field] = source[field];
+      const childValue = policy === "extensive"
+        ? (source[field] ?? 0) / expected
+        : (source[field] ?? 0);
+      for (const target of targets) target[field] = childValue;
       transferredFields.push(field);
     }
 
@@ -284,13 +288,6 @@ export class InfinityScaleLODTransfer {
   }
 
   /**
-   * Deterministic numerical invariant for a fine->coarse restriction.
-   *
-   * Intensive fields must equal the arithmetic volume average; extensive
-   * fields must preserve the sum over the represented fine-cell volume.
-   * This is a pure invariant check and does not mutate either input.
-   */
-  /**
    * Round-trip invariant for an intensive field under baseline
    * coarse-to-fine prolongation: every child must reproduce the coarse value.
    */
@@ -328,7 +325,9 @@ export class InfinityScaleLODTransfer {
         continue;
       }
 
-      const expectedValue = source[field] ?? 0;
+      const expectedValue = policy === "extensive"
+        ? (source[field] ?? 0) / expected
+        : (source[field] ?? 0);
       for (const target of targets) {
         if (target.length !== CELL_FIELDS) {
           throw new Error("Infinity Scale prolongation target dimensions are invalid");
