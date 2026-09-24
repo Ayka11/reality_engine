@@ -1,5 +1,5 @@
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
-import { validateInfinityScaleBoundaryGeometry } from "./InfinityScaleLODBoundaryGeometry";
+import { isInfinityScaleBoundaryCell } from "./InfinityScaleLODBoundaryCellMapper";
 
 export interface ExecutionCellRange {
   minX: number;
@@ -204,7 +204,7 @@ export class InfinityScaleChunkExecutionContext {
     for (const sourceRelations of this.boundaryRelationsBySource.values()) {
       for (const relation of sourceRelations) {
         const spec = this.relationToTransferSpec(relation);
-        if (validateInfinityScaleBoundaryGeometry(spec, [x, y, z], this.chunkSize)) {
+        if (isInfinityScaleBoundaryCell(spec, [x, y, z], this.chunkSize)) {
           relations.push({ ...relation });
         }
       }
