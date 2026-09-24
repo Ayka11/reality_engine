@@ -156,6 +156,7 @@ export class InfinityScaleMixedLODCPUExecutor {
     spec: InfinityScaleBoundaryTransferSpec,
   ): Array<[number, number, number]> {
     const sourceRange = this.rangeForChunk(spec.sourceChunk);
+    const targetScale = 2 ** spec.targetLevel;
     const cells: Array<[number, number, number]> = [];
 
     const xOverlapMin = Math.max(targetRange.minX, sourceRange.minX);
@@ -165,30 +166,37 @@ export class InfinityScaleMixedLODCPUExecutor {
     const zOverlapMin = Math.max(targetRange.minZ, sourceRange.minZ);
     const zOverlapMax = Math.min(targetRange.maxZ, sourceRange.maxZ);
 
+    const pushFace = (
+      axis: 0 | 1 | 2,
+      coordinate: number,
+      minU: number,
+      maxU: number,
+      minV: number,
+      maxV: number,
+    ) => {
+      for (let v = minV; v <= maxV; v += targetScale) {
+        for (let u = minU; u <= maxU; u += targetScale) {
+          const cell: [number, number, number] =
+            axis === 0 ? [coordinate, u, v] :
+            axis === 1 ? [u, coordinate, v] :
+            [u, v, coordinate];
+          cells.push(cell);
+        }
+      }
+    };
+
     if (targetRange.maxX + 1 === sourceRange.minX) {
-      for (let z = zOverlapMin; z <= zOverlapMax; z++)
-      for (let y = yOverlapMin; y <= yOverlapMax; y++)
-        cells.push([targetRange.maxX, y, z]);
+      pushFace(0, targetRange.maxX, yOverlapMin, yOverlapMax, zOverlapMin, zOverlapMax);
     } else if (sourceRange.maxX + 1 === targetRange.minX) {
-      for (let z = zOverlapMin; z <= zOverlapMax; z++)
-      for (let y = yOverlapMin; y <= yOverlapMax; y++)
-        cells.push([targetRange.minX, y, z]);
+      pushFace(0, targetRange.minX, yOverlapMin, yOverlapMax, zOverlapMin, zOverlapMax);
     } else if (targetRange.maxY + 1 === sourceRange.minY) {
-      for (let z = zOverlapMin; z <= zOverlapMax; z++)
-      for (let x = xOverlapMin; x <= xOverlapMax; x++)
-        cells.push([x, targetRange.maxY, z]);
+      pushFace(1, targetRange.maxY, xOverlapMin, xOverlapMax, zOverlapMin, zOverlapMax);
     } else if (sourceRange.maxY + 1 === targetRange.minY) {
-      for (let z = zOverlapMin; z <= zOverlapMax; z++)
-      for (let x = xOverlapMin; x <= xOverlapMax; x++)
-        cells.push([x, targetRange.minY, z]);
+      pushFace(1, targetRange.minY, xOverlapMin, xOverlapMax, zOverlapMin, zOverlapMax);
     } else if (targetRange.maxZ + 1 === sourceRange.minZ) {
-      for (let y = yOverlapMin; y <= yOverlapMax; y++)
-      for (let x = xOverlapMin; x <= xOverlapMax; x++)
-        cells.push([x, y, targetRange.maxZ]);
+      pushFace(2, targetRange.maxZ, xOverlapMin, xOverlapMax, yOverlapMin, yOverlapMax);
     } else if (sourceRange.maxZ + 1 === targetRange.minZ) {
-      for (let y = yOverlapMin; y <= yOverlapMax; y++)
-      for (let x = xOverlapMin; x <= xOverlapMax; x++)
-        cells.push([x, y, targetRange.minZ]);
+      pushFace(2, targetRange.minZ, xOverlapMin, xOverlapMax, yOverlapMin, yOverlapMax);
     }
 
     return cells;
