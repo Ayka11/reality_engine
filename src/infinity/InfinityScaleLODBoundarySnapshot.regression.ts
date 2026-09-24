@@ -1,6 +1,7 @@
 import { F } from "../core/CellState";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import { InfinityScaleLODBoundarySnapshot } from "./InfinityScaleLODBoundarySnapshot";
+import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
 import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
 
 const CHUNK = 4;
@@ -182,6 +183,68 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 5, CHUNK);
     const out = assertNotNull(snapshot.read(s, [15, 1, 1]), "coarse-to-fine ratio 4");
     assertEqual(out[F.ENERGY], 23, "coarse-to-fine ratio 4 energy");
+  }
+
+  // Numerical conservation: fine -> coarse restriction preserves extensive
+  // quantities as a sum and intensive quantities as a volume average.
+  {
+    const ratio = 2;
+    const sourceLevel = 0;
+    const targetLevel = 1;
+    const sources = Array.from({ length: ratio ** 3 }, (_, i) => {
+      const out = cell(i + 1);
+      out[F.ENERGY] = i + 1;
+      out[F.DENSITY] = 100 + i;
+      out[F.INFORMATION] = 2 * (i + 1);
+      return out;
+    });
+    const target = new Array<number>(24).fill(0);
+    InfinityScaleLODTransfer.restrict(sources, target, sourceLevel, targetLevel);
+
+    const invariant = InfinityScaleLODTransfer.validateRestrictionInvariant(
+      sources,
+      target,
+      sourceLevel,
+      targetLevel,
+    );
+    if (!invariant.valid) {
+      throw new Error(
+        `Infinity Scale regression failed: ratio-2 restriction invariant violated in fields ${invariant.violations.join(",")}`,
+      );
+    }
+    assertEqual(target[F.ENERGY], 36, "ratio-2 extensive energy");
+    assertEqual(target[F.INFORMATION], 72, "ratio-2 extensive information");
+    assertEqual(target[F.DENSITY], 103.5, "ratio-2 intensive density");
+  }
+
+  // Ratio 4 conservation: 64 fine cells must collapse to one coarse cell
+  // without losing extensive quantities.
+  {
+    const ratio = 4;
+    const sources = Array.from({ length: ratio ** 3 }, (_, i) => {
+      const out = cell(1);
+      out[F.ENERGY] = i + 1;
+      out[F.INFORMATION] = 3;
+      out[F.DENSITY] = 20 + (i % 4);
+      return out;
+    });
+    const target = new Array<number>(24).fill(0);
+    InfinityScaleLODTransfer.restrict(sources, target, 0, 2);
+
+    const invariant = InfinityScaleLODTransfer.validateRestrictionInvariant(
+      sources,
+      target,
+      0,
+      2,
+    );
+    if (!invariant.valid) {
+      throw new Error(
+        `Infinity Scale regression failed: ratio-4 restriction invariant violated in fields ${invariant.violations.join(",")}`,
+      );
+    }
+    assertEqual(target[F.ENERGY], 2080, "ratio-4 extensive energy");
+    assertEqual(target[F.INFORMATION], 192, "ratio-4 extensive information");
+    assertEqual(target[F.DENSITY], 21.5, "ratio-4 intensive density");
   }
 
   // Negative-side face: fine local x=[4..7], coarse neighbor x=[0..3].
