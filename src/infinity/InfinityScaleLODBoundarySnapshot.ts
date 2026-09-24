@@ -182,90 +182,87 @@ export class InfinityScaleLODBoundarySnapshot {
     const sourceScale = 2 ** spec.sourceLevel;
     const targetScale = 2 ** spec.targetLevel;
     const [x, y, z] = targetCell;
-
-    const face = resolveBoundaryFace(sourceRange, targetRange, x, y, z);
+    const face = resolveBoundaryReadFace(sourceRange, targetRange, x, y, z);
     if (!face) return null;
 
     const out = new Float32Array(CELL_FIELDS);
 
-    if (spec.readOperation === "copy" || spec.readOperation === "prolongation") {
-      // The local cell is on the source face. Read the adjacent dependency
-      // cell across that face, then map it into the dependency chunk's LOD.
-      const neighbor = shiftAcrossFace(
-        [x, y, z],
-        face,
-        1,
-      );
-      const lx = Math.floor((neighbor[0] - targetRange.minX) / sourceScale);
-      const ly = Math.floor((neighbor[1] - targetRange.minY) / sourceScale);
-      const lz = Math.floor((neighbor[2] - targetRange.minZ) / sourceScale);
+    // The solver asks for the dependency cell across the interface.
+    // For fine->coarse, that dependency is a fine face footprint matching
+    // the coarse cell's tangential extent, so restrict exactly ratio^2 cells.
+    if (spec.relation === "fine-to-coarse") {
+      const ratio = spec.refinementRatio;
+      const sourceFaceOrigin = [x, y, z] as [number, number, number];
+      const axis = face.axis === "x" ? 0 : face.axis === "y" ? 1 : 2;
+      const tangentialAxes = axis === 0 ? [1, 2] : axis === 1 ? [0, 2] : [0, 1];
 
+      sourceFaceOrigin[tangentialAxes[0]] =
+        Math.floor(sourceFaceOrigin[tangentialAxes[0]] / targetScale) * targetScale;
+      sourceFaceOrigin[tangentialAxes[1]] =
+        Math.floor(sourceFaceOrigin[tangentialAxes[1]] / targetScale) * targetScale;
+
+      const sources: Float32Array[] = [];
+      for (let b = 0; b < ratio; b++) {
+        for (let a = 0; a < ratio; a++) {
+          const coords: [number, number, number] = [...sourceFaceOrigin];
+          coords[tangentialAxes[0]] += a * sourceScale;
+          coords[tangentialAxes[1]] += b * sourceScale;
+          const lx = Math.floor((coords[0] - sourceRange.minX) / sourceScale);
+          const ly = Math.floor((coords[1] - sourceRange.minY) / sourceScale);
+          const lz = Math.floor((coords[2] - sourceRange.minZ) / sourceScale);
+          if (
+            lx < 0 || lx >= this.chunkSize ||
+            ly < 0 || ly >= this.chunkSize ||
+            lz < 0 || lz >= this.chunkSize
+          ) return null;
+          const offset =
+            ((lz * this.chunkSize * this.chunkSize) + ly * this.chunkSize + lx) * CELL_FIELDS;
+          const cell = new Float32Array(CELL_FIELDS);
+          cell.set(source.cells.subarray(offset, offset + CELL_FIELDS));
+          sources.push(cell);
+        }
+      }
+      InfinityScaleLODTransfer.restrictFace(
+        sources,
+        out,
+        spec.sourceLevel,
+        spec.targetLevel,
+      );
+      return out;
+    }
+
+    // For coarse->fine, the dependency is one coarse cell touching the
+    // interface. Move one base cell into the source side before mapping it
+    // into the coarse chunk.
+    if (spec.relation === "coarse-to-fine") {
+      const sourceCell = shiftAcrossFace(targetCell, face, -face.direction);
+      const lx = Math.floor((sourceCell[0] - sourceRange.minX) / sourceScale);
+      const ly = Math.floor((sourceCell[1] - sourceRange.minY) / sourceScale);
+      const lz = Math.floor((sourceCell[2] - sourceRange.minZ) / sourceScale);
       if (
         lx < 0 || lx >= this.chunkSize ||
         ly < 0 || ly >= this.chunkSize ||
         lz < 0 || lz >= this.chunkSize
       ) return null;
-
       const offset =
-        ((lz * this.chunkSize * this.chunkSize) +
-          ly * this.chunkSize +
-          lx) * CELL_FIELDS;
+        ((lz * this.chunkSize * this.chunkSize) + ly * this.chunkSize + lx) * CELL_FIELDS;
       out.set(source.cells.subarray(offset, offset + CELL_FIELDS));
       return out;
     }
 
-    if (spec.readOperation === "restriction") {
-      // The local source cell is coarse. Its face-adjacent neighbor on the
-      // fine dependency side occupies targetScale^3 base-space volume.
-      // Aggregate exactly the ratio^3 fine cells covering that neighbor cell.
-      const localOrigin: [number, number, number] = [
-        Math.floor(x / sourceScale) * sourceScale,
-        Math.floor(y / sourceScale) * sourceScale,
-        Math.floor(z / sourceScale) * sourceScale,
-      ];
-      const neighborOrigin = shiftAcrossFace(
-        localOrigin,
-        face,
-        sourceScale,
-      );
-      const ratio = spec.refinementRatio;
-      const fineCells: Float32Array[] = [];
-
-      for (let dz = 0; dz < ratio; dz++) {
-        for (let dy = 0; dy < ratio; dy++) {
-          for (let dx = 0; dx < ratio; dx++) {
-            const fx = neighborOrigin[0] + dx * sourceScale;
-            const fy = neighborOrigin[1] + dy * sourceScale;
-            const fz = neighborOrigin[2] + dz * sourceScale;
-            const flx = Math.floor((fx - targetRange.minX) / sourceScale);
-            const fly = Math.floor((fy - targetRange.minY) / sourceScale);
-            const flz = Math.floor((fz - targetRange.minZ) / sourceScale);
-
-            if (
-              flx < 0 || flx >= this.chunkSize ||
-              fly < 0 || fly >= this.chunkSize ||
-              flz < 0 || flz >= this.chunkSize
-            ) return null;
-
-            const fineOffset =
-              ((flz * this.chunkSize * this.chunkSize) +
-                fly * this.chunkSize +
-                flx) * CELL_FIELDS;
-            const cell = new Float32Array(CELL_FIELDS);
-            cell.set(source.cells.subarray(fineOffset, fineOffset + CELL_FIELDS));
-            fineCells.push(cell);
-          }
-        }
-      }
-
-      const numeric = new Array<number>(CELL_FIELDS).fill(0);
-      InfinityScaleLODTransfer.restrict(
-        fineCells,
-        numeric,
-        spec.sourceLevel,
-        spec.targetLevel,
-      );
-      out.set(numeric);
+    if (spec.relation === "same-level") {
+      const sourceCell = shiftAcrossFace(targetCell, -face.direction as BoundaryFace, -1);
+      const lx = sourceCell[0] - sourceRange.minX;
+      const ly = sourceCell[1] - sourceRange.minY;
+      const lz = sourceCell[2] - sourceRange.minZ;
+      if (
+        lx < 0 || lx >= this.chunkSize ||
+        ly < 0 || ly >= this.chunkSize ||
+        lz < 0 || lz >= this.chunkSize
+      ) return null;
+      const offset =
+        ((lz * this.chunkSize * this.chunkSize) + ly * this.chunkSize + lx) * CELL_FIELDS;
+      out.set(source.cells.subarray(offset, offset + CELL_FIELDS));
       return out;
     }
 
@@ -313,6 +310,22 @@ function chunkRangeForKey(
   };
 }
 
+
+function resolveBoundaryReadFace(
+  source: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number },
+  target: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number },
+  x: number,
+  y: number,
+  z: number,
+): BoundaryFace | null {
+  if (source.maxX + 1 === target.minX && x === target.minX && y >= target.minY && y <= target.maxY && z >= target.minZ && z <= target.maxZ) return { axis: "x", direction: 1 };
+  if (target.maxX + 1 === source.minX && x === source.minX && y >= target.minY && y <= target.maxY && z >= target.minZ && z <= target.maxZ) return { axis: "x", direction: -1 };
+  if (source.maxY + 1 === target.minY && y === target.minY && x >= target.minX && x <= target.maxX && z >= target.minZ && z <= target.maxZ) return { axis: "y", direction: 1 };
+  if (target.maxY + 1 === source.minY && y === source.minY && x >= target.minX && x <= target.maxX && z >= target.minZ && z <= target.maxZ) return { axis: "y", direction: -1 };
+  if (source.maxZ + 1 === target.minZ && z === target.minZ && x >= target.minX && x <= target.maxX && y >= target.minY && y <= target.maxY) return { axis: "z", direction: 1 };
+  if (target.maxZ + 1 === source.minZ && z === source.minZ && x >= target.minX && x <= target.maxX && y >= target.minY && y <= target.maxY) return { axis: "z", direction: -1 };
+  return null;
+}
 function resolveBoundaryFace(
   source: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number },
   target: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number },
