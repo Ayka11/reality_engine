@@ -53,6 +53,20 @@ export class AgentSystem {
   readonly maxAgents = 64;
   private pendingMigrations: AgentMigrationRequest[] = [];
 
+  spawnAt(
+    x: number,
+    y: number,
+    z: number,
+    behavior: AgentBehavior = "explorer",
+    energy = 200,
+  ): number {
+    if (this.agents.size >= this.maxAgents) {
+      throw new Error("Maximum agent count reached");
+    }
+    this._spawn(x, y, z, behavior, energy);
+    return _agentId - 1;
+  }
+
   queueMigrationRequest(request: AgentMigrationRequest): void {
     this.pendingMigrations.push({
       ...request,
