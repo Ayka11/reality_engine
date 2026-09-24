@@ -123,7 +123,7 @@ export class InfinityScaleLODBoundarySnapshot {
                 .filter(spec => spec.sourceLevel !== spec.targetLevel);
 
               for (const spec of specs) {
-                if (!this.hasSourceChunk(spec.targetChunk) || !this.read(spec, [x, y, z])) {
+                if (!this.hasSourceChunk(spec.sourceChunk) || !this.read(spec, [x, y, z])) {
                   invalidBoundaryReads++;
                   if (!firstInvalidRead) {
                     firstInvalidRead = {
