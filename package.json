@@ -7,7 +7,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "netlify deploy --prod --dir=dist",
-    "hf:smoke": "node scripts/hf-smoke-check.mjs"
+    "hf:smoke": "node scripts/hf-smoke-check.mjs",
+    "build:hf:cpu": "npm run build",
+    "hf:cpu:check": "node scripts/hf-cpu-check.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
