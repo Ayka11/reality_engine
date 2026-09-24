@@ -21,7 +21,7 @@ export function observeInfinityScalePostCommitRuntime(
     errorBefore: input.errorBefore,
     errorAfter: input.errorAfter,
     errorDelta: input.errorAfter - input.errorBefore,
-    topologyChanged: input.runtime.topologyRevision > input.runtime.stateRevision - 1,
+    topologyChanged: input.runtime.topologyChanged,
     observationHash: hashObservation(input),
   };
   feedback.observePostCommit(observation);
