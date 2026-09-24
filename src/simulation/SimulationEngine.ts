@@ -120,9 +120,10 @@ export class SimulationEngine {
       selectiveCpuReady: true,
       selectiveGpuReady: this._gpuReady,
       gpuPhysicsReady: this._gpuReady,
-      // The transfer kernel exists, but dense-solver mixed-LOD field
-      // synchronization is not yet certified as a complete execution path.
-      lodBoundaryTransferReady: false,
+      // Structural mixed-LOD readiness is certified by geometry, topology and
+      // reconciliation validation. Actual field values are still validated by
+      // the staged synchronization transaction before commit.
+      lodBoundaryTransferReady: validation !== null && validation.ready,
       mixedLodExecutionReady,
     };
   }
@@ -229,6 +230,21 @@ export class SimulationEngine {
         : null;
     if (frameState && frameContext) {
       assertInfinityScaleGlobalFramePlan(frameState, selectivePlan!, frameContext);
+
+      // Establish the entity/topology evidence before the runtime capability
+      // gate. This makes mixed-LOD readiness a property of the actual frame,
+      // not merely of the installed plan.
+      const initialBoundarySnapshot =
+        selectivePlan!.boundaryReadRelations.some(
+          relation => relation.relation !== 'same-level',
+        )
+          ? this.captureInfinityScaleBoundarySnapshot(frameContext)
+          : undefined;
+      this.entityLayer.prepareChunkExecution(
+        this.grid,
+        frameContext,
+        initialBoundarySnapshot,
+      );
 
       const currentCapabilities = this.getInfinityScaleExecutionCapabilities();
       const hasMixedLodBoundary = selectivePlan!.boundaryReadRelations.some(
