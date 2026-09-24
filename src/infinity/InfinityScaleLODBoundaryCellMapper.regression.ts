@@ -34,7 +34,7 @@ export function runInfinityScaleLODBoundaryCellMapperRegression(): void {
   }> = [
     {
       name: "fine-to-coarse-x+",
-      transfer: spec("0:4,0,0", "1:0,0,0", 0, 1, "fine-to-coarse"),
+      transfer: spec("0:8,0,0", "1:0,0,0", 0, 1, "fine-to-coarse"),
       expectedTargetCount: 4,
       expectedSourceCount: 4,
     },
@@ -46,13 +46,13 @@ export function runInfinityScaleLODBoundaryCellMapperRegression(): void {
     },
     {
       name: "fine-to-coarse-y-",
-      transfer: spec("0:0,0,0", "1:0,0,1", 0, 1, "fine-to-coarse"),
+      transfer: spec("0:0,8,0", "1:0,0,0", 0, 1, "fine-to-coarse"),
       expectedTargetCount: 4,
       expectedSourceCount: 4,
     },
     {
       name: "fine-to-coarse-z+",
-      transfer: spec("0:0,0,4", "1:0,0,0", 0, 1, "fine-to-coarse"),
+      transfer: spec("0:0,0,8", "1:0,0,0", 0, 1, "fine-to-coarse"),
       expectedTargetCount: 4,
       expectedSourceCount: 4,
     },
@@ -144,7 +144,7 @@ export function runInfinityScaleLODBoundaryCellMapperRegression(): void {
   }
 
   // Negative-coordinate boundary must remain geometrically valid.
-  const negative = spec("0:-4,0,0", "1:-1,0,0", 0, 1, "fine-to-coarse");
+  const negative = spec("0:-8,0,0", "1:-1,0,0", 0, 1, "fine-to-coarse");
   state.ensureChunk(negative.sourceChunk, 0);
   state.ensureChunk(negative.targetChunk, 1);
   const negativeTargets = mapper.enumerateTargetFaceCells(negative, 0, 8, 8);
@@ -154,7 +154,7 @@ export function runInfinityScaleLODBoundaryCellMapperRegression(): void {
 
   // Field-state access remains independent from geometry.
   const value = new Float32Array(CELL_FIELDS);
-  state.writeBaseCell("0:4,0,0", 0, 4, 0, 0, value);
+  state.writeBaseCell("0:8,0,0", 0, 8, 0, 0, value);
   const resolved = mapper.resolveValues(
     cases[0].transfer,
     [3, 0, 0],
