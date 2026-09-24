@@ -291,6 +291,24 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     }
   }
 
+  // Context relation lookup must reject corner-only adjacency and accept exact faces.
+  {
+    const plan: InfinityScaleExecutionPlan = {
+      revision: 77, mode: "selective-cpu-ready", observer: [0, 0, 0],
+      chunks: [{ key: "1:0,0,0", lod: 1, distance: 0 }], simulationBudget: 1,
+      requestedSimulationCount: 1, selectedSimulationCount: 1, maxSimulatingChunks: 1,
+      boundaryReadChunks: ["0:8,0,0"], boundaryReadCount: 1,
+      boundaryReadRelations: [{ sourceChunk: "0:8,0,0", targetChunk: "1:0,0,0", relation: "fine-to-coarse" }],
+      simulationCellCount: 64, boundaryReadCellCount: 64, localExecutionLayers: 1, globalExecutionLayers: 1,
+      selectiveCpuReady: true, selectiveGpuReady: false, gpuPhysicsReady: false,
+      lodBoundaryTransferReady: true, mixedLodExecutionReady: true, entityExecutionReady: false, agentMigrationReady: false,
+    };
+    const context = new InfinityScaleChunkExecutionContext(plan, 16, 16, 16, 4);
+    if (context.getBoundaryRelationsForCell(7, 2, 2).length !== 1) throw new Error("context exact face lookup failed");
+    if (context.getBoundaryRelationsForCell(7, 7, 7).length !== 1) throw new Error("context face corner lookup failed");
+    if (context.getBoundaryRelationsForCell(6, 2, 2).length !== 0) throw new Error("context admitted non-face target");
+  }
+
   // Face coverage must count invalid reads deterministically and expose
   // the first failing dependency instead of silently passing the boundary.
   {
