@@ -119,6 +119,55 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     assertEqual(zOut[F.ENERGY], 19, "fine-to-coarse -Z energy");
   }
 
+
+  // Y- and Z+ faces.
+  {
+    const state = new InfinityScaleLODState(CHUNK);
+    const local = key(0, 0);
+    const neighborY = key(1, 0, -1, 0);
+    const neighborZ = key(1, 0, 0, 1);
+    write(state, neighborY, 1, 2, -4, 2, 29);
+    write(state, neighborZ, 1, 2, 2, 4, 31);
+
+    const sy = spec(local, neighborY, "fine-to-coarse", 0, 1);
+    const sz = spec(local, neighborZ, "fine-to-coarse", 0, 1);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(
+      state,
+      [sy, sz],
+      6,
+      CHUNK,
+    );
+
+    const yOut = assertNotNull(snapshot.read(sy, [2, 0, 2]), "fine-to-coarse -Y");
+    const zOut = assertNotNull(snapshot.read(sz, [2, 2, 3]), "fine-to-coarse +Z");
+    assertEqual(yOut[F.ENERGY], 29, "fine-to-coarse -Y energy");
+    assertEqual(zOut[F.ENERGY], 31, "fine-to-coarse +Z energy");
+  }
+
+  // Edge cell: X+ and Y+ dependencies can both be resolved from the same
+  // local corner without confusing one face for the other.
+  {
+    const state = new InfinityScaleLODState(CHUNK);
+    const xNeighbor = key(1, 1, 0, 0);
+    const yNeighbor = key(1, 0, 1, 0);
+    write(state, xNeighbor, 1, 4, 2, 2, 37);
+    write(state, yNeighbor, 1, 2, 4, 2, 41);
+
+    const sx = spec(key(0, 0), xNeighbor, "fine-to-coarse", 0, 1);
+    const sy = spec(key(0, 0), yNeighbor, "fine-to-coarse", 0, 1);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(
+      state,
+      [sx, sy],
+      7,
+      CHUNK,
+    );
+
+    const xOut = assertNotNull(snapshot.read(sx, [3, 2, 2]), "edge X+");
+    const yOut = assertNotNull(snapshot.read(sy, [2, 3, 2]), "edge Y+");
+    assertEqual(xOut[F.ENERGY], 37, "edge X+ energy");
+    assertEqual(yOut[F.ENERGY], 41, "edge Y+ energy");
+  }
+
   // Ratio 4: coarse local cell receives a full 4^3 fine block.
   {
     const state = new InfinityScaleLODState(CHUNK);
