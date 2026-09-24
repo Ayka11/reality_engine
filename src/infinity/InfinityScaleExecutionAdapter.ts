@@ -42,6 +42,7 @@ export interface InfinityScaleExecutionPlan {
   selectiveGpuReady: boolean;
   gpuPhysicsReady: boolean;
   lodBoundaryTransferReady: boolean;
+  mixedLodExecutionReady: boolean;
   entityExecutionReady: boolean;
   agentMigrationReady: boolean;
 }
