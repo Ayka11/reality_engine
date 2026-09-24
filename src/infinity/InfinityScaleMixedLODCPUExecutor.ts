@@ -127,56 +127,49 @@ export class InfinityScaleMixedLODCPUExecutor {
   }
 
   private rangeForChunk(key: string): ExecutionCellRange {
-    const chunk = this.context.simulationRanges[
-      this.context.simulationRanges.findIndex((_, index) =>
-        this.contextContainsChunkRange(key, index),
-      )
-    ];
-    if (!chunk) {
-      throw new Error(`Infinity Scale CPU execution chunk is outside the execution context: ${key}`);
-    }
-    return chunk;
-  }
-
-  private contextContainsChunkRange(key: string, index: number): boolean {
-    const match = /^(\d+):/.exec(key);
-    if (!match) return false;
+    const match = /^(\\d+):(-?\\d+),(-?\\d+),(-?\\d+)$/.exec(key);
+    if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
     const level = Number(match[1]);
-    const planRange = this.context.simulationRanges[index];
-    return planRange !== undefined && level >= 0;
+    const scale = 2 ** level;
+    const extent = this.context.chunkSize * scale;
+    const originX = Number(match[2]) * extent;
+    const originY = Number(match[3]) * extent;
+    const originZ = Number(match[4]) * extent;
+    return {
+      minX: Math.max(0, originX),
+      maxX: Math.min(this.context.gridWidth - 1, originX + extent - 1),
+      minY: Math.max(0, originY),
+      maxY: Math.min(this.context.gridHeight - 1, originY + extent - 1),
+      minZ: Math.max(0, originZ),
+      maxZ: Math.min(this.context.gridDepth - 1, originZ + extent - 1),
+    };
   }
 
   private boundaryCells(
-    sourceRange: ExecutionCellRange,
+    targetRange: ExecutionCellRange,
     spec: InfinityScaleBoundaryTransferSpec,
   ): Array<[number, number, number]> {
     const cells: Array<[number, number, number]> = [];
-    const targetRange = this.context.readRanges.find(range => this.rangeTouches(range, sourceRange));
-    if (!targetRange) return cells;
+    const sourceRange = this.rangeForChunk(spec.sourceChunk);
 
-    if (spec.relation === "same-level") {
-      for (let z = sourceRange.minZ; z <= sourceRange.maxZ; z++) {
-        for (let y = sourceRange.minY; y <= sourceRange.maxY; y++) {
-          for (let x = sourceRange.minX; x <= sourceRange.maxX; x++) {
-            if (
-              x === sourceRange.minX || x === sourceRange.maxX ||
-              y === sourceRange.minY || y === sourceRange.maxY ||
-              z === sourceRange.minZ || z === sourceRange.maxZ
-            ) cells.push([x, y, z]);
-          }
+    const minX = Math.max(targetRange.minX, sourceRange.minX - 1);
+    const maxX = Math.min(targetRange.maxX, sourceRange.maxX + 1);
+    const minY = Math.max(targetRange.minY, sourceRange.minY - 1);
+    const maxY = Math.min(targetRange.maxY, sourceRange.maxY + 1);
+    const minZ = Math.max(targetRange.minZ, sourceRange.minZ - 1);
+    const maxZ = Math.min(targetRange.maxZ, sourceRange.maxZ + 1);
+
+    if (minX > maxX || minY > maxY || minZ > maxZ) return cells;
+
+    for (let z = minZ; z <= maxZ; z++) {
+      for (let y = minY; y <= maxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+          const onTargetFace =
+            x === targetRange.minX || x === targetRange.maxX ||
+            y === targetRange.minY || y === targetRange.maxY ||
+            z === targetRange.minZ || z === targetRange.maxZ;
+          if (onTargetFace) cells.push([x, y, z]);
         }
-      }
-    } else {
-      const minX = Math.max(sourceRange.minX, targetRange.minX);
-      const maxX = Math.min(sourceRange.maxX, targetRange.maxX);
-      const minY = Math.max(sourceRange.minY, targetRange.minY);
-      const maxY = Math.min(sourceRange.maxY, targetRange.maxY);
-      const minZ = Math.max(sourceRange.minZ, targetRange.minZ);
-      const maxZ = Math.min(sourceRange.maxZ, targetRange.maxZ);
-      if (minX <= maxX && minY <= maxY && minZ <= maxZ) {
-        for (let z = minZ; z <= maxZ; z++)
-          for (let y = minY; y <= maxY; y++)
-            for (let x = minX; x <= maxX; x++) cells.push([x, y, z]);
       }
     }
     return cells;
