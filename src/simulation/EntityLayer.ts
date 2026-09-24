@@ -134,6 +134,7 @@ export class EntityLayer {
       this.lastChunkConnectivity.components,
       this.getEntities(),
       fullDomainCovered,
+      this.lastChunkConnectivity,
     );
 
     const activePendingKeys = new Set<string>();
