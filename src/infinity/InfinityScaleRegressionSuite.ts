@@ -41,6 +41,7 @@ import { runInfinityScaleAdaptiveLODTransactionBridgeRegression } from "./Infini
 import { runInfinityScaleAdaptiveGPUCompletionRegression } from "./InfinityScaleAdaptiveGPUCompletion.regression";
 import { runInfinityScaleAdaptiveFeedbackLoopRegression } from "./InfinityScaleAdaptiveFeedbackLoop.regression";
 import { runInfinityScaleRuntimePredictionFeedbackRegression } from "./InfinityScaleRuntimePredictionFeedback.regression";
+import { runInfinityScaleClosedLoopAdaptiveControllerRegression } from "./InfinityScaleClosedLoopAdaptiveController.regression";
 
 export interface InfinityScaleRegressionResult { name: string; passed: boolean; }
 
@@ -90,6 +91,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["adaptive-gpu-completion", runInfinityScaleAdaptiveGPUCompletionRegression],
     ["adaptive-feedback-loop", runInfinityScaleAdaptiveFeedbackLoopRegression],
     ["runtime-prediction-feedback", runInfinityScaleRuntimePredictionFeedbackRegression],
+    ["closed-loop-adaptive-controller", runInfinityScaleClosedLoopAdaptiveControllerRegression],
   ];
   const results: InfinityScaleRegressionResult[] = [];
   for (const [name, test] of tests) {
