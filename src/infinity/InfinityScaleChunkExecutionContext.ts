@@ -202,8 +202,6 @@ export class InfinityScaleChunkExecutionContext {
 
     for (const [sourceChunk, sourceRelations] of this.boundaryRelationsBySource) {
       const sourceRange = this.chunkRange(sourceChunk);
-      if (!this.contains(sourceRange, x, y, z)) continue;
-
       for (const relation of sourceRelations) {
         const targetRange = this.chunkRange(relation.targetChunk);
         if (this.isAdjacentToTargetBoundary(sourceRange, targetRange, x, y, z)) {
@@ -216,13 +214,10 @@ export class InfinityScaleChunkExecutionContext {
   }
 
   /**
-   * A transfer relation is usable for a local cell only when that cell lies
-   * on the source chunk face adjacent to the target chunk footprint.
-   *
-   * This prevents a mixed-LOD relation from being attached to every cell in a
-   * large source chunk merely because the source and target chunks are
-   * related somewhere along one face.
-   */
+   * A transfer relation is usable for a target simulation cell only when that
+   * cell lies on the target chunk face adjacent to the source dependency.
+   * This keeps relation lookup in target-cell coordinates, matching the
+   * solver's boundary-read contract.
   private isAdjacentToTargetBoundary(
     source: ExecutionCellRange,
     target: ExecutionCellRange,
@@ -230,19 +225,22 @@ export class InfinityScaleChunkExecutionContext {
     y: number,
     z: number,
   ): boolean {
-    const xOverlap = x >= target.minX && x <= target.maxX;
-    const yOverlap = y >= target.minY && y <= target.maxY;
-    const zOverlap = z >= target.minZ && z <= target.maxZ;
+    const xOverlap = x >= target.minX && x <= target.maxX &&
+      x >= source.minX - 1 && x <= source.maxX + 1;
+    const yOverlap = y >= target.minY && y <= target.maxY &&
+      y >= source.minY - 1 && y <= source.maxY + 1;
+    const zOverlap = z >= target.minZ && z <= target.maxZ &&
+      z >= source.minZ - 1 && z <= source.maxZ + 1;
 
     const xFace =
-      (source.maxX + 1 === target.minX && x === source.maxX) ||
-      (target.maxX + 1 === source.minX && x === source.minX);
+      (source.maxX + 1 === target.minX && x === target.minX) ||
+      (target.maxX + 1 === source.minX && x === target.maxX);
     const yFace =
-      (source.maxY + 1 === target.minY && y === source.maxY) ||
-      (target.maxY + 1 === source.minY && y === source.minY);
+      (source.maxY + 1 === target.minY && y === target.minY) ||
+      (target.maxY + 1 === source.minY && y === target.maxY);
     const zFace =
-      (source.maxZ + 1 === target.minZ && z === source.maxZ) ||
-      (target.maxZ + 1 === source.minZ && z === source.minZ);
+      (source.maxZ + 1 === target.minZ && z === target.minZ) ||
+      (target.maxZ + 1 === source.minZ && z === target.maxZ);
 
     return (
       (xFace && yOverlap && zOverlap) ||
