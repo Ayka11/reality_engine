@@ -27,6 +27,7 @@ export interface InfinityScaleClosedLoopRuntimeRegion extends Omit<InfinityScale
 }
 
 export interface InfinityScaleAdaptiveRuntimeResult extends InfinityScalePredictiveAdaptivePipelineResult {
+  topologyChanged: boolean;
   committed: boolean;
   stateRevision: number;
   topologyRevision: number;
@@ -63,16 +64,17 @@ export class InfinityScaleAdaptiveRuntime {
     });
 
     let committed = false;
+    let topologyChanged = false;
     if (pipeline.commitReady) {
       if (!frame || !plan) throw new Error("Adaptive runtime commit requires a global execution frame and execution plan");
       const bridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, this.lodState);
       bridge.begin(frame);
       const result = bridge.commit(frame, step.mutations, step.transferExecutions ?? []);
       committed = result.committed;
-      if (committed) { this.stateRevision++; if (result.topologyChanged) this.topologyRevision++; }
+      if (committed) { topologyChanged = result.topologyChanged; this.stateRevision++; if (result.topologyChanged) this.topologyRevision++; }
     }
 
-    return { ...pipeline, committed, stateRevision: this.stateRevision, topologyRevision: this.topologyRevision, lodByRegion: this.snapshotLOD() };
+    return { ...pipeline, committed, topologyChanged, stateRevision: this.stateRevision, topologyRevision: this.topologyRevision, lodByRegion: this.snapshotLOD() };
   }
 
   stepClosedLoop(
