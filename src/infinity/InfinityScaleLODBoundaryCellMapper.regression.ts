@@ -87,6 +87,26 @@ export function runInfinityScaleLODBoundaryCellMapperRegression(): void {
     }
   }
 
+  // Face adjacency must require tangential overlap; touching only at a
+  // corner is not a valid boundary interface.
+  {
+    const diagonal = spec("0:4,4,0", "1:0,0,0", 0, 1, "fine-to-coarse");
+    state.ensureChunk(diagonal.sourceChunk, 0);
+    state.ensureChunk(diagonal.targetChunk, 1);
+    const diagonalTarget = mapper.enumerateTargetFaceCells(diagonal, 16, 16, 16);
+    if (diagonalTarget.length !== 0) {
+      throw new Error("corner-only chunks incorrectly produced a mixed-LOD face");
+    }
+    try {
+      mapper.map(diagonal, [3, 3, 1]);
+      throw new Error("corner-only chunks were accepted as adjacent");
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("adjacent chunks")) {
+        throw error;
+      }
+    }
+  }
+
   // Ratio-4 fine-to-coarse: one coarse face target must consume a 4x4
   // tangential fine footprint.
   const ratio4 = spec("0:8,0,0", "2:0,0,0", 0, 2, "fine-to-coarse");
