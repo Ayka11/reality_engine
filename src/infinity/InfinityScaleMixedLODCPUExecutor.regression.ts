@@ -121,6 +121,12 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   if (staged.length !== 16 || staged.some(update => update.sourceCells.length !== 4)) {
     throw new Error("Expected ratio-2 face restriction to use exactly four source cells");
   }
+  const targetKeys = new Set(
+    staged.map(update => `${update.targetCell[0]},${update.targetCell[1]},${update.targetCell[2]}`),
+  );
+  if (targetKeys.size !== staged.length) {
+    throw new Error("Four fine neighbors produced overlapping boundary target ownership");
+  }
 
   frame.phase = "boundary-reconciliation";
   commitInfinityScaleGlobalLODTransaction(transaction, frame);
