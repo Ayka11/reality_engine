@@ -26,14 +26,13 @@ export interface AgentMigrationRequest {
 
 export interface AgentMarker {
   id: string;
-  position: [number, number, number]; // grid coords
+  position: [number, number, number];
   behavior: AgentBehavior;
   energy: number;
   age: number;
 }
 
 let _agentId = 1;
-
 const BEHAVIORS: AgentBehavior[] = ['explorer', 'harvester', 'signaler', 'builder', 'destroyer'];
 
 function randomBehavior(): AgentBehavior {
@@ -41,11 +40,11 @@ function randomBehavior(): AgentBehavior {
 }
 
 export const AGENT_COLORS: Record<AgentBehavior, [number, number, number]> = {
-  explorer:  [0.49, 0.62, 1.00],  // blue
-  harvester: [0.30, 0.69, 0.49],  // green
-  signaler:  [0.75, 0.52, 0.99],  // purple
-  builder:   [0.94, 0.56, 0.25],  // orange
-  destroyer: [0.96, 0.48, 0.48],  // red
+  explorer: [0.49, 0.62, 1.00],
+  harvester: [0.30, 0.69, 0.49],
+  signaler: [0.75, 0.52, 0.99],
+  builder: [0.94, 0.56, 0.25],
+  destroyer: [0.96, 0.48, 0.48],
 };
 
 export class AgentSystem {
@@ -53,16 +52,8 @@ export class AgentSystem {
   readonly maxAgents = 64;
   private pendingMigrations: AgentMigrationRequest[] = [];
 
-  spawnAt(
-    x: number,
-    y: number,
-    z: number,
-    behavior: AgentBehavior = "explorer",
-    energy = 200,
-  ): number {
-    if (this.agents.size >= this.maxAgents) {
-      throw new Error("Maximum agent count reached");
-    }
+  spawnAt(x: number, y: number, z: number, behavior: AgentBehavior = "explorer", energy = 200): number {
+    if (this.agents.size >= this.maxAgents) throw new Error("Maximum agent count reached");
     this._spawn(x, y, z, behavior, energy);
     return _agentId - 1;
   }
@@ -75,23 +66,21 @@ export class AgentSystem {
     });
   }
 
+  peekMigrationRequests(): AgentMigrationRequest[] {
+    return dedupeMigrationRequests(this.pendingMigrations);
+  }
+
   consumeMigrationRequests(): AgentMigrationRequest[] {
-    const deduped = new Map<string, AgentMigrationRequest>();
-    for (const request of this.pendingMigrations) {
-      const key = [
-        request.agentId,
-        request.from.join(','),
-        request.to.join(','),
-      ].join('|');
-      deduped.set(key, request);
-    }
-    const requests = [...deduped.values()].map(request => ({
-      ...request,
-      from: [...request.from] as [number, number, number],
-      to: [...request.to] as [number, number, number],
-    }));
+    const requests = this.peekMigrationRequests();
     this.pendingMigrations = [];
     return requests;
+  }
+
+  acknowledgeMigrationRequests(requests: AgentMigrationRequest[]): void {
+    const acknowledged = new Set(requests.map(migrationKey));
+    this.pendingMigrations = this.pendingMigrations.filter(
+      request => !acknowledged.has(migrationKey(request)),
+    );
   }
 
   // Seed agents + inject local energy so they survive from a cold start
@@ -100,8 +89,6 @@ export class AgentSystem {
       const x = Math.floor(4 + Math.random() * (grid.W - 8));
       const y = Math.floor(4 + Math.random() * (grid.H - 8));
       const z = Math.floor(2 + Math.random() * (grid.D * 0.6));
-
-      // Inject a small energy patch so agents have something to harvest
       for (let dz = -1; dz <= 1; dz++)
       for (let dy = -2; dy <= 2; dy++)
       for (let dx = -2; dx <= 2; dx++) {
@@ -109,136 +96,71 @@ export class AgentSystem {
         const base = (((z+dz) * grid.H * grid.W) + (y+dy) * grid.W + (x+dx)) * CELL_FIELDS;
         grid.buffer[base + F.ENERGY] = Math.max(grid.buffer[base + F.ENERGY], 150);
       }
-
       this._spawn(x, y, z, randomBehavior(), 200);
     }
   }
 
-  tick(grid: VoxelGrid, dt: number): void {
-    this.tickRegion(grid, dt, null);
-  }
+  tick(grid: VoxelGrid, dt: number): void { this.tickRegion(grid, dt, null); }
 
-  tickChunks(
-    grid: VoxelGrid,
-    dt: number,
-    context: InfinityScaleChunkExecutionContext,
-    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
-  ): void {
+  tickChunks(grid: VoxelGrid, dt: number, context: InfinityScaleChunkExecutionContext, boundarySnapshot?: InfinityScaleLODBoundarySnapshot): void {
     this.tickRegion(grid, dt, context, boundarySnapshot);
   }
 
-  applyMigrationRequests(
-    grid: VoxelGrid,
-    requests: AgentMigrationRequest[],
-    context: InfinityScaleChunkExecutionContext,
-  ): number {
+  applyMigrationRequests(grid: VoxelGrid, requests: AgentMigrationRequest[], context: InfinityScaleChunkExecutionContext): number {
     let applied = 0;
+    const appliedRequests: AgentMigrationRequest[] = [];
     for (const request of requests) {
       const agent = this.agents.get(request.agentId);
       if (!agent) continue;
       if (!context.containsSimulationCell(request.to[0], request.to[1], request.to[2])) continue;
-      if (
-        Math.abs(agent.x - request.from[0]) > 0 ||
-        Math.abs(agent.y - request.from[1]) > 0 ||
-        Math.abs(agent.z - request.from[2]) > 0
-      ) continue;
-      agent.x = request.to[0];
-      agent.y = request.to[1];
-      agent.z = request.to[2];
+      if (agent.x !== request.from[0] || agent.y !== request.from[1] || agent.z !== request.from[2]) continue;
+      grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
+      agent.x = request.to[0]; agent.y = request.to[1]; agent.z = request.to[2];
+      grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = agent.id;
       applied++;
+      appliedRequests.push(request);
     }
-    if (applied > 0) {
-      const appliedKeys = new Set(
-        requests
-          .filter(request => {
-            const agent = this.agents.get(request.agentId);
-            return !!agent &&
-              context.containsSimulationCell(agent.x, agent.y, agent.z) &&
-              agent.x === request.to[0] &&
-              agent.y === request.to[1] &&
-              agent.z === request.to[2];
-          })
-          .map(request => [
-            request.agentId,
-            request.from.join(','),
-            request.to.join(','),
-          ].join('|')),
-      );
-      this.pendingMigrations = this.pendingMigrations.filter(request => {
-        const key = [
-          request.agentId,
-          request.from.join(','),
-          request.to.join(','),
-        ].join('|');
-        return !appliedKeys.has(key);
-      });
-    }
+    this.acknowledgeMigrationRequests(appliedRequests);
     return applied;
   }
 
-  private tickRegion(
-    grid: VoxelGrid,
-    dt: number,
-    context: InfinityScaleChunkExecutionContext | null,
-    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
-  ): void {
+  private tickRegion(grid: VoxelGrid, dt: number, context: InfinityScaleChunkExecutionContext | null, boundarySnapshot?: InfinityScaleLODBoundarySnapshot): void {
     const dead: number[] = [];
-
     for (const [id, agent] of this.agents) {
       if (context && !context.containsSimulationCell(agent.x, agent.y, agent.z)) continue;
       agent.age++;
-
       const base = this._base(grid, agent.x, agent.y, agent.z);
-      const buf  = grid.buffer;
+      const buf = grid.buffer;
       const localEnergy = buf[base + F.ENERGY];
-
       agent.memory = agent.memory * 0.95 + (localEnergy / 1000) * 0.05;
-
-      // Low base metabolism — agents can survive without a rich world
       const consume = 0.4 * dt * 60;
       agent.energy -= consume;
       buf[base + F.ENERGY] = Math.max(0, localEnergy - consume * 0.5);
-
       if (agent.energy <= 0) { dead.push(id); continue; }
-
       switch (agent.behavior) {
-        case 'explorer':  this._explore(grid, agent, dt, context, boundarySnapshot);  break;
-        case 'harvester': this._harvest(grid, agent, dt, context, boundarySnapshot);  break;
-        case 'signaler':  this._signal(grid, agent, dt, context);   break;
-        case 'builder':   this._build(grid, agent, dt, context);    break;
-        case 'destroyer': this._destroy(grid, agent, dt, context);  break;
+        case 'explorer': this._explore(grid, agent, dt, context, boundarySnapshot); break;
+        case 'harvester': this._harvest(grid, agent, dt, context, boundarySnapshot); break;
+        case 'signaler': this._signal(grid, agent, dt, context); break;
+        case 'builder': this._build(grid, agent, dt, context); break;
+        case 'destroyer': this._destroy(grid, agent, dt, context); break;
       }
-
-      // Stamp presence
-      buf[base + F.AGENT_MARK] = agent.id;
-
-      // Replicate when well-fed
+      const newBase = this._base(grid, agent.x, agent.y, agent.z);
+      buf[newBase + F.AGENT_MARK] = agent.id;
       if (agent.energy > 300 && this.agents.size < this.maxAgents) {
         agent.energy *= 0.55;
         const childX = Math.max(0, Math.min(grid.W - 1, agent.x + Math.round(Math.random() * 4 - 2)));
         const childY = Math.max(0, Math.min(grid.H - 1, agent.y + Math.round(Math.random() * 4 - 2)));
         const childZ = Math.max(0, Math.min(grid.D - 1, agent.z + Math.round(Math.random() * 2 - 1)));
-        if (context && !context.containsSimulationCell(childX, childY, childZ)) {
-          agent.energy /= 0.55;
-          continue;
-        }
+        if (context && !context.containsSimulationCell(childX, childY, childZ)) { agent.energy /= 0.55; continue; }
         const childBehavior = Math.random() < 0.15 ? randomBehavior() : agent.behavior;
-        this._spawn(
-          childX,
-          childY,
-          childZ,
-          childBehavior, agent.energy * 0.6,
-        );
+        this._spawn(childX, childY, childZ, childBehavior, agent.energy * 0.6);
         agent.children++;
       }
     }
-
     for (const id of dead) {
       const agent = this.agents.get(id)!;
       const base = this._base(grid, agent.x, agent.y, agent.z);
-      // Leave energy ghost on death
-      grid.buffer[base + F.ENERGY] = Math.min(9999,
-        grid.buffer[base + F.ENERGY] + agent.energy);
+      grid.buffer[base + F.ENERGY] = Math.min(9999, grid.buffer[base + F.ENERGY] + agent.energy);
       grid.buffer[base + F.AGENT_MARK] = 0;
       this.agents.delete(id);
     }
@@ -264,39 +186,28 @@ export class AgentSystem {
       if (context && boundarySnapshot && !context.containsSimulationCell(nx, ny, nz)) {
         for (const spec of context.getBoundaryTransferSpecsForCell(agent.x, agent.y, agent.z)) {
           const sample = boundarySnapshot.read(spec, [nx, ny, nz]);
-          if (sample) {
-            e = sample[F.ENERGY];
-            break;
-          }
+          if (sample) { e = sample[F.ENERGY]; break; }
         }
       }
       if (e > bestE) { bestE=e; bx=nx; by=ny; bz=nz; }
     }
-    // Always move (not probability-gated) — makes explorers visibly traverse the world
     if (bx !== agent.x || by !== agent.y || bz !== agent.z) {
-      // Clear old mark
       grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
       if (!context || context.containsSimulationCell(bx, by, bz)) {
-        if (!context || context.containsSimulationCell(bx, by, bz)) {
-          agent.x=bx; agent.y=by; agent.z=bz;
-        }
+        agent.x=bx; agent.y=by; agent.z=bz;
       }
     }
-    // Explorers passively harvest a tiny amount while moving
-    const base = this._base(grid, agent.x, agent.y, agent.z);
-    const take = Math.min(3 * dt * 60, grid.buffer[base + F.ENERGY]);
-    grid.buffer[base + F.ENERGY] -= take;
+    const newBase = this._base(grid, agent.x, agent.y, agent.z);
+    const take = Math.min(3 * dt * 60, grid.buffer[newBase + F.ENERGY]);
+    grid.buffer[newBase + F.ENERGY] -= take;
     agent.energy = Math.min(500, agent.energy + take);
   }
 
   private _harvest(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null, boundarySnapshot?: InfinityScaleLODBoundarySnapshot): void {
-    // Harvest locally, then move to richest neighbor
     const base = this._base(grid, agent.x, agent.y, agent.z);
     const take = Math.min(20 * dt * 60, grid.buffer[base + F.ENERGY]);
     grid.buffer[base + F.ENERGY] -= take;
     agent.energy = Math.min(600, agent.energy + take);
-
-    // Move toward richest neighbor every few ticks
     if (agent.age % 4 === 0) {
       const { W, H, D, buffer: buf } = grid;
       let bestE = grid.buffer[base + F.ENERGY], bx = agent.x, by = agent.y, bz = agent.z;
@@ -308,10 +219,7 @@ export class AgentSystem {
         if (context && boundarySnapshot && !context.containsSimulationCell(nx, ny, nz)) {
           for (const spec of context.getBoundaryTransferSpecsForCell(agent.x, agent.y, agent.z)) {
             const sample = boundarySnapshot.read(spec, [nx, ny, nz]);
-            if (sample) {
-              e = sample[F.ENERGY];
-              break;
-            }
+            if (sample) { e = sample[F.ENERGY]; break; }
           }
         }
         if (e > bestE) { bestE=e; bx=nx; by=ny; bz=nz; }
@@ -321,13 +229,7 @@ export class AgentSystem {
           grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
           agent.x=bx; agent.y=by; agent.z=bz;
         } else {
-          this.pendingMigrations.push({
-            agentId: agent.id,
-            from: [agent.x, agent.y, agent.z],
-            to: [bx, by, bz],
-            behavior: agent.behavior,
-            energy: agent.energy,
-          });
+          this.pendingMigrations.push({ agentId: agent.id, from: [agent.x, agent.y, agent.z], to: [bx, by, bz], behavior: agent.behavior, energy: agent.energy });
         }
       }
     }
@@ -336,13 +238,11 @@ export class AgentSystem {
   private _signal(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null): void {
     const base = this._base(grid, agent.x, agent.y, agent.z);
     agent.signal = Math.min(100, agent.signal + 8 * dt * 60);
-    grid.buffer[base + F.SIGNAL] = Math.min(100,
-      grid.buffer[base + F.SIGNAL] + agent.signal * 0.5 * dt);
-    // Signalers also move slowly toward high-signal neighbors
+    grid.buffer[base + F.SIGNAL] = Math.min(100, grid.buffer[base + F.SIGNAL] + agent.signal * 0.5 * dt);
     if (agent.age % 6 === 0) {
       const { W, H, buffer: buf } = grid;
       let bestS = -1, bx = agent.x, by = agent.y;
-      const dirs = [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0]] as const;
+      const dirs = [[-1,0],[1,0],[0,-1],[0,1]] as const;
       for (const [dx,dy] of dirs) {
         const nx=agent.x+dx, ny=agent.y+dy;
         if (nx<0||nx>=W||ny<0||ny>=H) continue;
@@ -351,9 +251,7 @@ export class AgentSystem {
       }
       if (bx !== agent.x || by !== agent.y) {
         grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
-        if (!context || context.containsSimulationCell(bx, by, agent.z)) {
-          agent.x = bx; agent.y = by;
-        }
+        if (!context || context.containsSimulationCell(bx, by, agent.z)) { agent.x = bx; agent.y = by; }
       }
     }
     agent.energy -= agent.signal * 0.005 * dt * 60;
@@ -361,19 +259,18 @@ export class AgentSystem {
 
   private _build(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null): void {
     const base = this._base(grid, agent.x, agent.y, agent.z);
-    grid.buffer[base + F.INFORMATION]   = Math.min(999, grid.buffer[base + F.INFORMATION]   + 5  * dt * 60);
-    grid.buffer[base + F.BIO_POTENTIAL] = Math.min(1,   grid.buffer[base + F.BIO_POTENTIAL] + 0.015 * dt * 60);
-    grid.buffer[base + F.ENTROPY]       = Math.max(0,   grid.buffer[base + F.ENTROPY]       - 0.005 * dt * 60);
+    grid.buffer[base + F.INFORMATION] = Math.min(999, grid.buffer[base + F.INFORMATION] + 5 * dt * 60);
+    grid.buffer[base + F.BIO_POTENTIAL] = Math.min(1, grid.buffer[base + F.BIO_POTENTIAL] + 0.015 * dt * 60);
+    grid.buffer[base + F.ENTROPY] = Math.max(0, grid.buffer[base + F.ENTROPY] - 0.005 * dt * 60);
     agent.energy -= 0.8 * dt * 60;
   }
 
   private _destroy(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null): void {
     const base = this._base(grid, agent.x, agent.y, agent.z);
     const stolenE = Math.min(15 * dt * 60, grid.buffer[base + F.ENERGY]);
-    grid.buffer[base + F.ENERGY]  = Math.max(0, grid.buffer[base + F.ENERGY] - stolenE);
+    grid.buffer[base + F.ENERGY] = Math.max(0, grid.buffer[base + F.ENERGY] - stolenE);
     grid.buffer[base + F.ENTROPY] = Math.min(1, grid.buffer[base + F.ENTROPY] + 0.03 * dt * 60);
     agent.energy = Math.min(500, agent.energy + stolenE * 0.7);
-    // Destroyers roam randomly
     if (agent.age % 3 === 0) {
       const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
       const [dx,dy] = dirs[Math.floor(Math.random()*4)];
@@ -384,13 +281,7 @@ export class AgentSystem {
           grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
           agent.x=nx; agent.y=ny;
         } else {
-          this.pendingMigrations.push({
-            agentId: agent.id,
-            from: [agent.x, agent.y, agent.z],
-            to: [nx, ny, agent.z],
-            behavior: agent.behavior,
-            energy: agent.energy,
-          });
+          this.pendingMigrations.push({ agentId: agent.id, from: [agent.x, agent.y, agent.z], to: [nx, ny, agent.z], behavior: agent.behavior, energy: agent.energy });
         }
       }
     }
@@ -399,14 +290,25 @@ export class AgentSystem {
   getAgents(): Agent[] { return [...this.agents.values()]; }
 
   agentMarkers(): AgentMarker[] {
-    return this.getAgents().map(a => ({
-      id: String(a.id),
-      position: [a.x, a.y, a.z] as [number, number, number],
-      behavior: a.behavior,
-      energy: a.energy,
-      age: a.age,
-    }));
+    return this.getAgents().map(a => ({ id: String(a.id), position: [a.x, a.y, a.z] as [number, number, number], behavior: a.behavior, energy: a.energy, age: a.age }));
   }
 
-  clear(): void { this.agents.clear(); _agentId = 1; }
+  clear(): void { this.agents.clear(); this.pendingMigrations = []; _agentId = 1; }
+}
+
+function migrationKey(request: AgentMigrationRequest): string {
+  return [request.agentId, request.from.join(','), request.to.join(',')].join('|');
+}
+
+function dedupeMigrationRequests(requests: AgentMigrationRequest[]): AgentMigrationRequest[] {
+  const deduped = new Map<string, AgentMigrationRequest>();
+  for (const request of requests) {
+    const key = migrationKey(request);
+    deduped.set(key, {
+      ...request,
+      from: [...request.from] as [number, number, number],
+      to: [...request.to] as [number, number, number],
+    });
+  }
+  return [...deduped.values()];
 }
