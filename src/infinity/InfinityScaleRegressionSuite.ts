@@ -7,6 +7,7 @@ import {
 import { runInfinityScaleUnifiedTransactionRegression } from "./InfinityScaleUnifiedTransaction.regression";
 import { runInfinityScaleLODResetInvalidationRegression } from "./InfinityScaleLODState.regression";
 import { runInfinityScaleLODMultiFrameRegression } from "./InfinityScaleLODMultiFrame.regression";
+import { runInfinityScaleMixedLODMultiFrameRegression } from "./InfinityScaleMixedLODMultiFrame.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -22,6 +23,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["unified-transaction", runInfinityScaleUnifiedTransactionRegression],
     ["lod-reset-invalidation", runInfinityScaleLODResetInvalidationRegression],
     ["lod-multi-frame", runInfinityScaleLODMultiFrameRegression],
+    ["mixed-lod-multi-frame", runInfinityScaleMixedLODMultiFrameRegression],
   ];
 
   const results: InfinityScaleRegressionResult[] = [];
