@@ -1,6 +1,7 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
+import type { InfinityScaleLODBoundarySnapshot } from '../infinity/InfinityScaleLODBoundarySnapshot';
 
 export type AgentBehavior = 'explorer' | 'harvester' | 'signaler' | 'builder' | 'destroyer';
 
@@ -99,8 +100,9 @@ export class AgentSystem {
     grid: VoxelGrid,
     dt: number,
     context: InfinityScaleChunkExecutionContext,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
-    this.tickRegion(grid, dt, context);
+    this.tickRegion(grid, dt, context, boundarySnapshot);
   }
 
   applyMigrationRequests(
@@ -156,6 +158,7 @@ export class AgentSystem {
     grid: VoxelGrid,
     dt: number,
     context: InfinityScaleChunkExecutionContext | null,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
     const dead: number[] = [];
 
@@ -177,8 +180,8 @@ export class AgentSystem {
       if (agent.energy <= 0) { dead.push(id); continue; }
 
       switch (agent.behavior) {
-        case 'explorer':  this._explore(grid, agent, dt, context);  break;
-        case 'harvester': this._harvest(grid, agent, dt, context);  break;
+        case 'explorer':  this._explore(grid, agent, dt, context, boundarySnapshot);  break;
+        case 'harvester': this._harvest(grid, agent, dt, context, boundarySnapshot);  break;
         case 'signaler':  this._signal(grid, agent, dt, context);   break;
         case 'builder':   this._build(grid, agent, dt, context);    break;
         case 'destroyer': this._destroy(grid, agent, dt, context);  break;
@@ -228,14 +231,23 @@ export class AgentSystem {
     this.agents.set(id, { id, x, y, z, energy, age: 0, behavior, memory: 0, signal: 0, children: 0 });
   }
 
-  private _explore(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null): void {
+  private _explore(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null, boundarySnapshot?: InfinityScaleLODBoundarySnapshot): void {
     const { W, H, D, buffer: buf } = grid;
     let bestE = -1, bx = agent.x, by = agent.y, bz = agent.z;
     const dirs = [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]] as const;
     for (const [dx,dy,dz] of dirs) {
       const nx=agent.x+dx, ny=agent.y+dy, nz=agent.z+dz;
       if (nx<0||nx>=W||ny<0||ny>=H||nz<0||nz>=D) continue;
-      const e = buf[(nz*H*W+ny*W+nx)*CELL_FIELDS+F.ENERGY];
+      let e = buf[(nz*H*W+ny*W+nx)*CELL_FIELDS+F.ENERGY];
+      if (context && boundarySnapshot && !context.containsSimulationCell(nx, ny, nz)) {
+        for (const spec of context.getBoundaryTransferSpecsForCell(agent.x, agent.y, agent.z)) {
+          const sample = boundarySnapshot.read(spec, [nx, ny, nz]);
+          if (sample) {
+            e = sample[F.ENERGY];
+            break;
+          }
+        }
+      }
       if (e > bestE) { bestE=e; bx=nx; by=ny; bz=nz; }
     }
     // Always move (not probability-gated) — makes explorers visibly traverse the world
@@ -255,7 +267,7 @@ export class AgentSystem {
     agent.energy = Math.min(500, agent.energy + take);
   }
 
-  private _harvest(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null): void {
+  private _harvest(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null, boundarySnapshot?: InfinityScaleLODBoundarySnapshot): void {
     // Harvest locally, then move to richest neighbor
     const base = this._base(grid, agent.x, agent.y, agent.z);
     const take = Math.min(20 * dt * 60, grid.buffer[base + F.ENERGY]);
@@ -270,7 +282,16 @@ export class AgentSystem {
       for (const [dx,dy,dz] of dirs) {
         const nx=agent.x+dx, ny=agent.y+dy, nz=agent.z+dz;
         if (nx<0||nx>=W||ny<0||ny>=H||nz<0||nz>=D) continue;
-        const e = buf[(nz*H*W+ny*W+nx)*CELL_FIELDS+F.ENERGY];
+        let e = buf[(nz*H*W+ny*W+nx)*CELL_FIELDS+F.ENERGY];
+        if (context && boundarySnapshot && !context.containsSimulationCell(nx, ny, nz)) {
+          for (const spec of context.getBoundaryTransferSpecsForCell(agent.x, agent.y, agent.z)) {
+            const sample = boundarySnapshot.read(spec, [nx, ny, nz]);
+            if (sample) {
+              e = sample[F.ENERGY];
+              break;
+            }
+          }
+        }
         if (e > bestE) { bestE=e; bx=nx; by=ny; bz=nz; }
       }
       if (bx !== agent.x || by !== agent.y || bz !== agent.z) {
