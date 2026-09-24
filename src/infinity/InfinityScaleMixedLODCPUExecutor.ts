@@ -113,6 +113,32 @@ export class InfinityScaleMixedLODCPUExecutor {
       }
     }
 
+    const stagedBoundaryUpdates = this.stageBoundaryTransfers(
+      transaction,
+      resolveBoundarySources,
+    );
+    const validation = transaction.synchronization.validate();
+    return {
+      executedCells,
+      stagedBoundaryUpdates,
+      transactionReady: validation.readyToCommit,
+    };
+  }
+
+  /**
+   * Stage only the cross-LOD face synchronization for the current frame.
+   * This is intentionally separate from the local cell kernel so the runtime
+   * can use the same exact mapper when another local solver owns the physics.
+   */
+  stageBoundaryTransfers(
+    transaction: InfinityScaleGlobalLODTransaction,
+    resolveBoundarySources?: InfinityScaleBoundarySourceResolver,
+  ): number {
+    if (transaction.committed) {
+      throw new Error("Infinity Scale boundary staging rejected: transaction already committed");
+    }
+    this.state.assertRevision(transaction.stateRevision);
+
     let stagedBoundaryUpdates = 0;
     for (const spec of this.context.boundaryTransferSpecs) {
       const targetRange = this.rangeForChunk(spec.targetChunk);
@@ -124,13 +150,8 @@ export class InfinityScaleMixedLODCPUExecutor {
         stagedBoundaryUpdates++;
       }
     }
-
-    const validation = transaction.synchronization.validate();
-    return {
-      executedCells,
-      stagedBoundaryUpdates,
-      transactionReady: validation.readyToCommit,
-    };
+    return stagedBoundaryUpdates;
+  }
   }
 
   private rangeForChunk(key: string): ExecutionCellRange {
