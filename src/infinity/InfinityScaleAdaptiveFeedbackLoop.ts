@@ -7,6 +7,8 @@ export interface InfinityScaleAdaptiveFeedbackSample {
   stateRevision: number;
   topologyRevision: number;
   pipeline: InfinityScalePredictiveAdaptivePipelineResult;
+  committed?: boolean;
+  lodByRegion?: Record<string, number>;
 }
 
 export interface InfinityScaleAdaptiveFeedbackSummary {
@@ -16,14 +18,29 @@ export interface InfinityScaleAdaptiveFeedbackSummary {
   errorTrend: number;
   executableRate: number;
   commitReadyRate: number;
+  committedRate: number;
   gpuCompletionRate: number;
   deferredRate: number;
   telemetryHash: string;
 }
 
+export interface InfinityScaleAdaptivePostCommitObservation {
+  epoch: number;
+  committed: boolean;
+  stateRevision: number;
+  topologyRevision: number;
+  lodByRegion: Record<string, number>;
+  errorBefore: number;
+  errorAfter: number;
+  errorDelta: number;
+  topologyChanged: boolean;
+  observationHash: string;
+}
+
 export class InfinityScaleAdaptiveFeedbackLoop {
   private readonly telemetry = new InfinityScaleAdaptiveTelemetryRecorder();
   private readonly errors: Array<{ epoch: number; error: number }> = [];
+  private readonly postCommit: InfinityScaleAdaptivePostCommitObservation[] = [];
 
   observe(sample: InfinityScaleAdaptiveFeedbackSample): InfinityScaleAdaptiveFeedbackSummary {
     if (!Number.isFinite(sample.error) || sample.error < 0) throw new Error("Adaptive feedback error must be finite and non-negative");
@@ -51,6 +68,20 @@ export class InfinityScaleAdaptiveFeedbackLoop {
     return this.summary();
   }
 
+  observePostCommit(observation: InfinityScaleAdaptivePostCommitObservation): void {
+    if (!Number.isInteger(observation.epoch) || observation.epoch < 0) throw new Error("Post-commit epoch must be a non-negative integer");
+    if (!Number.isFinite(observation.errorBefore) || !Number.isFinite(observation.errorAfter)) throw new Error("Post-commit errors must be finite");
+    if (observation.lodByRegion && Object.keys(observation.lodByRegion).some(key => !Number.isInteger(observation.lodByRegion[key]) || observation.lodByRegion[key] < 0)) {
+      throw new Error("Post-commit LOD state must contain non-negative integer levels");
+    }
+    this.postCommit.push({ ...observation, lodByRegion: { ...observation.lodByRegion } });
+    this.postCommit.sort((a, b) => a.epoch - b.epoch);
+  }
+
+  getPostCommitObservations(): InfinityScaleAdaptivePostCommitObservation[] {
+    return this.postCommit.map(observation => ({ ...observation, lodByRegion: { ...observation.lodByRegion } }));
+  }
+
   getTelemetry(): InfinityScaleAdaptiveTelemetryRecorder { return this.telemetry; }
 
   getErrorHistory(): Array<{ epoch: number; error: number }> {
@@ -72,6 +103,7 @@ export class InfinityScaleAdaptiveFeedbackLoop {
       errorTrend,
       executableRate: rate(records, r => r.executable),
       commitReadyRate: rate(records, r => r.commitReady),
+      committedRate: this.postCommit.length === 0 ? 0 : this.postCommit.filter(r => r.committed).length / this.postCommit.length,
       gpuCompletionRate: rate(records, r => r.gpuComplete),
       deferredRate: rate(records, r => r.deferredNodeCount > 0),
       telemetryHash: this.telemetry.summarize().telemetryHash,
