@@ -38,3 +38,6 @@ jobs:
 
       - name: Infinity Scale release validation
         run: npx --yes tsx scripts/validate-infinity-scale.ts
+
+      - name: Release evidence validation
+        run: npm run validate:infinity-scale:evidence
