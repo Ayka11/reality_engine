@@ -134,12 +134,27 @@ export function runInfinityScaleLODBoundaryCellMapperRegression(): void {
       );
     }
 
-    const fineToCoarse = spec("0:4,0,0", "1:0,0,0", 0, 1, "fine-to-coarse");
-    const fineMapping = mapper.map(fineToCoarse, [6, 2, 2]);
-    if (fineMapping.sourceCells[0][0] !== 4) {
+    const fineToCoarse = spec("0:8,0,0", "1:0,0,0", 0, 1, "fine-to-coarse");
+    const fineMapping = mapper.map(fineToCoarse, [7, 2, 2]);
+    if (fineMapping.sourceCells[0][0] !== 8) {
       throw new Error(
         `fine-to-coarse face alignment mismatch: ${fineMapping.sourceCells[0].join(",")}`,
       );
+    }
+  }
+
+  // Canonical same-level mapping must read the adjacent source cell, not the target itself.
+  {
+    const sameLevel: InfinityScaleBoundaryTransferSpec = {
+      sourceChunk: "0:4,0,0", targetChunk: "0:0,0,0",
+      sourceLevel: 0, targetLevel: 0, refinementRatio: 1,
+      relation: "same-level", operation: "copy", readOperation: "copy",
+    };
+    state.ensureChunk(sameLevel.sourceChunk, 0);
+    state.ensureChunk(sameLevel.targetChunk, 0);
+    const sameMapping = mapper.map(sameLevel, [3, 1, 1]);
+    if (sameMapping.sourceCells.length !== 1 || sameMapping.sourceCells[0].join(",") !== "4,1,1") {
+      throw new Error(`same-level canonical mapping mismatch: ${sameMapping.sourceCells[0]?.join(",")}`);
     }
   }
 
