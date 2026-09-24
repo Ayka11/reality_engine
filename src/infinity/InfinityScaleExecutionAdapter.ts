@@ -5,6 +5,7 @@ import type {
   InfinityScaleBoundaryReadRelation,
 } from "./InfinityScaleChunkExecutionContext";
 import { WORLD } from "../core/WorldConstants";
+import { resolveInfinityScaleBoundaryFaceGeometry } from "./InfinityScaleLODBoundaryCellMapper";
 
 export type InfinityScaleExecutionMode =
   | "advisory"
@@ -240,101 +241,65 @@ export class InfinityScaleExecutionAdapter {
   ): InfinityScaleBoundaryReadRelation[] {
     const out = new Map<string, InfinityScaleBoundaryReadRelation>();
     const level = chunk.chunk.level;
-    const scale = 2 ** level;
-    const baseX = chunk.chunk.x * scale;
-    const baseY = chunk.chunk.y * scale;
-    const baseZ = chunk.chunk.z * scale;
-    const maxX = baseX + scale - 1;
-    const maxY = baseY + scale - 1;
-    const maxZ = baseZ + scale - 1;
 
-    type Face = {
-      axis: "x" | "y" | "z";
-      coordinate: number;
-      minU: number;
-      maxU: number;
-      minV: number;
-      maxV: number;
-    };
+    // Neighbor discovery remains an adapter concern, but shared-face geometry
+    // is delegated to the canonical LOD boundary resolver. This prevents the
+    // execution planner from maintaining a second coarse/fine face definition.
+    for (const other of candidates) {
+      if (other.key === chunk.key) continue;
 
-    // A face is represented by its full 2-D footprint in base-cell space.
-    // This is essential for mixed LOD: a coarse face may touch several fine
-    // children, and point sampling can silently miss all but one of them.
-    const faces: Face[] = [
-      { axis: "x", coordinate: baseX - 1, minU: baseY, maxU: maxY, minV: baseZ, maxV: maxZ },
-      { axis: "x", coordinate: maxX + 1, minU: baseY, maxU: maxY, minV: baseZ, maxV: maxZ },
-      { axis: "y", coordinate: baseY - 1, minU: baseX, maxU: maxX, minV: baseZ, maxV: maxZ },
-      { axis: "y", coordinate: maxY + 1, minU: baseX, maxU: maxX, minV: baseZ, maxV: maxZ },
-      { axis: "z", coordinate: baseZ - 1, minU: baseX, maxU: maxX, minV: baseY, maxV: maxY },
-      { axis: "z", coordinate: maxZ + 1, minU: baseX, maxU: maxX, minV: baseY, maxV: maxY },
+      const relation: InfinityScaleBoundaryRelation =
+        other.chunk.level === level
+          ? "same-level"
+          : level < other.chunk.level
+            ? "fine-to-coarse"
+            : "coarse-to-fine";
+
+      const spec = {
+        sourceChunk: chunk.key,
+        targetChunk: other.key,
+        relation,
+        sourceLevel: level,
+        targetLevel: other.chunk.level,
+        refinementRatio: 2 ** Math.abs(level - other.chunk.level),
+        operation:
+          relation === "same-level"
+            ? "copy"
+            : relation === "coarse-to-fine"
+              ? "prolongation"
+              : "restriction",
+        readOperation:
+          relation === "same-level"
+            ? "copy"
+            : relation === "coarse-to-fine"
+              ? "restriction"
+              : "prolongation",
+      } as const;
+
+      if (resolveInfinityScaleBoundaryFaceGeometry(spec, 32) === null) continue;
+
+      const key = `${other.key}|${relation}`;
+      out.set(key, {
+        sourceChunk: chunk.key,
+        targetChunk: other.key,
+        relation,
+      });
+    }
+
+    // No explicit frame chunk owns a face. Request the logical same-level
+    // halo at each of the six neighboring chunk coordinates. This preserves
+    // the existing fallback behavior while keeping mixed-LOD geometry
+    // entirely delegated to the canonical resolver above.
+    const logicalNeighbors = [
+      `${level}:${chunk.chunk.x - 1},${chunk.chunk.y},${chunk.chunk.z}`,
+      `${level}:${chunk.chunk.x + 1},${chunk.chunk.y},${chunk.chunk.z}`,
+      `${level}:${chunk.chunk.x},${chunk.chunk.y - 1},${chunk.chunk.z}`,
+      `${level}:${chunk.chunk.x},${chunk.chunk.y + 1},${chunk.chunk.z}`,
+      `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z - 1}`,
+      `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z + 1}`,
     ];
 
-    for (const face of faces) {
-      const containing = candidates.filter(other => {
-        const otherScale = 2 ** other.chunk.level;
-        const ox = other.chunk.x * otherScale;
-        const oy = other.chunk.y * otherScale;
-        const oz = other.chunk.z * otherScale;
-        const otherMaxX = ox + otherScale - 1;
-        const otherMaxY = oy + otherScale - 1;
-        const otherMaxZ = oz + otherScale - 1;
-
-        if (face.axis === "x") {
-          return (
-            (face.coordinate === ox || face.coordinate === otherMaxX + 1) &&
-            face.minU <= otherMaxY && face.maxU >= oy &&
-            face.minV <= otherMaxZ && face.maxV >= oz
-          );
-        }
-
-        if (face.axis === "y") {
-          return (
-            (face.coordinate === oy || face.coordinate === otherMaxY + 1) &&
-            face.minU <= otherMaxX && face.maxU >= ox &&
-            face.minV <= otherMaxZ && face.maxV >= oz
-          );
-        }
-
-        return (
-          (face.coordinate === oz || face.coordinate === otherMaxZ + 1) &&
-          face.minU <= otherMaxX && face.maxU >= ox &&
-          face.minV <= otherMaxY && face.maxV >= oy
-        );
-      });
-
-      if (containing.length) {
-        for (const other of containing) {
-          const relation: InfinityScaleBoundaryRelation =
-            other.chunk.level === level
-              ? "same-level"
-              : level < other.chunk.level
-                ? "fine-to-coarse"
-                : "coarse-to-fine";
-          const key = `${other.key}|${relation}`;
-          out.set(key, {
-            sourceChunk: chunk.key,
-            targetChunk: other.key,
-            relation,
-          });
-        }
-        continue;
-      }
-
-      // No explicit frame chunk owns this face. Request the logical same-level
-      // halo at the face coordinate. floorDiv semantics are required for
-      // negative coordinates so -1 maps to chunk -1 rather than zero.
-      const floorDiv = (value: number, divisor: number): number =>
-        Math.floor(value / divisor);
-
-      let nx = chunk.chunk.x;
-      let ny = chunk.chunk.y;
-      let nz = chunk.chunk.z;
-
-      if (face.axis === "x") nx = floorDiv(face.coordinate, scale);
-      if (face.axis === "y") ny = floorDiv(face.coordinate, scale);
-      if (face.axis === "z") nz = floorDiv(face.coordinate, scale);
-
-      const targetChunk = `${level}:${nx},${ny},${nz}`;
+    for (const targetChunk of logicalNeighbors) {
       out.set(`${targetChunk}|same-level`, {
         sourceChunk: chunk.key,
         targetChunk,
