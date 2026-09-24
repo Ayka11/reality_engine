@@ -97,12 +97,12 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   // Negative-side face: fine local x=[4..7], coarse neighbor x=[0..3].
   {
     const state = new InfinityScaleLODState(CHUNK);
-    const fine = key(0, 1);
+    const fine = key(0, 0);
     const coarse = key(1, -1);
     write(state, coarse, 1, -4, 4, 4, 13);
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 3, CHUNK);
-    const out = assertNotNull(snapshot.read(s, [4, 4, 4]), "fine-to-coarse -X");
+    const out = assertNotNull(snapshot.read(s, [0, 4, 4]), "fine-to-coarse -X");
     assertEqual(out[F.ENERGY], 13, "fine-to-coarse -X energy");
   }
 }
