@@ -10,6 +10,7 @@ import { InfinityScaleClosedLoopAdaptiveController, type InfinityScaleClosedLoop
 import { buildInfinityScaleAdaptiveMutationPlan } from "./InfinityScaleAdaptiveMutationPlanBuilder";
 import { InfinityScaleClosedLoopExecutablePlanner } from "./InfinityScaleClosedLoopExecutablePlanner";
 import type { InfinityScaleSpatialConstraintNode } from "./InfinityScaleSpatialConstraintClosure";
+import type { InfinityScaleClosedLoopPostCommitInput } from "./InfinityScaleClosedLoopAdaptiveController";
 
 export interface InfinityScaleAdaptiveRuntimeStep {
   stateRevision: number;
@@ -52,6 +53,8 @@ export class InfinityScaleAdaptiveRuntime {
   getTopologyRevision(): number { return this.topologyRevision; }
   getLOD(regionId: string): number | undefined { return this.lodState.getChunk(regionId)?.level; }
   getLODState(): InfinityScaleLODState { return this.lodState; }
+  observeClosedLoopPostCommit(input: InfinityScaleClosedLoopPostCommitInput): void { this.closedLoopController.observePostCommit(input); }
+  getClosedLoopTransitionState(regionId: string) { return this.closedLoopController.getTransitionState(regionId); }
 
   step(step: InfinityScaleAdaptiveRuntimeStep, frame?: InfinityScaleGlobalExecutionFrame, plan?: InfinityScaleExecutionPlan): InfinityScaleAdaptiveRuntimeResult {
     if (step.stateRevision !== this.stateRevision) throw new Error("Adaptive runtime state revision is stale");
