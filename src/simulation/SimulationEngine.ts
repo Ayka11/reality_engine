@@ -130,12 +130,31 @@ export class SimulationEngine {
       return;
     }
 
-    // The engine accepts a GPU plan only when the runtime capability handshake
-    // actually reports an initialized GPU. It never promotes CPU plans itself.
-    if (plan.mode === 'selective-gpu-ready' && !this._gpuReady) {
+    const capabilities = this.getInfinityScaleExecutionCapabilities();
+
+    // Revalidate the incoming plan against the current runtime capability
+    // handshake. A plan generated under an older mixed-LOD state must never
+    // remain selectively executable after that state changes.
+    if (plan.mode === 'selective-gpu-ready' && !capabilities.selectiveGpuReady) {
       throw new Error(
-        'Infinity Scale GPU execution plan requires initialized GPU capability',
+        'Infinity Scale GPU execution plan is incompatible with current GPU capability',
       );
+    }
+    if (plan.mode !== 'advisory') {
+      const hasMixedLodBoundary = plan.boundaryReadRelations.some(
+        relation => relation.relation !== 'same-level',
+      );
+      if (
+        hasMixedLodBoundary &&
+        (
+          !capabilities.lodBoundaryTransferReady ||
+          !capabilities.mixedLodExecutionReady
+        )
+      ) {
+        throw new Error(
+          'Infinity Scale mixed-LOD execution plan is no longer transaction-ready',
+        );
+      }
     }
 
     this._infinityExecutionPlan = {
