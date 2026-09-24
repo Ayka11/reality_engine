@@ -22,6 +22,7 @@ export interface InfinityScaleLODSynchronizationResult {
   revision: number;
   updates: InfinityScaleLODBoundaryUpdate[];
   conservationValid: boolean;
+  topologyValid: boolean;
   readyToCommit: boolean;
   invalidUpdateCount: number;
 }
@@ -87,17 +88,30 @@ export class InfinityScaleLODSynchronization {
 
   validate(): InfinityScaleLODSynchronizationResult {
     let invalidUpdateCount = 0;
+    let topologyValid = true;
+    const seenTargets = new Set<string>();
+
     for (const update of this.staged.values()) {
       if (update.value.length !== CELL_FIELDS || !update.value.every(Number.isFinite)) {
         invalidUpdateCount++;
       }
+
+      const targetKey = this.updateKey(update.targetChunk, update.targetCell);
+      if (seenTargets.has(targetKey)) topologyValid = false;
+      seenTargets.add(targetKey);
+
+      const level = chunkLevel(update.targetChunk);
+      const state = this.state.getChunk(update.targetChunk);
+      if (!state || state.level !== level) topologyValid = false;
     }
 
+    const conservationValid = invalidUpdateCount === 0;
     return {
       revision: this.revision,
       updates: this.getStagedUpdates(),
-      conservationValid: invalidUpdateCount === 0,
-      readyToCommit: invalidUpdateCount === 0,
+      conservationValid,
+      topologyValid,
+      readyToCommit: conservationValid && topologyValid,
       invalidUpdateCount,
     };
   }
