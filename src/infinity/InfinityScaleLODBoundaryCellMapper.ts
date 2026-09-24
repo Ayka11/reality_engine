@@ -99,3 +99,23 @@ export class InfinityScaleLODBoundaryCellMapper {
 function floorToScale(value: number, scale: number): number {
   return Math.floor(value / scale) * scale;
 }
+
+function sharedFaceAxis(
+  target: ExecutionCellRange,
+  source: ExecutionCellRange,
+): 0 | 1 | 2 | null {
+  if (target.maxX + 1 === source.minX || source.maxX + 1 === target.minX) return 0;
+  if (target.maxY + 1 === source.minY || source.maxY + 1 === target.minY) return 1;
+  if (target.maxZ + 1 === source.minZ || source.maxZ + 1 === target.minZ) return 2;
+  return null;
+}
+
+function sourceFaceCoordinate(
+  source: ExecutionCellRange,
+  target: ExecutionCellRange,
+  axis: 0 | 1 | 2,
+): number {
+  if (axis === 0) return source.minX > target.maxX ? source.minX : source.maxX;
+  if (axis === 1) return source.minY > target.maxY ? source.minY : source.maxY;
+  return source.minZ > target.maxZ ? source.minZ : source.maxZ;
+}
