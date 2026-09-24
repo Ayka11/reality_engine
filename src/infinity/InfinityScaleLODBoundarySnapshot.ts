@@ -192,7 +192,7 @@ export class InfinityScaleLODBoundarySnapshot {
     // the coarse cell's tangential extent, so restrict exactly ratio^2 cells.
     if (spec.relation === "fine-to-coarse") {
       const ratio = spec.refinementRatio;
-      const sourceFaceOrigin = [x, y, z] as [number, number, number];
+      const sourceFaceOrigin = shiftAcrossFace([x, y, z], face, 1);
       const axis = face.axis === "x" ? 0 : face.axis === "y" ? 1 : 2;
       const tangentialAxes = axis === 0 ? [1, 2] : axis === 1 ? [0, 2] : [0, 1];
 
