@@ -131,7 +131,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
 
     const s = spec(coarse, fine, "coarse-to-fine", 2, 0);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 5, CHUNK);
-    const out = assertNotNull(snapshot.read(s, [127, 1, 1]), "coarse-to-fine ratio 4");
+    const out = assertNotNull(snapshot.read(s, [15, 1, 1]), "coarse-to-fine ratio 4");
     assertEqual(out[F.ENERGY], 23, "coarse-to-fine ratio 4 energy");
   }
 
