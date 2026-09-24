@@ -3,7 +3,10 @@ import {
   InfinityScaleLODState,
   type InfinityScaleLODChunkState,
 } from "./InfinityScaleLODState";
-import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
+import type {
+  InfinityScaleBoundaryTransferSpec,
+  InfinityScaleChunkExecutionContext,
+} from "./InfinityScaleChunkExecutionContext";
 import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
 
 export interface InfinityScaleLODTransferSample {
@@ -18,16 +21,15 @@ export interface InfinityScaleLODBoundaryCoverage {
   requiredSourceChunks: string[];
   missingSourceChunks: string[];
   complete: boolean;
+  invalidBoundaryReads: number;
+  firstInvalidRead?: {
+    sourceChunk: string;
+    targetChunk: string;
+    relation: string;
+    targetCell: [number, number, number];
+  };
 }
 
-/**
- * Immutable read-only boundary snapshot.
- *
- * Local solvers consume this object during a frame instead of reading and
- * mutating another LOD owner's state. The snapshot is intentionally detached
- * from InfinityScaleLODState so later local writes cannot change the values
- * observed by the current tick.
- */
 export class InfinityScaleLODBoundarySnapshot {
   private readonly chunks = new Map<string, InfinityScaleLODChunkState>();
 
@@ -74,20 +76,76 @@ export class InfinityScaleLODBoundarySnapshot {
     return this.chunks.has(key);
   }
 
-  /**
-   * Returns an explicit coverage report for every source chunk required by
-   * the immutable transfer contract. A missing source is a hard execution
-   * error; local solvers must not silently fall back to mutable or stale state.
-   */
   getCoverage(): InfinityScaleLODBoundaryCoverage {
     const requiredSourceChunks = [...new Set(this.specs.map(spec => spec.targetChunk))].sort();
-    const missingSourceChunks = requiredSourceChunks.filter(
-      key => !this.chunks.has(key),
-    );
+    const missingSourceChunks = requiredSourceChunks.filter(key => !this.chunks.has(key));
     return {
       requiredSourceChunks,
       missingSourceChunks,
       complete: missingSourceChunks.length === 0,
+      invalidBoundaryReads: 0,
+    };
+  }
+
+  validateFaceCoverage(
+    context: InfinityScaleChunkExecutionContext,
+  ): InfinityScaleLODBoundaryCoverage {
+    const base = this.getCoverage();
+    let invalidBoundaryReads = 0;
+    let firstInvalidRead = base.firstInvalidRead;
+
+    for (const range of context.simulationRanges) {
+      const faces = [
+        { axis: "x", value: range.minX },
+        { axis: "x", value: range.maxX },
+        { axis: "y", value: range.minY },
+        { axis: "y", value: range.maxY },
+        { axis: "z", value: range.minZ },
+        { axis: "z", value: range.maxZ },
+      ] as const;
+
+      const seen = new Set<string>();
+      for (const face of faces) {
+        for (let z = range.minZ; z <= range.maxZ; z++) {
+          for (let y = range.minY; y <= range.maxY; y++) {
+            for (let x = range.minX; x <= range.maxX; x++) {
+              if (
+                (face.axis === "x" && x !== face.value) ||
+                (face.axis === "y" && y !== face.value) ||
+                (face.axis === "z" && z !== face.value)
+              ) continue;
+
+              const key = `${x},${y},${z}`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+
+              const specs = context.getBoundaryTransferSpecsForCell(x, y, z)
+                .filter(spec => spec.sourceLevel !== spec.targetLevel);
+
+              for (const spec of specs) {
+                if (!this.hasSourceChunk(spec.targetChunk) || !this.read(spec, [x, y, z])) {
+                  invalidBoundaryReads++;
+                  if (!firstInvalidRead) {
+                    firstInvalidRead = {
+                      sourceChunk: spec.sourceChunk,
+                      targetChunk: spec.targetChunk,
+                      relation: spec.relation,
+                      targetCell: [x, y, z],
+                    };
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      ...base,
+      complete: base.complete && invalidBoundaryReads === 0,
+      invalidBoundaryReads,
+      ...(firstInvalidRead ? { firstInvalidRead } : {}),
     };
   }
 
@@ -100,11 +158,18 @@ export class InfinityScaleLODBoundarySnapshot {
     }
   }
 
-  /**
-   * Reads a base-resolution target coordinate from the corresponding
-   * neighboring LOD owner. For a coarse source, the source cell covering the
-   * target coordinate is returned as piecewise-constant prolongation.
-   */
+  assertFaceCoverage(context: InfinityScaleChunkExecutionContext): void {
+    const coverage = this.validateFaceCoverage(context);
+    if (!coverage.complete) {
+      const detail = coverage.firstInvalidRead
+        ? ` at ${coverage.firstInvalidRead.targetCell.join(",")}`
+        : "";
+      throw new Error(
+        `Infinity Scale mixed-LOD boundary face coverage is incomplete: ${coverage.invalidBoundaryReads} invalid reads${detail}`,
+      );
+    }
+  }
+
   read(
     spec: InfinityScaleBoundaryTransferSpec,
     targetCell: [number, number, number],
@@ -160,7 +225,7 @@ export class InfinityScaleLODBoundarySnapshot {
               flz < 0 || flz >= this.chunkSize
             ) return null;
 
-            const fineOffset = ((flz * this.chunkSize * this.chunkSize) + fly * this.chunkSize + flx) * CELL_FIELDS;
+            const fineOffset = ((flz * this.chunkSize * this.chunkSize) + fly * this.chunkSize + flz * 0 + flx) * CELL_FIELDS;
             const cell = new Float32Array(CELL_FIELDS);
             cell.set(source.cells.subarray(fineOffset, fineOffset + CELL_FIELDS));
             fineCells.push(cell);
