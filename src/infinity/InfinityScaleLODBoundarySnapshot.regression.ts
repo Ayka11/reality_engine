@@ -382,6 +382,48 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     );
   }
 
+  // Full-cell convergence contract: uniform states must survive
+  // coarse -> fine -> coarse transfer within numerical tolerance.
+  {
+    const source = cell(17);
+    source[F.ENERGY] = 96;
+    source[F.INFORMATION] = 48;
+    source[F.DENSITY] = 0.625;
+    source[F.TEMPERATURE] = 291.25;
+    source[F.WAVE_PHASE] = 1.2345;
+    source[F.MATERIAL_ID] = 7;
+
+    const children = Array.from({ length: 8 }, () => new Array<number>(24).fill(0));
+    InfinityScaleLODTransfer.prolongate(source, children, 1, 0);
+
+    const roundTrip = new Array<number>(24).fill(0);
+    InfinityScaleLODTransfer.restrict(children, roundTrip, 0, 1);
+
+    const tolerance = 1e-6;
+    for (const field of [
+      F.ENERGY,
+      F.INFORMATION,
+      F.DENSITY,
+      F.TEMPERATURE,
+      F.WAVE_PHASE,
+      F.MATERIAL_ID,
+    ]) {
+      const error = field === F.WAVE_PHASE
+        ? Math.abs(
+            Math.atan2(
+              Math.sin(roundTrip[field] - source[field]),
+              Math.cos(roundTrip[field] - source[field]),
+            ),
+          )
+        : Math.abs(roundTrip[field] - source[field]);
+      if (error > tolerance) {
+        throw new Error(
+          `Infinity Scale convergence regression failed for field ${field}: error=${error}`,
+        );
+      }
+    }
+  }
+
   // Circular phase regression: arithmetic averaging of +179° and -179°
   // would incorrectly approach 0°, while phasor averaging stays near pi.
   {
