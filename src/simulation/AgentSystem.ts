@@ -53,6 +53,14 @@ export class AgentSystem {
   readonly maxAgents = 64;
   private pendingMigrations: AgentMigrationRequest[] = [];
 
+  queueMigrationRequest(request: AgentMigrationRequest): void {
+    this.pendingMigrations.push({
+      ...request,
+      from: [...request.from] as [number, number, number],
+      to: [...request.to] as [number, number, number],
+    });
+  }
+
   consumeMigrationRequests(): AgentMigrationRequest[] {
     const deduped = new Map<string, AgentMigrationRequest>();
     for (const request of this.pendingMigrations) {
