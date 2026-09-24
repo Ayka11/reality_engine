@@ -93,6 +93,66 @@ export class InfinityScaleLODBoundaryCellMapper {
     return { targetCell, sourceCells };
   }
 
+  enumerateTargetFaceCells(
+    spec: InfinityScaleBoundaryTransferSpec,
+    gridWidth: number,
+    gridHeight: number,
+    gridDepth: number,
+  ): Array<[number, number, number]> {
+    const target = this.rangeForChunk(spec.targetChunk);
+    const source = this.rangeForChunk(spec.sourceChunk);
+    const scale = 2 ** spec.targetLevel;
+    const cells: Array<[number, number, number]> = [];
+
+    const x0 = Math.max(target.minX, source.minX);
+    const x1 = Math.min(target.maxX, source.maxX);
+    const y0 = Math.max(target.minY, source.minY);
+    const y1 = Math.min(target.maxY, source.maxY);
+    const z0 = Math.max(target.minZ, source.minZ);
+    const z1 = Math.min(target.maxZ, source.maxZ);
+
+    const pushFace = (
+      axis: 0 | 1 | 2,
+      coordinate: number,
+      minU: number,
+      maxU: number,
+      minV: number,
+      maxV: number,
+    ) => {
+      for (let v = minV; v <= maxV; v += scale) {
+        for (let u = minU; u <= maxU; u += scale) {
+          const cell: [number, number, number] =
+            axis === 0 ? [coordinate, u, v] :
+            axis === 1 ? [u, coordinate, v] :
+            [u, v, coordinate];
+          if (
+            cell[0] >= 0 && cell[0] < gridWidth &&
+            cell[1] >= 0 && cell[1] < gridHeight &&
+            cell[2] >= 0 && cell[2] < gridDepth
+          ) {
+            cells.push(cell);
+          }
+        }
+      }
+    };
+
+    if (target.maxX + 1 === source.minX) {
+      pushFace(0, target.maxX, y0, y1, z0, z1);
+    } else if (source.maxX + 1 === target.minX) {
+      pushFace(0, target.minX, y0, y1, z0, z1);
+    } else if (target.maxY + 1 === source.minY) {
+      pushFace(1, target.maxY, x0, x1, z0, z1);
+    } else if (source.maxY + 1 === target.minY) {
+      pushFace(1, target.minY, x0, x1, z0, z1);
+    } else if (target.maxZ + 1 === source.minZ) {
+      pushFace(2, target.maxZ, x0, x1, y0, y1);
+    } else if (source.maxZ + 1 === target.minZ) {
+      pushFace(2, target.minZ, x0, x1, y0, y1);
+    }
+
+    return cells;
+  }
+
   resolveValues(
     spec: InfinityScaleBoundaryTransferSpec,
     targetCell: [number, number, number],
