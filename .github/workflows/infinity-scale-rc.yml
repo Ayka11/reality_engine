@@ -47,3 +47,6 @@ jobs:
 
       - name: Release provenance integrity
         run: npm run validate:infinity-scale:integrity
+
+      - name: Emit deterministic RC package record
+        run: npm run package:infinity-scale:rc
