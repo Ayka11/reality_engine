@@ -47,6 +47,29 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
   return null;
 }
 
+export function isInfinityScaleBoundaryCell(
+  spec: InfinityScaleBoundaryTransferSpec,
+  targetCell: [number, number, number],
+  chunkSize = 32,
+): boolean {
+  const face = resolveInfinityScaleBoundaryFaceGeometry(spec, chunkSize);
+  if (!face) return false;
+
+  const source = rangeForChunk(spec.sourceChunk, chunkSize);
+  const [x, y, z] = targetCell;
+
+  if (face.axis === 0) {
+    const sourceCoordinate = source.maxX < face.coordinate ? source.maxX : source.minX;
+    return x === sourceCoordinate && y >= face.minU && y <= face.maxU && z >= face.minV && z <= face.maxV;
+  }
+  if (face.axis === 1) {
+    const sourceCoordinate = source.maxY < face.coordinate ? source.maxY : source.minY;
+    return y === sourceCoordinate && x >= face.minU && x <= face.maxU && z >= face.minV && z <= face.maxV;
+  }
+  const sourceCoordinate = source.maxZ < face.coordinate ? source.maxZ : source.minZ;
+  return z === sourceCoordinate && x >= face.minU && x <= face.maxU && y >= face.minV && y <= face.maxV;
+}
+
 export function mapInfinityScaleBoundaryCell(
   spec: InfinityScaleBoundaryTransferSpec,
   targetCell: [number, number, number],
