@@ -1,8 +1,6 @@
 import { CELL_FIELDS } from "../core/CellState";
-import {
-  InfinityScaleLODState,
-  type InfinityScaleLODChunkState,
-} from "./InfinityScaleLODState";
+import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import { getInfinityScaleFieldSemantics } from "./InfinityScaleFieldSemantics";
 import {
   InfinityScaleLODTransfer,
 } from "./InfinityScaleLODTransfer";
@@ -25,6 +23,7 @@ export interface InfinityScaleLODSynchronizationResult {
   topologyValid: boolean;
   readyToCommit: boolean;
   invalidUpdateCount: number;
+  conservationErrorFields: number[];
 }
 
 export class InfinityScaleLODSynchronization {
@@ -37,6 +36,7 @@ export class InfinityScaleLODSynchronization {
     if (!Number.isInteger(revision) || revision < 0) {
       throw new Error("Infinity Scale synchronization revision must be a non-negative integer");
     }
+    this.state.assertRevision(revision);
     this.staged.clear();
     this.revision = revision;
   }
@@ -87,9 +87,11 @@ export class InfinityScaleLODSynchronization {
   }
 
   validate(): InfinityScaleLODSynchronizationResult {
+    this.state.assertRevision(this.revision);
     let invalidUpdateCount = 0;
     let topologyValid = true;
     const seenTargets = new Set<string>();
+    const conservationErrorFields: number[] = [];
 
     for (const update of this.staged.values()) {
       if (update.value.length !== CELL_FIELDS || !update.value.every(Number.isFinite)) {
@@ -106,21 +108,50 @@ export class InfinityScaleLODSynchronization {
     }
 
     const conservationValid = invalidUpdateCount === 0;
+    for (const field of Array.from({ length: CELL_FIELDS }, (_, index) => index)) {
+      const semantics = getInfinityScaleFieldSemantics(field);
+      if (semantics.conservation === "none" || semantics.policy === "unsupported") continue;
+
+      let sourceTotal = 0;
+      let targetTotal = 0;
+      let hasComparableUpdate = false;
+
+      for (const update of this.staged.values()) {
+        if (update.relation === "fine-to-coarse" && semantics.conservation === "sum") {
+          const sourceState = this.state.getChunk(update.sourceChunk);
+          const targetState = this.state.getChunk(update.targetChunk);
+          if (!sourceState || !targetState) continue;
+          hasComparableUpdate = true;
+          targetTotal += update.value[field] ?? 0;
+          // Fine-to-coarse restriction output is the complete aggregate for the
+          // source footprint, so the staged target is directly comparable.
+          const sourceCell = sourceState.cells[0] ?? 0;
+          sourceTotal += sourceCell;
+        }
+      }
+
+      if (hasComparableUpdate && Math.abs(sourceTotal - targetTotal) > 1e-4 * Math.max(1, Math.abs(sourceTotal), Math.abs(targetTotal))) {
+        conservationErrorFields.push(field);
+      }
+    }
+
     return {
       revision: this.revision,
       updates: this.getStagedUpdates(),
-      conservationValid,
+      conservationValid: conservationValid && conservationErrorFields.length === 0,
       topologyValid,
-      readyToCommit: conservationValid && topologyValid,
+      readyToCommit: conservationValid && topologyValid && conservationErrorFields.length === 0,
       invalidUpdateCount,
+      conservationErrorFields,
     };
   }
 
   commit(): InfinityScaleLODSynchronizationResult {
     const result = this.validate();
+    this.state.assertRevision(this.revision);
     if (!result.readyToCommit) {
       throw new Error(
-        `Infinity Scale LOD synchronization rejected with ${result.invalidUpdateCount} invalid updates`,
+        `Infinity Scale LOD synchronization rejected: invalid=${result.invalidUpdateCount}, conservationErrors=${result.conservationErrorFields.length}`,
       );
     }
 
