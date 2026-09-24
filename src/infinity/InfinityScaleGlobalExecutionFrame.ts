@@ -1,6 +1,5 @@
-import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
+import type { InfinityScaleExecutionPlan, InfinityScaleExecutionCapabilities } from "./InfinityScaleExecutionAdapter";
 import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
-import type { InfinityScaleExecutionCapabilities } from "./InfinityScaleExecutionAdapter";
 
 /**
  * Transactional control-plane contract for one Infinity Scale simulation frame.
@@ -53,13 +52,26 @@ export function beginInfinityScaleGlobalFrame(
   };
 }
 
-function fingerprintCapabilities(plan: InfinityScaleExecutionPlan): string {
+function fingerprintCapabilities(
+  plan: Pick<
+    InfinityScaleExecutionPlan,
+    | "mode"
+    | "selectiveCpuReady"
+    | "selectiveGpuReady"
+    | "gpuPhysicsReady"
+    | "lodBoundaryTransferReady"
+    | "mixedLodExecutionReady"
+    | "entityExecutionReady"
+    | "agentMigrationReady"
+  >,
+): string {
   return [
     plan.mode,
     plan.selectiveCpuReady,
     plan.selectiveGpuReady,
     plan.gpuPhysicsReady,
     plan.lodBoundaryTransferReady,
+    plan.mixedLodExecutionReady,
     plan.entityExecutionReady,
     plan.agentMigrationReady,
   ].join("|");
@@ -106,14 +118,23 @@ export function validateInfinityScaleGlobalFrameCommit(
   if (frame.finalized) {
     throw new Error("Infinity Scale commit rejected: frame already finalized");
   }
-  if (capabilities && frame.capabilityFingerprint !== fingerprintCapabilities({
-    ...plan,
-    selectiveCpuReady: capabilities.selectiveCpuReady,
-    selectiveGpuReady: capabilities.selectiveGpuReady,
-    gpuPhysicsReady: capabilities.gpuPhysicsReady,
-    lodBoundaryTransferReady: capabilities.lodBoundaryTransferReady,
-  })) {
-    throw new Error("Infinity Scale commit rejected: execution capabilities changed");
+  if (
+    capabilities &&
+    frame.capabilityFingerprint !==
+      fingerprintCapabilities({
+        mode: plan.mode,
+        selectiveCpuReady: capabilities.selectiveCpuReady,
+        selectiveGpuReady: capabilities.selectiveGpuReady,
+        gpuPhysicsReady: capabilities.gpuPhysicsReady,
+        lodBoundaryTransferReady: capabilities.lodBoundaryTransferReady,
+        mixedLodExecutionReady: capabilities.mixedLodExecutionReady,
+        entityExecutionReady: plan.entityExecutionReady,
+        agentMigrationReady: plan.agentMigrationReady,
+      })
+  ) {
+    throw new Error(
+      "Infinity Scale commit rejected: execution capabilities changed",
+    );
   }
 }
 
