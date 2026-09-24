@@ -360,7 +360,11 @@ export class SimulationEngine {
       if (!selectivePlan) {
         throw new Error('Infinity Scale frame lost its execution plan');
       }
-      validateInfinityScaleGlobalFrameCommit(frameState, selectivePlan);
+      validateInfinityScaleGlobalFrameCommit(
+        frameState,
+        selectivePlan,
+        this.getInfinityScaleExecutionCapabilities(),
+      );
     }
 
     // Agent migrations cross ownership boundaries only at the frame barrier.
