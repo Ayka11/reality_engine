@@ -1,5 +1,8 @@
 import { InfinityScaleMixedLODCPUExecutor } from "./InfinityScaleMixedLODCPUExecutor";
-import { InfinityScaleGlobalLODTransaction } from "./InfinityScaleGlobalLODTransaction";
+import {
+  beginInfinityScaleGlobalLODTransaction,
+  commitInfinityScaleGlobalLODTransaction,
+} from "./InfinityScaleGlobalLODTransaction";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
@@ -7,7 +10,6 @@ import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExe
 
 export function runInfinityScaleMixedLODCPURegression(): void {
   const state = new InfinityScaleLODState(4);
-  const context = new InfinityScaleChunkExecutionContext(4, 8, 8, 8);
   const coarseKey = "1:0,0,0";
   const fineKey = "0:8,0,0";
 
@@ -61,6 +63,7 @@ export function runInfinityScaleMixedLODCPURegression(): void {
     agentMigrationReady: false,
   };
 
+  const context = new InfinityScaleChunkExecutionContext(plan, 8, 8, 8, 4);
   const frame: InfinityScaleGlobalExecutionFrame = {
     revision: 1,
     tickStart: 0,
@@ -75,7 +78,7 @@ export function runInfinityScaleMixedLODCPURegression(): void {
     capabilityFingerprint: "regression",
   };
 
-  const transaction = new InfinityScaleGlobalLODTransaction(state, frame);
+  const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
   const executor = new InfinityScaleMixedLODCPUExecutor(state, context);
 
   const result = executor.execute(
@@ -100,7 +103,7 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   }
 
   frame.phase = "boundary-reconciliation";
-  transaction.commit(frame);
+  commitInfinityScaleGlobalLODTransaction(transaction, frame);
 
   const sample = state.readBaseCell(coarseKey, 1, 0, 0, 0);
   if (!sample || sample[0] !== 9) {
