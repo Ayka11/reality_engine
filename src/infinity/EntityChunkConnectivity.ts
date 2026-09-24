@@ -4,6 +4,7 @@ import type {
   ExecutionCellRange,
 } from "./InfinityScaleChunkExecutionContext";
 import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
+import type { InfinityScaleLODBoundarySnapshot } from "./InfinityScaleLODBoundarySnapshot";
 
 export interface EntityChunkComponent {
   id: number;
@@ -11,6 +12,7 @@ export interface EntityChunkComponent {
   centroid: [number, number, number];
   touchesSimulationBoundary: boolean;
   touchesReadBoundary: boolean;
+  touchesMixedLODBoundary: boolean;
 }
 
 export interface EntityChunkConnectivityResult {
@@ -39,12 +41,13 @@ export class EntityChunkConnectivity {
   analyze(
     grid: VoxelGrid,
     context: InfinityScaleChunkExecutionContext,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): EntityChunkConnectivityResult {
     const pieces: Piece[] = [];
     const pieceByCell = new Map<number, number>();
 
     for (const range of context.simulationRanges) {
-      const pieceIds = this.labelRange(grid, range, context, pieces, pieceByCell);
+      const pieceIds = this.labelRange(grid, range, context, pieces, pieceByCell, boundarySnapshot);
       void pieceIds;
     }
 
@@ -87,6 +90,7 @@ export class EntityChunkConnectivity {
           centroid: [0, 0, 0],
           touchesSimulationBoundary: false,
           touchesReadBoundary: false,
+          touchesMixedLODBoundary: false,
         };
         merged.set(root, out);
       }
@@ -94,6 +98,7 @@ export class EntityChunkConnectivity {
       out.centroid = this.centroid(out.cells, grid);
       out.touchesSimulationBoundary ||= pieces[i].touchesSimulationBoundary;
       out.touchesReadBoundary ||= pieces[i].touchesReadBoundary;
+      out.touchesMixedLODBoundary ||= pieces[i].touchesMixedLODBoundary;
     }
 
     const components = [...merged.values()];
@@ -111,6 +116,7 @@ export class EntityChunkConnectivity {
     context: InfinityScaleChunkExecutionContext,
     pieces: Piece[],
     pieceByCell: Map<number, number>,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): number[] {
     const visited = new Uint8Array(
       Math.max(0, rangeVolume(range)),
@@ -139,6 +145,7 @@ export class EntityChunkConnectivity {
           const cells: number[] = [];
           const boundaryCells: number[] = [];
           let touchesReadBoundary = false;
+          let touchesMixedLODBoundary = false;
 
           while (stack.length) {
             const current = stack.pop()!;
@@ -150,7 +157,16 @@ export class EntityChunkConnectivity {
               c.y === range.minY || c.y === range.maxY ||
               c.z === range.minZ || c.z === range.maxZ;
 
-            if (onRangeBoundary) boundaryCells.push(current);
+            if (onRangeBoundary) {
+              boundaryCells.push(current);
+              if (boundarySnapshot) {
+                const mixedSpecs = context.getBoundaryTransferSpecsForCell(c.x, c.y, c.z)
+                  .filter(spec => spec.sourceLevel !== spec.targetLevel);
+                if (mixedSpecs.some(spec => boundarySnapshot.hasSourceChunk(spec.targetChunk))) {
+                  touchesMixedLODBoundary = true;
+                }
+              }
+            }
 
             const dirs = [
               [1, 0, 0], [-1, 0, 0],
@@ -192,6 +208,7 @@ export class EntityChunkConnectivity {
               boundaryCells,
               touchesSimulationBoundary: boundaryCells.length > 0,
               touchesReadBoundary,
+              touchesMixedLODBoundary,
             });
             for (const cell of cells) pieceByCell.set(cell, id);
             pieceIds.push(id);
@@ -232,6 +249,7 @@ interface Piece {
   boundaryCells: number[];
   touchesSimulationBoundary: boolean;
   touchesReadBoundary: boolean;
+  touchesMixedLODBoundary: boolean;
 }
 
 class UnionFind {
