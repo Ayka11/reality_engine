@@ -79,7 +79,7 @@ export class InfinityScalePredictiveAdaptiveController {
       predictionConfidence: prediction.confidence,
       goalRelevance,
       physicalCriticality: clamp01(input.physicalCriticality),
-      estimatedErrorReduction: clamp01(input.estimatedErrorReduction),
+      estimatedErrorReduction: clamp01(input.estimatedErrorReduction),\n      causalPhysicalBenefit: input.causalAttribution ? clamp01(input.causalAttribution.physicalEvolution + input.causalAttribution.numericalResidual) : undefined,\n      causalTransitionDisturbance: input.causalAttribution ? clamp01(input.causalAttribution.lodTransitionEffect + input.causalAttribution.transferEffect) : undefined,
       estimatedNewCells: input.estimatedNewCells,
       estimatedTransferDescriptors: input.estimatedTransferDescriptors,
       estimatedMemoryBytes: input.estimatedMemoryBytes,
