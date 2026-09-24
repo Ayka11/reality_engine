@@ -4,6 +4,7 @@ import { InfinityScaleLODBoundarySnapshot } from "./InfinityScaleLODBoundarySnap
 import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
 import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import { InfinityScaleLODBoundaryCellMapper } from "./InfinityScaleLODBoundaryCellMapper";
+import { validateInfinityScaleBoundaryGeometry } from "./InfinityScaleLODBoundaryGeometry";
 import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 
@@ -70,6 +71,19 @@ function spec(
  * framework, so it can be invoked by any host without adding a test runtime.
  */
 export function runInfinityScaleLODBoundaryRegression(): void {
+  // Geometry validation must use the same canonical face definition as the mapper.
+  {
+    const s = spec(key(0, 0), key(1, 1), "fine-to-coarse", 0, 1);
+    const valid = validateInfinityScaleBoundaryGeometry(s, [3, 2, 2], CHUNK);
+    if (!valid || valid.axis !== "x" || valid.direction !== 1) {
+      throw new Error("Infinity Scale regression failed: canonical boundary geometry validation");
+    }
+    const interior = validateInfinityScaleBoundaryGeometry(s, [2, 2, 2], CHUNK);
+    if (interior !== null) {
+      throw new Error("Infinity Scale regression failed: interior target cell accepted as boundary");
+    }
+  }
+
   // Cross-layer contract: the immutable snapshot and state-backed mapper must
   // resolve the same canonical fine->coarse footprint.
   {
