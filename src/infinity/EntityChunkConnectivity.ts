@@ -6,6 +6,15 @@ import type {
 import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import type { InfinityScaleLODBoundarySnapshot } from "./InfinityScaleLODBoundarySnapshot";
 
+export interface EntityBoundaryTopologySample {
+  localCell: number;
+  neighborCell: [number, number, number];
+  sourceChunk: string;
+  relation: "coarse-to-fine" | "fine-to-coarse";
+  occupied: boolean;
+  sourceEntityId: number;
+}
+
 export interface EntityChunkComponent {
   id: number;
   cells: number[];
@@ -21,6 +30,7 @@ export interface EntityChunkConnectivityResult {
   boundaryComponentCount: number;
   openReadComponentCount: number;
   mixedLodComponentCount: number;
+  mixedLodTopology: EntityBoundaryTopologySample[];
 }
 
 /**
@@ -103,12 +113,19 @@ export class EntityChunkConnectivity {
     }
 
     const components = [...merged.values()];
+    const mixedLodTopology = this.collectMixedLodTopology(
+      grid,
+      context,
+      boundarySnapshot,
+      components,
+    );
     return {
       components,
       closedComponentCount: components.filter(c => !c.touchesReadBoundary && !c.touchesMixedLODBoundary).length,
       boundaryComponentCount: components.filter(c => c.touchesSimulationBoundary).length,
       openReadComponentCount: components.filter(c => c.touchesReadBoundary).length,
       mixedLodComponentCount: components.filter(c => c.touchesMixedLODBoundary).length,
+      mixedLodTopology,
     };
   }
 
@@ -220,6 +237,58 @@ export class EntityChunkConnectivity {
     }
 
     return pieceIds;
+  }
+
+  private collectMixedLodTopology(
+    grid: VoxelGrid,
+    context: InfinityScaleChunkExecutionContext,
+    boundarySnapshot: InfinityScaleLODBoundarySnapshot | undefined,
+    components: EntityChunkComponent[],
+  ): EntityBoundaryTopologySample[] {
+    if (!boundarySnapshot) return [];
+    const componentByCell = new Map<number, EntityChunkComponent>();
+    for (const component of components) {
+      for (const cell of component.cells) componentByCell.set(cell, component);
+    }
+    const samples: EntityBoundaryTopologySample[] = [];
+    const seen = new Set<string>();
+    const dirs = [
+      [1, 0, 0], [-1, 0, 0],
+      [0, 1, 0], [0, -1, 0],
+      [0, 0, 1], [0, 0, -1],
+    ] as const;
+
+    for (const component of components) {
+      if (!component.touchesMixedLODBoundary) continue;
+      for (const cell of component.cells) {
+        const c = this.coords(cell, grid);
+        const specs = context.getBoundaryTransferSpecsForCell(c.x, c.y, c.z)
+          .filter(spec => spec.sourceLevel !== spec.targetLevel);
+        if (!specs.length) continue;
+        for (const [dx, dy, dz] of dirs) {
+          const nx = c.x + dx, ny = c.y + dy, nz = c.z + dz;
+          if (nx < 0 || nx >= grid.W || ny < 0 || ny >= grid.H || nz < 0 || nz >= grid.D) continue;
+          for (const spec of specs) {
+            if (!boundarySnapshot.hasSourceChunk(spec.targetChunk)) continue;
+            const values = boundarySnapshot.read(spec, [nx, ny, nz]);
+            if (!values) continue;
+            const sourceEntityId = Math.round(values[F.ENTITY_ID] ?? 0);
+            const key = `${cell}|${nx},${ny},${nz}|${spec.targetChunk}|${spec.relation}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            samples.push({
+              localCell: cell,
+              neighborCell: [nx, ny, nz],
+              sourceChunk: spec.targetChunk,
+              relation: spec.relation,
+              occupied: sourceEntityId !== 0,
+              sourceEntityId,
+            });
+          }
+        }
+      }
+    }
+    return samples;
   }
 
   private centroid(cells: number[], grid: VoxelGrid): [number, number, number] {
