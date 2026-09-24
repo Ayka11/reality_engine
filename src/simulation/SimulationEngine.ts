@@ -23,6 +23,7 @@ import { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChu
 import { InfinityScaleLODState } from '../infinity/InfinityScaleLODState';
 import { InfinityScaleLODTransfer } from '../infinity/InfinityScaleLODTransfer';
 import { InfinityScaleLODBoundarySnapshot } from '../infinity/InfinityScaleLODBoundarySnapshot';
+import { InfinityScaleMixedLODCPUExecutor } from '../infinity/InfinityScaleMixedLODCPUExecutor';
 import { validateInfinityScaleMixedLOD, type InfinityScaleMixedLODValidation } from '../infinity/InfinityScaleMixedLODValidation';
 import {
   advanceInfinityScaleGlobalFrame,
@@ -371,6 +372,21 @@ export class SimulationEngine {
 
     if (!frameContext) {
       this._detectCausality(null);
+    }
+
+    if (
+      frameState &&
+      frameContext &&
+      selectivePlan &&
+      unifiedTransaction &&
+      lodTransaction &&
+      frameContext.boundaryTransferSpecs.some(spec => spec.sourceLevel !== spec.targetLevel)
+    ) {
+      const mixedLODExecutor = new InfinityScaleMixedLODCPUExecutor(
+        this.infinityScaleLODState,
+        frameContext,
+      );
+      mixedLODExecutor.stageBoundaryTransfers(lodTransaction);
     }
 
     if (frameState && frameContext && selectivePlan && unifiedTransaction) {
