@@ -4,6 +4,7 @@ import {
   commitInfinityScaleGlobalLODTransaction,
 } from "./InfinityScaleGlobalLODTransaction";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import { CELL_FIELDS } from "../core/CellState";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
@@ -19,12 +20,12 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   for (let z = 0; z < 4; z++) {
     for (let y = 0; y < 4; y++) {
       for (let x = 0; x < 4; x++) {
-        const coarse = new Float32Array(state.fieldCount);
+        const coarse = new Float32Array(CELL_FIELDS);
         coarse[0] = 8;
         coarse[1] = 3;
         state.writeBaseCell(coarseKey, 1, x * 2, y * 2, z * 2, coarse);
 
-        const fine = new Float32Array(state.fieldCount);
+        const fine = new Float32Array(CELL_FIELDS);
         fine[0] = 1;
         fine[1] = 5;
         state.writeBaseCell(fineKey, 0, 8 + x, y, z, fine);
