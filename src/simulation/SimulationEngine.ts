@@ -31,6 +31,15 @@ import {
   validateInfinityScaleGlobalFrameCommit,
   type InfinityScaleGlobalExecutionFrame,
 } from '../infinity/InfinityScaleGlobalExecutionFrame';
+import {
+  beginInfinityScaleGlobalLODTransaction,
+} from '../infinity/InfinityScaleGlobalLODTransaction';
+import {
+  beginInfinityScaleUnifiedTransaction,
+  stageInfinityScaleEntityCommit,
+  stageInfinityScaleAgentMigrations,
+  commitInfinityScaleUnifiedTransaction,
+} from '../infinity/InfinityScaleUnifiedTransaction';
 
 export class SimulationEngine {
   readonly grid: SparseVoxelGrid;
@@ -194,6 +203,26 @@ export class SimulationEngine {
     let frameState = frame
       ? advanceInfinityScaleGlobalFrame(frame, 'local-execution')
       : null;
+    const lodTransaction =
+      frameState && selectivePlan
+        ? beginInfinityScaleGlobalLODTransaction(
+            frameState,
+            selectivePlan,
+            this.infinityScaleLODState,
+          )
+        : null;
+    const unifiedTransaction =
+      frameState && selectivePlan && frameContext
+        ? beginInfinityScaleUnifiedTransaction(
+            frameState,
+            selectivePlan,
+            lodTransaction!,
+            this.entityLayer,
+            this.agents,
+            this.grid,
+            frameContext,
+          )
+        : null;
     const frameContext = selectivePlan
       ? new InfinityScaleChunkExecutionContext(selectivePlan, this.grid.W, this.grid.H, this.grid.D)
       : null;
@@ -340,35 +369,28 @@ export class SimulationEngine {
       if (!selectivePlan) this._tick += nSteps;
     }
 
-    if (frameState && frameContext) {
-      if (!selectivePlan) {
-        throw new Error('Infinity Scale frame lost its execution plan');
-      }
+    if (!frameContext) {
+      this._detectCausality(null);
+    }
+
+    if (frameState && frameContext && selectivePlan && unifiedTransaction) {
       validateInfinityScaleGlobalFrameCommit(
         frameState,
         selectivePlan,
         this.getInfinityScaleExecutionCapabilities(),
       );
-    }
 
-    if (frameContext) {
-      const migrationRequests = this.agents.consumeMigrationRequests();
-      this.agents.applyMigrationRequests(
-        this.grid,
-        migrationRequests,
-        frameContext,
+      stageInfinityScaleEntityCommit(unifiedTransaction);
+      stageInfinityScaleAgentMigrations(
+        unifiedTransaction,
+        this.agents.peekMigrationRequests(),
       );
-      this.entityLayer.applyChunkReconciliation(this.grid, frameContext);
-    }
 
-    if (!frameContext) {
-      this._detectCausality(null);
-    }
-
-    if (frameState && frameContext) {
       this.chemLayer.commitPendingDensityTransfers(this.grid, frameContext);
       frameState = advanceInfinityScaleGlobalFrame(frameState, 'local-commit');
       frameState = advanceInfinityScaleGlobalFrame(frameState, 'boundary-reconciliation');
+
+      commitInfinityScaleUnifiedTransaction(unifiedTransaction, frameState);
     }
 
     const eventContext = frameContext;
