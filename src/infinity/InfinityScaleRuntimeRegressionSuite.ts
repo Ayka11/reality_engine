@@ -1,6 +1,7 @@
 import { runSimulationEngineInfinityScaleSelectiveCPURegression } from "../simulation/SimulationEngine.infinityScale.regression";
 import { runSimulationEngineMixedLODMultiFrameRegression } from "../simulation/SimulationEngine.mixedLOD.regression";
 import { runInfinityScaleUnifiedTransactionRegression } from "./InfinityScaleUnifiedTransaction.regression";
+import { runSimulationEngineMixedLODGPUReadinessRegression } from "../simulation/SimulationEngine.mixedLODGPU.regression";
 
 export interface InfinityScaleRuntimeRegressionResult {
   name: string;
@@ -12,6 +13,7 @@ export async function runInfinityScaleRuntimeRegressionSuite(): Promise<Infinity
     ["simulation-engine-selective-cpu", runSimulationEngineInfinityScaleSelectiveCPURegression],
     ["simulation-engine-mixed-lod-multi-frame", runSimulationEngineMixedLODMultiFrameRegression],
     ["unified-transaction-runtime-barrier", async () => { runInfinityScaleUnifiedTransactionRegression(); }],
+    ["mixed-lod-gpu-readiness-gate", async () => { runSimulationEngineMixedLODGPUReadinessRegression(); }],
   ];
 
   const results: InfinityScaleRuntimeRegressionResult[] = [];
