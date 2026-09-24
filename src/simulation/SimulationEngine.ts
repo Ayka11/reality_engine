@@ -63,8 +63,19 @@ export class SimulationEngine {
   private _infinityExecutionPlan: InfinityScaleExecutionPlan | null = null;
   private readonly infinityScaleLODState: InfinityScaleLODState;
 
-  constructor() {
-    this.grid = new SparseVoxelGrid(WORLD.W, WORLD.H, WORLD.D);
+  constructor(
+    width = WORLD.W,
+    height = WORLD.H,
+    depth = WORLD.D,
+  ) {
+    if (
+      !Number.isInteger(width) || width <= 0 ||
+      !Number.isInteger(height) || height <= 0 ||
+      !Number.isInteger(depth) || depth <= 0
+    ) {
+      throw new Error("SimulationEngine dimensions must be positive integers");
+    }
+    this.grid = new SparseVoxelGrid(width, height, depth);
     this.causal = new CausalGraph();
     this.laws = new LawEngine();
     this.gpu = new GPUBackend();
