@@ -247,6 +247,54 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     assertEqual(target[F.DENSITY], 21.5, "ratio-4 intensive density");
   }
 
+  // Prolongation invariant: one coarse state must reproduce the same
+  // intensive state in every fine child.
+  {
+    const source = cell(42);
+    source[F.DENSITY] = 12.5;
+    source[F.TEMPERATURE] = 287.4;
+    const targets = Array.from({ length: 8 }, () => new Array<number>(24).fill(0));
+    InfinityScaleLODTransfer.prolongate(source, targets, 1, 0);
+
+    const invariant = InfinityScaleLODTransfer.validateProlongationInvariant(
+      source,
+      targets,
+      1,
+      0,
+    );
+    if (!invariant.valid) {
+      throw new Error(
+        `Infinity Scale regression failed: prolongation invariant violated in fields ${invariant.violations.join(",")}`,
+      );
+    }
+    assertEqual(targets[0][F.DENSITY], 12.5, "ratio-2 prolongation density");
+    assertEqual(targets[7][F.TEMPERATURE], 287.4, "ratio-2 prolongation temperature");
+  }
+
+  // Prolongation/restriction round trip for a uniform state. The state must
+  // return exactly to the original value for both intensive and extensive
+  // policies under the baseline operators.
+  {
+    const source = cell(9);
+    source[F.ENERGY] = 64;
+    source[F.INFORMATION] = 32;
+    source[F.DENSITY] = 4;
+
+    const children = Array.from({ length: 8 }, () => new Array<number>(24).fill(0));
+    InfinityScaleLODTransfer.prolongate(source, children, 1, 0);
+
+    const roundTrip = new Array<number>(24).fill(0);
+    InfinityScaleLODTransfer.restrict(children, roundTrip, 0, 1);
+
+    assertEqual(roundTrip[F.DENSITY], source[F.DENSITY], "uniform round-trip density");
+    assertEqual(roundTrip[F.ENERGY], source[F.ENERGY] * 8, "uniform round-trip extensive energy");
+    assertEqual(
+      roundTrip[F.INFORMATION],
+      source[F.INFORMATION] * 8,
+      "uniform round-trip extensive information",
+    );
+  }
+
   // Negative-side face: fine local x=[4..7], coarse neighbor x=[0..3].
   {
     const state = new InfinityScaleLODState(CHUNK);
