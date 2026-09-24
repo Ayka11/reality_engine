@@ -203,10 +203,29 @@ function sharedFaceAxis(
   target: ChunkRange,
   source: ChunkRange,
 ): 0 | 1 | 2 | null {
-  if (target.maxX + 1 === source.minX || source.maxX + 1 === target.minX) return 0;
-  if (target.maxY + 1 === source.minY || source.maxY + 1 === target.minY) return 1;
-  if (target.maxZ + 1 === source.minZ || source.maxZ + 1 === target.minZ) return 2;
+  if (
+    (target.maxX + 1 === source.minX || source.maxX + 1 === target.minX) &&
+    overlaps(target.minY, target.maxY, source.minY, source.maxY) &&
+    overlaps(target.minZ, target.maxZ, source.minZ, source.maxZ)
+  ) return 0;
+
+  if (
+    (target.maxY + 1 === source.minY || source.maxY + 1 === target.minY) &&
+    overlaps(target.minX, target.maxX, source.minX, source.maxX) &&
+    overlaps(target.minZ, target.maxZ, source.minZ, source.maxZ)
+  ) return 1;
+
+  if (
+    (target.maxZ + 1 === source.minZ || source.maxZ + 1 === target.minZ) &&
+    overlaps(target.minX, target.maxX, source.minX, source.maxX) &&
+    overlaps(target.minY, target.maxY, source.minY, source.maxY)
+  ) return 2;
+
   return null;
+}
+
+function overlaps(aMin: number, aMax: number, bMin: number, bMax: number): boolean {
+  return aMin <= bMax && bMin <= aMax;
 }
 
 function sourceFaceCoordinate(
