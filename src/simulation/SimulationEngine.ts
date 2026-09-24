@@ -579,7 +579,7 @@ export class SimulationEngine {
     );
     if (specs.length === 0) return undefined;
 
-    const targetKeys = [...new Set(specs.map(spec => spec.targetChunk))];
+    const targetKeys = [...new Set(specs.map(spec => spec.sourceChunk))];
     for (const key of targetKeys) {
       const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
       if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
