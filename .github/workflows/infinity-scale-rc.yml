@@ -12,6 +12,8 @@ on:
 permissions:
   contents: read
 
+# Release-candidate gate for the real Infinity Scale diagnostics branch.
+
 jobs:
   validate:
     runs-on: ubuntu-latest
