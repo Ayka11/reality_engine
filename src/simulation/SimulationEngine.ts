@@ -549,6 +549,7 @@ export class SimulationEngine {
     this.causal.clear();
     this.entityLayer.clear();
     this.agents.clear();
+    this.infinityScaleLODState.clear();
     this.recorder.clearSnapshots();
     this.prevEnergy.fill(0);
     this._tick = 0;
