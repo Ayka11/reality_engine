@@ -96,9 +96,9 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   if (result.executedCells !== 64) {
     throw new Error(`Expected 64 executed coarse cells, received ${result.executedCells}`);
   }
-  if (result.stagedBoundaryUpdates !== 16) {
+  if (result.stagedBoundaryUpdates !== 4) {
     throw new Error(
-      `Expected 16 face boundary updates, received ${result.stagedBoundaryUpdates}`,
+      `Expected 4 face boundary updates for the covered fine face, received ${result.stagedBoundaryUpdates}`,
     );
   }
   if (!result.transactionReady) {
@@ -106,7 +106,7 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   }
 
   const staged = transaction.synchronization.getStagedUpdates();
-  if (staged.length !== 16 || staged.some(update => update.sourceCells.length !== 4)) {
+  if (staged.length !== 4 || staged.some(update => update.sourceCells.length !== 4)) {
     throw new Error("Expected ratio-2 face restriction to use exactly four source cells");
   }
 
