@@ -39,13 +39,6 @@ export function validateInfinityScaleBoundaryGeometry(
 
   if (!onFace) return null;
 
-  const direction: -1 | 1 =
-    face.axis === 0
-      ? face.coordinate === face.minU && face.coordinate !== face.maxU ? -1 : -1
-      : face.axis === 1
-        ? -1
-        : -1;
-
   // The canonical face coordinate is on the target side. The source lies
   // outside that face. Resolve direction from the target chunk bounds without
   // maintaining an independent source/target adjacency algorithm.
@@ -58,7 +51,6 @@ export function validateInfinityScaleBoundaryGeometry(
   const ty = Number(match[3]) * extent;
   const tz = Number(match[4]) * extent;
   const targetMin = [tx, ty, tz];
-  const targetMax = [tx + extent - 1, ty + extent - 1, tz + extent - 1];
   const axis = face.axis;
   const resolvedDirection: -1 | 1 = face.coordinate === targetMin[axis] ? -1 : 1;
 
