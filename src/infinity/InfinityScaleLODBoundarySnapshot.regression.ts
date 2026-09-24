@@ -287,10 +287,10 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     InfinityScaleLODTransfer.restrict(children, roundTrip, 0, 1);
 
     assertEqual(roundTrip[F.DENSITY], source[F.DENSITY], "uniform round-trip density");
-    assertEqual(roundTrip[F.ENERGY], source[F.ENERGY] * 8, "uniform round-trip extensive energy");
+    assertEqual(roundTrip[F.ENERGY], source[F.ENERGY], "uniform round-trip extensive energy");
     assertEqual(
       roundTrip[F.INFORMATION],
-      source[F.INFORMATION] * 8,
+      source[F.INFORMATION],
       "uniform round-trip extensive information",
     );
   }
