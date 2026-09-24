@@ -37,6 +37,7 @@ import { runInfinityScaleReproducibilityManifestRegression } from "./InfinitySca
 import { runInfinityScaleExperimentRunRegistryRegression } from "./InfinityScaleExperimentRunRegistry.regression";
 import { runInfinityScaleBenchmarkMatrixRegression } from "./InfinityScaleBenchmarkMatrix.regression";
 import { runInfinityScaleScientificEvaluationReportRegression } from "./InfinityScaleScientificEvaluationReport.regression";
+import { runInfinityScaleFinalAdaptiveResolutionValidationRegression } from "./InfinityScaleFinalAdaptiveResolutionValidation.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -82,6 +83,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["experiment-run-registry", runInfinityScaleExperimentRunRegistryRegression],
     ["benchmark-matrix", runInfinityScaleBenchmarkMatrixRegression],
     ["scientific-evaluation-report", runInfinityScaleScientificEvaluationReportRegression],
+    ["final-adaptive-resolution-validation", runInfinityScaleFinalAdaptiveResolutionValidationRegression],
   ];
 
   const results: InfinityScaleRegressionResult[] = [];
