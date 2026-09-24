@@ -225,27 +225,30 @@ export class InfinityScaleChunkExecutionContext {
     y: number,
     z: number,
   ): boolean {
-    const xOverlap = x >= target.minX && x <= target.maxX &&
-      x >= source.minX - 1 && x <= source.maxX + 1;
-    const yOverlap = y >= target.minY && y <= target.maxY &&
-      y >= source.minY - 1 && y <= source.maxY + 1;
-    const zOverlap = z >= target.minZ && z <= target.maxZ &&
-      z >= source.minZ - 1 && z <= source.maxZ + 1;
+    const xTangential = y >= source.minY && y <= source.maxY &&
+      z >= source.minZ && z <= source.maxZ;
+    const yTangential = x >= source.minX && x <= source.maxX &&
+      z >= source.minZ && z <= source.maxZ;
+    const zTangential = x >= source.minX && x <= source.maxX &&
+      y >= source.minY && y <= source.maxY;
 
     const xFace =
-      (source.maxX + 1 === target.minX && x === target.minX) ||
-      (target.maxX + 1 === source.minX && x === target.maxX);
+      x >= target.minX && x <= target.maxX &&
+      ((source.maxX + 1 === target.minX && x === target.minX) ||
+       (target.maxX + 1 === source.minX && x === target.maxX));
     const yFace =
-      (source.maxY + 1 === target.minY && y === target.minY) ||
-      (target.maxY + 1 === source.minY && y === target.maxY);
+      y >= target.minY && y <= target.maxY &&
+      ((source.maxY + 1 === target.minY && y === target.minY) ||
+       (target.maxY + 1 === source.minY && y === target.maxY));
     const zFace =
-      (source.maxZ + 1 === target.minZ && z === target.minZ) ||
-      (target.maxZ + 1 === source.minZ && z === target.maxZ);
+      z >= target.minZ && z <= target.maxZ &&
+      ((source.maxZ + 1 === target.minZ && z === target.minZ) ||
+       (target.maxZ + 1 === source.minZ && z === target.maxZ));
 
     return (
-      (xFace && yOverlap && zOverlap) ||
-      (yFace && xOverlap && zOverlap) ||
-      (zFace && xOverlap && yOverlap)
+      (xFace && xTangential) ||
+      (yFace && yTangential) ||
+      (zFace && zTangential)
     );
   }
 
