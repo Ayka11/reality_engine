@@ -2,7 +2,9 @@ import { F } from "../core/CellState";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import { InfinityScaleLODBoundarySnapshot } from "./InfinityScaleLODBoundarySnapshot";
 import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
+import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
+import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 
 const CHUNK = 4;
 
@@ -242,7 +244,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   // Context relation lookup must be expressed in target simulation-cell
   // coordinates, including coarse->fine and fine->coarse interfaces.
   {
-    const plan = {
+    const plan: InfinityScaleExecutionPlan = {
       revision: 1, mode: "selective-cpu-ready" as const, observer: [0, 0, 0] as [number,number,number],
       chunks: [{ key: "1:0,0,0", lod: 1, distance: 0 }],
       simulationBudget: 1, requestedSimulationCount: 1, selectedSimulationCount: 1,
@@ -253,9 +255,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
       lodBoundaryTransferReady: true, mixedLodExecutionReady: true,
       entityExecutionReady: false, agentMigrationReady: false,
     };
-    const context = new (require("./InfinityScaleChunkExecutionContext").InfinityScaleChunkExecutionContext)(
-      plan, 12, 8, 8, 4,
-    );
+    const context = new InfinityScaleChunkExecutionContext(plan, 12, 8, 8, 4);
     const relations = context.getBoundaryRelationsForCell(7, 2, 2);
     if (relations.length !== 1 || relations[0].sourceChunk !== "0:8,0,0") {
       throw new Error("Infinity Scale regression failed: target-cell boundary relation lookup");
