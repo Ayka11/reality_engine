@@ -106,3 +106,171 @@ function chunkRange(key: string, chunkSize: number) {
     maxZ: cz * extent + extent - 1,
   };
 }
+
+export interface InfinityScaleBoundaryCoverageValidation {
+  valid: boolean;
+  faceCellCount: number;
+  mappedCellCount: number;
+  unmappedCellCount: number;
+  duplicateCellCount: number;
+  invalidRatioCount: number;
+  firstUnmappedCell?: [number, number, number];
+}
+
+/**
+ * Enumerates every source-face cell and verifies that each one maps to a
+ * dependency-side footprint with exactly the expected LOD ratio.
+ *
+ * The check is geometry-only: it does not read field values or entity IDs.
+ */
+export function validateInfinityScaleBoundaryCoverage(
+  spec: InfinityScaleBoundaryTransferSpec,
+  chunkSize = 32,
+): InfinityScaleBoundaryCoverageValidation {
+  const source = chunkRange(spec.sourceChunk, chunkSize);
+  const target = chunkRange(spec.targetChunk, chunkSize);
+  const face = resolveFace(source, target);
+  if (!face) {
+    return {
+      valid: false,
+      faceCellCount: 0,
+      mappedCellCount: 0,
+      unmappedCellCount: 0,
+      duplicateCellCount: 0,
+      invalidRatioCount: 0,
+    };
+  }
+
+  const ratio = spec.refinementRatio;
+  const expectedRatio = 2 ** Math.abs(spec.sourceLevel - spec.targetLevel);
+  const invalidRatioCount = ratio === expectedRatio && Number.isInteger(ratio) && ratio >= 2 ? 0 : 1;
+  const mapped = new Set<string>();
+  let faceCellCount = 0;
+  let unmappedCellCount = 0;
+  let duplicateCellCount = 0;
+  let firstUnmappedCell: [number, number, number] | undefined;
+
+  for (let z = source.minZ; z <= source.maxZ; z++) {
+    for (let y = source.minY; y <= source.maxY; y++) {
+      for (let x = source.minX; x <= source.maxX; x++) {
+        if (!isOnFace(source, target, face, x, y, z)) continue;
+        faceCellCount++;
+
+        const key = mapBoundaryCell(spec, face, [x, y, z], source, target, chunkSize);
+        if (!key) {
+          unmappedCellCount++;
+          firstUnmappedCell ??= [x, y, z];
+          continue;
+        }
+
+        if (mapped.has(key)) duplicateCellCount++;
+        mapped.add(key);
+      }
+    }
+  }
+
+  return {
+    valid:
+      invalidRatioCount === 0 &&
+      faceCellCount > 0 &&
+      unmappedCellCount === 0 &&
+      duplicateCellCount === 0,
+    faceCellCount,
+    mappedCellCount: mapped.size,
+    unmappedCellCount,
+    duplicateCellCount,
+    invalidRatioCount,
+    ...(firstUnmappedCell ? { firstUnmappedCell } : {}),
+  };
+}
+
+function mapBoundaryCell(
+  spec: InfinityScaleBoundaryTransferSpec,
+  face: { axis: "x" | "y" | "z"; direction: -1 | 1 },
+  cell: [number, number, number],
+  source: ReturnType<typeof chunkRange>,
+  target: ReturnType<typeof chunkRange>,
+  chunkSize: number,
+): string | null {
+  const sourceScale = 2 ** spec.sourceLevel;
+  const targetScale = 2 ** spec.targetLevel;
+  const [x, y, z] = cell;
+
+  if (spec.readOperation === "prolongation") {
+    const shifted = shift(cell, face, 1);
+    const lx = Math.floor((shifted[0] - target.minX) / targetScale);
+    const ly = Math.floor((shifted[1] - target.minY) / targetScale);
+    const lz = Math.floor((shifted[2] - target.minZ) / targetScale);
+    return inChunk(lx, ly, lz, chunkSize) ? `${lx},${ly},${lz}` : null;
+  }
+
+  if (spec.readOperation === "restriction") {
+    const localOrigin: [number, number, number] = [
+      Math.floor(x / sourceScale) * sourceScale,
+      Math.floor(y / sourceScale) * sourceScale,
+      Math.floor(z / sourceScale) * sourceScale,
+    ];
+    const neighborOrigin = shift(localOrigin, face, sourceScale);
+    const ratio = spec.refinementRatio;
+    for (let dz = 0; dz < ratio; dz++) {
+      for (let dy = 0; dy < ratio; dy++) {
+        for (let dx = 0; dx < ratio; dx++) {
+          const fx = neighborOrigin[0] + dx * targetScale;
+          const fy = neighborOrigin[1] + dy * targetScale;
+          const fz = neighborOrigin[2] + dz * targetScale;
+          const lx = Math.floor((fx - target.minX) / targetScale);
+          const ly = Math.floor((fy - target.minY) / targetScale);
+          const lz = Math.floor((fz - target.minZ) / targetScale);
+          if (!inChunk(lx, ly, lz, chunkSize)) return null;
+        }
+      }
+    }
+    return `${Math.floor((neighborOrigin[0] - target.minX) / targetScale)},${Math.floor((neighborOrigin[1] - target.minY) / targetScale)},${Math.floor((neighborOrigin[2] - target.minZ) / targetScale)}`;
+  }
+
+  return null;
+}
+
+function resolveFace(
+  source: ReturnType<typeof chunkRange>,
+  target: ReturnType<typeof chunkRange>,
+): { axis: "x" | "y" | "z"; direction: -1 | 1 } | null {
+  if (source.maxX + 1 === target.minX && overlaps(source.minY, source.maxY, target.minY, target.maxY) && overlaps(source.minZ, source.maxZ, target.minZ, target.maxZ)) return { axis: "x", direction: 1 };
+  if (target.maxX + 1 === source.minX && overlaps(source.minY, source.maxY, target.minY, target.maxY) && overlaps(source.minZ, source.maxZ, target.minZ, target.maxZ)) return { axis: "x", direction: -1 };
+  if (source.maxY + 1 === target.minY && overlaps(source.minX, source.maxX, target.minX, target.maxX) && overlaps(source.minZ, source.maxZ, target.minZ, target.maxZ)) return { axis: "y", direction: 1 };
+  if (target.maxY + 1 === source.minY && overlaps(source.minX, source.maxX, target.minX, target.maxX) && overlaps(source.minZ, source.maxZ, target.minZ, target.maxZ)) return { axis: "y", direction: -1 };
+  if (source.maxZ + 1 === target.minZ && overlaps(source.minX, source.maxX, target.minX, target.maxX) && overlaps(source.minY, source.maxY, target.minY, target.maxY)) return { axis: "z", direction: 1 };
+  if (target.maxZ + 1 === source.minZ && overlaps(source.minX, source.maxX, target.minX, target.maxX) && overlaps(source.minY, source.maxY, target.minY, target.maxY)) return { axis: "z", direction: -1 };
+  return null;
+}
+
+function isOnFace(
+  source: ReturnType<typeof chunkRange>,
+  target: ReturnType<typeof chunkRange>,
+  face: { axis: "x" | "y" | "z"; direction: -1 | 1 },
+  x: number,
+  y: number,
+  z: number,
+): boolean {
+  if (face.axis === "x") return x === (face.direction > 0 ? source.maxX : source.minX) && overlaps(y, y, target.minY, target.maxY) && overlaps(z, z, target.minZ, target.maxZ);
+  if (face.axis === "y") return y === (face.direction > 0 ? source.maxY : source.minY) && overlaps(x, x, target.minX, target.maxX) && overlaps(z, z, target.minZ, target.maxZ);
+  return z === (face.direction > 0 ? source.maxZ : source.minZ) && overlaps(x, x, target.minX, target.maxX) && overlaps(y, y, target.minY, target.maxY);
+}
+
+function overlaps(a0: number, a1: number, b0: number, b1: number): boolean {
+  return a0 <= b1 && a1 >= b0;
+}
+
+function shift(
+  point: [number, number, number],
+  face: { axis: "x" | "y" | "z"; direction: -1 | 1 },
+  distance: number,
+): [number, number, number] {
+  const out: [number, number, number] = [...point];
+  out[face.axis === "x" ? 0 : face.axis === "y" ? 1 : 2] += face.direction * distance;
+  return out;
+}
+
+function inChunk(x: number, y: number, z: number, chunkSize: number): boolean {
+  return x >= 0 && x < chunkSize && y >= 0 && y < chunkSize && z >= 0 && z < chunkSize;
+}
