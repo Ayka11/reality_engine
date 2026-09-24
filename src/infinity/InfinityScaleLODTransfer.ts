@@ -12,6 +12,7 @@ import type {
  */
 export type InfinityScaleLODFieldPolicy =
   | "intensive"
+  | "extensive"
   | "discrete"
   | "unsupported";
 
@@ -62,6 +63,9 @@ export class InfinityScaleLODTransfer {
   ];
 
   static policy(field: number): InfinityScaleLODFieldPolicy {
+    if (field === F.ENERGY || field === F.INFORMATION || field === F.MEM_FIELD) {
+      return "extensive";
+    }
     if (this.continuousFields.includes(field)) return "intensive";
     if (this.discreteFields.includes(field)) return "discrete";
     return "unsupported";
@@ -144,7 +148,7 @@ export class InfinityScaleLODTransfer {
 
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
-      if (policy !== "intensive" && policy !== "discrete") {
+      if (policy !== "intensive" && policy !== "extensive" && policy !== "discrete") {
         skippedFields.push(field);
         continue;
       }
@@ -208,6 +212,14 @@ export class InfinityScaleLODTransfer {
         let sum = 0;
         for (const source of sources) sum += source[field] ?? 0;
         target[field] = sum / sources.length;
+        transferredFields.push(field);
+        continue;
+      }
+
+      if (policy === "extensive") {
+        let sum = 0;
+        for (const source of sources) sum += source[field] ?? 0;
+        target[field] = sum;
         transferredFields.push(field);
         continue;
       }
