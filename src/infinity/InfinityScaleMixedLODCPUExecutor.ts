@@ -155,29 +155,42 @@ export class InfinityScaleMixedLODCPUExecutor {
     targetRange: ExecutionCellRange,
     spec: InfinityScaleBoundaryTransferSpec,
   ): Array<[number, number, number]> {
-    const cells: Array<[number, number, number]> = [];
     const sourceRange = this.rangeForChunk(spec.sourceChunk);
+    const cells: Array<[number, number, number]> = [];
 
-    const minX = Math.max(targetRange.minX, sourceRange.minX - 1);
-    const maxX = Math.min(targetRange.maxX, sourceRange.maxX + 1);
-    const minY = Math.max(targetRange.minY, sourceRange.minY - 1);
-    const maxY = Math.min(targetRange.maxY, sourceRange.maxY + 1);
-    const minZ = Math.max(targetRange.minZ, sourceRange.minZ - 1);
-    const maxZ = Math.min(targetRange.maxZ, sourceRange.maxZ + 1);
+    const xOverlapMin = Math.max(targetRange.minX, sourceRange.minX);
+    const xOverlapMax = Math.min(targetRange.maxX, sourceRange.maxX);
+    const yOverlapMin = Math.max(targetRange.minY, sourceRange.minY);
+    const yOverlapMax = Math.min(targetRange.maxY, sourceRange.maxY);
+    const zOverlapMin = Math.max(targetRange.minZ, sourceRange.minZ);
+    const zOverlapMax = Math.min(targetRange.maxZ, sourceRange.maxZ);
 
-    if (minX > maxX || minY > maxY || minZ > maxZ) return cells;
-
-    for (let z = minZ; z <= maxZ; z++) {
-      for (let y = minY; y <= maxY; y++) {
-        for (let x = minX; x <= maxX; x++) {
-          const onTargetFace =
-            x === targetRange.minX || x === targetRange.maxX ||
-            y === targetRange.minY || y === targetRange.maxY ||
-            z === targetRange.minZ || z === targetRange.maxZ;
-          if (onTargetFace) cells.push([x, y, z]);
-        }
-      }
+    if (targetRange.maxX + 1 === sourceRange.minX) {
+      for (let z = zOverlapMin; z <= zOverlapMax; z++)
+      for (let y = yOverlapMin; y <= yOverlapMax; y++)
+        cells.push([targetRange.maxX, y, z]);
+    } else if (sourceRange.maxX + 1 === targetRange.minX) {
+      for (let z = zOverlapMin; z <= zOverlapMax; z++)
+      for (let y = yOverlapMin; y <= yOverlapMax; y++)
+        cells.push([targetRange.minX, y, z]);
+    } else if (targetRange.maxY + 1 === sourceRange.minY) {
+      for (let z = zOverlapMin; z <= zOverlapMax; z++)
+      for (let x = xOverlapMin; x <= xOverlapMax; x++)
+        cells.push([x, targetRange.maxY, z]);
+    } else if (sourceRange.maxY + 1 === targetRange.minY) {
+      for (let z = zOverlapMin; z <= zOverlapMax; z++)
+      for (let x = xOverlapMin; x <= xOverlapMax; x++)
+        cells.push([x, targetRange.minY, z]);
+    } else if (targetRange.maxZ + 1 === sourceRange.minZ) {
+      for (let y = yOverlapMin; y <= yOverlapMax; y++)
+      for (let x = xOverlapMin; x <= xOverlapMax; x++)
+        cells.push([x, y, targetRange.maxZ]);
+    } else if (sourceRange.maxZ + 1 === targetRange.minZ) {
+      for (let y = yOverlapMin; y <= yOverlapMax; y++)
+      for (let x = xOverlapMin; x <= xOverlapMax; x++)
+        cells.push([x, y, targetRange.minZ]);
     }
+
     return cells;
   }
 
