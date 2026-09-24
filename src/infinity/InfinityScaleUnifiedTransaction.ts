@@ -200,6 +200,6 @@ function countMissingMixedLODUpdates(
       if (!stagedKeys.has(`${spec.sourceChunk}|${spec.targetChunk}|${cell.join(",")}`)) missing++;
     }
   }
-
+  return missing;
 }
 
