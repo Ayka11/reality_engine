@@ -89,6 +89,9 @@ export class InfinityScaleLODState {
 
   clear(): void {
     this.states.clear();
+    // Clearing hierarchical state invalidates every outstanding transaction
+    // that captured the previous state revision.
+    this.revision += 1;
   }
 
   keys(): string[] {
