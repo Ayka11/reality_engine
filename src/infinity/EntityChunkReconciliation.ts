@@ -1,5 +1,5 @@
 import type { Entity } from "../simulation/EntityLayer";
-import type { EntityChunkComponent } from "./EntityChunkConnectivity";
+import type { EntityChunkComponent, EntityBoundaryTopologySample, EntityChunkConnectivityResult } from "./EntityChunkConnectivity";
 
 export interface EntityReconciliationProposal {
   componentId: number;
@@ -15,6 +15,8 @@ export interface EntityReconciliationCommit {
   retainedEntityIds: number[];
   newComponentIds: number[];
   extinctEntityIds: number[];
+  mixedLodTopologyResolved: boolean;
+  ambiguousMixedLodComponents: number[];
 }
 
 export interface EntityReconciliationCommitRecord {
@@ -47,6 +49,7 @@ export class EntityChunkReconciliation {
     components: EntityChunkComponent[],
     entities: Entity[],
     fullDomainCovered = false,
+    connectivity?: EntityChunkConnectivityResult,
   ): EntityReconciliationPlan {
     const componentSourceIds = new Map<number, number[]>();
     const sourceComponentCounts = new Map<number, number>();
@@ -64,13 +67,32 @@ export class EntityChunkReconciliation {
       }
     }
 
+    const topologyByComponent = new Map<number, EntityBoundaryTopologySample[]>();
+    for (const sample of connectivity?.mixedLodTopology ?? []) {
+      const component = connectivity?.components.find(c => c.cells.includes(sample.localCell));
+      if (!component) continue;
+      const list = topologyByComponent.get(component.id) ?? [];
+      list.push(sample);
+      topologyByComponent.set(component.id, list);
+    }
+
     const proposals: EntityReconciliationProposal[] = [];
+    const ambiguousMixedLodComponents: number[] = [];
     const used = new Set<number>();
 
     for (const component of components) {
       const centroid = component.centroid;
       const sourceEntityIds = componentSourceIds.get(component.id) ?? [];
-      if (component.touchesReadBoundary || component.touchesMixedLODBoundary) {
+      const mixedSamples = topologyByComponent.get(component.id) ?? [];
+      const mixedSourceIds = [...new Set(
+        mixedSamples.filter(sample => sample.occupied).map(sample => sample.sourceEntityId),
+      )];
+      const mixedTopologyAmbiguous =
+        component.touchesMixedLODBoundary &&
+        mixedSourceIds.length > 1;
+      if (mixedTopologyAmbiguous) ambiguousMixedLodComponents.push(component.id);
+
+      if (component.touchesReadBoundary || mixedTopologyAmbiguous) {
         proposals.push({
           componentId: component.id,
           existingEntityId: null,
@@ -154,7 +176,10 @@ export class EntityChunkReconciliation {
     return {
       proposals,
       unresolvedBoundaryComponents,
-      commitReady: unresolvedBoundaryComponents === 0,
+      commitReady: unresolvedBoundaryComponents === 0 &&
+        ambiguousMixedLodComponents.length === 0,
+      mixedLodTopologyResolved: ambiguousMixedLodComponents.length === 0,
+      ambiguousMixedLodComponents,
       closedComponentCount: closed.length,
       unmatchedClosedComponentCount: closed.filter(p => p.existingEntityId === null).length,
       extinctEntityIds,
