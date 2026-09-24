@@ -193,7 +193,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     const fine = key(0, 4);
 
     // Coarse X+ face cell at local (3, 1, 1) carries a unique value.
-    write(state, coarse, 1, 3, 1, 1, 77);
+    write(state, coarse, 1, 2, 2, 2, 77);
 
     const s = spec(coarse, fine, "coarse-to-fine", 1, 0);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 12, CHUNK);
