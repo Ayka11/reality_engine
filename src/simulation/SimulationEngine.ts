@@ -103,13 +103,17 @@ export class SimulationEngine {
   }
 
   getInfinityScaleExecutionCapabilities(): InfinityScaleExecutionCapabilities {
+    const validation = this.getInfinityScaleMixedLODValidation();
+    const mixedLodExecutionReady =
+      validation === null || validation.ready;
     return {
       selectiveCpuReady: true,
       selectiveGpuReady: this._gpuReady,
       gpuPhysicsReady: this._gpuReady,
-      // Mixed-LOD prolongation/restriction is described by the execution
-      // contract but is not yet applied to field values by the dense solver.
+      // The transfer kernel exists, but dense-solver mixed-LOD field
+      // synchronization is not yet certified as a complete execution path.
       lodBoundaryTransferReady: false,
+      mixedLodExecutionReady,
     };
   }
 
