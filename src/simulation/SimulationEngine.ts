@@ -92,7 +92,14 @@ export class SimulationEngine {
       this.grid.H,
       this.grid.D,
     );
-    return validateInfinityScaleMixedLOD(plan, context);
+    const connectivity = this.entityLayer.getChunkConnectivityDiagnostics() ?? undefined;
+    const reconciliation = this.entityLayer.getChunkReconciliationDiagnostics() ?? undefined;
+    return validateInfinityScaleMixedLOD(
+      plan,
+      context,
+      connectivity,
+      reconciliation,
+    );
   }
 
   getInfinityScaleExecutionCapabilities(): InfinityScaleExecutionCapabilities {
