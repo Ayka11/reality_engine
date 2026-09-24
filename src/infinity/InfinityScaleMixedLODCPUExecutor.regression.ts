@@ -96,11 +96,18 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   if (result.executedCells !== 64) {
     throw new Error(`Expected 64 executed coarse cells, received ${result.executedCells}`);
   }
-  if (result.stagedBoundaryUpdates === 0) {
-    throw new Error("Expected mixed-LOD boundary updates to be staged");
+  if (result.stagedBoundaryUpdates !== 16) {
+    throw new Error(
+      `Expected 16 face boundary updates, received ${result.stagedBoundaryUpdates}`,
+    );
   }
   if (!result.transactionReady) {
     throw new Error("Expected CPU mixed-LOD transaction to be ready");
+  }
+
+  const staged = transaction.synchronization.getStagedUpdates();
+  if (staged.length !== 16 || staged.some(update => update.sourceCells.length !== 4)) {
+    throw new Error("Expected ratio-2 face restriction to use exactly four source cells");
   }
 
   frame.phase = "boundary-reconciliation";
