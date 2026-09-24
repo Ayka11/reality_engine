@@ -81,9 +81,10 @@ export class InfinityScaleMixedLODCPUExecutor {
     let executedCells = 0;
     for (const chunk of plan.chunks) {
       const range = this.rangeForChunk(chunk.key);
-      for (let z = range.minZ; z <= range.maxZ; z++) {
-        for (let y = range.minY; y <= range.maxY; y++) {
-          for (let x = range.minX; x <= range.maxX; x++) {
+      const scale = 2 ** chunk.lod;
+      for (let z = range.minZ; z <= range.maxZ; z += scale) {
+        for (let y = range.minY; y <= range.maxY; y += scale) {
+          for (let x = range.minX; x <= range.maxX; x += scale) {
             const input = this.state.readBaseCell(chunk.key, chunk.lod, x, y, z);
             if (!input) {
               throw new Error(
