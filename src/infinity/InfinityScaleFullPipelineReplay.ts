@@ -21,6 +21,8 @@ export interface InfinityScaleFullPipelineReplayResult {
   secondGraphHash: string;
   firstGPUPlanHash: string;
   secondGPUPlanHash: string;
+  firstCommitReady: boolean;
+  secondCommitReady: boolean;
   deterministic: boolean;
 }
 
@@ -45,6 +47,8 @@ export function runInfinityScaleFullPipelineReplay(
     secondGraphHash: second.graphHash,
     firstGPUPlanHash: first.gpuPlanHash,
     secondGPUPlanHash: second.gpuPlanHash,
+    firstCommitReady: first.commitReady,
+    secondCommitReady: second.commitReady,
     deterministic:
       first.pipelineHash === second.pipelineHash &&
       first.transferPlanHash === second.transferPlanHash &&
