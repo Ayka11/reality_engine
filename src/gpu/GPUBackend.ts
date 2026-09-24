@@ -1,6 +1,8 @@
 import { CELL_FIELDS } from '../core/CellState';
 import { PhysicsParams } from '../laws/MetaLaw';
 import { MAT_COUNT } from '../materials/MaterialDef';
+import type { InfinityScaleGPUBoundaryTransferDescriptor } from '../infinity/InfinityScaleGPUBoundaryTransferContract';
+import { InfinityScaleGPUBoundaryTransferContract } from '../infinity/InfinityScaleGPUBoundaryTransferContract';
 
 // ─── WGSL compute shader ──────────────────────────────────────────────────────
 const SHADER = /* wgsl */`
@@ -322,6 +324,8 @@ export class GPUBackend {
   private stagingBuf: GPUBuffer | null = null;
   private bindGroup: GPUBindGroup | null = null;
   private rangeBuf: GPUBuffer | null = null;
+  private boundaryBuf: GPUBuffer | null = null;
+  private boundaryDescriptorCount = 0;
 
   W = 0; H = 0; D = 0;
   private cellCount = 0;
@@ -368,6 +372,11 @@ export class GPUBackend {
       size: 256 * 6 * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
+    // Separate descriptor storage for the future mixed-LOD boundary pass.
+    this.boundaryBuf = this.device.createBuffer({
+      size: 256 * 12 * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
 
     const mod = this.device.createShaderModule({ code: SHADER });
     this.pipeline = await this.device.createComputePipelineAsync({
@@ -398,6 +407,31 @@ export class GPUBackend {
       for (let j = 0; j < 7; j++) padded[i * 8 + j] = data[i * 7 + j];
     }
     this.device.queue.writeBuffer(this.matBuf, 0, padded.buffer, 0, padded.byteLength);
+  }
+
+  uploadBoundaryTransferDescriptors(
+    descriptors: ReadonlyArray<InfinityScaleGPUBoundaryTransferDescriptor>,
+  ): void {
+    if (!this.device || !this.boundaryBuf) return;
+    if (descriptors.length > 256) {
+      throw new Error('GPU mixed-LOD boundary execution supports at most 256 descriptors');
+    }
+    const packed = InfinityScaleGPUBoundaryTransferContract.pack(descriptors);
+    if (packed.byteLength > 256 * 12 * 4) {
+      throw new Error('GPU mixed-LOD boundary descriptor buffer capacity exceeded');
+    }
+    this.device.queue.writeBuffer(
+      this.boundaryBuf,
+      0,
+      packed.buffer,
+      packed.byteOffset,
+      packed.byteLength,
+    );
+    this.boundaryDescriptorCount = descriptors.length;
+  }
+
+  getBoundaryDescriptorCount(): number {
+    return this.boundaryDescriptorCount;
   }
 
   upload(data: Float32Array): void {
@@ -487,6 +521,7 @@ export class GPUBackend {
     this.paramsBuf?.destroy();
     this.matBuf?.destroy();
     this.rangeBuf?.destroy();
+    this.boundaryBuf?.destroy();
     this.device?.destroy();
     this.device = null;
   }
