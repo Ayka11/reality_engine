@@ -14,6 +14,7 @@ export interface InfinityScaleLODBoundaryUpdate {
   relation: "same-level" | "coarse-to-fine" | "fine-to-coarse";
   targetCell: [number, number, number];
   value: Float32Array;
+  sourceCells: Float32Array[];
 }
 
 export interface InfinityScaleLODSynchronizationResult {
@@ -83,6 +84,7 @@ export class InfinityScaleLODSynchronization {
       relation: spec.relation,
       targetCell: [...targetCell],
       value: target,
+      sourceCells: sourceCells.map(source => new Float32Array(source)),
     });
   }
 
@@ -107,42 +109,62 @@ export class InfinityScaleLODSynchronization {
       if (!state || state.level !== level) topologyValid = false;
     }
 
-    const conservationValid = invalidUpdateCount === 0;
-    for (const field of Array.from({ length: CELL_FIELDS }, (_, index) => index)) {
-      const semantics = getInfinityScaleFieldSemantics(field);
-      if (semantics.conservation === "none" || semantics.policy === "unsupported") continue;
-
-      let sourceTotal = 0;
-      let targetTotal = 0;
-      let hasComparableUpdate = false;
-
-      for (const update of this.staged.values()) {
-        if (update.relation === "fine-to-coarse" && semantics.conservation === "sum") {
-          const sourceState = this.state.getChunk(update.sourceChunk);
-          const targetState = this.state.getChunk(update.targetChunk);
-          if (!sourceState || !targetState) continue;
-          hasComparableUpdate = true;
-          targetTotal += update.value[field] ?? 0;
-          // Fine-to-coarse restriction output is the complete aggregate for the
-          // source footprint, so the staged target is directly comparable.
-          const sourceCell = sourceState.cells[0] ?? 0;
-          sourceTotal += sourceCell;
+    const conservationErrorFields = new Set<number>();
+    for (const update of this.staged.values()) {
+      for (let field = 0; field < CELL_FIELDS; field++) {
+        const semantics = getInfinityScaleFieldSemantics(field);
+        if (semantics.policy === "unsupported" || semantics.conservation === "none" || semantics.conservation === "majority") {
+          continue;
         }
-      }
 
-      if (hasComparableUpdate && Math.abs(sourceTotal - targetTotal) > 1e-4 * Math.max(1, Math.abs(sourceTotal), Math.abs(targetTotal))) {
-        conservationErrorFields.push(field);
+        const sources = update.sourceCells;
+        if (sources.length === 0) {
+          conservationErrorFields.add(field);
+          continue;
+        }
+
+        let expected = 0;
+        if (semantics.conservation === "sum") {
+          for (const source of sources) expected += source[field] ?? 0;
+          if (update.relation === "coarse-to-fine") {
+            expected /= update.sourceCells.length === 1 ? 1 : update.sourceCells.length;
+          }
+          if (update.relation === "coarse-to-fine" && sources.length === 1) {
+            expected /= Math.max(1, refinementRatio(update));
+          }
+        } else if (semantics.conservation === "average") {
+          for (const source of sources) expected += source[field] ?? 0;
+          expected /= sources.length;
+        } else {
+          let sumSin = 0;
+          let sumCos = 0;
+          for (const source of sources) {
+            const phase = source[field] ?? 0;
+            sumSin += Math.sin(phase);
+            sumCos += Math.cos(phase);
+          }
+          expected = Math.atan2(sumSin, sumCos);
+        }
+
+        const actual = update.value[field] ?? 0;
+        const error = semantics.conservation === "circular"
+          ? Math.abs(Math.atan2(Math.sin(actual - expected), Math.cos(actual - expected)))
+          : Math.abs(actual - expected);
+        const tolerance = 1e-4 * Math.max(1, Math.abs(expected), Math.abs(actual));
+        if (error > tolerance) conservationErrorFields.add(field);
       }
     }
 
+    const conservationErrorFieldList = [...conservationErrorFields];
+    const conservationValid = invalidUpdateCount === 0 && conservationErrorFieldList.length === 0;
     return {
       revision: this.revision,
       updates: this.getStagedUpdates(),
-      conservationValid: conservationValid && conservationErrorFields.length === 0,
+      conservationValid,
       topologyValid,
-      readyToCommit: conservationValid && topologyValid && conservationErrorFields.length === 0,
+      readyToCommit: conservationValid && topologyValid,
       invalidUpdateCount,
-      conservationErrorFields,
+      conservationErrorFields: conservationErrorFieldList,
     };
   }
 
@@ -188,12 +210,19 @@ export class InfinityScaleLODSynchronization {
       ...update,
       targetCell: [...update.targetCell] as [number, number, number],
       value: new Float32Array(update.value),
+      sourceCells: update.sourceCells.map(source => new Float32Array(source)),
     }));
   }
 
   private updateKey(targetChunk: string, cell: [number, number, number]): string {
     return `${targetChunk}|${cell[0]},${cell[1]},${cell[2]}`;
   }
+}
+
+function refinementRatio(update: InfinityScaleLODBoundaryUpdate): number {
+  const sourceLevel = chunkLevel(update.sourceChunk);
+  const targetLevel = chunkLevel(update.targetChunk);
+  return 2 ** Math.abs(sourceLevel - targetLevel);
 }
 
 function chunkLevel(key: string): number {
