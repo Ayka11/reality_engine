@@ -45,8 +45,8 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const plan: InfinityScaleExecutionPlan = {
     revision: 3,
     mode: "selective-cpu-ready",
-    observer: [9, 2, 2],
-    chunks: [{ key: fineKey, lod: 0, distance: 0 }],
+    observer: { x: 9, y: 2, z: 2 },
+    chunks: [{ key: fineKey, lod: 0, amr: 1, distance: 0 }],
     simulationBudget: 64,
     requestedSimulationCount: 1,
     selectedSimulationCount: 1,
