@@ -32,6 +32,7 @@ import { runInfinityScaleReactivePredictiveEvaluationRegression } from "./Infini
 import { runInfinityScaleControlledBenchmarkRegression } from "./InfinityScaleControlledBenchmark.regression";
 import { runInfinityScaleGoalDirectedBenchmarkRegression } from "./InfinityScaleGoalDirectedBenchmark.regression";
 import { runInfinityScaleStatisticalExperimentRegression } from "./InfinityScaleStatisticalExperiment.regression";
+import { runInfinityScaleCrossPolicyComparisonRegression } from "./InfinityScaleCrossPolicyComparison.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -72,6 +73,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["controlled-benchmark-scenarios", runInfinityScaleControlledBenchmarkRegression],
     ["goal-directed-benchmark", runInfinityScaleGoalDirectedBenchmarkRegression],
     ["statistical-experiment", runInfinityScaleStatisticalExperimentRegression],
+    ["cross-policy-comparison", runInfinityScaleCrossPolicyComparisonRegression],
   ];
 
   const results: InfinityScaleRegressionResult[] = [];
