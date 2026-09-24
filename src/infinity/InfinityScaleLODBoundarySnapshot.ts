@@ -251,7 +251,7 @@ export class InfinityScaleLODBoundarySnapshot {
     }
 
     if (spec.relation === "same-level") {
-      const sourceCell = targetCell;
+      const sourceCell = shiftAcrossFace(targetCell, face, -face.direction);
       const lx = sourceCell[0] - sourceRange.minX;
       const ly = sourceCell[1] - sourceRange.minY;
       const lz = sourceCell[2] - sourceRange.minZ;
