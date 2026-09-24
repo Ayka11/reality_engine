@@ -185,6 +185,31 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     assertEqual(out[F.ENERGY], 23, "coarse-to-fine ratio 4 energy");
   }
 
+  // Mixed-LOD face restriction must aggregate exactly ratio^2 fine cells,
+  // not the ratio^3 volume used by interior restriction.
+  {
+    const state = new InfinityScaleLODState(CHUNK);
+    const coarse = key(1, 0);
+    const fine = key(0, 4);
+    let value = 1;
+    for (let z = 0; z < 2; z++) {
+      for (let y = 0; y < 2; y++) {
+        const v = value++;
+        write(state, fine, 0, 4, y, z, v);
+      }
+    }
+
+    const s = spec(coarse, fine, "fine-to-coarse", 1, 0);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 11, CHUNK);
+    const out = assertNotNull(snapshot.read(s, [3, 1, 1]), "fine-to-coarse face restriction");
+
+    // ENERGY is extensive, so the boundary face sample is the sum of the four
+    // fine cells: 1 + 2 + 3 + 4 = 10.
+    assertEqual(out[F.ENERGY], 10, "fine-to-coarse face extensive energy");
+    // DENSITY is intensive, so the same face footprint is averaged.
+    assertEqual(out[F.DENSITY], 25, "fine-to-coarse face intensive density");
+  }
+
   // Numerical conservation: fine -> coarse restriction preserves extensive
   // quantities as a sum and intensive quantities as a volume average.
   {
