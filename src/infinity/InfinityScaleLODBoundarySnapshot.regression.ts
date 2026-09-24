@@ -223,6 +223,22 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     }
   }
 
+  // Face coverage must validate source dependencies as well, not merely
+  // whether the target simulation chunk exists.
+  {
+    const state = new InfinityScaleLODState(CHUNK);
+    const coarse = key(1, 0);
+    const fine = key(0, 4);
+    write(state, fine, 0, 4, 0, 0, 55);
+
+    const s = spec(coarse, fine, "fine-to-coarse", 1, 0);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 14, CHUNK);
+    const coverage = snapshot.getCoverage();
+    if (!coverage.complete || coverage.missingSourceChunks.length !== 0) {
+      throw new Error("Infinity Scale regression failed: source dependency coverage is incomplete");
+    }
+  }
+
   // Snapshot coverage must materialize the dependency source chunk, not the
   // simulation target chunk. This catches source/target inversion at capture time.
   {
