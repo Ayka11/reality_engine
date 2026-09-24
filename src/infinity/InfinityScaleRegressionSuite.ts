@@ -18,6 +18,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
   const tests: Array<[string, () => void]> = [
     ["canonical-boundary-mapper", runInfinityScaleLODBoundaryCellMapperRegression],
     ["lod-boundary-transfer", runInfinityScaleLODBoundaryRegression],
+    ["lod-convergence", runInfinityScaleLODBoundaryRegression],
     ["mixed-lod-cpu-restriction", runInfinityScaleMixedLODCPURegression],
     ["mixed-lod-cpu-prolongation", runInfinityScaleMixedLODCPUProlongationRegression],
     ["unified-transaction", runInfinityScaleUnifiedTransactionRegression],
