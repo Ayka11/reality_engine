@@ -163,7 +163,9 @@ export function validateInfinityScaleBoundaryCoverage(
           continue;
         }
 
-        if (mapped.has(key)) duplicateCellCount++;
+        if (spec.readOperation === "restriction" && mapped.has(key)) {
+          duplicateCellCount++;
+        }
         mapped.add(key);
       }
     }
