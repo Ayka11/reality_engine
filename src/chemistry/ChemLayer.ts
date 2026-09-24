@@ -1,6 +1,7 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
+import type { InfinityScaleLODBoundarySnapshot } from '../infinity/InfinityScaleLODBoundarySnapshot';
 
 export const CHEM = {
   GAS:      0,
@@ -10,6 +11,10 @@ export const CHEM = {
   REACTIVE: 4,
 } as const;
 export type ChemState = typeof CHEM[keyof typeof CHEM];
+
+function nxFromIndex(index: number, W: number, H: number): number { return index % W; }
+function nyFromIndex(index: number, W: number, H: number): number { return Math.floor((index % (W * H)) / W); }
+function nzFromIndex(index: number, W: number, H: number): number { return Math.floor(index / (W * H)); }
 
 export interface ChemDensityTransfer {
   targetCell: number;
@@ -31,8 +36,9 @@ export class ChemLayer {
     grid: VoxelGrid,
     dt: number,
     context: InfinityScaleChunkExecutionContext,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
-    this.tickRegion(grid, dt, context);
+    this.tickRegion(grid, dt, context, boundarySnapshot);
   }
 
   /**
@@ -67,6 +73,7 @@ export class ChemLayer {
     grid: VoxelGrid,
     dt: number,
     context: InfinityScaleChunkExecutionContext | null,
+    boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
     const { W, H, D, buffer: buf } = grid;
     const WH = W * H;
@@ -133,7 +140,22 @@ export class ChemLayer {
         for (const ni of neighbors) {
           if (ni < 0) continue;
           const nb = ni * CELL_FIELDS;
-          if (buf[nb + F.CHEM_STATE] === CHEM.SOLID) {
+          let neighborChem = buf[nb + F.CHEM_STATE];
+          if (context && boundarySnapshot && !context.containsSimulationCell(
+            nxFromIndex(ni, W, H), nyFromIndex(ni, W, H), nzFromIndex(ni, W, H)
+          )) {
+            const nx = nxFromIndex(ni, W, H);
+            const ny = nyFromIndex(ni, W, H);
+            const nz = nzFromIndex(ni, W, H);
+            for (const spec of context.getBoundaryTransferSpecsForCell(x, y, z)) {
+              const sample = boundarySnapshot.read(spec, [nx, ny, nz]);
+              if (sample) {
+                neighborChem = sample[F.CHEM_STATE];
+                break;
+              }
+            }
+          }
+          if (neighborChem === CHEM.SOLID) {
             const transfer = 0.002 * dt * 60;
             if (densityTransfers) {
               const nx = ni % W;
