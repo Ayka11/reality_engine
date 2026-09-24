@@ -6,6 +6,7 @@ import type {
 } from "./InfinityScaleChunkExecutionContext";
 import { WORLD } from "../core/WorldConstants";
 import { resolveInfinityScaleBoundaryFaceGeometry } from "./InfinityScaleLODBoundaryCellMapper";
+import { resolveInfinityScaleBoundaryFaceGeometry } from "./InfinityScaleLODBoundaryCellMapper";
 
 export type InfinityScaleExecutionMode =
   | "advisory"
@@ -240,7 +241,18 @@ export class InfinityScaleExecutionAdapter {
     candidates: InfinityScaleFramePlan["chunks"],
   ): InfinityScaleBoundaryReadRelation[] {
     const out = new Map<string, InfinityScaleBoundaryReadRelation>();
+    const coveredFaces = new Set<string>();
     const level = chunk.chunk.level;
+    const scale = 2 ** level;
+    const minX = chunk.chunk.x * scale;
+    const minY = chunk.chunk.y * scale;
+    const minZ = chunk.chunk.z * scale;
+    const maxX = minX + scale - 1;
+    const maxY = minY + scale - 1;
+    const maxZ = minZ + scale - 1;
+
+    const faceKey = (axis: 0 | 1 | 2, coordinate: number): string =>
+      `${axis}:${coordinate}`;
 
     // Neighbor discovery remains an adapter concern, but shared-face geometry
     // is delegated to the canonical LOD boundary resolver. This prevents the
@@ -276,8 +288,10 @@ export class InfinityScaleExecutionAdapter {
               : "prolongation",
       } as const;
 
-      if (resolveInfinityScaleBoundaryFaceGeometry(spec, 32) === null) continue;
+      const face = resolveInfinityScaleBoundaryFaceGeometry(spec, 32);
+      if (face === null) continue;
 
+      coveredFaces.add(faceKey(face.axis, face.coordinate));
       const key = `${other.key}|${relation}`;
       out.set(key, {
         sourceChunk: chunk.key,
@@ -287,22 +301,25 @@ export class InfinityScaleExecutionAdapter {
     }
 
     // No explicit frame chunk owns a face. Request the logical same-level
-    // halo at each of the six neighboring chunk coordinates. This preserves
-    // the existing fallback behavior while keeping mixed-LOD geometry
-    // entirely delegated to the canonical resolver above.
-    const logicalNeighbors = [
-      `${level}:${chunk.chunk.x - 1},${chunk.chunk.y},${chunk.chunk.z}`,
-      `${level}:${chunk.chunk.x + 1},${chunk.chunk.y},${chunk.chunk.z}`,
-      `${level}:${chunk.chunk.x},${chunk.chunk.y - 1},${chunk.chunk.z}`,
-      `${level}:${chunk.chunk.x},${chunk.chunk.y + 1},${chunk.chunk.z}`,
-      `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z - 1}`,
-      `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z + 1}`,
+    // halo only for uncovered faces. Negative chunk coordinates are preserved
+    // directly; this is equivalent to floorDiv for a one-chunk step.
+    const fallbackFaces: Array<{
+      key: string;
+      targetChunk: string;
+    }> = [
+      { key: faceKey(0, minX - 1), targetChunk: `${level}:${chunk.chunk.x - 1},${chunk.chunk.y},${chunk.chunk.z}` },
+      { key: faceKey(0, maxX + 1), targetChunk: `${level}:${chunk.chunk.x + 1},${chunk.chunk.y},${chunk.chunk.z}` },
+      { key: faceKey(1, minY - 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y - 1},${chunk.chunk.z}` },
+      { key: faceKey(1, maxY + 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y + 1},${chunk.chunk.z}` },
+      { key: faceKey(2, minZ - 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z - 1}` },
+      { key: faceKey(2, maxZ + 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z + 1}` },
     ];
 
-    for (const targetChunk of logicalNeighbors) {
-      out.set(`${targetChunk}|same-level`, {
+    for (const fallback of fallbackFaces) {
+      if (coveredFaces.has(fallback.key)) continue;
+      out.set(`${fallback.targetChunk}|same-level`, {
         sourceChunk: chunk.key,
-        targetChunk,
+        targetChunk: fallback.targetChunk,
         relation: "same-level",
       });
     }
