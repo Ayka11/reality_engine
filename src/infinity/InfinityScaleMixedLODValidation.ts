@@ -2,7 +2,11 @@ import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter
 import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import type { EntityChunkConnectivityResult } from "./EntityChunkConnectivity";
 import type { EntityReconciliationPlan } from "./EntityChunkReconciliation";
-import { validateInfinityScaleBoundaryChunks } from "./InfinityScaleLODBoundaryGeometry";
+import {
+  validateInfinityScaleBoundaryChunks,
+  validateInfinityScaleBoundaryCoverage,
+  type InfinityScaleBoundaryCoverageValidation,
+} from "./InfinityScaleLODBoundaryGeometry";
 
 export interface InfinityScaleMixedLODValidation {
   ready: boolean;
@@ -11,6 +15,8 @@ export interface InfinityScaleMixedLODValidation {
   unsupportedRelationCount: number;
   overlappingSimulationRanges: number;
   invalidBoundaryGeometryCount: number;
+  invalidBoundaryCoverageCount: number;
+  boundaryCoverage: InfinityScaleBoundaryCoverageValidation[];
   unresolvedTopology: boolean;
   topologyRepresentationReady: boolean;
   ambiguousTopologyComponentCount: number;
@@ -38,6 +44,10 @@ export function validateInfinityScaleMixedLOD(
   const invalidGeometry = mixed.filter(spec =>
     !validateInfinityScaleBoundaryChunks(spec, context.chunkSize),
   );
+  const boundaryCoverage = mixed.map(spec =>
+    validateInfinityScaleBoundaryCoverage(spec, context.chunkSize),
+  );
+  const invalidBoundaryCoverageCount = boundaryCoverage.filter(result => !result.valid).length;
   const invalid = mixed.filter(spec =>
     spec.refinementRatio < 2 ||
     !Number.isInteger(spec.refinementRatio) ||
@@ -76,6 +86,9 @@ export function validateInfinityScaleMixedLOD(
   if (invalidGeometry.length > 0) {
     reasons.push(`invalid mixed-LOD boundary geometry: ${invalidGeometry.length}`);
   }
+  if (invalidBoundaryCoverageCount > 0) {
+    reasons.push(`invalid mixed-LOD boundary coverage: ${invalidBoundaryCoverageCount}`);
+  }
 
   // ENTITY_ID majority reduction cannot prove topology continuity across an
   // LOD boundary. Keep the global capability blocked until an entity-specific
@@ -106,6 +119,7 @@ export function validateInfinityScaleMixedLOD(
       reconciliationReady &&
       invalid.length === 0 &&
       invalidGeometry.length === 0 &&
+      invalidBoundaryCoverageCount === 0 &&
       unsupported.length === 0 &&
       context.overlappingSimulationRangeCount === 0 &&
       !unresolvedTopology
@@ -117,6 +131,8 @@ export function validateInfinityScaleMixedLOD(
     invalidTransferSpecCount: invalid.length,
     unsupportedRelationCount: unsupported.length,
     invalidBoundaryGeometryCount: invalidGeometry.length,
+    invalidBoundaryCoverageCount,
+    boundaryCoverage,
     overlappingSimulationRanges: context.overlappingSimulationRangeCount,
     unresolvedTopology,
     topologyRepresentationReady,
