@@ -132,9 +132,6 @@ export class SimulationEngine {
 
     const capabilities = this.getInfinityScaleExecutionCapabilities();
 
-    // Revalidate the incoming plan against the current runtime capability
-    // handshake. A plan generated under an older mixed-LOD state must never
-    // remain selectively executable after that state changes.
     if (plan.mode === 'selective-gpu-ready' && !capabilities.selectiveGpuReady) {
       throw new Error(
         'Infinity Scale GPU execution plan is incompatible with current GPU capability',
@@ -203,9 +200,6 @@ export class SimulationEngine {
     if (frameState && frameContext) {
       assertInfinityScaleGlobalFramePlan(frameState, selectivePlan!, frameContext);
 
-      // Revalidate the installed plan at the frame boundary. Capability and
-      // ownership state may have changed after plan installation; a stale
-      // selective contract must fail before any local simulation writes.
       const currentCapabilities = this.getInfinityScaleExecutionCapabilities();
       const hasMixedLodBoundary = selectivePlan!.boundaryReadRelations.some(
         relation => relation.relation !== 'same-level',
@@ -245,7 +239,6 @@ export class SimulationEngine {
           throw new Error('Infinity Scale selective GPU execution requires an active frame context');
         }
 
-        // Preserve per-tick lifecycle semantics inside a batched frame.
         for (let s = 0; s < nSteps; s++) {
           this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
           this.gpu.submitCompute(1, executionContext);
@@ -257,15 +250,11 @@ export class SimulationEngine {
           this.agents.tickChunks(this.grid, clampedDt, executionContext);
           this.entityLayer.tickChunks(this.grid, clampedDt, executionContext);
 
-          // Causality is sampled at the same temporal boundary as the
-          // simulation tick, so batched frames do not collapse multiple
-          // energy transitions into one synthetic event.
           this._detectCausality(executionContext);
           this._tick++;
           this.gpu.upload(this.grid.buffer);
         }
       } else {
-        // Legacy full-domain GPU path.
         this.chemLayer.tick(this.grid, clampedDt * nSteps);
         this.entityLayer.tick(this.grid, clampedDt * nSteps);
         this.temporalLayer.tick(this.grid, clampedDt * nSteps);
@@ -274,7 +263,6 @@ export class SimulationEngine {
         this._tick += nSteps;
       }
     } else {
-      // CPU fallback — runs each step serially
       for (let s = 0; s < nSteps; s++) {
         this.grid.snapshot();
         const executionContext = frameContext;
@@ -329,7 +317,6 @@ export class SimulationEngine {
             boundarySnapshot,
           );
 
-          // Keep causality aligned with each selective CPU simulation tick.
           this._detectCausality(executionContext);
           this._tick++;
         } else {
@@ -353,9 +340,6 @@ export class SimulationEngine {
       if (!selectivePlan) this._tick += nSteps;
     }
 
-    // Validate the immutable frame contract before any deferred boundary
-    // mutation. A changed ownership plan must fail atomically, before agents,
-    // entities, or chemistry can publish cross-workset state.
     if (frameState && frameContext) {
       if (!selectivePlan) {
         throw new Error('Infinity Scale frame lost its execution plan');
@@ -367,7 +351,6 @@ export class SimulationEngine {
       );
     }
 
-    // Agent migrations cross ownership boundaries only at the frame barrier.
     if (frameContext) {
       const migrationRequests = this.agents.consumeMigrationRequests();
       this.agents.applyMigrationRequests(
@@ -375,22 +358,13 @@ export class SimulationEngine {
         migrationRequests,
         frameContext,
       );
-
-      // Entity reconciliation is a boundary commit, not a local behavior step.
-      // tickChunks() has already analyzed the owned workset; identities are
-      // committed only after all local systems have finished.
       this.entityLayer.applyChunkReconciliation(this.grid, frameContext);
     }
 
-    // Selective execution already samples causality per simulation tick.
-    // Legacy full-domain execution keeps its historical post-batch sampling.
     if (!frameContext) {
       this._detectCausality(null);
     }
 
-    // Boundary reconciliation is the single commit barrier for deferred
-    // cross-workset state. The plan was validated before mutation; now all
-    // deferred local writes become visible together.
     if (frameState && frameContext) {
       this.chemLayer.commitPendingDensityTransfers(this.grid, frameContext);
       frameState = advanceInfinityScaleGlobalFrame(frameState, 'local-commit');
@@ -402,16 +376,11 @@ export class SimulationEngine {
     const metrics = this._worldMetrics();
 
     if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'global-control');
-    // LawEngine and WorldEvents are frame-level global control systems.
-    // Advance their elapsed-time state by the complete batched interval rather
-    // than aging them once per render frame.
     this.laws.tick(metrics, nSteps);
     this.worldEvents.autoTick(this.grid, this._tick, eventContext, nSteps);
 
     if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'observation');
     if (frameContext) {
-      // Infinity Scale observation stores only simulation-owned cells. Full
-      // snapshots remain available for non-selective execution.
       this.recorder.tickSelective(this.grid, this._tick, frameContext);
     } else {
       this.recorder.tick(this.grid, this._tick);
@@ -419,24 +388,18 @@ export class SimulationEngine {
 
     if (frameState) frameState = advanceInfinityScaleGlobalFrame(frameState, 'finalize');
 
-    // Keep GPU in sync after CPU changes (presets, painting)
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
     if (this._tick % 500 === 0) {
       this.grid.markEmptyChunksInactive();
       this.grid.cullInactive();
     }
-
-    // _tick has already advanced in the selective per-tick loop or in the
-    // legacy batched CPU/GPU path. Do not advance it again at the frame tail.
   }
 
-  // Called after user paints/erases so GPU buffer stays consistent
   syncToGPU(): void {
     this.grid.syncDenseToChunks();
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
   }
 
-  // Synchronous CPU-only step used by ScriptEngine (bypasses GPU/await)
   syncTick(n: number): void {
     const dt = 0.016;
     for (let s = 0; s < n; s++) {
@@ -488,10 +451,6 @@ export class SimulationEngine {
       const owned = !context || context.containsSimulationCell(x, y, z);
       const delta = cell.energy - this.prevEnergy[lin];
 
-      // Causality is a simulation-owned write: selective execution may only
-      // emit events and mutate CAUSALITY_ID for cells in its simulation set.
-      // The energy baseline is still refreshed for every cell so inactive
-      // cells do not accumulate a false spike while outside the workset.
       if (owned && Math.abs(delta) > WORLD.CAUSALITY_THRESHOLD) {
         this.causal.log(this._tick, x, y, z, lin, 'energy_spike', Math.round(delta));
         cell.set(F.CAUSALITY_ID, this.causal.recent(1)[0]?.id ?? 0);
@@ -523,13 +482,13 @@ export class SimulationEngine {
 
   entityMarkers() {
     return this.entityLayer.getEntities().map(e => ({
-      id:       String(e.id),
+      id: String(e.id),
       centroid: e.centroid,
       stability: e.stage === 'juvenile' ? 0.3 : e.stage === 'mature' ? 0.9 : 0.5,
-      age:      e.age,
-      color:    (e.stage === 'juvenile' ? [0.2, 0.9, 0.4]
-               : e.stage === 'mature'  ? [0.9, 0.7, 0.1]
-               :                        [0.5, 0.3, 0.7]) as [number, number, number],
+      age: e.age,
+      color: (e.stage === 'juvenile' ? [0.2, 0.9, 0.4]
+             : e.stage === 'mature'  ? [0.9, 0.7, 0.1]
+             :                        [0.5, 0.3, 0.7]) as [number, number, number],
     }));
   }
 
@@ -544,14 +503,7 @@ export class SimulationEngine {
     this.grid.syncDenseToChunks();
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
   }
-  /**
-   * Builds an immutable LOD boundary snapshot from the pre-tick dense state.
-   *
-   * Only mixed-LOD dependency chunks are materialized. Level-0 dependencies
-   * are copied directly; coarser dependencies are restricted from their
-   * corresponding base-resolution blocks. The snapshot is read-only for all
-   * local solvers and is discarded after the tick.
-   */
+
   private captureInfinityScaleBoundarySnapshot(
     context: InfinityScaleChunkExecutionContext,
   ): InfinityScaleLODBoundarySnapshot | undefined {
@@ -636,12 +588,13 @@ export class SimulationEngine {
       }
     }
 
-    return InfinityScaleLODBoundarySnapshot.capture(
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(
       this.infinityScaleLODState,
       specs,
       this._tick,
       32,
     );
+    snapshot.assertCoverage();
+    return snapshot;
   }
-
 }
