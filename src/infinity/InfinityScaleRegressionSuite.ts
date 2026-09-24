@@ -22,6 +22,7 @@ import { runInfinityScaleGlobalAdaptivePlannerRegression } from "./InfinityScale
 import { runInfinityScaleSpatialConstraintClosureRegression } from "./InfinityScaleSpatialConstraintClosure.regression";
 import { runInfinityScaleTopologyMutationBridgeRegression } from "./InfinityScaleTopologyMutationBridge.regression";
 import { runInfinityScaleAdaptiveTransferCompilerRegression } from "./InfinityScaleAdaptiveTransferCompiler.regression";
+import { runInfinityScaleAdaptiveExecutionGraphCompilerRegression } from "./InfinityScaleAdaptiveExecutionGraphCompiler.regression";
 
 export interface InfinityScaleRegressionResult {
   name: string;
@@ -52,6 +53,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["spatial-constraint-closure", runInfinityScaleSpatialConstraintClosureRegression],
     ["topology-mutation-bridge", runInfinityScaleTopologyMutationBridgeRegression],
     ["adaptive-transfer-compiler", runInfinityScaleAdaptiveTransferCompilerRegression],
+    ["adaptive-execution-graph-compiler", runInfinityScaleAdaptiveExecutionGraphCompilerRegression],
   ];
 
   const results: InfinityScaleRegressionResult[] = [];
