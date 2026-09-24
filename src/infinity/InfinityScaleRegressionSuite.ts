@@ -1,6 +1,9 @@
 import { runInfinityScaleLODBoundaryCellMapperRegression } from "./InfinityScaleLODBoundaryCellMapper.regression";
 import { runInfinityScaleLODBoundaryRegression } from "./InfinityScaleLODBoundarySnapshot.regression";
-import { runInfinityScaleMixedLODCPUExecutorRegression } from "./InfinityScaleMixedLODCPUExecutor.regression";
+import {
+  runInfinityScaleMixedLODCPURegression,
+  runInfinityScaleMixedLODCPUProlongationRegression,
+} from "./InfinityScaleMixedLODCPUExecutor.regression";
 import { runInfinityScaleUnifiedTransactionRegression } from "./InfinityScaleUnifiedTransaction.regression";
 
 export interface InfinityScaleRegressionResult {
@@ -12,7 +15,8 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
   const tests: Array<[string, () => void]> = [
     ["canonical-boundary-mapper", runInfinityScaleLODBoundaryCellMapperRegression],
     ["lod-boundary-transfer", runInfinityScaleLODBoundaryRegression],
-    ["mixed-lod-cpu-executor", runInfinityScaleMixedLODCPUExecutorRegression],
+    ["mixed-lod-cpu-restriction", runInfinityScaleMixedLODCPURegression],
+    ["mixed-lod-cpu-prolongation", runInfinityScaleMixedLODCPUProlongationRegression],
     ["unified-transaction", runInfinityScaleUnifiedTransactionRegression],
   ];
 
