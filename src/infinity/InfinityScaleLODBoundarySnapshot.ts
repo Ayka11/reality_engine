@@ -180,10 +180,11 @@ export class InfinityScaleLODBoundarySnapshot {
     if (!source) return null;
 
     const mapping = mapInfinityScaleBoundaryCell(spec, targetCell, this.chunkSize);
+    const sourceRange = chunkRangeForKey(spec.sourceChunk, this.chunkSize);
+    const sourceScale = 2 ** spec.sourceLevel;
     const sources: Float32Array[] = [];
+
     for (const coords of mapping.sourceCells) {
-      const sourceRange = chunkRangeForKey(spec.sourceChunk, this.chunkSize);
-      const sourceScale = 2 ** spec.sourceLevel;
       const lx = Math.floor((coords[0] - sourceRange.minX) / sourceScale);
       const ly = Math.floor((coords[1] - sourceRange.minY) / sourceScale);
       const lz = Math.floor((coords[2] - sourceRange.minZ) / sourceScale);
@@ -193,6 +194,8 @@ export class InfinityScaleLODBoundarySnapshot {
       cell.set(source.cells.subarray(offset, offset + CELL_FIELDS));
       sources.push(cell);
     }
+
+    const out = new Float32Array(CELL_FIELDS);
     if (spec.relation === "same-level") {
       out.set(sources[0]);
       return out;
@@ -203,48 +206,6 @@ export class InfinityScaleLODBoundarySnapshot {
     }
     InfinityScaleLODTransfer.restrictFace(sources, out, spec.sourceLevel, spec.targetLevel);
     return out;
-    }
-
-    // For coarse->fine, the dependency is one coarse cell touching the
-    // interface. Move one base cell into the source side before mapping it
-    // into the coarse chunk.
-    if (spec.relation === "coarse-to-fine") {
-      const sourceCell = [
-        Math.floor(shiftAcrossFace(targetCell, face, -face.direction)[0] / sourceScale) * sourceScale,
-        Math.floor(shiftAcrossFace(targetCell, face, -face.direction)[1] / sourceScale) * sourceScale,
-        Math.floor(shiftAcrossFace(targetCell, face, -face.direction)[2] / sourceScale) * sourceScale,
-      ] as [number, number, number];
-      const lx = Math.floor((sourceCell[0] - sourceRange.minX) / sourceScale);
-      const ly = Math.floor((sourceCell[1] - sourceRange.minY) / sourceScale);
-      const lz = Math.floor((sourceCell[2] - sourceRange.minZ) / sourceScale);
-      if (
-        lx < 0 || lx >= this.chunkSize ||
-        ly < 0 || ly >= this.chunkSize ||
-        lz < 0 || lz >= this.chunkSize
-      ) return null;
-      const offset =
-        ((lz * this.chunkSize * this.chunkSize) + ly * this.chunkSize + lx) * CELL_FIELDS;
-      out.set(source.cells.subarray(offset, offset + CELL_FIELDS));
-      return out;
-    }
-
-    if (spec.relation === "same-level") {
-      const sourceCell = shiftAcrossFace(targetCell, face, -face.direction);
-      const lx = sourceCell[0] - sourceRange.minX;
-      const ly = sourceCell[1] - sourceRange.minY;
-      const lz = sourceCell[2] - sourceRange.minZ;
-      if (
-        lx < 0 || lx >= this.chunkSize ||
-        ly < 0 || ly >= this.chunkSize ||
-        lz < 0 || lz >= this.chunkSize
-      ) return null;
-      const offset =
-        ((lz * this.chunkSize * this.chunkSize) + ly * this.chunkSize + lx) * CELL_FIELDS;
-      out.set(source.cells.subarray(offset, offset + CELL_FIELDS));
-      return out;
-    }
-
-    return null;
   }
 
   getSpecs(): InfinityScaleBoundaryTransferSpec[] {
@@ -262,54 +223,3 @@ function parseChunkKey(key: string): [number, number, number] {
   return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
-interface BoundaryFace {
-  axis: "x" | "y" | "z";
-  direction: -1 | 1;
-}
-
-function chunkRangeForKey(
-  key: string,
-  chunkSize: number,
-): { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number } {
-  const [level, cx, cy, cz] = (() => {
-    const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
-    if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
-    return [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4])];
-  })();
-  const scale = 2 ** level;
-  const extent = chunkSize * scale;
-  return {
-    minX: cx * extent,
-    maxX: cx * extent + extent - 1,
-    minY: cy * extent,
-    maxY: cy * extent + extent - 1,
-    minZ: cz * extent,
-    maxZ: cz * extent + extent - 1,
-  };
-}
-
-
-function resolveBoundaryReadFace(
-  source: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number },
-  target: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number },
-  x: number,
-  y: number,
-  z: number,
-): BoundaryFace | null {
-  if (source.maxX + 1 === target.minX && x === target.minX && y >= target.minY && y <= target.maxY && z >= target.minZ && z <= target.maxZ) return { axis: "x", direction: 1 };
-  if (target.maxX + 1 === source.minX && x === source.minX && y >= target.minY && y <= target.maxY && z >= target.minZ && z <= target.maxZ) return { axis: "x", direction: -1 };
-  if (source.maxY + 1 === target.minY && y === target.minY && x >= target.minX && x <= target.maxX && z >= target.minZ && z <= target.maxZ) return { axis: "y", direction: 1 };
-  if (target.maxY + 1 === source.minY && y === source.minY && x >= target.minX && x <= target.maxX && z >= target.minZ && z <= target.maxZ) return { axis: "y", direction: -1 };
-  if (source.maxZ + 1 === target.minZ && z === target.minZ && x >= target.minX && x <= target.maxX && y >= target.minY && y <= target.maxY) return { axis: "z", direction: 1 };
-  if (target.maxZ + 1 === source.minZ && z === source.minZ && x >= target.minX && x <= target.maxX && y >= target.minY && y <= target.maxY) return { axis: "z", direction: -1 };
-  return null;
-}
-function shiftAcrossFace(
-  point: [number, number, number],
-  face: BoundaryFace,
-  distance: number,
-): [number, number, number] {
-  const shifted: [number, number, number] = [...point];
-  shifted[face.axis === "x" ? 0 : face.axis === "y" ? 1 : 2] += face.direction * distance;
-  return shifted;
-}
