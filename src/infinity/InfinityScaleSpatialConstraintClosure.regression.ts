@@ -13,8 +13,8 @@ export function runInfinityScaleSpatialConstraintClosureRegression(): void {
   if (Math.abs(result.proposedLOD.get("A")! - result.proposedLOD.get("B")!) > 1) {
     throw new Error("A/B 2:1 balance was not restored");
   }
-  if (result.proposedLOD.get("A") !== 1) {
-    throw new Error("Closure did not conservatively propagate the required LOD reduction");
+  if (result.proposedLOD.get("A") !== 2 || result.proposedLOD.get("B") !== 1) {
+    throw new Error("Closure did not converge to the expected minimal 2:1-balanced levels");
   }
   if (result.changedRegionIds.length === 0) {
     throw new Error("Closure failed to report changed regions");
