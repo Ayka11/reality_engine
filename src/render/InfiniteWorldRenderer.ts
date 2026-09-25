@@ -876,6 +876,43 @@ export class InfiniteWorldRenderer {
     return { center:{x:cx,z:cz}, radius, samples:cells, rivers }
   }
 
+  traceRiverSource(x: number, z: number, maxSteps = 160, step = 8) {
+    const path: Array<{x:number;z:number;y:number}> = []
+    let px = x
+    let pz = z
+    let previousY = this.generator.sampleHeight(px, pz)
+    for (let i = 0; i < maxSteps; i++) {
+      const y = this.generator.sampleHeight(px, pz)
+      path.push({ x: px, z: pz, y })
+      if (y <= this.generator.seaLevel + 0.5) break
+      const e = Math.max(2, step * 0.35)
+      const dx = this.generator.sampleHeight(px + e, pz) - this.generator.sampleHeight(px - e, pz)
+      const dz = this.generator.sampleHeight(px, pz + e) - this.generator.sampleHeight(px, pz - e)
+      const length = Math.hypot(dx, dz)
+      if (length < 0.05) break
+      const nx = px - (dx / length) * step
+      const nz = pz - (dz / length) * step
+      const nextY = this.generator.sampleHeight(nx, nz)
+      if (nextY > previousY + 0.25) break
+      px = nx
+      pz = nz
+      previousY = nextY
+    }
+    return path
+  }
+
+  generateRiverTraces(cx: number, cz: number, radius = 220, sources = 6) {
+    const candidates = this.analyzeHydrology(cx, cz, radius, 41).rivers
+      .filter((r) => r.y > this.generator.seaLevel + 12)
+      .slice(0, Math.max(1, sources))
+    const traces: Array<Array<{x:number;z:number;y:number}>> = []
+    for (const source of candidates) {
+      const path = this.traceRiverSource(source.x, source.z)
+      if (path.length > 2) traces.push(path)
+    }
+    return traces
+  }
+
   generateRiverNetwork(cx: number, cz: number, radius = 220, samples = 41) {
     const hydro = this.analyzeHydrology(cx, cz, radius, samples)
     const created: WorldObject[] = []
