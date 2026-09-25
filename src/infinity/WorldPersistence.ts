@@ -30,7 +30,6 @@ export class WorldPersistence {
 
   loadChunk(cx: number, cy: number, cz: number): WorldObject[] {
     const key = chunkKey(cx, cy, cz)
-    const key = chunkKey(cx, cy, cz)
     const cached = this.cache.get(key)
     if (cached) return cached
     const raw = localStorage.getItem(this.key(cx, cy, cz))
