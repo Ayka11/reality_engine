@@ -856,6 +856,43 @@ export class InfiniteWorldRenderer {
     return created
   }
 
+  analyzeWatershed(cx: number, cz: number, radius = 220, samples = 41) {
+    const hydro = this.analyzeHydrology(cx, cz, radius, samples)
+    const cells = hydro.samples
+    const basins: Array<{x:number;z:number;y:number;flow:number;basin:number}> = []
+    for (const cell of cells) {
+      const e = 6
+      const neighbors = [
+        {x: cell.x + e, z: cell.z},
+        {x: cell.x - e, z: cell.z},
+        {x: cell.x, z: cell.z + e},
+        {x: cell.x, z: cell.z - e},
+      ]
+      let lowest = cell.y
+      for (const n of neighbors) lowest = Math.min(lowest, this.generator.sampleHeight(n.x, n.z))
+      const basin = Math.round((lowest - this.generator.seaLevel) / 4)
+      basins.push({ x: cell.x, z: cell.z, y: cell.y, flow: cell.flow, basin })
+    }
+    const floodRisk = basins.map((cell) => ({
+      ...cell,
+      risk: cell.y <= this.generator.seaLevel + 4 ? Math.min(1, cell.flow / 12 + 0.35) : Math.min(1, cell.flow / 24),
+    }))
+    return { center:{x:cx,z:cz}, radius, samples:floodRisk }
+  }
+
+  buildZoneCost(x: number, z: number) {
+    const y = this.generator.sampleHeight(x, z)
+    const e = 4
+    const gx = this.generator.sampleHeight(x + e, z) - this.generator.sampleHeight(x - e, z)
+    const gz = this.generator.sampleHeight(x, z + e) - this.generator.sampleHeight(x, z - e)
+    const slope = Math.hypot(gx, gz) / (2 * e)
+    const hydro = this.analyzeHydrology(x, z, 16, 7)
+    const river = hydro.rivers.length > 0
+    const floodRisk = y <= this.generator.seaLevel + 4 ? 0.7 : river ? 0.45 : 0
+    const slopeRisk = Math.min(1, slope / 0.5)
+    return { x, z, y, slope, river, floodRisk, slopeRisk, cost: slopeRisk * 0.5 + floodRisk * 0.5 }
+  }
+
   analyzeHydrology(cx: number, cz: number, radius = 220, samples = 41) {
     const n = Math.max(9, Math.floor(samples))
     const step = (radius * 2) / (n - 1)
