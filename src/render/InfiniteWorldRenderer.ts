@@ -856,6 +856,71 @@ export class InfiniteWorldRenderer {
     return created
   }
 
+  generateSettlementV2(cx: number, cz: number, radius = 120, blocks = 4) {
+    const created: WorldObject[] = []
+    const seed = this.generator.seed
+    const blockCount = Math.max(2, Math.floor(blocks))
+    const ringRadius = radius * 0.62
+    const centerY = this.generator.sampleHeight(cx, cz)
+    const hub = this.objects.add({
+      kind: 'landmark', x: cx, y: centerY, z: cz,
+      rotationY: 0, scale: 1.5, seed: 0,
+      properties: { settlement: 'hub', seed },
+    })
+    created.push(hub)
+    this.history.push({ type: 'add', object: { ...hub } })
+
+    for (let i = 0; i < blockCount; i++) {
+      const angle = (i / blockCount) * Math.PI * 2
+      const bx = cx + Math.cos(angle) * ringRadius
+      const bz = cz + Math.sin(angle) * ringRadius
+      const route = this.optimizeRoute(cx, cz, bx, bz, 12)
+      if (route.length < 2) continue
+
+      for (let s = 0; s < route.length - 1; s++) {
+        const a = route[s]
+        const b = route[s + 1]
+        const length = Math.hypot(b.x - a.x, b.z - a.z)
+        const kind: WorldObjectKind = a.water || b.water ? 'bridge' : 'road'
+        const object = this.objects.add({
+          kind,
+          x: (a.x + b.x) * 0.5,
+          y: kind === 'bridge' ? this.generator.seaLevel + 0.45 : (a.y + b.y) * 0.5 + 0.08,
+          z: (a.z + b.z) * 0.5,
+          rotationY: Math.atan2(b.x - a.x, b.z - a.z),
+          scale: Math.max(0.5, length / 12),
+          seed: s,
+          properties: { settlement: 'road', block: i },
+        })
+        created.push(object)
+        this.history.push({ type: 'add', object: { ...object } })
+      }
+
+      const inner = ringRadius * 0.52
+      for (let b = 0; b < 4; b++) {
+        const lateral = (b - 1.5) * 16
+        const tangentX = Math.cos(angle + Math.PI / 2) * lateral
+        const tangentZ = Math.sin(angle + Math.PI / 2) * lateral
+        const px = bx + tangentX
+        const pz = bz + tangentZ
+        const py = this.generator.sampleHeight(px, pz)
+        const building = this.objects.add({
+          kind: 'building', x: px, y: py, z: pz,
+          rotationY: angle + Math.PI / 2,
+          scale: 0.8 + ((i + b) % 3) * 0.15,
+          seed: i * 100 + b,
+          properties: { settlement: 'block', block: i, slot: b, innerRadius: inner },
+        })
+        created.push(building)
+        this.history.push({ type: 'add', object: { ...building } })
+      }
+    }
+
+    this.syncObjects()
+    this.scheduleSave()
+    return created
+  }
+
   generateSettlement(cx: number, cz: number, radius = 80, count = 12) {
     const created: WorldObject[] = []
     const seed = this.generator.seed
