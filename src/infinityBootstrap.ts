@@ -112,6 +112,11 @@ if (canvas) {
   addButton('Settlement V2', () => world.generateSettlementV2(world.worldCoordinates.x, world.worldCoordinates.z, 120, 4))
   addButton('City Plan', () => world.generateCityPlan(world.worldCoordinates.x, world.worldCoordinates.z, 180, 31))
   addButton('River Network', () => world.generateRiverNetwork(world.worldCoordinates.x, world.worldCoordinates.z, 220, 41))
+  addButton('Suitability Map', () => world.setAnalyticalOverlay('suitability'))
+  addButton('Flood Map', () => world.setAnalyticalOverlay('flood'))
+  addButton('Slope Map', () => world.setAnalyticalOverlay('slope'))
+  addButton('Clear Map', () => world.setAnalyticalOverlay(null))
+  addButton('Optimized Route', () => world.buildSmartRoute(world.worldCoordinates.x - 180, world.worldCoordinates.z - 80, world.worldCoordinates.x + 180, world.worldCoordinates.z + 80, 12))
   addButton('Smart Route', () => world.buildSmartRoute(world.worldCoordinates.x - 120, world.worldCoordinates.z - 120, world.worldCoordinates.x + 120, world.worldCoordinates.z + 120, 12))
   document.body.appendChild(panel)
 
