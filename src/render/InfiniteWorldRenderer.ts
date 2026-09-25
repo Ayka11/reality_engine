@@ -6,6 +6,8 @@ import { worldToChunk, WORLD_CHUNK_SIZE, type ChunkCoord } from '../infinity/Wor
 import { WorldObjectManager } from '../infinity/ObjectManager'
 import { lodForDistance, lodResolution } from '../infinity/LODManager'
 import { OBJECT_CATALOG } from '../infinity/ObjectCatalog'
+import { WorldPersistence } from '../infinity/WorldPersistence'
+import { chunkKey } from '../infinity/WorldCoordinate'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
@@ -30,6 +32,7 @@ export class InfiniteWorldRenderer {
   readonly generator: WorldGenerator
   readonly chunks: InfiniteChunkManager
   readonly objects = new WorldObjectManager()
+  readonly persistence: WorldPersistence
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -128,27 +131,43 @@ export class InfiniteWorldRenderer {
   }
 
   saveWorld() {
-    const payload = { version: 1, seed: this.generator.seed, objects: this.objects.values() }
-    localStorage.setItem(this.storageKey, JSON.stringify(payload))
-    return payload.objects.length
+    const objects = this.objects.values()
+    const groups = new Map<string, WorldObject[]>()
+    for (const object of objects) {
+      const { cx, cy, cz } = this.persistence.chunkForObject(object)
+      const key = chunkKey(cx, cy, cz)
+      const list = groups.get(key) ?? []
+      list.push(object)
+      groups.set(key, list)
+    }
+    for (const key of this.persistence.knownChunks()) {
+      if (!groups.has(key)) {
+        const [cx, cy, cz] = key.split(',').map(Number)
+        this.persistence.deleteChunk(cx, cy, cz)
+      }
+    }
+    for (const [key, list] of groups) {
+      const [cx, cy, cz] = key.split(',').map(Number)
+      this.persistence.saveChunk(cx, cy, cz, list)
+    }
+    return objects.length
   }
 
   loadWorld() {
-    const raw = localStorage.getItem(this.storageKey)
-    if (!raw) return 0
-    try {
-      const payload = JSON.parse(raw) as { version?: number; seed?: string; objects?: WorldObject[] }
-      if (payload.seed !== this.generator.seed || !Array.isArray(payload.objects)) return 0
-      this.objects.clear()
-      for (const object of payload.objects) this.objects.add(object)
-      return payload.objects.length
-    } catch {
-      return 0
+    this.objects.clear()
+    let count = 0
+    for (const key of this.persistence.knownChunks()) {
+      const [cx, cy, cz] = key.split(',').map(Number)
+      for (const object of this.persistence.loadChunk(cx, cy, cz)) {
+        this.objects.add(object)
+        count++
+      }
     }
+    return count
   }
 
   clearSavedWorld() {
-    localStorage.removeItem(this.storageKey)
+    this.persistence.clear()
     this.objects.clear()
     this.syncObjects()
     this.selectedObjectId = null
