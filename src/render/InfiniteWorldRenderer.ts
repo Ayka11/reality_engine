@@ -67,6 +67,7 @@ export class InfiniteWorldRenderer {
     window.addEventListener('keydown', (e) => {
       if (['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','ShiftRight'].includes(e.code)) {
         this.keys.add(e.code)
+        e.preventDefault()
       }
       if (e.code === 'KeyF') this.flyMode = !this.flyMode
     })
@@ -93,6 +94,13 @@ export class InfiniteWorldRenderer {
   }
 
   get isEnabled() { return this.enabled }
+  get worldCoordinates() {
+    return { x: this.worldPosition.x, y: this.worldPosition.y, z: this.worldPosition.z }
+  }
+  setFlyMode(enabled: boolean) {
+    this.flyMode = enabled
+    this.controls.enabled = !enabled
+  }
 
   resize(width: number, height: number) {
     if (width <= 0 || height <= 0) return
