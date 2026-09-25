@@ -35,6 +35,12 @@ export class InfiniteWorldRenderer {
   private objectMeshes = new Map<string, ObjectMesh>()
   private waterMeshes = new Map<string, THREE.Mesh>()
   private dummy = new THREE.Object3D()
+  private readonly raycaster = new THREE.Raycaster()
+  private readonly pointer = new THREE.Vector2()
+  private readonly hoverMarker = new THREE.Mesh(
+    new THREE.RingGeometry(0.6, 0.85, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffff66, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+  )
   private enabled = true
   private lastCenter: ChunkCoord | null = null
   private worldY = 45
@@ -85,6 +91,10 @@ export class InfiniteWorldRenderer {
 
     const water = new THREE.MeshBasicMaterial({ color: 0x2b78b5, transparent: true, opacity: 0.48 })
     void water
+
+    this.hoverMarker.rotation.x = -Math.PI / 2
+    this.hoverMarker.visible = false
+    this.scene.add(this.hoverMarker)
 
     this.scene.background = new THREE.Color(0x9bb8d6)
     this.scene.fog = new THREE.Fog(0x9bb8d6, 180, 900)
@@ -183,6 +193,7 @@ export class InfiniteWorldRenderer {
 
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 })
     const mesh = new THREE.Mesh(geometry, material)
+    mesh.userData.terrain = true
     group.add(mesh)
 
     const waterGeometry = new THREE.PlaneGeometry(WORLD_CHUNK_SIZE, WORLD_CHUNK_SIZE)
@@ -340,6 +351,41 @@ export class InfiniteWorldRenderer {
         this.objectMeshes.delete(id)
       }
     }
+  }
+
+  pickAtScreen(clientX: number, clientY: number) {
+    const rect = this.renderer.domElement.getBoundingClientRect()
+    if (!rect.width || !rect.height) return null
+    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1
+    this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1
+    this.raycaster.setFromCamera(this.pointer, this.camera)
+    const terrainMeshes: THREE.Object3D[] = []
+    for (const patch of this.patches.values()) {
+      patch.group.traverse(obj => {
+        if (obj instanceof THREE.Mesh && obj.userData.terrain) terrainMeshes.push(obj)
+      })
+    }
+    const hit = this.raycaster.intersectObjects(terrainMeshes, false)[0]
+    if (!hit) {
+      this.hoverMarker.visible = false
+      return null
+    }
+    const worldX = hit.point.x + this.worldAnchor.x
+    const worldY = hit.point.y + this.worldAnchor.y
+    const worldZ = hit.point.z + this.worldAnchor.z
+    this.hoverMarker.position.set(hit.point.x, hit.point.y + 0.08, hit.point.z)
+    this.hoverMarker.visible = true
+    return { x: worldX, y: worldY, z: worldZ }
+  }
+
+  placeAtScreen(kind: WorldObjectKind, clientX: number, clientY: number, scale = 1) {
+    const point = this.pickAtScreen(clientX, clientY)
+    return point ? this.place(kind, point.x, point.z, point.y, scale) : null
+  }
+
+  eraseAtScreen(clientX: number, clientY: number, radius = 2) {
+    const point = this.pickAtScreen(clientX, clientY)
+    return point ? this.erase(point.x, point.y, point.z, radius) : []
   }
 
   place(kind: WorldObjectKind, x: number, z: number, y?: number, scale = 1) {
