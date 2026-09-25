@@ -386,6 +386,14 @@ export class InfiniteWorldRenderer {
 
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 })
     this.terrainMaterials.add(material)
+    if (this.materialMode === 'material') {
+      material.vertexColors = false
+      material.color.set(0x8a8f98)
+      material.roughness = 0.72
+      material.metalness = 0.08
+    } else if (this.materialMode === 'height') {
+      material.roughness = 0.88
+    }
     const mesh = new THREE.Mesh(geometry, material)
     mesh.userData.terrain = true
     group.add(mesh)
