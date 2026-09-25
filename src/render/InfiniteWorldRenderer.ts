@@ -785,7 +785,8 @@ export class InfiniteWorldRenderer {
         const prevY = this.generator.sampleHeight(cx * step, cz * step)
         const slope = Math.abs(y - prevY) / Math.max(1, Math.hypot(dx * step, dz * step))
         const water = y < this.generator.seaLevel - 0.25
-        const terrainCost = 1 + slope * 18 + (water ? 6 : 0)
+        const zone = this.buildZoneCost(wx, wz)
+        const terrainCost = 1 + slope * 18 + (water ? 6 : 0) + zone.floodRisk * 12 + zone.slopeRisk * 8
         const diagonal = dx !== 0 && dz !== 0 ? 1.414 : 1
         const tentative = (g.get(currentKey) ?? Infinity) + terrainCost * diagonal
         const nk = key(nx, nz)
@@ -1059,7 +1060,8 @@ export class InfiniteWorldRenderer {
         const angle = Math.atan2(cell.z - hub.z, cell.x - hub.x)
         const angleDiff = Math.abs(Math.atan2(Math.sin(angle - targetAngle), Math.cos(angle - targetAngle)))
         const separation = Math.min(1, distance / radius)
-        const value = cell.score + separation * 0.25 - angleDiff * 0.15
+        const zone = this.buildZoneCost(cell.x, cell.z)
+        const value = cell.score + separation * 0.25 - angleDiff * 0.15 - zone.cost * 0.45
         if (value > bestValue) { bestValue = value; best = cell }
       }
       districts.push({ x: best.x, z: best.z, y: best.y, score: best.score, role: i % 3 === 0 ? 'civic' : i % 3 === 1 ? 'residential' : 'mixed' })
