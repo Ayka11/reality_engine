@@ -40,6 +40,8 @@ export class InfiniteWorldRenderer {
   private selectedObjectId: string | null = null
   private selectedKind: WorldObjectKind = 'tree'
   private objectTool: 'select' | 'place' | 'erase' = 'select'
+  private saveTimer: number | null = null
+  private readonly storageKey: string
   private readonly selectionMarker = new THREE.Mesh(
     new THREE.BoxGeometry(1.2, 1.2, 1.2),
     new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true, transparent: true, opacity: 0.9 })
@@ -70,6 +72,7 @@ export class InfiniteWorldRenderer {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
 
     this.generator = new WorldGenerator(seed)
+    this.storageKey = `reality-engine-world:${seed}:objects`
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 3, verticalRadius: 0, maxLoaded: 49 })
 
     this.camera.position.set(28, this.worldY, 52)
@@ -89,6 +92,7 @@ export class InfiniteWorldRenderer {
     window.addEventListener('keyup', (e) => this.keys.delete(e.code))
     this.controls.target.set(16, 10, 16)
     this.worldPosition.copy(this.camera.position)
+    this.loadWorld()
 
     const hemi = new THREE.HemisphereLight(0xb9d8ff, 0x35402f, 1.6)
     this.scene.add(hemi)
@@ -107,6 +111,42 @@ export class InfiniteWorldRenderer {
 
     this.scene.background = new THREE.Color(0x9bb8d6)
     this.scene.fog = new THREE.Fog(0x9bb8d6, 180, 900)
+  }
+
+  private scheduleSave() {
+    if (this.saveTimer !== null) window.clearTimeout(this.saveTimer)
+    this.saveTimer = window.setTimeout(() => {
+      this.saveTimer = null
+      this.saveWorld()
+    }, 150)
+  }
+
+  saveWorld() {
+    const payload = { version: 1, seed: this.generator.seed, objects: this.objects.values() }
+    localStorage.setItem(this.storageKey, JSON.stringify(payload))
+    return payload.objects.length
+  }
+
+  loadWorld() {
+    const raw = localStorage.getItem(this.storageKey)
+    if (!raw) return 0
+    try {
+      const payload = JSON.parse(raw) as { version?: number; seed?: string; objects?: WorldObject[] }
+      if (payload.seed !== this.generator.seed || !Array.isArray(payload.objects)) return 0
+      this.objects.clear()
+      for (const object of payload.objects) this.objects.add(object)
+      return payload.objects.length
+    } catch {
+      return 0
+    }
+  }
+
+  clearSavedWorld() {
+    localStorage.removeItem(this.storageKey)
+    this.objects.clear()
+    this.syncObjects()
+    this.selectedObjectId = null
+    this.selectionMarker.visible = false
   }
 
   setEnabled(value: boolean) {
@@ -406,6 +446,7 @@ export class InfiniteWorldRenderer {
     const object = this.objects.get(this.selectedObjectId)
     if (!object) return null
     Object.assign(object, patch)
+    this.scheduleSave()
     const entry = this.objectMeshes.get(object.id)
     if (entry) {
       entry.group.position.set(object.x - this.worldAnchor.x, object.y - this.worldAnchor.y, object.z - this.worldAnchor.z)
@@ -434,6 +475,7 @@ export class InfiniteWorldRenderer {
     }
     this.selectedObjectId = null
     this.selectionMarker.visible = false
+    this.scheduleSave()
     return object ?? null
   }
 
@@ -485,6 +527,7 @@ export class InfiniteWorldRenderer {
       rotationY: 0, scale, seed: 0, properties: {},
     })
     this.syncObjects()
+    this.scheduleSave()
     return object
   }
 
@@ -496,6 +539,7 @@ export class InfiniteWorldRenderer {
     })
     for (const object of removed) this.objects.remove(object.id)
     this.syncObjects()
+    this.scheduleSave()
     return removed.map(o => o.id)
   }
 
@@ -503,6 +547,7 @@ export class InfiniteWorldRenderer {
     const objects = this.objects.scatter(this.generator.seed, kind, x0, z0, x1, z1, 32, density)
     for (const object of objects) object.y = this.generator.sampleHeight(object.x, object.z)
     this.syncObjects()
+    this.scheduleSave()
     return objects
   }
 
@@ -567,4 +612,5 @@ export class InfiniteWorldRenderer {
 
   getLoadedChunkCount() { return this.patches.size }
   getObjectCount() { return this.objects.size }
+  getStorageKey() { return this.storageKey }
 }
