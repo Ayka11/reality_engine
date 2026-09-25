@@ -44,6 +44,7 @@ if (canvas) {
   ;(window as any).infinityGenerateSettlement = (x: number, z: number, radius = 80, count = 12) => world.generateSettlement(x, z, radius, count)
   ;(window as any).infinityAnalyzeRoute = (x0: number, z0: number, x1: number, z1: number, samples = 32) => world.analyzeRoute(x0, z0, x1, z1, samples)
   ;(window as any).infinityBuildSmartRoute = (x0: number, z0: number, x1: number, z1: number, spacing = 12) => world.buildSmartRoute(x0, z0, x1, z1, spacing)
+  ;(window as any).infinityOptimizeRoute = (x0: number, z0: number, x1: number, z1: number, gridSize = 12) => world.optimizeRoute(x0, z0, x1, z1, gridSize)
   ;(window as any).infinityStorageKey = () => world.getStorageKey()
   ;(window as any).infinityHandlePointer = (clientX: number, clientY: number) => world.handlePointer(clientX, clientY)
 
