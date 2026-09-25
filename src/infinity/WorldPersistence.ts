@@ -7,6 +7,7 @@ export class WorldPersistence {
   private readonly prefix: string
   private readonly manifestKey: string
   private readonly loaded = new Set<string>()
+  private readonly cache = new Map<string, WorldObject[]>()
 
   constructor(private readonly seed: string) {
     this.prefix = `reality-engine-world:${seed}:chunk:`
@@ -19,20 +20,26 @@ export class WorldPersistence {
 
   saveChunk(cx: number, cy: number, cz: number, objects: WorldObject[]) {
     const payload: StoredChunk = { version: 1, seed: this.seed, objects }
+    const key = chunkKey(cx, cy, cz)
     localStorage.setItem(this.key(cx, cy, cz), JSON.stringify(payload))
-    this.loaded.add(chunkKey(cx, cy, cz))
+    this.cache.set(key, objects)
+    this.loaded.add(key)
     this.updateManifest()
     return objects.length
   }
 
   loadChunk(cx: number, cy: number, cz: number): WorldObject[] {
     const key = chunkKey(cx, cy, cz)
+    const key = chunkKey(cx, cy, cz)
+    const cached = this.cache.get(key)
+    if (cached) return cached
     const raw = localStorage.getItem(this.key(cx, cy, cz))
     this.loaded.add(key)
     if (!raw) return []
     try {
       const payload = JSON.parse(raw) as StoredChunk
       if (payload.version !== 1 || payload.seed !== this.seed || !Array.isArray(payload.objects)) return []
+      this.cache.set(key, payload.objects)
       return payload.objects
     } catch {
       return []
@@ -40,12 +47,16 @@ export class WorldPersistence {
   }
 
   unloadChunk(cx: number, cy: number, cz: number) {
-    this.loaded.delete(chunkKey(cx, cy, cz))
+    const key = chunkKey(cx, cy, cz)
+    this.loaded.delete(key)
+    this.cache.delete(key)
   }
 
   deleteChunk(cx: number, cy: number, cz: number) {
+    const key = chunkKey(cx, cy, cz)
     localStorage.removeItem(this.key(cx, cy, cz))
-    this.loaded.delete(chunkKey(cx, cy, cz))
+    this.loaded.delete(key)
+    this.cache.delete(key)
     this.updateManifest()
   }
 
@@ -59,11 +70,16 @@ export class WorldPersistence {
     }
     localStorage.removeItem(this.manifestKey)
     this.loaded.clear()
+    this.cache.clear()
   }
 
   chunkForObject(object: WorldObject) {
     return worldToChunk(object.x, object.y, object.z).chunk
   }
+
+  isLoaded(cx: number, cy: number, cz: number) { return this.loaded.has(chunkKey(cx, cy, cz)) }
+
+  loadedChunks(): string[] { return [...this.loaded] }
 
   knownChunks(): string[] {
     const raw = localStorage.getItem(this.manifestKey)
