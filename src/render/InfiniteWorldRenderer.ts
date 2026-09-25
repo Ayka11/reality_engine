@@ -970,7 +970,9 @@ export class InfiniteWorldRenderer {
       const route = this.optimizeRoute(plan.hub.x, plan.hub.z, d.x, d.z, 12)
       for (let j = 0; j < route.length - 1; j++) {
         const a = route[j], b = route[j + 1]
-        const water = a.water || b.water
+        const hydro = this.analyzeHydrology((a.x + b.x) * 0.5, (a.z + b.z) * 0.5, 18, 9)
+        const localRiver = hydro.rivers.length > 0
+        const water = a.water || b.water || localRiver
         const object = this.objects.add({
           kind: water ? 'bridge' : 'road',
           x: (a.x + b.x) * 0.5,
