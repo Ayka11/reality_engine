@@ -857,6 +857,28 @@ export class InfiniteWorldRenderer {
     return created
   }
 
+  explainBuildDecision(x: number, z: number) {
+    const zone = this.buildZoneCost(x, z)
+    const hydro = this.analyzeHydrology(x, z, 24, 9)
+    const reasons: string[] = []
+    if (zone.floodRisk > 0.6) reasons.push('high flood risk')
+    else if (zone.floodRisk > 0.3) reasons.push('moderate flood risk')
+    if (zone.slopeRisk > 0.6) reasons.push('high slope risk')
+    else if (zone.slopeRisk > 0.3) reasons.push('moderate slope risk')
+    if (zone.river) reasons.push('river corridor')
+    if (!reasons.length) reasons.push('low terrain risk')
+    return {
+      position:{x,z,y:zone.y},
+      suitability:Math.max(0, 1 - zone.cost),
+      cost:zone.cost,
+      slope:zone.slope,
+      floodRisk:zone.floodRisk,
+      river:zone.river,
+      localRiverCandidates:hydro.rivers.length,
+      reasons,
+    }
+  }
+
   setAnalyticalOverlay(mode: 'suitability' | 'flood' | 'slope' | null) {
     this.analyticalOverlayMode = mode
     if (this.analyticalOverlayMesh) {
