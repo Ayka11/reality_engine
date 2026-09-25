@@ -1,4 +1,4 @@
-import { WORLD_CHUNK_HEIGHT, WORLD_CHUNK_SIZE, chunkOrigin } from './WorldCoordinate'
+import { WORLD_CHUNK_SIZE, chunkOrigin } from './WorldCoordinate'
 import { fbm3D, ridgedFbm3D } from './Noise'
 
 export type Biome =
@@ -116,11 +116,11 @@ export class WorldGenerator {
     return {
       energy: 30 + proximity * 220 + fbm3D(x / 48, y / 32, z / 48, `${this.seed}:energy`, 3) * 80,
       density: Math.max(0, Math.min(1, y <= h ? 0.25 + proximity * 0.65 : proximity * 0.2)),
-      information: 10 + climate.moisture * 40 + (climate.biome === BIOME_ID_NAME[BIOME_ID.forest] ? 20 : 0),
+      information: 10 + climate.moisture * 40 + (climate.biome === 'forest' ? 20 : 0),
       entropy: 0.02 + (1 - climate.moisture) * 0.08,
       temperature: climate.temperature * 280,
       biology: climate.moisture * proximity,
-      material: y > h ? 0 : climate.biome,
+      material: y > h ? 0 : BIOME_ID[climate.biome],
     }
   }
 }
