@@ -29,6 +29,10 @@ if (canvas) {
   ;(window as any).infinitySetObjectKind = (kind: WorldObjectKind) => world.setObjectKind(kind)
   ;(window as any).infinityGetObjectTool = () => world.getObjectTool()
   ;(window as any).infinityGetObjectKind = () => world.getObjectKind()
+  ;(window as any).infinitySaveWorld = () => world.saveWorld()
+  ;(window as any).infinityLoadWorld = () => world.loadWorld()
+  ;(window as any).infinityClearSavedWorld = () => world.clearSavedWorld()
+  ;(window as any).infinityStorageKey = () => world.getStorageKey()
   ;(window as any).infinityHandlePointer = (clientX: number, clientY: number) => world.handlePointer(clientX, clientY)
 
   ;(window as any).infinityStats = () => ({
