@@ -46,6 +46,8 @@ if (canvas) {
   ;(window as any).infinityAnalyzeBuildZone = (x: number, z: number, radius = 160, samples = 25) => world.analyzeBuildZone(x, z, radius, samples)
   ;(window as any).infinityAnalyzeHydrology = (x: number, z: number, radius = 220, samples = 41) => world.analyzeHydrology(x, z, radius, samples)
   ;(window as any).infinityGenerateRiverNetwork = (x: number, z: number, radius = 220, samples = 41) => world.generateRiverNetwork(x, z, radius, samples)
+  ;(window as any).infinityTraceRiverSource = (x: number, z: number, maxSteps = 160, step = 8) => world.traceRiverSource(x, z, maxSteps, step)
+  ;(window as any).infinityGenerateRiverTraces = (x: number, z: number, radius = 220, sources = 6) => world.generateRiverTraces(x, z, radius, sources)
   ;(window as any).infinityPlanCity = (x: number, z: number, radius = 180, samples = 31) => world.planCity(x, z, radius, samples)
   ;(window as any).infinityGenerateCityPlan = (x: number, z: number, radius = 180, samples = 31) => world.generateCityPlan(x, z, radius, samples)
   ;(window as any).infinityAnalyzeRoute = (x0: number, z0: number, x1: number, z1: number, samples = 32) => world.analyzeRoute(x0, z0, x1, z1, samples)
