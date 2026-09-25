@@ -48,6 +48,26 @@ if (canvas) {
     },
   })
 
+  const panel = document.createElement('div')
+  panel.style.cssText = 'position:fixed;top:12px;left:12px;z-index:20;padding:10px;background:rgba(12,18,28,.86);color:#fff;font:12px system-ui;border:1px solid rgba(255,255,255,.18);border-radius:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:420px'
+  panel.innerHTML = '<strong>World Builder</strong>'
+  const addButton = (label: string, onClick: () => void) => {
+    const b = document.createElement('button')
+    b.textContent = label
+    b.style.cssText = 'cursor:pointer;padding:4px 7px;border-radius:5px;border:1px solid #667;background:#202938;color:#fff'
+    b.onclick = onClick
+    panel.appendChild(b)
+  }
+  addButton('Select', () => world.setObjectTool('select'))
+  addButton('Place Tree', () => { world.setObjectKind('tree'); world.setObjectTool('place') })
+  addButton('Place Rock', () => { world.setObjectKind('rock'); world.setObjectTool('place') })
+  addButton('Place Building', () => { world.setObjectKind('building'); world.setObjectTool('place') })
+  addButton('Erase', () => world.setObjectTool('erase'))
+  addButton('Save', () => world.saveWorld())
+  addButton('Load', () => world.loadWorld())
+  addButton('Clear Saved', () => world.clearSavedWorld())
+  document.body.appendChild(panel)
+
   const resize = () => {
     const parent = canvas.parentElement
     if (!parent) return
