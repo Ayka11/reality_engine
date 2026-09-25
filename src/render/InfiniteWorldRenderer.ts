@@ -91,6 +91,7 @@ export class InfiniteWorldRenderer {
 
     this.generator = new WorldGenerator(seed)
     this.storageKey = `reality-engine-world:${seed}:objects`
+    this.persistence = new WorldPersistence(seed)
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 3, verticalRadius: 0, maxLoaded: 49 })
 
     this.camera.position.set(28, this.worldY, 52)
