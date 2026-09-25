@@ -122,7 +122,7 @@ win['setMatMode'] = (m: string) => { getInfiniteWorld()?.setMaterialMode(m as 'f
 win['setTimeOfDay'] = (h: number) => { getInfiniteWorld()?.setTimeOfDay(h) }
 win['setFogDensity'] = (d: number) => { getInfiniteWorld()?.setFogDensity(d) }
 win['setCameraPreset'] = (p: string) => {
-  const map: Record<string, 'orbit'|'top'|'front'> = { orbit: 'orbit', top: 'top', iso: 'orbit', street: 'front', fly: 'orbit' }
+  const map: Record<string, 'orbit'|'top'|'front'|'iso'> = { orbit: 'orbit', top: 'top', iso: 'iso', street: 'front', fly: 'orbit' }
   if (p === 'fly') { getInfiniteWorld()?.setFlyMode(true); return }
   getInfiniteWorld()?.setCameraPreset(map[p] ?? 'orbit')
 }

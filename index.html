@@ -135,7 +135,7 @@ input[type=range]#spd{width:60px}
 .brush-btn:hover{border-color:var(--accent);color:var(--text);background:#111122}
 .brush-btn.active{border-color:var(--accent);color:#a09af0;background:#1a1830}
 /* Plog */
-#plog{position:absolute;top:8px;left:50%;transform:translateX(-50%);background:rgba(17,17,25,.95);border:0.5px solid var(--border);border-radius:8px;padding:4px 14px;font-size:11px;color:#9890d0;pointer-events:none;white-space:nowrap;z-index:10;font-family:monospace;box-shadow:0 2px 12px rgba(0,0,0,.5)}
+#plog{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(14,14,24,.85);backdrop-filter:blur(8px);border:0.5px solid var(--border);border-radius:20px;padding:3px 12px;font-size:10px;color:#9890d0;pointer-events:none;white-space:nowrap;z-index:15;font-family:system-ui,monospace;box-shadow:0 2px 12px rgba(0,0,0,.4);transition:opacity .3s}
 /* Game Dev panel classes */
 .sec{border-bottom:0.5px solid var(--border)}
 .sechdr{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer;user-select:none;font-size:11px;color:var(--tx);letter-spacing:.04em;text-transform:uppercase;font-weight:500;background:#0e0e1a;transition:background .15s}
@@ -159,19 +159,23 @@ input[type=range]#spd{width:60px}
 <!-- TOP BAR -->
 <div id="topbar">
   <button class="compose-btn" onclick="openComp()">✦ Compose World</button>
-  <button class="compose-btn" onclick="generateWorld()" style="border-color:#40c080;color:#50d090;background:#0d1f17;margin-left:4px" title="Generate with current settings">⚡ Quick Generate</button>
+  <button class="compose-btn" onclick="quickGenerateWorld()" style="border-color:#40c080;color:#50d090;background:#0d1f17;margin-left:4px" title="Generate with current settings">⚡ Quick Generate</button>
+  <button class="compose-btn" id="btnToggleWorldTools" onclick="window.toggleWorldToolbar&&window.toggleWorldToolbar()" style="border-color:var(--accent);color:#a09af0;background:#181628;margin-left:4px" title="Toggle World & Infinity Scale Tools">🌍 World Tools</button>
   <div class="tbsep"></div>
   <button class="mode-btn active" data-mode="create">Create</button>
   <button class="mode-btn" data-mode="science">Science</button>
   <button class="mode-btn" data-mode="cinema">Cinema</button>
   <button class="mode-btn" data-mode="game">Game Dev</button>
   <div style="flex:1"></div>
+  <button class="pill on" id="btnToggleLeft" onclick="window.toggleLeftPanel&&window.toggleLeftPanel()" style="font-size:9.5px;padding:2px 7px;margin-right:3px" title="Toggle Left Sidebar">◧ Sidebar</button>
+  <button class="pill on" id="btnToggleRight" onclick="window.toggleRightPanel&&window.toggleRightPanel()" style="font-size:9.5px;padding:2px 7px;margin-right:6px" title="Toggle Right Controls">◨ Controls</button>
   <span style="font-size:9px;color:var(--sub)">FPS:</span><span id="fpsOut" style="font-family:monospace;color:var(--text);min-width:20px">0</span>
 </div>
 
 <!-- ICON SIDEBAR -->
 <div id="icons">
   <button class="icon-btn active" data-panel="world" onclick="setIconPanel('world')" title="World"><i class="ti ti-planet"></i><span class="icon-tip">World</span></button>
+  <button class="icon-btn" data-panel="builder" onclick="setIconPanel('builder')" title="World Builder"><i class="ti ti-tools"></i><span class="icon-tip">Builder</span></button>
   <button class="icon-btn" data-panel="laws" onclick="setIconPanel('laws')" title="Laws"><i class="ti ti-atom"></i><span class="icon-tip">Laws</span></button>
   <button class="icon-btn" data-panel="brush" onclick="setIconPanel('brush')" title="Brushes"><i class="ti ti-brush"></i><span class="icon-tip">Brushes</span></button>
   <button class="icon-btn" data-panel="agents" onclick="setIconPanel('agents')" title="Agents"><i class="ti ti-robot"></i><span class="icon-tip">Agents</span></button>
@@ -232,7 +236,7 @@ input[type=range]#spd{width:60px}
   <div id="plog">ready</div>
 
   <!-- COMPOSER MODAL -->
-  <div id="comp">
+  <div id="comp" onclick="if(event.target===this)closeComp()">
     <div class="cbox">
       <div style="padding:14px 20px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
         <div>
@@ -275,11 +279,11 @@ input[type=range]#spd{width:60px}
 <!-- RIGHT PANEL -->
 <div id="right">
   <div class="rpanel" id="ctrl3DPanel">
-    <span class="rl">3D Controls</span>
+    <span class="rl">3D Navigation & Controls</span>
 
     <!-- Camera presets -->
     <div style="margin-bottom:8px">
-      <div style="font-size:10px;color:var(--sub);margin-bottom:5px;font-weight:600">Camera</div>
+      <div style="font-size:10px;color:var(--sub);margin-bottom:4px;font-weight:600">Camera Preset</div>
       <div style="display:flex;gap:4px;flex-wrap:wrap">
         <button class="camBtn pill on" id="cam_orbit"  onclick="setCam3D('orbit',this)">Orbit</button>
         <button class="camBtn pill"    id="cam_top"    onclick="setCam3D('top',this)">Top</button>
@@ -289,8 +293,58 @@ input[type=range]#spd{width:60px}
       </div>
     </div>
 
+    <!-- Orbit Turn Controls -->
+    <div style="margin-bottom:8px">
+      <div style="font-size:10px;color:var(--sub);margin-bottom:4px;font-weight:600">Turn Around (Orbit)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px">
+        <button class="pill" onclick="window.infinityTurn&&window.infinityTurn(0.35,0)" title="Turn Left (Q)">↺ Turn Left</button>
+        <button class="pill" onclick="window.infinityTurn&&window.infinityTurn(-0.35,0)" title="Turn Right (E)">↻ Turn Right</button>
+        <button class="pill" onclick="window.infinityTurn&&window.infinityTurn(0,-0.2)" title="Tilt Up">∧ Tilt Up</button>
+        <button class="pill" onclick="window.infinityTurn&&window.infinityTurn(0,0.2)" title="Tilt Down">∨ Tilt Down</button>
+      </div>
+    </div>
+
+    <!-- Move (Pan) & Zoom -->
+    <div style="margin-bottom:8px">
+      <div style="font-size:10px;color:var(--sub);margin-bottom:4px;font-weight:600">Move Across Terrain</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-bottom:4px">
+        <div></div>
+        <button class="pill" onclick="window.infinityPan&&window.infinityPan(0,18)" title="Move Forward (W)">↑ Fwd</button>
+        <div></div>
+        <button class="pill" onclick="window.infinityPan&&window.infinityPan(-18,0)" title="Move Left (A)">← Left</button>
+        <button class="pill" onclick="window.infinityResetCamera&&window.infinityResetCamera()" title="Reset View">⛶ Center</button>
+        <button class="pill" onclick="window.infinityPan&&window.infinityPan(18,0)" title="Move Right (D)">→ Right</button>
+        <div></div>
+        <button class="pill" onclick="window.infinityPan&&window.infinityPan(0,-18)" title="Move Back (S)">↓ Back</button>
+        <div></div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="pill" style="flex:1" onclick="window.infinityZoom&&window.infinityZoom(1)" title="Zoom in (+)">+ Zoom In</button>
+        <button class="pill" style="flex:1" onclick="window.infinityZoom&&window.infinityZoom(-1)" title="Zoom out (-)">− Zoom Out</button>
+        <button class="pill" style="flex:1" onclick="window.infinityFocus&&window.infinityFocus()" title="Focus Target (F)">🎯 Focus</button>
+      </div>
+    </div>
+
+    <!-- Selected Object Inspector -->
+    <div style="margin-bottom:8px;padding:6px 8px;background:#0d0d18;border-radius:6px;border:0.5px solid var(--border)">
+      <div style="font-size:9.5px;color:var(--sub);font-weight:600;margin-bottom:3px">Object Selection</div>
+      <div id="objInspector">
+        <span style="font-size:9.5px;color:var(--sub)">Click an object in 3D to inspect and edit</span>
+      </div>
+    </div>
+
+    <!-- Shading Mode -->
+    <div style="margin-bottom:8px">
+      <div style="font-size:10px;color:var(--sub);margin-bottom:4px;font-weight:600">Terrain Shading</div>
+      <div style="display:flex;gap:4px">
+        <button class="pill on" id="matFieldPill" onclick="window.setMatMode&&window.setMatMode('field');document.querySelectorAll('#matFieldPill,#matMaterialPill,#matHeightPill').forEach(p=>p.classList.remove('on'));this.classList.add('on')">Field Colors</button>
+        <button class="pill" id="matMaterialPill" onclick="window.setMatMode&&window.setMatMode('material');document.querySelectorAll('#matFieldPill,#matMaterialPill,#matHeightPill').forEach(p=>p.classList.remove('on'));this.classList.add('on')">PBR</button>
+        <button class="pill" id="matHeightPill" onclick="window.setMatMode&&window.setMatMode('height');document.querySelectorAll('#matFieldPill,#matMaterialPill,#matHeightPill').forEach(p=>p.classList.remove('on'));this.classList.add('on')">Height</button>
+      </div>
+    </div>
+
     <!-- Time of day -->
-    <div class="ctrl-row" style="margin-bottom:4px">
+    <div class="ctrl-row" style="margin-bottom:3px">
       <span class="ctrl-label">🌅 Time of day</span>
       <span class="ctrl-val" id="todVal">12h</span>
     </div>
@@ -299,26 +353,13 @@ input[type=range]#spd{width:60px}
         window.setTimeOfDay&&window.setTimeOfDay(parseFloat(this.value))">
 
     <!-- Fog density -->
-    <div class="ctrl-row" style="margin-bottom:4px">
+    <div class="ctrl-row" style="margin-bottom:3px">
       <span class="ctrl-label">🌫️ Fog density</span>
       <span class="ctrl-val" id="fogVal">0.012</span>
     </div>
     <input type="range" min="0" max="0.06" step="0.001" value="0.012" style="width:100%;margin-bottom:6px"
       oninput="document.getElementById('fogVal').textContent=parseFloat(this.value).toFixed(3);
         window.setFogDensity&&window.setFogDensity(parseFloat(this.value))">
-
-    <!-- Z-slice -->
-    <div class="ctrl-row" style="margin-bottom:4px">
-      <span class="ctrl-label">✂️ Z-Slice</span>
-      <span class="ctrl-val" id="zSliceVal">All</span>
-    </div>
-    <input type="range" min="0" max="63" step="1" value="63" style="width:100%;margin-bottom:6px"
-      oninput="var v=parseInt(this.value);document.getElementById('zSliceVal').textContent=v===63?'All':v;
-        window.setZSlice&&window.setZSlice(v)">
-
-    <!-- Particles toggle -->
-    <button id="btnParticles" onclick="toggleParticles3D(this)"
-      class="pill on" style="width:100%;text-align:center;padding:3px 0">✨ Particles ON</button>
   </div>
 
   <div class="rpanel">
@@ -857,6 +898,109 @@ const LAWS=[
   {name:'Civ Expansion',    type:'social',   active:false, fitness:.18, color:'#e09030', strength:0.1,    desc:'Civilization territory growth — needs civs active'},
 ];
 
+// ── WORLD BUILDER PANEL ───────────────────────────────────────────────────
+function renderBuilderPanel(){
+  const state = window.builderGetState ? window.builderGetState() : { tool:'navigate', kind:'tree', transformMode:'translate', snap:0, objectCount:0, selected:null, overlay:null };
+  const kinds = [
+    { id: 'tree', label: '🌲 Tree' },
+    { id: 'rock', label: '🪨 Rock' },
+    { id: 'crystal', label: '💎 Crystal' },
+    { id: 'water', label: '💧 Water' },
+    { id: 'building', label: '🏛️ Building' },
+    { id: 'road', label: '🛣️ Road' },
+    { id: 'bridge', label: '🌉 Bridge' },
+    { id: 'landmark', label: '🚩 Landmark' },
+    { id: 'spawn', label: '📍 Spawn' },
+  ];
+  return `
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Build Tool</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:6px">Active Mode</div>
+        <div class="pill-row">
+          <button class="pill${state.tool==='navigate'?' on':''}" onclick="window.builderSetTool&&window.builderSetTool('navigate')">🖐️ Explore</button>
+          <button class="pill${state.tool==='select'?' on':''}" onclick="window.builderSetTool&&window.builderSetTool('select')">🎯 Select</button>
+          <button class="pill${state.tool==='place'?' on':''}" onclick="window.builderSetTool&&window.builderSetTool('place')">🌲 Place</button>
+          <button class="pill${state.tool==='erase'?' on':''}" onclick="window.builderSetTool&&window.builderSetTool('erase')">🧹 Demolish</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Object Palette</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px">
+          ${kinds.map(k=>`
+            <button class="brush-btn${state.kind===k.id&&state.tool==='place'?' active':''}" onclick="window.builderSetKind&&window.builderSetKind('${k.id}')">${k.label}</button>
+          `).join('')}
+        </div>
+        <div style="font-size:9px;color:var(--sub);line-height:1.4">Click any palette item to place on terrain. Right-drag orbits view anytime.</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Transform & Grid</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:5px">Gizmo Mode</div>
+        <div class="pill-row">
+          <button class="pill${state.transformMode==='translate'?' on':''}" onclick="window.builderSetTransform&&window.builderSetTransform('translate')">✥ Move (G)</button>
+          <button class="pill${state.transformMode==='rotate'?' on':''}" onclick="window.builderSetTransform&&window.builderSetTransform('rotate')">⟳ Rotate (R)</button>
+          <button class="pill${state.transformMode==='scale'?' on':''}" onclick="window.builderSetTransform&&window.builderSetTransform('scale')">⤢ Scale (S)</button>
+        </div>
+        <div style="font-size:9px;color:var(--sub);margin-top:6px;margin-bottom:5px">Snapping</div>
+        <div class="pill-row">
+          <button class="pill${state.snap===0?' on':''}" onclick="window.builderSetSnap&&window.builderSetSnap(0)">Off</button>
+          <button class="pill${state.snap===1?' on':''}" onclick="window.builderSetSnap&&window.builderSetSnap(1)">1m Grid</button>
+          <button class="pill${state.snap===5?' on':''}" onclick="window.builderSetSnap&&window.builderSetSnap(5)">5m Grid</button>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:8px">
+          <button class="brush-btn" style="flex:1" onclick="window.builderFocus&&window.builderFocus()">⛶ Focus</button>
+          <button class="brush-btn" style="flex:1" onclick="window.builderDeleteSelected&&window.builderDeleteSelected()">🗑️ Delete</button>
+          <button class="brush-btn" style="flex:1" onclick="window.builderDeselect&&window.builderDeselect()">✕ Deselect</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Procedural Systems</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px">
+          <button class="brush-btn" onclick="window.builderGenerateSettlement&&window.builderGenerateSettlement()">🏘️ Settlement</button>
+          <button class="brush-btn" onclick="window.builderGenerateCityPlan&&window.builderGenerateCityPlan()">🏙️ City Plan</button>
+          <button class="brush-btn" onclick="window.builderGenerateRivers&&window.builderGenerateRivers()">🌊 River Net</button>
+          <button class="brush-btn" onclick="window.builderSmartRoute&&window.builderSmartRoute()">🛣️ Smart Road</button>
+          <button class="brush-btn" onclick="window.builderScatter&&window.builderScatter('tree', 0.12)">🌲 Scatter Forest</button>
+          <button class="brush-btn" onclick="window.builderScatter&&window.builderScatter('rock', 0.08)">🪨 Scatter Rocks</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Analytical Overlays</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div class="pill-row">
+          <button class="pill${state.overlay==='suitability'?' on':''}" onclick="window.builderSetOverlay&&window.builderSetOverlay('suitability')">🟢 Suitability</button>
+          <button class="pill${state.overlay==='flood'?' on':''}" onclick="window.builderSetOverlay&&window.builderSetOverlay('flood')">💧 Flood Risk</button>
+          <button class="pill${state.overlay==='slope'?' on':''}" onclick="window.builderSetOverlay&&window.builderSetOverlay('slope')">📐 Slope Map</button>
+          <button class="pill${state.overlay===null?' on':''}" onclick="window.builderSetOverlay&&window.builderSetOverlay(null)">✕ None</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>World Persistence</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="display:flex;gap:4px;margin-bottom:6px">
+          <button class="brush-btn" style="flex:1" onclick="window.builderUndo&&window.builderUndo()">↩ Undo</button>
+          <button class="brush-btn" style="flex:1" onclick="window.builderRedo&&window.builderRedo()">↪ Redo</button>
+          <button class="brush-btn" style="flex:1" onclick="window.builderSave&&window.builderSave()">💾 Save</button>
+        </div>
+        <button class="brush-btn" style="width:100%;color:#e06060;border-color:#502020" onclick="if(confirm('Clear all placed objects in this world?')){window.builderClear&&window.builderClear()}">🗑️ Clear All Objects</button>
+      </div>
+    </div>
+  `;
+}
+
 // ── LEFT PANEL CONTENT ────────────────────────────────────────────────────
 const PANELS={
   world:()=>`
@@ -901,6 +1045,8 @@ const PANELS={
         <input type="file" id="loadFileInput" accept=".reality,.json" style="display:none" onchange="loadWorld(this)">
       </div>
     </div>`,
+
+  builder:()=>renderBuilderPanel(),
 
   laws:()=>`
     <div class="section">
@@ -1382,16 +1528,25 @@ function generateWorld(){
       }
     },5000);
   }
-  if(currentRenderMode==='metrics')setRenderMode('3d',document.getElementById('tab3d'));
+  if(currentRenderMode!=='3d'&&currentRenderMode!=='hybrid'){
+    setRenderMode('3d',document.getElementById('tab3d'));
+  }
   // Apply the same composer choice to the visible Infinite World, not only the legacy field buffer.
   if(window.infinityApplyComposer) window.infinityApplyComposer(compSel);
   closeComp();
   drawGrid();
-  log(`∫ Φ=${compSel.phi} · ${compSel.fields} · C=${compSel.complexity} → reality generated`);
+  log(`✦ Reality synthesized: Φ=${compSel.phi} · ${compSel.fields} · C=${compSel.complexity}`);
   playing=true;
   document.getElementById('pb').textContent='⏸ Pause';
-  setIconPanel('world');
 }
+
+function quickGenerateWorld(){
+  if(!compSel||!compSel.phi){
+    compSel={phi:'Harmonic',fields:'Balanced',complexity:'Emergent',spacetime:'Standard'};
+  }
+  generateWorld();
+}
+window.quickGenerateWorld=quickGenerateWorld;
 function _clearComposerHazards(){if(window._composerHazardInterval){clearInterval(window._composerHazardInterval);window._composerHazardInterval=null;}}
 function _hazardMeteors(){
   for(let i=0;i<2+Math.floor(Math.random()*2);i++){
@@ -1509,13 +1664,14 @@ function paintAt(x,y){
   }
 }
 wrap.addEventListener('pointerdown',e=>{
+  if(currentRenderMode==='3d')return;
   const c=getCellAt(e);if(!c)return;
   painting=true;wrap.setPointerCapture(e.pointerId);
   if(tool==='inspect'){selX=c.x;selY=c.y;histE=[];histT=[];histI=[];histS=[];histB=[];explainCell(c.x,c.y);}
   else{pushUndo();paintAt(c.x,c.y);}
 });
 wrap.addEventListener('pointermove',e=>{
-  if(!painting)return;const c=getCellAt(e);if(!c)return;
+  if(currentRenderMode==='3d'||!painting)return;const c=getCellAt(e);if(!c)return;
   if(tool==='inspect'){selX=c.x;selY=c.y;}else paintAt(c.x,c.y);
 });
 wrap.addEventListener('pointerup',()=>{painting=false;});
@@ -1563,6 +1719,23 @@ function setIconPanel(id){
   document.dispatchEvent(new CustomEvent('panelRendered',{detail:{panel:id}}));
 }
 window.setIconPanel=setIconPanel;
+
+document.addEventListener('builderUpdated', () => {
+  if (currentPanel === 'builder') {
+    const left = document.getElementById('left');
+    if (left) left.innerHTML = renderBuilderPanel();
+  }
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeComp();
+    const apiKeyModal = document.getElementById('apiKeyModal');
+    if (apiKeyModal) apiKeyModal.style.display = 'none';
+    const shortcutsModal = document.getElementById('shortcutsModal');
+    if (shortcutsModal) shortcutsModal.style.display = 'none';
+  }
+});
 
 function setRenderMode(mode,btn){
   currentRenderMode=mode;
