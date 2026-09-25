@@ -38,6 +38,8 @@ export class InfiniteWorldRenderer {
   private readonly raycaster = new THREE.Raycaster()
   private readonly pointer = new THREE.Vector2()
   private selectedObjectId: string | null = null
+  private selectedKind: WorldObjectKind = 'tree'
+  private objectTool: 'select' | 'place' | 'erase' = 'select'
   private readonly selectionMarker = new THREE.Mesh(
     new THREE.BoxGeometry(1.2, 1.2, 1.2),
     new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true, transparent: true, opacity: 0.9 })
@@ -113,6 +115,10 @@ export class InfiniteWorldRenderer {
   }
 
   get isEnabled() { return this.enabled }
+  setObjectTool(tool: 'select' | 'place' | 'erase') { this.objectTool = tool }
+  setObjectKind(kind: WorldObjectKind) { this.selectedKind = kind }
+  getObjectTool() { return this.objectTool }
+  getObjectKind() { return this.selectedKind }
   get worldCoordinates() {
     return { x: this.worldPosition.x, y: this.worldPosition.y, z: this.worldPosition.z }
   }
@@ -429,6 +435,12 @@ export class InfiniteWorldRenderer {
     this.selectedObjectId = null
     this.selectionMarker.visible = false
     return object ?? null
+  }
+
+  handlePointer(clientX: number, clientY: number) {
+    if (this.objectTool === 'place') return this.placeAtScreen(this.selectedKind, clientX, clientY)
+    if (this.objectTool === 'erase') return this.eraseAtScreen(clientX, clientY)
+    return this.selectAtScreen(clientX, clientY)
   }
 
   pickAtScreen(clientX: number, clientY: number) {
