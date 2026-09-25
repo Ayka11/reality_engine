@@ -69,6 +69,7 @@ export class InfiniteWorldRenderer {
   private readonly flySpeed = 90
   private readonly recenterDistance = 512
   private readonly patchResolution = 16
+  private snapToGrid = 1
   private readonly patchScale = WORLD_CHUNK_SIZE / this.patchResolution
   private readonly lodDistance = 96
 
@@ -603,6 +604,19 @@ export class InfiniteWorldRenderer {
   }
 
   getTransformMode() { return this.transformControls.mode }
+  setSnapToGrid(size: number) { this.snapToGrid = Math.max(0.1, size) }
+  getSnapToGrid() { return this.snapToGrid }
+
+  private terrainY(x: number, z: number) { return this.generator.sampleHeight(x, z) }
+
+  snapWorld(x: number, y: number, z: number, kind: WorldObjectKind) {
+    const s = this.snapToGrid
+    const sx = Math.round(x / s) * s
+    const sz = Math.round(z / s) * s
+    const ground = this.terrainY(sx, sz)
+    const sy = kind === 'water' ? this.generator.seaLevel : (Math.abs(y - ground) < 8 ? ground : y)
+    return { x: sx, y: sy, z: sz }
+  }
 
   deleteSelected() {
     if (!this.selectedObjectId) return null
@@ -672,7 +686,11 @@ export class InfiniteWorldRenderer {
   }
 
   place(kind: WorldObjectKind, x: number, z: number, y?: number, scale = 1) {
-    const ground = y ?? this.generator.sampleHeight(x, z)
+    const snapped = this.snapWorld(x, y ?? this.generator.sampleHeight(x, z), z, kind)
+    x = snapped.x
+    z = snapped.z
+    y = snapped.y
+    const ground = y
     const object = this.objects.add({
       kind, x, y: ground, z,
       rotationY: 0, scale, seed: 0, properties: {},
