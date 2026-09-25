@@ -112,6 +112,22 @@ if (canvas) {
   { const r=row(); add(r,'Field',()=>world.setMaterialMode('field')); add(r,'PBR',()=>world.setMaterialMode('material')); add(r,'Height',()=>world.setMaterialMode('height')); add(r,'Day',()=>world.setTimeOfDay(12)); add(r,'Dusk',()=>world.setTimeOfDay(18)); add(r,'Night',()=>world.setTimeOfDay(0)); add(r,'Fog+',()=>world.setFogDensity(0.04)); add(r,'Fog-',()=>world.setFogDensity(0.005)) }
   document.body.appendChild(panel)
 
+  ;(window as any).infinityApplyComposer = (config: { phi: string; fields: string; complexity: string; spacetime: string }) => {
+    const x = world.worldCoordinates.x
+    const z = world.worldCoordinates.z
+    const count = config.complexity === 'Explosive' ? 24 : config.complexity === 'Oscillating' ? 18 : config.complexity === 'Stable' ? 10 : config.complexity === 'Collapsing' ? 5 : 14
+    const radius = config.fields === 'Mass Dominant' ? 100 : config.fields === 'Sparse' ? 170 : 130
+    world.setObjectTool('select')
+    world.setMaterialMode(config.phi === 'Void' ? 'material' : 'field')
+    world.generateSettlementV2(x, z, radius, Math.max(3, Math.min(8, Math.round(count / 3))))
+    if (config.fields === 'Information Dense' || config.fields === 'Pure Info') world.generateRiverNetwork(x, z, 220, 41)
+    world.setCameraPreset('orbit')
+    const s = document.getElementById('iwStatus')
+    if (s) s.textContent = 'Composer applied: ' + [config.phi, config.fields, config.complexity, config.spacetime].join(' · ')
+    return world.worldCoordinates
+  }
+
+
 
   const resize = () => {
     const parent = canvas.parentElement
