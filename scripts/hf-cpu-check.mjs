@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const required = ["index.html", "package.json", "package-lock.json"];
+const required = ["index.html", "package.json", "package-lock.json", "dist/index.html"];
 
 for (const file of required) {
   if (!fs.existsSync(path.resolve(file))) {
@@ -22,5 +22,6 @@ console.log(JSON.stringify({
   target: "huggingface-spaces-static",
   cpuMode: true,
   appFile: "dist/index.html",
+  staticAssetsPresent: true,
   runtimeServer: "none",
 }));
