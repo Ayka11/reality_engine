@@ -1383,6 +1383,8 @@ function generateWorld(){
     },5000);
   }
   if(currentRenderMode==='metrics')setRenderMode('3d',document.getElementById('tab3d'));
+  // Apply the same composer choice to the visible Infinite World, not only the legacy field buffer.
+  if(window.infinityApplyComposer) window.infinityApplyComposer(compSel);
   closeComp();
   drawGrid();
   log(`∫ Φ=${compSel.phi} · ${compSel.fields} · C=${compSel.complexity} → reality generated`);
