@@ -857,6 +857,33 @@ export class InfiniteWorldRenderer {
     return created
   }
 
+  setAnalyticalOverlay(mode: 'suitability' | 'flood' | 'slope' | null) {
+    this.analyticalOverlayMode = mode
+    if (this.analyticalOverlayMesh) {
+      this.terrainGroup.remove(this.analyticalOverlayMesh)
+      this.analyticalOverlayMesh.geometry.dispose()
+      const material = this.analyticalOverlayMesh.material
+      if (Array.isArray(material)) material.forEach((m) => m.dispose())
+      else material.dispose()
+      this.analyticalOverlayMesh = undefined
+    }
+    if (!mode) return
+    const data = this.buildAnalyticalOverlay(this.worldCoordinates.x, this.worldCoordinates.z, 160, 33, mode)
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(data.positions, 3))
+    const colors: number[] = []
+    for (const value of data.values) {
+      const v = Math.max(0, Math.min(1, value))
+      colors.push(1 - v, v, 0.18)
+    }
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+    const material = new THREE.PointsMaterial({ size: 2.4, vertexColors: true, transparent: true, opacity: 0.58, depthWrite: false })
+    const points = new THREE.Points(geometry, material)
+    points.userData.kind = 'analytical-overlay'
+    this.terrainGroup.add(points)
+    this.analyticalOverlayMesh = points
+  }
+
   buildAnalyticalOverlay(cx: number, cz: number, radius = 160, samples = 33, mode: 'suitability' | 'flood' | 'slope' = 'suitability') {
     const n = Math.max(9, Math.floor(samples))
     const step = (radius * 2) / (n - 1)
