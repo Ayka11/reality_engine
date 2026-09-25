@@ -21,6 +21,10 @@ if (canvas) {
   ;(window as any).infinityPickAtScreen = (clientX: number, clientY: number) => world.pickAtScreen(clientX, clientY)
   ;(window as any).infinityPlaceAtScreen = (kind: WorldObjectKind, clientX: number, clientY: number, scale = 1) => world.placeAtScreen(kind, clientX, clientY, scale)
   ;(window as any).infinityEraseAtScreen = (clientX: number, clientY: number, radius = 2) => world.eraseAtScreen(clientX, clientY, radius)
+  ;(window as any).infinitySelectAtScreen = (clientX: number, clientY: number) => world.selectAtScreen(clientX, clientY)
+  ;(window as any).infinitySelectedObject = () => world.getSelectedObject()
+  ;(window as any).infinityTransformSelected = (patch: { x?: number; y?: number; z?: number; rotationY?: number; scale?: number }) => world.transformSelected(patch)
+  ;(window as any).infinityDeleteSelected = () => world.deleteSelected()
 
   ;(window as any).infinityStats = () => ({
     loadedChunks: world.getLoadedChunkCount(),
