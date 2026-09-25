@@ -37,6 +37,12 @@ export class InfiniteWorldRenderer {
   private enabled = true
   private lastCenter: ChunkCoord | null = null
   private worldY = 45
+  private worldPosition = new THREE.Vector3(28, 45, 52)
+  private worldAnchor = new THREE.Vector3(0, 0, 0)
+  private flyMode = true
+  private readonly keys = new Set<string>()
+  private readonly flySpeed = 90
+  private readonly recenterDistance = 512
   private readonly patchResolution = 16
   private readonly patchScale = WORLD_CHUNK_SIZE / this.patchResolution
 
@@ -57,7 +63,16 @@ export class InfiniteWorldRenderer {
     this.controls.maxPolarAngle = Math.PI * 0.49
     this.controls.minDistance = 6
     this.controls.maxDistance = 240
+    this.controls.enablePan = false
+    window.addEventListener('keydown', (e) => {
+      if (['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','ShiftRight'].includes(e.code)) {
+        this.keys.add(e.code)
+      }
+      if (e.code === 'KeyF') this.flyMode = !this.flyMode
+    })
+    window.addEventListener('keyup', (e) => this.keys.delete(e.code))
     this.controls.target.set(16, 10, 16)
+    this.worldPosition.copy(this.camera.position)
 
     const hemi = new THREE.HemisphereLight(0xb9d8ff, 0x35402f, 1.6)
     this.scene.add(hemi)
@@ -87,7 +102,7 @@ export class InfiniteWorldRenderer {
   }
 
   private chunkCenter(): ChunkCoord {
-    const w = worldToChunk(this.camera.position.x, 0, this.camera.position.z)
+    const w = worldToChunk(this.worldPosition.x, 0, this.worldPosition.z)
     return w.chunk
   }
 
@@ -164,6 +179,7 @@ export class InfiniteWorldRenderer {
     const water = new THREE.Mesh(waterGeometry, waterMaterial)
     water.position.set(originX + WORLD_CHUNK_SIZE / 2, this.generator.seaLevel + 0.05, originZ + WORLD_CHUNK_SIZE / 2)
     group.add(water)
+    group.position.set(-this.worldAnchor.x, -this.worldAnchor.y, -this.worldAnchor.z)
     this.waterMeshes.set(`${chunk.cx},${chunk.cy},${chunk.cz}`, water)
 
     void sample
@@ -254,7 +270,7 @@ export class InfiniteWorldRenderer {
     }
 
     if (mesh !== g) g.add(mesh)
-    g.position.set(object.x, object.y, object.z)
+    g.position.set(object.x - this.worldAnchor.x, object.y - this.worldAnchor.y, object.z - this.worldAnchor.z)
     g.rotation.y = object.rotationY
     g.scale.setScalar(s)
     return g
@@ -317,13 +333,62 @@ export class InfiniteWorldRenderer {
     return objects
   }
 
+  private updateFly(dt: number) {
+    if (!this.flyMode) return
+    const direction = new THREE.Vector3()
+    if (this.keys.has('KeyW')) direction.z -= 1
+    if (this.keys.has('KeyS')) direction.z += 1
+    if (this.keys.has('KeyA')) direction.x -= 1
+    if (this.keys.has('KeyD')) direction.x += 1
+    if (this.keys.has('Space')) direction.y += 1
+    if (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) direction.y -= 1
+    if (direction.lengthSq() === 0) return
+    direction.normalize().multiplyScalar(this.flySpeed * dt)
+    const forward = new THREE.Vector3()
+    this.camera.getWorldDirection(forward)
+    const right = new THREE.Vector3().crossVectors(forward, this.camera.up).normalize()
+    const up = this.camera.up.clone()
+    this.worldPosition.addScaledVector(right, direction.x)
+    this.worldPosition.addScaledVector(forward, -direction.z)
+    this.worldPosition.addScaledVector(up, direction.y)
+    this.camera.position.set(
+      this.worldPosition.x - this.worldAnchor.x,
+      this.worldPosition.y - this.worldAnchor.y,
+      this.worldPosition.z - this.worldAnchor.z,
+    )
+    this.controls.target.copy(this.camera.position).add(forward.multiplyScalar(30))
+  }
+
+  private maybeRecenter() {
+    const distance = Math.hypot(
+      this.worldPosition.x - this.worldAnchor.x,
+      this.worldPosition.y - this.worldAnchor.y,
+      this.worldPosition.z - this.worldAnchor.z,
+    )
+    if (distance < this.recenterDistance) return
+    const old = this.worldAnchor.clone()
+    this.worldAnchor.copy(this.worldPosition)
+    this.worldAnchor.y = 0
+    const shift = this.worldAnchor.clone().sub(old)
+    for (const patch of this.patches.values()) patch.group.position.sub(shift)
+    for (const entry of this.objectMeshes.values()) {
+      entry.group.position.set(
+        entry.object.x - this.worldAnchor.x,
+        entry.object.y - this.worldAnchor.y,
+        entry.object.z - this.worldAnchor.z,
+      )
+    }
+    this.camera.position.sub(shift)
+    this.controls.target.sub(shift)
+  }
+
   render(dt = 0.016) {
     if (!this.enabled) return
-    this.controls.update()
+    this.updateFly(dt)
+    this.maybeRecenter()
     this.syncChunks()
     this.syncObjects()
     this.renderer.render(this.scene, this.camera)
-    void dt
   }
 
   getLoadedChunkCount() { return this.patches.size }
