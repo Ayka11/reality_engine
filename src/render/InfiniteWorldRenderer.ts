@@ -876,6 +876,48 @@ export class InfiniteWorldRenderer {
     return { center:{x:cx,z:cz}, radius, samples:cells, rivers }
   }
 
+  generateRiverGeometry(path: Array<{x:number;z:number;y:number}>, width = 5) {
+    const geometry = new THREE.BufferGeometry()
+    if (path.length < 2) return geometry
+    const positions: number[] = []
+    const indices: number[] = []
+    for (let i = 0; i < path.length; i++) {
+      const p = path[i]
+      const next = path[Math.min(path.length - 1, i + 1)]
+      const dx = next.x - p.x
+      const dz = next.z - p.z
+      const len = Math.max(0.001, Math.hypot(dx, dz))
+      const nx = -dz / len
+      const nz = dx / len
+      const half = width * 0.5
+      positions.push(p.x + nx * half, p.y + 0.04, p.z + nz * half)
+      positions.push(p.x - nx * half, p.y + 0.04, p.z - nz * half)
+    }
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = i * 2
+      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2)
+    }
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+    geometry.setIndex(indices)
+    geometry.computeVertexNormals()
+    return geometry
+  }
+
+  buildRiverMeshes(cx: number, cz: number, radius = 220, sources = 6, width = 5) {
+    const traces = this.generateRiverTraces(cx, cz, radius, sources)
+    const meshes: THREE.Mesh[] = []
+    for (const path of traces) {
+      const mesh = new THREE.Mesh(
+        this.generateRiverGeometry(path, width),
+        new THREE.MeshStandardMaterial({ transparent: true, opacity: 0.72, roughness: 0.15, metalness: 0.05 })
+      )
+      mesh.userData.kind = 'river'
+      this.terrainGroup.add(mesh)
+      meshes.push(mesh)
+    }
+    return { traces, meshes }
+  }
+
   traceRiverSource(x: number, z: number, maxSteps = 160, step = 8) {
     const path: Array<{x:number;z:number;y:number}> = []
     let px = x
