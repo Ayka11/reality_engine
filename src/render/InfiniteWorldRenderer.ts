@@ -716,6 +716,61 @@ export class InfiniteWorldRenderer {
     return removed.map(o => o.id)
   }
 
+  buildRoad(x0: number, z0: number, x1: number, z1: number, spacing = 12) {
+    const dx = x1 - x0
+    const dz = z1 - z0
+    const length = Math.hypot(dx, dz)
+    const count = Math.max(1, Math.ceil(length / Math.max(2, spacing)))
+    const rotationY = Math.atan2(dx, dz)
+    const created: WorldObject[] = []
+    for (let i = 0; i <= count; i++) {
+      const t = i / count
+      const x = x0 + dx * t
+      const z = z0 + dz * t
+      const y = this.generator.sampleHeight(x, z) + 0.08
+      const object = this.objects.add({
+        kind: 'road', x, y, z, rotationY, scale: Math.max(0.5, spacing / 12),
+        seed: i, properties: { segment: i, roadLength: length },
+      })
+      created.push(object)
+      this.history.push({ type: 'add', object: { ...object } })
+    }
+    this.syncObjects()
+    this.scheduleSave()
+    return created
+  }
+
+  generateSettlement(cx: number, cz: number, radius = 80, count = 12) {
+    const created: WorldObject[] = []
+    const seed = this.generator.seed
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + this.generator.sampleField(cx + i, 0, cz).entropy * 4
+      const radial = radius * (0.35 + (i % 5) / 8)
+      const x = cx + Math.cos(angle) * radial
+      const z = cz + Math.sin(angle) * radial
+      const y = this.generator.sampleHeight(x, z)
+      const building = this.objects.add({
+        kind: 'building', x, y, z,
+        rotationY: Math.atan2(cx - x, cz - z),
+        scale: 0.75 + (i % 4) * 0.12,
+        seed: i, properties: { settlement: 'generated', seed },
+      })
+      created.push(building)
+      this.history.push({ type: 'add', object: { ...building } })
+    }
+    if (created.length > 1) {
+      const hub = created[0]
+      for (let i = 1; i < created.length; i++) {
+        const b = created[i]
+        const road = this.buildRoad(hub.x, hub.z, b.x, b.z, 16)
+        created.push(...road)
+      }
+    }
+    this.syncObjects()
+    this.scheduleSave()
+    return created
+  }
+
   scatter(kind: WorldObjectKind, x0: number, z0: number, x1: number, z1: number, density = 0.15) {
     const objects = this.objects.scatter(this.generator.seed, kind, x0, z0, x1, z1, 32, density)
     for (const object of objects) object.y = this.generator.sampleHeight(object.x, object.z)
