@@ -201,7 +201,7 @@ input[type=range]#spd{width:60px}
 <!-- CENTER CANVAS -->
 <div id="cw">
   <div id="tabs" style="display:flex;background:var(--p2);border-bottom:1px solid var(--bd);flex-shrink:0">
-    <div class="ctab on" id="tab3d" onclick="setRenderMode('3d',this)">🔲 3D Volumetric</div>
+    <div class="ctab on" id="tab3d" onclick="setRenderMode('3d',this)">🔲 3D Infinite World</div>
     <div class="ctab" id="tab2d" onclick="setRenderMode('2d',this)">⬛ 2D Multi-Slice</div>
     <div class="ctab" id="tabHybrid" onclick="setRenderMode('hybrid',this)">⟐ Hybrid</div>
     <div class="ctab" id="tabMetrics" onclick="setView('metrics',this)">📈 Metrics</div>
@@ -1576,8 +1576,8 @@ function setRenderMode(mode,btn){
     c2d.style.cssText='position:absolute;top:0;left:0;width:50%;height:100%;display:block';
     c3d.style.cssText='position:absolute;top:0;left:50%;width:50%;height:100%;display:block';
   } else {
-    // 3D mode: c2d draws iso on top, c3d (Three.js particles) visible behind via clearRect
-    c2d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='metrics'?'none':'block');
+    // 3D mode: Three.js must be the sole visible surface; the 2D canvas would otherwise cover it and make camera interaction appear broken.
+    c2d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='2d'?'block':'none');
     c3d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='3d'?'block':'none');
   }
   if(metricsView)metricsView.style.display=mode==='metrics'?'block':'none';
