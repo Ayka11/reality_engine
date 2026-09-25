@@ -40,6 +40,8 @@ if (canvas) {
   ;(window as any).infinitySetSnapGrid = (size: number) => world.setSnapToGrid(size)
   ;(window as any).infinityGetSnapGrid = () => world.getSnapToGrid()
   ;(window as any).infinitySnapWorld = (x: number, y: number, z: number, kind: WorldObjectKind) => world.snapWorld(x, y, z, kind)
+  ;(window as any).infinityBuildRoad = (x0: number, z0: number, x1: number, z1: number, spacing = 12) => world.buildRoad(x0, z0, x1, z1, spacing)
+  ;(window as any).infinityGenerateSettlement = (x: number, z: number, radius = 80, count = 12) => world.generateSettlement(x, z, radius, count)
   ;(window as any).infinityStorageKey = () => world.getStorageKey()
   ;(window as any).infinityHandlePointer = (clientX: number, clientY: number) => world.handlePointer(clientX, clientY)
 
@@ -81,6 +83,7 @@ if (canvas) {
   addButton('Scale', () => world.setTransformMode('scale'))
   addButton('Snap 1m', () => world.setSnapToGrid(1))
   addButton('Snap 5m', () => world.setSnapToGrid(5))
+  addButton('Test Settlement', () => world.generateSettlement(world.worldCoordinates.x, world.worldCoordinates.z, 70, 10))
   document.body.appendChild(panel)
 
   const resize = () => {
