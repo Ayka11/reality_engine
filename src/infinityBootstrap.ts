@@ -47,6 +47,7 @@ if (canvas) {
   ;(window as any).infinityAnalyzeHydrology = (x: number, z: number, radius = 220, samples = 41) => world.analyzeHydrology(x, z, radius, samples)
   ;(window as any).infinityAnalyzeWatershed = (x: number, z: number, radius = 220, samples = 41) => world.analyzeWatershed(x, z, radius, samples)
   ;(window as any).infinityBuildZoneCost = (x: number, z: number) => world.buildZoneCost(x, z)
+  ;(window as any).infinityBuildAnalyticalOverlay = (x: number, z: number, radius = 160, samples = 33, mode: 'suitability' | 'flood' | 'slope' = 'suitability') => world.buildAnalyticalOverlay(x, z, radius, samples, mode)
   ;(window as any).infinityGenerateRiverNetwork = (x: number, z: number, radius = 220, samples = 41) => world.generateRiverNetwork(x, z, radius, samples)
   ;(window as any).infinityTraceRiverSource = (x: number, z: number, maxSteps = 160, step = 8) => world.traceRiverSource(x, z, maxSteps, step)
   ;(window as any).infinityGenerateRiverTraces = (x: number, z: number, radius = 220, sources = 6) => world.generateRiverTraces(x, z, radius, sources)
