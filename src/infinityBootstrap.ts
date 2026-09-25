@@ -42,6 +42,7 @@ if (canvas) {
   ;(window as any).infinitySnapWorld = (x: number, y: number, z: number, kind: WorldObjectKind) => world.snapWorld(x, y, z, kind)
   ;(window as any).infinityBuildRoad = (x0: number, z0: number, x1: number, z1: number, spacing = 12) => world.buildRoad(x0, z0, x1, z1, spacing)
   ;(window as any).infinityGenerateSettlement = (x: number, z: number, radius = 80, count = 12) => world.generateSettlement(x, z, radius, count)
+  ;(window as any).infinityGenerateSettlementV2 = (x: number, z: number, radius = 120, blocks = 4) => world.generateSettlementV2(x, z, radius, blocks)
   ;(window as any).infinityAnalyzeRoute = (x0: number, z0: number, x1: number, z1: number, samples = 32) => world.analyzeRoute(x0, z0, x1, z1, samples)
   ;(window as any).infinityBuildSmartRoute = (x0: number, z0: number, x1: number, z1: number, spacing = 12) => world.buildSmartRoute(x0, z0, x1, z1, spacing)
   ;(window as any).infinityOptimizeRoute = (x0: number, z0: number, x1: number, z1: number, gridSize = 12) => world.optimizeRoute(x0, z0, x1, z1, gridSize)
@@ -87,6 +88,7 @@ if (canvas) {
   addButton('Snap 1m', () => world.setSnapToGrid(1))
   addButton('Snap 5m', () => world.setSnapToGrid(5))
   addButton('Test Settlement', () => world.generateSettlement(world.worldCoordinates.x, world.worldCoordinates.z, 70, 10))
+  addButton('Settlement V2', () => world.generateSettlementV2(world.worldCoordinates.x, world.worldCoordinates.z, 120, 4))
   addButton('Smart Route', () => world.buildSmartRoute(world.worldCoordinates.x - 120, world.worldCoordinates.z - 120, world.worldCoordinates.x + 120, world.worldCoordinates.z + 120, 12))
   document.body.appendChild(panel)
 
