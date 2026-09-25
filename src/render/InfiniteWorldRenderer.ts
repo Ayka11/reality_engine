@@ -37,6 +37,11 @@ export class InfiniteWorldRenderer {
   private dummy = new THREE.Object3D()
   private readonly raycaster = new THREE.Raycaster()
   private readonly pointer = new THREE.Vector2()
+  private selectedObjectId: string | null = null
+  private readonly selectionMarker = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, 1.2, 1.2),
+    new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true, transparent: true, opacity: 0.9 })
+  )
   private readonly hoverMarker = new THREE.Mesh(
     new THREE.RingGeometry(0.6, 0.85, 32),
     new THREE.MeshBasicMaterial({ color: 0xffff66, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
@@ -92,6 +97,8 @@ export class InfiniteWorldRenderer {
     const water = new THREE.MeshBasicMaterial({ color: 0x2b78b5, transparent: true, opacity: 0.48 })
     void water
 
+    this.selectionMarker.visible = false
+    this.scene.add(this.selectionMarker)
     this.hoverMarker.rotation.x = -Math.PI / 2
     this.hoverMarker.visible = false
     this.scene.add(this.hoverMarker)
@@ -318,6 +325,7 @@ export class InfiniteWorldRenderer {
     }
 
     if (mesh !== g) g.add(mesh)
+    g.userData.objectId = object.id
     g.position.set(object.x - this.worldAnchor.x, object.y - this.worldAnchor.y, object.z - this.worldAnchor.z)
     g.rotation.y = object.rotationY
     g.scale.setScalar(s)
@@ -351,6 +359,76 @@ export class InfiniteWorldRenderer {
         this.objectMeshes.delete(id)
       }
     }
+  }
+
+  selectAtScreen(clientX: number, clientY: number) {
+    const rect = this.renderer.domElement.getBoundingClientRect()
+    if (!rect.width || !rect.height) return null
+    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1
+    this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1
+    this.raycaster.setFromCamera(this.pointer, this.camera)
+    const meshes = [...this.objectMeshes.values()].map(e => e.group)
+    const hit = this.raycaster.intersectObjects(meshes, true)[0]
+    if (!hit) {
+      this.selectedObjectId = null
+      this.selectionMarker.visible = false
+      return null
+    }
+    let node: THREE.Object3D | null = hit.object
+    while (node && !this.objectMeshes.has(node.userData.objectId)) node = node.parent
+    const id = node?.userData.objectId as string | undefined
+    if (!id) return null
+    const entry = this.objectMeshes.get(id)
+    if (!entry) return null
+    this.selectedObjectId = id
+    this.selectionMarker.position.set(
+      entry.object.x - this.worldAnchor.x,
+      entry.object.y - this.worldAnchor.y + 1.5,
+      entry.object.z - this.worldAnchor.z,
+    )
+    this.selectionMarker.scale.setScalar(Math.max(1, entry.object.scale * 2))
+    this.selectionMarker.visible = true
+    return entry.object
+  }
+
+  getSelectedObject() {
+    return this.selectedObjectId ? this.objects.get(this.selectedObjectId) ?? null : null
+  }
+
+  transformSelected(patch: Partial<Pick<WorldObject, 'x'|'y'|'z'|'rotationY'|'scale'>>) {
+    if (!this.selectedObjectId) return null
+    const object = this.objects.get(this.selectedObjectId)
+    if (!object) return null
+    Object.assign(object, patch)
+    const entry = this.objectMeshes.get(object.id)
+    if (entry) {
+      entry.group.position.set(object.x - this.worldAnchor.x, object.y - this.worldAnchor.y, object.z - this.worldAnchor.z)
+      entry.group.rotation.y = object.rotationY
+      entry.group.scale.setScalar(Math.max(0.1, object.scale))
+    }
+    this.selectionMarker.position.set(object.x - this.worldAnchor.x, object.y - this.worldAnchor.y + 1.5, object.z - this.worldAnchor.z)
+    this.selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
+    return object
+  }
+
+  deleteSelected() {
+    if (!this.selectedObjectId) return null
+    const id = this.selectedObjectId
+    const object = this.objects.get(id)
+    if (object) this.objects.remove(id)
+    const entry = this.objectMeshes.get(id)
+    if (entry) {
+      this.scene.remove(entry.group)
+      entry.group.traverse(obj => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        if (mesh.material) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(m => m.dispose())
+      })
+      this.objectMeshes.delete(id)
+    }
+    this.selectedObjectId = null
+    this.selectionMarker.visible = false
+    return object ?? null
   }
 
   pickAtScreen(clientX: number, clientY: number) {
