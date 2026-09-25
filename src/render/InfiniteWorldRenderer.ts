@@ -856,6 +856,45 @@ export class InfiniteWorldRenderer {
     return created
   }
 
+  analyzeHydrology(cx: number, cz: number, radius = 220, samples = 41) {
+    const n = Math.max(9, Math.floor(samples))
+    const step = (radius * 2) / (n - 1)
+    const cells: Array<{x:number;z:number;y:number;flow:number;river:boolean}> = []
+    for (let ix = 0; ix < n; ix++) for (let iz = 0; iz < n; iz++) {
+      const x = cx - radius + ix * step
+      const z = cz - radius + iz * step
+      const y = this.generator.sampleHeight(x, z)
+      const e = Math.max(2, step * 0.5)
+      const gx = this.generator.sampleHeight(x + e, z) - this.generator.sampleHeight(x - e, z)
+      const gz = this.generator.sampleHeight(x, z + e) - this.generator.sampleHeight(x, z - e)
+      const downhill = Math.max(0, -gx) + Math.max(0, -gz)
+      const basin = Math.max(0, this.generator.seaLevel + 8 - y)
+      const flow = basin * 0.35 + downhill * 0.8
+      cells.push({x,z,y,flow,river: flow > 8 && y > this.generator.seaLevel})
+    }
+    const rivers = cells.filter((c) => c.river).sort((a,b) => b.flow-a.flow)
+    return { center:{x:cx,z:cz}, radius, samples:cells, rivers }
+  }
+
+  generateRiverNetwork(cx: number, cz: number, radius = 220, samples = 41) {
+    const hydro = this.analyzeHydrology(cx, cz, radius, samples)
+    const created: WorldObject[] = []
+    const selected = hydro.rivers.filter((_, i) => i % Math.max(1, Math.floor(hydro.rivers.length / 5)) === 0).slice(0, 6)
+    for (let i = 0; i < selected.length; i++) {
+      const r = selected[i]
+      const water = this.objects.add({
+        kind:'water', x:r.x, y:Math.max(this.generator.seaLevel, r.y - 0.15), z:r.z,
+        rotationY:0, scale:Math.max(0.6, Math.min(3, r.flow / 12)), seed:i,
+        properties:{hydrology:'river',flow:r.flow}
+      })
+      created.push(water)
+      this.history.push({type:'add',object:{...water}})
+    }
+    this.syncObjects()
+    this.scheduleSave()
+    return {hydro, objects:created}
+  }
+
   analyzeBuildZone(cx: number, cz: number, radius = 160, samples = 25) {
     const result: Array<{ x:number; z:number; y:number; slope:number; water:boolean; score:number }> = []
     const n = Math.max(5, Math.floor(samples))
