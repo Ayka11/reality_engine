@@ -32,6 +32,9 @@ if (canvas) {
   ;(window as any).infinitySaveWorld = () => world.saveWorld()
   ;(window as any).infinityLoadWorld = () => world.loadWorld()
   ;(window as any).infinityClearSavedWorld = () => world.clearSavedWorld()
+  ;(window as any).infinityUndo = () => world.undo()
+  ;(window as any).infinityRedo = () => world.redo()
+  ;(window as any).infinityEditHistoryState = () => world.getEditHistoryState()
   ;(window as any).infinityStorageKey = () => world.getStorageKey()
   ;(window as any).infinityHandlePointer = (clientX: number, clientY: number) => world.handlePointer(clientX, clientY)
 
@@ -66,6 +69,8 @@ if (canvas) {
   addButton('Save', () => world.saveWorld())
   addButton('Load', () => world.loadWorld())
   addButton('Clear Saved', () => world.clearSavedWorld())
+  addButton('Undo', () => world.undo())
+  addButton('Redo', () => world.redo())
   document.body.appendChild(panel)
 
   const resize = () => {
