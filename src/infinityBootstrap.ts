@@ -18,6 +18,9 @@ if (canvas) {
 
   ;(window as any).infinitySetEnabled = (enabled: boolean) => world.setEnabled(enabled)
   ;(window as any).infinitySetFlyMode = (enabled: boolean) => world.setFlyMode(enabled)
+  ;(window as any).infinityPickAtScreen = (clientX: number, clientY: number) => world.pickAtScreen(clientX, clientY)
+  ;(window as any).infinityPlaceAtScreen = (kind: WorldObjectKind, clientX: number, clientY: number, scale = 1) => world.placeAtScreen(kind, clientX, clientY, scale)
+  ;(window as any).infinityEraseAtScreen = (clientX: number, clientY: number, radius = 2) => world.eraseAtScreen(clientX, clientY, radius)
 
   ;(window as any).infinityStats = () => ({
     loadedChunks: world.getLoadedChunkCount(),
