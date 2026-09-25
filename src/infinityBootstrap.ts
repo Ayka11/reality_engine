@@ -37,6 +37,9 @@ if (canvas) {
   ;(window as any).infinityEditHistoryState = () => world.getEditHistoryState()
   ;(window as any).infinitySetTransformMode = (mode: 'translate' | 'rotate' | 'scale') => world.setTransformMode(mode)
   ;(window as any).infinityGetTransformMode = () => world.getTransformMode()
+  ;(window as any).infinitySetSnapGrid = (size: number) => world.setSnapToGrid(size)
+  ;(window as any).infinityGetSnapGrid = () => world.getSnapToGrid()
+  ;(window as any).infinitySnapWorld = (x: number, y: number, z: number, kind: WorldObjectKind) => world.snapWorld(x, y, z, kind)
   ;(window as any).infinityStorageKey = () => world.getStorageKey()
   ;(window as any).infinityHandlePointer = (clientX: number, clientY: number) => world.handlePointer(clientX, clientY)
 
@@ -76,6 +79,8 @@ if (canvas) {
   addButton('Move', () => world.setTransformMode('translate'))
   addButton('Rotate', () => world.setTransformMode('rotate'))
   addButton('Scale', () => world.setTransformMode('scale'))
+  addButton('Snap 1m', () => world.setSnapToGrid(1))
+  addButton('Snap 5m', () => world.setSnapToGrid(5))
   document.body.appendChild(panel)
 
   const resize = () => {
