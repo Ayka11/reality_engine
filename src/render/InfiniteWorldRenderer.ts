@@ -414,6 +414,31 @@ export class InfiniteWorldRenderer {
     return g
   }
 
+  private syncPersistentObjects() {
+    const center = this.chunkCenter()
+    const radius = this.chunks.radius + 1
+    const desired = new Set<string>()
+    for (let dz = -radius; dz <= radius; dz++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const cx = center.cx + dx
+        const cz = center.cz + dz
+        const key = chunkKey(cx, 0, cz)
+        desired.add(key)
+        if (this.persistence.isLoaded(cx, 0, cz)) continue
+        const objects = this.persistence.loadChunk(cx, 0, cz)
+        for (const object of objects) {
+          if (!this.objects.get(object.id)) this.objects.add(object)
+        }
+      }
+    }
+    for (const key of this.persistence.loadedChunks()) {
+      if (!desired.has(key)) {
+        const [cx, cy, cz] = key.split(',').map(Number)
+        this.persistence.unloadChunk(cx, cy, cz)
+      }
+    }
+  }
+
   private syncObjects() {
     const center = this.camera.position
     const range = (this.chunks.radius + 1) * WORLD_CHUNK_SIZE
@@ -641,6 +666,7 @@ export class InfiniteWorldRenderer {
     this.updateFly(dt)
     this.maybeRecenter()
     this.syncChunks()
+    this.syncPersistentObjects()
     this.syncObjects()
     this.updateTerrainLod()
     this.renderer.render(this.scene, this.camera)
