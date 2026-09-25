@@ -49,6 +49,9 @@ export class InfiniteWorldRenderer {
   private saveTimer: number | null = null
   private readonly storageKey: string
   private readonly pointerHandler: (e: PointerEvent) => void
+  private pointerDownX = 0
+  private pointerDownY = 0
+  private pointerDownTime = 0
   private readonly transformControls: TransformControls
   private gizmoBefore: WorldObject | null = null
   private readonly selectionMarker = new THREE.Mesh(
@@ -87,11 +90,20 @@ export class InfiniteWorldRenderer {
 
     this.camera.position.set(28, this.worldY, 52)
     this.controls = new OrbitControls(this.camera, canvas)
+    this.flyMode = false
     this.pointerHandler = (e: PointerEvent) => {
       if (e.button !== 0) return
-      this.handlePointer(e.clientX, e.clientY)
+      this.pointerDownX = e.clientX
+      this.pointerDownY = e.clientY
+      this.pointerDownTime = performance.now()
     }
     canvas.addEventListener('pointerdown', this.pointerHandler)
+    canvas.addEventListener('pointerup', (e) => {
+      if (e.button !== 0 || this.flyMode || !this.controls.enabled) return
+      const distance = Math.hypot(e.clientX - this.pointerDownX, e.clientY - this.pointerDownY)
+      const elapsed = performance.now() - this.pointerDownTime
+      if (distance <= 6 && elapsed <= 500) this.handlePointer(e.clientX, e.clientY)
+    })
     this.controls.enableDamping = true
     this.controls.maxPolarAngle = Math.PI * 0.49
     this.controls.minDistance = 6
@@ -124,6 +136,7 @@ export class InfiniteWorldRenderer {
     })
     window.addEventListener('keyup', (e) => this.keys.delete(e.code))
     this.controls.target.set(16, 10, 16)
+    this.controls.update()
     this.worldPosition.copy(this.camera.position)
     this.loadWorld()
 
@@ -226,6 +239,26 @@ export class InfiniteWorldRenderer {
   setFlyMode(enabled: boolean) {
     this.flyMode = enabled
     this.controls.enabled = !enabled
+  }
+
+  resetCameraView() {
+    this.flyMode = false
+    this.controls.enabled = true
+    this.camera.position.set(28, this.worldY, 52)
+    this.controls.target.set(16, 10, 16)
+    this.controls.update()
+  }
+
+  setCameraPreset(preset: 'top' | 'front' | 'orbit') {
+    this.flyMode = false
+    this.controls.enabled = true
+    const target = new THREE.Vector3(this.worldPosition.x, this.generator.sampleHeight(this.worldPosition.x, this.worldPosition.z), this.worldPosition.z)
+    this.controls.target.copy(target)
+    if (preset === 'top') this.camera.position.set(target.x, target.y + 180, target.z + 0.01)
+    else if (preset === 'front') this.camera.position.set(target.x + 120, target.y + 55, target.z + 120)
+    else this.camera.position.set(target.x + 70, target.y + 55, target.z + 70)
+    this.camera.lookAt(target)
+    this.controls.update()
   }
 
   resize(width: number, height: number) {
