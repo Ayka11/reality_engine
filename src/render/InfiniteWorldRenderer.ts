@@ -716,6 +716,55 @@ export class InfiniteWorldRenderer {
     return removed.map(o => o.id)
   }
 
+  analyzeRoute(x0: number, z0: number, x1: number, z1: number, samples = 32) {
+    const result: Array<{ x: number; z: number; y: number; slope: number; water: boolean }> = []
+    const count = Math.max(2, Math.floor(samples))
+    let previousY = this.generator.sampleHeight(x0, z0)
+    for (let i = 0; i < count; i++) {
+      const t = i / (count - 1)
+      const x = x0 + (x1 - x0) * t
+      const z = z0 + (z1 - z0) * t
+      const y = this.generator.sampleHeight(x, z)
+      const distance = Math.max(1, Math.hypot(x1 - x0, z1 - z0) / (count - 1))
+      const slope = Math.abs(y - previousY) / distance
+      result.push({ x, z, y, slope, water: y < this.generator.seaLevel - 0.25 })
+      previousY = y
+    }
+    return result
+  }
+
+  buildSmartRoute(x0: number, z0: number, x1: number, z1: number, spacing = 12) {
+    const route = this.analyzeRoute(x0, z0, x1, z1, Math.max(8, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / spacing)))
+    const created: WorldObject[] = []
+    for (let i = 0; i < route.length - 1; i++) {
+      const a = route[i]
+      const b = route[i + 1]
+      const dx = b.x - a.x
+      const dz = b.z - a.z
+      const length = Math.hypot(dx, dz)
+      const rotationY = Math.atan2(dx, dz)
+      const crossesWater = a.water || b.water
+      const steep = Math.max(a.slope, b.slope) > 0.45
+      const kind: WorldObjectKind = crossesWater ? 'bridge' : 'road'
+      const y = crossesWater ? this.generator.seaLevel + 0.45 : (a.y + b.y) * 0.5 + 0.08
+      const object = this.objects.add({
+        kind, x: (a.x + b.x) * 0.5, y, z: (a.z + b.z) * 0.5,
+        rotationY, scale: Math.max(0.5, length / 12),
+        seed: i, properties: { route: 'smart', water: crossesWater, steep },
+      })
+      created.push(object)
+      this.history.push({ type: 'add', object: { ...object } })
+    }
+    this.syncObjects()
+    this.scheduleSave()
+    return { route, objects: created, summary: {
+      segments: created.length,
+      bridges: created.filter(o => o.kind === 'bridge').length,
+      roads: created.filter(o => o.kind === 'road').length,
+      maxSlope: Math.max(...route.map(p => p.slope)),
+    } }
+  }
+
   buildRoad(x0: number, z0: number, x1: number, z1: number, spacing = 12) {
     const dx = x1 - x0
     const dz = z1 - z0
