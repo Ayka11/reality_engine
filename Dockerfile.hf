@@ -9,6 +9,7 @@ RUN npm ci
 COPY . .
 
 RUN npm run build
+
 RUN npm install --global serve
 
 ENV PORT=7860
