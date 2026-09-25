@@ -78,47 +78,40 @@ if (canvas) {
   })
 
   const panel = document.createElement('div')
-  panel.style.cssText = 'position:fixed;top:56px;left:64px;z-index:5000;padding:10px;background:rgba(12,18,28,.86);color:#fff;font:12px system-ui;border:1px solid rgba(255,255,255,.18);border-radius:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:420px'
-  panel.innerHTML = '<strong>World Builder</strong>'
-  const addButton = (label: string, onClick: () => void) => {
+  panel.id = 'infiniteWorldTools'
+  panel.style.cssText = 'position:fixed;top:112px;right:248px;z-index:5000;width:270px;max-height:calc(100vh - 170px);overflow:auto;padding:10px;background:rgba(12,18,28,.94);color:#fff;font:11px system-ui;border:1px solid rgba(124,111,205,.55);border-radius:8px'
+  panel.innerHTML = '<b style="color:#c8c3ff">🌍 Infinite World Tools</b><div id="iwStatus" style="font-size:9px;color:#8e8aa8;margin:5px 0 7px">Streaming terrain · browser CPU</div>'
+  const group = (title: string) => {
+    const h = document.createElement('div')
+    h.textContent = title
+    h.style.cssText = 'margin:8px 0 4px;color:#8e8aa8;font-size:9px;text-transform:uppercase'
+    panel.appendChild(h)
+  }
+  const row = () => {
+    const r = document.createElement('div')
+    r.style.cssText = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px'
+    panel.appendChild(r)
+    return r
+  }
+  const add = (parent: HTMLElement, label: string, fn: () => void) => {
     const b = document.createElement('button')
     b.textContent = label
-    b.style.cssText = 'cursor:pointer;padding:4px 7px;border-radius:5px;border:1px solid #667;background:#202938;color:#fff'
-    b.onclick = onClick
-    panel.appendChild(b)
+    b.style.cssText = 'cursor:pointer;padding:5px 4px;border-radius:5px;border:1px solid #39405a;background:#202938;color:#fff;font-size:9px'
+    b.onclick = () => { fn(); const s=document.getElementById('iwStatus'); if(s)s.textContent=label }
+    parent.appendChild(b)
   }
-  addButton('Orbit Camera', () => world.setFlyMode(false))
-  addButton('Fly Camera', () => world.setFlyMode(true))
-  addButton('Reset View', () => world.resetCameraView())
-  addButton('Top View', () => world.setCameraPreset('top'))
-  addButton('Front View', () => world.setCameraPreset('front'))
-  addButton('Orbit View', () => world.setCameraPreset('orbit'))
-  addButton('Select', () => world.setObjectTool('select'))
-  addButton('Place Tree', () => { world.setObjectKind('tree'); world.setObjectTool('place') })
-  addButton('Place Rock', () => { world.setObjectKind('rock'); world.setObjectTool('place') })
-  addButton('Place Building', () => { world.setObjectKind('building'); world.setObjectTool('place') })
-  addButton('Erase', () => world.setObjectTool('erase'))
-  addButton('Save', () => world.saveWorld())
-  addButton('Load', () => world.loadWorld())
-  addButton('Clear Saved', () => world.clearSavedWorld())
-  addButton('Undo', () => world.undo())
-  addButton('Redo', () => world.redo())
-  addButton('Move', () => world.setTransformMode('translate'))
-  addButton('Rotate', () => world.setTransformMode('rotate'))
-  addButton('Scale', () => world.setTransformMode('scale'))
-  addButton('Snap 1m', () => world.setSnapToGrid(1))
-  addButton('Snap 5m', () => world.setSnapToGrid(5))
-  addButton('Test Settlement', () => world.generateSettlement(world.worldCoordinates.x, world.worldCoordinates.z, 70, 10))
-  addButton('Settlement V2', () => world.generateSettlementV2(world.worldCoordinates.x, world.worldCoordinates.z, 120, 4))
-  addButton('City Plan', () => world.generateCityPlan(world.worldCoordinates.x, world.worldCoordinates.z, 180, 31))
-  addButton('River Network', () => world.generateRiverNetwork(world.worldCoordinates.x, world.worldCoordinates.z, 220, 41))
-  addButton('Suitability Map', () => world.setAnalyticalOverlay('suitability'))
-  addButton('Flood Map', () => world.setAnalyticalOverlay('flood'))
-  addButton('Slope Map', () => world.setAnalyticalOverlay('slope'))
-  addButton('Clear Map', () => world.setAnalyticalOverlay(null))
-  addButton('Optimized Route', () => world.buildSmartRoute(world.worldCoordinates.x - 180, world.worldCoordinates.z - 80, world.worldCoordinates.x + 180, world.worldCoordinates.z + 80, 12))
-  addButton('Smart Route', () => world.buildSmartRoute(world.worldCoordinates.x - 120, world.worldCoordinates.z - 120, world.worldCoordinates.x + 120, world.worldCoordinates.z + 120, 12))
+  group('Camera')
+  { const r=row(); add(r,'Orbit',()=>world.setFlyMode(false)); add(r,'Fly',()=>world.setFlyMode(true)); add(r,'Reset',()=>world.resetCameraView()); add(r,'Top',()=>world.setCameraPreset('top')); add(r,'Front',()=>world.setCameraPreset('front')); add(r,'Orbit View',()=>world.setCameraPreset('orbit')) }
+  group('Objects')
+  { const r=row(); add(r,'Select',()=>world.setObjectTool('select')); add(r,'Tree',()=>{world.setObjectKind('tree');world.setObjectTool('place')}); add(r,'Rock',()=>{world.setObjectKind('rock');world.setObjectTool('place')}); add(r,'Building',()=>{world.setObjectKind('building');world.setObjectTool('place')}); add(r,'Erase',()=>world.setObjectTool('erase')); add(r,'Move',()=>world.setTransformMode('translate')); add(r,'Rotate',()=>world.setTransformMode('rotate')); add(r,'Scale',()=>world.setTransformMode('scale')) }
+  group('Persistence')
+  { const r=row(); add(r,'Save',()=>world.saveWorld()); add(r,'Load',()=>world.loadWorld()); add(r,'Clear',()=>world.clearSavedWorld()); add(r,'Undo',()=>world.undo()); add(r,'Redo',()=>world.redo()); add(r,'Snap 1m',()=>world.setSnapToGrid(1)); add(r,'Snap 5m',()=>world.setSnapToGrid(5)) }
+  group('Generation / Analysis')
+  { const r=row(); add(r,'Settlement',()=>world.generateSettlement(world.worldCoordinates.x,world.worldCoordinates.z,70,10)); add(r,'Settlement V2',()=>world.generateSettlementV2(world.worldCoordinates.x,world.worldCoordinates.z,120,4)); add(r,'City Plan',()=>world.generateCityPlan(world.worldCoordinates.x,world.worldCoordinates.z,180,31)); add(r,'River Network',()=>world.generateRiverNetwork(world.worldCoordinates.x,world.worldCoordinates.z,220,41)); add(r,'Suitability',()=>world.setAnalyticalOverlay('suitability')); add(r,'Flood Map',()=>world.setAnalyticalOverlay('flood')); add(r,'Slope Map',()=>world.setAnalyticalOverlay('slope')); add(r,'Clear Map',()=>world.setAnalyticalOverlay(null)); add(r,'Smart Route',()=>world.buildSmartRoute(world.worldCoordinates.x-120,world.worldCoordinates.z-120,world.worldCoordinates.x+120,world.worldCoordinates.z+120,12)) }
+  group('Display')
+  { const r=row(); add(r,'Field',()=>world.setMaterialMode('field')); add(r,'PBR',()=>world.setMaterialMode('material')); add(r,'Height',()=>world.setMaterialMode('height')); add(r,'Day',()=>world.setTimeOfDay(12)); add(r,'Dusk',()=>world.setTimeOfDay(18)); add(r,'Night',()=>world.setTimeOfDay(0)); add(r,'Fog+',()=>world.setFogDensity(0.04)); add(r,'Fog-',()=>world.setFogDensity(0.005)) }
   document.body.appendChild(panel)
+
 
   const resize = () => {
     const parent = canvas.parentElement
