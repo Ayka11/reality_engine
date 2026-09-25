@@ -857,6 +857,25 @@ export class InfiniteWorldRenderer {
     return created
   }
 
+  buildAnalyticalOverlay(cx: number, cz: number, radius = 160, samples = 33, mode: 'suitability' | 'flood' | 'slope' = 'suitability') {
+    const n = Math.max(9, Math.floor(samples))
+    const step = (radius * 2) / (n - 1)
+    const positions: number[] = []
+    const values: number[] = []
+    for (let ix = 0; ix < n; ix++) for (let iz = 0; iz < n; iz++) {
+      const x = cx - radius + ix * step
+      const z = cz - radius + iz * step
+      const zone = this.buildZoneCost(x, z)
+      let value = 0
+      if (mode === 'flood') value = zone.floodRisk
+      else if (mode === 'slope') value = zone.slopeRisk
+      else value = 1 - zone.cost
+      positions.push(x, this.generator.sampleHeight(x, z) + 0.12, z)
+      values.push(Math.max(0, Math.min(1, value)))
+    }
+    return { center:{x:cx,z:cz}, radius, samples:n, mode, positions, values }
+  }
+
   analyzeWatershed(cx: number, cz: number, radius = 220, samples = 41) {
     const hydro = this.analyzeHydrology(cx, cz, radius, samples)
     const cells = hydro.samples
