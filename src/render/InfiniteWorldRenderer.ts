@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { InfiniteChunkManager } from '../infinity/ChunkManager'
 import { WorldGenerator, BIOME_ID, type WorldChunk } from '../infinity/WorldGenerator'
 import { worldToChunk, WORLD_CHUNK_SIZE, type ChunkCoord } from '../infinity/WorldCoordinate'
@@ -48,6 +49,8 @@ export class InfiniteWorldRenderer {
   private saveTimer: number | null = null
   private readonly storageKey: string
   private readonly pointerHandler: (e: PointerEvent) => void
+  private readonly transformControls: TransformControls
+  private gizmoBefore: WorldObject | null = null
   private readonly selectionMarker = new THREE.Mesh(
     new THREE.BoxGeometry(1.2, 1.2, 1.2),
     new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true, transparent: true, opacity: 0.9 })
@@ -93,6 +96,24 @@ export class InfiniteWorldRenderer {
     this.controls.minDistance = 6
     this.controls.maxDistance = 240
     this.controls.enablePan = false
+    this.transformControls = new TransformControls(this.camera, canvas)
+    this.transformControls.setMode('translate')
+    this.transformControls.setSpace('world')
+    this.transformControls.visible = false
+    this.scene.add(this.transformControls as unknown as THREE.Object3D)
+    this.transformControls.addEventListener('dragging-changed', (event) => {
+      this.controls.enabled = !Boolean((event as { value: boolean }).value) && !this.flyMode
+      if ((event as { value: boolean }).value) {
+        const object = this.getSelectedObject()
+        this.gizmoBefore = object ? { ...object } : null
+      } else if (this.gizmoBefore) {
+        const object = this.getSelectedObject()
+        if (object) this.history.push({ type: 'transform', before: this.gizmoBefore, after: { ...object } })
+        this.gizmoBefore = null
+        this.scheduleSave()
+      }
+    })
+    this.transformControls.addEventListener('objectChange', () => this.syncSelectedFromGizmo())
     window.addEventListener('keydown', (e) => {
       if (['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','ShiftRight'].includes(e.code)) {
         this.keys.add(e.code)
@@ -179,6 +200,7 @@ export class InfiniteWorldRenderer {
   dispose() {
     this.renderer.domElement.removeEventListener('pointerdown', this.pointerHandler)
     this.controls.dispose()
+    this.transformControls.dispose()
     this.scene.traverse(obj => {
       const mesh = obj as THREE.Mesh
       if (mesh.geometry) mesh.geometry.dispose()
@@ -480,6 +502,8 @@ export class InfiniteWorldRenderer {
     const hit = this.raycaster.intersectObjects(meshes, true)[0]
     if (!hit) {
       this.selectedObjectId = null
+      this.transformControls.detach()
+      this.transformControls.visible = false
       this.selectionMarker.visible = false
       return null
     }
@@ -490,6 +514,9 @@ export class InfiniteWorldRenderer {
     const entry = this.objectMeshes.get(id)
     if (!entry) return null
     this.selectedObjectId = id
+    const selectedGroup = entry.group
+    this.transformControls.attach(selectedGroup)
+    this.transformControls.visible = true
     this.selectionMarker.position.set(
       entry.object.x - this.worldAnchor.x,
       entry.object.y - this.worldAnchor.y + 1.5,
@@ -498,6 +525,24 @@ export class InfiniteWorldRenderer {
     this.selectionMarker.scale.setScalar(Math.max(1, entry.object.scale * 2))
     this.selectionMarker.visible = true
     return entry.object
+  }
+
+  setTransformMode(mode: 'translate' | 'rotate' | 'scale') {
+    this.transformControls.setMode(mode)
+  }
+
+  private syncSelectedFromGizmo() {
+    if (!this.selectedObjectId) return
+    const object = this.objects.get(this.selectedObjectId)
+    const entry = this.objectMeshes.get(this.selectedObjectId)
+    if (!object || !entry) return
+    object.x = entry.group.position.x + this.worldAnchor.x
+    object.y = entry.group.position.y + this.worldAnchor.y
+    object.z = entry.group.position.z + this.worldAnchor.z
+    object.rotationY = entry.group.rotation.y
+    object.scale = entry.group.scale.x
+    this.selectionMarker.position.set(entry.group.position.x, entry.group.position.y + 1.5, entry.group.position.z)
+    this.selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
   }
 
   getSelectedObject() {
@@ -557,6 +602,8 @@ export class InfiniteWorldRenderer {
     return { canUndo: this.history.canUndo, canRedo: this.history.canRedo }
   }
 
+  getTransformMode() { return this.transformControls.mode }
+
   deleteSelected() {
     if (!this.selectedObjectId) return null
     const id = this.selectedObjectId
@@ -576,6 +623,8 @@ export class InfiniteWorldRenderer {
       this.objectMeshes.delete(id)
     }
     this.selectedObjectId = null
+    this.transformControls.detach()
+    this.transformControls.visible = false
     this.selectionMarker.visible = false
     this.scheduleSave()
     return object ?? null
