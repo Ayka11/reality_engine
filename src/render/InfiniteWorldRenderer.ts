@@ -49,6 +49,7 @@ export class InfiniteWorldRenderer {
   private saveTimer: number | null = null
   private readonly storageKey: string
   private readonly pointerHandler: (e: PointerEvent) => void
+  private readonly pointerUpHandler: (e: PointerEvent) => void
   private pointerDownX = 0
   private pointerDownY = 0
   private pointerDownTime = 0
@@ -75,6 +76,10 @@ export class InfiniteWorldRenderer {
   private snapToGrid = 1
   private readonly patchScale = WORLD_CHUNK_SIZE / this.patchResolution
   private readonly lodDistance = 96
+  private readonly sun: THREE.DirectionalLight
+  private readonly hemi: THREE.HemisphereLight
+  private materialMode: 'field' | 'material' | 'height' = 'field'
+  private readonly terrainMaterials = new Set<THREE.MeshStandardMaterial>()
 
   constructor(canvas: HTMLCanvasElement, seed = 'reality-engine-infinity-v1') {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
@@ -97,13 +102,14 @@ export class InfiniteWorldRenderer {
       this.pointerDownY = e.clientY
       this.pointerDownTime = performance.now()
     }
-    canvas.addEventListener('pointerdown', this.pointerHandler)
-    canvas.addEventListener('pointerup', (e) => {
+    this.pointerUpHandler = (e: PointerEvent) => {
       if (e.button !== 0 || this.flyMode || !this.controls.enabled) return
       const distance = Math.hypot(e.clientX - this.pointerDownX, e.clientY - this.pointerDownY)
       const elapsed = performance.now() - this.pointerDownTime
       if (distance <= 6 && elapsed <= 500) this.handlePointer(e.clientX, e.clientY)
-    })
+    }
+    canvas.addEventListener('pointerdown', this.pointerHandler)
+    canvas.addEventListener('pointerup', this.pointerUpHandler)
     this.controls.enableDamping = true
     this.controls.maxPolarAngle = Math.PI * 0.49
     this.controls.minDistance = 6
@@ -140,11 +146,11 @@ export class InfiniteWorldRenderer {
     this.worldPosition.copy(this.camera.position)
     this.loadWorld()
 
-    const hemi = new THREE.HemisphereLight(0xb9d8ff, 0x35402f, 1.6)
-    this.scene.add(hemi)
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2)
-    sun.position.set(300, 500, 180)
-    this.scene.add(sun)
+    this.hemi = new THREE.HemisphereLight(0xb9d8ff, 0x35402f, 1.6)
+    this.scene.add(this.hemi)
+    this.sun = new THREE.DirectionalLight(0xffffff, 2.2)
+    this.sun.position.set(300, 500, 180)
+    this.scene.add(this.sun)
 
     const water = new THREE.MeshBasicMaterial({ color: 0x2b78b5, transparent: true, opacity: 0.48 })
     void water
@@ -213,6 +219,7 @@ export class InfiniteWorldRenderer {
 
   dispose() {
     this.renderer.domElement.removeEventListener('pointerdown', this.pointerHandler)
+    this.renderer.domElement.removeEventListener('pointerup', this.pointerUpHandler)
     this.controls.dispose()
     this.transformControls.dispose()
     this.scene.traverse(obj => {
@@ -260,6 +267,45 @@ export class InfiniteWorldRenderer {
     this.camera.lookAt(target)
     this.controls.update()
   }
+
+
+  setMaterialMode(mode: 'field' | 'material' | 'height') {
+    this.materialMode = mode
+    for (const material of this.terrainMaterials) {
+      if (mode === 'material') {
+        material.vertexColors = false
+        material.color.set(0x8a8f98)
+        material.roughness = 0.72
+        material.metalness = 0.08
+      } else {
+        material.vertexColors = true
+        material.color.set(0xffffff)
+        material.roughness = mode === 'height' ? 0.88 : 0.95
+        material.metalness = 0
+      }
+      material.needsUpdate = true
+    }
+  }
+
+  setTimeOfDay(hours: number) {
+    const h = ((hours % 24) + 24) % 24
+    const daylight = Math.max(0, Math.sin(((h - 6) / 12) * Math.PI))
+    const azimuth = ((h - 6) / 24) * Math.PI * 2
+    this.sun.position.set(Math.cos(azimuth) * 420, 80 + daylight * 520, Math.sin(azimuth) * 420)
+    this.sun.intensity = 0.25 + daylight * 2.0
+    this.hemi.intensity = 0.45 + daylight * 1.15
+  }
+
+  setFogDensity(value: number) {
+    const density = Math.max(0, Math.min(0.06, value))
+    const fog = this.scene.fog
+    if (fog instanceof THREE.Fog) {
+      fog.near = 90 + (0.06 - density) * 900
+      fog.far = 260 + (0.06 - density) * 11000
+    }
+  }
+
+  getMaterialMode() { return this.materialMode }
 
   resize(width: number, height: number) {
     if (width <= 0 || height <= 0) return
@@ -339,6 +385,7 @@ export class InfiniteWorldRenderer {
     geometry.computeBoundingSphere()
 
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 })
+    this.terrainMaterials.add(material)
     const mesh = new THREE.Mesh(geometry, material)
     mesh.userData.terrain = true
     group.add(mesh)
