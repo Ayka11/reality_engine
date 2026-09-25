@@ -856,6 +856,118 @@ export class InfiniteWorldRenderer {
     return created
   }
 
+  analyzeBuildZone(cx: number, cz: number, radius = 160, samples = 25) {
+    const result: Array<{ x:number; z:number; y:number; slope:number; water:boolean; score:number }> = []
+    const n = Math.max(5, Math.floor(samples))
+    const step = (radius * 2) / (n - 1)
+    for (let ix = 0; ix < n; ix++) {
+      for (let iz = 0; iz < n; iz++) {
+        const x = cx - radius + ix * step
+        const z = cz - radius + iz * step
+        const y = this.generator.sampleHeight(x, z)
+        const e = Math.max(1, step * 0.5)
+        const gx = this.generator.sampleHeight(x + e, z) - this.generator.sampleHeight(x - e, z)
+        const gz = this.generator.sampleHeight(x, z + e) - this.generator.sampleHeight(x, z - e)
+        const slope = Math.hypot(gx, gz) / (2 * e)
+        const water = y < this.generator.seaLevel - 0.25
+        const elevationPenalty = Math.abs(y - (this.generator.seaLevel + 10)) / 30
+        const slopePenalty = Math.min(1, slope / 0.45)
+        const score = water ? 0 : Math.max(0, 1 - slopePenalty) * Math.max(0, 1 - elevationPenalty)
+        result.push({ x, z, y, slope, water, score })
+      }
+    }
+    result.sort((a, b) => b.score - a.score)
+    return {
+      center: { x: cx, z: cz },
+      radius,
+      samples: result,
+      best: result[0] ?? null,
+      buildable: result.filter((cell) => cell.score > 0.45),
+    }
+  }
+
+  planCity(cx: number, cz: number, radius = 180, samples = 31) {
+    const analysis = this.analyzeBuildZone(cx, cz, radius, samples)
+    if (!analysis.best) return null
+    const hub = analysis.best
+    const candidates = analysis.buildable.filter((cell) =>
+      Math.hypot(cell.x - hub.x, cell.z - hub.z) > radius * 0.18
+    )
+    const districts: Array<{ x:number; z:number; y:number; score:number; role:string }> = []
+    const desired = Math.min(8, Math.max(4, Math.floor(radius / 30)))
+    for (let i = 0; i < desired && candidates.length; i++) {
+      const targetAngle = (i / desired) * Math.PI * 2
+      let best = candidates[0]
+      let bestValue = -Infinity
+      for (const cell of candidates) {
+        const distance = Math.hypot(cell.x - hub.x, cell.z - hub.z)
+        const angle = Math.atan2(cell.z - hub.z, cell.x - hub.x)
+        const angleDiff = Math.abs(Math.atan2(Math.sin(angle - targetAngle), Math.cos(angle - targetAngle)))
+        const separation = Math.min(1, distance / radius)
+        const value = cell.score + separation * 0.25 - angleDiff * 0.15
+        if (value > bestValue) { bestValue = value; best = cell }
+      }
+      districts.push({ x: best.x, z: best.z, y: best.y, score: best.score, role: i % 3 === 0 ? 'civic' : i % 3 === 1 ? 'residential' : 'mixed' })
+      for (let j = candidates.length - 1; j >= 0; j--) {
+        if (Math.hypot(candidates[j].x - best.x, candidates[j].z - best.z) < radius * 0.22) candidates.splice(j, 1)
+      }
+    }
+    return { hub, districts, analysis }
+  }
+
+  generateCityPlan(cx: number, cz: number, radius = 180, samples = 31) {
+    const plan = this.planCity(cx, cz, radius, samples)
+    if (!plan) return null
+    const created: WorldObject[] = []
+    const hubObject = this.objects.add({
+      kind: 'landmark', x: plan.hub.x, y: plan.hub.y, z: plan.hub.z,
+      rotationY: 0, scale: 2, seed: 0,
+      properties: { city: 'hub', role: 'civic' },
+    })
+    created.push(hubObject)
+    this.history.push({ type: 'add', object: { ...hubObject } })
+    for (let i = 0; i < plan.districts.length; i++) {
+      const d = plan.districts[i]
+      const route = this.optimizeRoute(plan.hub.x, plan.hub.z, d.x, d.z, 12)
+      for (let j = 0; j < route.length - 1; j++) {
+        const a = route[j], b = route[j + 1]
+        const water = a.water || b.water
+        const object = this.objects.add({
+          kind: water ? 'bridge' : 'road',
+          x: (a.x + b.x) * 0.5,
+          y: water ? this.generator.seaLevel + 0.45 : (a.y + b.y) * 0.5 + 0.08,
+          z: (a.z + b.z) * 0.5,
+          rotationY: Math.atan2(b.x - a.x, b.z - a.z),
+          scale: Math.max(0.5, Math.hypot(b.x - a.x, b.z - a.z) / 12),
+          seed: i * 1000 + j,
+          properties: { city: 'corridor', district: i, role: d.role },
+        })
+        created.push(object)
+        this.history.push({ type: 'add', object: { ...object } })
+      }
+      const count = d.role === 'civic' ? 3 : 5
+      for (let k = 0; k < count; k++) {
+        const angle = (k / count) * Math.PI * 2
+        const distance = d.role === 'civic' ? 12 : 18
+        const x = d.x + Math.cos(angle) * distance
+        const z = d.z + Math.sin(angle) * distance
+        const y = this.generator.sampleHeight(x, z)
+        const building = this.objects.add({
+          kind: 'building', x, y, z,
+          rotationY: angle,
+          scale: d.role === 'civic' ? 1.1 : 0.8,
+          seed: i * 100 + k,
+          properties: { city: 'district', district: i, role: d.role },
+        })
+        created.push(building)
+        this.history.push({ type: 'add', object: { ...building } })
+      }
+    }
+    this.syncObjects()
+    this.scheduleSave()
+    return { plan, objects: created }
+  }
+
   generateSettlementV2(cx: number, cz: number, radius = 120, blocks = 4) {
     const created: WorldObject[] = []
     const seed = this.generator.seed
