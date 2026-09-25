@@ -25,6 +25,11 @@ if (canvas) {
   ;(window as any).infinitySelectedObject = () => world.getSelectedObject()
   ;(window as any).infinityTransformSelected = (patch: { x?: number; y?: number; z?: number; rotationY?: number; scale?: number }) => world.transformSelected(patch)
   ;(window as any).infinityDeleteSelected = () => world.deleteSelected()
+  ;(window as any).infinitySetObjectTool = (tool: 'select' | 'place' | 'erase') => world.setObjectTool(tool)
+  ;(window as any).infinitySetObjectKind = (kind: WorldObjectKind) => world.setObjectKind(kind)
+  ;(window as any).infinityGetObjectTool = () => world.getObjectTool()
+  ;(window as any).infinityGetObjectKind = () => world.getObjectKind()
+  ;(window as any).infinityHandlePointer = (clientX: number, clientY: number) => world.handlePointer(clientX, clientY)
 
   ;(window as any).infinityStats = () => ({
     loadedChunks: world.getLoadedChunkCount(),
