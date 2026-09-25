@@ -4,10 +4,11 @@ import { InfiniteChunkManager } from '../infinity/ChunkManager'
 import { WorldGenerator, BIOME_ID, type WorldChunk } from '../infinity/WorldGenerator'
 import { worldToChunk, WORLD_CHUNK_SIZE, type ChunkCoord } from '../infinity/WorldCoordinate'
 import { WorldObjectManager } from '../infinity/ObjectManager'
+import { lodForDistance, lodResolution } from '../infinity/LODManager'
 import { OBJECT_CATALOG } from '../infinity/ObjectCatalog'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 
-type TerrainPatch = { group: THREE.Group; chunk: WorldChunk }
+type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
 
 const BIOME_COLORS: Record<number, number> = {
@@ -45,6 +46,7 @@ export class InfiniteWorldRenderer {
   private readonly recenterDistance = 512
   private readonly patchResolution = 16
   private readonly patchScale = WORLD_CHUNK_SIZE / this.patchResolution
+  private readonly lodDistance = 96
 
   constructor(canvas: HTMLCanvasElement, seed = 'reality-engine-infinity-v1') {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
@@ -114,10 +116,12 @@ export class InfiniteWorldRenderer {
     return w.chunk
   }
 
-  private buildTerrainPatch(chunk: WorldChunk): THREE.Group {
+  private buildTerrainPatch(chunk: WorldChunk, lod = 1): THREE.Group {
     const group = new THREE.Group()
     const geometry = new THREE.BufferGeometry()
-    const n = this.patchResolution + 1
+    const resolution = lodResolution(lod)
+    const scale = WORLD_CHUNK_SIZE / resolution
+    const n = resolution + 1
     const positions = new Float32Array(n * n * 3)
     const normals = new Float32Array(n * n * 3)
     const colors = new Float32Array(n * n * 3)
@@ -135,8 +139,8 @@ export class InfiniteWorldRenderer {
     for (let z = 0; z < n; z++) {
       for (let x = 0; x < n; x++) {
         const i = z * n + x
-        const gx = x * this.patchScale
-        const gz = z * this.patchScale
+        const gx = x * scale
+        const gz = z * scale
         const h = this.generator.sampleHeight(originX + gx, originZ + gz)
         positions[i * 3] = originX + gx
         positions[i * 3 + 1] = h
@@ -161,8 +165,8 @@ export class InfiniteWorldRenderer {
       }
     }
 
-    for (let z = 0; z < this.patchResolution; z++) {
-      for (let x = 0; x < this.patchResolution; x++) {
+    for (let z = 0; z < resolution; z++) {
+      for (let x = 0; x < resolution; x++) {
         const a = z * n + x
         const b = a + 1
         const c = a + n
@@ -208,6 +212,31 @@ export class InfiniteWorldRenderer {
     this.waterMeshes.delete(key)
   }
 
+  private desiredLod(chunk: WorldChunk): number {
+    const cx = chunk.cx * WORLD_CHUNK_SIZE + WORLD_CHUNK_SIZE * 0.5
+    const cz = chunk.cz * WORLD_CHUNK_SIZE + WORLD_CHUNK_SIZE * 0.5
+    const dx = cx - this.worldPosition.x
+    const dz = cz - this.worldPosition.z
+    return lodForDistance(Math.hypot(dx, dz), this.lodDistance)
+  }
+
+  private updateTerrainLod() {
+    for (const [key, patch] of this.patches) {
+      const lod = this.desiredLod(patch.chunk)
+      if (lod === patch.lod) continue
+      this.scene.remove(patch.group)
+      patch.group.traverse(obj => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose())
+        else if (mesh.material) mesh.material.dispose()
+      })
+      const group = this.buildTerrainPatch(patch.chunk, lod)
+      this.patches.set(key, { group, chunk: patch.chunk, lod })
+      this.scene.add(group)
+    }
+  }
+
   private syncChunks() {
     const center = this.chunkCenter()
     if (this.lastCenter && center.cx === this.lastCenter.cx && center.cz === this.lastCenter.cz) return
@@ -217,8 +246,8 @@ export class InfiniteWorldRenderer {
     for (const chunk of delta.loaded) {
       const key = `${chunk.cx},${chunk.cy},${chunk.cz}`
       if (!this.patches.has(key)) {
-        const group = this.buildTerrainPatch(chunk)
-        this.patches.set(key, { group, chunk })
+        const group = this.buildTerrainPatch(chunk, 1)
+        this.patches.set(key, { group, chunk, lod: 1 })
         this.scene.add(group)
       }
     }
@@ -396,6 +425,7 @@ export class InfiniteWorldRenderer {
     this.maybeRecenter()
     this.syncChunks()
     this.syncObjects()
+    this.updateTerrainLod()
     this.renderer.render(this.scene, this.camera)
   }
 
