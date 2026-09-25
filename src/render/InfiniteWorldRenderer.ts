@@ -8,6 +8,7 @@ import { lodForDistance, lodResolution } from '../infinity/LODManager'
 import { OBJECT_CATALOG } from '../infinity/ObjectCatalog'
 import { WorldPersistence } from '../infinity/WorldPersistence'
 import { chunkKey } from '../infinity/WorldCoordinate'
+import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
@@ -33,6 +34,7 @@ export class InfiniteWorldRenderer {
   readonly chunks: InfiniteChunkManager
   readonly objects = new WorldObjectManager()
   readonly persistence: WorldPersistence
+  readonly history = new WorldEditHistory()
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -506,7 +508,9 @@ export class InfiniteWorldRenderer {
     if (!this.selectedObjectId) return null
     const object = this.objects.get(this.selectedObjectId)
     if (!object) return null
+    const before = { ...object }
     Object.assign(object, patch)
+    this.history.push({ type: 'transform', before, after: { ...object } })
     this.scheduleSave()
     const entry = this.objectMeshes.get(object.id)
     if (entry) {
@@ -519,11 +523,48 @@ export class InfiniteWorldRenderer {
     return object
   }
 
+  private applyHistoryEdit(edit: WorldEdit, reverse: boolean) {
+    if (edit.type === 'add') {
+      if (reverse) this.objects.remove(edit.object.id)
+      else this.objects.add(edit.object)
+    } else if (edit.type === 'remove') {
+      if (reverse) this.objects.add(edit.object)
+      else this.objects.remove(edit.object.id)
+    } else {
+      const object = reverse ? edit.before : edit.after
+      this.objects.remove(object.id)
+      this.objects.add(object)
+    }
+    this.syncObjects()
+    this.scheduleSave()
+  }
+
+  undo() {
+    const edit = this.history.undo()
+    if (!edit) return null
+    this.applyHistoryEdit(edit, true)
+    return edit
+  }
+
+  redo() {
+    const edit = this.history.redo()
+    if (!edit) return null
+    this.applyHistoryEdit(edit, false)
+    return edit
+  }
+
+  getEditHistoryState() {
+    return { canUndo: this.history.canUndo, canRedo: this.history.canRedo }
+  }
+
   deleteSelected() {
     if (!this.selectedObjectId) return null
     const id = this.selectedObjectId
     const object = this.objects.get(id)
-    if (object) this.objects.remove(id)
+    if (object) {
+      this.objects.remove(id)
+      this.history.push({ type: 'remove', object: { ...object } })
+    }
     const entry = this.objectMeshes.get(id)
     if (entry) {
       this.scene.remove(entry.group)
@@ -587,6 +628,7 @@ export class InfiniteWorldRenderer {
       kind, x, y: ground, z,
       rotationY: 0, scale, seed: 0, properties: {},
     })
+    this.history.push({ type: 'add', object: { ...object } })
     this.syncObjects()
     this.scheduleSave()
     return object
@@ -598,7 +640,10 @@ export class InfiniteWorldRenderer {
       minY: y - radius, maxY: y + radius,
       minZ: z - radius, maxZ: z + radius,
     })
-    for (const object of removed) this.objects.remove(object.id)
+    for (const object of removed) {
+      this.objects.remove(object.id)
+      this.history.push({ type: 'remove', object: { ...object } })
+    }
     this.syncObjects()
     this.scheduleSave()
     return removed.map(o => o.id)
