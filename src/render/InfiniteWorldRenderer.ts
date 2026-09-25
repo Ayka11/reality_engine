@@ -733,8 +733,75 @@ export class InfiniteWorldRenderer {
     return result
   }
 
+  optimizeRoute(x0: number, z0: number, x1: number, z1: number, gridSize = 12) {
+    const step = Math.max(4, gridSize)
+    const start = { x: Math.round(x0 / step), z: Math.round(z0 / step) }
+    const goal = { x: Math.round(x1 / step), z: Math.round(z1 / step) }
+    const key = (x: number, z: number) => `${x},${z}`
+    const open = new Set([key(start.x, start.z)])
+    const came = new Map<string, string>()
+    const g = new Map<string, number>([[key(start.x, start.z), 0]])
+    const f = new Map<string, number>([[key(start.x, start.z), 0]])
+    const heuristic = (x: number, z: number) => Math.hypot(goal.x - x, goal.z - z)
+    const limit = 2500
+    let iterations = 0
+    while (open.size && iterations++ < limit) {
+      let currentKey = ''
+      let best = Infinity
+      for (const k of open) {
+        const value = f.get(k) ?? Infinity
+        if (value < best) { best = value; currentKey = k }
+      }
+      if (!currentKey) break
+      const [cx, cz] = currentKey.split(',').map(Number)
+      if (cx === goal.x && cz === goal.z) {
+        const path: Array<{ x: number; z: number; y: number; water: boolean; slope: number }> = []
+        let cursor = currentKey
+        while (true) {
+          const [px, pz] = cursor.split(',').map(Number)
+          const wx = px * step
+          const wz = pz * step
+          const y = this.generator.sampleHeight(wx, wz)
+          path.push({ x: wx, z: wz, y, water: y < this.generator.seaLevel - 0.25, slope: 0 })
+          const previous = came.get(cursor)
+          if (!previous) break
+          cursor = previous
+        }
+        path.reverse()
+        for (let i = 1; i < path.length; i++) {
+          const d = Math.max(1, Math.hypot(path[i].x - path[i-1].x, path[i].z - path[i-1].z))
+          path[i].slope = Math.abs(path[i].y - path[i-1].y) / d
+        }
+        return path
+      }
+      open.delete(currentKey)
+      const neighbors = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]
+      for (const [dx, dz] of neighbors) {
+        const nx = cx + dx
+        const nz = cz + dz
+        const wx = nx * step
+        const wz = nz * step
+        const y = this.generator.sampleHeight(wx, wz)
+        const prevY = this.generator.sampleHeight(cx * step, cz * step)
+        const slope = Math.abs(y - prevY) / Math.max(1, Math.hypot(dx * step, dz * step))
+        const water = y < this.generator.seaLevel - 0.25
+        const terrainCost = 1 + slope * 18 + (water ? 6 : 0)
+        const diagonal = dx !== 0 && dz !== 0 ? 1.414 : 1
+        const tentative = (g.get(currentKey) ?? Infinity) + terrainCost * diagonal
+        const nk = key(nx, nz)
+        if (tentative < (g.get(nk) ?? Infinity)) {
+          came.set(nk, currentKey)
+          g.set(nk, tentative)
+          f.set(nk, tentative + heuristic(nx, nz))
+          open.add(nk)
+        }
+      }
+    }
+    return []
+  }
+
   buildSmartRoute(x0: number, z0: number, x1: number, z1: number, spacing = 12) {
-    const route = this.analyzeRoute(x0, z0, x1, z1, Math.max(8, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / spacing)))
+    const route = this.optimizeRoute(x0, z0, x1, z1, spacing)
     const created: WorldObject[] = []
     for (let i = 0; i < route.length - 1; i++) {
       const a = route[i]
