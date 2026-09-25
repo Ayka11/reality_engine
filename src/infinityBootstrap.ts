@@ -18,6 +18,8 @@ if (canvas) {
 
   ;(window as any).infinitySetEnabled = (enabled: boolean) => world.setEnabled(enabled)
   ;(window as any).infinitySetFlyMode = (enabled: boolean) => world.setFlyMode(enabled)
+  ;(window as any).infinityResetCamera = () => world.resetCameraView()
+  ;(window as any).infinitySetCameraPreset = (preset: 'top' | 'front' | 'orbit') => world.setCameraPreset(preset)
   ;(window as any).infinityPickAtScreen = (clientX: number, clientY: number) => world.pickAtScreen(clientX, clientY)
   ;(window as any).infinityPlaceAtScreen = (kind: WorldObjectKind, clientX: number, clientY: number, scale = 1) => world.placeAtScreen(kind, clientX, clientY, scale)
   ;(window as any).infinityEraseAtScreen = (clientX: number, clientY: number, radius = 2) => world.eraseAtScreen(clientX, clientY, radius)
@@ -76,7 +78,7 @@ if (canvas) {
   })
 
   const panel = document.createElement('div')
-  panel.style.cssText = 'position:fixed;top:12px;left:12px;z-index:20;padding:10px;background:rgba(12,18,28,.86);color:#fff;font:12px system-ui;border:1px solid rgba(255,255,255,.18);border-radius:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:420px'
+  panel.style.cssText = 'position:fixed;top:56px;left:64px;z-index:5000;padding:10px;background:rgba(12,18,28,.86);color:#fff;font:12px system-ui;border:1px solid rgba(255,255,255,.18);border-radius:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:420px'
   panel.innerHTML = '<strong>World Builder</strong>'
   const addButton = (label: string, onClick: () => void) => {
     const b = document.createElement('button')
@@ -85,6 +87,12 @@ if (canvas) {
     b.onclick = onClick
     panel.appendChild(b)
   }
+  addButton('Orbit Camera', () => world.setFlyMode(false))
+  addButton('Fly Camera', () => world.setFlyMode(true))
+  addButton('Reset View', () => world.resetCameraView())
+  addButton('Top View', () => world.setCameraPreset('top'))
+  addButton('Front View', () => world.setCameraPreset('front'))
+  addButton('Orbit View', () => world.setCameraPreset('orbit'))
   addButton('Select', () => world.setObjectTool('select'))
   addButton('Place Tree', () => { world.setObjectKind('tree'); world.setObjectTool('place') })
   addButton('Place Rock', () => { world.setObjectKind('rock'); world.setObjectTool('place') })
