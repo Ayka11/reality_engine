@@ -1,10 +1,10 @@
 ---
-title: Reality Engine Meta Law Simulator
+title: Reality Engine Meta Law Simulator — CPU Edition
 emoji: 🌌
 colorFrom: blue
 colorTo: purple
-sdk: docker
-app_port: 7860
+sdk: static
+app_file: dist/index.html
 license: mit
 pinned: false
 ---
@@ -724,3 +724,17 @@ MIT — see [LICENSE](LICENSE).
 ---
 
 *Built with [Claude Code](https://claude.ai/claude-code) by Anthropic.*
+
+## CPU Edition / Hugging Face
+
+This branch also contains a CPU-first Static Space deployment path for Hugging Face. The simulator executes in the visitor browser; no GPU-backed server is required.
+
+For the Static Space, build the deployable artifact before publishing:
+
+```bash
+npm ci
+npm run build
+npm run hf:cpu:check
+```
+
+The Hugging Face Space is configured with `app_file: dist/index.html`, so `dist/` must be present in the Space repository when deploying the static edition.

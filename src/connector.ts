@@ -25,7 +25,7 @@ import { BehaviorFSMCanvas, PRESET_BEHAVIORS }   from './modes/gamedev/EntityBeh
 import { PrefabSystem }                           from './modes/gamedev/PrefabSystem'
 import { AIGameDesigner }                         from './modes/gamedev/AIGameDesigner'
 import { buildGameDevModePanel }                  from './modes/GameDevModePanel'
-import { ChunkRenderer }                          from './render/ChunkRenderer'
+import { InfiniteWorldRenderer }                  from './render/InfiniteWorldRenderer'
 import { RealityMonitor, buildRealityMonitorHTML, updateMonitorPanels } from './ui/RealityMonitor'
 import { NodeLawEditor }                          from './ui/NodeLawEditor'
 import { sceneComposer }                          from './modes/cinema/SceneComposer'
@@ -36,7 +36,7 @@ const win = window as unknown as Record<string, unknown>
 // ── Chunk system — Three.js PBR renderer + 128×128×64 sparse worker ─────────
 
 const c3dCanvas = document.getElementById('c3d') as HTMLCanvasElement
-const chunkRenderer = new ChunkRenderer(c3dCanvas)
+const getInfiniteWorld = () => (win['infiniteWorld'] as InfiniteWorldRenderer | undefined)
 const monitor       = new RealityMonitor()
 const nodeEditor    = new NodeLawEditor()
 
@@ -66,7 +66,6 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       localChunks.set(key, f32.slice(off + 1, off + 1 + CF))
       off += 1 + CF
     }
-    chunkRenderer.applyWorkerFrame(ab as ArrayBuffer)
     const el = document.getElementById('chunkStats')
     if (el && stats) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`
   }
@@ -75,27 +74,6 @@ chunkWorker.onmessage = (e: MessageEvent) => {
 // Seed world on startup — generate sparse base then apply proto preset for visible data
 chunkWorker.postMessage({ cmd: 'generate', data: { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw } })
 chunkWorker.postMessage({ cmd: 'preset', data: { name: 'proto' } })
-
-// Self-contained render loop — always runs so 3D view shows even when paused
-let _rafLast = 0
-;(function rafLoop(ts: number) {
-  const dt = Math.min((ts - _rafLast) / 1000, 0.1)
-  _rafLast = ts
-  chunkRenderer.render(dt)
-  requestAnimationFrame(rafLoop)
-})(0)
-
-// Resize helper exposed to HTML — called by resize3D() on window/mode resize
-win['resizeChunkRenderer'] = (hybrid: boolean) => {
-  const parent = c3dCanvas.parentElement!
-  const w = hybrid ? Math.ceil(parent.clientWidth / 2) : parent.clientWidth
-  const h = parent.clientHeight
-  if (w > 0 && h > 0) {
-    chunkRenderer.renderer.setSize(w, h, false)
-    chunkRenderer.camera.aspect = w / h
-    chunkRenderer.camera.updateProjectionMatrix()
-  }
-}
 
 function chunkWorkerCompile() {
   const pipeline = nodeEditor.compile()
@@ -139,15 +117,26 @@ win['applyChunkPreset']   = (name: string) => {
   }
 }
 
-// 3D renderer controls — called from HTML UI controls
-win['setMatMode']      = (m: string) => chunkRenderer.setMatMode(m as 'field'|'material'|'height')
-win['setTimeOfDay']    = (h: number) => chunkRenderer.setTimeOfDay(h)
-win['setFogDensity']   = (d: number) => chunkRenderer.setFogDensity(d)
-win['setCameraPreset'] = (p: string) => chunkRenderer.setCameraPreset(p as 'orbit'|'top'|'iso'|'street'|'fly')
-win['setZSlice']       = (z: number) => chunkRenderer.setZSlice(z)
-win['setShowParticles']= (v: boolean) => { chunkRenderer.showParticles = v }
-win['setChunkLayer']   = (l: number) => chunkRenderer.setLayer(l)
-win['paintChunkAt']    = (x: number, y: number, z: number, f: number, v: number, r: number, mode?: string) => {
+// 3D renderer controls — routed to the Infinite World renderer
+win['setMatMode'] = (m: string) => { getInfiniteWorld()?.setMaterialMode(m as 'field'|'material'|'height') }
+win['setTimeOfDay'] = (h: number) => { getInfiniteWorld()?.setTimeOfDay(h) }
+win['setFogDensity'] = (d: number) => { getInfiniteWorld()?.setFogDensity(d) }
+win['setCameraPreset'] = (p: string) => {
+  const map: Record<string, 'orbit'|'top'|'front'> = { orbit: 'orbit', top: 'top', iso: 'orbit', street: 'front', fly: 'orbit' }
+  if (p === 'fly') { getInfiniteWorld()?.setFlyMode(true); return }
+  getInfiniteWorld()?.setCameraPreset(map[p] ?? 'orbit')
+}
+win['setZSlice'] = (_z: number) => {}
+win['setShowParticles'] = (_v: boolean) => {}
+win['setChunkLayer'] = (_l: number) => {}
+win['resizeChunkRenderer'] = (hybrid: boolean) => {
+  const parent = c3dCanvas.parentElement
+  if (!parent) return
+  const w = hybrid ? Math.ceil(parent.clientWidth / 2) : parent.clientWidth
+  const h = parent.clientHeight
+  getInfiniteWorld()?.resize(Math.max(1, w), Math.max(1, h))
+}
+win['paintChunkAt'] = (x: number, y: number, z: number, f: number, v: number, r: number, mode?: string) => {
   chunkWorker.postMessage({ cmd: 'paint', data: { x, y, z, f, v, r, mode: mode ?? 'add' } })
 }
 
