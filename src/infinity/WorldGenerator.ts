@@ -1,6 +1,5 @@
 import { WORLD_CHUNK_HEIGHT, WORLD_CHUNK_SIZE, chunkOrigin } from './WorldCoordinate'
 import { fbm3D, ridgedFbm3D } from './Noise'
-import { hash2, hash3 } from './WorldSeed'
 
 export type Biome =
   | 'ocean' | 'coast' | 'plains' | 'forest' | 'desert'
@@ -130,9 +129,3 @@ export const BIOME_ID: Record<Biome, number> = {
   ocean: 0, coast: 1, plains: 2, forest: 3, desert: 4, tundra: 5, mountain: 6, alpine: 7,
 }
 
-const BIOME_ID_NAME: Record<number, Biome> = {
-  0: 'ocean', 1: 'coast', 2: 'plains', 3: 'forest', 4: 'desert', 5: 'tundra', 6: 'mountain', 7: 'alpine',
-}
-
-void hash2
-void hash3
