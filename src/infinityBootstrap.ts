@@ -17,6 +17,7 @@ if (canvas) {
     world.scatter(kind, x0, z0, x1, z1, density)
 
   ;(window as any).infinitySetEnabled = (enabled: boolean) => world.setEnabled(enabled)
+  ;(window as any).infinitySetFlyMode = (enabled: boolean) => world.setFlyMode(enabled)
 
   ;(window as any).infinityStats = () => ({
     loadedChunks: world.getLoadedChunkCount(),
@@ -25,6 +26,9 @@ if (canvas) {
       x: world.camera.position.x,
       y: world.camera.position.y,
       z: world.camera.position.z,
+      worldX: world.worldCoordinates.x,
+      worldY: world.worldCoordinates.y,
+      worldZ: world.worldCoordinates.z,
     },
   })
 
