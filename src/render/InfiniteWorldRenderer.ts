@@ -42,6 +42,7 @@ export class InfiniteWorldRenderer {
   private objectTool: 'select' | 'place' | 'erase' = 'select'
   private saveTimer: number | null = null
   private readonly storageKey: string
+  private readonly pointerHandler: (e: PointerEvent) => void
   private readonly selectionMarker = new THREE.Mesh(
     new THREE.BoxGeometry(1.2, 1.2, 1.2),
     new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true, transparent: true, opacity: 0.9 })
@@ -77,6 +78,11 @@ export class InfiniteWorldRenderer {
 
     this.camera.position.set(28, this.worldY, 52)
     this.controls = new OrbitControls(this.camera, canvas)
+    this.pointerHandler = (e: PointerEvent) => {
+      if (e.button !== 0) return
+      this.handlePointer(e.clientX, e.clientY)
+    }
+    canvas.addEventListener('pointerdown', this.pointerHandler)
     this.controls.enableDamping = true
     this.controls.maxPolarAngle = Math.PI * 0.49
     this.controls.minDistance = 6
@@ -147,6 +153,17 @@ export class InfiniteWorldRenderer {
     this.syncObjects()
     this.selectedObjectId = null
     this.selectionMarker.visible = false
+  }
+
+  dispose() {
+    this.renderer.domElement.removeEventListener('pointerdown', this.pointerHandler)
+    this.controls.dispose()
+    this.scene.traverse(obj => {
+      const mesh = obj as THREE.Mesh
+      if (mesh.geometry) mesh.geometry.dispose()
+      if (mesh.material) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(m => m.dispose())
+    })
+    this.renderer.dispose()
   }
 
   setEnabled(value: boolean) {
