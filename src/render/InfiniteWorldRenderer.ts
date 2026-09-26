@@ -1102,7 +1102,9 @@ export class InfiniteWorldRenderer {
     instances.forEach((instance) => {
       const worldX = instance.position.x
       const worldZ = instance.position.z
-      instance.position.y = this.generator.sampleHeight(worldX, worldZ)
+      const worldY = this.generator.sampleHeight(worldX, worldZ)
+      instance.position.y = worldY
+      instance.userData.worldPosition = { x: worldX, y: worldY, z: worldZ }
     })
     return instances.length
   }
