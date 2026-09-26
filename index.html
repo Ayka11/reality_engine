@@ -1658,7 +1658,15 @@ function quickGenerateWorld(){
   // Quick Generate uses exactly the same authoritative generation pipeline as Compose.
   setRenderMode('3d',document.getElementById('tab3d'));
   setIconPanel('world');
+  const before=window.worldGenerationHealth?.();
   generateWorld();
+  const verification=window.worldVerifyGeneration?.(before);
+  if(verification && !verification.ok){
+    console.warn('[Reality Engine] Quick Generate verification did not detect a world change', verification);
+    log('⚠ Quick Generate completed, but generation verification detected no measurable Infinite World change.');
+  } else if(verification){
+    log('✓ Quick Generate verified: '+verification.delta.objects+' object delta · '+verification.delta.loadedChunks+' chunk delta');
+  }
 }
 window.quickGenerateWorld=quickGenerateWorld;
 function _clearComposerHazards(){if(window._composerHazardInterval){clearInterval(window._composerHazardInterval);window._composerHazardInterval=null;}}
