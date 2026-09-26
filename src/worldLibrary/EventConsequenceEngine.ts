@@ -4,6 +4,8 @@ import type { WorldTimelineEvent } from './ProductionInfrastructureRuntime'
 export type ConsequenceAction =
   | { type: 'growth-modifier'; multiplier: number; durationTicks: number; reason: string }
   | { type: 'stability-shift'; delta: number; reason: string }
+  | { type: 'population-shift'; deltaRatio: number; reason: string }
+  | { type: 'production-efficiency'; multiplier: number; durationTicks: number; reason: string }
   | { type: 'infrastructure-capacity'; amount: number; reason: string }
   | { type: 'production-profile'; civilization: CivilizationType; enabledNodes: string[]; reason: string }
   | { type: 'visual-transition'; civilization?: CivilizationType; tier?: string; visualKinds: string[]; reason: string }
@@ -48,10 +50,14 @@ export class EventConsequenceEngine {
     }
 
     if (event.type === 'migration') {
-      actions.push({ type: 'stability-shift', delta: -0.05, reason: 'migration temporarily reduces settlement stability' })
+      actions.push(
+        { type: 'stability-shift', delta: -0.05, reason: 'migration temporarily reduces settlement stability' },
+        { type: 'population-shift', deltaRatio: -0.08 * (event.severity ?? 1), reason: 'migration reduces local population' },
+      )
     }
 
     if (event.type === 'infrastructure-failure') {
+      actions.push({ type: 'production-efficiency', multiplier: 0.7, durationTicks: 3, reason: 'infrastructure failure reduces production efficiency' })
       if ((event.severity ?? 1) >= 0.7) actions.push({ type: 'stability-shift', delta: -0.1, reason: 'severe infrastructure failure increases instability' })
       actions.push({ type: 'growth-modifier', multiplier: 0.55, durationTicks: 2, reason: 'infrastructure failure suppresses growth' })
     }
