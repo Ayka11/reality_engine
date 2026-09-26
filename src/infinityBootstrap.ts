@@ -72,6 +72,7 @@ export function bootstrapInfiniteWorld() {
     return result
   }
   ;(window as any).productionInfrastructureState = (id: string) => productionInfrastructureRuntime.get(id)
+  ;(window as any).worldSimulationTick = (id: string, tier = 'village', delta = 1) => world.tickWorldSimulation(id, tier as any, delta)
   ;(window as any).productionStats = () => productionInfrastructureRuntime.all()
   ;(window as any).worldResourceEconomy = worldResourceEconomy
   ;(window as any).worldResourceStats = () => worldResourceEconomy.stats()
