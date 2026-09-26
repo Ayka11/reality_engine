@@ -166,7 +166,7 @@ export class ProductionInfrastructureRuntime {
       stabilityDelta: (conservation * 0.004 + technology * 0.003) - intensity * 0.002
     }
     next.environmentalImpactHistory = [...current.environmentalImpactHistory, { year: next.worldTime.year, ...next.environmentalImpact }].slice(-120)
-    next.causalCooldowns = Object.fromEntries(Object.entries(current.causalCooldowns).map(([key, value]) => [key, Math.max(0, value - 1)]).filter(([, value]) => value > 0))
+    next.causalCooldowns = Object.fromEntries(Object.entries(current.causalCooldowns).map(([key, value]) => [key, Math.max(0, value - 1)]).filter(([, value]) => Number(value) > 0))
     next.infrastructure.roads += expansion.addedRoads
     next.infrastructure.capacity += expansion.addedCapacity
     next.infrastructure.populationCapacity = Math.max(next.infrastructure.populationCapacity, current.infrastructure.populationCapacity + expansion.addedCapacity)
