@@ -35,7 +35,16 @@ const productionProfile = (type: CivilizationType) => type === 'agricultural'
     : ['agriculture', 'industry', 'research']
 
 export class EventConsequenceEngine {
-  derive(event: WorldTimelineEvent): EventConsequence {
+  mergeCompetingCauses(events: CausalEvent[]): CausalEvent[] {
+    const merged = new Map<string, CausalEvent>()
+    for (const event of events) {
+      const existing = merged.get(event.id)
+      if (!existing || (event.severity ?? 0) > (existing.severity ?? 0)) merged.set(event.id, event)
+    }
+    return [...merged.values()].sort((a, b) => (b.severity ?? 0) - (a.severity ?? 0))
+  }
+
+  derive(event: WorldTimelineEvent | CausalEvent): EventConsequence {
     const actions: ConsequenceAction[] = []
 
     if (event.type === 'resource-crisis') {
