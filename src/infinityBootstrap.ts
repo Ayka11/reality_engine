@@ -479,11 +479,11 @@ export function bootstrapInfiniteWorld() {
       plog.textContent = `✦ Infinite Reality: Φ=${phi} · ρ·E·I=${fields} · C=${complexity} · dτ·dV=${spacetime}`
     }
 
-    const stats = (window as any).infinityStats?.()
+    const stats = world.getRuntimeStats()
     return {
-      ...world.worldCoordinates,
-      objects: stats?.objects ?? 0,
-      loadedChunks: stats?.loadedChunks ?? 0,
+      ...stats.world,
+      objects: stats.objects,
+      loadedChunks: stats.loadedChunks,
     }
   }
 
