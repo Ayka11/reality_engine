@@ -327,98 +327,129 @@ export function bootstrapInfiniteWorld() {
     const complexity = config.complexity || 'Emergent'
     const spacetime = config.spacetime || 'Standard'
 
-    // Reseed terrain dynamically based on archetype parameters
-    const newSeed = `reality-${phi}-${fields}-${complexity}-${spacetime}`.toLowerCase().replace(/[^a-z0-9]/g, '-')
+    // All four Composer dimensions now drive the visible Infinite World.
+    const newSeed = `reality-${phi}-${fields}-${complexity}-${spacetime}`
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
     world.reseed(newSeed)
 
     const x = 16
     const z = 16
 
+    const fieldScale: Record<string, { density: number; energy: number; info: number }> = {
+      'Energy Dominant': { density: 0.55, energy: 1.5, info: 0.65 },
+      'Information Dense': { density: 0.8, energy: 0.9, info: 1.5 },
+      'Balanced': { density: 1.0, energy: 1.0, info: 1.0 },
+      'Mass Dominant': { density: 1.6, energy: 0.65, info: 0.45 },
+      'Sparse': { density: 0.35, energy: 0.75, info: 1.25 },
+      'Pure Info': { density: 0.25, energy: 0.5, info: 1.8 },
+    }
+    const fs = fieldScale[fields] ?? fieldScale.Balanced
+
+    const complexityScale: Record<string, { radius: number; structures: number; density: number }> = {
+      'Stable': { radius: 90, structures: 3, density: 0.65 },
+      'Emergent': { radius: 120, structures: 5, density: 1.0 },
+      'Explosive': { radius: 165, structures: 9, density: 1.55 },
+      'Collapsing': { radius: 75, structures: 2, density: 0.4 },
+      'Oscillating': { radius: 145, structures: 7, density: 1.2 },
+    }
+    const cs = complexityScale[complexity] ?? complexityScale.Emergent
+
     let tod = 14
     let fog = 0.012
     let mat: 'field' | 'material' | 'height' = 'field'
 
-    // Thematic Architecture, Hydrology, Flora, and Atmosphere
+    // Φ: base archetype.
     if (phi === 'Void') {
-      tod = 0.5
-      fog = 0.004
-      mat = 'material'
-      world.setTimeOfDay(tod)
-      world.setFogDensity(fog)
-      world.setMaterialMode(mat)
-      world.scatter('rock', x - 120, z - 120, x + 120, z + 120, 0.09)
-      world.scatter('crystal', x - 80, z - 80, x + 80, z + 80, 0.05)
-      world.place('gravity_well', x, z, 1.8)
-      world.place('quantum_emitter', x + 50, z + 50, 1.2)
-      world.generateSettlement(x, z, 70, 5)
-    } else if (phi === 'Living' || phi === 'Harmonic') {
-      tod = 13.5
-      fog = 0.010
-      mat = 'field'
-      world.setTimeOfDay(tod)
-      world.setFogDensity(fog)
-      world.setMaterialMode(mat)
-      world.scatter('tree', x - 140, z - 140, x + 140, z + 140, 0.16)
-      world.scatter('crystal', x - 70, z - 70, x + 70, z + 70, 0.04)
-      world.scatter('rock', x - 100, z - 100, x + 100, z + 100, 0.05)
-      world.place('quantum_emitter', x + 25, z + 25, 1.4)
-      world.place('metalaw', x - 30, z - 30, 1.2)
-      world.place('force_field', x, z, 1.0)
-      world.generateSettlementV2(x, z, 120, 5)
-      world.generateRiverNetwork(x, z, 220, 41)
-      world.buildSmartRoute(x - 90, z - 90, x + 90, z + 90, 12)
+      tod = 0.5; fog = 0.004; mat = 'material'
+      world.scatter('rock', x - 120, z - 120, x + 120, z + 120, 0.04 * fs.density)
+      world.scatter('crystal', x - 90, z - 90, x + 90, z + 90, 0.03 * fs.info)
+      world.place('gravity_well', x, z, 1.4)
+    } else if (phi === 'Living') {
+      world.scatter('tree', x - 140, z - 140, x + 140, z + 140, 0.10 * fs.density)
+      world.scatter('tree', x - 70, z - 70, x + 70, z + 70, 0.05 * fs.info)
+      world.scatter('rock', x - 100, z - 100, x + 100, z + 100, 0.04 * fs.density)
+      world.place('quantum_emitter', x + 25, z + 25, 1.2)
     } else if (phi === 'Chaotic') {
-      tod = 18.5
-      fog = 0.024
-      mat = 'height'
-      world.setTimeOfDay(tod)
-      world.setFogDensity(fog)
-      world.setMaterialMode(mat)
-      world.scatter('rock', x - 120, z - 120, x + 120, z + 120, 0.15)
-      world.scatter('crystal', x - 90, z - 90, x + 90, z + 90, 0.08)
-      world.place('gravity_well', x, z, 1.8)
-      world.place('entropy_sink', x + 40, z - 40, 1.3)
-      world.place('gravity_well', x - 55, z + 55, 1.2)
-      world.generateSettlementV2(x, z, 140, 6)
-      world.generateRiverNetwork(x, z, 180, 31)
+      tod = 18.5; fog = 0.024; mat = 'height'
+      world.scatter('rock', x - 130, z - 130, x + 130, z + 130, 0.10 * fs.density)
+      world.scatter('crystal', x - 90, z - 90, x + 90, z + 90, 0.07 * fs.info)
+      world.place('gravity_well', x, z, 1.7)
+      world.place('entropy_sink', x + 40, z - 40, 1.2)
     } else if (phi === 'Crystalline') {
-      tod = 8.5
-      fog = 0.007
-      mat = 'field'
-      world.setTimeOfDay(tod)
-      world.setFogDensity(fog)
-      world.setMaterialMode(mat)
-      world.scatter('crystal', x - 130, z - 130, x + 130, z + 130, 0.14)
-      world.scatter('rock', x - 90, z - 90, x + 90, z + 90, 0.06)
-      world.place('entropy_sink', x, z, 1.5)
-      world.place('metalaw', x + 45, z + 45, 1.3)
-      world.place('force_field', x - 35, z - 35, 1.1)
-      world.generateCityPlan(x, z, 170, 29)
-      world.buildSmartRoute(x - 80, z - 80, x + 80, z + 80, 10)
-    } else {
-      // Resonant / Balanced
-      tod = 15.5
-      fog = 0.011
-      mat = 'field'
-      world.setTimeOfDay(tod)
-      world.setFogDensity(fog)
-      world.setMaterialMode(mat)
-      world.scatter('tree', x - 110, z - 110, x + 110, z + 110, 0.11)
-      world.scatter('rock', x - 80, z - 80, x + 80, z + 80, 0.06)
+      tod = 8.5; fog = 0.007
+      world.scatter('crystal', x - 130, z - 130, x + 130, z + 130, 0.10 * fs.info)
+      world.scatter('rock', x - 90, z - 90, x + 90, z + 90, 0.04 * fs.density)
+      world.place('entropy_sink', x, z, 1.4)
+      world.place('metalaw', x + 45, z + 45, 1.2)
+    } else if (phi === 'Resonant') {
+      tod = 15.5; fog = 0.010
+      world.scatter('crystal', x - 110, z - 110, x + 110, z + 110, 0.06 * fs.info)
       world.place('quantum_emitter', x + 30, z + 20, 1.2)
-      world.place('metalaw', x - 25, z - 25, 1.1)
-      world.place('entropy_sink', x + 15, z - 35, 1.0)
-      world.generateSettlementV2(x, z, 110, 4)
-      world.generateRiverNetwork(x, z, 200, 35)
+      world.place('metalaw', x - 25, z - 25, 1.0)
+    } else {
+      // Harmonic.
+      world.scatter('tree', x - 110, z - 110, x + 110, z + 110, 0.07 * fs.density)
+      world.scatter('rock', x - 80, z - 80, x + 80, z + 80, 0.04 * fs.density)
+      world.place('metalaw', x - 25, z - 25, 1.0)
     }
 
+    // ρ·E·I: field balance.
+    if (fields === 'Energy Dominant') {
+      world.place('gravity_well', x + 55, z - 45, 1.0 + 0.3 * fs.energy)
+    } else if (fields === 'Mass Dominant') {
+      world.scatter('rock', x - 150, z - 150, x + 150, z + 150, 0.08 * fs.density)
+      world.generateCityPlan(x, z, cs.radius, 21)
+    } else if (fields === 'Information Dense' || fields === 'Pure Info') {
+      world.scatter('crystal', x - 150, z - 150, x + 150, z + 150, 0.06 * fs.info)
+      world.generateRiverNetwork(x, z, Math.max(160, cs.radius + 60), 31)
+    } else {
+      world.generateRiverNetwork(x, z, Math.max(140, cs.radius + 40), 31)
+    }
+
+    // C: structural complexity.
+    world.generateSettlementV2(x, z, cs.radius, cs.structures)
+    if (complexity === 'Explosive') {
+      world.place('gravity_well', x - 55, z + 55, 1.4)
+      world.place('quantum_emitter', x + 60, z - 60, 1.2)
+    } else if (complexity === 'Collapsing') {
+      world.place('entropy_sink', x + 35, z - 30, 1.4)
+    } else if (complexity === 'Oscillating') {
+      world.place('force_field', x + 55, z + 20, 1.0)
+      world.place('quantum_emitter', x - 60, z - 45, 1.0)
+    }
+
+    // dτ·dV: temporal and spatial regime.
+    if (spacetime === 'Slow Time') {
+      tod = 7; fog = 0.018
+    } else if (spacetime === 'Fractal Space') {
+      fog = 0.006
+      world.scatter('crystal', x - 180, z - 180, x + 180, z + 180, 0.04 * fs.info)
+    } else if (spacetime === 'High Radiation') {
+      tod = 17.5; fog = 0.028
+      world.place('entropy_sink', x + 75, z + 10, 1.3)
+      world.place('gravity_well', x - 70, z + 35, 1.1)
+    } else if (spacetime === 'Meteor Zone') {
+      tod = 16; fog = 0.020
+      world.place('gravity_well', x - 80, z - 55, 1.2)
+      world.place('force_field', x + 75, z + 55, 1.0)
+    } else if (spacetime === 'Frozen Topology') {
+      tod = 6; fog = 0.022; mat = 'material'
+      world.place('entropy_sink', x + 45, z + 35, 1.5)
+    }
+
+    world.setTimeOfDay(tod)
+    world.setFogDensity(fog)
+    world.setMaterialMode(mat)
     world.setObjectTool('navigate')
     world.setCameraPreset('orbit')
     syncWorldUI(tod, fog, mat)
     notifyBuilder()
 
     const plog = document.getElementById('plog')
-    if (plog) plog.textContent = `✦ Reality: Φ=${phi} · ${fields} · C=${complexity}`
+    if (plog) {
+      plog.textContent = `✦ Infinite Reality: Φ=${phi} · ρ·E·I=${fields} · C=${complexity} · dτ·dV=${spacetime}`
+    }
 
     return world.worldCoordinates
   }
