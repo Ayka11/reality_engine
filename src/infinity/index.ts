@@ -28,3 +28,4 @@ export * from './WorldExperimentBatch'
 export * from './CivilizationExperimentAdapter'
 
 export * from './CivilizationExperimentMatrix'
+export * from './CivilizationExperimentReplication'
