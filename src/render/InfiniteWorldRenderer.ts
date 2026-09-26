@@ -568,6 +568,12 @@ export class InfiniteWorldRenderer {
         const color = new THREE.Color(BIOME_COLORS[BIOME_ID[biome]])
         const slope = Math.max(0, 1 - normal.y)
         color.offsetHSL(0, 0, -slope * 0.18)
+
+        if (this.materialMode === 'height') {
+          const t = Math.max(0, Math.min(1, (h + 20) / 120))
+          color.setHSL(0.68 - t * 0.68, 0.82, 0.28 + t * 0.34)
+        }
+
         colors[i * 3] = color.r
         colors[i * 3 + 1] = color.g
         colors[i * 3 + 2] = color.b
