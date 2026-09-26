@@ -369,6 +369,13 @@ export class InfiniteWorldRenderer {
   }
 
   get isEnabled() { return this.enabled }
+  getRuntimeStats() {
+    return {
+      objects: this.objects.size,
+      loadedChunks: this.patches.size,
+      world: this.worldCoordinates,
+    }
+  }
   updateControlButtons() {
     const canvas = this.renderer.domElement
     if (this.objectTool === 'navigate') {
@@ -888,7 +895,9 @@ export class InfiniteWorldRenderer {
   }
 
   private syncObjects() {
-    const center = this.camera.position
+    // Camera coordinates are rebased around worldAnchor after Infinite World recentering.
+    // Visibility queries must therefore use the stable world-space position.
+    const center = this.worldPosition
     const range = (this.chunks.radius + 1) * WORLD_CHUNK_SIZE
     const visible = this.objects.query({
       minX: center.x - range, maxX: center.x + range,
