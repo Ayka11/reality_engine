@@ -1,15 +1,17 @@
 ---
-title: Reality Engine Meta Law Simulator — CPU Edition
+title: Reality Engine Meta Law Simulator
 emoji: 🌌
 colorFrom: blue
 colorTo: purple
-sdk: static
-app_file: dist/index.html
+sdk: docker
+app_port: 7860
 license: mit
 pinned: false
 ---
 
 # Reality Engine v6 — Meta-Law Physics Simulator
+
+> Hugging Face deployment uses the repository Dockerfile so the Space builds the current source and Vite bundle on every deployment.
 
 > *"A universe you can paint — where physics evolves, civilizations rise, and an AI director watches over it all."*
 
