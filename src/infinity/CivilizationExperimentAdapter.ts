@@ -191,9 +191,16 @@ export async function runCivilizationInfinityReplication(
     run: (_protocol, _runner, repetition) => {
       const id = `${plan.experimentId}-r${String(repetition).padStart(3, '0')}`
       const experiment = runtime.runExperiment(id, plan.scenarios, plan.ticks ?? 10, plan.delta ?? 1)
+      const outcomes = experiment.outcomes
+      const mean = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0
       return {
         civilization: experiment,
-        claimGraph: runtime.buildComparativeClaimGraph(experiment.outcomes),
+        claimGraph: runtime.buildComparativeClaimGraph(outcomes),
+        meanPopulationChange: mean(outcomes.map((item) => item.populationChange)),
+        meanStabilityChange: mean(outcomes.map((item) => item.stabilityChange)),
+        meanResilienceChange: mean(outcomes.map((item) => item.resilienceChange)),
+        meanScoreChange: mean(outcomes.map((item) => item.scoreChange)),
+        meanDivergence: mean(outcomes.map((item) => item.divergence)),
       }
     },
   })
