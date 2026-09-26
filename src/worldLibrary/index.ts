@@ -23,3 +23,4 @@ export * from './WorldAssetRuntime';
 export * from './OpenAssetsPanel';
 
 export * from './WorldResourceEconomy';
+export * from './SettlementGrowthModel';
