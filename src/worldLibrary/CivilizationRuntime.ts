@@ -445,13 +445,17 @@ export class CivilizationRuntime {
           { factor: 'resilience', weight: Math.min(1, Math.abs(final.resilience - baseline.resilience)), eventTypes: ['resource-crisis', 'migration', 'civilization-change'], mechanism: 'historical adaptation and crisis load changed resilience' },
           { factor: 'civilization-transition', weight: final.type === baseline.type ? 0 : 1, eventTypes: ['civilization-change', 'tier-transition'], mechanism: 'state transition changed the civilization trajectory' },
         ].filter((item) => item.weight > 0).sort((a, b) => b.weight - a.weight),
-        evidence: branch.history.map((snapshot) => ({
-          branchId: snapshot.branchId,
-          tick: snapshot.tick,
-          snapshot,
-          eventTypes: snapshot.type !== baseline.type ? ['civilization-change'] : snapshot.stability < baseline.stability ? ['growth', 'resource-crisis'] : ['growth'],
-          claim: `At tick ${snapshot.tick}, branch ${snapshot.branchId} had civilization ${snapshot.type}, population ${snapshot.population}, stability ${snapshot.stability.toFixed(3)}, resilience ${snapshot.resilience.toFixed(3)}.`,
-        })),
+        evidence: branch.history.map((snapshot) => {
+          const events = this.branchCausalEvents.get(snapshot.branchId) ?? []
+          const relevantEvents = events.filter((event) => event.year <= snapshot.tick).slice(-8)
+          return {
+            branchId: snapshot.branchId,
+            tick: snapshot.tick,
+            snapshot,
+            eventTypes: relevantEvents.map((event) => event.type),
+            claim: `At tick ${snapshot.tick}, branch ${snapshot.branchId} had civilization ${snapshot.type}, population ${snapshot.population}, stability ${snapshot.stability.toFixed(3)}, resilience ${snapshot.resilience.toFixed(3)}.`,
+          }
+        }),
       }
     })
     const result = { experimentId, ticks, branches, outcomes }
