@@ -4,6 +4,8 @@ import type { WorldObjectKind } from './infinity/WorldObject'
 export type DockPosition = 'top' | 'left' | 'right' | 'float'
 
 export function bootstrapInfiniteWorld() {
+  const existing = (window as any).infiniteWorld
+  if (existing) return existing
   const canvas = document.getElementById('c3d') as HTMLCanvasElement | null
   if (!canvas) return null
   const seed = (window as any).worldSeed || 'reality-seed-1'
@@ -1311,6 +1313,7 @@ export function bootstrapInfiniteWorld() {
   requestAnimationFrame(loop)
 
   console.log('[Reality Engine] Infinite World renderer initialized.')
+  ;(window as any).bootstrapInfiniteWorld = bootstrapInfiniteWorld
   return world
 }
 
