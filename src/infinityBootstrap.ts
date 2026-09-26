@@ -45,7 +45,14 @@ export function bootstrapInfiniteWorld() {
     world.populateExternalBiome(environment, radius, density, seed)
   ;(window as any).settlementGrowthEvaluate = (id: string, tier: any) => settlementGrowthModel.evaluate(id, tier)
   ;(window as any).settlementGrowthPath = (id: string, tier: any) => settlementGrowthModel.growthPath(settlementGrowthModel.evaluate(id, tier))
-  ;(window as any).settlementGrowthTick = (state: any, delta = 1) => settlementGrowthModel.tick(state, delta)
+  ;(window as any).settlementGrowthTick = (state: any, delta = 1) => {
+    const result = settlementGrowthModel.tick(state, delta)
+    if (result.nextTier) {
+      const materialized = world.materializeSettlementTier(result.nextTier)
+      return { ...result, materialized }
+    }
+    return result
+  }
   ;(window as any).settlementMaterializeTier = (tier: any) => world.materializeSettlementTier(tier)
   ;(window as any).settlementGrowthMaterialize = (state: any) => world.materializeSettlementTier(state.tier)
   ;(window as any).civilizationEvaluate = (id: string, tier: any) => civilizationRuntime.evaluate(id, tier)
