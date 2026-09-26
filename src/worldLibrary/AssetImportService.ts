@@ -91,6 +91,7 @@ export function importDiscoveredAsset(
       : undefined;
 
   const manifestEntry = createManifestEntry(asset, selected?.id);
+  if (selected) manifestEntry.tags = [...new Set([...(manifestEntry.tags || []), 'semantic:' + selected.id, 'layer:' + selected.category])];
   const candidateManifest = {
     ...manifest,
     entries: [...manifest.entries.filter((entry) => entry.id !== manifestEntry.id), manifestEntry],
