@@ -15,6 +15,8 @@ export type CivilizationMemory = {
   trajectory: Array<{ tick: number; type: CivilizationType; score: number; stability: number; evolutionPressure: number }>
   resilience: number
   adaptationSuccess: number
+  branchId: string
+  divergence: number
 }
 
 export type CivilizationState = {
@@ -87,7 +89,7 @@ export class CivilizationRuntime {
       specialization,
       evolutionPressure: Math.max(0, Math.min(1, Math.max(gatedCapabilities.industrial - gatedCapabilities.agricultural, gatedCapabilities['post-scarcity'] - gatedCapabilities.industrial) * (0.7 + (settlement.stability * 0.2)))),
       transitionReason: type === 'post-scarcity' ? 'advanced resource capability' : type === 'industrial' ? 'industrial capability exceeded agricultural capability' : 'agricultural capability remains dominant',
-      memory: { ticks: 0, crises: 0, migrations: 0, adaptations: 0, transitions: 0, cumulativeStability: settlement.stability, lastType: type, trajectory: [], resilience: 0.5, adaptationSuccess: 0 },
+      memory: { ticks: 0, crises: 0, migrations: 0, adaptations: 0, transitions: 0, cumulativeStability: settlement.stability, lastType: type, trajectory: [], resilience: 0.5, adaptationSuccess: 0, branchId: 'origin', divergence: 0 },
     }
   }
 
@@ -106,6 +108,8 @@ export class CivilizationRuntime {
     const adaptationSuccess = next.settlement.stability >= state.settlement.stability && next.type === state.type ? Math.min(1, (previousMemory.adaptationSuccess ?? 0) + 0.04 * delta) : Math.max(0, (previousMemory.adaptationSuccess ?? 0) - 0.02 * delta)
     const crisisLoad = Math.min(1, (previousMemory.crises + settlementTick.shortages.length) / 12)
     const resilience = Math.max(0.1, Math.min(0.95, previousResilience + adaptationSuccess * 0.03 - crisisLoad * 0.015))
+    const divergence = Math.max(0, Math.min(1, (previousMemory.divergence ?? 0) + Math.abs(settlementTick.state.stability - state.settlement.stability) * 0.5 + (next.type !== state.type ? 0.18 : 0)))
+    const branchId = divergence >= 0.35 ? `${previousMemory.branchId}-b${memory.ticks + delta}` : previousMemory.branchId
     const memory: CivilizationMemory = {
       ...previousMemory,
       ticks: previousMemory.ticks + delta,
@@ -115,6 +119,8 @@ export class CivilizationRuntime {
       lastType: next.type,
       resilience,
       adaptationSuccess,
+      branchId,
+      divergence,
       trajectory: [...previousMemory.trajectory, { tick: previousMemory.ticks + delta, type: next.type, score: next.score, stability: settlementTick.state.stability, evolutionPressure: next.evolutionPressure }].slice(-120),
     }
     next.memory = memory
