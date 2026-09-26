@@ -82,6 +82,7 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldTimeline = (id: string) => productionInfrastructureRuntime.timeline(id)
   ;(window as any).worldEventConsequences = (id: string) => productionInfrastructureRuntime.get(id)?.consequences ?? []
   ;(window as any).worldCausalChain = (id: string) => productionInfrastructureRuntime.causalChain(id)
+  ;(window as any).worldCausalQueue = (id: string) => productionInfrastructureRuntime.get(id)?.causalQueue ?? []
   ;(window as any).worldTimelineAll = () => productionInfrastructureRuntime.allTimelines()
 
   ;(window as any).productionStats = () => productionInfrastructureRuntime.all()
