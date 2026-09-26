@@ -1076,6 +1076,17 @@ function renderBuilderPanel(){
 const PANELS={
   world:()=>`
     <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>World Workspace</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+          <button class="brush-btn" onclick="openComp()">✦ Compose World</button>
+          <button class="brush-btn" onclick="quickGenerateWorld()">⚡ Quick Generate</button>
+          <button class="brush-btn" style="grid-column:1/-1;border-color:var(--accent);color:#a09af0" onclick="window.toggleWorldToolbar&&window.toggleWorldToolbar(true)">🌍 Open World Tools</button>
+        </div>
+        <div style="font-size:9px;color:var(--sub);margin-top:7px;line-height:1.4">3D Infinite World controls stay in the upper workspace toolbar. Use this panel for generation and world-level settings.</div>
+      </div>
+    </div>
+    <div class="section">
       <div class="section-hdr" onclick="toggleSection(this)"><span>World Mood</span><span class="arrow">▾</span></div>
       <div class="section-body">
         <div style="font-size:9px;color:var(--sub);margin-bottom:6px">Stability</div>
@@ -1913,6 +1924,10 @@ function setRenderMode(mode,btn){
   if((mode==='2d'||mode==='hybrid')&&c2d.style.display!=='none'){resize2D();draw2D();}
   if((mode==='3d'||mode==='hybrid')&&c3d.style.display!=='none'){resize3D();}
   if(mode==='field3d'&&window.renderField3D)window.renderField3D();
+
+  if (mode === '3d' && currentPanel !== 'world' && currentPanel !== 'builder') {
+    setIconPanel('world');
+  }
 
   log(`Switched to ${mode.toUpperCase()} render mode`);
 }
