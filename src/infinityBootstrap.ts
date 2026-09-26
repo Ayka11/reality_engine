@@ -630,6 +630,8 @@ export function bootstrapInfiniteWorld() {
     let libraryCategory = ''
     let librarySelected = ''
     let eraseRadius = 4
+    const escLibrary = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c] || c)
+    const libraryField = (label: string, values?: unknown[]) => values?.length ? `<div style="margin-top:4px;"><span style="color:#8f88d8;">${escLibrary(label)}:</span> ${values.map(escLibrary).join(' · ')}</div>` : ''
 
     let floatLeft = parseInt(localStorage.getItem('infinity_dock_float_x') || '40', 10)
     let floatTop = parseInt(localStorage.getItem('infinity_dock_float_y') || '60', 10)
@@ -943,6 +945,7 @@ export function bootstrapInfiniteWorld() {
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
               <!-- Mode Switcher -->
               <div style="display: flex; align-items: center; gap: 3px; background: #0a0a14; padding: 2px 4px; border-radius: 8px; border: 0.5px solid var(--border);">
+                <button class="pill ${activeTab === 'library' ? 'on' : ''}" id="topLibrary" style="font-size: 10px; padding: 3px 8px;">📚 Library</button>
                 <button class="pill ${state.tool === 'navigate' ? 'on' : ''}" id="topToolNav" style="font-size: 10px; padding: 3px 8px;">🖐️ Explore</button>
                 <button class="pill ${state.tool === 'select' ? 'on' : ''}" id="topToolSel" style="font-size: 10px; padding: 3px 8px;">🎯 Select</button>
                 <button class="pill ${state.tool === 'place' ? 'on' : ''}" id="topToolPlace" style="font-size: 10px; padding: 3px 8px;">🌲 Place</button>
