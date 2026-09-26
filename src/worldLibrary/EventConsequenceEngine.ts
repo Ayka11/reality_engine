@@ -46,7 +46,7 @@ export class EventConsequenceEngine {
 
   derive(event: WorldTimelineEvent | CausalEvent): EventConsequence {
     const actions: ConsequenceAction[] = []
-    const severity = 'severity' in event ? severity : 1
+    const severity = 'severity' in event ? (event.severity ?? 1) : 1
 
     if (event.type === 'resource-crisis') {
       actions.push({ type: 'adaptation-strategy', strategy: event.details.includes('drought') ? 'technology' : 'conservation', effectiveness: 0.5, durationTicks: 3, reason: 'resource crisis triggers adaptive resource management' })
