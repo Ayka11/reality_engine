@@ -18,6 +18,8 @@ export type InfrastructureState = {
   capacity: number
   utilization: number
   resilience: number
+  populationCapacity: number
+  pressure: number
 }
 
 export type CivilizationProductionState = {
@@ -63,6 +65,8 @@ export class ProductionInfrastructureRuntime {
       capacity,
       utilization,
       resilience: Math.max(0, Math.min(1, civilization.settlement.stability * 0.7 + (1 - utilization) * 0.3)),
+      populationCapacity: civilization.settlement.infrastructureCapacity,
+      pressure: Math.min(1, civilization.settlement.population / Math.max(1, civilization.settlement.infrastructureCapacity)),
     }
 
     const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [] }
