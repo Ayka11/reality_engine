@@ -24,6 +24,7 @@ import { compareExperiments, type ExperimentComparison } from '../infinity/Exper
 import { ExperimentCatalog } from '../infinity/ExperimentCatalog'
 import { analyzeExperiments, type ExperimentAnalysis } from '../infinity/ExperimentAnalysis'
 import { calculateStatisticalAnalysis, type StatisticalExperimentAnalysis } from '../infinity/ExperimentStatistics'
+import { WorldAssetRuntime } from '../worldLibrary/WorldAssetRuntime'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -58,6 +59,7 @@ export class InfiniteWorldRenderer {
   readonly runtimeDiagnostics = new RuntimeDiagnostics()
   readonly experimentRunner = new ExperimentRunner()
   readonly experimentCatalog = new ExperimentCatalog()
+  readonly worldAssetRuntime: WorldAssetRuntime
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -119,6 +121,7 @@ export class InfiniteWorldRenderer {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
 
     this.scene.add(this.terrainGroup)
+    this.worldAssetRuntime = new WorldAssetRuntime(this.scene)
     this.generator = new WorldGenerator(seed)
     this.fieldSampler = new FieldSampler(this.generator)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler)
@@ -1061,6 +1064,31 @@ export class InfiniteWorldRenderer {
     this.objectSpatialIndex.upsert(object)
     this.selectionMarker.position.set(entry.group.position.x, entry.group.position.y + 1.5, entry.group.position.z)
     this.selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
+  }
+
+  async loadExternalAsset(
+    assetId: string,
+    sourceUrl: string,
+    semanticEntryId?: string,
+    scale = 1,
+  ) {
+    const x = this.worldPosition.x
+    const z = this.worldPosition.z
+    return this.worldAssetRuntime.load(assetId, sourceUrl, {
+      semanticEntryId,
+      x,
+      y: this.generator.getHeightAt?.(x, z) ?? 0,
+      z,
+      scale,
+    })
+  }
+
+  removeExternalAsset(assetId: string) {
+    return this.worldAssetRuntime.remove(assetId)
+  }
+
+  getExternalAssetStats() {
+    return this.worldAssetRuntime.stats()
   }
 
   getSelectedObject() {
