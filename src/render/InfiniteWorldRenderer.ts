@@ -1186,7 +1186,10 @@ export class InfiniteWorldRenderer {
         }
       } else if (rule.layer === 'infrastructure') {
         if (rule.semanticEntryId === 'infrastructure.road') {
-          this.generateRoadNetwork(x, z, Math.round(radius * 1.2), 5)
+          this.buildRoad(x - radius * 0.55, z, x + radius * 0.55, z, 16)
+          this.buildRoad(x, z - radius * 0.55, x, z + radius * 0.55, 16)
+          this.syncObjects()
+          this.scheduleSave()
           count = 1
         } else if (rule.semanticEntryId === 'infrastructure.bridge') {
           this.place('bridge', x, z, 1)
