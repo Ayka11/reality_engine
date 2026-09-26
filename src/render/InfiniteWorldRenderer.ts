@@ -1957,6 +1957,7 @@ export class InfiniteWorldRenderer {
             obj.kind === 'force_field' ? 'force-field' : 'metalaw'
           const magnitude = factor
           if (magnitude > 0.15) {
+            this.physicsFrameInteractions++
             this.physicsInteractionLog.add(createPhysicsInteractionRecord(
               interactionType,
               obj.kind,
