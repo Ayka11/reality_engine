@@ -51,6 +51,7 @@ export type CivilizationProductionState = {
   productionModifier: number
   productionModifierTicks: number
   causalCooldowns: Record<string, number>
+  environmentalState: { temperature: number; moisture: number; radiation: number; stability: number }
 }
 
 const OUTPUTS: Record<ProductionKind, { output: string; rate: number; input?: string; inputRate?: number }> = {
@@ -102,7 +103,7 @@ export class ProductionInfrastructureRuntime {
       pressure: Math.min(1, civilization.settlement.population / Math.max(1, civilization.settlement.infrastructureCapacity)),
     }
 
-    const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [], worldTime: { year: 0, scale: 'year' as WorldTimeScale, elapsed: 0 }, history: [], timeline: [{ id: civilization.id + ':founding', year: 0, type: 'founding', settlementId: civilization.id, to: civilization.settlement.tier, details: 'Civilization runtime initialized' }], consequences: [], causalChain: [], causalQueue: [], productionModifier: 1, productionModifierTicks: 0, causalCooldowns: {} }
+    const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [], worldTime: { year: 0, scale: 'year' as WorldTimeScale, elapsed: 0 }, history: [], timeline: [{ id: civilization.id + ':founding', year: 0, type: 'founding', settlementId: civilization.id, to: civilization.settlement.tier, details: 'Civilization runtime initialized' }], consequences: [], causalChain: [], causalQueue: [], productionModifier: 1, productionModifierTicks: 0, causalCooldowns: {}, environmentalState: { temperature: 0.5, moisture: 0.5, radiation: 0, stability: 1 } }
     this.states.set(civilization.id, state)
     return state
   }
@@ -146,6 +147,7 @@ export class ProductionInfrastructureRuntime {
     next.causalQueue = [...current.causalQueue]
     next.productionModifier = current.productionModifierTicks > 0 ? current.productionModifier : 1
     next.productionModifierTicks = Math.max(0, current.productionModifierTicks - 1)
+    next.environmentalState = { ...current.environmentalState }
     next.causalCooldowns = Object.fromEntries(Object.entries(current.causalCooldowns).map(([key, value]) => [key, Math.max(0, value - 1)]).filter(([, value]) => value > 0))
     next.infrastructure.roads += expansion.addedRoads
     next.infrastructure.capacity += expansion.addedCapacity
@@ -211,6 +213,32 @@ export class ProductionInfrastructureRuntime {
     next.history = [...next.history, { year: worldTime.year, population: next.civilization.settlement.population, pressure: next.infrastructure.pressure, roads: next.infrastructure.roads, capacity: next.infrastructure.capacity, shortages: next.shortages }].slice(-120)
     this.states.set(id, next)
     return next
+  }
+
+
+  applyEnvironmentalState(id: string, environment: { temperature: number; moisture: number; radiation?: number; stability?: number }) {
+    const state = this.states.get(id)
+    if (!state) return null
+    const nextEnv = {
+      temperature: Math.max(0, Math.min(1, environment.temperature)),
+      moisture: Math.max(0, Math.min(1, environment.moisture)),
+      radiation: Math.max(0, Math.min(1, environment.radiation ?? 0)),
+      stability: Math.max(0, Math.min(1, environment.stability ?? 1)),
+    }
+    const previous = state.environmentalState
+    state.environmentalState = nextEnv
+    const events: WorldTimelineEvent[] = []
+    if (nextEnv.radiation >= 0.75 && previous.radiation < 0.75) {
+      events.push({ id: id + ':radiation-stress:' + state.worldTime.year, year: state.worldTime.year, type: 'resource-crisis', settlementId: id, details: 'High radiation stress disrupted resource conditions' })
+    }
+    if (nextEnv.moisture <= 0.2 && previous.moisture > 0.2) {
+      events.push({ id: id + ':drought:' + state.worldTime.year, year: state.worldTime.year, type: 'resource-crisis', settlementId: id, details: 'Low moisture triggered drought conditions' })
+    }
+    if (nextEnv.stability <= 0.25 && previous.stability > 0.25) {
+      events.push({ id: id + ':environmental-instability:' + state.worldTime.year, year: state.worldTime.year, type: 'growth', settlementId: id, details: 'Environmental instability reduced settlement growth' })
+    }
+    state.timeline.push(...events)
+    return { id, previous, current: nextEnv, events }
   }
 
   get(id: string) { return this.states.get(id) }
