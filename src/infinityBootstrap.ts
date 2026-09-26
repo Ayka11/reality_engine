@@ -98,6 +98,7 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldCivilizationBranchState = (branchId: string) => civilizationRuntime.branchState(branchId)
   ;(window as any).worldRunCivilizationExperiment = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta)
   ;(window as any).worldBuildCivilizationExperimentMatrix = (matrix: CivilizationExperimentMatrix) => buildCivilizationExperimentMatrix(matrix)
+  ;(window as any).worldBuildCivilizationInterventionCombinations = (interventions: any[], maxCombinationSize?: number) => buildCivilizationExperimentMatrix({ sourceBranches: ['main'], interventions, includeBaseline: false, combinationMode: 'powerset', maxCombinationSize })[0]?.scenarios ?? []
   ;(window as any).worldRunCivilizationExperimentBatch = async (matrix: CivilizationExperimentMatrix) => {
     const plans = buildCivilizationExperimentMatrix(matrix)
     return runCivilizationInfinityBatch(civilizationRuntime, plans)
