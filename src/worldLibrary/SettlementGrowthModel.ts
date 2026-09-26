@@ -13,6 +13,9 @@ export type SettlementGrowthState = {
   growthRate: number
   blockedBy: string[]
   consumption: Record<string, number>
+  density: number
+  landUse: number
+  infrastructureCapacity: number
 }
 
 export type SettlementTickResult = {
@@ -57,6 +60,9 @@ export class SettlementGrowthModel {
       : 1
     const blockedBy = capabilities.filter((item) => !item.available).map((item) => item.semanticEntryId)
     const infrastructureScore = tier === 'village' ? 0.6 : tier === 'town' ? 0.72 : tier === 'city' ? 0.86 : 0.95
+    const density = tier === 'village' ? 0.12 : tier === 'town' ? 0.28 : tier === 'city' ? 0.58 : 0.82
+    const infrastructureCapacity = tier === 'village' ? 120 : tier === 'town' ? 900 : tier === 'city' ? 18000 : 1400000
+    const landUse = Math.min(1, population / Math.max(1, infrastructureCapacity))
     const stability = Math.max(0, Math.min(1, resourceScore * 0.7 + infrastructureScore * 0.3))
     return {
       id,
@@ -68,6 +74,9 @@ export class SettlementGrowthModel {
       growthRate: (stability - 0.55) * 0.08,
       blockedBy,
       consumption: CONSUMPTION[tier],
+      density,
+      landUse,
+      infrastructureCapacity,
     }
   }
 
