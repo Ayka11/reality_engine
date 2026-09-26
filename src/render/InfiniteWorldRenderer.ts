@@ -801,14 +801,35 @@ export class InfiniteWorldRenderer {
         mesh = g
         break
       }
-      case 'road':
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(6, 0.12, 24), mat(0x3e4145))
-        ;(mesh as THREE.Mesh).position.y = 0.08
+      case 'road': {
+        const pavement = new THREE.Mesh(
+          new THREE.BoxGeometry(6, 0.12, 24),
+          mat(0x3e4145)
+        )
+        pavement.position.y = 0.08
+        const centerLine = new THREE.Mesh(
+          new THREE.BoxGeometry(0.18, 0.035, 20),
+          mat(0xb7b28a)
+        )
+        centerLine.position.y = 0.17
+        g.add(pavement, centerLine)
+        mesh = g
         break
-      case 'bridge':
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(8, 0.6, 22), mat(0x6a5540))
-        ;(mesh as THREE.Mesh).position.y = 0.35
+      }
+      case 'bridge': {
+        const deck = new THREE.Mesh(
+          new THREE.BoxGeometry(8, 0.6, 22),
+          mat(0x6a5540)
+        )
+        deck.position.y = 0.35
+        const railL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.1, 22), mat(0x383838))
+        const railR = railL.clone()
+        railL.position.set(-3.6, 1.0, 0)
+        railR.position.set(3.6, 1.0, 0)
+        g.add(deck, railL, railR)
+        mesh = g
         break
+      }
       case 'water':
         // River/water segments are elongated along their local Z axis.
         // The object rotationY supplied by hydrology aligns each segment to the flow.
