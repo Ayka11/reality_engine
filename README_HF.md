@@ -19,7 +19,7 @@ This branch provides the Docker-ready Reality Engine web application for Hugging
 - Port: 7860
 - Runtime: Node.js 18+
 - Frontend: Vite + Three.js
-- Signalling server: WebSocket on `$PORT` (internal process)
+- Signalling server: WebSocket on `$SIGNAL_PORT` (internal process)
 - Heavy scientific solvers remain optional and are not required for the core browser Space.
 
 ## Build
@@ -39,7 +39,7 @@ Browser
 HF Space :7860
   ↓
 serve dist
-  └── signalling-server.js (internal WebSocket)
+  └── signalling-server.js → $SIGNAL_PORT (internal WebSocket)
 ```
 
 ## WebGPU
