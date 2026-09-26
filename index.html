@@ -208,7 +208,8 @@ input[type=range]#spd{width:60px}
 <!-- CENTER CANVAS -->
 <div id="cw">
   <div id="tabs" style="display:flex;background:var(--p2);border-bottom:1px solid var(--bd);flex-shrink:0">
-    <div class="ctab on" id="tab3d" onclick="setRenderMode('3d',this)">🔲 3D Infinite World</div>
+    <div class="ctab on" id="tab3d" onclick="setRenderMode('3d',this)">🌍 3D Infinite World</div>
+    <div class="ctab" id="tabField3d" onclick="setRenderMode('field3d',this)">🧊 3D Volumetric Field</div>
     <div class="ctab" id="tab2d" onclick="setRenderMode('2d',this)">⬛ 2D Multi-Slice</div>
     <div class="ctab" id="tabHybrid" onclick="setRenderMode('hybrid',this)">⟐ Hybrid</div>
     <div class="ctab" id="tabMetrics" onclick="setView('metrics',this)">📈 Metrics</div>
@@ -1886,25 +1887,32 @@ function setRenderMode(mode,btn){
   if(btn)btn.classList.add('on');
 
   const c3d=document.getElementById('c3d');
+  const c3dField=document.getElementById('c3dField');
   const c2d=document.getElementById('c2d');
   const metricsView=document.getElementById('metricsView');
 
-  // For hybrid: 2D left half, Three.js right half
+  // Each 3D system gets its own WebGL canvas. Never stack the two renderers on one canvas.
   if(mode==='hybrid'){
     c2d.style.cssText='position:absolute;top:0;left:0;width:50%;height:100%;display:block';
     c3d.style.cssText='position:absolute;top:0;left:50%;width:50%;height:100%;display:block';
+    if(c3dField)c3dField.style.display='none';
   } else {
-    // 3D mode: Three.js must be the sole visible surface; the 2D canvas would otherwise cover it and make camera interaction appear broken.
     c2d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='2d'?'block':'none');
     c3d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='3d'?'block':'none');
+    if(c3dField)c3dField.style.display=mode==='field3d'?'block':'none';
   }
   if(metricsView)metricsView.style.display=mode==='metrics'?'block':'none';
   if(mode==='metrics')updateMetricsView();
+
+  // Field controls are meaningful in the volumetric view; Infinite World keeps its own terrain/object tools.
+  const layerBar=document.getElementById('layerBar');
+  if(layerBar)layerBar.style.opacity=mode==='field3d'?'1':'0.55';
 
   resize();
 
   if((mode==='2d'||mode==='hybrid')&&c2d.style.display!=='none'){resize2D();draw2D();}
   if((mode==='3d'||mode==='hybrid')&&c3d.style.display!=='none'){resize3D();}
+  if(mode==='field3d'&&window.renderField3D)window.renderField3D();
 
   log(`Switched to ${mode.toUpperCase()} render mode`);
 }
@@ -1913,7 +1921,7 @@ window.setView=setRenderMode;
 
 function previewRenderMode(mode){
   const idMap={
-    '3d':'tab3d','2d':'tab2d','hybrid':'tabHybrid','metrics':'tabMetrics'
+    '3d':'tab3d','field3d':'tabField3d','2d':'tab2d','hybrid':'tabHybrid','metrics':'tabMetrics'
   };
   setRenderMode(mode,document.getElementById(idMap[mode])||null);
 }
