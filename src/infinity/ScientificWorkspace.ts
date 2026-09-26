@@ -20,7 +20,6 @@ function render() {
   const batch = w?.batch
   const snapshots = w?.snapshots ?? []
   const completed = batch?.completed ?? 0
-  const failed = batch?.failed ?? 0
   const replications = w?.replications ? Object.values(w.replications) as any[] : []
   const replicationCompleted = replications.reduce((n, r) => n + (r?.repetitionsCompleted ?? 0), 0)
   const validationValues = w?.claimValidation ? Object.values(w.claimValidation) as any[] : []
