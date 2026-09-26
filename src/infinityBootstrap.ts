@@ -54,6 +54,8 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldResourceEconomy = worldResourceEconomy
   ;(window as any).worldResourceStats = () => worldResourceEconomy.stats()
   ;(window as any).worldResourceCapability = (id: string, requiredAmount: number) => worldResourceEconomy.capability(id, requiredAmount)
+  ;(window as any).worldResourceCanSupport = (targetId: string, requirements: Record<string, number> = {}) => worldResourceEconomy.canSupport(targetId, requirements)
+  ;(window as any).settlementGrowthRequirements = () => settlementGrowthModel
   ;(window as any).worldResourceTick = (delta = 1) => worldResourceEconomy.tick(delta)
   ;(window as any).worldBiomePopulate = (environment: any, radius = 100, density = 1, seed = 1) =>
     world.populateBiome(environment, radius, density, seed)
