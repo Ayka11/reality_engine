@@ -19,6 +19,14 @@ export type CivilizationMemory = {
   divergence: number
 }
 
+export type CounterfactualOverride = {
+  stabilityDelta?: number
+  populationRatio?: number
+  resilienceDelta?: number
+  civilization?: CivilizationType
+  reason: string
+}
+
 export type CivilizationDivergenceMetrics = {
   branchA: string
   branchB: string
@@ -162,6 +170,23 @@ export class CivilizationRuntime {
   branchSnapshot(branchId: string) { return this.branches.get(branchId)?.at(-1) ?? null }
   branchHistory(branchId: string) { return this.branches.get(branchId) ?? [] }
   branchesList() { return [...this.branches.entries()].map(([branchId, history]) => ({ branchId, latest: history.at(-1) ?? null, length: history.length })) }
+
+  forkBranch(sourceBranch: string, override: CounterfactualOverride): CivilizationBranchSnapshot | null {
+    const source = this.branchSnapshot(sourceBranch)
+    if (!source) return null
+    const branchId = `${sourceBranch}-cf-${this.branches.size + 1}`
+    const snapshot: CivilizationBranchSnapshot = {
+      ...source,
+      branchId,
+      stability: Math.max(0, Math.min(1, source.stability + (override.stabilityDelta ?? 0))),
+      population: Math.max(1, Math.round(source.population * (override.populationRatio ?? 1))),
+      resilience: Math.max(0.1, Math.min(0.95, source.resilience + (override.resilienceDelta ?? 0))),
+      type: override.civilization ?? source.type,
+      divergence: Math.max(0, Math.min(1, source.divergence + 0.15)),
+    }
+    this.branches.set(branchId, [snapshot])
+    return snapshot
+  }
 
   compareBranches(branchA: string, branchB: string): CivilizationDivergenceMetrics | null {
     const a = this.branchSnapshot(branchA)
