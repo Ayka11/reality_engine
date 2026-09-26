@@ -12,6 +12,15 @@ export type SettlementGrowthState = {
   resourceScore: number
   growthRate: number
   blockedBy: string[]
+  consumption: Record<string, number>
+}
+
+export type SettlementTickResult = {
+  state: SettlementGrowthState
+  consumed: Record<string, number>
+  shortages: string[]
+  changed: boolean
+  nextTier: SettlementTier | null
 }
 
 const TIER_ORDER: SettlementTier[] = ['village', 'town', 'city', 'megacity']
@@ -23,8 +32,22 @@ const REQUIREMENTS: Record<SettlementTier, Record<string, number>> = {
   megacity: { 'resource.water': 140, 'resource.stone': 100, 'resource.iron': 80, 'resource.crystal': 20 },
 }
 
+const CONSUMPTION: Record<SettlementTier, Record<string, number>> = {
+  village: { 'resource.water': 1.2, 'resource.wood': 0.7 },
+  town: { 'resource.water': 4, 'resource.wood': 2.2, 'resource.stone': 0.5 },
+  city: { 'resource.water': 12, 'resource.stone': 3, 'resource.iron': 1.4 },
+  megacity: { 'resource.water': 45, 'resource.stone': 10, 'resource.iron': 6, 'resource.crystal': 0.8 },
+}
+
+const BASE_POPULATION: Record<SettlementTier, number> = {
+  village: 80,
+  town: 800,
+  city: 12000,
+  megacity: 1000000,
+}
+
 export class SettlementGrowthModel {
-  evaluate(id: string, tier: SettlementTier): SettlementGrowthState {
+  evaluate(id: string, tier: SettlementTier, population = BASE_POPULATION[tier]): SettlementGrowthState {
     const requirements = REQUIREMENTS[tier]
     const capabilities = Object.entries(requirements).map(([resource, amount]) =>
       worldResourceEconomy.capability(resource, amount),
@@ -38,20 +61,20 @@ export class SettlementGrowthModel {
     return {
       id,
       tier,
-      population: tier === 'village' ? 80 : tier === 'town' ? 800 : tier === 'city' ? 12000 : 1000000,
+      population,
       stability,
       infrastructureScore,
       resourceScore,
       growthRate: (stability - 0.55) * 0.08,
       blockedBy,
+      consumption: CONSUMPTION[tier],
     }
   }
 
   canGrow(state: SettlementGrowthState): boolean {
     const nextIndex = TIER_ORDER.indexOf(state.tier) + 1
     if (nextIndex >= TIER_ORDER.length) return false
-    const nextTier = TIER_ORDER[nextIndex]
-    return this.evaluate(state.id, nextTier).blockedBy.length === 0
+    return this.evaluate(state.id, TIER_ORDER[nextIndex], state.population).blockedBy.length === 0
   }
 
   nextTier(state: SettlementGrowthState): SettlementTier | null {
@@ -61,6 +84,33 @@ export class SettlementGrowthModel {
     return this.canGrow(state) ? nextTier : null
   }
 
+  tick(state: SettlementGrowthState, delta = 1): SettlementTickResult {
+    const consumed: Record<string, number> = {}
+    const shortages: string[] = []
+    for (const [resource, rate] of Object.entries(state.consumption)) {
+      const amount = rate * delta
+      if (worldResourceEconomy.consume(resource, amount)) consumed[resource] = amount
+      else shortages.push(resource)
+    }
+
+    const shortagePenalty = Math.min(0.45, shortages.length * 0.18)
+    const nextStability = Math.max(0, Math.min(1, state.stability - shortagePenalty + (shortages.length ? 0 : 0.015 * delta)))
+    const nextPopulation = Math.max(1, Math.round(state.population * (1 + ((nextStability - 0.55) * 0.01) * delta)))
+    const nextState = this.evaluate(state.id, state.tier, nextPopulation)
+    nextState.stability = nextStability
+    nextState.resourceScore = Math.max(0, nextState.resourceScore - shortagePenalty)
+    nextState.growthRate = (nextStability - 0.55) * 0.08
+    nextState.blockedBy = [...new Set([...nextState.blockedBy, ...shortages])]
+    const nextTier = this.nextTier(nextState)
+    return {
+      state: nextState,
+      consumed,
+      shortages,
+      changed: nextPopulation !== state.population || nextStability !== state.stability,
+      nextTier,
+    }
+  }
+
   growthPath(state: SettlementGrowthState): SettlementTier[] {
     const path: SettlementTier[] = [state.tier]
     let current = state
@@ -68,7 +118,7 @@ export class SettlementGrowthModel {
       const next = this.nextTier(current)
       if (!next) break
       path.push(next)
-      current = this.evaluate(state.id, next)
+      current = this.evaluate(state.id, next, state.population)
     }
     return path
   }
