@@ -1077,7 +1077,7 @@ export class InfiniteWorldRenderer {
     return this.worldAssetRuntime.load(assetId, sourceUrl, {
       semanticEntryId,
       x,
-      y: this.generator.getHeightAt?.(x, z) ?? 0,
+      y: this.generator.sampleHeight(x, z),
       z,
       scale,
     })
