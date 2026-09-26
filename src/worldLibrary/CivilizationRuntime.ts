@@ -55,6 +55,7 @@ export type CivilizationGraphEdge = {
 export type CivilizationClaimGraph = {
   claims: CivilizationClaimNode[]
   evidence: CivilizationEvidenceLink[]
+  causalEvents: CausalEvent[]
   edges: CivilizationGraphEdge[]
 }
 
@@ -323,9 +324,11 @@ export class CivilizationRuntime {
   buildClaimGraph(outcomes: CivilizationExperimentOutcome[]): CivilizationClaimGraph {
     const claims: CivilizationClaimNode[] = []
     const evidence: CivilizationEvidenceLink[] = []
+    const causalEvents: CausalEvent[] = []
     const edges: CivilizationGraphEdge[] = []
     for (const outcome of outcomes) {
       for (const item of outcome.evidence) evidence.push(item)
+      for (const event of (this.branchCausalEvents.get(outcome.branchId) ?? [])) if (!causalEvents.some((existing) => existing.id === event.id)) causalEvents.push(event)
       const final = this.branchSnapshot(outcome.branchId)
       if (!final) continue
       const claimId = `claim:${outcome.scenarioId}:${final.tick}`
@@ -358,8 +361,11 @@ export class CivilizationRuntime {
       for (const factor of outcome.causalAttribution) {
         edges.push({ from: claimId, to: `factor:${factor.factor}`, relation: 'derived-from' })
       }
+      for (const event of (this.branchCausalEvents.get(outcome.branchId) ?? []).slice(-8)) {
+        edges.push({ from: claimId, to: event.id, relation: 'caused-by' })
+      }
     }
-    return { claims, evidence, edges }
+    return { claims, evidence, causalEvents, edges }
   }
 
   serializeState() {
