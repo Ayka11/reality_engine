@@ -84,7 +84,7 @@ export function analyzeHypotheses(
         observedDirections,
         replicationConsistency: null,
         generalizationConsistency: null,
-        status: 'insufficient_data',
+        status: 'insufficient_data' as const,
         notes,
       }
     }
