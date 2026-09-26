@@ -641,8 +641,11 @@ export function bootstrapInfiniteWorld() {
     }
 
     const setPosition = (newPos: DockPosition) => {
-      dockPos = newPos
-      localStorage.setItem('infinity_dock_pos', newPos)
+      // Keep World Tools in the upper workspace; floating/side placements
+      // made the narrow sidebar compete with the actual World panel.
+      dockPos = 'top'
+      localStorage.setItem('infinity_dock_pos', 'top')
+      if (newPos !== 'top') return render()
       render()
     }
     ;(window as any).setInfinityDockPosition = setPosition
