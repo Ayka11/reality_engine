@@ -1,4 +1,4 @@
-import type { ExperimentProtocol } from './ExperimentProtocol'
+import type { ExperimentPlan } from './ExperimentMatrix'
 import type { ExperimentSnapshot } from './ExperimentRunner'
 import { buildExperimentMatrix, type ExperimentMatrix } from './ExperimentMatrix'
 import { ExperimentBatchExecutor } from './ExperimentBatchExecutor'
@@ -12,7 +12,7 @@ export type CrossConditionStudyOptions = {
 }
 
 export type CrossConditionStudyResult = {
-  plans: ExperimentProtocol[]
+  plans: ExperimentPlan[]
   snapshots: ExperimentSnapshot[]
   completed: number
   failed: number
