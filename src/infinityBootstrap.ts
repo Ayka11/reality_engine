@@ -695,7 +695,8 @@ export function bootstrapInfiniteWorld() {
           libraryField('variants', selected.variants) + libraryField('simulationHooks', selected.simulationHooks) +
           '<div style="margin-top:5px;"><span style="color:#8f88d8;">conditions:</span> ' + (selected.conditions ? escLibrary(JSON.stringify(selected.conditions)) : 'none') + '</div>' +
           '<div style="margin-top:5px;"><span style="color:#8f88d8;">rules:</span> ' + (related.length ? related.map(rule => escLibrary(rule.from + ' — ' + rule.relation + ' → ' + rule.to)).join(' · ') : 'none registered') + '</div>' +
-          '<div style="margin-top:6px;padding:5px;border:1px solid rgba(124,111,205,.22);border-radius:5px;"><span style="color:#8f88d8;">environment:</span> ' + (envCheck ? escLibrary(envCheck.status) + ' · score ' + Number(envCheck.score).toFixed(2) + ' · ' + escLibrary((envCheck.reasons || []).join(', ')) : 'UNKNOWN') + '</div>' +
+          '<div style="margin-top:6px;padding:5px;border:1px solid rgba(124,111,205,.22);border-radius:5px;"><span style="color:#8f88d8;">environment:</span> ' + (envCheck ? escLibrary(envCheck.status) + ' · score ' + Number(envCheck.score).toFixed(2) + ' · ' + escLibrary((envCheck.reasons || []).join(', ')) : 'UNKNOWN') + '</div>' + +
+          '<div style="margin-top:5px;"><span style="color:#8f88d8;">generation:</span> ' + (selected ? escLibrary((window as any).worldLibraryGenerationPlan?.(selected.id)?.environmentStatus || 'UNKNOWN') : 'UNKNOWN') + '</div>' +
           '<button class="brush-btn libraryGenerate" data-library-id="' + escLibrary(selected.id) + '" style="width:100%;margin-top:7px;font-size:8.5px;">⚡ Generate This Element</button>' :
           '<div style="color:var(--sub);">Select an element to inspect its semantic definition and rules.</div>') +
         '</div></div>'
