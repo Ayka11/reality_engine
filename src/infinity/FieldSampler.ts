@@ -25,7 +25,11 @@ export type WorldContextSample = ScientificFieldSample & {
  * This is a computational model interface, not a claim of physical validation.
  */
 export class FieldSampler {
-  constructor(readonly generator: WorldGenerator) {}
+  constructor(public generator: WorldGenerator) {}
+
+  setGenerator(generator: WorldGenerator) {
+    this.generator = generator
+  }
 
   sample(x: number, y: number, z: number): ScientificFieldSample {
     return this.generator.sampleField(x, y, z)
