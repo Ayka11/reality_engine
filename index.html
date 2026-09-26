@@ -1614,12 +1614,19 @@ function generateWorld(){
     setRenderMode('3d',document.getElementById('tab3d'));
   }
   // Apply the same composer choice to the visible Infinite World, not only the legacy field buffer.
-  if(window.infinityApplyComposer) window.infinityApplyComposer(compSel);
-  closeComp();
-  drawGrid();
-  log(`✦ Reality synthesized: Φ=${compSel.phi} · ${compSel.fields} · C=${compSel.complexity}`);
-  playing=true;
-  document.getElementById('pb').textContent='⏸ Pause';
+  try {
+    if(window.infinityApplyComposer) window.infinityApplyComposer(compSel);
+    if(window.toggleWorldToolbar) window.toggleWorldToolbar(true);
+    log(`✦ Reality synthesized: Φ=${compSel.phi} · ${compSel.fields} · C=${compSel.complexity} · Infinite World updated`);
+  } catch (err) {
+    console.error('[Reality Engine] Infinite World generation failed', err);
+    log(`⚠ Legacy world generated, but Infinite World update failed: ${String(err)}`);
+  } finally {
+    closeComp();
+    drawGrid();
+    playing=true;
+    document.getElementById('pb').textContent='⏸ Pause';
+  }
 }
 
 function quickGenerateWorld(){
