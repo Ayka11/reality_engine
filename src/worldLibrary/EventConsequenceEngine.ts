@@ -38,6 +38,7 @@ export class EventConsequenceEngine {
     const actions: ConsequenceAction[] = []
 
     if (event.type === 'resource-crisis') {
+      if (event.details.includes('drought')) actions.push({ type: 'production-efficiency', multiplier: 0.75, durationTicks: 4, reason: 'drought reduces production efficiency' })
       actions.push(
         { type: 'growth-modifier', multiplier: 0.65, durationTicks: 3, reason: 'resource crisis reduces settlement growth' },
         { type: 'stability-shift', delta: -0.08, reason: 'resource shortage reduces stability' },
@@ -45,6 +46,7 @@ export class EventConsequenceEngine {
     }
 
     if (event.type === 'growth') {
+      if (event.details.includes('environmental instability')) actions.push({ type: 'stability-shift', delta: -0.07, reason: 'environmental instability reduces social stability' })
       if ((event.severity ?? 1) >= 0.8) actions.push({ type: 'stability-shift', delta: -0.03, reason: 'high-severity growth pressure increases social instability' })
       actions.push({ type: 'growth-modifier', multiplier: 0.8, durationTicks: 2, reason: 'growth decline propagates through the causal chain' })
     }
