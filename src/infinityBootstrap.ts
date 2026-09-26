@@ -72,7 +72,8 @@ export function bootstrapInfiniteWorld() {
     world.render(0)
     return { id: entry.id, visual, objects: world.getRuntimeStats().objects }
   }
-  ;(window as any).worldLibraryGenerationPlan = (id: string) => worldLibraryGenerationPlanner.plan(id)
+  ;(window as any).worldCurrentEnvironment = () => world.getWorldEnvironment()
+  ;(window as any).worldLibraryGenerationPlan = (id: string) => worldLibraryGenerationPlanner.plan(id, world.getWorldEnvironment())
   ;(window as any).worldLibraryEnvironmentCheck = (id: string, environment: any) => {
     const entry = resolveWorldLibraryEntry(id)
     if (!entry) return null
@@ -90,7 +91,7 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldLibraryGenerate = (id: string) => {
     const entry = resolveWorldLibraryEntry(id)
     if (!entry) return null
-    const plan = worldLibraryGenerationPlanner.plan(id)
+    const plan = worldLibraryGenerationPlanner.plan(id, world.getWorldEnvironment())
     if (!plan) return null
     if (plan.environmentStatus === 'BLOCKED') return { id, generated: false, blockedBy: ['environment'], plan }
     const blocked = plan.conflicts.filter((conflict) => worldLibrary.has(conflict))
