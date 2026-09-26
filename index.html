@@ -2131,6 +2131,7 @@ function loop(ts){
   }
   _tickParticles();
   drawGrid();
+  if(currentRenderMode==='field3d'&&window.renderField3D)window.renderField3D();
   if(tick%3===0&&selX>=0){explainCell(selX,selY);drawHist();}
   if(tick%15===0){updateHealth();}
   if(playing&&window._composerGrowth&&tick>0){
@@ -2177,7 +2178,7 @@ function loop(ts){
 restoreUIState();
 applyPreset('proto');
 updateHealth();
-const _modeTabMap={'3d':'tab3d','2d':'tab2d','hybrid':'tabHybrid','metrics':'tabMetrics'};
+const _modeTabMap={'3d':'tab3d','field3d':'tabField3d','2d':'tab2d','hybrid':'tabHybrid','metrics':'tabMetrics'};
 setRenderMode(currentRenderMode,document.getElementById(_modeTabMap[currentRenderMode]||'tab3d'));
 setLayer(layer);
 setIconPanel(currentPanel);
