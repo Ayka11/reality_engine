@@ -1261,6 +1261,29 @@ export function bootstrapInfiniteWorld() {
       document.getElementById('vTabPersist')?.addEventListener('click', () => { activeTab = 'persist'; render(); })
       document.getElementById('vTabDisp')?.addEventListener('click', () => { activeTab = 'display'; render(); })
 
+      document.getElementById('vTabLibrary')?.addEventListener('click', () => { activeTab = 'library'; render(); })
+      container.querySelectorAll('.librarySelect').forEach((button) => {
+        button.addEventListener('click', () => {
+          librarySelected = button.getAttribute('data-library-id') || ''
+          render()
+        })
+      })
+      container.querySelectorAll('.libraryPlace').forEach((button) => {
+        button.addEventListener('click', () => {
+          const id = button.getAttribute('data-library-id')
+          if (id) (window as any).worldLibraryPlace?.(id)
+          render()
+        })
+      })
+      document.getElementById('worldLibrarySearch')?.addEventListener('input', (event) => {
+        libraryQuery = (event.target as HTMLInputElement).value
+        render()
+      })
+      document.getElementById('worldLibraryCategory')?.addEventListener('change', (event) => {
+        libraryCategory = (event.target as HTMLSelectElement).value
+        render()
+      })
+
       // Tool switches
       document.getElementById('topToolNav')?.addEventListener('click', () => (window as any).builderSetTool('navigate'))
       document.getElementById('topToolSel')?.addEventListener('click', () => (window as any).builderSetTool('select'))
