@@ -103,12 +103,15 @@ export class SettlementGrowthModel {
     }
 
     const shortagePenalty = Math.min(0.45, shortages.length * 0.18)
-    const nextStability = Math.max(0, Math.min(1, state.stability - shortagePenalty + (shortages.length ? 0 : 0.015 * delta)))
+    const pressure = Math.min(1.5, state.population / Math.max(1, state.infrastructureCapacity))
+    const pressurePenalty = Math.max(0, pressure - 0.72) * 0.22
+    const capacityRelief = Math.max(0, state.infrastructureCapacity - state.population) / Math.max(1, state.infrastructureCapacity) * 0.02
+    const nextStability = Math.max(0, Math.min(1, state.stability - shortagePenalty - pressurePenalty + (shortages.length ? 0 : capacityRelief * delta)))
     const nextPopulation = Math.max(1, Math.round(state.population * (1 + ((nextStability - 0.55) * 0.01) * delta)))
     const nextState = this.evaluate(state.id, state.tier, nextPopulation)
     nextState.stability = nextStability
     nextState.resourceScore = Math.max(0, nextState.resourceScore - shortagePenalty)
-    nextState.growthRate = (nextStability - 0.55) * 0.08
+    nextState.growthRate = Math.max(-0.08, Math.min(0.08, (nextStability - 0.55) * 0.08 - pressurePenalty * 0.08))
     nextState.blockedBy = [...new Set([...nextState.blockedBy, ...shortages])]
     const nextTier = this.nextTier(nextState)
     return {
