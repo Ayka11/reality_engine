@@ -676,7 +676,8 @@ export function bootstrapInfiniteWorld() {
       const entries = worldLibrary.query({ category: libraryCategory || undefined, search: libraryQuery || undefined }).slice(0, 18)
       const selected = librarySelected ? worldLibrary.get(librarySelected) : undefined
       const related = selected ? worldRuleGraph.related(selected.id) : []
-      const envCheck = selected ? (window as any).worldLibraryEnvironmentCheck?.(selected.id, { temperature: 20, moisture: 0.5, elevation: 0, slope: 0, radiation: 0, stability: 1 }) : null
+      const currentEnvironment = (window as any).worldCurrentEnvironment?.() || null
+      const envCheck = selected && currentEnvironment ? (window as any).worldLibraryEnvironmentCheck?.(selected.id, currentEnvironment) : null
       return '<div style="width:100%;display:grid;grid-template-columns:minmax(240px,1fr) minmax(300px,1.4fr);gap:7px;max-height:270px;overflow:auto;">' +
         '<div style="display:flex;flex-direction:column;gap:3px;">' +
         entries.map((entry) => '<div style="padding:5px;border:1px solid ' + (librarySelected === entry.id ? 'rgba(124,111,205,.65)' : 'rgba(255,255,255,.07)') + ';border-radius:5px;background:rgba(8,9,17,.55);">' +
