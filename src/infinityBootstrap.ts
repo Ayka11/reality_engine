@@ -719,17 +719,10 @@ export function bootstrapInfiniteWorld() {
             <span style="color: var(--sub);">·</span>
             <span style="font-family: monospace; color: #40c080;">${state.tool.toUpperCase()}${state.tool === 'place' ? ` (${state.kind})` : ''}</span>
             <button id="dockTriggerOpen" style="cursor: pointer; background: #1a1830; border: 0.5px solid var(--accent); color: #a09af0; border-radius: 12px; padding: 2px 10px; font-size: 10px; font-weight: 500;">▾ Open</button>
-            <div style="display: flex; gap: 2px; margin-left: 2px;">
-              <button id="minDockLeft" style="cursor: pointer; background: ${dockPos === 'left' ? '#252542' : 'transparent'}; border: 0.5px solid var(--border); color: var(--sub); border-radius: 4px; padding: 1px 5px; font-size: 8.5px;" title="Dock to Left">◧</button>
-              <button id="minDockTop" style="cursor: pointer; background: ${dockPos === 'top' ? '#252542' : 'transparent'}; border: 0.5px solid var(--border); color: var(--sub); border-radius: 4px; padding: 1px 5px; font-size: 8.5px;" title="Dock to Top">⬒</button>
-              <button id="minDockRight" style="cursor: pointer; background: ${dockPos === 'right' ? '#252542' : 'transparent'}; border: 0.5px solid var(--border); color: var(--sub); border-radius: 4px; padding: 1px 5px; font-size: 8.5px;" title="Dock to Right">◨</button>
-            </div>
+            <span style="font-size: 8.5px; color: var(--sub);">TOP WORKSPACE</span>
           </div>
         `
         document.getElementById('dockTriggerOpen')?.addEventListener('click', () => setOpen(true))
-        document.getElementById('minDockLeft')?.addEventListener('click', () => setPosition('left'))
-        document.getElementById('minDockTop')?.addEventListener('click', () => setPosition('top'))
-        document.getElementById('minDockRight')?.addEventListener('click', () => setPosition('right'))
 
         const miniHandle = document.getElementById('miniDragHandle')
         if (miniHandle) {
@@ -808,13 +801,7 @@ export function bootstrapInfiniteWorld() {
             <span style="font-size: 9px; color: #8e8aa8; font-family: monospace;">${stats.loadedChunks} chunks · ${state.objectCount} obj · (X:${stats.camera.worldX}, Z:${stats.camera.worldZ})</span>
           </div>
           <div style="display: flex; align-items: center; gap: 4px;">
-            <!-- Dock Position Switchers -->
-            <div style="display: flex; background: #0a0a14; padding: 1px 3px; border-radius: 6px; border: 0.5px solid var(--border);">
-              <button id="posLeft" style="cursor: pointer; background: ${dockPos === 'left' ? '#22203a' : 'transparent'}; border: none; color: ${dockPos === 'left' ? '#a09af0' : 'var(--sub)'}; padding: 2px 5px; font-size: 9px; border-radius: 4px;" title="Dock Left">◧ Left</button>
-              <button id="posTop" style="cursor: pointer; background: ${dockPos === 'top' ? '#22203a' : 'transparent'}; border: none; color: ${dockPos === 'top' ? '#a09af0' : 'var(--sub)'}; padding: 2px 5px; font-size: 9px; border-radius: 4px;" title="Dock Top">⬒ Top</button>
-              <button id="posRight" style="cursor: pointer; background: ${dockPos === 'right' ? '#22203a' : 'transparent'}; border: none; color: ${dockPos === 'right' ? '#a09af0' : 'var(--sub)'}; padding: 2px 5px; font-size: 9px; border-radius: 4px;" title="Dock Right">◨ Right</button>
-              <button id="posFloat" style="cursor: pointer; background: ${dockPos === 'float' ? '#22203a' : 'transparent'}; border: none; color: ${dockPos === 'float' ? '#a09af0' : 'var(--sub)'}; padding: 2px 5px; font-size: 9px; border-radius: 4px;" title="Float & Drag">❐ Float</button>
-            </div>
+            <span style="font-size: 8.5px; color: var(--sub); padding: 2px 5px;">TOP WORKSPACE</span>
             <!-- Close / Collapse Button -->
             <button id="dockCloseBtn" style="cursor: pointer; background: #1a1828; border: 0.5px solid var(--border); color: var(--sub); border-radius: 6px; padding: 2px 8px; font-size: 10px;" title="Collapse Toolbar">▲ Close</button>
           </div>
