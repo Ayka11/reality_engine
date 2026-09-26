@@ -293,18 +293,22 @@ export class CivilizationRuntime {
   serializeState() {
     return {
       branches: Array.from(this.branches.entries()).map(([branchId, history]) => ({ branchId, history })),
-      branchStates: Array.from(this.branchStates.entries()).map(([branchId, state]) => ({ branchId, state }))
+      branchStates: Array.from(this.branchStates.entries()).map(([branchId, state]) => ({ branchId, state })),
+      experiments: Array.from(this.experiments.values())
     }
   }
 
   restoreState(snapshot: ReturnType<CivilizationRuntime['serializeState']>) {
     this.branches.clear()
     this.branchStates.clear()
+    this.experiments.clear()
     for (const entry of snapshot.branches ?? []) this.branches.set(entry.branchId, entry.history)
     for (const entry of snapshot.branchStates ?? []) this.branchStates.set(entry.branchId, entry.state)
+    for (const experiment of snapshot.experiments ?? []) this.experiments.set(experiment.experimentId, experiment)
     return {
       branchCount: this.branches.size,
       stateCount: this.branchStates.size,
+      experimentCount: this.experiments.size,
       restored: this.branches.size === this.branchStates.size
     }
   }
