@@ -777,6 +777,19 @@ export function bootstrapInfiniteWorld() {
     }
 
     const stats = world.getRuntimeStats()
+    ;(window as any).lastInfinityGeneration = {
+      config: { phi, fields, complexity, spacetime },
+      seed: newSeed,
+      environment: worldEnvironment,
+      generationPlan: {
+        biome: generationPlan.biome?.id ?? null,
+        plannedElements: generationPlan.elements.length,
+        appliedElements: appliedPlan.applied.length,
+        skippedElements: appliedPlan.skipped.length,
+      },
+      stats,
+      generatedAt: new Date().toISOString(),
+    }
     return {
       ...stats.world,
       objects: stats.objects,
