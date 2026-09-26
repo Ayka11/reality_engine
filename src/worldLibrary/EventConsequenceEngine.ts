@@ -8,6 +8,8 @@ export type ConsequenceAction =
   | { type: 'production-profile'; civilization: CivilizationType; enabledNodes: string[]; reason: string }
   | { type: 'visual-transition'; civilization?: CivilizationType; tier?: string; visualKinds: string[]; reason: string }
 
+export type CausalEvent = WorldTimelineEvent & { parentEventId?: string; depth?: number }
+
 export type EventConsequence = {
   eventId: string
   eventType: WorldTimelineEvent['type']
@@ -73,6 +75,27 @@ export class EventConsequenceEngine {
 
   deriveMany(events: WorldTimelineEvent[]) {
     return events.map((event) => this.derive(event))
+  }
+
+  deriveCausalEvents(events: CausalEvent[], maxDepth = 4): CausalEvent[] {
+    const queue = [...events]
+    const result: CausalEvent[] = []
+    const seen = new Set<string>()
+    while (queue.length) {
+      const event = queue.shift()!
+      const depth = event.depth ?? 0
+      if (seen.has(event.id) || depth > maxDepth) continue
+      seen.add(event.id)
+      result.push(event)
+      if (event.type === 'resource-crisis' && depth < maxDepth) {
+        queue.push({ id: event.id + ':growth-decline', year: event.year, type: 'growth', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Growth decline caused by resource crisis' })
+      } else if (event.type === 'growth' && depth < maxDepth) {
+        queue.push({ id: event.id + ':pressure', year: event.year, type: 'infrastructure-expansion', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Population pressure requires infrastructure response' })
+      } else if (event.type === 'infrastructure-expansion' && depth < maxDepth) {
+        queue.push({ id: event.id + ':civic-change', year: event.year, type: 'civilization-change', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Infrastructure change alters civilization organization' })
+      }
+    }
+    return result
   }
 }
 
