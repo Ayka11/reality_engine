@@ -1140,6 +1140,7 @@ export class InfiniteWorldRenderer {
     seed = 1,
   ) {
     const plan = biomePopulationEngine.plan(environment)
+    worldResourceEconomy.seedFromBiome(plan.biomeId, Math.max(0.25, density))
     const results: Array<{ semanticEntryId: string; layer: string; count: number; mode: string }> = []
 
     for (const rule of plan.rules) {
