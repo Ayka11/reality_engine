@@ -20,6 +20,7 @@ import { PhysicsInteractionLog } from '../infinity/PhysicsInteractionLog'
 import { RuntimeDiagnostics } from '../infinity/RuntimeDiagnostics'
 import { createExperimentProtocol } from '../infinity/ExperimentProtocol'
 import { ExperimentRunner, type ExperimentSnapshot } from '../infinity/ExperimentRunner'
+import { compareExperiments, type ExperimentComparison } from '../infinity/ExperimentComparison'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -2075,6 +2076,10 @@ export class InfiniteWorldRenderer {
     this.recordExperimentResult('physicsInteractions', this.physicsInteractionLog.recent(500))
     this.recordExperimentResult('decisionGraph', this.decisionGraph.snapshot())
     return this.experimentRunner.finish(status)
+  }
+
+  compareExperiments(left: ExperimentSnapshot, right: ExperimentSnapshot): ExperimentComparison {
+    return compareExperiments(left, right)
   }
 
   getRuntimeDiagnostics() {
