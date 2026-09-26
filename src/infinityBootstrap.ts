@@ -93,6 +93,8 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldCivilizationBranches = () => civilizationRuntime.branchesList()
   ;(window as any).worldCompareCivilizationBranches = (branchA: string, branchB: string) => civilizationRuntime.compareBranches(branchA, branchB)
   ;(window as any).worldForkCivilizationBranch = (branchId: string, override: any) => civilizationRuntime.forkBranch(branchId, override)
+  ;(window as any).worldTickCivilizationBranch = (branchId: string, delta = 1) => civilizationRuntime.tickBranch(branchId, delta)
+  ;(window as any).worldCivilizationBranchState = (branchId: string) => civilizationRuntime.branchState(branchId)
   ;(window as any).worldEnvironmentalImpact = (id: string) => productionInfrastructureRuntime.get(id)?.environmentalImpact ?? null
   ;(window as any).worldEnvironmentalImpactHistory = (id: string) => productionInfrastructureRuntime.get(id)?.environmentalImpactHistory ?? []
   ;(window as any).worldTimelineAll = () => productionInfrastructureRuntime.allTimelines()
