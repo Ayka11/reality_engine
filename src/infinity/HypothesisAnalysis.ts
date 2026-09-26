@@ -124,7 +124,7 @@ export function analyzeHypotheses(
       observedDirections,
       replicationConsistency,
       generalizationConsistency,
-      status: 'analyzable',
+      status: 'analyzable' as const,
       notes,
     }
   })
