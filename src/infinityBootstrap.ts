@@ -100,6 +100,7 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldExperimentCausalAttribution = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta).outcomes.map((outcome) => ({ scenarioId: outcome.scenarioId, causalAttribution: outcome.causalAttribution }))
   ;(window as any).worldExperimentEvidence = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta).outcomes.map((outcome) => ({ scenarioId: outcome.scenarioId, evidence: outcome.evidence }))
   ;(window as any).worldExperimentClaimGraph = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.buildClaimGraph(civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta).outcomes)
+  ;(window as any).worldComparativeExperimentClaimGraph = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.buildComparativeClaimGraph(civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta).outcomes)
   ;(window as any).worldValidateClaimGraph = (graph: any) => civilizationRuntime.validateClaimGraph(graph)
   ;(window as any).worldCivilizationRuntimeSnapshot = () => civilizationRuntime.serializeState()
   ;(window as any).worldRestoreCivilizationRuntime = (snapshot: any) => civilizationRuntime.restoreState(snapshot)
