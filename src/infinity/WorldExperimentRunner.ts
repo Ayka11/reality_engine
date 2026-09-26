@@ -38,6 +38,9 @@ export function runWorldExperiment(
   const generator = new WorldGenerator(protocol.world.seed)
   const sampler = new FieldSampler(generator)
   const provider = new GeneratorFieldProvider(generator)
+  if (protocol.field.providerId !== provider.id || protocol.field.providerVersion !== provider.version) {
+    throw new Error(`World experiment provider ${protocol.field.providerId}@${protocol.field.providerVersion} is not available in this runner`)
+  }
   sampler.setProvider(provider)
 
   const decisionWeights: DecisionWeights = protocol.decision.weights
