@@ -14,6 +14,7 @@ import { FieldSampler } from '../infinity/FieldSampler'
 import { WorldDecisionLayer, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { DecisionGraph } from '../infinity/DecisionGraph'
 import { WorldObjectSpatialIndex } from '../infinity/WorldObjectSpatialIndex'
+import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -43,6 +44,7 @@ export class InfiniteWorldRenderer {
   decisionLayer: WorldDecisionLayer
   readonly decisionGraph = new DecisionGraph()
   readonly objectSpatialIndex = new WorldObjectSpatialIndex()
+  readonly fieldPhysics = new FieldModulatedPhysics()
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -1913,32 +1915,35 @@ export class InfiniteWorldRenderer {
           const dist = Math.sqrt(distSq) || 0.1
           const factor = (1 - dist / rad)
 
+          const field = this.fieldSampler.sample(worldX, py, worldZ)
+          const modulation = this.fieldPhysics.modulation(field)
+
           if (obj.kind === 'gravity_well') {
             // Gravitational singularity: pull inward & spin accretion
-            const pull = factor * 48 * dt
+            const pull = factor * modulation.gravity * dt
             vx += (dx / dist) * pull - (dz / dist) * pull * 0.85
             vz += (dz / dist) * pull + (dx / dist) * pull * 0.85
             col[idx] = 0.85; col[idx + 1] = 0.25; col[idx + 2] = 1.0 // purple accretion
           } else if (obj.kind === 'entropy_sink') {
             // Thermodynamic damper: freeze velocity and turn cryogenic
-            vx *= 0.82
-            vy *= 0.82
-            vz *= 0.82
+            vx *= modulation.entropyDamping
+            vy *= modulation.entropyDamping
+            vz *= modulation.entropyDamping
             col[idx] = 0.25; col[idx + 1] = 0.9; col[idx + 2] = 1.0 // ice cyan
           } else if (obj.kind === 'quantum_emitter') {
             // Coherence core: vertical resonance beam lift
-            vy += factor * 35 * dt
+            vy += factor * modulation.quantumLift * dt
             col[idx] = 0.15; col[idx + 1] = 1.0; col[idx + 2] = 0.45 // radiant emerald
           } else if (obj.kind === 'force_field') {
             // Barrier: deflect outward
-            const push = factor * 40 * dt
+            const push = factor * modulation.forcePush * dt
             vx -= (dx / dist) * push
             vz -= (dz / dist) * push
             col[idx] = 0.0; col[idx + 1] = 0.85; col[idx + 2] = 1.0 // barrier cyan
           } else if (obj.kind === 'metalaw') {
             // MetaLaw node: harmonic gyroscopic orbital flow
-            vx += -(dz / dist) * factor * 22 * dt
-            vz += (dx / dist) * factor * 22 * dt
+            vx += -(dz / dist) * factor * modulation.metaLawOrbit * dt
+            vz += (dx / dist) * factor * modulation.metaLawOrbit * dt
             col[idx] = 1.0; col[idx + 1] = 0.88; col[idx + 2] = 0.2 // golden law
           }
         }
