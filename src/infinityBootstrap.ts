@@ -1017,7 +1017,7 @@ export function bootstrapInfiniteWorld() {
                     ${worldLibrary.categories().map((cat:string)=>`<option value="${cat}" ${libraryCategory===cat?'selected':''}>${cat}</option>`).join('')}
                   </select>
                 </div>
-                <div style="font-size:8.5px;color:var(--sub);margin-bottom:5px;">${worldLibrary.stats().entries} entries · semantic catalogue · Rule Graph</div>
+                <div style="font-size:8.5px;color:var(--sub);margin-bottom:5px;">${worldLibrary.stats().total} entries · semantic catalogue · Rule Graph</div>
                 <div style="max-height:210px;overflow:auto;display:flex;flex-direction:column;gap:4px;">
                   ${worldLibrary.query({ category: libraryCategory || undefined, search: libraryQuery || undefined }).slice(0,24).map((entry) => `
                     <div style="padding:6px 7px;border:1px solid ${librarySelected===entry.id?'rgba(124,111,205,.65)':'rgba(255,255,255,.07)'};border-radius:6px;background:rgba(8,9,17,.55);">
