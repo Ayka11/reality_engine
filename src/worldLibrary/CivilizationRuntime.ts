@@ -33,6 +33,29 @@ export type CivilizationExperimentScenario = {
   override: CounterfactualOverride
 }
 
+export type CivilizationClaimStatus = 'supported' | 'contradicted' | 'unresolved'
+
+export type CivilizationClaimNode = {
+  id: string
+  claim: string
+  status: CivilizationClaimStatus
+  confidence: number
+  branchId: string
+  tick: number
+}
+
+export type CivilizationGraphEdge = {
+  from: string
+  to: string
+  relation: 'supported-by' | 'contradicted-by' | 'derived-from' | 'caused-by'
+}
+
+export type CivilizationClaimGraph = {
+  claims: CivilizationClaimNode[]
+  evidence: CivilizationEvidenceLink[]
+  edges: CivilizationGraphEdge[]
+}
+
 export type CivilizationEvidenceLink = {
   branchId: string
   tick: number
@@ -222,6 +245,23 @@ export class CivilizationRuntime {
   }
 
   branchState(branchId: string) { return this.branchStates.get(branchId) ?? null }
+
+  buildClaimGraph(outcomes: CivilizationExperimentOutcome[]): CivilizationClaimGraph {
+    const claims: CivilizationClaimNode[] = []
+    const evidence: CivilizationEvidenceLink[] = []
+    const edges: CivilizationGraphEdge[] = []
+    for (const outcome of outcomes) {
+      for (const item of outcome.evidence) evidence.push(item)
+      const final = this.branchSnapshot(outcome.branchId)
+      if (!final) continue
+      const claimId = `claim:${outcome.scenarioId}:${final.tick}`
+      const confidence = Math.max(0, Math.min(1, 0.5 + Math.abs(outcome.divergence) * 0.5))
+      claims.push({ id: claimId, claim: `${outcome.scenarioId} produced population change ${(outcome.populationChange * 100).toFixed(1)}% with final civilization ${final.type}.`, status: outcome.civilizationChanged ? 'supported' : 'unresolved', confidence, branchId: final.branchId, tick: final.tick })
+      for (const item of outcome.evidence) edges.push({ from: claimId, to: `${item.branchId}:${item.tick}`, relation: 'supported-by' })
+      for (const factor of outcome.causalAttribution) edges.push({ from: claimId, to: `factor:${factor.factor}`, relation: 'derived-from' })
+    }
+    return { claims, evidence, edges }
+  }
 
   runExperiment(experimentId: string, scenarios: CivilizationExperimentScenario[], ticks = 10, delta = 1): CivilizationExperimentResult {
     const branches: CivilizationExperimentResult['branches'] = []
