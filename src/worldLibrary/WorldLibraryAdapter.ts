@@ -34,8 +34,25 @@ const VISUAL_TO_OBJECT: Record<string, WorldObjectKind> = {
   'resonance.node': 'metalaw',
 };
 
+export type PopulationRuntimeKind = 'visual' | 'biological' | 'resource' | 'infrastructure' | 'civilization'
+
+export function populationRuntimeKind(entry: WorldLibraryEntry): PopulationRuntimeKind {
+  if (entry.category === 'fauna') return 'biological'
+  if (entry.category === 'resource') return 'resource'
+  if (entry.category === 'infrastructure' || entry.category === 'structure' || entry.category === 'settlement') return 'infrastructure'
+  if (entry.category === 'civilization') return 'civilization'
+  return 'visual'
+}
+
 export function visualKindToWorldObject(entry: WorldLibraryEntry): WorldObjectKind | null {
   return VISUAL_TO_OBJECT[entry.visualKind] ?? null;
+}
+
+export function resourceVisualKind(entry: WorldLibraryEntry): WorldObjectKind | null {
+  if (entry.id === 'resource.wood') return 'tree'
+  if (entry.id === 'resource.stone' || entry.id === 'resource.iron') return 'rock'
+  if (entry.id === 'resource.crystal') return 'crystal'
+  return null
 }
 
 export function findWorldLibraryEntries(
