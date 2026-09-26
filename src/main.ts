@@ -1580,12 +1580,31 @@ function renderComposerStep(): void {
 
 function _composerGenerate(): void {
   if (!worldComposer) return;
+  const selection = {
+    phi: worldComposer.selection.phi ?? 'Harmonic',
+    fields: worldComposer.selection.fields ?? 'Balanced',
+    complexity: worldComposer.selection.complexity ?? 'Emergent',
+    spacetime: worldComposer.selection.spacetime ?? 'Standard',
+  };
+
   const msg = worldComposer.generate();
+
+  const win = window as unknown as Record<string, unknown>;
+  const applyComposer = win.infinityApplyComposer;
+  if (typeof applyComposer === 'function') {
+    (applyComposer as (config: typeof selection) => unknown)(selection);
+  }
+
   const modal = document.getElementById('composerModal');
   if (modal) modal.style.display = 'none';
   const log = document.getElementById('scriptLog');
-  if (log) log.textContent = msg;
+  if (log) log.textContent = `${msg} · Infinite World updated`;
   playing = true;
+
+  const tab3d = document.getElementById('tab3d');
+  if (typeof win.setRenderMode === 'function') {
+    (win.setRenderMode as (mode: string, btn?: HTMLElement | null) => void)('3d', tab3d);
+  }
 }
 
 const _win = window as unknown as Record<string, unknown>;
