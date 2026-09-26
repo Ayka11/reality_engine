@@ -1633,9 +1633,11 @@ function generateWorld(){
   try {
     const applyComposer=ensureInfiniteWorldComposer();
     if(!applyComposer) throw new Error('Infinite World composer bridge is unavailable');
-    applyComposer(compSel);
+    const result=applyComposer(compSel);
     if(window.toggleWorldToolbar) window.toggleWorldToolbar(true);
-    log(`✦ Reality synthesized: Φ=${compSel.phi} · ${compSel.fields} · C=${compSel.complexity} · Infinite World updated`);
+    const objectCount=Number(result?.objects||0);
+    const chunkCount=Number(result?.loadedChunks||0);
+    log(`✦ Reality synthesized: Φ=${compSel.phi} · ${compSel.fields} · C=${compSel.complexity} · ${objectCount} objects · ${chunkCount} chunks`);
   } catch (err) {
     console.error('[Reality Engine] Infinite World generation failed', err);
     log(`⚠ Legacy world generated, but Infinite World update failed: ${err?.message||String(err)}`);
