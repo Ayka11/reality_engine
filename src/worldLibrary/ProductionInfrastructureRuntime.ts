@@ -47,6 +47,7 @@ export type CivilizationProductionState = {
   timeline: WorldTimelineEvent[]
   consequences: EventConsequence[]
   causalChain: WorldTimelineEvent[]
+  causalQueue: Array<WorldTimelineEvent & { priority?: number; sourceEvents?: string[] }>
 }
 
 const OUTPUTS: Record<ProductionKind, { output: string; rate: number; input?: string; inputRate?: number }> = {
@@ -98,7 +99,7 @@ export class ProductionInfrastructureRuntime {
       pressure: Math.min(1, civilization.settlement.population / Math.max(1, civilization.settlement.infrastructureCapacity)),
     }
 
-    const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [], worldTime: { year: 0, scale: 'year' as WorldTimeScale, elapsed: 0 }, history: [], timeline: [{ id: civilization.id + ':founding', year: 0, type: 'founding', settlementId: civilization.id, to: civilization.settlement.tier, details: 'Civilization runtime initialized' }], consequences: [], causalChain: [] }
+    const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [], worldTime: { year: 0, scale: 'year' as WorldTimeScale, elapsed: 0 }, history: [], timeline: [{ id: civilization.id + ':founding', year: 0, type: 'founding', settlementId: civilization.id, to: civilization.settlement.tier, details: 'Civilization runtime initialized' }], consequences: [], causalChain: [], causalQueue: [] }
     this.states.set(civilization.id, state)
     return state
   }
@@ -139,6 +140,7 @@ export class ProductionInfrastructureRuntime {
     next.timeline = [...current.timeline]
     next.consequences = []
     next.causalChain = [...current.causalChain]
+    next.causalQueue = [...current.causalQueue]
     next.infrastructure.roads += expansion.addedRoads
     next.infrastructure.capacity += expansion.addedCapacity
     next.infrastructure.populationCapacity = Math.max(next.infrastructure.populationCapacity, current.infrastructure.populationCapacity + expansion.addedCapacity)
@@ -167,7 +169,9 @@ export class ProductionInfrastructureRuntime {
     }
     const previousTimelineIds = new Set(current.timeline.map((event) => event.id))
     const newEvents = next.timeline.filter((event) => !previousTimelineIds.has(event.id))
-    const causalEvents = eventConsequenceEngine.deriveCausalEvents(newEvents)
+    const mergedEvents = eventConsequenceEngine.mergeCompetingCauses(newEvents)
+    next.causalQueue = mergedEvents
+    const causalEvents = eventConsequenceEngine.deriveCausalEvents(mergedEvents)
     const consequences = eventConsequenceEngine.deriveMany(causalEvents)
     next.causalChain.push(...causalEvents.filter((event) => !current.causalChain.some((existing) => existing.id === event.id)))
     for (const consequence of consequences) {
