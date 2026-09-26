@@ -1,6 +1,5 @@
 import { worldResourceEconomy, type ResourceState } from './WorldResourceEconomy'
 import { settlementGrowthModel, SettlementGrowthState, SettlementTier } from './SettlementGrowthModel'
-import { worldResourceEconomy } from './WorldResourceEconomy'
 import { worldRuleGraph } from './registry'
 
 export type CivilizationType = 'agricultural' | 'industrial' | 'post-scarcity'
