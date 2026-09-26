@@ -1216,6 +1216,13 @@ export class InfiniteWorldRenderer {
 
   tickWorldSimulation(id: string, tier: Parameters<typeof civilizationRuntime.evaluate>[1] = 'village', delta = 1) {
     const environment = this.getWorldEnvironment()
+    const productionState = productionInfrastructureRuntime.get(id)
+    const impact = productionState?.environmentalImpact
+    if (impact) {
+      environment.moisture = Math.max(0, Math.min(1, environment.moisture + impact.moistureDelta))
+      environment.radiation = Math.max(0, Math.min(1, environment.radiation + impact.radiationDelta))
+      environment.stability = Math.max(0, Math.min(1, environment.stability + impact.stabilityDelta))
+    }
     productionInfrastructureRuntime.applyEnvironmentalState(id, environment)
     const before = productionInfrastructureRuntime.get(id)
     const civilization = civilizationRuntime.evaluate(id, tier)
