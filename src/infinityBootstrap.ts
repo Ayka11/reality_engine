@@ -12,7 +12,12 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).infiniteWorldControls = world
 
   // ── 3D Controls Bindings on window (ensures Right Panel controls always work) ───
+  const isField3DActive = () => document.getElementById('c3dField')?.style.display !== 'none'
   ;(window as any).setCameraPreset = (p: string) => {
+    if (isField3DActive() && (window as any).fieldSetCameraPreset) {
+      ;(window as any).fieldSetCameraPreset(p)
+      return
+    }
     const map: Record<string, 'orbit' | 'top' | 'front' | 'iso'> = {
       orbit: 'orbit',
       top: 'top',
@@ -28,9 +33,18 @@ export function bootstrapInfiniteWorld() {
     world.setFlyMode(false)
     world.setCameraPreset(map[p] ?? 'orbit')
   }
-  ;(window as any).setTimeOfDay = (h: number) => world.setTimeOfDay(h)
-  ;(window as any).setFogDensity = (d: number) => world.setFogDensity(d)
-  ;(window as any).setMatMode = (m: string) => world.setMaterialMode(m as 'field' | 'material' | 'height')
+  ;(window as any).setTimeOfDay = (h: number) => {
+    if (isField3DActive() && (window as any).fieldSetTimeOfDay) return (window as any).fieldSetTimeOfDay(h)
+    world.setTimeOfDay(h)
+  }
+  ;(window as any).setFogDensity = (d: number) => {
+    if (isField3DActive() && (window as any).fieldSetFogDensity) return (window as any).fieldSetFogDensity(d)
+    world.setFogDensity(d)
+  }
+  ;(window as any).setMatMode = (m: string) => {
+    if (isField3DActive() && (window as any).fieldSetMatMode) return (window as any).fieldSetMatMode(m)
+    world.setMaterialMode(m as 'field' | 'material' | 'height')
+  }
 
   // ── Camera Manipulation Shortcuts on window ───────────────────────────────
   ;(window as any).infinityZoom = (delta: number) => world.zoom(delta)
@@ -40,7 +54,10 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).infinityResetCamera = () => world.resetCameraView()
   ;(window as any).infinitySetPreset = (p: 'top' | 'front' | 'orbit' | 'iso') => world.setCameraPreset(p)
   ;(window as any).infinitySetFlyMode = (fly: boolean) => world.setFlyMode(fly)
-  ;(window as any).setShowParticles = (v: boolean) => world.setShowParticles(v)
+  ;(window as any).setShowParticles = (v: boolean) => {
+    if (isField3DActive() && (window as any).fieldSetShowParticles) return (window as any).fieldSetShowParticles(v)
+    world.setShowParticles(v)
+  }
   ;(window as any).getShowParticles = () => world.getShowParticles()
 
   ;(window as any).cinemaFlyover = (durationMs = 8000) => {
