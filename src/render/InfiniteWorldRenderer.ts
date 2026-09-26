@@ -2029,6 +2029,9 @@ export class InfiniteWorldRenderer {
       this.physicsFrameQueries,
     )
 
+    this.worldAssetRuntime.rebase(this.worldAnchor)
+    this.worldAssetRuntime.updateVisibility(this.camera, 650, 500)
+
     const lodStart = performance.now()
     this.updateTerrainLod()
     this.runtimeDiagnostics.recordTerrainLod(performance.now() - lodStart)
