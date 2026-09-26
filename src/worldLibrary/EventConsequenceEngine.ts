@@ -33,6 +33,18 @@ export class EventConsequenceEngine {
       )
     }
 
+    if (event.type === 'growth') {
+      actions.push({ type: 'growth-modifier', multiplier: 0.8, durationTicks: 2, reason: 'growth decline propagates through the causal chain' })
+    }
+
+    if (event.type === 'migration') {
+      actions.push({ type: 'stability-shift', delta: -0.05, reason: 'migration temporarily reduces settlement stability' })
+    }
+
+    if (event.type === 'infrastructure-failure') {
+      actions.push({ type: 'growth-modifier', multiplier: 0.55, durationTicks: 2, reason: 'infrastructure failure suppresses growth' })
+    }
+
     if (event.type === 'infrastructure-expansion') {
       actions.push({
         type: 'infrastructure-capacity',
@@ -92,7 +104,11 @@ export class EventConsequenceEngine {
       } else if (event.type === 'growth' && depth < maxDepth) {
         queue.push({ id: event.id + ':pressure', year: event.year, type: 'infrastructure-expansion', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Population pressure requires infrastructure response' })
       } else if (event.type === 'infrastructure-expansion' && depth < maxDepth) {
-        queue.push({ id: event.id + ':civic-change', year: event.year, type: 'civilization-change', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Infrastructure change alters civilization organization' })
+        queue.push({ id: event.id + ':civic-change', year: event.year, type: 'civilization-change', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, from: 'agricultural', to: 'industrial', details: 'Infrastructure change alters civilization organization' })
+      } else if (event.type === 'infrastructure-failure' && depth < maxDepth) {
+        queue.push({ id: event.id + ':migration', year: event.year, type: 'migration', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Population migration follows infrastructure failure' })
+      } else if (event.type === 'migration' && depth < maxDepth) {
+        queue.push({ id: event.id + ':civic-change', year: event.year, type: 'civilization-change', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, from: 'agricultural', to: 'industrial', details: 'Migration changes civilization organization' })
       }
     }
     return result
