@@ -1341,7 +1341,7 @@ export function bootstrapInfiniteWorld() {
                         <button class="pill librarySelect" data-library-id="${entry.id}" style="font-size:8px;padding:2px 6px;">Inspect</button>
                         <button class="pill libraryPlace" data-library-id="${entry.id}" style="font-size:8px;padding:2px 6px;">Add to World</button>
                       </div>
-                      ${librarySelected===entry.id ? `<div style="margin-top:5px;padding-top:4px;border-top:1px solid rgba(255,255,255,.06);font-size:7.5px;color:#9aa0b5;">Rules: ${worldRuleGraph.related(entry.id).slice(0,3).map(r=>r.relation+' → '+r.to).join(' · ') || 'none registered'}</div>` : ''}
+                      ${librarySelected===entry.id ? `<div style="margin-top:5px;padding-top:4px;border-top:1px solid rgba(255,255,255,.06);font-size:7.5px;color:#9aa0b5;">Rules: ${worldRuleGraph.outgoing(entry.id).slice(0,3).map(r=>r.relation+' → '+r.to).join(' · ') || 'none registered'}</div>` : ''}
                     </div>`).join('')}
                 </div>
               </div>
