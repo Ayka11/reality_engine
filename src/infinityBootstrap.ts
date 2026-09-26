@@ -6,7 +6,7 @@ import { productionInfrastructureRuntime } from './worldLibrary/ProductionInfras
 import { worldLibraryGenerationPlanner } from './worldLibrary/WorldLibraryGenerationPlanner'
 import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, visualKindToWorldObject, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
-import { buildCivilizationExperimentMatrix, runCivilizationInfinityBatch, type CivilizationExperimentMatrix } from './infinity'
+import { buildCivilizationExperimentMatrix, runCivilizationInfinityBatch, analyzeCrossDimensionGeneralization, type CivilizationExperimentMatrix } from './infinity'
 
 export type DockPosition = 'top' | 'left' | 'right' | 'float'
 
@@ -103,6 +103,7 @@ export function bootstrapInfiniteWorld() {
     const plans = buildCivilizationExperimentMatrix(matrix)
     return runCivilizationInfinityBatch(civilizationRuntime, plans)
   }
+  ;(window as any).worldAnalyzeExperimentGeneralization = (snapshots: any[], dimensions?: any[]) => analyzeCrossDimensionGeneralization(snapshots, dimensions)
   ;(window as any).worldAnalyzeCivilizationExperiment = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta).outcomes
   ;(window as any).worldExperimentCausalAttribution = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta).outcomes.map((outcome) => ({ scenarioId: outcome.scenarioId, causalAttribution: outcome.causalAttribution }))
   ;(window as any).worldExperimentEvidence = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta).outcomes.map((outcome) => ({ scenarioId: outcome.scenarioId, evidence: outcome.evidence }))
