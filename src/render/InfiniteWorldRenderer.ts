@@ -1213,6 +1213,26 @@ export class InfiniteWorldRenderer {
     return { tier, radius, buildings, roadSpacing }
   }
 
+  tickWorldSimulation(id: string, tier: Parameters<typeof civilizationRuntime.evaluate>[1] = 'village', delta = 1) {
+    const before = productionInfrastructureRuntime.get(id)
+    const civilization = civilizationRuntime.evaluate(id, tier)
+    const production = productionInfrastructureRuntime.get(id) ?? productionInfrastructureRuntime.evaluate(civilization)
+    const next = productionInfrastructureRuntime.tick(id, delta) ?? production
+    const addedRoads = Math.max(0, next.infrastructure.roads - (before?.infrastructure.roads ?? production.infrastructure.roads))
+    const addedCapacity = Math.max(0, next.infrastructure.capacity - (before?.infrastructure.capacity ?? production.infrastructure.capacity))
+    const materialized = (addedRoads || addedCapacity)
+      ? this.materializeInfrastructureExpansion(id, addedRoads, addedCapacity)
+      : { id, addedRoads: 0, addedBuildings: 0 }
+    return {
+      id,
+      civilization: next.civilization,
+      production: next,
+      infrastructure: next.infrastructure,
+      materialized,
+      layers: ['visual', 'biological', 'resource', 'infrastructure', 'civilization'],
+    }
+  }
+
   materializeInfrastructureExpansion(id: string, addedRoads: number, addedCapacity: number) {
     if (addedRoads <= 0 && addedCapacity <= 0) return { id, addedRoads: 0, addedBuildings: 0 }
 
