@@ -114,6 +114,7 @@ export class InfiniteWorldRenderer {
   private physicsParticleVelocities = new Float32Array(0)
   private physicsParticleColors = new Float32Array(0)
   private showParticles = true
+  private readonly materializedConsequenceEvents = new Set<string>()
 
   constructor(canvas: HTMLCanvasElement, seed = 'reality-engine-infinity-v1') {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
@@ -1240,14 +1241,13 @@ export class InfiniteWorldRenderer {
     const x = this.worldPosition.x
     const z = this.worldPosition.z
     for (const consequence of consequences) {
+      if (this.materializedConsequenceEvents.has(consequence.eventId)) continue
+      let didMaterialize = false
       for (const action of consequence.actions) {
         if (action.type !== 'visual-transition') continue
+        didMaterialize = true
         if (action.tier === 'village' || action.tier === 'town' || action.tier === 'city' || action.tier === 'megacity') {
-          materialized.push({
-            eventId: consequence.eventId,
-            action: action.type,
-            result: this.materializeSettlementTier(action.tier, x, z),
-          })
+          materialized.push({ eventId: consequence.eventId, action: action.type, result: this.materializeSettlementTier(action.tier, x, z) })
         } else if (action.civilization === 'post-scarcity') {
           this.generateCityPlan(x, z, 240, 41)
           this.place('quantum_emitter', x, z, 1.5)
@@ -1266,6 +1266,7 @@ export class InfiniteWorldRenderer {
           materialized.push({ eventId: consequence.eventId, action: action.type, result: { civilization: action.civilization, form: 'agricultural-settlement' } })
         }
       }
+      if (didMaterialize) this.materializedConsequenceEvents.add(consequence.eventId)
     }
     return materialized
   }
