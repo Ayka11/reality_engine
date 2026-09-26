@@ -11,7 +11,7 @@ import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import { FieldSampler } from '../infinity/FieldSampler'
-import { WorldDecisionLayer } from '../infinity/WorldDecisionLayer'
+import { WorldDecisionLayer, type RouteProfile } from '../infinity/WorldDecisionLayer'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -1131,7 +1131,7 @@ export class InfiniteWorldRenderer {
     return result
   }
 
-  optimizeRoute(x0: number, z0: number, x1: number, z1: number, gridSize = 12) {
+  optimizeRoute(x0: number, z0: number, x1: number, z1: number, gridSize = 12, profile: RouteProfile = 'balanced') {
     const step = Math.max(4, gridSize)
     const start = { x: Math.round(x0 / step), z: Math.round(z0 / step) }
     const goal = { x: Math.round(x1 / step), z: Math.round(z1 / step) }
@@ -1179,12 +1179,10 @@ export class InfiniteWorldRenderer {
         const nz = cz + dz
         const wx = nx * step
         const wz = nz * step
-        const y = this.generator.sampleHeight(wx, wz)
-        const prevY = this.generator.sampleHeight(cx * step, cz * step)
-        const slope = Math.abs(y - prevY) / Math.max(1, Math.hypot(dx * step, dz * step))
-        const water = y < this.generator.seaLevel - 0.25
-        const zone = this.buildZoneCost(wx, wz)
-        const terrainCost = 1 + slope * 18 + (water ? 6 : 0) + zone.floodRisk * 12 + zone.slopeRisk * 8
+        const decision = this.decisionLayer.routeCost(
+          wx, wz, cx * step, cz * step, profile,
+        )
+        const terrainCost = decision.cost
         const diagonal = dx !== 0 && dz !== 0 ? 1.414 : 1
         const tentative = (g.get(currentKey) ?? Infinity) + terrainCost * diagonal
         const nk = key(nx, nz)
