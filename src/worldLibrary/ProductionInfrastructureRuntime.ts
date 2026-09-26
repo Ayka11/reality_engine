@@ -55,6 +55,7 @@ export type CivilizationProductionState = {
   environmentalState: { temperature: number; moisture: number; radiation: number; stability: number }
   adaptation: { strategy: AdaptationStrategy; effectiveness: number; ticks: number }
   environmentalImpact: { temperatureDelta: number; moistureDelta: number; radiationDelta: number; stabilityDelta: number }
+  environmentalImpactHistory: Array<{ year: number; temperatureDelta: number; moistureDelta: number; radiationDelta: number; stabilityDelta: number }>
 }
 
 const OUTPUTS: Record<ProductionKind, { output: string; rate: number; input?: string; inputRate?: number }> = {
@@ -106,7 +107,7 @@ export class ProductionInfrastructureRuntime {
       pressure: Math.min(1, civilization.settlement.population / Math.max(1, civilization.settlement.infrastructureCapacity)),
     }
 
-    const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [], worldTime: { year: 0, scale: 'year' as WorldTimeScale, elapsed: 0 }, history: [], timeline: [{ id: civilization.id + ':founding', year: 0, type: 'founding', settlementId: civilization.id, to: civilization.settlement.tier, details: 'Civilization runtime initialized' }], consequences: [], causalChain: [], causalQueue: [], productionModifier: 1, productionModifierTicks: 0, causalCooldowns: {}, environmentalState: { temperature: 0.5, moisture: 0.5, radiation: 0, stability: 1 }, adaptation: { strategy: 'conservation', effectiveness: 0, ticks: 0 }, environmentalImpact: { temperatureDelta: 0, moistureDelta: 0, radiationDelta: 0, stabilityDelta: 0 } }
+    const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [], worldTime: { year: 0, scale: 'year' as WorldTimeScale, elapsed: 0 }, history: [], timeline: [{ id: civilization.id + ':founding', year: 0, type: 'founding', settlementId: civilization.id, to: civilization.settlement.tier, details: 'Civilization runtime initialized' }], consequences: [], causalChain: [], causalQueue: [], productionModifier: 1, productionModifierTicks: 0, causalCooldowns: {}, environmentalState: { temperature: 0.5, moisture: 0.5, radiation: 0, stability: 1 }, adaptation: { strategy: 'conservation', effectiveness: 0, ticks: 0 }, environmentalImpact: { temperatureDelta: 0, moistureDelta: 0, radiationDelta: 0, stabilityDelta: 0 }, environmentalImpactHistory: [] }
     this.states.set(civilization.id, state)
     return state
   }
@@ -163,6 +164,7 @@ export class ProductionInfrastructureRuntime {
       radiationDelta: next.civilization.type === 'post-scarcity' ? intensity * 0.002 * (1 - technology) : 0,
       stabilityDelta: (conservation * 0.004 + technology * 0.003) - intensity * 0.002
     }
+    next.environmentalImpactHistory = [...current.environmentalImpactHistory, { year: next.worldTime, ...next.environmentalImpact }].slice(-120)
     next.causalCooldowns = Object.fromEntries(Object.entries(current.causalCooldowns).map(([key, value]) => [key, Math.max(0, value - 1)]).filter(([, value]) => value > 0))
     next.infrastructure.roads += expansion.addedRoads
     next.infrastructure.capacity += expansion.addedCapacity
