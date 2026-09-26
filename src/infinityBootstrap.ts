@@ -1,5 +1,6 @@
 import { InfiniteWorldRenderer } from './render/InfiniteWorldRenderer'
 import { worldResourceEconomy } from './worldLibrary/WorldResourceEconomy'
+import { settlementGrowthModel } from './worldLibrary/SettlementGrowthModel'
 import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, visualKindToWorldObject, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
 
@@ -39,6 +40,8 @@ export function bootstrapInfiniteWorld() {
     world.scatterExternalSemantic(semanticEntryId, count, radius, seed, scale)
   ;(window as any).worldExternalBiomePopulate = (environment: any, radius = 100, density = 1, seed = 1) =>
     world.populateExternalBiome(environment, radius, density, seed)
+  ;(window as any).settlementGrowthEvaluate = (id: string, tier: any) => settlementGrowthModel.evaluate(id, tier)
+  ;(window as any).settlementGrowthPath = (id: string, tier: any) => settlementGrowthModel.growthPath(settlementGrowthModel.evaluate(id, tier))
   ;(window as any).worldResourceEconomy = worldResourceEconomy
   ;(window as any).worldResourceStats = () => worldResourceEconomy.stats()
   ;(window as any).worldResourceCapability = (id: string, requiredAmount: number) => worldResourceEconomy.capability(id, requiredAmount)
