@@ -51,6 +51,8 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldResourceTick = (delta = 1) => worldResourceEconomy.tick(delta)
   ;(window as any).worldBiomePopulate = (environment: any, radius = 100, density = 1, seed = 1) =>
     world.populateBiome(environment, radius, density, seed)
+  ;(window as any).worldCivilizationPopulate = (id: string, tier: any = 'village', radius = 120) =>
+    world.populateCivilization(id, tier, radius)
   ;(window as any).worldExternalAssetStats = () => world.getExternalAssetStats()
   ;(window as any).worldLibraryPlace = (id: string) => {
     const entry = resolveWorldLibraryEntry(id)
