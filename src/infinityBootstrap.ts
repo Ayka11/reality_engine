@@ -7,7 +7,7 @@ import { worldLibraryGenerationPlanner } from './worldLibrary/WorldLibraryGenera
 import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, visualKindToWorldObject, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
 import { installScientificWorkspace } from './infinity/ScientificWorkspace'
-import { buildCivilizationExperimentMatrix, runCivilizationInfinityBatch, analyzeCrossDimensionGeneralization, summarizeReplicationSnapshots, createInfinityScientificReport, serializeInfinityScientificReport, createScientificProvenance, attachScientificProvenance, validateScientificProvenance, assessInfinityClaim, type CivilizationExperimentMatrix } from './infinity'
+import { buildCivilizationExperimentMatrix, runCivilizationInfinityBatch, runCivilizationInfinityReplication, analyzeCrossDimensionGeneralization, summarizeReplicationSnapshots, createInfinityScientificReport, serializeInfinityScientificReport, createScientificProvenance, attachScientificProvenance, validateScientificProvenance, assessInfinityClaim, type CivilizationExperimentMatrix } from './infinity'
 
 export type DockPosition = 'top' | 'left' | 'right' | 'float'
 
@@ -104,6 +104,52 @@ export function bootstrapInfiniteWorld() {
     const plans = buildCivilizationExperimentMatrix(matrix)
     return runCivilizationInfinityBatch(civilizationRuntime, plans)
   }
+  ;(window as any).worldRunScientificWorkflow = async (matrix: CivilizationExperimentMatrix, repetitions = 3) => {
+    const plans = buildCivilizationExperimentMatrix(matrix)
+    const batch = await runCivilizationInfinityBatch(civilizationRuntime, plans)
+    const replications: Record<string, any> = {}
+    const claimValidation: Record<string, any> = {}
+    const reports: Record<string, any> = {}
+    const provenance: Record<string, any> = {}
+    const allSnapshots = [...batch.snapshots]
+    for (const plan of plans) {
+      const snapshot = batch.snapshots.find((item) => item.protocol.experimentId === plan.experimentId)
+      if (!snapshot || snapshot.status !== 'completed') continue
+      const replication = await runCivilizationInfinityReplication(civilizationRuntime, plan, repetitions)
+      replications[plan.experimentId] = replication
+      allSnapshots.push(...replication.snapshots)
+      const graph = (snapshot.results as any).claimGraph
+      claimValidation[plan.experimentId] = graph ? civilizationRuntime.validateClaimGraph(graph) : { valid: false, errors: ['Claim graph missing from experiment snapshot'] }
+      const generalization = analyzeCrossDimensionGeneralization(allSnapshots)
+      const reportBase = createInfinityScientificReport(snapshot, replication, generalization, undefined, {
+        title: `Infinity Scale Scientific Report — ${plan.experimentId}`,
+        conclusions: [
+          snapshot.status === 'completed' ? 'The configured experiment completed successfully.' : 'The configured experiment did not complete successfully.',
+          `Replication completed ${replication.repetitionsCompleted} of ${replication.repetitionsRequested} requested runs.`,
+          `Claim graph validation: ${claimValidation[plan.experimentId].valid ? 'valid' : 'failed'}.`,
+          generalization.overallDirectionConsistency === null
+            ? 'Cross-dimension direction consistency was not estimable from the available numeric metrics.'
+            : `Cross-dimension direction consistency: ${generalization.overallDirectionConsistency.toFixed(3)}.`,
+        ],
+      })
+      const prov = createScientificProvenance(snapshot, replication, generalization)
+      const report = attachScientificProvenance(reportBase, prov)
+      reports[plan.experimentId] = report
+      provenance[plan.experimentId] = validateScientificProvenance(report)
+    }
+    return {
+      schemaVersion: 'infinity-scientific-workflow-v1',
+      matrix,
+      plans,
+      batch,
+      snapshots: allSnapshots,
+      replications,
+      claimValidation,
+      reports,
+      provenance,
+    }
+  }
+
   ;(window as any).worldAnalyzeExperimentGeneralization = (snapshots: any[], dimensions?: any[]) => analyzeCrossDimensionGeneralization(snapshots, dimensions)
   ;(window as any).worldSummarizeReplicationStatistics = (snapshots: any[]) => summarizeReplicationSnapshots(snapshots)
   ;(window as any).worldCreateInfinityScientificReport = (snapshot: any, replication?: any, generalization?: any, evidence?: any, options?: any) => createInfinityScientificReport(snapshot, replication, generalization, evidence, options)
