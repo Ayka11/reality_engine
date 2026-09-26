@@ -16,3 +16,4 @@ export * from './WorldGenerationPlan';
 export * from './WorldPlanRuntimeAdapter';
 export * from './AssetProviders';
 export * from './AssetImportManifest';
+export * from './AssetDiscovery';
