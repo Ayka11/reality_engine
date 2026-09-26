@@ -44,7 +44,14 @@ export class BiomePopulationEngine {
     }
     if (!biome) return { biomeId: 'unknown', rules: [], count: 0, byLayer: empty, reason: ['no-biome-match'] }
 
-    const rules = biome.preferredElements.map((semanticEntryId, index) => {
+    const preferred = [...biome.preferredElements]
+    const derived = worldRuleGraph
+      .query({ from: biome.id })
+      .filter((rule) => rule.relation === 'produces' || rule.relation === 'enables' || rule.relation === 'supports')
+      .map((rule) => rule.to)
+    const semanticIds = [...new Set([...preferred, ...derived])]
+
+    const rules = semanticIds.map((semanticEntryId, index) => {
       const entry = worldLibrary.get(semanticEntryId)
       const outgoing = worldRuleGraph.outgoing(semanticEntryId)
       const supported = worldRuleGraph.incoming(semanticEntryId, 'supports')
@@ -64,14 +71,15 @@ export class BiomePopulationEngine {
       }
     })
 
-    const limited = rules.slice(0, maxElements)
+    const ordered = rules.sort((a, b) => b.weight - a.weight)
+    const limited = ordered.slice(0, maxElements)
     for (const rule of limited) empty[rule.layer].push(rule)
     return {
       biomeId: biome.id,
       rules: limited,
       count: limited.length,
       byLayer: empty,
-      reason: ['biome-classified', 'preferred-elements', 'world-rule-graph-weighted', 'layer-classified'],
+      reason: ['biome-classified', 'preferred-elements', 'rule-derived-resources', 'rule-derived-infrastructure', 'world-rule-graph-weighted', 'layer-classified'],
     }
   }
 
