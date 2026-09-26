@@ -47,6 +47,15 @@ c3dFieldCanvas.id = 'c3dField'
 c3dFieldCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:2'
 c3dCanvas.parentElement?.appendChild(c3dFieldCanvas)
 const fieldRenderer = new ChunkRenderer(c3dFieldCanvas)
+try {
+  const saved = JSON.parse(localStorage.getItem('reality_engine_ui_state') || '{}')
+  if (saved.currentRenderMode === 'field3d') {
+    c3dFieldCanvas.style.display = 'block'
+    c3dCanvas.style.display = 'none'
+  }
+} catch {
+  // Ignore malformed UI state; default to Infinite World.
+}
 const getInfiniteWorld = () => (win['infiniteWorld'] as InfiniteWorldRenderer | undefined)
 const monitor       = new RealityMonitor()
 const nodeEditor    = new NodeLawEditor()
