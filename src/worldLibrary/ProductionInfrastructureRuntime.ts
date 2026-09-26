@@ -38,6 +38,14 @@ const OUTPUTS: Record<ProductionKind, { output: string; rate: number; input?: st
 }
 
 export class ProductionInfrastructureRuntime {
+  private infrastructureExpansion(state: CivilizationProductionState, delta: number) {
+    const pressure = state.infrastructure.pressure
+    if (pressure < 0.62) return { addedRoads: 0, addedCapacity: 0 }
+    const addedRoads = Math.max(0, Math.floor((pressure - 0.62) * 12 * delta))
+    const addedCapacity = addedRoads * 25 + Math.max(0, pressure - 0.8) * 500 * delta
+    return { addedRoads, addedCapacity }
+  }
+
   private readonly states = new Map<string, CivilizationProductionState>()
 
   evaluate(civilization: CivilizationState): CivilizationProductionState {
@@ -80,6 +88,11 @@ export class ProductionInfrastructureRuntime {
     const produced: Record<string, number> = {}
     const consumed: Record<string, number> = {}
     const shortages: string[] = []
+    const expansion = this.infrastructureExpansion(current, delta)
+    if (expansion.addedCapacity > 0) {
+      current.infrastructure.roads += expansion.addedRoads
+      current.infrastructure.capacity += expansion.addedCapacity
+    }
 
     for (const node of current.nodes) {
       const efficiency = node.efficiency
