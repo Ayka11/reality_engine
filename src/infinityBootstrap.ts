@@ -103,6 +103,8 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldValidateClaimGraph = (graph: any) => civilizationRuntime.validateClaimGraph(graph)
   ;(window as any).worldCivilizationRuntimeSnapshot = () => civilizationRuntime.serializeState()
   ;(window as any).worldRestoreCivilizationRuntime = (snapshot: any) => civilizationRuntime.restoreState(snapshot)
+  ;(window as any).worldCivilizationExperiment = (experimentId: string) => civilizationRuntime.experiment(experimentId)
+  ;(window as any).worldCivilizationExperiments = () => civilizationRuntime.experimentsList()
   ;(window as any).worldEnvironmentalImpact = (id: string) => productionInfrastructureRuntime.get(id)?.environmentalImpact ?? null
   ;(window as any).worldEnvironmentalImpactHistory = (id: string) => productionInfrastructureRuntime.get(id)?.environmentalImpactHistory ?? []
   ;(window as any).worldTimelineAll = () => productionInfrastructureRuntime.allTimelines()
