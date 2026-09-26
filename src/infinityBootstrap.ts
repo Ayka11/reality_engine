@@ -999,6 +999,7 @@ export function bootstrapInfiniteWorld() {
             <!-- Category Tabs -->
             <div style="display: flex; gap: 2px; border-bottom: 0.5px solid rgba(255,255,255,0.06); padding-bottom: 4px;">
               <button class="cstep ${activeTab === 'objects' ? 'active' : ''}" id="vTabObj" style="flex:1; padding: 3px 2px; font-size: 9px;">Objects</button>
+              <button class="cstep ${activeTab === 'library' ? 'active' : ''}" id="vTabLibrary" style="flex:1; padding: 3px 2px; font-size: 9px;">Library</button>
               <button class="cstep ${activeTab === 'camera' ? 'active' : ''}" id="vTabCam" style="flex:1; padding: 3px 2px; font-size: 9px;">Camera</button>
               <button class="cstep ${activeTab === 'analysis' ? 'active' : ''}" id="vTabGen" style="flex:1; padding: 3px 2px; font-size: 9px;">Generate</button>
               <button class="cstep ${activeTab === 'persist' ? 'active' : ''}" id="vTabPersist" style="flex:1; padding: 3px 2px; font-size: 9px;">Save</button>
@@ -1006,7 +1007,32 @@ export function bootstrapInfiniteWorld() {
             </div>
 
             <!-- Tab Content -->
-            ${activeTab === 'objects' ? `
+            ${activeTab === 'library' ? `
+              <div>
+                <div style="font-size:9.5px;color:var(--sub);margin-bottom:5px;text-transform:uppercase;">World Knowledge Library</div>
+                <div style="display:grid;grid-template-columns:1fr 110px;gap:4px;margin-bottom:6px;">
+                  <input id="worldLibrarySearch" placeholder="Search world elements..." value="${libraryQuery.replace(/"/g,'&quot;')}" style="min-width:0;padding:5px 7px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.08);border-radius:5px;font-size:9px;outline:none;">
+                  <select id="worldLibraryCategory" style="padding:5px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.08);border-radius:5px;font-size:9px;">
+                    <option value="">All categories</option>
+                    ${worldLibrary.categories().map((cat:string)=>`<option value="${cat}" ${libraryCategory===cat?'selected':''}>${cat}</option>`).join('')}
+                  </select>
+                </div>
+                <div style="font-size:8.5px;color:var(--sub);margin-bottom:5px;">${worldLibrary.stats().entries} entries · semantic catalogue · Rule Graph</div>
+                <div style="max-height:210px;overflow:auto;display:flex;flex-direction:column;gap:4px;">
+                  ${worldLibrary.query({ category: libraryCategory || undefined, search: libraryQuery || undefined }).slice(0,24).map((entry) => `
+                    <div style="padding:6px 7px;border:1px solid ${librarySelected===entry.id?'rgba(124,111,205,.65)':'rgba(255,255,255,.07)'};border-radius:6px;background:rgba(8,9,17,.55);">
+                      <div style="display:flex;gap:5px;align-items:center;"><span style="font-size:9.5px;color:var(--tx);font-weight:600;flex:1;">${entry.name}</span><span style="font-size:7.5px;color:#8f88d8;">${entry.category}</span></div>
+                      <div style="font-size:8px;color:var(--sub);margin-top:2px;">${entry.description}</div>
+                      <div style="font-size:7.5px;color:#70758a;margin-top:3px;">${entry.tags.slice(0,5).join(' · ')}</div>
+                      <div style="display:flex;gap:4px;margin-top:5px;">
+                        <button class="pill librarySelect" data-library-id="${entry.id}" style="font-size:8px;padding:2px 6px;">Inspect</button>
+                        <button class="pill libraryPlace" data-library-id="${entry.id}" style="font-size:8px;padding:2px 6px;">Add to World</button>
+                      </div>
+                      ${librarySelected===entry.id ? `<div style="margin-top:5px;padding-top:4px;border-top:1px solid rgba(255,255,255,.06);font-size:7.5px;color:#9aa0b5;">Rules: ${worldRuleGraph.related(entry.id).slice(0,3).map(r=>r.relation+' → '+r.to).join(' · ') || 'none registered'}</div>` : ''}
+                    </div>`).join('')}
+                </div>
+              </div>
+            ` : `            ${activeTab === 'objects' ? `
               <div>
                 <div style="font-size: 9.5px; color: var(--sub); margin-bottom: 4px; text-transform: uppercase;">Build Tool Mode</div>
                 <div class="pill-row">
