@@ -674,6 +674,7 @@ export function bootstrapInfiniteWorld() {
       const entries = worldLibrary.query({ category: libraryCategory || undefined, search: libraryQuery || undefined }).slice(0, 18)
       const selected = librarySelected ? worldLibrary.get(librarySelected) : undefined
       const related = selected ? worldRuleGraph.related(selected.id) : []
+      const envCheck = selected ? (window as any).worldLibraryEnvironmentCheck?.(selected.id, { temperature: 20, moisture: 0.5, elevation: 0, slope: 0, radiation: 0, stability: 1 }) : null
       return '<div style="width:100%;display:grid;grid-template-columns:minmax(240px,1fr) minmax(300px,1.4fr);gap:7px;max-height:270px;overflow:auto;">' +
         '<div style="display:flex;flex-direction:column;gap:3px;">' +
         entries.map((entry) => '<div style="padding:5px;border:1px solid ' + (librarySelected === entry.id ? 'rgba(124,111,205,.65)' : 'rgba(255,255,255,.07)') + ';border-radius:5px;background:rgba(8,9,17,.55);">' +
@@ -690,6 +691,7 @@ export function bootstrapInfiniteWorld() {
           libraryField('variants', selected.variants) + libraryField('simulationHooks', selected.simulationHooks) +
           '<div style="margin-top:5px;"><span style="color:#8f88d8;">conditions:</span> ' + (selected.conditions ? escLibrary(JSON.stringify(selected.conditions)) : 'none') + '</div>' +
           '<div style="margin-top:5px;"><span style="color:#8f88d8;">rules:</span> ' + (related.length ? related.map(rule => escLibrary(rule.from + ' — ' + rule.relation + ' → ' + rule.to)).join(' · ') : 'none registered') + '</div>' +
+          '<div style="margin-top:6px;padding:5px;border:1px solid rgba(124,111,205,.22);border-radius:5px;"><span style="color:#8f88d8;">environment:</span> ' + (envCheck ? escLibrary(envCheck.status) + ' · score ' + Number(envCheck.score).toFixed(2) + ' · ' + escLibrary((envCheck.reasons || []).join(', ')) : 'UNKNOWN') + '</div>' +
           '<button class="brush-btn libraryGenerate" data-library-id="' + escLibrary(selected.id) + '" style="width:100%;margin-top:7px;font-size:8.5px;">⚡ Generate This Element</button>' :
           '<div style="color:var(--sub);">Select an element to inspect its semantic definition and rules.</div>') +
         '</div></div>'
