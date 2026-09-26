@@ -21,3 +21,5 @@ export * from './AssetDiscovery';
 export * from './AssetImportService';
 export * from './WorldAssetRuntime';
 export * from './OpenAssetsPanel';
+
+export * from './WorldResourceEconomy';
