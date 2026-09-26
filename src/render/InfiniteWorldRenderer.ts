@@ -23,6 +23,7 @@ import { ExperimentRunner, type ExperimentSnapshot } from '../infinity/Experimen
 import { compareExperiments, type ExperimentComparison } from '../infinity/ExperimentComparison'
 import { ExperimentCatalog } from '../infinity/ExperimentCatalog'
 import { analyzeExperiments, type ExperimentAnalysis } from '../infinity/ExperimentAnalysis'
+import { calculateStatisticalAnalysis, type StatisticalExperimentAnalysis } from '../infinity/ExperimentStatistics'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -2118,6 +2119,10 @@ export class InfiniteWorldRenderer {
 
   analyzeExperiments(groupBy: 'seed' | 'provider' | 'physics' | 'decision' = 'provider'): ExperimentAnalysis {
     return analyzeExperiments(this.experimentCatalog.list(), groupBy)
+  }
+
+  analyzeExperimentStatistics(groupBy: 'seed' | 'provider' | 'physics' | 'decision' = 'provider'): StatisticalExperimentAnalysis {
+    return calculateStatisticalAnalysis(this.analyzeExperiments(groupBy))
   }
 
   getRuntimeDiagnostics() {
