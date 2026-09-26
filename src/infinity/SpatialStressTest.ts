@@ -11,6 +11,10 @@ export type StressResult = StressScenario & {
   indexedObjects: number
   averageQueryMs: number
   queriesPerSecond: number
+  bruteForceAverageQueryMs: number
+  bruteForceQueriesPerSecond: number
+  candidateObjects: number
+  speedup: number
 }
 
 const PHYSICS_KINDS: WorldObjectKind[] = [
@@ -34,32 +38,65 @@ function syntheticObject(i: number): WorldObject {
   }
 }
 
+function bruteForceQuery(objects: WorldObject[], x: number, y: number, z: number, radius: number) {
+  const r2 = Math.max(0, radius) ** 2
+  const result: WorldObject[] = []
+  for (const object of objects) {
+    if (!PHYSICS_KINDS.includes(object.kind)) continue
+    const dx = object.x - x
+    const dy = object.y - y
+    const dz = object.z - z
+    if (dx * dx + dy * dy + dz * dz <= r2) result.push(object)
+  }
+  return result
+}
+
 /**
- * Measures spatial lookup cost only. It does not emulate rendering or physics integration.
+ * Synthetic lookup benchmark. It compares spatial-index lookup with a brute-force scan.
+ * It does not emulate rendering, GPU work, or the complete physics integration loop.
  */
 export function runSpatialStressTest(scenario: StressScenario, iterations = 100): StressResult {
   const index = new WorldObjectSpatialIndex()
-  const objects = Array.from({ length: Math.max(0, scenario.physicsObjects) }, (_, i) => syntheticObject(i))
+  const objects = Array.from(
+    { length: Math.max(0, scenario.physicsObjects) },
+    (_, i) => syntheticObject(i),
+  )
   index.rebuild(objects)
 
-  const start = performance.now()
-  let queries = 0
-  for (let i = 0; i < Math.max(1, iterations); i++) {
-    for (let p = 0; p < Math.max(1, scenario.particles); p++) {
-      const angle = (p + i * 0.37) * 2.399963
-      const x = Math.cos(angle) * 110
-      const z = Math.sin(angle) * 110
-      index.queryRadius(x, 5, z, scenario.radius)
-      queries++
-    }
+  const particleCount = Math.max(1, scenario.particles)
+  const iterationCount = Math.max(1, iterations)
+  const queries = particleCount * iterationCount
+  const points = Array.from({ length: queries }, (_, q) => {
+    const particle = q % particleCount
+    const iteration = Math.floor(q / particleCount)
+    const angle = (particle + iteration * 0.37) * 2.399963
+    return { x: Math.cos(angle) * 110, y: 5, z: Math.sin(angle) * 110 }
+  })
+
+  const indexedStart = performance.now()
+  let indexedCandidates = 0
+  for (const point of points) {
+    indexedCandidates += index.queryRadius(
+      point.x, point.y, point.z, scenario.radius,
+    ).length
   }
-  const elapsed = Math.max(0.001, performance.now() - start)
+  const indexedElapsed = Math.max(0.001, performance.now() - indexedStart)
+
+  const bruteStart = performance.now()
+  for (const point of points) {
+    bruteForceQuery(objects, point.x, point.y, point.z, scenario.radius)
+  }
+  const bruteElapsed = Math.max(0.001, performance.now() - bruteStart)
 
   return {
     ...scenario,
     indexedObjects: index.size,
-    averageQueryMs: elapsed / queries,
-    queriesPerSecond: queries * 1000 / elapsed,
+    averageQueryMs: indexedElapsed / queries,
+    queriesPerSecond: queries * 1000 / indexedElapsed,
+    bruteForceAverageQueryMs: bruteElapsed / queries,
+    bruteForceQueriesPerSecond: queries * 1000 / bruteElapsed,
+    candidateObjects: indexedCandidates / queries,
+    speedup: bruteElapsed / indexedElapsed,
   }
 }
 
