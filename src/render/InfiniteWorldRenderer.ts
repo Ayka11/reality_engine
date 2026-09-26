@@ -1533,7 +1533,12 @@ export class InfiniteWorldRenderer {
         const angleDiff = Math.abs(Math.atan2(Math.sin(angle - targetAngle), Math.cos(angle - targetAngle)))
         const separation = Math.min(1, distance / radius)
         const zone = this.buildZoneCost(cell.x, cell.z)
-        const value = cell.score + separation * 0.25 - angleDiff * 0.15 - zone.cost * 0.45
+        const decision = this.decisionLayer.analyzeBuildability(cell.x, cell.z)
+        const value =
+          decision.score +
+          separation * 0.25 -
+          angleDiff * 0.15 -
+          zone.cost * 0.35
         if (value > bestValue) { bestValue = value; best = cell }
       }
       districts.push({ x: best.x, z: best.z, y: best.y, score: best.score, role: i % 3 === 0 ? 'civic' : i % 3 === 1 ? 'residential' : 'mixed' })
@@ -1557,7 +1562,7 @@ export class InfiniteWorldRenderer {
     this.history.push({ type: 'add', object: { ...hubObject } })
     for (let i = 0; i < plan.districts.length; i++) {
       const d = plan.districts[i]
-      const route = this.optimizeRoute(plan.hub.x, plan.hub.z, d.x, d.z, 12)
+      const route = this.optimizeRoute(plan.hub.x, plan.hub.z, d.x, d.z, 12, 'balanced')
       for (let j = 0; j < route.length - 1; j++) {
         const a = route[j], b = route[j + 1]
         const hydro = this.analyzeHydrology((a.x + b.x) * 0.5, (a.z + b.z) * 0.5, 18, 9)
@@ -1582,13 +1587,18 @@ export class InfiniteWorldRenderer {
         const distance = d.role === 'civic' ? 12 : 18
         const x = d.x + Math.cos(angle) * distance
         const z = d.z + Math.sin(angle) * distance
-        const y = this.generator.sampleHeight(x, z)
+        const siteDecision = this.decisionLayer.analyzeBuildability(x, z)
+        const y = siteDecision.elevation
         const building = this.objects.add({
           kind: 'building', x, y, z,
           rotationY: angle,
           scale: d.role === 'civic' ? 1.1 : 0.8,
           seed: i * 100 + k,
-          properties: { city: 'district', district: i, role: d.role },
+          properties: {
+            city: 'district', district: i, role: d.role,
+            buildability: siteDecision.score,
+            scientificField: siteDecision.field,
+          },
         })
         created.push(building)
         this.history.push({ type: 'add', object: { ...building } })
