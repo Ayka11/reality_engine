@@ -99,9 +99,19 @@ export async function runCivilizationInfinityBatch(
   const snapshots: ExperimentSnapshot[] = []
   const experiments: CivilizationExperimentResult[] = []
   const errors: CivilizationBatchResult['errors'] = []
+  const seenExperimentIds = new Set<string>()
 
   for (let index = 0; index < plans.length; index++) {
     const plan = plans[index]
+    if (seenExperimentIds.has(plan.experimentId)) {
+      errors.push({ index, experimentId: plan.experimentId, message: 'Duplicate civilization experimentId in batch' })
+      continue
+    }
+    seenExperimentIds.add(plan.experimentId)
+    if (!plan.scenarios.length) {
+      errors.push({ index, experimentId: plan.experimentId, message: 'Civilization experiment requires at least one scenario' })
+      continue
+    }
     const protocol = createExperimentProtocol({
       experimentId: plan.experimentId,
       world: { seed: plan.sourceBranch, generatorVersion: 'civilization-runtime-v1' },
