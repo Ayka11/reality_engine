@@ -28,6 +28,8 @@ import { WorldAssetRuntime } from '../worldLibrary/WorldAssetRuntime'
 import { biomePopulationEngine } from '../worldLibrary/BiomePopulationEngine'
 import { worldResourceEconomy } from '../worldLibrary/WorldResourceEconomy'
 import { civilizationRuntime, type CivilizationType } from '../worldLibrary/CivilizationRuntime'
+import { productionInfrastructureRuntime } from '../worldLibrary/ProductionInfrastructureRuntime'
+import { resolveWorldLibraryEntry, resourceVisualKind, visualKindToWorldObject } from '../worldLibrary/WorldLibraryAdapter'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -1805,7 +1807,7 @@ export class InfiniteWorldRenderer {
     const zone = this.buildZoneCost(x, z)
     const hydro = this.analyzeHydrology(x, z, 24, 9)
     const scientificDecision = this.decisionLayer.explainBuildDecision(x, z)
-    this.decisionGraph.addDecision(scientificDecision, 'Build decision')
+    this.decisionGraph.addDecision(scientificDecision)
     const reasons: string[] = []
     if (zone.floodRisk > 0.6) reasons.push('high flood risk')
     else if (zone.floodRisk > 0.3) reasons.push('moderate flood risk')
@@ -1904,7 +1906,7 @@ export class InfiniteWorldRenderer {
     const river = hydro.rivers.length > 0
     const floodRisk = y <= this.generator.seaLevel + 4 ? 0.7 : river ? 0.45 : 0
     const decision = this.decisionLayer.buildZoneCost(x, z)
-    const slopeRisk = Math.min(1, decision.slope / 0.5)
+    const slopeRisk = Math.min(1, decision.buildability.slope / 0.5)
     const legacyTerrainCost = slopeRisk * 0.5 + floodRisk * 0.5
     return {
       x, z, y, slope: decision.slope, river, floodRisk, slopeRisk,
@@ -2017,9 +2019,7 @@ export class InfiniteWorldRenderer {
   generateRiverNetwork(cx: number, cz: number, radius = 220, samples = 41) {
     const hydro = this.analyzeHydrology(cx, cz, radius, samples)
     const created: WorldObject[] = []
-    const selected = hydro.rivers
-      .filter((_, i) => i % Math.max(1, Math.floor(hydro.rivers.length / 5)) === 0)
-      .slice(0, 6)
+    const selected = this.generateRiverTraces(cx, cz, radius, 6)
 
     // Render actual river traces as connected water segments rather than isolated
     // disks. This makes River Network visibly read as a river in the 3D world.
@@ -2163,7 +2163,7 @@ export class InfiniteWorldRenderer {
           properties: {
             city: 'district', district: i, role: d.role,
             buildability: siteDecision.score,
-            scientificField: siteDecision.field,
+            scientificField: siteDecision.field.information,
           },
         })
         created.push(building)
