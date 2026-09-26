@@ -8,6 +8,8 @@ export type WorldGenerationPlan = {
   target: string
   environmentStatus: 'READY' | 'CONDITIONAL' | 'BLOCKED' | 'UNKNOWN'
   environmentScore: number
+  environmentReasons: string[]
+  consequences: string[]
   ordered: string[]
   dependencies: string[]
   conflicts: string[]
@@ -22,6 +24,7 @@ export class WorldLibraryGenerationPlanner {
 
     const ordered: string[] = []
     const dependencies: string[] = []
+    const consequences: string[] = []
     const conflicts: string[] = []
     const unresolved: string[] = []
     const seen = new Set<string>()
@@ -38,8 +41,13 @@ export class WorldLibraryGenerationPlanner {
       const requires = [
         ...(entry.requires ?? []),
         ...worldRuleGraph.outgoing(entry.id, 'requires').map((r) => r.to),
-        ...worldRuleGraph.outgoing(entry.id, 'enables').map((r) => r.to),
       ]
+      for (const consequence of worldRuleGraph.outgoing(entry.id, 'enables').map((r) => r.to)) {
+        if (!consequences.includes(consequence)) consequences.push(consequence)
+      }
+      for (const consequence of worldRuleGraph.outgoing(entry.id, 'produces').map((r) => r.to)) {
+        if (!consequences.includes(consequence)) consequences.push(consequence)
+      }
       for (const dependency of requires) {
         if (dependency !== entry.id) visit(dependency)
         if (!dependencies.includes(dependency) && dependency !== id) dependencies.push(dependency)
@@ -67,6 +75,8 @@ export class WorldLibraryGenerationPlanner {
       target: id,
       environmentStatus,
       environmentScore,
+      environmentReasons: environmentMatch?.reasons ?? (target.conditions ? ['environment-condition-mismatch'] : ['no-explicit-conditions']),
+      consequences,
       ordered,
       dependencies,
       conflicts,
@@ -74,6 +84,7 @@ export class WorldLibraryGenerationPlanner {
       reasons: [
         'dependency-closure',
         'rule-graph-expanded',
+        'enables-and-produces-treated-as-consequences',
         conflicts.length ? 'conflict-check-required' : 'no-known-conflicts',
       ],
     }
