@@ -170,6 +170,7 @@ export class ProductionInfrastructureRuntime {
     const causalEvents = eventConsequenceEngine.deriveCausalEvents(newEvents)
     const consequences = eventConsequenceEngine.deriveMany(causalEvents)
     next.causalChain.push(...causalEvents.filter((event) => !current.causalChain.some((existing) => existing.id === event.id)))
+    const chainSeverity = causalEvents.reduce((sum, event) => sum + (event.severity ?? 1), 0)
     for (const consequence of consequences) {
       for (const action of consequence.actions) {
         if (action.type === 'growth-modifier') {
@@ -185,6 +186,7 @@ export class ProductionInfrastructureRuntime {
       }
     }
     next.consequences = consequences
+    if (chainSeverity > 0) next.history.push({ year: worldTime.year, population: next.civilization.settlement.population, pressure: next.infrastructure.pressure, roads: next.infrastructure.roads, capacity: next.infrastructure.capacity, shortages: next.shortages })
     worldTime.elapsed += delta
     const yearsPerTick = worldTime.scale === 'minute' ? 1 / (365 * 24 * 60) : worldTime.scale === 'decade' ? 10 : worldTime.scale === 'century' ? 100 : 1
     worldTime.year += delta * yearsPerTick
