@@ -19,34 +19,18 @@ export type CrossConditionStudyResult = {
   generalization: Partial<Record<GeneralizationDimension, GeneralizationResult>>
 }
 
-export async function runCrossConditionStudy(
-  options: CrossConditionStudyOptions,
-): Promise<CrossConditionStudyResult> {
+export async function runCrossConditionStudy(options:CrossConditionStudyOptions):Promise<CrossConditionStudyResult> {
   const plans = buildExperimentMatrix(options.matrix)
   const executor = new ExperimentBatchExecutor()
   const batch = await executor.execute(
     plans,
-    async (plan) => {
-      const snapshot = await runWorldExperiment(plan)
-      return snapshot.results
-    },
-    {
-      stopOnError: options.stopOnError ?? false,
-    },
+    (plan, runner) => runWorldExperiment(plan, {runner}),
+    {stopOnError:options.stopOnError ?? false},
   )
-
   const snapshots = batch.snapshots
-  const generalization: Partial<Record<GeneralizationDimension, GeneralizationResult>> = {}
-
+  const generalization:Partial<Record<GeneralizationDimension, GeneralizationResult>> = {}
   for (const dimension of options.generalizationDimensions ?? ['seed']) {
     generalization[dimension] = analyzeGeneralization(snapshots, dimension)
   }
-
-  return {
-    plans,
-    snapshots,
-    completed: batch.completed,
-    failed: batch.failed,
-    generalization,
-  }
+  return {plans, snapshots, completed:batch.completed, failed:batch.failed, generalization}
 }
