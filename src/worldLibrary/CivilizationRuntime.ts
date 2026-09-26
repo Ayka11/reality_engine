@@ -84,6 +84,7 @@ function capabilityScore(requirements: Record<string, number>) {
 
 export class CivilizationRuntime {
   private readonly branches = new Map<string, CivilizationBranchSnapshot[]>()
+  private readonly branchStates = new Map<string, CivilizationState>()
 
   evaluate(id: string, tier: SettlementTier): CivilizationState {
     const settlement = settlementGrowthModel.evaluate(id, tier)
@@ -169,6 +170,16 @@ export class CivilizationRuntime {
 
   branchSnapshot(branchId: string) { return this.branches.get(branchId)?.at(-1) ?? null }
   branchHistory(branchId: string) { return this.branches.get(branchId) ?? [] }
+
+  tickBranch(branchId: string, delta = 1) {
+    const state = this.branchStates.get(branchId)
+    if (!state) return null
+    const result = this.tick(state, delta)
+    this.branchStates.set(branchId, result.state)
+    return result
+  }
+
+  branchState(branchId: string) { return this.branchStates.get(branchId) ?? null }
   branchesList() { return [...this.branches.entries()].map(([branchId, history]) => ({ branchId, latest: history.at(-1) ?? null, length: history.length })) }
 
   forkBranch(sourceBranch: string, override: CounterfactualOverride): CivilizationBranchSnapshot | null {
@@ -184,6 +195,13 @@ export class CivilizationRuntime {
       type: override.civilization ?? source.type,
       divergence: Math.max(0, Math.min(1, source.divergence + 0.15)),
     }
+    const state = this.evaluate(`branch:${branchId}`, source.type === 'post-scarcity' ? 'megacity' : source.type === 'industrial' ? 'city' : 'town')
+    state.settlement.population = snapshot.population
+    state.settlement.stability = snapshot.stability
+    state.type = snapshot.type
+    state.score = snapshot.score
+    state.memory = { ...state.memory, branchId, divergence: snapshot.divergence, resilience: snapshot.resilience, lastType: snapshot.type }
+    this.branchStates.set(branchId, state)
     this.branches.set(branchId, [snapshot])
     return snapshot
   }
