@@ -632,6 +632,30 @@ export function bootstrapInfiniteWorld() {
     let eraseRadius = 4
     const escLibrary = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c] || c)
     const libraryField = (label: string, values?: unknown[]) => values?.length ? `<div style="margin-top:4px;"><span style="color:#8f88d8;">${escLibrary(label)}:</span> ${values.map(escLibrary).join(' · ')}</div>` : ''
+    const renderLibraryShelf = () => {
+      const entries = worldLibrary.query({ category: libraryCategory || undefined, search: libraryQuery || undefined }).slice(0, 18)
+      const selected = librarySelected ? worldLibrary.get(librarySelected) : undefined
+      const related = selected ? worldRuleGraph.related(selected.id) : []
+      return '<div style="width:100%;display:grid;grid-template-columns:minmax(240px,1fr) minmax(300px,1.4fr);gap:7px;max-height:270px;overflow:auto;">' +
+        '<div style="display:flex;flex-direction:column;gap:3px;">' +
+        entries.map((entry) => '<div style="padding:5px;border:1px solid ' + (librarySelected === entry.id ? 'rgba(124,111,205,.65)' : 'rgba(255,255,255,.07)') + ';border-radius:5px;background:rgba(8,9,17,.55);">' +
+          '<div style="display:flex;gap:5px;"><b style="font-size:8.5px;flex:1;">' + escLibrary(entry.name) + '</b><span style="font-size:7px;color:#8f88d8;">' + escLibrary(entry.category) + '</span></div>' +
+          '<div style="font-size:7px;color:var(--sub);margin-top:2px;">' + escLibrary(entry.description) + '</div>' +
+          '<button class="pill librarySelect" data-library-id="' + escLibrary(entry.id) + '" style="font-size:7px;padding:2px 5px;margin-top:3px;">Inspect</button></div>').join('') +
+        '</div>' +
+        '<div style="padding:7px;border:1px solid rgba(124,111,205,.25);border-radius:6px;background:rgba(8,9,17,.5);font-size:7.5px;color:#aeb3c5;">' +
+        (selected ? '<div style="font-size:10px;color:var(--tx);font-weight:600;">' + escLibrary(selected.name) + '</div>' +
+          '<div style="margin-top:3px;color:#8f88d8;">' + escLibrary(selected.id) + ' · ' + escLibrary(selected.category) + ' · ' + escLibrary(selected.scale) + ' · ' + escLibrary(selected.rarity) + '</div>' +
+          '<div style="margin-top:5px;">' + escLibrary(selected.description) + '</div>' +
+          libraryField('requires', selected.requires) + libraryField('produces', selected.produces) +
+          libraryField('conflicts', selected.conflictsWith) + libraryField('compatibleWith', selected.compatibleWith) +
+          libraryField('variants', selected.variants) + libraryField('simulationHooks', selected.simulationHooks) +
+          '<div style="margin-top:5px;"><span style="color:#8f88d8;">conditions:</span> ' + (selected.conditions ? escLibrary(JSON.stringify(selected.conditions)) : 'none') + '</div>' +
+          '<div style="margin-top:5px;"><span style="color:#8f88d8;">rules:</span> ' + (related.length ? related.map(rule => escLibrary(rule.from + ' — ' + rule.relation + ' → ' + rule.to)).join(' · ') : 'none registered') + '</div>' +
+          '<button class="brush-btn libraryGenerate" data-library-id="' + escLibrary(selected.id) + '" style="width:100%;margin-top:7px;font-size:8.5px;">⚡ Generate This Element</button>' :
+          '<div style="color:var(--sub);">Select an element to inspect its semantic definition and rules.</div>') +
+        '</div></div>'
+    }
 
     let floatLeft = parseInt(localStorage.getItem('infinity_dock_float_x') || '40', 10)
     let floatTop = parseInt(localStorage.getItem('infinity_dock_float_y') || '60', 10)
@@ -988,7 +1012,7 @@ export function bootstrapInfiniteWorld() {
 
             <!-- ROW 2: CONTEXTUAL SHELF FOR ACTIVE MODE -->
             <div style="display: flex; align-items: center; justify-content: space-between; border-top: 0.5px solid rgba(255,255,255,0.06); padding-top: 5px;">
-              ${state.tool === 'place' ? `
+              ${activeTab === 'library' ? renderLibraryShelf() : state.tool === 'place' ? `
                 <div style="display: flex; align-items: center; gap: 3px; flex-wrap: wrap;">
                   <span style="font-size: 9px; color: #a09af0; font-weight: 600; margin-right: 4px;">PALETTE:</span>
                   ${kinds.map(k => `
@@ -1306,6 +1330,14 @@ export function bootstrapInfiniteWorld() {
       document.getElementById('vTabDisp')?.addEventListener('click', () => { activeTab = 'display'; render(); })
 
       document.getElementById('vTabLibrary')?.addEventListener('click', () => { activeTab = 'library'; render(); })
+      document.getElementById('topLibrary')?.addEventListener('click', () => { activeTab = activeTab === 'library' ? 'objects' : 'library'; render(); })
+      container.querySelectorAll('.libraryGenerate').forEach((button) => {
+        button.addEventListener('click', () => {
+          const id = button.getAttribute('data-library-id')
+          if (id) (window as any).worldLibraryGenerate?.(id)
+          render()
+        })
+      })
       container.querySelectorAll('.librarySelect').forEach((button) => {
         button.addEventListener('click', () => {
           librarySelected = button.getAttribute('data-library-id') || ''
