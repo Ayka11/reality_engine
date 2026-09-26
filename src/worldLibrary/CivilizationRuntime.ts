@@ -33,6 +33,14 @@ export type CivilizationExperimentScenario = {
   override: CounterfactualOverride
 }
 
+export type CivilizationEvidenceLink = {
+  branchId: string
+  tick: number
+  snapshot: CivilizationBranchSnapshot
+  eventTypes: string[]
+  claim: string
+}
+
 export type CivilizationCausalAttribution = {
   factor: string
   weight: number
@@ -51,6 +59,7 @@ export type CivilizationExperimentOutcome = {
   divergence: number
   dominantFactors: string[]
   causalAttribution: CivilizationCausalAttribution[]
+  evidence: CivilizationEvidenceLink[]
 }
 
 export type CivilizationExperimentResult = {
@@ -225,7 +234,7 @@ export class CivilizationRuntime {
     const baseline = branches[0]?.final ?? null
     const outcomes: CivilizationExperimentOutcome[] = branches.map((branch) => {
       const final = branch.final
-      if (!final || !baseline) return { scenarioId: branch.scenarioId, branchId: branch.branchId, populationChange: 0, stabilityChange: 0, resilienceChange: 0, scoreChange: 0, civilizationChanged: false, divergence: 0, dominantFactors: [], causalAttribution: [] }
+      if (!final || !baseline) return { scenarioId: branch.scenarioId, branchId: branch.branchId, populationChange: 0, stabilityChange: 0, resilienceChange: 0, scoreChange: 0, civilizationChanged: false, divergence: 0, dominantFactors: [], causalAttribution: [], evidence: [] }
       const metrics = this.compareBranches(baseline.branchId, branch.branchId)
       return {
         scenarioId: branch.scenarioId,
@@ -243,6 +252,13 @@ export class CivilizationRuntime {
           { factor: 'resilience', weight: Math.min(1, Math.abs(final.resilience - baseline.resilience)), eventTypes: ['resource-crisis', 'migration', 'civilization-change'], mechanism: 'historical adaptation and crisis load changed resilience' },
           { factor: 'civilization-transition', weight: final.type === baseline.type ? 0 : 1, eventTypes: ['civilization-change', 'tier-transition'], mechanism: 'state transition changed the civilization trajectory' },
         ].filter((item) => item.weight > 0).sort((a, b) => b.weight - a.weight),
+        evidence: branch.history.map((snapshot) => ({
+          branchId: snapshot.branchId,
+          tick: snapshot.tick,
+          snapshot,
+          eventTypes: snapshot.type !== baseline.type ? ['civilization-change'] : snapshot.stability < baseline.stability ? ['growth', 'resource-crisis'] : ['growth'],
+          claim: `At tick ${snapshot.tick}, branch ${snapshot.branchId} had civilization ${snapshot.type}, population ${snapshot.population}, stability ${snapshot.stability.toFixed(3)}, resilience ${snapshot.resilience.toFixed(3)}.`,
+        })),
       }
     })
     return { experimentId, ticks, branches, outcomes }
