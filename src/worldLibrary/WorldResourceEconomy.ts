@@ -47,6 +47,17 @@ export class WorldResourceEconomy {
   get(id: string) { return this.resources.get(this.canonicalId(id)) }
   all() { return [...this.resources.values()] }
 
+  snapshot(): ResourceState[] {
+    return this.all().map((resource) => ({ ...resource }))
+  }
+
+  restore(snapshot: ResourceState[]) {
+    this.resources.clear()
+    for (const resource of snapshot) this.resources.set(resource.semanticEntryId, { ...resource })
+    return this.snapshot()
+  }
+
+
   capability(id: string, requiredAmount: number): ResourceCapability {
     const resource = this.resources.get(this.canonicalId(id))
     const effective = resource ? resource.amount * resource.quality * resource.accessibility : 0
