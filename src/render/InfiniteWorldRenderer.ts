@@ -99,6 +99,8 @@ export class InfiniteWorldRenderer {
   private lastCenter: ChunkCoord | null = null
   private worldY = 45
   private worldPosition = new THREE.Vector3(28, 45, 52)
+
+  getWorldPosition() { return this.worldPosition.clone() }
   private worldAnchor = new THREE.Vector3(0, 0, 0)
   private flyMode = true
   private readonly keys = new Set<string>()
@@ -1909,7 +1911,7 @@ export class InfiniteWorldRenderer {
     const slopeRisk = Math.min(1, decision.buildability.slope / 0.5)
     const legacyTerrainCost = slopeRisk * 0.5 + floodRisk * 0.5
     return {
-      x, z, y, slope: decision.slope, river, floodRisk, slopeRisk,
+      x, z, y, slope: decision.buildability.slope, river, floodRisk, slopeRisk,
       cost: Math.max(0, Math.min(1, legacyTerrainCost * 0.65 + decision.cost * 0.35)),
       decisionCost: decision.cost,
       scientific: decision.buildability.field,
@@ -2233,7 +2235,7 @@ export class InfiniteWorldRenderer {
           properties: {
             settlement: 'block', block: i, slot: b, innerRadius: inner,
             buildability: siteDecision.score,
-            scientificField: siteDecision.field,
+            scientificField: siteDecision.field.information,
           },
         })
         created.push(building)
