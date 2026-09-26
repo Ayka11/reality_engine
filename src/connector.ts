@@ -26,6 +26,7 @@ import { PrefabSystem }                           from './modes/gamedev/PrefabSy
 import { AIGameDesigner }                         from './modes/gamedev/AIGameDesigner'
 import { buildGameDevModePanel }                  from './modes/GameDevModePanel'
 import { InfiniteWorldRenderer }                  from './render/InfiniteWorldRenderer'
+import { ChunkRenderer }                          from './render/ChunkRenderer'
 import { RealityMonitor, buildRealityMonitorHTML, updateMonitorPanels } from './ui/RealityMonitor'
 import { NodeLawEditor }                          from './ui/NodeLawEditor'
 import { sceneComposer }                          from './modes/cinema/SceneComposer'
@@ -36,6 +37,16 @@ const win = window as unknown as Record<string, unknown>
 // ── Chunk system — Three.js PBR renderer + 128×128×64 sparse worker ─────────
 
 const c3dCanvas = document.getElementById('c3d') as HTMLCanvasElement
+
+// The original volumetric field renderer remains available as a distinct 3D surface.
+// It uses the scientific ChunkSimWorker data, while InfiniteWorldRenderer is the
+// unbounded terrain/world surface. Keeping two canvases prevents two WebGL renderers
+// from fighting over the same drawing buffer.
+const c3dFieldCanvas = document.createElement('canvas')
+c3dFieldCanvas.id = 'c3dField'
+c3dFieldCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:2'
+c3dCanvas.parentElement?.appendChild(c3dFieldCanvas)
+const fieldRenderer = new ChunkRenderer(c3dFieldCanvas)
 const getInfiniteWorld = () => (win['infiniteWorld'] as InfiniteWorldRenderer | undefined)
 const monitor       = new RealityMonitor()
 const nodeEditor    = new NodeLawEditor()
@@ -118,10 +129,33 @@ win['applyChunkPreset']   = (name: string) => {
 }
 
 // 3D renderer controls — routed to the Infinite World renderer
-win['setMatMode'] = (m: string) => { getInfiniteWorld()?.setMaterialMode(m as 'field'|'material'|'height') }
-win['setTimeOfDay'] = (h: number) => { getInfiniteWorld()?.setTimeOfDay(h) }
-win['setFogDensity'] = (d: number) => { getInfiniteWorld()?.setFogDensity(d) }
+const activeField3D = () => (document.getElementById('c3dField')?.style.display !== 'none')
+win['setField3DVisible'] = (visible: boolean) => {
+  c3dFieldCanvas.style.display = visible ? 'block' : 'none'
+  c3dCanvas.style.display = visible ? 'none' : c3dCanvas.style.display
+  if (visible) fieldRenderer.controls.enabled = true
+}
+win['setFieldLayer'] = (layer: number) => { fieldRenderer.layer = Math.max(0, Math.min(5, layer)); fieldRenderer.applyWorkerFrame(new ArrayBuffer(4)) }
+win['setFieldZSlice'] = (z: number) => { fieldRenderer.zSlice = Math.max(0, Math.min(63, Math.round(z))); fieldRenderer.applyWorkerFrame(new ArrayBuffer(4)) }
+win['setFieldMatMode'] = (m: string) => { fieldRenderer.setMaterialMode(m as 'field'|'material'|'height') }
+win['setMatMode'] = (m: string) => {
+  if (activeField3D()) fieldRenderer.setMaterialMode(m as 'field'|'material'|'height')
+  else getInfiniteWorld()?.setMaterialMode(m as 'field'|'material'|'height')
+}
+win['setTimeOfDay'] = (h: number) => {
+  if (activeField3D()) fieldRenderer.setTimeOfDay(h)
+  else getInfiniteWorld()?.setTimeOfDay(h)
+}
+win['setFogDensity'] = (d: number) => {
+  if (activeField3D()) fieldRenderer.setFogDensity(d)
+  else getInfiniteWorld()?.setFogDensity(d)
+}
 win['setCameraPreset'] = (p: string) => {
+  if (activeField3D()) {
+    const map: Record<string, 'orbit'|'top'|'iso'|'street'|'fly'> = { orbit:'orbit', top:'top', iso:'iso', street:'street', fly:'fly' }
+    fieldRenderer.setCameraPreset(map[p] ?? 'orbit')
+    return
+  }
   const map: Record<string, 'orbit'|'top'|'front'|'iso'> = { orbit: 'orbit', top: 'top', iso: 'iso', street: 'front', fly: 'orbit' }
   const world = getInfiniteWorld()
   if (!world) return
@@ -132,9 +166,12 @@ win['setCameraPreset'] = (p: string) => {
   world.setFlyMode(false)
   world.setCameraPreset(map[p] ?? 'orbit')
 }
-win['setZSlice'] = (_z: number) => {}
-win['setShowParticles'] = (v: boolean) => { getInfiniteWorld()?.setShowParticles(v) }
-win['setChunkLayer'] = (_l: number) => {}
+win['setZSlice'] = (z: number) => { fieldRenderer.zSlice = Math.max(0, Math.min(63, Math.round(z))); fieldRenderer.applyWorkerFrame(new ArrayBuffer(4)) }
+win['setShowParticles'] = (v: boolean) => {
+  if (activeField3D()) fieldRenderer.setShowParticles(v)
+  else getInfiniteWorld()?.setShowParticles(v)
+}
+win['setChunkLayer'] = (l: number) => { fieldRenderer.layer = Math.max(0, Math.min(5, l)); if (activeField3D()) fieldRenderer.applyWorkerFrame(new ArrayBuffer(4)) }
 win['resizeChunkRenderer'] = (hybrid: boolean) => {
   const parent = c3dCanvas.parentElement
   if (!parent) return
