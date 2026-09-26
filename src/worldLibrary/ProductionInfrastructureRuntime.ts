@@ -28,7 +28,7 @@ export type WorldTimeScale = 'minute' | 'year' | 'decade' | 'century'
 export type WorldTimelineEvent = {
   id: string
   year: number
-  type: 'founding' | 'growth' | 'tier-transition' | 'resource-crisis' | 'infrastructure-expansion' | 'civilization-change'
+  type: 'founding' | 'growth' | 'tier-transition' | 'resource-crisis' | 'infrastructure-expansion' | 'infrastructure-failure' | 'migration' | 'civilization-change'
   settlementId: string
   from?: string
   to?: string
