@@ -59,7 +59,18 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).civilizationEvaluate = (id: string, tier: any) => civilizationRuntime.evaluate(id, tier)
   ;(window as any).civilizationTick = (state: any, delta = 1) => civilizationRuntime.tick(state, delta)
   ;(window as any).productionEvaluate = (id: string, tier: any = 'village') => productionInfrastructureRuntime.evaluate(civilizationRuntime.evaluate(id, tier))
-  ;(window as any).productionTick = (id: string, delta = 1) => productionInfrastructureRuntime.tick(id, delta)
+  ;(window as any).productionTick = (id: string, delta = 1) => {
+    const before = productionInfrastructureRuntime.get(id)
+    const result = productionInfrastructureRuntime.tick(id, delta)
+    if (result && before) {
+      const addedRoads = Math.max(0, result.infrastructure.roads - before.infrastructure.roads)
+      const addedCapacity = Math.max(0, result.infrastructure.capacity - before.infrastructure.capacity)
+      if (addedRoads || addedCapacity) {
+        ;(result as any).materialized = world.materializeInfrastructureExpansion(id, addedRoads, addedCapacity)
+      }
+    }
+    return result
+  }
   ;(window as any).productionInfrastructureState = (id: string) => productionInfrastructureRuntime.get(id)
   ;(window as any).productionStats = () => productionInfrastructureRuntime.all()
   ;(window as any).worldResourceEconomy = worldResourceEconomy
