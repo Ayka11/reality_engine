@@ -1,9 +1,13 @@
 import { worldLibrary, worldRuleGraph } from './registry'
 import type { WorldLibraryEntry } from './WorldLibrary'
 import { populationRuntimeKind, visualKindToWorldObject } from './WorldLibraryAdapter'
+import type { WorldEnvironment } from './WorldEnvironmentResolver'
+import { worldEnvironmentResolver } from './WorldEnvironmentResolver'
 
 export type WorldGenerationPlan = {
   target: string
+  environmentStatus: 'READY' | 'CONDITIONAL' | 'BLOCKED' | 'UNKNOWN'
+  environmentScore: number
   ordered: string[]
   dependencies: string[]
   conflicts: string[]
@@ -12,7 +16,7 @@ export type WorldGenerationPlan = {
 }
 
 export class WorldLibraryGenerationPlanner {
-  plan(id: string): WorldGenerationPlan | null {
+  plan(id: string, environment?: WorldEnvironment): WorldGenerationPlan | null {
     const target = worldLibrary.get(id)
     if (!target) return null
 
@@ -55,8 +59,14 @@ export class WorldLibraryGenerationPlanner {
 
     visit(id, true)
 
+    const environmentMatch = environment ? worldEnvironmentResolver.resolve(environment).find((item) => item.entry.id === id) : undefined
+    const environmentScore = environmentMatch?.score ?? (target.conditions ? 0 : 1)
+    const environmentStatus = !environment ? 'UNKNOWN' : !environmentMatch && target.conditions ? 'BLOCKED' : environmentScore >= 0.8 ? 'READY' : 'CONDITIONAL'
+
     return {
       target: id,
+      environmentStatus,
+      environmentScore,
       ordered,
       dependencies,
       conflicts,
