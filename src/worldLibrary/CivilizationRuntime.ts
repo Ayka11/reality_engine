@@ -1,3 +1,4 @@
+import { worldResourceEconomy, type ResourceState } from './WorldResourceEconomy'
 import { settlementGrowthModel, SettlementGrowthState, SettlementTier } from './SettlementGrowthModel'
 import { worldResourceEconomy } from './WorldResourceEconomy'
 import { worldRuleGraph } from './registry'
@@ -152,6 +153,7 @@ export class CivilizationRuntime {
   private readonly branches = new Map<string, CivilizationBranchSnapshot[]>()
   private readonly branchStates = new Map<string, CivilizationState>()
   private readonly experiments = new Map<string, CivilizationExperimentResult>()
+  private readonly branchResources = new Map<string, ResourceState[]>()
 
   evaluate(id: string, tier: SettlementTier): CivilizationState {
     const settlement = settlementGrowthModel.evaluate(id, tier)
@@ -241,7 +243,10 @@ export class CivilizationRuntime {
   tickBranch(branchId: string, delta = 1) {
     const state = this.branchStates.get(branchId)
     if (!state) return null
+    const branchSnapshot = this.branchResources.get(branchId)
+    if (branchSnapshot) worldResourceEconomy.restore(branchSnapshot)
     const result = this.tick(state, delta)
+    this.branchResources.set(branchId, worldResourceEconomy.snapshot())
     this.branchStates.set(branchId, result.state)
     return result
   }
@@ -385,6 +390,9 @@ export class CivilizationRuntime {
   forkBranch(sourceBranch: string, override: CounterfactualOverride): CivilizationBranchSnapshot | null {
     const source = this.branchSnapshot(sourceBranch)
     if (!source) return null
+    const sourceResources = this.branchResources.get(sourceBranch)
+    if (sourceResources) worldResourceEconomy.restore(sourceResources)
+    else this.branchResources.set(sourceBranch, worldResourceEconomy.snapshot())
     const branchId = `${sourceBranch}-cf-${this.branches.size + 1}`
     const snapshot: CivilizationBranchSnapshot = {
       ...source,
@@ -402,6 +410,7 @@ export class CivilizationRuntime {
     state.score = snapshot.score
     state.memory = { ...state.memory, branchId, divergence: snapshot.divergence, resilience: snapshot.resilience, lastType: snapshot.type }
     this.branchStates.set(branchId, state)
+    this.branchResources.set(branchId, worldResourceEconomy.snapshot())
     this.branches.set(branchId, [snapshot])
     return snapshot
   }
