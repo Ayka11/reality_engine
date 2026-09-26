@@ -73,6 +73,20 @@ export function bootstrapInfiniteWorld() {
     return { id: entry.id, visual, objects: world.getRuntimeStats().objects }
   }
   ;(window as any).worldLibraryGenerationPlan = (id: string) => worldLibraryGenerationPlanner.plan(id)
+  ;(window as any).worldLibraryEnvironmentCheck = (id: string, environment: any) => {
+    const entry = resolveWorldLibraryEntry(id)
+    if (!entry) return null
+    const matches = worldEnvironmentResolver.resolve(environment).find((item) => item.entry.id === id)
+    if (!entry.conditions) return { id, status: 'READY', score: 1, reasons: ['no-explicit-conditions'] }
+    if (!matches) return { id, status: 'BLOCKED', score: 0, reasons: ['environment-condition-mismatch'] }
+    const score = Math.max(0, Math.min(1, matches.score))
+    return {
+      id,
+      status: score >= 0.8 ? 'READY' : 'CONDITIONAL',
+      score,
+      reasons: matches.reasons,
+    }
+  }
   ;(window as any).worldLibraryGenerate = (id: string) => {
     const entry = resolveWorldLibraryEntry(id)
     if (!entry) return null
