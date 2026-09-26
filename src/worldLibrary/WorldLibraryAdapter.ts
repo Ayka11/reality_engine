@@ -1,5 +1,5 @@
 import { WorldLibraryEntry } from './WorldLibrary';
-import { worldLibrary } from './index';
+import { worldLibrary } from './registry';
 import type { WorldObjectKind } from '../infinity/WorldObject';
 
 const VISUAL_TO_OBJECT: Record<string, WorldObjectKind> = {
