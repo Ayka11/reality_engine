@@ -288,6 +288,25 @@ export class CivilizationRuntime {
     return { claims, evidence, edges }
   }
 
+  serializeState() {
+    return {
+      branches: Array.from(this.branches.entries()).map(([branchId, history]) => ({ branchId, history })),
+      branchStates: Array.from(this.branchStates.entries()).map(([branchId, state]) => ({ branchId, state }))
+    }
+  }
+
+  restoreState(snapshot: ReturnType<CivilizationRuntime['serializeState']>) {
+    this.branches.clear()
+    this.branchStates.clear()
+    for (const entry of snapshot.branches ?? []) this.branches.set(entry.branchId, entry.history)
+    for (const entry of snapshot.branchStates ?? []) this.branchStates.set(entry.branchId, entry.state)
+    return {
+      branchCount: this.branches.size,
+      stateCount: this.branchStates.size,
+      restored: this.branches.size === this.branchStates.size
+    }
+  }
+
   validateClaimGraph(graph: CivilizationClaimGraph) {
     const claimIds = new Set(graph.claims.map((claim) => claim.id))
     const evidenceIds = new Set(graph.evidence.map((item) => `${item.branchId}:${item.tick}`))
