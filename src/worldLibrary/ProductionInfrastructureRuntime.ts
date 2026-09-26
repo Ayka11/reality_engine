@@ -3,6 +3,7 @@ import { worldResourceEconomy } from './WorldResourceEconomy'
 import { eventConsequenceEngine, type EventConsequence } from './EventConsequenceEngine'
 
 export type ProductionKind = 'agriculture' | 'industry' | 'research'
+export type AdaptationStrategy = 'conservation' | 'infrastructure' | 'technology' | 'migration'
 
 export type ProductionNode = {
   id: string
@@ -52,6 +53,7 @@ export type CivilizationProductionState = {
   productionModifierTicks: number
   causalCooldowns: Record<string, number>
   environmentalState: { temperature: number; moisture: number; radiation: number; stability: number }
+  adaptation: { strategy: AdaptationStrategy; effectiveness: number; ticks: number }
 }
 
 const OUTPUTS: Record<ProductionKind, { output: string; rate: number; input?: string; inputRate?: number }> = {
@@ -103,7 +105,7 @@ export class ProductionInfrastructureRuntime {
       pressure: Math.min(1, civilization.settlement.population / Math.max(1, civilization.settlement.infrastructureCapacity)),
     }
 
-    const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [], worldTime: { year: 0, scale: 'year' as WorldTimeScale, elapsed: 0 }, history: [], timeline: [{ id: civilization.id + ':founding', year: 0, type: 'founding', settlementId: civilization.id, to: civilization.settlement.tier, details: 'Civilization runtime initialized' }], consequences: [], causalChain: [], causalQueue: [], productionModifier: 1, productionModifierTicks: 0, causalCooldowns: {}, environmentalState: { temperature: 0.5, moisture: 0.5, radiation: 0, stability: 1 } }
+    const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [], worldTime: { year: 0, scale: 'year' as WorldTimeScale, elapsed: 0 }, history: [], timeline: [{ id: civilization.id + ':founding', year: 0, type: 'founding', settlementId: civilization.id, to: civilization.settlement.tier, details: 'Civilization runtime initialized' }], consequences: [], causalChain: [], causalQueue: [], productionModifier: 1, productionModifierTicks: 0, causalCooldowns: {}, environmentalState: { temperature: 0.5, moisture: 0.5, radiation: 0, stability: 1 }, adaptation: { strategy: 'conservation', effectiveness: 0, ticks: 0 } }
     this.states.set(civilization.id, state)
     return state
   }
@@ -115,6 +117,7 @@ export class ProductionInfrastructureRuntime {
     const consumed: Record<string, number> = {}
     const shortages: string[] = []
     const expansion = this.infrastructureExpansion(current, delta)
+    if (current.adaptation.ticks <= 0) current.adaptation = this.chooseAdaptation(current)
     if (expansion.addedCapacity > 0) {
       current.infrastructure.roads += expansion.addedRoads
       current.infrastructure.capacity += expansion.addedCapacity
@@ -128,7 +131,8 @@ export class ProductionInfrastructureRuntime {
         continue
       }
       if (node.input) consumed[node.input] = (consumed[node.input] ?? 0) + inputAmount
-      const amount = node.rate * efficiency * current.productionModifier * delta
+      const adaptationMultiplier = current.adaptation.strategy === 'technology' ? 1 + current.adaptation.effectiveness * 0.2 : current.adaptation.strategy === 'conservation' ? 1 - current.adaptation.effectiveness * 0.15 : 1
+      const amount = node.rate * efficiency * current.productionModifier * adaptationMultiplier * delta
       const resource = worldResourceEconomy.get(node.output)
       if (resource) {
         resource.amount = Math.min(resource.capacity, resource.amount + amount)
@@ -148,6 +152,7 @@ export class ProductionInfrastructureRuntime {
     next.productionModifier = current.productionModifierTicks > 0 ? current.productionModifier : 1
     next.productionModifierTicks = Math.max(0, current.productionModifierTicks - 1)
     next.environmentalState = { ...current.environmentalState }
+    next.adaptation = current.adaptation.ticks > 0 ? { ...current.adaptation, ticks: current.adaptation.ticks - 1 } : { strategy: current.adaptation.strategy, effectiveness: 0, ticks: 0 }
     next.causalCooldowns = Object.fromEntries(Object.entries(current.causalCooldowns).map(([key, value]) => [key, Math.max(0, value - 1)]).filter(([, value]) => value > 0))
     next.infrastructure.roads += expansion.addedRoads
     next.infrastructure.capacity += expansion.addedCapacity
@@ -215,6 +220,17 @@ export class ProductionInfrastructureRuntime {
     return next
   }
 
+
+
+  private chooseAdaptation(state: CivilizationProductionState): CivilizationProductionState['adaptation'] {
+    const pressure = state.infrastructure.pressure
+    const env = state.environmentalState
+    if (pressure >= 0.9) return { strategy: 'infrastructure', effectiveness: Math.min(1, 0.35 + pressure * 0.55), ticks: 4 }
+    if (env.radiation >= 0.75 || env.moisture <= 0.2) return { strategy: 'technology', effectiveness: 0.65, ticks: 4 }
+    if (state.shortages.length > 0) return { strategy: 'conservation', effectiveness: 0.5, ticks: 3 }
+    if (state.civilization.settlement.stability < 0.35) return { strategy: 'migration', effectiveness: 0.45, ticks: 3 }
+    return { strategy: 'conservation', effectiveness: 0, ticks: 0 }
+  }
 
   applyEnvironmentalState(id: string, environment: { temperature: number; moisture: number; radiation?: number; stability?: number }) {
     const state = this.states.get(id)
