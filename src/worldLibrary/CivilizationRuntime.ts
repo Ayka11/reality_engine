@@ -74,6 +74,16 @@ export type CivilizationCausalAttribution = {
   mechanism: string
 }
 
+export type CivilizationExperimentCausalAttribution = {
+  eventId: string
+  eventType: string
+  branchId: string
+  tick: number
+  impact: number
+  dimensions: Array<'population' | 'stability' | 'resilience' | 'score'>
+  mechanism: string
+}
+
 export type CivilizationExperimentOutcome = {
   scenarioId: string
   branchId: string
@@ -85,6 +95,7 @@ export type CivilizationExperimentOutcome = {
   divergence: number
   dominantFactors: string[]
   causalAttribution: CivilizationCausalAttribution[]
+  eventAttribution?: CivilizationExperimentCausalAttribution[]
   evidence: CivilizationEvidenceLink[]
 }
 
@@ -439,6 +450,8 @@ export class CivilizationRuntime {
       const final = branch.final
       if (!final || !baseline) return { scenarioId: branch.scenarioId, branchId: branch.branchId, populationChange: 0, stabilityChange: 0, resilienceChange: 0, scoreChange: 0, civilizationChanged: false, divergence: 0, dominantFactors: [], causalAttribution: [], evidence: [] }
       const metrics = this.compareBranches(baseline.branchId, branch.branchId)
+      const baselineBranch = branches.find((item) => item.branchId === baseline.branchId)
+      const baselineHistory = baselineBranch?.history ?? []
       return {
         scenarioId: branch.scenarioId,
         branchId: branch.branchId,
@@ -455,6 +468,32 @@ export class CivilizationRuntime {
           { factor: 'resilience', weight: Math.min(1, Math.abs(final.resilience - baseline.resilience)), eventTypes: ['resource-crisis', 'migration', 'civilization-change'], mechanism: 'historical adaptation and crisis load changed resilience' },
           { factor: 'civilization-transition', weight: final.type === baseline.type ? 0 : 1, eventTypes: ['civilization-change', 'tier-transition'], mechanism: 'state transition changed the civilization trajectory' },
         ].filter((item) => item.weight > 0).sort((a, b) => b.weight - a.weight),
+        eventAttribution: (this.branchCausalEvents.get(branch.branchId) ?? [])
+          .map((event) => {
+            const historyAtTick = branch.history.find((snapshot) => snapshot.tick === event.year) ?? final
+            const baselineAtTick = baselineHistory.find((snapshot) => snapshot.tick === event.year) ?? baseline
+            const populationImpact = Math.abs(historyAtTick.population - baselineAtTick.population) / Math.max(1, baselineAtTick.population)
+            const stabilityImpact = Math.abs(historyAtTick.stability - baselineAtTick.stability)
+            const resilienceImpact = Math.abs(historyAtTick.resilience - baselineAtTick.resilience)
+            const scoreImpact = Math.abs(historyAtTick.score - baselineAtTick.score)
+            const impact = Math.min(1, populationImpact * 0.35 + stabilityImpact * 0.3 + resilienceImpact * 0.2 + scoreImpact * 0.15)
+            return {
+              eventId: event.id,
+              eventType: event.type,
+              branchId: branch.branchId,
+              tick: event.year,
+              impact,
+              dimensions: [
+                ...(populationImpact > 0.02 ? ['population' as const] : []),
+                ...(stabilityImpact > 0.02 ? ['stability' as const] : []),
+                ...(resilienceImpact > 0.02 ? ['resilience' as const] : []),
+                ...(scoreImpact > 0.02 ? ['score' as const] : []),
+              ],
+              mechanism: event.details,
+            }
+          })
+          .filter((item) => item.impact > 0)
+          .sort((a, b) => b.impact - a.impact),
         evidence: branch.history.map((snapshot) => {
           const events = this.branchCausalEvents.get(snapshot.branchId) ?? []
           const relevantEvents = events.filter((event) => event.year <= snapshot.tick).slice(-8)
