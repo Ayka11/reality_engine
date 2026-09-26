@@ -18,4 +18,5 @@ export * from './AssetProviders';
 export * from './AssetImportManifest';
 export * from './AssetDiscovery';
 export * from './AssetImportService';
+export * from './WorldAssetRuntime';
 export * from './OpenAssetsPanel';
