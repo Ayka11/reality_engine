@@ -163,6 +163,42 @@ export async function runCivilizationInfinityBatch(
   }
 }
 
+export async function runCivilizationInfinityReplication(
+  runtime: CivilizationRuntime,
+  plan: CivilizationBatchScenario,
+  repetitions = 3,
+  tolerance = 1e-9,
+): Promise<import('./ReplicationStudy').ReplicationStudySummary> {
+  const { createExperimentProtocol } = await import('./ExperimentProtocol')
+  const { runReplicationStudy } = await import('./ReplicationStudy')
+  const protocol = createExperimentProtocol({
+    experimentId: plan.experimentId,
+    world: { seed: plan.sourceBranch, generatorVersion: 'civilization-runtime-v1' },
+    field: { providerId: 'civilization-runtime', providerVersion: 'civilization-runtime-v1' },
+    decision: {
+      version: 'civilization-decision-v1',
+      weights: { slope: 0, water: 0, elevation: 0, entropy: 0, density: 0, biology: 0, information: 0, distance: 1 },
+    },
+    physics: {
+      version: 'civilization-runtime-v1',
+      parameters: { gravity: 0, entropyDamping: 0, quantumLift: 0, forcePush: 0, metaLawOrbit: 0 },
+    },
+    metadata: { ...plan.metadata, replication: true },
+  })
+  return runReplicationStudy(protocol, {
+    repetitions,
+    tolerance,
+    run: (_protocol, _runner, repetition) => {
+      const id = `${plan.experimentId}-r${String(repetition).padStart(3, '0')}`
+      const experiment = runtime.runExperiment(id, plan.scenarios, plan.ticks ?? 10, plan.delta ?? 1)
+      return {
+        civilization: experiment,
+        claimGraph: runtime.buildComparativeClaimGraph(experiment.outcomes),
+      }
+    },
+  })
+}
+
 
 export function assessCivilizationReplicationBatch(
   baseline: CivilizationExperimentResult,
