@@ -31,6 +31,7 @@ export type CivilizationExperimentScenario = {
   id: string
   sourceBranch: string
   override: CounterfactualOverride
+  baseline?: boolean
 }
 
 export type CivilizationClaimStatus = 'supported' | 'contradicted' | 'unresolved'
@@ -150,6 +151,7 @@ function capabilityScore(requirements: Record<string, number>) {
 export class CivilizationRuntime {
   private readonly branches = new Map<string, CivilizationBranchSnapshot[]>()
   private readonly branchStates = new Map<string, CivilizationState>()
+  private readonly experiments = new Map<string, CivilizationExperimentResult>()
 
   evaluate(id: string, tier: SettlementTier): CivilizationState {
     const settlement = settlementGrowthModel.evaluate(id, tier)
@@ -336,7 +338,8 @@ export class CivilizationRuntime {
       for (let i = 0; i < ticks; i++) this.tickBranch(fork.branchId, delta)
       branches.push({ scenarioId: scenario.id, branchId: fork.branchId, final: this.branchSnapshot(fork.branchId), history: this.branchHistory(fork.branchId) })
     }
-    const baseline = branches[0]?.final ?? null
+    const baselineScenario = scenarios.find((scenario) => scenario.baseline)
+    const baseline = baselineScenario ? branches.find((branch) => branch.scenarioId === baselineScenario.id)?.final ?? null : branches[0]?.final ?? null
     const outcomes: CivilizationExperimentOutcome[] = branches.map((branch) => {
       const final = branch.final
       if (!final || !baseline) return { scenarioId: branch.scenarioId, branchId: branch.branchId, populationChange: 0, stabilityChange: 0, resilienceChange: 0, scoreChange: 0, civilizationChanged: false, divergence: 0, dominantFactors: [], causalAttribution: [], evidence: [] }
@@ -366,8 +369,13 @@ export class CivilizationRuntime {
         })),
       }
     })
-    return { experimentId, ticks, branches, outcomes }
+    const result = { experimentId, ticks, branches, outcomes }
+    this.experiments.set(experimentId, result)
+    return result
   }
+
+  experiment(experimentId: string) { return this.experiments.get(experimentId) ?? null }
+  experimentsList() { return [...this.experiments.values()].map((item) => ({ experimentId: item.experimentId, ticks: item.ticks, branchCount: item.branches.length, outcomeCount: item.outcomes.length })) }
   branchesList() { return [...this.branches.entries()].map(([branchId, history]) => ({ branchId, latest: history.at(-1) ?? null, length: history.length })) }
 
   forkBranch(sourceBranch: string, override: CounterfactualOverride): CivilizationBranchSnapshot | null {
