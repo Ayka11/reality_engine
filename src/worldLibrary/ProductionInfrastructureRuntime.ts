@@ -120,6 +120,8 @@ export class ProductionInfrastructureRuntime {
     worldResourceEconomy.tick(delta)
     const civTick = civilizationRuntime.tick(current.civilization, delta)
     const next = this.evaluate(civTick.state)
+    next.worldTime = { ...current.worldTime }
+    next.history = [...current.history]
     next.infrastructure.roads += expansion.addedRoads
     next.infrastructure.capacity += expansion.addedCapacity
     next.infrastructure.populationCapacity = Math.max(next.infrastructure.populationCapacity, current.infrastructure.populationCapacity + expansion.addedCapacity)
