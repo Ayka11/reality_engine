@@ -146,7 +146,7 @@ win['setField3DVisible'] = (visible: boolean) => {
   c3dCanvas.style.display = visible ? 'none' : c3dCanvas.style.display
   if (visible) fieldRenderer.controls.enabled = true
 }
-win['setFieldLayer'] = (layer: number) => { fieldRenderer.setLayer(Math.max(0, Math.min(5, layer))) }
+win['setFieldLayer'] = (layer: number) => { fieldRenderer.setLayer(Math.max(-1, Math.min(5, layer))) }
 win['setFieldZSlice'] = (z: number) => { fieldRenderer.setZSlice(Math.max(0, Math.min(63, Math.round(z)))) }
 win['setFieldMatMode'] = (m: string) => { fieldRenderer.setMatMode(m as 'field'|'material'|'height') }
 win['setMatMode'] = (m: string) => {
@@ -182,7 +182,7 @@ win['setShowParticles'] = (v: boolean) => {
   if (activeField3D()) fieldRenderer.showParticles = v
   else getInfiniteWorld()?.setShowParticles(v)
 }
-win['setChunkLayer'] = (l: number) => { fieldRenderer.setLayer(Math.max(0, Math.min(5, l))) }
+win['setChunkLayer'] = (l: number) => { fieldRenderer.setLayer(Math.max(-1, Math.min(5, l))) }
 win['renderField3D'] = () => fieldRenderer.render()
 win['fieldSetCameraPreset'] = (p: string) => {
   const map: Record<string, 'orbit'|'top'|'iso'|'street'|'fly'> = { orbit:'orbit', top:'top', iso:'iso', street:'street', fly:'fly' }
