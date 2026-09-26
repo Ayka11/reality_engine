@@ -12,6 +12,7 @@ export function bootstrapInfiniteWorld() {
   const world = new InfiniteWorldRenderer(canvas, seed)
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world
+  ;(window as any).infinityStats = () => world.getRuntimeStats()
 
   // ── 3D Controls Bindings on window (ensures Right Panel controls always work) ───
   const isField3DActive = () => document.getElementById('c3dField')?.style.display !== 'none'
