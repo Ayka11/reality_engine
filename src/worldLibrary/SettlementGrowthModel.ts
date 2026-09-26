@@ -16,6 +16,8 @@ export type SettlementGrowthState = {
   density: number
   landUse: number
   infrastructureCapacity: number
+  growthModifier: number
+  growthModifierTicks: number
 }
 
 export type SettlementTickResult = {
@@ -77,6 +79,8 @@ export class SettlementGrowthModel {
       density,
       landUse,
       infrastructureCapacity,
+      growthModifier: 1,
+      growthModifierTicks: 0,
     }
   }
 
@@ -107,11 +111,14 @@ export class SettlementGrowthModel {
     const pressurePenalty = Math.max(0, pressure - 0.72) * 0.22
     const capacityRelief = Math.max(0, state.infrastructureCapacity - state.population) / Math.max(1, state.infrastructureCapacity) * 0.02
     const nextStability = Math.max(0, Math.min(1, state.stability - shortagePenalty - pressurePenalty + (shortages.length ? 0 : capacityRelief * delta)))
-    const nextPopulation = Math.max(1, Math.round(state.population * (1 + ((nextStability - 0.55) * 0.01) * delta)))
+    const growthModifier = state.growthModifierTicks > 0 ? state.growthModifier : 1
+    const nextPopulation = Math.max(1, Math.round(state.population * (1 + ((nextStability - 0.55) * 0.01) * growthModifier * delta)))
     const nextState = this.evaluate(state.id, state.tier, nextPopulation)
     nextState.stability = nextStability
     nextState.resourceScore = Math.max(0, nextState.resourceScore - shortagePenalty)
-    nextState.growthRate = Math.max(-0.08, Math.min(0.08, (nextStability - 0.55) * 0.08 - pressurePenalty * 0.08))
+    nextState.growthRate = Math.max(-0.08, Math.min(0.08, (nextStability - 0.55) * 0.08 * growthModifier - pressurePenalty * 0.08))
+    nextState.growthModifier = growthModifier
+    nextState.growthModifierTicks = Math.max(0, state.growthModifierTicks - delta)
     nextState.blockedBy = [...new Set([...nextState.blockedBy, ...shortages])]
     const nextTier = this.nextTier(nextState)
     return {
