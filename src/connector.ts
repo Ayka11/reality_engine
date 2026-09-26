@@ -135,11 +135,11 @@ win['setField3DVisible'] = (visible: boolean) => {
   c3dCanvas.style.display = visible ? 'none' : c3dCanvas.style.display
   if (visible) fieldRenderer.controls.enabled = true
 }
-win['setFieldLayer'] = (layer: number) => { fieldRenderer.layer = Math.max(0, Math.min(5, layer)); fieldRenderer.applyWorkerFrame(new ArrayBuffer(4)) }
-win['setFieldZSlice'] = (z: number) => { fieldRenderer.zSlice = Math.max(0, Math.min(63, Math.round(z))); fieldRenderer.applyWorkerFrame(new ArrayBuffer(4)) }
-win['setFieldMatMode'] = (m: string) => { fieldRenderer.setMaterialMode(m as 'field'|'material'|'height') }
+win['setFieldLayer'] = (layer: number) => { fieldRenderer.setLayer(Math.max(0, Math.min(5, layer))) }
+win['setFieldZSlice'] = (z: number) => { fieldRenderer.setZSlice(Math.max(0, Math.min(63, Math.round(z)))) }
+win['setFieldMatMode'] = (m: string) => { fieldRenderer.setMatMode(m as 'field'|'material'|'height') }
 win['setMatMode'] = (m: string) => {
-  if (activeField3D()) fieldRenderer.setMaterialMode(m as 'field'|'material'|'height')
+  if (activeField3D()) fieldRenderer.setMatMode(m as 'field'|'material'|'height')
   else getInfiniteWorld()?.setMaterialMode(m as 'field'|'material'|'height')
 }
 win['setTimeOfDay'] = (h: number) => {
@@ -166,12 +166,13 @@ win['setCameraPreset'] = (p: string) => {
   world.setFlyMode(false)
   world.setCameraPreset(map[p] ?? 'orbit')
 }
-win['setZSlice'] = (z: number) => { fieldRenderer.zSlice = Math.max(0, Math.min(63, Math.round(z))); fieldRenderer.applyWorkerFrame(new ArrayBuffer(4)) }
+win['setZSlice'] = (z: number) => { fieldRenderer.setZSlice(Math.max(0, Math.min(63, Math.round(z)))) }
 win['setShowParticles'] = (v: boolean) => {
-  if (activeField3D()) fieldRenderer.setShowParticles(v)
+  if (activeField3D()) fieldRenderer.showParticles = v
   else getInfiniteWorld()?.setShowParticles(v)
 }
-win['setChunkLayer'] = (l: number) => { fieldRenderer.layer = Math.max(0, Math.min(5, l)); if (activeField3D()) fieldRenderer.applyWorkerFrame(new ArrayBuffer(4)) }
+win['setChunkLayer'] = (l: number) => { fieldRenderer.setLayer(Math.max(0, Math.min(5, l))) }
+win['renderField3D'] = () => fieldRenderer.render()
 win['resizeChunkRenderer'] = (hybrid: boolean) => {
   const parent = c3dCanvas.parentElement
   if (!parent) return
