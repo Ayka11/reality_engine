@@ -67,7 +67,7 @@ export class BiomePopulationEngine {
         minCount,
         maxCount,
         scale: layer === 'visual' && semanticEntryId.startsWith('flora.') ? 1 : 0.85,
-        requiredRelations: ['supports', 'compatible'],
+        requiredRelations: ['supports', 'compatible'] as Array<'supports' | 'enables' | 'compatible'>,
       }
     })
 
