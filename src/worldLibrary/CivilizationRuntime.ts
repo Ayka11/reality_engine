@@ -375,6 +375,9 @@ export class CivilizationRuntime {
       for (const event of (this.branchCausalEvents.get(outcome.branchId) ?? []).slice(-8)) {
         edges.push({ from: claimId, to: event.id, relation: 'caused-by' })
       }
+      for (const attribution of outcome.eventAttribution ?? []) {
+        if (attribution.impact > 0.02) edges.push({ from: claimId, to: attribution.eventId, relation: 'caused-by' })
+      }
     }
     return { claims, evidence, causalEvents, edges }
   }
