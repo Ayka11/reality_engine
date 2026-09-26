@@ -1,5 +1,5 @@
 import { InfiniteWorldRenderer } from './render/InfiniteWorldRenderer'
-import { findWorldLibraryEntries, resolveWorldLibraryEntry, worldLibrary, worldRuleGraph } from './worldLibrary'
+import { findWorldLibraryEntries, resolveWorldLibraryEntry, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
 
 export type DockPosition = 'top' | 'left' | 'right' | 'float'
@@ -21,6 +21,10 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldRuleGraph = worldRuleGraph
   ;(window as any).worldRuleStats = () => worldRuleGraph.stats()
   ;(window as any).worldRuleRelated = (id: string) => worldRuleGraph.related(id)
+  ;(window as any).worldEnvironmentResolve = (environment: any, category?: string) =>
+    worldEnvironmentResolver.resolve(environment, category as any)
+  ;(window as any).worldEnvironmentRelated = (environment: any, seedIds: string[] = []) =>
+    worldEnvironmentResolver.related(environment, seedIds)
   ;(window as any).infinityStats = () => ({ ...world.getRuntimeStats(), library: worldLibrary.stats() })
   ;(window as any).focusGeneratedWorld = () => {
     const result = world.focusGeneratedRegion()
