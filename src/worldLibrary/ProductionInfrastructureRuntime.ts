@@ -166,6 +166,8 @@ export class ProductionInfrastructureRuntime {
   }
 
   get(id: string) { return this.states.get(id) }
+  timeline(id: string) { return this.states.get(id)?.timeline ?? [] }
+  allTimelines() { return [...this.states.values()].flatMap((state) => state.timeline) }
   all() { return [...this.states.values()] }
 }
 
