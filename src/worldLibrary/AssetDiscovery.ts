@@ -17,6 +17,8 @@ export type DiscoveredAsset = {
   providerId: string;
   sourceUrl: string;
   license: string;
+  runtimeUrl?: string;
+  format?: string;
 };
 
 export async function discoverPolyHavenAssets(
