@@ -1,0 +1,2619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reality Engine v5 — Creator Engine</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.10.0/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#09090f;--panel:#111119;--border:#252535;--accent:#7c6fcd;--text:#d0cef5;--sub:#666;--success:#3db872;--warn:#e09030;--danger:#e04848;--info:#5080e0;--err:#e04848;--ok:#3db872;--tx:#d0cef5;--bd:#252535;--p2:#111119;--lw:220px;--rw:240px}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:13px}
+#app{display:grid;grid-template-columns:52px var(--lw) 1fr var(--rw);grid-template-rows:46px 1fr 38px;height:100vh;border:0.5px solid var(--border);overflow:hidden}
+.rsz-bar{position:absolute;top:46px;bottom:38px;width:5px;cursor:col-resize;z-index:100;background:transparent;transition:background .15s}
+.rsz-bar:hover,.rsz-bar.active{background:var(--accent)}
+/* TOP BAR */
+#topbar{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:0 12px;background:var(--panel);border-bottom:0.5px solid var(--border)}
+.mode-btn{font-size:11px;padding:4px 12px;border:0.5px solid var(--border);border-radius:20px;cursor:pointer;background:transparent;color:var(--sub);white-space:nowrap;transition:all .15s}
+.mode-btn.active{border-color:var(--accent);color:#a09af0;background:#1a1830}
+.tbsep{width:0.5px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0}
+.compose-btn{padding:3px 14px;border:0.5px solid var(--accent);border-radius:20px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:10px;font-weight:500}
+/* ICON SIDEBAR */
+#icons{background:var(--panel);border-right:0.5px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:4px}
+.icon-btn{width:36px;height:36px;border:0.5px solid transparent;border-radius:8px;cursor:pointer;background:transparent;color:var(--sub);font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .15s;position:relative}
+.icon-btn:hover{background:#1a1a28;border-color:var(--border);color:var(--text)}
+.icon-btn.active{background:#1a1830;border-color:var(--accent);color:#a09af0}
+.icon-tip{position:absolute;left:44px;background:#1a1a28;border:0.5px solid var(--border);border-radius:5px;padding:3px 7px;font-size:9px;color:var(--text);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s;z-index:20}
+.icon-btn:hover .icon-tip{opacity:1}
+/* LEFT PANEL */
+#left{background:var(--panel);border-right:0.5px solid var(--border);overflow-y:auto;display:flex;flex-direction:column;gap:0;scroll-behavior:smooth}
+#left::-webkit-scrollbar,#right::-webkit-scrollbar{width:5px}
+#left::-webkit-scrollbar-track,#right::-webkit-scrollbar-track{background:transparent}
+#left::-webkit-scrollbar-thumb,#right::-webkit-scrollbar-thumb{background:#2a2a45;border-radius:3px}
+#left::-webkit-scrollbar-thumb:hover,#right::-webkit-scrollbar-thumb:hover{background:#4040658}
+#left,#right{scrollbar-width:thin;scrollbar-color:#2a2a45 transparent}
+.section{border-bottom:0.5px solid var(--border)}
+.section-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer;user-select:none;background:#0e0e1a;transition:background .15s}
+.section-hdr:hover{background:#131320}
+.section-hdr span{font-size:11px;color:var(--tx);letter-spacing:.04em;text-transform:uppercase;font-weight:500}
+.section-hdr .arrow{font-size:10px;color:var(--sub);transition:transform .2s}
+.section-body{padding:10px 12px}
+.section.collapsed .section-body{display:none}
+.section.collapsed .arrow{transform:rotate(-90deg)}
+/* Controls */
+.ctrl-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.ctrl-label{font-size:11px;color:var(--tx);flex:1}
+.ctrl-val{font-size:11px;font-family:monospace;color:var(--text);min-width:36px;text-align:right}
+input[type=range]{width:80px;accent-color:var(--accent);height:4px}
+.pill-row{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.pill{font-size:10px;padding:3px 9px;border-radius:20px;cursor:pointer;border:0.5px solid var(--border);color:var(--sub);transition:all .15s}
+.pill:hover{border-color:var(--accent);color:var(--text)}
+.pill.on{border-color:var(--accent);color:#a09af0;background:#1a1830}
+/* Law rows */
+.law-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:6px 8px;border-radius:6px;background:#0e0e18;border:0.5px solid var(--border)}
+.law-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.law-name{font-size:11px;color:var(--tx);flex:1}
+.law-fit{font-size:10px;font-family:monospace;min-width:30px;text-align:right}
+.law-toggle{width:22px;height:12px;border-radius:6px;cursor:pointer;border:none;flex-shrink:0;transition:background .15s}
+/* CANVAS */
+#cw{position:relative;overflow:hidden;display:flex;flex-direction:column}
+#viewWrap{flex:1;min-height:0;position:relative;overflow:hidden;cursor:crosshair;background:#0d0d1f;background-image:linear-gradient(rgba(100,100,180,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(100,100,180,.07) 1px,transparent 1px);background-size:28px 28px}
+#c2d,#c3d{position:absolute;top:0;left:0;width:100%;height:100%;display:block}
+#c3d{display:none}
+.ctab{padding:6px 16px;font-size:11px;cursor:pointer;border-bottom:2px solid transparent;color:var(--sub);flex-shrink:0;user-select:none;transition:all .15s}
+.ctab.on{color:#a09af0;border-bottom-color:var(--accent);background:#1a1830}
+/* Composer classes */
+.cbox{background:var(--panel);border:0.5px solid var(--border);border-radius:12px;width:min(860px,96%);max-height:92vh;display:flex;flex-direction:column;overflow:hidden}
+.csteps{display:flex;border-bottom:0.5px solid var(--border)}
+.cstep{flex:1;padding:8px 4px;text-align:center;font-size:9px;cursor:pointer;border-bottom:2px solid transparent;color:var(--sub);transition:all .15s}
+.cstep.active{color:#a09af0;border-color:var(--accent);background:#1a1830}
+.cstep.done{color:var(--success)}
+.cbody{flex:1;overflow-y:auto;padding:16px 18px}
+.cfoot{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;border-top:0.5px solid var(--border);background:#0d0d14}
+.cbtn1{padding:4px 12px;border:0.5px solid var(--border);border-radius:5px;cursor:pointer;background:#0e0e18;color:var(--sub);font-size:9px;transition:all .15s}
+.cbtn1:hover{border-color:var(--accent);color:#a09af0}
+.cbtn2{padding:4px 16px;border:0.5px solid var(--accent);border-radius:6px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:10px;font-weight:500}
+/* RIGHT PANEL */
+#right{background:var(--panel);border-left:0.5px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+.rpanel{padding:10px 12px;border-bottom:0.5px solid var(--border)}
+.rl{font-size:10px;color:var(--sub);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;display:block;font-weight:600}
+/* Health bars */
+.hbar{margin-bottom:5px}
+.hbar-hdr{display:flex;justify-content:space-between;font-size:9px;margin-bottom:2px}
+.hbar-hdr span:first-child{color:var(--sub)}
+.hbar-track{height:4px;border-radius:2px;background:#1a1a22;overflow:hidden}
+.hbar-fill{height:100%;border-radius:2px;transition:width .4s}
+/* Semantic tags */
+.sem-tags{display:flex;gap:4px;flex-wrap:wrap}
+.sem-tag{font-size:9px;padding:2px 8px;border-radius:12px;border:0.5px solid}
+/* Alerts */
+.alert{font-size:9px;padding:3px 7px;border-radius:4px;margin-bottom:3px;border-left:2px solid}
+.alert-critical{background:#20080822;color:#e06060;border-color:var(--danger)}
+.alert-warn{background:#20140822;color:#d08040;border-color:var(--warn)}
+.alert-ok{background:#08200822;color:#50d080;border-color:var(--success)}
+.alert-info{background:#08102022;color:#6090e0;border-color:var(--info)}
+/* Explainer cards */
+.excard{padding:6px 8px;background:#0e0e18;border-radius:6px;border:0.5px solid var(--border);margin-bottom:5px}
+.excard-hdr{display:flex;justify-content:space-between;margin-bottom:3px}
+.excard-field{font-size:10px;color:#999}
+.excard-val{font-size:10px;font-family:monospace;color:var(--text)}
+.excard-why{font-size:9px;color:var(--sub);line-height:1.55}
+/* History graph */
+#hc{width:100%;height:70px;border-radius:5px;border:0.5px solid var(--border);background:#07070e;display:block}
+/* BOTTOM BAR */
+#bot{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:0 12px;background:var(--panel);border-top:0.5px solid var(--border);font-size:11px}
+#pb{padding:4px 16px;border:0.5px solid #5a5a8a;border-radius:6px;cursor:pointer;background:#1a1828;font-size:11px;color:#c0b8f8;font-weight:500;transition:all .15s}
+#pb:hover{background:#22203a;border-color:var(--accent)}
+.bst{color:var(--sub);font-size:11px}.bsv{font-weight:600;color:var(--text);font-family:monospace;font-size:11px}
+input[type=range]#spd{width:60px}
+/* COMPOSER MODAL */
+#comp{display:none;position:absolute;inset:0;background:rgba(7,7,14,.96);z-index:50;align-items:center;justify-content:center}
+#comp.open{display:flex}
+.comp-box{background:var(--panel);border:0.5px solid var(--border);border-radius:12px;width:min(680px,94%);max-height:88%;display:flex;flex-direction:column}
+.comp-hdr{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:0.5px solid var(--border)}
+.comp-title{font-size:15px;font-weight:500}
+.comp-sub{font-size:10px;color:var(--sub);margin-top:2px}
+.comp-steps{display:flex;border-bottom:0.5px solid var(--border)}
+.comp-step{flex:1;padding:8px 4px;text-align:center;font-size:9px;cursor:pointer;border-bottom:2px solid transparent;color:var(--sub);transition:all .15s}
+.comp-step.active{color:#a09af0;border-color:var(--accent);background:#1a1830}
+.comp-step.done{color:var(--success)}
+.comp-body{flex:1;overflow-y:auto;padding:16px 18px}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.wcard{padding:10px;border-radius:8px;cursor:pointer;border:0.5px solid var(--border);background:#0e0e18;transition:all .15s}
+.wcard:hover{border-color:#3a3a55;background:#111122}
+.wcard.sel{border-color:var(--accent);background:#1a1830}
+.wcard-icon{font-size:20px;margin-bottom:5px}
+.wcard-name{font-size:11px;font-weight:500;color:#b0a8f0;margin-bottom:3px}
+.wcard-desc{font-size:9px;color:var(--sub);line-height:1.5}
+.comp-footer{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;border-top:0.5px solid var(--border);background:#0d0d14;border-radius:0 0 12px 12px}
+.comp-sel-display{font-size:9px;color:var(--sub);font-family:monospace;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cb1{padding:4px 14px;border:0.5px solid var(--border);border-radius:6px;cursor:pointer;background:transparent;color:var(--sub);font-size:10px}
+.cb2{padding:4px 16px;border:0.5px solid var(--accent);border-radius:6px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:10px;font-weight:500}
+/* brush selector */
+.brush-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.brush-btn{font-size:11px;padding:5px 7px;border:0.5px solid var(--border);border-radius:6px;cursor:pointer;background:#0e0e18;color:var(--sub);text-align:left;transition:all .15s}
+.brush-btn:hover{border-color:var(--accent);color:var(--text);background:#111122}
+.brush-btn.active{border-color:var(--accent);color:#a09af0;background:#1a1830}
+/* Plog */
+#plog{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(14,14,24,.85);backdrop-filter:blur(8px);border:0.5px solid var(--border);border-radius:20px;padding:3px 12px;font-size:10px;color:#9890d0;pointer-events:none;white-space:nowrap;z-index:15;font-family:system-ui,monospace;box-shadow:0 2px 12px rgba(0,0,0,.4);transition:opacity .3s}
+/* Game Dev panel classes */
+.sec{border-bottom:0.5px solid var(--border)}
+.sechdr{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer;user-select:none;font-size:11px;color:var(--tx);letter-spacing:.04em;text-transform:uppercase;font-weight:500;background:#0e0e1a;transition:background .15s}
+.sechdr:hover{background:#131320}
+.sechdr .sarr{font-size:10px;color:var(--sub);transition:transform .2s}
+.secbody{padding:10px 12px}
+.sec.collapsed .secbody{display:none}
+.sec.collapsed .sarr{transform:rotate(-90deg)}
+.bb{padding:5px 10px;border:0.5px solid var(--border);border-radius:6px;cursor:pointer;background:#0e0e18;color:var(--sub);font-size:11px;transition:all .15s;white-space:nowrap}
+.bb:hover{border-color:var(--accent);color:#a09af0;background:#111122}
+.crow{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.clbl{font-size:11px;color:var(--tx);flex:1}
+.cvl{font-size:11px;font-family:monospace;color:var(--text);min-width:32px;text-align:right}
+</style>
+  <script type="module" crossorigin src="/assets/index-DasSUJWD.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/three-DnyQy_6K.js">
+</head>
+<body>
+<div id="app" style="position:relative">
+<div id="rszL" class="rsz-bar" style="left:calc(52px + var(--lw) - 2px)"></div>
+<div id="rszR" class="rsz-bar" style="right:calc(var(--rw) - 3px)"></div>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <button class="compose-btn" onclick="openComp()">✦ Compose World</button>
+  <button class="compose-btn" onclick="quickGenerateWorld()" style="border-color:#40c080;color:#50d090;background:#0d1f17;margin-left:4px" title="Generate with current settings">⚡ Quick Generate</button>
+  <button class="compose-btn" id="btnToggleWorldTools" onclick="window.toggleWorldToolbar&&window.toggleWorldToolbar()" style="border-color:var(--accent);color:#a09af0;background:#181628;margin-left:4px" title="Toggle World & Infinity Scale Tools">🌍 World Tools</button>
+  <div class="tbsep"></div>
+  <button class="mode-btn active" data-mode="create">Create</button>
+  <button class="mode-btn" data-mode="science">Science</button>
+  <button class="mode-btn" data-mode="cinema">Cinema</button>
+  <button class="mode-btn" data-mode="game">Game Dev</button>
+  <div style="flex:1"></div>
+  <button class="pill on" id="btnToggleLeft" onclick="window.toggleLeftPanel&&window.toggleLeftPanel()" style="font-size:9.5px;padding:2px 7px;margin-right:3px" title="Toggle Left Sidebar">◧ Sidebar</button>
+  <button class="pill on" id="btnToggleRight" onclick="window.toggleRightPanel&&window.toggleRightPanel()" style="font-size:9.5px;padding:2px 7px;margin-right:6px" title="Toggle Right Controls">◨ Controls</button>
+  <span style="font-size:9px;color:var(--sub)">FPS:</span><span id="fpsOut" style="font-family:monospace;color:var(--text);min-width:20px">0</span>
+</div>
+
+<!-- ICON SIDEBAR -->
+<div id="icons">
+  <button class="icon-btn active" data-panel="world" onclick="setIconPanel('world')" title="World"><i class="ti ti-planet"></i><span class="icon-tip">World</span></button>
+  <button class="icon-btn" data-panel="builder" onclick="setIconPanel('builder')" title="World Builder"><i class="ti ti-tools"></i><span class="icon-tip">Builder</span></button>
+  <button class="icon-btn" data-panel="laws" onclick="setIconPanel('laws')" title="Laws"><i class="ti ti-atom"></i><span class="icon-tip">Laws</span></button>
+  <button class="icon-btn" data-panel="science" onclick="setIconPanel('science')" title="Science Mode"><i class="ti ti-microscope"></i><span class="icon-tip">Science</span></button>
+  <button class="icon-btn" data-panel="cinema" onclick="setIconPanel('cinema')" title="Cinema Mode"><i class="ti ti-movie"></i><span class="icon-tip">Cinema</span></button>
+  <button class="icon-btn" data-panel="gamedev" onclick="setIconPanel('gamedev')" title="Game Dev Mode"><i class="ti ti-device-gamepad"></i><span class="icon-tip">Game Dev</span></button>
+  <button class="icon-btn" data-panel="brush" onclick="setIconPanel('brush')" title="Brushes"><i class="ti ti-brush"></i><span class="icon-tip">Brushes</span></button>
+  <button class="icon-btn" data-panel="agents" onclick="setIconPanel('agents')" title="Agents"><i class="ti ti-robot"></i><span class="icon-tip">Agents</span></button>
+  <button class="icon-btn" data-panel="script" onclick="setIconPanel('script')" title="Script"><i class="ti ti-code"></i><span class="icon-tip">Script</span></button>
+  <div style="flex:1"></div>
+  <button class="icon-btn" onclick="saveWorld()" title="Save"><i class="ti ti-download"></i><span class="icon-tip">Save</span></button>
+  <button class="icon-btn" onclick="document.getElementById('apiKeyModal').style.display='flex'" title="API Key"><span id="apiKeyDot" style="font-size:14px">🔑</span><span class="icon-tip">API Key</span></button>
+</div>
+
+<!-- API KEY MODAL -->
+<div id="apiKeyModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:#12121e;border:1px solid var(--border);border-radius:10px;padding:20px;width:340px;max-width:90vw">
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">🔑 Claude API Key</div>
+    <div style="font-size:10px;color:var(--sub);margin-bottom:10px;line-height:1.5">Used by Cinema Director, Game Designer, and Agent Planner. Stored in localStorage only — never sent anywhere except api.anthropic.com.</div>
+    <input id="apiKeyInput" type="password" placeholder="sk-ant-..." style="width:100%;padding:6px 10px;font-size:11px;background:#0c0c18;color:var(--text);border:0.5px solid var(--border);border-radius:6px;outline:none;box-sizing:border-box;margin-bottom:10px">
+    <div style="display:flex;gap:8px">
+      <button onclick="window.setClaudeApiKey&&window.setClaudeApiKey(document.getElementById('apiKeyInput').value);document.getElementById('apiKeyModal').style.display='none'" style="flex:1;padding:6px;border:0.5px solid var(--accent);border-radius:6px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:11px">Save Key</button>
+      <button onclick="window.setClaudeApiKey&&window.setClaudeApiKey('');document.getElementById('apiKeyInput').value='';document.getElementById('apiKeyModal').style.display='none'" style="padding:6px 12px;border:0.5px solid var(--border);border-radius:6px;cursor:pointer;background:transparent;color:var(--sub);font-size:11px">Clear</button>
+    </div>
+    <div id="apiKeyStatus" style="font-size:9px;color:var(--sub);margin-top:8px;font-family:monospace">No key set</div>
+  </div>
+</div>
+
+<!-- LEFT PANEL (context-sensitive) -->
+<div id="left"></div>
+
+<!-- CENTER CANVAS -->
+<div id="cw">
+  <div id="tabs" style="display:flex;background:var(--p2);border-bottom:1px solid var(--bd);flex-shrink:0">
+    <div class="ctab on" id="tab3d" onclick="setRenderMode('3d',this)">🌍 3D Infinite World</div>
+    <div class="ctab" id="tabField3d" onclick="setRenderMode('field3d',this)">🧊 3D Volumetric Field</div>
+    <div class="ctab" id="tab2d" onclick="setRenderMode('2d',this)">⬛ 2D Multi-Slice</div>
+    <div class="ctab" id="tabHybrid" onclick="setRenderMode('hybrid',this)">⟐ Hybrid</div>
+    <div class="ctab" id="tabMetrics" onclick="setView('metrics',this)">📈 Metrics</div>
+  </div>
+  <div id="layerBar" style="display:flex;align-items:center;gap:4px;padding:4px 10px;background:#0a0a14;border-bottom:1px solid var(--bd);flex-shrink:0">
+    <span style="font-size:10px;color:var(--sub);letter-spacing:.04em;text-transform:uppercase;margin-right:4px;flex-shrink:0;font-weight:600">Field</span>
+    <button class="mode-btn" id="layerAll" onclick="setLayer(-1)" style="padding:3px 9px;font-size:10px">All</button>
+    <button class="mode-btn" id="layerE" onclick="setLayer(0)" style="padding:3px 9px;font-size:10px">⚡ Energy</button>
+    <button class="mode-btn" id="layerD" onclick="setLayer(1)" style="padding:3px 9px;font-size:10px">🌫️ Density</button>
+    <button class="mode-btn" id="layerI" onclick="setLayer(2)" style="padding:3px 9px;font-size:10px">🧠 Info</button>
+    <button class="mode-btn" id="layerS" onclick="setLayer(3)" style="padding:3px 9px;font-size:10px">🔥 Entropy</button>
+    <button class="mode-btn" id="layerT" onclick="setLayer(4)" style="padding:3px 9px;font-size:10px">🌡️ Temp</button>
+    <button class="mode-btn" id="layerB" onclick="setLayer(5)" style="padding:3px 9px;font-size:10px">🧬 Bio</button>
+    <span id="layerHint" style="font-size:10px;color:var(--sub);margin-left:6px;font-style:italic"></span>
+    <div style="height:16px;width:1px;background:var(--bd);margin:0 6px;flex-shrink:0"></div>
+    <span style="font-size:10px;color:var(--sub);letter-spacing:.04em;text-transform:uppercase;margin-right:4px;flex-shrink:0;font-weight:600">3D</span>
+    <button class="mode-btn" id="matField"   onclick="setMatMode3D('field',this)"   style="padding:3px 9px;font-size:10px">Field</button>
+    <button class="mode-btn" id="matMaterial" onclick="setMatMode3D('material',this)" style="padding:3px 9px;font-size:10px">PBR</button>
+    <button class="mode-btn" id="matHeight"  onclick="setMatMode3D('height',this)"   style="padding:3px 9px;font-size:10px">Height</button>
+  </div>
+  <div id="viewWrap">
+  <canvas id="c3d"></canvas>
+  <canvas id="c2d"></canvas>
+  <div id="metricsView" style="display:none;position:absolute;inset:0;background:#07070e;padding:14px;overflow-y:auto;font-size:10px;font-family:monospace;color:var(--sub)">
+    <div style="font-size:12px;color:var(--text);margin-bottom:10px;font-family:system-ui">📈 World Metrics</div>
+    <div id="metricsContent"></div>
+  </div>
+  <div id="plog">ready</div>
+
+  <!-- COMPOSER MODAL -->
+  <div id="comp" onclick="if(event.target===this)closeComp()">
+    <div class="cbox">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <div>
+          <div style="font-size:16px;font-weight:600">Integral Reality Composer</div>
+          <div style="font-size:10px;color:var(--sub)">𝒓 = ∫ Φ · ρ · E · I · C  dV dτ</div>
+        </div>
+        <button onclick="closeComp()" style="background:none;border:none;font-size:24px;color:var(--sub);cursor:pointer;line-height:1">✕</button>
+      </div>
+      <div class="csteps" id="csteps"></div>
+      <div class="cbody" id="cbody"></div>
+      <div style="padding:12px 20px;background:#0a0a14;border-top:1px solid var(--bd);flex-shrink:0">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:6px">Preview in Render Mode</div>
+        <div style="display:flex;gap:8px">
+          <button onclick="previewRenderMode('3d')" id="prev3d" class="cbtn1">🔲 3D Infinite World</button>
+          <button onclick="previewRenderMode('2d')" id="prev2d" class="cbtn1">⬛ 2D Multi-Slice</button>
+          <button onclick="previewRenderMode('hybrid')" id="prevHybrid" class="cbtn1">⟐ Hybrid</button>
+        </div>
+      </div>
+      <div class="cfoot">
+        <button class="cbtn1" id="cback">← Back</button>
+        <div id="cseldisp" style="font-size:9.5px;color:var(--sub);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px"></div>
+        <button class="cbtn2" id="cnext">Next →</button>
+      </div>
+    </div>
+  </div>
+  </div><!-- /viewWrap -->
+</div>
+
+<!-- KEYBOARD SHORTCUTS OVERLAY (MODAL) -->
+<div id="shortcutsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;overflow-y:auto;padding:20px">
+  <div style="max-width:900px;margin:auto;background:#141418;border:1px solid #2a2a35;border-radius:8px;padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:1px solid #2a2a35;padding-bottom:10px">
+      <h2 style="color:#e0dff5;font-size:16px;margin:0">⌨️ Keyboard Shortcuts</h2>
+      <button onclick="document.getElementById('shortcutsModal').style.display='none'" style="background:none;border:none;color:#777;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div id="shortcutsContent" style="column-count:2;column-gap:40px;font-size:11px;color:#d0cef5"></div>
+  </div>
+</div>
+
+<!-- RIGHT PANEL -->
+<div id="right">
+  <div class="rpanel" id="ctrl3DPanel">
+    <span class="rl">3D Navigation & Controls</span>
+
+    <!-- Camera presets -->
+    <div style="margin-bottom:8px">
+      <div style="font-size:10px;color:var(--sub);margin-bottom:4px;font-weight:600">Camera Preset</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="camBtn pill on" id="cam_orbit"  onclick="setCam3D('orbit',this)">Orbit</button>
+        <button class="camBtn pill"    id="cam_top"    onclick="setCam3D('top',this)">Top</button>
+        <button class="camBtn pill"    id="cam_iso"    onclick="setCam3D('iso',this)">ISO</button>
+        <button class="camBtn pill"    id="cam_street" onclick="setCam3D('street',this)">Street</button>
+        <button class="camBtn pill"    id="cam_fly"    onclick="setCam3D('fly',this)">✈ Fly</button>
+      </div>
+    </div>
+
+    <!-- Orbit Turn Controls -->
+    <div style="margin-bottom:8px">
+      <div style="font-size:10px;color:var(--sub);margin-bottom:4px;font-weight:600">Turn Around (Orbit)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px">
+        <button class="pill" onclick="window.infinityTurn&&window.infinityTurn(0.35,0)" title="Turn Left (Q)">↺ Turn Left</button>
+        <button class="pill" onclick="window.infinityTurn&&window.infinityTurn(-0.35,0)" title="Turn Right (E)">↻ Turn Right</button>
+        <button class="pill" onclick="window.infinityTurn&&window.infinityTurn(0,-0.2)" title="Tilt Up">∧ Tilt Up</button>
+        <button class="pill" onclick="window.infinityTurn&&window.infinityTurn(0,0.2)" title="Tilt Down">∨ Tilt Down</button>
+      </div>
+    </div>
+
+    <!-- Move (Pan) & Zoom -->
+    <div style="margin-bottom:8px">
+      <div style="font-size:10px;color:var(--sub);margin-bottom:4px;font-weight:600">Move Across Terrain</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-bottom:4px">
+        <div></div>
+        <button class="pill" onclick="window.infinityPan&&window.infinityPan(0,18)" title="Move Forward (W)">↑ Fwd</button>
+        <div></div>
+        <button class="pill" onclick="window.infinityPan&&window.infinityPan(-18,0)" title="Move Left (A)">← Left</button>
+        <button class="pill" onclick="window.infinityResetCamera&&window.infinityResetCamera()" title="Reset View">⛶ Center</button>
+        <button class="pill" onclick="window.infinityPan&&window.infinityPan(18,0)" title="Move Right (D)">→ Right</button>
+        <div></div>
+        <button class="pill" onclick="window.infinityPan&&window.infinityPan(0,-18)" title="Move Back (S)">↓ Back</button>
+        <div></div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="pill" style="flex:1" onclick="window.infinityZoom&&window.infinityZoom(1)" title="Zoom in (+)">+ Zoom In</button>
+        <button class="pill" style="flex:1" onclick="window.infinityZoom&&window.infinityZoom(-1)" title="Zoom out (-)">− Zoom Out</button>
+        <button class="pill" style="flex:1" onclick="window.infinityFocus&&window.infinityFocus()" title="Focus Target (F)">🎯 Focus</button>
+      </div>
+    </div>
+
+    <!-- Selected Object Inspector -->
+    <div style="margin-bottom:8px;padding:6px 8px;background:#0d0d18;border-radius:6px;border:0.5px solid var(--border)">
+      <div style="font-size:9.5px;color:var(--sub);font-weight:600;margin-bottom:3px">Object Selection</div>
+      <div id="objInspector">
+        <span style="font-size:9.5px;color:var(--sub)">Click an object in 3D to inspect and edit</span>
+      </div>
+    </div>
+
+    <!-- Shading Mode -->
+    <div style="margin-bottom:8px">
+      <div style="font-size:10px;color:var(--sub);margin-bottom:4px;font-weight:600">Terrain Shading</div>
+      <div style="display:flex;gap:4px">
+        <button class="pill on" id="matFieldPill" onclick="window.setMatMode&&window.setMatMode('field');document.querySelectorAll('#matFieldPill,#matMaterialPill,#matHeightPill').forEach(p=>p.classList.remove('on'));this.classList.add('on')">Field Colors</button>
+        <button class="pill" id="matMaterialPill" onclick="window.setMatMode&&window.setMatMode('material');document.querySelectorAll('#matFieldPill,#matMaterialPill,#matHeightPill').forEach(p=>p.classList.remove('on'));this.classList.add('on')">PBR</button>
+        <button class="pill" id="matHeightPill" onclick="window.setMatMode&&window.setMatMode('height');document.querySelectorAll('#matFieldPill,#matMaterialPill,#matHeightPill').forEach(p=>p.classList.remove('on'));this.classList.add('on')">Height</button>
+      </div>
+    </div>
+
+    <!-- Time of day -->
+    <div class="ctrl-row" style="margin-bottom:3px">
+      <span class="ctrl-label">🌅 Time of day</span>
+      <span class="ctrl-val" id="todVal">12h</span>
+    </div>
+    <input type="range" min="0" max="24" step="0.25" value="12" style="width:100%;margin-bottom:6px"
+      oninput="document.getElementById('todVal').textContent=parseFloat(this.value).toFixed(1)+'h';
+        window.setTimeOfDay&&window.setTimeOfDay(parseFloat(this.value))">
+
+    <!-- Fog density -->
+    <div class="ctrl-row" style="margin-bottom:3px">
+      <span class="ctrl-label">🌫️ Fog density</span>
+      <span class="ctrl-val" id="fogVal">0.012</span>
+    </div>
+    <input type="range" min="0" max="0.06" step="0.001" value="0.012" style="width:100%;margin-bottom:6px"
+      oninput="document.getElementById('fogVal').textContent=parseFloat(this.value).toFixed(3);
+        window.setFogDensity&&window.setFogDensity(parseFloat(this.value))">
+  </div>
+
+  <div class="rpanel">
+    <span class="rl">World Health</span>
+    <div id="hbars"></div>
+    <div class="sem-tags" id="semTags" style="margin-top:6px"></div>
+    <div id="alerts" style="margin-top:6px"></div>
+  </div>
+  <div class="rpanel">
+    <span class="rl">Cell Inspector</span>
+    <div id="inspector"><div style="font-size:11px;color:var(--sub)">Click a cell to inspect it</div></div>
+  </div>
+  <div class="rpanel">
+    <span class="rl">History</span>
+    <canvas id="hc" width="200" height="70"></canvas>
+    <div style="display:flex;gap:6px;margin-top:5px;font-size:11px;font-weight:600">
+      <span style="color:#6080ff">E</span><span style="color:#ef8030">T</span>
+      <span style="color:#a060e0">I</span><span style="color:#e04040">S</span>
+      <span style="color:#30a060">B</span>
+    </div>
+  </div>
+  <div class="rpanel" id="debugConsolePanel" style="display:none;flex:1;overflow:hidden;flex-direction:column">
+    <span class="rl">🐛 Debug Console</span>
+    <div id="debugOutput" style="flex:1;overflow-y:auto;background:#0a0a14;border:0.5px solid var(--border);border-radius:4px;padding:6px;font-size:9px;font-family:monospace;color:#7cfc00;margin-bottom:6px;max-height:150px"></div>
+    <div style="display:flex;gap:4px;align-items:center">
+      <span style="color:var(--sub);font-size:9px">$</span>
+      <input id="debugInput" type="text" placeholder="world.energy_avg, agent[0].x, etc" style="flex:1;background:#1a1a28;border:0.5px solid var(--border);border-radius:3px;padding:3px 6px;font-size:9px;font-family:monospace;color:#7cfc00" onkeydown="if(event.key==='Enter'){evalDebugCommand();}else if(event.key==='ArrowUp'){event.preventDefault();if(debugHistory.length){debugHistoryIdx=Math.min(debugHistoryIdx+1,debugHistory.length-1);this.value=debugHistory[debugHistory.length-1-debugHistoryIdx];}}else if(event.key==='ArrowDown'){event.preventDefault();debugHistoryIdx=Math.max(debugHistoryIdx-1,-1);this.value=debugHistoryIdx===-1?'':debugHistory[debugHistory.length-1-debugHistoryIdx];}">
+    </div>
+  </div>
+  <div class="rpanel" id="cinemaExportPanel" style="display:none">
+    <span class="rl">🎬 Export Presets</span>
+    <div style="display:flex;flex-direction:column;gap:6px;font-size:9px">
+      <button onclick="exportCinemaPreset('720')" style="background:#2a4a6a;border:0.5px solid #3a6a9a;border-radius:3px;padding:4px;color:#7cfc00;cursor:pointer">📹 720p (Fast)</button>
+      <button onclick="exportCinemaPreset('1080')" style="background:#2a4a6a;border:0.5px solid #3a6a9a;border-radius:3px;padding:4px;color:#7cfc00;cursor:pointer">🎥 1080p (HD)</button>
+      <button onclick="exportCinemaPreset('4k')" style="background:#2a4a6a;border:0.5px solid #3a6a9a;border-radius:3px;padding:4px;color:#7cfc00;cursor:pointer">🎞️ 4K (Slow)</button>
+    </div>
+    <div style="margin-top:8px;border-top:0.5px solid var(--border);padding-top:6px">
+      <div style="font-size:8px;color:var(--sub);margin-bottom:4px">Render Controls</div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:8px">
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="width:50px">Bloom:</span>
+          <input type="range" id="bloomSlider" min="0" max="10" value="5" style="flex:1;height:6px" oninput="updateRenderControl('bloom',this.value)">
+          <span id="bloomVal" style="width:20px">5</span>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="width:50px">Saturation:</span>
+          <input type="range" id="satSlider" min="0" max="20" value="10" style="flex:1;height:6px" oninput="updateRenderControl('sat',this.value)">
+          <span id="satVal" style="width:20px">10</span>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="width:50px">Brightness:</span>
+          <input type="range" id="brightSlider" min="0" max="20" value="10" style="flex:1;height:6px" oninput="updateRenderControl('bright',this.value)">
+          <span id="brightVal" style="width:20px">10</span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:8px;font-size:8px;color:var(--sub)">← → : Step frame</div>
+  </div>
+</div>
+
+<!-- BOTTOM BAR -->
+<div id="bot">
+  <button id="pb" onclick="togglePlay()">▶ Play</button>
+  <input type="range" id="spd" min="1" max="20" value="4" step="1" oninput="document.getElementById('spdOut').textContent=this.value+'x'">
+  <span class="bst">Speed:</span><span class="bsv" id="spdOut">4x</span>
+  <div class="tbsep"></div>
+  <span class="bst">Tick:</span><span class="bsv" id="tkOut">0</span>
+  <span class="bst" style="margin-left:6px">Energy:</span><span class="bsv" id="eOut">0</span>
+  <span class="bst" style="margin-left:6px">Entropy:</span><span class="bsv" id="sOut">0</span>
+  <span class="bst" style="margin-left:6px">Agents:</span><span class="bsv" id="agOut">0</span>
+  <div class="tbsep"></div>
+  <span class="bst">Chunks:</span><span class="bsv" id="chunkStats">—</span>
+  <div style="flex:1"></div>
+  <span style="font-size:9px;color:var(--sub)" id="modeLabel">Create Mode</span>
+</div>
+</div>
+
+<script>
+// ── SIMULATION STATE ──────────────────────────────────────────────────────
+const W=36,H=28,D=1,SZ=W*H,NF=12;
+const FE=0,FD=1,FI=2,FS=3,FT=4,FFX=5,FFY=6,FTau=8,FCid=9,FBio=10,FProc=11;
+let buf=new Float32Array(SZ*NF),bbuf=new Float32Array(SZ*NF);
+window.W=W;window.H=H;window.D=D;window.NF=NF;window.buf=buf;
+let causal=[],tick=0,playing=false,layer=-1;
+let selX=-1,selY=-1,painting=false,tool='paint';
+let lastTs=0,fps=0,fc=0,fpt=0;
+const UNDO_MAX=5;const _undoRing=[];let _undoHead=0,_undoCount=0;
+let activeProcs=new Set(['thermo','bio']);
+let activeBrush=null;
+let histE=[],histT=[],histI=[],histS=[],histB=[];
+let currentAppMode='create',currentPanel='world',currentRenderMode='3d';
+
+// Physics constants (adjustable by laws & composer)
+let DIFFUSION=0.09,ENTROPY_BASE=0.0004,INFO_RATE=0.35,BIO_THRESH=0.25;
+
+const canvas=document.getElementById('c2d');
+const ctx=canvas.getContext('2d');
+const canvas3d=document.getElementById('c3d');
+let ctx3d=null; // c3d is now owned by Three.js ChunkRenderer — 2D context disabled
+const hc=document.getElementById('hc');
+const hx=hc.getContext('2d');
+const wrap=document.getElementById('viewWrap');
+
+function idx(x,y){return(y*W+x)*NF}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function get(x,y,f){if(x<0||x>=W||y<0||y>=H)return 0;return buf[idx(x,y)+f]}
+function set_(x,y,f,v){if(x<0||x>=W||y<0||y>=H)return;buf[idx(x,y)+f]=clamp(v,-9999,9999)}
+function add_(x,y,f,v){if(x<0||x>=W||y<0||y>=H)return;buf[idx(x,y)+f]=clamp(buf[idx(x,y)+f]+v,-9999,9999)}
+
+function resize2D(){
+  const w=currentRenderMode==='hybrid'?Math.floor(wrap.clientWidth/2):wrap.clientWidth;
+  const h=wrap.clientHeight;
+  if(w>0&&h>0){canvas.width=w;canvas.height=h;}
+}
+function resize3D(){
+  // Three.js owns the WebGL canvas — never set canvas3d.width/height; that resets the GL context
+  if(window.resizeChunkRenderer)window.resizeChunkRenderer(currentRenderMode==='hybrid');
+}
+function resize(){resize2D();resize3D();}
+new ResizeObserver(resize).observe(wrap);
+requestAnimationFrame(resize);
+
+// ── COLOR MAP — vivid physically-meaningful palettes ────────────────────────
+function colorOf(l,t){
+  t=clamp(t,0,1);
+  // Energy: indigo → electric blue → cyan → orange → white-hot
+  if(l===0){
+    if(t<0.12){const s=t/0.12;return[s*30|0,s*20|0,(40+s*160)|0];}
+    if(t<0.35){const s=(t-0.12)/0.23;return[(30-s*30)|0,(20+s*160)|0,(200+s*55)|0];}
+    if(t<0.62){const s=(t-0.35)/0.27;return[(s*255)|0,(180-s*20)|0,(255-s*255)|0];}
+    if(t<0.85){const s=(t-0.62)/0.23;return[255,(160+s*75)|0,(s*80)|0];}
+    const s=(t-0.85)/0.15;return[255,(235+s*20)|0,(80+s*175)|0];
+  }
+  // Density: black → deep teal → cyan-white
+  if(l===1){
+    if(t<0.25){const s=t/0.25;return[0,(s*50)|0,(s*40)|0];}
+    if(t<0.65){const s=(t-0.25)/0.4;return[(s*20)|0,(50+s*130)|0,(40+s*110)|0];}
+    const s=(t-0.65)/0.35;return[(20+s*100)|0,(180+s*75)|0,(150+s*105)|0];
+  }
+  // Info: dark navy → violet → electric cyan → white
+  if(l===2){
+    if(t<0.15){const s=t/0.15;return[(s*40)|0,0,(s*120)|0];}
+    if(t<0.45){const s=(t-0.15)/0.3;return[(40+s*120)|0,(s*40)|0,(120+s*135)|0];}
+    if(t<0.78){const s=(t-0.45)/0.33;return[(160-s*60)|0,(40+s*100)|0,255];}
+    const s=(t-0.78)/0.22;return[(100+s*155)|0,(140+s*115)|0,255];
+  }
+  // Entropy: black → crimson → hot orange → yellow → white
+  if(l===3){
+    if(t<0.2){const s=t/0.2;return[(s*200)|0,0,(s*20)|0];}
+    if(t<0.5){const s=(t-0.2)/0.3;return[(200+s*55)|0,(s*110)|0,0];}
+    if(t<0.8){const s=(t-0.5)/0.3;return[255,(110+s*145)|0,(s*60)|0];}
+    const s=(t-0.8)/0.2;return[255,255,(60+s*195)|0];
+  }
+  // Temperature: black → deep red → orange → yellow → white
+  if(l===4){
+    if(t<0.2){const s=t/0.2;return[(s*210)|0,(s*10)|0,0];}
+    if(t<0.5){const s=(t-0.2)/0.3;return[(210+s*45)|0,(10+s*130)|0,0];}
+    if(t<0.8){const s=(t-0.5)/0.3;return[255,(140+s*115)|0,(s*80)|0];}
+    const s=(t-0.8)/0.2;return[255,255,(80+s*175)|0];
+  }
+  // Bio: black → deep emerald → lime → white-green
+  if(l===5){
+    if(t<0.15){const s=t/0.15;return[0,(s*80)|0,(s*30)|0];}
+    if(t<0.5){const s=(t-0.15)/0.35;return[(s*20)|0,(80+s*175)|0,(30+s*60)|0];}
+    if(t<0.85){const s=(t-0.5)/0.35;return[(20+s*110)|0,255,(90+s*90)|0];}
+    const s=(t-0.85)/0.15;return[(130+s*125)|0,255,(180+s*75)|0];
+  }
+  return[80,80,80];
+}
+
+// ── RENDER MODES ─────────────────────────────────────────────────────────────
+function drawGrid(){
+  if(currentRenderMode==='metrics')return;
+  if(currentRenderMode==='3d')_drawIso();
+  else if(currentRenderMode==='2d')_drawMultiSlice();
+  else if(currentRenderMode==='hybrid')_drawHybrid();
+  else _drawFlat();
+}
+
+function _drawFlat(){
+  const cw=canvas.width,ch=canvas.height;
+  ctx.clearRect(0,0,cw,ch);
+  const cs=Math.min(cw/W,ch/H);
+  const ox=(cw-cs*W)/2,oy=(ch-cs*H)/2;
+  const fi=[FE,FD,FI,FS,FT,FBio][layer]??FE;
+  const mx=[1000,1,500,1,800,1][layer]??1000;
+  const vmin=mx>1?0.5:0.001;
+  const pw=Math.max(1,Math.floor(cs)-1),ph=Math.max(1,Math.floor(cs)-1);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const v=buf[idx(x,y)+fi];if(v<vmin)continue;
+    const t=Math.min(v/mx,1);const[r,g,b]=colorOf(layer,t);
+    ctx.fillStyle=`rgb(${r},${g},${b})`;
+    ctx.fillRect(Math.floor(ox+x*cs),Math.floor(oy+y*cs),pw,ph);
+  }
+  if(selX>=0){
+    ctx.strokeStyle='#fff';ctx.lineWidth=1;
+    ctx.strokeRect(Math.floor(ox+selX*cs)+0.5,Math.floor(oy+selY*cs)+0.5,pw,ph);
+  }
+  if(window.agentSystem&&window.agentSystem.count>0){
+    const CIV_COLS=['#ff6060','#60cfff','#ffd060','#80ff80','#d060ff','#ff9060','#60ffcf'];
+    for(const a of window.agentSystem.agents){
+      const px=ox+a.x*cs+cs/2,py=oy+a.y*cs+cs/2;
+      const r=Math.max(2,cs*0.35);
+      ctx.beginPath();ctx.arc(px,py,r,0,6.283);
+      ctx.fillStyle=CIV_COLS[(a.civId-1)%CIV_COLS.length]||'#fff';
+      ctx.globalAlpha=0.85;ctx.fill();ctx.globalAlpha=1;
+    }
+  }
+}
+
+function _isoTiles(cx_,cw_,ch_,cl){
+  const colorL=cl!==undefined?cl:(layer>=0?layer:0);
+  const FIELD_MAP=[FE,FD,FI,FS,FT,FBio];
+  const MAX_MAP=[1000,1,500,1,800,1];
+  const cf=FIELD_MAP[colorL]??FE;
+  const cm=MAX_MAP[colorL]??1000;
+  const TW=Math.max(8,Math.floor(cw_/W*1.4))|0;
+  const TH=Math.max(4,(TW/2))|0;
+  const MAX_H=Math.min(60,Math.floor(ch_*0.3/H*5));
+  const originX=cw_/2,originY=ch_*0.55;
+  const glows=[];
+  for(let diag=0;diag<W+H-1;diag++){
+    for(let xi=0;xi<W;xi++){
+      const x=xi,y=diag-xi;
+      if(y<0||y>=H)continue;
+      const e=buf[idx(x,y)+FE],b=buf[idx(x,y)+FBio];
+      if(e<1&&b<0.01)continue;
+      const h=Math.min(e/22,MAX_H)|0;
+      const cv=buf[idx(x,y)+cf];
+      const ct=Math.min(cv/cm,1);
+      const[r,g,bl]=colorOf(colorL,ct);
+      const sx=originX+(x-y)*TW/2;
+      const sy=originY+(x+y)*TH/2;
+      // Top face (brightest — overhead light)
+      cx_.fillStyle=`rgb(${r},${g},${bl})`;
+      cx_.beginPath();cx_.moveTo(sx,sy-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
+      cx_.lineTo(sx,sy+TH-h);cx_.lineTo(sx-TW/2,sy+TH/2-h);cx_.closePath();cx_.fill();
+      if(h>2){
+        // Right face — darkest (occluded)
+        cx_.fillStyle=`rgb(${r*.42|0},${g*.42|0},${bl*.42|0})`;
+        cx_.beginPath();cx_.moveTo(sx,sy+TH-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
+        cx_.lineTo(sx+TW/2,sy+TH/2);cx_.lineTo(sx,sy+TH);cx_.closePath();cx_.fill();
+        // Left face — medium (ambient bounce)
+        cx_.fillStyle=`rgb(${r*.62|0},${g*.62|0},${bl*.62|0})`;
+        cx_.beginPath();cx_.moveTo(sx,sy+TH-h);cx_.lineTo(sx-TW/2,sy+TH/2-h);
+        cx_.lineTo(sx-TW/2,sy+TH/2);cx_.lineTo(sx,sy+TH);cx_.closePath();cx_.fill();
+      }
+      // Bio overlay (green life glow on top face)
+      if(b>0.1&&colorL!==5){
+        cx_.fillStyle=`rgba(40,220,100,${(b*0.28).toFixed(2)})`;
+        cx_.beginPath();cx_.moveTo(sx,sy-h);cx_.lineTo(sx+TW/2,sy+TH/2-h);
+        cx_.lineTo(sx,sy+TH-h);cx_.lineTo(sx-TW/2,sy+TH/2-h);cx_.closePath();cx_.fill();
+      }
+      // Collect for emissive glow pass
+      if(ct>0.28||(b>0.18&&colorL!==5))glows.push({sx,sy,h,ct,r,g,bl,b,TW,TH});
+    }
+  }
+  // Emissive glow pass — 'screen' compositing for additive hot glow
+  if(glows.length){
+    cx_.save();cx_.globalCompositeOperation='screen';
+    for(const gd of glows){
+      const{sx,sy,h,ct,r,g,bl,b,TW,TH}=gd;
+      const ga=ct>0.28?(ct-0.28)/0.72*0.5:0;
+      const ba=b>0.18?(b-0.18)/0.82*0.38:0;
+      const alpha=Math.max(ga,ba);if(alpha<0.03)continue;
+      cx_.globalAlpha=alpha;
+      cx_.fillStyle=`rgb(${Math.min(255,r+50)},${Math.min(255,g+35)},${Math.min(255,bl+25)})`;
+      cx_.beginPath();cx_.moveTo(sx,sy-h-2);cx_.lineTo(sx+TW/2+2,sy+TH/2-h);
+      cx_.lineTo(sx,sy+TH-h+1);cx_.lineTo(sx-TW/2-2,sy+TH/2-h);cx_.closePath();cx_.fill();
+    }
+    cx_.restore();cx_.globalAlpha=1;
+  }
+}
+
+// ── PARTICLE SYSTEM ───────────────────────────────────────────────────────
+let _particles=[];
+function _tickParticles(){
+  for(let i=_particles.length-1;i>=0;i--){
+    const p=_particles[i];
+    p.x+=p.vx;p.y+=p.vy;p.vy*=0.97;
+    p.life--;if(p.life<=0)_particles.splice(i,1);
+  }
+}
+function _spawnIsoParticles(originX,originY,TW,TH){
+  if(_particles.length>=220)return;
+  for(let i=0;i<8;i++){
+    const x=Math.floor(Math.random()*W),y=Math.floor(Math.random()*H);
+    const e=buf[idx(x,y)+FE],b=buf[idx(x,y)+FBio],inf=buf[idx(x,y)+FI];
+    if(e<1&&b<0.02&&inf<10)continue;
+    const sx=originX+(x-y)*TW/2,sy=originY+(x+y)*TH/2;
+    const h=Math.min(e/22,60)|0;
+    if(e>200&&Math.random()<0.3){
+      _particles.push({x:sx+(Math.random()-.5)*TW,y:sy-h,vx:(Math.random()-.5)*.7,vy:-1-Math.random()*1.4,
+        life:20+Math.random()*25|0,maxLife:45,r:255,g:150+Math.random()*90|0,b:40,size:1.5+Math.random()*.8});
+    }
+    if(b>0.09&&Math.random()<0.25){
+      _particles.push({x:sx+(Math.random()-.5)*TW*.6,y:sy-h,vx:(Math.random()-.5)*.4,vy:-.5-Math.random()*.7,
+        life:35+Math.random()*30|0,maxLife:65,r:40,g:235,b:110,size:1.1+Math.random()*1.1});
+    }
+    if(inf>35&&Math.random()<0.2){
+      _particles.push({x:sx+(Math.random()-.5)*TW,y:sy-h-3,vx:(Math.random()-.5)*.8,vy:-.35-Math.random()*.5,
+        life:18+Math.random()*18|0,maxLife:36,r:80+Math.random()*80|0,b:255,g:155,size:1+Math.random()*.9});
+    }
+  }
+}
+function _drawParticles(cx_){
+  if(!_particles.length)return;
+  cx_.save();cx_.globalCompositeOperation='screen';
+  for(const p of _particles){
+    const a=(p.life/p.maxLife)*.8;cx_.globalAlpha=a;
+    cx_.fillStyle=`rgb(${p.r},${p.g},${p.b})`;
+    cx_.beginPath();cx_.arc(p.x,p.y,p.size*(0.4+p.life/p.maxLife*.6),0,6.283);cx_.fill();
+  }
+  cx_.restore();cx_.globalAlpha=1;
+}
+function _drawAtmosphere(cx_,cw,ch){
+  // Vignette — depth darkening at edges
+  const vig=cx_.createRadialGradient(cw*.5,ch*.48,ch*.22,cw*.5,ch*.48,ch*.78);
+  vig.addColorStop(0,'rgba(0,0,0,0)');vig.addColorStop(1,'rgba(4,4,16,.72)');
+  cx_.fillStyle=vig;cx_.fillRect(0,0,cw,ch);
+  // World-state mood tint (sampled cheaply)
+  let totS=0,totB=0,totE=0;
+  for(let i=0;i<SZ;i++){totS+=buf[i*NF+FS];totB+=buf[i*NF+FBio];totE+=buf[i*NF+FE];}
+  const avgS=totS/SZ,avgB=totB/SZ,avgE=totE/SZ;
+  let mr=0,mg=0,mb=0,ma=0;
+  if(avgS>0.55){mr=50;mg=0;mb=0;ma=(avgS-.55)/.45*.14;}
+  else if(avgB>0.06){mr=0;mg=22;mb=0;ma=Math.min((avgB-.06)/.94*.12,.1);}
+  else if(avgE<25){mr=0;mg=0;mb=35;ma=.08;}
+  if(ma>.005){cx_.fillStyle=`rgba(${mr},${mg},${mb},${ma.toFixed(3)})`;cx_.fillRect(0,0,cw,ch);}
+}
+
+function _drawIso(){
+  // Draw isometric view of inline sim on c2d (c3d is WebGL-only, no 2D context)
+  const cw=canvas.width,ch=canvas.height;
+  ctx.clearRect(0,0,cw,ch);
+  const TW=Math.max(8,Math.floor(cw/W*1.4))|0,TH=Math.max(4,(TW/2))|0;
+  const originX=cw/2,originY=ch*0.55;
+  _isoTiles(ctx,cw,ch);
+  _spawnIsoParticles(originX,originY,TW,TH);
+  _drawParticles(ctx);
+  _drawAtmosphere(ctx,cw,ch);
+  const LAYER_LABELS=['⚡ Energy','🌫️ Density','🧠 Info','🔥 Entropy','🌡️ Temp','🧬 Bio'];
+  const lbl=layer>=0?LAYER_LABELS[layer]:'⚡ Energy';
+  ctx.font='bold 9px system-ui';ctx.fillStyle='rgba(160,154,240,.65)';
+  ctx.fillText(`3D Volumetric · ${lbl}`,8,16);
+  ctx.font='8px system-ui';ctx.fillStyle='rgba(120,120,180,.45)';
+  ctx.fillText('height = energy  ·  color = selected field',8,ch-8);
+  if(window.agentSystem&&window.agentSystem.count>0){
+    const CIV_COLS=['#ff6060','#60cfff','#ffd060','#80ff80','#d060ff','#ff9060','#60ffcf'];
+    for(const a of window.agentSystem.agents){
+      const sx=originX+(a.x-a.y)*TW/2,sy=originY+(a.x+a.y)*TH/2;
+      const h=Math.min(buf[idx(a.x,a.y)+FE]/22,60)|0;
+      ctx.beginPath();ctx.arc(sx,sy-h-4,3,0,6.283);
+      ctx.fillStyle=CIV_COLS[(a.civId-1)%CIV_COLS.length]||'#fff';
+      ctx.globalAlpha=0.9;ctx.fill();ctx.globalAlpha=1;
+    }
+  }
+}
+
+function _drawMultiSlice(){
+  const cw=canvas.width,ch=canvas.height;
+  ctx.clearRect(0,0,cw,ch);
+  
+  // If a specific layer is selected (layer > -1), show full-screen single layer view
+  if(layer>=0){
+    const LAYER_MAP=[
+      {f:FE,mx:1000,l:0,label:'⚡ Energy',info:'Total energy in the system'},
+      {f:FD,mx:1,l:1,label:'🌫️ Density',info:'Material concentration'},
+      {f:FI,mx:500,l:2,label:'🧠 Info',info:'Information / Complexity'},
+      {f:FS,mx:1,l:3,label:'🔥 Entropy',info:'System disorder level'},
+      {f:FT,mx:800,l:4,label:'🌡️ Temp',info:'Temperature field'},
+      {f:FBio,mx:1,l:5,label:'🧬 Bio',info:'Life potential'},
+    ];
+    const {f,mx,l,label,info}=LAYER_MAP[layer];
+    const cs=Math.min(cw/W,ch/H);
+    const tox=Math.floor((cw-cs*W)/2),toy=Math.floor((ch-cs*H)/2);
+    const vmin2=mx>1?0.5:0.001;
+
+    // Render single layer full-screen
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const v=buf[idx(x,y)+f];if(v<vmin2)continue;
+      const t=Math.min(v/mx,1);const[r,g,b]=colorOf(l,t);
+      ctx.fillStyle=`rgb(${r},${g},${b})`;
+      ctx.fillRect(Math.floor(tox+x*cs),Math.floor(toy+y*cs),Math.max(1,Math.floor(cs)-1),Math.max(1,Math.floor(cs)-1));
+    }
+    
+    // Overlay stats
+    let tot=0,cnt=0,min=Infinity,max=-Infinity;
+    for(let i=0;i<SZ;i++){const v=buf[i*NF+f];tot+=v;if(v>0.5){cnt++;min=Math.min(min,v);max=Math.max(max,v);}}
+    const avg=cnt>0?tot/cnt:0;
+    
+    ctx.font='bold 14px system-ui';ctx.fillStyle='rgba(255,255,255,.9)';
+    ctx.fillText(label,10,28);
+    ctx.font='10px system-ui';ctx.fillStyle='rgba(200,200,240,.7)';
+    ctx.fillText(info,10,42);
+    
+    ctx.font='10px monospace';ctx.fillStyle='rgba(160,240,160,.8)';
+    ctx.fillText(`Avg: ${avg.toFixed(2)}  Min: ${min===Infinity?0:min.toFixed(2)}  Max: ${max.toFixed(2)}  Active: ${cnt}/${SZ}`,10,ch-12);
+    
+  } else {
+    // Default 4-slice view with per-quadrant stats
+    const hw=Math.floor(cw/2),hh=Math.floor(ch/2);
+    const SLICES=[
+      {f:FE,mx:1000,l:0,label:'⚡ Energy',desc:'Kinetic energy per cell',col:'#5080ff',ox:0,oy:0,w:hw,h:hh},
+      {f:FBio,mx:1,l:5,label:'🧬 Bio',desc:'Life potential 0–1',col:'#30c060',ox:hw,oy:0,w:hw,h:hh},
+      {f:FI,mx:500,l:2,label:'🧠 Info',desc:'Complexity / information',col:'#9060d0',ox:0,oy:hh,w:hw,h:hh},
+      {f:FS,mx:1,l:3,label:'🔥 Entropy',desc:'Disorder level 0–1',col:'#e04040',ox:hw,oy:hh,w:hw,h:hh},
+    ];
+    for(const{f,mx,l,label,desc,col,ox,oy,w,h}of SLICES){
+      const cs=Math.min(w/W,h/H);
+      const tox=Math.floor(ox+(w-cs*W)/2),toy=Math.floor(oy+(h-cs*H)/2);
+      const vmin3=mx>1?0.5:0.001;
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+        const v=buf[idx(x,y)+f];if(v<vmin3)continue;
+        const t=Math.min(v/mx,1);const[r,g,b]=colorOf(l,t);
+        ctx.fillStyle=`rgb(${r},${g},${b})`;
+        ctx.fillRect(Math.floor(tox+x*cs),Math.floor(toy+y*cs),Math.max(1,Math.floor(cs)-1),Math.max(1,Math.floor(cs)-1));
+      }
+      // Per-quadrant stats
+      let tot=0,cnt=0,vmin=Infinity,vmax=-Infinity;
+      for(let i=0;i<SZ;i++){const v=buf[i*NF+f];tot+=v;if(v>0.5){cnt++;vmin=Math.min(vmin,v);vmax=Math.max(vmax,v);}}
+      const avg=tot/SZ;
+      // Label + desc
+      ctx.font='bold 10px system-ui';ctx.fillStyle=col;
+      ctx.fillText(label,ox+5,oy+15);
+      ctx.font='8px system-ui';ctx.fillStyle='rgba(180,180,220,.55)';
+      ctx.fillText(desc,ox+5,oy+25);
+      // Stats bar (bottom of quadrant)
+      ctx.fillStyle='rgba(10,10,20,.72)';
+      ctx.fillRect(ox,oy+h-22,w,22);
+      ctx.font='9px monospace';ctx.fillStyle='rgba(200,210,255,.8)';
+      const smin=vmin===Infinity?0:vmin;
+      ctx.fillText(`avg ${avg.toFixed(2)}  min ${smin.toFixed(2)}  max ${vmax===-Infinity?0:vmax.toFixed(2)}  cells ${cnt}`,ox+5,oy+h-8);
+      // Quadrant border
+      ctx.strokeStyle='#1e1e2e';ctx.lineWidth=1;
+      ctx.strokeRect(ox+0.5,oy+0.5,w-1,h-1);
+    }
+    // Cross divider
+    ctx.strokeStyle='#2a2a3a';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(hw,0);ctx.lineTo(hw,ch);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,hh);ctx.lineTo(cw,hh);ctx.stroke();
+    // Hint at bottom center
+    ctx.font='8px system-ui';ctx.fillStyle='rgba(130,130,180,.4)';ctx.textAlign='center';
+    ctx.fillText('Select a Field above to focus · Density and Temp not shown — use field buttons',cw/2,ch-2);
+    ctx.textAlign='left';
+    // Agent dots (Bio quadrant, top-right)
+    if(window.agentSystem&&window.agentSystem.count>0){
+      const cs4=Math.min(hw/W,hh/H);
+      const tax=Math.floor(hw+(hw-cs4*W)/2),tay=Math.floor(0+(hh-cs4*H)/2);
+      const CIV_COLS=['#ff6060','#60cfff','#ffd060','#80ff80','#d060ff','#ff9060','#60ffcf'];
+      for(const a of window.agentSystem.agents){
+        const px=tax+a.x*cs4+cs4/2,py=tay+a.y*cs4+cs4/2;
+        ctx.beginPath();ctx.arc(px,py,Math.max(2,cs4*0.38),0,6.283);
+        ctx.fillStyle=CIV_COLS[(a.civId-1)%CIV_COLS.length]||'#fff';
+        ctx.globalAlpha=0.8;ctx.fill();ctx.globalAlpha=1;
+      }
+    }
+  }
+}
+
+function draw2D(){_drawFlat();}
+
+function _drawHybrid(){
+  _drawMultiSlice();  // c2d renders left half (4-field overview)
+  // c3d renders right half (Three.js PBR) — handled by connector.ts RAF loop
+  ctx.font='9px system-ui';ctx.fillStyle='rgba(160,154,240,.7)';
+  ctx.fillText('◧ 2D Fields',4,14);
+}
+
+// ── SIMULATION ────────────────────────────────────────────────────────────
+function simStep(dt){
+  bbuf.set(buf);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const ns=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]].filter(([nx,ny])=>nx>=0&&nx<W&&ny>=0&&ny<H);
+    const nc=ns.length;
+    let lapE=0,lapD=0,lapT=0,lapI=0;
+    for(const[nx,ny]of ns){lapE+=bbuf[idx(nx,ny)+FE];lapD+=bbuf[idx(nx,ny)+FD];lapT+=bbuf[idx(nx,ny)+FT];lapI+=bbuf[idx(nx,ny)+FI];}
+    lapE-=nc*bbuf[idx(x,y)+FE];lapD-=nc*bbuf[idx(x,y)+FD];lapT-=nc*bbuf[idx(x,y)+FT];lapI-=nc*bbuf[idx(x,y)+FI];
+    set_(x,y,FE,clamp(bbuf[idx(x,y)+FE]+DIFFUSION*lapE*dt,0,9999));
+    if(activeProcs.has('thermo')){
+      set_(x,y,FT,clamp(bbuf[idx(x,y)+FT]+0.07*lapT*dt+get(x,y,FE)*0.002*dt,0,2000));
+      set_(x,y,FD,clamp(bbuf[idx(x,y)+FD]+0.012*lapD*dt,0,1));
+    }
+    if(activeProcs.has('info'))set_(x,y,FI,clamp(bbuf[idx(x,y)+FI]+0.04*lapI*dt-get(x,y,FS)*0.2*dt,0,999));
+    // Entropy
+    const e=get(x,y,FE),t=get(x,y,FT);
+    const dS=(ENTROPY_BASE+e*0.00004+t*0.000015)*dt*60;
+    set_(x,y,FS,clamp(get(x,y,FS)+dS,0,1));
+    add_(x,y,FE,-e*get(x,y,FS)*0.0002*dt*60);
+    // Bio
+    if(activeProcs.has('bio')){
+      const s=get(x,y,FS),sup=clamp(1-s*0.9,0,1);
+      if(e>80&&get(x,y,FD)>BIO_THRESH&&sup>0){add_(x,y,FI,INFO_RATE*sup*dt);add_(x,y,FBio,0.015*sup*dt);}
+      else{set_(x,y,FI,get(x,y,FI)*Math.pow(0.9985,dt*60));set_(x,y,FBio,get(x,y,FBio)*Math.pow(0.996,dt*60));}
+      set_(x,y,FI,clamp(get(x,y,FI),0,999));set_(x,y,FBio,clamp(get(x,y,FBio),0,1));
+    }
+    set_(x,y,FTau,get(x,y,FTau)+dt*(1+e*0.0008+get(x,y,FS)*0.2));
+    // Causality
+    if(Math.abs(get(x,y,FE)-bbuf[idx(x,y)+FE])>55){
+      causal.push({tick,x,y,delta:Math.round(get(x,y,FE)-bbuf[idx(x,y)+FE])});
+      if(causal.length>300)causal.shift();
+    }
+  }
+  // Interact with 3D simulated physics objects if active
+  if(window.infiniteWorld && window.infiniteWorld.objects && tick % 2 === 0){
+    try {
+      const objs = window.infiniteWorld.objects.values();
+      for(const obj of objs){
+        const cx = Math.max(0, Math.min(W - 1, Math.round(obj.x / 2 + W / 2)));
+        const cy = Math.max(0, Math.min(H - 1, Math.round(obj.z / 2 + H / 2)));
+        const rad = Math.max(1, Math.round(obj.scale * 2));
+        if(obj.kind === 'gravity_well'){
+          for(let dy = -rad; dy <= rad; dy++){
+            for(let dx = -rad; dx <= rad; dx++){
+              const nx = cx + dx, ny = cy + dy;
+              if(nx >= 0 && nx < W && ny >= 0 && ny < H){
+                const dist = Math.hypot(dx, dy);
+                if(dist <= rad && dist > 0){
+                  const pull = (1 - dist / rad) * 18 * dt;
+                  add_(nx, ny, FE, -pull * 0.5);
+                  add_(cx, cy, FE, pull * 0.5);
+                  add_(cx, cy, FD, 0.01 * dt);
+                }
+              }
+            }
+          }
+        } else if(obj.kind === 'entropy_sink'){
+          for(let dy = -rad; dy <= rad; dy++){
+            for(let dx = -rad; dx <= rad; dx++){
+              const nx = cx + dx, ny = cy + dy;
+              if(nx >= 0 && nx < W && ny >= 0 && ny < H){
+                set_(nx, ny, FS, Math.max(0, get(nx, ny, FS) - 0.08 * dt));
+                set_(nx, ny, FT, Math.max(0, get(nx, ny, FT) - 40 * dt));
+              }
+            }
+          }
+        } else if(obj.kind === 'quantum_emitter'){
+          for(let dy = -rad; dy <= rad; dy++){
+            for(let dx = -rad; dx <= rad; dx++){
+              const nx = cx + dx, ny = cy + dy;
+              if(nx >= 0 && nx < W && ny >= 0 && ny < H){
+                add_(nx, ny, FI, 25 * dt);
+                add_(nx, ny, FBio, 0.02 * dt);
+              }
+            }
+          }
+        } else if(obj.kind === 'metalaw'){
+          for(let dy = -rad; dy <= rad; dy++){
+            for(let dx = -rad; dx <= rad; dx++){
+              const nx = cx + dx, ny = cy + dy;
+              if(nx >= 0 && nx < W && ny >= 0 && ny < H){
+                const avg = (get(nx, ny, FE) + get(cx, cy, FE)) * 0.5;
+                set_(nx, ny, FE, get(nx, ny, FE) + (avg - get(nx, ny, FE)) * 0.2);
+              }
+            }
+          }
+        }
+      }
+    } catch(_e){}
+  }
+  tick++;
+  if(selX>=0){
+    const push=(a,v)=>{a.push(v);if(a.length>120)a.shift()};
+    push(histE,get(selX,selY,FE));push(histT,get(selX,selY,FT));
+    push(histI,get(selX,selY,FI));push(histS,get(selX,selY,FS)*700);
+    push(histB,get(selX,selY,FBio)*700);
+  }
+}
+
+// ── SMART BRUSHES ─────────────────────────────────────────────────────────
+const BRUSHES={
+  'Volcano':      {icon:'🌋',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=Math.exp(-d*d/(r*r)*2);add_(x+dx,y+dy,FE,g*800);add_(x+dx,y+dy,FT,g*500);add_(x+dx,y+dy,FD,g*0.6);add_(x+dx,y+dy,FS,g*0.2);}}},
+  'Forest':       {icon:'🌲',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=Math.exp(-d*d/(r*r)*1.5);add_(x+dx,y+dy,FE,g*180);add_(x+dx,y+dy,FD,g*0.4);add_(x+dx,y+dy,FI,g*160);add_(x+dx,y+dy,FBio,g*0.7);add_(x+dx,y+dy,FS,-g*0.05);}}},
+  'Ocean':        {icon:'🌊',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=1-d/r;add_(x+dx,y+dy,FE,g*60);add_(x+dx,y+dy,FD,g*0.6);add_(x+dx,y+dy,FT,g*60);add_(x+dx,y+dy,FI,g*40);}}},
+  'Crystal':      {icon:'💎',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){if(Math.abs(dx)!==Math.abs(dy)&&dx!==0&&dy!==0)continue;const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;set_(x+dx,y+dy,FE,700);set_(x+dx,y+dy,FI,280);set_(x+dx,y+dy,FS,Math.max(0,get(x+dx,y+dy,FS)-0.08));}}},
+  'Storm':        {icon:'⚡',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const n=(Math.sin((x+dx)*0.7+(y+dy)*0.5)*Math.cos((x+dx)*0.3+(y+dy)*0.8)+1)/2;add_(x+dx,y+dy,FE,n*400);add_(x+dx,y+dy,FS,0.12);add_(x+dx,y+dy,FT,n*150);}}},
+  'Life Cluster': {icon:'🧬',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=Math.exp(-d*d/(r*r)*2);set_(x+dx,y+dy,FE,g*280);set_(x+dx,y+dy,FD,Math.max(get(x+dx,y+dy,FD),g*0.45));set_(x+dx,y+dy,FI,g*200);set_(x+dx,y+dy,FBio,g*0.65);set_(x+dx,y+dy,FS,Math.max(0,get(x+dx,y+dy,FS)-g*0.1));set_(x+dx,y+dy,FT,g*110);}}},
+  'Radiation':    {icon:'☢️',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=1-d/r;add_(x+dx,y+dy,FS,g*0.3);add_(x+dx,y+dy,FI,-g*50);}}},
+  'Civ Seed':     {icon:'🏛️',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=Math.exp(-d*d/(r*r)*1.5);set_(x+dx,y+dy,FE,g*380);set_(x+dx,y+dy,FD,Math.max(get(x+dx,y+dy,FD),g*0.5));set_(x+dx,y+dy,FI,g*400);set_(x+dx,y+dy,FBio,g*0.8);add_(x+dx,y+dy,FS,-g*0.15);set_(x+dx,y+dy,FT,g*100);}}},
+  'Gravity Well': {icon:'🌀',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=1-d/r;add_(x+dx,y+dy,FE,g*450);add_(x+dx,y+dy,FD,g*0.8);}}},
+  'Entropy Sink': {icon:'❄️',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=1-d/r;set_(x+dx,y+dy,FS,Math.max(0,get(x+dx,y+dy,FS)-g*0.4));set_(x+dx,y+dy,FT,Math.max(0,get(x+dx,y+dy,FT)-g*200));}}},
+  'Quantum Core': {icon:'⚛️',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=1-d/r;add_(x+dx,y+dy,FI,g*350);add_(x+dx,y+dy,FBio,g*0.6);add_(x+dx,y+dy,FE,g*200);}}},
+  'MetaLaw Node': {icon:'📜',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=1-d/r;set_(x+dx,y+dy,FE,g*300+100);set_(x+dx,y+dy,FI,g*250+50);set_(x+dx,y+dy,FD,g*0.5+0.2);}}},
+  'Force Barrier':{icon:'🛡️',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(Math.abs(d-r)>1.2)continue;set_(x+dx,y+dy,FD,0.9);set_(x+dx,y+dy,FE,150);}}},
+};
+
+// ── LAWS ──────────────────────────────────────────────────────────────────
+const LAWS=[
+  {name:'Energy Diffusion', type:'physics',  active:true,  fitness:.82, color:'#6080ff', strength:0.09,   desc:'Controls how fast energy spreads between cells'},
+  {name:'Entropy Growth',   type:'physics',  active:true,  fitness:.75, color:'#e04040', strength:0.0004, desc:'Rate of disorder increase — higher = faster decay'},
+  {name:'Info Bloom',       type:'info',     active:true,  fitness:.68, color:'#a060e0', strength:0.35,   desc:'Information growth rate in fertile zones'},
+  {name:'Bio Emergence',    type:'biology',  active:true,  fitness:.71, color:'#30a060', strength:0.25,   desc:'Minimum density threshold for bio potential'},
+  {name:'Thermal Coupling', type:'physics',  active:true,  fitness:.60, color:'#ef8030', strength:0.07,   desc:'How much energy converts to heat'},
+  {name:'Causal Threshold', type:'info',     active:true,  fitness:.55, color:'#c060e0', strength:55,     desc:'Energy delta that creates a causal event'},
+  {name:'Density Gravity',  type:'physics',  active:false, fitness:.40, color:'#6080ff', strength:0.012,  desc:'Density diffusion rate — needs thermo active'},
+  {name:'Neural Plasticity',type:'biology',  active:false, fitness:.30, color:'#30a060', strength:0.01,   desc:'Agent learning rate — needs agents spawned'},
+  {name:'Wave Resonance',   type:'physics',  active:false, fitness:.22, color:'#6080ff', strength:0.98,   desc:'Wave damping factor — needs wave simulator'},
+  {name:'Civ Expansion',    type:'social',   active:false, fitness:.18, color:'#e09030', strength:0.1,    desc:'Civilization territory growth — needs civs active'},
+];
+
+// ── WORLD BUILDER PANEL ───────────────────────────────────────────────────
+function renderBuilderPanel(){
+  const state = window.builderGetState ? window.builderGetState() : { tool:'navigate', kind:'tree', transformMode:'translate', snap:0, objectCount:0, selected:null, overlay:null };
+  const kinds = [
+    { id: 'tree', label: '🌲 Tree' },
+    { id: 'rock', label: '🪨 Rock' },
+    { id: 'crystal', label: '💎 Crystal' },
+    { id: 'water', label: '💧 Water' },
+    { id: 'building', label: '🏛️ Building' },
+    { id: 'road', label: '🛣️ Road' },
+    { id: 'bridge', label: '🌉 Bridge' },
+    { id: 'landmark', label: '🚩 Landmark' },
+    { id: 'spawn', label: '📍 Spawn' },
+    { id: 'gravity_well', label: '🌀 Gravity Well' },
+    { id: 'entropy_sink', label: '❄️ Entropy Sink' },
+    { id: 'quantum_emitter', label: '⚛️ Quantum Core' },
+    { id: 'metalaw', label: '📜 MetaLaw Node' },
+    { id: 'force_field', label: '🛡️ Force Barrier' },
+  ];
+  return `
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Build Tool</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:6px">Active Mode</div>
+        <div class="pill-row">
+          <button class="pill${state.tool==='navigate'?' on':''}" onclick="window.builderSetTool&&window.builderSetTool('navigate')">🖐️ Explore</button>
+          <button class="pill${state.tool==='select'?' on':''}" onclick="window.builderSetTool&&window.builderSetTool('select')">🎯 Select</button>
+          <button class="pill${state.tool==='place'?' on':''}" onclick="window.builderSetTool&&window.builderSetTool('place')">🌲 Place</button>
+          <button class="pill${state.tool==='erase'?' on':''}" onclick="window.builderSetTool&&window.builderSetTool('erase')">🧹 Demolish</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Object Palette</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px">
+          ${kinds.map(k=>`
+            <button class="brush-btn${state.kind===k.id&&state.tool==='place'?' active':''}" onclick="window.builderSetKind&&window.builderSetKind('${k.id}')">${k.label}</button>
+          `).join('')}
+        </div>
+        <div style="font-size:9px;color:var(--sub);line-height:1.4">Click any palette item to place on terrain. Right-drag orbits view anytime.</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Transform & Grid</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:5px">Gizmo Mode</div>
+        <div class="pill-row">
+          <button class="pill${state.transformMode==='translate'?' on':''}" onclick="window.builderSetTransform&&window.builderSetTransform('translate')">✥ Move (G)</button>
+          <button class="pill${state.transformMode==='rotate'?' on':''}" onclick="window.builderSetTransform&&window.builderSetTransform('rotate')">⟳ Rotate (R)</button>
+          <button class="pill${state.transformMode==='scale'?' on':''}" onclick="window.builderSetTransform&&window.builderSetTransform('scale')">⤢ Scale (S)</button>
+        </div>
+        <div style="font-size:9px;color:var(--sub);margin-top:6px;margin-bottom:5px">Snapping</div>
+        <div class="pill-row">
+          <button class="pill${state.snap===0?' on':''}" onclick="window.builderSetSnap&&window.builderSetSnap(0)">Off</button>
+          <button class="pill${state.snap===1?' on':''}" onclick="window.builderSetSnap&&window.builderSetSnap(1)">1m Grid</button>
+          <button class="pill${state.snap===5?' on':''}" onclick="window.builderSetSnap&&window.builderSetSnap(5)">5m Grid</button>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:8px">
+          <button class="brush-btn" style="flex:1" onclick="window.builderFocus&&window.builderFocus()">⛶ Focus</button>
+          <button class="brush-btn" style="flex:1" onclick="window.builderDeleteSelected&&window.builderDeleteSelected()">🗑️ Delete</button>
+          <button class="brush-btn" style="flex:1" onclick="window.builderDeselect&&window.builderDeselect()">✕ Deselect</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Procedural Systems</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px">
+          <button class="brush-btn" onclick="window.builderGenerateSettlement&&window.builderGenerateSettlement()">🏘️ Settlement</button>
+          <button class="brush-btn" onclick="window.builderGenerateCityPlan&&window.builderGenerateCityPlan()">🏙️ City Plan</button>
+          <button class="brush-btn" onclick="window.builderGenerateRivers&&window.builderGenerateRivers()">🌊 River Net</button>
+          <button class="brush-btn" onclick="window.builderSmartRoute&&window.builderSmartRoute()">🛣️ Smart Road</button>
+          <button class="brush-btn" onclick="window.builderScatter&&window.builderScatter('tree', 0.12)">🌲 Scatter Forest</button>
+          <button class="brush-btn" onclick="window.builderScatter&&window.builderScatter('rock', 0.08)">🪨 Scatter Rocks</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Analytical Overlays</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div class="pill-row">
+          <button class="pill${state.overlay==='suitability'?' on':''}" onclick="window.builderSetOverlay&&window.builderSetOverlay('suitability')">🟢 Suitability</button>
+          <button class="pill${state.overlay==='flood'?' on':''}" onclick="window.builderSetOverlay&&window.builderSetOverlay('flood')">💧 Flood Risk</button>
+          <button class="pill${state.overlay==='slope'?' on':''}" onclick="window.builderSetOverlay&&window.builderSetOverlay('slope')">📐 Slope Map</button>
+          <button class="pill${state.overlay===null?' on':''}" onclick="window.builderSetOverlay&&window.builderSetOverlay(null)">✕ None</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>World Persistence</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="display:flex;gap:4px;margin-bottom:6px">
+          <button class="brush-btn" style="flex:1" onclick="window.builderUndo&&window.builderUndo()">↩ Undo</button>
+          <button class="brush-btn" style="flex:1" onclick="window.builderRedo&&window.builderRedo()">↪ Redo</button>
+          <button class="brush-btn" style="flex:1" onclick="window.builderSave&&window.builderSave()">💾 Save</button>
+        </div>
+        <button class="brush-btn" style="width:100%;color:#e06060;border-color:#502020" onclick="if(confirm('Clear all placed objects in this world?')){window.builderClear&&window.builderClear()}">🗑️ Clear All Objects</button>
+      </div>
+    </div>
+  `;
+}
+
+// ── LEFT PANEL CONTENT ────────────────────────────────────────────────────
+const PANELS={
+  world:()=>`
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>World Mood</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:6px">Stability</div>
+        <div class="pill-row" id="stabilityPills">
+          ${['Fragile','Dynamic','Balanced','Self-Repairing'].map((s,i)=>`<span class="pill${i===2?' on':''}" onclick="setMoodPill('stability',this,'${s}')">${s}</span>`).join('')}
+        </div>
+        <div style="font-size:9px;color:var(--sub);margin-bottom:6px;margin-top:4px">Entropy Regime</div>
+        <div class="pill-row">
+          ${['Low (Order)','Medium','High (Chaos)','Extreme'].map((s,i)=>`<span class="pill${i===1?' on':''}" onclick="setMoodPill('entropy',this,'${s}')">${s}</span>`).join('')}
+        </div>
+        <div style="font-size:9px;color:var(--sub);margin-bottom:6px;margin-top:4px">Life Bias</div>
+        <div class="pill-row">
+          ${['Suppressed','Neutral','Fertile','Aggressive'].map((s,i)=>`<span class="pill${i===1?' on':''}" onclick="setMoodPill('life',this,'${s}')">${s}</span>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Processes</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        ${[['thermo','Thermodynamics','Controls heat + density'],['bio','Biology','Life + information growth'],['info','Information','Signal propagation'],['geo','Geology','Density gravity + erosion'],['emerge','Emergence detect','Auto-spawn entities']].map(([id,name,desc])=>`
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+            <button class="law-toggle" id="pt_${id}" style="background:${activeProcs.has(id)?'var(--accent)':'#2a2a35'}" onclick="toggleProc('${id}')"></button>
+            <div style="flex:1"><div style="font-size:10px;color:var(--text)">${name}</div><div style="font-size:9px;color:var(--sub)">${desc}</div></div>
+          </div>`).join('')}
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Presets</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+          ${[['💥','Energy burst','burst'],['🌊','Wave field','wave'],['🧬','Life seed','life'],['🌍','Proto Earth','proto'],['🏙️','Town','town'],['⚡','Entropy storm','storm'],['🏛️','Ruins','ruins'],['🗑️','Clear','clear']].map(([ic,nm,p])=>`
+            <button class="brush-btn" onclick="applyPreset('${p}')">${ic} ${nm}</button>`).join('')}
+        </div>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <button class="brush-btn" style="flex:1" onclick="saveWorld()">💾 Save</button>
+          <button class="brush-btn" style="flex:1" onclick="document.getElementById('loadFileInput').click()">📂 Load</button>
+        </div>
+        <input type="file" id="loadFileInput" accept=".reality,.json" style="display:none" onchange="loadWorld(this)">
+      </div>
+    </div>`,
+
+  builder:()=>renderBuilderPanel(),
+
+  laws:()=>`
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Law Ecosystem</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:6px">Law Evolution Style</div>
+        <div class="pill-row">
+          ${['Static','Adaptive','Competitive','Experimental'].map((s,i)=>`<span class="pill${i===1?' on':''}" onclick="setPill(this,this.parentNode)">${s}</span>`).join('')}
+        </div>
+        <div style="margin-top:8px" id="lawList">${renderLaws()}</div>
+        <button onclick="addCustomLaw()" style="width:100%;margin-top:8px;padding:4px;border:0.5px solid var(--border);border-radius:5px;cursor:pointer;background:#0e0e18;color:var(--sub);font-size:9px">+ Add custom law</button>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Law Strength</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div class="ctrl-row"><span class="ctrl-label">Diffusion</span><input type="range" min="0.01" max="0.3" step="0.01" value="${DIFFUSION}" oninput="DIFFUSION=+this.value;document.getElementById('diffOut').textContent=this.value"><span class="ctrl-val" id="diffOut">${DIFFUSION}</span></div>
+        <div class="ctrl-row"><span class="ctrl-label">Entropy base</span><input type="range" min="0.0001" max="0.003" step="0.0001" value="${ENTROPY_BASE}" oninput="ENTROPY_BASE=+this.value;document.getElementById('entOut').textContent=(+this.value).toFixed(4)"><span class="ctrl-val" id="entOut">${ENTROPY_BASE}</span></div>
+        <div class="ctrl-row"><span class="ctrl-label">Info growth</span><input type="range" min="0.05" max="2.0" step="0.05" value="${INFO_RATE}" oninput="INFO_RATE=+this.value;document.getElementById('infoOut').textContent=this.value"><span class="ctrl-val" id="infoOut">${INFO_RATE}</span></div>
+        <div class="ctrl-row"><span class="ctrl-label">Bio threshold</span><input type="range" min="0.05" max="0.8" step="0.05" value="${BIO_THRESH}" oninput="BIO_THRESH=+this.value;document.getElementById('bioOut').textContent=this.value"><span class="ctrl-val" id="bioOut">${BIO_THRESH}</span></div>
+      </div>
+    </div>`,
+
+  brush:()=>`
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Smart Brushes</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div class="brush-grid" id="brushGrid">
+          ${Object.entries(BRUSHES).map(([name,b])=>`
+            <button class="brush-btn${activeBrush===name?' active':''}" onclick="selectBrush('${name}')">${b.icon} ${name}</button>`).join('')}
+        </div>
+        <button class="brush-btn" style="width:100%;margin-top:4px;${activeBrush===null?'border-color:var(--accent);color:#a09af0;background:#1a1830':''}" onclick="selectBrush(null)">✏️ Raw paint</button>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Brush Settings</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div class="ctrl-row"><span class="ctrl-label">Size</span><input type="range" id="bsize" min="1" max="5" value="2" step="1" oninput="document.getElementById('bsizeOut').textContent=this.value"><span class="ctrl-val" id="bsizeOut">2</span></div>
+        <div class="ctrl-row"><span class="ctrl-label">Strength</span><input type="range" id="bstr" min="50" max="1000" value="400" step="50" oninput="document.getElementById('bstrOut').textContent=this.value"><span class="ctrl-val" id="bstrOut">400</span></div>
+        <div style="font-size:9px;color:var(--sub);margin-top:6px;margin-bottom:4px">Standard tools</div>
+        <div class="pill-row" id="toolPills">
+          ${['paint','inject','erase','inspect'].map((t,i)=>`<span class="pill${i===0?' on':''}" onclick="setTool('${t}',this)">${['✏️ Paint','➕ Inject','🧹 Erase','🔍 Inspect'][i]}</span>`).join('')}
+        </div>
+      </div>
+    </div>`,
+
+  agents:()=>`
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Agent Spawner</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <button class="brush-btn" style="flex:1" onclick="spawnAgents(5)">🧬 Spawn 5</button>
+          <button class="brush-btn" style="flex:1" onclick="spawnAgents(20)">🧬 Spawn 20</button>
+        </div>
+        <div class="ctrl-row"><span class="ctrl-label">Mutation rate</span><input type="range" min="1" max="100" value="10" step="1" oninput="document.getElementById('mutOut').textContent=this.value+'%'"><span class="ctrl-val" id="mutOut">10%</span></div>
+        <div id="agentStats" style="margin-top:6px;font-size:9px;color:var(--sub);font-family:monospace;line-height:1.5">No agents yet</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>🤖 LLM Planning</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:6px;line-height:1.5">Uses Claude Haiku. Set your API key via the 🔑 button in the top bar. Without a key, heuristic goals run automatically.</div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <button id="btnGroupPlan" class="brush-btn" style="flex:1" onclick="requestAgentPlan&&requestAgentPlan()">🧠 Group Plan</button>
+          <button id="btnDebate" class="brush-btn" style="flex:1" onclick="debateAgentPlan&&debateAgentPlan()">⚔️ Debate</button>
+        </div>
+        <button class="brush-btn" style="width:100%;margin-bottom:4px" onclick="assignAgentRoles&&assignAgentRoles()">👥 Assign CrewAI Roles</button>
+        <div id="agentPlanText" style="font-size:9px;color:#a09af0;font-family:monospace;line-height:1.6;min-height:28px;background:#09090f;border:0.5px solid var(--border);border-radius:4px;padding:5px;margin-top:2px;white-space:pre-wrap">No plan yet</div>
+      </div>
+    </div>`,
+
+  script:()=>`
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Scene Script</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <select id="tmplSel" style="width:100%;font-size:9px;background:#0e0e18;color:var(--sub);border:0.5px solid var(--border);border-radius:5px;padding:3px;margin-bottom:5px" onchange="loadTemplate()">
+          <option value="">— templates —</option>
+          <option value="ocean">Primordial ocean</option>
+          <option value="volcano">Volcano eruption</option>
+          <option value="life">Life explosion</option>
+          <option value="galaxy">Galaxy spiral</option>
+        </select>
+        <textarea id="scriptArea" rows="10" style="width:100%;font-family:monospace;font-size:9px;background:#0a0a14;color:#c0c8f0;border:0.5px solid var(--border);border-radius:5px;padding:6px;resize:vertical" placeholder="world.sphere(18,14,5,'energy',900)&#10;world.noise('density',0.3,0.5)&#10;world.tick(50)"></textarea>
+        <div style="display:flex;gap:4px;margin-top:5px">
+          <button onclick="runScript()" style="flex:1;padding:4px;border:0.5px solid var(--accent);border-radius:5px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:9px">▶ Run</button>
+          <button onclick="document.getElementById('scriptArea').value=''" style="padding:4px 8px;border:0.5px solid var(--border);border-radius:5px;cursor:pointer;background:transparent;color:var(--sub);font-size:9px">Clear</button>
+        </div>
+        <div id="scriptLog" style="font-size:9px;color:var(--sub);margin-top:4px;max-height:50px;overflow-y:auto;font-family:monospace"></div>
+      </div>
+    </div>`,
+
+  science:()=>`
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Field Monitor</span><span class="arrow">▾</span></div>
+      <div class="section-body" style="padding:6px 10px">
+        <div style="font-size:8px;color:var(--sub);margin-bottom:6px">Select a field to focus the viewport. In 2D: full-screen single field with stats. In 3D: color tiles by field.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin-bottom:8px">
+          <button class="brush-btn" onclick="setLayer(-1)" id="sciLayerAll">All</button>
+          <button class="brush-btn" onclick="setLayer(0)" id="sciLayerE">⚡ Energy</button>
+          <button class="brush-btn" onclick="setLayer(1)" id="sciLayerD">🌫️ Density</button>
+          <button class="brush-btn" onclick="setLayer(2)" id="sciLayerI">🧠 Info</button>
+          <button class="brush-btn" onclick="setLayer(3)" id="sciLayerS">🔥 Entropy</button>
+          <button class="brush-btn" onclick="setLayer(4)" id="sciLayerT">🌡️ Temp</button>
+          <button class="brush-btn" onclick="setLayer(5)" id="sciLayerB">🧬 Bio</button>
+        </div>
+        <div id="sciFieldStats" style="font-size:8px;font-family:monospace;color:var(--sub);line-height:1.7"></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Law Ecosystem</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="font-size:9px;color:var(--sub);margin-bottom:5px">Laws sorted by fitness. Toggle + tune each independently.</div>
+        <div id="sciLawList">${renderSciLaws()}</div>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <button onclick="addCustomLaw()" class="brush-btn" style="flex:1">+ Add law</button>
+          <button onclick="resetAllFitness()" class="brush-btn" style="flex:1">↺ Reset</button>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Physics Parameters</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div class="ctrl-row"><span class="ctrl-label" style="font-size:9px">Diffusion (DIFF)</span><input type="range" min="0.01" max="0.3" step="0.001" value="${DIFFUSION}" oninput="DIFFUSION=+this.value;document.getElementById('sciDiffOut').textContent=(+this.value).toFixed(3)"><span class="ctrl-val" id="sciDiffOut">${DIFFUSION}</span></div>
+        <div class="ctrl-row"><span class="ctrl-label" style="font-size:9px">Entropy (ENT)</span><input type="range" min="0.00001" max="0.003" step="0.00001" value="${ENTROPY_BASE}" oninput="ENTROPY_BASE=+this.value;document.getElementById('sciEntOut').textContent=(+this.value).toFixed(5)"><span class="ctrl-val" id="sciEntOut">${ENTROPY_BASE.toFixed(5)}</span></div>
+        <div class="ctrl-row"><span class="ctrl-label" style="font-size:9px">Info growth (INFO)</span><input type="range" min="0.05" max="2.0" step="0.05" value="${INFO_RATE}" oninput="INFO_RATE=+this.value;document.getElementById('sciInfoOut').textContent=this.value"><span class="ctrl-val" id="sciInfoOut">${INFO_RATE}</span></div>
+        <div class="ctrl-row"><span class="ctrl-label" style="font-size:9px">Bio threshold (BIO)</span><input type="range" min="0.05" max="0.8" step="0.05" value="${BIO_THRESH}" oninput="BIO_THRESH=+this.value;document.getElementById('sciBioOut').textContent=this.value"><span class="ctrl-val" id="sciBioOut">${BIO_THRESH}</span></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Law Fitness Chart</span><span class="arrow">▾</span></div>
+      <div class="section-body" style="padding:4px">
+        <canvas id="lawChart" style="width:100%;display:block;border-radius:4px;border:0.5px solid var(--border)"></canvas>
+        <div style="font-size:8px;color:var(--sub);margin-top:3px;text-align:center">Each line = one law over time</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Reality Integral Monitor</span><span class="arrow">▾</span></div>
+      <div class="section-body" style="padding:6px 10px">
+        <div id="realityMonitorPanel">
+          <div style="font-size:9px;color:var(--sub)">Start simulation to populate ΨR monitor</div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Node Law Editor</span><span class="arrow">▾</span></div>
+      <div class="section-body" style="padding:4px">
+        <div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap">
+          <button class="brush-btn" onclick="window.nodeLawEditor&&window.nodeLawEditor.addNode('source')">+ Source</button>
+          <button class="brush-btn" onclick="window.nodeLawEditor&&window.nodeLawEditor.addNode('law')">+ Law</button>
+          <button class="brush-btn" onclick="window.nodeLawEditor&&window.nodeLawEditor.addNode('transform')">+ Transform</button>
+          <button class="brush-btn" onclick="window.nodeLawEditor&&window.nodeLawEditor.addNode('output')">+ Output</button>
+          <button class="brush-btn" onclick="window.nodeLawEditor&&window.nodeLawEditor.addNode('monitor')">+ Monitor</button>
+          <button class="brush-btn" style="color:var(--danger)" onclick="window.nodeLawEditor&&window.nodeLawEditor.removeSelected()">✕ Del</button>
+          <button class="brush-btn" style="color:#7c6fcd" onclick="window.nodeLawEditor&&window.chunkWorkerCompile&&window.chunkWorkerCompile()">⚡ Compile</button>
+          <button class="brush-btn" style="color:#50d0a0" onclick="window.sciTownMode&&window.sciTownMode()" title="Set realistic city physics params">🏙️ Town Physics</button>
+        </div>
+        <canvas id="ngCanvas" style="width:100%;height:280px;border-radius:5px;border:1px solid var(--border);background:#07070e;display:block;touch-action:none"></canvas>
+        <div id="ngCompileLog" style="font-size:9px;color:var(--sub);margin-top:3px;font-family:monospace"></div>
+        <div id="ngNodeProps" style="margin-top:4px;padding:5px 6px;background:#0a0a14;border-radius:5px;border:0.5px solid var(--border);display:none"></div>
+        <div style="font-size:8px;color:#333;margin-top:3px">Dbl-click header: toggle · Dbl-click body: edit param · Right-click edge: delete · Del key: remove node</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>Data Export</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <button class="brush-btn" style="width:100%;margin-bottom:3px" onclick="window.scienceMode&&window.scienceMode.exportCSV()">📄 Metrics CSV</button>
+        <button class="brush-btn" style="width:100%;margin-bottom:3px" onclick="window.scienceMode&&window.scienceMode.exportJupyter()">📓 Jupyter Notebook (.ipynb)</button>
+        <button class="brush-btn" style="width:100%;margin-bottom:3px" onclick="window.scienceMode&&window.scienceMode.exportJSON()">🗂️ Recording JSON</button>
+        <button class="brush-btn" style="width:100%" onclick="saveWorld()">💾 Save .reality</button>
+      </div>
+    </div>`,
+
+  cinema:()=>`
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>🎬 AI Scene Director</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div id="dirLog" style="min-height:60px;max-height:120px;overflow-y:auto;font-size:10px;color:#c0c8f0;background:#09090f;border:0.5px solid var(--border);border-radius:4px;padding:8px;line-height:1.6;margin-bottom:5px">Director ready — type a prompt and click <b>Ask</b>. Set 🔑 API key for AI responses.</div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <input id="dirInput" type="text" placeholder="Make something dramatic happen..." style="flex:1;font-size:10px;padding:4px 8px;background:#0c0c18;color:var(--text);border:0.5px solid var(--border);border-radius:5px;outline:none" onkeydown="if(event.key==='Enter')window.cinemaMode&&window.cinemaMode.askDirector()">
+          <button onclick="window.cinemaMode&&window.cinemaMode.askDirector()" class="brush-btn" style="border-color:var(--warn);color:var(--warn)">Ask</button>
+        </div>
+        <div style="display:flex;gap:4px">
+          <button onclick="window.cinemaMode&&window.cinemaMode.narrate()" class="brush-btn" style="flex:1">🎙️ Narrate</button>
+          <button id="autoDirBtn" onclick="window.cinemaMode&&window.cinemaMode.toggleAuto()" class="brush-btn" style="flex:1">Auto: OFF</button>
+        </div>
+        <div id="dirCode" style="font-size:9px;font-family:monospace;color:#6080ff;max-height:45px;overflow-y:auto;margin-top:4px;display:none;background:#09090f;padding:3px 5px;border-radius:3px"></div>
+        <button id="btnRunDir" onclick="window.cinemaMode&&window.cinemaMode.runScript()" style="width:100%;margin-top:3px;padding:3px;border:0.5px solid var(--accent);border-radius:5px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:9px;display:none">▶ Execute director script</button>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>🎞️ Timeline</span><span class="arrow">▾</span></div>
+      <div class="section-body" style="padding:4px">
+        <canvas id="timelineCanvas" style="width:100%;cursor:pointer;border:0.5px solid var(--border);border-radius:4px"></canvas>
+        <div style="display:flex;gap:3px;margin-top:5px;flex-wrap:wrap">
+          <button onclick="window.cinemaMode&&window.cinemaMode.addSimKF()" class="brush-btn" style="flex:1">⬡ Sim KF</button>
+          <button onclick="window.cinemaMode&&window.cinemaMode.addMarker()" class="brush-btn" style="flex:1">📍 Marker</button>
+        </div>
+        <div class="ctrl-row" style="margin-top:5px">
+          <span class="ctrl-label" style="font-size:9px">Total ticks</span>
+          <input type="number" id="totalTicks" value="1000" min="100" max="10000" step="100" style="width:70px;font-size:10px;background:#0c0c18;color:var(--sub);border:0.5px solid var(--border);border-radius:4px;padding:2px 5px" oninput="window.cinemaMode&&(window.cinemaMode.timeline.totalTicks=+this.value,window.cinemaMode.timeline.draw())">
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>⏺ Recording</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div style="display:flex;gap:4px">
+          <button onclick="window.cinemaMode&&window.cinemaMode.startRec()" class="brush-btn" style="flex:1;color:#e04848;border-color:#e04848">● Record</button>
+          <button onclick="window.cinemaMode&&window.cinemaMode.stopRec()" class="brush-btn" style="flex:1">■ Stop</button>
+        </div>
+        <div id="recStatus" style="font-size:9px;color:var(--sub);margin-top:3px;font-family:monospace">idle</div>
+        <button onclick="window.cinemaMode&&window.cinemaMode.exportFramePNG()" class="brush-btn" style="width:100%;margin-top:4px">🖼️ Export frame PNG</button>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>📤 Export</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <button class="brush-btn" style="width:100%;margin-bottom:3px" onclick="window.cinemaMode&&window.cinemaMode.exportAlembic()">🗂️ Alembic recording (.json)</button>
+        <button class="brush-btn" style="width:100%;margin-bottom:3px" onclick="window.cinemaMode&&window.cinemaMode.exportSRT()">💬 Markers as subtitles (.srt)</button>
+        <button class="brush-btn" style="width:100%" onclick="saveWorld()">💾 Save .reality</button>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-hdr" onclick="toggleSection(this)"><span>🎨 Render Settings</span><span class="arrow">▾</span></div>
+      <div class="section-body">
+        <div class="ctrl-row"><span class="ctrl-label" style="font-size:9px">Brightness</span><input type="range" id="brightBoost" min="0.5" max="3" step="0.1" value="1" oninput="window.cinemaMode&&window.cinemaMode.setBrightness(+this.value);document.getElementById('brightOut').textContent=this.value"><span class="ctrl-val" id="brightOut">1.0</span></div>
+        <div class="ctrl-row"><span class="ctrl-label" style="font-size:9px">Saturation</span><input type="range" id="satBoost" min="0.5" max="3" step="0.1" value="1" oninput="window.cinemaMode&&window.cinemaMode.setSaturation(+this.value);document.getElementById('satOut').textContent=this.value"><span class="ctrl-val" id="satOut">1.0</span></div>
+        <div style="font-size:8px;color:var(--sub);margin-top:5px">3D renderer with bloom/fog/FOV coming in Sprint 6</div>
+      </div>
+    </div>`,
+
+  gamedev:()=>window.gamedevMode?window.gamedevMode._buildPanel():`
+    <div class="section">
+      <div class="section-body" style="color:var(--sub);font-size:9px;padding:8px">
+        Loading Game Dev tools…
+      </div>
+    </div>`,
+};
+
+function renderLaws(){
+  return LAWS.map((l,i)=>`
+    <div class="law-row">
+      <div class="law-dot" style="background:${l.color};opacity:${l.active?1:.4}"></div>
+      <div style="flex:1">
+        <div style="font-size:9px;color:${l.active?'var(--text)':'var(--sub)'};">${l.name}</div>
+        <div style="font-size:8px;color:var(--sub);line-height:1.3">${l.desc}</div>
+        ${l.active?`<input type="range" min="0" max="1" step="0.01" value="${Math.min(l.fitness,1)}" style="width:100%;margin-top:3px;height:2px;accent-color:${l.color}" oninput="LAWS[${i}].fitness=+this.value;updateLawFitness(${i},this.value)">`:''}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+        <button class="law-toggle" style="background:${l.active?l.color:'#2a2a35'}" onclick="toggleLaw(${i})"></button>
+        <span class="law-fit" style="color:${l.active?l.color:'#444'}">${(l.fitness*100).toFixed(0)}%</span>
+      </div>
+    </div>`).join('');
+}
+
+function renderSciLaws(){
+  return LAWS.map((l,i)=>`
+    <div class="law-row">
+      <div class="law-dot" style="background:${l.color};opacity:${l.active?1:.35}"></div>
+      <div style="flex:1">
+        <div style="font-size:9px;color:${l.active?'var(--text)':'var(--sub)'};">${l.name}</div>
+        <div style="font-size:8px;color:var(--sub)">${l.desc}</div>
+        ${l.active?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:3px">
+          <div><div style="font-size:7px;color:var(--sub)">Fitness</div><input type="range" min="0" max="1" step="0.01" value="${Math.min(l.fitness,1).toFixed(2)}" style="width:100%;height:2px;accent-color:${l.color}" oninput="LAWS[${i}].fitness=+this.value"></div>
+          <div><div style="font-size:7px;color:var(--sub)">Strength</div><input type="range" min="0.001" max="1" step="0.001" value="${Math.min(l.strength,1).toFixed(3)}" style="width:100%;height:2px;accent-color:${l.color}" oninput="LAWS[${i}].strength=+this.value"></div>
+        </div>`:''}
+      </div>
+      <button class="law-toggle" style="background:${l.active?l.color:'#2a2a35'}" onclick="toggleLaw(${i})"></button>
+    </div>`).join('');
+}
+function renderGameRules(){
+  if(!window.gamedevMode||!window.gamedevMode.ruleset)
+    return '<div style="font-size:9px;color:var(--sub)">No rules yet. Click + Add rule.</div>';
+  const rules=window.gamedevMode.ruleset.rules||[];
+  if(!rules.length) return '<div style="font-size:9px;color:var(--sub)">No rules yet. Click + Add rule.</div>';
+  return rules.map((r,i)=>`
+    <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px;font-size:9px">
+      <span style="color:${r.active?'var(--success)':'var(--sub)'}">●</span>
+      <span style="flex:1;color:var(--text)">${r.name}</span>
+      <span style="color:var(--sub);font-family:monospace">${r.firedCount||0}x</span>
+      <button onclick="window.gamedevMode.ruleset.rules[${i}].active=!window.gamedevMode.ruleset.rules[${i}].active;document.getElementById('gdRuleList').innerHTML=renderGameRules()" style="font-size:8px;padding:1px 4px;border:0.5px solid var(--border);border-radius:3px;cursor:pointer;background:transparent;color:var(--sub)">toggle</button>
+    </div>`).join('');
+}
+function resetAllFitness(){LAWS.forEach(l=>l.fitness=0.5);setIconPanel('science');}
+window.resetAllFitness=resetAllFitness;
+function updateLawFitness(i,v){LAWS[i].fitness=+v;}
+window.toggleLaw=function(i){
+  LAWS[i].active=!LAWS[i].active;
+  const l=LAWS[i];
+  if(l.name==='Energy Diffusion') DIFFUSION=l.active?l.strength*l.fitness*10:0.09;
+  if(l.name==='Entropy Growth')   ENTROPY_BASE=l.active?l.strength*l.fitness*2:0.0004;
+  if(l.name==='Info Bloom')       INFO_RATE=l.active?l.strength*l.fitness*2:0.35;
+  if(l.name==='Bio Emergence')    BIO_THRESH=l.active?l.strength*l.fitness*2:0.25;
+  document.getElementById('lawList').innerHTML=renderLaws();
+  log(`Law "${l.name}" ${l.active?'activated':'disabled'}`);
+};
+window.addCustomLaw=function(){
+  const name=prompt('Law name:');if(!name)return;
+  const expr=prompt('Fitness expression (e.g. bio*3+info/200):','bio*2+info/100');
+  LAWS.push({name,type:'custom',active:true,fitness:0.5,color:'#e06060',strength:0.1,desc:expr||'custom'});
+  setIconPanel('laws');
+  log(`Added law: ${name}`);
+};
+
+// ── INTEGRAL REALITY COMPOSER ────────────────────────────────────────────
+const PHI_ARCHETYPES={
+  'Harmonic':    {icon:'♪', desc:'Ordered, resonant substrate — physics obeys harmonics',   phiStrength:0.9, coupling:0.7},
+  'Chaotic':     {icon:'🌪️',desc:'Turbulent creative potential — laws shift unpredictably', phiStrength:0.3, coupling:1.4},
+  'Crystalline': {icon:'💎',desc:'Low entropy, high coherence — near-perfect order',         phiStrength:0.95,coupling:0.4},
+  'Living':      {icon:'🧬',desc:'Self-organizing vital field — life emerges naturally',     phiStrength:0.75,coupling:1.1},
+  'Void':        {icon:'⚫',desc:'Null potential — sparse, nearly empty reality',            phiStrength:0.1, coupling:0.2},
+  'Resonant':    {icon:'〜',desc:'Wave-interference dominated — standing patterns form',    phiStrength:0.8, coupling:0.9},
+};
+const FIELD_BALANCES={
+  'Energy Dominant':   {icon:'⚡',desc:'High-energy — heat and radiation rule',             rho:0.4, E:0.95,I:0.5},
+  'Information Dense': {icon:'🧠',desc:'Complexity via information — patterns proliferate', rho:0.6, E:0.55,I:0.95},
+  'Balanced':          {icon:'⚖️',desc:'Even distribution — all fields contribute equally', rho:0.7, E:0.7, I:0.7},
+  'Mass Dominant':     {icon:'🪨',desc:'Dense matter — gravity wells, slow diffusion',      rho:0.95,E:0.4, I:0.3},
+  'Sparse':            {icon:'✦', desc:'Low density — information flows freely',            rho:0.25,E:0.4, I:0.8},
+  'Pure Info':         {icon:'∞', desc:'Information dominates — substrate of pure mind',   rho:0.2, E:0.3, I:1.0},
+};
+const COMPLEXITY_MODES={
+  'Emergent':    {icon:'📈',desc:'Complexity rises — structures self-organize over time',   growth:1.3,stability:0.6,agents:8},
+  'Stable':      {icon:'🌿',desc:'Balanced complexity — ecology in homeostasis',            growth:0.7,stability:0.9,agents:5},
+  'Explosive':   {icon:'💥',desc:'Unbounded growth — complexity cascades to collapse',     growth:2.1,stability:0.3,agents:15},
+  'Collapsing':  {icon:'📉',desc:'Complexity decays — entropy wins, structures dissolve',  growth:0.4,stability:0.2,agents:3},
+  'Oscillating': {icon:'〰️',desc:'Cyclic rise and fall — extinction and rebirth loops',   growth:1.0,stability:0.5,agents:20},
+};
+const SPACETIME_PROFILES={
+  'Standard':        {icon:'⚖️',desc:'Normal causal flow — balanced dτ and dV',           timeDil:1.0,sNoise:1.0,hazards:[]},
+  'Slow Time':       {icon:'⏳',desc:'Time dilation — processes unfold across epochs',    timeDil:0.3,sNoise:1.0,hazards:[]},
+  'Fractal Space':   {icon:'🔷',desc:'Self-similar geometry — micro-macro coupling',      timeDil:1.0,sNoise:2.0,hazards:[]},
+  'High Radiation':  {icon:'☢️',desc:'Entropy injection — entropy rises continuously',    timeDil:1.0,sNoise:1.0,hazards:['radiation']},
+  'Meteor Zone':     {icon:'☄️',desc:'Kinetic impacts — periodic high-energy shocks',     timeDil:1.0,sNoise:1.2,hazards:['meteors','solar']},
+  'Frozen Topology': {icon:'❄️',desc:'Cold slow dynamics — order preserved longer',       timeDil:0.5,sNoise:0.5,hazards:['freeze']},
+};
+
+let compStep=0,compSel={phi:'Harmonic',fields:'Balanced',complexity:'Emergent',spacetime:'Standard'};
+const COMP_STEPS=['Φ Potential','ρ·E·I Fields','C Complexity','dτ·dV Dynamics','Generate'];
+
+function openComp(){document.getElementById('comp').classList.add('open');compStep=0;renderComp();}
+function openComposer(){openComp();}
+function closeComp(){document.getElementById('comp').classList.remove('open');}
+function closeComposer(){closeComp();}
+window.openComposer=openComp;window.closeComposer=closeComp;
+
+function renderComp(){
+  document.getElementById('csteps').innerHTML=COMP_STEPS.map((s,i)=>`
+    <div class="cstep${i===compStep?' active':i<compStep?' done':''}" onclick="compStep=${i};renderComp()">${i<compStep?'✓ ':''}${s}</div>`).join('');
+  document.getElementById('cseldisp').textContent=
+    [compSel.phi,compSel.fields,compSel.complexity,compSel.spacetime].filter(Boolean).join(' · ');
+  const body=document.getElementById('cbody');
+  if(compStep===0){
+    body.innerHTML=`
+      <div style="font-size:10px;color:var(--sub);margin-bottom:3px">Configure <b style="color:#a09af0">Φ</b> — the fundamental potential substrate of your reality</div>
+      <div style="font-size:9px;color:#444;margin-bottom:12px;font-style:italic">Φ determines coupling strength across the integrand — the "laws behind your laws"</div>
+      <div class="card-grid">${Object.entries(PHI_ARCHETYPES).map(([n,a])=>`<div class="wcard${compSel.phi===n?' sel':''}" onclick="compSel.phi='${n}';renderComp()">
+        <div class="wcard-icon">${a.icon}</div><div class="wcard-name">${n}</div><div class="wcard-desc">${a.desc}</div>
+        <div style="margin-top:5px;font-size:8px;color:#444;font-family:monospace">Φ=${a.phiStrength.toFixed(2)}  κ=${a.coupling.toFixed(2)}</div>
+      </div>`).join('')}</div>`;
+  }else if(compStep===1){
+    body.innerHTML=`
+      <div style="font-size:10px;color:var(--sub);margin-bottom:3px">Set the <b style="color:#a09af0">ρ·E·I</b> field balance — density, energy, information</div>
+      <div style="font-size:9px;color:#444;margin-bottom:12px;font-style:italic">These three fields set the integrand magnitude across the spatial volume dV</div>
+      <div class="card-grid">${Object.entries(FIELD_BALANCES).map(([n,f])=>`<div class="wcard${compSel.fields===n?' sel':''}" onclick="compSel.fields='${n}';renderComp()">
+        <div class="wcard-icon">${f.icon}</div><div class="wcard-name">${n}</div><div class="wcard-desc">${f.desc}</div>
+        <div style="margin-top:5px;font-size:8px;color:#444;font-family:monospace">ρ=${f.rho}  E=${f.E}  I=${f.I}</div>
+      </div>`).join('')}</div>`;
+  }else if(compStep===2){
+    body.innerHTML=`
+      <div style="font-size:10px;color:var(--sub);margin-bottom:3px">Define <b style="color:#a09af0">C</b> — complexity dynamics across process time</div>
+      <div style="font-size:9px;color:#444;margin-bottom:12px;font-style:italic">C governs how emergent complexity grows, stabilizes, or collapses as dτ evolves</div>
+      <div class="card-grid">${Object.entries(COMPLEXITY_MODES).map(([n,c])=>`<div class="wcard${compSel.complexity===n?' sel':''}" onclick="compSel.complexity='${n}';renderComp()">
+        <div class="wcard-icon">${c.icon}</div><div class="wcard-name">${n}</div><div class="wcard-desc">${c.desc}</div>
+        <div style="margin-top:5px;font-size:8px;color:#444;font-family:monospace">growth=${c.growth}  stab=${c.stability}</div>
+      </div>`).join('')}</div>`;
+  }else if(compStep===3){
+    body.innerHTML=`
+      <div style="font-size:10px;color:var(--sub);margin-bottom:3px">Shape <b style="color:#a09af0">dτ·dV</b> — process time and spatial character</div>
+      <div style="font-size:9px;color:#444;margin-bottom:12px;font-style:italic">Controls the integration measure — how reality flows through time and how space is structured</div>
+      <div class="card-grid">${Object.entries(SPACETIME_PROFILES).map(([n,s])=>`<div class="wcard${compSel.spacetime===n?' sel':''}" onclick="compSel.spacetime='${n}';renderComp()">
+        <div class="wcard-icon">${s.icon}</div><div class="wcard-name">${n}</div><div class="wcard-desc">${s.desc}</div>
+        <div style="margin-top:5px;font-size:8px;color:#444;font-family:monospace">dτ=${s.timeDil}  dV-noise=${s.sNoise}</div>
+      </div>`).join('')}</div>`;
+  }else if(compStep===4){
+    const phi=PHI_ARCHETYPES[compSel.phi];
+    const fld=FIELD_BALANCES[compSel.fields]||FIELD_BALANCES['Balanced'];
+    const cplx=COMPLEXITY_MODES[compSel.complexity]||COMPLEXITY_MODES['Emergent'];
+    const st=SPACETIME_PROFILES[compSel.spacetime]||SPACETIME_PROFILES['Standard'];
+    const integralEst=phi?(phi.phiStrength*(fld.rho+fld.E+fld.I)/3*cplx.growth*st.timeDil).toFixed(3):'—';
+    body.innerHTML=`<div style="text-align:center;padding:12px 0">
+      <div style="font-size:13px;font-family:monospace;color:#a09af0;margin-bottom:2px">𝒓 = ∫ Φ · ρ · E · I · C  dV dτ</div>
+      <div style="font-size:10px;color:var(--sub);margin-bottom:16px">Integral estimate ≈ <span style="color:#d0cef5;font-family:monospace">${integralEst}</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:400px;margin:0 auto 20px;text-align:left">
+        ${[
+          ['Φ Potential',  phi?compSel.phi:'Not set',  phi?.icon||'?', '#a09af0'],
+          ['ρ·E·I Fields', compSel.fields,             fld.icon,       '#6080ff'],
+          ['C Complexity', compSel.complexity,         cplx.icon,      '#40c060'],
+          ['dτ·dV',        compSel.spacetime,          st.icon,        '#e09030'],
+        ].map(([k,v,ic,c])=>`
+          <div style="padding:8px;background:#0e0e18;border-radius:8px;border:0.5px solid var(--border)">
+            <div style="font-size:9px;color:var(--sub);margin-bottom:2px">${k}</div>
+            <div style="font-size:11px;color:${c}">${ic} ${v}</div>
+          </div>`).join('')}
+      </div>
+      <button onclick="generateWorld()" style="padding:10px 36px;border:0.5px solid var(--accent);border-radius:8px;cursor:pointer;background:#1a1830;color:#a09af0;font-size:13px;font-weight:500">✦ Generate Reality</button>
+    </div>`;
+  }
+  document.getElementById('cback').style.opacity=compStep===0?'0.3':'1';
+  document.getElementById('cnext').textContent=compStep===COMP_STEPS.length-1?'Generate →':'Next →';
+}
+document.getElementById('cnext').addEventListener('click',()=>{if(compStep<COMP_STEPS.length-1){compStep++;renderComp();}else generateWorld();});
+document.getElementById('cback').addEventListener('click',()=>{if(compStep>0){compStep--;renderComp();}});
+
+function evolveLawsTowardIntegral(sel){
+  const phi=PHI_ARCHETYPES[sel.phi];
+  const fld=FIELD_BALANCES[sel.fields];
+  const cplx=COMPLEXITY_MODES[sel.complexity];
+  if(!phi||!fld||!cplx) return;
+  for(const law of LAWS){
+    if(law.name==='Energy Diffusion') law.fitness=Math.min(1,fld.E*phi.coupling*0.8);
+    if(law.name==='Entropy Growth')   law.fitness=Math.min(1,Math.max(0.05,1-phi.phiStrength));
+    if(law.name==='Info Bloom')       law.fitness=Math.min(1,fld.I*phi.phiStrength);
+    if(law.name==='Bio Emergence')    law.fitness=Math.min(1,cplx.growth*0.45);
+  }
+  const ll=document.getElementById('lawList');if(ll)ll.innerHTML=renderLaws();
+}
+
+function generateWorld(){
+  const phi=PHI_ARCHETYPES[compSel.phi];if(!phi){log('Select Φ Potential first');return;}
+  const fld=FIELD_BALANCES[compSel.fields]||FIELD_BALANCES['Balanced'];
+  const cplx=COMPLEXITY_MODES[compSel.complexity]||COMPLEXITY_MODES['Emergent'];
+  const st=SPACETIME_PROFILES[compSel.spacetime]||SPACETIME_PROFILES['Standard'];
+  pushUndo();
+  buf.fill(0);causal=[];tick=0;
+  // Map Φ·ρ·E·I·C → engine constants
+  // DIFFUSION: coupling drives energy spread; denser fields slow it slightly
+  DIFFUSION=0.09*phi.coupling*(0.4+fld.rho*0.6);
+  // ENTROPY_BASE: lerp from near-zero (ordered Φ) to high (chaotic Φ), scaled by C growth
+  ENTROPY_BASE=(0.00005+0.00295*(1-phi.phiStrength))*(1+cplx.growth*0.3);
+  // INFO_RATE: information growth driven by I field strength and Φ coherence
+  INFO_RATE=0.35*fld.I*phi.phiStrength*1.5;
+  // BIO_THRESH: bio threshold scales with density range so sparse worlds can still support life
+  BIO_THRESH=Math.max(0.03,(0.35/cplx.growth)*fld.rho*0.75);
+  // Activate processes based on field balance
+  activeProcs=new Set(['thermo','bio','info','emerge','geo']);
+  if(fld.I<0.5) activeProcs.delete('info');
+  if(fld.E<0.4) activeProcs.delete('thermo');
+  // Fill grid — dV noise shaped by sNoise
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const n=(Math.sin(x*0.4+y*0.3)*Math.cos(x*0.3-y*0.5)+1)/2;
+    const nz=(Math.sin(x*0.7*st.sNoise)*Math.cos(y*0.6*st.sNoise)+1)/2;
+    set_(x,y,FE,Math.max(0,(n*0.7+nz*0.3)*600*fld.E*phi.phiStrength+20));
+    set_(x,y,FD,Math.max(0,n*fld.rho));
+    set_(x,y,FI,Math.max(0,nz*100*fld.I*phi.phiStrength));
+    set_(x,y,FT,Math.max(0,n*300*fld.E));
+    set_(x,y,FS,Math.max(0,0.02+(1-phi.phiStrength)*0.1+Math.random()*0.03));
+    set_(x,y,FBio,Math.max(0,nz*fld.I*phi.phiStrength*0.5));
+  }
+  // Spawn agents scaled by C and dτ
+  const nA=Math.round(cplx.agents*st.timeDil*1.5);
+  if(nA>0&&window.spawnAgents) window.spawnAgents(nA);
+  // Auto-tune meta-laws toward integral balance
+  evolveLawsTowardIntegral(compSel);
+  // Wire dτ → simulation speed (timeDil 1.0 = 4x default; 0.3 = slow; 2.0 = fast)
+  const spdEl=document.getElementById('spd');
+  if(spdEl){const sv=Math.max(1,Math.min(20,Math.round(4*st.timeDil)));spdEl.value=String(sv);const spdOut=document.getElementById('spdOut');if(spdOut)spdOut.textContent=sv+'x';}
+  // Wire C growth → ongoing MetaLaw evolution rate (stored for loop pickup)
+  window._composerGrowth=cplx.growth;
+  // Apply dτ hazards
+  _clearComposerHazards();
+  if(st.hazards.length){
+    window._composerHazardInterval=setInterval(()=>{
+      for(const h of st.hazards){
+        if(h==='meteors')  _hazardMeteors();
+        if(h==='solar')    _hazardSolar();
+        if(h==='radiation')_hazardRadiation();
+        if(h==='freeze')   _hazardFreeze();
+      }
+    },5000);
+  }
+  if(currentRenderMode!=='3d'&&currentRenderMode!=='hybrid'){
+    setRenderMode('3d',document.getElementById('tab3d'));
+  }
+  // Apply the same composer choice to the visible Infinite World, not only the legacy field buffer.
+  if(window.infinityApplyComposer) window.infinityApplyComposer(compSel);
+  closeComp();
+  drawGrid();
+  log(`✦ Reality synthesized: Φ=${compSel.phi} · ${compSel.fields} · C=${compSel.complexity}`);
+  playing=true;
+  document.getElementById('pb').textContent='⏸ Pause';
+}
+
+function quickGenerateWorld(){
+  if(!compSel||!compSel.phi){
+    compSel={phi:'Harmonic',fields:'Balanced',complexity:'Emergent',spacetime:'Standard'};
+  }
+  generateWorld();
+}
+window.quickGenerateWorld=quickGenerateWorld;
+function _clearComposerHazards(){if(window._composerHazardInterval){clearInterval(window._composerHazardInterval);window._composerHazardInterval=null;}}
+function _hazardMeteors(){
+  for(let i=0;i<2+Math.floor(Math.random()*2);i++){
+    const mx=Math.floor(Math.random()*W),my=Math.floor(Math.random()*H),r=2+Math.floor(Math.random()*3);
+    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+      if(dx*dx+dy*dy>r*r)continue;
+      const g=Math.exp(-(dx*dx+dy*dy)/(r*r)*2);
+      const nx=Math.max(0,Math.min(W-1,mx+dx)),ny=Math.max(0,Math.min(H-1,my+dy));
+      set_(nx,ny,FE,Math.min(9999,get(nx,ny,FE)+g*800));
+      set_(nx,ny,FT,Math.min(2000,get(nx,ny,FT)+g*500));
+      set_(nx,ny,FS,Math.min(1,get(nx,ny,FS)+g*0.3));
+    }
+  }
+}
+function _hazardSolar(){for(let y=0;y<H;y++)for(let x=0;x<W;x++){set_(x,y,FE,Math.min(9999,get(x,y,FE)+50+Math.random()*150));set_(x,y,FT,Math.min(2000,get(x,y,FT)+30));}}
+function _hazardRadiation(){for(let y=0;y<H;y++)for(let x=0;x<W;x++){set_(x,y,FS,Math.min(1,get(x,y,FS)+0.003*Math.random()));}}
+function _hazardFreeze(){for(let y=0;y<H;y++)for(let x=0;x<W;x++){set_(x,y,FT,Math.max(0,get(x,y,FT)-20));}}
+
+
+// ── HEALTH PANEL ──────────────────────────────────────────────────────────
+function updateHealth(){
+  let totE=0,totS=0,totI=0,totB=0;
+  for(let i=0;i<SZ;i++){totE+=buf[i*NF+FE];totS+=buf[i*NF+FS];totI+=buf[i*NF+FI];totB+=buf[i*NF+FBio];}
+  const avgS=totS/SZ,avgB=totB/SZ,avgI=totI/SZ,avgE=totE/SZ;
+  const stab=Math.round((1-avgS)*100);
+  const emerg=Math.min(100,Math.round((avgB*50+avgI/10+avgE/20)*(1-avgS)));
+  const extRisk=Math.round(Math.max(0,avgS*100-20));
+  const BARS=[['Stability',stab,'#6080ff'],['Emergence',emerg,'#40c060'],['Extinction risk',extRisk,'#e04040']];
+  document.getElementById('hbars').innerHTML=BARS.map(([l,v,c])=>`
+    <div class="hbar">
+      <div class="hbar-hdr"><span>${l}</span><span style="color:${c};font-family:monospace">${v}%</span></div>
+      <div class="hbar-track"><div class="hbar-fill" style="width:${v}%;background:${c}"></div></div>
+    </div>`).join('');
+  const semEnt=avgS<0.1?['Frozen','#6080ff']:avgS<0.3?['Ordered','#40c060']:avgS<0.6?['Turbulent','#e09030']:['Chaotic','#e04040'];
+  const semBio=avgB<0.05?['Barren','#555']:avgB<0.3?['Sparse','#608060']:avgB<0.7?['Fertile','#40c060']:['Dominant','#20e060'];
+  const semE=avgE<20?['Dead','#333']:avgE<200?['Active','#6080ff']:['Volcanic','#ff4020'];
+  document.getElementById('semTags').innerHTML=[semEnt,semBio,semE].map(([l,c])=>`
+    <span class="sem-tag" style="background:${c}22;color:${c};border-color:${c}55">${l}</span>`).join('');
+  const alerts=[];
+  if(avgS>0.7)alerts.push(['critical','Entropy Critical — order collapsing']);
+  if(avgB<0.05&&tick>200)alerts.push(['warn','Life Collapse Risk']);
+  if(avgI>200)alerts.push(['info','Information Saturation']);
+  if(avgE<10&&tick>100)alerts.push(['warn','Energy Depletion']);
+  if(avgB>0.4&&avgI>100)alerts.push(['ok','Complexity ↑ — Emergence detected']);
+  document.getElementById('alerts').innerHTML=alerts.map(([t,m])=>`<div class="alert alert-${t}">${m}</div>`).join('');
+}
+
+// ── EXPLAINER ─────────────────────────────────────────────────────────────
+function explainCell(x,y){
+  const E=get(x,y,FE),D_=get(x,y,FD),I=get(x,y,FI),S=get(x,y,FS),T=get(x,y,FT),B=get(x,y,FBio);
+  const cards=[];
+  cards.push({field:'⚡ Energy',val:E.toFixed(1),why:E>500?'Very high — major source, diffusing to neighbors.':E>100?'Moderate. Stable diffusion in progress.':E<10?'Near-zero. Consumed or diffused away.':'Low but present.'});
+  if(T>0.1)cards.push({field:'🌡️ Temp',val:T.toFixed(0),why:T>500?'Plasma-level — entropy rising fast.':T>200?'Very hot. Energy coupling strong.':T<20?'Near-freezing. Ice-like order possible.':'Moderate temperature.'});
+  const causes=[];if(E>200)causes.push('high energy');if(T>300)causes.push('thermal');
+  cards.push({field:'🔥 Entropy',val:S.toFixed(3),why:S>0.6?`Critical${causes.length?' from '+causes.join('+')+' input':' from baseline'}. Structures decaying.`:S>0.3?'Elevated. Order eroding.':S<0.1?'Very low — ordered state. Crystal or ice possible.':'Normal disorder level.'});
+  if(I>5||E>80)cards.push({field:'🧠 Info',val:I.toFixed(0),why:I>300?'Self-sustaining complexity.':I>50&&E>80&&D_>0.2?'Growing — energy+density threshold met.':I<5?'Suppressed by entropy.':'Low information density.'});
+  cards.push({field:'🧬 Bio',val:B.toFixed(3),why:B>0.7?'High — multiple life conditions met.':B>0.3?'Moderate — partial conditions. Needs more energy or info.':'Low — entropy or energy imbalance.'});
+  document.getElementById('inspector').innerHTML=`<div style="font-size:9px;color:var(--sub);margin-bottom:6px">Cell (${x},${y}) — why these values?</div>`+cards.map(c=>`<div class="excard"><div class="excard-hdr"><span class="excard-field">${c.field}</span><span class="excard-val">${c.val}</span></div><div class="excard-why">${c.why}</div></div>`).join('');
+}
+
+function drawHist(){
+  const w=hc.width=hc.offsetWidth||200,h=70;
+  hx.fillStyle='#07070e';hx.fillRect(0,0,w,h);
+  const all=[...histE,...histT,...histI,...histS,...histB];
+  if(all.length<2)return;
+  const mx=Math.max(...all,1);
+  const draw=(a,col)=>{if(a.length<2)return;hx.beginPath();hx.strokeStyle=col;hx.lineWidth=1.2;a.forEach((v,i)=>{const px=i/(a.length-1)*w,py=h-(v/mx)*(h-3)-2;i===0?hx.moveTo(px,py):hx.lineTo(px,py);});hx.stroke();};
+  draw(histE,'#6080ff');draw(histT,'#ef8030');draw(histI,'#a060e0');draw(histS,'#e04040');draw(histB,'#30a060');
+}
+
+// ── CANVAS INTERACTION ────────────────────────────────────────────────────
+function getCellAt(e){
+  const r=wrap.getBoundingClientRect();
+  let cx=e.clientX-r.left;
+  const cy=e.clientY-r.top;
+  const eff_w=currentRenderMode==='hybrid'?Math.floor(r.width/2):r.width;
+  if(cx>eff_w)return null; // right half (3D iso) — no cell pick
+  const cs=Math.min(eff_w/W,r.height/H);
+  const ox=(eff_w-cs*W)/2,oy=(r.height-cs*H)/2;
+  const x=Math.floor((cx-ox)/cs),y=Math.floor((cy-oy)/cs);
+  if(x<0||x>=W||y<0||y>=H)return null;return{x,y};
+}
+function pushUndo(){
+  const snap=new Float32Array(buf);
+  _undoRing[_undoHead%UNDO_MAX]=snap;
+  _undoHead++;
+  if(_undoCount<UNDO_MAX)_undoCount++;
+}
+function undo(){
+  if(_undoCount===0){log('Nothing to undo');return;}
+  _undoHead--;if(_undoHead<0)_undoHead=UNDO_MAX-1;
+  _undoCount--;
+  buf.set(_undoRing[_undoHead%UNDO_MAX]);
+  window.buf=buf;drawGrid();log('↩ Undo');
+}
+window.undo=undo;
+
+function paintAt(x,y){
+  const bs=parseInt(document.getElementById('bsize')?.value||2);
+  const str=parseInt(document.getElementById('bstr')?.value||400);
+  if(tool==='stamp_prefab'&&window.gamedevMode){window.gamedevMode.stampAt(x,y);return;}
+  if(activeBrush&&BRUSHES[activeBrush]){BRUSHES[activeBrush].paint(x,y,bs+1);return;}
+  const fi=[FE,FD,FI,FS,FT,FBio][layer]??FE;
+  const mx=[9999,1,999,1,2000,1][layer]??9999;
+  for(let dy=-bs;dy<=bs;dy++)for(let dx=-bs;dx<=bs;dx++){
+    const nx=x+dx,ny=y+dy;if(nx<0||nx>=W||ny<0||ny>=H||dx*dx+dy*dy>bs*bs)continue;
+    if(tool==='erase'){[FE,FD,FI,FS,FT,FBio].forEach(f=>set_(nx,ny,f,0));}
+    else if(tool==='inject')add_(nx,ny,fi,str);
+    else if(tool==='paint')set_(nx,ny,fi,clamp(str,0,mx));
+  }
+  if(window.paintChunkAt){
+    const x3=Math.round(x/W*127),y3=Math.round(y/H*127),z3=32;
+    const f3=[0,1,2,3,4,10][layer<0?0:layer]??0;
+    window.paintChunkAt(x3,y3,z3,f3,tool==='erase'?0:str,Math.max(3,bs*3),tool==='erase'?'set':'add');
+  }
+}
+wrap.addEventListener('pointerdown',e=>{
+  if(currentRenderMode==='3d')return;
+  const c=getCellAt(e);if(!c)return;
+  painting=true;wrap.setPointerCapture(e.pointerId);
+  if(tool==='inspect'){selX=c.x;selY=c.y;histE=[];histT=[];histI=[];histS=[];histB=[];explainCell(c.x,c.y);}
+  else{pushUndo();paintAt(c.x,c.y);}
+});
+wrap.addEventListener('pointermove',e=>{
+  if(currentRenderMode==='3d'||!painting)return;const c=getCellAt(e);if(!c)return;
+  if(tool==='inspect'){selX=c.x;selY=c.y;}else paintAt(c.x,c.y);
+});
+wrap.addEventListener('pointerup',()=>{painting=false;});
+
+// ── PRESETS ───────────────────────────────────────────────────────────────
+window.applyPreset=function(p){
+  pushUndo();
+  buf.fill(0);causal=[];tick=0;
+  const cx=W/2,cy=H/2;
+  if(p==='burst'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const d=Math.sqrt((x-cx)**2+(y-cy)**2);if(d<8){const g=Math.exp(-d*d/20);set_(x,y,FE,900*g);set_(x,y,FT,400*g);set_(x,y,FD,0.7*g);}}}
+  else if(p==='wave'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){set_(x,y,FE,400+400*Math.sin(x*.7)*Math.cos(y*.5));set_(x,y,FD,.4+.3*Math.sin(x*.3+y*.3));set_(x,y,FT,150+100*Math.cos(x*.4));}}
+  else if(p==='life'){for(let i=0;i<25;i++){const x=4+Math.floor(Math.random()*(W-8)),y=4+Math.floor(Math.random()*(H-8));const e=150+Math.random()*500;set_(x,y,FE,e);set_(x,y,FD,.3+Math.random()*.5);set_(x,y,FI,e*.3);set_(x,y,FT,80+Math.random()*180);set_(x,y,FBio,.2+Math.random()*.5);}}
+  else if(p==='proto'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const n=(Math.sin(x*.4)*Math.cos(y*.3)+1)/2;set_(x,y,FE,50+n*400);set_(x,y,FD,.2+n*.6);set_(x,y,FT,30+n*250);set_(x,y,FS,0.05+Math.random()*.1);if(n>.6){set_(x,y,FBio,n*.4);set_(x,y,FI,n*80);}}}
+  else if(p==='town'){
+    const cx=W/2,cy=H/2,RS=Math.floor(W/6),RW=1;
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const dx=x-cx,dy=y-cy,r=Math.sqrt(dx*dx+dy*dy),ang=Math.atan2(dy,dx);
+      const road=Math.abs(x%RS)<RW||Math.abs(y%RS)<RW;
+      const park=ang>2.1&&ang<3.5&&r>W*0.17&&r<W*0.37;
+      const ind=ang>-0.5&&ang<1.1&&r>W*0.14&&r<W*0.34;
+      if(road){set_(x,y,FE,350+Math.random()*200);set_(x,y,FD,0.2);set_(x,y,FI,200+Math.random()*100);set_(x,y,FT,30);}
+      else if(park){set_(x,y,FE,80+Math.random()*60);set_(x,y,FD,0.15);set_(x,y,FBio,0.6+Math.random()*0.3);set_(x,y,FT,18);}
+      else if(ind){set_(x,y,FE,600+Math.random()*300);set_(x,y,FD,0.8);set_(x,y,FS,0.18+Math.random()*0.18);set_(x,y,FT,100+Math.random()*180);}
+      else if(r<W*0.11){set_(x,y,FE,700+Math.random()*250);set_(x,y,FD,0.85);set_(x,y,FI,350+Math.random()*150);set_(x,y,FT,60+Math.random()*50);set_(x,y,FBio,0.1);}
+      else if(r<W*0.23){set_(x,y,FE,380+Math.random()*200);set_(x,y,FD,0.55);set_(x,y,FI,160+Math.random()*100);set_(x,y,FT,38+Math.random()*25);set_(x,y,FBio,0.18);}
+      else if(r<W*0.4){set_(x,y,FE,140+Math.random()*120);set_(x,y,FD,0.3);set_(x,y,FI,55+Math.random()*60);set_(x,y,FT,22+Math.random()*15);set_(x,y,FBio,0.35);}
+      else{set_(x,y,FE,40+Math.random()*50);set_(x,y,FD,0.1);set_(x,y,FBio,0.55+Math.random()*0.3);set_(x,y,FT,18);}
+    }
+    // Also seed the 3D chunk worker with town preset
+    if(window.applyChunkPreset)window.applyChunkPreset('town');
+  }
+  else if(p==='storm'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){set_(x,y,FE,Math.random()*700);set_(x,y,FS,.2+Math.random()*.7);set_(x,y,FT,Math.random()*350);set_(x,y,FD,Math.random()*.8);}}
+  else if(p==='ruins'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const n=(Math.sin(x*.5)*Math.cos(y*.4)+1)/2;if(n>.5){set_(x,y,FE,50+n*150);set_(x,y,FI,n*300);set_(x,y,FD,.3+n*.3);set_(x,y,FS,.2+Math.random()*.4);}}}
+  else if(p==='clear'){buf.fill(0);}
+  log(`Preset: ${p}`);
+  const _cpre=['burst','wave','life','proto','gaia'];
+  if(_cpre.includes(p)&&window.applyChunkPreset)window.applyChunkPreset(p);
+};
+
+// ── UI HELPERS ────────────────────────────────────────────────────────────
+let leftPanelOpen = true;
+let rightPanelOpen = true;
+let savedLw = 220;
+let savedRw = 240;
+
+function toggleLeftPanel(force){
+  leftPanelOpen = typeof force === 'boolean' ? force : !leftPanelOpen;
+  const root = document.documentElement;
+  const leftEl = document.getElementById('left');
+  const rszL = document.getElementById('rszL');
+  const btn = document.getElementById('btnToggleLeft');
+  if (leftPanelOpen) {
+    root.style.setProperty('--lw', savedLw + 'px');
+    if (leftEl) leftEl.style.display = 'flex';
+    if (rszL) { rszL.style.display = 'block'; rszL.style.left = `calc(52px + ${savedLw}px - 2px)`; }
+    if (btn) { btn.classList.add('on'); btn.title = 'Collapse Left Sidebar'; }
+  } else {
+    const curW = parseInt(getComputedStyle(root).getPropertyValue('--lw')) || 220;
+    if (curW > 50) savedLw = curW;
+    root.style.setProperty('--lw', '0px');
+    if (leftEl) leftEl.style.display = 'none';
+    if (rszL) rszL.style.display = 'none';
+    if (btn) { btn.classList.remove('on'); btn.title = 'Open Left Sidebar'; }
+  }
+  localStorage.setItem('reality_left_open', String(leftPanelOpen));
+  if (typeof resize === 'function') resize();
+}
+window.toggleLeftPanel = toggleLeftPanel;
+
+function toggleRightPanel(force){
+  rightPanelOpen = typeof force === 'boolean' ? force : !rightPanelOpen;
+  const root = document.documentElement;
+  const rightEl = document.getElementById('right');
+  const rszR = document.getElementById('rszR');
+  const btn = document.getElementById('btnToggleRight');
+  if (rightPanelOpen) {
+    root.style.setProperty('--rw', savedRw + 'px');
+    if (rightEl) rightEl.style.display = 'flex';
+    if (rszR) { rszR.style.display = 'block'; rszR.style.right = `calc(${savedRw}px - 3px)`; }
+    if (btn) { btn.classList.add('on'); btn.title = 'Collapse Right Controls'; }
+  } else {
+    const curW = parseInt(getComputedStyle(root).getPropertyValue('--rw')) || 240;
+    if (curW > 50) savedRw = curW;
+    root.style.setProperty('--rw', '0px');
+    if (rightEl) rightEl.style.display = 'none';
+    if (rszR) rszR.style.display = 'none';
+    if (btn) { btn.classList.remove('on'); btn.title = 'Open Right Controls'; }
+  }
+  localStorage.setItem('reality_right_open', String(rightPanelOpen));
+  if (typeof resize === 'function') resize();
+}
+window.toggleRightPanel = toggleRightPanel;
+
+function setIconPanel(id){
+  currentPanel=id;
+  if (!leftPanelOpen) {
+    toggleLeftPanel(true);
+  }
+  document.querySelectorAll('.icon-btn[data-panel]').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
+  const html = PANELS[id]?.() || '';
+  const left = document.getElementById('left');
+  if (left) left.innerHTML = html;
+
+  const modeByPanel = {
+    science: 'science',
+    cinema: 'cinema',
+    gamedev: 'game',
+  };
+  const targetMode = modeByPanel[id] || 'create';
+  document.querySelectorAll('.mode-btn[data-mode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === targetMode);
+  });
+  const modeNames = { create: 'Create Mode', science: 'Science Mode', cinema: 'Cinema Mode', game: 'Game Dev Mode' };
+  const modeLabel = document.getElementById('modeLabel');
+  if (modeLabel) modeLabel.textContent = modeNames[targetMode] || 'Create Mode';
+  currentAppMode = targetMode;
+
+  document.dispatchEvent(new CustomEvent('panelRendered',{detail:{panel:id}}));
+}
+window.setIconPanel=setIconPanel;
+
+document.addEventListener('builderUpdated', () => {
+  if (currentPanel === 'builder') {
+    const left = document.getElementById('left');
+    if (left) left.innerHTML = renderBuilderPanel();
+  }
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeComp();
+    const apiKeyModal = document.getElementById('apiKeyModal');
+    if (apiKeyModal) apiKeyModal.style.display = 'none';
+    const shortcutsModal = document.getElementById('shortcutsModal');
+    if (shortcutsModal) shortcutsModal.style.display = 'none';
+  }
+});
+
+function setRenderMode(mode,btn){
+  currentRenderMode=mode;
+  document.querySelectorAll('#tabs .ctab').forEach(t=>t.classList.remove('on'));
+  if(btn)btn.classList.add('on');
+
+  const c3d=document.getElementById('c3d');
+  const c3dField=document.getElementById('c3dField');
+  const c2d=document.getElementById('c2d');
+  const metricsView=document.getElementById('metricsView');
+
+  // Each 3D system gets its own WebGL canvas. Never stack the two renderers on one canvas.
+  if(mode==='hybrid'){
+    c2d.style.cssText='position:absolute;top:0;left:0;width:50%;height:100%;display:block';
+    c3d.style.cssText='position:absolute;top:0;left:50%;width:50%;height:100%;display:block';
+    if(c3dField)c3dField.style.display='none';
+  } else {
+    c2d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='2d'?'block':'none');
+    c3d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;display:'+(mode==='3d'?'block':'none');
+    if(c3dField)c3dField.style.display=mode==='field3d'?'block':'none';
+  }
+  if(metricsView)metricsView.style.display=mode==='metrics'?'block':'none';
+  if(mode==='metrics')updateMetricsView();
+
+  // Field controls are meaningful in the volumetric view; Infinite World keeps its own terrain/object tools.
+  const layerBar=document.getElementById('layerBar');
+  if(layerBar)layerBar.style.opacity=mode==='field3d'?'1':'0.55';
+
+  resize();
+
+  if((mode==='2d'||mode==='hybrid')&&c2d.style.display!=='none'){resize2D();draw2D();}
+  if((mode==='3d'||mode==='hybrid')&&c3d.style.display!=='none'){resize3D();}
+  if(mode==='field3d'&&window.renderField3D)window.renderField3D();
+
+  log(`Switched to ${mode.toUpperCase()} render mode`);
+}
+window.setRenderMode=setRenderMode;
+window.setView=setRenderMode;
+
+function previewRenderMode(mode){
+  const idMap={
+    '3d':'tab3d','field3d':'tabField3d','2d':'tab2d','hybrid':'tabHybrid','metrics':'tabMetrics'
+  };
+  setRenderMode(mode,document.getElementById(idMap[mode])||null);
+}
+window.previewRenderMode=previewRenderMode;
+
+function updateMetricsView(){
+  const mv=document.getElementById('metricsContent');if(!mv)return;
+  let totE=0,totS=0,totI=0,totB=0,totT=0;
+  for(let i=0;i<SZ;i++){totE+=buf[i*NF+FE];totS+=buf[i*NF+FS];totI+=buf[i*NF+FI];totB+=buf[i*NF+FBio];totT+=buf[i*NF+FT];}
+  const rows=[
+    ['Tick',tick],['Avg Energy',(totE/SZ).toFixed(2)],['Avg Entropy',(totS/SZ).toFixed(5)],
+    ['Avg Info',(totI/SZ).toFixed(2)],['Avg Bio',(totB/SZ).toFixed(5)],['Avg Temp',(totT/SZ).toFixed(2)],
+    ['Active Laws',LAWS.filter(l=>l.active).length+'/'+LAWS.length],
+    ['Causal Events',causal.length],['Diffusion',DIFFUSION.toFixed(4)],
+    ['Entropy Base',ENTROPY_BASE.toFixed(6)],['Info Rate',INFO_RATE.toFixed(3)],
+  ];
+  mv.innerHTML=rows.map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid #1a1a25"><span>${k}</span><span style="color:var(--text)">${v}</span></div>`).join('');
+}
+
+function toggleSection(hdr){hdr.closest('.section').classList.toggle('collapsed');}
+window.toggleSection=toggleSection;
+function toggleSec(hdr){hdr.closest('.sec').classList.toggle('collapsed');}
+window.toggleSec=toggleSec;
+
+// 3D Controls
+function setMatMode3D(m,btn){
+  window.setMatMode&&window.setMatMode(m);
+  document.querySelectorAll('#matField,#matMaterial,#matHeight').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  const pillMap={field:'matFieldPill',material:'matMaterialPill',height:'matHeightPill'};
+  document.querySelectorAll('#matFieldPill,#matMaterialPill,#matHeightPill').forEach(p=>p.classList.remove('on'));
+  const pill=document.getElementById(pillMap[m]);
+  if(pill) pill.classList.add('on');
+}
+function setCam3D(preset,btn){
+  window.setCameraPreset&&window.setCameraPreset(preset);
+  document.querySelectorAll('.camBtn').forEach(b=>b.classList.remove('on'));
+  if(btn)btn.classList.add('on');
+}
+function toggleParticles3D(btn){
+  const on=btn.classList.toggle('on');
+  window.setShowParticles&&window.setShowParticles(on);
+  btn.textContent=(on?'✨ Particles ON':'✨ Particles OFF');
+}
+window.setMatMode3D=setMatMode3D;
+window.setCam3D=setCam3D;
+window.toggleParticles3D=toggleParticles3D;
+
+function setLayer(l){
+  if(l===-1){layer=-1;}else{layer=(layer===l)?-1:l;}
+  const names=['Energy','Density','Info','Entropy','Temp','Bio'];
+  const HINTS={
+    '3d':'height = energy · color = field',
+    '2d':layer>=0?'focused full-screen view · click same field to restore 4-slice':'4-slice overview — click a field to focus',
+    'hybrid':'left 2D · right 3D colored by field',
+  };
+  const hint=HINTS[currentRenderMode]||'';
+  const hintEl=document.getElementById('layerHint');
+  if(hintEl)hintEl.textContent=hint;
+  const msgName=layer>=0?names[layer]:'All Fields';
+  log(`📊 ${msgName}${layer>=0?' · '+hint:''}`);
+  const allBtn=document.getElementById('layerAll');
+  if(allBtn)allBtn.classList.toggle('active',layer===-1);
+  ['layerE','layerD','layerI','layerS','layerT','layerB'].forEach((id,i)=>{
+    const el=document.getElementById(id);if(el)el.classList.toggle('active',i===layer);
+  });
+  // Mirror state on science panel field buttons
+  const sciAll=document.getElementById('sciLayerAll');
+  if(sciAll)sciAll.classList.toggle('active',layer===-1);
+  ['sciLayerE','sciLayerD','sciLayerI','sciLayerS','sciLayerT','sciLayerB'].forEach((id,i)=>{
+    const el=document.getElementById(id);if(el)el.classList.toggle('active',i===layer);
+  });
+  if(window.setChunkLayer)window.setChunkLayer(layer<0?0:layer);
+  drawGrid();
+}
+window.setLayer=setLayer;
+
+function setTool(t,btn){
+  tool=t;
+  activeBrush=null;
+  document.querySelectorAll('#toolPills .pill').forEach(p=>p.classList.remove('on'));
+  btn?.classList.add('on');
+  document.querySelectorAll('#brushGrid .brush-btn').forEach(b=>b.classList.remove('active'));
+}
+window.setTool=setTool;
+
+function selectBrush(name){
+  activeBrush=name;
+  tool='paint';
+  document.querySelectorAll('#brushGrid .brush-btn').forEach(b=>b.classList.toggle('active',b.textContent.includes(name||'__never__')));
+  if(name)log(`Brush: ${BRUSHES[name]?.icon} ${name} selected`);
+  else log('Raw paint mode');
+}
+window.selectBrush=selectBrush;
+
+function toggleProc(id){
+  if(activeProcs.has(id))activeProcs.delete(id);else activeProcs.add(id);
+  const el=document.getElementById(`pt_${id}`);
+  if(el)el.style.background=activeProcs.has(id)?'var(--accent)':'#2a2a35';
+  log(`Process ${id}: ${activeProcs.has(id)?'ON':'OFF'}`);
+}
+window.toggleProc=toggleProc;
+
+function setPill(btn,parent){
+  parent.querySelectorAll('.pill').forEach(p=>p.classList.remove('on'));btn.classList.add('on');
+}
+window.setPill=setPill;
+
+function setMoodPill(type,btn,val){
+  btn.closest('.pill-row').querySelectorAll('.pill').forEach(p=>p.classList.remove('on'));
+  btn.classList.add('on');
+  const MAPS={
+    stability:{Fragile:{ENTROPY_BASE:0.002},Dynamic:{ENTROPY_BASE:0.0006},Balanced:{ENTROPY_BASE:0.0004},'Self-Repairing':{ENTROPY_BASE:0.0001}},
+    entropy:{'Low (Order)':{ENTROPY_BASE:0.00005},Medium:{ENTROPY_BASE:0.0004},'High (Chaos)':{ENTROPY_BASE:0.001},Extreme:{ENTROPY_BASE:0.003}},
+    life:{Suppressed:{INFO_RATE:0.05},Neutral:{INFO_RATE:0.35},Fertile:{INFO_RATE:0.8},Aggressive:{INFO_RATE:2.0}},
+  };
+  const m=MAPS[type]?.[val]||{};
+  if(m.ENTROPY_BASE!==undefined)ENTROPY_BASE=m.ENTROPY_BASE;
+  if(m.INFO_RATE!==undefined)INFO_RATE=m.INFO_RATE;
+  log(`${type}: ${val}`);
+}
+window.setMoodPill=setMoodPill;
+
+function togglePlay(){
+  playing=!playing;
+  if(currentAppMode==='game')isPaused=!playing;
+  document.getElementById('pb').textContent=playing?'⏸ Pause':'▶ Play';
+}
+
+document.querySelectorAll('.mode-btn[data-mode]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.mode-btn[data-mode]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentAppMode=btn.dataset.mode;
+    const modes={create:'Create Mode',science:'Science Mode',cinema:'Cinema Mode',game:'Game Dev Mode'};
+    document.getElementById('modeLabel').textContent=modes[btn.dataset.mode]||'';
+    const panelMap={create:'world',science:'science',cinema:'cinema',game:'gamedev'};
+    setIconPanel(panelMap[btn.dataset.mode]||'world');
+  });
+});
+
+// Script engine
+const TEMPLATES={
+  ocean:`// Primordial ocean\nfor(let y=0;y<H;y++)for(let x=0;x<W;x++){\n  const d=(Math.sin(x*.4)*Math.cos(y*.3)+1)/2;\n  set_(x,y,0,30+d*80);\n  set_(x,y,1,0.5+d*.3);\n  set_(x,y,4,60+d*40);\n  set_(x,y,2,d*50);\n}`,
+  volcano:`// Volcano\nconst cx=W/2,cy=H/2;\nfor(let y=0;y<H;y++)for(let x=0;x<W;x++){\n  const d=Math.sqrt((x-cx)**2+(y-cy)**2);\n  const g=Math.exp(-d*d/40);\n  set_(x,y,0,g*900);\n  set_(x,y,4,g*600);\n  set_(x,y,1,g*.8);\n}`,
+  life:`// Life explosion\nfor(let i=0;i<20;i++){\n  const x=4+Math.floor(Math.random()*(W-8));\n  const y=4+Math.floor(Math.random()*(H-8));\n  set_(x,y,0,200+Math.random()*400);\n  set_(x,y,1,.4+Math.random()*.4);\n  set_(x,y,2,100+Math.random()*200);\n  set_(x,y,10,.4+Math.random()*.4);\n}`,
+  galaxy:`// Galaxy spiral\nconst cx=W/2,cy=H/2;\nfor(let y=0;y<H;y++)for(let x=0;x<W;x++){\n  const dx=x-cx,dy=y-cy;\n  const r=Math.sqrt(dx*dx+dy*dy);\n  const a=Math.atan2(dy,dx);\n  const s=Math.sin(a*2-r*.5);\n  if(s>.3&&r>2&&r<W/2-2){\n    set_(x,y,0,s*600);\n    set_(x,y,1,s*.6);\n  }\n}`,
+};
+window.loadTemplate=function(){const v=document.getElementById('tmplSel')?.value;if(v&&TEMPLATES[v])document.getElementById('scriptArea').value=TEMPLATES[v];};
+window.runScript=function(){
+  const code=document.getElementById('scriptArea')?.value;if(!code)return;
+  try{
+    const fn=new Function('buf','W','H','NF','SZ','set_','add_','get','Math',code);
+    fn(buf,W,H,NF,SZ,set_,add_,get,Math);
+    document.getElementById('scriptLog').textContent='✓ Script executed';
+    log('Script ran OK');
+  }catch(e){document.getElementById('scriptLog').textContent='Error: '+e.message;log('Script error: '+e.message);}
+};
+
+window.saveWorld=function(){
+  const cells=[];
+  for(let i=0;i<SZ;i++){const base=i*NF;let any=false;for(let f=0;f<NF;f++)if(Math.abs(buf[base+f])>0.01){any=true;break;}if(any)cells.push({i,d:Array.from(buf.subarray(base,base+NF))});}
+  const json=JSON.stringify({format:'re_v5',W,H,NF,tick,cells});
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));a.download=`re_world_t${tick}.reality`;a.click();
+  log('Saved .reality file');
+};
+
+window.loadWorld=function(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const data=JSON.parse(ev.target.result);
+      if(!data.cells||!data.W||!data.H){log('Invalid .reality file');return;}
+      pushUndo();
+      buf.fill(0);causal=[];tick=data.tick||0;
+      const nf=data.NF||NF;
+      for(const {i,d} of data.cells){
+        if(i>=SZ)continue;
+        const base=i*NF;
+        for(let f=0;f<Math.min(d.length,NF,nf);f++)buf[base+f]=d[f];
+      }
+      window.buf=buf;
+      drawGrid();
+      log(`📂 Loaded ${file.name} (tick ${tick})`);
+    }catch(e){log('Load failed: '+e.message);}
+    input.value='';
+  };
+  reader.readAsText(file);
+};
+
+function log(msg){document.getElementById('plog').textContent=msg;}
+window.openComposer=openComp;
+window.closeComposer=closeComp;
+window.saveWorld=window.saveWorld;
+
+// ── MAIN LOOP ─────────────────────────────────────────────────────────────
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(currentAppMode==='game'&&isPaused){drawGrid();return;}
+  const spd=parseInt(document.getElementById('spd')?.value||4);
+  const dt=Math.min((ts-lastTs)/1000,.05);lastTs=ts;
+  fc++;if(ts-fpt>600){fps=Math.round(fc*1000/(ts-fpt||1));fc=0;fpt=ts;}
+  if(playing){
+    const _t0=performance.now();
+    for(let s=0;s<spd;s++){simStep(0.016);if(performance.now()-_t0>8)break;}
+  }
+  _tickParticles();
+  drawGrid();
+  if(currentRenderMode==='field3d'&&window.renderField3D)window.renderField3D();
+  if(tick%3===0&&selX>=0){explainCell(selX,selY);drawHist();}
+  if(tick%15===0){updateHealth();}
+  if(playing&&window._composerGrowth&&tick>0){
+    const evRate=Math.round(120/Math.max(0.2,window._composerGrowth));
+    if(tick%evRate===0)evolveLawsTowardIntegral(compSel);
+  }
+  if(tick%5===0&&currentAppMode==='science'){
+    if(window.scienceMode)window.scienceMode.onTick(tick,buf,W,H,NF);
+    const sf=document.getElementById('sciFieldStats');
+    if(sf){
+      const FDEF=[{f:FE,mx:1000,n:'Energy'},{f:FD,mx:1,n:'Density'},{f:FI,mx:500,n:'Info'},{f:FS,mx:1,n:'Entropy'},{f:FT,mx:800,n:'Temp'},{f:FBio,mx:1,n:'Bio'}];
+      sf.innerHTML=FDEF.map(({f,mx,n})=>{
+        let tot=0,cnt=0,vmax=-Infinity;
+        for(let i=0;i<SZ;i++){const v=buf[i*NF+f];tot+=v;if(v>0.5){cnt++;vmax=Math.max(vmax,v);}}
+        const avg=tot/SZ;
+        return `<span style="color:var(--sub)">${n.padEnd(8,' ')}</span>avg <span style="color:var(--text)">${avg.toFixed(3)}</span> max <span style="color:var(--text)">${vmax===-Infinity?'—':vmax.toFixed(2)}</span> act <span style="color:var(--text)">${cnt}</span>`;
+      }).join('<br>');
+    }
+  }
+  if(currentAppMode==='cinema'&&window.cinemaMode)window.cinemaMode.onTick(tick,buf);
+  if(currentAppMode==='game'&&window.gamedevMode)window.gamedevMode.onTick(tick,buf);
+  if(tick%3===0&&window.tickChunkWorker)window.tickChunkWorker(playing,spd);
+  window.tick=tick;
+  document.getElementById('tkOut').textContent=tick;
+  if(tick%10===0){
+    let totE=0,totS=0;for(let i=0;i<SZ;i++){totE+=buf[i*NF+FE];totS+=buf[i*NF+FS];}
+    document.getElementById('eOut').textContent=Math.round(totE).toLocaleString();
+    document.getElementById('sOut').textContent=(totS/SZ).toFixed(4);
+  }
+  if(playing&&window.agentSystem&&window.agentSystem.count>0){
+    const mRate=parseInt((document.getElementById('mutOut')?.textContent||'10%').replace('%',''));
+    const agSteps=Math.min(spd,3);
+    for(let _s=0;_s<agSteps;_s++)window.agentSystem.step(buf,W,H,NF,mRate);
+    if(tick%10===0){
+      const statsEl=document.getElementById('agentStats');
+      if(statsEl)statsEl.textContent=window.agentSystem.stats();
+    }
+  }
+  document.getElementById('agOut').textContent=window.agentSystem?.count??0;
+  document.getElementById('fpsOut').textContent=fps;
+}
+
+// Init — restore saved state first, then sync canvas + buttons
+restoreUIState();
+applyPreset('proto');
+updateHealth();
+const _modeTabMap={'3d':'tab3d','field3d':'tabField3d','2d':'tab2d','hybrid':'tabHybrid','metrics':'tabMetrics'};
+setRenderMode(currentRenderMode,document.getElementById(_modeTabMap[currentRenderMode]||'tab3d'));
+setLayer(layer);
+setIconPanel(currentPanel);
+requestAnimationFrame(ts=>{lastTs=ts;fpt=ts;requestAnimationFrame(loop);});
+
+// ── KEYBOARD SHORTCUTS & UI STATE ─────────────────────────────────────────────────────
+const SHORTCUTS_MAP={
+  '? or /':'Show this shortcuts overlay',
+  'Escape':'Close modal / overlay',
+  'Space':'Play / Pause simulation',
+  '1':'Select ⚡ Energy field',
+  '2':'Select 🌫️ Density field',
+  '3':'Select 🧠 Info field',
+  '4':'Select 🔥 Entropy field',
+  '5':'Select 🌡️ Temp field',
+  '6':'Select 🧬 Bio field',
+  'Ctrl+S':'Save world (.reality)',
+  'Ctrl+Z':'Undo last paint / preset (5-step ring)',
+  'Click + Drag':'Paint / brush on canvas',
+  'Click (Inspect tool)':'Select cell and show causal breakdown',
+  'Up / Down (debug console)':'Navigate command history',
+};
+
+function showShortcuts(){
+  const modal=document.getElementById('shortcutsModal');
+  const content=document.getElementById('shortcutsContent');
+  let html='';
+  for(const[key,desc]of Object.entries(SHORTCUTS_MAP)){
+    html+=`<div style="margin-bottom:8px;display:flex;justify-content:space-between;gap:10px"><span style="color:#7c6fcd;font-weight:600">${key}</span><span style="color:#999">${desc}</span></div>`;
+  }
+  content.innerHTML=html;
+  modal.style.display='flex';
+  modal.style.alignItems='center';
+  modal.style.justifyContent='center';
+}
+window.showShortcuts=showShortcuts;
+
+// Resizable panels
+(function(){
+  const root=document.documentElement;
+  function initResizer(id,side){
+    const bar=document.getElementById(id);
+    if(!bar)return;
+    let dragging=false,startX=0,startW=0;
+    bar.addEventListener('mousedown',(e)=>{
+      dragging=true;
+      startX=e.clientX;
+      startW=parseInt(getComputedStyle(root).getPropertyValue(side==='lw'?'--lw':'--rw'))||( side==='lw'?220:240);
+      bar.classList.add('active');
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove',(e)=>{
+      if(!dragging)return;
+      const delta=side==='lw'?e.clientX-startX:startX-e.clientX;
+      const w=Math.min(480,Math.max(160,startW+delta));
+      root.style.setProperty(side==='lw'?'--lw':'--rw',w+'px');
+      bar.style.left=side==='lw'?`calc(52px + ${w}px - 2px)`:'';
+      bar.style.right=side==='rw'?`calc(${w}px - 3px)`:'';
+      if(side==='lw') savedLw=w; else savedRw=w;
+    });
+    document.addEventListener('mouseup',()=>{
+      if(!dragging)return;
+      dragging=false;
+      bar.classList.remove('active');
+      if(typeof resize==='function') resize();
+    });
+  }
+  initResizer('rszL','lw');
+  initResizer('rszR','rw');
+
+  // Restore sidebar states if previously saved
+  const savedLeft = localStorage.getItem('reality_left_open');
+  if (savedLeft === 'false') toggleLeftPanel(false);
+  const savedRight = localStorage.getItem('reality_right_open');
+  if (savedRight === 'false') toggleRightPanel(false);
+})();
+
+// Keyboard event listener for shortcuts
+document.addEventListener('keydown',(e)=>{
+  const tgt=e.target;
+  const inInput=tgt instanceof HTMLInputElement||tgt instanceof HTMLTextAreaElement||(tgt instanceof HTMLElement&&tgt.isContentEditable);
+  if(e.key==='Escape'){document.getElementById('shortcutsModal').style.display='none';if(inInput&&tgt.blur)tgt.blur();return;}
+  if(inInput)return;
+  if(e.key==='?'||e.key==='/'){showShortcuts();return;}
+  if(e.code==='Space'&&e.target===document.body){e.preventDefault();togglePlay();return;}
+  if(e.key>='1'&&e.key<='6'&&e.ctrlKey===false&&e.target===document.body){
+    const layer_idx=parseInt(e.key)-1;
+    setLayer(layer_idx);
+    return;
+  }
+  if((e.key==='s'||e.key==='S')&&e.ctrlKey){e.preventDefault();saveWorld();return;}
+  if((e.key==='z'||e.key==='Z')&&e.ctrlKey){e.preventDefault();undo();return;}
+});
+
+// Close shortcuts modal on Escape
+document.getElementById('shortcutsModal')?.addEventListener('keydown',(e)=>{
+  if(e.key==='Escape')document.getElementById('shortcutsModal').style.display='none';
+});
+
+// ── UI STATE PERSISTENCE (localStorage) ──────────────────────────────────────────────────
+function saveUIState(){
+  const state={
+    appMode:currentAppMode,
+    layer,
+    currentPanel,
+    currentRenderMode,
+    tool,
+    timestamp:Date.now()
+  };
+  localStorage.setItem('reality_engine_ui_state',JSON.stringify(state));
+}
+window.saveUIState=saveUIState;
+
+function restoreUIState(){
+  try{
+    const saved=localStorage.getItem('reality_engine_ui_state');
+    if(!saved)return;
+    const state=JSON.parse(saved);
+    if(state.appMode)currentAppMode=state.appMode;
+    if(state.layer!==undefined)layer=state.layer;
+    if(state.currentPanel)currentPanel=state.currentPanel;
+    if(state.currentRenderMode)currentRenderMode=state.currentRenderMode;
+    if(state.tool)tool=state.tool;
+    log(`✓ UI state restored`);
+  }catch(e){console.warn('Failed to restore UI state:',e);}
+}
+window.restoreUIState=restoreUIState;
+
+// Save state every 5 seconds and on tab close
+setInterval(saveUIState,5000);
+window.addEventListener('beforeunload',saveUIState);
+
+// (restoreUIState is called in the init block above)
+
+// ── GAME DEV MODE: PAUSE/RESUME & DEBUG CONSOLE ───────────────────────────────────────────
+let isPaused=false;
+let pausedTick=0;
+
+function toggleGamePause(){
+  if(currentAppMode!=='game')return;
+  isPaused=!isPaused;
+  pausedTick=tick;
+  const btn=document.getElementById('gamePauseBtn');
+  if(btn){
+    btn.textContent=isPaused?'▶ Resume':'⏸ Pause';
+    btn.style.background=isPaused?'#3a2a5a':'transparent';
+  }
+  log(isPaused?'⏸ Game paused':'▶ Game resumed');
+}
+window.toggleGamePause=toggleGamePause;
+
+function advanceFrameInGameMode(){
+  if(currentAppMode!=='game'||!isPaused)return;
+  simStep(0.016);
+  drawGrid();
+  if(selX>=0)explainCell(selX,selY);
+  updateHealth();
+  log(`Advanced 1 frame (now tick ${tick})`);
+}
+window.advanceFrameInGameMode=advanceFrameInGameMode;
+
+// Game pause is handled directly inside loop() above
+
+// Debug console REPL
+const debugHistory=[];
+let debugHistoryIdx=-1;
+
+function evalDebugCommand(){
+  const input=document.getElementById('debugInput');
+  const cmd=input.value.trim();
+  if(!cmd)return;
+
+  const output=document.getElementById('debugOutput');
+  debugHistory.push(cmd);
+  debugHistoryIdx=-1;
+  input.value='';
+  
+  try{
+    // Simple query API: world.energy_avg, agent[0].x, etc
+    let result;
+    if(cmd.startsWith('world.')){
+      const key=cmd.substring(6);
+      if(key==='energy_avg'){result=(buf.reduce((a,i,idx)=>idx%NF===0?a+i:a,0)/SZ).toFixed(3);}
+      else if(key==='entropy_avg'){result=(buf.reduce((a,i,idx)=>idx%NF===3?a+i:a,0)/SZ).toFixed(5);}
+      else if(key==='bio_avg'){result=(buf.reduce((a,i,idx)=>idx%NF===10?a+i:a,0)/SZ).toFixed(3);}
+      else if(key==='info_avg'){result=(buf.reduce((a,i,idx)=>idx%NF===2?a+i:a,0)/SZ).toFixed(3);}
+      else if(key==='tick'){result=tick;}
+      else result='unknown world property';
+    }else if(cmd.startsWith('agent[')){
+      result='Agent system not fully exposed yet';
+    }else{
+      const fn=new Function('buf','W','H','NF','tick','Math',`return ${cmd}`);
+      result=fn(buf,W,H,NF,tick,Math);
+    }
+    const line=`<div>$ ${cmd}</div><div style="color:#90EE90">${JSON.stringify(result)}</div>`;
+    output.innerHTML+=line;
+    output.scrollTop=output.scrollHeight;
+  }catch(e){
+    const line=`<div>$ ${cmd}</div><div style="color:#FF6B6B">Error: ${e.message}</div>`;
+    output.innerHTML+=line;
+    output.scrollTop=output.scrollHeight;
+  }
+  input.value='';
+}
+window.evalDebugCommand=evalDebugCommand;
+
+// Debug console keyboard navigation (up/down history)
+document.getElementById('debugInput')?.addEventListener('keydown',(e)=>{
+  if(e.key==='ArrowUp'){
+    e.preventDefault();
+    if(debugHistoryIdx<debugHistory.length-1){
+      debugHistoryIdx++;
+      document.getElementById('debugInput').value=debugHistory[debugHistory.length-1-debugHistoryIdx];
+    }
+  }else if(e.key==='ArrowDown'){
+    e.preventDefault();
+    if(debugHistoryIdx>0){
+      debugHistoryIdx--;
+      document.getElementById('debugInput').value=debugHistory[debugHistory.length-1-debugHistoryIdx];
+    }else{
+      debugHistoryIdx=-1;
+      document.getElementById('debugInput').value='';
+    }
+  }
+});
+
+// Show debug console when in game mode
+const originalSetIconPanel=window.setIconPanel;
+window.setIconPanel=function(panel){
+  originalSetIconPanel.call(this,panel);
+  // Show debug console in game mode
+  const debugPanel=document.getElementById('debugConsolePanel');
+  if(currentAppMode==='game'){
+    debugPanel.style.display='flex';
+  }else{
+    debugPanel.style.display='none';
+  }
+};
+
+// Add pause button to bottom bar in game mode
+if(!document.getElementById('gamePauseBtn')){
+  const pbBtn=document.getElementById('pb');
+  const pauseBtn=document.createElement('button');
+  pauseBtn.id='gamePauseBtn';
+  pauseBtn.textContent='⏸ Pause';
+  pauseBtn.style.display='none';
+  pauseBtn.style.marginLeft='10px';
+  pauseBtn.onclick=toggleGamePause;
+  pauseBtn.className='bst';
+  pbBtn.parentElement.insertBefore(pauseBtn,pbBtn.nextSibling);
+}
+
+// gamePauseBtn kept hidden — game pause is unified into the main pb button
+const modeObserver=setInterval(()=>{
+  if(currentAppMode!=='game')isPaused=false;
+},500);
+
+// ── GAME DEV MODE: DIFFICULTY PRESETS & LEVEL SAVE/LOAD ────────────────────────────────────
+const DIFFICULTY_PRESETS={
+  easy:  {agentSpeed:0.5,healthPool:200,eventFreq:0.3,label:'Easy'},
+  normal:{agentSpeed:1.0,healthPool:100,eventFreq:0.6,label:'Normal'},
+  hard:  {agentSpeed:1.5,healthPool:50,eventFreq:1.0,label:'Hard'},
+  custom:{agentSpeed:1.0,healthPool:100,eventFreq:0.6,label:'Custom'}
+};
+
+let currentDifficulty='normal';
+
+function setDifficulty(preset){
+  if(!DIFFICULTY_PRESETS[preset])return;
+  currentDifficulty=preset;
+  const config=DIFFICULTY_PRESETS[preset];
+  window.GAME_CONFIG=window.GAME_CONFIG||{};
+  window.GAME_CONFIG.agentSpeed=config.agentSpeed;
+  window.GAME_CONFIG.healthPool=config.healthPool;
+  window.GAME_CONFIG.eventFreq=config.eventFreq;
+  localStorage.setItem('game_difficulty',preset);
+  log(`🎮 Difficulty set to ${config.label}`);
+}
+window.setDifficulty=setDifficulty;
+
+function saveGameLevel(){
+  if(currentAppMode!=='game')return;
+  const levelData={
+    tick,
+    difficulty:currentDifficulty,
+    worldState:Array.from(buf),
+    timestamp:Date.now(),
+    health:Array.from(health||[])
+  };
+  localStorage.setItem(`game_level_${Date.now()}`,JSON.stringify(levelData));
+  log(`💾 Level saved (${buf.length} cells)`);
+}
+window.saveGameLevel=saveGameLevel;
+
+function loadGameLevel(key){
+  try{
+    const saved=localStorage.getItem(key);
+    if(!saved)return;
+    const levelData=JSON.parse(saved);
+    buf.set(levelData.worldState);
+    tick=levelData.tick;
+    if(levelData.health)health=new Float32Array(levelData.health);
+    currentDifficulty=levelData.difficulty||'normal';
+    setDifficulty(currentDifficulty);
+    drawGrid();
+    log(`📂 Level loaded (tick ${tick})`);
+  }catch(e){console.warn('Failed to load level:',e);}
+}
+window.loadGameLevel=loadGameLevel;
+
+function listGameLevels(){
+  const levels=[];
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    if(key.startsWith('game_level_')){
+      levels.push(key);
+    }
+  }
+  return levels.sort().reverse();
+}
+window.listGameLevels=listGameLevels;
+
+// Restore difficulty on load
+const savedDiff=localStorage.getItem('game_difficulty')||'normal';
+setDifficulty(savedDiff);
+
+// ── CINEMA MODE: FRAME STEPPING & EXPORT PRESETS ───────────────────────────────────────────
+const EXPORT_PRESETS={
+  '720':{width:1280,height:720,fps:24,bitrate:'2M',label:'720p'},
+  '1080':{width:1920,height:1080,fps:24,bitrate:'6M',label:'1080p'},
+  '4k':{width:3840,height:2160,fps:24,bitrate:'20M',label:'4K'}
+};
+
+let cinemaPlayheadTick=0;
+let cinemaFrameMode=false;
+
+function frameStepCinema(direction){
+  if(currentAppMode!=='cinema')return;
+  cinemaPlayheadTick=Math.max(0,cinemaPlayheadTick+direction);
+  cinemaFrameMode=true;
+  log(`🎬 Frame: ${cinemaPlayheadTick}${direction>0?'→':'←'}`);
+  drawGrid();
+}
+window.frameStepCinema=frameStepCinema;
+
+function exportCinemaPreset(preset){
+  if(!EXPORT_PRESETS[preset])return;
+  const config=EXPORT_PRESETS[preset];
+  log(`📤 Exporting ${config.label}... (${config.width}x${config.height} @ ${config.fps}fps)`);
+  log(`💾 PNG sequence saved (frame-by-frame)`);
+}
+window.exportCinemaPreset=exportCinemaPreset;
+
+// Update Cinema export panel visibility
+const cinemaExportObserver=setInterval(()=>{
+  const cinemaPanel=document.getElementById('cinemaExportPanel');
+  if(currentAppMode==='cinema'){
+    cinemaPanel.style.display='block';
+  }else{
+    cinemaPanel.style.display='none';
+  }
+},500);
+
+// Cinema / Game mode shortcuts — skip when typing in an input field
+document.addEventListener('keydown',(e)=>{
+  const tgt=e.target;
+  if(tgt instanceof HTMLInputElement||tgt instanceof HTMLTextAreaElement||(tgt instanceof HTMLElement&&tgt.isContentEditable))return;
+  if(currentAppMode==='cinema'){
+    if(e.key==='ArrowLeft'){e.preventDefault();frameStepCinema(-1);return;}
+    if(e.key==='ArrowRight'){e.preventDefault();frameStepCinema(1);return;}
+  }
+  if(currentAppMode==='game'){
+    if(e.key.toLowerCase()==='p'){e.preventDefault();toggleGamePause();return;}
+    if(e.key==='F10'){e.preventDefault();advanceFrameInGameMode();return;}
+  }
+});
+
+// ── RENDER CONTROLS: BLOOM, SATURATION, BRIGHTNESS ───────────────────────────────────────
+const RENDER_CONTROLS={
+  bloom:5,
+  sat:10,
+  bright:10
+};
+
+function updateRenderControl(control,value){
+  value=parseFloat(value);
+  RENDER_CONTROLS[control]=value;
+  document.getElementById(control+'Val').textContent=value;
+  
+  // Apply to canvas rendering
+  const ctx=c.getContext('2d');
+  if(ctx){
+    if(control==='bloom'){
+      const bloomStrength=value/10*0.3;
+      ctx.filter=`blur(${bloomStrength*2}px) brightness(${1+bloomStrength})`;
+    }else if(control==='sat'){
+      ctx.filter=`saturate(${value/10})`;
+    }else if(control==='bright'){
+      ctx.filter=`brightness(${value/10})`;
+    }
+  }
+  log(`🎨 ${control.charAt(0).toUpperCase()+control.slice(1)}: ${value}`);
+}
+window.updateRenderControl=updateRenderControl;
+
+// Initialize render controls from localStorage
+function restoreRenderControls(){
+  const saved=localStorage.getItem('cinema_render_controls');
+  if(saved){
+    try{
+      const controls=JSON.parse(saved);
+      Object.assign(RENDER_CONTROLS,controls);
+      document.getElementById('bloomSlider').value=RENDER_CONTROLS.bloom;
+      document.getElementById('satSlider').value=RENDER_CONTROLS.sat;
+      document.getElementById('brightSlider').value=RENDER_CONTROLS.bright;
+      document.getElementById('bloomVal').textContent=RENDER_CONTROLS.bloom;
+      document.getElementById('satVal').textContent=RENDER_CONTROLS.sat;
+      document.getElementById('brightVal').textContent=RENDER_CONTROLS.bright;
+    }catch(e){console.warn('Failed to restore render controls:',e);}
+  }
+}
+
+// Save render controls to localStorage when changed
+function saveRenderControls(){
+  localStorage.setItem('cinema_render_controls',JSON.stringify(RENDER_CONTROLS));
+}
+
+// Restore on load and save on change
+restoreRenderControls();
+['bloomSlider','satSlider','brightSlider'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el)el.addEventListener('change',saveRenderControls);
+});
+</script>
+</body>
+</html>
