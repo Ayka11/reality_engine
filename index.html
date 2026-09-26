@@ -177,6 +177,9 @@ input[type=range]#spd{width:60px}
   <button class="icon-btn active" data-panel="world" onclick="setIconPanel('world')" title="World"><i class="ti ti-planet"></i><span class="icon-tip">World</span></button>
   <button class="icon-btn" data-panel="builder" onclick="setIconPanel('builder')" title="World Builder"><i class="ti ti-tools"></i><span class="icon-tip">Builder</span></button>
   <button class="icon-btn" data-panel="laws" onclick="setIconPanel('laws')" title="Laws"><i class="ti ti-atom"></i><span class="icon-tip">Laws</span></button>
+  <button class="icon-btn" data-panel="science" onclick="setIconPanel('science')" title="Science Mode"><i class="ti ti-microscope"></i><span class="icon-tip">Science</span></button>
+  <button class="icon-btn" data-panel="cinema" onclick="setIconPanel('cinema')" title="Cinema Mode"><i class="ti ti-movie"></i><span class="icon-tip">Cinema</span></button>
+  <button class="icon-btn" data-panel="gamedev" onclick="setIconPanel('gamedev')" title="Game Dev Mode"><i class="ti ti-device-gamepad"></i><span class="icon-tip">Game Dev</span></button>
   <button class="icon-btn" data-panel="brush" onclick="setIconPanel('brush')" title="Brushes"><i class="ti ti-brush"></i><span class="icon-tip">Brushes</span></button>
   <button class="icon-btn" data-panel="agents" onclick="setIconPanel('agents')" title="Agents"><i class="ti ti-robot"></i><span class="icon-tip">Agents</span></button>
   <button class="icon-btn" data-panel="script" onclick="setIconPanel('script')" title="Script"><i class="ti ti-code"></i><span class="icon-tip">Script</span></button>
@@ -863,6 +866,63 @@ function simStep(dt){
       if(causal.length>300)causal.shift();
     }
   }
+  // Interact with 3D simulated physics objects if active
+  if(window.infiniteWorld && window.infiniteWorld.objects && tick % 2 === 0){
+    try {
+      const objs = window.infiniteWorld.objects.values();
+      for(const obj of objs){
+        const cx = Math.max(0, Math.min(W - 1, Math.round(obj.x / 2 + W / 2)));
+        const cy = Math.max(0, Math.min(H - 1, Math.round(obj.z / 2 + H / 2)));
+        const rad = Math.max(1, Math.round(obj.scale * 2));
+        if(obj.kind === 'gravity_well'){
+          for(let dy = -rad; dy <= rad; dy++){
+            for(let dx = -rad; dx <= rad; dx++){
+              const nx = cx + dx, ny = cy + dy;
+              if(nx >= 0 && nx < W && ny >= 0 && ny < H){
+                const dist = Math.hypot(dx, dy);
+                if(dist <= rad && dist > 0){
+                  const pull = (1 - dist / rad) * 18 * dt;
+                  add_(nx, ny, FE, -pull * 0.5);
+                  add_(cx, cy, FE, pull * 0.5);
+                  add_(cx, cy, FD, 0.01 * dt);
+                }
+              }
+            }
+          }
+        } else if(obj.kind === 'entropy_sink'){
+          for(let dy = -rad; dy <= rad; dy++){
+            for(let dx = -rad; dx <= rad; dx++){
+              const nx = cx + dx, ny = cy + dy;
+              if(nx >= 0 && nx < W && ny >= 0 && ny < H){
+                set_(nx, ny, FS, Math.max(0, get(nx, ny, FS) - 0.08 * dt));
+                set_(nx, ny, FT, Math.max(0, get(nx, ny, FT) - 40 * dt));
+              }
+            }
+          }
+        } else if(obj.kind === 'quantum_emitter'){
+          for(let dy = -rad; dy <= rad; dy++){
+            for(let dx = -rad; dx <= rad; dx++){
+              const nx = cx + dx, ny = cy + dy;
+              if(nx >= 0 && nx < W && ny >= 0 && ny < H){
+                add_(nx, ny, FI, 25 * dt);
+                add_(nx, ny, FBio, 0.02 * dt);
+              }
+            }
+          }
+        } else if(obj.kind === 'metalaw'){
+          for(let dy = -rad; dy <= rad; dy++){
+            for(let dx = -rad; dx <= rad; dx++){
+              const nx = cx + dx, ny = cy + dy;
+              if(nx >= 0 && nx < W && ny >= 0 && ny < H){
+                const avg = (get(nx, ny, FE) + get(cx, cy, FE)) * 0.5;
+                set_(nx, ny, FE, get(nx, ny, FE) + (avg - get(nx, ny, FE)) * 0.2);
+              }
+            }
+          }
+        }
+      }
+    } catch(_e){}
+  }
   tick++;
   if(selX>=0){
     const push=(a,v)=>{a.push(v);if(a.length>120)a.shift()};
@@ -882,6 +942,11 @@ const BRUSHES={
   'Life Cluster': {icon:'🧬',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=Math.exp(-d*d/(r*r)*2);set_(x+dx,y+dy,FE,g*280);set_(x+dx,y+dy,FD,Math.max(get(x+dx,y+dy,FD),g*0.45));set_(x+dx,y+dy,FI,g*200);set_(x+dx,y+dy,FBio,g*0.65);set_(x+dx,y+dy,FS,Math.max(0,get(x+dx,y+dy,FS)-g*0.1));set_(x+dx,y+dy,FT,g*110);}}},
   'Radiation':    {icon:'☢️',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=1-d/r;add_(x+dx,y+dy,FS,g*0.3);add_(x+dx,y+dy,FI,-g*50);}}},
   'Civ Seed':     {icon:'🏛️',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=Math.exp(-d*d/(r*r)*1.5);set_(x+dx,y+dy,FE,g*380);set_(x+dx,y+dy,FD,Math.max(get(x+dx,y+dy,FD),g*0.5));set_(x+dx,y+dy,FI,g*400);set_(x+dx,y+dy,FBio,g*0.8);add_(x+dx,y+dy,FS,-g*0.15);set_(x+dx,y+dy,FT,g*100);}}},
+  'Gravity Well': {icon:'🌀',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=1-d/r;add_(x+dx,y+dy,FE,g*450);add_(x+dx,y+dy,FD,g*0.8);}}},
+  'Entropy Sink': {icon:'❄️',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=1-d/r;set_(x+dx,y+dy,FS,Math.max(0,get(x+dx,y+dy,FS)-g*0.4));set_(x+dx,y+dy,FT,Math.max(0,get(x+dx,y+dy,FT)-g*200));}}},
+  'Quantum Core': {icon:'⚛️',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=1-d/r;add_(x+dx,y+dy,FI,g*350);add_(x+dx,y+dy,FBio,g*0.6);add_(x+dx,y+dy,FE,g*200);}}},
+  'MetaLaw Node': {icon:'📜',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;const g=1-d/r;set_(x+dx,y+dy,FE,g*300+100);set_(x+dx,y+dy,FI,g*250+50);set_(x+dx,y+dy,FD,g*0.5+0.2);}}},
+  'Force Barrier':{icon:'🛡️',paint(x,y,r){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const d=Math.sqrt(dx*dx+dy*dy);if(Math.abs(d-r)>1.2)continue;set_(x+dx,y+dy,FD,0.9);set_(x+dx,y+dy,FE,150);}}},
 };
 
 // ── LAWS ──────────────────────────────────────────────────────────────────
@@ -911,6 +976,11 @@ function renderBuilderPanel(){
     { id: 'bridge', label: '🌉 Bridge' },
     { id: 'landmark', label: '🚩 Landmark' },
     { id: 'spawn', label: '📍 Spawn' },
+    { id: 'gravity_well', label: '🌀 Gravity Well' },
+    { id: 'entropy_sink', label: '❄️ Entropy Sink' },
+    { id: 'quantum_emitter', label: '⚛️ Quantum Core' },
+    { id: 'metalaw', label: '📜 MetaLaw Node' },
+    { id: 'force_field', label: '🛡️ Force Barrier' },
   ];
   return `
     <div class="section">
@@ -1712,10 +1782,83 @@ window.applyPreset=function(p){
 };
 
 // ── UI HELPERS ────────────────────────────────────────────────────────────
+let leftPanelOpen = true;
+let rightPanelOpen = true;
+let savedLw = 220;
+let savedRw = 240;
+
+function toggleLeftPanel(force){
+  leftPanelOpen = typeof force === 'boolean' ? force : !leftPanelOpen;
+  const root = document.documentElement;
+  const leftEl = document.getElementById('left');
+  const rszL = document.getElementById('rszL');
+  const btn = document.getElementById('btnToggleLeft');
+  if (leftPanelOpen) {
+    root.style.setProperty('--lw', savedLw + 'px');
+    if (leftEl) leftEl.style.display = 'flex';
+    if (rszL) { rszL.style.display = 'block'; rszL.style.left = `calc(52px + ${savedLw}px - 2px)`; }
+    if (btn) { btn.classList.add('on'); btn.title = 'Collapse Left Sidebar'; }
+  } else {
+    const curW = parseInt(getComputedStyle(root).getPropertyValue('--lw')) || 220;
+    if (curW > 50) savedLw = curW;
+    root.style.setProperty('--lw', '0px');
+    if (leftEl) leftEl.style.display = 'none';
+    if (rszL) rszL.style.display = 'none';
+    if (btn) { btn.classList.remove('on'); btn.title = 'Open Left Sidebar'; }
+  }
+  localStorage.setItem('reality_left_open', String(leftPanelOpen));
+  if (typeof resize === 'function') resize();
+}
+window.toggleLeftPanel = toggleLeftPanel;
+
+function toggleRightPanel(force){
+  rightPanelOpen = typeof force === 'boolean' ? force : !rightPanelOpen;
+  const root = document.documentElement;
+  const rightEl = document.getElementById('right');
+  const rszR = document.getElementById('rszR');
+  const btn = document.getElementById('btnToggleRight');
+  if (rightPanelOpen) {
+    root.style.setProperty('--rw', savedRw + 'px');
+    if (rightEl) rightEl.style.display = 'flex';
+    if (rszR) { rszR.style.display = 'block'; rszR.style.right = `calc(${savedRw}px - 3px)`; }
+    if (btn) { btn.classList.add('on'); btn.title = 'Collapse Right Controls'; }
+  } else {
+    const curW = parseInt(getComputedStyle(root).getPropertyValue('--rw')) || 240;
+    if (curW > 50) savedRw = curW;
+    root.style.setProperty('--rw', '0px');
+    if (rightEl) rightEl.style.display = 'none';
+    if (rszR) rszR.style.display = 'none';
+    if (btn) { btn.classList.remove('on'); btn.title = 'Open Right Controls'; }
+  }
+  localStorage.setItem('reality_right_open', String(rightPanelOpen));
+  if (typeof resize === 'function') resize();
+}
+window.toggleRightPanel = toggleRightPanel;
+
 function setIconPanel(id){
   currentPanel=id;
+  if (!leftPanelOpen) {
+    toggleLeftPanel(true);
+  }
   document.querySelectorAll('.icon-btn[data-panel]').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
-  document.getElementById('left').innerHTML=PANELS[id]?.()||'';
+  const html = PANELS[id]?.() || '';
+  const left = document.getElementById('left');
+  if (left) left.innerHTML = html;
+
+  const modeByPanel = {
+    science: 'science',
+    cinema: 'cinema',
+    gamedev: 'game',
+  };
+  const targetMode = modeByPanel[id] || 'create';
+  document.querySelectorAll('.mode-btn[data-mode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === targetMode);
+  });
+  const modeNames = { create: 'Create Mode', science: 'Science Mode', cinema: 'Cinema Mode', game: 'Game Dev Mode' };
+  const modeLabel = document.getElementById('modeLabel');
+  if (modeLabel) modeLabel.textContent = modeNames[targetMode] || 'Create Mode';
+  currentAppMode = targetMode;
+
   document.dispatchEvent(new CustomEvent('panelRendered',{detail:{panel:id}}));
 }
 window.setIconPanel=setIconPanel;
@@ -1800,6 +1943,10 @@ function setMatMode3D(m,btn){
   window.setMatMode&&window.setMatMode(m);
   document.querySelectorAll('#matField,#matMaterial,#matHeight').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
+  const pillMap={field:'matFieldPill',material:'matMaterialPill',height:'matHeightPill'};
+  document.querySelectorAll('#matFieldPill,#matMaterialPill,#matHeightPill').forEach(p=>p.classList.remove('on'));
+  const pill=document.getElementById(pillMap[m]);
+  if(pill) pill.classList.add('on');
 }
 function setCam3D(preset,btn){
   window.setCameraPreset&&window.setCameraPreset(preset);
@@ -2077,19 +2224,27 @@ window.showShortcuts=showShortcuts;
     document.addEventListener('mousemove',(e)=>{
       if(!dragging)return;
       const delta=side==='lw'?e.clientX-startX:startX-e.clientX;
-      const w=Math.min(400,Math.max(160,startW+delta));
+      const w=Math.min(480,Math.max(160,startW+delta));
       root.style.setProperty(side==='lw'?'--lw':'--rw',w+'px');
       bar.style.left=side==='lw'?`calc(52px + ${w}px - 2px)`:'';
       bar.style.right=side==='rw'?`calc(${w}px - 3px)`:'';
+      if(side==='lw') savedLw=w; else savedRw=w;
     });
     document.addEventListener('mouseup',()=>{
       if(!dragging)return;
       dragging=false;
       bar.classList.remove('active');
+      if(typeof resize==='function') resize();
     });
   }
   initResizer('rszL','lw');
   initResizer('rszR','rw');
+
+  // Restore sidebar states if previously saved
+  const savedLeft = localStorage.getItem('reality_left_open');
+  if (savedLeft === 'false') toggleLeftPanel(false);
+  const savedRight = localStorage.getItem('reality_right_open');
+  if (savedRight === 'false') toggleRightPanel(false);
 })();
 
 // Keyboard event listener for shortcuts

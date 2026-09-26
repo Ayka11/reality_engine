@@ -123,11 +123,17 @@ win['setTimeOfDay'] = (h: number) => { getInfiniteWorld()?.setTimeOfDay(h) }
 win['setFogDensity'] = (d: number) => { getInfiniteWorld()?.setFogDensity(d) }
 win['setCameraPreset'] = (p: string) => {
   const map: Record<string, 'orbit'|'top'|'front'|'iso'> = { orbit: 'orbit', top: 'top', iso: 'iso', street: 'front', fly: 'orbit' }
-  if (p === 'fly') { getInfiniteWorld()?.setFlyMode(true); return }
-  getInfiniteWorld()?.setCameraPreset(map[p] ?? 'orbit')
+  const world = getInfiniteWorld()
+  if (!world) return
+  if (p === 'fly') {
+    world.setFlyMode(true)
+    return
+  }
+  world.setFlyMode(false)
+  world.setCameraPreset(map[p] ?? 'orbit')
 }
 win['setZSlice'] = (_z: number) => {}
-win['setShowParticles'] = (_v: boolean) => {}
+win['setShowParticles'] = (v: boolean) => { getInfiniteWorld()?.setShowParticles(v) }
 win['setChunkLayer'] = (_l: number) => {}
 win['resizeChunkRenderer'] = (hybrid: boolean) => {
   const parent = c3dCanvas.parentElement

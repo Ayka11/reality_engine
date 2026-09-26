@@ -1,7 +1,7 @@
 import { InfiniteWorldRenderer } from './render/InfiniteWorldRenderer'
 import type { WorldObjectKind } from './infinity/WorldObject'
 
-export type DockPosition = 'top' | 'left' | 'right'
+export type DockPosition = 'top' | 'left' | 'right' | 'float'
 
 export function bootstrapInfiniteWorld() {
   const canvas = document.getElementById('c3d') as HTMLCanvasElement | null
@@ -11,6 +11,27 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world
 
+  // ── 3D Controls Bindings on window (ensures Right Panel controls always work) ───
+  ;(window as any).setCameraPreset = (p: string) => {
+    const map: Record<string, 'orbit' | 'top' | 'front' | 'iso'> = {
+      orbit: 'orbit',
+      top: 'top',
+      iso: 'iso',
+      street: 'front',
+      front: 'front',
+      fly: 'orbit',
+    }
+    if (p === 'fly') {
+      world.setFlyMode(true)
+      return
+    }
+    world.setFlyMode(false)
+    world.setCameraPreset(map[p] ?? 'orbit')
+  }
+  ;(window as any).setTimeOfDay = (h: number) => world.setTimeOfDay(h)
+  ;(window as any).setFogDensity = (d: number) => world.setFogDensity(d)
+  ;(window as any).setMatMode = (m: string) => world.setMaterialMode(m as 'field' | 'material' | 'height')
+
   // ── Camera Manipulation Shortcuts on window ───────────────────────────────
   ;(window as any).infinityZoom = (delta: number) => world.zoom(delta)
   ;(window as any).infinityTurn = (dH: number, dV = 0) => world.turnAround(dH, dV)
@@ -19,6 +40,51 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).infinityResetCamera = () => world.resetCameraView()
   ;(window as any).infinitySetPreset = (p: 'top' | 'front' | 'orbit' | 'iso') => world.setCameraPreset(p)
   ;(window as any).infinitySetFlyMode = (fly: boolean) => world.setFlyMode(fly)
+  ;(window as any).setShowParticles = (v: boolean) => world.setShowParticles(v)
+  ;(window as any).getShowParticles = () => world.getShowParticles()
+
+  ;(window as any).cinemaFlyover = (durationMs = 8000) => {
+    world.setFlyMode(false)
+    const startX = world.worldPosition.x - 90
+    const startZ = world.worldPosition.z - 90
+    const endX = startX + 180
+    const endZ = startZ + 180
+    const startTime = performance.now()
+    const animateFlyover = (now: number) => {
+      const elapsed = now - startTime
+      const t = Math.min(1, elapsed / durationMs)
+      const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+      const curX = startX + (endX - startX) * ease
+      const curZ = startZ + (endZ - startZ) * ease
+      const curY = 32 + Math.sin(ease * Math.PI) * 18
+      world.camera.position.set(curX, curY, curZ)
+      world.controls.target.set(curX + 35, 12, curZ + 35)
+      world.controls.update()
+      if (t < 1) requestAnimationFrame(animateFlyover)
+    }
+    requestAnimationFrame(animateFlyover)
+  }
+
+  ;(window as any).cinemaOrbitHero = (durationMs = 7000) => {
+    world.setFlyMode(false)
+    const target = world.controls.target.clone()
+    const radius = 65
+    const startTime = performance.now()
+    const animateOrbit = (now: number) => {
+      const elapsed = now - startTime
+      const t = Math.min(1, elapsed / durationMs)
+      const angle = t * Math.PI * 2
+      world.camera.position.set(
+        target.x + Math.cos(angle) * radius,
+        target.y + 24 + Math.sin(t * Math.PI) * 8,
+        target.z + Math.sin(angle) * radius
+      )
+      world.controls.target.copy(target)
+      world.controls.update()
+      if (t < 1) requestAnimationFrame(animateOrbit)
+    }
+    requestAnimationFrame(animateOrbit)
+  }
 
   // ── Scientific & Spatial Analysis APIs on window ───────────────────────────
   ;(window as any).infinityAnalyzeHydrology = (x: number, z: number, radius = 220, samples = 41) =>
@@ -69,7 +135,59 @@ export function bootstrapInfiniteWorld() {
   })
 
   // ── World Builder Bridge on window ─────────────────────────────────────────
+  const updateObjInspector = (obj: any) => {
+    const el = document.getElementById('objInspector')
+    if (!el) return
+    if (!obj) {
+      el.innerHTML = '<span style="font-size:9.5px;color:var(--sub)">Click an object in 3D to inspect and edit</span>'
+      return
+    }
+    const kindNames: Record<string, string> = {
+      tree: '🌲 Forest Canopy',
+      rock: '🪨 Geological Formation',
+      crystal: '💎 Resonant Crystal',
+      water: '💧 Water Reservoir',
+      building: '🏛️ Architecture / Structure',
+      road: '🛣️ Paved Infrastructure',
+      bridge: '🌉 Span Bridge',
+      landmark: '🚩 Survey Landmark',
+      spawn: '📍 Entity Spawn Beacon',
+      custom: '📦 Custom Geometry',
+      gravity_well: '🌀 Gravitational Singularity',
+      entropy_sink: '❄️ Thermodynamic Damper',
+      quantum_emitter: '⚛️ Quantum Coherence Core',
+      metalaw: '📜 MetaLaw Node',
+      force_field: '🛡️ Kinetic Force Barrier',
+    }
+    const isPhysics = ['gravity_well', 'entropy_sink', 'quantum_emitter', 'metalaw', 'force_field'].includes(obj.kind)
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+        <b style="font-size:10px;color:#c0b8f8">${kindNames[obj.kind] || obj.kind}</b>
+        <span style="font-size:8.5px;font-family:monospace;color:var(--sub)">#${obj.id.slice(-6)}</span>
+      </div>
+      <div style="font-size:8.5px;color:var(--sub);font-family:monospace;margin-bottom:3px">
+        Pos: (${obj.x.toFixed(1)}, ${obj.y.toFixed(1)}, ${obj.z.toFixed(1)})
+      </div>
+      <div style="font-size:8.5px;color:var(--sub);font-family:monospace;margin-bottom:4px">
+        Scale: ${obj.scale.toFixed(2)}x · Rot: ${((obj.rotationY * 180) / Math.PI).toFixed(0)}°
+      </div>
+      ${isPhysics ? `
+        <div style="background:rgba(124,111,205,0.12);border:0.5px solid rgba(124,111,205,0.3);border-radius:4px;padding:4px 6px;margin:3px 0 5px;font-size:8.5px;color:#a09af0">
+          <div>⚡ <b>Simulated Physics Object</b></div>
+          <div style="color:var(--tx);margin-top:1px">Rule: ${obj.kind.replace('_', ' ').toUpperCase()} Active</div>
+          <div style="color:var(--sub)">Field radius: ${(obj.scale * 45).toFixed(0)}m</div>
+        </div>
+      ` : ''}
+      <div style="display:flex;gap:3px;margin-top:4px">
+        <button class="pill on" style="flex:1;font-size:8.5px;padding:2px 4px" onclick="window.infinityFocus&&window.infinityFocus()">⛶ Focus</button>
+        <button class="pill" style="flex:1;font-size:8.5px;padding:2px 4px;color:#e06060;border-color:#502020" onclick="window.builderDeleteSelected&&window.builderDeleteSelected()">🗑️ Del</button>
+        <button class="pill" style="flex:1;font-size:8.5px;padding:2px 4px" onclick="window.builderDeselect&&window.builderDeselect()">✕ Desel</button>
+      </div>
+    `
+  }
+
   const notifyBuilder = () => {
+    updateObjInspector(world.getSelectedObject())
     document.dispatchEvent(new CustomEvent('builderUpdated'))
   }
 
@@ -202,13 +320,14 @@ export function bootstrapInfiniteWorld() {
     else if (matMode === 'height') document.getElementById('matHeight')?.classList.add('active')
   }
 
-  // ── Integral Reality Composer Integration ──────────────────────────────────
+  // ── High-Fidelity Integral Reality Composer Integration ────────────────────
   ;(window as any).infinityApplyComposer = (config: { phi: string; fields: string; complexity: string; spacetime: string }) => {
     const phi = config.phi || 'Harmonic'
     const fields = config.fields || 'Balanced'
     const complexity = config.complexity || 'Emergent'
     const spacetime = config.spacetime || 'Standard'
 
+    // Reseed terrain dynamically based on archetype parameters
     const newSeed = `reality-${phi}-${fields}-${complexity}-${spacetime}`.toLowerCase().replace(/[^a-z0-9]/g, '-')
     world.reseed(newSeed)
 
@@ -219,14 +338,18 @@ export function bootstrapInfiniteWorld() {
     let fog = 0.012
     let mat: 'field' | 'material' | 'height' = 'field'
 
+    // Thematic Architecture, Hydrology, Flora, and Atmosphere
     if (phi === 'Void') {
-      tod = 0
-      fog = 0.003
+      tod = 0.5
+      fog = 0.004
       mat = 'material'
       world.setTimeOfDay(tod)
       world.setFogDensity(fog)
       world.setMaterialMode(mat)
-      world.scatter('rock', x - 90, z - 90, x + 90, z + 90, 0.07)
+      world.scatter('rock', x - 120, z - 120, x + 120, z + 120, 0.09)
+      world.scatter('crystal', x - 80, z - 80, x + 80, z + 80, 0.05)
+      world.place('gravity_well', x, z, 1.8)
+      world.place('quantum_emitter', x + 50, z + 50, 1.2)
       world.generateSettlement(x, z, 70, 5)
     } else if (phi === 'Living' || phi === 'Harmonic') {
       tod = 13.5
@@ -235,39 +358,58 @@ export function bootstrapInfiniteWorld() {
       world.setTimeOfDay(tod)
       world.setFogDensity(fog)
       world.setMaterialMode(mat)
-      world.scatter('tree', x - 120, z - 120, x + 120, z + 120, 0.14)
-      world.scatter('crystal', x - 60, z - 60, x + 60, z + 60, 0.04)
-      world.generateSettlementV2(x, z, 110, 4)
-      world.generateRiverNetwork(x, z, 200, 35)
+      world.scatter('tree', x - 140, z - 140, x + 140, z + 140, 0.16)
+      world.scatter('crystal', x - 70, z - 70, x + 70, z + 70, 0.04)
+      world.scatter('rock', x - 100, z - 100, x + 100, z + 100, 0.05)
+      world.place('quantum_emitter', x + 25, z + 25, 1.4)
+      world.place('metalaw', x - 30, z - 30, 1.2)
+      world.place('force_field', x, z, 1.0)
+      world.generateSettlementV2(x, z, 120, 5)
+      world.generateRiverNetwork(x, z, 220, 41)
+      world.buildSmartRoute(x - 90, z - 90, x + 90, z + 90, 12)
     } else if (phi === 'Chaotic') {
       tod = 18.5
-      fog = 0.022
+      fog = 0.024
       mat = 'height'
       world.setTimeOfDay(tod)
       world.setFogDensity(fog)
       world.setMaterialMode(mat)
-      world.scatter('rock', x - 100, z - 100, x + 100, z + 100, 0.12)
-      world.scatter('crystal', x - 80, z - 80, x + 80, z + 80, 0.06)
-      world.generateSettlementV2(x, z, 130, 5)
+      world.scatter('rock', x - 120, z - 120, x + 120, z + 120, 0.15)
+      world.scatter('crystal', x - 90, z - 90, x + 90, z + 90, 0.08)
+      world.place('gravity_well', x, z, 1.8)
+      world.place('entropy_sink', x + 40, z - 40, 1.3)
+      world.place('gravity_well', x - 55, z + 55, 1.2)
+      world.generateSettlementV2(x, z, 140, 6)
+      world.generateRiverNetwork(x, z, 180, 31)
     } else if (phi === 'Crystalline') {
-      tod = 9
-      fog = 0.006
+      tod = 8.5
+      fog = 0.007
       mat = 'field'
       world.setTimeOfDay(tod)
       world.setFogDensity(fog)
       world.setMaterialMode(mat)
-      world.scatter('crystal', x - 110, z - 110, x + 110, z + 110, 0.12)
-      world.generateCityPlan(x, z, 160, 27)
+      world.scatter('crystal', x - 130, z - 130, x + 130, z + 130, 0.14)
+      world.scatter('rock', x - 90, z - 90, x + 90, z + 90, 0.06)
+      world.place('entropy_sink', x, z, 1.5)
+      world.place('metalaw', x + 45, z + 45, 1.3)
+      world.place('force_field', x - 35, z - 35, 1.1)
+      world.generateCityPlan(x, z, 170, 29)
+      world.buildSmartRoute(x - 80, z - 80, x + 80, z + 80, 10)
     } else {
-      tod = 15
+      // Resonant / Balanced
+      tod = 15.5
       fog = 0.011
       mat = 'field'
       world.setTimeOfDay(tod)
       world.setFogDensity(fog)
       world.setMaterialMode(mat)
-      world.scatter('tree', x - 90, z - 90, x + 90, z + 90, 0.09)
-      world.generateSettlementV2(x, z, 100, 3)
-      world.generateRiverNetwork(x, z, 180, 30)
+      world.scatter('tree', x - 110, z - 110, x + 110, z + 110, 0.11)
+      world.scatter('rock', x - 80, z - 80, x + 80, z + 80, 0.06)
+      world.place('quantum_emitter', x + 30, z + 20, 1.2)
+      world.place('metalaw', x - 25, z - 25, 1.1)
+      world.place('entropy_sink', x + 15, z - 35, 1.0)
+      world.generateSettlementV2(x, z, 110, 4)
+      world.generateRiverNetwork(x, z, 200, 35)
     }
 
     world.setObjectTool('navigate')
@@ -281,28 +423,88 @@ export function bootstrapInfiniteWorld() {
     return world.worldCoordinates
   }
 
-  // ── DYNAMIC INFINITY SCALE & WORLD BUILDER TOOLBAR ─────────────────────────
+  // ── DYNAMIC, DRAGGABLE INFINITY SCALE & WORLD BUILDER TOOLBAR ──────────────
   const wrap = canvas.parentElement
   if (wrap) {
-    // Remove old instances
     document.getElementById('infiniteWorldTools')?.remove()
     document.getElementById('workspaceBuilderDock')?.remove()
     document.getElementById('workspaceNavHUD')?.remove()
+    document.getElementById('dockGhostPreview')?.remove()
 
-    // Persistent docking state: 'top' | 'left' | 'right'
+    // Persistent docking state: 'top' | 'left' | 'right' | 'float'
     let dockPos: DockPosition = (localStorage.getItem('infinity_dock_pos') as DockPosition) || 'top'
     let isOpen = localStorage.getItem('infinity_dock_open') !== 'false'
     let activeTab: 'camera' | 'objects' | 'persist' | 'analysis' | 'display' = 'objects'
     let eraseRadius = 4
 
+    let floatLeft = parseInt(localStorage.getItem('infinity_dock_float_x') || '40', 10)
+    let floatTop = parseInt(localStorage.getItem('infinity_dock_float_y') || '60', 10)
+
+    // Ghost indicator for drag-to-dock zones
+    const ghost = document.createElement('div')
+    ghost.id = 'dockGhostPreview'
+    ghost.style.cssText =
+      'position:absolute;display:none;pointer-events:none;z-index:22;border:2px dashed #7c6fcd;border-radius:10px;background:rgba(124,111,205,0.12);transition:all .15s;'
+    wrap.appendChild(ghost)
+
     const container = document.createElement('div')
     container.id = 'infiniteWorldTools'
     wrap.appendChild(container)
 
+    const showGhostZone = (zone: 'top' | 'left' | 'right' | null) => {
+      if (!zone) {
+        ghost.style.display = 'none'
+        return
+      }
+      ghost.style.display = 'block'
+      const w = wrap.clientWidth
+      const h = wrap.clientHeight
+      if (zone === 'top') {
+        ghost.style.left = '16px'
+        ghost.style.top = '10px'
+        ghost.style.width = `${w - 32}px`
+        ghost.style.height = '85px'
+        ghost.style.right = 'auto'
+        ghost.style.bottom = 'auto'
+      } else if (zone === 'left') {
+        ghost.style.left = '12px'
+        ghost.style.top = '10px'
+        ghost.style.width = '290px'
+        ghost.style.height = `${h - 20}px`
+        ghost.style.right = 'auto'
+        ghost.style.bottom = 'auto'
+      } else if (zone === 'right') {
+        ghost.style.left = `${w - 302}px`
+        ghost.style.top = '10px'
+        ghost.style.width = '290px'
+        ghost.style.height = `${h - 20}px`
+        ghost.style.right = 'auto'
+        ghost.style.bottom = 'auto'
+      }
+    }
+
     const updateContainerStyle = () => {
       if (!isOpen) {
         // Minimized floating trigger pill
-        if (dockPos === 'top') {
+        if (dockPos === 'left') {
+          container.style.cssText = `
+            position: absolute;
+            top: 10px;
+            left: 12px;
+            z-index: 30;
+            pointer-events: auto;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          `
+        } else if (dockPos === 'right') {
+          container.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            z-index: 30;
+            pointer-events: auto;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          `
+        } else if (dockPos === 'top') {
           container.style.cssText = `
             position: absolute;
             top: 10px;
@@ -312,20 +514,12 @@ export function bootstrapInfiniteWorld() {
             pointer-events: auto;
             transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           `
-        } else if (dockPos === 'left') {
-          container.style.cssText = `
-            position: absolute;
-            top: 10px;
-            left: 12px;
-            z-index: 30;
-            pointer-events: auto;
-            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-          `
         } else {
+          // 'float' position
           container.style.cssText = `
             position: absolute;
-            top: 10px;
-            right: 12px;
+            top: ${floatTop}px;
+            left: ${floatLeft}px;
             z-index: 30;
             pointer-events: auto;
             transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -334,13 +528,13 @@ export function bootstrapInfiniteWorld() {
         return
       }
 
-      // Open expanded toolbar styling based on dock position
+      // Open expanded styling based on dock position
       if (dockPos === 'top') {
         container.style.cssText = `
           position: absolute;
           top: 10px;
-          left: 12px;
-          right: 12px;
+          left: 14px;
+          right: 14px;
           max-width: 980px;
           margin: 0 auto;
           z-index: 25;
@@ -348,7 +542,7 @@ export function bootstrapInfiniteWorld() {
           display: flex;
           flex-direction: column;
           align-items: stretch;
-          transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         `
       } else if (dockPos === 'left') {
         container.style.cssText = `
@@ -361,10 +555,9 @@ export function bootstrapInfiniteWorld() {
           pointer-events: none;
           display: flex;
           flex-direction: column;
-          transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         `
-      } else {
-        // right dock
+      } else if (dockPos === 'right') {
         container.style.cssText = `
           position: absolute;
           top: 10px;
@@ -375,7 +568,21 @@ export function bootstrapInfiniteWorld() {
           pointer-events: none;
           display: flex;
           flex-direction: column;
-          transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        `
+      } else {
+        // 'float' position
+        container.style.cssText = `
+          position: absolute;
+          top: ${floatTop}px;
+          left: ${floatLeft}px;
+          width: 310px;
+          max-height: calc(100vh - 120px);
+          z-index: 32;
+          pointer-events: none;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 12px 48px rgba(0,0,0,0.7);
         `
       }
     }
@@ -391,11 +598,8 @@ export function bootstrapInfiniteWorld() {
       isOpen = open
       localStorage.setItem('infinity_dock_open', String(open))
       render()
-      // Also sync topbar button
       const tbBtn = document.getElementById('btnToggleWorldTools')
-      if (tbBtn) {
-        tbBtn.classList.toggle('active', isOpen)
-      }
+      if (tbBtn) tbBtn.classList.toggle('active', isOpen)
     }
     ;(window as any).toggleWorldToolbar = (force?: boolean) => {
       setOpen(typeof force === 'boolean' ? force : !isOpen)
@@ -410,6 +614,11 @@ export function bootstrapInfiniteWorld() {
       { id: 'road', label: '🛣️ Road' },
       { id: 'bridge', label: '🌉 Bridge' },
       { id: 'landmark', label: '🚩 Landmark' },
+      { id: 'gravity_well', label: '🌀 Gravity' },
+      { id: 'entropy_sink', label: '❄️ Sink' },
+      { id: 'quantum_emitter', label: '⚛️ Quantum' },
+      { id: 'metalaw', label: '📜 MetaLaw' },
+      { id: 'force_field', label: '🛡️ Shield' },
     ]
 
     const render = () => {
@@ -430,18 +639,18 @@ export function bootstrapInfiniteWorld() {
         camera: { x: 0, y: 0, z: 0, worldX: 0, worldY: 0, worldZ: 0 },
       }
 
-      // Minimized Floating Trigger Pill
+      // Minimized Floating Pill
       if (!isOpen) {
         container.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(13, 15, 26, 0.92); backdrop-filter: blur(14px); border: 1px solid rgba(124, 111, 205, 0.4); border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.55); font-size: 11px; color: var(--tx);">
-            <span style="color: #a09af0; font-weight: 600;">🌍 Infinity Scale Tools</span>
+          <div style="display: flex; align-items: center; gap: 6px; padding: 4px 12px; background: rgba(13, 15, 26, 0.94); backdrop-filter: blur(14px); border: 1px solid rgba(124, 111, 205, 0.45); border-radius: 20px; box-shadow: 0 4px 24px rgba(0,0,0,0.6); font-size: 11px; color: var(--tx);">
+            <span style="color: #a09af0; font-weight: 600; cursor: move;" id="miniDragHandle" title="Drag to reposition">⠿ 🌍 World Tools</span>
             <span style="color: var(--sub);">·</span>
             <span style="font-family: monospace; color: #40c080;">${state.tool.toUpperCase()}${state.tool === 'place' ? ` (${state.kind})` : ''}</span>
-            <button id="dockTriggerOpen" style="cursor: pointer; background: #1a1830; border: 0.5px solid var(--accent); color: #a09af0; border-radius: 12px; padding: 2px 9px; font-size: 10px; font-weight: 500;">▾ Open</button>
+            <button id="dockTriggerOpen" style="cursor: pointer; background: #1a1830; border: 0.5px solid var(--accent); color: #a09af0; border-radius: 12px; padding: 2px 10px; font-size: 10px; font-weight: 500;">▾ Open</button>
             <div style="display: flex; gap: 2px; margin-left: 2px;">
-              <button id="minDockLeft" style="cursor: pointer; background: ${dockPos === 'left' ? '#252542' : 'transparent'}; border: 0.5px solid var(--border); color: var(--sub); border-radius: 4px; padding: 1px 4px; font-size: 8.5px;" title="Dock to Left">◧</button>
-              <button id="minDockTop" style="cursor: pointer; background: ${dockPos === 'top' ? '#252542' : 'transparent'}; border: 0.5px solid var(--border); color: var(--sub); border-radius: 4px; padding: 1px 4px; font-size: 8.5px;" title="Dock to Top">⬒</button>
-              <button id="minDockRight" style="cursor: pointer; background: ${dockPos === 'right' ? '#252542' : 'transparent'}; border: 0.5px solid var(--border); color: var(--sub); border-radius: 4px; padding: 1px 4px; font-size: 8.5px;" title="Dock to Right">◨</button>
+              <button id="minDockLeft" style="cursor: pointer; background: ${dockPos === 'left' ? '#252542' : 'transparent'}; border: 0.5px solid var(--border); color: var(--sub); border-radius: 4px; padding: 1px 5px; font-size: 8.5px;" title="Dock to Left">◧</button>
+              <button id="minDockTop" style="cursor: pointer; background: ${dockPos === 'top' ? '#252542' : 'transparent'}; border: 0.5px solid var(--border); color: var(--sub); border-radius: 4px; padding: 1px 5px; font-size: 8.5px;" title="Dock to Top">⬒</button>
+              <button id="minDockRight" style="cursor: pointer; background: ${dockPos === 'right' ? '#252542' : 'transparent'}; border: 0.5px solid var(--border); color: var(--sub); border-radius: 4px; padding: 1px 5px; font-size: 8.5px;" title="Dock to Right">◨</button>
             </div>
           </div>
         `
@@ -449,30 +658,98 @@ export function bootstrapInfiniteWorld() {
         document.getElementById('minDockLeft')?.addEventListener('click', () => setPosition('left'))
         document.getElementById('minDockTop')?.addEventListener('click', () => setPosition('top'))
         document.getElementById('minDockRight')?.addEventListener('click', () => setPosition('right'))
+
+        const miniHandle = document.getElementById('miniDragHandle')
+        if (miniHandle) {
+          let isDragging = false
+          let startX = 0, startY = 0
+          let initLeft = 0, initTop = 0
+          miniHandle.addEventListener('pointerdown', (e: PointerEvent) => {
+            isDragging = true
+            miniHandle.style.cursor = 'grabbing'
+            startX = e.clientX
+            startY = e.clientY
+            const rect = container.getBoundingClientRect()
+            const wrapRect = wrap.getBoundingClientRect()
+            initLeft = rect.left - wrapRect.left
+            initTop = rect.top - wrapRect.top
+            miniHandle.setPointerCapture(e.pointerId)
+            e.preventDefault()
+          })
+          miniHandle.addEventListener('pointermove', (e: PointerEvent) => {
+            if (!isDragging) return
+            const dx = e.clientX - startX
+            const dy = e.clientY - startY
+            const wrapRect = wrap.getBoundingClientRect()
+            const curX = e.clientX - wrapRect.left
+            const curY = e.clientY - wrapRect.top
+            if (curY < 85) {
+              showGhostZone('top')
+            } else if (curX < 140) {
+              showGhostZone('left')
+            } else if (curX > wrapRect.width - 140) {
+              showGhostZone('right')
+            } else {
+              showGhostZone(null)
+            }
+            floatLeft = Math.max(10, Math.min(wrapRect.width - 240, initLeft + dx))
+            floatTop = Math.max(10, Math.min(wrapRect.height - 40, initTop + dy))
+            container.style.transition = 'none'
+            container.style.left = `${floatLeft}px`
+            container.style.top = `${floatTop}px`
+            container.style.transform = 'none'
+          })
+          const onMiniDragEnd = (e: PointerEvent) => {
+            if (!isDragging) return
+            isDragging = false
+            miniHandle.style.cursor = 'move'
+            showGhostZone(null)
+            const wrapRect = wrap.getBoundingClientRect()
+            const curX = e.clientX - wrapRect.left
+            const curY = e.clientY - wrapRect.top
+            if (curY < 85) {
+              setPosition('top')
+            } else if (curX < 140) {
+              setPosition('left')
+            } else if (curX > wrapRect.width - 140) {
+              setPosition('right')
+            } else {
+              dockPos = 'float'
+              localStorage.setItem('infinity_dock_pos', 'float')
+              localStorage.setItem('infinity_dock_float_x', String(floatLeft))
+              localStorage.setItem('infinity_dock_float_y', String(floatTop))
+              render()
+            }
+          }
+          miniHandle.addEventListener('pointerup', onMiniDragEnd)
+          miniHandle.addEventListener('pointercancel', onMiniDragEnd)
+        }
         return
       }
 
-      // Common Header for all docking positions
+      // Drag Handle & Header Controls
       const headerHTML = `
-        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 0.5px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 6px;">
+        <div id="infinityDragHandle" style="cursor: grab; display: flex; align-items: center; justify-content: space-between; border-bottom: 0.5px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 6px; user-select: none;">
           <div style="display: flex; align-items: center; gap: 6px;">
-            <b style="color: #c8c3ff; font-size: 11px;">🌍 Infinity Scale Tools</b>
+            <span style="color: #8e8aa8; font-size: 11px; cursor: grab;" title="Drag to move or dock">⠿</span>
+            <b style="color: #c8c3ff; font-size: 11px;">🌍 Infinity Scale & World Tools</b>
             <span style="font-size: 9px; color: #8e8aa8; font-family: monospace;">${stats.loadedChunks} chunks · ${state.objectCount} obj · (X:${stats.camera.worldX}, Z:${stats.camera.worldZ})</span>
           </div>
           <div style="display: flex; align-items: center; gap: 4px;">
             <!-- Dock Position Switchers -->
             <div style="display: flex; background: #0a0a14; padding: 1px 3px; border-radius: 6px; border: 0.5px solid var(--border);">
-              <button id="posLeft" style="cursor: pointer; background: ${dockPos === 'left' ? '#22203a' : 'transparent'}; border: none; color: ${dockPos === 'left' ? '#a09af0' : 'var(--sub)'}; padding: 2px 5px; font-size: 9px; border-radius: 4px;" title="Dock to Left side">◧ Left</button>
-              <button id="posTop" style="cursor: pointer; background: ${dockPos === 'top' ? '#22203a' : 'transparent'}; border: none; color: ${dockPos === 'top' ? '#a09af0' : 'var(--sub)'}; padding: 2px 5px; font-size: 9px; border-radius: 4px;" title="Dock to Top panel above">⬒ Top</button>
-              <button id="posRight" style="cursor: pointer; background: ${dockPos === 'right' ? '#22203a' : 'transparent'}; border: none; color: ${dockPos === 'right' ? '#a09af0' : 'var(--sub)'}; padding: 2px 5px; font-size: 9px; border-radius: 4px;" title="Dock to Right side">◨ Right</button>
+              <button id="posLeft" style="cursor: pointer; background: ${dockPos === 'left' ? '#22203a' : 'transparent'}; border: none; color: ${dockPos === 'left' ? '#a09af0' : 'var(--sub)'}; padding: 2px 5px; font-size: 9px; border-radius: 4px;" title="Dock Left">◧ Left</button>
+              <button id="posTop" style="cursor: pointer; background: ${dockPos === 'top' ? '#22203a' : 'transparent'}; border: none; color: ${dockPos === 'top' ? '#a09af0' : 'var(--sub)'}; padding: 2px 5px; font-size: 9px; border-radius: 4px;" title="Dock Top">⬒ Top</button>
+              <button id="posRight" style="cursor: pointer; background: ${dockPos === 'right' ? '#22203a' : 'transparent'}; border: none; color: ${dockPos === 'right' ? '#a09af0' : 'var(--sub)'}; padding: 2px 5px; font-size: 9px; border-radius: 4px;" title="Dock Right">◨ Right</button>
+              <button id="posFloat" style="cursor: pointer; background: ${dockPos === 'float' ? '#22203a' : 'transparent'}; border: none; color: ${dockPos === 'float' ? '#a09af0' : 'var(--sub)'}; padding: 2px 5px; font-size: 9px; border-radius: 4px;" title="Float & Drag">❐ Float</button>
             </div>
             <!-- Close / Collapse Button -->
-            <button id="dockCloseBtn" style="cursor: pointer; background: #1a1828; border: 0.5px solid var(--border); color: var(--sub); border-radius: 6px; padding: 2px 7px; font-size: 10px;" title="Collapse / Close Toolbar">▲ Close</button>
+            <button id="dockCloseBtn" style="cursor: pointer; background: #1a1828; border: 0.5px solid var(--border); color: var(--sub); border-radius: 6px; padding: 2px 8px; font-size: 10px;" title="Collapse Toolbar">▲ Close</button>
           </div>
         </div>
       `
 
-      // ── RENDERING FOR TOP PANEL (PANEL ABOVE WORKSPACE) ──────────────────────
+      // ── RENDERING FOR TOP PANEL ─────────────────────────────────────────────
       if (dockPos === 'top') {
         container.innerHTML = `
           <div style="pointer-events: auto; width: 100%; background: rgba(13, 15, 26, 0.94); backdrop-filter: blur(14px); border: 1px solid rgba(124, 111, 205, 0.35); border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.6); padding: 8px 12px; display: flex; flex-direction: column; gap: 6px;">
@@ -480,7 +757,7 @@ export function bootstrapInfiniteWorld() {
 
             <!-- ROW 1: PRIMARY TOOL MODES, SNAPPING, AND SHORTCUT ACTIONS -->
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
-              <!-- Primary Tool Modes -->
+              <!-- Mode Switcher -->
               <div style="display: flex; align-items: center; gap: 3px; background: #0a0a14; padding: 2px 4px; border-radius: 8px; border: 0.5px solid var(--border);">
                 <button class="pill ${state.tool === 'navigate' ? 'on' : ''}" id="topToolNav" style="font-size: 10px; padding: 3px 8px;">🖐️ Explore</button>
                 <button class="pill ${state.tool === 'select' ? 'on' : ''}" id="topToolSel" style="font-size: 10px; padding: 3px 8px;">🎯 Select</button>
@@ -496,16 +773,16 @@ export function bootstrapInfiniteWorld() {
                 <button class="pill ${state.snap === 5 ? 'on' : ''}" id="topSnap5" style="font-size: 9.5px; padding: 2px 6px;">5m</button>
               </div>
 
-              <!-- Quick Generation & Spatial Tools -->
+              <!-- Procedural & Spatial Systems -->
               <div style="display: flex; align-items: center; gap: 3px;">
                 <button class="brush-btn" id="topGenTown" style="font-size: 9.5px; padding: 3px 7px;">🏘️ Town</button>
-                <button class="brush-btn" id="topGenCity" style="font-size: 9.5px; padding: 3px 7px;">🏙️ City Plan</button>
+                <button class="brush-btn" id="topGenCity" style="font-size: 9.5px; padding: 3px 7px;">🏙️ City</button>
                 <button class="brush-btn" id="topGenRivers" style="font-size: 9.5px; padding: 3px 7px;">🌊 Rivers</button>
                 <button class="brush-btn" id="topGenRoute" style="font-size: 9.5px; padding: 3px 7px;">🛣️ Route</button>
                 <button class="brush-btn" id="topGenForest" style="font-size: 9.5px; padding: 3px 7px;">🌲 Forest</button>
               </div>
 
-              <!-- Overlays -->
+              <!-- Analytical Overlays -->
               <div style="display: flex; align-items: center; gap: 3px;">
                 <button class="pill ${state.overlay === 'suitability' ? 'on' : ''}" id="topOverlaySuit" style="font-size: 9.5px; padding: 2px 6px;">🟢 Suitability</button>
                 <button class="pill ${state.overlay === 'flood' ? 'on' : ''}" id="topOverlayFlood" style="font-size: 9.5px; padding: 2px 6px;">💧 Flood</button>
@@ -513,7 +790,7 @@ export function bootstrapInfiniteWorld() {
                 <button class="pill ${state.overlay === null ? 'on' : ''}" id="topOverlayNone" style="font-size: 9.5px; padding: 2px 6px;">✕</button>
               </div>
 
-              <!-- Persistence -->
+              <!-- Persistence & History -->
               <div style="display: flex; align-items: center; gap: 3px;">
                 <button class="brush-btn" id="topUndo" style="font-size: 9.5px; padding: 3px 6px;" title="Undo">↩</button>
                 <button class="brush-btn" id="topRedo" style="font-size: 9.5px; padding: 3px 6px;" title="Redo">↪</button>
@@ -543,7 +820,7 @@ export function bootstrapInfiniteWorld() {
                   <button class="brush-btn" id="topDelSel" style="font-size: 9.5px; padding: 2px 6px; color: #e06060;">🗑️ Delete</button>
                   <button class="brush-btn" id="topDesel" style="font-size: 9.5px; padding: 2px 6px;">✕ Deselect</button>
                 </div>
-                <span style="font-size: 9px; color: var(--sub); font-style: italic;">Click object to inspect & edit with 3D gizmo</span>
+                <span style="font-size: 9px; color: var(--sub); font-style: italic;">Click object to select · Drag gizmo axes to transform</span>
               ` : state.tool === 'erase' ? `
                 <div style="display: flex; align-items: center; gap: 4px;">
                   <span style="font-size: 9px; color: #e06060; font-weight: 600; margin-right: 4px;">RADIUS:</span>
@@ -551,17 +828,17 @@ export function bootstrapInfiniteWorld() {
                     <button class="pill ${eraseRadius === r ? 'on' : ''}" data-radius="${r}" style="font-size: 9.5px; padding: 2px 6px;">${r}m</button>
                   `).join('')}
                   <span style="color: var(--sub);">·</span>
-                  <button class="brush-btn" id="topClearAll" style="font-size: 9.5px; padding: 2px 7px; color: #e06060;">🗑️ Clear All Objects</button>
+                  <button class="brush-btn" id="topClearAll" style="font-size: 9.5px; padding: 2px 7px; color: #e06060;">🗑️ Clear All</button>
                 </div>
-                <span style="font-size: 9px; color: var(--sub); font-style: italic;">Click or drag over terrain to demolish objects</span>
+                <span style="font-size: 9px; color: var(--sub); font-style: italic;">Click or drag to demolish objects</span>
               ` : `
                 <div style="display: flex; align-items: center; gap: 4px;">
-                  <span style="font-size: 9px; color: #a09af0; font-weight: 600; margin-right: 4px;">VIEW PRESETS:</span>
+                  <span style="font-size: 9px; color: #a09af0; font-weight: 600; margin-right: 4px;">VIEW:</span>
                   <button class="pill" id="topCamOrbit" style="font-size: 9.5px; padding: 2px 6px;">Orbit</button>
                   <button class="pill" id="topCamTop" style="font-size: 9.5px; padding: 2px 6px;">Top</button>
                   <button class="pill" id="topCamFront" style="font-size: 9.5px; padding: 2px 6px;">Front</button>
                   <button class="pill" id="topCamIso" style="font-size: 9.5px; padding: 2px 6px;">Iso</button>
-                  <button class="brush-btn" id="topCamReset" style="font-size: 9.5px; padding: 2px 6px;">⛶ Center View</button>
+                  <button class="brush-btn" id="topCamReset" style="font-size: 9.5px; padding: 2px 6px;">⛶ Center</button>
                   <span style="color: var(--sub);">·</span>
                   <button class="pill" id="topCamFly" style="font-size: 9.5px; padding: 2px 6px;">Fly Walk</button>
                 </div>
@@ -571,12 +848,12 @@ export function bootstrapInfiniteWorld() {
           </div>
         `
       } else {
-        // ── RENDERING FOR VERTICAL TOOLBAR (LEFT OR RIGHT DOCK) ─────────────────
+        // ── RENDERING FOR VERTICAL TOOLBAR (LEFT, RIGHT, OR FLOATING) ───────────
         container.innerHTML = `
           <div style="pointer-events: auto; width: 100%; max-height: calc(100vh - 120px); overflow-y: auto; background: rgba(13, 15, 26, 0.95); backdrop-filter: blur(14px); border: 1px solid rgba(124, 111, 205, 0.35); border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.65); padding: 10px; display: flex; flex-direction: column; gap: 8px;">
             ${headerHTML}
 
-            <!-- Category Tabs in Vertical Dock -->
+            <!-- Category Tabs -->
             <div style="display: flex; gap: 2px; border-bottom: 0.5px solid rgba(255,255,255,0.06); padding-bottom: 4px;">
               <button class="cstep ${activeTab === 'objects' ? 'active' : ''}" id="vTabObj" style="flex:1; padding: 3px 2px; font-size: 9px;">Objects</button>
               <button class="cstep ${activeTab === 'camera' ? 'active' : ''}" id="vTabCam" style="flex:1; padding: 3px 2px; font-size: 9px;">Camera</button>
@@ -585,7 +862,7 @@ export function bootstrapInfiniteWorld() {
               <button class="cstep ${activeTab === 'display' ? 'active' : ''}" id="vTabDisp" style="flex:1; padding: 3px 2px; font-size: 9px;">Display</button>
             </div>
 
-            <!-- Content by Active Tab -->
+            <!-- Tab Content -->
             ${activeTab === 'objects' ? `
               <div>
                 <div style="font-size: 9.5px; color: var(--sub); margin-bottom: 4px; text-transform: uppercase;">Build Tool Mode</div>
@@ -722,11 +999,90 @@ export function bootstrapInfiniteWorld() {
         `
       }
 
-      // ── BIND EVENT LISTENERS ──────────────────────────────────────────────
-      // Dock controls
+      // ── BIND DRAG-AND-DROP HANDLER ──────────────────────────────────────────
+      const handle = document.getElementById('infinityDragHandle')
+      if (handle) {
+        let isDragging = false
+        let startX = 0, startY = 0
+        let initLeft = 0, initTop = 0
+
+        handle.addEventListener('pointerdown', (e: PointerEvent) => {
+          if ((e.target as HTMLElement).tagName === 'BUTTON') return
+          isDragging = true
+          handle.style.cursor = 'grabbing'
+          startX = e.clientX
+          startY = e.clientY
+          const rect = container.getBoundingClientRect()
+          const wrapRect = wrap.getBoundingClientRect()
+          initLeft = rect.left - wrapRect.left
+          initTop = rect.top - wrapRect.top
+          handle.setPointerCapture(e.pointerId)
+          e.preventDefault()
+        })
+
+        handle.addEventListener('pointermove', (e: PointerEvent) => {
+          if (!isDragging) return
+          const dx = e.clientX - startX
+          const dy = e.clientY - startY
+          const wrapRect = wrap.getBoundingClientRect()
+          const curX = e.clientX - wrapRect.left
+          const curY = e.clientY - wrapRect.top
+
+          // Detect drop zone and show ghost preview
+          if (curY < 85) {
+            showGhostZone('top')
+          } else if (curX < 140) {
+            showGhostZone('left')
+          } else if (curX > wrapRect.width - 140) {
+            showGhostZone('right')
+          } else {
+            showGhostZone(null)
+          }
+
+          // Move container
+          floatLeft = Math.max(10, Math.min(wrapRect.width - 320, initLeft + dx))
+          floatTop = Math.max(10, Math.min(wrapRect.height - 120, initTop + dy))
+          container.style.transition = 'none'
+          container.style.left = `${floatLeft}px`
+          container.style.top = `${floatTop}px`
+          container.style.right = 'auto'
+          container.style.bottom = 'auto'
+          container.style.width = '310px'
+          container.style.transform = 'none'
+        })
+
+        const onDragEnd = (e: PointerEvent) => {
+          if (!isDragging) return
+          isDragging = false
+          handle.style.cursor = 'grab'
+          showGhostZone(null)
+          const wrapRect = wrap.getBoundingClientRect()
+          const curX = e.clientX - wrapRect.left
+          const curY = e.clientY - wrapRect.top
+
+          if (curY < 85) {
+            setPosition('top')
+          } else if (curX < 140) {
+            setPosition('left')
+          } else if (curX > wrapRect.width - 140) {
+            setPosition('right')
+          } else {
+            dockPos = 'float'
+            localStorage.setItem('infinity_dock_pos', 'float')
+            localStorage.setItem('infinity_dock_float_x', String(floatLeft))
+            localStorage.setItem('infinity_dock_float_y', String(floatTop))
+            render()
+          }
+        }
+        handle.addEventListener('pointerup', onDragEnd)
+        handle.addEventListener('pointercancel', onDragEnd)
+      }
+
+      // ── DOCK SWITCHER & COLLAPSE ───────────────────────────────────────────
       document.getElementById('posLeft')?.addEventListener('click', () => setPosition('left'))
       document.getElementById('posTop')?.addEventListener('click', () => setPosition('top'))
       document.getElementById('posRight')?.addEventListener('click', () => setPosition('right'))
+      document.getElementById('posFloat')?.addEventListener('click', () => setPosition('float'))
       document.getElementById('dockCloseBtn')?.addEventListener('click', () => setOpen(false))
 
       // Tab switcher in vertical dock
@@ -736,7 +1092,7 @@ export function bootstrapInfiniteWorld() {
       document.getElementById('vTabPersist')?.addEventListener('click', () => { activeTab = 'persist'; render(); })
       document.getElementById('vTabDisp')?.addEventListener('click', () => { activeTab = 'display'; render(); })
 
-      // Tools
+      // Tool switches
       document.getElementById('topToolNav')?.addEventListener('click', () => (window as any).builderSetTool('navigate'))
       document.getElementById('topToolSel')?.addEventListener('click', () => (window as any).builderSetTool('select'))
       document.getElementById('topToolPlace')?.addEventListener('click', () => (window as any).builderSetTool('place'))

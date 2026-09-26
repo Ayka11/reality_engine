@@ -81,6 +81,11 @@ export class InfiniteWorldRenderer {
   private readonly hemi: THREE.HemisphereLight
   private materialMode: 'field' | 'material' | 'height' = 'field'
   private readonly terrainMaterials = new Set<THREE.MeshStandardMaterial>()
+  private physicsParticlePoints: THREE.Points | null = null
+  private physicsParticlePositions = new Float32Array(0)
+  private physicsParticleVelocities = new Float32Array(0)
+  private physicsParticleColors = new Float32Array(0)
+  private showParticles = true
 
   constructor(canvas: HTMLCanvasElement, seed = 'reality-engine-infinity-v1') {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
@@ -221,6 +226,7 @@ export class InfiniteWorldRenderer {
 
     this.scene.background = new THREE.Color(0x9bb8d6)
     this.scene.fog = new THREE.Fog(0x9bb8d6, 180, 900)
+    this.initPhysicsParticleSystem(700)
   }
 
   private scheduleSave() {
@@ -469,8 +475,26 @@ export class InfiniteWorldRenderer {
     const daylight = Math.max(0, Math.sin(((h - 6) / 12) * Math.PI))
     const azimuth = ((h - 6) / 24) * Math.PI * 2
     this.sun.position.set(Math.cos(azimuth) * 420, 80 + daylight * 520, Math.sin(azimuth) * 420)
-    this.sun.intensity = 0.25 + daylight * 2.0
-    this.hemi.intensity = 0.45 + daylight * 1.15
+    this.sun.intensity = 0.15 + daylight * 2.1
+    this.hemi.intensity = 0.35 + daylight * 1.25
+
+    let skyCol: number
+    if (daylight < 0.05) {
+      skyCol = 0x070918
+      this.sun.color.setHex(0x5070a0)
+    } else if (daylight < 0.35) {
+      skyCol = h < 12 ? 0xcc7755 : 0xc05544
+      this.sun.color.setHex(0xffaa77)
+    } else {
+      skyCol = 0x8eb4db
+      this.sun.color.setHex(0xffffff)
+    }
+    if (this.scene.background instanceof THREE.Color) {
+      this.scene.background.setHex(skyCol)
+    }
+    if (this.scene.fog instanceof THREE.Fog) {
+      this.scene.fog.color.setHex(skyCol)
+    }
   }
 
   setFogDensity(value: number) {
@@ -691,6 +715,96 @@ export class InfiniteWorldRenderer {
         mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.1, 5, 8), mat(0xb8b1a1))
         ;(mesh as THREE.Mesh).position.y = 2.5
         break
+      case 'metalaw': {
+        // Simulated Physics Object: MetaLaw Core with gyroscopic rule rings
+        const core = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(1.2, 0),
+          new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.2, metalness: 0.8, emissive: 0x553300 })
+        )
+        core.position.y = 2.2
+        const ring1 = new THREE.Mesh(
+          new THREE.TorusGeometry(1.8, 0.08, 8, 32),
+          new THREE.MeshStandardMaterial({ color: 0x90caf9, emissive: 0x1565c0, roughness: 0.3 })
+        )
+        ring1.position.y = 2.2
+        ring1.rotation.x = Math.PI / 3
+        const ring2 = new THREE.Mesh(
+          new THREE.TorusGeometry(2.3, 0.06, 8, 32),
+          new THREE.MeshStandardMaterial({ color: 0xffb74d, emissive: 0xe65100, roughness: 0.3 })
+        )
+        ring2.position.y = 2.2
+        ring2.rotation.y = Math.PI / 4
+        g.add(core, ring1, ring2)
+        mesh = g
+        break
+      }
+      case 'gravity_well': {
+        // Simulated Physics Object: Gravitational Singularity with accretion disk
+        const core = new THREE.Mesh(
+          new THREE.SphereGeometry(1.0, 16, 16),
+          new THREE.MeshStandardMaterial({ color: 0x050010, roughness: 0.1, emissive: 0x220044 })
+        )
+        core.position.y = 2.4
+        const disk = new THREE.Mesh(
+          new THREE.RingGeometry(1.2, 2.8, 32),
+          new THREE.MeshBasicMaterial({ color: 0x9c27b0, side: THREE.DoubleSide, transparent: true, opacity: 0.75 })
+        )
+        disk.position.y = 2.4
+        disk.rotation.x = -Math.PI / 2.2
+        g.add(core, disk)
+        mesh = g
+        break
+      }
+      case 'entropy_sink': {
+        // Simulated Physics Object: Cryogenic Thermodynamic Damper
+        const pillar = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.5, 0.8, 4.2, 6),
+          new THREE.MeshStandardMaterial({ color: 0x4dd0e1, roughness: 0.15, metalness: 0.6, emissive: 0x004d40 })
+        )
+        pillar.position.y = 2.1
+        const cap = new THREE.Mesh(
+          new THREE.OctahedronGeometry(1.0, 0),
+          new THREE.MeshStandardMaterial({ color: 0xe0f7fa, roughness: 0.1, emissive: 0x00838f })
+        )
+        cap.position.y = 4.4
+        g.add(pillar, cap)
+        mesh = g
+        break
+      }
+      case 'quantum_emitter': {
+        // Simulated Physics Object: Quantum Coherence Emitter
+        const emitter = new THREE.Mesh(
+          new THREE.IcosahedronGeometry(1.3, 0),
+          new THREE.MeshStandardMaterial({ color: 0x69f0ae, roughness: 0.2, emissive: 0x00c853, metalness: 0.5 })
+        )
+        emitter.position.y = 2.2
+        const beacon = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.1, 0.6, 12, 16),
+          new THREE.MeshBasicMaterial({ color: 0xb9f6ca, transparent: true, opacity: 0.35 })
+        )
+        beacon.position.y = 6.0
+        g.add(emitter, beacon)
+        mesh = g
+        break
+      }
+      case 'force_field': {
+        // Simulated Physics Object: Kinetic & Wave Shield Barrier
+        const dome = new THREE.Mesh(
+          new THREE.SphereGeometry(3.6, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+          new THREE.MeshStandardMaterial({
+            color: 0x00e5ff,
+            transparent: true,
+            opacity: 0.42,
+            roughness: 0.1,
+            metalness: 0.1,
+            side: THREE.DoubleSide,
+            emissive: 0x006064
+          })
+        )
+        dome.position.y = 0.05
+        mesh = dome
+        break
+      }
       default:
         mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), mat(0xc0c0c0))
         ;(mesh as THREE.Mesh).position.y = 1
@@ -1644,18 +1758,195 @@ export class InfiniteWorldRenderer {
 
   render(dt = 0.016) {
     if (!this.enabled) return
-    if (this.flyMode) {
+
+    // Cinema Mode camera track interpolation if defined
+    const cc = (window as any).cinemaCamera
+    if ((window as any).currentAppMode === 'cinema' && cc && typeof cc.x === 'number' && typeof cc.y === 'number' && typeof cc.z === 'number') {
+      this.camera.position.set(cc.x, cc.y, cc.z)
+      if (typeof cc.fov === 'number' && Math.abs(this.camera.fov - cc.fov) > 0.1) {
+        this.camera.fov = cc.fov
+        this.camera.updateProjectionMatrix()
+      }
+    } else if (this.flyMode) {
       this.updateFly(dt)
     } else {
       this.updateOrbitKeyboard(dt)
       if (this.controls.enabled) this.controls.update()
     }
+
     this.maybeRecenter()
     this.syncChunks()
     this.syncPersistentObjects()
     this.syncObjects()
+    this.animatePhysicsObjects(dt)
+    this.updatePhysicsParticles(dt)
     this.updateTerrainLod()
     this.renderer.render(this.scene, this.camera)
+  }
+
+  private initPhysicsParticleSystem(count = 700) {
+    const geo = new THREE.BufferGeometry()
+    const pos = new Float32Array(count * 3)
+    const vel = new Float32Array(count * 3)
+    const col = new Float32Array(count * 3)
+
+    for (let i = 0; i < count; i++) {
+      const idx = i * 3
+      pos[idx] = (Math.random() - 0.5) * 220
+      pos[idx + 1] = 5 + Math.random() * 25
+      pos[idx + 2] = (Math.random() - 0.5) * 220
+
+      vel[idx] = (Math.random() - 0.5) * 2.5
+      vel[idx + 1] = (Math.random() - 0.5) * 0.8
+      vel[idx + 2] = (Math.random() - 0.5) * 2.5
+
+      col[idx] = 0.5 + Math.random() * 0.5
+      col[idx + 1] = 0.7 + Math.random() * 0.3
+      col[idx + 2] = 1.0
+    }
+
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3))
+
+    const mat = new THREE.PointsMaterial({
+      size: 2.2,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+
+    this.physicsParticlePoints = new THREE.Points(geo, mat)
+    this.physicsParticlePositions = pos
+    this.physicsParticleVelocities = vel
+    this.physicsParticleColors = col
+    this.scene.add(this.physicsParticlePoints)
+  }
+
+  private updatePhysicsParticles(dt: number) {
+    if (!this.physicsParticlePoints || !this.showParticles) return
+    const pos = this.physicsParticlePositions
+    const vel = this.physicsParticleVelocities
+    const col = this.physicsParticleColors
+    const count = pos.length / 3
+    const camX = this.worldPosition.x
+    const camZ = this.worldPosition.z
+    const objects = [...this.objectMeshes.values()].map(e => e.object)
+
+    for (let i = 0; i < count; i++) {
+      const idx = i * 3
+      let px = pos[idx]
+      let py = pos[idx + 1]
+      let pz = pos[idx + 2]
+
+      let vx = vel[idx]
+      let vy = vel[idx + 1]
+      let vz = vel[idx + 2]
+
+      // Natural atmospheric drift
+      vx *= 0.985
+      vy *= 0.985
+      vz *= 0.985
+      vy += 0.25 * dt
+
+      // Real-time field interaction with placed simulated physics objects
+      for (const obj of objects) {
+        const dx = (obj.x - this.worldAnchor.x) - px
+        const dz = (obj.z - this.worldAnchor.z) - pz
+        const distSq = dx * dx + dz * dz
+        const rad = obj.scale * 38
+
+        if (distSq < rad * rad) {
+          const dist = Math.sqrt(distSq) || 0.1
+          const factor = (1 - dist / rad)
+
+          if (obj.kind === 'gravity_well') {
+            // Gravitational singularity: pull inward & spin accretion
+            const pull = factor * 48 * dt
+            vx += (dx / dist) * pull - (dz / dist) * pull * 0.85
+            vz += (dz / dist) * pull + (dx / dist) * pull * 0.85
+            col[idx] = 0.85; col[idx + 1] = 0.25; col[idx + 2] = 1.0 // purple accretion
+          } else if (obj.kind === 'entropy_sink') {
+            // Thermodynamic damper: freeze velocity and turn cryogenic
+            vx *= 0.82
+            vy *= 0.82
+            vz *= 0.82
+            col[idx] = 0.25; col[idx + 1] = 0.9; col[idx + 2] = 1.0 // ice cyan
+          } else if (obj.kind === 'quantum_emitter') {
+            // Coherence core: vertical resonance beam lift
+            vy += factor * 35 * dt
+            col[idx] = 0.15; col[idx + 1] = 1.0; col[idx + 2] = 0.45 // radiant emerald
+          } else if (obj.kind === 'force_field') {
+            // Barrier: deflect outward
+            const push = factor * 40 * dt
+            vx -= (dx / dist) * push
+            vz -= (dz / dist) * push
+            col[idx] = 0.0; col[idx + 1] = 0.85; col[idx + 2] = 1.0 // barrier cyan
+          } else if (obj.kind === 'metalaw') {
+            // MetaLaw node: harmonic gyroscopic orbital flow
+            vx += -(dz / dist) * factor * 22 * dt
+            vz += (dx / dist) * factor * 22 * dt
+            col[idx] = 1.0; col[idx + 1] = 0.88; col[idx + 2] = 0.2 // golden law
+          }
+        }
+      }
+
+      px += vx * dt
+      py += vy * dt
+      pz += vz * dt
+
+      // Area boundary wrap
+      if (Math.abs(px - camX) > 135) px = camX - Math.sign(px - camX) * 130
+      if (Math.abs(pz - camZ) > 135) pz = camZ - Math.sign(pz - camZ) * 130
+      if (py > 65) py = 4
+      if (py < 2) { py = 2; vy = Math.abs(vy) * 0.5 + 2 }
+
+      pos[idx] = px
+      pos[idx + 1] = py
+      pos[idx + 2] = pz
+
+      vel[idx] = vx
+      vel[idx + 1] = vy
+      vel[idx + 2] = vz
+    }
+
+    const geo = this.physicsParticlePoints.geometry
+    geo.attributes.position.needsUpdate = true
+    geo.attributes.color.needsUpdate = true
+  }
+
+  setShowParticles(visible: boolean) {
+    this.showParticles = visible
+    if (this.physicsParticlePoints) {
+      this.physicsParticlePoints.visible = visible
+    }
+  }
+
+  getShowParticles(): boolean {
+    return this.showParticles
+  }
+
+  private animatePhysicsObjects(dt: number) {
+    if (this.objectMeshes.size === 0) return
+    for (const entry of this.objectMeshes.values()) {
+      const kind = entry.object.kind
+      const group = entry.group
+      if (kind === 'metalaw' && group.children.length >= 3) {
+        group.children[1].rotation.z += 1.2 * dt
+        group.children[2].rotation.x += 0.9 * dt
+      } else if (kind === 'gravity_well' && group.children.length >= 2) {
+        group.children[1].rotation.z += 2.2 * dt
+      } else if (kind === 'entropy_sink' && group.children.length >= 2) {
+        group.children[1].rotation.y += 0.8 * dt
+      } else if (kind === 'quantum_emitter' && group.children.length >= 2) {
+        group.children[0].rotation.y += 1.5 * dt
+        group.children[0].rotation.x += 0.8 * dt
+      } else if (kind === 'force_field') {
+        const t = performance.now() * 0.002
+        group.scale.setScalar(entry.object.scale * (1 + 0.015 * Math.sin(t * 3)))
+      }
+    }
   }
 
   getLoadedChunkCount() { return this.patches.size }
