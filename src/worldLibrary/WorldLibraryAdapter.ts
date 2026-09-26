@@ -45,7 +45,7 @@ export function populationRuntimeKind(entry: WorldLibraryEntry): PopulationRunti
 }
 
 export function visualKindToWorldObject(entry: WorldLibraryEntry): WorldObjectKind | null {
-  return VISUAL_TO_OBJECT[entry.visualKind] ?? null;
+  return entry.visualKind ? (VISUAL_TO_OBJECT[entry.visualKind] ?? null) : null;
 }
 
 export function resourceVisualKind(entry: WorldLibraryEntry): WorldObjectKind | null {
