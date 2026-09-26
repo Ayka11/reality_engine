@@ -1,4 +1,6 @@
 import { WorldGenerator, BIOME_ID, type Biome } from './WorldGenerator'
+import type { ScientificFieldProvider } from './ScientificFieldProvider'
+import { GeneratorFieldProvider } from './ScientificFieldProvider'
 
 export type ScientificFieldSample = {
   energy: number
@@ -25,14 +27,23 @@ export type WorldContextSample = ScientificFieldSample & {
  * This is a computational model interface, not a claim of physical validation.
  */
 export class FieldSampler {
-  constructor(public generator: WorldGenerator) {}
+  private provider: ScientificFieldProvider
+
+  constructor(public generator: WorldGenerator, provider?: ScientificFieldProvider) {
+    this.provider = provider ?? new GeneratorFieldProvider(generator)
+  }
+
+  setProvider(provider: ScientificFieldProvider) {
+    this.provider = provider
+  }
 
   setGenerator(generator: WorldGenerator) {
     this.generator = generator
+    this.provider = new GeneratorFieldProvider(generator)
   }
 
   sample(x: number, y: number, z: number): ScientificFieldSample {
-    return this.generator.sampleField(x, y, z)
+    return this.provider.sample(x, y, z)
   }
 
   sampleWorld(x: number, y?: number, z?: number): WorldContextSample {
