@@ -15,6 +15,8 @@ import { WorldDecisionLayer, type RouteProfile } from '../infinity/WorldDecision
 import { DecisionGraph } from '../infinity/DecisionGraph'
 import { WorldObjectSpatialIndex } from '../infinity/WorldObjectSpatialIndex'
 import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
+import { createPhysicsInteractionRecord, type PhysicsInteractionType } from '../infinity/PhysicsInteractionRecord'
+import { PhysicsInteractionLog } from '../infinity/PhysicsInteractionLog'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -45,6 +47,7 @@ export class InfiniteWorldRenderer {
   readonly decisionGraph = new DecisionGraph()
   readonly objectSpatialIndex = new WorldObjectSpatialIndex()
   readonly fieldPhysics = new FieldModulatedPhysics()
+  readonly physicsInteractionLog = new PhysicsInteractionLog()
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -1918,6 +1921,25 @@ export class InfiniteWorldRenderer {
           const field = this.fieldSampler.sample(worldX, py, worldZ)
           const modulation = this.fieldPhysics.modulation(field)
 
+          const interactionType: PhysicsInteractionType =
+            obj.kind === 'gravity_well' ? 'gravity' :
+            obj.kind === 'entropy_sink' ? 'entropy' :
+            obj.kind === 'quantum_emitter' ? 'quantum' :
+            obj.kind === 'force_field' ? 'force-field' : 'metalaw'
+          const magnitude = factor
+          if (magnitude > 0.15) {
+            this.physicsInteractionLog.add(createPhysicsInteractionRecord(
+              interactionType,
+              obj.kind,
+              obj.id,
+              i,
+              { x: worldX, y: py, z: worldZ },
+              field,
+              modulation,
+              magnitude,
+            ))
+          }
+
           if (obj.kind === 'gravity_well') {
             // Gravitational singularity: pull inward & spin accretion
             const pull = factor * modulation.gravity * dt
@@ -2004,6 +2026,14 @@ export class InfiniteWorldRenderer {
         group.scale.setScalar(entry.object.scale * (1 + 0.015 * Math.sin(t * 3)))
       }
     }
+  }
+
+  getPhysicsInteractionSnapshot(limit = 100) {
+    return this.physicsInteractionLog.recent(limit)
+  }
+
+  clearPhysicsInteractionLog() {
+    this.physicsInteractionLog.clear()
   }
 
   getDecisionGraphSnapshot() {
