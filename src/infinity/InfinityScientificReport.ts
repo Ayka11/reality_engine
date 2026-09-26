@@ -52,7 +52,7 @@ export function createInfinityScientificReport(snapshot: ExperimentSnapshot, rep
         n: summary.n, mean: summary.mean, variance: summary.standardDeviation ** 2, standardDeviation: summary.standardDeviation, standardError: summary.n > 1 ? summary.standardDeviation / Math.sqrt(summary.n) : 0, min: summary.min, max: summary.max,
         confidence95: summary.n > 1 ? { lower: summary.mean - 1.96 * (summary.standardDeviation / Math.sqrt(summary.n)), upper: summary.mean + 1.96 * (summary.standardDeviation / Math.sqrt(summary.n)) } : { lower: null, upper: null },
         directionConsistency: null,
-      }]))),
+      }])),
     } } : undefined,
     generalization: generalization ? { dimensions, crossDimension: generalization, byDimension } : undefined,
     evidence, conclusions, limitations,
