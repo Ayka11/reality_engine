@@ -50,7 +50,9 @@ export class WorldResourceEconomy {
 
   canSupport(targetId: string, requirements: Record<string, number>) {
     const capabilities = Object.entries(requirements).map(([id, amount]) => this.capability(id, amount))
-    const ruleRequirements = worldRuleGraph.incoming(targetId, 'requires').map((rule) => this.capability(rule.to, 1))
+    const ruleRequirements = worldRuleGraph.outgoing(targetId, 'requires')
+      .filter((rule) => rule.to.startsWith('resource.'))
+      .map((rule) => this.capability(rule.to, 1))
     const all = [...capabilities, ...ruleRequirements]
     return {
       targetId,
