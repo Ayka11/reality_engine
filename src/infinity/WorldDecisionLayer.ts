@@ -40,6 +40,18 @@ export type BuildabilityResult = {
   }
 }
 
+export type RouteProfile = 'balanced' | 'shortest' | 'safe' | 'low-impact' | 'scientific'
+
+export type RouteCostResult = {
+  cost: number
+  distance: number
+  slope: number
+  water: number
+  flood: number
+  scientific: number
+  components: Record<string, number>
+}
+
 export type ZoneCostResult = {
   cost: number
   components: Record<string, number>
@@ -123,6 +135,36 @@ export class WorldDecisionLayer {
       cost: this.clamp01(Object.values(components).reduce((sum, value) => sum + value, 0)),
       components,
       buildability,
+    }
+  }
+
+  routeCost(x: number, z: number, previousX: number, previousZ: number, profile: RouteProfile = 'balanced'): RouteCostResult {
+    const current = this.analyzeBuildability(x, z)
+    const previous = this.sampler.sampleWorld(previousX, undefined, previousZ)
+    const distance = Math.max(1, Math.hypot(x - previousX, z - previousZ))
+    const slope = Math.abs(current.elevation - previous.height) / distance
+    const water = current.waterDepth > 0.25 ? 1 : 0
+    const flood = current.waterDepth > 0 ? Math.min(1, current.waterDepth / 8) : 0
+    const scientific = 1 - current.score
+
+    const profiles: Record<RouteProfile, { distance:number; slope:number; water:number; flood:number; scientific:number }> = {
+      balanced: { distance: 1, slope: 18, water: 6, flood: 12, scientific: 8 },
+      shortest: { distance: 1, slope: 4, water: 2, flood: 2, scientific: 1 },
+      safe: { distance: 1, slope: 24, water: 14, flood: 24, scientific: 8 },
+      'low-impact': { distance: 1, slope: 16, water: 10, flood: 18, scientific: 18 },
+      scientific: { distance: 1, slope: 10, water: 8, flood: 12, scientific: 28 },
+    }
+    const w = profiles[profile]
+    const components = {
+      distance: distance * w.distance,
+      slope: slope * w.slope,
+      water: water * w.water,
+      flood: flood * w.flood,
+      scientific: scientific * w.scientific,
+    }
+    return {
+      cost: Object.values(components).reduce((sum, value) => sum + value, 0),
+      distance, slope, water, flood, scientific, components,
     }
   }
 
