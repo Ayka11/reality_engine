@@ -92,6 +92,7 @@ export function bootstrapInfiniteWorld() {
     if (!entry) return null
     const plan = worldLibraryGenerationPlanner.plan(id)
     if (!plan) return null
+    if (plan.environmentStatus === 'BLOCKED') return { id, generated: false, blockedBy: ['environment'], plan }
     const blocked = plan.conflicts.filter((conflict) => worldLibrary.has(conflict))
     if (blocked.length) return { id, generated: false, blockedBy: blocked, plan }
     const generated: string[] = []
