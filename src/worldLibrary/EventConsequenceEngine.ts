@@ -46,7 +46,7 @@ export class EventConsequenceEngine {
 
   derive(event: WorldTimelineEvent | CausalEvent): EventConsequence {
     const actions: ConsequenceAction[] = []
-    const severity: number = 'severity' in event ? severity : 1
+    const severity: number = 'severity' in event ? (event.severity ?? 1) : 1
 
     if (event.type === 'resource-crisis') {
       actions.push({ type: 'adaptation-strategy', strategy: event.details.includes('drought') ? 'technology' : 'conservation', effectiveness: 0.5, durationTicks: 3, reason: 'resource crisis triggers adaptive resource management' })
@@ -67,14 +67,14 @@ export class EventConsequenceEngine {
       actions.push({ type: 'adaptation-strategy', strategy: 'migration', effectiveness: 0.45, durationTicks: 3, reason: 'migration becomes an adaptive response' })
       actions.push(
         { type: 'stability-shift', delta: -0.05, reason: 'migration temporarily reduces settlement stability' },
-        { type: 'population-shift', deltaRatio: -0.08 * (event.severity ?? 1), reason: 'migration reduces local population' },
+        { type: 'population-shift', deltaRatio: -0.08 * severity, reason: 'migration reduces local population' },
       )
     }
 
     if (event.type === 'infrastructure-failure') {
       actions.push({ type: 'adaptation-strategy', strategy: 'infrastructure', effectiveness: 0.65, durationTicks: 4, reason: 'infrastructure failure triggers structural adaptation' })
       actions.push({ type: 'production-efficiency', multiplier: 0.7, durationTicks: 3, reason: 'infrastructure failure reduces production efficiency' })
-      if ((event.severity ?? 1) >= 0.7) actions.push({ type: 'stability-shift', delta: -0.1, reason: 'severe infrastructure failure increases instability' })
+      if (severity >= 0.7) actions.push({ type: 'stability-shift', delta: -0.1, reason: 'severe infrastructure failure increases instability' })
       actions.push({ type: 'growth-modifier', multiplier: 0.55, durationTicks: 2, reason: 'infrastructure failure suppresses growth' })
     }
 
