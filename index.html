@@ -1076,14 +1076,17 @@ function renderBuilderPanel(){
 const PANELS={
   world:()=>`
     <div class="section">
-      <div class="section-hdr" onclick="toggleSection(this)"><span>World Workspace</span><span class="arrow">▾</span></div>
+      <div class="section-hdr" onclick="toggleSection(this)"><span>World State</span><span class="arrow">▾</span></div>
       <div class="section-body">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
-          <button class="brush-btn" onclick="openComp()">✦ Compose World</button>
-          <button class="brush-btn" onclick="quickGenerateWorld()">⚡ Quick Generate</button>
-          <button class="brush-btn" style="grid-column:1/-1;border-color:var(--accent);color:#a09af0" onclick="window.toggleWorldToolbar&&window.toggleWorldToolbar(true)">🌍 Open World Tools</button>
+        <div style="font-size:9px;color:var(--sub);line-height:1.5">
+          <b style="color:#a09af0">Infinite World</b><br>
+          Generation actions and 3D World Tools are kept in the upper workspace bar so the sidebar remains focused on world configuration and state.
         </div>
-        <div style="font-size:9px;color:var(--sub);margin-top:7px;line-height:1.4">3D Infinite World controls stay in the upper workspace toolbar. Use this panel for generation and world-level settings.</div>
+        <div class="pill-row" style="margin-top:7px">
+          <button class="pill" onclick="window.toggleWorldToolbar&&window.toggleWorldToolbar(true)">🌍 World Tools</button>
+          <button class="pill" onclick="openComp()">✦ Compose</button>
+          <button class="pill" onclick="quickGenerateWorld()">⚡ Quick</button>
+        </div>
       </div>
     </div>
     <div class="section">
