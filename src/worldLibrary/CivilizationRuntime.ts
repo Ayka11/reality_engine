@@ -4,6 +4,17 @@ import { worldRuleGraph } from './registry'
 
 export type CivilizationType = 'agricultural' | 'industrial' | 'post-scarcity'
 
+export type CivilizationMemory = {
+  ticks: number
+  crises: number
+  migrations: number
+  adaptations: number
+  transitions: number
+  cumulativeStability: number
+  lastType: CivilizationType
+  trajectory: Array<{ tick: number; type: CivilizationType; score: number; stability: number; evolutionPressure: number }>
+}
+
 export type CivilizationState = {
   id: string
   type: CivilizationType
@@ -14,6 +25,7 @@ export type CivilizationState = {
   specialization: string[]
   evolutionPressure: number
   transitionReason: string
+  memory: CivilizationMemory
 }
 
 const TYPE_REQUIREMENTS: Record<CivilizationType, Record<string, number>> = {
@@ -73,6 +85,7 @@ export class CivilizationRuntime {
       specialization,
       evolutionPressure: Math.max(0, Math.min(1, Math.max(gatedCapabilities.industrial - gatedCapabilities.agricultural, gatedCapabilities['post-scarcity'] - gatedCapabilities.industrial))),
       transitionReason: type === 'post-scarcity' ? 'advanced resource capability' : type === 'industrial' ? 'industrial capability exceeded agricultural capability' : 'agricultural capability remains dominant',
+      memory: { ticks: 0, crises: 0, migrations: 0, adaptations: 0, transitions: 0, cumulativeStability: settlement.stability, lastType: type, trajectory: [] },
     }
   }
 
@@ -86,6 +99,17 @@ export class CivilizationRuntime {
       next.score = next.capabilities[state.type]
     }
     next.blockedBy = [...new Set([...next.blockedBy, ...settlementTick.shortages])]
+    const previousMemory = state.memory ?? { ticks: 0, crises: 0, migrations: 0, adaptations: 0, transitions: 0, cumulativeStability: state.settlement.stability, lastType: state.type, trajectory: [] }
+    const memory: CivilizationMemory = {
+      ...previousMemory,
+      ticks: previousMemory.ticks + delta,
+      crises: previousMemory.crises + settlementTick.shortages.length,
+      transitions: previousMemory.transitions + (next.type !== state.type ? 1 : 0),
+      cumulativeStability: previousMemory.cumulativeStability + settlementTick.state.stability * delta,
+      lastType: next.type,
+      trajectory: [...previousMemory.trajectory, { tick: previousMemory.ticks + delta, type: next.type, score: next.score, stability: settlementTick.state.stability, evolutionPressure: next.evolutionPressure }].slice(-120),
+    }
+    next.memory = memory
     return {
       state: next,
       settlementTick,
