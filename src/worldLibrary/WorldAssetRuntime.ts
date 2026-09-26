@@ -61,6 +61,7 @@ export class WorldAssetRuntime {
             mesh.castShadow = false
             mesh.receiveShadow = false
           })
+          object.visible = false
           this.scene.add(object)
           const asset: RuntimeAsset = {
             id,
@@ -120,6 +121,13 @@ export class WorldAssetRuntime {
     const instance = this.instances.get(instanceId)
     if (!instance) return false
     this.scene.remove(instance)
+    instance.traverse((node) => {
+      const mesh = node as THREE.Mesh
+      if (!mesh.isMesh) return
+      mesh.geometry.dispose()
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+      materials.forEach((material) => material.dispose())
+    })
     this.instances.delete(instanceId)
     return true
   }
