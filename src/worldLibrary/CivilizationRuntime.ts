@@ -117,6 +117,14 @@ export type CivilizationBranchSnapshot = {
   score: number
 }
 
+export type CivilizationBranchEnvironment = {
+  temperature: number
+  moisture: number
+  radiation: number
+  stability: number
+  tick: number
+}
+ 
 export type CivilizationState = {
   id: string
   type: CivilizationType
@@ -154,6 +162,7 @@ export class CivilizationRuntime {
   private readonly branchStates = new Map<string, CivilizationState>()
   private readonly experiments = new Map<string, CivilizationExperimentResult>()
   private readonly branchResources = new Map<string, ResourceState[]>()
+  private readonly branchEnvironments = new Map<string, CivilizationBranchEnvironment>()
 
   evaluate(id: string, tier: SettlementTier): CivilizationState {
     const settlement = settlementGrowthModel.evaluate(id, tier)
@@ -245,8 +254,22 @@ export class CivilizationRuntime {
     if (!state) return null
     const branchSnapshot = this.branchResources.get(branchId)
     if (branchSnapshot) worldResourceEconomy.restore(branchSnapshot)
+    const environment = this.branchEnvironments.get(branchId)
+    if (environment) {
+      const environmentalStress = (1 - environment.moisture) * 0.04 + environment.radiation * 0.03 + (1 - environment.stability) * 0.05
+      state = { ...state, settlement: { ...state.settlement, stability: Math.max(0, Math.min(1, state.settlement.stability - environmentalStress * delta)) } }
+    }
     const result = this.tick(state, delta)
     this.branchResources.set(branchId, worldResourceEconomy.snapshot())
+    const previousEnvironment = this.branchEnvironments.get(branchId) ?? { temperature: 0.5, moisture: 0.5, radiation: 0.2, stability: 0.8, tick: 0 }
+    const environmentalLoad = Math.max(0, Math.min(1, 1 - result.state.settlement.stability))
+    this.branchEnvironments.set(branchId, {
+      temperature: Math.max(0, Math.min(1, previousEnvironment.temperature + environmentalLoad * 0.002 * delta)),
+      moisture: Math.max(0, Math.min(1, previousEnvironment.moisture - environmentalLoad * 0.004 * delta)),
+      radiation: Math.max(0, Math.min(1, previousEnvironment.radiation + (result.state.type === 'post-scarcity' ? 0.002 : 0) * delta)),
+      stability: Math.max(0, Math.min(1, previousEnvironment.stability - environmentalLoad * 0.003 * delta)),
+      tick: previousEnvironment.tick + delta,
+    })
     this.branchStates.set(branchId, result.state)
     return result
   }
@@ -396,6 +419,7 @@ export class CivilizationRuntime {
     const sourceResources = this.branchResources.get(sourceBranch)
     if (sourceResources) worldResourceEconomy.restore(sourceResources)
     else this.branchResources.set(sourceBranch, worldResourceEconomy.snapshot())
+    const sourceEnvironment = this.branchEnvironments.get(sourceBranch) ?? { temperature: 0.5, moisture: 0.5, radiation: 0.2, stability: 0.8, tick: source.tick }
     const branchId = `${sourceBranch}-cf-${this.branches.size + 1}`
     const snapshot: CivilizationBranchSnapshot = {
       ...source,
@@ -414,6 +438,7 @@ export class CivilizationRuntime {
     state.memory = { ...state.memory, branchId, divergence: snapshot.divergence, resilience: snapshot.resilience, lastType: snapshot.type }
     this.branchStates.set(branchId, state)
     this.branchResources.set(branchId, worldResourceEconomy.snapshot())
+    this.branchEnvironments.set(branchId, { ...sourceEnvironment, tick: source.tick })
     this.branches.set(branchId, [snapshot])
     return snapshot
   }
