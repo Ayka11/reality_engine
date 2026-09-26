@@ -2,6 +2,7 @@ import { CivilizationRuntime, type CivilizationExperimentScenario, type Civiliza
 import { createExperimentProtocol } from './ExperimentProtocol'
 import { ExperimentRunner, type ExperimentSnapshot } from './ExperimentRunner'
 import type { ExperimentCatalog } from './ExperimentCatalog'
+import { assessCivilizationReplication, type CivilizationReplicationResult } from './CivilizationExperimentReplication'
 
 export type CivilizationInfinityExperimentOptions = {
   experimentId: string
@@ -83,6 +84,14 @@ export type CivilizationBatchScenario = {
   metadata?: Record<string, string | number | boolean>
 }
 
+export type CivilizationReplicationBatch = {
+  baseline: CivilizationExperimentResult
+  replications: CivilizationExperimentResult[]
+  assessments: CivilizationReplicationResult[]
+  meanScenarioConsistency: number
+  meanOutcomeConsistency: number
+}
+
 export type CivilizationBatchResult = {
   snapshots: ExperimentSnapshot[]
   experiments: CivilizationExperimentResult[]
@@ -151,5 +160,26 @@ export async function runCivilizationInfinityBatch(
     errors,
     completed: snapshots.filter((snapshot) => snapshot.status === 'completed').length,
     failed: errors.length,
+  }
+}
+
+
+export function assessCivilizationReplicationBatch(
+  baseline: CivilizationExperimentResult,
+  replications: CivilizationExperimentResult[],
+  tolerance = 1e-6,
+): CivilizationReplicationBatch {
+  const assessments = replications.map((replication) =>
+    assessCivilizationReplication(baseline, replication, tolerance),
+  )
+  const mean = (values: number[]) =>
+    values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0
+
+  return {
+    baseline,
+    replications,
+    assessments,
+    meanScenarioConsistency: mean(assessments.map((item) => item.scenarioConsistency)),
+    meanOutcomeConsistency: mean(assessments.map((item) => item.outcomeConsistency)),
   }
 }
