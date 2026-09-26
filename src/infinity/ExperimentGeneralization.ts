@@ -21,20 +21,21 @@ export type GeneralizationResult = {
   metrics: GeneralizationMetric[]
 }
 
-function dimensionKey(
-  snapshot: ExperimentSnapshot,
-  dimension: GeneralizationDimension,
-): string {
+export type CrossDimensionGeneralizationResult = {
+  dimensions: GeneralizationDimension[]
+  analyses: GeneralizationResult[]
+  completedExperiments: number
+  overallDirectionConsistency: number | null
+  generalizedMetrics: string[]
+}
+
+function dimensionKey(snapshot: ExperimentSnapshot, dimension: GeneralizationDimension): string {
   const protocol = snapshot.protocol
   switch (dimension) {
-    case 'seed':
-      return protocol.world.seed
-    case 'provider':
-      return `${protocol.field.providerId}@${protocol.field.providerVersion}`
-    case 'physics':
-      return protocol.physics.version
-    case 'decision':
-      return protocol.decision.version
+    case 'seed': return protocol.world.seed
+    case 'provider': return `${protocol.field.providerId}@${protocol.field.providerVersion}`
+    case 'physics': return protocol.physics.version
+    case 'decision': return protocol.decision.version
   }
 }
 
@@ -44,12 +45,7 @@ function summarize(values: number[]) {
   const variance = n > 1
     ? values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (n - 1)
     : 0
-  return {
-    mean,
-    standardDeviation: Math.sqrt(variance),
-    min: Math.min(...values),
-    max: Math.max(...values),
-  }
+  return { mean, standardDeviation: Math.sqrt(variance), min: Math.min(...values), max: Math.max(...values) }
 }
 
 export function analyzeGeneralization(
@@ -74,21 +70,17 @@ export function analyzeGeneralization(
   }
 
   const metrics: GeneralizationMetric[] = []
-
   for (const metric of [...metricNames].sort()) {
     const values = completed
       .map(snapshot => snapshot.results[metric])
       .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-
     if (!values.length) continue
 
     const summary = summarize(values)
     const groupMeans = [...groups.values()]
-      .map(group =>
-        group
-          .map(snapshot => snapshot.results[metric])
-          .filter((value): value is number => typeof value === 'number' && Number.isFinite(value)),
-      )
+      .map(group => group
+        .map(snapshot => snapshot.results[metric])
+        .filter((value): value is number => typeof value === 'number' && Number.isFinite(value)))
       .filter(group => group.length > 0)
       .map(group => summarize(group).mean)
 
@@ -105,8 +97,7 @@ export function analyzeGeneralization(
       standardDeviation: summary.standardDeviation,
       min: summary.min,
       max: summary.max,
-      coefficientOfVariation:
-        summary.mean !== 0 ? summary.standardDeviation / Math.abs(summary.mean) : null,
+      coefficientOfVariation: summary.mean !== 0 ? summary.standardDeviation / Math.abs(summary.mean) : null,
       directionConsistency,
     })
   }
@@ -116,5 +107,34 @@ export function analyzeGeneralization(
     groupKeys: [...groups.keys()].sort(),
     completedExperiments: completed.length,
     metrics,
+  }
+}
+
+export function analyzeCrossDimensionGeneralization(
+  snapshots: ExperimentSnapshot[],
+  dimensions: GeneralizationDimension[] = ['seed', 'provider', 'physics', 'decision'],
+): CrossDimensionGeneralizationResult {
+  const completed = snapshots.filter(snapshot => snapshot.status === 'completed')
+  const analyses = dimensions.map(dimension => analyzeGeneralization(completed, dimension))
+  const consistencyValues = analyses
+    .flatMap(analysis => analysis.metrics
+      .map(metric => metric.directionConsistency)
+      .filter((value): value is number => value !== null))
+
+  const metricNames = new Set<string>()
+  for (const analysis of analyses) {
+    for (const metric of analysis.metrics) {
+      if ((metric.directionConsistency ?? 0) >= 0.75) metricNames.add(metric.metric)
+    }
+  }
+
+  return {
+    dimensions,
+    analyses,
+    completedExperiments: completed.length,
+    overallDirectionConsistency: consistencyValues.length
+      ? consistencyValues.reduce((sum, value) => sum + value, 0) / consistencyValues.length
+      : null,
+    generalizedMetrics: [...metricNames].sort(),
   }
 }
