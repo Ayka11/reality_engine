@@ -13,6 +13,12 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world
   ;(window as any).infinityStats = () => world.getRuntimeStats()
+  ;(window as any).focusGeneratedWorld = () => {
+    const result = world.focusGeneratedRegion()
+    world.render(0)
+    syncWorldUI()
+    return result
+  }
 
   // ── 3D Controls Bindings on window (ensures Right Panel controls always work) ───
   const isField3DActive = () => document.getElementById('c3dField')?.style.display !== 'none'
