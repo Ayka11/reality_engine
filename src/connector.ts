@@ -86,6 +86,8 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       localChunks.set(key, f32.slice(off + 1, off + 1 + CF))
       off += 1 + CF
     }
+    // Feed the scientific field state directly into the dedicated volumetric renderer.
+    fieldRenderer.applyWorkerFrame(ab as ArrayBuffer)
     const el = document.getElementById('chunkStats')
     if (el && stats) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`
   }
