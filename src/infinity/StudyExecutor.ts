@@ -6,6 +6,8 @@ import { analyzeExperiments } from './ExperimentAnalysis'
 import { calculateStatisticalAnalysis } from './ExperimentStatistics'
 import { analyzeGeneralization, type GeneralizationDimension } from './ExperimentGeneralization'
 import { createStudyManifest, type StudyManifest } from './StudyManifest'
+import { EvidenceClaimGraph } from './EvidenceClaimGraph'
+import { validateStudyManifest, type StudyValidationResult } from './StudyValidation'
 
 export type StudyExecutionOptions = {
   generalizationDimensions?: GeneralizationDimension[]
@@ -18,6 +20,7 @@ export type StudyExecutionResult = {
   completed: number
   failed: number
   warnings: string[]
+  validation: StudyValidationResult
 }
 
 export async function executeStudy(
@@ -44,8 +47,7 @@ export async function executeStudy(
 
   const analysis = analyzeExperiments(batch.snapshots, 'provider')
   const statistics = calculateStatisticalAnalysis(analysis)
-  const dimensions = options.generalizationDimensions ??
-    specification.generalizationDimensions
+  const dimensions = options.generalizationDimensions ?? specification.generalizationDimensions
 
   const generalization = Object.fromEntries(
     dimensions.map(dimension => [
@@ -53,6 +55,9 @@ export async function executeStudy(
       analyzeGeneralization(batch.snapshots, dimension),
     ]),
   ) as StudyManifest['generalization']
+
+  const evidenceGraph = new EvidenceClaimGraph()
+  for (const snapshot of batch.snapshots) evidenceGraph.addExperiment(snapshot)
 
   const manifest = createStudyManifest({
     studyId: specification.studyId,
@@ -64,15 +69,20 @@ export async function executeStudy(
     runs: batch.snapshots,
     statistics,
     generalization,
+    evidence: evidenceGraph.snapshot(),
   })
+
+  const validation = validateStudyManifest(manifest)
 
   const warnings: string[] = []
   if (batch.failed > 0) {
     warnings.push(`${batch.failed} experiment(s) failed during execution.`)
   }
-
   if (batch.completed === 0) {
     warnings.push('No experiments completed successfully.')
+  }
+  if (!validation.valid) {
+    warnings.push('Study manifest failed structural validation.')
   }
 
   return {
@@ -80,5 +90,6 @@ export async function executeStudy(
     completed: batch.completed,
     failed: batch.failed,
     warnings,
+    validation,
   }
 }
