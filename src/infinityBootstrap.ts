@@ -6,7 +6,7 @@ import { productionInfrastructureRuntime } from './worldLibrary/ProductionInfras
 import { worldLibraryGenerationPlanner } from './worldLibrary/WorldLibraryGenerationPlanner'
 import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, visualKindToWorldObject, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
-import { buildCivilizationExperimentMatrix, runCivilizationInfinityBatch, analyzeCrossDimensionGeneralization, summarizeReplicationSnapshots, createInfinityScientificReport, serializeInfinityScientificReport, createScientificProvenance, attachScientificProvenance, validateScientificProvenance, type CivilizationExperimentMatrix } from './infinity'
+import { buildCivilizationExperimentMatrix, runCivilizationInfinityBatch, analyzeCrossDimensionGeneralization, summarizeReplicationSnapshots, createInfinityScientificReport, serializeInfinityScientificReport, createScientificProvenance, attachScientificProvenance, validateScientificProvenance, assessInfinityClaim, type CivilizationExperimentMatrix } from './infinity'
 
 export type DockPosition = 'top' | 'left' | 'right' | 'float'
 
@@ -110,6 +110,7 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldCreateScientificProvenance = (snapshot: any, replication?: any, generalization?: any, evidence?: any) => createScientificProvenance(snapshot, replication, generalization, evidence)
   ;(window as any).worldAttachScientificProvenance = (report: any, provenance: any) => attachScientificProvenance(report, provenance)
   ;(window as any).worldValidateScientificProvenance = (report: any) => validateScientificProvenance(report)
+  ;(window as any).worldAssessInfinityClaim = (claimId: string, graph: any, experiments: any[], replications: any[], generalization?: any, options?: any) => assessInfinityClaim(claimId, graph, experiments, replications, generalization, options)
   ;(window as any).worldAnalyzeCivilizationExperiment = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta).outcomes
   ;(window as any).worldExperimentCausalAttribution = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta).outcomes.map((outcome) => ({ scenarioId: outcome.scenarioId, causalAttribution: outcome.causalAttribution }))
   ;(window as any).worldExperimentEvidence = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta).outcomes.map((outcome) => ({ scenarioId: outcome.scenarioId, evidence: outcome.evidence }))
