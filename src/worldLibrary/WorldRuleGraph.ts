@@ -29,6 +29,10 @@ export type WorldRuleQuery = {
 export class WorldRuleGraph {
   private readonly rules = new Map<string, WorldRule>();
 
+  constructor(rules: WorldRule[] = []) {
+    this.addMany(rules)
+  }
+
   add(rule: WorldRule): WorldRule {
     if (!rule.id || !rule.from || !rule.to) {
       throw new Error('World rule requires id, from and to');
