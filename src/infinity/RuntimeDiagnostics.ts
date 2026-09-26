@@ -26,16 +26,17 @@ export class RuntimeDiagnostics {
     return performance.now()
   }
 
-  recordFrame(start: number, dtMs: number) {
+  recordFrame(start: number) {
+    const wallClockMs = Math.max(0.001, performance.now() - start)
     this.frames++
-    this.elapsed += dtMs
-    this.frameTimeMs = this.frameTimeMs * 0.9 + dtMs * 0.1
+    this.elapsed += wallClockMs
+    this.frameTimeMs = this.frameTimeMs * 0.9 + wallClockMs * 0.1
     if (this.elapsed >= 1000) {
       this.fps = this.frames * 1000 / this.elapsed
       this.frames = 0
       this.elapsed = 0
     }
-    return performance.now() - start
+    return wallClockMs
   }
 
   recordPhysics(ms: number, interactions: number, queries: number) {
