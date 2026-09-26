@@ -16,6 +16,11 @@ export class WorldObjectSpatialIndex {
     this.objectChunks.clear()
   }
 
+  private chunkFor(x: number, y: number, z: number) {
+    const { chunk } = worldToChunk(x, y, z)
+    return chunkKey(chunk.cx, chunk.cy, chunk.cz)
+  }
+
   upsert(object: WorldObject) {
     const nextChunk = this.chunkFor(object.x, object.y, object.z)
     const previousChunk = this.objectChunks.get(object.id)
