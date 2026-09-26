@@ -480,7 +480,12 @@ export function bootstrapInfiniteWorld() {
     document.getElementById('dockGhostPreview')?.remove()
 
     // Persistent docking state: 'top' | 'left' | 'right' | 'float'
-    let dockPos: DockPosition = (localStorage.getItem('infinity_dock_pos') as DockPosition) || 'top'
+    let dockPos: DockPosition = 'top'
+    // World Tools is a workspace toolbar: keep it in the upper panel by default.
+    // Legacy left/right/float preferences are normalized to top for the current UI.
+    if (localStorage.getItem('infinity_dock_pos') !== 'top') {
+      localStorage.setItem('infinity_dock_pos', 'top')
+    }
     let isOpen = localStorage.getItem('infinity_dock_open') !== 'false'
     let activeTab: 'camera' | 'objects' | 'persist' | 'analysis' | 'display' = 'objects'
     let eraseRadius = 4
