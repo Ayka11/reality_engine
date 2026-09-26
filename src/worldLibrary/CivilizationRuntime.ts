@@ -275,6 +275,7 @@ export class CivilizationRuntime {
   }
 
   branchState(branchId: string) { return this.branchStates.get(branchId) ?? null }
+  branchEnvironment(branchId: string) { return this.branchEnvironments.get(branchId) ?? null }
 
   buildClaimGraph(outcomes: CivilizationExperimentOutcome[]): CivilizationClaimGraph {
     const claims: CivilizationClaimNode[] = []
@@ -323,7 +324,8 @@ export class CivilizationRuntime {
       branches: Array.from(this.branches.entries()).map(([branchId, history]) => ({ branchId, history })),
       branchStates: Array.from(this.branchStates.entries()).map(([branchId, state]) => ({ branchId, state })),
       experiments: Array.from(this.experiments.values()),
-      branchResources: Array.from(this.branchResources.entries()).map(([branchId, resources]) => ({ branchId, resources }))
+      branchResources: Array.from(this.branchResources.entries()).map(([branchId, resources]) => ({ branchId, resources })),
+      branchEnvironments: Array.from(this.branchEnvironments.entries()).map(([branchId, environment]) => ({ branchId, environment }))
     }
   }
 
@@ -332,10 +334,12 @@ export class CivilizationRuntime {
     this.branchStates.clear()
     this.experiments.clear()
     this.branchResources.clear()
+    this.branchEnvironments.clear()
     for (const entry of snapshot.branches ?? []) this.branches.set(entry.branchId, entry.history)
     for (const entry of snapshot.branchStates ?? []) this.branchStates.set(entry.branchId, entry.state)
     for (const experiment of snapshot.experiments ?? []) this.experiments.set(experiment.experimentId, experiment)
     for (const entry of snapshot.branchResources ?? []) this.branchResources.set(entry.branchId, entry.resources.map((resource) => ({ ...resource })))
+    for (const entry of snapshot.branchEnvironments ?? []) this.branchEnvironments.set(entry.branchId, { ...entry.environment })
     return {
       branchCount: this.branches.size,
       stateCount: this.branchStates.size,
