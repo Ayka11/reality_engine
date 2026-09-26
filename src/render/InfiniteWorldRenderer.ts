@@ -1614,7 +1614,8 @@ export class InfiniteWorldRenderer {
     const seed = this.generator.seed
     const blockCount = Math.max(2, Math.floor(blocks))
     const ringRadius = radius * 0.62
-    const centerY = this.generator.sampleHeight(cx, cz)
+    const centerDecision = this.decisionLayer.analyzeBuildability(cx, cz)
+    const centerY = centerDecision.elevation
     const hub = this.objects.add({
       kind: 'landmark', x: cx, y: centerY, z: cz,
       rotationY: 0, scale: 1.5, seed: 0,
@@ -1627,7 +1628,7 @@ export class InfiniteWorldRenderer {
       const angle = (i / blockCount) * Math.PI * 2
       const bx = cx + Math.cos(angle) * ringRadius
       const bz = cz + Math.sin(angle) * ringRadius
-      const route = this.optimizeRoute(cx, cz, bx, bz, 12)
+      const route = this.optimizeRoute(cx, cz, bx, bz, 12, 'low-impact')
       if (route.length < 2) continue
 
       for (let s = 0; s < route.length - 1; s++) {
@@ -1656,13 +1657,18 @@ export class InfiniteWorldRenderer {
         const tangentZ = Math.sin(angle + Math.PI / 2) * lateral
         const px = bx + tangentX
         const pz = bz + tangentZ
-        const py = this.generator.sampleHeight(px, pz)
+        const siteDecision = this.decisionLayer.analyzeBuildability(px, pz)
+        const py = siteDecision.elevation
         const building = this.objects.add({
           kind: 'building', x: px, y: py, z: pz,
           rotationY: angle + Math.PI / 2,
           scale: 0.8 + ((i + b) % 3) * 0.15,
           seed: i * 100 + b,
-          properties: { settlement: 'block', block: i, slot: b, innerRadius: inner },
+          properties: {
+            settlement: 'block', block: i, slot: b, innerRadius: inner,
+            buildability: siteDecision.score,
+            scientificField: siteDecision.field,
+          },
         })
         created.push(building)
         this.history.push({ type: 'add', object: { ...building } })
