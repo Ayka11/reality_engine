@@ -403,17 +403,21 @@ export class CivilizationRuntime {
   validateClaimGraph(graph: CivilizationClaimGraph) {
     const claimIds = new Set(graph.claims.map((claim) => claim.id))
     const evidenceIds = new Set(graph.evidence.map((item) => `${item.branchId}:${item.tick}`))
+    const causalEventIds = new Set(graph.causalEvents.map((event) => event.id))
     const orphanClaims = graph.claims.filter((claim) => !graph.edges.some((edge) => edge.from === claim.id))
     const orphanEdges = graph.edges.filter((edge) =>
       edge.relation === 'supported-by' || edge.relation === 'contradicted-by'
         ? !evidenceIds.has(edge.to)
-        : !edge.to.startsWith('factor:')
+        : edge.relation === 'caused-by'
+          ? !causalEventIds.has(edge.to)
+          : !edge.to.startsWith('factor:')
     )
     const invalidClaimEdges = graph.edges.filter((edge) => !claimIds.has(edge.from))
     return {
       valid: orphanClaims.length === 0 && orphanEdges.length === 0 && invalidClaimEdges.length === 0,
       claimCount: graph.claims.length,
       evidenceCount: graph.evidence.length,
+      causalEventCount: graph.causalEvents.length,
       edgeCount: graph.edges.length,
       orphanClaims: orphanClaims.map((claim) => claim.id),
       orphanEdges: orphanEdges.map((edge) => `${edge.from}->${edge.to}`),
