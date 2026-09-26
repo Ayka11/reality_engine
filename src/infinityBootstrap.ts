@@ -97,6 +97,7 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldCivilizationBranchState = (branchId: string) => civilizationRuntime.branchState(branchId)
   ;(window as any).worldRunCivilizationExperiment = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta)
   ;(window as any).worldAnalyzeCivilizationExperiment = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta).outcomes
+  ;(window as any).worldExperimentCausalAttribution = (experimentId: string, scenarios: any[], ticks = 10, delta = 1) => civilizationRuntime.runExperiment(experimentId, scenarios, ticks, delta).outcomes.map((outcome) => ({ scenarioId: outcome.scenarioId, causalAttribution: outcome.causalAttribution }))
   ;(window as any).worldEnvironmentalImpact = (id: string) => productionInfrastructureRuntime.get(id)?.environmentalImpact ?? null
   ;(window as any).worldEnvironmentalImpactHistory = (id: string) => productionInfrastructureRuntime.get(id)?.environmentalImpactHistory ?? []
   ;(window as any).worldTimelineAll = () => productionInfrastructureRuntime.allTimelines()
