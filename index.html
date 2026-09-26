@@ -1627,6 +1627,14 @@ function quickGenerateWorld(){
     compSel={phi:'Harmonic',fields:'Balanced',complexity:'Emergent',spacetime:'Standard'};
   }
   generateWorld();
+  // Quick Generate is a world action: return the user to the visible Infinite World
+  // and its contextual sidebar after generation.
+  if(typeof setRenderMode==='function'){
+    setRenderMode('3d',document.getElementById('tab3d'));
+  }
+  if(typeof setIconPanel==='function'){
+    setIconPanel('world');
+  }
 }
 window.quickGenerateWorld=quickGenerateWorld;
 function _clearComposerHazards(){if(window._composerHazardInterval){clearInterval(window._composerHazardInterval);window._composerHazardInterval=null;}}
