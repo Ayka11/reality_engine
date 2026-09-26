@@ -33,6 +33,84 @@ Reality Engine is an **interactive physics sandbox** where the rules of physics 
 
 ---
 
+## Infinity Scale & Scientific Workspace
+
+Reality Engine now includes an **Infinity Scale** world runtime and a connected scientific experimentation layer.
+
+### Infinity Scale World Tools
+
+The upper workspace toolbar provides:
+
+- 🌍 World Library and semantic asset generation
+- 🧭 infinite-world navigation and camera controls
+- 🧱 object placement, selection and erase tools
+- 🗺️ suitability, flood and slope overlays
+- 💾 world save/load, undo/redo and persistence
+- 📊 runtime chunk/object statistics
+- 🌐 semantic world generation through the World Library
+- 🔬 direct access to the scientific workspace
+
+The **World Tools** toolbar is intentionally docked in the upper workspace so it does not compete with the main left sidebar.
+
+### 🔬 Infinity Scientific Workspace
+
+The **Science Lab** button in the top bar opens the computational research workflow:
+
+```
+Experiment Matrix
+      ↓
+Batch Execution
+      ↓
+Replication / Statistics
+      ↓
+Generalization
+      ↓
+Evidence / Claim Graph
+      ↓
+Scientific Report
+      ↓
+Scientific Provenance
+```
+
+The current SDK exposes APIs for:
+
+- civilization counterfactual experiments
+- experiment matrices and intervention combinations
+- batch execution
+- replication assessment and statistical summaries
+- cross-dimension generalization
+- evidence and claim graphs
+- scientific report generation
+- reproducibility fingerprints and provenance validation
+
+Example browser APIs:
+
+```ts
+window.worldBuildCivilizationExperimentMatrix(...)
+window.worldRunCivilizationExperimentBatch(...)
+window.worldAnalyzeExperimentGeneralization(...)
+window.worldSummarizeReplicationStatistics(...)
+window.worldCreateInfinityScientificReport(...)
+window.worldCreateScientificProvenance(...)
+window.worldValidateScientificProvenance(...)
+```
+
+The scientific layer is **computational and conditional**: simulation results do not by themselves establish real-world causal validity. Replication and generalization are evaluated only over the represented experimental configurations.
+
+### Scientific Workspace UI
+
+The **🔬 Science Lab** control provides a direct UI for:
+
+1. running a civilization experiment batch;
+2. inspecting completed/failed runs;
+3. analyzing generalization;
+4. building an evidence/claim graph;
+5. generating a Scientific Report.
+
+The UI is implemented in `src/infinity/ScientificWorkspace.ts` and mounted by `src/infinityBootstrap.ts`.
+
+---
+
 ## Quick Start
 
 ```bash
