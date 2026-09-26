@@ -17,3 +17,4 @@ export * from './WorldPlanRuntimeAdapter';
 export * from './AssetProviders';
 export * from './AssetImportManifest';
 export * from './AssetDiscovery';
+export * from './OpenAssetsPanel';
