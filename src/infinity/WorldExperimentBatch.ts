@@ -6,6 +6,12 @@ import { runWorldExperiment, type WorldExperimentRunnerOptions } from './WorldEx
 
 export type WorldBatchSummary = {
   batch: BatchExecutionResult
+  aggregate: {
+    successful: number
+    meanHeight: number
+    meanBuildability: number
+    meanRouteCost: number
+  }
   experiments: Array<{
     experimentId: string
     fingerprint: string
@@ -47,5 +53,20 @@ export async function runWorldExperimentBatch(
     }
   })
 
-  return { batch, experiments }
+  const successful = experiments.filter(item => item.status === 'completed')
+  const mean = (values: Array<number | undefined>) => {
+    const finite = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+    return finite.length ? finite.reduce((sum, value) => sum + value, 0) / finite.length : 0
+  }
+
+  return {
+    batch,
+    aggregate: {
+      successful: successful.length,
+      meanHeight: mean(successful.map(item => item.meanHeight)),
+      meanBuildability: mean(successful.map(item => item.meanBuildability)),
+      meanRouteCost: mean(successful.map(item => item.meanRouteCost)),
+    },
+    experiments,
+  }
 }
