@@ -153,6 +153,9 @@ export class ProductionInfrastructureRuntime {
     if (previousTier !== nextTier) {
       next.timeline.push({ id: id + ':tier:' + worldTime.year, year: worldTime.year, type: 'tier-transition', settlementId: id, from: previousTier, to: nextTier, details: 'Settlement tier changed through simulation' })
     }
+    if (next.infrastructure.pressure >= 0.95 && current.infrastructure.pressure < 0.95) {
+      next.timeline.push({ id: id + ':infra-failure:' + worldTime.year, year: worldTime.year, type: 'infrastructure-failure', settlementId: id, details: 'Infrastructure pressure reached critical threshold' })
+    }
     if (next.shortages.length > 0 && current.shortages.length === 0) {
       next.timeline.push({ id: id + ':crisis:' + worldTime.year, year: worldTime.year, type: 'resource-crisis', settlementId: id, details: 'Resource shortage detected: ' + next.shortages.join(', ') })
     }
