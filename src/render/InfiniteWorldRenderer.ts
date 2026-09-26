@@ -1091,9 +1091,16 @@ export class InfiniteWorldRenderer {
     seed = 1,
   ) {
     const plan = biomePopulationEngine.plan(environment)
-    const results: Array<{ semanticEntryId: string; count: number }> = []
+    const results: Array<{ semanticEntryId: string; layer: string; count: number; status: string }> = []
+
     for (const rule of plan.rules) {
-      const count = Math.max(1, Math.round((rule.minCount + rule.maxCount) * 0.5 * density * rule.weight))
+      if (rule.layer !== 'visual' && rule.layer !== 'biological') {
+        results.push({ semanticEntryId: rule.semanticEntryId, layer: rule.layer, count: 0, status: 'delegated' })
+        continue
+      }
+
+      const count = Math.max(1, Math.min(rule.maxCount,
+        Math.round((rule.minCount + rule.maxCount) * 0.5 * density * rule.weight)))
       const placed = this.worldAssetRuntime.scatterSemantic(
         rule.semanticEntryId,
         {
@@ -1106,6 +1113,7 @@ export class InfiniteWorldRenderer {
         seed + results.length,
         rule.scale,
       )
+
       placed.forEach((instance) => {
         const worldX = instance.position.x
         const worldZ = instance.position.z
@@ -1113,9 +1121,15 @@ export class InfiniteWorldRenderer {
         instance.position.y = worldY
         instance.userData.worldPosition = { x: worldX, y: worldY, z: worldZ }
       })
-      if (placed.length) results.push({ semanticEntryId: rule.semanticEntryId, count: placed.length })
+      results.push({
+        semanticEntryId: rule.semanticEntryId,
+        layer: rule.layer,
+        count: placed.length,
+        status: placed.length ? 'materialized' : 'no-runtime-asset',
+      })
     }
-    return { biomeId: plan.biomeId, results, reason: plan.reason }
+
+    return { biomeId: plan.biomeId, byLayer: plan.byLayer, results, reason: plan.reason }
   }
 
   scatterExternalSemantic(
