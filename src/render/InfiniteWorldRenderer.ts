@@ -1215,6 +1215,8 @@ export class InfiniteWorldRenderer {
   }
 
   tickWorldSimulation(id: string, tier: Parameters<typeof civilizationRuntime.evaluate>[1] = 'village', delta = 1) {
+    const environment = this.getWorldEnvironment()
+    productionInfrastructureRuntime.applyEnvironmentalState(id, environment)
     const before = productionInfrastructureRuntime.get(id)
     const civilization = civilizationRuntime.evaluate(id, tier)
     const production = productionInfrastructureRuntime.get(id) ?? productionInfrastructureRuntime.evaluate(civilization)
