@@ -296,9 +296,9 @@ export class ChunkRenderer {
       for (let lx = 0; lx < CX; lx++) {
         const base = (lz * CY * CX + ly * CX + lx) * NF
         const v = chunk[base + fi]
-        if (v < this.VOXEL_THRESH || cnt >= this.MAX_INST) continue
+        const allMode = this.layer < 0
+        if ((!allMode && v < this.VOXEL_THRESH) || cnt >= this.MAX_INST) continue
 
-        const t = Math.min(v / mx, 1)
         let r: number, g: number, b: number
 
         if (this.matMode === 'height') {
@@ -307,7 +307,24 @@ export class ChunkRenderer {
           r = Math.round(hz * 255)
           g = Math.round(Math.sin(hz * Math.PI) * 180)
           b = Math.round((1 - hz) * 255)
+        } else if (allMode) {
+          // Aggregate view: show every active scientific field in one voxel volume.
+          const vals = [
+            Math.min(Math.max(chunk[base + F.E] / LAYER_MAX[0], 0), 1),
+            Math.min(Math.max(chunk[base + F.D] / LAYER_MAX[1], 0), 1),
+            Math.min(Math.max(chunk[base + F.I] / LAYER_MAX[2], 0), 1),
+            Math.min(Math.max(chunk[base + F.S] / LAYER_MAX[3], 0), 1),
+            Math.min(Math.max(chunk[base + F.T] / LAYER_MAX[4], 0), 1),
+            Math.min(Math.max(chunk[base + F.BIO] / LAYER_MAX[5], 0), 1),
+          ]
+          const intensity = Math.max(...vals)
+          if (intensity < this.VOXEL_THRESH) continue
+          const sum = vals.reduce((a, x) => a + x, 0) || 1
+          r = Math.round(Math.min(1, (vals[0] + vals[3] * 0.85 + vals[4] * 0.55) / sum) * 255)
+          g = Math.round(Math.min(1, (vals[1] + vals[5] * 0.85 + vals[4] * 0.35) / sum) * 255)
+          b = Math.round(Math.min(1, (vals[2] + vals[3] * 0.25) / sum) * 255)
         } else {
+          const t = Math.min(v / mx, 1)
           ;[r, g, b] = lerpPalette(pal, t)
         }
 
@@ -519,7 +536,7 @@ export class ChunkRenderer {
   // ── Public controls ────────────────────────────────────────────────────────────
 
   setLayer(layer: number) {
-    this.layer = layer
+    this.layer = Math.max(-1, Math.min(5, Math.round(layer)))
     if (this.matMode !== 'material') this._rebuildLayer()
   }
 
