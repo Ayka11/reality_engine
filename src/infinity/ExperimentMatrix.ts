@@ -8,6 +8,7 @@ export type ExperimentMatrix = {
   decisionWeights?: DecisionWeights[]
   physicsParameters?: PhysicsFieldParameters[]
   metadata?: Record<string, string | number | boolean>
+  maxPlans?: number
 }
 
 export type ExperimentPlan = {
@@ -20,6 +21,12 @@ export function buildExperimentMatrix(matrix: ExperimentMatrix): ExperimentPlan[
   const fields = matrix.fields.length ? matrix.fields : [{ id: 'world-generator', version: 'world-generator-v1' }]
   const decisions = matrix.decisionWeights?.length ? matrix.decisionWeights : [undefined]
   const physics = matrix.physicsParameters?.length ? matrix.physicsParameters : [undefined]
+
+  const total = seeds.length * fields.length * decisions.length * physics.length
+  const maxPlans = Math.max(1, Math.floor(matrix.maxPlans ?? 1000))
+  if (total > maxPlans) {
+    throw new Error(`Experiment matrix contains ${total} plans; maxPlans is ${maxPlans}`)
+  }
 
   const plans: ExperimentPlan[] = []
   let index = 0
