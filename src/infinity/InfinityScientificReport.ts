@@ -3,6 +3,7 @@ import type { ReplicationStudySummary } from './ReplicationStudy'
 import type { CrossDimensionGeneralizationResult, GeneralizationResult, GeneralizationDimension } from './ExperimentGeneralization'
 import type { EvidenceClaimGraphSnapshot } from './EvidenceClaimGraph'
 import type { ReplicationStatisticalSummary } from './ReplicationStatistics'
+import type { ScientificProvenance } from './ScientificProvenance'
 
 export type InfinityScientificReport = {
   schemaVersion: 'infinity-scientific-report-v1'
@@ -16,6 +17,7 @@ export type InfinityScientificReport = {
   evidence?: EvidenceClaimGraphSnapshot
   conclusions: string[]
   limitations: string[]
+  provenance?: ScientificProvenance
 }
 
 export type InfinityScientificReportOptions = { reportId?: string; title?: string; dimensions?: GeneralizationDimension[]; conclusions?: string[]; limitations?: string[] }
