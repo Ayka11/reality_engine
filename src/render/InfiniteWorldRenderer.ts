@@ -1213,6 +1213,34 @@ export class InfiniteWorldRenderer {
     return { tier, radius, buildings, roadSpacing }
   }
 
+  materializeInfrastructureExpansion(id: string, addedRoads: number, addedCapacity: number) {
+    if (addedRoads <= 0 && addedCapacity <= 0) return { id, addedRoads: 0, addedBuildings: 0 }
+
+    const x = this.worldPosition.x
+    const z = this.worldPosition.z
+    const radius = Math.max(40, Math.min(260, 55 + Math.sqrt(Math.max(0, addedCapacity)) * 1.8))
+    const roads = Math.min(12, Math.max(1, addedRoads))
+    for (let i = 0; i < roads; i++) {
+      const angle = (i / Math.max(1, roads)) * Math.PI * 2
+      const ex = x + Math.cos(angle) * radius
+      const ez = z + Math.sin(angle) * radius
+      this.buildRoad(x, z, ex, ez, 14)
+    }
+
+    const addedBuildings = Math.min(10, Math.max(0, Math.floor(addedCapacity / 180)))
+    for (let i = 0; i < addedBuildings; i++) {
+      const angle = (i * 2.399963) % (Math.PI * 2)
+      const distance = 25 + (i % 5) * 14
+      const bx = x + Math.cos(angle) * distance
+      const bz = z + Math.sin(angle) * distance
+      this.place('building', bx, bz, 0.9 + (i % 3) * 0.15)
+    }
+
+    this.syncObjects()
+    this.scheduleSave()
+    return { id, addedRoads: roads, addedBuildings }
+  }
+
   populateCivilization(id: string, tier: Parameters<typeof civilizationRuntime.evaluate>[1] = 'village', radius = 120) {
     const state = civilizationRuntime.evaluate(id, tier)
     const x = this.worldPosition.x
