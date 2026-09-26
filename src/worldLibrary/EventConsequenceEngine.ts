@@ -43,6 +43,7 @@ export class EventConsequenceEngine {
     }
 
     if (event.type === 'growth') {
+      if ((event.severity ?? 1) >= 0.8) actions.push({ type: 'stability-shift', delta: -0.03, reason: 'high-severity growth pressure increases social instability' })
       actions.push({ type: 'growth-modifier', multiplier: 0.8, durationTicks: 2, reason: 'growth decline propagates through the causal chain' })
     }
 
@@ -51,6 +52,7 @@ export class EventConsequenceEngine {
     }
 
     if (event.type === 'infrastructure-failure') {
+      if ((event.severity ?? 1) >= 0.7) actions.push({ type: 'stability-shift', delta: -0.1, reason: 'severe infrastructure failure increases instability' })
       actions.push({ type: 'growth-modifier', multiplier: 0.55, durationTicks: 2, reason: 'infrastructure failure suppresses growth' })
     }
 
