@@ -38,6 +38,8 @@ export function bootstrapInfiniteWorld() {
     world.scatterExternalSemantic(semanticEntryId, count, radius, seed, scale)
   ;(window as any).worldExternalBiomePopulate = (environment: any, radius = 100, density = 1, seed = 1) =>
     world.populateExternalBiome(environment, radius, density, seed)
+  ;(window as any).worldBiomePopulate = (environment: any, radius = 100, density = 1, seed = 1) =>
+    world.populateBiome(environment, radius, density, seed)
   ;(window as any).worldExternalAssetStats = () => world.getExternalAssetStats()
   ;(window as any).worldLibraryPlace = (id: string) => {
     const entry = resolveWorldLibraryEntry(id)
