@@ -62,11 +62,14 @@ export class ProductionInfrastructureRuntime {
       efficiency: Math.max(0.1, civilization.score * (1 - index * 0.08)),
     }))
 
-    const roads = civilization.settlement.tier === 'village' ? 4
+    const baselineRoads = civilization.settlement.tier === 'village' ? 4
       : civilization.settlement.tier === 'town' ? 12
       : civilization.settlement.tier === 'city' ? 40
       : 120
-    const capacity = roads * 25 + civilization.settlement.population * 0.02
+    const baselineCapacity = baselineRoads * 25 + civilization.settlement.population * 0.02
+    const previous = this.states.get(civilization.id)
+    const roads = Math.max(baselineRoads, previous?.infrastructure.roads ?? 0)
+    const capacity = Math.max(baselineCapacity, previous?.infrastructure.capacity ?? 0)
     const utilization = Math.min(1, civilization.settlement.population / Math.max(1, capacity))
     const infrastructure: InfrastructureState = {
       roads,
