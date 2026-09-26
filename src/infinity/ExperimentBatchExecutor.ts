@@ -51,7 +51,7 @@ export class ExperimentBatchExecutor {
         const snapshot = runner.finish('aborted')
         this.catalog.add(snapshot)
         snapshots.push(snapshot)
-        aborted++
+        failed++
         errors.push({
           index: plan.index,
           experimentId: plan.protocol.experimentId,
@@ -60,7 +60,6 @@ export class ExperimentBatchExecutor {
         options.onProgress?.(completed + aborted + failed, plans.length, plan)
 
         if (options.stopOnError) break
-        failed++
       }
     }
 
