@@ -117,6 +117,7 @@ export class ProductionInfrastructureRuntime {
     next.infrastructure.capacity += expansion.addedCapacity
     next.infrastructure.populationCapacity = Math.max(next.infrastructure.populationCapacity, current.infrastructure.populationCapacity + expansion.addedCapacity)
     next.infrastructure.pressure = Math.min(1, next.civilization.settlement.population / Math.max(1, next.infrastructure.populationCapacity))
+    next.civilization.settlement.infrastructureCapacity = Math.max(next.civilization.settlement.infrastructureCapacity, next.infrastructure.populationCapacity)
     next.produced = produced
     next.consumed = consumed
     next.shortages = [...new Set([...shortages, ...civTick.settlementTick.shortages])]
