@@ -788,6 +788,44 @@ export function bootstrapInfiniteWorld() {
     }
   }
 
+  // ── Generation diagnostics ───────────────────────────────────────────────
+  ;(window as any).worldGenerationHealth = () => {
+    const stats = world.getRuntimeStats()
+    const canvasState = {
+      width: canvas.width,
+      height: canvas.height,
+      clientWidth: canvas.clientWidth,
+      clientHeight: canvas.clientHeight,
+      connected: canvas.isConnected,
+    }
+    return {
+      ok: Boolean(canvas.isConnected && stats),
+      renderer: 'InfiniteWorldRenderer',
+      stats,
+      canvas: canvasState,
+      generatedRegion: stats.world ?? null,
+      timestamp: new Date().toISOString(),
+    }
+  }
+
+  ;(window as any).worldVerifyGeneration = (before: any = null) => {
+    const after = (window as any).worldGenerationHealth()
+    const beforeStats = before?.stats ?? before ?? null
+    const beforeObjects = Number(beforeStats?.objects ?? 0)
+    const beforeChunks = Number(beforeStats?.loadedChunks ?? 0)
+    const afterObjects = Number(after.stats?.objects ?? 0)
+    const afterChunks = Number(after.stats?.loadedChunks ?? 0)
+    return {
+      ok: after.ok && (afterObjects !== beforeObjects || afterChunks !== beforeChunks || Boolean(after.stats?.world)),
+      before: beforeStats,
+      after: after.stats,
+      delta: {
+        objects: afterObjects - beforeObjects,
+        loadedChunks: afterChunks - beforeChunks,
+      },
+    }
+  }
+
   // ── DYNAMIC, DRAGGABLE INFINITY SCALE & WORLD BUILDER TOOLBAR ──────────────
   const wrap = canvas.parentElement
   if (wrap) {
