@@ -376,6 +376,42 @@ export class InfiniteWorldRenderer {
       world: this.worldCoordinates,
     }
   }
+
+  focusGeneratedRegion(padding = 1.35) {
+    const objects = this.objects.values()
+    if (!objects.length) {
+      this.resetCameraView()
+      return { objects: 0, radius: 0 }
+    }
+
+    let minX = Infinity, maxX = -Infinity
+    let minY = Infinity, maxY = -Infinity
+    let minZ = Infinity, maxZ = -Infinity
+    for (const object of objects) {
+      minX = Math.min(minX, object.x)
+      maxX = Math.max(maxX, object.x)
+      minY = Math.min(minY, object.y)
+      maxY = Math.max(maxY, object.y + 8 * object.scale)
+      minZ = Math.min(minZ, object.z)
+      maxZ = Math.max(maxZ, object.z)
+    }
+
+    const centerX = (minX + maxX) * 0.5
+    const centerZ = (minZ + maxZ) * 0.5
+    const centerY = this.generator.sampleHeight(centerX, centerZ)
+    const radius = Math.max(24, Math.hypot(maxX - minX, maxZ - minZ) * 0.5)
+    const distance = Math.min(1800, Math.max(70, radius * 2.25 * padding))
+
+    this.worldPosition.set(centerX, centerY, centerZ)
+    this.controls.target.set(centerX, centerY, centerZ)
+    this.camera.position.set(centerX + distance, centerY + distance * 0.62, centerZ + distance)
+    this.camera.lookAt(this.controls.target)
+    this.controls.update()
+    this.syncChunks()
+    this.syncObjects()
+
+    return { objects: objects.length, radius, center: { x: centerX, y: centerY, z: centerZ } }
+  }
   updateControlButtons() {
     const canvas = this.renderer.domElement
     if (this.objectTool === 'navigate') {
