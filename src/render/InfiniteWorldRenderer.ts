@@ -788,7 +788,12 @@ export class InfiniteWorldRenderer {
         ;(mesh as THREE.Mesh).position.y = 0.35
         break
       case 'water':
-        mesh = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.5, 0.3, 24), new THREE.MeshBasicMaterial({ color: 0x2b78b5, transparent: true, opacity: 0.65 }))
+        // River/water segments are elongated along their local Z axis.
+        // The object rotationY supplied by hydrology aligns each segment to the flow.
+        mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(3.2, 0.3, 8),
+          new THREE.MeshBasicMaterial({ color: 0x2b78b5, transparent: true, opacity: 0.65 })
+        )
         ;(mesh as THREE.Mesh).position.y = 0.15
         break
       case 'spawn':
@@ -1546,16 +1551,33 @@ export class InfiniteWorldRenderer {
   generateRiverNetwork(cx: number, cz: number, radius = 220, samples = 41) {
     const hydro = this.analyzeHydrology(cx, cz, radius, samples)
     const created: WorldObject[] = []
-    const selected = hydro.rivers.filter((_, i) => i % Math.max(1, Math.floor(hydro.rivers.length / 5)) === 0).slice(0, 6)
-    for (let i = 0; i < selected.length; i++) {
-      const r = selected[i]
-      const water = this.objects.add({
-        kind:'water', x:r.x, y:Math.max(this.generator.seaLevel, r.y - 0.15), z:r.z,
-        rotationY:0, scale:Math.max(0.6, Math.min(3, r.flow / 12)), seed:i,
-        properties:{hydrology:'river',flow:r.flow}
-      })
-      created.push(water)
-      this.history.push({type:'add',object:{...water}})
+    const selected = hydro.rivers
+      .filter((_, i) => i % Math.max(1, Math.floor(hydro.rivers.length / 5)) === 0)
+      .slice(0, 6)
+
+    // Render actual river traces as connected water segments rather than isolated
+    // disks. This makes River Network visibly read as a river in the 3D world.
+    let segmentId = 0
+    for (const trace of selected) {
+      for (let p = 0; p < trace.length - 1; p += 2) {
+        const a = trace[p]
+        const b = trace[Math.min(p + 2, trace.length - 1)]
+        const dx = b.x - a.x
+        const dz = b.z - a.z
+        const length = Math.max(3, Math.hypot(dx, dz))
+        const water = this.objects.add({
+          kind: 'water',
+          x: (a.x + b.x) * 0.5,
+          y: Math.max(this.generator.seaLevel, (a.y + b.y) * 0.5 - 0.15),
+          z: (a.z + b.z) * 0.5,
+          rotationY: Math.atan2(dx, dz),
+          scale: Math.max(0.6, Math.min(8, length / 8)),
+          seed: segmentId++,
+          properties: { hydrology: 'river', flow: Math.max(1, length), segment: true },
+        })
+        created.push(water)
+        this.history.push({ type: 'add', object: { ...water } })
+      }
     }
     this.syncObjects()
     this.scheduleSave()
