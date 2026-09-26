@@ -164,6 +164,10 @@ export class ProductionInfrastructureRuntime {
     if (next.infrastructure.pressure >= 0.95 && current.infrastructure.pressure < 0.95) {
       next.timeline.push({ id: id + ':infra-failure:' + worldTime.year, year: worldTime.year, type: 'infrastructure-failure', settlementId: id, details: 'Infrastructure pressure reached critical threshold' })
     }
+    if (next.civilization.settlement.population < current.civilization.settlement.population * 0.95 && (current.causalCooldowns['population-decline'] ?? 0) === 0) {
+      next.timeline.push({ id: id + ':population-decline:' + worldTime.year, year: worldTime.year, type: 'growth', settlementId: id, details: 'Population decline reduced productive capacity' })
+      next.causalCooldowns['population-decline'] = 3
+    }
     if (next.shortages.length > 0 && current.shortages.length === 0) {
       next.timeline.push({ id: id + ':crisis:' + worldTime.year, year: worldTime.year, type: 'resource-crisis', settlementId: id, details: 'Resource shortage detected: ' + next.shortages.join(', ') })
     }
