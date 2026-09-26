@@ -61,6 +61,7 @@ export type WorldLibraryQuery = {
   rarity?: WorldLibraryEntry['rarity'];
   biome?: string;
   visualKind?: string;
+  search?: string;
 };
 
 export class WorldLibrary {
@@ -98,6 +99,10 @@ export class WorldLibrary {
       if (query.category && entry.category !== query.category) return false;
       if (query.rarity && entry.rarity !== query.rarity) return false;
       if (query.visualKind && entry.visualKind !== query.visualKind) return false;
+      if (query.search) {
+        const needle = query.search.toLowerCase().trim();
+        if (needle && ![entry.id, entry.name, entry.description, ...entry.tags].join(' ').toLowerCase().includes(needle)) return false;
+      }
       if (query.tags?.length && !query.tags.every((tag) => entry.tags.includes(tag))) {
         return false;
       }
