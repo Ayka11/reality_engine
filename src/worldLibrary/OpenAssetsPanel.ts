@@ -36,6 +36,7 @@ export function mountOpenAssetsPanel() {
   let error = ''
   let importing = ''
   let importMessage = ''
+  const importedSemantic = new Map<string, string>()
 
   const render = () => {
     host.innerHTML = open ? `
@@ -65,7 +66,7 @@ export function mountOpenAssetsPanel() {
               <div style="font-size:7px;color:var(--sub);margin-top:3px">${esc(a.category || 'asset')} · ${esc(a.license)}</div>
               <div style="display:flex;gap:4px;align-items:center;margin-top:5px">
                 <a href="${esc(a.sourceUrl)}" target="_blank" rel="noreferrer" style="font-size:7.5px;color:#a09af0">Source ↗</a>
-                ${a.providerId==='polyhaven' ? `<button data-import-asset="${esc(a.id)}" class="pill" style="font-size:7px;padding:2px 5px">${importing===a.id?'Loading…':'Import'}</button>` : ''}
+                ${a.providerId==='polyhaven' ? `<button data-import-asset="${esc(a.id)}" class="pill" style="font-size:7px;padding:2px 5px">${importing===a.id?'Loading…':'Import'}</button>${importedSemantic.has(a.id) ? `<button data-scatter-asset="${esc(a.id)}" class="pill" style="font-size:7px;padding:2px 5px">Scatter</button>` : ''}` : ''}
               </div>
             </div>`).join('') || '<div style="grid-column:1/-1;padding:18px;text-align:center;font-size:9px;color:var(--sub)">Choose Browse to discover provider assets.</div>'}
         </div>
@@ -76,7 +77,17 @@ export function mountOpenAssetsPanel() {
     document.getElementById('openAssetsQuery')?.addEventListener('input',(e)=>{query=(e.target as HTMLInputElement).value;render()})
     document.getElementById('openAssetsBrowse')?.addEventListener('click',browse)
     host.querySelectorAll('[data-import-asset]').forEach(b=>b.addEventListener('click',()=>importAsset(b.getAttribute('data-import-asset')||'')))
+    host.querySelectorAll('[data-scatter-asset]').forEach(b=>b.addEventListener('click',()=>scatterAsset(b.getAttribute('data-scatter-asset')||'')))
     host.querySelectorAll('[data-provider]').forEach(b=>b.addEventListener('click',()=>{providerId=b.getAttribute('data-provider')||providerId;results=[];error='';browse()}))
+  }
+
+  const scatterAsset = (assetId: string) => {
+    const semanticEntryId = importedSemantic.get(assetId)
+    const scatter = (window as any).worldExternalAssetScatter
+    if (!semanticEntryId || typeof scatter !== 'function') return
+    const count = scatter(semanticEntryId, 12, 70, Date.now() >>> 0, 1)
+    importMessage = 'Scattered ' + count + ' instances of ' + semanticEntryId
+    render()
   }
 
   const importAsset = async (assetId: string) => {
@@ -98,6 +109,7 @@ export function mountOpenAssetsPanel() {
       await load(asset.id, runtime.url, manifestResult.manifestEntry?.semanticEntryId, 1)
       asset.runtimeUrl = runtime.url
       asset.format = runtime.format
+      if (manifestResult.manifestEntry?.semanticEntryId) importedSemantic.set(asset.id, manifestResult.manifestEntry.semanticEntryId)
       importMessage = 'Imported ' + asset.name + ' as ' + (manifestResult.manifestEntry?.semanticEntryId || 'unmapped asset')
     } catch (e) {
       error = e instanceof Error ? e.message : 'Asset import failed'
