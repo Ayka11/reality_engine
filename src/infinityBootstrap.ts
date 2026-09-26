@@ -6,6 +6,7 @@ import { productionInfrastructureRuntime } from './worldLibrary/ProductionInfras
 import { worldLibraryGenerationPlanner } from './worldLibrary/WorldLibraryGenerationPlanner'
 import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, visualKindToWorldObject, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
+import { installScientificWorkspace } from './infinity/ScientificWorkspace'
 import { buildCivilizationExperimentMatrix, runCivilizationInfinityBatch, analyzeCrossDimensionGeneralization, summarizeReplicationSnapshots, createInfinityScientificReport, serializeInfinityScientificReport, createScientificProvenance, attachScientificProvenance, validateScientificProvenance, assessInfinityClaim, type CivilizationExperimentMatrix } from './infinity'
 
 export type DockPosition = 'top' | 'left' | 'right' | 'float'
@@ -211,6 +212,7 @@ export function bootstrapInfiniteWorld() {
     worldEnvironmentResolver.related(environment, seedIds)
   ;(window as any).worldGenerationPlan = (environment: any) => buildWorldGenerationPlan(environment)
   ;(window as any).infinityStats = () => ({ ...world.getRuntimeStats(), library: worldLibrary.stats() })
+  installScientificWorkspace()
   ;(window as any).focusGeneratedWorld = () => {
     const result = world.focusGeneratedRegion()
     world.render(0)
