@@ -8,7 +8,14 @@ export type ConsequenceAction =
   | { type: 'production-profile'; civilization: CivilizationType; enabledNodes: string[]; reason: string }
   | { type: 'visual-transition'; civilization?: CivilizationType; tier?: string; visualKinds: string[]; reason: string }
 
-export type CausalEvent = WorldTimelineEvent & { parentEventId?: string; depth?: number }
+export type CausalEvent = WorldTimelineEvent & { parentEventId?: string; depth?: number; severity?: number; trigger?: string }
+
+export type CausalChainNode = {
+  event: CausalEvent
+  parentEventId?: string
+  depth: number
+  severity: number
+}
 
 export type EventConsequence = {
   eventId: string
@@ -96,18 +103,19 @@ export class EventConsequenceEngine {
     while (queue.length) {
       const event = queue.shift()!
       const depth = event.depth ?? 0
-      if (seen.has(event.id) || depth > maxDepth) continue
+      const severity = Math.max(0, Math.min(1, event.severity ?? 1))
+      if (seen.has(event.id) || depth > maxDepth || severity < 0.2) continue
       seen.add(event.id)
-      result.push(event)
+      result.push({ ...event, severity })
       if (event.type === 'resource-crisis' && depth < maxDepth) {
-        queue.push({ id: event.id + ':growth-decline', year: event.year, type: 'growth', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Growth decline caused by resource crisis' })
+        queue.push({ id: event.id + ':growth-decline', year: event.year, type: 'growth', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, severity: severity * 0.85, trigger: 'resource-crisis', details: 'Growth decline caused by resource crisis' })
       } else if (event.type === 'growth' && depth < maxDepth) {
-        queue.push({ id: event.id + ':pressure', year: event.year, type: 'infrastructure-expansion', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Population pressure requires infrastructure response' })
-        queue.push({ id: event.id + ':failure-risk', year: event.year, type: 'infrastructure-failure', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Persistent growth pressure creates infrastructure failure risk' })
+        queue.push({ id: event.id + ':pressure', year: event.year, type: 'infrastructure-expansion', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, severity: severity * 0.9, trigger: 'population-pressure', details: 'Population pressure requires infrastructure response' })
+        queue.push({ id: event.id + ':failure-risk', year: event.year, type: 'infrastructure-failure', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, severity: severity * 0.75, trigger: 'persistent-pressure', details: 'Persistent growth pressure creates infrastructure failure risk' })
       } else if (event.type === 'infrastructure-failure' && depth < maxDepth) {
-        queue.push({ id: event.id + ':migration', year: event.year, type: 'migration', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Population migration follows infrastructure failure' })
+        queue.push({ id: event.id + ':migration', year: event.year, type: 'migration', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, severity: severity * 0.9, trigger: 'infrastructure-failure', details: 'Population migration follows infrastructure failure' })
       } else if (event.type === 'migration' && depth < maxDepth) {
-        queue.push({ id: event.id + ':civic-change', year: event.year, type: 'civilization-change', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, from: 'agricultural', to: 'industrial', details: 'Migration changes civilization organization' })
+        queue.push({ id: event.id + ':civic-change', year: event.year, type: 'civilization-change', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, severity: severity * 0.8, trigger: 'infrastructure-expansion', from: 'agricultural', to: 'industrial', details: 'Migration changes civilization organization' })
       }
     }
     return result
