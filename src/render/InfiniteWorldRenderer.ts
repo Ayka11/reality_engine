@@ -26,6 +26,8 @@ import { analyzeExperiments, type ExperimentAnalysis } from '../infinity/Experim
 import { calculateStatisticalAnalysis, type StatisticalExperimentAnalysis } from '../infinity/ExperimentStatistics'
 import { WorldAssetRuntime } from '../worldLibrary/WorldAssetRuntime'
 import { biomePopulationEngine } from '../worldLibrary/BiomePopulationEngine'
+import { worldResourceEconomy } from '../worldLibrary/WorldResourceEconomy'
+import { civilizationRuntime, type CivilizationType } from '../worldLibrary/CivilizationRuntime'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -1131,6 +1133,39 @@ export class InfiniteWorldRenderer {
     }
 
     return { biomeId: plan.biomeId, byLayer: plan.byLayer, results, reason: plan.reason }
+  }
+
+  populateCivilization(id: string, tier: Parameters<typeof civilizationRuntime.evaluate>[1] = 'village', radius = 120) {
+    const state = civilizationRuntime.evaluate(id, tier)
+    const x = this.worldPosition.x
+    const z = this.worldPosition.z
+    const result: { id: string; type: CivilizationType; blockedBy: string[]; generated: string[] } = {
+      id,
+      type: state.type,
+      blockedBy: [...state.blockedBy],
+      generated: [],
+    }
+
+    if (state.type === 'agricultural') {
+      this.generateSettlementV2(x, z, Math.min(radius, 150), 6)
+      this.buildRoad(x - radius * 0.5, z, x + radius * 0.5, z, 18)
+      result.generated.push('settlement', 'road-network')
+    } else if (state.type === 'industrial') {
+      this.generateCityPlan(x, z, Math.min(radius, 190), 31)
+      this.buildRoad(x - radius * 0.65, z, x + radius * 0.65, z, 14)
+      this.buildRoad(x, z - radius * 0.65, x, z + radius * 0.65, 14)
+      result.generated.push('industrial-city', 'road-network')
+    } else {
+      this.generateCityPlan(x, z, Math.min(radius, 240), 41)
+      this.buildRoad(x - radius * 0.7, z, x + radius * 0.7, z, 12)
+      this.buildRoad(x, z - radius * 0.7, x, z + radius * 0.7, 12)
+      this.place('quantum_emitter', x, z, 1.5)
+      result.generated.push('post-scarcity-city', 'road-network', 'quantum-emitter')
+    }
+
+    this.syncObjects()
+    this.scheduleSave()
+    return result
   }
 
   populateBiome(
