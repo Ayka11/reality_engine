@@ -255,12 +255,58 @@ export class CivilizationRuntime {
       const final = this.branchSnapshot(outcome.branchId)
       if (!final) continue
       const claimId = `claim:${outcome.scenarioId}:${final.tick}`
-      const confidence = Math.max(0, Math.min(1, 0.5 + Math.abs(outcome.divergence) * 0.5))
-      claims.push({ id: claimId, claim: `${outcome.scenarioId} produced population change ${(outcome.populationChange * 100).toFixed(1)}% with final civilization ${final.type}.`, status: outcome.civilizationChanged ? 'supported' : 'unresolved', confidence, branchId: final.branchId, tick: final.tick })
-      for (const item of outcome.evidence) edges.push({ from: claimId, to: `${item.branchId}:${item.tick}`, relation: 'supported-by' })
-      for (const factor of outcome.causalAttribution) edges.push({ from: claimId, to: `factor:${factor.factor}`, relation: 'derived-from' })
+      const populationSupported = outcome.populationChange > 0.02
+      const populationContradicted = outcome.populationChange < -0.02
+      const status: CivilizationClaimStatus = outcome.civilizationChanged
+        ? 'supported'
+        : populationContradicted
+          ? 'contradicted'
+          : 'unresolved'
+      const confidence = Math.max(0, Math.min(1,
+        0.5 + Math.abs(outcome.divergence) * 0.5 + (populationSupported || populationContradicted ? 0.15 : 0)
+      ))
+      claims.push({
+        id: claimId,
+        claim: `${outcome.scenarioId} produced population change ${(outcome.populationChange * 100).toFixed(1)}% with final civilization ${final.type}.`,
+        status,
+        confidence,
+        branchId: final.branchId,
+        tick: final.tick
+      })
+      for (const item of outcome.evidence) {
+        const evidenceId = `${item.branchId}:${item.tick}`
+        edges.push({
+          from: claimId,
+          to: evidenceId,
+          relation: status === 'contradicted' ? 'contradicted-by' : 'supported-by'
+        })
+      }
+      for (const factor of outcome.causalAttribution) {
+        edges.push({ from: claimId, to: `factor:${factor.factor}`, relation: 'derived-from' })
+      }
     }
     return { claims, evidence, edges }
+  }
+
+  validateClaimGraph(graph: CivilizationClaimGraph) {
+    const claimIds = new Set(graph.claims.map((claim) => claim.id))
+    const evidenceIds = new Set(graph.evidence.map((item) => `${item.branchId}:${item.tick}`))
+    const orphanClaims = graph.claims.filter((claim) => !graph.edges.some((edge) => edge.from === claim.id))
+    const orphanEdges = graph.edges.filter((edge) =>
+      edge.relation === 'supported-by' || edge.relation === 'contradicted-by'
+        ? !evidenceIds.has(edge.to)
+        : !edge.to.startsWith('factor:')
+    )
+    const invalidClaimEdges = graph.edges.filter((edge) => !claimIds.has(edge.from))
+    return {
+      valid: orphanClaims.length === 0 && orphanEdges.length === 0 && invalidClaimEdges.length === 0,
+      claimCount: graph.claims.length,
+      evidenceCount: graph.evidence.length,
+      edgeCount: graph.edges.length,
+      orphanClaims: orphanClaims.map((claim) => claim.id),
+      orphanEdges: orphanEdges.map((edge) => `${edge.from}->${edge.to}`),
+      invalidClaimEdges: invalidClaimEdges.map((edge) => `${edge.from}->${edge.to}`)
+    }
   }
 
   runExperiment(experimentId: string, scenarios: CivilizationExperimentScenario[], ticks = 10, delta = 1): CivilizationExperimentResult {
