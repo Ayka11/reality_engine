@@ -270,6 +270,11 @@ export class InfiniteWorldRenderer {
         count++
       }
     }
+    this.syncObjects()
+    this.selectedObjectId = null
+    this.transformControls.detach()
+    ;(this.transformControls as any).visible = false
+    this.selectionMarker.visible = false
     return count
   }
 
