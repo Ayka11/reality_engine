@@ -106,8 +106,19 @@ export function bootstrapInfiniteWorld() {
     }
     if (entry.category === 'civilization') {
       const tier = id.endsWith('post-scarcity') ? 'megacity' : id.endsWith('industrial') ? 'city' : 'village'
+      const civilization = civilizationRuntime.evaluate(id, tier)
+      if (civilization.blockedBy.length) {
+        return {
+          id,
+          generated: false,
+          blockedBy: civilization.blockedBy,
+          reason: 'resource-requirements-not-satisfied',
+          civilization,
+          plan,
+        }
+      }
       const result = world.populateCivilization(id, tier, tier === 'megacity' ? 240 : tier === 'city' ? 190 : 150)
-      return { ...result, generated: [...generated, ...(result.generated || [])], plan }
+      return { ...result, generated: [...generated, ...(result.generated || [])], civilization, plan }
     }
     const placed = (window as any).worldLibraryPlace?.(id)
     return placed ? { ...placed, generated: [...generated, id], plan } : { id, generated: false, reason: 'No runtime visual mapping is registered for this element', plan }
