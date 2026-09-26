@@ -13,3 +13,4 @@ export * from './WorldRuleGraph';
 export * from './rules';
 export * from './WorldEnvironmentResolver';
 export * from './BiomeEngine';
+export * from './WorldGenerationPlan';
