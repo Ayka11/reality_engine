@@ -27,6 +27,18 @@ export type CounterfactualOverride = {
   reason: string
 }
 
+export type CivilizationExperimentScenario = {
+  id: string
+  sourceBranch: string
+  override: CounterfactualOverride
+}
+
+export type CivilizationExperimentResult = {
+  experimentId: string
+  ticks: number
+  branches: Array<{ scenarioId: string; branchId: string; final: CivilizationBranchSnapshot | null; history: CivilizationBranchSnapshot[] }>
+}
+
 export type CivilizationDivergenceMetrics = {
   branchA: string
   branchB: string
@@ -180,6 +192,17 @@ export class CivilizationRuntime {
   }
 
   branchState(branchId: string) { return this.branchStates.get(branchId) ?? null }
+
+  runExperiment(experimentId: string, scenarios: CivilizationExperimentScenario[], ticks = 10, delta = 1): CivilizationExperimentResult {
+    const branches: CivilizationExperimentResult['branches'] = []
+    for (const scenario of scenarios) {
+      const fork = this.forkBranch(scenario.sourceBranch, scenario.override)
+      if (!fork) continue
+      for (let i = 0; i < ticks; i++) this.tickBranch(fork.branchId, delta)
+      branches.push({ scenarioId: scenario.id, branchId: fork.branchId, final: this.branchSnapshot(fork.branchId), history: this.branchHistory(fork.branchId) })
+    }
+    return { experimentId, ticks, branches }
+  }
   branchesList() { return [...this.branches.entries()].map(([branchId, history]) => ({ branchId, latest: history.at(-1) ?? null, length: history.length })) }
 
   forkBranch(sourceBranch: string, override: CounterfactualOverride): CivilizationBranchSnapshot | null {
