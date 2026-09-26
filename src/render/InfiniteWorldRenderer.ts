@@ -18,6 +18,8 @@ import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
 import { createPhysicsInteractionRecord, type PhysicsInteractionType } from '../infinity/PhysicsInteractionRecord'
 import { PhysicsInteractionLog } from '../infinity/PhysicsInteractionLog'
 import { RuntimeDiagnostics } from '../infinity/RuntimeDiagnostics'
+import { createExperimentProtocol } from '../infinity/ExperimentProtocol'
+import { ExperimentRunner, type ExperimentSnapshot } from '../infinity/ExperimentRunner'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -50,6 +52,7 @@ export class InfiniteWorldRenderer {
   readonly fieldPhysics = new FieldModulatedPhysics()
   readonly physicsInteractionLog = new PhysicsInteractionLog()
   readonly runtimeDiagnostics = new RuntimeDiagnostics()
+  readonly experimentRunner = new ExperimentRunner()
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -2045,6 +2048,33 @@ export class InfiniteWorldRenderer {
         group.scale.setScalar(entry.object.scale * (1 + 0.015 * Math.sin(t * 3)))
       }
     }
+  }
+
+  startExperiment(metadata: Record<string, string | number | boolean> = {}) {
+    const provider = this.fieldSampler.registry.getActive()
+    const protocol = createExperimentProtocol({
+      experimentId: `exp-${Date.now().toString(36)}`,
+      world: { seed: this.generator.seed, generatorVersion: 'world-generator-v1' },
+      field: {
+        providerId: provider?.id ?? 'unknown',
+        providerVersion: provider?.version ?? 'unknown',
+      },
+      decision: { version: this.decisionLayer.version, weights: this.decisionLayer.weights },
+      physics: { version: this.fieldPhysics.version, parameters: this.fieldPhysics.parameters },
+      metadata,
+    })
+    return this.experimentRunner.start(protocol)
+  }
+
+  recordExperimentResult(name: string, value: unknown) {
+    this.experimentRunner.record(name, value)
+  }
+
+  finishExperiment(status: 'completed' | 'aborted' = 'completed'): ExperimentSnapshot {
+    this.recordExperimentResult('runtime', this.getRuntimeDiagnostics())
+    this.recordExperimentResult('physicsInteractions', this.physicsInteractionLog.recent(500))
+    this.recordExperimentResult('decisionGraph', this.decisionGraph.snapshot())
+    return this.experimentRunner.finish(status)
   }
 
   getRuntimeDiagnostics() {
