@@ -1083,6 +1083,30 @@ export class InfiniteWorldRenderer {
     })
   }
 
+  scatterExternalSemantic(
+    semanticEntryId: string,
+    count: number,
+    radius = 70,
+    seed = 1,
+    scale = 1,
+  ) {
+    const x = this.worldPosition.x
+    const z = this.worldPosition.z
+    const instances = this.worldAssetRuntime.scatterSemantic(
+      semanticEntryId,
+      { minX: x - radius, maxX: x + radius, minZ: z - radius, maxZ: z + radius },
+      count,
+      seed,
+      scale,
+    )
+    instances.forEach((instance) => {
+      const worldX = instance.position.x
+      const worldZ = instance.position.z
+      instance.position.y = this.generator.sampleHeight(worldX, worldZ)
+    })
+    return instances.length
+  }
+
   removeExternalAsset(assetId: string) {
     return this.worldAssetRuntime.remove(assetId)
   }
