@@ -145,6 +145,7 @@ export class ProductionInfrastructureRuntime {
     worldResourceEconomy.tick(delta)
     const civTick = civilizationRuntime.tick(current.civilization, delta)
     const next = this.evaluate(civTick.state)
+    next.civilization.memory = { ...civTick.state.memory, crises: civTick.settlementTick.shortages.length > 0 ? civTick.state.memory.crises + 1 : civTick.state.memory.crises }
     next.worldTime = { ...current.worldTime }
     next.history = [...current.history]
     next.timeline = [...current.timeline]
