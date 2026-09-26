@@ -1185,6 +1185,34 @@ export class InfiniteWorldRenderer {
     return { biomeId: plan.biomeId, byLayer: plan.byLayer, results, reason: plan.reason }
   }
 
+  materializeSettlementTier(tier: 'village' | 'town' | 'city' | 'megacity', x = this.worldPosition.x, z = this.worldPosition.z) {
+    const radius = tier === 'village' ? 90 : tier === 'town' ? 125 : tier === 'city' ? 180 : 240
+    const buildings = tier === 'village' ? 5 : tier === 'town' ? 12 : tier === 'city' ? 28 : 55
+    const roadSpacing = tier === 'village' ? 22 : tier === 'town' ? 18 : tier === 'city' ? 14 : 11
+
+    if (tier === 'village' || tier === 'town') {
+      this.generateSettlementV2(x, z, radius, buildings)
+    } else {
+      this.generateCityPlan(x, z, radius, buildings)
+    }
+
+    this.buildRoad(x - radius * 0.55, z, x + radius * 0.55, z, roadSpacing)
+    if (tier !== 'village') {
+      this.buildRoad(x, z - radius * 0.55, x, z + radius * 0.55, roadSpacing)
+    }
+    if (tier === 'city' || tier === 'megacity') {
+      this.place('building', x + radius * 0.22, z + radius * 0.18, tier === 'megacity' ? 2 : 1.4)
+      this.place('building', x - radius * 0.22, z - radius * 0.18, tier === 'megacity' ? 1.8 : 1.2)
+    }
+    if (tier === 'megacity') {
+      this.place('quantum_emitter', x, z, 1.5)
+    }
+
+    this.syncObjects()
+    this.scheduleSave()
+    return { tier, radius, buildings, roadSpacing }
+  }
+
   populateCivilization(id: string, tier: Parameters<typeof civilizationRuntime.evaluate>[1] = 'village', radius = 120) {
     const state = civilizationRuntime.evaluate(id, tier)
     const x = this.worldPosition.x
