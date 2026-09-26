@@ -216,7 +216,7 @@ export class ProductionInfrastructureRuntime {
           next.civilization.settlement.population = Math.max(1, population * (1 + action.deltaRatio))
         } else if (action.type === 'adaptation-strategy') {
           next.adaptation = { strategy: action.strategy, effectiveness: action.effectiveness, ticks: action.durationTicks }
-        }        } else if (action.type === 'production-efficiency') {
+        } else if (action.type === 'production-efficiency') {
           next.productionModifier = Math.min(next.productionModifier, action.multiplier)
           next.productionModifierTicks = Math.max(next.productionModifierTicks, action.durationTicks)
         } else if (action.type === 'infrastructure-capacity') {
