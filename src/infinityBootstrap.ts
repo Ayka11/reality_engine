@@ -31,6 +31,10 @@ export function bootstrapInfiniteWorld() {
     const manifest = (window as any).worldAssetManifest as WorldAssetImportManifest
     return JSON.stringify(manifest, null, 2)
   }
+  ;(window as any).worldExternalAssetLoad = (assetId: string, sourceUrl: string, semanticEntryId?: string, scale = 1) =>
+    world.loadExternalAsset(assetId, sourceUrl, semanticEntryId, scale)
+  ;(window as any).worldExternalAssetRemove = (assetId: string) => world.removeExternalAsset(assetId)
+  ;(window as any).worldExternalAssetStats = () => world.getExternalAssetStats()
   ;(window as any).worldLibraryPlace = (id: string) => {
     const entry = resolveWorldLibraryEntry(id)
     if (!entry) return null
