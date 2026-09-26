@@ -1,5 +1,4 @@
 export { worldLibrary, worldRuleGraph } from './registry';
-import { worldRuleGraph } from './registry';
 import { worldLibrary } from './registry';
 export { worldEnvironmentResolver } from './WorldEnvironmentResolver';
 
