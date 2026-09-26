@@ -14,7 +14,7 @@ export * from './WorldEnvironmentResolver';
 export * from './BiomeEngine';
 export * from './BiomePopulationEngine';
 export * from './WorldGenerationPlan';
-export * from './WorldPlanRuntimeAdapter';
+export { applyWorldGenerationPlan } from './WorldPlanRuntimeAdapter';
 export * from './AssetProviders';
 export * from './AssetImportManifest';
 export * from './AssetDiscovery';
