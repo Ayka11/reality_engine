@@ -34,6 +34,8 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldExternalAssetLoad = (assetId: string, sourceUrl: string, semanticEntryId?: string, scale = 1) =>
     world.loadExternalAsset(assetId, sourceUrl, semanticEntryId, scale)
   ;(window as any).worldExternalAssetRemove = (assetId: string) => world.removeExternalAsset(assetId)
+  ;(window as any).worldExternalAssetScatter = (semanticEntryId: string, count = 12, radius = 70, seed = 1, scale = 1) =>
+    world.scatterExternalSemantic(semanticEntryId, count, radius, seed, scale)
   ;(window as any).worldExternalAssetStats = () => world.getExternalAssetStats()
   ;(window as any).worldLibraryPlace = (id: string) => {
     const entry = resolveWorldLibraryEntry(id)
