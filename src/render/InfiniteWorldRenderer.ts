@@ -868,7 +868,10 @@ export class InfiniteWorldRenderer {
         if (this.persistence.isLoaded(cx, 0, cz)) continue
         const objects = this.persistence.loadChunk(cx, 0, cz)
         for (const object of objects) {
-          if (!this.objects.get(object.id)) this.objects.add(object)
+          if (!this.objects.get(object.id)) {
+            this.objects.add(object)
+            this.objectSpatialIndex.upsert(object)
+          }
         }
       }
     }
@@ -958,6 +961,7 @@ export class InfiniteWorldRenderer {
     object.z = entry.group.position.z + this.worldAnchor.z
     object.rotationY = entry.group.rotation.y
     object.scale = entry.group.scale.x
+    this.objectSpatialIndex.upsert(object)
     this.selectionMarker.position.set(entry.group.position.x, entry.group.position.y + 1.5, entry.group.position.z)
     this.selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
   }
@@ -975,6 +979,7 @@ export class InfiniteWorldRenderer {
     this.history.push({ type: 'transform', before, after: { ...object } })
     this.scheduleSave()
     const entry = this.objectMeshes.get(object.id)
+    this.objectSpatialIndex.upsert(object)
     if (entry) {
       entry.group.position.set(object.x - this.worldAnchor.x, object.y - this.worldAnchor.y, object.z - this.worldAnchor.z)
       entry.group.rotation.y = object.rotationY
@@ -987,15 +992,17 @@ export class InfiniteWorldRenderer {
 
   private applyHistoryEdit(edit: WorldEdit, reverse: boolean) {
     if (edit.type === 'add') {
-      if (reverse) this.objects.remove(edit.object.id)
-      else this.objects.add(edit.object)
+      if (reverse) { this.objects.remove(edit.object.id); this.objectSpatialIndex.remove(edit.object.id) }
+      else { this.objects.add(edit.object); this.objectSpatialIndex.upsert(edit.object) }
     } else if (edit.type === 'remove') {
-      if (reverse) this.objects.add(edit.object)
-      else this.objects.remove(edit.object.id)
+      if (reverse) { this.objects.add(edit.object); this.objectSpatialIndex.upsert(edit.object) }
+      else { this.objects.remove(edit.object.id); this.objectSpatialIndex.remove(edit.object.id) }
     } else {
       const object = reverse ? edit.before : edit.after
       this.objects.remove(object.id)
+      this.objectSpatialIndex.remove(object.id)
       this.objects.add(object)
+      this.objectSpatialIndex.upsert(object)
     }
     this.syncObjects()
     this.scheduleSave()
@@ -1040,6 +1047,7 @@ export class InfiniteWorldRenderer {
     const object = this.objects.get(id)
     if (object) {
       this.objects.remove(id)
+      this.objectSpatialIndex.remove(id)
       this.history.push({ type: 'remove', object: { ...object } })
     }
     const entry = this.objectMeshes.get(id)
@@ -1111,6 +1119,7 @@ export class InfiniteWorldRenderer {
       kind, x, y: ground, z,
       rotationY: 0, scale, seed: 0, properties: {},
     })
+    this.objectSpatialIndex.upsert(object)
     this.history.push({ type: 'add', object: { ...object } })
     this.syncObjects()
     this.scheduleSave()
@@ -1125,6 +1134,7 @@ export class InfiniteWorldRenderer {
     })
     for (const object of removed) {
       this.objects.remove(object.id)
+      this.objectSpatialIndex.remove(object.id)
       this.history.push({ type: 'remove', object: { ...object } })
     }
     this.syncObjects()
