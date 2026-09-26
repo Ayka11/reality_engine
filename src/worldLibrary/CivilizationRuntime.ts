@@ -33,6 +33,13 @@ export type CivilizationExperimentScenario = {
   override: CounterfactualOverride
 }
 
+export type CivilizationCausalAttribution = {
+  factor: string
+  weight: number
+  eventTypes: string[]
+  mechanism: string
+}
+
 export type CivilizationExperimentOutcome = {
   scenarioId: string
   branchId: string
@@ -43,6 +50,7 @@ export type CivilizationExperimentOutcome = {
   civilizationChanged: boolean
   divergence: number
   dominantFactors: string[]
+  causalAttribution: CivilizationCausalAttribution[]
 }
 
 export type CivilizationExperimentResult = {
@@ -217,7 +225,7 @@ export class CivilizationRuntime {
     const baseline = branches[0]?.final ?? null
     const outcomes: CivilizationExperimentOutcome[] = branches.map((branch) => {
       const final = branch.final
-      if (!final || !baseline) return { scenarioId: branch.scenarioId, branchId: branch.branchId, populationChange: 0, stabilityChange: 0, resilienceChange: 0, scoreChange: 0, civilizationChanged: false, divergence: 0, dominantFactors: [] }
+      if (!final || !baseline) return { scenarioId: branch.scenarioId, branchId: branch.branchId, populationChange: 0, stabilityChange: 0, resilienceChange: 0, scoreChange: 0, civilizationChanged: false, divergence: 0, dominantFactors: [], causalAttribution: [] }
       const metrics = this.compareBranches(baseline.branchId, branch.branchId)
       return {
         scenarioId: branch.scenarioId,
@@ -229,6 +237,12 @@ export class CivilizationRuntime {
         civilizationChanged: final.type !== baseline.type,
         divergence: metrics?.divergenceGap ?? Math.abs(final.divergence - baseline.divergence),
         dominantFactors: metrics?.dominantFactors ?? [],
+        causalAttribution: [
+          { factor: 'population-pressure', weight: Math.min(1, Math.abs((final.population - baseline.population) / Math.max(1, baseline.population))), eventTypes: ['growth', 'migration'], mechanism: 'population trajectory changed the settlement pressure state' },
+          { factor: 'stability', weight: Math.min(1, Math.abs(final.stability - baseline.stability)), eventTypes: ['resource-crisis', 'infrastructure-failure', 'growth'], mechanism: 'causal events altered settlement stability' },
+          { factor: 'resilience', weight: Math.min(1, Math.abs(final.resilience - baseline.resilience)), eventTypes: ['resource-crisis', 'migration', 'civilization-change'], mechanism: 'historical adaptation and crisis load changed resilience' },
+          { factor: 'civilization-transition', weight: final.type === baseline.type ? 0 : 1, eventTypes: ['civilization-change', 'tier-transition'], mechanism: 'state transition changed the civilization trajectory' },
+        ].filter((item) => item.weight > 0).sort((a, b) => b.weight - a.weight),
       }
     })
     return { experimentId, ticks, branches, outcomes }
