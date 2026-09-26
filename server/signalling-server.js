@@ -1,7 +1,7 @@
 
 import { WebSocketServer } from 'ws';
 
-const PORT = process.env.PORT || 8888;
+const PORT = process.env.SIGNAL_PORT || 8888;
 const wss = new WebSocketServer({ port: PORT });
 
 wss.on('connection', (ws) => {
