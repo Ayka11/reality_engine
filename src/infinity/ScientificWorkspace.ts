@@ -25,6 +25,8 @@ function render() {
   const validationValues = w?.claimValidation ? Object.values(w.claimValidation) as any[] : []
   const claimsValid = validationValues.filter((v: any) => v?.valid).length
   const reportValues = w?.reports ? Object.values(w.reports) as any[] : []
+  const generationHealth = win().worldGenerationHealth?.() ?? null
+  const lastGeneration = win().lastInfinityGeneration ?? null
   const provenanceValues = w?.provenance ? Object.values(w.provenance) as any[] : []
   const provenanceValid = provenanceValues.filter((v: any) => v?.valid).length
 
@@ -58,17 +60,24 @@ function render() {
             stage(provenanceValid > 0, 'Provenance validation') +
             stage(Boolean(w), 'Reproducible workflow result') +
           '</div>' +
-          '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px;">' +
+          '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px;">' +
             '<div style="background:#0e0e18;padding:7px;border-radius:6px"><small>Runs</small><div>' + snapshots.length + '</div></div>' +
             '<div style="background:#0e0e18;padding:7px;border-radius:6px"><small>Completed</small><div>' + completed + '</div></div>' +
             '<div style="background:#0e0e18;padding:7px;border-radius:6px"><small>Replications</small><div>' + replicationCompleted + '</div></div>' +
             '<div style="background:#0e0e18;padding:7px;border-radius:6px"><small>Reports</small><div>' + reportValues.length + '</div></div>' +
+            '<div style="background:#0e0e18;padding:7px;border-radius:6px"><small>World Objects</small><div>' + esc(generationHealth?.stats?.objects ?? lastGeneration?.stats?.objects ?? '—') + '</div></div>' +
           '</div>' +
         '</section>' +
       '</div>' +
       '<div style="padding:0 12px 12px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
         '<section style="border:1px solid #29283a;border-radius:8px;padding:10px;">' +
           '<b>Scenario Results</b>' +
+          '<div style="margin-top:7px;padding:7px;border:1px solid #29283a;border-radius:6px;background:#0b0b13;color:#888;font-size:10px;">' +
+          '<b style="color:#9f9bb5">World Generation Diagnostics</b><br>' +
+          'Renderer: ' + esc(generationHealth?.renderer ?? 'not initialized') + ' · Canvas: ' + esc(generationHealth?.canvas?.width ?? '—') + '×' + esc(generationHealth?.canvas?.height ?? '—') + '<br>' +
+          'Objects: ' + esc(generationHealth?.stats?.objects ?? '—') + ' · Chunks: ' + esc(generationHealth?.stats?.loadedChunks ?? '—') + '<br>' +
+          'Seed: ' + esc(lastGeneration?.seed ?? '—') +
+          '</div>' +
           '<div id="scienceScenarioResults" style="margin-top:7px;max-height:180px;overflow:auto;">' +
             (snapshots.length ? snapshots.map((s:any) => '<div style="padding:6px;border-bottom:1px solid #1f1f2c"><b>' + esc(s.protocol?.experimentId) + '</b> <span style="color:' + (s.status === 'completed' ? '#6ee7b7' : '#f59e0b') + '">' + esc(s.status) + '</span><div style="color:#777;font-size:10px">' + esc(JSON.stringify(s.results?.civilization?.outcomes?.map((o:any) => ({ scenarioId:o.scenarioId, populationChange:o.populationChange, stabilityChange:o.stabilityChange, resilienceChange:o.resilienceChange, scoreChange:o.scoreChange })))) + '</div></div>').join('') : '<div style="color:#666">No execution yet.</div>') +
           '</div>' +
