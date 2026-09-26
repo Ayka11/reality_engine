@@ -1849,8 +1849,8 @@ export class InfiniteWorldRenderer {
     this.updatePhysicsParticles(dt)
     this.runtimeDiagnostics.recordPhysics(
       performance.now() - physicsStart,
-      this.physicsInteractionLog.size,
-      this.objectSpatialIndex.size,
+      this.physicsFrameInteractions,
+      this.physicsFrameQueries,
     )
 
     const lodStart = performance.now()
@@ -1858,7 +1858,7 @@ export class InfiniteWorldRenderer {
     this.runtimeDiagnostics.recordTerrainLod(performance.now() - lodStart)
 
     this.renderer.render(this.scene, this.camera)
-    this.runtimeDiagnostics.recordFrame(frameStart, Math.max(0.001, dt * 1000))
+    this.runtimeDiagnostics.recordFrame(frameStart)
   }
 
   private initPhysicsParticleSystem(count = 700) {
@@ -1901,7 +1901,12 @@ export class InfiniteWorldRenderer {
     this.scene.add(this.physicsParticlePoints)
   }
 
+  private physicsFrameQueries = 0
+  private physicsFrameInteractions = 0
+
   private updatePhysicsParticles(dt: number) {
+    this.physicsFrameQueries = 0
+    this.physicsFrameInteractions = 0
     if (!this.physicsParticlePoints || !this.showParticles) return
     const pos = this.physicsParticlePositions
     const vel = this.physicsParticleVelocities
@@ -1930,6 +1935,7 @@ export class InfiniteWorldRenderer {
       // Query only nearby physics objects through the chunk-local spatial index.
       const worldX = px + this.worldAnchor.x
       const worldZ = pz + this.worldAnchor.z
+      this.physicsFrameQueries++
       const nearbyObjects = this.objectSpatialIndex.queryRadius(worldX, py, worldZ, 160, physicsKinds)
       for (const obj of nearbyObjects) {
         const dx = obj.x - worldX
