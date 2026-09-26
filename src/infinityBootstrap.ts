@@ -1,5 +1,5 @@
 import { InfiniteWorldRenderer } from './render/InfiniteWorldRenderer'
-import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
+import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, visualKindToWorldObject, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
 
 export type DockPosition = 'top' | 'left' | 'right' | 'float'
@@ -18,6 +18,18 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldLibrarySearch = (tags: string[] = [], category?: string) =>
     findWorldLibraryEntries(tags, category as any)
   ;(window as any).worldLibraryGet = (id: string) => resolveWorldLibraryEntry(id)
+  ;(window as any).worldLibraryPlace = (id: string) => {
+    const entry = resolveWorldLibraryEntry(id)
+    if (!entry) return null
+    const visual = visualKindToWorldObject(entry)
+    if (!visual) return null
+    const x = world.worldCoordinates.x || 16
+    const z = world.worldCoordinates.z || 16
+    if (visual === 'tree' || visual === 'rock' || visual === 'crystal') world.scatter(visual, x - 70, z - 70, x + 70, z + 70, 0.045)
+    else world.place(visual, x, z, 1)
+    world.render(0)
+    return { id: entry.id, visual, objects: world.getRuntimeStats().objects }
+  }
   ;(window as any).worldRuleGraph = worldRuleGraph
   ;(window as any).worldRuleStats = () => worldRuleGraph.stats()
   ;(window as any).worldRuleRelated = (id: string) => worldRuleGraph.related(id)
@@ -572,7 +584,10 @@ export function bootstrapInfiniteWorld() {
       localStorage.setItem('infinity_dock_pos', 'top')
     }
     let isOpen = localStorage.getItem('infinity_dock_open') !== 'false'
-    let activeTab: 'camera' | 'objects' | 'persist' | 'analysis' | 'display' = 'objects'
+    let activeTab: 'camera' | 'objects' | 'persist' | 'analysis' | 'display' | 'library' = 'objects'
+    let libraryQuery = ''
+    let libraryCategory = ''
+    let librarySelected = ''
     let eraseRadius = 4
 
     let floatLeft = parseInt(localStorage.getItem('infinity_dock_float_x') || '40', 10)
