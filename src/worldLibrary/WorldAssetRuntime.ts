@@ -69,6 +69,7 @@ export class WorldAssetRuntime {
             object,
             loadedAt: Date.now(),
           }
+          object.userData.worldPosition = { x: options.x ?? 0, y: options.y ?? 0, z: options.z ?? 0 }
           this.assets.set(id, asset)
           if (asset.semanticEntryId) this.semanticSources.set(asset.semanticEntryId, asset)
           resolve(asset)
@@ -105,6 +106,7 @@ export class WorldAssetRuntime {
       else mesh.material = mesh.material.clone()
     })
     instance.position.set(options.x, options.y, options.z)
+    instance.userData.worldPosition = { x: options.x, y: options.y, z: options.z }
     instance.rotation.y = options.rotationY ?? 0
     instance.scale.setScalar(Math.max(0.001, options.scale ?? 1))
     instance.userData.runtimeAssetInstanceId = instanceId
@@ -169,6 +171,28 @@ export class WorldAssetRuntime {
   clear() {
     for (const id of [...this.instances.keys()]) this.removeInstance(id)
     for (const id of [...this.assets.keys()]) this.remove(id)
+  }
+
+  rebase(worldAnchor: { x: number; y?: number; z: number }) {
+    for (const asset of this.assets.values()) {
+      const world = asset.object.userData.worldPosition as { x: number; y: number; z: number } | undefined
+      if (world) asset.object.position.set(world.x - worldAnchor.x, world.y - (worldAnchor.y ?? 0), world.z - worldAnchor.z)
+    }
+    for (const instance of this.instances.values()) {
+      const world = instance.userData.worldPosition as { x: number; y: number; z: number } | undefined
+      if (world) instance.position.set(world.x - worldAnchor.x, world.y - (worldAnchor.y ?? 0), world.z - worldAnchor.z)
+    }
+  }
+
+  updateVisibility(camera: THREE.Camera, maxDistance = 650, maxVisible = 500) {
+    const cameraPosition = new THREE.Vector3()
+    camera.getWorldPosition(cameraPosition)
+    const candidates = [...this.instances.values(), ...[...this.assets.values()].map(asset => asset.object)]
+    const ranked = candidates.map(object => ({ object, distance: object.position.distanceTo(cameraPosition) }))
+      .sort((a, b) => a.distance - b.distance)
+    const visible = new Set(ranked.slice(0, maxVisible).filter(item => item.distance <= maxDistance).map(item => item.object))
+    candidates.forEach(object => { object.visible = visible.has(object) })
+    return { total: candidates.length, visible: visible.size }
   }
 
   stats() {
