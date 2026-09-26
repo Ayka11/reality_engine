@@ -28,4 +28,4 @@ export * from './SettlementGrowthModel';
 export * from './CivilizationRuntime';
 
 export * from './ProductionInfrastructureRuntime';
-export * from './WorldLibraryGenerationPlanner';
+export { WorldLibraryGenerationPlanner, worldLibraryGenerationPlanner } from './WorldLibraryGenerationPlanner';
