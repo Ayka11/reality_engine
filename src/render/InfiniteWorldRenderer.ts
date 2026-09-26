@@ -403,6 +403,28 @@ export class InfiniteWorldRenderer {
     }
   }
 
+  hasSemanticElement(semanticId: string): boolean {
+    const objects = this.objects.values()
+    const entry = semanticId.split('.').pop() || semanticId
+    const kindMap: Record<string, WorldObjectKind> = {
+      tree: 'tree', oak: 'tree', pine: 'tree', palm: 'tree', cactus: 'tree',
+      grass: 'custom', mushroom: 'custom',
+      rock: 'rock', granite: 'rock', basalt: 'rock', stone: 'rock', iron: 'rock', 'ore-vein': 'rock',
+      crystal: 'crystal',
+      river: 'water', lake: 'water', ocean: 'water', waterfall: 'water',
+      house: 'building', tower: 'building', temple: 'building', 'research-station': 'building',
+      road: 'road', bridge: 'bridge', harbor: 'building',
+      village: 'landmark', town: 'landmark', city: 'landmark', megacity: 'landmark',
+      'gravity-well': 'gravity_well', 'entropy-sink': 'entropy_sink',
+      'quantum-emitter': 'quantum_emitter', 'force-field': 'force_field', 'resonance-node': 'metalaw',
+    }
+    const kind = kindMap[entry]
+    if (!kind) return false
+    return objects.some((object) => object.kind === kind && (
+      object.properties.semanticEntryId === semanticId || object.properties.semanticId === semanticId
+    ))
+  }
+
   getRuntimeStats() {
     return {
       objects: this.objects.size,
