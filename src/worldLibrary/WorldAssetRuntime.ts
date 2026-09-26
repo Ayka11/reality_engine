@@ -97,6 +97,13 @@ export class WorldAssetRuntime {
     const source = this.semanticSources.get(semanticEntryId)
     if (!source) return null
     const instance = source.object.clone(true)
+    instance.traverse((node) => {
+      const mesh = node as THREE.Mesh
+      if (!mesh.isMesh) return
+      mesh.geometry = mesh.geometry.clone()
+      if (Array.isArray(mesh.material)) mesh.material = mesh.material.map((material) => material.clone())
+      else mesh.material = mesh.material.clone()
+    })
     instance.position.set(options.x, options.y, options.z)
     instance.rotation.y = options.rotationY ?? 0
     instance.scale.setScalar(Math.max(0.001, options.scale ?? 1))
