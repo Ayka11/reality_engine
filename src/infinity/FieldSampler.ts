@@ -1,6 +1,7 @@
 import { WorldGenerator, BIOME_ID, type Biome } from './WorldGenerator'
 import type { ScientificFieldProvider } from './ScientificFieldProvider'
 import { GeneratorFieldProvider } from './ScientificFieldProvider'
+import { ScientificFieldRegistry } from './ScientificFieldRegistry'
 
 export type ScientificFieldSample = {
   energy: number
@@ -28,13 +29,29 @@ export type WorldContextSample = ScientificFieldSample & {
  */
 export class FieldSampler {
   private provider: ScientificFieldProvider
+  readonly registry: ScientificFieldRegistry
 
   constructor(public generator: WorldGenerator, provider?: ScientificFieldProvider) {
     this.provider = provider ?? new GeneratorFieldProvider(generator)
+    this.registry = new ScientificFieldRegistry()
+    this.registry.register(this.provider, true)
   }
 
   setProvider(provider: ScientificFieldProvider) {
     this.provider = provider
+    this.registry.register(provider, true)
+  }
+
+  activateProvider(id: string) {
+    if (!this.registry.activate(id)) return false
+    const provider = this.registry.getActive()
+    if (!provider) return false
+    this.provider = provider
+    return true
+  }
+
+  listProviders() {
+    return this.registry.list()
   }
 
   setGenerator(generator: WorldGenerator) {
