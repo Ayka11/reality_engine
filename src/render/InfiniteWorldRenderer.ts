@@ -775,10 +775,32 @@ export class InfiniteWorldRenderer {
       case 'crystal':
         mesh = new THREE.Mesh(new THREE.OctahedronGeometry(1.25, 0), mat(0x8a6de0))
         break
-      case 'building':
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(4, 5, 4), mat(0x8b9099))
-        ;(mesh as THREE.Mesh).position.y = 2.5
+      case 'building': {
+        // Procedural building silhouette: a low-rise body plus a smaller roof volume.
+        // Scale remains controlled by WorldObject.scale, while local proportions
+        // make generated districts visually distinguishable from rocks/landmarks.
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(4.5, 6, 4.5),
+          mat(0x8b9099)
+        )
+        body.position.y = 3
+
+        const roof = new THREE.Mesh(
+          new THREE.BoxGeometry(3.8, 1.1, 3.8),
+          mat(0x565b66)
+        )
+        roof.position.y = 6.45
+
+        const crown = new THREE.Mesh(
+          new THREE.BoxGeometry(1.4, 1.4, 1.4),
+          mat(0xa9afb8)
+        )
+        crown.position.y = 7.65
+
+        g.add(body, roof, crown)
+        mesh = g
         break
+      }
       case 'road':
         mesh = new THREE.Mesh(new THREE.BoxGeometry(6, 0.12, 24), mat(0x3e4145))
         ;(mesh as THREE.Mesh).position.y = 0.08
