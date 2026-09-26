@@ -1,5 +1,5 @@
 import { InfiniteWorldRenderer } from './render/InfiniteWorldRenderer'
-import { buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
+import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
 
 export type DockPosition = 'top' | 'left' | 'right' | 'float'
@@ -395,6 +395,42 @@ export function bootstrapInfiniteWorld() {
     }
     const cs = complexityScale[complexity] ?? complexityScale.Emergent
 
+    // Semantic World Library environment: Composer parameters become physical
+    // conditions first, then the library/rule graph derives world content.
+    const phiTemperature: Record<string, number> = {
+      Void: 0.18, Living: 0.72, Chaotic: 0.62, Crystalline: 0.44, Resonant: 0.56, Harmonic: 0.50,
+    }
+    const phiMoisture: Record<string, number> = {
+      Void: 0.18, Living: 0.78, Chaotic: 0.46, Crystalline: 0.38, Resonant: 0.58, Harmonic: 0.62,
+    }
+    const fieldTemperature: Record<string, number> = {
+      'Energy Dominant': 0.14, 'Information Dense': 0.04, Balanced: 0, 'Mass Dominant': -0.06, Sparse: -0.08, 'Pure Info': 0.02,
+    }
+    const fieldMoisture: Record<string, number> = {
+      'Energy Dominant': -0.08, 'Information Dense': 0.04, Balanced: 0, 'Mass Dominant': 0.08, Sparse: -0.12, 'Pure Info': -0.04,
+    }
+    const complexityElevation: Record<string, number> = {
+      Stable: 0.30, Emergent: 0.44, Explosive: 0.68, Collapsing: 0.22, Oscillating: 0.56,
+    }
+    const complexitySlope: Record<string, number> = {
+      Stable: 0.20, Emergent: 0.34, Explosive: 0.58, Collapsing: 0.18, Oscillating: 0.46,
+    }
+    const spacetimeRadiation: Record<string, number> = {
+      Standard: 0.12, 'Slow Time': 0.08, 'Fractal Space': 0.20, 'High Radiation': 0.88, 'Meteor Zone': 0.64, 'Frozen Topology': 0.26,
+    }
+    const stabilityByPhi: Record<string, number> = {
+      Void: 0.72, Living: 0.76, Chaotic: 0.24, Crystalline: 0.88, Resonant: 0.68, Harmonic: 0.92,
+    }
+    const worldEnvironment = {
+      temperature: Math.max(0, Math.min(1, (phiTemperature[phi] ?? 0.5) + (fieldTemperature[fields] ?? 0))),
+      moisture: Math.max(0, Math.min(1, (phiMoisture[phi] ?? 0.5) + (fieldMoisture[fields] ?? 0))),
+      elevation: complexityElevation[complexity] ?? 0.44,
+      slope: complexitySlope[complexity] ?? 0.34,
+      radiation: spacetimeRadiation[spacetime] ?? 0.12,
+      stability: Math.max(0, Math.min(1, (stabilityByPhi[phi] ?? 0.7) * (1 - (cs.density - 1) * 0.18))),
+    }
+    const generationPlan = buildWorldGenerationPlan(worldEnvironment)
+
     let tod = 14
     let fog = 0.012
     let mat: 'field' | 'material' | 'height' = 'field'
@@ -459,6 +495,11 @@ export function bootstrapInfiniteWorld() {
       world.place('quantum_emitter', x - 60, z - 45, 1.0)
     }
 
+    // Execute the semantic plan after the baseline procedural pass. The plan
+    // is intentionally bounded so the library enriches, rather than overwhelms,
+    // the existing high-fidelity procedural generators.
+    const appliedPlan = applyWorldGenerationPlan(world, generationPlan, x, z)
+
     // dτ·dV: temporal and spatial regime.
     if (spacetime === 'Slow Time') {
       tod = 7; fog = 0.018
@@ -508,6 +549,10 @@ export function bootstrapInfiniteWorld() {
       ...stats.world,
       objects: stats.objects,
       loadedChunks: stats.loadedChunks,
+      biome: generationPlan.biome?.id ?? null,
+      plannedElements: generationPlan.elements.length,
+      appliedElements: appliedPlan.applied.length,
+      skippedElements: appliedPlan.skipped.length,
     }
   }
 
