@@ -1,4 +1,5 @@
 import { InfiniteWorldRenderer } from './render/InfiniteWorldRenderer'
+import { worldLibrary } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
 
 export type DockPosition = 'top' | 'left' | 'right' | 'float'
@@ -12,7 +13,9 @@ export function bootstrapInfiniteWorld() {
   const world = new InfiniteWorldRenderer(canvas, seed)
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world
-  ;(window as any).infinityStats = () => world.getRuntimeStats()
+  ;(window as any).worldLibrary = worldLibrary
+  ;(window as any).worldLibraryStats = () => worldLibrary.stats()
+  ;(window as any).infinityStats = () => ({ ...world.getRuntimeStats(), library: worldLibrary.stats() })
   ;(window as any).focusGeneratedWorld = () => {
     const result = world.focusGeneratedRegion()
     world.render(0)
