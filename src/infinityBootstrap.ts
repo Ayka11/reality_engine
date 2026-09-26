@@ -18,6 +18,19 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldLibrarySearch = (tags: string[] = [], category?: string) =>
     findWorldLibraryEntries(tags, category as any)
   ;(window as any).worldLibraryGet = (id: string) => resolveWorldLibraryEntry(id)
+  ;(window as any).worldAssetManifest = createAssetImportManifest()
+  ;(window as any).worldAssetImport = (asset: DiscoveredAsset, semanticEntryId?: string) => {
+    const manifest = (window as any).worldAssetManifest as WorldAssetImportManifest
+    const result = importDiscoveredAsset(asset, manifest, semanticEntryId)
+    if (result.accepted && result.manifestEntry) {
+      manifest.entries = [...manifest.entries.filter((entry) => entry.id !== result.manifestEntry!.id), result.manifestEntry]
+    }
+    return result
+  }
+  ;(window as any).worldAssetManifestExport = () => {
+    const manifest = (window as any).worldAssetManifest as WorldAssetImportManifest
+    return JSON.stringify(manifest, null, 2)
+  }
   ;(window as any).worldLibraryPlace = (id: string) => {
     const entry = resolveWorldLibraryEntry(id)
     if (!entry) return null
