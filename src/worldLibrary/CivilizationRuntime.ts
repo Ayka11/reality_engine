@@ -382,6 +382,46 @@ export class CivilizationRuntime {
     return { claims, evidence, causalEvents, edges }
   }
 
+  buildComparativeClaimGraph(outcomes: CivilizationExperimentOutcome[]): CivilizationClaimGraph {
+    const graph = this.buildClaimGraph(outcomes)
+    const claims = [...graph.claims]
+    const edges = [...graph.edges]
+    const baselineOutcome = outcomes.find((outcome) => outcome.populationChange === 0 && outcome.stabilityChange === 0 && outcome.resilienceChange === 0 && outcome.scoreChange === 0)
+    const alternatives = outcomes.filter((outcome) => !baselineOutcome || outcome.scenarioId !== baselineOutcome.scenarioId)
+    const positive = alternatives.filter((outcome) => outcome.populationChange > 0.02)
+    const negative = alternatives.filter((outcome) => outcome.populationChange < -0.02)
+    const stable = alternatives.filter((outcome) => Math.abs(outcome.populationChange) <= 0.02)
+    const comparativeStatus: CivilizationClaimStatus =
+      positive.length > 0 && negative.length > 0 ? 'unresolved'
+        : positive.length > 0 ? 'supported'
+          : negative.length > 0 ? 'contradicted'
+            : 'unresolved'
+    const confidence = Math.max(0.1, Math.min(1,
+      0.4
+      + Math.min(0.3, Math.abs(positive.length - negative.length) * 0.1)
+      + Math.min(0.3, alternatives.length * 0.05)
+    ))
+    const claimId = `claim:comparative:population-effect`
+    claims.push({
+      id: claimId,
+      claim: 'Counterfactual interventions produced a consistent population effect relative to the experiment baseline.',
+      status: comparativeStatus,
+      confidence,
+      branchId: baselineOutcome?.branchId ?? alternatives[0]?.branchId ?? 'unknown',
+      tick: Math.max(0, ...outcomes.map((outcome) => this.branchSnapshot(outcome.branchId)?.tick ?? 0))
+    })
+    for (const outcome of positive) {
+      edges.push({ from: claimId, to: `claim:${outcome.scenarioId}:${this.branchSnapshot(outcome.branchId)?.tick ?? 0}`, relation: 'supported-by' })
+    }
+    for (const outcome of negative) {
+      edges.push({ from: claimId, to: `claim:${outcome.scenarioId}:${this.branchSnapshot(outcome.branchId)?.tick ?? 0}`, relation: 'contradicted-by' })
+    }
+    for (const outcome of stable) {
+      edges.push({ from: claimId, to: `claim:${outcome.scenarioId}:${this.branchSnapshot(outcome.branchId)?.tick ?? 0}`, relation: 'derived-from' })
+    }
+    return { ...graph, claims, edges }
+  }
+
   serializeState() {
     return {
       branches: Array.from(this.branches.entries()).map(([branchId, history]) => ({ branchId, history })),
