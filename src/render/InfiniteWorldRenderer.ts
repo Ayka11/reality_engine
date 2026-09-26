@@ -25,6 +25,7 @@ import { ExperimentCatalog } from '../infinity/ExperimentCatalog'
 import { analyzeExperiments, type ExperimentAnalysis } from '../infinity/ExperimentAnalysis'
 import { calculateStatisticalAnalysis, type StatisticalExperimentAnalysis } from '../infinity/ExperimentStatistics'
 import { WorldAssetRuntime } from '../worldLibrary/WorldAssetRuntime'
+import { biomePopulationEngine } from '../worldLibrary/BiomePopulationEngine'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -1081,6 +1082,40 @@ export class InfiniteWorldRenderer {
       z,
       scale,
     })
+  }
+
+  populateExternalBiome(
+    environment: Parameters<typeof biomePopulationEngine.plan>[0],
+    radius = 100,
+    density = 1,
+    seed = 1,
+  ) {
+    const plan = biomePopulationEngine.plan(environment)
+    const results: Array<{ semanticEntryId: string; count: number }> = []
+    for (const rule of plan.rules) {
+      const count = Math.max(1, Math.round((rule.minCount + rule.maxCount) * 0.5 * density * rule.weight))
+      const placed = this.worldAssetRuntime.scatterSemantic(
+        rule.semanticEntryId,
+        {
+          minX: this.worldPosition.x - radius,
+          maxX: this.worldPosition.x + radius,
+          minZ: this.worldPosition.z - radius,
+          maxZ: this.worldPosition.z + radius,
+        },
+        count,
+        seed + results.length,
+        rule.scale,
+      )
+      placed.forEach((instance) => {
+        const worldX = instance.position.x
+        const worldZ = instance.position.z
+        const worldY = this.generator.sampleHeight(worldX, worldZ)
+        instance.position.y = worldY
+        instance.userData.worldPosition = { x: worldX, y: worldY, z: worldZ }
+      })
+      if (placed.length) results.push({ semanticEntryId: rule.semanticEntryId, count: placed.length })
+    }
+    return { biomeId: plan.biomeId, results, reason: plan.reason }
   }
 
   scatterExternalSemantic(
