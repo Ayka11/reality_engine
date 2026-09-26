@@ -46,6 +46,8 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).settlementGrowthEvaluate = (id: string, tier: any) => settlementGrowthModel.evaluate(id, tier)
   ;(window as any).settlementGrowthPath = (id: string, tier: any) => settlementGrowthModel.growthPath(settlementGrowthModel.evaluate(id, tier))
   ;(window as any).settlementGrowthTick = (state: any, delta = 1) => settlementGrowthModel.tick(state, delta)
+  ;(window as any).settlementMaterializeTier = (tier: any) => world.materializeSettlementTier(tier)
+  ;(window as any).settlementGrowthMaterialize = (state: any) => world.materializeSettlementTier(state.tier)
   ;(window as any).civilizationEvaluate = (id: string, tier: any) => civilizationRuntime.evaluate(id, tier)
   ;(window as any).civilizationTick = (state: any, delta = 1) => civilizationRuntime.tick(state, delta)
   ;(window as any).productionEvaluate = (id: string, tier: any = 'village') => productionInfrastructureRuntime.evaluate(civilizationRuntime.evaluate(id, tier))
