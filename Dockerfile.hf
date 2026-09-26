@@ -13,6 +13,7 @@ RUN npm run build
 RUN npm install --global serve
 
 ENV PORT=7860
+ENV SIGNAL_PORT=8888
 EXPOSE 7860
 
 CMD ["sh", "-c", "node server/signalling-server.js & exec serve dist -l 7860"]
