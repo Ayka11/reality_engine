@@ -1249,7 +1249,7 @@ export class InfiniteWorldRenderer {
     }
   }
 
-  materializeEventConsequences(id: string, consequences: Array<{ eventId: string; actions: Array<{ type: string; civilization?: string; tier?: string; visualKinds?: string[] }> }>) {
+  materializeEventConsequences(_id: string, consequences: Array<{ eventId: string; actions: Array<{ type: string; civilization?: string; tier?: string; visualKinds?: string[] }> }>) {
     const materialized: Array<{ eventId: string; action: string; result?: unknown }> = []
     const x = this.worldPosition.x
     const z = this.worldPosition.z
