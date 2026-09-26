@@ -3,6 +3,7 @@ import { worldResourceEconomy } from './worldLibrary/WorldResourceEconomy'
 import { settlementGrowthModel } from './worldLibrary/SettlementGrowthModel'
 import { civilizationRuntime } from './worldLibrary/CivilizationRuntime'
 import { productionInfrastructureRuntime } from './worldLibrary/ProductionInfrastructureRuntime'
+import { worldLibraryGenerationPlanner } from './worldLibrary/WorldLibraryGenerationPlanner'
 import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, visualKindToWorldObject, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
 
@@ -71,15 +72,28 @@ export function bootstrapInfiniteWorld() {
     world.render(0)
     return { id: entry.id, visual, objects: world.getRuntimeStats().objects }
   }
+  ;(window as any).worldLibraryGenerationPlan = (id: string) => worldLibraryGenerationPlanner.plan(id)
   ;(window as any).worldLibraryGenerate = (id: string) => {
     const entry = resolveWorldLibraryEntry(id)
     if (!entry) return null
+    const plan = worldLibraryGenerationPlanner.plan(id)
+    if (!plan) return null
+    const blocked = plan.conflicts.filter((conflict) => worldLibrary.has(conflict))
+    if (blocked.length) return { id, generated: false, blockedBy: blocked, plan }
+    const generated: string[] = []
+    for (const dependency of plan.dependencies) {
+      const dep = resolveWorldLibraryEntry(dependency)
+      if (!dep || dep.category === 'resource' || dep.category === 'climate' || dep.category === 'biome') continue
+      const placedDependency = (window as any).worldLibraryPlace?.(dependency)
+      if (placedDependency) generated.push(dependency)
+    }
     if (entry.category === 'civilization') {
       const tier = id.endsWith('post-scarcity') ? 'megacity' : id.endsWith('industrial') ? 'city' : 'village'
-      return world.populateCivilization(id, tier, tier === 'megacity' ? 240 : tier === 'city' ? 190 : 150)
+      const result = world.populateCivilization(id, tier, tier === 'megacity' ? 240 : tier === 'city' ? 190 : 150)
+      return { ...result, generated: [...generated, ...(result.generated || [])], plan }
     }
     const placed = (window as any).worldLibraryPlace?.(id)
-    return placed ? { ...placed, generated: true } : { id, generated: false, reason: 'No runtime visual mapping is registered for this element' }
+    return placed ? { ...placed, generated: [...generated, id], plan } : { id, generated: false, reason: 'No runtime visual mapping is registered for this element', plan }
   }
   ;(window as any).worldRuleGraph = worldRuleGraph
   ;(window as any).worldRuleStats = () => worldRuleGraph.stats()
