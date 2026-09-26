@@ -104,8 +104,6 @@ export class EventConsequenceEngine {
       } else if (event.type === 'growth' && depth < maxDepth) {
         queue.push({ id: event.id + ':pressure', year: event.year, type: 'infrastructure-expansion', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Population pressure requires infrastructure response' })
         queue.push({ id: event.id + ':failure-risk', year: event.year, type: 'infrastructure-failure', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Persistent growth pressure creates infrastructure failure risk' })
-      } else if (event.type === 'infrastructure-expansion' && depth < maxDepth) {
-        queue.push({ id: event.id + ':civic-change', year: event.year, type: 'civilization-change', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, from: 'agricultural', to: 'industrial', details: 'Infrastructure change alters civilization organization' })
       } else if (event.type === 'infrastructure-failure' && depth < maxDepth) {
         queue.push({ id: event.id + ':migration', year: event.year, type: 'migration', settlementId: event.settlementId, parentEventId: event.id, depth: depth + 1, details: 'Population migration follows infrastructure failure' })
       } else if (event.type === 'migration' && depth < maxDepth) {
