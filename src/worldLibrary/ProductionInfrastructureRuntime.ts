@@ -24,6 +24,16 @@ export type InfrastructureState = {
 
 export type WorldTimeScale = 'minute' | 'year' | 'decade' | 'century'
 
+export type WorldTimelineEvent = {
+  id: string
+  year: number
+  type: 'founding' | 'growth' | 'tier-transition' | 'resource-crisis' | 'infrastructure-expansion' | 'civilization-change'
+  settlementId: string
+  from?: string
+  to?: string
+  details: string
+}
+
 export type CivilizationProductionState = {
   civilization: CivilizationState
   nodes: ProductionNode[]
@@ -33,6 +43,7 @@ export type CivilizationProductionState = {
   shortages: string[]
   worldTime: { year: number; scale: WorldTimeScale; elapsed: number }
   history: Array<{ year: number; population: number; pressure: number; roads: number; capacity: number; shortages: string[] }>
+  timeline: WorldTimelineEvent[]
 }
 
 const OUTPUTS: Record<ProductionKind, { output: string; rate: number; input?: string; inputRate?: number }> = {
@@ -122,6 +133,7 @@ export class ProductionInfrastructureRuntime {
     const next = this.evaluate(civTick.state)
     next.worldTime = { ...current.worldTime }
     next.history = [...current.history]
+    next.timeline = [...current.timeline]
     next.infrastructure.roads += expansion.addedRoads
     next.infrastructure.capacity += expansion.addedCapacity
     next.infrastructure.populationCapacity = Math.max(next.infrastructure.populationCapacity, current.infrastructure.populationCapacity + expansion.addedCapacity)
@@ -131,6 +143,20 @@ export class ProductionInfrastructureRuntime {
     next.consumed = consumed
     next.shortages = [...new Set([...shortages, ...civTick.settlementTick.shortages])]
     const worldTime = next.worldTime
+    const previousTier = current.civilization.settlement.tier
+    const nextTier = next.civilization.settlement.tier
+    if (previousTier !== nextTier) {
+      next.timeline.push({ id: id + ':tier:' + worldTime.year, year: worldTime.year, type: 'tier-transition', settlementId: id, from: previousTier, to: nextTier, details: 'Settlement tier changed through simulation' })
+    }
+    if (next.shortages.length > 0 && current.shortages.length === 0) {
+      next.timeline.push({ id: id + ':crisis:' + worldTime.year, year: worldTime.year, type: 'resource-crisis', settlementId: id, details: 'Resource shortage detected: ' + next.shortages.join(', ') })
+    }
+    if (expansion.addedRoads > 0 || expansion.addedCapacity > 0) {
+      next.timeline.push({ id: id + ':infra:' + worldTime.year, year: worldTime.year, type: 'infrastructure-expansion', settlementId: id, details: 'Infrastructure expanded by ' + expansion.addedRoads + ' roads and ' + expansion.addedCapacity.toFixed(1) + ' capacity' })
+    }
+    if (current.civilization.type !== next.civilization.type) {
+      next.timeline.push({ id: id + ':civ:' + worldTime.year, year: worldTime.year, type: 'civilization-change', settlementId: id, from: current.civilization.type, to: next.civilization.type, details: 'Civilization specialization changed' })
+    }
     worldTime.elapsed += delta
     const yearsPerTick = worldTime.scale === 'minute' ? 1 / (365 * 24 * 60) : worldTime.scale === 'decade' ? 10 : worldTime.scale === 'century' ? 100 : 1
     worldTime.year += delta * yearsPerTick
