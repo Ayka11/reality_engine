@@ -1345,7 +1345,7 @@ export function bootstrapInfiniteWorld() {
                     </div>`).join('')}
                 </div>
               </div>
-            ` : `            ${activeTab === 'objects' ? `
+            ` : activeTab === 'objects' ? `
               <div>
                 <div style="font-size: 9.5px; color: var(--sub); margin-bottom: 4px; text-transform: uppercase;">Build Tool Mode</div>
                 <div class="pill-row">
