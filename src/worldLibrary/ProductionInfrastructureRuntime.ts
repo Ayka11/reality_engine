@@ -1,5 +1,6 @@
 import { civilizationRuntime, CivilizationState } from './CivilizationRuntime'
 import { worldResourceEconomy } from './WorldResourceEconomy'
+import { eventConsequenceEngine, type EventConsequence } from './EventConsequenceEngine'
 
 export type ProductionKind = 'agriculture' | 'industry' | 'research'
 
@@ -44,6 +45,7 @@ export type CivilizationProductionState = {
   worldTime: { year: number; scale: WorldTimeScale; elapsed: number }
   history: Array<{ year: number; population: number; pressure: number; roads: number; capacity: number; shortages: string[] }>
   timeline: WorldTimelineEvent[]
+  consequences: EventConsequence[]
 }
 
 const OUTPUTS: Record<ProductionKind, { output: string; rate: number; input?: string; inputRate?: number }> = {
@@ -95,7 +97,7 @@ export class ProductionInfrastructureRuntime {
       pressure: Math.min(1, civilization.settlement.population / Math.max(1, civilization.settlement.infrastructureCapacity)),
     }
 
-    const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [], worldTime: { year: 0, scale: 'year' as WorldTimeScale, elapsed: 0 }, history: [] }
+    const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [], worldTime: { year: 0, scale: 'year' as WorldTimeScale, elapsed: 0 }, history: [], timeline: [{ id: civilization.id + ':founding', year: 0, type: 'founding', settlementId: civilization.id, to: civilization.settlement.tier, details: 'Civilization runtime initialized' }], consequences: [] }
     this.states.set(civilization.id, state)
     return state
   }
@@ -134,6 +136,7 @@ export class ProductionInfrastructureRuntime {
     next.worldTime = { ...current.worldTime }
     next.history = [...current.history]
     next.timeline = [...current.timeline]
+    next.consequences = []
     next.infrastructure.roads += expansion.addedRoads
     next.infrastructure.capacity += expansion.addedCapacity
     next.infrastructure.populationCapacity = Math.max(next.infrastructure.populationCapacity, current.infrastructure.populationCapacity + expansion.addedCapacity)
@@ -157,6 +160,24 @@ export class ProductionInfrastructureRuntime {
     if (current.civilization.type !== next.civilization.type) {
       next.timeline.push({ id: id + ':civ:' + worldTime.year, year: worldTime.year, type: 'civilization-change', settlementId: id, from: current.civilization.type, to: next.civilization.type, details: 'Civilization specialization changed' })
     }
+    const previousTimelineIds = new Set(current.timeline.map((event) => event.id))
+    const newEvents = next.timeline.filter((event) => !previousTimelineIds.has(event.id))
+    const consequences = eventConsequenceEngine.deriveMany(newEvents)
+    for (const consequence of consequences) {
+      for (const action of consequence.actions) {
+        if (action.type === 'growth-modifier') {
+          next.civilization.settlement.growthModifier = Math.min(next.civilization.settlement.growthModifier, action.multiplier)
+          next.civilization.settlement.growthModifierTicks = Math.max(next.civilization.settlement.growthModifierTicks, action.durationTicks)
+        } else if (action.type === 'stability-shift') {
+          next.civilization.settlement.stability = Math.max(0, Math.min(1, next.civilization.settlement.stability + action.delta))
+        } else if (action.type === 'infrastructure-capacity') {
+          next.civilization.settlement.infrastructureCapacity += action.amount
+        } else if (action.type === 'production-profile') {
+          next.nodes = next.nodes.filter((node) => action.enabledNodes.includes(node.kind))
+        }
+      }
+    }
+    next.consequences = consequences
     worldTime.elapsed += delta
     const yearsPerTick = worldTime.scale === 'minute' ? 1 / (365 * 24 * 60) : worldTime.scale === 'decade' ? 10 : worldTime.scale === 'century' ? 100 : 1
     worldTime.year += delta * yearsPerTick
