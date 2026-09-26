@@ -1560,6 +1560,19 @@ function evolveLawsTowardIntegral(sel){
   const ll=document.getElementById('lawList');if(ll)ll.innerHTML=renderLaws();
 }
 
+function ensureInfiniteWorldComposer(){
+  // The Infinite World module is deferred; make generation resilient to module timing.
+  if(typeof window.infinityApplyComposer==='function')return window.infinityApplyComposer;
+  if(typeof window.bootstrapInfiniteWorld==='function'){
+    try{ window.bootstrapInfiniteWorld(); }catch(e){
+      console.error('[Reality Engine] Infinite World bootstrap failed',e);
+      log('⚠ Infinite World bootstrap failed: '+(e?.message||String(e)));
+    }
+  }
+  return typeof window.infinityApplyComposer==='function' ? window.infinityApplyComposer : null;
+}
+window.ensureInfiniteWorldComposer=ensureInfiniteWorldComposer;
+
 function generateWorld(){
   const phi=PHI_ARCHETYPES[compSel.phi];if(!phi){log('Select Φ Potential first');return;}
   const fld=FIELD_BALANCES[compSel.fields]||FIELD_BALANCES['Balanced'];
@@ -1613,17 +1626,19 @@ function generateWorld(){
       }
     },5000);
   }
-  if(currentRenderMode!=='3d'&&currentRenderMode!=='hybrid'){
-    setRenderMode('3d',document.getElementById('tab3d'));
-  }
+  // Make the target renderer visible and sized BEFORE generating into it.
+  setRenderMode('3d',document.getElementById('tab3d'));
+  setIconPanel('world');
   // Apply the same composer choice to the visible Infinite World, not only the legacy field buffer.
   try {
-    if(window.infinityApplyComposer) window.infinityApplyComposer(compSel);
+    const applyComposer=ensureInfiniteWorldComposer();
+    if(!applyComposer) throw new Error('Infinite World composer bridge is unavailable');
+    applyComposer(compSel);
     if(window.toggleWorldToolbar) window.toggleWorldToolbar(true);
     log(`✦ Reality synthesized: Φ=${compSel.phi} · ${compSel.fields} · C=${compSel.complexity} · Infinite World updated`);
   } catch (err) {
     console.error('[Reality Engine] Infinite World generation failed', err);
-    log(`⚠ Legacy world generated, but Infinite World update failed: ${String(err)}`);
+    log(`⚠ Legacy world generated, but Infinite World update failed: ${err?.message||String(err)}`);
   } finally {
     closeComp();
     drawGrid();
@@ -1636,15 +1651,10 @@ function quickGenerateWorld(){
   if(!compSel||!compSel.phi){
     compSel={phi:'Harmonic',fields:'Balanced',complexity:'Emergent',spacetime:'Standard'};
   }
+  // Quick Generate uses exactly the same authoritative generation pipeline as Compose.
+  setRenderMode('3d',document.getElementById('tab3d'));
+  setIconPanel('world');
   generateWorld();
-  // Quick Generate is a world action: return the user to the visible Infinite World
-  // and its contextual sidebar after generation.
-  if(typeof setRenderMode==='function'){
-    setRenderMode('3d',document.getElementById('tab3d'));
-  }
-  if(typeof setIconPanel==='function'){
-    setIconPanel('world');
-  }
 }
 window.quickGenerateWorld=quickGenerateWorld;
 function _clearComposerHazards(){if(window._composerHazardInterval){clearInterval(window._composerHazardInterval);window._composerHazardInterval=null;}}
