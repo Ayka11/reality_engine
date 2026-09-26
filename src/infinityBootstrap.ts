@@ -4,6 +4,10 @@ import { settlementGrowthModel } from './worldLibrary/SettlementGrowthModel'
 import { civilizationRuntime } from './worldLibrary/CivilizationRuntime'
 import { productionInfrastructureRuntime } from './worldLibrary/ProductionInfrastructureRuntime'
 import { worldLibraryGenerationPlanner } from './worldLibrary/WorldLibraryGenerationPlanner'
+import { createAssetImportManifest } from './worldLibrary/AssetImportManifest'
+import type { WorldAssetImportManifest } from './worldLibrary/AssetImportManifest'
+import type { DiscoveredAsset } from './worldLibrary/AssetDiscovery'
+import { importDiscoveredAsset } from './worldLibrary/AssetImportService'
 import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, visualKindToWorldObject, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
 import { installScientificWorkspace } from './infinity/ScientificWorkspace'
@@ -317,8 +321,8 @@ export function bootstrapInfiniteWorld() {
 
   ;(window as any).cinemaFlyover = (durationMs = 8000) => {
     world.setFlyMode(false)
-    const startX = world.worldPosition.x - 90
-    const startZ = world.worldPosition.z - 90
+    const startX = world.getWorldPosition().x - 90
+    const startZ = world.getWorldPosition().z - 90
     const endX = startX + 180
     const endZ = startZ + 180
     const startTime = performance.now()
@@ -868,7 +872,7 @@ export function bootstrapInfiniteWorld() {
     let isOpen = localStorage.getItem('infinity_dock_open') !== 'false'
     let activeTab: 'camera' | 'objects' | 'persist' | 'analysis' | 'display' | 'library' = 'objects'
     let libraryQuery = ''
-    let libraryCategory = ''
+    let libraryCategory: import('./worldLibrary/WorldLibrary').WorldLibraryCategory | '' = ''
     let librarySelected = ''
     let eraseRadius = 4
     const escLibrary = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c] || c)
