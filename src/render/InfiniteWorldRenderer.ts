@@ -1223,14 +1223,51 @@ export class InfiniteWorldRenderer {
     const materialized = (addedRoads || addedCapacity)
       ? this.materializeInfrastructureExpansion(id, addedRoads, addedCapacity)
       : { id, addedRoads: 0, addedBuildings: 0 }
+    const consequenceMaterialized = this.materializeEventConsequences(id, next.consequences ?? [])
     return {
       id,
       civilization: next.civilization,
       production: next,
       infrastructure: next.infrastructure,
       materialized,
+      consequenceMaterialized,
       layers: ['visual', 'biological', 'resource', 'infrastructure', 'civilization'],
     }
+  }
+
+  materializeEventConsequences(id: string, consequences: Array<{ eventId: string; actions: Array<{ type: string; civilization?: string; tier?: string; visualKinds?: string[] }> }>) {
+    const materialized: Array<{ eventId: string; action: string; result?: unknown }> = []
+    const x = this.worldPosition.x
+    const z = this.worldPosition.z
+    for (const consequence of consequences) {
+      for (const action of consequence.actions) {
+        if (action.type !== 'visual-transition') continue
+        if (action.tier === 'village' || action.tier === 'town' || action.tier === 'city' || action.tier === 'megacity') {
+          materialized.push({
+            eventId: consequence.eventId,
+            action: action.type,
+            result: this.materializeSettlementTier(action.tier, x, z),
+          })
+        } else if (action.civilization === 'post-scarcity') {
+          this.generateCityPlan(x, z, 240, 41)
+          this.place('quantum_emitter', x, z, 1.5)
+          this.syncObjects()
+          this.scheduleSave()
+          materialized.push({ eventId: consequence.eventId, action: action.type, result: { civilization: action.civilization, form: 'post-scarcity-city' } })
+        } else if (action.civilization === 'industrial') {
+          this.generateCityPlan(x, z, 190, 31)
+          this.syncObjects()
+          this.scheduleSave()
+          materialized.push({ eventId: consequence.eventId, action: action.type, result: { civilization: action.civilization, form: 'industrial-city' } })
+        } else if (action.civilization === 'agricultural') {
+          this.generateSettlementV2(x, z, 150, 6)
+          this.syncObjects()
+          this.scheduleSave()
+          materialized.push({ eventId: consequence.eventId, action: action.type, result: { civilization: action.civilization, form: 'agricultural-settlement' } })
+        }
+      }
+    }
+    return materialized
   }
 
   materializeInfrastructureExpansion(id: string, addedRoads: number, addedCapacity: number) {
