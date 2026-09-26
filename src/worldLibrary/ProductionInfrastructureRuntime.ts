@@ -22,6 +22,8 @@ export type InfrastructureState = {
   pressure: number
 }
 
+export type WorldTimeScale = 'minute' | 'year' | 'decade' | 'century'
+
 export type CivilizationProductionState = {
   civilization: CivilizationState
   nodes: ProductionNode[]
@@ -29,6 +31,8 @@ export type CivilizationProductionState = {
   produced: Record<string, number>
   consumed: Record<string, number>
   shortages: string[]
+  worldTime: { year: number; scale: WorldTimeScale; elapsed: number }
+  history: Array<{ year: number; population: number; pressure: number; roads: number; capacity: number; shortages: string[] }>
 }
 
 const OUTPUTS: Record<ProductionKind, { output: string; rate: number; input?: string; inputRate?: number }> = {
@@ -80,7 +84,7 @@ export class ProductionInfrastructureRuntime {
       pressure: Math.min(1, civilization.settlement.population / Math.max(1, civilization.settlement.infrastructureCapacity)),
     }
 
-    const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [] }
+    const state = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [], worldTime: { year: 0, scale: 'year' as WorldTimeScale, elapsed: 0 }, history: [] }
     this.states.set(civilization.id, state)
     return state
   }
@@ -124,6 +128,11 @@ export class ProductionInfrastructureRuntime {
     next.produced = produced
     next.consumed = consumed
     next.shortages = [...new Set([...shortages, ...civTick.settlementTick.shortages])]
+    const worldTime = next.worldTime
+    worldTime.elapsed += delta
+    const yearsPerTick = worldTime.scale === 'minute' ? 1 / (365 * 24 * 60) : worldTime.scale === 'decade' ? 10 : worldTime.scale === 'century' ? 100 : 1
+    worldTime.year += delta * yearsPerTick
+    next.history = [...next.history, { year: worldTime.year, population: next.civilization.settlement.population, pressure: next.infrastructure.pressure, roads: next.infrastructure.roads, capacity: next.infrastructure.capacity, shortages: next.shortages }].slice(-120)
     this.states.set(id, next)
     return next
   }
