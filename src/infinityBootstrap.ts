@@ -73,6 +73,7 @@ export function bootstrapInfiniteWorld() {
     return { id: entry.id, visual, objects: world.getRuntimeStats().objects }
   }
   ;(window as any).worldCurrentEnvironment = () => world.getWorldEnvironment()
+  ;(window as any).worldHasSemanticElement = (id: string) => world.hasSemanticElement(id)
   ;(window as any).worldLibraryGenerationPlan = (id: string) => worldLibraryGenerationPlanner.plan(id, world.getWorldEnvironment())
   ;(window as any).worldLibraryEnvironmentCheck = (id: string, environment: any) => {
     const entry = resolveWorldLibraryEntry(id)
@@ -94,7 +95,7 @@ export function bootstrapInfiniteWorld() {
     const plan = worldLibraryGenerationPlanner.plan(id, world.getWorldEnvironment())
     if (!plan) return null
     if (plan.environmentStatus === 'BLOCKED') return { id, generated: false, blockedBy: ['environment'], plan }
-    const blocked = plan.conflicts.filter((conflict) => worldLibrary.has(conflict))
+    const blocked = plan.conflicts.filter((conflict) => world.hasSemanticElement(conflict))
     if (blocked.length) return { id, generated: false, blockedBy: blocked, plan }
     const generated: string[] = []
     for (const dependency of plan.dependencies) {
