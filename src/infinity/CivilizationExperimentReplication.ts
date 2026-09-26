@@ -87,6 +87,7 @@ export function assessCivilizationReplication(
         return metricNames.every((metric) => {
           const l = metricValue(leftOutcome, metric)
           const r = metricValue(rightOutcome, metric)
+          if (l === null || r === null) return false
           return Math.abs(l - r) <= tolerance || Math.sign(l) === Math.sign(r)
         })
       }).length / scenarioIds.length
