@@ -21,6 +21,7 @@ import { RuntimeDiagnostics } from '../infinity/RuntimeDiagnostics'
 import { createExperimentProtocol } from '../infinity/ExperimentProtocol'
 import { ExperimentRunner, type ExperimentSnapshot } from '../infinity/ExperimentRunner'
 import { compareExperiments, type ExperimentComparison } from '../infinity/ExperimentComparison'
+import { ExperimentCatalog } from '../infinity/ExperimentCatalog'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -54,6 +55,7 @@ export class InfiniteWorldRenderer {
   readonly physicsInteractionLog = new PhysicsInteractionLog()
   readonly runtimeDiagnostics = new RuntimeDiagnostics()
   readonly experimentRunner = new ExperimentRunner()
+  readonly experimentCatalog = new ExperimentCatalog()
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -2092,11 +2094,25 @@ export class InfiniteWorldRenderer {
     this.recordExperimentResult('runtime', this.getRuntimeDiagnostics())
     this.recordExperimentResult('physicsInteractions', this.physicsInteractionLog.recent(500))
     this.recordExperimentResult('decisionGraph', this.decisionGraph.snapshot())
-    return this.experimentRunner.finish(status)
+    const snapshot = this.experimentRunner.finish(status)
+    this.experimentCatalog.add(snapshot)
+    return snapshot
   }
 
   compareExperiments(left: ExperimentSnapshot, right: ExperimentSnapshot): ExperimentComparison {
     return compareExperiments(left, right)
+  }
+
+  getExperiment(experimentId: string) {
+    return this.experimentCatalog.get(experimentId)
+  }
+
+  getRecentExperiments(limit = 20) {
+    return this.experimentCatalog.recent(limit)
+  }
+
+  getExperimentCatalogSnapshot() {
+    return this.experimentCatalog.snapshot()
   }
 
   getRuntimeDiagnostics() {
