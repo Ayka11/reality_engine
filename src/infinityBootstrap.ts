@@ -804,6 +804,9 @@ export function bootstrapInfiniteWorld() {
   // ── Generation diagnostics ───────────────────────────────────────────────
   ;(window as any).worldGenerationHealth = () => {
     const stats = world.getRuntimeStats()
+    const last = (window as any).lastInfinityGeneration
+    const worldStats = stats.world ?? {}
+
     const canvasState = {
       width: canvas.width,
       height: canvas.height,
@@ -817,6 +820,14 @@ export function bootstrapInfiniteWorld() {
       stats,
       canvas: canvasState,
       generatedRegion: stats.world ?? null,
+      lastGeneration: last ? {
+        seed: last.seed,
+        config: last.config,
+        plannedElements: last.generationPlan?.plannedElements ?? 0,
+        appliedElements: last.generationPlan?.appliedElements ?? 0,
+        skippedElements: last.generationPlan?.skippedElements ?? 0,
+      } : null,
+      worldStats,
       timestamp: new Date().toISOString(),
     }
   }
