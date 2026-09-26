@@ -19,6 +19,12 @@ export type ResourceCapability = {
 export class WorldResourceEconomy {
   private readonly resources = new Map<string, ResourceState>()
 
+  private canonicalId(id: string) {
+    if (id === 'resource.iron' && this.resources.has('resource.metal')) return 'resource.metal'
+    if (id === 'resource.metal' && this.resources.has('resource.iron')) return 'resource.iron'
+    return id
+  }
+
   seedFromBiome(biomeId: string, multiplier = 1): ResourceState[] {
     const produced = worldRuleGraph.query({ from: biomeId, relation: 'produces' })
     const states: ResourceState[] = []
@@ -38,11 +44,11 @@ export class WorldResourceEconomy {
   }
 
   set(state: ResourceState) { this.resources.set(state.semanticEntryId, state); return state }
-  get(id: string) { return this.resources.get(id) }
+  get(id: string) { return this.resources.get(this.canonicalId(id)) }
   all() { return [...this.resources.values()] }
 
   capability(id: string, requiredAmount: number): ResourceCapability {
-    const resource = this.resources.get(id)
+    const resource = this.resources.get(this.canonicalId(id))
     const effective = resource ? resource.amount * resource.quality * resource.accessibility : 0
     const score = requiredAmount <= 0 ? 1 : Math.max(0, Math.min(1, effective / requiredAmount))
     return { semanticEntryId: id, requiredAmount, available: score >= 1, score }
