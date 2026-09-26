@@ -462,7 +462,10 @@ export function bootstrapInfiniteWorld() {
     world.setFogDensity(fog)
     world.setMaterialMode(mat)
     world.setObjectTool('navigate')
-    world.setCameraPreset('orbit')
+
+    // Frame the generated region so Compose/Quick Generate immediately reveals
+    // the newly created world instead of leaving the camera at an unrelated point.
+    world.focusGeneratedRegion()
 
     // Force an immediate resize/render after generation. This is important when
     // Compose/Quick Generate switches the canvas from a hidden tab to the 3D view.
