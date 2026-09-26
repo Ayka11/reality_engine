@@ -113,3 +113,42 @@ graph that can be queried by the World Composer and AI.
 
 The long-term goal is not simply a larger asset list. It is a reusable **World Knowledge
 System** from which an effectively unbounded number of coherent worlds can be generated.
+
+
+## Rule Graph
+
+The catalogue is paired with a rule graph. Rules connect semantic entities using
+relations such as:
+
+- requires
+- enables
+- supports
+- produces
+- conflicts
+- compatible
+- transforms
+
+This enables compositional generation. For example:
+
+```
+Forest
+  -> supports -> Oak
+  -> supports -> Deer
+  -> supports -> Wolf
+  -> produces -> Timber
+
+River
+  -> supports -> Fish
+  -> enables -> Bridge
+  -> enables -> Agriculture
+
+Village
+  -> transforms -> Town
+  -> Town transforms -> City
+```
+
+The graph is intentionally separate from rendering. A future World Composer can
+evaluate rules against local terrain, climate, resources and active world laws before
+placing entities.
+
+This creates the basis for a coherent world rather than a random collection of objects.
