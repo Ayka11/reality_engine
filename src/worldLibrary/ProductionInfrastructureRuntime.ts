@@ -144,7 +144,7 @@ export class ProductionInfrastructureRuntime {
     next.consequences = []
     next.causalChain = [...current.causalChain]
     next.causalQueue = [...current.causalQueue]
-    next.productionModifier = current.productionModifier
+    next.productionModifier = current.productionModifierTicks > 0 ? current.productionModifier : 1
     next.productionModifierTicks = Math.max(0, current.productionModifierTicks - 1)
     next.causalCooldowns = Object.fromEntries(Object.entries(current.causalCooldowns).map(([key, value]) => [key, Math.max(0, value - 1)]).filter(([, value]) => value > 0))
     next.infrastructure.roads += expansion.addedRoads
