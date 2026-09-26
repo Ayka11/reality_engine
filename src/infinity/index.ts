@@ -26,3 +26,5 @@ export * from './EvidenceValidator'
 export * from './WorldExperimentRunner'
 export * from './WorldExperimentBatch'
 export * from './CivilizationExperimentAdapter'
+
+export * from './CivilizationExperimentMatrix'
