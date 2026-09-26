@@ -17,6 +17,7 @@ export type CivilizationExperimentMatrix = {
   maxPlans?: number
   combinationMode?: 'single' | 'powerset'
   maxCombinationSize?: number
+  maxScenariosPerPlan?: number
 }
 
 export type CivilizationExperimentPlan = CivilizationBatchScenario & {
@@ -81,6 +82,10 @@ export function buildCivilizationExperimentMatrix(
   }
 
   const maxPlans = Math.max(1, Math.floor(matrix.maxPlans ?? 1000))
+  const maxScenariosPerPlan = Math.max(1, Math.floor(matrix.maxScenariosPerPlan ?? 1000))
+  if (interventions.length + (includeBaseline ? 1 : 0) > maxScenariosPerPlan) {
+    throw new Error(`Civilization matrix contains ${interventions.length + (includeBaseline ? 1 : 0)} scenarios per plan; maxScenariosPerPlan is ${maxScenariosPerPlan}`)
+  }
   if (branches.length > maxPlans) {
     throw new Error(`Civilization matrix contains ${branches.length} plans; maxPlans is ${maxPlans}`)
   }
