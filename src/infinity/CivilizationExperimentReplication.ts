@@ -53,8 +53,8 @@ export function assessCivilizationReplication(
       const l = metricValue(leftMap.get(scenarioId), metric)
       const r = metricValue(rightMap.get(scenarioId), metric)
       const comparableValues = l !== null && r !== null
-      const absoluteDifference = comparableValues ? Math.abs(r - l) : null
-      const scale = comparableValues ? Math.max(Math.abs(l), Math.abs(r), 1e-12) : 1
+      const absoluteDifference = comparableValues ? Math.abs(r as number - l as number) : null
+      const scale = comparableValues ? Math.max(Math.abs(l as number), Math.abs(r as number), 1e-12) : 1
       const relativeDifference = comparableValues ? (absoluteDifference as number) / scale : null
       const sameDirection = comparableValues
         ? Math.abs(l) <= tolerance || Math.abs(r) <= tolerance
