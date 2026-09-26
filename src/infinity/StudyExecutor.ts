@@ -8,6 +8,8 @@ import { analyzeGeneralization, type GeneralizationDimension } from './Experimen
 import { createStudyManifest, type StudyManifest } from './StudyManifest'
 import { EvidenceClaimGraph } from './EvidenceClaimGraph'
 import { validateStudyManifest, type StudyValidationResult } from './StudyValidation'
+import { createDefaultOperationalization } from './StudyOperationalization'
+import { analyzeHypotheses } from './HypothesisAnalysis'
 
 export type StudyExecutionOptions={generalizationDimensions?:GeneralizationDimension[];stopOnError?:boolean;onProgress?:(completed:number,total:number)=>void}
 export type StudyExecutionResult={manifest:StudyManifest;completed:number;failed:number;warnings:string[];validation:StudyValidationResult}
@@ -15,14 +17,17 @@ export type StudyExecutionResult={manifest:StudyManifest;completed:number;failed
 export async function executeStudy(specification:StudySpecification,contract:StudyExecutionContract,options:StudyExecutionOptions={}):Promise<StudyExecutionResult>{
  if(contract.studyId!==specification.studyId) throw new Error('Execution contract does not belong to the supplied study specification')
  const executor=new ExperimentBatchExecutor()
- const batch=await executor.execute(contract.plans,async (plan,runner)=>{ const snapshot=runWorldExperiment(plan,{runner}); return snapshot.results },{stopOnError:options.stopOnError??false,onProgress:(completed,total)=>options.onProgress?.(completed,total)})
+ const batch=await executor.execute(contract.plans,async (plan,runner)=>runWorldExperiment(plan,{runner}),{stopOnError:options.stopOnError??false,onProgress:(completed,total)=>options.onProgress?.(completed,total)})
  const analysis=analyzeExperiments(batch.snapshots,'provider')
  const statistics=calculateStatisticalAnalysis(analysis)
  const dimensions=options.generalizationDimensions??specification.generalizationDimensions
  const generalization=Object.fromEntries(dimensions.map(dimension=>[dimension,analyzeGeneralization(batch.snapshots,dimension)])) as StudyManifest['generalization']
  const evidenceGraph=new EvidenceClaimGraph()
  for(const snapshot of batch.snapshots) evidenceGraph.addExperiment(snapshot)
- const manifest=createStudyManifest({studyId:specification.studyId,matrix:specification.matrix,plans:contract.plans.map(plan=>({experimentId:plan.protocol.experimentId,protocol:plan.protocol})),runs:batch.snapshots,statistics,generalization,evidence:evidenceGraph.snapshot()})
+ const operationalization=createDefaultOperationalization(specification)
+ const manifest=createStudyManifest({studyId:specification.studyId,matrix:specification.matrix,plans:contract.plans.map(plan=>({experimentId:plan.protocol.experimentId,protocol:plan.protocol})),runs:batch.snapshots,statistics,generalization,evidence:evidenceGraph.snapshot(),operationalization})
+ const hypothesisAnalysis=analyzeHypotheses(specification,operationalization,manifest)
+ manifest.hypothesisAnalysis=hypothesisAnalysis
  const validation=validateStudyManifest(manifest)
  const warnings:string[]=[]
  if(batch.failed>0) warnings.push('Some experiments failed during execution.')
