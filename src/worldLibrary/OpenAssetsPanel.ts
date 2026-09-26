@@ -7,7 +7,7 @@
  */
 
 import { worldAssetProviders, type WorldAssetProvider } from './AssetProviders'
-import { discoverPolyHavenAssets, type DiscoveredAsset } from './AssetDiscovery'
+import { discoverPolyHavenAssets, resolvePolyHavenRuntimeUrl, type DiscoveredAsset } from './AssetDiscovery'
 
 const esc = (value: string) => value.replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -34,6 +34,8 @@ export function mountOpenAssetsPanel() {
   let results: DiscoveredAsset[] = []
   let loading = false
   let error = ''
+  let importing = ''
+  let importMessage = ''
 
   const render = () => {
     host.innerHTML = open ? `
@@ -53,7 +55,7 @@ export function mountOpenAssetsPanel() {
           ${worldAssetProviders.all().map(providerCard).join('')}
         </div>
         <div style="font-size:8px;color:var(--sub);margin-bottom:5px">
-          ${loading ? 'Loading provider catalogue…' : error ? esc(error) : providerId==='polyhaven' ? 'Poly Haven live catalogue' : 'Provider registry metadata'}
+          ${loading ? 'Loading provider catalogue…' : importing ? 'Resolving runtime asset…' : error ? esc(error) : importMessage || (providerId==='polyhaven' ? 'Poly Haven live catalogue' : 'Provider registry metadata')}
         </div>
         <div style="max-height:270px;overflow:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
           ${results.filter(a => !query || (a.name+' '+a.id+' '+a.tags.join(' ')).toLowerCase().includes(query.toLowerCase())).slice(0,30).map(a=>`
@@ -61,7 +63,10 @@ export function mountOpenAssetsPanel() {
               <div style="font-size:8.5px;font-weight:600">${esc(a.name)}</div>
               <div style="font-size:7px;color:#8f88d8;margin-top:2px">${esc(a.id)}</div>
               <div style="font-size:7px;color:var(--sub);margin-top:3px">${esc(a.category || 'asset')} · ${esc(a.license)}</div>
-              <a href="${esc(a.sourceUrl)}" target="_blank" rel="noreferrer" style="font-size:7.5px;color:#a09af0;display:inline-block;margin-top:4px">Open source ↗</a>
+              <div style="display:flex;gap:4px;align-items:center;margin-top:5px">
+                <a href="${esc(a.sourceUrl)}" target="_blank" rel="noreferrer" style="font-size:7.5px;color:#a09af0">Source ↗</a>
+                ${a.providerId==='polyhaven' ? `<button data-import-asset="${esc(a.id)}" class="pill" style="font-size:7px;padding:2px 5px">${importing===a.id?'Loading…':'Import'}</button>` : ''}
+              </div>
             </div>`).join('') || '<div style="grid-column:1/-1;padding:18px;text-align:center;font-size:9px;color:var(--sub)">Choose Browse to discover provider assets.</div>'}
         </div>
       </div>` : ''
@@ -70,7 +75,36 @@ export function mountOpenAssetsPanel() {
     document.getElementById('openAssetsProvider')?.addEventListener('change',(e)=>{providerId=(e.target as HTMLSelectElement).value;results=[];error='';render()})
     document.getElementById('openAssetsQuery')?.addEventListener('input',(e)=>{query=(e.target as HTMLInputElement).value;render()})
     document.getElementById('openAssetsBrowse')?.addEventListener('click',browse)
+    host.querySelectorAll('[data-import-asset]').forEach(b=>b.addEventListener('click',()=>importAsset(b.getAttribute('data-import-asset')||'')))
     host.querySelectorAll('[data-provider]').forEach(b=>b.addEventListener('click',()=>{providerId=b.getAttribute('data-provider')||providerId;results=[];error='';browse()}))
+  }
+
+  const importAsset = async (assetId: string) => {
+    const asset = results.find(item => item.id === assetId)
+    if (!asset) return
+    importing = assetId
+    importMessage = ''
+    error = ''
+    render()
+    try {
+      const runtime = await resolvePolyHavenRuntimeUrl(asset)
+      if (!runtime) throw new Error('No GLB/GLTF runtime file is available for this asset')
+      const manifestResult = (window as any).worldAssetImport?.(asset)
+      if (!manifestResult?.accepted) {
+        throw new Error(manifestResult?.errors?.join('; ') || 'Asset provenance validation failed')
+      }
+      const load = (window as any).worldExternalAssetLoad
+      if (typeof load !== 'function') throw new Error('Infinite World asset runtime is not ready')
+      await load(asset.id, runtime.url, manifestResult.manifestEntry?.semanticEntryId, 1)
+      asset.runtimeUrl = runtime.url
+      asset.format = runtime.format
+      importMessage = 'Imported ' + asset.name + ' as ' + (manifestResult.manifestEntry?.semanticEntryId || 'unmapped asset')
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Asset import failed'
+    } finally {
+      importing = ''
+      render()
+    }
   }
 
   const browse = async () => {
