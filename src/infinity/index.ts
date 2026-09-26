@@ -30,3 +30,4 @@ export * from './CivilizationExperimentAdapter'
 
 export * from './CivilizationExperimentMatrix'
 export * from './CivilizationExperimentReplication'
+export * from './ReplicationStatistics'
