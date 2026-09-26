@@ -10,6 +10,8 @@ export type ConsequenceAction =
 
 export type CausalEvent = WorldTimelineEvent & { parentEventId?: string; depth?: number; severity?: number; trigger?: string }
 
+export type CausalEventQueueItem = CausalEvent & { priority?: number; sourceEvents?: string[] }
+
 export type CausalChainNode = {
   event: CausalEvent
   parentEventId?: string
@@ -97,7 +99,7 @@ export class EventConsequenceEngine {
   }
 
   deriveCausalEvents(events: CausalEvent[], maxDepth = 4): CausalEvent[] {
-    const queue = [...events]
+    const queue = [...this.mergeCompetingCauses(events)]
     const result: CausalEvent[] = []
     const seen = new Set<string>()
     while (queue.length) {
