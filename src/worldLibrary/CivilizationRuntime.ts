@@ -49,7 +49,7 @@ export type CivilizationClaimNode = {
 export type CivilizationGraphEdge = {
   from: string
   to: string
-  relation: 'supported-by' | 'contradicted-by' | 'derived-from' | 'caused-by'
+  relation: 'supported-by' | 'contradicted-by' | 'derived-from' | 'caused-by' | 'compared-with'
 }
 
 export type CivilizationClaimGraph = {
@@ -411,13 +411,13 @@ export class CivilizationRuntime {
       tick: Math.max(0, ...outcomes.map((outcome) => this.branchSnapshot(outcome.branchId)?.tick ?? 0))
     })
     for (const outcome of positive) {
-      edges.push({ from: claimId, to: `claim:${outcome.scenarioId}:${this.branchSnapshot(outcome.branchId)?.tick ?? 0}`, relation: 'supported-by' })
+      edges.push({ from: claimId, to: `claim:${outcome.scenarioId}:${this.branchSnapshot(outcome.branchId)?.tick ?? 0}`, relation: 'compared-with' })
     }
     for (const outcome of negative) {
-      edges.push({ from: claimId, to: `claim:${outcome.scenarioId}:${this.branchSnapshot(outcome.branchId)?.tick ?? 0}`, relation: 'contradicted-by' })
+      edges.push({ from: claimId, to: `claim:${outcome.scenarioId}:${this.branchSnapshot(outcome.branchId)?.tick ?? 0}`, relation: 'compared-with' })
     }
     for (const outcome of stable) {
-      edges.push({ from: claimId, to: `claim:${outcome.scenarioId}:${this.branchSnapshot(outcome.branchId)?.tick ?? 0}`, relation: 'derived-from' })
+      edges.push({ from: claimId, to: `claim:${outcome.scenarioId}:${this.branchSnapshot(outcome.branchId)?.tick ?? 0}`, relation: 'compared-with' })
     }
     return { ...graph, claims, edges }
   }
@@ -464,9 +464,11 @@ export class CivilizationRuntime {
         ? !evidenceIds.has(edge.to)
         : edge.relation === 'caused-by'
           ? !causalEventIds.has(edge.to)
-          : !edge.to.startsWith('factor:')
+          : edge.relation === 'compared-with'
+            ? false
+            : !edge.to.startsWith('factor:')
     )
-    const invalidClaimEdges = graph.edges.filter((edge) => !claimIds.has(edge.from))
+    const invalidClaimEdges = graph.edges.filter((edge) => !claimIds.has(edge.from) || (edge.relation === 'compared-with' && !claimIds.has(edge.to)))
     return {
       valid: orphanClaims.length === 0 && orphanEdges.length === 0 && invalidClaimEdges.length === 0,
       claimCount: graph.claims.length,
