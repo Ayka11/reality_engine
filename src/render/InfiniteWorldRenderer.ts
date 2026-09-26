@@ -13,6 +13,7 @@ import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import { FieldSampler } from '../infinity/FieldSampler'
 import { WorldDecisionLayer, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { DecisionGraph } from '../infinity/DecisionGraph'
+import { WorldObjectSpatialIndex } from '../infinity/WorldObjectSpatialIndex'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -41,6 +42,7 @@ export class InfiniteWorldRenderer {
   readonly fieldSampler: FieldSampler
   decisionLayer: WorldDecisionLayer
   readonly decisionGraph = new DecisionGraph()
+  readonly objectSpatialIndex = new WorldObjectSpatialIndex()
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -270,11 +272,13 @@ export class InfiniteWorldRenderer {
 
   loadWorld() {
     this.objects.clear()
+    this.objectSpatialIndex.clear()
     let count = 0
     for (const key of this.persistence.knownChunks()) {
       const [cx, cy, cz] = key.split(',').map(Number)
       for (const object of this.persistence.loadChunk(cx, cy, cz)) {
         this.objects.add(object)
+        this.objectSpatialIndex.upsert(object)
         count++
       }
     }
@@ -289,6 +293,7 @@ export class InfiniteWorldRenderer {
   clearSavedWorld() {
     this.persistence.clear()
     this.objects.clear()
+    this.objectSpatialIndex.clear()
     this.syncObjects()
     this.selectedObjectId = null
     this.transformControls.detach()
@@ -1876,7 +1881,7 @@ export class InfiniteWorldRenderer {
     const count = pos.length / 3
     const camX = this.worldPosition.x
     const camZ = this.worldPosition.z
-    const objects = [...this.objectMeshes.values()].map(e => e.object)
+    const physicsKinds = new Set<WorldObjectKind>(['metalaw', 'gravity_well', 'entropy_sink', 'quantum_emitter', 'force_field'])
 
     for (let i = 0; i < count; i++) {
       const idx = i * 3
@@ -1894,10 +1899,13 @@ export class InfiniteWorldRenderer {
       vz *= 0.985
       vy += 0.25 * dt
 
-      // Real-time field interaction with placed simulated physics objects
-      for (const obj of objects) {
-        const dx = (obj.x - this.worldAnchor.x) - px
-        const dz = (obj.z - this.worldAnchor.z) - pz
+      // Query only nearby physics objects through the chunk-local spatial index.
+      const worldX = px + this.worldAnchor.x
+      const worldZ = pz + this.worldAnchor.z
+      const nearbyObjects = this.objectSpatialIndex.queryRadius(worldX, py, worldZ, 160, physicsKinds)
+      for (const obj of nearbyObjects) {
+        const dx = obj.x - worldX
+        const dz = obj.z - worldZ
         const distSq = dx * dx + dz * dz
         const rad = obj.scale * 38
 
