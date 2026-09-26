@@ -299,7 +299,8 @@ export class CivilizationRuntime {
     return {
       branches: Array.from(this.branches.entries()).map(([branchId, history]) => ({ branchId, history })),
       branchStates: Array.from(this.branchStates.entries()).map(([branchId, state]) => ({ branchId, state })),
-      experiments: Array.from(this.experiments.values())
+      experiments: Array.from(this.experiments.values()),
+      branchResources: Array.from(this.branchResources.entries()).map(([branchId, resources]) => ({ branchId, resources }))
     }
   }
 
@@ -307,9 +308,11 @@ export class CivilizationRuntime {
     this.branches.clear()
     this.branchStates.clear()
     this.experiments.clear()
+    this.branchResources.clear()
     for (const entry of snapshot.branches ?? []) this.branches.set(entry.branchId, entry.history)
     for (const entry of snapshot.branchStates ?? []) this.branchStates.set(entry.branchId, entry.state)
     for (const experiment of snapshot.experiments ?? []) this.experiments.set(experiment.experimentId, experiment)
+    for (const entry of snapshot.branchResources ?? []) this.branchResources.set(entry.branchId, entry.resources.map((resource) => ({ ...resource })))
     return {
       branchCount: this.branches.size,
       stateCount: this.branchStates.size,
