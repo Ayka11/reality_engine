@@ -375,6 +375,34 @@ export class InfiniteWorldRenderer {
   }
 
   get isEnabled() { return this.enabled }
+  getWorldEnvironment() {
+    const x = this.worldPosition.x
+    const z = this.worldPosition.z
+    const y = this.generator.sampleHeight(x, z)
+    const climate = this.generator.sampleClimate(x, z, y)
+    const step = 2
+    const hL = this.generator.sampleHeight(x - step, z)
+    const hR = this.generator.sampleHeight(x + step, z)
+    const hD = this.generator.sampleHeight(x, z - step)
+    const hU = this.generator.sampleHeight(x, z + step)
+    const dx = (hR - hL) / (step * 2)
+    const dz = (hU - hD) / (step * 2)
+    const slope = Math.min(1, Math.sqrt(dx * dx + dz * dz) / 3)
+    const field = this.generator.sampleField(x, y, z)
+    const radiation = Math.max(0, Math.min(1, field.entropy * 8))
+    const stability = Math.max(0, Math.min(1, 1 - field.entropy * 8))
+    return {
+      temperature: climate.temperature,
+      moisture: climate.moisture,
+      elevation: y / this.generator.maxElevation,
+      slope,
+      radiation,
+      stability,
+      biome: `biome.${climate.biome}`,
+      worldPosition: { x, y, z },
+    }
+  }
+
   getRuntimeStats() {
     return {
       objects: this.objects.size,
