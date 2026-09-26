@@ -12,6 +12,7 @@ import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import { FieldSampler } from '../infinity/FieldSampler'
 import { WorldDecisionLayer, type RouteProfile } from '../infinity/WorldDecisionLayer'
+import { DecisionGraph } from '../infinity/DecisionGraph'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -39,6 +40,7 @@ export class InfiniteWorldRenderer {
   history = new WorldEditHistory()
   readonly fieldSampler: FieldSampler
   decisionLayer: WorldDecisionLayer
+  readonly decisionGraph = new DecisionGraph()
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -1257,6 +1259,7 @@ export class InfiniteWorldRenderer {
     const zone = this.buildZoneCost(x, z)
     const hydro = this.analyzeHydrology(x, z, 24, 9)
     const scientificDecision = this.decisionLayer.explainBuildDecision(x, z)
+    this.decisionGraph.addDecision(scientificDecision, 'Build decision')
     const reasons: string[] = []
     if (zone.floodRisk > 0.6) reasons.push('high flood risk')
     else if (zone.floodRisk > 0.3) reasons.push('moderate flood risk')
@@ -1988,6 +1991,14 @@ export class InfiniteWorldRenderer {
         group.scale.setScalar(entry.object.scale * (1 + 0.015 * Math.sin(t * 3)))
       }
     }
+  }
+
+  getDecisionGraphSnapshot() {
+    return this.decisionGraph.snapshot()
+  }
+
+  clearDecisionGraph() {
+    this.decisionGraph.clear()
   }
 
   getLoadedChunkCount() { return this.patches.size }
