@@ -17,6 +17,7 @@ import { WorldObjectSpatialIndex } from '../infinity/WorldObjectSpatialIndex'
 import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
 import { createPhysicsInteractionRecord, type PhysicsInteractionType } from '../infinity/PhysicsInteractionRecord'
 import { PhysicsInteractionLog } from '../infinity/PhysicsInteractionLog'
+import { RuntimeDiagnostics } from '../infinity/RuntimeDiagnostics'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -48,6 +49,7 @@ export class InfiniteWorldRenderer {
   readonly objectSpatialIndex = new WorldObjectSpatialIndex()
   readonly fieldPhysics = new FieldModulatedPhysics()
   readonly physicsInteractionLog = new PhysicsInteractionLog()
+  readonly runtimeDiagnostics = new RuntimeDiagnostics()
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -1812,6 +1814,7 @@ export class InfiniteWorldRenderer {
 
   render(dt = 0.016) {
     if (!this.enabled) return
+    const frameStart = this.runtimeDiagnostics.beginFrame()
 
     // Cinema Mode camera track interpolation if defined
     const cc = (window as any).cinemaCamera
@@ -1829,13 +1832,29 @@ export class InfiniteWorldRenderer {
     }
 
     this.maybeRecenter()
+
+    const chunkStart = performance.now()
     this.syncChunks()
     this.syncPersistentObjects()
     this.syncObjects()
+    this.runtimeDiagnostics.recordChunkSync(performance.now() - chunkStart)
+
     this.animatePhysicsObjects(dt)
+
+    const physicsStart = performance.now()
     this.updatePhysicsParticles(dt)
+    this.runtimeDiagnostics.recordPhysics(
+      performance.now() - physicsStart,
+      this.physicsInteractionLog.size,
+      this.objectSpatialIndex.size,
+    )
+
+    const lodStart = performance.now()
     this.updateTerrainLod()
+    this.runtimeDiagnostics.recordTerrainLod(performance.now() - lodStart)
+
     this.renderer.render(this.scene, this.camera)
+    this.runtimeDiagnostics.recordFrame(frameStart, Math.max(0.001, dt * 1000))
   }
 
   private initPhysicsParticleSystem(count = 700) {
@@ -2026,6 +2045,14 @@ export class InfiniteWorldRenderer {
         group.scale.setScalar(entry.object.scale * (1 + 0.015 * Math.sin(t * 3)))
       }
     }
+  }
+
+  getRuntimeDiagnostics() {
+    return this.runtimeDiagnostics.snapshot(
+      this.getLoadedChunkCount(),
+      this.objectMeshes.size,
+      this.physicsParticlePositions.length / 3,
+    )
   }
 
   getPhysicsInteractionSnapshot(limit = 100) {
