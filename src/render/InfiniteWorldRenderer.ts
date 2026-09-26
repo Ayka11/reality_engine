@@ -1132,6 +1132,113 @@ export class InfiniteWorldRenderer {
     return { biomeId: plan.biomeId, byLayer: plan.byLayer, results, reason: plan.reason }
   }
 
+  populateBiome(
+    environment: Parameters<typeof biomePopulationEngine.plan>[0],
+    radius = 100,
+    density = 1,
+    seed = 1,
+  ) {
+    const plan = biomePopulationEngine.plan(environment)
+    const results: Array<{ semanticEntryId: string; layer: string; count: number; mode: string }> = []
+
+    for (const rule of plan.rules) {
+      const source = this.worldAssetRuntime.getSemanticSource(rule.semanticEntryId)
+      if (source && (rule.layer === 'visual' || rule.layer === 'biological')) {
+        const count = Math.max(1, Math.min(rule.maxCount,
+          Math.round((rule.minCount + rule.maxCount) * 0.5 * density * rule.weight)))
+        const placed = this.worldAssetRuntime.scatterSemantic(
+          rule.semanticEntryId,
+          {
+            minX: this.worldPosition.x - radius,
+            maxX: this.worldPosition.x + radius,
+            minZ: this.worldPosition.z - radius,
+            maxZ: this.worldPosition.z + radius,
+          },
+          count,
+          seed + results.length,
+          rule.scale,
+        )
+        placed.forEach((instance) => {
+          const x = instance.position.x
+          const z = instance.position.z
+          const y = this.generator.sampleHeight(x, z)
+          instance.position.y = y
+          instance.userData.worldPosition = { x, y, z }
+        })
+        results.push({ semanticEntryId: rule.semanticEntryId, layer: rule.layer, count: placed.length, mode: 'external-asset' })
+        continue
+      }
+
+      const angle = (results.length * 2.399963) % (Math.PI * 2)
+      const x = this.worldPosition.x + Math.cos(angle) * radius * 0.55
+      const z = this.worldPosition.z + Math.sin(angle) * radius * 0.55
+      let count = 0
+      const entry = resolveWorldLibraryEntry(rule.semanticEntryId)
+
+      if (rule.layer === 'resource') {
+        const visual = entry ? resourceVisualKind(entry) : null
+        if (visual) {
+          this.scatter(visual, x - 35, z - 35, x + 35, z + 35, Math.min(0.08, 0.025 * density * rule.weight))
+          count = 1
+        } else if (rule.semanticEntryId === 'resource.water') {
+          this.place('water', x, z, 1)
+          count = 1
+        }
+      } else if (rule.layer === 'infrastructure') {
+        if (rule.semanticEntryId === 'infrastructure.road') {
+          this.generateRoadNetwork(x, z, Math.round(radius * 1.2), 5)
+          count = 1
+        } else if (rule.semanticEntryId === 'infrastructure.bridge') {
+          this.place('bridge', x, z, 1)
+          count = 1
+        } else if (rule.semanticEntryId === 'infrastructure.harbor') {
+          this.place('building', x, z, 1.25)
+          count = 1
+        } else if (rule.semanticEntryId === 'infrastructure.power-grid') {
+          this.place('building', x, z, 1.1)
+          count = 1
+        } else if (rule.semanticEntryId === 'settlement.city' || rule.semanticEntryId === 'settlement.megacity') {
+          this.generateCityPlan(x, z, rule.semanticEntryId === 'settlement.megacity' ? 240 : 180, 31)
+          count = 1
+        } else if (rule.semanticEntryId === 'settlement.town' || rule.semanticEntryId === 'settlement.village') {
+          this.generateSettlementV2(x, z, rule.semanticEntryId === 'settlement.town' ? 150 : 110, 5)
+          count = 1
+        } else if (entry) {
+          const visual = visualKindToWorldObject(entry)
+          if (visual) {
+            this.place(visual, x, z, rule.scale)
+            count = 1
+          }
+        }
+      } else if (rule.layer === 'civilization') {
+        if (rule.semanticEntryId === 'civilization.industrial') {
+          this.generateCityPlan(x, z, 190, 31)
+          count = 1
+        } else if (rule.semanticEntryId === 'civilization.post-scarcity') {
+          this.generateCityPlan(x, z, 240, 41)
+          this.place('quantum_emitter', x, z, 1.5)
+          count = 1
+        } else if (rule.semanticEntryId === 'civilization.agricultural') {
+          this.generateSettlementV2(x, z, 150, 6)
+          count = 1
+        }
+      } else if (rule.layer === 'biological') {
+        this.place('spawn', x, z, rule.scale)
+        count = 1
+      } else if (rule.layer === 'visual' && entry) {
+        const visual = visualKindToWorldObject(entry)
+        if (visual) {
+          this.scatter(visual, x - radius, z - radius, x + radius, z + radius, Math.min(0.08, 0.02 * density * rule.weight))
+          count = 1
+        }
+      }
+
+      results.push({ semanticEntryId: rule.semanticEntryId, layer: rule.layer, count, mode: 'procedural-fallback' })
+    }
+
+    return { biomeId: plan.biomeId, byLayer: plan.byLayer, results, reason: plan.reason }
+  }
+
   scatterExternalSemantic(
     semanticEntryId: string,
     count: number,
