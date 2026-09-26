@@ -79,6 +79,9 @@ export function bootstrapInfiniteWorld() {
     if (scale) state.worldTime.scale = scale
     return { ...state.worldTime, history: state.history }
   }
+  ;(window as any).worldTimeline = (id: string) => productionInfrastructureRuntime.timeline(id)
+  ;(window as any).worldTimelineAll = () => productionInfrastructureRuntime.allTimelines()
+
   ;(window as any).productionStats = () => productionInfrastructureRuntime.all()
   ;(window as any).worldResourceEconomy = worldResourceEconomy
   ;(window as any).worldResourceStats = () => worldResourceEconomy.stats()
