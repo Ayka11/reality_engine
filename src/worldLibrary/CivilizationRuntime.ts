@@ -175,7 +175,7 @@ export class CivilizationRuntime {
   private readonly experiments = new Map<string, CivilizationExperimentResult>()
   private readonly branchResources = new Map<string, ResourceState[]>()
   private readonly branchEnvironments = new Map<string, CivilizationBranchEnvironment>()
-  private readonly branchCausalEvents = new Map<string, CausalEvent[]>()
+  private readonly branchCausalEventStore = new Map<string, CausalEvent[]>()
 
   evaluate(id: string, tier: SettlementTier): CivilizationState {
     const settlement = settlementGrowthModel.evaluate(id, tier)
@@ -249,7 +249,7 @@ export class CivilizationRuntime {
       trajectory: [...previousMemory.trajectory, { tick: previousMemory.ticks + delta, type: next.type, score: next.score, stability: settlementTick.state.stability, evolutionPressure: next.evolutionPressure }].slice(-120),
     }
     next.memory = memory
-    const causalEvents = this.branchCausalEvents.get(memory.branchId) ?? []
+    const causalEvents = this.branchCausalEventStore.get(memory.branchId) ?? []
     const tickEvents: CausalEvent[] = []
     if (settlementTick.shortages.length > 0) {
       tickEvents.push({
@@ -288,7 +288,7 @@ export class CivilizationRuntime {
     }
     if (tickEvents.length) {
       const derived = eventConsequenceEngine.deriveCausalEvents(tickEvents)
-      this.branchCausalEvents.set(memory.branchId, [...causalEvents, ...derived].slice(-240))
+      this.branchCausalEventStore.set(memory.branchId, [...causalEvents, ...derived].slice(-240))
     }
     const branchSnapshot: CivilizationBranchSnapshot = { branchId: memory.branchId, tick: memory.ticks, type: next.type, population: next.settlement.population, stability: next.settlement.stability, resilience: memory.resilience, divergence: memory.divergence, score: next.score }
     const history = this.branches.get(memory.branchId) ?? []
@@ -304,7 +304,7 @@ export class CivilizationRuntime {
   branchHistory(branchId: string) { return this.branches.get(branchId) ?? [] }
 
   tickBranch(branchId: string, delta = 1) {
-    const state = this.branchStates.get(branchId)
+    let state = this.branchStates.get(branchId)
     if (!state) return null
     const branchSnapshot = this.branchResources.get(branchId)
     if (branchSnapshot) worldResourceEconomy.restore(branchSnapshot)
@@ -330,7 +330,7 @@ export class CivilizationRuntime {
 
   branchState(branchId: string) { return this.branchStates.get(branchId) ?? null }
   branchEnvironment(branchId: string) { return this.branchEnvironments.get(branchId) ?? null }
-  branchCausalEvents(branchId: string) { return this.branchCausalEvents.get(branchId) ?? [] }
+  branchCausalEvents(branchId: string) { return this.branchCausalEventStore.get(branchId) ?? [] }
 
   buildClaimGraph(outcomes: CivilizationExperimentOutcome[]): CivilizationClaimGraph {
     const claims: CivilizationClaimNode[] = []
@@ -339,7 +339,7 @@ export class CivilizationRuntime {
     const edges: CivilizationGraphEdge[] = []
     for (const outcome of outcomes) {
       for (const item of outcome.evidence) evidence.push(item)
-      for (const event of (this.branchCausalEvents.get(outcome.branchId) ?? [])) if (!causalEvents.some((existing) => existing.id === event.id)) causalEvents.push(event)
+      for (const event of (this.branchCausalEventStore.get(outcome.branchId) ?? [])) if (!causalEvents.some((existing) => existing.id === event.id)) causalEvents.push(event)
       const final = this.branchSnapshot(outcome.branchId)
       if (!final) continue
       const claimId = `claim:${outcome.scenarioId}:${final.tick}`
@@ -372,7 +372,7 @@ export class CivilizationRuntime {
       for (const factor of outcome.causalAttribution) {
         edges.push({ from: claimId, to: `factor:${factor.factor}`, relation: 'derived-from' })
       }
-      for (const event of (this.branchCausalEvents.get(outcome.branchId) ?? []).slice(-8)) {
+      for (const event of (this.branchCausalEventStore.get(outcome.branchId) ?? []).slice(-8)) {
         edges.push({ from: claimId, to: event.id, relation: 'caused-by' })
       }
       for (const attribution of outcome.eventAttribution ?? []) {
@@ -429,7 +429,7 @@ export class CivilizationRuntime {
       experiments: Array.from(this.experiments.values()),
       branchResources: Array.from(this.branchResources.entries()).map(([branchId, resources]) => ({ branchId, resources })),
       branchEnvironments: Array.from(this.branchEnvironments.entries()).map(([branchId, environment]) => ({ branchId, environment })),
-      branchCausalEvents: Array.from(this.branchCausalEvents.entries()).map(([branchId, events]) => ({ branchId, events }))
+      branchCausalEvents: Array.from(this.branchCausalEventStore.entries()).map(([branchId, events]) => ({ branchId, events }))
     }
   }
 
@@ -439,13 +439,13 @@ export class CivilizationRuntime {
     this.experiments.clear()
     this.branchResources.clear()
     this.branchEnvironments.clear()
-    this.branchCausalEvents.clear()
+    this.branchCausalEventStore.clear()
     for (const entry of snapshot.branches ?? []) this.branches.set(entry.branchId, entry.history)
     for (const entry of snapshot.branchStates ?? []) this.branchStates.set(entry.branchId, entry.state)
     for (const experiment of snapshot.experiments ?? []) this.experiments.set(experiment.experimentId, experiment)
     for (const entry of snapshot.branchResources ?? []) this.branchResources.set(entry.branchId, entry.resources.map((resource) => ({ ...resource })))
     for (const entry of snapshot.branchEnvironments ?? []) this.branchEnvironments.set(entry.branchId, { ...entry.environment })
-    for (const entry of snapshot.branchCausalEvents ?? []) this.branchCausalEvents.set(entry.branchId, entry.events.map((event) => ({ ...event })))
+    for (const entry of snapshot.branchCausalEvents ?? []) this.branchCausalEventStore.set(entry.branchId, entry.events.map((event) => ({ ...event })))
     return {
       branchCount: this.branches.size,
       stateCount: this.branchStates.size,
@@ -513,7 +513,7 @@ export class CivilizationRuntime {
           { factor: 'resilience', weight: Math.min(1, Math.abs(final.resilience - baseline.resilience)), eventTypes: ['resource-crisis', 'migration', 'civilization-change'], mechanism: 'historical adaptation and crisis load changed resilience' },
           { factor: 'civilization-transition', weight: final.type === baseline.type ? 0 : 1, eventTypes: ['civilization-change', 'tier-transition'], mechanism: 'state transition changed the civilization trajectory' },
         ].filter((item) => item.weight > 0).sort((a, b) => b.weight - a.weight),
-        eventAttribution: (this.branchCausalEvents.get(branch.branchId) ?? [])
+        eventAttribution: (this.branchCausalEventStore.get(branch.branchId) ?? [])
           .map((event) => {
             const historyAtTick = branch.history.find((snapshot) => snapshot.tick === event.year) ?? final
             const baselineAtTick = baselineHistory.find((snapshot) => snapshot.tick === event.year) ?? baseline
@@ -540,7 +540,7 @@ export class CivilizationRuntime {
           .filter((item) => item.impact > 0)
           .sort((a, b) => b.impact - a.impact),
         evidence: branch.history.map((snapshot) => {
-          const events = this.branchCausalEvents.get(snapshot.branchId) ?? []
+          const events = this.branchCausalEventStore.get(snapshot.branchId) ?? []
           const relevantEvents = events.filter((event) => event.year <= snapshot.tick).slice(-8)
           return {
             branchId: snapshot.branchId,
