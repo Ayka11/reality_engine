@@ -58,7 +58,7 @@ export class EventConsequenceEngine {
 
     if (event.type === 'growth') {
       if (event.details.includes('environmental instability')) actions.push({ type: 'stability-shift', delta: -0.07, reason: 'environmental instability reduces social stability' })
-      if ((event.severity ?? 1) >= 0.8) actions.push({ type: 'stability-shift', delta: -0.03, reason: 'high-severity growth pressure increases social instability' })
+      if ((('severity' in event ? event.severity : undefined) ?? 1) >= 0.8) actions.push({ type: 'stability-shift', delta: -0.03, reason: 'high-severity growth pressure increases social instability' })
       actions.push({ type: 'growth-modifier', multiplier: 0.8, durationTicks: 2, reason: 'growth decline propagates through the causal chain' })
     }
 
