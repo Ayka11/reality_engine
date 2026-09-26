@@ -19,6 +19,17 @@ export type CivilizationMemory = {
   divergence: number
 }
 
+export type CivilizationBranchSnapshot = {
+  branchId: string
+  tick: number
+  type: CivilizationType
+  population: number
+  stability: number
+  resilience: number
+  divergence: number
+  score: number
+}
+
 export type CivilizationState = {
   id: string
   type: CivilizationType
@@ -52,6 +63,8 @@ function capabilityScore(requirements: Record<string, number>) {
 }
 
 export class CivilizationRuntime {
+  private readonly branches = new Map<string, CivilizationBranchSnapshot[]>()
+
   evaluate(id: string, tier: SettlementTier): CivilizationState {
     const settlement = settlementGrowthModel.evaluate(id, tier)
     const capabilities = {
@@ -124,12 +137,19 @@ export class CivilizationRuntime {
       trajectory: [...previousMemory.trajectory, { tick: previousMemory.ticks + delta, type: next.type, score: next.score, stability: settlementTick.state.stability, evolutionPressure: next.evolutionPressure }].slice(-120),
     }
     next.memory = memory
+    const branchSnapshot: CivilizationBranchSnapshot = { branchId: memory.branchId, tick: memory.ticks, type: next.type, population: next.settlement.population, stability: next.settlement.stability, resilience: memory.resilience, divergence: memory.divergence, score: next.score }
+    const history = this.branches.get(memory.branchId) ?? []
+    this.branches.set(memory.branchId, [...history, branchSnapshot].slice(-120))
     return {
       state: next,
       settlementTick,
       changed: settlementTick.changed || next.type !== state.type,
     }
   }
+
+  branchSnapshot(branchId: string) { return this.branches.get(branchId)?.at(-1) ?? null }
+  branchHistory(branchId: string) { return this.branches.get(branchId) ?? [] }
+  branchesList() { return [...this.branches.entries()].map(([branchId, history]) => ({ branchId, latest: history.at(-1) ?? null, length: history.length })) }
 }
 
 export const civilizationRuntime = new CivilizationRuntime()
