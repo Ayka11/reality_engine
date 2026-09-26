@@ -10,6 +10,8 @@ import { WorldPersistence } from '../infinity/WorldPersistence'
 import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
+import { FieldSampler } from '../infinity/FieldSampler'
+import { WorldDecisionLayer } from '../infinity/WorldDecisionLayer'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -35,6 +37,8 @@ export class InfiniteWorldRenderer {
   readonly objects = new WorldObjectManager()
   persistence: WorldPersistence
   history = new WorldEditHistory()
+  readonly fieldSampler: FieldSampler
+  decisionLayer: WorldDecisionLayer
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -97,6 +101,8 @@ export class InfiniteWorldRenderer {
 
     this.scene.add(this.terrainGroup)
     this.generator = new WorldGenerator(seed)
+    this.fieldSampler = new FieldSampler(this.generator)
+    this.decisionLayer = new WorldDecisionLayer(this.fieldSampler)
     this.storageKey = `reality-engine-world:${seed}:objects`
     this.persistence = new WorldPersistence(seed)
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 3, verticalRadius: 0, maxLoaded: 49 })
@@ -305,6 +311,8 @@ export class InfiniteWorldRenderer {
     this.clearSavedWorld()
 
     this.generator = new WorldGenerator(newSeed)
+    this.fieldSampler.setGenerator(this.generator)
+    this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights)
     this.persistence = new WorldPersistence(newSeed)
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 3, verticalRadius: 0, maxLoaded: 49 })
     this.history = new WorldEditHistory()
@@ -1250,6 +1258,7 @@ export class InfiniteWorldRenderer {
   explainBuildDecision(x: number, z: number) {
     const zone = this.buildZoneCost(x, z)
     const hydro = this.analyzeHydrology(x, z, 24, 9)
+    const scientificDecision = this.decisionLayer.explainBuildDecision(x, z)
     const reasons: string[] = []
     if (zone.floodRisk > 0.6) reasons.push('high flood risk')
     else if (zone.floodRisk > 0.3) reasons.push('moderate flood risk')
@@ -1265,6 +1274,9 @@ export class InfiniteWorldRenderer {
       floodRisk:zone.floodRisk,
       river:zone.river,
       localRiverCandidates:hydro.rivers.length,
+      scientific: zone.scientific,
+      decisionComponents: zone.decisionComponents,
+      decisionRecord: scientificDecision,
       reasons,
     }
   }
@@ -1341,15 +1353,19 @@ export class InfiniteWorldRenderer {
 
   buildZoneCost(x: number, z: number) {
     const y = this.generator.sampleHeight(x, z)
-    const e = 4
-    const gx = this.generator.sampleHeight(x + e, z) - this.generator.sampleHeight(x - e, z)
-    const gz = this.generator.sampleHeight(x, z + e) - this.generator.sampleHeight(x, z - e)
-    const slope = Math.hypot(gx, gz) / (2 * e)
     const hydro = this.analyzeHydrology(x, z, 16, 7)
     const river = hydro.rivers.length > 0
     const floodRisk = y <= this.generator.seaLevel + 4 ? 0.7 : river ? 0.45 : 0
-    const slopeRisk = Math.min(1, slope / 0.5)
-    return { x, z, y, slope, river, floodRisk, slopeRisk, cost: slopeRisk * 0.5 + floodRisk * 0.5 }
+    const decision = this.decisionLayer.buildZoneCost(x, z)
+    const slopeRisk = Math.min(1, decision.slope / 0.5)
+    const legacyTerrainCost = slopeRisk * 0.5 + floodRisk * 0.5
+    return {
+      x, z, y, slope: decision.slope, river, floodRisk, slopeRisk,
+      cost: Math.max(0, Math.min(1, legacyTerrainCost * 0.65 + decision.cost * 0.35)),
+      decisionCost: decision.cost,
+      scientific: decision.buildability.field,
+      decisionComponents: decision.components,
+    }
   }
 
   analyzeHydrology(cx: number, cz: number, radius = 220, samples = 41) {
