@@ -173,6 +173,14 @@ win['setShowParticles'] = (v: boolean) => {
 }
 win['setChunkLayer'] = (l: number) => { fieldRenderer.setLayer(Math.max(0, Math.min(5, l))) }
 win['renderField3D'] = () => fieldRenderer.render()
+win['fieldSetCameraPreset'] = (p: string) => {
+  const map: Record<string, 'orbit'|'top'|'iso'|'street'|'fly'> = { orbit:'orbit', top:'top', iso:'iso', street:'street', fly:'fly' }
+  fieldRenderer.setCameraPreset(map[p] ?? 'orbit')
+}
+win['fieldSetTimeOfDay'] = (h: number) => fieldRenderer.setTimeOfDay(h)
+win['fieldSetFogDensity'] = (d: number) => fieldRenderer.setFogDensity(d)
+win['fieldSetMatMode'] = (m: string) => fieldRenderer.setMatMode(m as 'field'|'material'|'height')
+win['fieldSetShowParticles'] = (v: boolean) => { fieldRenderer.showParticles = v }
 win['resizeChunkRenderer'] = (hybrid: boolean) => {
   const parent = c3dCanvas.parentElement
   if (!parent) return
