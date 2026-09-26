@@ -71,6 +71,16 @@ export function bootstrapInfiniteWorld() {
     world.render(0)
     return { id: entry.id, visual, objects: world.getRuntimeStats().objects }
   }
+  ;(window as any).worldLibraryGenerate = (id: string) => {
+    const entry = resolveWorldLibraryEntry(id)
+    if (!entry) return null
+    if (entry.category === 'civilization') {
+      const tier = id.endsWith('post-scarcity') ? 'megacity' : id.endsWith('industrial') ? 'city' : 'village'
+      return world.populateCivilization(id, tier, tier === 'megacity' ? 240 : tier === 'city' ? 190 : 150)
+    }
+    const placed = (window as any).worldLibraryPlace?.(id)
+    return placed ? { ...placed, generated: true } : { id, generated: false, reason: 'No runtime visual mapping is registered for this element' }
+  }
   ;(window as any).worldRuleGraph = worldRuleGraph
   ;(window as any).worldRuleStats = () => worldRuleGraph.stats()
   ;(window as any).worldRuleRelated = (id: string) => worldRuleGraph.related(id)
