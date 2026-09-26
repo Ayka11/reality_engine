@@ -33,10 +33,23 @@ export type CivilizationExperimentScenario = {
   override: CounterfactualOverride
 }
 
+export type CivilizationExperimentOutcome = {
+  scenarioId: string
+  branchId: string
+  populationChange: number
+  stabilityChange: number
+  resilienceChange: number
+  scoreChange: number
+  civilizationChanged: boolean
+  divergence: number
+  dominantFactors: string[]
+}
+
 export type CivilizationExperimentResult = {
   experimentId: string
   ticks: number
   branches: Array<{ scenarioId: string; branchId: string; final: CivilizationBranchSnapshot | null; history: CivilizationBranchSnapshot[] }>
+  outcomes: CivilizationExperimentOutcome[]
 }
 
 export type CivilizationDivergenceMetrics = {
@@ -201,7 +214,24 @@ export class CivilizationRuntime {
       for (let i = 0; i < ticks; i++) this.tickBranch(fork.branchId, delta)
       branches.push({ scenarioId: scenario.id, branchId: fork.branchId, final: this.branchSnapshot(fork.branchId), history: this.branchHistory(fork.branchId) })
     }
-    return { experimentId, ticks, branches }
+    const baseline = branches[0]?.final ?? null
+    const outcomes: CivilizationExperimentOutcome[] = branches.map((branch) => {
+      const final = branch.final
+      if (!final || !baseline) return { scenarioId: branch.scenarioId, branchId: branch.branchId, populationChange: 0, stabilityChange: 0, resilienceChange: 0, scoreChange: 0, civilizationChanged: false, divergence: 0, dominantFactors: [] }
+      const metrics = this.compareBranches(baseline.branchId, branch.branchId)
+      return {
+        scenarioId: branch.scenarioId,
+        branchId: branch.branchId,
+        populationChange: (final.population - baseline.population) / Math.max(1, baseline.population),
+        stabilityChange: final.stability - baseline.stability,
+        resilienceChange: final.resilience - baseline.resilience,
+        scoreChange: final.score - baseline.score,
+        civilizationChanged: final.type !== baseline.type,
+        divergence: metrics?.divergenceGap ?? Math.abs(final.divergence - baseline.divergence),
+        dominantFactors: metrics?.dominantFactors ?? [],
+      }
+    })
+    return { experimentId, ticks, branches, outcomes }
   }
   branchesList() { return [...this.branches.entries()].map(([branchId, history]) => ({ branchId, latest: history.at(-1) ?? null, length: history.length })) }
 
