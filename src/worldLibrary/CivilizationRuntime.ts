@@ -19,6 +19,18 @@ export type CivilizationMemory = {
   divergence: number
 }
 
+export type CivilizationDivergenceMetrics = {
+  branchA: string
+  branchB: string
+  populationGap: number
+  stabilityGap: number
+  resilienceGap: number
+  scoreGap: number
+  typeChanged: boolean
+  divergenceGap: number
+  dominantFactors: string[]
+}
+
 export type CivilizationBranchSnapshot = {
   branchId: string
   tick: number
@@ -150,6 +162,21 @@ export class CivilizationRuntime {
   branchSnapshot(branchId: string) { return this.branches.get(branchId)?.at(-1) ?? null }
   branchHistory(branchId: string) { return this.branches.get(branchId) ?? [] }
   branchesList() { return [...this.branches.entries()].map(([branchId, history]) => ({ branchId, latest: history.at(-1) ?? null, length: history.length })) }
+
+  compareBranches(branchA: string, branchB: string): CivilizationDivergenceMetrics | null {
+    const a = this.branchSnapshot(branchA)
+    const b = this.branchSnapshot(branchB)
+    if (!a || !b) return null
+    const factors: Array<[string, number]> = [
+      ['population-pressure', Math.abs(a.population - b.population) / Math.max(1, Math.max(a.population, b.population))],
+      ['stability', Math.abs(a.stability - b.stability)],
+      ['resilience', Math.abs(a.resilience - b.resilience)],
+      ['capability', Math.abs(a.score - b.score)],
+      ['civilization-transition', a.type === b.type ? 0 : 1],
+      ['historical-divergence', Math.abs(a.divergence - b.divergence)],
+    ]
+    return { branchA, branchB, populationGap: factors[0][1], stabilityGap: factors[1][1], resilienceGap: factors[2][1], scoreGap: factors[3][1], typeChanged: a.type !== b.type, divergenceGap: factors[5][1], dominantFactors: factors.sort((x,y) => y[1] - x[1]).slice(0,3).map(([name]) => name) }
+  }
 }
 
 export const civilizationRuntime = new CivilizationRuntime()
