@@ -462,6 +462,15 @@ export function bootstrapInfiniteWorld() {
     world.setMaterialMode(mat)
     world.setObjectTool('navigate')
     world.setCameraPreset('orbit')
+
+    // Force an immediate resize/render after generation. This is important when
+    // Compose/Quick Generate switches the canvas from a hidden tab to the 3D view.
+    const parent = canvas.parentElement
+    if (parent) {
+      world.resize(Math.max(1, parent.clientWidth), Math.max(1, parent.clientHeight))
+    }
+    world.render(0)
+
     syncWorldUI(tod, fog, mat)
     notifyBuilder()
 
@@ -470,7 +479,12 @@ export function bootstrapInfiniteWorld() {
       plog.textContent = `✦ Infinite Reality: Φ=${phi} · ρ·E·I=${fields} · C=${complexity} · dτ·dV=${spacetime}`
     }
 
-    return world.worldCoordinates
+    const stats = (window as any).infinityStats?.()
+    return {
+      ...world.worldCoordinates,
+      objects: stats?.objects ?? 0,
+      loadedChunks: stats?.loadedChunks ?? 0,
+    }
   }
 
   // ── DYNAMIC, DRAGGABLE INFINITY SCALE & WORLD BUILDER TOOLBAR ──────────────
