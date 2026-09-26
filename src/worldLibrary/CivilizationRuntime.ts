@@ -109,7 +109,7 @@ export class CivilizationRuntime {
     const crisisLoad = Math.min(1, (previousMemory.crises + settlementTick.shortages.length) / 12)
     const resilience = Math.max(0.1, Math.min(0.95, previousResilience + adaptationSuccess * 0.03 - crisisLoad * 0.015))
     const divergence = Math.max(0, Math.min(1, (previousMemory.divergence ?? 0) + Math.abs(settlementTick.state.stability - state.settlement.stability) * 0.5 + (next.type !== state.type ? 0.18 : 0)))
-    const branchId = divergence >= 0.35 ? `${previousMemory.branchId}-b${memory.ticks + delta}` : previousMemory.branchId
+    const branchId = divergence >= 0.35 ? `${previousMemory.branchId}-b${previousMemory.ticks + delta}` : previousMemory.branchId
     const memory: CivilizationMemory = {
       ...previousMemory,
       ticks: previousMemory.ticks + delta,
