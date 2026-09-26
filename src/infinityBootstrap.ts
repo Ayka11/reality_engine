@@ -266,7 +266,7 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).focusGeneratedWorld = () => {
     const result = world.focusGeneratedRegion()
     world.render(0)
-    syncWorldUI()
+    syncWorldUI(12, 0.012, 'field')
     return result
   }
 
