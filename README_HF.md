@@ -3,53 +3,70 @@ title: Reality Engine Meta Law Simulator
 emoji: 🌌
 colorFrom: blue
 colorTo: purple
-sdk: docker
-app_port: 7860
+sdk: static
+app_file: dist/index.html
+app_build_command: npm run build
+fullWidth: true
+header: mini
 license: mit
 pinned: false
+custom_headers:
+  cross-origin-embedder-policy: require-corp
+  cross-origin-opener-policy: same-origin
+  cross-origin-resource-policy: cross-origin
 ---
 
-# Reality Engine — Hugging Face Deployment
+# Reality Engine — Hugging Face Static Space
 
-This branch provides the Docker-ready Reality Engine web application for Hugging Face Spaces.
+This branch targets a browser-first Hugging Face Static Space.
 
 ## Deployment target
 
-- SDK: Docker
-- Port: 7860
-- Runtime: Node.js 18+
+- SDK: Static
+- Build command: `npm run build`
+- Published entry point: `dist/index.html`
+- Runtime server: none
 - Frontend: Vite + Three.js
-- Signalling server: WebSocket on `$SIGNAL_PORT` (internal process)
-- Heavy scientific solvers remain optional and are not required for the core browser Space.
+- Core Infinite World and Science Lab workflows run in the browser.
+- Optional signalling/solver services are not required for the core Static Space.
 
-## Build
+## Build locally
 
 ```bash
 npm ci
 npm run build
+npm run hf:smoke
+npm run hf:cpu:check
 ```
 
-## Container contract
-
-The Docker image must expose port 7860. The runtime serves the Vite production bundle from `dist/`.
+## Static runtime contract
 
 ```text
-Browser
-  ↓
-HF Space :7860
-  ↓
-serve dist
-  └── signalling-server.js → $SIGNAL_PORT (internal WebSocket)
+Hugging Face Static Space
+        ↓
+     dist/index.html
+        ↓
+   Vite browser bundle
+        ↓
+Infinite World + Science Lab
 ```
+
+The Static Space does not require a Node runtime, port 7860, or the internal WebSocket signalling process.
 
 ## WebGPU
 
-The application uses WebGPU-capable browser APIs where available and falls back to browser-side CPU paths where supported. A GPU-enabled HF Space is not required to launch the container.
+The application uses browser APIs where available and browser-side CPU paths where supported. A GPU-enabled Hugging Face runtime is not required to serve the static bundle.
 
 ## Scientific solver service
 
-The Python solver under `solver/` is an auxiliary development/service component. The Docker Space does not install FEniCS/MOOSE/Elmer/GROMACS and therefore does not claim those optional capabilities are available in the hosted container.
+Optional solver/service components remain outside the core Static Space contract. The hosted browser application must not claim those optional capabilities are available unless a separate service is configured.
 
-## Health check
+## Acceptance
 
-A successful deployment should return HTTP 200 for `/` and serve the built application.
+A successful Static deployment should:
+
+1. Serve `dist/index.html`.
+2. Load all relative Vite assets.
+3. Render the Infinite World viewport in-browser.
+4. Keep World Tools and sidebars detachable without blocking the viewport.
+5. Execute Quick Generate and the Science Lab workflow in the browser.
