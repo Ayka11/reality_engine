@@ -90,6 +90,7 @@ const worldFieldRestoreState = {
   staleFrames: 0,
   restoreFrameRestoreId: 0,
   restoreFrameKeys: [] as number[],
+  workerBarrierComplete: false,
 }
 const worldFieldRestoreExpectedKeys = new Set<number>()
 const worldFieldRestoreAcknowledgedKeys = new Set<number>()
@@ -315,6 +316,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       worldFieldRestoreState.staleFrames === 0 &&
       worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
       worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
+      worldFieldRestoreState.workerBarrierComplete &&
       [...worldFieldRestoreExpectedKeys].every((key) => worldFieldRestoreFrameKeys.has(key))
     if (restoreComplete) {
       publishWorkerBoundarySnapshots()
@@ -587,11 +589,13 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   worldFieldRestoreExpectedKeys.clear()
   worldFieldRestoreAcknowledgedKeys.clear()
   worldFieldRestoreFrameKeys.clear()
+  chunkWorker.postMessage({ cmd: 'restoreBegin', data: { restoreId, expected: restoreChunks.length } })
   for (const chunk of restoreChunks) {
     worldFieldRestoreExpectedKeys.add(chunk.key)
     localChunks.set(chunk.key, chunk.data)
     chunkWorker.postMessage({ cmd: 'restoreChunk', data: { key: chunk.key, data: Array.from(chunk.data), restoreId } })
   }
+  chunkWorker.postMessage({ cmd: 'restoreEnd', data: { restoreId } })
   runtimeProvenance.record('world-state', { source: 'WorldFieldChunkPersistence', action: 'restore', coord: { cx, cy, cz }, key, checksum: snapshot.checksum })
   return true
 }
