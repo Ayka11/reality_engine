@@ -801,6 +801,22 @@ export class InfiniteWorldRenderer {
     }
   }
 
+  sampleRenderedTerrainHeight(x: number, z: number): number | null {
+    let best: { distance: number; height: number } | null = null
+    for (const patch of this.patches.values()) {
+      const mesh = patch.group.children.find((child) => child.userData.terrain) as THREE.Mesh | undefined
+      const position = mesh?.geometry.getAttribute('position') as THREE.BufferAttribute | undefined
+      if (!position) continue
+      for (let i = 0; i < position.count; i++) {
+        const px = position.getX(i) + patch.group.position.x
+        const pz = position.getZ(i) + patch.group.position.z
+        const distance = Math.hypot(px - x, pz - z)
+        if (!best || distance < best.distance) best = { distance, height: position.getY(i) + patch.group.position.y }
+      }
+    }
+    return best?.height ?? null
+  }
+
   /** Rebuild currently visible terrain so authoritative field mutations become geometric state. */
   invalidateTerrainFromAuthoritativeField() {
     const visible = [...this.patches.values()].map((patch) => ({ key: [...this.patches.entries()].find(([, value]) => value === patch)?.[0], chunk: patch.chunk, lod: patch.lod }))
