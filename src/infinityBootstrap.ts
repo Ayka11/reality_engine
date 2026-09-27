@@ -26,6 +26,9 @@ export function bootstrapInfiniteWorld() {
   const world = new InfiniteWorldRenderer(canvas, seed)
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world
+  ;(window as any).worldFieldSample = (x: number, y?: number, z?: number) => world.fieldSampler.sampleWorld(x, y, z)
+  ;(window as any).worldFieldViewWindow = (width: number, height: number, sliceY?: number) => world.fieldSampler.sampleViewWindow(width, height, sliceY)
+
   worldViewContract.setSeed(seed)
   worldViewContract.setCenter(world.getWorldPosition().x, world.getWorldPosition().y, world.getWorldPosition().z)
   ;(window as any).getWorldViewContract = () => worldViewContract.snapshot()
