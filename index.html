@@ -908,23 +908,22 @@ function _drawLegacyMultiSlice(){
 
 function _drawWorldFieldMultiSlice(){
   const cw=canvas.width,ch=canvas.height
-  const dataCanvasKeyBase = `${cw}x${ch}`
-  const mainCtx = ctx
   const windowW=Math.max(1,Math.min(96,Math.floor(cw/8)))
   const windowH=Math.max(1,Math.min(72,Math.floor(ch/8)))
   const data=_getWorldField2DWindow(windowW,windowH)
   if(!data)return false
-  const renderKey = `${data.key}|${dataCanvasKeyBase}|layer=${layer}`
-  if (worldField2DRenderCache?.key === renderKey) {
+  const renderKey=`${data.key}|${cw}x${ch}|layer=${layer}`
+  const mainCtx=ctx
+  if(worldField2DRenderCache?.key===renderKey){
     mainCtx.clearRect(0,0,cw,ch)
     mainCtx.drawImage(worldField2DRenderCache.canvas,0,0)
     return true
   }
-  const renderCanvas = document.createElement('canvas')
-  renderCanvas.width = cw
-  renderCanvas.height = ch
-  const ctx = renderCanvas.getContext('2d')
-  if (!ctx) return false
+  const renderCanvas=document.createElement('canvas')
+  renderCanvas.width=cw
+  renderCanvas.height=ch
+  const ctx=renderCanvas.getContext('2d')
+  if(!ctx)return false
   const value=(s,f)=>[s.energy,s.density,s.information,s.entropy,s.temperature,s.biology][f]??s.energy
   const meta=[
     {mx:1000,l:0,label:'⚡ Energy',info:'World-space energy field'},
@@ -936,10 +935,11 @@ function _drawWorldFieldMultiSlice(){
   ]
   const drawField=(ox,oy,w,h,f,showStats=true)=>{
     const m=meta[f],cw2=w/data.width,ch2=h/data.height
-    let total=0,count=0,min=Infinity,max=-Infinity
+    let total=0,min=Infinity,max=-Infinity
     for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
-      const v=value(data.samples[py*data.width+px],f);total+=v
-      if(v>0.5){count++;min=Math.min(min,v);max=Math.max(max,v)}
+      const v=value(data.samples[py*data.width+px],f)
+      total+=v
+      if(v>0.5){min=Math.min(min,v);max=Math.max(max,v)}
       if(v<=(m.mx>1?0.5:0.001))continue
       const [r,g,b]=colorOf(m.l,Math.min(Math.max(v/m.mx,0),1))
       ctx.fillStyle=`rgb(${r},${g},${b})`
@@ -947,7 +947,11 @@ function _drawWorldFieldMultiSlice(){
     }
     ctx.font='bold 10px system-ui';ctx.fillStyle='rgba(235,240,255,.92)';ctx.fillText(m.label,ox+6,oy+15)
     ctx.font='8px system-ui';ctx.fillStyle='rgba(190,205,235,.68)';ctx.fillText(m.info,ox+6,oy+27)
-    if(showStats){ctx.fillStyle='rgba(10,10,20,.72)';ctx.fillRect(ox,oy+h-22,w,22);ctx.font='9px monospace';ctx.fillStyle='rgba(205,215,255,.85)';ctx.fillText(`avg ${(total/data.samples.length).toFixed(2)} min ${(min===Infinity?0:min).toFixed(2)} max ${(max===-Infinity?0:max).toFixed(2)}`,ox+6,oy+h-8)}
+    if(showStats){
+      ctx.fillStyle='rgba(10,10,20,.72)';ctx.fillRect(ox,oy+h-22,w,22)
+      ctx.font='9px monospace';ctx.fillStyle='rgba(205,215,255,.85)'
+      ctx.fillText(`avg ${(total/data.samples.length).toFixed(2)} min ${(min===Infinity?0:min).toFixed(2)} max ${(max===-Infinity?0:max).toFixed(2)}`,ox+6,oy+h-8)
+    }
   }
   ctx.clearRect(0,0,cw,ch)
   if(layer>=0){
@@ -956,18 +960,26 @@ function _drawWorldFieldMultiSlice(){
     ctx.fillText(`WORLD center=(${data.view.center.x.toFixed(1)},${data.view.center.y.toFixed(1)},${data.view.center.z.toFixed(1)}) Y=${data.view.sliceY} R=${data.view.visibleRadius}`,10,ch-12)
   }else{
     const hw=Math.floor(cw/2),hh=Math.floor(ch/2)
-    const qs=[{f:0,ox:0,oy:0,w:hw,h:hh},{f:5,ox:hw,oy:0,w:hw,h:hh},{f:2,ox:0,oy:hh,w:hw,h:hh},{f:3,ox:hw,oy:hh,w:hw,h:hh}]
-    for(const q of qs){drawField(q.ox,q.oy,q.w,q.h,q.f,true);ctx.strokeStyle='#2a2a3a';ctx.strokeRect(q.ox+.5,q.oy+.5,q.w-1,q.h-1)}
-    ctx.strokeStyle='#3b4964';ctx.beginPath();ctx.moveTo(hw,0);ctx.lineTo(hw,ch);ctx.stroke();ctx.beginPath();ctx.moveTo(0,hh);ctx.lineTo(cw,hh);ctx.stroke()
-    ctx.font='8px monospace';ctx.fillStyle='rgba(160,190,230,.72)';ctx.fillText(`WORLD SPACE · center=(${data.view.center.x.toFixed(1)},${data.view.center.z.toFixed(1)}) · Y=${data.view.sliceY} · seed=${data.view.seed}`,8,ch-4)
+    const qs=[
+      {f:0,ox:0,oy:0,w:hw,h:hh},
+      {f:5,ox:hw,oy:0,w:hw,h:hh},
+      {f:2,ox:0,oy:hh,w:hw,h:hh},
+      {f:3,ox:hw,oy:hh,w:hw,h:hh}
+    ]
+    for(const q of qs){
+      drawField(q.ox,q.oy,q.w,q.h,q.f,true)
+      ctx.strokeStyle='#2a2a3a'
+      ctx.strokeRect(q.ox+.5,q.oy+.5,q.w-1,q.h-1)
+    }
+    ctx.strokeStyle='#3b4964'
+    ctx.beginPath();ctx.moveTo(hw,0);ctx.lineTo(hw,ch);ctx.stroke()
+    ctx.beginPath();ctx.moveTo(0,hh);ctx.lineTo(cw,hh);ctx.stroke()
+    ctx.font='8px monospace';ctx.fillStyle='rgba(160,190,230,.72)'
+    ctx.fillText(`WORLD SPACE · center=(${data.view.center.x.toFixed(1)},${data.view.center.z.toFixed(1)}) · Y=${data.view.sliceY} · seed=${data.view.seed}`,8,ch-4)
   }
   mainCtx.clearRect(0,0,cw,ch)
   mainCtx.drawImage(renderCanvas,0,0)
-  worldField2DRenderCache = { key: renderKey, canvas: renderCanvas }
-  return true
-}
-seed}`,8,ch-4)
-  }
+  worldField2DRenderCache={key:renderKey,canvas:renderCanvas}
   return true
 }
 
