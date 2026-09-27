@@ -1910,30 +1910,6 @@ let rightPanelOpen = true;
 let savedLw = 220;
 let savedRw = 240;
 
-function toggleLeftPanel(force){
-  leftPanelOpen = typeof force === 'boolean' ? force : !leftPanelOpen;
-  const root = document.documentElement;
-  const leftEl = document.getElementById('left');
-  const rszL = document.getElementById('rszL');
-  const btn = document.getElementById('btnToggleLeft');
-  if (leftPanelOpen) {
-    root.style.setProperty('--lw', savedLw + 'px');
-    if (leftEl) leftEl.style.display = 'flex';
-    if (rszL) { rszL.style.display = 'block'; rszL.style.left = `calc(52px + ${savedLw}px - 2px)`; }
-    if (btn) { btn.classList.add('on'); btn.title = 'Collapse Left Sidebar'; }
-  } else {
-    const curW = parseInt(getComputedStyle(root).getPropertyValue('--lw')) || 220;
-    if (curW > 50) savedLw = curW;
-    root.style.setProperty('--lw', '0px');
-    if (leftEl) leftEl.style.display = 'none';
-    if (rszL) rszL.style.display = 'none';
-    if (btn) { btn.classList.remove('on'); btn.title = 'Open Left Sidebar'; }
-  }
-  localStorage.setItem('reality_left_open', String(leftPanelOpen));
-  if (typeof resize === 'function') resize();
-}
-window.toggleLeftPanel = toggleLeftPanel;
-
 function toggleRightPanel(force){
   rightPanelOpen = typeof force === 'boolean' ? force : !rightPanelOpen;
   const root = document.documentElement;
@@ -1960,9 +1936,7 @@ window.toggleRightPanel = toggleRightPanel;
 
 function setIconPanel(id){
   currentPanel=id;
-  if (!leftPanelOpen) {
-    toggleLeftPanel(true);
-  }
+  // Left workspace is intentionally fixed/docked; no detachable sidebar mode.
   document.querySelectorAll('.icon-btn[data-panel]').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
   const html = PANELS[id]?.() || '';
   const left = document.getElementById('left');
