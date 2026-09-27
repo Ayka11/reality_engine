@@ -858,8 +858,20 @@ The render surfaces currently represent different simulation layers:
 
 - **3D Infinite World** — deterministic, streamed procedural terrain with unbounded X/Z coordinates, chunk streaming, LOD, persistence and world-rule integration. It is currently an infinite horizontal terrain surface, not an infinite 3D volume.
 - **3D Volumetric Field** — scientific field renderer over the current finite 128×128×64 field grid.
-- **2D Multi-Slice** — legacy 36×28 field/slice view retained for compatibility and diagnostics.
-- **Hybrid** — synchronized-layout preview combining the 2D and Infinite World surfaces; the next architecture phase will make both projections read the same authoritative world state.
+- **2D Multi-Slice** — world-space scientific projection driven by `WorldViewContract` + `FieldSampler.sampleViewWindow()`; legacy 36×28 simulation rendering remains available through `window.setWorldField2DLinked(false)`.
+- **Hybrid** — synchronized-layout preview combining the world-space 2D projection and Infinite World surface. Both now share the same world center, slice Y and deterministic seed through the spatial contract.
+- **3D Volumetric Field** — continues to consume the scientific chunk worker; its spatial convergence with the world-space contract is the next renderer phase.
 
-The planned convergence of these layers is documented in `docs/INFINITE_WORLD_ENGINE_PLAN.md`.
+### World-space projection contract
+
+```js
+window.getWorldViewContract()
+window.setWorldViewCenter(x, y, z)
+window.setWorldViewSliceY(y)
+window.worldFieldViewWindow(width, height, sliceY)
+window.getWorldField2DLinked()
+window.setWorldField2DLinked(false) // compatibility fallback
+```
+
+The planned full convergence of these layers is documented in `docs/INFINITE_WORLD_ENGINE_PLAN.md`.
 
