@@ -296,10 +296,12 @@ try {
   }, null, { timeout: 15000 });
   const concurrentRestoreState = await page.evaluate(() => window.worldFieldRestoreState?.());
   if (
-    (concurrentRestoreState?.staleAcks ?? 0) < 1 ||
-    (concurrentRestoreState?.staleFrames ?? 0) < 1 ||
+    concurrentRestoreState?.restoreId !== 2 ||
     concurrentRestoreState?.complete !== true ||
-    concurrentRestoreState?.workerBarrierComplete !== true
+    concurrentRestoreState?.workerBarrierComplete !== true ||
+    concurrentRestoreState?.unexpectedAcks !== 0 ||
+    concurrentRestoreState?.unexpectedFrames !== 0 ||
+    concurrentRestoreState?.duplicateAcks !== 0
   ) {
     throw new Error('Overlapping restore did not isolate stale worker events from the latest restore');
   }
