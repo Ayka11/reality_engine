@@ -312,6 +312,14 @@ self.onmessage = (e: MessageEvent) => {
       DIFF = 0.12; ENT = 0.00015; INFO = 0.45; BIO = 0.32
       activeProcs.clear(); ['thermo', 'bio', 'info'].forEach(p => activeProcs.add(p))
     }
+    ;(self as unknown as Worker).postMessage({
+      cmd: 'presetApplied',
+      name: nm,
+      tick,
+      stats: { ...grid.stats },
+      processes: Array.from(activeProcs),
+      params: { DIFF, ENT, INFO, BIO }
+    })
     return
   }
 
