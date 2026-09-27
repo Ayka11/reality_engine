@@ -801,6 +801,28 @@ export class InfiniteWorldRenderer {
     }
   }
 
+  /** Rebuild currently visible terrain so authoritative field mutations become geometric state. */
+  invalidateTerrainFromAuthoritativeField() {
+    const visible = [...this.patches.values()].map((patch) => ({ key: [...this.patches.entries()].find(([, value]) => value === patch)?.[0], chunk: patch.chunk, lod: patch.lod }))
+    for (const item of visible) {
+      if (!item.key) continue
+      const current = this.patches.get(item.key)
+      if (!current) continue
+      this.scene.remove(current.group)
+      current.group.traverse(obj => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose())
+        else if (mesh.material) mesh.material.dispose()
+      })
+      const group = this.buildTerrainPatch(item.chunk, item.lod)
+      this.patches.set(item.key, { group, chunk: item.chunk, lod: item.lod })
+      this.scene.add(group)
+    }
+    this.updateTerrainLod()
+    return this.getTerrainPatchStats()
+  }
+
   private removeChunk(key: string) {
     const patch = this.patches.get(key)
     if (!patch) return
