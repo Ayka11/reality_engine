@@ -98,7 +98,7 @@ function buildFramePayload(): ArrayBuffer {
   }
   return ab
 }
-function emitFrame() {
+function emitFrame(restoreId?: number) {
   const ab = buildFramePayload()
   ;(self as unknown as Worker).postMessage({
     cmd: 'frame',
@@ -107,6 +107,7 @@ function emitFrame() {
     events: causal.slice(-20),
     ab,
     stats: grid.stats,
+    ...(restoreId !== undefined ? { restoreId } : {}),
   }, [ab])
 }
 
@@ -352,7 +353,7 @@ self.onmessage = (e: MessageEvent) => {
 
   if (cmd === 'restoreChunk') {
     grid.restoreChunk(data.key, data.data)
-    emitFrame()
+    emitFrame(data.restoreId)
     ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key: data.key, restoreId: data.restoreId } })
     return
   }
