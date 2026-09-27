@@ -38,7 +38,7 @@ try {
   if (grips !== 2) throw new Error(`Expected 2 sidebar drag grips, found ${grips}`);
 
   const worldTools = page.locator("#infiniteWorldTools");
-  await page.getByRole("button", { name: /World Tools/ }).click();
+  await page.locator("#btnToggleWorldTools").click();
   await page.waitForFunction(() => {
     const el = document.getElementById("infiniteWorldTools");
     return !!el && getComputedStyle(el).display !== "none";
@@ -52,7 +52,7 @@ try {
   await page.locator("#dockCloseBtn").click();
   await page.waitForFunction(() => localStorage.getItem("infinity_dock_open") === "false");
 
-  await page.getByRole("button", { name: /World Tools/ }).click();
+  await page.locator("#btnToggleWorldTools").click();
   await page.waitForFunction(() => localStorage.getItem("infinity_dock_open") !== "false");
 
   const before = await page.evaluate(() => window.worldGenerationHealth());
