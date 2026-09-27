@@ -61,6 +61,46 @@ try {
     throw new Error("Obsolete sidebar drag text is still rendered");
   }
 
+  // Render-mode smoke matrix: each mode must own the expected canvas surface.
+  const modeChecks = [
+    ["3d", "#tab3d"],
+    ["field3d", "#tabField3d"],
+    ["2d", "#tab2d"],
+    ["hybrid", "#tabHybrid"],
+  ];
+  for (const [mode, selector] of modeChecks) {
+    await page.locator(selector).click();
+    await page.waitForFunction((m) => window.currentRenderMode === m || document.querySelector("#tabs .ctab.on")?.id?.toLowerCase().includes(m === "field3d" ? "field3d" : m), mode);
+    const surfaces = await page.evaluate(() => {
+      const display = (id) => getComputedStyle(document.getElementById(id)).display;
+      const rect = (id) => {
+        const r = document.getElementById(id)?.getBoundingClientRect();
+        return r ? { x:r.x, y:r.y, width:r.width, height:r.height } : null;
+      };
+      return {
+        c3d: display("c3d"),
+        field3d: display("c3dField"),
+        c2d: display("c2d"),
+        c3dRect: rect("c3d"),
+        field3dRect: rect("c3dField"),
+        c2dRect: rect("c2d"),
+      };
+    });
+    if (mode === "3d" && !(surfaces.c3d === "block" && surfaces.c2d === "none" && surfaces.field3d === "none")) {
+      throw new Error("3D Infinite World surface routing is incorrect");
+    }
+    if (mode === "field3d" && !(surfaces.field3d === "block" && surfaces.c3d === "none" && surfaces.c2d === "none")) {
+      throw new Error("3D Volumetric Field surface routing is incorrect");
+    }
+    if (mode === "2d" && !(surfaces.c2d === "block" && surfaces.c3d === "none" && surfaces.field3d === "none")) {
+      throw new Error("2D Multi-Slice surface routing is incorrect");
+    }
+    if (mode === "hybrid" && !(surfaces.c2d === "block" && surfaces.c3d === "block" && surfaces.field3d === "none")) {
+      throw new Error("Hybrid surface routing is incorrect");
+    }
+  }
+  await page.locator("#tab3d").click();
+
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
