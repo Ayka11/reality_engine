@@ -305,6 +305,10 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       [...worldFieldRestoreExpectedKeys].every((key) => worldFieldRestoreFrameKeys.has(key))
     if (restoreComplete) {
       publishWorkerBoundarySnapshots()
+      // Rehydrate the world-chunk registry only after the worker restore is
+      // complete, so the store cannot expose a provider backed by partial data.
+      worldFieldChunkStore.delete({ cx, cy, cz })
+      populateWorldFieldChunk(cx, cy, cz, snapshot.seed)
     }
     return
   }
