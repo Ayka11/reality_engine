@@ -96,7 +96,7 @@ function installChunkWorldFieldProvider() {
   fieldRenderer.setWorldFieldProvider(authoritativeWorldFieldProvider)
   return true
 }
-function workerToWorld(x: number, y: number, z: number) {
+function workerToWorld(x: number, y: number, _z: number) {
   const view = worldViewContract.snapshot()
   // Worker coordinates are local chunk indices; only X/Z are spatial offsets.
   // Global Y is the shared World View slice, not the worker's local voxel Z index.
