@@ -138,7 +138,7 @@ export class InfiniteWorldRenderer {
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler)
     this.storageKey = `reality-engine-world:${seed}:objects`
     this.persistence = new WorldPersistence(seed)
-    this.chunks = new InfiniteChunkManager(this.generator, { radius: 3, verticalRadius: 0, maxLoaded: 49 })
+    this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9 })
 
     this.camera.position.set(38, this.worldY, 62)
     this.controls = new OrbitControls(this.camera, canvas)
@@ -350,7 +350,7 @@ export class InfiniteWorldRenderer {
     this.fieldSampler.setGenerator(this.generator)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights)
     this.persistence = new WorldPersistence(newSeed)
-    this.chunks = new InfiniteChunkManager(this.generator, { radius: 3, verticalRadius: 0, maxLoaded: 49 })
+    this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9 })
     this.history = new WorldEditHistory()
 
     const groundY = this.generator.sampleHeight(16, 16)
