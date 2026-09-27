@@ -166,12 +166,16 @@ win['setRealityLaw'] = (name: string, active: boolean, fitness = 0.5, strength =
   realityLawBridge.setUiLaw(name, active, fitness, strength)
   const state = syncRuntimeLawsToWorker()
   installChunkWorldFieldProvider()
-  authoritativeWorldFieldProvider?.setGlobal('law', {}, {
-    energy: state.DIFF * 10,
-    entropy: state.ENT,
-    information: state.INFO * 0.1,
-    biology: state.BIO * 0.1,
-  }, { name, active, fitness, strength, processes: state.processes })
+  if (active) {
+    authoritativeWorldFieldProvider?.setGlobal('law', {}, {
+      energy: state.DIFF * 10,
+      entropy: state.ENT,
+      information: state.INFO * 0.1,
+      biology: state.BIO * 0.1,
+    }, { name, active, fitness, strength, processes: state.processes })
+  } else {
+    authoritativeWorldFieldProvider?.clearGlobal('law')
+  }
   runtimeProvenance.record('law', {
     name,
     active,
