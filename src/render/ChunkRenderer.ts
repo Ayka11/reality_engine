@@ -580,7 +580,7 @@ export class ChunkRenderer {
     const view = this.worldViewBinding
     if (!view) return null
     const lx = Math.round(x - view.center.x + GRID_W / 2)
-    const ly = Math.round(y)
+    const ly = Math.round(y - view.center.y + GRID_D * 0.45)
     const lz = Math.round(z - view.center.z + GRID_H / 2)
     if (lx < 0 || lx >= GRID_W || ly < 0 || ly >= GRID_D || lz < 0 || lz >= GRID_H) return null
     const cx = lx >> 3, cy = ly >> 3, cz = lz >> 3
