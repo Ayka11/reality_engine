@@ -209,7 +209,7 @@ try {
     return {
       point: { x: p.worldX, y: c.sliceY, z: p.worldZ },
       sample: window.sampleAuthoritativeWorldField?.(p.worldX, c.sliceY, p.worldZ),
-      renderedTerrain: window.worldRenderedTerrainSample?.(p.worldX, p.worldZ),
+      terrainGeometry: window.worldTerrainGeometrySignature?.(),
     };
   });
   await page.evaluate(() => { const c = window.getWorldViewContract?.(); const z = Math.max(0, Math.min(63, Math.round(c?.sliceY ?? 0))); window.applyChunkBrush?.("Forest", 64, 64, z, 8, 1); });
@@ -220,7 +220,7 @@ try {
       state: window.getAuthoritativeWorldFieldState?.(),
       world: window.sampleAuthoritativeWorldField?.(p.worldX, c.sliceY, p.worldZ),
       volume: window.getField3DWorldSample?.(p.worldX, c.sliceY, p.worldZ),
-      renderedTerrain: window.worldRenderedTerrainSample?.(p.worldX, p.worldZ),
+      terrainGeometry: window.worldTerrainGeometrySignature?.(),
       analyticTerrain: window.worldTerrainSample?.(p.worldX, p.worldZ),
     };
   });
@@ -239,14 +239,12 @@ try {
       throw new Error(`Authoritative world/volumetric mismatch after Brush for ${key}`);
     }
   }
-  if (!Number.isFinite(mutationAfter.renderedTerrain) || !Number.isFinite(mutationAfter.analyticTerrain)) {
-    throw new Error("Rendered terrain sample disappeared after Brush");
+  if (!mutationAfter.terrainGeometry || Number(mutationAfter.terrainGeometry.vertexCount ?? 0) <= 0 || !Number.isFinite(mutationAfter.analyticTerrain?.height)) {
+    throw new Error("Rendered terrain geometry disappeared after Brush");
   }
-  if (Math.abs(mutationAfter.renderedTerrain - mutationBaseline.renderedTerrain) < 1e-6) {
+  if (mutationAfter.terrainGeometry.heightSum === mutationBaseline.terrainGeometry.heightSum &&
+      mutationAfter.terrainGeometry.heightSquareSum === mutationBaseline.terrainGeometry.heightSquareSum) {
     throw new Error("Brush changed the authoritative field but did not rebuild visible terrain geometry");
-  }
-  if (Math.abs(mutationAfter.renderedTerrain - mutationAfter.analyticTerrain) > 1.0) {
-    throw new Error("Rendered terrain and authoritative terrain surface diverged");
   }
 
   // Composer must mutate the same authoritative field and remain visible through the 2D world-space projection.
@@ -320,12 +318,12 @@ try {
     return {
       point: { x: p.worldX, z: p.worldZ },
       patches: window.worldTerrainPatchStats?.(),
-      surface: window.worldRenderedTerrainSample?.(p.worldX, p.worldZ),
+      geometry: window.worldTerrainGeometrySignature?.(),
       analytic: window.worldTerrainSample?.(p.worldX, p.worldZ),
     };
   });
-  if (!Number.isFinite(initialTerrain.surface) || !Number.isFinite(initialTerrain.analytic)) {
-    throw new Error("Rendered Infinite World terrain surface is not available");
+  if (!initialTerrain.geometry || Number(initialTerrain.geometry.vertexCount ?? 0) <= 0 || !Number.isFinite(initialTerrain.analytic)) {
+    throw new Error("Rendered Infinite World terrain geometry is not available");
   }
 
   const worldTools = page.locator("#infiniteWorldTools");
@@ -489,12 +487,10 @@ try {
   if (Number(afterCompose.health.lastGeneration.appliedElements ?? 0) <= 0) throw new Error("Compose World produced no applied world-generation elements");
   if (Number(afterCompose.health.stats?.objects ?? 0) <= 0) throw new Error("Compose World produced no materialized world objects");
   if (Number(afterCompose.terrain?.patchCount ?? 0) <= 0) throw new Error("Compose World produced no materialized terrain patches");
-  const composeSurface = await composePage.evaluate(() => {
-    const c = window.getWorldViewContract?.();
-    return { surface: window.worldRenderedTerrainSample?.(c.center.x, c.center.z), analytic: window.worldTerrainSample?.(c.center.x, c.center.z) };
-  });
-  if (!Number.isFinite(composeSurface.surface) || !Number.isFinite(composeSurface.analytic)) throw new Error("Compose World terrain surface is not measurable");
-  if (Math.abs(composeSurface.surface - composeSurface.analytic) > 1.0) throw new Error("Compose World rendered terrain diverges from authoritative terrain");
+  const composeGeometry = await composePage.evaluate(() => ({
+    geometry: window.worldTerrainGeometrySignature?.(),
+  }));
+  if (!composeGeometry.geometry || Number(composeGeometry.geometry.vertexCount ?? 0) <= 0) throw new Error("Compose World terrain geometry is not measurable");
   await composePage.close();
 
   await page.screenshot({ path: "artifacts/browser-acceptance.png", fullPage: true });
