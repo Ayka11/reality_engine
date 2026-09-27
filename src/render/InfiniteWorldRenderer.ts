@@ -399,7 +399,7 @@ export class InfiniteWorldRenderer {
     const dx = (hR - hL) / (step * 2)
     const dz = (hU - hD) / (step * 2)
     const slope = Math.min(1, Math.sqrt(dx * dx + dz * dz) / 3)
-    const field = this.generator.sampleField(x, y, z)
+    const field = (window as any).sampleAuthoritativeWorldField?.(x, y, z) ?? this.generator.sampleField(x, y, z)
     const radiation = Math.max(0, Math.min(1, field.entropy * 8))
     const stability = Math.max(0, Math.min(1, 1 - field.entropy * 8))
     return {
