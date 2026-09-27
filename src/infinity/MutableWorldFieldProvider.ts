@@ -89,7 +89,11 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
       if (delta[field] !== undefined) this.globalDelta[field] = delta[field]
     }
     this.versionCounter++
-    return this.apply({ kind, scale, delta, metadata })
+    const committed: WorldFieldMutation = { id: this.nextId++, kind, metadata: { ...metadata, globalScale: scale, globalDelta: delta } }
+    this.mutations.push(committed)
+    this.versionCounter++
+    if (this.mutations.length > 4096) this.mutations.splice(0, this.mutations.length - 4096)
+    return committed
   }
 
   clear() {
