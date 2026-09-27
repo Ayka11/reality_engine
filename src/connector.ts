@@ -26,6 +26,8 @@ import { PrefabSystem }                           from './modes/gamedev/PrefabSy
 import { AIGameDesigner }                         from './modes/gamedev/AIGameDesigner'
 import { buildGameDevModePanel }                  from './modes/GameDevModePanel'
 import { InfiniteWorldRenderer }                  from './render/InfiniteWorldRenderer'
+import { ChunkWorldFieldProvider }                 from './infinity/ChunkWorldFieldProvider'
+import { GeneratorFieldProvider }                    from './infinity/ScientificFieldProvider'
 import { ChunkRenderer }                          from './render/ChunkRenderer'
 import { RealityMonitor, buildRealityMonitorHTML, updateMonitorPanels } from './ui/RealityMonitor'
 import { NodeLawEditor }                          from './ui/NodeLawEditor'
@@ -66,6 +68,7 @@ const nodeEditor    = new NodeLawEditor()
 const localChunks = new Map<number, Float32Array>()
 let chunkTick = 0, chunkEvCount = 0, workerBusy = false
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
+let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
 const realityLawBridge = new RealityLawBridge()
 win['realityLawBridge'] = realityLawBridge
 win['getRuntimeProvenance'] = () => runtimeProvenance.getTrace()
@@ -147,6 +150,18 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     }
     // Feed the scientific field state directly into the dedicated volumetric renderer.
     fieldRenderer.applyWorkerFrame(ab as ArrayBuffer)
+
+    // Make the same worker voxel state available to the world-space FieldSampler.
+    const world = getInfiniteWorld()
+    if (world && !chunkWorldFieldProvider) {
+      const fallback = new GeneratorFieldProvider(world.generator)
+      chunkWorldFieldProvider = new ChunkWorldFieldProvider(
+        localChunks,
+        () => worldViewContract.snapshot(),
+        fallback,
+      )
+      world.fieldSampler.setProvider(chunkWorldFieldProvider)
+    }
     const el = document.getElementById('chunkStats')
     if (el && stats) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`
   }
@@ -252,6 +267,7 @@ win['renderField3D'] = () => {
   fieldRenderer.render()
 }
 win['getField3DWorldBinding'] = () => fieldRenderer.getWorldViewBinding()
+win['getField3DWorldSample'] = (x: number, y: number, z: number) => fieldRenderer.sampleWorldField(x, y, z)
 win['fieldSetCameraPreset'] = (p: string) => {
   const map: Record<string, 'orbit'|'top'|'iso'|'street'|'fly'> = { orbit:'orbit', top:'top', iso:'iso', street:'street', fly:'fly' }
   fieldRenderer.setCameraPreset(map[p] ?? 'orbit')
