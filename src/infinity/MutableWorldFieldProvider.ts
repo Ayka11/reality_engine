@@ -37,8 +37,11 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   private nextId = 1
   private versionCounter = 0
   private mutations: WorldFieldMutation[] = []
-  private globalScale: Partial<Record<keyof ScientificFieldSample, number>> = {}
-  private globalDelta: Partial<ScientificFieldSample> = {}
+  private globalOverlays = new Map<'preset' | 'law' | 'composer', {
+    scale: Partial<Record<keyof ScientificFieldSample, number>>
+    delta: Partial<ScientificFieldSample>
+    metadata?: Record<string, unknown>
+  }>()
 
   constructor(private base: ScientificFieldProvider) {}
 
@@ -51,11 +54,13 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
     const base = this.base.sample(x, y, z)
     const out = { ...base }
 
-    for (const field of FIELDS) {
-      const scale = this.globalScale[field]
-      if (scale !== undefined) out[field] *= scale
-      const delta = this.globalDelta[field]
-      if (delta !== undefined) out[field] += delta
+    for (const overlay of this.globalOverlays.values()) {
+      for (const field of FIELDS) {
+        const scale = overlay.scale[field]
+        if (scale !== undefined) out[field] *= scale
+        const delta = overlay.delta[field]
+        if (delta !== undefined) out[field] += delta
+      }
     }
 
     for (const mutation of this.mutations) {
@@ -89,22 +94,17 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   }
 
   setGlobal(kind: 'preset' | 'law' | 'composer', scale: Partial<Record<keyof ScientificFieldSample, number>> = {}, delta: Partial<ScientificFieldSample> = {}, metadata?: Record<string, unknown>) {
-    for (const field of FIELDS) {
-      if (scale[field] !== undefined) this.globalScale[field] = scale[field]
-      if (delta[field] !== undefined) this.globalDelta[field] = delta[field]
-    }
+    this.globalOverlays.set(kind, { scale: { ...scale }, delta: { ...delta }, metadata })
     this.versionCounter++
-    const committed: WorldFieldMutation = { id: this.nextId++, kind, metadata: { ...metadata, globalScale: scale, globalDelta: delta } }
+    const committed: WorldFieldMutation = { id: this.nextId++, kind, metadata: { ...metadata, globalScale: scale, globalDelta: delta, replacesPrevious: true } }
     this.mutations.push(committed)
-    this.versionCounter++
     if (this.mutations.length > 4096) this.mutations.splice(0, this.mutations.length - 4096)
     return committed
   }
 
   clear() {
     this.mutations = []
-    this.globalScale = {}
-    this.globalDelta = {}
+    this.globalOverlays.clear()
     this.versionCounter++
   }
 
