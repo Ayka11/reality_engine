@@ -194,7 +194,7 @@ try {
     throw new Error("World FieldSampler is not using the chunk-worker scientific source");
   }
   if (!unifiedField.world || !unifiedField.volume) {
-    throw new Error("Unified world/volumetric field sample is unavailable");
+    throw new Error(`Unified world/volumetric field sample is unavailable: ${JSON.stringify(unifiedField)}`);
   }
   for (const key of ["energy","density","information","entropy","temperature","biology"]) {
     if (Math.abs((unifiedField.world[key] ?? 0) - (unifiedField.volume[key] ?? 0)) > 1e-5) {
