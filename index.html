@@ -149,6 +149,34 @@ input[type=range]#spd{width:60px}
 .crow{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .clbl{font-size:11px;color:var(--tx);flex:1}
 .cvl{font-size:11px;font-family:monospace;color:var(--text);min-width:32px;text-align:right}
+
+/* ── Workspace v2: detachable sidebars / unobstructed world view ── */
+.sidebar-drag-grip{
+  position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:120;
+  display:flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid rgba(124,111,205,.45);
+  border-radius:999px;background:rgba(13,15,26,.92);backdrop-filter:blur(10px);
+  color:#a09af0;font:600 9px system-ui,sans-serif;letter-spacing:.03em;cursor:grab;
+  box-shadow:0 3px 14px rgba(0,0,0,.35);user-select:none;touch-action:none;opacity:.78;
+}
+.sidebar-drag-grip:hover{opacity:1;border-color:var(--accent)}
+.sidebar-drag-grip.dragging{cursor:grabbing;opacity:1}
+#left.workspace-floating,#right.workspace-floating{
+  position:fixed!important;top:46px!important;bottom:38px!important;z-index:110!important;
+  width:var(--panel-float-w)!important;max-height:none!important;
+  box-shadow:0 18px 60px rgba(0,0,0,.55);border:1px solid rgba(124,111,205,.35);
+}
+#left.workspace-floating{left:52px!important}
+#right.workspace-floating{right:0!important}
+.workspace-floating .sidebar-drag-grip{top:5px}
+body.workspace-dragging *{user-select:none!important}
+.workspace-drop-hint{
+  position:fixed;z-index:105;pointer-events:none;display:none;border:1px dashed rgba(124,111,205,.7);
+  background:rgba(124,111,205,.08);border-radius:10px;
+}
+#cw.workspace-canvas-focus{min-width:0}
+/* The World Tools surface should read as a compact workspace, not a modal covering the terrain. */
+#infiniteWorldTools{transition:none!important}
+#infiniteWorldTools .workspace-toolbar-surface{max-height:min(34vh,320px);overflow:auto}
 </style>
 </head>
 <body>
@@ -2667,6 +2695,100 @@ restoreRenderControls();
   const el=document.getElementById(id);
   if(el)el.addEventListener('change',saveRenderControls);
 });
+</script>
+
+<script>
+/* ── Workspace v2: detachable left/right panels ── */
+(function(){
+  const app=document.getElementById('app');
+  if(!app)return;
+  const root=document.documentElement;
+  const state={left:false,right:false};
+  const key=(side)=>side==='left'?'reality_left_float':'reality_right_float';
+  const read=(side)=>{try{return JSON.parse(localStorage.getItem(key(side))||'false')}catch{return false}};
+  const write=(side,v)=>localStorage.setItem(key(side),JSON.stringify(v));
+
+  function makeGrip(side){
+    const panel=document.getElementById(side);
+    if(!panel)return;
+    const id=side+'WorkspaceGrip';
+    document.getElementById(id)?.remove();
+    const grip=document.createElement('div');
+    grip.id=id; grip.className='sidebar-drag-grip';
+    grip.innerHTML=side==='left'?'⠿ LEFT · drag to float':'⠿ RIGHT · drag to float';
+    grip.title='Drag this panel over the world view. Double-click to dock it again.';
+    app.appendChild(grip);
+    positionGrip(side);
+    let dragging=false,sx=0,sy=0,baseX=0,baseY=0;
+    grip.addEventListener('pointerdown',e=>{
+      dragging=true; grip.classList.add('dragging'); document.body.classList.add('workspace-dragging');
+      sx=e.clientX; sy=e.clientY;
+      const r=panel.getBoundingClientRect(); baseX=r.left; baseY=r.top;
+      if(!state[side]) setFloating(side,true,baseX,baseY);
+      grip.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    grip.addEventListener('pointermove',e=>{
+      if(!dragging)return;
+      const dx=e.clientX-sx,dy=e.clientY-sy;
+      const maxX=Math.max(52,innerWidth-panel.offsetWidth),maxY=Math.max(46,innerHeight-38-panel.offsetHeight);
+      const x=Math.max(52,Math.min(maxX,baseX+dx));
+      const y=Math.max(46,Math.min(maxY,baseY+dy));
+      panel.style.left=side==='left'?x+'px':''; panel.style.right=side==='right'?(innerWidth-x-panel.offsetWidth)+'px':'';
+      panel.style.top=y+'px'; panel.style.bottom='auto';
+      positionGrip(side);
+    });
+    const end=e=>{if(!dragging)return;dragging=false;grip.classList.remove('dragging');document.body.classList.remove('workspace-dragging');try{grip.releasePointerCapture(e.pointerId)}catch{}; const r=panel.getBoundingClientRect(); localStorage.setItem(key(side),JSON.stringify({x:r.left,y:r.top,w:r.width}));};
+    grip.addEventListener('pointerup',end); grip.addEventListener('pointercancel',end);
+    grip.addEventListener('dblclick',()=>setFloating(side,false));
+  }
+  function positionGrip(side){
+    const panel=document.getElementById(side),grip=document.getElementById(side+'WorkspaceGrip'); if(!panel||!grip)return;
+    const r=panel.getBoundingClientRect();
+    grip.style.left=(r.left+r.width/2)+'px'; grip.style.top=(r.top+4)+'px';
+    grip.style.transform='translateX(-50%)';
+  }
+  function setFloating(side,on,x=undefined,y=undefined){
+    const panel=document.getElementById(side); if(!panel)return;
+    state[side]=on;
+    if(on){
+      const r=panel.getBoundingClientRect();
+      const w=Math.max(180,Math.min(420,r.width||220));
+      root.style.setProperty('--panel-float-w',w+'px');
+      panel.classList.add('workspace-floating');
+      panel.style.setProperty('--panel-float-w',w+'px');
+      panel.style.width=w+'px';
+      panel.style.display='flex';
+      if(x!==undefined)panel.style.left=Math.max(52,Math.min(innerWidth-w,x))+'px';
+      else if(side==='left')panel.style.left='52px';
+      if(y!==undefined)panel.style.top=Math.max(46,Math.min(innerHeight-38-160,y))+'px';
+      else panel.style.top='46px';
+      if(side==='right')panel.style.right=(x!==undefined?Math.max(0,innerWidth-w-x):'0')+'px';
+      if(side==='left')panel.style.right='auto';
+      if(side==='left')root.style.setProperty('--lw','0px');
+      if(side==='right')root.style.setProperty('--rw','0px');
+      const rz=document.getElementById(side==='left'?'rszL':'rszR');if(rz)rz.style.display='none';
+    }else{
+      panel.classList.remove('workspace-floating');
+      panel.style.cssText='';
+      if(side==='left'){root.style.setProperty('--lw',savedLw+'px');const rz=document.getElementById('rszL');if(rz)rz.style.display='block';}
+      else{root.style.setProperty('--rw',savedRw+'px');const rz=document.getElementById('rszR');if(rz)rz.style.display='block';}
+      write(side,false);
+    }
+    write(side,on);
+    positionGrip(side); if(typeof resize==='function')resize();
+  }
+  window.setWorkspacePanelFloat=(side,on)=>setFloating(side,on);
+  window.addEventListener('resize',()=>{positionGrip('left');positionGrip('right')});
+  document.addEventListener('panelRendered',()=>{positionGrip('left');positionGrip('right')});
+
+  function boot(side){
+    makeGrip(side);
+    const saved=read(side);
+    if(saved && typeof saved==='object')setFloating(side,true,saved.x,saved.y);
+    else if(saved===true)setFloating(side,true);
+  }
+  boot('left'); boot('right');
+})();
 </script>
 <script type="module" src="/src/connector.ts"></script>
 <script type="module" src="/src/infinityBootstrap.ts"></script>
