@@ -54,7 +54,7 @@ export class ChunkRenderer {
   private dummy = new THREE.Object3D()
   private col3  = new THREE.Color()
 
-  private readonly MAX_INST     = 800_000
+  private readonly MAX_INST     = 350_000
   private readonly PER_MAT_INST = Math.floor(800_000 / MAT_TYPES.length)
   private readonly VOXEL_THRESH = 0.8
   private rebuildPending = false
@@ -63,7 +63,7 @@ export class ChunkRenderer {
   // Public state
   layer         = 0
   matMode: 'field' | 'material' | 'height' = 'field'
-  zSlice        = GRID_D - 1
+  zSlice        = 15
   showParticles = true
   showAgents    = true
   emissiveMult  = 1.5
