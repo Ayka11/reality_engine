@@ -153,6 +153,19 @@ input[type=range]#spd{width:60px}
 .clbl{font-size:11px;color:var(--tx);flex:1}
 .cvl{font-size:11px;font-family:monospace;color:var(--text);min-width:32px;text-align:right}
 
+/* ── Workspace v4: stable docking geometry ── */
+#left.workspace-floating,#right.workspace-floating{
+  /* Floating is opt-in after an explicit drag; never let a restored stale
+     float state cover the opposite sidebar or the primary viewport. */
+  min-width:180px!important;
+  min-height:220px!important;
+}
+#left.workspace-floating{max-width:min(360px,calc(100vw - 72px))!important}
+#right.workspace-floating{max-width:min(360px,calc(100vw - 72px))!important}
+#leftWorkspaceGrip,#rightWorkspaceGrip{pointer-events:auto!important}
+#leftWorkspaceGrip{margin-right:0}
+#rightWorkspaceGrip{margin-left:0}
+
 /* ── Workspace v3: clear, compact, detachable sidebars ── */
 .sidebar-drag-grip{
   position:fixed;z-index:121;display:flex;align-items:center;justify-content:center;
@@ -2847,11 +2860,31 @@ restoreRenderControls();
   window.addEventListener('resize',()=>{positionGrip('left');positionGrip('right')});
   document.addEventListener('panelRendered',()=>{positionGrip('left');positionGrip('right')});
 
+  // Workspace v4: invalidate the pre-v4 float state once. Earlier versions
+  // could leave both sidebars restored at the same coordinates, which makes
+  // the Controls panel appear to sit on top of the workspace. Detaching is
+  // still available immediately after this migration.
+  const layoutVersionKey='reality_workspace_layout_version';
+  const layoutVersion=localStorage.getItem(layoutVersionKey);
+  if(layoutVersion!=='4'){
+    localStorage.removeItem('reality_left_float');
+    localStorage.removeItem('reality_right_float');
+    localStorage.removeItem('reality_left_open');
+    localStorage.removeItem('reality_right_open');
+    localStorage.setItem(layoutVersionKey,'4');
+  }
+
   function boot(side){
     makeGrip(side);
     const saved=read(side);
-    if(saved && typeof saved==='object')setFloating(side,true,saved.x,saved.y);
-    else if(saved===true)setFloating(side,true);
+    if(saved && typeof saved==='object'){
+      // Only restore a float if it is a valid, visible position. The first
+      // post-migration load is always docked, preventing legacy overlap.
+      const x=Number(saved.x), y=Number(saved.y);
+      const valid=Number.isFinite(x)&&Number.isFinite(y)&&
+        x>=52&&y>=46&&x<innerWidth-160&&y<innerHeight-120;
+      if(valid)setFloating(side,true,x,y);
+    }else if(saved===true)setFloating(side,true);
   }
   boot('left'); boot('right');
 })();
