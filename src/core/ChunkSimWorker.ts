@@ -115,6 +115,13 @@ function emitFrame(restoreId?: number) {
 self.onmessage = (e: MessageEvent) => {
   const { cmd, data } = e.data
 
+  if (cmd === 'restoreBegin') {
+    activeRestoreId = data.restoreId
+    expectedRestoreChunks = Number.isInteger(data.expected) ? data.expected : 0
+    restoredChunkCount = 0
+    return
+  }
+
   if (cmd === 'tick') {
     const speed = (data?.speed as number) || 1
     for (let s = 0; s < speed; s++) simStep(0.016)
@@ -352,9 +359,30 @@ self.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'restoreChunk') {
+    if (activeRestoreId !== data.restoreId) return
     grid.restoreChunk(data.key, data.data)
+    restoredChunkCount++
     emitFrame(data.restoreId)
     ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key: data.key, restoreId: data.restoreId } })
+    return
+  }
+
+  if (cmd === 'restoreEnd') {
+    const restoreId = data.restoreId
+    if (activeRestoreId !== restoreId || restoredChunkCount !== expectedRestoreChunks) {
+      ;(self as unknown as Worker).postMessage({
+        cmd: 'restoreComplete',
+        data: { restoreId, complete: false, restoredChunkCount, expectedRestoreChunks },
+      })
+      return
+    }
+    activeRestoreId = null
+    expectedRestoreChunks = 0
+    restoredChunkCount = 0
+    ;(self as unknown as Worker).postMessage({
+      cmd: 'restoreComplete',
+      data: { restoreId, complete: true },
+    })
     return
   }
 
