@@ -217,7 +217,7 @@ try {
     throw new Error("World Tools header/label is missing");
   }
 
-  await page.locator("#dockCloseBtn").click();
+  await page.locator("#btnToggleWorldTools").click();
   await page.waitForFunction(() => {
     const el = document.getElementById("infiniteWorldTools");
     return !!el && getComputedStyle(el).display === "none";
