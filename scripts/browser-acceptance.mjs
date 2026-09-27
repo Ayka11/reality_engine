@@ -21,6 +21,11 @@ const waitForServer = async () => {
 
 const browser = await chromium.launch({ headless: true });
 const acceptanceTimeout = 30000;
+const overallTimeout = Number(process.env.ACCEPTANCE_OVERALL_TIMEOUT || 120000);
+const watchdog = setTimeout(() => {
+  console.error("[acceptance] WATCHDOG TIMEOUT: acceptance exceeded overall timeout");
+  process.exit(124);
+}, overallTimeout);
 try {
   await waitForServer();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -193,8 +198,9 @@ try {
 
 
   const before = await page.evaluate(() => window.worldGenerationHealth());
-  console.log("[acceptance] Quick Generate");
-  await page.getByRole("button", { name: /Quick Generate/ }).click();
+  console.log("[acceptance] Quick Generate: click");
+  await page.getByRole("button", { name: /Quick Generate/ }).click({ timeout: acceptanceTimeout });
+  console.log("[acceptance] Quick Generate: clicked");
   await page.waitForFunction((b) => {
     const a = window.worldGenerationHealth();
     return Number(a?.stats?.objects ?? 0) !== Number(b?.stats?.objects ?? 0)
@@ -229,15 +235,18 @@ try {
   await composePage.waitForSelector("#c3d");
   await composePage.waitForFunction(() => typeof window.worldGenerationHealth === "function");
 
-  console.log("[acceptance] Compose World");
-  await composePage.getByRole("button", { name: /Compose World/ }).click();
+  console.log("[acceptance] Compose World: click");
+  await composePage.getByRole("button", { name: /Compose World/ }).click({ timeout: acceptanceTimeout });
+  console.log("[acceptance] Compose World: clicked");
   await composePage.waitForSelector("#comp.open");
   if (!(await composePage.locator("#comp").innerText()).includes("Integral Reality Composer")) {
     throw new Error("Compose World opened without the Integral Reality Composer");
   }
   for (let i = 0; i < 4; i++) await composePage.locator("#cnext").click();
   console.log("[acceptance] Generate Reality");
+  console.log("[acceptance] Generate Reality: click");
   await composePage.getByRole("button", { name: /Generate Reality/ }).click({ timeout: acceptanceTimeout });
+  console.log("[acceptance] Generate Reality: clicked");
   await composePage.waitForFunction(() => {
     const health = window.worldGenerationHealth();
     return !!health?.lastGeneration;
@@ -257,6 +266,7 @@ try {
     screenshot: "artifacts/browser-acceptance.png"
   }));
 } finally {
+  clearTimeout(watchdog);
   await browser.close();
   server.kill();
 }
