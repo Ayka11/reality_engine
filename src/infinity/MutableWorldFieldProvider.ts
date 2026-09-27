@@ -102,6 +102,12 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
     return committed
   }
 
+  clearGlobal(kind: 'preset' | 'law' | 'composer') {
+    if (!this.globalOverlays.delete(kind)) return false
+    this.versionCounter++
+    return true
+  }
+
   clear() {
     this.mutations = []
     this.globalOverlays.clear()
