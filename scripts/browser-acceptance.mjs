@@ -99,6 +99,11 @@ try {
   });
   if (persistenceContract.schemaVersion !== 1 || !persistenceContract.valid || !persistenceContract.same || !persistenceContract.tamperRejected) throw new Error('Streamed chunk persistence round-trip contract failed');
   if (chunkContract.evictions < 1) throw new Error('World field chunk store did not evict at capacity');
+  const streamedSnapshot = await page.evaluate(() => {
+    const saved = window.snapshotWorldFieldChunkPersistence?.(0, 0, 0, 'acceptance-seed');
+    return { schemaVersion: saved?.schemaVersion, workerChunks: saved?.workerChunks?.length ?? 0, valid: saved ? window.validateWorldFieldChunkSnapshot?.(saved) : false };
+  });
+  if (streamedSnapshot.schemaVersion !== 2 || streamedSnapshot.workerChunks < 1 || !streamedSnapshot.valid) throw new Error('Atomic multi-worker world chunk snapshot contract failed');
   if (!chunkContract.deterministic || !chunkContract.finite || !chunkContract.differentAddress) throw new Error('Deterministic streamed field chunk replay contract failed');
   const restoreContract = await page.evaluate(() => {
     const count = 512 * 14
