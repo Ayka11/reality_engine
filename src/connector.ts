@@ -494,6 +494,7 @@ win['publishWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x
 win['snapshotWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z', side: -1|1, resolution?: number, seed?: string) => { const chunk = populateWorldFieldChunk(cx, cy, cz, seed); return worldFieldBoundaryExchange.snapshotFace(chunk.provider, { cx, cy, cz }, axis, side, resolution) }
 win['validateWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z') => worldFieldBoundaryExchange.validatePair({ cx, cy, cz }, axis)
 win['populateWorldFieldChunk'] = (cx: number, cy: number, cz: number, seed?: string) => populateWorldFieldChunk(cx, cy, cz, seed)
+win['evictWorldFieldChunk'] = (cx: number, cy: number, cz: number) => worldFieldChunkStore.delete({ cx: Math.trunc(cx), cy: Math.trunc(cy), cz: Math.trunc(cz) })
 win['sampleWorldFieldChunk'] = (x: number, y: number, z: number, seed?: string) => { const c = worldFieldChunkCoord(x, y, z); return populateWorldFieldChunk(c.cx, c.cy, c.cz, seed).provider.sample(x, y, z) }
 win['sampleWorldFieldChunkAt'] = (cx: number, cy: number, cz: number, x: number, y: number, z: number, seed?: string) => populateWorldFieldChunk(cx, cy, cz, seed).provider.sample(x, y, z)
 win['worldFieldChunkCoord'] = (x: number, y: number, z: number) => worldFieldChunkCoord(x, y, z)
