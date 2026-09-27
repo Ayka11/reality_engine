@@ -173,6 +173,43 @@ try {
     throw new Error('Cross-chunk seam validation failed after persistence eviction/restore');
   }
 
+  const roundTrip = await page.evaluate(() => {
+    const coords = [[0,0,0],[1,0,0],[0,1,0],[0,0,1]];
+    const before = coords.map(([cx,cy,cz]) => window.loadWorldFieldChunkSnapshot?.(cx,cy,cz));
+    const canonical = (snapshot) => (snapshot?.workerChunks ?? [])
+      .map((chunk) => ({ key: chunk.key, data: [...chunk.data] }))
+      .sort((a,b) => a.key - b.key);
+    const compare = (a, b) => {
+      const aa = canonical(a), bb = canonical(b);
+      if (aa.length !== bb.length) return false;
+      for (let i = 0; i < aa.length; i++) {
+        if (aa[i].key !== bb[i].key || aa[i].data.length !== bb[i].data.length) return false;
+        for (let j = 0; j < aa[i].data.length; j++) {
+          if (Math.abs(aa[i].data[j] - bb[i].data[j]) > 1e-6) return false;
+        }
+      }
+      return true;
+    };
+    const after = coords.map(([cx,cy,cz]) => window.snapshotWorldFieldChunkPersistence?.(cx,cy,cz,'acceptance-seed'));
+    return {
+      beforeValid: before.every(s => !!s && window.validateWorldFieldChunkSnapshot?.(s)),
+      afterValid: after.every(s => !!s && window.validateWorldFieldChunkSnapshot?.(s)),
+      exact: before.every((s, i) => compare(s, after[i])),
+      checksumsEqual: before.every((s, i) => s?.checksum === after[i]?.checksum),
+      chunksBefore: before.map(s => s?.workerChunks?.length ?? 0),
+      chunksAfter: after.map(s => s?.workerChunks?.length ?? 0),
+    };
+  });
+  if (
+    !roundTrip.beforeValid ||
+    !roundTrip.afterValid ||
+    !roundTrip.exact ||
+    !roundTrip.checksumsEqual ||
+    roundTrip.chunksBefore.some(n => n < 1) ||
+    roundTrip.chunksBefore.some((n, i) => n !== roundTrip.chunksAfter[i])
+  ) {
+    throw new Error('Worker persistence restore round-trip integrity failed');
+  }
 
   // Docked workspace regression: detachable sidebar chrome was removed.
   const workspaceChrome = await page.evaluate(() => ({
