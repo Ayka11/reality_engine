@@ -899,7 +899,14 @@ function _drawLegacyMultiSlice(){
         const px=tax+a.x*cs4+cs4/2,py=tay+a.y*cs4+cs4/2;
         ctx.beginPath();ctx.arc(px,py,Math.max(2,cs4*0.38),0,6.283);
         ctx.fillStyle=CIV_COLS[(a.civId-1)%CIV_COLS.length]||'#fff';
-        ctx.globalAlpha=0.8;ctx.fill();ctx.glofunction _drawWorldFieldMultiSlice(){
+        ctx.globalAlpha=0.8;ctx.fill();ctx.globalAlpha=1;
+      }
+    }
+  }
+}
+
+
+function _drawWorldFieldMultiSlice(){
   const cw=canvas.width,ch=canvas.height
   const dataCanvasKeyBase = `${cw}x${ch}`
   const mainCtx = ctx
