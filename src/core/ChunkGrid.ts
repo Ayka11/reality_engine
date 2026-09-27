@@ -153,6 +153,12 @@ export class ChunkGrid {
     return [...this.chunks.entries()].map(([key, chunk]) => ({ key, data: Array.from(chunk) }))
   }
 
+  restoreChunk(key: number, data: number[]): void {
+    if (!Number.isInteger(key) || data.length !== CHUNK_FLOATS) return
+    this.chunks.set(key, new Float32Array(data))
+    this.dirtyChunks.add(key)
+  }
+
   restore(snap: Array<{ key: number; data: number[] }>): void {
     this.chunks.clear(); this.dirtyChunks.clear()
     for (const { key, data } of snap) {
