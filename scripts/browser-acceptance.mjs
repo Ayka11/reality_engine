@@ -253,7 +253,13 @@ try {
   }
   if (mutationAfter.terrainGeometry.heightSum === mutationBaseline.terrainGeometry.heightSum &&
       mutationAfter.terrainGeometry.heightSquareSum === mutationBaseline.terrainGeometry.heightSquareSum) {
-    throw new Error("Brush changed the authoritative field but did not rebuild visible terrain geometry");
+    const fieldDelta = {
+      energy: (mutationAfter.world?.energy ?? 0) - (mutationBaseline.sample?.energy ?? 0),
+      density: (mutationAfter.world?.density ?? 0) - (mutationBaseline.sample?.density ?? 0),
+      biology: (mutationAfter.world?.biology ?? 0) - (mutationBaseline.sample?.biology ?? 0),
+    };
+    const terrainDelta = (mutationAfter.analyticTerrain?.height ?? 0) - (mutationBaseline.point?.y ?? 0);
+    throw new Error("Brush field→terrain convergence failed: " + JSON.stringify({ fieldDelta, terrainDelta, baselineGeometry: mutationBaseline.terrainGeometry, afterGeometry: mutationAfter.terrainGeometry }));
   }
 
   // Composer must mutate the same authoritative field and remain visible through the 2D world-space projection.
