@@ -149,6 +149,37 @@ input[type=range]#spd{width:60px}
 .crow{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .clbl{font-size:11px;color:var(--tx);flex:1}
 .cvl{font-size:11px;font-family:monospace;color:var(--text);min-width:32px;text-align:right}
+/* ── Shared sidebar UX / contrast patch ── */
+:root{--panel:#121826;--panel-raised:#192236;--panel-soft:#161e2e;--border:#3b4964;--sub:#aab6cf;--text:#edf2ff;--tx:#dfe7f7;--accent:#9a8cff;--accent-strong:#b6adff}
+#topbar,#bot{background:#121826!important;border-color:#3b4964!important}
+#icons{background:#101724!important;border-color:#3b4964!important}
+#left,#right{background:#121a29!important;border-color:#3b4964!important}
+.section-hdr{min-height:38px;background:#1a2436!important;border-bottom:1px solid #35445e!important}
+.section-hdr:hover{background:#243149!important}
+.section-hdr span{color:#f0f4ff!important;font-weight:750!important}
+.section-hdr .arrow{color:#b8c4db!important}
+.ctrl-label,.law-name{color:#dfe7f7!important}
+.ctrl-val,.law-fit,.bsv,.excard-val{color:#f4f7ff!important}
+.pill{background:#1a263b!important;color:#dbe5fa!important;border-color:#52627e!important;font-weight:650}
+.pill:hover{background:#263653!important;border-color:#8496bc!important;color:#fff!important}
+.pill.on{background:#332d61!important;border-color:#a397ff!important;color:#f4f1ff!important}
+.icon-btn{background:#182236!important;border:1px solid #3c4d69!important;color:#c7d3e8!important;box-shadow:0 2px 8px rgba(0,0,0,.22)}
+.icon-btn i{font-size:18px!important;color:inherit!important}
+.icon-btn:hover{background:#263652!important;border-color:#7185aa!important;color:#fff!important}
+.icon-btn.active{background:#332d61!important;border-color:#a397ff!important;color:#fff!important}
+.icon-tip{background:#25334b!important;border-color:#657899!important;color:#fff!important;font-weight:700!important}
+.brush-btn,.law-row,.excard,.wcard{background:#172236!important;border-color:#3c4d69!important;color:#dce6f8!important}
+.brush-btn:hover,.wcard:hover{background:#243452!important;border-color:#7a8fb7!important;color:#fff!important}
+input[type=range]{accent-color:#a397ff!important}
+.sidebar-drag-grip{position:fixed;z-index:121;width:30px;height:112px;display:flex;align-items:center;justify-content:center;padding:4px 2px;border:1px solid #6675a8;border-radius:9px;background:#172033;color:#f2f5ff;font:800 8px/1.15 system-ui,sans-serif;letter-spacing:.08em;cursor:grab;box-shadow:0 6px 22px rgba(0,0,0,.55);user-select:none;touch-action:none;opacity:1;writing-mode:vertical-rl}
+#leftWorkspaceGrip{background:#17243a;border-color:#5b88c9;color:#eaf4ff}
+#rightWorkspaceGrip{background:#211d38;border-color:#8b76d0;color:#f1edff}
+.sidebar-drag-grip:hover{border-color:#b9c7ff;background:#263451}
+.sidebar-drag-grip.dragging{cursor:grabbing;background:#304467}
+#left.workspace-floating,#right.workspace-floating{position:fixed!important;top:72px!important;bottom:auto!important;z-index:110!important;width:min(280px,calc(100vw - 46px))!important;height:min(72vh,680px)!important;max-height:calc(100vh - 120px)!important;overflow-y:auto!important;overflow-x:hidden!important;box-shadow:0 18px 60px rgba(0,0,0,.68);border:1px solid #6173a6!important;border-radius:10px}
+#left.workspace-floating{left:38px!important}
+#right.workspace-floating{right:14px!important}
+body.workspace-dragging *{user-select:none!important}
 </style>
 </head>
 <body>
@@ -2278,5 +2309,36 @@ restoreRenderControls();
 </script>
 <script type="module" src="/src/connector.ts"></script>
 <script type="module" src="/src/infinityBootstrap.ts"></script>
+<script>
+/* Shared detachable sidebar controller */
+(function(){
+ const app=document.getElementById('app'); if(!app)return;
+ const root=document.documentElement, state={left:false,right:false};
+ const key=s=>s==='left'?'reality_left_float':'reality_right_float';
+ const read=s=>{try{return JSON.parse(localStorage.getItem(key(s))||'false')}catch{return false}};
+ function grip(side){
+  const panel=document.getElementById(side); if(!panel)return;
+  document.getElementById(side+'WorkspaceGrip')?.remove();
+  const g=document.createElement('div'); g.id=side+'WorkspaceGrip'; g.className='sidebar-drag-grip';
+  g.textContent=side==='left'?'LEFT · DRAG':'RIGHT · DRAG'; g.title='Drag to move this sidebar. Double-click the handle to dock it again.';
+  app.appendChild(g);
+  let dragging=false,sx=0,sy=0,bx=0,by=0;
+  const pos=()=>{const r=panel.getBoundingClientRect();g.style.left=(side==='left'?Math.max(2,r.left+r.width-8):Math.min(innerWidth-32,r.left-22))+'px';g.style.top=Math.max(58,Math.min(innerHeight-70,r.top+r.height/2))+'px';g.style.transform='translateY(-50%)'};
+  const float=(on,x,y)=>{
+   state[side]=on;
+   if(on){const r=panel.getBoundingClientRect(),w=Math.max(180,Math.min(360,r.width||240));panel.classList.add('workspace-floating');panel.style.width=w+'px';panel.style.display='flex';panel.style.top=(y??72)+'px';if(side==='left'){panel.style.left=(x??52)+'px';panel.style.right='auto'}else{panel.style.right=(x!==undefined?Math.max(0,innerWidth-w-x):14)+'px';panel.style.left='auto'}}
+   else{panel.classList.remove('workspace-floating');['position','top','bottom','left','right','width','z-index','box-shadow'].forEach(p=>panel.style.removeProperty(p));}
+   localStorage.setItem(key(side),JSON.stringify(on));pos();
+  };
+  g.addEventListener('pointerdown',e=>{dragging=true;sx=e.clientX;sy=e.clientY;const r=panel.getBoundingClientRect();bx=r.left;by=r.top;if(!state[side])float(true,bx,by);g.classList.add('dragging');g.setPointerCapture(e.pointerId);e.preventDefault()});
+  g.addEventListener('pointermove',e=>{if(!dragging)return;const r=panel.getBoundingClientRect(),x=Math.max(52,Math.min(innerWidth-r.width,bx+e.clientX-sx)),y=Math.max(58,Math.min(innerHeight-r.height-40,by+e.clientY-sy));panel.style.top=y+'px';if(side==='left')panel.style.left=x+'px';else panel.style.right=Math.max(14,innerWidth-x-r.width)+'px';pos()});
+  g.addEventListener('pointerup',e=>{dragging=false;g.classList.remove('dragging');try{g.releasePointerCapture(e.pointerId)}catch{}});
+  g.addEventListener('dblclick',()=>float(false));
+  window.addEventListener('resize',pos); pos();
+  const saved=read(side); if(saved&&typeof saved==='object')float(true,saved.x,saved.y); else if(saved===true)float(true);
+ }
+ grip('left');grip('right');
+})();
+</script>
 </body>
 </html>
