@@ -14,13 +14,13 @@ The current InfiniteWorldRenderer is a deterministic, streamed procedural terrai
 Important limitation: the current chunk manager uses verticalRadius: 0. Therefore this is an **infinite horizontal terrain world**, not an infinite 3D volumetric universe.
 
 ### 2. 3D Volumetric Field
-The scientific volume currently uses a finite 128 × 128 × 64 grid, 8 × 8 × 8 field chunks, and 14 fields per voxel. It is a finite scientific field renderer fed by ChunkSimWorker. It is not currently spatially continuous with the Infinite World.
+The scientific worker still uses a finite 128 × 128 × 64 grid, 8 × 8 × 8 field chunks, and 14 fields per voxel. The volumetric renderer is now spatially bound to `WorldViewContract` and can consume the authoritative Infinite World field provider for the active view. Full streamed volumetric simulation across unbounded world coordinates is not yet implemented.
 
 ### 3. 2D Multi-Slice
-The legacy 2D renderer currently uses W = 36, H = 28, D = 1. Its simulation state is stored in a separate Float32Array. It is useful for the existing field/law simulation but is not the same spatial lattice as the 3D scientific field or Infinite World.
+Production 2D Multi-Slice now projects a world-space window from `FieldSampler.sampleViewWindow()` using `WorldViewContract`. The legacy 36×28 simulation remains available as an explicit compatibility/test mode and is not the production world projection.
 
 ### 4. Hybrid
-Hybrid currently displays the legacy 2D field beside the Infinite World. These are not yet two projections of one shared spatial state. Hybrid therefore needs architectural integration, not only layout changes.
+Hybrid now uses the world-space 2D projection alongside the Infinite World surface and shares center, slice Y and seed through `WorldViewContract`. Remaining work is deeper streamed volumetric continuity, not basic spatial synchronization.
 
 ## Target architecture
 Authoritative Reality State → World Coordinates → Terrain/Hydrology → Scientific Fields → Meta-Laws → Matter/Resources → Biology → Agents/Civilization → Infrastructure → Events/Causality → Provenance.
@@ -68,4 +68,4 @@ Automated checks: seed determinism, chunk seam test, coordinate round-trip test,
 ## UI cleanup applied
 Removed the detachable sidebar system: Sidebar top-bar toggle, LEFT · DRAG, RIGHT · DRAG, floating sidebar grips, detachable workspace chrome, and legacy left-sidebar floating state. Side panels remain normal docked workspace panels.
 
-Next engine implementation target: Phase 1 Spatial Contract, then convert Hybrid/2D to projections of the same world state.
+Next engine implementation target: extend the verified spatial contract into streamed volumetric world chunks, then unify long-distance field continuity and cross-chunk boundary exchange.
