@@ -48,7 +48,10 @@ export function applyWorldGenerationPlan(
         skipped.push(entry.id);
         continue;
       }
-      world.generateRiverNetwork(x, z, Math.round(150 + item.score * 120), 25);
+      // The interactive composer must stay responsive. Materialize the
+      // semantic river as a lightweight water landmark here; full hydrology
+      // remains available as an explicit World Tool.
+      world.place('water', x + 42, z - 18, scale);
       riverGenerated = true;
       applied.push(entry.id);
       continue;
@@ -59,11 +62,15 @@ export function applyWorldGenerationPlan(
         skipped.push(entry.id);
         continue;
       }
-      if (entry.id === 'settlement.city' || entry.id === 'settlement.megacity') {
-        world.generateCityPlan(x, z, entry.id === 'settlement.megacity' ? 220 : 170, 25);
-      } else {
-        world.generateSettlementV2(x, z, entry.id === 'settlement.town' ? 140 : 105, entry.id === 'settlement.town' ? 4 : 3);
-      }
+      // Procedural settlement/city generation is intentionally not executed
+      // inside the synchronous Composer transaction. It can be launched later
+      // from World Tools; the Composer still records the semantic settlement
+      // through lightweight runtime objects.
+      const semanticKind: WorldObjectKind =
+        entry.id === 'settlement.city' || entry.id === 'settlement.megacity'
+          ? 'building'
+          : 'landmark';
+      world.place(semanticKind, x - 38, z + 24, scale);
       settlementGenerated = true;
       applied.push(entry.id);
       continue;
