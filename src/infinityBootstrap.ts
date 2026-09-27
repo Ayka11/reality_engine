@@ -28,6 +28,7 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).infiniteWorldControls = world
   ;(window as any).worldFieldSample = (x: number, y?: number, z?: number) => world.fieldSampler.sampleWorld(x, y, z)
   ;(window as any).worldFieldViewWindow = (width: number, height: number, sliceY?: number) => world.fieldSampler.sampleViewWindow(width, height, sliceY)
+  ;(window as any).getWorldFieldProvider = () => world.fieldSampler.listProviders().find((p) => p.active) ?? null
 
   worldViewContract.setSeed(seed)
   worldViewContract.setCenter(world.getWorldPosition().x, world.getWorldPosition().y, world.getWorldPosition().z)
