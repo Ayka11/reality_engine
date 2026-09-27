@@ -152,10 +152,24 @@ try {
   }
   await page.waitForFunction(() => {
     const state = window.worldFieldRestoreState?.();
-    return !!state && state.expected > 0 && state.acknowledged === state.expected;
+    return !!state && state.complete === true;
   }, null, { timeout: 15000 });
   const restoreAck = await page.evaluate(() => window.worldFieldRestoreState?.());
-  if (!restoreAck || restoreAck.acknowledged !== restoreAck.expected || restoreAck.keys.length !== restoreAck.expected) {
+  const expectedKeys = new Set(restoreAck?.expectedKeys ?? []);
+  const acknowledgedKeys = new Set(restoreAck?.keys ?? []);
+  const exactKeySet =
+    expectedKeys.size > 0 &&
+    expectedKeys.size === acknowledgedKeys.size &&
+    [...expectedKeys].every((key) => acknowledgedKeys.has(key));
+  if (
+    !restoreAck ||
+    !restoreAck.complete ||
+    restoreAck.acknowledged !== restoreAck.expected ||
+    !exactKeySet ||
+    restoreAck.duplicateAcks !== 0 ||
+    restoreAck.unexpectedAcks !== 0 ||
+    restoreAck.staleAcks !== 0
+  ) {
     throw new Error('Worker restore acknowledgement contract failed');
   }
 
