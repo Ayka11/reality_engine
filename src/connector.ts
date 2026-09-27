@@ -85,9 +85,12 @@ const worldFieldRestoreState = {
   duplicateAcks: 0,
   unexpectedAcks: 0,
   staleAcks: 0,
+  restoreFrameRestoreId: 0,
+  restoreFrameKeys: [] as number[],
 }
 const worldFieldRestoreExpectedKeys = new Set<number>()
 const worldFieldRestoreAcknowledgedKeys = new Set<number>()
+const worldFieldRestoreFrameKeys = new Set<number>()
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
 let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
@@ -267,7 +270,7 @@ requestAnimationFrame(() => {
 })
 
 chunkWorker.onmessage = (e: MessageEvent) => {
-  const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data
+  const { cmd, tick: wTick, evCount: wEv, ab, stats, restoreId: frameRestoreId } = e.data
   workerBusy = false
 
   if (cmd === 'restoreChunkAck') {
@@ -313,6 +316,13 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'frame' && ab) {
+    if (frameRestoreId !== undefined && frameRestoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
+    }
+    if (frameRestoreId !== undefined) {
+      worldFieldRestoreState.restoreFrameRestoreId = frameRestoreId
+    }
     chunkTick    = wTick    ?? chunkTick
     chunkEvCount = wEv      ?? chunkEvCount
     const NF_W = 14, CF = 512 * NF_W
@@ -323,6 +333,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     for (let c = 0; c < num; c++) {
       const key = u32[off]
       localChunks.set(key, f32.slice(off + 1, off + 1 + CF))
+      if (frameRestoreId !== undefined) worldFieldRestoreFrameKeys.add(key)
       off += 1 + CF
     }
     // Feed the scientific field state directly into the dedicated volumetric renderer.
@@ -483,12 +494,16 @@ win['worldFieldRestoreState'] = () => ({
   ...worldFieldRestoreState,
   expectedKeys: [...worldFieldRestoreExpectedKeys],
   keys: [...worldFieldRestoreAcknowledgedKeys],
+  restoreFrameKeys: [...worldFieldRestoreFrameKeys],
   complete:
     worldFieldRestoreExpectedKeys.size > 0 &&
     worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
     worldFieldRestoreState.unexpectedAcks === 0 &&
     worldFieldRestoreState.duplicateAcks === 0 &&
-    worldFieldRestoreState.staleAcks === 0,
+    worldFieldRestoreState.staleAcks === 0 &&
+    worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
+    worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
+    [...worldFieldRestoreExpectedKeys].every((key) => worldFieldRestoreFrameKeys.has(key)),
 })
 win['saveWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number, values: number[], seed?: string, providerVersion?: number) => worldFieldChunkPersistence.save(
   { cx, cy, cz },
@@ -530,8 +545,11 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   worldFieldRestoreState.duplicateAcks = 0
   worldFieldRestoreState.unexpectedAcks = 0
   worldFieldRestoreState.staleAcks = 0
+  worldFieldRestoreState.restoreFrameRestoreId = 0
+  worldFieldRestoreState.restoreFrameKeys = []
   worldFieldRestoreExpectedKeys.clear()
   worldFieldRestoreAcknowledgedKeys.clear()
+  worldFieldRestoreFrameKeys.clear()
   for (const chunk of restoreChunks) {
     worldFieldRestoreExpectedKeys.add(chunk.key)
     localChunks.set(chunk.key, chunk.data)
