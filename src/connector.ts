@@ -114,6 +114,23 @@ function installChunkWorldFieldProvider() {
   fieldRenderer.setWorldFieldProvider(authoritativeWorldFieldProvider)
   return true
 }
+function publishWorkerBoundarySnapshots() {
+  const view = worldViewContract.snapshot()
+  const centerChunk = worldFieldChunkCoord(view.center.x, view.sliceY, view.center.z)
+  const provider = new WorkerWorldFieldChunkProvider(
+    centerChunk,
+    localChunks,
+    () => worldViewContract.snapshot(),
+    new DeterministicWorldFieldChunkProvider(view.seed, centerChunk),
+  )
+  for (const axis of ['x', 'y', 'z'] as const) {
+    worldFieldBoundaryExchange.snapshotFace(provider, centerChunk, axis, 1, 8)
+    const next = worldFieldBoundaryExchange.neighbor(centerChunk, axis, 1)
+    worldFieldBoundaryExchange.snapshotFace(provider, next, axis, -1, 8)
+  }
+  return { centerChunk, faces: worldFieldBoundaryExchange.size() }
+}
+
 function workerToWorld(x: number, y: number, _z: number) {
   const view = worldViewContract.snapshot()
   // Worker coordinates are local chunk indices; only X/Z are spatial offsets.
@@ -268,6 +285,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
 
     // Make the same worker voxel state available to the world-space FieldSampler.
     installChunkWorldFieldProvider()
+    publishWorkerBoundarySnapshots()
     const el = document.getElementById('chunkStats')
     if (el && stats) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`
   }
