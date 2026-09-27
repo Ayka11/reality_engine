@@ -410,6 +410,7 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
 win['worldFieldChunkStoreStats'] = () => worldFieldChunkStore.stats()
 win['worldFieldBoundaryStats'] = () => ({ faces: worldFieldBoundaryExchange.size() })
 win['publishWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z', side: -1|1, samples: ScientificFieldSample[]) => worldFieldBoundaryExchange.publish({ cx, cy, cz }, axis, side, samples)
+win['snapshotWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z', side: -1|1, resolution?: number, seed?: string) => { const chunk = populateWorldFieldChunk(cx, cy, cz, seed); return worldFieldBoundaryExchange.snapshotFace(chunk.provider, { cx, cy, cz }, axis, side, resolution) }
 win['validateWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z') => worldFieldBoundaryExchange.validatePair({ cx, cy, cz }, axis)
 win['populateWorldFieldChunk'] = (cx: number, cy: number, cz: number, seed?: string) => populateWorldFieldChunk(cx, cy, cz, seed)
 win['sampleWorldFieldChunk'] = (x: number, y: number, z: number, seed?: string) => { const c = worldFieldChunkCoord(x, y, z); return populateWorldFieldChunk(c.cx, c.cy, c.cz, seed).provider.sample(x, y, z) }
