@@ -92,6 +92,15 @@ try {
   if (chunkContract.loaded > chunkContract.capacity) throw new Error('World field chunk store exceeded bounded capacity');
   if (chunkContract.evictions < 1) throw new Error('World field chunk store did not evict at capacity');
   if (!chunkContract.deterministic || !chunkContract.finite || !chunkContract.differentAddress) throw new Error('Deterministic streamed field chunk replay contract failed');
+  const boundaryContract = await page.evaluate(() => {
+    const sample = { energy: 1, density: 0.5, information: 0.25, entropy: 0.1, temperature: 0.75, biology: 0.4, material: 0.5 };
+    const samples = [sample, { ...sample, energy: 2 }];
+    window.publishWorldFieldBoundary?.(0,0,0,'x',1,samples);
+    window.publishWorldFieldBoundary?.(1,0,0,'x',-1,samples.map((v) => ({ ...v })));
+    return window.validateWorldFieldBoundary?.(0,0,0,'x');
+  });
+  if (!boundaryContract?.paired || boundaryContract.samples !== 2 || boundaryContract.maxDelta !== 0) throw new Error('Cross-chunk boundary continuity contract failed');
+
 
   // Docked workspace regression: detachable sidebar chrome was removed.
   const workspaceChrome = await page.evaluate(() => ({
