@@ -120,12 +120,18 @@ try {
         index === 0 ? { ...chunk, data: [...chunk.data.slice(0, 8), NaN, ...chunk.data.slice(9)] } : chunk
       ),
     };
+    const mismatchedKey = { ...snapshot, key: "999,999,999" };
+    const invalidCoord = { ...snapshot, coord: { ...snapshot.coord, cx: 0.5 } };
+    const invalidView = { ...snapshot, workerView: { ...snapshot.workerView, center: { ...snapshot.workerView.center, x: NaN } } };
     return {
       duplicateRejected: !window.validateWorldFieldChunkSnapshot?.(duplicate),
       nonFiniteRejected: !window.validateWorldFieldChunkSnapshot?.(nonFinite),
+      mismatchedKeyRejected: !window.validateWorldFieldChunkSnapshot?.(mismatchedKey),
+      invalidCoordRejected: !window.validateWorldFieldChunkSnapshot?.(invalidCoord),
+      invalidViewRejected: !window.validateWorldFieldChunkSnapshot?.(invalidView),
     };
   });
-  if (!streamedIntegrity.duplicateRejected || !streamedIntegrity.nonFiniteRejected) {
+  if (!streamedIntegrity.duplicateRejected || !streamedIntegrity.nonFiniteRejected || !streamedIntegrity.mismatchedKeyRejected || !streamedIntegrity.invalidCoordRejected || !streamedIntegrity.invalidViewRejected) {
     throw new Error('Worker snapshot structural integrity contract failed');
   }
   if (!chunkContract.deterministic || !chunkContract.finite || !chunkContract.differentAddress) throw new Error('Deterministic streamed field chunk replay contract failed');
