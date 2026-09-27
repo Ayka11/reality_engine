@@ -572,6 +572,7 @@ win['worldFieldRestoreState'] = () => ({
     worldFieldRestoreExpectedKeys.size > 0 &&
     worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
     worldFieldRestoreState.unexpectedAcks === 0 &&
+    worldFieldRestoreState.unexpectedFrames === 0 &&
     worldFieldRestoreState.duplicateAcks === 0 &&
     worldFieldRestoreState.staleAcks === 0 &&
     worldFieldRestoreState.staleFrames === 0 &&
