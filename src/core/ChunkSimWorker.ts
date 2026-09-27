@@ -124,6 +124,44 @@ self.onmessage = (e: MessageEvent) => {
     return
   }
 
+  if (cmd === 'brush') {
+    const { name, x, y, z, radius, strength } = data as {
+      name: string; x: number; y: number; z: number; radius: number; strength: number
+    }
+    const cx = Math.max(0, Math.min(W - 1, Math.round(x)))
+    const cy = Math.max(0, Math.min(H - 1, Math.round(y)))
+    const cz = Math.max(0, Math.min(D - 1, Math.round(z)))
+    const r = Math.max(1, Math.min(24, radius || 4))
+    const s = Number.isFinite(strength) ? strength : 1
+    const paint = (f: number, value: number) => grid.paintSphere(cx, cy, cz, r, f, value * s)
+    switch (name) {
+      case 'Volcano': paint(F.E, 800); paint(F.T, 500); paint(F.D, 0.6); paint(F.S, 0.2); break
+      case 'Forest': paint(F.E, 180); paint(F.D, 0.4); paint(F.I, 160); paint(F.BIO, 0.7); break
+      case 'Ocean': paint(F.E, 60); paint(F.D, 0.6); paint(F.T, 60); paint(F.I, 40); break
+      case 'Crystal': paint(F.E, 700); paint(F.I, 280); paint(F.S, -0.08); break
+      case 'Storm': paint(F.E, 400); paint(F.S, 0.12); paint(F.T, 150); break
+      case 'Life Cluster': paint(F.E, 280); paint(F.D, 0.45); paint(F.I, 200); paint(F.BIO, 0.65); paint(F.T, 110); paint(F.S, -0.1); break
+      case 'Radiation': paint(F.S, 0.3); paint(F.I, -50); break
+      case 'Civ Seed': paint(F.E, 380); paint(F.D, 0.5); paint(F.I, 400); paint(F.BIO, 0.8); paint(F.S, -0.15); paint(F.T, 100); break
+      case 'Gravity Well': paint(F.E, 450); paint(F.D, 0.8); break
+      case 'Entropy Sink': paint(F.S, -0.4); paint(F.T, -200); break
+      case 'Quantum Core': paint(F.I, 350); paint(F.BIO, 0.6); paint(F.E, 200); break
+      case 'MetaLaw Node': paint(F.E, 400); paint(F.I, 300); paint(F.D, 0.5); break
+      case 'Force Barrier': {
+        const ir = Math.ceil(r)
+        for (let dz=-ir; dz<=ir; dz++) for (let dy=-ir; dy<=ir; dy++) for (let dx=-ir; dx<=ir; dx++) {
+          const d = Math.sqrt(dx*dx+dy*dy+dz*dz)
+          if (Math.abs(d-r) > 1.2) continue
+          grid.set(cx+dx, cy+dy, cz+dz, F.D, 0.9*s)
+          grid.set(cx+dx, cy+dy, cz+dz, F.E, 150*s)
+        }
+        break
+      }
+      default: paint(F.E, 100)
+    }
+    return
+  }
+
   if (cmd === 'generate') {
     grid.clear()
     const a = data
