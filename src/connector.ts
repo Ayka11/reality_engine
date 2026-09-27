@@ -63,6 +63,24 @@ const nodeEditor    = new NodeLawEditor()
 const localChunks = new Map<number, Float32Array>()
 let chunkTick = 0, chunkEvCount = 0, workerBusy = false
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
+const realityLawBridge = new RealityLawBridge()
+win['realityLawBridge'] = realityLawBridge
+win['getRealityLawState'] = () => realityLawBridge.getState()
+function syncRuntimeLawsToWorker() {
+  const s = realityLawBridge.getState()
+  DIFF_cw = s.DIFF; ENT_cw = s.ENT; INFO_cw = s.INFO; BIO_cw = s.BIO
+  chunkWorker.postMessage({ cmd: 'setParams', data: { DIFF: s.DIFF, ENT: s.ENT, INFO: s.INFO, BIO: s.BIO, procs: s.processes } })
+  return s
+}
+win['setRealityLaw'] = (name: string, active: boolean, fitness = 0.5, strength = 0.1) => {
+  realityLawBridge.setUiLaw(name, active, fitness, strength)
+  return syncRuntimeLawsToWorker()
+}
+win['syncRealityLaws'] = () => {
+  const laws = (win['LAWS'] as {name:string;active:boolean;fitness:number;strength:number}[] | undefined) ?? []
+  return realityLawBridge.applySnapshot(laws)
+    && syncRuntimeLawsToWorker()
+}
 
 const chunkWorker = new Worker(
   new URL('./core/ChunkSimWorker.ts', import.meta.url),
@@ -137,6 +155,7 @@ win['applyChunkPreset']   = (name: string) => {
     DIFF_cw = 0.12; ENT_cw = 0.00015; INFO_cw = 0.45; BIO_cw = 0.32
     chunkWorker.postMessage({ cmd: 'setParams', data: { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw, procs: ['thermo', 'bio', 'info'] } })
   }
+  syncRuntimeLawsToWorker()
 }
 
 // 3D renderer controls — routed to the Infinite World renderer
