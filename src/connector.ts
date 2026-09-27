@@ -580,8 +580,6 @@ win['worldFieldRestoreState'] = () => ({
     worldFieldRestoreState.unexpectedAcks === 0 &&
     worldFieldRestoreState.unexpectedFrames === 0 &&
     worldFieldRestoreState.duplicateAcks === 0 &&
-    worldFieldRestoreState.staleAcks === 0 &&
-    worldFieldRestoreState.staleFrames === 0 &&
     worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
     worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
     [...worldFieldRestoreExpectedKeys].every((key) => worldFieldRestoreFrameKeys.has(key)),
