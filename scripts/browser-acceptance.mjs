@@ -345,8 +345,11 @@ try {
     window.paintChunkAt?.(64, 64, 32, 0, 17.25, 2, 'add');
     window.tickChunkWorker?.(true, 1);
   });
-  await page.waitForFunction(() => window.worldFieldRestoreState?.()?.workerBarrierComplete === true, null, { timeout: 15000 });
-  await new Promise((resolve) => setTimeout(resolve, 350));
+  await page.waitForFunction(
+    (baseline) => window.loadWorldFieldChunkSnapshot?.(0, 0, 0)?.checksum !== baseline,
+    postRestoreEvictionPersistence.beforeChecksum,
+    { timeout: 15000 },
+  );
   const postRestoreEvictionResult = await page.evaluate(() => {
     for (let i = 0; i < 140; i++) window.populateWorldFieldChunk?.(1000 + i, 0, 0, 'acceptance-seed');
     const store = window.worldFieldChunkStoreState?.();
