@@ -35,6 +35,44 @@ try {
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
 
+  // Workspace v4 regression: legacy float state must not restore two
+  // overlapping sidebars over the viewport.
+  const layout = await page.evaluate(() => {
+    localStorage.setItem("reality_workspace_layout_version", "3");
+    localStorage.setItem("reality_left_float", JSON.stringify({ x: 58, y: 72, w: 220 }));
+    localStorage.setItem("reality_right_float", JSON.stringify({ x: 58, y: 72, w: 220 }));
+    location.reload();
+    return true;
+  });
+  if (!layout) throw new Error("Workspace migration setup failed");
+  await page.waitForSelector("#left");
+  await page.waitForSelector("#right");
+  await page.waitForFunction(() => localStorage.getItem("reality_workspace_layout_version") === "4");
+  const workspaceGeometry = await page.evaluate(() => {
+    const left = document.getElementById("left")?.getBoundingClientRect();
+    const right = document.getElementById("right")?.getBoundingClientRect();
+    const canvas = document.getElementById("cw")?.getBoundingClientRect();
+    return {
+      left: left ? {x:left.x,width:left.width} : null,
+      right: right ? {x:right.x,width:right.width} : null,
+      canvas: canvas ? {x:canvas.x,width:canvas.width} : null,
+      leftFloating: document.getElementById("left")?.classList.contains("workspace-floating"),
+      rightFloating: document.getElementById("right")?.classList.contains("workspace-floating")
+    };
+  });
+  if (workspaceGeometry.leftFloating || workspaceGeometry.rightFloating) {
+    throw new Error("Legacy floating sidebar state was not migrated to docked layout");
+  }
+  if (!workspaceGeometry.left || !workspaceGeometry.right || !workspaceGeometry.canvas) {
+    throw new Error("Workspace geometry is incomplete");
+  }
+  if (workspaceGeometry.left.x + workspaceGeometry.left.width > workspaceGeometry.canvas.x + 2) {
+    throw new Error("Left sidebar overlaps the world canvas");
+  }
+  if (workspaceGeometry.canvas.x + workspaceGeometry.canvas.width > workspaceGeometry.right.x + 2) {
+    throw new Error("Right sidebar overlaps the world canvas");
+  }
+
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
