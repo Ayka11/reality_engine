@@ -30,6 +30,27 @@ export class WorldFieldBoundaryExchange {
     return `${coord.cx},${coord.cy},${coord.cz}|${axis}|${side}`
   }
 
+  snapshotFace(provider: { sample: (x: number, y: number, z: number) => ScientificFieldSample }, coord: WorldFieldChunkCoord, axis: BoundaryAxis, side: BoundarySide, resolution = 8): WorldFieldBoundarySnapshot {
+    const size = 32
+    const edge = side > 0 ? size : 0
+    const samples: ScientificFieldSample[] = []
+    const count = Math.max(2, Math.trunc(resolution))
+    for (let v = 0; v < count; v++) {
+      for (let u = 0; u < count; u++) {
+        const a = (u / (count - 1)) * size
+        const b = (v / (count - 1)) * size
+        let x = coord.cx * size
+        let y = coord.cy * size
+        let z = coord.cz * size
+        if (axis === 'x') { x += edge; y += a; z += b }
+        else if (axis === 'y') { x += a; y += edge; z += b }
+        else { x += a; y += b; z += edge }
+        samples.push({ ...provider.sample(x, y, z) })
+      }
+    }
+    return this.publish(coord, axis, side, samples)
+  }
+
   publish(coord: WorldFieldChunkCoord, axis: BoundaryAxis, side: BoundarySide, samples: ScientificFieldSample[]): WorldFieldBoundarySnapshot {
     const key = WorldFieldBoundaryExchange.key(coord, axis, side)
     const snapshot: WorldFieldBoundarySnapshot = {
