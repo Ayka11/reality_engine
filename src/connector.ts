@@ -400,7 +400,10 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     for (let c = 0; c < num; c++) {
       const key = u32[off]
       localChunks.set(key, f32.slice(off + 1, off + 1 + CF))
-      if (frameRestoreId !== undefined) worldFieldRestoreFrameKeys.add(key)
+      if (frameRestoreId !== undefined) {
+        if (worldFieldRestoreExpectedKeys.has(key)) worldFieldRestoreFrameKeys.add(key)
+        else worldFieldRestoreState.unexpectedAcks++
+      }
       off += 1 + CF
     }
     // Feed the scientific field state directly into the dedicated volumetric renderer.
