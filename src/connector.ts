@@ -408,6 +408,7 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
 }
 win['worldFieldChunkStoreStats'] = () => worldFieldChunkStore.stats()
 win['populateWorldFieldChunk'] = (cx: number, cy: number, cz: number, seed?: string) => populateWorldFieldChunk(cx, cy, cz, seed)
+win['sampleWorldFieldChunk'] = (x: number, y: number, z: number, seed?: string) => { const c = worldFieldChunkCoord(x, y, z); return populateWorldFieldChunk(c.cx, c.cy, c.cz, seed).provider.sample(x, y, z) }
 win['worldFieldChunkCoord'] = (x: number, y: number, z: number) => worldFieldChunkCoord(x, y, z)
 win['getAuthoritativeWorldFieldState'] = () => authoritativeWorldFieldProvider?.getState() ?? null
 win['sampleAuthoritativeWorldField'] = (x: number, y: number, z: number) => {
