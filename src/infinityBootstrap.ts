@@ -26,6 +26,7 @@ export function bootstrapInfiniteWorld() {
   const world = new InfiniteWorldRenderer(canvas, seed)
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world
+  ;(window as any).installChunkWorldFieldProvider?.()
   ;(window as any).worldFieldSample = (x: number, y?: number, z?: number) => world.fieldSampler.sampleWorld(x, y, z)
   ;(window as any).worldFieldViewWindow = (width: number, height: number, sliceY?: number) => world.fieldSampler.sampleViewWindow(width, height, sliceY)
   ;(window as any).getWorldFieldProvider = () => world.fieldSampler.listProviders().find((p) => p.active) ?? null
