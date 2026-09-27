@@ -1,4 +1,5 @@
-import type { ScientificFieldProvider, ScientificFieldSample } from './ScientificFieldProvider'
+import type { ScientificFieldProvider } from './ScientificFieldProvider'
+import type { ScientificFieldSample } from './FieldSampler'
 import type { WorldFieldChunkCoord } from './WorldFieldChunkStore'
 import { WORLD_FIELD_CHUNK_SIZE, worldFieldChunkOrigin } from './WorldFieldChunkStore'
 
@@ -29,7 +30,7 @@ export class DeterministicWorldFieldChunkProvider implements ScientificFieldProv
   private readonly seedHash: number
   private readonly origin: { x: number; y: number; z: number }
 
-  constructor(private readonly seed: string, private readonly coord: WorldFieldChunkCoord) {
+  constructor(seed: string, coord: WorldFieldChunkCoord) {
     this.seedHash = hashSeed(seed, coord)
     this.origin = worldFieldChunkOrigin(coord)
   }
