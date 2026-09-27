@@ -111,7 +111,10 @@ export class InfiniteWorldRenderer {
   private readonly lodDistance = 96
   private readonly sun: THREE.DirectionalLight
   private readonly hemi: THREE.HemisphereLight
-  private materialMode: 'field' | 'material' | 'height' = 'field'
+  private materialMode: 'field' | 'material' | 'height' = 'height'
+  // Functional vertex presentation: the underlying terrain mesh remains raycastable,
+  // while points + restrained wireframe expose elevation and chunk topology.
+  private terrainStyle: 'vertex' | 'surface' = 'vertex'
   private readonly terrainMaterials = new Set<THREE.MeshStandardMaterial>()
   private physicsParticlePoints: THREE.Points | null = null
   private physicsParticlePositions = new Float32Array(0)
@@ -743,6 +746,30 @@ export class InfiniteWorldRenderer {
     const mesh = new THREE.Mesh(geometry, material)
     mesh.userData.terrain = true
     group.add(mesh)
+
+    if (this.terrainStyle === 'vertex') {
+      const vertexMaterial = new THREE.PointsMaterial({
+        color: 0xd8e6ff,
+        size: 1.8,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.72,
+      })
+      const vertices = new THREE.Points(geometry, vertexMaterial)
+      vertices.name = 'terrain-vertices'
+      vertices.userData.terrainOverlay = true
+      group.add(vertices)
+
+      const wireMaterial = new THREE.LineBasicMaterial({
+        color: 0x90a9d8,
+        transparent: true,
+        opacity: 0.22,
+      })
+      const wire = new THREE.LineSegments(new THREE.WireframeGeometry(geometry), wireMaterial)
+      wire.name = 'terrain-wireframe'
+      wire.userData.terrainOverlay = true
+      group.add(wire)
+    }
 
     const waterGeometry = new THREE.PlaneGeometry(WORLD_CHUNK_SIZE, WORLD_CHUNK_SIZE)
     waterGeometry.rotateX(-Math.PI / 2)

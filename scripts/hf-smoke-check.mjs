@@ -4,28 +4,38 @@ import path from "node:path";
 const required = [
   "package.json",
   "package-lock.json",
-  "Dockerfile.hf",
-  "README_HF.md",
+  "README.md",
   "index.html",
-  "server/signalling-server.js",
+  "vite.config.ts",
+  "dist/index.html",
 ];
 
 for (const file of required) {
   if (!fs.existsSync(path.resolve(file))) {
-    throw new Error(`HF deployment file missing: ${file}`);
+    throw new Error(`Static HF deployment file missing: ${file}`);
   }
 }
 
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
 if (!pkg.scripts?.build) throw new Error("package.json has no build script");
-if (!fs.existsSync("dist")) throw new Error("dist/ is missing; run npm run build before packaging");
+
+const readme = fs.readFileSync(path.resolve("README.md"), "utf8");
+if (!/^sdk:\s*static\s*$/m.test(readme)) throw new Error("README.md must declare sdk: static");
+if (!/^app_file:\s*dist\/index\.html\s*$/m.test(readme)) throw new Error("README.md must declare app_file: dist/index.html");
+if (!/^app_build_command:\s*npm run build\s*$/m.test(readme)) throw new Error("README.md must declare app_build_command: npm run build");
 
 const indexHtml = fs.readFileSync(path.resolve("index.html"), "utf8");
-const inlineScripts = [...indexHtml.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]).filter((code) => code.trim());
+if (indexHtml.includes("server/signalling-server.js")) {
+  throw new Error("Static Space must not require the internal signalling server");
+}
+
+const inlineScripts = [...indexHtml.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi)]
+  .map((m) => m[1])
+  .filter((code) => code.trim());
+
 if (inlineScripts.length === 0) throw new Error("No inline scripts found for syntax validation");
 for (const [index, code] of inlineScripts.entries()) {
   try {
-    // Syntax-only validation; browser globals are intentionally not executed here.
     new Function(code);
   } catch (error) {
     throw new Error(`Inline script ${index + 1} has invalid JavaScript syntax: ${error instanceof Error ? error.message : String(error)}`);
@@ -34,8 +44,9 @@ for (const [index, code] of inlineScripts.entries()) {
 
 console.log(JSON.stringify({
   status: "READY",
-  target: "huggingface-spaces-docker",
-  port: 7860,
-  buildOutput: "dist/",
-  requiredFiles: required.length,
+  target: "huggingface-spaces-static",
+  appFile: "dist/index.html",
+  buildCommand: "npm run build",
+  runtimeServer: "none",
+  inlineScriptsChecked: inlineScripts.length,
 }));

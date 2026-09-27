@@ -253,6 +253,17 @@ export function bootstrapInfiniteWorld() {
     const placed = (window as any).worldLibraryPlace?.(id)
     return placed ? { ...placed, generated: [...generated, id], plan } : { id, generated: false, reason: 'No runtime visual mapping is registered for this element', plan }
   }
+  // First-run showcase: never leave the user in an empty green plain.
+  // The terrain remains deterministic; this only seeds a small functional scene once.
+  if (!localStorage.getItem('reality_engine_showcase_v2') && world.getRuntimeStats().objects === 0) {
+    world.scatter('tree', -70, -70, 70, 70, 0.028)
+    world.scatter('rock', -55, -55, 55, 55, 0.012)
+    world.populateCivilization('civilization.agricultural', 'village', 100)
+    localStorage.setItem('reality_engine_showcase_v2', '1')
+    world.focusGeneratedRegion(1.45)
+    world.render(0)
+  }
+
   ;(window as any).worldRuleGraph = worldRuleGraph
   ;(window as any).worldRuleStats = () => worldRuleGraph.stats()
   ;(window as any).worldRuleRelated = (id: string) => worldRuleGraph.related(id)
@@ -862,14 +873,13 @@ export function bootstrapInfiniteWorld() {
     document.getElementById('workspaceNavHUD')?.remove()
     document.getElementById('dockGhostPreview')?.remove()
 
-    // Persistent docking state: 'top' | 'left' | 'right' | 'float'
-    let dockPos: DockPosition = 'top'
-    // World Tools is a workspace toolbar: keep it in the upper panel by default.
-    // Legacy left/right/float preferences are normalized to top for the current UI.
-    if (localStorage.getItem('infinity_dock_pos') !== 'top') {
-      localStorage.setItem('infinity_dock_pos', 'top')
-    }
-    let isOpen = localStorage.getItem('infinity_dock_open') !== 'false'
+    // Persistent docking state: top / left / right / float.
+    // Top is the default, but dragging is authoritative and must remain free.
+    const savedDock = localStorage.getItem('infinity_dock_pos') as DockPosition | null
+    let dockPos: DockPosition = savedDock === 'left' || savedDock === 'right' || savedDock === 'float' ? savedDock : 'top'
+    const savedOpen = localStorage.getItem('infinity_dock_open')
+    // Keep the world unobstructed on first visit; remember the user's later choice.
+    let isOpen = savedOpen === null ? false : savedOpen !== 'false'
     let activeTab: 'camera' | 'objects' | 'persist' | 'analysis' | 'display' | 'library' = 'objects'
     let libraryQuery = ''
     let libraryCategory: import('./worldLibrary/WorldLibrary').WorldLibraryCategory | '' = ''
@@ -1019,7 +1029,9 @@ export function bootstrapInfiniteWorld() {
           top: 10px;
           left: 12px;
           bottom: 12px;
-          width: 290px;
+          width: min(290px, calc(100vw - 24px));
+          max-height: calc(100vh - 34px);
+          overflow: hidden;
           z-index: 25;
           pointer-events: none;
           display: flex;
@@ -1045,8 +1057,9 @@ export function bootstrapInfiniteWorld() {
           position: absolute;
           top: ${floatTop}px;
           left: ${floatLeft}px;
-          width: 310px;
-          max-height: calc(100vh - 120px);
+          width: min(310px, calc(100vw - 24px));
+          max-height: min(calc(100vh - 70px), 680px);
+          overflow: hidden;
           z-index: 32;
           pointer-events: none;
           display: flex;
@@ -1057,11 +1070,12 @@ export function bootstrapInfiniteWorld() {
     }
 
     const setPosition = (newPos: DockPosition) => {
-      // Keep World Tools in the upper workspace; floating/side placements
-      // made the narrow sidebar compete with the actual World panel.
-      dockPos = 'top'
-      localStorage.setItem('infinity_dock_pos', 'top')
-      if (newPos !== 'top') return render()
+      dockPos = newPos
+      localStorage.setItem('infinity_dock_pos', newPos)
+      if (newPos === 'float') {
+        floatLeft = Number(localStorage.getItem('infinity_dock_float_x') ?? floatLeft)
+        floatTop = Number(localStorage.getItem('infinity_dock_float_y') ?? floatTop)
+      }
       render()
     }
     ;(window as any).setInfinityDockPosition = setPosition
@@ -1194,16 +1208,15 @@ export function bootstrapInfiniteWorld() {
 
       // Drag Handle & Header Controls
       const headerHTML = `
-        <div id="infinityDragHandle" style="cursor: grab; display: flex; align-items: center; justify-content: space-between; border-bottom: 0.5px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 6px; user-select: none;">
+        <div id="infinityDragHandle" class="world-tools-header" style="cursor: grab; display: flex; align-items: center; justify-content: space-between; border-bottom: 0.5px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 6px; user-select: none;">
           <div style="display: flex; align-items: center; gap: 6px;">
             <span style="color: #8e8aa8; font-size: 11px; cursor: grab;" title="Drag to move or dock">⠿</span>
             <b style="color: #c8c3ff; font-size: 11px;">🌍 Infinity Scale & World Tools</b>
             <span style="font-size: 9px; color: #8e8aa8; font-family: monospace;">${stats.loadedChunks} chunks · ${state.objectCount} obj · (X:${stats.camera.worldX}, Z:${stats.camera.worldZ})</span>
           </div>
           <div style="display: flex; align-items: center; gap: 4px;">
-            <span style="font-size: 8.5px; color: var(--sub); padding: 2px 5px;">TOP WORKSPACE</span>
-            <!-- Close / Collapse Button -->
-            <button id="dockCloseBtn" style="cursor: pointer; background: #1a1828; border: 0.5px solid var(--border); color: var(--sub); border-radius: 6px; padding: 2px 8px; font-size: 10px;" title="Collapse Toolbar">▲ Close</button>
+            <span style="font-size: 8.5px; color: #8f88d8; padding: 2px 5px;">WORLD TOOLS</span>
+            <button id="dockCloseBtn" style="cursor:pointer;background:#211d38;border:1px solid #7c6fcd;color:#c8c3ff;border-radius:7px;padding:3px 8px;font-size:10px;font-weight:700;" title="Close World Tools">× Close</button>
           </div>
         </div>
       `
