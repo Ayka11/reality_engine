@@ -297,7 +297,7 @@ export class ChunkRenderer {
     // Downsample the authoritative world field for interactive volumetric rendering.
     // The full scientific field remains available through FieldSampler/2D; the 3D
     // projection uses a bounded voxel budget so it cannot monopolize the main thread.
-    const stride = 2
+    const stride = 4
     const maxInst = this.MAX_INST
     let cnt = 0
     for (let lz = 0; lz < GRID_D && cnt < maxInst; lz += stride) {
@@ -608,10 +608,19 @@ export class ChunkRenderer {
       view.center.y - GRID_D * 0.45,
       view.center.z - GRID_H / 2,
     )
+    const previous = this.worldViewBinding
+    const changed = !previous ||
+      previous.center.x !== view.center.x ||
+      previous.center.y !== view.center.y ||
+      previous.center.z !== view.center.z ||
+      previous.sliceY !== view.sliceY ||
+      previous.seed !== view.seed ||
+      previous.visibleRadius !== view.visibleRadius
     this.worldViewBinding = {
       ...view,
       center: { ...view.center },
     }
+    if (changed && this.worldFieldProvider) this.rebuildPending = true
   }
 
   getWorldViewBinding(): WorldViewSnapshot | null {
