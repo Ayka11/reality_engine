@@ -209,8 +209,8 @@ try {
     const stats = window.worldTerrainPatchStats?.();
     const key = stats?.loadedChunkKeys?.[0];
     const [cx, , cz] = String(key ?? "0,0,0").split(",").map(Number);
-    const x = cx * 128;
-    const z = cz * 128;
+    const x = cx * 32;
+    const z = cz * 32;
     const terrain = window.worldTerrainSample?.(x, z);
     const c = window.getWorldViewContract?.();
     if (c) {
