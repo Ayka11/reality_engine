@@ -249,6 +249,33 @@ try {
     throw new Error('World chunk store was not rehydrated after persistence restore');
   }
 
+  const evictionDuringRestore = await page.evaluate(() => {
+    const before = window.loadWorldFieldChunkSnapshot?.(0, 0, 0);
+    const beforeChecksum = before?.checksum ?? null;
+    const started = window.restoreWorldFieldChunkSnapshot?.(0, 0, 0);
+    setTimeout(() => window.evictWorldFieldChunk?.(0, 0, 0), 0);
+    return { beforeChecksum, started };
+  });
+  await page.waitForFunction(() => window.worldFieldRestoreState?.()?.complete === true, null, { timeout: 15000 });
+  const evictionDuringRestoreAfter = await page.evaluate(() => {
+    const snapshot = window.loadWorldFieldChunkSnapshot?.(0, 0, 0);
+    const store = window.worldFieldChunkStoreState?.();
+    return {
+      checksum: snapshot?.checksum ?? null,
+      storeHasTarget: !!store?.keys?.includes('0,0,0'),
+      restore: window.worldFieldRestoreState?.(),
+    };
+  });
+  if (
+    !evictionDuringRestore.started ||
+    !evictionDuringRestore.beforeChecksum ||
+    evictionDuringRestoreAfter.checksum !== evictionDuringRestore.beforeChecksum ||
+    !evictionDuringRestoreAfter.storeHasTarget ||
+    !evictionDuringRestoreAfter.restore?.complete
+  ) {
+    throw new Error('Eviction during restore corrupted persistence/store consistency');
+  }
+
   const concurrentRestore = await page.evaluate(() => {
     const first = window.restoreWorldFieldChunkSnapshot?.(0, 0, 0);
     const second = window.restoreWorldFieldChunkSnapshot?.(0, 0, 0);
