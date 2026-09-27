@@ -83,7 +83,7 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
     return this.apply({ kind, x, y, z, radius, delta, metadata })
   }
 
-  setGlobal(kind: 'preset' | 'law', scale: Partial<Record<keyof ScientificFieldSample, number>> = {}, delta: Partial<ScientificFieldSample> = {}, metadata?: Record<string, unknown>) {
+  setGlobal(kind: 'preset' | 'law' | 'composer', scale: Partial<Record<keyof ScientificFieldSample, number>> = {}, delta: Partial<ScientificFieldSample> = {}, metadata?: Record<string, unknown>) {
     for (const field of FIELDS) {
       if (scale[field] !== undefined) this.globalScale[field] = scale[field]
       if (delta[field] !== undefined) this.globalDelta[field] = delta[field]
