@@ -56,6 +56,7 @@ export class ChunkRenderer {
   private readonly MAX_INST     = 800_000
   private readonly PER_MAT_INST = Math.floor(800_000 / MAT_TYPES.length)
   private readonly VOXEL_THRESH = 0.8
+  private rebuildPending = false
 
   // Public state
   layer         = 0
@@ -266,7 +267,9 @@ export class ChunkRenderer {
       this.shadowChunks.set(key, f32.slice(start, start + CHUNK_FLOATS))
       offset += 1 + CHUNK_FLOATS
     }
-    this._rebuild()
+    // Worker frames can arrive faster than the renderer can rebuild hundreds of thousands
+    // of instances. Defer the rebuild to the render cadence and coalesce dirty frames.
+    this.rebuildPending = true
   }
 
   private _rebuild() {
@@ -537,20 +540,24 @@ export class ChunkRenderer {
 
   setLayer(layer: number) {
     this.layer = Math.max(-1, Math.min(5, Math.round(layer)))
-    if (this.matMode !== 'material') this._rebuildLayer()
+    if (this.matMode !== 'material') this.rebuildPending = true
   }
 
   setMatMode(mode: 'field' | 'material' | 'height') {
     this.matMode = mode
-    this._rebuild()
+    this.rebuildPending = true
   }
 
   setZSlice(z: number) {
     this.zSlice = Math.max(0, Math.min(GRID_D - 1, Math.round(z)))
-    this._rebuild()
+    this.rebuildPending = true
   }
 
   render(dt = 0.016) {
+    if (this.rebuildPending) {
+      this.rebuildPending = false
+      this._rebuild()
+    }
     this._updateFlyCamera(dt)
     if (this.controls.enabled) this.controls.update()
     this.renderer.render(this.scene, this.camera)
