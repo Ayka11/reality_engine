@@ -28,12 +28,15 @@ export class WorldFieldChunkPersistence {
   private readonly snapshots = new Map<string, WorldFieldChunkSnapshot>()
 
   saveWorkerChunks(coord: WorldFieldChunkCoord, seed: string, workerChunks: { key: number; data: number[] }[], workerView: { center: { x: number; y: number; z: number }; sliceY: number; seed: string }, providerVersion = 2): WorldFieldChunkSnapshot {
-    const flat = workerChunks.flatMap(chunk => [chunk.key, ...chunk.data])
+    const canonical = workerChunks
+      .map(chunk => ({ key: chunk.key, data: [...chunk.data] }))
+      .sort((a, b) => a.key - b.key)
+    const flat = canonical.flatMap(chunk => [chunk.key, ...chunk.data])
     const snapshot: WorldFieldChunkSnapshot = {
       schemaVersion: 2,
       key: `${coord.cx},${coord.cy},${coord.cz}`,
       coord: { ...coord }, seed, providerVersion, values: flat,
-      workerChunks: workerChunks.map(chunk => ({ key: chunk.key, data: [...chunk.data] })),
+      workerChunks: canonical,
       workerView: { center: { ...workerView.center }, sliceY: workerView.sliceY, seed: workerView.seed },
       checksum: checksum(flat), savedAt: Date.now(),
     }
@@ -68,7 +71,15 @@ export class WorldFieldChunkPersistence {
 
   validate(snapshot: WorldFieldChunkSnapshot): boolean {
     if (snapshot.schemaVersion === 1) return checksum(snapshot.values) === snapshot.checksum
-    if (snapshot.schemaVersion === 2) return Array.isArray(snapshot.workerChunks) && checksum(snapshot.values) === snapshot.checksum && snapshot.workerChunks.every(chunk => chunk.data.length > 0)
+    if (snapshot.schemaVersion === 2) {
+      if (!Array.isArray(snapshot.workerChunks) || snapshot.workerChunks.length === 0) return false
+      if (!snapshot.workerChunks.every(chunk => Number.isInteger(chunk.key) && chunk.data.length === 7168)) return false
+      const canonical = snapshot.workerChunks
+        .map(chunk => ({ key: chunk.key, data: [...chunk.data] }))
+        .sort((a, b) => a.key - b.key)
+      const flat = canonical.flatMap(chunk => [chunk.key, ...chunk.data])
+      return checksum(flat) === snapshot.checksum && checksum(snapshot.values) === snapshot.checksum
+    }
     return false
   }
 
