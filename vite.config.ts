@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+
 export default defineConfig({
   base: './',
   build: {
@@ -15,9 +16,8 @@ export default defineConfig({
   optimizeDeps: { exclude: [] },
   preview: { allowedHosts: 'all' },
   server: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
+    host: '0.0.0.0',
+    port: 3000,
+    allowedHosts: 'all',
   },
 })
