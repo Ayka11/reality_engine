@@ -76,6 +76,8 @@ const nodeEditor    = new NodeLawEditor()
 
 const localChunks = new Map<number, Float32Array>()
 let chunkTick = 0, chunkEvCount = 0, workerBusy = false
+let worldFieldRestoreId = 0
+const worldFieldRestoreState = { restoreId: 0, expected: 0, acknowledged: 0, keys: [] as number[] }
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
 let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
@@ -257,6 +259,14 @@ requestAnimationFrame(() => {
 chunkWorker.onmessage = (e: MessageEvent) => {
   const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data
   workerBusy = false
+
+  if (cmd === 'restoreChunkAck') {
+    if (e.data.restoreId === worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.acknowledged++
+      worldFieldRestoreState.keys.push(e.data.key)
+    }
+    return
+  }
 
   if (cmd === 'brushApplied') {
     const brush = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius }
@@ -445,6 +455,7 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
 }
 win['worldFieldChunkStoreStats'] = () => worldFieldChunkStore.stats()
 win['worldFieldChunkPersistenceStats'] = () => ({ snapshots: worldFieldChunkPersistence.size() })
+win['worldFieldRestoreState'] = () => ({ ...worldFieldRestoreState, keys: [...worldFieldRestoreState.keys] })
 win['saveWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number, values: number[], seed?: string, providerVersion?: number) => worldFieldChunkPersistence.save(
   { cx, cy, cz },
   seed ?? worldViewContract.snapshot().seed,
@@ -474,16 +485,17 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   const wz = Math.round(originZ - view.center.z + GRID_H / 2)
   if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_D || wz < 0 || wz >= GRID_H) return false
   const key = (wz >> 3) * (GRID_H / CY) * (GRID_W / CX) + (wy >> 3) * (GRID_W / CX) + (wx >> 3)
-  if (snapshot.schemaVersion === 2 && snapshot.workerChunks?.length) {
-    for (const chunk of snapshot.workerChunks) {
-      const restored = new Float32Array(chunk.data)
-      localChunks.set(chunk.key, restored)
-      chunkWorker.postMessage({ cmd: 'restoreChunk', data: { key: chunk.key, data: Array.from(restored) } })
-    }
-  } else {
-    const restored = new Float32Array(snapshot.values)
-    localChunks.set(key, restored)
-    chunkWorker.postMessage({ cmd: 'restoreChunk', data: { key, data: Array.from(restored) } })
+  const restoreId = ++worldFieldRestoreId
+  const restoreChunks = snapshot.schemaVersion === 2 && snapshot.workerChunks?.length
+    ? snapshot.workerChunks.map(chunk => ({ key: chunk.key, data: new Float32Array(chunk.data) }))
+    : [{ key, data: new Float32Array(snapshot.values) }]
+  worldFieldRestoreState.restoreId = restoreId
+  worldFieldRestoreState.expected = restoreChunks.length
+  worldFieldRestoreState.acknowledged = 0
+  worldFieldRestoreState.keys = []
+  for (const chunk of restoreChunks) {
+    localChunks.set(chunk.key, chunk.data)
+    chunkWorker.postMessage({ cmd: 'restoreChunk', data: { key: chunk.key, data: Array.from(chunk.data), restoreId } })
   }
   publishWorkerBoundarySnapshots()
   runtimeProvenance.record('world-state', { source: 'WorldFieldChunkPersistence', action: 'restore', coord: { cx, cy, cz }, key, checksum: snapshot.checksum })
