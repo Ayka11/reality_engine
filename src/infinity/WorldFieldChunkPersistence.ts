@@ -71,10 +71,19 @@ export class WorldFieldChunkPersistence {
   }
 
   validate(snapshot: WorldFieldChunkSnapshot): boolean {
+    if (!snapshot || !Array.isArray(snapshot.values) || !snapshot.values.every(Number.isFinite)) return false
+    if (typeof snapshot.checksum !== 'string' || snapshot.checksum.length !== 8) return false
     if (snapshot.schemaVersion === 1) return checksum(snapshot.values) === snapshot.checksum
     if (snapshot.schemaVersion === 2) {
       if (!Array.isArray(snapshot.workerChunks) || snapshot.workerChunks.length === 0) return false
-      if (!snapshot.workerChunks.every(chunk => Number.isInteger(chunk.key) && chunk.data.length === CHUNK_FLOATS)) return false
+      const keys = new Set<number>()
+      for (const chunk of snapshot.workerChunks) {
+        if (!Number.isInteger(chunk.key) || keys.has(chunk.key)) return false
+        if (!Array.isArray(chunk.data) || chunk.data.length !== CHUNK_FLOATS) return false
+        if (!chunk.data.every(Number.isFinite)) return false
+        keys.add(chunk.key)
+      }
+      if (!Number.isFinite(snapshot.savedAt)) return false
       const canonical = snapshot.workerChunks
         .map(chunk => ({ key: chunk.key, data: [...chunk.data] }))
         .sort((a, b) => a.key - b.key)
