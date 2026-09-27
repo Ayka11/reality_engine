@@ -789,6 +789,7 @@ function _drawIso(){
 
 let worldField2DLinked = true
 let worldField2DCache = null
+let worldField2DRenderCache = null
 
 function _getWorldField2DWindow(width, height) {
   const sampler = window.worldFieldViewWindow
@@ -898,20 +899,25 @@ function _drawLegacyMultiSlice(){
         const px=tax+a.x*cs4+cs4/2,py=tay+a.y*cs4+cs4/2;
         ctx.beginPath();ctx.arc(px,py,Math.max(2,cs4*0.38),0,6.283);
         ctx.fillStyle=CIV_COLS[(a.civId-1)%CIV_COLS.length]||'#fff';
-        ctx.globalAlpha=0.8;ctx.fill();ctx.globalAlpha=1;
-      }
-    }
-  }
-}
-
-
-
-function _drawWorldFieldMultiSlice(){
+        ctx.globalAlpha=0.8;ctx.fill();ctx.glofunction _drawWorldFieldMultiSlice(){
   const cw=canvas.width,ch=canvas.height
+  const dataCanvasKeyBase = `${cw}x${ch}`
+  const mainCtx = ctx
   const windowW=Math.max(1,Math.min(96,Math.floor(cw/8)))
   const windowH=Math.max(1,Math.min(72,Math.floor(ch/8)))
   const data=_getWorldField2DWindow(windowW,windowH)
   if(!data)return false
+  const renderKey = `${data.key}|${dataCanvasKeyBase}|layer=${layer}`
+  if (worldField2DRenderCache?.key === renderKey) {
+    mainCtx.clearRect(0,0,cw,ch)
+    mainCtx.drawImage(worldField2DRenderCache.canvas,0,0)
+    return true
+  }
+  const renderCanvas = document.createElement('canvas')
+  renderCanvas.width = cw
+  renderCanvas.height = ch
+  const ctx = renderCanvas.getContext('2d')
+  if (!ctx) return false
   const value=(s,f)=>[s.energy,s.density,s.information,s.entropy,s.temperature,s.biology][f]??s.energy
   const meta=[
     {mx:1000,l:0,label:'⚡ Energy',info:'World-space energy field'},
@@ -948,6 +954,13 @@ function _drawWorldFieldMultiSlice(){
     ctx.strokeStyle='#3b4964';ctx.beginPath();ctx.moveTo(hw,0);ctx.lineTo(hw,ch);ctx.stroke();ctx.beginPath();ctx.moveTo(0,hh);ctx.lineTo(cw,hh);ctx.stroke()
     ctx.font='8px monospace';ctx.fillStyle='rgba(160,190,230,.72)';ctx.fillText(`WORLD SPACE · center=(${data.view.center.x.toFixed(1)},${data.view.center.z.toFixed(1)}) · Y=${data.view.sliceY} · seed=${data.view.seed}`,8,ch-4)
   }
+  mainCtx.clearRect(0,0,cw,ch)
+  mainCtx.drawImage(renderCanvas,0,0)
+  worldField2DRenderCache = { key: renderKey, canvas: renderCanvas }
+  return true
+}
+seed}`,8,ch-4)
+  }
   return true
 }
 
@@ -955,7 +968,7 @@ function _drawMultiSlice(){
   if(worldField2DLinked&&_drawWorldFieldMultiSlice())return
   _drawLegacyMultiSlice()
 }
-window.setWorldField2DLinked=(enabled)=>{worldField2DLinked=Boolean(enabled);worldField2DCache=null;drawGrid()}
+window.setWorldField2DLinked=(enabled)=>{worldField2DLinked=Boolean(enabled);worldField2DCache=null;worldField2DRenderCache=null;drawGrid()}
 window.getWorldField2DLinked=()=>worldField2DLinked
 window.getWorldField2DState=()=>({linked:worldField2DLinked,view:worldField2DCache?.view??null,sampleCount:worldField2DCache?.samples?.length??0})
 
