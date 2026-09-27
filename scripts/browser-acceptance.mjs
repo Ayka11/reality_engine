@@ -239,6 +239,33 @@ try {
     throw new Error('Worker persistence restore round-trip integrity failed');
   }
 
+  const concurrentRestore = await page.evaluate(() => {
+    const first = window.restoreWorldFieldChunkSnapshot?.(0, 0, 0);
+    const second = window.restoreWorldFieldChunkSnapshot?.(0, 0, 0);
+    return { first, second };
+  });
+  if (!concurrentRestore.first || !concurrentRestore.second) {
+    throw new Error('Concurrent restore setup failed');
+  }
+  await page.waitForFunction(() => {
+    const state = window.worldFieldRestoreState?.();
+    return !!state && state.complete === true;
+  }, null, { timeout: 15000 });
+  const concurrentRestoreState = await page.evaluate(() => window.worldFieldRestoreState?.());
+  if (
+    !concurrentRestoreState ||
+    concurrentRestoreState.restoreId < 2 ||
+    concurrentRestoreState.staleAcks < 1 ||
+    concurrentRestoreState.staleFrames < 1 ||
+    concurrentRestoreState.restoreFrameRestoreId !== concurrentRestoreState.restoreId ||
+    concurrentRestoreState.acknowledged !== concurrentRestoreState.expected ||
+    concurrentRestoreState.duplicateAcks !== 0 ||
+    concurrentRestoreState.unexpectedAcks !== 0 ||
+    !concurrentRestoreState.complete
+  ) {
+    throw new Error('Concurrent restore race hardening failed');
+  }
+
   // Docked workspace regression: detachable sidebar chrome was removed.
   const workspaceChrome = await page.evaluate(() => ({
     leftToggle: !!document.getElementById("btnToggleLeft"),
