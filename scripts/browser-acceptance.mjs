@@ -205,32 +205,34 @@ try {
   // Mutation convergence: Brush must mutate the same authoritative field consumed by World/2D/3D.
   // The terrain renderer is anchored at Infinite World position; restore the shared spatial contract to that anchor
   // after the earlier 2D/3D routing tests moved the contract to a remote diagnostic location.
-  await page.evaluate(() => {
+  const mutationAnchor = await page.evaluate(() => {
     const p = window.infinityStats?.().camera;
+    const terrain = p ? window.worldTerrainSample?.(p.worldX, p.worldZ) : null;
     const c = window.getWorldViewContract?.();
-    if (p && c) window.setWorldViewCenter?.(p.worldX, c.center.y, p.worldZ);
+    if (p && terrain && c) {
+      window.setWorldViewCenter?.(p.worldX, c.center.y, p.worldZ);
+      window.setWorldViewSliceY?.(terrain.height);
+    }
+    return { x: p?.worldX ?? 0, z: p?.worldZ ?? 0, y: terrain?.height ?? c?.sliceY ?? 0 };
   });
-  const mutationBaseline = await page.evaluate(() => {
-    const c = window.getWorldViewContract?.();
-    const p = window.infinityStats?.().camera ?? { worldX: c.center.x, worldZ: c.center.z };
+  const mutationBaseline = await page.evaluate((anchor) => {
     return {
-      point: { x: p.worldX, y: c.sliceY, z: p.worldZ },
-      sample: window.sampleAuthoritativeWorldField?.(p.worldX, c.sliceY, p.worldZ),
+      point: anchor,
+      sample: window.sampleAuthoritativeWorldField?.(anchor.x, anchor.y, anchor.z),
       terrainGeometry: window.worldTerrainGeometrySignature?.(),
     };
-  });
-  await page.evaluate(() => { const c = window.getWorldViewContract?.(); const z = Math.max(0, Math.min(63, Math.round(c?.sliceY ?? 0))); window.applyChunkBrush?.("Forest", 64, 64, z, 8, 1); });
-  const mutationAfter = await page.evaluate(() => {
-    const c = window.getWorldViewContract?.();
-    const p = window.infinityStats?.().camera ?? { worldX: c.center.x, worldZ: c.center.z };
-    return {
-      state: window.getAuthoritativeWorldFieldState?.(),
-      world: window.sampleAuthoritativeWorldField?.(p.worldX, c.sliceY, p.worldZ),
-      volume: window.getField3DWorldSample?.(p.worldX, c.sliceY, p.worldZ),
-      terrainGeometry: window.worldTerrainGeometrySignature?.(),
-      analyticTerrain: window.worldTerrainSample?.(p.worldX, p.worldZ),
-    };
-  });
+  }, mutationAnchor);
+  await page.evaluate((anchor) => {
+    const z = Math.max(0, Math.min(63, Math.round(anchor.y)));
+    window.applyChunkBrush?.("Forest", 64, 64, z, 8, 1);
+  }, mutationAnchor);
+  const mutationAfter = await page.evaluate((anchor) => ({
+    state: window.getAuthoritativeWorldFieldState?.(),
+    world: window.sampleAuthoritativeWorldField?.(anchor.x, anchor.y, anchor.z),
+    volume: window.getField3DWorldSample?.(anchor.x, anchor.y, anchor.z),
+    terrainGeometry: window.worldTerrainGeometrySignature?.(),
+    analyticTerrain: window.worldTerrainSample?.(anchor.x, anchor.z),
+  }), mutationAnchor);
   if (!mutationAfter.state || mutationAfter.state.mutationCount < 1) {
     throw new Error("Authoritative world field did not record the Brush mutation");
   }
