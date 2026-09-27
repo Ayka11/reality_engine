@@ -453,6 +453,14 @@ win['saveWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number, values
   values.length === CHUNK_FLOATS ? { fieldsPerCell: NF, cellCount: CHUNK_FLOATS / NF } : undefined,
 )
 win['loadWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => worldFieldChunkPersistence.load({ cx, cy, cz })
+win['snapshotWorldFieldChunkPersistence'] = (cx: number, cy: number, cz: number, seed?: string) => {
+  const chunk = populateWorldFieldChunk(cx, cy, cz, seed)
+  const provider = chunk.provider as WorkerWorldFieldChunkProvider
+  const workerChunks = provider.snapshotWorkerChunks()
+  return workerChunks.length
+    ? worldFieldChunkPersistence.saveWorkerChunks({ cx, cy, cz }, chunk.seed, workerChunks, worldViewContract.snapshot(), chunk.version)
+    : null
+}
 win['validateWorldFieldChunkSnapshot'] = (snapshot: unknown) => worldFieldChunkPersistence.validate(snapshot as any)
 win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => {
   const snapshot = worldFieldChunkPersistence.loadValid({ cx, cy, cz })
