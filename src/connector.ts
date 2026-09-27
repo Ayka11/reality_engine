@@ -464,7 +464,7 @@ win['snapshotWorldFieldChunkPersistence'] = (cx: number, cy: number, cz: number,
 win['validateWorldFieldChunkSnapshot'] = (snapshot: unknown) => worldFieldChunkPersistence.validate(snapshot as any)
 win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => {
   const snapshot = worldFieldChunkPersistence.loadValid({ cx, cy, cz })
-  if (!snapshot || snapshot.values.length < CHUNK_FLOATS || snapshot.fieldLayout?.fieldsPerCell !== NF) return false
+  if (!snapshot || !((snapshot.schemaVersion === 2 && snapshot.workerChunks?.length) || (snapshot.values.length >= CHUNK_FLOATS && snapshot.fieldLayout?.fieldsPerCell === NF))) return false
   const world = getInfiniteWorld()
   if (!world) return false
   const view = worldViewContract.snapshot()
