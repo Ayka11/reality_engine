@@ -296,6 +296,7 @@ win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4
   installChunkWorldFieldProvider()
   const p = workerToWorld(x, y, z)
   authoritativeWorldFieldProvider?.applyRadial('brush', p.x, p.y, p.z, radius, brushMutation(name, strength), { name, worker: { x, y, z }, strength })
+  getInfiniteWorld()?.invalidateTerrainFromAuthoritativeField()
   return authoritativeWorldFieldProvider?.getState() ?? null
 }
 
@@ -314,6 +315,7 @@ win['applyChunkPreset']   = (name: string) => {
     chunkWorker.postMessage({ cmd: 'setParams', data: { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw, procs: ['thermo', 'bio', 'info'] } })
   }
   syncRuntimeLawsToWorker()
+  getInfiniteWorld()?.invalidateTerrainFromAuthoritativeField()
 }
 
 // 3D renderer controls — routed to the Infinite World renderer
@@ -399,6 +401,7 @@ win['sampleAuthoritativeWorldField'] = (x: number, y: number, z: number) => {
 }
 win['clearAuthoritativeWorldFieldMutations'] = () => {
   authoritativeWorldFieldProvider?.clear()
+  getInfiniteWorld()?.invalidateTerrainFromAuthoritativeField()
   return authoritativeWorldFieldProvider?.getState() ?? null
 }
 
@@ -416,6 +419,7 @@ sceneComposer.setOnApply((cmds) => {
     const field = fieldByIndex[cmd.f]
     if (field) authoritativeWorldFieldProvider?.applyRadial('composer', p.x, p.y, p.z, cmd.r ?? 0.75, { [field]: cmd.v }, { mode: cmd.mode ?? 'add', field: cmd.f })
   }
+  getInfiniteWorld()?.invalidateTerrainFromAuthoritativeField()
   runtimeProvenance.record('world-state', { source: 'SceneComposer', commandCount: cmds.length, fieldState: authoritativeWorldFieldProvider?.getState() ?? null })
 })
 win['addSceneComp'] = (id: string)  => { sceneComposer.addComponent(id) }
