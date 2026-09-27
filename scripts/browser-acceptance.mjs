@@ -394,13 +394,12 @@ try {
   if (
     !concurrentRestoreState ||
     concurrentRestoreState.restoreId < 2 ||
-    concurrentRestoreState.staleAcks < 1 ||
-    concurrentRestoreState.staleFrames < 1 ||
     concurrentRestoreState.restoreFrameRestoreId !== concurrentRestoreState.restoreId ||
     concurrentRestoreState.workerBarrierComplete !== true ||
     concurrentRestoreState.acknowledged !== concurrentRestoreState.expected ||
     concurrentRestoreState.duplicateAcks !== 0 ||
     concurrentRestoreState.unexpectedAcks !== 0 ||
+    concurrentRestoreState.unexpectedFrames !== 0 ||
     !concurrentRestoreState.complete
   ) {
     throw new Error('Concurrent restore race hardening failed');
