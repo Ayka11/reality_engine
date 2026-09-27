@@ -804,7 +804,10 @@ export class InfiniteWorldRenderer {
   sampleRenderedTerrainHeight(x: number, z: number): number | null {
     let best: { distance: number; height: number } | null = null
     for (const patch of this.patches.values()) {
-      const mesh = patch.group.children.find((child) => child.userData.terrain) as THREE.Mesh | undefined
+      let mesh: THREE.Mesh | undefined
+      patch.group.traverse((child) => {
+        if (!mesh && child.userData.terrain && (child as THREE.Mesh).isMesh) mesh = child as THREE.Mesh
+      })
       const position = mesh?.geometry.getAttribute('position') as THREE.BufferAttribute | undefined
       if (!position) continue
       for (let i = 0; i < position.count; i++) {
