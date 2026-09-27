@@ -232,6 +232,46 @@ try {
     }
   }
 
+  // Composer must mutate the same authoritative field and remain visible through the 2D world-space projection.
+  const composerBaseline = await page.evaluate(() => {
+    const c = window.getWorldViewContract?.();
+    return window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z);
+  });
+  await page.evaluate(() => window.infinityApplyComposer?.({
+    phi: "Crystalline",
+    fields: "Information Dense",
+    complexity: "Explosive",
+    spacetime: "High Radiation",
+  }));
+  const composerAfter = await page.evaluate(() => {
+    const c = window.getWorldViewContract?.();
+    const view = window.worldFieldViewWindow?.(1, 1, c.sliceY);
+    return {
+      state: window.getAuthoritativeWorldFieldState?.(),
+      world: window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z),
+      volume: window.getField3DWorldSample?.(c.center.x, c.sliceY, c.center.z),
+      slice: view?.samples?.[0] ?? null,
+    };
+  });
+  if (!composerAfter.state || composerAfter.state.mutationCount < 1) {
+    throw new Error("Composer did not record an authoritative world-field mutation");
+  }
+  if (!composerAfter.world || !composerAfter.volume || !composerAfter.slice) {
+    throw new Error("Composer convergence samples are unavailable");
+  }
+  if (Math.abs((composerAfter.world.information ?? 0) - (composerBaseline?.information ?? 0)) < 1e-6) {
+    throw new Error("Composer did not change the authoritative information field");
+  }
+  for (const key of ["energy","density","information","entropy","temperature","biology","material"]) {
+    if (Math.abs((composerAfter.world[key] ?? 0) - (composerAfter.volume[key] ?? 0)) > 1e-9) {
+      throw new Error(`Composer world/volumetric mismatch for ${key}`);
+    }
+    if (Math.abs((composerAfter.world[key] ?? 0) - (composerAfter.slice[key] ?? 0)) > 1e-9) {
+      throw new Error(`Composer world/2D slice mismatch for ${key}`);
+    }
+  }
+  await page.evaluate(() => window.clearAuthoritativeWorldFieldMutations?.());
+
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
