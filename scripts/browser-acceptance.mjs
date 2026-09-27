@@ -69,6 +69,32 @@ try {
   }));
   if (Number(terrainSmoke.geometry?.vertexCount ?? 0) <= 0) throw new Error("Infinite World terrain geometry did not materialize");
 
+  // Phase 3 spatial chunk-address contract: negative coordinates, boundaries and bounded cache.
+  const chunkContract = await page.evaluate(async () => {
+    const mod = await import('/src/infinity/WorldFieldChunkStore.ts');
+    const cases = [
+      [0, 0, 0, '0,0,0'],
+      [31.999, 0, 31.999, '0,0,0'],
+      [32, 0, 32, '1,0,1'],
+      [-0.001, 0, -0.001, '-1,0,-1'],
+      [-32, 0, -32, '-1,0,-1'],
+      [-32.001, 0, -32.001, '-2,0,-2'],
+    ];
+    const mapped = cases.map(([x,y,z,key]) => ({ input:[x,y,z], key: mod.WorldFieldChunkStore.key(mod.worldFieldChunkCoord(x,y,z)), expected:key }));
+    const boundariesOk = mapped.every((v) => v.key === v.expected);
+    const store = new mod.WorldFieldChunkStore(2);
+    const provider = { sample: () => ({ energy:1,density:1,information:1,entropy:0,temperature:1,biology:1,material:1 }) };
+    store.set({cx:0,cy:0,cz:0}, 's', provider);
+    store.set({cx:1,cy:0,cz:0}, 's', provider);
+    store.get({cx:0,cy:0,cz:0});
+    store.set({cx:2,cy:0,cz:0}, 's', provider);
+    const stats = store.stats();
+    return { boundariesOk, mapped, loaded: stats.loaded, capacity: stats.capacity, evictions: stats.evictions, keys: stats.keys };
+  });
+  if (!chunkContract.boundariesOk) throw new Error('World field chunk coordinate boundary contract failed');
+  if (chunkContract.loaded > chunkContract.capacity) throw new Error('World field chunk store exceeded bounded capacity');
+  if (chunkContract.evictions < 1) throw new Error('World field chunk store did not evict at capacity');
+
   // Docked workspace regression: detachable sidebar chrome was removed.
   const workspaceChrome = await page.evaluate(() => ({
     leftToggle: !!document.getElementById("btnToggleLeft"),
