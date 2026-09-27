@@ -647,6 +647,7 @@ export function bootstrapInfiniteWorld() {
       .replace(/[^a-z0-9]+/g, '-')
     world.reseed(newSeed)
     worldViewContract.setSeed(newSeed)
+    ;(window as any).applyAuthoritativeComposerMutation?.({ phi, fields, complexity, spacetime })
 
     worldViewContract.setCenter(world.getWorldPosition().x, world.getWorldPosition().y, world.getWorldPosition().z)
     const x = 16
