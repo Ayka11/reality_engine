@@ -37,6 +37,7 @@ import { runtimeProvenance }                      from './infinity/RuntimeProven
 import { worldViewContract } from './infinity/WorldViewContract'
 import { FunctionFieldProvider } from './infinity/ScientificFieldProvider'
 import { MutableWorldFieldProvider } from './infinity/MutableWorldFieldProvider'
+import { WorldFieldChunkStore, worldFieldChunkCoord } from './infinity/WorldFieldChunkStore'
 import type { ScientificFieldSample } from './infinity/FieldSampler'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
@@ -73,6 +74,7 @@ let chunkTick = 0, chunkEvCount = 0, workerBusy = false
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
 let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
+const worldFieldChunkStore = new WorldFieldChunkStore(128)
 
 function installChunkWorldFieldProvider() {
   const world = getInfiniteWorld()
@@ -396,6 +398,8 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
   const h = parent.clientHeight
   getInfiniteWorld()?.resize(Math.max(1, w), Math.max(1, h))
 }
+win['worldFieldChunkStoreStats'] = () => worldFieldChunkStore.stats()
+win['worldFieldChunkCoord'] = (x: number, y: number, z: number) => worldFieldChunkCoord(x, y, z)
 win['getAuthoritativeWorldFieldState'] = () => authoritativeWorldFieldProvider?.getState() ?? null
 win['sampleAuthoritativeWorldField'] = (x: number, y: number, z: number) => {
   installChunkWorldFieldProvider()
