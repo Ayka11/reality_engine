@@ -26,6 +26,13 @@ export function bootstrapInfiniteWorld() {
   const world = new InfiniteWorldRenderer(canvas, seed)
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world
+  worldViewContract.setSeed(seed)
+  worldViewContract.setCenter(world.getWorldPosition().x, world.getWorldPosition().y, world.getWorldPosition().z)
+  ;(window as any).getWorldViewContract = () => worldViewContract.snapshot()
+  ;(window as any).setWorldViewRenderMode = (mode: '3d'|'field3d'|'2d'|'hybrid'|'metrics') => worldViewContract.setRenderMode(mode)
+  ;(window as any).setWorldViewCenter = (x: number, y: number, z: number) => worldViewContract.setCenter(x, y, z)
+  ;(window as any).setWorldViewSliceY = (y: number) => worldViewContract.setSliceY(y)
+
   ;(window as any).worldLibrary = worldLibrary
   ;(window as any).worldLibraryStats = () => worldLibrary.stats()
   ;(window as any).worldLibrarySearch = (tags: string[] = [], category?: string) =>
@@ -636,6 +643,7 @@ export function bootstrapInfiniteWorld() {
     world.reseed(newSeed)
     worldViewContract.setSeed(newSeed)
 
+    worldViewContract.setCenter(world.getWorldPosition().x, world.getWorldPosition().y, world.getWorldPosition().z)
     const x = 16
     const z = 16
 
