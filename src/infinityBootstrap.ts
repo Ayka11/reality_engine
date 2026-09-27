@@ -1029,7 +1029,9 @@ export function bootstrapInfiniteWorld() {
           top: 10px;
           left: 12px;
           bottom: 12px;
-          width: 290px;
+          width: min(290px, calc(100vw - 24px));
+          max-height: calc(100vh - 34px);
+          overflow: hidden;
           z-index: 25;
           pointer-events: none;
           display: flex;
@@ -1055,8 +1057,9 @@ export function bootstrapInfiniteWorld() {
           position: absolute;
           top: ${floatTop}px;
           left: ${floatLeft}px;
-          width: 310px;
-          max-height: calc(100vh - 120px);
+          width: min(310px, calc(100vw - 24px));
+          max-height: min(calc(100vh - 70px), 680px);
+          overflow: hidden;
           z-index: 32;
           pointer-events: none;
           display: flex;
@@ -1205,16 +1208,15 @@ export function bootstrapInfiniteWorld() {
 
       // Drag Handle & Header Controls
       const headerHTML = `
-        <div id="infinityDragHandle" style="cursor: grab; display: flex; align-items: center; justify-content: space-between; border-bottom: 0.5px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 6px; user-select: none;">
+        <div id="infinityDragHandle" class="world-tools-header" style="cursor: grab; display: flex; align-items: center; justify-content: space-between; border-bottom: 0.5px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 6px; user-select: none;">
           <div style="display: flex; align-items: center; gap: 6px;">
             <span style="color: #8e8aa8; font-size: 11px; cursor: grab;" title="Drag to move or dock">⠿</span>
             <b style="color: #c8c3ff; font-size: 11px;">🌍 Infinity Scale & World Tools</b>
             <span style="font-size: 9px; color: #8e8aa8; font-family: monospace;">${stats.loadedChunks} chunks · ${state.objectCount} obj · (X:${stats.camera.worldX}, Z:${stats.camera.worldZ})</span>
           </div>
           <div style="display: flex; align-items: center; gap: 4px;">
-            <span style="font-size: 8.5px; color: var(--sub); padding: 2px 5px;">TOP WORKSPACE</span>
-            <!-- Close / Collapse Button -->
-            <button id="dockCloseBtn" style="cursor: pointer; background: #1a1828; border: 0.5px solid var(--border); color: var(--sub); border-radius: 6px; padding: 2px 8px; font-size: 10px;" title="Collapse Toolbar">▲ Close</button>
+            <span style="font-size: 8.5px; color: #8f88d8; padding: 2px 5px;">WORLD TOOLS</span>
+            <button id="dockCloseBtn" style="cursor:pointer;background:#211d38;border:1px solid #7c6fcd;color:#c8c3ff;border-radius:7px;padding:3px 8px;font-size:10px;font-weight:700;" title="Close World Tools">× Close</button>
           </div>
         </div>
       `
