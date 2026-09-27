@@ -100,6 +100,23 @@ try {
   if (persistenceContract.schemaVersion !== 1 || !persistenceContract.valid || !persistenceContract.same || !persistenceContract.tamperRejected) throw new Error('Streamed chunk persistence round-trip contract failed');
   if (chunkContract.evictions < 1) throw new Error('World field chunk store did not evict at capacity');
   if (!chunkContract.deterministic || !chunkContract.finite || !chunkContract.differentAddress) throw new Error('Deterministic streamed field chunk replay contract failed');
+  const restoreContract = await page.evaluate(() => {
+    const count = 512 * 14
+    const values = new Array(count).fill(42.5)
+    const saved = window.saveWorldFieldChunkSnapshot?.(0, 0, 0, values, 'acceptance-seed', 2)
+    for (let i = 0; i < 130; i++) window.populateWorldFieldChunk?.(i + 200, 0, 0, 'acceptance-seed')
+    const restored = window.restoreWorldFieldChunkSnapshot?.(0, 0, 0)
+    return { saved: !!saved, restored: !!restored }
+  });
+  if (!restoreContract.saved || !restoreContract.restored) throw new Error('Persisted worker chunk restore was not accepted');
+  await page.waitForFunction(() => {
+    const sample = window.sampleWorldFieldChunkAt?.(0, 0, 0, 0, 0, 0, 'acceptance-seed');
+    return Number.isFinite(sample?.energy) && Math.abs((sample?.energy ?? 0) - 42.5) < 1e-6;
+  }, undefined, { timeout: acceptanceTimeout });
+  const restoredSample = await page.evaluate(() => window.sampleWorldFieldChunkAt?.(0, 0, 0, 0, 0, 0, 'acceptance-seed'));
+  if (Math.abs((restoredSample?.energy ?? 0) - 42.5) > 1e-6 || Math.abs((restoredSample?.density ?? 0) - 42.5) > 1e-6) {
+    throw new Error('Restored worker chunk does not match persisted payload');
+  }
   const boundaryContract = await page.evaluate(() => {
     const axes = [
       ['x', [0,0,0], [1,0,0]], ['y', [0,0,0], [0,1,0]], ['z', [0,0,0], [0,0,1]],
