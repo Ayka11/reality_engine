@@ -159,6 +159,7 @@ self.onmessage = (e: MessageEvent) => {
       }
       default: paint(F.E, 100)
     }
+    ;(self as unknown as Worker).postMessage({ cmd: 'brushApplied', name, x: cx, y: cy, z: cz, radius: r })
     return
   }
 
