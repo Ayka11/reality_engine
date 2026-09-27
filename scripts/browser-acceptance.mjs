@@ -91,19 +91,16 @@ try {
   if (!chunkContract.deterministic || !chunkContract.finite || !chunkContract.differentAddress) throw new Error('Deterministic streamed field chunk replay contract failed');
   const boundaryContract = await page.evaluate(() => {
     const axes = [
-      ['x', [32, 7, 11], [0, 0, 0], [1, 0, 0]],
-      ['y', [7, 32, 11], [0, 0, 0], [0, 1, 0]],
-      ['z', [7, 11, 32], [0, 0, 0], [0, 0, 1]],
+      ['x', [0,0,0], [1,0,0]], ['y', [0,0,0], [0,1,0]], ['z', [0,0,0], [0,0,1]],
     ];
-    const deltas = axes.map(([axis, point, a, b]) => {
-      const p = point;
-      const left = window.sampleWorldFieldChunkAt?.(a[0], a[1], a[2], p[0], p[1], p[2], 'acceptance-seed');
-      const right = window.sampleWorldFieldChunkAt?.(b[0], b[1], b[2], p[0], p[1], p[2], 'acceptance-seed');
-      const maxDelta = Math.max(...['energy','density','information','entropy','temperature','biology','material'].map((k) => Math.abs(left[k] - right[k])));
-      return { axis, maxDelta };
+    const results = axes.map(([axis, base, next]) => {
+      window.snapshotWorldFieldBoundary?.(base[0],base[1],base[2],axis,1,8,'acceptance-seed');
+      window.snapshotWorldFieldBoundary?.(next[0],next[1],next[2],axis,-1,8,'acceptance-seed');
+      return { axis, ...window.validateWorldFieldBoundary?.(base[0],base[1],base[2],axis) };
     });
-    return { deltas, allSame: deltas.every((v) => v.maxDelta === 0) };
+    return { results, allSame: results.every((v) => v.paired && v.samples === 64 && v.maxDelta === 0) };
   });
+
   if (!boundaryContract?.allSame) throw new Error('Cross-chunk boundary continuity contract failed');
 
 
