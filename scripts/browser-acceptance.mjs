@@ -206,13 +206,18 @@ try {
   // The terrain renderer is anchored at Infinite World position; restore the shared spatial contract to that anchor
   // after the earlier 2D/3D routing tests moved the contract to a remote diagnostic location.
   const mutationAnchor = await page.evaluate(() => {
-    const anchor = window.worldTerrainVertexAnchor?.();
+    const stats = window.worldTerrainPatchStats?.();
+    const key = stats?.loadedChunkKeys?.[0];
+    const [cx, , cz] = String(key ?? "0,0,0").split(",").map(Number);
+    const x = cx * 128;
+    const z = cz * 128;
+    const terrain = window.worldTerrainSample?.(x, z);
     const c = window.getWorldViewContract?.();
-    if (anchor && c) {
-      window.setWorldViewCenter?.(anchor.x, c.center.y, anchor.z);
-      window.setWorldViewSliceY?.(anchor.y);
+    if (c) {
+      window.setWorldViewCenter?.(x, c.center.y, z);
+      window.setWorldViewSliceY?.(terrain?.height ?? c.sliceY);
     }
-    return anchor ?? { x: 0, y: c?.sliceY ?? 0, z: 0 };
+    return { x, y: terrain?.height ?? c?.sliceY ?? 0, z };
   });
   const mutationBaseline = await page.evaluate((anchor) => {
     return {
@@ -336,8 +341,8 @@ try {
       analytic: window.worldTerrainSample?.(p.worldX, p.worldZ),
     };
   });
-  if (!initialTerrain.geometry || Number(initialTerrain.geometry.vertexCount ?? 0) <= 0 || !Number.isFinite(initialTerrain.analytic)) {
-    throw new Error("Rendered Infinite World terrain geometry is not available");
+  if (!initialTerrain.patches || Number(initialTerrain.patches.patchCount ?? 0) <= 0 || !Number.isFinite(initialTerrain.analytic)) {
+    throw new Error("Infinite World terrain patches are not available");
   }
 
   const worldTools = page.locator("#infiniteWorldTools");
