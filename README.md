@@ -18,7 +18,7 @@ custom_headers:
 
 # Reality Engine v6 — Meta-Law Physics Simulator
 
-> Hugging Face deployment uses the repository Dockerfile so the Space builds the current source and Vite bundle on every deployment.
+> Hugging Face deployment uses the Static Space build pipeline: `npm run build` produces `dist/index.html`, which is served directly in the browser.
 
 > *"A universe you can paint — where physics evolves, civilizations rise, and an AI director watches over it all."*
 
