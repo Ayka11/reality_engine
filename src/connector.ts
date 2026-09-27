@@ -40,6 +40,7 @@ import { MutableWorldFieldProvider } from './infinity/MutableWorldFieldProvider'
 import { WorldFieldChunkStore, worldFieldChunkCoord } from './infinity/WorldFieldChunkStore'
 import { DeterministicWorldFieldChunkProvider } from './infinity/DeterministicWorldFieldChunkProvider'
 import { WorkerWorldFieldChunkProvider } from './infinity/WorkerWorldFieldChunkProvider'
+import { worldFieldChunkPersistence } from './infinity/WorldFieldChunkPersistence'
 import { worldFieldBoundaryExchange } from './infinity/WorldFieldBoundaryExchange'
 import type { ScientificFieldSample } from './infinity/FieldSampler'
 
@@ -433,6 +434,10 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
   getInfiniteWorld()?.resize(Math.max(1, w), Math.max(1, h))
 }
 win['worldFieldChunkStoreStats'] = () => worldFieldChunkStore.stats()
+win['worldFieldChunkPersistenceStats'] = () => ({ snapshots: worldFieldChunkPersistence.size() })
+win['saveWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number, values: number[], seed?: string, providerVersion?: number) => worldFieldChunkPersistence.save({ cx, cy, cz }, seed ?? worldViewContract.snapshot().seed, values, providerVersion ?? 1)
+win['loadWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => worldFieldChunkPersistence.load({ cx, cy, cz })
+win['validateWorldFieldChunkSnapshot'] = (snapshot: unknown) => worldFieldChunkPersistence.validate(snapshot as any)
 win['worldFieldBoundaryStats'] = () => ({ faces: worldFieldBoundaryExchange.size() })
 win['publishWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z', side: -1|1, samples: ScientificFieldSample[]) => worldFieldBoundaryExchange.publish({ cx, cy, cz }, axis, side, samples)
 win['snapshotWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z', side: -1|1, resolution?: number, seed?: string) => { const chunk = populateWorldFieldChunk(cx, cy, cz, seed); return worldFieldBoundaryExchange.snapshotFace(chunk.provider, { cx, cy, cz }, axis, side, resolution) }
