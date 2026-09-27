@@ -293,6 +293,19 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     worldFieldRestoreAcknowledgedKeys.add(ackKey)
     worldFieldRestoreState.acknowledged = worldFieldRestoreAcknowledgedKeys.size
     worldFieldRestoreState.keys = [...worldFieldRestoreAcknowledgedKeys]
+    const restoreComplete =
+      worldFieldRestoreExpectedKeys.size > 0 &&
+      worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
+      worldFieldRestoreState.unexpectedAcks === 0 &&
+      worldFieldRestoreState.duplicateAcks === 0 &&
+      worldFieldRestoreState.staleAcks === 0 &&
+      worldFieldRestoreState.staleFrames === 0 &&
+      worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
+      worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
+      [...worldFieldRestoreExpectedKeys].every((key) => worldFieldRestoreFrameKeys.has(key))
+    if (restoreComplete) {
+      publishWorkerBoundarySnapshots()
+    }
     return
   }
 
@@ -342,7 +355,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
 
     // Make the same worker voxel state available to the world-space FieldSampler.
     installChunkWorldFieldProvider()
-    publishWorkerBoundarySnapshots()
+    if (frameRestoreId === undefined) publishWorkerBoundarySnapshots()
     const el = document.getElementById('chunkStats')
     if (el && stats) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`
   }
