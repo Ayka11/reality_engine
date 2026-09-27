@@ -1909,19 +1909,16 @@ function toggleRightPanel(force){
   rightPanelOpen = typeof force === 'boolean' ? force : !rightPanelOpen;
   const root = document.documentElement;
   const rightEl = document.getElementById('right');
-  const rszR = document.getElementById('rszR');
   const btn = document.getElementById('btnToggleRight');
   if (rightPanelOpen) {
     root.style.setProperty('--rw', savedRw + 'px');
     if (rightEl) rightEl.style.display = 'flex';
-    if (rszR) { rszR.style.display = 'block'; rszR.style.right = `calc(${savedRw}px - 3px)`; }
     if (btn) { btn.classList.add('on'); btn.title = 'Collapse Right Controls'; }
   } else {
     const curW = parseInt(getComputedStyle(root).getPropertyValue('--rw')) || 240;
     if (curW > 50) savedRw = curW;
     root.style.setProperty('--rw', '0px');
     if (rightEl) rightEl.style.display = 'none';
-    if (rszR) rszR.style.display = 'none';
     if (btn) { btn.classList.remove('on'); btn.title = 'Open Right Controls'; }
   }
   localStorage.setItem('reality_right_open', String(rightPanelOpen));
