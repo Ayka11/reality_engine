@@ -722,16 +722,21 @@ export function bootstrapInfiniteWorld() {
       world.place('gravity_well', x + 55, z - 45, 1.0 + 0.3 * fs.energy)
     } else if (fields === 'Mass Dominant') {
       world.scatter('rock', x - 150, z - 150, x + 150, z + 150, 0.08 * fs.density)
-      world.generateCityPlan(x, z, cs.radius, 21)
+      world.generateCityPlan(x, z, Math.min(cs.radius, 120), 17)
     } else if (fields === 'Information Dense' || fields === 'Pure Info') {
       world.scatter('crystal', x - 150, z - 150, x + 150, z + 150, 0.06 * fs.info)
       world.generateRiverNetwork(x, z, Math.max(160, cs.radius + 60), 31)
     } else {
-      world.generateRiverNetwork(x, z, Math.max(140, cs.radius + 40), 31)
+      // Hydrology is supplied by the bounded semantic generation plan below.
+      // Avoid generating a second full river network here; this keeps Compose
+      // responsive while preserving the semantic water layer.
     }
 
     // C: structural complexity.
-    world.generateSettlementV2(x, z, cs.radius, cs.structures)
+    // Settlement materialization is also delegated to the bounded semantic plan
+    // below. Keep a lightweight landmark here so complexity still has a visible
+    // structural anchor without duplicating expensive route generation.
+    world.place('landmark', x, z, 1.15)
     if (complexity === 'Explosive') {
       world.place('gravity_well', x - 55, z + 55, 1.4)
       world.place('quantum_emitter', x + 60, z - 60, 1.2)
