@@ -801,6 +801,31 @@ export class InfiniteWorldRenderer {
     }
   }
 
+  getTerrainGeometrySignature() {
+    let vertexCount = 0
+    let heightSum = 0
+    let heightSquareSum = 0
+    for (const patch of this.patches.values()) {
+      patch.group.traverse((child) => {
+        if (!child.userData.terrain || !(child as THREE.Mesh).isMesh) return
+        const position = (child as THREE.Mesh).geometry.getAttribute('position') as THREE.BufferAttribute | undefined
+        if (!position) return
+        vertexCount += position.count
+        for (let i = 0; i < position.count; i++) {
+          const y = position.getY(i) + patch.group.position.y
+          heightSum += y
+          heightSquareSum += y * y
+        }
+      })
+    }
+    return {
+      patchCount: this.patches.size,
+      vertexCount,
+      heightSum: Number(heightSum.toFixed(6)),
+      heightSquareSum: Number(heightSquareSum.toFixed(6)),
+    }
+  }
+
   sampleRenderedTerrainHeight(x: number, z: number): number | null {
     let best: { distance: number; height: number } | null = null
     for (const patch of this.patches.values()) {
