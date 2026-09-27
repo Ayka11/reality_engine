@@ -1,12 +1,14 @@
 import type { WorldFieldChunkCoord } from './WorldFieldChunkStore'
 
 export type WorldFieldChunkSnapshot = {
-  schemaVersion: 1
+  schemaVersion: 1 | 2
   key: string
   coord: WorldFieldChunkCoord
   seed: string
   providerVersion: number
   values: number[]
+  workerChunks?: { key: number; data: number[] }[]
+  workerView?: { center: { x: number; y: number; z: number }; sliceY: number; seed: string }
   fieldLayout?: { fieldsPerCell: number; cellCount: number }
   checksum: string
   savedAt: number
@@ -24,6 +26,20 @@ function checksum(values: number[]): string {
 
 export class WorldFieldChunkPersistence {
   private readonly snapshots = new Map<string, WorldFieldChunkSnapshot>()
+
+  saveWorkerChunks(coord: WorldFieldChunkCoord, seed: string, workerChunks: { key: number; data: number[] }[], workerView: { center: { x: number; y: number; z: number }; sliceY: number; seed: string }, providerVersion = 2): WorldFieldChunkSnapshot {
+    const flat = workerChunks.flatMap(chunk => [chunk.key, ...chunk.data])
+    const snapshot: WorldFieldChunkSnapshot = {
+      schemaVersion: 2,
+      key: `${coord.cx},${coord.cy},${coord.cz}`,
+      coord: { ...coord }, seed, providerVersion, values: flat,
+      workerChunks: workerChunks.map(chunk => ({ key: chunk.key, data: [...chunk.data] })),
+      workerView: { center: { ...workerView.center }, sliceY: workerView.sliceY, seed: workerView.seed },
+      checksum: checksum(flat), savedAt: Date.now(),
+    }
+    this.snapshots.set(snapshot.key, snapshot)
+    return snapshot
+  }
 
   save(coord: WorldFieldChunkCoord, seed: string, values: number[], providerVersion = 1, fieldLayout?: { fieldsPerCell: number; cellCount: number }): WorldFieldChunkSnapshot {
     const snapshot: WorldFieldChunkSnapshot = {
@@ -51,7 +67,9 @@ export class WorldFieldChunkPersistence {
   }
 
   validate(snapshot: WorldFieldChunkSnapshot): boolean {
-    return snapshot.schemaVersion === 1 && checksum(snapshot.values) === snapshot.checksum
+    if (snapshot.schemaVersion === 1) return checksum(snapshot.values) === snapshot.checksum
+    if (snapshot.schemaVersion === 2) return Array.isArray(snapshot.workerChunks) && checksum(snapshot.values) === snapshot.checksum && snapshot.workerChunks.every(chunk => chunk.data.length > 0)
+    return false
   }
 
   remove(coord: WorldFieldChunkCoord): boolean {
