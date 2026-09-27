@@ -10,7 +10,8 @@
     "deploy": "netlify deploy --prod --dir=dist",
     "hf:smoke": "node scripts/hf-smoke-check.mjs",
     "build:hf:cpu": "npm run build",
-    "hf:cpu:check": "node scripts/hf-cpu-check.mjs"
+    "hf:cpu:check": "node scripts/hf-cpu-check.mjs",
+    "hf:browser:acceptance": "node scripts/browser-acceptance.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
