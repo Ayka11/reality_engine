@@ -78,7 +78,11 @@ let chunkTick = 0, chunkEvCount = 0, workerBusy = false
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
 let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
-const worldFieldChunkStore = new WorldFieldChunkStore(128)
+const worldFieldChunkStore = new WorldFieldChunkStore(128, (chunk) => {
+  const provider = chunk.provider as { snapshotValues?: () => number[] }
+  const values = provider.snapshotValues?.()
+  if (values?.length) worldFieldChunkPersistence.save(chunk.coord, chunk.seed, values, chunk.version)
+})
 const populateWorldFieldChunk = (cx: number, cy: number, cz: number, seed = worldViewContract.snapshot().seed) => {
   const coord = { cx: Math.trunc(cx), cy: Math.trunc(cy), cz: Math.trunc(cz) }
   const existing = worldFieldChunkStore.get(coord)
