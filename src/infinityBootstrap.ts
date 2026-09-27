@@ -786,7 +786,9 @@ export function bootstrapInfiniteWorld() {
     if (parent) {
       world.resize(Math.max(1, parent.clientWidth), Math.max(1, parent.clientHeight))
     }
-    world.render(0)
+    // Do not synchronously render/stream terrain inside the Composer transaction.
+    // The normal animation loop will materialize the new chunks on the next frame.
+    requestAnimationFrame(() => world.render(0))
 
     syncWorldUI(tod, fog, mat)
     notifyBuilder()
