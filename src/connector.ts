@@ -442,6 +442,22 @@ win['worldFieldChunkPersistenceStats'] = () => ({ snapshots: worldFieldChunkPers
 win['saveWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number, values: number[], seed?: string, providerVersion?: number) => worldFieldChunkPersistence.save({ cx, cy, cz }, seed ?? worldViewContract.snapshot().seed, values, providerVersion ?? 1)
 win['loadWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => worldFieldChunkPersistence.load({ cx, cy, cz })
 win['validateWorldFieldChunkSnapshot'] = (snapshot: unknown) => worldFieldChunkPersistence.validate(snapshot as any)
+win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => {
+  const snapshot = worldFieldChunkPersistence.loadValid({ cx, cy, cz })
+  if (!snapshot || snapshot.values.length < CHUNK_FLOATS || snapshot.fieldLayout?.fieldsPerCell !== NF) return false
+  const world = getInfiniteWorld()
+  if (!world) return false
+  const view = worldViewContract.snapshot()
+  const originX = cx * 32, originY = cy * 32, originZ = cz * 32
+  const wx = Math.round(originX - view.center.x + GRID_W / 2)
+  const wy = Math.round(originY - view.center.y + GRID_D * 0.45)
+  const wz = Math.round(originZ - view.center.z + GRID_H / 2)
+  if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_D || wz < 0 || wz >= GRID_H) return false
+  const key = (wz >> 3) * (GRID_H / CY) * (GRID_W / CX) + (wy >> 3) * (GRID_W / CX) + (wx >> 3)
+  localChunks.set(key, new Float32Array(snapshot.values))
+  publishWorkerBoundarySnapshots()
+  return true
+}
 win['worldFieldBoundaryStats'] = () => ({ faces: worldFieldBoundaryExchange.size() })
 win['publishWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z', side: -1|1, samples: ScientificFieldSample[]) => worldFieldBoundaryExchange.publish({ cx, cy, cz }, axis, side, samples)
 win['snapshotWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z', side: -1|1, resolution?: number, seed?: string) => { const chunk = populateWorldFieldChunk(cx, cy, cz, seed); return worldFieldBoundaryExchange.snapshotFace(chunk.provider, { cx, cy, cz }, axis, side, resolution) }
