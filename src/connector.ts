@@ -80,9 +80,13 @@ let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
 let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
 const worldFieldChunkStore = new WorldFieldChunkStore(128, (chunk) => {
-  const provider = chunk.provider as { snapshotValues?: () => number[] }
-  const values = provider.snapshotValues?.()
-  if (values?.length) worldFieldChunkPersistence.save(chunk.coord, chunk.seed, values, chunk.version, { fieldsPerCell: NF, cellCount: CHUNK_FLOATS / NF })
+  const provider = chunk.provider as { snapshotWorkerChunks?: () => { key: number; data: number[] }[]; snapshotValues?: () => number[] }
+  const workerChunks = provider.snapshotWorkerChunks?.() ?? []
+  if (workerChunks.length) worldFieldChunkPersistence.saveWorkerChunks(chunk.coord, chunk.seed, workerChunks, worldViewContract.snapshot(), chunk.version)
+  else {
+    const values = provider.snapshotValues?.()
+    if (values?.length) worldFieldChunkPersistence.save(chunk.coord, chunk.seed, values, chunk.version, { fieldsPerCell: NF, cellCount: CHUNK_FLOATS / NF })
+  }
 })
 const populateWorldFieldChunk = (cx: number, cy: number, cz: number, seed = worldViewContract.snapshot().seed) => {
   const coord = { cx: Math.trunc(cx), cy: Math.trunc(cy), cz: Math.trunc(cz) }
@@ -462,9 +466,17 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   const wz = Math.round(originZ - view.center.z + GRID_H / 2)
   if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_D || wz < 0 || wz >= GRID_H) return false
   const key = (wz >> 3) * (GRID_H / CY) * (GRID_W / CX) + (wy >> 3) * (GRID_W / CX) + (wx >> 3)
-  const restored = new Float32Array(snapshot.values)
-  localChunks.set(key, restored)
-  chunkWorker.postMessage({ cmd: 'restoreChunk', data: { key, data: Array.from(restored) } })
+  if (snapshot.schemaVersion === 2 && snapshot.workerChunks?.length) {
+    for (const chunk of snapshot.workerChunks) {
+      const restored = new Float32Array(chunk.data)
+      localChunks.set(chunk.key, restored)
+      chunkWorker.postMessage({ cmd: 'restoreChunk', data: { key: chunk.key, data: Array.from(restored) } })
+    }
+  } else {
+    const restored = new Float32Array(snapshot.values)
+    localChunks.set(key, restored)
+    chunkWorker.postMessage({ cmd: 'restoreChunk', data: { key, data: Array.from(restored) } })
+  }
   publishWorkerBoundarySnapshots()
   runtimeProvenance.record('world-state', { source: 'WorldFieldChunkPersistence', action: 'restore', coord: { cx, cy, cz }, key, checksum: snapshot.checksum })
   return true
