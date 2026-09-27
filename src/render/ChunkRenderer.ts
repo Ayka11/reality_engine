@@ -617,6 +617,7 @@ export class ChunkRenderer {
   }
 
   render(dt = 0.016) {
+    if (this.canvas.style.display === 'none') return
     if (this.rebuildPending) {
       this.rebuildPending = false
       this._rebuild()
