@@ -319,6 +319,12 @@ chunkWorker.onmessage = (e: MessageEvent) => {
           populateWorldFieldChunk(worldFieldRestoreCoord.cx, worldFieldRestoreCoord.cy, worldFieldRestoreCoord.cz, worldFieldRestoreSeed)
         }
         worldFieldRestoreActive = false
+      } else {
+        // The worker completed its barrier, but the frontend did not receive a
+        // complete ACK/frame key-set. Release the eviction guard so a failed
+        // restore cannot permanently suppress persistence for this coordinate.
+        worldFieldRestoreActive = false
+        worldFieldRestoreState.unexpectedAcks++
       }
     }
     return
