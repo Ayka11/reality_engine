@@ -1,6 +1,6 @@
 import type { ScientificFieldProvider } from './ScientificFieldProvider'
 import type { ScientificFieldSample } from './FieldSampler'
-import { F, GRID_D, GRID_H, GRID_W, NF, CHUNK_FLOATS, CX, CY, CZ } from '../core/ChunkGrid'
+import { F, GRID_D, GRID_H, GRID_W, NF, CHUNK_FLOATS, CX, CY } from '../core/ChunkGrid'
 import type { WorldViewSnapshot } from './WorldViewContract'
 
 /**
