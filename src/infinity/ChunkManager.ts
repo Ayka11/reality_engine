@@ -5,6 +5,7 @@ export type ChunkManagerOptions = {
   radius?: number
   verticalRadius?: number
   maxLoaded?: number
+  maxNewPerUpdate?: number
 }
 
 export class InfiniteChunkManager {
@@ -12,6 +13,7 @@ export class InfiniteChunkManager {
   readonly radius: number
   readonly verticalRadius: number
   readonly maxLoaded: number
+  readonly maxNewPerUpdate: number
   private loaded = new Map<string, WorldChunk>()
 
   constructor(generator = new WorldGenerator(), options: ChunkManagerOptions = {}) {
@@ -19,6 +21,7 @@ export class InfiniteChunkManager {
     this.radius = options.radius ?? 4
     this.verticalRadius = options.verticalRadius ?? 0
     this.maxLoaded = options.maxLoaded ?? 96
+    this.maxNewPerUpdate = Math.max(1, Math.floor(options.maxNewPerUpdate ?? 2))
   }
 
   get size(): number { return this.loaded.size }
@@ -44,11 +47,14 @@ export class InfiniteChunkManager {
     const targetKeys = new Set(target.map(v => v.key))
     const newlyLoaded: WorldChunk[] = []
 
+    let generated = 0
     for (const item of target) {
+      if (generated >= this.maxNewPerUpdate) break
       if (!this.loaded.has(item.key)) {
         const chunk = this.generator.generateChunk(item.cx, item.cy, item.cz)
         this.loaded.set(item.key, chunk)
         newlyLoaded.push(chunk)
+        generated++
       }
     }
 
