@@ -360,7 +360,9 @@ export class InfiniteWorldRenderer {
     this.worldPosition.copy(this.controls.target)
     this.controls.update()
 
-    this.syncChunks()
+    // Terrain streaming is intentionally deferred to the render loop. Reseeding
+    // is a UI transaction and must not synchronously build the entire visible
+    // terrain before the Composer can return control to the browser.
   }
 
   dispose() {
@@ -471,8 +473,8 @@ export class InfiniteWorldRenderer {
     this.camera.position.set(centerX + distance, centerY + distance * 0.62, centerZ + distance)
     this.camera.lookAt(this.controls.target)
     this.controls.update()
-    this.syncChunks()
-    this.syncObjects()
+    // Terrain/object synchronization is handled by the render loop. Keeping
+    // focusGeneratedRegion non-blocking prevents Composer from freezing the UI.
 
     return { objects: objects.length, radius, center: { x: centerX, y: centerY, z: centerZ } }
   }
