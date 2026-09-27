@@ -87,7 +87,7 @@ try {
   await composePage.waitForFunction(() => {
     const health = window.worldGenerationHealth();
     return !!health?.lastGeneration;
-  }, { timeout: 90000 });
+  }, undefined, { timeout: 90000 });
 
   const afterCompose = await composePage.evaluate(() => window.worldGenerationHealth());
   if (!afterCompose?.lastGeneration) throw new Error("Compose World did not produce a generation record");
