@@ -179,6 +179,27 @@ try {
   ) {
     throw new Error("Volumetric 3D and World View contract are using different spatial state");
   }
+
+  const unifiedField = await page.evaluate(() => {
+    const c = window.getWorldViewContract?.();
+    const x = c.center.x, y = c.sliceY, z = c.center.z;
+    return {
+      provider: window.getWorldFieldProvider?.(),
+      world: window.worldFieldSample?.(x, y, z),
+      volume: window.getField3DWorldSample?.(x, y, z),
+    };
+  });
+  if (unifiedField.provider?.id !== "chunk-worker-world-field-v1" && unifiedField.provider?.id !== "chunk-worker-world-field") {
+    throw new Error("World FieldSampler is not using the chunk-worker scientific source");
+  }
+  if (!unifiedField.world || !unifiedField.volume) {
+    throw new Error("Unified world/volumetric field sample is unavailable");
+  }
+  for (const key of ["energy","density","information","entropy","temperature","biology"]) {
+    if (Math.abs((unifiedField.world[key] ?? 0) - (unifiedField.volume[key] ?? 0)) > 1e-5) {
+      throw new Error(`World and volumetric field mismatch for ${key}`);
+    }
+  }
   await page.locator("#tab3d").click();
 
   const initial = await page.evaluate(() => window.worldGenerationHealth());
