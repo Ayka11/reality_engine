@@ -662,7 +662,14 @@ export class ChunkRenderer {
       instances: this.layerMesh.count,
       pending: this.rebuildPending,
       binding: this.getWorldViewBinding(),
+      fieldProvider: this.worldFieldProvider
+        ? { id: this.worldFieldProvider.id, version: this.worldFieldProvider.version }
+        : null,
     }
+  }
+
+  sampleWorldField(x: number, y: number, z: number) {
+    return this.worldFieldProvider?.sample(x, y, z) ?? null
   }
 
   get instanceCount(): number { return this.layerMesh.count }
