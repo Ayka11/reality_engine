@@ -30,6 +30,7 @@ import { ChunkRenderer }                          from './render/ChunkRenderer'
 import { RealityMonitor, buildRealityMonitorHTML, updateMonitorPanels } from './ui/RealityMonitor'
 import { NodeLawEditor }                          from './ui/NodeLawEditor'
 import { sceneComposer }                          from './modes/cinema/SceneComposer'
+import { RealityLawBridge }                       from './laws/RealityLawBridge'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
 const win = window as unknown as Record<string, unknown>
