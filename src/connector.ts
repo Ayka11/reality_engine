@@ -282,6 +282,8 @@ win['renderField3D'] = () => {
   fieldRenderer.render()
 }
 win['getField3DWorldBinding'] = () => fieldRenderer.getWorldViewBinding()
+win['getField3DSourceStats'] = () => fieldRenderer.getSourceStats()
+win['sampleField3DWorld'] = (x: number, y: number, z: number) => fieldRenderer.sampleWorldField(x, y, z)
 win['getField3DWorldSample'] = (x: number, y: number, z: number) => fieldRenderer.sampleWorldField(x, y, z)
 win['getField3DSourceStats'] = () => fieldRenderer.getSourceStats()
 win['fieldSetCameraPreset'] = (p: string) => {
