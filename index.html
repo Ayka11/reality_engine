@@ -1869,7 +1869,11 @@ function paintAt(x,y){
   const bs=parseInt(document.getElementById('bsize')?.value||2);
   const str=parseInt(document.getElementById('bstr')?.value||400);
   if(tool==='stamp_prefab'&&window.gamedevMode){window.gamedevMode.stampAt(x,y);return;}
-  if(activeBrush&&BRUSHES[activeBrush]){\n    if(window.applyChunkBrush)window.applyChunkBrush(activeBrush,Math.round(x/W*127),Math.round(y/H*127),32,Math.max(2,bs*2),str/400);\n    BRUSHES[activeBrush].paint(x,y,bs+1);\n    return;\n  }
+  if(activeBrush&&BRUSHES[activeBrush]){
+    if(window.applyChunkBrush)window.applyChunkBrush(activeBrush,Math.round(x/W*127),Math.round(y/H*127),32,Math.max(2,bs*2),str/400);
+    BRUSHES[activeBrush].paint(x,y,bs+1);
+    return;
+  }
   const fi=[FE,FD,FI,FS,FT,FBio][layer]??FE;
   const mx=[9999,1,999,1,2000,1][layer]??9999;
   for(let dy=-bs;dy<=bs;dy++)for(let dx=-bs;dx<=bs;dx++){
