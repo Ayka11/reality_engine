@@ -156,6 +156,10 @@ nodeEditor.onSelect  = (node) => {
 }
 win['chunkWorkerCompile'] = chunkWorkerCompile
 win['nodeLawEditor']      = nodeEditor
+win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4, strength = 1) => {
+  chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength } })
+}
+
 win['applyChunkPreset']   = (name: string) => {
   chunkWorker.postMessage({ cmd: 'preset', data: { name } })
   if (name === 'town') {
