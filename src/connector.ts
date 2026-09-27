@@ -77,6 +77,8 @@ const nodeEditor    = new NodeLawEditor()
 const localChunks = new Map<number, Float32Array>()
 let chunkTick = 0, chunkEvCount = 0, workerBusy = false
 let worldFieldRestoreId = 0
+let worldFieldRestoreCoord: { cx: number; cy: number; cz: number } | null = null
+let worldFieldRestoreSeed = ''
 const worldFieldRestoreState = {
   restoreId: 0,
   expected: 0,
@@ -307,8 +309,10 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       publishWorkerBoundarySnapshots()
       // Rehydrate the world-chunk registry only after the worker restore is
       // complete, so the store cannot expose a provider backed by partial data.
-      worldFieldChunkStore.delete({ cx, cy, cz })
-      populateWorldFieldChunk(cx, cy, cz, snapshot.seed)
+      if (worldFieldRestoreCoord) {
+        worldFieldChunkStore.delete(worldFieldRestoreCoord)
+        populateWorldFieldChunk(worldFieldRestoreCoord.cx, worldFieldRestoreCoord.cy, worldFieldRestoreCoord.cz, worldFieldRestoreSeed)
+      }
     }
     return
   }
@@ -554,6 +558,8 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_D || wz < 0 || wz >= GRID_H) return false
   const key = (wz >> 3) * (GRID_H / CY) * (GRID_W / CX) + (wy >> 3) * (GRID_W / CX) + (wx >> 3)
   const restoreId = ++worldFieldRestoreId
+  worldFieldRestoreCoord = { cx, cy, cz }
+  worldFieldRestoreSeed = snapshot.seed
   const restoreChunks = snapshot.schemaVersion === 2 && snapshot.workerChunks?.length
     ? snapshot.workerChunks.map(chunk => ({ key: chunk.key, data: new Float32Array(chunk.data) }))
     : [{ key, data: new Float32Array(snapshot.values) }]
