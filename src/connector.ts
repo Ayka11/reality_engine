@@ -39,6 +39,7 @@ import { FunctionFieldProvider } from './infinity/ScientificFieldProvider'
 import { MutableWorldFieldProvider } from './infinity/MutableWorldFieldProvider'
 import { WorldFieldChunkStore, worldFieldChunkCoord } from './infinity/WorldFieldChunkStore'
 import { DeterministicWorldFieldChunkProvider } from './infinity/DeterministicWorldFieldChunkProvider'
+import { WorkerWorldFieldChunkProvider } from './infinity/WorkerWorldFieldChunkProvider'
 import { worldFieldBoundaryExchange } from './infinity/WorldFieldBoundaryExchange'
 import type { ScientificFieldSample } from './infinity/FieldSampler'
 
@@ -81,7 +82,13 @@ const populateWorldFieldChunk = (cx: number, cy: number, cz: number, seed = worl
   const coord = { cx: Math.trunc(cx), cy: Math.trunc(cy), cz: Math.trunc(cz) }
   const existing = worldFieldChunkStore.get(coord)
   if (existing) return existing
-  return worldFieldChunkStore.set(coord, seed, new DeterministicWorldFieldChunkProvider(seed, coord), 1)
+  const world = getInfiniteWorld()
+  const fallback = new DeterministicWorldFieldChunkProvider(seed, coord)
+  if (world) {
+    const workerProvider = new WorkerWorldFieldChunkProvider(coord, localChunks, () => worldViewContract.snapshot(), fallback)
+    return worldFieldChunkStore.set(coord, seed, workerProvider, 2)
+  }
+  return worldFieldChunkStore.set(coord, seed, fallback, 1)
 }
 
 
