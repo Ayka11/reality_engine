@@ -3,10 +3,17 @@ title: Reality Engine Meta Law Simulator
 emoji: 🌌
 colorFrom: blue
 colorTo: purple
-sdk: docker
-app_port: 7860
+sdk: static
+app_file: dist/index.html
+app_build_command: npm run build
+fullWidth: true
+header: mini
 license: mit
 pinned: false
+custom_headers:
+  cross-origin-embedder-policy: require-corp
+  cross-origin-opener-policy: same-origin
+  cross-origin-resource-policy: cross-origin
 ---
 
 # Reality Engine v6 — Meta-Law Physics Simulator
