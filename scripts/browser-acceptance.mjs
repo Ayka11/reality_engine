@@ -165,11 +165,7 @@ try {
     const validBefore = saved.every(s => s?.schemaVersion === 2 && window.validateWorldFieldChunkSnapshot?.(s));
     coords.forEach(([cx,cy,cz]) => window.evictWorldFieldChunk?.(cx,cy,cz));
     const restored = coords.map(([cx,cy,cz]) => window.restoreWorldFieldChunkSnapshot?.(cx,cy,cz));
-    const axes = [
-      ['x',[0,0,0]], ['y',[0,0,0]], ['z',[0,0,0]],
-    ];
-    const results = axes.map(([axis, base]) => ({ axis, ...window.validateWorldFieldBoundary?.(base[0],base[1],base[2],axis) }));
-    return { validBefore, savedChunks: saved.map(s => s?.workerChunks?.length ?? 0), restored, results };
+    return { validBefore, savedChunks: saved.map(s => s?.workerChunks?.length ?? 0), restored };
   });
   await page.waitForFunction(() => {
     const state = window.worldFieldRestoreState?.();
@@ -194,7 +190,14 @@ try {
   ) {
     throw new Error('Worker restore acknowledgement contract failed');
   }
-  if (!restoredSeams.validBefore || restoredSeams.savedChunks.some(n => n < 1) || restoredSeams.restored.some(v => !v) || restoredSeams.results.some(v => !v.paired || v.samples !== 64 || v.maxDelta > 1e-6)) {
+  const restoredSeamsAfterAck = await page.evaluate(() => {
+    const axes = [
+      ['x',[0,0,0]], ['y',[0,0,0]], ['z',[0,0,0]],
+    ];
+    const results = axes.map(([axis, base]) => ({ axis, ...window.validateWorldFieldBoundary?.(base[0],base[1],base[2],axis) }));
+    return results;
+  });
+  if (!restoredSeams.validBefore || restoredSeams.savedChunks.some(n => n < 1) || restoredSeams.restored.some(v => !v) || restoredSeamsAfterAck.some(v => !v.paired || v.samples !== 64 || v.maxDelta > 1e-6)) {
     throw new Error('Cross-chunk seam validation failed after persistence eviction/restore');
   }
 
