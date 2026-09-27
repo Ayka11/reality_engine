@@ -205,21 +205,23 @@ try {
   // Mutation convergence: Brush must mutate the same authoritative field consumed by World/2D/3D.
   const mutationBaseline = await page.evaluate(() => {
     const c = window.getWorldViewContract?.();
+    const p = window.infinityStats?.().camera ?? { worldX: c.center.x, worldZ: c.center.z };
     return {
-      point: { x: c.center.x, y: c.sliceY, z: c.center.z },
-      sample: window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z),
-      renderedTerrain: window.worldRenderedTerrainSample?.(c.center.x, c.center.z),
+      point: { x: p.worldX, y: c.sliceY, z: p.worldZ },
+      sample: window.sampleAuthoritativeWorldField?.(p.worldX, c.sliceY, p.worldZ),
+      renderedTerrain: window.worldRenderedTerrainSample?.(p.worldX, p.worldZ),
     };
   });
   await page.evaluate(() => { const c = window.getWorldViewContract?.(); const z = Math.max(0, Math.min(63, Math.round(c?.sliceY ?? 0))); window.applyChunkBrush?.("Forest", 64, 64, z, 8, 1); });
   const mutationAfter = await page.evaluate(() => {
     const c = window.getWorldViewContract?.();
+    const p = window.infinityStats?.().camera ?? { worldX: c.center.x, worldZ: c.center.z };
     return {
       state: window.getAuthoritativeWorldFieldState?.(),
-      world: window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z),
-      volume: window.getField3DWorldSample?.(c.center.x, c.sliceY, c.center.z),
-      renderedTerrain: window.worldRenderedTerrainSample?.(c.center.x, c.center.z),
-      analyticTerrain: window.worldTerrainSample?.(c.center.x, c.center.z),
+      world: window.sampleAuthoritativeWorldField?.(p.worldX, c.sliceY, p.worldZ),
+      volume: window.getField3DWorldSample?.(p.worldX, c.sliceY, p.worldZ),
+      renderedTerrain: window.worldRenderedTerrainSample?.(p.worldX, p.worldZ),
+      analyticTerrain: window.worldTerrainSample?.(p.worldX, p.worldZ),
     };
   });
   if (!mutationAfter.state || mutationAfter.state.mutationCount < 1) {
@@ -314,11 +316,12 @@ try {
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
   await page.waitForFunction(() => Number(window.worldTerrainPatchStats?.().patchCount ?? 0) > 0, undefined, { timeout: acceptanceTimeout });
   const initialTerrain = await page.evaluate(() => {
-    const c = window.getWorldViewContract?.();
+    const p = window.infinityStats?.().camera ?? { worldX: 0, worldZ: 0 };
     return {
+      point: { x: p.worldX, z: p.worldZ },
       patches: window.worldTerrainPatchStats?.(),
-      surface: window.worldRenderedTerrainSample?.(c.center.x, c.center.z),
-      analytic: window.worldTerrainSample?.(c.center.x, c.center.z),
+      surface: window.worldRenderedTerrainSample?.(p.worldX, p.worldZ),
+      analytic: window.worldTerrainSample?.(p.worldX, p.worldZ),
     };
   });
   if (!Number.isFinite(initialTerrain.surface) || !Number.isFinite(initialTerrain.analytic)) {
