@@ -33,11 +33,12 @@ export class WorkerWorldFieldChunkProvider implements ScientificFieldProvider {
       const key = cz * (GRID_H / CY) * (GRID_W / CX) + cy * (GRID_W / CX) + cx
       const chunk = this.chunks.get(key)
       if (!chunk || chunk.length < CHUNK_FLOATS) continue
-      const base = ((wz & 7) * CY * CX + (wy & 7) * CX + (wx & 7)) * NF
-      for (const field of [F.E, F.D, F.I, F.S, F.T, F.BIO, F.MAT]) values.push(chunk[base + field] || 0)
+      for (let i = 0; i < CHUNK_FLOATS; i++) values.push(chunk[i])
+      break
     }
     return values
   }
+
 
   sample(x: number, y: number, z: number): ScientificFieldSample {
     const originX = this.coord.cx * WORLD_CHUNK_SIZE
