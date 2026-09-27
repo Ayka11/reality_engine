@@ -94,6 +94,17 @@ try {
   if (!chunkContract.boundariesOk) throw new Error('World field chunk coordinate boundary contract failed');
   if (chunkContract.loaded > chunkContract.capacity) throw new Error('World field chunk store exceeded bounded capacity');
   if (chunkContract.evictions < 1) throw new Error('World field chunk store did not evict at capacity');
+  const deterministicChunk = await page.evaluate(async () => {
+    const mod = await import('/src/infinity/DeterministicWorldFieldChunkProvider.ts');
+    const a = new mod.DeterministicWorldFieldChunkProvider('acceptance-seed', {cx:4,cy:-2,cz:7});
+    const b = new mod.DeterministicWorldFieldChunkProvider('acceptance-seed', {cx:4,cy:-2,cz:7});
+    const c = new mod.DeterministicWorldFieldChunkProvider('acceptance-seed', {cx:5,cy:-2,cz:7});
+    const pa = a.sample(4 * 32 + 7, -2 * 32 + 9, 7 * 32 + 11);
+    const pb = b.sample(4 * 32 + 7, -2 * 32 + 9, 7 * 32 + 11);
+    const pc = c.sample(5 * 32 + 7, -2 * 32 + 9, 7 * 32 + 11);
+    return { same: JSON.stringify(pa) === JSON.stringify(pb), finite: Object.values(pa).every(Number.isFinite), differentAddress: JSON.stringify(pa) !== JSON.stringify(pc) };
+  });
+  if (!deterministicChunk.same || !deterministicChunk.finite || !deterministicChunk.differentAddress) throw new Error('Deterministic streamed field chunk replay contract failed');
 
   // Docked workspace regression: detachable sidebar chrome was removed.
   const workspaceChrome = await page.evaluate(() => ({
