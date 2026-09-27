@@ -193,6 +193,17 @@ try {
   const afterQuick = await page.evaluate(() => window.worldGenerationHealth());
   if (!afterQuick?.lastGeneration) throw new Error("Quick Generate did not record a generation result");
 
+  const finalProvenance = await page.evaluate(() => window.getRuntimeProvenance?.());
+  const finalStages = (finalProvenance?.events ?? []).map((event) => event.stage);
+  if (!finalStages.includes("world-state")) {
+    throw new Error(`World state provenance was not recorded after Quick Generate: ${JSON.stringify(finalStages)}`);
+  }
+  const finalValidation = await page.evaluate(() => window.validateRuntimeProvenance?.());
+  if (!finalValidation?.valid) {
+    throw new Error(`Final runtime provenance validation failed: ${JSON.stringify(finalValidation?.errors)}`);
+  }
+  console.log("[acceptance] Runtime provenance chain:", JSON.stringify(finalStages));
+
   // Test Compose World in a fresh browser page so this acceptance path is independent
   // from Quick Generate and cannot fail merely because two large generations are stacked.
   const composePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
