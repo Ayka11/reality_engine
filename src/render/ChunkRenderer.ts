@@ -576,6 +576,30 @@ export class ChunkRenderer {
       center: { ...this.worldViewBinding.center },
     }
   }
+  sampleWorldField(x: number, y: number, z: number) {
+    const view = this.worldViewBinding
+    if (!view) return null
+    const lx = Math.round(x - view.center.x + GRID_W / 2)
+    const ly = Math.round(y)
+    const lz = Math.round(z - view.center.z + GRID_H / 2)
+    if (lx < 0 || lx >= GRID_W || ly < 0 || ly >= GRID_D || lz < 0 || lz >= GRID_H) return null
+    const cx = lx >> 3, cy = ly >> 3, cz = lz >> 3
+    const key = cz * (GRID_H / CY) * (GRID_W / CX) + cy * (GRID_W / CX) + cx
+    const chunk = this.shadowChunks.get(key)
+    if (!chunk) return null
+    const base = ((lz & 7) * CY * CX + (ly & 7) * CX + (lx & 7)) * NF
+    return {
+      x, y, z,
+      energy: chunk[base + F.E] || 0,
+      density: chunk[base + F.D] || 0,
+      information: chunk[base + F.I] || 0,
+      entropy: chunk[base + F.S] || 0,
+      temperature: chunk[base + F.T] || 0,
+      biology: chunk[base + F.BIO] || 0,
+      material: chunk[base + F.MAT] || 0,
+    }
+  }
+
 
   setLayer(layer: number) {
     this.layer = Math.max(-1, Math.min(5, Math.round(layer)))
