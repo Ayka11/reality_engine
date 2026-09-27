@@ -877,7 +877,9 @@ export function bootstrapInfiniteWorld() {
     // Top is the default, but dragging is authoritative and must remain free.
     const savedDock = localStorage.getItem('infinity_dock_pos') as DockPosition | null
     let dockPos: DockPosition = savedDock === 'left' || savedDock === 'right' || savedDock === 'float' ? savedDock : 'top'
-    let isOpen = localStorage.getItem('infinity_dock_open') !== 'false'
+    const savedOpen = localStorage.getItem('infinity_dock_open')
+    // Keep the world unobstructed on first visit; remember the user's later choice.
+    let isOpen = savedOpen === null ? false : savedOpen !== 'false'
     let activeTab: 'camera' | 'objects' | 'persist' | 'analysis' | 'display' | 'library' = 'objects'
     let libraryQuery = ''
     let libraryCategory: import('./worldLibrary/WorldLibrary').WorldLibraryCategory | '' = ''
