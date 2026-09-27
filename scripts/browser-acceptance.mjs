@@ -42,58 +42,24 @@ try {
   await page.waitForFunction(() => typeof window.infinityBuildZoneCost === "function");
   await page.waitForFunction(() => typeof window.infinityBuildZoneCost === "function");
 
-  // Workspace v4 regression: legacy float state must not restore two
-  // overlapping sidebars over the viewport.
-  const layout = await page.evaluate(() => {
-    localStorage.setItem("reality_workspace_layout_version", "3");
-    localStorage.setItem("reality_left_float", JSON.stringify({ x: 58, y: 72, w: 220 }));
-    localStorage.setItem("reality_right_float", JSON.stringify({ x: 58, y: 72, w: 220 }));
-    location.reload();
-    return true;
-  });
-  if (!layout) throw new Error("Workspace migration setup failed");
-  await page.waitForSelector("#left");
-  await page.waitForSelector("#right");
-  await page.waitForFunction(() => localStorage.getItem("reality_workspace_layout_version") === "4");
-  const workspaceGeometry = await page.evaluate(() => {
-    const left = document.getElementById("left")?.getBoundingClientRect();
-    const right = document.getElementById("right")?.getBoundingClientRect();
-    const canvas = document.getElementById("cw")?.getBoundingClientRect();
-    return {
-      left: left ? {x:left.x,width:left.width} : null,
-      right: right ? {x:right.x,width:right.width} : null,
-      canvas: canvas ? {x:canvas.x,width:canvas.width} : null,
-      leftFloating: document.getElementById("left")?.classList.contains("workspace-floating"),
-      rightFloating: document.getElementById("right")?.classList.contains("workspace-floating")
-    };
-  });
-  if (workspaceGeometry.leftFloating || workspaceGeometry.rightFloating) {
-    throw new Error("Legacy floating sidebar state was not migrated to docked layout");
+  // Docked workspace regression: detachable sidebar chrome was removed.
+  const workspaceChrome = await page.evaluate(() => ({
+    leftToggle: !!document.getElementById("btnToggleLeft"),
+    leftGrip: !!document.getElementById("leftWorkspaceGrip"),
+    rightGrip: !!document.getElementById("rightWorkspaceGrip"),
+    leftFloating: document.getElementById("left")?.classList.contains("workspace-floating"),
+    rightFloating: document.getElementById("right")?.classList.contains("workspace-floating"),
+    leftText: document.getElementById("left")?.innerText || ""
+  }));
+  if (workspaceChrome.leftToggle || workspaceChrome.leftGrip || workspaceChrome.rightGrip) {
+    throw new Error("Obsolete detachable sidebar controls are still present");
   }
-  if (!workspaceGeometry.left || !workspaceGeometry.right || !workspaceGeometry.canvas) {
-    throw new Error("Workspace geometry is incomplete");
+  if (workspaceChrome.leftFloating || workspaceChrome.rightFloating) {
+    throw new Error("Workspace panels must remain docked");
   }
-  if (workspaceGeometry.left.x + workspaceGeometry.left.width > workspaceGeometry.canvas.x + 2) {
-    throw new Error("Left sidebar overlaps the world canvas");
+  if (/LEFT\\s*·\\s*DRAG|RIGHT\\s*·\\s*DRAG/i.test(workspaceChrome.leftText)) {
+    throw new Error("Obsolete sidebar drag text is still rendered");
   }
-  if (workspaceGeometry.canvas.x + workspaceGeometry.canvas.width > workspaceGeometry.right.x + 2) {
-    throw new Error("Right sidebar overlaps the world canvas");
-  }
-
-  // Verify explicit detach -> move -> dock works after the migration.
-  const floatGeometry = await page.evaluate(() => {
-    window.setWorkspacePanelFloat?.("left", true);
-    const panel = document.getElementById("left");
-    if (!panel) return null;
-    panel.style.left = "180px";
-    panel.style.top = "90px";
-    return { x: panel.getBoundingClientRect().x, y: panel.getBoundingClientRect().y };
-  });
-  if (!floatGeometry || floatGeometry.x < 175 || floatGeometry.y < 85) {
-    throw new Error("Floating sidebar does not honor drag geometry");
-  }
-  await page.evaluate(() => window.setWorkspacePanelFloat?.("left", false));
-  await page.waitForFunction(() => !document.getElementById("left")?.classList.contains("workspace-floating"));
 
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
@@ -262,7 +228,6 @@ try {
     initialObjects: initial.stats?.objects ?? 0,
     quickGenerateObjects: afterQuick.stats?.objects ?? 0,
     composeObjects: afterCompose.stats?.objects ?? 0,
-    sidebarGrips: grips,
     screenshot: "artifacts/browser-acceptance.png"
   }));
 } finally {
