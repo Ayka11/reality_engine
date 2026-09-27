@@ -862,13 +862,10 @@ export function bootstrapInfiniteWorld() {
     document.getElementById('workspaceNavHUD')?.remove()
     document.getElementById('dockGhostPreview')?.remove()
 
-    // Persistent docking state: 'top' | 'left' | 'right' | 'float'
-    let dockPos: DockPosition = 'top'
-    // World Tools is a workspace toolbar: keep it in the upper panel by default.
-    // Legacy left/right/float preferences are normalized to top for the current UI.
-    if (localStorage.getItem('infinity_dock_pos') !== 'top') {
-      localStorage.setItem('infinity_dock_pos', 'top')
-    }
+    // Persistent docking state: top / left / right / float.
+    // Top is the default, but dragging is authoritative and must remain free.
+    const savedDock = localStorage.getItem('infinity_dock_pos') as DockPosition | null
+    let dockPos: DockPosition = savedDock === 'left' || savedDock === 'right' || savedDock === 'float' ? savedDock : 'top'
     let isOpen = localStorage.getItem('infinity_dock_open') !== 'false'
     let activeTab: 'camera' | 'objects' | 'persist' | 'analysis' | 'display' | 'library' = 'objects'
     let libraryQuery = ''
@@ -1057,11 +1054,12 @@ export function bootstrapInfiniteWorld() {
     }
 
     const setPosition = (newPos: DockPosition) => {
-      // Keep World Tools in the upper workspace; floating/side placements
-      // made the narrow sidebar compete with the actual World panel.
-      dockPos = 'top'
-      localStorage.setItem('infinity_dock_pos', 'top')
-      if (newPos !== 'top') return render()
+      dockPos = newPos
+      localStorage.setItem('infinity_dock_pos', newPos)
+      if (newPos === 'float') {
+        floatLeft = Number(localStorage.getItem('infinity_dock_float_x') ?? floatLeft)
+        floatTop = Number(localStorage.getItem('infinity_dock_float_y') ?? floatTop)
+      }
       render()
     }
     ;(window as any).setInfinityDockPosition = setPosition
