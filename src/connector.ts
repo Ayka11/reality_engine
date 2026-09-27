@@ -77,9 +77,12 @@ let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
 function installChunkWorldFieldProvider() {
   const world = getInfiniteWorld()
   if (!world) return false
+  const fallback = new GeneratorFieldProvider(world.generator)
   if (!authoritativeWorldFieldProvider) {
-    const fallback = new GeneratorFieldProvider(world.generator)
     authoritativeWorldFieldProvider = new MutableWorldFieldProvider(fallback)
+    world.fieldSampler.setProvider(authoritativeWorldFieldProvider)
+  } else {
+    authoritativeWorldFieldProvider.setBase(fallback)
     world.fieldSampler.setProvider(authoritativeWorldFieldProvider)
   }
   if (!chunkWorldFieldProvider) {
