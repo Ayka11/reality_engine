@@ -79,6 +79,7 @@ let chunkTick = 0, chunkEvCount = 0, workerBusy = false
 let worldFieldRestoreId = 0
 let worldFieldRestoreCoord: { cx: number; cy: number; cz: number } | null = null
 let worldFieldRestoreSeed = ''
+let worldFieldRestoreActive = false
 const worldFieldRestoreState = {
   restoreId: 0,
   expected: 0,
@@ -103,6 +104,7 @@ const worldFieldChunkStore = new WorldFieldChunkStore(128, (chunk) => {
   // that exact world chunk is being rehydrated. The worker may still be emitting
   // partial restore frames at this point.
   if (
+    worldFieldRestoreActive &&
     worldFieldRestoreCoord &&
     chunk.coord.cx === worldFieldRestoreCoord.cx &&
     chunk.coord.cy === worldFieldRestoreCoord.cy &&
@@ -295,7 +297,10 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       return
     }
     worldFieldRestoreState.workerBarrierComplete = result.complete === true
-    if (!result.complete) worldFieldRestoreState.unexpectedAcks++
+    if (!result.complete) {
+      worldFieldRestoreState.unexpectedAcks++
+      worldFieldRestoreActive = false
+    }
     if (result.complete) {
       const restoreComplete =
         worldFieldRestoreExpectedKeys.size > 0 &&
@@ -313,6 +318,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
           worldFieldChunkStore.delete(worldFieldRestoreCoord)
           populateWorldFieldChunk(worldFieldRestoreCoord.cx, worldFieldRestoreCoord.cy, worldFieldRestoreCoord.cz, worldFieldRestoreSeed)
         }
+        worldFieldRestoreActive = false
       }
     }
     return
@@ -601,6 +607,7 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_D || wz < 0 || wz >= GRID_H) return false
   const key = (wz >> 3) * (GRID_H / CY) * (GRID_W / CX) + (wy >> 3) * (GRID_W / CX) + (wx >> 3)
   const restoreId = ++worldFieldRestoreId
+  worldFieldRestoreActive = true
   worldFieldRestoreCoord = { cx, cy, cz }
   worldFieldRestoreSeed = snapshot.seed
   const restoreChunks = snapshot.schemaVersion === 2 && snapshot.workerChunks?.length
