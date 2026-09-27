@@ -289,16 +289,23 @@ try {
     return !!state && state.complete === true;
   }, null, { timeout: 15000 });
   const concurrentRestoreState = await page.evaluate(() => window.worldFieldRestoreState?.());
-  const mutationAfterRestore = await page.evaluate(() => {
-    const state = window.worldFieldRestoreState?.();
+  const mutationQueuedDuringRestore = await page.evaluate(() => {
+    const started = window.restoreWorldFieldChunkSnapshot?.(0, 0, 0);
     window.paintChunkAt?.(64, 64, 32, 0, 1, 1, 'add');
-    return {
-      completeBeforeMutation: state?.complete === true,
-      restoreId: state?.restoreId ?? 0,
-    };
+    return { started };
   });
-  if (!mutationAfterRestore.completeBeforeMutation) {
-    throw new Error('Mutation was allowed before restore barrier completion');
+  if (!mutationQueuedDuringRestore.started) {
+    throw new Error('Mutation-vs-restore setup failed');
+  }
+  await page.waitForFunction(() => window.worldFieldRestoreState?.()?.complete === true, null, { timeout: 15000 });
+  const mutationAfterBarrier = await page.evaluate(() => window.worldFieldRestoreState?.());
+  if (
+    !mutationAfterBarrier?.complete ||
+    mutationAfterBarrier.workerBarrierComplete !== true ||
+    mutationAfterBarrier.staleAcks !== 0 ||
+    mutationAfterBarrier.staleFrames !== 0
+  ) {
+    throw new Error('Mutation-vs-restore barrier failed');
   }
 
   if (
