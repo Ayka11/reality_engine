@@ -185,22 +185,23 @@ try {
     const c = window.getWorldViewContract?.();
     const x = c.center.x, y = c.sliceY, z = c.center.z;
     return {
-      provider: window.getWorldFieldProvider?.(),
+      source: window.getField3DSourceStats?.(),
       world: window.worldFieldSample?.(x, y, z),
       volume: window.getField3DWorldSample?.(x, y, z),
     };
   });
-  if (unifiedField.provider?.id !== "chunk-worker-world-field-v1" && unifiedField.provider?.id !== "chunk-worker-world-field") {
-    throw new Error("World FieldSampler is not using the chunk-worker scientific source");
+  if (unifiedField.source?.fieldProvider?.id !== "infinite-world-field-sampler") {
+    throw new Error("Volumetric 3D is not using the authoritative Infinite World field provider");
   }
   if (!unifiedField.world || !unifiedField.volume) {
     throw new Error(`Unified world/volumetric field sample is unavailable: ${JSON.stringify(unifiedField)}`);
   }
-  for (const key of ["energy","density","information","entropy","temperature","biology"]) {
-    if (Math.abs((unifiedField.world[key] ?? 0) - (unifiedField.volume[key] ?? 0)) > 1e-5) {
+  for (const key of ["energy","density","information","entropy","temperature","biology","material"]) {
+    if (Math.abs((unifiedField.world[key] ?? 0) - (unifiedField.volume[key] ?? 0)) > 1e-9) {
       throw new Error(`World and volumetric field mismatch for ${key}`);
     }
   }
+
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
