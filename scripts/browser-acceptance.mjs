@@ -298,6 +298,39 @@ try {
     throw new Error('Mutation-vs-restore setup failed');
   }
   await page.waitForFunction(() => window.worldFieldRestoreState?.()?.complete === true, null, { timeout: 15000 });
+  const restoreAccountingAfterMutation = await page.evaluate(async () => {
+    const before = window.worldFieldRestoreState?.();
+    window.paintChunkAt?.(64, 64, 32, 0, 2, 1, 'add');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const after = window.worldFieldRestoreState?.();
+    return {
+      restoreId: before?.restoreId,
+      expected: before?.expected,
+      acknowledged: before?.acknowledged,
+      frameKeys: before?.restoreFrameKeys ?? [],
+      complete: before?.complete,
+      afterRestoreId: after?.restoreId,
+      afterExpected: after?.expected,
+      afterAcknowledged: after?.acknowledged,
+      afterFrameKeys: after?.restoreFrameKeys ?? [],
+      afterComplete: after?.complete,
+      staleAcks: after?.staleAcks,
+      staleFrames: after?.staleFrames,
+    };
+  });
+  if (
+    restoreAccountingAfterMutation.restoreId !== restoreAccountingAfterMutation.afterRestoreId ||
+    restoreAccountingAfterMutation.expected !== restoreAccountingAfterMutation.afterExpected ||
+    restoreAccountingAfterMutation.acknowledged !== restoreAccountingAfterMutation.afterAcknowledged ||
+    JSON.stringify(restoreAccountingAfterMutation.frameKeys) !== JSON.stringify(restoreAccountingAfterMutation.afterFrameKeys) ||
+    restoreAccountingAfterMutation.complete !== true ||
+    restoreAccountingAfterMutation.afterComplete !== true ||
+    restoreAccountingAfterMutation.staleAcks !== 0 ||
+    restoreAccountingAfterMutation.staleFrames !== 0
+  ) {
+    throw new Error('Post-restore mutation contaminated restore accounting');
+  }
+
   const mutationAfterBarrier = await page.evaluate(() => window.worldFieldRestoreState?.());
   if (
     !mutationAfterBarrier?.complete ||
