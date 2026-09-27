@@ -90,7 +90,7 @@ const chunkWorker = new Worker(
 // The visible Law panel is the authoritative frontend control surface.
 // Seed the worker with the same law/process state before the first tick.
 requestAnimationFrame(() => {
-  try { win['syncRealityLaws']?.() } catch (error) { console.warn('[RealityLawBridge] initial sync failed', error) }
+  try { const sync = win['syncRealityLaws'] as (() => unknown) | undefined; if (sync) sync() } catch (error) { console.warn('[RealityLawBridge] initial sync failed', error) }
 })
 
 chunkWorker.onmessage = (e: MessageEvent) => {
