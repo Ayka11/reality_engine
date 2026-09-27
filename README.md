@@ -26,7 +26,7 @@ custom_headers:
 [![Three.js](https://img.shields.io/badge/Three.js-r165-green)](https://threejs.org/)
 [![Vite](https://img.shields.io/badge/Vite-5.x-purple)](https://vitejs.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![HuggingFace](https://img.shields.io/badge/🤗-Live%20Demo-yellow)](https://huggingface.co/spaces/Aygun1489/Reality_Engine_Meta_Law_SImulator)
+[![HuggingFace](https://img.shields.io/badge/🤗-Live%20Demo-yellow)](https://huggingface.co/spaces/Aygun1489/Reality_Engine_SImulator)
 
 ---
 
@@ -128,7 +128,7 @@ npm run dev
 # → http://localhost:5173
 ```
 
-Or open the **[live demo on Hugging Face](https://huggingface.co/spaces/Aygun1489/Reality_Engine_Meta_Law_SImulator)** — no install needed.
+Or open the **[live demo on Hugging Face](https://huggingface.co/spaces/Aygun1489/Reality_Engine_SImulator)** — no install needed.
 
 ---
 
