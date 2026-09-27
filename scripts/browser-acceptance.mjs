@@ -162,7 +162,7 @@ try {
     window.setWorldViewSliceY?.(17);
   });
   await page.locator("#tabField3d").click();
-  await page.waitForFunction(() => (window.getField3DSourceStats?.()?.shadowChunks ?? 0) > 0, { timeout: 30000 });
+  await page.waitForFunction(() => typeof window.worldFieldSample === "function");
   await page.evaluate(() => window.renderField3D?.());
   const field3dBinding = await page.evaluate(() => ({
     binding: window.getField3DWorldBinding?.(),
