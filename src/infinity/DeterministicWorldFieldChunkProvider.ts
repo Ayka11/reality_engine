@@ -5,9 +5,8 @@ import { WORLD_FIELD_CHUNK_SIZE, worldFieldChunkOrigin } from './WorldFieldChunk
 
 const ZERO: ScientificFieldSample = { energy: 0, density: 0, information: 0, entropy: 0, temperature: 0, biology: 0, material: 0 }
 
-function hashSeed(seed: string, coord: WorldFieldChunkCoord): number {
+function hashText(text: string): number {
   let h = 2166136261 >>> 0
-  const text = `${seed}|${coord.cx},${coord.cy},${coord.cz}`
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i)
     h = Math.imul(h, 16777619) >>> 0
@@ -31,7 +30,7 @@ export class DeterministicWorldFieldChunkProvider implements ScientificFieldProv
   private readonly origin: { x: number; y: number; z: number }
 
   constructor(seed: string, coord: WorldFieldChunkCoord) {
-    this.seedHash = hashSeed(seed, coord)
+    this.seedHash = hashText(seed)
     this.origin = worldFieldChunkOrigin(coord)
   }
 
@@ -46,7 +45,7 @@ export class DeterministicWorldFieldChunkProvider implements ScientificFieldProv
     const gx = Math.floor(x)
     const gy = Math.floor(y)
     const gz = Math.floor(z)
-    const globalHash = hashSeed(this.seedHash.toString(), { cx: gx, cy: gy, cz: gz })
+    const globalHash = hashText(`${this.seedHash}|${gx},${gy},${gz}`)
     const h = mix(globalHash)
     const n = h / 0xffffffff
     const wave = Math.sin((x + this.seedHash % 997) * 0.07) * Math.cos((z + this.seedHash % 991) * 0.05)
