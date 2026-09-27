@@ -18,6 +18,27 @@ export class WorkerWorldFieldChunkProvider implements ScientificFieldProvider {
     private readonly fallback: ScientificFieldProvider,
   ) {}
 
+  snapshotWorkerChunks(): { key: number; data: number[] }[] {
+    const view = this.getView()
+    const ox = this.coord.cx * WORLD_CHUNK_SIZE
+    const oy = this.coord.cy * WORLD_CHUNK_SIZE
+    const oz = this.coord.cz * WORLD_CHUNK_SIZE
+    const out: { key: number; data: number[] }[] = []
+    for (const [key, chunk] of this.chunks) {
+      if (chunk.length < CHUNK_FLOATS) continue
+      const cz = Math.floor(key / ((GRID_H / CY) * (GRID_W / CX)))
+      const rem = key - cz * (GRID_H / CY) * (GRID_W / CX)
+      const cy = Math.floor(rem / (GRID_W / CX))
+      const cx = rem % (GRID_W / CX)
+      const wx0 = cx * CX - GRID_W / 2 + view.center.x
+      const wy0 = cy * CY - GRID_D * 0.45 + view.center.y
+      const wz0 = cz * 8 - GRID_H / 2 + view.center.z
+      if (wx0 + CX <= ox || wx0 >= ox + WORLD_CHUNK_SIZE || wy0 + CY <= oy || wy0 >= oy + WORLD_CHUNK_SIZE || wz0 + 8 <= oz || wz0 >= oz + WORLD_CHUNK_SIZE) continue
+      out.push({ key, data: Array.from(chunk) })
+    }
+    return out
+  }
+
   snapshotValues(): number[] {
     const values: number[] = []
     const view = this.getView()
