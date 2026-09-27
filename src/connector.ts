@@ -441,7 +441,13 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
 }
 win['worldFieldChunkStoreStats'] = () => worldFieldChunkStore.stats()
 win['worldFieldChunkPersistenceStats'] = () => ({ snapshots: worldFieldChunkPersistence.size() })
-win['saveWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number, values: number[], seed?: string, providerVersion?: number) => worldFieldChunkPersistence.save({ cx, cy, cz }, seed ?? worldViewContract.snapshot().seed, values, providerVersion ?? 1)
+win['saveWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number, values: number[], seed?: string, providerVersion?: number) => worldFieldChunkPersistence.save(
+  { cx, cy, cz },
+  seed ?? worldViewContract.snapshot().seed,
+  values,
+  providerVersion ?? 1,
+  values.length === CHUNK_FLOATS ? { fieldsPerCell: NF, cellCount: CHUNK_FLOATS / NF } : undefined,
+)
 win['loadWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => worldFieldChunkPersistence.load({ cx, cy, cz })
 win['validateWorldFieldChunkSnapshot'] = (snapshot: unknown) => worldFieldChunkPersistence.validate(snapshot as any)
 win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => {
