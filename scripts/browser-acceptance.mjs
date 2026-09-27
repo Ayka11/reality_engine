@@ -202,6 +202,36 @@ try {
     }
   }
 
+  // Mutation convergence: Brush must mutate the same authoritative field consumed by World/2D/3D.
+  const mutationBaseline = await page.evaluate(() => {
+    const c = window.getWorldViewContract?.();
+    return { point: { x: c.center.x, y: c.sliceY, z: c.center.z }, sample: window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z) };
+  });
+  await page.evaluate(() => window.applyChunkBrush?.("Forest", 64, 64, 32, 8, 1));
+  const mutationAfter = await page.evaluate(() => {
+    const c = window.getWorldViewContract?.();
+    return {
+      state: window.getAuthoritativeWorldFieldState?.(),
+      world: window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z),
+      volume: window.getField3DWorldSample?.(c.center.x, c.sliceY, c.center.z),
+    };
+  });
+  if (!mutationAfter.state || mutationAfter.state.mutationCount < 1) {
+    throw new Error("Authoritative world field did not record the Brush mutation");
+  }
+  if (!mutationAfter.world || !mutationAfter.volume) {
+    throw new Error("Authoritative mutation sample is unavailable");
+  }
+  if (Math.abs((mutationAfter.world.energy ?? 0) - (mutationBaseline.sample?.energy ?? 0)) < 1e-6 &&
+      Math.abs((mutationAfter.world.biology ?? 0) - (mutationBaseline.sample?.biology ?? 0)) < 1e-6) {
+    throw new Error("Brush mutation did not change the authoritative world field");
+  }
+  for (const key of ["energy","density","information","entropy","temperature","biology","material"]) {
+    if (Math.abs((mutationAfter.world[key] ?? 0) - (mutationAfter.volume[key] ?? 0)) > 1e-9) {
+      throw new Error(`Authoritative world/volumetric mismatch after Brush for ${key}`);
+    }
+  }
+
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
