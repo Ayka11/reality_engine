@@ -899,20 +899,35 @@ export function bootstrapInfiniteWorld() {
     }
   }
 
+  ;(window as any).worldTerrainSample = (x: number, z: number) => ({
+    x,
+    z,
+    height: world.sampleTerrainHeight(x, z),
+  })
+  ;(window as any).worldTerrainPatchStats = () => world.getTerrainPatchStats()
   ;(window as any).worldVerifyGeneration = (before: any = null) => {
     const after = (window as any).worldGenerationHealth()
     const beforeStats = before?.stats ?? before ?? null
     const beforeObjects = Number(beforeStats?.objects ?? 0)
     const beforeChunks = Number(beforeStats?.loadedChunks ?? 0)
+    const beforeSeed = before?.lastGeneration?.seed ?? beforeStats?.world?.seed ?? null
     const afterObjects = Number(after.stats?.objects ?? 0)
     const afterChunks = Number(after.stats?.loadedChunks ?? 0)
+    const afterSeed = after.lastGeneration?.seed ?? after.stats?.world?.seed ?? null
+    const objectDelta = afterObjects - beforeObjects
+    const chunkDelta = afterChunks - beforeChunks
+    const seedChanged = beforeSeed !== null && afterSeed !== null && beforeSeed !== afterSeed
+    const appliedElements = Number(after.lastGeneration?.appliedElements ?? 0)
+    const measurableChange = objectDelta !== 0 || chunkDelta !== 0 || seedChanged || appliedElements > 0
     return {
-      ok: after.ok && (afterObjects !== beforeObjects || afterChunks !== beforeChunks || Boolean(after.stats?.world)),
+      ok: Boolean(after.ok && measurableChange),
       before: beforeStats,
       after: after.stats,
       delta: {
-        objects: afterObjects - beforeObjects,
-        loadedChunks: afterChunks - beforeChunks,
+        objects: objectDelta,
+        loadedChunks: chunkDelta,
+        seedChanged,
+        appliedElements,
       },
     }
   }
