@@ -95,15 +95,39 @@ try {
     const same = JSON.stringify(loaded?.values) === JSON.stringify(values);
     const tampered = loaded ? { ...loaded, values: [...loaded.values, 99] } : null;
     const tamperRejected = tampered ? !window.validateWorldFieldChunkSnapshot?.(tampered) : false;
-    return { schemaVersion: saved?.schemaVersion, valid, same, tamperRejected };
+    const nonFinite = loaded ? { ...loaded, values: [...loaded.values.slice(0, 4), NaN] } : null;
+    const nonFiniteRejected = nonFinite ? !window.validateWorldFieldChunkSnapshot?.(nonFinite) : false;
+    return { schemaVersion: saved?.schemaVersion, valid, same, tamperRejected, nonFiniteRejected };
   });
-  if (persistenceContract.schemaVersion !== 1 || !persistenceContract.valid || !persistenceContract.same || !persistenceContract.tamperRejected) throw new Error('Streamed chunk persistence round-trip contract failed');
+  if (persistenceContract.schemaVersion !== 1 || !persistenceContract.valid || !persistenceContract.same || !persistenceContract.tamperRejected || !persistenceContract.nonFiniteRejected) throw new Error('Streamed chunk persistence round-trip contract failed');
   if (chunkContract.evictions < 1) throw new Error('World field chunk store did not evict at capacity');
   const streamedSnapshot = await page.evaluate(() => {
     const saved = window.snapshotWorldFieldChunkPersistence?.(0, 0, 0, 'acceptance-seed');
     return { schemaVersion: saved?.schemaVersion, workerChunks: saved?.workerChunks?.length ?? 0, valid: saved ? window.validateWorldFieldChunkSnapshot?.(saved) : false };
   });
   if (streamedSnapshot.schemaVersion !== 2 || streamedSnapshot.workerChunks < 1 || !streamedSnapshot.valid) throw new Error('Atomic multi-worker world chunk snapshot contract failed');
+  const streamedIntegrity = await page.evaluate(() => {
+    const snapshot = window.snapshotWorldFieldChunkPersistence?.(0, 0, 0, 'acceptance-seed');
+    if (!snapshot?.workerChunks?.length) return { duplicateRejected: false, nonFiniteRejected: false };
+    const duplicate = {
+      ...snapshot,
+      workerChunks: [...snapshot.workerChunks, { ...snapshot.workerChunks[0], data: [...snapshot.workerChunks[0].data] }],
+    };
+    duplicate.workerChunks[duplicate.workerChunks.length - 1].key = snapshot.workerChunks[0].key;
+    const nonFinite = {
+      ...snapshot,
+      workerChunks: snapshot.workerChunks.map((chunk, index) =>
+        index === 0 ? { ...chunk, data: [...chunk.data.slice(0, 8), NaN, ...chunk.data.slice(9)] } : chunk
+      ),
+    };
+    return {
+      duplicateRejected: !window.validateWorldFieldChunkSnapshot?.(duplicate),
+      nonFiniteRejected: !window.validateWorldFieldChunkSnapshot?.(nonFinite),
+    };
+  });
+  if (!streamedIntegrity.duplicateRejected || !streamedIntegrity.nonFiniteRejected) {
+    throw new Error('Worker snapshot structural integrity contract failed');
+  }
   if (!chunkContract.deterministic || !chunkContract.finite || !chunkContract.differentAddress) throw new Error('Deterministic streamed field chunk replay contract failed');
   const restoreContract = await page.evaluate(() => {
     const count = 512 * 14
