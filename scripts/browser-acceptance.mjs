@@ -136,7 +136,7 @@ try {
 
   if (!boundaryContract?.allSame) throw new Error('Cross-chunk boundary continuity contract failed');
   const restoredSeams = await page.evaluate(() => {
-    const coords = [[0,0,0],[1,0,0]];
+    const coords = [[0,0,0],[1,0,0],[0,1,0],[0,0,1]];
     const saved = coords.map(([cx,cy,cz]) => window.snapshotWorldFieldChunkPersistence?.(cx,cy,cz,'acceptance-seed'));
     const validBefore = saved.every(s => s?.schemaVersion === 2 && window.validateWorldFieldChunkSnapshot?.(s));
     coords.forEach(([cx,cy,cz]) => window.evictWorldFieldChunk?.(cx,cy,cz));
