@@ -207,7 +207,7 @@ try {
     const c = window.getWorldViewContract?.();
     return { point: { x: c.center.x, y: c.sliceY, z: c.center.z }, sample: window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z) };
   });
-  await page.evaluate(() => window.applyChunkBrush?.("Forest", 64, 64, 32, 8, 1));
+  await page.evaluate(() => { const c = window.getWorldViewContract?.(); const z = Math.max(0, Math.min(63, Math.round(c?.sliceY ?? 0))); window.applyChunkBrush?.("Forest", 64, 64, z, 8, 1); });
   const mutationAfter = await page.evaluate(() => {
     const c = window.getWorldViewContract?.();
     return {
