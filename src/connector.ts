@@ -273,6 +273,7 @@ win['renderField3D'] = () => {
 }
 win['getField3DWorldBinding'] = () => fieldRenderer.getWorldViewBinding()
 win['getField3DWorldSample'] = (x: number, y: number, z: number) => fieldRenderer.sampleWorldField(x, y, z)
+win['getField3DSourceStats'] = () => fieldRenderer.getSourceStats()
 win['fieldSetCameraPreset'] = (p: string) => {
   const map: Record<string, 'orbit'|'top'|'iso'|'street'|'fly'> = { orbit:'orbit', top:'top', iso:'iso', street:'street', fly:'fly' }
   fieldRenderer.setCameraPreset(map[p] ?? 'orbit')
