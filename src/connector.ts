@@ -118,6 +118,35 @@ function brushMutation(name: string, strength = 1) {
   return delta
 }
 win['installChunkWorldFieldProvider'] = installChunkWorldFieldProvider
+win['applyAuthoritativeComposerMutation'] = (config: { phi?: string; fields?: string; complexity?: string; spacetime?: string }) => {
+  installChunkWorldFieldProvider()
+  const phi = config.phi ?? 'Harmonic'
+  const fields = config.fields ?? 'Balanced'
+  const complexity = config.complexity ?? 'Emergent'
+  const spacetime = config.spacetime ?? 'Standard'
+  const phiStrength: Record<string, number> = { Void: 0.1, Living: 0.75, Chaotic: 0.3, Crystalline: 0.95, Resonant: 0.8, Harmonic: 0.9 }
+  const fieldScale: Record<string, { density: number; energy: number; information: number }> = {
+    'Energy Dominant': { density: 0.55, energy: 1.5, information: 0.65 },
+    'Information Dense': { density: 0.8, energy: 0.9, information: 1.5 },
+    Balanced: { density: 1, energy: 1, information: 1 },
+    'Mass Dominant': { density: 1.6, energy: 0.65, information: 0.45 },
+    Sparse: { density: 0.35, energy: 0.75, information: 1.25 },
+    'Pure Info': { density: 0.25, energy: 0.5, information: 1.8 },
+  }
+  const fs = fieldScale[fields] ?? fieldScale.Balanced
+  const growth: Record<string, number> = { Stable: 0.7, Emergent: 1.3, Explosive: 2.1, Collapsing: 0.4, Oscillating: 1 }
+  const radiation: Record<string, number> = { Standard: 0.12, 'Slow Time': 0.08, 'Fractal Space': 0.2, 'High Radiation': 0.88, 'Meteor Zone': 0.64, 'Frozen Topology': 0.26 }
+  const g = growth[complexity] ?? 1.3
+  const r = radiation[spacetime] ?? 0.12
+  return authoritativeWorldFieldProvider?.setGlobal('composer', {
+    density: fs.density,
+    energy: fs.energy * (0.8 + 0.2 * (phiStrength[phi] ?? 0.5)),
+    information: fs.information,
+    entropy: 1 + r * 0.25,
+    temperature: 1 + (fs.energy - 1) * 0.15,
+    biology: Math.max(0.25, Math.min(1.5, g * 0.6)),
+  }, {}, { phi, fields, complexity, spacetime })
+}
 const realityLawBridge = new RealityLawBridge()
 win['realityLawBridge'] = realityLawBridge
 win['getRuntimeProvenance'] = () => runtimeProvenance.getTrace()
