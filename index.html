@@ -155,13 +155,13 @@ input[type=range]#spd{width:60px}
 
 /* ── Workspace v4: stable docking geometry ── */
 #left.workspace-floating,#right.workspace-floating{
-  /* Floating is opt-in after an explicit drag; never let a restored stale
-     float state cover the opposite sidebar or the primary viewport. */
+  /* Geometry is owned by the drag controller's inline styles. Do not use
+     positional !important rules here or dragging/restoration cannot move
+     the panel after it becomes floating. */
   min-width:180px!important;
   min-height:220px!important;
+  max-width:min(360px,calc(100vw - 72px))!important;
 }
-#left.workspace-floating{max-width:min(360px,calc(100vw - 72px))!important}
-#right.workspace-floating{max-width:min(360px,calc(100vw - 72px))!important}
 #leftWorkspaceGrip,#rightWorkspaceGrip{pointer-events:auto!important}
 #leftWorkspaceGrip{margin-right:0}
 #rightWorkspaceGrip{margin-left:0}
