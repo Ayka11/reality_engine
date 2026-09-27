@@ -77,10 +77,7 @@ try {
     ];
     const mapped = cases.map(([x,y,z,key]) => ({ input:[x,y,z], key: window.worldFieldChunkCoord?.(x,y,z), expected:key }));
     const boundariesOk = mapped.every((v) => v.key && `${v.key.cx},${v.key.cy},${v.key.cz}` === v.expected);
-    window.populateWorldFieldChunk?.(0,0,0,'acceptance-seed');
-    window.populateWorldFieldChunk?.(1,0,0,'acceptance-seed');
-    window.populateWorldFieldChunk?.(0,0,0,'acceptance-seed');
-    window.populateWorldFieldChunk?.(2,0,0,'acceptance-seed');
+    for (let i = 0; i < 130; i++) window.populateWorldFieldChunk?.(i, 0, 0, 'acceptance-seed');
     const stats = window.worldFieldChunkStoreStats?.();
     const pa = window.sampleWorldFieldChunk?.(4*32+7,-2*32+9,7*32+11,'acceptance-seed');
     const pb = window.sampleWorldFieldChunk?.(4*32+7,-2*32+9,7*32+11,'acceptance-seed');
