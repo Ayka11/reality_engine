@@ -205,7 +205,11 @@ try {
   // Mutation convergence: Brush must mutate the same authoritative field consumed by World/2D/3D.
   const mutationBaseline = await page.evaluate(() => {
     const c = window.getWorldViewContract?.();
-    return { point: { x: c.center.x, y: c.sliceY, z: c.center.z }, sample: window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z) };
+    return {
+      point: { x: c.center.x, y: c.sliceY, z: c.center.z },
+      sample: window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z),
+      renderedTerrain: window.worldRenderedTerrainSample?.(c.center.x, c.center.z),
+    };
   });
   await page.evaluate(() => { const c = window.getWorldViewContract?.(); const z = Math.max(0, Math.min(63, Math.round(c?.sliceY ?? 0))); window.applyChunkBrush?.("Forest", 64, 64, z, 8, 1); });
   const mutationAfter = await page.evaluate(() => {
@@ -214,6 +218,8 @@ try {
       state: window.getAuthoritativeWorldFieldState?.(),
       world: window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z),
       volume: window.getField3DWorldSample?.(c.center.x, c.sliceY, c.center.z),
+      renderedTerrain: window.worldRenderedTerrainSample?.(c.center.x, c.center.z),
+      analyticTerrain: window.worldTerrainSample?.(c.center.x, c.center.z),
     };
   });
   if (!mutationAfter.state || mutationAfter.state.mutationCount < 1) {
@@ -230,6 +236,15 @@ try {
     if (Math.abs((mutationAfter.world[key] ?? 0) - (mutationAfter.volume[key] ?? 0)) > 1e-9) {
       throw new Error(`Authoritative world/volumetric mismatch after Brush for ${key}`);
     }
+  }
+  if (!Number.isFinite(mutationAfter.renderedTerrain) || !Number.isFinite(mutationAfter.analyticTerrain)) {
+    throw new Error("Rendered terrain sample disappeared after Brush");
+  }
+  if (Math.abs(mutationAfter.renderedTerrain - mutationBaseline.renderedTerrain) < 1e-6) {
+    throw new Error("Brush changed the authoritative field but did not rebuild visible terrain geometry");
+  }
+  if (Math.abs(mutationAfter.renderedTerrain - mutationAfter.analyticTerrain) > 1.0) {
+    throw new Error("Rendered terrain and authoritative terrain surface diverged");
   }
 
   // Composer must mutate the same authoritative field and remain visible through the 2D world-space projection.
@@ -297,6 +312,18 @@ try {
 
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
+  await page.waitForFunction(() => Number(window.worldTerrainPatchStats?.().patchCount ?? 0) > 0, undefined, { timeout: acceptanceTimeout });
+  const initialTerrain = await page.evaluate(() => {
+    const c = window.getWorldViewContract?.();
+    return {
+      patches: window.worldTerrainPatchStats?.(),
+      surface: window.worldRenderedTerrainSample?.(c.center.x, c.center.z),
+      analytic: window.worldTerrainSample?.(c.center.x, c.center.z),
+    };
+  });
+  if (!Number.isFinite(initialTerrain.surface) || !Number.isFinite(initialTerrain.analytic)) {
+    throw new Error("Rendered Infinite World terrain surface is not available");
+  }
 
   const worldTools = page.locator("#infiniteWorldTools");
   await page.locator("#btnToggleWorldTools").click();
@@ -405,8 +432,12 @@ try {
       || !!a?.lastGeneration;
   }, before, { timeout: acceptanceTimeout });
 
-  const afterQuick = await page.evaluate(() => window.worldGenerationHealth());
-  if (!afterQuick?.lastGeneration) throw new Error("Quick Generate did not record a generation result");
+  await page.waitForFunction(() => Number(window.worldTerrainPatchStats?.().patchCount ?? 0) > 0, undefined, { timeout: acceptanceTimeout });
+  const afterQuick = await page.evaluate(() => ({ health: window.worldGenerationHealth(), terrain: window.worldTerrainPatchStats?.() }));
+  if (!afterQuick?.health?.lastGeneration) throw new Error("Quick Generate did not record a generation result");
+  if (Number(afterQuick.health.lastGeneration.appliedElements ?? 0) <= 0) throw new Error("Quick Generate produced no applied world-generation elements");
+  if (Number(afterQuick.health.stats?.objects ?? 0) <= Number(before?.stats?.objects ?? 0)) throw new Error("Quick Generate did not materialize additional world objects");
+  if (Number(afterQuick.terrain?.patchCount ?? 0) <= 0) throw new Error("Quick Generate did not materialize terrain patches");
 
   const finalProvenance = await page.evaluate(() => window.getRuntimeProvenance?.());
   const finalStages = (finalProvenance?.events ?? []).map((event) => event.stage);
@@ -449,15 +480,25 @@ try {
     return !!health?.lastGeneration;
   }, undefined, { timeout: acceptanceTimeout });
 
-  const afterCompose = await composePage.evaluate(() => window.worldGenerationHealth());
-  if (!afterCompose?.lastGeneration) throw new Error("Compose World did not produce a generation record");
+  await composePage.waitForFunction(() => Number(window.worldTerrainPatchStats?.().patchCount ?? 0) > 0, undefined, { timeout: acceptanceTimeout });
+  const afterCompose = await composePage.evaluate(() => ({ health: window.worldGenerationHealth(), terrain: window.worldTerrainPatchStats?.() }));
+  if (!afterCompose?.health?.lastGeneration) throw new Error("Compose World did not produce a generation record");
+  if (Number(afterCompose.health.lastGeneration.appliedElements ?? 0) <= 0) throw new Error("Compose World produced no applied world-generation elements");
+  if (Number(afterCompose.health.stats?.objects ?? 0) <= 0) throw new Error("Compose World produced no materialized world objects");
+  if (Number(afterCompose.terrain?.patchCount ?? 0) <= 0) throw new Error("Compose World produced no materialized terrain patches");
+  const composeSurface = await composePage.evaluate(() => {
+    const c = window.getWorldViewContract?.();
+    return { surface: window.worldRenderedTerrainSample?.(c.center.x, c.center.z), analytic: window.worldTerrainSample?.(c.center.x, c.center.z) };
+  });
+  if (!Number.isFinite(composeSurface.surface) || !Number.isFinite(composeSurface.analytic)) throw new Error("Compose World terrain surface is not measurable");
+  if (Math.abs(composeSurface.surface - composeSurface.analytic) > 1.0) throw new Error("Compose World rendered terrain diverges from authoritative terrain");
   await composePage.close();
 
   await page.screenshot({ path: "artifacts/browser-acceptance.png", fullPage: true });
   console.log(JSON.stringify({
     status: "PASS",
     initialObjects: initial.stats?.objects ?? 0,
-    quickGenerateObjects: afterQuick.stats?.objects ?? 0,
+    quickGenerateObjects: afterQuick.health?.stats?.objects ?? 0,
     composeObjects: afterCompose.stats?.objects ?? 0,
     screenshot: "artifacts/browser-acceptance.png"
   }));
