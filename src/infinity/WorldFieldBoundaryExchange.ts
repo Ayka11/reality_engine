@@ -69,6 +69,17 @@ export class WorldFieldBoundaryExchange {
     return this.faces.get(WorldFieldBoundaryExchange.key(coord, axis, side)) ?? null
   }
 
+  clearForChunk(coord: WorldFieldChunkCoord): number {
+    let removed = 0
+    for (const key of [...this.faces.keys()]) {
+      if (key.startsWith(`${coord.cx},${coord.cy},${coord.cz}|`)) {
+        this.faces.delete(key)
+        removed++
+      }
+    }
+    return removed
+  }
+
   clear(): void {
     this.faces.clear()
   }
