@@ -2,6 +2,7 @@ import { WorldGenerator, BIOME_ID, type Biome } from './WorldGenerator'
 import type { ScientificFieldProvider } from './ScientificFieldProvider'
 import { GeneratorFieldProvider } from './ScientificFieldProvider'
 import { ScientificFieldRegistry } from './ScientificFieldRegistry'
+import { worldViewContract } from './WorldViewContract'
 
 export type ScientificFieldSample = {
   energy: number
@@ -78,6 +79,21 @@ export class FieldSampler {
       biome: climate.biome,
       waterDepth: Math.max(0, this.generator.seaLevel - height),
     }
+  }
+
+
+  sampleViewWindow(width: number, height: number, sliceY = worldViewContract.snapshot().sliceY) {
+    const view = worldViewContract.snapshot()
+    const out = new Array<WorldContextSample>(Math.max(1, width) * Math.max(1, height))
+    let i = 0
+    for (let py = 0; py < Math.max(1, height); py++) {
+      for (let px = 0; px < Math.max(1, width); px++) {
+        const p = worldViewContract.sliceToWorld(px + 0.5, py + 0.5, width, height)
+        const sample = this.sampleWorld(p.x, sliceY, p.z)
+        out[i++] = sample
+      }
+    }
+    return { view, width: Math.max(1, width), height: Math.max(1, height), samples: out }
   }
 
   sampleTerrain(x: number, z: number) {
