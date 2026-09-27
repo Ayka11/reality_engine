@@ -1525,6 +1525,7 @@ window.toggleLaw=function(i){
   if(l.name==='Entropy Growth')   ENTROPY_BASE=l.active?l.strength*l.fitness*2:0.0004;
   if(l.name==='Info Bloom')       INFO_RATE=l.active?l.strength*l.fitness*2:0.35;
   if(l.name==='Bio Emergence')    BIO_THRESH=l.active?l.strength*l.fitness*2:0.25;
+  if(window.setRealityLaw) window.setRealityLaw(l.name,l.active,l.fitness,l.strength);
   document.getElementById('lawList').innerHTML=renderLaws();
   log(`Law "${l.name}" ${l.active?'activated':'disabled'}`);
 };
