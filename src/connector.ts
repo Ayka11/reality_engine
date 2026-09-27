@@ -35,6 +35,7 @@ import { sceneComposer }                          from './modes/cinema/SceneComp
 import { RealityLawBridge }                       from './laws/RealityLawBridge'
 import { runtimeProvenance }                      from './infinity/RuntimeProvenance'
 import { worldViewContract } from './infinity/WorldViewContract'
+import { FunctionFieldProvider } from './infinity/ScientificFieldProvider'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
 const win = window as unknown as Record<string, unknown>
@@ -269,7 +270,15 @@ win['setShowParticles'] = (v: boolean) => {
 }
 win['setChunkLayer'] = (l: number) => { fieldRenderer.setLayer(Math.max(-1, Math.min(5, l))) }
 win['renderField3D'] = () => {
-  fieldRenderer.setWorldViewBinding(worldViewContract.snapshot())
+  const world = getInfiniteWorld()
+  if (world) {
+    fieldRenderer.setWorldFieldProvider(new FunctionFieldProvider(
+      'infinite-world-field-sampler',
+      'field-sampler-v1',
+      (x, y, z) => world.fieldSampler.sample(x, y, z),
+    ))
+    fieldRenderer.setWorldViewBinding(worldViewContract.snapshot())
+  }
   fieldRenderer.render()
 }
 win['getField3DWorldBinding'] = () => fieldRenderer.getWorldViewBinding()
