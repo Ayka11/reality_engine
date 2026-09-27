@@ -80,6 +80,7 @@ function installChunkWorldFieldProvider() {
     fallback,
   )
   world.fieldSampler.setProvider(chunkWorldFieldProvider)
+  fieldRenderer.setWorldFieldProvider(chunkWorldFieldProvider)
   return true
 }
 win['installChunkWorldFieldProvider'] = installChunkWorldFieldProvider
