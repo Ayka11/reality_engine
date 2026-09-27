@@ -133,6 +133,14 @@ try {
   }
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
 
+  await page.waitForFunction(() => typeof window.applyChunkBrush === "function");
+  await page.evaluate(() => { window.lastChunkBrush = null; window.applyChunkBrush("Forest", 64, 64, 32, 5, 1); });
+  await page.waitForFunction(() => !!window.lastChunkBrush, undefined, { timeout: acceptanceTimeout });
+  const brushAck = await page.evaluate(() => window.lastChunkBrush);
+  if (brushAck?.name !== "Forest" || brushAck?.x !== 64 || brushAck?.y !== 64 || brushAck?.z !== 32 || brushAck?.radius !== 5) {
+    throw new Error("Smart Brush did not reach ChunkSimWorker with expected runtime parameters");
+  }
+
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
