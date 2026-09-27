@@ -203,6 +203,13 @@ try {
   }
 
   // Mutation convergence: Brush must mutate the same authoritative field consumed by World/2D/3D.
+  // The terrain renderer is anchored at Infinite World position; restore the shared spatial contract to that anchor
+  // after the earlier 2D/3D routing tests moved the contract to a remote diagnostic location.
+  await page.evaluate(() => {
+    const p = window.infinityStats?.().camera;
+    const c = window.getWorldViewContract?.();
+    if (p && c) window.setWorldViewCenter?.(p.worldX, c.center.y, p.worldZ);
+  });
   const mutationBaseline = await page.evaluate(() => {
     const c = window.getWorldViewContract?.();
     const p = window.infinityStats?.().camera ?? { worldX: c.center.x, worldZ: c.center.z };
