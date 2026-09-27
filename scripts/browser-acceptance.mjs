@@ -2,6 +2,11 @@ import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 
 const port = 4173;
+let phase = "startup";
+const watchdog = setTimeout(() => {
+  console.error(`[acceptance] watchdog timeout in phase: ${phase}`);
+  process.exit(2);
+}, 120000);
 const server = spawn("npm", ["run", "preview", "--", "--host", "127.0.0.1", "--port", String(port)], {
   stdio: ["ignore", "pipe", "pipe"],
   shell: process.platform === "win32",
@@ -21,6 +26,7 @@ const waitForServer = async () => {
 
 const browser = await chromium.launch({ headless: true });
 try {
+  phase = "primary-page";
   await waitForServer();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await page.addInitScript(() => {
@@ -29,6 +35,7 @@ try {
 
   console.log("[acceptance] opening primary page");
   await page.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+  phase = "primary-ready";
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
 
@@ -57,6 +64,7 @@ try {
   await page.waitForFunction(() => localStorage.getItem("infinity_dock_open") !== "false");
 
   const before = await page.evaluate(() => window.worldGenerationHealth());
+  phase = "quick-generate";
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
   await page.waitForFunction((b) => {
@@ -75,11 +83,13 @@ try {
   await composePage.addInitScript(() => {
     localStorage.clear();
   });
+  phase = "composer-page";
   console.log("[acceptance] opening composer page");
   await composePage.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await composePage.waitForSelector("#c3d");
   await composePage.waitForFunction(() => typeof window.worldGenerationHealth === "function");
 
+  phase = "compose-open";
   console.log("[acceptance] Compose World");
   await composePage.getByRole("button", { name: /Compose World/ }).click();
   await composePage.waitForSelector("#comp.open");
@@ -87,6 +97,7 @@ try {
     throw new Error("Compose World opened without the Integral Reality Composer");
   }
   for (let i = 0; i < 4; i++) await composePage.locator("#cnext").click();
+  phase = "compose-generate";
   console.log("[acceptance] Generate Reality");
   await composePage.getByRole("button", { name: /Generate Reality/ }).click();
   await composePage.waitForFunction(() => {
@@ -98,6 +109,7 @@ try {
   if (!afterCompose?.lastGeneration) throw new Error("Compose World did not produce a generation record");
   await composePage.close();
 
+  phase = "complete";
   await page.screenshot({ path: "artifacts/browser-acceptance.png", fullPage: true });
   console.log(JSON.stringify({
     status: "PASS",
@@ -108,6 +120,7 @@ try {
     screenshot: "artifacts/browser-acceptance.png"
   }));
 } finally {
+  clearTimeout(watchdog);
   await browser.close();
   server.kill();
 }
