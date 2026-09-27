@@ -592,7 +592,6 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
     localChunks.set(chunk.key, chunk.data)
     chunkWorker.postMessage({ cmd: 'restoreChunk', data: { key: chunk.key, data: Array.from(chunk.data), restoreId } })
   }
-  publishWorkerBoundarySnapshots()
   runtimeProvenance.record('world-state', { source: 'WorldFieldChunkPersistence', action: 'restore', coord: { cx, cy, cz }, key, checksum: snapshot.checksum })
   return true
 }
