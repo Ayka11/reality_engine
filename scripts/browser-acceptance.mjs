@@ -206,14 +206,13 @@ try {
   // The terrain renderer is anchored at Infinite World position; restore the shared spatial contract to that anchor
   // after the earlier 2D/3D routing tests moved the contract to a remote diagnostic location.
   const mutationAnchor = await page.evaluate(() => {
-    const p = window.infinityStats?.().camera;
-    const terrain = p ? window.worldTerrainSample?.(p.worldX, p.worldZ) : null;
+    const anchor = window.worldTerrainVertexAnchor?.();
     const c = window.getWorldViewContract?.();
-    if (p && terrain && c) {
-      window.setWorldViewCenter?.(p.worldX, c.center.y, p.worldZ);
-      window.setWorldViewSliceY?.(terrain.height);
+    if (anchor && c) {
+      window.setWorldViewCenter?.(anchor.x, c.center.y, anchor.z);
+      window.setWorldViewSliceY?.(anchor.y);
     }
-    return { x: p?.worldX ?? 0, z: p?.worldZ ?? 0, y: terrain?.height ?? c?.sliceY ?? 0 };
+    return anchor ?? { x: 0, y: c?.sliceY ?? 0, z: 0 };
   });
   const mutationBaseline = await page.evaluate((anchor) => {
     return {
