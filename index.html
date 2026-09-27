@@ -787,7 +787,23 @@ function _drawIso(){
   }
 }
 
-function _drawMultiSlice(){
+let worldField2DLinked = true
+let worldField2DCache = null
+
+function _getWorldField2DWindow(width, height) {
+  const sampler = window.worldFieldViewWindow
+  const getView = window.getWorldViewContract
+  if (typeof sampler !== 'function' || typeof getView !== 'function') return null
+  const view = getView()
+  const key = [width, height, view.center.x.toFixed(3), view.center.y.toFixed(3), view.center.z.toFixed(3), view.sliceY, view.visibleRadius, view.seed].join('|')
+  if (worldField2DCache?.key === key) return worldField2DCache
+  const data = sampler(width, height, view.sliceY)
+  if (!data?.samples?.length) return null
+  worldField2DCache = { key, ...data }
+  return worldField2DCache
+}
+
+function _drawLegacyMultiSlice(){
   const cw=canvas.width,ch=canvas.height;
   ctx.clearRect(0,0,cw,ch);
   
@@ -887,6 +903,61 @@ function _drawMultiSlice(){
     }
   }
 }
+
+
+}
+
+function _drawWorldFieldMultiSlice(){
+  const cw=canvas.width,ch=canvas.height
+  const windowW=Math.max(1,Math.min(96,Math.floor(cw/8)))
+  const windowH=Math.max(1,Math.min(72,Math.floor(ch/8)))
+  const data=_getWorldField2DWindow(windowW,windowH)
+  if(!data)return false
+  const value=(s,f)=>[s.energy,s.density,s.information,s.entropy,s.temperature,s.biology][f]??s.energy
+  const meta=[
+    {mx:1000,l:0,label:'⚡ Energy',info:'World-space energy field'},
+    {mx:1,l:1,label:'🌫️ Density',info:'World-space density field'},
+    {mx:500,l:2,label:'🧠 Info',info:'World-space information field'},
+    {mx:1,l:3,label:'🔥 Entropy',info:'World-space entropy field'},
+    {mx:800,l:4,label:'🌡️ Temp',info:'World-space temperature field'},
+    {mx:1,l:5,label:'🧬 Bio',info:'World-space biology field'}
+  ]
+  const drawField=(ox,oy,w,h,f,showStats=true)=>{
+    const m=meta[f],cw2=w/data.width,ch2=h/data.height
+    let total=0,count=0,min=Infinity,max=-Infinity
+    for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
+      const v=value(data.samples[py*data.width+px],f);total+=v
+      if(v>0.5){count++;min=Math.min(min,v);max=Math.max(max,v)}
+      if(v<=(m.mx>1?0.5:0.001))continue
+      const [r,g,b]=colorOf(m.l,Math.min(Math.max(v/m.mx,0),1))
+      ctx.fillStyle=`rgb(${r},${g},${b})`
+      ctx.fillRect(Math.floor(ox+px*cw2),Math.floor(oy+py*ch2),Math.max(1,Math.ceil(cw2)),Math.max(1,Math.ceil(ch2)))
+    }
+    ctx.font='bold 10px system-ui';ctx.fillStyle='rgba(235,240,255,.92)';ctx.fillText(m.label,ox+6,oy+15)
+    ctx.font='8px system-ui';ctx.fillStyle='rgba(190,205,235,.68)';ctx.fillText(m.info,ox+6,oy+27)
+    if(showStats){ctx.fillStyle='rgba(10,10,20,.72)';ctx.fillRect(ox,oy+h-22,w,22);ctx.font='9px monospace';ctx.fillStyle='rgba(205,215,255,.85)';ctx.fillText(`avg ${(total/data.samples.length).toFixed(2)} min ${(min===Infinity?0:min).toFixed(2)} max ${(max===-Infinity?0:max).toFixed(2)}`,ox+6,oy+h-8)}
+  }
+  ctx.clearRect(0,0,cw,ch)
+  if(layer>=0){
+    drawField(0,0,cw,ch,layer,false)
+    ctx.font='10px monospace';ctx.fillStyle='rgba(160,240,190,.82)'
+    ctx.fillText(`WORLD center=(${data.view.center.x.toFixed(1)},${data.view.center.y.toFixed(1)},${data.view.center.z.toFixed(1)}) Y=${data.view.sliceY} R=${data.view.visibleRadius}`,10,ch-12)
+  }else{
+    const hw=Math.floor(cw/2),hh=Math.floor(ch/2)
+    const qs=[{f:0,ox:0,oy:0,w:hw,h:hh},{f:5,ox:hw,oy:0,w:hw,h:hh},{f:2,ox:0,oy:hh,w:hw,h:hh},{f:3,ox:hw,oy:hh,w:hw,h:hh}]
+    for(const q of qs){drawField(q.ox,q.oy,q.w,q.h,q.f,true);ctx.strokeStyle='#2a2a3a';ctx.strokeRect(q.ox+.5,q.oy+.5,q.w-1,q.h-1)}
+    ctx.strokeStyle='#3b4964';ctx.beginPath();ctx.moveTo(hw,0);ctx.lineTo(hw,ch);ctx.stroke();ctx.beginPath();ctx.moveTo(0,hh);ctx.lineTo(cw,hh);ctx.stroke()
+    ctx.font='8px monospace';ctx.fillStyle='rgba(160,190,230,.72)';ctx.fillText(`WORLD SPACE · center=(${data.view.center.x.toFixed(1)},${data.view.center.z.toFixed(1)}) · Y=${data.view.sliceY} · seed=${data.view.seed}`,8,ch-4)
+  }
+  return true
+}
+
+function _drawMultiSlice(){
+  if(worldField2DLinked&&_drawWorldFieldMultiSlice())return
+  _drawLegacyMultiSlice()
+}
+window.setWorldField2DLinked=(enabled)=>{worldField2DLinked=Boolean(enabled);worldField2DCache=null;drawGrid()}
+window.getWorldField2DLinked=()=>worldField2DLinked
 
 function draw2D(){_drawFlat();}
 
