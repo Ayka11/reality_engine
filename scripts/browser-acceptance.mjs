@@ -73,6 +73,21 @@ try {
     throw new Error("Right sidebar overlaps the world canvas");
   }
 
+  // Verify explicit detach -> move -> dock works after the migration.
+  const floatGeometry = await page.evaluate(() => {
+    window.setWorkspacePanelFloat?.("left", true);
+    const panel = document.getElementById("left");
+    if (!panel) return null;
+    panel.style.left = "180px";
+    panel.style.top = "90px";
+    return { x: panel.getBoundingClientRect().x, y: panel.getBoundingClientRect().y };
+  });
+  if (!floatGeometry || floatGeometry.x < 175 || floatGeometry.y < 85) {
+    throw new Error("Floating sidebar does not honor drag geometry");
+  }
+  await page.evaluate(() => window.setWorkspacePanelFloat?.("left", false));
+  await page.waitForFunction(() => !document.getElementById("left")?.classList.contains("workspace-floating"));
+
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
