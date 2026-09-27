@@ -1,3 +1,4 @@
+import { CHUNK_FLOATS } from '../core/ChunkGrid'
 import type { WorldFieldChunkCoord } from './WorldFieldChunkStore'
 
 export type WorldFieldChunkSnapshot = {
@@ -73,7 +74,7 @@ export class WorldFieldChunkPersistence {
     if (snapshot.schemaVersion === 1) return checksum(snapshot.values) === snapshot.checksum
     if (snapshot.schemaVersion === 2) {
       if (!Array.isArray(snapshot.workerChunks) || snapshot.workerChunks.length === 0) return false
-      if (!snapshot.workerChunks.every(chunk => Number.isInteger(chunk.key) && chunk.data.length === 7168)) return false
+      if (!snapshot.workerChunks.every(chunk => Number.isInteger(chunk.key) && chunk.data.length === CHUNK_FLOATS)) return false
       const canonical = snapshot.workerChunks
         .map(chunk => ({ key: chunk.key, data: [...chunk.data] }))
         .sort((a, b) => a.key - b.key)
