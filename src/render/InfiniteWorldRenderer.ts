@@ -11,7 +11,7 @@ import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import { FieldSampler } from '../infinity/FieldSampler'
-import { WorldDecisionLayer, type RouteProfile } from '../infinity/WorldDecisionLayer'
+import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { DecisionGraph } from '../infinity/DecisionGraph'
 import { WorldObjectSpatialIndex } from '../infinity/WorldObjectSpatialIndex'
 import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
@@ -135,7 +135,7 @@ export class InfiniteWorldRenderer {
     this.worldAssetRuntime = new WorldAssetRuntime(this.scene)
     this.generator = new WorldGenerator(seed)
     this.fieldSampler = new FieldSampler(this.generator)
-    this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, undefined, () => (window as any).getRealityLawState?.() ?? null)
+    this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null)
     this.storageKey = `reality-engine-world:${seed}:objects`
     this.persistence = new WorldPersistence(seed)
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9, maxNewPerUpdate: 1 })
