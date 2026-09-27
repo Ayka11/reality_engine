@@ -89,6 +89,7 @@ const worldFieldRestoreState = {
   unexpectedAcks: 0,
   staleAcks: 0,
   staleFrames: 0,
+  unexpectedFrames: 0,
   restoreFrameRestoreId: 0,
   restoreFrameKeys: [] as number[],
   workerBarrierComplete: false,
@@ -306,6 +307,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
         worldFieldRestoreExpectedKeys.size > 0 &&
         worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
         worldFieldRestoreState.unexpectedAcks === 0 &&
+        worldFieldRestoreState.unexpectedFrames === 0 &&
         worldFieldRestoreState.duplicateAcks === 0 &&
         worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
         worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
@@ -345,6 +347,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       worldFieldRestoreExpectedKeys.size > 0 &&
       worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
       worldFieldRestoreState.unexpectedAcks === 0 &&
+      worldFieldRestoreState.unexpectedFrames === 0 &&
       worldFieldRestoreState.duplicateAcks === 0 &&
       worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
       worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
@@ -620,6 +623,7 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   worldFieldRestoreState.unexpectedAcks = 0
   worldFieldRestoreState.staleAcks = 0
   worldFieldRestoreState.staleFrames = 0
+  worldFieldRestoreState.unexpectedFrames = 0
   worldFieldRestoreState.restoreFrameRestoreId = 0
   worldFieldRestoreState.restoreFrameKeys = []
   worldFieldRestoreState.workerBarrierComplete = false
