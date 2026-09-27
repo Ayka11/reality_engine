@@ -218,10 +218,16 @@ try {
   }
 
   await page.locator("#dockCloseBtn").click();
-  await page.waitForFunction(() => localStorage.getItem("infinity_dock_open") === "false");
+  await page.waitForFunction(() => {
+    const el = document.getElementById("infiniteWorldTools");
+    return !!el && getComputedStyle(el).display === "none";
+  });
 
   await page.locator("#btnToggleWorldTools").click();
-  await page.waitForFunction(() => localStorage.getItem("infinity_dock_open") !== "false");
+  await page.waitForFunction(() => {
+    const el = document.getElementById("infiniteWorldTools");
+    return !!el && getComputedStyle(el).display !== "none";
+  });
 
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
   const lawBaseline = await page.evaluate(() => window.getRealityLawState?.());
