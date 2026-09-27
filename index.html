@@ -922,7 +922,7 @@ function _drawWorldFieldMultiSlice(){
   const renderCanvas=document.createElement('canvas')
   renderCanvas.width=cw
   renderCanvas.height=ch
-  const ctx=renderCanvas.getContext('2d')
+  const renderCtx=renderCanvas.getContext('2d')
   if(!ctx)return false
   const value=(s,f)=>[s.energy,s.density,s.information,s.entropy,s.temperature,s.biology][f]??s.energy
   const meta=[
@@ -942,22 +942,22 @@ function _drawWorldFieldMultiSlice(){
       if(v>0.5){min=Math.min(min,v);max=Math.max(max,v)}
       if(v<=(m.mx>1?0.5:0.001))continue
       const [r,g,b]=colorOf(m.l,Math.min(Math.max(v/m.mx,0),1))
-      ctx.fillStyle=`rgb(${r},${g},${b})`
-      ctx.fillRect(Math.floor(ox+px*cw2),Math.floor(oy+py*ch2),Math.max(1,Math.ceil(cw2)),Math.max(1,Math.ceil(ch2)))
+      renderCtx.fillStyle=`rgb(${r},${g},${b})`
+      renderCtx.fillRect(Math.floor(ox+px*cw2),Math.floor(oy+py*ch2),Math.max(1,Math.ceil(cw2)),Math.max(1,Math.ceil(ch2)))
     }
-    ctx.font='bold 10px system-ui';ctx.fillStyle='rgba(235,240,255,.92)';ctx.fillText(m.label,ox+6,oy+15)
-    ctx.font='8px system-ui';ctx.fillStyle='rgba(190,205,235,.68)';ctx.fillText(m.info,ox+6,oy+27)
+    renderCtx.font='bold 10px system-ui';renderCtx.fillStyle='rgba(235,240,255,.92)';renderCtx.fillText(m.label,ox+6,oy+15)
+    renderCtx.font='8px system-ui';renderCtx.fillStyle='rgba(190,205,235,.68)';renderCtx.fillText(m.info,ox+6,oy+27)
     if(showStats){
-      ctx.fillStyle='rgba(10,10,20,.72)';ctx.fillRect(ox,oy+h-22,w,22)
-      ctx.font='9px monospace';ctx.fillStyle='rgba(205,215,255,.85)'
-      ctx.fillText(`avg ${(total/data.samples.length).toFixed(2)} min ${(min===Infinity?0:min).toFixed(2)} max ${(max===-Infinity?0:max).toFixed(2)}`,ox+6,oy+h-8)
+      renderCtx.fillStyle='rgba(10,10,20,.72)';renderCtx.fillRect(ox,oy+h-22,w,22)
+      renderCtx.font='9px monospace';renderCtx.fillStyle='rgba(205,215,255,.85)'
+      renderCtx.fillText(`avg ${(total/data.samples.length).toFixed(2)} min ${(min===Infinity?0:min).toFixed(2)} max ${(max===-Infinity?0:max).toFixed(2)}`,ox+6,oy+h-8)
     }
   }
-  ctx.clearRect(0,0,cw,ch)
+  renderCtx.clearRect(0,0,cw,ch)
   if(layer>=0){
     drawField(0,0,cw,ch,layer,false)
-    ctx.font='10px monospace';ctx.fillStyle='rgba(160,240,190,.82)'
-    ctx.fillText(`WORLD center=(${data.view.center.x.toFixed(1)},${data.view.center.y.toFixed(1)},${data.view.center.z.toFixed(1)}) Y=${data.view.sliceY} R=${data.view.visibleRadius}`,10,ch-12)
+    renderCtx.font='10px monospace';renderCtx.fillStyle='rgba(160,240,190,.82)'
+    renderCtx.fillText(`WORLD center=(${data.view.center.x.toFixed(1)},${data.view.center.y.toFixed(1)},${data.view.center.z.toFixed(1)}) Y=${data.view.sliceY} R=${data.view.visibleRadius}`,10,ch-12)
   }else{
     const hw=Math.floor(cw/2),hh=Math.floor(ch/2)
     const qs=[
@@ -968,14 +968,14 @@ function _drawWorldFieldMultiSlice(){
     ]
     for(const q of qs){
       drawField(q.ox,q.oy,q.w,q.h,q.f,true)
-      ctx.strokeStyle='#2a2a3a'
-      ctx.strokeRect(q.ox+.5,q.oy+.5,q.w-1,q.h-1)
+      renderCtx.strokeStyle='#2a2a3a'
+      renderCtx.strokeRect(q.ox+.5,q.oy+.5,q.w-1,q.h-1)
     }
-    ctx.strokeStyle='#3b4964'
-    ctx.beginPath();ctx.moveTo(hw,0);ctx.lineTo(hw,ch);ctx.stroke()
-    ctx.beginPath();ctx.moveTo(0,hh);ctx.lineTo(cw,hh);ctx.stroke()
-    ctx.font='8px monospace';ctx.fillStyle='rgba(160,190,230,.72)'
-    ctx.fillText(`WORLD SPACE · center=(${data.view.center.x.toFixed(1)},${data.view.center.z.toFixed(1)}) · Y=${data.view.sliceY} · seed=${data.view.seed}`,8,ch-4)
+    renderCtx.strokeStyle='#3b4964'
+    renderCtx.beginPath();renderCtx.moveTo(hw,0);renderCtx.lineTo(hw,ch);renderCtx.stroke()
+    renderCtx.beginPath();renderCtx.moveTo(0,hh);renderCtx.lineTo(cw,hh);renderCtx.stroke()
+    renderCtx.font='8px monospace';renderCtx.fillStyle='rgba(160,190,230,.72)'
+    renderCtx.fillText(`WORLD SPACE · center=(${data.view.center.x.toFixed(1)},${data.view.center.z.toFixed(1)}) · Y=${data.view.sliceY} · seed=${data.view.seed}`,8,ch-4)
   }
   mainCtx.clearRect(0,0,cw,ch)
   mainCtx.drawImage(renderCanvas,0,0)
