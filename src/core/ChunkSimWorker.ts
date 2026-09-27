@@ -350,6 +350,12 @@ self.onmessage = (e: MessageEvent) => {
     return
   }
 
+  if (cmd === 'restoreChunk') {
+    grid.restoreChunk(data.key, data.data)
+    emitFrame()
+    return
+  }
+
   if (cmd === 'restore') {
     grid.restore(data.snap); tick = data.tick || 0
     return
