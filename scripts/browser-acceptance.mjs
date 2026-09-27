@@ -189,7 +189,8 @@ try {
     !exactKeySet ||
     restoreAck.duplicateAcks !== 0 ||
     restoreAck.unexpectedAcks !== 0 ||
-    restoreAck.staleAcks !== 0
+    restoreAck.staleAcks !== 0 ||
+    restoreAck.staleFrames !== 0
   ) {
     throw new Error('Worker restore acknowledgement contract failed');
   }
