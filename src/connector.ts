@@ -43,6 +43,7 @@ import { WorkerWorldFieldChunkProvider } from './infinity/WorkerWorldFieldChunkP
 import { worldFieldChunkPersistence } from './infinity/WorldFieldChunkPersistence'
 import { worldFieldBoundaryExchange } from './infinity/WorldFieldBoundaryExchange'
 import type { ScientificFieldSample } from './infinity/FieldSampler'
+import { CHUNK_FLOATS, CX, CY, GRID_D, GRID_H, GRID_W, NF } from './core/ChunkGrid'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
 const win = window as unknown as Record<string, unknown>
@@ -81,7 +82,7 @@ let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
 const worldFieldChunkStore = new WorldFieldChunkStore(128, (chunk) => {
   const provider = chunk.provider as { snapshotValues?: () => number[] }
   const values = provider.snapshotValues?.()
-  if (values?.length) worldFieldChunkPersistence.save(chunk.coord, chunk.seed, values, chunk.version)
+  if (values?.length) worldFieldChunkPersistence.save(chunk.coord, chunk.seed, values, chunk.version, { fieldsPerCell: NF, cellCount: CHUNK_FLOATS / NF })
 })
 const populateWorldFieldChunk = (cx: number, cy: number, cz: number, seed = worldViewContract.snapshot().seed) => {
   const coord = { cx: Math.trunc(cx), cy: Math.trunc(cy), cz: Math.trunc(cz) }
@@ -454,8 +455,11 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   const wz = Math.round(originZ - view.center.z + GRID_H / 2)
   if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_D || wz < 0 || wz >= GRID_H) return false
   const key = (wz >> 3) * (GRID_H / CY) * (GRID_W / CX) + (wy >> 3) * (GRID_W / CX) + (wx >> 3)
-  localChunks.set(key, new Float32Array(snapshot.values))
+  const restored = new Float32Array(snapshot.values)
+  localChunks.set(key, restored)
+  chunkWorker.postMessage({ cmd: 'restoreChunk', data: { key, data: Array.from(restored) } })
   publishWorkerBoundarySnapshots()
+  runtimeProvenance.record('world-state', { source: 'WorldFieldChunkPersistence', action: 'restore', coord: { cx, cy, cz }, key, checksum: snapshot.checksum })
   return true
 }
 win['worldFieldBoundaryStats'] = () => ({ faces: worldFieldBoundaryExchange.size() })
