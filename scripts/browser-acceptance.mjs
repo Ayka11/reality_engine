@@ -112,6 +112,21 @@ try {
   await page.locator("#btnToggleWorldTools").click();
   await page.waitForFunction(() => localStorage.getItem("infinity_dock_open") !== "false");
 
+  const lawBaseline = await page.evaluate(() => window.getRealityLawState?.());
+  if (!lawBaseline || !Array.isArray(lawBaseline.processes)) throw new Error("Runtime law bridge is not exposed");
+
+  const lawBuildBefore = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
+  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
+  const lawDisabled = await page.evaluate(() => window.getRealityLawState?.());
+  if (lawDisabled?.processes?.includes("gravity") || lawDisabled?.processes?.includes("density")) {
+    throw new Error("Disabling Density Gravity did not reach the runtime process state");
+  }
+  const lawBuildAfter = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
+  if (Number(lawBuildAfter?.laws?.penalty ?? -1) <= Number(lawBuildBefore?.laws?.penalty ?? -1)) {
+    throw new Error("Build decision did not change after disabling a governing law");
+  }
+  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
+
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
