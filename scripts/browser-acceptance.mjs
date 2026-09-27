@@ -35,6 +35,7 @@ try {
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
   await page.waitForFunction(() => typeof window.infinityBuildZoneCost === "function");
+  await page.waitForFunction(() => typeof window.infinityBuildZoneCost === "function");
 
   // Workspace v4 regression: legacy float state must not restore two
   // overlapping sidebars over the viewport.
