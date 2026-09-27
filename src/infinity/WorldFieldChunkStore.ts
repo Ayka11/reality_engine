@@ -27,12 +27,14 @@ export type WorldFieldChunkStoreStats = {
  * persisted simulation snapshot. This keeps streaming concerns separate from
  * field physics while guaranteeing one canonical world-coordinate address.
  */
+export type WorldFieldChunkEvictionHandler = (chunk: WorldFieldChunk) => void
+
 export class WorldFieldChunkStore {
   private readonly chunks = new Map<string, WorldFieldChunk>()
   private tick = 0
   private evictions = 0
 
-  constructor(private readonly capacity = 128) {}
+  constructor(private readonly capacity = 128, private readonly onEvict?: WorldFieldChunkEvictionHandler) {}
 
   static key(coord: WorldFieldChunkCoord): string {
     return `${coord.cx},${coord.cy},${coord.cz}`
@@ -90,6 +92,7 @@ export class WorldFieldChunkStore {
       }
       if (!candidate) break
       this.chunks.delete(candidate.key)
+      this.onEvict?.(candidate)
       this.evictions++
     }
   }
