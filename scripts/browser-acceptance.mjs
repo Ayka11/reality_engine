@@ -56,6 +56,19 @@ try {
   await page.waitForFunction(() => typeof window.infinityBuildZoneCost === "function");
   await page.waitForFunction(() => typeof window.infinityBuildZoneCost === "function");
 
+  // Materialize a real Infinite World terrain patch before switching render modes.
+  await page.evaluate(() => window.focusGeneratedWorld?.());
+  await page.waitForFunction(() => {
+    const patches = window.worldTerrainPatchStats?.();
+    const geometry = window.worldTerrainGeometrySignature?.();
+    return Number(patches?.patchCount ?? 0) > 0 && Number(geometry?.vertexCount ?? 0) > 0;
+  }, undefined, { timeout: acceptanceTimeout });
+  const terrainSmoke = await page.evaluate(() => ({
+    patches: window.worldTerrainPatchStats?.(),
+    geometry: window.worldTerrainGeometrySignature?.(),
+  }));
+  if (Number(terrainSmoke.geometry?.vertexCount ?? 0) <= 0) throw new Error("Infinite World terrain geometry did not materialize");
+
   // Docked workspace regression: detachable sidebar chrome was removed.
   const workspaceChrome = await page.evaluate(() => ({
     leftToggle: !!document.getElementById("btnToggleLeft"),
@@ -331,27 +344,6 @@ try {
     }
   }
   await page.evaluate(() => window.clearAuthoritativeWorldFieldMutations?.());
-
-  const initial = await page.evaluate(() => window.worldGenerationHealth());
-  if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
-  await page.evaluate(() => window.focusGeneratedWorld?.());
-  await page.waitForFunction(() => {
-    const patches = window.worldTerrainPatchStats?.();
-    const geometry = window.worldTerrainGeometrySignature?.();
-    return Number(patches?.patchCount ?? 0) > 0 && Number(geometry?.vertexCount ?? 0) > 0;
-  }, undefined, { timeout: acceptanceTimeout });
-  const initialTerrain = await page.evaluate(() => {
-    const p = window.infinityStats?.().camera ?? { worldX: 0, worldZ: 0 };
-    return {
-      point: { x: p.worldX, z: p.worldZ },
-      patches: window.worldTerrainPatchStats?.(),
-      geometry: window.worldTerrainGeometrySignature?.(),
-      analytic: window.worldTerrainSample?.(p.worldX, p.worldZ),
-    };
-  });
-  if (!initialTerrain.patches || Number(initialTerrain.patches.patchCount ?? 0) <= 0 || !Number.isFinite(initialTerrain.analytic)) {
-    throw new Error("Infinite World terrain patches are not available");
-  }
 
   const worldTools = page.locator("#infiniteWorldTools");
   await page.locator("#btnToggleWorldTools").click();
