@@ -156,6 +156,30 @@ try {
     throw new Error("Preset did not reach ChunkSimWorker with expected runtime state");
   }
 
+  // Runtime provenance acceptance: prove the causal chain is captured by the same trace.
+  await page.evaluate(() => window.resetRuntimeProvenance?.());
+  await page.evaluate(() => window.applyChunkPreset("town"));
+  await page.waitForFunction(() => !!window.lastChunkPreset, undefined, { timeout: acceptanceTimeout });
+  await page.evaluate(() => window.applyChunkBrush("Forest", 64, 64, 32, 5, 1));
+  await page.waitForFunction(() => !!window.lastChunkBrush, undefined, { timeout: acceptanceTimeout });
+  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
+  const provenanceDecision = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
+  if (!provenanceDecision?.laws) throw new Error("Build decision did not expose law state for provenance");
+  const provenance = await page.evaluate(() => window.getRuntimeProvenance?.());
+  const provenanceValidation = await page.evaluate(() => window.validateRuntimeProvenance?.());
+  const provenanceStages = (provenance?.events ?? []).map((event) => event.stage);
+  const expectedStages = ["preset", "brush", "law", "build-decision"];
+  if (expectedStages.some((stage, index) => provenanceStages[index] !== stage)) {
+    throw new Error(`Runtime provenance order invalid: ${JSON.stringify(provenanceStages)}`);
+  }
+  if (provenance?.events?.some((event, index) => index > 0 && event.parentId !== provenance.events[index - 1].id)) {
+    throw new Error("Runtime provenance parent chain is broken");
+  }
+  if (!provenanceValidation?.valid) {
+    throw new Error(`Runtime provenance validation failed: ${JSON.stringify(provenanceValidation?.errors)}`);
+  }
+
+
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
