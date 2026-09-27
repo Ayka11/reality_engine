@@ -103,6 +103,17 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     return
   }
 
+  if (cmd === 'presetApplied') {
+    win['lastChunkPreset'] = {
+      name: e.data.name,
+      tick: e.data.tick,
+      stats: e.data.stats,
+      processes: e.data.processes,
+      params: e.data.params
+    }
+    return
+  }
+
   if (cmd === 'frame' && ab) {
     chunkTick    = wTick    ?? chunkTick
     chunkEvCount = wEv      ?? chunkEvCount
