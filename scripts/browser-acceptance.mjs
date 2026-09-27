@@ -20,9 +20,12 @@ const waitForServer = async () => {
 };
 
 const browser = await chromium.launch({ headless: true });
+const acceptanceTimeout = 30000;
 try {
   await waitForServer();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  page.on("console", (msg) => console.log(`[browser:${msg.type()}] ${msg.text()}`));
+  page.on("pageerror", (error) => console.log(`[browser:pageerror] ${error.stack || error.message}`));
   await page.addInitScript(() => {
     localStorage.clear();
   });
@@ -64,7 +67,7 @@ try {
     return Number(a?.stats?.objects ?? 0) !== Number(b?.stats?.objects ?? 0)
       || Number(a?.stats?.loadedChunks ?? 0) !== Number(b?.stats?.loadedChunks ?? 0)
       || !!a?.lastGeneration;
-  }, before);
+  }, before, { timeout: acceptanceTimeout });
 
   const afterQuick = await page.evaluate(() => window.worldGenerationHealth());
   if (!afterQuick?.lastGeneration) throw new Error("Quick Generate did not record a generation result");
@@ -72,6 +75,8 @@ try {
   // Test Compose World in a fresh browser page so this acceptance path is independent
   // from Quick Generate and cannot fail merely because two large generations are stacked.
   const composePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  composePage.on("console", (msg) => console.log(`[composer:${msg.type()}] ${msg.text()}`));
+  composePage.on("pageerror", (error) => console.log(`[composer:pageerror] ${error.stack || error.message}`));
   await composePage.addInitScript(() => {
     localStorage.clear();
   });
@@ -88,11 +93,11 @@ try {
   }
   for (let i = 0; i < 4; i++) await composePage.locator("#cnext").click();
   console.log("[acceptance] Generate Reality");
-  await composePage.getByRole("button", { name: /Generate Reality/ }).click();
+  await composePage.getByRole("button", { name: /Generate Reality/ }).click({ timeout: acceptanceTimeout });
   await composePage.waitForFunction(() => {
     const health = window.worldGenerationHealth();
     return !!health?.lastGeneration;
-  }, undefined, { timeout: 90000 });
+  }, undefined, { timeout: acceptanceTimeout });
 
   const afterCompose = await composePage.evaluate(() => window.worldGenerationHealth());
   if (!afterCompose?.lastGeneration) throw new Error("Compose World did not produce a generation record");
