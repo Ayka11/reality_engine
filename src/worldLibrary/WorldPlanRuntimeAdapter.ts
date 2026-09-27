@@ -25,8 +25,13 @@ export function applyWorldGenerationPlan(
   const applied: string[] = [];
   const skipped: string[] = [];
   const radius = 110;
+  // Keep semantic enrichment bounded: one hydrology network and one settlement
+  // generator are enough to establish the biome without stacking expensive
+  // route/road generation repeatedly in a single browser frame.
+  let riverGenerated = false;
+  let settlementGenerated = false;
 
-  for (const item of plan.elements.slice(0, 18)) {
+  for (const item of plan.elements.slice(0, 14)) {
     const entry = item.entry;
     const visual = visualKindToWorldObject(entry);
 
@@ -39,17 +44,27 @@ export function applyWorldGenerationPlan(
     const density = Math.max(0.012, Math.min(0.09, 0.018 + item.score * 0.045));
 
     if (entry.id === 'water.river') {
-      world.generateRiverNetwork(x, z, Math.round(150 + item.score * 120), 31);
+      if (riverGenerated) {
+        skipped.push(entry.id);
+        continue;
+      }
+      world.generateRiverNetwork(x, z, Math.round(150 + item.score * 120), 25);
+      riverGenerated = true;
       applied.push(entry.id);
       continue;
     }
 
     if (entry.category === 'settlement') {
-      if (entry.id === 'settlement.city' || entry.id === 'settlement.megacity') {
-        world.generateCityPlan(x, z, entry.id === 'settlement.megacity' ? 240 : 180, 31);
-      } else {
-        world.generateSettlementV2(x, z, entry.id === 'settlement.town' ? 150 : 110, entry.id === 'settlement.town' ? 5 : 4);
+      if (settlementGenerated) {
+        skipped.push(entry.id);
+        continue;
       }
+      if (entry.id === 'settlement.city' || entry.id === 'settlement.megacity') {
+        world.generateCityPlan(x, z, entry.id === 'settlement.megacity' ? 220 : 170, 25);
+      } else {
+        world.generateSettlementV2(x, z, entry.id === 'settlement.town' ? 140 : 105, entry.id === 'settlement.town' ? 4 : 3);
+      }
+      settlementGenerated = true;
       applied.push(entry.id);
       continue;
     }
