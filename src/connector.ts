@@ -69,6 +69,20 @@ const localChunks = new Map<number, Float32Array>()
 let chunkTick = 0, chunkEvCount = 0, workerBusy = false
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
+
+function installChunkWorldFieldProvider() {
+  const world = getInfiniteWorld()
+  if (!world || chunkWorldFieldProvider) return Boolean(world)
+  const fallback = new GeneratorFieldProvider(world.generator)
+  chunkWorldFieldProvider = new ChunkWorldFieldProvider(
+    localChunks,
+    () => worldViewContract.snapshot(),
+    fallback,
+  )
+  world.fieldSampler.setProvider(chunkWorldFieldProvider)
+  return true
+}
+win['installChunkWorldFieldProvider'] = installChunkWorldFieldProvider
 const realityLawBridge = new RealityLawBridge()
 win['realityLawBridge'] = realityLawBridge
 win['getRuntimeProvenance'] = () => runtimeProvenance.getTrace()
@@ -152,16 +166,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     fieldRenderer.applyWorkerFrame(ab as ArrayBuffer)
 
     // Make the same worker voxel state available to the world-space FieldSampler.
-    const world = getInfiniteWorld()
-    if (world && !chunkWorldFieldProvider) {
-      const fallback = new GeneratorFieldProvider(world.generator)
-      chunkWorldFieldProvider = new ChunkWorldFieldProvider(
-        localChunks,
-        () => worldViewContract.snapshot(),
-        fallback,
-      )
-      world.fieldSampler.setProvider(chunkWorldFieldProvider)
-    }
+    installChunkWorldFieldProvider()
     const el = document.getElementById('chunkStats')
     if (el && stats) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`
   }
