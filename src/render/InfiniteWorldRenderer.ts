@@ -787,7 +787,6 @@ export class InfiniteWorldRenderer {
     group.position.set(-this.worldAnchor.x, -this.worldAnchor.y, -this.worldAnchor.z)
     this.waterMeshes.set(`${chunk.cx},${chunk.cy},${chunk.cz}`, water)
 
-    void sample
     return group
   }
 
