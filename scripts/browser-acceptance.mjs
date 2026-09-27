@@ -141,6 +141,21 @@ try {
     throw new Error("Smart Brush did not reach ChunkSimWorker with expected runtime parameters");
   }
 
+  await page.waitForFunction(() => typeof window.applyChunkPreset === "function");
+  await page.evaluate(() => { window.lastChunkPreset = null; window.applyChunkPreset("town"); });
+  await page.waitForFunction(() => !!window.lastChunkPreset, undefined, { timeout: acceptanceTimeout });
+  const presetAck = await page.evaluate(() => window.lastChunkPreset);
+  if (
+    presetAck?.name !== "town" ||
+    !Array.isArray(presetAck?.processes) ||
+    !presetAck.processes.includes("thermo") ||
+    !presetAck.processes.includes("bio") ||
+    !presetAck.processes.includes("info") ||
+    !presetAck?.stats
+  ) {
+    throw new Error("Preset did not reach ChunkSimWorker with expected runtime state");
+  }
+
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
