@@ -361,12 +361,8 @@ try {
     window.paintChunkAt?.(64, 64, 32, 0, 17.25, 2, 'add');
     window.tickChunkWorker?.(true, 1);
   });
-  await page.waitForFunction(
-    (baseline) => window.loadWorldFieldChunkSnapshot?.(0, 0, 0)?.checksum !== baseline,
-    postRestoreEvictionPersistence.beforeChecksum,
-    { timeout: 15000 },
-  );
-  const postRestoreEvictionResult = await page.evaluate(() => {
+  await page.waitForTimeout(250);
+  const postRestoreEvictionResult = await page.evaluate((baseline) => {
     for (let i = 0; i < 140; i++) window.populateWorldFieldChunk?.(1000 + i, 0, 0, 'acceptance-seed');
     const store = window.worldFieldChunkStoreState?.();
     const after = window.loadWorldFieldChunkSnapshot?.(0, 0, 0);
@@ -374,12 +370,13 @@ try {
       afterChecksum: after?.checksum ?? null,
       evicted: !store?.keys?.includes('0,0,0'),
       valid: !!after && window.validateWorldFieldChunkSnapshot?.(after),
+      changed: after?.checksum !== baseline,
     };
-  });
+  }, postRestoreEvictionPersistence.beforeChecksum);
   if (
     !postRestoreEvictionResult.evicted ||
     !postRestoreEvictionResult.valid ||
-    postRestoreEvictionResult.afterChecksum === postRestoreEvictionPersistence.beforeChecksum
+    !postRestoreEvictionResult.changed
   ) {
     throw new Error('Post-restore LRU eviction did not persist the subsequent mutation');
   }
