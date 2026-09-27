@@ -227,6 +227,9 @@ try {
     };
   }, mutationAnchor);
   await page.evaluate((anchor) => {
+    const c = window.getWorldViewContract?.();
+    window.setWorldViewCenter?.(anchor.x, c?.center.y ?? anchor.y, anchor.z);
+    window.setWorldViewSliceY?.(anchor.y);
     const z = Math.max(0, Math.min(63, Math.round(anchor.y)));
     window.applyChunkBrush?.("Forest", 64, 64, z, 8, 1);
   }, mutationAnchor);
