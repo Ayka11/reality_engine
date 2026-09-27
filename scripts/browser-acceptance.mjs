@@ -100,11 +100,12 @@ try {
     ];
     const deltas = axes.map(([axis, point, a, b]) => {
       const p = point;
-      const sa = window.sampleWorldFieldChunk?.(p[0], p[1], p[2], 'acceptance-seed');
-      const sb = window.sampleWorldFieldChunk?.(p[0], p[1], p[2], 'acceptance-seed');
-      return { axis, same: JSON.stringify(sa) === JSON.stringify(sb), a, b };
+      const left = window.sampleWorldFieldChunkAt?.(a[0], a[1], a[2], p[0], p[1], p[2], 'acceptance-seed');
+      const right = window.sampleWorldFieldChunkAt?.(b[0], b[1], b[2], p[0], p[1], p[2], 'acceptance-seed');
+      const maxDelta = Math.max(...['energy','density','information','entropy','temperature','biology','material'].map((k) => Math.abs(left[k] - right[k])));
+      return { axis, maxDelta };
     });
-    return { deltas, allSame: deltas.every((v) => v.same) };
+    return { deltas, allSame: deltas.every((v) => v.maxDelta === 0) };
   });
   if (!boundaryContract?.allSame) throw new Error('Cross-chunk boundary continuity contract failed');
 
