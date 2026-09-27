@@ -101,6 +101,17 @@ try {
   }
   await page.locator("#tab3d").click();
 
+  const fieldBridge = await page.evaluate(() => ({
+    sample: window.worldFieldSample?.(0, 0, 0),
+    window: window.worldFieldViewWindow?.(4, 4),
+  }));
+  if (!fieldBridge.sample || !Number.isFinite(fieldBridge.sample.x) || !Number.isFinite(fieldBridge.sample.z)) {
+    throw new Error("World-space scientific field sampling bridge is unavailable");
+  }
+  if (!fieldBridge.window || fieldBridge.window.samples?.length !== 16) {
+    throw new Error("World-space field view window did not return the requested sample lattice");
+  }
+
   const worldView = await page.evaluate(() => window.getWorldViewContract?.());
   if (!worldView || worldView.version !== 1 || !worldView.center || !Number.isFinite(worldView.center.x) || !Number.isFinite(worldView.center.z)) {
     throw new Error("Unified World View spatial contract is not exposed or has invalid coordinates");
