@@ -270,6 +270,29 @@ try {
       throw new Error(`Composer world/2D slice mismatch for ${key}`);
     }
   }
+  // Global overlays are keyed: disabling a law removes its contribution rather than accumulating an inverse.
+  const lawBase = await page.evaluate(() => {
+    const c = window.getWorldViewContract?.();
+    return window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z);
+  });
+  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.7, 0.2));
+  const lawOn = await page.evaluate(() => {
+    const c = window.getWorldViewContract?.();
+    return window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z);
+  });
+  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.7, 0.2));
+  const lawOff = await page.evaluate(() => {
+    const c = window.getWorldViewContract?.();
+    return window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z);
+  });
+  if (!lawOn || !lawOff || Math.abs((lawOn.energy ?? 0) - (lawBase?.energy ?? 0)) < 1e-6) {
+    throw new Error("Law overlay did not affect the authoritative field");
+  }
+  for (const key of ["energy","density","information","entropy","temperature","biology","material"]) {
+    if (Math.abs((lawOff[key] ?? 0) - (lawBase?.[key] ?? 0)) > 1e-9) {
+      throw new Error("Disabled law overlay was not removed for " + key);
+    }
+  }
   await page.evaluate(() => window.clearAuthoritativeWorldFieldMutations?.());
 
   const initial = await page.evaluate(() => window.worldGenerationHealth());
