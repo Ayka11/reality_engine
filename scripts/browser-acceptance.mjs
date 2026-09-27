@@ -239,6 +239,16 @@ try {
     throw new Error('Worker persistence restore round-trip integrity failed');
   }
 
+  const restoredStoreState = await page.evaluate(() => window.worldFieldChunkStoreState?.());
+  const restoredStoreKey = '0,0,0';
+  if (
+    !restoredStoreState ||
+    !restoredStoreState.keys.includes(restoredStoreKey) ||
+    restoredStoreState.loaded < 1
+  ) {
+    throw new Error('World chunk store was not rehydrated after persistence restore');
+  }
+
   const concurrentRestore = await page.evaluate(() => {
     const first = window.restoreWorldFieldChunkSnapshot?.(0, 0, 0);
     const second = window.restoreWorldFieldChunkSnapshot?.(0, 0, 0);
