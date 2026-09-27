@@ -253,6 +253,17 @@ export function bootstrapInfiniteWorld() {
     const placed = (window as any).worldLibraryPlace?.(id)
     return placed ? { ...placed, generated: [...generated, id], plan } : { id, generated: false, reason: 'No runtime visual mapping is registered for this element', plan }
   }
+  // First-run showcase: never leave the user in an empty green plain.
+  // The terrain remains deterministic; this only seeds a small functional scene once.
+  if (!localStorage.getItem('reality_engine_showcase_v2') && world.getRuntimeStats().objects === 0) {
+    world.scatter('tree', -70, -70, 70, 70, 0.028)
+    world.scatter('rock', -55, -55, 55, 55, 0.012)
+    world.populateCivilization('civilization.agricultural', 'village', 100)
+    localStorage.setItem('reality_engine_showcase_v2', '1')
+    world.focusGeneratedRegion(1.45)
+    world.render(0)
+  }
+
   ;(window as any).worldRuleGraph = worldRuleGraph
   ;(window as any).worldRuleStats = () => worldRuleGraph.stats()
   ;(window as any).worldRuleRelated = (id: string) => worldRuleGraph.related(id)
