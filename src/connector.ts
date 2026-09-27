@@ -37,6 +37,7 @@ import { runtimeProvenance }                      from './infinity/RuntimeProven
 import { worldViewContract } from './infinity/WorldViewContract'
 import { FunctionFieldProvider } from './infinity/ScientificFieldProvider'
 import { MutableWorldFieldProvider } from './infinity/MutableWorldFieldProvider'
+import type { ScientificFieldSample } from './infinity/FieldSampler'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
 const win = window as unknown as Record<string, unknown>
@@ -98,7 +99,7 @@ function workerToWorld(x: number, y: number, z: number) {
 }
 function brushMutation(name: string, strength = 1) {
   const s = Number.isFinite(strength) ? strength : 1
-  const table: Record<string, Partial<import('./infinity/FieldSampler').ScientificFieldSample>> = {
+  const table: Record<string, Partial<ScientificFieldSample>> = {
     Volcano: { energy: 800, temperature: 500, density: 0.6, entropy: 0.2 },
     Forest: { energy: 180, density: 0.4, information: 160, biology: 0.7 },
     Ocean: { energy: 60, density: 0.6, temperature: 60, information: 40 },
@@ -263,7 +264,7 @@ win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4
 win['applyChunkPreset']   = (name: string) => {
   chunkWorker.postMessage({ cmd: 'preset', data: { name } })
   installChunkWorldFieldProvider()
-  const presetScale: Record<string, Partial<Record<import('./infinity/FieldSampler').ScientificFieldSample extends infer T ? keyof T : never, number>>> = {
+  const presetScale: Record<string, Partial<Record<ScientificFieldSample extends infer T ? keyof T : never, number>>> = {
     town: { energy: 1.08, density: 1.12, information: 1.15, biology: 1.05 },
     burst: { energy: 1.15, temperature: 1.08 },
     life: { biology: 1.25, information: 1.08 },
@@ -374,7 +375,7 @@ sceneComposer.setOnApply((cmds) => {
   for (const cmd of cmds) {
     chunkWorker.postMessage({ cmd: 'paint', data: cmd })
     const p = workerToWorld(cmd.x, cmd.y, cmd.z)
-    const fieldByIndex: Record<number, keyof import('./infinity/FieldSampler').ScientificFieldSample> = { 0:'energy', 1:'density', 2:'information', 3:'entropy', 4:'temperature', 10:'biology', 11:'material' }
+    const fieldByIndex: Record<number, keyof ScientificFieldSample> = { 0:'energy', 1:'density', 2:'information', 3:'entropy', 4:'temperature', 10:'biology', 11:'material' }
     const field = fieldByIndex[cmd.f]
     if (field) authoritativeWorldFieldProvider?.applyRadial('composer', p.x, p.y, p.z, cmd.r ?? 0.75, { [field]: cmd.v }, { mode: cmd.mode ?? 'add', field: cmd.f })
   }
