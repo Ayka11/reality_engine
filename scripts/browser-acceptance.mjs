@@ -245,12 +245,12 @@ try {
   }));
   const composerAfter = await page.evaluate(() => {
     const c = window.getWorldViewContract?.();
-    const view = window.worldFieldViewWindow?.(1, 1, c.sliceY);
+    const view = window.worldFieldViewWindow?.(3, 3, c.sliceY);
     return {
       state: window.getAuthoritativeWorldFieldState?.(),
       world: window.sampleAuthoritativeWorldField?.(c.center.x, c.sliceY, c.center.z),
       volume: window.getField3DWorldSample?.(c.center.x, c.sliceY, c.center.z),
-      slice: view?.samples?.[0] ?? null,
+      slice: view?.samples?.[4] ?? null,
     };
   });
   if (!composerAfter.state || composerAfter.state.mutationCount < 1) {
