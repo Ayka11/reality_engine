@@ -112,8 +112,12 @@ try {
   await page.locator("#btnToggleWorldTools").click();
   await page.waitForFunction(() => localStorage.getItem("infinity_dock_open") !== "false");
 
+  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
   const lawBaseline = await page.evaluate(() => window.getRealityLawState?.());
   if (!lawBaseline || !Array.isArray(lawBaseline.processes)) throw new Error("Runtime law bridge is not exposed");
+  if (!lawBaseline.processes.includes("gravity") || !lawBaseline.processes.includes("density")) {
+    throw new Error("Density Gravity could not be established as active before the build-law test");
+  }
 
   const lawBuildBefore = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
