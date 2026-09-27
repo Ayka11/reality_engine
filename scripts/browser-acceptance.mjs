@@ -150,6 +150,14 @@ try {
   if (!restoredSeams.validBefore || restoredSeams.savedChunks.some(n => n < 1) || restoredSeams.restored.some(v => !v) || restoredSeams.results.some(v => !v.paired || v.samples !== 64 || v.maxDelta > 1e-6)) {
     throw new Error('Cross-chunk seam validation failed after persistence eviction/restore');
   }
+  await page.waitForFunction(() => {
+    const state = window.worldFieldRestoreState?.();
+    return !!state && state.expected > 0 && state.acknowledged === state.expected;
+  }, null, { timeout: 15000 });
+  const restoreAck = await page.evaluate(() => window.worldFieldRestoreState?.());
+  if (!restoreAck || restoreAck.acknowledged !== restoreAck.expected || restoreAck.keys.length !== restoreAck.expected) {
+    throw new Error('Worker restore acknowledgement contract failed');
+  }
 
 
   // Docked workspace regression: detachable sidebar chrome was removed.
