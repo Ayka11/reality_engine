@@ -289,12 +289,25 @@ try {
     return !!state && state.complete === true;
   }, null, { timeout: 15000 });
   const concurrentRestoreState = await page.evaluate(() => window.worldFieldRestoreState?.());
+  const mutationAfterRestore = await page.evaluate(() => {
+    const state = window.worldFieldRestoreState?.();
+    window.paintChunkAt?.(64, 64, 32, 0, 1, 1, 'add');
+    return {
+      completeBeforeMutation: state?.complete === true,
+      restoreId: state?.restoreId ?? 0,
+    };
+  });
+  if (!mutationAfterRestore.completeBeforeMutation) {
+    throw new Error('Mutation was allowed before restore barrier completion');
+  }
+
   if (
     !concurrentRestoreState ||
     concurrentRestoreState.restoreId < 2 ||
     concurrentRestoreState.staleAcks < 1 ||
     concurrentRestoreState.staleFrames < 1 ||
     concurrentRestoreState.restoreFrameRestoreId !== concurrentRestoreState.restoreId ||
+    concurrentRestoreState.workerBarrierComplete !== true ||
     concurrentRestoreState.acknowledged !== concurrentRestoreState.expected ||
     concurrentRestoreState.duplicateAcks !== 0 ||
     concurrentRestoreState.unexpectedAcks !== 0 ||
