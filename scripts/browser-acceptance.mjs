@@ -67,16 +67,31 @@ try {
   const afterQuick = await page.evaluate(() => window.worldGenerationHealth());
   if (!afterQuick?.lastGeneration) throw new Error("Quick Generate did not record a generation result");
 
-  await page.getByRole("button", { name: /Compose World/ }).click();
-  await page.waitForSelector("#comp.open");
-  if (!(await page.locator("#comp").innerText()).includes("Integral Reality Composer")) {
+  // Test Compose World in a fresh browser page so this acceptance path is independent
+  // from Quick Generate and cannot fail merely because two large generations are stacked.
+  const composePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await composePage.addInitScript(() => {
+    localStorage.clear();
+  });
+  await composePage.goto(`http://127.0.0.1:${port}`, { waitUntil: "networkidle" });
+  await composePage.waitForSelector("#c3d");
+  await composePage.waitForFunction(() => typeof window.worldGenerationHealth === "function");
+
+  await composePage.getByRole("button", { name: /Compose World/ }).click();
+  await composePage.waitForSelector("#comp.open");
+  if (!(await composePage.locator("#comp").innerText()).includes("Integral Reality Composer")) {
     throw new Error("Compose World opened without the Integral Reality Composer");
   }
-  for (let i = 0; i < 4; i++) await page.locator("#cnext").click();
-  await page.getByRole("button", { name: /Generate Reality/ }).click();
-  await page.waitForTimeout(250);
-  const afterCompose = await page.evaluate(() => window.worldGenerationHealth());
+  for (let i = 0; i < 4; i++) await composePage.locator("#cnext").click();
+  await composePage.getByRole("button", { name: /Generate Reality/ }).click();
+  await composePage.waitForFunction(() => {
+    const health = window.worldGenerationHealth();
+    return !!health?.lastGeneration;
+  }, { timeout: 90000 });
+
+  const afterCompose = await composePage.evaluate(() => window.worldGenerationHealth());
   if (!afterCompose?.lastGeneration) throw new Error("Compose World did not produce a generation record");
+  await composePage.close();
 
   await page.screenshot({ path: "artifacts/browser-acceptance.png", fullPage: true });
   console.log(JSON.stringify({
