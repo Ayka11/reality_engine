@@ -98,6 +98,17 @@ let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
 let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
 const worldFieldChunkStore = new WorldFieldChunkStore(128, (chunk) => {
+  // Never overwrite the persisted restore source from an eviction callback while
+  // that exact world chunk is being rehydrated. The worker may still be emitting
+  // partial restore frames at this point.
+  if (
+    worldFieldRestoreCoord &&
+    chunk.coord.cx === worldFieldRestoreCoord.cx &&
+    chunk.coord.cy === worldFieldRestoreCoord.cy &&
+    chunk.coord.cz === worldFieldRestoreCoord.cz
+  ) {
+    return
+  }
   const provider = chunk.provider as { snapshotWorkerChunks?: () => { key: number; data: number[] }[]; snapshotValues?: () => number[] }
   const workerChunks = provider.snapshotWorkerChunks?.() ?? []
   if (workerChunks.length) worldFieldChunkPersistence.saveWorkerChunks(chunk.coord, chunk.seed, workerChunks, worldViewContract.snapshot(), chunk.version)
