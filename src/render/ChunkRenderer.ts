@@ -284,7 +284,50 @@ export class ChunkRenderer {
 
   // ── Rebuild: field / height mode ─────────────────────────────────────────────
 
+  private _rebuildWorldFieldLayer() {
+    this.layerMesh.visible = true
+    for (const m of this.matMeshes.values()) m.visible = false
+    const fi = LAYER_FIELD[this.layer] ?? F.E
+    const mx = LAYER_MAX[this.layer] ?? 1000
+    const pal = LAYER_PALS[this.layer] ?? LAYER_PALS[0]
+    const view = this.worldViewBinding
+    const provider = this.worldFieldProvider
+    if (!view || !provider) return false
+
+    // Downsample the authoritative world field for interactive volumetric rendering.
+    // The full scientific field remains available through FieldSampler/2D; the 3D
+    // projection uses a bounded voxel budget so it cannot monopolize the main thread.
+    const stride = 2
+    const maxInst = this.MAX_INST
+    let cnt = 0
+    for (let lz = 0; lz < GRID_D && cnt < maxInst; lz += stride) {
+      for (let ly = 0; ly < GRID_H && cnt < maxInst; ly += stride) {
+        for (let lx = 0; lx < GRID_W && cnt < maxInst; lx += stride) {
+          const x = view.center.x + (lx - GRID_W / 2)
+          const y = view.center.y + (lz - GRID_D / 2)
+          const z = view.center.z + (ly - GRID_H / 2)
+          const sample = provider.sample(x, y, z)
+          const v = [sample.energy, sample.density, sample.information, sample.entropy, sample.temperature, sample.biology][fi] ?? sample.energy
+          if (v < this.VOXEL_THRESH) continue
+          const t = Math.min(v / mx, 1)
+          const [r, g, b] = lerpPalette(pal, t)
+          this.dummy.position.set(x, y, z)
+          this.dummy.updateMatrix()
+          this.layerMesh.setMatrixAt(cnt, this.dummy.matrix)
+          this.col3.setRGB(r / 255, g / 255, b / 255)
+          this.layerMesh.setColorAt!(cnt, this.col3)
+          cnt++
+        }
+      }
+    }
+    this.layerMesh.count = cnt
+    this.layerMesh.instanceMatrix.needsUpdate = true
+    if (this.layerMesh.instanceColor) this.layerMesh.instanceColor.needsUpdate = true
+    return true
+  }
+
   private _rebuildLayer() {
+    if (this.worldFieldProvider && this.worldViewBinding && this._rebuildWorldFieldLayer()) return
     this.layerMesh.visible = true
     for (const m of this.matMeshes.values()) m.visible = false
 
