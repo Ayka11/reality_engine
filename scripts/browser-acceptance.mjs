@@ -201,8 +201,6 @@ try {
       throw new Error(`World and volumetric field mismatch for ${key}`);
     }
   }
-  await page.locator("#tab3d").click();
-
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
