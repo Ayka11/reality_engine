@@ -1,4 +1,5 @@
 import { InfiniteWorldRenderer } from './render/InfiniteWorldRenderer'
+import { runtimeProvenance } from './infinity/RuntimeProvenance'
 import { worldResourceEconomy } from './worldLibrary/WorldResourceEconomy'
 import { settlementGrowthModel } from './worldLibrary/SettlementGrowthModel'
 import { civilizationRuntime } from './worldLibrary/CivilizationRuntime'
@@ -378,8 +379,18 @@ export function bootstrapInfiniteWorld() {
     world.analyzeHydrology(x, z, radius, samples)
   ;(window as any).infinityAnalyzeWatershed = (x: number, z: number, radius = 220, samples = 41) =>
     world.analyzeWatershed(x, z, radius, samples)
-  ;(window as any).infinityBuildZoneCost = (x: number, z: number) =>
-    world.buildZoneCost(x, z)
+  ;(window as any).infinityBuildZoneCost = (x: number, z: number) => {
+    const result = world.buildZoneCost(x, z)
+    runtimeProvenance.record('build-decision', {
+      x, z,
+      cost: result.cost,
+      components: result.components,
+      buildability: result.buildability,
+      laws: result.laws,
+      source: 'WorldDecisionLayer',
+    })
+    return result
+  }
   ;(window as any).infinityBuildAnalyticalOverlay = (x: number, z: number, radius = 160, samples = 33, mode: 'suitability' | 'flood' | 'slope' = 'suitability') =>
     world.buildAnalyticalOverlay(x, z, radius, samples, mode)
   ;(window as any).infinitySetAnalyticalOverlay = (mode: 'suitability' | 'flood' | 'slope' | null) =>
@@ -812,6 +823,21 @@ export function bootstrapInfiniteWorld() {
       stats,
       generatedAt: new Date().toISOString(),
     }
+    runtimeProvenance.record('world-state', {
+      source: 'infinityApplyComposer',
+      seed: newSeed,
+      config: { phi, fields, complexity, spacetime },
+      environment: worldEnvironment,
+      generationPlan: {
+        biome: generationPlan.biome?.id ?? null,
+        plannedElements: generationPlan.elements.length,
+        appliedElements: appliedPlan.applied.length,
+        skippedElements: appliedPlan.skipped.length,
+      },
+      stats,
+      objects: stats.objects,
+      loadedChunks: stats.loadedChunks,
+    })
     return {
       ...stats.world,
       objects: stats.objects,
