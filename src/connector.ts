@@ -413,6 +413,7 @@ win['publishWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x
 win['validateWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z') => worldFieldBoundaryExchange.validatePair({ cx, cy, cz }, axis)
 win['populateWorldFieldChunk'] = (cx: number, cy: number, cz: number, seed?: string) => populateWorldFieldChunk(cx, cy, cz, seed)
 win['sampleWorldFieldChunk'] = (x: number, y: number, z: number, seed?: string) => { const c = worldFieldChunkCoord(x, y, z); return populateWorldFieldChunk(c.cx, c.cy, c.cz, seed).provider.sample(x, y, z) }
+win['sampleWorldFieldChunkAt'] = (cx: number, cy: number, cz: number, x: number, y: number, z: number, seed?: string) => populateWorldFieldChunk(cx, cy, cz, seed).provider.sample(x, y, z)
 win['worldFieldChunkCoord'] = (x: number, y: number, z: number) => worldFieldChunkCoord(x, y, z)
 win['getAuthoritativeWorldFieldState'] = () => authoritativeWorldFieldProvider?.getState() ?? null
 win['sampleAuthoritativeWorldField'] = (x: number, y: number, z: number) => {
