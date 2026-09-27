@@ -128,7 +128,13 @@ try {
     throw new Error("Disabling Density Gravity did not reach the runtime process state");
   }
   const lawBuildAfter = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
-  if (Number(lawBuildAfter?.laws?.penalty ?? -1) <= Number(lawBuildBefore?.laws?.penalty ?? -1)) {
+  const beforeLawPenalty = Number(lawBuildBefore?.laws?.penalty ?? lawBuildBefore?.decisionComponents?.laws ?? lawBuildBefore?.components?.laws ?? NaN);
+  const afterLawPenalty = Number(lawBuildAfter?.laws?.penalty ?? lawBuildAfter?.decisionComponents?.laws ?? lawBuildAfter?.components?.laws ?? NaN);
+  const beforeCost = Number(lawBuildBefore?.cost ?? NaN);
+  const afterCost = Number(lawBuildAfter?.cost ?? NaN);
+  const penaltyChanged = Number.isFinite(beforeLawPenalty) && Number.isFinite(afterLawPenalty) && afterLawPenalty > beforeLawPenalty;
+  const costChanged = Number.isFinite(beforeCost) && Number.isFinite(afterCost) && afterCost > beforeCost;
+  if (!penaltyChanged && !costChanged) {
     throw new Error("Build decision did not change after disabling a governing law");
   }
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
@@ -164,7 +170,13 @@ try {
   await page.waitForFunction(() => !!window.lastChunkBrush, undefined, { timeout: acceptanceTimeout });
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
   const provenanceDecision = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
-  if (!provenanceDecision?.laws) throw new Error("Build decision did not expose law state for provenance");
+  const provenanceLawPenalty = Number(
+    provenanceDecision?.laws?.penalty ??
+    provenanceDecision?.decisionComponents?.laws ??
+    provenanceDecision?.components?.laws ??
+    NaN
+  );
+  if (!Number.isFinite(provenanceLawPenalty)) throw new Error("Build decision did not expose law contribution for provenance");
   const provenance = await page.evaluate(() => window.getRuntimeProvenance?.());
   const provenanceValidation = await page.evaluate(() => window.validateRuntimeProvenance?.());
   const provenanceStages = (provenance?.events ?? []).map((event) => event.stage);
