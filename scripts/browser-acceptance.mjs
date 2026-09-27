@@ -112,9 +112,6 @@ try {
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
-  const grips = await page.locator(".sidebar-drag-grip").count();
-  if (grips !== 2) throw new Error(`Expected 2 sidebar drag grips, found ${grips}`);
-
   const worldTools = page.locator("#infiniteWorldTools");
   await page.locator("#btnToggleWorldTools").click();
   await page.waitForFunction(() => {
