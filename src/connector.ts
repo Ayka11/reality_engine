@@ -32,6 +32,7 @@ import { NodeLawEditor }                          from './ui/NodeLawEditor'
 import { sceneComposer }                          from './modes/cinema/SceneComposer'
 import { RealityLawBridge }                       from './laws/RealityLawBridge'
 import { runtimeProvenance }                      from './infinity/RuntimeProvenance'
+import { worldViewContract } from './infinity/WorldViewContract'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
 const win = window as unknown as Record<string, unknown>
@@ -246,7 +247,11 @@ win['setShowParticles'] = (v: boolean) => {
   else getInfiniteWorld()?.setShowParticles(v)
 }
 win['setChunkLayer'] = (l: number) => { fieldRenderer.setLayer(Math.max(-1, Math.min(5, l))) }
-win['renderField3D'] = () => fieldRenderer.render()
+win['renderField3D'] = () => {
+  fieldRenderer.setWorldViewBinding(worldViewContract.snapshot())
+  fieldRenderer.render()
+}
+win['getField3DWorldBinding'] = () => fieldRenderer.getWorldViewBinding()
 win['fieldSetCameraPreset'] = (p: string) => {
   const map: Record<string, 'orbit'|'top'|'iso'|'street'|'fly'> = { orbit:'orbit', top:'top', iso:'iso', street:'street', fly:'fly' }
   fieldRenderer.setCameraPreset(map[p] ?? 'orbit')
