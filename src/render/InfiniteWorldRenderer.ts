@@ -18,6 +18,7 @@ import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
 import { createPhysicsInteractionRecord, type PhysicsInteractionType } from '../infinity/PhysicsInteractionRecord'
 import { PhysicsInteractionLog } from '../infinity/PhysicsInteractionLog'
 import { RuntimeDiagnostics } from '../infinity/RuntimeDiagnostics'
+import { worldViewContract } from '../infinity/WorldViewContract'
 import { createExperimentProtocol } from '../infinity/ExperimentProtocol'
 import { ExperimentRunner, type ExperimentSnapshot } from '../infinity/ExperimentRunner'
 import { compareExperiments, type ExperimentComparison } from '../infinity/ExperimentComparison'
@@ -2418,6 +2419,8 @@ export class InfiniteWorldRenderer {
     }
 
     this.maybeRecenter()
+    worldViewContract.setCenter(this.worldPosition.x, this.worldPosition.y, this.worldPosition.z)
+    worldViewContract.setSimulationTime(performance.now() / 1000)
 
     const chunkStart = performance.now()
     this.syncChunks()
