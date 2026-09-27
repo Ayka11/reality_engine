@@ -72,6 +72,7 @@ try {
   if (!(await page.locator("#comp").innerText()).includes("Integral Reality Composer")) {
     throw new Error("Compose World opened without the Integral Reality Composer");
   }
+  for (let i = 0; i < 4; i++) await page.locator("#cnext").click();
   await page.getByRole("button", { name: /Generate Reality/ }).click();
   await page.waitForTimeout(250);
   const afterCompose = await page.evaluate(() => window.worldGenerationHealth());
