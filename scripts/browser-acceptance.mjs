@@ -295,6 +295,14 @@ try {
     return !!state && state.complete === true;
   }, null, { timeout: 15000 });
   const concurrentRestoreState = await page.evaluate(() => window.worldFieldRestoreState?.());
+  if (
+    (concurrentRestoreState?.staleAcks ?? 0) < 1 ||
+    (concurrentRestoreState?.staleFrames ?? 0) < 1 ||
+    concurrentRestoreState?.complete !== true ||
+    concurrentRestoreState?.workerBarrierComplete !== true
+  ) {
+    throw new Error('Overlapping restore did not isolate stale worker events from the latest restore');
+  }
   const mutationQueuedDuringRestore = await page.evaluate(() => {
     const started = window.restoreWorldFieldChunkSnapshot?.(0, 0, 0);
     window.paintChunkAt?.(64, 64, 32, 0, 1, 1, 'add');
