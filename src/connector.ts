@@ -98,7 +98,9 @@ function installChunkWorldFieldProvider() {
 }
 function workerToWorld(x: number, y: number, z: number) {
   const view = worldViewContract.snapshot()
-  return { x: view.center.x + (x - 64), y: z, z: view.center.z + (y - 64) }
+  // Worker coordinates are local chunk indices; only X/Z are spatial offsets.
+  // Global Y is the shared World View slice, not the worker's local voxel Z index.
+  return { x: view.center.x + (x - 64), y: view.sliceY, z: view.center.z + (y - 64) }
 }
 function brushMutation(name: string, strength = 1) {
   const s = Number.isFinite(strength) ? strength : 1
