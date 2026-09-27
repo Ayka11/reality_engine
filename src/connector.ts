@@ -36,6 +36,7 @@ import { RealityLawBridge }                       from './laws/RealityLawBridge'
 import { runtimeProvenance }                      from './infinity/RuntimeProvenance'
 import { worldViewContract } from './infinity/WorldViewContract'
 import { FunctionFieldProvider } from './infinity/ScientificFieldProvider'
+import { MutableWorldFieldProvider } from './infinity/MutableWorldFieldProvider'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
 const win = window as unknown as Record<string, unknown>
@@ -70,19 +71,50 @@ const localChunks = new Map<number, Float32Array>()
 let chunkTick = 0, chunkEvCount = 0, workerBusy = false
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
+let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
 
 function installChunkWorldFieldProvider() {
   const world = getInfiniteWorld()
-  if (!world || chunkWorldFieldProvider) return Boolean(world)
-  const fallback = new GeneratorFieldProvider(world.generator)
-  chunkWorldFieldProvider = new ChunkWorldFieldProvider(
-    localChunks,
-    () => worldViewContract.snapshot(),
-    fallback,
-  )
-  world.fieldSampler.setProvider(chunkWorldFieldProvider)
-  fieldRenderer.setWorldFieldProvider(chunkWorldFieldProvider)
+  if (!world) return false
+  if (!authoritativeWorldFieldProvider) {
+    const fallback = new GeneratorFieldProvider(world.generator)
+    authoritativeWorldFieldProvider = new MutableWorldFieldProvider(fallback)
+    world.fieldSampler.setProvider(authoritativeWorldFieldProvider)
+  }
+  if (!chunkWorldFieldProvider) {
+    const fallback = new GeneratorFieldProvider(world.generator)
+    chunkWorldFieldProvider = new ChunkWorldFieldProvider(
+      localChunks,
+      () => worldViewContract.snapshot(),
+      fallback,
+    )
+  }
+  fieldRenderer.setWorldFieldProvider(authoritativeWorldFieldProvider)
   return true
+}
+function workerToWorld(x: number, y: number, z: number) {
+  const view = worldViewContract.snapshot()
+  return { x: view.center.x + (x - 64), y: z, z: view.center.z + (y - 64) }
+}
+function brushMutation(name: string, strength = 1) {
+  const s = Number.isFinite(strength) ? strength : 1
+  const table: Record<string, Partial<import('./infinity/FieldSampler').ScientificFieldSample>> = {
+    Volcano: { energy: 800, temperature: 500, density: 0.6, entropy: 0.2 },
+    Forest: { energy: 180, density: 0.4, information: 160, biology: 0.7 },
+    Ocean: { energy: 60, density: 0.6, temperature: 60, information: 40 },
+    Crystal: { energy: 700, information: 280, entropy: -0.08 },
+    Storm: { energy: 400, entropy: 0.12, temperature: 150 },
+    'Life Cluster': { energy: 280, density: 0.45, information: 200, biology: 0.65, temperature: 110, entropy: -0.1 },
+    Radiation: { entropy: 0.3, information: -50 },
+    'Civ Seed': { energy: 380, density: 0.5, information: 400, biology: 0.8, entropy: -0.15, temperature: 100 },
+    'Gravity Well': { energy: 450, density: 0.8 },
+    'Entropy Sink': { entropy: -0.4, temperature: -200 },
+    'Quantum Core': { information: 350, biology: 0.6, energy: 200 },
+    'MetaLaw Node': { energy: 400, information: 300, density: 0.5 },
+    'Force Barrier': { density: 0.9, energy: 150 },
+  }
+  const delta = Object.fromEntries(Object.entries(table[name] ?? { energy: 100 }).map(([k,v]) => [k, (v as number) * s]))
+  return delta
 }
 win['installChunkWorldFieldProvider'] = installChunkWorldFieldProvider
 const realityLawBridge = new RealityLawBridge()
@@ -100,6 +132,13 @@ function syncRuntimeLawsToWorker() {
 win['setRealityLaw'] = (name: string, active: boolean, fitness = 0.5, strength = 0.1) => {
   realityLawBridge.setUiLaw(name, active, fitness, strength)
   const state = syncRuntimeLawsToWorker()
+  installChunkWorldFieldProvider()
+  authoritativeWorldFieldProvider?.setGlobal('law', {}, {
+    energy: state.DIFF * 10,
+    entropy: state.ENT,
+    information: state.INFO * 0.1,
+    biology: state.BIO * 0.1,
+  }, { name, active, fitness, strength, processes: state.processes })
   runtimeProvenance.record('law', {
     name,
     active,
@@ -214,10 +253,24 @@ win['chunkWorkerCompile'] = chunkWorkerCompile
 win['nodeLawEditor']      = nodeEditor
 win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4, strength = 1) => {
   chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength } })
+  installChunkWorldFieldProvider()
+  const p = workerToWorld(x, y, z)
+  const mutation = authoritativeWorldFieldProvider?.applyRadial('brush', p.x, p.y, p.z, radius, brushMutation(name, strength), { name, worker: { x, y, z }, strength })
+  if (mutation) runtimeProvenance.record('brush', { ...mutation, source: 'AuthoritativeWorldField' })
+  return authoritativeWorldFieldProvider?.getState() ?? null
 }
 
 win['applyChunkPreset']   = (name: string) => {
   chunkWorker.postMessage({ cmd: 'preset', data: { name } })
+  installChunkWorldFieldProvider()
+  const presetScale: Record<string, Partial<Record<import('./infinity/FieldSampler').ScientificFieldSample extends infer T ? keyof T : never, number>>> = {
+    town: { energy: 1.08, density: 1.12, information: 1.15, biology: 1.05 },
+    burst: { energy: 1.15, temperature: 1.08 },
+    life: { biology: 1.25, information: 1.08 },
+    proto: { energy: 1.02, density: 1.02 },
+  }
+  const mutation = authoritativeWorldFieldProvider?.setGlobal('preset', presetScale[name] ?? {}, {}, { name })
+  if (mutation) runtimeProvenance.record('preset', { ...mutation, source: 'AuthoritativeWorldField' })
   if (name === 'town') {
     DIFF_cw = 0.12; ENT_cw = 0.00015; INFO_cw = 0.45; BIO_cw = 0.32
     chunkWorker.postMessage({ cmd: 'setParams', data: { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw, procs: ['thermo', 'bio', 'info'] } })
@@ -301,15 +354,31 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
   const h = parent.clientHeight
   getInfiniteWorld()?.resize(Math.max(1, w), Math.max(1, h))
 }
+win['getAuthoritativeWorldFieldState'] = () => authoritativeWorldFieldProvider?.getState() ?? null
+win['sampleAuthoritativeWorldField'] = (x: number, y: number, z: number) => {
+  installChunkWorldFieldProvider()
+  return authoritativeWorldFieldProvider?.sample(x, y, z) ?? null
+}
+win['clearAuthoritativeWorldFieldMutations'] = () => {
+  authoritativeWorldFieldProvider?.clear()
+  return authoritativeWorldFieldProvider?.getState() ?? null
+}
+
 win['paintChunkAt'] = (x: number, y: number, z: number, f: number, v: number, r: number, mode?: string) => {
   chunkWorker.postMessage({ cmd: 'paint', data: { x, y, z, f, v, r, mode: mode ?? 'add' } })
 }
 
 // Scene Composer APIs
 sceneComposer.setOnApply((cmds) => {
+  installChunkWorldFieldProvider()
   for (const cmd of cmds) {
     chunkWorker.postMessage({ cmd: 'paint', data: cmd })
+    const p = workerToWorld(cmd.x, cmd.y, cmd.z)
+    const fieldByIndex: Record<number, keyof import('./infinity/FieldSampler').ScientificFieldSample> = { 0:'energy', 1:'density', 2:'information', 3:'entropy', 4:'temperature', 10:'biology', 11:'material' }
+    const field = fieldByIndex[cmd.f]
+    if (field) authoritativeWorldFieldProvider?.applyRadial('composer', p.x, p.y, p.z, cmd.r ?? 0.75, { [field]: cmd.v }, { mode: cmd.mode ?? 'add', field: cmd.f })
   }
+  runtimeProvenance.record('world-state', { source: 'SceneComposer', commandCount: cmds.length, fieldState: authoritativeWorldFieldProvider?.getState() ?? null })
 })
 win['addSceneComp'] = (id: string)  => { sceneComposer.addComponent(id) }
 win['removeComp']   = (id: string)  => { sceneComposer.removeComponent(id) }
