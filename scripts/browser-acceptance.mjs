@@ -27,7 +27,8 @@ try {
     localStorage.clear();
   });
 
-  await page.goto(`http://127.0.0.1:${port}`, { waitUntil: "networkidle" });
+  console.log("[acceptance] opening primary page");
+  await page.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
 
@@ -56,6 +57,7 @@ try {
   await page.waitForFunction(() => localStorage.getItem("infinity_dock_open") !== "false");
 
   const before = await page.evaluate(() => window.worldGenerationHealth());
+  console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
   await page.waitForFunction((b) => {
     const a = window.worldGenerationHealth();
@@ -73,16 +75,19 @@ try {
   await composePage.addInitScript(() => {
     localStorage.clear();
   });
-  await composePage.goto(`http://127.0.0.1:${port}`, { waitUntil: "networkidle" });
+  console.log("[acceptance] opening composer page");
+  await composePage.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await composePage.waitForSelector("#c3d");
   await composePage.waitForFunction(() => typeof window.worldGenerationHealth === "function");
 
+  console.log("[acceptance] Compose World");
   await composePage.getByRole("button", { name: /Compose World/ }).click();
   await composePage.waitForSelector("#comp.open");
   if (!(await composePage.locator("#comp").innerText()).includes("Integral Reality Composer")) {
     throw new Error("Compose World opened without the Integral Reality Composer");
   }
   for (let i = 0; i < 4; i++) await composePage.locator("#cnext").click();
+  console.log("[acceptance] Generate Reality");
   await composePage.getByRole("button", { name: /Generate Reality/ }).click();
   await composePage.waitForFunction(() => {
     const health = window.worldGenerationHealth();
