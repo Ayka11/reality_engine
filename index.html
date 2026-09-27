@@ -958,6 +958,7 @@ function _drawMultiSlice(){
 }
 window.setWorldField2DLinked=(enabled)=>{worldField2DLinked=Boolean(enabled);worldField2DCache=null;drawGrid()}
 window.getWorldField2DLinked=()=>worldField2DLinked
+window.getWorldField2DState=()=>({linked:worldField2DLinked,view:worldField2DCache?.view??null,sampleCount:worldField2DCache?.samples?.length??0})
 
 function draw2D(){_drawFlat();}
 
