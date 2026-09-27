@@ -101,6 +101,14 @@ try {
   }
   await page.locator("#tab3d").click();
 
+  const worldView = await page.evaluate(() => window.getWorldViewContract?.());
+  if (!worldView || worldView.version !== 1 || !worldView.center || !Number.isFinite(worldView.center.x) || !Number.isFinite(worldView.center.z)) {
+    throw new Error("Unified World View spatial contract is not exposed or has invalid coordinates");
+  }
+  if (worldView.renderMode !== "3d") {
+    throw new Error("World View contract did not follow the final 3D mode selection");
+  }
+
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
