@@ -1,5 +1,6 @@
 import { InfiniteWorldRenderer } from './render/InfiniteWorldRenderer'
 import { runtimeProvenance } from './infinity/RuntimeProvenance'
+import { worldViewContract } from './infinity/WorldViewContract'
 import { worldResourceEconomy } from './worldLibrary/WorldResourceEconomy'
 import { settlementGrowthModel } from './worldLibrary/SettlementGrowthModel'
 import { civilizationRuntime } from './worldLibrary/CivilizationRuntime'
@@ -633,6 +634,7 @@ export function bootstrapInfiniteWorld() {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
     world.reseed(newSeed)
+    worldViewContract.setSeed(newSeed)
 
     const x = 16
     const z = 16
