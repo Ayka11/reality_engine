@@ -56,6 +56,7 @@ export type ZoneCostResult = {
   cost: number
   components: Record<string, number>
   buildability: BuildabilityResult
+  laws: { activeProcesses: string[]; penalty: number }
 }
 
 export class WorldDecisionLayer {
@@ -64,6 +65,7 @@ export class WorldDecisionLayer {
   constructor(
     readonly sampler: FieldSampler,
     readonly weights: DecisionWeights = DEFAULT_DECISION_WEIGHTS,
+    readonly lawProvider?: () => { processes?: string[] } | null,
   ) {}
 
   private clamp01(value: number) {
@@ -119,6 +121,14 @@ export class WorldDecisionLayer {
   buildZoneCost(x: number, z: number, distanceFromHub = 0): ZoneCostResult {
     const buildability = this.analyzeBuildability(x, z)
     const w = this.weights
+    const activeProcesses = this.lawProvider?.()?.processes ?? []
+    const missing = (name: string) => activeProcesses.includes(name) ? 0 : 1
+    const lawPenalty = Math.min(0.55,
+      missing('gravity') * 0.20 +
+      missing('density') * 0.12 +
+      missing('energy') * 0.08 +
+      (activeProcesses.includes('erosion') ? 0.05 : 0),
+    )
 
     const components = {
       slope: (1 - buildability.components.slope) * w.slope,
@@ -129,12 +139,14 @@ export class WorldDecisionLayer {
       biology: (1 - buildability.components.biology) * w.biology,
       information: (1 - buildability.components.information) * w.information,
       distance: this.clamp01(distanceFromHub / 500) * w.distance,
+      laws: lawPenalty,
     }
 
     return {
       cost: this.clamp01(Object.values(components).reduce((sum, value) => sum + value, 0)),
       components,
       buildability,
+      laws: { activeProcesses, penalty: lawPenalty },
     }
   }
 
@@ -146,6 +158,8 @@ export class WorldDecisionLayer {
     const water = current.waterDepth > 0.25 ? 1 : 0
     const flood = current.waterDepth > 0 ? Math.min(1, current.waterDepth / 8) : 0
     const scientific = 1 - current.score
+    const activeProcesses = this.lawProvider?.()?.processes ?? []
+    const lawPenalty = (activeProcesses.includes('gravity') ? 0 : 0.8) + (activeProcesses.includes('density') ? 0 : 0.5)
 
     const profiles: Record<RouteProfile, { distance:number; slope:number; water:number; flood:number; scientific:number }> = {
       balanced: { distance: 1, slope: 18, water: 6, flood: 12, scientific: 8 },
@@ -161,6 +175,7 @@ export class WorldDecisionLayer {
       water: water * w.water,
       flood: flood * w.flood,
       scientific: scientific * w.scientific,
+      laws: lawPenalty,
     }
     return {
       cost: Object.values(components).reduce((sum, value) => sum + value, 0),
