@@ -135,7 +135,7 @@ export class InfiniteWorldRenderer {
     this.worldAssetRuntime = new WorldAssetRuntime(this.scene)
     this.generator = new WorldGenerator(seed)
     this.fieldSampler = new FieldSampler(this.generator)
-    this.decisionLayer = new WorldDecisionLayer(this.fieldSampler)
+    this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, undefined, () => (window as any).getRealityLawState?.() ?? null)
     this.storageKey = `reality-engine-world:${seed}:objects`
     this.persistence = new WorldPersistence(seed)
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9, maxNewPerUpdate: 1 })
@@ -348,7 +348,7 @@ export class InfiniteWorldRenderer {
 
     this.generator = new WorldGenerator(newSeed)
     this.fieldSampler.setGenerator(this.generator)
-    this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights)
+    this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights, () => (window as any).getRealityLawState?.() ?? null)
     this.persistence = new WorldPersistence(newSeed)
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9, maxNewPerUpdate: 1 })
     this.history = new WorldEditHistory()
