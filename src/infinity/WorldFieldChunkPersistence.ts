@@ -72,6 +72,10 @@ export class WorldFieldChunkPersistence {
 
   validate(snapshot: WorldFieldChunkSnapshot): boolean {
     if (!snapshot || !Array.isArray(snapshot.values) || !snapshot.values.every(Number.isFinite)) return false
+    if (typeof snapshot.key !== 'string' || typeof snapshot.seed !== 'string') return false
+    if (!snapshot.coord || !Number.isInteger(snapshot.coord.cx) || !Number.isInteger(snapshot.coord.cy) || !Number.isInteger(snapshot.coord.cz)) return false
+    if (snapshot.key !== snapshot.coord.cx + ',' + snapshot.coord.cy + ',' + snapshot.coord.cz) return false
+    if (!Number.isFinite(snapshot.providerVersion) || !Number.isFinite(snapshot.savedAt)) return false
     if (typeof snapshot.checksum !== 'string' || snapshot.checksum.length !== 8) return false
     if (snapshot.schemaVersion === 1) return checksum(snapshot.values) === snapshot.checksum
     if (snapshot.schemaVersion === 2) {
@@ -83,7 +87,9 @@ export class WorldFieldChunkPersistence {
         if (!chunk.data.every(Number.isFinite)) return false
         keys.add(chunk.key)
       }
-      if (!Number.isFinite(snapshot.savedAt)) return false
+      if (!snapshot.workerView || typeof snapshot.workerView.seed !== 'string') return false
+      const center = snapshot.workerView.center
+      if (!center || !Number.isFinite(center.x) || !Number.isFinite(center.y) || !Number.isFinite(center.z) || !Number.isFinite(snapshot.workerView.sliceY)) return false
       const canonical = snapshot.workerChunks
         .map(chunk => ({ key: chunk.key, data: [...chunk.data] }))
         .sort((a, b) => a.key - b.key)
