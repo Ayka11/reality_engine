@@ -288,6 +288,36 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   const { cmd, tick: wTick, evCount: wEv, ab, stats, restoreId: frameRestoreId } = e.data
   workerBusy = false
 
+  if (cmd === 'restoreComplete') {
+    const result = e.data.data as { restoreId?: number; complete?: boolean } | undefined
+    if (result?.restoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
+    }
+    worldFieldRestoreState.workerBarrierComplete = result.complete === true
+    if (!result.complete) worldFieldRestoreState.unexpectedAcks++
+    if (result.complete) {
+      const restoreComplete =
+        worldFieldRestoreExpectedKeys.size > 0 &&
+        worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
+        worldFieldRestoreState.unexpectedAcks === 0 &&
+        worldFieldRestoreState.duplicateAcks === 0 &&
+        worldFieldRestoreState.staleAcks === 0 &&
+        worldFieldRestoreState.staleFrames === 0 &&
+        worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
+        worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
+        [...worldFieldRestoreExpectedKeys].every((key) => worldFieldRestoreFrameKeys.has(key))
+      if (restoreComplete) {
+        publishWorkerBoundarySnapshots()
+        if (worldFieldRestoreCoord) {
+          worldFieldChunkStore.delete(worldFieldRestoreCoord)
+          populateWorldFieldChunk(worldFieldRestoreCoord.cx, worldFieldRestoreCoord.cy, worldFieldRestoreCoord.cz, worldFieldRestoreSeed)
+        }
+      }
+    }
+    return
+  }
+
   if (cmd === 'restoreChunkAck') {
     const ack = e.data.data as { key?: number; restoreId?: number } | undefined
     const ackRestoreId = ack?.restoreId
@@ -586,6 +616,7 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   worldFieldRestoreState.staleFrames = 0
   worldFieldRestoreState.restoreFrameRestoreId = 0
   worldFieldRestoreState.restoreFrameKeys = []
+  worldFieldRestoreState.workerBarrierComplete = false
   worldFieldRestoreExpectedKeys.clear()
   worldFieldRestoreAcknowledgedKeys.clear()
   worldFieldRestoreFrameKeys.clear()
