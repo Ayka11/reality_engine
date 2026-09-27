@@ -857,10 +857,10 @@ The Hugging Face Space is configured with `app_file: dist/index.html`, so `dist/
 The render surfaces currently represent different simulation layers:
 
 - **3D Infinite World** — deterministic, streamed procedural terrain with unbounded X/Z coordinates, chunk streaming, LOD, persistence and world-rule integration. It is currently an infinite horizontal terrain surface, not an infinite 3D volume.
-- **3D Volumetric Field** — scientific field renderer over the current finite 128×128×64 field grid.
+- **3D Volumetric Field** — scientific field renderer bound to `WorldViewContract`; its authoritative source can be the Infinite World field sampler, while the finite 128×128×64 worker remains a fallback/material source.
 - **2D Multi-Slice** — world-space scientific projection driven by `WorldViewContract` + `FieldSampler.sampleViewWindow()`; legacy 36×28 simulation rendering remains available through `window.setWorldField2DLinked(false)`.
-- **Hybrid** — synchronized-layout preview combining the world-space 2D projection and Infinite World surface. Both now share the same world center, slice Y and deterministic seed through the spatial contract.
-- **3D Volumetric Field** — continues to consume the scientific chunk worker; its spatial convergence with the world-space contract is the next renderer phase.
+- **Hybrid** — synchronized preview combining the world-space 2D projection and Infinite World surface. Both share world center, slice Y and deterministic seed through the spatial contract.
+- **3D Volumetric Field** — spatially converged with the authoritative world field for the active view; full streamed volumetric simulation across unbounded world coordinates remains a future phase.
 
 ### World-space projection contract
 
