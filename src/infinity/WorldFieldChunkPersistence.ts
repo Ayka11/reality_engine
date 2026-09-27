@@ -7,6 +7,7 @@ export type WorldFieldChunkSnapshot = {
   seed: string
   providerVersion: number
   values: number[]
+  fieldLayout?: { fieldsPerCell: number; cellCount: number }
   checksum: string
   savedAt: number
 }
@@ -24,7 +25,7 @@ function checksum(values: number[]): string {
 export class WorldFieldChunkPersistence {
   private readonly snapshots = new Map<string, WorldFieldChunkSnapshot>()
 
-  save(coord: WorldFieldChunkCoord, seed: string, values: number[], providerVersion = 1): WorldFieldChunkSnapshot {
+  save(coord: WorldFieldChunkCoord, seed: string, values: number[], providerVersion = 1, fieldLayout?: { fieldsPerCell: number; cellCount: number }): WorldFieldChunkSnapshot {
     const snapshot: WorldFieldChunkSnapshot = {
       schemaVersion: 1,
       key: `${coord.cx},${coord.cy},${coord.cz}`,
@@ -32,6 +33,7 @@ export class WorldFieldChunkPersistence {
       seed,
       providerVersion,
       values: [...values],
+      fieldLayout,
       checksum: checksum(values),
       savedAt: Date.now(),
     }
