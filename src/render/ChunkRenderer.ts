@@ -627,5 +627,14 @@ export class ChunkRenderer {
     this.renderer.render(this.scene, this.camera)
   }
 
+  getSourceStats() {
+    return {
+      shadowChunks: this.shadowChunks.size,
+      instances: this.layerMesh.count,
+      pending: this.rebuildPending,
+      binding: this.getWorldViewBinding(),
+    }
+  }
+
   get instanceCount(): number { return this.layerMesh.count }
 }
