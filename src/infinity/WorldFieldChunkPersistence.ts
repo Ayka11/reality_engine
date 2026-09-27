@@ -43,6 +43,11 @@ export class WorldFieldChunkPersistence {
     return this.snapshots.get(`${coord.cx},${coord.cy},${coord.cz}`) ?? null
   }
 
+  loadValid(coord: WorldFieldChunkCoord): WorldFieldChunkSnapshot | null {
+    const snapshot = this.load(coord)
+    return snapshot && this.validate(snapshot) ? snapshot : null
+  }
+
   validate(snapshot: WorldFieldChunkSnapshot): boolean {
     return snapshot.schemaVersion === 1 && checksum(snapshot.values) === snapshot.checksum
   }
