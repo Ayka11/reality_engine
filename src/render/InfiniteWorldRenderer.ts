@@ -665,6 +665,17 @@ export class InfiniteWorldRenderer {
     return w.chunk
   }
 
+  /** Authoritative terrain surface used by both mesh generation and diagnostics. */
+  sampleTerrainHeight(x: number, z: number): number {
+    const baseHeight = this.generator.sampleHeight(x, z)
+    const field = (window as any).sampleAuthoritativeWorldField?.(x, baseHeight, z)
+    if (!field) return baseHeight
+    const densityLift = ((field.density ?? 0.5) - 0.5) * 8
+    const energyLift = Math.log1p(Math.max(0, field.energy ?? 0)) * 0.35
+    const entropyLift = (field.entropy ?? 0) * 2
+    return baseHeight + densityLift + energyLift + entropyLift
+  }
+
   private buildTerrainPatch(chunk: WorldChunk, lod = 1): THREE.Group {
     const group = new THREE.Group()
     const geometry = new THREE.BufferGeometry()
@@ -679,15 +690,7 @@ export class InfiniteWorldRenderer {
     const originX = chunk.cx * WORLD_CHUNK_SIZE
     const originZ = chunk.cz * WORLD_CHUNK_SIZE
 
-    const sampleTerrainHeight = (x: number, z: number) => {
-      const baseHeight = this.generator.sampleHeight(x, z)
-      const field = (window as any).sampleAuthoritativeWorldField?.(x, baseHeight, z)
-      if (!field) return baseHeight
-      const densityLift = ((field.density ?? 0.5) - 0.5) * 8
-      const energyLift = Math.log1p(Math.max(0, field.energy ?? 0)) * 0.35
-      const entropyLift = (field.entropy ?? 0) * 2
-      return baseHeight + densityLift + energyLift + entropyLift
-    }
+    const sampleTerrainHeight = (x: number, z: number) => this.sampleTerrainHeight(x, z)
 
     for (let z = 0; z < n; z++) {
       for (let x = 0; x < n; x++) {
@@ -788,6 +791,14 @@ export class InfiniteWorldRenderer {
     this.waterMeshes.set(`${chunk.cx},${chunk.cy},${chunk.cz}`, water)
 
     return group
+  }
+
+  getTerrainPatchStats() {
+    return {
+      patchCount: this.patches.size,
+      loadedChunkKeys: [...this.patches.keys()],
+      worldAnchor: this.worldAnchor.clone(),
+    }
   }
 
   private removeChunk(key: string) {
