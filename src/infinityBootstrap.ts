@@ -905,6 +905,7 @@ export function bootstrapInfiniteWorld() {
     height: world.sampleTerrainHeight(x, z),
   })
   ;(window as any).worldTerrainPatchStats = () => world.getTerrainPatchStats()
+  ;(window as any).worldTerrainGeometrySignature = () => world.getTerrainGeometrySignature()
   ;(window as any).worldRenderedTerrainSample = (x: number, z: number) => world.sampleRenderedTerrainHeight(x, z)
   ;(window as any).worldVerifyGeneration = (before: any = null) => {
     const after = (window as any).worldGenerationHealth()
