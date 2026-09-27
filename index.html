@@ -1905,7 +1905,6 @@ window.applyPreset=function(p){
 };
 
 // ── UI HELPERS ────────────────────────────────────────────────────────────
-let leftPanelOpen = true;
 let rightPanelOpen = true;
 let savedLw = 220;
 let savedRw = 240;
@@ -2350,8 +2349,6 @@ window.showShortcuts=showShortcuts;
   initResizer('rszR','rw');
 
   // Restore sidebar states if previously saved
-  const savedLeft = localStorage.getItem('reality_left_open');
-  if (savedLeft === 'false') toggleLeftPanel(false);
   const savedRight = localStorage.getItem('reality_right_open');
   if (savedRight === 'false') toggleRightPanel(false);
 })();
