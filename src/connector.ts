@@ -77,7 +77,17 @@ const nodeEditor    = new NodeLawEditor()
 const localChunks = new Map<number, Float32Array>()
 let chunkTick = 0, chunkEvCount = 0, workerBusy = false
 let worldFieldRestoreId = 0
-const worldFieldRestoreState = { restoreId: 0, expected: 0, acknowledged: 0, keys: [] as number[] }
+const worldFieldRestoreState = {
+  restoreId: 0,
+  expected: 0,
+  acknowledged: 0,
+  keys: [] as number[],
+  duplicateAcks: 0,
+  unexpectedAcks: 0,
+  staleAcks: 0,
+}
+const worldFieldRestoreExpectedKeys = new Set<number>()
+const worldFieldRestoreAcknowledgedKeys = new Set<number>()
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
 let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
@@ -261,10 +271,24 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   workerBusy = false
 
   if (cmd === 'restoreChunkAck') {
-    if (e.data.restoreId === worldFieldRestoreState.restoreId) {
-      worldFieldRestoreState.acknowledged++
-      worldFieldRestoreState.keys.push(e.data.key)
+    const ack = e.data.data as { key?: number; restoreId?: number } | undefined
+    const ackRestoreId = ack?.restoreId
+    const ackKey = ack?.key
+    if (ackRestoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
     }
+    if (!Number.isInteger(ackKey) || !worldFieldRestoreExpectedKeys.has(ackKey)) {
+      worldFieldRestoreState.unexpectedAcks++
+      return
+    }
+    if (worldFieldRestoreAcknowledgedKeys.has(ackKey)) {
+      worldFieldRestoreState.duplicateAcks++
+      return
+    }
+    worldFieldRestoreAcknowledgedKeys.add(ackKey)
+    worldFieldRestoreState.acknowledged = worldFieldRestoreAcknowledgedKeys.size
+    worldFieldRestoreState.keys = [...worldFieldRestoreAcknowledgedKeys]
     return
   }
 
@@ -455,7 +479,17 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
 }
 win['worldFieldChunkStoreStats'] = () => worldFieldChunkStore.stats()
 win['worldFieldChunkPersistenceStats'] = () => ({ snapshots: worldFieldChunkPersistence.size() })
-win['worldFieldRestoreState'] = () => ({ ...worldFieldRestoreState, keys: [...worldFieldRestoreState.keys] })
+win['worldFieldRestoreState'] = () => ({
+  ...worldFieldRestoreState,
+  expectedKeys: [...worldFieldRestoreExpectedKeys],
+  keys: [...worldFieldRestoreAcknowledgedKeys],
+  complete:
+    worldFieldRestoreExpectedKeys.size > 0 &&
+    worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
+    worldFieldRestoreState.unexpectedAcks === 0 &&
+    worldFieldRestoreState.duplicateAcks === 0 &&
+    worldFieldRestoreState.staleAcks === 0,
+})
 win['saveWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number, values: number[], seed?: string, providerVersion?: number) => worldFieldChunkPersistence.save(
   { cx, cy, cz },
   seed ?? worldViewContract.snapshot().seed,
@@ -493,7 +527,13 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   worldFieldRestoreState.expected = restoreChunks.length
   worldFieldRestoreState.acknowledged = 0
   worldFieldRestoreState.keys = []
+  worldFieldRestoreState.duplicateAcks = 0
+  worldFieldRestoreState.unexpectedAcks = 0
+  worldFieldRestoreState.staleAcks = 0
+  worldFieldRestoreExpectedKeys.clear()
+  worldFieldRestoreAcknowledgedKeys.clear()
   for (const chunk of restoreChunks) {
+    worldFieldRestoreExpectedKeys.add(chunk.key)
     localChunks.set(chunk.key, chunk.data)
     chunkWorker.postMessage({ cmd: 'restoreChunk', data: { key: chunk.key, data: Array.from(chunk.data), restoreId } })
   }
