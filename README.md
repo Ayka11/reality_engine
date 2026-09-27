@@ -850,3 +850,16 @@ npm run hf:cpu:check
 ```
 
 The Hugging Face Space is configured with `app_file: dist/index.html`, so `dist/` must be present in the Space repository when deploying the static edition.
+
+
+## Infinite World render architecture
+
+The render surfaces currently represent different simulation layers:
+
+- **3D Infinite World** — deterministic, streamed procedural terrain with unbounded X/Z coordinates, chunk streaming, LOD, persistence and world-rule integration. It is currently an infinite horizontal terrain surface, not an infinite 3D volume.
+- **3D Volumetric Field** — scientific field renderer over the current finite 128×128×64 field grid.
+- **2D Multi-Slice** — legacy 36×28 field/slice view retained for compatibility and diagnostics.
+- **Hybrid** — synchronized-layout preview combining the 2D and Infinite World surfaces; the next architecture phase will make both projections read the same authoritative world state.
+
+The planned convergence of these layers is documented in `docs/INFINITE_WORLD_ENGINE_PLAN.md`.
+
