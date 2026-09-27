@@ -1,0 +1,92 @@
+import { chromium } from "playwright";
+import { spawn } from "node:child_process";
+
+const port = 4173;
+const server = spawn("npm", ["run", "preview", "--", "--host", "127.0.0.1", "--port", String(port)], {
+  stdio: ["ignore", "pipe", "pipe"],
+  shell: process.platform === "win32",
+});
+
+const waitForServer = async () => {
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}`);
+      if (res.ok) return;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  throw new Error("Vite preview server did not become ready");
+};
+
+const browser = await chromium.launch({ headless: true });
+try {
+  await waitForServer();
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await page.addInitScript(() => {
+    localStorage.clear();
+  });
+
+  await page.goto(`http://127.0.0.1:${port}`, { waitUntil: "networkidle" });
+  await page.waitForSelector("#c3d");
+  await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
+
+  const initial = await page.evaluate(() => window.worldGenerationHealth());
+  if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
+
+  const grips = await page.locator(".sidebar-drag-grip").count();
+  if (grips !== 2) throw new Error(`Expected 2 sidebar drag grips, found ${grips}`);
+
+  const worldTools = page.locator("#infiniteWorldTools");
+  await page.getByRole("button", { name: /World Tools/ }).click();
+  await page.waitForFunction(() => {
+    const el = document.getElementById("infiniteWorldTools");
+    return !!el && getComputedStyle(el).display !== "none";
+  });
+
+  const worldToolsHeader = await page.locator("#infiniteWorldTools").innerText();
+  if (!worldToolsHeader.includes("WORLD TOOLS")) {
+    throw new Error("World Tools header/label is missing");
+  }
+
+  await page.locator("#dockCloseBtn").click();
+  await page.waitForFunction(() => localStorage.getItem("infinity_dock_open") === "false");
+
+  await page.getByRole("button", { name: /World Tools/ }).click();
+  await page.waitForFunction(() => localStorage.getItem("infinity_dock_open") !== "false");
+
+  const before = await page.evaluate(() => window.worldGenerationHealth());
+  await page.getByRole("button", { name: /Quick Generate/ }).click();
+  await page.waitForFunction((b) => {
+    const a = window.worldGenerationHealth();
+    return Number(a?.stats?.objects ?? 0) !== Number(b?.stats?.objects ?? 0)
+      || Number(a?.stats?.loadedChunks ?? 0) !== Number(b?.stats?.loadedChunks ?? 0)
+      || !!a?.lastGeneration;
+  }, before);
+
+  const afterQuick = await page.evaluate(() => window.worldGenerationHealth());
+  if (!afterQuick?.lastGeneration) throw new Error("Quick Generate did not record a generation result");
+
+  await page.getByRole("button", { name: /Compose World/ }).click();
+  await page.waitForSelector("#comp.open");
+  if (!(await page.locator("#comp").innerText()).includes("Integral Reality Composer")) {
+    throw new Error("Compose World opened without the Integral Reality Composer");
+  }
+  await page.getByRole("button", { name: /Generate Reality/ }).click();
+  await page.waitForTimeout(250);
+  const afterCompose = await page.evaluate(() => window.worldGenerationHealth());
+  if (!afterCompose?.lastGeneration) throw new Error("Compose World did not produce a generation record");
+
+  await page.screenshot({ path: "artifacts/browser-acceptance.png", fullPage: true });
+  console.log(JSON.stringify({
+    status: "PASS",
+    initialObjects: initial.stats?.objects ?? 0,
+    quickGenerateObjects: afterQuick.stats?.objects ?? 0,
+    composeObjects: afterCompose.stats?.objects ?? 0,
+    sidebarGrips: grips,
+    screenshot: "artifacts/browser-acceptance.png"
+  }));
+} finally {
+  await browser.close();
+  server.kill();
+}
