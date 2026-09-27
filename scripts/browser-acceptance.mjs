@@ -334,6 +334,7 @@ try {
 
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
+  await page.evaluate(() => window.focusGeneratedWorld?.());
   await page.waitForFunction(() => {
     const patches = window.worldTerrainPatchStats?.();
     const geometry = window.worldTerrainGeometrySignature?.();
