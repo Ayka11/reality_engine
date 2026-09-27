@@ -138,7 +138,7 @@ export class InfiniteWorldRenderer {
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler)
     this.storageKey = `reality-engine-world:${seed}:objects`
     this.persistence = new WorldPersistence(seed)
-    this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9 })
+    this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9, maxNewPerUpdate: 1 })
 
     this.camera.position.set(38, this.worldY, 62)
     this.controls = new OrbitControls(this.camera, canvas)
@@ -350,7 +350,7 @@ export class InfiniteWorldRenderer {
     this.fieldSampler.setGenerator(this.generator)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights)
     this.persistence = new WorldPersistence(newSeed)
-    this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9 })
+    this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9, maxNewPerUpdate: 1 })
     this.history = new WorldEditHistory()
 
     const groundY = this.generator.sampleHeight(16, 16)
@@ -827,8 +827,12 @@ export class InfiniteWorldRenderer {
 
   private syncChunks() {
     const center = this.chunkCenter()
-    if (this.lastCenter && center.cx === this.lastCenter.cx && center.cz === this.lastCenter.cz) return
+    const centerChanged = !this.lastCenter || center.cx !== this.lastCenter.cx || center.cz !== this.lastCenter.cz
     this.lastCenter = center
+    // ChunkManager is deliberately budgeted: keep asking for the current target
+    // every frame so remaining terrain chunks can materialize incrementally.
+    // This prevents one Composer/Quick Generate transaction from monopolizing
+    // the browser thread while preserving the same visible target set.
     const delta = this.chunks.update(center)
 
     for (const chunk of delta.loaded) {
@@ -840,7 +844,7 @@ export class InfiniteWorldRenderer {
       }
     }
     for (const key of delta.unloaded) this.removeChunk(key)
-    this.syncObjects()
+    if (centerChanged || delta.loaded.length > 0 || delta.unloaded.length > 0) this.syncObjects()
   }
 
   private makeObject(object: WorldObject): THREE.Group {
