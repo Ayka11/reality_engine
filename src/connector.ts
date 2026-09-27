@@ -98,7 +98,12 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data
   workerBusy = false
 
-  if (cmd === 'brushApplied') {\n    win['lastChunkBrush'] = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius }\n    return\n  }\n\n  if (cmd === 'frame' && ab) {
+  if (cmd === 'brushApplied') {
+    win['lastChunkBrush'] = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius }
+    return
+  }
+
+  if (cmd === 'frame' && ab) {
     chunkTick    = wTick    ?? chunkTick
     chunkEvCount = wEv      ?? chunkEvCount
     const NF_W = 14, CF = 512 * NF_W
