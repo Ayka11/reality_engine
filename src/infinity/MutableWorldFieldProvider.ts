@@ -40,7 +40,12 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   private globalScale: Partial<Record<keyof ScientificFieldSample, number>> = {}
   private globalDelta: Partial<ScientificFieldSample> = {}
 
-  constructor(private readonly base: ScientificFieldProvider) {}
+  constructor(private base: ScientificFieldProvider) {}
+
+  setBase(base: ScientificFieldProvider) {
+    this.base = base
+    this.versionCounter++
+  }
 
   sample(x: number, y: number, z: number): ScientificFieldSample {
     const base = this.base.sample(x, y, z)
