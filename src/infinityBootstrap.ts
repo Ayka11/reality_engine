@@ -384,9 +384,12 @@ export function bootstrapInfiniteWorld() {
     runtimeProvenance.record('build-decision', {
       x, z,
       cost: result.cost,
-      components: result.components,
-      buildability: result.buildability,
-      laws: result.laws,
+      decisionComponents: result.decisionComponents,
+      scientific: result.scientific,
+      slope: result.slope,
+      floodRisk: result.floodRisk,
+      slopeRisk: result.slopeRisk,
+      river: result.river,
       source: 'WorldDecisionLayer',
     })
     return result
