@@ -141,7 +141,7 @@ win['applyAuthoritativeComposerMutation'] = (config: { phi?: string; fields?: st
   const radiation: Record<string, number> = { Standard: 0.12, 'Slow Time': 0.08, 'Fractal Space': 0.2, 'High Radiation': 0.88, 'Meteor Zone': 0.64, 'Frozen Topology': 0.26 }
   const g = growth[complexity] ?? 1.3
   const r = radiation[spacetime] ?? 0.12
-  return authoritativeWorldFieldProvider?.setGlobal('composer', {
+  const mutation = authoritativeWorldFieldProvider?.setGlobal('composer', {
     density: fs.density,
     energy: fs.energy * (0.8 + 0.2 * (phiStrength[phi] ?? 0.5)),
     information: fs.information,
@@ -149,6 +149,8 @@ win['applyAuthoritativeComposerMutation'] = (config: { phi?: string; fields?: st
     temperature: 1 + (fs.energy - 1) * 0.15,
     biology: Math.max(0.25, Math.min(1.5, g * 0.6)),
   }, {}, { phi, fields, complexity, spacetime })
+  getInfiniteWorld()?.invalidateTerrainFromAuthoritativeField()
+  return mutation
 }
 const realityLawBridge = new RealityLawBridge()
 win['realityLawBridge'] = realityLawBridge
@@ -176,6 +178,7 @@ win['setRealityLaw'] = (name: string, active: boolean, fitness = 0.5, strength =
   } else {
     authoritativeWorldFieldProvider?.clearGlobal('law')
   }
+  getInfiniteWorld()?.invalidateTerrainFromAuthoritativeField()
   runtimeProvenance.record('law', {
     name,
     active,
