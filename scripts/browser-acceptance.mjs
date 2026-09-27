@@ -5,7 +5,20 @@ const port = 4173;
 const server = spawn("npm", ["run", "preview", "--", "--host", "127.0.0.1", "--port", String(port)], {
   stdio: ["ignore", "pipe", "pipe"],
   shell: process.platform === "win32",
+  detached: process.platform !== "win32",
 });
+
+function terminateServerTree() {
+  try {
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/pid", String(server.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+    } else if (server.pid) {
+      process.kill(-server.pid, "SIGTERM");
+    }
+  } catch {
+    try { server.kill("SIGTERM"); } catch {}
+  }
+}
 
 const waitForServer = async () => {
   const deadline = Date.now() + 30000;
@@ -24,6 +37,7 @@ const acceptanceTimeout = 30000;
 const overallTimeout = Number(process.env.ACCEPTANCE_OVERALL_TIMEOUT || 120000);
 const watchdog = setTimeout(() => {
   console.error("[acceptance] WATCHDOG TIMEOUT: acceptance exceeded overall timeout");
+  terminateServerTree();
   process.exit(124);
 }, overallTimeout);
 try {
@@ -311,5 +325,5 @@ try {
 } finally {
   clearTimeout(watchdog);
   await browser.close();
-  server.kill();
+  terminateServerTree();
 }
