@@ -331,7 +331,11 @@ try {
 
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
-  await page.waitForFunction(() => Number(window.worldTerrainPatchStats?.().patchCount ?? 0) > 0, undefined, { timeout: acceptanceTimeout });
+  await page.waitForFunction(() => {
+    const patches = window.worldTerrainPatchStats?.();
+    const geometry = window.worldTerrainGeometrySignature?.();
+    return Number(patches?.patchCount ?? 0) > 0 && Number(geometry?.vertexCount ?? 0) > 0;
+  }, undefined, { timeout: acceptanceTimeout });
   const initialTerrain = await page.evaluate(() => {
     const p = window.infinityStats?.().camera ?? { worldX: 0, worldZ: 0 };
     return {
