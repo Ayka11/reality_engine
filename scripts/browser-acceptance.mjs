@@ -346,13 +346,10 @@ try {
   });
   await new Promise((resolve) => setTimeout(resolve, 350));
   const postRestoreEvictionResult = await page.evaluate(() => {
-    const before = window.loadWorldFieldChunkSnapshot?.(0, 0, 0);
-    const beforeChecksum = before?.checksum ?? null;
     for (let i = 0; i < 140; i++) window.populateWorldFieldChunk?.(1000 + i, 0, 0, 'acceptance-seed');
     const store = window.worldFieldChunkStoreState?.();
     const after = window.loadWorldFieldChunkSnapshot?.(0, 0, 0);
     return {
-      beforeChecksum,
       afterChecksum: after?.checksum ?? null,
       evicted: !store?.keys?.includes('0,0,0'),
       valid: !!after && window.validateWorldFieldChunkSnapshot?.(after),
@@ -361,7 +358,7 @@ try {
   if (
     !postRestoreEvictionResult.evicted ||
     !postRestoreEvictionResult.valid ||
-    postRestoreEvictionResult.afterChecksum === postRestoreEvictionResult.beforeChecksum
+    postRestoreEvictionResult.afterChecksum === postRestoreEvictionPersistence.beforeChecksum
   ) {
     throw new Error('Post-restore LRU eviction did not persist the subsequent mutation');
   }
