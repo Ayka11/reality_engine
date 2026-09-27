@@ -35,7 +35,9 @@ function simStep(dt: number) {
     const D_ = chunk[base + F.D], I = chunk[base + F.I]
     lapE -= nc * E; lapT -= nc * T; lapD -= nc * D_; lapI -= nc * I
 
-    const newE = Math.max(0, Math.min(9999, E + DIFF * lapE * dt))
+    const newE = activeProcs.has('energy')
+      ? Math.max(0, Math.min(9999, E + DIFF * lapE * dt))
+      : E
     grid.set(x, y, z, F.E, newE)
 
     if (activeProcs.has('thermo')) {
@@ -45,7 +47,9 @@ function simStep(dt: number) {
     if (activeProcs.has('info'))
       grid.set(x, y, z, F.I, Math.max(0, Math.min(999, I + 0.04 * lapI * dt - chunk[base + F.S] * 0.2 * dt)))
 
-    const dS = (ENT + newE * 0.00004 + (chunk[base + F.T] || 0) * 0.000015) * dt * 60
+    const dS = activeProcs.has('entropy')
+      ? (ENT + newE * 0.00004 + (chunk[base + F.T] || 0) * 0.000015) * dt * 60
+      : 0
     const newS = Math.max(0, Math.min(1, chunk[base + F.S] + dS))
     grid.set(x, y, z, F.S, newS)
     grid.set(x, y, z, F.E, Math.max(0, newE * (1 - newS * 0.0002 * dt * 60)))
