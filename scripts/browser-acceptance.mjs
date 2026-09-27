@@ -87,6 +87,17 @@ try {
   });
   if (!chunkContract.boundariesOk) throw new Error('World field chunk coordinate boundary contract failed');
   if (chunkContract.loaded > chunkContract.capacity) throw new Error('World field chunk store exceeded bounded capacity');
+  const persistenceContract = await page.evaluate(() => {
+    const values = [0.125, 1.5, -0.25, 7.75, 0.001];
+    const saved = window.saveWorldFieldChunkSnapshot?.(4, -2, 7, values, 'acceptance-seed', 2);
+    const loaded = window.loadWorldFieldChunkSnapshot?.(4, -2, 7);
+    const valid = !!loaded && window.validateWorldFieldChunkSnapshot?.(loaded);
+    const same = JSON.stringify(loaded?.values) === JSON.stringify(values);
+    const tampered = loaded ? { ...loaded, values: [...loaded.values, 99] } : null;
+    const tamperRejected = tampered ? !window.validateWorldFieldChunkSnapshot?.(tampered) : false;
+    return { schemaVersion: saved?.schemaVersion, valid, same, tamperRejected };
+  });
+  if (persistenceContract.schemaVersion !== 1 || !persistenceContract.valid || !persistenceContract.same || !persistenceContract.tamperRejected) throw new Error('Streamed chunk persistence round-trip contract failed');
   if (chunkContract.evictions < 1) throw new Error('World field chunk store did not evict at capacity');
   if (!chunkContract.deterministic || !chunkContract.finite || !chunkContract.differentAddress) throw new Error('Deterministic streamed field chunk replay contract failed');
   const boundaryContract = await page.evaluate(() => {
