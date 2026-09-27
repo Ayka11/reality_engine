@@ -120,6 +120,28 @@ try {
     throw new Error("World View contract did not follow the final 3D mode selection");
   }
 
+  // 2D Multi-Slice must consume the same world-space contract as Infinite World.
+  await page.evaluate(() => {
+    window.setWorldViewCenter?.(321.5, 17, -148.25);
+    window.setWorldViewSliceY?.(17);
+  });
+  await page.locator("#tab2d").click();
+  await page.waitForFunction(() => window.getWorldField2DLinked?.() === true);
+  const world2d = await page.evaluate(() => ({
+    state: window.getWorldField2DState?.(),
+    contract: window.getWorldViewContract?.(),
+  }));
+  if (!world2d.state?.linked || world2d.state.sampleCount !== 96 * 72) {
+    throw new Error("2D Multi-Slice did not bind to the world-space field sampler");
+  }
+  const sameCenter =
+    Math.abs(world2d.state.view?.center?.x - world2d.contract?.center?.x) < 1e-6 &&
+    Math.abs(world2d.state.view?.center?.z - world2d.contract?.center?.z) < 1e-6;
+  if (!sameCenter || world2d.state.view?.sliceY !== world2d.contract?.sliceY || world2d.state.view?.seed !== world2d.contract?.seed) {
+    throw new Error("2D Multi-Slice and World View contract are using different spatial state");
+  }
+  await page.locator("#tab3d").click();
+
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
