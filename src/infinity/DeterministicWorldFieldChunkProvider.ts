@@ -39,10 +39,15 @@ export class DeterministicWorldFieldChunkProvider implements ScientificFieldProv
     const lx = Math.floor(x - this.origin.x)
     const ly = Math.floor(y - this.origin.y)
     const lz = Math.floor(z - this.origin.z)
-    if (lx < 0 || lx >= WORLD_FIELD_CHUNK_SIZE || ly < 0 || ly >= WORLD_FIELD_CHUNK_SIZE || lz < 0 || lz >= WORLD_FIELD_CHUNK_SIZE) return ZERO
+    if (lx < 0 || lx > WORLD_FIELD_CHUNK_SIZE || ly < 0 || ly > WORLD_FIELD_CHUNK_SIZE || lz < 0 || lz > WORLD_FIELD_CHUNK_SIZE) return ZERO
 
-    const local = (lx * 73856093) ^ (ly * 19349663) ^ (lz * 83492791)
-    const h = mix((this.seedHash ^ local) >>> 0)
+    // Field identity is derived from global coordinates, not local chunk coordinates.
+    // This guarantees identical values on shared faces of adjacent chunks.
+    const gx = Math.floor(x)
+    const gy = Math.floor(y)
+    const gz = Math.floor(z)
+    const globalHash = hashSeed(this.seedHash.toString(), { cx: gx, cy: gy, cz: gz })
+    const h = mix(globalHash)
     const n = h / 0xffffffff
     const wave = Math.sin((x + this.seedHash % 997) * 0.07) * Math.cos((z + this.seedHash % 991) * 0.05)
     const density = Math.max(0, Math.min(1, 0.5 + wave * 0.18 + (n - 0.5) * 0.08))
