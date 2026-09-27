@@ -156,6 +156,31 @@ try {
   }
   await page.locator("#tab3d").click();
 
+  // Volumetric 3D uses the same World View as a spatial anchor.
+  await page.evaluate(() => {
+    window.setWorldViewCenter?.(321.5, 17, -148.25);
+    window.setWorldViewSliceY?.(17);
+  });
+  await page.locator("#tabField3d").click();
+  await page.evaluate(() => window.renderField3D?.());
+  const field3dBinding = await page.evaluate(() => ({
+    binding: window.getField3DWorldBinding?.(),
+    contract: window.getWorldViewContract?.(),
+  }));
+  if (!field3dBinding.binding || !field3dBinding.contract) {
+    throw new Error("Volumetric 3D world-view binding is not exposed");
+  }
+  if (
+    Math.abs(field3dBinding.binding.center.x - field3dBinding.contract.center.x) > 1e-6 ||
+    Math.abs(field3dBinding.binding.center.y - field3dBinding.contract.center.y) > 1e-6 ||
+    Math.abs(field3dBinding.binding.center.z - field3dBinding.contract.center.z) > 1e-6 ||
+    field3dBinding.binding.sliceY !== field3dBinding.contract.sliceY ||
+    field3dBinding.binding.seed !== field3dBinding.contract.seed
+  ) {
+    throw new Error("Volumetric 3D and World View contract are using different spatial state");
+  }
+  await page.locator("#tab3d").click();
+
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
