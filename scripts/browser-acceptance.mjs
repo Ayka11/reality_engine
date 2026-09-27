@@ -515,9 +515,8 @@ try {
   await page.screenshot({ path: "artifacts/browser-acceptance.png", fullPage: true });
   console.log(JSON.stringify({
     status: "PASS",
-    initialObjects: initial.stats?.objects ?? 0,
     quickGenerateObjects: afterQuick.health?.stats?.objects ?? 0,
-    composeObjects: afterCompose.stats?.objects ?? 0,
+    composeObjects: afterCompose.health?.stats?.objects ?? 0,
     screenshot: "artifacts/browser-acceptance.png"
   }));
 } finally {
