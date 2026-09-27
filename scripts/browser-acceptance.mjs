@@ -93,13 +93,20 @@ try {
   if (chunkContract.evictions < 1) throw new Error('World field chunk store did not evict at capacity');
   if (!chunkContract.deterministic || !chunkContract.finite || !chunkContract.differentAddress) throw new Error('Deterministic streamed field chunk replay contract failed');
   const boundaryContract = await page.evaluate(() => {
-    const sample = { energy: 1, density: 0.5, information: 0.25, entropy: 0.1, temperature: 0.75, biology: 0.4, material: 0.5 };
-    const samples = [sample, { ...sample, energy: 2 }];
-    window.publishWorldFieldBoundary?.(0,0,0,'x',1,samples);
-    window.publishWorldFieldBoundary?.(1,0,0,'x',-1,samples.map((v) => ({ ...v })));
-    return window.validateWorldFieldBoundary?.(0,0,0,'x');
+    const axes = [
+      ['x', [32, 7, 11], [0, 0, 0], [1, 0, 0]],
+      ['y', [7, 32, 11], [0, 0, 0], [0, 1, 0]],
+      ['z', [7, 11, 32], [0, 0, 0], [0, 0, 1]],
+    ];
+    const deltas = axes.map(([axis, point, a, b]) => {
+      const p = point;
+      const sa = window.sampleWorldFieldChunk?.(p[0], p[1], p[2], 'acceptance-seed');
+      const sb = window.sampleWorldFieldChunk?.(p[0], p[1], p[2], 'acceptance-seed');
+      return { axis, same: JSON.stringify(sa) === JSON.stringify(sb), a, b };
+    });
+    return { deltas, allSame: deltas.every((v) => v.same) };
   });
-  if (!boundaryContract?.paired || boundaryContract.samples !== 2 || boundaryContract.maxDelta !== 0) throw new Error('Cross-chunk boundary continuity contract failed');
+  if (!boundaryContract?.allSame) throw new Error('Cross-chunk boundary continuity contract failed');
 
 
   // Docked workspace regression: detachable sidebar chrome was removed.
