@@ -147,9 +147,6 @@ try {
     const results = axes.map(([axis, base]) => ({ axis, ...window.validateWorldFieldBoundary?.(base[0],base[1],base[2],axis) }));
     return { validBefore, savedChunks: saved.map(s => s?.workerChunks?.length ?? 0), restored, results };
   });
-  if (!restoredSeams.validBefore || restoredSeams.savedChunks.some(n => n < 1) || restoredSeams.restored.some(v => !v) || restoredSeams.results.some(v => !v.paired || v.samples !== 64 || v.maxDelta > 1e-6)) {
-    throw new Error('Cross-chunk seam validation failed after persistence eviction/restore');
-  }
   await page.waitForFunction(() => {
     const state = window.worldFieldRestoreState?.();
     return !!state && state.complete === true;
@@ -171,6 +168,9 @@ try {
     restoreAck.staleAcks !== 0
   ) {
     throw new Error('Worker restore acknowledgement contract failed');
+  }
+  if (!restoredSeams.validBefore || restoredSeams.savedChunks.some(n => n < 1) || restoredSeams.restored.some(v => !v) || restoredSeams.results.some(v => !v.paired || v.samples !== 64 || v.maxDelta > 1e-6)) {
+    throw new Error('Cross-chunk seam validation failed after persistence eviction/restore');
   }
 
 
