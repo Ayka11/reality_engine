@@ -11,6 +11,7 @@ import {
   NF, F, GRID_W, GRID_H, GRID_D, CX, CY, CZ, CHUNK_FLOATS, decodeChunkKey,
 } from '../core/ChunkGrid'
 import type { WorldViewSnapshot } from '../infinity/WorldViewContract'
+import type { ScientificFieldProvider } from '../infinity/ScientificFieldProvider'
 import {
   classifyVoxel, getMat, blendEnergyGlow, lerpPalette, LAYER_PALS,
   type MatType,
@@ -59,6 +60,7 @@ export class ChunkRenderer {
   private readonly VOXEL_THRESH = 0.8
   private rebuildPending = false
   private worldViewBinding: WorldViewSnapshot | null = null
+  private worldFieldProvider: ScientificFieldProvider | null = null
 
   // Public state
   layer         = 0
@@ -576,28 +578,12 @@ export class ChunkRenderer {
       center: { ...this.worldViewBinding.center },
     }
   }
+  setWorldFieldProvider(provider: ScientificFieldProvider | null) {
+    this.worldFieldProvider = provider
+  }
+
   sampleWorldField(x: number, y: number, z: number) {
-    const view = this.worldViewBinding
-    if (!view) return null
-    const lx = Math.round(x - view.center.x + GRID_W / 2)
-    const ly = Math.round(y - view.center.y + GRID_D * 0.45)
-    const lz = Math.round(z - view.center.z + GRID_H / 2)
-    if (lx < 0 || lx >= GRID_W || ly < 0 || ly >= GRID_D || lz < 0 || lz >= GRID_H) return null
-    const cx = lx >> 3, cy = ly >> 3, cz = lz >> 3
-    const key = cz * (GRID_H / CY) * (GRID_W / CX) + cy * (GRID_W / CX) + cx
-    const chunk = this.shadowChunks.get(key)
-    if (!chunk) return null
-    const base = ((lz & 7) * CY * CX + (ly & 7) * CX + (lx & 7)) * NF
-    return {
-      x, y, z,
-      energy: chunk[base + F.E] || 0,
-      density: chunk[base + F.D] || 0,
-      information: chunk[base + F.I] || 0,
-      entropy: chunk[base + F.S] || 0,
-      temperature: chunk[base + F.T] || 0,
-      biology: chunk[base + F.BIO] || 0,
-      material: chunk[base + F.MAT] || 0,
-    }
+    return this.worldFieldProvider?.sample(x, y, z) ?? null
   }
 
 
