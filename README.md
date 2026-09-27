@@ -104,6 +104,31 @@ window.worldValidateScientificProvenance(...)
 
 The scientific layer is **computational and conditional**: simulation results do not by themselves establish real-world causal validity. Replication and generalization are evaluated only over the represented experimental configurations.
 
+### Runtime Provenance — Preset → Brush → Law → Build → World
+
+The runtime layer records a causal trace for interactive world operations without replacing the existing scientific provenance system. The trace links:
+
+```
+Preset acknowledgement
+      ↓
+Brush acknowledgement
+      ↓
+Runtime Law state
+      ↓
+World Decision / build cost
+      ↓
+World State after generation
+```
+
+Browser APIs:
+
+```ts
+window.getRuntimeProvenance()
+window.validateRuntimeProvenance()
+window.resetRuntimeProvenance()
+```
+
+Each event contains an ID, timestamp, stage, parent event, and structured payload. Browser acceptance verifies the complete causal parent chain and validates the trace after Quick Generate. This is runtime execution provenance; it is distinct from ScientificProvenance, which fingerprints experiment protocols, results, replication, generalization, and evidence.
 ### Scientific Workspace UI
 
 The **🔬 Science Lab** control provides a direct UI for:
