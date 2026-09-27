@@ -31,6 +31,7 @@ import { RealityMonitor, buildRealityMonitorHTML, updateMonitorPanels } from './
 import { NodeLawEditor }                          from './ui/NodeLawEditor'
 import { sceneComposer }                          from './modes/cinema/SceneComposer'
 import { RealityLawBridge }                       from './laws/RealityLawBridge'
+import { runtimeProvenance }                      from './infinity/RuntimeProvenance'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
 const win = window as unknown as Record<string, unknown>
@@ -66,6 +67,9 @@ let chunkTick = 0, chunkEvCount = 0, workerBusy = false
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 const realityLawBridge = new RealityLawBridge()
 win['realityLawBridge'] = realityLawBridge
+win['getRuntimeProvenance'] = () => runtimeProvenance.getTrace()
+win['validateRuntimeProvenance'] = () => runtimeProvenance.validate()
+win['resetRuntimeProvenance'] = () => runtimeProvenance.reset()
 win['getRealityLawState'] = () => realityLawBridge.getState()
 function syncRuntimeLawsToWorker() {
   const s = realityLawBridge.getState()
@@ -75,7 +79,16 @@ function syncRuntimeLawsToWorker() {
 }
 win['setRealityLaw'] = (name: string, active: boolean, fitness = 0.5, strength = 0.1) => {
   realityLawBridge.setUiLaw(name, active, fitness, strength)
-  return syncRuntimeLawsToWorker()
+  const state = syncRuntimeLawsToWorker()
+  runtimeProvenance.record('law', {
+    name,
+    active,
+    fitness,
+    strength,
+    processes: state.processes,
+    params: { DIFF: state.DIFF, ENT: state.ENT, INFO: state.INFO, BIO: state.BIO },
+  })
+  return state
 }
 win['syncRealityLaws'] = () => {
   const laws = (win['LAWS'] as {name:string;active:boolean;fitness:number;strength:number}[] | undefined) ?? []
@@ -99,18 +112,22 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   workerBusy = false
 
   if (cmd === 'brushApplied') {
-    win['lastChunkBrush'] = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius }
+    const brush = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius }
+    win['lastChunkBrush'] = brush
+    runtimeProvenance.record('brush', { ...brush, source: 'ChunkSimWorker' })
     return
   }
 
   if (cmd === 'presetApplied') {
-    win['lastChunkPreset'] = {
+    const preset = {
       name: e.data.name,
       tick: e.data.tick,
       stats: e.data.stats,
       processes: e.data.processes,
       params: e.data.params
     }
+    win['lastChunkPreset'] = preset
+    runtimeProvenance.record('preset', { ...preset, source: 'ChunkSimWorker' })
     return
   }
 
