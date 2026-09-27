@@ -10,6 +10,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
   NF, F, GRID_W, GRID_H, GRID_D, CX, CY, CZ, CHUNK_FLOATS, decodeChunkKey,
 } from '../core/ChunkGrid'
+import type { WorldViewSnapshot } from '../infinity/WorldViewContract'
 import {
   classifyVoxel, getMat, blendEnergyGlow, lerpPalette, LAYER_PALS,
   type MatType,
@@ -57,6 +58,7 @@ export class ChunkRenderer {
   private readonly PER_MAT_INST = Math.floor(800_000 / MAT_TYPES.length)
   private readonly VOXEL_THRESH = 0.8
   private rebuildPending = false
+  private worldViewBinding: WorldViewSnapshot | null = null
 
   // Public state
   layer         = 0
@@ -537,6 +539,43 @@ export class ChunkRenderer {
   }
 
   // ── Public controls ────────────────────────────────────────────────────────────
+
+  setWorldViewBinding(view: WorldViewSnapshot) {
+    if (!view || view.version !== 1) return
+    const localCenter = new THREE.Vector3(GRID_W / 2, GRID_D * 0.45, GRID_H / 2)
+    const nextCenter = new THREE.Vector3(view.center.x, view.center.y, view.center.z)
+    if (!this.worldViewBinding) {
+      const offset = this.camera.position.clone().sub(localCenter)
+      this.camera.position.copy(nextCenter).add(offset)
+      this.controls.target.copy(nextCenter)
+    } else {
+      const prev = this.worldViewBinding.center
+      const delta = new THREE.Vector3(
+        view.center.x - prev.x,
+        view.center.y - prev.y,
+        view.center.z - prev.z,
+      )
+      this.camera.position.add(delta)
+      this.controls.target.add(delta)
+    }
+    this.scene.position.set(
+      view.center.x - GRID_W / 2,
+      view.center.y - GRID_D * 0.45,
+      view.center.z - GRID_H / 2,
+    )
+    this.worldViewBinding = {
+      ...view,
+      center: { ...view.center },
+    }
+  }
+
+  getWorldViewBinding(): WorldViewSnapshot | null {
+    if (!this.worldViewBinding) return null
+    return {
+      ...this.worldViewBinding,
+      center: { ...this.worldViewBinding.center },
+    }
+  }
 
   setLayer(layer: number) {
     this.layer = Math.max(-1, Math.min(5, Math.round(layer)))
