@@ -353,6 +353,7 @@ self.onmessage = (e: MessageEvent) => {
   if (cmd === 'restoreChunk') {
     grid.restoreChunk(data.key, data.data)
     emitFrame()
+    ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key: data.key, restoreId: data.restoreId } })
     return
   }
 
