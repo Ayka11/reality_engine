@@ -1,4 +1,5 @@
-import type { ScientificFieldProvider, ScientificFieldSample } from './ScientificFieldProvider'
+import type { ScientificFieldProvider } from './ScientificFieldProvider'
+import type { ScientificFieldSample } from './FieldSampler'
 
 export type WorldFieldChunkCoord = { cx: number; cy: number; cz: number }
 
