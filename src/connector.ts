@@ -256,7 +256,7 @@ win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4
   chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength } })
   installChunkWorldFieldProvider()
   const p = workerToWorld(x, y, z)
-  const mutation = authoritativeWorldFieldProvider?.applyRadial('brush', p.x, p.y, p.z, radius, brushMutation(name, strength), { name, worker: { x, y, z }, strength })
+  authoritativeWorldFieldProvider?.applyRadial('brush', p.x, p.y, p.z, radius, brushMutation(name, strength), { name, worker: { x, y, z }, strength })
   return authoritativeWorldFieldProvider?.getState() ?? null
 }
 
@@ -269,7 +269,7 @@ win['applyChunkPreset']   = (name: string) => {
     life: { biology: 1.25, information: 1.08 },
     proto: { energy: 1.02, density: 1.02 },
   }
-  const mutation = authoritativeWorldFieldProvider?.setGlobal('preset', presetScale[name] ?? {}, {}, { name })
+  authoritativeWorldFieldProvider?.setGlobal('preset', presetScale[name] ?? {}, {}, { name })
   if (name === 'town') {
     DIFF_cw = 0.12; ENT_cw = 0.00015; INFO_cw = 0.45; BIO_cw = 0.32
     chunkWorker.postMessage({ cmd: 'setParams', data: { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw, procs: ['thermo', 'bio', 'info'] } })
