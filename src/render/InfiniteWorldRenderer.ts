@@ -114,13 +114,13 @@ export class InfiniteWorldRenderer {
   private materialMode: 'field' | 'material' | 'height' = 'height'
   // Functional vertex presentation: the underlying terrain mesh remains raycastable,
   // while points + restrained wireframe expose elevation and chunk topology.
-  private terrainStyle: 'vertex' | 'surface' = 'vertex'
+  private terrainStyle: 'vertex' | 'surface' = 'surface'
   private readonly terrainMaterials = new Set<THREE.MeshStandardMaterial>()
   private physicsParticlePoints: THREE.Points | null = null
   private physicsParticlePositions = new Float32Array(0)
   private physicsParticleVelocities = new Float32Array(0)
   private physicsParticleColors = new Float32Array(0)
-  private showParticles = true
+  private showParticles = false
   private readonly materializedConsequenceEvents = new Set<string>()
 
   constructor(canvas: HTMLCanvasElement, seed = 'reality-engine-infinity-v1') {
@@ -138,7 +138,7 @@ export class InfiniteWorldRenderer {
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null)
     this.storageKey = `reality-engine-world:${seed}:objects`
     this.persistence = new WorldPersistence(seed)
-    this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9, maxNewPerUpdate: 1 })
+    this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 2 })
 
     this.camera.position.set(38, this.worldY, 62)
     this.controls = new OrbitControls(this.camera, canvas)
