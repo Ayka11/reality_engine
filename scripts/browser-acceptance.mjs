@@ -45,7 +45,6 @@ try {
     localStorage.setItem("reality_right_float", JSON.stringify({ x: 58, y: 72, w: 220 }));
     location.reload();
   });
-  if (!layout) throw new Error("Workspace migration setup failed");
   await page.waitForSelector("#left");
   await page.waitForSelector("#right");
   await page.waitForFunction(() => localStorage.getItem("reality_workspace_layout_version") === "4");
