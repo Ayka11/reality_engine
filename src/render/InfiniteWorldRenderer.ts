@@ -350,7 +350,7 @@ export class InfiniteWorldRenderer {
     this.fieldSampler.setGenerator(this.generator)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights, () => (window as any).getRealityLawState?.() ?? null)
     this.persistence = new WorldPersistence(newSeed)
-    this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9, maxNewPerUpdate: 1 })
+    this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
     this.history = new WorldEditHistory()
 
     const groundY = this.generator.sampleHeight(16, 16)
