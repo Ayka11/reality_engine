@@ -38,7 +38,6 @@ import { SMART_BRUSHES } from './ux/SmartBrushes';
 import { createInfinityScaleRuntime } from './infinity/InfinityScaleRuntime';
 
 // ── Chunk system imports ───────────────────────────────────────────────────────
-import { ChunkRenderer } from './render/ChunkRenderer';
 import { RealityMonitor, buildRealityMonitorHTML, updateMonitorPanels } from './ui/RealityMonitor';
 import { NodeLawEditor } from './ui/NodeLawEditor';
 
@@ -61,8 +60,6 @@ const realityCreatorCompiler = new GraphCompiler();
 };
 
 // ── Chunk system — Three.js renderer + sparse worker ─────────────────────────
-const c3dCanvas = document.getElementById('c3d') as HTMLCanvasElement;
-const chunkRenderer = new ChunkRenderer(c3dCanvas);
 const monitor    = new RealityMonitor();
 const nodeEditor = new NodeLawEditor();
 
@@ -97,9 +94,6 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       localChunks.set(key, f32.slice(off + 1, off + 1 + CF));
       off += 1 + CF;
     }
-
-    // Push dirty payload to renderer
-    chunkRenderer.applyWorkerFrame(ab as ArrayBuffer);
 
     // Update bottom-bar chunk stats
     if (stats) {
@@ -1695,9 +1689,6 @@ async function loop(ts: number) {
       chunkWorker.postMessage({ cmd: 'tick', data: { speed: Math.min(nSteps, 3) } });
     }
   }
-
-  // Render Three.js chunk view
-  chunkRenderer.render();
 
   fieldAnim.update(sim.tick, dt);
 
