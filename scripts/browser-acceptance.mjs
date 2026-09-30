@@ -26,6 +26,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.on("console", (msg) => console.log(`[browser:${msg.type()}] ${msg.text()}`));
   page.on("pageerror", (error) => console.log(`[browser:pageerror] ${error.stack || error.message}`));
+  page.on("requestfailed", (request) => console.log(`[browser:requestfailed] ${request.method()} ${request.url()} :: ${request.failure()?.errorText || "unknown"}`));
   await page.addInitScript(() => {
     localStorage.clear();
   });
@@ -172,6 +173,7 @@ try {
   const composePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   composePage.on("console", (msg) => console.log(`[composer:${msg.type()}] ${msg.text()}`));
   composePage.on("pageerror", (error) => console.log(`[composer:pageerror] ${error.stack || error.message}`));
+  composePage.on("requestfailed", (request) => console.log(`[composer:requestfailed] ${request.method()} ${request.url()} :: ${request.failure()?.errorText || "unknown"}`));
   await composePage.addInitScript(() => {
     localStorage.clear();
   });
