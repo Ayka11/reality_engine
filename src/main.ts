@@ -35,6 +35,7 @@ import { WorldComposer, PHI_ARCHETYPES, FIELD_BALANCES, COMPLEXITY_MODES, SPACET
 import { WorldHealth } from './ux/WorldHealth';
 import { Explainer } from './ux/Explainer';
 import { SMART_BRUSHES } from './ux/SmartBrushes';
+import { createInfinityScaleRuntime } from './infinity/InfinityScaleRuntime';
 
 // ── Chunk system imports ───────────────────────────────────────────────────────
 import { ChunkRenderer } from './render/ChunkRenderer';
@@ -48,6 +49,7 @@ import './ui/ux-system.css';
 
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
+const infinityScale = createInfinityScaleRuntime();
 const canvas   = document.getElementById('gc') as HTMLCanvasElement;
 const renderer = new VoxelRenderer(canvas, sim.grid.W, sim.grid.H, sim.grid.D);
 const realityCreatorGraph = new RealityGraph();
@@ -1665,6 +1667,8 @@ async function loop(ts: number) {
       z: chunk.cz,
       level: 0,
     }));
+
+    _updateInfinityObserver();
 
     const infinityDiagnostics =
       _computeInfinityScaleDiagnostics();
