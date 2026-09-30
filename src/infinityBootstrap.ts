@@ -1219,7 +1219,7 @@ export function bootstrapInfiniteWorld() {
           <div style="display: flex; align-items: center; gap: 6px;">
             <span style="color: #8e8aa8; font-size: 11px; cursor: grab;" title="Drag to move or dock">⠿</span>
             <b style="color: #c8c3ff; font-size: 11px;">🌍 Infinity Scale & World Tools</b>
-            <span style="font-size: 9px; color: #8e8aa8; font-family: monospace;">${stats.loadedChunks} chunks · ${state.objectCount} obj · (X:${stats.camera.worldX}, Z:${stats.camera.worldZ})</span>
+            <span data-infinity-runtime-stats style="font-size: 9px; color: #8e8aa8; font-family: monospace;">${stats.loadedChunks} chunks · ${stats.objects} obj · (X:${Math.round(stats.camera?.worldX ?? stats.world?.x ?? 0)}, Z:${Math.round(stats.camera?.worldZ ?? stats.world?.z ?? 0)})</span>
           </div>
           <div style="display: flex; align-items: center; gap: 4px;">
             <span style="font-size: 8.5px; color: #8f88d8; padding: 2px 5px;">WORLD TOOLS</span>
@@ -1787,6 +1787,12 @@ export function bootstrapInfiniteWorld() {
     const dt = Math.min((now - last) / 1000, 0.1)
     last = now
     world.render(dt)
+    const liveStats = world.getRuntimeStats()
+    document.querySelectorAll<HTMLElement>('[data-infinity-runtime-stats]').forEach((el) => {
+      const x = Math.round(liveStats.camera?.worldX ?? liveStats.world?.x ?? 0)
+      const z = Math.round(liveStats.camera?.worldZ ?? liveStats.world?.z ?? 0)
+      el.textContent = `${liveStats.loadedChunks} chunks · ${liveStats.objects} obj · (X:${x}, Z:${z})`
+    })
     requestAnimationFrame(loop)
   }
   requestAnimationFrame(loop)
