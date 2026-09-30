@@ -39,12 +39,11 @@ try {
 
   // Workspace v4 regression: legacy float state must not restore two
   // overlapping sidebars over the viewport.
-  const layout = await page.evaluate(() => {
+  await page.evaluate(() => {
     localStorage.setItem("reality_workspace_layout_version", "3");
     localStorage.setItem("reality_left_float", JSON.stringify({ x: 58, y: 72, w: 220 }));
     localStorage.setItem("reality_right_float", JSON.stringify({ x: 58, y: 72, w: 220 }));
     location.reload();
-    return true;
   });
   if (!layout) throw new Error("Workspace migration setup failed");
   await page.waitForSelector("#left");
