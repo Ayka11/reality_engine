@@ -1,4 +1,6 @@
 import { InfiniteWorldRenderer } from './render/InfiniteWorldRenderer'
+import { runtimeProvenance } from './infinity/RuntimeProvenance'
+import { worldViewContract } from './infinity/WorldViewContract'
 import { worldResourceEconomy } from './worldLibrary/WorldResourceEconomy'
 import { settlementGrowthModel } from './worldLibrary/SettlementGrowthModel'
 import { civilizationRuntime } from './worldLibrary/CivilizationRuntime'
@@ -24,6 +26,18 @@ export function bootstrapInfiniteWorld() {
   const world = new InfiniteWorldRenderer(canvas, seed)
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world
+  ;(window as any).installChunkWorldFieldProvider?.()
+  ;(window as any).worldFieldSample = (x: number, y?: number, z?: number) => world.fieldSampler.sampleWorld(x, y, z)
+  ;(window as any).worldFieldViewWindow = (width: number, height: number, sliceY?: number) => world.fieldSampler.sampleViewWindow(width, height, sliceY)
+  ;(window as any).getWorldFieldProvider = () => world.fieldSampler.listProviders().find((p) => p.active) ?? null
+
+  worldViewContract.setSeed(seed)
+  worldViewContract.setCenter(world.getWorldPosition().x, world.getWorldPosition().y, world.getWorldPosition().z)
+  ;(window as any).getWorldViewContract = () => worldViewContract.snapshot()
+  ;(window as any).setWorldViewRenderMode = (mode: '3d'|'field3d'|'2d'|'hybrid'|'metrics') => worldViewContract.setRenderMode(mode)
+  ;(window as any).setWorldViewCenter = (x: number, y: number, z: number) => worldViewContract.setCenter(x, y, z)
+  ;(window as any).setWorldViewSliceY = (y: number) => worldViewContract.setSliceY(y)
+
   ;(window as any).worldLibrary = worldLibrary
   ;(window as any).worldLibraryStats = () => worldLibrary.stats()
   ;(window as any).worldLibrarySearch = (tags: string[] = [], category?: string) =>
@@ -378,8 +392,21 @@ export function bootstrapInfiniteWorld() {
     world.analyzeHydrology(x, z, radius, samples)
   ;(window as any).infinityAnalyzeWatershed = (x: number, z: number, radius = 220, samples = 41) =>
     world.analyzeWatershed(x, z, radius, samples)
-  ;(window as any).infinityBuildZoneCost = (x: number, z: number) =>
-    world.buildZoneCost(x, z)
+  ;(window as any).infinityBuildZoneCost = (x: number, z: number) => {
+    const result = world.buildZoneCost(x, z)
+    runtimeProvenance.record('build-decision', {
+      x, z,
+      cost: result.cost,
+      decisionComponents: result.decisionComponents,
+      scientific: result.scientific,
+      slope: result.slope,
+      floodRisk: result.floodRisk,
+      slopeRisk: result.slopeRisk,
+      river: result.river,
+      source: 'WorldDecisionLayer',
+    })
+    return result
+  }
   ;(window as any).infinityBuildAnalyticalOverlay = (x: number, z: number, radius = 160, samples = 33, mode: 'suitability' | 'flood' | 'slope' = 'suitability') =>
     world.buildAnalyticalOverlay(x, z, radius, samples, mode)
   ;(window as any).infinitySetAnalyticalOverlay = (mode: 'suitability' | 'flood' | 'slope' | null) =>
@@ -619,7 +646,10 @@ export function bootstrapInfiniteWorld() {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
     world.reseed(newSeed)
+    worldViewContract.setSeed(newSeed)
+    ;(window as any).applyAuthoritativeComposerMutation?.({ phi, fields, complexity, spacetime })
 
+    worldViewContract.setCenter(world.getWorldPosition().x, world.getWorldPosition().y, world.getWorldPosition().z)
     const x = 16
     const z = 16
 
@@ -812,6 +842,21 @@ export function bootstrapInfiniteWorld() {
       stats,
       generatedAt: new Date().toISOString(),
     }
+    runtimeProvenance.record('world-state', {
+      source: 'infinityApplyComposer',
+      seed: newSeed,
+      config: { phi, fields, complexity, spacetime },
+      environment: worldEnvironment,
+      generationPlan: {
+        biome: generationPlan.biome?.id ?? null,
+        plannedElements: generationPlan.elements.length,
+        appliedElements: appliedPlan.applied.length,
+        skippedElements: appliedPlan.skipped.length,
+      },
+      stats,
+      objects: stats.objects,
+      loadedChunks: stats.loadedChunks,
+    })
     return {
       ...stats.world,
       objects: stats.objects,
@@ -854,20 +899,38 @@ export function bootstrapInfiniteWorld() {
     }
   }
 
+  ;(window as any).worldTerrainSample = (x: number, z: number) => ({
+    x,
+    z,
+    height: world.sampleTerrainHeight(x, z),
+  })
+  ;(window as any).worldTerrainPatchStats = () => world.getTerrainPatchStats()
+  ;(window as any).worldTerrainGeometrySignature = () => world.getTerrainGeometrySignature()
+  ;(window as any).worldTerrainVertexAnchor = () => world.getTerrainVertexAnchor()
+  ;(window as any).worldRenderedTerrainSample = (x: number, z: number) => world.sampleRenderedTerrainHeight(x, z)
   ;(window as any).worldVerifyGeneration = (before: any = null) => {
     const after = (window as any).worldGenerationHealth()
     const beforeStats = before?.stats ?? before ?? null
     const beforeObjects = Number(beforeStats?.objects ?? 0)
     const beforeChunks = Number(beforeStats?.loadedChunks ?? 0)
+    const beforeSeed = before?.lastGeneration?.seed ?? beforeStats?.world?.seed ?? null
     const afterObjects = Number(after.stats?.objects ?? 0)
     const afterChunks = Number(after.stats?.loadedChunks ?? 0)
+    const afterSeed = after.lastGeneration?.seed ?? after.stats?.world?.seed ?? null
+    const objectDelta = afterObjects - beforeObjects
+    const chunkDelta = afterChunks - beforeChunks
+    const seedChanged = beforeSeed !== null && afterSeed !== null && beforeSeed !== afterSeed
+    const appliedElements = Number(after.lastGeneration?.appliedElements ?? 0)
+    const measurableChange = objectDelta !== 0 || chunkDelta !== 0 || seedChanged || appliedElements > 0
     return {
-      ok: after.ok && (afterObjects !== beforeObjects || afterChunks !== beforeChunks || Boolean(after.stats?.world)),
+      ok: Boolean(after.ok && measurableChange),
       before: beforeStats,
       after: after.stats,
       delta: {
-        objects: afterObjects - beforeObjects,
-        loadedChunks: afterChunks - beforeChunks,
+        objects: objectDelta,
+        loadedChunks: chunkDelta,
+        seedChanged,
+        appliedElements,
       },
     }
   }

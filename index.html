@@ -13,8 +13,6 @@
 :root{--bg:#09090f;--panel:#111119;--border:#252535;--accent:#7c6fcd;--text:#d0cef5;--sub:#666;--success:#3db872;--warn:#e09030;--danger:#e04848;--info:#5080e0;--err:#e04848;--ok:#3db872;--tx:#d0cef5;--bd:#252535;--p2:#111119;--lw:220px;--rw:240px}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:13px}
 #app{display:grid;grid-template-columns:52px var(--lw) 1fr var(--rw);grid-template-rows:46px 1fr 38px;height:100vh;border:0.5px solid var(--border);overflow:hidden}
-.rsz-bar{position:absolute;top:46px;bottom:38px;width:5px;cursor:col-resize;z-index:100;background:transparent;transition:background .15s}
-.rsz-bar:hover,.rsz-bar.active{background:var(--accent)}
 /* TOP BAR */
 #topbar{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:0 12px;background:var(--panel);border-bottom:0.5px solid var(--border)}
 .mode-btn{font-size:11px;padding:4px 12px;border:0.5px solid var(--border);border-radius:20px;cursor:pointer;background:transparent;color:var(--sub);white-space:nowrap;transition:all .15s}
@@ -166,37 +164,6 @@ input[type=range]#spd{width:60px}
 #leftWorkspaceGrip{margin-right:0}
 #rightWorkspaceGrip{margin-left:0}
 
-/* ── Workspace v3: clear, compact, detachable sidebars ── */
-.sidebar-drag-grip{
-  position:fixed;z-index:121;display:flex;align-items:center;justify-content:center;
-  width:30px;height:112px;padding:4px 2px;border:1px solid #6675a8;
-  border-radius:9px;background:#172033;backdrop-filter:blur(12px);
-  color:#f2f5ff;font:800 8px/1.15 system-ui,sans-serif;letter-spacing:.08em;cursor:grab;
-  box-shadow:0 6px 22px rgba(0,0,0,.55),0 0 0 1px rgba(122,145,210,.12);
-  user-select:none;touch-action:none;opacity:1;writing-mode:vertical-rl;text-orientation:mixed;
-}
-#leftWorkspaceGrip{background:#17243a;border-color:#5b88c9;color:#eaf4ff}
-#rightWorkspaceGrip{background:#211d38;border-color:#8b76d0;color:#f1edff}
-.sidebar-drag-grip:hover{border-color:#b9c7ff;background:#263451;box-shadow:0 8px 28px rgba(0,0,0,.62),0 0 0 2px rgba(124,145,220,.18)}
-.sidebar-drag-grip.dragging{cursor:grabbing;background:#304467}
-#left.workspace-floating,#right.workspace-floating{
-  position:fixed!important;
-  bottom:auto!important;
-  z-index:110!important;
-  height:min(72vh,680px)!important;
-  max-height:calc(100vh - 120px)!important;
-  overflow-y:auto!important;overflow-x:hidden!important;
-  box-shadow:0 18px 60px rgba(0,0,0,.68);border:1px solid #6173a6;
-  border-radius:10px;
-}
-.workspace-floating .sidebar-drag-grip{top:50%;transform:translateY(-50%)}
-body.workspace-dragging *{user-select:none!important}
-.workspace-drop-hint{
-  position:fixed;z-index:105;pointer-events:none;display:none;border:1px dashed #8095d5;
-  background:rgba(124,145,220,.10);border-radius:10px;
-}
-#cw.workspace-canvas-focus{min-width:0}
-
 /* ── Contrast / hierarchy ── */
 :root{
   --panel:#121826;--panel-raised:#192236;--panel-soft:#161e2e;
@@ -251,8 +218,6 @@ input[type=range]{accent-color:#a397ff}
 </head>
 <body>
 <div id="app" style="position:relative">
-<div id="rszL" class="rsz-bar" style="left:calc(52px + var(--lw) - 2px)"></div>
-<div id="rszR" class="rsz-bar" style="right:calc(var(--rw) - 3px)"></div>
 
 <!-- TOP BAR -->
 <div id="topbar">
@@ -267,7 +232,6 @@ input[type=range]{accent-color:#a397ff}
   <button class="mode-btn" data-mode="cinema">Cinema</button>
   <button class="mode-btn" data-mode="game">Game Dev</button>
   <div style="flex:1"></div>
-  <button class="pill on" id="btnToggleLeft" onclick="window.toggleLeftPanel&&window.toggleLeftPanel()" style="font-size:9.5px;padding:2px 7px;margin-right:3px" title="Toggle Left Sidebar">◧ Sidebar</button>
   <button class="pill on" id="btnToggleRight" onclick="window.toggleRightPanel&&window.toggleRightPanel()" style="font-size:9.5px;padding:2px 7px;margin-right:6px" title="Toggle Right Controls">◨ Controls</button>
   <span style="font-size:9px;color:var(--sub)">FPS:</span><span id="fpsOut" style="font-family:monospace;color:var(--text);min-width:20px">0</span>
 </div>
@@ -823,7 +787,24 @@ function _drawIso(){
   }
 }
 
-function _drawMultiSlice(){
+let worldField2DLinked = true
+let worldField2DCache = null
+let worldField2DRenderCache = null
+
+function _getWorldField2DWindow(width, height) {
+  const sampler = window.worldFieldViewWindow
+  const getView = window.getWorldViewContract
+  if (typeof sampler !== 'function' || typeof getView !== 'function') return null
+  const view = getView()
+  const key = [width, height, view.center.x.toFixed(3), view.center.y.toFixed(3), view.center.z.toFixed(3), view.sliceY, view.visibleRadius, view.seed].join('|')
+  if (worldField2DCache?.key === key) return worldField2DCache
+  const data = sampler(width, height, view.sliceY)
+  if (!data?.samples?.length) return null
+  worldField2DCache = { key, ...data }
+  return worldField2DCache
+}
+
+function _drawLegacyMultiSlice(){
   const cw=canvas.width,ch=canvas.height;
   ctx.clearRect(0,0,cw,ch);
   
@@ -923,6 +904,92 @@ function _drawMultiSlice(){
     }
   }
 }
+
+
+function _drawWorldFieldMultiSlice(){
+  const cw=canvas.width,ch=canvas.height
+  const windowW=Math.max(1,Math.min(96,Math.floor(cw/8)))
+  const windowH=Math.max(1,Math.min(72,Math.floor(ch/8)))
+  const data=_getWorldField2DWindow(windowW,windowH)
+  if(!data)return false
+  const renderKey=`${data.key}|${cw}x${ch}|layer=${layer}`
+  const mainCtx=ctx
+  if(worldField2DRenderCache?.key===renderKey){
+    mainCtx.clearRect(0,0,cw,ch)
+    mainCtx.drawImage(worldField2DRenderCache.canvas,0,0)
+    return true
+  }
+  const renderCanvas=document.createElement('canvas')
+  renderCanvas.width=cw
+  renderCanvas.height=ch
+  const renderCtx=renderCanvas.getContext('2d')
+  if(!ctx)return false
+  const value=(s,f)=>[s.energy,s.density,s.information,s.entropy,s.temperature,s.biology][f]??s.energy
+  const meta=[
+    {mx:1000,l:0,label:'⚡ Energy',info:'World-space energy field'},
+    {mx:1,l:1,label:'🌫️ Density',info:'World-space density field'},
+    {mx:500,l:2,label:'🧠 Info',info:'World-space information field'},
+    {mx:1,l:3,label:'🔥 Entropy',info:'World-space entropy field'},
+    {mx:800,l:4,label:'🌡️ Temp',info:'World-space temperature field'},
+    {mx:1,l:5,label:'🧬 Bio',info:'World-space biology field'}
+  ]
+  const drawField=(ox,oy,w,h,f,showStats=true)=>{
+    const m=meta[f],cw2=w/data.width,ch2=h/data.height
+    let total=0,min=Infinity,max=-Infinity
+    for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
+      const v=value(data.samples[py*data.width+px],f)
+      total+=v
+      if(v>0.5){min=Math.min(min,v);max=Math.max(max,v)}
+      if(v<=(m.mx>1?0.5:0.001))continue
+      const [r,g,b]=colorOf(m.l,Math.min(Math.max(v/m.mx,0),1))
+      renderCtx.fillStyle=`rgb(${r},${g},${b})`
+      renderCtx.fillRect(Math.floor(ox+px*cw2),Math.floor(oy+py*ch2),Math.max(1,Math.ceil(cw2)),Math.max(1,Math.ceil(ch2)))
+    }
+    renderCtx.font='bold 10px system-ui';renderCtx.fillStyle='rgba(235,240,255,.92)';renderCtx.fillText(m.label,ox+6,oy+15)
+    renderCtx.font='8px system-ui';renderCtx.fillStyle='rgba(190,205,235,.68)';renderCtx.fillText(m.info,ox+6,oy+27)
+    if(showStats){
+      renderCtx.fillStyle='rgba(10,10,20,.72)';renderCtx.fillRect(ox,oy+h-22,w,22)
+      renderCtx.font='9px monospace';renderCtx.fillStyle='rgba(205,215,255,.85)'
+      renderCtx.fillText(`avg ${(total/data.samples.length).toFixed(2)} min ${(min===Infinity?0:min).toFixed(2)} max ${(max===-Infinity?0:max).toFixed(2)}`,ox+6,oy+h-8)
+    }
+  }
+  renderCtx.clearRect(0,0,cw,ch)
+  if(layer>=0){
+    drawField(0,0,cw,ch,layer,false)
+    renderCtx.font='10px monospace';renderCtx.fillStyle='rgba(160,240,190,.82)'
+    renderCtx.fillText(`WORLD center=(${data.view.center.x.toFixed(1)},${data.view.center.y.toFixed(1)},${data.view.center.z.toFixed(1)}) Y=${data.view.sliceY} R=${data.view.visibleRadius}`,10,ch-12)
+  }else{
+    const hw=Math.floor(cw/2),hh=Math.floor(ch/2)
+    const qs=[
+      {f:0,ox:0,oy:0,w:hw,h:hh},
+      {f:5,ox:hw,oy:0,w:hw,h:hh},
+      {f:2,ox:0,oy:hh,w:hw,h:hh},
+      {f:3,ox:hw,oy:hh,w:hw,h:hh}
+    ]
+    for(const q of qs){
+      drawField(q.ox,q.oy,q.w,q.h,q.f,true)
+      renderCtx.strokeStyle='#2a2a3a'
+      renderCtx.strokeRect(q.ox+.5,q.oy+.5,q.w-1,q.h-1)
+    }
+    renderCtx.strokeStyle='#3b4964'
+    renderCtx.beginPath();renderCtx.moveTo(hw,0);renderCtx.lineTo(hw,ch);renderCtx.stroke()
+    renderCtx.beginPath();renderCtx.moveTo(0,hh);renderCtx.lineTo(cw,hh);renderCtx.stroke()
+    renderCtx.font='8px monospace';renderCtx.fillStyle='rgba(160,190,230,.72)'
+    renderCtx.fillText(`WORLD SPACE · center=(${data.view.center.x.toFixed(1)},${data.view.center.z.toFixed(1)}) · Y=${data.view.sliceY} · seed=${data.view.seed}`,8,ch-4)
+  }
+  mainCtx.clearRect(0,0,cw,ch)
+  mainCtx.drawImage(renderCanvas,0,0)
+  worldField2DRenderCache={key:renderKey,canvas:renderCanvas}
+  return true
+}
+
+function _drawMultiSlice(){
+  if(worldField2DLinked&&_drawWorldFieldMultiSlice())return
+  _drawLegacyMultiSlice()
+}
+window.setWorldField2DLinked=(enabled)=>{worldField2DLinked=Boolean(enabled);worldField2DCache=null;worldField2DRenderCache=null;drawGrid()}
+window.getWorldField2DLinked=()=>worldField2DLinked
+window.getWorldField2DState=()=>({linked:worldField2DLinked,view:worldField2DCache?.view??null,sampleCount:worldField2DCache?.samples?.length??0})
 
 function draw2D(){_drawFlat();}
 
@@ -1937,52 +2004,24 @@ window.applyPreset=function(p){
 };
 
 // ── UI HELPERS ────────────────────────────────────────────────────────────
-let leftPanelOpen = true;
 let rightPanelOpen = true;
 let savedLw = 220;
 let savedRw = 240;
-
-function toggleLeftPanel(force){
-  leftPanelOpen = typeof force === 'boolean' ? force : !leftPanelOpen;
-  const root = document.documentElement;
-  const leftEl = document.getElementById('left');
-  const rszL = document.getElementById('rszL');
-  const btn = document.getElementById('btnToggleLeft');
-  if (leftPanelOpen) {
-    root.style.setProperty('--lw', savedLw + 'px');
-    if (leftEl) leftEl.style.display = 'flex';
-    if (rszL) { rszL.style.display = 'block'; rszL.style.left = `calc(52px + ${savedLw}px - 2px)`; }
-    if (btn) { btn.classList.add('on'); btn.title = 'Collapse Left Sidebar'; }
-  } else {
-    const curW = parseInt(getComputedStyle(root).getPropertyValue('--lw')) || 220;
-    if (curW > 50) savedLw = curW;
-    root.style.setProperty('--lw', '0px');
-    if (leftEl) leftEl.style.display = 'none';
-    if (rszL) rszL.style.display = 'none';
-    if (btn) { btn.classList.remove('on'); btn.title = 'Open Left Sidebar'; }
-  }
-  localStorage.setItem('reality_left_open', String(leftPanelOpen));
-  if (typeof resize === 'function') resize();
-}
-window.toggleLeftPanel = toggleLeftPanel;
 
 function toggleRightPanel(force){
   rightPanelOpen = typeof force === 'boolean' ? force : !rightPanelOpen;
   const root = document.documentElement;
   const rightEl = document.getElementById('right');
-  const rszR = document.getElementById('rszR');
   const btn = document.getElementById('btnToggleRight');
   if (rightPanelOpen) {
     root.style.setProperty('--rw', savedRw + 'px');
     if (rightEl) rightEl.style.display = 'flex';
-    if (rszR) { rszR.style.display = 'block'; rszR.style.right = `calc(${savedRw}px - 3px)`; }
     if (btn) { btn.classList.add('on'); btn.title = 'Collapse Right Controls'; }
   } else {
     const curW = parseInt(getComputedStyle(root).getPropertyValue('--rw')) || 240;
     if (curW > 50) savedRw = curW;
     root.style.setProperty('--rw', '0px');
     if (rightEl) rightEl.style.display = 'none';
-    if (rszR) rszR.style.display = 'none';
     if (btn) { btn.classList.remove('on'); btn.title = 'Open Right Controls'; }
   }
   localStorage.setItem('reality_right_open', String(rightPanelOpen));
@@ -1992,9 +2031,7 @@ window.toggleRightPanel = toggleRightPanel;
 
 function setIconPanel(id){
   currentPanel=id;
-  if (!leftPanelOpen) {
-    toggleLeftPanel(true);
-  }
+  // Left workspace is intentionally fixed/docked; no detachable sidebar mode.
   document.querySelectorAll('.icon-btn[data-panel]').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
   const html = PANELS[id]?.() || '';
   const left = document.getElementById('left');
@@ -2037,6 +2074,7 @@ window.addEventListener('keydown', (e) => {
 
 function setRenderMode(mode,btn){
   currentRenderMode=mode;
+  window.setWorldViewRenderMode?.(mode);
   document.querySelectorAll('#tabs .ctab').forEach(t=>t.classList.remove('on'));
   if(btn)btn.classList.add('on');
 
@@ -2373,46 +2411,6 @@ function showShortcuts(){
   modal.style.justifyContent='center';
 }
 window.showShortcuts=showShortcuts;
-
-// Resizable panels
-(function(){
-  const root=document.documentElement;
-  function initResizer(id,side){
-    const bar=document.getElementById(id);
-    if(!bar)return;
-    let dragging=false,startX=0,startW=0;
-    bar.addEventListener('mousedown',(e)=>{
-      dragging=true;
-      startX=e.clientX;
-      startW=parseInt(getComputedStyle(root).getPropertyValue(side==='lw'?'--lw':'--rw'))||( side==='lw'?220:240);
-      bar.classList.add('active');
-      e.preventDefault();
-    });
-    document.addEventListener('mousemove',(e)=>{
-      if(!dragging)return;
-      const delta=side==='lw'?e.clientX-startX:startX-e.clientX;
-      const w=Math.min(480,Math.max(160,startW+delta));
-      root.style.setProperty(side==='lw'?'--lw':'--rw',w+'px');
-      bar.style.left=side==='lw'?`calc(52px + ${w}px - 2px)`:'';
-      bar.style.right=side==='rw'?`calc(${w}px - 3px)`:'';
-      if(side==='lw') savedLw=w; else savedRw=w;
-    });
-    document.addEventListener('mouseup',()=>{
-      if(!dragging)return;
-      dragging=false;
-      bar.classList.remove('active');
-      if(typeof resize==='function') resize();
-    });
-  }
-  initResizer('rszL','lw');
-  initResizer('rszR','rw');
-
-  // Restore sidebar states if previously saved
-  const savedLeft = localStorage.getItem('reality_left_open');
-  if (savedLeft === 'false') toggleLeftPanel(false);
-  const savedRight = localStorage.getItem('reality_right_open');
-  if (savedRight === 'false') toggleRightPanel(false);
-})();
 
 // Keyboard event listener for shortcuts
 document.addEventListener('keydown',(e)=>{
@@ -2773,126 +2771,6 @@ restoreRenderControls();
 </script>
 
 <script>
-/* ── Workspace v2: detachable left/right panels ── */
-(function(){
-  const app=document.getElementById('app');
-  if(!app)return;
-  const root=document.documentElement;
-  const state={left:false,right:false};
-  const key=(side)=>side==='left'?'reality_left_float':'reality_right_float';
-  const read=(side)=>{try{return JSON.parse(localStorage.getItem(key(side))||'false')}catch{return false}};
-  const write=(side,v)=>localStorage.setItem(key(side),JSON.stringify(v));
-
-  function makeGrip(side){
-    const panel=document.getElementById(side);
-    if(!panel)return;
-    const id=side+'WorkspaceGrip';
-    document.getElementById(id)?.remove();
-    const grip=document.createElement('div');
-    grip.id=id; grip.className='sidebar-drag-grip';
-    grip.innerHTML=side==='left'?'LEFT · DRAG':'RIGHT · DRAG';
-    grip.title='Drag to move this sidebar. Double-click the handle to dock it again.';
-    app.appendChild(grip);
-    positionGrip(side);
-    let dragging=false,sx=0,sy=0,baseX=0,baseY=0;
-    grip.addEventListener('pointerdown',e=>{
-      dragging=true; grip.classList.add('dragging'); document.body.classList.add('workspace-dragging');
-      sx=e.clientX; sy=e.clientY;
-      const r=panel.getBoundingClientRect(); baseX=r.left; baseY=r.top;
-      if(!state[side]) setFloating(side,true,baseX,baseY);
-      grip.setPointerCapture(e.pointerId); e.preventDefault();
-    });
-    grip.addEventListener('pointermove',e=>{
-      if(!dragging)return;
-      const dx=e.clientX-sx,dy=e.clientY-sy;
-      const maxX=Math.max(52,innerWidth-panel.offsetWidth),maxY=Math.max(46,innerHeight-38-panel.offsetHeight);
-      const x=Math.max(52,Math.min(maxX,baseX+dx));
-      const y=Math.max(46,Math.min(maxY,baseY+dy));
-      panel.style.left=side==='left'?x+'px':''; panel.style.right=side==='right'?(innerWidth-x-panel.offsetWidth)+'px':'';
-      panel.style.top=y+'px'; panel.style.bottom='auto';
-      positionGrip(side);
-    });
-    const end=e=>{if(!dragging)return;dragging=false;grip.classList.remove('dragging');document.body.classList.remove('workspace-dragging');try{grip.releasePointerCapture(e.pointerId)}catch{}; const r=panel.getBoundingClientRect(); localStorage.setItem(key(side),JSON.stringify({x:r.left,y:r.top,w:r.width}));};
-    grip.addEventListener('pointerup',end); grip.addEventListener('pointercancel',end);
-    grip.addEventListener('dblclick',()=>setFloating(side,false));
-  }
-  function positionGrip(side){
-    const panel=document.getElementById(side),grip=document.getElementById(side+'WorkspaceGrip'); if(!panel||!grip)return;
-    const r=panel.getBoundingClientRect();
-    const edgeX = side==='left' ? Math.max(2,r.left+r.width-8) : Math.min(innerWidth-24,r.left-14);
-    grip.style.left=edgeX+'px';
-    grip.style.top=Math.max(58,Math.min(innerHeight-104,r.top+r.height/2))+'px';
-    grip.style.transform='translateY(-50%)';
-  }
-  function setFloating(side,on,x=undefined,y=undefined){
-    const panel=document.getElementById(side); if(!panel)return;
-    state[side]=on;
-    if(on){
-      const r=panel.getBoundingClientRect();
-      const w=Math.max(180,Math.min(420,r.width||220));
-      root.style.setProperty('--panel-float-w',w+'px');
-      panel.classList.add('workspace-floating');
-      panel.style.setProperty('--panel-float-w',w+'px');
-      panel.style.width=w+'px';
-      panel.style.display='flex';
-      if(x!==undefined)panel.style.left=Math.max(52,Math.min(innerWidth-w,x))+'px';
-      else if(side==='left')panel.style.left='52px';
-      if(y!==undefined)panel.style.top=Math.max(46,Math.min(innerHeight-38-160,y))+'px';
-      else panel.style.top='72px';
-      if(side==='right')panel.style.right=(x!==undefined?Math.max(0,innerWidth-w-x):'0')+'px';
-      if(side==='left')panel.style.right='auto';
-      if(side==='left')root.style.setProperty('--lw','0px');
-      if(side==='right')root.style.setProperty('--rw','0px');
-      const rz=document.getElementById(side==='left'?'rszL':'rszR');if(rz)rz.style.display='none';
-    }else{
-      panel.classList.remove('workspace-floating');
-      panel.style.removeProperty('position');
-      panel.style.removeProperty('top');
-      panel.style.removeProperty('bottom');
-      panel.style.removeProperty('left');
-      panel.style.removeProperty('right');
-      panel.style.removeProperty('width');
-      panel.style.removeProperty('z-index');
-      panel.style.removeProperty('box-shadow');
-      if(side==='left'){root.style.setProperty('--lw',savedLw+'px');const rz=document.getElementById('rszL');if(rz)rz.style.display='block';}
-      else{root.style.setProperty('--rw',savedRw+'px');const rz=document.getElementById('rszR');if(rz)rz.style.display='block';}
-      write(side,false);
-    }
-    write(side,on);
-    positionGrip(side); if(typeof resize==='function')resize();
-  }
-  window.setWorkspacePanelFloat=(side,on)=>setFloating(side,on);
-  window.addEventListener('resize',()=>{positionGrip('left');positionGrip('right')});
-  document.addEventListener('panelRendered',()=>{positionGrip('left');positionGrip('right')});
-
-  // Workspace v4: invalidate the pre-v4 float state once. Earlier versions
-  // could leave both sidebars restored at the same coordinates, which makes
-  // the Controls panel appear to sit on top of the workspace. Detaching is
-  // still available immediately after this migration.
-  const layoutVersionKey='reality_workspace_layout_version';
-  const layoutVersion=localStorage.getItem(layoutVersionKey);
-  if(layoutVersion!=='4'){
-    localStorage.removeItem('reality_left_float');
-    localStorage.removeItem('reality_right_float');
-    localStorage.removeItem('reality_left_open');
-    localStorage.removeItem('reality_right_open');
-    localStorage.setItem(layoutVersionKey,'4');
-  }
-
-  function boot(side){
-    makeGrip(side);
-    const saved=read(side);
-    if(saved && typeof saved==='object'){
-      // Only restore a float if it is a valid, visible position. The first
-      // post-migration load is always docked, preventing legacy overlap.
-      const x=Number(saved.x), y=Number(saved.y);
-      const valid=Number.isFinite(x)&&Number.isFinite(y)&&
-        x>=52&&y>=46&&x<innerWidth-160&&y<innerHeight-120;
-      if(valid)setFloating(side,true,x,y);
-    }else if(saved===true)setFloating(side,true);
-  }
-  boot('left'); boot('right');
-})();
 </script>
 <script type="module" src="/src/connector.ts"></script>
 <script type="module" src="/src/infinityBootstrap.ts"></script>

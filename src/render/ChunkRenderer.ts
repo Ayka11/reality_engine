@@ -10,6 +10,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
   NF, F, GRID_W, GRID_H, GRID_D, CX, CY, CZ, CHUNK_FLOATS, decodeChunkKey,
 } from '../core/ChunkGrid'
+import type { WorldViewSnapshot } from '../infinity/WorldViewContract'
+import type { ScientificFieldProvider } from '../infinity/ScientificFieldProvider'
 import {
   classifyVoxel, getMat, blendEnergyGlow, lerpPalette, LAYER_PALS,
   type MatType,
@@ -53,14 +55,17 @@ export class ChunkRenderer {
   private dummy = new THREE.Object3D()
   private col3  = new THREE.Color()
 
-  private readonly MAX_INST     = 800_000
+  private readonly MAX_INST     = 120_000
   private readonly PER_MAT_INST = Math.floor(800_000 / MAT_TYPES.length)
   private readonly VOXEL_THRESH = 0.8
+  private rebuildPending = false
+  private worldViewBinding: WorldViewSnapshot | null = null
+  private worldFieldProvider: ScientificFieldProvider | null = null
 
   // Public state
   layer         = 0
   matMode: 'field' | 'material' | 'height' = 'field'
-  zSlice        = GRID_D - 1
+  zSlice        = 7
   showParticles = true
   showAgents    = true
   emissiveMult  = 1.5
@@ -266,7 +271,9 @@ export class ChunkRenderer {
       this.shadowChunks.set(key, f32.slice(start, start + CHUNK_FLOATS))
       offset += 1 + CHUNK_FLOATS
     }
-    this._rebuild()
+    // Worker frames can arrive faster than the renderer can rebuild hundreds of thousands
+    // of instances. Defer the rebuild to the render cadence and coalesce dirty frames.
+    this.rebuildPending = true
   }
 
   private _rebuild() {
@@ -277,7 +284,50 @@ export class ChunkRenderer {
 
   // ── Rebuild: field / height mode ─────────────────────────────────────────────
 
+  private _rebuildWorldFieldLayer() {
+    this.layerMesh.visible = true
+    for (const m of this.matMeshes.values()) m.visible = false
+    const fi = LAYER_FIELD[this.layer] ?? F.E
+    const mx = LAYER_MAX[this.layer] ?? 1000
+    const pal = LAYER_PALS[this.layer] ?? LAYER_PALS[0]
+    const view = this.worldViewBinding
+    const provider = this.worldFieldProvider
+    if (!view || !provider) return false
+
+    // Downsample the authoritative world field for interactive volumetric rendering.
+    // The full scientific field remains available through FieldSampler/2D; the 3D
+    // projection uses a bounded voxel budget so it cannot monopolize the main thread.
+    const stride = 4
+    const maxInst = this.MAX_INST
+    let cnt = 0
+    for (let lz = 0; lz < GRID_D && cnt < maxInst; lz += stride) {
+      for (let ly = 0; ly < GRID_H && cnt < maxInst; ly += stride) {
+        for (let lx = 0; lx < GRID_W && cnt < maxInst; lx += stride) {
+          const x = view.center.x + (lx - GRID_W / 2)
+          const y = view.center.y + (lz - GRID_D / 2)
+          const z = view.center.z + (ly - GRID_H / 2)
+          const sample = provider.sample(x, y, z)
+          const v = [sample.energy, sample.density, sample.information, sample.entropy, sample.temperature, sample.biology][fi] ?? sample.energy
+          if (v < this.VOXEL_THRESH) continue
+          const t = Math.min(v / mx, 1)
+          const [r, g, b] = lerpPalette(pal, t)
+          this.dummy.position.set(x, y, z)
+          this.dummy.updateMatrix()
+          this.layerMesh.setMatrixAt(cnt, this.dummy.matrix)
+          this.col3.setRGB(r / 255, g / 255, b / 255)
+          this.layerMesh.setColorAt!(cnt, this.col3)
+          cnt++
+        }
+      }
+    }
+    this.layerMesh.count = cnt
+    this.layerMesh.instanceMatrix.needsUpdate = true
+    if (this.layerMesh.instanceColor) this.layerMesh.instanceColor.needsUpdate = true
+    return true
+  }
+
   private _rebuildLayer() {
+    if (this.worldFieldProvider && this.worldViewBinding && this._rebuildWorldFieldLayer()) return
     this.layerMesh.visible = true
     for (const m of this.matMeshes.values()) m.visible = false
 
@@ -535,25 +585,96 @@ export class ChunkRenderer {
 
   // ── Public controls ────────────────────────────────────────────────────────────
 
+  setWorldViewBinding(view: WorldViewSnapshot) {
+    if (!view || view.version !== 1) return
+    const localCenter = new THREE.Vector3(GRID_W / 2, GRID_D * 0.45, GRID_H / 2)
+    const nextCenter = new THREE.Vector3(view.center.x, view.center.y, view.center.z)
+    if (!this.worldViewBinding) {
+      const offset = this.camera.position.clone().sub(localCenter)
+      this.camera.position.copy(nextCenter).add(offset)
+      this.controls.target.copy(nextCenter)
+    } else {
+      const prev = this.worldViewBinding.center
+      const delta = new THREE.Vector3(
+        view.center.x - prev.x,
+        view.center.y - prev.y,
+        view.center.z - prev.z,
+      )
+      this.camera.position.add(delta)
+      this.controls.target.add(delta)
+    }
+    this.scene.position.set(
+      view.center.x - GRID_W / 2,
+      view.center.y - GRID_D * 0.45,
+      view.center.z - GRID_H / 2,
+    )
+    const previous = this.worldViewBinding
+    const changed = !previous ||
+      previous.center.x !== view.center.x ||
+      previous.center.y !== view.center.y ||
+      previous.center.z !== view.center.z ||
+      previous.sliceY !== view.sliceY ||
+      previous.seed !== view.seed ||
+      previous.visibleRadius !== view.visibleRadius
+    this.worldViewBinding = {
+      ...view,
+      center: { ...view.center },
+    }
+    if (changed && this.worldFieldProvider) this.rebuildPending = true
+  }
+
+  getWorldViewBinding(): WorldViewSnapshot | null {
+    if (!this.worldViewBinding) return null
+    return {
+      ...this.worldViewBinding,
+      center: { ...this.worldViewBinding.center },
+    }
+  }
+  setWorldFieldProvider(provider: ScientificFieldProvider | null) {
+    this.worldFieldProvider = provider
+  }
+
+  sampleWorldField(x: number, y: number, z: number) {
+    return this.worldFieldProvider?.sample(x, y, z) ?? null
+  }
+
+
   setLayer(layer: number) {
     this.layer = Math.max(-1, Math.min(5, Math.round(layer)))
-    if (this.matMode !== 'material') this._rebuildLayer()
+    if (this.matMode !== 'material') this.rebuildPending = true
   }
 
   setMatMode(mode: 'field' | 'material' | 'height') {
     this.matMode = mode
-    this._rebuild()
+    this.rebuildPending = true
   }
 
   setZSlice(z: number) {
     this.zSlice = Math.max(0, Math.min(GRID_D - 1, Math.round(z)))
-    this._rebuild()
+    this.rebuildPending = true
   }
 
   render(dt = 0.016) {
+    if (this.canvas.style.display === 'none') return
+    if (this.rebuildPending) {
+      this.rebuildPending = false
+      this._rebuild()
+    }
     this._updateFlyCamera(dt)
     if (this.controls.enabled) this.controls.update()
     this.renderer.render(this.scene, this.camera)
+  }
+
+  getSourceStats() {
+    return {
+      shadowChunks: this.shadowChunks.size,
+      instances: this.layerMesh.count,
+      pending: this.rebuildPending,
+      binding: this.getWorldViewBinding(),
+      fieldProvider: this.worldFieldProvider
+        ? { id: this.worldFieldProvider.id, version: this.worldFieldProvider.version }
+        : null,
+    }
   }
 
   get instanceCount(): number { return this.layerMesh.count }

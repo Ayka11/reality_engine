@@ -18,6 +18,7 @@ import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
 import { createPhysicsInteractionRecord, type PhysicsInteractionType } from '../infinity/PhysicsInteractionRecord'
 import { PhysicsInteractionLog } from '../infinity/PhysicsInteractionLog'
 import { RuntimeDiagnostics } from '../infinity/RuntimeDiagnostics'
+import { worldViewContract } from '../infinity/WorldViewContract'
 import { createExperimentProtocol } from '../infinity/ExperimentProtocol'
 import { ExperimentRunner, type ExperimentSnapshot } from '../infinity/ExperimentRunner'
 import { compareExperiments, type ExperimentComparison } from '../infinity/ExperimentComparison'
@@ -398,7 +399,7 @@ export class InfiniteWorldRenderer {
     const dx = (hR - hL) / (step * 2)
     const dz = (hU - hD) / (step * 2)
     const slope = Math.min(1, Math.sqrt(dx * dx + dz * dz) / 3)
-    const field = this.generator.sampleField(x, y, z)
+    const field = (window as any).sampleAuthoritativeWorldField?.(x, y, z) ?? this.generator.sampleField(x, y, z)
     const radiation = Math.max(0, Math.min(1, field.entropy * 8))
     const stability = Math.max(0, Math.min(1, 1 - field.entropy * 8))
     return {
@@ -664,6 +665,17 @@ export class InfiniteWorldRenderer {
     return w.chunk
   }
 
+  /** Authoritative terrain surface used by both mesh generation and diagnostics. */
+  sampleTerrainHeight(x: number, z: number): number {
+    const baseHeight = this.generator.sampleHeight(x, z)
+    const field = (window as any).sampleAuthoritativeWorldField?.(x, baseHeight, z)
+    if (!field) return baseHeight
+    const densityLift = ((field.density ?? 0.5) - 0.5) * 8
+    const energyLift = Math.log1p(Math.max(0, field.energy ?? 0)) * 0.35
+    const entropyLift = (field.entropy ?? 0) * 2
+    return baseHeight + densityLift + energyLift + entropyLift
+  }
+
   private buildTerrainPatch(chunk: WorldChunk, lod = 1): THREE.Group {
     const group = new THREE.Group()
     const geometry = new THREE.BufferGeometry()
@@ -678,26 +690,22 @@ export class InfiniteWorldRenderer {
     const originX = chunk.cx * WORLD_CHUNK_SIZE
     const originZ = chunk.cz * WORLD_CHUNK_SIZE
 
-    const sample = (gx: number, gz: number) => {
-      const lx = Math.min(WORLD_CHUNK_SIZE - 1, Math.floor(gx))
-      const lz = Math.min(WORLD_CHUNK_SIZE - 1, Math.floor(gz))
-      return chunk.heights[lz * WORLD_CHUNK_SIZE + lx]
-    }
+    const sampleTerrainHeight = (x: number, z: number) => this.sampleTerrainHeight(x, z)
 
     for (let z = 0; z < n; z++) {
       for (let x = 0; x < n; x++) {
         const i = z * n + x
         const gx = x * scale
         const gz = z * scale
-        const h = this.generator.sampleHeight(originX + gx, originZ + gz)
+        const h = sampleTerrainHeight(originX + gx, originZ + gz)
         positions[i * 3] = originX + gx
         positions[i * 3 + 1] = h
         positions[i * 3 + 2] = originZ + gz
 
-        const hL = this.generator.sampleHeight(originX + gx - 1, originZ + gz)
-        const hR = this.generator.sampleHeight(originX + gx + 1, originZ + gz)
-        const hD = this.generator.sampleHeight(originX + gx, originZ + gz - 1)
-        const hU = this.generator.sampleHeight(originX + gx, originZ + gz + 1)
+        const hL = sampleTerrainHeight(originX + gx - 1, originZ + gz)
+        const hR = sampleTerrainHeight(originX + gx + 1, originZ + gz)
+        const hD = sampleTerrainHeight(originX + gx, originZ + gz - 1)
+        const hU = sampleTerrainHeight(originX + gx, originZ + gz + 1)
         const normal = new THREE.Vector3(hL - hR, 2, hD - hU).normalize()
         normals[i * 3] = normal.x
         normals[i * 3 + 1] = normal.y
@@ -782,8 +790,99 @@ export class InfiniteWorldRenderer {
     group.position.set(-this.worldAnchor.x, -this.worldAnchor.y, -this.worldAnchor.z)
     this.waterMeshes.set(`${chunk.cx},${chunk.cy},${chunk.cz}`, water)
 
-    void sample
     return group
+  }
+
+  getTerrainPatchStats() {
+    return {
+      patchCount: this.patches.size,
+      loadedChunkKeys: [...this.patches.keys()],
+      worldAnchor: this.worldAnchor.clone(),
+    }
+  }
+
+  getTerrainVertexAnchor() {
+    for (const patch of this.patches.values()) {
+      let found: { x: number; y: number; z: number } | null = null
+      patch.group.traverse((child) => {
+        if (found || !child.userData.terrain || !(child as THREE.Mesh).isMesh) return
+        const position = (child as THREE.Mesh).geometry.getAttribute('position') as THREE.BufferAttribute | undefined
+        if (!position || position.count === 0) return
+        found = {
+          x: position.getX(0) + patch.group.position.x,
+          y: position.getY(0) + patch.group.position.y,
+          z: position.getZ(0) + patch.group.position.z,
+        }
+      })
+      if (found) return found
+    }
+    return null
+  }
+
+  getTerrainGeometrySignature() {
+    let vertexCount = 0
+    let heightSum = 0
+    let heightSquareSum = 0
+    for (const patch of this.patches.values()) {
+      patch.group.traverse((child) => {
+        if (!child.userData.terrain || !(child as THREE.Mesh).isMesh) return
+        const position = (child as THREE.Mesh).geometry.getAttribute('position') as THREE.BufferAttribute | undefined
+        if (!position) return
+        vertexCount += position.count
+        for (let i = 0; i < position.count; i++) {
+          const y = position.getY(i) + patch.group.position.y
+          heightSum += y
+          heightSquareSum += y * y
+        }
+      })
+    }
+    return {
+      patchCount: this.patches.size,
+      vertexCount,
+      heightSum: Number(heightSum.toFixed(6)),
+      heightSquareSum: Number(heightSquareSum.toFixed(6)),
+    }
+  }
+
+  sampleRenderedTerrainHeight(x: number, z: number): number | null {
+    let best: { distance: number; height: number } | null = null
+    for (const patch of this.patches.values()) {
+      let mesh: THREE.Mesh | undefined
+      patch.group.traverse((child) => {
+        if (!mesh && child.userData.terrain && (child as THREE.Mesh).isMesh) mesh = child as THREE.Mesh
+      })
+      const position = mesh?.geometry.getAttribute('position') as THREE.BufferAttribute | undefined
+      if (!position) continue
+      for (let i = 0; i < position.count; i++) {
+        const px = position.getX(i) + patch.group.position.x
+        const pz = position.getZ(i) + patch.group.position.z
+        const distance = Math.hypot(px - x, pz - z)
+        if (!best || distance < best.distance) best = { distance, height: position.getY(i) + patch.group.position.y }
+      }
+    }
+    return best?.height ?? null
+  }
+
+  /** Rebuild currently visible terrain so authoritative field mutations become geometric state. */
+  invalidateTerrainFromAuthoritativeField() {
+    const visible = [...this.patches.values()].map((patch) => ({ key: [...this.patches.entries()].find(([, value]) => value === patch)?.[0], chunk: patch.chunk, lod: patch.lod }))
+    for (const item of visible) {
+      if (!item.key) continue
+      const current = this.patches.get(item.key)
+      if (!current) continue
+      this.scene.remove(current.group)
+      current.group.traverse(obj => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose())
+        else if (mesh.material) mesh.material.dispose()
+      })
+      const group = this.buildTerrainPatch(item.chunk, item.lod)
+      this.patches.set(item.key, { group, chunk: item.chunk, lod: item.lod })
+      this.scene.add(group)
+    }
+    this.updateTerrainLod()
+    return this.getTerrainPatchStats()
   }
 
   private removeChunk(key: string) {
@@ -2418,6 +2517,8 @@ export class InfiniteWorldRenderer {
     }
 
     this.maybeRecenter()
+    worldViewContract.setCenter(this.worldPosition.x, this.worldPosition.y, this.worldPosition.z)
+    worldViewContract.setSimulationTime(performance.now() / 1000)
 
     const chunkStart = performance.now()
     this.syncChunks()

@@ -104,6 +104,31 @@ window.worldValidateScientificProvenance(...)
 
 The scientific layer is **computational and conditional**: simulation results do not by themselves establish real-world causal validity. Replication and generalization are evaluated only over the represented experimental configurations.
 
+### Runtime Provenance — Preset → Brush → Law → Build → World
+
+The runtime layer records a causal trace for interactive world operations without replacing the existing scientific provenance system. The trace links:
+
+```
+Preset acknowledgement
+      ↓
+Brush acknowledgement
+      ↓
+Runtime Law state
+      ↓
+World Decision / build cost
+      ↓
+World State after generation
+```
+
+Browser APIs:
+
+```ts
+window.getRuntimeProvenance()
+window.validateRuntimeProvenance()
+window.resetRuntimeProvenance()
+```
+
+Each event contains an ID, timestamp, stage, parent event, and structured payload. Browser acceptance verifies the complete causal parent chain and validates the trace after Quick Generate. This is runtime execution provenance; it is distinct from ScientificProvenance, which fingerprints experiment protocols, results, replication, generalization, and evidence.
 ### Scientific Workspace UI
 
 The **🔬 Science Lab** control provides a direct UI for:
@@ -825,3 +850,28 @@ npm run hf:cpu:check
 ```
 
 The Hugging Face Space is configured with `app_file: dist/index.html`, so `dist/` must be present in the Space repository when deploying the static edition.
+
+
+## Infinite World render architecture
+
+The render surfaces currently represent different simulation layers:
+
+- **3D Infinite World** — deterministic, streamed procedural terrain with unbounded X/Z coordinates, chunk streaming, LOD, persistence and world-rule integration. It is currently an infinite horizontal terrain surface, not an infinite 3D volume.
+- **3D Volumetric Field** — scientific field renderer bound to `WorldViewContract`; its authoritative source can be the Infinite World field sampler, while the finite 128×128×64 worker remains a fallback/material source.
+- **2D Multi-Slice** — world-space scientific projection driven by `WorldViewContract` + `FieldSampler.sampleViewWindow()`; legacy 36×28 simulation rendering remains available through `window.setWorldField2DLinked(false)`.
+- **Hybrid** — synchronized preview combining the world-space 2D projection and Infinite World surface. Both share world center, slice Y and deterministic seed through the spatial contract.
+- **3D Volumetric Field** — spatially converged with the authoritative world field for the active view; full streamed volumetric simulation across unbounded world coordinates remains a future phase.
+
+### World-space projection contract
+
+```js
+window.getWorldViewContract()
+window.setWorldViewCenter(x, y, z)
+window.setWorldViewSliceY(y)
+window.worldFieldViewWindow(width, height, sliceY)
+window.getWorldField2DLinked()
+window.setWorldField2DLinked(false) // compatibility fallback
+```
+
+The planned full convergence of these layers is documented in `docs/INFINITE_WORLD_ENGINE_PLAN.md`.
+

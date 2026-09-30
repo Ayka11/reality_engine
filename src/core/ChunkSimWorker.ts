@@ -98,6 +98,18 @@ function buildFramePayload(): ArrayBuffer {
   }
   return ab
 }
+function emitFrame() {
+  const ab = buildFramePayload()
+  ;(self as unknown as Worker).postMessage({
+    cmd: 'frame',
+    tick,
+    evCount,
+    events: causal.slice(-20),
+    ab,
+    stats: grid.stats,
+  }, [ab])
+}
+
 
 self.onmessage = (e: MessageEvent) => {
   const { cmd, data } = e.data
@@ -105,13 +117,7 @@ self.onmessage = (e: MessageEvent) => {
   if (cmd === 'tick') {
     const speed = (data?.speed as number) || 1
     for (let s = 0; s < speed; s++) simStep(0.016)
-    const ab = buildFramePayload()
-    ;(self as unknown as Worker).postMessage({
-      cmd: 'frame', tick, evCount,
-      events: causal.slice(-20),
-      ab,
-      stats: grid.stats,
-    }, [ab])
+    emitFrame()
     return
   }
 
@@ -160,6 +166,7 @@ self.onmessage = (e: MessageEvent) => {
       default: paint(F.E, 100)
     }
     ;(self as unknown as Worker).postMessage({ cmd: 'brushApplied', name, x: cx, y: cy, z: cz, radius: r })
+    emitFrame()
     return
   }
 
@@ -320,6 +327,7 @@ self.onmessage = (e: MessageEvent) => {
       processes: Array.from(activeProcs),
       params: { DIFF, ENT, INFO, BIO }
     })
+    emitFrame()
     return
   }
 
@@ -339,6 +347,13 @@ self.onmessage = (e: MessageEvent) => {
 
   if (cmd === 'snapshot') {
     ;(self as unknown as Worker).postMessage({ cmd: 'snapshot', data: { snap: grid.snapshot(), tick } })
+    return
+  }
+
+  if (cmd === 'restoreChunk') {
+    grid.restoreChunk(data.key, data.data)
+    emitFrame()
+    ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key: data.key, restoreId: data.restoreId } })
     return
   }
 
