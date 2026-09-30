@@ -439,7 +439,13 @@ export class InfiniteWorldRenderer {
     return {
       objects: this.objects.size,
       loadedChunks: this.patches.size,
-      world: this.worldCoordinates,
+      targetChunks: this.chunks.size,
+      world: { ...this.worldCoordinates },
+      camera: {
+        worldX: this.worldPosition.x,
+        worldY: this.worldPosition.y,
+        worldZ: this.worldPosition.z,
+      },
     }
   }
 
