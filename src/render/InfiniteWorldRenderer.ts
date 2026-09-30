@@ -1955,6 +1955,7 @@ export class InfiniteWorldRenderer {
       decisionCost: decision.cost,
       scientific: decision.buildability.field,
       decisionComponents: decision.components,
+      laws: decision.laws,
     }
   }
 
