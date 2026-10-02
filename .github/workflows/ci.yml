@@ -2,12 +2,12 @@ name: Reality Engine CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, reality-engine-hf-infinity]
   pull_request:
-    branches: [main]
+    branches: [main, reality-engine-hf-infinity]
 
 concurrency:
-  group: reality-engine-main
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -21,6 +21,7 @@ jobs:
       - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
       - run: npm run lint
+      - run: npm run test:brushes
       - run: npm run build
       - run: npm run hf:smoke
       - run: npm run hf:cpu:check
