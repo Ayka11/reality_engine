@@ -21,8 +21,8 @@ assert.equal(brushFalloffWeight(Number.NaN, 10, "linear"), 0);
 
 assert.equal(applyBrushOperation(10, 2, "add", 0.5, 2), 12);
 assert.equal(applyBrushOperation(10, 20, "set", 0.5), 15);
-assert.equal(applyBrushOperation(10, 2, "scale", 1, 1), 10);
-assert.equal(applyBrushOperation(10, 2, "scale", 0.5, 1), 5);
+assert.equal(applyBrushOperation(10, 2, "scale", 1, 1), 20);
+assert.equal(applyBrushOperation(10, 0, "scale", 0.5, 1), 5);
 assert.equal(applyBrushOperation(10, 2, "add", 1, 0), 10);
 assert.throws(() => applyBrushOperation(Number.NaN, 1, "add", 1), RangeError);
 
