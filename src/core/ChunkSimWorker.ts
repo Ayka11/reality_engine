@@ -102,19 +102,23 @@ function buildFramePayload(): ArrayBuffer {
   return ab
 }
 
+function publishFrame() {
+  const ab = buildFramePayload()
+  ;(self as unknown as Worker).postMessage({
+    cmd: 'frame', tick, evCount,
+    events: causal.slice(-20),
+    ab,
+    stats: grid.stats,
+  }, [ab])
+}
+
 self.onmessage = (e: MessageEvent) => {
   const { cmd, data } = e.data
 
   if (cmd === 'tick') {
     const speed = (data?.speed as number) || 1
     for (let s = 0; s < speed; s++) simStep(0.016)
-    const ab = buildFramePayload()
-    ;(self as unknown as Worker).postMessage({
-      cmd: 'frame', tick, evCount,
-      events: causal.slice(-20),
-      ab,
-      stats: grid.stats,
-    }, [ab])
+    publishFrame()
     return
   }
 
@@ -124,6 +128,7 @@ self.onmessage = (e: MessageEvent) => {
     else if (mode === 'add') grid.add(x, y, z, f, v)
     else if (mode === 'set') grid.set(x, y, z, f, v)
     else [F.E, F.D, F.I, F.S, F.T, F.BIO].forEach(ff => grid.set(x, y, z, ff, 0))
+    publishFrame()
     return
   }
 
@@ -208,6 +213,7 @@ self.onmessage = (e: MessageEvent) => {
       cmd: 'brushApplied', name, x: cx, y: cy, z: cz, radius: r,
       geometry: shape, falloff: falloffMode, verticalExtent: verticalMode, operation: op,
     })
+    publishFrame()
     return
   }
 
@@ -232,6 +238,7 @@ self.onmessage = (e: MessageEvent) => {
       const s = 0.02 + Math.random() * 0.06
       grid.set(x, y, z, F.S, s)
     }
+    publishFrame()
     return
   }
 
@@ -368,6 +375,7 @@ self.onmessage = (e: MessageEvent) => {
       processes: Array.from(activeProcs),
       params: { DIFF, ENT, INFO, BIO }
     })
+    publishFrame()
     return
   }
 
@@ -392,6 +400,7 @@ self.onmessage = (e: MessageEvent) => {
 
   if (cmd === 'restore') {
     grid.restore(data.snap); tick = data.tick || 0
+    publishFrame()
     return
   }
 }
