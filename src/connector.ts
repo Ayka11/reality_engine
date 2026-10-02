@@ -99,7 +99,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   workerBusy = false
 
   if (cmd === 'brushApplied') {
-    win['lastChunkBrush'] = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius }
+    win['lastChunkBrush'] = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius, geometry: e.data.geometry, falloff: e.data.falloff, verticalExtent: e.data.verticalExtent, operation: e.data.operation }
     return
   }
 
