@@ -172,8 +172,8 @@ nodeEditor.onSelect  = (node) => {
 }
 win['chunkWorkerCompile'] = chunkWorkerCompile
 win['nodeLawEditor']      = nodeEditor
-win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4, strength = 1) => {
-  chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength } })
+win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4, strength = 1, options: { geometry?: string; falloff?: string; verticalExtent?: string; operation?: string; shellThickness?: number; layerThickness?: number } = {}) => {
+  chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength, ...options } })
 }
 
 win['applyChunkPreset']   = (name: string) => {
