@@ -133,11 +133,11 @@ try {
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
 
   await page.waitForFunction(() => typeof window.applyChunkBrush === "function");
-  await page.evaluate(() => { window.lastChunkBrush = null; window.applyChunkBrush("Forest", 64, 64, 32, 5, 1); });
+  await page.evaluate(() => { window.lastChunkBrush = null; window.applyChunkBrush("Forest", 64, 64, 32, 5, 1, { geometry: "shell", falloff: "linear", verticalExtent: "full-column", operation: "add" }); });
   await page.waitForFunction(() => !!window.lastChunkBrush, undefined, { timeout: acceptanceTimeout });
   const brushAck = await page.evaluate(() => window.lastChunkBrush);
-  if (brushAck?.name !== "Forest" || brushAck?.x !== 64 || brushAck?.y !== 64 || brushAck?.z !== 32 || brushAck?.radius !== 5) {
-    throw new Error("Smart Brush did not reach ChunkSimWorker with expected runtime parameters");
+  if (brushAck?.name !== "Forest" || brushAck?.x !== 64 || brushAck?.y !== 64 || brushAck?.z !== 32 || brushAck?.radius !== 5 || brushAck?.geometry !== "shell" || brushAck?.falloff !== "linear" || brushAck?.verticalExtent !== "full-column" || brushAck?.operation !== "add") {
+    throw new Error("Smart Brush geometry settings did not reach ChunkSimWorker with expected runtime parameters");
   }
 
   await page.waitForFunction(() => typeof window.applyChunkPreset === "function");
