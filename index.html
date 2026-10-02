@@ -1271,6 +1271,10 @@ const PANELS={
       <div class="section-body">
         <div class="ctrl-row"><span class="ctrl-label">Size</span><input type="range" id="bsize" min="1" max="5" value="2" step="1" oninput="document.getElementById('bsizeOut').textContent=this.value"><span class="ctrl-val" id="bsizeOut">2</span></div>
         <div class="ctrl-row"><span class="ctrl-label">Strength</span><input type="range" id="bstr" min="50" max="1000" value="400" step="50" oninput="document.getElementById('bstrOut').textContent=this.value"><span class="ctrl-val" id="bstrOut">400</span></div>
+        <div class="ctrl-row"><span class="ctrl-label">Geometry</span><select id="brushGeometry" class="ctrl-select"><option value="sphere">Sphere</option><option value="shell">Shell</option><option value="column">Column</option><option value="layer">Layer</option></select></div>
+        <div class="ctrl-row"><span class="ctrl-label">Falloff</span><select id="brushFalloff" class="ctrl-select"><option value="gaussian">Gaussian</option><option value="linear">Linear</option><option value="constant">Constant</option></select></div>
+        <div class="ctrl-row"><span class="ctrl-label">Column extent</span><select id="brushVerticalExtent" class="ctrl-select"><option value="bounded-volume">Bounded</option><option value="selected-layer">Selected layer</option><option value="full-column">Full column</option></select></div>
+        <div class="ctrl-row"><span class="ctrl-label">Operation</span><select id="brushOperation" class="ctrl-select"><option value="set">Set / blend</option><option value="add">Add</option></select></div>
         <div style="font-size:9px;color:var(--sub);margin-top:6px;margin-bottom:4px">Standard tools</div>
         <div class="pill-row" id="toolPills">
           ${['paint','inject','erase','inspect'].map((t,i)=>`<span class="pill${i===0?' on':''}" onclick="setTool('${t}',this)">${['✏️ Paint','➕ Inject','🧹 Erase','🔍 Inspect'][i]}</span>`).join('')}
@@ -1870,7 +1874,7 @@ function paintAt(x,y){
   const str=parseInt(document.getElementById('bstr')?.value||400);
   if(tool==='stamp_prefab'&&window.gamedevMode){window.gamedevMode.stampAt(x,y);return;}
   if(activeBrush&&BRUSHES[activeBrush]){
-    if(window.applyChunkBrush)window.applyChunkBrush(activeBrush,Math.round(x/W*127),Math.round(y/H*127),32,Math.max(2,bs*2),str/400);
+    if(window.applyChunkBrush)window.applyChunkBrush(activeBrush,Math.round(x/W*127),Math.round(y/H*127),32,Math.max(2,bs*2),str/400,{geometry:document.getElementById('brushGeometry')?.value||'sphere',falloff:document.getElementById('brushFalloff')?.value||'gaussian',verticalExtent:document.getElementById('brushVerticalExtent')?.value||'bounded-volume',operation:document.getElementById('brushOperation')?.value||'set',shellThickness:1.5,layerThickness:0.5});
     BRUSHES[activeBrush].paint(x,y,bs+1);
     return;
   }
