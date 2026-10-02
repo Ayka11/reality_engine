@@ -255,7 +255,8 @@ export class ChunkRenderer {
   // ── Worker frame integration ─────────────────────────────────────────────────
 
   /** Decode dirty-chunk ArrayBuffer from worker, update shadow map, rebuild. */
-  applyWorkerFrame(ab: ArrayBuffer) {
+  applyWorkerFrame(ab: ArrayBuffer, replaceAll = false) {
+    if (replaceAll) this.shadowChunks.clear()
     const u32 = new Uint32Array(ab)
     const f32 = new Float32Array(ab)
     const numChunks = u32[0]
