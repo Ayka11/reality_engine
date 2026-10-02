@@ -7,6 +7,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
+    "test:brushes": "node scripts/check-brush-contracts.mjs && node scripts/check-brush-math.mjs && node scripts/check-brush-geometry.mjs",
     "deploy": "netlify deploy --prod --dir=dist",
     "hf:smoke": "node scripts/hf-smoke-check.mjs",
     "build:hf:cpu": "npm run build",
