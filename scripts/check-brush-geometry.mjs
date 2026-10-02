@@ -21,7 +21,6 @@ async function loadTypeScriptModule(relativePath, replacements = []) {
   return import(url);
 }
 
-const mathModule = await loadTypeScriptModule("src/brushes/BrushMath.ts");
 const mathSource = await readFile(new URL("src/brushes/BrushMath.ts", root), "utf8");
 const mathJavascript = ts.transpileModule(mathSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
@@ -50,25 +49,16 @@ function weight(shape, point, options = {}) {
   });
 }
 
-// Sphere uses three-dimensional distance.
 assert.equal(weight("sphere", { x: 3, y: 4, z: 0 }), 1);
 assert.equal(weight("sphere", { x: 3, y: 4, z: 1 }), 0);
-
-// Shell affects a band around the spherical surface.
 assert.equal(weight("shell", { x: 5, y: 0, z: 0 }, { shellThickness: 0.5 }), 1);
 assert.equal(weight("shell", { x: 0, y: 0, z: 0 }, { shellThickness: 0.5 }), 0);
-
-// Column uses X/Z horizontal distance and explicit vertical extent.
 assert.equal(weight("column", { x: 3, y: 100, z: 4 }, { verticalExtent: "full-column" }), 1);
 assert.equal(weight("column", { x: 6, y: 0, z: 0 }, { verticalExtent: "full-column" }), 0);
 assert.equal(weight("column", { x: 0, y: 6, z: 0 }, { verticalExtent: "bounded-volume" }), 0);
-
-// Layer requires an explicit selected height.
 assert.equal(weight("layer", { x: 2, y: 10, z: 0 }, { selectedLayerY: 10, layerThickness: 0.5 }), 1);
 assert.equal(weight("layer", { x: 2, y: 12, z: 0 }, { selectedLayerY: 10, layerThickness: 0.5 }), 0);
 assert.equal(weight("layer", { x: 2, y: 10, z: 0 }), 0);
-
-// Invalid input is rejected safely.
 assert.equal(weight("sphere", { x: 0, y: 0, z: 0 }, { radius: 0 }), 0);
 assert.equal(weight("sphere", { x: Number.NaN, y: 0, z: 0 }), 0);
 
