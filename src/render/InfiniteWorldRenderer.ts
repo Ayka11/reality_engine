@@ -138,7 +138,7 @@ export class InfiniteWorldRenderer {
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null)
     this.storageKey = `reality-engine-world:${seed}:objects`
     this.persistence = new WorldPersistence(seed)
-    this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9, maxNewPerUpdate: 1 })
+    this.chunks = new InfiniteChunkManager(this.generator, { radius: 6, verticalRadius: 0, maxLoaded: 113, maxNewPerUpdate: 2 })
 
     this.camera.position.set(38, this.worldY, 62)
     this.controls = new OrbitControls(this.camera, canvas)
@@ -146,7 +146,7 @@ export class InfiniteWorldRenderer {
     this.controls.dampingFactor = 0.08
     this.controls.maxPolarAngle = Math.PI * 0.485
     this.controls.minDistance = 2
-    this.controls.maxDistance = 2000
+    this.controls.maxDistance = 900
     this.controls.enablePan = true
     this.controls.screenSpacePanning = true
     this.controls.panSpeed = 1.1
@@ -350,7 +350,7 @@ export class InfiniteWorldRenderer {
     this.fieldSampler.setGenerator(this.generator)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights, () => (window as any).getRealityLawState?.() ?? null)
     this.persistence = new WorldPersistence(newSeed)
-    this.chunks = new InfiniteChunkManager(this.generator, { radius: 1, verticalRadius: 0, maxLoaded: 9, maxNewPerUpdate: 1 })
+    this.chunks = new InfiniteChunkManager(this.generator, { radius: 6, verticalRadius: 0, maxLoaded: 113, maxNewPerUpdate: 2 })
     this.history = new WorldEditHistory()
 
     const groundY = this.generator.sampleHeight(16, 16)
@@ -2415,6 +2415,9 @@ export class InfiniteWorldRenderer {
     } else {
       this.updateOrbitKeyboard(dt)
       if (this.controls.enabled) this.controls.update()
+      // OrbitControls stores camera target in rebased render coordinates.
+      // Convert back to stable world coordinates before streaming terrain.
+      this.worldPosition.copy(this.controls.target).add(this.worldAnchor)
     }
 
     this.maybeRecenter()
