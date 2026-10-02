@@ -95,7 +95,7 @@ requestAnimationFrame(() => {
 })
 
 chunkWorker.onmessage = (e: MessageEvent) => {
-  const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data
+  const { cmd, tick: wTick, evCount: wEv, ab, stats, replaceAll } = e.data
   workerBusy = false
 
   if (cmd === 'brushApplied') {
@@ -115,6 +115,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'frame' && ab) {
+    if (replaceAll) localChunks.clear()
     chunkTick    = wTick    ?? chunkTick
     chunkEvCount = wEv      ?? chunkEvCount
     const NF_W = 14, CF = 512 * NF_W
@@ -128,7 +129,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       off += 1 + CF
     }
     // Feed the scientific field state directly into the dedicated volumetric renderer.
-    fieldRenderer.applyWorkerFrame(ab as ArrayBuffer)
+    fieldRenderer.applyWorkerFrame(ab as ArrayBuffer, Boolean(replaceAll))
     const el = document.getElementById('chunkStats')
     if (el && stats) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`
   }
