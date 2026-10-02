@@ -8,6 +8,9 @@ import {
   ChunkGrid, GRID_W, GRID_H, GRID_D,
   CHUNK_FLOATS, F,
 } from './ChunkGrid'
+import { brushGeometryWeight } from '../brushes/BrushGeometry'
+import { applyBrushOperation } from '../brushes/BrushMath'
+import type { BrushFalloff, BrushOperation, BrushShape, BrushVerticalExtent } from '../brushes/BrushContract'
 
 const grid = new ChunkGrid()
 const W = GRID_W, H = GRID_H, D = GRID_D
@@ -125,15 +128,52 @@ self.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'brush') {
-    const { name, x, y, z, radius, strength } = data as {
+    const {
+      name, x, y, z, radius, strength,
+      geometry = 'sphere', falloff = 'gaussian',
+      verticalExtent = 'bounded-volume', operation = 'set',
+      shellThickness = 1, layerThickness = 0.5,
+    } = data as {
       name: string; x: number; y: number; z: number; radius: number; strength: number
+      geometry?: BrushShape; falloff?: BrushFalloff; verticalExtent?: BrushVerticalExtent
+      operation?: BrushOperation; shellThickness?: number; layerThickness?: number
     }
     const cx = Math.max(0, Math.min(W - 1, Math.round(x)))
     const cy = Math.max(0, Math.min(H - 1, Math.round(y)))
     const cz = Math.max(0, Math.min(D - 1, Math.round(z)))
-    const r = Math.max(1, Math.min(24, radius || 4))
-    const s = Number.isFinite(strength) ? strength : 1
-    const paint = (f: number, value: number) => grid.paintSphere(cx, cy, cz, r, f, value * s)
+    const r = Math.max(1, Math.min(24, Number.isFinite(radius) ? radius : 4))
+    const s = Math.max(0, Math.min(2.5, Number.isFinite(strength) ? strength : 1))
+    const shape = (['sphere', 'shell', 'column', 'layer'] as string[]).includes(geometry) ? geometry : 'sphere'
+    const falloffMode = (['gaussian', 'linear', 'constant'] as string[]).includes(falloff) ? falloff : 'gaussian'
+    const verticalMode = (['selected-layer', 'bounded-volume', 'full-column'] as string[]).includes(verticalExtent) ? verticalExtent : 'bounded-volume'
+    const op = (['add', 'set', 'scale'] as string[]).includes(operation) ? operation : 'set'
+    const brushGeometry = {
+      shape, falloff: falloffMode, verticalExtent: verticalMode, radius: r,
+      shellThickness: Math.max(0.25, Math.min(8, Number.isFinite(shellThickness) ? shellThickness : 1)),
+      layerThickness: Math.max(0, Math.min(4, Number.isFinite(layerThickness) ? layerThickness : 0.5)),
+    }
+    const paint = (field: number, value: number) => {
+      const shellPad = shape === 'shell' ? brushGeometry.shellThickness : 0
+      const x0 = Math.max(0, Math.floor(cx - r - shellPad)), x1 = Math.min(W - 1, Math.ceil(cx + r + shellPad))
+      const z0 = Math.max(0, Math.floor(cz - r - shellPad)), z1 = Math.min(D - 1, Math.ceil(cz + r + shellPad))
+      const fullColumn = shape === 'column' && verticalMode === 'full-column'
+      const y0 = fullColumn ? 0 : Math.max(0, Math.floor(cy - r - shellPad))
+      const y1 = fullColumn ? H - 1 : Math.min(H - 1, Math.ceil(cy + r + shellPad))
+      for (let py = y0; py <= y1; py++) for (let pz = z0; pz <= z1; pz++) for (let px = x0; px <= x1; px++) {
+        const weight = brushGeometryWeight({
+          center: { x: cx, y: cy, z: cz },
+          point: { x: px, y: py, z: pz },
+          selectedLayerY: cy,
+          geometry: brushGeometry,
+        })
+        if (weight <= 0) continue
+        const current = grid.get(px, py, pz, field)
+        const next = op === 'set'
+          ? applyBrushOperation(current, value * s, 'set', weight, 1)
+          : applyBrushOperation(current, value, op, weight, s)
+        grid.set(px, py, pz, field, next)
+      }
+    }
     switch (name) {
       case 'Volcano': paint(F.E, 800); paint(F.T, 500); paint(F.D, 0.6); paint(F.S, 0.2); break
       case 'Forest': paint(F.E, 180); paint(F.D, 0.4); paint(F.I, 160); paint(F.BIO, 0.7); break
@@ -148,18 +188,26 @@ self.onmessage = (e: MessageEvent) => {
       case 'Quantum Core': paint(F.I, 350); paint(F.BIO, 0.6); paint(F.E, 200); break
       case 'MetaLaw Node': paint(F.E, 400); paint(F.I, 300); paint(F.D, 0.5); break
       case 'Force Barrier': {
-        const ir = Math.ceil(r)
-        for (let dz=-ir; dz<=ir; dz++) for (let dy=-ir; dy<=ir; dy++) for (let dx=-ir; dx<=ir; dx++) {
-          const d = Math.sqrt(dx*dx+dy*dy+dz*dz)
-          if (Math.abs(d-r) > 1.2) continue
-          grid.set(cx+dx, cy+dy, cz+dz, F.D, 0.9*s)
-          grid.set(cx+dx, cy+dy, cz+dz, F.E, 150*s)
-        }
+        const ir = Math.ceil(r + (shape === 'shell' ? brushGeometry.shellThickness : 0))
+        for (let py = Math.max(0, cy - ir); py <= Math.min(H - 1, cy + ir); py++)
+          for (let pz = Math.max(0, cz - ir); pz <= Math.min(D - 1, cz + ir); pz++)
+            for (let px = Math.max(0, cx - ir); px <= Math.min(W - 1, cx + ir); px++) {
+              const weight = brushGeometryWeight({
+                center: { x: cx, y: cy, z: cz }, point: { x: px, y: py, z: pz },
+                selectedLayerY: cy, geometry: brushGeometry,
+              })
+              if (weight <= 0) continue
+              grid.set(px, py, pz, F.D, applyBrushOperation(grid.get(px, py, pz, F.D), 0.9 * s, 'set', weight, 1))
+              grid.set(px, py, pz, F.E, applyBrushOperation(grid.get(px, py, pz, F.E), 150 * s, 'set', weight, 1))
+            }
         break
       }
       default: paint(F.E, 100)
     }
-    ;(self as unknown as Worker).postMessage({ cmd: 'brushApplied', name, x: cx, y: cy, z: cz, radius: r })
+    ;(self as unknown as Worker).postMessage({
+      cmd: 'brushApplied', name, x: cx, y: cy, z: cz, radius: r,
+      geometry: shape, falloff: falloffMode, verticalExtent: verticalMode, operation: op,
+    })
     return
   }
 
