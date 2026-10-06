@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { transformWithEsbuild } from "vite";
 
 const required = [
   "package.json",
@@ -36,9 +37,16 @@ const inlineScripts = [...indexHtml.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*
 if (inlineScripts.length === 0) throw new Error("No inline scripts found for syntax validation");
 for (const [index, code] of inlineScripts.entries()) {
   try {
-    new Function(code);
+    await transformWithEsbuild(code, `inline-script-${index + 1}.js`, {
+      loader: "js",
+      target: "esnext",
+      format: "iife",
+      sourcefile: `index.html:inline-script-${index + 1}`,
+    });
   } catch (error) {
-    throw new Error(`Inline script ${index + 1} has invalid JavaScript syntax: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Inline script ${index + 1} has invalid JavaScript syntax: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
