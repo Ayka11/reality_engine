@@ -42,6 +42,7 @@ for (const [index, code] of inlineScripts.entries()) {
       loader: "js",
       target: "esnext",
       format: "iife",
+      sourcefile: `index.html:inline-script-${index + 1}`,
     });
   } catch (error) {
     throw new Error(
