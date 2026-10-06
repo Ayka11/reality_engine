@@ -95,11 +95,11 @@ requestAnimationFrame(() => {
 })
 
 chunkWorker.onmessage = (e: MessageEvent) => {
-  const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data
+  const { cmd, tick: wTick, evCount: wEv, ab, stats, replaceAll } = e.data
   workerBusy = false
 
   if (cmd === 'brushApplied') {
-    win['lastChunkBrush'] = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius }
+    win['lastChunkBrush'] = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius, geometry: e.data.geometry, falloff: e.data.falloff, verticalExtent: e.data.verticalExtent, operation: e.data.operation }
     return
   }
 
@@ -115,6 +115,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'frame' && ab) {
+    if (replaceAll) localChunks.clear()
     chunkTick    = wTick    ?? chunkTick
     chunkEvCount = wEv      ?? chunkEvCount
     const NF_W = 14, CF = 512 * NF_W
@@ -128,7 +129,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       off += 1 + CF
     }
     // Feed the scientific field state directly into the dedicated volumetric renderer.
-    fieldRenderer.applyWorkerFrame(ab as ArrayBuffer)
+    fieldRenderer.applyWorkerFrame(ab as ArrayBuffer, Boolean(replaceAll))
     const el = document.getElementById('chunkStats')
     if (el && stats) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`
   }
@@ -172,8 +173,8 @@ nodeEditor.onSelect  = (node) => {
 }
 win['chunkWorkerCompile'] = chunkWorkerCompile
 win['nodeLawEditor']      = nodeEditor
-win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4, strength = 1) => {
-  chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength } })
+win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4, strength = 1, options: { geometry?: string; falloff?: string; verticalExtent?: string; operation?: string; shellThickness?: number; layerThickness?: number } = {}) => {
+  chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength, ...options } })
 }
 
 win['applyChunkPreset']   = (name: string) => {
