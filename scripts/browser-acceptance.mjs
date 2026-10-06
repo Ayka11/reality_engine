@@ -132,36 +132,33 @@ try {
   }
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
 
-  // Structural materialization regression: choose a buildable coordinate while
-  // the governing laws are active, then prove disabling those laws vetoes the
-  // actual object mutation rather than only changing the decision preview.
+  // Structural materialization regression: first prove a buildable site can
+  // materialize normally, then enable the governing law and prove the same
+  // physical mutation is vetoed when the law penalty crosses the gate.
+  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
   const materializationProbe = await page.evaluate(() => {
     const world = window.infiniteWorld;
     if (!world || typeof world.place !== "function") return { error: "InfiniteWorldRenderer.place is not exposed" };
-    const candidates = [];
-    for (let x = -96; x <= 96; x += 16) {
-      for (let z = -96; z <= 96; z += 16) {
+    for (let x = -128; x <= 128; x += 8) {
+      for (let z = -128; z <= 128; z += 8) {
         const d = world.buildZoneCost(x, z);
-        if (d?.buildability?.score >= 0.2 && d?.laws?.penalty < 0.25) candidates.push({ x, z, score: d.buildability.score });
+        if (d?.buildability?.score >= 0.2) {
+          const before = world.getObjectCount();
+          const allowed = world.place("building", x, z);
+          const afterAllowed = world.getObjectCount();
+          if (allowed && afterAllowed === before + 1) {
+            return { x, z, score: d.buildability.score, before, afterAllowed, allowedCreated: true };
+          }
+        }
       }
     }
-    if (!candidates.length) return { error: "No deterministic buildable probe coordinate found" };
-    const probe = candidates[0];
-    const before = world.getObjectCount();
-    const allowed = world.place("building", probe.x, probe.z);
-    const afterAllowed = world.getObjectCount();
-    return {
-      x: probe.x, z: probe.z, score: probe.score,
-      before, afterAllowed,
-      allowedCreated: !!allowed,
-      allowedLawPenalty: allowed?.properties?.lawPenalty ?? null,
-    };
+    return { error: "No deterministic buildable probe coordinate found" };
   });
-  if (materializationProbe.error || !materializationProbe.allowedCreated || materializationProbe.afterAllowed !== materializationProbe.before + 1) {
-    throw new Error(`Structural materialization did not succeed at a valid law-approved site: ${JSON.stringify(materializationProbe)}`);
+  if (materializationProbe.error || !materializationProbe.allowedCreated) {
+    throw new Error(`Structural materialization did not succeed at a valid terrain site: ${JSON.stringify(materializationProbe)}`);
   }
 
-  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
+  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
   const vetoMaterialization = await page.evaluate((probe) => {
     const world = window.infiniteWorld;
     const before = world.getObjectCount();
