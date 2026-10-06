@@ -2283,7 +2283,7 @@ export class InfiniteWorldRenderer {
             buildability: siteDecision.buildability.score,
             scientificField: siteDecision.buildability.field.information,
             lawPenalty: siteDecision.laws.penalty,
-            activeLawProcesses: siteDecision.laws.activeProcesses,
+            activeLawProcesses: siteDecision.laws.activeProcesses.join(','),
           },
         })
         created.push(building)
