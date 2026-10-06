@@ -207,6 +207,20 @@ try {
     throw new Error("Preset did not reach ChunkSimWorker with expected runtime state");
   }
 
+  // Visible preset parity: commands that exist in the 2D UI must also be executable
+  // by the authoritative worker, not only by the local canvas implementation.
+  for (const preset of ["wave", "storm", "ruins", "clear"]) {
+    await page.evaluate((name) => {
+      window.lastChunkPreset = null;
+      window.applyChunkPreset?.(name);
+    }, preset);
+    await page.waitForFunction(() => !!window.lastChunkPreset, undefined, { timeout: acceptanceTimeout });
+    const ack = await page.evaluate(() => window.lastChunkPreset);
+    if (ack?.name !== preset || !ack?.stats) {
+      throw new Error(`Preset ${preset} did not reach ChunkSimWorker with a valid acknowledgement`);
+    }
+  }
+
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
