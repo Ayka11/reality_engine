@@ -1979,6 +1979,7 @@ export class InfiniteWorldRenderer {
       x, z, y, slope: decision.buildability.slope, river, floodRisk, slopeRisk,
       cost: Math.max(0, Math.min(1, legacyTerrainCost * 0.65 + decision.cost * 0.35)),
       decisionCost: decision.cost,
+      buildability: decision.buildability,
       scientific: decision.buildability.field,
       decisionComponents: decision.components,
       laws: decision.laws,
