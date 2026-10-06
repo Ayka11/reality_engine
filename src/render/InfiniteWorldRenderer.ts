@@ -1672,7 +1672,16 @@ export class InfiniteWorldRenderer {
     return point ? this.erase(point.x, point.y, point.z, radius) : []
   }
 
+  private lawGateForBuild(kind: WorldObjectKind, x: number, z: number) {
+    const structural = new Set<WorldObjectKind>(['building', 'road', 'bridge', 'water'])
+    if (!structural.has(kind)) return { allowed: true, decision: null }
+    const decision = this.decisionLayer.buildZoneCost(x, z)
+    return { allowed: decision.buildability.score >= 0.2 && decision.laws.penalty < 0.25, decision }
+  }
+
   place(kind: WorldObjectKind, x: number, z: number, y?: number, scale = 1) {
+    const lawGate = this.lawGateForBuild(kind, x, z)
+    if (!lawGate.allowed) return null
     const snapped = this.snapWorld(x, y ?? this.generator.sampleHeight(x, z), z, kind)
     x = snapped.x
     z = snapped.z
@@ -1680,7 +1689,10 @@ export class InfiniteWorldRenderer {
     const ground = y
     const object = this.objects.add({
       kind, x, y: ground, z,
-      rotationY: 0, scale, seed: 0, properties: {},
+      rotationY: 0, scale, seed: 0, properties: {
+        lawPenalty: lawGate.decision?.laws.penalty ?? 0,
+        activeLawProcesses: lawGate.decision?.laws.activeProcesses.join(',') ?? '',
+      },
     })
     this.objectSpatialIndex.upsert(object)
     this.history.push({ type: 'add', object: { ...object } })
@@ -1831,10 +1843,16 @@ export class InfiniteWorldRenderer {
       const t = i / count
       const x = x0 + dx * t
       const z = z0 + dz * t
+      const lawGate = this.lawGateForBuild('road', x, z)
+      if (!lawGate.allowed) continue
       const y = this.generator.sampleHeight(x, z) + 0.08
       const object = this.objects.add({
         kind: 'road', x, y, z, rotationY, scale: Math.max(0.5, spacing / 12),
-        seed: i, properties: { segment: i, roadLength: length },
+        seed: i, properties: {
+          segment: i, roadLength: length,
+          lawPenalty: lawGate.decision?.laws.penalty ?? 0,
+          activeLawProcesses: lawGate.decision?.laws.activeProcesses.join(',') ?? '',
+        },
       })
       created.push(object)
       this.history.push({ type: 'add', object: { ...object } })
