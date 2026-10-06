@@ -132,6 +132,58 @@ try {
   }
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
 
+  // Structural materialization regression: choose a buildable coordinate while
+  // the governing laws are active, then prove disabling those laws vetoes the
+  // actual object mutation rather than only changing the decision preview.
+  const materializationProbe = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (!world || typeof world.place !== "function") return { error: "InfiniteWorldRenderer.place is not exposed" };
+    const candidates = [];
+    for (let x = -96; x <= 96; x += 16) {
+      for (let z = -96; z <= 96; z += 16) {
+        const d = world.buildZoneCost(x, z);
+        if (d?.buildability?.score >= 0.2 && d?.laws?.penalty < 0.25) candidates.push({ x, z, score: d.buildability.score });
+      }
+    }
+    if (!candidates.length) return { error: "No deterministic buildable probe coordinate found" };
+    const probe = candidates[0];
+    const before = world.getObjectCount();
+    const allowed = world.place("building", probe.x, probe.z);
+    const afterAllowed = world.getObjectCount();
+    return {
+      x: probe.x, z: probe.z, score: probe.score,
+      before, afterAllowed,
+      allowedCreated: !!allowed,
+      allowedLawPenalty: allowed?.properties?.lawPenalty ?? null,
+    };
+  });
+  if (materializationProbe.error || !materializationProbe.allowedCreated || materializationProbe.afterAllowed !== materializationProbe.before + 1) {
+    throw new Error(`Structural materialization did not succeed at a valid law-approved site: ${JSON.stringify(materializationProbe)}`);
+  }
+
+  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
+  const vetoMaterialization = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    const before = world.getObjectCount();
+    const decision = world.buildZoneCost(probe.x, probe.z);
+    const result = world.place("building", probe.x, probe.z);
+    return {
+      before,
+      after: world.getObjectCount(),
+      created: !!result,
+      lawPenalty: decision?.laws?.penalty ?? null,
+      activeProcesses: decision?.laws?.activeProcesses ?? [],
+    };
+  }, materializationProbe);
+  if (
+    vetoMaterialization.created ||
+    vetoMaterialization.after !== vetoMaterialization.before ||
+    Number(vetoMaterialization.lawPenalty ?? 0) < 0.25
+  ) {
+    throw new Error(`Law gate failed to veto structural materialization: ${JSON.stringify(vetoMaterialization)}`);
+  }
+  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
+
   await page.waitForFunction(() => typeof window.applyChunkBrush === "function");
   await page.evaluate(() => { window.lastChunkBrush = null; window.applyChunkBrush("Forest", 64, 64, 32, 5, 1); });
   await page.waitForFunction(() => !!window.lastChunkBrush, undefined, { timeout: acceptanceTimeout });
