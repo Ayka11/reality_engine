@@ -194,6 +194,33 @@ self.onmessage = (e: MessageEvent) => {
       grid.paintSphere(64, 64, 32, 18, F.E, 900)
       grid.paintSphere(64, 64, 32, 14, F.T, 500)
       grid.paintSphere(64, 64, 32, 16, F.D, 0.8)
+    } else if (nm === 'wave') {
+      for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const wave = Math.sin(x * 0.6) * Math.cos(y * 0.4) * Math.sin(z * 0.3 + 0.5)
+        grid.set(x, y, z, F.E, Math.max(0, 400 + 400 * wave))
+        grid.set(x, y, z, F.D, Math.max(0, Math.min(1, 0.4 + 0.3 * Math.sin(x * 0.3 + y * 0.3))))
+        grid.set(x, y, z, F.T, Math.max(0, 200 + 200 * Math.cos(x * 0.3 + y * 0.3)))
+      }
+    } else if (nm === 'storm') {
+      for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        grid.set(x, y, z, F.E, Math.random() * 800)
+        grid.set(x, y, z, F.S, 0.3 + Math.random() * 0.6)
+        grid.set(x, y, z, F.T, Math.random() * 400)
+        grid.set(x, y, z, F.D, Math.random() * 0.8)
+      }
+    } else if (nm === 'ruins') {
+      for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const n = (Math.sin(x * 0.5) * Math.cos(y * 0.4) + 1) / 2
+        if (n > 0.5) {
+          grid.set(x, y, z, F.E, 50 + n * 150)
+          grid.set(x, y, z, F.I, n * 300)
+          grid.set(x, y, z, F.D, 0.3 + n * 0.3)
+          grid.set(x, y, z, F.S, 0.2 + Math.random() * 0.4)
+        }
+      }
+    } else if (nm === 'clear') {
+      // grid was already cleared above; keep the explicit runtime contract.
+      activeProcs.clear()
     } else if (nm === 'life') {
       for (let k = 0; k < 60; k++) {
         const x = 10 + Math.floor(Math.random() * (W - 20))
