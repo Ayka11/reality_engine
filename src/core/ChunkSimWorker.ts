@@ -8,12 +8,16 @@ import {
   ChunkGrid, GRID_W, GRID_H, GRID_D,
   CHUNK_FLOATS, F,
 } from './ChunkGrid'
+import { brushGeometryWeight } from '../brushes/BrushGeometry'
+import { applyBrushOperation } from '../brushes/BrushMath'
+import type { BrushFalloff, BrushOperation, BrushShape, BrushVerticalExtent } from '../brushes/BrushContract'
 
 const grid = new ChunkGrid()
 const W = GRID_W, H = GRID_H, D = GRID_D
 let tick = 0, evCount = 0
 const causal: Array<{ id: number; tick: number; x: number; y: number; z: number; delta: number }> = []
 let DIFF = 0.09, ENT = 0.0004, INFO = 0.35, BIO = 0.25
+let pendingReplaceAll = false
 const activeProcs = new Set<string>(['thermo', 'bio'])
 
 function simStep(dt: number) {
@@ -76,7 +80,7 @@ function simStep(dt: number) {
     }
   }
 
-  if (tick % 100 === 0) grid.prune()
+  if (tick % 100 === 0 && grid.prune() > 0) pendingReplaceAll = true
   tick++
 }
 
@@ -99,19 +103,24 @@ function buildFramePayload(): ArrayBuffer {
   return ab
 }
 
+function publishFrame(replaceAll = pendingReplaceAll) {
+  pendingReplaceAll = false
+  const ab = buildFramePayload()
+  ;(self as unknown as Worker).postMessage({
+    cmd: 'frame', tick, evCount, replaceAll,
+    events: causal.slice(-20),
+    ab,
+    stats: grid.stats,
+  }, [ab])
+}
+
 self.onmessage = (e: MessageEvent) => {
   const { cmd, data } = e.data
 
   if (cmd === 'tick') {
     const speed = (data?.speed as number) || 1
     for (let s = 0; s < speed; s++) simStep(0.016)
-    const ab = buildFramePayload()
-    ;(self as unknown as Worker).postMessage({
-      cmd: 'frame', tick, evCount,
-      events: causal.slice(-20),
-      ab,
-      stats: grid.stats,
-    }, [ab])
+    publishFrame()
     return
   }
 
@@ -121,19 +130,57 @@ self.onmessage = (e: MessageEvent) => {
     else if (mode === 'add') grid.add(x, y, z, f, v)
     else if (mode === 'set') grid.set(x, y, z, f, v)
     else [F.E, F.D, F.I, F.S, F.T, F.BIO].forEach(ff => grid.set(x, y, z, ff, 0))
+    publishFrame()
     return
   }
 
   if (cmd === 'brush') {
-    const { name, x, y, z, radius, strength } = data as {
+    const {
+      name, x, y, z, radius, strength,
+      geometry = 'sphere', falloff = 'gaussian',
+      verticalExtent = 'bounded-volume', operation = 'set',
+      shellThickness = 1, layerThickness = 0.5,
+    } = data as {
       name: string; x: number; y: number; z: number; radius: number; strength: number
+      geometry?: BrushShape; falloff?: BrushFalloff; verticalExtent?: BrushVerticalExtent
+      operation?: BrushOperation; shellThickness?: number; layerThickness?: number
     }
     const cx = Math.max(0, Math.min(W - 1, Math.round(x)))
     const cy = Math.max(0, Math.min(H - 1, Math.round(y)))
     const cz = Math.max(0, Math.min(D - 1, Math.round(z)))
-    const r = Math.max(1, Math.min(24, radius || 4))
-    const s = Number.isFinite(strength) ? strength : 1
-    const paint = (f: number, value: number) => grid.paintSphere(cx, cy, cz, r, f, value * s)
+    const r = Math.max(1, Math.min(24, Number.isFinite(radius) ? radius : 4))
+    const s = Math.max(0, Math.min(2.5, Number.isFinite(strength) ? strength : 1))
+    const shape = (['sphere', 'shell', 'column', 'layer'] as string[]).includes(geometry) ? geometry : 'sphere'
+    const falloffMode = (['gaussian', 'linear', 'constant'] as string[]).includes(falloff) ? falloff : 'gaussian'
+    const verticalMode = (['selected-layer', 'bounded-volume', 'full-column'] as string[]).includes(verticalExtent) ? verticalExtent : 'bounded-volume'
+    const op = (['add', 'set', 'scale'] as string[]).includes(operation) ? operation : 'set'
+    const brushGeometry = {
+      shape, falloff: falloffMode, verticalExtent: verticalMode, radius: r,
+      shellThickness: Math.max(0.25, Math.min(8, Number.isFinite(shellThickness) ? shellThickness : 1)),
+      layerThickness: Math.max(0, Math.min(4, Number.isFinite(layerThickness) ? layerThickness : 0.5)),
+    }
+    const paint = (field: number, value: number) => {
+      const shellPad = shape === 'shell' ? brushGeometry.shellThickness : 0
+      const x0 = Math.max(0, Math.floor(cx - r - shellPad)), x1 = Math.min(W - 1, Math.ceil(cx + r + shellPad))
+      const z0 = Math.max(0, Math.floor(cz - r - shellPad)), z1 = Math.min(D - 1, Math.ceil(cz + r + shellPad))
+      const fullColumn = shape === 'column' && verticalMode === 'full-column'
+      const y0 = fullColumn ? 0 : Math.max(0, Math.floor(cy - r - shellPad))
+      const y1 = fullColumn ? H - 1 : Math.min(H - 1, Math.ceil(cy + r + shellPad))
+      for (let py = y0; py <= y1; py++) for (let pz = z0; pz <= z1; pz++) for (let px = x0; px <= x1; px++) {
+        const weight = brushGeometryWeight({
+          center: { x: cx, y: cy, z: cz },
+          point: { x: px, y: py, z: pz },
+          selectedLayerY: cy,
+          geometry: brushGeometry,
+        })
+        if (weight <= 0) continue
+        const current = grid.get(px, py, pz, field)
+        const next = op === 'set'
+          ? applyBrushOperation(current, value * s, 'set', weight, 1)
+          : applyBrushOperation(current, value, op, weight, s)
+        grid.set(px, py, pz, field, next)
+      }
+    }
     switch (name) {
       case 'Volcano': paint(F.E, 800); paint(F.T, 500); paint(F.D, 0.6); paint(F.S, 0.2); break
       case 'Forest': paint(F.E, 180); paint(F.D, 0.4); paint(F.I, 160); paint(F.BIO, 0.7); break
@@ -142,30 +189,39 @@ self.onmessage = (e: MessageEvent) => {
       case 'Storm': paint(F.E, 400); paint(F.S, 0.12); paint(F.T, 150); break
       case 'Life Cluster': paint(F.E, 280); paint(F.D, 0.45); paint(F.I, 200); paint(F.BIO, 0.65); paint(F.T, 110); paint(F.S, -0.1); break
       case 'Radiation': paint(F.S, 0.3); paint(F.I, -50); break
-      case 'Civ Seed':
-      case 'Civilization Seed': paint(F.E, 380); paint(F.D, 0.5); paint(F.I, 400); paint(F.BIO, 0.8); paint(F.S, -0.15); paint(F.T, 100); break
+      case 'Civ Seed': paint(F.E, 380); paint(F.D, 0.5); paint(F.I, 400); paint(F.BIO, 0.8); paint(F.S, -0.15); paint(F.T, 100); break
       case 'Gravity Well': paint(F.E, 450); paint(F.D, 0.8); break
       case 'Entropy Sink': paint(F.S, -0.4); paint(F.T, -200); break
       case 'Quantum Core': paint(F.I, 350); paint(F.BIO, 0.6); paint(F.E, 200); break
       case 'MetaLaw Node': paint(F.E, 400); paint(F.I, 300); paint(F.D, 0.5); break
       case 'Force Barrier': {
-        const ir = Math.ceil(r)
-        for (let dz=-ir; dz<=ir; dz++) for (let dy=-ir; dy<=ir; dy++) for (let dx=-ir; dx<=ir; dx++) {
-          const d = Math.sqrt(dx*dx+dy*dy+dz*dz)
-          if (Math.abs(d-r) > 1.2) continue
-          grid.set(cx+dx, cy+dy, cz+dz, F.D, 0.9*s)
-          grid.set(cx+dx, cy+dy, cz+dz, F.E, 150*s)
-        }
+        const ir = Math.ceil(r + (shape === 'shell' ? brushGeometry.shellThickness : 0))
+        for (let py = Math.max(0, cy - ir); py <= Math.min(H - 1, cy + ir); py++)
+          for (let pz = Math.max(0, cz - ir); pz <= Math.min(D - 1, cz + ir); pz++)
+            for (let px = Math.max(0, cx - ir); px <= Math.min(W - 1, cx + ir); px++) {
+              const weight = brushGeometryWeight({
+                center: { x: cx, y: cy, z: cz }, point: { x: px, y: py, z: pz },
+                selectedLayerY: cy, geometry: brushGeometry,
+              })
+              if (weight <= 0) continue
+              grid.set(px, py, pz, F.D, applyBrushOperation(grid.get(px, py, pz, F.D), 0.9 * s, 'set', weight, 1))
+              grid.set(px, py, pz, F.E, applyBrushOperation(grid.get(px, py, pz, F.E), 150 * s, 'set', weight, 1))
+            }
         break
       }
       default: paint(F.E, 100)
     }
-    ;(self as unknown as Worker).postMessage({ cmd: 'brushApplied', name, x: cx, y: cy, z: cz, radius: r })
+    ;(self as unknown as Worker).postMessage({
+      cmd: 'brushApplied', name, x: cx, y: cy, z: cz, radius: r,
+      geometry: shape, falloff: falloffMode, verticalExtent: verticalMode, operation: op,
+    })
+    publishFrame()
     return
   }
 
   if (cmd === 'generate') {
     grid.clear()
+    pendingReplaceAll = true
     const a = data
     DIFF = a.DIFF || 0.09; ENT = a.ENT || 0.0004
     INFO = a.INFO || 0.35; BIO  = a.BIO  || 0.25
@@ -185,43 +241,17 @@ self.onmessage = (e: MessageEvent) => {
       const s = 0.02 + Math.random() * 0.06
       grid.set(x, y, z, F.S, s)
     }
+    publishFrame()
     return
   }
 
   if (cmd === 'preset') {
-    grid.clear(); tick = 0; causal.length = 0; evCount = 0
+    grid.clear(); pendingReplaceAll = true; tick = 0; causal.length = 0; evCount = 0
     const nm = data.name as string
     if (nm === 'burst') {
       grid.paintSphere(64, 64, 32, 18, F.E, 900)
       grid.paintSphere(64, 64, 32, 14, F.T, 500)
       grid.paintSphere(64, 64, 32, 16, F.D, 0.8)
-    } else if (nm === 'wave') {
-      for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-        const wave = Math.sin(x * 0.6) * Math.cos(y * 0.4) * Math.sin(z * 0.3 + 0.5)
-        grid.set(x, y, z, F.E, Math.max(0, 400 + 400 * wave))
-        grid.set(x, y, z, F.D, Math.max(0, Math.min(1, 0.4 + 0.3 * Math.sin(x * 0.3 + y * 0.3))))
-        grid.set(x, y, z, F.T, Math.max(0, 200 + 200 * Math.cos(x * 0.3 + y * 0.3)))
-      }
-    } else if (nm === 'storm') {
-      for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-        grid.set(x, y, z, F.E, Math.random() * 800)
-        grid.set(x, y, z, F.S, 0.3 + Math.random() * 0.6)
-        grid.set(x, y, z, F.T, Math.random() * 400)
-        grid.set(x, y, z, F.D, Math.random() * 0.8)
-      }
-    } else if (nm === 'ruins') {
-      for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-        const n = (Math.sin(x * 0.5) * Math.cos(y * 0.4) + 1) / 2
-        if (n > 0.5) {
-          grid.set(x, y, z, F.E, 50 + n * 150)
-          grid.set(x, y, z, F.I, n * 300)
-          grid.set(x, y, z, F.D, 0.3 + n * 0.3)
-          grid.set(x, y, z, F.S, 0.2 + Math.random() * 0.4)
-        }
-      }
-    } else if (nm === 'clear') {
-      // grid was already cleared above; keep the explicit runtime contract.
-      activeProcs.clear()
     } else if (nm === 'life') {
       for (let k = 0; k < 60; k++) {
         const x = 10 + Math.floor(Math.random() * (W - 20))
@@ -348,6 +378,7 @@ self.onmessage = (e: MessageEvent) => {
       processes: Array.from(activeProcs),
       params: { DIFF, ENT, INFO, BIO }
     })
+    publishFrame()
     return
   }
 
@@ -372,6 +403,8 @@ self.onmessage = (e: MessageEvent) => {
 
   if (cmd === 'restore') {
     grid.restore(data.snap); tick = data.tick || 0
+    pendingReplaceAll = true
+    publishFrame()
     return
   }
 }
