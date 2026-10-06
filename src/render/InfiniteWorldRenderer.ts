@@ -2195,8 +2195,10 @@ export class InfiniteWorldRenderer {
         const distance = d.role === 'civic' ? 12 : 18
         const x = d.x + Math.cos(angle) * distance
         const z = d.z + Math.sin(angle) * distance
-        const siteDecision = this.decisionLayer.analyzeBuildability(x, z)
-        const y = siteDecision.elevation
+        const siteDecision = this.decisionLayer.buildZoneCost(x, z, Math.hypot(x - plan.hub.x, z - plan.hub.z))
+        // Auto-building is law-aware: missing core physical processes can veto a site.
+        if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
+        const y = siteDecision.buildability.elevation
         const building = this.objects.add({
           kind: 'building', x, y, z,
           rotationY: angle,
@@ -2204,8 +2206,10 @@ export class InfiniteWorldRenderer {
           seed: i * 100 + k,
           properties: {
             city: 'district', district: i, role: d.role,
-            buildability: siteDecision.score,
-            scientificField: siteDecision.field.information,
+            buildability: siteDecision.buildability.score,
+            scientificField: siteDecision.buildability.field.information,
+            lawPenalty: siteDecision.laws.penalty,
+            activeLawProcesses: siteDecision.laws.activeProcesses,
           },
         })
         created.push(building)
@@ -2265,8 +2269,10 @@ export class InfiniteWorldRenderer {
         const tangentZ = Math.sin(angle + Math.PI / 2) * lateral
         const px = bx + tangentX
         const pz = bz + tangentZ
-        const siteDecision = this.decisionLayer.analyzeBuildability(px, pz)
-        const py = siteDecision.elevation
+        const siteDecision = this.decisionLayer.buildZoneCost(px, pz, Math.hypot(px - cx, pz - cz))
+        // Settlement growth must obey the same physical-law gate as city planning.
+        if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
+        const py = siteDecision.buildability.elevation
         const building = this.objects.add({
           kind: 'building', x: px, y: py, z: pz,
           rotationY: angle + Math.PI / 2,
@@ -2274,8 +2280,10 @@ export class InfiniteWorldRenderer {
           seed: i * 100 + b,
           properties: {
             settlement: 'block', block: i, slot: b, innerRadius: inner,
-            buildability: siteDecision.score,
-            scientificField: siteDecision.field.information,
+            buildability: siteDecision.buildability.score,
+            scientificField: siteDecision.buildability.field.information,
+            lawPenalty: siteDecision.laws.penalty,
+            activeLawProcesses: siteDecision.laws.activeProcesses,
           },
         })
         created.push(building)
