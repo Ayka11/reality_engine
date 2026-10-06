@@ -139,8 +139,8 @@ try {
   const materializationProbe = await page.evaluate(() => {
     const world = window.infiniteWorld;
     if (!world || typeof world.place !== "function") return { error: "InfiniteWorldRenderer.place is not exposed" };
-    for (let x = -128; x <= 128; x += 8) {
-      for (let z = -128; z <= 128; z += 8) {
+    for (let x = -1024; x <= 1024; x += 32) {
+      for (let z = -1024; z <= 1024; z += 32) {
         const d = world.buildZoneCost(x, z);
         if (d?.buildability?.score >= 0.2) {
           const before = world.getObjectCount();
