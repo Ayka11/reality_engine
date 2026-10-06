@@ -159,7 +159,7 @@ try {
     throw new Error(`Structural materialization did not succeed at a valid terrain site: ${JSON.stringify(materializationProbe)}`);
   }
 
-  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
+  await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
   const vetoMaterialization = await page.evaluate((probe) => {
     const world = window.infiniteWorld;
     const before = world.getObjectCount();
