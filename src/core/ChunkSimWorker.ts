@@ -142,7 +142,8 @@ self.onmessage = (e: MessageEvent) => {
       case 'Storm': paint(F.E, 400); paint(F.S, 0.12); paint(F.T, 150); break
       case 'Life Cluster': paint(F.E, 280); paint(F.D, 0.45); paint(F.I, 200); paint(F.BIO, 0.65); paint(F.T, 110); paint(F.S, -0.1); break
       case 'Radiation': paint(F.S, 0.3); paint(F.I, -50); break
-      case 'Civ Seed': paint(F.E, 380); paint(F.D, 0.5); paint(F.I, 400); paint(F.BIO, 0.8); paint(F.S, -0.15); paint(F.T, 100); break
+      case 'Civ Seed':
+      case 'Civilization Seed': paint(F.E, 380); paint(F.D, 0.5); paint(F.I, 400); paint(F.BIO, 0.8); paint(F.S, -0.15); paint(F.T, 100); break
       case 'Gravity Well': paint(F.E, 450); paint(F.D, 0.8); break
       case 'Entropy Sink': paint(F.S, -0.4); paint(F.T, -200); break
       case 'Quantum Core': paint(F.I, 350); paint(F.BIO, 0.6); paint(F.E, 200); break
