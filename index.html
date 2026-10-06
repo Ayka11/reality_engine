@@ -1932,8 +1932,10 @@ window.applyPreset=function(p){
   else if(p==='ruins'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const n=(Math.sin(x*.5)*Math.cos(y*.4)+1)/2;if(n>.5){set_(x,y,FE,50+n*150);set_(x,y,FI,n*300);set_(x,y,FD,.3+n*.3);set_(x,y,FS,.2+Math.random()*.4);}}}
   else if(p==='clear'){buf.fill(0);}
   log(`Preset: ${p}`);
-  const _cpre=['burst','wave','life','proto','gaia'];
-  if(_cpre.includes(p)&&window.applyChunkPreset)window.applyChunkPreset(p);
+  // Keep the visible 2D preset and the authoritative ChunkSimWorker on the same semantic preset command.
+  // The local canvas remains a presentation/undo surface; the worker owns the runtime field state.
+  const runtimePresets=['burst','wave','life','proto','town','storm','ruins','clear'];
+  if(runtimePresets.includes(p)&&window.applyChunkPreset)window.applyChunkPreset(p);
 };
 
 // ── UI HELPERS ────────────────────────────────────────────────────────────
