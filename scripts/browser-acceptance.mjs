@@ -139,10 +139,13 @@ try {
   const materializationProbe = await page.evaluate(() => {
     const world = window.infiniteWorld;
     if (!world || typeof world.place !== "function") return { error: "InfiniteWorldRenderer.place is not exposed" };
-    for (let x = -1024; x <= 1024; x += 32) {
-      for (let z = -1024; z <= 1024; z += 32) {
+    let best = null;
+    for (let x = -4096; x <= 4096; x += 64) {
+      for (let z = -4096; z <= 4096; z += 64) {
         const d = world.buildZoneCost(x, z);
-        if (d?.buildability?.score >= 0.2) {
+        const score = Number(d?.buildability?.score ?? -1);
+        if (!best || score > best.score) best = { x, z, score, waterDepth: d?.buildability?.waterDepth ?? null, slope: d?.buildability?.slope ?? null };
+        if (score >= 0.2) {
           const before = world.getObjectCount();
           const allowed = world.place("building", x, z);
           const afterAllowed = world.getObjectCount();
@@ -152,7 +155,7 @@ try {
         }
       }
     }
-    return { error: "No deterministic buildable probe coordinate found" };
+    return { error: "No deterministic buildable probe coordinate found", best };
   });
   if (materializationProbe.error || !materializationProbe.allowedCreated) {
     throw new Error(`Structural materialization did not succeed at a valid terrain site: ${JSON.stringify(materializationProbe)}`);
