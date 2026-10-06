@@ -1813,11 +1813,19 @@ export class InfiniteWorldRenderer {
       const crossesWater = a.water || b.water
       const steep = Math.max(a.slope, b.slope) > 0.45
       const kind: WorldObjectKind = crossesWater ? 'bridge' : 'road'
+      const segmentX = (a.x + b.x) * 0.5
+      const segmentZ = (a.z + b.z) * 0.5
+      const lawGate = this.lawGateForBuild(kind, segmentX, segmentZ)
+      if (!lawGate.allowed) continue
       const y = crossesWater ? this.generator.seaLevel + 0.45 : (a.y + b.y) * 0.5 + 0.08
       const object = this.objects.add({
-        kind, x: (a.x + b.x) * 0.5, y, z: (a.z + b.z) * 0.5,
+        kind, x: segmentX, y, z: segmentZ,
         rotationY, scale: Math.max(0.5, length / 12),
-        seed: i, properties: { route: 'smart', water: crossesWater, steep },
+        seed: i, properties: {
+          route: 'smart', water: crossesWater, steep,
+          lawPenalty: lawGate.decision?.laws.penalty ?? 0,
+          activeLawProcesses: lawGate.decision?.laws.activeProcesses.join(',') ?? '',
+        },
       })
       created.push(object)
       this.history.push({ type: 'add', object: { ...object } })
@@ -2194,15 +2202,24 @@ export class InfiniteWorldRenderer {
         const hydro = this.analyzeHydrology((a.x + b.x) * 0.5, (a.z + b.z) * 0.5, 18, 9)
         const localRiver = hydro.rivers.length > 0
         const water = a.water || b.water || localRiver
+        const kind: WorldObjectKind = water ? 'bridge' : 'road'
+        const segmentX = (a.x + b.x) * 0.5
+        const segmentZ = (a.z + b.z) * 0.5
+        const lawGate = this.lawGateForBuild(kind, segmentX, segmentZ)
+        if (!lawGate.allowed) continue
         const object = this.objects.add({
-          kind: water ? 'bridge' : 'road',
-          x: (a.x + b.x) * 0.5,
+          kind,
+          x: segmentX,
           y: water ? this.generator.seaLevel + 0.45 : (a.y + b.y) * 0.5 + 0.08,
-          z: (a.z + b.z) * 0.5,
+          z: segmentZ,
           rotationY: Math.atan2(b.x - a.x, b.z - a.z),
           scale: Math.max(0.5, Math.hypot(b.x - a.x, b.z - a.z) / 12),
           seed: i * 1000 + j,
-          properties: { city: 'corridor', district: i, role: d.role },
+          properties: {
+            city: 'corridor', district: i, role: d.role,
+            lawPenalty: lawGate.decision?.laws.penalty ?? 0,
+            activeLawProcesses: lawGate.decision?.laws.activeProcesses.join(',') ?? '',
+          },
         })
         created.push(object)
         this.history.push({ type: 'add', object: { ...object } })
@@ -2266,15 +2283,23 @@ export class InfiniteWorldRenderer {
         const b = route[s + 1]
         const length = Math.hypot(b.x - a.x, b.z - a.z)
         const kind: WorldObjectKind = a.water || b.water ? 'bridge' : 'road'
+        const segmentX = (a.x + b.x) * 0.5
+        const segmentZ = (a.z + b.z) * 0.5
+        const lawGate = this.lawGateForBuild(kind, segmentX, segmentZ)
+        if (!lawGate.allowed) continue
         const object = this.objects.add({
           kind,
-          x: (a.x + b.x) * 0.5,
+          x: segmentX,
           y: kind === 'bridge' ? this.generator.seaLevel + 0.45 : (a.y + b.y) * 0.5 + 0.08,
-          z: (a.z + b.z) * 0.5,
+          z: segmentZ,
           rotationY: Math.atan2(b.x - a.x, b.z - a.z),
           scale: Math.max(0.5, length / 12),
           seed: s,
-          properties: { settlement: 'road', block: i },
+          properties: {
+            settlement: 'road', block: i,
+            lawPenalty: lawGate.decision?.laws.penalty ?? 0,
+            activeLawProcesses: lawGate.decision?.laws.activeProcesses.join(',') ?? '',
+          },
         })
         created.push(object)
         this.history.push({ type: 'add', object: { ...object } })
@@ -2322,12 +2347,21 @@ export class InfiniteWorldRenderer {
       const radial = radius * (0.35 + (i % 5) / 8)
       const x = cx + Math.cos(angle) * radial
       const z = cz + Math.sin(angle) * radial
-      const y = this.generator.sampleHeight(x, z)
+      const siteDecision = this.decisionLayer.buildZoneCost(x, z, Math.hypot(x - cx, z - cz))
+      if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
+      const y = siteDecision.buildability.elevation
       const building = this.objects.add({
         kind: 'building', x, y, z,
         rotationY: Math.atan2(cx - x, cz - z),
         scale: 0.75 + (i % 4) * 0.12,
-        seed: i, properties: { settlement: 'generated', seed },
+        seed: i,
+        properties: {
+          settlement: 'generated', seed,
+          buildability: siteDecision.buildability.score,
+          scientificField: siteDecision.buildability.field.information,
+          lawPenalty: siteDecision.laws.penalty,
+          activeLawProcesses: siteDecision.laws.activeProcesses.join(','),
+        },
       })
       created.push(building)
       this.history.push({ type: 'add', object: { ...building } })
