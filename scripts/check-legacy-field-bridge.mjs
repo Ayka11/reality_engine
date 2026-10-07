@@ -24,6 +24,7 @@ const {
   sculptPatternToMutation,
   sculptStampToMutation,
   sculptSmartBrushToMutation,
+  sculptSmoothToMutation,
 } = mod;
 
 assert.deepEqual(LEGACY_WORLD_AXIS_MAP, { x: "x", y: "z", z: "y" });
@@ -120,6 +121,12 @@ assert.equal(forest.delta.information, 18);
 
 const radiation = sculptSmartBrushToMutation("Radiation", {x:8,y:9,z:3}, 5);
 assert.equal(radiation.delta.information, -5);
+
+const smoothMutation = sculptSmoothToMutation({x:3,y:5,z:2}, 4, 1);
+assert.deepEqual({x:smoothMutation.x,y:smoothMutation.y,z:smoothMutation.z}, {x:3,y:2,z:5});
+assert.equal(smoothMutation.operations.energy.mode, "smooth6");
+assert.equal(smoothMutation.operations.energy.value, 1);
+assert.equal(smoothMutation.metadata.brush, "Smooth");
 
 assert.throws(
   () => legacyToWorldCoordinate({x: -1, y: 0, z: 0}, {W:64,H:64,D:32}),
