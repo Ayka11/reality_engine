@@ -68,6 +68,46 @@ export function normalizeLegacyCell(cell: {
  * Converts an additive legacy brush change into an authoritative mutation.
  * Fields not represented by ScientificFieldSample are intentionally excluded.
  */
+export function sculptInjectToMutation(
+  cell: LegacyVoxelCoordinate,
+  radius: number,
+  strength: number,
+  fields: Partial<{ energy: number; density: number; temperature: number; bio: number; information: number; entropy: number }>,
+  metadata: Record<string, unknown> = {},
+): WorldFieldMutation {
+  return legacyBrushDeltaToMutation(
+    cell,
+    {
+      energy: strength * 12 * (fields.energy ?? 0),
+      density: strength * 0.012 * (fields.density ?? 0),
+      temperature: strength * 8 * (fields.temperature ?? 0),
+      bioPotential: strength * 0.01 * (fields.bio ?? 0),
+      information: strength * 2 * (fields.information ?? 0),
+      entropy: strength * 0.005 * (fields.entropy ?? 0),
+    },
+    radius,
+    { ...metadata, source: metadata.source ?? 'legacy-sculpt-inject' },
+  )
+}
+
+export function sculptErodeToMutation(
+  cell: LegacyVoxelCoordinate,
+  radius: number,
+  strength: number,
+  metadata: Record<string, unknown> = {},
+): WorldFieldMutation {
+  return legacyBrushDeltaToMutation(
+    cell,
+    {
+      density: -strength * 0.01,
+      entropy: strength * 0.006,
+      temperature: -strength * 1.5,
+    },
+    radius,
+    { ...metadata, source: metadata.source ?? 'legacy-sculpt-erode' },
+  )
+}
+
 export function legacyBrushDeltaToMutation(
   cell: LegacyVoxelCoordinate,
   delta: {
