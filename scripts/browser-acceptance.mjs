@@ -152,7 +152,7 @@ try {
   if (Number(fieldPhysicsAfter?.modulation?.forcePush ?? 0) === Number(fieldPhysicsBaseline?.modulation?.forcePush ?? 0)) {
     throw new Error("Field mutation did not modulate Infinity physics");
   }
-  if (Number(fieldPhysicsAfter?.decision?.components?.density ?? 0) === Number(fieldPhysicsBaseline?.decision?.components?.density ?? 0)) {
+  if (Number(fieldPhysicsAfter?.decisionComponents?.density ?? 0) === Number(fieldPhysicsBaseline?.decision?.components?.density ?? 0)) {
     throw new Error("Field density mutation did not reach construction decision scoring");
   }
   if (!fieldMutation?.metadata?.provenanceEventId) {
