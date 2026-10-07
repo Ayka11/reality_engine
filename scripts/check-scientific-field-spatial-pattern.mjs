@@ -4,7 +4,7 @@ import ts from "typescript";
 const root=new URL("../",import.meta.url);
 async function load(path){const source=await readFile(new URL(path,root),"utf8");const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;return import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`)}
 const m=await load("src/infinity/ScientificFieldSpatialPattern.ts");
-const {evaluateScientificFieldSpatialPattern,assertScientificFieldSpatialPattern}=m;
+const {evaluateScientificFieldSpatialPattern,evaluateScientificSmartBrush,assertScientificFieldSpatialPattern}=m;
 const origin={x:10,y:20,z:30};
 const noise={schemaVersion:"scientific-field-pattern-v1",kind:"noise3",origin,scale:8,seed:17,octaves:4,coordinateFrame:"legacy-grid"};
 assert.doesNotThrow(()=>assertScientificFieldSpatialPattern(noise));
@@ -15,6 +15,14 @@ const changed=evaluateScientificFieldSpatialPattern({...noise,seed:18},{x:11,y:2
 assert.notEqual(a,changed);
 const pattern={schemaVersion:"scientific-field-pattern-v1",kind:"pattern3",origin,scale:8,coordinateFrame:"legacy-grid"};
 assert.equal(evaluateScientificFieldSpatialPattern(pattern,{x:10,y:20,z:30}),.5);
+const volcano={schemaVersion:"scientific-smart-brush-v1",kind:"smart-brush",name:"Volcano",origin:{x:10,y:0,z:20},radius:5};
+assert.doesNotThrow(()=>assertScientificFieldSpatialPattern(volcano));
+assert.ok(evaluateScientificSmartBrush(volcano,{x:10,y:0,z:20})>0);
+assert.equal(evaluateScientificSmartBrush(volcano,{x:10,y:0,z:25}),0);
+const storm={schemaVersion:"scientific-smart-brush-v1",kind:"smart-brush",name:"Storm",origin:{x:10,y:0,z:20},radius:5,selectedLegacyZ:3};
+assert.equal(evaluateScientificSmartBrush(storm,{x:10,y:3,z:20})>=0,true);
+assert.throws(()=>assertScientificFieldSpatialPattern({...volcano,radius:0}),/radius/);
+
 const stamp={schemaVersion:"scientific-field-pattern-v1",kind:"stamp-lattice",origin,period:4,low:.2,high:1,coordinateFrame:"legacy-grid"};
 assert.equal(evaluateScientificFieldSpatialPattern(stamp,{x:14,y:20,z:30}),1);
 assert.equal(evaluateScientificFieldSpatialPattern(stamp,{x:12,y:21,z:31}),.2);
@@ -23,4 +31,5 @@ assert.throws(()=>assertScientificFieldSpatialPattern({...noise,coordinateFrame:
 console.log("PASS: deterministic seeded noise pattern");
 console.log("PASS: legacy pattern3 coordinate semantics");
 console.log("PASS: stamp lattice semantics");
+console.log("PASS: smart brush spatial profiles and validation");
 console.log("PASS: spatial pattern validation");
