@@ -213,6 +213,54 @@ try {
     throw new Error("Field mutation did not receive runtime provenance");
   }
 
+  // Persistence regression: authoritative field edits must survive Save -> Load,
+  // not only the object layer. Save a known mutation, perturb it, then restore.
+  const fieldPersistenceBaseline = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    world.saveWorld();
+    return {
+      sample: world.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
+      state: world.getAuthoritativeFieldState().field,
+    };
+  }, fieldProbe);
+  await page.evaluate((probe) => window.worldFieldMutate?.({
+    kind: "brush",
+    x: probe.x,
+    y: probe.y,
+    z: probe.z,
+    radius: 16,
+    delta: { density: 0.15 },
+    metadata: { acceptance: "field-persistence-perturbation" },
+  }), fieldProbe);
+  const fieldPersistencePerturbed = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    return world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
+  }, fieldProbe);
+  if (!(Number(fieldPersistencePerturbed?.density ?? NaN) > Number(fieldPersistenceBaseline?.sample?.density ?? NaN))) {
+    throw new Error("Field persistence perturbation did not change the authoritative sample");
+  }
+  const restoredFieldPersistence = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    world.loadWorld();
+    return {
+      sample: world.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
+      state: world.getAuthoritativeFieldState().field,
+    };
+  }, fieldProbe);
+  if (
+    !Number.isFinite(Number(restoredFieldPersistence?.sample?.density ?? NaN)) ||
+    Math.abs(Number(restoredFieldPersistence.sample.density) - Number(fieldPersistenceBaseline.sample.density)) > 1e-9
+  ) {
+    throw new Error(
+      `Authoritative field did not restore from Save -> Load: saved=${fieldPersistenceBaseline.sample.density}, restored=${restoredFieldPersistence.sample.density}`
+    );
+  }
+  if (Number(restoredFieldPersistence?.state?.mutationCount ?? -1) !== Number(fieldPersistenceBaseline?.state?.mutationCount ?? -2)) {
+    throw new Error(
+      `Authoritative field mutation count did not restore: saved=${fieldPersistenceBaseline.state.mutationCount}, restored=${restoredFieldPersistence.state.mutationCount}`
+    );
+  }
+
   const lawBuildBefore = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
   const lawDisabled = await page.evaluate(() => window.getRealityLawState?.());
