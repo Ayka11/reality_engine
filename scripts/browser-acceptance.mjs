@@ -19,7 +19,7 @@ const waitForServer = async () => {
   throw new Error("Vite preview server did not become ready");
 };
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: ["--disable-gpu", "--disable-dev-shm-usage"] });
 const acceptanceTimeout = 30000;
 try {
   await waitForServer();
@@ -288,6 +288,15 @@ try {
     sidebarGrips: grips,
   }));
 } finally {
-  await browser.close();
-  server.kill();
+  server.kill("SIGKILL");
+  const forceExit = setTimeout(() => process.exit(process.exitCode ?? 0), 5000);
+  forceExit.unref();
+  try {
+    await Promise.race([
+      browser.close(),
+      new Promise((resolve) => setTimeout(resolve, 4500)),
+    ]);
+  } finally {
+    clearTimeout(forceExit);
+  }
 }
