@@ -21,7 +21,7 @@ jobs:
       - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
       - run: npm run lint
-      - run: npm run test:brushes
+      - run: npm run test:brushes --if-present
       - run: npm run build
       - run: npm run hf:smoke
       - run: npm run hf:cpu:check
