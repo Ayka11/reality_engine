@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict'
+import { LegacySculptRuntimeAdapter } from '../src/infinity/LegacySculptRuntimeAdapter'
+const captured:any[]=[]
+const adapter=new LegacySculptRuntimeAdapter(m=>{captured.push(m);return {...m,id:captured.length}})
+const out=adapter.inject({x:3,y:5,z:2},4,2,{energy:1,density:.5})
+assert.equal(out.id,1)
+assert.equal(captured[0].metadata.source,'legacy-sculpt-inject')
+adapter.erase({x:3,y:5,z:2},4,.75)
+assert.equal(captured[1].metadata.brush,'Erase')
+adapter.smooth({x:3,y:5,z:2},4,1)
+assert.equal(captured[2].operations.energy.mode,'smooth6')
+adapter.noise({x:3,y:5,z:2},4,2,8,17,{energy:1})
+assert.equal(captured[3].spatialPattern.kind,'noise3')
+adapter.pattern({x:3,y:5,z:2},4,2,8,{energy:1})
+assert.equal(captured[4].spatialPattern.kind,'pattern3')
+adapter.stamp({x:3,y:5,z:2},4,2)
+assert.equal(captured[5].spatialPattern.kind,'stamp-lattice')
+adapter.smartBrush('Volcano',{x:3,y:5,z:2},4)
+assert.equal(captured[6].spatialPattern.name,'Volcano')
+console.log('PASS: legacy sculpt authoritative runtime adapter')
