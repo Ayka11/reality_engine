@@ -32,7 +32,7 @@ const { MutableWorldFieldProvider } = provider;
 
 const base = {
   sample: (x, y, z) => ({
-    energy: 1 + x*x + y*y + z*z,
+    energy: 1,
     density: 0.2,
     information: 1,
     entropy: 0.1,
@@ -89,7 +89,8 @@ legacy.applyRadial("brush", 0, 0, 0, 10, { energy: 10 });
 assert.equal(legacy.sample(0, 0, 5).energy, 6);
 assert.equal(legacy.sample(0, 0, 10).energy, 1);
 
-const smooth = new MutableWorldFieldProvider(base);
+const smoothBase = { ...base, sample: (x, y, z) => ({ ...base.sample(x, y, z), energy: x*x + y*y + z*z }) };
+const smooth = new MutableWorldFieldProvider(smoothBase);
 smooth.apply({
   kind: "brush", x: 0, y: 0, z: 0, radius: 1,
   operations: {
