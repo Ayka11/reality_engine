@@ -153,14 +153,13 @@ export class InfiniteWorldRenderer {
     radius: number,
     selectedLegacyZ?: number,
   ): WorldFieldMutation {
-    const transaction = this.authoritativeSculptTransactions.commit(() =>
+    return this.authoritativeSculptTransactions.commit(() =>
       this.legacySculptRuntimeAdapter.smartBrush(name, cell, radius, selectedLegacyZ, {
         source: 'legacy-sculpt-runtime',
         legacyTool: 'smart-brush',
         legacyCoordinate: { ...cell },
       })
-    )
-    return transaction.after.mutations[transaction.after.mutations.length - 1]
+    ).mutation
   }
   private worldAnchor = new THREE.Vector3(0, 0, 0)
   private flyMode = true
