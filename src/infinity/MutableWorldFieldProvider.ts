@@ -2,8 +2,8 @@ import type { ScientificFieldProvider } from './ScientificFieldProvider'
 import type { ScientificFieldSample } from './FieldSampler'
 import { assertScientificFieldProfile, evaluateScientificFieldProfile } from './ScientificFieldProfile'
 import type { ScientificFieldProfile } from './ScientificFieldProfile'
-import { assertScientificFieldSpatialPattern, evaluateScientificFieldSpatialPattern } from './ScientificFieldSpatialPattern'
-import type { ScientificFieldSpatialPattern } from './ScientificFieldSpatialPattern'
+import { assertScientificFieldSpatialPattern, evaluateScientificFieldSpatialPattern, evaluateScientificSmartBrush } from './ScientificFieldSpatialPattern'
+import type { ScientificFieldSpatialPattern, ScientificSmartBrushPattern } from './ScientificFieldSpatialPattern'
 
 export type WorldFieldMutation = {
   id: number
@@ -13,7 +13,8 @@ export type WorldFieldMutation = {
   z?: number
   radius?: number
   profile?: ScientificFieldProfile
-  spatialPattern?: ScientificFieldSpatialPattern
+  spatialPattern?: ScientificFieldSpatialPattern | ScientificSmartBrushPattern
+  operations?: Partial<Record<keyof ScientificFieldSample, { mode: 'add' | 'max' | 'min'; value: number }>>
   delta?: Partial<ScientificFieldSample>
   scale?: Partial<Record<keyof ScientificFieldSample, number>>
   metadata?: Record<string, unknown>
@@ -50,11 +51,13 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
       const distance=Math.hypot(x-mutation.x,y-mutation.y,z-mutation.z)
       if(distance>radius) continue
       const radial=mutation.profile?evaluateScientificFieldProfile(mutation.profile,distance):Math.max(0,1-distance/radius)
-      const pattern=mutation.spatialPattern?evaluateScientificFieldSpatialPattern(mutation.spatialPattern,{x,y,z}):1
+      const pattern=mutation.spatialPattern?(mutation.spatialPattern.kind==='smart-brush'?evaluateScientificSmartBrush(mutation.spatialPattern,{x,y,z}):evaluateScientificFieldSpatialPattern(mutation.spatialPattern,{x,y,z})):1
       const weight=radial*pattern
       for(const field of FIELDS){
         const delta=mutation.delta?.[field]; if(delta!==undefined) out[field]+=delta*weight
         const scale=mutation.scale?.[field]; if(scale!==undefined) out[field]*=1+(scale-1)*weight
+        const op=mutation.operations?.[field]
+        if(op){ const value=op.value*weight; if(op.mode==='add') out[field]+=value; else if(op.mode==='max') out[field]=Math.max(out[field],value); else out[field]=Math.min(out[field],value) }
       }
     }
     for(const field of FIELDS) out[field]=clampField(field,out[field])
