@@ -121,6 +121,44 @@ try {
     throw new Error("Density Gravity could not be established as active before the build-law test");
   }
 
+  const fieldPhysicsBaseline = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const sample = world.fieldSampler.sampleWorld(0, undefined, 0);
+    const modulation = world.fieldPhysics.modulation(sample);
+    const decision = world.buildZoneCost(0, 0);
+    return { sample, modulation, decision };
+  });
+  const fieldMutation = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    return window.worldFieldMutate?.({
+      kind: "brush", x: 0, y: 0, z: 0, radius: 64,
+      delta: { energy: 0.25, density: 0.25 },
+      metadata: { acceptance: "field-law-physics-construction-e2e" },
+    });
+  });
+  const fieldPhysicsAfter = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const sample = world.fieldSampler.sampleWorld(0, undefined, 0);
+    const modulation = world.fieldPhysics.modulation(sample);
+    const decision = world.buildZoneCost(0, 0);
+    return { sample, modulation, decision };
+  });
+  if (Number(fieldPhysicsAfter?.sample?.density ?? 0) <= Number(fieldPhysicsBaseline?.sample?.density ?? 0)) {
+    throw new Error("Authoritative field mutation did not reach World Field sampling");
+  }
+  if (Number(fieldPhysicsAfter?.sample?.energy ?? 0) <= Number(fieldPhysicsBaseline?.sample?.energy ?? 0)) {
+    throw new Error("Authoritative field energy mutation did not reach World Field sampling");
+  }
+  if (Number(fieldPhysicsAfter?.modulation?.forcePush ?? 0) === Number(fieldPhysicsBaseline?.modulation?.forcePush ?? 0)) {
+    throw new Error("Field mutation did not modulate Infinity physics");
+  }
+  if (Number(fieldPhysicsAfter?.decision?.components?.density ?? 0) >= Number(fieldPhysicsBaseline?.decision?.components?.density ?? 0)) {
+    throw new Error("Field density mutation did not reach construction decision scoring");
+  }
+  if (!fieldMutation?.metadata?.provenanceEventId) {
+    throw new Error("Authoritative field mutation did not record provenance linkage");
+  }
+
   const lawBuildBefore = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
   const lawDisabled = await page.evaluate(() => window.getRealityLawState?.());
