@@ -143,6 +143,7 @@ export class InfiniteWorldRenderer {
         case 'stamp': return this.legacySculptRuntimeAdapter.stamp(cell, radius, strength, options.period ?? 4, metadata)
         case 'erode': return this.legacySculptRuntimeAdapter.erode(cell, radius, strength, metadata)
         case 'smooth': return this.legacySculptRuntimeAdapter.smooth(cell, radius, strength, metadata)
+        default: throw new Error(`Unsupported legacy sculpt tool: ${tool}`)
       }
     })
   }
