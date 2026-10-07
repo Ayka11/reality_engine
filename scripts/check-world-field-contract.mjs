@@ -39,7 +39,17 @@ exchange.publish({cx:1,cy:0,cz:0}, "x", -1, face.samples);
 assert.equal(exchange.validatePair({cx:0,cy:0,cz:0}, "x").paired, true);
 assert.equal(exchange.validatePair({cx:0,cy:0,cz:0}, "x").maxDelta, 0);
 
-const mutableMod = await load("src/infinity/MutableWorldFieldProvider.ts");
+const spatialJs = await readFile(new URL("src/infinity/ScientificFieldSpatialPattern.ts", root), "utf8");
+const spatialCompiled = ts.transpileModule(spatialJs, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+const spatialUrl = `data:text/javascript;base64,${Buffer.from(spatialCompiled).toString("base64")}`;
+const profileJs = await readFile(new URL("src/infinity/ScientificFieldProfile.ts", root), "utf8");
+const profileCompiled = ts.transpileModule(profileJs, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+const profileUrl = `data:text/javascript;base64,${Buffer.from(profileCompiled).toString("base64")}`;
+
+const mutableMod = await load("src/infinity/MutableWorldFieldProvider.ts", [
+  [/from ['"]\.\/ScientificFieldSpatialPattern['"]/, `from "${spatialUrl}"`],
+  [/from ['"]\.\/ScientificFieldProfile['"]/, `from "${profileUrl}"`],
+]);
 const { MutableWorldFieldProvider } = mutableMod;
 const mutable = new MutableWorldFieldProvider(fakeProvider);
 const before = mutable.sample(0,0,0).energy;
