@@ -8,7 +8,7 @@ async function load(path) {
   if (cache.has(path)) return cache.get(path);
   const source = await readFile(new URL(path, root), "utf8");
   let js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const imports = [...js.matchAll(/from\\s+["'](\\.\\/?[^"']+)["']/g)];
+  const imports = [...js.matchAll(/from\s+["'](\.\/?[^"']+)["']/g)];
   for (const match of imports) {
     const specifier = match[1];
     const resolved = new URL(specifier.endsWith(".ts") ? specifier : specifier + ".ts", new URL(path, root)).pathname.split("/").pop();
