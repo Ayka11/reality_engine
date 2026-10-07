@@ -162,6 +162,17 @@ try {
   const lawBuildBefore = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
   const lawDisabled = await page.evaluate(() => window.getRealityLawState?.());
+  const lawPhysicsDisabled = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const sample = world.fieldSampler.sampleWorld(0, undefined, 0);
+    return world.lawPhysicsContract.apply(world.fieldPhysics.modulation(sample));
+  });
+  if (Number(lawPhysicsDisabled?.forcePush ?? -1) !== 0) {
+    throw new Error("Disabling Density Gravity did not veto density-driven Infinity physics");
+  }
+  if (Number(lawPhysicsDisabled?.gravity ?? -1) !== 0) {
+    throw new Error("Disabling Density Gravity did not veto gravity-driven Infinity physics");
+  }
   if (lawDisabled?.processes?.includes("gravity") || lawDisabled?.processes?.includes("density")) {
     throw new Error("Disabling Density Gravity did not reach the runtime process state");
   }
