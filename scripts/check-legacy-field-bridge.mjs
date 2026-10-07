@@ -23,6 +23,7 @@ const {
   sculptNoiseToMutation,
   sculptPatternToMutation,
   sculptStampToMutation,
+  sculptSmartBrushToMutation,
 } = mod;
 
 assert.deepEqual(LEGACY_WORLD_AXIS_MAP, { x: "x", y: "z", z: "y" });
@@ -101,6 +102,24 @@ assert.equal(stamp.delta.density, 0.02);
 assert.equal(stamp.delta.information, 0.2);
 assert.equal(stamp.spatialPattern.kind, "stamp-lattice");
 assert.equal(stamp.spatialPattern.period, 4);
+
+const volcano = sculptSmartBrushToMutation("Volcano", {x:8,y:9,z:3}, 5);
+assert.deepEqual({x:volcano.x,y:volcano.y,z:volcano.z}, {x:8,y:0,z:9});
+assert.equal(volcano.spatialPattern.kind, "smart-brush");
+assert.equal(volcano.spatialPattern.name, "Volcano");
+assert.equal(volcano.delta.energy, 9);
+assert.equal(volcano.delta.temperature, 60);
+
+const ocean = sculptSmartBrushToMutation("Ocean", {x:8,y:9,z:3}, 5);
+assert.deepEqual(ocean.operations.density, {mode:"max",value:.7});
+assert.deepEqual(ocean.operations.temperature, {mode:"max",value:7});
+
+const forest = sculptSmartBrushToMutation("Forest", {x:8,y:9,z:3}, 5, 3);
+assert.equal(forest.spatialPattern.selectedLegacyZ, 3);
+assert.equal(forest.delta.information, 18);
+
+const radiation = sculptSmartBrushToMutation("Radiation", {x:8,y:9,z:3}, 5);
+assert.equal(radiation.delta.information, -5);
 
 assert.throws(
   () => legacyToWorldCoordinate({x: -1, y: 0, z: 0}, {W:64,H:64,D:32}),
