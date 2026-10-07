@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { LegacySculptRuntimeAdapter } from '../src/infinity/LegacySculptRuntimeAdapter'
-const captured:any[]=[]
+const captured=[]
 const adapter=new LegacySculptRuntimeAdapter(m=>{captured.push(m);return {...m,id:captured.length}})
 const out=adapter.inject({x:3,y:5,z:2},4,2,{energy:1,density:.5})
 assert.equal(out.id,1)
