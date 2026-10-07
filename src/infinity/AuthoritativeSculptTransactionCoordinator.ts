@@ -5,6 +5,7 @@ type FieldState = ReturnType<MutableWorldFieldProvider['serialize']>
 export type AuthoritativeSculptTransaction = {
   transactionId: number
   mutationId: number
+  mutation: WorldFieldMutation
   before: FieldState
   after: FieldState
 }
@@ -33,6 +34,7 @@ export class AuthoritativeSculptTransactionCoordinator {
     const transaction: AuthoritativeSculptTransaction = {
       transactionId: this.nextTransactionId++,
       mutationId: mutation.id,
+      mutation,
       before,
       after,
     }
