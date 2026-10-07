@@ -134,7 +134,7 @@ export class InfiniteWorldRenderer {
       legacyTool: tool,
       legacyCoordinate: { ...cell },
     }
-    return this.authoritativeSculptTransactions.commit(() => {
+    const transaction = this.authoritativeSculptTransactions.commit(() => {
       switch (tool) {
         case 'inject': return this.legacySculptRuntimeAdapter.inject(cell, radius, strength, options.fields ?? {}, metadata)
         case 'erase': return this.legacySculptRuntimeAdapter.erase(cell, radius, strength, metadata)
@@ -146,6 +146,8 @@ export class InfiniteWorldRenderer {
         default: throw new Error(`Unsupported legacy sculpt tool: ${tool}`)
       }
     })
+    this.persistence.saveFieldState(this.authoritativeField.serialize())
+    return transaction.mutation
   }
 
   applyLegacySmartBrush(
@@ -161,11 +163,15 @@ export class InfiniteWorldRenderer {
     })
   }
   undoLegacySculptAuthoritative() {
-    return this.authoritativeSculptTransactions.undo()
+    const transaction = this.authoritativeSculptTransactions.undo()
+    if (transaction) this.persistence.saveFieldState(this.authoritativeField.serialize())
+    return transaction
   }
 
   redoLegacySculptAuthoritative() {
-    return this.authoritativeSculptTransactions.redo()
+    const transaction = this.authoritativeSculptTransactions.redo()
+    if (transaction) this.persistence.saveFieldState(this.authoritativeField.serialize())
+    return transaction
   }
 
   getLegacySculptAuthoritativeHistory() {
@@ -225,6 +231,14 @@ export class InfiniteWorldRenderer {
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
     this.storageKey = `reality-engine-world:${seed}:objects`
     this.persistence = new WorldPersistence(seed)
+    const persistedField = this.persistence.loadFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
+    if (persistedField) {
+      try {
+        this.authoritativeField.restore(persistedField)
+      } catch {
+        this.persistence.deleteFieldState()
+      }
+    }
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
 
     this.camera.position.set(38, this.worldY, 62)
