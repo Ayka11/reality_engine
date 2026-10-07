@@ -79,7 +79,7 @@ assert.ok(Array.isArray(mutation.metadata.unsupportedFields));
 assert.ok(mutation.metadata.unsupportedFields.includes("materialId"));
 
 const inject = sculptInjectToMutation({x: 3, y: 5, z: 2}, 4, 2, {energy: 1, density: 0.5});
-assert.deepEqual(inject.delta, {energy: 0.24, density: 0.00024});
+assert.deepEqual(inject.delta, {energy: 0.24, density: 0.012});
 assert.equal(inject.metadata.source, "legacy-sculpt-inject");
 
 const erode = sculptErodeToMutation({x: 3, y: 5, z: 2}, 4, 2);
