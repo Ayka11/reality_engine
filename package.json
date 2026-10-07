@@ -17,7 +17,8 @@
     "test:presets": "node scripts/check-preset-contract.mjs",
     "test:preset-field": "node scripts/check-preset-field-provenance.mjs",
     "test:construction": "node scripts/check-world-construction-contract.mjs",
-    "test:law-physics": "node scripts/check-law-physics-contract.mjs"
+    "test:law-physics": "node scripts/check-law-physics-contract.mjs",
+    "test:legacy-field-bridge": "node scripts/check-legacy-field-bridge.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
