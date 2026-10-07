@@ -243,6 +243,11 @@ try {
   const afterQuick = await page.evaluate(() => window.worldGenerationHealth());
   if (!afterQuick?.lastGeneration) throw new Error("Quick Generate did not record a generation result");
 
+  // Quick Generate has been fully validated. Close its continuously rendering page
+  // before opening the independent Composer page so headless Chromium does not run
+  // two Three.js render loops concurrently.
+  await page.close();
+
   // Test Compose World in a fresh browser page so this acceptance path is independent
   // from Quick Generate and cannot fail merely because two large generations are stacked.
   const composePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
