@@ -18,6 +18,8 @@ const {
   isLegacyCoordinateInBounds,
   normalizeLegacyCell,
   legacyBrushDeltaToMutation,
+  sculptInjectToMutation,
+  sculptErodeToMutation,
 } = mod;
 
 assert.deepEqual(LEGACY_WORLD_AXIS_MAP, { x: "x", y: "z", z: "y" });
@@ -69,6 +71,14 @@ assert.deepEqual(mutation.delta, {
 assert.equal(mutation.metadata.coordinateContract, "legacy-grid-x-y-z-to-world-x-z-y-v1");
 assert.ok(Array.isArray(mutation.metadata.unsupportedFields));
 assert.ok(mutation.metadata.unsupportedFields.includes("materialId"));
+
+const inject = sculptInjectToMutation({x: 3, y: 5, z: 2}, 4, 2, {energy: 1, density: 0.5});
+assert.deepEqual(inject.delta, {energy: 0.24, density: 0.00024});
+assert.equal(inject.metadata.source, "legacy-sculpt-inject");
+
+const erode = sculptErodeToMutation({x: 3, y: 5, z: 2}, 4, 2);
+assert.deepEqual(erode.delta, {density: -0.02, entropy: 0.012, temperature: -0.03});
+assert.equal(erode.metadata.source, "legacy-sculpt-erode");
 
 assert.throws(
   () => legacyToWorldCoordinate({x: -1, y: 0, z: 0}, {W:64,H:64,D:32}),
