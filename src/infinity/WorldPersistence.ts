@@ -6,6 +6,7 @@ type StoredChunk = { version: 1; seed: string; objects: WorldObject[] }
 export class WorldPersistence {
   private readonly prefix: string
   private readonly manifestKey: string
+  private readonly fieldStateKey = `reality-engine-world:${seed}:field-state`
   private readonly loaded = new Set<string>()
   private readonly cache = new Map<string, WorldObject[]>()
 
@@ -68,6 +69,7 @@ export class WorldPersistence {
       } catch {}
     }
     localStorage.removeItem(this.manifestKey)
+    localStorage.removeItem(this.fieldStateKey)
     this.loaded.clear()
     this.cache.clear()
   }
