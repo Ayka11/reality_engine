@@ -288,6 +288,15 @@ try {
     sidebarGrips: grips,
   }));
 } finally {
-  await browser.close();
-  server.kill();
+  server.kill("SIGKILL");
+  const forceExit = setTimeout(() => process.exit(process.exitCode ?? 0), 5000);
+  forceExit.unref();
+  try {
+    await Promise.race([
+      browser.close(),
+      new Promise((resolve) => setTimeout(resolve, 4500)),
+    ]);
+  } finally {
+    clearTimeout(forceExit);
+  }
 }
