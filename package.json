@@ -11,7 +11,8 @@
     "hf:smoke": "node scripts/hf-smoke-check.mjs",
     "build:hf:cpu": "npm run build",
     "hf:cpu:check": "node scripts/hf-cpu-check.mjs",
-    "hf:browser:acceptance": "node scripts/browser-acceptance.mjs"
+    "hf:browser:acceptance": "node scripts/browser-acceptance.mjs",
+    "test:world-field": "node scripts/check-world-field-contract.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
