@@ -14,6 +14,7 @@ import { FieldSampler } from '../infinity/FieldSampler'
 import { GeneratorFieldProvider } from '../infinity/ScientificFieldProvider'
 import { MutableWorldFieldProvider, type WorldFieldMutation } from '../infinity/MutableWorldFieldProvider'
 import { LegacySculptRuntimeAdapter } from '../infinity/LegacySculptRuntimeAdapter'
+import { AuthoritativeSculptTransactionCoordinator } from '../infinity/AuthoritativeSculptTransactionCoordinator'
 import type { LegacyVoxelCoordinate } from '../infinity/LegacyScientificFieldBridge'
 import { runtimeProvenance } from '../infinity/RuntimeProvenance'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
@@ -65,6 +66,7 @@ export class InfiniteWorldRenderer {
   readonly fieldSampler: FieldSampler
   readonly authoritativeField: MutableWorldFieldProvider
   readonly legacySculptRuntimeAdapter: LegacySculptRuntimeAdapter
+  readonly authoritativeSculptTransactions: AuthoritativeSculptTransactionCoordinator
   decisionLayer: WorldDecisionLayer
   constructionContract: WorldConstructionContract
   readonly decisionGraph = new DecisionGraph()
@@ -132,15 +134,17 @@ export class InfiniteWorldRenderer {
       legacyTool: tool,
       legacyCoordinate: { ...cell },
     }
-    switch (tool) {
-      case 'inject': return this.legacySculptRuntimeAdapter.inject(cell, radius, strength, options.fields ?? {}, metadata)
-      case 'erase': return this.legacySculptRuntimeAdapter.erase(cell, radius, strength, metadata)
-      case 'noise': return this.legacySculptRuntimeAdapter.noise(cell, radius, strength, options.noiseScale ?? 10, options.seed ?? 1337, options.fields ?? {}, metadata)
-      case 'pattern': return this.legacySculptRuntimeAdapter.pattern(cell, radius, strength, options.noiseScale ?? 10, options.fields ?? {}, metadata)
-      case 'stamp': return this.legacySculptRuntimeAdapter.stamp(cell, radius, strength, options.period ?? 4, metadata)
-      case 'erode': return this.legacySculptRuntimeAdapter.erode(cell, radius, strength, metadata)
-      case 'smooth': return this.legacySculptRuntimeAdapter.smooth(cell, radius, strength, metadata)
-    }
+    return this.authoritativeSculptTransactions.commit(() => {
+      switch (tool) {
+        case 'inject': return this.legacySculptRuntimeAdapter.inject(cell, radius, strength, options.fields ?? {}, metadata)
+        case 'erase': return this.legacySculptRuntimeAdapter.erase(cell, radius, strength, metadata)
+        case 'noise': return this.legacySculptRuntimeAdapter.noise(cell, radius, strength, options.noiseScale ?? 10, options.seed ?? 1337, options.fields ?? {}, metadata)
+        case 'pattern': return this.legacySculptRuntimeAdapter.pattern(cell, radius, strength, options.noiseScale ?? 10, options.fields ?? {}, metadata)
+        case 'stamp': return this.legacySculptRuntimeAdapter.stamp(cell, radius, strength, options.period ?? 4, metadata)
+        case 'erode': return this.legacySculptRuntimeAdapter.erode(cell, radius, strength, metadata)
+        case 'smooth': return this.legacySculptRuntimeAdapter.smooth(cell, radius, strength, metadata)
+      }
+    })
   }
 
   applyLegacySmartBrush(
@@ -149,12 +153,14 @@ export class InfiniteWorldRenderer {
     radius: number,
     selectedLegacyZ?: number,
   ): WorldFieldMutation {
-    const committed = this.legacySculptRuntimeAdapter.smartBrush(name, cell, radius, selectedLegacyZ, {
-      source: 'legacy-sculpt-runtime',
-      legacyTool: 'smart-brush',
-      legacyCoordinate: { ...cell },
-    })
-    return committed
+    const transaction = this.authoritativeSculptTransactions.commit(() =>
+      this.legacySculptRuntimeAdapter.smartBrush(name, cell, radius, selectedLegacyZ, {
+        source: 'legacy-sculpt-runtime',
+        legacyTool: 'smart-brush',
+        legacyCoordinate: { ...cell },
+      })
+    )
+    return transaction.after.mutations[transaction.after.mutations.length - 1]
   }
   private worldAnchor = new THREE.Vector3(0, 0, 0)
   private flyMode = true
@@ -200,6 +206,7 @@ export class InfiniteWorldRenderer {
       })
       return committed
     })
+    this.authoritativeSculptTransactions = new AuthoritativeSculptTransactionCoordinator(this.authoritativeField)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null)
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
