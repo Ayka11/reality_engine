@@ -278,7 +278,6 @@ try {
 
   const afterCompose = await composePage.evaluate(() => window.worldGenerationHealth());
   if (!afterCompose?.lastGeneration) throw new Error("Compose World did not produce a generation record");
-  await composePage.screenshot({ path: "artifacts/browser-acceptance.png", fullPage: true });
   await composePage.close();
 
   console.log(JSON.stringify({
@@ -287,7 +286,6 @@ try {
     quickGenerateObjects: afterQuick.stats?.objects ?? 0,
     composeObjects: afterCompose.stats?.objects ?? 0,
     sidebarGrips: grips,
-    screenshot: "artifacts/browser-acceptance.png"
   }));
 } finally {
   await browser.close();
