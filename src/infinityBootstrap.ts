@@ -1710,7 +1710,6 @@ export function bootstrapInfiniteWorld() {
         document.querySelectorAll<HTMLElement>('[data-authoritative-field-status]').forEach((el) => {
           el.textContent = 'Authoritative field · ' + label + ' · mutation #' + mutation.id
         })
-        render()
         return mutation
       }
       document.getElementById('vFieldDensity')?.addEventListener('click', () => applyFieldBrush({ density: 0.12 }, 'density +'))
