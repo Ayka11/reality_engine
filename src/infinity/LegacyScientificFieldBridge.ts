@@ -287,8 +287,10 @@ export function sculptSmartBrushToMutation(
     case 'Crystal':
       delta.energy=7; delta.density=.8; delta.entropy=-.08; delta.information=25; break
     case 'Storm':
-      delta.entropy=.15; delta.temperature=20
-      delta.energy=5; break
+      delta.temperature=20
+      delta.energy=5
+      operations.entropy={mode:'add',value:.15,weighting:'radial'}
+      break
     case 'Life Cluster':
       delta.energy=3; delta.density=.4; delta.information=20; delta.biology=.6; delta.entropy=-.1; delta.temperature=12; break
     case 'Radiation':
