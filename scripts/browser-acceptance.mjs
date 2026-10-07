@@ -133,8 +133,9 @@ try {
     ];
     for (const [x, z] of candidates) {
       const sample = world.fieldSampler.sampleWorld(x, undefined, z);
-      if (Number(sample.density ?? 1) < 0.7 && Number(sample.energy ?? 1) < 0.7) {
-        return { x, z, sample };
+      const density = Number(sample.density);
+      if (Number.isFinite(density) && density > 0.05 && density < 0.7) {
+        return { x, y: Number(sample.y), z, sample };
       }
     }
     return null;
@@ -152,9 +153,16 @@ try {
   const fieldMutation = await page.evaluate((probe) => {
     const world = window.infiniteWorld;
     return window.worldFieldMutate?.({
-      kind: "brush", x: probe.x, y: 0, z: probe.z, radius: 16,
+      kind: "brush",
+      x: probe.x,
+      y: probe.y,
+      z: probe.z,
+      radius: 16,
       delta: { energy: 0.2, density: 0.2 },
-      metadata: { acceptance: "field-law-physics-construction-e2e", probe: { x: probe.x, z: probe.z } },
+      metadata: {
+        acceptance: "field-law-physics-construction-e2e",
+        probe: { x: probe.x, y: probe.y, z: probe.z },
+      },
     });
   }, fieldProbe);
   const fieldPhysicsAfter = await page.evaluate((probe) => {
@@ -164,6 +172,47 @@ try {
     const decision = world.buildZoneCost(probe.x, probe.z);
     return { sample, modulation, decision };
   }, fieldProbe);
+
+  const beforeDensity = Number(fieldPhysicsBaseline?.sample?.density ?? NaN);
+  const afterDensity = Number(fieldPhysicsAfter?.sample?.density ?? NaN);
+  if (
+    !Number.isFinite(beforeDensity) ||
+    !Number.isFinite(afterDensity) ||
+    !(afterDensity > beforeDensity)
+  ) {
+    throw new Error(
+      `Authoritative field mutation did not increase sampled density: before=${beforeDensity}, after=${afterDensity}`
+    );
+  }
+
+  const beforeForcePush = Number(fieldPhysicsBaseline?.modulation?.forcePush ?? NaN);
+  const afterForcePush = Number(fieldPhysicsAfter?.modulation?.forcePush ?? NaN);
+  if (
+    !Number.isFinite(beforeForcePush) ||
+    !Number.isFinite(afterForcePush) ||
+    !(afterForcePush > beforeForcePush)
+  ) {
+    throw new Error(
+      `Density mutation did not reach field physics: before=${beforeForcePush}, after=${afterForcePush}`
+    );
+  }
+
+  const beforeDensityCost = Number(fieldPhysicsBaseline?.decision?.components?.density ?? NaN);
+  const afterDensityCost = Number(fieldPhysicsAfter?.decision?.components?.density ?? NaN);
+  if (
+    !Number.isFinite(beforeDensityCost) ||
+    !Number.isFinite(afterDensityCost) ||
+    !(afterDensityCost > beforeDensityCost)
+  ) {
+    throw new Error(
+      `Field density mutation did not reach construction decision scoring: before=${beforeDensityCost}, after=${afterDensityCost}`
+    );
+  }
+
+  if (!fieldMutation?.metadata?.provenanceEventId) {
+    throw new Error("Field mutation did not receive runtime provenance");
+  }
+
   const lawBuildBefore = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
   const lawDisabled = await page.evaluate(() => window.getRealityLawState?.());
