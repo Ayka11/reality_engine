@@ -273,6 +273,10 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();
     const stroke = e.shiftKey ? sculptManager.redo() : sculptManager.undo();
+    if (stroke) {
+      const authoritative = (window as any)[e.shiftKey ? 'infinityRedoLegacySculptAuthoritative' : 'infinityUndoLegacySculptAuthoritative'];
+      if (typeof authoritative === 'function') authoritative();
+    }
     if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `${e.shiftKey ? 'Redo' : 'Undo'} ${stroke.tool}` : 'Sculpt history empty';
   }
   if (e.key === 'r' || e.key === 'R') renderer.resetCamera();
@@ -339,10 +343,18 @@ readSculptFields();
 
 document.getElementById('sculptUndoBtn')?.addEventListener('click', () => {
   const stroke = sculptManager.undo();
+  if (stroke) {
+    const authoritative = (window as any).infinityUndoLegacySculptAuthoritative;
+    if (typeof authoritative === 'function') authoritative();
+  }
   if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `Undo ${stroke.tool}` : 'Nothing to undo';
 });
 document.getElementById('sculptRedoBtn')?.addEventListener('click', () => {
   const stroke = sculptManager.redo();
+  if (stroke) {
+    const authoritative = (window as any).infinityRedoLegacySculptAuthoritative;
+    if (typeof authoritative === 'function') authoritative();
+  }
   if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `Redo ${stroke.tool}` : 'Nothing to redo';
 });
 
@@ -400,6 +412,16 @@ async function paintAt(x: number, y: number, z: number, event?: PointerEvent) {
     layer: renderer.layer,
     additive: sculptTool !== 'erase',
   });
+  const authoritative = (window as any).infinityApplyLegacySculptStroke;
+  if (typeof authoritative === 'function') {
+    authoritative(sculptTool, { x, y, z }, bs, sculptManager.currentBrush.strength, {
+      fields: { ...sculptManager.currentBrush.fields },
+      noiseScale: sculptManager.currentBrush.noiseScale,
+      seed: sculptManager.currentBrush.seed,
+      period: 4,
+      selectedLegacyZ: selZ,
+    });
+  }
   if (sculptStatusEl) {
     sculptStatusEl.textContent = `${stroke.tool} r${stroke.radius} chunks:${stroke.affectedChunks.length} hist:${sculptManager.brushEngine.historyLength}`;
   }
