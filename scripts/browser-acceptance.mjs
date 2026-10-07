@@ -231,6 +231,52 @@ try {
     }
   }
 
+  // Authoritative sculpt transaction contract: one legacy stroke must create
+  // one authoritative mutation and exact snapshot-based undo/redo must restore state.
+  const sculptContract = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (!world || typeof window.infinityApplyLegacySculptStroke !== "function") {
+      return { error: "Authoritative legacy sculpt bridge is not exposed" };
+    }
+    const beforeState = world.authoritativeField.serialize();
+    const beforeSample = world.authoritativeField.sample(0, 0, 0);
+    const beforeCount = world.authoritativeField.getMutationCount();
+    window.infinityApplyLegacySculptStroke("inject", { x: 0, y: 0, z: 0 }, 2, 1, {
+      fields: { energy: 1 },
+      selectedLegacyZ: 0,
+    });
+    const afterState = world.authoritativeField.serialize();
+    const afterSample = world.authoritativeField.sample(0, 0, 0);
+    const afterCount = world.authoritativeField.getMutationCount();
+    window.infinityUndoLegacySculptAuthoritative?.();
+    const undoState = world.authoritativeField.serialize();
+    window.infinityRedoLegacySculptAuthoritative?.();
+    const redoState = world.authoritativeField.serialize();
+    return {
+      beforeState,
+      afterState,
+      undoState,
+      redoState,
+      beforeSample,
+      afterSample,
+      beforeCount,
+      afterCount,
+    };
+  });
+  if (sculptContract.error) throw new Error(sculptContract.error);
+  if (sculptContract.afterCount !== sculptContract.beforeCount + 1) {
+    throw new Error(`Authoritative sculpt mutation count did not advance by one: ${JSON.stringify(sculptContract)}`);
+  }
+  if (!(Number(sculptContract.afterSample?.energy) > Number(sculptContract.beforeSample?.energy))) {
+    throw new Error(`Authoritative sculpt sample did not change: ${JSON.stringify(sculptContract)}`);
+  }
+  if (JSON.stringify(sculptContract.undoState) !== JSON.stringify(sculptContract.beforeState)) {
+    throw new Error("Authoritative sculpt undo did not restore the exact pre-stroke state");
+  }
+  if (JSON.stringify(sculptContract.redoState) !== JSON.stringify(sculptContract.afterState)) {
+    throw new Error("Authoritative sculpt redo did not restore the exact post-stroke state");
+  }
+
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
