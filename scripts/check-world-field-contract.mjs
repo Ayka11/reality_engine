@@ -57,9 +57,14 @@ mutable.applyRadial("brush", 0,0,0,10,{ energy: 9 });
 assert.ok(mutable.sample(0,0,0).energy > before);
 assert.ok(mutable.getVersion() > 0);
 
-const worldPersistenceMod = await load("src/infinity/WorldPersistence.ts", [
-  [/localStorage/g, "storage"],
-]);
+globalThis.localStorage = { data:new Map(), setItem(k,v){this.data.set(k,v)}, getItem(k){return this.data.get(k)??null}, removeItem(k){this.data.delete(k)} };
+const worldPersistenceMod = await load("src/infinity/WorldPersistence.ts");
+const { WorldPersistence } = worldPersistenceMod;
+const worldPersistence = new WorldPersistence("seed");
+worldPersistence.saveFieldState({schemaVersion:"world-field-state-v2",mutationCount:1});
+assert.deepEqual(worldPersistence.loadFieldState(), {schemaVersion:"world-field-state-v2",mutationCount:1});
+worldPersistence.deleteFieldState();
+assert.equal(worldPersistence.loadFieldState(), null);
 const persistenceMod = await load("src/infinity/WorldFieldChunkPersistence.ts", [
   [/import \{ CHUNK_FLOATS \} from [^;]+;/, "const CHUNK_FLOATS = 7168;"],
 ]);
