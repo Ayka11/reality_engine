@@ -305,3 +305,4 @@ try {
     clearTimeout(forceExit);
   }
 }
+// CI retrigger marker: acceptance lifecycle fix is validated on the current branch head.
