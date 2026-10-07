@@ -11,6 +11,8 @@ import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import { FieldSampler } from '../infinity/FieldSampler'
+import { GeneratorFieldProvider } from '../infinity/ScientificFieldProvider'
+import { MutableWorldFieldProvider } from '../infinity/MutableWorldFieldProvider'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { WorldConstructionContract } from '../infinity/WorldConstructionContract'
 import { DecisionGraph } from '../infinity/DecisionGraph'
@@ -58,6 +60,7 @@ export class InfiniteWorldRenderer {
   persistence: WorldPersistence
   history = new WorldEditHistory()
   readonly fieldSampler: FieldSampler
+  readonly authoritativeWorldField: MutableWorldFieldProvider
   decisionLayer: WorldDecisionLayer
   constructionContract: WorldConstructionContract
   readonly decisionGraph = new DecisionGraph()
@@ -138,7 +141,8 @@ export class InfiniteWorldRenderer {
     this.scene.add(this.terrainGroup)
     this.worldAssetRuntime = new WorldAssetRuntime(this.scene)
     this.generator = new WorldGenerator(seed)
-    this.fieldSampler = new FieldSampler(this.generator)
+    this.authoritativeWorldField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
+    this.fieldSampler = new FieldSampler(this.generator, this.authoritativeWorldField)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null)
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
