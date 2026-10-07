@@ -111,5 +111,24 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   clear(){this.mutations=[];this.globalOverlays.clear();this.versionCounter++}
   getVersion(){return this.versionCounter}
   getMutationCount(){return this.mutations.length}
+  serialize(){return {schemaVersion:'world-field-state-v2',providerId:this.id,providerVersion:this.version,version:this.versionCounter,nextId:this.nextId,mutations:this.mutations.map(m=>({...m,metadata:m.metadata?{...m.metadata}:undefined})),globalOverlays:[...this.globalOverlays.entries()].map(([kind,value])=>[kind,{scale:{...value.scale},delta:{...value.delta},metadata:value.metadata?{...value.metadata}:undefined}])}}
+  restore(state:ReturnType<MutableWorldFieldProvider['serialize']>){
+    if(state.schemaVersion!=='world-field-state-v2'||state.providerId!==this.id) throw new Error('Unsupported world field state')
+    if(!Number.isInteger(state.nextId)||state.nextId<1||!Number.isInteger(state.version)||state.version<0) throw new Error('Invalid world field state counters')
+    for(const mutation of state.mutations){
+      if(!Number.isInteger(mutation.id)||mutation.id<1) throw new Error('Invalid world field mutation id')
+      if(mutation.profile) assertScientificFieldProfile(mutation.profile)
+      if(mutation.spatialPattern) assertScientificFieldSpatialPattern(mutation.spatialPattern)
+      if(mutation.profile&&mutation.radius!==undefined&&mutation.radius!==mutation.profile.radius) throw new Error('World field mutation radius must match its profile radius')
+    }
+    this.mutations=state.mutations.map(m=>({...m,metadata:m.metadata?{...m.metadata}:undefined}))
+    this.globalOverlays.clear()
+    for(const [kind,value] of state.globalOverlays){
+      if(kind!=='preset'&&kind!=='law'&&kind!=='composer') throw new Error('Invalid world field overlay kind')
+      this.globalOverlays.set(kind,{scale:{...value.scale},delta:{...value.delta},metadata:value.metadata?{...value.metadata}:undefined})
+    }
+    this.nextId=state.nextId
+    this.versionCounter=state.version
+  }
   getState(){return {schemaVersion:'world-field-state-v1',providerId:this.id,providerVersion:this.version,version:this.versionCounter,mutationCount:this.mutations.length,lastMutation:this.mutations[this.mutations.length-1]??null}}
 }
