@@ -108,6 +108,41 @@ export function sculptErodeToMutation(
   )
 }
 
+export function sculptEraseToMutation(
+  cell: LegacyVoxelCoordinate,
+  radius: number,
+  strength: number,
+  metadata: Record<string, unknown> = {},
+): WorldFieldMutation {
+  const p = legacyToWorldCoordinate(cell)
+  const fade = Math.max(0, Math.min(1, strength))
+  const scale: Partial<Record<keyof ScientificFieldSample, number>> = {
+    energy: 1 - fade,
+    density: 1 - fade,
+    information: 1 - fade,
+    entropy: 1 - fade,
+    temperature: 1 - fade,
+    biology: 1 - fade,
+  }
+  return {
+    id: 0,
+    kind: 'brush',
+    x: p.x,
+    y: p.y,
+    z: p.z,
+    radius,
+    scale,
+    metadata: {
+      ...metadata,
+      source: metadata.source ?? 'legacy-sculpt-erase',
+      brush: 'Erase',
+      coordinateContract: 'legacy-grid-x-y-z-to-world-x-z-y-v1',
+      unsupportedFields: ['materialId', 'signal', 'memField'],
+      materialClearRule: 'legacy-fade-below-0.08-not-represented-in-authoritative-field-v1',
+    },
+  }
+}
+
 export function legacyBrushDeltaToMutation(
   cell: LegacyVoxelCoordinate,
   delta: {
