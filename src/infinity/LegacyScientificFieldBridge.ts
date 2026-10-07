@@ -309,6 +309,34 @@ export function sculptSmartBrushToMutation(
   }
 }
 
+export function sculptSmoothToMutation(
+  cell: LegacyVoxelCoordinate,
+  radius: number,
+  strength: number,
+  metadata: Record<string, unknown> = {},
+): WorldFieldMutation {
+  const p = legacyToWorldCoordinate(cell)
+  const operations: NonNullable<WorldFieldMutation['operations']> = {}
+  for (const field of ['energy','density','information','entropy','temperature','biology'] as const) {
+    operations[field] = { mode: 'smooth6', value: strength }
+  }
+  return {
+    id: 0,
+    kind: 'brush',
+    x: p.x,
+    y: p.y,
+    z: p.z,
+    radius,
+    operations,
+    metadata: {
+      ...metadata,
+      source: metadata.source ?? 'legacy-sculpt-smooth',
+      brush: 'Smooth',
+      coordinateContract: 'legacy-grid-x-y-z-to-world-x-z-y-v1',
+    },
+  }
+}
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
 }
