@@ -43,9 +43,12 @@ export function evaluateScientificFieldSpatialPattern(pattern:ScientificFieldSpa
   return (Math.abs(rel[0])%period===0||Math.abs(rel[1])%period===0||Math.abs(rel[2])%period===0)?pattern.high:pattern.low
 }
 export function assertScientificFieldSpatialPattern(pattern:ScientificFieldSpatialPattern | ScientificSmartBrushPattern):void {
+  if(pattern.kind==='smart-brush') {
+    if(pattern.schemaVersion!=='scientific-smart-brush-v1') throw new Error('Unsupported smart brush schema')
+    if(!Number.isFinite(pattern.radius)||pattern.radius<=0) throw new Error('Smart brush radius must be positive')
+    return
+  }
   if(pattern.schemaVersion!=='scientific-field-pattern-v1') throw new Error('Unsupported scientific field pattern schema')
-  if(pattern.kind==='smart-brush') { if(!Number.isFinite(pattern.radius)||pattern.radius<=0) throw new Error('Smart brush radius must be positive'); return }
-  if(pattern.kind==='smart-brush') return
   if(pattern.coordinateFrame!=='legacy-grid') throw new Error('Unsupported scientific field pattern coordinate frame')
   for(const value of Object.values(pattern.origin)) if(!Number.isFinite(value)) throw new Error('Scientific field pattern origin must be finite')
   if(pattern.kind==='noise3'){
