@@ -140,16 +140,27 @@ try {
   const materializationProbe = await page.evaluate(() => {
     const world = window.infiniteWorld;
     if (!world || typeof world.place !== "function") return { error: "InfiniteWorldRenderer.place is not exposed" };
-    for (let x = -1024; x <= 1024; x += 32) {
-      for (let z = -1024; z <= 1024; z += 32) {
-        const d = world.buildZoneCost(x, z);
-        if (d?.buildability?.score >= 0.2 && Number(d?.laws?.penalty ?? 1) < 0.25) {
-          const before = world.getObjectCount();
-          const allowed = world.place("building", x, z);
-          const afterAllowed = world.getObjectCount();
-          if (allowed && afterAllowed === before + 1) {
-            return { x, z, score: d.buildability.score, before, afterAllowed, allowedCreated: true };
-          }
+    // Keep the probe deterministic without monopolizing the browser UI thread:
+    // evaluate a bounded canonical lattice first, then validate the actual mutation.
+    const candidates = [
+      [0, 0], [32, 0], [-32, 0], [0, 32], [0, -32],
+      [64, 0], [-64, 0], [0, 64], [0, -64],
+      [64, 64], [-64, 64], [64, -64], [-64, -64],
+      [128, 0], [-128, 0], [0, 128], [0, -128],
+      [128, 128], [-128, 128], [128, -128], [-128, -128],
+      [256, 0], [-256, 0], [0, 256], [0, -256],
+      [256, 256], [-256, 256], [256, -256], [-256, -256],
+      [384, 0], [-384, 0], [0, 384], [0, -384],
+      [512, 0], [-512, 0], [0, 512], [0, -512],
+    ];
+    for (const [x, z] of candidates) {
+      const d = world.buildZoneCost(x, z);
+      if (d?.buildability?.score >= 0.2 && Number(d?.laws?.penalty ?? 1) < 0.25) {
+        const before = world.getObjectCount();
+        const allowed = world.place("building", x, z);
+        const afterAllowed = world.getObjectCount();
+        if (allowed && afterAllowed === before + 1) {
+          return { x, z, score: d.buildability.score, before, afterAllowed, allowedCreated: true };
         }
       }
     }
