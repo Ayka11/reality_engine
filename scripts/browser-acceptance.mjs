@@ -19,7 +19,7 @@ const waitForServer = async () => {
   throw new Error("Vite preview server did not become ready");
 };
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: ["--disable-gpu", "--disable-dev-shm-usage"] });
 const acceptanceTimeout = 30000;
 try {
   await waitForServer();
