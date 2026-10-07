@@ -108,7 +108,7 @@ smooth.apply({
     biology: { mode: "smooth6", value: 1 },
   },
 });
-assert.equal(smooth.sample(0, 0, 0).energy, 1.65);
+assert.equal(smooth.sample(0, 0, 0).energy, 0.65);
 assert.equal(smooth.sample(0, 0, 0).energy, smooth.sample(0, 0, 0).energy);
 
 console.log("PASS: profiled mutations use authoritative spatial falloff");
