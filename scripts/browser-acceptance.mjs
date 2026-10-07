@@ -289,12 +289,16 @@ try {
     composeObjects: afterCompose.stats?.objects ?? 0,
     sidebarGrips: grips,
   }));
-} finally {
+  // The acceptance contract is complete. Do not await Playwright teardown here:
+  // headless Chromium/Three.js can keep native handles alive after all assertions
+  // have passed. CI needs the process to terminate deterministically on PASS.
   server.kill("SIGKILL");
-  if (acceptancePassed) {
-    process.exit(0);
-  }
-  const forceExit = setTimeout(() => process.exit(process.exitCode ?? 1), 5000);
+  process.exit(0);
+} catch (error) {
+  server.kill("SIGKILL");
+  console.error(error?.stack || error?.message || String(error));
+  process.exitCode = 1;
+  const forceExit = setTimeout(() => process.exit(1), 5000);
   forceExit.unref();
   try {
     await Promise.race([
