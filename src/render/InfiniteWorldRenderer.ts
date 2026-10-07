@@ -2277,9 +2277,10 @@ export class InfiniteWorldRenderer {
         const distance = d.role === 'civic' ? 12 : 18
         const x = d.x + Math.cos(angle) * distance
         const z = d.z + Math.sin(angle) * distance
-        const siteDecision = this.decisionLayer.buildZoneCost(x, z, Math.hypot(x - plan.hub.x, z - plan.hub.z))
-        // Auto-building is law-aware: missing core physical processes can veto a site.
-        if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
+        const construction = this.constructionContract.authorize('building', x, z)
+        // Auto-building must use the same authoritative construction contract as manual placement.
+        if (!construction.allowed || !construction.decision) continue
+        const siteDecision = construction.decision
         const y = siteDecision.buildability.elevation
         const building = this.objects.add({
           kind: 'building', x, y, z,
@@ -2359,9 +2360,10 @@ export class InfiniteWorldRenderer {
         const tangentZ = Math.sin(angle + Math.PI / 2) * lateral
         const px = bx + tangentX
         const pz = bz + tangentZ
-        const siteDecision = this.decisionLayer.buildZoneCost(px, pz, Math.hypot(px - cx, pz - cz))
-        // Settlement growth must obey the same physical-law gate as city planning.
-        if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
+        const construction = this.constructionContract.authorize('building', px, pz)
+        // Settlement growth must use the same authoritative construction contract as manual placement.
+        if (!construction.allowed || !construction.decision) continue
+        const siteDecision = construction.decision
         const py = siteDecision.buildability.elevation
         const building = this.objects.add({
           kind: 'building', x: px, y: py, z: pz,
@@ -2394,8 +2396,9 @@ export class InfiniteWorldRenderer {
       const radial = radius * (0.35 + (i % 5) / 8)
       const x = cx + Math.cos(angle) * radial
       const z = cz + Math.sin(angle) * radial
-      const siteDecision = this.decisionLayer.buildZoneCost(x, z, Math.hypot(x - cx, z - cz))
-      if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
+      const construction = this.constructionContract.authorize('building', x, z)
+      if (!construction.allowed || !construction.decision) continue
+      const siteDecision = construction.decision
       const y = siteDecision.buildability.elevation
       const building = this.objects.add({
         kind: 'building', x, y, z,
