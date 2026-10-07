@@ -10,7 +10,7 @@ export type PresetCommandName = PresetName | WorkerPresetName;
 export type PresetExecutionTarget = 'worker' | 'voxel';
 
 export interface PresetDefinition {
-  readonly name: PresetName;
+  readonly name: PresetCommandName;
   readonly target: PresetExecutionTarget;
   readonly clearsBeforeApply: true;
 }
