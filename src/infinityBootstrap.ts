@@ -24,6 +24,11 @@ export function bootstrapInfiniteWorld() {
   const world = new InfiniteWorldRenderer(canvas, seed)
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world
+  ;(window as any).infinityApplyLegacySculptStroke = (tool: any, cell: any, radius: number, strength: number, options?: any) =>
+    world.applyLegacySculptStroke(tool, cell, radius, strength, options)
+  ;(window as any).infinityApplyLegacySmartBrush = (name: any, cell: any, radius: number, selectedLegacyZ?: number) =>
+    world.applyLegacySmartBrush(name, cell, radius, selectedLegacyZ)
+  ;(window as any).infinityAuthoritativeFieldState = () => world.authoritativeField.getState()
   ;(window as any).worldLibrary = worldLibrary
   ;(window as any).worldLibraryStats = () => worldLibrary.stats()
   ;(window as any).worldLibrarySearch = (tags: string[] = [], category?: string) =>
