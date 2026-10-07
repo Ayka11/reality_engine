@@ -142,6 +142,20 @@ export class InfiniteWorldRenderer {
       case 'smooth': return this.legacySculptRuntimeAdapter.smooth(cell, radius, strength, metadata)
     }
   }
+
+  applyLegacySmartBrush(
+    name: 'Volcano' | 'Forest' | 'Ocean' | 'Crystal' | 'Storm' | 'Life Cluster' | 'Radiation' | 'Civilization Seed',
+    cell: LegacyVoxelCoordinate,
+    radius: number,
+    selectedLegacyZ?: number,
+  ): WorldFieldMutation {
+    const committed = this.legacySculptRuntimeAdapter.smartBrush(name, cell, radius, selectedLegacyZ, {
+      source: 'legacy-sculpt-runtime',
+      legacyTool: 'smart-brush',
+      legacyCoordinate: { ...cell },
+    })
+    return committed
+  }
   private worldAnchor = new THREE.Vector3(0, 0, 0)
   private flyMode = true
   private readonly keys = new Set<string>()
