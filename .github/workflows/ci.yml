@@ -23,6 +23,7 @@ jobs:
       - run: npm run lint
       - run: npm run test:brushes --if-present
       - run: npm run test:world-field --if-present
+      - run: npm run test:presets --if-present
       - run: npm run build
       - run: npm run hf:smoke
       - run: npm run hf:cpu:check

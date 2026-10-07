@@ -2,6 +2,7 @@ import { SimulationEngine } from './simulation/SimulationEngine';
 import { VoxelRenderer, LayerName } from './render/VoxelRenderer';
 import { Entity } from './simulation/EntityLayer';
 import { Presets, PresetName } from './world/Presets';
+import { isWorkerPreset, normalizePresetName } from './world/PresetContract';
 import { ScriptEngine, SCRIPT_TEMPLATES } from './world/ScriptEngine';
 import { NodeGraph } from './ui/NodeGraph';
 import { UnrealBridge } from './export/UnrealBridge';
@@ -79,6 +80,11 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data;
   workerBusy = false;
 
+  if (cmd === 'presetApplied') {
+    (window as unknown as Record<string, unknown>).lastChunkPreset = e.data;
+    return;
+  }
+
   if (cmd === 'frame' && ab) {
     chunkTick    = wTick ?? chunkTick;
     chunkEvCount = wEv   ?? chunkEvCount;
@@ -102,6 +108,20 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     }
   }
 };
+
+// Canonical worker preset entry point. UI and external diagnostics use this path.
+function applyChunkPreset(value: string) {
+  const name = normalizePresetName(value);
+  if (!name) throw new Error(`Unknown preset: ${value}`);
+  if (!isWorkerPreset(value)) {
+    Presets.apply(sim.grid, name as PresetName);
+    sim.syncToGPU();
+    return;
+  }
+  (window as unknown as Record<string, unknown>).lastChunkPreset = null;
+  chunkWorker.postMessage({ cmd: 'preset', data: { name: value } });
+}
+(window as unknown as Record<string, unknown>).applyChunkPreset = applyChunkPreset;
 
 // Seed initial world in worker
 chunkWorker.postMessage({ cmd: 'generate', data: { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw } });
@@ -281,8 +301,7 @@ function renderMaterialPalette() {
 // ── Preset buttons ────────────────────────────────────────────────────────────
 document.querySelectorAll<HTMLButtonElement>('.preset-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    Presets.apply(sim.grid, btn.dataset.preset as PresetName);
-    sim.syncToGPU();
+    applyChunkPreset(btn.dataset.preset || '');
   });
 });
 
