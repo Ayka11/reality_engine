@@ -106,7 +106,7 @@ assert.equal(stamp.spatialPattern.kind, "stamp-lattice");
 assert.equal(stamp.spatialPattern.period, 4);
 
 const volcano = sculptSmartBrushToMutation("Volcano", {x:8,y:9,z:3}, 5);
-assert.deepEqual({x:volcano.x,y:volcano.y,z:volcano.z}, {x:8,y:0,z:9});
+assert.deepEqual({x:volcano.x,y:volcano.y,z:volcano.z}, {x:8,y:3,z:9});
 assert.equal(volcano.spatialPattern.kind, "smart-brush");
 assert.equal(volcano.spatialPattern.name, "Volcano");
 assert.equal(volcano.delta.energy, 9);
