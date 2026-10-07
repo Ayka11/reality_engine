@@ -11,6 +11,8 @@ import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import { FieldSampler } from '../infinity/FieldSampler'
+import { GeneratorFieldProvider } from '../infinity/ScientificFieldProvider'
+import { MutableWorldFieldProvider } from '../infinity/MutableWorldFieldProvider'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { WorldConstructionContract } from '../infinity/WorldConstructionContract'
 import { DecisionGraph } from '../infinity/DecisionGraph'
@@ -20,6 +22,7 @@ import { LawPhysicsContract } from '../infinity/LawPhysicsContract'
 import { createPhysicsInteractionRecord, type PhysicsInteractionType } from '../infinity/PhysicsInteractionRecord'
 import { PhysicsInteractionLog } from '../infinity/PhysicsInteractionLog'
 import { RuntimeDiagnostics } from '../infinity/RuntimeDiagnostics'
+import { runtimeProvenance } from '../infinity/RuntimeProvenance'
 import { createExperimentProtocol } from '../infinity/ExperimentProtocol'
 import { ExperimentRunner, type ExperimentSnapshot } from '../infinity/ExperimentRunner'
 import { compareExperiments, type ExperimentComparison } from '../infinity/ExperimentComparison'
@@ -58,6 +61,7 @@ export class InfiniteWorldRenderer {
   persistence: WorldPersistence
   history = new WorldEditHistory()
   readonly fieldSampler: FieldSampler
+  readonly authoritativeWorldField: MutableWorldFieldProvider
   decisionLayer: WorldDecisionLayer
   constructionContract: WorldConstructionContract
   readonly decisionGraph = new DecisionGraph()
@@ -105,6 +109,31 @@ export class InfiniteWorldRenderer {
   private worldPosition = new THREE.Vector3(28, 45, 52)
 
   getWorldPosition() { return this.worldPosition.clone() }
+  applyAuthoritativeFieldMutation(input: Parameters<MutableWorldFieldProvider['apply']>[0]) {
+    const event = runtimeProvenance.record(input.kind === 'composer' ? 'world-state' : input.kind, {
+      ...input.metadata,
+      mutationKind: input.kind,
+      x: input.x,
+      y: input.y,
+      z: input.z,
+      radius: input.radius,
+    })
+    const mutation = this.authoritativeWorldField.apply({
+      ...input,
+      metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id },
+    })
+    this.refreshTerrainPatches()
+    this.scheduleSave()
+    return mutation
+  }
+
+  getAuthoritativeFieldState() {
+    return {
+      field: this.authoritativeWorldField.getState(),
+      provenance: runtimeProvenance.getTrace(),
+    }
+  }
+
   private worldAnchor = new THREE.Vector3(0, 0, 0)
   private flyMode = true
   private readonly keys = new Set<string>()
@@ -138,7 +167,8 @@ export class InfiniteWorldRenderer {
     this.scene.add(this.terrainGroup)
     this.worldAssetRuntime = new WorldAssetRuntime(this.scene)
     this.generator = new WorldGenerator(seed)
-    this.fieldSampler = new FieldSampler(this.generator)
+    this.authoritativeWorldField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
+    this.fieldSampler = new FieldSampler(this.generator, this.authoritativeWorldField)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null)
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
@@ -302,10 +332,15 @@ export class InfiniteWorldRenderer {
       const [cx, cy, cz] = key.split(',').map(Number)
       this.persistence.saveChunk(cx, cy, cz, list)
     }
+    this.persistence.saveFieldState(this.authoritativeWorldField.serialize())
     return objects.length
   }
 
   loadWorld() {
+    this.authoritativeWorldField.clear()
+    const fieldState = this.persistence.loadFieldState()
+    if (fieldState) this.authoritativeWorldField.restore(fieldState)
+
     this.objects.clear()
     this.objectSpatialIndex.clear()
     let count = 0
@@ -353,7 +388,10 @@ export class InfiniteWorldRenderer {
     this.clearSavedWorld()
 
     this.generator = new WorldGenerator(newSeed)
+    this.authoritativeWorldField.setBase(new GeneratorFieldProvider(this.generator))
+    this.authoritativeWorldField.clear()
     this.fieldSampler.setGenerator(this.generator)
+    this.fieldSampler.setProvider(this.authoritativeWorldField)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights, () => (window as any).getRealityLawState?.() ?? null)
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.persistence = new WorldPersistence(newSeed)
@@ -611,19 +649,21 @@ export class InfiniteWorldRenderer {
 
   setMaterialMode(mode: 'field' | 'material' | 'height') {
     this.materialMode = mode
-    for (const material of this.terrainMaterials) {
-      if (mode === 'material') {
-        material.vertexColors = false
-        material.color.set(0x8a8f98)
-        material.roughness = 0.72
-        material.metalness = 0.08
-      } else {
-        material.vertexColors = true
-        material.color.set(0xffffff)
-        material.roughness = mode === 'height' ? 0.88 : 0.95
-        material.metalness = 0
-      }
-      material.needsUpdate = true
+    this.refreshTerrainPatches()
+  }
+
+  private refreshTerrainPatches() {
+    for (const [key, patch] of this.patches) {
+      this.scene.remove(patch.group)
+      patch.group.traverse(obj => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose())
+        else if (mesh.material) mesh.material.dispose()
+      })
+      const group = this.buildTerrainPatch(patch.chunk, patch.lod)
+      this.patches.set(key, { group, chunk: patch.chunk, lod: patch.lod })
+      this.scene.add(group)
     }
   }
 
@@ -721,7 +761,14 @@ export class InfiniteWorldRenderer {
         const slope = Math.max(0, 1 - normal.y)
         color.offsetHSL(0, 0, -slope * 0.18)
 
-        if (this.materialMode === 'height') {
+        if (this.materialMode === 'field') {
+          // Field mode must visualize the authoritative scientific field, not the biome layer.
+          // Sample at the exact terrain surface so sparse field mutations are visible immediately.
+          const field = this.fieldSampler.sample(originX + gx, h, originZ + gz)
+          const density = Math.max(0, Math.min(1, field.density))
+          const information = Math.max(0, Math.min(1, field.information / 70))
+          color.setHSL(0.68 - density * 0.68, 0.84, 0.3 + information * 0.28)
+        } else if (this.materialMode === 'height') {
           const t = Math.max(0, Math.min(1, (h + 20) / 120))
           color.setHSL(0.68 - t * 0.68, 0.82, 0.28 + t * 0.34)
         }
@@ -2240,9 +2287,10 @@ export class InfiniteWorldRenderer {
         const distance = d.role === 'civic' ? 12 : 18
         const x = d.x + Math.cos(angle) * distance
         const z = d.z + Math.sin(angle) * distance
-        const siteDecision = this.decisionLayer.buildZoneCost(x, z, Math.hypot(x - plan.hub.x, z - plan.hub.z))
-        // Auto-building is law-aware: missing core physical processes can veto a site.
-        if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
+        const construction = this.constructionContract.authorize('building', x, z)
+        // Auto-building must use the same authoritative construction contract as manual placement.
+        if (!construction.allowed || !construction.decision) continue
+        const siteDecision = construction.decision
         const y = siteDecision.buildability.elevation
         const building = this.objects.add({
           kind: 'building', x, y, z,
@@ -2322,9 +2370,10 @@ export class InfiniteWorldRenderer {
         const tangentZ = Math.sin(angle + Math.PI / 2) * lateral
         const px = bx + tangentX
         const pz = bz + tangentZ
-        const siteDecision = this.decisionLayer.buildZoneCost(px, pz, Math.hypot(px - cx, pz - cz))
-        // Settlement growth must obey the same physical-law gate as city planning.
-        if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
+        const construction = this.constructionContract.authorize('building', px, pz)
+        // Settlement growth must use the same authoritative construction contract as manual placement.
+        if (!construction.allowed || !construction.decision) continue
+        const siteDecision = construction.decision
         const py = siteDecision.buildability.elevation
         const building = this.objects.add({
           kind: 'building', x: px, y: py, z: pz,
@@ -2357,8 +2406,9 @@ export class InfiniteWorldRenderer {
       const radial = radius * (0.35 + (i % 5) / 8)
       const x = cx + Math.cos(angle) * radial
       const z = cz + Math.sin(angle) * radial
-      const siteDecision = this.decisionLayer.buildZoneCost(x, z, Math.hypot(x - cx, z - cz))
-      if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
+      const construction = this.constructionContract.authorize('building', x, z)
+      if (!construction.allowed || !construction.decision) continue
+      const siteDecision = construction.decision
       const y = siteDecision.buildability.elevation
       const building = this.objects.add({
         kind: 'building', x, y, z,

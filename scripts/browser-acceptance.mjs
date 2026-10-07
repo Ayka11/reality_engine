@@ -121,9 +121,199 @@ try {
     throw new Error("Density Gravity could not be established as active before the build-law test");
   }
 
+  const fieldProbe = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const candidates = [
+      [0, 0], [32, 0], [-32, 0], [0, 32], [0, -32],
+      [64, 0], [-64, 0], [0, 64], [0, -64],
+      [128, 0], [-128, 0], [0, 128], [0, -128],
+      [256, 0], [-256, 0], [0, 256], [0, -256],
+      [384, 0], [-384, 0], [0, 384], [0, -384],
+      [512, 0], [-512, 0], [0, 512], [0, -512],
+    ];
+    for (const [x, z] of candidates) {
+      const sample = world.fieldSampler.sampleWorld(x, undefined, z);
+      const density = Number(sample.density);
+      if (Number.isFinite(density) && density > 0.05 && density < 1) {
+        return { x, y: Number(sample.y), z, sample };
+      }
+    }
+    return null;
+  });
+  if (!fieldProbe) {
+    throw new Error("No deterministic non-saturated World Field probe coordinate found");
+  }
+  const fieldPhysicsBaseline = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    const sample = world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
+    const modulation = world.fieldPhysics.modulation(sample);
+    const decision = world.buildZoneCost(probe.x, probe.z);
+    return { sample, modulation, decision };
+  }, fieldProbe);
+  const fieldMutation = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    return window.worldFieldMutate?.({
+      kind: "brush",
+      x: probe.x,
+      y: probe.y,
+      z: probe.z,
+      radius: 16,
+      delta: { energy: 0.2, density: 0.2 },
+      metadata: {
+        acceptance: "field-law-physics-construction-e2e",
+        probe: { x: probe.x, y: probe.y, z: probe.z },
+      },
+    });
+  }, fieldProbe);
+  const fieldPhysicsAfter = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    const sample = world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
+    const modulation = world.fieldPhysics.modulation(sample);
+    const decision = world.buildZoneCost(probe.x, probe.z);
+    return { sample, modulation, decision };
+  }, fieldProbe);
+
+  const beforeDensity = Number(fieldPhysicsBaseline?.sample?.density ?? NaN);
+  const afterDensity = Number(fieldPhysicsAfter?.sample?.density ?? NaN);
+  if (
+    !Number.isFinite(beforeDensity) ||
+    !Number.isFinite(afterDensity) ||
+    !(afterDensity > beforeDensity)
+  ) {
+    throw new Error(
+      `Authoritative field mutation did not increase sampled density: before=${beforeDensity}, after=${afterDensity}`
+    );
+  }
+
+  const beforeForcePush = Number(fieldPhysicsBaseline?.modulation?.forcePush ?? NaN);
+  const afterForcePush = Number(fieldPhysicsAfter?.modulation?.forcePush ?? NaN);
+  if (
+    !Number.isFinite(beforeForcePush) ||
+    !Number.isFinite(afterForcePush) ||
+    !(afterForcePush > beforeForcePush)
+  ) {
+    throw new Error(
+      `Density mutation did not reach field physics: before=${beforeForcePush}, after=${afterForcePush}`
+    );
+  }
+
+  const beforeDensityCost = Number(fieldPhysicsBaseline?.decision?.decisionComponents?.density ?? NaN);
+  const afterDensityCost = Number(fieldPhysicsAfter?.decision?.decisionComponents?.density ?? NaN);
+  if (
+    !Number.isFinite(beforeDensityCost) ||
+    !Number.isFinite(afterDensityCost) ||
+    !(afterDensityCost > beforeDensityCost)
+  ) {
+    throw new Error(
+      `Field density mutation did not reach construction decision scoring: before=${beforeDensityCost}, after=${afterDensityCost}`
+    );
+  }
+
+  if (!fieldMutation?.metadata?.provenanceEventId) {
+    throw new Error("Field mutation did not receive runtime provenance");
+  }
+
+  // Persistence regression: authoritative field edits must survive Save -> Load,
+  // not only the object layer. Save a known mutation, perturb it, then restore.
+  const fieldPersistenceBaseline = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    world.saveWorld();
+    return {
+      sample: world.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
+      state: world.getAuthoritativeFieldState().field,
+    };
+  }, fieldProbe);
+  await page.evaluate((probe) => window.worldFieldMutate?.({
+    kind: "brush",
+    x: probe.x,
+    y: probe.y,
+    z: probe.z,
+    radius: 16,
+    delta: { energy: 5 },
+    metadata: { acceptance: "field-persistence-perturbation" },
+  }), fieldProbe);
+  const fieldPersistencePerturbed = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    return world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
+  }, fieldProbe);
+  if (!(Number(fieldPersistencePerturbed?.energy ?? NaN) > Number(fieldPersistenceBaseline?.sample?.energy ?? NaN))) {
+    throw new Error("Field persistence perturbation did not change the authoritative sample");
+  }
+  const restoredFieldPersistence = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    world.loadWorld();
+    return {
+      sample: world.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
+      state: world.getAuthoritativeFieldState().field,
+    };
+  }, fieldProbe);
+  if (
+    !Number.isFinite(Number(restoredFieldPersistence?.sample?.density ?? NaN)) ||
+    Math.abs(Number(restoredFieldPersistence.sample.energy) - Number(fieldPersistenceBaseline.sample.energy)) > 1e-9
+  ) {
+    throw new Error(
+      `Authoritative field did not restore from Save -> Load: saved=${fieldPersistenceBaseline.sample.energy}, restored=${restoredFieldPersistence.sample.energy}`
+    );
+  }
+  if (Number(restoredFieldPersistence?.state?.mutationCount ?? -1) !== Number(fieldPersistenceBaseline?.state?.mutationCount ?? -2)) {
+    throw new Error(
+      `Authoritative field mutation count did not restore: saved=${fieldPersistenceBaseline.state.mutationCount}, restored=${restoredFieldPersistence.state.mutationCount}`
+    );
+  }
+
+  // Frontend parity regression: the visible Scientific Field tab must mutate the same
+  // authoritative provider used by the direct runtime API.
+  await page.evaluate(() => {
+    window.setInfinityDockPosition?.("right");
+    window.toggleWorldToolbar?.(true);
+  });
+  await page.waitForSelector("#vTabField");
+  await page.locator("#vTabField").click();
+  await page.waitForSelector("#vFieldEnergy");
+  const uiFieldBaseline = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const p = world.getWorldPosition();
+    const y = world.getWorldEnvironment().worldPosition.y;
+    return {
+      position: { x: p.x, y, z: p.z },
+      sample: world.fieldSampler.sample(p.x, y, p.z),
+      state: world.getAuthoritativeFieldState().field,
+    };
+  });
+  await page.locator("#vFieldEnergy").click();
+  const uiFieldAfter = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const p = world.getWorldPosition();
+    const y = world.getWorldEnvironment().worldPosition.y;
+    return {
+      sample: world.fieldSampler.sample(p.x, y, p.z),
+      state: world.getAuthoritativeFieldState().field,
+    };
+  });
+  if (!(Number(uiFieldAfter?.sample?.energy ?? NaN) > Number(uiFieldBaseline?.sample?.energy ?? NaN))) {
+    throw new Error("Scientific Field UI brush did not mutate the authoritative energy field");
+  }
+  if (Number(uiFieldAfter?.state?.mutationCount ?? 0) !== Number(uiFieldBaseline?.state?.mutationCount ?? 0) + 1) {
+    throw new Error("Scientific Field UI brush did not create exactly one authoritative mutation");
+  }
+  if (uiFieldAfter?.state?.lastMutation?.metadata?.source !== "infinity-world-ui") {
+    throw new Error("Scientific Field UI brush mutation lost its frontend provenance metadata");
+  }
+
   const lawBuildBefore = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
   const lawDisabled = await page.evaluate(() => window.getRealityLawState?.());
+  const lawPhysicsDisabled = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const sample = world.fieldSampler.sampleWorld(0, undefined, 0);
+    return world.lawPhysicsContract.apply(world.fieldPhysics.modulation(sample));
+  });
+  if (Number(lawPhysicsDisabled?.forcePush ?? -1) !== 0) {
+    throw new Error("Disabling Density Gravity did not veto density-driven Infinity physics");
+  }
+  if (Number(lawPhysicsDisabled?.gravity ?? -1) !== 0) {
+    throw new Error("Disabling Density Gravity did not veto gravity-driven Infinity physics");
+  }
   if (lawDisabled?.processes?.includes("gravity") || lawDisabled?.processes?.includes("density")) {
     throw new Error("Disabling Density Gravity did not reach the runtime process state");
   }

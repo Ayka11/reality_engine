@@ -13,6 +13,22 @@ export type WorldFieldMutation = {
   metadata?: Record<string, unknown>
 }
 
+export type WorldFieldOverlay = {
+  scale: Partial<Record<keyof ScientificFieldSample, number>>
+  delta: Partial<ScientificFieldSample>
+  metadata?: Record<string, unknown>
+}
+
+export type WorldFieldStateSnapshot = {
+  schemaVersion: 'world-field-state-v1'
+  providerId: string
+  providerVersion: string
+  version: number
+  nextId: number
+  mutations: WorldFieldMutation[]
+  globalOverlays: Partial<Record<'preset' | 'law' | 'composer', WorldFieldOverlay>>
+}
+
 const FIELDS: (keyof ScientificFieldSample)[] = [
   'energy', 'density', 'information', 'entropy', 'temperature', 'biology', 'material',
 ]
@@ -111,7 +127,63 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   clear() {
     this.mutations = []
     this.globalOverlays.clear()
+    this.nextId = 1
     this.versionCounter++
+  }
+
+  serialize(): WorldFieldStateSnapshot {
+    const globalOverlays: WorldFieldStateSnapshot['globalOverlays'] = {}
+    for (const kind of ['preset', 'law', 'composer'] as const) {
+      const overlay = this.globalOverlays.get(kind)
+      if (overlay) {
+        globalOverlays[kind] = {
+          scale: { ...overlay.scale },
+          delta: { ...overlay.delta },
+          metadata: overlay.metadata ? { ...overlay.metadata } : undefined,
+        }
+      }
+    }
+    return {
+      schemaVersion: 'world-field-state-v1',
+      providerId: this.id,
+      providerVersion: this.version,
+      version: this.versionCounter,
+      nextId: this.nextId,
+      mutations: this.mutations.map((mutation) => ({
+        ...mutation,
+        delta: mutation.delta ? { ...mutation.delta } : undefined,
+        scale: mutation.scale ? { ...mutation.scale } : undefined,
+        metadata: mutation.metadata ? { ...mutation.metadata } : undefined,
+      })),
+      globalOverlays,
+    }
+  }
+
+  restore(snapshot: WorldFieldStateSnapshot) {
+    if (snapshot.schemaVersion !== 'world-field-state-v1' || snapshot.providerId !== this.id) return false
+    if (!Array.isArray(snapshot.mutations) || typeof snapshot.version !== 'number') return false
+
+    this.mutations = snapshot.mutations.map((mutation) => ({
+      ...mutation,
+      delta: mutation.delta ? { ...mutation.delta } : undefined,
+      scale: mutation.scale ? { ...mutation.scale } : undefined,
+      metadata: mutation.metadata ? { ...mutation.metadata } : undefined,
+    }))
+    this.globalOverlays.clear()
+    for (const kind of ['preset', 'law', 'composer'] as const) {
+      const overlay = snapshot.globalOverlays?.[kind]
+      if (overlay) {
+        this.globalOverlays.set(kind, {
+          scale: { ...overlay.scale },
+          delta: { ...overlay.delta },
+          metadata: overlay.metadata ? { ...overlay.metadata } : undefined,
+        })
+      }
+    }
+    const maxId = this.mutations.reduce((max, mutation) => Math.max(max, mutation.id), 0)
+    this.nextId = Math.max(maxId + 1, Number.isFinite(snapshot.nextId) ? snapshot.nextId : 1)
+    this.versionCounter = Math.max(0, snapshot.version)
+    return true
   }
 
   getVersion() {

@@ -1,17 +1,20 @@
 import { chunkKey, worldToChunk } from './WorldCoordinate'
 import type { WorldObject } from './WorldObject'
+import type { WorldFieldStateSnapshot } from './MutableWorldFieldProvider'
 
 type StoredChunk = { version: 1; seed: string; objects: WorldObject[] }
 
 export class WorldPersistence {
   private readonly prefix: string
   private readonly manifestKey: string
+  private readonly fieldStateKey: string
   private readonly loaded = new Set<string>()
   private readonly cache = new Map<string, WorldObject[]>()
 
   constructor(private readonly seed: string) {
     this.prefix = `reality-engine-world:${seed}:chunk:`
     this.manifestKey = `reality-engine-world:${seed}:manifest`
+    this.fieldStateKey = `reality-engine-world:${seed}:field-state`
   }
 
   private key(cx: number, cy: number, cz: number) {
@@ -59,6 +62,22 @@ export class WorldPersistence {
     this.updateManifest()
   }
 
+  saveFieldState(state: WorldFieldStateSnapshot) {
+    localStorage.setItem(this.fieldStateKey, JSON.stringify(state))
+    return state.version
+  }
+
+  loadFieldState(): WorldFieldStateSnapshot | null {
+    const raw = localStorage.getItem(this.fieldStateKey)
+    if (!raw) return null
+    try {
+      const state = JSON.parse(raw) as WorldFieldStateSnapshot
+      return state?.schemaVersion === 'world-field-state-v1' ? state : null
+    } catch {
+      return null
+    }
+  }
+
   clear() {
     const raw = localStorage.getItem(this.manifestKey)
     if (raw) {
@@ -68,6 +87,7 @@ export class WorldPersistence {
       } catch {}
     }
     localStorage.removeItem(this.manifestKey)
+    localStorage.removeItem(this.fieldStateKey)
     this.loaded.clear()
     this.cache.clear()
   }
