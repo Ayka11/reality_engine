@@ -22,6 +22,7 @@ import { LawPhysicsContract } from '../infinity/LawPhysicsContract'
 import { createPhysicsInteractionRecord, type PhysicsInteractionType } from '../infinity/PhysicsInteractionRecord'
 import { PhysicsInteractionLog } from '../infinity/PhysicsInteractionLog'
 import { RuntimeDiagnostics } from '../infinity/RuntimeDiagnostics'
+import { runtimeProvenance } from '../infinity/RuntimeProvenance'
 import { createExperimentProtocol } from '../infinity/ExperimentProtocol'
 import { ExperimentRunner, type ExperimentSnapshot } from '../infinity/ExperimentRunner'
 import { compareExperiments, type ExperimentComparison } from '../infinity/ExperimentComparison'
@@ -108,6 +109,28 @@ export class InfiniteWorldRenderer {
   private worldPosition = new THREE.Vector3(28, 45, 52)
 
   getWorldPosition() { return this.worldPosition.clone() }
+  applyAuthoritativeFieldMutation(input: Parameters<MutableWorldFieldProvider['apply']>[0]) {
+    const event = runtimeProvenance.record(input.kind === 'composer' ? 'world-state' : input.kind, {
+      ...input.metadata,
+      mutationKind: input.kind,
+      x: input.x,
+      y: input.y,
+      z: input.z,
+      radius: input.radius,
+    })
+    return this.authoritativeWorldField.apply({
+      ...input,
+      metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id },
+    })
+  }
+
+  getAuthoritativeFieldState() {
+    return {
+      field: this.authoritativeWorldField.getState(),
+      provenance: runtimeProvenance.getTrace(),
+    }
+  }
+
   private worldAnchor = new THREE.Vector3(0, 0, 0)
   private flyMode = true
   private readonly keys = new Set<string>()
