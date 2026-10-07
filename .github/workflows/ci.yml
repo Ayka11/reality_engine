@@ -30,6 +30,7 @@ jobs:
       - run: npm run test:field-profile --if-present
       - run: npm run test:mutable-field-profile --if-present
       - run: npm run test:legacy-field-bridge --if-present
+      - run: npm run test:legacy-sculpt-adapter --if-present
       - run: npm run test:field-spatial-pattern --if-present
       - run: npm run build
       - run: npm run hf:smoke
