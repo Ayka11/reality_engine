@@ -14,7 +14,7 @@ export type WorldFieldMutation = {
   radius?: number
   profile?: ScientificFieldProfile
   spatialPattern?: ScientificFieldSpatialPattern | ScientificSmartBrushPattern
-  operations?: Partial<Record<keyof ScientificFieldSample, { mode: 'add' | 'max' | 'min' | 'smooth6'; value: number }>>
+  operations?: Partial<Record<keyof ScientificFieldSample, { mode: 'add' | 'max' | 'min' | 'smooth6'; value: number; weighting?: 'radial' | 'spatial' }>>
   delta?: Partial<ScientificFieldSample>
   scale?: Partial<Record<keyof ScientificFieldSample, number>>
   metadata?: Record<string, unknown>
@@ -73,10 +73,11 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
               this.sampleThrough(x,y,z+1,mutationIndex),
             ]
             const avg=neighbors.reduce((sum,n)=>sum+n[field],0)/neighbors.length
-            const t=Math.min(1,op.value*weight*.65)
+            const t=Math.min(1,op.value*(op.weighting==='radial'?radial:weight)*.65)
             out[field]=out[field]*(1-t)+avg*t
           } else {
-            const value=op.value*weight
+            const operationWeight=op.weighting==='radial'?radial:weight
+            const value=op.value*operationWeight
             if(op.mode==='add') out[field]+=value
             else if(op.mode==='max') out[field]=Math.max(out[field],value)
             else out[field]=Math.min(out[field],value)
