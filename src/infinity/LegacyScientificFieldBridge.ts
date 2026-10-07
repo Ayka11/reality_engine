@@ -258,6 +258,57 @@ export function sculptStampToMutation(
   }
 }
 
+export function sculptSmartBrushToMutation(
+  name: 'Volcano'|'Forest'|'Ocean'|'Crystal'|'Storm'|'Life Cluster'|'Radiation'|'Civilization Seed',
+  cell: LegacyVoxelCoordinate,
+  radius: number,
+  selectedLegacyZ?: number,
+  metadata: Record<string, unknown> = {},
+): WorldFieldMutation {
+  const origin = { x: cell.x, y: 0, z: cell.y }
+  const spatialPattern = {
+    schemaVersion: 'scientific-smart-brush-v1' as const,
+    kind: 'smart-brush' as const,
+    name,
+    origin,
+    radius,
+    ...(selectedLegacyZ === undefined ? {} : { selectedLegacyZ }),
+  }
+  const delta: Partial<ScientificFieldSample> = {}
+  const operations: NonNullable<WorldFieldMutation['operations']> = {}
+  switch (name) {
+    case 'Volcano':
+      delta.energy=9; delta.density=.7; delta.temperature=60; delta.entropy=.2; break
+    case 'Forest':
+      delta.energy=2; delta.density=.5; delta.information=18; delta.biology=.7; delta.temperature=8; delta.entropy=-.05; break
+    case 'Ocean':
+      delta.energy=.8; delta.information=4
+      operations.density={mode:'max',value:.7}; operations.temperature={mode:'max',value:7}; break
+    case 'Crystal':
+      delta.energy=7; delta.density=.8; delta.entropy=-.08; delta.information=25; break
+    case 'Storm':
+      delta.entropy=.15; delta.temperature=20
+      delta.energy=5; break
+    case 'Life Cluster':
+      delta.energy=3; delta.density=.4; delta.information=20; delta.biology=.6; delta.entropy=-.1; delta.temperature=12; break
+    case 'Radiation':
+      delta.entropy=.3; delta.information=-5; break
+    case 'Civilization Seed':
+      delta.energy=4; delta.density=.5; delta.information=40; delta.biology=.8; delta.entropy=-.15; delta.temperature=10; break
+  }
+  return {
+    id:0, kind:'brush', x:origin.x, y:origin.y, z:origin.z, radius,
+    spatialPattern, delta, operations,
+    metadata:{
+      ...metadata,
+      source: metadata.source ?? 'legacy-smart-brush',
+      brush:name,
+      coordinateContract:'legacy-grid-x-y-z-to-world-x-z-y-v1',
+      unsupportedFields:['materialId','pressure','fieldX','fieldY','fieldZ','localTime','causalityId','wavePhase','waveAmp','gravityPotential','chemState','signal','memField','agentMark','entityId'],
+    },
+  }
+}
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
 }
