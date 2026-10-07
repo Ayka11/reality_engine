@@ -381,6 +381,7 @@ export class InfiniteWorldRenderer {
 
     this.generator = new WorldGenerator(newSeed)
     this.authoritativeWorldField.setBase(new GeneratorFieldProvider(this.generator))
+    this.authoritativeWorldField.clear()
     this.fieldSampler.setGenerator(this.generator)
     this.fieldSampler.setProvider(this.authoritativeWorldField)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights, () => (window as any).getRealityLawState?.() ?? null)
