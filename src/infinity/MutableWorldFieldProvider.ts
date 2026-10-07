@@ -1,5 +1,7 @@
 import type { ScientificFieldProvider } from './ScientificFieldProvider'
 import type { ScientificFieldSample } from './FieldSampler'
+import { assertScientificFieldProfile, evaluateScientificFieldProfile } from './ScientificFieldProfile'
+import type { ScientificFieldProfile } from './ScientificFieldProfile'
 
 export type WorldFieldMutation = {
   id: number
@@ -8,6 +10,7 @@ export type WorldFieldMutation = {
   y?: number
   z?: number
   radius?: number
+  profile?: ScientificFieldProfile
   delta?: Partial<ScientificFieldSample>
   scale?: Partial<Record<keyof ScientificFieldSample, number>>
   metadata?: Record<string, unknown>
@@ -29,6 +32,9 @@ function clampField(name: keyof ScientificFieldSample, value: number): number {
  * The deterministic generator remains the immutable base. Mutations are sparse,
  * deterministic overlays so 2D, volumetric 3D and Infinite World all consume
  * the same state without copying the entire infinite field.
+ *
+ * Legacy delta/scale mutations remain valid and retain linear radial falloff.
+ * Profiled mutations opt into an explicit serializable spatial falloff contract.
  */
 export class MutableWorldFieldProvider implements ScientificFieldProvider {
   readonly id = 'authoritative-world-field'
@@ -65,10 +71,13 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
 
     for (const mutation of this.mutations) {
       if (mutation.x === undefined || mutation.y === undefined || mutation.z === undefined) continue
-      const radius = Math.max(0.001, mutation.radius ?? 0)
+      const radius = Math.max(0.001, mutation.radius ?? mutation.profile?.radius ?? 0)
       const distance = Math.hypot(x - mutation.x, y - mutation.y, z - mutation.z)
       if (distance > radius) continue
-      const falloff = radius === 0 ? 1 : Math.max(0, 1 - distance / radius)
+      const falloff = mutation.profile
+        ? evaluateScientificFieldProfile(mutation.profile, distance)
+        : Math.max(0, 1 - distance / radius)
+
       for (const field of FIELDS) {
         const delta = mutation.delta?.[field]
         if (delta !== undefined) out[field] += delta * falloff
@@ -82,6 +91,10 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   }
 
   apply(mutation: Omit<WorldFieldMutation, 'id'>): WorldFieldMutation {
+    if (mutation.profile) assertScientificFieldProfile(mutation.profile)
+    if (mutation.profile && mutation.radius !== undefined && mutation.radius !== mutation.profile.radius) {
+      throw new Error('World field mutation radius must match its profile radius')
+    }
     const committed: WorldFieldMutation = { ...mutation, id: this.nextId++ }
     this.mutations.push(committed)
     this.versionCounter++
