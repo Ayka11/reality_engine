@@ -13,10 +13,15 @@ async function compile(path, replacements = []) {
   return js;
 }
 
+const spatialJs = await compile("src/infinity/ScientificFieldSpatialPattern.ts");
+const spatialUrl = `data:text/javascript;base64,${Buffer.from(spatialJs).toString("base64")}`;
+
 const profileJs = await compile("src/infinity/ScientificFieldProfile.ts");
 const profileUrl = `data:text/javascript;base64,${Buffer.from(profileJs).toString("base64")}`;
 
 const providerJs = await compile("src/infinity/MutableWorldFieldProvider.ts", [
+  [/import { assertScientificFieldSpatialPattern, evaluateScientificFieldSpatialPattern, evaluateScientificSmartBrush } from ['"]\.\/ScientificFieldSpatialPattern['"]/, `import { assertScientificFieldSpatialPattern, evaluateScientificFieldSpatialPattern, evaluateScientificSmartBrush } from "${spatialUrl}"`],
+  [/import type \{ ScientificFieldSpatialPattern, ScientificSmartBrushPattern \} from ['"]\.\/ScientificFieldSpatialPattern['"]/, ''],
   [/import { assertScientificFieldProfile, evaluateScientificFieldProfile } from ['"]\.\/ScientificFieldProfile['"]/, `import { assertScientificFieldProfile, evaluateScientificFieldProfile } from "${profileUrl}"`],
   [/import type { ScientificFieldProfile } from ['"]\.\/ScientificFieldProfile['"]/, ''],
   [/import type \{ ScientificFieldProvider \} from ['"]\.\/ScientificFieldProvider['"]/, ''],
@@ -26,8 +31,8 @@ const provider = await import(`data:text/javascript;base64,${Buffer.from(provide
 const { MutableWorldFieldProvider } = provider;
 
 const base = {
-  sample: () => ({
-    energy: 1,
+  sample: (x, y, z) => ({
+    energy: 1 + x*x + y*y + z*z,
     density: 0.2,
     information: 1,
     entropy: 0.1,
@@ -83,6 +88,21 @@ const legacy = new MutableWorldFieldProvider(base);
 legacy.applyRadial("brush", 0, 0, 0, 10, { energy: 10 });
 assert.equal(legacy.sample(0, 0, 5).energy, 6);
 assert.equal(legacy.sample(0, 0, 10).energy, 1);
+
+const smooth = new MutableWorldFieldProvider(base);
+smooth.apply({
+  kind: "brush", x: 0, y: 0, z: 0, radius: 1,
+  operations: {
+    energy: { mode: "smooth6", value: 1 },
+    density: { mode: "smooth6", value: 1 },
+    information: { mode: "smooth6", value: 1 },
+    entropy: { mode: "smooth6", value: 1 },
+    temperature: { mode: "smooth6", value: 1 },
+    biology: { mode: "smooth6", value: 1 },
+  },
+});
+assert.equal(smooth.sample(0, 0, 0).energy, 1.65);
+assert.equal(smooth.sample(0, 0, 0).energy, smooth.sample(0, 0, 0).energy);
 
 console.log("PASS: profiled mutations use authoritative spatial falloff");
 console.log("PASS: profile is retained in mutation state");
