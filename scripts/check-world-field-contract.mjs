@@ -13,7 +13,7 @@ async function load(path, replacements = []) {
 const view = await load("src/infinity/WorldViewContract.ts");
 const { WorldViewContract } = view;
 const contract = new WorldViewContract();
-contract.setCenter(10, 4, -6).setVisibleRadius(100);
+contract.setCenter(10, 4, -6);\ncontract.setVisibleRadius(100);
 const world = contract.sliceToWorld(50, 50, 100, 100);
 const pixel = contract.worldToSlice(world.x, world.z, 100, 100);
 assert.ok(Math.abs(pixel.x - 50) < 1e-9);
