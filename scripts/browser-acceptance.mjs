@@ -21,6 +21,7 @@ const waitForServer = async () => {
 
 const browser = await chromium.launch({ headless: true, args: ["--disable-gpu", "--disable-dev-shm-usage"] });
 const acceptanceTimeout = 30000;
+let acceptancePassed = false;
 try {
   await waitForServer();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -280,6 +281,7 @@ try {
   if (!afterCompose?.lastGeneration) throw new Error("Compose World did not produce a generation record");
   await composePage.close();
 
+  acceptancePassed = true;
   console.log(JSON.stringify({
     status: "PASS",
     initialObjects: initial.stats?.objects ?? 0,
@@ -289,7 +291,10 @@ try {
   }));
 } finally {
   server.kill("SIGKILL");
-  const forceExit = setTimeout(() => process.exit(process.exitCode ?? 0), 5000);
+  if (acceptancePassed) {
+    process.exit(0);
+  }
+  const forceExit = setTimeout(() => process.exit(process.exitCode ?? 1), 5000);
   forceExit.unref();
   try {
     await Promise.race([
