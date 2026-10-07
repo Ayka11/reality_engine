@@ -134,7 +134,7 @@ try {
     for (const [x, z] of candidates) {
       const sample = world.fieldSampler.sampleWorld(x, undefined, z);
       const density = Number(sample.density);
-      if (Number.isFinite(density) && density > 0.05 && density < 0.7) {
+      if (Number.isFinite(density) && density > 0.05 && density < 1) {
         return { x, y: Number(sample.y), z, sample };
       }
     }
