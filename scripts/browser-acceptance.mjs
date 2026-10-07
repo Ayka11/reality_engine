@@ -229,7 +229,7 @@ try {
     y: probe.y,
     z: probe.z,
     radius: 16,
-    delta: { density: 0.15 },
+    delta: { density: 0.05 },
     metadata: { acceptance: "field-persistence-perturbation" },
   }), fieldProbe);
   const fieldPersistencePerturbed = await page.evaluate((probe) => {
