@@ -12,6 +12,7 @@ import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import { FieldSampler } from '../infinity/FieldSampler'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
+import { WorldConstructionContract } from '../infinity/WorldConstructionContract'
 import { DecisionGraph } from '../infinity/DecisionGraph'
 import { WorldObjectSpatialIndex } from '../infinity/WorldObjectSpatialIndex'
 import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
@@ -57,6 +58,7 @@ export class InfiniteWorldRenderer {
   history = new WorldEditHistory()
   readonly fieldSampler: FieldSampler
   decisionLayer: WorldDecisionLayer
+  constructionContract: WorldConstructionContract
   readonly decisionGraph = new DecisionGraph()
   readonly objectSpatialIndex = new WorldObjectSpatialIndex()
   readonly fieldPhysics = new FieldModulatedPhysics()
@@ -136,6 +138,7 @@ export class InfiniteWorldRenderer {
     this.generator = new WorldGenerator(seed)
     this.fieldSampler = new FieldSampler(this.generator)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null)
+    this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.storageKey = `reality-engine-world:${seed}:objects`
     this.persistence = new WorldPersistence(seed)
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
@@ -349,6 +352,7 @@ export class InfiniteWorldRenderer {
     this.generator = new WorldGenerator(newSeed)
     this.fieldSampler.setGenerator(this.generator)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights, () => (window as any).getRealityLawState?.() ?? null)
+    this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.persistence = new WorldPersistence(newSeed)
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
     this.history = new WorldEditHistory()
@@ -1673,10 +1677,7 @@ export class InfiniteWorldRenderer {
   }
 
   private lawGateForBuild(kind: WorldObjectKind, x: number, z: number) {
-    const structural = new Set<WorldObjectKind>(['building', 'road', 'bridge', 'water'])
-    if (!structural.has(kind)) return { allowed: true, decision: null }
-    const decision = this.decisionLayer.buildZoneCost(x, z)
-    return { allowed: decision.buildability.score >= 0.2 && decision.laws.penalty < 0.25, decision }
+    return this.constructionContract.authorize(kind, x, z)
   }
 
   place(kind: WorldObjectKind, x: number, z: number, y?: number, scale = 1) {
@@ -2100,7 +2101,7 @@ export class InfiniteWorldRenderer {
         const dx = b.x - a.x
         const dz = b.z - a.z
         const length = Math.max(3, Math.hypot(dx, dz))
-        const water = this.objects.add({
+        const water = this.constructionContract.materialize('water', (a.x + b.x) * 0.5, (a.z + b.z) * 0.5, (gate) => this.objects.add({
           kind: 'water',
           x: (a.x + b.x) * 0.5,
           y: Math.max(this.generator.seaLevel, (a.y + b.y) * 0.5 - 0.15),
@@ -2108,8 +2109,13 @@ export class InfiniteWorldRenderer {
           rotationY: Math.atan2(dx, dz),
           scale: Math.max(0.6, Math.min(8, length / 8)),
           seed: segmentId++,
-          properties: { hydrology: 'river', flow: Math.max(1, length), segment: true },
-        })
+          properties: {
+            hydrology: 'river', flow: Math.max(1, length), segment: true,
+            lawPenalty: gate.decision?.laws.penalty ?? 0,
+            activeLawProcesses: gate.decision?.laws.activeProcesses.join(',') ?? '',
+          },
+        }))
+        if (!water) continue
         created.push(water)
         this.history.push({ type: 'add', object: { ...water } })
       }
