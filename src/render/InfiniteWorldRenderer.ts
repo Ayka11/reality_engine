@@ -758,7 +758,14 @@ export class InfiniteWorldRenderer {
         const slope = Math.max(0, 1 - normal.y)
         color.offsetHSL(0, 0, -slope * 0.18)
 
-        if (this.materialMode === 'height') {
+        if (this.materialMode === 'field') {
+          // Field mode must visualize the authoritative scientific field, not the biome layer.
+          // Sample at the exact terrain surface so sparse field mutations are visible immediately.
+          const field = this.fieldSampler.sample(originX + gx, h, originZ + gz)
+          const density = Math.max(0, Math.min(1, field.density))
+          const information = Math.max(0, Math.min(1, field.information / 70))
+          color.setHSL(0.68 - density * 0.68, 0.84, 0.3 + information * 0.28)
+        } else if (this.materialMode === 'height') {
           const t = Math.max(0, Math.min(1, (h + 20) / 120))
           color.setHSL(0.68 - t * 0.68, 0.82, 0.28 + t * 0.34)
         }
