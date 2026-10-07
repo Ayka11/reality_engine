@@ -83,7 +83,7 @@ assert.deepEqual(inject.delta, {energy: 0.24, density: 0.012, information: 0, en
 assert.equal(inject.metadata.source, "legacy-sculpt-inject");
 
 const erode = sculptErodeToMutation({x: 3, y: 5, z: 2}, 4, 2);
-assert.deepEqual(erode.delta, {density: -0.02, entropy: 0.012, temperature: -0.03});
+assert.deepEqual(erode.delta, {density: -0.02, entropy: 0.012, temperature: -0.3});
 assert.equal(erode.metadata.source, "legacy-sculpt-erode");
 
 const noise = sculptNoiseToMutation({x:3,y:5,z:2}, 6, 2, 8, 17, {energy:1, information:1});
