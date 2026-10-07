@@ -19,7 +19,8 @@
     "test:construction": "node scripts/check-world-construction-contract.mjs",
     "test:law-physics": "node scripts/check-law-physics-contract.mjs",
     "test:legacy-field-bridge": "node scripts/check-legacy-field-bridge.mjs",
-    "test:field-profile": "node scripts/check-scientific-field-profile.mjs"
+    "test:field-profile": "node scripts/check-scientific-field-profile.mjs",
+    "test:mutable-field-profile": "node scripts/check-mutable-field-profile.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
