@@ -16,6 +16,7 @@ import { WorldConstructionContract } from '../infinity/WorldConstructionContract
 import { DecisionGraph } from '../infinity/DecisionGraph'
 import { WorldObjectSpatialIndex } from '../infinity/WorldObjectSpatialIndex'
 import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
+import { LawPhysicsContract } from '../infinity/LawPhysicsContract'
 import { createPhysicsInteractionRecord, type PhysicsInteractionType } from '../infinity/PhysicsInteractionRecord'
 import { PhysicsInteractionLog } from '../infinity/PhysicsInteractionLog'
 import { RuntimeDiagnostics } from '../infinity/RuntimeDiagnostics'
@@ -62,6 +63,7 @@ export class InfiniteWorldRenderer {
   readonly decisionGraph = new DecisionGraph()
   readonly objectSpatialIndex = new WorldObjectSpatialIndex()
   readonly fieldPhysics = new FieldModulatedPhysics()
+  readonly lawPhysicsContract: LawPhysicsContract
   readonly physicsInteractionLog = new PhysicsInteractionLog()
   readonly runtimeDiagnostics = new RuntimeDiagnostics()
   readonly experimentRunner = new ExperimentRunner()
@@ -139,6 +141,7 @@ export class InfiniteWorldRenderer {
     this.fieldSampler = new FieldSampler(this.generator)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null)
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
+    this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
     this.storageKey = `reality-engine-world:${seed}:objects`
     this.persistence = new WorldPersistence(seed)
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
@@ -2607,7 +2610,7 @@ export class InfiniteWorldRenderer {
           const factor = (1 - dist / rad)
 
           const field = this.fieldSampler.sample(worldX, py, worldZ)
-          const modulation = this.fieldPhysics.modulation(field)
+          const modulation = this.lawPhysicsContract.apply(this.fieldPhysics.modulation(field))
 
           const interactionType: PhysicsInteractionType =
             obj.kind === 'gravity_well' ? 'gravity' :
