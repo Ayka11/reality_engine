@@ -66,6 +66,12 @@ assert.equal(mutable.sample(0, 0, 10).energy, 1);
 assert.ok(mutable.sample(0, 0, 2).energy > mutable.sample(0, 0, 5).energy);
 
 const state = mutable.getState();
+const persistedState = mutable.serialize();
+const restored = new MutableWorldFieldProvider(base);
+restored.restore(persistedState);
+assert.deepEqual(restored.sample(0,0,0), mutable.sample(0,0,0));
+assert.equal(restored.getMutationCount(), mutable.getMutationCount());
+assert.equal(restored.getVersion(), mutable.getVersion());
 assert.deepEqual(state.lastMutation?.profile, profile);
 assert.equal(state.lastMutation?.radius, 10);
 
