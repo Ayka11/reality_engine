@@ -263,7 +263,10 @@ try {
 
   // Frontend parity regression: the visible Scientific Field tab must mutate the same
   // authoritative provider used by the direct runtime API.
-  await page.evaluate(() => window.toggleWorldToolbar?.(true));
+  await page.evaluate(() => {
+    window.setInfinityDockPosition?.("right");
+    window.toggleWorldToolbar?.(true);
+  });
   await page.waitForSelector("#vTabField");
   await page.locator("#vTabField").click();
   await page.waitForSelector("#vFieldEnergy");
