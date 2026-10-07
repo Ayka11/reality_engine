@@ -118,14 +118,17 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   getMutationCount(){return this.mutations.length}
   serialize(){return {schemaVersion:'world-field-state-v2',providerId:this.id,providerVersion:this.version,version:this.versionCounter,nextId:this.nextId,mutations:this.mutations.map(m=>({...m,metadata:m.metadata?{...m.metadata}:undefined})),globalOverlays:Array.from(this.globalOverlays.entries()).map(([kind,value])=>({kind,scale:{...value.scale},delta:{...value.delta},metadata:value.metadata?{...value.metadata}:undefined}))}}
   restore(state:ReturnType<MutableWorldFieldProvider['serialize']>){
-    if(state.schemaVersion!=='world-field-state-v2'||state.providerId!==this.id) throw new Error('Unsupported world field state')
+    if(state.schemaVersion!=='world-field-state-v2'||state.providerId!==this.id||state.providerVersion!==this.version) throw new Error('Unsupported world field state')
     if(!Number.isInteger(state.nextId)||state.nextId<1||!Number.isInteger(state.version)||state.version<0) throw new Error('Invalid world field state counters')
+    let previousId = 0
     for(const mutation of state.mutations){
-      if(!Number.isInteger(mutation.id)||mutation.id<1) throw new Error('Invalid world field mutation id')
+      if(!Number.isInteger(mutation.id)||mutation.id<=previousId) throw new Error('Invalid world field mutation id sequence')
+      previousId = mutation.id
       if(mutation.profile) assertScientificFieldProfile(mutation.profile)
       if(mutation.spatialPattern) assertScientificFieldSpatialPattern(mutation.spatialPattern)
       if(mutation.profile&&mutation.radius!==undefined&&mutation.radius!==mutation.profile.radius) throw new Error('World field mutation radius must match its profile radius')
     }
+    if(state.mutations.length>4096 || (state.mutations.length>0 && state.nextId<=state.mutations[state.mutations.length-1].id)) throw new Error('Invalid world field mutation counter')
     this.mutations=state.mutations.map(m=>({...m,metadata:m.metadata?{...m.metadata}:undefined}))
     this.globalOverlays.clear()
     for(const entry of state.globalOverlays){
