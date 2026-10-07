@@ -161,6 +161,21 @@ export class InfiniteWorldRenderer {
       })
     ).mutation
   }
+  undoLegacySculptAuthoritative() {
+    return this.authoritativeSculptTransactions.undo()
+  }
+
+  redoLegacySculptAuthoritative() {
+    return this.authoritativeSculptTransactions.redo()
+  }
+
+  getLegacySculptAuthoritativeHistory() {
+    return {
+      undo: this.authoritativeSculptTransactions.historyLength,
+      redo: this.authoritativeSculptTransactions.redoLength,
+    }
+  }
+
   private worldAnchor = new THREE.Vector3(0, 0, 0)
   private flyMode = true
   private readonly keys = new Set<string>()
