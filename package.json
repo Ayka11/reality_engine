@@ -15,7 +15,8 @@
     "test:brushes": "node scripts/check-brush-math.mjs && node scripts/check-brush-geometry.mjs",
     "test:world-field": "node scripts/check-world-field-contract.mjs",
     "test:presets": "node scripts/check-preset-contract.mjs",
-    "test:preset-field": "node scripts/check-preset-field-provenance.mjs"
+    "test:preset-field": "node scripts/check-preset-field-provenance.mjs",
+    "test:construction": "node scripts/check-world-construction-contract.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
