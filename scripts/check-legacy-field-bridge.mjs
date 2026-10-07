@@ -20,6 +20,9 @@ const {
   legacyBrushDeltaToMutation,
   sculptInjectToMutation,
   sculptErodeToMutation,
+  sculptNoiseToMutation,
+  sculptPatternToMutation,
+  sculptStampToMutation,
 } = mod;
 
 assert.deepEqual(LEGACY_WORLD_AXIS_MAP, { x: "x", y: "z", z: "y" });
@@ -79,6 +82,25 @@ assert.equal(inject.metadata.source, "legacy-sculpt-inject");
 const erode = sculptErodeToMutation({x: 3, y: 5, z: 2}, 4, 2);
 assert.deepEqual(erode.delta, {density: -0.02, entropy: 0.012, temperature: -0.03});
 assert.equal(erode.metadata.source, "legacy-sculpt-erode");
+
+const noise = sculptNoiseToMutation({x:3,y:5,z:2}, 6, 2, 8, 17, {energy:1, information:1});
+assert.deepEqual({x:noise.x,y:noise.y,z:noise.z}, {x:3,y:2,z:5});
+assert.equal(noise.delta.energy, 0.2);
+assert.equal(noise.delta.information, 0.04);
+assert.equal(noise.spatialPattern.kind, "noise3");
+assert.equal(noise.spatialPattern.seed, 17);
+
+const pattern = sculptPatternToMutation({x:3,y:5,z:2}, 6, 2, 8, {energy:1,density:1,information:1});
+assert.equal(pattern.delta.energy, 0.16);
+assert.equal(pattern.delta.density, 0.02);
+assert.equal(pattern.delta.information, 0.3);
+assert.equal(pattern.spatialPattern.kind, "pattern3");
+
+const stamp = sculptStampToMutation({x:3,y:5,z:2}, 6, 2);
+assert.equal(stamp.delta.density, 0.02);
+assert.equal(stamp.delta.information, 0.2);
+assert.equal(stamp.spatialPattern.kind, "stamp-lattice");
+assert.equal(stamp.spatialPattern.period, 4);
 
 assert.throws(
   () => legacyToWorldCoordinate({x: -1, y: 0, z: 0}, {W:64,H:64,D:32}),
