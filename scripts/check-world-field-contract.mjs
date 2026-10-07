@@ -57,6 +57,9 @@ mutable.applyRadial("brush", 0,0,0,10,{ energy: 9 });
 assert.ok(mutable.sample(0,0,0).energy > before);
 assert.ok(mutable.getVersion() > 0);
 
+const worldPersistenceMod = await load("src/infinity/WorldPersistence.ts", [
+  [/localStorage/g, "storage"],
+]);
 const persistenceMod = await load("src/infinity/WorldFieldChunkPersistence.ts", [
   [/import \{ CHUNK_FLOATS \} from [^;]+;/, "const CHUNK_FLOATS = 7168;"],
 ]);
