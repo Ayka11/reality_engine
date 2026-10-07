@@ -20,7 +20,8 @@
     "test:law-physics": "node scripts/check-law-physics-contract.mjs",
     "test:legacy-field-bridge": "node scripts/check-legacy-field-bridge.mjs",
     "test:field-profile": "node scripts/check-scientific-field-profile.mjs",
-    "test:mutable-field-profile": "node scripts/check-mutable-field-profile.mjs"
+    "test:mutable-field-profile": "node scripts/check-mutable-field-profile.mjs",
+    "test:field-spatial-pattern": "node scripts/check-scientific-field-spatial-pattern.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
