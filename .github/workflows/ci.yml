@@ -26,4 +26,4 @@ jobs:
       - run: npm run hf:smoke
       - run: npm run hf:cpu:check
       - run: npx playwright install chromium
-      - run: npm run hf:browser:acceptance
+      - run: timeout 180s npm run hf:browser:acceptance
