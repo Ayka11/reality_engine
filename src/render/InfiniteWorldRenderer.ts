@@ -156,11 +156,15 @@ export class InfiniteWorldRenderer {
     radius: number,
     selectedLegacyZ?: number,
   ): WorldFieldMutation {
-    return this.legacySculptRuntimeAdapter.smartBrush(name, cell, radius, selectedLegacyZ, {
-      source: 'legacy-sculpt-runtime',
-      legacyTool: 'smart-brush',
-      legacyCoordinate: { ...cell },
-    })
+    const transaction = this.authoritativeSculptTransactions.commit(() =>
+      this.legacySculptRuntimeAdapter.smartBrush(name, cell, radius, selectedLegacyZ, {
+        source: 'legacy-sculpt-runtime',
+        legacyTool: 'smart-brush',
+        legacyCoordinate: { ...cell },
+      }),
+    )
+    this.persistence.saveFieldState(this.authoritativeField.serialize())
+    return transaction.mutation
   }
   undoLegacySculptAuthoritative() {
     const transaction = this.authoritativeSculptTransactions.undo()
