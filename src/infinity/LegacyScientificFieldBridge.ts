@@ -300,7 +300,7 @@ export function sculptSmartBrushToMutation(
   selectedLegacyZ?: number,
   metadata: Record<string, unknown> = {},
 ): WorldFieldMutation {
-  const origin = { x: cell.x, y: 0, z: cell.y }
+  const origin = legacyToWorldCoordinate(cell)
   const spatialPattern = {
     schemaVersion: 'scientific-smart-brush-v1' as const,
     kind: 'smart-brush' as const,
