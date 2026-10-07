@@ -287,7 +287,20 @@ try {
     composeObjects: afterCompose.stats?.objects ?? 0,
     sidebarGrips: grips,
   }));
-} finally {
-  await browser.close();
-  server.kill();
+  server.kill("SIGKILL");
+  process.exit(0);
+} catch (error) {
+  server.kill("SIGKILL");
+  console.error(error?.stack || error?.message || String(error));
+  process.exitCode = 1;
+  const forceExit = setTimeout(() => process.exit(1), 5000);
+  forceExit.unref();
+  try {
+    await Promise.race([
+      browser.close(),
+      new Promise((resolve) => setTimeout(resolve, 4500)),
+    ]);
+  } finally {
+    clearTimeout(forceExit);
+  }
 }
