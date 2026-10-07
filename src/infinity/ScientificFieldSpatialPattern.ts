@@ -57,3 +57,44 @@ export function assertScientificFieldSpatialPattern(pattern:ScientificFieldSpati
     if(!Number.isFinite(pattern.low)||!Number.isFinite(pattern.high)||pattern.low<0||pattern.high<0) throw new Error('Stamp lattice values must be non-negative')
   }
 }
+
+export type ScientificSmartBrushName =
+  | 'Volcano' | 'Forest' | 'Ocean' | 'Crystal' | 'Storm' | 'Life Cluster' | 'Radiation' | 'Civilization Seed'
+
+export type ScientificSmartBrushPattern = {
+  schemaVersion: 'scientific-smart-brush-v1'
+  kind: 'smart-brush'
+  name: ScientificSmartBrushName
+  origin: {x:number;y:number;z:number}
+  radius: number
+  selectedLegacyZ?: number
+}
+
+export function evaluateScientificSmartBrush(pattern: ScientificSmartBrushPattern, world:{x:number;y:number;z:number}):number {
+  const p=relative(world,pattern.origin)
+  const r=Math.max(0.001,pattern.radius)
+  const legacyX=p.x, legacyY=p.z, legacyZ=p.y
+  const d=Math.hypot(legacyX,legacyY)
+  if(d>r)return 0
+  const selected=pattern.selectedLegacyZ
+  switch(pattern.name){
+    case 'Volcano':
+      return legacyZ>=0 && legacyZ<4 ? Math.exp(-d*d/(r*r)*2) : 0
+    case 'Forest':
+      return selected!==undefined && Math.round(legacyZ)===Math.round(selected) ? Math.exp(-d*d/(r*r)*1.5) : 0
+    case 'Ocean':
+      return legacyZ>=0 && legacyZ<5 ? 1-d/r : 0
+    case 'Crystal':
+      return selected!==undefined && Math.round(legacyZ)===Math.round(selected) &&
+        (Math.abs(Math.round(legacyX))===Math.abs(Math.round(legacyY)) || Math.round(legacyX)===0 || Math.round(legacyY)===0) ? 1 : 0
+    case 'Storm':
+      return selected!==undefined && Math.round(legacyZ)===Math.round(selected)
+        ? (Math.sin(legacyX*.7+legacyY*.5)*Math.cos(legacyX*.3+legacyY*.8)+1)/2 : 0
+    case 'Life Cluster':
+      return selected!==undefined && Math.round(legacyZ)===Math.round(selected) ? Math.exp(-d*d/(r*r)*2) : 0
+    case 'Radiation':
+      return legacyZ>=0 ? 1-d/r : 0
+    case 'Civilization Seed':
+      return selected!==undefined && Math.round(legacyZ)===Math.round(selected) ? Math.exp(-d*d/(r*r)*1.5) : 0
+  }
+}
