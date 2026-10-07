@@ -25,6 +25,7 @@ const {
   sculptStampToMutation,
   sculptSmartBrushToMutation,
   sculptSmoothToMutation,
+  sculptEraseToMutation,
 } = mod;
 
 assert.deepEqual(LEGACY_WORLD_AXIS_MAP, { x: "x", y: "z", z: "y" });
@@ -121,6 +122,12 @@ assert.equal(forest.delta.information, 18);
 
 const radiation = sculptSmartBrushToMutation("Radiation", {x:8,y:9,z:3}, 5);
 assert.equal(radiation.delta.information, -5);
+
+const erase = sculptEraseToMutation({x:3,y:5,z:2}, 4, 0.75);
+assert.deepEqual({x:erase.x,y:erase.y,z:erase.z}, {x:3,y:2,z:5});
+assert.deepEqual(erase.scale, {energy:.25,density:.25,information:.25,entropy:.25,temperature:.25,biology:.25});
+assert.equal(erase.metadata.brush, "Erase");
+assert.ok(erase.metadata.unsupportedFields.includes("materialId"));
 
 const smoothMutation = sculptSmoothToMutation({x:3,y:5,z:2}, 4, 1);
 assert.deepEqual({x:smoothMutation.x,y:smoothMutation.y,z:smoothMutation.z}, {x:3,y:2,z:5});
