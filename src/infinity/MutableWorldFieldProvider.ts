@@ -55,7 +55,12 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
       const radius=Math.max(.001,mutation.radius??mutation.profile?.radius??0)
       const distance=Math.hypot(x-mutation.x,y-mutation.y,z-mutation.z)
       if(distance>radius) continue
-      const radial=mutation.profile?evaluateScientificFieldProfile(mutation.profile,distance):Math.max(0,1-distance/radius)
+      const legacyFalloff = mutation.metadata?.legacyFalloff
+      const radial = legacyFalloff === 'linear' || legacyFalloff === 'smooth' || legacyFalloff === 'sphere' || legacyFalloff === 'sharp'
+        ? evaluateScientificFieldProfile({ schemaVersion: 'scientific-field-profile-v1', kind: 'radial', falloff: legacyFalloff, radius }, distance)
+        : mutation.profile
+          ? evaluateScientificFieldProfile(mutation.profile, distance)
+          : Math.max(0, 1 - distance / radius)
       const pattern=mutation.spatialPattern?(mutation.spatialPattern.kind==='smart-brush'?evaluateScientificSmartBrush(mutation.spatialPattern,{x,y,z}):evaluateScientificFieldSpatialPattern(mutation.spatialPattern,{x,y,z})):1
       const weight=radial*pattern
       for(const field of FIELDS){
