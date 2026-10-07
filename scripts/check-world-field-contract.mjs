@@ -46,6 +46,23 @@ mutable.applyRadial("brush", 0,0,0,10,{ energy: 9 });
 assert.ok(mutable.sample(0,0,0).energy > before);
 assert.ok(mutable.getVersion() > 0);
 
+const persistenceMod = await load("src/infinity/WorldFieldChunkPersistence.ts", [
+  [/import \{ CHUNK_FLOATS \} from [^;]+;/, "const CHUNK_FLOATS = 7168;"],
+]);
+const { WorldFieldChunkPersistence } = persistenceMod;
+const persistence = new WorldFieldChunkPersistence();
+const workerData = [{ key: 0, data: Array(7168).fill(1) }];
+const saved = persistence.saveWorkerChunks(
+  {cx:0,cy:0,cz:0},
+  "seed",
+  workerData,
+  { center: {x:0,y:0,z:0}, sliceY:0, seed:"seed" },
+);
+assert.equal(persistence.validate(saved), true);
+assert.equal(persistence.loadValid({cx:0,cy:0,cz:0})?.workerChunks?.[0]?.data.length, 7168);
+const tampered = { ...saved, values: [...saved.values, 99] };
+assert.equal(persistence.validate(tampered), false);
+
 const provenanceMod = await load("src/infinity/RuntimeProvenance.ts");
 const { RuntimeProvenance } = provenanceMod;
 const provenance = new RuntimeProvenance();
@@ -60,4 +77,5 @@ console.log("PASS: world/slice coordinate round-trip");
 console.log("PASS: canonical world chunk addressing and eviction");
 console.log("PASS: adjacent boundary exchange");
 console.log("PASS: authoritative mutable field overlay");
+console.log("PASS: world-field persistence round-trip and checksum validation");
 console.log("PASS: runtime provenance chain");
