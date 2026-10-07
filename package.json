@@ -22,7 +22,8 @@
     "test:field-profile": "node scripts/check-scientific-field-profile.mjs",
     "test:mutable-field-profile": "node scripts/check-mutable-field-profile.mjs",
     "test:field-spatial-pattern": "node scripts/check-scientific-field-spatial-pattern.mjs",
-    "test:legacy-sculpt-adapter": "node scripts/check-legacy-sculpt-runtime-adapter.mjs"
+    "test:legacy-sculpt-adapter": "node scripts/check-legacy-sculpt-runtime-adapter.mjs",
+    "test:authoritative-sculpt-transaction": "node scripts/check-authoritative-sculpt-transaction.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
