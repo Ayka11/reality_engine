@@ -14,7 +14,7 @@ export type WorldFieldMutation = {
   radius?: number
   profile?: ScientificFieldProfile
   spatialPattern?: ScientificFieldSpatialPattern | ScientificSmartBrushPattern
-  operations?: Partial<Record<keyof ScientificFieldSample, { mode: 'add' | 'max' | 'min'; value: number }>>
+  operations?: Partial<Record<keyof ScientificFieldSample, { mode: 'add' | 'max' | 'min' | 'smooth6'; value: number }>>
   delta?: Partial<ScientificFieldSample>
   scale?: Partial<Record<keyof ScientificFieldSample, number>>
   metadata?: Record<string, unknown>
@@ -40,12 +40,17 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   setBase(base:ScientificFieldProvider){this.base=base;this.versionCounter++}
 
   sample(x:number,y:number,z:number):ScientificFieldSample {
+    return this.sampleThrough(x,y,z,this.mutations.length)
+  }
+
+  private sampleThrough(x:number,y:number,z:number,endExclusive:number):ScientificFieldSample {
     const out={...this.base.sample(x,y,z)}
     for(const overlay of this.globalOverlays.values()) for(const field of FIELDS){
       const scale=overlay.scale[field]; if(scale!==undefined) out[field]*=scale
       const delta=overlay.delta[field]; if(delta!==undefined) out[field]+=delta
     }
-    for(const mutation of this.mutations){
+    for(let mutationIndex=0;mutationIndex<endExclusive;mutationIndex++){
+      const mutation=this.mutations[mutationIndex]
       if(mutation.x===undefined||mutation.y===undefined||mutation.z===undefined) continue
       const radius=Math.max(.001,mutation.radius??mutation.profile?.radius??0)
       const distance=Math.hypot(x-mutation.x,y-mutation.y,z-mutation.z)
@@ -57,7 +62,26 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
         const delta=mutation.delta?.[field]; if(delta!==undefined) out[field]+=delta*weight
         const scale=mutation.scale?.[field]; if(scale!==undefined) out[field]*=1+(scale-1)*weight
         const op=mutation.operations?.[field]
-        if(op){ const value=op.value*weight; if(op.mode==='add') out[field]+=value; else if(op.mode==='max') out[field]=Math.max(out[field],value); else out[field]=Math.min(out[field],value) }
+        if(op){
+          if(op.mode==='smooth6'){
+            const neighbors=[
+              this.sampleThrough(x-1,y,z,mutationIndex),
+              this.sampleThrough(x+1,y,z,mutationIndex),
+              this.sampleThrough(x,y-1,z,mutationIndex),
+              this.sampleThrough(x,y+1,z,mutationIndex),
+              this.sampleThrough(x,y,z-1,mutationIndex),
+              this.sampleThrough(x,y,z+1,mutationIndex),
+            ]
+            const avg=neighbors.reduce((sum,n)=>sum+n[field],0)/neighbors.length
+            const t=Math.min(1,op.value*weight*.65)
+            out[field]=out[field]*(1-t)+avg*t
+          } else {
+            const value=op.value*weight
+            if(op.mode==='add') out[field]+=value
+            else if(op.mode==='max') out[field]=Math.max(out[field],value)
+            else out[field]=Math.min(out[field],value)
+          }
+        }
       }
     }
     for(const field of FIELDS) out[field]=clampField(field,out[field])
