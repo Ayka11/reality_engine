@@ -277,6 +277,15 @@ try {
     throw new Error("Authoritative sculpt redo did not restore the exact post-stroke state");
   }
 
+  const persistedSculptState = sculptContract.redoState;
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector("#c3d");
+  await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
+  const reloadedSculptState = await page.evaluate(() => window.infiniteWorld?.authoritativeField?.serialize());
+  if (JSON.stringify(reloadedSculptState) !== JSON.stringify(persistedSculptState)) {
+    throw new Error("Authoritative sculpt persistence did not survive a page reload");
+  }
+
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
