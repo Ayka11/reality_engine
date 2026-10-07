@@ -146,6 +146,118 @@ export function legacyBrushDeltaToMutation(
   }
 }
 
+export function sculptNoiseToMutation(
+  cell: LegacyVoxelCoordinate,
+  radius: number,
+  strength: number,
+  noiseScale: number,
+  seed: number,
+  fields: Partial<{ energy: number; information: number; bio: number; temperature: number }>,
+  metadata: Record<string, unknown> = {},
+): WorldFieldMutation {
+  const origin = legacyToWorldCoordinate(cell)
+  return {
+    ...legacyBrushDeltaToMutation(cell, {}, radius, {
+      ...metadata,
+      source: metadata.source ?? 'legacy-sculpt-noise',
+      brush: 'Noise',
+    }),
+    profile: {
+      schemaVersion: 'scientific-field-profile-v1',
+      kind: 'radial',
+      falloff: 'linear',
+      radius,
+    },
+    spatialPattern: {
+      schemaVersion: 'scientific-field-pattern-v1',
+      kind: 'noise3',
+      origin,
+      scale: noiseScale,
+      seed,
+      octaves: 4,
+      coordinateFrame: 'legacy-grid',
+    },
+    delta: {
+      energy: strength * 0.1 * (fields.energy ?? 0),
+      information: strength * 0.02 * (fields.information ?? 0),
+      biology: strength * 0.0001 * (fields.bio ?? 0),
+      temperature: strength * 0.06 * (fields.temperature ?? 0),
+    },
+  }
+}
+
+export function sculptPatternToMutation(
+  cell: LegacyVoxelCoordinate,
+  radius: number,
+  strength: number,
+  noiseScale: number,
+  fields: Partial<{ energy: number; density: number; information: number }>,
+  metadata: Record<string, unknown> = {},
+): WorldFieldMutation {
+  const origin = legacyToWorldCoordinate(cell)
+  return {
+    ...legacyBrushDeltaToMutation(cell, {}, radius, {
+      ...metadata,
+      source: metadata.source ?? 'legacy-sculpt-pattern',
+      brush: 'Pattern',
+    }),
+    profile: {
+      schemaVersion: 'scientific-field-profile-v1',
+      kind: 'radial',
+      falloff: 'linear',
+      radius,
+    },
+    spatialPattern: {
+      schemaVersion: 'scientific-field-pattern-v1',
+      kind: 'pattern3',
+      origin,
+      scale: noiseScale,
+      coordinateFrame: 'legacy-grid',
+    },
+    delta: {
+      energy: strength * 0.08 * (fields.energy ?? 0),
+      density: strength * 0.01 * (fields.density ?? 0),
+      information: strength * 0.15 * (fields.information ?? 0),
+    },
+  }
+}
+
+export function sculptStampToMutation(
+  cell: LegacyVoxelCoordinate,
+  radius: number,
+  strength: number,
+  period = 4,
+  metadata: Record<string, unknown> = {},
+): WorldFieldMutation {
+  const origin = legacyToWorldCoordinate(cell)
+  return {
+    ...legacyBrushDeltaToMutation(cell, {}, radius, {
+      ...metadata,
+      source: metadata.source ?? 'legacy-sculpt-stamp',
+      brush: 'Stamp',
+    }),
+    profile: {
+      schemaVersion: 'scientific-field-profile-v1',
+      kind: 'radial',
+      falloff: 'linear',
+      radius,
+    },
+    spatialPattern: {
+      schemaVersion: 'scientific-field-pattern-v1',
+      kind: 'stamp-lattice',
+      origin,
+      period,
+      low: 0.2,
+      high: 1,
+      coordinateFrame: 'legacy-grid',
+    },
+    delta: {
+      density: 0.02,
+      information: strength * 0.1,
+    },
+  }
+}
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
 }
