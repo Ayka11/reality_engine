@@ -2101,7 +2101,7 @@ export class InfiniteWorldRenderer {
         const dx = b.x - a.x
         const dz = b.z - a.z
         const length = Math.max(3, Math.hypot(dx, dz))
-        const water = this.objects.add({
+        const water = this.constructionContract.materialize('water', (a.x + b.x) * 0.5, (a.z + b.z) * 0.5, (gate) => this.objects.add({
           kind: 'water',
           x: (a.x + b.x) * 0.5,
           y: Math.max(this.generator.seaLevel, (a.y + b.y) * 0.5 - 0.15),
@@ -2109,8 +2109,13 @@ export class InfiniteWorldRenderer {
           rotationY: Math.atan2(dx, dz),
           scale: Math.max(0.6, Math.min(8, length / 8)),
           seed: segmentId++,
-          properties: { hydrology: 'river', flow: Math.max(1, length), segment: true },
-        })
+          properties: {
+            hydrology: 'river', flow: Math.max(1, length), segment: true,
+            lawPenalty: gate.decision?.laws.penalty ?? 0,
+            activeLawProcesses: gate.decision?.laws.activeProcesses.join(',') ?? '',
+          },
+        }))
+        if (!water) continue
         created.push(water)
         this.history.push({ type: 'add', object: { ...water } })
       }
