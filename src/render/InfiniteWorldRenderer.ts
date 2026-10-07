@@ -118,10 +118,12 @@ export class InfiniteWorldRenderer {
       z: input.z,
       radius: input.radius,
     })
-    return this.authoritativeWorldField.apply({
+    const mutation = this.authoritativeWorldField.apply({
       ...input,
       metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id },
     })
+    this.scheduleSave()
+    return mutation
   }
 
   getAuthoritativeFieldState() {
@@ -329,10 +331,15 @@ export class InfiniteWorldRenderer {
       const [cx, cy, cz] = key.split(',').map(Number)
       this.persistence.saveChunk(cx, cy, cz, list)
     }
+    this.persistence.saveFieldState(this.authoritativeWorldField.serialize())
     return objects.length
   }
 
   loadWorld() {
+    this.authoritativeWorldField.clear()
+    const fieldState = this.persistence.loadFieldState()
+    if (fieldState) this.authoritativeWorldField.restore(fieldState)
+
     this.objects.clear()
     this.objectSpatialIndex.clear()
     let count = 0
