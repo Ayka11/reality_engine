@@ -197,8 +197,8 @@ try {
     );
   }
 
-  const beforeDensityCost = Number(fieldPhysicsBaseline?.decision?.components?.density ?? NaN);
-  const afterDensityCost = Number(fieldPhysicsAfter?.decision?.components?.density ?? NaN);
+  const beforeDensityCost = Number(fieldPhysicsBaseline?.decision?.decisionComponents?.density ?? NaN);
+  const afterDensityCost = Number(fieldPhysicsAfter?.decision?.decisionComponents?.density ?? NaN);
   if (
     !Number.isFinite(beforeDensityCost) ||
     !Number.isFinite(afterDensityCost) ||
