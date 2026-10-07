@@ -229,14 +229,14 @@ try {
     y: probe.y,
     z: probe.z,
     radius: 16,
-    delta: { density: 0.05 },
+    delta: { energy: 5 },
     metadata: { acceptance: "field-persistence-perturbation" },
   }), fieldProbe);
   const fieldPersistencePerturbed = await page.evaluate((probe) => {
     const world = window.infiniteWorld;
     return world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
   }, fieldProbe);
-  if (!(Number(fieldPersistencePerturbed?.density ?? NaN) > Number(fieldPersistenceBaseline?.sample?.density ?? NaN))) {
+  if (!(Number(fieldPersistencePerturbed?.energy ?? NaN) > Number(fieldPersistenceBaseline?.sample?.energy ?? NaN))) {
     throw new Error("Field persistence perturbation did not change the authoritative sample");
   }
   const restoredFieldPersistence = await page.evaluate((probe) => {
@@ -249,10 +249,10 @@ try {
   }, fieldProbe);
   if (
     !Number.isFinite(Number(restoredFieldPersistence?.sample?.density ?? NaN)) ||
-    Math.abs(Number(restoredFieldPersistence.sample.density) - Number(fieldPersistenceBaseline.sample.density)) > 1e-9
+    Math.abs(Number(restoredFieldPersistence.sample.energy) - Number(fieldPersistenceBaseline.sample.energy)) > 1e-9
   ) {
     throw new Error(
-      `Authoritative field did not restore from Save -> Load: saved=${fieldPersistenceBaseline.sample.density}, restored=${restoredFieldPersistence.sample.density}`
+      `Authoritative field did not restore from Save -> Load: saved=${fieldPersistenceBaseline.sample.energy}, restored=${restoredFieldPersistence.sample.energy}`
     );
   }
   if (Number(restoredFieldPersistence?.state?.mutationCount ?? -1) !== Number(fieldPersistenceBaseline?.state?.mutationCount ?? -2)) {
