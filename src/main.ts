@@ -384,8 +384,30 @@ async function paintAt(x: number, y: number, z: number, event?: PointerEvent) {
 
   // Smart brush intercept
   if (activeSmartBrush && SMART_BRUSHES[activeSmartBrush]) {
-    SMART_BRUSHES[activeSmartBrush].paint(sim.grid, x, y, bs + 1, selZ);
-    sim.syncToGPU();
+    const smartStroke = await sculptManager.applyCustomStroke({
+      tool: 'inject',
+      position: [x, y, selZ],
+      radius: bs + 1,
+      strength: sculptManager.currentBrush.strength,
+      falloff: sculptManager.currentBrush.falloff,
+      parameters: {
+        smartBrush: activeSmartBrush,
+        selectedLegacyZ: selZ,
+      },
+      affectedChunks: [],
+    }, () => {
+      SMART_BRUSHES[activeSmartBrush!].paint(sim.grid, x, y, bs + 1, selZ);
+    });
+    const authoritative = (window as any).infinityApplyLegacySmartBrush;
+    if (typeof authoritative === 'function') {
+      authoritative(activeSmartBrush, { x, y, z: selZ }, bs + 1, selZ, {
+        strength: sculptManager.currentBrush.strength,
+        selectedLegacyZ: selZ,
+      });
+    }
+    if (sculptStatusEl) {
+      sculptStatusEl.textContent = `smart:${activeSmartBrush} r${smartStroke.radius} hist:${sculptManager.brushEngine.historyLength}`;
+    }
     return;
   }
 
