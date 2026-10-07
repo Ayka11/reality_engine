@@ -11,6 +11,11 @@ import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import { FieldSampler } from '../infinity/FieldSampler'
+import { GeneratorFieldProvider } from '../infinity/ScientificFieldProvider'
+import { MutableWorldFieldProvider, type WorldFieldMutation } from '../infinity/MutableWorldFieldProvider'
+import { LegacySculptRuntimeAdapter } from '../infinity/LegacySculptRuntimeAdapter'
+import type { LegacyVoxelCoordinate } from '../infinity/LegacyScientificFieldBridge'
+import { runtimeProvenance } from '../infinity/RuntimeProvenance'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { WorldConstructionContract } from '../infinity/WorldConstructionContract'
 import { DecisionGraph } from '../infinity/DecisionGraph'
@@ -58,6 +63,8 @@ export class InfiniteWorldRenderer {
   persistence: WorldPersistence
   history = new WorldEditHistory()
   readonly fieldSampler: FieldSampler
+  readonly authoritativeField: MutableWorldFieldProvider
+  readonly legacySculptRuntimeAdapter: LegacySculptRuntimeAdapter
   decisionLayer: WorldDecisionLayer
   constructionContract: WorldConstructionContract
   readonly decisionGraph = new DecisionGraph()
@@ -105,6 +112,36 @@ export class InfiniteWorldRenderer {
   private worldPosition = new THREE.Vector3(28, 45, 52)
 
   getWorldPosition() { return this.worldPosition.clone() }
+
+  applyLegacySculptStroke(
+    tool: 'inject' | 'erase' | 'noise' | 'stamp' | 'erode' | 'smooth' | 'pattern',
+    cell: LegacyVoxelCoordinate,
+    radius: number,
+    strength: number,
+    options: {
+      fields?: Partial<{ energy: number; density: number; temperature: number; bio: number; information: number; entropy: number }>
+      noiseScale?: number
+      seed?: number
+      period?: number
+      smartBrush?: 'Volcano' | 'Forest' | 'Ocean' | 'Crystal' | 'Storm' | 'Life Cluster' | 'Radiation' | 'Civilization Seed'
+      selectedLegacyZ?: number
+    } = {},
+  ): WorldFieldMutation {
+    const metadata = {
+      source: 'legacy-sculpt-runtime',
+      legacyTool: tool,
+      legacyCoordinate: { ...cell },
+    }
+    switch (tool) {
+      case 'inject': return this.legacySculptRuntimeAdapter.inject(cell, radius, strength, options.fields ?? {}, metadata)
+      case 'erase': return this.legacySculptRuntimeAdapter.erase(cell, radius, strength, metadata)
+      case 'noise': return this.legacySculptRuntimeAdapter.noise(cell, radius, strength, options.noiseScale ?? 10, options.seed ?? 1337, options.fields ?? {}, metadata)
+      case 'pattern': return this.legacySculptRuntimeAdapter.pattern(cell, radius, strength, options.noiseScale ?? 10, options.fields ?? {}, metadata)
+      case 'stamp': return this.legacySculptRuntimeAdapter.stamp(cell, radius, strength, options.period ?? 4, metadata)
+      case 'erode': return this.legacySculptRuntimeAdapter.erode(cell, radius, strength, metadata)
+      case 'smooth': return this.legacySculptRuntimeAdapter.smooth(cell, radius, strength, metadata)
+    }
+  }
   private worldAnchor = new THREE.Vector3(0, 0, 0)
   private flyMode = true
   private readonly keys = new Set<string>()
@@ -138,7 +175,17 @@ export class InfiniteWorldRenderer {
     this.scene.add(this.terrainGroup)
     this.worldAssetRuntime = new WorldAssetRuntime(this.scene)
     this.generator = new WorldGenerator(seed)
-    this.fieldSampler = new FieldSampler(this.generator)
+    this.authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
+    this.fieldSampler = new FieldSampler(this.generator, this.authoritativeField)
+    this.legacySculptRuntimeAdapter = new LegacySculptRuntimeAdapter((mutation) => {
+      const committed = this.authoritativeField.apply(mutation)
+      runtimeProvenance.record('brush', {
+        mutationId: committed.id,
+        mutation: committed,
+        runtime: 'infinite-world-authoritative-field',
+      })
+      return committed
+    })
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null)
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
@@ -353,7 +400,8 @@ export class InfiniteWorldRenderer {
     this.clearSavedWorld()
 
     this.generator = new WorldGenerator(newSeed)
-    this.fieldSampler.setGenerator(this.generator)
+    this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
+    this.fieldSampler.setProvider(this.authoritativeField)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights, () => (window as any).getRealityLawState?.() ?? null)
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.persistence = new WorldPersistence(newSeed)
