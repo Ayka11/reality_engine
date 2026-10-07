@@ -20,6 +20,28 @@ export class WorldPersistence {
     return this.prefix + chunkKey(cx, cy, cz)
   }
 
+  saveFieldState(state: unknown) {
+    const payload = { version: 1, seed: this.seed, state }
+    localStorage.setItem(this.fieldStateKey, JSON.stringify(payload))
+    return true
+  }
+
+  loadFieldState<T = unknown>(): T | null {
+    const raw = localStorage.getItem(this.fieldStateKey)
+    if (!raw) return null
+    try {
+      const payload = JSON.parse(raw) as {version:number;seed:string;state:T}
+      if (payload.version !== 1 || payload.seed !== this.seed) return null
+      return payload.state
+    } catch {
+      return null
+    }
+  }
+
+  deleteFieldState() {
+    localStorage.removeItem(this.fieldStateKey)
+  }
+
   saveChunk(cx: number, cy: number, cz: number, objects: WorldObject[]) {
     const payload: StoredChunk = { version: 1, seed: this.seed, objects }
     const key = chunkKey(cx, cy, cz)
