@@ -53,4 +53,6 @@ export interface CellEdit {
 export interface StrokeRecord {
   stroke: BrushStroke;
   edits: CellEdit[];
+  fullBefore?: Float32Array;
+  fullAfter?: Float32Array;
 }
