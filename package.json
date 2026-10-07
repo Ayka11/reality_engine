@@ -12,7 +12,8 @@
     "build:hf:cpu": "npm run build",
     "hf:cpu:check": "node scripts/hf-cpu-check.mjs",
     "hf:browser:acceptance": "node scripts/browser-acceptance.mjs",
-    "test:brushes": "node scripts/check-brush-math.mjs && node scripts/check-brush-geometry.mjs"
+    "test:brushes": "node scripts/check-brush-math.mjs && node scripts/check-brush-geometry.mjs",
+    "test:world-field": "node scripts/check-world-field-contract.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
