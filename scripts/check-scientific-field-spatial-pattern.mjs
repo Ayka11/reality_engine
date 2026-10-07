@@ -1,0 +1,26 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import ts from "typescript";
+const root=new URL("../",import.meta.url);
+async function load(path){const source=await readFile(new URL(path,root),"utf8");const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;return import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`)}
+const m=await load("src/infinity/ScientificFieldSpatialPattern.ts");
+const {evaluateScientificFieldSpatialPattern,assertScientificFieldSpatialPattern}=m;
+const origin={x:10,y:20,z:30};
+const noise={schemaVersion:"scientific-field-pattern-v1",kind:"noise3",origin,scale:8,seed:17,octaves:4,coordinateFrame:"legacy-grid"};
+assert.doesNotThrow(()=>assertScientificFieldSpatialPattern(noise));
+const a=evaluateScientificFieldSpatialPattern(noise,{x:11,y:22,z:33});
+const b=evaluateScientificFieldSpatialPattern(noise,{x:11,y:22,z:33});
+assert.equal(a,b); assert.ok(a>=0&&a<=1);
+const changed=evaluateScientificFieldSpatialPattern({...noise,seed:18},{x:11,y:22,z:33});
+assert.notEqual(a,changed);
+const pattern={schemaVersion:"scientific-field-pattern-v1",kind:"pattern3",origin,scale:8,coordinateFrame:"legacy-grid"};
+assert.equal(evaluateScientificFieldSpatialPattern(pattern,{x:10,y:20,z:30}),.5);
+const stamp={schemaVersion:"scientific-field-pattern-v1",kind:"stamp-lattice",origin,period:4,low:.2,high:1,coordinateFrame:"legacy-grid"};
+assert.equal(evaluateScientificFieldSpatialPattern(stamp,{x:14,y:20,z:30}),1);
+assert.equal(evaluateScientificFieldSpatialPattern(stamp,{x:12,y:21,z:31}),.2);
+assert.throws(()=>assertScientificFieldSpatialPattern({...noise,seed:Number.NaN}),/seed/);
+assert.throws(()=>assertScientificFieldSpatialPattern({...noise,coordinateFrame:"world"}),/coordinate frame/);
+console.log("PASS: deterministic seeded noise pattern");
+console.log("PASS: legacy pattern3 coordinate semantics");
+console.log("PASS: stamp lattice semantics");
+console.log("PASS: spatial pattern validation");
