@@ -58,7 +58,12 @@ assert.ok(mutable.sample(0,0,0).energy > before);
 assert.ok(mutable.getVersion() > 0);
 
 globalThis.localStorage = { data:new Map(), setItem(k,v){this.data.set(k,v)}, getItem(k){return this.data.get(k)??null}, removeItem(k){this.data.delete(k)} };
-const worldPersistenceMod = await load("src/infinity/WorldPersistence.ts");
+const worldCoordinateJs = await readFile(new URL("src/infinity/WorldCoordinate.ts", root), "utf8");
+const worldCoordinateCompiled = ts.transpileModule(worldCoordinateJs, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+const worldCoordinateUrl = `data:text/javascript;base64,${Buffer.from(worldCoordinateCompiled).toString("base64")}`;
+const worldPersistenceMod = await load("src/infinity/WorldPersistence.ts", [
+  [/from ['"]\.\/WorldCoordinate['"]/, `from "${worldCoordinateUrl}"`],
+]);
 const { WorldPersistence } = worldPersistenceMod;
 const worldPersistence = new WorldPersistence("seed");
 worldPersistence.saveFieldState({schemaVersion:"world-field-state-v2",mutationCount:1});
