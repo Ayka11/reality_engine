@@ -2224,6 +2224,7 @@ export class InfiniteWorldRenderer {
         }))
         if (!water) continue
         created.push(water)
+        this.objectSpatialIndex.upsert(water)
         this.history.push({ type: 'add', object: { ...water } })
       }
     }
