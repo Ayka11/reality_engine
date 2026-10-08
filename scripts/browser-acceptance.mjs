@@ -39,6 +39,22 @@ try {
   await page.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
+
+  const lawBridgeContract = await page.evaluate(() => {
+    const engine = (window as any).realityEngine;
+    const getter = (window as any).getRealityLawState;
+    if (!engine?.laws || typeof getter !== "function") return { error: "Simulation law bridge is not exposed" };
+    const before = getter();
+    engine.laws.toggleProcess(7, false); // GRAVITY
+    const afterOff = getter();
+    engine.laws.toggleProcess(7, true);
+    const afterOn = getter();
+    return { before, afterOff, afterOn };
+  });
+  if (lawBridgeContract.error) throw new Error(lawBridgeContract.error);
+  if (!lawBridgeContract.before.processes.includes("gravity")) throw new Error("Infinite World law bridge missing default gravity process");
+  if (lawBridgeContract.afterOff.processes.includes("gravity")) throw new Error("Infinite World law bridge ignored gravity disable");
+  if (!lawBridgeContract.afterOn.processes.includes("gravity")) throw new Error("Infinite World law bridge ignored gravity restore");
   await page.waitForFunction(() => typeof window.infinityBuildZoneCost === "function");
   await page.waitForFunction(() => typeof window.infinityBuildZoneCost === "function");
 
