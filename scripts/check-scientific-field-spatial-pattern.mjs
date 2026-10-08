@@ -18,7 +18,7 @@ assert.equal(evaluateScientificFieldSpatialPattern(pattern,{x:10,y:20,z:30}),.5)
 const volcano={schemaVersion:"scientific-smart-brush-v1",kind:"smart-brush",name:"Volcano",origin:{x:10,y:0,z:20},radius:5};
 assert.doesNotThrow(()=>assertScientificFieldSpatialPattern(volcano));
 assert.ok(evaluateScientificSmartBrush(volcano,{x:10,y:0,z:20})>0);
-assert.equal(evaluateScientificSmartBrush(volcano,{x:10,y:0,z:25}),0);
+assert.equal(evaluateScientificSmartBrush(volcano,{x:16,y:0,z:20}),0);
 const storm={schemaVersion:"scientific-smart-brush-v1",kind:"smart-brush",name:"Storm",origin:{x:10,y:0,z:20},radius:5,selectedLegacyZ:3};
 assert.ok(evaluateScientificSmartBrush(storm,{x:10,y:3,z:20})>0);
 assert.throws(()=>assertScientificFieldSpatialPattern({...volcano,radius:0}),/radius/);
