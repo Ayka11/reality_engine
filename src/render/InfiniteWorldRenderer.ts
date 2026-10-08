@@ -1934,6 +1934,7 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(object)
+    this.objectSpatialIndex.upsert(object)
       this.history.push({ type: 'add', object: { ...object } })
     }
     this.syncObjects()
@@ -1969,6 +1970,7 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(object)
+    this.objectSpatialIndex.upsert(object)
       this.history.push({ type: 'add', object: { ...object } })
     }
     this.syncObjects()
@@ -2305,6 +2307,7 @@ export class InfiniteWorldRenderer {
       properties: { city: 'hub', role: 'civic' },
     })
     created.push(hubObject)
+    this.objectSpatialIndex.upsert(hubObject)
     this.history.push({ type: 'add', object: { ...hubObject } })
     for (let i = 0; i < plan.districts.length; i++) {
       const d = plan.districts[i]
@@ -2334,6 +2337,7 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(object)
+    this.objectSpatialIndex.upsert(object)
         this.history.push({ type: 'add', object: { ...object } })
       }
       const count = d.role === 'civic' ? 3 : 5
@@ -2360,6 +2364,7 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(building)
+    this.objectSpatialIndex.upsert(building)
         this.history.push({ type: 'add', object: { ...building } })
       }
     }
@@ -2381,6 +2386,7 @@ export class InfiniteWorldRenderer {
       properties: { settlement: 'hub', seed },
     })
     created.push(hub)
+    this.objectSpatialIndex.upsert(hub)
     this.history.push({ type: 'add', object: { ...hub } })
 
     for (let i = 0; i < blockCount; i++) {
@@ -2414,6 +2420,7 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(object)
+    this.objectSpatialIndex.upsert(object)
         this.history.push({ type: 'add', object: { ...object } })
       }
 
@@ -2442,6 +2449,7 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(building)
+    this.objectSpatialIndex.upsert(building)
         this.history.push({ type: 'add', object: { ...building } })
       }
     }
@@ -2476,6 +2484,7 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(building)
+    this.objectSpatialIndex.upsert(building)
       this.history.push({ type: 'add', object: { ...building } })
     }
     if (created.length > 1) {
@@ -2509,6 +2518,7 @@ export class InfiniteWorldRenderer {
       this.objectSpatialIndex.upsert(object)
       this.history.push({ type: 'add', object: { ...object } })
       created.push(object)
+    this.objectSpatialIndex.upsert(object)
     }
     this.syncObjects()
     this.scheduleSave()
