@@ -2492,11 +2492,27 @@ export class InfiniteWorldRenderer {
   }
 
   scatter(kind: WorldObjectKind, x0: number, z0: number, x1: number, z1: number, density = 0.15) {
-    const objects = this.objects.scatter(this.generator.seed, kind, x0, z0, x1, z1, 32, density)
-    for (const object of objects) object.y = this.generator.sampleHeight(object.x, object.z)
+    const candidates = this.objects.scatter(this.generator.seed, kind, x0, z0, x1, z1, 32, density)
+    const created: WorldObject[] = []
+    for (const object of candidates) {
+      const lawGate = this.lawGateForBuild(kind, object.x, object.z)
+      if (!lawGate.allowed) {
+        this.objects.remove(object.id)
+        continue
+      }
+      object.y = this.generator.sampleHeight(object.x, object.z)
+      object.properties = {
+        ...object.properties,
+        lawPenalty: lawGate.decision?.laws.penalty ?? 0,
+        activeLawProcesses: lawGate.decision?.laws.activeProcesses.join(',') ?? '',
+      }
+      this.objectSpatialIndex.upsert(object)
+      this.history.push({ type: 'add', object: { ...object } })
+      created.push(object)
+    }
     this.syncObjects()
     this.scheduleSave()
-    return objects
+    return created
   }
 
   private updateFly(dt: number) {
