@@ -29,7 +29,10 @@ try {
   page.on("pageerror", (error) => console.log(`[browser:pageerror] ${error.stack || error.message}`));
   page.on("requestfailed", (request) => console.log(`[browser:requestfailed] ${request.method()} ${request.url()} :: ${request.failure()?.errorText || "unknown"}`));
   await page.addInitScript(() => {
-    localStorage.clear();
+    if (sessionStorage.getItem("reality-engine-acceptance-cleaned") !== "1") {
+      localStorage.clear();
+      sessionStorage.setItem("reality-engine-acceptance-cleaned", "1");
+    }
   });
 
   console.log("[acceptance] opening primary page");
