@@ -234,59 +234,83 @@ try {
     }
   }
 
-  // Authoritative sculpt transaction contract: one legacy stroke must create
-  // one authoritative mutation and exact snapshot-based undo/redo must restore state.
+  // Authoritative sculpt transaction contract: verify ordered mixed history
+  // (SmartBrush -> ordinary legacy stroke -> undo x2 -> redo x2) and persistence.
   const sculptContract = await page.evaluate(() => {
     const world = window.infiniteWorld;
-    if (!world || typeof window.infinityApplyLegacySculptStroke !== "function") {
-      return { error: "Authoritative legacy sculpt bridge is not exposed" };
+    if (!world || typeof window.infinityApplyLegacySculptStroke !== "function" || typeof window.infinityApplyLegacySmartBrush !== "function") {
+      return { error: "Authoritative legacy sculpt bridge is not fully exposed" };
     }
-    const beforeState = world.authoritativeField.serialize();
-    const beforeSample = world.authoritativeField.sample(0, 0, 0);
-    const beforeCount = world.authoritativeField.getMutationCount();
-    window.infinityApplyLegacySculptStroke("inject", { x: 0, y: 0, z: 0 }, 2, 1, {
+    const baselineState = world.authoritativeField.serialize();
+    const baselineSample = world.authoritativeField.sample(4, 2, 5);
+    const baselineCount = world.authoritativeField.getMutationCount();
+
+    window.infinityApplyLegacySmartBrush("Forest", { x: 4, y: 5, z: 2 }, 3, 2);
+    const afterSmartState = world.authoritativeField.serialize();
+    const afterSmartSample = world.authoritativeField.sample(4, 2, 5);
+    const afterSmartCount = world.authoritativeField.getMutationCount();
+
+    window.infinityApplyLegacySculptStroke("inject", { x: 4, y: 5, z: 2 }, 2, 1, {
       fields: { energy: 1 },
-      selectedLegacyZ: 0,
+      selectedLegacyZ: 2,
     });
-    const afterState = world.authoritativeField.serialize();
-    const afterSample = world.authoritativeField.sample(0, 0, 0);
-    const afterCount = world.authoritativeField.getMutationCount();
+    const afterOrdinaryState = world.authoritativeField.serialize();
+    const afterOrdinarySample = world.authoritativeField.sample(4, 2, 5);
+    const afterOrdinaryCount = world.authoritativeField.getMutationCount();
+
     window.infinityUndoLegacySculptAuthoritative?.();
-    const undoState = world.authoritativeField.serialize();
+    const undoOneState = world.authoritativeField.serialize();
+    window.infinityUndoLegacySculptAuthoritative?.();
+    const undoTwoState = world.authoritativeField.serialize();
+
     window.infinityRedoLegacySculptAuthoritative?.();
-    const redoState = world.authoritativeField.serialize();
+    const redoOneState = world.authoritativeField.serialize();
+    window.infinityRedoLegacySculptAuthoritative?.();
+    const redoTwoState = world.authoritativeField.serialize();
+
     return {
-      beforeState,
-      afterState,
-      undoState,
-      redoState,
-      beforeSample,
-      afterSample,
-      beforeCount,
-      afterCount,
+      baselineState, afterSmartState, afterOrdinaryState, undoOneState, undoTwoState,
+      redoOneState, redoTwoState, baselineSample, afterSmartSample, afterOrdinarySample,
+      baselineCount, afterSmartCount, afterOrdinaryCount,
+      history: window.infinityLegacySculptAuthoritativeHistory?.(),
     };
   });
   if (sculptContract.error) throw new Error(sculptContract.error);
-  if (sculptContract.afterCount !== sculptContract.beforeCount + 1) {
-    throw new Error(`Authoritative sculpt mutation count did not advance by one: ${JSON.stringify(sculptContract)}`);
+  if (sculptContract.afterSmartCount !== sculptContract.baselineCount + 1) {
+    throw new Error(`SmartBrush did not create exactly one authoritative mutation: ${JSON.stringify(sculptContract)}`);
   }
-  if (!(Number(sculptContract.afterSample?.energy) > Number(sculptContract.beforeSample?.energy))) {
-    throw new Error(`Authoritative sculpt sample did not change: ${JSON.stringify(sculptContract)}`);
+  if (sculptContract.afterOrdinaryCount !== sculptContract.afterSmartCount + 1) {
+    throw new Error(`Ordinary sculpt did not create exactly one authoritative mutation: ${JSON.stringify(sculptContract)}`);
   }
-  if (JSON.stringify(sculptContract.undoState) !== JSON.stringify(sculptContract.beforeState)) {
-    throw new Error("Authoritative sculpt undo did not restore the exact pre-stroke state");
+  if (!(Number(sculptContract.afterSmartSample?.information) > Number(sculptContract.baselineSample?.information))) {
+    throw new Error(`SmartBrush did not change the expected information field: ${JSON.stringify(sculptContract)}`);
   }
-  if (JSON.stringify(sculptContract.redoState) !== JSON.stringify(sculptContract.afterState)) {
-    throw new Error("Authoritative sculpt redo did not restore the exact post-stroke state");
+  if (!(Number(sculptContract.afterOrdinarySample?.energy) > Number(sculptContract.afterSmartSample?.energy))) {
+    throw new Error(`Ordinary sculpt did not apply after SmartBrush: ${JSON.stringify(sculptContract)}`);
+  }
+  if (JSON.stringify(sculptContract.undoOneState) !== JSON.stringify(sculptContract.afterSmartState)) {
+    throw new Error("Mixed sculpt undo #1 did not restore the SmartBrush state");
+  }
+  if (JSON.stringify(sculptContract.undoTwoState) !== JSON.stringify(sculptContract.baselineState)) {
+    throw new Error("Mixed sculpt undo #2 did not restore the baseline state");
+  }
+  if (JSON.stringify(sculptContract.redoOneState) !== JSON.stringify(sculptContract.afterSmartState)) {
+    throw new Error("Mixed sculpt redo #1 did not restore the SmartBrush state");
+  }
+  if (JSON.stringify(sculptContract.redoTwoState) !== JSON.stringify(sculptContract.afterOrdinaryState)) {
+    throw new Error("Mixed sculpt redo #2 did not restore the ordinary sculpt state");
+  }
+  if (sculptContract.history?.undo !== 2 || sculptContract.history?.redo !== 0) {
+    throw new Error(`Mixed sculpt history lengths are incorrect after redo x2: ${JSON.stringify(sculptContract.history)}`);
   }
 
-  const persistedSculptState = sculptContract.redoState;
+  const persistedSculptState = sculptContract.redoTwoState;
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
   const reloadedSculptState = await page.evaluate(() => window.infiniteWorld?.authoritativeField?.serialize());
   if (JSON.stringify(reloadedSculptState) !== JSON.stringify(persistedSculptState)) {
-    throw new Error("Authoritative sculpt persistence did not survive a page reload");
+    throw new Error("Mixed authoritative sculpt persistence did not survive a page reload");
   }
 
   const before = await page.evaluate(() => window.worldGenerationHealth());
