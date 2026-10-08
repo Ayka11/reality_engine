@@ -49,6 +49,24 @@ import './ui/ux-system.css';
 
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
+
+// Canonical law-state bridge consumed by Infinite World decision and physics contracts.
+// Keep this derived from the same LawEngine instance that drives the simulation.
+const REALITY_LAW_PROCESS_NAMES: Record<number, string> = {
+  0: 'energy', 1: 'thermo', 2: 'density', 3: 'entropy', 4: 'info', 5: 'bio',
+  6: 'wave', 7: 'gravity', 8: 'phase', 9: 'metabolism', 10: 'signal',
+  11: 'crystallization', 12: 'radiation', 13: 'pressure', 14: 'rotation', 15: 'erosion',
+};
+(window as unknown as Record<string, unknown>).getRealityLawState = () => {
+  const mask = sim.laws.activeProcessMask;
+  return {
+    laws: sim.laws.laws.map(law => ({ name: law.name, active: law.active, fitness: law.fitness, strength: 1 })),
+    processes: Object.entries(REALITY_LAW_PROCESS_NAMES)
+      .filter(([id]) => (mask & (1 << Number(id))) !== 0)
+      .map(([, name]) => name),
+  };
+};
+
 const infinityScale = createInfinityScaleRuntime();
 const canvas   = document.getElementById('gc') as HTMLCanvasElement;
 const renderer = new VoxelRenderer(canvas, sim.grid.W, sim.grid.H, sim.grid.D);
