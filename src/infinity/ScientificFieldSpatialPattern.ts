@@ -78,7 +78,7 @@ export type ScientificSmartBrushPattern = {
 export function evaluateScientificSmartBrush(pattern: ScientificSmartBrushPattern, world:{x:number;y:number;z:number}):number {
   const p=relative(world,pattern.origin)
   const r=Math.max(0.001,pattern.radius)
-  const legacyX=p.x, legacyY=p.z, legacyZ=p.y
+  const legacyX=p.x, legacyY=p.y, legacyZ=p.z
   const d=Math.hypot(legacyX,legacyY)
   if(d>r)return 0
   const selected=pattern.selectedLegacyZ
