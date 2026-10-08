@@ -49,7 +49,7 @@ try {
     const afterOff = getter();
     engine.laws.toggleProcess(7, true);
     const afterOn = getter();
-    return { before, afterOff, afterOn };
+    engine.laws.clearManualOverrides();\n    return { before, afterOff, afterOn };
   });
   if (lawBridgeContract.error) throw new Error(lawBridgeContract.error);
   if (!lawBridgeContract.before.processes.includes("gravity")) throw new Error("Infinite World law bridge missing default gravity process");
