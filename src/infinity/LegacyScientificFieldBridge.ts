@@ -299,7 +299,9 @@ export function sculptSmartBrushToMutation(
   radius: number,
   selectedLegacyZ?: number,
   metadata: Record<string, unknown> = {},
+  strength = 1,
 ): WorldFieldMutation {
+  if (!Number.isFinite(strength) || strength < 0) throw new RangeError('Smart brush strength must be finite and non-negative')
   const origin = legacyToWorldCoordinate(cell)
   const spatialPattern = {
     schemaVersion: 'scientific-smart-brush-v1' as const,
@@ -333,11 +335,19 @@ export function sculptSmartBrushToMutation(
     case 'Civilization Seed':
       delta.energy=4; delta.density=.5; delta.information=40; delta.biology=.8; delta.entropy=-.15; delta.temperature=10; break
   }
+  for (const field of Object.keys(delta) as (keyof ScientificFieldSample)[]) {
+    const value = delta[field]
+    if (value !== undefined) delta[field] = value * strength
+  }
+  for (const operation of Object.values(operations)) {
+    if (operation) operation.value *= strength
+  }
   return {
     id:0, kind:'brush', x:origin.x, y:origin.y, z:origin.z, radius,
     spatialPattern, delta, operations,
     metadata:{
       ...metadata,
+      strength,
       source: metadata.source ?? 'legacy-smart-brush',
       brush:name,
       coordinateContract:'legacy-grid-x-y-z-to-world-x-z-y-v1',
