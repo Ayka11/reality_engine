@@ -93,7 +93,14 @@ wss.on('connection', (ws, req) => {
     let message;
     try { message = JSON.parse(raw.toString()); } catch { return; }
     if (!message || typeof message.type !== 'string' || typeof message.from !== 'string' || message.from.length < 1 || message.from.length > 64) return;
-    if (message.type === 'announce') ws.peerId = message.from;
+    if (message.type === 'announce') {
+      // Bind the socket to one peer identity; a later announce cannot take over another ID.
+      if (ws.peerId && ws.peerId !== message.from) return;
+      ws.peerId = message.from;
+    } else if (!ws.peerId || message.from !== ws.peerId) {
+      // Every signalling message must use the identity bound by the initial announce.
+      return;
+    }
     if (message.type === 'app-message' && (!message.payload || typeof message.payload !== 'object' || message.payload.userId !== message.from || typeof message.payload.type !== 'string')) return;
 
     for (const client of wss.clients) {
