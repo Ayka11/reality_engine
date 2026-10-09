@@ -67,32 +67,6 @@ const REALITY_LAW_PROCESS_NAMES: Record<number, string> = {
   };
 };
 
-(window as unknown as Record<string, unknown>).setRealityLaw = (
-  name: string,
-  enabled: boolean,
-  _strength = 1,
-  _threshold = 0,
-) => {
-  // Keep the acceptance/debug API bound to the same LawEngine instance used by
-  // getRealityLawState and by the legacy simulation runtime. This is an explicit
-  // process toggle, not a fabricated physics-field mutation.
-  const normalized = name.trim().toLowerCase();
-  const processIds: Record<string, number[]> = {
-    'density gravity': [2, 7],
-    density: [2],
-    gravity: [7],
-    thermodynamics: [1],
-    entropy: [3],
-    information: [4],
-    biology: [5],
-    wave: [6],
-    radiation: [12],
-  };
-  const ids = processIds[normalized];
-  if (!ids) throw new Error(`Unsupported reality law toggle: ${name}`);
-  for (const id of ids) sim.laws.toggleProcess(id, enabled);
-  return (window as unknown as { getRealityLawState: () => unknown }).getRealityLawState();
-};
 
 const infinityScale = createInfinityScaleRuntime();
 const canvas   = document.getElementById('gc') as HTMLCanvasElement;
