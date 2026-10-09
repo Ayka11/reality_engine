@@ -20,6 +20,7 @@ jobs:
           node-version: 20
       - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
+      - run: npm run audit:report
       - run: npm run lint
       - run: npm run test:brushes --if-present
       - run: npm run test:world-field --if-present
