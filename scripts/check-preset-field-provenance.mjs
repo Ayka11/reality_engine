@@ -77,9 +77,9 @@ assert.equal(centerSample.energy,1.2,'regional preset delta must change sampled 
 assert.equal(edgeSample.energy,1,'energy delta must fade to zero at the radius boundary');
 assert.equal(realField.getMutationCount(),1,'real field must contain the committed regional mutation');
 const physicsSource=await fs.readFile('src/infinity/FieldModulatedPhysics.ts','utf8');
-const physicsJs=ts.transpileModule(physicsSource,{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText;
+const physicsJs=ts.transpileModule(physicsSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 const physicsModule={exports:{}};
-new Function('exports','module',physicsJs.replace(/export /g,''))(physicsModule.exports,physicsModule);
+new Function('exports','module',physicsJs)(physicsModule.exports,physicsModule);
 const {FieldModulatedPhysics}=physicsModule.exports;
 const physics=new FieldModulatedPhysics();
 const centerModulation=physics.modulation(centerSample);
