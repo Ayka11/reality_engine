@@ -75,6 +75,17 @@ try {
   assert.equal(relayed.type, 'offer');
   assert.equal(relayed.payload, 'contract-check');
 
+  const appMessage = waitForMessage(bob);
+  alice.send(JSON.stringify({
+    type: 'app-message',
+    from: 'alice',
+    payload: { type: 'delta', userId: 'alice', cells: [{ x: 1, y: 2, z: 0, field: 3, value: 0.75 }] },
+  }));
+  const appRelay = await appMessage;
+  assert.equal(appRelay.type, 'app-message');
+  assert.equal(appRelay.payload.type, 'delta');
+  assert.equal(appRelay.payload.cells[0].value, 0.75);
+
   console.log('Combined HF HTTP + WebSocket runtime contract: PASS');
 } finally {
   for (const socket of sockets) {
