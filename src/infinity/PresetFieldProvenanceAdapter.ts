@@ -37,6 +37,9 @@ export class PresetFieldProvenanceAdapter {
     if (input.delta && !input.region) {
       throw new Error('Preset field delta requires an explicit spatial region')
     }
+    if (input.delta && Object.keys(input.delta).length === 0) {
+      throw new Error('Preset field delta must contain at least one field')
+    }
     if (input.delta && !Object.values(input.delta).every(Number.isFinite)) {
       throw new Error('Preset field delta values must be finite')
     }
