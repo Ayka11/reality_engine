@@ -21,6 +21,9 @@ assert.ok(evaluateScientificSmartBrush(volcano,{x:10,y:0,z:20})>0);
 assert.equal(evaluateScientificSmartBrush(volcano,{x:16,y:0,z:20}),0);
 const storm={schemaVersion:"scientific-smart-brush-v1",kind:"smart-brush",name:"Storm",origin:{x:10,y:0,z:20},radius:5,selectedLegacyZ:3};
 assert.ok(evaluateScientificSmartBrush(storm,{x:10,y:3,z:20})>0);
+const forest={schemaVersion:"scientific-smart-brush-v1",kind:"smart-brush",name:"Forest",origin:{x:4,y:2,z:5},radius:3,selectedLegacyZ:2};
+assert.ok(evaluateScientificSmartBrush(forest,{x:4,y:2,z:5})>0,"Forest must affect the selected absolute world-altitude slice");
+assert.equal(evaluateScientificSmartBrush(forest,{x:4,y:3,z:5}),0,"Forest must not affect a different altitude slice");
 assert.throws(()=>assertScientificFieldSpatialPattern({...volcano,radius:0}),/radius/);
 
 const stamp={schemaVersion:"scientific-field-pattern-v1",kind:"stamp-lattice",origin,period:4,low:.2,high:1,coordinateFrame:"legacy-grid"};
