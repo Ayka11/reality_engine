@@ -270,12 +270,12 @@ try {
       return { error: "Authoritative legacy sculpt bridge is not fully exposed" };
     }
     const baselineState = world.authoritativeField.serialize();
-    const baselineSample = world.authoritativeField.sample(4, 4, 5);
+    const baselineSample = world.authoritativeField.sample(4, 2, 5);
     const baselineCount = world.authoritativeField.getMutationCount();
 
     window.infinityApplyLegacySmartBrush("Forest", { x: 4, y: 5, z: 2 }, 3, 2);
     const afterSmartState = world.authoritativeField.serialize();
-    const afterSmartSample = world.authoritativeField.sample(4, 4, 5);
+    const afterSmartSample = world.authoritativeField.sample(4, 2, 5);
     const afterSmartCount = world.authoritativeField.getMutationCount();
 
     window.infinityApplyLegacySculptStroke("inject", { x: 4, y: 5, z: 2 }, 2, 1, {
@@ -283,7 +283,7 @@ try {
       selectedLegacyZ: 2,
     });
     const afterOrdinaryState = world.authoritativeField.serialize();
-    const afterOrdinarySample = world.authoritativeField.sample(4, 4, 5);
+    const afterOrdinarySample = world.authoritativeField.sample(4, 2, 5);
     const afterOrdinaryCount = world.authoritativeField.getMutationCount();
 
     window.infinityUndoLegacySculptAuthoritative?.();
