@@ -111,7 +111,7 @@ realField.setBase({sample:()=>({...realBase.sample(),biology:.1})});
 realField.clear();
 assert.equal(construction.authorize('building',0,0).allowed,false,'baseline biology 0.1 should be below the buildability threshold');
 const beforeScore=construction.authorize('building',0,0).decision.buildability.score;
-realAdapter.commit({preset:'biology-test',execution:'voxel',delta:{biology:.2},region:{x:0,y:0,z:0,radius:10}});
+realAdapter.commit({preset:'biology-test',execution:'voxel',delta:{biology:.2},region:{x:0,y:26,z:0,radius:10}});
 const afterDecision=construction.authorize('building',0,0);
 assert.ok(afterDecision.decision.buildability.score>beforeScore,'regional preset delta must change buildability score');
 assert.equal(afterDecision.allowed,true,'preset field mutation should cross the configured construction threshold');
