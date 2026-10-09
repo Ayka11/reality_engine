@@ -86,6 +86,21 @@ try {
   assert.equal(appRelay.payload.type, 'delta');
   assert.equal(appRelay.payload.cells[0].value, 0.75);
 
+  const spoofedMessageRejected = new Promise(resolve => {
+    const onMessage = () => resolve(false);
+    bob.once('message', onMessage);
+    setTimeout(() => {
+      bob.off('message', onMessage);
+      resolve(true);
+    }, 300);
+  });
+  alice.send(JSON.stringify({
+    type: 'app-message',
+    from: 'alice',
+    payload: { type: 'delta', userId: 'someone-else', cells: [{ x: 1, y: 2, z: 0, field: 3, value: 0.99 }] },
+  }));
+  assert.equal(await spoofedMessageRejected, true, 'relay must reject mismatched sender identity');
+
   console.log('Combined HF HTTP + WebSocket runtime contract: PASS');
 } finally {
   for (const socket of sockets) {
