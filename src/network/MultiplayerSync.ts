@@ -165,7 +165,7 @@ export class MultiplayerSync {
       }
     }
 
-    if (data.type === 'full_state' && !this.isHost && Array.isArray(data.buf)) {
+    if (data.type === 'full_state' && !this.isHost && data.userId === [this.userId, ...this.peers.keys()].sort()[0] && Array.isArray(data.buf)) {
       const buf = this.sim.grid.buffer;
       // Check size before allocating a typed-array copy.
       if (data.buf.length !== buf.length || !data.buf.every(value => Number.isFinite(value) && Math.abs(value) <= 1e9)) return;
