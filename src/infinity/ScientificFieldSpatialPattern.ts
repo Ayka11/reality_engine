@@ -86,20 +86,20 @@ export function evaluateScientificSmartBrush(pattern: ScientificSmartBrushPatter
     case 'Volcano':
       return legacyZ>=0 && legacyZ<4 ? Math.exp(-d*d/(r*r)*2) : 0
     case 'Forest':
-      return selected!==undefined && Math.round(legacyZ)===Math.round(selected) ? Math.exp(-d*d/(r*r)*1.5) : 0
+      return selected!==undefined && Math.round(world.y)===Math.round(selected) ? Math.exp(-d*d/(r*r)*1.5) : 0
     case 'Ocean':
       return legacyZ>=0 && legacyZ<5 ? 1-d/r : 0
     case 'Crystal':
-      return selected!==undefined && Math.round(legacyZ)===Math.round(selected) &&
+      return selected!==undefined && Math.round(world.y)===Math.round(selected) &&
         (Math.abs(Math.round(legacyX))===Math.abs(Math.round(legacyY)) || Math.round(legacyX)===0 || Math.round(legacyY)===0) ? 1 : 0
     case 'Storm':
-      return selected!==undefined && Math.round(legacyZ)===Math.round(selected)
+      return selected!==undefined && Math.round(world.y)===Math.round(selected)
         ? (Math.sin(legacyX*.7+legacyY*.5)*Math.cos(legacyX*.3+legacyY*.8)+1)/2 : 0
     case 'Life Cluster':
-      return selected!==undefined && Math.round(legacyZ)===Math.round(selected) ? Math.exp(-d*d/(r*r)*2) : 0
+      return selected!==undefined && Math.round(world.y)===Math.round(selected) ? Math.exp(-d*d/(r*r)*2) : 0
     case 'Radiation':
       return legacyZ>=0 ? 1-d/r : 0
     case 'Civilization Seed':
-      return selected!==undefined && Math.round(legacyZ)===Math.round(selected) ? Math.exp(-d*d/(r*r)*1.5) : 0
+      return selected!==undefined && Math.round(world.y)===Math.round(selected) ? Math.exp(-d*d/(r*r)*1.5) : 0
   }
 }
