@@ -10,7 +10,6 @@ const required = [
   "vite.config.ts",
   "Dockerfile.hf",
   "server/signalling-server.js",
-  "server/hf-server.js",
   "dist/index.html",
 ];
 
@@ -32,7 +31,7 @@ const dockerfile = fs.readFileSync(path.resolve("Dockerfile.hf"), "utf8");
 for (const [label, pattern] of [
   ["build command", /RUN\s+npm\s+run\s+build/],
   ["port 7860", /EXPOSE\s+7860/],
-  ["combined runtime server", /server\/hf-server\.js/],
+  ["frontend server", /serve\s+dist\s+-l\s+7860/],
   ["signalling server", /server\/signalling-server\.js/],
 ]) {
   if (!pattern.test(dockerfile)) {
@@ -72,7 +71,6 @@ console.log(JSON.stringify({
   appFile: "dist/index.html",
   buildCommand: "npm run build",
   frontendPort: 7860,
-  runtimeServer: "server/hf-server.js",
-  signallingPath: "/signal",
+  signallingServer: "server/signalling-server.js",
   inlineScriptsChecked: inlineScripts.length,
 }));
