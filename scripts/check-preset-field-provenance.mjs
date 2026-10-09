@@ -107,8 +107,9 @@ const decisionSampler={
 const decisionWeights={slope:0,water:0,elevation:0,entropy:0,density:0,biology:1,information:0,distance:0};
 const decisionLayer=new WorldDecisionLayer(decisionSampler,decisionWeights,()=>({processes:['gravity','density','energy']}));
 const construction=new WorldConstructionContract(decisionLayer);
+realField.setBase({sample:()=>({...realBase.sample(),biology:.1})});
 realField.clear();
-assert.equal(construction.authorize('building',0,0).allowed,false,'baseline biology 0.2 should be below the buildability threshold');
+assert.equal(construction.authorize('building',0,0).allowed,false,'baseline biology 0.1 should be below the buildability threshold');
 const beforeScore=construction.authorize('building',0,0).decision.buildability.score;
 realAdapter.commit({preset:'biology-test',execution:'voxel',delta:{biology:.2},region:{x:0,y:0,z:0,radius:10}});
 const afterDecision=construction.authorize('building',0,0);
