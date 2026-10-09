@@ -127,16 +127,17 @@ export class MultiplayerSync {
 
     if (data.type === 'join') {
       this.peers.set(data.userId, { color: data.color ?? '#888', lastSeen: Date.now() });
-      if (!this.isHost || this.peers.size === 1) {
-        this.isHost = true;
-        setTimeout(() => this._sendFullState(), 200);
-      }
+      const wasHost = this.isHost;
+      this._refreshHostRole();
+      if (this.isHost && !wasHost) setTimeout(() => this._sendFullState(), 200);
     }
 
     if (data.type === 'leave') {
       this.peers.delete(data.userId);
       this.cursors.delete(data.userId);
-      if (this.peers.size === 0) this.isHost = false;
+      const wasHost = this.isHost;
+      this._refreshHostRole();
+      if (this.isHost && !wasHost) setTimeout(() => this._sendFullState(), 200);
     }
 
     if (data.type === 'cursor') {
@@ -163,6 +164,12 @@ export class MultiplayerSync {
     }
 
     if (data.type === 'request_state' && this.isHost) this._sendFullState();
+  }
+
+  private _refreshHostRole(): void {
+    // Deterministic host election prevents two clients from answering state requests.
+    const smallestPeerId = [...this.peers.keys()].sort()[0];
+    this.isHost = !smallestPeerId || this.userId.localeCompare(smallestPeerId) < 0;
   }
 
   private _sendFullState(): void {
