@@ -81,7 +81,7 @@ const server = createServer(async (req, res) => {
 });
 
 const wss = new WebSocketServer({ server, path: '/signal' });
-const ROOM_PATTERN = /^[A-Za-z0-9_-]{3,64}$/;
+const ROOM_PATTERN = /^[A-Za-z0-9_-]{12,64}$/;
 
 wss.on('connection', (ws, req) => {
   const requestUrl = new URL(req.url || '/signal', 'http://localhost');
