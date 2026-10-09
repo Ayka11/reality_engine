@@ -3,9 +3,7 @@ title: Reality Engine Meta Law Simulator
 emoji: 🌌
 colorFrom: blue
 colorTo: purple
-sdk: static
-app_file: dist/index.html
-app_build_command: npm run build
+sdk: docker
 fullWidth: true
 header: mini
 license: mit
@@ -18,7 +16,7 @@ custom_headers:
 
 # Reality Engine v6 — Meta-Law Physics Simulator
 
-> Hugging Face deployment uses the Static Space build pipeline: `npm run build` produces `dist/index.html`, which is served directly in the browser.
+> Hugging Face deployment uses the Docker Space runtime. The container installs dependencies, builds `dist/`, and serves the application on port `7860`; the signalling service runs alongside the static frontend.
 
 > *"A universe you can paint — where physics evolves, civilizations rise, and an AI director watches over it all."*
 
