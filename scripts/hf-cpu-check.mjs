@@ -7,6 +7,7 @@ const required = [
   "package-lock.json",
   "Dockerfile.hf",
   "server/signalling-server.js",
+  "server/hf-server.js",
   "dist/index.html",
 ];
 
@@ -28,8 +29,8 @@ if (!/^sdk:\s*docker\s*$/m.test(readme)) {
 if (index.includes("server/signalling-server.js")) {
   throw new Error("Frontend must not load the internal signalling server as a script");
 }
-if (!/EXPOSE\\s+7860/.test(dockerfile) || !/hf-server\\.js|serve\\s+dist\\s+-l\\s+7860/.test(dockerfile)) {
-  throw new Error("Docker HF runtime must serve the built frontend on port 7860");
+if (!dockerfile.includes("EXPOSE 7860") || !(dockerfile.includes("hf-server.js") || dockerfile.includes("serve dist -l 7860"))) {
+  throw new Error("Docker HF runtime must serve frontend and signalling on port 7860");
 }
 
 console.log(JSON.stringify({
