@@ -1427,7 +1427,11 @@ document.getElementById('btnMultiplayer')?.addEventListener('click', () => {
     const uid = multiplay.connect();
     btn.textContent = `Disconnect (${uid})`;
     btn.style.color = '#4caf7d';
-    document.getElementById('scriptLog')!.textContent = `Connected as ${uid} — open another tab to collaborate`;
+    const room = new URLSearchParams(window.location.search).get('room') || '';
+    const sharedRoom = /^[A-Za-z0-9_-]{12,64}$/.test(room);
+    document.getElementById('scriptLog')!.textContent = sharedRoom
+      ? `Connected as ${uid} — cross-device room: ${room}`
+      : `Connected as ${uid} — same-browser tabs only. For cross-device collaboration, open this URL with ?room=YOUR_SHARED_TOKEN on each device.`;
   } else {
     multiplay.disconnect();
     btn.textContent = '🔗 Multiplayer';
