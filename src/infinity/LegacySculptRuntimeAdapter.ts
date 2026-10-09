@@ -11,5 +11,5 @@ export class LegacySculptRuntimeAdapter {
   pattern(cell:LegacyVoxelCoordinate,radius:number,strength:number,noiseScale:number,fields:Partial<{ energy:number; density:number; information:number }>,metadata:Record<string,unknown>={}){return this.applyMutation(sculptPatternToMutation(cell,radius,strength,noiseScale,fields,metadata))}
   stamp(cell:LegacyVoxelCoordinate,radius:number,strength:number,period=4,metadata:Record<string,unknown>={}){return this.applyMutation(sculptStampToMutation(cell,radius,strength,period,metadata))}
   smooth(cell:LegacyVoxelCoordinate,radius:number,strength:number,metadata:Record<string,unknown>={}){return this.applyMutation(sculptSmoothToMutation(cell,radius,strength,metadata))}
-  smartBrush(name:Parameters<typeof sculptSmartBrushToMutation>[0],cell:LegacyVoxelCoordinate,radius:number,selectedLegacyZ?:number,metadata:Record<string,unknown>={}){return this.applyMutation(sculptSmartBrushToMutation(name,cell,radius,selectedLegacyZ,metadata))}
+  smartBrush(name:Parameters<typeof sculptSmartBrushToMutation>[0],cell:LegacyVoxelCoordinate,radius:number,selectedLegacyZ?:number,metadata:Record<string,unknown>={},strength=1){return this.applyMutation(sculptSmartBrushToMutation(name,cell,radius,selectedLegacyZ,metadata,strength))}
 }
