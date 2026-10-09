@@ -12,6 +12,7 @@
     "build:hf:cpu": "npm run build",
     "hf:cpu:check": "node scripts/hf-cpu-check.mjs",
     "hf:browser:acceptance": "node scripts/browser-acceptance.mjs",
+    "test:signalling": "node scripts/check-signalling-server.mjs",
     "test:brushes": "node scripts/check-brush-math.mjs && node scripts/check-brush-geometry.mjs",
     "test:world-field": "node scripts/check-world-field-contract.mjs",
     "test:presets": "node scripts/check-preset-contract.mjs",
