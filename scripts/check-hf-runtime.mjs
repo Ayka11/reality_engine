@@ -47,17 +47,27 @@ try {
   const unsupportedMethod = await fetch(`http://127.0.0.1:${port}/`, { method: 'POST' });
   assert.equal(unsupportedMethod.status, 405);
 
-  const alice = new WebSocket(`ws://127.0.0.1:${port}/signal`);
-  const bob = new WebSocket(`ws://127.0.0.1:${port}/signal`);
-  sockets.push(alice, bob);
+  const alice = new WebSocket(`ws://127.0.0.1:${port}/signal?room=runtime-test-room`);
+  const bob = new WebSocket(`ws://127.0.0.1:${port}/signal?room=runtime-test-room`);
+  const charlie = new WebSocket(`ws://127.0.0.1:${port}/signal`);
+  sockets.push(alice, bob, charlie);
   await Promise.all(sockets.map(socket => once(socket, 'open')));
 
   const aliceAnnounce = waitForMessage(alice);
   const bobAnnounce = waitForMessage(bob);
+  const isolatedRoomReceivesNothing = new Promise(resolve => {
+    const onMessage = () => resolve(false);
+    charlie.once('message', onMessage);
+    setTimeout(() => {
+      charlie.off('message', onMessage);
+      resolve(true);
+    }, 300);
+  });
   alice.send(JSON.stringify({ type: 'announce', from: 'alice' }));
   bob.send(JSON.stringify({ type: 'announce', from: 'bob' }));
   assert.equal((await aliceAnnounce).from, 'bob');
   assert.equal((await bobAnnounce).from, 'alice');
+  assert.equal(await isolatedRoomReceivesNothing, true, 'clients without the room token must be isolated');
 
   const targeted = waitForMessage(bob);
   alice.send(JSON.stringify({ type: 'offer', from: 'alice', to: 'bob', payload: 'contract-check' }));
