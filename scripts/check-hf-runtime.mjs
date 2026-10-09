@@ -18,6 +18,7 @@ child.stderr.on('data', chunk => { stderr += chunk; });
 const sockets = [];
 const multiplayerSource = await readFile(new URL('../src/network/MultiplayerSync.ts', import.meta.url), 'utf8');
 assert.ok(multiplayerSource.includes("data.userId === [this.userId, ...this.peers.keys()].sort()[0]"), 'full state must come from the elected host');
+assert.ok(multiplayerSource.includes('this.userId < smallestPeerId'), 'host election must use the same lexical ordering as peer sorting');
 assert.ok(multiplayerSource.includes('cell.field >= CELL_FIELDS'), 'remote field index must be bounded');
 assert.ok(multiplayerSource.includes('if (!this.connected) return;'), 'disconnected client must ignore late messages');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
