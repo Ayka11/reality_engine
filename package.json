@@ -27,7 +27,8 @@
     "test:authoritative-sculpt-transaction": "node scripts/check-authoritative-sculpt-transaction.mjs",
     "test:world-persistence-failures": "node scripts/check-world-persistence-failures.mjs",
     "audit:report": "node scripts/report-npm-audit.mjs",
-    "test:solver-deployment": "node scripts/check-solver-client-deployment.mjs"
+    "test:solver-deployment": "node scripts/check-solver-client-deployment.mjs",
+    "test:hf-runtime": "node scripts/check-hf-runtime.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
