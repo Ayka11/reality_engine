@@ -178,7 +178,7 @@ export class MultiplayerSync {
   private _refreshHostRole(): void {
     // Deterministic host election prevents two clients from answering state requests.
     const smallestPeerId = [...this.peers.keys()].sort()[0];
-    this.isHost = !smallestPeerId || this.userId.localeCompare(smallestPeerId) < 0;
+    this.isHost = !smallestPeerId || this.userId < smallestPeerId;
   }
 
   private _sendFullState(): void {
