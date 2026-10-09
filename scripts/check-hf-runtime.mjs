@@ -1,0 +1,60 @@
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { WebSocket } from 'ws';
+
+const port = 22000 + Math.floor(Math.random() * 10000);
+const child = spawn(process.execPath, ['server/hf-server.js'], {
+  env: { ...process.env, PORT: String(port) },
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+let stdout = '';
+let stderr = '';
+child.stdout.setEncoding('utf8');
+child.stderr.setEncoding('utf8');
+child.stdout.on('data', chunk => { stdout += chunk; });
+child.stderr.on('data', chunk => { stderr += chunk; });
+const sockets = [];
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const waitForMessage = (socket, timeoutMs = 2500) => Promise.race([
+  once(socket, 'message').then(([payload]) => JSON.parse(payload.toString())),
+  delay(timeoutMs).then(() => { throw new Error('WebSocket relay timed out'); }),
+]);
+
+try {
+  for (let i = 0; i < 120 && !stdout.includes('HTTP + signalling listening'); i++) {
+    if (child.exitCode !== null) throw new Error(`HF runtime exited: ${stderr}`);
+    await delay(50);
+  }
+  assert.match(stdout, /HTTP \+ signalling listening/, `HF runtime failed to start: ${stderr}`);
+
+  const response = await fetch(`http://127.0.0.1:${port}/`);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type') || '', /text\/html/);
+  assert.match(await response.text(), /Reality Engine/i);
+
+  const alice = new WebSocket(`ws://127.0.0.1:${port}/signal`);
+  const bob = new WebSocket(`ws://127.0.0.1:${port}/signal`);
+  sockets.push(alice, bob);
+  await Promise.all(sockets.map(socket => once(socket, 'open')));
+
+  const aliceAnnounce = waitForMessage(alice);
+  const bobAnnounce = waitForMessage(bob);
+  alice.send(JSON.stringify({ type: 'announce', from: 'alice' }));
+  bob.send(JSON.stringify({ type: 'announce', from: 'bob' }));
+  assert.equal((await aliceAnnounce).from, 'bob');
+  assert.equal((await bobAnnounce).from, 'alice');
+
+  const targeted = waitForMessage(bob);
+  alice.send(JSON.stringify({ type: 'offer', from: 'alice', to: 'bob', payload: 'contract-check' }));
+  const relayed = await targeted;
+  assert.equal(relayed.type, 'offer');
+  assert.equal(relayed.payload, 'contract-check');
+
+  console.log('Combined HF HTTP + WebSocket runtime contract: PASS');
+} finally {
+  for (const socket of sockets) {
+    try { socket.terminate(); } catch {}
+  }
+  child.kill('SIGTERM');
+}
