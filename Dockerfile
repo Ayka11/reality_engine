@@ -3,8 +3,8 @@ FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json ./
+RUN npm install --package-lock-only --ignore-scripts && npm ci
 
 COPY . .
 
