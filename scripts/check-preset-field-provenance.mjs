@@ -46,3 +46,30 @@ assert.equal(events[0].payload.preset,'forest','metadata must not spoof provenan
 assert.equal(events[0].payload.execution,'worker','metadata must not spoof provenance execution');
 console.log('Preset Field/Provenance adapter regression: PASS');
 console.log('Preset field delta requires a valid explicit region: PASS');
+
+// Exercise the adapter against the real mutable provider, not only a recording fake.
+const spatialSource=await fs.readFile('src/infinity/ScientificFieldSpatialPattern.ts','utf8');
+const spatialJs=ts.transpileModule(spatialSource,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const spatialUrl='data:text/javascript;base64,'+Buffer.from(spatialJs).toString('base64');
+const profileSource=await fs.readFile('src/infinity/ScientificFieldProfile.ts','utf8');
+const profileJs=ts.transpileModule(profileSource,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const profileUrl='data:text/javascript;base64,'+Buffer.from(profileJs).toString('base64');
+let providerSource=await fs.readFile('src/infinity/MutableWorldFieldProvider.ts','utf8');
+providerSource=ts.transpileModule(providerSource,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+providerSource=providerSource
+  .replace(/import { assertScientificFieldSpatialPattern, evaluateScientificFieldSpatialPattern, evaluateScientificSmartBrush } from ['"]\.\/ScientificFieldSpatialPattern['"]/, `import { assertScientificFieldSpatialPattern, evaluateScientificFieldSpatialPattern, evaluateScientificSmartBrush } from "${spatialUrl}"`)
+  .replace(/import type \\{ ScientificFieldSpatialPattern, ScientificSmartBrushPattern \\} from ['"]\.\/ScientificFieldSpatialPattern['"]/, '')
+  .replace(/import { assertScientificFieldProfile, evaluateScientificFieldProfile } from ['"]\.\/ScientificFieldProfile['"]/, `import { assertScientificFieldProfile, evaluateScientificFieldProfile } from "${profileUrl}"`)
+  .replace(/import type \\{ ScientificFieldProfile \\} from ['"]\.\/ScientificFieldProfile['"]/, '')
+  .replace(/import type \\{ ScientificFieldProvider \\} from ['"]\.\/ScientificFieldProvider['"]/, '')
+  .replace(/import type \\{ ScientificFieldSample \\} from ['"]\.\/FieldSampler['"]/, '');
+const providerModule=await import('data:text/javascript;base64,'+Buffer.from(providerSource).toString('base64'));
+const realBase={sample:()=>({energy:1,density:.2,information:1,entropy:.1,temperature:1,biology:.2,material:0})};
+const realField=new providerModule.MutableWorldFieldProvider(realBase);
+const realProvenance={record(stage,payload){const event={id:'real-event-'+(events.length+1),stage,payload};events.push(event);return event;}};
+const realAdapter=new PresetFieldProvenanceAdapter(realField,realProvenance);
+realAdapter.commit({preset:'forest',execution:'voxel',delta:{biology:.2},region:{x:0,y:0,z:0,radius:10}});
+assert.equal(realField.sample(0,0,0).biology,.4,'regional preset delta must change the actual sampled field at its center');
+assert.equal(realField.sample(0,0,10).biology,.2,'regional preset delta must fade to zero at the radius boundary');
+assert.equal(realField.getMutationCount(),1,'real field must contain the committed regional mutation');
+console.log('PASS: preset adapter changes real authoritative samples within the explicit region');
