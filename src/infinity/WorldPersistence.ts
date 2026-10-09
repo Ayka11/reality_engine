@@ -20,16 +20,25 @@ export class WorldPersistence {
     return this.prefix + chunkKey(cx, cy, cz)
   }
 
-  saveFieldState(state: unknown) {
-    const payload = { version: 1, seed: this.seed, state }
-    localStorage.setItem(this.fieldStateKey, JSON.stringify(payload))
-    return true
+  /**
+   * Persist the authoritative field without allowing browser storage failures
+   * (quota/security/private-mode restrictions) to escape into the runtime.
+   * false means the in-memory field changed but durable persistence failed.
+   */
+  saveFieldState(state: unknown): boolean {
+    try {
+      const payload = { version: 1, seed: this.seed, state }
+      localStorage.setItem(this.fieldStateKey, JSON.stringify(payload))
+      return true
+    } catch {
+      return false
+    }
   }
 
   loadFieldState<T = unknown>(): T | null {
-    const raw = localStorage.getItem(this.fieldStateKey)
-    if (!raw) return null
     try {
+      const raw = localStorage.getItem(this.fieldStateKey)
+      if (!raw) return null
       const payload = JSON.parse(raw) as {version:number;seed:string;state:T}
       if (payload.version !== 1 || payload.seed !== this.seed) return null
       return payload.state
@@ -38,8 +47,13 @@ export class WorldPersistence {
     }
   }
 
-  deleteFieldState() {
-    localStorage.removeItem(this.fieldStateKey)
+  deleteFieldState(): boolean {
+    try {
+      localStorage.removeItem(this.fieldStateKey)
+      return true
+    } catch {
+      return false
+    }
   }
 
   saveChunk(cx: number, cy: number, cz: number, objects: WorldObject[]) {
