@@ -1934,7 +1934,7 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(object)
-    this.objectSpatialIndex.upsert(object)
+      this.objectSpatialIndex.upsert(object)
       this.history.push({ type: 'add', object: { ...object } })
     }
     this.syncObjects()
@@ -1970,7 +1970,7 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(object)
-    this.objectSpatialIndex.upsert(object)
+      this.objectSpatialIndex.upsert(object)
       this.history.push({ type: 'add', object: { ...object } })
     }
     this.syncObjects()
