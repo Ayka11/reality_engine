@@ -46,16 +46,22 @@ export class AuthoritativeSculptTransactionCoordinator {
   }
 
   undo(): AuthoritativeSculptTransaction | null {
-    const transaction = this.undoStack.pop()
+    const transaction = this.undoStack[this.undoStack.length - 1]
     if (!transaction) return null
+    // Do not restore a stale snapshot over mutations made outside this coordinator.
+    if (JSON.stringify(this.field.serialize()) !== JSON.stringify(transaction.after)) return null
+    this.undoStack.pop()
     this.field.restore(transaction.before)
     this.redoStack.push(transaction)
     return transaction
   }
 
   redo(): AuthoritativeSculptTransaction | null {
-    const transaction = this.redoStack.pop()
+    const transaction = this.redoStack[this.redoStack.length - 1]
     if (!transaction) return null
+    // Redo is safe only while the field still matches the transaction's before-state.
+    if (JSON.stringify(this.field.serialize()) !== JSON.stringify(transaction.before)) return null
+    this.redoStack.pop()
     this.field.restore(transaction.after)
     this.undoStack.push(transaction)
     return transaction
