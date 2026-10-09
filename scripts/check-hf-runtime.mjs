@@ -92,6 +92,17 @@ try {
   assert.equal(appRelay.payload.type, 'delta');
   assert.equal(appRelay.payload.cells[0].value, 0.75);
 
+  const reboundIdentityRejected = new Promise(resolve => {
+    const onMessage = () => resolve(false);
+    bob.once('message', onMessage);
+    setTimeout(() => {
+      bob.off('message', onMessage);
+      resolve(true);
+    }, 300);
+  });
+  alice.send(JSON.stringify({ type: 'offer', from: 'mallory', to: 'bob', payload: 'identity-takeover' }));
+  assert.equal(await reboundIdentityRejected, true, 'socket must not send using an identity other than its announced peer ID');
+
   const spoofedMessageRejected = new Promise(resolve => {
     const onMessage = () => resolve(false);
     bob.once('message', onMessage);
