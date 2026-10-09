@@ -10,6 +10,7 @@ const required = [
   "vite.config.ts",
   "Dockerfile.hf",
   "server/signalling-server.js",
+  "server/hf-server.js",
   "dist/index.html",
 ];
 
@@ -71,6 +72,7 @@ console.log(JSON.stringify({
   appFile: "dist/index.html",
   buildCommand: "npm run build",
   frontendPort: 7860,
-  signallingServer: "server/signalling-server.js",
+  runtimeServer: "server/hf-server.js",
+  signallingPath: "/signal",
   inlineScriptsChecked: inlineScripts.length,
 }));
