@@ -85,5 +85,34 @@ const physics=new FieldModulatedPhysics();
 const centerModulation=physics.modulation(centerSample);
 const edgeModulation=physics.modulation(edgeSample);
 assert.ok(centerModulation.gravity>edgeModulation.gravity,'preset energy delta must propagate into physics gravity modulation');
-console.log('PASS: preset adapter changes real authoritative samples within the explicit region');
+
+// Verify the sampled mutation can change a construction decision, using the actual decision and construction contracts.
+let decisionSource=await fs.readFile('src/infinity/WorldDecisionLayer.ts','utf8');
+decisionSource=decisionSource.replace(/import { createDecisionRecord, type DecisionRecord } from ['"]\.\/DecisionRecord['"]/, 'const createDecisionRecord = (...args) => ({ args })');
+const decisionJs=ts.transpileModule(decisionSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const decisionModule={exports:{}};
+new Function('exports','module',decisionJs)(decisionModule.exports,decisionModule);
+let constructionSource=await fs.readFile('src/infinity/WorldConstructionContract.ts','utf8');
+const constructionJs=ts.transpileModule(constructionSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const constructionModule={exports:{}};
+new Function('exports','module',constructionJs)(constructionModule.exports,constructionModule);
+const {WorldDecisionLayer}=decisionModule.exports;
+const {WorldConstructionContract}=constructionModule.exports;
+const decisionSampler={
+  generator:{seaLevel:16,sampleHeight:()=>26},
+  sampleWorld(x,y,z){
+    return {...realField.sample(x,26,z),x,y:26,z,height:26,moisture:.5,biome:'plains',waterDepth:0};
+  },
+};
+const decisionWeights={slope:0,water:0,elevation:0,entropy:0,density:0,biology:1,information:0,distance:0};
+const decisionLayer=new WorldDecisionLayer(decisionSampler,decisionWeights,()=>({processes:['gravity','density','energy']}));
+const construction=new WorldConstructionContract(decisionLayer);
+realField.clear();
+assert.equal(construction.authorize('building',0,0).allowed,false,'baseline biology 0.2 should be below the buildability threshold');
+const beforeScore=construction.authorize('building',0,0).decision.buildability.score;
+realAdapter.commit({preset:'biology-test',execution:'voxel',delta:{biology:.2},region:{x:0,y:0,z:0,radius:10}});
+const afterDecision=construction.authorize('building',0,0);
+assert.ok(afterDecision.decision.buildability.score>beforeScore,'regional preset delta must change buildability score');
+assert.equal(afterDecision.allowed,true,'preset field mutation should cross the configured construction threshold');
+console.log('PASS: preset field mutation changes buildability and construction authorization');
 console.log('PASS: sampled energy change propagates into field-modulated physics');
