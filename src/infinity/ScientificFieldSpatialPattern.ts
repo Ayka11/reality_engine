@@ -46,6 +46,10 @@ export function assertScientificFieldSpatialPattern(pattern:ScientificFieldSpati
   if(pattern.kind==='smart-brush') {
     if(pattern.schemaVersion!=='scientific-smart-brush-v1') throw new Error('Unsupported smart brush schema')
     if(!Number.isFinite(pattern.radius)||pattern.radius<=0) throw new Error('Smart brush radius must be positive')
+    const brushNames: ScientificSmartBrushName[] = ['Volcano','Forest','Ocean','Crystal','Storm','Life Cluster','Radiation','Civilization Seed']
+    if(!brushNames.includes(pattern.name)) throw new Error('Unsupported smart brush name')
+    if(!pattern.origin || typeof pattern.origin!=='object' || ![pattern.origin.x,pattern.origin.y,pattern.origin.z].every(Number.isFinite)) throw new Error('Smart brush origin must be finite')
+    if(pattern.selectedLegacyZ!==undefined && !Number.isFinite(pattern.selectedLegacyZ)) throw new Error('Smart brush selected altitude must be finite')
     return
   }
   if(pattern.schemaVersion!=='scientific-field-pattern-v1') throw new Error('Unsupported scientific field pattern schema')
