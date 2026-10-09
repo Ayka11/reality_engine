@@ -29,6 +29,7 @@ jobs:
       - run: npm run test:construction --if-present
       - run: npm run test:law-physics --if-present
       - run: npm run test:signalling
+      - run: npm run test:hf-runtime
       - run: npm run test:solver-deployment
       - run: npm run test:field-profile --if-present
       - run: npm run test:mutable-field-profile --if-present
