@@ -28,7 +28,16 @@ export class AuthoritativeSculptTransactionCoordinator {
 
   commit(apply: () => WorldFieldMutation): AuthoritativeSculptTransaction {
     const before = this.field.serialize()
-    const mutation = apply()
+    let mutation: WorldFieldMutation
+    try {
+      mutation = apply()
+    } catch (error) {
+      // Keep the field atomic if a callback mutates it and then throws.
+      if (JSON.stringify(this.field.serialize()) !== JSON.stringify(before)) {
+        this.field.restore(before)
+      }
+      throw error
+    }
     const after = this.field.serialize()
 
     const transaction: AuthoritativeSculptTransaction = {
