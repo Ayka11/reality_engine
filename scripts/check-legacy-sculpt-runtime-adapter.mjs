@@ -33,4 +33,10 @@ adapter.noise(cell,4,2,8,17,{energy:1}); assert.equal(captured[3].spatialPattern
 adapter.pattern(cell,4,2,8,{energy:1}); assert.equal(captured[4].spatialPattern.kind,"pattern3");
 adapter.stamp(cell,4,2); assert.equal(captured[5].spatialPattern.kind,"stamp-lattice");
 adapter.smartBrush("Volcano",cell,4); assert.equal(captured[6].spatialPattern.name,"Volcano");
+adapter.smartBrush("Volcano",cell,4,2,{source:"ui-smart-brush"},.5);
+assert.equal(captured[7].delta.energy,4.5,"SmartBrush strength must scale authoritative energy delta");
+assert.equal(captured[7].delta.temperature,30,"SmartBrush strength must scale authoritative temperature delta");
+assert.equal(captured[7].metadata.strength,.5,"SmartBrush strength must be recorded in provenance");
+assert.throws(()=>adapter.smartBrush("Volcano",cell,4,2,{},Number.NaN),/strength must be finite/);
 console.log("PASS: legacy sculpt authoritative runtime adapter");
+console.log("PASS: SmartBrush strength reaches authoritative mutation");
