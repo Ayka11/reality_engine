@@ -29,7 +29,6 @@ jobs:
       - run: npm run test:construction --if-present
       - run: npm run test:law-physics --if-present
       - run: npm run test:signalling
-      - run: npm run test:hf-runtime
       - run: npm run test:solver-deployment
       - run: npm run test:field-profile --if-present
       - run: npm run test:mutable-field-profile --if-present
@@ -39,6 +38,7 @@ jobs:
       - run: npm run test:world-persistence-failures --if-present
       - run: npm run test:field-spatial-pattern --if-present
       - run: npm run build
+      - run: npm run test:hf-runtime
       - run: docker build --file Dockerfile --tag reality-engine:ci .
       - run: docker build --file Dockerfile.hf --tag reality-engine-hf:ci .
       - name: Smoke-test Hugging Face Docker container
