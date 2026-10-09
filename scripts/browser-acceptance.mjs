@@ -273,8 +273,9 @@ try {
     const baselineSample = world.authoritativeField.sample(4, 2, 5);
     const baselineCount = world.authoritativeField.getMutationCount();
 
-    window.infinityApplyLegacySmartBrush("Forest", { x: 4, y: 5, z: 2 }, 3, 2);
+    window.infinityApplyLegacySmartBrush("Forest", { x: 4, y: 5, z: 2 }, 3, 2, { strength: 0.5 });
     const afterSmartState = world.authoritativeField.serialize();
+    const smartMutation = afterSmartState.mutations[afterSmartState.mutations.length - 1];
     const afterSmartSample = world.authoritativeField.sample(4, 2, 5);
     const afterSmartCount = world.authoritativeField.getMutationCount();
 
@@ -299,7 +300,7 @@ try {
     return {
       baselineState, afterSmartState, afterOrdinaryState, undoOneState, undoTwoState,
       redoOneState, redoTwoState, baselineSample, afterSmartSample, afterOrdinarySample,
-      baselineCount, afterSmartCount, afterOrdinaryCount,
+      smartMutation, baselineCount, afterSmartCount, afterOrdinaryCount,
       history: window.infinityLegacySculptAuthoritativeHistory?.(),
     };
   });
@@ -312,6 +313,9 @@ try {
   }
   if (!(Number(sculptContract.afterSmartSample?.information) > Number(sculptContract.baselineSample?.information))) {
     throw new Error(`SmartBrush did not change the expected information field: ${JSON.stringify(sculptContract)}`);
+  }
+  if (sculptContract.smartMutation?.metadata?.strength !== 0.5 || sculptContract.smartMutation?.delta?.information !== 9) {
+    throw new Error(`SmartBrush UI strength was not propagated into the authoritative mutation: ${JSON.stringify(sculptContract.smartMutation)}`);
   }
   if (!(Number(sculptContract.afterOrdinarySample?.energy) > Number(sculptContract.afterSmartSample?.energy))) {
     throw new Error(`Ordinary sculpt did not apply after SmartBrush: ${JSON.stringify(sculptContract)}`);
