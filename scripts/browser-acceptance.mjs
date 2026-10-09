@@ -40,16 +40,27 @@ try {
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
 
+  await page.waitForFunction(() =>
+    typeof window.getRealityLawState === "function" &&
+    typeof window.setRealityLaw === "function" &&
+    !!window.realityLawBridge
+  );
   const lawBridgeContract = await page.evaluate(() => {
-    const engine = window.realityEngine;
     const getter = window.getRealityLawState;
-    if (!engine?.laws || typeof getter !== "function") return { error: "Simulation law bridge is not exposed" };
+    const setter = window.setRealityLaw;
+    if (!window.realityLawBridge || typeof getter !== "function" || typeof setter !== "function") {
+      return {
+        error: "Active connector law bridge is not exposed",
+        hasBridge: !!window.realityLawBridge,
+        hasGetter: typeof getter === "function",
+        hasSetter: typeof setter === "function",
+      };
+    }
     const before = getter();
-    engine.laws.toggleProcess(7, false); // GRAVITY
+    setter("Density Gravity", false, 0.4, 0.012);
     const afterOff = getter();
-    engine.laws.toggleProcess(7, true);
+    setter("Density Gravity", true, 0.4, 0.012);
     const afterOn = getter();
-    engine.laws.clearManualOverrides();
     return { before, afterOff, afterOn };
   });
   if (lawBridgeContract.error) throw new Error(lawBridgeContract.error);
