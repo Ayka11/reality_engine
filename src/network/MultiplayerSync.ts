@@ -122,6 +122,7 @@ export class MultiplayerSync {
   }
 
   private _handleMessage(data: BroadcastMsg): void {
+    if (!this.connected) return;
     if (!data || data.userId === this.userId || typeof data.userId !== 'string') return;
 
     if (data.type === 'join') {
