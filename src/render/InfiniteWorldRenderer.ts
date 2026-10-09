@@ -2520,7 +2520,6 @@ export class InfiniteWorldRenderer {
       this.objectSpatialIndex.upsert(object)
       this.history.push({ type: 'add', object: { ...object } })
       created.push(object)
-    this.objectSpatialIndex.upsert(object)
     }
     this.syncObjects()
     this.scheduleSave()
