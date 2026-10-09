@@ -33,6 +33,20 @@ try {
   assert.match(response.headers.get('content-type') || '', /text\/html/);
   assert.match(await response.text(), /Reality Engine/i);
 
+  const spaRoute = await fetch(`http://127.0.0.1:${port}/science-lab`);
+  assert.equal(spaRoute.status, 200, 'extensionless SPA route should fall back to index.html');
+  assert.match(spaRoute.headers.get('content-type') || '', /text\/html/);
+
+  const missingAsset = await fetch(`http://127.0.0.1:${port}/missing-bundle.js`);
+  assert.equal(missingAsset.status, 404, 'missing static assets must not silently return index.html');
+
+  const head = await fetch(`http://127.0.0.1:${port}/`, { method: 'HEAD' });
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), '');
+
+  const unsupportedMethod = await fetch(`http://127.0.0.1:${port}/`, { method: 'POST' });
+  assert.equal(unsupportedMethod.status, 405);
+
   const alice = new WebSocket(`ws://127.0.0.1:${port}/signal`);
   const bob = new WebSocket(`ws://127.0.0.1:${port}/signal`);
   sockets.push(alice, bob);
