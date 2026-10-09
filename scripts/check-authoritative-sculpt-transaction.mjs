@@ -86,4 +86,39 @@ coordinator.undo();
 assert.deepEqual(field.serialize(), initial);
 assert.equal(coordinator.historyLength, 0);
 assert.equal(coordinator.redoLength, 2);
+
+// External field changes must never be overwritten by a stale undo snapshot.
+const guardedField = new MutableWorldFieldProvider(base);
+const guardedCoordinator = new AuthoritativeSculptTransactionCoordinator(guardedField);
+guardedCoordinator.commit(() => guardedField.apply({
+  kind: "brush", x: 1, y: 2, z: 3, radius: 2,
+  delta: { energy: 5 }, metadata: { transaction: "coordinated" },
+}));
+guardedField.apply({
+  kind: "brush", x: 8, y: 9, z: 10, radius: 2,
+  delta: { information: 7 }, metadata: { transaction: "external" },
+});
+const stateBeforeConflictedUndo = guardedField.serialize();
+assert.equal(guardedCoordinator.undo(), null, "undo must refuse a stale snapshot");
+assert.deepEqual(guardedField.serialize(), stateBeforeConflictedUndo, "conflicted undo must preserve external mutation");
+assert.equal(guardedCoordinator.historyLength, 1, "conflicted undo must keep history available");
+
+// Redo must likewise refuse to overwrite a field changed after undo.
+const redoGuardField = new MutableWorldFieldProvider(base);
+const redoGuardCoordinator = new AuthoritativeSculptTransactionCoordinator(redoGuardField);
+redoGuardCoordinator.commit(() => redoGuardField.apply({
+  kind: "brush", x: 1, y: 2, z: 3, radius: 2,
+  delta: { energy: 5 }, metadata: { transaction: "redo-candidate" },
+}));
+assert.ok(redoGuardCoordinator.undo());
+redoGuardField.apply({
+  kind: "brush", x: 8, y: 9, z: 10, radius: 2,
+  delta: { information: 7 }, metadata: { transaction: "external-after-undo" },
+});
+const stateBeforeConflictedRedo = redoGuardField.serialize();
+assert.equal(redoGuardCoordinator.redo(), null, "redo must refuse a stale before-state");
+assert.deepEqual(redoGuardField.serialize(), stateBeforeConflictedRedo, "conflicted redo must preserve external mutation");
+assert.equal(redoGuardCoordinator.redoLength, 1, "conflicted redo must keep redo history available");
+
 console.log("PASS: authoritative sculpt transaction coordinator");
+console.log("PASS: conflicting undo/redo preserves external field mutations");
