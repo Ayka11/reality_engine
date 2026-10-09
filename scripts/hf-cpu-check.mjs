@@ -28,7 +28,7 @@ if (!/^sdk:\s*docker\s*$/m.test(readme)) {
 if (index.includes("server/signalling-server.js")) {
   throw new Error("Frontend must not load the internal signalling server as a script");
 }
-if (!/EXPOSE\s+7860/.test(dockerfile) || !/serve\s+dist\s+-l\s+7860/.test(dockerfile)) {
+if (!/EXPOSE\\s+7860/.test(dockerfile) || !/hf-server\\.js|serve\\s+dist\\s+-l\\s+7860/.test(dockerfile)) {
   throw new Error("Docker HF runtime must serve the built frontend on port 7860");
 }
 
