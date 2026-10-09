@@ -1,8 +1,9 @@
 /**
  * SolverClient — browser-side connector to the Python solver microservice.
  *
- * Endpoint: http://localhost:8765  (configured via SOLVER_URL)
- * Falls back gracefully when the microservice is offline.
+ * Endpoint: VITE_SOLVER_URL when configured. Local development defaults to
+ * http://localhost:8765; production builds do not probe the visitor's localhost.
+ * Falls back gracefully when the microservice is unavailable.
  *
  * Usage:
  *   const client = new SolverClient()
@@ -11,7 +12,8 @@
  *   client.applyResult(result, buf, W, H, NF)
  */
 
-export const SOLVER_URL = 'http://localhost:8765'
+const configuredSolverUrl = import.meta.env.VITE_SOLVER_URL?.trim()
+export const SOLVER_URL = configuredSolverUrl || (import.meta.env.DEV ? 'http://localhost:8765' : '')
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -84,6 +86,10 @@ export class SolverClient {
   onProgress: ((msg: string) => void) | null = null
 
   async checkStatus(): Promise<boolean> {
+    if (!SOLVER_URL) {
+      this.status.online = false
+      return false
+    }
     try {
       const res = await fetch(`${SOLVER_URL}/status`, {
         signal: AbortSignal.timeout(2500),
@@ -102,6 +108,9 @@ export class SolverClient {
   }
 
   async solve(req: SolverRequest): Promise<SolverResult> {
+    if (!SOLVER_URL) {
+      return { ok: false, error: 'No solver endpoint configured. Set VITE_SOLVER_URL to enable the Python solver service.' }
+    }
     if (!this.status.online) {
       return { ok: false, error: 'Solver microservice is offline. See setup instructions.' }
     }
@@ -121,13 +130,14 @@ export class SolverClient {
 
   /** Open a WebSocket for streaming progress during long solves. */
   connectWS(onMessage: (data: Record<string, unknown>) => void) {
-    if (this.ws?.readyState === WebSocket.OPEN) return
+    if (!SOLVER_URL || this.ws?.readyState === WebSocket.OPEN) return
     this.ws = new WebSocket(`${SOLVER_URL.replace('http','ws')}/ws`)
     this.ws.onmessage = (e) => { try { onMessage(JSON.parse(e.data)) } catch {} }
     this.ws.onerror   = () => { this.ws = null }
   }
 
   async solveWS(req: SolverRequest): Promise<SolverResult> {
+    if (!SOLVER_URL) return this.solve(req)
     return new Promise((resolve) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         this.connectWS(() => {})

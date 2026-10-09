@@ -26,7 +26,8 @@
     "test:legacy-sculpt-adapter": "node scripts/check-legacy-sculpt-runtime-adapter.mjs",
     "test:authoritative-sculpt-transaction": "node scripts/check-authoritative-sculpt-transaction.mjs",
     "test:world-persistence-failures": "node scripts/check-world-persistence-failures.mjs",
-    "audit:report": "node scripts/report-npm-audit.mjs"
+    "audit:report": "node scripts/report-npm-audit.mjs",
+    "test:solver-deployment": "node scripts/check-solver-client-deployment.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
