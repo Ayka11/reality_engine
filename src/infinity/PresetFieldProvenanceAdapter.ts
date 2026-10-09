@@ -40,6 +40,10 @@ export class PresetFieldProvenanceAdapter {
     if (input.delta && !Object.values(input.delta).every(Number.isFinite)) {
       throw new Error('Preset field delta values must be finite')
     }
+    const supportedFields = new Set(['energy', 'density', 'information', 'entropy', 'temperature', 'biology', 'material'])
+    if (input.delta && Object.keys(input.delta).some(field => !supportedFields.has(field))) {
+      throw new Error('Preset field delta contains an unsupported field')
+    }
     if (input.region && (![input.region.x, input.region.y, input.region.z, input.region.radius].every(Number.isFinite) || input.region.radius <= 0)) {
       throw new Error('Preset field region must have finite coordinates and a positive radius')
     }
