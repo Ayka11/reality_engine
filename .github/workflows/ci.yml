@@ -36,6 +36,8 @@ jobs:
       - run: npm run test:world-persistence-failures --if-present
       - run: npm run test:field-spatial-pattern --if-present
       - run: npm run build
+      - run: docker build --file Dockerfile --tag reality-engine:ci .
+      - run: docker build --file Dockerfile.hf --tag reality-engine-hf:ci .
       - run: npm run hf:smoke
       - run: npm run hf:cpu:check
       - run: npx playwright install chromium
