@@ -28,6 +28,11 @@ custom_headers:
 
 ---
 
+
+### Multiplayer rooms
+
+Same-browser tabs can collaborate through `BroadcastChannel`. Cross-device collaboration is opt-in: open the same deployment URL with a shared room token, for example `?room=team-room-2026-10`, on each device and then press **Multiplayer**. Use a unique, hard-to-guess token (12–64 letters, numbers, underscores or hyphens); do not reuse a public room token. Without a valid room token, each WebSocket connection is isolated and cannot receive other visitors' signalling messages. The room token is a shared-room identifier, not account authentication.
+
 ## What Is This
 
 Reality Engine is an **interactive physics sandbox** where the rules of physics are themselves simulated objects — they compete, mutate, and go extinct. Paint energy and matter onto a voxel grid. Thermodynamics, chemistry, geology, and life emerge from first principles. The laws governing them evolve in real time through a **MetaLaw system**: each law has fitness, strength, and mutation rate. Laws that produce complexity survive. Laws that collapse into chaos go dormant.
