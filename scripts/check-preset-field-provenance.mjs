@@ -27,6 +27,9 @@ assert.throws(()=>presetAdapter.commit({preset:'forest',execution:'worker',delta
 assert.equal(captured.length,0,'invalid preset delta must not mutate the field');
 assert.equal(events.length,0,'invalid preset delta must not record a successful provenance event');
 assert.throws(()=>presetAdapter.commit({preset:'forest',execution:'worker',delta:{biology:.2},region:{x:0,y:0,z:0,radius:0}}),/positive radius/);
+assert.throws(()=>presetAdapter.commit({preset:'forest',execution:'worker',delta:{biology:Number.NaN},region:{x:10,y:4,z:8,radius:12}}),/delta values must be finite/);
+assert.equal(captured.length,0,'invalid preset inputs must not mutate the field');
+assert.equal(events.length,0,'invalid preset inputs must not record provenance');
 const committed=presetAdapter.commit({preset:'forest',execution:'worker',delta:{biology:.2},region:{x:10,y:4,z:8,radius:12}});
 assert.equal(committed.fieldMutationId,1);
 assert.deepEqual({x:captured[0].x,y:captured[0].y,z:captured[0].z,radius:captured[0].radius},{x:10,y:4,z:8,radius:12});
