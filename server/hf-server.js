@@ -92,8 +92,9 @@ wss.on('connection', (ws, req) => {
   ws.on('message', raw => {
     let message;
     try { message = JSON.parse(raw.toString()); } catch { return; }
-    if (!message || typeof message.type !== 'string' || typeof message.from !== 'string') return;
+    if (!message || typeof message.type !== 'string' || typeof message.from !== 'string' || message.from.length < 1 || message.from.length > 64) return;
     if (message.type === 'announce') ws.peerId = message.from;
+    if (message.type === 'app-message' && (!message.payload || typeof message.payload !== 'object' || message.payload.userId !== message.from || typeof message.payload.type !== 'string')) return;
 
     for (const client of wss.clients) {
       if (client === ws || client.readyState !== WebSocket.OPEN) continue;
