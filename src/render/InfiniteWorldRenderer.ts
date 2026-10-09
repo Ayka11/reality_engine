@@ -115,6 +115,14 @@ export class InfiniteWorldRenderer {
 
   getWorldPosition() { return this.worldPosition.clone() }
 
+  private persistAuthoritativeFieldState(): boolean {
+    const saved = this.persistence.saveFieldState(this.authoritativeField.serialize())
+    if (!saved) {
+      console.warn('[persistence] Authoritative field changed in memory but could not be saved to localStorage')
+    }
+    return saved
+  }
+
   applyLegacySculptStroke(
     tool: 'inject' | 'erase' | 'noise' | 'stamp' | 'erode' | 'smooth' | 'pattern',
     cell: LegacyVoxelCoordinate,
@@ -146,7 +154,7 @@ export class InfiniteWorldRenderer {
         default: throw new Error(`Unsupported legacy sculpt tool: ${tool}`)
       }
     })
-    this.persistence.saveFieldState(this.authoritativeField.serialize())
+    this.persistAuthoritativeFieldState()
     return transaction.mutation
   }
 
@@ -164,18 +172,18 @@ export class InfiniteWorldRenderer {
         legacyCoordinate: { ...cell },
       }, options.strength ?? 1),
     )
-    this.persistence.saveFieldState(this.authoritativeField.serialize())
+    this.persistAuthoritativeFieldState()
     return transaction.mutation
   }
   undoLegacySculptAuthoritative() {
     const transaction = this.authoritativeSculptTransactions.undo()
-    if (transaction) this.persistence.saveFieldState(this.authoritativeField.serialize())
+    if (transaction) this.persistAuthoritativeFieldState()
     return transaction
   }
 
   redoLegacySculptAuthoritative() {
     const transaction = this.authoritativeSculptTransactions.redo()
-    if (transaction) this.persistence.saveFieldState(this.authoritativeField.serialize())
+    if (transaction) this.persistAuthoritativeFieldState()
     return transaction
   }
 
