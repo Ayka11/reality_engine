@@ -26,8 +26,8 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).infiniteWorldControls = world
   ;(window as any).infinityApplyLegacySculptStroke = (tool: any, cell: any, radius: number, strength: number, options?: any) =>
     world.applyLegacySculptStroke(tool, cell, radius, strength, options)
-  ;(window as any).infinityApplyLegacySmartBrush = (name: any, cell: any, radius: number, selectedLegacyZ?: number) =>
-    world.applyLegacySmartBrush(name, cell, radius, selectedLegacyZ)
+  ;(window as any).infinityApplyLegacySmartBrush = (name: any, cell: any, radius: number, selectedLegacyZ?: number, options?: { strength?: number }) =>
+    world.applyLegacySmartBrush(name, cell, radius, selectedLegacyZ, options)
   ;(window as any).infinityAuthoritativeFieldState = () => world.authoritativeField.getState()
   ;(window as any).infinityUndoLegacySculptAuthoritative = () => world.undoLegacySculptAuthoritative()
   ;(window as any).infinityRedoLegacySculptAuthoritative = () => world.redoLegacySculptAuthoritative()
