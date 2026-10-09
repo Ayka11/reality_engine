@@ -41,15 +41,16 @@ try {
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
 
   const lawBridgeContract = await page.evaluate(() => {
-    const engine = (window as any).realityEngine;
-    const getter = (window as any).getRealityLawState;
+    const engine = window.realityEngine;
+    const getter = window.getRealityLawState;
     if (!engine?.laws || typeof getter !== "function") return { error: "Simulation law bridge is not exposed" };
     const before = getter();
     engine.laws.toggleProcess(7, false); // GRAVITY
     const afterOff = getter();
     engine.laws.toggleProcess(7, true);
     const afterOn = getter();
-    engine.laws.clearManualOverrides();\n    return { before, afterOff, afterOn };
+    engine.laws.clearManualOverrides();
+    return { before, afterOff, afterOn };
   });
   if (lawBridgeContract.error) throw new Error(lawBridgeContract.error);
   if (!lawBridgeContract.before.processes.includes("gravity")) throw new Error("Infinite World law bridge missing default gravity process");
