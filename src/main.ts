@@ -1,3 +1,4 @@
+import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import { SimulationEngine } from './simulation/SimulationEngine';
 import { VoxelRenderer, LayerName } from './render/VoxelRenderer';
 import { Entity } from './simulation/EntityLayer';
