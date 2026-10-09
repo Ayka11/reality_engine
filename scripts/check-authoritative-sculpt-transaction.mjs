@@ -103,6 +103,20 @@ assert.equal(guardedCoordinator.undo(), null, "undo must refuse a stale snapshot
 assert.deepEqual(guardedField.serialize(), stateBeforeConflictedUndo, "conflicted undo must preserve external mutation");
 assert.equal(guardedCoordinator.historyLength, 1, "conflicted undo must keep history available");
 
+// A callback that mutates the field and then throws must leave no partial mutation.
+const atomicField = new MutableWorldFieldProvider(base);
+const atomicCoordinator = new AuthoritativeSculptTransactionCoordinator(atomicField);
+const atomicInitial = atomicField.serialize();
+assert.throws(() => atomicCoordinator.commit(() => {
+  atomicField.apply({
+    kind: "brush", x: 1, y: 2, z: 3, radius: 2,
+    delta: { energy: 11 }, metadata: { transaction: "partial-failure" },
+  });
+  throw new Error("simulated transaction failure");
+}), /simulated transaction failure/);
+assert.deepEqual(atomicField.serialize(), atomicInitial, "failed commit must roll back partial field mutation");
+assert.equal(atomicCoordinator.historyLength, 0, "failed commit must not create undo history");
+
 // Redo must likewise refuse to overwrite a field changed after undo.
 const redoGuardField = new MutableWorldFieldProvider(base);
 const redoGuardCoordinator = new AuthoritativeSculptTransactionCoordinator(redoGuardField);
