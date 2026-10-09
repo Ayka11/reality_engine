@@ -31,7 +31,7 @@ const dockerfile = fs.readFileSync(path.resolve("Dockerfile.hf"), "utf8");
 for (const [label, pattern] of [
   ["build command", /RUN\s+npm\s+run\s+build/],
   ["port 7860", /EXPOSE\s+7860/],
-  ["frontend server", /serve\s+dist\s+-l\s+7860/],
+  ["frontend server", /serve\s+dist\s+-l\s+7860|hf-server\.js/],
   ["signalling server", /server\/signalling-server\.js/],
 ]) {
   if (!pattern.test(dockerfile)) {
