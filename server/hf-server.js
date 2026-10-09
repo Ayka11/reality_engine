@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -80,15 +81,24 @@ const server = createServer(async (req, res) => {
 });
 
 const wss = new WebSocketServer({ server, path: '/signal' });
-wss.on('connection', ws => {
+const ROOM_PATTERN = /^[A-Za-z0-9_-]{3,64}$/;
+
+wss.on('connection', (ws, req) => {
+  const requestUrl = new URL(req.url || '/signal', 'http://localhost');
+  const requestedRoom = requestUrl.searchParams.get('room') || '';
+  // No room parameter means private-to-this-socket, never a global public room.
+  ws.roomId = ROOM_PATTERN.test(requestedRoom) ? requestedRoom : `private-${crypto.randomUUID()}`;
+
   ws.on('message', raw => {
     let message;
     try { message = JSON.parse(raw.toString()); } catch { return; }
     if (!message || typeof message.type !== 'string' || typeof message.from !== 'string') return;
     if (message.type === 'announce') ws.peerId = message.from;
+
     for (const client of wss.clients) {
       if (client === ws || client.readyState !== WebSocket.OPEN) continue;
-      if (message.to && client.peerId && client.peerId !== message.to) continue;
+      if (client.roomId !== ws.roomId) continue;
+      if (message.to && client.peerId !== message.to) continue;
       client.send(JSON.stringify(message));
     }
   });
