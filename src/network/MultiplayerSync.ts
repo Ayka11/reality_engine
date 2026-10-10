@@ -59,7 +59,11 @@ export class MultiplayerSync {
         let envelope: unknown;
         try { envelope = JSON.parse(String(event.data)); } catch { return; }
         if (!envelope || typeof envelope !== 'object') return;
-        const message = envelope as Partial<SignalEnvelope>;
+        const message = envelope as Partial<SignalEnvelope> & { type?: string; from?: string; payload?: BroadcastMsg };
+        if (message.type === 'announce' && typeof message.from === 'string') {
+          this._handleMessage({ type: 'join', userId: message.from, color: '#888' });
+          return;
+        }
         if (message.type !== 'app-message' || !message.payload || typeof message.payload.userId !== 'string') return;
         this._handleMessage(message.payload);
       });
@@ -72,6 +76,8 @@ export class MultiplayerSync {
   connect(): string {
     if (this.connected) return this.userId;
     this.connected = true;
+    // Re-announce on connect so the server replays peers that joined before this client.
+    this._sendSocket({ type: 'announce', from: this.userId });
     const join: BroadcastMsg = { type: 'join', userId: this.userId, color: this._randomColor() };
     this._send(join);
     this.syncInterval = setInterval(() => this._broadcastDelta(), 500);
