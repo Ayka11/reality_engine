@@ -98,13 +98,39 @@ requestAnimationFrame(() => {
   try { const sync = win['syncRealityLaws'] as (() => unknown) | undefined; if (sync) sync() } catch (error) { console.warn('[RealityLawBridge] initial sync failed', error) }
 })
 
+type SculptHistoryAcknowledgement = { action: 'undo' | 'redo'; applied: boolean; seq: number }
+const pendingSculptHistory = new Map<number, {
+  resolve: (acknowledgement: SculptHistoryAcknowledgement) => void
+  reject: (error: Error) => void
+  timer: number
+}>()
+let nextSculptHistoryRequestId = 0
+function requestChunkSculptHistory(action: 'undo' | 'redo'): Promise<SculptHistoryAcknowledgement> {
+  const requestId = ++nextSculptHistoryRequestId
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      pendingSculptHistory.delete(requestId)
+      reject(new Error(`Sparse worker sculpt ${action} acknowledgement timed out`))
+    }, 5000)
+    pendingSculptHistory.set(requestId, { resolve, reject, timer })
+    chunkWorker.postMessage({ cmd: action === 'undo' ? 'undoSculpt' : 'redoSculpt', requestId })
+  })
+}
+
 chunkWorker.onmessage = (e: MessageEvent) => {
   const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data
   workerBusy = false
 
   if (cmd === 'sculptHistoryApplied') {
     const previous = (win['lastChunkSculptHistory'] as { seq?: number } | undefined)?.seq ?? 0
-    win['lastChunkSculptHistory'] = { action: e.data.action, applied: e.data.applied, seq: previous + 1 }
+    const acknowledgement = { action: e.data.action, applied: e.data.applied, seq: previous + 1 }
+    win['lastChunkSculptHistory'] = acknowledgement
+    const pending = pendingSculptHistory.get(e.data.requestId)
+    if (pending) {
+      window.clearTimeout(pending.timer)
+      pendingSculptHistory.delete(e.data.requestId)
+      pending.resolve(acknowledgement)
+    }
     return
   }
 
@@ -261,8 +287,8 @@ win['paintChunkAt'] = (x: number, y: number, z: number, f: number, v: number, r:
   if (!trackHistory) clearUiSculptHistory()
   chunkWorker.postMessage({ cmd: 'paint', data: { x, y, z, f, v, r, mode: mode ?? 'add', trackHistory } })
 }
-win['undoChunkSculpt'] = () => chunkWorker.postMessage({ cmd: 'undoSculpt' })
-win['redoChunkSculpt'] = () => chunkWorker.postMessage({ cmd: 'redoSculpt' })
+win['undoChunkSculpt'] = () => requestChunkSculptHistory('undo')
+win['redoChunkSculpt'] = () => requestChunkSculptHistory('redo')
 win['clearChunkSculptHistory'] = () => chunkWorker.postMessage({ cmd: 'clearSculptHistory' })
 
 // Scene Composer APIs
