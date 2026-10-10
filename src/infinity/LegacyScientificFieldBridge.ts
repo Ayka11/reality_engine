@@ -104,11 +104,11 @@ export function sculptPaintToMutation(
 ): WorldFieldMutation {
   const p = legacyToWorldCoordinate(cell)
   const target: Partial<ScientificFieldSample> = {
-    ...(fields.energy === undefined ? {} : { energy: Math.max(0, strength * 4 * fields.energy) }),
+    ...(fields.energy === undefined ? {} : { energy: Math.max(0, Math.min(9999, strength * 400) / 100 * fields.energy) }),
     ...(fields.density === undefined ? {} : { density: clamp01(strength * 400 * fields.density) }),
-    ...(fields.information === undefined ? {} : { information: Math.max(0, strength * 40 * fields.information) }),
+    ...(fields.information === undefined ? {} : { information: Math.max(0, Math.min(999, strength * 400) / 10 * fields.information) }),
     ...(fields.entropy === undefined ? {} : { entropy: clamp01(strength * 400 * fields.entropy) }),
-    ...(fields.temperature === undefined ? {} : { temperature: Math.max(0, strength * 40 * fields.temperature) }),
+    ...(fields.temperature === undefined ? {} : { temperature: Math.max(0, Math.min(2000, strength * 400) / 10 * fields.temperature) }),
     ...(fields.bio === undefined ? {} : { biology: clamp01(strength * 400 * fields.bio) }),
   }
   const operations: NonNullable<WorldFieldMutation['operations']> = {}
