@@ -640,8 +640,8 @@ try {
   }
   const dragUndoAckStart = await page.evaluate(() => window.lastChunkSculptHistory?.seq ?? 0);
   await page.evaluate(() => window.undo());
-  await page.waitForFunction((start, count) => (window.lastChunkSculptHistory?.seq ?? 0) >= start + count,
-    dragUndoAckStart, dragOperations, { timeout: acceptanceTimeout });
+  await page.waitForFunction(({ start, count }) => (window.lastChunkSculptHistory?.seq ?? 0) >= start + count,
+    { start: dragUndoAckStart, count: dragOperations }, { timeout: acceptanceTimeout });
   const dragUndone = await page.evaluate(() => ({
     legacy: window.realitySculptTransactionRuntime.fingerprint(),
     field: window.infiniteWorld.authoritativeField.serialize(),
@@ -656,8 +656,8 @@ try {
   }
   const dragRedoAckStart = await page.evaluate(() => window.lastChunkSculptHistory?.seq ?? 0);
   await page.evaluate(() => window.redo());
-  await page.waitForFunction((start, count) => (window.lastChunkSculptHistory?.seq ?? 0) >= start + count,
-    dragRedoAckStart, dragOperations, { timeout: acceptanceTimeout });
+  await page.waitForFunction(({ start, count }) => (window.lastChunkSculptHistory?.seq ?? 0) >= start + count,
+    { start: dragRedoAckStart, count: dragOperations }, { timeout: acceptanceTimeout });
   const dragRedone = await page.evaluate(() => ({
     legacy: window.realitySculptTransactionRuntime.fingerprint(),
     field: window.infiniteWorld.authoritativeField.serialize(),
