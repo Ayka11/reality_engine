@@ -32,6 +32,7 @@ import { GraphCompiler, RealityGraph } from './creator';
 import { LawProcessEditor } from './ui/LawProcessEditor';
 import { SaveManager, WorldSaveSystem } from './world/save';
 import { SculptManager, type BrushFalloff, type SculptToolId } from './sculpt';
+import { UnifiedSculptTransactionCoordinator } from './sculpt/UnifiedSculptTransactionCoordinator';
 import { DistributedEngine } from './distributed/DistributedEngine';
 import { WorldComposer, PHI_ARCHETYPES, FIELD_BALANCES, COMPLEXITY_MODES, SPACETIME_PROFILES } from './ux/WorldComposer';
 import { WorldHealth } from './ux/WorldHealth';
@@ -292,12 +293,13 @@ document.addEventListener('keydown', e => {
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();
-    const stroke = e.shiftKey ? sculptManager.redo() : sculptManager.undo();
-    if (stroke) {
-      const authoritative = (window as any)[e.shiftKey ? 'infinityRedoLegacySculptAuthoritative' : 'infinityUndoLegacySculptAuthoritative'];
-      if (typeof authoritative === 'function') authoritative();
+    try {
+      const label = e.shiftKey ? unifiedSculptTransactions.redo() : unifiedSculptTransactions.undo();
+      if (sculptStatusEl) sculptStatusEl.textContent = label ? `${e.shiftKey ? 'Redo' : 'Undo'} ${label}` : 'Sculpt history empty';
+    } catch (error) {
+      console.error('[sculpt-transaction] keyboard undo/redo failed', error);
+      if (sculptStatusEl) sculptStatusEl.textContent = 'Sculpt transaction failed; state rollback attempted';
     }
-    if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `${e.shiftKey ? 'Redo' : 'Undo'} ${stroke.tool}` : 'Sculpt history empty';
   }
   if (e.key === 'r' || e.key === 'R') renderer.resetCamera();
 });
@@ -337,6 +339,21 @@ const speedSl = document.getElementById('speedSlider') as HTMLInputElement;
 const falloffEl = document.getElementById('brushFalloff') as HTMLSelectElement;
 const sculptStatusEl = document.getElementById('sculptStatus');
 const sculptManager = new SculptManager(sim.grid, () => sim.syncToGPU());
+const unifiedSculptTransactions = new UnifiedSculptTransactionCoordinator({
+  undoLegacy: () => sculptManager.undo(),
+  redoLegacy: () => sculptManager.redo(),
+  undoAuthoritative: () => (window as any).infinityUndoLegacySculptAuthoritative?.() ?? null,
+  redoAuthoritative: () => (window as any).infinityRedoLegacySculptAuthoritative?.() ?? null,
+  authoritativeCheckpoint: () => {
+    const field = (window as any).infiniteWorld?.authoritativeField;
+    return field ? JSON.stringify(field.serialize()) : 'missing-authoritative-field';
+  },
+});
+(window as any).realitySculptTransactionRuntime = {
+  undo: () => unifiedSculptTransactions.undo(),
+  redo: () => unifiedSculptTransactions.redo(),
+  history: () => unifiedSculptTransactions.getState(),
+};
 
 bsEl.addEventListener('input',    () => document.getElementById('bsOut')!.textContent    = bsEl.value);
 bStrEl.addEventListener('input',  () => document.getElementById('bStrOut')!.textContent  = bStrEl.value);
@@ -362,20 +379,22 @@ function readSculptFields() {
 readSculptFields();
 
 document.getElementById('sculptUndoBtn')?.addEventListener('click', () => {
-  const stroke = sculptManager.undo();
-  if (stroke) {
-    const authoritative = (window as any).infinityUndoLegacySculptAuthoritative;
-    if (typeof authoritative === 'function') authoritative();
+  try {
+    const label = unifiedSculptTransactions.undo();
+    if (sculptStatusEl) sculptStatusEl.textContent = label ? `Undo ${label}` : 'Nothing to undo';
+  } catch (error) {
+    console.error('[sculpt-transaction] UI undo failed', error);
+    if (sculptStatusEl) sculptStatusEl.textContent = 'Undo failed; state rollback attempted';
   }
-  if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `Undo ${stroke.tool}` : 'Nothing to undo';
 });
 document.getElementById('sculptRedoBtn')?.addEventListener('click', () => {
-  const stroke = sculptManager.redo();
-  if (stroke) {
-    const authoritative = (window as any).infinityRedoLegacySculptAuthoritative;
-    if (typeof authoritative === 'function') authoritative();
+  try {
+    const label = unifiedSculptTransactions.redo();
+    if (sculptStatusEl) sculptStatusEl.textContent = label ? `Redo ${label}` : 'Nothing to redo';
+  } catch (error) {
+    console.error('[sculpt-transaction] UI redo failed', error);
+    if (sculptStatusEl) sculptStatusEl.textContent = 'Redo failed; state rollback attempted';
   }
-  if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `Redo ${stroke.tool}` : 'Nothing to redo';
 });
 
 zSlice.max = String(sim.grid.D - 1);
@@ -394,6 +413,49 @@ document.getElementById('playbtn')!.addEventListener('click', () => {
     : '<i class="ti ti-player-play"></i> Play';
 });
 
+async function applySmartBrushTransaction(name: keyof typeof SMART_BRUSHES, x: number, y: number, radius: number, selectedZ: number, strength: number) {
+  return unifiedSculptTransactions.commit(`smart:${name}`,
+    () => sculptManager.applyCustomStroke({
+      tool: 'inject', position: [x, y, selectedZ], radius, strength,
+      falloff: sculptManager.currentBrush.falloff,
+      parameters: { smartBrush: name, selectedLegacyZ: selectedZ }, affectedChunks: [],
+    }, () => SMART_BRUSHES[name].paint(sim.grid, x, y, radius, selectedZ)),
+    () => {
+      const authoritative = (window as any).infinityApplyLegacySmartBrush;
+      if (typeof authoritative !== 'function') throw new Error('Authoritative SmartBrush runtime is unavailable');
+      return authoritative(name, { x, y, z: selectedZ }, radius, selectedZ, { strength, selectedLegacyZ: selectedZ });
+    },
+  );
+}
+async function applyLegacySculptTransaction(sculptTool: SculptToolId, cell: { x: number; y: number; z: number }, radius: number, strength: number) {
+  return unifiedSculptTransactions.commit(`brush:${sculptTool}`,
+    () => sculptManager.onMouseDrag([cell.x, cell.y, cell.z], sculptTool, {
+      materialId: activeMaterial, layer: renderer.layer, additive: sculptTool !== 'erase',
+    }),
+    () => {
+      const authoritative = (window as any).infinityApplyLegacySculptStroke;
+      if (typeof authoritative !== 'function') throw new Error('Authoritative sculpt runtime is unavailable');
+      return authoritative(sculptTool, cell, radius, strength, {
+        fields: { ...sculptManager.currentBrush.fields },
+        noiseScale: sculptManager.currentBrush.noiseScale, seed: sculptManager.currentBrush.seed,
+        period: 4, selectedLegacyZ: selZ,
+      });
+    },
+  );
+}
+(window as any).realitySculptTransactionRuntime.applySmartBrush = async (name: keyof typeof SMART_BRUSHES, x: number, y: number, radius: number, selectedZ: number, strength = 1) => {
+  sculptManager.currentBrush.radius = radius; sculptManager.currentBrush.strength = strength;
+  return applySmartBrushTransaction(name, x, y, radius, selectedZ, strength);
+};
+(window as any).realitySculptTransactionRuntime.applyStroke = async (
+  sculptTool: SculptToolId, cell: { x: number; y: number; z: number }, radius: number, strength: number,
+  fields: Partial<typeof sculptManager.currentBrush.fields> = { energy: 1 },
+) => {
+  sculptManager.currentBrush.radius = radius; sculptManager.currentBrush.strength = strength;
+  sculptManager.currentBrush.fields = { ...sculptManager.currentBrush.fields, ...fields };
+  return applyLegacySculptTransaction(sculptTool, cell, radius, strength);
+};
+
 // ── 3D Painting ───────────────────────────────────────────────────────────────
 async function paintAt(x: number, y: number, z: number, event?: PointerEvent) {
   const bs  = parseInt(bsEl.value);
@@ -402,32 +464,10 @@ async function paintAt(x: number, y: number, z: number, event?: PointerEvent) {
   sculptManager.currentBrush.strength = Math.max(0.1, str / 50);
   sculptManager.currentBrush.falloff = falloffEl.value as BrushFalloff;
 
-  // Smart brush intercept
+  // SmartBrush and ordinary strokes share the same transaction/undo stream.
   if (activeSmartBrush && SMART_BRUSHES[activeSmartBrush]) {
-    const smartStroke = await sculptManager.applyCustomStroke({
-      tool: 'inject',
-      position: [x, y, selZ],
-      radius: bs + 1,
-      strength: sculptManager.currentBrush.strength,
-      falloff: sculptManager.currentBrush.falloff,
-      parameters: {
-        smartBrush: activeSmartBrush,
-        selectedLegacyZ: selZ,
-      },
-      affectedChunks: [],
-    }, () => {
-      SMART_BRUSHES[activeSmartBrush!].paint(sim.grid, x, y, bs + 1, selZ);
-    });
-    const authoritative = (window as any).infinityApplyLegacySmartBrush;
-    if (typeof authoritative === 'function') {
-      authoritative(activeSmartBrush, { x, y, z: selZ }, bs + 1, selZ, {
-        strength: sculptManager.currentBrush.strength,
-        selectedLegacyZ: selZ,
-      });
-    }
-    if (sculptStatusEl) {
-      sculptStatusEl.textContent = `smart:${activeSmartBrush} r${smartStroke.radius} hist:${sculptManager.brushEngine.historyLength}`;
-    }
+    const smartStroke = await applySmartBrushTransaction(activeSmartBrush, x, y, bs + 1, selZ, sculptManager.currentBrush.strength);
+    if (sculptStatusEl) sculptStatusEl.textContent = `smart:${activeSmartBrush} r${smartStroke.radius} hist:${unifiedSculptTransactions.getState().undo}`;
     return;
   }
 
@@ -449,24 +489,8 @@ async function paintAt(x: number, y: number, z: number, event?: PointerEvent) {
   if (event?.shiftKey) sculptTool = 'smooth';
   if (event?.ctrlKey) sculptTool = 'erase';
 
-  const stroke = await sculptManager.onMouseDrag([x, y, z], sculptTool, {
-    materialId: activeMaterial,
-    layer: renderer.layer,
-    additive: sculptTool !== 'erase',
-  });
-  const authoritative = (window as any).infinityApplyLegacySculptStroke;
-  if (typeof authoritative === 'function') {
-    authoritative(sculptTool, { x, y, z }, bs, sculptManager.currentBrush.strength, {
-      fields: { ...sculptManager.currentBrush.fields },
-      noiseScale: sculptManager.currentBrush.noiseScale,
-      seed: sculptManager.currentBrush.seed,
-      period: 4,
-      selectedLegacyZ: selZ,
-    });
-  }
-  if (sculptStatusEl) {
-    sculptStatusEl.textContent = `${stroke.tool} r${stroke.radius} chunks:${stroke.affectedChunks.length} hist:${sculptManager.brushEngine.historyLength}`;
-  }
+  const stroke = await applyLegacySculptTransaction(sculptTool, { x, y, z }, bs, sculptManager.currentBrush.strength);
+  if (sculptStatusEl) sculptStatusEl.textContent = `${stroke.tool} r${stroke.radius} chunks:${stroke.affectedChunks.length} hist:${unifiedSculptTransactions.getState().undo}`;
 }
 
 canvas.addEventListener('pointerdown', e => {
