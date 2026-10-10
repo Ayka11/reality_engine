@@ -324,13 +324,25 @@ try {
     throw new Error(`Could not prepare a valid worker chunk restore fixture: ${JSON.stringify(chunkRestoreFixture)}`);
   }
   const restoreDispatch = await page.evaluate((coord) => {
+    const targetKey = `${coord.cx},${coord.cy},${coord.cz}`;
+    // Isolate the LRU fixture, then make the target the oldest entry while
+    // keeping the source snapshot in persistence.
+    for (const key of window.worldFieldChunkStoreState?.().keys ?? []) {
+      if (key === targetKey) continue;
+      const [cx, cy, cz] = key.split(",").map(Number);
+      window.evictWorldFieldChunk?.(cx, cy, cz);
+    }
+    for (let i = 0; i < 127; i++) window.populateWorldFieldChunk?.(1000 + i, 0, 0);
+    const before = window.worldFieldChunkStoreState?.();
+    if (!before?.keys?.includes(targetKey) || before.loaded !== before.capacity) {
+      return { started: false, targetRetained: true, error: "Could not establish deterministic LRU fixture", before };
+    }
     const started = window.restoreWorldFieldChunkSnapshot?.(coord.cx, coord.cy, coord.cz) ?? false;
     if (!started) return { started: false, targetRetained: true };
-    // Force LRU pressure while the worker restore is in flight. The source
-    // snapshot must not be overwritten by a partially rehydrated provider.
-    for (let i = 0; i < 160; i++) window.populateWorldFieldChunk?.(1000 + i, 0, 0);
+    // One new insertion should evict the oldest (target) while restore is active.
+    window.populateWorldFieldChunk?.(2000, 0, 0);
     const stats = window.worldFieldChunkStoreState?.();
-    return { started, targetRetained: stats?.keys?.includes(`${coord.cx},${coord.cy},${coord.cz}`) ?? true };
+    return { started, targetRetained: stats?.keys?.includes(targetKey) ?? true };
   }, chunkRestoreFixture.coord);
   if (!restoreDispatch.started) throw new Error("Worker chunk restore was rejected before dispatch");
   if (restoreDispatch.targetRetained) throw new Error("LRU stress did not evict the restore target; eviction guard was not exercised");
