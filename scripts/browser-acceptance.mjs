@@ -496,6 +496,7 @@ try {
     const afterOrdinaryState = world.authoritativeField.serialize();
     const afterOrdinarySample = world.authoritativeField.sample(samplePoint.x, samplePoint.y, samplePoint.z);
     const afterOrdinaryCount = world.authoritativeField.getMutationCount();
+    const mixedWorkerAckStart = window.lastChunkSculptHistory?.seq ?? 0;
     runtime.undo();
     const undoOneLegacy = fingerprint(legacyBuffer()), undoOneState = world.authoritativeField.serialize();
     runtime.undo();
@@ -503,6 +504,15 @@ try {
     runtime.redo();
     const redoOneLegacy = fingerprint(legacyBuffer()), redoOneState = world.authoritativeField.serialize();
     runtime.redo();
+    await new Promise((resolve, reject) => {
+      const deadline = Date.now() + 5000;
+      const check = () => {
+        if ((window.lastChunkSculptHistory?.seq ?? 0) >= mixedWorkerAckStart + 4) resolve();
+        else if (Date.now() > deadline) reject(new Error("Sparse worker did not acknowledge mixed sculpt undo/redo"));
+        else setTimeout(check, 10);
+      };
+      check();
+    });
     const redoTwoLegacy = fingerprint(legacyBuffer()), redoTwoState = world.authoritativeField.serialize();
     const mixedHistoryAfterRedo = runtime.history();
 
