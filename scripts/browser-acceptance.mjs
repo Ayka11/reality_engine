@@ -453,49 +453,43 @@ try {
     }
   }
 
-  // Authoritative sculpt transaction contract: verify ordered mixed history
-  // (SmartBrush -> ordinary legacy stroke -> undo x2 -> redo x2) and persistence.
-  const sculptContract = await page.evaluate(() => {
-    const world = window.infiniteWorld;
-    if (!world || typeof window.infinityApplyLegacySculptStroke !== "function" || typeof window.infinityApplyLegacySmartBrush !== "function") {
-      return { error: "Authoritative legacy sculpt bridge is not fully exposed" };
-    }
+  // Exercise the UI-owned transaction helpers used by paintAt, including legacy-grid parity.
+  const sculptContract = await page.evaluate(async () => {
+    const world = window.infiniteWorld, runtime = window.realitySculptTransactionRuntime;
+    if (!world || !runtime || typeof runtime.applySmartBrush !== "function" || typeof runtime.applyStroke !== "function") return { error: "Unified sculpt transaction runtime is not exposed" };
+    const baselineLegacy = window.realityEngine.grid.buffer.slice();
     const baselineState = world.authoritativeField.serialize();
     const baselineSample = world.authoritativeField.sample(4, 2, 5);
     const baselineCount = world.authoritativeField.getMutationCount();
-
-    window.infinityApplyLegacySmartBrush("Forest", { x: 4, y: 5, z: 2 }, 3, 2, { strength: 0.5 });
+    await runtime.applySmartBrush("Forest", 4, 5, 3, 2, 0.5);
+    const afterSmartLegacy = window.realityEngine.grid.buffer.slice();
     const afterSmartState = world.authoritativeField.serialize();
     const smartMutation = afterSmartState.mutations[afterSmartState.mutations.length - 1];
     const afterSmartSample = world.authoritativeField.sample(4, 2, 5);
     const afterSmartCount = world.authoritativeField.getMutationCount();
-
-    window.infinityApplyLegacySculptStroke("inject", { x: 4, y: 5, z: 2 }, 2, 1, {
-      fields: { energy: 1 },
-      selectedLegacyZ: 2,
-    });
+    await runtime.applyStroke("inject", { x: 4, y: 5, z: 2 }, 2, 1, { energy: 1 });
+    const afterOrdinaryLegacy = window.realityEngine.grid.buffer.slice();
     const afterOrdinaryState = world.authoritativeField.serialize();
     const afterOrdinarySample = world.authoritativeField.sample(4, 2, 5);
     const afterOrdinaryCount = world.authoritativeField.getMutationCount();
-
-    window.infinityUndoLegacySculptAuthoritative?.();
-    const undoOneState = world.authoritativeField.serialize();
-    window.infinityUndoLegacySculptAuthoritative?.();
-    const undoTwoState = world.authoritativeField.serialize();
-
-    window.infinityRedoLegacySculptAuthoritative?.();
-    const redoOneState = world.authoritativeField.serialize();
-    window.infinityRedoLegacySculptAuthoritative?.();
-    const redoTwoState = world.authoritativeField.serialize();
-
-    return {
-      baselineState, afterSmartState, afterOrdinaryState, undoOneState, undoTwoState,
-      redoOneState, redoTwoState, baselineSample, afterSmartSample, afterOrdinarySample,
-      smartMutation, baselineCount, afterSmartCount, afterOrdinaryCount,
-      history: window.infinityLegacySculptAuthoritativeHistory?.(),
-    };
+    runtime.undo();
+    const undoOneLegacy = window.realityEngine.grid.buffer.slice(), undoOneState = world.authoritativeField.serialize();
+    runtime.undo();
+    const undoTwoLegacy = window.realityEngine.grid.buffer.slice(), undoTwoState = world.authoritativeField.serialize();
+    runtime.redo();
+    const redoOneLegacy = window.realityEngine.grid.buffer.slice(), redoOneState = world.authoritativeField.serialize();
+    runtime.redo();
+    const redoTwoLegacy = window.realityEngine.grid.buffer.slice(), redoTwoState = world.authoritativeField.serialize();
+    const arraysEqual = (a, b) => a.length === b.length && a.every((value, index) => value === b[index]);
+    return { baselineState, afterSmartState, afterOrdinaryState, undoOneState, undoTwoState, redoOneState, redoTwoState,
+      baselineSample, afterSmartSample, afterOrdinarySample, smartMutation, baselineCount, afterSmartCount, afterOrdinaryCount,
+      history: runtime.history(), legacyParity: { undoOne: arraysEqual(undoOneLegacy, afterSmartLegacy), undoTwo: arraysEqual(undoTwoLegacy, baselineLegacy),
+        redoOne: arraysEqual(redoOneLegacy, afterSmartLegacy), redoTwo: arraysEqual(redoTwoLegacy, afterOrdinaryLegacy) } };
   });
   if (sculptContract.error) throw new Error(sculptContract.error);
+  if (!sculptContract.legacyParity?.undoOne || !sculptContract.legacyParity?.undoTwo || !sculptContract.legacyParity?.redoOne || !sculptContract.legacyParity?.redoTwo) {
+    throw new Error(`Unified sculpt history diverged between legacy and authoritative models: ${JSON.stringify(sculptContract.legacyParity)}`);
+  }
   if (sculptContract.afterSmartCount !== sculptContract.baselineCount + 1) {
     throw new Error(`SmartBrush did not create exactly one authoritative mutation: ${JSON.stringify(sculptContract)}`);
   }
