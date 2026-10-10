@@ -690,6 +690,7 @@ try {
     field: window.infiniteWorld.authoritativeField.serialize(),
     history: window.realitySculptTransactionRuntime.history(),
   }));
+  const workerAckBeforePartialUndo = await page.evaluate(() => window.lastChunkSculptHistory?.seq ?? 0);
   const injectedUndo = await page.evaluate(() => {
     const original = window.infinityUndoLegacySculptAuthoritative;
     let calls = 0;
@@ -710,6 +711,15 @@ try {
   }));
   if (injectedUndo.calls !== 2 || !injectedUndo.message.includes("undo rejected")) {
     throw new Error(`Partial undo failure was not injected as expected: ${JSON.stringify(injectedUndo)}`);
+  }
+  await page.waitForFunction(
+    (seq) => (window.lastChunkSculptHistory?.seq ?? 0) >= seq + 2,
+    workerAckBeforePartialUndo,
+    { timeout: acceptanceTimeout },
+  );
+  const partialUndoWorkerAck = await page.evaluate(() => window.lastChunkSculptHistory);
+  if (partialUndoWorkerAck?.action !== "redo" || partialUndoWorkerAck?.applied !== true) {
+    throw new Error("Sparse worker did not acknowledge rollback after partial undo: " + JSON.stringify(partialUndoWorkerAck));
   }
   if (partialUndoAfterFailure.legacy !== partialUndoBeforeFailure.legacy ||
       JSON.stringify(partialUndoAfterFailure.field) !== JSON.stringify(partialUndoBeforeFailure.field) ||
