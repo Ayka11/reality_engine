@@ -81,7 +81,7 @@ let worldFieldRestoreSeed = ''
 let worldFieldRestoreActive = false
 const worldFieldRestoreState = {
   restoreId: 0, expected: 0, acknowledged: 0, keys: [] as number[],
-  duplicateAcks: 0, unexpectedAcks: 0, staleAcks: 0, staleFrames: 0,
+  duplicateAcks: 0, unexpectedAcks: 0, staleAcks: 0, staleFrames: 0, discardedInflightFrames: 0,
   unexpectedFrames: 0, restoreFrameRestoreId: 0, restoreFrameKeys: [] as number[],
   workerBarrierComplete: false,
 }
@@ -268,7 +268,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   if (cmd === 'frame' && ab) {
     // Drop a tick frame that was already in flight when the restore barrier began.
     if (worldFieldRestoreActive && frameRestoreId === undefined) {
-      worldFieldRestoreState.staleFrames++
+      worldFieldRestoreState.discardedInflightFrames++
       return
     }
     if (frameRestoreId !== undefined) {
@@ -482,7 +482,7 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   worldFieldRestoreSeed = snapshot.seed
   Object.assign(worldFieldRestoreState, {
     restoreId, expected: restoreChunks.length, acknowledged: 0, keys: [],
-    duplicateAcks: 0, unexpectedAcks: 0, staleAcks: 0, staleFrames: 0,
+    duplicateAcks: 0, unexpectedAcks: 0, staleAcks: 0, staleFrames: 0, discardedInflightFrames: 0,
     unexpectedFrames: 0, restoreFrameRestoreId: 0, restoreFrameKeys: [], workerBarrierComplete: false,
   })
   worldFieldRestoreExpectedKeys.clear()
