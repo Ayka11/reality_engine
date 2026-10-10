@@ -115,6 +115,30 @@ export class InfiniteWorldRenderer {
 
   getWorldPosition() { return this.worldPosition.clone() }
 
+  applyAuthoritativeFieldMutation(input: Parameters<MutableWorldFieldProvider['apply']>[0]) {
+    const event = runtimeProvenance.record(input.kind === 'composer' ? 'world-state' : input.kind, {
+      ...input.metadata,
+      mutationKind: input.kind,
+      x: input.x,
+      y: input.y,
+      z: input.z,
+      radius: input.radius,
+    })
+    const mutation = this.authoritativeField.apply({
+      ...input,
+      metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id },
+    })
+    this.persistAuthoritativeFieldState()
+    return mutation
+  }
+
+  getAuthoritativeFieldState() {
+    return {
+      field: this.authoritativeField.getState(),
+      provenance: runtimeProvenance.getTrace(),
+    }
+  }
+
   private persistAuthoritativeFieldState(): boolean {
     const saved = this.persistence.saveFieldState(this.authoritativeField.serialize())
     if (!saved) {
