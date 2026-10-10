@@ -7,6 +7,7 @@ export class WorldPersistence {
   private readonly prefix: string
   private readonly manifestKey: string
   private readonly fieldStateKey: string
+  private readonly fieldCheckpointKey: string
   private readonly loaded = new Set<string>()
   private readonly cache = new Map<string, WorldObject[]>()
 
@@ -14,6 +15,7 @@ export class WorldPersistence {
     this.prefix = `reality-engine-world:${seed}:chunk:`
     this.manifestKey = `reality-engine-world:${seed}:manifest`
     this.fieldStateKey = `reality-engine-world:${seed}:field-state`
+    this.fieldCheckpointKey = `reality-engine-world:${seed}:field-checkpoint`
   }
 
   private key(cx: number, cy: number, cz: number) {
@@ -44,6 +46,37 @@ export class WorldPersistence {
       return payload.state
     } catch {
       return null
+    }
+  }
+
+  saveFieldCheckpoint(state: unknown): boolean {
+    try {
+      const payload = { version: 1, seed: this.seed, state }
+      localStorage.setItem(this.fieldCheckpointKey, JSON.stringify(payload))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  loadFieldCheckpoint<T = unknown>(): T | null {
+    try {
+      const raw = localStorage.getItem(this.fieldCheckpointKey)
+      if (!raw) return null
+      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
+      if (payload.version !== 1 || payload.seed !== this.seed) return null
+      return payload.state
+    } catch {
+      return null
+    }
+  }
+
+  deleteFieldCheckpoint(): boolean {
+    try {
+      localStorage.removeItem(this.fieldCheckpointKey)
+      return true
+    } catch {
+      return false
     }
   }
 
@@ -107,6 +140,7 @@ export class WorldPersistence {
     }
     localStorage.removeItem(this.manifestKey)
     localStorage.removeItem(this.fieldStateKey)
+    localStorage.removeItem(this.fieldCheckpointKey)
     this.loaded.clear()
     this.cache.clear()
   }
