@@ -29,13 +29,44 @@ try {
   page.on("pageerror", (error) => console.log(`[browser:pageerror] ${error.stack || error.message}`));
   page.on("requestfailed", (request) => console.log(`[browser:requestfailed] ${request.method()} ${request.url()} :: ${request.failure()?.errorText || "unknown"}`));
   await page.addInitScript(() => {
-    localStorage.clear();
+    if (sessionStorage.getItem("reality-engine-acceptance-cleaned") !== "1") {
+      localStorage.clear();
+      sessionStorage.setItem("reality-engine-acceptance-cleaned", "1");
+    }
   });
 
   console.log("[acceptance] opening primary page");
   await page.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
+
+  await page.waitForFunction(() =>
+    typeof window.getRealityLawState === "function" &&
+    typeof window.setRealityLaw === "function" &&
+    !!window.realityLawBridge
+  );
+  const lawBridgeContract = await page.evaluate(() => {
+    const getter = window.getRealityLawState;
+    const setter = window.setRealityLaw;
+    if (!window.realityLawBridge || typeof getter !== "function" || typeof setter !== "function") {
+      return {
+        error: "Active connector law bridge is not exposed",
+        hasBridge: !!window.realityLawBridge,
+        hasGetter: typeof getter === "function",
+        hasSetter: typeof setter === "function",
+      };
+    }
+    const before = getter();
+    setter("Density Gravity", false, 0.4, 0.012);
+    const afterOff = getter();
+    setter("Density Gravity", true, 0.4, 0.012);
+    const afterOn = getter();
+    return { before, afterOff, afterOn };
+  });
+  if (lawBridgeContract.error) throw new Error(lawBridgeContract.error);
+  if (!lawBridgeContract.before.processes.includes("gravity")) throw new Error("Infinite World law bridge missing default gravity process");
+  if (lawBridgeContract.afterOff.processes.includes("gravity")) throw new Error("Infinite World law bridge ignored gravity disable");
+  if (!lawBridgeContract.afterOn.processes.includes("gravity")) throw new Error("Infinite World law bridge ignored gravity restore");
   await page.waitForFunction(() => typeof window.infinityBuildZoneCost === "function");
   await page.waitForFunction(() => typeof window.infinityBuildZoneCost === "function");
 
@@ -121,9 +152,200 @@ try {
     throw new Error("Density Gravity could not be established as active before the build-law test");
   }
 
+  const fieldProbe = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const candidates = [
+      [0, 0], [32, 0], [-32, 0], [0, 32], [0, -32],
+      [64, 0], [-64, 0], [0, 64], [0, -64],
+      [128, 0], [-128, 0], [0, 128], [0, -128],
+      [256, 0], [-256, 0], [0, 256], [0, -256],
+      [384, 0], [-384, 0], [0, 384], [0, -384],
+      [512, 0], [-512, 0], [0, 512], [0, -512],
+    ];
+    for (const [x, z] of candidates) {
+      const sample = world.fieldSampler.sampleWorld(x, undefined, z);
+      const density = Number(sample.density);
+      if (Number.isFinite(density) && density > 0.05 && density < 1) {
+        return { x, y: Number(sample.y), z, sample };
+      }
+    }
+    return null;
+  });
+  if (!fieldProbe) {
+    throw new Error("No deterministic non-saturated World Field probe coordinate found");
+  }
+  const fieldPhysicsBaseline = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    const sample = world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
+    const modulation = world.fieldPhysics.modulation(sample);
+    const decision = world.buildZoneCost(probe.x, probe.z);
+    return { sample, modulation, decision };
+  }, fieldProbe);
+  const fieldMutation = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    return window.worldFieldMutate?.({
+      kind: "brush",
+      x: probe.x,
+      y: probe.y,
+      z: probe.z,
+      radius: 16,
+      delta: { energy: 0.2, density: 0.2 },
+      metadata: {
+        acceptance: "field-law-physics-construction-e2e",
+        probe: { x: probe.x, y: probe.y, z: probe.z },
+      },
+    });
+  }, fieldProbe);
+  const fieldPhysicsAfter = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    const sample = world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
+    const modulation = world.fieldPhysics.modulation(sample);
+    const decision = world.buildZoneCost(probe.x, probe.z);
+    return { sample, modulation, decision };
+  }, fieldProbe);
+
+  const beforeDensity = Number(fieldPhysicsBaseline?.sample?.density ?? NaN);
+  const afterDensity = Number(fieldPhysicsAfter?.sample?.density ?? NaN);
+  if (
+    !Number.isFinite(beforeDensity) ||
+    !Number.isFinite(afterDensity) ||
+    !(afterDensity > beforeDensity)
+  ) {
+    throw new Error(
+      `Authoritative field mutation did not increase sampled density: before=${beforeDensity}, after=${afterDensity}`
+    );
+  }
+
+  const beforeForcePush = Number(fieldPhysicsBaseline?.modulation?.forcePush ?? NaN);
+  const afterForcePush = Number(fieldPhysicsAfter?.modulation?.forcePush ?? NaN);
+  if (
+    !Number.isFinite(beforeForcePush) ||
+    !Number.isFinite(afterForcePush) ||
+    !(afterForcePush > beforeForcePush)
+  ) {
+    throw new Error(
+      `Density mutation did not reach field physics: before=${beforeForcePush}, after=${afterForcePush}`
+    );
+  }
+
+  const beforeDensityCost = Number(fieldPhysicsBaseline?.decision?.decisionComponents?.density ?? NaN);
+  const afterDensityCost = Number(fieldPhysicsAfter?.decision?.decisionComponents?.density ?? NaN);
+  if (
+    !Number.isFinite(beforeDensityCost) ||
+    !Number.isFinite(afterDensityCost) ||
+    !(afterDensityCost > beforeDensityCost)
+  ) {
+    throw new Error(
+      `Field density mutation did not reach construction decision scoring: before=${beforeDensityCost}, after=${afterDensityCost}`
+    );
+  }
+
+  if (!fieldMutation?.metadata?.provenanceEventId) {
+    throw new Error("Field mutation did not receive runtime provenance");
+  }
+
+  // Persistence regression: authoritative field edits must survive Save -> Load,
+  // not only the object layer. Save a known mutation, perturb it, then restore.
+  const fieldPersistenceBaseline = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    world.saveWorld();
+    return {
+      sample: world.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
+      state: world.getAuthoritativeFieldState().field,
+    };
+  }, fieldProbe);
+  await page.evaluate((probe) => window.worldFieldMutate?.({
+    kind: "brush",
+    x: probe.x,
+    y: probe.y,
+    z: probe.z,
+    radius: 16,
+    delta: { energy: 5 },
+    metadata: { acceptance: "field-persistence-perturbation" },
+  }), fieldProbe);
+  const fieldPersistencePerturbed = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    return world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
+  }, fieldProbe);
+  if (!(Number(fieldPersistencePerturbed?.energy ?? NaN) > Number(fieldPersistenceBaseline?.sample?.energy ?? NaN))) {
+    throw new Error("Field persistence perturbation did not change the authoritative sample");
+  }
+  const restoredFieldPersistence = await page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    world.loadWorld();
+    return {
+      sample: world.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
+      state: world.getAuthoritativeFieldState().field,
+    };
+  }, fieldProbe);
+  if (
+    !Number.isFinite(Number(restoredFieldPersistence?.sample?.density ?? NaN)) ||
+    Math.abs(Number(restoredFieldPersistence.sample.energy) - Number(fieldPersistenceBaseline.sample.energy)) > 1e-9
+  ) {
+    throw new Error(
+      `Authoritative field did not restore from Save -> Load: saved=${fieldPersistenceBaseline.sample.energy}, restored=${restoredFieldPersistence.sample.energy}`
+    );
+  }
+  if (Number(restoredFieldPersistence?.state?.mutationCount ?? -1) !== Number(fieldPersistenceBaseline?.state?.mutationCount ?? -2)) {
+    throw new Error(
+      `Authoritative field mutation count did not restore: saved=${fieldPersistenceBaseline.state.mutationCount}, restored=${restoredFieldPersistence.state.mutationCount}`
+    );
+  }
+
+
+  // Frontend parity regression: the visible Scientific Field tab must mutate the same
+  // authoritative provider used by the direct runtime API.
+  await page.evaluate(() => {
+    window.setInfinityDockPosition?.("right");
+    window.toggleWorldToolbar?.(true);
+  });
+  await page.waitForSelector("#vTabField");
+  await page.locator("#vTabField").click();
+  await page.waitForSelector("#vFieldEnergy");
+  const uiFieldBaseline = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const p = world.getWorldPosition();
+    const y = world.getWorldEnvironment().worldPosition.y;
+    return {
+      position: { x: p.x, y, z: p.z },
+      sample: world.fieldSampler.sample(p.x, y, p.z),
+      state: world.getAuthoritativeFieldState().field,
+    };
+  });
+  await page.locator("#vFieldEnergy").click();
+  const uiFieldAfter = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const p = world.getWorldPosition();
+    const y = world.getWorldEnvironment().worldPosition.y;
+    return {
+      sample: world.fieldSampler.sample(p.x, y, p.z),
+      state: world.getAuthoritativeFieldState().field,
+    };
+  });
+  if (!(Number(uiFieldAfter?.sample?.energy ?? NaN) > Number(uiFieldBaseline?.sample?.energy ?? NaN))) {
+    throw new Error("Scientific Field UI brush did not mutate the authoritative energy field");
+  }
+  if (Number(uiFieldAfter?.state?.mutationCount ?? 0) !== Number(uiFieldBaseline?.state?.mutationCount ?? 0) + 1) {
+    throw new Error("Scientific Field UI brush did not create exactly one authoritative mutation");
+  }
+  if (uiFieldAfter?.state?.lastMutation?.metadata?.source !== "infinity-world-ui") {
+    throw new Error("Scientific Field UI brush mutation lost its frontend provenance metadata");
+  }
+
   const lawBuildBefore = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
   const lawDisabled = await page.evaluate(() => window.getRealityLawState?.());
+  const lawPhysicsDisabled = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const sample = world.fieldSampler.sampleWorld(0, undefined, 0);
+    return world.lawPhysicsContract.apply(world.fieldPhysics.modulation(sample));
+  });
+  if (Number(lawPhysicsDisabled?.forcePush ?? -1) !== 0) {
+    throw new Error("Disabling Density Gravity did not veto density-driven Infinity physics");
+  }
+  if (Number(lawPhysicsDisabled?.gravity ?? -1) !== 0) {
+    throw new Error("Disabling Density Gravity did not veto gravity-driven Infinity physics");
+  }
   if (lawDisabled?.processes?.includes("gravity") || lawDisabled?.processes?.includes("density")) {
     throw new Error("Disabling Density Gravity did not reach the runtime process state");
   }
@@ -229,6 +451,89 @@ try {
     if (ack?.name !== preset || !ack?.stats) {
       throw new Error(`Preset ${preset} did not reach ChunkSimWorker with a valid acknowledgement`);
     }
+  }
+
+  // Authoritative sculpt transaction contract: verify ordered mixed history
+  // (SmartBrush -> ordinary legacy stroke -> undo x2 -> redo x2) and persistence.
+  const sculptContract = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (!world || typeof window.infinityApplyLegacySculptStroke !== "function" || typeof window.infinityApplyLegacySmartBrush !== "function") {
+      return { error: "Authoritative legacy sculpt bridge is not fully exposed" };
+    }
+    const baselineState = world.authoritativeField.serialize();
+    const baselineSample = world.authoritativeField.sample(4, 2, 5);
+    const baselineCount = world.authoritativeField.getMutationCount();
+
+    window.infinityApplyLegacySmartBrush("Forest", { x: 4, y: 5, z: 2 }, 3, 2, { strength: 0.5 });
+    const afterSmartState = world.authoritativeField.serialize();
+    const smartMutation = afterSmartState.mutations[afterSmartState.mutations.length - 1];
+    const afterSmartSample = world.authoritativeField.sample(4, 2, 5);
+    const afterSmartCount = world.authoritativeField.getMutationCount();
+
+    window.infinityApplyLegacySculptStroke("inject", { x: 4, y: 5, z: 2 }, 2, 1, {
+      fields: { energy: 1 },
+      selectedLegacyZ: 2,
+    });
+    const afterOrdinaryState = world.authoritativeField.serialize();
+    const afterOrdinarySample = world.authoritativeField.sample(4, 2, 5);
+    const afterOrdinaryCount = world.authoritativeField.getMutationCount();
+
+    window.infinityUndoLegacySculptAuthoritative?.();
+    const undoOneState = world.authoritativeField.serialize();
+    window.infinityUndoLegacySculptAuthoritative?.();
+    const undoTwoState = world.authoritativeField.serialize();
+
+    window.infinityRedoLegacySculptAuthoritative?.();
+    const redoOneState = world.authoritativeField.serialize();
+    window.infinityRedoLegacySculptAuthoritative?.();
+    const redoTwoState = world.authoritativeField.serialize();
+
+    return {
+      baselineState, afterSmartState, afterOrdinaryState, undoOneState, undoTwoState,
+      redoOneState, redoTwoState, baselineSample, afterSmartSample, afterOrdinarySample,
+      smartMutation, baselineCount, afterSmartCount, afterOrdinaryCount,
+      history: window.infinityLegacySculptAuthoritativeHistory?.(),
+    };
+  });
+  if (sculptContract.error) throw new Error(sculptContract.error);
+  if (sculptContract.afterSmartCount !== sculptContract.baselineCount + 1) {
+    throw new Error(`SmartBrush did not create exactly one authoritative mutation: ${JSON.stringify(sculptContract)}`);
+  }
+  if (sculptContract.afterOrdinaryCount !== sculptContract.afterSmartCount + 1) {
+    throw new Error(`Ordinary sculpt did not create exactly one authoritative mutation: ${JSON.stringify(sculptContract)}`);
+  }
+  if (!(Number(sculptContract.afterSmartSample?.information) > Number(sculptContract.baselineSample?.information))) {
+    throw new Error(`SmartBrush did not change the expected information field: ${JSON.stringify(sculptContract)}`);
+  }
+  if (sculptContract.smartMutation?.metadata?.strength !== 0.5 || sculptContract.smartMutation?.delta?.information !== 9) {
+    throw new Error(`SmartBrush UI strength was not propagated into the authoritative mutation: ${JSON.stringify(sculptContract.smartMutation)}`);
+  }
+  if (!(Number(sculptContract.afterOrdinarySample?.energy) > Number(sculptContract.afterSmartSample?.energy))) {
+    throw new Error(`Ordinary sculpt did not apply after SmartBrush: ${JSON.stringify(sculptContract)}`);
+  }
+  if (JSON.stringify(sculptContract.undoOneState) !== JSON.stringify(sculptContract.afterSmartState)) {
+    throw new Error("Mixed sculpt undo #1 did not restore the SmartBrush state");
+  }
+  if (JSON.stringify(sculptContract.undoTwoState) !== JSON.stringify(sculptContract.baselineState)) {
+    throw new Error("Mixed sculpt undo #2 did not restore the baseline state");
+  }
+  if (JSON.stringify(sculptContract.redoOneState) !== JSON.stringify(sculptContract.afterSmartState)) {
+    throw new Error("Mixed sculpt redo #1 did not restore the SmartBrush state");
+  }
+  if (JSON.stringify(sculptContract.redoTwoState) !== JSON.stringify(sculptContract.afterOrdinaryState)) {
+    throw new Error("Mixed sculpt redo #2 did not restore the ordinary sculpt state");
+  }
+  if (sculptContract.history?.undo !== 2 || sculptContract.history?.redo !== 0) {
+    throw new Error(`Mixed sculpt history lengths are incorrect after redo x2: ${JSON.stringify(sculptContract.history)}`);
+  }
+
+  const persistedSculptState = sculptContract.redoTwoState;
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector("#c3d");
+  await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
+  const reloadedSculptState = await page.evaluate(() => window.infiniteWorld?.authoritativeField?.serialize());
+  if (JSON.stringify(reloadedSculptState) !== JSON.stringify(persistedSculptState)) {
+    throw new Error("Mixed authoritative sculpt persistence did not survive a page reload");
   }
 
   const before = await page.evaluate(() => window.worldGenerationHealth());

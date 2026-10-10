@@ -34,6 +34,12 @@ export class SculptManager {
     this.brushEngine = new BrushEngine(grid);
   }
 
+  async applyCustomStroke(stroke: BrushStroke, apply: () => void): Promise<BrushStroke> {
+    this.lastStroke = await this.brushEngine.applyCustomStroke(stroke, apply);
+    this.onChanged?.();
+    return this.lastStroke;
+  }
+
   async onMouseDrag(
     worldPos: [number, number, number],
     tool: SculptToolId,

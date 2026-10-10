@@ -41,6 +41,25 @@ export class BrushEngine {
     ]) this.tools.set(tool.id, tool);
   }
 
+  async applyCustomStroke(stroke: BrushStroke, apply: () => void): Promise<BrushStroke> {
+    const before = this.grid.buffer.slice();
+    const chunks = this.getAffectedChunks(stroke);
+    stroke.affectedChunks = chunks.map(chunk => this.grid.getChunkKey(chunk.cx, chunk.cy, chunk.cz));
+    apply();
+    const after = this.grid.buffer.slice();
+    this.grid.syncDenseToChunks();
+    this.grid.markChunksDirty(stroke.affectedChunks);
+    this.history.push({
+      stroke: { ...stroke, affectedChunks: [...stroke.affectedChunks] },
+      edits: [],
+      fullBefore: before,
+      fullAfter: after,
+    });
+    if (this.history.length > this.maxHistory) this.history.shift();
+    this.redoStack = [];
+    return stroke;
+  }
+
   async applyStroke(stroke: BrushStroke): Promise<BrushStroke> {
     const chunks = this.getAffectedChunks(stroke);
     stroke.affectedChunks = chunks.map(chunk => this.grid.getChunkKey(chunk.cx, chunk.cy, chunk.cz));
@@ -86,7 +105,8 @@ export class BrushEngine {
   undo(): BrushStroke | null {
     const record = this.history.pop();
     if (!record) return null;
-    for (const edit of record.edits) this.grid.buffer.set(edit.before, edit.offset);
+    if (record.fullBefore) this.grid.buffer.set(record.fullBefore);
+    else for (const edit of record.edits) this.grid.buffer.set(edit.before, edit.offset);
     this.grid.syncDenseToChunks();
     this.grid.markChunksDirty(record.stroke.affectedChunks);
     this.redoStack.push(record);
@@ -96,7 +116,8 @@ export class BrushEngine {
   redo(): BrushStroke | null {
     const record = this.redoStack.pop();
     if (!record) return null;
-    for (const edit of record.edits) this.grid.buffer.set(edit.after, edit.offset);
+    if (record.fullAfter) this.grid.buffer.set(record.fullAfter);
+    else for (const edit of record.edits) this.grid.buffer.set(edit.after, edit.offset);
     this.grid.syncDenseToChunks();
     this.grid.markChunksDirty(record.stroke.affectedChunks);
     this.history.push(record);

@@ -1,3 +1,4 @@
+import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import { SimulationEngine } from './simulation/SimulationEngine';
 import { VoxelRenderer, LayerName } from './render/VoxelRenderer';
 import { Entity } from './simulation/EntityLayer';
@@ -49,6 +50,25 @@ import './ui/ux-system.css';
 
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
+
+// Canonical law-state bridge consumed by Infinite World decision and physics contracts.
+// Keep this derived from the same LawEngine instance that drives the simulation.
+const REALITY_LAW_PROCESS_NAMES: Record<number, string> = {
+  0: 'energy', 1: 'thermo', 2: 'density', 3: 'entropy', 4: 'info', 5: 'bio',
+  6: 'wave', 7: 'gravity', 8: 'phase', 9: 'metabolism', 10: 'signal',
+  11: 'crystallization', 12: 'radiation', 13: 'pressure', 14: 'rotation', 15: 'erosion',
+};
+(window as unknown as Record<string, unknown>).getRealityLawState = () => {
+  const mask = sim.laws.activeProcessMask;
+  return {
+    laws: sim.laws.laws.map(law => ({ name: law.name, active: law.active, fitness: law.fitness, strength: 1 })),
+    processes: Object.entries(REALITY_LAW_PROCESS_NAMES)
+      .filter(([id]) => (mask & (1 << Number(id))) !== 0)
+      .map(([, name]) => name),
+  };
+};
+
+
 const infinityScale = createInfinityScaleRuntime();
 const canvas   = document.getElementById('gc') as HTMLCanvasElement;
 const renderer = new VoxelRenderer(canvas, sim.grid.W, sim.grid.H, sim.grid.D);
@@ -273,6 +293,10 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();
     const stroke = e.shiftKey ? sculptManager.redo() : sculptManager.undo();
+    if (stroke) {
+      const authoritative = (window as any)[e.shiftKey ? 'infinityRedoLegacySculptAuthoritative' : 'infinityUndoLegacySculptAuthoritative'];
+      if (typeof authoritative === 'function') authoritative();
+    }
     if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `${e.shiftKey ? 'Redo' : 'Undo'} ${stroke.tool}` : 'Sculpt history empty';
   }
   if (e.key === 'r' || e.key === 'R') renderer.resetCamera();
@@ -339,10 +363,18 @@ readSculptFields();
 
 document.getElementById('sculptUndoBtn')?.addEventListener('click', () => {
   const stroke = sculptManager.undo();
+  if (stroke) {
+    const authoritative = (window as any).infinityUndoLegacySculptAuthoritative;
+    if (typeof authoritative === 'function') authoritative();
+  }
   if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `Undo ${stroke.tool}` : 'Nothing to undo';
 });
 document.getElementById('sculptRedoBtn')?.addEventListener('click', () => {
   const stroke = sculptManager.redo();
+  if (stroke) {
+    const authoritative = (window as any).infinityRedoLegacySculptAuthoritative;
+    if (typeof authoritative === 'function') authoritative();
+  }
   if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `Redo ${stroke.tool}` : 'Nothing to redo';
 });
 
@@ -372,8 +404,30 @@ async function paintAt(x: number, y: number, z: number, event?: PointerEvent) {
 
   // Smart brush intercept
   if (activeSmartBrush && SMART_BRUSHES[activeSmartBrush]) {
-    SMART_BRUSHES[activeSmartBrush].paint(sim.grid, x, y, bs + 1, selZ);
-    sim.syncToGPU();
+    const smartStroke = await sculptManager.applyCustomStroke({
+      tool: 'inject',
+      position: [x, y, selZ],
+      radius: bs + 1,
+      strength: sculptManager.currentBrush.strength,
+      falloff: sculptManager.currentBrush.falloff,
+      parameters: {
+        smartBrush: activeSmartBrush,
+        selectedLegacyZ: selZ,
+      },
+      affectedChunks: [],
+    }, () => {
+      SMART_BRUSHES[activeSmartBrush!].paint(sim.grid, x, y, bs + 1, selZ);
+    });
+    const authoritative = (window as any).infinityApplyLegacySmartBrush;
+    if (typeof authoritative === 'function') {
+      authoritative(activeSmartBrush, { x, y, z: selZ }, bs + 1, selZ, {
+        strength: sculptManager.currentBrush.strength,
+        selectedLegacyZ: selZ,
+      });
+    }
+    if (sculptStatusEl) {
+      sculptStatusEl.textContent = `smart:${activeSmartBrush} r${smartStroke.radius} hist:${sculptManager.brushEngine.historyLength}`;
+    }
     return;
   }
 
@@ -400,6 +454,16 @@ async function paintAt(x: number, y: number, z: number, event?: PointerEvent) {
     layer: renderer.layer,
     additive: sculptTool !== 'erase',
   });
+  const authoritative = (window as any).infinityApplyLegacySculptStroke;
+  if (typeof authoritative === 'function') {
+    authoritative(sculptTool, { x, y, z }, bs, sculptManager.currentBrush.strength, {
+      fields: { ...sculptManager.currentBrush.fields },
+      noiseScale: sculptManager.currentBrush.noiseScale,
+      seed: sculptManager.currentBrush.seed,
+      period: 4,
+      selectedLegacyZ: selZ,
+    });
+  }
   if (sculptStatusEl) {
     sculptStatusEl.textContent = `${stroke.tool} r${stroke.radius} chunks:${stroke.affectedChunks.length} hist:${sculptManager.brushEngine.historyLength}`;
   }
@@ -1363,7 +1427,11 @@ document.getElementById('btnMultiplayer')?.addEventListener('click', () => {
     const uid = multiplay.connect();
     btn.textContent = `Disconnect (${uid})`;
     btn.style.color = '#4caf7d';
-    document.getElementById('scriptLog')!.textContent = `Connected as ${uid} — open another tab to collaborate`;
+    const room = new URLSearchParams(window.location.search).get('room') || '';
+    const sharedRoom = /^[A-Za-z0-9_-]{12,64}$/.test(room);
+    document.getElementById('scriptLog')!.textContent = sharedRoom
+      ? `Connected as ${uid} — cross-device room: ${room}`
+      : `Connected as ${uid} — same-browser tabs only. For cross-device collaboration, open this URL with ?room=YOUR_SHARED_TOKEN on each device.`;
   } else {
     multiplay.disconnect();
     btn.textContent = '🔗 Multiplayer';

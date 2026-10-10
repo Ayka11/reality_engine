@@ -39,7 +39,17 @@ exchange.publish({cx:1,cy:0,cz:0}, "x", -1, face.samples);
 assert.equal(exchange.validatePair({cx:0,cy:0,cz:0}, "x").paired, true);
 assert.equal(exchange.validatePair({cx:0,cy:0,cz:0}, "x").maxDelta, 0);
 
-const mutableMod = await load("src/infinity/MutableWorldFieldProvider.ts");
+const spatialJs = await readFile(new URL("src/infinity/ScientificFieldSpatialPattern.ts", root), "utf8");
+const spatialCompiled = ts.transpileModule(spatialJs, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+const spatialUrl = `data:text/javascript;base64,${Buffer.from(spatialCompiled).toString("base64")}`;
+const profileJs = await readFile(new URL("src/infinity/ScientificFieldProfile.ts", root), "utf8");
+const profileCompiled = ts.transpileModule(profileJs, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+const profileUrl = `data:text/javascript;base64,${Buffer.from(profileCompiled).toString("base64")}`;
+
+const mutableMod = await load("src/infinity/MutableWorldFieldProvider.ts", [
+  [/from ['"]\.\/ScientificFieldSpatialPattern['"]/, `from "${spatialUrl}"`],
+  [/from ['"]\.\/ScientificFieldProfile['"]/, `from "${profileUrl}"`],
+]);
 const { MutableWorldFieldProvider } = mutableMod;
 const mutable = new MutableWorldFieldProvider(fakeProvider);
 const before = mutable.sample(0,0,0).energy;
@@ -47,6 +57,19 @@ mutable.applyRadial("brush", 0,0,0,10,{ energy: 9 });
 assert.ok(mutable.sample(0,0,0).energy > before);
 assert.ok(mutable.getVersion() > 0);
 
+globalThis.localStorage = { data:new Map(), setItem(k,v){this.data.set(k,v)}, getItem(k){return this.data.get(k)??null}, removeItem(k){this.data.delete(k)} };
+const worldCoordinateJs = await readFile(new URL("src/infinity/WorldCoordinate.ts", root), "utf8");
+const worldCoordinateCompiled = ts.transpileModule(worldCoordinateJs, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+const worldCoordinateUrl = `data:text/javascript;base64,${Buffer.from(worldCoordinateCompiled).toString("base64")}`;
+const worldPersistenceMod = await load("src/infinity/WorldPersistence.ts", [
+  [/from ['"]\.\/WorldCoordinate['"]/, `from "${worldCoordinateUrl}"`],
+]);
+const { WorldPersistence } = worldPersistenceMod;
+const worldPersistence = new WorldPersistence("seed");
+worldPersistence.saveFieldState({schemaVersion:"world-field-state-v2",mutationCount:1});
+assert.deepEqual(worldPersistence.loadFieldState(), {schemaVersion:"world-field-state-v2",mutationCount:1});
+worldPersistence.deleteFieldState();
+assert.equal(worldPersistence.loadFieldState(), null);
 const persistenceMod = await load("src/infinity/WorldFieldChunkPersistence.ts", [
   [/import \{ CHUNK_FLOATS \} from [^;]+;/, "const CHUNK_FLOATS = 7168;"],
 ]);

@@ -24,6 +24,16 @@ export function bootstrapInfiniteWorld() {
   const world = new InfiniteWorldRenderer(canvas, seed)
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world
+  ;(window as any).worldFieldMutate = (mutation: any) => world.applyAuthoritativeFieldMutation(mutation)
+  ;(window as any).worldFieldState = () => world.getAuthoritativeFieldState()
+  ;(window as any).infinityApplyLegacySculptStroke = (tool: any, cell: any, radius: number, strength: number, options?: any) =>
+    world.applyLegacySculptStroke(tool, cell, radius, strength, options)
+  ;(window as any).infinityApplyLegacySmartBrush = (name: any, cell: any, radius: number, selectedLegacyZ?: number, options?: { strength?: number }) =>
+    world.applyLegacySmartBrush(name, cell, radius, selectedLegacyZ, options)
+  ;(window as any).infinityAuthoritativeFieldState = () => world.authoritativeField.getState()
+  ;(window as any).infinityUndoLegacySculptAuthoritative = () => world.undoLegacySculptAuthoritative()
+  ;(window as any).infinityRedoLegacySculptAuthoritative = () => world.redoLegacySculptAuthoritative()
+  ;(window as any).infinityLegacySculptAuthoritativeHistory = () => world.getLegacySculptAuthoritativeHistory()
   ;(window as any).worldLibrary = worldLibrary
   ;(window as any).worldLibraryStats = () => worldLibrary.stats()
   ;(window as any).worldLibrarySearch = (tags: string[] = [], category?: string) =>
@@ -887,7 +897,8 @@ export function bootstrapInfiniteWorld() {
     const savedOpen = localStorage.getItem('infinity_dock_open')
     // Keep the world unobstructed on first visit; remember the user's later choice.
     let isOpen = savedOpen === null ? false : savedOpen !== 'false'
-    let activeTab: 'camera' | 'objects' | 'persist' | 'analysis' | 'display' | 'library' = 'objects'
+    let activeTab: 'camera' | 'objects' | 'persist' | 'analysis' | 'display' | 'library' | 'field' = 'objects'
+    let fieldBrushRadius = 8
     let libraryQuery = ''
     let libraryCategory: import('./worldLibrary/WorldLibrary').WorldLibraryCategory | '' = ''
     let librarySelected = ''
@@ -1336,6 +1347,7 @@ export function bootstrapInfiniteWorld() {
             <!-- Category Tabs -->
             <div style="display: flex; gap: 2px; border-bottom: 0.5px solid rgba(255,255,255,0.06); padding-bottom: 4px;">
               <button class="cstep ${activeTab === 'objects' ? 'active' : ''}" id="vTabObj" style="flex:1; padding: 3px 2px; font-size: 9px;">Objects</button>
+              <button class="cstep ${activeTab === 'field' ? 'active' : ''}" id="vTabField" style="flex:1; padding: 3px 2px; font-size: 9px;">Field</button>
               <button class="cstep ${activeTab === 'library' ? 'active' : ''}" id="vTabLibrary" style="flex:1; padding: 3px 2px; font-size: 9px;">Library</button>
               <button class="cstep ${activeTab === 'camera' ? 'active' : ''}" id="vTabCam" style="flex:1; padding: 3px 2px; font-size: 9px;">Camera</button>
               <button class="cstep ${activeTab === 'analysis' ? 'active' : ''}" id="vTabGen" style="flex:1; padding: 3px 2px; font-size: 9px;">Generate</button>
@@ -1344,7 +1356,22 @@ export function bootstrapInfiniteWorld() {
             </div>
 
             <!-- Tab Content -->
-            ${activeTab === 'library' ? `
+            ${activeTab === 'field' ? `
+              <div>
+                <div style="font-size: 9.5px; color: var(--sub); margin-bottom: 4px; text-transform: uppercase;">Scientific Field Brush</div>
+                <div style="font-size: 8px; color: #8f88d8; margin-bottom: 6px;">Mutates the authoritative Infinite World field at the current terrain position.</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                  <button class="brush-btn" id="vFieldDensity">◈ Density +</button>
+                  <button class="brush-btn" id="vFieldDensityDown">◇ Density −</button>
+                  <button class="brush-btn" id="vFieldEnergy">⚡ Energy +</button>
+                  <button class="brush-btn" id="vFieldInformation">ℹ Information +</button>
+                  <button class="brush-btn" id="vFieldEntropy">∿ Entropy +</button>
+                  <button class="brush-btn" id="vFieldBiology">♧ Biology +</button>
+                </div>
+                <div style="font-size: 8px; color: var(--sub); margin-top: 6px;">Radius <button class="pill" id="vFieldRadius4" style="font-size:8px;padding:2px 5px;">4m</button> <button class="pill on" id="vFieldRadius8" style="font-size:8px;padding:2px 5px;">8m</button> <button class="pill" id="vFieldRadius16" style="font-size:8px;padding:2px 5px;">16m</button></div>
+                <div data-authoritative-field-status style="font-size: 7.5px; color: #40c080; margin-top: 5px;">Authoritative field · ready</div>
+              </div>
+            ` : activeTab === 'library' ? `
               <div>
                 <div style="font-size:9.5px;color:var(--sub);margin-bottom:5px;text-transform:uppercase;">World Knowledge Library</div>
                 <div style="display:grid;grid-template-columns:1fr 110px;gap:4px;margin-bottom:6px;">
@@ -1593,12 +1620,36 @@ export function bootstrapInfiniteWorld() {
 
       // Tab switcher in vertical dock
       document.getElementById('vTabObj')?.addEventListener('click', () => { activeTab = 'objects'; render(); })
+      document.getElementById('vTabField')?.addEventListener('click', () => { activeTab = 'field'; render(); })
       document.getElementById('vTabCam')?.addEventListener('click', () => { activeTab = 'camera'; render(); })
       document.getElementById('vTabGen')?.addEventListener('click', () => { activeTab = 'analysis'; render(); })
       document.getElementById('vTabPersist')?.addEventListener('click', () => { activeTab = 'persist'; render(); })
       document.getElementById('vTabDisp')?.addEventListener('click', () => { activeTab = 'display'; render(); })
 
       document.getElementById('vTabLibrary')?.addEventListener('click', () => { activeTab = 'library'; render(); })
+
+      // Scientific Field Brush — radius lives outside render() so rerendering preserves the selection.
+      const applyFieldBrush = (delta: Record<string, number>, label: string) => {
+        const p = world.getWorldPosition()
+        const mutation = world.applyAuthoritativeFieldMutation({
+          kind: 'brush', x: p.x, y: world.getWorldEnvironment().worldPosition.y, z: p.z,
+          radius: fieldBrushRadius, delta,
+          metadata: { source: 'infinity-world-ui', tool: 'scientific-field-brush', label, radius: fieldBrushRadius },
+        })
+        document.querySelectorAll<HTMLElement>('[data-authoritative-field-status]').forEach((el) => {
+          el.textContent = 'Authoritative field · ' + label + ' · mutation #' + mutation.id
+        })
+        return mutation
+      }
+      document.getElementById('vFieldDensity')?.addEventListener('click', () => applyFieldBrush({ density: 0.12 }, 'density +'))
+      document.getElementById('vFieldDensityDown')?.addEventListener('click', () => applyFieldBrush({ density: -0.12 }, 'density −'))
+      document.getElementById('vFieldEnergy')?.addEventListener('click', () => applyFieldBrush({ energy: 12 }, 'energy +'))
+      document.getElementById('vFieldInformation')?.addEventListener('click', () => applyFieldBrush({ information: 12 }, 'information +'))
+      document.getElementById('vFieldEntropy')?.addEventListener('click', () => applyFieldBrush({ entropy: 0.08 }, 'entropy +'))
+      document.getElementById('vFieldBiology')?.addEventListener('click', () => applyFieldBrush({ biology: 0.12 }, 'biology +'))
+      document.getElementById('vFieldRadius4')?.addEventListener('click', () => { fieldBrushRadius = 4; render() })
+      document.getElementById('vFieldRadius8')?.addEventListener('click', () => { fieldBrushRadius = 8; render() })
+      document.getElementById('vFieldRadius16')?.addEventListener('click', () => { fieldBrushRadius = 16; render() })
       document.getElementById('topLibrary')?.addEventListener('click', () => { activeTab = activeTab === 'library' ? 'objects' : 'library'; render(); })
       container.querySelectorAll('.libraryGenerate').forEach((button) => {
         button.addEventListener('click', () => {

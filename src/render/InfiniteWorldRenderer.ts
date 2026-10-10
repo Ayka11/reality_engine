@@ -11,6 +11,12 @@ import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import { FieldSampler } from '../infinity/FieldSampler'
+import { GeneratorFieldProvider } from '../infinity/ScientificFieldProvider'
+import { MutableWorldFieldProvider, type WorldFieldMutation } from '../infinity/MutableWorldFieldProvider'
+import { LegacySculptRuntimeAdapter } from '../infinity/LegacySculptRuntimeAdapter'
+import { AuthoritativeSculptTransactionCoordinator } from '../infinity/AuthoritativeSculptTransactionCoordinator'
+import type { LegacyVoxelCoordinate } from '../infinity/LegacyScientificFieldBridge'
+import { runtimeProvenance } from '../infinity/RuntimeProvenance'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { WorldConstructionContract } from '../infinity/WorldConstructionContract'
 import { DecisionGraph } from '../infinity/DecisionGraph'
@@ -58,6 +64,9 @@ export class InfiniteWorldRenderer {
   persistence: WorldPersistence
   history = new WorldEditHistory()
   readonly fieldSampler: FieldSampler
+  readonly authoritativeField: MutableWorldFieldProvider
+  readonly legacySculptRuntimeAdapter: LegacySculptRuntimeAdapter
+  readonly authoritativeSculptTransactions: AuthoritativeSculptTransactionCoordinator
   decisionLayer: WorldDecisionLayer
   constructionContract: WorldConstructionContract
   readonly decisionGraph = new DecisionGraph()
@@ -105,6 +114,111 @@ export class InfiniteWorldRenderer {
   private worldPosition = new THREE.Vector3(28, 45, 52)
 
   getWorldPosition() { return this.worldPosition.clone() }
+
+  applyAuthoritativeFieldMutation(input: Parameters<MutableWorldFieldProvider['apply']>[0]) {
+    const event = runtimeProvenance.record(input.kind === 'composer' ? 'world-state' : input.kind, {
+      ...input.metadata,
+      mutationKind: input.kind,
+      x: input.x,
+      y: input.y,
+      z: input.z,
+      radius: input.radius,
+    })
+    const mutation = this.authoritativeField.apply({
+      ...input,
+      metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id },
+    })
+    this.refreshTerrainPatches()
+    this.persistAuthoritativeFieldState()
+    return mutation
+  }
+
+  getAuthoritativeFieldState() {
+    return {
+      field: this.authoritativeField.getState(),
+      provenance: runtimeProvenance.getTrace(),
+    }
+  }
+
+  private persistAuthoritativeFieldState(): boolean {
+    const saved = this.persistence.saveFieldState(this.authoritativeField.serialize())
+    if (!saved) {
+      console.warn('[persistence] Authoritative field changed in memory but could not be saved to localStorage')
+    }
+    return saved
+  }
+
+  applyLegacySculptStroke(
+    tool: 'inject' | 'erase' | 'noise' | 'stamp' | 'erode' | 'smooth' | 'pattern',
+    cell: LegacyVoxelCoordinate,
+    radius: number,
+    strength: number,
+    options: {
+      fields?: Partial<{ energy: number; density: number; temperature: number; bio: number; information: number; entropy: number }>
+      noiseScale?: number
+      seed?: number
+      period?: number
+      smartBrush?: 'Volcano' | 'Forest' | 'Ocean' | 'Crystal' | 'Storm' | 'Life Cluster' | 'Radiation' | 'Civilization Seed'
+      selectedLegacyZ?: number
+    } = {},
+  ): WorldFieldMutation {
+    const metadata = {
+      source: 'legacy-sculpt-runtime',
+      legacyTool: tool,
+      legacyCoordinate: { ...cell },
+    }
+    const transaction = this.authoritativeSculptTransactions.commit(() => {
+      switch (tool) {
+        case 'inject': return this.legacySculptRuntimeAdapter.inject(cell, radius, strength, options.fields ?? {}, metadata)
+        case 'erase': return this.legacySculptRuntimeAdapter.erase(cell, radius, strength, metadata)
+        case 'noise': return this.legacySculptRuntimeAdapter.noise(cell, radius, strength, options.noiseScale ?? 10, options.seed ?? 1337, options.fields ?? {}, metadata)
+        case 'pattern': return this.legacySculptRuntimeAdapter.pattern(cell, radius, strength, options.noiseScale ?? 10, options.fields ?? {}, metadata)
+        case 'stamp': return this.legacySculptRuntimeAdapter.stamp(cell, radius, strength, options.period ?? 4, metadata)
+        case 'erode': return this.legacySculptRuntimeAdapter.erode(cell, radius, strength, metadata)
+        case 'smooth': return this.legacySculptRuntimeAdapter.smooth(cell, radius, strength, metadata)
+        default: throw new Error(`Unsupported legacy sculpt tool: ${tool}`)
+      }
+    })
+    this.persistAuthoritativeFieldState()
+    return transaction.mutation
+  }
+
+  applyLegacySmartBrush(
+    name: 'Volcano' | 'Forest' | 'Ocean' | 'Crystal' | 'Storm' | 'Life Cluster' | 'Radiation' | 'Civilization Seed',
+    cell: LegacyVoxelCoordinate,
+    radius: number,
+    selectedLegacyZ?: number,
+    options: { strength?: number } = {},
+  ): WorldFieldMutation {
+    const transaction = this.authoritativeSculptTransactions.commit(() =>
+      this.legacySculptRuntimeAdapter.smartBrush(name, cell, radius, selectedLegacyZ, {
+        source: 'legacy-sculpt-runtime',
+        legacyTool: 'smart-brush',
+        legacyCoordinate: { ...cell },
+      }, options.strength ?? 1),
+    )
+    this.persistAuthoritativeFieldState()
+    return transaction.mutation
+  }
+  undoLegacySculptAuthoritative() {
+    const transaction = this.authoritativeSculptTransactions.undo()
+    if (transaction) this.persistAuthoritativeFieldState()
+    return transaction
+  }
+
+  redoLegacySculptAuthoritative() {
+    const transaction = this.authoritativeSculptTransactions.redo()
+    if (transaction) this.persistAuthoritativeFieldState()
+    return transaction
+  }
+
+  getLegacySculptAuthoritativeHistory() {
+    return {
+      undo: this.authoritativeSculptTransactions.historyLength,
+      redo: this.authoritativeSculptTransactions.redoLength,
+    }
+  }
+
   private worldAnchor = new THREE.Vector3(0, 0, 0)
   private flyMode = true
   private readonly keys = new Set<string>()
@@ -138,12 +252,31 @@ export class InfiniteWorldRenderer {
     this.scene.add(this.terrainGroup)
     this.worldAssetRuntime = new WorldAssetRuntime(this.scene)
     this.generator = new WorldGenerator(seed)
-    this.fieldSampler = new FieldSampler(this.generator)
+    this.authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
+    this.fieldSampler = new FieldSampler(this.generator, this.authoritativeField)
+    this.legacySculptRuntimeAdapter = new LegacySculptRuntimeAdapter((mutation) => {
+      const committed = this.authoritativeField.apply(mutation)
+      runtimeProvenance.record('brush', {
+        mutationId: committed.id,
+        mutation: committed,
+        runtime: 'infinite-world-authoritative-field',
+      })
+      return committed
+    })
+    this.authoritativeSculptTransactions = new AuthoritativeSculptTransactionCoordinator(this.authoritativeField)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null)
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
     this.storageKey = `reality-engine-world:${seed}:objects`
     this.persistence = new WorldPersistence(seed)
+    const persistedField = this.persistence.loadFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
+    if (persistedField) {
+      try {
+        this.authoritativeField.restore(persistedField)
+      } catch {
+        this.persistence.deleteFieldState()
+      }
+    }
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
 
     this.camera.position.set(38, this.worldY, 62)
@@ -252,7 +385,8 @@ export class InfiniteWorldRenderer {
     this.controls.target.set(16, 10, 16)
     this.controls.update()
     this.worldPosition.copy(this.controls.target)
-    this.loadWorld()
+    // Startup restores the latest autosaved field; the explicit Load action uses the saved checkpoint.
+    this.loadWorld({ restoreFieldCheckpoint: false })
 
     this.hemi = new THREE.HemisphereLight(0xb9d8ff, 0x35402f, 1.6)
     this.scene.add(this.hemi)
@@ -278,11 +412,15 @@ export class InfiniteWorldRenderer {
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer)
     this.saveTimer = window.setTimeout(() => {
       this.saveTimer = null
-      this.saveWorld()
+      this.saveWorld({ checkpoint: false })
     }, 150)
   }
 
-  saveWorld() {
+  saveWorld(options: { checkpoint?: boolean } = {}) {
+    // Explicit Save creates a stable checkpoint; autosave must not move that checkpoint.
+    const fieldSnapshot = this.authoritativeField.serialize()
+    this.persistAuthoritativeFieldState()
+    if (options.checkpoint !== false) this.persistence.saveFieldCheckpoint(fieldSnapshot)
     const objects = this.objects.values()
     const groups = new Map<string, WorldObject[]>()
     for (const object of objects) {
@@ -305,7 +443,21 @@ export class InfiniteWorldRenderer {
     return objects.length
   }
 
-  loadWorld() {
+  loadWorld(options: { restoreFieldCheckpoint?: boolean } = {}) {
+    // Explicit Load restores the last manual checkpoint; startup can opt into the latest autosave.
+    const checkpoint = options.restoreFieldCheckpoint === false
+      ? null
+      : this.persistence.loadFieldCheckpoint<ReturnType<MutableWorldFieldProvider['serialize']>>()
+    const persistedField = checkpoint ?? this.persistence.loadFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
+    if (persistedField) {
+      try {
+        this.authoritativeField.restore(persistedField)
+        this.persistAuthoritativeFieldState()
+        this.refreshTerrainPatches()
+      } catch (error) {
+        console.warn('[persistence] Could not restore authoritative field state', error)
+      }
+    }
     this.objects.clear()
     this.objectSpatialIndex.clear()
     let count = 0
@@ -353,7 +505,10 @@ export class InfiniteWorldRenderer {
     this.clearSavedWorld()
 
     this.generator = new WorldGenerator(newSeed)
-    this.fieldSampler.setGenerator(this.generator)
+    this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
+    this.authoritativeField.clear()
+    this.authoritativeSculptTransactions.clear()
+    this.fieldSampler.setProvider(this.authoritativeField)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights, () => (window as any).getRealityLawState?.() ?? null)
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.persistence = new WorldPersistence(newSeed)
@@ -611,20 +766,7 @@ export class InfiniteWorldRenderer {
 
   setMaterialMode(mode: 'field' | 'material' | 'height') {
     this.materialMode = mode
-    for (const material of this.terrainMaterials) {
-      if (mode === 'material') {
-        material.vertexColors = false
-        material.color.set(0x8a8f98)
-        material.roughness = 0.72
-        material.metalness = 0.08
-      } else {
-        material.vertexColors = true
-        material.color.set(0xffffff)
-        material.roughness = mode === 'height' ? 0.88 : 0.95
-        material.metalness = 0
-      }
-      material.needsUpdate = true
-    }
+    this.refreshTerrainPatches()
   }
 
   setTimeOfDay(hours: number) {
@@ -721,7 +863,13 @@ export class InfiniteWorldRenderer {
         const slope = Math.max(0, 1 - normal.y)
         color.offsetHSL(0, 0, -slope * 0.18)
 
-        if (this.materialMode === 'height') {
+        if (this.materialMode === 'field') {
+          // Field mode visualizes the same authoritative scientific field used by physics and construction.
+          const field = this.fieldSampler.sample(originX + gx, h, originZ + gz)
+          const density = Math.max(0, Math.min(1, field.density))
+          const information = Math.max(0, Math.min(1, field.information / 70))
+          color.setHSL(0.68 - density * 0.68, 0.84, 0.3 + information * 0.28)
+        } else if (this.materialMode === 'height') {
           const t = Math.max(0, Math.min(1, (h + 20) / 120))
           color.setHSL(0.68 - t * 0.68, 0.82, 0.28 + t * 0.34)
         }
@@ -797,6 +945,21 @@ export class InfiniteWorldRenderer {
 
     void sample
     return group
+  }
+
+  private refreshTerrainPatches() {
+    for (const [key, patch] of this.patches) {
+      this.scene.remove(patch.group)
+      patch.group.traverse(obj => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        if (Array.isArray(mesh.material)) mesh.material.forEach(m => { m.dispose(); this.terrainMaterials.delete(m as THREE.MeshStandardMaterial) })
+        else if (mesh.material) { mesh.material.dispose(); this.terrainMaterials.delete(mesh.material as THREE.MeshStandardMaterial) }
+      })
+      const group = this.buildTerrainPatch(patch.chunk, patch.lod)
+      this.patches.set(key, { group, chunk: patch.chunk, lod: patch.lod })
+      this.scene.add(group)
+    }
   }
 
   private removeChunk(key: string) {
@@ -1832,6 +1995,7 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(object)
+      this.objectSpatialIndex.upsert(object)
       this.history.push({ type: 'add', object: { ...object } })
     }
     this.syncObjects()
@@ -1867,6 +2031,7 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(object)
+      this.objectSpatialIndex.upsert(object)
       this.history.push({ type: 'add', object: { ...object } })
     }
     this.syncObjects()
@@ -2120,6 +2285,7 @@ export class InfiniteWorldRenderer {
         }))
         if (!water) continue
         created.push(water)
+        this.objectSpatialIndex.upsert(water)
         this.history.push({ type: 'add', object: { ...water } })
       }
     }
@@ -2203,6 +2369,7 @@ export class InfiniteWorldRenderer {
       properties: { city: 'hub', role: 'civic' },
     })
     created.push(hubObject)
+    this.objectSpatialIndex.upsert(hubObject)
     this.history.push({ type: 'add', object: { ...hubObject } })
     for (let i = 0; i < plan.districts.length; i++) {
       const d = plan.districts[i]
@@ -2232,6 +2399,7 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(object)
+    this.objectSpatialIndex.upsert(object)
         this.history.push({ type: 'add', object: { ...object } })
       }
       const count = d.role === 'civic' ? 3 : 5
@@ -2240,8 +2408,11 @@ export class InfiniteWorldRenderer {
         const distance = d.role === 'civic' ? 12 : 18
         const x = d.x + Math.cos(angle) * distance
         const z = d.z + Math.sin(angle) * distance
+        const construction = this.constructionContract.authorize('building', x, z)
+        // The authoritative construction contract must gate generated structures too.
+        if (!construction.allowed || !construction.decision) continue
         const siteDecision = this.decisionLayer.buildZoneCost(x, z, Math.hypot(x - plan.hub.x, z - plan.hub.z))
-        // Auto-building is law-aware: missing core physical processes can veto a site.
+        // Keep the distance-aware city-planning score after applying the shared construction gate.
         if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
         const y = siteDecision.buildability.elevation
         const building = this.objects.add({
@@ -2258,6 +2429,7 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(building)
+    this.objectSpatialIndex.upsert(building)
         this.history.push({ type: 'add', object: { ...building } })
       }
     }
@@ -2279,6 +2451,7 @@ export class InfiniteWorldRenderer {
       properties: { settlement: 'hub', seed },
     })
     created.push(hub)
+    this.objectSpatialIndex.upsert(hub)
     this.history.push({ type: 'add', object: { ...hub } })
 
     for (let i = 0; i < blockCount; i++) {
@@ -2312,6 +2485,7 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(object)
+    this.objectSpatialIndex.upsert(object)
         this.history.push({ type: 'add', object: { ...object } })
       }
 
@@ -2322,8 +2496,11 @@ export class InfiniteWorldRenderer {
         const tangentZ = Math.sin(angle + Math.PI / 2) * lateral
         const px = bx + tangentX
         const pz = bz + tangentZ
+        const construction = this.constructionContract.authorize('building', px, pz)
+        // Settlement growth must pass the authoritative construction contract.
+        if (!construction.allowed || !construction.decision) continue
         const siteDecision = this.decisionLayer.buildZoneCost(px, pz, Math.hypot(px - cx, pz - cz))
-        // Settlement growth must obey the same physical-law gate as city planning.
+        // Preserve the settlement's distance-aware placement constraints as well.
         if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
         const py = siteDecision.buildability.elevation
         const building = this.objects.add({
@@ -2340,6 +2517,7 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(building)
+    this.objectSpatialIndex.upsert(building)
         this.history.push({ type: 'add', object: { ...building } })
       }
     }
@@ -2357,6 +2535,8 @@ export class InfiniteWorldRenderer {
       const radial = radius * (0.35 + (i % 5) / 8)
       const x = cx + Math.cos(angle) * radial
       const z = cz + Math.sin(angle) * radial
+      const construction = this.constructionContract.authorize('building', x, z)
+      if (!construction.allowed || !construction.decision) continue
       const siteDecision = this.decisionLayer.buildZoneCost(x, z, Math.hypot(x - cx, z - cz))
       if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
       const y = siteDecision.buildability.elevation
@@ -2374,6 +2554,7 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(building)
+    this.objectSpatialIndex.upsert(building)
       this.history.push({ type: 'add', object: { ...building } })
     }
     if (created.length > 1) {
@@ -2390,11 +2571,27 @@ export class InfiniteWorldRenderer {
   }
 
   scatter(kind: WorldObjectKind, x0: number, z0: number, x1: number, z1: number, density = 0.15) {
-    const objects = this.objects.scatter(this.generator.seed, kind, x0, z0, x1, z1, 32, density)
-    for (const object of objects) object.y = this.generator.sampleHeight(object.x, object.z)
+    const candidates = this.objects.scatter(this.generator.seed, kind, x0, z0, x1, z1, 32, density)
+    const created: WorldObject[] = []
+    for (const object of candidates) {
+      const lawGate = this.lawGateForBuild(kind, object.x, object.z)
+      if (!lawGate.allowed) {
+        this.objects.remove(object.id)
+        continue
+      }
+      object.y = this.generator.sampleHeight(object.x, object.z)
+      object.properties = {
+        ...object.properties,
+        lawPenalty: lawGate.decision?.laws.penalty ?? 0,
+        activeLawProcesses: lawGate.decision?.laws.activeProcesses.join(',') ?? '',
+      }
+      this.objectSpatialIndex.upsert(object)
+      this.history.push({ type: 'add', object: { ...object } })
+      created.push(object)
+    }
     this.syncObjects()
     this.scheduleSave()
-    return objects
+    return created
   }
 
   private updateFly(dt: number) {

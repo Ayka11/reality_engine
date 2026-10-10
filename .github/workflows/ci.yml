@@ -2,9 +2,9 @@ name: Reality Engine CI
 
 on:
   push:
-    branches: [main, reality-engine-hf-infinity]
+    branches: [main, reality-engine-hf-infinity, 'integration/**']
   pull_request:
-    branches: [main, reality-engine-hf-infinity]
+    branches: [main, reality-engine-hf-infinity, 'integration/**']
 
 concurrency:
   group: reality-engine-ci-${{ github.ref }}
@@ -20,6 +20,7 @@ jobs:
           node-version: 20
       - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
+      - run: npm run audit:report
       - run: npm run lint
       - run: npm run test:brushes --if-present
       - run: npm run test:world-field --if-present
@@ -27,7 +28,38 @@ jobs:
       - run: npm run test:preset-field --if-present
       - run: npm run test:construction --if-present
       - run: npm run test:law-physics --if-present
+      - run: npm run test:signalling
+      - run: npm run test:solver-deployment
+      - run: npm run test:field-profile --if-present
+      - run: npm run test:mutable-field-profile --if-present
+      - run: npm run test:legacy-field-bridge --if-present
+      - run: npm run test:legacy-sculpt-adapter --if-present
+      - run: npm run test:authoritative-sculpt-transaction --if-present
+      - run: npm run test:world-persistence-failures --if-present
+      - run: npm run test:field-spatial-pattern --if-present
       - run: npm run build
+      - run: npm run test:hf-runtime
+      - run: docker build --file Dockerfile --tag reality-engine:ci .
+      - run: docker build --file Dockerfile.hf --tag reality-engine-hf:ci .
+      - name: Smoke-test Hugging Face Docker container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name reality-engine-hf-smoke --publish 7860:7860 reality-engine-hf:ci
+          cleanup() {
+            docker logs reality-engine-hf-smoke || true
+            docker rm --force reality-engine-hf-smoke >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:7860/ >/dev/null; then
+              echo "Docker HF runtime HTTP smoke: PASS"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Docker HF runtime did not serve HTTP on port 7860"
+          exit 1
       - run: npm run hf:smoke
       - run: npm run hf:cpu:check
       - run: npx playwright install chromium
