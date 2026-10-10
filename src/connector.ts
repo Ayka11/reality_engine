@@ -149,6 +149,8 @@ function publishWorkerBoundarySnapshots() {
   }
   return { centerChunk, faces: worldFieldBoundaryExchange.size() }
 }
+win['getWorldViewContract'] = () => worldViewContract.snapshot()
+win['worldFieldChunkCoord'] = worldFieldChunkCoord
 win['installChunkWorldFieldProvider'] = installChunkWorldFieldProvider
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 const realityLawBridge = new RealityLawBridge()
