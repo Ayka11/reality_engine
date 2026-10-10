@@ -6,7 +6,7 @@
 
 import {
   ChunkGrid, GRID_W, GRID_H, GRID_D,
-  CHUNK_FLOATS, F, CX, CY, CZ, chunkKey,
+  CHUNK_FLOATS, F, NF, CX, CY, CZ, chunkKey,
 } from './ChunkGrid'
 
 const grid = new ChunkGrid()
