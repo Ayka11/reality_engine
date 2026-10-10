@@ -266,6 +266,11 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'frame' && ab) {
+    // Drop a tick frame that was already in flight when the restore barrier began.
+    if (worldFieldRestoreActive && frameRestoreId === undefined) {
+      worldFieldRestoreState.staleFrames++
+      return
+    }
     if (frameRestoreId !== undefined) {
       if (frameRestoreId !== worldFieldRestoreState.restoreId) {
         worldFieldRestoreState.staleFrames++
@@ -543,7 +548,7 @@ function tryInitNodeEditor() {
 
 // Tick chunk worker alongside inline sim (called from HTML's simStep loop)
 win['tickChunkWorker'] = (playing: boolean, speed: number) => {
-  if (!playing || workerBusy) return
+  if (!playing || workerBusy || worldFieldRestoreActive) return
   workerBusy = true
   chunkWorker.postMessage({ cmd: 'tick', data: { speed: Math.min(speed, 3) } })
 
