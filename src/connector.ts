@@ -454,6 +454,12 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   if (!snapshot || !((snapshot.schemaVersion === 2 && snapshot.workerChunks?.length) ||
       (snapshot.values.length === CHUNK_FLOATS && snapshot.fieldLayout?.fieldsPerCell === NF))) return false
   const view = worldViewContract.snapshot()
+  if (snapshot.schemaVersion === 2 && snapshot.workerView &&
+      (snapshot.workerView.seed !== view.seed ||
+       snapshot.workerView.sliceY !== view.sliceY ||
+       snapshot.workerView.center.x !== view.center.x ||
+       snapshot.workerView.center.y !== view.center.y ||
+       snapshot.workerView.center.z !== view.center.z)) return false
   const originX = cx * 32, originY = cy * 32, originZ = cz * 32
   const wx = Math.round(originX - view.center.x + GRID_W / 2)
   const wy = Math.round(originY - view.center.y + GRID_D * 0.45)
