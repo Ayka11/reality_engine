@@ -198,6 +198,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       worldFieldRestoreState.unexpectedAcks === 0 &&
       worldFieldRestoreState.unexpectedFrames === 0 &&
       worldFieldRestoreState.duplicateAcks === 0 &&
+      worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
       worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
       [...worldFieldRestoreExpectedKeys].every(key =>
         worldFieldRestoreAcknowledgedKeys.has(key) && worldFieldRestoreFrameKeys.has(key))
@@ -274,8 +275,11 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       let off = 1
       for (let i = 0; i < u32[0]; i++) {
         const key = u32[off]
-        if (!worldFieldRestoreExpectedKeys.has(key)) worldFieldRestoreState.unexpectedFrames++
-        else worldFieldRestoreFrameKeys.add(key)
+        if (!worldFieldRestoreExpectedKeys.has(key) || worldFieldRestoreFrameKeys.has(key)) {
+          worldFieldRestoreState.unexpectedFrames++
+        } else {
+          worldFieldRestoreFrameKeys.add(key)
+        }
         off += 1 + CHUNK_FLOATS
       }
       worldFieldRestoreState.restoreFrameKeys = [...worldFieldRestoreFrameKeys]
@@ -423,6 +427,7 @@ win['worldFieldRestoreState'] = () => ({
     worldFieldRestoreState.unexpectedAcks === 0 &&
     worldFieldRestoreState.unexpectedFrames === 0 &&
     worldFieldRestoreState.duplicateAcks === 0 &&
+    worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
     worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
     [...worldFieldRestoreExpectedKeys].every(key => worldFieldRestoreFrameKeys.has(key)),
 })
