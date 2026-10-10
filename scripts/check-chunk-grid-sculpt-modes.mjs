@@ -33,8 +33,8 @@ assert.match(page, /effectiveTool==='erase'\?'erase':effectiveTool==='paint'\?'s
 assert.match(worker, /cmd\s*===\s*'undoSculpt'[\s\S]*?restoreCells\(record\.before\)/, "worker must restore sparse chunks on sculpt undo");
 assert.match(worker, /cmd\s*===\s*'redoSculpt'[\s\S]*?restoreCells\(record\.after\)/, "worker must restore sparse chunks on sculpt redo");
 assert.match(worker, /trackHistory \? captureCells\(cells\) : null/, "worker paint history must be opt-in to avoid tracking unrelated worker edits");
-assert.match(page, /window\.undoChunkSculpt\?\.\(\)/, "active UI undo must forward to sparse worker history");
-assert.match(page, /window\.redoChunkSculpt\?\.\(\)/, "active UI redo must forward to sparse worker history");
+assert.match(page, /await window\.undoChunkSculpt\?\.\(\)/, "active UI undo must await sparse worker history acknowledgement");
+assert.match(page, /await window\.redoChunkSculpt\?\.\(\)/, "active UI redo must await sparse worker history acknowledgement");
 
 // Execute the real worker handler against its real ChunkGrid to verify mixed
 // SmartBrush + ordinary-paint undo/redo restores sparse chunk data, not just wiring.
