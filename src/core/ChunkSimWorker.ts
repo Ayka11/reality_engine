@@ -151,7 +151,7 @@ function buildFramePayload(): ArrayBuffer {
 }
 
 self.onmessage = (e: MessageEvent) => {
-  const { cmd, data } = e.data
+  const { cmd, data, requestId } = e.data
 
   if (cmd === 'tick') {
     const speed = (data?.speed as number) || 1
@@ -183,11 +183,11 @@ self.onmessage = (e: MessageEvent) => {
   }
   if(cmd==='undoSculpt'){
     const record=sculptUndo.pop();if(record){restoreCells(record.before);sculptRedo.push(record)}
-    ;(self as unknown as Worker).postMessage({cmd:'sculptHistoryApplied',action:'undo',applied:!!record});return
+    ;(self as unknown as Worker).postMessage({cmd:'sculptHistoryApplied',action:'undo',applied:!!record,requestId});return
   }
   if(cmd==='redoSculpt'){
     const record=sculptRedo.pop();if(record){restoreCells(record.after);sculptUndo.push(record)}
-    ;(self as unknown as Worker).postMessage({cmd:'sculptHistoryApplied',action:'redo',applied:!!record});return
+    ;(self as unknown as Worker).postMessage({cmd:'sculptHistoryApplied',action:'redo',applied:!!record,requestId});return
   }
   if(cmd==='clearSculptHistory'){clearSculptHistory();return}
 
