@@ -149,7 +149,7 @@ export class InfiniteWorldRenderer {
   }
 
   applyLegacySculptStroke(
-    tool: 'inject' | 'erase' | 'noise' | 'stamp' | 'erode' | 'smooth' | 'pattern',
+    tool: 'inject' | 'paint' | 'erase' | 'noise' | 'stamp' | 'erode' | 'smooth' | 'pattern',
     cell: LegacyVoxelCoordinate,
     radius: number,
     strength: number,
@@ -170,6 +170,7 @@ export class InfiniteWorldRenderer {
     const transaction = this.authoritativeSculptTransactions.commit(() => {
       switch (tool) {
         case 'inject': return this.legacySculptRuntimeAdapter.inject(cell, radius, strength, options.fields ?? {}, metadata)
+        case 'paint': return this.legacySculptRuntimeAdapter.paint(cell, radius, strength, options.fields ?? {}, metadata)
         case 'erase': return this.legacySculptRuntimeAdapter.erase(cell, radius, strength, metadata)
         case 'noise': return this.legacySculptRuntimeAdapter.noise(cell, radius, strength, options.noiseScale ?? 10, options.seed ?? 1337, options.fields ?? {}, metadata)
         case 'pattern': return this.legacySculptRuntimeAdapter.pattern(cell, radius, strength, options.noiseScale ?? 10, options.fields ?? {}, metadata)

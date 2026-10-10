@@ -1850,56 +1850,223 @@ function getCellAt(e){
   const x=Math.floor((cx-ox)/cs),y=Math.floor((cy-oy)/cs);
   if(x<0||x>=W||y<0||y>=H)return null;return{x,y};
 }
+const _unifiedSculptUndo=[];
+const _unifiedSculptRedo=[];
+let _activeSculptGesture=null;
+function _finishSculptGesture(){
+  const gesture=_activeSculptGesture;_activeSculptGesture=null;
+  if(!gesture||gesture.authoritativeOps===0)return null;
+  const record={label:gesture.authoritativeOps===1?gesture.label:'gesture ('+gesture.authoritativeOps+' samples)',before:gesture.before,after:new Float32Array(buf),authoritativeOps:gesture.authoritativeOps};
+  _unifiedSculptUndo.push(record);if(_unifiedSculptUndo.length>50)_unifiedSculptUndo.shift();_unifiedSculptRedo.length=0;
+  return record;
+}
+function _beginSculptGesture(){
+  _finishSculptGesture();
+  _activeSculptGesture={label:'sculpt gesture',before:new Float32Array(buf),authoritativeOps:0};
+}
+function clearSculptTransactionHistory(){
+  _activeSculptGesture=null;
+  _unifiedSculptUndo.length=0;_unifiedSculptRedo.length=0;
+  _undoRing.length=0;_undoHead=0;_undoCount=0;
+  window.clearChunkSculptHistory?.();
+}
+window.clearSculptTransactionHistory=clearSculptTransactionHistory;
 function pushUndo(){
+  // Presets and non-sculpt bulk edits use the legacy snapshot ring. Clear sculpt
+  // history at that boundary so Undo never crosses an untracked mutation.
+  clearSculptTransactionHistory();
   const snap=new Float32Array(buf);
   _undoRing[_undoHead%UNDO_MAX]=snap;
   _undoHead++;
   if(_undoCount<UNDO_MAX)_undoCount++;
 }
-function undo(){
-  if(_undoCount===0){log('Nothing to undo');return;}
+function _unifiedSculptApply(label,applyLegacy,applyAuthoritative){
+  const before=new Float32Array(buf);
+  const field=window.infiniteWorld?.authoritativeField;
+  const mutationCountBefore=field?.getMutationCount?.()??0;
+  try{
+    applyLegacy();
+    const result=applyAuthoritative();
+    if(result===null||result===undefined||result===false)throw new Error('Authoritative sculpt mutation was rejected');
+    if(_activeSculptGesture){
+      if(_activeSculptGesture.authoritativeOps===0)_activeSculptGesture.label=label;
+      else if(_activeSculptGesture.label!==label)_activeSculptGesture.label='sculpt gesture';
+      _activeSculptGesture.authoritativeOps++;
+    }else{
+      const record={label,before,after:new Float32Array(buf),authoritativeOps:1};
+      _unifiedSculptUndo.push(record);if(_unifiedSculptUndo.length>50)_unifiedSculptUndo.shift();_unifiedSculptRedo.length=0;
+    }
+    window.buf=buf;drawGrid();
+    return result;
+  }catch(error){
+    buf.set(before);
+    const mutationCountAfter=field?.getMutationCount?.()??mutationCountBefore;
+    if(mutationCountAfter!==mutationCountBefore)window.infinityUndoLegacySculptAuthoritative?.();
+    window.buf=buf;drawGrid();
+    throw error;
+  }
+}
+async function undo(){
+  if(_unifiedSculptUndo.length){
+    const record=_unifiedSculptUndo[_unifiedSculptUndo.length-1];
+    let completed=0;
+    try{
+      for(let i=0;i<record.authoritativeOps;i++){
+        const result=window.infinityUndoLegacySculptAuthoritative?.();
+        if(!result)throw new Error('Authoritative sculpt undo rejected');
+        try{
+          const acknowledgement=await window.undoChunkSculpt?.();
+          if(!acknowledgement||acknowledgement.action!=='undo'||acknowledgement.applied!==true)
+            throw new Error('Sparse worker sculpt undo rejected');
+        }catch(workerError){
+          const restored=window.infinityRedoLegacySculptAuthoritative?.();
+          if(!restored)throw new Error('Authoritative undo rollback after worker rejection failed: '+String(workerError));
+          throw workerError;
+        }
+        completed++;
+      }
+    }catch(error){
+      let rollbackError=null;
+      for(let i=0;i<completed;i++){
+        try{
+          const restored=window.infinityRedoLegacySculptAuthoritative?.();
+          if(!restored)throw new Error('Authoritative sculpt undo rollback rejected');
+          const acknowledgement=await window.redoChunkSculpt?.();
+          if(!acknowledgement||acknowledgement.action!=='redo'||acknowledgement.applied!==true)
+            throw new Error('Sparse worker sculpt undo rollback rejected');
+        }catch(rollback){rollbackError=rollback;break;}
+      }
+      if(rollbackError)throw new Error('Sculpt undo failed and partial rollback failed: '+String(rollbackError)+'; original: '+String(error));
+      throw error;
+    }
+    _unifiedSculptUndo.pop();buf.set(record.before);_unifiedSculptRedo.push(record);
+    window.buf=buf;drawGrid();log('↩ Undo '+record.label);return record.label;
+  }
+  if(_undoCount===0){log('Nothing to undo');return null;}
   _undoHead--;if(_undoHead<0)_undoHead=UNDO_MAX-1;
   _undoCount--;
   buf.set(_undoRing[_undoHead%UNDO_MAX]);
-  window.buf=buf;drawGrid();log('↩ Undo');
+  window.buf=buf;drawGrid();log('↩ Undo');return 'legacy-snapshot';
 }
-window.undo=undo;
+async function redo(){
+  if(!_unifiedSculptRedo.length)return null;
+  const record=_unifiedSculptRedo[_unifiedSculptRedo.length-1];
+  let completed=0;
+  try{
+    for(let i=0;i<record.authoritativeOps;i++){
+      const result=window.infinityRedoLegacySculptAuthoritative?.();
+      if(!result)throw new Error('Authoritative sculpt redo rejected');
+      try{
+        const acknowledgement=await window.redoChunkSculpt?.();
+        if(!acknowledgement||acknowledgement.action!=='redo'||acknowledgement.applied!==true)
+          throw new Error('Sparse worker sculpt redo rejected');
+      }catch(workerError){
+        const restored=window.infinityUndoLegacySculptAuthoritative?.();
+        if(!restored)throw new Error('Authoritative redo rollback after worker rejection failed: '+String(workerError));
+        throw workerError;
+      }
+      completed++;
+    }
+  }catch(error){
+    let rollbackError=null;
+    for(let i=0;i<completed;i++){
+      try{
+        const restored=window.infinityUndoLegacySculptAuthoritative?.();
+        if(!restored)throw new Error('Authoritative sculpt redo rollback rejected');
+        const acknowledgement=await window.undoChunkSculpt?.();
+        if(!acknowledgement||acknowledgement.action!=='undo'||acknowledgement.applied!==true)
+          throw new Error('Sparse worker sculpt redo rollback rejected');
+      }catch(rollback){rollbackError=rollback;break;}
+    }
+    if(rollbackError)throw new Error('Sculpt redo failed and partial rollback failed: '+String(rollbackError)+'; original: '+String(error));
+    throw error;
+  }
+  _unifiedSculptRedo.pop();buf.set(record.after);_unifiedSculptUndo.push(record);
+  window.buf=buf;drawGrid();log('↪ Redo '+record.label);return record.label;
+}
+window.undo=undo;window.redo=redo;
 
+function _legacyWorldCell(x,y){return{x:Math.round(x/W*127),y:Math.round(y/H*127),z:0};}
+function _fieldsForLayer(selectedLayer){
+  const names=['energy','density','information','entropy','temperature','bio'];
+  return{[names[selectedLayer<0?0:selectedLayer]??'energy']:1};
+}
+function _applyUnifiedSmartBrush(name,x,y,radius,strength){
+  const worldCell=_legacyWorldCell(x,y);
+  const bridge=window.infinityApplyLegacySmartBrush;
+  if(typeof bridge!=='function')throw new Error('Authoritative SmartBrush bridge is unavailable');
+  const mappedName=name==='Civ Seed'?'Civilization Seed':name;
+  const supported=['Volcano','Forest','Ocean','Crystal','Storm','Life Cluster','Radiation','Civilization Seed'];
+  const result=_unifiedSculptApply('smart:'+name,
+    ()=>BRUSHES[name].paint(x,y,radius),
+    ()=>supported.includes(mappedName)
+      ? bridge(mappedName,worldCell,Math.max(2,radius*2),0,{strength})
+      : window.infinityApplyLegacySculptStroke?.('inject',worldCell,Math.max(2,radius*2),strength,{
+          fields:name==='Gravity Well'?{energy:1,density:1}:{entropy:1,information:1},selectedLegacyZ:0,
+        }));
+  if(window.applyChunkBrush)window.applyChunkBrush(name,worldCell.x,worldCell.y,32,Math.max(2,radius*2),strength,true);
+  return result;
+}
+function _applyUnifiedStroke(toolName,cell,radius,strength,fields,selectedLayer=layer){
+  const x=cell.x,y=cell.y,worldCell=_legacyWorldCell(x,y);
+  const legacyStrength=strength*400;
+  const fi=[FE,FD,FI,FS,FT,FBio][selectedLayer]??FE;
+  const mx=[9999,1,999,1,2000,1][selectedLayer]??9999;
+  const effectiveTool=toolName==='erase'?'erase':toolName==='paint'?'paint':'inject';
+  const result=_unifiedSculptApply('brush:'+effectiveTool,
+    ()=>{
+      for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){
+        const nx=x+dx,ny=y+dy;if(nx<0||nx>=W||ny<0||ny>=H||dx*dx+dy*dy>radius*radius)continue;
+        if(effectiveTool==='erase'){[FE,FD,FI,FS,FT,FBio].forEach(f=>set_(nx,ny,f,0));}
+        else if(effectiveTool==='inject')add_(nx,ny,fi,legacyStrength);
+        else set_(nx,ny,fi,clamp(legacyStrength,0,mx));
+      }
+    },
+    ()=>{
+      const bridge=window.infinityApplyLegacySculptStroke;
+      if(typeof bridge!=='function')throw new Error('Authoritative sculpt bridge is unavailable');
+      return bridge(effectiveTool==='erase'?'erase':effectiveTool==='paint'?'paint':'inject',worldCell,Math.max(2,radius*2),strength,{
+        fields:{...fields},selectedLegacyZ:0,
+      });
+    });
+  if(window.paintChunkAt){
+    const f3=[0,1,2,3,4,10][selectedLayer<0?0:selectedLayer]??0;
+    window.paintChunkAt(worldCell.x,worldCell.y,32,f3,effectiveTool==='erase'?0:legacyStrength,Math.max(3,radius*3),effectiveTool==='erase'?'erase':effectiveTool==='paint'?'set':'add',true);
+  }
+  return result;
+}
+window.realitySculptTransactionRuntime={
+  applySmartBrush:(name,x,y,radius,selectedZ=0,strength=1)=>_applyUnifiedSmartBrush(name,x,y,radius,strength),
+  applyStroke:(toolName,cell,radius,strength,fields={energy:1})=>_applyUnifiedStroke(toolName,cell,radius,strength,fields),
+  beginGesture:()=>_beginSculptGesture(),endGesture:()=>_finishSculptGesture(),
+  undo:()=>undo(),redo:()=>redo(),
+  history:()=>({undo:_unifiedSculptUndo.length,redo:_unifiedSculptRedo.length,undoLabels:_unifiedSculptUndo.map(x=>x.label),redoLabels:_unifiedSculptRedo.map(x=>x.label)}),
+  fingerprint:()=>{const bits=new Uint32Array(buf.buffer,buf.byteOffset,buf.length);let a=2166136261,b=2246822519;for(let i=0;i<bits.length;i++){a=Math.imul(a^bits[i],16777619)>>>0;b=Math.imul(b^(bits[i]+i),3266489917)>>>0;}return bits.length+':'+a+':'+b;},
+};
 function paintAt(x,y){
   const bs=parseInt(document.getElementById('bsize')?.value||2);
   const str=parseInt(document.getElementById('bstr')?.value||400);
-  if(tool==='stamp_prefab'&&window.gamedevMode){window.gamedevMode.stampAt(x,y);return;}
+  if(tool==='stamp_prefab'&&window.gamedevMode){pushUndo();window.gamedevMode.stampAt(x,y);return;}
   if(activeBrush&&BRUSHES[activeBrush]){
-    if(window.applyChunkBrush)window.applyChunkBrush(activeBrush,Math.round(x/W*127),Math.round(y/H*127),32,Math.max(2,bs*2),str/400);
-    BRUSHES[activeBrush].paint(x,y,bs+1);
+    _applyUnifiedSmartBrush(activeBrush,x,y,bs+1,str/400);
     return;
   }
-  const fi=[FE,FD,FI,FS,FT,FBio][layer]??FE;
-  const mx=[9999,1,999,1,2000,1][layer]??9999;
-  for(let dy=-bs;dy<=bs;dy++)for(let dx=-bs;dx<=bs;dx++){
-    const nx=x+dx,ny=y+dy;if(nx<0||nx>=W||ny<0||ny>=H||dx*dx+dy*dy>bs*bs)continue;
-    if(tool==='erase'){[FE,FD,FI,FS,FT,FBio].forEach(f=>set_(nx,ny,f,0));}
-    else if(tool==='inject')add_(nx,ny,fi,str);
-    else if(tool==='paint')set_(nx,ny,fi,clamp(str,0,mx));
-  }
-  if(window.paintChunkAt){
-    const x3=Math.round(x/W*127),y3=Math.round(y/H*127),z3=32;
-    const f3=[0,1,2,3,4,10][layer<0?0:layer]??0;
-    window.paintChunkAt(x3,y3,z3,f3,tool==='erase'?0:str,Math.max(3,bs*3),tool==='erase'?'set':'add');
-  }
+  const selectedLayer=layer<0?0:layer;
+  _applyUnifiedStroke(tool,{x,y,z:0},bs,str/400,_fieldsForLayer(selectedLayer),selectedLayer);
 }
 wrap.addEventListener('pointerdown',e=>{
   if(currentRenderMode==='3d')return;
   const c=getCellAt(e);if(!c)return;
   painting=true;wrap.setPointerCapture(e.pointerId);
   if(tool==='inspect'){selX=c.x;selY=c.y;histE=[];histT=[];histI=[];histS=[];histB=[];explainCell(c.x,c.y);}
-  else{pushUndo();paintAt(c.x,c.y);}
+  else{_beginSculptGesture();paintAt(c.x,c.y);}
 });
 wrap.addEventListener('pointermove',e=>{
   if(currentRenderMode==='3d'||!painting)return;const c=getCellAt(e);if(!c)return;
   if(tool==='inspect'){selX=c.x;selY=c.y;}else paintAt(c.x,c.y);
 });
-wrap.addEventListener('pointerup',()=>{painting=false;});
+wrap.addEventListener('pointerup',()=>{painting=false;_finishSculptGesture();});
+wrap.addEventListener('pointercancel',()=>{painting=false;_finishSculptGesture();});
 
 // ── PRESETS ───────────────────────────────────────────────────────────────
 window.applyPreset=function(p){

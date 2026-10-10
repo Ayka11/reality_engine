@@ -453,49 +453,101 @@ try {
     }
   }
 
-  // Authoritative sculpt transaction contract: verify ordered mixed history
-  // (SmartBrush -> ordinary legacy stroke -> undo x2 -> redo x2) and persistence.
-  const sculptContract = await page.evaluate(() => {
-    const world = window.infiniteWorld;
-    if (!world || typeof window.infinityApplyLegacySculptStroke !== "function" || typeof window.infinityApplyLegacySmartBrush !== "function") {
-      return { error: "Authoritative legacy sculpt bridge is not fully exposed" };
+  // Exercise the active inline UI's actual Float32Array grid and the authoritative world field.
+  // The active page uses index.html's legacy grid (window.buf), not the dormant src/main.ts canvas.
+  await page.waitForFunction(() =>
+    !!window.infiniteWorld?.authoritativeField &&
+    typeof window.realitySculptTransactionRuntime?.applySmartBrush === "function" &&
+    typeof window.realitySculptTransactionRuntime?.applyStroke === "function" &&
+    typeof window.realitySculptTransactionRuntime?.undo === "function" &&
+    typeof window.realitySculptTransactionRuntime?.redo === "function",
+    undefined,
+    { timeout: acceptanceTimeout },
+  );
+  const sculptContract = await page.evaluate(async () => {
+    const world = window.infiniteWorld, runtime = window.realitySculptTransactionRuntime;
+    if (!world || !world.authoritativeField || !runtime || !window.buf) {
+      return { error: "Active legacy-grid sculpt runtime is not exposed", hasWorld: !!world,
+        hasField: !!world?.authoritativeField, hasRuntime: !!runtime, hasLegacyGrid: !!window.buf };
     }
+    const fingerprint = (buffer) => {
+      const bits = new Uint32Array(buffer.buffer, buffer.byteOffset, buffer.length);
+      let a = 2166136261, b = 2246822519;
+      for (let i = 0; i < bits.length; i++) {
+        a = Math.imul(a ^ bits[i], 16777619) >>> 0;
+        b = Math.imul(b ^ (bits[i] + i), 3266489917) >>> 0;
+      }
+      return `${bits.length}:${a}:${b}`;
+    };
+    const legacyBuffer = () => window.buf;
+    const samplePoint = { x: 14, y: 0, z: 23 }; // legacy (4,5,0) mapped to world (x,z,y)
+    const baselineLegacy = fingerprint(legacyBuffer());
     const baselineState = world.authoritativeField.serialize();
-    const baselineSample = world.authoritativeField.sample(4, 2, 5);
+    const baselineSample = world.authoritativeField.sample(samplePoint.x, samplePoint.y, samplePoint.z);
     const baselineCount = world.authoritativeField.getMutationCount();
-
-    window.infinityApplyLegacySmartBrush("Forest", { x: 4, y: 5, z: 2 }, 3, 2, { strength: 0.5 });
+    await runtime.applySmartBrush("Forest", 4, 5, 3, 0, 0.5);
+    const afterSmartLegacy = fingerprint(legacyBuffer());
     const afterSmartState = world.authoritativeField.serialize();
     const smartMutation = afterSmartState.mutations[afterSmartState.mutations.length - 1];
-    const afterSmartSample = world.authoritativeField.sample(4, 2, 5);
+    const afterSmartSample = world.authoritativeField.sample(samplePoint.x, samplePoint.y, samplePoint.z);
     const afterSmartCount = world.authoritativeField.getMutationCount();
-
-    window.infinityApplyLegacySculptStroke("inject", { x: 4, y: 5, z: 2 }, 2, 1, {
-      fields: { energy: 1 },
-      selectedLegacyZ: 2,
-    });
+    await runtime.applyStroke("inject", { x: 4, y: 5, z: 0 }, 2, 1, { energy: 1 });
+    const afterOrdinaryLegacy = fingerprint(legacyBuffer());
     const afterOrdinaryState = world.authoritativeField.serialize();
-    const afterOrdinarySample = world.authoritativeField.sample(4, 2, 5);
+    const afterOrdinarySample = world.authoritativeField.sample(samplePoint.x, samplePoint.y, samplePoint.z);
     const afterOrdinaryCount = world.authoritativeField.getMutationCount();
+    const mixedWorkerAckStart = window.lastChunkSculptHistory?.seq ?? 0;
+    runtime.undo();
+    const undoOneLegacy = fingerprint(legacyBuffer()), undoOneState = world.authoritativeField.serialize();
+    runtime.undo();
+    const undoTwoLegacy = fingerprint(legacyBuffer()), undoTwoState = world.authoritativeField.serialize();
+    runtime.redo();
+    const redoOneLegacy = fingerprint(legacyBuffer()), redoOneState = world.authoritativeField.serialize();
+    runtime.redo();
+    await new Promise((resolve, reject) => {
+      const deadline = Date.now() + 5000;
+      const check = () => {
+        if ((window.lastChunkSculptHistory?.seq ?? 0) >= mixedWorkerAckStart + 4) resolve();
+        else if (Date.now() > deadline) reject(new Error("Sparse worker did not acknowledge mixed sculpt undo/redo"));
+        else setTimeout(check, 10);
+      };
+      check();
+    });
+    const redoTwoLegacy = fingerprint(legacyBuffer()), redoTwoState = world.authoritativeField.serialize();
+    const mixedHistoryAfterRedo = runtime.history();
 
-    window.infinityUndoLegacySculptAuthoritative?.();
-    const undoOneState = world.authoritativeField.serialize();
-    window.infinityUndoLegacySculptAuthoritative?.();
-    const undoTwoState = world.authoritativeField.serialize();
-
-    window.infinityRedoLegacySculptAuthoritative?.();
-    const redoOneState = world.authoritativeField.serialize();
-    window.infinityRedoLegacySculptAuthoritative?.();
-    const redoTwoState = world.authoritativeField.serialize();
-
-    return {
-      baselineState, afterSmartState, afterOrdinaryState, undoOneState, undoTwoState,
-      redoOneState, redoTwoState, baselineSample, afterSmartSample, afterOrdinarySample,
-      smartMutation, baselineCount, afterSmartCount, afterOrdinaryCount,
-      history: window.infinityLegacySculptAuthoritativeHistory?.(),
-    };
+    // A drag with multiple paint samples is one user-visible undo transaction,
+    // while the worker records each sample so the grouped undo can replay them all.
+    const gestureBaselineLegacy = fingerprint(legacyBuffer());
+    const gestureBaselineState = world.authoritativeField.serialize();
+    const gestureHistoryBefore = runtime.history().undo;
+    const workerAckStart = window.lastChunkSculptHistory?.seq ?? 0;
+    runtime.beginGesture();
+    await runtime.applyStroke("inject", { x: 10, y: 8, z: 0 }, 1, 0.5, { energy: 1 });
+    await runtime.applyStroke("inject", { x: 11, y: 8, z: 0 }, 1, 0.5, { energy: 1 });
+    runtime.endGesture();
+    const gestureAfterLegacy = fingerprint(legacyBuffer());
+    const gestureAfterState = world.authoritativeField.serialize();
+    const gestureHistoryAfterCommit = runtime.history();
+    runtime.undo();
+    const gestureUndoLegacy = fingerprint(legacyBuffer());
+    const gestureUndoState = world.authoritativeField.serialize();
+    runtime.redo();
+    const gestureRedoLegacy = fingerprint(legacyBuffer());
+    const gestureRedoState = world.authoritativeField.serialize();
+    return { baselineState, afterSmartState, afterOrdinaryState, undoOneState, undoTwoState, redoOneState, redoTwoState,
+      baselineSample, afterSmartSample, afterOrdinarySample, smartMutation, baselineCount, afterSmartCount, afterOrdinaryCount,
+      history: mixedHistoryAfterRedo, legacyParity: { undoOne: undoOneLegacy === afterSmartLegacy, undoTwo: undoTwoLegacy === baselineLegacy,
+        redoOne: redoOneLegacy === afterSmartLegacy, redoTwo: redoTwoLegacy === afterOrdinaryLegacy },
+      gesture: { workerAckStart, baselineLegacy: gestureBaselineLegacy, baselineState: gestureBaselineState,
+        afterLegacy: gestureAfterLegacy, afterState: gestureAfterState, undoLegacy: gestureUndoLegacy, undoState: gestureUndoState,
+        redoLegacy: gestureRedoLegacy, redoState: gestureRedoState, historyBefore: gestureHistoryBefore,
+        historyAfterCommit: gestureHistoryAfterCommit, historyAfterRedo: runtime.history() } };
   });
-  if (sculptContract.error) throw new Error(sculptContract.error);
+  if (sculptContract.error) throw new Error(`${sculptContract.error}: ${JSON.stringify(sculptContract)}`);
+  if (!sculptContract.legacyParity?.undoOne || !sculptContract.legacyParity?.undoTwo || !sculptContract.legacyParity?.redoOne || !sculptContract.legacyParity?.redoTwo) {
+    throw new Error(`Unified sculpt history diverged between legacy and authoritative models: ${JSON.stringify(sculptContract.legacyParity)}`);
+  }
   if (sculptContract.afterSmartCount !== sculptContract.baselineCount + 1) {
     throw new Error(`SmartBrush did not create exactly one authoritative mutation: ${JSON.stringify(sculptContract)}`);
   }
@@ -526,8 +578,20 @@ try {
   if (sculptContract.history?.undo !== 2 || sculptContract.history?.redo !== 0) {
     throw new Error(`Mixed sculpt history lengths are incorrect after redo x2: ${JSON.stringify(sculptContract.history)}`);
   }
+  const gesture = sculptContract.gesture;
+  if (gesture.historyAfterCommit?.undo !== gesture.historyBefore + 1 || gesture.historyAfterCommit?.redo !== 0) {
+    throw new Error(`Pointer-drag samples were not grouped into one undo transaction: ${JSON.stringify(gesture.historyAfterCommit)}`);
+  }
+  if (gesture.undoLegacy !== gesture.baselineLegacy || JSON.stringify(gesture.undoState) !== JSON.stringify(gesture.baselineState)) {
+    throw new Error("Grouped sculpt gesture undo did not restore both legacy grid and authoritative field");
+  }
+  if (gesture.redoLegacy !== gesture.afterLegacy || JSON.stringify(gesture.redoState) !== JSON.stringify(gesture.afterState)) {
+    throw new Error("Grouped sculpt gesture redo did not restore both legacy grid and authoritative field");
+  }
+  await page.waitForFunction((start) => (window.lastChunkSculptHistory?.seq ?? 0) >= start + 4,
+    gesture.workerAckStart, { timeout: acceptanceTimeout });
 
-  const persistedSculptState = sculptContract.redoTwoState;
+  const persistedSculptState = sculptContract.gesture.redoState;
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
@@ -535,6 +599,200 @@ try {
   if (JSON.stringify(reloadedSculptState) !== JSON.stringify(persistedSculptState)) {
     throw new Error("Mixed authoritative sculpt persistence did not survive a page reload");
   }
+
+  // Exercise actual pointerdown -> pointermove* -> pointerup, not only the helper.
+  console.log("[acceptance] literal pointer-drag sculpt undo/redo");
+  const dragSetup = await page.evaluate(() => {
+    window.setRenderMode?.("2d");
+    window.setTool?.("inject", null);
+    window.selectBrush?.(null);
+    window.setLayer?.(0);
+    const size = document.getElementById("bsize"); if (size) size.value = "1";
+    const strength = document.getElementById("bstr"); if (strength) strength.value = "200";
+    const wrap = document.getElementById("viewWrap");
+    if (!wrap) return { error: "viewWrap missing" };
+    const rect = wrap.getBoundingClientRect();
+    const cellSize = Math.min(rect.width / window.W, rect.height / window.H);
+    const ox = (rect.width - cellSize * window.W) / 2, oy = (rect.height - cellSize * window.H) / 2;
+    const point = (x, y) => ({ x: rect.left + ox + (x + 0.5) * cellSize, y: rect.top + oy + (y + 0.5) * cellSize });
+    return { start: point(8, 8), end: point(13, 8),
+      beforeLegacy: window.realitySculptTransactionRuntime.fingerprint(),
+      beforeField: window.infiniteWorld.authoritativeField.serialize(),
+      beforeMutationCount: window.infiniteWorld.authoritativeField.getMutationCount() };
+  });
+  if (dragSetup.error) throw new Error(dragSetup.error);
+  await page.mouse.move(dragSetup.start.x, dragSetup.start.y);
+  await page.mouse.down();
+  await page.mouse.move(dragSetup.end.x, dragSetup.end.y, { steps: 4 });
+  await page.mouse.up();
+  const dragAfter = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    mutationCount: window.infiniteWorld.authoritativeField.getMutationCount(),
+    history: window.realitySculptTransactionRuntime.history(),
+  }));
+  const dragOperations = dragAfter.mutationCount - dragSetup.beforeMutationCount;
+  if (dragAfter.legacy === dragSetup.beforeLegacy || dragOperations < 2) {
+    throw new Error(`Actual pointer drag did not produce multiple sculpt samples: ${JSON.stringify({ dragAfter, dragOperations })}`);
+  }
+  if (dragAfter.history.undo !== 1 || dragAfter.history.redo !== 0) {
+    throw new Error(`Actual pointer drag must create exactly one undo record: ${JSON.stringify(dragAfter.history)}`);
+  }
+  const dragUndoAckStart = await page.evaluate(() => window.lastChunkSculptHistory?.seq ?? 0);
+  await page.evaluate(() => window.undo());
+  await page.waitForFunction(({ start, count }) => (window.lastChunkSculptHistory?.seq ?? 0) >= start + count,
+    { start: dragUndoAckStart, count: dragOperations }, { timeout: acceptanceTimeout });
+  const dragUndone = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+    workerApplied: window.lastChunkSculptHistory?.applied,
+  }));
+  if (dragUndone.legacy !== dragSetup.beforeLegacy || JSON.stringify(dragUndone.field) !== JSON.stringify(dragSetup.beforeField)) {
+    throw new Error("Literal pointer-drag undo did not restore the legacy grid and authoritative field");
+  }
+  if (dragUndone.history.undo !== 0 || dragUndone.history.redo !== 1 || dragUndone.workerApplied !== true) {
+    throw new Error(`Literal pointer-drag undo history/worker parity failed: ${JSON.stringify(dragUndone)}`);
+  }
+  const dragRedoAckStart = await page.evaluate(() => window.lastChunkSculptHistory?.seq ?? 0);
+  await page.evaluate(() => window.redo());
+  await page.waitForFunction(({ start, count }) => (window.lastChunkSculptHistory?.seq ?? 0) >= start + count,
+    { start: dragRedoAckStart, count: dragOperations }, { timeout: acceptanceTimeout });
+  const dragRedone = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+    workerApplied: window.lastChunkSculptHistory?.applied,
+  }));
+  if (dragRedone.legacy !== dragAfter.legacy || JSON.stringify(dragRedone.field) !== JSON.stringify(dragAfter.field)) {
+    throw new Error("Literal pointer-drag redo did not restore the post-gesture models");
+  }
+  if (dragRedone.history.undo !== 1 || dragRedone.history.redo !== 0 || dragRedone.workerApplied !== true) {
+    throw new Error(`Literal pointer-drag redo history/worker parity failed: ${JSON.stringify(dragRedone)}`);
+  }
+
+  // Failure injection: if a multi-sample undo fails after one authoritative
+  // operation, roll that operation forward and retain the original history.
+  const partialUndoBaseline = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+  }));
+  await page.evaluate(async () => {
+    const runtime = window.realitySculptTransactionRuntime;
+    runtime.beginGesture();
+    await runtime.applyStroke("inject", { x: 20, y: 20, z: 0 }, 1, 0.25, { energy: 1 });
+    await runtime.applyStroke("inject", { x: 21, y: 20, z: 0 }, 1, 0.25, { energy: 1 });
+    runtime.endGesture();
+  });
+  const partialUndoBeforeFailure = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+  }));
+  const workerUndoFailure = await page.evaluate(async () => {
+    const original = window.undoChunkSculpt;
+    window.undoChunkSculpt = () => Promise.resolve({
+      action: "undo",
+      applied: false,
+      seq: (window.lastChunkSculptHistory?.seq ?? 0) + 1,
+    });
+    let message = "";
+    try { await window.undo(); } catch (error) { message = String(error?.message || error); }
+    finally { window.undoChunkSculpt = original; }
+    return {
+      message,
+      legacy: window.realitySculptTransactionRuntime.fingerprint(),
+      field: window.infiniteWorld.authoritativeField.serialize(),
+      history: window.realitySculptTransactionRuntime.history(),
+    };
+  });
+  if (!workerUndoFailure.message.includes("sculpt undo rejected") ||
+      workerUndoFailure.legacy !== partialUndoBeforeFailure.legacy ||
+      JSON.stringify(workerUndoFailure.field) !== JSON.stringify(partialUndoBeforeFailure.field) ||
+      workerUndoFailure.history.undo !== partialUndoBeforeFailure.history.undo ||
+      workerUndoFailure.history.redo !== partialUndoBeforeFailure.history.redo) {
+    throw new Error("Rejected sparse-worker Undo did not preserve the pre-undo transaction state: " + JSON.stringify(workerUndoFailure));
+  }
+  const workerAckBeforePartialUndo = await page.evaluate(() => window.lastChunkSculptHistory?.seq ?? 0);
+  const injectedUndo = await page.evaluate(async () => {
+    const original = window.infinityUndoLegacySculptAuthoritative;
+    let calls = 0;
+    window.infinityUndoLegacySculptAuthoritative = (...args) => {
+      calls++;
+      if (calls === 2) return false;
+      return original?.(...args);
+    };
+    let message = "";
+    try { await window.undo(); } catch (error) { message = String(error?.message || error); }
+    finally { window.infinityUndoLegacySculptAuthoritative = original; }
+    return { calls, message };
+  });
+  const partialUndoAfterFailure = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+  }));
+  if (injectedUndo.calls !== 2 || !injectedUndo.message.includes("undo rejected")) {
+    throw new Error(`Partial undo failure was not injected as expected: ${JSON.stringify(injectedUndo)}`);
+  }
+  await page.waitForFunction(
+    (seq) => (window.lastChunkSculptHistory?.seq ?? 0) >= seq + 2,
+    workerAckBeforePartialUndo,
+    { timeout: acceptanceTimeout },
+  );
+  const partialUndoWorkerAck = await page.evaluate(() => window.lastChunkSculptHistory);
+  if (partialUndoWorkerAck?.action !== "redo" || partialUndoWorkerAck?.applied !== true) {
+    throw new Error("Sparse worker did not acknowledge rollback after partial undo: " + JSON.stringify(partialUndoWorkerAck));
+  }
+  if (partialUndoAfterFailure.legacy !== partialUndoBeforeFailure.legacy ||
+      JSON.stringify(partialUndoAfterFailure.field) !== JSON.stringify(partialUndoBeforeFailure.field) ||
+      partialUndoAfterFailure.history.undo !== partialUndoBeforeFailure.history.undo ||
+      partialUndoAfterFailure.history.redo !== partialUndoBeforeFailure.history.redo) {
+    throw new Error("Failed multi-sample undo did not roll back to the exact pre-undo state");
+  }
+  await page.evaluate(() => window.undo());
+  const partialUndoRecovered = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+  }));
+  if (partialUndoRecovered.legacy !== partialUndoBaseline.legacy ||
+      JSON.stringify(partialUndoRecovered.field) !== JSON.stringify(partialUndoBaseline.field) ||
+      partialUndoRecovered.history.undo !== partialUndoBaseline.history.undo ||
+      partialUndoRecovered.history.redo !== partialUndoBaseline.history.redo + 1) {
+    throw new Error("Undo history was not usable after a failed partial undo");
+  }
+  const workerRedoBaseline = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+  }));
+  const workerRedoFailure = await page.evaluate(async () => {
+    const original = window.redoChunkSculpt;
+    window.redoChunkSculpt = () => Promise.resolve({
+      action: "redo",
+      applied: false,
+      seq: (window.lastChunkSculptHistory?.seq ?? 0) + 1,
+    });
+    let message = "";
+    try { await window.redo(); } catch (error) { message = String(error?.message || error); }
+    finally { window.redoChunkSculpt = original; }
+    return {
+      message,
+      legacy: window.realitySculptTransactionRuntime.fingerprint(),
+      field: window.infiniteWorld.authoritativeField.serialize(),
+      history: window.realitySculptTransactionRuntime.history(),
+    };
+  });
+  if (!workerRedoFailure.message.includes("sculpt redo rejected") ||
+      workerRedoFailure.legacy !== workerRedoBaseline.legacy ||
+      JSON.stringify(workerRedoFailure.field) !== JSON.stringify(workerRedoBaseline.field) ||
+      workerRedoFailure.history.undo !== workerRedoBaseline.history.undo ||
+      workerRedoFailure.history.redo !== workerRedoBaseline.history.redo) {
+    throw new Error("Rejected sparse-worker Redo did not preserve the pre-redo transaction state: " + JSON.stringify(workerRedoFailure));
+  }
+  await page.evaluate(() => window.redo());
 
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
