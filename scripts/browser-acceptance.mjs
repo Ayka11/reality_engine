@@ -301,11 +301,16 @@ try {
   );
   // Seed one known voxel so the worker emits at least one dirty chunk even when
   // the initial simulation has not ticked yet.
-  await page.evaluate(() => {
+  const workerFixtureReady = await page.evaluate(async () => {
     window.paintChunkAt?.(64, 29, 64, 0, 0.5, 1, "set");
-    window.tickChunkWorker?.(true, 1);
+    for (let attempt = 0; attempt < 80; attempt++) {
+      window.tickChunkWorker?.(true, 1);
+      if (Number(window.worldFieldWorkerChunkStats?.() ?? 0) > 0) return true;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return false;
   });
-  await page.waitForFunction(() => Number(window.worldFieldWorkerChunkStats?.() ?? 0) > 0, undefined, { timeout: acceptanceTimeout });
+  if (!workerFixtureReady) throw new Error("Worker did not publish the seeded dirty chunk before restore acceptance");
   const chunkRestoreFixture = await page.evaluate(() => {
     const view = window.getWorldViewContract?.();
     if (!view) return { error: "World View contract unavailable" };
