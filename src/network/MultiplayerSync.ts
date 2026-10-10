@@ -15,12 +15,6 @@ interface BroadcastMsg {
   buf?: number[];
 }
 
-interface SignalEnvelope {
-  type: 'app-message';
-  from: string;
-  payload: BroadcastMsg;
-}
-
 const ROOM_PATTERN = /^[A-Za-z0-9_-]{12,64}$/;
 
 export class MultiplayerSync {
@@ -59,7 +53,7 @@ export class MultiplayerSync {
         let envelope: unknown;
         try { envelope = JSON.parse(String(event.data)); } catch { return; }
         if (!envelope || typeof envelope !== 'object') return;
-        const message = envelope as Partial<SignalEnvelope> & { type?: string; from?: string; payload?: BroadcastMsg };
+        const message = envelope as { type?: string; from?: string; payload?: BroadcastMsg };
         if (message.type === 'announce' && typeof message.from === 'string') {
           this._handleMessage({ type: 'join', userId: message.from, color: '#888' });
           return;
