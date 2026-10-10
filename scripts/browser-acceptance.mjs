@@ -715,7 +715,7 @@ try {
     throw new Error("Rejected sparse-worker Undo did not preserve the pre-undo transaction state: " + JSON.stringify(workerUndoFailure));
   }
   const workerAckBeforePartialUndo = await page.evaluate(() => window.lastChunkSculptHistory?.seq ?? 0);
-  const injectedUndo = await page.evaluate(() => {
+  const injectedUndo = await page.evaluate(async () => {
     const original = window.infinityUndoLegacySculptAuthoritative;
     let calls = 0;
     window.infinityUndoLegacySculptAuthoritative = (...args) => {
