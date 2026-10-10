@@ -453,10 +453,10 @@ try {
     }
   }
 
-  // Exercise the UI-owned transaction helpers used by paintAt, including legacy-grid parity.
-  // worldGenerationHealth can be published before main.ts finishes wiring the sculpt controls;
-  // wait for the transaction API itself rather than treating renderer readiness as sculpt readiness.
+  // Exercise the active inline UI's actual Float32Array grid and the authoritative world field.
+  // The active page uses index.html's legacy grid (window.buf), not the dormant src/main.ts canvas.
   await page.waitForFunction(() =>
+    !!window.infiniteWorld?.authoritativeField &&
     typeof window.realitySculptTransactionRuntime?.applySmartBrush === "function" &&
     typeof window.realitySculptTransactionRuntime?.applyStroke === "function" &&
     typeof window.realitySculptTransactionRuntime?.undo === "function" &&
@@ -466,7 +466,10 @@ try {
   );
   const sculptContract = await page.evaluate(async () => {
     const world = window.infiniteWorld, runtime = window.realitySculptTransactionRuntime;
-    if (!world || !runtime || typeof runtime.applySmartBrush !== "function" || typeof runtime.applyStroke !== "function") return { error: "Unified sculpt transaction runtime is not exposed" };
+    if (!world || !world.authoritativeField || !runtime || !window.buf) {
+      return { error: "Active legacy-grid sculpt runtime is not exposed", hasWorld: !!world,
+        hasField: !!world?.authoritativeField, hasRuntime: !!runtime, hasLegacyGrid: !!window.buf };
+    }
     const fingerprint = (buffer) => {
       const bits = new Uint32Array(buffer.buffer, buffer.byteOffset, buffer.length);
       let a = 2166136261, b = 2246822519;
@@ -476,21 +479,22 @@ try {
       }
       return `${bits.length}:${a}:${b}`;
     };
-    const legacyBuffer = () => window.realityEngine.grid.buffer;
+    const legacyBuffer = () => window.buf;
+    const samplePoint = { x: 14, y: 0, z: 23 }; // legacy (4,5,0) mapped to world (x,z,y)
     const baselineLegacy = fingerprint(legacyBuffer());
     const baselineState = world.authoritativeField.serialize();
-    const baselineSample = world.authoritativeField.sample(4, 2, 5);
+    const baselineSample = world.authoritativeField.sample(samplePoint.x, samplePoint.y, samplePoint.z);
     const baselineCount = world.authoritativeField.getMutationCount();
-    await runtime.applySmartBrush("Forest", 4, 5, 3, 2, 0.5);
+    await runtime.applySmartBrush("Forest", 4, 5, 3, 0, 0.5);
     const afterSmartLegacy = fingerprint(legacyBuffer());
     const afterSmartState = world.authoritativeField.serialize();
     const smartMutation = afterSmartState.mutations[afterSmartState.mutations.length - 1];
-    const afterSmartSample = world.authoritativeField.sample(4, 2, 5);
+    const afterSmartSample = world.authoritativeField.sample(samplePoint.x, samplePoint.y, samplePoint.z);
     const afterSmartCount = world.authoritativeField.getMutationCount();
-    await runtime.applyStroke("inject", { x: 4, y: 5, z: 2 }, 2, 1, { energy: 1 });
+    await runtime.applyStroke("inject", { x: 4, y: 5, z: 0 }, 2, 1, { energy: 1 });
     const afterOrdinaryLegacy = fingerprint(legacyBuffer());
     const afterOrdinaryState = world.authoritativeField.serialize();
-    const afterOrdinarySample = world.authoritativeField.sample(4, 2, 5);
+    const afterOrdinarySample = world.authoritativeField.sample(samplePoint.x, samplePoint.y, samplePoint.z);
     const afterOrdinaryCount = world.authoritativeField.getMutationCount();
     runtime.undo();
     const undoOneLegacy = fingerprint(legacyBuffer()), undoOneState = world.authoritativeField.serialize();
@@ -505,7 +509,7 @@ try {
       history: runtime.history(), legacyParity: { undoOne: undoOneLegacy === afterSmartLegacy, undoTwo: undoTwoLegacy === baselineLegacy,
         redoOne: redoOneLegacy === afterSmartLegacy, redoTwo: redoTwoLegacy === afterOrdinaryLegacy } };
   });
-  if (sculptContract.error) throw new Error(sculptContract.error);
+  if (sculptContract.error) throw new Error(`${sculptContract.error}: ${JSON.stringify(sculptContract)}`);
   if (!sculptContract.legacyParity?.undoOne || !sculptContract.legacyParity?.undoTwo || !sculptContract.legacyParity?.redoOne || !sculptContract.legacyParity?.redoTwo) {
     throw new Error(`Unified sculpt history diverged between legacy and authoritative models: ${JSON.stringify(sculptContract.legacyParity)}`);
   }
