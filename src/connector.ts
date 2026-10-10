@@ -205,17 +205,27 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       [...worldFieldRestoreExpectedKeys].every(key =>
         worldFieldRestoreAcknowledgedKeys.has(key) && worldFieldRestoreFrameKeys.has(key))
     if (complete) {
+      // Commit all restored chunks as one renderer frame only after the ACK/frame barrier.
+      const combined = new ArrayBuffer(4 + worldFieldRestoreExpectedKeys.size * (4 + CHUNK_FLOATS * 4))
+      const targetU32 = new Uint32Array(combined)
+      const targetF32 = new Float32Array(combined)
+      targetU32[0] = worldFieldRestoreExpectedKeys.size
+      let targetOff = 1
       for (const frame of worldFieldRestorePendingFrames.values()) {
-        const u32 = new Uint32Array(frame), f32 = new Float32Array(frame)
-        const count = u32[0]
-        let off = 1
+        const sourceU32 = new Uint32Array(frame), sourceF32 = new Float32Array(frame)
+        const count = sourceU32[0]
+        let sourceOff = 1
         for (let i = 0; i < count; i++) {
-          const chunkKey = u32[off]
-          localChunks.set(chunkKey, f32.slice(off + 1, off + 1 + CHUNK_FLOATS))
-          off += 1 + CHUNK_FLOATS
+          const chunkKey = sourceU32[sourceOff]
+          const chunkData = sourceF32.subarray(sourceOff + 1, sourceOff + 1 + CHUNK_FLOATS)
+          localChunks.set(chunkKey, new Float32Array(chunkData))
+          targetU32[targetOff] = chunkKey
+          targetF32.set(chunkData, targetOff + 1)
+          targetOff += 1 + CHUNK_FLOATS
+          sourceOff += 1 + CHUNK_FLOATS
         }
-        fieldRenderer.applyWorkerFrame(frame)
       }
+      fieldRenderer.applyWorkerFrame(combined)
       installChunkWorldFieldProvider()
       publishWorkerBoundarySnapshots()
       if (worldFieldRestoreCoord) {
