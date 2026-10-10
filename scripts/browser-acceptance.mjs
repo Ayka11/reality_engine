@@ -292,6 +292,47 @@ try {
     );
   }
 
+  // Worker restore barrier regression: persisted chunk data is not published
+  // until every expected ACK and tagged frame has arrived for the same restore ID.
+  await page.waitForFunction(() =>
+    typeof window.snapshotWorldFieldChunkPersistence === "function" &&
+    typeof window.restoreWorldFieldChunkSnapshot === "function" &&
+    typeof window.worldFieldRestoreState === "function"
+  );
+  const chunkRestoreFixture = await page.evaluate(() => {
+    const view = window.getWorldViewContract?.();
+    if (!view) return { error: "World View contract unavailable" };
+    const coord = window.worldFieldChunkCoord?.(view.center.x, view.sliceY, view.center.z);
+    if (!coord) return { error: "World chunk coordinate unavailable" };
+    const snapshot = window.snapshotWorldFieldChunkPersistence?.(coord.cx, coord.cy, coord.cz);
+    return { coord, snapshot, valid: snapshot ? window.validateWorldFieldChunkSnapshot?.(snapshot) : false };
+  });
+  if (chunkRestoreFixture.error || !chunkRestoreFixture.snapshot || chunkRestoreFixture.snapshot.schemaVersion !== 2 ||
+      !chunkRestoreFixture.snapshot.workerChunks?.length || !chunkRestoreFixture.valid) {
+    throw new Error(`Could not prepare a valid worker chunk restore fixture: ${JSON.stringify(chunkRestoreFixture)}`);
+  }
+  const restoreStarted = await page.evaluate((coord) =>
+    window.restoreWorldFieldChunkSnapshot?.(coord.cx, coord.cy, coord.cz) ?? false,
+    chunkRestoreFixture.coord
+  );
+  if (!restoreStarted) throw new Error("Worker chunk restore was rejected before dispatch");
+  await page.waitForFunction(() => window.worldFieldRestoreState?.().complete === true, undefined, { timeout: acceptanceTimeout });
+  const restoreBarrier = await page.evaluate(() => window.worldFieldRestoreState?.());
+  if (!restoreBarrier || restoreBarrier.acknowledged !== restoreBarrier.expected ||
+      restoreBarrier.duplicateAcks !== 0 || restoreBarrier.unexpectedAcks !== 0 ||
+      restoreBarrier.unexpectedFrames !== 0 || restoreBarrier.staleFrames !== 0 ||
+      restoreBarrier.staleAcks !== 0 ||
+      restoreBarrier.expectedKeys.some((key) => !restoreBarrier.keys.includes(key) || !restoreBarrier.restoreFrameKeys.includes(key))) {
+    throw new Error(`Worker restore ACK/frame barrier failed: ${JSON.stringify(restoreBarrier)}`);
+  }
+  const restoredChunkFixture = await page.evaluate((coord) => {
+    const snapshot = window.snapshotWorldFieldChunkPersistence?.(coord.cx, coord.cy, coord.cz);
+    return { snapshot, valid: snapshot ? window.validateWorldFieldChunkSnapshot?.(snapshot) : false };
+  }, chunkRestoreFixture.coord);
+  if (!restoredChunkFixture.snapshot || !restoredChunkFixture.valid ||
+      restoredChunkFixture.snapshot.checksum !== chunkRestoreFixture.snapshot.checksum) {
+    throw new Error("Worker chunk restore changed the canonical persisted payload/checksum");
+  }
 
   // Frontend parity regression: the visible Scientific Field tab must mutate the same
   // authoritative provider used by the direct runtime API.
