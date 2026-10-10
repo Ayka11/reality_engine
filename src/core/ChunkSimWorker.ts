@@ -168,6 +168,7 @@ self.onmessage = (e: MessageEvent) => {
 
   if (cmd === 'paint') {
     const { x, y, z, f, v, r, mode, trackHistory } = data
+    if (!trackHistory) clearSculptHistory()
     const cells = trackHistory ? affectedCellIndices(x,y,z,Math.max(0,r||0)) : []
     const before = trackHistory ? captureCells(cells) : null
     if (mode === 'erase') {
@@ -199,7 +200,10 @@ self.onmessage = (e: MessageEvent) => {
     const cz = Math.max(0, Math.min(D - 1, Math.round(z)))
     const r = Math.max(1, Math.min(24, radius || 4))
     const s = Number.isFinite(strength) ? strength : 1
-    const cells=affectedCellIndices(cx,cy,cz,r),before=captureCells(cells)
+    const trackHistory = data.trackHistory === true
+    if (!trackHistory) clearSculptHistory()
+    const cells = trackHistory ? affectedCellIndices(cx,cy,cz,r) : []
+    const before = trackHistory ? captureCells(cells) : null
     const paint = (f: number, value: number) => grid.paintSphere(cx, cy, cz, r, f, value * s)
     switch (name) {
       case 'Volcano': paint(F.E, 800); paint(F.T, 500); paint(F.D, 0.6); paint(F.S, 0.2); break
@@ -227,7 +231,7 @@ self.onmessage = (e: MessageEvent) => {
       }
       default: paint(F.E, 100)
     }
-    commitSculptEdit(cells,before)
+    if (before) commitSculptEdit(cells,before)
     ;(self as unknown as Worker).postMessage({ cmd: 'brushApplied', name, x: cx, y: cy, z: cz, radius: r })
     return
   }
