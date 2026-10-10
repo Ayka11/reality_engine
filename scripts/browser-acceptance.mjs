@@ -457,34 +457,43 @@ try {
   const sculptContract = await page.evaluate(async () => {
     const world = window.infiniteWorld, runtime = window.realitySculptTransactionRuntime;
     if (!world || !runtime || typeof runtime.applySmartBrush !== "function" || typeof runtime.applyStroke !== "function") return { error: "Unified sculpt transaction runtime is not exposed" };
-    const baselineLegacy = window.realityEngine.grid.buffer.slice();
+    const fingerprint = (buffer) => {
+      const bits = new Uint32Array(buffer.buffer, buffer.byteOffset, buffer.length);
+      let a = 2166136261, b = 2246822519;
+      for (let i = 0; i < bits.length; i++) {
+        a = Math.imul(a ^ bits[i], 16777619) >>> 0;
+        b = Math.imul(b ^ (bits[i] + i), 3266489917) >>> 0;
+      }
+      return `${bits.length}:${a}:${b}`;
+    };
+    const legacyBuffer = () => window.realityEngine.grid.buffer;
+    const baselineLegacy = fingerprint(legacyBuffer());
     const baselineState = world.authoritativeField.serialize();
     const baselineSample = world.authoritativeField.sample(4, 2, 5);
     const baselineCount = world.authoritativeField.getMutationCount();
     await runtime.applySmartBrush("Forest", 4, 5, 3, 2, 0.5);
-    const afterSmartLegacy = window.realityEngine.grid.buffer.slice();
+    const afterSmartLegacy = fingerprint(legacyBuffer());
     const afterSmartState = world.authoritativeField.serialize();
     const smartMutation = afterSmartState.mutations[afterSmartState.mutations.length - 1];
     const afterSmartSample = world.authoritativeField.sample(4, 2, 5);
     const afterSmartCount = world.authoritativeField.getMutationCount();
     await runtime.applyStroke("inject", { x: 4, y: 5, z: 2 }, 2, 1, { energy: 1 });
-    const afterOrdinaryLegacy = window.realityEngine.grid.buffer.slice();
+    const afterOrdinaryLegacy = fingerprint(legacyBuffer());
     const afterOrdinaryState = world.authoritativeField.serialize();
     const afterOrdinarySample = world.authoritativeField.sample(4, 2, 5);
     const afterOrdinaryCount = world.authoritativeField.getMutationCount();
     runtime.undo();
-    const undoOneLegacy = window.realityEngine.grid.buffer.slice(), undoOneState = world.authoritativeField.serialize();
+    const undoOneLegacy = fingerprint(legacyBuffer()), undoOneState = world.authoritativeField.serialize();
     runtime.undo();
-    const undoTwoLegacy = window.realityEngine.grid.buffer.slice(), undoTwoState = world.authoritativeField.serialize();
+    const undoTwoLegacy = fingerprint(legacyBuffer()), undoTwoState = world.authoritativeField.serialize();
     runtime.redo();
-    const redoOneLegacy = window.realityEngine.grid.buffer.slice(), redoOneState = world.authoritativeField.serialize();
+    const redoOneLegacy = fingerprint(legacyBuffer()), redoOneState = world.authoritativeField.serialize();
     runtime.redo();
-    const redoTwoLegacy = window.realityEngine.grid.buffer.slice(), redoTwoState = world.authoritativeField.serialize();
-    const arraysEqual = (a, b) => a.length === b.length && a.every((value, index) => value === b[index]);
+    const redoTwoLegacy = fingerprint(legacyBuffer()), redoTwoState = world.authoritativeField.serialize();
     return { baselineState, afterSmartState, afterOrdinaryState, undoOneState, undoTwoState, redoOneState, redoTwoState,
       baselineSample, afterSmartSample, afterOrdinarySample, smartMutation, baselineCount, afterSmartCount, afterOrdinaryCount,
-      history: runtime.history(), legacyParity: { undoOne: arraysEqual(undoOneLegacy, afterSmartLegacy), undoTwo: arraysEqual(undoTwoLegacy, baselineLegacy),
-        redoOne: arraysEqual(redoOneLegacy, afterSmartLegacy), redoTwo: arraysEqual(redoTwoLegacy, afterOrdinaryLegacy) } };
+      history: runtime.history(), legacyParity: { undoOne: undoOneLegacy === afterSmartLegacy, undoTwo: undoTwoLegacy === baselineLegacy,
+        redoOne: redoOneLegacy === afterSmartLegacy, redoTwo: redoTwoLegacy === afterOrdinaryLegacy } };
   });
   if (sculptContract.error) throw new Error(sculptContract.error);
   if (!sculptContract.legacyParity?.undoOne || !sculptContract.legacyParity?.undoTwo || !sculptContract.legacyParity?.redoOne || !sculptContract.legacyParity?.redoTwo) {
