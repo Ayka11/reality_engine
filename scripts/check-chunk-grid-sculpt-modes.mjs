@@ -51,30 +51,41 @@ globalThis.self = workerSelf;
 try {
   await import(workerModuleUrl);
   const dispatch = (cmd, data = {}) => workerSelf.onmessage({ data: { cmd, data } });
-  const x = 17, y = 18, z = 19;
-  const localOffset = (((z & 7) * 8 * 8) + ((y & 7) * 8) + (x & 7)) * 14;
-  const cellEnergy = () => {
+  const x = 17, y = 18, z = 19, unrelatedX = 22;
+  const cellValueAt = (cx, cy, cz, field) => {
     dispatch("snapshot");
     const response = workerMessages.filter(message => message.cmd === "snapshot").at(-1);
-    const chunkKeyValue = Math.floor(x / 8) + Math.floor(y / 8) * 16 + Math.floor(z / 8) * 256;
+    const chunkKeyValue = Math.floor(cx / 8) + Math.floor(cy / 8) * 16 + Math.floor(cz / 8) * 256;
     const chunk = response.data.snap.find(item => item.key === chunkKeyValue);
-    return chunk ? chunk.data[localOffset + F.E] : 0;
+    const localOffset = (((cz & 7) * 8 * 8) + ((cy & 7) * 8) + (cx & 7)) * 14;
+    return chunk ? chunk.data[localOffset + field] : 0;
   };
+  const cellEnergy = () => cellValueAt(x, y, z, F.E);
+  // Put a live simulation cell outside the brush radius but inside the same chunk.
+  dispatch("paint", { x: unrelatedX, y, z, f: F.E, v: 200, r: 0, mode: "set" });
+  dispatch("paint", { x: unrelatedX, y, z, f: F.T, v: 100, r: 0, mode: "set" });
   dispatch("brush", { name: "Forest", x, y, z, radius: 2, strength: 0.5, trackHistory: true });
   const afterSmartBrush = cellEnergy();
   assert.ok(afterSmartBrush > 0, "SmartBrush must create sparse worker data");
   dispatch("paint", { x, y, z, f: F.E, v: 25, r: 0, mode: "add", trackHistory: true });
   const afterOrdinaryPaint = cellEnergy();
   assert.ok(afterOrdinaryPaint > afterSmartBrush, "ordinary paint must apply after SmartBrush");
+  dispatch("tick", { speed: 1 });
+  const unrelatedTemperatureAfterTick = cellValueAt(unrelatedX, y, z, F.T);
+  assert.notEqual(unrelatedTemperatureAfterTick, 100, "simulation tick must mutate the unrelated cell for the preservation check");
   dispatch("undoSculpt");
   assert.equal(workerMessages.filter(message => message.cmd === "sculptHistoryApplied").at(-1)?.applied, true);
   assert.equal(cellEnergy(), afterSmartBrush, "mixed worker undo #1 must restore SmartBrush state");
   dispatch("undoSculpt");
-  assert.equal(cellEnergy(), 0, "mixed worker undo #2 must restore baseline sparse state");
+  assert.equal(cellEnergy(), 0, "mixed worker undo #2 must restore baseline sculpt cell");
+  assert.equal(cellValueAt(unrelatedX, y, z, F.T), unrelatedTemperatureAfterTick,
+    "cell-level undo must preserve simulation changes to unrelated cells in the same chunk");
   dispatch("redoSculpt");
   assert.equal(cellEnergy(), afterSmartBrush, "mixed worker redo #1 must restore SmartBrush state");
   dispatch("redoSculpt");
   assert.equal(cellEnergy(), afterOrdinaryPaint, "mixed worker redo #2 must restore ordinary-paint state");
+  assert.equal(cellValueAt(unrelatedX, y, z, F.T), unrelatedTemperatureAfterTick,
+    "redo must preserve unrelated simulation changes in the same chunk");
   // A non-transactional worker edit must invalidate sculpt history rather than
   // letting a later Undo erase that unrelated edit or pop a mismatched record.
   dispatch("paint", { x: x + 1, y, z, f: F.E, v: 17, r: 0, mode: "set" });
