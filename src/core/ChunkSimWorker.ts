@@ -6,7 +6,7 @@
 
 import {
   ChunkGrid, GRID_W, GRID_H, GRID_D,
-  CHUNK_FLOATS, F,
+  CHUNK_FLOATS, F, CX, CY, CZ, chunkKey,
 } from './ChunkGrid'
 
 const grid = new ChunkGrid()
@@ -15,6 +15,31 @@ let tick = 0, evCount = 0
 const causal: Array<{ id: number; tick: number; x: number; y: number; z: number; delta: number }> = []
 let DIFF = 0.09, ENT = 0.0004, INFO = 0.35, BIO = 0.25
 const activeProcs = new Set<string>(['thermo', 'bio'])
+
+type ChunkImage = Map<number, Float32Array | null>
+type SculptHistoryRecord = { before: ChunkImage; after: ChunkImage }
+const sculptUndo: SculptHistoryRecord[] = []
+const sculptRedo: SculptHistoryRecord[] = []
+const MAX_SCULPT_HISTORY = 50
+function touchedChunkKeys(x: number, y: number, z: number, radius: number): number[] {
+  const r = Math.max(0, Number.isFinite(radius) ? radius : 0)
+  const x0 = Math.max(0, Math.floor((x-r)/CX)), x1 = Math.min(GRID_W-1, Math.ceil((x+r)/CX))
+  const y0 = Math.max(0, Math.floor((y-r)/CY)), y1 = Math.min(GRID_H-1, Math.ceil((y+r)/CY))
+  const z0 = Math.max(0, Math.floor((z-r)/CZ)), z1 = Math.min(GRID_D-1, Math.ceil((z+r)/CZ))
+  const keys:number[]=[]
+  for(let cz=z0;cz<=z1;cz++)for(let cy=y0;cy<=y1;cy++)for(let cx=x0;cx<=x1;cx++)keys.push(chunkKey(cx,cy,cz))
+  return keys
+}
+function captureChunks(keys:number[]):ChunkImage {
+  return new Map<number,Float32Array|null>(keys.map(key=>[key,grid.chunks.get(key)?.slice()??null] as [number,Float32Array|null]))
+}
+function restoreChunks(image:ChunkImage):void {
+  for(const [key,chunk] of image){if(chunk===null)grid.chunks.delete(key);else grid.chunks.set(key,chunk.slice());grid.dirtyChunks.add(key)}
+}
+function commitSculptEdit(keys:number[],before:ChunkImage):void {
+  sculptUndo.push({before,after:captureChunks(keys)});if(sculptUndo.length>MAX_SCULPT_HISTORY)sculptUndo.shift();sculptRedo.length=0
+}
+function clearSculptHistory():void {sculptUndo.length=0;sculptRedo.length=0}
 
 function simStep(dt: number) {
   for (const { x, y, z, base, chunk } of grid.activeCells()) {
@@ -116,7 +141,9 @@ self.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'paint') {
-    const { x, y, z, f, v, r, mode } = data
+    const { x, y, z, f, v, r, mode, trackHistory } = data
+    const keys = trackHistory ? touchedChunkKeys(x,y,z,Math.max(0,r||0)) : []
+    const before = trackHistory ? captureChunks(keys) : null
     if (mode === 'erase') {
       if (r > 0) grid.eraseSphere(x, y, z, r)
       else [F.E, F.D, F.I, F.S, F.T, F.BIO].forEach(ff => grid.set(x, y, z, ff, 0))
@@ -124,8 +151,18 @@ self.onmessage = (e: MessageEvent) => {
     else if (mode === 'add') grid.add(x, y, z, f, v)
     else if (mode === 'set') grid.set(x, y, z, f, v)
     else [F.E, F.D, F.I, F.S, F.T, F.BIO].forEach(ff => grid.set(x, y, z, ff, 0))
+    if(before)commitSculptEdit(keys,before)
     return
   }
+  if(cmd==='undoSculpt'){
+    const record=sculptUndo.pop();if(record){restoreChunks(record.before);sculptRedo.push(record)}
+    ;(self as unknown as Worker).postMessage({cmd:'sculptHistoryApplied',action:'undo',applied:!!record});return
+  }
+  if(cmd==='redoSculpt'){
+    const record=sculptRedo.pop();if(record){restoreChunks(record.after);sculptUndo.push(record)}
+    ;(self as unknown as Worker).postMessage({cmd:'sculptHistoryApplied',action:'redo',applied:!!record});return
+  }
+  if(cmd==='clearSculptHistory'){clearSculptHistory();return}
 
   if (cmd === 'brush') {
     const { name, x, y, z, radius, strength } = data as {
@@ -136,6 +173,7 @@ self.onmessage = (e: MessageEvent) => {
     const cz = Math.max(0, Math.min(D - 1, Math.round(z)))
     const r = Math.max(1, Math.min(24, radius || 4))
     const s = Number.isFinite(strength) ? strength : 1
+    const keys=touchedChunkKeys(cx,cy,cz,r),before=captureChunks(keys)
     const paint = (f: number, value: number) => grid.paintSphere(cx, cy, cz, r, f, value * s)
     switch (name) {
       case 'Volcano': paint(F.E, 800); paint(F.T, 500); paint(F.D, 0.6); paint(F.S, 0.2); break
@@ -163,11 +201,13 @@ self.onmessage = (e: MessageEvent) => {
       }
       default: paint(F.E, 100)
     }
+    commitSculptEdit(keys,before)
     ;(self as unknown as Worker).postMessage({ cmd: 'brushApplied', name, x: cx, y: cy, z: cz, radius: r })
     return
   }
 
   if (cmd === 'generate') {
+    clearSculptHistory()
     grid.clear()
     const a = data
     DIFF = a.DIFF || 0.09; ENT = a.ENT || 0.0004
@@ -192,6 +232,7 @@ self.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'preset') {
+    clearSculptHistory()
     grid.clear(); tick = 0; causal.length = 0; evCount = 0
     const nm = data.name as string
     if (nm === 'burst') {
