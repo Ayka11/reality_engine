@@ -104,12 +104,12 @@ export function sculptPaintToMutation(
 ): WorldFieldMutation {
   const p = legacyToWorldCoordinate(cell)
   const target: Partial<ScientificFieldSample> = {
-    ...(fields.energy === undefined ? {} : { energy: Math.max(0, fields.energy / 100) }),
-    ...(fields.density === undefined ? {} : { density: clamp01(fields.density) }),
-    ...(fields.information === undefined ? {} : { information: Math.max(0, fields.information / 10) }),
-    ...(fields.entropy === undefined ? {} : { entropy: clamp01(fields.entropy) }),
-    ...(fields.temperature === undefined ? {} : { temperature: Math.max(0, fields.temperature / 10) }),
-    ...(fields.bio === undefined ? {} : { biology: clamp01(fields.bio) }),
+    ...(fields.energy === undefined ? {} : { energy: Math.max(0, strength * 4 * fields.energy) }),
+    ...(fields.density === undefined ? {} : { density: clamp01(strength * 400 * fields.density) }),
+    ...(fields.information === undefined ? {} : { information: Math.max(0, strength * 40 * fields.information) }),
+    ...(fields.entropy === undefined ? {} : { entropy: clamp01(strength * 400 * fields.entropy) }),
+    ...(fields.temperature === undefined ? {} : { temperature: Math.max(0, strength * 40 * fields.temperature) }),
+    ...(fields.bio === undefined ? {} : { biology: clamp01(strength * 400 * fields.bio) }),
   }
   const operations: NonNullable<WorldFieldMutation['operations']> = {}
   for (const field of Object.keys(target) as (keyof ScientificFieldSample)[]) {
