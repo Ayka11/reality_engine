@@ -33,12 +33,15 @@ export class MultiplayerSync {
   constructor(sim: SimulationEngine) {
     this.sim = sim;
     this.userId = Math.random().toString(36).slice(2, 8);
-    this.channel = new BroadcastChannel('reality_engine_v4');
-    this._listen();
 
-    // Cross-device sync is opt-in: users must share a URL containing the same room token.
+    // Resolve the room before opening BroadcastChannel: same-browser tabs must obey
+    // the same room boundary as the WebSocket relay, not leak edits across room tokens.
     const requestedRoom = new URLSearchParams(window.location.search).get('room') || '';
     this.roomId = ROOM_PATTERN.test(requestedRoom) ? requestedRoom : null;
+    this.channel = new BroadcastChannel(
+      this.roomId ? `reality_engine_v4:${this.roomId}` : 'reality_engine_v4'
+    );
+    this._listen();
     if (this.roomId && typeof WebSocket !== 'undefined') {
       const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       this.socket = new WebSocket(`${scheme}//${window.location.host}/signal?room=${encodeURIComponent(this.roomId)}`);
