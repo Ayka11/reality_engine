@@ -1864,11 +1864,17 @@ function _beginSculptGesture(){
   _finishSculptGesture();
   _activeSculptGesture={label:'sculpt gesture',before:new Float32Array(buf),authoritativeOps:0};
 }
+function clearSculptTransactionHistory(){
+  _activeSculptGesture=null;
+  _unifiedSculptUndo.length=0;_unifiedSculptRedo.length=0;
+  _undoRing.length=0;_undoHead=0;_undoCount=0;
+  window.clearChunkSculptHistory?.();
+}
+window.clearSculptTransactionHistory=clearSculptTransactionHistory;
 function pushUndo(){
   // Presets and non-sculpt bulk edits use the legacy snapshot ring. Clear sculpt
   // history at that boundary so Undo never crosses an untracked mutation.
-  _unifiedSculptUndo.length=0;_unifiedSculptRedo.length=0;
-  window.clearChunkSculptHistory?.();
+  clearSculptTransactionHistory();
   const snap=new Float32Array(buf);
   _undoRing[_undoHead%UNDO_MAX]=snap;
   _undoHead++;
@@ -1948,7 +1954,7 @@ function _applyUnifiedSmartBrush(name,x,y,radius,strength){
       : window.infinityApplyLegacySculptStroke?.('inject',worldCell,Math.max(2,radius*2),strength,{
           fields:name==='Gravity Well'?{energy:1,density:1}:{entropy:1,information:1},selectedLegacyZ:0,
         }));
-  if(window.applyChunkBrush)window.applyChunkBrush(name,worldCell.x,worldCell.y,32,Math.max(2,radius*2),strength);
+  if(window.applyChunkBrush)window.applyChunkBrush(name,worldCell.x,worldCell.y,32,Math.max(2,radius*2),strength,true);
   return result;
 }
 function _applyUnifiedStroke(toolName,cell,radius,strength,fields,selectedLayer=layer){
@@ -1975,7 +1981,7 @@ function _applyUnifiedStroke(toolName,cell,radius,strength,fields,selectedLayer=
     });
   if(window.paintChunkAt){
     const f3=[0,1,2,3,4,10][selectedLayer<0?0:selectedLayer]??0;
-    window.paintChunkAt(worldCell.x,worldCell.y,32,f3,effectiveTool==='erase'?0:legacyStrength,Math.max(3,radius*3),effectiveTool==='erase'?'erase':effectiveTool==='paint'?'set':'add');
+    window.paintChunkAt(worldCell.x,worldCell.y,32,f3,effectiveTool==='erase'?0:legacyStrength,Math.max(3,radius*3),effectiveTool==='erase'?'erase':effectiveTool==='paint'?'set':'add',true);
   }
   return result;
 }
