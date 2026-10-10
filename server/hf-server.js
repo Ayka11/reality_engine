@@ -97,6 +97,12 @@ wss.on('connection', (ws, req) => {
       // Bind the socket to one peer identity; a later announce cannot take over another ID.
       if (ws.peerId && ws.peerId !== message.from) return;
       ws.peerId = message.from;
+      // Replay the current room roster to late joiners; the browser client uses it for host election.
+      for (const client of wss.clients) {
+        if (client === ws || client.readyState !== WebSocket.OPEN) continue;
+        if (client.roomId !== ws.roomId || !client.peerId) continue;
+        ws.send(JSON.stringify({ type: 'announce', from: client.peerId }));
+      }
     } else if (!ws.peerId || message.from !== ws.peerId) {
       // Every signalling message must use the identity bound by the initial announce.
       return;
