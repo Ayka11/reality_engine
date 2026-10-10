@@ -23,9 +23,9 @@ const sculptRedo: SculptHistoryRecord[] = []
 const MAX_SCULPT_HISTORY = 50
 function touchedChunkKeys(x: number, y: number, z: number, radius: number): number[] {
   const r = Math.max(0, Number.isFinite(radius) ? radius : 0)
-  const x0 = Math.max(0, Math.floor((x-r)/CX)), x1 = Math.min(GRID_W-1, Math.ceil((x+r)/CX))
-  const y0 = Math.max(0, Math.floor((y-r)/CY)), y1 = Math.min(GRID_H-1, Math.ceil((y+r)/CY))
-  const z0 = Math.max(0, Math.floor((z-r)/CZ)), z1 = Math.min(GRID_D-1, Math.ceil((z+r)/CZ))
+  const x0 = Math.max(0, Math.floor((x-r)/CX)), x1 = Math.min(Math.ceil(GRID_W/CX)-1, Math.ceil((x+r)/CX))
+  const y0 = Math.max(0, Math.floor((y-r)/CY)), y1 = Math.min(Math.ceil(GRID_H/CY)-1, Math.ceil((y+r)/CY))
+  const z0 = Math.max(0, Math.floor((z-r)/CZ)), z1 = Math.min(Math.ceil(GRID_D/CZ)-1, Math.ceil((z+r)/CZ))
   const keys:number[]=[]
   for(let cz=z0;cz<=z1;cz++)for(let cy=y0;cy<=y1;cy++)for(let cx=x0;cx<=x1;cx++)keys.push(chunkKey(cx,cy,cz))
   return keys
