@@ -600,6 +600,77 @@ try {
     throw new Error("Mixed authoritative sculpt persistence did not survive a page reload");
   }
 
+  // Exercise actual pointerdown -> pointermove* -> pointerup, not only the helper.
+  console.log("[acceptance] literal pointer-drag sculpt undo/redo");
+  const dragSetup = await page.evaluate(() => {
+    window.setRenderMode?.("2d");
+    window.setTool?.("inject", null);
+    window.selectBrush?.(null);
+    window.setLayer?.(0);
+    const size = document.getElementById("bsize"); if (size) size.value = "1";
+    const strength = document.getElementById("bstr"); if (strength) strength.value = "200";
+    const wrap = document.getElementById("viewWrap");
+    if (!wrap) return { error: "viewWrap missing" };
+    const rect = wrap.getBoundingClientRect();
+    const cellSize = Math.min(rect.width / window.W, rect.height / window.H);
+    const ox = (rect.width - cellSize * window.W) / 2, oy = (rect.height - cellSize * window.H) / 2;
+    const point = (x, y) => ({ x: rect.left + ox + (x + 0.5) * cellSize, y: rect.top + oy + (y + 0.5) * cellSize });
+    return { start: point(8, 8), end: point(13, 8),
+      beforeLegacy: window.realitySculptTransactionRuntime.fingerprint(),
+      beforeField: window.infiniteWorld.authoritativeField.serialize(),
+      beforeMutationCount: window.infiniteWorld.authoritativeField.getMutationCount() };
+  });
+  if (dragSetup.error) throw new Error(dragSetup.error);
+  await page.mouse.move(dragSetup.start.x, dragSetup.start.y);
+  await page.mouse.down();
+  await page.mouse.move(dragSetup.end.x, dragSetup.end.y, { steps: 4 });
+  await page.mouse.up();
+  const dragAfter = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    mutationCount: window.infiniteWorld.authoritativeField.getMutationCount(),
+    history: window.realitySculptTransactionRuntime.history(),
+  }));
+  const dragOperations = dragAfter.mutationCount - dragSetup.beforeMutationCount;
+  if (dragAfter.legacy === dragSetup.beforeLegacy || dragOperations < 2) {
+    throw new Error(`Actual pointer drag did not produce multiple sculpt samples: ${JSON.stringify({ dragAfter, dragOperations })}`);
+  }
+  if (dragAfter.history.undo !== 1 || dragAfter.history.redo !== 0) {
+    throw new Error(`Actual pointer drag must create exactly one undo record: ${JSON.stringify(dragAfter.history)}`);
+  }
+  const dragUndoAckStart = await page.evaluate(() => window.lastChunkSculptHistory?.seq ?? 0);
+  await page.evaluate(() => window.undo());
+  await page.waitForFunction((start, count) => (window.lastChunkSculptHistory?.seq ?? 0) >= start + count,
+    dragUndoAckStart, dragOperations, { timeout: acceptanceTimeout });
+  const dragUndone = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+    workerApplied: window.lastChunkSculptHistory?.applied,
+  }));
+  if (dragUndone.legacy !== dragSetup.beforeLegacy || JSON.stringify(dragUndone.field) !== JSON.stringify(dragSetup.beforeField)) {
+    throw new Error("Literal pointer-drag undo did not restore the legacy grid and authoritative field");
+  }
+  if (dragUndone.history.undo !== 0 || dragUndone.history.redo !== 1 || dragUndone.workerApplied !== true) {
+    throw new Error(`Literal pointer-drag undo history/worker parity failed: ${JSON.stringify(dragUndone)}`);
+  }
+  const dragRedoAckStart = await page.evaluate(() => window.lastChunkSculptHistory?.seq ?? 0);
+  await page.evaluate(() => window.redo());
+  await page.waitForFunction((start, count) => (window.lastChunkSculptHistory?.seq ?? 0) >= start + count,
+    dragRedoAckStart, dragOperations, { timeout: acceptanceTimeout });
+  const dragRedone = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+    workerApplied: window.lastChunkSculptHistory?.applied,
+  }));
+  if (dragRedone.legacy !== dragAfter.legacy || JSON.stringify(dragRedone.field) !== JSON.stringify(dragAfter.field)) {
+    throw new Error("Literal pointer-drag redo did not restore the post-gesture models");
+  }
+  if (dragRedone.history.undo !== 1 || dragRedone.history.redo !== 0 || dragRedone.workerApplied !== true) {
+    throw new Error(`Literal pointer-drag redo history/worker parity failed: ${JSON.stringify(dragRedone)}`);
+  }
+
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
