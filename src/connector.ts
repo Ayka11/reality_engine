@@ -432,6 +432,7 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
   getInfiniteWorld()?.resize(Math.max(1, w), Math.max(1, h))
 }
 win['worldFieldChunkStoreStats'] = () => worldFieldChunkStore.stats()
+win['worldFieldWorkerChunkStats'] = () => localChunks.size
 win['worldFieldChunkPersistenceStats'] = () => ({ snapshots: worldFieldChunkPersistence.size() })
 win['worldFieldRestoreState'] = () => ({
   ...worldFieldRestoreState,
