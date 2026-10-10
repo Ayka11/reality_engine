@@ -412,15 +412,15 @@ export class InfiniteWorldRenderer {
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer)
     this.saveTimer = window.setTimeout(() => {
       this.saveTimer = null
-      this.saveWorld()
+      this.saveWorld({ checkpoint: false })
     }, 150)
   }
 
-  saveWorld() {
-    // Manual Save creates a stable checkpoint, separate from per-mutation autosave.
+  saveWorld(options: { checkpoint?: boolean } = {}) {
+    // Explicit Save creates a stable checkpoint; autosave must not move that checkpoint.
     const fieldSnapshot = this.authoritativeField.serialize()
     this.persistAuthoritativeFieldState()
-    this.persistence.saveFieldCheckpoint(fieldSnapshot)
+    if (options.checkpoint !== false) this.persistence.saveFieldCheckpoint(fieldSnapshot)
     const objects = this.objects.values()
     const groups = new Map<string, WorldObject[]>()
     for (const object of objects) {
