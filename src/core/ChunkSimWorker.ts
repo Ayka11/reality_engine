@@ -106,6 +106,14 @@ function buildFramePayload(): ArrayBuffer {
   return ab
 }
 
+function emitFrame(restoreId?: number) {
+  const ab = buildFramePayload()
+  ;(self as unknown as Worker).postMessage({
+    cmd: 'frame', tick, evCount, events: causal.slice(-20), ab, stats: grid.stats,
+    ...(restoreId !== undefined ? { restoreId } : {}),
+  }, [ab])
+}
+
 self.onmessage = (e: MessageEvent) => {
   const { cmd, data } = e.data
 
