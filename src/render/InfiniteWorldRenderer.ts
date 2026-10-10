@@ -416,6 +416,8 @@ export class InfiniteWorldRenderer {
   }
 
   saveWorld() {
+    // Manual Save must snapshot the authoritative scientific field as well as objects.
+    this.persistAuthoritativeFieldState()
     const objects = this.objects.values()
     const groups = new Map<string, WorldObject[]>()
     for (const object of objects) {
@@ -439,6 +441,16 @@ export class InfiniteWorldRenderer {
   }
 
   loadWorld() {
+    // Restore field mutations and overlays from the same Save -> Load snapshot.
+    const persistedField = this.persistence.loadFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
+    if (persistedField) {
+      try {
+        this.authoritativeField.restore(persistedField)
+        this.refreshTerrainPatches()
+      } catch (error) {
+        console.warn('[persistence] Could not restore authoritative field state', error)
+      }
+    }
     this.objects.clear()
     this.objectSpatialIndex.clear()
     let count = 0
