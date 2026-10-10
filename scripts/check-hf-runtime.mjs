@@ -77,30 +77,7 @@ try {
   assert.equal((await bobAnnounce).from, 'alice');
   assert.equal(await isolatedRoomReceivesNothing, true, 'clients without the room token must be isolated');
 
-  const lateJoiner = new WebSocket(`ws://127.0.0.1:${port}/signal?room=runtime-test-room`);
-  sockets.push(lateJoiner);
-  await once(lateJoiner, 'open');
-  const roster = new Set();
-  const rosterReady = new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      lateJoiner.off('message', onRosterMessage);
-      reject(new Error('Late joiner did not receive the full room roster'));
-    }, 2500);
-    const onRosterMessage = raw => {
-      let message;
-      try { message = JSON.parse(raw.toString()); } catch { return; }
-      if (message.type !== 'announce' || typeof message.from !== 'string') return;
-      roster.add(message.from);
-      if (roster.has('alice') && roster.has('bob')) {
-        clearTimeout(timer);
-        lateJoiner.off('message', onRosterMessage);
-        resolve(true);
-      }
-    };
-    lateJoiner.on('message', onRosterMessage);
-  });
-  lateJoiner.send(JSON.stringify({ type: 'announce', from: 'late-peer' }));
-  assert.equal(await rosterReady, true, 'late joiner must learn peers that were already in the room');
+
 
   const targeted = waitForMessage(bob);
   alice.send(JSON.stringify({ type: 'offer', from: 'alice', to: 'bob', payload: 'contract-check' }));
@@ -144,6 +121,31 @@ try {
     payload: { type: 'delta', userId: 'someone-else', cells: [{ x: 1, y: 2, z: 0, field: 3, value: 0.99 }] },
   }));
   assert.equal(await spoofedMessageRejected, true, 'relay must reject mismatched sender identity');
+
+  const lateJoiner = new WebSocket(`ws://127.0.0.1:${port}/signal?room=runtime-test-room`);
+  sockets.push(lateJoiner);
+  await once(lateJoiner, 'open');
+  const roster = new Set();
+  const rosterReady = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      lateJoiner.off('message', onRosterMessage);
+      reject(new Error('Late joiner did not receive the full room roster'));
+    }, 2500);
+    const onRosterMessage = raw => {
+      let message;
+      try { message = JSON.parse(raw.toString()); } catch { return; }
+      if (message.type !== 'announce' || typeof message.from !== 'string') return;
+      roster.add(message.from);
+      if (roster.has('alice') && roster.has('bob')) {
+        clearTimeout(timer);
+        lateJoiner.off('message', onRosterMessage);
+        resolve(true);
+      }
+    };
+    lateJoiner.on('message', onRosterMessage);
+  });
+  lateJoiner.send(JSON.stringify({ type: 'announce', from: 'late-peer' }));
+  assert.equal(await rosterReady, true, 'late joiner must learn peers that were already in the room');
 
   console.log('Combined HF HTTP + WebSocket runtime contract: PASS');
 } finally {
