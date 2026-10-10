@@ -299,7 +299,12 @@ try {
     typeof window.restoreWorldFieldChunkSnapshot === "function" &&
     typeof window.worldFieldRestoreState === "function"
   );
-  await page.evaluate(() => window.tickChunkWorker?.(true, 1));
+  // Seed one known voxel so the worker emits at least one dirty chunk even when
+  // the initial simulation has not ticked yet.
+  await page.evaluate(() => {
+    window.paintChunkAt?.(64, 29, 64, 0, 0.5, 1, "set");
+    window.tickChunkWorker?.(true, 1);
+  });
   await page.waitForFunction(() => Number(window.worldFieldWorkerChunkStats?.() ?? 0) > 0, undefined, { timeout: acceptanceTimeout });
   const chunkRestoreFixture = await page.evaluate(() => {
     const view = window.getWorldViewContract?.();
