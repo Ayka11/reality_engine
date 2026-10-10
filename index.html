@@ -1856,6 +1856,7 @@ function pushUndo(){
   // Presets and non-sculpt bulk edits use the legacy snapshot ring. Clear sculpt
   // history at that boundary so Undo never crosses an untracked mutation.
   _unifiedSculptUndo.length=0;_unifiedSculptRedo.length=0;
+  window.clearChunkSculptHistory?.();
   const snap=new Float32Array(buf);
   _undoRing[_undoHead%UNDO_MAX]=snap;
   _undoHead++;
@@ -1889,6 +1890,7 @@ function undo(){
     for(let i=0;i<record.authoritativeOps;i++){
       const result=window.infinityUndoLegacySculptAuthoritative?.();
       if(!result)throw new Error('Authoritative sculpt undo rejected');
+      window.undoChunkSculpt?.();
     }
     _unifiedSculptUndo.pop();buf.set(record.before);_unifiedSculptRedo.push(record);
     window.buf=buf;drawGrid();log('↩ Undo '+record.label);return record.label;
@@ -1905,6 +1907,7 @@ function redo(){
   for(let i=0;i<record.authoritativeOps;i++){
     const result=window.infinityRedoLegacySculptAuthoritative?.();
     if(!result)throw new Error('Authoritative sculpt redo rejected');
+    window.redoChunkSculpt?.();
   }
   _unifiedSculptRedo.pop();buf.set(record.after);_unifiedSculptUndo.push(record);
   window.buf=buf;drawGrid();log('↪ Redo '+record.label);return record.label;
