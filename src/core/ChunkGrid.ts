@@ -154,7 +154,7 @@ export class ChunkGrid {
   }
 
   restoreChunk(key: number, data: number[] | Float32Array): boolean {
-    if (!Number.isInteger(key) || key < 0 || !data || data.length !== CHUNK_FLOATS) return false
+    if (!Number.isInteger(key) || key < 0 || key >= CHUNKS_X * CHUNKS_Y * CHUNKS_Z || !data || data.length !== CHUNK_FLOATS) return false
     for (let i = 0; i < data.length; i++) {
       if (!Number.isFinite(data[i])) return false
     }
