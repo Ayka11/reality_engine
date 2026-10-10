@@ -385,7 +385,8 @@ export class InfiniteWorldRenderer {
     this.controls.target.set(16, 10, 16)
     this.controls.update()
     this.worldPosition.copy(this.controls.target)
-    this.loadWorld()
+    // Startup restores the latest autosaved field; the explicit Load action uses the saved checkpoint.
+    this.loadWorld({ restoreFieldCheckpoint: false })
 
     this.hemi = new THREE.HemisphereLight(0xb9d8ff, 0x35402f, 1.6)
     this.scene.add(this.hemi)
@@ -416,8 +417,10 @@ export class InfiniteWorldRenderer {
   }
 
   saveWorld() {
-    // Manual Save must snapshot the authoritative scientific field as well as objects.
+    // Manual Save creates a stable checkpoint, separate from per-mutation autosave.
+    const fieldSnapshot = this.authoritativeField.serialize()
     this.persistAuthoritativeFieldState()
+    this.persistence.saveFieldCheckpoint(fieldSnapshot)
     const objects = this.objects.values()
     const groups = new Map<string, WorldObject[]>()
     for (const object of objects) {
@@ -440,12 +443,16 @@ export class InfiniteWorldRenderer {
     return objects.length
   }
 
-  loadWorld() {
-    // Restore field mutations and overlays from the same Save -> Load snapshot.
-    const persistedField = this.persistence.loadFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
+  loadWorld(options: { restoreFieldCheckpoint?: boolean } = {}) {
+    // Explicit Load restores the last manual checkpoint; startup can opt into the latest autosave.
+    const checkpoint = options.restoreFieldCheckpoint === false
+      ? null
+      : this.persistence.loadFieldCheckpoint<ReturnType<MutableWorldFieldProvider['serialize']>>()
+    const persistedField = checkpoint ?? this.persistence.loadFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
     if (persistedField) {
       try {
         this.authoritativeField.restore(persistedField)
+        this.persistAuthoritativeFieldState()
         this.refreshTerrainPatches()
       } catch (error) {
         console.warn('[persistence] Could not restore authoritative field state', error)
