@@ -504,10 +504,35 @@ try {
     const redoOneLegacy = fingerprint(legacyBuffer()), redoOneState = world.authoritativeField.serialize();
     runtime.redo();
     const redoTwoLegacy = fingerprint(legacyBuffer()), redoTwoState = world.authoritativeField.serialize();
+    const mixedHistoryAfterRedo = runtime.history();
+
+    // A drag with multiple paint samples is one user-visible undo transaction,
+    // while the worker records each sample so the grouped undo can replay them all.
+    const gestureBaselineLegacy = fingerprint(legacyBuffer());
+    const gestureBaselineState = world.authoritativeField.serialize();
+    const gestureHistoryBefore = runtime.history().undo;
+    const workerAckStart = window.lastChunkSculptHistory?.seq ?? 0;
+    runtime.beginGesture();
+    await runtime.applyStroke("inject", { x: 10, y: 8, z: 0 }, 1, 0.5, { energy: 1 });
+    await runtime.applyStroke("inject", { x: 11, y: 8, z: 0 }, 1, 0.5, { energy: 1 });
+    runtime.endGesture();
+    const gestureAfterLegacy = fingerprint(legacyBuffer());
+    const gestureAfterState = world.authoritativeField.serialize();
+    const gestureHistoryAfterCommit = runtime.history();
+    runtime.undo();
+    const gestureUndoLegacy = fingerprint(legacyBuffer());
+    const gestureUndoState = world.authoritativeField.serialize();
+    runtime.redo();
+    const gestureRedoLegacy = fingerprint(legacyBuffer());
+    const gestureRedoState = world.authoritativeField.serialize();
     return { baselineState, afterSmartState, afterOrdinaryState, undoOneState, undoTwoState, redoOneState, redoTwoState,
       baselineSample, afterSmartSample, afterOrdinarySample, smartMutation, baselineCount, afterSmartCount, afterOrdinaryCount,
-      history: runtime.history(), legacyParity: { undoOne: undoOneLegacy === afterSmartLegacy, undoTwo: undoTwoLegacy === baselineLegacy,
-        redoOne: redoOneLegacy === afterSmartLegacy, redoTwo: redoTwoLegacy === afterOrdinaryLegacy } };
+      history: mixedHistoryAfterRedo, legacyParity: { undoOne: undoOneLegacy === afterSmartLegacy, undoTwo: undoTwoLegacy === baselineLegacy,
+        redoOne: redoOneLegacy === afterSmartLegacy, redoTwo: redoTwoLegacy === afterOrdinaryLegacy },
+      gesture: { workerAckStart, baselineLegacy: gestureBaselineLegacy, baselineState: gestureBaselineState,
+        afterLegacy: gestureAfterLegacy, afterState: gestureAfterState, undoLegacy: gestureUndoLegacy, undoState: gestureUndoState,
+        redoLegacy: gestureRedoLegacy, redoState: gestureRedoState, historyBefore: gestureHistoryBefore,
+        historyAfterCommit: gestureHistoryAfterCommit, historyAfterRedo: runtime.history() } };
   });
   if (sculptContract.error) throw new Error(`${sculptContract.error}: ${JSON.stringify(sculptContract)}`);
   if (!sculptContract.legacyParity?.undoOne || !sculptContract.legacyParity?.undoTwo || !sculptContract.legacyParity?.redoOne || !sculptContract.legacyParity?.redoTwo) {
@@ -543,8 +568,20 @@ try {
   if (sculptContract.history?.undo !== 2 || sculptContract.history?.redo !== 0) {
     throw new Error(`Mixed sculpt history lengths are incorrect after redo x2: ${JSON.stringify(sculptContract.history)}`);
   }
+  const gesture = sculptContract.gesture;
+  if (gesture.historyAfterCommit?.undo !== gesture.historyBefore + 1 || gesture.historyAfterCommit?.redo !== 0) {
+    throw new Error(`Pointer-drag samples were not grouped into one undo transaction: ${JSON.stringify(gesture.historyAfterCommit)}`);
+  }
+  if (gesture.undoLegacy !== gesture.baselineLegacy || JSON.stringify(gesture.undoState) !== JSON.stringify(gesture.baselineState)) {
+    throw new Error("Grouped sculpt gesture undo did not restore both legacy grid and authoritative field");
+  }
+  if (gesture.redoLegacy !== gesture.afterLegacy || JSON.stringify(gesture.redoState) !== JSON.stringify(gesture.afterState)) {
+    throw new Error("Grouped sculpt gesture redo did not restore both legacy grid and authoritative field");
+  }
+  await page.waitForFunction((start) => (window.lastChunkSculptHistory?.seq ?? 0) >= start + 4,
+    gesture.workerAckStart, { timeout: acceptanceTimeout });
 
-  const persistedSculptState = sculptContract.redoTwoState;
+  const persistedSculptState = sculptContract.gesture.redoState;
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
