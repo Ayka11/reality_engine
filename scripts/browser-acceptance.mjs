@@ -707,7 +707,7 @@ try {
       history: window.realitySculptTransactionRuntime.history(),
     };
   });
-  if (!workerUndoFailure.message.includes("worker undo rejected") ||
+  if (!workerUndoFailure.message.includes("sculpt undo rejected") ||
       workerUndoFailure.legacy !== partialUndoBeforeFailure.legacy ||
       JSON.stringify(workerUndoFailure.field) !== JSON.stringify(partialUndoBeforeFailure.field) ||
       workerUndoFailure.history.undo !== partialUndoBeforeFailure.history.undo ||
@@ -785,7 +785,7 @@ try {
       history: window.realitySculptTransactionRuntime.history(),
     };
   });
-  if (!workerRedoFailure.message.includes("worker redo rejected") ||
+  if (!workerRedoFailure.message.includes("sculpt redo rejected") ||
       workerRedoFailure.legacy !== workerRedoBaseline.legacy ||
       JSON.stringify(workerRedoFailure.field) !== JSON.stringify(workerRedoBaseline.field) ||
       workerRedoFailure.history.undo !== workerRedoBaseline.history.undo ||
