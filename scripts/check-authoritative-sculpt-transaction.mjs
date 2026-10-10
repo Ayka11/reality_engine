@@ -134,5 +134,15 @@ assert.equal(redoGuardCoordinator.redo(), null, "redo must refuse a stale before
 assert.deepEqual(redoGuardField.serialize(), stateBeforeConflictedRedo, "conflicted redo must preserve external mutation");
 assert.equal(redoGuardCoordinator.redoLength, 1, "conflicted redo must keep redo history available");
 
+// Paint replacement semantics: exact target at the brush center and a radial blend at the edge.
+const paintField = new MutableWorldFieldProvider(base);
+paintField.apply({
+  kind: "brush", x: 4, y: 5, z: 6, radius: 2,
+  operations: { energy: { mode: "set", value: 4, weighting: "radial" } },
+  metadata: { brush: "Paint" },
+});
+assert.equal(paintField.sample(4,5,6).energy, 4, "Paint must replace the authoritative center value");
+assert.equal(paintField.sample(5,5,6).energy, 17, "Paint must blend toward target using radial weight");
+
 console.log("PASS: authoritative sculpt transaction coordinator");
 console.log("PASS: conflicting undo/redo preserves external field mutations");
