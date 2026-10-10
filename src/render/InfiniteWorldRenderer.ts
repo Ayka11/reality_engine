@@ -934,8 +934,8 @@ export class InfiniteWorldRenderer {
       patch.group.traverse(obj => {
         const mesh = obj as THREE.Mesh
         if (mesh.geometry) mesh.geometry.dispose()
-        if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose())
-        else if (mesh.material) mesh.material.dispose()
+        if (Array.isArray(mesh.material)) mesh.material.forEach(m => { m.dispose(); this.terrainMaterials.delete(m as THREE.MeshStandardMaterial) })
+        else if (mesh.material) { mesh.material.dispose(); this.terrainMaterials.delete(mesh.material as THREE.MeshStandardMaterial) }
       })
       const group = this.buildTerrainPatch(patch.chunk, patch.lod)
       this.patches.set(key, { group, chunk: patch.chunk, lod: patch.lod })
