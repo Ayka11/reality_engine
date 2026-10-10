@@ -71,17 +71,28 @@ try {
   const afterOrdinaryPaint = cellEnergy();
   assert.ok(afterOrdinaryPaint > afterSmartBrush, "ordinary paint must apply after SmartBrush");
   dispatch("tick", { speed: 1 });
+  const sculptCellTemperatureAfterTick = cellValueAt(x, y, z, F.T);
   const unrelatedTemperatureAfterTick = cellValueAt(unrelatedX, y, z, F.T);
-  assert.notEqual(unrelatedTemperatureAfterTick, 100, "simulation tick must mutate the unrelated cell for the preservation check");
+  assert.ok(sculptCellTemperatureAfterTick > 0,
+    "simulation tick must mutate a field on the same cell as the sculpt stroke");
+  assert.notEqual(unrelatedTemperatureAfterTick, 100,
+    "simulation tick must mutate the unrelated cell for the preservation check");
+  // Contract: Undo is snapshot-based for sculpt-touched cells. Simulation changes
+  // to that exact cell are overwritten by the pre-stroke snapshot; unrelated cells
+  // are not part of the sculpt snapshot and must retain their simulation changes.
   dispatch("undoSculpt");
   assert.equal(workerMessages.filter(message => message.cmd === "sculptHistoryApplied").at(-1)?.applied, true);
   assert.equal(cellEnergy(), afterSmartBrush, "mixed worker undo #1 must restore SmartBrush state");
+  assert.equal(cellValueAt(x, y, z, F.T), 0,
+    "Undo must restore the same-cell temperature to its pre-stroke snapshot, overriding the later simulation tick");
   dispatch("undoSculpt");
   assert.equal(cellEnergy(), 0, "mixed worker undo #2 must restore baseline sculpt cell");
   assert.equal(cellValueAt(unrelatedX, y, z, F.T), unrelatedTemperatureAfterTick,
     "cell-level undo must preserve simulation changes to unrelated cells in the same chunk");
   dispatch("redoSculpt");
   assert.equal(cellEnergy(), afterSmartBrush, "mixed worker redo #1 must restore SmartBrush state");
+  assert.equal(cellValueAt(x, y, z, F.T), 0,
+    "Redo must restore the post-stroke snapshot, not replay the simulation mutation");
   dispatch("redoSculpt");
   assert.equal(cellEnergy(), afterOrdinaryPaint, "mixed worker redo #2 must restore ordinary-paint state");
   assert.equal(cellValueAt(unrelatedX, y, z, F.T), unrelatedTemperatureAfterTick,
