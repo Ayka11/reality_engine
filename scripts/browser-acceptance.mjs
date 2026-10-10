@@ -299,6 +299,8 @@ try {
     typeof window.restoreWorldFieldChunkSnapshot === "function" &&
     typeof window.worldFieldRestoreState === "function"
   );
+  await page.evaluate(() => window.tickChunkWorker?.(true, 1));
+  await page.waitForFunction(() => Number(window.worldFieldWorkerChunkStats?.() ?? 0) > 0, undefined, { timeout: acceptanceTimeout });
   const chunkRestoreFixture = await page.evaluate(() => {
     const view = window.getWorldViewContract?.();
     if (!view) return { error: "World View contract unavailable" };
