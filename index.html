@@ -1909,10 +1909,25 @@ function _unifiedSculptApply(label,applyLegacy,applyAuthoritative){
 function undo(){
   if(_unifiedSculptUndo.length){
     const record=_unifiedSculptUndo[_unifiedSculptUndo.length-1];
-    for(let i=0;i<record.authoritativeOps;i++){
-      const result=window.infinityUndoLegacySculptAuthoritative?.();
-      if(!result)throw new Error('Authoritative sculpt undo rejected');
-      window.undoChunkSculpt?.();
+    let completed=0;
+    try{
+      for(let i=0;i<record.authoritativeOps;i++){
+        const result=window.infinityUndoLegacySculptAuthoritative?.();
+        if(!result)throw new Error('Authoritative sculpt undo rejected');
+        completed++;
+        window.undoChunkSculpt?.();
+      }
+    }catch(error){
+      let rollbackError=null;
+      for(let i=0;i<completed;i++){
+        try{
+          const restored=window.infinityRedoLegacySculptAuthoritative?.();
+          if(!restored)throw new Error('Authoritative sculpt undo rollback rejected');
+          window.redoChunkSculpt?.();
+        }catch(rollback){rollbackError=rollback;break;}
+      }
+      if(rollbackError)throw new Error('Sculpt undo failed and partial rollback failed: '+String(rollbackError)+'; original: '+String(error));
+      throw error;
     }
     _unifiedSculptUndo.pop();buf.set(record.before);_unifiedSculptRedo.push(record);
     window.buf=buf;drawGrid();log('↩ Undo '+record.label);return record.label;
@@ -1926,10 +1941,25 @@ function undo(){
 function redo(){
   if(!_unifiedSculptRedo.length)return null;
   const record=_unifiedSculptRedo[_unifiedSculptRedo.length-1];
-  for(let i=0;i<record.authoritativeOps;i++){
-    const result=window.infinityRedoLegacySculptAuthoritative?.();
-    if(!result)throw new Error('Authoritative sculpt redo rejected');
-    window.redoChunkSculpt?.();
+  let completed=0;
+  try{
+    for(let i=0;i<record.authoritativeOps;i++){
+      const result=window.infinityRedoLegacySculptAuthoritative?.();
+      if(!result)throw new Error('Authoritative sculpt redo rejected');
+      completed++;
+      window.redoChunkSculpt?.();
+    }
+  }catch(error){
+    let rollbackError=null;
+    for(let i=0;i<completed;i++){
+      try{
+        const restored=window.infinityUndoLegacySculptAuthoritative?.();
+        if(!restored)throw new Error('Authoritative sculpt redo rollback rejected');
+        window.undoChunkSculpt?.();
+      }catch(rollback){rollbackError=rollback;break;}
+    }
+    if(rollbackError)throw new Error('Sculpt redo failed and partial rollback failed: '+String(rollbackError)+'; original: '+String(error));
+    throw error;
   }
   _unifiedSculptRedo.pop();buf.set(record.after);_unifiedSculptUndo.push(record);
   window.buf=buf;drawGrid();log('↪ Redo '+record.label);return record.label;
