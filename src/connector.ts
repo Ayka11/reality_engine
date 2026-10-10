@@ -502,7 +502,11 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   for (const chunk of restoreChunks) worldFieldRestoreExpectedKeys.add(chunk.key)
   chunkWorker.postMessage({ cmd: 'restoreBegin', data: { restoreId, expected: restoreChunks.length } })
   for (const chunk of restoreChunks) {
-    chunkWorker.postMessage({ cmd: 'restoreChunk', data: { key: chunk.key, data: Array.from(chunk.data), restoreId } })
+    // Transfer typed-array storage instead of cloning thousands of boxed numbers.
+    chunkWorker.postMessage(
+      { cmd: 'restoreChunk', data: { key: chunk.key, data: chunk.data, restoreId } },
+      [chunk.data.buffer],
+    )
   }
   chunkWorker.postMessage({ cmd: 'restoreEnd', data: { restoreId } })
   runtimeProvenance.record('world-state', { source: 'WorldFieldChunkPersistence', action: 'restore', coord: { cx, cy, cz }, key, checksum: snapshot.checksum })
