@@ -32,7 +32,7 @@ assert.match(worker, /grid\.paintSphere\(x, y, z, r, f, v, mode === 'add' \? 'ad
 assert.match(page, /effectiveTool==='erase'\?'erase':effectiveTool==='paint'\?'set':'add'/, "active UI must send the correct worker mode for erase, paint, and inject");
 assert.match(worker, /cmd\s*===\s*'undoSculpt'[\s\S]*?restoreCells\(record\.before\)/, "worker must restore sparse chunks on sculpt undo");
 assert.match(worker, /cmd\s*===\s*'redoSculpt'[\s\S]*?restoreCells\(record\.after\)/, "worker must restore sparse chunks on sculpt redo");
-assert.match(worker, /trackHistory \? captureChunks\(keys\) : null/, "worker paint history must be opt-in to avoid tracking unrelated worker edits");
+assert.match(worker, /trackHistory \? captureCells\(cells\) : null/, "worker paint history must be opt-in to avoid tracking unrelated worker edits");
 assert.match(page, /window\.undoChunkSculpt\?\.\(\)/, "active UI undo must forward to sparse worker history");
 assert.match(page, /window\.redoChunkSculpt\?\.\(\)/, "active UI redo must forward to sparse worker history");
 
@@ -60,7 +60,7 @@ try {
     const chunk = response.data.snap.find(item => item.key === chunkKeyValue);
     return chunk ? chunk.data[localOffset + F.E] : 0;
   };
-  dispatch("brush", { name: "Forest", x, y, z, radius: 2, strength: 0.5 });
+  dispatch("brush", { name: "Forest", x, y, z, radius: 2, strength: 0.5, trackHistory: true });
   const afterSmartBrush = cellEnergy();
   assert.ok(afterSmartBrush > 0, "SmartBrush must create sparse worker data");
   dispatch("paint", { x, y, z, f: F.E, v: 25, r: 0, mode: "add", trackHistory: true });
