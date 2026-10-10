@@ -671,6 +671,66 @@ try {
     throw new Error(`Literal pointer-drag redo history/worker parity failed: ${JSON.stringify(dragRedone)}`);
   }
 
+  // Failure injection: if a multi-sample undo fails after one authoritative
+  // operation, roll that operation forward and retain the original history.
+  const partialUndoBaseline = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+  }));
+  await page.evaluate(async () => {
+    const runtime = window.realitySculptTransactionRuntime;
+    runtime.beginGesture();
+    await runtime.applyStroke("inject", { x: 20, y: 20, z: 0 }, 1, 0.25, { energy: 1 });
+    await runtime.applyStroke("inject", { x: 21, y: 20, z: 0 }, 1, 0.25, { energy: 1 });
+    runtime.endGesture();
+  });
+  const partialUndoBeforeFailure = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+  }));
+  const injectedUndo = await page.evaluate(() => {
+    const original = window.infinityUndoLegacySculptAuthoritative;
+    let calls = 0;
+    window.infinityUndoLegacySculptAuthoritative = (...args) => {
+      calls++;
+      if (calls === 2) return false;
+      return original?.(...args);
+    };
+    let message = "";
+    try { window.undo(); } catch (error) { message = String(error?.message || error); }
+    finally { window.infinityUndoLegacySculptAuthoritative = original; }
+    return { calls, message };
+  });
+  const partialUndoAfterFailure = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+  }));
+  if (injectedUndo.calls !== 2 || !injectedUndo.message.includes("undo rejected")) {
+    throw new Error(`Partial undo failure was not injected as expected: ${JSON.stringify(injectedUndo)}`);
+  }
+  if (partialUndoAfterFailure.legacy !== partialUndoBeforeFailure.legacy ||
+      JSON.stringify(partialUndoAfterFailure.field) !== JSON.stringify(partialUndoBeforeFailure.field) ||
+      partialUndoAfterFailure.history.undo !== partialUndoBeforeFailure.history.undo ||
+      partialUndoAfterFailure.history.redo !== partialUndoBeforeFailure.history.redo) {
+    throw new Error("Failed multi-sample undo did not roll back to the exact pre-undo state");
+  }
+  await page.evaluate(() => window.undo());
+  const partialUndoRecovered = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+  }));
+  if (partialUndoRecovered.legacy !== partialUndoBaseline.legacy ||
+      JSON.stringify(partialUndoRecovered.field) !== JSON.stringify(partialUndoBaseline.field) ||
+      partialUndoRecovered.history.undo !== partialUndoBaseline.history.undo ||
+      partialUndoRecovered.history.redo !== partialUndoBaseline.history.redo + 1) {
+    throw new Error("Undo history was not usable after a failed partial undo");
+  }
+  await page.evaluate(() => window.redo());
+
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
