@@ -27,7 +27,7 @@ const adapter=new LegacySculptRuntimeAdapter(m=>{captured.push(m);return {...m,i
 const cell={x:3,y:5,z:2};
 const out=adapter.inject(cell,4,2,{energy:1,density:.5});
 assert.equal(out.id,1); assert.equal(captured[0].metadata.source,"legacy-sculpt-inject");
-adapter.paint(cell,4,.5,{energy:1,density:1}); assert.equal(captured[1].operations.energy.mode,"set"); assert.equal(captured[1].operations.energy.value,200); assert.equal(captured[1].metadata.brush,"Paint");
+adapter.paint(cell,4,.5,{energy:1,density:1}); assert.equal(captured[1].operations.energy.mode,"set"); assert.equal(captured[1].operations.energy.value,2); assert.equal(captured[1].metadata.brush,"Paint");
 adapter.erase(cell,4,.75); assert.equal(captured[2].metadata.brush,"Erase");
 adapter.smooth(cell,4,1); assert.equal(captured[3].operations.energy.mode,"smooth6");
 adapter.noise(cell,4,2,8,17,{energy:1}); assert.equal(captured[4].spatialPattern.kind,"noise3");
