@@ -40,7 +40,7 @@ import { WorkerWorldFieldChunkProvider } from './infinity/WorkerWorldFieldChunkP
 import { worldFieldChunkPersistence } from './infinity/WorldFieldChunkPersistence'
 import { worldFieldBoundaryExchange } from './infinity/WorldFieldBoundaryExchange'
 import type { ScientificFieldSample } from './infinity/FieldSampler'
-import { CHUNK_FLOATS, CX, CY, GRID_D, GRID_H, GRID_W, NF } from './core/ChunkGrid'
+import { CHUNK_FLOATS, CX, CY, GRID_D, GRID_H, GRID_W, NF, chunkKey } from './core/ChunkGrid'
 import { runtimeProvenance } from './infinity/RuntimeProvenance'
 import { worldViewContract } from './infinity/WorldViewContract'
 
@@ -469,8 +469,8 @@ win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => 
   const wx = Math.round(originX - view.center.x + GRID_W / 2)
   const wy = Math.round(originY - view.center.y + GRID_D * 0.45)
   const wz = Math.round(originZ - view.center.z + GRID_H / 2)
-  if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_D || wz < 0 || wz >= GRID_H) return false
-  const key = (wz >> 3) * (GRID_H / CY) * (GRID_W / CX) + (wy >> 3) * (GRID_W / CX) + (wx >> 3)
+  if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_H || wz < 0 || wz >= GRID_D) return false
+  const key = chunkKey(wx >> 3, wy >> 3, wz >> 3)
   const restoreId = ++worldFieldRestoreId
   const restoreChunks = snapshot.schemaVersion === 2 && snapshot.workerChunks?.length
     ? snapshot.workerChunks.map(chunk => ({ key: chunk.key, data: new Float32Array(chunk.data) }))
