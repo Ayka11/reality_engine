@@ -454,6 +454,16 @@ try {
   }
 
   // Exercise the UI-owned transaction helpers used by paintAt, including legacy-grid parity.
+  // worldGenerationHealth can be published before main.ts finishes wiring the sculpt controls;
+  // wait for the transaction API itself rather than treating renderer readiness as sculpt readiness.
+  await page.waitForFunction(() =>
+    typeof window.realitySculptTransactionRuntime?.applySmartBrush === "function" &&
+    typeof window.realitySculptTransactionRuntime?.applyStroke === "function" &&
+    typeof window.realitySculptTransactionRuntime?.undo === "function" &&
+    typeof window.realitySculptTransactionRuntime?.redo === "function",
+    undefined,
+    { timeout: acceptanceTimeout },
+  );
   const sculptContract = await page.evaluate(async () => {
     const world = window.infiniteWorld, runtime = window.realitySculptTransactionRuntime;
     if (!world || !runtime || typeof runtime.applySmartBrush !== "function" || typeof runtime.applyStroke !== "function") return { error: "Unified sculpt transaction runtime is not exposed" };
