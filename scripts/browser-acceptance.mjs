@@ -690,6 +690,30 @@ try {
     field: window.infiniteWorld.authoritativeField.serialize(),
     history: window.realitySculptTransactionRuntime.history(),
   }));
+  const workerUndoFailure = await page.evaluate(async () => {
+    const original = window.undoChunkSculpt;
+    window.undoChunkSculpt = () => Promise.resolve({
+      action: "undo",
+      applied: false,
+      seq: (window.lastChunkSculptHistory?.seq ?? 0) + 1,
+    });
+    let message = "";
+    try { await window.undo(); } catch (error) { message = String(error?.message || error); }
+    finally { window.undoChunkSculpt = original; }
+    return {
+      message,
+      legacy: window.realitySculptTransactionRuntime.fingerprint(),
+      field: window.infiniteWorld.authoritativeField.serialize(),
+      history: window.realitySculptTransactionRuntime.history(),
+    };
+  });
+  if (!workerUndoFailure.message.includes("worker undo rejected") ||
+      workerUndoFailure.legacy !== partialUndoBeforeFailure.legacy ||
+      JSON.stringify(workerUndoFailure.field) !== JSON.stringify(partialUndoBeforeFailure.field) ||
+      workerUndoFailure.history.undo !== partialUndoBeforeFailure.history.undo ||
+      workerUndoFailure.history.redo !== partialUndoBeforeFailure.history.redo) {
+    throw new Error("Rejected sparse-worker Undo did not preserve the pre-undo transaction state: " + JSON.stringify(workerUndoFailure));
+  }
   const workerAckBeforePartialUndo = await page.evaluate(() => window.lastChunkSculptHistory?.seq ?? 0);
   const injectedUndo = await page.evaluate(() => {
     const original = window.infinityUndoLegacySculptAuthoritative;
@@ -700,7 +724,7 @@ try {
       return original?.(...args);
     };
     let message = "";
-    try { window.undo(); } catch (error) { message = String(error?.message || error); }
+    try { await window.undo(); } catch (error) { message = String(error?.message || error); }
     finally { window.infinityUndoLegacySculptAuthoritative = original; }
     return { calls, message };
   });
