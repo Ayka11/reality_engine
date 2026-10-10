@@ -31,6 +31,18 @@ import { RealityMonitor, buildRealityMonitorHTML, updateMonitorPanels } from './
 import { NodeLawEditor }                          from './ui/NodeLawEditor'
 import { sceneComposer }                          from './modes/cinema/SceneComposer'
 import { RealityLawBridge }                       from './laws/RealityLawBridge'
+import { ChunkWorldFieldProvider } from './infinity/ChunkWorldFieldProvider'
+import { GeneratorFieldProvider } from './infinity/ScientificFieldProvider'
+import { MutableWorldFieldProvider } from './infinity/MutableWorldFieldProvider'
+import { WorldFieldChunkStore, worldFieldChunkCoord } from './infinity/WorldFieldChunkStore'
+import { DeterministicWorldFieldChunkProvider } from './infinity/DeterministicWorldFieldChunkProvider'
+import { WorkerWorldFieldChunkProvider } from './infinity/WorkerWorldFieldChunkProvider'
+import { worldFieldChunkPersistence } from './infinity/WorldFieldChunkPersistence'
+import { worldFieldBoundaryExchange } from './infinity/WorldFieldBoundaryExchange'
+import type { ScientificFieldSample } from './infinity/FieldSampler'
+import { CHUNK_FLOATS, CX, CY, GRID_D, GRID_H, GRID_W, NF } from './core/ChunkGrid'
+import { runtimeProvenance } from './infinity/RuntimeProvenance'
+import { worldViewContract } from './infinity/WorldViewContract'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
 const win = window as unknown as Record<string, unknown>
@@ -63,6 +75,82 @@ const nodeEditor    = new NodeLawEditor()
 
 const localChunks = new Map<number, Float32Array>()
 let chunkTick = 0, chunkEvCount = 0, workerBusy = false
+let worldFieldRestoreId = 0
+let worldFieldRestoreCoord: { cx: number; cy: number; cz: number } | null = null
+let worldFieldRestoreSeed = ''
+let worldFieldRestoreActive = false
+const worldFieldRestoreState = {
+  restoreId: 0, expected: 0, acknowledged: 0, keys: [] as number[],
+  duplicateAcks: 0, unexpectedAcks: 0, staleAcks: 0, staleFrames: 0,
+  unexpectedFrames: 0, restoreFrameRestoreId: 0, restoreFrameKeys: [] as number[],
+  workerBarrierComplete: false,
+}
+const worldFieldRestoreExpectedKeys = new Set<number>()
+const worldFieldRestoreAcknowledgedKeys = new Set<number>()
+const worldFieldRestoreFrameKeys = new Set<number>()
+const worldFieldRestorePendingFrames = new Map<number, ArrayBuffer>()
+let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
+let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
+const worldFieldChunkStore = new WorldFieldChunkStore(128, (chunk) => {
+  // Do not persist a partial worker view over the source snapshot being restored.
+  if (worldFieldRestoreActive && worldFieldRestoreCoord &&
+      chunk.coord.cx === worldFieldRestoreCoord.cx &&
+      chunk.coord.cy === worldFieldRestoreCoord.cy &&
+      chunk.coord.cz === worldFieldRestoreCoord.cz) return
+  const provider = chunk.provider as {
+    snapshotWorkerChunks?: () => { key: number; data: number[] }[]
+    snapshotValues?: () => number[]
+  }
+  const workerChunks = provider.snapshotWorkerChunks?.() ?? []
+  if (workerChunks.length) {
+    worldFieldChunkPersistence.saveWorkerChunks(chunk.coord, chunk.seed, workerChunks, worldViewContract.snapshot(), chunk.version)
+  } else {
+    const values = provider.snapshotValues?.()
+    if (values?.length) worldFieldChunkPersistence.save(
+      chunk.coord, chunk.seed, values, chunk.version,
+      { fieldsPerCell: NF, cellCount: CHUNK_FLOATS / NF },
+    )
+  }
+})
+const populateWorldFieldChunk = (cx: number, cy: number, cz: number, seed = worldViewContract.snapshot().seed) => {
+  const coord = { cx: Math.trunc(cx), cy: Math.trunc(cy), cz: Math.trunc(cz) }
+  const existing = worldFieldChunkStore.get(coord)
+  if (existing) return existing
+  const world = getInfiniteWorld()
+  const fallback = new DeterministicWorldFieldChunkProvider(seed, coord)
+  const provider = world
+    ? new WorkerWorldFieldChunkProvider(coord, localChunks, () => worldViewContract.snapshot(), fallback)
+    : fallback
+  return worldFieldChunkStore.set(coord, seed, provider, world ? 2 : 1)
+}
+function installChunkWorldFieldProvider() {
+  const world = getInfiniteWorld()
+  if (!world) return false
+  const fallback = new GeneratorFieldProvider(world.generator)
+  if (!authoritativeWorldFieldProvider) authoritativeWorldFieldProvider = new MutableWorldFieldProvider(fallback)
+  else authoritativeWorldFieldProvider.setBase(fallback)
+  world.fieldSampler.setProvider(authoritativeWorldFieldProvider)
+  if (!chunkWorldFieldProvider) {
+    chunkWorldFieldProvider = new ChunkWorldFieldProvider(localChunks, () => worldViewContract.snapshot(), fallback)
+  }
+  fieldRenderer.setWorldFieldProvider(authoritativeWorldFieldProvider)
+  return true
+}
+function publishWorkerBoundarySnapshots() {
+  const view = worldViewContract.snapshot()
+  const centerChunk = worldFieldChunkCoord(view.center.x, view.sliceY, view.center.z)
+  const provider = new WorkerWorldFieldChunkProvider(
+    centerChunk, localChunks, () => worldViewContract.snapshot(),
+    new DeterministicWorldFieldChunkProvider(view.seed, centerChunk),
+  )
+  worldFieldBoundaryExchange.clearForChunk(centerChunk)
+  for (const axis of ['x', 'y', 'z'] as const) {
+    worldFieldBoundaryExchange.snapshotFace(provider, centerChunk, axis, 1, 8)
+    worldFieldBoundaryExchange.snapshotFace(provider, worldFieldBoundaryExchange.neighbor(centerChunk, axis, 1), axis, -1, 8)
+  }
+  return { centerChunk, faces: worldFieldBoundaryExchange.size() }
+}
+win['installChunkWorldFieldProvider'] = installChunkWorldFieldProvider
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 const realityLawBridge = new RealityLawBridge()
 win['realityLawBridge'] = realityLawBridge
@@ -95,8 +183,70 @@ requestAnimationFrame(() => {
 })
 
 chunkWorker.onmessage = (e: MessageEvent) => {
-  const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data
+  const { cmd, tick: wTick, evCount: wEv, ab, stats, restoreId: frameRestoreId } = e.data
   workerBusy = false
+
+  if (cmd === 'restoreComplete') {
+    const result = e.data.data as { restoreId?: number; complete?: boolean } | undefined
+    if (result?.restoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
+    }
+    worldFieldRestoreState.workerBarrierComplete = result.complete === true
+    const complete = result.complete === true &&
+      worldFieldRestoreExpectedKeys.size > 0 &&
+      worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
+      worldFieldRestoreState.unexpectedAcks === 0 &&
+      worldFieldRestoreState.unexpectedFrames === 0 &&
+      worldFieldRestoreState.duplicateAcks === 0 &&
+      worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
+      [...worldFieldRestoreExpectedKeys].every(key =>
+        worldFieldRestoreAcknowledgedKeys.has(key) && worldFieldRestoreFrameKeys.has(key))
+    if (complete) {
+      for (const [key, frame] of worldFieldRestorePendingFrames) {
+        const u32 = new Uint32Array(frame), f32 = new Float32Array(frame)
+        const count = u32[0]
+        let off = 1
+        for (let i = 0; i < count; i++) {
+          const chunkKey = u32[off]
+          localChunks.set(chunkKey, f32.slice(off + 1, off + 1 + CHUNK_FLOATS))
+          off += 1 + CHUNK_FLOATS
+        }
+        fieldRenderer.applyWorkerFrame(frame)
+      }
+      installChunkWorldFieldProvider()
+      publishWorkerBoundarySnapshots()
+      if (worldFieldRestoreCoord) {
+        worldFieldChunkStore.delete(worldFieldRestoreCoord)
+        populateWorldFieldChunk(worldFieldRestoreCoord.cx, worldFieldRestoreCoord.cy, worldFieldRestoreCoord.cz, worldFieldRestoreSeed)
+      }
+    } else {
+      worldFieldRestoreState.unexpectedAcks++
+    }
+    worldFieldRestoreActive = false
+    worldFieldRestorePendingFrames.clear()
+    return
+  }
+
+  if (cmd === 'restoreChunkAck') {
+    const ack = e.data.data as { key?: number; restoreId?: number; accepted?: boolean; duplicate?: boolean } | undefined
+    if (ack?.restoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
+    }
+    if (ack.accepted === false || !Number.isInteger(ack.key) || !worldFieldRestoreExpectedKeys.has(ack.key)) {
+      worldFieldRestoreState.unexpectedAcks++
+      return
+    }
+    if (worldFieldRestoreAcknowledgedKeys.has(ack.key)) {
+      worldFieldRestoreState.duplicateAcks++
+      return
+    }
+    worldFieldRestoreAcknowledgedKeys.add(ack.key)
+    worldFieldRestoreState.acknowledged = worldFieldRestoreAcknowledgedKeys.size
+    worldFieldRestoreState.keys = [...worldFieldRestoreAcknowledgedKeys]
+    return
+  }
 
   if (cmd === 'brushApplied') {
     win['lastChunkBrush'] = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius }
@@ -105,29 +255,43 @@ chunkWorker.onmessage = (e: MessageEvent) => {
 
   if (cmd === 'presetApplied') {
     win['lastChunkPreset'] = {
-      name: e.data.name,
-      tick: e.data.tick,
-      stats: e.data.stats,
-      processes: e.data.processes,
-      params: e.data.params
+      name: e.data.name, tick: e.data.tick, stats: e.data.stats,
+      processes: e.data.processes, params: e.data.params
     }
     return
   }
 
   if (cmd === 'frame' && ab) {
-    chunkTick    = wTick    ?? chunkTick
-    chunkEvCount = wEv      ?? chunkEvCount
-    const NF_W = 14, CF = 512 * NF_W
+    if (frameRestoreId !== undefined) {
+      if (frameRestoreId !== worldFieldRestoreState.restoreId) {
+        worldFieldRestoreState.staleFrames++
+        return
+      }
+      worldFieldRestoreState.restoreFrameRestoreId = frameRestoreId
+      const frame = ab as ArrayBuffer
+      const u32 = new Uint32Array(frame)
+      let off = 1
+      for (let i = 0; i < u32[0]; i++) {
+        const key = u32[off]
+        if (!worldFieldRestoreExpectedKeys.has(key)) worldFieldRestoreState.unexpectedFrames++
+        else worldFieldRestoreFrameKeys.add(key)
+        off += 1 + CHUNK_FLOATS
+      }
+      worldFieldRestoreState.restoreFrameKeys = [...worldFieldRestoreFrameKeys]
+      worldFieldRestorePendingFrames.set(worldFieldRestoreFrameKeys.size, frame.slice(0))
+      return
+    }
+    chunkTick = wTick ?? chunkTick
+    chunkEvCount = wEv ?? chunkEvCount
     const u32 = new Uint32Array(ab as ArrayBuffer)
     const f32 = new Float32Array(ab as ArrayBuffer)
     const num = u32[0]
     let off = 1
-    for (let c = 0; c < num; c++) {
+    for (let i = 0; i < num; i++) {
       const key = u32[off]
-      localChunks.set(key, f32.slice(off + 1, off + 1 + CF))
-      off += 1 + CF
+      localChunks.set(key, f32.slice(off + 1, off + 1 + CHUNK_FLOATS))
+      off += 1 + CHUNK_FLOATS
     }
-    // Feed the scientific field state directly into the dedicated volumetric renderer.
     fieldRenderer.applyWorkerFrame(ab as ArrayBuffer)
     const el = document.getElementById('chunkStats')
     if (el && stats) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`
@@ -245,6 +409,89 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
   const h = parent.clientHeight
   getInfiniteWorld()?.resize(Math.max(1, w), Math.max(1, h))
 }
+win['worldFieldChunkStoreStats'] = () => worldFieldChunkStore.stats()
+win['worldFieldChunkPersistenceStats'] = () => ({ snapshots: worldFieldChunkPersistence.size() })
+win['worldFieldRestoreState'] = () => ({
+  ...worldFieldRestoreState,
+  expectedKeys: [...worldFieldRestoreExpectedKeys],
+  keys: [...worldFieldRestoreAcknowledgedKeys],
+  restoreFrameKeys: [...worldFieldRestoreFrameKeys],
+  complete: worldFieldRestoreState.workerBarrierComplete &&
+    worldFieldRestoreExpectedKeys.size > 0 &&
+    worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
+    worldFieldRestoreState.unexpectedAcks === 0 &&
+    worldFieldRestoreState.unexpectedFrames === 0 &&
+    worldFieldRestoreState.duplicateAcks === 0 &&
+    worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
+    [...worldFieldRestoreExpectedKeys].every(key => worldFieldRestoreFrameKeys.has(key)),
+})
+win['saveWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number, values: number[], seed?: string, providerVersion?: number) =>
+  worldFieldChunkPersistence.save(
+    { cx, cy, cz }, seed ?? worldViewContract.snapshot().seed, values, providerVersion ?? 1,
+    values.length === CHUNK_FLOATS ? { fieldsPerCell: NF, cellCount: CHUNK_FLOATS / NF } : undefined,
+  )
+win['loadWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => worldFieldChunkPersistence.load({ cx, cy, cz })
+win['snapshotWorldFieldChunkPersistence'] = (cx: number, cy: number, cz: number, seed?: string) => {
+  const chunk = populateWorldFieldChunk(cx, cy, cz, seed)
+  const provider = chunk.provider as WorkerWorldFieldChunkProvider
+  const workerChunks = provider.snapshotWorkerChunks()
+  return workerChunks.length
+    ? worldFieldChunkPersistence.saveWorkerChunks({ cx, cy, cz }, chunk.seed, workerChunks, worldViewContract.snapshot(), chunk.version)
+    : null
+}
+win['validateWorldFieldChunkSnapshot'] = (snapshot: unknown) => worldFieldChunkPersistence.validate(snapshot as any)
+win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => {
+  if (worldFieldRestoreActive) return false
+  const snapshot = worldFieldChunkPersistence.loadValid({ cx, cy, cz })
+  if (!snapshot || !((snapshot.schemaVersion === 2 && snapshot.workerChunks?.length) ||
+      (snapshot.values.length === CHUNK_FLOATS && snapshot.fieldLayout?.fieldsPerCell === NF))) return false
+  const view = worldViewContract.snapshot()
+  const originX = cx * 32, originY = cy * 32, originZ = cz * 32
+  const wx = Math.round(originX - view.center.x + GRID_W / 2)
+  const wy = Math.round(originY - view.center.y + GRID_D * 0.45)
+  const wz = Math.round(originZ - view.center.z + GRID_H / 2)
+  if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_D || wz < 0 || wz >= GRID_H) return false
+  const key = (wz >> 3) * (GRID_H / CY) * (GRID_W / CX) + (wy >> 3) * (GRID_W / CX) + (wx >> 3)
+  const restoreId = ++worldFieldRestoreId
+  const restoreChunks = snapshot.schemaVersion === 2 && snapshot.workerChunks?.length
+    ? snapshot.workerChunks.map(chunk => ({ key: chunk.key, data: new Float32Array(chunk.data) }))
+    : [{ key, data: new Float32Array(snapshot.values) }]
+  if (!restoreChunks.length || restoreChunks.some(chunk => chunk.data.length !== CHUNK_FLOATS) ||
+      new Set(restoreChunks.map(chunk => chunk.key)).size !== restoreChunks.length) return false
+  worldFieldRestoreActive = true
+  worldFieldRestoreCoord = { cx, cy, cz }
+  worldFieldRestoreSeed = snapshot.seed
+  Object.assign(worldFieldRestoreState, {
+    restoreId, expected: restoreChunks.length, acknowledged: 0, keys: [],
+    duplicateAcks: 0, unexpectedAcks: 0, staleAcks: 0, staleFrames: 0,
+    unexpectedFrames: 0, restoreFrameRestoreId: 0, restoreFrameKeys: [], workerBarrierComplete: false,
+  })
+  worldFieldRestoreExpectedKeys.clear()
+  worldFieldRestoreAcknowledgedKeys.clear()
+  worldFieldRestoreFrameKeys.clear()
+  worldFieldRestorePendingFrames.clear()
+  for (const chunk of restoreChunks) worldFieldRestoreExpectedKeys.add(chunk.key)
+  chunkWorker.postMessage({ cmd: 'restoreBegin', data: { restoreId, expected: restoreChunks.length } })
+  for (const chunk of restoreChunks) {
+    chunkWorker.postMessage({ cmd: 'restoreChunk', data: { key: chunk.key, data: Array.from(chunk.data), restoreId } })
+  }
+  chunkWorker.postMessage({ cmd: 'restoreEnd', data: { restoreId } })
+  runtimeProvenance.record('world-state', { source: 'WorldFieldChunkPersistence', action: 'restore', coord: { cx, cy, cz }, key, checksum: snapshot.checksum })
+  return true
+}
+win['worldFieldBoundaryStats'] = () => ({ faces: worldFieldBoundaryExchange.size() })
+win['publishWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z', side: -1|1, samples: ScientificFieldSample[]) =>
+  worldFieldBoundaryExchange.publish({ cx, cy, cz }, axis, side, samples)
+win['snapshotWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z', side: -1|1, resolution?: number, seed?: string) => {
+  const chunk = populateWorldFieldChunk(cx, cy, cz, seed)
+  return worldFieldBoundaryExchange.snapshotFace(chunk.provider, { cx, cy, cz }, axis, side, resolution)
+}
+win['validateWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z') =>
+  worldFieldBoundaryExchange.validatePair({ cx, cy, cz }, axis)
+win['populateWorldFieldChunk'] = (cx: number, cy: number, cz: number, seed?: string) => populateWorldFieldChunk(cx, cy, cz, seed)
+win['worldFieldChunkStoreState'] = () => worldFieldChunkStore.stats()
+win['evictWorldFieldChunk'] = (cx: number, cy: number, cz: number) => worldFieldChunkStore.delete({ cx: Math.trunc(cx), cy: Math.trunc(cy), cz: Math.trunc(cz) })
+
 win['paintChunkAt'] = (x: number, y: number, z: number, f: number, v: number, r: number, mode?: string) => {
   chunkWorker.postMessage({ cmd: 'paint', data: { x, y, z, f, v, r, mode: mode ?? 'add' } })
 }
