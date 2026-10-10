@@ -246,8 +246,11 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
   getInfiniteWorld()?.resize(Math.max(1, w), Math.max(1, h))
 }
 win['paintChunkAt'] = (x: number, y: number, z: number, f: number, v: number, r: number, mode?: string) => {
-  chunkWorker.postMessage({ cmd: 'paint', data: { x, y, z, f, v, r, mode: mode ?? 'add' } })
+  chunkWorker.postMessage({ cmd: 'paint', data: { x, y, z, f, v, r, mode: mode ?? 'add', trackHistory: true } })
 }
+win['undoChunkSculpt'] = () => chunkWorker.postMessage({ cmd: 'undoSculpt' })
+win['redoChunkSculpt'] = () => chunkWorker.postMessage({ cmd: 'redoSculpt' })
+win['clearChunkSculptHistory'] = () => chunkWorker.postMessage({ cmd: 'clearSculptHistory' })
 
 // Scene Composer APIs
 sceneComposer.setOnApply((cmds) => {
