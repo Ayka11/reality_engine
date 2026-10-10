@@ -21,6 +21,8 @@ assert.ok(multiplayerSource.includes("data.userId === [this.userId, ...this.peer
 assert.ok(multiplayerSource.includes('this.userId < smallestPeerId'), 'host election must use the same lexical ordering as peer sorting');
 assert.ok(multiplayerSource.includes('cell.field >= CELL_FIELDS'), 'remote field index must be bounded');
 assert.ok(multiplayerSource.includes('if (!this.connected) return;'), 'disconnected client must ignore late messages');
+assert.ok(multiplayerSource.includes("this._handleMessage({ type: 'join', userId: message.from, color: '#888' })"), 'late room roster announcements must populate peer state');
+assert.ok(multiplayerSource.includes("this._sendSocket({ type: 'announce', from: this.userId })"), 'connect must request a fresh room roster');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const waitForMessage = (socket, timeoutMs = 2500) => Promise.race([
   once(socket, 'message').then(([payload]) => JSON.parse(payload.toString())),
@@ -74,6 +76,31 @@ try {
   assert.equal((await aliceAnnounce).from, 'bob');
   assert.equal((await bobAnnounce).from, 'alice');
   assert.equal(await isolatedRoomReceivesNothing, true, 'clients without the room token must be isolated');
+
+  const lateJoiner = new WebSocket(`ws://127.0.0.1:${port}/signal?room=runtime-test-room`);
+  sockets.push(lateJoiner);
+  await once(lateJoiner, 'open');
+  const roster = new Set();
+  const rosterReady = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      lateJoiner.off('message', onRosterMessage);
+      reject(new Error('Late joiner did not receive the full room roster'));
+    }, 2500);
+    const onRosterMessage = raw => {
+      let message;
+      try { message = JSON.parse(raw.toString()); } catch { return; }
+      if (message.type !== 'announce' || typeof message.from !== 'string') return;
+      roster.add(message.from);
+      if (roster.has('alice') && roster.has('bob')) {
+        clearTimeout(timer);
+        lateJoiner.off('message', onRosterMessage);
+        resolve(true);
+      }
+    };
+    lateJoiner.on('message', onRosterMessage);
+  });
+  lateJoiner.send(JSON.stringify({ type: 'announce', from: 'late-peer' }));
+  assert.equal(await rosterReady, true, 'late joiner must learn peers that were already in the room');
 
   const targeted = waitForMessage(bob);
   alice.send(JSON.stringify({ type: 'offer', from: 'alice', to: 'bob', payload: 'contract-check' }));
