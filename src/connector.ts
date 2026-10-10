@@ -40,7 +40,7 @@ import { WorkerWorldFieldChunkProvider } from './infinity/WorkerWorldFieldChunkP
 import { worldFieldChunkPersistence } from './infinity/WorldFieldChunkPersistence'
 import { worldFieldBoundaryExchange } from './infinity/WorldFieldBoundaryExchange'
 import type { ScientificFieldSample } from './infinity/FieldSampler'
-import { CHUNK_FLOATS, CX, CY, GRID_D, GRID_H, GRID_W, NF, chunkKey } from './core/ChunkGrid'
+import { CHUNK_FLOATS, GRID_D, GRID_H, GRID_W, NF, chunkKey } from './core/ChunkGrid'
 import { runtimeProvenance } from './infinity/RuntimeProvenance'
 import { worldViewContract } from './infinity/WorldViewContract'
 
