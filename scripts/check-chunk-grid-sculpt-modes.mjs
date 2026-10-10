@@ -75,6 +75,13 @@ try {
   assert.equal(cellEnergy(), afterSmartBrush, "mixed worker redo #1 must restore SmartBrush state");
   dispatch("redoSculpt");
   assert.equal(cellEnergy(), afterOrdinaryPaint, "mixed worker redo #2 must restore ordinary-paint state");
+  // A non-transactional worker edit must invalidate sculpt history rather than
+  // letting a later Undo erase that unrelated edit or pop a mismatched record.
+  dispatch("paint", { x: x + 1, y, z, f: F.E, v: 17, r: 0, mode: "set" });
+  dispatch("undoSculpt");
+  assert.equal(workerMessages.filter(message => message.cmd === "sculptHistoryApplied").at(-1)?.applied, false,
+    "untracked worker mutation must clear sculpt undo history");
+  assert.equal(cellEnergy(), afterOrdinaryPaint, "untracked edit must not roll back the prior sculpted cell");
 } finally {
   if (originalSelf === undefined) delete globalThis.self;
   else globalThis.self = originalSelf;
