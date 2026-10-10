@@ -1975,7 +1975,7 @@ function _applyUnifiedStroke(toolName,cell,radius,strength,fields,selectedLayer=
     ()=>{
       const bridge=window.infinityApplyLegacySculptStroke;
       if(typeof bridge!=='function')throw new Error('Authoritative sculpt bridge is unavailable');
-      return bridge(effectiveTool==='erase'?'erase':'inject',worldCell,Math.max(2,radius*2),strength,{
+      return bridge(effectiveTool==='erase'?'erase':effectiveTool==='paint'?'paint':'inject',worldCell,Math.max(2,radius*2),strength,{
         fields:{...fields},selectedLegacyZ:0,
       });
     });
