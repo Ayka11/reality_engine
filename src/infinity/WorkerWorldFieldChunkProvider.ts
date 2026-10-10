@@ -51,6 +51,9 @@ export class WorkerWorldFieldChunkProvider implements ScientificFieldProvider {
 
   /** Returns one value per world voxel, preserving the canonical 32³ contract. */
   snapshotValues(): number[] {
+    // Most streamed world chunks lie outside the finite worker window. Avoid a
+    // full 32³ scan during LRU eviction when there is no worker data to persist.
+    if (this.snapshotWorkerChunks().length === 0) return []
     const values: number[] = []
     const view = this.getView()
     const originX = this.coord.cx * WORLD_CHUNK_SIZE
