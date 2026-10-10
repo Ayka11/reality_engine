@@ -2,7 +2,7 @@ name: Reality Engine CI
 
 on:
   push:
-    branches: [main, reality-engine-hf-infinity]
+    branches: [main, reality-engine-hf-infinity, 'integration/**']
   pull_request:
     branches: [main, reality-engine-hf-infinity]
 
