@@ -1911,7 +1911,7 @@ function redo(){
 }
 window.undo=undo;window.redo=redo;
 
-function _legacyWorldCell(x,y){return{x:Math.round(x/W*127),y:0,z:Math.round(y/H*127)};}
+function _legacyWorldCell(x,y){return{x:Math.round(x/W*127),y:Math.round(y/H*127),z:0};}
 function _fieldsForLayer(selectedLayer){
   const names=['energy','density','information','entropy','temperature','bio'];
   return{[names[selectedLayer<0?0:selectedLayer]??'energy']:1};
@@ -1922,11 +1922,14 @@ function _applyUnifiedSmartBrush(name,x,y,radius,strength){
   if(typeof bridge!=='function')throw new Error('Authoritative SmartBrush bridge is unavailable');
   const mappedName=name==='Civ Seed'?'Civilization Seed':name;
   const supported=['Volcano','Forest','Ocean','Crystal','Storm','Life Cluster','Radiation','Civilization Seed'];
-  if(!supported.includes(mappedName))throw new Error('No authoritative SmartBrush mapping for '+name);
   const result=_unifiedSculptApply('smart:'+name,
     ()=>BRUSHES[name].paint(x,y,radius),
-    ()=>bridge(mappedName,worldCell,Math.max(2,radius*2),0,{strength}));
-  if(window.applyChunkBrush)window.applyChunkBrush(name,worldCell.x,worldCell.z,32,Math.max(2,radius*2),strength);
+    ()=>supported.includes(mappedName)
+      ? bridge(mappedName,worldCell,Math.max(2,radius*2),0,{strength})
+      : window.infinityApplyLegacySculptStroke?.('inject',worldCell,Math.max(2,radius*2),strength,{
+          fields:name==='Gravity Well'?{energy:1,density:1}:{entropy:1,information:1},selectedLegacyZ:0,
+        }));
+  if(window.applyChunkBrush)window.applyChunkBrush(name,worldCell.x,worldCell.y,32,Math.max(2,radius*2),strength);
   return result;
 }
 function _applyUnifiedStroke(toolName,cell,radius,strength,fields,selectedLayer=layer){
@@ -1953,7 +1956,7 @@ function _applyUnifiedStroke(toolName,cell,radius,strength,fields,selectedLayer=
     });
   if(window.paintChunkAt){
     const f3=[0,1,2,3,4,10][selectedLayer<0?0:selectedLayer]??0;
-    window.paintChunkAt(worldCell.x,worldCell.z,32,f3,effectiveTool==='erase'?0:legacyStrength,Math.max(3,radius*3),effectiveTool==='erase'?'set':'add');
+    window.paintChunkAt(worldCell.x,worldCell.y,32,f3,effectiveTool==='erase'?0:legacyStrength,Math.max(3,radius*3),effectiveTool==='erase'?'set':'add');
   }
   return result;
 }
