@@ -19,6 +19,7 @@ const {
   normalizeLegacyCell,
   legacyBrushDeltaToMutation,
   sculptInjectToMutation,
+  sculptPaintToMutation,
   sculptErodeToMutation,
   sculptNoiseToMutation,
   sculptPatternToMutation,
@@ -81,6 +82,13 @@ assert.ok(mutation.metadata.unsupportedFields.includes("materialId"));
 const inject = sculptInjectToMutation({x: 3, y: 5, z: 2}, 4, 2, {energy: 1, density: 0.5});
 assert.deepEqual(inject.delta, {energy: 0.24, density: 0.012, information: 0, entropy: 0, temperature: 0, biology: 0});
 assert.equal(inject.metadata.source, "legacy-sculpt-inject");
+
+const paint = sculptPaintToMutation({x:3,y:5,z:2}, 4, .5, {energy:1, density:1, information:1, temperature:1, bio:1, entropy:1});
+assert.deepEqual({x:paint.x,y:paint.y,z:paint.z}, {x:3,y:2,z:5});
+assert.deepEqual(paint.operations.energy, {mode:"set",value:2,weighting:"radial"});
+assert.deepEqual(paint.operations.density, {mode:"set",value:1,weighting:"radial"});
+assert.equal(paint.metadata.brush, "Paint");
+assert.equal(paint.metadata.source, "legacy-sculpt-paint");
 
 const erode = sculptErodeToMutation({x: 3, y: 5, z: 2}, 4, 2);
 assert.deepEqual(erode.delta, {density: -0.02, entropy: 0.012, temperature: -0.3});
