@@ -10,6 +10,22 @@ async function load(path, replacements = []) {
   return import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
 }
 
+const gridMod = await load("src/core/ChunkGrid.ts");
+const { ChunkGrid, CHUNK_FLOATS } = gridMod;
+const grid = new ChunkGrid();
+const validChunk = Array(CHUNK_FLOATS).fill(0.25);
+assert.equal(grid.restoreChunk(0, validChunk), true);
+assert.equal(grid.chunks.get(0)?.[0], 0.25);
+assert.equal(grid.dirtyChunks.has(0), true);
+assert.equal(grid.restoreChunk(-1, validChunk), false);
+assert.equal(grid.restoreChunk(2047, validChunk), true);
+assert.equal(grid.restoreChunk(2048, validChunk), false);
+assert.equal(grid.restoreChunk(1, [1, 2]), false);
+const invalidChunk = Array(CHUNK_FLOATS).fill(0.5);
+invalidChunk[12] = Number.NaN;
+assert.equal(grid.restoreChunk(1, invalidChunk), false);
+assert.equal(grid.chunks.has(1), false);
+
 const view = await load("src/infinity/WorldViewContract.ts");
 const { WorldViewContract } = view;
 const contract = new WorldViewContract();
