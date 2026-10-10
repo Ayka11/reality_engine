@@ -278,7 +278,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
         off += 1 + CHUNK_FLOATS
       }
       worldFieldRestoreState.restoreFrameKeys = [...worldFieldRestoreFrameKeys]
-      worldFieldRestorePendingFrames.set(worldFieldRestoreFrameKeys.size, frame.slice(0))
+      worldFieldRestorePendingFrames.set(worldFieldRestorePendingFrames.size, frame.slice(0))
       return
     }
     chunkTick = wTick ?? chunkTick
