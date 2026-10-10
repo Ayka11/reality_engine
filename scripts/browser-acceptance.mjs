@@ -293,6 +293,45 @@ try {
   }
 
 
+  // Frontend parity regression: the visible Scientific Field tab must mutate the same
+  // authoritative provider used by the direct runtime API.
+  await page.evaluate(() => {
+    window.setInfinityDockPosition?.("right");
+    window.toggleWorldToolbar?.(true);
+  });
+  await page.waitForSelector("#vTabField");
+  await page.locator("#vTabField").click();
+  await page.waitForSelector("#vFieldEnergy");
+  const uiFieldBaseline = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const p = world.getWorldPosition();
+    const y = world.getWorldEnvironment().worldPosition.y;
+    return {
+      position: { x: p.x, y, z: p.z },
+      sample: world.fieldSampler.sample(p.x, y, p.z),
+      state: world.getAuthoritativeFieldState().field,
+    };
+  });
+  await page.locator("#vFieldEnergy").click();
+  const uiFieldAfter = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const p = world.getWorldPosition();
+    const y = world.getWorldEnvironment().worldPosition.y;
+    return {
+      sample: world.fieldSampler.sample(p.x, y, p.z),
+      state: world.getAuthoritativeFieldState().field,
+    };
+  });
+  if (!(Number(uiFieldAfter?.sample?.energy ?? NaN) > Number(uiFieldBaseline?.sample?.energy ?? NaN))) {
+    throw new Error("Scientific Field UI brush did not mutate the authoritative energy field");
+  }
+  if (Number(uiFieldAfter?.state?.mutationCount ?? 0) !== Number(uiFieldBaseline?.state?.mutationCount ?? 0) + 1) {
+    throw new Error("Scientific Field UI brush did not create exactly one authoritative mutation");
+  }
+  if (uiFieldAfter?.state?.lastMutation?.metadata?.source !== "infinity-world-ui") {
+    throw new Error("Scientific Field UI brush mutation lost its frontend provenance metadata");
+  }
+
   const lawBuildBefore = await page.evaluate(() => window.infinityBuildZoneCost?.(0, 0));
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", false, 0.4, 0.012));
   const lawDisabled = await page.evaluate(() => window.getRealityLawState?.());
