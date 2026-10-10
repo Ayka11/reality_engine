@@ -133,7 +133,6 @@ function installChunkWorldFieldProvider() {
   if (!chunkWorldFieldProvider) {
     chunkWorldFieldProvider = new ChunkWorldFieldProvider(localChunks, () => worldViewContract.snapshot(), fallback)
   }
-  fieldRenderer.setWorldFieldProvider(authoritativeWorldFieldProvider)
   return true
 }
 function publishWorkerBoundarySnapshots() {
@@ -203,7 +202,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       [...worldFieldRestoreExpectedKeys].every(key =>
         worldFieldRestoreAcknowledgedKeys.has(key) && worldFieldRestoreFrameKeys.has(key))
     if (complete) {
-      for (const [key, frame] of worldFieldRestorePendingFrames) {
+      for (const frame of worldFieldRestorePendingFrames.values()) {
         const u32 = new Uint32Array(frame), f32 = new Float32Array(frame)
         const count = u32[0]
         let off = 1
@@ -234,15 +233,17 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       worldFieldRestoreState.staleAcks++
       return
     }
-    if (ack.accepted === false || !Number.isInteger(ack.key) || !worldFieldRestoreExpectedKeys.has(ack.key)) {
+    const ackKey = ack?.key
+    if (ack?.accepted === false || typeof ackKey !== 'number' || !Number.isInteger(ackKey) ||
+        !worldFieldRestoreExpectedKeys.has(ackKey)) {
       worldFieldRestoreState.unexpectedAcks++
       return
     }
-    if (worldFieldRestoreAcknowledgedKeys.has(ack.key)) {
+    if (worldFieldRestoreAcknowledgedKeys.has(ackKey)) {
       worldFieldRestoreState.duplicateAcks++
       return
     }
-    worldFieldRestoreAcknowledgedKeys.add(ack.key)
+    worldFieldRestoreAcknowledgedKeys.add(ackKey)
     worldFieldRestoreState.acknowledged = worldFieldRestoreAcknowledgedKeys.size
     worldFieldRestoreState.keys = [...worldFieldRestoreAcknowledgedKeys]
     return
