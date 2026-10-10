@@ -1906,7 +1906,7 @@ function _unifiedSculptApply(label,applyLegacy,applyAuthoritative){
     throw error;
   }
 }
-function undo(){
+async function undo(){
   if(_unifiedSculptUndo.length){
     const record=_unifiedSculptUndo[_unifiedSculptUndo.length-1];
     let completed=0;
@@ -1914,8 +1914,16 @@ function undo(){
       for(let i=0;i<record.authoritativeOps;i++){
         const result=window.infinityUndoLegacySculptAuthoritative?.();
         if(!result)throw new Error('Authoritative sculpt undo rejected');
+        try{
+          const acknowledgement=await window.undoChunkSculpt?.();
+          if(!acknowledgement||acknowledgement.action!=='undo'||acknowledgement.applied!==true)
+            throw new Error('Sparse worker sculpt undo rejected');
+        }catch(workerError){
+          const restored=window.infinityRedoLegacySculptAuthoritative?.();
+          if(!restored)throw new Error('Authoritative undo rollback after worker rejection failed: '+String(workerError));
+          throw workerError;
+        }
         completed++;
-        window.undoChunkSculpt?.();
       }
     }catch(error){
       let rollbackError=null;
@@ -1923,7 +1931,9 @@ function undo(){
         try{
           const restored=window.infinityRedoLegacySculptAuthoritative?.();
           if(!restored)throw new Error('Authoritative sculpt undo rollback rejected');
-          window.redoChunkSculpt?.();
+          const acknowledgement=await window.redoChunkSculpt?.();
+          if(!acknowledgement||acknowledgement.action!=='redo'||acknowledgement.applied!==true)
+            throw new Error('Sparse worker sculpt undo rollback rejected');
         }catch(rollback){rollbackError=rollback;break;}
       }
       if(rollbackError)throw new Error('Sculpt undo failed and partial rollback failed: '+String(rollbackError)+'; original: '+String(error));
@@ -1938,7 +1948,7 @@ function undo(){
   buf.set(_undoRing[_undoHead%UNDO_MAX]);
   window.buf=buf;drawGrid();log('↩ Undo');return 'legacy-snapshot';
 }
-function redo(){
+async function redo(){
   if(!_unifiedSculptRedo.length)return null;
   const record=_unifiedSculptRedo[_unifiedSculptRedo.length-1];
   let completed=0;
@@ -1946,8 +1956,16 @@ function redo(){
     for(let i=0;i<record.authoritativeOps;i++){
       const result=window.infinityRedoLegacySculptAuthoritative?.();
       if(!result)throw new Error('Authoritative sculpt redo rejected');
+      try{
+        const acknowledgement=await window.redoChunkSculpt?.();
+        if(!acknowledgement||acknowledgement.action!=='redo'||acknowledgement.applied!==true)
+          throw new Error('Sparse worker sculpt redo rejected');
+      }catch(workerError){
+        const restored=window.infinityUndoLegacySculptAuthoritative?.();
+        if(!restored)throw new Error('Authoritative redo rollback after worker rejection failed: '+String(workerError));
+        throw workerError;
+      }
       completed++;
-      window.redoChunkSculpt?.();
     }
   }catch(error){
     let rollbackError=null;
@@ -1955,7 +1973,9 @@ function redo(){
       try{
         const restored=window.infinityUndoLegacySculptAuthoritative?.();
         if(!restored)throw new Error('Authoritative sculpt redo rollback rejected');
-        window.undoChunkSculpt?.();
+        const acknowledgement=await window.undoChunkSculpt?.();
+        if(!acknowledgement||acknowledgement.action!=='undo'||acknowledgement.applied!==true)
+          throw new Error('Sparse worker sculpt redo rollback rejected');
       }catch(rollback){rollbackError=rollback;break;}
     }
     if(rollbackError)throw new Error('Sculpt redo failed and partial rollback failed: '+String(rollbackError)+'; original: '+String(error));
