@@ -1852,6 +1852,18 @@ function getCellAt(e){
 }
 const _unifiedSculptUndo=[];
 const _unifiedSculptRedo=[];
+let _activeSculptGesture=null;
+function _finishSculptGesture(){
+  const gesture=_activeSculptGesture;_activeSculptGesture=null;
+  if(!gesture||gesture.authoritativeOps===0)return null;
+  const record={label:gesture.authoritativeOps===1?gesture.label:'gesture ('+gesture.authoritativeOps+' samples)',before:gesture.before,after:new Float32Array(buf),authoritativeOps:gesture.authoritativeOps};
+  _unifiedSculptUndo.push(record);if(_unifiedSculptUndo.length>50)_unifiedSculptUndo.shift();_unifiedSculptRedo.length=0;
+  return record;
+}
+function _beginSculptGesture(){
+  _finishSculptGesture();
+  _activeSculptGesture={label:'sculpt gesture',before:new Float32Array(buf),authoritativeOps:0};
+}
 function pushUndo(){
   // Presets and non-sculpt bulk edits use the legacy snapshot ring. Clear sculpt
   // history at that boundary so Undo never crosses an untracked mutation.
@@ -1870,10 +1882,14 @@ function _unifiedSculptApply(label,applyLegacy,applyAuthoritative){
     applyLegacy();
     const result=applyAuthoritative();
     if(result===null||result===undefined||result===false)throw new Error('Authoritative sculpt mutation was rejected');
-    const record={label,before,after:new Float32Array(buf),authoritativeOps:1};
-    _unifiedSculptUndo.push(record);
-    if(_unifiedSculptUndo.length>50)_unifiedSculptUndo.shift();
-    _unifiedSculptRedo.length=0;
+    if(_activeSculptGesture){
+      if(_activeSculptGesture.authoritativeOps===0)_activeSculptGesture.label=label;
+      else if(_activeSculptGesture.label!==label)_activeSculptGesture.label='sculpt gesture';
+      _activeSculptGesture.authoritativeOps++;
+    }else{
+      const record={label,before,after:new Float32Array(buf),authoritativeOps:1};
+      _unifiedSculptUndo.push(record);if(_unifiedSculptUndo.length>50)_unifiedSculptUndo.shift();_unifiedSculptRedo.length=0;
+    }
     window.buf=buf;drawGrid();
     return result;
   }catch(error){
@@ -1966,6 +1982,7 @@ function _applyUnifiedStroke(toolName,cell,radius,strength,fields,selectedLayer=
 window.realitySculptTransactionRuntime={
   applySmartBrush:(name,x,y,radius,selectedZ=0,strength=1)=>_applyUnifiedSmartBrush(name,x,y,radius,strength),
   applyStroke:(toolName,cell,radius,strength,fields={energy:1})=>_applyUnifiedStroke(toolName,cell,radius,strength,fields),
+  beginGesture:()=>_beginSculptGesture(),endGesture:()=>_finishSculptGesture(),
   undo:()=>undo(),redo:()=>redo(),
   history:()=>({undo:_unifiedSculptUndo.length,redo:_unifiedSculptRedo.length,undoLabels:_unifiedSculptUndo.map(x=>x.label),redoLabels:_unifiedSculptRedo.map(x=>x.label)}),
   fingerprint:()=>{const bits=new Uint32Array(buf.buffer,buf.byteOffset,buf.length);let a=2166136261,b=2246822519;for(let i=0;i<bits.length;i++){a=Math.imul(a^bits[i],16777619)>>>0;b=Math.imul(b^(bits[i]+i),3266489917)>>>0;}return bits.length+':'+a+':'+b;},
@@ -1986,13 +2003,14 @@ wrap.addEventListener('pointerdown',e=>{
   const c=getCellAt(e);if(!c)return;
   painting=true;wrap.setPointerCapture(e.pointerId);
   if(tool==='inspect'){selX=c.x;selY=c.y;histE=[];histT=[];histI=[];histS=[];histB=[];explainCell(c.x,c.y);}
-  else{paintAt(c.x,c.y);}
+  else{_beginSculptGesture();paintAt(c.x,c.y);}
 });
 wrap.addEventListener('pointermove',e=>{
   if(currentRenderMode==='3d'||!painting)return;const c=getCellAt(e);if(!c)return;
   if(tool==='inspect'){selX=c.x;selY=c.y;}else paintAt(c.x,c.y);
 });
-wrap.addEventListener('pointerup',()=>{painting=false;});
+wrap.addEventListener('pointerup',()=>{painting=false;_finishSculptGesture();});
+wrap.addEventListener('pointercancel',()=>{painting=false;_finishSculptGesture();});
 
 // ── PRESETS ───────────────────────────────────────────────────────────────
 window.applyPreset=function(p){
