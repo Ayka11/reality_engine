@@ -23,6 +23,7 @@ assert.ok(multiplayerSource.includes('cell.field >= CELL_FIELDS'), 'remote field
 assert.ok(multiplayerSource.includes('if (!this.connected) return;'), 'disconnected client must ignore late messages');
 assert.ok(multiplayerSource.includes("this._handleMessage({ type: 'join', userId: message.from, color: '#888' })"), 'late room roster announcements must populate peer state');
 assert.ok(multiplayerSource.includes("this._sendSocket({ type: 'announce', from: this.userId })"), 'connect must request a fresh room roster');
+assert.ok(multiplayerSource.includes("`reality_engine_v4:${this.roomId}`"), 'same-browser BroadcastChannel must be scoped to the validated room token');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const waitForMessage = (socket, timeoutMs = 2500) => Promise.race([
   once(socket, 'message').then(([payload]) => JSON.parse(payload.toString())),
