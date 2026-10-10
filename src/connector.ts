@@ -98,6 +98,12 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data
   workerBusy = false
 
+  if (cmd === 'sculptHistoryApplied') {
+    const previous = (win['lastChunkSculptHistory'] as { seq?: number } | undefined)?.seq ?? 0
+    win['lastChunkSculptHistory'] = { action: e.data.action, applied: e.data.applied, seq: previous + 1 }
+    return
+  }
+
   if (cmd === 'brushApplied') {
     win['lastChunkBrush'] = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius }
     return
