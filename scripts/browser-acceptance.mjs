@@ -763,6 +763,35 @@ try {
       partialUndoRecovered.history.redo !== partialUndoBaseline.history.redo + 1) {
     throw new Error("Undo history was not usable after a failed partial undo");
   }
+  const workerRedoBaseline = await page.evaluate(() => ({
+    legacy: window.realitySculptTransactionRuntime.fingerprint(),
+    field: window.infiniteWorld.authoritativeField.serialize(),
+    history: window.realitySculptTransactionRuntime.history(),
+  }));
+  const workerRedoFailure = await page.evaluate(async () => {
+    const original = window.redoChunkSculpt;
+    window.redoChunkSculpt = () => Promise.resolve({
+      action: "redo",
+      applied: false,
+      seq: (window.lastChunkSculptHistory?.seq ?? 0) + 1,
+    });
+    let message = "";
+    try { await window.redo(); } catch (error) { message = String(error?.message || error); }
+    finally { window.redoChunkSculpt = original; }
+    return {
+      message,
+      legacy: window.realitySculptTransactionRuntime.fingerprint(),
+      field: window.infiniteWorld.authoritativeField.serialize(),
+      history: window.realitySculptTransactionRuntime.history(),
+    };
+  });
+  if (!workerRedoFailure.message.includes("worker redo rejected") ||
+      workerRedoFailure.legacy !== workerRedoBaseline.legacy ||
+      JSON.stringify(workerRedoFailure.field) !== JSON.stringify(workerRedoBaseline.field) ||
+      workerRedoFailure.history.undo !== workerRedoBaseline.history.undo ||
+      workerRedoFailure.history.redo !== workerRedoBaseline.history.redo) {
+    throw new Error("Rejected sparse-worker Redo did not preserve the pre-redo transaction state: " + JSON.stringify(workerRedoFailure));
+  }
   await page.evaluate(() => window.redo());
 
   const before = await page.evaluate(() => window.worldGenerationHealth());
