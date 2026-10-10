@@ -128,6 +128,7 @@ export class InfiniteWorldRenderer {
       ...input,
       metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id },
     })
+    this.refreshTerrainPatches()
     this.persistAuthoritativeFieldState()
     return mutation
   }
@@ -746,20 +747,7 @@ export class InfiniteWorldRenderer {
 
   setMaterialMode(mode: 'field' | 'material' | 'height') {
     this.materialMode = mode
-    for (const material of this.terrainMaterials) {
-      if (mode === 'material') {
-        material.vertexColors = false
-        material.color.set(0x8a8f98)
-        material.roughness = 0.72
-        material.metalness = 0.08
-      } else {
-        material.vertexColors = true
-        material.color.set(0xffffff)
-        material.roughness = mode === 'height' ? 0.88 : 0.95
-        material.metalness = 0
-      }
-      material.needsUpdate = true
-    }
+    this.refreshTerrainPatches()
   }
 
   setTimeOfDay(hours: number) {
@@ -938,6 +926,21 @@ export class InfiniteWorldRenderer {
 
     void sample
     return group
+  }
+
+  private refreshTerrainPatches() {
+    for (const [key, patch] of this.patches) {
+      this.scene.remove(patch.group)
+      patch.group.traverse(obj => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose())
+        else if (mesh.material) mesh.material.dispose()
+      })
+      const group = this.buildTerrainPatch(patch.chunk, patch.lod)
+      this.patches.set(key, { group, chunk: patch.chunk, lod: patch.lod })
+      this.scene.add(group)
+    }
   }
 
   private removeChunk(key: string) {
