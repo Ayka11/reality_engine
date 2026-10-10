@@ -34,6 +34,10 @@ import { RealityLawBridge }                       from './laws/RealityLawBridge'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
 const win = window as unknown as Record<string, unknown>
+const clearUiSculptHistory = () => {
+  const clear = win['clearSculptTransactionHistory']
+  if (typeof clear === 'function') (clear as () => void)()
+}
 
 // ── Chunk system — Three.js PBR renderer + 128×128×64 sparse worker ─────────
 
@@ -179,12 +183,12 @@ nodeEditor.onSelect  = (node) => {
 win['chunkWorkerCompile'] = chunkWorkerCompile
 win['nodeLawEditor']      = nodeEditor
 win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4, strength = 1, trackHistory = false) => {
-  if (!trackHistory) win['clearSculptTransactionHistory']?.()
+  if (!trackHistory) clearUiSculptHistory()
   chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength, trackHistory } })
 }
 
 win['applyChunkPreset']   = (name: string) => {
-  win['clearSculptTransactionHistory']?.()
+  clearUiSculptHistory()
   chunkWorker.postMessage({ cmd: 'preset', data: { name } })
   if (name === 'town') {
     DIFF_cw = 0.12; ENT_cw = 0.00015; INFO_cw = 0.45; BIO_cw = 0.32
@@ -254,7 +258,7 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
   getInfiniteWorld()?.resize(Math.max(1, w), Math.max(1, h))
 }
 win['paintChunkAt'] = (x: number, y: number, z: number, f: number, v: number, r: number, mode?: string, trackHistory = false) => {
-  if (!trackHistory) win['clearSculptTransactionHistory']?.()
+  if (!trackHistory) clearUiSculptHistory()
   chunkWorker.postMessage({ cmd: 'paint', data: { x, y, z, f, v, r, mode: mode ?? 'add', trackHistory } })
 }
 win['undoChunkSculpt'] = () => chunkWorker.postMessage({ cmd: 'undoSculpt' })
@@ -263,7 +267,7 @@ win['clearChunkSculptHistory'] = () => chunkWorker.postMessage({ cmd: 'clearScul
 
 // Scene Composer APIs
 sceneComposer.setOnApply((cmds) => {
-  win['clearSculptTransactionHistory']?.()
+  clearUiSculptHistory()
   for (const cmd of cmds) {
     chunkWorker.postMessage({ cmd: 'paint', data: cmd })
   }
