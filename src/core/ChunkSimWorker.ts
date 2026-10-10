@@ -125,6 +125,8 @@ self.onmessage = (e: MessageEvent) => {
     restoredChunkCount = 0
     restoreFailed = false
     restoredChunkKeys.clear()
+    // Prevent pre-restore dirty chunks from being mixed into a restore-tagged frame.
+    grid.dirtyChunks.clear()
     return
   }
 
