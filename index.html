@@ -1956,7 +1956,7 @@ function _applyUnifiedStroke(toolName,cell,radius,strength,fields,selectedLayer=
     });
   if(window.paintChunkAt){
     const f3=[0,1,2,3,4,10][selectedLayer<0?0:selectedLayer]??0;
-    window.paintChunkAt(worldCell.x,worldCell.y,32,f3,effectiveTool==='erase'?0:legacyStrength,Math.max(3,radius*3),effectiveTool==='erase'?'set':'add');
+    window.paintChunkAt(worldCell.x,worldCell.y,32,f3,effectiveTool==='erase'?0:legacyStrength,Math.max(3,radius*3),effectiveTool==='erase'?'erase':effectiveTool==='paint'?'set':'add');
   }
   return result;
 }

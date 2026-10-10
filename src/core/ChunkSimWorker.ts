@@ -117,7 +117,10 @@ self.onmessage = (e: MessageEvent) => {
 
   if (cmd === 'paint') {
     const { x, y, z, f, v, r, mode } = data
-    if (r > 0) grid.paintSphere(x, y, z, r, f, v)
+    if (mode === 'erase') {
+      if (r > 0) grid.eraseSphere(x, y, z, r)
+      else [F.E, F.D, F.I, F.S, F.T, F.BIO].forEach(ff => grid.set(x, y, z, ff, 0))
+    } else if (r > 0) grid.paintSphere(x, y, z, r, f, v, mode === 'add' ? 'add' : 'set')
     else if (mode === 'add') grid.add(x, y, z, f, v)
     else if (mode === 'set') grid.set(x, y, z, f, v)
     else [F.E, F.D, F.I, F.S, F.T, F.BIO].forEach(ff => grid.set(x, y, z, ff, 0))
