@@ -12,6 +12,13 @@ import {
 const grid = new ChunkGrid()
 const W = GRID_W, H = GRID_H, D = GRID_D
 let tick = 0, evCount = 0
+// Restore sessions are isolated from ordinary simulation frames. A session is
+// complete only after every expected unique chunk has been accepted.
+let activeRestoreId: number | null = null
+let expectedRestoreChunks = 0
+let restoredChunkCount = 0
+let restoreFailed = false
+const restoredChunkKeys = new Set<number>()
 const causal: Array<{ id: number; tick: number; x: number; y: number; z: number; delta: number }> = []
 let DIFF = 0.09, ENT = 0.0004, INFO = 0.35, BIO = 0.25
 const activeProcs = new Set<string>(['thermo', 'bio'])
@@ -101,6 +108,25 @@ function buildFramePayload(): ArrayBuffer {
 
 self.onmessage = (e: MessageEvent) => {
   const { cmd, data } = e.data
+
+  if (cmd === 'restoreBegin') {
+    const restoreId = data?.restoreId
+    const expected = data?.expected
+    if (!Number.isInteger(restoreId) || restoreId < 1 ||
+        !Number.isInteger(expected) || expected < 1 || activeRestoreId !== null) {
+      ;(self as unknown as Worker).postMessage({
+        cmd: 'restoreComplete',
+        data: { restoreId, complete: false, reason: 'invalid-or-concurrent-restore', restoredChunkCount, expectedRestoreChunks },
+      })
+      return
+    }
+    activeRestoreId = restoreId
+    expectedRestoreChunks = expected
+    restoredChunkCount = 0
+    restoreFailed = false
+    restoredChunkKeys.clear()
+    return
+  }
 
   if (cmd === 'tick') {
     const speed = (data?.speed as number) || 1
@@ -367,6 +393,60 @@ self.onmessage = (e: MessageEvent) => {
 
   if (cmd === 'snapshot') {
     ;(self as unknown as Worker).postMessage({ cmd: 'snapshot', data: { snap: grid.snapshot(), tick } })
+    return
+  }
+
+  if (cmd === 'restoreChunk') {
+    const restoreId = data?.restoreId
+    const key = data?.key
+    const payload = data?.data as number[] | Float32Array | undefined
+    if (activeRestoreId === null || restoreId !== activeRestoreId) return
+    if (!Number.isInteger(key) || key < 0 || !payload || payload.length !== CHUNK_FLOATS) {
+      restoreFailed = true
+      ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key, restoreId, accepted: false } })
+      return
+    }
+    if (restoredChunkKeys.has(key)) {
+      restoreFailed = true
+      ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key, restoreId, accepted: false, duplicate: true } })
+      return
+    }
+    for (let i = 0; i < payload.length; i++) {
+      if (!Number.isFinite(payload[i])) {
+        restoreFailed = true
+        ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key, restoreId, accepted: false } })
+        return
+      }
+    }
+    if (!grid.restoreChunk(key, payload)) {
+      restoreFailed = true
+      ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key, restoreId, accepted: false } })
+      return
+    }
+    restoredChunkKeys.add(key)
+    restoredChunkCount++
+    emitFrame(restoreId)
+    ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key, restoreId, accepted: true } })
+    return
+  }
+
+  if (cmd === 'restoreEnd') {
+    const restoreId = data?.restoreId
+    const complete = activeRestoreId === restoreId &&
+      !restoreFailed &&
+      restoredChunkCount === expectedRestoreChunks &&
+      restoredChunkKeys.size === expectedRestoreChunks
+    ;(self as unknown as Worker).postMessage({
+      cmd: 'restoreComplete',
+      data: { restoreId, complete, restoredChunkCount, expectedRestoreChunks },
+    })
+    if (activeRestoreId === restoreId) {
+      activeRestoreId = null
+      expectedRestoreChunks = 0
+      restoredChunkCount = 0
+      restoreFailed = false
+      restoredChunkKeys.clear()
+    }
     return
   }
 
