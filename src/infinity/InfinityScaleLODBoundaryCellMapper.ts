@@ -223,38 +223,34 @@ function sharedFaceAxis(a: ChunkRange, b: ChunkRange): 0 | 1 | 2 | null {
   const overlapsX = a.minX <= b.maxX && a.maxX >= b.minX;
   const overlapsY = a.minY <= b.maxY && a.maxY >= b.minY;
   const overlapsZ = a.minZ <= b.maxZ && a.maxZ >= b.minZ;
-  const sameSize = a.level === b.level;
-  if (sameSize) {
+
+  // Same-LOD chunks use neighboring chunk indices.
+  if (a.level === b.level) {
     if (Math.abs(a.keyX - b.keyX) === 1 && a.keyY === b.keyY && a.keyZ === b.keyZ) return 0;
     if (Math.abs(a.keyY - b.keyY) === 1 && a.keyX === b.keyX && a.keyZ === b.keyZ) return 1;
     if (Math.abs(a.keyZ - b.keyZ) === 1 && a.keyX === b.keyX && a.keyY === b.keyY) return 2;
     return null;
   }
 
-  // Compare base-cell chunk bounds using a closed-cell convention: chunks
-  // separated only by adjacent boundary cells are considered neighbors.
+  // Cross-LOD neighbours can have either touching ranges or a fine chunk
+  // embedded in the outermost slice of a coarse chunk. Require that the
+  // smaller chunk occupies the coarse chunk's exterior plane and shares the
+  // other two chunk-origin coordinates; a diagonal/edge-only contact fails.
   if ((a.maxX + 1 === b.minX || b.maxX + 1 === a.minX) && overlapsY && overlapsZ) return 0;
   if ((a.maxY + 1 === b.minY || b.maxY + 1 === a.minY) && overlapsX && overlapsZ) return 1;
   if ((a.maxZ + 1 === b.minZ || b.maxZ + 1 === a.minZ) && overlapsX && overlapsY) return 2;
 
-  // Mixed LOD chunk face: the finer chunk's full extent touches one face of
-  // the coarser chunk. The ranges are half-open in world space in concept,
-  // while stored max bounds are inclusive, so compare their exterior edges.
-  if (a.level > b.level) {
-    if (a.minX === b.maxX + 1 && overlapsY && overlapsZ) return 0;
-    if (a.maxX + 1 === b.minX && overlapsY && overlapsZ) return 0;
-    if (a.minY === b.maxY + 1 && overlapsX && overlapsZ) return 1;
-    if (a.maxY + 1 === b.minY && overlapsX && overlapsZ) return 1;
-    if (a.minZ === b.maxZ + 1 && overlapsX && overlapsY) return 2;
-    if (a.maxZ + 1 === b.minZ && overlapsX && overlapsY) return 2;
+  if (a.maxX === b.maxX && overlapsY && overlapsZ) {
+    const sameTangentialOrigin = a.keyY === b.keyY && a.keyZ === b.keyZ;
+    if (sameTangentialOrigin) return 0;
   }
-  if (b.level > a.level) {
-    if (a.minX === b.maxX + 1 && overlapsY && overlapsZ) return 0;
-    if (a.maxX + 1 === b.minX && overlapsY && overlapsZ) return 0;
-    if (a.minY === b.maxY + 1 && overlapsX && overlapsZ) return 1;
-    if (a.maxY + 1 === b.minY && overlapsX && overlapsZ) return 1;
-    if (a.minZ === b.maxZ + 1 && overlapsX && overlapsY) return 2;
-    if (a.maxZ + 1 === b.minZ && overlapsX && overlapsY) return 2;
+  if (a.maxY === b.maxY && overlapsX && overlapsZ) {
+    const sameTangentialOrigin = a.keyX === b.keyX && a.keyZ === b.keyZ;
+    if (sameTangentialOrigin) return 1;
+  }
+  if (a.maxZ === b.maxZ && overlapsX && overlapsY) {
+    const sameTangentialOrigin = a.keyX === b.keyX && a.keyY === b.keyY;
+    if (sameTangentialOrigin) return 2;
   }
   return null;
 }
