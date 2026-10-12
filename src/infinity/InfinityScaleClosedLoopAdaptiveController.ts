@@ -1,7 +1,6 @@
 import type { InfinityScalePredictiveAdaptiveInput, InfinityScalePredictiveAdaptiveRecommendation } from "./InfinityScalePredictiveAdaptiveController";
 import { InfinityScalePredictiveAdaptiveController } from "./InfinityScalePredictiveAdaptiveController";
-import type { InfinityScaleAdaptiveFeedbackSample } from "./InfinityScaleAdaptiveFeedbackLoop";
-import { InfinityScaleRuntimePredictionFeedback, type InfinityScaleRuntimePredictionFeedback as RuntimePrediction } from "./InfinityScaleRuntimePredictionFeedback";
+import { InfinityScaleRuntimePredictionFeedback, type InfinityScaleRuntimePredictionFeedbackResult as RuntimePrediction } from "./InfinityScaleRuntimePredictionFeedback";
 import type { InfinityScaleCausalAdaptiveAttribution } from "./InfinityScaleCausalAdaptiveAttribution";
 
 export interface InfinityScaleClosedLoopAdaptiveInput extends InfinityScalePredictiveAdaptiveInput {
