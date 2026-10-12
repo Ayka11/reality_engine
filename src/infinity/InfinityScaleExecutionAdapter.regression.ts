@@ -53,8 +53,8 @@ export function runInfinityScaleExecutionAdapterBoundaryRegression(): void {
   const mixed = plan.boundaryReadRelations.find(
     relation => relation.targetChunk === "1:1,0,0",
   );
-  if (!mixed || mixed.relation !== "coarse-to-fine") {
-    throw new Error("Canonical adapter regression: coarse face neighbor was not resolved");
+  if (!mixed || mixed.relation !== "fine-to-coarse") {
+    throw new Error("Canonical adapter regression: fine-to-coarse face neighbor was not resolved");
   }
 
   const corner = plan.boundaryReadRelations.find(
