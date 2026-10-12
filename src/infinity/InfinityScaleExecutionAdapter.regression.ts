@@ -29,7 +29,7 @@ export function runInfinityScaleExecutionAdapterBoundaryRegression(): void {
   const frame = {
     observer: { x: 0, y: 0, z: 0 },
     chunks: [
-      chunk("0:0,0,0", 0, 0, 0, 0, true),
+      chunk("0:0,0,0", 0, 0, 0, 0, 0, true),
       // One coarse neighbor sharing the +X face.
       chunk("1:1,0,0", 1, 1, 0, 0, 10, false),
       // Corner-only coarse chunk: must not be treated as a face neighbor.
