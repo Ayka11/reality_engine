@@ -201,10 +201,15 @@ export class InfinityScaleLODBoundarySnapshot {
       return out;
     }
     if (spec.relation === "coarse-to-fine") {
-      InfinityScaleLODTransfer.prolongate(sources[0], out, spec.sourceLevel, spec.targetLevel);
+      const childCount = (2 ** (spec.sourceLevel - spec.targetLevel)) ** 3;
+      const children = Array.from({ length: childCount }, () => new Array<number>(CELL_FIELDS).fill(0));
+      InfinityScaleLODTransfer.prolongate(sources[0], children, spec.sourceLevel, spec.targetLevel);
+      out.set(children[0]);
       return out;
     }
-    InfinityScaleLODTransfer.restrictFace(sources, out, spec.sourceLevel, spec.targetLevel);
+    const restricted = new Array<number>(CELL_FIELDS).fill(0);
+    InfinityScaleLODTransfer.restrictFace(sources, restricted, spec.sourceLevel, spec.targetLevel);
+    out.set(restricted);
     return out;
   }
 
