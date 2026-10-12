@@ -9,6 +9,7 @@ import type {
 } from "./InfinityScaleChunkExecutionContext";
 import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
 import { mapInfinityScaleBoundaryCell } from "./InfinityScaleLODBoundaryCellMapper";
+import { validateInfinityScaleBoundaryGeometry } from "./InfinityScaleLODBoundaryGeometry";
 
 export interface InfinityScaleLODTransferSample {
   sourceChunk: string;
@@ -178,6 +179,10 @@ export class InfinityScaleLODBoundarySnapshot {
   ): Float32Array | null {
     const source = this.chunks.get(spec.sourceChunk);
     if (!source) return null;
+
+    // A boundary snapshot is valid only for a cell on the target-side face.
+    // Reject interior and out-of-chunk coordinates before reading source data.
+    if (!validateInfinityScaleBoundaryGeometry(spec, targetCell, this.chunkSize)) return null;
 
     const mapping = mapInfinityScaleBoundaryCell(spec, targetCell, this.chunkSize);
     const sourceRange = chunkRangeForKey(spec.sourceChunk, this.chunkSize);
