@@ -60,10 +60,13 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
     targetVmin: number, targetVmax: number,
     sourceVmin: number, sourceVmax: number,
   ): InfinityScaleBoundaryFaceGeometry | null => {
-    // A true face needs a positive span on both tangential axes. Closed
-    // interval intersection alone accepts edge/corner-only contact.
-    if (!tangentialOverlap || Math.min(targetUmax, sourceUmax) <= Math.max(targetUmin, sourceUmin) ||
-        Math.min(targetVmax, sourceVmax) <= Math.max(targetVmin, sourceVmin)) return null;
+    // A true face needs at least one complete target-LOD cell along both
+    // tangential axes. A single shared boundary coordinate is only edge/corner
+    // contact and must not count as a face.
+    const tangentialMinimumSpan = Math.max(1, 2 ** targetLevel);
+    if (!tangentialOverlap ||
+        Math.min(targetUmax, sourceUmax) - Math.max(targetUmin, sourceUmin) + 1 < tangentialMinimumSpan ||
+        Math.min(targetVmax, sourceVmax) - Math.max(targetVmin, sourceVmin) + 1 < tangentialMinimumSpan) return null;
     let coordinate: number | null = null;
     if (targetMax + 1 === sourceMin) coordinate = targetMax;
     else if (sourceMax + 1 === targetMin) coordinate = targetMin;
