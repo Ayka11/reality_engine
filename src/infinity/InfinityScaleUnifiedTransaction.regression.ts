@@ -3,6 +3,7 @@ import { EntityLayer } from "../simulation/EntityLayer";
 import { VoxelGrid } from "../core/VoxelGrid";
 import { F } from "../core/CellState";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import { InfinityScaleMixedLODCPUExecutor } from "./InfinityScaleMixedLODCPUExecutor";
 import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import {
   beginInfinityScaleGlobalLODTransaction,
@@ -109,6 +110,8 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   );
 
   stageInfinityScaleEntityCommit(transaction);
+  // The unified commit barrier requires complete mixed-LOD face staging.
+  new InfinityScaleMixedLODCPUExecutor(state, context).stageBoundaryTransfers(lodTransaction);
   stageInfinityScaleAgentMigrations(transaction, [{
     agentId,
     from: [9, 2, 2],
@@ -186,7 +189,6 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     integrityContext,
   );
 
-  const { InfinityScaleMixedLODCPUExecutor } = require("./InfinityScaleMixedLODCPUExecutor") as typeof import("./InfinityScaleMixedLODCPUExecutor");
   const executor = new InfinityScaleMixedLODCPUExecutor(integrityState, integrityContext);
   executor.stageBoundaryTransfers(integrityLod);
   const staged = integrityLod.synchronization.getStagedUpdates();
