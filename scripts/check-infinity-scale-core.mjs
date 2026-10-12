@@ -31,6 +31,13 @@ assert.equal(
   "residency state counts must be disjoint and sum to the resident count",
 );
 assert.equal(scale.state({ x: 0, y: 0, z: 0, level: 0 }), "simulating");
+
+const simulationLimited = new InfinityScaleV2({ maxSimulatingChunks: 16 });
+simulationLimited.setObserver({ x: 0, y: 0, z: 0 });
+assert.equal(simulationLimited.telemetry().simulatingChunks, 16,
+  "the active simulation envelope must respect maxSimulatingChunks");
+assert.throws(() => new InfinityScaleV2({ maxSimulatingChunks: -1 }), RangeError);
+assert.throws(() => new InfinityScaleV2({ maxResidentChunks: 0 }), RangeError);
 assert.equal(scale.selectLOD(0), 0);
 assert.equal(scale.selectLOD(2), 1);
 assert.equal(scale.selectLOD(3), 2);
