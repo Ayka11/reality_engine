@@ -223,38 +223,50 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     assertEqual(out[F.ENERGY], 23 / 64, "coarse-to-fine ratio 4 energy share");
  }
 
-  // Mixed-LOD coarse -> fine must map one coarse face cell to the
-  // correct fine boundary cells without collapsing the tangential mapping.
+  // Mixed-LOD coarse -> fine must preserve tangential face mapping.
+  // Four distinct coarse face cells each expand to a 2x2 fine face patch;
+  // extensive ENERGY is divided across all eight 3D child cells.
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 2);
-
-    // Coarse X+ boundary footprint at x=6 spans coarse tangential cells
-    // (y,z)=(2,2),(2,4),(4,2),(4,4) because coarse cells have scale 2.
-    for (const y of [2, 4]) {
-      for (const z of [2, 4]) {
-        write(state, coarse, 1, 6, y, z, 77);
-      }
+    const fine = key(0, 2, 1, 1);
+    const expectedCoarseEnergy = new Map<string, number>([
+      ["4,4", 80],
+      ["4,6", 88],
+      ["6,4", 96],
+      ["6,6", 104],
+    ]);
+    for (const [keyValue, energy] of expectedCoarseEnergy) {
+      const [y, z] = keyValue.split(",").map(Number);
+      write(state, coarse, 1, 6, y, z, energy);
     }
 
     const s = spec(coarse, fine, "coarse-to-fine", 1, 0);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 12, CHUNK);
 
     const values: number[] = [];
-    for (const y of [2, 3]) {
-      for (const z of [2, 3]) {
+    for (let y = 4; y < 8; y++) {
+      for (let z = 4; z < 8; z++) {
         const out = assertNotNull(
           snapshot.read(s, [8, y, z]),
-          `coarse-to-fine face cell 4,${y},${z}`,
+          `coarse-to-fine face cell 8,${y},${z}`,
         );
+        const sourceY = Math.floor(y / 2) * 2;
+        const sourceZ = Math.floor(z / 2) * 2;
+        const sourceEnergy = expectedCoarseEnergy.get(`${sourceY},${sourceZ}`);
+        if (sourceEnergy === undefined) {
+          throw new Error("Regression fixture omitted a tangential coarse source cell");
+        }
+        const expectedChildEnergy = sourceEnergy / 8;
+        assertEqual(out[F.ENERGY], expectedChildEnergy,
+          `coarse-to-fine energy at fine tangential cell ${y},${z}`);
         values.push(out[F.ENERGY]);
       }
     }
 
-    if (values.length !== 4 || values.some(value => value !== 77)) {
+    if (values.length !== 16) {
       throw new Error(
-        `Infinity Scale regression failed: coarse-to-fine face mapping produced [${values.join(",")}]`,
+        `Infinity Scale regression failed: expected 16 fine face cells, got ${values.length}`,
       );
     }
 
