@@ -207,8 +207,83 @@ function requestChunkSculptHistory(action: 'undo' | 'redo'): Promise<SculptHisto
 }
 
 chunkWorker.onmessage = (e: MessageEvent) => {
-  const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data
+  const { cmd, tick: wTick, evCount: wEv, ab, stats, restoreId: frameRestoreId } = e.data
   workerBusy = false
+
+  if (cmd === 'restoreComplete') {
+    const result = e.data.data as { restoreId?: number; complete?: boolean } | undefined
+    if (result?.restoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
+    }
+    worldFieldRestoreState.workerBarrierComplete = result.complete === true
+    const complete = result.complete === true &&
+      worldFieldRestoreExpectedKeys.size > 0 &&
+      worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
+      worldFieldRestoreState.unexpectedAcks === 0 &&
+      worldFieldRestoreState.unexpectedFrames === 0 &&
+      worldFieldRestoreState.duplicateAcks === 0 &&
+      worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
+      worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
+      [...worldFieldRestoreExpectedKeys].every(key =>
+        worldFieldRestoreAcknowledgedKeys.has(key) && worldFieldRestoreFrameKeys.has(key))
+    if (complete) {
+      // Commit all restored chunks as one renderer frame only after the ACK/frame barrier.
+      const combined = new ArrayBuffer(4 + worldFieldRestoreExpectedKeys.size * (4 + CHUNK_FLOATS * 4))
+      const targetU32 = new Uint32Array(combined)
+      const targetF32 = new Float32Array(combined)
+      targetU32[0] = worldFieldRestoreExpectedKeys.size
+      let targetOff = 1
+      for (const frame of worldFieldRestorePendingFrames.values()) {
+        const sourceU32 = new Uint32Array(frame), sourceF32 = new Float32Array(frame)
+        const count = sourceU32[0]
+        let sourceOff = 1
+        for (let i = 0; i < count; i++) {
+          const chunkKey = sourceU32[sourceOff]
+          const chunkData = sourceF32.subarray(sourceOff + 1, sourceOff + 1 + CHUNK_FLOATS)
+          localChunks.set(chunkKey, new Float32Array(chunkData))
+          targetU32[targetOff] = chunkKey
+          targetF32.set(chunkData, targetOff + 1)
+          targetOff += 1 + CHUNK_FLOATS
+          sourceOff += 1 + CHUNK_FLOATS
+        }
+      }
+      fieldRenderer.applyWorkerFrame(combined)
+      installChunkWorldFieldProvider()
+      publishWorkerBoundarySnapshots()
+      if (worldFieldRestoreCoord) {
+        worldFieldChunkStore.delete(worldFieldRestoreCoord)
+        populateWorldFieldChunk(worldFieldRestoreCoord.cx, worldFieldRestoreCoord.cy, worldFieldRestoreCoord.cz, worldFieldRestoreSeed)
+      }
+    } else {
+      worldFieldRestoreState.unexpectedAcks++
+    }
+    worldFieldRestoreActive = false
+    worldFieldRestorePendingFrames.clear()
+    return
+  }
+
+  if (cmd === 'restoreChunkAck') {
+    const ack = e.data.data as { key?: number; restoreId?: number; accepted?: boolean; duplicate?: boolean } | undefined
+    if (ack?.restoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
+    }
+    const ackKey = ack?.key
+    if (ack?.accepted === false || typeof ackKey !== 'number' || !Number.isInteger(ackKey) ||
+        !worldFieldRestoreExpectedKeys.has(ackKey)) {
+      worldFieldRestoreState.unexpectedAcks++
+      return
+    }
+    if (worldFieldRestoreAcknowledgedKeys.has(ackKey)) {
+      worldFieldRestoreState.duplicateAcks++
+      return
+    }
+    worldFieldRestoreAcknowledgedKeys.add(ackKey)
+    worldFieldRestoreState.acknowledged = worldFieldRestoreAcknowledgedKeys.size
+    worldFieldRestoreState.keys = [...worldFieldRestoreAcknowledgedKeys]
+    return
+  }
 
   if (cmd === 'sculptHistoryApplied') {
     const previous = (win['lastChunkSculptHistory'] as { seq?: number } | undefined)?.seq ?? 0
@@ -240,6 +315,33 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'frame' && ab) {
+    // Drop a tick frame that was already in flight when the restore barrier began.
+    if (worldFieldRestoreActive && frameRestoreId === undefined) {
+      worldFieldRestoreState.discardedInflightFrames++
+      return
+    }
+    if (frameRestoreId !== undefined) {
+      if (frameRestoreId !== worldFieldRestoreState.restoreId) {
+        worldFieldRestoreState.staleFrames++
+        return
+      }
+      worldFieldRestoreState.restoreFrameRestoreId = frameRestoreId
+      const frame = ab as ArrayBuffer
+      const u32 = new Uint32Array(frame)
+      let off = 1
+      for (let i = 0; i < u32[0]; i++) {
+        const key = u32[off]
+        if (!worldFieldRestoreExpectedKeys.has(key) || worldFieldRestoreFrameKeys.has(key)) {
+          worldFieldRestoreState.unexpectedFrames++
+        } else {
+          worldFieldRestoreFrameKeys.add(key)
+        }
+        off += 1 + CHUNK_FLOATS
+      }
+      worldFieldRestoreState.restoreFrameKeys = [...worldFieldRestoreFrameKeys]
+      worldFieldRestorePendingFrames.set(worldFieldRestorePendingFrames.size, frame.slice(0))
+      return
+    }
     chunkTick    = wTick    ?? chunkTick
     chunkEvCount = wEv      ?? chunkEvCount
     const NF_W = 14, CF = 512 * NF_W
