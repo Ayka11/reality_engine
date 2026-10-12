@@ -141,6 +141,18 @@ export class InfinityScaleLODBoundaryCellMapper {
     return mapInfinityScaleBoundaryCell(spec, targetCell, this.chunkSize);
   }
 
+  resolveValues(
+    spec: InfinityScaleBoundaryTransferSpec,
+    targetCell: [number, number, number],
+  ): ReadonlyArray<ReadonlyArray<number>> {
+    const mapping = this.map(spec, targetCell);
+    return mapping.sourceCells.map(([x, y, z]) => {
+      const values = this.state.readBaseCell(spec.sourceChunk, spec.sourceLevel, x, y, z);
+      if (!values) throw new Error(`Infinity Scale boundary source cell is missing: ${spec.sourceChunk}:${x},${y},${z}`);
+      return Array.from(values);
+    });
+  }
+
   enumerateTargetFaceCells(
     spec: InfinityScaleBoundaryTransferSpec,
     gridWidth: number,
@@ -158,4 +170,30 @@ export class InfinityScaleLODBoundaryCellMapper {
     }
     return cells;
   }
+}
+
+
+function rangeForChunk(key: string, chunkSize: number): ChunkRange {
+  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
+  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
+  const level = Number(match[1]);
+  if (!Number.isInteger(level) || level < 0 || level > 30) throw new Error(`Invalid Infinity Scale LOD level: ${match[1]}`);
+  const extent = chunkSize * (2 ** level);
+  const x = Number(match[2]) * extent, y = Number(match[3]) * extent, z = Number(match[4]) * extent;
+  return { minX: x, maxX: x + extent - 1, minY: y, maxY: y + extent - 1, minZ: z, maxZ: z + extent - 1 };
+}
+function sharedFaceAxis(a: ChunkRange, b: ChunkRange): 0 | 1 | 2 | null {
+  const ox = a.minX <= b.maxX && a.maxX >= b.minX, oy = a.minY <= b.maxY && a.maxY >= b.minY, oz = a.minZ <= b.maxZ && a.maxZ >= b.minZ;
+  if ((a.maxX + 1 === b.minX || b.maxX + 1 === a.minX) && oy && oz) return 0;
+  if ((a.maxY + 1 === b.minY || b.maxY + 1 === a.minY) && ox && oz) return 1;
+  if ((a.maxZ + 1 === b.minZ || b.maxZ + 1 === a.minZ) && ox && oy) return 2;
+  return null;
+}
+function floorToScale(value: number, scale: number): number { return Math.floor(value / scale) * scale; }
+function sourceFaceCoordinate(source: ChunkRange, target: ChunkRange, axis: 0 | 1 | 2, sourceScale: number): number {
+  const sMin = axis === 0 ? source.minX : axis === 1 ? source.minY : source.minZ;
+  const sMax = axis === 0 ? source.maxX : axis === 1 ? source.maxY : source.maxZ;
+  const tMin = axis === 0 ? target.minX : axis === 1 ? target.minY : target.minZ;
+  const raw = sMax < tMin ? sMax : sMin;
+  return floorToScale(raw, sourceScale);
 }
