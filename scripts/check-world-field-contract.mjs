@@ -40,6 +40,20 @@ const pixel = contract.worldToSlice(world.x, world.z, 100, 100);
 assert.ok(Math.abs(pixel.x - 50) < 1e-9);
 assert.ok(Math.abs(pixel.y - 50) < 1e-9);
 
+const gridConstants = await load("src/core/ChunkGrid.ts");
+const { F, NF, CHUNK_FLOATS, chunkKey } = gridConstants;
+const workerProviderMod = await load("src/infinity/WorkerWorldFieldChunkProvider.ts");
+const { WorkerWorldFieldChunkProvider } = workerProviderMod;
+const defaultView = new WorldViewContract().snapshot();
+const workerKey = chunkKey(8, 8, 3); // world (0,0,0) maps to worker x=64, z=29, y=64
+const workerChunk = new Float32Array(CHUNK_FLOATS);
+workerChunk[(5 * 64 + 0 * 8 + 0) * NF + F.E] = 123;
+const workerProvider = new WorkerWorldFieldChunkProvider(
+  { cx: 0, cy: 0, cz: 0 }, new Map([[workerKey, workerChunk]]), () => defaultView, fakeProvider
+);
+assert.equal(workerProvider.sample(0, 0, 0).energy, 123);
+assert.equal(workerProvider.snapshotWorkerChunks().some(chunk => chunk.key === workerKey), true);
+
 const storeMod = await load("src/infinity/WorldFieldChunkStore.ts");
 const { WorldFieldChunkStore, worldFieldChunkCoord } = storeMod;
 const fakeProvider = { sample: () => ({ energy: 1, density: .2, information: 3, entropy: .1, temperature: 4, biology: .5, material: 2 }) };
