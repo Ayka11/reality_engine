@@ -42,6 +42,10 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const entityIndex = grid.idx(9, 2, 2) / CELL_FIELDS;
   grid.buffer[entityIndex * CELL_FIELDS + F.BIO_POTENTIAL] = 0.5;
   grid.buffer[entityIndex * CELL_FIELDS + F.ENERGY] = 20;
+  // EntityLayer's flood-fill contract requires at least two connected active cells.
+  const adjacentEntityIndex = grid.idx(10, 2, 2) / CELL_FIELDS;
+  grid.buffer[adjacentEntityIndex * CELL_FIELDS + F.BIO_POTENTIAL] = 0.5;
+  grid.buffer[adjacentEntityIndex * CELL_FIELDS + F.ENERGY] = 20;
 
   const plan: InfinityScaleExecutionPlan = {
     revision: 3,
