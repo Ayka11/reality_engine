@@ -32,6 +32,12 @@ export interface InfinityScaleBoundaryTransferSpec {
   readOperation: "copy" | "prolongation" | "restriction";
 }
 
+function chunkLevel(key: string): number {
+  const match = /^(\d+):/.exec(key);
+  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
+  return Number(match[1]);
+}
+
 export class InfinityScaleChunkExecutionContext {
   readonly simulationRanges: ExecutionCellRange[];
   readonly readRanges: ExecutionCellRange[];
@@ -267,12 +273,6 @@ export class InfinityScaleChunkExecutionContext {
       maxZ: Math.min(this.gridDepth - 1, z + extent - 1),
     };
   }
-
-function chunkLevel(key: string): number {
-  const match = /^(\d+):/.exec(key);
-  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
-  return Number(match[1]);
-}
 
   private isFullyContainedBySimulation(range: ExecutionCellRange): boolean {
     for (let z = range.minZ; z <= range.maxZ; z++)
