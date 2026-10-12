@@ -81,7 +81,6 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
       const fineMin = targetIsCoarse ? sourceMin : targetMin;
       const fineMax = targetIsCoarse ? sourceMax : targetMax;
       const coarseKey = targetIsCoarse ? targetKey : sourceKey;
-      const fineKey = targetIsCoarse ? sourceKey : targetKey;
       const alignedOuterFace =
         (fineMin === coarseMin && fineMax < coarseMax) ||
         (fineMax === coarseMax && fineMin > coarseMin);
