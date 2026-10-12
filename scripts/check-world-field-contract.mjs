@@ -42,7 +42,10 @@ assert.ok(Math.abs(pixel.y - 50) < 1e-9);
 
 const gridConstants = await load("src/core/ChunkGrid.ts");
 const { F, NF, CHUNK_FLOATS, chunkKey } = gridConstants;
-const workerProviderMod = await load("src/infinity/WorkerWorldFieldChunkProvider.ts");
+const workerProviderMod = await load("src/infinity/WorkerWorldFieldChunkProvider.ts", [[
+  /import \{ F, CHUNK_FLOATS, CX, CY, GRID_D, GRID_H, GRID_W, NF \} from '\.\.\/core\/ChunkGrid';?/,
+  "const F = { E: 0, D: 1, I: 2, S: 3, T: 4, BIO: 10, MAT: 11 }; const CHUNK_FLOATS = 7168; const CX = 8; const CY = 8; const GRID_D = 64; const GRID_H = 128; const GRID_W = 128; const NF = 14;"
+]]);
 const { WorkerWorldFieldChunkProvider } = workerProviderMod;
 const defaultView = new WorldViewContract().snapshot();
 const workerKey = chunkKey(8, 8, 3); // world (0,0,0) maps to worker x=64, z=29, y=64
