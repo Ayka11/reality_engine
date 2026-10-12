@@ -32,6 +32,14 @@ The scientific worker remains a finite `128 × 128 × 64` grid with `8 × 8 × 8
 
 Remaining work: make every view mode and every streaming path consume the same persisted view state, and verify that changing center/seed/slice preserves spatial identity end-to-end.
 
+### 3a. Infinity Scale bounded planner core
+The bounded planner core from the RC branch is now selectively integrated:
+- `InfinityScaleV2` enforces `maxSimulatingChunks` deterministically by distance.
+- Resident budgeting preserves mandatory simulation/background chunks and chooses the nearest optional visible chunks.
+- Focused CI tests cover negative-coordinate mapping, LOD/AMR decisions, pinning, constrained budgets, the residency adapter, and memory-store behavior.
+
+**Limit:** this planner is not yet wired as the production terrain chunk manager. The full `infinity-scale-real-diagnostics` RC branch remains unmerged: its latest TypeScript validation ([run #38218384872](https://github.com/Ayka11/reality_engine/actions/runs/38218384872)) still reports broad cross-module type errors, missing adaptive-attribution modules, and mixed-LOD API/fixture mismatches. Do not merge that branch wholesale; port and validate each runtime slice separately.
+
 ### 4. 2D Multi-Slice and Hybrid
 Production 2D rendering should be a world-space projection of the selected field window; the legacy small-grid simulation remains a compatibility/test mode. Hybrid should use the same center, slice, seed, and time as the 3D world.
 
