@@ -198,7 +198,7 @@ function rangeForChunk(key: string, chunkSize: number): ChunkRange {
   if (!Number.isInteger(level) || level < 0 || level > 30) throw new Error(`Invalid Infinity Scale LOD level: ${match[1]}`);
   const keyX = Number(match[2]), keyY = Number(match[3]), keyZ = Number(match[4]);
   const extent = chunkSize * (2 ** level);
-  const x = keyX * extent, y = keyY * extent, z = keyZ * extent;
+  const x = keyX, y = keyY, z = keyZ;
   return { minX: x, maxX: x + extent - 1, minY: y, maxY: y + extent - 1, minZ: z, maxZ: z + extent - 1, level, chunkSize, keyX, keyY, keyZ };
 }
 function sharedFaceAxis(a: ChunkRange, b: ChunkRange): 0 | 1 | 2 | null {
