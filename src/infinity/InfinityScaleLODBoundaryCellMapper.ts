@@ -36,89 +36,83 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
 ): InfinityScaleBoundaryFaceGeometry | null {
   const target = rangeForChunk(spec.targetChunk, chunkSize);
   const source = rangeForChunk(spec.sourceChunk, chunkSize);
-  const scale = 2 ** spec.targetLevel;
+  const targetScale = 2 ** spec.targetLevel;
 
-  const overlap = (aMin: number, aMax: number, bMin: number, bMax: number) =>
-    Math.max(aMin, bMin) <= Math.min(aMax, bMax);
-  const xOverlap = overlap(target.minX, target.maxX, source.minX, source.maxX);
-  const yOverlap = overlap(target.minY, target.maxY, source.minY, source.maxY);
-  const zOverlap = overlap(target.minZ, target.maxZ, source.minZ, source.maxZ);
+  const positiveSpan = (aMin: number, aMax: number, bMin: number, bMax: number, scale: number) =>
+    Math.min(aMax, bMax) - Math.max(aMin, bMin) + 1 >= scale;
 
-  // Resolve a face only when the chunk ranges are true neighbors along
-  // the normal axis. A mixed-LOD overlap is not adjacency by itself: the
-  // source/target must share a coarse/fine outer plane, and both tangential
-  // axes must overlap with positive extent. This excludes corner-only pairs.
-  const faceCandidate = (
+  const candidates: Array<{
+    axis: 0 | 1 | 2;
+    coordinate: number;
+    targetMin: number;
+    targetMax: number;
+    sourceMin: number;
+    sourceMax: number;
+    targetUmin: number;
+    targetUmax: number;
+    sourceUmin: number;
+    sourceUmax: number;
+    targetVmin: number;
+    targetVmax: number;
+    sourceVmin: number;
+    sourceVmax: number;
+  }> = [];
+
+  const addCandidate = (
     axis: 0 | 1 | 2,
-    targetMin: number, targetMax: number,
-    sourceMin: number, sourceMax: number,
-    targetKey: number, sourceKey: number,
-    targetLevel: number, sourceLevel: number,
-    tangentialOverlap: boolean,
-    targetUmin: number, targetUmax: number,
-    sourceUmin: number, sourceUmax: number,
-    targetVmin: number, targetVmax: number,
-    sourceVmin: number, sourceVmax: number,
-  ): InfinityScaleBoundaryFaceGeometry | null => {
-    // A true face needs at least one complete target-LOD cell along both
-    // tangential axes. A single shared boundary coordinate is only edge/corner
-    // contact and must not count as a face.
-    const tangentialMinimumSpan = Math.max(1, 2 ** targetLevel);
-    if (!tangentialOverlap ||
-        Math.min(targetUmax, sourceUmax) - Math.max(targetUmin, sourceUmin) + 1 < tangentialMinimumSpan ||
-        Math.min(targetVmax, sourceVmax) - Math.max(targetVmin, sourceVmin) + 1 < tangentialMinimumSpan) return null;
+    tMin: number, tMax: number, sMin: number, sMax: number,
+    tUmin: number, tUmax: number, sUmin: number, sUmax: number,
+    tVmin: number, tVmax: number, sVmin: number, sVmax: number,
+  ) => {
     let coordinate: number | null = null;
-    if (targetMax + 1 === sourceMin) {
-      coordinate = targetMax;
-    } else if (sourceMax + 1 === targetMin) {
-      coordinate = targetMin;
-    } else if (targetLevel !== sourceLevel) {
-      const coarseLevel = Math.max(targetLevel, sourceLevel);
-      const coarseExtent = chunkSize * (2 ** coarseLevel);
-      const targetIsCoarse = targetLevel > sourceLevel;
-      const coarseMin = targetIsCoarse ? targetMin : sourceMin;
-      const coarseMax = targetIsCoarse ? targetMax : sourceMax;
-      const fineMin = targetIsCoarse ? sourceMin : targetMin;
-      const fineMax = targetIsCoarse ? sourceMax : targetMax;
-      const coarseKey = targetIsCoarse ? targetKey : sourceKey;
-      const alignedOuterFace =
-        (fineMin === coarseMin && fineMax < coarseMax) ||
-        (fineMax === coarseMax && fineMin > coarseMin);
-      const keysConsistent = coarseKey * coarseExtent === coarseMin;
-      // The mixed-LOD ranges themselves must share an exterior plane on the
-      // normal axis. An aligned tangential edge must not make a diagonal pair
-      // appear adjacent.
-      const sharesOuterPlane = fineMin === coarseMin || fineMax === coarseMax;
-      if (alignedOuterFace && keysConsistent && sharesOuterPlane) {
-        coordinate = fineMin === coarseMin ? targetMin : targetMax;
+    if (tMax + 1 === sMin) coordinate = tMax;
+    else if (sMax + 1 === tMin) coordinate = tMin;
+    else if (target.level !== source.level) {
+      // The fine chunk must abut the exterior face of the coarse chunk on the
+      // normal axis. Do not use mere bounding-box overlap to infer adjacency.
+      const targetCoarse = target.level > source.level;
+      const coarseMin = targetCoarse ? tMin : sMin;
+      const coarseMax = targetCoarse ? tMax : sMax;
+      const fineMin = targetCoarse ? sMin : tMin;
+      const fineMax = targetCoarse ? sMax : tMax;
+      const spansTouchAtOuterPlane =
+        fineMax + 1 === coarseMin || coarseMax + 1 === fineMin;
+      if (spansTouchAtOuterPlane) {
+        coordinate = fineMax + 1 === coarseMin ? tMin : tMax;
       }
     }
-    if (coordinate === null) return null;
-    return {
-      axis,
-      coordinate,
-      minU: Math.max(targetUmin, sourceUmin),
-      maxU: Math.min(targetUmax, sourceUmax),
-      minV: Math.max(targetVmin, sourceVmin),
-      maxV: Math.min(targetVmax, sourceVmax),
-      scale,
-    };
+    if (coordinate === null) return;
+    if (!positiveSpan(tUmin, tUmax, sUmin, sUmax, targetScale) ||
+        !positiveSpan(tVmin, tVmax, sVmin, sVmax, targetScale)) return;
+    candidates.push({
+      axis, coordinate,
+      targetMin: tMin, targetMax: tMax, sourceMin: sMin, sourceMax: sMax,
+      targetUmin: tUmin, targetUmax: tUmax, sourceUmin: sUmin, sourceUmax: sUmax,
+      targetVmin: tVmin, targetVmax: tVmax, sourceVmin: sVmin, sourceVmax: sVmax,
+    });
   };
 
-  return (
-    faceCandidate(0, target.minX, target.maxX, source.minX, source.maxX,
-      target.keyX, source.keyX, target.level, source.level, yOverlap && zOverlap,
-      target.minY, target.maxY, source.minY, source.maxY,
-      target.minZ, target.maxZ, source.minZ, source.maxZ) ??
-    faceCandidate(1, target.minY, target.maxY, source.minY, source.maxY,
-      target.keyY, source.keyY, target.level, source.level, xOverlap && zOverlap,
-      target.minX, target.maxX, source.minX, source.maxX,
-      target.minZ, target.maxZ, source.minZ, source.maxZ) ??
-    faceCandidate(2, target.minZ, target.maxZ, source.minZ, source.maxZ,
-      target.keyZ, source.keyZ, target.level, source.level, xOverlap && yOverlap,
-      target.minX, target.maxX, source.minX, source.maxX,
-      target.minY, target.maxY, source.minY, source.maxY)
-  );
+  addCandidate(0, target.minX, target.maxX, source.minX, source.maxX,
+    target.minY, target.maxY, source.minY, source.maxY,
+    target.minZ, target.maxZ, source.minZ, source.maxZ);
+  addCandidate(1, target.minY, target.maxY, source.minY, source.maxY,
+    target.minX, target.maxX, source.minX, source.maxX,
+    target.minZ, target.maxZ, source.minZ, source.maxZ);
+  addCandidate(2, target.minZ, target.maxZ, source.minZ, source.maxZ,
+    target.minX, target.maxX, source.minX, source.maxX,
+    target.minY, target.maxY, source.minY, source.maxY);
+
+  if (candidates.length === 0) return null;
+  const face = candidates[0];
+  return {
+    axis: face.axis,
+    coordinate: face.coordinate,
+    minU: Math.max(face.targetUmin, face.sourceUmin),
+    maxU: Math.min(face.targetUmax, face.sourceUmax),
+    minV: Math.max(face.targetVmin, face.sourceVmin),
+    maxV: Math.min(face.targetVmax, face.sourceVmax),
+    scale: targetScale,
+  };
 }
 
 export function isInfinityScaleSourceBoundaryCell(
