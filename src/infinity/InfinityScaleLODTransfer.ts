@@ -79,7 +79,7 @@ export class InfinityScaleLODTransfer {
    * Same-level transfer. No interpolation is performed.
    */
   static copy(
-    source: ReadonlyArray<number>,
+    source: ArrayLike<number>,
     target: number[],
   ): InfinityScaleLODTransferResult {
     if (source.length !== CELL_FIELDS || target.length !== CELL_FIELDS) {
@@ -119,7 +119,7 @@ export class InfinityScaleLODTransfer {
    * field-transfer policy; conservation is not assumed for every field.
    */
   static prolongate(
-    source: ReadonlyArray<number>,
+    source: ArrayLike<number>,
     targets: Array<number[]>,
     sourceLevel: number,
     targetLevel: number,
@@ -187,7 +187,7 @@ export class InfinityScaleLODTransfer {
    * majority selection rather than arithmetic interpolation.
    */
   static restrict(
-    sources: ReadonlyArray<ReadonlyArray<number>>,
+    sources: ReadonlyArray<ArrayLike<number>>,
     target: number[],
     sourceLevel: number,
     targetLevel: number,
@@ -295,7 +295,7 @@ export class InfinityScaleLODTransfer {
    * consistently instead of being summed across a partial volume.
    */
   static restrictFace(
-    sources: ReadonlyArray<ReadonlyArray<number>>,
+    sources: ReadonlyArray<ArrayLike<number>>,
     target: number[],
     sourceLevel: number,
     targetLevel: number,
@@ -369,7 +369,7 @@ export class InfinityScaleLODTransfer {
   }
 
   static validateProlongationInvariant(
-    source: ReadonlyArray<number>,
+    source: ArrayLike<number>,
     targets: ReadonlyArray<ReadonlyArray<number>>,
     sourceLevel: number,
     targetLevel: number,
@@ -421,7 +421,7 @@ export class InfinityScaleLODTransfer {
   }
 
   static validateRestrictionInvariant(
-    sources: ReadonlyArray<ReadonlyArray<number>>,
+    sources: ReadonlyArray<ArrayLike<number>>,
     target: ReadonlyArray<number>,
     sourceLevel: number,
     targetLevel: number,
