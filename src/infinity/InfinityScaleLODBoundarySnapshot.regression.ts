@@ -121,7 +121,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 1, CHUNK);
     const out = assertNotNull(snapshot.read(s, [7, 2, 2]), "fine-to-coarse +X");
-    assertEqual(out[F.ENERGY], 7, "fine-to-coarse +X energy");
+    assertEqual(out[F.ENERGY], 28, "fine-to-coarse +X energy sum");
     assertEqual(out[F.DENSITY], 70, "fine-to-coarse +X density");
   }
 
@@ -145,8 +145,12 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     const coarseY = key(1, 0, 0, 0);
     const fineZ = key(0, 0, 0, 0);
     const coarseZ = key(1, 0, 0, -1);
-    write(state, fineY, 0, 2, 8, 2, 17);
-    write(state, fineZ, 0, 2, 2, 0, 19);
+    for (let z = 2; z < 4; z++)
+      for (let x = 2; x < 4; x++)
+        write(state, fineY, 0, x, 8, z, 17);
+    for (let y = 2; y < 4; y++)
+      for (let x = 2; x < 4; x++)
+        write(state, fineZ, 0, x, y, 0, 19);
 
     const sy = spec(fineY, coarseY, "fine-to-coarse", 0, 1);
     const sz = spec(fineZ, coarseZ, "fine-to-coarse", 0, 1);
@@ -154,8 +158,8 @@ export function runInfinityScaleLODBoundaryRegression(): void {
 
     const yOut = assertNotNull(snapshot.read(sy, [2, 7, 2]), "fine-to-coarse +Y");
     const zOut = assertNotNull(snapshot.read(sz, [2, 2, -1]), "fine-to-coarse -Z");
-    assertEqual(yOut[F.ENERGY], 17, "fine-to-coarse +Y energy");
-    assertEqual(zOut[F.ENERGY], 19, "fine-to-coarse -Z energy");
+    assertEqual(yOut[F.ENERGY], 68, "fine-to-coarse +Y energy sum");
+    assertEqual(zOut[F.ENERGY], 76, "fine-to-coarse -Z energy sum");
   }
 
 
@@ -166,8 +170,12 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     const coarseY = key(1, 0, -1, 0);
     const fineZ = key(0, 0, 0, 2);
     const coarseZ = key(1, 0, 0, 0);
-    write(state, fineY, 0, 2, 0, 2, 29);
-    write(state, fineZ, 0, 2, 2, 8, 31);
+    for (let z = 2; z < 4; z++)
+      for (let x = 2; x < 4; x++)
+        write(state, fineY, 0, x, 0, z, 29);
+    for (let y = 2; y < 4; y++)
+      for (let x = 2; x < 4; x++)
+        write(state, fineZ, 0, x, y, 8, 31);
 
     const sy = spec(fineY, coarseY, "fine-to-coarse", 0, 1);
     const sz = spec(fineZ, coarseZ, "fine-to-coarse", 0, 1);
@@ -175,8 +183,8 @@ export function runInfinityScaleLODBoundaryRegression(): void {
 
     const yOut = assertNotNull(snapshot.read(sy, [2, -1, 2]), "fine-to-coarse -Y");
     const zOut = assertNotNull(snapshot.read(sz, [2, 2, 7]), "fine-to-coarse +Z");
-    assertEqual(yOut[F.ENERGY], 29, "fine-to-coarse -Y energy");
-    assertEqual(zOut[F.ENERGY], 31, "fine-to-coarse +Z energy");
+    assertEqual(yOut[F.ENERGY], 116, "fine-to-coarse -Y energy sum");
+    assertEqual(zOut[F.ENERGY], 124, "fine-to-coarse +Z energy sum");
   }
 
   // Edge coverage: X+ and Y+ dependencies are resolved independently at adjacent fine chunks.
@@ -185,8 +193,12 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     const coarse = key(1, 0);
     const fineX = key(0, 2, 0, 0);
     const fineY = key(0, 0, 2, 0);
-    write(state, fineX, 0, 8, 2, 2, 37);
-    write(state, fineY, 0, 2, 8, 2, 41);
+    for (let z = 2; z < 4; z++)
+      for (let y = 2; y < 4; y++)
+        write(state, fineX, 0, 8, y, z, 37);
+    for (let z = 2; z < 4; z++)
+      for (let x = 2; x < 4; x++)
+        write(state, fineY, 0, x, 8, z, 41);
 
     const sx = spec(fineX, coarse, "fine-to-coarse", 0, 1);
     const sy = spec(fineY, coarse, "fine-to-coarse", 0, 1);
@@ -194,8 +206,8 @@ export function runInfinityScaleLODBoundaryRegression(): void {
 
     const xOut = assertNotNull(snapshot.read(sx, [7, 2, 2]), "edge X+");
     const yOut = assertNotNull(snapshot.read(sy, [2, 7, 2]), "edge Y+");
-    assertEqual(xOut[F.ENERGY], 37, "edge X+ energy");
-    assertEqual(yOut[F.ENERGY], 41, "edge Y+ energy");
+    assertEqual(xOut[F.ENERGY], 148, "edge X+ energy sum");
+    assertEqual(yOut[F.ENERGY], 164, "edge Y+ energy sum");
   }
 
   // Ratio 4: one coarse source cell is prolonged onto the adjacent fine target face.
