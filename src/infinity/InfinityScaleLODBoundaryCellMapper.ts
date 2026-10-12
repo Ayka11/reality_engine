@@ -82,20 +82,15 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
       const fineMax = targetIsCoarse ? sourceMax : targetMax;
       const coarseKey = targetIsCoarse ? targetKey : sourceKey;
       const fineKey = targetIsCoarse ? sourceKey : targetKey;
-      const coarseIndex = coarseKey;
-      const fineIndex = fineKey;
-      const coarseCellSpan = 2 ** coarseLevel;
-      const fineCellSpan = 2 ** Math.min(targetLevel, sourceLevel);
-      const indexGap = Math.abs(fineIndex * fineCellSpan - coarseIndex * coarseCellSpan);
       const alignedOuterFace =
         (fineMin === coarseMin && fineMax < coarseMax) ||
         (fineMax === coarseMax && fineMin > coarseMin);
       const keysConsistent = coarseKey * coarseExtent === coarseMin;
-      // Along the normal axis, indices must represent the same outer
-      // interface; do not infer adjacency from bounding-box overlap alone.
-      const keyFaceAdjacent = indexGap <= coarseCellSpan &&
-        (fineIndex <= coarseIndex || fineIndex >= coarseIndex);
-      if (alignedOuterFace && keysConsistent && keyFaceAdjacent) {
+      // The mixed-LOD ranges themselves must share an exterior plane on the
+      // normal axis. An aligned tangential edge must not make a diagonal pair
+      // appear adjacent.
+      const sharesOuterPlane = fineMin === coarseMin || fineMax === coarseMax;
+      if (alignedOuterFace && keysConsistent && sharesOuterPlane) {
         coordinate = fineMin === coarseMin ? targetMin : targetMax;
       }
     }
