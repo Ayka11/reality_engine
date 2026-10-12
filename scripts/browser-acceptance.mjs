@@ -723,8 +723,12 @@ try {
   await page.waitForFunction(() => {
     const state = window.worldFieldRestoreState?.();
     return state?.workerBarrierComplete === true || state?.unexpectedAcks > 0;
-  }, { timeout: acceptanceTimeout });
+  }, undefined, { timeout: acceptanceTimeout });
   const restoreBarrier = await page.evaluate(() => window.worldFieldRestoreState?.());
+  const expectedFixtureKeys = [...(restoreDispatch.fixture?.expectedKeys ?? [])].sort((a, b) => a - b);
+  if (JSON.stringify([...restoreBarrier.expectedKeys].sort((a, b) => a - b)) !== JSON.stringify(expectedFixtureKeys)) {
+    throw new Error("Restored worker chunk keys do not match the durable pre-reload snapshot");
+  }
   if (!restoreBarrier?.complete ||
       restoreBarrier.acknowledged !== restoreBarrier.expected ||
       restoreBarrier.duplicateAcks !== 0 ||
