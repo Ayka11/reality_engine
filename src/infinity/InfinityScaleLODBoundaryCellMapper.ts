@@ -44,25 +44,32 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
   const yOverlap = overlap(target.minY, target.maxY, source.minY, source.maxY);
   const zOverlap = overlap(target.minZ, target.maxZ, source.minZ, source.maxZ);
 
-  // Prefer physical faces at the target boundary. Different LODs may share a
-  // coarse face plane while their cell ranges overlap along the normal axis.
-  if (target.maxX + 1 === source.minX && yOverlap && zOverlap) {
-    return { axis: 0, coordinate: target.maxX, minU: Math.max(target.minY, source.minY), maxU: Math.min(target.maxY, source.maxY), minV: Math.max(target.minZ, source.minZ), maxV: Math.min(target.maxZ, source.maxZ), scale };
+  // Target-side boundary face: accept adjacency whether the source is lower
+  // or higher along the normal axis. Cross-LOD chunk ranges can overlap in
+  // cell space, so compare aligned outer planes in addition to exact touching.
+  const relationX = (target.maxX + 1 === source.minX || source.maxX + 1 === target.minX ||
+    (target.level !== source.level && (target.minX === source.maxX || source.minX === target.maxX)));
+  if (relationX && yOverlap && zOverlap) {
+    const coordinate = target.maxX + 1 === source.minX || (target.level !== source.level && target.minX > source.minX)
+      ? target.maxX
+      : target.minX;
+    return { axis: 0, coordinate, minU: Math.max(target.minY, source.minY), maxU: Math.min(target.maxY, source.maxY), minV: Math.max(target.minZ, source.minZ), maxV: Math.min(target.maxZ, source.maxZ), scale };
   }
-  if (source.maxX + 1 === target.minX && yOverlap && zOverlap) {
-    return { axis: 0, coordinate: target.minX, minU: Math.max(target.minY, source.minY), maxU: Math.min(target.maxY, source.maxY), minV: Math.max(target.minZ, source.minZ), maxV: Math.min(target.maxZ, source.maxZ), scale };
+  const relationY = (target.maxY + 1 === source.minY || source.maxY + 1 === target.minY ||
+    (target.level !== source.level && (target.minY === source.maxY || source.minY === target.maxY)));
+  if (relationY && xOverlap && zOverlap) {
+    const coordinate = target.maxY + 1 === source.minY || (target.level !== source.level && target.minY > source.minY)
+      ? target.maxY
+      : target.minY;
+    return { axis: 1, coordinate, minU: Math.max(target.minX, source.minX), maxU: Math.min(target.maxX, source.maxX), minV: Math.max(target.minZ, source.minZ), maxV: Math.min(target.maxZ, source.maxZ), scale };
   }
-  if (target.maxY + 1 === source.minY && xOverlap && zOverlap) {
-    return { axis: 1, coordinate: target.maxY, minU: Math.max(target.minX, source.minX), maxU: Math.min(target.maxX, source.maxX), minV: Math.max(target.minZ, source.minZ), maxV: Math.min(target.maxZ, source.maxZ), scale };
-  }
-  if (source.maxY + 1 === target.minY && xOverlap && zOverlap) {
-    return { axis: 1, coordinate: target.minY, minU: Math.max(target.minX, source.minX), maxU: Math.min(target.maxX, source.maxX), minV: Math.max(target.minZ, source.minZ), maxV: Math.min(target.maxZ, source.maxZ), scale };
-  }
-  if (target.maxZ + 1 === source.minZ && xOverlap && yOverlap) {
-    return { axis: 2, coordinate: target.maxZ, minU: Math.max(target.minX, source.minX), maxU: Math.min(target.maxX, source.maxX), minV: Math.max(target.minY, source.minY), maxV: Math.min(target.maxY, source.maxY), scale };
-  }
-  if (source.maxZ + 1 === target.minZ && xOverlap && yOverlap) {
-    return { axis: 2, coordinate: target.minZ, minU: Math.max(target.minX, source.minX), maxU: Math.min(target.maxX, source.maxX), minV: Math.max(target.minY, source.minY), maxV: Math.min(target.maxY, source.maxY), scale };
+  const relationZ = (target.maxZ + 1 === source.minZ || source.maxZ + 1 === target.minZ ||
+    (target.level !== source.level && (target.minZ === source.maxZ || source.minZ === target.maxZ)));
+  if (relationZ && xOverlap && yOverlap) {
+    const coordinate = target.maxZ + 1 === source.minZ || (target.level !== source.level && target.minZ > source.minZ)
+      ? target.maxZ
+      : target.minZ;
+    return { axis: 2, coordinate, minU: Math.max(target.minX, source.minX), maxU: Math.min(target.maxX, source.maxX), minV: Math.max(target.minY, source.minY), maxV: Math.min(target.maxY, source.maxY), scale };
   }
 
   // AMR chunks at different levels can occupy nested ranges. Accept only an
