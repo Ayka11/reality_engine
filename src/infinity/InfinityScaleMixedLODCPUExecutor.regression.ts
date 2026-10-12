@@ -12,7 +12,7 @@ import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExe
 export function runInfinityScaleMixedLODCPURegression(): void {
   const state = new InfinityScaleLODState(4);
   const coarseKey = "1:0,0,0";
-  const fineKeys = ["0:8,0,0", "0:8,4,0", "0:8,0,4", "0:8,4,4"];
+  const fineKeys = ["0:2,0,0", "0:2,1,0", "0:2,0,1", "0:2,1,1"];
 
   state.ensureChunk(coarseKey, 1);
   for (const fineKey of fineKeys) state.ensureChunk(fineKey, 0);
@@ -141,7 +141,7 @@ export function runInfinityScaleMixedLODCPURegression(): void {
 export function runInfinityScaleMixedLODCPUProlongationRegression(): void {
   const state = new InfinityScaleLODState(4);
   const coarseKey = "1:0,0,0";
-  const fineKeys = ["0:8,0,0", "0:8,4,0", "0:8,0,4", "0:8,4,4"];
+  const fineKeys = ["0:2,0,0", "0:2,1,0", "0:2,0,1", "0:2,1,1"];
 
   state.ensureChunk(coarseKey, 1);
   for (const fineKey of fineKeys) state.ensureChunk(fineKey, 0);
