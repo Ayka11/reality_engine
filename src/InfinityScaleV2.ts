@@ -1,8 +1,8 @@
 /**
- * Reality Engine тАФ Infinity Scale v2.0
+ * Reality Engine — Infinity Scale v2.0
  *
  * Logical planetary-scale coordinate space with bounded local residency.
- * This layer intentionally does NOT allocate a 512├Ч512├Ч256 dense world.
+ * This layer intentionally does NOT allocate a 512×512×256 dense world.
  * It plans/reserves chunks around an observer and exposes LOD/AMR metadata.
  */
 
@@ -31,9 +31,9 @@ export const DEFAULT_INFINITY_SCALE_V2: InfinityScaleConfigV2 = {
   chunkSize: 32,
   logicalExtentCells: { x: 512, y: 512, z: 256 },
   activeWindowCells: { x: 512, y: 512, z: 256 },
-  activeRadiusChunks: { x: 2, y: 2, z: 1 },       // 5├Ч5├Ч3 = 75
-  backgroundRadiusChunks: { x: 4, y: 4, z: 2 },   // 9├Ч9├Ч5 = 405
-  visibleRadiusChunks: { x: 5, y: 5, z: 2 },      // 11├Ч11├Ч5 = 605
+  activeRadiusChunks: { x: 2, y: 2, z: 1 },       // 5×5×3 = 75
+  backgroundRadiusChunks: { x: 4, y: 4, z: 2 },   // 9×9×5 = 405
+  visibleRadiusChunks: { x: 5, y: 5, z: 2 },      // 11×11×5 = 605
   maxSimulatingChunks: 75,
   maxResidentChunks: 512,
   lodLevels: 4,
@@ -117,6 +117,9 @@ export class InfinityScaleV2 {
           ) simulating.add(key);
         }
 
+    // Establish semantic priority first: simulation > background > visible.
+    // The visible radius can describe more chunks than the hard resident cap,
+    // so only the nearest visible candidates are admitted when necessary.
     for (const key of visible) this.states.set(key, "visible");
     for (const key of background) this.states.set(key, "background");
     for (const key of simulating) this.states.set(key, "simulating");
@@ -124,7 +127,7 @@ export class InfinityScaleV2 {
     for (const key of [...this.states.keys()]) {
       if (!visible.has(key) && !this.pinned.has(key)) this.states.set(key, "cached");
     }
-    this.evictIfNeeded();
+    this.enforceResidentBudget(cx, cy, cz, simulating, background, visible);
   }
 
   touch(k: ChunkKey): void {
@@ -192,13 +195,56 @@ export class InfinityScaleV2 {
     };
   }
 
-  private evictIfNeeded(): void {
+  private enforceResidentBudget(
+    observerX: number,
+    observerY: number,
+    observerZ: number,
+    simulating: Set<string>,
+    background: Set<string>,
+    visible: Set<string>,
+  ): void {
     if (this.states.size <= this.config.maxResidentChunks) return;
-    const candidates = [...this.states.entries()]
-      .filter(([key]) => !this.pinned.has(key) && this.states.get(key) === "cached")
+
+    const mandatory = new Set<string>([
+      ...simulating,
+      ...background,
+      ...[...this.pinned],
+    ]);
+
+    // A configuration with a resident cap below its simulation/background
+    // envelope cannot satisfy both constraints. Keep mandatory chunks rather
+    // than silently evicting active simulation state.
+    const optionalVisible = [...visible]
+      .filter(key => !mandatory.has(key))
+      .map(key => {
+        const coords = key.slice(key.indexOf(":") + 1);
+        const [x, y, z] = coords.split(",").map(Number);
+        const dx = x - observerX;
+        const dy = y - observerY;
+        const dz = z - observerZ;
+        return { key, distance: dx * dx + dy * dy + dz * dz };
+      })
+      .sort((a, b) => a.distance - b.distance);
+
+    const available = Math.max(0, this.config.maxResidentChunks - mandatory.size);
+    const keepVisible = new Set(optionalVisible.slice(0, available).map(v => v.key));
+
+    for (const key of [...this.states.keys()]) {
+      if (mandatory.has(key)) continue;
+      if (visible.has(key) && keepVisible.has(key)) continue;
+      this.states.set(key, "cached");
+    }
+
+    const removable = [...this.states.entries()]
+      .filter(([key]) =>
+        !this.pinned.has(key) &&
+        !mandatory.has(key) &&
+        !keepVisible.has(key),
+      )
       .sort((a, b) => (this.touched.get(a[0]) ?? 0) - (this.touched.get(b[0]) ?? 0));
-    while (this.states.size > this.config.maxResidentChunks && candidates.length) {
-      const [key] = candidates.shift()!;
+
+    while (this.states.size > this.config.maxResidentChunks && removable.length) {
+      const [key] = removable.shift()!;
       this.states.delete(key);
       this.touched.delete(key);
     }
