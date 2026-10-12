@@ -78,15 +78,12 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
       const spansTouchAtOuterPlane =
         fineMax + 1 === coarseMin || coarseMax + 1 === fineMin;
       if (spansTouchAtOuterPlane) {
-        // The geometry coordinate must always belong to the target-side face.
-        // For target=fine / source=coarse, the fine face is its minimum when
-        // the coarse chunk is immediately before it; for target=coarse / source=fine,
-        // the coarse face is its maximum in the mirrored arrangement.
-        if (targetCoarse) {
-          coordinate = fineMax + 1 === coarseMin ? tMin : tMax;
-        } else {
-          coordinate = fineMax + 1 === coarseMin ? tMax : tMin;
-        }
+        // Resolve the actual boundary of the target chunk. If the coarse
+        // target is left of the fine source, target's +X face is its max;
+        // if the fine target is right of the coarse source, target's -X
+        // face is its min. Mirror that rule for either normal direction.
+        const targetIsLeftOfSource = tMax + 1 === sMin;
+        coordinate = targetIsLeftOfSource ? tMax : tMin;
       }
     }
     if (coordinate === null) return;
