@@ -70,8 +70,12 @@ export class WorldFieldChunkPersistence {
         try {
           const transaction = db.transaction(OBJECT_STORE, 'readwrite')
           const request = operation(transaction.objectStore(OBJECT_STORE))
-          request.onsuccess = () => resolve()
           request.onerror = () => reject(request.error ?? new Error('IndexedDB write failed'))
+          transaction.oncomplete = () => {
+            this.lastDurabilityError = null
+            resolve()
+          }
+          transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB transaction failed'))
           transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted'))
         } catch (error) { reject(error) }
       })
