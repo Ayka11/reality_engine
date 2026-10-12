@@ -74,7 +74,6 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
       const fineMin = targetIsCoarse ? sourceMin : targetMin;
       const fineMax = targetIsCoarse ? sourceMax : targetMax;
       const coarseKey = targetIsCoarse ? targetKey : sourceKey;
-      const fineKey = targetIsCoarse ? sourceKey : targetKey;
       // The fine range must occupy the coarse chunk's exterior slice on
       // this axis; merely touching at an edge in a tangential dimension
       // is not enough.
