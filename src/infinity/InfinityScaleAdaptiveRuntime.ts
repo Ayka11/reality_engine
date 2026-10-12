@@ -93,7 +93,6 @@ export class InfinityScaleAdaptiveRuntime {
       .map(region => this.closedLoopController.observeAndRecommend({
         ...region,
         currentLOD: region.currentLOD ?? this.getLOD(region.regionId) ?? region.topology.currentLOD,
-        error: region.runtimeError,
       }))
       .sort((a, b) => a.regionId.localeCompare(b.regionId));
 
