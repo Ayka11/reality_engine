@@ -23,6 +23,11 @@ interface ChunkRange {
   maxY: number;
   minZ: number;
   maxZ: number;
+  level: number;
+  chunkSize: number;
+  keyX: number;
+  keyY: number;
+  keyZ: number;
 }
 
 export function resolveInfinityScaleBoundaryFaceGeometry(
@@ -191,43 +196,48 @@ function rangeForChunk(key: string, chunkSize: number): ChunkRange {
   if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
   const level = Number(match[1]);
   if (!Number.isInteger(level) || level < 0 || level > 30) throw new Error(`Invalid Infinity Scale LOD level: ${match[1]}`);
+  const keyX = Number(match[2]), keyY = Number(match[3]), keyZ = Number(match[4]);
   const extent = chunkSize * (2 ** level);
-  const x = Number(match[2]) * extent, y = Number(match[3]) * extent, z = Number(match[4]) * extent;
-  return { minX: x, maxX: x + extent - 1, minY: y, maxY: y + extent - 1, minZ: z, maxZ: z + extent - 1 };
+  const x = keyX * extent, y = keyY * extent, z = keyZ * extent;
+  return { minX: x, maxX: x + extent - 1, minY: y, maxY: y + extent - 1, minZ: z, maxZ: z + extent - 1, level, chunkSize, keyX, keyY, keyZ };
 }
 function sharedFaceAxis(a: ChunkRange, b: ChunkRange): 0 | 1 | 2 | null {
-  // Chunk-key coordinates are in chunk units at their own LOD. Their world
-  // ranges may overlap after conversion to base-cell coordinates; the shared
-  // face must therefore be identified from the LOD-relative chunk indices.
-  const aKeyLevel = a.level;
-  const bKeyLevel = b.level;
-  const aScale = 2 ** aKeyLevel;
-  const bScale = 2 ** bKeyLevel;
-  const chunkSize = a.chunkSize;
-  const aExtent = chunkSize * aScale;
-  const bExtent = chunkSize * bScale;
   const overlapsX = a.minX <= b.maxX && a.maxX >= b.minX;
   const overlapsY = a.minY <= b.maxY && a.maxY >= b.minY;
   const overlapsZ = a.minZ <= b.maxZ && a.maxZ >= b.minZ;
+  const sameSize = a.level === b.level;
+  if (sameSize) {
+    if (Math.abs(a.keyX - b.keyX) === 1 && a.keyY === b.keyY && a.keyZ === b.keyZ) return 0;
+    if (Math.abs(a.keyY - b.keyY) === 1 && a.keyX === b.keyX && a.keyZ === b.keyZ) return 1;
+    if (Math.abs(a.keyZ - b.keyZ) === 1 && a.keyX === b.keyX && a.keyY === b.keyY) return 2;
+    return null;
+  }
 
-  // A true interface has touching range boundaries, not an arbitrary gap.
+  // Compare base-cell chunk bounds using a closed-cell convention: chunks
+  // separated only by adjacent boundary cells are considered neighbors.
   if ((a.maxX + 1 === b.minX || b.maxX + 1 === a.minX) && overlapsY && overlapsZ) return 0;
   if ((a.maxY + 1 === b.minY || b.maxY + 1 === a.minY) && overlapsX && overlapsZ) return 1;
   if ((a.maxZ + 1 === b.minZ || b.maxZ + 1 === a.minZ) && overlapsX && overlapsY) return 2;
 
-  // When one chunk is coarser, its index-grid face spans multiple fine chunks.
-  // Normalize chunk origin coordinates into the common coarser grid to test
-  // adjacency without confusing overlapping cell extents for contact.
-  const ax = a.minX / aExtent, ay = a.minY / aExtent, az = a.minZ / aExtent;
-  const bx = b.minX / bExtent, by = b.minY / bExtent, bz = b.minZ / bExtent;
-  const scaleRatio = Math.max(aScale, bScale) / Math.min(aScale, bScale);
-  if (!Number.isInteger(scaleRatio)) return null;
-  if (a.maxX < b.minX && overlapsY && overlapsZ && Math.abs((ax + 1) - bx) <= scaleRatio) return 0;
-  if (b.maxX < a.minX && overlapsY && overlapsZ && Math.abs((bx + 1) - ax) <= scaleRatio) return 0;
-  if (a.maxY < b.minY && overlapsX && overlapsZ && Math.abs((ay + 1) - by) <= scaleRatio) return 1;
-  if (b.maxY < a.minY && overlapsX && overlapsZ && Math.abs((by + 1) - ay) <= scaleRatio) return 1;
-  if (a.maxZ < b.minZ && overlapsX && overlapsY && Math.abs((az + 1) - bz) <= scaleRatio) return 2;
-  if (b.maxZ < a.minZ && overlapsX && overlapsY && Math.abs((bz + 1) - az) <= scaleRatio) return 2;
+  // Mixed LOD chunk face: the finer chunk's full extent touches one face of
+  // the coarser chunk. The ranges are half-open in world space in concept,
+  // while stored max bounds are inclusive, so compare their exterior edges.
+  if (a.level > b.level) {
+    if (a.minX === b.maxX + 1 && overlapsY && overlapsZ) return 0;
+    if (a.maxX + 1 === b.minX && overlapsY && overlapsZ) return 0;
+    if (a.minY === b.maxY + 1 && overlapsX && overlapsZ) return 1;
+    if (a.maxY + 1 === b.minY && overlapsX && overlapsZ) return 1;
+    if (a.minZ === b.maxZ + 1 && overlapsX && overlapsY) return 2;
+    if (a.maxZ + 1 === b.minZ && overlapsX && overlapsY) return 2;
+  }
+  if (b.level > a.level) {
+    if (a.minX === b.maxX + 1 && overlapsY && overlapsZ) return 0;
+    if (a.maxX + 1 === b.minX && overlapsY && overlapsZ) return 0;
+    if (a.minY === b.maxY + 1 && overlapsX && overlapsZ) return 1;
+    if (a.maxY + 1 === b.minY && overlapsX && overlapsZ) return 1;
+    if (a.minZ === b.maxZ + 1 && overlapsX && overlapsY) return 2;
+    if (a.maxZ + 1 === b.minZ && overlapsX && overlapsY) return 2;
+  }
   return null;
 }
 function floorToScale(value: number, scale: number): number { return Math.floor(value / scale) * scale; }
