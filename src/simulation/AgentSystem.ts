@@ -265,7 +265,7 @@ export class AgentSystem {
     agent.energy -= 0.8 * dt * 60;
   }
 
-  private _destroy(grid: VoxelGrid, agent: Agent, dt: number, _context: InfinityScaleChunkExecutionContext | null = null): void {
+  private _destroy(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null): void {
     const base = this._base(grid, agent.x, agent.y, agent.z);
     const stolenE = Math.min(15 * dt * 60, grid.buffer[base + F.ENERGY]);
     grid.buffer[base + F.ENERGY] = Math.max(0, grid.buffer[base + F.ENERGY] - stolenE);
