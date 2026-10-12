@@ -29,14 +29,14 @@ export function runInfinityScaleExecutionAdapterBoundaryRegression(): void {
   const frame = {
     observer: { x: 0, y: 0, z: 0 },
     chunks: [
-      chunk("0:0,0,0", 0, 0, 0, 0, 0, true),
+      chunk("0:1,0,0", 0, 1, 0, 0, 0, true),
       // One coarse neighbor sharing the +X face.
       chunk("1:1,0,0", 1, 1, 0, 0, 10, false),
       // Corner-only coarse chunk: must not be treated as a face neighbor.
       chunk("1:1,1,0", 1, 1, 1, 0, 20, false),
     ],
-    simulating: ["0:0,0,0"],
-    visible: ["0:0,0,0"],
+    simulating: ["0:1,0,0"],
+    visible: ["0:1,0,0"],
     background: [],
     cached: [],
     unloaded: [],
@@ -66,7 +66,7 @@ export function runInfinityScaleExecutionAdapterBoundaryRegression(): void {
 
   const plusXFallback = plan.boundaryReadRelations.find(
     relation =>
-      relation.targetChunk === "0:1,0,0" &&
+      relation.targetChunk === "0:2,0,0" &&
       relation.relation === "same-level",
   );
   if (plusXFallback) {
@@ -75,7 +75,7 @@ export function runInfinityScaleExecutionAdapterBoundaryRegression(): void {
 
   const minusXFallback = plan.boundaryReadRelations.find(
     relation =>
-      relation.targetChunk === "0:-1,0,0" &&
+      relation.targetChunk === "0:0,0,0" &&
       relation.relation === "same-level",
   );
   if (!minusXFallback) {
