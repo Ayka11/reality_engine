@@ -44,29 +44,39 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
   const yOverlap = overlap(target.minY, target.maxY, source.minY, source.maxY);
   const zOverlap = overlap(target.minZ, target.maxZ, source.minZ, source.maxZ);
 
-  // Target-side boundary face: accept adjacency whether the source is lower
-  // or higher along the normal axis. Cross-LOD chunk ranges can overlap in
-  // cell space, so compare aligned outer planes in addition to exact touching.
-  const relationX = (target.maxX + 1 === source.minX || source.maxX + 1 === target.minX ||
-    (target.level !== source.level && (target.minX === source.maxX || source.minX === target.maxX)));
-  if (relationX && yOverlap && zOverlap) {
-    const coordinate = target.maxX + 1 === source.minX || (target.level !== source.level && target.minX > source.minX)
+  // Target-side face lies on the target chunk boundary. Use the target's
+  // actual boundary coordinate while requiring the source to touch that face.
+  // For mixed LOD, a fine chunk's face can align with an interior slice of the
+  // coarse range, so level-aware adjacency must use chunk-key origins.
+  const adjacentX = target.maxX + 1 === source.minX || source.maxX + 1 === target.minX ||
+    (target.level !== source.level && (
+      (target.keyX < source.keyX && target.maxX >= source.minX - source.chunkSize * (2 ** source.level)) ||
+      (target.keyX > source.keyX && target.minX <= source.maxX + 1)
+    ));
+  if (adjacentX && yOverlap && zOverlap) {
+    const coordinate = target.maxX < source.maxX && source.minX <= target.maxX + 1
       ? target.maxX
       : target.minX;
     return { axis: 0, coordinate, minU: Math.max(target.minY, source.minY), maxU: Math.min(target.maxY, source.maxY), minV: Math.max(target.minZ, source.minZ), maxV: Math.min(target.maxZ, source.maxZ), scale };
   }
-  const relationY = (target.maxY + 1 === source.minY || source.maxY + 1 === target.minY ||
-    (target.level !== source.level && (target.minY === source.maxY || source.minY === target.maxY)));
-  if (relationY && xOverlap && zOverlap) {
-    const coordinate = target.maxY + 1 === source.minY || (target.level !== source.level && target.minY > source.minY)
+  const adjacentY = target.maxY + 1 === source.minY || source.maxY + 1 === target.minY ||
+    (target.level !== source.level && (
+      (target.keyY < source.keyY && target.maxY >= source.minY - source.chunkSize * (2 ** source.level)) ||
+      (target.keyY > source.keyY && target.minY <= source.maxY + 1)
+    ));
+  if (adjacentY && xOverlap && zOverlap) {
+    const coordinate = target.maxY < source.maxY && source.minY <= target.maxY + 1
       ? target.maxY
       : target.minY;
     return { axis: 1, coordinate, minU: Math.max(target.minX, source.minX), maxU: Math.min(target.maxX, source.maxX), minV: Math.max(target.minZ, source.minZ), maxV: Math.min(target.maxZ, source.maxZ), scale };
   }
-  const relationZ = (target.maxZ + 1 === source.minZ || source.maxZ + 1 === target.minZ ||
-    (target.level !== source.level && (target.minZ === source.maxZ || source.minZ === target.maxZ)));
-  if (relationZ && xOverlap && yOverlap) {
-    const coordinate = target.maxZ + 1 === source.minZ || (target.level !== source.level && target.minZ > source.minZ)
+  const adjacentZ = target.maxZ + 1 === source.minZ || source.maxZ + 1 === target.minZ ||
+    (target.level !== source.level && (
+      (target.keyZ < source.keyZ && target.maxZ >= source.minZ - source.chunkSize * (2 ** source.level)) ||
+      (target.keyZ > source.keyZ && target.minZ <= source.maxZ + 1)
+    ));
+  if (adjacentZ && xOverlap && yOverlap) {
+    const coordinate = target.maxZ < source.maxZ && source.minZ <= target.maxZ + 1
       ? target.maxZ
       : target.minZ;
     return { axis: 2, coordinate, minU: Math.max(target.minX, source.minX), maxU: Math.min(target.maxX, source.maxX), minV: Math.max(target.minY, source.minY), maxV: Math.min(target.maxY, source.maxY), scale };
