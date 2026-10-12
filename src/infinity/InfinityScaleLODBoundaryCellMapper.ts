@@ -84,18 +84,27 @@ export function isInfinityScaleSourceBoundaryCell(
   const face = resolveInfinityScaleBoundaryFaceGeometry(spec, chunkSize);
   if (!face) return false;
 
+  const source = rangeForChunk(spec.sourceChunk, chunkSize);
   const [x, y, z] = targetCell;
 
-  // Callers pass the target simulation-cell coordinate. The canonical face
-  // coordinate is already expressed on that target side; comparing against
-  // the source chunk's outer cell incorrectly rejects valid mixed-LOD reads.
+  // Same-level context relations identify the simulation chunk as sourceChunk,
+  // so the queried cell lies on that chunk's edge. Mixed-LOD transfer specs
+  // identify the simulation chunk as targetChunk, so use the canonical
+  // target-side face coordinate for those relations.
+  const coordinateFor = (axis: 0 | 1 | 2): number => {
+    if (spec.relation !== "same-level") return face.coordinate;
+    const sourceMin = axis === 0 ? source.minX : axis === 1 ? source.minY : source.minZ;
+    const sourceMax = axis === 0 ? source.maxX : axis === 1 ? source.maxY : source.maxZ;
+    return sourceMax < face.coordinate ? sourceMax : sourceMin;
+  };
+
   if (face.axis === 0) {
-    return x === face.coordinate && y >= face.minU && y <= face.maxU && z >= face.minV && z <= face.maxV;
+    return x === coordinateFor(0) && y >= face.minU && y <= face.maxU && z >= face.minV && z <= face.maxV;
   }
   if (face.axis === 1) {
-    return y === face.coordinate && x >= face.minU && x <= face.maxU && z >= face.minV && z <= face.maxV;
+    return y === coordinateFor(1) && x >= face.minU && x <= face.maxU && z >= face.minV && z <= face.maxV;
   }
-  return z === face.coordinate && x >= face.minU && x <= face.maxU && y >= face.minV && y <= face.maxV;
+  return z === coordinateFor(2) && x >= face.minU && x <= face.maxU && y >= face.minV && y <= face.maxV;
 }
 
 /** Backward-compatible alias; new solver code should use the explicit source-side name. */
