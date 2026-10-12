@@ -45,18 +45,18 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
       makePlan("0:0,0,0", "0:1,0,0", "same-level", 0, 0),
       16, 16, 16, 4,
     );
-    const boundary = context.getBoundaryRelationsForCell(3, 2, 2);
+    const boundary = context.getBoundaryRelationsForCell(7, 2, 2);
     if (boundary.length !== 1 || boundary[0].targetChunk !== "0:1,0,0") {
       throw new Error("Chunk context regression: same-level face lookup failed");
     }
-    if (context.getBoundaryRelationsForCell(2, 2, 2).length !== 0) {
+    if (context.getBoundaryRelationsForCell(6, 2, 2).length !== 0) {
       throw new Error("Chunk context regression: interior cell accepted as boundary");
     }
   }
 
   {
     const context = new InfinityScaleChunkExecutionContext(
-      makePlan("0:0,0,0", "1:1,0,0", "fine-to-coarse", 0, 1),
+      makePlan("0:1,0,0", "1:1,0,0", "fine-to-coarse", 0, 1),
       32, 16, 16, 4,
     );
     const boundary = context.getBoundaryRelationsForCell(3, 2, 2);
