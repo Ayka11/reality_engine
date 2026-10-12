@@ -573,7 +573,64 @@ export class SimulationEngine {
 
   private syncInfinityScaleDenseState(
     context: InfinityScaleChunkExecutionContext,
-  ): void {\n    const keys = new Set([\n      ...this._infinityExecutionPlan!.chunks.map(chunk => chunk.key),\n      ...context.boundaryReadRelations.map(relation => relation.sourceChunk),\n      ...context.boundaryReadRelations.map(relation => relation.targetChunk),\n    ]);\n\n    for (const key of keys) {\n      const match = /^(\\d+):(-?\\d+),(-?\\d+),(-?\\d+)$/.exec(key);\n      if (!match) throw new Error("Invalid Infinity Scale chunk key: " + key);\n      const level = Number(match[1]);\n      const cx = Number(match[2]);\n      const cy = Number(match[3]);\n      const cz = Number(match[4]);\n      const scale = 2 ** level;\n      const state = this.infinityScaleLODState.ensureChunk(key, level);\n\n      for (let lz = 0; lz < 32; lz++) {\n        for (let ly = 0; ly < 32; ly++) {\n          for (let lx = 0; lx < 32; lx++) {\n            const baseX = cx * 32 * scale + lx * scale;\n            const baseY = cy * 32 * scale + ly * scale;\n            const baseZ = cz * 32 * scale + lz * scale;\n            const offset = ((lz * 32 * 32) + ly * 32 + lx) * CELL_FIELDS;\n\n            if (level === 0) {\n              if (baseX < 0 || baseX >= this.grid.W || baseY < 0 || baseY >= this.grid.H || baseZ < 0 || baseZ >= this.grid.D) continue;\n              const cell = this.grid.cell(baseX, baseY, baseZ);\n              for (let field = 0; field < CELL_FIELDS; field++) state.cells[offset + field] = cell.get(field);\n              continue;\n            }\n\n            const fineCells: Float32Array[] = [];\n            let complete = true;\n            for (let dz = 0; dz < scale && complete; dz++) {\n              for (let dy = 0; dy < scale && complete; dy++) {\n                for (let dx = 0; dx < scale; dx++) {\n                  const x = baseX + dx;\n                  const y = baseY + dy;\n                  const z = baseZ + dz;\n                  if (x < 0 || x >= this.grid.W || y < 0 || y >= this.grid.H || z < 0 || z >= this.grid.D) { complete = false; break; }\n                  const cell = this.grid.cellBack(x, y, z);\n                  const values = new Float32Array(CELL_FIELDS);\n                  for (let field = 0; field < CELL_FIELDS; field++) values[field] = cell.get(field);\n                  fineCells.push(values);\n                }\n              }\n            }\n            if (!complete) continue;\n            const coarse = new Array<number>(CELL_FIELDS).fill(0);\n            InfinityScaleLODTransfer.restrict(fineCells, coarse, 0, level);\n            state.cells.set(coarse, offset);\n          }\n        }\n      }\n    }\n  }\n  private captureInfinityScaleBoundarySnapshot(
+  ): void {
+    const keys = new Set([
+      ...this._infinityExecutionPlan!.chunks.map(chunk => chunk.key),
+      ...context.boundaryReadRelations.map(relation => relation.sourceChunk),
+      ...context.boundaryReadRelations.map(relation => relation.targetChunk),
+    ]);
+
+    for (const key of keys) {
+      const match = /^(\\d+):(-?\\d+),(-?\\d+),(-?\\d+)$/.exec(key);
+      if (!match) throw new Error("Invalid Infinity Scale chunk key: " + key);
+      const level = Number(match[1]);
+      const cx = Number(match[2]);
+      const cy = Number(match[3]);
+      const cz = Number(match[4]);
+      const scale = 2 ** level;
+      const state = this.infinityScaleLODState.ensureChunk(key, level);
+
+      for (let lz = 0; lz < 32; lz++) {
+        for (let ly = 0; ly < 32; ly++) {
+          for (let lx = 0; lx < 32; lx++) {
+            const baseX = cx * 32 * scale + lx * scale;
+            const baseY = cy * 32 * scale + ly * scale;
+            const baseZ = cz * 32 * scale + lz * scale;
+            const offset = ((lz * 32 * 32) + ly * 32 + lx) * CELL_FIELDS;
+
+            if (level === 0) {
+              if (baseX < 0 || baseX >= this.grid.W || baseY < 0 || baseY >= this.grid.H || baseZ < 0 || baseZ >= this.grid.D) continue;
+              const cell = this.grid.cell(baseX, baseY, baseZ);
+              for (let field = 0; field < CELL_FIELDS; field++) state.cells[offset + field] = cell.get(field);
+              continue;
+            }
+
+            const fineCells: Float32Array[] = [];
+            let complete = true;
+            for (let dz = 0; dz < scale && complete; dz++) {
+              for (let dy = 0; dy < scale && complete; dy++) {
+                for (let dx = 0; dx < scale; dx++) {
+                  const x = baseX + dx;
+                  const y = baseY + dy;
+                  const z = baseZ + dz;
+                  if (x < 0 || x >= this.grid.W || y < 0 || y >= this.grid.H || z < 0 || z >= this.grid.D) { complete = false; break; }
+                  const cell = this.grid.cellBack(x, y, z);
+                  const values = new Float32Array(CELL_FIELDS);
+                  for (let field = 0; field < CELL_FIELDS; field++) values[field] = cell.get(field);
+                  fineCells.push(values);
+                }
+              }
+            }
+            if (!complete) continue;
+            const coarse = new Array<number>(CELL_FIELDS).fill(0);
+            InfinityScaleLODTransfer.restrict(fineCells, coarse, 0, level);
+            state.cells.set(coarse, offset);
+          }
+        }
+      }
+    }
+  }
+  private captureInfinityScaleBoundarySnapshot(
     context: InfinityScaleChunkExecutionContext,
   ): InfinityScaleLODBoundarySnapshot | undefined {
     const specs = context.boundaryTransferSpecs.filter(
