@@ -3,9 +3,14 @@ import { InfinityScalePredictiveAdaptiveController } from "./InfinityScalePredic
 import { InfinityScaleRuntimePredictionFeedback, type InfinityScaleRuntimePredictionFeedbackResult as RuntimePrediction } from "./InfinityScaleRuntimePredictionFeedback";
 import type { InfinityScaleCausalAdaptiveAttribution } from "./InfinityScaleCausalAdaptiveAttribution";
 
-export interface InfinityScaleClosedLoopAdaptiveInput extends InfinityScalePredictiveAdaptiveInput {
+export interface InfinityScaleClosedLoopAdaptiveInput extends Omit<InfinityScalePredictiveAdaptiveInput, "error"> {
   runtimeError: number;
   causalAttribution?: InfinityScaleCausalAdaptiveAttribution;
+}
+
+export interface InfinityScaleClosedLoopRuntimeRegion extends Omit<InfinityScaleClosedLoopAdaptiveInput, "currentLOD"> {
+  currentLOD?: number;
+  topology: { regionId: string; currentLOD: number; proposedLOD: number; neighbors: string[] };
 }
 
 export interface InfinityScaleClosedLoopAdaptiveRecommendation extends InfinityScalePredictiveAdaptiveRecommendation {
