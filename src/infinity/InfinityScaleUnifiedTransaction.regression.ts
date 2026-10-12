@@ -163,6 +163,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const integrityFrame: InfinityScaleGlobalExecutionFrame = {
     ...frame,
     revision: 5,
+    planRevision: 5,
     phase: "local-execution",
     committed: false,
     finalized: false,
@@ -226,6 +227,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const frame2: InfinityScaleGlobalExecutionFrame = {
     ...frame,
     revision: 4,
+    planRevision: 4,
     phase: "local-execution",
     committed: false,
     finalized: false,
