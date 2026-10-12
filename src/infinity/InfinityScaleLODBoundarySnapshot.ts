@@ -223,7 +223,7 @@ export class InfinityScaleLODBoundarySnapshot {
 }
 
 function chunkRangeForKey(key: string, chunkSize: number): { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number } {
-  const match = /^(\\d+):(-?\\d+),(-?\\d+),(-?\\d+)$/.exec(key);
+  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
   if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
   const level = Number(match[1]);
   if (!Number.isInteger(level) || level < 0 || level > 30) throw new Error(`Invalid Infinity Scale LOD level: ${level}`);
