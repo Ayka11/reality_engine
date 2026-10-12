@@ -12,6 +12,8 @@ export interface InfinityScaleLODBoundaryUpdate {
   sourceChunk: string;
   targetChunk: string;
   relation: "same-level" | "coarse-to-fine" | "fine-to-coarse";
+  sourceLevel: number;
+  targetLevel: number;
   targetCell: [number, number, number];
   value: Float32Array;
   sourceCells: Float32Array[];
@@ -82,6 +84,8 @@ export class InfinityScaleLODSynchronization {
       sourceChunk: spec.sourceChunk,
       targetChunk: spec.targetChunk,
       relation: spec.relation,
+      sourceLevel: spec.sourceLevel,
+      targetLevel: spec.targetLevel,
       targetCell: [...targetCell],
       value: target,
       sourceCells: sourceCells.map(source => new Float32Array(source)),
