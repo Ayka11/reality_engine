@@ -19,6 +19,7 @@ let restoredChunkCount = 0
 let restoreFailed = false
 const restoredChunkKeys = new Set<number>()
 const restoreBeforeChunks = new Map<number, Float32Array | null>()
+const restoreBeforeDirtyChunks = new Set<number>()
 const causal: Array<{ id: number; tick: number; x: number; y: number; z: number; delta: number }> = []
 let DIFF = 0.09, ENT = 0.0004, INFO = 0.35, BIO = 0.25
 const activeProcs = new Set<string>(['thermo', 'bio'])
@@ -184,6 +185,8 @@ self.onmessage = (e: MessageEvent) => {
     restoreFailed = false
     restoredChunkKeys.clear()
     restoreBeforeChunks.clear()
+    restoreBeforeDirtyChunks.clear()
+    for (const key of grid.dirtyChunks) restoreBeforeDirtyChunks.add(key)
     grid.dirtyChunks.clear()
     return
   }
@@ -521,16 +524,22 @@ self.onmessage = (e: MessageEvent) => {
     const restoreId = data?.restoreId
     const complete = activeRestoreId === restoreId && !restoreFailed &&
       restoredChunkCount === expectedRestoreChunks && restoredChunkKeys.size === expectedRestoreChunks
-    if (!complete && activeRestoreId === restoreId) {
-      // Roll back every chunk already replaced so a rejected restore is atomic.
-      for (const [key, before] of restoreBeforeChunks) {
-        if (before === null) {
-          grid.chunks.delete(key)
-          grid.dirtyChunks.add(key)
-        } else {
-          grid.restoreChunk(key, before)
+    if (activeRestoreId === restoreId) {
+      if (!complete) {
+        // Roll back every chunk already replaced so a rejected restore is atomic.
+        for (const [key, before] of restoreBeforeChunks) {
+          if (before === null) {
+            grid.chunks.delete(key)
+            grid.dirtyChunks.add(key)
+          } else {
+            grid.restoreChunk(key, before)
+          }
         }
+      } else {
+        clearSculptHistory()
       }
+      // Preserve dirty work that was pending before the isolated restore began.
+      for (const key of restoreBeforeDirtyChunks) grid.dirtyChunks.add(key)
     }
     ;(self as unknown as Worker).postMessage({
       cmd: 'restoreComplete', data: { restoreId, complete, restoredChunkCount, expectedRestoreChunks },
@@ -542,6 +551,7 @@ self.onmessage = (e: MessageEvent) => {
       restoreFailed = false
       restoredChunkKeys.clear()
       restoreBeforeChunks.clear()
+      restoreBeforeDirtyChunks.clear()
     }
     return
   }
