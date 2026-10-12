@@ -1,7 +1,7 @@
 import { InfinityScalePredictionEngine, type InfinityScalePredictionResult } from "./InfinityScalePredictionEngine";
 import type { InfinityScaleAdaptiveFeedbackSample } from "./InfinityScaleAdaptiveFeedbackLoop";
 
-export interface InfinityScaleRuntimePredictionFeedback {
+export interface InfinityScaleRuntimePredictionFeedbackResult {
   regionId: string;
   epoch: number;
   observedError: number;
@@ -15,7 +15,7 @@ export class InfinityScaleRuntimePredictionFeedback {
     this.engine = engine;
   }
 
-  observe(sample: InfinityScaleAdaptiveFeedbackSample & { regionId?: string }): InfinityScaleRuntimePredictionFeedback {
+  observe(sample: InfinityScaleAdaptiveFeedbackSample & { regionId?: string }): InfinityScaleRuntimePredictionFeedbackResult {
     const regionId = sample.regionId ?? "global";
     this.engine.observe(regionId, sample.epoch, sample.error);
     const prediction = this.engine.predict(regionId, 1);
