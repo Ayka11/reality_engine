@@ -10,6 +10,26 @@ async function load(path, replacements = []) {
   return import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
 }
 
+const gridMod = await load("src/core/ChunkGrid.ts");
+const { ChunkGrid, CHUNK_FLOATS } = gridMod;
+const restoreGrid = new ChunkGrid();
+const validChunk = new Float32Array(CHUNK_FLOATS).fill(0.25);
+assert.equal(restoreGrid.restoreChunk(0, validChunk), true);
+assert.equal(restoreGrid.chunks.get(0)?.[0], 0.25);
+assert.equal(restoreGrid.dirtyChunks.has(0), true);
+assert.equal(restoreGrid.restoreChunk(-1, validChunk), false);
+assert.equal(restoreGrid.restoreChunk(2048, validChunk), false);
+assert.equal(restoreGrid.restoreChunk(1, [1, 2]), false);
+const invalidChunk = new Float32Array(CHUNK_FLOATS).fill(0.5);
+invalidChunk[12] = Number.NaN;
+assert.equal(restoreGrid.restoreChunk(1, invalidChunk), false);
+assert.equal(restoreGrid.chunks.has(1), false);
+const workerSource = await readFile(new URL("src/core/ChunkSimWorker.ts", root), "utf8");
+assert.ok(workerSource.includes("cmd === 'restoreBegin'"), "worker restore begin command missing");
+assert.ok(workerSource.includes("cmd === 'restoreChunkAck'") === false, "worker must emit ACKs, not consume its own ACK command");
+assert.ok(workerSource.includes("cmd: 'restoreChunkAck'"), "worker restore ACK emission missing");
+assert.ok(workerSource.includes("Roll back every chunk already replaced"), "partial restore rollback missing");
+
 const view = await load("src/infinity/WorldViewContract.ts");
 const { WorldViewContract } = view;
 const contract = new WorldViewContract();
@@ -19,6 +39,27 @@ const world = contract.sliceToWorld(50, 50, 100, 100);
 const pixel = contract.worldToSlice(world.x, world.z, 100, 100);
 assert.ok(Math.abs(pixel.x - 50) < 1e-9);
 assert.ok(Math.abs(pixel.y - 50) < 1e-9);
+
+const gridConstants = await load("src/core/ChunkGrid.ts");
+const { F, NF, chunkKey } = gridConstants;
+const workerProviderMod = await load("src/infinity/WorkerWorldFieldChunkProvider.ts", [[
+  /import \{ F, CHUNK_FLOATS, CX, CY, GRID_D, GRID_H, GRID_W, NF \} from '\.\.\/core\/ChunkGrid';?/,
+  "const F = { E: 0, D: 1, I: 2, S: 3, T: 4, BIO: 10, MAT: 11 }; const CHUNK_FLOATS = 7168; const CX = 8; const CY = 8; const GRID_D = 64; const GRID_H = 128; const GRID_W = 128; const NF = 14;"
+]]);
+const { WorkerWorldFieldChunkProvider } = workerProviderMod;
+const defaultView = {
+  version: 1, center: { x: 0, y: 0, z: 0 }, visibleRadius: 128,
+  sliceY: 0, simulationTime: 0, seed: "reality-engine-infinity-v1", renderMode: "3d",
+};
+const workerKey = chunkKey(8, 8, 3); // world (0,0,0) maps to worker x=64, z=29, y=64
+const workerChunk = new Float32Array(CHUNK_FLOATS);
+workerChunk[(5 * 64 + 0 * 8 + 0) * NF + F.E] = 123;
+const workerProvider = new WorkerWorldFieldChunkProvider(
+  { cx: 0, cy: 0, cz: 0 }, new Map([[workerKey, workerChunk]]), () => defaultView,
+  { sample: () => ({ energy: 0, density: 0, information: 0, entropy: 0, temperature: 0, biology: 0, material: 0 }) }
+);
+assert.equal(workerProvider.sample(0, 0, 0).energy, 123);
+assert.equal(workerProvider.snapshotWorkerChunks().some(chunk => chunk.key === workerKey), true);
 
 const storeMod = await load("src/infinity/WorldFieldChunkStore.ts");
 const { WorldFieldChunkStore, worldFieldChunkCoord } = storeMod;

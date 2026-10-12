@@ -293,6 +293,43 @@ try {
   }
 
 
+  // Seed a real worker chunk and persist its snapshot before a full page reload.
+  // The later restore assertion intentionally uses a fresh JS runtime/empty memory Map.
+  await page.waitForFunction(() =>
+    typeof window.snapshotWorldFieldChunkPersistence === "function" &&
+    typeof window.restoreWorldFieldChunkSnapshot === "function" &&
+    typeof window.worldFieldRestoreState === "function" &&
+    typeof window.flushWorldFieldChunkPersistence === "function"
+  );
+  const durableRestoreFixture = await page.evaluate(async () => {
+    window.paintChunkAt?.(64, 29, 64, 0, 0.5, 1, "set");
+    let workerReady = false;
+    for (let attempt = 0; attempt < 80; attempt++) {
+      window.tickChunkWorker?.(true, 1);
+      if (Number(window.worldFieldWorkerChunkStats?.() ?? 0) > 0) { workerReady = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    if (!workerReady) return { error: "worker fixture never became dirty" };
+    const view = window.getWorldViewContract?.();
+    if (!view) return { error: "world view contract unavailable" };
+    const coord = window.worldFieldChunkCoord?.(view.center.x, view.sliceY, view.center.z);
+    if (!coord) return { error: "world chunk coordinate unavailable" };
+    const snapshot = window.snapshotWorldFieldChunkPersistence?.(coord.cx, coord.cy, coord.cz);
+    const durable = await window.flushWorldFieldChunkPersistence?.();
+    if (!snapshot || snapshot.schemaVersion !== 2 || !snapshot.workerChunks?.length) {
+      return { error: "valid worker snapshot was not produced", coord, schemaVersion: snapshot?.schemaVersion };
+    }
+    sessionStorage.setItem("reality-engine-worker-restore-fixture", JSON.stringify({
+      coord, checksum: snapshot.checksum, workerView: snapshot.workerView,
+      expectedKeys: snapshot.workerChunks.map((chunk) => chunk.key),
+    }));
+    return { coord, checksum: snapshot.checksum, expected: snapshot.workerChunks.length, durable };
+  });
+  if (durableRestoreFixture.error || !durableRestoreFixture.durable?.durable ||
+      durableRestoreFixture.durable.pending || !durableRestoreFixture.expected) {
+    throw new Error(`World field snapshot was not durably committed before reload: ${JSON.stringify(durableRestoreFixture)}`);
+  }
+
   // Frontend parity regression: the visible Scientific Field tab must mutate the same
   // authoritative provider used by the direct runtime API.
   await page.evaluate(() => {
@@ -644,6 +681,66 @@ try {
   const reloadedSculptState = await page.evaluate(() => window.infiniteWorld?.authoritativeField?.serialize());
   if (JSON.stringify(reloadedSculptState) !== JSON.stringify(persistedSculptState)) {
     throw new Error("Mixed authoritative sculpt persistence did not survive a page reload");
+  }
+
+  // Restore the worker snapshot from IndexedDB after reload and prove the ACK/frame
+  // barrier completes without publishing partial state during an LRU eviction.
+  await page.waitForFunction(() =>
+    typeof window.restoreWorldFieldChunkSnapshot === "function" &&
+    typeof window.worldFieldRestoreState === "function" &&
+    typeof window.worldFieldChunkStoreState === "function"
+  );
+  const restoreDispatch = await page.evaluate(async () => {
+    const raw = sessionStorage.getItem("reality-engine-worker-restore-fixture");
+    if (!raw) return { started: false, error: "durable restore fixture metadata missing" };
+    const fixture = JSON.parse(raw);
+    const { cx, cy, cz } = fixture.coord;
+    const targetKey = `${cx},${cy},${cz}`;
+    window.populateWorldFieldChunk?.(cx, cy, cz);
+    for (const key of window.worldFieldChunkStoreState?.().keys ?? []) {
+      if (key === targetKey) continue;
+      const [x, y, z] = key.split(",").map(Number);
+      window.evictWorldFieldChunk?.(x, y, z);
+    }
+    for (let i = 0; i < 127; i++) window.populateWorldFieldChunk?.(1000 + i, 0, 0);
+    const before = window.worldFieldChunkStoreState?.();
+    if (!before?.keys?.includes(targetKey) || before.loaded !== before.capacity) {
+      return { started: false, error: "could not establish deterministic LRU fixture", before };
+    }
+    const started = await window.restoreWorldFieldChunkSnapshot?.(cx, cy, cz);
+    if (!started) return { started: false, error: "durable snapshot failed to load or validate" };
+    // The restore target is oldest; force its eviction while the worker barrier is active.
+    window.populateWorldFieldChunk?.(2000, 0, 0);
+    const after = window.worldFieldChunkStoreState?.();
+    return { started, targetRetained: after?.keys?.includes(targetKey) ?? true, fixture };
+  });
+  if (!restoreDispatch.started) {
+    throw new Error(`Durable worker restore could not start after reload: ${JSON.stringify(restoreDispatch)}`);
+  }
+  if (restoreDispatch.targetRetained) {
+    throw new Error("LRU stress did not evict the active worker restore target");
+  }
+  await page.waitForFunction(() => {
+    const state = window.worldFieldRestoreState?.();
+    return state?.workerBarrierComplete === true || state?.unexpectedAcks > 0;
+  }, undefined, { timeout: acceptanceTimeout });
+  const restoreBarrier = await page.evaluate(() => window.worldFieldRestoreState?.());
+  const expectedFixtureKeys = [...(restoreDispatch.fixture?.expectedKeys ?? [])].sort((a, b) => a - b);
+  if (JSON.stringify([...restoreBarrier.expectedKeys].sort((a, b) => a - b)) !== JSON.stringify(expectedFixtureKeys)) {
+    throw new Error("Restored worker chunk keys do not match the durable pre-reload snapshot");
+  }
+  if (!restoreBarrier?.complete ||
+      restoreBarrier.acknowledged !== restoreBarrier.expected ||
+      restoreBarrier.duplicateAcks !== 0 ||
+      restoreBarrier.unexpectedAcks !== 0 ||
+      restoreBarrier.unexpectedFrames !== 0 ||
+      JSON.stringify([...restoreBarrier.expectedKeys].sort((a, b) => a - b)) !==
+        JSON.stringify([...restoreBarrier.restoreFrameKeys].sort((a, b) => a - b))) {
+    throw new Error(`Worker restore ACK/frame barrier failed after reload: ${JSON.stringify(restoreBarrier)}`);
+  }
+  const durableAfterReload = await page.evaluate(() => window.flushWorldFieldChunkPersistence?.());
+  if (!durableAfterReload?.durable || durableAfterReload.pending) {
+    throw new Error(`World field persistence was not durable after restore: ${JSON.stringify(durableAfterReload)}`);
   }
 
   // Exercise actual pointerdown -> pointermove* -> pointerup, not only the helper.
