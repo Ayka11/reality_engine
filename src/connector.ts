@@ -34,6 +34,10 @@ import { RealityLawBridge }                       from './laws/RealityLawBridge'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
 const win = window as unknown as Record<string, unknown>
+const clearUiSculptHistory = () => {
+  const clear = win['clearSculptTransactionHistory']
+  if (typeof clear === 'function') (clear as () => void)()
+}
 
 // ── Chunk system — Three.js PBR renderer + 128×128×64 sparse worker ─────────
 
@@ -94,9 +98,41 @@ requestAnimationFrame(() => {
   try { const sync = win['syncRealityLaws'] as (() => unknown) | undefined; if (sync) sync() } catch (error) { console.warn('[RealityLawBridge] initial sync failed', error) }
 })
 
+type SculptHistoryAcknowledgement = { action: 'undo' | 'redo'; applied: boolean; seq: number }
+const pendingSculptHistory = new Map<number, {
+  resolve: (acknowledgement: SculptHistoryAcknowledgement) => void
+  reject: (error: Error) => void
+  timer: number
+}>()
+let nextSculptHistoryRequestId = 0
+function requestChunkSculptHistory(action: 'undo' | 'redo'): Promise<SculptHistoryAcknowledgement> {
+  const requestId = ++nextSculptHistoryRequestId
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      pendingSculptHistory.delete(requestId)
+      reject(new Error(`Sparse worker sculpt ${action} acknowledgement timed out`))
+    }, 5000)
+    pendingSculptHistory.set(requestId, { resolve, reject, timer })
+    chunkWorker.postMessage({ cmd: action === 'undo' ? 'undoSculpt' : 'redoSculpt', requestId })
+  })
+}
+
 chunkWorker.onmessage = (e: MessageEvent) => {
   const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data
   workerBusy = false
+
+  if (cmd === 'sculptHistoryApplied') {
+    const previous = (win['lastChunkSculptHistory'] as { seq?: number } | undefined)?.seq ?? 0
+    const acknowledgement = { action: e.data.action, applied: e.data.applied, seq: previous + 1 }
+    win['lastChunkSculptHistory'] = acknowledgement
+    const pending = pendingSculptHistory.get(e.data.requestId)
+    if (pending) {
+      window.clearTimeout(pending.timer)
+      pendingSculptHistory.delete(e.data.requestId)
+      pending.resolve(acknowledgement)
+    }
+    return
+  }
 
   if (cmd === 'brushApplied') {
     win['lastChunkBrush'] = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius }
@@ -172,11 +208,13 @@ nodeEditor.onSelect  = (node) => {
 }
 win['chunkWorkerCompile'] = chunkWorkerCompile
 win['nodeLawEditor']      = nodeEditor
-win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4, strength = 1) => {
-  chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength } })
+win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4, strength = 1, trackHistory = false) => {
+  if (!trackHistory) clearUiSculptHistory()
+  chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength, trackHistory } })
 }
 
 win['applyChunkPreset']   = (name: string) => {
+  clearUiSculptHistory()
   chunkWorker.postMessage({ cmd: 'preset', data: { name } })
   if (name === 'town') {
     DIFF_cw = 0.12; ENT_cw = 0.00015; INFO_cw = 0.45; BIO_cw = 0.32
@@ -245,12 +283,17 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
   const h = parent.clientHeight
   getInfiniteWorld()?.resize(Math.max(1, w), Math.max(1, h))
 }
-win['paintChunkAt'] = (x: number, y: number, z: number, f: number, v: number, r: number, mode?: string) => {
-  chunkWorker.postMessage({ cmd: 'paint', data: { x, y, z, f, v, r, mode: mode ?? 'add' } })
+win['paintChunkAt'] = (x: number, y: number, z: number, f: number, v: number, r: number, mode?: string, trackHistory = false) => {
+  if (!trackHistory) clearUiSculptHistory()
+  chunkWorker.postMessage({ cmd: 'paint', data: { x, y, z, f, v, r, mode: mode ?? 'add', trackHistory } })
 }
+win['undoChunkSculpt'] = () => requestChunkSculptHistory('undo')
+win['redoChunkSculpt'] = () => requestChunkSculptHistory('redo')
+win['clearChunkSculptHistory'] = () => chunkWorker.postMessage({ cmd: 'clearSculptHistory' })
 
 // Scene Composer APIs
 sceneComposer.setOnApply((cmds) => {
+  clearUiSculptHistory()
   for (const cmd of cmds) {
     chunkWorker.postMessage({ cmd: 'paint', data: cmd })
   }

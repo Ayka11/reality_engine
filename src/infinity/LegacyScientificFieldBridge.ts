@@ -90,6 +90,45 @@ export function sculptInjectToMutation(
   )
 }
 
+/**
+ * Converts the legacy Paint tool into a replacement operation on the authoritative
+ * field. Unlike Inject, Paint approaches the requested value using the same radial
+ * weight contract as the legacy brush footprint.
+ */
+export function sculptPaintToMutation(
+  cell: LegacyVoxelCoordinate,
+  radius: number,
+  strength: number,
+  fields: Partial<{ energy: number; density: number; temperature: number; bio: number; information: number; entropy: number }>,
+  metadata: Record<string, unknown> = {},
+): WorldFieldMutation {
+  const p = legacyToWorldCoordinate(cell)
+  const target: Partial<ScientificFieldSample> = {
+    ...(fields.energy === undefined ? {} : { energy: Math.max(0, Math.min(9999, strength * 400) / 100 * fields.energy) }),
+    ...(fields.density === undefined ? {} : { density: clamp01(strength * 400 * fields.density) }),
+    ...(fields.information === undefined ? {} : { information: Math.max(0, Math.min(999, strength * 400) / 10 * fields.information) }),
+    ...(fields.entropy === undefined ? {} : { entropy: clamp01(strength * 400 * fields.entropy) }),
+    ...(fields.temperature === undefined ? {} : { temperature: Math.max(0, Math.min(2000, strength * 400) / 10 * fields.temperature) }),
+    ...(fields.bio === undefined ? {} : { biology: clamp01(strength * 400 * fields.bio) }),
+  }
+  const operations: NonNullable<WorldFieldMutation['operations']> = {}
+  for (const field of Object.keys(target) as (keyof ScientificFieldSample)[]) {
+    const value = target[field]
+    if (value !== undefined) operations[field] = { mode: 'set', value, weighting: 'radial' }
+  }
+  return {
+    id: 0, kind: 'brush', x: p.x, y: p.y, z: p.z, radius, operations,
+    metadata: {
+      ...metadata,
+      source: metadata.source ?? 'legacy-sculpt-paint',
+      brush: 'Paint',
+      strength,
+      coordinateContract: 'legacy-grid-x-y-z-to-world-x-z-y-v1',
+      unsupportedFields: ['materialId', 'signal', 'memField'],
+    },
+  }
+}
+
 export function sculptErodeToMutation(
   cell: LegacyVoxelCoordinate,
   radius: number,

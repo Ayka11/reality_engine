@@ -45,8 +45,16 @@ export class BrushEngine {
     const before = this.grid.buffer.slice();
     const chunks = this.getAffectedChunks(stroke);
     stroke.affectedChunks = chunks.map(chunk => this.grid.getChunkKey(chunk.cx, chunk.cy, chunk.cz));
-    apply();
-    const after = this.grid.buffer.slice();
+    let after: Float32Array;
+    try {
+      apply();
+      after = this.grid.buffer.slice();
+    } catch (error) {
+      this.grid.buffer.set(before);
+      this.grid.syncDenseToChunks();
+      this.grid.markChunksDirty(stroke.affectedChunks);
+      throw error;
+    }
     this.grid.syncDenseToChunks();
     this.grid.markChunksDirty(stroke.affectedChunks);
     this.history.push({
@@ -75,20 +83,26 @@ export class BrushEngine {
     const minZ = Math.floor(cz - radius);
     const maxZ = Math.ceil(cz + radius);
 
-    for (let z = minZ; z <= maxZ; z++)
-    for (let y = minY; y <= maxY; y++)
-    for (let x = minX; x <= maxX; x++) {
-      if (!this.grid.inBounds(x, y, z)) continue;
-      const dx = x - cx, dy = y - cy, dz = z - cz;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (dist > radius) continue;
-      const offset = this.grid.idx(x, y, z);
-      const before = this.grid.buffer.slice(offset, offset + CELL_FIELDS);
-      const weight = falloffWeight(stroke.falloff, 1 - dist / radius);
-      tool.apply({ grid: this.grid, stroke, x, y, z, distance: dist, weight });
-      const after = this.grid.buffer.slice(offset, offset + CELL_FIELDS);
-      if (!edits.has(offset)) edits.set(offset, { before, after });
-      else edits.get(offset)!.after = after;
+    try {
+      for (let z = minZ; z <= maxZ; z++)
+      for (let y = minY; y <= maxY; y++)
+      for (let x = minX; x <= maxX; x++) {
+        if (!this.grid.inBounds(x, y, z)) continue;
+        const dx = x - cx, dy = y - cy, dz = z - cz;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist > radius) continue;
+        const offset = this.grid.idx(x, y, z);
+        const before = this.grid.buffer.slice(offset, offset + CELL_FIELDS);
+        const weight = falloffWeight(stroke.falloff, 1 - dist / radius);
+        edits.set(offset, { before, after: before.slice() });
+        tool.apply({ grid: this.grid, stroke, x, y, z, distance: dist, weight });
+        edits.get(offset)!.after = this.grid.buffer.slice(offset, offset + CELL_FIELDS);
+      }
+    } catch (error) {
+      for (const [offset, edit] of edits) this.grid.buffer.set(edit.before, offset);
+      this.grid.syncDenseToChunks();
+      this.grid.markChunksDirty(stroke.affectedChunks);
+      throw error;
     }
 
     this.grid.syncDenseToChunks();
