@@ -53,7 +53,7 @@ export const DEFAULT_INFINITY_SCALE_RESOLUTION_UTILITY: InfinityScaleResolutionU
   descriptorCostWeight: 0.1,
   memoryCostWeight: 0.001,
   gpuCostWeight: 0.01,
-  minimumUtility: 0.05,
+  minimumUtility: 0.01,
 };
 
 export class InfinityScaleResolutionUtilityEngine {
