@@ -186,6 +186,9 @@ self.onmessage = (e: MessageEvent) => {
     return
   }
 
+  // Do not let simulation or edits interleave with an atomic restore session.
+  if (activeRestoreId !== null && cmd !== 'restoreChunk' && cmd !== 'restoreEnd') return
+
   if (cmd === 'tick') {
     const speed = (data?.speed as number) || 1
     for (let s = 0; s < speed; s++) simStep(0.016)
