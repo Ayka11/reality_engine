@@ -80,6 +80,12 @@ export class InfinityScaleV2 {
     if (this.config.lodLevels < 1 || this.config.amrLevels < 1) {
       throw new Error("lodLevels and amrLevels must be >= 1.");
     }
+    if (!Number.isSafeInteger(this.config.maxSimulatingChunks) || this.config.maxSimulatingChunks < 0) {
+      throw new RangeError("maxSimulatingChunks must be a non-negative safe integer.");
+    }
+    if (!Number.isSafeInteger(this.config.maxResidentChunks) || this.config.maxResidentChunks < 1) {
+      throw new RangeError("maxResidentChunks must be a positive safe integer.");
+    }
   }
 
   setObserver(cell: Vec3i): void {
@@ -117,17 +123,32 @@ export class InfinityScaleV2 {
           ) simulating.add(key);
         }
 
+    // Bound active simulation independently of visibility and residency.
+    // Keep the nearest active candidates deterministic when the configured
+    // simulation budget is smaller than the active-radius envelope.
+    const simulatingWithinBudget = new Set(
+      [...simulating]
+        .map(key => {
+          const [x, y, z] = key.slice(key.indexOf(":") + 1).split(",").map(Number);
+          const dx = x - cx, dy = y - cy, dz = z - cz;
+          return { key, distance: dx * dx + dy * dy + dz * dz };
+        })
+        .sort((a, b) => a.distance - b.distance || a.key.localeCompare(b.key))
+        .slice(0, this.config.maxSimulatingChunks)
+        .map(candidate => candidate.key),
+    );
+
     // Establish semantic priority first: simulation > background > visible.
     // The visible radius can describe more chunks than the hard resident cap,
     // so only the nearest visible candidates are admitted when necessary.
     for (const key of visible) this.states.set(key, "visible");
     for (const key of background) this.states.set(key, "background");
-    for (const key of simulating) this.states.set(key, "simulating");
+    for (const key of simulatingWithinBudget) this.states.set(key, "simulating");
 
     for (const key of [...this.states.keys()]) {
       if (!visible.has(key) && !this.pinned.has(key)) this.states.set(key, "cached");
     }
-    this.enforceResidentBudget(cx, cy, cz, simulating, background, visible);
+    this.enforceResidentBudget(cx, cy, cz, simulatingWithinBudget, background, visible);
   }
 
   touch(k: ChunkKey): void {
