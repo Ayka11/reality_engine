@@ -64,9 +64,9 @@ export class SimulationEngine {
   private readonly infinityScaleLODState: InfinityScaleLODState;
 
   constructor(
-    width = WORLD.W,
-    height = WORLD.H,
-    depth = WORLD.D,
+    width: number = WORLD.W,
+    height: number = WORLD.H,
+    depth: number = WORLD.D,
   ) {
     if (
       !Number.isInteger(width) || width <= 0 ||
