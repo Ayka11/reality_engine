@@ -288,7 +288,11 @@ export class InfinityScaleExecutionAdapter {
               : "prolongation",
       } as const;
 
-      const face = resolveInfinityScaleBoundaryFaceGeometry(spec, 32);
+      // This adapter resolves topology in base-chunk units (the chunk indices
+      // from InfinityScaleFramePlan), not in cell coordinates. The canonical
+      // mapper's chunkSize must therefore be 1 here; execution contexts pass
+      // their real cell chunkSize when mapping cell coordinates.
+      const face = resolveInfinityScaleBoundaryFaceGeometry(spec, 1);
       if (face === null) continue;
 
       coveredFaces.add(faceKey(face.axis, face.coordinate));
