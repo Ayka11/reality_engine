@@ -114,8 +114,8 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     const state = new InfinityScaleLODState(CHUNK);
     const fine = key(0, 2);
     const coarse = key(1, 0);
-    for (let z = 0; z < 2; z++)
-      for (let y = 0; y < 2; y++)
+    for (let z = 2; z < 4; z++)
+      for (let y = 2; y < 4; y++)
         write(state, fine, 0, 8, y, z, 7);
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
