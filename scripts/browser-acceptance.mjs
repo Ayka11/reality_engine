@@ -535,10 +535,44 @@ try {
     await runtime.redo();
     const gestureRedoLegacy = fingerprint(legacyBuffer());
     const gestureRedoState = world.authoritativeField.serialize();
+
+    // Hold the first worker ACK to simulate a rapid double-click. A second history
+    // operation and a concurrent sculpt mutation must not race the pending transaction.
+    const historyBusyBefore = runtime.history();
+    const originalUndoChunkSculpt = window.undoChunkSculpt;
+    let releaseDelayedUndo = null, delayFirstUndoAck = true;
+    window.undoChunkSculpt = () => {
+      if (!delayFirstUndoAck) return originalUndoChunkSculpt();
+      delayFirstUndoAck = false;
+      return new Promise((resolve, reject) => {
+        releaseDelayedUndo = () => originalUndoChunkSculpt().then(resolve, reject);
+      });
+    };
+    const firstHistoryOperation = runtime.undo();
+    await new Promise(resolve => setTimeout(resolve, 25));
+    const secondHistoryResult = await runtime.undo();
+    const concurrentMutationRejected = await runtime.applyStroke(
+      "inject", { x: 20, y: 8, z: 0 }, 1, 0.25, { energy: 1 }
+    ).then(() => false, () => true);
+    let firstHistoryResult;
+    try {
+      if (releaseDelayedUndo) releaseDelayedUndo();
+      firstHistoryResult = await firstHistoryOperation;
+    } finally {
+      window.undoChunkSculpt = originalUndoChunkSculpt;
+    }
+    const historyBusyAfter = runtime.history();
+    const historyBusy = {
+      secondOperationBlocked: secondHistoryResult === null,
+      concurrentMutationRejected,
+      oneRecordConsumed: historyBusyBefore.undo - historyBusyAfter.undo === 1,
+      firstOperationCompleted: typeof firstHistoryResult === "string",
+    };
     return { baselineState, afterSmartState, afterOrdinaryState, undoOneState, undoTwoState, redoOneState, redoTwoState,
       baselineSample, afterSmartSample, afterOrdinarySample, smartMutation, baselineCount, afterSmartCount, afterOrdinaryCount,
       history: mixedHistoryAfterRedo, legacyParity: { undoOne: undoOneLegacy === afterSmartLegacy, undoTwo: undoTwoLegacy === baselineLegacy,
         redoOne: redoOneLegacy === afterSmartLegacy, redoTwo: redoTwoLegacy === afterOrdinaryLegacy },
+      historyBusy,
       gesture: { workerAckStart, baselineLegacy: gestureBaselineLegacy, baselineState: gestureBaselineState,
         afterLegacy: gestureAfterLegacy, afterState: gestureAfterState, undoLegacy: gestureUndoLegacy, undoState: gestureUndoState,
         redoLegacy: gestureRedoLegacy, redoState: gestureRedoState, historyBefore: gestureHistoryBefore,
@@ -577,6 +611,12 @@ try {
   }
   if (sculptContract.history?.undo !== 2 || sculptContract.history?.redo !== 0) {
     throw new Error(`Mixed sculpt history lengths are incorrect after redo x2: ${JSON.stringify(sculptContract.history)}`);
+  }
+  if (!sculptContract.historyBusy?.secondOperationBlocked ||
+      !sculptContract.historyBusy?.concurrentMutationRejected ||
+      !sculptContract.historyBusy?.oneRecordConsumed ||
+      !sculptContract.historyBusy?.firstOperationCompleted) {
+    throw new Error(`Concurrent sculpt history was not serialized safely: ${JSON.stringify(sculptContract.historyBusy)}`);
   }
   const gesture = sculptContract.gesture;
   if (gesture.historyAfterCommit?.undo !== gesture.historyBefore + 1 || gesture.historyAfterCommit?.redo !== 0) {
