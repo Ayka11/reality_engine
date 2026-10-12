@@ -45,7 +45,7 @@ export class InfinityScaleLODSynchronization {
   stageTransfer(
     spec: InfinityScaleBoundaryTransferSpec,
     targetCell: [number, number, number],
-    sourceCells: ReadonlyArray<ReadonlyArray<number>>,
+    sourceCells: ReadonlyArray<ArrayLike<number>>,
   ): void {
     InfinityScaleLODTransfer.validateSpec(spec);
 
