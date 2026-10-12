@@ -32,18 +32,31 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
   const target = rangeForChunk(spec.targetChunk, chunkSize);
   const source = rangeForChunk(spec.sourceChunk, chunkSize);
   const scale = 2 ** spec.targetLevel;
-  const x0 = Math.max(target.minX, source.minX);
-  const x1 = Math.min(target.maxX, source.maxX);
-  const y0 = Math.max(target.minY, source.minY);
-  const y1 = Math.min(target.maxY, source.maxY);
-  const z0 = Math.max(target.minZ, source.minZ);
-  const z1 = Math.min(target.maxZ, source.maxZ);
-  if (target.maxX + 1 === source.minX && y0 <= y1 && z0 <= z1) return { axis: 0, coordinate: target.maxX, minU: y0, maxU: y1, minV: z0, maxV: z1, scale };
-  if (source.maxX + 1 === target.minX && y0 <= y1 && z0 <= z1) return { axis: 0, coordinate: target.minX, minU: y0, maxU: y1, minV: z0, maxV: z1, scale };
-  if (target.maxY + 1 === source.minY && x0 <= x1 && z0 <= z1) return { axis: 1, coordinate: target.maxY, minU: x0, maxU: x1, minV: z0, maxV: z1, scale };
-  if (source.maxY + 1 === target.minY && x0 <= x1 && z0 <= z1) return { axis: 1, coordinate: target.minY, minU: x0, maxU: x1, minV: z0, maxV: z1, scale };
-  if (target.maxZ + 1 === source.minZ && x0 <= x1 && y0 <= y1) return { axis: 2, coordinate: target.maxZ, minU: x0, maxU: x1, minV: y0, maxV: y1, scale };
-  if (source.maxZ + 1 === target.minZ && x0 <= x1 && y0 <= y1) return { axis: 2, coordinate: target.minZ, minU: x0, maxU: x1, minV: y0, maxV: y1, scale };
+
+  // Chunk-key coordinates are expressed in chunk units at each LOD. A fine
+  // chunk may sit next to a coarse chunk whose edge is several fine chunks away.
+  // Derive the interface from the ranges, not from exact one-cell adjacency.
+  const xOverlap = Math.max(target.minX, source.minX) <= Math.min(target.maxX, source.maxX);
+  const yOverlap = Math.max(target.minY, source.minY) <= Math.min(target.maxY, source.maxY);
+  const zOverlap = Math.max(target.minZ, source.minZ) <= Math.min(target.maxZ, source.maxZ);
+  if (target.maxX < source.minX && yOverlap && zOverlap) {
+    return { axis: 0, coordinate: target.maxX, minU: Math.max(target.minY, source.minY), maxU: Math.min(target.maxY, source.maxY), minV: Math.max(target.minZ, source.minZ), maxV: Math.min(target.maxZ, source.maxZ), scale };
+  }
+  if (source.maxX < target.minX && yOverlap && zOverlap) {
+    return { axis: 0, coordinate: target.minX, minU: Math.max(target.minY, source.minY), maxU: Math.min(target.maxY, source.maxY), minV: Math.max(target.minZ, source.minZ), maxV: Math.min(target.maxZ, source.maxZ), scale };
+  }
+  if (target.maxY < source.minY && xOverlap && zOverlap) {
+    return { axis: 1, coordinate: target.maxY, minU: Math.max(target.minX, source.minX), maxU: Math.min(target.maxX, source.maxX), minV: Math.max(target.minZ, source.minZ), maxV: Math.min(target.maxZ, source.maxZ), scale };
+  }
+  if (source.maxY < target.minY && xOverlap && zOverlap) {
+    return { axis: 1, coordinate: target.minY, minU: Math.max(target.minX, source.minX), maxU: Math.min(target.maxX, source.maxX), minV: Math.max(target.minZ, source.minZ), maxV: Math.min(target.maxZ, source.maxZ), scale };
+  }
+  if (target.maxZ < source.minZ && xOverlap && yOverlap) {
+    return { axis: 2, coordinate: target.maxZ, minU: Math.max(target.minX, source.minX), maxU: Math.min(target.maxX, source.maxX), minV: Math.max(target.minY, source.minY), maxV: Math.min(target.maxY, source.maxY), scale };
+  }
+  if (source.maxZ < target.minZ && xOverlap && yOverlap) {
+    return { axis: 2, coordinate: target.minZ, minU: Math.max(target.minX, source.minX), maxU: Math.min(target.maxX, source.maxX), minV: Math.max(target.minY, source.minY), maxV: Math.min(target.maxY, source.maxY), scale };
+  }
   return null;
 }
 
