@@ -22,7 +22,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const grid = new VoxelGrid(12, 8, 8);
   const state = new InfinityScaleLODState(4);
   const coarseKey = "1:0,0,0";
-  const fineKey = "0:8,0,0";
+  const fineKey = "0:2,0,0";
   state.ensureChunk(coarseKey, 1);
   state.ensureChunk(fineKey, 0);
 
