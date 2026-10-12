@@ -3,6 +3,7 @@ import { PhysicsParams } from '../laws/MetaLaw';
 import { MAT_COUNT } from '../materials/MaterialDef';
 import type { InfinityScaleGPUBoundaryTransferDescriptor } from '../infinity/InfinityScaleGPUBoundaryTransferContract';
 import { InfinityScaleGPUBoundaryTransferContract } from '../infinity/InfinityScaleGPUBoundaryTransferContract';
+import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 
 // ─── WGSL compute shader ──────────────────────────────────────────────────────
 const SHADER = /* wgsl */`
