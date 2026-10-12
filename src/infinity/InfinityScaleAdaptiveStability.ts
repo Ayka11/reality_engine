@@ -148,15 +148,22 @@ export class InfinityScaleAdaptiveStability {
         "adaptive region is frozen");
     }
 
-    if (candidate === "KEEP" || !hysteresisPassed) {
+    if (candidate === "KEEP") {
       return this.record(state, epoch, "KEEP", score, hysteresisPassed, residencePassed, cooldownPassed,
         oscillationDetected, criticalOverride, transitionDominated ? "transition disturbance excluded from physical refinement score" : "insufficient persistent evidence");
     }
 
+    // Stability locks take precedence over evidence accumulation for a proposed
+    // mutation. Critical evidence may override both the locks and hysteresis.
     if (!criticalOverride && (!residencePassed || !cooldownPassed || oscillationDetected)) {
       if (oscillationDetected) state.frozenUntilEpoch = epoch + this.config.freezeEpochs;
-      return this.record(state, epoch, "HOLD", score, true, residencePassed, cooldownPassed,
+      return this.record(state, epoch, "HOLD", score, hysteresisPassed, residencePassed, cooldownPassed,
         oscillationDetected, false, oscillationDetected ? "LOD oscillation detected" : "stability constraint active");
+    }
+
+    if (!criticalOverride && !hysteresisPassed) {
+      return this.record(state, epoch, "KEEP", score, false, residencePassed, cooldownPassed,
+        oscillationDetected, false, transitionDominated ? "transition disturbance excluded from physical refinement score" : "insufficient persistent evidence");
     }
 
     const decision = candidate;
