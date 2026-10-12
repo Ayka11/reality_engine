@@ -100,7 +100,6 @@ export class InfoPhysics {
           resonanceSum += nInfo;
           resonanceCount++;
         }
-        }
       }
 
       if (resonanceCount >= 3) {
