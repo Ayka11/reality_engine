@@ -126,10 +126,11 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   }
 
   // Coarse source chunk x=[0..7], fine target neighbor x=[8..11].
+  // Y/Z coordinates 4..7 require the fine chunk at tangential key (1,1).
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 2);
+    const fine = key(0, 2, 1, 1);
     write(state, coarse, 1, 6, 4, 4, 11);
     const s = spec(coarse, fine, "coarse-to-fine", 1, 0);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 2, CHUNK);
