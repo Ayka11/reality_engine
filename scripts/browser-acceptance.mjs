@@ -497,13 +497,13 @@ try {
     const afterOrdinarySample = world.authoritativeField.sample(samplePoint.x, samplePoint.y, samplePoint.z);
     const afterOrdinaryCount = world.authoritativeField.getMutationCount();
     const mixedWorkerAckStart = window.lastChunkSculptHistory?.seq ?? 0;
-    runtime.undo();
+    await runtime.undo();
     const undoOneLegacy = fingerprint(legacyBuffer()), undoOneState = world.authoritativeField.serialize();
-    runtime.undo();
+    await runtime.undo();
     const undoTwoLegacy = fingerprint(legacyBuffer()), undoTwoState = world.authoritativeField.serialize();
-    runtime.redo();
+    await runtime.redo();
     const redoOneLegacy = fingerprint(legacyBuffer()), redoOneState = world.authoritativeField.serialize();
-    runtime.redo();
+    await runtime.redo();
     await new Promise((resolve, reject) => {
       const deadline = Date.now() + 5000;
       const check = () => {
@@ -529,10 +529,10 @@ try {
     const gestureAfterLegacy = fingerprint(legacyBuffer());
     const gestureAfterState = world.authoritativeField.serialize();
     const gestureHistoryAfterCommit = runtime.history();
-    runtime.undo();
+    await runtime.undo();
     const gestureUndoLegacy = fingerprint(legacyBuffer());
     const gestureUndoState = world.authoritativeField.serialize();
-    runtime.redo();
+    await runtime.redo();
     const gestureRedoLegacy = fingerprint(legacyBuffer());
     const gestureRedoState = world.authoritativeField.serialize();
     return { baselineState, afterSmartState, afterOrdinaryState, undoOneState, undoTwoState, redoOneState, redoTwoState,
