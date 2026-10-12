@@ -78,7 +78,15 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
       const spansTouchAtOuterPlane =
         fineMax + 1 === coarseMin || coarseMax + 1 === fineMin;
       if (spansTouchAtOuterPlane) {
-        coordinate = fineMax + 1 === coarseMin ? tMin : tMax;
+        // The geometry coordinate must always belong to the target-side face.
+        // For target=fine / source=coarse, the fine face is its minimum when
+        // the coarse chunk is immediately before it; for target=coarse / source=fine,
+        // the coarse face is its maximum in the mirrored arrangement.
+        if (targetCoarse) {
+          coordinate = fineMax + 1 === coarseMin ? tMin : tMax;
+        } else {
+          coordinate = fineMax + 1 === coarseMin ? tMax : tMin;
+        }
       }
     }
     if (coordinate === null) return;
