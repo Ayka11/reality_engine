@@ -47,10 +47,12 @@ export const DEFAULT_INFINITY_SCALE_RESOLUTION_UTILITY: InfinityScaleResolutionU
   errorWeight: 1,
   goalWeight: 1,
   criticalityWeight: 1,
-  cellCostWeight: 1,
-  descriptorCostWeight: 1,
-  memoryCostWeight: 1,
-  gpuCostWeight: 1,
+  // Cost channels have different units; scale them to comparable utility
+  // magnitudes rather than treating bytes, descriptors and cells as equal.
+  cellCostWeight: 0.01,
+  descriptorCostWeight: 0.1,
+  memoryCostWeight: 0.001,
+  gpuCostWeight: 0.01,
   minimumUtility: 0.05,
 };
 
