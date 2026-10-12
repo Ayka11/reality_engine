@@ -477,6 +477,7 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
 win['worldFieldChunkStoreStats'] = () => worldFieldChunkStore.stats()
 win['worldFieldWorkerChunkStats'] = () => localChunks.size
 win['worldFieldChunkPersistenceStats'] = () => ({ snapshots: worldFieldChunkPersistence.size() })
+win['flushWorldFieldChunkPersistence'] = () => worldFieldChunkPersistence.flushDurableWrites()
 win['worldFieldRestoreState'] = () => ({
   ...worldFieldRestoreState,
   expectedKeys: [...worldFieldRestoreExpectedKeys],
@@ -507,10 +508,11 @@ win['snapshotWorldFieldChunkPersistence'] = (cx: number, cy: number, cz: number,
     : null
 }
 win['validateWorldFieldChunkSnapshot'] = (snapshot: unknown) => worldFieldChunkPersistence.validate(snapshot as any)
-win['restoreWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => {
+win['restoreWorldFieldChunkSnapshot'] = async (cx: number, cy: number, cz: number) => {
   if (worldFieldRestoreActive) return false
-  const snapshot = worldFieldChunkPersistence.loadValid({ cx, cy, cz })
-  if (!snapshot || !((snapshot.schemaVersion === 2 && snapshot.workerChunks?.length) ||
+  const snapshot = await worldFieldChunkPersistence.loadDurable({ cx, cy, cz })
+  if (!snapshot || !worldFieldChunkPersistence.validate(snapshot) ||
+      !((snapshot.schemaVersion === 2 && snapshot.workerChunks?.length) ||
       (snapshot.values.length === CHUNK_FLOATS && snapshot.fieldLayout?.fieldsPerCell === NF))) return false
   const view = worldViewContract.snapshot()
   if (snapshot.schemaVersion === 2 && snapshot.workerView &&
