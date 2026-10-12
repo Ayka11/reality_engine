@@ -196,10 +196,22 @@ function rangeForChunk(key: string, chunkSize: number): ChunkRange {
   return { minX: x, maxX: x + extent - 1, minY: y, maxY: y + extent - 1, minZ: z, maxZ: z + extent - 1 };
 }
 function sharedFaceAxis(a: ChunkRange, b: ChunkRange): 0 | 1 | 2 | null {
-  const ox = a.minX <= b.maxX && a.maxX >= b.minX, oy = a.minY <= b.maxY && a.maxY >= b.minY, oz = a.minZ <= b.maxZ && a.maxZ >= b.minZ;
-  if ((a.maxX + 1 === b.minX || b.maxX + 1 === a.minX) && oy && oz) return 0;
-  if ((a.maxY + 1 === b.minY || b.maxY + 1 === a.minY) && ox && oz) return 1;
-  if ((a.maxZ + 1 === b.minZ || b.maxZ + 1 === a.minZ) && ox && oy) return 2;
+  const overlapsX = a.minX <= b.maxX && a.maxX >= b.minX;
+  const overlapsY = a.minY <= b.maxY && a.maxY >= b.minY;
+  const overlapsZ = a.minZ <= b.maxZ && a.maxZ >= b.minZ;
+  // At mixed LOD, coarse/fine chunk ranges can overlap along the normal axis
+  // in base-cell coordinates while their boundary planes differ. Prefer the
+  // axis with the smallest gap and require positive tangential overlap.
+  const gapX = a.maxX < b.minX ? b.minX - a.maxX : b.maxX < a.minX ? a.minX - b.maxX : 0;
+  const gapY = a.maxY < b.minY ? b.minY - a.maxY : b.maxY < a.minY ? a.minY - b.maxY : 0;
+  const gapZ = a.maxZ < b.minZ ? b.minZ - a.maxZ : b.maxZ < a.minZ ? a.minZ - b.maxZ : 0;
+  if (gapX > 0 && overlapsY && overlapsZ) return 0;
+  if (gapY > 0 && overlapsX && overlapsZ) return 1;
+  if (gapZ > 0 && overlapsX && overlapsY) return 2;
+  // Exact edge-adjacent chunks (including same LOD) share an interface.
+  if ((a.maxX + 1 === b.minX || b.maxX + 1 === a.minX) && overlapsY && overlapsZ) return 0;
+  if ((a.maxY + 1 === b.minY || b.maxY + 1 === a.minY) && overlapsX && overlapsZ) return 1;
+  if ((a.maxZ + 1 === b.minZ || b.maxZ + 1 === a.minZ) && overlapsX && overlapsY) return 2;
   return null;
 }
 function floorToScale(value: number, scale: number): number { return Math.floor(value / scale) * scale; }
