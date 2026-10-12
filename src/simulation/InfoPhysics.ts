@@ -96,9 +96,10 @@ export class InfoPhysics {
             }
           }
         }
-        if (Math.abs(nInfo - info) < info * 0.3)
+        if (Math.abs(nInfo - info) < info * 0.3) {
           resonanceSum += nInfo;
           resonanceCount++;
+        }
         }
       }
 
