@@ -55,7 +55,16 @@ export class InfinityScaleClosedLoopAdaptiveController {
       ...input,
       error: transitionAdjustedError,
     });
-    return { ...recommendation, feedbackPrediction, transitionAdjustedError, transitionPenalty: penalty };
+    const causalPredictiveError = input.causalAttribution?.predictiveError ?? feedbackPrediction.prediction.predictedError;
+    const causalAttributionHash = input.causalAttribution?.deterministicHash;
+    return {
+      ...recommendation,
+      feedbackPrediction,
+      transitionAdjustedError,
+      transitionPenalty: penalty,
+      causalPredictiveError,
+      causalAttributionHash,
+    };
   }
 
   observePostCommit(input: InfinityScaleClosedLoopPostCommitInput): void {
