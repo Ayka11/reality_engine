@@ -84,19 +84,18 @@ export function isInfinityScaleSourceBoundaryCell(
   const face = resolveInfinityScaleBoundaryFaceGeometry(spec, chunkSize);
   if (!face) return false;
 
-  const source = rangeForChunk(spec.sourceChunk, chunkSize);
   const [x, y, z] = targetCell;
 
+  // Callers pass the target simulation-cell coordinate. The canonical face
+  // coordinate is already expressed on that target side; comparing against
+  // the source chunk's outer cell incorrectly rejects valid mixed-LOD reads.
   if (face.axis === 0) {
-    const sourceCoordinate = source.maxX < face.coordinate ? source.maxX : source.minX;
-    return x === sourceCoordinate && y >= face.minU && y <= face.maxU && z >= face.minV && z <= face.maxV;
+    return x === face.coordinate && y >= face.minU && y <= face.maxU && z >= face.minV && z <= face.maxV;
   }
   if (face.axis === 1) {
-    const sourceCoordinate = source.maxY < face.coordinate ? source.maxY : source.minY;
-    return y === sourceCoordinate && x >= face.minU && x <= face.maxU && z >= face.minV && z <= face.maxV;
+    return y === face.coordinate && x >= face.minU && x <= face.maxU && z >= face.minV && z <= face.maxV;
   }
-  const sourceCoordinate = source.maxZ < face.coordinate ? source.maxZ : source.minZ;
-  return z === sourceCoordinate && x >= face.minU && x <= face.maxU && y >= face.minV && y <= face.maxV;
+  return z === face.coordinate && x >= face.minU && x <= face.maxU && y >= face.minV && y <= face.maxV;
 }
 
 /** Backward-compatible alias; new solver code should use the explicit source-side name. */
