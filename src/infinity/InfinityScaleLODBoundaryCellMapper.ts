@@ -68,9 +68,11 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
         Math.min(targetUmax, sourceUmax) - Math.max(targetUmin, sourceUmin) + 1 < tangentialMinimumSpan ||
         Math.min(targetVmax, sourceVmax) - Math.max(targetVmin, sourceVmin) + 1 < tangentialMinimumSpan) return null;
     let coordinate: number | null = null;
-    if (targetMax + 1 === sourceMin) coordinate = targetMax;
-    else if (sourceMax + 1 === targetMin) coordinate = targetMin;
-    else if (targetLevel !== sourceLevel) {
+    if (targetMax + 1 === sourceMin) {
+      coordinate = targetMax;
+    } else if (sourceMax + 1 === targetMin) {
+      coordinate = targetMin;
+    } else if (targetLevel !== sourceLevel) {
       const coarseLevel = Math.max(targetLevel, sourceLevel);
       const coarseExtent = chunkSize * (2 ** coarseLevel);
       const targetIsCoarse = targetLevel > sourceLevel;
@@ -79,14 +81,21 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
       const fineMin = targetIsCoarse ? sourceMin : targetMin;
       const fineMax = targetIsCoarse ? sourceMax : targetMax;
       const coarseKey = targetIsCoarse ? targetKey : sourceKey;
-      // The fine range must occupy the coarse chunk's exterior slice on
-      // this axis; merely touching at an edge in a tangential dimension
-      // is not enough.
+      const fineKey = targetIsCoarse ? sourceKey : targetKey;
+      const coarseIndex = coarseKey;
+      const fineIndex = fineKey;
+      const coarseCellSpan = 2 ** coarseLevel;
+      const fineCellSpan = 2 ** Math.min(targetLevel, sourceLevel);
+      const indexGap = Math.abs(fineIndex * fineCellSpan - coarseIndex * coarseCellSpan);
       const alignedOuterFace =
         (fineMin === coarseMin && fineMax < coarseMax) ||
         (fineMax === coarseMax && fineMin > coarseMin);
       const keysConsistent = coarseKey * coarseExtent === coarseMin;
-      if (alignedOuterFace && keysConsistent) {
+      // Along the normal axis, indices must represent the same outer
+      // interface; do not infer adjacency from bounding-box overlap alone.
+      const keyFaceAdjacent = indexGap <= coarseCellSpan &&
+        (fineIndex <= coarseIndex || fineIndex >= coarseIndex);
+      if (alignedOuterFace && keysConsistent && keyFaceAdjacent) {
         coordinate = fineMin === coarseMin ? targetMin : targetMax;
       }
     }
