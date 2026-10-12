@@ -138,6 +138,7 @@ export class InfinityScaleExecutionAdapter {
 
     const geometry = new InfinityScaleChunkExecutionContext(
       {
+        ...this.plan,
         revision: frame.revision,
         mode: "selective-cpu-ready",
         observer: frame.observer,
