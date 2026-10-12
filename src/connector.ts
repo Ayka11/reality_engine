@@ -525,8 +525,9 @@ win['restoreWorldFieldChunkSnapshot'] = async (cx: number, cy: number, cz: numbe
   const wx = Math.round(originX - view.center.x + GRID_W / 2)
   const wy = Math.round(originY - view.center.y + GRID_D * 0.45)
   const wz = Math.round(originZ - view.center.z + GRID_H / 2)
-  if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_H || wz < 0 || wz >= GRID_D) return false
-  const key = chunkKey(wx >> 3, wy >> 3, wz >> 3)
+  // World Y maps to worker Z/depth; world Z maps to worker Y.
+  if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_D || wz < 0 || wz >= GRID_H) return false
+  const key = chunkKey(wx >> 3, wz >> 3, wy >> 3)
   const restoreId = ++worldFieldRestoreId
   const restoreChunks = snapshot.schemaVersion === 2 && snapshot.workerChunks?.length
     ? snapshot.workerChunks.map(chunk => ({ key: chunk.key, data: new Float32Array(chunk.data) }))
