@@ -120,6 +120,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     energy: agent.energy,
   }]);
 
+  frame.phase = "boundary-reconciliation";
   const validation = validateInfinityScaleUnifiedTransaction(transaction, frame);
   if (!validation.readyToCommit) {
     throw new Error(
@@ -127,7 +128,6 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     );
   }
 
-  frame.phase = "boundary-reconciliation";
   commitInfinityScaleUnifiedTransaction(transaction, frame);
 
   const moved = agents.getAgents().find(candidate => candidate.id === agentId);
