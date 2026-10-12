@@ -10,7 +10,7 @@ export function runInfinityScalePostCommitObservationRegression(): void {
     stateRevision: 3,
     topologyRevision: 2,
     lodByRegion: { a: 2, b: 1 },
-  } as InfinityScaleAdaptiveRuntimeResult;
+  } as unknown as InfinityScaleAdaptiveRuntimeResult;
 
   const first = observeInfinityScalePostCommitRuntime(feedback, {
     epoch: 4, errorBefore: 0.8, errorAfter: 0.35, runtime,
@@ -20,7 +20,7 @@ export function runInfinityScalePostCommitObservationRegression(): void {
   if (first.observationHash.length !== 8) throw new Error("Post-commit observation hash is invalid");
 
   const second = observeInfinityScalePostCommitRuntime(feedback, {
-    epoch: 5, errorBefore: 0.35, errorAfter: 0.3, runtime: { ...runtime, stateRevision: 4, topologyChanged: false } as InfinityScaleAdaptiveRuntimeResult,
+    epoch: 5, errorBefore: 0.35, errorAfter: 0.3, runtime: { ...runtime, stateRevision: 4, topologyChanged: false } as unknown as InfinityScaleAdaptiveRuntimeResult,
   });
   if (second.observationHash !== observeInfinityScalePostCommitRuntime(feedback, {
     epoch: 5, errorBefore: 0.35, errorAfter: 0.3, runtime: { ...runtime, stateRevision: 4, topologyChanged: false } as InfinityScaleAdaptiveRuntimeResult,
