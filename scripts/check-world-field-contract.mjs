@@ -10,6 +10,26 @@ async function load(path, replacements = []) {
   return import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
 }
 
+const gridMod = await load("src/core/ChunkGrid.ts");
+const { ChunkGrid, CHUNK_FLOATS } = gridMod;
+const restoreGrid = new ChunkGrid();
+const validChunk = new Float32Array(CHUNK_FLOATS).fill(0.25);
+assert.equal(restoreGrid.restoreChunk(0, validChunk), true);
+assert.equal(restoreGrid.chunks.get(0)?.[0], 0.25);
+assert.equal(restoreGrid.dirtyChunks.has(0), true);
+assert.equal(restoreGrid.restoreChunk(-1, validChunk), false);
+assert.equal(restoreGrid.restoreChunk(2048, validChunk), false);
+assert.equal(restoreGrid.restoreChunk(1, [1, 2]), false);
+const invalidChunk = new Float32Array(CHUNK_FLOATS).fill(0.5);
+invalidChunk[12] = Number.NaN;
+assert.equal(restoreGrid.restoreChunk(1, invalidChunk), false);
+assert.equal(restoreGrid.chunks.has(1), false);
+const workerSource = await readFile(new URL("src/core/ChunkSimWorker.ts", root), "utf8");
+assert.ok(workerSource.includes("cmd === 'restoreBegin'"), "worker restore begin command missing");
+assert.ok(workerSource.includes("cmd === 'restoreChunkAck'") === false, "worker must emit ACKs, not consume its own ACK command");
+assert.ok(workerSource.includes("cmd: 'restoreChunkAck'"), "worker restore ACK emission missing");
+assert.ok(workerSource.includes("Roll back every chunk already replaced"), "partial restore rollback missing");
+
 const view = await load("src/infinity/WorldViewContract.ts");
 const { WorldViewContract } = view;
 const contract = new WorldViewContract();
