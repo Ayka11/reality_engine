@@ -333,7 +333,8 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     };
     const context = new InfinityScaleChunkExecutionContext(plan, 16, 16, 16, 4);
     if (context.getBoundaryRelationsForCell(7, 2, 2).length !== 1) throw new Error("context exact face lookup failed");
-    if (context.getBoundaryRelationsForCell(7, 7, 7).length !== 1) throw new Error("context face corner lookup failed");
+    // The fine source covers tangential coordinates 0..3, so the shared-face corner is (7,3,3), not the uncovered coarse-face corner (7,7,7).
+    if (context.getBoundaryRelationsForCell(7, 3, 3).length !== 1) throw new Error("context shared-face corner lookup failed");
     if (context.getBoundaryRelationsForCell(6, 2, 2).length !== 0) throw new Error("context admitted non-face target");
   }
 
