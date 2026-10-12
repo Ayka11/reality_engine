@@ -196,22 +196,38 @@ function rangeForChunk(key: string, chunkSize: number): ChunkRange {
   return { minX: x, maxX: x + extent - 1, minY: y, maxY: y + extent - 1, minZ: z, maxZ: z + extent - 1 };
 }
 function sharedFaceAxis(a: ChunkRange, b: ChunkRange): 0 | 1 | 2 | null {
+  // Chunk-key coordinates are in chunk units at their own LOD. Their world
+  // ranges may overlap after conversion to base-cell coordinates; the shared
+  // face must therefore be identified from the LOD-relative chunk indices.
+  const aKeyLevel = a.level;
+  const bKeyLevel = b.level;
+  const aScale = 2 ** aKeyLevel;
+  const bScale = 2 ** bKeyLevel;
+  const chunkSize = a.chunkSize;
+  const aExtent = chunkSize * aScale;
+  const bExtent = chunkSize * bScale;
   const overlapsX = a.minX <= b.maxX && a.maxX >= b.minX;
   const overlapsY = a.minY <= b.maxY && a.maxY >= b.minY;
   const overlapsZ = a.minZ <= b.maxZ && a.maxZ >= b.minZ;
-  // At mixed LOD, coarse/fine chunk ranges can overlap along the normal axis
-  // in base-cell coordinates while their boundary planes differ. Prefer the
-  // axis with the smallest gap and require positive tangential overlap.
-  const gapX = a.maxX < b.minX ? b.minX - a.maxX : b.maxX < a.minX ? a.minX - b.maxX : 0;
-  const gapY = a.maxY < b.minY ? b.minY - a.maxY : b.maxY < a.minY ? a.minY - b.maxY : 0;
-  const gapZ = a.maxZ < b.minZ ? b.minZ - a.maxZ : b.maxZ < a.minZ ? a.minZ - b.maxZ : 0;
-  if (gapX > 0 && overlapsY && overlapsZ) return 0;
-  if (gapY > 0 && overlapsX && overlapsZ) return 1;
-  if (gapZ > 0 && overlapsX && overlapsY) return 2;
-  // Exact edge-adjacent chunks (including same LOD) share an interface.
+
+  // A true interface has touching range boundaries, not an arbitrary gap.
   if ((a.maxX + 1 === b.minX || b.maxX + 1 === a.minX) && overlapsY && overlapsZ) return 0;
   if ((a.maxY + 1 === b.minY || b.maxY + 1 === a.minY) && overlapsX && overlapsZ) return 1;
   if ((a.maxZ + 1 === b.minZ || b.maxZ + 1 === a.minZ) && overlapsX && overlapsY) return 2;
+
+  // When one chunk is coarser, its index-grid face spans multiple fine chunks.
+  // Normalize chunk origin coordinates into the common coarser grid to test
+  // adjacency without confusing overlapping cell extents for contact.
+  const ax = a.minX / aExtent, ay = a.minY / aExtent, az = a.minZ / aExtent;
+  const bx = b.minX / bExtent, by = b.minY / bExtent, bz = b.minZ / bExtent;
+  const scaleRatio = Math.max(aScale, bScale) / Math.min(aScale, bScale);
+  if (!Number.isInteger(scaleRatio)) return null;
+  if (a.maxX < b.minX && overlapsY && overlapsZ && Math.abs((ax + 1) - bx) <= scaleRatio) return 0;
+  if (b.maxX < a.minX && overlapsY && overlapsZ && Math.abs((bx + 1) - ax) <= scaleRatio) return 0;
+  if (a.maxY < b.minY && overlapsX && overlapsZ && Math.abs((ay + 1) - by) <= scaleRatio) return 1;
+  if (b.maxY < a.minY && overlapsX && overlapsZ && Math.abs((by + 1) - ay) <= scaleRatio) return 1;
+  if (a.maxZ < b.minZ && overlapsX && overlapsY && Math.abs((az + 1) - bz) <= scaleRatio) return 2;
+  if (b.maxZ < a.minZ && overlapsX && overlapsY && Math.abs((bz + 1) - az) <= scaleRatio) return 2;
   return null;
 }
 function floorToScale(value: number, scale: number): number { return Math.floor(value / scale) * scale; }
