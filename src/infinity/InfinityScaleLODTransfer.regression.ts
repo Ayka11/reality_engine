@@ -53,5 +53,5 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
   } catch (error) {
     throw new Error(`Face restriction stage: ${error instanceof Error ? error.message : String(error)}`);
   }
-  if (faceTarget[F.ENERGY] !== 2.5 || faceTarget[F.DENSITY] !== 21.5) throw new Error("Face restriction average semantics failed");
+  if (faceTarget[F.ENERGY] !== 10 || faceTarget[F.DENSITY] !== 21.5) throw new Error("Face restriction extensive-sum/intensive-average semantics failed");
 }
