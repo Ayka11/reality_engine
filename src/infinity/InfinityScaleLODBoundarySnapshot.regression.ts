@@ -270,7 +270,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
       );
     }
 
-    const outside = snapshot.read(s, [4, 4, 4]);
+    const outside = snapshot.read(s, [7, 4, 4]);
     if (outside !== null) {
       throw new Error(
         "Infinity Scale regression failed: coarse-to-fine read accepted a non-face target cell",
