@@ -6,7 +6,7 @@ function makePlan(
   targetChunk: string,
   relation: "same-level" | "coarse-to-fine" | "fine-to-coarse",
   sourceLevel: number,
-  targetLevel: number,
+  _targetLevel: number,
 ): InfinityScaleExecutionPlan {
   return {
     revision: 1,
@@ -17,14 +17,6 @@ function makePlan(
       lod: sourceLevel,
       amr: 2 ** sourceLevel,
       distance: 0,
-      simulationEligible: true,
-      state: "simulating",
-      chunk: (() => {
-        const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(sourceChunk)!;
-        return { level: Number(match[1]), x: Number(match[2]), y: Number(match[3]), z: Number(match[4]) };
-      })(),
-      pinned: false,
-      renderEligible: true,
     }],
     simulationBudget: 1,
     requestedSimulationCount: 1,
