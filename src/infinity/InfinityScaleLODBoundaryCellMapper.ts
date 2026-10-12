@@ -113,8 +113,6 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
       target.minY, target.maxY, source.minY, source.maxY)
   );
 }
-  return null;
-}
 
 export function isInfinityScaleSourceBoundaryCell(
   spec: InfinityScaleBoundaryTransferSpec,
