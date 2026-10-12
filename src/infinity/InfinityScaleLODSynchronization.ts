@@ -131,9 +131,9 @@ export class InfinityScaleLODSynchronization {
           if (update.relation === "coarse-to-fine" && sources.length === 1) {
             expected /= Math.max(1, refinementRatio(update) ** 3);
           } else if (update.relation === "fine-to-coarse") {
-            // Boundary restriction samples a face footprint (ratio^2), not a
-            // complete volume. The face operator therefore uses the mean.
-            expected /= sources.length;
+            // Extensive quantities remain additive across the ratio^2 face
+            // footprint. Intensive quantities use the average branch above;
+            // dividing an extensive field here would contradict restrictFace.
           }
         } else if (semantics.conservation === "average") {
           for (const source of sources) expected += source[field] ?? 0;
