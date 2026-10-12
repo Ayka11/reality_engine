@@ -293,6 +293,42 @@ try {
   }
 
 
+  // Seed a real worker chunk and persist its snapshot before a full page reload.
+  // The later restore assertion intentionally uses a fresh JS runtime/empty memory Map.
+  await page.waitForFunction(() =>
+    typeof window.snapshotWorldFieldChunkPersistence === "function" &&
+    typeof window.restoreWorldFieldChunkSnapshot === "function" &&
+    typeof window.worldFieldRestoreState === "function" &&
+    typeof window.flushWorldFieldChunkPersistence === "function"
+  );
+  const durableRestoreFixture = await page.evaluate(async () => {
+    window.paintChunkAt?.(64, 29, 64, 0, 0.5, 1, "set");
+    let workerReady = false;
+    for (let attempt = 0; attempt < 80; attempt++) {
+      window.tickChunkWorker?.(true, 1);
+      if (Number(window.worldFieldWorkerChunkStats?.() ?? 0) > 0) { workerReady = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    if (!workerReady) return { error: "worker fixture never became dirty" };
+    const view = window.getWorldViewContract?.();
+    if (!view) return { error: "world view contract unavailable" };
+    const coord = window.worldFieldChunkCoord?.(view.center.x, view.sliceY, view.center.z);
+    if (!coord) return { error: "world chunk coordinate unavailable" };
+    const snapshot = window.snapshotWorldFieldChunkPersistence?.(coord.cx, coord.cy, coord.cz);
+    const durable = await window.flushWorldFieldChunkPersistence?.();
+    if (!snapshot || snapshot.schemaVersion !== 2 || !snapshot.workerChunks?.length) {
+      return { error: "valid worker snapshot was not produced", coord, schemaVersion: snapshot?.schemaVersion };
+    }
+    sessionStorage.setItem("reality-engine-worker-restore-fixture", JSON.stringify({
+      coord, checksum: snapshot.checksum, expectedKeys: snapshot.workerChunks.map((chunk) => chunk.key),
+    }));
+    return { coord, checksum: snapshot.checksum, expected: snapshot.workerChunks.length, durable };
+  });
+  if (durableRestoreFixture.error || !durableRestoreFixture.durable?.durable ||
+      durableRestoreFixture.durable.pending || !durableRestoreFixture.expected) {
+    throw new Error(`World field snapshot was not durably committed before reload: ${JSON.stringify(durableRestoreFixture)}`);
+  }
+
   // Frontend parity regression: the visible Scientific Field tab must mutate the same
   // authoritative provider used by the direct runtime API.
   await page.evaluate(() => {
