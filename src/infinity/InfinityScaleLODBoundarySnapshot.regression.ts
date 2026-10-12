@@ -109,18 +109,18 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     }
   }
 
-  // Fine source chunk x=[4..7], coarse target neighbor x=[8..15].
+  // Fine source chunk x=[8..11], coarse target neighbor x=[0..7].
   {
     const state = new InfinityScaleLODState(CHUNK);
-    const fine = key(0, 1);
-    const coarse = key(1, 1);
+    const fine = key(0, 2);
+    const coarse = key(1, 0);
     for (let z = 0; z < 2; z++)
       for (let y = 0; y < 2; y++)
-        write(state, fine, 0, 7, y, z, 7);
+        write(state, fine, 0, 8, y, z, 7);
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 1, CHUNK);
-    const out = assertNotNull(snapshot.read(s, [8, 2, 2]), "fine-to-coarse +X");
+    const out = assertNotNull(snapshot.read(s, [7, 2, 2]), "fine-to-coarse +X");
     assertEqual(out[F.ENERGY], 7, "fine-to-coarse +X energy");
     assertEqual(out[F.DENSITY], 70, "fine-to-coarse +X density");
   }
