@@ -41,7 +41,7 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
   circularSources[0][F.WAVE_PHASE] = Math.PI - 0.05; circularSources[1][F.WAVE_PHASE] = -Math.PI + 0.05;
   circularSources[2][F.WAVE_PHASE] = Math.PI - 0.05; circularSources[3][F.WAVE_PHASE] = -Math.PI + 0.05;
   const circularTarget = cell();
-  InfinityScaleLODTransfer.restrict(circularSources, circularTarget, 0, 1);
+  InfinityScaleLODTransfer.restrictFace(circularSources, circularTarget, 0, 1);
   if (Math.abs(Math.abs(circularTarget[F.WAVE_PHASE]) - Math.PI) > 0.06) throw new Error("Circular phase wrap invariant failed");
 
   const faceSources = Array.from({ length: 4 }, (_, index) => {
