@@ -571,6 +571,9 @@ try {
       oneRecordConsumed: historyBusyBefore.undo - historyBusyAfter.undo === 1,
       firstOperationCompleted: typeof firstHistoryResult === "string",
     };
+    // Restore the fixture so the following persistence assertion compares the
+    // same post-Redo field state that was captured before the concurrency probe.
+    await runtime.redo();
     return { baselineState, afterSmartState, afterOrdinaryState, undoOneState, undoTwoState, redoOneState, redoTwoState,
       baselineSample, afterSmartSample, afterOrdinarySample, smartMutation, baselineCount, afterSmartCount, afterOrdinaryCount,
       history: mixedHistoryAfterRedo, legacyParity: { undoOne: undoOneLegacy === afterSmartLegacy, undoTwo: undoTwoLegacy === baselineLegacy,
