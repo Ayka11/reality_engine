@@ -5,13 +5,16 @@ import { InfinityScaleRuntimePredictionFeedback, type InfinityScaleRuntimePredic
 import type { InfinityScaleCausalAdaptiveAttribution } from "./InfinityScaleCausalAdaptiveAttribution";
 
 export interface InfinityScaleClosedLoopAdaptiveInput extends InfinityScalePredictiveAdaptiveInput {
-  runtimeError: number;\n  causalAttribution?: InfinityScaleCausalAdaptiveAttribution;
+  runtimeError: number;
+  causalAttribution?: InfinityScaleCausalAdaptiveAttribution;
 }
 
 export interface InfinityScaleClosedLoopAdaptiveRecommendation extends InfinityScalePredictiveAdaptiveRecommendation {
   feedbackPrediction: RuntimePrediction;
   transitionAdjustedError: number;
-  transitionPenalty: number;\n  causalPredictiveError: number;\n  causalAttributionHash?: string;
+  transitionPenalty: number;
+  causalPredictiveError: number;
+  causalAttributionHash?: string;
 }
 
 export interface InfinityScaleClosedLoopPostCommitInput {
@@ -40,7 +43,14 @@ export class InfinityScaleClosedLoopAdaptiveController {
     const transition = this.transitionState.get(input.regionId);
     const penalty = transition && input.epoch <= transition.epoch + 1 ? transition.penalty : 0;
     const transitionAdjustedError = clamp01(input.runtimeError + penalty);
-    const feedbackPrediction = input.causalAttribution\n      ? this.feedback.observeCausalError(input.regionId, input.epoch, input.causalAttribution.predictiveError, {\n          numericalResidual: input.causalAttribution.numericalResidual,\n          transitionEffect: input.causalAttribution.lodTransitionEffect,\n          transferEffect: input.causalAttribution.transferEffect,\n          attributionHash: input.causalAttribution.deterministicHash,\n        }, 1)\n      : this.feedback.observeError(input.regionId, input.epoch, transitionAdjustedError, 1);
+    const feedbackPrediction = input.causalAttribution
+      ? this.feedback.observeCausalError(input.regionId, input.epoch, input.causalAttribution.predictiveError, {
+          numericalResidual: input.causalAttribution.numericalResidual,
+          transitionEffect: input.causalAttribution.lodTransitionEffect,
+          transferEffect: input.causalAttribution.transferEffect,
+          attributionHash: input.causalAttribution.deterministicHash,
+        }, 1)
+      : this.feedback.observeError(input.regionId, input.epoch, transitionAdjustedError, 1);
     const recommendation = this.controller.recommend({
       ...input,
       error: transitionAdjustedError,
