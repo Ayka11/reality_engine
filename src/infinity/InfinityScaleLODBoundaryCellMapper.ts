@@ -36,88 +36,57 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
 ): InfinityScaleBoundaryFaceGeometry | null {
   const target = rangeForChunk(spec.targetChunk, chunkSize);
   const source = rangeForChunk(spec.sourceChunk, chunkSize);
-  const targetScale = 2 ** spec.targetLevel;
+  const scale = 2 ** spec.targetLevel;
 
-  const positiveSpan = (aMin: number, aMax: number, bMin: number, bMax: number, scale: number) =>
-    Math.min(aMax, bMax) - Math.max(aMin, bMin) + 1 >= scale;
+  type Axis = 0 | 1 | 2;
+  const axes: Axis[] = [0, 1, 2];
+  const mins = (r: ChunkRange): [number, number, number] => [r.minX, r.minY, r.minZ];
+  const maxs = (r: ChunkRange): [number, number, number] => [r.maxX, r.maxY, r.maxZ];
+  const tMin = mins(target), tMax = maxs(target);
+  const sMin = mins(source), sMax = maxs(source);
 
-  const candidates: Array<{
-    axis: 0 | 1 | 2;
-    coordinate: number;
-    targetMin: number;
-    targetMax: number;
-    sourceMin: number;
-    sourceMax: number;
-    targetUmin: number;
-    targetUmax: number;
-    sourceUmin: number;
-    sourceUmax: number;
-    targetVmin: number;
-    targetVmax: number;
-    sourceVmin: number;
-    sourceVmax: number;
-  }> = [];
+  for (const axis of axes) {
+    const tangents = axes.filter(a => a !== axis);
+    const tangentialOverlap = tangents.every(a =>
+      Math.min(tMax[a], sMax[a]) - Math.max(tMin[a], sMin[a]) + 1 >= scale
+    );
+    if (!tangentialOverlap) continue;
 
-  const addCandidate = (
-    axis: 0 | 1 | 2,
-    tMin: number, tMax: number, sMin: number, sMax: number,
-    tUmin: number, tUmax: number, sUmin: number, sUmax: number,
-    tVmin: number, tVmax: number, sVmin: number, sVmax: number,
-  ) => {
     let coordinate: number | null = null;
-    if (tMax + 1 === sMin) coordinate = tMax;
-    else if (sMax + 1 === tMin) coordinate = tMin;
-    else if (target.level !== source.level) {
-      // The fine chunk must abut the exterior face of the coarse chunk on the
-      // normal axis. Do not use mere bounding-box overlap to infer adjacency.
-      const targetCoarse = target.level > source.level;
-      const coarseMin = targetCoarse ? tMin : sMin;
-      const coarseMax = targetCoarse ? tMax : sMax;
-      const fineMin = targetCoarse ? sMin : tMin;
-      const fineMax = targetCoarse ? sMax : tMax;
-      const spansTouchAtOuterPlane =
-        fineMax + 1 === coarseMin || coarseMax + 1 === fineMin;
-      if (spansTouchAtOuterPlane) {
-        // Resolve the actual boundary of the target chunk. If the coarse
-        // target is left of the fine source, target's +X face is its max;
-        // if the fine target is right of the coarse source, target's -X
-        // face is its min. Mirror that rule for either normal direction.
-        const targetIsLeftOfSource = tMax + 1 === sMin;
-        coordinate = targetIsLeftOfSource ? tMax : tMin;
-      }
+    if (tMax[axis] + 1 === sMin[axis]) {
+      coordinate = tMax[axis];
+    } else if (sMax[axis] + 1 === tMin[axis]) {
+      coordinate = tMin[axis];
+    } else if (target.level !== source.level) {
+      // AMR levels use nested extents. A fine chunk can share a face plane
+      // with a coarse neighbor even when the coarse and fine ranges overlap
+      // in the normal axis under inclusive-cell coordinates. Only recognize
+      // an aligned exterior plane; tangential-only alignment is not a face.
+      const targetIsCoarse = target.level > source.level;
+      const coarse = targetIsCoarse ? target : source;
+      const fine = targetIsCoarse ? source : target;
+      const cMin = mins(coarse)[axis], cMax = maxs(coarse)[axis];
+      const fMin = mins(fine)[axis], fMax = maxs(fine)[axis];
+      const sharesLowPlane = fMin === cMin && fMax < cMax;
+      const sharesHighPlane = fMax === cMax && fMin > cMin;
+      if (sharesLowPlane) coordinate = tMin[axis];
+      else if (sharesHighPlane) coordinate = tMax[axis];
     }
-    if (coordinate === null) return;
-    if (!positiveSpan(tUmin, tUmax, sUmin, sUmax, targetScale) ||
-        !positiveSpan(tVmin, tVmax, sVmin, sVmax, targetScale)) return;
-    candidates.push({
-      axis, coordinate,
-      targetMin: tMin, targetMax: tMax, sourceMin: sMin, sourceMax: sMax,
-      targetUmin: tUmin, targetUmax: tUmax, sourceUmin: sUmin, sourceUmax: sUmax,
-      targetVmin: tVmin, targetVmax: tVmax, sourceVmin: sVmin, sourceVmax: sVmax,
-    });
-  };
 
-  addCandidate(0, target.minX, target.maxX, source.minX, source.maxX,
-    target.minY, target.maxY, source.minY, source.maxY,
-    target.minZ, target.maxZ, source.minZ, source.maxZ);
-  addCandidate(1, target.minY, target.maxY, source.minY, source.maxY,
-    target.minX, target.maxX, source.minX, source.maxX,
-    target.minZ, target.maxZ, source.minZ, source.maxZ);
-  addCandidate(2, target.minZ, target.maxZ, source.minZ, source.maxZ,
-    target.minX, target.maxX, source.minX, source.maxX,
-    target.minY, target.maxY, source.minY, source.maxY);
-
-  if (candidates.length === 0) return null;
-  const face = candidates[0];
-  return {
-    axis: face.axis,
-    coordinate: face.coordinate,
-    minU: Math.max(face.targetUmin, face.sourceUmin),
-    maxU: Math.min(face.targetUmax, face.sourceUmax),
-    minV: Math.max(face.targetVmin, face.sourceVmin),
-    maxV: Math.min(face.targetVmax, face.sourceVmax),
-    scale: targetScale,
-  };
+    if (coordinate !== null) {
+      const tangentialAxes = axes.filter(a => a !== axis);
+      return {
+        axis,
+        coordinate,
+        minU: Math.max(tMin[tangentialAxes[0]], sMin[tangentialAxes[0]]),
+        maxU: Math.min(tMax[tangentialAxes[0]], sMax[tangentialAxes[0]]),
+        minV: Math.max(tMin[tangentialAxes[1]], sMin[tangentialAxes[1]]),
+        maxV: Math.min(tMax[tangentialAxes[1]], sMax[tangentialAxes[1]]),
+        scale,
+      };
+    }
+  }
+  return null;
 }
 
 export function isInfinityScaleSourceBoundaryCell(
