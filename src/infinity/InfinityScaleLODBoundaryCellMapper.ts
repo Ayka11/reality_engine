@@ -87,16 +87,26 @@ export function isInfinityScaleSourceBoundaryCell(
   const source = rangeForChunk(spec.sourceChunk, chunkSize);
   const [x, y, z] = targetCell;
 
+  // Execution-context callers can address the dependency from either side:
+  // the source chunk's outer cell (solver-side lookup) or the target face cell
+  // (simulation-side lookup). Accept only those two canonical face planes;
+  // never broaden the test to an interior cell or a corner-only adjacency.
   if (face.axis === 0) {
     const sourceCoordinate = source.maxX < face.coordinate ? source.maxX : source.minX;
-    return x === sourceCoordinate && y >= face.minU && y <= face.maxU && z >= face.minV && z <= face.maxV;
+    return (x === sourceCoordinate || x === face.coordinate) &&
+      y >= face.minU && y <= face.maxU &&
+      z >= face.minV && z <= face.maxV;
   }
   if (face.axis === 1) {
     const sourceCoordinate = source.maxY < face.coordinate ? source.maxY : source.minY;
-    return y === sourceCoordinate && x >= face.minU && x <= face.maxU && z >= face.minV && z <= face.maxV;
+    return (y === sourceCoordinate || y === face.coordinate) &&
+      x >= face.minU && x <= face.maxU &&
+      z >= face.minV && z <= face.maxV;
   }
   const sourceCoordinate = source.maxZ < face.coordinate ? source.maxZ : source.minZ;
-  return z === sourceCoordinate && x >= face.minU && x <= face.maxU && y >= face.minV && y <= face.maxV;
+  return (z === sourceCoordinate || z === face.coordinate) &&
+    x >= face.minU && x <= face.maxU &&
+    y >= face.minV && y <= face.maxV;
 }
 
 /** Backward-compatible alias; new solver code should use the explicit source-side name. */
