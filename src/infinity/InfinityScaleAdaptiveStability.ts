@@ -139,8 +139,8 @@ export class InfinityScaleAdaptiveStability {
           ? state.consecutiveCoarsenVotes >= this.config.coarsenEvidenceEpochs
           : true;
 
-    const residencePassed = epoch >= state.residenceUntilEpoch;
-    const cooldownPassed = epoch >= state.cooldownUntilEpoch;
+    const residencePassed = this.config.minResidenceEpochs === 0 || epoch > state.residenceUntilEpoch;
+    const cooldownPassed = this.config.cooldownEpochs === 0 || epoch > state.cooldownUntilEpoch;
     const oscillationDetected = this.detectOscillation(state, candidate);
 
     if (epoch < state.frozenUntilEpoch && !criticalOverride) {
