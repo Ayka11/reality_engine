@@ -57,21 +57,8 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
       coordinate = tMax[axis];
     } else if (sMax[axis] + 1 === tMin[axis]) {
       coordinate = tMin[axis];
-    } else if (target.level !== source.level) {
-      // AMR levels use nested extents. A fine chunk can share a face plane
-      // with a coarse neighbor even when the coarse and fine ranges overlap
-      // in the normal axis under inclusive-cell coordinates. Only recognize
-      // an aligned exterior plane; tangential-only alignment is not a face.
-      const targetIsCoarse = target.level > source.level;
-      const coarse = targetIsCoarse ? target : source;
-      const fine = targetIsCoarse ? source : target;
-      const cMin = mins(coarse)[axis], cMax = maxs(coarse)[axis];
-      const fMin = mins(fine)[axis], fMax = maxs(fine)[axis];
-      const sharesLowPlane = fMin === cMin && fMax < cMax;
-      const sharesHighPlane = fMax === cMax && fMin > cMin;
-      if (sharesLowPlane) coordinate = tMin[axis];
-      else if (sharesHighPlane) coordinate = tMax[axis];
     }
+
 
     if (coordinate !== null) {
       const tangentialAxes = axes.filter(a => a !== axis);
