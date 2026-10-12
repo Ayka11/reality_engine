@@ -275,8 +275,11 @@ export function runInfinityScaleMixedLODCPUProlongationRegression(): void {
   commitInfinityScaleGlobalLODTransaction(transaction, frame);
 
   for (const update of staged) {
-    const source = update.sourceCells[0];
-    const expected = (100 + (source[1] / 2) * 10 + source[2] / 2) / 8;
+    const expected = (
+      100 +
+      Math.floor(update.targetCell[1] / 2) * 10 +
+      Math.floor(update.targetCell[2] / 2)
+    ) / 8;
     const actual = state.readBaseCell(
       update.targetChunk,
       update.targetLevel,
@@ -284,7 +287,7 @@ export function runInfinityScaleMixedLODCPUProlongationRegression(): void {
     );
     if (!actual || actual[0] !== expected) {
       throw new Error(
-        `Coarse-to-fine prolongation mismatch at ${update.targetChunk}:${update.targetCell.join(",")}`,
+        `Coarse-to-fine prolongation mismatch at ${update.targetChunk}:${update.targetCell.join(",")}: expected ${expected}, received ${actual?.[0]}`,
       );
     }
   }
