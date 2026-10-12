@@ -124,7 +124,7 @@ export function runInfinityScaleMixedLODMultiFrameRegression(): void {
     );
   }
 
-  const boundary = state.readBaseCell(coarseKey, 1, 2, 0, 0);
+  const boundary = state.readBaseCell(coarseKey, 1, 6, 0, 0);
   if (!boundary || boundary[0] !== 2) {
     throw new Error(
       `Expected fine-to-coarse boundary state to persist across frames at value 2, received ${boundary?.[0]}`,
