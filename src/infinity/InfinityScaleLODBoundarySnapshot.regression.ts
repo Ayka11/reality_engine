@@ -309,11 +309,11 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const plan: InfinityScaleExecutionPlan = {
       revision: 77, mode: "selective-cpu-ready", observer: { x: 0, y: 0, z: 0 },
-      chunks: [{ key: "1:0,0,0", lod: 1, distance: 0 }], simulationBudget: 1,
+      chunks: [{ key: "1:0,0,0", lod: 1, amr: 2, distance: 0 }], simulationBudget: 1,
       requestedSimulationCount: 1, selectedSimulationCount: 1, maxSimulatingChunks: 1,
       boundaryReadChunks: ["0:8,0,0"], boundaryReadCount: 1,
       boundaryReadRelations: [{ sourceChunk: "0:8,0,0", targetChunk: "1:0,0,0", relation: "fine-to-coarse" }],
-      simulationCellCount: 64, boundaryReadCellCount: 64, localExecutionLayers: 1, globalExecutionLayers: 1,
+      simulationCellCount: 64, boundaryReadCellCount: 64, localExecutionLayers: [], globalExecutionLayers: [],
       selectiveCpuReady: true, selectiveGpuReady: false, gpuPhysicsReady: false,
       lodBoundaryTransferReady: true, mixedLodExecutionReady: true, entityExecutionReady: false, agentMigrationReady: false,
     };
@@ -335,13 +335,13 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     const coverage = snapshot.validateFaceCoverage(
       new InfinityScaleChunkExecutionContext(
         {
-          revision: 16, mode: "selective-cpu-ready", observer: [0, 0, 0],
+          revision: 16, mode: "selective-cpu-ready", observer: { x: 0, y: 0, z: 0 },
           chunks: [{ key: coarse, lod: 1, amr: 2, distance: 0 }],
           simulationBudget: 1, requestedSimulationCount: 1, selectedSimulationCount: 1,
           maxSimulatingChunks: 1, boundaryReadChunks: [fine], boundaryReadCount: 1,
           boundaryReadRelations: [{ sourceChunk: fine, targetChunk: coarse, relation: "fine-to-coarse" }],
           simulationCellCount: 64, boundaryReadCellCount: 16,
-          localExecutionLayers: 1, globalExecutionLayers: 1,
+          localExecutionLayers: [], globalExecutionLayers: [],
           selectiveCpuReady: true, selectiveGpuReady: false, gpuPhysicsReady: false,
           lodBoundaryTransferReady: true, mixedLodExecutionReady: true,
           entityExecutionReady: false, agentMigrationReady: false,
