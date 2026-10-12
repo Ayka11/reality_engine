@@ -1,4 +1,4 @@
-import { runInfinityScaleReleaseValidation } from "./InfinityScaleReleaseValidation";
+import { runInfinityScaleReleaseValidation } from "../src/infinity/InfinityScaleReleaseValidation";
 
 const result = runInfinityScaleReleaseValidation();
 if (!result.allPassed) {
