@@ -30,6 +30,12 @@ export interface InfinityScaleAdaptiveMetrics {
   score: number;
   estimatedError?: number;
   conservationResidual?: number;
+  causalAttribution?: {
+    physicalEvolution: number;
+    numericalResidual: number;
+    lodTransitionEffect: number;
+    transferEffect: number;
+  };
 }
 
 export interface InfinityScaleAdaptiveRegionState {
@@ -110,7 +116,11 @@ export class InfinityScaleAdaptiveStability {
       throw new Error(`Adaptive LOD mismatch for ${regionId}: state=${state.currentLOD}, input=${currentLOD}`);
     }
 
-    const score = Math.max(0, Math.min(1, metrics.score));
+    const rawScore = Math.max(0, Math.min(1, metrics.score));
+    const score = metrics.causalAttribution
+      ? Math.max(0, Math.min(1, metrics.causalAttribution.physicalEvolution + metrics.causalAttribution.numericalResidual))
+      : rawScore;
+    const transitionDominated = !!metrics.causalAttribution && rawScore >= this.config.refineThreshold && score < this.config.refineThreshold;
     const criticalOverride = score >= this.config.criticalThreshold ||
       Math.abs(metrics.estimatedError ?? 0) >= this.config.criticalThreshold;
 
@@ -140,7 +150,7 @@ export class InfinityScaleAdaptiveStability {
 
     if (candidate === "KEEP" || !hysteresisPassed) {
       return this.record(state, epoch, "KEEP", score, hysteresisPassed, residencePassed, cooldownPassed,
-        oscillationDetected, criticalOverride, "insufficient persistent evidence");
+        oscillationDetected, criticalOverride, transitionDominated ? "transition disturbance excluded from physical refinement score" : "insufficient persistent evidence");
     }
 
     if (!criticalOverride && (!residencePassed || !cooldownPassed || oscillationDetected)) {
@@ -177,7 +187,7 @@ export class InfinityScaleAdaptiveStability {
   }
 
   private create(regionId: string, currentLOD: number): InfinityScaleAdaptiveRegionState {
-    const state = this.state(regionId, currentLOD);
+    this.state(regionId, currentLOD);
     return this.regions.get(regionId)!;
   }
 
@@ -196,7 +206,7 @@ export class InfinityScaleAdaptiveStability {
     state: InfinityScaleAdaptiveRegionState,
     epoch: number,
     decision: AdaptiveLODDecision,
-    score: number,
+    _score: number,
     hysteresisPassed: boolean,
     residencePassed: boolean,
     cooldownPassed: boolean,
