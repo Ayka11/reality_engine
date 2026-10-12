@@ -350,7 +350,10 @@ export class InfinityScaleLODTransfer {
         } else {
           let sum = 0;
           for (const source of sources) sum += source[field] ?? 0;
-          target[field] = sum / sources.length;
+          // Extensive fields represent additive quantities (energy, information,
+          // memory): restriction must preserve their total. Intensive fields
+          // represent local state and are averaged over the boundary footprint.
+          target[field] = policy === "extensive" ? sum : sum / sources.length;
         }
         transferredFields.push(field);
       } else {
