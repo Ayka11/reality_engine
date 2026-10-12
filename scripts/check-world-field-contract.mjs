@@ -49,7 +49,8 @@ const workerKey = chunkKey(8, 8, 3); // world (0,0,0) maps to worker x=64, z=29,
 const workerChunk = new Float32Array(CHUNK_FLOATS);
 workerChunk[(5 * 64 + 0 * 8 + 0) * NF + F.E] = 123;
 const workerProvider = new WorkerWorldFieldChunkProvider(
-  { cx: 0, cy: 0, cz: 0 }, new Map([[workerKey, workerChunk]]), () => defaultView, fakeProvider
+  { cx: 0, cy: 0, cz: 0 }, new Map([[workerKey, workerChunk]]), () => defaultView,
+  { sample: () => ({ energy: 0, density: 0, information: 0, entropy: 0, temperature: 0, biology: 0, material: 0 }) }
 );
 assert.equal(workerProvider.sample(0, 0, 0).energy, 123);
 assert.equal(workerProvider.snapshotWorkerChunks().some(chunk => chunk.key === workerKey), true);
