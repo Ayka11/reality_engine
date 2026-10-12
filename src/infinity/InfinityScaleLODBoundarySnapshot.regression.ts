@@ -1,4 +1,4 @@
-import { F } from "../core/CellState";
+import { CELL_FIELDS, F } from "../core/CellState";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import { InfinityScaleLODBoundarySnapshot } from "./InfinityScaleLODBoundarySnapshot";
 import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
