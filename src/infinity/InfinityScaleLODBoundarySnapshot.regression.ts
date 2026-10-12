@@ -73,7 +73,7 @@ function spec(
 export function runInfinityScaleLODBoundaryRegression(): void {
   // Geometry validation must use the same canonical face definition as the mapper.
   {
-    const s = spec(key(0, 0), key(1, 1), "fine-to-coarse", 0, 1);
+    const s = spec(key(0, 1), key(1, 1), "fine-to-coarse", 0, 1);
     const valid = validateInfinityScaleBoundaryGeometry(s, [8, 2, 2], CHUNK);
     if (!valid || valid.axis !== "x" || valid.direction !== -1) {
       throw new Error("Infinity Scale regression failed: canonical boundary geometry validation");
