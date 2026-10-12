@@ -47,7 +47,10 @@ const workerProviderMod = await load("src/infinity/WorkerWorldFieldChunkProvider
   "const F = { E: 0, D: 1, I: 2, S: 3, T: 4, BIO: 10, MAT: 11 }; const CHUNK_FLOATS = 7168; const CX = 8; const CY = 8; const GRID_D = 64; const GRID_H = 128; const GRID_W = 128; const NF = 14;"
 ]]);
 const { WorkerWorldFieldChunkProvider } = workerProviderMod;
-const defaultView = new WorldViewContract().snapshot();
+const defaultView = {
+  version: 1, center: { x: 0, y: 0, z: 0 }, visibleRadius: 128,
+  sliceY: 0, simulationTime: 0, seed: "reality-engine-infinity-v1", renderMode: "3d",
+};
 const workerKey = chunkKey(8, 8, 3); // world (0,0,0) maps to worker x=64, z=29, y=64
 const workerChunk = new Float32Array(CHUNK_FLOATS);
 workerChunk[(5 * 64 + 0 * 8 + 0) * NF + F.E] = 123;
