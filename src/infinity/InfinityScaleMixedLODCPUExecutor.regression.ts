@@ -146,8 +146,9 @@ export function runInfinityScaleMixedLODCPUProlongationRegression(): void {
   state.ensureChunk(coarseKey, 1);
   for (const fineKey of fineKeys) state.ensureChunk(fineKey, 0);
 
-  // Give every coarse face cell a distinct value. The fine face must inherit
-  // each value into exactly four fine target cells (2x2 tangential footprint).
+  // Give every coarse face cell a distinct extensive energy value. Each fine
+  // face cell receives one eighth of its source value, with four tangential
+  // fine cells sharing each coarse face cell (2x2 footprint).
   for (let z = 0; z < 4; z++) {
     for (let y = 0; y < 4; y++) {
       for (let x = 0; x < 4; x++) {
@@ -275,7 +276,7 @@ export function runInfinityScaleMixedLODCPUProlongationRegression(): void {
 
   for (const update of staged) {
     const source = update.sourceCells[0];
-    const expected = 100 + (source[1] / 2) * 10 + source[2] / 2;
+    const expected = (100 + (source[1] / 2) * 10 + source[2] / 2) / 8;
     const actual = state.readBaseCell(
       update.targetChunk,
       update.targetLevel,
