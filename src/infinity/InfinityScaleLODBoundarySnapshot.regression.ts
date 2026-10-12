@@ -230,8 +230,13 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     const coarse = key(1, 0);
     const fine = key(0, 2);
 
-    // Coarse X+ face cell at base coordinate (6, 2, 2) carries a unique value.
-    write(state, coarse, 1, 6, 2, 2, 77);
+    // Coarse X+ boundary footprint at x=6 spans coarse tangential cells
+    // (y,z)=(2,2),(2,4),(4,2),(4,4) because coarse cells have scale 2.
+    for (const y of [2, 4]) {
+      for (const z of [2, 4]) {
+        write(state, coarse, 1, 6, y, z, 77);
+      }
+    }
 
     const s = spec(coarse, fine, "coarse-to-fine", 1, 0);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 12, CHUNK);
