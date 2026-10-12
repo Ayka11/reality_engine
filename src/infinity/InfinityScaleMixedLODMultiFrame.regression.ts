@@ -10,7 +10,7 @@ import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExe
 import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 
 const coarseKey = "1:0,0,0";
-const fineKeys = ["0:8,0,0", "0:8,4,0", "0:8,0,4", "0:8,4,4"];
+const fineKeys = ["0:2,0,0", "0:2,1,0", "0:2,0,1", "0:2,1,1"];
 
 function makePlan(): InfinityScaleExecutionPlan {
   return {
