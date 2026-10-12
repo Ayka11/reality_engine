@@ -158,4 +158,4 @@ export class InfinityScaleLODBoundaryCellMapper {
     }
     return cells;
   }
-
+}
