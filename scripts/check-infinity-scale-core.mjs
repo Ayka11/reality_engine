@@ -63,7 +63,7 @@ const { ChunkResidencyManager } = managerMod;
 const manager = new ChunkResidencyManager(scale);
 const records = manager.plan({ x: 0, y: 0, z: 0 }, [
   { x: 0, y: 0, z: 0, level: 0 },
-  { x: 100, y: 0, z: 0, level: 0 },
+  { x: 1000, y: 0, z: 0, level: 0 },
 ]);
 assert.equal(records[0].state, "simulating");
 assert.equal(records[0].lod, 0);
