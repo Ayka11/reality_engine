@@ -6,7 +6,7 @@ import {
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import { CELL_FIELDS } from "../core/CellState";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
-import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
+import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
 
 export function runInfinityScaleMixedLODCPURegression(): void {
