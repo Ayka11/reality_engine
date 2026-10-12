@@ -551,9 +551,12 @@ try {
     const firstHistoryOperation = runtime.undo();
     await new Promise(resolve => setTimeout(resolve, 25));
     const secondHistoryResult = await runtime.undo();
-    const concurrentMutationRejected = await runtime.applyStroke(
-      "inject", { x: 20, y: 8, z: 0 }, 1, 0.25, { energy: 1 }
-    ).then(() => false, () => true);
+    let concurrentMutationRejected = false;
+    try {
+      await runtime.applyStroke("inject", { x: 20, y: 8, z: 0 }, 1, 0.25, { energy: 1 });
+    } catch {
+      concurrentMutationRejected = true;
+    }
     let firstHistoryResult;
     try {
       if (releaseDelayedUndo) releaseDelayedUndo();
