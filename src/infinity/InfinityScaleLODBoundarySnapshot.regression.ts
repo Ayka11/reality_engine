@@ -89,7 +89,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     let value = 10;
     for (let z = 0; z < 2; z++) {
       for (let y = 0; y < 2; y++) {
@@ -129,7 +129,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     write(state, fine, 0, 8, 4, 4, 11);
     const s = spec(coarse, fine, "coarse-to-fine", 1, 0);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 2, CHUNK);
@@ -215,7 +215,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(2, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     for (let dz = 0; dz < 4; dz++)
       for (let dy = 0; dy < 4; dy++)
         for (let dx = 0; dx < 4; dx++)
@@ -232,7 +232,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
 
     // Coarse X+ face cell at base coordinate (6, 2, 2) carries a unique value.
     write(state, coarse, 1, 6, 2, 2, 77);
@@ -270,7 +270,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     write(state, fine, 0, 8, 0, 0, 55);
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
@@ -288,8 +288,8 @@ export function runInfinityScaleLODBoundaryRegression(): void {
       revision: 1, mode: "selective-cpu-ready" as const, observer: { x: 0, y: 0, z: 0 },
       chunks: [{ key: "1:0,0,0", lod: 1, amr: 2, distance: 0 }],
       simulationBudget: 1, requestedSimulationCount: 1, selectedSimulationCount: 1,
-      maxSimulatingChunks: 1, boundaryReadChunks: ["0:8,0,0"], boundaryReadCount: 1,
-      boundaryReadRelations: [{ sourceChunk: "0:8,0,0", targetChunk: "1:0,0,0", relation: "fine-to-coarse" as const }],
+      maxSimulatingChunks: 1, boundaryReadChunks: ["0:2,0,0"], boundaryReadCount: 1,
+      boundaryReadRelations: [{ sourceChunk: "0:2,0,0", targetChunk: "1:0,0,0", relation: "fine-to-coarse" as const }],
       simulationCellCount: 64, boundaryReadCellCount: 64, localExecutionLayers: [], globalExecutionLayers: [],
       selectiveCpuReady: true, selectiveGpuReady: false, gpuPhysicsReady: false,
       lodBoundaryTransferReady: true, mixedLodExecutionReady: true,
@@ -297,7 +297,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     };
     const context = new InfinityScaleChunkExecutionContext(plan, 12, 8, 8, 4);
     const relations = context.getBoundaryRelationsForCell(7, 2, 2);
-    if (relations.length !== 1 || relations[0].sourceChunk !== "0:8,0,0") {
+    if (relations.length !== 1 || relations[0].sourceChunk !== "0:2,0,0") {
       throw new Error("Infinity Scale regression failed: target-cell boundary relation lookup");
     }
     if (context.getBoundaryRelationsForCell(6, 2, 2).length !== 0) {
@@ -311,8 +311,8 @@ export function runInfinityScaleLODBoundaryRegression(): void {
       revision: 77, mode: "selective-cpu-ready", observer: { x: 0, y: 0, z: 0 },
       chunks: [{ key: "1:0,0,0", lod: 1, amr: 2, distance: 0 }], simulationBudget: 1,
       requestedSimulationCount: 1, selectedSimulationCount: 1, maxSimulatingChunks: 1,
-      boundaryReadChunks: ["0:8,0,0"], boundaryReadCount: 1,
-      boundaryReadRelations: [{ sourceChunk: "0:8,0,0", targetChunk: "1:0,0,0", relation: "fine-to-coarse" }],
+      boundaryReadChunks: ["0:2,0,0"], boundaryReadCount: 1,
+      boundaryReadRelations: [{ sourceChunk: "0:2,0,0", targetChunk: "1:0,0,0", relation: "fine-to-coarse" }],
       simulationCellCount: 64, boundaryReadCellCount: 64, localExecutionLayers: [], globalExecutionLayers: [],
       selectiveCpuReady: true, selectiveGpuReady: false, gpuPhysicsReady: false,
       lodBoundaryTransferReady: true, mixedLodExecutionReady: true, entityExecutionReady: false, agentMigrationReady: false,
@@ -328,7 +328,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     state.ensureChunk(coarse, 1);
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 16, CHUNK);
@@ -361,7 +361,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     state.ensureChunk(coarse, 1);
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
@@ -379,7 +379,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     write(state, fine, 0, 8, 0, 0, 91);
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
@@ -403,7 +403,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     let value = 1;
     for (let z = 0; z < 2; z++) {
       for (let y = 0; y < 2; y++) {
