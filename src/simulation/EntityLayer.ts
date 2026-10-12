@@ -300,6 +300,7 @@ export class EntityLayer {
       );
     }
 
+    const fullDomainCovered = context.simulationCellCount >= grid.size && context.readCellCount === 0;
     if (fullDomainCovered && plan.commitReady) {
       // Merge resolution: the selected primary retains its lifecycle state;
       // secondary source identities are retired only after full-domain proof.
