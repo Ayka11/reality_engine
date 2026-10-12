@@ -121,13 +121,22 @@ export class ChunkGrid {
       this.set(x, y, z, f, value)
   }
 
-  paintSphere(cx: number, cy: number, cz: number, r: number, f: number, value: number): void {
+  paintSphere(cx: number, cy: number, cz: number, r: number, f: number, value: number, mode: 'add' | 'set' = 'set'): void {
     const ir = Math.ceil(r)
     for (let dz = -ir; dz <= ir; dz++) for (let dy = -ir; dy <= ir; dy++) for (let dx = -ir; dx <= ir; dx++) {
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz)
       if (d > r) continue
       const g = Math.exp(-d * d / (r * r) * 2.5)
-      this.set(cx + dx, cy + dy, cz + dz, f, value * g)
+      const x = cx + dx, y = cy + dy, z = cz + dz
+      this.set(x, y, z, f, mode === 'add' ? this.get(x, y, z, f) + value * g : value * g)
+    }
+  }
+
+  eraseSphere(cx: number, cy: number, cz: number, r: number): void {
+    const ir = Math.ceil(r)
+    for (let dz = -ir; dz <= ir; dz++) for (let dy = -ir; dy <= ir; dy++) for (let dx = -ir; dx <= ir; dx++) {
+      if (Math.sqrt(dx * dx + dy * dy + dz * dz) > r) continue
+      for (let f = 0; f < NF; f++) this.set(cx + dx, cy + dy, cz + dz, f, 0)
     }
   }
 
@@ -151,6 +160,15 @@ export class ChunkGrid {
 
   snapshot(): Array<{ key: number; data: number[] }> {
     return [...this.chunks.entries()].map(([key, chunk]) => ({ key, data: Array.from(chunk) }))
+  }
+
+  restoreChunk(key: number, data: number[] | Float32Array): boolean {
+    if (!Number.isInteger(key) || key < 0 || key >= CHUNKS_X * CHUNKS_Y * CHUNKS_Z ||
+        !data || data.length !== CHUNK_FLOATS) return false
+    for (let i = 0; i < data.length; i++) if (!Number.isFinite(data[i])) return false
+    this.chunks.set(key, new Float32Array(data))
+    this.dirtyChunks.add(key)
+    return true
   }
 
   restore(snap: Array<{ key: number; data: number[] }>): void {

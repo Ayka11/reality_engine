@@ -6,16 +6,87 @@ type StoredChunk = { version: 1; seed: string; objects: WorldObject[] }
 export class WorldPersistence {
   private readonly prefix: string
   private readonly manifestKey: string
+  private readonly fieldStateKey: string
+  private readonly fieldCheckpointKey: string
   private readonly loaded = new Set<string>()
   private readonly cache = new Map<string, WorldObject[]>()
 
   constructor(private readonly seed: string) {
     this.prefix = `reality-engine-world:${seed}:chunk:`
     this.manifestKey = `reality-engine-world:${seed}:manifest`
+    this.fieldStateKey = `reality-engine-world:${seed}:field-state`
+    this.fieldCheckpointKey = `reality-engine-world:${seed}:field-checkpoint`
   }
 
   private key(cx: number, cy: number, cz: number) {
     return this.prefix + chunkKey(cx, cy, cz)
+  }
+
+  /**
+   * Persist the authoritative field without allowing browser storage failures
+   * (quota/security/private-mode restrictions) to escape into the runtime.
+   * false means the in-memory field changed but durable persistence failed.
+   */
+  saveFieldState(state: unknown): boolean {
+    try {
+      const payload = { version: 1, seed: this.seed, state }
+      localStorage.setItem(this.fieldStateKey, JSON.stringify(payload))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  loadFieldState<T = unknown>(): T | null {
+    try {
+      const raw = localStorage.getItem(this.fieldStateKey)
+      if (!raw) return null
+      const payload = JSON.parse(raw) as {version:number;seed:string;state:T}
+      if (payload.version !== 1 || payload.seed !== this.seed) return null
+      return payload.state
+    } catch {
+      return null
+    }
+  }
+
+  saveFieldCheckpoint(state: unknown): boolean {
+    try {
+      const payload = { version: 1, seed: this.seed, state }
+      localStorage.setItem(this.fieldCheckpointKey, JSON.stringify(payload))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  loadFieldCheckpoint<T = unknown>(): T | null {
+    try {
+      const raw = localStorage.getItem(this.fieldCheckpointKey)
+      if (!raw) return null
+      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
+      if (payload.version !== 1 || payload.seed !== this.seed) return null
+      return payload.state
+    } catch {
+      return null
+    }
+  }
+
+  deleteFieldCheckpoint(): boolean {
+    try {
+      localStorage.removeItem(this.fieldCheckpointKey)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  deleteFieldState(): boolean {
+    try {
+      localStorage.removeItem(this.fieldStateKey)
+      return true
+    } catch {
+      return false
+    }
   }
 
   saveChunk(cx: number, cy: number, cz: number, objects: WorldObject[]) {
@@ -68,6 +139,8 @@ export class WorldPersistence {
       } catch {}
     }
     localStorage.removeItem(this.manifestKey)
+    localStorage.removeItem(this.fieldStateKey)
+    localStorage.removeItem(this.fieldCheckpointKey)
     this.loaded.clear()
     this.cache.clear()
   }

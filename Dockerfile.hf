@@ -1,19 +1,10 @@
 # Hugging Face Spaces Docker deployment
 FROM node:20-bookworm-slim
-
 WORKDIR /app
-
-COPY package.json package-lock.json* ./
-RUN npm ci
-
+COPY package.json ./
+RUN npm install --package-lock-only --ignore-scripts && npm ci
 COPY . .
-
 RUN npm run build
-
-RUN npm install --global serve
-
 ENV PORT=7860
-ENV SIGNAL_PORT=8888
 EXPOSE 7860
-
-CMD ["sh", "-c", "node server/signalling-server.js & exec serve dist -l 7860"]
+CMD ["node", "server/hf-server.js"]

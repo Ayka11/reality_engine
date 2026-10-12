@@ -3,9 +3,7 @@ title: Reality Engine Meta Law Simulator
 emoji: 🌌
 colorFrom: blue
 colorTo: purple
-sdk: static
-app_file: dist/index.html
-app_build_command: npm run build
+sdk: docker
 fullWidth: true
 header: mini
 license: mit
@@ -18,7 +16,7 @@ custom_headers:
 
 # Reality Engine v6 — Meta-Law Physics Simulator
 
-> Hugging Face deployment uses the Static Space build pipeline: `npm run build` produces `dist/index.html`, which is served directly in the browser.
+> Hugging Face deployment uses the Docker Space runtime. The container installs dependencies, builds `dist/`, and serves the application on port `7860`; the signalling service runs alongside the static frontend.
 
 > *"A universe you can paint — where physics evolves, civilizations rise, and an AI director watches over it all."*
 
@@ -29,6 +27,11 @@ custom_headers:
 [![HuggingFace](https://img.shields.io/badge/🤗-Live%20Demo-yellow)](https://huggingface.co/spaces/Aygun1489/Reality_Engine_SImulator)
 
 ---
+
+
+### Multiplayer rooms
+
+Same-browser tabs can collaborate through `BroadcastChannel`. Cross-device collaboration is opt-in: open the same deployment URL with a shared room token, for example `?room=team-room-2026-10`, on each device and then press **Multiplayer**. Use a unique, hard-to-guess token (12–64 letters, numbers, underscores or hyphens); do not reuse a public room token. Without a valid room token, each WebSocket connection is isolated and cannot receive other visitors' signalling messages. The room token is a shared-room identifier, not account authentication.
 
 ## What Is This
 

@@ -6,15 +6,74 @@
 
 import {
   ChunkGrid, GRID_W, GRID_H, GRID_D,
-  CHUNK_FLOATS, F,
+  CHUNK_FLOATS, F, NF, CX, CY, CZ, chunkKey,
 } from './ChunkGrid'
 
 const grid = new ChunkGrid()
 const W = GRID_W, H = GRID_H, D = GRID_D
 let tick = 0, evCount = 0
+// A restore session is isolated from normal ticks and requires unique chunk ACKs.
+let activeRestoreId: number | null = null
+let expectedRestoreChunks = 0
+let restoredChunkCount = 0
+let restoreFailed = false
+const restoredChunkKeys = new Set<number>()
+const restoreBeforeChunks = new Map<number, Float32Array | null>()
+const restoreBeforeDirtyChunks = new Set<number>()
 const causal: Array<{ id: number; tick: number; x: number; y: number; z: number; delta: number }> = []
 let DIFF = 0.09, ENT = 0.0004, INFO = 0.35, BIO = 0.25
 const activeProcs = new Set<string>(['thermo', 'bio'])
+
+type CellImage = Map<number, Float32Array>
+type SculptHistoryRecord = { before: CellImage; after: CellImage }
+const sculptUndo: SculptHistoryRecord[] = []
+const sculptRedo: SculptHistoryRecord[] = []
+const MAX_SCULPT_HISTORY = 50
+function affectedCellIndices(x: number, y: number, z: number, radius: number): number[] {
+  const r = Math.max(0, Number.isFinite(radius) ? radius : 0)
+  const x0 = Math.max(0, Math.ceil(x-r)), x1 = Math.min(GRID_W-1, Math.floor(x+r))
+  const y0 = Math.max(0, Math.ceil(y-r)), y1 = Math.min(GRID_H-1, Math.floor(y+r))
+  const z0 = Math.max(0, Math.ceil(z-r)), z1 = Math.min(GRID_D-1, Math.floor(z+r))
+  const cells:number[]=[]
+  for(let cz=z0;cz<=z1;cz++)for(let cy=y0;cy<=y1;cy++)for(let cx=x0;cx<=x1;cx++){
+    const dx=cx-x,dy=cy-y,dz=cz-z
+    if(Math.sqrt(dx*dx+dy*dy+dz*dz)<=r)cells.push((cz*GRID_H+cy)*GRID_W+cx)
+  }
+  return cells
+}
+function captureCells(indices:number[]):CellImage {
+  const image:CellImage=new Map()
+  for(const index of indices){
+    const x=index%GRID_W,y=Math.floor(index/GRID_W)%GRID_H,z=Math.floor(index/(GRID_W*GRID_H))
+    const values=new Float32Array(NF)
+    for(let f=0;f<NF;f++)values[f]=grid.get(x,y,z,f)
+    image.set(index,values)
+  }
+  return image
+}
+function restoreCells(image:CellImage):void {
+  const touchedChunks=new Set<number>()
+  for(const [index,values] of image){
+    const x=index%GRID_W,y=Math.floor(index/GRID_W)%GRID_H,z=Math.floor(index/(GRID_W*GRID_H))
+    for(let f=0;f<NF;f++)grid.set(x,y,z,f,values[f])
+    touchedChunks.add(chunkKey(Math.floor(x/CX),Math.floor(y/CY),Math.floor(z/CZ)))
+  }
+  // A first sculpt can allocate a formerly empty chunk. Remove it again only
+  // when no other cell in that chunk still contains data.
+  for(const key of touchedChunks){
+    const chunk=grid.chunks.get(key)
+    if(!chunk)continue
+    let nonzero=false
+    for(let i=0;i<chunk.length;i++)if(Math.abs(chunk[i])>0.001){nonzero=true;break}
+    if(!nonzero){grid.chunks.delete(key);grid.dirtyChunks.add(key)}
+  }
+}
+function commitSculptEdit(indices:number[],before:CellImage):void {
+  sculptUndo.push({before,after:captureCells(indices)})
+  if(sculptUndo.length>MAX_SCULPT_HISTORY)sculptUndo.shift()
+  sculptRedo.length=0
+}
+function clearSculptHistory():void {sculptUndo.length=0;sculptRedo.length=0}
 
 function simStep(dt: number) {
   for (const { x, y, z, base, chunk } of grid.activeCells()) {
@@ -99,8 +158,41 @@ function buildFramePayload(): ArrayBuffer {
   return ab
 }
 
+function emitRestoreFrame(restoreId: number): void {
+  const ab = buildFramePayload()
+  ;(self as unknown as Worker).postMessage({
+    cmd: 'frame', tick, evCount, events: causal.slice(-20), ab, stats: grid.stats, restoreId,
+  }, [ab])
+}
+
 self.onmessage = (e: MessageEvent) => {
-  const { cmd, data } = e.data
+  const { cmd, data, requestId } = e.data
+
+  if (cmd === 'restoreBegin') {
+    const restoreId = data?.restoreId
+    const expected = data?.expected
+    if (!Number.isInteger(restoreId) || restoreId < 1 ||
+        !Number.isInteger(expected) || expected < 1 || activeRestoreId !== null) {
+      ;(self as unknown as Worker).postMessage({
+        cmd: 'restoreComplete',
+        data: { restoreId, complete: false, reason: 'invalid-or-concurrent-restore', restoredChunkCount, expectedRestoreChunks },
+      })
+      return
+    }
+    activeRestoreId = restoreId
+    expectedRestoreChunks = expected
+    restoredChunkCount = 0
+    restoreFailed = false
+    restoredChunkKeys.clear()
+    restoreBeforeChunks.clear()
+    restoreBeforeDirtyChunks.clear()
+    for (const key of grid.dirtyChunks) restoreBeforeDirtyChunks.add(key)
+    grid.dirtyChunks.clear()
+    return
+  }
+
+  // Do not let simulation or edits interleave with an atomic restore session.
+  if (activeRestoreId !== null && cmd !== 'restoreChunk' && cmd !== 'restoreEnd') return
 
   if (cmd === 'tick') {
     const speed = (data?.speed as number) || 1
@@ -116,13 +208,29 @@ self.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'paint') {
-    const { x, y, z, f, v, r, mode } = data
-    if (r > 0) grid.paintSphere(x, y, z, r, f, v)
+    const { x, y, z, f, v, r, mode, trackHistory } = data
+    if (!trackHistory) clearSculptHistory()
+    const cells = trackHistory ? affectedCellIndices(x,y,z,Math.max(0,r||0)) : []
+    const before = trackHistory ? captureCells(cells) : null
+    if (mode === 'erase') {
+      if (r > 0) grid.eraseSphere(x, y, z, r)
+      else [F.E, F.D, F.I, F.S, F.T, F.BIO].forEach(ff => grid.set(x, y, z, ff, 0))
+    } else if (r > 0) grid.paintSphere(x, y, z, r, f, v, mode === 'add' ? 'add' : 'set')
     else if (mode === 'add') grid.add(x, y, z, f, v)
     else if (mode === 'set') grid.set(x, y, z, f, v)
     else [F.E, F.D, F.I, F.S, F.T, F.BIO].forEach(ff => grid.set(x, y, z, ff, 0))
+    if(before)commitSculptEdit(cells,before)
     return
   }
+  if(cmd==='undoSculpt'){
+    const record=sculptUndo.pop();if(record){restoreCells(record.before);sculptRedo.push(record)}
+    ;(self as unknown as Worker).postMessage({cmd:'sculptHistoryApplied',action:'undo',applied:!!record,requestId});return
+  }
+  if(cmd==='redoSculpt'){
+    const record=sculptRedo.pop();if(record){restoreCells(record.after);sculptUndo.push(record)}
+    ;(self as unknown as Worker).postMessage({cmd:'sculptHistoryApplied',action:'redo',applied:!!record,requestId});return
+  }
+  if(cmd==='clearSculptHistory'){clearSculptHistory();return}
 
   if (cmd === 'brush') {
     const { name, x, y, z, radius, strength } = data as {
@@ -133,6 +241,10 @@ self.onmessage = (e: MessageEvent) => {
     const cz = Math.max(0, Math.min(D - 1, Math.round(z)))
     const r = Math.max(1, Math.min(24, radius || 4))
     const s = Number.isFinite(strength) ? strength : 1
+    const trackHistory = data.trackHistory === true
+    if (!trackHistory) clearSculptHistory()
+    const cells = trackHistory ? affectedCellIndices(cx,cy,cz,r) : []
+    const before = trackHistory ? captureCells(cells) : null
     const paint = (f: number, value: number) => grid.paintSphere(cx, cy, cz, r, f, value * s)
     switch (name) {
       case 'Volcano': paint(F.E, 800); paint(F.T, 500); paint(F.D, 0.6); paint(F.S, 0.2); break
@@ -160,11 +272,13 @@ self.onmessage = (e: MessageEvent) => {
       }
       default: paint(F.E, 100)
     }
+    if (before) commitSculptEdit(cells,before)
     ;(self as unknown as Worker).postMessage({ cmd: 'brushApplied', name, x: cx, y: cy, z: cz, radius: r })
     return
   }
 
   if (cmd === 'generate') {
+    clearSculptHistory()
     grid.clear()
     const a = data
     DIFF = a.DIFF || 0.09; ENT = a.ENT || 0.0004
@@ -189,6 +303,7 @@ self.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'preset') {
+    clearSculptHistory()
     grid.clear(); tick = 0; causal.length = 0; evCount = 0
     const nm = data.name as string
     if (nm === 'burst') {
@@ -367,6 +482,77 @@ self.onmessage = (e: MessageEvent) => {
 
   if (cmd === 'snapshot') {
     ;(self as unknown as Worker).postMessage({ cmd: 'snapshot', data: { snap: grid.snapshot(), tick } })
+    return
+  }
+
+  if (cmd === 'restoreChunk') {
+    const restoreId = data?.restoreId
+    const key = data?.key
+    const payload = data?.data as number[] | Float32Array | undefined
+    if (activeRestoreId === null || restoreId !== activeRestoreId) return
+    if (!Number.isInteger(key) || key < 0 || !payload || payload.length !== CHUNK_FLOATS) {
+      restoreFailed = true
+      ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key, restoreId, accepted: false } })
+      return
+    }
+    if (restoredChunkKeys.has(key)) {
+      restoreFailed = true
+      ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key, restoreId, accepted: false, duplicate: true } })
+      return
+    }
+    for (let i = 0; i < payload.length; i++) {
+      if (!Number.isFinite(payload[i])) {
+        restoreFailed = true
+        ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key, restoreId, accepted: false } })
+        return
+      }
+    }
+    if (!restoreBeforeChunks.has(key)) restoreBeforeChunks.set(key, grid.chunks.get(key)?.slice() ?? null)
+    if (!grid.restoreChunk(key, payload)) {
+      restoreFailed = true
+      ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key, restoreId, accepted: false } })
+      return
+    }
+    restoredChunkKeys.add(key)
+    restoredChunkCount++
+    emitRestoreFrame(restoreId)
+    ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key, restoreId, accepted: true } })
+    return
+  }
+
+  if (cmd === 'restoreEnd') {
+    const restoreId = data?.restoreId
+    const complete = activeRestoreId === restoreId && !restoreFailed &&
+      restoredChunkCount === expectedRestoreChunks && restoredChunkKeys.size === expectedRestoreChunks
+    if (activeRestoreId === restoreId) {
+      if (!complete) {
+        // Roll back every chunk already replaced so a rejected restore is atomic.
+        for (const [key, before] of restoreBeforeChunks) {
+          if (before === null) {
+            grid.chunks.delete(key)
+            grid.dirtyChunks.add(key)
+          } else {
+            grid.restoreChunk(key, before)
+          }
+        }
+      } else {
+        clearSculptHistory()
+      }
+      // Preserve dirty work that was pending before the isolated restore began.
+      for (const key of restoreBeforeDirtyChunks) grid.dirtyChunks.add(key)
+    }
+    ;(self as unknown as Worker).postMessage({
+      cmd: 'restoreComplete', data: { restoreId, complete, restoredChunkCount, expectedRestoreChunks },
+    })
+    if (activeRestoreId === restoreId) {
+      activeRestoreId = null
+      expectedRestoreChunks = 0
+      restoredChunkCount = 0
+      restoreFailed = false
+      restoredChunkKeys.clear()
+      restoreBeforeChunks.clear()
+      restoreBeforeDirtyChunks.clear()
+    }
     return
   }
 

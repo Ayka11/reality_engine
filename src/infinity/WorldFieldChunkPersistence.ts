@@ -25,8 +25,97 @@ function checksum(values: number[]): string {
   return (h >>> 0).toString(16).padStart(8, '0')
 }
 
+const DATABASE_NAME = 'reality-engine-world-field-chunks'
+const DATABASE_VERSION = 1
+const OBJECT_STORE = 'snapshots'
+
 export class WorldFieldChunkPersistence {
   private readonly snapshots = new Map<string, WorldFieldChunkSnapshot>()
+  private databasePromise: Promise<IDBDatabase | null> | null = null
+  private writeQueue: Promise<void> = Promise.resolve()
+  private lastDurabilityError: string | null = null
+
+  private openDatabase(): Promise<IDBDatabase | null> {
+    if (this.databasePromise) return this.databasePromise
+    if (typeof indexedDB === 'undefined') return Promise.resolve(null)
+    this.databasePromise = new Promise((resolve) => {
+      try {
+        const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
+        request.onupgradeneeded = () => {
+          const db = request.result
+          if (!db.objectStoreNames.contains(OBJECT_STORE)) db.createObjectStore(OBJECT_STORE, { keyPath: 'key' })
+        }
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => {
+          this.lastDurabilityError = request.error?.message ?? 'IndexedDB open failed'
+          resolve(null)
+        }
+        request.onblocked = () => {
+          this.lastDurabilityError = 'IndexedDB upgrade blocked by another open tab'
+          resolve(null)
+        }
+      } catch (error) {
+        this.lastDurabilityError = error instanceof Error ? error.message : String(error)
+        resolve(null)
+      }
+    })
+    return this.databasePromise
+  }
+
+  private enqueueWrite(operation: (store: IDBObjectStore) => IDBRequest): void {
+    this.writeQueue = this.writeQueue.then(async () => {
+      const db = await this.openDatabase()
+      if (!db) return
+      await new Promise<void>((resolve, reject) => {
+        try {
+          const transaction = db.transaction(OBJECT_STORE, 'readwrite')
+          const request = operation(transaction.objectStore(OBJECT_STORE))
+          request.onerror = () => reject(request.error ?? new Error('IndexedDB write failed'))
+          transaction.oncomplete = () => {
+            this.lastDurabilityError = null
+            resolve()
+          }
+          transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB transaction failed'))
+          transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted'))
+        } catch (error) { reject(error) }
+      })
+    }).catch((error) => {
+      this.lastDurabilityError = error instanceof Error ? error.message : String(error)
+    })
+  }
+
+  async flushDurableWrites(): Promise<{ durable: boolean; pending: boolean; error: string | null }> {
+    await this.writeQueue
+    const db = await this.openDatabase()
+    return { durable: db !== null && this.lastDurabilityError === null, pending: false, error: this.lastDurabilityError }
+  }
+
+  async loadDurable(coord: WorldFieldChunkCoord): Promise<WorldFieldChunkSnapshot | null> {
+    await this.writeQueue
+    const key = `${coord.cx},${coord.cy},${coord.cz}`
+    const cached = this.snapshots.get(key)
+    if (cached && this.validate(cached)) return cached
+    const db = await this.openDatabase()
+    if (!db) return null
+    const snapshot = await new Promise<WorldFieldChunkSnapshot | null>((resolve) => {
+      try {
+        const request = db.transaction(OBJECT_STORE, 'readonly').objectStore(OBJECT_STORE).get(key)
+        request.onsuccess = () => resolve((request.result as WorldFieldChunkSnapshot | undefined) ?? null)
+        request.onerror = () => {
+          this.lastDurabilityError = request.error?.message ?? 'IndexedDB read failed'
+          resolve(null)
+        }
+      } catch (error) {
+        this.lastDurabilityError = error instanceof Error ? error.message : String(error)
+        resolve(null)
+      }
+    })
+    if (snapshot && this.validate(snapshot)) {
+      this.snapshots.set(key, snapshot)
+      return snapshot
+    }
+    return null
+  }
 
   saveWorkerChunks(coord: WorldFieldChunkCoord, seed: string, workerChunks: { key: number; data: number[] }[], workerView: { center: { x: number; y: number; z: number }; sliceY: number; seed: string }, providerVersion = 2): WorldFieldChunkSnapshot {
     const canonical = workerChunks
@@ -42,6 +131,7 @@ export class WorldFieldChunkPersistence {
       checksum: checksum(flat), savedAt: Date.now(),
     }
     this.snapshots.set(snapshot.key, snapshot)
+    this.enqueueWrite(store => store.put(snapshot))
     return snapshot
   }
 
@@ -58,6 +148,7 @@ export class WorldFieldChunkPersistence {
       savedAt: Date.now(),
     }
     this.snapshots.set(snapshot.key, snapshot)
+    this.enqueueWrite(store => store.put(snapshot))
     return snapshot
   }
 
@@ -100,10 +191,16 @@ export class WorldFieldChunkPersistence {
   }
 
   remove(coord: WorldFieldChunkCoord): boolean {
-    return this.snapshots.delete(`${coord.cx},${coord.cy},${coord.cz}`)
+    const key = `${coord.cx},${coord.cy},${coord.cz}`
+    const removed = this.snapshots.delete(key)
+    this.enqueueWrite(store => store.delete(key))
+    return removed
   }
 
-  clear(): void { this.snapshots.clear() }
+  clear(): void {
+    this.snapshots.clear()
+    this.enqueueWrite(store => store.clear())
+  }
   size(): number { return this.snapshots.size }
 }
 

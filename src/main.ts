@@ -1,3 +1,4 @@
+import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import { SimulationEngine } from './simulation/SimulationEngine';
 import { VoxelRenderer, LayerName } from './render/VoxelRenderer';
 import { Entity } from './simulation/EntityLayer';
@@ -31,6 +32,7 @@ import { GraphCompiler, RealityGraph } from './creator';
 import { LawProcessEditor } from './ui/LawProcessEditor';
 import { SaveManager, WorldSaveSystem } from './world/save';
 import { SculptManager, type BrushFalloff, type SculptToolId } from './sculpt';
+import { UnifiedSculptTransactionCoordinator } from './sculpt/UnifiedSculptTransactionCoordinator';
 import { DistributedEngine } from './distributed/DistributedEngine';
 import { WorldComposer, PHI_ARCHETYPES, FIELD_BALANCES, COMPLEXITY_MODES, SPACETIME_PROFILES } from './ux/WorldComposer';
 import { WorldHealth } from './ux/WorldHealth';
@@ -49,6 +51,25 @@ import './ui/ux-system.css';
 
 // ── Engine + renderer ─────────────────────────────────────────────────────────
 const sim      = new SimulationEngine();
+
+// Canonical law-state bridge consumed by Infinite World decision and physics contracts.
+// Keep this derived from the same LawEngine instance that drives the simulation.
+const REALITY_LAW_PROCESS_NAMES: Record<number, string> = {
+  0: 'energy', 1: 'thermo', 2: 'density', 3: 'entropy', 4: 'info', 5: 'bio',
+  6: 'wave', 7: 'gravity', 8: 'phase', 9: 'metabolism', 10: 'signal',
+  11: 'crystallization', 12: 'radiation', 13: 'pressure', 14: 'rotation', 15: 'erosion',
+};
+(window as unknown as Record<string, unknown>).getRealityLawState = () => {
+  const mask = sim.laws.activeProcessMask;
+  return {
+    laws: sim.laws.laws.map(law => ({ name: law.name, active: law.active, fitness: law.fitness, strength: 1 })),
+    processes: Object.entries(REALITY_LAW_PROCESS_NAMES)
+      .filter(([id]) => (mask & (1 << Number(id))) !== 0)
+      .map(([, name]) => name),
+  };
+};
+
+
 const infinityScale = createInfinityScaleRuntime();
 const canvas   = document.getElementById('gc') as HTMLCanvasElement;
 const renderer = new VoxelRenderer(canvas, sim.grid.W, sim.grid.H, sim.grid.D);
@@ -272,8 +293,13 @@ document.addEventListener('keydown', e => {
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();
-    const stroke = e.shiftKey ? sculptManager.redo() : sculptManager.undo();
-    if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `${e.shiftKey ? 'Redo' : 'Undo'} ${stroke.tool}` : 'Sculpt history empty';
+    try {
+      const label = e.shiftKey ? unifiedSculptTransactions.redo() : unifiedSculptTransactions.undo();
+      if (sculptStatusEl) sculptStatusEl.textContent = label ? `${e.shiftKey ? 'Redo' : 'Undo'} ${label}` : 'Sculpt history empty';
+    } catch (error) {
+      console.error('[sculpt-transaction] keyboard undo/redo failed', error);
+      if (sculptStatusEl) sculptStatusEl.textContent = 'Sculpt transaction failed; state rollback attempted';
+    }
   }
   if (e.key === 'r' || e.key === 'R') renderer.resetCamera();
 });
@@ -313,6 +339,21 @@ const speedSl = document.getElementById('speedSlider') as HTMLInputElement;
 const falloffEl = document.getElementById('brushFalloff') as HTMLSelectElement;
 const sculptStatusEl = document.getElementById('sculptStatus');
 const sculptManager = new SculptManager(sim.grid, () => sim.syncToGPU());
+const unifiedSculptTransactions = new UnifiedSculptTransactionCoordinator({
+  undoLegacy: () => sculptManager.undo(),
+  redoLegacy: () => sculptManager.redo(),
+  undoAuthoritative: () => (window as any).infinityUndoLegacySculptAuthoritative?.() ?? null,
+  redoAuthoritative: () => (window as any).infinityRedoLegacySculptAuthoritative?.() ?? null,
+  authoritativeCheckpoint: () => {
+    const field = (window as any).infiniteWorld?.authoritativeField;
+    return field ? JSON.stringify(field.serialize()) : 'missing-authoritative-field';
+  },
+});
+(window as any).realitySculptTransactionRuntime = {
+  undo: () => unifiedSculptTransactions.undo(),
+  redo: () => unifiedSculptTransactions.redo(),
+  history: () => unifiedSculptTransactions.getState(),
+};
 
 bsEl.addEventListener('input',    () => document.getElementById('bsOut')!.textContent    = bsEl.value);
 bStrEl.addEventListener('input',  () => document.getElementById('bStrOut')!.textContent  = bStrEl.value);
@@ -338,12 +379,22 @@ function readSculptFields() {
 readSculptFields();
 
 document.getElementById('sculptUndoBtn')?.addEventListener('click', () => {
-  const stroke = sculptManager.undo();
-  if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `Undo ${stroke.tool}` : 'Nothing to undo';
+  try {
+    const label = unifiedSculptTransactions.undo();
+    if (sculptStatusEl) sculptStatusEl.textContent = label ? `Undo ${label}` : 'Nothing to undo';
+  } catch (error) {
+    console.error('[sculpt-transaction] UI undo failed', error);
+    if (sculptStatusEl) sculptStatusEl.textContent = 'Undo failed; state rollback attempted';
+  }
 });
 document.getElementById('sculptRedoBtn')?.addEventListener('click', () => {
-  const stroke = sculptManager.redo();
-  if (sculptStatusEl) sculptStatusEl.textContent = stroke ? `Redo ${stroke.tool}` : 'Nothing to redo';
+  try {
+    const label = unifiedSculptTransactions.redo();
+    if (sculptStatusEl) sculptStatusEl.textContent = label ? `Redo ${label}` : 'Nothing to redo';
+  } catch (error) {
+    console.error('[sculpt-transaction] UI redo failed', error);
+    if (sculptStatusEl) sculptStatusEl.textContent = 'Redo failed; state rollback attempted';
+  }
 });
 
 zSlice.max = String(sim.grid.D - 1);
@@ -362,6 +413,49 @@ document.getElementById('playbtn')!.addEventListener('click', () => {
     : '<i class="ti ti-player-play"></i> Play';
 });
 
+async function applySmartBrushTransaction(name: keyof typeof SMART_BRUSHES, x: number, y: number, radius: number, selectedZ: number, strength: number) {
+  return unifiedSculptTransactions.commit(`smart:${name}`,
+    () => sculptManager.applyCustomStroke({
+      tool: 'inject', position: [x, y, selectedZ], radius, strength,
+      falloff: sculptManager.currentBrush.falloff,
+      parameters: { smartBrush: name, selectedLegacyZ: selectedZ }, affectedChunks: [],
+    }, () => SMART_BRUSHES[name].paint(sim.grid, x, y, radius, selectedZ)),
+    () => {
+      const authoritative = (window as any).infinityApplyLegacySmartBrush;
+      if (typeof authoritative !== 'function') throw new Error('Authoritative SmartBrush runtime is unavailable');
+      return authoritative(name, { x, y, z: selectedZ }, radius, selectedZ, { strength, selectedLegacyZ: selectedZ });
+    },
+  );
+}
+async function applyLegacySculptTransaction(sculptTool: SculptToolId, cell: { x: number; y: number; z: number }, radius: number, strength: number) {
+  return unifiedSculptTransactions.commit(`brush:${sculptTool}`,
+    () => sculptManager.onMouseDrag([cell.x, cell.y, cell.z], sculptTool, {
+      materialId: activeMaterial, layer: renderer.layer, additive: sculptTool !== 'erase',
+    }),
+    () => {
+      const authoritative = (window as any).infinityApplyLegacySculptStroke;
+      if (typeof authoritative !== 'function') throw new Error('Authoritative sculpt runtime is unavailable');
+      return authoritative(sculptTool, cell, radius, strength, {
+        fields: { ...sculptManager.currentBrush.fields },
+        noiseScale: sculptManager.currentBrush.noiseScale, seed: sculptManager.currentBrush.seed,
+        period: 4, selectedLegacyZ: selZ,
+      });
+    },
+  );
+}
+(window as any).realitySculptTransactionRuntime.applySmartBrush = async (name: keyof typeof SMART_BRUSHES, x: number, y: number, radius: number, selectedZ: number, strength = 1) => {
+  sculptManager.currentBrush.radius = radius; sculptManager.currentBrush.strength = strength;
+  return applySmartBrushTransaction(name, x, y, radius, selectedZ, strength);
+};
+(window as any).realitySculptTransactionRuntime.applyStroke = async (
+  sculptTool: SculptToolId, cell: { x: number; y: number; z: number }, radius: number, strength: number,
+  fields: Partial<typeof sculptManager.currentBrush.fields> = { energy: 1 },
+) => {
+  sculptManager.currentBrush.radius = radius; sculptManager.currentBrush.strength = strength;
+  sculptManager.currentBrush.fields = { ...sculptManager.currentBrush.fields, ...fields };
+  return applyLegacySculptTransaction(sculptTool, cell, radius, strength);
+};
+
 // ── 3D Painting ───────────────────────────────────────────────────────────────
 async function paintAt(x: number, y: number, z: number, event?: PointerEvent) {
   const bs  = parseInt(bsEl.value);
@@ -370,10 +464,10 @@ async function paintAt(x: number, y: number, z: number, event?: PointerEvent) {
   sculptManager.currentBrush.strength = Math.max(0.1, str / 50);
   sculptManager.currentBrush.falloff = falloffEl.value as BrushFalloff;
 
-  // Smart brush intercept
+  // SmartBrush and ordinary strokes share the same transaction/undo stream.
   if (activeSmartBrush && SMART_BRUSHES[activeSmartBrush]) {
-    SMART_BRUSHES[activeSmartBrush].paint(sim.grid, x, y, bs + 1, selZ);
-    sim.syncToGPU();
+    const smartStroke = await applySmartBrushTransaction(activeSmartBrush, x, y, bs + 1, selZ, sculptManager.currentBrush.strength);
+    if (sculptStatusEl) sculptStatusEl.textContent = `smart:${activeSmartBrush} r${smartStroke.radius} hist:${unifiedSculptTransactions.getState().undo}`;
     return;
   }
 
@@ -395,14 +489,8 @@ async function paintAt(x: number, y: number, z: number, event?: PointerEvent) {
   if (event?.shiftKey) sculptTool = 'smooth';
   if (event?.ctrlKey) sculptTool = 'erase';
 
-  const stroke = await sculptManager.onMouseDrag([x, y, z], sculptTool, {
-    materialId: activeMaterial,
-    layer: renderer.layer,
-    additive: sculptTool !== 'erase',
-  });
-  if (sculptStatusEl) {
-    sculptStatusEl.textContent = `${stroke.tool} r${stroke.radius} chunks:${stroke.affectedChunks.length} hist:${sculptManager.brushEngine.historyLength}`;
-  }
+  const stroke = await applyLegacySculptTransaction(sculptTool, { x, y, z }, bs, sculptManager.currentBrush.strength);
+  if (sculptStatusEl) sculptStatusEl.textContent = `${stroke.tool} r${stroke.radius} chunks:${stroke.affectedChunks.length} hist:${unifiedSculptTransactions.getState().undo}`;
 }
 
 canvas.addEventListener('pointerdown', e => {
@@ -1363,7 +1451,11 @@ document.getElementById('btnMultiplayer')?.addEventListener('click', () => {
     const uid = multiplay.connect();
     btn.textContent = `Disconnect (${uid})`;
     btn.style.color = '#4caf7d';
-    document.getElementById('scriptLog')!.textContent = `Connected as ${uid} — open another tab to collaborate`;
+    const room = new URLSearchParams(window.location.search).get('room') || '';
+    const sharedRoom = /^[A-Za-z0-9_-]{12,64}$/.test(room);
+    document.getElementById('scriptLog')!.textContent = sharedRoom
+      ? `Connected as ${uid} — cross-device room: ${room}`
+      : `Connected as ${uid} — same-browser tabs only. For cross-device collaboration, open this URL with ?room=YOUR_SHARED_TOKEN on each device.`;
   } else {
     multiplay.disconnect();
     btn.textContent = '🔗 Multiplayer';

@@ -34,6 +34,17 @@ export class SculptManager {
     this.brushEngine = new BrushEngine(grid);
   }
 
+  async applyCustomStroke(stroke: BrushStroke, apply: () => void): Promise<BrushStroke> {
+    try {
+      this.lastStroke = await this.brushEngine.applyCustomStroke(stroke, apply);
+      this.onChanged?.();
+      return this.lastStroke;
+    } catch (error) {
+      this.onChanged?.();
+      throw error;
+    }
+  }
+
   async onMouseDrag(
     worldPos: [number, number, number],
     tool: SculptToolId,
@@ -55,9 +66,14 @@ export class SculptManager {
       affectedChunks: [],
     };
 
-    this.lastStroke = await this.brushEngine.applyStroke(stroke);
-    this.onChanged?.();
-    return this.lastStroke;
+    try {
+      this.lastStroke = await this.brushEngine.applyStroke(stroke);
+      this.onChanged?.();
+      return this.lastStroke;
+    } catch (error) {
+      this.onChanged?.();
+      throw error;
+    }
   }
 
   setSingleLayer(layer: string, strength: number): void {

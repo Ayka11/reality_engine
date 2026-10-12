@@ -6,8 +6,13 @@ export default defineConfig({
     target: 'esnext',
     rollupOptions: {
       output: {
-        manualChunks: {
-          three: ['three'],
+        codeSplitting: {
+          groups: [
+            {
+              name: 'three',
+              test: /[\\/]node_modules[\\/]three[\\/]/,
+            },
+          ],
         },
       },
     },
