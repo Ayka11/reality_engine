@@ -3,6 +3,7 @@ import { EntityLayer } from "../simulation/EntityLayer";
 import { VoxelGrid } from "../core/VoxelGrid";
 import { F } from "../core/CellState";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import { InfinityScaleMixedLODCPUExecutor } from "./InfinityScaleMixedLODCPUExecutor";
 import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import {
   beginInfinityScaleGlobalLODTransaction,
@@ -22,7 +23,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const grid = new VoxelGrid(12, 8, 8);
   const state = new InfinityScaleLODState(4);
   const coarseKey = "1:0,0,0";
-  const fineKey = "0:8,0,0";
+  const fineKey = "0:2,0,0";
   state.ensureChunk(coarseKey, 1);
   state.ensureChunk(fineKey, 0);
 
@@ -41,6 +42,10 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const entityIndex = grid.idx(9, 2, 2) / CELL_FIELDS;
   grid.buffer[entityIndex * CELL_FIELDS + F.BIO_POTENTIAL] = 0.5;
   grid.buffer[entityIndex * CELL_FIELDS + F.ENERGY] = 20;
+  // EntityLayer's flood-fill contract requires at least two connected active cells.
+  const adjacentEntityIndex = grid.idx(10, 2, 2) / CELL_FIELDS;
+  grid.buffer[adjacentEntityIndex * CELL_FIELDS + F.BIO_POTENTIAL] = 0.5;
+  grid.buffer[adjacentEntityIndex * CELL_FIELDS + F.ENERGY] = 20;
 
   const plan: InfinityScaleExecutionPlan = {
     revision: 3,
@@ -109,6 +114,8 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   );
 
   stageInfinityScaleEntityCommit(transaction);
+  // The unified commit barrier requires complete mixed-LOD face staging.
+  new InfinityScaleMixedLODCPUExecutor(state, context).stageBoundaryTransfers(lodTransaction);
   stageInfinityScaleAgentMigrations(transaction, [{
     agentId,
     from: [9, 2, 2],
@@ -117,6 +124,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     energy: agent.energy,
   }]);
 
+  frame.phase = "boundary-reconciliation";
   const validation = validateInfinityScaleUnifiedTransaction(transaction, frame);
   if (!validation.readyToCommit) {
     throw new Error(
@@ -124,7 +132,6 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     );
   }
 
-  frame.phase = "boundary-reconciliation";
   commitInfinityScaleUnifiedTransaction(transaction, frame);
 
   const moved = agents.getAgents().find(candidate => candidate.id === agentId);
@@ -156,6 +163,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const integrityFrame: InfinityScaleGlobalExecutionFrame = {
     ...frame,
     revision: 5,
+    planRevision: 5,
     phase: "local-execution",
     committed: false,
     finalized: false,
@@ -186,7 +194,6 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     integrityContext,
   );
 
-  const { InfinityScaleMixedLODCPUExecutor } = require("./InfinityScaleMixedLODCPUExecutor") as typeof import("./InfinityScaleMixedLODCPUExecutor");
   const executor = new InfinityScaleMixedLODCPUExecutor(integrityState, integrityContext);
   executor.stageBoundaryTransfers(integrityLod);
   const staged = integrityLod.synchronization.getStagedUpdates();
@@ -220,6 +227,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const frame2: InfinityScaleGlobalExecutionFrame = {
     ...frame,
     revision: 4,
+    planRevision: 4,
     phase: "local-execution",
     committed: false,
     finalized: false,
