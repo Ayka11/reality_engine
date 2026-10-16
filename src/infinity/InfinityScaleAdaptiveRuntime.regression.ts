@@ -1,8 +1,23 @@
 import { InfinityScaleV2 } from "../InfinityScaleV2";
 import { InfinityScaleAdaptiveRuntime } from "./InfinityScaleAdaptiveRuntime";
+import { beginInfinityScaleGlobalFrame, advanceInfinityScaleGlobalFrame } from "./InfinityScaleGlobalExecutionFrame";
+import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 
 export function runInfinityScaleAdaptiveRuntimeRegression(): void {
   const runtime = new InfinityScaleAdaptiveRuntime(new InfinityScaleV2());
+  const plan: InfinityScaleExecutionPlan = {
+    revision: 0, mode: "selective-cpu-ready", observer: { x: 0, y: 0, z: 0 },
+    chunks: [], simulationBudget: 0, requestedSimulationCount: 0, selectedSimulationCount: 0,
+    maxSimulatingChunks: 0, boundaryReadChunks: [], boundaryReadCount: 0, boundaryReadRelations: [],
+    simulationCellCount: 0, boundaryReadCellCount: 0, localExecutionLayers: [], globalExecutionLayers: [],
+    selectiveCpuReady: true, selectiveGpuReady: false, gpuPhysicsReady: false,
+    lodBoundaryTransferReady: false, mixedLodExecutionReady: false,
+    entityExecutionReady: false, agentMigrationReady: false,
+  };
+  const frame0 = beginInfinityScaleGlobalFrame(plan, 0, 1);
+  const frame1 = advanceInfinityScaleGlobalFrame(frame0, "local-execution");
+  const frame2 = advanceInfinityScaleGlobalFrame(frame1, "local-commit");
+  const frame = advanceInfinityScaleGlobalFrame(frame2, "boundary-reconciliation");
 
   const committed = runtime.step({
     stateRevision: 0,
@@ -19,7 +34,7 @@ export function runInfinityScaleAdaptiveRuntimeRegression(): void {
     },
     conservationValid: true,
     gpuComplete: true,
-  });
+  }, frame, plan);
 
   if (!committed.committed) throw new Error("Valid adaptive runtime step did not commit");
   if (committed.topologyRevision !== 1) {
