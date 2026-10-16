@@ -1,9 +1,9 @@
 import { runInfinityScaleRuntimeReplay } from "./InfinityScaleRuntimeReplay";
 
 export function runInfinityScaleRuntimeReplayRegression(): void {
-  const region = (error: number) => ({
+  const region = (error: number, epoch: number) => ({
     regionId: "front",
-    epoch: 1,
+    epoch,
     runtimeError: error,
     field: "density",
     estimatedErrorReduction: 0.9,
@@ -17,9 +17,9 @@ export function runInfinityScaleRuntimeReplayRegression(): void {
   });
 
   const epochs = [
-    { epoch: 1, stateRevision: 0, topologyRevision: 0, regions: [region(0.8) as any], errorAfterCommit: 0.7, committed: true, topologyChanged: true },
-    { epoch: 2, stateRevision: 1, topologyRevision: 1, regions: [region(0.6) as any], errorAfterCommit: 0.5, committed: true, topologyChanged: false },
-    { epoch: 3, stateRevision: 2, topologyRevision: 1, regions: [region(0.4) as any], errorAfterCommit: 0.35, committed: false, topologyChanged: false },
+    { epoch: 1, stateRevision: 0, topologyRevision: 0, regions: [region(0.8, 1) as any], errorAfterCommit: 0.7, committed: true, topologyChanged: true },
+    { epoch: 2, stateRevision: 1, topologyRevision: 1, regions: [region(0.6, 2) as any], errorAfterCommit: 0.5, committed: true, topologyChanged: false },
+    { epoch: 3, stateRevision: 2, topologyRevision: 1, regions: [region(0.4, 3) as any], errorAfterCommit: 0.35, committed: false, topologyChanged: false },
   ];
 
   const a = runInfinityScaleRuntimeReplay(epochs);
