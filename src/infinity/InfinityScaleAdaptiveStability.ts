@@ -30,6 +30,12 @@ export interface InfinityScaleAdaptiveMetrics {
   score: number;
   estimatedError?: number;
   conservationResidual?: number;
+  causalAttribution?: {
+    physicalEvolution: number;
+    numericalResidual: number;
+    lodTransitionEffect: number;
+    transferEffect: number;
+  };
 }
 
 export interface InfinityScaleAdaptiveRegionState {
@@ -110,7 +116,11 @@ export class InfinityScaleAdaptiveStability {
       throw new Error(`Adaptive LOD mismatch for ${regionId}: state=${state.currentLOD}, input=${currentLOD}`);
     }
 
-    const score = Math.max(0, Math.min(1, metrics.score));
+    const rawScore = Math.max(0, Math.min(1, metrics.score));
+    const score = metrics.causalAttribution
+      ? Math.max(0, Math.min(1, metrics.causalAttribution.physicalEvolution + metrics.causalAttribution.numericalResidual))
+      : rawScore;
+    const transitionDominated = !!metrics.causalAttribution && rawScore >= this.config.refineThreshold && score < this.config.refineThreshold;
     const criticalOverride = score >= this.config.criticalThreshold ||
       Math.abs(metrics.estimatedError ?? 0) >= this.config.criticalThreshold;
 
@@ -129,8 +139,8 @@ export class InfinityScaleAdaptiveStability {
           ? state.consecutiveCoarsenVotes >= this.config.coarsenEvidenceEpochs
           : true;
 
-    const residencePassed = epoch >= state.residenceUntilEpoch;
-    const cooldownPassed = epoch >= state.cooldownUntilEpoch;
+    const residencePassed = this.config.minResidenceEpochs === 0 || epoch > state.residenceUntilEpoch;
+    const cooldownPassed = this.config.cooldownEpochs === 0 || epoch > state.cooldownUntilEpoch;
     const oscillationDetected = this.detectOscillation(state, candidate);
 
     if (epoch < state.frozenUntilEpoch && !criticalOverride) {
@@ -138,15 +148,22 @@ export class InfinityScaleAdaptiveStability {
         "adaptive region is frozen");
     }
 
-    if (candidate === "KEEP" || !hysteresisPassed) {
+    if (candidate === "KEEP") {
       return this.record(state, epoch, "KEEP", score, hysteresisPassed, residencePassed, cooldownPassed,
-        oscillationDetected, criticalOverride, "insufficient persistent evidence");
+        oscillationDetected, criticalOverride, transitionDominated ? "transition disturbance excluded from physical refinement score" : "insufficient persistent evidence");
     }
 
+    // Stability locks take precedence over evidence accumulation for a proposed
+    // mutation. Critical evidence may override both the locks and hysteresis.
     if (!criticalOverride && (!residencePassed || !cooldownPassed || oscillationDetected)) {
       if (oscillationDetected) state.frozenUntilEpoch = epoch + this.config.freezeEpochs;
-      return this.record(state, epoch, "HOLD", score, true, residencePassed, cooldownPassed,
+      return this.record(state, epoch, "HOLD", score, hysteresisPassed, residencePassed, cooldownPassed,
         oscillationDetected, false, oscillationDetected ? "LOD oscillation detected" : "stability constraint active");
+    }
+
+    if (!criticalOverride && !hysteresisPassed) {
+      return this.record(state, epoch, "KEEP", score, false, residencePassed, cooldownPassed,
+        oscillationDetected, false, transitionDominated ? "transition disturbance excluded from physical refinement score" : "insufficient persistent evidence");
     }
 
     const decision = candidate;
@@ -177,7 +194,7 @@ export class InfinityScaleAdaptiveStability {
   }
 
   private create(regionId: string, currentLOD: number): InfinityScaleAdaptiveRegionState {
-    const state = this.state(regionId, currentLOD);
+    this.state(regionId, currentLOD);
     return this.regions.get(regionId)!;
   }
 
@@ -196,7 +213,7 @@ export class InfinityScaleAdaptiveStability {
     state: InfinityScaleAdaptiveRegionState,
     epoch: number,
     decision: AdaptiveLODDecision,
-    score: number,
+    _score: number,
     hysteresisPassed: boolean,
     residencePassed: boolean,
     cooldownPassed: boolean,
