@@ -63,7 +63,7 @@ export function runInfinityScaleResolutionUtilityRegression(): void {
       estimatedMemoryBytes: 100,
       estimatedGPUWork: 10,
     },
-  ], {
+  ], predictions, {
     maxCells: 10,
     maxDescriptors: 2,
     maxMemoryBytes: 100,
@@ -101,7 +101,7 @@ export function runInfinityScaleResolutionUtilityRegression(): void {
       estimatedMemoryBytes: 100,
       estimatedGPUWork: 10,
     },
-  ], {
+  ], new Map([["A", prediction], ["Z", prediction]]), {
     maxCells: 10,
     maxDescriptors: 2,
     maxMemoryBytes: 100,
