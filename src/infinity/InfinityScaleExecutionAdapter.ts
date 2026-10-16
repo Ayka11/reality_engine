@@ -5,8 +5,6 @@ import type {
   InfinityScaleBoundaryReadRelation,
 } from "./InfinityScaleChunkExecutionContext";
 import { WORLD } from "../core/WorldConstants";
-import { resolveInfinityScaleBoundaryFaceGeometry } from "./InfinityScaleLODBoundaryCellMapper";
-import { resolveInfinityScaleBoundaryFaceGeometry } from "./InfinityScaleLODBoundaryCellMapper";
 
 export type InfinityScaleExecutionMode =
   | "advisory"
@@ -139,6 +137,7 @@ export class InfinityScaleExecutionAdapter {
 
     const geometry = new InfinityScaleChunkExecutionContext(
       {
+        ...this.plan,
         revision: frame.revision,
         mode: "selective-cpu-ready",
         observer: frame.observer,
@@ -243,6 +242,8 @@ export class InfinityScaleExecutionAdapter {
     const out = new Map<string, InfinityScaleBoundaryReadRelation>();
     const coveredFaces = new Set<string>();
     const level = chunk.chunk.level;
+    // FramePlan chunk coordinates are level-local chunk indices. For adapter
+    // topology, normalize each chunk into base-chunk units (not world cells).
     const scale = 2 ** level;
     const minX = chunk.chunk.x * scale;
     const minY = chunk.chunk.y * scale;
@@ -254,44 +255,51 @@ export class InfinityScaleExecutionAdapter {
     const faceKey = (axis: 0 | 1 | 2, coordinate: number): string =>
       `${axis}:${coordinate}`;
 
-    // Neighbor discovery remains an adapter concern, but shared-face geometry
-    // is delegated to the canonical LOD boundary resolver. This prevents the
-    // execution planner from maintaining a second coarse/fine face definition.
     for (const other of candidates) {
       if (other.key === chunk.key) continue;
 
+      const otherLevel = other.chunk.level;
+      const otherScale = 2 ** otherLevel;
+      const otherMinX = other.chunk.x * otherScale;
+      const otherMinY = other.chunk.y * otherScale;
+      const otherMinZ = other.chunk.z * otherScale;
+      const otherMaxX = otherMinX + otherScale - 1;
+      const otherMaxY = otherMinY + otherScale - 1;
+      const otherMaxZ = otherMinZ + otherScale - 1;
+
       const relation: InfinityScaleBoundaryRelation =
-        other.chunk.level === level
+        otherLevel === level
           ? "same-level"
-          : level < other.chunk.level
+          : level < otherLevel
             ? "fine-to-coarse"
             : "coarse-to-fine";
 
-      const spec = {
-        sourceChunk: chunk.key,
-        targetChunk: other.key,
-        relation,
-        sourceLevel: level,
-        targetLevel: other.chunk.level,
-        refinementRatio: 2 ** Math.abs(level - other.chunk.level),
-        operation:
-          relation === "same-level"
-            ? "copy"
-            : relation === "coarse-to-fine"
-              ? "prolongation"
-              : "restriction",
-        readOperation:
-          relation === "same-level"
-            ? "copy"
-            : relation === "coarse-to-fine"
-              ? "restriction"
-              : "prolongation",
-      } as const;
+      const overlaps = (aMin: number, aMax: number, bMin: number, bMax: number) =>
+        aMin <= bMax && aMax >= bMin;
+      let axis: 0 | 1 | 2 | null = null;
+      let coveredCoordinate: number | null = null;
 
-      const face = resolveInfinityScaleBoundaryFaceGeometry(spec, 32);
-      if (face === null) continue;
+      // Use base-chunk units consistently. Only face contact with overlap on
+      // both tangential axes is accepted; edge/corner contact is rejected.
+      if ((maxX + 1 === otherMinX || otherMaxX + 1 === minX) &&
+          overlaps(minY, maxY, otherMinY, otherMaxY) &&
+          overlaps(minZ, maxZ, otherMinZ, otherMaxZ)) {
+        axis = 0;
+        coveredCoordinate = maxX + 1 === otherMinX ? maxX + 1 : minX;
+      } else if ((maxY + 1 === otherMinY || otherMaxY + 1 === minY) &&
+          overlaps(minX, maxX, otherMinX, otherMaxX) &&
+          overlaps(minZ, maxZ, otherMinZ, otherMaxZ)) {
+        axis = 1;
+        coveredCoordinate = maxY + 1 === otherMinY ? maxY + 1 : minY;
+      } else if ((maxZ + 1 === otherMinZ || otherMaxZ + 1 === minZ) &&
+          overlaps(minX, maxX, otherMinX, otherMaxX) &&
+          overlaps(minY, maxY, otherMinY, otherMaxY)) {
+        axis = 2;
+        coveredCoordinate = maxZ + 1 === otherMinZ ? maxZ + 1 : minZ;
+      }
 
-      coveredFaces.add(faceKey(face.axis, face.coordinate));
+      if (axis === null) continue;
+      coveredFaces.add(faceKey(axis, coveredCoordinate!));
       const key = `${other.key}|${relation}`;
       out.set(key, {
         sourceChunk: chunk.key,
@@ -300,9 +308,6 @@ export class InfinityScaleExecutionAdapter {
       });
     }
 
-    // No explicit frame chunk owns a face. Request the logical same-level
-    // halo only for uncovered faces. Negative chunk coordinates are preserved
-    // directly; this is equivalent to floorDiv for a one-chunk step.
     const fallbackFaces: Array<{
       key: string;
       targetChunk: string;
@@ -323,7 +328,6 @@ export class InfinityScaleExecutionAdapter {
         relation: "same-level",
       });
     }
-
     return [...out.values()];
   }
 

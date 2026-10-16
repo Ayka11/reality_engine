@@ -11,6 +11,7 @@ export interface InfinityScaleGlobalLODTransaction {
   stateRevision: number;
   synchronization: InfinityScaleLODSynchronization;
   committed: boolean;
+  state: InfinityScaleLODState;
 }
 
 /**
@@ -37,6 +38,7 @@ export function beginInfinityScaleGlobalLODTransaction(
     stateRevision,
     synchronization,
     committed: false,
+    state,
   };
 }
 

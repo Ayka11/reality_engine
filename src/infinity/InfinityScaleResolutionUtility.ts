@@ -47,11 +47,13 @@ export const DEFAULT_INFINITY_SCALE_RESOLUTION_UTILITY: InfinityScaleResolutionU
   errorWeight: 1,
   goalWeight: 1,
   criticalityWeight: 1,
-  cellCostWeight: 1,
-  descriptorCostWeight: 1,
-  memoryCostWeight: 1,
-  gpuCostWeight: 1,
-  minimumUtility: 0.05,
+  // Cost channels have different units; scale them to comparable utility
+  // magnitudes rather than treating bytes, descriptors and cells as equal.
+  cellCostWeight: 0.01,
+  descriptorCostWeight: 0.1,
+  memoryCostWeight: 0.001,
+  gpuCostWeight: 0.01,
+  minimumUtility: 0.01,
 };
 
 export class InfinityScaleResolutionUtilityEngine {
@@ -65,7 +67,7 @@ export class InfinityScaleResolutionUtilityEngine {
     candidate: InfinityScaleResolutionCandidate,
     prediction: InfinityScalePredictionResult,
   ): InfinityScaleResolutionUtility {
-    const benefit = clamp01(
+    const baselineBenefit =
       prediction.predictedError *
       prediction.confidence *
       candidate.estimatedErrorReduction *
@@ -74,7 +76,18 @@ export class InfinityScaleResolutionUtilityEngine {
         candidate.physicalCriticality,
         this.config.goalWeight,
         this.config.criticalityWeight,
-      ),
+      );
+
+    // Causal attribution is optional for legacy callers. When supplied, physical
+    // benefit scales the baseline value while transition disturbance discounts it.
+    const causalPhysicalBenefit = candidate.causalPhysicalBenefit === undefined
+      ? 1
+      : clamp01(candidate.causalPhysicalBenefit);
+    const causalTransitionDisturbance = candidate.causalTransitionDisturbance === undefined
+      ? 0
+      : clamp01(candidate.causalTransitionDisturbance);
+    const benefit = clamp01(
+      baselineBenefit * causalPhysicalBenefit * (1 - causalTransitionDisturbance),
     );
 
     const cost =

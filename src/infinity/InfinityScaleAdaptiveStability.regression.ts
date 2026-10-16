@@ -39,7 +39,7 @@ export function runInfinityScaleAdaptiveStabilityRegression(): void {
     coarsenEvidenceEpochs: 1,
     minResidenceEpochs: 0,
     cooldownEpochs: 0,
-    oscillationTransitions: 2,
+    oscillationTransitions: 3,
     freezeEpochs: 4,
     criticalThreshold: 0.98,
   });

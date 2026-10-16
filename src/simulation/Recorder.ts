@@ -87,7 +87,6 @@ export class Recorder {
       for (let z = range.minZ; z <= range.maxZ; z++)
       for (let y = range.minY; y <= range.maxY; y++)
       for (let x = range.minX; x <= range.maxX; x++) {
-        const cell = grid.cell(x, y, z);
         const index = z * grid.H * grid.W + y * grid.W + x;
         const base = index * CELL_FIELDS;
         const values = Array.from(grid.buffer.subarray(base, base + CELL_FIELDS));
