@@ -44,7 +44,7 @@ export function validateInfinityScaleBoundaryGeometry(
   // maintaining an independent source/target adjacency algorithm.
   const targetLevel = spec.targetLevel;
   const targetScale = 2 ** targetLevel;
-  const match = /^(\\d+):(-?\\d+),(-?\\d+),(-?\\d+)$/.exec(spec.targetChunk);
+  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(spec.targetChunk);
   if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${spec.targetChunk}`);
   const extent = chunkSize * targetScale;
   const tx = Number(match[2]) * extent;
