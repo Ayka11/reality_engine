@@ -12,7 +12,7 @@ export const CHEM = {
 } as const;
 export type ChemState = typeof CHEM[keyof typeof CHEM];
 
-function nxFromIndex(index: number, W: number, H: number): number { return index % W; }
+function nxFromIndex(index: number, W: number, _H: number): number { return index % W; }
 function nyFromIndex(index: number, W: number, H: number): number { return Math.floor((index % (W * H)) / W); }
 function nzFromIndex(index: number, W: number, H: number): number { return Math.floor(index / (W * H)); }
 
