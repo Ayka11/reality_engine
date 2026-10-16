@@ -6,13 +6,13 @@ import {
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import { CELL_FIELDS } from "../core/CellState";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
-import type { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
+import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
 
 export function runInfinityScaleMixedLODCPURegression(): void {
   const state = new InfinityScaleLODState(4);
   const coarseKey = "1:0,0,0";
-  const fineKeys = ["0:8,0,0", "0:8,4,0", "0:8,0,4", "0:8,4,4"];
+  const fineKeys = ["0:2,0,0", "0:2,1,0", "0:2,0,1", "0:2,1,1"];
 
   state.ensureChunk(coarseKey, 1);
   for (const fineKey of fineKeys) state.ensureChunk(fineKey, 0);
@@ -141,13 +141,14 @@ export function runInfinityScaleMixedLODCPURegression(): void {
 export function runInfinityScaleMixedLODCPUProlongationRegression(): void {
   const state = new InfinityScaleLODState(4);
   const coarseKey = "1:0,0,0";
-  const fineKeys = ["0:8,0,0", "0:8,4,0", "0:8,0,4", "0:8,4,4"];
+  const fineKeys = ["0:2,0,0", "0:2,1,0", "0:2,0,1", "0:2,1,1"];
 
   state.ensureChunk(coarseKey, 1);
   for (const fineKey of fineKeys) state.ensureChunk(fineKey, 0);
 
-  // Give every coarse face cell a distinct value. The fine face must inherit
-  // each value into exactly four fine target cells (2x2 tangential footprint).
+  // Give every coarse face cell a distinct extensive energy value. Each fine
+  // face cell receives one eighth of its source value, with four tangential
+  // fine cells sharing each coarse face cell (2x2 footprint).
   for (let z = 0; z < 4; z++) {
     for (let y = 0; y < 4; y++) {
       for (let x = 0; x < 4; x++) {
@@ -274,8 +275,11 @@ export function runInfinityScaleMixedLODCPUProlongationRegression(): void {
   commitInfinityScaleGlobalLODTransaction(transaction, frame);
 
   for (const update of staged) {
-    const source = update.sourceCells[0];
-    const expected = 100 + (source[1] / 2) * 10 + source[2] / 2;
+    const expected = (
+      100 +
+      Math.floor(update.targetCell[1] / 2) * 10 +
+      Math.floor(update.targetCell[2] / 2)
+    ) / 8;
     const actual = state.readBaseCell(
       update.targetChunk,
       update.targetLevel,
@@ -283,7 +287,7 @@ export function runInfinityScaleMixedLODCPUProlongationRegression(): void {
     );
     if (!actual || actual[0] !== expected) {
       throw new Error(
-        `Coarse-to-fine prolongation mismatch at ${update.targetChunk}:${update.targetCell.join(",")}`,
+        `Coarse-to-fine prolongation mismatch at ${update.targetChunk}:${update.targetCell.join(",")}: expected ${expected}, received ${actual?.[0]}`,
       );
     }
   }
