@@ -47,10 +47,12 @@ export class InfinityScaleSpatialConstraintClosure {
               didChange = true;
             }
           } else {
-            const next = Math.min(this.maxLOD, neighborLevel - 1);
-            if (next !== neighborLevel) {
-              levels.set(neighborId, next);
-              changed.add(neighborId);
+            // Preserve the higher proposed LOD and raise the lower neighbor
+            // only as far as needed to restore the 2:1 constraint.
+            const next = Math.min(this.maxLOD, level + 1);
+            if (next !== level) {
+              levels.set(node.regionId, next);
+              changed.add(node.regionId);
               didChange = true;
             }
           }
