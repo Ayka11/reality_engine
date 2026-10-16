@@ -33,7 +33,7 @@ export interface InfinityScaleMixedLODValidation {
  * representation exists.
  */
 export function validateInfinityScaleMixedLOD(
-  plan: InfinityScaleExecutionPlan,
+  _plan: InfinityScaleExecutionPlan,
   context: InfinityScaleChunkExecutionContext,
   entityTopology?: EntityChunkConnectivityResult,
   reconciliation?: EntityReconciliationPlan,
