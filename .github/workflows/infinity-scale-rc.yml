@@ -49,7 +49,7 @@ jobs:
         run: npm run validate:infinity-scale:integrity
 
       - name: Emit deterministic RC package record
-        run: npm run package:infinity-scale:rc > infinity-scale-rc-package.json
+        run: npm run --silent package:infinity-scale:rc > infinity-scale-rc-package.json
 
       - name: Emit release record
         run: |
