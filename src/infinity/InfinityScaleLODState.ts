@@ -145,7 +145,7 @@ export class InfinityScaleLODState {
     baseX: number,
     baseY: number,
     baseZ: number,
-    source: ReadonlyArray<number>,
+    source: ArrayLike<number>,
   ): void {
     if (source.length !== CELL_FIELDS) {
       throw new Error(`Infinity Scale LOD cell requires ${CELL_FIELDS} fields`);
