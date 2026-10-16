@@ -1,6 +1,5 @@
 import {
   InfinityScaleAdaptiveCompiledPlan,
-  InfinityScaleCompiledTransfer,
 } from "./InfinityScaleAdaptiveTransferCompiler";
 
 export type InfinityScaleExecutionNodeType =
