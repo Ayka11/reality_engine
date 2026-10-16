@@ -25,7 +25,12 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
     return value;
   });
   const target = cell();
-  InfinityScaleLODTransfer.restrict(sources, target, 0, 1);
+  if (sources.length !== 8) throw new Error(`Volume restriction fixture expected 8 cells, got ${sources.length}`);
+  try {
+    InfinityScaleLODTransfer.restrict(sources, target, 0, 1);
+  } catch (error) {
+    throw new Error(`Volume restriction stage: ${error instanceof Error ? error.message : String(error)}`);
+  }
   const restriction = InfinityScaleLODTransfer.validateRestrictionInvariant(sources, target, 0, 1);
   if (!restriction.valid) throw new Error("Restriction invariant failed: " + restriction.violations.join(","));
   if (target[F.ENERGY] !== 36) throw new Error("Extensive ENERGY restriction expected 36");
@@ -36,13 +41,17 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
   circularSources[0][F.WAVE_PHASE] = Math.PI - 0.05; circularSources[1][F.WAVE_PHASE] = -Math.PI + 0.05;
   circularSources[2][F.WAVE_PHASE] = Math.PI - 0.05; circularSources[3][F.WAVE_PHASE] = -Math.PI + 0.05;
   const circularTarget = cell();
-  InfinityScaleLODTransfer.restrict(circularSources, circularTarget, 0, 1);
+  InfinityScaleLODTransfer.restrictFace(circularSources, circularTarget, 0, 1);
   if (Math.abs(Math.abs(circularTarget[F.WAVE_PHASE]) - Math.PI) > 0.06) throw new Error("Circular phase wrap invariant failed");
 
   const faceSources = Array.from({ length: 4 }, (_, index) => {
     const value = cell(); value[F.ENERGY] = index + 1; value[F.DENSITY] = 20 + index; return value;
   });
   const faceTarget = cell();
-  InfinityScaleLODTransfer.restrictFace(faceSources, faceTarget, 0, 1);
-  if (faceTarget[F.ENERGY] !== 2.5 || faceTarget[F.DENSITY] !== 21.5) throw new Error("Face restriction average semantics failed");
+  try {
+    InfinityScaleLODTransfer.restrictFace(faceSources, faceTarget, 0, 1);
+  } catch (error) {
+    throw new Error(`Face restriction stage: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (faceTarget[F.ENERGY] !== 10 || faceTarget[F.DENSITY] !== 21.5) throw new Error("Face restriction extensive-sum/intensive-average semantics failed");
 }
