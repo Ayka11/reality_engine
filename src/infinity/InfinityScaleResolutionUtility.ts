@@ -67,7 +67,7 @@ export class InfinityScaleResolutionUtilityEngine {
     candidate: InfinityScaleResolutionCandidate,
     prediction: InfinityScalePredictionResult,
   ): InfinityScaleResolutionUtility {
-    const benefit = clamp01(
+    const baselineBenefit =
       prediction.predictedError *
       prediction.confidence *
       candidate.estimatedErrorReduction *
@@ -76,7 +76,18 @@ export class InfinityScaleResolutionUtilityEngine {
         candidate.physicalCriticality,
         this.config.goalWeight,
         this.config.criticalityWeight,
-      ),
+      );
+
+    // Causal attribution is optional for legacy callers. When supplied, physical
+    // benefit scales the baseline value while transition disturbance discounts it.
+    const causalPhysicalBenefit = candidate.causalPhysicalBenefit === undefined
+      ? 1
+      : clamp01(candidate.causalPhysicalBenefit);
+    const causalTransitionDisturbance = candidate.causalTransitionDisturbance === undefined
+      ? 0
+      : clamp01(candidate.causalTransitionDisturbance);
+    const benefit = clamp01(
+      baselineBenefit * causalPhysicalBenefit * (1 - causalTransitionDisturbance),
     );
 
     const cost =
