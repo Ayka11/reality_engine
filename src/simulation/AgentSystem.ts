@@ -32,7 +32,13 @@ export interface AgentMarker {
   age: number;
 }
 
-let _agentId = 1;
+export interface AgentSystemSnapshot {
+  agents: Agent[];
+  pendingMigrations: AgentMigrationRequest[];
+  nextAgentId: number;
+}
+
+
 const BEHAVIORS: AgentBehavior[] = ['explorer', 'harvester', 'signaler', 'builder', 'destroyer'];
 
 function randomBehavior(): AgentBehavior {
@@ -51,11 +57,54 @@ export class AgentSystem {
   private agents: Map<number, Agent> = new Map();
   readonly maxAgents = 64;
   private pendingMigrations: AgentMigrationRequest[] = [];
+  private nextAgentId = 1;
+
+  snapshot(): AgentSystemSnapshot {
+    return {
+      agents: [...this.agents.values()].map(agent => ({ ...agent })),
+      pendingMigrations: this.pendingMigrations.map(request => ({
+        ...request,
+        from: [...request.from] as [number, number, number],
+        to: [...request.to] as [number, number, number],
+      })),
+      nextAgentId: this.nextAgentId,
+    };
+  }
+
+  restore(snapshot: AgentSystemSnapshot): void {
+    const ids = new Set<number>();
+    for (const agent of snapshot.agents) {
+      if (!Number.isInteger(agent.id) || agent.id <= 0 || ids.has(agent.id)) {
+        throw new Error("Invalid AgentSystem snapshot: agent IDs must be unique positive integers");
+      }
+      if (![agent.x, agent.y, agent.z, agent.energy, agent.age, agent.memory, agent.signal, agent.children].every(Number.isFinite)) {
+        throw new Error("Invalid AgentSystem snapshot: agent state contains non-finite values");
+      }
+      ids.add(agent.id);
+    }
+    const maxId = Math.max(0, ...ids);
+    if (!Number.isInteger(snapshot.nextAgentId) || snapshot.nextAgentId <= maxId) {
+      throw new Error("Invalid AgentSystem snapshot: next agent ID must exceed all restored IDs");
+    }
+    for (const request of snapshot.pendingMigrations) {
+      if (!ids.has(request.agentId) ||
+          ![...request.from, ...request.to, request.energy].every(Number.isFinite)) {
+        throw new Error("Invalid AgentSystem snapshot: migration request is inconsistent");
+      }
+    }
+    this.agents = new Map(snapshot.agents.map(agent => [agent.id, { ...agent }]));
+    this.pendingMigrations = snapshot.pendingMigrations.map(request => ({
+      ...request,
+      from: [...request.from] as [number, number, number],
+      to: [...request.to] as [number, number, number],
+    }));
+    this.nextAgentId = snapshot.nextAgentId;
+  }
 
   spawnAt(x: number, y: number, z: number, behavior: AgentBehavior = "explorer", energy = 200): number {
     if (this.agents.size >= this.maxAgents) throw new Error("Maximum agent count reached");
     this._spawn(x, y, z, behavior, energy);
-    return _agentId - 1;
+    return this.nextAgentId - 1;
   }
 
   queueMigrationRequest(request: AgentMigrationRequest): void {
@@ -171,7 +220,7 @@ export class AgentSystem {
   }
 
   private _spawn(x: number, y: number, z: number, behavior: AgentBehavior, energy = 200): void {
-    const id = _agentId++;
+    const id = this.nextAgentId++;
     this.agents.set(id, { id, x, y, z, energy, age: 0, behavior, memory: 0, signal: 0, children: 0 });
   }
 
@@ -293,7 +342,7 @@ export class AgentSystem {
     return this.getAgents().map(a => ({ id: String(a.id), position: [a.x, a.y, a.z] as [number, number, number], behavior: a.behavior, energy: a.energy, age: a.age }));
   }
 
-  clear(): void { this.agents.clear(); this.pendingMigrations = []; _agentId = 1; }
+  clear(): void { this.agents.clear(); this.pendingMigrations = []; this.nextAgentId = 1; }
 }
 
 function migrationKey(request: AgentMigrationRequest): string {
