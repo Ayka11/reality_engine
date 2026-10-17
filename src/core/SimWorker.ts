@@ -133,6 +133,9 @@ function restoreWorkerSnapshot(snapshot: SimWorkerSnapshot): void {
   // Validate the complete payload before mutating live state.
   const nextBuffer = new Float32Array(snapshot.buffer)
   const nextBackBuffer = new Float32Array(snapshot.backBuffer)
+  if (!nextBuffer.every(Number.isFinite) || !nextBackBuffer.every(Number.isFinite)) {
+    throw new Error('SimWorker snapshot contains values outside Float32 range')
+  }
   const nextCausal = snapshot.causal.map(event => ({ ...event }))
   const nextProcs = new Set(snapshot.activeProcs)
 
