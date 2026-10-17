@@ -77,6 +77,79 @@ let evCount  = 0
 let causal: Array<{ id: number; tick: number; x: number; y: number; z: number; delta: number }> = []
 const activeProcs = new Set<string>(['thermo', 'bio'])
 
+export interface SimWorkerSnapshot {
+  version: 1;
+  tick: number;
+  rngState: number;
+  buffer: number[];
+  backBuffer: number[];
+  DIFF: number;
+  ENT: number;
+  INFO: number;
+  BIO: number;
+  evCount: number;
+  causal: Array<{ id: number; tick: number; x: number; y: number; z: number; delta: number }>;
+  activeProcs: string[];
+}
+
+function captureWorkerSnapshot(): SimWorkerSnapshot {
+  return {
+    version: 1,
+    tick,
+    rngState,
+    buffer: Array.from(buf),
+    backBuffer: Array.from(backBuf),
+    DIFF,
+    ENT,
+    INFO,
+    BIO,
+    evCount,
+    causal: causal.map(event => ({ ...event })),
+    activeProcs: [...activeProcs].sort(),
+  }
+}
+
+function restoreWorkerSnapshot(snapshot: SimWorkerSnapshot): void {
+  if (!snapshot || snapshot.version !== 1 ||
+      !Number.isSafeInteger(snapshot.tick) || snapshot.tick < 0 ||
+      !Number.isSafeInteger(snapshot.rngState) || snapshot.rngState <= 0 || snapshot.rngState > 0xffffffff ||
+      !Array.isArray(snapshot.buffer) || snapshot.buffer.length !== buf.length ||
+      !snapshot.buffer.every(Number.isFinite) ||
+      !Array.isArray(snapshot.backBuffer) || snapshot.backBuffer.length !== backBuf.length ||
+      !snapshot.backBuffer.every(Number.isFinite) ||
+      ![snapshot.DIFF, snapshot.ENT, snapshot.INFO, snapshot.BIO].every(Number.isFinite) ||
+      !Number.isSafeInteger(snapshot.evCount) || snapshot.evCount < 0 ||
+      !Array.isArray(snapshot.causal) || snapshot.causal.length > 400 ||
+      !snapshot.causal.every(event => event && Number.isSafeInteger(event.id) &&
+        Number.isSafeInteger(event.tick) && event.tick >= 0 &&
+        [event.x, event.y, event.z, event.delta].every(Number.isFinite) &&
+        Number.isInteger(event.x) && event.x >= 0 && event.x < W &&
+        Number.isInteger(event.y) && event.y >= 0 && event.y < H &&
+        Number.isInteger(event.z) && event.z >= 0 && event.z < D) ||
+      !Array.isArray(snapshot.activeProcs) || !snapshot.activeProcs.every(p => typeof p === 'string')) {
+    throw new Error('Invalid SimWorker snapshot')
+  }
+
+  // Validate the complete payload before mutating live state.
+  const nextBuffer = new Float32Array(snapshot.buffer)
+  const nextBackBuffer = new Float32Array(snapshot.backBuffer)
+  const nextCausal = snapshot.causal.map(event => ({ ...event }))
+  const nextProcs = new Set(snapshot.activeProcs)
+
+  buf = nextBuffer
+  backBuf = nextBackBuffer
+  tick = snapshot.tick
+  rngState = snapshot.rngState >>> 0
+  DIFF = snapshot.DIFF
+  ENT = snapshot.ENT
+  INFO = snapshot.INFO
+  BIO = snapshot.BIO
+  evCount = snapshot.evCount
+  causal = nextCausal
+  activeProcs.clear()
+  for (const proc of nextProcs) activeProcs.add(proc)
+}
+
 // ── Physics step ──────────────────────────────────────────────────────────────
 function simStep(dt: number) {
   backBuf.set(buf)
@@ -236,6 +309,26 @@ function applyGenerated(data: {
 // ── Message handler ───────────────────────────────────────────────────────────
 self.onmessage = (e: MessageEvent) => {
   const { cmd, data } = e.data as { cmd: string; data: any }
+
+  if (cmd === 'setSeed') {
+    const seed = data?.seed
+    if (!Number.isSafeInteger(seed) || seed < 0 || seed > 0xffffffff) {
+      throw new Error('setSeed requires a uint32 seed')
+    }
+    rngState = (seed >>> 0) || 0x51ed270b
+    return
+  }
+
+  if (cmd === 'snapshot') {
+    ;(self as unknown as Worker).postMessage({ cmd: 'snapshot', data: captureWorkerSnapshot() })
+    return
+  }
+
+  if (cmd === 'restore') {
+    restoreWorkerSnapshot(data as SimWorkerSnapshot)
+    ;(self as unknown as Worker).postMessage({ cmd: 'restored', data: { tick, rngState } })
+    return
+  }
 
   if (cmd === 'tick') {
     const speed = (data?.speed as number) || 1
