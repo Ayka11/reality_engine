@@ -12,6 +12,25 @@ function evalCond(c: LawCondition, m: WorldMetrics): boolean {
 
 function uid() { return 'law_' + Math.random().toString(36).slice(2, 9); }
 
+
+export interface LawEngineSnapshot {
+  laws: MetaLaw[];
+  lawOverrides: Array<[string, 'on' | 'off']>;
+  manualOn: number[];
+  manualOff: number[];
+  graphProcessIds: number[] | null;
+}
+
+function cloneLaw(law: MetaLaw): MetaLaw {
+  return {
+    ...law,
+    conditions: law.conditions.map(condition => ({ ...condition })),
+    enablesProcesses: [...law.enablesProcesses],
+    disablesProcesses: [...law.disablesProcesses],
+    paramOverrides: { ...law.paramOverrides },
+  };
+}
+
 export class LawEngine {
   laws: MetaLaw[];
   private _mask = 0;
@@ -84,6 +103,104 @@ export class LawEngine {
         fitness: 0.4, age: 0, mutationRate: 0.0008, generation: 0, color: '#a0855a',
       },
     ];
+  }
+
+
+  snapshot(): LawEngineSnapshot {
+    return {
+      laws: this.laws.map(cloneLaw),
+      lawOverrides: [...this._lawOverride.entries()].filter(
+        (entry): entry is [string, 'on' | 'off'] => entry[1] !== 'auto',
+      ),
+      manualOn: [...this._manualOn],
+      manualOff: [...this._manualOff],
+      graphProcessIds: this._graphProcessIds ? [...this._graphProcessIds] : null,
+    };
+  }
+
+  restore(snapshot: LawEngineSnapshot): void {
+    if (!snapshot || !Array.isArray(snapshot.laws) ||
+        !Array.isArray(snapshot.lawOverrides) ||
+        !Array.isArray(snapshot.manualOn) ||
+        !Array.isArray(snapshot.manualOff) ||
+        !(snapshot.graphProcessIds === null || Array.isArray(snapshot.graphProcessIds))) {
+      throw new Error("Invalid LawEngine snapshot");
+    }
+
+    const laws = snapshot.laws.map(law => {
+      if (!law || typeof law.id !== "string" || !law.id ||
+          typeof law.name !== "string" ||
+          typeof law.active !== "boolean" ||
+          !Array.isArray(law.conditions) ||
+          !Array.isArray(law.enablesProcesses) ||
+          !Array.isArray(law.disablesProcesses) ||
+          !law.paramOverrides || typeof law.paramOverrides !== "object" ||
+          !Number.isFinite(law.fitness) || !Number.isFinite(law.age) ||
+          !Number.isFinite(law.mutationRate) || !Number.isSafeInteger(law.generation) ||
+          typeof law.color !== "string") {
+        throw new Error("Invalid LawEngine law entry");
+      }
+      for (const condition of law.conditions) {
+        if (!condition ||
+            !["totalEnergy", "avgEntropy", "avgInfo", "avgDensity", "avgBio", "tick"].includes(condition.metric) ||
+            !["gt", "lt", "gte", "lte"].includes(condition.op) ||
+            !Number.isFinite(condition.value)) {
+          throw new Error("Invalid LawEngine condition");
+        }
+      }
+      for (const pid of [...law.enablesProcesses, ...law.disablesProcesses]) {
+        if (!Number.isSafeInteger(pid) || pid < 0) throw new Error("Invalid LawEngine process id");
+      }
+      for (const value of Object.values(law.paramOverrides)) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          throw new Error("Invalid LawEngine parameter override");
+        }
+      }
+      return cloneLaw(law);
+    });
+
+    const ids = new Set<string>();
+    for (const law of laws) {
+      if (ids.has(law.id)) throw new Error("Duplicate LawEngine law id");
+      ids.add(law.id);
+    }
+
+    const lawOverrides = new Map<string, 'on' | 'off'>();
+    for (const entry of snapshot.lawOverrides) {
+      if (!Array.isArray(entry) || entry.length !== 2 ||
+          typeof entry[0] !== "string" || !ids.has(entry[0]) ||
+          (entry[1] !== "on" && entry[1] !== "off") ||
+          lawOverrides.has(entry[0])) {
+        throw new Error("Invalid LawEngine override");
+      }
+      lawOverrides.set(entry[0], entry[1]);
+    }
+
+    const validateProcessSet = (values: number[], name: string): Set<number> => {
+      const result = new Set<number>();
+      for (const value of values) {
+        if (!Number.isSafeInteger(value) || value < 0 || result.has(value)) {
+          throw new Error("Invalid LawEngine " + name);
+        }
+        result.add(value);
+      }
+      return result;
+    };
+    const manualOn = validateProcessSet(snapshot.manualOn, "manual-on set");
+    const manualOff = validateProcessSet(snapshot.manualOff, "manual-off set");
+    for (const pid of manualOn) {
+      if (manualOff.has(pid)) throw new Error("Conflicting LawEngine manual overrides");
+    }
+    const graphProcessIds = snapshot.graphProcessIds === null
+      ? null
+      : validateProcessSet(snapshot.graphProcessIds, "graph process set");
+
+    this.laws = laws;
+    this._lawOverride = lawOverrides;
+    this._manualOn = manualOn;
+    this._manualOff = manualOff;
+    this._graphProcessIds = graphProcessIds;
+    this._recompute();
   }
 
   tick(metrics: WorldMetrics, elapsedTicks = 1): void {
