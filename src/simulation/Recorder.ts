@@ -23,6 +23,12 @@ export interface Snapshot {
   metrics: { totalEnergy: number; avgEntropy: number; avgInfo: number; avgBio: number };
 }
 
+export interface RecorderSnapshot {
+  control: RecorderControlSnapshot;
+  snapshots: Snapshot[];
+  selectiveSnapshots: SelectiveObservationSnapshot[];
+}
+
 export class Recorder {
   private snapshots: Snapshot[] = [];
   private maxSnapshots: number;
@@ -83,6 +89,92 @@ export class Recorder {
     this._nextSnapTick = snapshot.nextSnapTick;
     while (this.snapshots.length > this.maxSnapshots) this.snapshots.shift();
     while (this.selectiveSnapshots.length > this.maxSnapshots) this.selectiveSnapshots.shift();
+  }
+
+  snapshotState(): RecorderSnapshot {
+    return {
+      control: this.snapshotControlState(),
+      snapshots: this.snapshots.map(snapshot => ({
+        tick: snapshot.tick,
+        buffer: new Float32Array(snapshot.buffer),
+        metrics: { ...snapshot.metrics },
+      })),
+      selectiveSnapshots: this.selectiveSnapshots.map(snapshot => ({
+        tick: snapshot.tick,
+        cellCount: snapshot.cellCount,
+        cells: snapshot.cells.map(([index, values]) => [index, [...values]]),
+        metrics: { ...snapshot.metrics },
+      })),
+    };
+  }
+
+  restoreState(snapshot: RecorderSnapshot, expectedBufferLength?: number): void {
+    if (!snapshot || !Array.isArray(snapshot.snapshots) ||
+        !Array.isArray(snapshot.selectiveSnapshots)) {
+      throw new Error("Invalid Recorder snapshot");
+    }
+    // Validate control state before touching the live recorder.
+    const control = snapshot.control;
+    if (!control ||
+        typeof control.recording !== "boolean" ||
+        !Number.isSafeInteger(control.maxSnapshots) || control.maxSnapshots < 1 ||
+        !Number.isSafeInteger(control.intervalTicks) || control.intervalTicks < 1 ||
+        !Number.isSafeInteger(control.lastSnapTick) || control.lastSnapTick < 0 ||
+        !Number.isSafeInteger(control.nextSnapTick) || control.nextSnapTick < 0 ||
+        snapshot.snapshots.length > control.maxSnapshots ||
+        snapshot.selectiveSnapshots.length > control.maxSnapshots) {
+      throw new Error("Invalid Recorder snapshot control or history size");
+    }
+
+    const snapshots = snapshot.snapshots.map(item => {
+      if (!item || !Number.isSafeInteger(item.tick) || item.tick < 0 ||
+          !(item.buffer instanceof Float32Array) ||
+          (expectedBufferLength !== undefined && item.buffer.length !== expectedBufferLength) ||
+          !item.metrics || ![
+            item.metrics.totalEnergy, item.metrics.avgEntropy,
+            item.metrics.avgInfo, item.metrics.avgBio,
+          ].every(Number.isFinite)) {
+        throw new Error("Invalid Recorder full snapshot entry");
+      }
+      return {
+        tick: item.tick,
+        buffer: new Float32Array(item.buffer),
+        metrics: { ...item.metrics },
+      };
+    });
+
+    const selectiveSnapshots = snapshot.selectiveSnapshots.map(item => {
+      if (!item || !Number.isSafeInteger(item.tick) || item.tick < 0 ||
+          !Number.isSafeInteger(item.cellCount) || item.cellCount < 0 ||
+          !Array.isArray(item.cells) || item.cells.length !== item.cellCount ||
+          !item.metrics || ![
+            item.metrics.totalEnergy, item.metrics.avgEntropy,
+            item.metrics.avgInfo, item.metrics.avgBio,
+          ].every(Number.isFinite)) {
+        throw new Error("Invalid Recorder selective snapshot entry");
+      }
+      const seen = new Set<number>();
+      const cells = item.cells.map(entry => {
+        if (!Array.isArray(entry) || entry.length !== 2 ||
+            !Number.isSafeInteger(entry[0]) || entry[0] < 0 ||
+            seen.has(entry[0]) || !Array.isArray(entry[1]) ||
+            !entry[1].every(Number.isFinite)) {
+          throw new Error("Invalid Recorder selective cell");
+        }
+        seen.add(entry[0]);
+        return [entry[0], [...entry[1]] as number[]] as [number, number[]];
+      });
+      return {
+        tick: item.tick,
+        cellCount: item.cellCount,
+        cells,
+        metrics: { ...item.metrics },
+      };
+    });
+
+    this.restoreControlState(control);
+    this.snapshots = snapshots;
+    this.selectiveSnapshots = selectiveSnapshots;
   }
 
   tick(grid: VoxelGrid, currentTick: number): void {
