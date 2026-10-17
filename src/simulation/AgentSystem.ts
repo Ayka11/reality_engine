@@ -59,10 +59,12 @@ export class AgentSystem {
   readonly maxAgents = 64;
   private pendingMigrations: AgentMigrationRequest[] = [];
   private nextAgentId = 1;
+  private readonly initialRngState: number;
   private _rngState: number;
 
   constructor(seed = 0x2c1b3c6d) {
-    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x2c1b3c6d : 0x2c1b3c6d;
+    this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x2c1b3c6d : 0x2c1b3c6d;
+    this._rngState = this.initialRngState;
   }
 
   private _random(): number {
@@ -365,7 +367,12 @@ export class AgentSystem {
     return this.getAgents().map(a => ({ id: String(a.id), position: [a.x, a.y, a.z] as [number, number, number], behavior: a.behavior, energy: a.energy, age: a.age }));
   }
 
-  clear(): void { this.agents.clear(); this.pendingMigrations = []; this.nextAgentId = 1; }
+  clear(): void {
+    this.agents.clear();
+    this.pendingMigrations = [];
+    this.nextAgentId = 1;
+    this._rngState = this.initialRngState;
+  }
 }
 
 function migrationKey(request: AgentMigrationRequest): string {
