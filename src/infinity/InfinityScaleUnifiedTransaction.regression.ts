@@ -435,4 +435,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     throw new Error("Failed unified commit did not restore hierarchical LOD cell state");
   }
   if (rollbackTx.committed) throw new Error("Failed unified commit was incorrectly marked committed");
+  if (rollbackTx.lod.committed) {
+    throw new Error("Failed unified commit left the compensated LOD transaction marked committed");
+  }
 }
