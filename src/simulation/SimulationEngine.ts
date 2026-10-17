@@ -292,6 +292,11 @@ export class SimulationEngine {
 
   // nSteps allows batching multiple physics ticks per animation frame
   async step(dt: number, nSteps = 1): Promise<void> {
+    const frameRecoverySnapshot = this._infinityExecutionPlan && this._infinityExecutionPlan.mode !== 'advisory'
+      ? this.captureCoreRecoveryState()
+      : null;
+
+    try {
     const clampedDt = Math.min(dt, 0.05);
 
     const selectivePlan =
@@ -560,6 +565,17 @@ export class SimulationEngine {
     if (this._tick % 500 === 0) {
       this.grid.markEmptyChunksInactive();
       this.grid.cullInactive();
+    }
+    } catch (error) {
+      if (frameRecoverySnapshot) {
+        try {
+          this.restoreCoreRecoveryState(frameRecoverySnapshot);
+        } catch (rollbackError) {
+          const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          throw new Error(`Infinity Scale frame failed and frame-level rollback failed: ${rollbackMessage}`);
+        }
+      }
+      throw error;
     }
   }
 
