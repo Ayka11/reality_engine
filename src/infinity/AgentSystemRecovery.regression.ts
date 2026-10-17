@@ -1,6 +1,22 @@
 import { AgentSystem } from "../simulation/AgentSystem";
+import { VoxelGrid } from "../core/VoxelGrid";
 
 export function runAgentSystemRecoveryRegression(): void {
+  const randomReplay = new AgentSystem(8675309);
+  const randomStart = randomReplay.snapshot();
+  const seedGridA = new VoxelGrid(20, 20, 10);
+  randomReplay.seed(seedGridA, 5);
+  const generatedA = randomReplay.getAgents().map(agent => ({ ...agent }));
+  const rngAfterA = randomReplay.snapshot().rngState;
+  randomReplay.restore(randomStart);
+  const seedGridB = new VoxelGrid(20, 20, 10);
+  randomReplay.seed(seedGridB, 5);
+  const generatedB = randomReplay.getAgents().map(agent => ({ ...agent }));
+  if (JSON.stringify(generatedA) !== JSON.stringify(generatedB) ||
+      randomReplay.snapshot().rngState !== rngAfterA) {
+    throw new Error("AgentSystem restore did not replay seeded agent generation");
+  }
+
   const agents = new AgentSystem();
   const id = agents.spawnAt(2, 3, 1, "explorer", 240);
   agents.queueMigrationRequest({
