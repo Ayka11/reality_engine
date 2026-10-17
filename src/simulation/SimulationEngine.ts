@@ -9,18 +9,18 @@ import { WorldMetrics } from '../laws/MetaLaw';
 import { GPUBackend } from '../gpu/GPUBackend';
 import { buildMaterialBuffer } from '../materials/MaterialDef';
 import { ChemLayer } from '../chemistry/ChemLayer';
-import { EntityLayer } from './EntityLayer';
+import { EntityLayer, type EntityLayerSnapshot } from './EntityLayer';
 import { WorldEvents, EventType } from '../world/WorldEvents';
 import { TemporalLayer } from './TemporalLayer';
 import { InfoPhysics } from './InfoPhysics';
 import { Recorder } from './Recorder';
-import { AgentSystem } from './AgentSystem';
+import { AgentSystem, type AgentSystemSnapshot } from './AgentSystem';
 import type {
   InfinityScaleExecutionCapabilities,
   InfinityScaleExecutionPlan,
 } from '../infinity/InfinityScaleExecutionAdapter';
 import { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
-import { InfinityScaleLODState } from '../infinity/InfinityScaleLODState';
+import { InfinityScaleLODState, type InfinityScaleLODStateSnapshot } from '../infinity/InfinityScaleLODState';
 import { InfinityScaleLODTransfer } from '../infinity/InfinityScaleLODTransfer';
 import { InfinityScaleLODBoundarySnapshot } from '../infinity/InfinityScaleLODBoundarySnapshot';
 import { InfinityScaleMixedLODCPUExecutor } from '../infinity/InfinityScaleMixedLODCPUExecutor';
@@ -41,6 +41,18 @@ import {
   stageInfinityScaleAgentMigrations,
   commitInfinityScaleUnifiedTransaction,
 } from '../infinity/InfinityScaleUnifiedTransaction';
+
+export interface SimulationEngineCoreRecoverySnapshot {
+  width: number;
+  height: number;
+  depth: number;
+  tick: number;
+  prevEnergy: Float32Array;
+  grid: ReturnType<SparseVoxelGrid["captureState"]>;
+  entities: EntityLayerSnapshot;
+  agents: AgentSystemSnapshot;
+  lod: InfinityScaleLODStateSnapshot;
+}
 
 export class SimulationEngine {
   readonly grid: SparseVoxelGrid;
@@ -197,6 +209,66 @@ export class SimulationEngine {
   restoreTick(tick: number): void {
     this._tick = Math.max(0, Math.floor(tick));
   }
+
+  /**
+   * Capture the core mutable domains needed for Infinity Scale recovery.
+   * This is not a complete engine checkpoint: physics-layer internals,
+   * event/recorder history, causal/law state and RNG state are not included.
+   */
+  captureCoreRecoveryState(): SimulationEngineCoreRecoverySnapshot {
+    return {
+      width: this.grid.W,
+      height: this.grid.H,
+      depth: this.grid.D,
+      tick: this._tick,
+      prevEnergy: new Float32Array(this.prevEnergy),
+      grid: this.grid.captureState(),
+      entities: this.entityLayer.snapshot(),
+      agents: this.agents.snapshot(),
+      lod: this.infinityScaleLODState.snapshot(),
+    };
+  }
+
+  /**
+   * Restore the captured core domains. If one domain rejects the snapshot,
+   * restore the pre-call core state before rethrowing the original error.
+   * This protects the included domains only; it does not roll back omitted
+   * physics internals or external side effects.
+   */
+  restoreCoreRecoveryState(snapshot: SimulationEngineCoreRecoverySnapshot): void {
+    if (!snapshot ||
+        snapshot.width !== this.grid.W ||
+        snapshot.height !== this.grid.H ||
+        snapshot.depth !== this.grid.D ||
+        !Number.isInteger(snapshot.tick) || snapshot.tick < 0 ||
+        !(snapshot.prevEnergy instanceof Float32Array) ||
+        snapshot.prevEnergy.length !== this.prevEnergy.length) {
+      throw new Error("Invalid SimulationEngine core recovery snapshot");
+    }
+
+    const previous = this.captureCoreRecoveryState();
+    const apply = (state: SimulationEngineCoreRecoverySnapshot) => {
+      this.grid.restoreState(state.grid);
+      this.entityLayer.restore(state.entities);
+      this.agents.restore(state.agents);
+      this.infinityScaleLODState.restore(state.lod);
+      this.prevEnergy = new Float32Array(state.prevEnergy);
+      this._tick = state.tick;
+    };
+
+    try {
+      apply(snapshot);
+    } catch (error) {
+      try {
+        apply(previous);
+      } catch (rollbackError) {
+        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        throw new Error(`Core recovery failed and rollback could not restore prior state: ${rollbackMessage}`);
+      }
+      throw error;
+    }
+  }
+
 
   // nSteps allows batching multiple physics ticks per animation frame
   async step(dt: number, nSteps = 1): Promise<void> {
