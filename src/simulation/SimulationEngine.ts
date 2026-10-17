@@ -216,9 +216,10 @@ export class SimulationEngine {
   }
 
   /**
-   * Capture the core mutable domains needed for Infinity Scale recovery.
-   * This is not a complete engine checkpoint: physics-layer internals,
-   * RNG state and private physics-layer internals are not included.
+   * Capture mutable simulation domains needed for Infinity Scale recovery.
+   * All stateful RNGs are included through their subsystem snapshots. The GPU
+   * device mirror and immutable execution-plan configuration are not stored;
+   * GPU field data is rebuilt from the restored CPU grid.
    */
   captureCoreRecoveryState(): SimulationEngineCoreRecoverySnapshot {
     return {
@@ -273,9 +274,13 @@ export class SimulationEngine {
 
     try {
       apply(snapshot);
+      // The CPU grid is authoritative. Rebuild the GPU field mirror after a
+      // restore so a subsequent GPU step cannot resume from stale device data.
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer);
     } catch (error) {
       try {
         apply(previous);
+        if (this._gpuReady) this.gpu.upload(this.grid.buffer);
       } catch (rollbackError) {
         const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
         throw new Error(`Core recovery failed and rollback could not restore prior state: ${rollbackMessage}`);
