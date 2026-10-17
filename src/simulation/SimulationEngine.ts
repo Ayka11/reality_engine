@@ -240,6 +240,16 @@ export class SimulationEngine {
     if (frameState && frameContext) {
       assertInfinityScaleGlobalFramePlan(frameState, selectivePlan!, frameContext);
 
+      // Reject a stale plan/capability contract before any physics layer mutates
+      // dense fields, entities, agents, or the simulation tick. The same check
+      // remains at commit time because GPU readback and later frame work can
+      // yield control after this preflight.
+      validateInfinityScaleGlobalFrameCommit(
+        frameState,
+        selectivePlan!,
+        this.getInfinityScaleExecutionCapabilities(),
+      );
+
       // Establish the entity/topology evidence before the runtime capability
       // gate. This makes mixed-LOD readiness a property of the actual frame,
       // not merely of the installed plan.
