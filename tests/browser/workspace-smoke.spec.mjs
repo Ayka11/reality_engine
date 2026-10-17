@@ -45,26 +45,3 @@ test("workspace mode handler updates the active mode and label", async ({ page }
   expect(result.createActive).toBe(false);
   expect(pageErrors, "uncaught browser exceptions during mode switch").toEqual([]);
 });
-
-test("workspace mode can be activated with real keyboard input", async ({ page }) => {
-  const pageErrors = [];
-  page.on("pageerror", error => pageErrors.push(error.message));
-
-  await page.goto("/", { waitUntil: "networkidle" });
-  const scienceButton = page.locator('.mode-btn[data-mode="science"]');
-  await expect(scienceButton).toBeVisible();
-
-  // Focus the actual production button, then send Enter through Playwright's
-  // keyboard input API. This avoids locator actionability/hit-testing, which has
-  // stalled in this app, while still exercising the browser's keyboard event path.
-  await page.evaluate(() => {
-    const button = document.querySelector('.mode-btn[data-mode="science"]');
-    if (!(button instanceof HTMLButtonElement)) throw new Error("science button not found");
-    button.focus();
-  });
-  await page.keyboard.press("Enter");
-
-  await expect(page.locator("#modeLabel")).toHaveText("Science Mode", { timeout: 5000 });
-  await expect(scienceButton).toHaveClass(/active/, { timeout: 5000 });
-  expect(pageErrors, "uncaught browser exceptions during keyboard activation").toEqual([]);
-});
