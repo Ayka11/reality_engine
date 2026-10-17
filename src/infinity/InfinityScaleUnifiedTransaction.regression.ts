@@ -268,8 +268,8 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     throw new Error("Expected divergent agent migrations to remain blocked at commit phase");
   }
 
-  // Regression: if an entity disappears after planning, reconciliation must
-  // reject the entire record set before changing any entity markers.
+  // Regression: if an entity disappears after planning, the unified
+  // transaction must reject before LOD state or entity markers are mutated.
   const stalePlan = entityLayer.prepareChunkExecution(grid, context);
   if (!stalePlan.commitReady) {
     throw new Error("Expected entity reconciliation to be ready before stale-entity regression");
@@ -278,14 +278,49 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   if (!staleRecords?.some(record => record.entityId === entity.id)) {
     throw new Error("Expected stale-entity regression plan to reference the retained entity");
   }
+
+  const staleFrame: InfinityScaleGlobalExecutionFrame = {
+    ...frame,
+    revision: 6,
+    planRevision: plan.revision,
+    phase: "local-execution",
+    committed: false,
+    finalized: false,
+  };
+  const staleState = new InfinityScaleLODState(4);
+  staleState.ensureChunk(coarseKey, 1);
+  staleState.ensureChunk(fineKey, 0);
+  const staleLod = beginInfinityScaleGlobalLODTransaction(staleFrame, plan, staleState);
+  const staleTx = beginInfinityScaleUnifiedTransaction(
+    staleFrame,
+    plan,
+    staleLod,
+    entityLayer,
+    agents,
+    grid,
+    context,
+  );
+  stageInfinityScaleEntityCommit(staleTx);
+  new InfinityScaleMixedLODCPUExecutor(staleState, context).stageBoundaryTransfers(staleLod);
+  staleFrame.phase = "boundary-reconciliation";
+
   const markersBefore = Array.from(
     { length: grid.size },
     (_, index) => grid.buffer[index * CELL_FIELDS + F.ENTITY_ID],
   );
+  const lodRevisionBefore = staleState.revision;
   const entityInternals = entityLayer as unknown as { entities: Map<number, unknown> };
   entityInternals.entities.delete(entity.id);
+
+  const staleValidation = validateInfinityScaleUnifiedTransaction(staleTx, staleFrame);
+  if (staleValidation.readyToCommit || staleValidation.entityReady) {
+    throw new Error("Expected stale entity to block the unified transaction commit barrier");
+  }
+  if (staleState.revision !== lodRevisionBefore) {
+    throw new Error("Rejected stale-entity transaction mutated LOD state");
+  }
   if (entityLayer.applyChunkReconciliation(grid, context)) {
-    throw new Error("Expected reconciliation to reject an entity removed after planning");
+    throw new Error("Expected direct reconciliation to reject an entity removed after planning");
   }
   const markersAfter = Array.from(
     { length: grid.size },
