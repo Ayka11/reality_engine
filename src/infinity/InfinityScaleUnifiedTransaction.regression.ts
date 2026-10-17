@@ -329,4 +329,92 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   if (markersAfter.some((marker, index) => marker !== markersBefore[index])) {
     throw new Error("Rejected entity reconciliation mutated grid ownership markers");
   }
+
+  // Atomicity regression: a migration failure after the LOD commit must restore
+  // every already-mutated domain, including dense buffers and migration queues.
+  const rollbackFrame: InfinityScaleGlobalExecutionFrame = {
+    ...frame,
+    revision: 7,
+    planRevision: 7,
+    phase: "local-execution",
+    committed: false,
+    finalized: false,
+  };
+  const rollbackPlan = { ...plan, revision: 7 };
+  const rollbackContext = new InfinityScaleChunkExecutionContext(
+    rollbackPlan,
+    12,
+    8,
+    8,
+    4,
+  );
+  const rollbackLod = beginInfinityScaleGlobalLODTransaction(
+    rollbackFrame,
+    rollbackPlan,
+    state,
+  );
+  const rollbackTx = beginInfinityScaleUnifiedTransaction(
+    rollbackFrame,
+    rollbackPlan,
+    rollbackLod,
+    entityLayer,
+    agents,
+    grid,
+    rollbackContext,
+  );
+  new InfinityScaleMixedLODCPUExecutor(state, rollbackContext).stageBoundaryTransfers(rollbackLod);
+  stageInfinityScaleAgentMigrations(rollbackTx, [{
+    agentId,
+    from: [moved.x, moved.y, moved.z],
+    to: [11, 2, 2],
+    behavior: moved.behavior,
+    energy: moved.energy,
+  }]);
+  rollbackFrame.phase = "boundary-reconciliation";
+  const rollbackValidation = validateInfinityScaleUnifiedTransaction(rollbackTx, rollbackFrame);
+  if (!rollbackValidation.readyToCommit) {
+    throw new Error(`Expected rollback transaction to pass preflight: ${rollbackValidation.reasons.join("; ")}`);
+  }
+
+  const gridBufferBeforeFailure = new Float32Array(grid.buffer);
+  const gridBackBufferBeforeFailure = new Float32Array(grid.backBuffer);
+  const agentsBeforeFailure = agents.snapshot();
+  const lodBeforeFailure = state.snapshot();
+  const originalApplyMigrations = agents.applyMigrationRequests.bind(agents);
+  (agents as unknown as {
+    applyMigrationRequests: typeof agents.applyMigrationRequests;
+  }).applyMigrationRequests = () => {
+    grid.buffer[grid.idx(10, 2, 2) + F.AGENT_MARK] = 999;
+    throw new Error("injected migration commit failure");
+  };
+
+  let commitFailed = false;
+  try {
+    commitInfinityScaleUnifiedTransaction(rollbackTx, rollbackFrame);
+  } catch (error) {
+    commitFailed = error instanceof Error && error.message === "injected migration commit failure";
+  } finally {
+    agents.applyMigrationRequests = originalApplyMigrations;
+  }
+  if (!commitFailed) throw new Error("Expected injected migration failure to escape the unified commit");
+  if (grid.buffer.some((value, index) => value !== gridBufferBeforeFailure[index]) ||
+      grid.backBuffer.some((value, index) => value !== gridBackBufferBeforeFailure[index])) {
+    throw new Error("Failed unified commit did not restore dense grid buffers");
+  }
+  const agentsAfterFailure = agents.snapshot();
+  if (JSON.stringify(agentsAfterFailure) !== JSON.stringify(agentsBeforeFailure)) {
+    throw new Error("Failed unified commit did not restore agent state and pending migrations");
+  }
+  const lodAfterFailure = state.snapshot();
+  if (lodAfterFailure.chunks.length !== lodBeforeFailure.chunks.length ||
+      lodAfterFailure.chunks.some((chunk, index) => {
+        const before = lodBeforeFailure.chunks[index];
+        return !before || chunk.key !== before.key ||
+          chunk.level !== before.level ||
+          chunk.scale !== before.scale ||
+          chunk.cells.some((value, cellIndex) => value !== before.cells[cellIndex]);
+      })) {
+    throw new Error("Failed unified commit did not restore hierarchical LOD cell state");
+  }
+  if (rollbackTx.committed) throw new Error("Failed unified commit was incorrectly marked committed");
 }
