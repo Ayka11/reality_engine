@@ -84,13 +84,13 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
     throw new Error("Selective frame failure did not restore subsystem random generator state");
   }
   if (JSON.stringify(after.laws.manualOff) !== JSON.stringify(before.laws.manualOff) ||
-      after.worldEvents.history.length !== before.worldEvents.history.length ||
-      after.causal.events.length !== before.causal.events.length ||
+      JSON.stringify(after.worldEvents.history) !== JSON.stringify(before.worldEvents.history) ||
+      JSON.stringify(after.causal.events) !== JSON.stringify(before.causal.events) ||
       after.causal.nextId !== before.causal.nextId ||
       after.recorder.control.recording !== before.recorder.control.recording ||
-      after.recorder.snapshots.length !== before.recorder.snapshots.length ||
-      after.grid.chunkOwners.length !== before.grid.chunkOwners.length ||
-      after.grid.dirtyChunks.length !== before.grid.dirtyChunks.length) {
+      JSON.stringify(after.recorder.snapshots) !== JSON.stringify(before.recorder.snapshots) ||
+      JSON.stringify(after.grid.chunkOwners) !== JSON.stringify(before.grid.chunkOwners) ||
+      JSON.stringify(after.grid.dirtyChunks) !== JSON.stringify(before.grid.dirtyChunks)) {
     throw new Error("Selective frame failure did not restore auxiliary simulation state");
   }
 }
