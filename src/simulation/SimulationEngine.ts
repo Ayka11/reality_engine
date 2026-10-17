@@ -10,7 +10,7 @@ import { GPUBackend } from '../gpu/GPUBackend';
 import { buildMaterialBuffer } from '../materials/MaterialDef';
 import { ChemLayer, type ChemLayerSnapshot } from '../chemistry/ChemLayer';
 import { EntityLayer, type EntityLayerSnapshot } from './EntityLayer';
-import { WorldEvents, EventType } from '../world/WorldEvents';
+import { WorldEvents, type EventType, type WorldEventsSnapshot } from '../world/WorldEvents';
 import { TemporalLayer } from './TemporalLayer';
 import { InfoPhysics } from './InfoPhysics';
 import { Recorder } from './Recorder';
@@ -52,6 +52,7 @@ export interface SimulationEngineCoreRecoverySnapshot {
   entities: EntityLayerSnapshot;
   agents: AgentSystemSnapshot;
   chemistry: ChemLayerSnapshot;
+  worldEvents: WorldEventsSnapshot;
   lod: InfinityScaleLODStateSnapshot;
 }
 
@@ -214,7 +215,7 @@ export class SimulationEngine {
   /**
    * Capture the core mutable domains needed for Infinity Scale recovery.
    * This is not a complete engine checkpoint: physics-layer internals,
-   * event/recorder history, causal/law state and RNG state are not included.
+   * recorder history, causal/law state and RNG state are not included.
    */
   captureCoreRecoveryState(): SimulationEngineCoreRecoverySnapshot {
     return {
@@ -227,6 +228,7 @@ export class SimulationEngine {
       entities: this.entityLayer.snapshot(),
       agents: this.agents.snapshot(),
       chemistry: this.chemLayer.snapshot(),
+      worldEvents: this.worldEvents.snapshot(),
       lod: this.infinityScaleLODState.snapshot(),
     };
   }
@@ -254,6 +256,7 @@ export class SimulationEngine {
       this.entityLayer.restore(state.entities);
       this.agents.restore(state.agents);
       this.chemLayer.restore(state.chemistry, this.grid.size);
+      this.worldEvents.restore(state.worldEvents);
       this.infinityScaleLODState.restore(state.lod);
       this.prevEnergy = new Float32Array(state.prevEnergy);
       this._tick = state.tick;
