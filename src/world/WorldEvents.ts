@@ -19,6 +19,20 @@ export interface WorldEvent {
   description: string;
 }
 
+export interface WorldEventsSnapshot {
+  history: WorldEvent[];
+  nextAuto: number;
+}
+
+const EVENT_TYPES: readonly EventType[] = [
+  'meteor_strike',
+  'solar_flare',
+  'radiation_storm',
+  'mutation_wave',
+  'entropy_collapse',
+  'tectonic_shift',
+];
+
 const EVENT_LABELS: Record<EventType, string> = {
   meteor_strike:    'Meteor Strike',
   solar_flare:      'Solar Flare',
@@ -40,6 +54,38 @@ const EVENT_DESC: Record<EventType, string> = {
 export class WorldEvents {
   private history: WorldEvent[] = [];
   private _nextAuto = 600; // ticks until next random event
+
+  snapshot(): WorldEventsSnapshot {
+    return {
+      history: this.history.map(event => ({ ...event })),
+      nextAuto: this._nextAuto,
+    };
+  }
+
+  restore(snapshot: WorldEventsSnapshot): void {
+    if (!snapshot ||
+        !Array.isArray(snapshot.history) ||
+        snapshot.history.length > 20 ||
+        !Number.isSafeInteger(snapshot.nextAuto) ||
+        snapshot.nextAuto < 1) {
+      throw new Error("Invalid WorldEvents snapshot");
+    }
+
+    const history = snapshot.history.map(event => {
+      if (!event ||
+          !EVENT_TYPES.includes(event.type) ||
+          !Number.isSafeInteger(event.tick) ||
+          event.tick < 0 ||
+          typeof event.label !== "string" ||
+          typeof event.description !== "string") {
+        throw new Error("Invalid WorldEvents history entry");
+      }
+      return { ...event };
+    });
+
+    this.history = history;
+    this._nextAuto = snapshot.nextAuto;
+  }
 
   trigger(
     grid: VoxelGrid,
