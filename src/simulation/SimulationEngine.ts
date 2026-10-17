@@ -4,7 +4,7 @@ import { F, CELL_FIELDS } from '../core/CellState';
 import { FieldPhysics } from './FieldPhysics';
 import { EntropyLayer } from './EntropyLayer';
 import { CausalGraph, type CausalGraphSnapshot } from './CausalGraph';
-import { LawEngine } from '../laws/LawEngine';
+import { LawEngine, type LawEngineSnapshot } from '../laws/LawEngine';
 import { WorldMetrics } from '../laws/MetaLaw';
 import { GPUBackend } from '../gpu/GPUBackend';
 import { buildMaterialBuffer } from '../materials/MaterialDef';
@@ -54,6 +54,7 @@ export interface SimulationEngineCoreRecoverySnapshot {
   chemistry: ChemLayerSnapshot;
   worldEvents: WorldEventsSnapshot;
   causal: CausalGraphSnapshot;
+  laws: LawEngineSnapshot;
   lod: InfinityScaleLODStateSnapshot;
 }
 
@@ -216,7 +217,7 @@ export class SimulationEngine {
   /**
    * Capture the core mutable domains needed for Infinity Scale recovery.
    * This is not a complete engine checkpoint: physics-layer internals,
-   * recorder history, law state and RNG state are not included.
+   * recorder history and RNG state are not included.
    */
   captureCoreRecoveryState(): SimulationEngineCoreRecoverySnapshot {
     return {
@@ -231,6 +232,7 @@ export class SimulationEngine {
       chemistry: this.chemLayer.snapshot(),
       worldEvents: this.worldEvents.snapshot(),
       causal: this.causal.snapshot(),
+      laws: this.laws.snapshot(),
       lod: this.infinityScaleLODState.snapshot(),
     };
   }
@@ -260,6 +262,7 @@ export class SimulationEngine {
       this.chemLayer.restore(state.chemistry, this.grid.size);
       this.worldEvents.restore(state.worldEvents);
       this.causal.restore(state.causal);
+      this.laws.restore(state.laws);
       this.infinityScaleLODState.restore(state.lod);
       this.prevEnergy = new Float32Array(state.prevEnergy);
       this._tick = state.tick;
