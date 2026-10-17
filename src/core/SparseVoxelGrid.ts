@@ -187,15 +187,17 @@ export class SparseVoxelGrid {
 
     const restoredChunks = new Map<string, Chunk>();
     for (const data of snapshot.chunks) {
-      const expectedKey = this.getChunkKey(data.cx, data.cy, data.cz);
-      if (!data || typeof data.key !== "string" || data.key !== expectedKey ||
-          restoredChunks.has(data.key) || !Number.isInteger(data.cx) ||
+      if (!data || typeof data.key !== "string" || !Number.isInteger(data.cx) ||
           !Number.isInteger(data.cy) || !Number.isInteger(data.cz) ||
           typeof data.active !== "boolean" || !Number.isFinite(data.lastAccessed) ||
           !(data.buffer instanceof Float32Array) ||
           data.buffer.length !== CHUNK_VOLUME * CELL_FIELDS ||
           !(data.backBuffer instanceof Float32Array) ||
           data.backBuffer.length !== CHUNK_VOLUME * CELL_FIELDS) {
+        throw new Error("Invalid SparseVoxelGrid snapshot chunk");
+      }
+      const expectedKey = this.getChunkKey(data.cx, data.cy, data.cz);
+      if (data.key !== expectedKey || restoredChunks.has(data.key)) {
         throw new Error("Invalid SparseVoxelGrid snapshot chunk");
       }
       const chunk = new Chunk(data.cx, data.cy, data.cz);
