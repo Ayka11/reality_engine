@@ -3,6 +3,7 @@ import { runInfinityScaleLODBoundaryRegression } from "./InfinityScaleLODBoundar
 import { runInfinityScaleMixedLODCPURegression, runInfinityScaleMixedLODCPUProlongationRegression } from "./InfinityScaleMixedLODCPUExecutor.regression";
 import { runInfinityScaleUnifiedTransactionRegression } from "./InfinityScaleUnifiedTransaction.regression";
 import { runInfinityScaleLODResetInvalidationRegression } from "./InfinityScaleLODState.regression";
+import { runInfinityScaleLODStateRecoveryRegression } from "./InfinityScaleLODStateRecovery.regression";
 import { runInfinityScaleLODMultiFrameRegression } from "./InfinityScaleLODMultiFrame.regression";
 import { runInfinityScaleMixedLODMultiFrameRegression } from "./InfinityScaleMixedLODMultiFrame.regression";
 import { runInfinityScaleExecutionAdapterBoundaryRegression } from "./InfinityScaleExecutionAdapter.regression";
@@ -71,6 +72,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["gpu-boundary-transfer-contract", runInfinityScaleGPUBoundaryTransferContractRegression],
     ["unified-transaction", runInfinityScaleUnifiedTransactionRegression],
     ["lod-reset-invalidation", runInfinityScaleLODResetInvalidationRegression],
+    ["lod-state-recovery", runInfinityScaleLODStateRecoveryRegression],
     ["lod-multi-frame", runInfinityScaleLODMultiFrameRegression],
     ["mixed-lod-multi-frame", runInfinityScaleMixedLODMultiFrameRegression],
     ["adaptive-stability-anti-thrashing", runInfinityScaleAdaptiveStabilityRegression],
