@@ -45,3 +45,20 @@ test("workspace mode handler updates the active mode and label", async ({ page }
   expect(result.createActive).toBe(false);
   expect(pageErrors, "uncaught browser exceptions during mode switch").toEqual([]);
 });
+
+test("workspace mode can be activated with real keyboard input", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", error => pageErrors.push(error.message));
+
+  await page.goto("/", { waitUntil: "networkidle" });
+  const scienceButton = page.locator('.mode-btn[data-mode="science"]');
+  await expect(scienceButton).toBeVisible();
+
+  // Playwright's press() sends keyboard input through Chromium's input path;
+  // unlike dispatchEvent(), this exercises the button's native keyboard activation.
+  await scienceButton.press("Enter", { timeout: 8000 });
+
+  await expect(page.locator("#modeLabel")).toHaveText("Science Mode", { timeout: 5000 });
+  await expect(scienceButton).toHaveClass(/active/, { timeout: 5000 });
+  expect(pageErrors, "uncaught browser exceptions during keyboard activation").toEqual([]);
+});
