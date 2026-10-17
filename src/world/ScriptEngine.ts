@@ -56,6 +56,7 @@ export class ScriptEngine {
   }
 
   buildWorldAPI(log: string[]) {
+    const random = () => this._random();
     const { grid, laws } = this.sim;
     const { W, H, D, buffer: buf } = grid;
 
@@ -133,7 +134,7 @@ export class ScriptEngine {
       },
 
       preset(name: string) {
-        Presets.apply(grid, name as PresetName, Math.floor(this._random() * 0xffffffff) || 1);
+        Presets.apply(grid, name as PresetName, Math.floor(random() * 0xffffffff) || 1);
       },
 
       spawnEntity(x: number, y: number, z: number) {
@@ -145,9 +146,9 @@ export class ScriptEngine {
           const nx=Math.floor(x+dx), ny=Math.floor(y+dy), nz=Math.floor(z+dz);
           if (!grid.inBounds(nx, ny, nz)) continue;
           const b = (nz*H*W+ny*W+nx)*CELL_FIELDS;
-          buf[b+F.BIO_POTENTIAL] = Math.max(buf[b+F.BIO_POTENTIAL], 0.4+this._random()*0.3);
-          buf[b+F.ENERGY]        = Math.max(buf[b+F.ENERGY],        200+this._random()*150);
-          buf[b+F.INFORMATION]   = Math.max(buf[b+F.INFORMATION],   50+this._random()*30);
+          buf[b+F.BIO_POTENTIAL] = Math.max(buf[b+F.BIO_POTENTIAL], 0.4+random()*0.3);
+          buf[b+F.ENERGY]        = Math.max(buf[b+F.ENERGY],        200+random()*150);
+          buf[b+F.INFORMATION]   = Math.max(buf[b+F.INFORMATION],   50+random()*30);
         }
       },
 
