@@ -28,7 +28,7 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
     selectiveCpuReady: true,
     selectiveGpuReady: false,
     gpuPhysicsReady: false,
-    lodBoundaryTransferReady: false,
+    lodBoundaryTransferReady: true,
     mixedLodExecutionReady: true,
     entityExecutionReady: true,
     agentMigrationReady: true,
