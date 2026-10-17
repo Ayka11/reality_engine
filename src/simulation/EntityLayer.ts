@@ -51,12 +51,12 @@ export interface EntityLayerSnapshot {
 
 function defaultGenome(random: () => number): EntityGenome {
   return {
-    metabolismRate:  0.4 + this._random() * 0.4,
-    reproThreshold:  300 + this._random() * 200,
-    signalStrength:  0.3 + this._random() * 0.4,
-    bioAffinity:     0.3 + this._random() * 0.5,
-    mutationRate:    0.02 + this._random() * 0.04,
-    memoryDecay:     0.05 + this._random() * 0.1,
+    metabolismRate:  0.4 + random() * 0.4,
+    reproThreshold:  300 + random() * 200,
+    signalStrength:  0.3 + random() * 0.4,
+    bioAffinity:     0.3 + random() * 0.5,
+    mutationRate:    0.02 + random() * 0.04,
+    memoryDecay:     0.05 + random() * 0.1,
   };
 }
 
