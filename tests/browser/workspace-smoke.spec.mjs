@@ -22,7 +22,19 @@ test("switching workspace mode updates the active mode and label", async ({ page
   const handlerType = await page.evaluate(() => typeof window.selectWorkspaceMode);
   expect(handlerType, "workspace mode handler must be globally available").toBe("function");
 
-  await scienceButton.click();
+  const hitTarget = await scienceButton.evaluate(button => {
+    const r = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return {
+      button: button.outerHTML,
+      hitTag: hit?.tagName ?? null,
+      hitId: hit?.id ?? null,
+      hitClass: typeof hit?.className === "string" ? hit.className : "",
+      hitText: hit?.textContent?.trim().slice(0, 80) ?? ""
+    };
+  });
+  console.log("Science button hit-test:", JSON.stringify(hitTarget));
+  await scienceButton.click({ timeout: 5000 });
 
   await expect(page.locator("#modeLabel")).toHaveText("Science Mode", { timeout: 5000 });
   await expect(scienceButton).toHaveClass(/active/, { timeout: 5000 });
