@@ -8,7 +8,7 @@ import { LawEngine } from '../laws/LawEngine';
 import { WorldMetrics } from '../laws/MetaLaw';
 import { GPUBackend } from '../gpu/GPUBackend';
 import { buildMaterialBuffer } from '../materials/MaterialDef';
-import { ChemLayer } from '../chemistry/ChemLayer';
+import { ChemLayer, type ChemLayerSnapshot } from '../chemistry/ChemLayer';
 import { EntityLayer, type EntityLayerSnapshot } from './EntityLayer';
 import { WorldEvents, EventType } from '../world/WorldEvents';
 import { TemporalLayer } from './TemporalLayer';
@@ -51,6 +51,7 @@ export interface SimulationEngineCoreRecoverySnapshot {
   grid: ReturnType<SparseVoxelGrid["captureState"]>;
   entities: EntityLayerSnapshot;
   agents: AgentSystemSnapshot;
+  chemistry: ChemLayerSnapshot;
   lod: InfinityScaleLODStateSnapshot;
 }
 
@@ -225,6 +226,7 @@ export class SimulationEngine {
       grid: this.grid.captureState(),
       entities: this.entityLayer.snapshot(),
       agents: this.agents.snapshot(),
+      chemistry: this.chemLayer.snapshot(),
       lod: this.infinityScaleLODState.snapshot(),
     };
   }
@@ -251,6 +253,7 @@ export class SimulationEngine {
       this.grid.restoreState(state.grid);
       this.entityLayer.restore(state.entities);
       this.agents.restore(state.agents);
+      this.chemLayer.restore(state.chemistry);
       this.infinityScaleLODState.restore(state.lod);
       this.prevEnergy = new Float32Array(state.prevEnergy);
       this._tick = state.tick;
