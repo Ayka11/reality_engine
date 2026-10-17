@@ -160,6 +160,12 @@ export function commitInfinityScaleUnifiedTransaction(
       transaction.entityLayer.restore(rollback.entities);
       transaction.agentSystem.restore(rollback.agents);
       transaction.lod.state.restore(rollback.lod);
+      // The LOD write was applied and then compensated by restoring the state.
+      // Clear staged work and reflect that the failed global transaction did
+      // not leave a committed LOD result. Its captured revision is now stale,
+      // so this transaction object still cannot be reused.
+      transaction.lod.synchronization.rollback();
+      transaction.lod.committed = false;
       transaction.committed = false;
     } catch (rollbackError) {
       const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
