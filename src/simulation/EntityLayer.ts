@@ -34,8 +34,19 @@ export interface Entity {
   reproCounter: number;      // energy / reproThreshold — 0..1 display gauge
 }
 
-let _nextId = 1;
-let _extinctCount = 0;
+export interface EntityLayerSnapshot {
+  entities: Entity[];
+  bioThreshold: number;
+  mutationStrength: number;
+  nextId: number;
+  extinctCount: number;
+  pendingBoundaryComponents: Array<[string, {
+    sourceEntityIds: number[];
+    centroid: [number, number, number];
+    cellCount: number;
+  }]>;
+}
+
 
 function defaultGenome(): EntityGenome {
   return {
@@ -109,6 +120,8 @@ function centroid(cells: number[], W: number, H: number): [number, number, numbe
 
 export class EntityLayer {
   private entities: Map<number, Entity> = new Map();
+  private nextId = 1;
+  private extinctCountValue = 0;
   private bioThreshold = 0.05;
   mutationStrength = 1.0;
   private readonly chunkConnectivity = new EntityChunkConnectivity(this.bioThreshold);
@@ -120,6 +133,117 @@ export class EntityLayer {
     centroid: [number, number, number];
     cellCount: number;
   }>();
+
+  /**
+   * Capture the mutable EntityLayer domain for frame rollback/recovery.
+   * Diagnostic plans are invalidated on restore to prevent stale commits.
+   */
+  snapshot(): EntityLayerSnapshot {
+    return {
+      entities: [...this.entities.values()].map(entity => ({
+        ...entity,
+        cells: [...entity.cells],
+        centroid: [...entity.centroid] as [number, number, number],
+        genome: { ...entity.genome },
+        memoryBuffer: new Float32Array(entity.memoryBuffer),
+        colorRgb: [...entity.colorRgb] as [number, number, number],
+      })),
+      bioThreshold: this.bioThreshold,
+      mutationStrength: this.mutationStrength,
+      nextId: this.nextId,
+      extinctCount: this.extinctCountValue,
+      pendingBoundaryComponents: [...this.pendingBoundaryComponents.entries()].map(
+        ([key, value]) => [key, {
+          sourceEntityIds: [...value.sourceEntityIds],
+          centroid: [...value.centroid] as [number, number, number],
+          cellCount: value.cellCount,
+        }],
+      ),
+    };
+  }
+
+  restore(snapshot: EntityLayerSnapshot): void {
+    if (!snapshot || !Array.isArray(snapshot.entities) ||
+        !Number.isFinite(snapshot.bioThreshold) || snapshot.bioThreshold <= 0 ||
+        !Number.isFinite(snapshot.mutationStrength) || snapshot.mutationStrength < 0 ||
+        !Number.isInteger(snapshot.nextId) || snapshot.nextId < 1 ||
+        !Number.isInteger(snapshot.extinctCount) || snapshot.extinctCount < 0 ||
+        !Array.isArray(snapshot.pendingBoundaryComponents)) {
+      throw new Error('Invalid EntityLayer snapshot');
+    }
+
+    const restored = new Map<number, Entity>();
+    let maxId = 0;
+    for (const entity of snapshot.entities) {
+      const genomeValues = entity && entity.genome ? Object.values(entity.genome) : [];
+      if (!entity || !Number.isInteger(entity.id) || entity.id < 1 ||
+          restored.has(entity.id) ||
+          !Array.isArray(entity.cells) ||
+          !entity.cells.every(index => Number.isInteger(index) && index >= 0) ||
+          !Array.isArray(entity.centroid) || entity.centroid.length !== 3 ||
+          !entity.centroid.every(Number.isFinite) ||
+          genomeValues.length !== 6 || !genomeValues.every(Number.isFinite) ||
+          !Number.isFinite(entity.age) || entity.age < 0 ||
+          !Number.isFinite(entity.energy) ||
+          !Number.isInteger(entity.memPtr) || entity.memPtr < 0 ||
+          !(entity.memoryBuffer instanceof Float32Array) || entity.memoryBuffer.length !== 8 ||
+          !Array.from(entity.memoryBuffer).every(Number.isFinite) ||
+          !Array.isArray(entity.colorRgb) || entity.colorRgb.length !== 3 ||
+          !entity.colorRgb.every(Number.isFinite) ||
+          !Number.isInteger(entity.children) || entity.children < 0 ||
+          !Number.isFinite(entity.reproCounter) ||
+          !['juvenile', 'mature', 'elder'].includes(entity.stage) ||
+          typeof entity.symbol !== 'string') {
+        throw new Error('Invalid EntityLayer snapshot entity');
+      }
+      restored.set(entity.id, {
+        ...entity,
+        cells: [...entity.cells],
+        centroid: [...entity.centroid] as [number, number, number],
+        genome: { ...entity.genome },
+        memoryBuffer: new Float32Array(entity.memoryBuffer),
+        colorRgb: [...entity.colorRgb] as [number, number, number],
+      });
+      maxId = Math.max(maxId, entity.id);
+    }
+    if (snapshot.nextId <= maxId) {
+      throw new Error('Invalid EntityLayer snapshot allocator state');
+    }
+
+    const pending = new Map<string, {
+      sourceEntityIds: number[];
+      centroid: [number, number, number];
+      cellCount: number;
+    }>();
+    for (const entry of snapshot.pendingBoundaryComponents) {
+      if (!Array.isArray(entry) || entry.length !== 2 ||
+          typeof entry[0] !== 'string' || pending.has(entry[0])) {
+        throw new Error('Invalid EntityLayer snapshot boundary entry');
+      }
+      const value = entry[1];
+      if (!value || !Array.isArray(value.sourceEntityIds) ||
+          !value.sourceEntityIds.every(id => Number.isInteger(id) && id > 0) ||
+          !Array.isArray(value.centroid) || value.centroid.length !== 3 ||
+          !value.centroid.every(Number.isFinite) ||
+          !Number.isInteger(value.cellCount) || value.cellCount < 0) {
+        throw new Error('Invalid EntityLayer snapshot boundary component');
+      }
+      pending.set(entry[0], {
+        sourceEntityIds: [...value.sourceEntityIds],
+        centroid: [...value.centroid] as [number, number, number],
+        cellCount: value.cellCount,
+      });
+    }
+
+    this.entities = restored;
+    this.bioThreshold = snapshot.bioThreshold;
+    this.mutationStrength = snapshot.mutationStrength;
+    this.nextId = snapshot.nextId;
+    this.extinctCountValue = snapshot.extinctCount;
+    this.pendingBoundaryComponents = pending;
+    this.lastChunkConnectivity = null;
+    this.lastChunkReconciliation = null;
+  }
 
   analyzeChunks(
     grid: VoxelGrid,
@@ -281,7 +405,7 @@ export class EntityLayer {
               .map(id => this.entities.get(id))
               .find(candidate => !!candidate)
           : undefined;
-        const id = _nextId++;
+        const id = this.nextId++;
         entity = {
           id,
           cells: [],
@@ -339,13 +463,13 @@ export class EntityLayer {
       for (const sourceId of mergedSourceIds) {
         const source = this.entities.get(sourceId);
         if (!source) continue;
-        _extinctCount++;
+        this.extinctCountValue++;
         this.entities.delete(sourceId);
       }
 
       for (const [id, entity] of [...this.entities]) {
         if (!retained.has(id)) {
-          _extinctCount++;
+          this.extinctCountValue++;
           for (const index of entity.cells) {
             const base = index * CELL_FIELDS;
             grid.buffer[base + F.ENERGY] = Math.min(
@@ -483,8 +607,8 @@ export class EntityLayer {
     }
   }
 
-  get extinctCount(): number { return _extinctCount; }
-  get totalSpawned(): number { return _nextId - 1; }
+  get extinctCount(): number { return this.extinctCountValue; }
+  get totalSpawned(): number { return this.nextId - 1; }
 
   tick(grid: VoxelGrid, dt: number): void {
     const { W, H, D, buffer: buf } = grid;
@@ -530,7 +654,7 @@ export class EntityLayer {
         nextEntities.set(best.id, best);
       } else {
         // New entity — inherit any genome from field or start fresh
-        const id = _nextId++;
+        const id = this.nextId++;
         const ent: Entity = {
           id, cells: blob, centroid: c,
           genome: defaultGenome(),
@@ -553,7 +677,7 @@ export class EntityLayer {
     // Count extinction for entities whose blob disappeared
     for (const [id] of this.entities) {
       if (!nextEntities.has(id)) {
-        _extinctCount++;
+        this.extinctCountValue++;
         const dead = this.entities.get(id)!;
         for (const i of dead.cells) {
           const base = i * CELL_FIELDS;
@@ -681,7 +805,7 @@ export class EntityLayer {
       parent.children++;
 
       // Register new entity immediately
-      const id = _nextId++;
+      const id = this.nextId++;
       const c = centroid([nz * WH + ny * W + nx], W, H);
       this.entities.set(id, {
         id, cells: [nz * WH + ny * W + nx], centroid: c,
@@ -713,7 +837,7 @@ export class EntityLayer {
 
   clear(): void {
     this.entities.clear();
-    _nextId = 1;
-    _extinctCount = 0;
+    this.nextId = 1;
+    this.extinctCountValue = 0;
   }
 }
