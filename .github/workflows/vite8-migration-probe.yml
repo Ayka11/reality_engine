@@ -1,0 +1,167 @@
+name: Vite 8 Security Migration Probe
+
+on:
+  push:
+    branches:
+      - codex/vite8-migration-probe-2026-10-17
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - codex/infinity-scale-selective-port-2026-10-16
+    paths:
+      - ".github/workflows/vite8-migration-probe.yml"
+      - "package.json"
+      - "package-lock.json"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Vite 8 candidate validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install current locked dependencies
+        run: npm ci
+
+      - name: Upgrade candidate to Vite 8
+        run: npm install --save-dev vite@^8.3.4 --ignore-scripts
+
+      - name: Apply remaining semver-compatible security fixes
+        shell: bash
+        run: |
+          set +e
+          npm audit fix --package-lock-only --ignore-scripts
+          result=$?
+          set -e
+          echo "npm audit fix exit code: $result"
+          # A non-zero result is evaluated using the final JSON audit below.
+
+      - name: Install Vite 8 candidate lockfile
+        run: npm ci
+
+      - name: TypeScript validation
+        run: npx tsc --noEmit
+
+      - name: Production build
+        run: npm run build
+
+      - name: Infinity Scale deterministic regression validation
+        run: npm run validate:infinity-scale
+
+      - name: Release evidence validation
+        run: npm run validate:infinity-scale:evidence
+
+      - name: Release package validation
+        run: npm run package:infinity-scale:rc
+
+      - name: Release integrity validation
+        run: npm run validate:infinity-scale:integrity
+
+      - name: Generate candidate audit report
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          npm audit --json > npm-audit-vite8.json
+          audit_exit_code=$?
+          set -e
+          echo "npm audit exit code: $audit_exit_code"
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+          let report;
+          try {
+            report = JSON.parse(fs.readFileSync('npm-audit-vite8.json', 'utf8'));
+          } catch (error) {
+            fs.writeFileSync('npm-audit-vite8-summary.json', JSON.stringify({
+              reportValid: false,
+              error: String(error),
+            }, null, 2) + '\n');
+            process.exit(0);
+          }
+          const v = report.metadata?.vulnerabilities ?? {};
+          const summary = {
+            reportValid: true,
+            vulnerabilities: {
+              info: Number(v.info ?? 0),
+              low: Number(v.low ?? 0),
+              moderate: Number(v.moderate ?? 0),
+              high: Number(v.high ?? 0),
+              critical: Number(v.critical ?? 0),
+              total: Number(v.total ?? 0),
+            },
+            packagesWithFindings: Object.entries(report.vulnerabilities ?? {}).map(([name, item]) => ({
+              name,
+              severity: item.severity,
+              range: item.range,
+              fixAvailable: item.fixAvailable,
+              via: (item.via ?? []).map(v => typeof v === 'string' ? v : {
+                title: v.title, url: v.url, range: v.range, severity: v.severity,
+              }),
+            })),
+            auditError: report.error ?? null,
+          };
+          fs.writeFileSync('npm-audit-vite8-summary.json', JSON.stringify(summary, null, 2) + '\n');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+            '## Vite 8 migration candidate audit',
+            '',
+            '| Severity | Count |',
+            '|---|---:|',
+            '| Critical | ' + summary.vulnerabilities.critical + ' |',
+            '| High | ' + summary.vulnerabilities.high + ' |',
+            '| Moderate | ' + summary.vulnerabilities.moderate + ' |',
+            '| Low | ' + summary.vulnerabilities.low + ' |',
+            '| Info | ' + summary.vulnerabilities.info + ' |',
+            '| **Total** | **' + summary.vulnerabilities.total + ' |',
+          ].join('\n') + '\n');
+          console.log(JSON.stringify(summary, null, 2));
+          NODE
+          git diff -- package.json package-lock.json > vite8-migration-candidate.diff
+
+      - name: Upload candidate files and audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vite8-migration-candidate
+          path: |
+            package.json
+            package-lock.json
+            vite8-migration-candidate.diff
+            npm-audit-vite8.json
+            npm-audit-vite8-summary.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Enforce candidate audit
+        if: always()
+        shell: bash
+        run: |
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+          let summary;
+          try {
+            summary = JSON.parse(fs.readFileSync('npm-audit-vite8-summary.json', 'utf8'));
+          } catch (error) {
+            console.error('Candidate audit summary is missing or invalid:', String(error));
+            process.exit(2);
+          }
+          if (!summary.reportValid) {
+            console.error('Candidate audit report is invalid.');
+            process.exit(2);
+          }
+          const total = Number(summary.vulnerabilities?.total ?? 0);
+          console.log('Vite 8 candidate vulnerable package entries:', total);
+          if (total > 0) {
+            console.error('Vite 8 candidate still has ' + total + ' vulnerable package entries.');
+            process.exit(1);
+          }
+          NODE
