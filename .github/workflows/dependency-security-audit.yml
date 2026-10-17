@@ -140,8 +140,8 @@ jobs:
             fs.writeFileSync('npm-audit-after-safe-fix-summary.json', JSON.stringify({
               reportValid: false,
               error: String(error),
-            }, null, 2) + '\\n');
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '\\n**Safe-fix candidate audit:** report could not be parsed; inspect artifacts.\\n');
+            }, null, 2) + '\n');
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '\n**Safe-fix candidate audit:** report could not be parsed; inspect artifacts.\n');
             process.exit(0);
           }
           const v = report.metadata?.vulnerabilities ?? {};
@@ -166,9 +166,9 @@ jobs:
             })),
             auditError: report.error ?? null,
           };
-          fs.writeFileSync('npm-audit-after-safe-fix-summary.json', JSON.stringify(summary, null, 2) + '\\n');
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'total=' + summary.vulnerabilities.total + '\\n');
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'report_valid=' + String(summary.reportValid) + '\\n');
+          fs.writeFileSync('npm-audit-after-safe-fix-summary.json', JSON.stringify(summary, null, 2) + '\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'total=' + summary.vulnerabilities.total + '\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'report_valid=' + String(summary.reportValid) + '\n');
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
             '',
             '### Semver-compatible fix candidate (lockfile only)',
@@ -183,7 +183,7 @@ jobs:
             '| **Total** | **' + summary.vulnerabilities.total + ' |',
             '',
             'This is a generated candidate only. No repository manifest or lockfile was committed.',
-          ].join('\\n') + '\\n');
+          ].join('\n') + '\n');
           console.log(JSON.stringify(summary, null, 2));
           NODE
 
