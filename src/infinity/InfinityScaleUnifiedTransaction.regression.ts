@@ -308,7 +308,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     { length: grid.size },
     (_, index) => grid.buffer[index * CELL_FIELDS + F.ENTITY_ID],
   );
-  const lodRevisionBefore = staleState.revision;
+  const lodRevisionBefore = staleState.getRevision();
   const entityInternals = entityLayer as unknown as { entities: Map<number, unknown> };
   entityInternals.entities.delete(entity.id);
 
@@ -316,7 +316,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   if (staleValidation.readyToCommit || staleValidation.entityReady) {
     throw new Error("Expected stale entity to block the unified transaction commit barrier");
   }
-  if (staleState.revision !== lodRevisionBefore) {
+  if (staleState.getRevision() !== lodRevisionBefore) {
     throw new Error("Rejected stale-entity transaction mutated LOD state");
   }
   if (entityLayer.applyChunkReconciliation(grid, context)) {
