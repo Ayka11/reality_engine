@@ -12,6 +12,7 @@ import { runChemLayerRecoveryRegression } from "./ChemLayerRecovery.regression";
 import { runWorldEventsRecoveryRegression } from "./WorldEventsRecovery.regression";
 import { runCausalGraphRecoveryRegression } from "./CausalGraphRecovery.regression";
 import { runLawEngineRecoveryRegression } from "./LawEngineRecovery.regression";
+import { runRecorderRecoveryRegression } from "./RecorderRecovery.regression";
 import { runRecorderControlRecoveryRegression } from "./RecorderControlRecovery.regression";
 import { runInfinityScaleLODMultiFrameRegression } from "./InfinityScaleLODMultiFrame.regression";
 import { runInfinityScaleMixedLODMultiFrameRegression } from "./InfinityScaleMixedLODMultiFrame.regression";
@@ -90,6 +91,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["world-events-recovery", runWorldEventsRecoveryRegression],
     ["causal-graph-recovery", runCausalGraphRecoveryRegression],
     ["law-engine-recovery", runLawEngineRecoveryRegression],
+    ["recorder-recovery", runRecorderRecoveryRegression],
     ["recorder-control-recovery", runRecorderControlRecoveryRegression],
     ["lod-multi-frame", runInfinityScaleLODMultiFrameRegression],
     ["mixed-lod-multi-frame", runInfinityScaleMixedLODMultiFrameRegression],
