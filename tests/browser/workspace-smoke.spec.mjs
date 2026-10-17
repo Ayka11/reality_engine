@@ -38,16 +38,6 @@ test("switching workspace mode updates the active mode and label", async ({ page
   expect(hitTarget.hitTag, "Science button center must hit a real element").toBe("BUTTON");
   expect(hitTarget.hitClass.split(/\\s+/), "Science button center must hit the Science button").toContain("mode-btn");
 
-  // Probe the native pointer-move channel separately so a stalled browser input
-  // command is diagnosed without hiding the app's click-handler assertion.
-  const pointerMoveResult = await Promise.race([
-    page.mouse.move(hitTarget.rect.left + hitTarget.rect.width / 2, hitTarget.rect.top + hitTarget.rect.height / 2, { steps: 1 })
-      .then(() => "completed")
-      .catch(error => `error: ${error.message}`),
-    page.waitForTimeout(1500).then(() => "timeout")
-  ]);
-  console.log("Science button native pointer-move diagnostic:", pointerMoveResult);
-
   // Dispatch the click event through the button's DOM event path. Native mouse
   // input currently stalls Chromium for 30s in CI, despite the hit-test proving
   // the button is the target; keep this test focused on the production handler
