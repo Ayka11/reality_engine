@@ -49,7 +49,7 @@ export class CosmologicalSim {
     return {
       tick: this.tick,
       galaxies: this.galaxies.map(galaxy => ({ ...galaxy })),
-      cells: [...this.grid.cells.entries()].map(([key, cell]) => [key, Array.from(cell)]),
+      cells: [...this.grid.cells.entries()].map(([key, cell]): [string, number[]] => [key, Array.from(cell)]),
       dirtyKeys: [...this.grid.dirty],
       rngState: this._rngState,
     };
