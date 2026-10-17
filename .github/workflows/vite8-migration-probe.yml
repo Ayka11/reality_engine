@@ -68,6 +68,15 @@ jobs:
       - name: Release integrity validation
         run: npm run validate:infinity-scale:integrity
 
+      - name: Install browser test runner without changing manifests
+        run: npm install --no-save --package-lock=false --ignore-scripts @playwright/test
+
+      - name: Install Chromium for browser acceptance
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser acceptance
+        run: npx playwright test
+
       - name: Generate candidate audit report
         if: always()
         shell: bash
