@@ -267,4 +267,31 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   if (conflictAfterPhase.readyToCommit || conflictAfterPhase.migrationConflicts === 0) {
     throw new Error("Expected divergent agent migrations to remain blocked at commit phase");
   }
+
+  // Regression: if an entity disappears after planning, reconciliation must
+  // reject the entire record set before changing any entity markers.
+  const stalePlan = entityLayer.prepareChunkExecution(grid, context);
+  if (!stalePlan.commitReady) {
+    throw new Error("Expected entity reconciliation to be ready before stale-entity regression");
+  }
+  const staleRecords = entityLayer.getChunkReconciliationCommitRecords(grid, context);
+  if (!staleRecords?.some(record => record.entityId === entity.id)) {
+    throw new Error("Expected stale-entity regression plan to reference the retained entity");
+  }
+  const markersBefore = Array.from(
+    { length: grid.size },
+    (_, index) => grid.buffer[index * CELL_FIELDS + F.ENTITY_ID],
+  );
+  const entityInternals = entityLayer as unknown as { entities: Map<number, unknown> };
+  entityInternals.entities.delete(entity.id);
+  if (entityLayer.applyChunkReconciliation(grid, context)) {
+    throw new Error("Expected reconciliation to reject an entity removed after planning");
+  }
+  const markersAfter = Array.from(
+    { length: grid.size },
+    (_, index) => grid.buffer[index * CELL_FIELDS + F.ENTITY_ID],
+  );
+  if (markersAfter.some((marker, index) => marker !== markersBefore[index])) {
+    throw new Error("Rejected entity reconciliation mutated grid ownership markers");
+  }
 }
