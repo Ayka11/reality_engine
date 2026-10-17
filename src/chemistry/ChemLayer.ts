@@ -21,11 +21,41 @@ export interface ChemDensityTransfer {
   delta: number;
 }
 
+export interface ChemLayerSnapshot {
+  pendingDensityTransfers: Array<[number, number]>;
+}
+
 export class ChemLayer {
   private pendingDensityTransfers = new Map<number, number>();
 
   getPendingDensityTransferCount(): number {
     return this.pendingDensityTransfers.size;
+  }
+
+  snapshot(): ChemLayerSnapshot {
+    return {
+      pendingDensityTransfers: [...this.pendingDensityTransfers.entries()].map(
+        ([index, delta]) => [index, delta],
+      ),
+    };
+  }
+
+  restore(snapshot: ChemLayerSnapshot): void {
+    if (!snapshot || !Array.isArray(snapshot.pendingDensityTransfers)) {
+      throw new Error("Invalid ChemLayer snapshot");
+    }
+    const restored = new Map<number, number>();
+    for (const entry of snapshot.pendingDensityTransfers) {
+      if (!Array.isArray(entry) || entry.length !== 2) {
+        throw new Error("Invalid ChemLayer pending density transfer");
+      }
+      const [index, delta] = entry;
+      if (!Number.isSafeInteger(index) || index < 0 || !Number.isFinite(delta) || restored.has(index)) {
+        throw new Error("Invalid ChemLayer pending density transfer");
+      }
+      restored.set(index, delta);
+    }
+    this.pendingDensityTransfers = restored;
   }
 
   tick(grid: VoxelGrid, dt: number): void {
