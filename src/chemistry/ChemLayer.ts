@@ -40,7 +40,7 @@ export class ChemLayer {
     };
   }
 
-  restore(snapshot: ChemLayerSnapshot): void {
+  restore(snapshot: ChemLayerSnapshot, cellCount?: number): void {
     if (!snapshot || !Array.isArray(snapshot.pendingDensityTransfers)) {
       throw new Error("Invalid ChemLayer snapshot");
     }
@@ -50,7 +50,9 @@ export class ChemLayer {
         throw new Error("Invalid ChemLayer pending density transfer");
       }
       const [index, delta] = entry;
-      if (!Number.isSafeInteger(index) || index < 0 || !Number.isFinite(delta) || restored.has(index)) {
+      if (!Number.isSafeInteger(index) || index < 0 ||
+          (cellCount !== undefined && (!Number.isSafeInteger(cellCount) || cellCount < 0 || index >= cellCount)) ||
+          !Number.isFinite(delta) || restored.has(index)) {
         throw new Error("Invalid ChemLayer pending density transfer");
       }
       restored.set(index, delta);
