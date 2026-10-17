@@ -30,11 +30,16 @@ test("switching workspace mode updates the active mode and label", async ({ page
       hitTag: hit?.tagName ?? null,
       hitId: hit?.id ?? null,
       hitClass: typeof hit?.className === "string" ? hit.className : "",
-      hitText: hit?.textContent?.trim().slice(0, 80) ?? ""
+      hitText: hit?.textContent?.trim().slice(0, 80) ?? "",
+      x: r.left + r.width / 2,
+      y: r.top + r.height / 2,
+      rect: { left: r.left, top: r.top, width: r.width, height: r.height }
     };
   });
   console.log("Science button hit-test:", JSON.stringify(hitTarget));
-  await scienceButton.click({ timeout: 5000 });
+  // Use a real pointer click at the hit-tested center. Locator.click() stalls
+  // while waiting for stability even though the center is directly hit-tested.
+  await page.mouse.click(hitTarget.x, hitTarget.y);
 
   await expect(page.locator("#modeLabel")).toHaveText("Science Mode", { timeout: 5000 });
   await expect(scienceButton).toHaveClass(/active/, { timeout: 5000 });
