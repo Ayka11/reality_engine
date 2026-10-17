@@ -45,22 +45,23 @@ export interface EntityLayerSnapshot {
     centroid: [number, number, number];
     cellCount: number;
   }]>;
+  rngState: number;
 }
 
 
-function defaultGenome(): EntityGenome {
+function defaultGenome(random: () => number): EntityGenome {
   return {
-    metabolismRate:  0.4 + Math.random() * 0.4,
-    reproThreshold:  300 + Math.random() * 200,
-    signalStrength:  0.3 + Math.random() * 0.4,
-    bioAffinity:     0.3 + Math.random() * 0.5,
-    mutationRate:    0.02 + Math.random() * 0.04,
-    memoryDecay:     0.05 + Math.random() * 0.1,
+    metabolismRate:  0.4 + random() * 0.4,
+    reproThreshold:  300 + random() * 200,
+    signalStrength:  0.3 + random() * 0.4,
+    bioAffinity:     0.3 + random() * 0.5,
+    mutationRate:    0.02 + random() * 0.04,
+    memoryDecay:     0.05 + random() * 0.1,
   };
 }
 
-function mutateGenome(parent: EntityGenome, rate: number): EntityGenome {
-  const noise = () => (Math.random() - 0.5) * 2 * rate;
+function mutateGenome(parent: EntityGenome, rate: number, random: () => number): EntityGenome {
+  const noise = () => (random() - 0.5) * 2 * rate;
   return {
     metabolismRate:  Math.max(0.05, parent.metabolismRate  + noise()),
     reproThreshold:  Math.max(50,   parent.reproThreshold  + noise() * 200),
@@ -133,6 +134,20 @@ export class EntityLayer {
     centroid: [number, number, number];
     cellCount: number;
   }>();
+  private _rngState: number;
+
+  constructor(seed = 0x4f1bbcdc) {
+    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x4f1bbcdc : 0x4f1bbcdc;
+  }
+
+  private _random(): number {
+    let x = this._rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this._rngState = x >>> 0;
+    return this._rngState / 0x100000000;
+  }
 
   /**
    * Capture the mutable EntityLayer domain for frame rollback/recovery.
@@ -152,6 +167,7 @@ export class EntityLayer {
       mutationStrength: this.mutationStrength,
       nextId: this.nextId,
       extinctCount: this.extinctCountValue,
+      rngState: this._rngState,
       pendingBoundaryComponents: [...this.pendingBoundaryComponents.entries()].map(
         ([key, value]): EntityLayerSnapshot["pendingBoundaryComponents"][number] => [key, {
           sourceEntityIds: [...value.sourceEntityIds],
@@ -168,7 +184,8 @@ export class EntityLayer {
         !Number.isFinite(snapshot.mutationStrength) || snapshot.mutationStrength < 0 ||
         !Number.isInteger(snapshot.nextId) || snapshot.nextId < 1 ||
         !Number.isInteger(snapshot.extinctCount) || snapshot.extinctCount < 0 ||
-        !Array.isArray(snapshot.pendingBoundaryComponents)) {
+        !Array.isArray(snapshot.pendingBoundaryComponents) ||
+        !Number.isSafeInteger(snapshot.rngState) || snapshot.rngState <= 0 || snapshot.rngState > 0xffffffff) {
       throw new Error('Invalid EntityLayer snapshot');
     }
 
@@ -241,6 +258,7 @@ export class EntityLayer {
     this.nextId = snapshot.nextId;
     this.extinctCountValue = snapshot.extinctCount;
     this.pendingBoundaryComponents = pending;
+    this._rngState = snapshot.rngState >>> 0;
     this.lastChunkConnectivity = null;
     this.lastChunkReconciliation = null;
   }
@@ -410,7 +428,7 @@ export class EntityLayer {
           id,
           cells: [],
           centroid: record.centroid,
-          genome: source ? { ...source.genome } : defaultGenome(),
+          genome: source ? { ...source.genome } : defaultGenome(() => this._random()),
           age: source && record.continuity === 'split' ? source.age : 0,
           energy: 0,
           stage: source && record.continuity === 'split' ? source.stage : 'juvenile',
@@ -418,11 +436,11 @@ export class EntityLayer {
             ? new Float32Array(source.memoryBuffer)
             : new Float32Array(8),
           memPtr: source && record.continuity === 'split' ? source.memPtr : 0,
-          symbol: source?.symbol ?? SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+          symbol: source?.symbol ?? SYMBOLS[Math.floor(random() * SYMBOLS.length)],
           colorRgb: source ? [...source.colorRgb] as [number, number, number] : [
-            0.3 + Math.random() * 0.7,
-            0.3 + Math.random() * 0.7,
-            0.3 + Math.random() * 0.7,
+            0.3 + random() * 0.7,
+            0.3 + random() * 0.7,
+            0.3 + random() * 0.7,
           ],
           children: 0,
           reproCounter: 0,
@@ -657,15 +675,15 @@ export class EntityLayer {
         const id = this.nextId++;
         const ent: Entity = {
           id, cells: blob, centroid: c,
-          genome: defaultGenome(),
+          genome: defaultGenome(() => this._random()),
           age: 0, energy: 0, stage: 'juvenile',
           memoryBuffer: new Float32Array(8),
           memPtr: 0,
-          symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+          symbol: SYMBOLS[Math.floor(random() * SYMBOLS.length)],
           colorRgb: [
-            0.3 + Math.random() * 0.7,
-            0.3 + Math.random() * 0.7,
-            0.3 + Math.random() * 0.7,
+            0.3 + random() * 0.7,
+            0.3 + random() * 0.7,
+            0.3 + random() * 0.7,
           ],
           children: 0,
           reproCounter: 0,
@@ -773,7 +791,7 @@ export class EntityLayer {
     context: InfinityScaleChunkExecutionContext | null = null,
   ): void {
     // Pick a random parent cell and try to seed child in a random adjacent empty location
-    const srcIdx = parent.cells[Math.floor(Math.random() * parent.cells.length)];
+    const srcIdx = parent.cells[Math.floor(random() * parent.cells.length)];
     const WH = W * H;
     const pz = Math.floor(srcIdx / WH);
     const rem = srcIdx - pz * WH;
@@ -782,8 +800,8 @@ export class EntityLayer {
 
     // Random offset 2..4 cells away
     const offsets = [-3, -2, 2, 3];
-    const ox = offsets[Math.floor(Math.random() * 4)];
-    const oy = offsets[Math.floor(Math.random() * 4)];
+    const ox = offsets[Math.floor(random() * 4)];
+    const oy = offsets[Math.floor(random() * 4)];
     const nx = Math.max(0, Math.min(W - 1, px + ox));
     const ny = Math.max(0, Math.min(H - 1, py + oy));
     const nz = Math.max(0, Math.min(D - 1, pz));
@@ -797,7 +815,7 @@ export class EntityLayer {
       buf[childBase + F.BIO_POTENTIAL] < 0.02 &&
       (!context || context.containsSimulationCell(nx, ny, nz))
     ) {
-      const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate * this.mutationStrength);
+      const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate * this.mutationStrength, () => this._random());
       buf[childBase + F.BIO_POTENTIAL] = 0.15;
       buf[childBase + F.ENERGY]        = parent.genome.reproThreshold * 0.3;
       buf[childBase + F.INFORMATION]   = 5;
@@ -813,11 +831,11 @@ export class EntityLayer {
         age: 0, energy: buf[childBase + F.ENERGY], stage: 'juvenile',
         memoryBuffer: new Float32Array(8),
         memPtr: 0,
-        symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+        symbol: SYMBOLS[Math.floor(random() * SYMBOLS.length)],
         colorRgb: [
-          Math.max(0.2, parent.colorRgb[0] + (Math.random() - 0.5) * 0.3),
-          Math.max(0.2, parent.colorRgb[1] + (Math.random() - 0.5) * 0.3),
-          Math.max(0.2, parent.colorRgb[2] + (Math.random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[0] + (random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[1] + (random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[2] + (random() - 0.5) * 0.3),
         ],
         children: 0,
         reproCounter: 0,
