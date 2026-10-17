@@ -2,6 +2,28 @@ import { SimulationEngine } from '../simulation/SimulationEngine';
 import { CivilizationSystem } from '../simulation/CivilizationSystem';
 import { F } from '../core/CellState';
 
+let worldComposerRngState = 0x243f6a88;
+
+function worldComposerRandom(): number {
+  let x = worldComposerRngState >>> 0;
+  x ^= x << 13;
+  x ^= x >>> 17;
+  x ^= x << 5;
+  worldComposerRngState = x >>> 0;
+  return worldComposerRngState / 0x100000000;
+}
+
+export function snapshotWorldComposerRandomState(): number {
+  return worldComposerRngState;
+}
+
+export function restoreWorldComposerRandomState(state: number): void {
+  if (!Number.isSafeInteger(state) || state <= 0 || state > 0xffffffff) {
+    throw new Error("Invalid WorldComposer PRNG state");
+  }
+  worldComposerRngState = state >>> 0;
+}
+
 // ── Integral Reality Archetypes ───────────────────────────────────────────────
 export interface PhiArchetype {
   icon: string; desc: string; phiStrength: number; coupling: number;
@@ -68,10 +90,10 @@ export const ENV_HAZARDS: Record<string, { desc: string; fn: HazardFn }> = {
 
 function _hazardMeteors(grid: SimulationEngine['grid']): void {
   const buf = grid.buffer; const { W, H, D } = grid;
-  const n = 1 + Math.floor(Math.random() * 3);
+  const n = 1 + Math.floor(worldComposerRandom() * 3);
   for (let i = 0; i < n; i++) {
-    const x = Math.floor(Math.random() * W), y = Math.floor(Math.random() * H);
-    const r = 2 + Math.floor(Math.random() * 4);
+    const x = Math.floor(worldComposerRandom() * W), y = Math.floor(worldComposerRandom() * H);
+    const r = 2 + Math.floor(worldComposerRandom() * 4);
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
       const nx = x + dx, ny = y + dy;
       if (!grid.inBounds(nx, ny, D - 1) || dx*dx+dy*dy > r*r) continue;
@@ -87,21 +109,21 @@ function _hazardAcidRain(grid: SimulationEngine['grid']): void {
   const buf = grid.buffer; const { W, H, D } = grid;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const bi = grid.idx(x, y, D - 1);
-    buf[bi+F.DENSITY] = Math.max(0, buf[bi+F.DENSITY] - 0.05 * Math.random());
-    buf[bi+F.ENTROPY] = Math.min(1, buf[bi+F.ENTROPY] + 0.02 * Math.random());
+    buf[bi+F.DENSITY] = Math.max(0, buf[bi+F.DENSITY] - 0.05 * worldComposerRandom());
+    buf[bi+F.ENTROPY] = Math.min(1, buf[bi+F.ENTROPY] + 0.02 * worldComposerRandom());
   }
 }
 function _hazardSolarStorm(grid: SimulationEngine['grid']): void {
   const buf = grid.buffer; const { W, H, D } = grid;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const bi = grid.idx(x, y, D - 1);
-    buf[bi+F.ENERGY]      = Math.min(9999, buf[bi+F.ENERGY]      + 50 + Math.random()*150);
+    buf[bi+F.ENERGY]      = Math.min(9999, buf[bi+F.ENERGY]      + 50 + worldComposerRandom()*150);
     buf[bi+F.TEMPERATURE] = Math.min(2000, buf[bi+F.TEMPERATURE] + 30);
   }
 }
 function _hazardTectonics(grid: SimulationEngine['grid']): void {
   const buf = grid.buffer; const { W, H, D } = grid;
-  const cx = Math.floor(Math.random() * W), cy = Math.floor(Math.random() * H);
+  const cx = Math.floor(worldComposerRandom() * W), cy = Math.floor(worldComposerRandom() * H);
   for (let dy = -8; dy <= 8; dy++) for (let dx = -8; dx <= 8; dx++) {
     const nx = cx+dx, ny = cy+dy;
     if (!grid.inBounds(nx, ny, 0) || Math.sqrt(dx*dx+dy*dy) > 8) continue;
@@ -117,7 +139,7 @@ function _hazardRadiation(grid: SimulationEngine['grid']): void {
   const buf = grid.buffer; const { W, H, D } = grid;
   for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const bi = grid.idx(x, y, z);
-    buf[bi+F.ENTROPY] = Math.min(1, buf[bi+F.ENTROPY] + 0.003 * Math.random());
+    buf[bi+F.ENTROPY] = Math.min(1, buf[bi+F.ENTROPY] + 0.003 * worldComposerRandom());
   }
 }
 function _hazardFreezing(grid: SimulationEngine['grid']): void {
