@@ -52,7 +52,8 @@ export interface SimulationEngineCoreRecoverySnapshot {
   entities: EntityLayerSnapshot;
   agents: AgentSystemSnapshot;
   chemistry: ChemLayerSnapshot;
-  worldEvents: WorldEventsSnapshot;\n  causal: CausalGraphSnapshot;
+  worldEvents: WorldEventsSnapshot;
+  causal: CausalGraphSnapshot;
   lod: InfinityScaleLODStateSnapshot;
 }
 
@@ -228,7 +229,8 @@ export class SimulationEngine {
       entities: this.entityLayer.snapshot(),
       agents: this.agents.snapshot(),
       chemistry: this.chemLayer.snapshot(),
-      worldEvents: this.worldEvents.snapshot(),\n      causal: this.causal.snapshot(),
+      worldEvents: this.worldEvents.snapshot(),
+      causal: this.causal.snapshot(),
       lod: this.infinityScaleLODState.snapshot(),
     };
   }
@@ -256,7 +258,8 @@ export class SimulationEngine {
       this.entityLayer.restore(state.entities);
       this.agents.restore(state.agents);
       this.chemLayer.restore(state.chemistry, this.grid.size);
-      this.worldEvents.restore(state.worldEvents);\n      this.causal.restore(state.causal);
+      this.worldEvents.restore(state.worldEvents);
+      this.causal.restore(state.causal);
       this.infinityScaleLODState.restore(state.lod);
       this.prevEnergy = new Float32Array(state.prevEnergy);
       this._tick = state.tick;
