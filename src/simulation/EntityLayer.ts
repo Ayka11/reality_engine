@@ -51,12 +51,12 @@ export interface EntityLayerSnapshot {
 
 function defaultGenome(random: () => number): EntityGenome {
   return {
-    metabolismRate:  0.4 + random() * 0.4,
-    reproThreshold:  300 + random() * 200,
-    signalStrength:  0.3 + random() * 0.4,
-    bioAffinity:     0.3 + random() * 0.5,
-    mutationRate:    0.02 + random() * 0.04,
-    memoryDecay:     0.05 + random() * 0.1,
+    metabolismRate:  0.4 + this._random() * 0.4,
+    reproThreshold:  300 + this._random() * 200,
+    signalStrength:  0.3 + this._random() * 0.4,
+    bioAffinity:     0.3 + this._random() * 0.5,
+    mutationRate:    0.02 + this._random() * 0.04,
+    memoryDecay:     0.05 + this._random() * 0.1,
   };
 }
 
@@ -436,11 +436,11 @@ export class EntityLayer {
             ? new Float32Array(source.memoryBuffer)
             : new Float32Array(8),
           memPtr: source && record.continuity === 'split' ? source.memPtr : 0,
-          symbol: source?.symbol ?? SYMBOLS[Math.floor(random() * SYMBOLS.length)],
+          symbol: source?.symbol ?? SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
           colorRgb: source ? [...source.colorRgb] as [number, number, number] : [
-            0.3 + random() * 0.7,
-            0.3 + random() * 0.7,
-            0.3 + random() * 0.7,
+            0.3 + this._random() * 0.7,
+            0.3 + this._random() * 0.7,
+            0.3 + this._random() * 0.7,
           ],
           children: 0,
           reproCounter: 0,
@@ -679,11 +679,11 @@ export class EntityLayer {
           age: 0, energy: 0, stage: 'juvenile',
           memoryBuffer: new Float32Array(8),
           memPtr: 0,
-          symbol: SYMBOLS[Math.floor(random() * SYMBOLS.length)],
+          symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
           colorRgb: [
-            0.3 + random() * 0.7,
-            0.3 + random() * 0.7,
-            0.3 + random() * 0.7,
+            0.3 + this._random() * 0.7,
+            0.3 + this._random() * 0.7,
+            0.3 + this._random() * 0.7,
           ],
           children: 0,
           reproCounter: 0,
@@ -791,7 +791,7 @@ export class EntityLayer {
     context: InfinityScaleChunkExecutionContext | null = null,
   ): void {
     // Pick a random parent cell and try to seed child in a random adjacent empty location
-    const srcIdx = parent.cells[Math.floor(random() * parent.cells.length)];
+    const srcIdx = parent.cells[Math.floor(this._random() * parent.cells.length)];
     const WH = W * H;
     const pz = Math.floor(srcIdx / WH);
     const rem = srcIdx - pz * WH;
@@ -800,8 +800,8 @@ export class EntityLayer {
 
     // Random offset 2..4 cells away
     const offsets = [-3, -2, 2, 3];
-    const ox = offsets[Math.floor(random() * 4)];
-    const oy = offsets[Math.floor(random() * 4)];
+    const ox = offsets[Math.floor(this._random() * 4)];
+    const oy = offsets[Math.floor(this._random() * 4)];
     const nx = Math.max(0, Math.min(W - 1, px + ox));
     const ny = Math.max(0, Math.min(H - 1, py + oy));
     const nz = Math.max(0, Math.min(D - 1, pz));
@@ -831,11 +831,11 @@ export class EntityLayer {
         age: 0, energy: buf[childBase + F.ENERGY], stage: 'juvenile',
         memoryBuffer: new Float32Array(8),
         memPtr: 0,
-        symbol: SYMBOLS[Math.floor(random() * SYMBOLS.length)],
+        symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
         colorRgb: [
-          Math.max(0.2, parent.colorRgb[0] + (random() - 0.5) * 0.3),
-          Math.max(0.2, parent.colorRgb[1] + (random() - 0.5) * 0.3),
-          Math.max(0.2, parent.colorRgb[2] + (random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[0] + (this._random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[1] + (this._random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[2] + (this._random() - 0.5) * 0.3),
         ],
         children: 0,
         reproCounter: 0,
