@@ -9,6 +9,7 @@ import { runEntityLayerRecoveryRegression } from "./EntityLayerRecovery.regressi
 import { runSparseVoxelGridRecoveryRegression } from "./SparseVoxelGridRecovery.regression";
 import { runSimulationEngineCoreRecoveryRegression } from "./SimulationEngineCoreRecovery.regression";
 import { runChemLayerRecoveryRegression } from "./ChemLayerRecovery.regression";
+import { runWorldEventsRecoveryRegression } from "./WorldEventsRecovery.regression";
 import { runInfinityScaleLODMultiFrameRegression } from "./InfinityScaleLODMultiFrame.regression";
 import { runInfinityScaleMixedLODMultiFrameRegression } from "./InfinityScaleMixedLODMultiFrame.regression";
 import { runInfinityScaleExecutionAdapterBoundaryRegression } from "./InfinityScaleExecutionAdapter.regression";
@@ -83,6 +84,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["sparse-voxel-grid-recovery", runSparseVoxelGridRecoveryRegression],
     ["simulation-engine-core-recovery", runSimulationEngineCoreRecoveryRegression],
     ["chem-layer-recovery", runChemLayerRecoveryRegression],
+    ["world-events-recovery", runWorldEventsRecoveryRegression],
     ["lod-multi-frame", runInfinityScaleLODMultiFrameRegression],
     ["mixed-lod-multi-frame", runInfinityScaleMixedLODMultiFrameRegression],
     ["adaptive-stability-anti-thrashing", runInfinityScaleAdaptiveStabilityRegression],
