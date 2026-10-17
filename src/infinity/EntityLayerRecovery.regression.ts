@@ -3,6 +3,34 @@ import { VoxelGrid } from "../core/VoxelGrid";
 import { EntityLayer } from "../simulation/EntityLayer";
 
 export function runEntityLayerRecoveryRegression(): void {
+  const randomLayer = new EntityLayer(24681357);
+  const randomStart = randomLayer.snapshot();
+  const randomGridA = new VoxelGrid(4, 4, 1);
+  randomGridA.buffer[randomGridA.idx(1, 1, 0) + F.BIO_POTENTIAL] = 0.8;
+  randomGridA.buffer[randomGridA.idx(2, 1, 0) + F.BIO_POTENTIAL] = 0.8;
+  randomGridA.buffer[randomGridA.idx(1, 1, 0) + F.ENERGY] = 120;
+  randomGridA.buffer[randomGridA.idx(2, 1, 0) + F.ENERGY] = 130;
+  randomLayer.tick(randomGridA, 0.01);
+  const generatedA = JSON.stringify(randomLayer.getEntities().map(entity => ({
+    ...entity,
+    memoryBuffer: Array.from(entity.memoryBuffer),
+  })));
+  const rngAfterA = randomLayer.snapshot().rngState;
+
+  randomLayer.restore(randomStart);
+  const randomGridB = new VoxelGrid(4, 4, 1);
+  randomGridB.buffer[randomGridB.idx(1, 1, 0) + F.BIO_POTENTIAL] = 0.8;
+  randomGridB.buffer[randomGridB.idx(2, 1, 0) + F.BIO_POTENTIAL] = 0.8;
+  randomGridB.buffer[randomGridB.idx(1, 1, 0) + F.ENERGY] = 120;
+  randomGridB.buffer[randomGridB.idx(2, 1, 0) + F.ENERGY] = 130;
+  randomLayer.tick(randomGridB, 0.01);
+  const generatedB = JSON.stringify(randomLayer.getEntities().map(entity => ({
+    ...entity,
+    memoryBuffer: Array.from(entity.memoryBuffer),
+  })));
+  if (generatedA !== generatedB || randomLayer.snapshot().rngState !== rngAfterA) {
+    throw new Error("EntityLayer restore did not replay randomized entity generation");
+  }
   const grid = new VoxelGrid(4, 4, 1);
   grid.buffer[grid.idx(1, 1, 0) + F.BIO_POTENTIAL] = 0.8;
   grid.buffer[grid.idx(2, 1, 0) + F.BIO_POTENTIAL] = 0.8;
