@@ -114,6 +114,82 @@ jobs:
 
           echo "npm_exit_code=$audit_exit_code" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare semver-compatible lockfile fix candidate
+        id: safe_fix
+        shell: bash
+        run: |
+          set +e
+          npm audit fix --package-lock-only --ignore-scripts > npm-audit-fix.log 2>&1
+          fix_exit_code=$?
+          set -e
+          echo "npm audit fix exit code: $fix_exit_code"
+          cat npm-audit-fix.log
+
+          set +e
+          npm audit --json > npm-audit-after-safe-fix.json
+          audit_exit_code=$?
+          set -e
+          echo "post_fix_audit_exit_code=$audit_exit_code" >> "$GITHUB_OUTPUT"
+
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+          let report;
+          try {
+            report = JSON.parse(fs.readFileSync('npm-audit-after-safe-fix.json', 'utf8'));
+          } catch (error) {
+            fs.writeFileSync('npm-audit-after-safe-fix-summary.json', JSON.stringify({
+              reportValid: false,
+              error: String(error),
+            }, null, 2) + '\\n');
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '\\n**Safe-fix candidate audit:** report could not be parsed; inspect artifacts.\\n');
+            process.exit(0);
+          }
+          const v = report.metadata?.vulnerabilities ?? {};
+          const summary = {
+            reportValid: true,
+            vulnerabilities: {
+              info: Number(v.info ?? 0),
+              low: Number(v.low ?? 0),
+              moderate: Number(v.moderate ?? 0),
+              high: Number(v.high ?? 0),
+              critical: Number(v.critical ?? 0),
+              total: Number(v.total ?? 0),
+            },
+            packagesWithFindings: Object.entries(report.vulnerabilities ?? {}).map(([name, item]) => ({
+              name,
+              severity: item.severity,
+              range: item.range,
+              fixAvailable: item.fixAvailable,
+              via: (item.via ?? []).map(v => typeof v === 'string' ? v : {
+                title: v.title, url: v.url, range: v.range, severity: v.severity,
+              }),
+            })),
+            auditError: report.error ?? null,
+          };
+          fs.writeFileSync('npm-audit-after-safe-fix-summary.json', JSON.stringify(summary, null, 2) + '\\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'total=' + summary.vulnerabilities.total + '\\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'report_valid=' + String(summary.reportValid) + '\\n');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+            '',
+            '### Semver-compatible fix candidate (lockfile only)',
+            '',
+            '| Severity | Remaining |',
+            '|---|---:|',
+            '| Critical | ' + summary.vulnerabilities.critical + ' |',
+            '| High | ' + summary.vulnerabilities.high + ' |',
+            '| Moderate | ' + summary.vulnerabilities.moderate + ' |',
+            '| Low | ' + summary.vulnerabilities.low + ' |',
+            '| Info | ' + summary.vulnerabilities.info + ' |',
+            '| **Total** | **' + summary.vulnerabilities.total + ' |',
+            '',
+            'This is a generated candidate only. No repository manifest or lockfile was committed.',
+          ].join('\\n') + '\\n');
+          console.log(JSON.stringify(summary, null, 2));
+          NODE
+
+          git diff -- package-lock.json > package-lock-safe-fix.diff
+          echo "lockfile_changed=$(git diff --quiet -- package-lock.json; echo $?)" >> "$GITHUB_OUTPUT"
+
       - name: Upload full audit report
         if: always()
         uses: actions/upload-artifact@v4
@@ -122,14 +198,19 @@ jobs:
           path: |
             npm-audit.json
             npm-audit-summary.json
+            npm-audit-fix.log
+            npm-audit-after-safe-fix.json
+            npm-audit-after-safe-fix-summary.json
+            package-lock.json
+            package-lock-safe-fix.diff
           if-no-files-found: error
           retention-days: 14
 
-      - name: Enforce audit result
-        if: steps.audit.outputs.report_valid == 'true'
+      - name: Enforce safe-fix candidate audit result
+        if: steps.safe_fix.outputs.report_valid == 'true'
         shell: bash
         run: |
-          if [ "${{ steps.audit.outputs.total }}" -gt 0 ]; then
-            echo "::error::npm audit found ${{ steps.audit.outputs.total }} known vulnerable package entries. Download npm-audit-report for the complete advisory and remediation details."
+          if [ "${{ steps.safe_fix.outputs.total }}" -gt 0 ]; then
+            echo "::error::The semver-compatible lockfile-only fix candidate still has ${{ steps.safe_fix.outputs.total }} vulnerable package entries. Review the attached candidate and assess any required major upgrades separately."
             exit 1
           fi
