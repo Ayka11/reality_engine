@@ -253,7 +253,7 @@ export class SimulationEngine {
       this.grid.restoreState(state.grid);
       this.entityLayer.restore(state.entities);
       this.agents.restore(state.agents);
-      this.chemLayer.restore(state.chemistry);
+      this.chemLayer.restore(state.chemistry, this.grid.size);
       this.infinityScaleLODState.restore(state.lod);
       this.prevEnergy = new Float32Array(state.prevEnergy);
       this._tick = state.tick;
