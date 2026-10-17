@@ -153,7 +153,7 @@ export class EntityLayer {
       nextId: this.nextId,
       extinctCount: this.extinctCountValue,
       pendingBoundaryComponents: [...this.pendingBoundaryComponents.entries()].map(
-        ([key, value]) => [key, {
+        ([key, value]): EntityLayerSnapshot["pendingBoundaryComponents"][number] => [key, {
           sourceEntityIds: [...value.sourceEntityIds],
           centroid: [...value.centroid] as [number, number, number],
           cellCount: value.cellCount,
