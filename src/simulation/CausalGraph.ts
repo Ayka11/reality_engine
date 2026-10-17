@@ -7,6 +7,21 @@ export interface CausalEvent {
   parentId?: number;
 }
 
+
+export interface CausalGraphSnapshot {
+  events: CausalEvent[];
+  nextId: number;
+  lastEventByCell: Array<[number, number]>;
+}
+
+const CAUSAL_EVENT_TYPES: readonly CausalEvent["type"][] = [
+  "energy_spike",
+  "info_bloom",
+  "entropy_burst",
+  "bio_emergence",
+  "phase_transition",
+];
+
 export class CausalGraph {
   private events: CausalEvent[] = [];
   private nextId = 1;
