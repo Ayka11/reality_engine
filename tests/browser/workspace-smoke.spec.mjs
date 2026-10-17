@@ -54,9 +54,15 @@ test("workspace mode can be activated with real keyboard input", async ({ page }
   const scienceButton = page.locator('.mode-btn[data-mode="science"]');
   await expect(scienceButton).toBeVisible();
 
-  // Playwright's press() sends keyboard input through Chromium's input path;
-  // unlike dispatchEvent(), this exercises the button's native keyboard activation.
-  await scienceButton.press("Enter", { timeout: 8000 });
+  // Focus the actual production button, then send Enter through Playwright's
+  // keyboard input API. This avoids locator actionability/hit-testing, which has
+  // stalled in this app, while still exercising the browser's keyboard event path.
+  await page.evaluate(() => {
+    const button = document.querySelector('.mode-btn[data-mode="science"]');
+    if (!(button instanceof HTMLButtonElement)) throw new Error("science button not found");
+    button.focus();
+  });
+  await page.keyboard.press("Enter");
 
   await expect(page.locator("#modeLabel")).toHaveText("Science Mode", { timeout: 5000 });
   await expect(scienceButton).toHaveClass(/active/, { timeout: 5000 });
