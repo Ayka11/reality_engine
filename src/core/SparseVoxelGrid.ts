@@ -10,6 +10,28 @@ export interface SerializedChunk {
   buffer: ArrayBuffer;
 }
 
+export interface SparseVoxelGridSnapshot {
+  width: number;
+  height: number;
+  depth: number;
+  buffer: Float32Array;
+  backBuffer: Float32Array;
+  denseOrigin: { x: number; y: number; z: number };
+  activeChunkRange: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
+  chunks: Array<{
+    key: string;
+    cx: number;
+    cy: number;
+    cz: number;
+    active: boolean;
+    lastAccessed: number;
+    buffer: Float32Array;
+    backBuffer: Float32Array;
+  }>;
+  dirtyChunks: string[];
+  chunkOwners: Array<[string, string]>;
+}
+
 export class SparseVoxelGrid {
   readonly chunkSize = CHUNK_SIZE;
   readonly W: number;
@@ -118,6 +140,94 @@ export class SparseVoxelGrid {
 
   inBounds(x: number, y: number, z: number): boolean {
     return x >= 0 && x < this.W && y >= 0 && y < this.H && z >= 0 && z < this.D;
+  }
+
+  /**
+   * Capture dense and sparse representations plus scheduling/ownership metadata.
+   * This is distinct from snapshot(), which only copies the current buffer into
+   * the back buffer for the numerical solver.
+   */
+  captureState(): SparseVoxelGridSnapshot {
+    return {
+      width: this.W,
+      height: this.H,
+      depth: this.D,
+      buffer: new Float32Array(this.buffer),
+      backBuffer: new Float32Array(this.backBuffer),
+      denseOrigin: { ...this.denseOrigin },
+      activeChunkRange: { ...this.activeChunkRange },
+      chunks: [...this.chunks.entries()].map(([key, chunk]) => ({
+        key,
+        cx: chunk.cx,
+        cy: chunk.cy,
+        cz: chunk.cz,
+        active: chunk.active,
+        lastAccessed: chunk.lastAccessed,
+        buffer: new Float32Array(chunk.buffer),
+        backBuffer: new Float32Array(chunk.backBuffer),
+      })),
+      dirtyChunks: [...this.dirtyChunks],
+      chunkOwners: [...this.chunkOwners.entries()],
+    };
+  }
+
+  restoreState(snapshot: SparseVoxelGridSnapshot): void {
+    const validRange = (range: SparseVoxelGridSnapshot["activeChunkRange"]) =>
+      !!range && Object.values(range).every(Number.isInteger);
+    if (!snapshot ||
+        snapshot.width !== this.W || snapshot.height !== this.H || snapshot.depth !== this.D ||
+        !(snapshot.buffer instanceof Float32Array) || snapshot.buffer.length !== this.size * CELL_FIELDS ||
+        !(snapshot.backBuffer instanceof Float32Array) || snapshot.backBuffer.length !== this.size * CELL_FIELDS ||
+        !snapshot.denseOrigin || ![snapshot.denseOrigin.x, snapshot.denseOrigin.y, snapshot.denseOrigin.z].every(Number.isInteger) ||
+        !validRange(snapshot.activeChunkRange) ||
+        !Array.isArray(snapshot.chunks) || !Array.isArray(snapshot.dirtyChunks) ||
+        !Array.isArray(snapshot.chunkOwners)) {
+      throw new Error("Invalid SparseVoxelGrid snapshot");
+    }
+
+    const restoredChunks = new Map<string, Chunk>();
+    for (const data of snapshot.chunks) {
+      const expectedKey = this.getChunkKey(data.cx, data.cy, data.cz);
+      if (!data || typeof data.key !== "string" || data.key !== expectedKey ||
+          restoredChunks.has(data.key) || !Number.isInteger(data.cx) ||
+          !Number.isInteger(data.cy) || !Number.isInteger(data.cz) ||
+          typeof data.active !== "boolean" || !Number.isFinite(data.lastAccessed) ||
+          !(data.buffer instanceof Float32Array) ||
+          data.buffer.length !== CHUNK_VOLUME * CELL_FIELDS ||
+          !(data.backBuffer instanceof Float32Array) ||
+          data.backBuffer.length !== CHUNK_VOLUME * CELL_FIELDS) {
+        throw new Error("Invalid SparseVoxelGrid snapshot chunk");
+      }
+      const chunk = new Chunk(data.cx, data.cy, data.cz);
+      chunk.buffer.set(data.buffer);
+      chunk.backBuffer.set(data.backBuffer);
+      chunk.active = data.active;
+      chunk.lastAccessed = data.lastAccessed;
+      restoredChunks.set(data.key, chunk);
+    }
+
+    const owners = new Map<string, string>();
+    for (const entry of snapshot.chunkOwners) {
+      if (!Array.isArray(entry) || entry.length !== 2 ||
+          typeof entry[0] !== "string" || typeof entry[1] !== "string" || owners.has(entry[0])) {
+        throw new Error("Invalid SparseVoxelGrid snapshot ownership entry");
+      }
+      owners.set(entry[0], entry[1]);
+    }
+    if (!snapshot.dirtyChunks.every(key => typeof key === "string")) {
+      throw new Error("Invalid SparseVoxelGrid snapshot dirty-chunk list");
+    }
+
+    this.buffer = new Float32Array(snapshot.buffer);
+    this.backBuffer = new Float32Array(snapshot.backBuffer);
+    this.denseOrigin = { ...snapshot.denseOrigin };
+    this.activeChunkRange = { ...snapshot.activeChunkRange };
+    this.chunks.clear();
+    for (const [key, chunk] of restoredChunks) this.chunks.set(key, chunk);
+    this.dirtyChunks.clear();
+    for (const key of snapshot.dirtyChunks) this.dirtyChunks.add(key);
+    this.chunkOwners.clear();
+    for (const [key, owner] of owners) this.chunkOwners.set(key, owner);
   }
 
   snapshot(): void {
