@@ -29,7 +29,7 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
     selectiveGpuReady: false,
     gpuPhysicsReady: false,
     lodBoundaryTransferReady: false,
-    mixedLodExecutionReady: false,
+    mixedLodExecutionReady: true,
     entityExecutionReady: true,
     agentMigrationReady: true,
   });
