@@ -10,6 +10,8 @@ import { runSparseVoxelGridRecoveryRegression } from "./SparseVoxelGridRecovery.
 import { runSimulationEngineCoreRecoveryRegression } from "./SimulationEngineCoreRecovery.regression";
 import { runChemLayerRecoveryRegression } from "./ChemLayerRecovery.regression";
 import { runWorldEventsRecoveryRegression } from "./WorldEventsRecovery.regression";
+import { runCivilizationSystemRecoveryRegression } from "./CivilizationSystemRecovery.regression";
+import { runCosmologicalSimRecoveryRegression } from "./CosmologicalSimRecovery.regression";
 import { runCausalGraphRecoveryRegression } from "./CausalGraphRecovery.regression";
 import { runLawEngineRecoveryRegression } from "./LawEngineRecovery.regression";
 import { runRecorderRecoveryRegression } from "./RecorderRecovery.regression";
@@ -89,6 +91,8 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["simulation-engine-core-recovery", runSimulationEngineCoreRecoveryRegression],
     ["chem-layer-recovery", runChemLayerRecoveryRegression],
     ["world-events-recovery", runWorldEventsRecoveryRegression],
+    ["civilization-system-recovery", runCivilizationSystemRecoveryRegression],
+    ["cosmological-sim-recovery", runCosmologicalSimRecoveryRegression],
     ["causal-graph-recovery", runCausalGraphRecoveryRegression],
     ["law-engine-recovery", runLawEngineRecoveryRegression],
     ["recorder-recovery", runRecorderRecoveryRegression],
