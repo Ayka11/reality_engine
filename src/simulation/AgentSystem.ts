@@ -87,7 +87,9 @@ export class AgentSystem {
       throw new Error("Invalid AgentSystem snapshot: next agent ID must exceed all restored IDs");
     }
     for (const request of snapshot.pendingMigrations) {
-      if (!ids.has(request.agentId) ||
+      // A queued migration may legitimately outlive an agent that dies before
+      // the next commit barrier; the application path safely ignores missing IDs.
+      if (!Number.isInteger(request.agentId) || request.agentId <= 0 ||
           ![...request.from, ...request.to, request.energy].every(Number.isFinite)) {
         throw new Error("Invalid AgentSystem snapshot: migration request is inconsistent");
       }
