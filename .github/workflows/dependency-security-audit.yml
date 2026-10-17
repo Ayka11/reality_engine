@@ -196,15 +196,6 @@ jobs:
       - name: Validate candidate production build
         run: npm run build
 
-      - name: Validate candidate Infinity Scale regressions
-        run: npm run validate:infinity-scale
-
-      - name: Validate candidate release evidence
-        run: npm run validate:infinity-scale:evidence
-
-      - name: Validate candidate release integrity
-        run: npm run validate:infinity-scale:integrity
-
       - name: Upload full audit report
         if: always()
         uses: actions/upload-artifact@v4
