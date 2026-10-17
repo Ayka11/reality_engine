@@ -10,9 +10,9 @@ export function runSparseVoxelGridRecoveryRegression(): void {
   const chunk = grid.getOrCreateChunk(2, 0, 0);
   chunk.buffer[0] = 55;
   chunk.backBuffer[1] = 66;
-  chunk.active = false;
   chunk.lastAccessed = 123456;
   grid.markChunksDirty([chunk]);
+  chunk.active = false;
   grid.assignChunkOwner("2,0,0", "worker-A");
   grid.activeChunkRange = { minX: -2, maxX: 4, minY: -1, maxY: 5, minZ: 0, maxZ: 3 };
 
