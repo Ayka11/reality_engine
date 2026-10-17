@@ -3,24 +3,24 @@ import { WORLD } from '../core/WorldConstants';
 import { F, CELL_FIELDS } from '../core/CellState';
 import { FieldPhysics } from './FieldPhysics';
 import { EntropyLayer } from './EntropyLayer';
-import { CausalGraph } from './CausalGraph';
-import { LawEngine } from '../laws/LawEngine';
+import { CausalGraph, type CausalGraphSnapshot } from './CausalGraph';
+import { LawEngine, type LawEngineSnapshot } from '../laws/LawEngine';
 import { WorldMetrics } from '../laws/MetaLaw';
 import { GPUBackend } from '../gpu/GPUBackend';
 import { buildMaterialBuffer } from '../materials/MaterialDef';
-import { ChemLayer } from '../chemistry/ChemLayer';
-import { EntityLayer } from './EntityLayer';
-import { WorldEvents, EventType } from '../world/WorldEvents';
+import { ChemLayer, type ChemLayerSnapshot } from '../chemistry/ChemLayer';
+import { EntityLayer, type EntityLayerSnapshot } from './EntityLayer';
+import { WorldEvents, type EventType, type WorldEventsSnapshot } from '../world/WorldEvents';
 import { TemporalLayer } from './TemporalLayer';
 import { InfoPhysics } from './InfoPhysics';
-import { Recorder } from './Recorder';
-import { AgentSystem } from './AgentSystem';
+import { Recorder, type RecorderSnapshot } from './Recorder';
+import { AgentSystem, type AgentSystemSnapshot } from './AgentSystem';
 import type {
   InfinityScaleExecutionCapabilities,
   InfinityScaleExecutionPlan,
 } from '../infinity/InfinityScaleExecutionAdapter';
 import { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
-import { InfinityScaleLODState } from '../infinity/InfinityScaleLODState';
+import { InfinityScaleLODState, type InfinityScaleLODStateSnapshot } from '../infinity/InfinityScaleLODState';
 import { InfinityScaleLODTransfer } from '../infinity/InfinityScaleLODTransfer';
 import { InfinityScaleLODBoundarySnapshot } from '../infinity/InfinityScaleLODBoundarySnapshot';
 import { InfinityScaleMixedLODCPUExecutor } from '../infinity/InfinityScaleMixedLODCPUExecutor';
@@ -41,6 +41,23 @@ import {
   stageInfinityScaleAgentMigrations,
   commitInfinityScaleUnifiedTransaction,
 } from '../infinity/InfinityScaleUnifiedTransaction';
+
+export interface SimulationEngineCoreRecoverySnapshot {
+  width: number;
+  height: number;
+  depth: number;
+  tick: number;
+  prevEnergy: Float32Array;
+  grid: ReturnType<SparseVoxelGrid["captureState"]>;
+  entities: EntityLayerSnapshot;
+  agents: AgentSystemSnapshot;
+  chemistry: ChemLayerSnapshot;
+  worldEvents: WorldEventsSnapshot;
+  causal: CausalGraphSnapshot;
+  laws: LawEngineSnapshot;
+  recorder: RecorderSnapshot;
+  lod: InfinityScaleLODStateSnapshot;
+}
 
 export class SimulationEngine {
   readonly grid: SparseVoxelGrid;
@@ -64,9 +81,9 @@ export class SimulationEngine {
   private readonly infinityScaleLODState: InfinityScaleLODState;
 
   constructor(
-    width = WORLD.W,
-    height = WORLD.H,
-    depth = WORLD.D,
+    width: number = WORLD.W,
+    height: number = WORLD.H,
+    depth: number = WORLD.D,
   ) {
     if (
       !Number.isInteger(width) || width <= 0 ||
@@ -198,8 +215,88 @@ export class SimulationEngine {
     this._tick = Math.max(0, Math.floor(tick));
   }
 
+  /**
+   * Capture mutable simulation domains needed for Infinity Scale recovery.
+   * All stateful RNGs are included through their subsystem snapshots. The GPU
+   * device mirror and immutable execution-plan configuration are not stored;
+   * GPU field data is rebuilt from the restored CPU grid.
+   */
+  captureCoreRecoveryState(): SimulationEngineCoreRecoverySnapshot {
+    return {
+      width: this.grid.W,
+      height: this.grid.H,
+      depth: this.grid.D,
+      tick: this._tick,
+      prevEnergy: new Float32Array(this.prevEnergy),
+      grid: this.grid.captureState(),
+      entities: this.entityLayer.snapshot(),
+      agents: this.agents.snapshot(),
+      chemistry: this.chemLayer.snapshot(),
+      worldEvents: this.worldEvents.snapshot(),
+      causal: this.causal.snapshot(),
+      laws: this.laws.snapshot(),
+      recorder: this.recorder.snapshotState(),
+      lod: this.infinityScaleLODState.snapshot(),
+    };
+  }
+
+  /**
+   * Restore the captured core domains. If one domain rejects the snapshot,
+   * restore the pre-call core state before rethrowing the original error.
+   * This protects the included domains only; it does not roll back omitted
+   * physics internals or external side effects.
+   */
+  restoreCoreRecoveryState(snapshot: SimulationEngineCoreRecoverySnapshot): void {
+    if (!snapshot ||
+        snapshot.width !== this.grid.W ||
+        snapshot.height !== this.grid.H ||
+        snapshot.depth !== this.grid.D ||
+        !Number.isInteger(snapshot.tick) || snapshot.tick < 0 ||
+        !(snapshot.prevEnergy instanceof Float32Array) ||
+        snapshot.prevEnergy.length !== this.prevEnergy.length) {
+      throw new Error("Invalid SimulationEngine core recovery snapshot");
+    }
+
+    const previous = this.captureCoreRecoveryState();
+    const apply = (state: SimulationEngineCoreRecoverySnapshot) => {
+      this.grid.restoreState(state.grid);
+      this.entityLayer.restore(state.entities);
+      this.agents.restore(state.agents);
+      this.chemLayer.restore(state.chemistry, this.grid.size);
+      this.worldEvents.restore(state.worldEvents);
+      this.causal.restore(state.causal);
+      this.laws.restore(state.laws);
+      this.recorder.restoreState(state.recorder, this.grid.buffer.length);
+      this.infinityScaleLODState.restore(state.lod);
+      this.prevEnergy = new Float32Array(state.prevEnergy);
+      this._tick = state.tick;
+    };
+
+    try {
+      apply(snapshot);
+      // The CPU grid is authoritative. Rebuild the GPU field mirror after a
+      // restore so a subsequent GPU step cannot resume from stale device data.
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+    } catch (error) {
+      try {
+        apply(previous);
+        if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+      } catch (rollbackError) {
+        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        throw new Error(`Core recovery failed and rollback could not restore prior state: ${rollbackMessage}`);
+      }
+      throw error;
+    }
+  }
+
+
   // nSteps allows batching multiple physics ticks per animation frame
   async step(dt: number, nSteps = 1): Promise<void> {
+    const frameRecoverySnapshot = this._infinityExecutionPlan && this._infinityExecutionPlan.mode !== 'advisory'
+      ? this.captureCoreRecoveryState()
+      : null;
+
+    try {
     const clampedDt = Math.min(dt, 0.05);
 
     const selectivePlan =
@@ -239,6 +336,16 @@ export class SimulationEngine {
         : null;
     if (frameState && frameContext) {
       assertInfinityScaleGlobalFramePlan(frameState, selectivePlan!, frameContext);
+
+      // Reject a stale plan/capability contract before any physics layer mutates
+      // dense fields, entities, agents, or the simulation tick. The same check
+      // remains at commit time because GPU readback and later frame work can
+      // yield control after this preflight.
+      validateInfinityScaleGlobalFrameCommit(
+        frameState,
+        selectivePlan!,
+        this.getInfinityScaleExecutionCapabilities(),
+      );
 
       // Establish the entity/topology evidence before the runtime capability
       // gate. This makes mixed-LOD readiness a property of the actual frame,
@@ -458,6 +565,17 @@ export class SimulationEngine {
     if (this._tick % 500 === 0) {
       this.grid.markEmptyChunksInactive();
       this.grid.cullInactive();
+    }
+    } catch (error) {
+      if (frameRecoverySnapshot) {
+        try {
+          this.restoreCoreRecoveryState(frameRecoverySnapshot);
+        } catch (rollbackError) {
+          const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          throw new Error(`Infinity Scale frame failed and frame-level rollback failed: ${rollbackMessage}`);
+        }
+      }
+      throw error;
     }
   }
 

@@ -17,10 +17,14 @@ export function runInfinityScaleClosedLoopPostCommitFeedbackRegression(): void {
     epoch: 11,
     runtimeError: 0.4,
     currentLOD: 1,
-    goalRelevance: 0.8,
+    field: "density",
+    estimatedErrorReduction: 0.8,
+    estimatedNewCells: 8,
+    estimatedTransferDescriptors: 2,
+    estimatedMemoryBytes: 1024,
+    estimatedGPUWork: 4,
     physicalCriticality: 0.8,
-    estimatedRefinementCost: 2,
-    estimatedCoarseningCost: 1,
+    budget: { maxCells: 100, maxDescriptors: 100, maxMemoryBytes: 100000, maxGPUWork: 100 },
   });
 
   if (next.transitionPenalty <= 0) throw new Error("Post-commit transition penalty was not propagated");

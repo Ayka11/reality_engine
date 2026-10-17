@@ -3,6 +3,21 @@ import { runInfinityScaleLODBoundaryRegression } from "./InfinityScaleLODBoundar
 import { runInfinityScaleMixedLODCPURegression, runInfinityScaleMixedLODCPUProlongationRegression } from "./InfinityScaleMixedLODCPUExecutor.regression";
 import { runInfinityScaleUnifiedTransactionRegression } from "./InfinityScaleUnifiedTransaction.regression";
 import { runInfinityScaleLODResetInvalidationRegression } from "./InfinityScaleLODState.regression";
+import { runInfinityScaleLODStateRecoveryRegression } from "./InfinityScaleLODStateRecovery.regression";
+import { runAgentSystemRecoveryRegression } from "./AgentSystemRecovery.regression";
+import { runEntityLayerRecoveryRegression } from "./EntityLayerRecovery.regression";
+import { runSparseVoxelGridRecoveryRegression } from "./SparseVoxelGridRecovery.regression";
+import { runSimulationEngineCoreRecoveryRegression } from "./SimulationEngineCoreRecovery.regression";
+import { runChemLayerRecoveryRegression } from "./ChemLayerRecovery.regression";
+import { runWorldEventsRecoveryRegression } from "./WorldEventsRecovery.regression";
+import { runCivilizationSystemRecoveryRegression } from "./CivilizationSystemRecovery.regression";
+import { runCosmologicalSimRecoveryRegression } from "./CosmologicalSimRecovery.regression";
+import { runSimWorkerRNGRecoveryRegression } from "./SimWorkerRNGRecovery.regression";
+import { runSimulationRNGResetRegression } from "./SimulationRNGReset.regression";
+import { runCausalGraphRecoveryRegression } from "./CausalGraphRecovery.regression";
+import { runLawEngineRecoveryRegression } from "./LawEngineRecovery.regression";
+import { runRecorderRecoveryRegression } from "./RecorderRecovery.regression";
+import { runRecorderControlRecoveryRegression } from "./RecorderControlRecovery.regression";
 import { runInfinityScaleLODMultiFrameRegression } from "./InfinityScaleLODMultiFrame.regression";
 import { runInfinityScaleMixedLODMultiFrameRegression } from "./InfinityScaleMixedLODMultiFrame.regression";
 import { runInfinityScaleExecutionAdapterBoundaryRegression } from "./InfinityScaleExecutionAdapter.regression";
@@ -71,6 +86,21 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["gpu-boundary-transfer-contract", runInfinityScaleGPUBoundaryTransferContractRegression],
     ["unified-transaction", runInfinityScaleUnifiedTransactionRegression],
     ["lod-reset-invalidation", runInfinityScaleLODResetInvalidationRegression],
+    ["lod-state-recovery", runInfinityScaleLODStateRecoveryRegression],
+    ["agent-system-recovery", runAgentSystemRecoveryRegression],
+    ["entity-layer-recovery", runEntityLayerRecoveryRegression],
+    ["sparse-voxel-grid-recovery", runSparseVoxelGridRecoveryRegression],
+    ["simulation-engine-core-recovery", runSimulationEngineCoreRecoveryRegression],
+    ["chem-layer-recovery", runChemLayerRecoveryRegression],
+    ["world-events-recovery", runWorldEventsRecoveryRegression],
+    ["civilization-system-recovery", runCivilizationSystemRecoveryRegression],
+    ["cosmological-sim-recovery", runCosmologicalSimRecoveryRegression],
+    ["sim-worker-rng-recovery", runSimWorkerRNGRecoveryRegression],
+    ["simulation-rng-reset", runSimulationRNGResetRegression],
+    ["causal-graph-recovery", runCausalGraphRecoveryRegression],
+    ["law-engine-recovery", runLawEngineRecoveryRegression],
+    ["recorder-recovery", runRecorderRecoveryRegression],
+    ["recorder-control-recovery", runRecorderControlRecoveryRegression],
     ["lod-multi-frame", runInfinityScaleLODMultiFrameRegression],
     ["mixed-lod-multi-frame", runInfinityScaleMixedLODMultiFrameRegression],
     ["adaptive-stability-anti-thrashing", runInfinityScaleAdaptiveStabilityRegression],

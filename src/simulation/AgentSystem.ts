@@ -32,11 +32,18 @@ export interface AgentMarker {
   age: number;
 }
 
-let _agentId = 1;
+export interface AgentSystemSnapshot {
+  agents: Agent[];
+  pendingMigrations: AgentMigrationRequest[];
+  nextAgentId: number;
+  rngState: number;
+}
+
+
 const BEHAVIORS: AgentBehavior[] = ['explorer', 'harvester', 'signaler', 'builder', 'destroyer'];
 
-function randomBehavior(): AgentBehavior {
-  return BEHAVIORS[Math.floor(Math.random() * BEHAVIORS.length)];
+function randomBehavior(random: () => number): AgentBehavior {
+  return BEHAVIORS[Math.floor(random() * BEHAVIORS.length)];
 }
 
 export const AGENT_COLORS: Record<AgentBehavior, [number, number, number]> = {
@@ -51,11 +58,78 @@ export class AgentSystem {
   private agents: Map<number, Agent> = new Map();
   readonly maxAgents = 64;
   private pendingMigrations: AgentMigrationRequest[] = [];
+  private nextAgentId = 1;
+  private readonly initialRngState: number;
+  private _rngState: number;
+
+  constructor(seed = 0x2c1b3c6d) {
+    this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x2c1b3c6d : 0x2c1b3c6d;
+    this._rngState = this.initialRngState;
+  }
+
+  private _random(): number {
+    let x = this._rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this._rngState = x >>> 0;
+    return this._rngState / 0x100000000;
+  }
+
+  snapshot(): AgentSystemSnapshot {
+    return {
+      agents: [...this.agents.values()].map(agent => ({ ...agent })),
+      pendingMigrations: this.pendingMigrations.map(request => ({
+        ...request,
+        from: [...request.from] as [number, number, number],
+        to: [...request.to] as [number, number, number],
+      })),
+      nextAgentId: this.nextAgentId,
+      rngState: this._rngState,
+    };
+  }
+
+  restore(snapshot: AgentSystemSnapshot): void {
+    if (!snapshot || !Array.isArray(snapshot.agents) || !Array.isArray(snapshot.pendingMigrations) ||
+        !Number.isSafeInteger(snapshot.rngState) || snapshot.rngState <= 0 || snapshot.rngState > 0xffffffff) {
+      throw new Error("Invalid AgentSystem snapshot: malformed random generator state");
+    }
+    const ids = new Set<number>();
+    for (const agent of snapshot.agents) {
+      if (!Number.isInteger(agent.id) || agent.id <= 0 || ids.has(agent.id)) {
+        throw new Error("Invalid AgentSystem snapshot: agent IDs must be unique positive integers");
+      }
+      if (![agent.x, agent.y, agent.z, agent.energy, agent.age, agent.memory, agent.signal, agent.children].every(Number.isFinite)) {
+        throw new Error("Invalid AgentSystem snapshot: agent state contains non-finite values");
+      }
+      ids.add(agent.id);
+    }
+    const maxId = Math.max(0, ...ids);
+    if (!Number.isInteger(snapshot.nextAgentId) || snapshot.nextAgentId <= maxId) {
+      throw new Error("Invalid AgentSystem snapshot: next agent ID must exceed all restored IDs");
+    }
+    for (const request of snapshot.pendingMigrations) {
+      // A queued migration may legitimately outlive an agent that dies before
+      // the next commit barrier; the application path safely ignores missing IDs.
+      if (!Number.isInteger(request.agentId) || request.agentId <= 0 ||
+          ![...request.from, ...request.to, request.energy].every(Number.isFinite)) {
+        throw new Error("Invalid AgentSystem snapshot: migration request is inconsistent");
+      }
+    }
+    this.agents = new Map(snapshot.agents.map(agent => [agent.id, { ...agent }]));
+    this.pendingMigrations = snapshot.pendingMigrations.map(request => ({
+      ...request,
+      from: [...request.from] as [number, number, number],
+      to: [...request.to] as [number, number, number],
+    }));
+    this.nextAgentId = snapshot.nextAgentId;
+    this._rngState = snapshot.rngState >>> 0;
+  }
 
   spawnAt(x: number, y: number, z: number, behavior: AgentBehavior = "explorer", energy = 200): number {
     if (this.agents.size >= this.maxAgents) throw new Error("Maximum agent count reached");
     this._spawn(x, y, z, behavior, energy);
-    return _agentId - 1;
+    return this.nextAgentId - 1;
   }
 
   queueMigrationRequest(request: AgentMigrationRequest): void {
@@ -86,9 +160,9 @@ export class AgentSystem {
   // Seed agents + inject local energy so they survive from a cold start
   seed(grid: VoxelGrid, count = 8): void {
     for (let i = 0; i < count && this.agents.size < this.maxAgents; i++) {
-      const x = Math.floor(4 + Math.random() * (grid.W - 8));
-      const y = Math.floor(4 + Math.random() * (grid.H - 8));
-      const z = Math.floor(2 + Math.random() * (grid.D * 0.6));
+      const x = Math.floor(4 + this._random() * (grid.W - 8));
+      const y = Math.floor(4 + this._random() * (grid.H - 8));
+      const z = Math.floor(2 + this._random() * (grid.D * 0.6));
       for (let dz = -1; dz <= 1; dz++)
       for (let dy = -2; dy <= 2; dy++)
       for (let dx = -2; dx <= 2; dx++) {
@@ -96,7 +170,7 @@ export class AgentSystem {
         const base = (((z+dz) * grid.H * grid.W) + (y+dy) * grid.W + (x+dx)) * CELL_FIELDS;
         grid.buffer[base + F.ENERGY] = Math.max(grid.buffer[base + F.ENERGY], 150);
       }
-      this._spawn(x, y, z, randomBehavior(), 200);
+      this._spawn(x, y, z, randomBehavior(() => this._random()), 200);
     }
   }
 
@@ -148,11 +222,11 @@ export class AgentSystem {
       buf[newBase + F.AGENT_MARK] = agent.id;
       if (agent.energy > 300 && this.agents.size < this.maxAgents) {
         agent.energy *= 0.55;
-        const childX = Math.max(0, Math.min(grid.W - 1, agent.x + Math.round(Math.random() * 4 - 2)));
-        const childY = Math.max(0, Math.min(grid.H - 1, agent.y + Math.round(Math.random() * 4 - 2)));
-        const childZ = Math.max(0, Math.min(grid.D - 1, agent.z + Math.round(Math.random() * 2 - 1)));
+        const childX = Math.max(0, Math.min(grid.W - 1, agent.x + Math.round(this._random() * 4 - 2)));
+        const childY = Math.max(0, Math.min(grid.H - 1, agent.y + Math.round(this._random() * 4 - 2)));
+        const childZ = Math.max(0, Math.min(grid.D - 1, agent.z + Math.round(this._random() * 2 - 1)));
         if (context && !context.containsSimulationCell(childX, childY, childZ)) { agent.energy /= 0.55; continue; }
-        const childBehavior = Math.random() < 0.15 ? randomBehavior() : agent.behavior;
+        const childBehavior = this._random() < 0.15 ? randomBehavior(() => this._random()) : agent.behavior;
         this._spawn(childX, childY, childZ, childBehavior, agent.energy * 0.6);
         agent.children++;
       }
@@ -171,7 +245,7 @@ export class AgentSystem {
   }
 
   private _spawn(x: number, y: number, z: number, behavior: AgentBehavior, energy = 200): void {
-    const id = _agentId++;
+    const id = this.nextAgentId++;
     this.agents.set(id, { id, x, y, z, energy, age: 0, behavior, memory: 0, signal: 0, children: 0 });
   }
 
@@ -257,7 +331,7 @@ export class AgentSystem {
     agent.energy -= agent.signal * 0.005 * dt * 60;
   }
 
-  private _build(grid: VoxelGrid, agent: Agent, dt: number, context: InfinityScaleChunkExecutionContext | null = null): void {
+  private _build(grid: VoxelGrid, agent: Agent, dt: number, _context: InfinityScaleChunkExecutionContext | null = null): void {
     const base = this._base(grid, agent.x, agent.y, agent.z);
     grid.buffer[base + F.INFORMATION] = Math.min(999, grid.buffer[base + F.INFORMATION] + 5 * dt * 60);
     grid.buffer[base + F.BIO_POTENTIAL] = Math.min(1, grid.buffer[base + F.BIO_POTENTIAL] + 0.015 * dt * 60);
@@ -273,7 +347,7 @@ export class AgentSystem {
     agent.energy = Math.min(500, agent.energy + stolenE * 0.7);
     if (agent.age % 3 === 0) {
       const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
-      const [dx,dy] = dirs[Math.floor(Math.random()*4)];
+      const [dx,dy] = dirs[Math.floor(this._random()*4)];
       const nx = Math.max(0, Math.min(grid.W-1, agent.x+dx));
       const ny = Math.max(0, Math.min(grid.H-1, agent.y+dy));
       if (nx !== agent.x || ny !== agent.y) {
@@ -293,7 +367,12 @@ export class AgentSystem {
     return this.getAgents().map(a => ({ id: String(a.id), position: [a.x, a.y, a.z] as [number, number, number], behavior: a.behavior, energy: a.energy, age: a.age }));
   }
 
-  clear(): void { this.agents.clear(); this.pendingMigrations = []; _agentId = 1; }
+  clear(): void {
+    this.agents.clear();
+    this.pendingMigrations = [];
+    this.nextAgentId = 1;
+    this._rngState = this.initialRngState;
+  }
 }
 
 function migrationKey(request: AgentMigrationRequest): string {

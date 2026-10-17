@@ -12,8 +12,6 @@ on:
 permissions:
   contents: read
 
-# Release-candidate gate for the real Infinity Scale diagnostics branch.
-
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -36,6 +34,15 @@ jobs:
       - name: Production build
         run: npm run build
 
+      - name: Install Playwright test runner
+        run: npm install --no-save @playwright/test
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run production browser smoke tests
+        run: npx playwright test
+
       - name: Infinity Scale release validation
         run: npx --yes tsx scripts/validate-infinity-scale.ts
 
@@ -49,7 +56,7 @@ jobs:
         run: npm run validate:infinity-scale:integrity
 
       - name: Emit deterministic RC package record
-        run: npm run package:infinity-scale:rc > infinity-scale-rc-package.json
+        run: npm run --silent package:infinity-scale:rc > infinity-scale-rc-package.json
 
       - name: Emit release record
         run: |

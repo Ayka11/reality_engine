@@ -20,6 +20,14 @@ const CIV_NAMES = [
   'Nexali','Biolum','Crystas','Emberkin','Deepweld','Starfall',
 ];
 const MAX_CIVS = 12;
+
+export interface CivilizationSystemSnapshot {
+  civs: Civilization[];
+  nextId: number;
+  tickCount: number;
+  historyLog: string[];
+  rngState: number;
+}
 const BIO_THRESH = 0.35;
 
 export class CivilizationSystem {
@@ -28,9 +36,66 @@ export class CivilizationSystem {
   private nextId = 0;
   private tickCount = 0;
   historyLog: string[] = [];
+  private _rngState: number;
 
-  constructor(grid: VoxelGrid) {
+  constructor(grid: VoxelGrid, seed = 0x6c8e9cf5) {
     this.grid = grid;
+    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6c8e9cf5 : 0x6c8e9cf5;
+  }
+
+  private _random(): number {
+    let x = this._rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this._rngState = x >>> 0;
+    return this._rngState / 0x100000000;
+  }
+
+  snapshot(): CivilizationSystemSnapshot {
+    return {
+      civs: this.civs.map(civ => ({ ...civ, color: [...civ.color] as [number, number, number],
+        origin: [...civ.origin] as [number, number, number], territory: [...civ.territory],
+        diplomacy: { ...civ.diplomacy }, history: [...civ.history] })),
+      nextId: this.nextId,
+      tickCount: this.tickCount,
+      historyLog: [...this.historyLog],
+      rngState: this._rngState,
+    };
+  }
+
+  restore(snapshot: CivilizationSystemSnapshot): void {
+    if (!snapshot || !Array.isArray(snapshot.civs) || !Array.isArray(snapshot.historyLog) ||
+        !Number.isSafeInteger(snapshot.nextId) || snapshot.nextId < 0 ||
+        !Number.isSafeInteger(snapshot.tickCount) || snapshot.tickCount < 0 ||
+        !Number.isSafeInteger(snapshot.rngState) || snapshot.rngState <= 0 || snapshot.rngState > 0xffffffff) {
+      throw new Error("Invalid CivilizationSystem snapshot");
+    }
+    const ids = new Set<number>();
+    const civs = snapshot.civs.map(civ => {
+      if (!civ || !Number.isSafeInteger(civ.id) || civ.id < 0 || ids.has(civ.id) ||
+          typeof civ.name !== "string" || !Array.isArray(civ.color) || civ.color.length !== 3 ||
+          !civ.color.every(Number.isFinite) || !Array.isArray(civ.origin) || civ.origin.length !== 3 ||
+          !civ.origin.every(Number.isFinite) || !Array.isArray(civ.territory) ||
+          !civ.territory.every(value => Number.isSafeInteger(value) && value >= 0) ||
+          !Number.isFinite(civ.techLevel) || !Number.isFinite(civ.population) ||
+          !Number.isFinite(civ.energy) || !Number.isFinite(civ.age) ||
+          !civ.diplomacy || typeof civ.diplomacy !== "object" || !Array.isArray(civ.history)) {
+        throw new Error("Invalid CivilizationSystem civilization snapshot");
+      }
+      ids.add(civ.id);
+      return { ...civ, color: [...civ.color] as [number, number, number],
+        origin: [...civ.origin] as [number, number, number], territory: [...civ.territory],
+        diplomacy: { ...civ.diplomacy }, history: [...civ.history] };
+    });
+    if (civs.length > MAX_CIVS || (civs.length > 0 && snapshot.nextId <= Math.max(...ids))) {
+      throw new Error("Invalid CivilizationSystem ID allocator state");
+    }
+    this.civs = civs;
+    this.nextId = snapshot.nextId;
+    this.tickCount = snapshot.tickCount;
+    this.historyLog = [...snapshot.historyLog];
+    this._rngState = snapshot.rngState >>> 0;
   }
 
   tick(): void {
@@ -67,9 +132,9 @@ export class CivilizationSystem {
 
     let bestVal = BIO_THRESH, bx = -1, by = -1, bz = -1;
     for (let _ = 0; _ < 300; _++) {
-      const x = Math.floor(Math.random() * W);
-      const y = Math.floor(Math.random() * H);
-      const z = Math.floor(Math.random() * D);
+      const x = Math.floor(this._random() * W);
+      const y = Math.floor(this._random() * H);
+      const z = Math.floor(this._random() * D);
       if (occupied.has(this._enc(x, y, z))) continue;
       const bio = buf[(z * H * W + y * W + x) * CELL_FIELDS + F.BIO_POTENTIAL];
       if (bio > bestVal) { bestVal = bio; bx = x; by = y; bz = z; }
@@ -116,10 +181,10 @@ export class CivilizationSystem {
     const occupied = new Set<number>();
     for (const c of this.civs) c.territory.forEach(t => occupied.add(t));
 
-    const src = civ.territory[Math.floor(Math.random() * civ.territory.length)];
+    const src = civ.territory[Math.floor(this._random() * civ.territory.length)];
     const [x, y, z] = this._dec(src);
     const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
-    const [dx, dy, dz] = dirs[Math.floor(Math.random() * dirs.length)];
+    const [dx, dy, dz] = dirs[Math.floor(this._random() * dirs.length)];
     const nx = x + dx, ny = y + dy, nz = z + dz;
     if (nx < 0 || nx >= W || ny < 0 || ny >= H || nz < 0 || nz >= D) return;
     const enc = this._enc(nx, ny, nz);
@@ -130,7 +195,7 @@ export class CivilizationSystem {
 
   private _techResearch(civ: Civilization): void {
     if (civ.energy > 150 && civ.population > 30 && civ.techLevel < 10) {
-      if (Math.random() < 0.005) {
+      if (this._random() < 0.005) {
         civ.techLevel = Math.min(10, civ.techLevel + 1);
         civ.history.push(`t:${this.tickCount} Tech level ${civ.techLevel}`);
         this._log(`${civ.name} tech ${civ.techLevel}`);
@@ -140,19 +205,19 @@ export class CivilizationSystem {
 
   private _diplomacy(): void {
     if (this.civs.length < 2) return;
-    const a = this.civs[Math.floor(Math.random() * this.civs.length)];
-    const b = this.civs[Math.floor(Math.random() * this.civs.length)];
+    const a = this.civs[Math.floor(this._random() * this.civs.length)];
+    const b = this.civs[Math.floor(this._random() * this.civs.length)];
     if (a.id === b.id) return;
     const cur = a.diplomacy[b.id] ?? 'neutral';
     const aSet = new Set(a.territory);
     const overlap = b.territory.filter(t => aSet.has(t)).length;
-    if (overlap > 5 && cur !== 'war' && Math.random() < 0.12) {
+    if (overlap > 5 && cur !== 'war' && this._random() < 0.12) {
       a.diplomacy[b.id] = b.diplomacy[a.id] = 'war';
       this._log(`${a.name} ⚔ ${b.name}`);
-    } else if (overlap === 0 && cur === 'neutral' && Math.random() < 0.04) {
+    } else if (overlap === 0 && cur === 'neutral' && this._random() < 0.04) {
       a.diplomacy[b.id] = b.diplomacy[a.id] = 'ally';
       this._log(`${a.name} + ${b.name} ally`);
-    } else if (cur === 'war' && Math.random() < 0.02) {
+    } else if (cur === 'war' && this._random() < 0.02) {
       a.diplomacy[b.id] = b.diplomacy[a.id] = 'neutral';
       this._log(`${a.name} peace ${b.name}`);
     }

@@ -1,4 +1,3 @@
-import type { InfinityScaleResolutionAction } from "./InfinityScaleResolutionUtility";
 import type { InfinityScaleAdaptiveMutation } from "./InfinityScaleAdaptiveTransferCompiler";
 import type { InfinityScaleClosedLoopAdaptiveRecommendation } from "./InfinityScaleClosedLoopAdaptiveController";
 

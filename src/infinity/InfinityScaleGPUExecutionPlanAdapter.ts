@@ -57,6 +57,10 @@ export class InfinityScaleGPUExecutionPlanAdapter {
         candidate: candidateMap.get(node.nodeId),
       }))
       .sort((a, b) =>
+        // Boundary topology transfers are mandatory prerequisites and must be
+        // scheduled before conditional GPU execution, regardless of score.
+        (a.node.type === "TOPOLOGY_TRANSFER" ? 0 : 1) -
+          (b.node.type === "TOPOLOGY_TRANSFER" ? 0 : 1) ||
         (b.candidate?.priorityScore ?? 0) - (a.candidate?.priorityScore ?? 0) ||
         a.node.nodeId.localeCompare(b.node.nodeId),
       );

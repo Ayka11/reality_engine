@@ -10,7 +10,7 @@ import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExe
 import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 
 const coarseKey = "1:0,0,0";
-const fineKeys = ["0:8,0,0", "0:8,4,0", "0:8,0,4", "0:8,4,4"];
+const fineKeys = ["0:2,0,0", "0:2,1,0", "0:2,0,1", "0:2,1,1"];
 
 function makePlan(): InfinityScaleExecutionPlan {
   return {
@@ -124,10 +124,10 @@ export function runInfinityScaleMixedLODMultiFrameRegression(): void {
     );
   }
 
-  const boundary = state.readBaseCell(coarseKey, 1, 2, 0, 0);
-  if (!boundary || boundary[0] !== 2) {
+  const boundary = state.readBaseCell(coarseKey, 1, 6, 0, 0);
+  if (!boundary || boundary[0] !== 8) {
     throw new Error(
-      `Expected fine-to-coarse boundary state to persist across frames at value 2, received ${boundary?.[0]}`,
+      `Expected fine-to-coarse boundary energy to sum four source cells to 8 across frames, received ${boundary?.[0]}`,
     );
   }
 }

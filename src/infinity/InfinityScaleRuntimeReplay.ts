@@ -1,4 +1,5 @@
-import { InfinityScaleClosedLoopAdaptiveController, type InfinityScaleClosedLoopRuntimeRegion } from "./InfinityScaleClosedLoopAdaptiveController";
+import { InfinityScaleClosedLoopAdaptiveController } from "./InfinityScaleClosedLoopAdaptiveController";
+import type { InfinityScaleClosedLoopRuntimeRegion } from "./InfinityScaleAdaptiveRuntime";
 import { buildInfinityScaleAdaptiveMutationPlan } from "./InfinityScaleAdaptiveMutationPlanBuilder";
 import { InfinityScaleClosedLoopExecutablePlanner } from "./InfinityScaleClosedLoopExecutablePlanner";
 
@@ -37,7 +38,6 @@ export function runInfinityScaleRuntimeReplay(
       .map(region => controller.observeAndRecommend({
         ...region,
         currentLOD: region.currentLOD ?? region.topology.currentLOD,
-        error: region.runtimeError,
       }))
       .sort((a, b) => a.regionId.localeCompare(b.regionId));
 

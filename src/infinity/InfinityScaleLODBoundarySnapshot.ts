@@ -9,6 +9,7 @@ import type {
 } from "./InfinityScaleChunkExecutionContext";
 import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
 import { mapInfinityScaleBoundaryCell } from "./InfinityScaleLODBoundaryCellMapper";
+import { validateInfinityScaleBoundaryGeometry } from "./InfinityScaleLODBoundaryGeometry";
 
 export interface InfinityScaleLODTransferSample {
   sourceChunk: string;
@@ -179,6 +180,10 @@ export class InfinityScaleLODBoundarySnapshot {
     const source = this.chunks.get(spec.sourceChunk);
     if (!source) return null;
 
+    // A boundary snapshot is valid only for a cell on the target-side face.
+    // Reject interior and out-of-chunk coordinates before reading source data.
+    if (!validateInfinityScaleBoundaryGeometry(spec, targetCell, this.chunkSize)) return null;
+
     const mapping = mapInfinityScaleBoundaryCell(spec, targetCell, this.chunkSize);
     const sourceRange = chunkRangeForKey(spec.sourceChunk, this.chunkSize);
     const sourceScale = 2 ** spec.sourceLevel;
@@ -201,10 +206,15 @@ export class InfinityScaleLODBoundarySnapshot {
       return out;
     }
     if (spec.relation === "coarse-to-fine") {
-      InfinityScaleLODTransfer.prolongate(sources[0], out, spec.sourceLevel, spec.targetLevel);
+      const childCount = (2 ** (spec.sourceLevel - spec.targetLevel)) ** 3;
+      const children = Array.from({ length: childCount }, () => new Array<number>(CELL_FIELDS).fill(0));
+      InfinityScaleLODTransfer.prolongate(sources[0], children, spec.sourceLevel, spec.targetLevel);
+      out.set(children[0]);
       return out;
     }
-    InfinityScaleLODTransfer.restrictFace(sources, out, spec.sourceLevel, spec.targetLevel);
+    const restricted = new Array<number>(CELL_FIELDS).fill(0);
+    InfinityScaleLODTransfer.restrictFace(sources, restricted, spec.sourceLevel, spec.targetLevel);
+    out.set(restricted);
     return out;
   }
 
@@ -217,4 +227,12 @@ export class InfinityScaleLODBoundarySnapshot {
   }
 }
 
-
+function chunkRangeForKey(key: string, chunkSize: number): { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number } {
+  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
+  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
+  const level = Number(match[1]);
+  if (!Number.isInteger(level) || level < 0 || level > 30) throw new Error(`Invalid Infinity Scale LOD level: ${level}`);
+  const extent = chunkSize * (2 ** level);
+  const x = Number(match[2]) * extent, y = Number(match[3]) * extent, z = Number(match[4]) * extent;
+  return { minX: x, maxX: x + extent - 1, minY: y, maxY: y + extent - 1, minZ: z, maxZ: z + extent - 1 };
+}

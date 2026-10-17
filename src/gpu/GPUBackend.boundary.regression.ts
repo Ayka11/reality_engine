@@ -1,4 +1,4 @@
-import { InfinityScaleGPUBoundaryTransferContract } from "./InfinityScaleGPUBoundaryTransferContract";
+import { InfinityScaleGPUBoundaryTransferContract } from "../infinity/InfinityScaleGPUBoundaryTransferContract";
 
 export function runInfinityScaleGPUBoundaryDescriptorRegression(): void {
   const descriptor = InfinityScaleGPUBoundaryTransferContract.descriptor(

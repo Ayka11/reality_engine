@@ -1,4 +1,4 @@
-import { F } from "../core/CellState";
+import { CELL_FIELDS, F } from "../core/CellState";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import { InfinityScaleLODBoundarySnapshot } from "./InfinityScaleLODBoundarySnapshot";
 import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
@@ -73,7 +73,7 @@ function spec(
 export function runInfinityScaleLODBoundaryRegression(): void {
   // Geometry validation must use the same canonical face definition as the mapper.
   {
-    const s = spec(key(0, 0), key(1, 1), "fine-to-coarse", 0, 1);
+    const s = spec(key(0, 1), key(1, 1), "fine-to-coarse", 0, 1);
     const valid = validateInfinityScaleBoundaryGeometry(s, [8, 2, 2], CHUNK);
     if (!valid || valid.axis !== "x" || valid.direction !== -1) {
       throw new Error("Infinity Scale regression failed: canonical boundary geometry validation");
@@ -89,7 +89,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     let value = 10;
     for (let z = 0; z < 2; z++) {
       for (let y = 0; y < 2; y++) {
@@ -109,155 +109,169 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     }
   }
 
-  // Fine local chunk at x=[0..3], coarse neighbor at x=[4..11].
+  // Fine source chunk x=[8..11], coarse target neighbor x=[0..7].
   {
     const state = new InfinityScaleLODState(CHUNK);
-    const fine = key(0, 0);
+    const fine = key(0, 2);
     const coarse = key(1, 0);
-    for (let z = 0; z < 2; z++)
-      for (let y = 0; y < 2; y++)
+    for (let z = 2; z < 4; z++)
+      for (let y = 2; y < 4; y++)
         write(state, fine, 0, 8, y, z, 7);
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 1, CHUNK);
-    const out = assertNotNull(snapshot.read(s, [3, 2, 2]), "fine-to-coarse +X");
-    assertEqual(out[F.ENERGY], 7, "fine-to-coarse +X energy");
+    const out = assertNotNull(snapshot.read(s, [7, 2, 2]), "fine-to-coarse +X");
+    assertEqual(out[F.ENERGY], 28, "fine-to-coarse +X energy sum");
     assertEqual(out[F.DENSITY], 70, "fine-to-coarse +X density");
   }
 
-  // Coarse local chunk at x=[0..7], fine neighbor at x=[8..11].
+  // Coarse source chunk x=[0..7], fine target neighbor x=[8..11].
+  // Y/Z coordinates 4..7 require the fine chunk at tangential key (1,1).
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
-    write(state, fine, 0, 8, 4, 4, 11);
+    const fine = key(0, 2, 1, 1);
+    write(state, coarse, 1, 6, 4, 4, 11);
     const s = spec(coarse, fine, "coarse-to-fine", 1, 0);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 2, CHUNK);
-    const out = assertNotNull(snapshot.read(s, [7, 4, 4]), "coarse-to-fine +X");
-    assertEqual(out[F.ENERGY], 11, "coarse-to-fine +X energy");
+    const out = assertNotNull(snapshot.read(s, [8, 4, 4]), "coarse-to-fine +X");
+    assertEqual(out[F.ENERGY], 11 / 8, "coarse-to-fine +X energy share");
   }
 
 
-  // Y+ and Z- face coverage with ratio 2.
+  // Y+ and Z- interfaces: the fine source lies just beyond the coarse target face.
   {
     const state = new InfinityScaleLODState(CHUNK);
-    const local = key(0, 0);
-    const neighborY = key(1, 0, 1, 0);
-    const neighborZ = key(1, 0, 0, -1);
-    write(state, neighborY, 1, 2, 4, 2, 17);
-    write(state, neighborZ, 1, 2, 2, -4, 19);
+    const fineY = key(0, 0, 2, 0);
+    const coarseY = key(1, 0, 0, 0);
+    const fineZ = key(0, 0, 0, 0);
+    const coarseZ = key(1, 0, 0, -1);
+    for (let z = 2; z < 4; z++)
+      for (let x = 2; x < 4; x++)
+        write(state, fineY, 0, x, 8, z, 17);
+    for (let y = 2; y < 4; y++)
+      for (let x = 2; x < 4; x++)
+        write(state, fineZ, 0, x, y, 0, 19);
 
-    const sy = spec(local, neighborY, "fine-to-coarse", 0, 1);
-    const sz = spec(local, neighborZ, "fine-to-coarse", 0, 1);
-    const snapshot = InfinityScaleLODBoundarySnapshot.capture(
-      state,
-      [sy, sz],
-      4,
-      CHUNK,
-    );
+    const sy = spec(fineY, coarseY, "fine-to-coarse", 0, 1);
+    const sz = spec(fineZ, coarseZ, "fine-to-coarse", 0, 1);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [sy, sz], 4, CHUNK);
 
-    const yOut = assertNotNull(snapshot.read(sy, [2, 3, 2]), "fine-to-coarse +Y");
-    const zOut = assertNotNull(snapshot.read(sz, [2, 2, 0]), "fine-to-coarse -Z");
-    assertEqual(yOut[F.ENERGY], 17, "fine-to-coarse +Y energy");
-    assertEqual(zOut[F.ENERGY], 19, "fine-to-coarse -Z energy");
+    const yOut = assertNotNull(snapshot.read(sy, [2, 7, 2]), "fine-to-coarse +Y");
+    const zOut = assertNotNull(snapshot.read(sz, [2, 2, -1]), "fine-to-coarse -Z");
+    assertEqual(yOut[F.ENERGY], 68, "fine-to-coarse +Y energy sum");
+    assertEqual(zOut[F.ENERGY], 76, "fine-to-coarse -Z energy sum");
   }
 
 
-  // Y- and Z+ faces.
+  // Y- and Z+ interfaces use valid negative/positive coarse neighbors.
   {
     const state = new InfinityScaleLODState(CHUNK);
-    const local = key(0, 0);
-    const neighborY = key(1, 0, -1, 0);
-    const neighborZ = key(1, 0, 0, 1);
-    write(state, neighborY, 1, 2, -4, 2, 29);
-    write(state, neighborZ, 1, 2, 2, 4, 31);
+    const fineY = key(0, 0, 0, 0);
+    const coarseY = key(1, 0, -1, 0);
+    const fineZ = key(0, 0, 0, 2);
+    const coarseZ = key(1, 0, 0, 0);
+    for (let z = 2; z < 4; z++)
+      for (let x = 2; x < 4; x++)
+        write(state, fineY, 0, x, 0, z, 29);
+    for (let y = 2; y < 4; y++)
+      for (let x = 2; x < 4; x++)
+        write(state, fineZ, 0, x, y, 8, 31);
 
-    const sy = spec(local, neighborY, "fine-to-coarse", 0, 1);
-    const sz = spec(local, neighborZ, "fine-to-coarse", 0, 1);
-    const snapshot = InfinityScaleLODBoundarySnapshot.capture(
-      state,
-      [sy, sz],
-      6,
-      CHUNK,
-    );
+    const sy = spec(fineY, coarseY, "fine-to-coarse", 0, 1);
+    const sz = spec(fineZ, coarseZ, "fine-to-coarse", 0, 1);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [sy, sz], 6, CHUNK);
 
-    const yOut = assertNotNull(snapshot.read(sy, [2, 0, 2]), "fine-to-coarse -Y");
-    const zOut = assertNotNull(snapshot.read(sz, [2, 2, 3]), "fine-to-coarse +Z");
-    assertEqual(yOut[F.ENERGY], 29, "fine-to-coarse -Y energy");
-    assertEqual(zOut[F.ENERGY], 31, "fine-to-coarse +Z energy");
+    const yOut = assertNotNull(snapshot.read(sy, [2, -1, 2]), "fine-to-coarse -Y");
+    const zOut = assertNotNull(snapshot.read(sz, [2, 2, 7]), "fine-to-coarse +Z");
+    assertEqual(yOut[F.ENERGY], 116, "fine-to-coarse -Y energy sum");
+    assertEqual(zOut[F.ENERGY], 124, "fine-to-coarse +Z energy sum");
   }
 
-  // Edge cell: X+ and Y+ dependencies can both be resolved from the same
-  // local corner without confusing one face for the other.
+  // Edge coverage: X+ and Y+ dependencies are resolved independently at adjacent fine chunks.
   {
     const state = new InfinityScaleLODState(CHUNK);
-    const xNeighbor = key(1, 1, 0, 0);
-    const yNeighbor = key(1, 0, 1, 0);
-    write(state, xNeighbor, 1, 4, 2, 2, 37);
-    write(state, yNeighbor, 1, 2, 4, 2, 41);
+    const coarse = key(1, 0);
+    const fineX = key(0, 2, 0, 0);
+    const fineY = key(0, 0, 2, 0);
+    for (let z = 2; z < 4; z++)
+      for (let y = 2; y < 4; y++)
+        write(state, fineX, 0, 8, y, z, 37);
+    for (let z = 2; z < 4; z++)
+      for (let x = 2; x < 4; x++)
+        write(state, fineY, 0, x, 8, z, 41);
 
-    const sx = spec(key(0, 0), xNeighbor, "fine-to-coarse", 0, 1);
-    const sy = spec(key(0, 0), yNeighbor, "fine-to-coarse", 0, 1);
-    const snapshot = InfinityScaleLODBoundarySnapshot.capture(
-      state,
-      [sx, sy],
-      7,
-      CHUNK,
-    );
+    const sx = spec(fineX, coarse, "fine-to-coarse", 0, 1);
+    const sy = spec(fineY, coarse, "fine-to-coarse", 0, 1);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [sx, sy], 7, CHUNK);
 
-    const xOut = assertNotNull(snapshot.read(sx, [3, 2, 2]), "edge X+");
-    const yOut = assertNotNull(snapshot.read(sy, [2, 3, 2]), "edge Y+");
-    assertEqual(xOut[F.ENERGY], 37, "edge X+ energy");
-    assertEqual(yOut[F.ENERGY], 41, "edge Y+ energy");
+    const xOut = assertNotNull(snapshot.read(sx, [7, 2, 2]), "edge X+");
+    const yOut = assertNotNull(snapshot.read(sy, [2, 7, 2]), "edge Y+");
+    assertEqual(xOut[F.ENERGY], 148, "edge X+ energy sum");
+    assertEqual(yOut[F.ENERGY], 164, "edge Y+ energy sum");
   }
 
-  // Ratio 4: coarse local cell receives a full 4^3 fine block.
+  // Ratio 4: one coarse source cell is prolonged onto the adjacent fine target face.
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(2, 0);
-    const fine = key(0, 8);
-    for (let dz = 0; dz < 4; dz++)
-      for (let dy = 0; dy < 4; dy++)
-        for (let dx = 0; dx < 4; dx++)
-          write(state, fine, 0, 16 + dx, dy, dz, 23);
+    const fine = key(0, 4);
+    write(state, coarse, 2, 12, 0, 0, 23);
 
     const s = spec(coarse, fine, "coarse-to-fine", 2, 0);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 5, CHUNK);
-    const out = assertNotNull(snapshot.read(s, [15, 1, 1]), "coarse-to-fine ratio 4");
-    assertEqual(out[F.ENERGY], 23, "coarse-to-fine ratio 4 energy");
-  }
+    const out = assertNotNull(snapshot.read(s, [16, 1, 1]), "coarse-to-fine ratio 4");
+    assertEqual(out[F.ENERGY], 23 / 64, "coarse-to-fine ratio 4 energy share");
+ }
 
-  // Mixed-LOD coarse -> fine must map one coarse face cell to the
-  // correct fine boundary cells without collapsing the tangential mapping.
+  // Mixed-LOD coarse -> fine must preserve tangential face mapping.
+  // Four distinct coarse face cells each expand to a 2x2 fine face patch;
+  // extensive ENERGY is divided across all eight 3D child cells.
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
-
-    // Coarse X+ face cell at base coordinate (6, 2, 2) carries a unique value.
-    write(state, coarse, 1, 6, 2, 2, 77);
+    const fine = key(0, 2, 1, 1);
+    const expectedCoarseEnergy = new Map<string, number>([
+      ["4,4", 80],
+      ["4,6", 88],
+      ["6,4", 96],
+      ["6,6", 104],
+    ]);
+    for (const [keyValue, energy] of expectedCoarseEnergy) {
+      const [y, z] = keyValue.split(",").map(Number);
+      write(state, coarse, 1, 6, y, z, energy);
+    }
 
     const s = spec(coarse, fine, "coarse-to-fine", 1, 0);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 12, CHUNK);
 
     const values: number[] = [];
-    for (const y of [2, 3]) {
-      for (const z of [2, 3]) {
+    for (let y = 4; y < 8; y++) {
+      for (let z = 4; z < 8; z++) {
         const out = assertNotNull(
           snapshot.read(s, [8, y, z]),
-          `coarse-to-fine face cell 4,${y},${z}`,
+          `coarse-to-fine face cell 8,${y},${z}`,
         );
+        const sourceY = Math.floor(y / 2) * 2;
+        const sourceZ = Math.floor(z / 2) * 2;
+        const sourceEnergy = expectedCoarseEnergy.get(`${sourceY},${sourceZ}`);
+        if (sourceEnergy === undefined) {
+          throw new Error("Regression fixture omitted a tangential coarse source cell");
+        }
+        const expectedChildEnergy = sourceEnergy / 8;
+        assertEqual(out[F.ENERGY], expectedChildEnergy,
+          `coarse-to-fine energy at fine tangential cell ${y},${z}`);
         values.push(out[F.ENERGY]);
       }
     }
 
-    if (values.length !== 4 || values.some(value => value !== 77)) {
+    if (values.length !== 16) {
       throw new Error(
-        `Infinity Scale regression failed: coarse-to-fine face mapping produced [${values.join(",")}]`,
+        `Infinity Scale regression failed: expected 16 fine face cells, got ${values.length}`,
       );
     }
 
-    const outside = snapshot.read(s, [4, 4, 4]);
+    const outside = snapshot.read(s, [7, 4, 4]);
     if (outside !== null) {
       throw new Error(
         "Infinity Scale regression failed: coarse-to-fine read accepted a non-face target cell",
@@ -270,7 +284,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     write(state, fine, 0, 8, 0, 0, 55);
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
@@ -285,19 +299,19 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   // coordinates, including coarse->fine and fine->coarse interfaces.
   {
     const plan: InfinityScaleExecutionPlan = {
-      revision: 1, mode: "selective-cpu-ready" as const, observer: [0, 0, 0] as [number,number,number],
-      chunks: [{ key: "1:0,0,0", lod: 1, distance: 0 }],
+      revision: 1, mode: "selective-cpu-ready" as const, observer: { x: 0, y: 0, z: 0 },
+      chunks: [{ key: "1:0,0,0", lod: 1, amr: 2, distance: 0 }],
       simulationBudget: 1, requestedSimulationCount: 1, selectedSimulationCount: 1,
-      maxSimulatingChunks: 1, boundaryReadChunks: ["0:8,0,0"], boundaryReadCount: 1,
-      boundaryReadRelations: [{ sourceChunk: "0:8,0,0", targetChunk: "1:0,0,0", relation: "fine-to-coarse" as const }],
-      simulationCellCount: 64, boundaryReadCellCount: 64, localExecutionLayers: 1, globalExecutionLayers: 1,
+      maxSimulatingChunks: 1, boundaryReadChunks: ["0:2,0,0"], boundaryReadCount: 1,
+      boundaryReadRelations: [{ sourceChunk: "0:2,0,0", targetChunk: "1:0,0,0", relation: "fine-to-coarse" as const }],
+      simulationCellCount: 64, boundaryReadCellCount: 64, localExecutionLayers: [], globalExecutionLayers: [],
       selectiveCpuReady: true, selectiveGpuReady: false, gpuPhysicsReady: false,
       lodBoundaryTransferReady: true, mixedLodExecutionReady: true,
       entityExecutionReady: false, agentMigrationReady: false,
     };
     const context = new InfinityScaleChunkExecutionContext(plan, 12, 8, 8, 4);
     const relations = context.getBoundaryRelationsForCell(7, 2, 2);
-    if (relations.length !== 1 || relations[0].sourceChunk !== "0:8,0,0") {
+    if (relations.length !== 1 || relations[0].sourceChunk !== "0:2,0,0") {
       throw new Error("Infinity Scale regression failed: target-cell boundary relation lookup");
     }
     if (context.getBoundaryRelationsForCell(6, 2, 2).length !== 0) {
@@ -308,19 +322,20 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   // Context relation lookup must reject corner-only adjacency and accept exact faces.
   {
     const plan: InfinityScaleExecutionPlan = {
-      revision: 77, mode: "selective-cpu-ready", observer: [0, 0, 0],
-      chunks: [{ key: "1:0,0,0", lod: 1, distance: 0 }], simulationBudget: 1,
+      revision: 77, mode: "selective-cpu-ready", observer: { x: 0, y: 0, z: 0 },
+      chunks: [{ key: "1:0,0,0", lod: 1, amr: 2, distance: 0 }], simulationBudget: 1,
       requestedSimulationCount: 1, selectedSimulationCount: 1, maxSimulatingChunks: 1,
-      boundaryReadChunks: ["0:8,0,0"], boundaryReadCount: 1,
-      boundaryReadRelations: [{ sourceChunk: "0:8,0,0", targetChunk: "1:0,0,0", relation: "fine-to-coarse" }],
-      simulationCellCount: 64, boundaryReadCellCount: 64, localExecutionLayers: 1, globalExecutionLayers: 1,
+      boundaryReadChunks: ["0:2,1,1"], boundaryReadCount: 1,
+      boundaryReadRelations: [{ sourceChunk: "0:2,1,1", targetChunk: "1:0,0,0", relation: "fine-to-coarse" }],
+      simulationCellCount: 64, boundaryReadCellCount: 64, localExecutionLayers: [], globalExecutionLayers: [],
       selectiveCpuReady: true, selectiveGpuReady: false, gpuPhysicsReady: false,
       lodBoundaryTransferReady: true, mixedLodExecutionReady: true, entityExecutionReady: false, agentMigrationReady: false,
     };
     const context = new InfinityScaleChunkExecutionContext(plan, 16, 16, 16, 4);
-    if (context.getBoundaryRelationsForCell(7, 2, 2).length !== 1) throw new Error("context exact face lookup failed");
-    if (context.getBoundaryRelationsForCell(7, 7, 7).length !== 1) throw new Error("context face corner lookup failed");
-    if (context.getBoundaryRelationsForCell(6, 2, 2).length !== 0) throw new Error("context admitted non-face target");
+    if (context.getBoundaryRelationsForCell(7, 6, 6).length !== 1) throw new Error("context exact face lookup failed");
+    // This fixture uses the fine chunk at tangential key (1,1), covering coordinates 4..7.
+    if (context.getBoundaryRelationsForCell(7, 7, 7).length !== 1) throw new Error("context shared-face corner lookup failed");
+    if (context.getBoundaryRelationsForCell(6, 6, 6).length !== 0) throw new Error("context admitted non-face target");
   }
 
   // Face coverage must count invalid reads deterministically and expose
@@ -328,20 +343,20 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     state.ensureChunk(coarse, 1);
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 16, CHUNK);
     const coverage = snapshot.validateFaceCoverage(
       new InfinityScaleChunkExecutionContext(
         {
-          revision: 16, mode: "selective-cpu-ready", observer: [0, 0, 0],
-          chunks: [{ key: coarse, lod: 1, distance: 0 }],
+          revision: 16, mode: "selective-cpu-ready", observer: { x: 0, y: 0, z: 0 },
+          chunks: [{ key: coarse, lod: 1, amr: 2, distance: 0 }],
           simulationBudget: 1, requestedSimulationCount: 1, selectedSimulationCount: 1,
           maxSimulatingChunks: 1, boundaryReadChunks: [fine], boundaryReadCount: 1,
           boundaryReadRelations: [{ sourceChunk: fine, targetChunk: coarse, relation: "fine-to-coarse" }],
           simulationCellCount: 64, boundaryReadCellCount: 16,
-          localExecutionLayers: 1, globalExecutionLayers: 1,
+          localExecutionLayers: [], globalExecutionLayers: [],
           selectiveCpuReady: true, selectiveGpuReady: false, gpuPhysicsReady: false,
           lodBoundaryTransferReady: true, mixedLodExecutionReady: true,
           entityExecutionReady: false, agentMigrationReady: false,
@@ -361,7 +376,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     state.ensureChunk(coarse, 1);
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
@@ -379,7 +394,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     write(state, fine, 0, 8, 0, 0, 91);
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
@@ -403,7 +418,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
   {
     const state = new InfinityScaleLODState(CHUNK);
     const coarse = key(1, 0);
-    const fine = key(0, 8);
+    const fine = key(0, 2);
     let value = 1;
     for (let z = 0; z < 2; z++) {
       for (let y = 0; y < 2; y++) {
@@ -414,7 +429,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 11, CHUNK);
-    const out = assertNotNull(snapshot.read(s, [3, 1, 1]), "fine-to-coarse face restriction");
+    const out = assertNotNull(snapshot.read(s, [7, 1, 1]), "fine-to-coarse face restriction");
 
     // ENERGY is extensive, so the boundary face sample is the sum of the four
     // fine cells: 1 + 2 + 3 + 4 = 10.
@@ -610,12 +625,12 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     }
   }
 
-  // Negative-side face: fine local x=[4..7], coarse neighbor x=[0..3].
+  // Negative-side face: fine source x=[-4..-1], coarse target x=[0..7].
   {
     const state = new InfinityScaleLODState(CHUNK);
-    const fine = key(0, 0);
-    const coarse = key(1, -1);
-    write(state, coarse, 1, -4, 4, 4, 13);
+    const fine = key(0, -1);
+    const coarse = key(1, 0);
+    write(state, fine, 0, -1, 2, 2, 13);
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 3, CHUNK);
     const out = assertNotNull(snapshot.read(s, [0, 2, 2]), "fine-to-coarse -X");

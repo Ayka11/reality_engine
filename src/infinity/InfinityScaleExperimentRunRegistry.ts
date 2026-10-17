@@ -70,6 +70,7 @@ export function registerInfinityScaleExperimentRuns(
     experimentId,
     runs: registered.map(run => ({
       ...run,
+      experimentId,
       records: run.records.map(record => ({ ...record })),
     })),
     registryHash: stableHash(JSON.stringify(registryPayload)),
