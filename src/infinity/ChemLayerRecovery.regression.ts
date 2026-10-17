@@ -28,6 +28,14 @@ export function runChemLayerRecoveryRegression(): void {
     rejected = true;
   }
   if (!rejected) throw new Error("ChemLayer accepted a non-finite pending transfer");
+  let boundsRejected = false;
+  try {
+    layer.restore({ pendingDensityTransfers: [[10, 0.5]] }, 10);
+  } catch {
+    boundsRejected = true;
+  }
+  if (!boundsRejected) throw new Error("ChemLayer accepted a transfer outside the grid bounds");
+
   const afterRejectedRestore = layer.snapshot();
   if (afterRejectedRestore.pendingDensityTransfers.length !== 2 ||
       afterRejectedRestore.pendingDensityTransfers[0][0] !== 7 ||
