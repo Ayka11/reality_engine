@@ -27,6 +27,62 @@ export class CausalGraph {
   private nextId = 1;
   private lastEventByCell = new Map<number, number>();
 
+  snapshot(): CausalGraphSnapshot {
+    return {
+      events: this.events.map(event => ({ ...event })),
+      nextId: this.nextId,
+      lastEventByCell: [...this.lastEventByCell.entries()],
+    };
+  }
+
+  restore(snapshot: CausalGraphSnapshot): void {
+    if (!snapshot ||
+        !Array.isArray(snapshot.events) ||
+        snapshot.events.length > 500 ||
+        !Number.isSafeInteger(snapshot.nextId) ||
+        snapshot.nextId < 1 ||
+        !Array.isArray(snapshot.lastEventByCell)) {
+      throw new Error("Invalid CausalGraph snapshot");
+    }
+
+    const events = snapshot.events.map(event => {
+      if (!event ||
+          !Number.isSafeInteger(event.id) || event.id < 1 ||
+          !Number.isSafeInteger(event.tick) || event.tick < 0 ||
+          ![event.x, event.y, event.z].every(Number.isSafeInteger) ||
+          event.x < 0 || event.y < 0 || event.z < 0 ||
+          !CAUSAL_EVENT_TYPES.includes(event.type) ||
+          !Number.isFinite(event.delta) ||
+          (event.parentId !== undefined &&
+            (!Number.isSafeInteger(event.parentId) || event.parentId < 1)) ||
+          event.id >= snapshot.nextId) {
+        throw new Error("Invalid CausalGraph event");
+      }
+      return { ...event };
+    });
+    const ids = new Set<number>();
+    for (const event of events) {
+      if (ids.has(event.id)) throw new Error("Duplicate CausalGraph event id");
+      ids.add(event.id);
+    }
+
+    const lastEventByCell = new Map<number, number>();
+    for (const entry of snapshot.lastEventByCell) {
+      if (!Array.isArray(entry) || entry.length !== 2 ||
+          !Number.isSafeInteger(entry[0]) || entry[0] < 0 ||
+          !Number.isSafeInteger(entry[1]) || entry[1] < 1 ||
+          entry[1] >= snapshot.nextId ||
+          lastEventByCell.has(entry[0])) {
+        throw new Error("Invalid CausalGraph cell index");
+      }
+      lastEventByCell.set(entry[0], entry[1]);
+    }
+
+    this.events = events;
+    this.nextId = snapshot.nextId;
+    this.lastEventByCell = lastEventByCell;
+  }
+
   log(
     tick: number,
     x: number, y: number, z: number,
