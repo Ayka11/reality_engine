@@ -1,6 +1,5 @@
 import { Recorder } from "../simulation/Recorder";
 import { VoxelGrid } from "../core/VoxelGrid";
-import { InfinityScaleChunkExecutionContext } from "../infinity/InfinityScaleChunkExecutionContext";
 
 export function runRecorderRecoveryRegression(): void {
   const grid = new VoxelGrid(2, 2, 1);
