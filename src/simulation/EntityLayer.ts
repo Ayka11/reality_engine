@@ -230,19 +230,24 @@ export class EntityLayer {
     );
     if (!records) return false;
 
-    const safeRecords = records.filter(record => {
-      if (record.entityId === null) return true;
+    // Validate the complete reconciliation set before mutating any entity or
+    // grid marker. Silently dropping unsafe records can otherwise make a
+    // partial reconciliation look like a successful commit.
+    for (const record of records) {
+      if (record.entityId === null) continue;
       const entity = this.entities.get(record.entityId);
       if (!entity) return false;
-      return !entity.cells.some(index => {
-
+      const hasOwnedCellOutsideWorkset = entity.cells.some(index => {
         const z = Math.floor(index / (grid.W * grid.H));
         const rem = index - z * grid.W * grid.H;
         const y = Math.floor(rem / grid.W);
         const cellX = rem - y * grid.W;
         return !context.containsSimulationCell(cellX, y, z);
       });
-    });
+      if (hasOwnedCellOutsideWorkset) return false;
+    }
+
+    const safeRecords = records;
 
     const retained = new Set<number>();
     for (const record of safeRecords) {
