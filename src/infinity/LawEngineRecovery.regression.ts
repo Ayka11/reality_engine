@@ -8,12 +8,10 @@ export function runLawEngineRecoveryRegression(): void {
   const expectedMask = engine.activeProcessMask;
   const expectedEntropyRate = engine.params.entropyGrowthRate;
 
-  snapshot.laws[0].name = "snapshot-only mutation";
-  if (engine.laws[0].name === "snapshot-only mutation") {
-    throw new Error("LawEngine snapshot retained law aliases");
-  }
-
   engine.laws[0].name = "mutated live law";
+  if (snapshot.laws[0].name !== "Thermodynamics") {
+    throw new Error("LawEngine snapshot retained live law aliases");
+  }
   engine.setLawOverride("law_radiation", "off");
   engine.toggleProcess(27, true);
   engine.restore(snapshot);
