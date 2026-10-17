@@ -13,7 +13,7 @@ import { EntityLayer, type EntityLayerSnapshot } from './EntityLayer';
 import { WorldEvents, type EventType, type WorldEventsSnapshot } from '../world/WorldEvents';
 import { TemporalLayer } from './TemporalLayer';
 import { InfoPhysics } from './InfoPhysics';
-import { Recorder } from './Recorder';
+import { Recorder, type RecorderControlSnapshot } from './Recorder';
 import { AgentSystem, type AgentSystemSnapshot } from './AgentSystem';
 import type {
   InfinityScaleExecutionCapabilities,
@@ -55,6 +55,7 @@ export interface SimulationEngineCoreRecoverySnapshot {
   worldEvents: WorldEventsSnapshot;
   causal: CausalGraphSnapshot;
   laws: LawEngineSnapshot;
+  recorderControl: RecorderControlSnapshot;
   lod: InfinityScaleLODStateSnapshot;
 }
 
@@ -233,6 +234,7 @@ export class SimulationEngine {
       worldEvents: this.worldEvents.snapshot(),
       causal: this.causal.snapshot(),
       laws: this.laws.snapshot(),
+      recorderControl: this.recorder.snapshotControlState(),
       lod: this.infinityScaleLODState.snapshot(),
     };
   }
@@ -263,6 +265,7 @@ export class SimulationEngine {
       this.worldEvents.restore(state.worldEvents);
       this.causal.restore(state.causal);
       this.laws.restore(state.laws);
+      this.recorder.restoreControlState(state.recorderControl);
       this.infinityScaleLODState.restore(state.lod);
       this.prevEnergy = new Float32Array(state.prevEnergy);
       this._tick = state.tick;
