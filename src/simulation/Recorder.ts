@@ -157,7 +157,9 @@ export class Recorder {
       const cells = item.cells.map(entry => {
         if (!Array.isArray(entry) || entry.length !== 2 ||
             !Number.isSafeInteger(entry[0]) || entry[0] < 0 ||
+            entry[0] >= item.cellCount ||
             seen.has(entry[0]) || !Array.isArray(entry[1]) ||
+            entry[1].length !== CELL_FIELDS ||
             !entry[1].every(Number.isFinite)) {
           throw new Error("Invalid Recorder selective cell");
         }
