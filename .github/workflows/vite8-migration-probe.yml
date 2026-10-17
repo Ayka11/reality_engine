@@ -1,4 +1,4 @@
-name: Vite 8 Security Migration Probe
+name: Vite 8 Security Migration Validation
 
 on:
   push:
