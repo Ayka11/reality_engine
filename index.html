@@ -1955,11 +1955,16 @@ document.querySelectorAll('.mode-btn[data-mode]').forEach(btn=>{
       b.classList.toggle('active',b===btn);
     });
     const panelMap={create:'world',science:'science',cinema:'cinema',game:'gamedev'};
-    try {
-      setIconPanel(panelMap[mode]||'world');
-    } catch(error) {
-      console.error('Failed to render workspace mode panel:', error);
-    }
+    const panelId=panelMap[mode]||'world';
+    // Let the click handler return before building the selected panel.
+    // This keeps mode selection responsive if a panel renderer is expensive.
+    window.setTimeout(()=>{
+      try {
+        setIconPanel(panelId);
+      } catch(error) {
+        console.error('Failed to render workspace mode panel:', error);
+      }
+    },0);
   }, true);
 });
 
