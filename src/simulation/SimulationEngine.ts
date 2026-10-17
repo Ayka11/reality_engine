@@ -13,7 +13,7 @@ import { EntityLayer, type EntityLayerSnapshot } from './EntityLayer';
 import { WorldEvents, type EventType, type WorldEventsSnapshot } from '../world/WorldEvents';
 import { TemporalLayer } from './TemporalLayer';
 import { InfoPhysics } from './InfoPhysics';
-import { Recorder, type RecorderControlSnapshot } from './Recorder';
+import { Recorder, type RecorderSnapshot } from './Recorder';
 import { AgentSystem, type AgentSystemSnapshot } from './AgentSystem';
 import type {
   InfinityScaleExecutionCapabilities,
@@ -55,7 +55,7 @@ export interface SimulationEngineCoreRecoverySnapshot {
   worldEvents: WorldEventsSnapshot;
   causal: CausalGraphSnapshot;
   laws: LawEngineSnapshot;
-  recorderControl: RecorderControlSnapshot;
+  recorder: RecorderSnapshot;
   lod: InfinityScaleLODStateSnapshot;
 }
 
@@ -218,7 +218,7 @@ export class SimulationEngine {
   /**
    * Capture the core mutable domains needed for Infinity Scale recovery.
    * This is not a complete engine checkpoint: physics-layer internals,
-   * recorder history and RNG state are not included.
+   * RNG state and private physics-layer internals are not included.
    */
   captureCoreRecoveryState(): SimulationEngineCoreRecoverySnapshot {
     return {
@@ -234,7 +234,7 @@ export class SimulationEngine {
       worldEvents: this.worldEvents.snapshot(),
       causal: this.causal.snapshot(),
       laws: this.laws.snapshot(),
-      recorderControl: this.recorder.snapshotControlState(),
+      recorder: this.recorder.snapshotState(),
       lod: this.infinityScaleLODState.snapshot(),
     };
   }
@@ -265,7 +265,7 @@ export class SimulationEngine {
       this.worldEvents.restore(state.worldEvents);
       this.causal.restore(state.causal);
       this.laws.restore(state.laws);
-      this.recorder.restoreControlState(state.recorderControl);
+      this.recorder.restoreState(state.recorder, this.grid.buffer.length);
       this.infinityScaleLODState.restore(state.lod);
       this.prevEnergy = new Float32Array(state.prevEnergy);
       this._tick = state.tick;
