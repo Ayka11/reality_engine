@@ -93,4 +93,14 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
       JSON.stringify(after.grid.dirtyChunks) !== JSON.stringify(before.grid.dirtyChunks)) {
     throw new Error("Selective frame failure did not restore auxiliary simulation state");
   }
+
+  // A rollback is only useful if the same engine can execute the next frame.
+  // The failed frame invalidates transient entity diagnostics; step() must
+  // rebuild them during preflight rather than leaving the engine permanently
+  // unable to satisfy its selective execution plan.
+  const tickBeforeRetry = engine.tick;
+  await engine.step(0.016);
+  if (engine.tick !== tickBeforeRetry + 1) {
+    throw new Error("Simulation did not advance after recovering from a failed selective frame");
+  }
 }
