@@ -45,3 +45,28 @@ test("workspace mode handler updates the active mode and label", async ({ page }
   expect(result.createActive).toBe(false);
   expect(pageErrors, "uncaught browser exceptions during mode switch").toEqual([]);
 });
+
+test("real keyboard activation reaches the mode control independently of panel rendering", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", error => pageErrors.push(error.message));
+
+  await page.goto("/", { waitUntil: "networkidle" });
+  const scienceButton = page.locator('.mode-btn[data-mode="science"]');
+  await expect(scienceButton).toBeVisible();
+
+  // Diagnostic isolation: the production handler schedules panel rendering
+  // after updating the visible mode state. Stub only that expensive render step
+  // so native keyboard input can be tested independently.
+  await page.evaluate(() => {
+    window.setIconPanel = () => {};
+    const button = document.querySelector('.mode-btn[data-mode="science"]');
+    if (!(button instanceof HTMLButtonElement)) throw new Error("science button not found");
+    button.focus();
+  });
+  await page.keyboard.press("Enter");
+
+  await expect(page.locator("#modeLabel")).toHaveText("Science Mode", { timeout: 5000 });
+  await expect(scienceButton).toHaveClass(/active/, { timeout: 5000 });
+  expect(pageErrors, "uncaught browser exceptions during isolated keyboard activation").toEqual([]);
+});
+
