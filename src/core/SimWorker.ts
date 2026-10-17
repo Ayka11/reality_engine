@@ -15,6 +15,8 @@
  */
 
 // ── Field layout ──────────────────────────────────────────────────────────────
+import { nextXorShift32 } from './SimWorkerState';
+
 const NF = 14 as const
 
 const F = {
@@ -60,12 +62,9 @@ function add_(x: number, y: number, z: number, f: number, v: number): void {
 let rngState = 0x51ed270b
 
 function random(): number {
-  let x = rngState >>> 0
-  x ^= x << 13
-  x ^= x >>> 17
-  x ^= x << 5
-  rngState = x >>> 0
-  return rngState / 0x100000000
+  const next = nextXorShift32(rngState)
+  rngState = next.state
+  return next.value
 }
 
 let tick     = 0
