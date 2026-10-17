@@ -134,10 +134,12 @@ export class EntityLayer {
     centroid: [number, number, number];
     cellCount: number;
   }>();
+  private readonly initialRngState: number;
   private _rngState: number;
 
   constructor(seed = 0x4f1bbcdc) {
-    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x4f1bbcdc : 0x4f1bbcdc;
+    this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x4f1bbcdc : 0x4f1bbcdc;
+    this._rngState = this.initialRngState;
   }
 
   private _random(): number {
@@ -857,5 +859,9 @@ export class EntityLayer {
     this.entities.clear();
     this.nextId = 1;
     this.extinctCountValue = 0;
+    this.pendingBoundaryComponents.clear();
+    this._rngState = this.initialRngState;
+    this.lastChunkConnectivity = null;
+    this.lastChunkReconciliation = null;
   }
 }
