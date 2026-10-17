@@ -1,0 +1,132 @@
+name: Dependency Security Audit
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - infinity-scale-real-diagnostics
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/dependency-security-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: npm dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Generate full JSON audit report
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          npm audit --json > npm-audit.json
+          audit_exit_code=$?
+          set -e
+
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+
+          let report;
+          try {
+            report = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));
+          } catch (error) {
+            const summary = {
+              reportValid: false,
+              error: 'npm audit did not produce valid JSON',
+              detail: String(error),
+            };
+            fs.writeFileSync('npm-audit-summary.json', JSON.stringify(summary, null, 2) + '\n');
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '## Dependency security audit\n\n**ERROR:** npm audit did not produce valid JSON. See the uploaded artifact and job logs.\n');
+            process.exit(0);
+          }
+
+          const vulnerabilities = report.metadata?.vulnerabilities ?? {};
+          const total = Number(vulnerabilities.total ?? 0);
+          const entries = Object.entries(report.vulnerabilities ?? {}).map(([name, item]) => ({
+            name,
+            severity: item.severity,
+            isDirect: item.isDirect,
+            range: item.range,
+            fixAvailable: item.fixAvailable,
+            via: (item.via ?? []).map(v => typeof v === 'string' ? v : {
+              title: v.title,
+              url: v.url,
+              range: v.range,
+              severity: v.severity,
+            }),
+          }));
+
+          const summary = {
+            reportValid: true,
+            auditReportVersion: report.auditReportVersion ?? null,
+            vulnerabilities: {
+              info: Number(vulnerabilities.info ?? 0),
+              low: Number(vulnerabilities.low ?? 0),
+              moderate: Number(vulnerabilities.moderate ?? 0),
+              high: Number(vulnerabilities.high ?? 0),
+              critical: Number(vulnerabilities.critical ?? 0),
+              total,
+            },
+            packages: report.metadata?.dependencies ?? null,
+            packagesWithFindings: entries,
+            auditError: report.error ?? null,
+          };
+
+          fs.writeFileSync('npm-audit-summary.json', JSON.stringify(summary, null, 2) + '\n');
+          const lines = [
+            '## Dependency security audit',
+            '',
+            '| Severity | Count |',
+            '|---|---:|',
+            '| Critical | ' + summary.vulnerabilities.critical + ' |',
+            '| High | ' + summary.vulnerabilities.high + ' |',
+            '| Moderate | ' + summary.vulnerabilities.moderate + ' |',
+            '| Low | ' + summary.vulnerabilities.low + ' |',
+            '| Info | ' + summary.vulnerabilities.info + ' |',
+            '| **Total** | **' + total + ' |',
+            '',
+            'Full package-level details are attached as the `npm-audit-report` workflow artifact.',
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'total=' + total + '\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'report_valid=true\n');
+          console.log(JSON.stringify(summary, null, 2));
+          NODE
+
+          echo "npm_exit_code=$audit_exit_code" >> "$GITHUB_OUTPUT"
+
+      - name: Upload full audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: |
+            npm-audit.json
+            npm-audit-summary.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce audit result
+        if: steps.audit.outputs.report_valid == 'true'
+        shell: bash
+        run: |
+          if [ "${{ steps.audit.outputs.total }}" -gt 0 ]; then
+            echo "::error::npm audit found ${{ steps.audit.outputs.total }} known vulnerable package entries. Download npm-audit-report for the complete advisory and remediation details."
+            exit 1
+          fi
