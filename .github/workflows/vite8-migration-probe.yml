@@ -15,10 +15,11 @@ on:
       - "vite.config.ts"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   probe:
+    if: github.actor != 'github-actions[bot]'
     name: Vite 8 candidate validation
     runs-on: ubuntu-latest
     steps:
@@ -175,3 +176,17 @@ jobs:
             process.exit(1);
           }
           NODE
+
+      - name: Commit the validated candidate on this experiment branch
+        if: github.event_name == 'push' && success()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "Candidate manifest and lockfile are already committed."
+            exit 0
+          fi
+          git commit -m "build: apply validated Vite 8 dependency candidate"
+          git push origin HEAD:codex/vite8-migration-probe-2026-10-17
