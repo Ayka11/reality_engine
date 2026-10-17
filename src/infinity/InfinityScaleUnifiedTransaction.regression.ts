@@ -353,15 +353,21 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     rollbackPlan,
     state,
   );
+  const rollbackEntityLayer = new EntityLayer();
+  const rollbackEntityPlan = rollbackEntityLayer.prepareChunkExecution(grid, rollbackContext);
+  if (!rollbackEntityPlan.commitReady) {
+    throw new Error("Expected rollback entity reconciliation to be ready before injected migration failure");
+  }
   const rollbackTx = beginInfinityScaleUnifiedTransaction(
     rollbackFrame,
     rollbackPlan,
     rollbackLod,
-    entityLayer,
+    rollbackEntityLayer,
     agents,
     grid,
     rollbackContext,
   );
+  stageInfinityScaleEntityCommit(rollbackTx);
   new InfinityScaleMixedLODCPUExecutor(state, rollbackContext).stageBoundaryTransfers(rollbackLod);
   stageInfinityScaleAgentMigrations(rollbackTx, [{
     agentId,
@@ -379,6 +385,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const gridBufferBeforeFailure = new Float32Array(grid.buffer);
   const gridBackBufferBeforeFailure = new Float32Array(grid.backBuffer);
   const agentsBeforeFailure = agents.snapshot();
+  const entitiesBeforeFailure = rollbackEntityLayer.snapshot();
   const lodBeforeFailure = state.snapshot();
   const originalApplyMigrations = agents.applyMigrationRequests.bind(agents);
   (agents as unknown as {
@@ -404,6 +411,17 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const agentsAfterFailure = agents.snapshot();
   if (JSON.stringify(agentsAfterFailure) !== JSON.stringify(agentsBeforeFailure)) {
     throw new Error("Failed unified commit did not restore agent state and pending migrations");
+  }
+  const entitiesAfterFailure = rollbackEntityLayer.snapshot();
+  if (entitiesAfterFailure.entities.length !== entitiesBeforeFailure.entities.length ||
+      entitiesAfterFailure.entities.some((entity, index) => {
+        const before = entitiesBeforeFailure.entities[index];
+        return !before || entity.id !== before.id ||
+          entity.age !== before.age || entity.energy !== before.energy ||
+          entity.cells.length !== before.cells.length ||
+          entity.cells.some((cell, cellIndex) => cell !== before.cells[cellIndex]);
+      })) {
+    throw new Error("Failed unified commit did not restore entity ownership state");
   }
   const lodAfterFailure = state.snapshot();
   if (lodAfterFailure.chunks.length !== lodBeforeFailure.chunks.length ||
