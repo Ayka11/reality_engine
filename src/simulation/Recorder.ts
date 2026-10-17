@@ -2,6 +2,14 @@ import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS } from '../core/CellState';
 import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 
+export interface RecorderControlSnapshot {
+  recording: boolean;
+  maxSnapshots: number;
+  intervalTicks: number;
+  lastSnapTick: number;
+  nextSnapTick: number;
+}
+
 export interface SelectiveObservationSnapshot {
   tick: number;
   cellCount: number;
@@ -46,6 +54,35 @@ export class Recorder {
     this.selectiveSnapshots = [];
     this._lastSnapTick = 0;
     this._nextSnapTick = Math.max(1, this._intervalTicks);
+  }
+
+  snapshotControlState(): RecorderControlSnapshot {
+    return {
+      recording: this._recording,
+      maxSnapshots: this.maxSnapshots,
+      intervalTicks: this._intervalTicks,
+      lastSnapTick: this._lastSnapTick,
+      nextSnapTick: this._nextSnapTick,
+    };
+  }
+
+  restoreControlState(snapshot: RecorderControlSnapshot): void {
+    if (!snapshot ||
+        typeof snapshot.recording !== "boolean" ||
+        !Number.isSafeInteger(snapshot.maxSnapshots) || snapshot.maxSnapshots < 1 ||
+        !Number.isSafeInteger(snapshot.intervalTicks) || snapshot.intervalTicks < 1 ||
+        !Number.isSafeInteger(snapshot.lastSnapTick) || snapshot.lastSnapTick < 0 ||
+        !Number.isSafeInteger(snapshot.nextSnapTick) || snapshot.nextSnapTick < 0) {
+      throw new Error("Invalid Recorder control snapshot");
+    }
+
+    this._recording = snapshot.recording;
+    this.maxSnapshots = snapshot.maxSnapshots;
+    this._intervalTicks = snapshot.intervalTicks;
+    this._lastSnapTick = snapshot.lastSnapTick;
+    this._nextSnapTick = snapshot.nextSnapTick;
+    while (this.snapshots.length > this.maxSnapshots) this.snapshots.shift();
+    while (this.selectiveSnapshots.length > this.maxSnapshots) this.selectiveSnapshots.shift();
   }
 
   tick(grid: VoxelGrid, currentTick: number): void {
