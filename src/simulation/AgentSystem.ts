@@ -36,13 +36,14 @@ export interface AgentSystemSnapshot {
   agents: Agent[];
   pendingMigrations: AgentMigrationRequest[];
   nextAgentId: number;
+  rngState: number;
 }
 
 
 const BEHAVIORS: AgentBehavior[] = ['explorer', 'harvester', 'signaler', 'builder', 'destroyer'];
 
-function randomBehavior(): AgentBehavior {
-  return BEHAVIORS[Math.floor(Math.random() * BEHAVIORS.length)];
+function randomBehavior(random: () => number): AgentBehavior {
+  return BEHAVIORS[Math.floor(random() * BEHAVIORS.length)];
 }
 
 export const AGENT_COLORS: Record<AgentBehavior, [number, number, number]> = {
@@ -58,6 +59,20 @@ export class AgentSystem {
   readonly maxAgents = 64;
   private pendingMigrations: AgentMigrationRequest[] = [];
   private nextAgentId = 1;
+  private _rngState: number;
+
+  constructor(seed = 0x2c1b3c6d) {
+    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x2c1b3c6d : 0x2c1b3c6d;
+  }
+
+  private _random(): number {
+    let x = this._rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this._rngState = x >>> 0;
+    return this._rngState / 0x100000000;
+  }
 
   snapshot(): AgentSystemSnapshot {
     return {
@@ -68,10 +83,15 @@ export class AgentSystem {
         to: [...request.to] as [number, number, number],
       })),
       nextAgentId: this.nextAgentId,
+      rngState: this._rngState,
     };
   }
 
   restore(snapshot: AgentSystemSnapshot): void {
+    if (!snapshot || !Array.isArray(snapshot.agents) || !Array.isArray(snapshot.pendingMigrations) ||
+        !Number.isSafeInteger(snapshot.rngState) || snapshot.rngState <= 0 || snapshot.rngState > 0xffffffff) {
+      throw new Error("Invalid AgentSystem snapshot: malformed random generator state");
+    }
     const ids = new Set<number>();
     for (const agent of snapshot.agents) {
       if (!Number.isInteger(agent.id) || agent.id <= 0 || ids.has(agent.id)) {
@@ -101,6 +121,7 @@ export class AgentSystem {
       to: [...request.to] as [number, number, number],
     }));
     this.nextAgentId = snapshot.nextAgentId;
+    this._rngState = snapshot.rngState >>> 0;
   }
 
   spawnAt(x: number, y: number, z: number, behavior: AgentBehavior = "explorer", energy = 200): number {
@@ -137,9 +158,9 @@ export class AgentSystem {
   // Seed agents + inject local energy so they survive from a cold start
   seed(grid: VoxelGrid, count = 8): void {
     for (let i = 0; i < count && this.agents.size < this.maxAgents; i++) {
-      const x = Math.floor(4 + Math.random() * (grid.W - 8));
-      const y = Math.floor(4 + Math.random() * (grid.H - 8));
-      const z = Math.floor(2 + Math.random() * (grid.D * 0.6));
+      const x = Math.floor(4 + this._random() * (grid.W - 8));
+      const y = Math.floor(4 + this._random() * (grid.H - 8));
+      const z = Math.floor(2 + this._random() * (grid.D * 0.6));
       for (let dz = -1; dz <= 1; dz++)
       for (let dy = -2; dy <= 2; dy++)
       for (let dx = -2; dx <= 2; dx++) {
@@ -147,7 +168,7 @@ export class AgentSystem {
         const base = (((z+dz) * grid.H * grid.W) + (y+dy) * grid.W + (x+dx)) * CELL_FIELDS;
         grid.buffer[base + F.ENERGY] = Math.max(grid.buffer[base + F.ENERGY], 150);
       }
-      this._spawn(x, y, z, randomBehavior(), 200);
+      this._spawn(x, y, z, randomBehavior(() => this._random()), 200);
     }
   }
 
@@ -199,11 +220,11 @@ export class AgentSystem {
       buf[newBase + F.AGENT_MARK] = agent.id;
       if (agent.energy > 300 && this.agents.size < this.maxAgents) {
         agent.energy *= 0.55;
-        const childX = Math.max(0, Math.min(grid.W - 1, agent.x + Math.round(Math.random() * 4 - 2)));
-        const childY = Math.max(0, Math.min(grid.H - 1, agent.y + Math.round(Math.random() * 4 - 2)));
-        const childZ = Math.max(0, Math.min(grid.D - 1, agent.z + Math.round(Math.random() * 2 - 1)));
+        const childX = Math.max(0, Math.min(grid.W - 1, agent.x + Math.round(this._random() * 4 - 2)));
+        const childY = Math.max(0, Math.min(grid.H - 1, agent.y + Math.round(this._random() * 4 - 2)));
+        const childZ = Math.max(0, Math.min(grid.D - 1, agent.z + Math.round(this._random() * 2 - 1)));
         if (context && !context.containsSimulationCell(childX, childY, childZ)) { agent.energy /= 0.55; continue; }
-        const childBehavior = Math.random() < 0.15 ? randomBehavior() : agent.behavior;
+        const childBehavior = this._random() < 0.15 ? randomBehavior(() => this._random()) : agent.behavior;
         this._spawn(childX, childY, childZ, childBehavior, agent.energy * 0.6);
         agent.children++;
       }
@@ -324,7 +345,7 @@ export class AgentSystem {
     agent.energy = Math.min(500, agent.energy + stolenE * 0.7);
     if (agent.age % 3 === 0) {
       const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
-      const [dx,dy] = dirs[Math.floor(Math.random()*4)];
+      const [dx,dy] = dirs[Math.floor(this._random()*4)];
       const nx = Math.max(0, Math.min(grid.W-1, agent.x+dx));
       const ny = Math.max(0, Math.min(grid.H-1, agent.y+dy));
       if (nx !== agent.x || ny !== agent.y) {
