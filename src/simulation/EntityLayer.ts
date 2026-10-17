@@ -194,6 +194,40 @@ export class EntityLayer {
     return this.lastChunkReconciliation?.commitReady === true;
   }
 
+  /**
+   * Preflight the complete reconciliation record set without mutating entities
+   * or grid ownership markers. Unified transactions call this before any
+   * other domain commits, so a stale entity cannot cause a partial frame commit.
+   */
+  canApplyChunkReconciliation(
+    grid: VoxelGrid,
+    context: InfinityScaleChunkExecutionContext,
+  ): boolean {
+    const plan = this.lastChunkReconciliation;
+    const connectivity = this.lastChunkConnectivity;
+    if (!plan || !connectivity) return false;
+    const records = this.chunkReconciliation.commitRecords(
+      plan,
+      connectivity.components,
+    );
+    if (!records) return false;
+
+    for (const record of records) {
+      if (record.entityId === null) continue;
+      const entity = this.entities.get(record.entityId);
+      if (!entity) return false;
+      const hasOwnedCellOutsideWorkset = entity.cells.some(index => {
+        const z = Math.floor(index / (grid.W * grid.H));
+        const rem = index - z * grid.W * grid.H;
+        const y = Math.floor(rem / grid.W);
+        const cellX = rem - y * grid.W;
+        return !context.containsSimulationCell(cellX, y, z);
+      });
+      if (hasOwnedCellOutsideWorkset) return false;
+    }
+    return true;
+  }
+
   getChunkReconciliationCommitRecords(
     grid: VoxelGrid,
     context: InfinityScaleChunkExecutionContext,
@@ -230,23 +264,9 @@ export class EntityLayer {
     );
     if (!records) return false;
 
-    // Validate the complete reconciliation set before mutating any entity or
-    // grid marker. Silently dropping unsafe records can otherwise make a
-    // partial reconciliation look like a successful commit.
-    for (const record of records) {
-      if (record.entityId === null) continue;
-      const entity = this.entities.get(record.entityId);
-      if (!entity) return false;
-      const hasOwnedCellOutsideWorkset = entity.cells.some(index => {
-        const z = Math.floor(index / (grid.W * grid.H));
-        const rem = index - z * grid.W * grid.H;
-        const y = Math.floor(rem / grid.W);
-        const cellX = rem - y * grid.W;
-        return !context.containsSimulationCell(cellX, y, z);
-      });
-      if (hasOwnedCellOutsideWorkset) return false;
-    }
-
+    // Recheck at the mutation boundary; the transaction validator also calls
+    // this preflight before committing the LOD domain.
+    if (!this.canApplyChunkReconciliation(grid, context)) return false;
     const safeRecords = records;
 
     const retained = new Set<number>();
