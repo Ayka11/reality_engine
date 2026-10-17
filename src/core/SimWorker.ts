@@ -57,6 +57,17 @@ function add_(x: number, y: number, z: number, f: number, v: number): void {
 }
 
 // ── Simulation state ──────────────────────────────────────────────────────────
+let rngState = 0x51ed270b
+
+function random(): number {
+  let x = rngState >>> 0
+  x ^= x << 13
+  x ^= x >>> 17
+  x ^= x << 5
+  rngState = x >>> 0
+  return rngState / 0x100000000
+}
+
 let tick     = 0
 let DIFF     = 0.09
 let ENT      = 0.0004
@@ -172,16 +183,16 @@ function applyPreset(name: string) {
     }
   } else if (name === 'life') {
     for (let k = 0; k < 25; k++) {
-      const x = 4 + Math.floor(Math.random() * (W - 8))
-      const y = 4 + Math.floor(Math.random() * (H - 8))
-      const z = Math.floor(Math.random() * D)
-      const e = 150 + Math.random() * 500
+      const x = 4 + Math.floor(random() * (W - 8))
+      const y = 4 + Math.floor(random() * (H - 8))
+      const z = Math.floor(random() * D)
+      const e = 150 + random() * 500
       const i = idx(x, y, z)
       buf[i + F.E]   = e
-      buf[i + F.D]   = 0.3 + Math.random() * 0.5
+      buf[i + F.D]   = 0.3 + random() * 0.5
       buf[i + F.I]   = e * 0.3
-      buf[i + F.T]   = 80 + Math.random() * 180
-      buf[i + F.BIO] = 0.2 + Math.random() * 0.5
+      buf[i + F.T]   = 80 + random() * 180
+      buf[i + F.BIO] = 0.2 + random() * 0.5
     }
   } else if (name === 'proto') {
     for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -190,7 +201,7 @@ function applyPreset(name: string) {
       buf[i + F.E]   = 50 + n * 400 * (1 - z / D * 0.5)
       buf[i + F.D]   = 0.2 + n * 0.6
       buf[i + F.T]   = 30 + n * 250
-      buf[i + F.S]   = 0.05 + Math.random() * 0.1
+      buf[i + F.S]   = 0.05 + random() * 0.1
       if (n > 0.6) {
         buf[i + F.BIO] = n * 0.4
         buf[i + F.I]   = n * 80
@@ -218,7 +229,7 @@ function applyGenerated(data: {
     buf[i + F.D] = Math.max(0, n * 0.8)
     buf[i + F.I] = Math.max(0, n2 * 100)
     buf[i + F.T] = Math.max(0, n * 250)
-    buf[i + F.S] = 0.02 + Math.random() * 0.05
+    buf[i + F.S] = 0.02 + random() * 0.05
   }
 }
 
