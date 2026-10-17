@@ -98,7 +98,10 @@ export function validateInfinityScaleUnifiedTransaction(
     reasons.push(`missing mixed-LOD boundary updates: ${missingBoundaryUpdates}`);
   }
 
-  const entityReady = !transaction.entityCommitRequested || transaction.entityLayer.canCommitChunkReconciliation();
+  const entityReady = !transaction.entityCommitRequested || (
+    transaction.entityLayer.canCommitChunkReconciliation() &&
+    transaction.entityLayer.canApplyChunkReconciliation(transaction.grid, transaction.context)
+  );
   if (!entityReady) reasons.push("entity reconciliation is not commit-ready");
 
   const migrationConflicts = countMigrationConflicts(transaction.stagedMigrations, transaction.context, transaction.agentSystem);
