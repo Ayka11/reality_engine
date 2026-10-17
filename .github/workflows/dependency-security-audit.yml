@@ -1,6 +1,9 @@
 name: Dependency Security Audit
 
 on:
+  push:
+    branches:
+      - codex/dependency-audit-report-2026-10-17
   workflow_dispatch:
   pull_request:
     branches:
