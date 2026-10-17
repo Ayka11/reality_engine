@@ -13,6 +13,7 @@ import { runWorldEventsRecoveryRegression } from "./WorldEventsRecovery.regressi
 import { runCivilizationSystemRecoveryRegression } from "./CivilizationSystemRecovery.regression";
 import { runCosmologicalSimRecoveryRegression } from "./CosmologicalSimRecovery.regression";
 import { runSimWorkerRNGRecoveryRegression } from "./SimWorkerRNGRecovery.regression";
+import { runSimulationRNGResetRegression } from "./SimulationRNGReset.regression";
 import { runCausalGraphRecoveryRegression } from "./CausalGraphRecovery.regression";
 import { runLawEngineRecoveryRegression } from "./LawEngineRecovery.regression";
 import { runRecorderRecoveryRegression } from "./RecorderRecovery.regression";
@@ -95,6 +96,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["civilization-system-recovery", runCivilizationSystemRecoveryRegression],
     ["cosmological-sim-recovery", runCosmologicalSimRecoveryRegression],
     ["sim-worker-rng-recovery", runSimWorkerRNGRecoveryRegression],
+    ["simulation-rng-reset", runSimulationRNGResetRegression],
     ["causal-graph-recovery", runCausalGraphRecoveryRegression],
     ["law-engine-recovery", runLawEngineRecoveryRegression],
     ["recorder-recovery", runRecorderRecoveryRegression],
