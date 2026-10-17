@@ -35,8 +35,9 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
   });
 
   const before = engine.captureCoreRecoveryState();
-  const originalTickChunks = engine.fieldPhysics.tickChunks;
-  engine.fieldPhysics.tickChunks = ((...args: Parameters<typeof originalTickChunks>) => {
+  const fieldPhysics = (engine as unknown as { fieldPhysics: { tickChunks: (...args: any[]) => void } }).fieldPhysics;
+  const originalTickChunks = fieldPhysics.tickChunks;
+  fieldPhysics.tickChunks = ((...args: Parameters<typeof originalTickChunks>) => {
     args[0].buffer[fieldIndex] = 999;
     engine.agents.getAgents()[0].energy = 1;
     throw new Error("intentional frame rollback regression failure");
@@ -48,7 +49,7 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
   } catch (error) {
     rejected = error instanceof Error && error.message === "intentional frame rollback regression failure";
   } finally {
-    engine.fieldPhysics.tickChunks = originalTickChunks;
+    fieldPhysics.tickChunks = originalTickChunks;
   }
 
   if (!rejected) {
