@@ -12,13 +12,19 @@ test("production app mounts the main workspace without uncaught exceptions", asy
 });
 
 test("switching workspace mode updates the active mode and label", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#app")).toBeVisible();
 
   const scienceButton = page.locator('.mode-btn[data-mode="science"]');
   await expect(scienceButton).toBeVisible();
+  const handlerType = await page.evaluate(() => typeof window.selectWorkspaceMode);
+  expect(handlerType, "workspace mode handler must be globally available").toBe("function");
+
   await scienceButton.click();
 
-  await expect(scienceButton).toHaveClass(/active/);
-  await expect(page.locator("#modeLabel")).toHaveText("Science Mode");
+  await expect(page.locator("#modeLabel")).toHaveText("Science Mode", { timeout: 5000 });
+  await expect(scienceButton).toHaveClass(/active/, { timeout: 5000 });
+  expect(pageErrors, "uncaught browser exceptions during mode switch").toEqual([]);
 });
