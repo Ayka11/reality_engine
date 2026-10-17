@@ -12,6 +12,7 @@ on:
       - ".github/workflows/vite8-migration-probe.yml"
       - "package.json"
       - "package-lock.json"
+      - "vite.config.ts"
 
 permissions:
   contents: read
