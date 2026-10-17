@@ -40,6 +40,15 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
   fieldPhysics.tickChunks = ((...args: Parameters<typeof originalTickChunks>) => {
     args[0].buffer[fieldIndex] = 999;
     engine.agents.getAgents()[0].energy = 1;
+    // Exercise recovery across domains that a later frame stage can mutate,
+    // not just the field and the currently executing subsystem.
+    engine.agents.seed(engine.grid, 1);
+    engine.laws.toggleProcess(27, false);
+    engine.worldEvents.trigger(engine.grid, "meteor_strike", engine.tick);
+    engine.causal.log(engine.tick, 1, 1, 1, 7, "energy_spike", 12);
+    engine.recorder.startRecording();
+    engine.grid.assignChunkOwner("0,0,0", "rollback-test-owner");
+    engine.grid.markChunksDirty(["0,0,0"]);
     throw new Error("intentional frame rollback regression failure");
   }) as typeof originalTickChunks;
 
@@ -68,5 +77,20 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
   if (JSON.stringify(after.chemistry.pendingDensityTransfers) !== JSON.stringify(before.chemistry.pendingDensityTransfers) ||
       after.lod.chunks.length !== before.lod.chunks.length) {
     throw new Error("Selective frame failure did not restore deferred chemistry or LOD state");
+  }
+  if (after.agents.rngState !== before.agents.rngState ||
+      after.laws.rngState !== before.laws.rngState ||
+      after.worldEvents.rngState !== before.worldEvents.rngState) {
+    throw new Error("Selective frame failure did not restore subsystem random generator state");
+  }
+  if (JSON.stringify(after.laws.manualOff) !== JSON.stringify(before.laws.manualOff) ||
+      after.worldEvents.history.length !== before.worldEvents.history.length ||
+      after.causal.events.length !== before.causal.events.length ||
+      after.causal.nextId !== before.causal.nextId ||
+      after.recorder.control.recording !== before.recorder.control.recording ||
+      after.recorder.snapshots.length !== before.recorder.snapshots.length ||
+      after.grid.chunkOwners.length !== before.grid.chunkOwners.length ||
+      after.grid.dirtyChunks.length !== before.grid.dirtyChunks.length) {
+    throw new Error("Selective frame failure did not restore auxiliary simulation state");
   }
 }
