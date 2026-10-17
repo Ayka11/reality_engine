@@ -23,6 +23,27 @@ export function runLawEngineRecoveryRegression(): void {
     throw new Error("LawEngine restore did not recover laws and overrides");
   }
 
+  const replaySnapshot = engine.snapshot();
+  const firstSpawn = engine.spawnMutation("law_radiation");
+  const firstSpawnJson = JSON.stringify(firstSpawn);
+  engine.restore(replaySnapshot);
+  const replayedSpawn = engine.spawnMutation("law_radiation");
+  if (JSON.stringify(replayedSpawn) !== firstSpawnJson) {
+    throw new Error("LawEngine restore did not replay the same random mutation sequence");
+  }
+
+  const invalidRng = engine.snapshot();
+  invalidRng.rngState = 0;
+  let rejectedRng = false;
+  try {
+    engine.restore(invalidRng);
+  } catch {
+    rejectedRng = true;
+  }
+  if (!rejectedRng) {
+    throw new Error("LawEngine accepted an invalid PRNG state");
+  }
+
   const before = engine.snapshot();
   const invalid = engine.snapshot();
   invalid.laws[1].id = invalid.laws[0].id;
