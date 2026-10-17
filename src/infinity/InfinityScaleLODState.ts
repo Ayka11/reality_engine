@@ -8,6 +8,11 @@ export interface InfinityScaleLODChunkState {
   cells: Float32Array;
 }
 
+/** Deep snapshot of hierarchical cells for a failed-frame recovery boundary. */
+export interface InfinityScaleLODStateSnapshot {
+  chunks: InfinityScaleLODChunkState[];
+}
+
 /**
  * Hierarchical state store for Infinity Scale LOD chunks.
  *
@@ -25,6 +30,54 @@ export class InfinityScaleLODState {
 
   getRevision(): number {
     return this.revision;
+  }
+
+  /**
+   * Capture every hierarchical chunk without sharing mutable cell buffers.
+   * The snapshot intentionally excludes the revision: restoring content must
+   * invalidate all outstanding transactions rather than resurrect old tokens.
+   */
+  snapshot(): InfinityScaleLODStateSnapshot {
+    return {
+      chunks: [...this.states.values()].map(state => ({
+        key: state.key,
+        level: state.level,
+        scale: state.scale,
+        cells: new Float32Array(state.cells),
+      })),
+    };
+  }
+
+  /**
+   * Restore hierarchical content after an aborted frame. This is a recovery
+   * boundary, not a transaction commit; always advance revision so stale
+   * transactions cannot become valid again.
+   */
+  restore(snapshot: InfinityScaleLODStateSnapshot): void {
+    const restored = new Map<string, InfinityScaleLODChunkState>();
+    for (const chunk of snapshot.chunks) {
+      if (restored.has(chunk.key)) {
+        throw new Error(`Cannot restore duplicate Infinity Scale LOD chunk ${chunk.key}`);
+      }
+      if (
+        !Number.isInteger(chunk.level) ||
+        chunk.level < 0 ||
+        chunk.level > 30 ||
+        chunk.scale !== 2 ** chunk.level ||
+        chunk.cells.length !== this.chunkSize ** 3 * CELL_FIELDS
+      ) {
+        throw new Error(`Cannot restore invalid Infinity Scale LOD chunk ${chunk.key}`);
+      }
+      restored.set(chunk.key, {
+        key: chunk.key,
+        level: chunk.level,
+        scale: chunk.scale,
+        cells: new Float32Array(chunk.cells),
+      });
+    }
+    this.states.clear();
+    for (const [key, chunk] of restored) this.states.set(key, chunk);
+    this.revision += 1;
   }
 
   beginRevision(): number {
