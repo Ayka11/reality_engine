@@ -1943,14 +1943,19 @@ function togglePlay(){
 }
 
 document.querySelectorAll('.mode-btn[data-mode]').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    document.querySelectorAll('.mode-btn[data-mode]').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    currentAppMode=btn.dataset.mode;
+  btn.type='button';
+  btn.addEventListener('click',(event)=>{
+    event.preventDefault();
+    const mode=btn.dataset.mode;
+    currentAppMode=mode;
     const modes={create:'Create Mode',science:'Science Mode',cinema:'Cinema Mode',game:'Game Dev Mode'};
-    document.getElementById('modeLabel').textContent=modes[btn.dataset.mode]||'';
+    const label=document.getElementById('modeLabel');
+    if(label) label.textContent=modes[mode]||'';
     const panelMap={create:'world',science:'science',cinema:'cinema',game:'gamedev'};
-    setIconPanel(panelMap[btn.dataset.mode]||'world');
+    setIconPanel(panelMap[mode]||'world');
+    document.querySelectorAll('.mode-btn[data-mode]').forEach(b=>{
+      b.classList.toggle('active',b===btn);
+    });
   });
 });
 
