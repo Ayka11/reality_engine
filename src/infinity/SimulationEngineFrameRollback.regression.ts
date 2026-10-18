@@ -121,9 +121,26 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
 
   const recoveredFrame = engine.captureCoreRecoveryState();
   const controlFrame = control.captureCoreRecoveryState();
+
+  // SparseVoxelGrid updates chunk.lastAccessed with Date.now() whenever a
+  // chunk is touched. That wall-clock eviction hint is deliberately not a
+  // simulation input and cannot be expected to match between sequential runs.
+  // Compare the complete grid state while excluding only this non-deterministic
+  // timestamp; preserve dense/sparse buffers, active flags, range, ownership,
+  // dirty chunks, and all other recovery domains.
+  const normalizeGrid = (grid: typeof recoveredFrame.grid) => ({
+    ...grid,
+    chunks: grid.chunks
+      .map(({ lastAccessed: _lastAccessed, ...chunk }) => chunk)
+      .sort((a, b) => a.key.localeCompare(b.key)),
+    dirtyChunks: [...grid.dirtyChunks].sort(),
+    chunkOwners: [...grid.chunkOwners].sort(([a], [b]) => a.localeCompare(b)),
+  });
   const divergentDomains = (
     Object.keys(recoveredFrame) as Array<keyof typeof recoveredFrame>
-  ).filter(key => JSON.stringify(recoveredFrame[key]) !== JSON.stringify(controlFrame[key]));
+  ).filter(key => key === "grid"
+    ? JSON.stringify(normalizeGrid(recoveredFrame.grid)) !== JSON.stringify(normalizeGrid(controlFrame.grid))
+    : JSON.stringify(recoveredFrame[key]) !== JSON.stringify(controlFrame[key]));
   if (divergentDomains.length > 0) {
     throw new Error(
       "Post-rollback frame diverged from the clean control simulation in: " +
