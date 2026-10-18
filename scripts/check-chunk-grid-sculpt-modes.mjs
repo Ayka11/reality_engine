@@ -16,7 +16,7 @@ const mathUrl = "data:text/javascript;base64," + Buffer.from(mathJs).toString("b
 const geometrySource = await readFile(new URL("src/brushes/BrushGeometry.ts", root), "utf8");
 const geometryJs = ts.transpileModule(geometrySource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-}).outputText.replace("from './BrushMath'", `from '${mathUrl}'`);
+}).outputText.replace(/from ['"]\.\/BrushMath['"]/, `from "${mathUrl}"`);
 const geometryUrl = "data:text/javascript;base64," + Buffer.from(geometryJs).toString("base64");
 const { ChunkGrid, F } = await import(moduleUrl);
 const grid = new ChunkGrid();
