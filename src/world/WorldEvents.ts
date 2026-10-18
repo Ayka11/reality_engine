@@ -39,6 +39,36 @@ const EVENT_DESC: Record<EventType, string> = {
 export class WorldEvents {
   private history: WorldEvent[] = [];
   private _nextAuto = 600; // ticks until next random event
+  private _rngState = 0x6d2b79f5;
+
+  constructor(seed = 0x6d2b79f5) {
+    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6d2b79f5 : 0x6d2b79f5;
+  }
+
+  private _random(): number {
+    let x = this._rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this._rngState = x >>> 0;
+    return this._rngState / 0x100000000;
+  }
+
+  snapshotRandomState(): { rngState: number; nextAuto: number; history: WorldEvent[] } {
+    return { rngState: this._rngState, nextAuto: this._nextAuto, history: this.history.map(event => ({ ...event })) };
+  }
+
+  restoreRandomState(snapshot: { rngState: number; nextAuto: number; history: WorldEvent[] }): void {
+    if (!snapshot || !Number.isSafeInteger(snapshot.rngState) || snapshot.rngState <= 0 || snapshot.rngState > 0xffffffff ||
+        !Number.isSafeInteger(snapshot.nextAuto) || snapshot.nextAuto < 0 || !Array.isArray(snapshot.history) ||
+        snapshot.history.length > 20 || snapshot.history.some(event => !event || typeof event.type !== 'string' ||
+          !Number.isSafeInteger(event.tick) || typeof event.label !== 'string' || typeof event.description !== 'string')) {
+      throw new Error("Invalid WorldEvents snapshot");
+    }
+    this._rngState = snapshot.rngState >>> 0;
+    this._nextAuto = snapshot.nextAuto;
+    this.history = snapshot.history.map(event => ({ ...event }));
+  }
 
   trigger(grid: VoxelGrid, type: EventType, tick: number): WorldEvent {
     switch (type) {
@@ -64,12 +94,12 @@ export class WorldEvents {
     this._nextAuto--;
     if (this._nextAuto > 0) return null;
     // Randomize next interval: 400..1200 ticks
-    this._nextAuto = 400 + Math.floor(Math.random() * 800);
+    this._nextAuto = 400 + Math.floor(this._random() * 800);
     const types: EventType[] = [
       'meteor_strike','solar_flare','radiation_storm',
       'mutation_wave','entropy_collapse','tectonic_shift',
     ];
-    const type = types[Math.floor(Math.random() * types.length)];
+    const type = types[Math.floor(this._random() * types.length)];
     return this.trigger(grid, type, tick);
   }
 
@@ -78,8 +108,8 @@ export class WorldEvents {
   // ── Event implementations ─────────────────────────────────────────────────
 
   private _meteorStrike(grid: VoxelGrid) {
-    const ix = Math.floor(Math.random() * grid.W);
-    const iy = Math.floor(Math.random() * grid.H);
+    const ix = Math.floor(this._random() * grid.W);
+    const iy = Math.floor(this._random() * grid.H);
     const iz = grid.D - 1;
     for (let dz = -4; dz <= 4; dz++)
     for (let dy = -4; dy <= 4; dy++)
@@ -103,9 +133,9 @@ export class WorldEvents {
     for (let y = 0; y < grid.H; y++)
     for (let x = 0; x < grid.W; x++) {
       const cell = grid.cell(x, y, z);
-      cell.energy      = Math.min(9999, cell.energy + 200 + Math.random()*300);
-      cell.temperature = Math.min(9999, cell.temperature + 150 + Math.random()*200);
-      cell.entropy     = Math.min(1, cell.entropy + 0.05 + Math.random()*0.1);
+      cell.energy      = Math.min(9999, cell.energy + 200 + this._random()*300);
+      cell.temperature = Math.min(9999, cell.temperature + 150 + this._random()*200);
+      cell.entropy     = Math.min(1, cell.entropy + 0.05 + this._random()*0.1);
     }
   }
 
@@ -113,9 +143,9 @@ export class WorldEvents {
     const n = grid.size;
     for (let i = 0; i < n; i++) {
       const cell = grid.cellAt(i);
-      cell.entropy     = Math.min(1, cell.entropy + 0.02 + Math.random()*0.04);
-      cell.energy      = Math.min(9999, cell.energy + Math.random()*30);
-      cell.temperature = Math.min(9999, cell.temperature + Math.random()*20);
+      cell.entropy     = Math.min(1, cell.entropy + 0.02 + this._random()*0.04);
+      cell.energy      = Math.min(9999, cell.energy + this._random()*30);
+      cell.temperature = Math.min(9999, cell.temperature + this._random()*20);
     }
   }
 
@@ -124,8 +154,8 @@ export class WorldEvents {
     for (let i = 0; i < n; i++) {
       const cell = grid.cellAt(i);
       if (cell.bioPotential > 0.1) {
-        cell.bioPotential = Math.min(1, cell.bioPotential + 0.15 + Math.random()*0.2);
-        cell.information  = Math.min(999, cell.information + 30 + Math.random()*50);
+        cell.bioPotential = Math.min(1, cell.bioPotential + 0.15 + this._random()*0.2);
+        cell.information  = Math.min(999, cell.information + 30 + this._random()*50);
         cell.set(F.CHEM_STATE, CHEM.ORGANIC);
       }
     }
@@ -133,13 +163,13 @@ export class WorldEvents {
 
   private _entropyCollapse(grid: VoxelGrid) {
     // Random region — entropy drops sharply, crystallization occurs
-    const cx = Math.floor(4 + Math.random()*(grid.W-8));
-    const cy = Math.floor(4 + Math.random()*(grid.H-8));
-    const cz = Math.floor(Math.random()*grid.D);
+    const cx = Math.floor(4 + this._random()*(grid.W-8));
+    const cy = Math.floor(4 + this._random()*(grid.H-8));
+    const cz = Math.floor(this._random()*grid.D);
     for (let dz=-6;dz<=6;dz++) for (let dy=-6;dy<=6;dy++) for (let dx=-6;dx<=6;dx++) {
       if (dx*dx+dy*dy+dz*dz>36 || !grid.inBounds(cx+dx,cy+dy,cz+dz)) continue;
       const cell = grid.cell(cx+dx,cy+dy,cz+dz);
-      cell.entropy  = Math.max(0, cell.entropy  - 0.3 - Math.random()*0.2);
+      cell.entropy  = Math.max(0, cell.entropy  - 0.3 - this._random()*0.2);
       cell.density  = Math.min(1, cell.density  + 0.1);
       cell.set(F.CHEM_STATE, CHEM.SOLID);
       cell.materialId = MAT.CRYSTAL;
@@ -148,8 +178,8 @@ export class WorldEvents {
 
   private _tectonicShift(grid: VoxelGrid) {
     // Shear a horizontal slice — shift density and energy by one column
-    const shiftZ = Math.floor(Math.random() * grid.D);
-    const shift  = Math.random() < 0.5 ? 1 : -1;
+    const shiftZ = Math.floor(this._random() * grid.D);
+    const shift  = this._random() < 0.5 ? 1 : -1;
     for (let y = 0; y < grid.H; y++) {
       const srcX = shift > 0 ? grid.W - 1 : 0;
       const srcCell = grid.cell(srcX, y, shiftZ);
