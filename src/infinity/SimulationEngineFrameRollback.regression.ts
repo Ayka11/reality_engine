@@ -47,6 +47,7 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
     // the surrounding frame path changes and no longer happens to draw from
     // one of these generators before the injected exception.
     (engine.agents as unknown as { _random: () => number })._random();
+    (engine.entityLayer as unknown as { _random: () => number })._random();
     (engine.laws as unknown as { _random: () => number })._random();
     (engine.worldEvents as unknown as { _random: () => number })._random();
     engine.laws.toggleProcess(27, false);
@@ -92,6 +93,7 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
     throw new Error("Selective frame failure did not restore deferred chemistry or LOD state");
   }
   if (after.agents.rngState !== before.agents.rngState ||
+      after.entities.rngState !== before.entities.rngState ||
       after.laws.rngState !== before.laws.rngState ||
       after.worldEvents.rngState !== before.worldEvents.rngState) {
     throw new Error("Selective frame failure did not restore subsystem random generator state");
