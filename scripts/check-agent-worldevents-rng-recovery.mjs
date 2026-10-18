@@ -54,7 +54,7 @@ function runAgentScenario(system, grid) {
   for (let i = 0; i < 18; i++) system.tick(grid, 1 / 60);
   return {
     grid: Array.from(grid.buffer),
-    agents: system.getAgents().map(({ id, ...agent }) => agent),
+    agents: system.getAgents(),
     rngState: system.snapshotRandomState(),
   };
 }
@@ -79,6 +79,20 @@ agentGrid.backBuffer.fill(0);
 agents.restoreRandomState(agentCheckpoint);
 const agentReplay = runAgentScenario(agents, agentGrid);
 assert.deepEqual(agentReplay, agentExpected, "AgentSystem replay must reproduce agents and grid after RNG restore");
+
+const isolatedA = new AgentSystem(0x1111);
+const isolatedB = new AgentSystem(0x2222);
+const isolatedGridA = makeGrid();
+const isolatedGridB = makeGrid();
+isolatedA.seed(isolatedGridA, 1);
+isolatedB.seed(isolatedGridB, 1);
+assert.deepEqual(isolatedA.getAgents().map(agent => agent.id), [1]);
+assert.deepEqual(isolatedB.getAgents().map(agent => agent.id), [1], "agent IDs must be scoped to each AgentSystem instance");
+isolatedB.clear();
+isolatedA.seed(isolatedGridA, 1);
+assert.deepEqual(isolatedA.getAgents().map(agent => agent.id), [1, 2], "clearing another AgentSystem must not reset this instance's ID sequence");
+isolatedB.seed(isolatedGridB, 1);
+assert.deepEqual(isolatedB.getAgents().map(agent => agent.id), [1], "cleared AgentSystem must restart its own ID sequence");
 for (const invalid of [0, -1, 0x100000000]) {
   assert.throws(() => agents.restoreRandomState(invalid), /Invalid AgentSystem PRNG state/);
 }
