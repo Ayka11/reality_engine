@@ -5,7 +5,7 @@ import ts from "typescript";
 const root = new URL("../", import.meta.url);
 const source = await readFile(new URL("src/world/ScriptEngine.ts", root), "utf8");
 const cellModule = `export const CELL_FIELDS=24; export const F={ENERGY:0,DENSITY:1,INFORMATION:2,ENTROPY:3,TEMPERATURE:4,BIO_POTENTIAL:11,SIGNAL:17,MEM_FIELD:18};`;
-const presetModule = `export const Presets={apply(){}};`;
+const presetModule = `export const Presets={apply(grid,name,random=Math.random){if(name==='life'){for(let i=0;i<10;i++)grid.buffer[i*24]=random();}}};`;
 const cellUrl = `data:text/javascript;base64,${Buffer.from(cellModule).toString("base64")}`;
 const presetUrl = `data:text/javascript;base64,${Buffer.from(presetModule).toString("base64")}`;
 let js = ts.transpileModule(source, {
@@ -29,6 +29,7 @@ function makeSimulation() {
 function runScenario(engine) {
   const result=engine.run(`
     world.clear();
+    world.preset('life');
     for (let i=0;i<20;i++) {
       const x=Math.floor(Math.random()*W);
       const y=Math.floor(Math.random()*H);
