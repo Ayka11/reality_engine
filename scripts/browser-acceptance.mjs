@@ -124,6 +124,32 @@ try {
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
+  // Deterministic scientific view-window sampling must be available to the browser runtime.
+  const viewWindowContract = await page.evaluate(() => {
+    const sampleWindow = window.worldFieldViewWindow;
+    if (typeof sampleWindow !== "function" || typeof window.worldFieldSample !== "function" ||
+        typeof window.getWorldViewContract !== "function" || typeof window.setWorldViewSliceY !== "function") {
+      return { error: "World-field view-window API is not exposed" };
+    }
+    const first = sampleWindow(2, 2, 7);
+    const second = sampleWindow(2, 2, 7);
+    return {
+      width: first.width, height: first.height, sliceY: first.sliceY,
+      count: first.samples?.length,
+      allOnSlice: first.samples?.every((sample) => sample.y === 7),
+      deterministic: JSON.stringify(first) === JSON.stringify(second),
+      view: window.getWorldViewContract(),
+    };
+  });
+  if (viewWindowContract.error) throw new Error(viewWindowContract.error);
+  if (viewWindowContract.width !== 2 || viewWindowContract.height !== 2 || viewWindowContract.count !== 4) {
+    throw new Error("World-field view-window sampling returned an invalid grid shape");
+  }
+  if (viewWindowContract.sliceY !== 7 || !viewWindowContract.allOnSlice) {
+    throw new Error("World-field view-window sampling ignored the requested Y slice");
+  }
+  if (!viewWindowContract.deterministic) throw new Error("World-field view-window sampling is not deterministic");
+
   const grips = await page.locator(".sidebar-drag-grip").count();
   if (grips !== 2) throw new Error(`Expected 2 sidebar drag grips, found ${grips}`);
 
