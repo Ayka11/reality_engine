@@ -19,13 +19,6 @@ export interface InfinityScaleGlobalLODTransaction {
   rollbackSnapshot: InfinityScaleLODStateSnapshot;
 }
 
-/**
- * Connects the revisioned hierarchical LOD state to the global frame
- * transaction without making the frame itself an owner of cell data.
- *
- * The transaction can only commit during the boundary-reconciliation phase.
- * A state revision change invalidates the transaction before any write.
- */
 export function beginInfinityScaleGlobalLODTransaction(
   frame: InfinityScaleGlobalExecutionFrame,
   plan: InfinityScaleExecutionPlan,
@@ -53,27 +46,36 @@ export function commitInfinityScaleGlobalLODTransaction(
   transaction: InfinityScaleGlobalLODTransaction,
   frame: InfinityScaleGlobalExecutionFrame,
 ): InfinityScaleLODSynchronizationResult {
-  if (frame.revision !== transaction.frameRevision) {
-    throw new Error("Infinity Scale LOD transaction rejected: frame revision changed");
-  }
-  if (frame.phase !== "boundary-reconciliation") {
-    throw new Error(
-      `Infinity Scale LOD transaction commit requires boundary-reconciliation phase; received ${frame.phase}`,
-    );
-  }
-  if (transaction.committed) {
-    throw new Error("Infinity Scale LOD transaction has already committed");
-  }
-
   try {
+    if (frame.revision !== transaction.frameRevision) {
+      throw new Error("Infinity Scale LOD transaction rejected: frame revision changed");
+    }
+    if (frame.phase !== "boundary-reconciliation") {
+      throw new Error(
+        `Infinity Scale LOD transaction commit requires boundary-reconciliation phase; received ${frame.phase}`,
+      );
+    }
+    if (transaction.committed) {
+      throw new Error("Infinity Scale LOD transaction has already committed");
+    }
+
     const result = transaction.synchronization.commit();
     transaction.committed = true;
     return result;
   } catch (error) {
-    // Synchronization may fail after local CPU writes. Restore the whole frame
-    // snapshot so a failed commit cannot leave partially advanced cell state.
-    transaction.synchronization.rollback();
-    transaction.state.restore(transaction.rollbackSnapshot);
+    // A failed commit must not leave local execution writes or a partial set of
+    // boundary writes in the authoritative state. A previously committed
+    // transaction is never reverted by a duplicate commit attempt.
+    if (!transaction.committed) {
+      try {
+        transaction.synchronization.rollback();
+        transaction.state.restore(transaction.rollbackSnapshot);
+      } catch (rollbackError) {
+        throw new Error(
+          `Infinity Scale LOD commit failed (${String(error)}); rollback also failed (${String(rollbackError)})`,
+        );
+      }
+    }
     throw error;
   }
 }
