@@ -3,6 +3,7 @@ import {
   commitInfinityScaleGlobalLODTransaction,
 } from "./InfinityScaleGlobalLODTransaction";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import { CELL_FIELDS } from "../core/CellState";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
 
@@ -119,6 +120,6 @@ export function runInfinityScaleLODTopologyRevisionRegression(): void {
   const state = new InfinityScaleLODState(4);
   state.ensureChunk("0:0,0,0", 0);
   const transaction = beginInfinityScaleGlobalLODTransaction(frame(), plan(), state);
-  state.writeBaseCell("0:0,0,0", 0, 0, 0, 0, new Float32Array(20));
+  state.writeBaseCell("0:0,0,0", 0, 0, 0, 0, new Float32Array(CELL_FIELDS));
   state.assertRevision(transaction.stateRevision);
 }
