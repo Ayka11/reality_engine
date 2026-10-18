@@ -4,7 +4,7 @@ export default defineConfig({
   base: './',
   build: {
     target: 'esnext',
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         codeSplitting: {
           groups: [
