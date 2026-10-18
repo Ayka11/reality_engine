@@ -44,7 +44,7 @@ export class InfinityScaleAdaptiveTransferCompiler {
       const delta = mutation.toLOD - mutation.fromLOD;
       const ratio = 2 ** Math.abs(delta);
       const operation =
-        delta > 0 ? "TOPOLOGY_PROLONGATION" : "TOPOLOGY_RESTRICTION";
+        delta < 0 ? "TOPOLOGY_PROLONGATION" : "TOPOLOGY_RESTRICTION";
 
       transfers.push({
         transferId: `${mutation.regionId}:${mutation.fromLOD}->${mutation.toLOD}`,

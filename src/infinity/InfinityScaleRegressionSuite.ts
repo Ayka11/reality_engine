@@ -2,7 +2,7 @@ import { runInfinityScaleLODBoundaryCellMapperRegression } from "./InfinityScale
 import { runInfinityScaleLODBoundaryRegression } from "./InfinityScaleLODBoundarySnapshot.regression";
 import { runInfinityScaleMixedLODCPURegression, runInfinityScaleMixedLODCPUProlongationRegression } from "./InfinityScaleMixedLODCPUExecutor.regression";
 import { runInfinityScaleUnifiedTransactionRegression } from "./InfinityScaleUnifiedTransaction.regression";
-import { runInfinityScaleLODResetInvalidationRegression } from "./InfinityScaleLODState.regression";
+import { runInfinityScaleLODResetInvalidationRegression, runInfinityScaleLODTopologyRevisionRegression } from "./InfinityScaleLODState.regression";
 import { runInfinityScaleLODStateRecoveryRegression } from "./InfinityScaleLODStateRecovery.regression";
 import { runAgentSystemRecoveryRegression } from "./AgentSystemRecovery.regression";
 import { runEntityLayerRecoveryRegression } from "./EntityLayerRecovery.regression";
@@ -87,6 +87,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["gpu-boundary-transfer-contract", runInfinityScaleGPUBoundaryTransferContractRegression],
     ["unified-transaction", runInfinityScaleUnifiedTransactionRegression],
     ["lod-reset-invalidation", runInfinityScaleLODResetInvalidationRegression],
+    ["lod-topology-revision", runInfinityScaleLODTopologyRevisionRegression],
     ["lod-state-recovery", runInfinityScaleLODStateRecoveryRegression],
     ["agent-system-recovery", runAgentSystemRecoveryRegression],
     ["entity-layer-recovery", runEntityLayerRecoveryRegression],

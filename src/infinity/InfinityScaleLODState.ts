@@ -125,6 +125,8 @@ export class InfinityScaleLODState {
       cells: new Float32Array(this.chunkSize ** 3 * CELL_FIELDS),
     };
     this.states.set(key, state);
+    // Topology changes invalidate transactions; writes to an existing chunk do not.
+    this.revision += 1;
     return state;
   }
 
@@ -137,7 +139,12 @@ export class InfinityScaleLODState {
   }
 
   deleteChunk(key: string): boolean {
-    return this.states.delete(key);
+    const deleted = this.states.delete(key);
+    if (deleted) {
+      // Removing a chunk changes the topology captured by open transactions.
+      this.revision += 1;
+    }
+    return deleted;
   }
 
   clear(): void {
@@ -166,7 +173,8 @@ export class InfinityScaleLODState {
     if (state.level !== level) {
       throw new Error(`Infinity Scale LOD chunk level mismatch for ${key}`);
     }
-    const [cx, cy, cz] = parseChunkKey(key);
+    const [keyLevel, cx, cy, cz] = parseChunkKey(key);
+    if (keyLevel !== level) throw new Error(`Infinity Scale LOD chunk key level mismatch for ${key}`);
     const scale = state.scale;
 
     const originX = cx * this.chunkSize * scale;
@@ -205,7 +213,8 @@ export class InfinityScaleLODState {
     }
 
     const state = this.ensureChunk(key, level);
-    const [cx, cy, cz] = parseChunkKey(key);
+    const [keyLevel, cx, cy, cz] = parseChunkKey(key);
+    if (keyLevel !== level) throw new Error(`Infinity Scale LOD chunk key level mismatch for ${key}`);
     const scale = state.scale;
 
     const originX = cx * this.chunkSize * scale;
@@ -264,8 +273,8 @@ export class InfinityScaleLODState {
   }
 }
 
-function parseChunkKey(key: string): [number, number, number] {
-  const match = /^(?:\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
+function parseChunkKey(key: string): [number, number, number, number] {
+  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
   if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
+  return [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4])];
 }

@@ -34,6 +34,7 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
   constructor(private readonly plan: InfinityScaleExecutionPlan, private readonly state: InfinityScaleLODState) {}
 
   begin(frame: InfinityScaleGlobalExecutionFrame): InfinityScaleGlobalLODTransaction {
+    if (this.transaction) throw new Error("Adaptive LOD transaction already begun");
     if (frame.planRevision !== this.plan.revision) throw new Error("Adaptive LOD transaction rejected: frame/plan revision mismatch");
     this.transaction = beginInfinityScaleGlobalLODTransaction(frame, this.plan, this.state);
     return this.transaction;
@@ -45,28 +46,53 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
     transfers: InfinityScaleAdaptiveTransferExecution[] = [],
   ): InfinityScaleAdaptiveLODTransactionResult {
     if (!this.transaction) throw new Error("Adaptive LOD transaction has not begun");
-    if (frame.phase !== "boundary-reconciliation") throw new Error("Adaptive LOD transaction commit requires boundary-reconciliation phase");
     const stateRevisionBefore = this.state.getRevision();
-    this.state.assertRevision(this.transaction.stateRevision);
-    const changed = mutations.filter(m => m.fromLOD !== m.toLOD).slice().sort((a, b) => a.regionId.localeCompare(b.regionId));
-    const expectedTransferIds = new Set(changed.map(m => m.regionId + ":" + m.fromLOD + "->" + m.toLOD));
-    const executionById = new Map(transfers.map(t => [t.transferId, t]));
     const createdChunks: string[] = [];
 
-    for (const mutation of changed) {
-      const chunk = this.state.getChunk(mutation.regionId);
-      if (chunk && chunk.level !== mutation.fromLOD) throw new Error("Adaptive LOD state conflict for region: " + mutation.regionId);
-    }
-    for (const execution of transfers) {
-      if (!expectedTransferIds.has(execution.transferId)) throw new Error("Unexpected adaptive transfer: " + execution.transferId);
-    }
-
     try {
+      // Keep all input processing inside cleanup: malformed runtime input must
+      // not leave a failed transaction attached to this bridge.
+      if (!Array.isArray(mutations) || !Array.isArray(transfers)) {
+        throw new Error("Adaptive LOD transaction requires mutation and transfer arrays");
+      }
+      const changed = mutations.filter(m => m.fromLOD !== m.toLOD).slice().sort((a, b) => a.regionId.localeCompare(b.regionId));
+      const expectedTransferIds = new Set(changed.map(m => m.regionId + ":" + m.fromLOD + "->" + m.toLOD));
+      const executionById = new Map(transfers.map(t => [t.transferId, t]));
+
+      // Every rejection after begin must pass through cleanup so this bridge
+      // cannot retain a failed transaction and accidentally reuse it.
+      if (frame.phase !== "boundary-reconciliation") {
+        throw new Error("Adaptive LOD transaction commit requires boundary-reconciliation phase");
+      }
+      this.state.assertRevision(this.transaction.stateRevision);
+      if (changed.length > 0) {
+        throw new Error("Adaptive LOD topology commit is disabled until physical chunk remapping and full-cell transfer are implemented");
+      }
+      for (const mutation of changed) {
+        const chunk = this.state.getChunk(mutation.regionId);
+        if (chunk && chunk.level !== mutation.fromLOD) throw new Error("Adaptive LOD state conflict for region: " + mutation.regionId);
+      }
+      for (const execution of transfers) {
+        if (!expectedTransferIds.has(execution.transferId)) throw new Error("Unexpected adaptive transfer: " + execution.transferId);
+      }
+
       for (const mutation of changed) {
         if (!this.state.hasChunk(mutation.regionId)) {
           this.state.ensureChunk(mutation.regionId, mutation.toLOD);
           createdChunks.push(mutation.regionId);
         }
+      }
+
+      if (createdChunks.length > 0) {
+        // Chunk creation is an owned topology mutation in this transaction.
+        // Rebase only across the exact revision delta caused by these chunks;
+        // any additional change means another mutation raced with this commit.
+        const expectedRevision = this.transaction.stateRevision + createdChunks.length;
+        if (this.state.getRevision() !== expectedRevision) {
+          throw new Error("Adaptive LOD transaction rejected: unexpected state revision during topology staging");
+        }
+        this.transaction.stateRevision = expectedRevision;
+        this.transaction.synchronization.begin(expectedRevision);
       }
 
       for (const mutation of changed) {
@@ -116,7 +142,7 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
 }
 
 function transferOperation(mutation: InfinityScaleAdaptiveMutation): InfinityScaleCompiledTransfer["operation"] {
-  return mutation.toLOD > mutation.fromLOD ? "TOPOLOGY_PROLONGATION" : "TOPOLOGY_RESTRICTION";
+  return mutation.toLOD < mutation.fromLOD ? "TOPOLOGY_PROLONGATION" : "TOPOLOGY_RESTRICTION";
 }
 
 function validateConcreteTransfer(compiled: InfinityScaleCompiledTransfer, execution: InfinityScaleAdaptiveTransferExecution): void {
