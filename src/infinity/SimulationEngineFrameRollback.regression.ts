@@ -101,6 +101,35 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
     throw new Error("Selective frame failure did not restore auxiliary simulation state");
   }
 
+  // Inject a failure after the unified LOD/entity/agent commit barrier has run.
+  // This late failure must restore the complete sparse-grid metadata too, not
+  // merely dense buffers, because chunk access/dirtying can mutate scheduling
+  // and ownership metadata while a frame is in progress.
+  const beforeLateFailure = engine.captureCoreRecoveryState();
+  const originalLawTick = engine.laws.tick.bind(engine.laws);
+  (engine.laws as unknown as { tick: (...args: any[]) => void }).tick = () => {
+    engine.grid.assignChunkOwner("rollback-late-failure", "unexpected-owner");
+    engine.grid.markChunksDirty(["rollback-late-failure"]);
+    engine.grid.getOrCreateChunk(9, 9, 9);
+    throw new Error("intentional late frame rollback regression failure");
+  };
+  let lateFailureRejected = false;
+  try {
+    await engine.step(0.016);
+  } catch (error) {
+    lateFailureRejected = error instanceof Error &&
+      error.message === "intentional late frame rollback regression failure";
+  } finally {
+    engine.laws.tick = originalLawTick;
+  }
+  if (!lateFailureRejected) {
+    throw new Error("Late selective frame failure did not propagate the injected error");
+  }
+  const afterLateFailure = engine.captureCoreRecoveryState();
+  if (JSON.stringify(afterLateFailure) !== JSON.stringify(beforeLateFailure)) {
+    throw new Error("Late selective frame failure did not restore full sparse-grid metadata and subsystem state");
+  }
+
   // A rollback is only useful if the same engine can execute the next frame.
   // The failed frame invalidates transient entity diagnostics; step() must
   // rebuild them during preflight rather than leaving the engine permanently
