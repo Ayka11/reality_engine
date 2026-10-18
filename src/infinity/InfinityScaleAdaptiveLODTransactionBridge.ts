@@ -139,7 +139,7 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
 }
 
 function transferOperation(mutation: InfinityScaleAdaptiveMutation): InfinityScaleCompiledTransfer["operation"] {
-  return mutation.toLOD > mutation.fromLOD ? "TOPOLOGY_PROLONGATION" : "TOPOLOGY_RESTRICTION";
+  return mutation.toLOD < mutation.fromLOD ? "TOPOLOGY_PROLONGATION" : "TOPOLOGY_RESTRICTION";
 }
 
 function validateConcreteTransfer(compiled: InfinityScaleCompiledTransfer, execution: InfinityScaleAdaptiveTransferExecution): void {
