@@ -471,9 +471,9 @@ try {
     throw new Error("Smart Brush geometry settings did not reach ChunkSimWorker with expected runtime parameters");
   }
 
-  // Earlier law/materialization checks switch panels; restore the World panel that owns brush controls.
-  await page.evaluate(() => window.setIconPanel?.("world"));
-  await page.waitForFunction(() => document.querySelector('.icon-btn[data-panel="world"]')?.classList.contains("active"));
+  // Earlier law/materialization checks switch panels; restore the Brushes panel that owns brush geometry controls.
+  await page.evaluate(() => window.setIconPanel?.("brush"));
+  await page.waitForFunction(() => document.querySelector('.icon-btn[data-panel="brush"]')?.classList.contains("active"));
 
   const brushControls = await page.evaluate(() => ({
     geometry: !!document.getElementById("brushGeometry"),
