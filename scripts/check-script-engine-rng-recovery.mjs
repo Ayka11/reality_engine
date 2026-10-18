@@ -8,15 +8,29 @@ const presetsSource = await readFile(new URL("src/world/Presets.ts", root), "utf
 assert.match(source, /Presets\.apply\(grid, name as PresetName, random\)/, "ScriptEngine must inject its seeded RNG into presets");
 assert.match(presetsSource, /static apply\(grid: VoxelGrid, name: PresetName, random: \(\) => number = Math\.random\)/, "Presets must accept an injectable RNG while preserving backward compatibility");
 assert.doesNotMatch(presetsSource, /Math\.random\(\)/, "preset implementations must not bypass the injected RNG");
-const cellModule = `export const CELL_FIELDS=24; export const F={ENERGY:0,DENSITY:1,INFORMATION:2,ENTROPY:3,TEMPERATURE:4,BIO_POTENTIAL:11,SIGNAL:17,MEM_FIELD:18};`;
-const presetModule = `export const Presets={apply(grid,name,random=Math.random){if(name==='life'){for(let i=0;i<10;i++)grid.buffer[i*24]=random();}}};`;
+const cellModule = `export const CELL_FIELDS=24; export const F={ENERGY:0,DENSITY:1,INFORMATION:2,ENTROPY:3,TEMPERATURE:4,BIO_POTENTIAL:11,SIGNAL:17,MEM_FIELD:18,FIELD_X:20,FIELD_Y:21,CHEM_STATE:22};`;
+const materialModule = `export const MAT={VACUUM:0,STONE:1,SAND:2,CRYSTAL:3,METAL:4,MAGMA:5,ICE:6,ORGANIC_TISSUE:7,SPORES:8,MEMBRANE:9,BIOMASS:10,PLASMA:11,SUPERCONDUCTIVE_MATTER:12,INFORMATION_SUBSTRATE:13};`;
+const chemModule = `export const CHEM={GAS:0,LIQUID:1,SOLID:2,ORGANIC:3,REACTIVE:4};`;
 const cellUrl = `data:text/javascript;base64,${Buffer.from(cellModule).toString("base64")}`;
-const presetUrl = `data:text/javascript;base64,${Buffer.from(presetModule).toString("base64")}`;
-let js = ts.transpileModule(source, {
+const materialUrl = `data:text/javascript;base64,${Buffer.from(materialModule).toString("base64")}`;
+const chemUrl = `data:text/javascript;base64,${Buffer.from(chemModule).toString("base64")}`;
+
+const gridSource = await readFile(new URL("src/core/VoxelGrid.ts", root), "utf8");
+let gridJs = ts.transpileModule(gridSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-js = js.replace(/from ['"]\.\.\/core\/CellState['"]/, `from "${cellUrl}"`);
-js = js.replace(/from ['"]\.\/Presets['"]/, `from "${presetUrl}"`);
+gridJs = gridJs.replace(/from ['"]\.\/CellState['"]/, `from "${cellUrl}"`);
+const gridUrl = `data:text/javascript;base64,${Buffer.from(gridJs).toString("base64")}`;
+
+let presetsJs = ts.transpileModule(presetsSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+presetsJs = presetsJs.replace(/from ['"]\.\.\/core\/VoxelGrid['"]/, `from "${gridUrl}"`);
+presetsJs = presetsJs.replace(/from ['"]\.\.\/core\/CellState['"]/, `from "${cellUrl}"`);
+presetsJs = presetsJs.replace(/from ['"]\.\.\/materials\/MaterialDef['"]/, `from "${materialUrl}"`);
+presetsJs = presetsJs.replace(/from ['"]\.\.\/chemistry\/ChemLayer['"]/, `from "${chemUrl}"`);
+const presetUrl = `data:text/javascript;base64,${Buffer.from(presetsJs).toString("base64")}`;
+
 const { ScriptEngine } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
 
 function makeSimulation() {
