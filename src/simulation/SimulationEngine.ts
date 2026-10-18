@@ -253,7 +253,8 @@ export class SimulationEngine {
         snapshot.depth !== this.grid.D ||
         !Number.isInteger(snapshot.tick) || snapshot.tick < 0 ||
         !(snapshot.prevEnergy instanceof Float32Array) ||
-        snapshot.prevEnergy.length !== this.prevEnergy.length) {
+        snapshot.prevEnergy.length !== this.prevEnergy.length ||
+        !snapshot.prevEnergy.every(Number.isFinite)) {
       throw new Error("Invalid SimulationEngine core recovery snapshot");
     }
 
