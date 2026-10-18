@@ -80,6 +80,11 @@ export class InfinityScaleLODSynchronization {
     }
 
     const key = this.updateKey(spec.targetChunk, targetCell);
+    if (this.staged.has(key)) {
+      throw new Error(
+        `Infinity Scale LOD synchronization rejected duplicate target cell ${key}`,
+      );
+    }
     this.staged.set(key, {
       sourceChunk: spec.sourceChunk,
       targetChunk: spec.targetChunk,
