@@ -69,6 +69,18 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
         }
       }
 
+      if (createdChunks.length > 0) {
+        // Chunk creation is an owned topology mutation in this transaction.
+        // Rebase only across the exact revision delta caused by these chunks;
+        // any additional change means another mutation raced with this commit.
+        const expectedRevision = this.transaction.stateRevision + createdChunks.length;
+        if (this.state.getRevision() !== expectedRevision) {
+          throw new Error("Adaptive LOD transaction rejected: unexpected state revision during topology staging");
+        }
+        this.transaction.stateRevision = expectedRevision;
+        this.transaction.synchronization.begin(expectedRevision);
+      }
+
       for (const mutation of changed) {
         const transferId = mutation.regionId + ":" + mutation.fromLOD + "->" + mutation.toLOD;
         const execution = executionById.get(transferId);
