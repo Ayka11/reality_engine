@@ -1,6 +1,6 @@
 import { runInfinityScaleLODBoundaryCellMapperRegression } from "./InfinityScaleLODBoundaryCellMapper.regression";
 import { runInfinityScaleLODBoundaryRegression } from "./InfinityScaleLODBoundarySnapshot.regression";
-import { runInfinityScaleMixedLODCPURegression, runInfinityScaleMixedLODCPUProlongationRegression } from "./InfinityScaleMixedLODCPUExecutor.regression";
+import { runInfinityScaleMixedLODCPURegression, runInfinityScaleMixedLODCPUProlongationRegression, runInfinityScaleMixedLODCPURollbackRegression } from "./InfinityScaleMixedLODCPUExecutor.regression";
 import { runInfinityScaleUnifiedTransactionRegression } from "./InfinityScaleUnifiedTransaction.regression";
 import { runInfinityScaleLODResetInvalidationRegression } from "./InfinityScaleLODState.regression";
 import { runInfinityScaleLODStateRecoveryRegression } from "./InfinityScaleLODStateRecovery.regression";
@@ -83,6 +83,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["lod-boundary-transfer-and-convergence", runInfinityScaleLODBoundaryRegression],
     ["mixed-lod-cpu-restriction", runInfinityScaleMixedLODCPURegression],
     ["mixed-lod-cpu-prolongation", runInfinityScaleMixedLODCPUProlongationRegression],
+    ["mixed-lod-cpu-rollback-after-kernel-failure", runInfinityScaleMixedLODCPURollbackRegression],
     ["lod-transfer-physical-invariants", runInfinityScaleLODTransferInvariantRegression],
     ["gpu-boundary-transfer-contract", runInfinityScaleGPUBoundaryTransferContractRegression],
     ["unified-transaction", runInfinityScaleUnifiedTransactionRegression],
