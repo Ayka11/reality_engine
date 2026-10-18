@@ -57,4 +57,23 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   retryBridge.begin(frame);
   const retried = retryBridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
   if (!retried.committed) throw new Error("LOD bridge could not commit after wrong-phase rejection");
+
+  // A stale-revision rejection must also detach the failed transaction and
+  // allow a new transaction to start from the current state revision.
+  const staleRetryState = new InfinityScaleLODState();
+  const staleRetryBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, staleRetryState);
+  staleRetryBridge.begin(frame);
+  staleRetryState.beginRevision();
+  let retryStaleRejected = false;
+  try {
+    staleRetryBridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
+  } catch (error) {
+    retryStaleRejected = error instanceof Error && error.message.includes("revision");
+  }
+  if (!retryStaleRejected) throw new Error("Stale-revision LOD commit was not rejected");
+  if (staleRetryState.hasChunk("0:0,0,0")) throw new Error("Stale LOD commit leaked a staged chunk");
+
+  staleRetryBridge.begin(frame);
+  const staleRetried = staleRetryBridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
+  if (!staleRetried.committed) throw new Error("LOD bridge could not commit after stale-revision rejection");
 }
