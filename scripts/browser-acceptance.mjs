@@ -471,9 +471,9 @@ try {
     throw new Error("Smart Brush geometry settings did not reach ChunkSimWorker with expected runtime parameters");
   }
 
-  // Brush controls live in the Builder icon panel, not the default World panel.
-  await page.evaluate(() => window.setIconPanel?.("builder"));
-  await page.waitForFunction(() => document.querySelector('.icon-btn[data-panel="builder"]')?.classList.contains("active"));
+  // Earlier law/materialization checks switch panels; restore the World panel that owns brush controls.
+  await page.evaluate(() => window.setIconPanel?.("world"));
+  await page.waitForFunction(() => document.querySelector('.icon-btn[data-panel="world"]')?.classList.contains("active"));
 
   const brushControls = await page.evaluate(() => ({
     geometry: !!document.getElementById("brushGeometry"),
