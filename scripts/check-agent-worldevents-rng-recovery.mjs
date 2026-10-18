@@ -70,10 +70,12 @@ function runEventScenario(events, grid) {
 
 const agents = new AgentSystem(0x1234abcd);
 const agentGrid = makeGrid();
+const agentGridBaseline = agentGrid.buffer.slice();
 const agentCheckpoint = agents.snapshotRandomState();
 const agentExpected = runAgentScenario(agents, agentGrid);
 agents.clear();
-agentGrid.clear();
+agentGrid.buffer.set(agentGridBaseline);
+agentGrid.backBuffer.fill(0);
 agents.restoreRandomState(agentCheckpoint);
 const agentReplay = runAgentScenario(agents, agentGrid);
 assert.deepEqual(agentReplay, agentExpected, "AgentSystem replay must reproduce agents and grid after RNG restore");
