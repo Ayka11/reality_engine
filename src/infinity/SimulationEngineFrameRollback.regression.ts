@@ -110,4 +110,18 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
   if (engine.tick !== tickBeforeRetry + 1) {
     throw new Error("Simulation did not advance after recovering from a failed selective frame");
   }
+
+  // Compare the post-recovery frame with a clean control engine restored from
+  // the exact pre-failure snapshot and given the same immutable execution plan.
+  // This catches hidden RNG offsets and state that merely passes a tick check.
+  const control = new SimulationEngine(4, 4, 2);
+  control.restoreCoreRecoveryState(before);
+  control.setInfinityScaleExecutionPlan(engine.infinityScaleExecutionPlan);
+  await control.step(0.016);
+
+  const recoveredFrame = engine.captureCoreRecoveryState();
+  const controlFrame = control.captureCoreRecoveryState();
+  if (JSON.stringify(recoveredFrame) !== JSON.stringify(controlFrame)) {
+    throw new Error("Post-rollback frame diverged from the clean control simulation");
+  }
 }
