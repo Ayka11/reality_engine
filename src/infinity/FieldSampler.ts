@@ -2,6 +2,7 @@ import { WorldGenerator, BIOME_ID, type Biome } from './WorldGenerator'
 import type { ScientificFieldProvider } from './ScientificFieldProvider'
 import { GeneratorFieldProvider } from './ScientificFieldProvider'
 import { ScientificFieldRegistry } from './ScientificFieldRegistry'
+import { worldViewContract } from './WorldViewContract'
 
 export type ScientificFieldSample = {
   energy: number
@@ -78,6 +79,30 @@ export class FieldSampler {
       biome: climate.biome,
       waterDepth: Math.max(0, this.generator.seaLevel - height),
     }
+  }
+
+
+  /**
+   * Samples a deterministic X/Z window on the selected world-space Y slice.
+   * Pixel centers are mapped through the shared WorldViewContract so drawing
+   * and sampling use the same coordinate transform.
+   */
+  sampleViewWindow(width: number, height: number, sliceY = worldViewContract.snapshot().sliceY) {
+    const safeWidth = Number.isFinite(width) ? Math.max(1, Math.floor(width)) : 1
+    const safeHeight = Number.isFinite(height) ? Math.max(1, Math.floor(height)) : 1
+    const safeSliceY = Number.isFinite(sliceY) ? sliceY : worldViewContract.snapshot().sliceY
+    const view = worldViewContract.snapshot()
+    const samples = new Array<WorldContextSample>(safeWidth * safeHeight)
+    let index = 0
+
+    for (let py = 0; py < safeHeight; py++) {
+      for (let px = 0; px < safeWidth; px++) {
+        const point = worldViewContract.sliceToWorld(px + 0.5, py + 0.5, safeWidth, safeHeight)
+        samples[index++] = this.sampleWorld(point.x, safeSliceY, point.z)
+      }
+    }
+
+    return { view, width: safeWidth, height: safeHeight, sliceY: safeSliceY, samples }
   }
 
   sampleTerrain(x: number, z: number) {
