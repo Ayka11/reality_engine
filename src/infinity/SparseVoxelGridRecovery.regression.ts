@@ -55,6 +55,18 @@ export function runSparseVoxelGridRecoveryRegression(): void {
   }
   if (!rejected) throw new Error("SparseVoxelGrid restore accepted incompatible dimensions");
 
+  const invalidRange = grid.captureState();
+  invalidRange.activeChunkRange = { minX: 3, maxX: -1, minY: 0, maxY: 0, minZ: 0, maxZ: 0 };
+  rejected = false;
+  try {
+    grid.restoreState(invalidRange);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected || grid.activeChunkRange.minX !== -2 || grid.activeChunkRange.maxX !== 4) {
+    throw new Error("SparseVoxelGrid restore accepted an inverted active chunk range or mutated live state");
+  }
+
   const invalidDense = grid.captureState();
   invalidDense.buffer[denseIndex] = Number.NaN;
   rejected = false;
