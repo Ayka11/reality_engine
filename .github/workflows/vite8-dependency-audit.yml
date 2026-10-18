@@ -1,0 +1,37 @@
+name: Vite 8 dependency security audit
+
+on:
+  pull_request:
+    branches:
+      - infinity-scale-real-diagnostics
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/vite8-dependency-audit.yml"
+  push:
+    branches:
+      - codex/vite8-clean-integration-2026-10-18
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/vite8-dependency-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  npm-audit:
+    name: npm audit (moderate and above)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Enforce dependency audit
+        run: npm audit --audit-level=moderate
