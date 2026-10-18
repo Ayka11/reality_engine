@@ -46,12 +46,18 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
   ): InfinityScaleAdaptiveLODTransactionResult {
     if (!this.transaction) throw new Error("Adaptive LOD transaction has not begun");
     const stateRevisionBefore = this.state.getRevision();
-    const changed = mutations.filter(m => m.fromLOD !== m.toLOD).slice().sort((a, b) => a.regionId.localeCompare(b.regionId));
-    const expectedTransferIds = new Set(changed.map(m => m.regionId + ":" + m.fromLOD + "->" + m.toLOD));
-    const executionById = new Map(transfers.map(t => [t.transferId, t]));
     const createdChunks: string[] = [];
 
     try {
+      // Keep all input processing inside cleanup: malformed runtime input must
+      // not leave a failed transaction attached to this bridge.
+      if (!Array.isArray(mutations) || !Array.isArray(transfers)) {
+        throw new Error("Adaptive LOD transaction requires mutation and transfer arrays");
+      }
+      const changed = mutations.filter(m => m.fromLOD !== m.toLOD).slice().sort((a, b) => a.regionId.localeCompare(b.regionId));
+      const expectedTransferIds = new Set(changed.map(m => m.regionId + ":" + m.fromLOD + "->" + m.toLOD));
+      const executionById = new Map(transfers.map(t => [t.transferId, t]));
+
       // Every rejection after begin must pass through cleanup so this bridge
       // cannot retain a failed transaction and accidentally reuse it.
       if (frame.phase !== "boundary-reconciliation") {
