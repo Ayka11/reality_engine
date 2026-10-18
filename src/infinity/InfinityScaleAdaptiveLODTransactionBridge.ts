@@ -45,7 +45,6 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
     transfers: InfinityScaleAdaptiveTransferExecution[] = [],
   ): InfinityScaleAdaptiveLODTransactionResult {
     if (!this.transaction) throw new Error("Adaptive LOD transaction has not begun");
-    if (frame.phase !== "boundary-reconciliation") throw new Error("Adaptive LOD transaction commit requires boundary-reconciliation phase");
     const stateRevisionBefore = this.state.getRevision();
     const changed = mutations.filter(m => m.fromLOD !== m.toLOD).slice().sort((a, b) => a.regionId.localeCompare(b.regionId));
     const expectedTransferIds = new Set(changed.map(m => m.regionId + ":" + m.fromLOD + "->" + m.toLOD));
@@ -53,8 +52,11 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
     const createdChunks: string[] = [];
 
     try {
-      // Put revision and input validation inside the cleanup boundary: a stale
-      // transaction or invalid transfer must not remain attached to this bridge.
+      // Every rejection after begin must pass through cleanup so this bridge
+      // cannot retain a failed transaction and accidentally reuse it.
+      if (frame.phase !== "boundary-reconciliation") {
+        throw new Error("Adaptive LOD transaction commit requires boundary-reconciliation phase");
+      }
       this.state.assertRevision(this.transaction.stateRevision);
       for (const mutation of changed) {
         const chunk = this.state.getChunk(mutation.regionId);
