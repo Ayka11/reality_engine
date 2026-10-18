@@ -46,6 +46,10 @@ export function runSimWorkerRNGRecoveryRegression(): void {
     { name: "zero event ID", events: [{ ...validHistory[0], id: 0 }], evCount: 5, tick: 4 },
     { name: "event ID beyond count", events: [{ ...validHistory[0], id: 6 }], evCount: 5, tick: 4 },
     { name: "non-monotonic IDs", events: [validHistory[1], validHistory[0]], evCount: 5, tick: 4 },
+    { name: "non-monotonic event ticks", events: [
+      { id: 2, tick: 4, x: 0, y: 1, z: 2, delta: 4 },
+      { id: 5, tick: 3, x: 31, y: 23, z: 9, delta: -7 },
+    ], evCount: 5, tick: 4 },
     { name: "future event tick", events: [{ ...validHistory[0], tick: 5 }], evCount: 5, tick: 4 },
     { name: "out-of-bounds coordinate", events: [{ ...validHistory[0], x: 32 }], evCount: 5, tick: 4 },
     { name: "non-finite delta", events: [{ ...validHistory[0], delta: Number.NaN }], evCount: 5, tick: 4 },
