@@ -47,21 +47,23 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
     if (!this.transaction) throw new Error("Adaptive LOD transaction has not begun");
     if (frame.phase !== "boundary-reconciliation") throw new Error("Adaptive LOD transaction commit requires boundary-reconciliation phase");
     const stateRevisionBefore = this.state.getRevision();
-    this.state.assertRevision(this.transaction.stateRevision);
     const changed = mutations.filter(m => m.fromLOD !== m.toLOD).slice().sort((a, b) => a.regionId.localeCompare(b.regionId));
     const expectedTransferIds = new Set(changed.map(m => m.regionId + ":" + m.fromLOD + "->" + m.toLOD));
     const executionById = new Map(transfers.map(t => [t.transferId, t]));
     const createdChunks: string[] = [];
 
-    for (const mutation of changed) {
-      const chunk = this.state.getChunk(mutation.regionId);
-      if (chunk && chunk.level !== mutation.fromLOD) throw new Error("Adaptive LOD state conflict for region: " + mutation.regionId);
-    }
-    for (const execution of transfers) {
-      if (!expectedTransferIds.has(execution.transferId)) throw new Error("Unexpected adaptive transfer: " + execution.transferId);
-    }
-
     try {
+      // Put revision and input validation inside the cleanup boundary: a stale
+      // transaction or invalid transfer must not remain attached to this bridge.
+      this.state.assertRevision(this.transaction.stateRevision);
+      for (const mutation of changed) {
+        const chunk = this.state.getChunk(mutation.regionId);
+        if (chunk && chunk.level !== mutation.fromLOD) throw new Error("Adaptive LOD state conflict for region: " + mutation.regionId);
+      }
+      for (const execution of transfers) {
+        if (!expectedTransferIds.has(execution.transferId)) throw new Error("Unexpected adaptive transfer: " + execution.transferId);
+      }
+
       for (const mutation of changed) {
         if (!this.state.hasChunk(mutation.regionId)) {
           this.state.ensureChunk(mutation.regionId, mutation.toLOD);
