@@ -338,7 +338,11 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'brushApplied') {
-    win['lastChunkBrush'] = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius }
+    win['lastChunkBrush'] = {
+      name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius,
+      geometry: e.data.geometry, falloff: e.data.falloff,
+      verticalExtent: e.data.verticalExtent, operation: e.data.operation,
+    }
     return
   }
 
@@ -438,9 +442,29 @@ nodeEditor.onSelect  = (node) => {
 }
 win['chunkWorkerCompile'] = chunkWorkerCompile
 win['nodeLawEditor']      = nodeEditor
-win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4, strength = 1, trackHistory = false) => {
+win['applyChunkBrush'] = (
+  name: string, x: number, y: number, z = 32, radius = 4, strength = 1,
+  trackHistoryOrOptions: boolean | {
+    geometry?: 'sphere' | 'shell' | 'column' | 'layer'
+    falloff?: 'gaussian' | 'linear' | 'constant'
+    verticalExtent?: 'selected-layer' | 'bounded-volume' | 'full-column'
+    operation?: 'add' | 'set' | 'scale'
+    shellThickness?: number
+    layerThickness?: number
+  } = false,
+  options: {
+    geometry?: 'sphere' | 'shell' | 'column' | 'layer'
+    falloff?: 'gaussian' | 'linear' | 'constant'
+    verticalExtent?: 'selected-layer' | 'bounded-volume' | 'full-column'
+    operation?: 'add' | 'set' | 'scale'
+    shellThickness?: number
+    layerThickness?: number
+  } = {},
+) => {
+  const trackHistory = typeof trackHistoryOrOptions === 'boolean' ? trackHistoryOrOptions : false
+  const brushOptions = typeof trackHistoryOrOptions === 'object' ? trackHistoryOrOptions : options
   if (!trackHistory) clearUiSculptHistory()
-  chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength, trackHistory } })
+  chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength, trackHistory, ...brushOptions } })
 }
 
 win['applyChunkPreset']   = (name: string) => {
