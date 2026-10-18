@@ -52,7 +52,7 @@ export function runInfinityScalePredictionEngineRegression(): void {
   }
 
   const state = replayA.state("replay");
-  if (!state?.lastResult || state.lastResult.modelVersion !== "linear-quadratic-v1") {
+  if (!state?.lastResult || state.lastResult.modelVersion !== "causal-linear-quadratic-v2") {
     throw new Error("Prediction provenance state was not retained");
   }
 }

@@ -23,6 +23,11 @@ interface ChunkRange {
   maxY: number;
   minZ: number;
   maxZ: number;
+  level: number;
+  chunkSize: number;
+  keyX: number;
+  keyY: number;
+  keyZ: number;
 }
 
 export function resolveInfinityScaleBoundaryFaceGeometry(
@@ -32,18 +37,42 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
   const target = rangeForChunk(spec.targetChunk, chunkSize);
   const source = rangeForChunk(spec.sourceChunk, chunkSize);
   const scale = 2 ** spec.targetLevel;
-  const x0 = Math.max(target.minX, source.minX);
-  const x1 = Math.min(target.maxX, source.maxX);
-  const y0 = Math.max(target.minY, source.minY);
-  const y1 = Math.min(target.maxY, source.maxY);
-  const z0 = Math.max(target.minZ, source.minZ);
-  const z1 = Math.min(target.maxZ, source.maxZ);
-  if (target.maxX + 1 === source.minX && y0 <= y1 && z0 <= z1) return { axis: 0, coordinate: target.maxX, minU: y0, maxU: y1, minV: z0, maxV: z1, scale };
-  if (source.maxX + 1 === target.minX && y0 <= y1 && z0 <= z1) return { axis: 0, coordinate: target.minX, minU: y0, maxU: y1, minV: z0, maxV: z1, scale };
-  if (target.maxY + 1 === source.minY && x0 <= x1 && z0 <= z1) return { axis: 1, coordinate: target.maxY, minU: x0, maxU: x1, minV: z0, maxV: z1, scale };
-  if (source.maxY + 1 === target.minY && x0 <= x1 && z0 <= z1) return { axis: 1, coordinate: target.minY, minU: x0, maxU: x1, minV: z0, maxV: z1, scale };
-  if (target.maxZ + 1 === source.minZ && x0 <= x1 && y0 <= y1) return { axis: 2, coordinate: target.maxZ, minU: x0, maxU: x1, minV: y0, maxV: y1, scale };
-  if (source.maxZ + 1 === target.minZ && x0 <= x1 && y0 <= y1) return { axis: 2, coordinate: target.minZ, minU: x0, maxU: x1, minV: y0, maxV: y1, scale };
+
+  type Axis = 0 | 1 | 2;
+  const axes: Axis[] = [0, 1, 2];
+  const mins = (r: ChunkRange): [number, number, number] => [r.minX, r.minY, r.minZ];
+  const maxs = (r: ChunkRange): [number, number, number] => [r.maxX, r.maxY, r.maxZ];
+  const tMin = mins(target), tMax = maxs(target);
+  const sMin = mins(source), sMax = maxs(source);
+
+  for (const axis of axes) {
+    const tangents = axes.filter(a => a !== axis);
+    const tangentialOverlap = tangents.every(a =>
+      Math.min(tMax[a], sMax[a]) - Math.max(tMin[a], sMin[a]) + 1 >= scale
+    );
+    if (!tangentialOverlap) continue;
+
+    let coordinate: number | null = null;
+    if (tMax[axis] + 1 === sMin[axis]) {
+      coordinate = tMax[axis];
+    } else if (sMax[axis] + 1 === tMin[axis]) {
+      coordinate = tMin[axis];
+    }
+
+
+    if (coordinate !== null) {
+      const tangentialAxes = axes.filter(a => a !== axis);
+      return {
+        axis,
+        coordinate,
+        minU: Math.max(tMin[tangentialAxes[0]], sMin[tangentialAxes[0]]),
+        maxU: Math.min(tMax[tangentialAxes[0]], sMax[tangentialAxes[0]]),
+        minV: Math.max(tMin[tangentialAxes[1]], sMin[tangentialAxes[1]]),
+        maxV: Math.min(tMax[tangentialAxes[1]], sMax[tangentialAxes[1]]),
+        scale,
+      };
+    }
+  }
   return null;
 }
 
@@ -58,16 +87,26 @@ export function isInfinityScaleSourceBoundaryCell(
   const source = rangeForChunk(spec.sourceChunk, chunkSize);
   const [x, y, z] = targetCell;
 
+  // Execution-context callers can address the dependency from either side:
+  // the source chunk's outer cell (solver-side lookup) or the target face cell
+  // (simulation-side lookup). Accept only those two canonical face planes;
+  // never broaden the test to an interior cell or a corner-only adjacency.
   if (face.axis === 0) {
     const sourceCoordinate = source.maxX < face.coordinate ? source.maxX : source.minX;
-    return x === sourceCoordinate && y >= face.minU && y <= face.maxU && z >= face.minV && z <= face.maxV;
+    return (x === sourceCoordinate || x === face.coordinate) &&
+      y >= face.minU && y <= face.maxU &&
+      z >= face.minV && z <= face.maxV;
   }
   if (face.axis === 1) {
     const sourceCoordinate = source.maxY < face.coordinate ? source.maxY : source.minY;
-    return y === sourceCoordinate && x >= face.minU && x <= face.maxU && z >= face.minV && z <= face.maxV;
+    return (y === sourceCoordinate || y === face.coordinate) &&
+      x >= face.minU && x <= face.maxU &&
+      z >= face.minV && z <= face.maxV;
   }
   const sourceCoordinate = source.maxZ < face.coordinate ? source.maxZ : source.minZ;
-  return z === sourceCoordinate && x >= face.minU && x <= face.maxU && y >= face.minV && y <= face.maxV;
+  return (z === sourceCoordinate || z === face.coordinate) &&
+    x >= face.minU && x <= face.maxU &&
+    y >= face.minV && y <= face.maxV;
 }
 
 /** Backward-compatible alias; new solver code should use the explicit source-side name. */
@@ -141,6 +180,18 @@ export class InfinityScaleLODBoundaryCellMapper {
     return mapInfinityScaleBoundaryCell(spec, targetCell, this.chunkSize);
   }
 
+  resolveValues(
+    spec: InfinityScaleBoundaryTransferSpec,
+    targetCell: [number, number, number],
+  ): ReadonlyArray<ReadonlyArray<number>> {
+    const mapping = this.map(spec, targetCell);
+    return mapping.sourceCells.map(([x, y, z]) => {
+      const values = this.state.readBaseCell(spec.sourceChunk, spec.sourceLevel, x, y, z);
+      if (!values) throw new Error(`Infinity Scale boundary source cell is missing: ${spec.sourceChunk}:${x},${y},${z}`);
+      return Array.from(values);
+    });
+  }
+
   enumerateTargetFaceCells(
     spec: InfinityScaleBoundaryTransferSpec,
     gridWidth: number,
@@ -158,4 +209,59 @@ export class InfinityScaleLODBoundaryCellMapper {
     }
     return cells;
   }
+}
+
+
+function rangeForChunk(key: string, chunkSize: number): ChunkRange {
+  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
+  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
+  const level = Number(match[1]);
+  if (!Number.isInteger(level) || level < 0 || level > 30) throw new Error(`Invalid Infinity Scale LOD level: ${match[1]}`);
+  const keyX = Number(match[2]), keyY = Number(match[3]), keyZ = Number(match[4]);
+  const extent = chunkSize * (2 ** level);
+  const x = keyX * extent, y = keyY * extent, z = keyZ * extent;
+  return { minX: x, maxX: x + extent - 1, minY: y, maxY: y + extent - 1, minZ: z, maxZ: z + extent - 1, level, chunkSize, keyX, keyY, keyZ };
+}
+function sharedFaceAxis(a: ChunkRange, b: ChunkRange): 0 | 1 | 2 | null {
+  const overlapsX = a.minX <= b.maxX && a.maxX >= b.minX;
+  const overlapsY = a.minY <= b.maxY && a.maxY >= b.minY;
+  const overlapsZ = a.minZ <= b.maxZ && a.maxZ >= b.minZ;
+
+  // Same-LOD chunks use neighboring chunk indices.
+  if (a.level === b.level) {
+    if (Math.abs(a.keyX - b.keyX) === 1 && a.keyY === b.keyY && a.keyZ === b.keyZ) return 0;
+    if (Math.abs(a.keyY - b.keyY) === 1 && a.keyX === b.keyX && a.keyZ === b.keyZ) return 1;
+    if (Math.abs(a.keyZ - b.keyZ) === 1 && a.keyX === b.keyX && a.keyY === b.keyY) return 2;
+    return null;
+  }
+
+  // Cross-LOD neighbours can have either touching ranges or a fine chunk
+  // embedded in the outermost slice of a coarse chunk. Require that the
+  // smaller chunk occupies the coarse chunk's exterior plane and shares the
+  // other two chunk-origin coordinates; a diagonal/edge-only contact fails.
+  if ((a.maxX + 1 === b.minX || b.maxX + 1 === a.minX) && overlapsY && overlapsZ) return 0;
+  if ((a.maxY + 1 === b.minY || b.maxY + 1 === a.minY) && overlapsX && overlapsZ) return 1;
+  if ((a.maxZ + 1 === b.minZ || b.maxZ + 1 === a.minZ) && overlapsX && overlapsY) return 2;
+
+  if (a.maxX === b.maxX && overlapsY && overlapsZ) {
+    const sameTangentialOrigin = a.keyY === b.keyY && a.keyZ === b.keyZ;
+    if (sameTangentialOrigin) return 0;
+  }
+  if (a.maxY === b.maxY && overlapsX && overlapsZ) {
+    const sameTangentialOrigin = a.keyX === b.keyX && a.keyZ === b.keyZ;
+    if (sameTangentialOrigin) return 1;
+  }
+  if (a.maxZ === b.maxZ && overlapsX && overlapsY) {
+    const sameTangentialOrigin = a.keyX === b.keyX && a.keyY === b.keyY;
+    if (sameTangentialOrigin) return 2;
+  }
+  return null;
+}
+function floorToScale(value: number, scale: number): number { return Math.floor(value / scale) * scale; }
+function sourceFaceCoordinate(source: ChunkRange, target: ChunkRange, axis: 0 | 1 | 2, sourceScale: number): number {
+  const sMin = axis === 0 ? source.minX : axis === 1 ? source.minY : source.minZ;
+  const sMax = axis === 0 ? source.maxX : axis === 1 ? source.maxY : source.maxZ;
+  const tMin = axis === 0 ? target.minX : axis === 1 ? target.minY : target.minZ;
+  const raw = sMax < tMin ? sMax : sMin;
+  return floorToScale(raw, sourceScale);
 }

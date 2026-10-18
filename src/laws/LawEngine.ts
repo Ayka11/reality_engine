@@ -10,14 +10,36 @@ function evalCond(c: LawCondition, m: WorldMetrics): boolean {
   return v <= c.value;
 }
 
-function uid() { return 'law_' + Math.random().toString(36).slice(2, 9); }
+function uid(random: () => number) { return 'law_' + random().toString(36).slice(2, 9); }
+
+
+export interface LawEngineSnapshot {
+  laws: MetaLaw[];
+  lawOverrides: Array<[string, 'on' | 'off']>;
+  manualOn: number[];
+  manualOff: number[];
+  graphProcessIds: number[] | null;
+  rngState: number;
+}
+
+function cloneLaw(law: MetaLaw): MetaLaw {
+  return {
+    ...law,
+    conditions: law.conditions.map(condition => ({ ...condition })),
+    enablesProcesses: [...law.enablesProcesses],
+    disablesProcesses: [...law.disablesProcesses],
+    paramOverrides: { ...law.paramOverrides },
+  };
+}
 
 export class LawEngine {
   laws: MetaLaw[];
   private _mask = 0;
   private _params: PhysicsParams = { ...DEFAULT_PARAMS };
+  private _rngState: number;
 
-  constructor() {
+  constructor(seed = 0x6d2b79f5) {
+    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6d2b79f5 : 0x6d2b79f5;
     this.laws = this._defaultLaws();
     this._recompute();
   }
@@ -86,6 +108,117 @@ export class LawEngine {
     ];
   }
 
+
+  private _random(): number {
+    // xorshift32: small, serializable PRNG for deterministic law evolution.
+    let x = this._rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this._rngState = x >>> 0;
+    return this._rngState / 0x100000000;
+  }
+
+  snapshot(): LawEngineSnapshot {
+    return {
+      laws: this.laws.map(cloneLaw),
+      lawOverrides: [...this._lawOverride.entries()].filter(
+        (entry): entry is [string, 'on' | 'off'] => entry[1] !== 'auto',
+      ),
+      manualOn: [...this._manualOn],
+      manualOff: [...this._manualOff],
+      graphProcessIds: this._graphProcessIds ? [...this._graphProcessIds] : null,
+      rngState: this._rngState,
+    };
+  }
+
+  restore(snapshot: LawEngineSnapshot): void {
+    if (!snapshot || !Array.isArray(snapshot.laws) ||
+        !Array.isArray(snapshot.lawOverrides) ||
+        !Array.isArray(snapshot.manualOn) ||
+        !Array.isArray(snapshot.manualOff) ||
+        !(snapshot.graphProcessIds === null || Array.isArray(snapshot.graphProcessIds)) ||
+        !Number.isSafeInteger(snapshot.rngState) || snapshot.rngState <= 0 || snapshot.rngState > 0xffffffff) {
+      throw new Error("Invalid LawEngine snapshot");
+    }
+
+    const laws = snapshot.laws.map(law => {
+      if (!law || typeof law.id !== "string" || !law.id ||
+          typeof law.name !== "string" ||
+          typeof law.active !== "boolean" ||
+          !Array.isArray(law.conditions) ||
+          !Array.isArray(law.enablesProcesses) ||
+          !Array.isArray(law.disablesProcesses) ||
+          !law.paramOverrides || typeof law.paramOverrides !== "object" ||
+          !Number.isFinite(law.fitness) || !Number.isFinite(law.age) ||
+          !Number.isFinite(law.mutationRate) || !Number.isSafeInteger(law.generation) ||
+          typeof law.color !== "string") {
+        throw new Error("Invalid LawEngine law entry");
+      }
+      for (const condition of law.conditions) {
+        if (!condition ||
+            !["totalEnergy", "avgEntropy", "avgInfo", "avgDensity", "avgBio", "tick"].includes(condition.metric) ||
+            !["gt", "lt", "gte", "lte"].includes(condition.op) ||
+            !Number.isFinite(condition.value)) {
+          throw new Error("Invalid LawEngine condition");
+        }
+      }
+      for (const pid of [...law.enablesProcesses, ...law.disablesProcesses]) {
+        if (!Number.isSafeInteger(pid) || pid < 0) throw new Error("Invalid LawEngine process id");
+      }
+      for (const value of Object.values(law.paramOverrides)) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          throw new Error("Invalid LawEngine parameter override");
+        }
+      }
+      return cloneLaw(law);
+    });
+
+    const ids = new Set<string>();
+    for (const law of laws) {
+      if (ids.has(law.id)) throw new Error("Duplicate LawEngine law id");
+      ids.add(law.id);
+    }
+
+    const lawOverrides = new Map<string, 'on' | 'off'>();
+    for (const entry of snapshot.lawOverrides) {
+      if (!Array.isArray(entry) || entry.length !== 2 ||
+          typeof entry[0] !== "string" || !ids.has(entry[0]) ||
+          (entry[1] !== "on" && entry[1] !== "off") ||
+          lawOverrides.has(entry[0])) {
+        throw new Error("Invalid LawEngine override");
+      }
+      lawOverrides.set(entry[0], entry[1]);
+    }
+
+    const validateProcessSet = (values: number[], name: string): Set<number> => {
+      const result = new Set<number>();
+      for (const value of values) {
+        if (!Number.isSafeInteger(value) || value < 0 || result.has(value)) {
+          throw new Error("Invalid LawEngine " + name);
+        }
+        result.add(value);
+      }
+      return result;
+    };
+    const manualOn = validateProcessSet(snapshot.manualOn, "manual-on set");
+    const manualOff = validateProcessSet(snapshot.manualOff, "manual-off set");
+    for (const pid of manualOn) {
+      if (manualOff.has(pid)) throw new Error("Conflicting LawEngine manual overrides");
+    }
+    const graphProcessIds = snapshot.graphProcessIds === null
+      ? null
+      : validateProcessSet(snapshot.graphProcessIds, "graph process set");
+
+    this.laws = laws;
+    this._lawOverride = lawOverrides;
+    this._manualOn = manualOn;
+    this._manualOff = manualOff;
+    this._graphProcessIds = graphProcessIds;
+    this._rngState = snapshot.rngState >>> 0;
+    this._recompute();
+  }
+
   tick(metrics: WorldMetrics, elapsedTicks = 1): void {
     let dirty = false;
     for (const law of this.laws) {
@@ -114,7 +247,7 @@ export class LawEngine {
       // opportunities: 1 - (1-r)^n.
       if (
         law.mutationRate > 0 &&
-        Math.random() < 1 - Math.pow(1 - law.mutationRate, Math.max(1, elapsedTicks))
+        this._random() < 1 - Math.pow(1 - law.mutationRate, Math.max(1, elapsedTicks))
       ) {
         this._mutate(law);
         dirty = true;
@@ -126,15 +259,15 @@ export class LawEngine {
   private _mutate(law: MetaLaw): void {
     // Drift a random condition threshold ±8%
     if (law.conditions.length > 0) {
-      const c = law.conditions[Math.floor(Math.random() * law.conditions.length)];
-      c.value *= 0.92 + Math.random() * 0.16;
+      const c = law.conditions[Math.floor(this._random() * law.conditions.length)];
+      c.value *= 0.92 + this._random() * 0.16;
     }
 
     // Drift a random param override ±15%
     const keys = Object.keys(law.paramOverrides) as (keyof PhysicsParams)[];
     if (keys.length > 0) {
-      const k = keys[Math.floor(Math.random() * keys.length)];
-      (law.paramOverrides as Record<string, number>)[k] *= 0.85 + Math.random() * 0.3;
+      const k = keys[Math.floor(this._random() * keys.length)];
+      (law.paramOverrides as Record<string, number>)[k] *= 0.85 + this._random() * 0.3;
     }
     law.generation++;
   }
@@ -170,24 +303,24 @@ export class LawEngine {
     if (!parent) return null;
 
     const child: MetaLaw = JSON.parse(JSON.stringify(parent));
-    child.id = uid();
+    child.id = uid(() => this._random());
     child.parentId = parent.id;
     child.generation = parent.generation + 1;
     child.fitness = 0.2;
     child.age = 0;
-    child.mutationRate = Math.min(0.01, parent.mutationRate * (0.6 + Math.random() * 0.8));
+    child.mutationRate = Math.min(0.01, parent.mutationRate * (0.6 + this._random() * 0.8));
     child.name = parent.name + '+';
 
     // Mutate a condition value aggressively
     if (child.conditions.length > 0) {
-      const c = child.conditions[Math.floor(Math.random() * child.conditions.length)];
-      c.value *= 0.5 + Math.random() * 1.0;
+      const c = child.conditions[Math.floor(this._random() * child.conditions.length)];
+      c.value *= 0.5 + this._random() * 1.0;
     }
 
     // Possibly add/remove a process
     const mutableProcs = PROCESS_LIBRARY.filter(p => p.mutable);
-    const rp = mutableProcs[Math.floor(Math.random() * mutableProcs.length)];
-    if (Math.random() < 0.5) {
+    const rp = mutableProcs[Math.floor(this._random() * mutableProcs.length)];
+    if (this._random() < 0.5) {
       if (!child.enablesProcesses.includes(rp.id)) child.enablesProcesses.push(rp.id);
     } else {
       child.enablesProcesses = child.enablesProcesses.filter(p => p !== rp.id);

@@ -12,6 +12,8 @@ export interface InfinityScaleLODBoundaryUpdate {
   sourceChunk: string;
   targetChunk: string;
   relation: "same-level" | "coarse-to-fine" | "fine-to-coarse";
+  sourceLevel: number;
+  targetLevel: number;
   targetCell: [number, number, number];
   value: Float32Array;
   sourceCells: Float32Array[];
@@ -45,7 +47,7 @@ export class InfinityScaleLODSynchronization {
   stageTransfer(
     spec: InfinityScaleBoundaryTransferSpec,
     targetCell: [number, number, number],
-    sourceCells: ReadonlyArray<ReadonlyArray<number>>,
+    sourceCells: ReadonlyArray<ArrayLike<number>>,
   ): void {
     InfinityScaleLODTransfer.validateSpec(spec);
 
@@ -78,10 +80,17 @@ export class InfinityScaleLODSynchronization {
     }
 
     const key = this.updateKey(spec.targetChunk, targetCell);
+    if (this.staged.has(key)) {
+      throw new Error(
+        `Infinity Scale LOD synchronization rejected duplicate target cell ${key}`,
+      );
+    }
     this.staged.set(key, {
       sourceChunk: spec.sourceChunk,
       targetChunk: spec.targetChunk,
       relation: spec.relation,
+      sourceLevel: spec.sourceLevel,
+      targetLevel: spec.targetLevel,
       targetCell: [...targetCell],
       value: target,
       sourceCells: sourceCells.map(source => new Float32Array(source)),
@@ -127,9 +136,9 @@ export class InfinityScaleLODSynchronization {
           if (update.relation === "coarse-to-fine" && sources.length === 1) {
             expected /= Math.max(1, refinementRatio(update) ** 3);
           } else if (update.relation === "fine-to-coarse") {
-            // Boundary restriction samples a face footprint (ratio^2), not a
-            // complete volume. The face operator therefore uses the mean.
-            expected /= sources.length;
+            // Extensive quantities remain additive across the ratio^2 face
+            // footprint. Intensive quantities use the average branch above;
+            // dividing an extensive field here would contradict restrictFace.
           }
         } else if (semantics.conservation === "average") {
           for (const source of sources) expected += source[field] ?? 0;

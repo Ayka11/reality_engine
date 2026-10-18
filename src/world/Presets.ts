@@ -13,7 +13,19 @@ export type PresetName =
   | 'self_replicating_field' | 'causality_collapse';
 
 export class Presets {
-  static apply(grid: VoxelGrid, name: PresetName): void {
+  private static _rngState = 0x5eeda11;
+
+  private static _random(): number {
+    let x = this._rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this._rngState = x >>> 0;
+    return this._rngState / 0x100000000;
+  }
+
+  static apply(grid: VoxelGrid, name: PresetName, seed = 0x5eeda11): void {
+    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x5eeda11 : 0x5eeda11;
     grid.clear();
     switch (name) {
       case 'burst':                this._burst(grid);              break;
@@ -69,14 +81,14 @@ export class Presets {
 
   private static _life(grid: VoxelGrid) {
     for (let i=0;i<40;i++) {
-      const x=Math.floor(6+Math.random()*(grid.W-12));
-      const y=Math.floor(6+Math.random()*(grid.H-12));
-      const z=Math.floor(grid.D*0.3+Math.random()*grid.D*0.4);
-      const e=200+Math.random()*600;
+      const x=Math.floor(6+this._random()*(grid.W-12));
+      const y=Math.floor(6+this._random()*(grid.H-12));
+      const z=Math.floor(grid.D*0.3+this._random()*grid.D*0.4);
+      const e=200+this._random()*600;
       const cell=grid.cell(x,y,z);
-      cell.energy=e; cell.density=0.3+Math.random()*0.6;
-      cell.information=e*0.3; cell.temperature=100+Math.random()*200;
-      cell.entropy=Math.random()*0.3;
+      cell.energy=e; cell.density=0.3+this._random()*0.6;
+      cell.information=e*0.3; cell.temperature=100+this._random()*200;
+      cell.entropy=this._random()*0.3;
     }
   }
 
@@ -96,23 +108,23 @@ export class Presets {
   private static _entropyStorm(grid: VoxelGrid) {
     for (let z=0;z<grid.D;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const cell=grid.cell(x,y,z);
-      cell.energy=Math.random()*800; cell.entropy=0.3+Math.random()*0.6;
-      cell.temperature=Math.random()*400; cell.density=Math.random()*0.8;
+      cell.energy=this._random()*800; cell.entropy=0.3+this._random()*0.6;
+      cell.temperature=this._random()*400; cell.density=this._random()*0.8;
     }
   }
 
   private static _ecosystem(grid: VoxelGrid) {
     for (let z=0;z<3;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const cell=grid.cell(x,y,z);
-      cell.density=0.7+Math.random()*0.3; cell.energy=50+Math.random()*100;
-      cell.temperature=50+Math.random()*50;
+      cell.density=0.7+this._random()*0.3; cell.energy=50+this._random()*100;
+      cell.temperature=50+this._random()*50;
     }
     for (let i=0;i<20;i++) {
-      const x=Math.floor(Math.random()*grid.W), y=Math.floor(Math.random()*grid.H);
-      const z=3+Math.floor(Math.random()*4);
+      const x=Math.floor(this._random()*grid.W), y=Math.floor(this._random()*grid.H);
+      const z=3+Math.floor(this._random()*4);
       const cell=grid.cell(x,y,z);
-      cell.energy=300+Math.random()*400; cell.density=0.4+Math.random()*0.4;
-      cell.information=100+Math.random()*200; cell.bioPotential=0.5+Math.random()*0.4;
+      cell.energy=300+this._random()*400; cell.density=0.4+this._random()*0.4;
+      cell.information=100+this._random()*200; cell.bioPotential=0.5+this._random()*0.4;
     }
   }
 
@@ -121,10 +133,10 @@ export class Presets {
   private static _plasmaUniverse(grid: VoxelGrid) {
     for (let z=0;z<grid.D;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const cell=grid.cell(x,y,z);
-      cell.energy=2000+Math.random()*5000;
-      cell.temperature=3000+Math.random()*6000;
-      cell.density=0.05+Math.random()*0.15;
-      cell.entropy=0.6+Math.random()*0.3;
+      cell.energy=2000+this._random()*5000;
+      cell.temperature=3000+this._random()*6000;
+      cell.density=0.05+this._random()*0.15;
+      cell.entropy=0.6+this._random()*0.3;
       cell.materialId=MAT.PLASMA;
       cell.set(F.CHEM_STATE, CHEM.GAS);
     }
@@ -134,10 +146,10 @@ export class Presets {
     for (let z=0;z<grid.D;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const cell=grid.cell(x,y,z);
       const isBase = z < 4;
-      cell.density   = isBase ? 0.9+Math.random()*0.1 : 0.1+Math.random()*0.3;
-      cell.temperature = 5+Math.random()*20;
-      cell.energy    = 10+Math.random()*30;
-      cell.entropy   = 0.01+Math.random()*0.05;
+      cell.density   = isBase ? 0.9+this._random()*0.1 : 0.1+this._random()*0.3;
+      cell.temperature = 5+this._random()*20;
+      cell.energy    = 10+this._random()*30;
+      cell.entropy   = 0.01+this._random()*0.05;
       cell.materialId = isBase ? MAT.ICE : MAT.VACUUM;
       cell.set(F.CHEM_STATE, isBase ? CHEM.SOLID : CHEM.GAS);
     }
@@ -147,8 +159,8 @@ export class Presets {
     for (let z=0;z<grid.D;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const cell=grid.cell(x,y,z);
       const depth=z/grid.D;
-      cell.density = 0.9-depth*0.4+Math.random()*0.05;
-      cell.energy  = 100+depth*500+Math.random()*200;
+      cell.density = 0.9-depth*0.4+this._random()*0.05;
+      cell.energy  = 100+depth*500+this._random()*200;
       cell.temperature = 50+depth*800;
       cell.materialId = z < 2 ? MAT.METAL : z < 6 ? MAT.STONE : MAT.VACUUM;
     }
@@ -157,9 +169,9 @@ export class Presets {
   private static _lowEntropyVacuum(grid: VoxelGrid) {
     // Nearly empty universe — just a few seed energy clusters
     for (let i=0;i<8;i++) {
-      const x=Math.floor(4+Math.random()*(grid.W-8));
-      const y=Math.floor(4+Math.random()*(grid.H-8));
-      const z=Math.floor(4+Math.random()*(grid.D-8));
+      const x=Math.floor(4+this._random()*(grid.W-8));
+      const y=Math.floor(4+this._random()*(grid.H-8));
+      const z=Math.floor(4+this._random()*(grid.D-8));
       for (let dz=-2;dz<=2;dz++) for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++) {
         if (!grid.inBounds(x+dx,y+dy,z+dz)) continue;
         const d=Math.sqrt(dx*dx+dy*dy+dz*dz);
@@ -181,17 +193,17 @@ export class Presets {
     }
     // Mycelial threads — sinusoidal paths
     for (let thread=0;thread<12;thread++) {
-      const sx=Math.floor(Math.random()*grid.W);
-      let y=Math.floor(Math.random()*grid.H), z=3;
+      const sx=Math.floor(this._random()*grid.W);
+      let y=Math.floor(this._random()*grid.H), z=3;
       for (let x=sx;x<grid.W&&x>=0;x+=thread%2===0?1:-1) {
         if (!grid.inBounds(x,y,z)) break;
         const cell=grid.cell(x,y,z);
-        cell.bioPotential=0.6+Math.random()*0.3; cell.information=80+Math.random()*120;
+        cell.bioPotential=0.6+this._random()*0.3; cell.information=80+this._random()*120;
         cell.energy=200; cell.materialId=MAT.ORGANIC_TISSUE;
         cell.set(F.CHEM_STATE, CHEM.ORGANIC);
-        cell.set(F.SIGNAL, 30+Math.random()*40);
-        y=Math.max(0,Math.min(grid.H-1,y+(Math.random()<0.4?Math.round(Math.random()*2-1):0)));
-        z=Math.max(3,Math.min(grid.D-1,z+(Math.random()<0.2?1:0)));
+        cell.set(F.SIGNAL, 30+this._random()*40);
+        y=Math.max(0,Math.min(grid.H-1,y+(this._random()<0.4?Math.round(this._random()*2-1):0)));
+        z=Math.max(3,Math.min(grid.D-1,z+(this._random()<0.2?1:0)));
       }
     }
   }
@@ -207,8 +219,8 @@ export class Presets {
     }
     // Thermal vents
     for (let i=0;i<5;i++) {
-      const vx=Math.floor(4+Math.random()*(grid.W-8));
-      const vy=Math.floor(4+Math.random()*(grid.H-8));
+      const vx=Math.floor(4+this._random()*(grid.W-8));
+      const vy=Math.floor(4+this._random()*(grid.H-8));
       for (let z=0;z<8;z++) {
         const cell=grid.cell(vx,vy,z);
         cell.energy=400+z*50; cell.temperature=600+z*80;
@@ -221,16 +233,16 @@ export class Presets {
   private static _toxicEcosystem(grid: VoxelGrid) {
     for (let z=0;z<grid.D;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const cell=grid.cell(x,y,z);
-      cell.entropy=0.4+Math.random()*0.4;
-      cell.temperature=120+Math.random()*80;
-      cell.density=0.2+Math.random()*0.3;
-      cell.energy=100+Math.random()*200;
+      cell.entropy=0.4+this._random()*0.4;
+      cell.temperature=120+this._random()*80;
+      cell.density=0.2+this._random()*0.3;
+      cell.energy=100+this._random()*200;
       cell.materialId=MAT.SPORES;
       cell.set(F.CHEM_STATE, CHEM.REACTIVE);
     }
     // Adapted survivors
     for (let i=0;i<15;i++) {
-      const x=Math.floor(Math.random()*grid.W), y=Math.floor(Math.random()*grid.H);
+      const x=Math.floor(this._random()*grid.W), y=Math.floor(this._random()*grid.H);
       const cell=grid.cell(x,y,Math.floor(grid.D/2));
       cell.bioPotential=0.8; cell.information=200; cell.entropy=0.1;
       cell.materialId=MAT.MEMBRANE; cell.set(F.CHEM_STATE, CHEM.ORGANIC);
@@ -270,14 +282,14 @@ export class Presets {
     // Molecular cloud with collapsing cores
     for (let z=0;z<grid.D;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const cell=grid.cell(x,y,z);
-      cell.density=0.01+Math.random()*0.05; cell.temperature=10+Math.random()*20;
-      cell.energy=5+Math.random()*20; cell.materialId=MAT.PLASMA;
+      cell.density=0.01+this._random()*0.05; cell.temperature=10+this._random()*20;
+      cell.energy=5+this._random()*20; cell.materialId=MAT.PLASMA;
       cell.set(F.CHEM_STATE, CHEM.GAS);
     }
     // 3 collapsing cores
     for (let c=0;c<3;c++) {
-      const cx=Math.floor(10+Math.random()*(grid.W-20));
-      const cy=Math.floor(10+Math.random()*(grid.H-20));
+      const cx=Math.floor(10+this._random()*(grid.W-20));
+      const cy=Math.floor(10+this._random()*(grid.H-20));
       const cz=Math.floor(grid.D/2);
       for (let dz=-5;dz<=5;dz++) for (let dy=-5;dy<=5;dy++) for (let dx=-5;dx<=5;dx++) {
         const d=Math.sqrt(dx*dx+dy*dy+dz*dz);
@@ -297,13 +309,13 @@ export class Presets {
     for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const bldg = (x%8 < 5 && y%8 < 5); // block pattern
       if (!bldg) continue;
-      const height = 2+Math.floor(Math.random()*8);
+      const height = 2+Math.floor(this._random()*8);
       for (let z=0;z<height;z++) {
         if (!grid.inBounds(x,y,z)) continue;
         const cell=grid.cell(x,y,z);
-        cell.density=0.7+Math.random()*0.2; cell.energy=20+Math.random()*50;
-        cell.temperature=15+Math.random()*10; cell.entropy=0.1+Math.random()*0.2;
-        cell.information=50+Math.random()*100;
+        cell.density=0.7+this._random()*0.2; cell.energy=20+this._random()*50;
+        cell.temperature=15+this._random()*10; cell.entropy=0.1+this._random()*0.2;
+        cell.information=50+this._random()*100;
         cell.materialId = z===0 ? MAT.METAL : MAT.STONE;
         cell.set(F.CHEM_STATE, CHEM.SOLID);
       }
@@ -315,8 +327,8 @@ export class Presets {
     for (let z=0;z<grid.D;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       if ((x+y+z)%3 === 0) {
         const cell=grid.cell(x,y,z);
-        cell.density=0.8; cell.energy=100+Math.random()*200;
-        cell.information=80+Math.random()*120; cell.entropy=0.05;
+        cell.density=0.8; cell.energy=100+this._random()*200;
+        cell.information=80+this._random()*120; cell.entropy=0.05;
         cell.materialId=MAT.SUPERCONDUCTIVE_MATTER; cell.set(F.CHEM_STATE, CHEM.REACTIVE);
         cell.set(F.SIGNAL, 20);
       }
@@ -326,17 +338,17 @@ export class Presets {
   private static _energyEconomy(grid: VoxelGrid) {
     // Producers (high energy) and consumers (high info) linked by signal channels
     for (let i=0;i<20;i++) {
-      const px=Math.floor(Math.random()*grid.W), py=Math.floor(Math.random()*grid.H);
-      const pz=Math.floor(Math.random()*grid.D);
+      const px=Math.floor(this._random()*grid.W), py=Math.floor(this._random()*grid.H);
+      const pz=Math.floor(this._random()*grid.D);
       const isProducer = i < 10;
       for (let dz=-1;dz<=1;dz++) for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
         if (!grid.inBounds(px+dx,py+dy,pz+dz)) continue;
         const cell=grid.cell(px+dx,py+dy,pz+dz);
         if (isProducer) {
-          cell.energy=800+Math.random()*200; cell.temperature=200;
+          cell.energy=800+this._random()*200; cell.temperature=200;
           cell.materialId=MAT.PLASMA; cell.set(F.CHEM_STATE, CHEM.REACTIVE);
         } else {
-          cell.information=400+Math.random()*100; cell.bioPotential=0.9;
+          cell.information=400+this._random()*100; cell.bioPotential=0.9;
           cell.materialId=MAT.INFORMATION_SUBSTRATE; cell.set(F.CHEM_STATE, CHEM.ORGANIC);
         }
         cell.set(F.SIGNAL, 80);
@@ -349,15 +361,15 @@ export class Presets {
   private static _selfReplicatingField(grid: VoxelGrid) {
     // Sparse seeds of reactive+bio that should reproduce via EntityLayer
     for (let i=0;i<12;i++) {
-      const x=Math.floor(4+Math.random()*(grid.W-8));
-      const y=Math.floor(4+Math.random()*(grid.H-8));
-      const z=Math.floor(grid.D*0.3+Math.random()*grid.D*0.4);
+      const x=Math.floor(4+this._random()*(grid.W-8));
+      const y=Math.floor(4+this._random()*(grid.H-8));
+      const z=Math.floor(grid.D*0.3+this._random()*grid.D*0.4);
       for (let dz=-1;dz<=1;dz++) for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
         if (!grid.inBounds(x+dx,y+dy,z+dz)) continue;
         const cell=grid.cell(x+dx,y+dy,z+dz);
-        cell.bioPotential=0.8+Math.random()*0.2;
-        cell.energy=400+Math.random()*300;
-        cell.information=200+Math.random()*100;
+        cell.bioPotential=0.8+this._random()*0.2;
+        cell.energy=400+this._random()*300;
+        cell.information=200+this._random()*100;
         cell.entropy=0.05;
         cell.materialId=MAT.MEMBRANE;
         cell.set(F.CHEM_STATE, CHEM.ORGANIC);
@@ -368,10 +380,10 @@ export class Presets {
   private static _causalityCollapse(grid: VoxelGrid) {
     // Extreme energy spikes to flood causality log with events
     for (let i=0;i<30;i++) {
-      const x=Math.floor(Math.random()*grid.W), y=Math.floor(Math.random()*grid.H);
-      const z=Math.floor(Math.random()*grid.D);
+      const x=Math.floor(this._random()*grid.W), y=Math.floor(this._random()*grid.H);
+      const z=Math.floor(this._random()*grid.D);
       const cell=grid.cell(x,y,z);
-      cell.energy=9000+Math.random()*999; cell.temperature=9000;
+      cell.energy=9000+this._random()*999; cell.temperature=9000;
       cell.density=0.9; cell.entropy=0.95;
     }
   }

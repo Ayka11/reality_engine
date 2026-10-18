@@ -180,10 +180,10 @@ body.workspace-dragging *{user-select:none!important}
   <button class="compose-btn" onclick="openComp()">✦ Compose World</button>
   <button class="compose-btn" onclick="generateWorld()" style="border-color:#40c080;color:#50d090;background:#0d1f17;margin-left:4px" title="Generate with current settings">⚡ Quick Generate</button>
   <div class="tbsep"></div>
-  <button class="mode-btn active" data-mode="create">Create</button>
-  <button class="mode-btn" data-mode="science">Science</button>
-  <button class="mode-btn" data-mode="cinema">Cinema</button>
-  <button class="mode-btn" data-mode="game">Game Dev</button>
+  <button type="button" class="mode-btn active" data-mode="create" onclick="selectWorkspaceMode('create',this)">Create</button>
+  <button type="button" class="mode-btn" data-mode="science" onclick="selectWorkspaceMode('science',this)">Science</button>
+  <button type="button" class="mode-btn" data-mode="cinema" onclick="selectWorkspaceMode('cinema',this)">Cinema</button>
+  <button type="button" class="mode-btn" data-mode="game" onclick="selectWorkspaceMode('game',this)">Game Dev</button>
   <div style="flex:1"></div>
   <span style="font-size:9px;color:var(--sub)">FPS:</span><span id="fpsOut" style="font-family:monospace;color:var(--text);min-width:20px">0</span>
 </div>
@@ -554,10 +554,6 @@ function updateInfinityDiagnosticsPanel() {
     infinityScaleRecords.filter(
       r => Number(r.amr) >= 2
     ).length;
-
-  const panel = document.getElementById(
-    "infinityDiagnosticsPanel"
-  );
 
   if (panel) {
     let dist = document.getElementById(
@@ -1946,17 +1942,26 @@ function togglePlay(){
   document.getElementById('pb').textContent=playing?'⏸ Pause':'▶ Play';
 }
 
-document.querySelectorAll('.mode-btn[data-mode]').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    document.querySelectorAll('.mode-btn[data-mode]').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    currentAppMode=btn.dataset.mode;
-    const modes={create:'Create Mode',science:'Science Mode',cinema:'Cinema Mode',game:'Game Dev Mode'};
-    document.getElementById('modeLabel').textContent=modes[btn.dataset.mode]||'';
-    const panelMap={create:'world',science:'science',cinema:'cinema',game:'gamedev'};
-    setIconPanel(panelMap[btn.dataset.mode]||'world');
+window.selectWorkspaceMode=function(mode,btn){
+  const validModes={create:'world',science:'science',cinema:'cinema',game:'gamedev'};
+  if(!Object.prototype.hasOwnProperty.call(validModes,mode))return;
+  currentAppMode=mode;
+  const labels={create:'Create Mode',science:'Science Mode',cinema:'Cinema Mode',game:'Game Dev Mode'};
+  const label=document.getElementById('modeLabel');
+  if(label)label.textContent=labels[mode];
+  document.querySelectorAll('.mode-btn[data-mode]').forEach(b=>{
+    b.classList.toggle('active',b===btn||(!btn&&b.dataset.mode===mode));
   });
-});
+  const panelId=validModes[mode];
+  // Keep the UI state synchronous and defer potentially expensive panel rendering.
+  window.setTimeout(()=>{
+    try {
+      setIconPanel(panelId);
+    } catch(error) {
+      console.error('Failed to render workspace mode panel:', error);
+    }
+  },0);
+};
 
 // Script engine
 const TEMPLATES={
@@ -2022,7 +2027,6 @@ function loop(ts){
   if ((fc % 6) === 0) {
     updateInfinityScaleRuntime();
   }
-  requestAnimationFrame(loop);
   if(currentAppMode==='game'&&isPaused){drawGrid();return;}
   const spd=parseInt(document.getElementById('spd')?.value||4);
   const dt=Math.min((ts-lastTs)/1000,.05);lastTs=ts;

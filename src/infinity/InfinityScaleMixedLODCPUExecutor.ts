@@ -51,15 +51,14 @@ export interface InfinityScaleMixedLODCPUExecutionResult {
  * boundary-reconciliation phase.
  */
 export class InfinityScaleMixedLODCPUExecutor {
+  private readonly boundaryMapper: InfinityScaleLODBoundaryCellMapper;
+
   constructor(
     private readonly state: InfinityScaleLODState,
     private readonly context: InfinityScaleChunkExecutionContext,
-  ) {}
-
-  private readonly boundaryMapper = new InfinityScaleLODBoundaryCellMapper(
-    this.state,
-    this.context.chunkSize,
-  );
+  ) {
+    this.boundaryMapper = new InfinityScaleLODBoundaryCellMapper(state, context.chunkSize);
+  }
 
   execute(
     frame: InfinityScaleGlobalExecutionFrame,
@@ -174,6 +173,7 @@ export class InfinityScaleMixedLODCPUExecutor {
   private boundaryCells(
     spec: InfinityScaleBoundaryTransferSpec,
   ): Array<[number, number, number]> {
+    const targetRange = this.rangeForChunk(spec.targetChunk);
     return this.boundaryMapper.enumerateTargetFaceCells(
       spec,
       this.context.gridWidth,

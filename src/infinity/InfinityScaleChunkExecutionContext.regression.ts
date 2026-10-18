@@ -6,7 +6,7 @@ function makePlan(
   targetChunk: string,
   relation: "same-level" | "coarse-to-fine" | "fine-to-coarse",
   sourceLevel: number,
-  targetLevel: number,
+  _targetLevel: number,
 ): InfinityScaleExecutionPlan {
   return {
     revision: 1,
@@ -17,14 +17,6 @@ function makePlan(
       lod: sourceLevel,
       amr: 2 ** sourceLevel,
       distance: 0,
-      simulationEligible: true,
-      state: "simulating",
-      chunk: (() => {
-        const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(sourceChunk)!;
-        return { level: Number(match[1]), x: Number(match[2]), y: Number(match[3]), z: Number(match[4]) };
-      })(),
-      pinned: false,
-      renderEligible: true,
     }],
     simulationBudget: 1,
     requestedSimulationCount: 1,
@@ -64,14 +56,14 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
 
   {
     const context = new InfinityScaleChunkExecutionContext(
-      makePlan("0:0,0,0", "1:1,0,0", "fine-to-coarse", 0, 1),
+      makePlan("0:1,0,0", "1:1,0,0", "fine-to-coarse", 0, 1),
       32, 16, 16, 4,
     );
-    const boundary = context.getBoundaryRelationsForCell(3, 2, 2);
+    const boundary = context.getBoundaryRelationsForCell(7, 2, 2);
     if (boundary.length !== 1 || boundary[0].relation !== "fine-to-coarse") {
       throw new Error("Chunk context regression: mixed-LOD source face lookup failed");
     }
-    if (context.getBoundaryRelationsForCell(2, 2, 2).length !== 0) {
+    if (context.getBoundaryRelationsForCell(6, 2, 2).length !== 0) {
       throw new Error("Chunk context regression: mixed-LOD interior cell accepted");
     }
   }

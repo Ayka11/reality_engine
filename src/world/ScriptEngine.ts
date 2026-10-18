@@ -31,9 +31,32 @@ function valueNoise(nx: number, ny: number, nz: number): number {
 }
 
 export class ScriptEngine {
-  constructor(private sim: SimulationEngine) {}
+  private _rngState = 0x1f123bb5;
+
+  constructor(private sim: SimulationEngine, seed = 0x1f123bb5) {
+    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x1f123bb5 : 0x1f123bb5;
+  }
+
+  private _random(): number {
+    let x = this._rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this._rngState = x >>> 0;
+    return this._rngState / 0x100000000;
+  }
+
+  snapshotRandomState(): number { return this._rngState; }
+
+  restoreRandomState(state: number): void {
+    if (!Number.isSafeInteger(state) || state <= 0 || state > 0xffffffff) {
+      throw new Error("Invalid ScriptEngine PRNG state");
+    }
+    this._rngState = state >>> 0;
+  }
 
   buildWorldAPI(log: string[]) {
+    const random = () => this._random();
     const { grid, laws } = this.sim;
     const { W, H, D, buffer: buf } = grid;
 
@@ -111,7 +134,7 @@ export class ScriptEngine {
       },
 
       preset(name: string) {
-        Presets.apply(grid, name as PresetName);
+        Presets.apply(grid, name as PresetName, Math.floor(random() * 0xffffffff) || 1);
       },
 
       spawnEntity(x: number, y: number, z: number) {
@@ -123,9 +146,9 @@ export class ScriptEngine {
           const nx=Math.floor(x+dx), ny=Math.floor(y+dy), nz=Math.floor(z+dz);
           if (!grid.inBounds(nx, ny, nz)) continue;
           const b = (nz*H*W+ny*W+nx)*CELL_FIELDS;
-          buf[b+F.BIO_POTENTIAL] = Math.max(buf[b+F.BIO_POTENTIAL], 0.4+Math.random()*0.3);
-          buf[b+F.ENERGY]        = Math.max(buf[b+F.ENERGY],        200+Math.random()*150);
-          buf[b+F.INFORMATION]   = Math.max(buf[b+F.INFORMATION],   50+Math.random()*30);
+          buf[b+F.BIO_POTENTIAL] = Math.max(buf[b+F.BIO_POTENTIAL], 0.4+random()*0.3);
+          buf[b+F.ENERGY]        = Math.max(buf[b+F.ENERGY],        200+random()*150);
+          buf[b+F.INFORMATION]   = Math.max(buf[b+F.INFORMATION],   50+random()*30);
         }
       },
 
@@ -161,8 +184,10 @@ export class ScriptEngine {
     const api = this.buildWorldAPI(log);
     try {
       // eslint-disable-next-line no-new-func
-      const fn = new Function('world', 'W', 'H', 'D', '"use strict";\n' + code);
-      fn(api, this.sim.grid.W, this.sim.grid.H, this.sim.grid.D);
+      const scriptMath = Object.create(Math) as Math & { random: () => number };
+      scriptMath.random = () => this._random();
+      const fn = new Function('world', 'W', 'H', 'D', 'Math', '"use strict";\n' + code);
+      fn(api, this.sim.grid.W, this.sim.grid.H, this.sim.grid.D, scriptMath);
       this.sim.syncToGPU();
       if (!log.length) log.push('✓ Done.');
     } catch (e) {

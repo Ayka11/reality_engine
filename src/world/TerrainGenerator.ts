@@ -8,9 +8,19 @@ export type BiomeName = typeof BIOME_LIST[number];
 
 export class TerrainGenerator {
   private grid: VoxelGrid;
+  private _rngState = 0x7f4a7c15;
 
   constructor(grid: VoxelGrid) {
     this.grid = grid;
+  }
+
+  private _random(): number {
+    let x = this._rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this._rngState = x >>> 0;
+    return this._rngState / 0x100000000;
   }
 
   private _noise2(x: number, y: number, seed = 0): number {
@@ -48,7 +58,8 @@ export class TerrainGenerator {
     return val / max;
   }
 
-  generate(biome: BiomeName = 'earth', seed = Math.floor(Math.random() * 9999)): string {
+  generate(biome: BiomeName = 'earth', seed = 1337): string {
+    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x7f4a7c15 : 0x7f4a7c15;
     const { grid } = this;
     grid.buffer.fill(0);
     grid.backBuffer.fill(0);
@@ -169,8 +180,8 @@ export class TerrainGenerator {
       }
     }
     for (let v = 0; v < 4; v++) {
-      const vx = 8 + Math.floor(Math.random() * (W-16));
-      const vy = 8 + Math.floor(Math.random() * (H-16));
+      const vx = 8 + Math.floor(this._random() * (W-16));
+      const vy = 8 + Math.floor(this._random() * (H-16));
       for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
         const dx = x-vx, dy = y-vy, d = Math.sqrt(dx*dx+dy*dy);
         if (d < 6) {

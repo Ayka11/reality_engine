@@ -52,7 +52,7 @@ export interface HazardProfile {
   name: string
   icon: string
   desc: string
-  fn: (params: { W: number; H: number; D: number }) => HazardCell[]
+  fn: (params: { W: number; H: number; D: number; seed?: number }) => HazardCell[]
 }
 
 // ── Archetypes ────────────────────────────────────────────────────────────────
@@ -202,15 +202,30 @@ export const EVOLUTION_STYLES: EvolutionStyle[] = [
 
 // ── Hazard Profiles ───────────────────────────────────────────────────────────
 
+const DEFAULT_HAZARD_SEED = 0x6a09e667;
+
+function createHazardRandom(seed = DEFAULT_HAZARD_SEED): () => number {
+  let state = (Number.isSafeInteger(seed) ? seed >>> 0 : DEFAULT_HAZARD_SEED) || DEFAULT_HAZARD_SEED;
+  return () => {
+    let x = state;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    state = x >>> 0;
+    return state / 0x100000000;
+  };
+}
+
 export const HAZARDS: HazardProfile[] = [
   {
     id: 'meteor', name: 'Meteor Storms', icon: '☄️',
     desc: 'Periodic high-energy impacts.',
-    fn: ({ W, H, D }) => {
+    fn: ({ W, H, D, seed }) => {
+      const random = createHazardRandom(seed)
       const cells: HazardCell[] = []
       for (let i = 0; i < 3; i++) {
-        const x = Math.floor(Math.random() * W)
-        const y = Math.floor(Math.random() * H)
+        const x = Math.floor(random() * W)
+        const y = Math.floor(random() * H)
         for (let r = 0; r < 4; r++) {
           cells.push({
             x: Math.max(0, Math.min(W - 1, x + r - 2)),
@@ -236,11 +251,12 @@ export const HAZARDS: HazardProfile[] = [
   {
     id: 'acid', name: 'Acid Rain', icon: '🌧️',
     desc: 'Density erosion from above.',
-    fn: ({ W, H, D }) => {
+    fn: ({ W, H, D, seed }) => {
+      const random = createHazardRandom(seed)
       const cells: HazardCell[] = []
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-        if (Math.random() > 0.7) {
-          cells.push({ x, y, z: D - 1, f: 1, v: -(0.05 + Math.random() * 0.05) })
+        if (random() > 0.7) {
+          cells.push({ x, y, z: D - 1, f: 1, v: -(0.05 + random() * 0.05) })
         }
       }
       return cells
@@ -249,10 +265,11 @@ export const HAZARDS: HazardProfile[] = [
   {
     id: 'tectonic', name: 'Tectonic Chaos', icon: '⛰️',
     desc: 'Density upheavals from below.',
-    fn: ({ W, H }) => {
+    fn: ({ W, H, seed }) => {
+      const random = createHazardRandom(seed)
       const cells: HazardCell[] = []
-      const cx = Math.floor(Math.random() * W)
-      const cy = Math.floor(Math.random() * H)
+      const cx = Math.floor(random() * W)
+      const cy = Math.floor(random() * H)
       for (let r = 0; r < 6; r++) {
         cells.push({
           x: Math.max(0, Math.min(W - 1, cx + r - 3)),
@@ -266,14 +283,15 @@ export const HAZARDS: HazardProfile[] = [
   {
     id: 'magnetic', name: 'Magnetic Instability', icon: '🧲',
     desc: 'Information field disruption.',
-    fn: ({ W, H, D }) => {
+    fn: ({ W, H, D, seed }) => {
+      const random = createHazardRandom(seed)
       const cells: HazardCell[] = []
       for (let i = 0; i < 20; i++) {
         cells.push({
-          x: Math.floor(Math.random() * W),
-          y: Math.floor(Math.random() * H),
-          z: Math.floor(Math.random() * D),
-          f: 2, v: -(20 + Math.random() * 50),
+          x: Math.floor(random() * W),
+          y: Math.floor(random() * H),
+          z: Math.floor(random() * D),
+          f: 2, v: -(20 + random() * 50),
         })
       }
       return cells

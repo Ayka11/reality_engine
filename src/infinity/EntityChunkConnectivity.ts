@@ -276,6 +276,7 @@ export class EntityChunkConnectivity {
             const key = `${cell}|${nx},${ny},${nz}|${spec.targetChunk}|${spec.relation}`;
             if (seen.has(key)) continue;
             seen.add(key);
+            if (spec.relation === "same-level") continue;
             samples.push({
               localCell: cell,
               neighborCell: [nx, ny, nz],

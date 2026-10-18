@@ -1,12 +1,16 @@
 import type { InfinityScalePredictiveAdaptiveInput, InfinityScalePredictiveAdaptiveRecommendation } from "./InfinityScalePredictiveAdaptiveController";
 import { InfinityScalePredictiveAdaptiveController } from "./InfinityScalePredictiveAdaptiveController";
-import type { InfinityScaleAdaptiveFeedbackSample } from "./InfinityScaleAdaptiveFeedbackLoop";
-import { InfinityScaleRuntimePredictionFeedback, type InfinityScaleRuntimePredictionFeedback as RuntimePrediction } from "./InfinityScaleRuntimePredictionFeedback";
+import { InfinityScaleRuntimePredictionFeedback, type InfinityScaleRuntimePredictionFeedbackResult as RuntimePrediction } from "./InfinityScaleRuntimePredictionFeedback";
 import type { InfinityScaleCausalAdaptiveAttribution } from "./InfinityScaleCausalAdaptiveAttribution";
 
-export interface InfinityScaleClosedLoopAdaptiveInput extends InfinityScalePredictiveAdaptiveInput {
+export interface InfinityScaleClosedLoopAdaptiveInput extends Omit<InfinityScalePredictiveAdaptiveInput, "error"> {
   runtimeError: number;
   causalAttribution?: InfinityScaleCausalAdaptiveAttribution;
+}
+
+export interface InfinityScaleClosedLoopRuntimeRegion extends Omit<InfinityScaleClosedLoopAdaptiveInput, "currentLOD"> {
+  currentLOD?: number;
+  topology: { regionId: string; currentLOD: number; proposedLOD: number; neighbors: string[] };
 }
 
 export interface InfinityScaleClosedLoopAdaptiveRecommendation extends InfinityScalePredictiveAdaptiveRecommendation {

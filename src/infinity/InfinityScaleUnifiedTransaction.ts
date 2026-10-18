@@ -98,7 +98,10 @@ export function validateInfinityScaleUnifiedTransaction(
     reasons.push(`missing mixed-LOD boundary updates: ${missingBoundaryUpdates}`);
   }
 
-  const entityReady = !transaction.entityCommitRequested || transaction.entityLayer.canCommitChunkReconciliation();
+  const entityReady = !transaction.entityCommitRequested || (
+    transaction.entityLayer.canCommitChunkReconciliation() &&
+    transaction.entityLayer.canApplyChunkReconciliation(transaction.grid, transaction.context)
+  );
   if (!entityReady) reasons.push("entity reconciliation is not commit-ready");
 
   const migrationConflicts = countMigrationConflicts(transaction.stagedMigrations, transaction.context, transaction.agentSystem);
@@ -122,22 +125,54 @@ export function commitInfinityScaleUnifiedTransaction(
     throw new Error(`Infinity Scale unified transaction rejected: ${validation.reasons.join("; ")}`);
   }
 
-  // Preflight is complete. Domain commits occur only at the global barrier.
-  // AgentSystem acknowledges exactly the requests it successfully applies,
-  // preventing failed transactions from silently consuming pending migrations.
-  commitInfinityScaleGlobalLODTransaction(transaction.lod, frame);
+  // Preflight is complete. The domains still commit sequentially, so retain a
+  // frame-local rollback image until every mutation succeeds. A later entity or
+  // migration failure must not leave LOD cells, entity ownership, agent state,
+  // or grid markers at different revisions.
+  const rollback = {
+    gridBuffer: new Float32Array(transaction.grid.buffer),
+    gridBackBuffer: new Float32Array(transaction.grid.backBuffer),
+    entities: transaction.entityLayer.snapshot(),
+    agents: transaction.agentSystem.snapshot(),
+    lod: transaction.lod.state.snapshot(),
+  };
 
-  if (transaction.entityCommitRequested) {
-    if (!transaction.entityLayer.applyChunkReconciliation(transaction.grid, transaction.context)) {
-      throw new Error("Infinity Scale unified transaction entity commit failed");
+  try {
+    // AgentSystem acknowledges exactly the requests it successfully applies,
+    // preventing failed transactions from silently consuming pending migrations.
+    commitInfinityScaleGlobalLODTransaction(transaction.lod, frame);
+
+    if (transaction.entityCommitRequested) {
+      if (!transaction.entityLayer.applyChunkReconciliation(transaction.grid, transaction.context)) {
+        throw new Error("Infinity Scale unified transaction entity commit failed");
+      }
     }
-  }
 
-  if (transaction.stagedMigrations.length > 0) {
-    transaction.agentSystem.applyMigrationRequests(transaction.grid, transaction.stagedMigrations, transaction.context);
-  }
+    if (transaction.stagedMigrations.length > 0) {
+      transaction.agentSystem.applyMigrationRequests(transaction.grid, transaction.stagedMigrations, transaction.context);
+    }
 
-  transaction.committed = true;
+    transaction.committed = true;
+  } catch (error) {
+    try {
+      transaction.grid.buffer.set(rollback.gridBuffer);
+      transaction.grid.backBuffer.set(rollback.gridBackBuffer);
+      transaction.entityLayer.restore(rollback.entities);
+      transaction.agentSystem.restore(rollback.agents);
+      transaction.lod.state.restore(rollback.lod);
+      // The LOD write was applied and then compensated by restoring the state.
+      // Clear staged work and reflect that the failed global transaction did
+      // not leave a committed LOD result. Its captured revision is now stale,
+      // so this transaction object still cannot be reused.
+      transaction.lod.synchronization.rollback();
+      transaction.lod.committed = false;
+      transaction.committed = false;
+    } catch (rollbackError) {
+      const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+      throw new Error(`Infinity Scale unified transaction failed and rollback could not restore prior state: ${rollbackMessage}`);
+    }
+    throw error;
+  }
 }
 
 function migrationKey(request: AgentMigrationRequest): string {

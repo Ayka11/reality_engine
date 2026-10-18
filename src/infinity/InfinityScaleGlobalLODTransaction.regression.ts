@@ -61,6 +61,41 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
     sources,
   );
 
+  // Duplicate target writes must be rejected rather than silently replacing
+  // the first staged boundary value in the synchronization map.
+  const conflictingSources = Array.from({ length: 4 }, () => {
+    const cell = new Array<number>(CELL_FIELDS).fill(0);
+    cell[F.ENERGY] = 99;
+    cell[F.DENSITY] = 99;
+    return cell;
+  });
+  let duplicateRejected = false;
+  try {
+    transaction.synchronization.stageTransfer(
+      {
+        sourceChunk: "0:0,0,0",
+        targetChunk: "1:1,0,0",
+        relation: "fine-to-coarse",
+        sourceLevel: 0,
+        targetLevel: 1,
+        refinementRatio: 2,
+        operation: "restriction",
+        readOperation: "prolongation",
+      },
+      [4, 0, 0],
+      conflictingSources,
+    );
+  } catch (error) {
+    duplicateRejected = error instanceof Error &&
+      error.message.includes("duplicate target cell");
+  }
+  const stagedAfterDuplicate = transaction.synchronization.getStagedUpdates();
+  if (!duplicateRejected || stagedAfterDuplicate.length !== 1 ||
+      stagedAfterDuplicate[0].value[F.ENERGY] !== 2 ||
+      stagedAfterDuplicate[0].value[F.DENSITY] !== 10) {
+    throw new Error("Infinity Scale duplicate boundary target regression failed");
+  }
+
   const readyFrame = advanceInfinityScaleGlobalFrame(frame, "local-execution");
   const localCommittedFrame = advanceInfinityScaleGlobalFrame(readyFrame, "local-commit");
   const boundaryFrame = advanceInfinityScaleGlobalFrame(

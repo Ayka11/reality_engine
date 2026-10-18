@@ -3,6 +3,7 @@ import { EntityLayer } from "../simulation/EntityLayer";
 import { VoxelGrid } from "../core/VoxelGrid";
 import { F } from "../core/CellState";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import { InfinityScaleMixedLODCPUExecutor } from "./InfinityScaleMixedLODCPUExecutor";
 import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 import {
   beginInfinityScaleGlobalLODTransaction,
@@ -22,7 +23,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const grid = new VoxelGrid(12, 8, 8);
   const state = new InfinityScaleLODState(4);
   const coarseKey = "1:0,0,0";
-  const fineKey = "0:8,0,0";
+  const fineKey = "0:2,0,0";
   state.ensureChunk(coarseKey, 1);
   state.ensureChunk(fineKey, 0);
 
@@ -41,6 +42,10 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const entityIndex = grid.idx(9, 2, 2) / CELL_FIELDS;
   grid.buffer[entityIndex * CELL_FIELDS + F.BIO_POTENTIAL] = 0.5;
   grid.buffer[entityIndex * CELL_FIELDS + F.ENERGY] = 20;
+  // EntityLayer's flood-fill contract requires at least two connected active cells.
+  const adjacentEntityIndex = grid.idx(10, 2, 2) / CELL_FIELDS;
+  grid.buffer[adjacentEntityIndex * CELL_FIELDS + F.BIO_POTENTIAL] = 0.5;
+  grid.buffer[adjacentEntityIndex * CELL_FIELDS + F.ENERGY] = 20;
 
   const plan: InfinityScaleExecutionPlan = {
     revision: 3,
@@ -109,6 +114,8 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   );
 
   stageInfinityScaleEntityCommit(transaction);
+  // The unified commit barrier requires complete mixed-LOD face staging.
+  new InfinityScaleMixedLODCPUExecutor(state, context).stageBoundaryTransfers(lodTransaction);
   stageInfinityScaleAgentMigrations(transaction, [{
     agentId,
     from: [9, 2, 2],
@@ -117,6 +124,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     energy: agent.energy,
   }]);
 
+  frame.phase = "boundary-reconciliation";
   const validation = validateInfinityScaleUnifiedTransaction(transaction, frame);
   if (!validation.readyToCommit) {
     throw new Error(
@@ -124,7 +132,6 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     );
   }
 
-  frame.phase = "boundary-reconciliation";
   commitInfinityScaleUnifiedTransaction(transaction, frame);
 
   const moved = agents.getAgents().find(candidate => candidate.id === agentId);
@@ -156,6 +163,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const integrityFrame: InfinityScaleGlobalExecutionFrame = {
     ...frame,
     revision: 5,
+    planRevision: 5,
     phase: "local-execution",
     committed: false,
     finalized: false,
@@ -186,7 +194,6 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
     integrityContext,
   );
 
-  const { InfinityScaleMixedLODCPUExecutor } = require("./InfinityScaleMixedLODCPUExecutor") as typeof import("./InfinityScaleMixedLODCPUExecutor");
   const executor = new InfinityScaleMixedLODCPUExecutor(integrityState, integrityContext);
   executor.stageBoundaryTransfers(integrityLod);
   const staged = integrityLod.synchronization.getStagedUpdates();
@@ -220,6 +227,7 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const frame2: InfinityScaleGlobalExecutionFrame = {
     ...frame,
     revision: 4,
+    planRevision: 4,
     phase: "local-execution",
     committed: false,
     finalized: false,
@@ -258,5 +266,176 @@ export function runInfinityScaleUnifiedTransactionRegression(): void {
   const conflictAfterPhase = validateInfinityScaleUnifiedTransaction(transaction2, frame2);
   if (conflictAfterPhase.readyToCommit || conflictAfterPhase.migrationConflicts === 0) {
     throw new Error("Expected divergent agent migrations to remain blocked at commit phase");
+  }
+
+  // Regression: if an entity disappears after planning, the unified
+  // transaction must reject before LOD state or entity markers are mutated.
+  const stalePlan = entityLayer.prepareChunkExecution(grid, context);
+  if (!stalePlan.commitReady) {
+    throw new Error("Expected entity reconciliation to be ready before stale-entity regression");
+  }
+  const staleRecords = entityLayer.getChunkReconciliationCommitRecords(grid, context);
+  if (!staleRecords?.some(record => record.entityId === entity.id)) {
+    throw new Error("Expected stale-entity regression plan to reference the retained entity");
+  }
+
+  const staleFrame: InfinityScaleGlobalExecutionFrame = {
+    ...frame,
+    revision: 6,
+    planRevision: plan.revision,
+    phase: "local-execution",
+    committed: false,
+    finalized: false,
+  };
+  const staleState = new InfinityScaleLODState(4);
+  staleState.ensureChunk(coarseKey, 1);
+  staleState.ensureChunk(fineKey, 0);
+  const staleLod = beginInfinityScaleGlobalLODTransaction(staleFrame, plan, staleState);
+  const staleTx = beginInfinityScaleUnifiedTransaction(
+    staleFrame,
+    plan,
+    staleLod,
+    entityLayer,
+    agents,
+    grid,
+    context,
+  );
+  stageInfinityScaleEntityCommit(staleTx);
+  new InfinityScaleMixedLODCPUExecutor(staleState, context).stageBoundaryTransfers(staleLod);
+  staleFrame.phase = "boundary-reconciliation";
+
+  const markersBefore = Array.from(
+    { length: grid.size },
+    (_, index) => grid.buffer[index * CELL_FIELDS + F.ENTITY_ID],
+  );
+  const lodRevisionBefore = staleState.getRevision();
+  const entityInternals = entityLayer as unknown as { entities: Map<number, unknown> };
+  entityInternals.entities.delete(entity.id);
+
+  const staleValidation = validateInfinityScaleUnifiedTransaction(staleTx, staleFrame);
+  if (staleValidation.readyToCommit || staleValidation.entityReady) {
+    throw new Error("Expected stale entity to block the unified transaction commit barrier");
+  }
+  if (staleState.getRevision() !== lodRevisionBefore) {
+    throw new Error("Rejected stale-entity transaction mutated LOD state");
+  }
+  if (entityLayer.applyChunkReconciliation(grid, context)) {
+    throw new Error("Expected direct reconciliation to reject an entity removed after planning");
+  }
+  const markersAfter = Array.from(
+    { length: grid.size },
+    (_, index) => grid.buffer[index * CELL_FIELDS + F.ENTITY_ID],
+  );
+  if (markersAfter.some((marker, index) => marker !== markersBefore[index])) {
+    throw new Error("Rejected entity reconciliation mutated grid ownership markers");
+  }
+
+  // Atomicity regression: a migration failure after the LOD commit must restore
+  // every already-mutated domain, including dense buffers and migration queues.
+  const rollbackFrame: InfinityScaleGlobalExecutionFrame = {
+    ...frame,
+    revision: 7,
+    planRevision: 7,
+    phase: "local-execution",
+    committed: false,
+    finalized: false,
+  };
+  const rollbackPlan = { ...plan, revision: 7 };
+  const rollbackContext = new InfinityScaleChunkExecutionContext(
+    rollbackPlan,
+    12,
+    8,
+    8,
+    4,
+  );
+  const rollbackLod = beginInfinityScaleGlobalLODTransaction(
+    rollbackFrame,
+    rollbackPlan,
+    state,
+  );
+  const rollbackEntityLayer = new EntityLayer();
+  const rollbackEntityPlan = rollbackEntityLayer.prepareChunkExecution(grid, rollbackContext);
+  if (!rollbackEntityPlan.commitReady) {
+    throw new Error("Expected rollback entity reconciliation to be ready before injected migration failure");
+  }
+  const rollbackTx = beginInfinityScaleUnifiedTransaction(
+    rollbackFrame,
+    rollbackPlan,
+    rollbackLod,
+    rollbackEntityLayer,
+    agents,
+    grid,
+    rollbackContext,
+  );
+  stageInfinityScaleEntityCommit(rollbackTx);
+  new InfinityScaleMixedLODCPUExecutor(state, rollbackContext).stageBoundaryTransfers(rollbackLod);
+  stageInfinityScaleAgentMigrations(rollbackTx, [{
+    agentId,
+    from: [moved.x, moved.y, moved.z],
+    to: [11, 2, 2],
+    behavior: moved.behavior,
+    energy: moved.energy,
+  }]);
+  rollbackFrame.phase = "boundary-reconciliation";
+  const rollbackValidation = validateInfinityScaleUnifiedTransaction(rollbackTx, rollbackFrame);
+  if (!rollbackValidation.readyToCommit) {
+    throw new Error(`Expected rollback transaction to pass preflight: ${rollbackValidation.reasons.join("; ")}`);
+  }
+
+  const gridBufferBeforeFailure = new Float32Array(grid.buffer);
+  const gridBackBufferBeforeFailure = new Float32Array(grid.backBuffer);
+  const agentsBeforeFailure = agents.snapshot();
+  const entitiesBeforeFailure = rollbackEntityLayer.snapshot();
+  const lodBeforeFailure = state.snapshot();
+  const originalApplyMigrations = agents.applyMigrationRequests.bind(agents);
+  (agents as unknown as {
+    applyMigrationRequests: typeof agents.applyMigrationRequests;
+  }).applyMigrationRequests = () => {
+    grid.buffer[grid.idx(10, 2, 2) + F.AGENT_MARK] = 999;
+    throw new Error("injected migration commit failure");
+  };
+
+  let commitFailed = false;
+  try {
+    commitInfinityScaleUnifiedTransaction(rollbackTx, rollbackFrame);
+  } catch (error) {
+    commitFailed = error instanceof Error && error.message === "injected migration commit failure";
+  } finally {
+    agents.applyMigrationRequests = originalApplyMigrations;
+  }
+  if (!commitFailed) throw new Error("Expected injected migration failure to escape the unified commit");
+  if (grid.buffer.some((value, index) => value !== gridBufferBeforeFailure[index]) ||
+      grid.backBuffer.some((value, index) => value !== gridBackBufferBeforeFailure[index])) {
+    throw new Error("Failed unified commit did not restore dense grid buffers");
+  }
+  const agentsAfterFailure = agents.snapshot();
+  if (JSON.stringify(agentsAfterFailure) !== JSON.stringify(agentsBeforeFailure)) {
+    throw new Error("Failed unified commit did not restore agent state and pending migrations");
+  }
+  const entitiesAfterFailure = rollbackEntityLayer.snapshot();
+  if (entitiesAfterFailure.entities.length !== entitiesBeforeFailure.entities.length ||
+      entitiesAfterFailure.entities.some((entity, index) => {
+        const before = entitiesBeforeFailure.entities[index];
+        return !before || entity.id !== before.id ||
+          entity.age !== before.age || entity.energy !== before.energy ||
+          entity.cells.length !== before.cells.length ||
+          entity.cells.some((cell, cellIndex) => cell !== before.cells[cellIndex]);
+      })) {
+    throw new Error("Failed unified commit did not restore entity ownership state");
+  }
+  const lodAfterFailure = state.snapshot();
+  if (lodAfterFailure.chunks.length !== lodBeforeFailure.chunks.length ||
+      lodAfterFailure.chunks.some((chunk, index) => {
+        const before = lodBeforeFailure.chunks[index];
+        return !before || chunk.key !== before.key ||
+          chunk.level !== before.level ||
+          chunk.scale !== before.scale ||
+          chunk.cells.some((value, cellIndex) => value !== before.cells[cellIndex]);
+      })) {
+    throw new Error("Failed unified commit did not restore hierarchical LOD cell state");
+  }
+  if (rollbackTx.committed) throw new Error("Failed unified commit was incorrectly marked committed");
+  if (rollbackTx.lod.committed) {
+    throw new Error("Failed unified commit left the compensated LOD transaction marked committed");
   }
 }
