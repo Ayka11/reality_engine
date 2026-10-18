@@ -933,7 +933,8 @@ function _getWorldField2DWindow(width, height) {
   const getView = window.getWorldViewContract
   if (typeof sampler !== 'function' || typeof getView !== 'function') return null
   const view = getView()
-  const key = [width, height, view.center.x.toFixed(3), view.center.y.toFixed(3), view.center.z.toFixed(3), view.sliceY, view.visibleRadius, view.seed].join('|')
+  const fieldState = typeof window.worldFieldState === 'function' ? window.worldFieldState()?.field : null
+  const key = [width, height, view.center.x.toFixed(3), view.center.y.toFixed(3), view.center.z.toFixed(3), view.sliceY, view.visibleRadius, view.seed, fieldState?.version ?? 0, fieldState?.mutationCount ?? 0, fieldState?.lastMutation?.id ?? 0].join('|')
   if (worldField2DCache?.key === key) return worldField2DCache
   const data = sampler(width, height, view.sliceY)
   if (!data?.samples?.length) return null
