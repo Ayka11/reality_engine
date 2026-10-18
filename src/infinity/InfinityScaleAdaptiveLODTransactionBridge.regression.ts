@@ -76,4 +76,20 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   staleRetryBridge.begin(frame);
   const staleRetried = staleRetryBridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
   if (!staleRetried.committed) throw new Error("LOD bridge could not commit after stale-revision rejection");
+
+  // Runtime callers can violate TypeScript's array contract; this must still
+  // reject through finally and leave the bridge reusable.
+  const malformedState = new InfinityScaleLODState();
+  const malformedBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, malformedState);
+  malformedBridge.begin(frame);
+  let malformedRejected = false;
+  try {
+    malformedBridge.commit(frame, undefined as never);
+  } catch (error) {
+    malformedRejected = error instanceof Error && error.message.includes("arrays");
+  }
+  if (!malformedRejected) throw new Error("Malformed adaptive LOD input was not rejected");
+  malformedBridge.begin(frame);
+  const malformedRetried = malformedBridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
+  if (!malformedRetried.committed) throw new Error("LOD bridge could not commit after malformed-input rejection");
 }
