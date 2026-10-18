@@ -566,13 +566,27 @@ self.onmessage = (e: MessageEvent) => {
 
   if (cmd === 'restoreCommit') {
     const restoreId = data?.restoreId
-    const committed = activeRestoreId === restoreId && restorePrepared && !restoreFailed &&
+    const matchesActive = activeRestoreId === restoreId
+    const committed = matchesActive && restorePrepared && !restoreFailed &&
       restoredChunkCount === expectedRestoreChunks && restoredChunkKeys.size === expectedRestoreChunks
-    if (committed) clearSculptHistory()
+    if (committed) {
+      clearSculptHistory()
+      for (const key of restoreBeforeDirtyChunks) grid.dirtyChunks.add(key)
+    } else if (matchesActive) {
+      for (const [key, before] of restoreBeforeChunks) {
+        if (before === null) {
+          grid.chunks.delete(key)
+          grid.dirtyChunks.add(key)
+        } else {
+          grid.restoreChunk(key, before)
+        }
+      }
+      for (const key of restoreBeforeDirtyChunks) grid.dirtyChunks.add(key)
+    }
     ;(self as unknown as Worker).postMessage({
       cmd: 'restoreCommitted', data: { restoreId, committed },
     })
-    if (committed) {
+    if (matchesActive) {
       activeRestoreId = null
       expectedRestoreChunks = 0
       restoredChunkCount = 0
@@ -587,7 +601,7 @@ self.onmessage = (e: MessageEvent) => {
 
   if (cmd === 'restoreAbort') {
     const restoreId = data?.restoreId
-    const aborted = activeRestoreId === restoreId && restorePrepared
+    const aborted = activeRestoreId === restoreId
     if (aborted) {
       for (const [key, before] of restoreBeforeChunks) {
         if (before === null) {
