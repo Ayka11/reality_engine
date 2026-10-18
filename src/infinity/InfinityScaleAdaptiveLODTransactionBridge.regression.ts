@@ -92,4 +92,23 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   malformedBridge.begin(frame);
   const malformedRetried = malformedBridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
   if (!malformedRetried.committed) throw new Error("LOD bridge could not commit after malformed-input rejection");
+
+  // A duplicate begin must reject without replacing the already active
+  // transaction; the original transaction must still be able to commit.
+  const duplicateBeginState = new InfinityScaleLODState();
+  const duplicateBeginBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, duplicateBeginState);
+  duplicateBeginBridge.begin(frame);
+  let duplicateBeginRejected = false;
+  try {
+    duplicateBeginBridge.begin(frame);
+  } catch (error) {
+    duplicateBeginRejected = error instanceof Error && error.message.includes("already begun");
+  }
+  if (!duplicateBeginRejected) throw new Error("Duplicate adaptive LOD begin was not rejected");
+  const originalTransactionCommitted = duplicateBeginBridge.commit(frame, [
+    { regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 },
+  ]);
+  if (!originalTransactionCommitted.committed) {
+    throw new Error("Duplicate begin replaced or invalidated the original adaptive LOD transaction");
+  }
 }

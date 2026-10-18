@@ -34,6 +34,7 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
   constructor(private readonly plan: InfinityScaleExecutionPlan, private readonly state: InfinityScaleLODState) {}
 
   begin(frame: InfinityScaleGlobalExecutionFrame): InfinityScaleGlobalLODTransaction {
+    if (this.transaction) throw new Error("Adaptive LOD transaction already begun");
     if (frame.planRevision !== this.plan.revision) throw new Error("Adaptive LOD transaction rejected: frame/plan revision mismatch");
     this.transaction = beginInfinityScaleGlobalLODTransaction(frame, this.plan, this.state);
     return this.transaction;
