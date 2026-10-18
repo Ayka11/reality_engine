@@ -69,7 +69,12 @@ export function commitInfinityScaleGlobalLODTransaction(
     if (!transaction.committed) {
       try {
         transaction.synchronization.rollback();
-        transaction.state.restore(transaction.rollbackSnapshot);
+        // Do not overwrite an external state mutation (e.g. clear/reset) that
+        // already invalidated this transaction. Restore only while this
+        // transaction still owns the captured state revision.
+        if (transaction.state.getRevision() === transaction.stateRevision) {
+          transaction.state.restore(transaction.rollbackSnapshot);
+        }
       } catch (rollbackError) {
         throw new Error(
           `Infinity Scale LOD commit failed (${String(error)}); rollback also failed (${String(rollbackError)})`,
@@ -87,5 +92,9 @@ export function rollbackInfinityScaleGlobalLODTransaction(
     throw new Error("Infinity Scale LOD transaction cannot rollback after commit");
   }
   transaction.synchronization.rollback();
-  transaction.state.restore(transaction.rollbackSnapshot);
+  // A reset/clear that changed the revision is authoritative; rolling back a
+  // stale transaction must never resurrect the pre-reset chunk set.
+  if (transaction.state.getRevision() === transaction.stateRevision) {
+    transaction.state.restore(transaction.rollbackSnapshot);
+  }
 }
