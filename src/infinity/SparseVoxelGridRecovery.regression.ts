@@ -54,4 +54,28 @@ export function runSparseVoxelGridRecoveryRegression(): void {
     rejected = true;
   }
   if (!rejected) throw new Error("SparseVoxelGrid restore accepted incompatible dimensions");
+
+  const invalidDense = grid.captureState();
+  invalidDense.buffer[denseIndex] = Number.NaN;
+  rejected = false;
+  try {
+    grid.restoreState(invalidDense);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected || grid.buffer[denseIndex] !== 123.5) {
+    throw new Error("SparseVoxelGrid restore accepted non-finite dense data or mutated live state");
+  }
+
+  const invalidChunk = grid.captureState();
+  invalidChunk.chunks.find(item => item.key === "2,0,0")!.backBuffer[1] = Number.POSITIVE_INFINITY;
+  rejected = false;
+  try {
+    grid.restoreState(invalidChunk);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected || grid.chunks.get("2,0,0")!.backBuffer[1] !== 66) {
+    throw new Error("SparseVoxelGrid restore accepted non-finite chunk data or mutated live state");
+  }
 }
