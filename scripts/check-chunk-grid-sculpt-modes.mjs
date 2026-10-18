@@ -8,6 +8,16 @@ const javascript = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const moduleUrl = "data:text/javascript;base64," + Buffer.from(javascript).toString("base64");
+const mathSource = await readFile(new URL("src/brushes/BrushMath.ts", root), "utf8");
+const mathJs = ts.transpileModule(mathSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const mathUrl = "data:text/javascript;base64," + Buffer.from(mathJs).toString("base64");
+const geometrySource = await readFile(new URL("src/brushes/BrushGeometry.ts", root), "utf8");
+const geometryJs = ts.transpileModule(geometrySource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText.replace("from './BrushMath'", `from '${mathUrl}'`);
+const geometryUrl = "data:text/javascript;base64," + Buffer.from(geometryJs).toString("base64");
 const { ChunkGrid, F } = await import(moduleUrl);
 const grid = new ChunkGrid();
 
@@ -42,7 +52,10 @@ const chunkGridUrl = "data:text/javascript;base64," + Buffer.from(javascript).to
 const workerSource = await readFile(new URL("src/core/ChunkSimWorker.ts", root), "utf8");
 const workerJs = ts.transpileModule(workerSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-}).outputText.replace("from './ChunkGrid'", `from '${chunkGridUrl}'`);
+}).outputText
+  .replace("from './ChunkGrid'", `from '${chunkGridUrl}'`)
+  .replace("from '../brushes/BrushGeometry'", `from '${geometryUrl}'`)
+  .replace("from '../brushes/BrushMath'", `from '${mathUrl}'`);
 const workerModuleUrl = "data:text/javascript;base64," + Buffer.from(workerJs).toString("base64");
 const originalSelf = globalThis.self;
 const workerMessages = [];
