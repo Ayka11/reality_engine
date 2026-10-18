@@ -177,7 +177,9 @@ export class SparseVoxelGrid {
     if (!snapshot ||
         snapshot.width !== this.W || snapshot.height !== this.H || snapshot.depth !== this.D ||
         !(snapshot.buffer instanceof Float32Array) || snapshot.buffer.length !== this.size * CELL_FIELDS ||
+        !snapshot.buffer.every(Number.isFinite) ||
         !(snapshot.backBuffer instanceof Float32Array) || snapshot.backBuffer.length !== this.size * CELL_FIELDS ||
+        !snapshot.backBuffer.every(Number.isFinite) ||
         !snapshot.denseOrigin || ![snapshot.denseOrigin.x, snapshot.denseOrigin.y, snapshot.denseOrigin.z].every(Number.isInteger) ||
         !validRange(snapshot.activeChunkRange) ||
         !Array.isArray(snapshot.chunks) || !Array.isArray(snapshot.dirtyChunks) ||
@@ -192,8 +194,10 @@ export class SparseVoxelGrid {
           typeof data.active !== "boolean" || !Number.isFinite(data.lastAccessed) ||
           !(data.buffer instanceof Float32Array) ||
           data.buffer.length !== CHUNK_VOLUME * CELL_FIELDS ||
+          !data.buffer.every(Number.isFinite) ||
           !(data.backBuffer instanceof Float32Array) ||
-          data.backBuffer.length !== CHUNK_VOLUME * CELL_FIELDS) {
+          data.backBuffer.length !== CHUNK_VOLUME * CELL_FIELDS ||
+          !data.backBuffer.every(Number.isFinite)) {
         throw new Error("Invalid SparseVoxelGrid snapshot chunk");
       }
       const expectedKey = this.getChunkKey(data.cx, data.cy, data.cz);
