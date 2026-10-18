@@ -174,7 +174,7 @@ export class SparseVoxelGrid {
   restoreState(snapshot: SparseVoxelGridSnapshot): void {
     const validRange = (range: SparseVoxelGridSnapshot["activeChunkRange"]) =>
       !!range &&
-      Object.values(range).every(Number.isInteger) &&
+      Object.values(range).every(Number.isSafeInteger) &&
       range.minX <= range.maxX &&
       range.minY <= range.maxY &&
       range.minZ <= range.maxZ;
@@ -184,7 +184,7 @@ export class SparseVoxelGrid {
         !snapshot.buffer.every(Number.isFinite) ||
         !(snapshot.backBuffer instanceof Float32Array) || snapshot.backBuffer.length !== this.size * CELL_FIELDS ||
         !snapshot.backBuffer.every(Number.isFinite) ||
-        !snapshot.denseOrigin || ![snapshot.denseOrigin.x, snapshot.denseOrigin.y, snapshot.denseOrigin.z].every(Number.isInteger) ||
+        !snapshot.denseOrigin || ![snapshot.denseOrigin.x, snapshot.denseOrigin.y, snapshot.denseOrigin.z].every(Number.isSafeInteger) ||
         !validRange(snapshot.activeChunkRange) ||
         !Array.isArray(snapshot.chunks) || !Array.isArray(snapshot.dirtyChunks) ||
         !Array.isArray(snapshot.chunkOwners)) {
@@ -193,8 +193,8 @@ export class SparseVoxelGrid {
 
     const restoredChunks = new Map<string, Chunk>();
     for (const data of snapshot.chunks) {
-      if (!data || typeof data.key !== "string" || !Number.isInteger(data.cx) ||
-          !Number.isInteger(data.cy) || !Number.isInteger(data.cz) ||
+      if (!data || typeof data.key !== "string" || !Number.isSafeInteger(data.cx) ||
+          !Number.isSafeInteger(data.cy) || !Number.isSafeInteger(data.cz) ||
           typeof data.active !== "boolean" || !Number.isFinite(data.lastAccessed) ||
           !(data.buffer instanceof Float32Array) ||
           data.buffer.length !== CHUNK_VOLUME * CELL_FIELDS ||
