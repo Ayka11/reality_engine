@@ -292,3 +292,99 @@ export function runInfinityScaleMixedLODCPUProlongationRegression(): void {
     }
   }
 }
+
+
+export function runInfinityScaleMixedLODCPURollbackRegression(): void {
+  const state = new InfinityScaleLODState(4);
+  const key = "0:0,0,0";
+  state.ensureChunk(key, 0);
+  for (let z = 0; z < 4; z++) {
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 4; x++) {
+        const cell = new Float32Array(CELL_FIELDS);
+        cell[0] = x + y * 4 + z * 16;
+        state.writeBaseCell(key, 0, x, y, z, cell);
+      }
+    }
+  }
+
+  const plan = {
+    revision: 99,
+    mode: "selective-cpu-ready",
+    observer: { x: 0, y: 0, z: 0 },
+    chunks: [{ key, lod: 0, amr: 1, distance: 0 }],
+    simulationBudget: 64,
+    requestedSimulationCount: 1,
+    selectedSimulationCount: 1,
+    maxSimulatingChunks: 1,
+    boundaryReadChunks: [],
+    boundaryReadCount: 0,
+    boundaryReadRelations: [],
+    simulationCellCount: 64,
+    boundaryReadCellCount: 0,
+    localExecutionLayers: [],
+    globalExecutionLayers: [],
+    selectiveCpuReady: true,
+    selectiveGpuReady: false,
+    gpuPhysicsReady: false,
+    lodBoundaryTransferReady: true,
+    mixedLodExecutionReady: true,
+    entityExecutionReady: false,
+    agentMigrationReady: false,
+  } as unknown as InfinityScaleExecutionPlan;
+  const context = new InfinityScaleChunkExecutionContext(plan, 4, 4, 4, 4);
+  const frame: InfinityScaleGlobalExecutionFrame = {
+    revision: 99,
+    tickStart: 0,
+    tickEnd: 1,
+    phase: "local-execution",
+    planRevision: 99,
+    simulationCellCount: 64,
+    boundaryReadCellCount: 0,
+    committed: false,
+    finalized: false,
+    ownershipFingerprint: "rollback-regression",
+    capabilityFingerprint: "rollback-regression",
+  };
+  const before = state.snapshot();
+  const revisionBefore = state.getRevision();
+  const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
+  const executor = new InfinityScaleMixedLODCPUExecutor(state, context);
+  let calls = 0;
+  let failed = false;
+  try {
+    executor.execute(frame, plan, transaction, cell => {
+      calls++;
+      const output = new Float32Array(cell.input);
+      output[0] += 1000;
+      if (calls === 3) throw new Error("injected kernel failure");
+      return output;
+    });
+  } catch (error) {
+    failed = error instanceof Error && error.message === "injected kernel failure";
+  }
+
+  if (!failed || calls !== 3) {
+    throw new Error("Expected the injected mid-frame CPU kernel failure");
+  }
+  if (state.getRevision() <= revisionBefore) {
+    throw new Error("Rollback did not invalidate the failed transaction revision");
+  }
+  const after = state.snapshot();
+  if (after.chunks.length !== before.chunks.length) {
+    throw new Error("Rollback did not restore the original chunk set");
+  }
+  for (let i = 0; i < before.chunks.length; i++) {
+    const expected = before.chunks[i];
+    const actual = after.chunks.find(chunk => chunk.key === expected.key);
+    if (!actual || actual.level !== expected.level || actual.scale !== expected.scale ||
+        actual.cells.length !== expected.cells.length) {
+      throw new Error("Rollback did not restore original chunk metadata");
+    }
+    for (let j = 0; j < expected.cells.length; j++) {
+      if (actual.cells[j] !== expected.cells[j]) {
+        throw new Error(`Rollback left a partial CPU write at ${expected.key} buffer offset ${j}`);
+      }
+    }
+  }
+}
