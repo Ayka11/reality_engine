@@ -21,13 +21,15 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   const initialStateRevision = state.getRevision();
   const bridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, state);
   bridge.begin(frame);
-  const result = bridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
-
-  if (!result.committed) throw new Error("Adaptive LOD transaction did not commit");
-  if (result.stateRevisionAfter !== initialStateRevision + 2) {
-    throw new Error("LOD state revision did not account for chunk creation and transaction commit");
+  let topologyRejected = false;
+  try {
+    bridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
+  } catch (error) {
+    topologyRejected = error instanceof Error && error.message.includes("physical chunk remapping");
   }
-  if (!state.hasChunk("0:0,0,0")) throw new Error("Committed adaptive chunk is missing");
+  if (!topologyRejected) throw new Error("Adaptive LOD topology mutation was not fail-closed");
+  if (state.getRevision() !== initialStateRevision) throw new Error("Rejected topology mutation changed state revision");
+  if (state.hasChunk("0:0,0,0")) throw new Error("Rejected topology mutation created a placeholder chunk");
 
   const blocked = new InfinityScaleAdaptiveLODTransactionBridge(plan, state);
   blocked.begin(frame);
@@ -55,7 +57,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   if (retryState.hasChunk("0:0,0,0")) throw new Error("Wrong-phase LOD commit leaked a staged chunk");
 
   retryBridge.begin(frame);
-  const retried = retryBridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
+  const retried = retryBridge.commit(frame, []);
   if (!retried.committed) throw new Error("LOD bridge could not commit after wrong-phase rejection");
 
   // A stale-revision rejection must also detach the failed transaction and
@@ -74,7 +76,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   if (staleRetryState.hasChunk("0:0,0,0")) throw new Error("Stale LOD commit leaked a staged chunk");
 
   staleRetryBridge.begin(frame);
-  const staleRetried = staleRetryBridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
+  const staleRetried = staleRetryBridge.commit(frame, []);
   if (!staleRetried.committed) throw new Error("LOD bridge could not commit after stale-revision rejection");
 
   // Runtime callers can violate TypeScript's array contract; this must still
@@ -90,7 +92,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   }
   if (!malformedRejected) throw new Error("Malformed adaptive LOD input was not rejected");
   malformedBridge.begin(frame);
-  const malformedRetried = malformedBridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
+  const malformedRetried = malformedBridge.commit(frame, []);
   if (!malformedRetried.committed) throw new Error("LOD bridge could not commit after malformed-input rejection");
 
   // A duplicate begin must reject without replacing the already active
@@ -106,7 +108,6 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   }
   if (!duplicateBeginRejected) throw new Error("Duplicate adaptive LOD begin was not rejected");
   const originalTransactionCommitted = duplicateBeginBridge.commit(frame, [
-    { regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 },
   ]);
   if (!originalTransactionCommitted.committed) {
     throw new Error("Duplicate begin replaced or invalidated the original adaptive LOD transaction");

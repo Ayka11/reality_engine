@@ -65,6 +65,9 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
         throw new Error("Adaptive LOD transaction commit requires boundary-reconciliation phase");
       }
       this.state.assertRevision(this.transaction.stateRevision);
+      if (changed.length > 0) {
+        throw new Error("Adaptive LOD topology commit is disabled until physical chunk remapping and full-cell transfer are implemented");
+      }
       for (const mutation of changed) {
         const chunk = this.state.getChunk(mutation.regionId);
         if (chunk && chunk.level !== mutation.fromLOD) throw new Error("Adaptive LOD state conflict for region: " + mutation.regionId);
