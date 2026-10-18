@@ -31,7 +31,7 @@ presetsJs = presetsJs.replace(/from ['"]\.\.\/materials\/MaterialDef['"]/, `from
 presetsJs = presetsJs.replace(/from ['"]\.\.\/chemistry\/ChemLayer['"]/, `from "${chemUrl}"`);
 const presetUrl = `data:text/javascript;base64,${Buffer.from(presetsJs).toString("base64")}`;
 
-js = ts.transpileModule(source, {
+let js = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 js = js.replace(/from ['"]\.\.\/core\/CellState['"]/, `from "${cellUrl}"`);
