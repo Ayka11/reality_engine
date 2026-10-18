@@ -149,6 +149,19 @@ try {
     throw new Error("World-field view-window sampling ignored the requested Y slice");
   }
   if (!viewWindowContract.deterministic) throw new Error("World-field view-window sampling is not deterministic");
+  await page.evaluate(() => {
+    window.setWorldField2DLinked?.(true);
+    window.previewRenderMode?.("2d");
+  });
+  await page.waitForFunction(() => {
+    const state = window.getWorldField2DState?.();
+    return !!state && state.linked === true && state.sampleCount > 0;
+  }, { timeout: 10000 });
+  const renderedWorldField = await page.evaluate(() => window.getWorldField2DState());
+  if (!renderedWorldField.view || renderedWorldField.sampleCount <= 0) {
+    throw new Error("2D world-field renderer did not consume sampled world-space data");
+  }
+  await page.evaluate(() => window.previewRenderMode?.("3d"));
 
   const grips = await page.locator(".sidebar-drag-grip").count();
   if (grips !== 2) throw new Error(`Expected 2 sidebar drag grips, found ${grips}`);
