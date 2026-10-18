@@ -74,6 +74,13 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
     throw new Error("Selective frame failure did not restore agent state");
   }
   const after = engine.captureCoreRecoveryState();
+  // Compare the complete recovery snapshot, not only selected sentinel fields.
+  // Typed arrays serialize by index and the snapshot intentionally contains
+  // plain arrays for maps/sets, so this catches divergence across all captured
+  // subsystem state, both grid buffers, RNG, LOD chunks and metadata.
+  if (JSON.stringify(after) !== JSON.stringify(before)) {
+    throw new Error("Selective frame failure did not restore the complete core recovery snapshot");
+  }
   if (JSON.stringify(after.chemistry.pendingDensityTransfers) !== JSON.stringify(before.chemistry.pendingDensityTransfers) ||
       after.lod.chunks.length !== before.lod.chunks.length) {
     throw new Error("Selective frame failure did not restore deferred chemistry or LOD state");
