@@ -17,6 +17,7 @@ import { runSimulationRNGResetRegression } from "./SimulationRNGReset.regression
 import { runCausalGraphRecoveryRegression } from "./CausalGraphRecovery.regression";
 import { runLawEngineRecoveryRegression } from "./LawEngineRecovery.regression";
 import { runRecorderRecoveryRegression } from "./RecorderRecovery.regression";
+import { runSimulationStochasticReplayRegression } from "./SimulationStochasticReplay.regression";
 import { runRecorderControlRecoveryRegression } from "./RecorderControlRecovery.regression";
 import { runInfinityScaleLODMultiFrameRegression } from "./InfinityScaleLODMultiFrame.regression";
 import { runInfinityScaleMixedLODMultiFrameRegression } from "./InfinityScaleMixedLODMultiFrame.regression";
@@ -100,6 +101,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["causal-graph-recovery", runCausalGraphRecoveryRegression],
     ["law-engine-recovery", runLawEngineRecoveryRegression],
     ["recorder-recovery", runRecorderRecoveryRegression],
+    ["stochastic-replay-recovery", runSimulationStochasticReplayRegression],
     ["recorder-control-recovery", runRecorderControlRecoveryRegression],
     ["lod-multi-frame", runInfinityScaleLODMultiFrameRegression],
     ["mixed-lod-multi-frame", runInfinityScaleMixedLODMultiFrameRegression],
