@@ -211,13 +211,19 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   workerBusy = false
 
   if (cmd === 'restoreComplete') {
-    const result = e.data.data as { restoreId?: number; complete?: boolean } | undefined
+    const result = e.data.data as { restoreId?: number; complete?: boolean; prepared?: boolean } | undefined
     if (result?.restoreId !== worldFieldRestoreState.restoreId) {
       worldFieldRestoreState.staleAcks++
       return
     }
-    worldFieldRestoreState.workerBarrierComplete = result.complete === true
-    const complete = result.complete === true &&
+    if (result.complete !== true || result.prepared !== true) {
+      worldFieldRestoreState.workerBarrierComplete = false
+      worldFieldRestoreState.unexpectedAcks++
+      worldFieldRestoreActive = false
+      worldFieldRestorePendingFrames.clear()
+      return
+    }
+    const barrierComplete =
       worldFieldRestoreExpectedKeys.size > 0 &&
       worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
       worldFieldRestoreState.unexpectedAcks === 0 &&
@@ -227,37 +233,70 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
       [...worldFieldRestoreExpectedKeys].every(key =>
         worldFieldRestoreAcknowledgedKeys.has(key) && worldFieldRestoreFrameKeys.has(key))
-    if (complete) {
-      // Commit all restored chunks as one renderer frame only after the ACK/frame barrier.
-      const combined = new ArrayBuffer(4 + worldFieldRestoreExpectedKeys.size * (4 + CHUNK_FLOATS * 4))
-      const targetU32 = new Uint32Array(combined)
-      const targetF32 = new Float32Array(combined)
-      targetU32[0] = worldFieldRestoreExpectedKeys.size
-      let targetOff = 1
-      for (const frame of worldFieldRestorePendingFrames.values()) {
-        const sourceU32 = new Uint32Array(frame), sourceF32 = new Float32Array(frame)
-        const count = sourceU32[0]
-        let sourceOff = 1
-        for (let i = 0; i < count; i++) {
-          const chunkKey = sourceU32[sourceOff]
-          const chunkData = sourceF32.subarray(sourceOff + 1, sourceOff + 1 + CHUNK_FLOATS)
-          localChunks.set(chunkKey, new Float32Array(chunkData))
-          targetU32[targetOff] = chunkKey
-          targetF32.set(chunkData, targetOff + 1)
-          targetOff += 1 + CHUNK_FLOATS
-          sourceOff += 1 + CHUNK_FLOATS
-        }
-      }
-      fieldRenderer.applyWorkerFrame(combined)
-      installChunkWorldFieldProvider()
-      publishWorkerBoundarySnapshots()
-      if (worldFieldRestoreCoord) {
-        worldFieldChunkStore.delete(worldFieldRestoreCoord)
-        populateWorldFieldChunk(worldFieldRestoreCoord.cx, worldFieldRestoreCoord.cy, worldFieldRestoreCoord.cz, worldFieldRestoreSeed)
-      }
+    if (barrierComplete) {
+      // The worker retains its before-image until this explicit second-phase commit.
+      chunkWorker.postMessage({ cmd: 'restoreCommit', data: { restoreId: result.restoreId } })
     } else {
       worldFieldRestoreState.unexpectedAcks++
+      chunkWorker.postMessage({ cmd: 'restoreAbort', data: { restoreId: result.restoreId } })
     }
+    return
+  }
+
+  if (cmd === 'restoreCommitted') {
+    const result = e.data.data as { restoreId?: number; committed?: boolean } | undefined
+    if (result?.restoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
+    }
+    if (result.committed !== true) {
+      worldFieldRestoreState.unexpectedAcks++
+      worldFieldRestoreState.workerBarrierComplete = false
+      worldFieldRestoreActive = false
+      worldFieldRestorePendingFrames.clear()
+      return
+    }
+    // Only publish to the renderer after the worker confirms the second phase.
+    worldFieldRestoreState.workerBarrierComplete = true
+    const combined = new ArrayBuffer(4 + worldFieldRestoreExpectedKeys.size * (4 + CHUNK_FLOATS * 4))
+    const targetU32 = new Uint32Array(combined)
+    const targetF32 = new Float32Array(combined)
+    targetU32[0] = worldFieldRestoreExpectedKeys.size
+    let targetOff = 1
+    for (const frame of worldFieldRestorePendingFrames.values()) {
+      const sourceU32 = new Uint32Array(frame), sourceF32 = new Float32Array(frame)
+      const count = sourceU32[0]
+      let sourceOff = 1
+      for (let i = 0; i < count; i++) {
+        const chunkKey = sourceU32[sourceOff]
+        const chunkData = sourceF32.subarray(sourceOff + 1, sourceOff + 1 + CHUNK_FLOATS)
+        localChunks.set(chunkKey, new Float32Array(chunkData))
+        targetU32[targetOff] = chunkKey
+        targetF32.set(chunkData, targetOff + 1)
+        targetOff += 1 + CHUNK_FLOATS
+        sourceOff += 1 + CHUNK_FLOATS
+      }
+    }
+    fieldRenderer.applyWorkerFrame(combined)
+    installChunkWorldFieldProvider()
+    publishWorkerBoundarySnapshots()
+    if (worldFieldRestoreCoord) {
+      worldFieldChunkStore.delete(worldFieldRestoreCoord)
+      populateWorldFieldChunk(worldFieldRestoreCoord.cx, worldFieldRestoreCoord.cy, worldFieldRestoreCoord.cz, worldFieldRestoreSeed)
+    }
+    worldFieldRestoreActive = false
+    worldFieldRestorePendingFrames.clear()
+    return
+  }
+
+  if (cmd === 'restoreAborted') {
+    const result = e.data.data as { restoreId?: number; aborted?: boolean } | undefined
+    if (result?.restoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
+    }
+    if (result.aborted !== true) worldFieldRestoreState.unexpectedAcks++
+    worldFieldRestoreState.workerBarrierComplete = false
     worldFieldRestoreActive = false
     worldFieldRestorePendingFrames.clear()
     return
