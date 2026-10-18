@@ -48,7 +48,7 @@ export class TerrainGenerator {
     return val / max;
   }
 
-  generate(biome: BiomeName = 'earth', seed = Math.floor(Math.random() * 9999)): string {
+  generate(biome: BiomeName = 'earth', seed = 1): string {
     const { grid } = this;
     grid.buffer.fill(0);
     grid.backBuffer.fill(0);
@@ -56,7 +56,7 @@ export class TerrainGenerator {
       earth:       s => this._earthBiome(s),
       alien:       s => this._alienBiome(s),
       ocean:       s => this._oceanBiome(s),
-      volcanic:    s => this._volcanicBiome(s),
+      volcanic:    s => this._volcanicBiome(s, this._seededRandom(s)),
       arctic:      s => this._arcticBiome(s),
       desert:      s => this._desertBiome(s),
       forest:      s => this._forestBiome(s),
@@ -64,6 +64,18 @@ export class TerrainGenerator {
     };
     (biomes[biome] ?? biomes.earth)(seed);
     return `Terrain "${biome}" generated (seed ${seed})`;
+  }
+
+  private _seededRandom(seed: number): () => number {
+    let state = (Math.trunc(seed) >>> 0) || 0x9e3779b9;
+    return () => {
+      let x = state;
+      x ^= x << 13;
+      x ^= x >>> 17;
+      x ^= x << 5;
+      state = x >>> 0;
+      return state / 0x100000000;
+    };
   }
 
   private _set(x: number, y: number, z: number, field: number, value: number): void {
@@ -157,7 +169,7 @@ export class TerrainGenerator {
     }
   }
 
-  private _volcanicBiome(seed: number): void {
+  private _volcanicBiome(seed: number, random: () => number): void {
     const { grid } = this;
     const { W, H, D } = grid;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -169,8 +181,8 @@ export class TerrainGenerator {
       }
     }
     for (let v = 0; v < 4; v++) {
-      const vx = 8 + Math.floor(Math.random() * (W-16));
-      const vy = 8 + Math.floor(Math.random() * (H-16));
+      const vx = 8 + Math.floor(random() * Math.max(1, W-16));
+      const vy = 8 + Math.floor(random() * Math.max(1, H-16));
       for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
         const dx = x-vx, dy = y-vy, d = Math.sqrt(dx*dx+dy*dy);
         if (d < 6) {

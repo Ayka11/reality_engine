@@ -56,7 +56,7 @@ export interface ComposerSelection {
 }
 
 // ── Environment Hazards ───────────────────────────────────────────────────────
-type HazardFn = (grid: SimulationEngine['grid']) => void;
+type HazardFn = (grid: SimulationEngine['grid'], random?: () => number) => void;
 export const ENV_HAZARDS: Record<string, { desc: string; fn: HazardFn }> = {
   'Acid Rain':            { desc:'Periodic density erosion from above',     fn: _hazardAcidRain },
   'Meteor Activity':      { desc:'Random high-energy impacts',              fn: _hazardMeteors },
@@ -66,12 +66,12 @@ export const ENV_HAZARDS: Record<string, { desc: string; fn: HazardFn }> = {
   'Frozen Climate':       { desc:'Temperature drops periodically',          fn: _hazardFreezing },
 };
 
-function _hazardMeteors(grid: SimulationEngine['grid']): void {
+function _hazardMeteors(grid: SimulationEngine['grid'], random: () => number = Math.random): void {
   const buf = grid.buffer; const { W, H, D } = grid;
-  const n = 1 + Math.floor(Math.random() * 3);
+  const n = 1 + Math.floor(random() * 3);
   for (let i = 0; i < n; i++) {
-    const x = Math.floor(Math.random() * W), y = Math.floor(Math.random() * H);
-    const r = 2 + Math.floor(Math.random() * 4);
+    const x = Math.floor(random() * W), y = Math.floor(random() * H);
+    const r = 2 + Math.floor(random() * 4);
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
       const nx = x + dx, ny = y + dy;
       if (!grid.inBounds(nx, ny, D - 1) || dx*dx+dy*dy > r*r) continue;
@@ -83,25 +83,25 @@ function _hazardMeteors(grid: SimulationEngine['grid']): void {
     }
   }
 }
-function _hazardAcidRain(grid: SimulationEngine['grid']): void {
+function _hazardAcidRain(grid: SimulationEngine['grid'], random: () => number = Math.random): void {
   const buf = grid.buffer; const { W, H, D } = grid;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const bi = grid.idx(x, y, D - 1);
-    buf[bi+F.DENSITY] = Math.max(0, buf[bi+F.DENSITY] - 0.05 * Math.random());
-    buf[bi+F.ENTROPY] = Math.min(1, buf[bi+F.ENTROPY] + 0.02 * Math.random());
+    buf[bi+F.DENSITY] = Math.max(0, buf[bi+F.DENSITY] - 0.05 * random());
+    buf[bi+F.ENTROPY] = Math.min(1, buf[bi+F.ENTROPY] + 0.02 * random());
   }
 }
-function _hazardSolarStorm(grid: SimulationEngine['grid']): void {
+function _hazardSolarStorm(grid: SimulationEngine['grid'], random: () => number = Math.random): void {
   const buf = grid.buffer; const { W, H, D } = grid;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const bi = grid.idx(x, y, D - 1);
-    buf[bi+F.ENERGY]      = Math.min(9999, buf[bi+F.ENERGY]      + 50 + Math.random()*150);
+    buf[bi+F.ENERGY]      = Math.min(9999, buf[bi+F.ENERGY]      + 50 + random()*150);
     buf[bi+F.TEMPERATURE] = Math.min(2000, buf[bi+F.TEMPERATURE] + 30);
   }
 }
-function _hazardTectonics(grid: SimulationEngine['grid']): void {
+function _hazardTectonics(grid: SimulationEngine['grid'], random: () => number = Math.random): void {
   const buf = grid.buffer; const { W, H, D } = grid;
-  const cx = Math.floor(Math.random() * W), cy = Math.floor(Math.random() * H);
+  const cx = Math.floor(random() * W), cy = Math.floor(random() * H);
   for (let dy = -8; dy <= 8; dy++) for (let dx = -8; dx <= 8; dx++) {
     const nx = cx+dx, ny = cy+dy;
     if (!grid.inBounds(nx, ny, 0) || Math.sqrt(dx*dx+dy*dy) > 8) continue;
@@ -113,11 +113,11 @@ function _hazardTectonics(grid: SimulationEngine['grid']): void {
     }
   }
 }
-function _hazardRadiation(grid: SimulationEngine['grid']): void {
+function _hazardRadiation(grid: SimulationEngine['grid'], random: () => number = Math.random): void {
   const buf = grid.buffer; const { W, H, D } = grid;
   for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const bi = grid.idx(x, y, z);
-    buf[bi+F.ENTROPY] = Math.min(1, buf[bi+F.ENTROPY] + 0.003 * Math.random());
+    buf[bi+F.ENTROPY] = Math.min(1, buf[bi+F.ENTROPY] + 0.003 * random());
   }
 }
 function _hazardFreezing(grid: SimulationEngine['grid']): void {
@@ -134,11 +134,34 @@ export class WorldComposer {
     phi: null, fields: 'Balanced', complexity: 'Emergent', spacetime: 'Standard',
   };
   private activeHazardInterval: ReturnType<typeof setInterval> | null = null;
+  private _rngState: number;
+
 
   constructor(
     private sim: SimulationEngine,
-    private civSystem: CivilizationSystem | null = null
-  ) {}
+    private civSystem: CivilizationSystem | null = null,
+    seed = 0x4f1bbcdc
+  ) {
+    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x4f1bbcdc : 0x4f1bbcdc;
+  }
+
+  private _random(): number {
+    let x = this._rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this._rngState = x >>> 0;
+    return this._rngState / 0x100000000;
+  }
+
+  snapshotRandomState(): number { return this._rngState; }
+
+  restoreRandomState(state: number): void {
+    if (!Number.isSafeInteger(state) || state <= 0 || state > 0xffffffff) {
+      throw new Error('Invalid WorldComposer PRNG state');
+    }
+    this._rngState = state >>> 0;
+  }
 
   generate(): string {
     const { sim, selection } = this;
@@ -181,9 +204,9 @@ export class WorldComposer {
     if (st.hazards.length > 0) {
       this.activeHazardInterval = setInterval(() => {
         for (const h of st.hazards) {
-          if (h === 'radiation') _hazardRadiation(sim.grid);
-          if (h === 'meteors')   _hazardMeteors(sim.grid);
-          if (h === 'solar')     _hazardSolarStorm(sim.grid);
+          if (h === 'radiation') _hazardRadiation(sim.grid, () => this._random());
+          if (h === 'meteors')   _hazardMeteors(sim.grid, () => this._random());
+          if (h === 'solar')     _hazardSolarStorm(sim.grid, () => this._random());
           if (h === 'freeze')    _hazardFreezing(sim.grid);
         }
       }, 5000);
