@@ -134,7 +134,7 @@ export class ScriptEngine {
       },
 
       preset(name: string) {
-        Presets.apply(grid, name as PresetName, Math.floor(random() * 0xffffffff) || 1);
+        Presets.apply(grid, name as PresetName, random);
       },
 
       spawnEntity(x: number, y: number, z: number) {
