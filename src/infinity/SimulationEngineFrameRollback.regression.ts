@@ -192,15 +192,18 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
     throw new Error("Expected an installed Infinity Scale plan before stale-plan regression");
   }
   const beforePlanReplacement = engine.captureCoreRecoveryState();
-  const originalTickChunksForPlan = fieldPhysics.tickChunks;
-  fieldPhysics.tickChunks = ((...args: Parameters<typeof originalTickChunksForPlan>) => {
-    const result = originalTickChunksForPlan(...args);
-    engine.setInfinityScaleExecutionPlan({
-      ...planBeforeReplacement,
-      revision: planBeforeReplacement.revision + 1,
-    });
-    return result;
-  }) as typeof originalTickChunksForPlan;
+  let replacementApplied = false;
+  const originalSyncDenseToChunks = engine.grid.syncDenseToChunks;
+  engine.grid.syncDenseToChunks = (() => {
+    originalSyncDenseToChunks.call(engine.grid);
+    if (!replacementApplied) {
+      replacementApplied = true;
+      engine.setInfinityScaleExecutionPlan({
+        ...planBeforeReplacement,
+        revision: planBeforeReplacement.revision + 1,
+      });
+    }
+  }) as typeof originalSyncDenseToChunks;
 
   let stalePlanRejected = false;
   try {
@@ -209,7 +212,10 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
     stalePlanRejected = error instanceof Error &&
       error.message === "Infinity Scale execution plan changed during an active frame";
   } finally {
-    fieldPhysics.tickChunks = originalTickChunksForPlan;
+    engine.grid.syncDenseToChunks = originalSyncDenseToChunks;
+  }
+  if (!replacementApplied) {
+    throw new Error("Stale-plan regression did not reach the plan-replacement injection point");
   }
   if (!stalePlanRejected) {
     throw new Error("Frame committed despite execution-plan replacement during execution");
