@@ -52,6 +52,7 @@ export function runInfinityScaleLODMultiFrameRegression(): void {
   const key = "0:0,0,0";
   state.ensureChunk(key, 0);
 
+  const initialStateRevision = state.getRevision();
   const first = beginInfinityScaleGlobalLODTransaction(makeFrame(1), plan, state);
   first.synchronization.stageTransfer(
     {
@@ -69,8 +70,11 @@ export function runInfinityScaleLODMultiFrameRegression(): void {
   );
   const firstResult = commitInfinityScaleGlobalLODTransaction(first, makeFrame(1));
 
-  if (state.getRevision() !== 1 || firstResult.revision !== 1) {
-    throw new Error("Expected first committed LOD frame to advance state revision to 1");
+  if (
+    state.getRevision() !== initialStateRevision + 1 ||
+    firstResult.revision !== initialStateRevision + 1
+  ) {
+    throw new Error("Expected first committed LOD frame to advance state revision exactly once");
   }
 
   const stale = beginInfinityScaleGlobalLODTransaction(makeFrame(2), plan, state);
@@ -104,8 +108,10 @@ export function runInfinityScaleLODMultiFrameRegression(): void {
     throw new Error("Expected stale multi-frame LOD transaction to be rejected");
   }
 
-  if (state.getRevision() !== 2) {
-    throw new Error(`Expected second frame commit to advance revision to 2, received ${state.getRevision()}`);
+  if (state.getRevision() !== initialStateRevision + 2) {
+    throw new Error(
+      `Expected second frame commit to advance revision by two overall, received ${state.getRevision()}`,
+    );
   }
 
   const persisted = state.readBaseCell(key, 0, 1, 0, 0);
