@@ -453,11 +453,13 @@ export function runInfinityScaleLODPartialBoundaryCommitRollbackRegression(): vo
     operation: "copy" as const,
     readOperation: "copy" as const,
   };
-  transaction.synchronization.stageTransfer(spec, [0, 0, 0], [initial]);
+  const stagedValue = new Float32Array(initial);
+  stagedValue[0] = 99;
+  transaction.synchronization.stageTransfer(spec, [0, 0, 0], [stagedValue]);
   // Staging validates the transfer schema but intentionally leaves coordinate
   // bounds to the authoritative state write, injecting a failure after the
-  // preceding valid target has already been written during commit.
-  transaction.synchronization.stageTransfer(spec, [4, 0, 0], [initial]);
+  // preceding valid target has already been changed during commit.
+  transaction.synchronization.stageTransfer(spec, [4, 0, 0], [stagedValue]);
 
   let failed = false;
   try {
