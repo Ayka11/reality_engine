@@ -184,4 +184,50 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
       divergentDomains.join(", "),
     );
   }
+
+  // Simulate a plan replacement during frame execution. The active frame must
+  // not commit against its captured plan after a setter installs a newer one.
+  const planBeforeReplacement = engine.infinityScaleExecutionPlan;
+  if (!planBeforeReplacement) {
+    throw new Error("Expected an installed Infinity Scale plan before stale-plan regression");
+  }
+  const beforePlanReplacement = engine.captureCoreRecoveryState();
+  const originalTickChunksForPlan = fieldPhysics.tickChunks;
+  fieldPhysics.tickChunks = ((...args: Parameters<typeof originalTickChunksForPlan>) => {
+    const result = originalTickChunksForPlan(...args);
+    engine.setInfinityScaleExecutionPlan({
+      ...planBeforeReplacement,
+      revision: planBeforeReplacement.revision + 1,
+    });
+    return result;
+  }) as typeof originalTickChunksForPlan;
+
+  let stalePlanRejected = false;
+  try {
+    await engine.step(0.016);
+  } catch (error) {
+    stalePlanRejected = error instanceof Error &&
+      error.message === "Infinity Scale execution plan changed during an active frame";
+  } finally {
+    fieldPhysics.tickChunks = originalTickChunksForPlan;
+  }
+  if (!stalePlanRejected) {
+    throw new Error("Frame committed despite execution-plan replacement during execution");
+  }
+
+  const afterPlanReplacement = engine.captureCoreRecoveryState();
+  const planReplacementDivergence = (
+    Object.keys(beforePlanReplacement) as Array<keyof typeof beforePlanReplacement>
+  ).filter(key => key === "grid"
+    ? JSON.stringify(normalizeGrid(beforePlanReplacement.grid)) !== JSON.stringify(normalizeGrid(afterPlanReplacement.grid))
+    : JSON.stringify(beforePlanReplacement[key]) !== JSON.stringify(afterPlanReplacement[key]));
+  if (planReplacementDivergence.length > 0) {
+    throw new Error(
+      "Stale-plan rejection did not restore frame state in: " +
+      planReplacementDivergence.join(", "),
+    );
+  }
+  if (engine.infinityScaleExecutionPlan?.revision !== planBeforeReplacement.revision + 1) {
+    throw new Error("Stale-plan rollback unexpectedly discarded the newly installed plan");
+  }
 }
