@@ -4,6 +4,10 @@ import ts from "typescript";
 
 const root = new URL("../", import.meta.url);
 const source = await readFile(new URL("src/world/ScriptEngine.ts", root), "utf8");
+const presetsSource = await readFile(new URL("src/world/Presets.ts", root), "utf8");
+assert.match(source, /Presets\.apply\(grid, name as PresetName, random\)/, "ScriptEngine must inject its seeded RNG into presets");
+assert.match(presetsSource, /static apply\(grid: VoxelGrid, name: PresetName, random: \(\) => number = Math\.random\)/, "Presets must accept an injectable RNG while preserving backward compatibility");
+assert.doesNotMatch(presetsSource, /Math\.random\(\)/, "preset implementations must not bypass the injected RNG");
 const cellModule = `export const CELL_FIELDS=24; export const F={ENERGY:0,DENSITY:1,INFORMATION:2,ENTROPY:3,TEMPERATURE:4,BIO_POTENTIAL:11,SIGNAL:17,MEM_FIELD:18};`;
 const presetModule = `export const Presets={apply(grid,name,random=Math.random){if(name==='life'){for(let i=0;i<10;i++)grid.buffer[i*24]=random();}}};`;
 const cellUrl = `data:text/javascript;base64,${Buffer.from(cellModule).toString("base64")}`;
