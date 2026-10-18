@@ -21,6 +21,50 @@ export type WorldFieldMutation = {
 }
 
 const FIELDS: (keyof ScientificFieldSample)[] = ['energy','density','information','entropy','temperature','biology','material']
+const MUTATION_KINDS = ['brush', 'preset', 'law', 'composer'] as const
+const OVERLAY_KINDS = ['preset', 'law', 'composer'] as const
+
+function assertFiniteFieldValues(values: Partial<Record<keyof ScientificFieldSample, number>> | undefined, label: string, nonNegative = false): void {
+  if (values === undefined) return
+  if (!values || typeof values !== 'object' || Array.isArray(values)) throw new Error(`Invalid ${label}`)
+  for (const [field, value] of Object.entries(values)) {
+    if (!FIELDS.includes(field as keyof ScientificFieldSample) || typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error(`Invalid ${label} value for ${field}`)
+    }
+    if (nonNegative && value < 0) throw new Error(`Invalid ${label} value for ${field}: must be non-negative`)
+  }
+}
+
+function assertMutation(mutation: Omit<WorldFieldMutation, 'id'> | WorldFieldMutation): void {
+  if (!mutation || typeof mutation !== 'object' || !MUTATION_KINDS.includes(mutation.kind)) throw new Error('Invalid world field mutation kind')
+  const coordinates = [mutation.x, mutation.y, mutation.z]
+  if (coordinates.some(value => value !== undefined) && !coordinates.every(value => typeof value === 'number' && Number.isFinite(value))) {
+    throw new Error('World field mutation coordinates must be all finite when provided')
+  }
+  if (mutation.radius !== undefined && (typeof mutation.radius !== 'number' || !Number.isFinite(mutation.radius) || mutation.radius < 0)) {
+    throw new Error('World field mutation radius must be finite and non-negative')
+  }
+  assertFiniteFieldValues(mutation.delta, 'mutation delta')
+  assertFiniteFieldValues(mutation.scale, 'mutation scale', true)
+  if (mutation.operations !== undefined) {
+    if (!mutation.operations || typeof mutation.operations !== 'object' || Array.isArray(mutation.operations)) throw new Error('Invalid mutation operations')
+    for (const [field, operation] of Object.entries(mutation.operations)) {
+      if (!FIELDS.includes(field as keyof ScientificFieldSample) || !operation || typeof operation !== 'object') throw new Error(`Invalid mutation operation for ${field}`)
+      if (!['add', 'set', 'max', 'min', 'smooth6'].includes(operation.mode)) throw new Error(`Invalid mutation operation mode for ${field}`)
+      if (typeof operation.value !== 'number' || !Number.isFinite(operation.value)) throw new Error(`Invalid mutation operation value for ${field}`)
+      if (operation.weighting !== undefined && operation.weighting !== 'radial' && operation.weighting !== 'spatial') throw new Error(`Invalid mutation operation weighting for ${field}`)
+    }
+  }
+  if (mutation.profile) assertScientificFieldProfile(mutation.profile)
+  if (mutation.spatialPattern) assertScientificFieldSpatialPattern(mutation.spatialPattern)
+  if (mutation.profile && mutation.radius !== undefined && mutation.radius !== mutation.profile.radius) throw new Error('World field mutation radius must match its profile radius')
+}
+
+function assertOverlay(entry: { kind: string; scale: Partial<Record<keyof ScientificFieldSample, number>>; delta: Partial<ScientificFieldSample> }): void {
+  if (!entry || !OVERLAY_KINDS.includes(entry.kind as typeof OVERLAY_KINDS[number])) throw new Error('Invalid world field overlay kind')
+  assertFiniteFieldValues(entry.scale, 'global overlay scale', true)
+  assertFiniteFieldValues(entry.delta, 'global overlay delta')
+}
 
 function clampField(name:keyof ScientificFieldSample,value:number):number {
   if(name==='density'||name==='entropy'||name==='biology') return Math.max(0,Math.min(1,value))
@@ -96,9 +140,7 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   }
 
   apply(mutation:Omit<WorldFieldMutation,'id'>):WorldFieldMutation {
-    if(mutation.profile) assertScientificFieldProfile(mutation.profile)
-    if(mutation.spatialPattern) assertScientificFieldSpatialPattern(mutation.spatialPattern)
-    if(mutation.profile&&mutation.radius!==undefined&&mutation.radius!==mutation.profile.radius) throw new Error('World field mutation radius must match its profile radius')
+    assertMutation(mutation)
     const committed={...mutation,id:this.nextId++}
     this.mutations.push(committed);this.versionCounter++
     if(this.mutations.length>4096)this.mutations.splice(0,this.mutations.length-4096)
@@ -109,8 +151,11 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
     return this.apply({kind,x,y,z,radius,delta,metadata})
   }
   setGlobal(kind:'preset'|'law'|'composer',scale:Partial<Record<keyof ScientificFieldSample,number>>={},delta:Partial<ScientificFieldSample>={},metadata?:Record<string,unknown>){
-    this.globalOverlays.set(kind,{scale:{...scale},delta:{...delta},metadata});this.versionCounter++
-    const committed={id:this.nextId++,kind,metadata:{...metadata,globalScale:scale,globalDelta:delta,replacesPrevious:true}}
+    assertOverlay({kind,scale,delta})
+    const committed={id:this.nextId,kind,metadata:{...metadata,globalScale:scale,globalDelta:delta,replacesPrevious:true}}
+    this.globalOverlays.set(kind,{scale:{...scale},delta:{...delta},metadata})
+    this.versionCounter++
+    this.nextId++
     this.mutations.push(committed);if(this.mutations.length>4096)this.mutations.splice(0,this.mutations.length-4096);return committed
   }
   clearGlobal(kind:'preset'|'law'|'composer'){if(!this.globalOverlays.delete(kind))return false;this.versionCounter++;return true}
@@ -119,23 +164,25 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   getMutationCount(){return this.mutations.length}
   serialize(){return {schemaVersion:'world-field-state-v2',providerId:this.id,providerVersion:this.version,version:this.versionCounter,nextId:this.nextId,mutations:this.mutations.map(m=>({...m,metadata:m.metadata?{...m.metadata}:undefined})),globalOverlays:Array.from(this.globalOverlays.entries()).map(([kind,value])=>({kind,scale:{...value.scale},delta:{...value.delta},metadata:value.metadata?{...value.metadata}:undefined}))}}
   restore(state:ReturnType<MutableWorldFieldProvider['serialize']>){
-    if(state.schemaVersion!=='world-field-state-v2'||state.providerId!==this.id||state.providerVersion!==this.version) throw new Error('Unsupported world field state')
+    if(!state||state.schemaVersion!=='world-field-state-v2'||state.providerId!==this.id||state.providerVersion!==this.version) throw new Error('Unsupported world field state')
     if(!Number.isInteger(state.nextId)||state.nextId<1||!Number.isInteger(state.version)||state.version<0) throw new Error('Invalid world field state counters')
+    if(!Array.isArray(state.mutations)||!Array.isArray(state.globalOverlays)) throw new Error('Invalid world field state collections')
     let previousId = 0
     for(const mutation of state.mutations){
       if(!Number.isInteger(mutation.id)||mutation.id<=previousId) throw new Error('Invalid world field mutation id sequence')
       previousId = mutation.id
-      if(mutation.profile) assertScientificFieldProfile(mutation.profile)
-      if(mutation.spatialPattern) assertScientificFieldSpatialPattern(mutation.spatialPattern)
-      if(mutation.profile&&mutation.radius!==undefined&&mutation.radius!==mutation.profile.radius) throw new Error('World field mutation radius must match its profile radius')
+      const { id: _id, ...withoutId } = mutation
+      assertMutation(withoutId)
     }
     if(state.mutations.length>4096 || (state.mutations.length>0 && state.nextId<=state.mutations[state.mutations.length-1].id)) throw new Error('Invalid world field mutation counter')
+    const overlays = state.globalOverlays.map(entry => {
+      assertOverlay(entry)
+      return {kind:entry.kind,scale:{...entry.scale},delta:{...entry.delta},metadata:entry.metadata?{...entry.metadata}:undefined}
+    })
+    // Commit only after every item has validated, so a corrupt snapshot cannot partially restore state.
     this.mutations=state.mutations.map(m=>({...m,metadata:m.metadata?{...m.metadata}:undefined}))
     this.globalOverlays.clear()
-    for(const entry of state.globalOverlays){
-      if(entry.kind!=='preset'&&entry.kind!=='law'&&entry.kind!=='composer') throw new Error('Invalid world field overlay kind')
-      this.globalOverlays.set(entry.kind,{scale:{...entry.scale},delta:{...entry.delta},metadata:entry.metadata?{...entry.metadata}:undefined})
-    }
+    for(const entry of overlays) this.globalOverlays.set(entry.kind,{scale:entry.scale,delta:entry.delta,metadata:entry.metadata})
     this.nextId=state.nextId
     this.versionCounter=state.version
   }
