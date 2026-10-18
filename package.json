@@ -32,7 +32,8 @@
     "audit:report": "node scripts/report-npm-audit.mjs",
     "test:solver-deployment": "node scripts/check-solver-client-deployment.mjs",
     "test:hf-runtime": "node scripts/check-hf-runtime.mjs",
-    "test:script-engine-rng-recovery": "node scripts/check-script-engine-rng-recovery.mjs"
+    "test:script-engine-rng-recovery": "node scripts/check-script-engine-rng-recovery.mjs",
+    "test:agent-worldevents-rng-recovery": "node scripts/check-agent-worldevents-rng-recovery.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
