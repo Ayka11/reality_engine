@@ -8,6 +8,9 @@ import {
   ChunkGrid, GRID_W, GRID_H, GRID_D,
   CHUNK_FLOATS, F, NF, CX, CY, CZ, chunkKey,
 } from './ChunkGrid'
+import { brushGeometryWeight } from '../brushes/BrushGeometry'
+import { applyBrushOperation } from '../brushes/BrushMath'
+import type { BrushFalloff, BrushOperation, BrushShape, BrushVerticalExtent } from '../brushes/BrushContract'
 
 const grid = new ChunkGrid()
 const W = GRID_W, H = GRID_H, D = GRID_D
@@ -42,6 +45,29 @@ function affectedCellIndices(x: number, y: number, z: number, radius: number): n
   }
   return cells
 }
+function affectedBrushCellIndices(
+  x: number, y: number, z: number, geometry: {
+    shape: BrushShape; falloff: BrushFalloff; verticalExtent: BrushVerticalExtent;
+    radius: number; shellThickness: number; layerThickness: number;
+  },
+): number[] {
+  const pad = geometry.shape === 'shell' ? geometry.shellThickness : 0
+  const x0 = Math.max(0, Math.floor(x - geometry.radius - pad))
+  const x1 = Math.min(GRID_W - 1, Math.ceil(x + geometry.radius + pad))
+  const z0 = Math.max(0, Math.floor(z - geometry.radius - pad))
+  const z1 = Math.min(GRID_D - 1, Math.ceil(z + geometry.radius + pad))
+  const fullColumn = geometry.shape === 'column' && geometry.verticalExtent === 'full-column'
+  const y0 = fullColumn ? 0 : Math.max(0, Math.floor(y - geometry.radius - pad))
+  const y1 = fullColumn ? GRID_H - 1 : Math.min(GRID_H - 1, Math.ceil(y + geometry.radius + pad))
+  const cells: number[] = []
+  for (let cz = z0; cz <= z1; cz++) for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+    if (brushGeometryWeight({ center: { x, y, z }, point: { x: cx, y: cy, z: cz }, geometry, selectedLayerY: y }) > 0) {
+      cells.push((cz * GRID_H + cy) * GRID_W + cx)
+    }
+  }
+  return cells
+}
+
 function captureCells(indices:number[]):CellImage {
   const image:CellImage=new Map()
   for(const index of indices){
@@ -235,47 +261,80 @@ self.onmessage = (e: MessageEvent) => {
   if(cmd==='clearSculptHistory'){clearSculptHistory();return}
 
   if (cmd === 'brush') {
-    const { name, x, y, z, radius, strength } = data as {
+    const {
+      name, x, y, z, radius, strength,
+      geometry: requestedShape = 'sphere',
+      falloff: requestedFalloff = 'gaussian',
+      verticalExtent: requestedVerticalExtent = 'bounded-volume',
+      operation: requestedOperation = 'set',
+      shellThickness = 1,
+      layerThickness = 0.5,
+    } = data as {
       name: string; x: number; y: number; z: number; radius: number; strength: number
+      geometry?: BrushShape; falloff?: BrushFalloff; verticalExtent?: BrushVerticalExtent
+      operation?: BrushOperation; shellThickness?: number; layerThickness?: number
+      trackHistory?: boolean
     }
     const cx = Math.max(0, Math.min(W - 1, Math.round(x)))
     const cy = Math.max(0, Math.min(H - 1, Math.round(y)))
     const cz = Math.max(0, Math.min(D - 1, Math.round(z)))
-    const r = Math.max(1, Math.min(24, radius || 4))
-    const s = Number.isFinite(strength) ? strength : 1
+    const r = Math.max(1, Math.min(24, Number.isFinite(radius) ? radius : 4))
+    const s = Math.max(0, Math.min(2.5, Number.isFinite(strength) ? strength : 1))
+    const shape: BrushShape = (['sphere', 'shell', 'column', 'layer'] as string[]).includes(requestedShape) ? requestedShape : 'sphere'
+    const falloff: BrushFalloff = (['gaussian', 'linear', 'constant'] as string[]).includes(requestedFalloff) ? requestedFalloff : 'gaussian'
+    const verticalExtent: BrushVerticalExtent = (['selected-layer', 'bounded-volume', 'full-column'] as string[]).includes(requestedVerticalExtent) ? requestedVerticalExtent : 'bounded-volume'
+    const operation: BrushOperation = (['add', 'set', 'scale'] as string[]).includes(requestedOperation) ? requestedOperation : 'set'
+    const brushGeometry = {
+      shape, falloff, verticalExtent, radius: r,
+      shellThickness: Math.max(0.25, Math.min(8, Number.isFinite(shellThickness) ? shellThickness : 1)),
+      layerThickness: Math.max(0, Math.min(4, Number.isFinite(layerThickness) ? layerThickness : 0.5)),
+    }
     const trackHistory = data.trackHistory === true
     if (!trackHistory) clearSculptHistory()
-    const cells = trackHistory ? affectedCellIndices(cx,cy,cz,r) : []
+    const cells = trackHistory ? affectedBrushCellIndices(cx, cy, cz, brushGeometry) : []
     const before = trackHistory ? captureCells(cells) : null
-    const paint = (f: number, value: number) => grid.paintSphere(cx, cy, cz, r, f, value * s)
-    switch (name) {
-      case 'Volcano': paint(F.E, 800); paint(F.T, 500); paint(F.D, 0.6); paint(F.S, 0.2); break
-      case 'Forest': paint(F.E, 180); paint(F.D, 0.4); paint(F.I, 160); paint(F.BIO, 0.7); break
-      case 'Ocean': paint(F.E, 60); paint(F.D, 0.6); paint(F.T, 60); paint(F.I, 40); break
-      case 'Crystal': paint(F.E, 700); paint(F.I, 280); paint(F.S, -0.08); break
-      case 'Storm': paint(F.E, 400); paint(F.S, 0.12); paint(F.T, 150); break
-      case 'Life Cluster': paint(F.E, 280); paint(F.D, 0.45); paint(F.I, 200); paint(F.BIO, 0.65); paint(F.T, 110); paint(F.S, -0.1); break
-      case 'Radiation': paint(F.S, 0.3); paint(F.I, -50); break
-      case 'Civ Seed':
-      case 'Civilization Seed': paint(F.E, 380); paint(F.D, 0.5); paint(F.I, 400); paint(F.BIO, 0.8); paint(F.S, -0.15); paint(F.T, 100); break
-      case 'Gravity Well': paint(F.E, 450); paint(F.D, 0.8); break
-      case 'Entropy Sink': paint(F.S, -0.4); paint(F.T, -200); break
-      case 'Quantum Core': paint(F.I, 350); paint(F.BIO, 0.6); paint(F.E, 200); break
-      case 'MetaLaw Node': paint(F.E, 400); paint(F.I, 300); paint(F.D, 0.5); break
-      case 'Force Barrier': {
-        const ir = Math.ceil(r)
-        for (let dz=-ir; dz<=ir; dz++) for (let dy=-ir; dy<=ir; dy++) for (let dx=-ir; dx<=ir; dx++) {
-          const d = Math.sqrt(dx*dx+dy*dy+dz*dz)
-          if (Math.abs(d-r) > 1.2) continue
-          grid.set(cx+dx, cy+dy, cz+dz, F.D, 0.9*s)
-          grid.set(cx+dx, cy+dy, cz+dz, F.E, 150*s)
-        }
-        break
+
+    const effects: Array<[number, number]> = (() => {
+      switch (name) {
+        case 'Volcano': return [[F.E, 800], [F.T, 500], [F.D, 0.6], [F.S, 0.2]]
+        case 'Forest': return [[F.E, 180], [F.D, 0.4], [F.I, 160], [F.BIO, 0.7]]
+        case 'Ocean': return [[F.E, 60], [F.D, 0.6], [F.T, 60], [F.I, 40]]
+        case 'Crystal': return [[F.E, 700], [F.I, 280], [F.S, -0.08]]
+        case 'Storm': return [[F.E, 400], [F.S, 0.12], [F.T, 150]]
+        case 'Life Cluster': return [[F.E, 280], [F.D, 0.45], [F.I, 200], [F.BIO, 0.65], [F.T, 110], [F.S, -0.1]]
+        case 'Radiation': return [[F.S, 0.3], [F.I, -50]]
+        case 'Civ Seed':
+        case 'Civilization Seed': return [[F.E, 380], [F.D, 0.5], [F.I, 400], [F.BIO, 0.8], [F.S, -0.15], [F.T, 100]]
+        case 'Gravity Well': return [[F.E, 450], [F.D, 0.8]]
+        case 'Entropy Sink': return [[F.S, -0.4], [F.T, -200]]
+        case 'Quantum Core': return [[F.I, 350], [F.BIO, 0.6], [F.E, 200]]
+        case 'MetaLaw Node': return [[F.E, 400], [F.I, 300], [F.D, 0.5]]
+        case 'Force Barrier': return [[F.D, 0.9], [F.E, 150]]
+        default: return [[F.E, 100]]
       }
-      default: paint(F.E, 100)
+    })()
+    const pad = shape === 'shell' ? brushGeometry.shellThickness : 0
+    const x0 = Math.max(0, Math.floor(cx - r - pad)), x1 = Math.min(W - 1, Math.ceil(cx + r + pad))
+    const z0 = Math.max(0, Math.floor(cz - r - pad)), z1 = Math.min(D - 1, Math.ceil(cz + r + pad))
+    const fullColumn = shape === 'column' && verticalExtent === 'full-column'
+    const y0 = fullColumn ? 0 : Math.max(0, Math.floor(cy - r - pad))
+    const y1 = fullColumn ? H - 1 : Math.min(H - 1, Math.ceil(cy + r + pad))
+    for (let pz = z0; pz <= z1; pz++) for (let py = y0; py <= y1; py++) for (let px = x0; px <= x1; px++) {
+      const weight = brushGeometryWeight({
+        center: { x: cx, y: cy, z: cz }, point: { x: px, y: py, z: pz },
+        geometry: brushGeometry, selectedLayerY: cy,
+      })
+      if (weight <= 0) continue
+      for (const [field, value] of effects) {
+        const current = grid.get(px, py, pz, field)
+        grid.set(px, py, pz, field, applyBrushOperation(current, value, operation, weight, s))
+      }
     }
-    if (before) commitSculptEdit(cells,before)
-    ;(self as unknown as Worker).postMessage({ cmd: 'brushApplied', name, x: cx, y: cy, z: cz, radius: r })
+    if (before) commitSculptEdit(cells, before)
+    ;(self as unknown as Worker).postMessage({
+      cmd: 'brushApplied', name, x: cx, y: cy, z: cz, radius: r,
+      geometry: shape, falloff, verticalExtent, operation,
+    })
     return
   }
 

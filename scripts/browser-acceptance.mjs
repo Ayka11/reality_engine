@@ -454,12 +454,67 @@ try {
   await page.evaluate(() => window.setRealityLaw?.("Density Gravity", true, 0.4, 0.012));
 
   await page.waitForFunction(() => typeof window.applyChunkBrush === "function");
-  await page.evaluate(() => { window.lastChunkBrush = null; window.applyChunkBrush("Forest", 64, 64, 32, 5, 1); });
+  await page.evaluate(() => {
+    window.lastChunkBrush = null;
+    window.applyChunkBrush("Forest", 64, 64, 32, 5, 1, {
+      geometry: "shell", falloff: "linear", verticalExtent: "full-column", operation: "add",
+    });
+  });
   await page.waitForFunction(() => !!window.lastChunkBrush, undefined, { timeout: acceptanceTimeout });
   const brushAck = await page.evaluate(() => window.lastChunkBrush);
-  if (brushAck?.name !== "Forest" || brushAck?.x !== 64 || brushAck?.y !== 64 || brushAck?.z !== 32 || brushAck?.radius !== 5) {
-    throw new Error("Smart Brush did not reach ChunkSimWorker with expected runtime parameters");
+  if (
+    brushAck?.name !== "Forest" || brushAck?.x !== 64 || brushAck?.y !== 64 ||
+    brushAck?.z !== 32 || brushAck?.radius !== 5 ||
+    brushAck?.geometry !== "shell" || brushAck?.falloff !== "linear" ||
+    brushAck?.verticalExtent !== "full-column" || brushAck?.operation !== "add"
+  ) {
+    throw new Error("Smart Brush geometry settings did not reach ChunkSimWorker with expected runtime parameters");
   }
+
+  // Earlier law/materialization checks switch panels; restore the Brushes panel that owns brush geometry controls.
+  await page.evaluate(() => window.setIconPanel?.("brush"));
+  await page.waitForFunction(() => document.querySelector('.icon-btn[data-panel="brush"]')?.classList.contains("active"));
+
+  const brushControls = await page.evaluate(() => ({
+    geometry: !!document.getElementById("brushGeometry"),
+    falloff: !!document.getElementById("brushFalloff"),
+    verticalExtent: !!document.getElementById("brushVerticalExtent"),
+    operation: !!document.getElementById("brushOperation"),
+  }));
+  if (Object.values(brushControls).some(present => !present)) {
+    throw new Error(`Brush geometry controls are missing from the workspace: ${JSON.stringify(brushControls)}`);
+  }
+
+  // Exercise the real UI path: selected controls -> paintAt -> connector -> worker ACK.
+  await page.evaluate(() => {
+    window.setRenderMode?.("2d");
+    window.selectBrush?.("Forest");
+    document.getElementById("brushGeometry").value = "column";
+    document.getElementById("brushFalloff").value = "constant";
+    document.getElementById("brushVerticalExtent").value = "full-column";
+    document.getElementById("brushOperation").value = "add";
+    window.lastChunkBrush = null;
+  });
+  const brushUiPoint = await page.evaluate(() => {
+    const wrap = document.getElementById("viewWrap");
+    if (!wrap) return { error: "viewWrap missing" };
+    const rect = wrap.getBoundingClientRect();
+    const cellSize = Math.min(rect.width / window.W, rect.height / window.H);
+    const ox = (rect.width - cellSize * window.W) / 2, oy = (rect.height - cellSize * window.H) / 2;
+    return { x: rect.left + ox + 20.5 * cellSize, y: rect.top + oy + 20.5 * cellSize };
+  });
+  if (brushUiPoint.error) throw new Error(brushUiPoint.error);
+  await page.mouse.click(brushUiPoint.x, brushUiPoint.y);
+  await page.waitForFunction(() => window.lastChunkBrush?.geometry === "column", undefined, { timeout: acceptanceTimeout });
+  const brushUiAck = await page.evaluate(() => window.lastChunkBrush);
+  if (
+    brushUiAck?.falloff !== "constant" ||
+    brushUiAck?.verticalExtent !== "full-column" ||
+    brushUiAck?.operation !== "add"
+  ) {
+    throw new Error(`Brush settings from the workspace did not reach the Worker: ${JSON.stringify(brushUiAck)}`);
+  }
+  console.log("[acceptance] brush geometry UI -> worker contract PASS");
 
   await page.waitForFunction(() => typeof window.applyChunkPreset === "function");
   await page.evaluate(() => { window.lastChunkPreset = null; window.applyChunkPreset("town"); });
@@ -675,6 +730,9 @@ try {
     gesture.workerAckStart, { timeout: acceptanceTimeout });
 
   const persistedSculptState = sculptContract.gesture.redoState;
+  // The brush UI contract switches to 2D; restore 3D before reload because subsequent
+  // worker-restore acceptance requires the primary #c3d canvas to be visible.
+  await page.evaluate(() => window.setRenderMode?.("3d"));
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
