@@ -31,9 +31,25 @@ import { RealityMonitor, buildRealityMonitorHTML, updateMonitorPanels } from './
 import { NodeLawEditor }                          from './ui/NodeLawEditor'
 import { sceneComposer }                          from './modes/cinema/SceneComposer'
 import { RealityLawBridge }                       from './laws/RealityLawBridge'
+import { ChunkWorldFieldProvider } from './infinity/ChunkWorldFieldProvider'
+import { GeneratorFieldProvider } from './infinity/ScientificFieldProvider'
+import { MutableWorldFieldProvider } from './infinity/MutableWorldFieldProvider'
+import { WorldFieldChunkStore, worldFieldChunkCoord } from './infinity/WorldFieldChunkStore'
+import { DeterministicWorldFieldChunkProvider } from './infinity/DeterministicWorldFieldChunkProvider'
+import { WorkerWorldFieldChunkProvider } from './infinity/WorkerWorldFieldChunkProvider'
+import { worldFieldChunkPersistence } from './infinity/WorldFieldChunkPersistence'
+import { worldFieldBoundaryExchange } from './infinity/WorldFieldBoundaryExchange'
+import type { ScientificFieldSample } from './infinity/FieldSampler'
+import { CHUNK_FLOATS, GRID_D, GRID_H, GRID_W, NF, chunkKey } from './core/ChunkGrid'
+import { runtimeProvenance } from './infinity/RuntimeProvenance'
+import { worldViewContract } from './infinity/WorldViewContract'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
 const win = window as unknown as Record<string, unknown>
+const clearUiSculptHistory = () => {
+  const clear = win['clearSculptTransactionHistory']
+  if (typeof clear === 'function') (clear as () => void)()
+}
 
 // ── Chunk system — Three.js PBR renderer + 128×128×64 sparse worker ─────────
 
@@ -63,6 +79,83 @@ const nodeEditor    = new NodeLawEditor()
 
 const localChunks = new Map<number, Float32Array>()
 let chunkTick = 0, chunkEvCount = 0, workerBusy = false
+let worldFieldRestoreId = 0
+let worldFieldRestoreCoord: { cx: number; cy: number; cz: number } | null = null
+let worldFieldRestoreSeed = ''
+let worldFieldRestoreActive = false
+const worldFieldRestoreState = {
+  restoreId: 0, expected: 0, acknowledged: 0, keys: [] as number[],
+  duplicateAcks: 0, unexpectedAcks: 0, staleAcks: 0, staleFrames: 0, discardedInflightFrames: 0,
+  unexpectedFrames: 0, restoreFrameRestoreId: 0, restoreFrameKeys: [] as number[],
+  workerBarrierComplete: false,
+}
+const worldFieldRestoreExpectedKeys = new Set<number>()
+const worldFieldRestoreAcknowledgedKeys = new Set<number>()
+const worldFieldRestoreFrameKeys = new Set<number>()
+const worldFieldRestorePendingFrames = new Map<number, ArrayBuffer>()
+let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
+let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
+const worldFieldChunkStore = new WorldFieldChunkStore(128, (chunk) => {
+  // Do not persist a partial worker view over the source snapshot being restored.
+  if (worldFieldRestoreActive && worldFieldRestoreCoord &&
+      chunk.coord.cx === worldFieldRestoreCoord.cx &&
+      chunk.coord.cy === worldFieldRestoreCoord.cy &&
+      chunk.coord.cz === worldFieldRestoreCoord.cz) return
+  const provider = chunk.provider as {
+    snapshotWorkerChunks?: () => { key: number; data: number[] }[]
+    snapshotValues?: () => number[]
+  }
+  const workerChunks = provider.snapshotWorkerChunks?.() ?? []
+  if (workerChunks.length) {
+    worldFieldChunkPersistence.saveWorkerChunks(chunk.coord, chunk.seed, workerChunks, worldViewContract.snapshot(), chunk.version)
+  } else {
+    const values = provider.snapshotValues?.()
+    if (values?.length) worldFieldChunkPersistence.save(
+      chunk.coord, chunk.seed, values, chunk.version,
+      { fieldsPerCell: NF, cellCount: CHUNK_FLOATS / NF },
+    )
+  }
+})
+const populateWorldFieldChunk = (cx: number, cy: number, cz: number, seed = worldViewContract.snapshot().seed) => {
+  const coord = { cx: Math.trunc(cx), cy: Math.trunc(cy), cz: Math.trunc(cz) }
+  const existing = worldFieldChunkStore.get(coord)
+  if (existing) return existing
+  const world = getInfiniteWorld()
+  const fallback = new DeterministicWorldFieldChunkProvider(seed, coord)
+  const provider = world
+    ? new WorkerWorldFieldChunkProvider(coord, localChunks, () => worldViewContract.snapshot(), fallback)
+    : fallback
+  return worldFieldChunkStore.set(coord, seed, provider, world ? 2 : 1)
+}
+function installChunkWorldFieldProvider() {
+  const world = getInfiniteWorld()
+  if (!world) return false
+  const fallback = new GeneratorFieldProvider(world.generator)
+  if (!authoritativeWorldFieldProvider) authoritativeWorldFieldProvider = new MutableWorldFieldProvider(fallback)
+  else authoritativeWorldFieldProvider.setBase(fallback)
+  world.fieldSampler.setProvider(authoritativeWorldFieldProvider)
+  if (!chunkWorldFieldProvider) {
+    chunkWorldFieldProvider = new ChunkWorldFieldProvider(localChunks, () => worldViewContract.snapshot(), fallback)
+  }
+  return true
+}
+function publishWorkerBoundarySnapshots() {
+  const view = worldViewContract.snapshot()
+  const centerChunk = worldFieldChunkCoord(view.center.x, view.sliceY, view.center.z)
+  const provider = new WorkerWorldFieldChunkProvider(
+    centerChunk, localChunks, () => worldViewContract.snapshot(),
+    new DeterministicWorldFieldChunkProvider(view.seed, centerChunk),
+  )
+  worldFieldBoundaryExchange.clearForChunk(centerChunk)
+  for (const axis of ['x', 'y', 'z'] as const) {
+    worldFieldBoundaryExchange.snapshotFace(provider, centerChunk, axis, 1, 8)
+    worldFieldBoundaryExchange.snapshotFace(provider, worldFieldBoundaryExchange.neighbor(centerChunk, axis, 1), axis, -1, 8)
+  }
+  return { centerChunk, faces: worldFieldBoundaryExchange.size() }
+}
+win['getWorldViewContract'] = () => worldViewContract.snapshot()
+win['worldFieldChunkCoord'] = worldFieldChunkCoord
+win['installChunkWorldFieldProvider'] = installChunkWorldFieldProvider
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 const realityLawBridge = new RealityLawBridge()
 win['realityLawBridge'] = realityLawBridge
@@ -94,9 +187,155 @@ requestAnimationFrame(() => {
   try { const sync = win['syncRealityLaws'] as (() => unknown) | undefined; if (sync) sync() } catch (error) { console.warn('[RealityLawBridge] initial sync failed', error) }
 })
 
+type SculptHistoryAcknowledgement = { action: 'undo' | 'redo'; applied: boolean; seq: number }
+const pendingSculptHistory = new Map<number, {
+  resolve: (acknowledgement: SculptHistoryAcknowledgement) => void
+  reject: (error: Error) => void
+  timer: number
+}>()
+let nextSculptHistoryRequestId = 0
+function requestChunkSculptHistory(action: 'undo' | 'redo'): Promise<SculptHistoryAcknowledgement> {
+  const requestId = ++nextSculptHistoryRequestId
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      pendingSculptHistory.delete(requestId)
+      reject(new Error(`Sparse worker sculpt ${action} acknowledgement timed out`))
+    }, 5000)
+    pendingSculptHistory.set(requestId, { resolve, reject, timer })
+    chunkWorker.postMessage({ cmd: action === 'undo' ? 'undoSculpt' : 'redoSculpt', requestId })
+  })
+}
+
 chunkWorker.onmessage = (e: MessageEvent) => {
-  const { cmd, tick: wTick, evCount: wEv, ab, stats } = e.data
+  const { cmd, tick: wTick, evCount: wEv, ab, stats, restoreId: frameRestoreId } = e.data
   workerBusy = false
+
+  if (cmd === 'restoreComplete') {
+    const result = e.data.data as { restoreId?: number; complete?: boolean; prepared?: boolean } | undefined
+    if (result?.restoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
+    }
+    if (result.complete !== true || result.prepared !== true) {
+      worldFieldRestoreState.workerBarrierComplete = false
+      worldFieldRestoreState.unexpectedAcks++
+      worldFieldRestoreActive = false
+      worldFieldRestorePendingFrames.clear()
+      return
+    }
+    const barrierComplete =
+      worldFieldRestoreExpectedKeys.size > 0 &&
+      worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
+      worldFieldRestoreState.unexpectedAcks === 0 &&
+      worldFieldRestoreState.unexpectedFrames === 0 &&
+      worldFieldRestoreState.duplicateAcks === 0 &&
+      worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
+      worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
+      [...worldFieldRestoreExpectedKeys].every(key =>
+        worldFieldRestoreAcknowledgedKeys.has(key) && worldFieldRestoreFrameKeys.has(key))
+    if (barrierComplete) {
+      // The worker retains its before-image until this explicit second-phase commit.
+      chunkWorker.postMessage({ cmd: 'restoreCommit', data: { restoreId: result.restoreId } })
+    } else {
+      worldFieldRestoreState.unexpectedAcks++
+      chunkWorker.postMessage({ cmd: 'restoreAbort', data: { restoreId: result.restoreId } })
+    }
+    return
+  }
+
+  if (cmd === 'restoreCommitted') {
+    const result = e.data.data as { restoreId?: number; committed?: boolean } | undefined
+    if (result?.restoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
+    }
+    if (result.committed !== true) {
+      worldFieldRestoreState.unexpectedAcks++
+      worldFieldRestoreState.workerBarrierComplete = false
+      worldFieldRestoreActive = false
+      worldFieldRestorePendingFrames.clear()
+      return
+    }
+    // Only publish to the renderer after the worker confirms the second phase.
+    worldFieldRestoreState.workerBarrierComplete = true
+    const combined = new ArrayBuffer(4 + worldFieldRestoreExpectedKeys.size * (4 + CHUNK_FLOATS * 4))
+    const targetU32 = new Uint32Array(combined)
+    const targetF32 = new Float32Array(combined)
+    targetU32[0] = worldFieldRestoreExpectedKeys.size
+    let targetOff = 1
+    for (const frame of worldFieldRestorePendingFrames.values()) {
+      const sourceU32 = new Uint32Array(frame), sourceF32 = new Float32Array(frame)
+      const count = sourceU32[0]
+      let sourceOff = 1
+      for (let i = 0; i < count; i++) {
+        const chunkKey = sourceU32[sourceOff]
+        const chunkData = sourceF32.subarray(sourceOff + 1, sourceOff + 1 + CHUNK_FLOATS)
+        localChunks.set(chunkKey, new Float32Array(chunkData))
+        targetU32[targetOff] = chunkKey
+        targetF32.set(chunkData, targetOff + 1)
+        targetOff += 1 + CHUNK_FLOATS
+        sourceOff += 1 + CHUNK_FLOATS
+      }
+    }
+    fieldRenderer.applyWorkerFrame(combined)
+    installChunkWorldFieldProvider()
+    publishWorkerBoundarySnapshots()
+    if (worldFieldRestoreCoord) {
+      worldFieldChunkStore.delete(worldFieldRestoreCoord)
+      populateWorldFieldChunk(worldFieldRestoreCoord.cx, worldFieldRestoreCoord.cy, worldFieldRestoreCoord.cz, worldFieldRestoreSeed)
+    }
+    worldFieldRestoreActive = false
+    worldFieldRestorePendingFrames.clear()
+    return
+  }
+
+  if (cmd === 'restoreAborted') {
+    const result = e.data.data as { restoreId?: number; aborted?: boolean } | undefined
+    if (result?.restoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
+    }
+    if (result.aborted !== true) worldFieldRestoreState.unexpectedAcks++
+    worldFieldRestoreState.workerBarrierComplete = false
+    worldFieldRestoreActive = false
+    worldFieldRestorePendingFrames.clear()
+    return
+  }
+
+  if (cmd === 'restoreChunkAck') {
+    const ack = e.data.data as { key?: number; restoreId?: number; accepted?: boolean; duplicate?: boolean } | undefined
+    if (ack?.restoreId !== worldFieldRestoreState.restoreId) {
+      worldFieldRestoreState.staleAcks++
+      return
+    }
+    const ackKey = ack?.key
+    if (ack?.accepted === false || typeof ackKey !== 'number' || !Number.isInteger(ackKey) ||
+        !worldFieldRestoreExpectedKeys.has(ackKey)) {
+      worldFieldRestoreState.unexpectedAcks++
+      return
+    }
+    if (worldFieldRestoreAcknowledgedKeys.has(ackKey)) {
+      worldFieldRestoreState.duplicateAcks++
+      return
+    }
+    worldFieldRestoreAcknowledgedKeys.add(ackKey)
+    worldFieldRestoreState.acknowledged = worldFieldRestoreAcknowledgedKeys.size
+    worldFieldRestoreState.keys = [...worldFieldRestoreAcknowledgedKeys]
+    return
+  }
+
+  if (cmd === 'sculptHistoryApplied') {
+    const previous = (win['lastChunkSculptHistory'] as { seq?: number } | undefined)?.seq ?? 0
+    const acknowledgement = { action: e.data.action, applied: e.data.applied, seq: previous + 1 }
+    win['lastChunkSculptHistory'] = acknowledgement
+    const pending = pendingSculptHistory.get(e.data.requestId)
+    if (pending) {
+      window.clearTimeout(pending.timer)
+      pendingSculptHistory.delete(e.data.requestId)
+      pending.resolve(acknowledgement)
+    }
+    return
+  }
 
   if (cmd === 'brushApplied') {
     win['lastChunkBrush'] = { name: e.data.name, x: e.data.x, y: e.data.y, z: e.data.z, radius: e.data.radius }
@@ -115,6 +354,33 @@ chunkWorker.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'frame' && ab) {
+    // Drop a tick frame that was already in flight when the restore barrier began.
+    if (worldFieldRestoreActive && frameRestoreId === undefined) {
+      worldFieldRestoreState.discardedInflightFrames++
+      return
+    }
+    if (frameRestoreId !== undefined) {
+      if (frameRestoreId !== worldFieldRestoreState.restoreId) {
+        worldFieldRestoreState.staleFrames++
+        return
+      }
+      worldFieldRestoreState.restoreFrameRestoreId = frameRestoreId
+      const frame = ab as ArrayBuffer
+      const u32 = new Uint32Array(frame)
+      let off = 1
+      for (let i = 0; i < u32[0]; i++) {
+        const key = u32[off]
+        if (!worldFieldRestoreExpectedKeys.has(key) || worldFieldRestoreFrameKeys.has(key)) {
+          worldFieldRestoreState.unexpectedFrames++
+        } else {
+          worldFieldRestoreFrameKeys.add(key)
+        }
+        off += 1 + CHUNK_FLOATS
+      }
+      worldFieldRestoreState.restoreFrameKeys = [...worldFieldRestoreFrameKeys]
+      worldFieldRestorePendingFrames.set(worldFieldRestorePendingFrames.size, frame.slice(0))
+      return
+    }
     chunkTick    = wTick    ?? chunkTick
     chunkEvCount = wEv      ?? chunkEvCount
     const NF_W = 14, CF = 512 * NF_W
@@ -172,11 +438,13 @@ nodeEditor.onSelect  = (node) => {
 }
 win['chunkWorkerCompile'] = chunkWorkerCompile
 win['nodeLawEditor']      = nodeEditor
-win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4, strength = 1) => {
-  chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength } })
+win['applyChunkBrush'] = (name: string, x: number, y: number, z = 32, radius = 4, strength = 1, trackHistory = false) => {
+  if (!trackHistory) clearUiSculptHistory()
+  chunkWorker.postMessage({ cmd: 'brush', data: { name, x, y, z, radius, strength, trackHistory } })
 }
 
 win['applyChunkPreset']   = (name: string) => {
+  clearUiSculptHistory()
   chunkWorker.postMessage({ cmd: 'preset', data: { name } })
   if (name === 'town') {
     DIFF_cw = 0.12; ENT_cw = 0.00015; INFO_cw = 0.45; BIO_cw = 0.32
@@ -245,12 +513,115 @@ win['resizeChunkRenderer'] = (hybrid: boolean) => {
   const h = parent.clientHeight
   getInfiniteWorld()?.resize(Math.max(1, w), Math.max(1, h))
 }
-win['paintChunkAt'] = (x: number, y: number, z: number, f: number, v: number, r: number, mode?: string) => {
-  chunkWorker.postMessage({ cmd: 'paint', data: { x, y, z, f, v, r, mode: mode ?? 'add' } })
+win['worldFieldChunkStoreStats'] = () => worldFieldChunkStore.stats()
+win['worldFieldWorkerChunkStats'] = () => localChunks.size
+win['worldFieldChunkPersistenceStats'] = () => ({ snapshots: worldFieldChunkPersistence.size() })
+win['flushWorldFieldChunkPersistence'] = () => worldFieldChunkPersistence.flushDurableWrites()
+win['worldFieldRestoreState'] = () => ({
+  ...worldFieldRestoreState,
+  expectedKeys: [...worldFieldRestoreExpectedKeys],
+  keys: [...worldFieldRestoreAcknowledgedKeys],
+  restoreFrameKeys: [...worldFieldRestoreFrameKeys],
+  complete: worldFieldRestoreState.workerBarrierComplete &&
+    worldFieldRestoreExpectedKeys.size > 0 &&
+    worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
+    worldFieldRestoreState.unexpectedAcks === 0 &&
+    worldFieldRestoreState.unexpectedFrames === 0 &&
+    worldFieldRestoreState.duplicateAcks === 0 &&
+    worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
+    worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
+    [...worldFieldRestoreExpectedKeys].every(key => worldFieldRestoreFrameKeys.has(key)),
+})
+win['saveWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number, values: number[], seed?: string, providerVersion?: number) =>
+  worldFieldChunkPersistence.save(
+    { cx, cy, cz }, seed ?? worldViewContract.snapshot().seed, values, providerVersion ?? 1,
+    values.length === CHUNK_FLOATS ? { fieldsPerCell: NF, cellCount: CHUNK_FLOATS / NF } : undefined,
+  )
+win['loadWorldFieldChunkSnapshot'] = (cx: number, cy: number, cz: number) => worldFieldChunkPersistence.load({ cx, cy, cz })
+win['snapshotWorldFieldChunkPersistence'] = (cx: number, cy: number, cz: number, seed?: string) => {
+  const chunk = populateWorldFieldChunk(cx, cy, cz, seed)
+  const provider = chunk.provider as WorkerWorldFieldChunkProvider
+  const workerChunks = provider.snapshotWorkerChunks()
+  return workerChunks.length
+    ? worldFieldChunkPersistence.saveWorkerChunks({ cx, cy, cz }, chunk.seed, workerChunks, worldViewContract.snapshot(), chunk.version)
+    : null
 }
+win['validateWorldFieldChunkSnapshot'] = (snapshot: unknown) => worldFieldChunkPersistence.validate(snapshot as any)
+win['restoreWorldFieldChunkSnapshot'] = async (cx: number, cy: number, cz: number) => {
+  if (worldFieldRestoreActive) return false
+  const snapshot = await worldFieldChunkPersistence.loadDurable({ cx, cy, cz })
+  if (!snapshot || !worldFieldChunkPersistence.validate(snapshot) ||
+      !((snapshot.schemaVersion === 2 && snapshot.workerChunks?.length) ||
+      (snapshot.values.length === CHUNK_FLOATS && snapshot.fieldLayout?.fieldsPerCell === NF))) return false
+  const view = worldViewContract.snapshot()
+  if (snapshot.schemaVersion === 2 && snapshot.workerView &&
+      (snapshot.workerView.seed !== view.seed ||
+       snapshot.workerView.sliceY !== view.sliceY ||
+       snapshot.workerView.center.x !== view.center.x ||
+       snapshot.workerView.center.y !== view.center.y ||
+       snapshot.workerView.center.z !== view.center.z)) return false
+  const originX = cx * 32, originY = cy * 32, originZ = cz * 32
+  const wx = Math.round(originX - view.center.x + GRID_W / 2)
+  const wy = Math.round(originY - view.center.y + GRID_D * 0.45)
+  const wz = Math.round(originZ - view.center.z + GRID_H / 2)
+  // World Y maps to worker Z/depth; world Z maps to worker Y.
+  if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_D || wz < 0 || wz >= GRID_H) return false
+  const key = chunkKey(wx >> 3, wz >> 3, wy >> 3)
+  const restoreId = ++worldFieldRestoreId
+  const restoreChunks = snapshot.schemaVersion === 2 && snapshot.workerChunks?.length
+    ? snapshot.workerChunks.map(chunk => ({ key: chunk.key, data: new Float32Array(chunk.data) }))
+    : [{ key, data: new Float32Array(snapshot.values) }]
+  if (!restoreChunks.length || restoreChunks.some(chunk => chunk.data.length !== CHUNK_FLOATS) ||
+      new Set(restoreChunks.map(chunk => chunk.key)).size !== restoreChunks.length) return false
+  worldFieldRestoreActive = true
+  worldFieldRestoreCoord = { cx, cy, cz }
+  worldFieldRestoreSeed = snapshot.seed
+  Object.assign(worldFieldRestoreState, {
+    restoreId, expected: restoreChunks.length, acknowledged: 0, keys: [],
+    duplicateAcks: 0, unexpectedAcks: 0, staleAcks: 0, staleFrames: 0, discardedInflightFrames: 0,
+    unexpectedFrames: 0, restoreFrameRestoreId: 0, restoreFrameKeys: [], workerBarrierComplete: false,
+  })
+  worldFieldRestoreExpectedKeys.clear()
+  worldFieldRestoreAcknowledgedKeys.clear()
+  worldFieldRestoreFrameKeys.clear()
+  worldFieldRestorePendingFrames.clear()
+  for (const chunk of restoreChunks) worldFieldRestoreExpectedKeys.add(chunk.key)
+  chunkWorker.postMessage({ cmd: 'restoreBegin', data: { restoreId, expected: restoreChunks.length } })
+  for (const chunk of restoreChunks) {
+    // Transfer typed-array storage instead of cloning thousands of boxed numbers.
+    chunkWorker.postMessage(
+      { cmd: 'restoreChunk', data: { key: chunk.key, data: chunk.data, restoreId } },
+      [chunk.data.buffer],
+    )
+  }
+  chunkWorker.postMessage({ cmd: 'restoreEnd', data: { restoreId } })
+  runtimeProvenance.record('world-state', { source: 'WorldFieldChunkPersistence', action: 'restore', coord: { cx, cy, cz }, key, checksum: snapshot.checksum })
+  return true
+}
+win['worldFieldBoundaryStats'] = () => ({ faces: worldFieldBoundaryExchange.size() })
+win['publishWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z', side: -1|1, samples: ScientificFieldSample[]) =>
+  worldFieldBoundaryExchange.publish({ cx, cy, cz }, axis, side, samples)
+win['snapshotWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z', side: -1|1, resolution?: number, seed?: string) => {
+  const chunk = populateWorldFieldChunk(cx, cy, cz, seed)
+  return worldFieldBoundaryExchange.snapshotFace(chunk.provider, { cx, cy, cz }, axis, side, resolution)
+}
+win['validateWorldFieldBoundary'] = (cx: number, cy: number, cz: number, axis: 'x'|'y'|'z') =>
+  worldFieldBoundaryExchange.validatePair({ cx, cy, cz }, axis)
+win['populateWorldFieldChunk'] = (cx: number, cy: number, cz: number, seed?: string) => populateWorldFieldChunk(cx, cy, cz, seed)
+win['worldFieldChunkStoreState'] = () => worldFieldChunkStore.stats()
+win['evictWorldFieldChunk'] = (cx: number, cy: number, cz: number) => worldFieldChunkStore.delete({ cx: Math.trunc(cx), cy: Math.trunc(cy), cz: Math.trunc(cz) })
+
+win['paintChunkAt'] = (x: number, y: number, z: number, f: number, v: number, r: number, mode?: string, trackHistory = false) => {
+  if (!trackHistory) clearUiSculptHistory()
+  chunkWorker.postMessage({ cmd: 'paint', data: { x, y, z, f, v, r, mode: mode ?? 'add', trackHistory } })
+}
+win['undoChunkSculpt'] = () => requestChunkSculptHistory('undo')
+win['redoChunkSculpt'] = () => requestChunkSculptHistory('redo')
+win['clearChunkSculptHistory'] = () => chunkWorker.postMessage({ cmd: 'clearSculptHistory' })
 
 // Scene Composer APIs
 sceneComposer.setOnApply((cmds) => {
+  clearUiSculptHistory()
   for (const cmd of cmds) {
     chunkWorker.postMessage({ cmd: 'paint', data: cmd })
   }

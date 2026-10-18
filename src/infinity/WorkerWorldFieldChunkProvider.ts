@@ -25,7 +25,8 @@ export class WorkerWorldFieldChunkProvider implements ScientificFieldProvider {
 
   private workerChunkAtWorld(wx: number, wy: number, wz: number): Float32Array | null {
     if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_D || wz < 0 || wz >= GRID_H) return null
-    return this.chunks.get(this.chunkKey(Math.floor(wx / WORKER_CHUNK_SIZE), Math.floor(wy / WORKER_CHUNK_SIZE), Math.floor(wz / WORKER_CHUNK_SIZE))) ?? null
+    // World Y is the worker grid's Z axis (64 deep); world Z is grid Y (128 high).
+    return this.chunks.get(this.chunkKey(Math.floor(wx / WORKER_CHUNK_SIZE), Math.floor(wz / WORKER_CHUNK_SIZE), Math.floor(wy / WORKER_CHUNK_SIZE))) ?? null
   }
 
   snapshotWorkerChunks(): { key: number; data: number[] }[] {
@@ -41,9 +42,9 @@ export class WorkerWorldFieldChunkProvider implements ScientificFieldProvider {
       const cy = Math.floor(rem / (GRID_W / CX))
       const cx = rem % (GRID_W / CX)
       const wx0 = cx * CX - GRID_W / 2 + view.center.x
-      const wy0 = cy * CY - GRID_D * 0.45 + view.center.y
-      const wz0 = cz * WORKER_CHUNK_SIZE - GRID_H / 2 + view.center.z
-      if (wx0 + CX <= ox || wx0 >= ox + WORLD_CHUNK_SIZE || wy0 + CY <= oy || wy0 >= oy + WORLD_CHUNK_SIZE || wz0 + WORKER_CHUNK_SIZE <= oz || wz0 >= oz + WORLD_CHUNK_SIZE) continue
+      const wy0 = cz * WORKER_CHUNK_SIZE - GRID_D * 0.45 + view.center.y
+      const wz0 = cy * CY - GRID_H / 2 + view.center.z
+      if (wx0 + CX <= ox || wx0 >= ox + WORLD_CHUNK_SIZE || wy0 + WORKER_CHUNK_SIZE <= oy || wy0 >= oy + WORLD_CHUNK_SIZE || wz0 + CY <= oz || wz0 >= oz + WORLD_CHUNK_SIZE) continue
       out.push({ key, data: Array.from(chunk) })
     }
     return out
@@ -51,6 +52,9 @@ export class WorkerWorldFieldChunkProvider implements ScientificFieldProvider {
 
   /** Returns one value per world voxel, preserving the canonical 32³ contract. */
   snapshotValues(): number[] {
+    // Most streamed world chunks lie outside the finite worker window. Avoid a
+    // full 32³ scan during LRU eviction when there is no worker data to persist.
+    if (this.snapshotWorkerChunks().length === 0) return []
     const values: number[] = []
     const view = this.getView()
     const originX = this.coord.cx * WORLD_CHUNK_SIZE
@@ -65,8 +69,8 @@ export class WorkerWorldFieldChunkProvider implements ScientificFieldProvider {
           const chunk = this.workerChunkAtWorld(wx, wy, wz)
           if (!chunk) continue
           const ox = wx & 7
-          const oy = wy & 7
-          const oz = wz & 7
+          const oy = wz & 7
+          const oz = wy & 7
           const base = (oz * CY * CX + oy * CX + ox) * NF
           values.push(...chunk.slice(base, base + NF))
         }
@@ -92,8 +96,8 @@ export class WorkerWorldFieldChunkProvider implements ScientificFieldProvider {
     if (!chunk) return this.fallback.sample(x, y, z)
 
     const ox = wx & 7
-    const oy = wy & 7
-    const oz = wz & 7
+    const oy = wz & 7
+    const oz = wy & 7
     const base = (oz * CY * CX + oy * CX + ox) * NF
     return {
       energy: chunk[base + F.E] || 0,
