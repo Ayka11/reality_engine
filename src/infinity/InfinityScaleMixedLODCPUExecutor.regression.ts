@@ -388,3 +388,102 @@ export function runInfinityScaleMixedLODCPURollbackRegression(): void {
     }
   }
 }
+
+
+/**
+ * A boundary commit can fail after one or more target cells have already been
+ * written. Verify the global transaction restores every byte of the original
+ * state rather than leaving a partially reconciled frame.
+ */
+export function runInfinityScaleLODPartialBoundaryCommitRollbackRegression(): void {
+  const state = new InfinityScaleLODState(4);
+  const key = "0:0,0,0";
+  state.ensureChunk(key, 0);
+  const initial = new Float32Array(CELL_FIELDS);
+  initial[0] = 17;
+  initial[1] = 3;
+  state.writeBaseCell(key, 0, 0, 0, 0, initial);
+  const before = state.snapshot();
+
+  const plan: InfinityScaleExecutionPlan = {
+    revision: 101,
+    mode: "selective-cpu-ready",
+    observer: { x: 0, y: 0, z: 0 },
+    chunks: [{ key, lod: 0, amr: 1, distance: 0 }],
+    simulationBudget: 64,
+    requestedSimulationCount: 1,
+    selectedSimulationCount: 1,
+    maxSimulatingChunks: 1,
+    boundaryReadChunks: [],
+    boundaryReadCount: 0,
+    boundaryReadRelations: [],
+    simulationCellCount: 64,
+    boundaryReadCellCount: 0,
+    localExecutionLayers: [],
+    globalExecutionLayers: [],
+    selectiveCpuReady: true,
+    selectiveGpuReady: false,
+    gpuPhysicsReady: false,
+    lodBoundaryTransferReady: true,
+    mixedLodExecutionReady: true,
+    entityExecutionReady: false,
+    agentMigrationReady: false,
+  };
+  const frame: InfinityScaleGlobalExecutionFrame = {
+    revision: 101,
+    tickStart: 0,
+    tickEnd: 1,
+    phase: "boundary-reconciliation",
+    planRevision: 101,
+    simulationCellCount: 64,
+    boundaryReadCellCount: 0,
+    committed: false,
+    finalized: false,
+    ownershipFingerprint: "partial-boundary-rollback",
+    capabilityFingerprint: "partial-boundary-rollback",
+  };
+  const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
+  const spec = {
+    sourceChunk: key,
+    targetChunk: key,
+    relation: "same-level" as const,
+    sourceLevel: 0,
+    targetLevel: 0,
+    refinementRatio: 1,
+    operation: "copy" as const,
+    readOperation: "copy" as const,
+  };
+  transaction.synchronization.stageTransfer(spec, [0, 0, 0], [initial]);
+  // Staging validates the transfer schema but intentionally leaves coordinate
+  // bounds to the authoritative state write, injecting a failure after the
+  // preceding valid target has already been written during commit.
+  transaction.synchronization.stageTransfer(spec, [4, 0, 0], [initial]);
+
+  let failed = false;
+  try {
+    commitInfinityScaleGlobalLODTransaction(transaction, frame);
+  } catch (error) {
+    failed = error instanceof Error && error.message.includes("outside LOD chunk");
+  }
+  if (!failed) {
+    throw new Error("Expected the invalid second boundary target to fail after the first write");
+  }
+
+  const after = state.snapshot();
+  if (state.getRevision() <= 0 || after.chunks.length !== before.chunks.length) {
+    throw new Error("Partial boundary commit rollback did not restore the original chunk set");
+  }
+  for (const expectedChunk of before.chunks) {
+    const actualChunk = after.chunks.find(chunk => chunk.key === expectedChunk.key);
+    if (!actualChunk || actualChunk.level !== expectedChunk.level ||
+        actualChunk.scale !== expectedChunk.scale ||
+        actualChunk.cells.length !== expectedChunk.cells.length) {
+      throw new Error("Partial boundary commit rollback changed chunk metadata");
+    }
+    for (let i = 0; i < expectedChunk.cells.length; i++) {
+      if (actualChunk.cells[i] !== expectedChunk.cells[i]) {
+        throw new Error(`Partial boundary commit left mutation at ${expectedChunk.key} offset ${i}`);
+      }
+    }
+  }
+}
