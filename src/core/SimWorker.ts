@@ -15,6 +15,8 @@
  */
 
 // ── Field layout ──────────────────────────────────────────────────────────────
+import { isValidSimWorkerCausalHistory, nextXorShift32 } from './SimWorkerState';
+
 const NF = 14 as const
 
 const F = {
@@ -57,6 +59,14 @@ function add_(x: number, y: number, z: number, f: number, v: number): void {
 }
 
 // ── Simulation state ──────────────────────────────────────────────────────────
+let rngState = 0x51ed270b
+
+function random(): number {
+  const next = nextXorShift32(rngState)
+  rngState = next.state
+  return next.value
+}
+
 let tick     = 0
 let DIFF     = 0.09
 let ENT      = 0.0004
@@ -65,6 +75,76 @@ let BIO      = 0.25
 let evCount  = 0
 let causal: Array<{ id: number; tick: number; x: number; y: number; z: number; delta: number }> = []
 const activeProcs = new Set<string>(['thermo', 'bio'])
+
+export interface SimWorkerSnapshot {
+  version: 1;
+  tick: number;
+  rngState: number;
+  buffer: number[];
+  backBuffer: number[];
+  DIFF: number;
+  ENT: number;
+  INFO: number;
+  BIO: number;
+  evCount: number;
+  causal: Array<{ id: number; tick: number; x: number; y: number; z: number; delta: number }>;
+  activeProcs: string[];
+}
+
+function captureWorkerSnapshot(): SimWorkerSnapshot {
+  return {
+    version: 1,
+    tick,
+    rngState,
+    buffer: Array.from(buf),
+    backBuffer: Array.from(backBuf),
+    DIFF,
+    ENT,
+    INFO,
+    BIO,
+    evCount,
+    causal: causal.map(event => ({ ...event })),
+    activeProcs: [...activeProcs].sort(),
+  }
+}
+
+function restoreWorkerSnapshot(snapshot: SimWorkerSnapshot): void {
+  if (!snapshot || snapshot.version !== 1 ||
+      !Number.isSafeInteger(snapshot.tick) || snapshot.tick < 0 ||
+      !Number.isSafeInteger(snapshot.rngState) || snapshot.rngState <= 0 || snapshot.rngState > 0xffffffff ||
+      !Array.isArray(snapshot.buffer) || snapshot.buffer.length !== buf.length ||
+      !snapshot.buffer.every(Number.isFinite) ||
+      !Array.isArray(snapshot.backBuffer) || snapshot.backBuffer.length !== backBuf.length ||
+      !snapshot.backBuffer.every(Number.isFinite) ||
+      ![snapshot.DIFF, snapshot.ENT, snapshot.INFO, snapshot.BIO].every(Number.isFinite) ||
+      !Number.isSafeInteger(snapshot.evCount) || snapshot.evCount < 0 ||
+      !isValidSimWorkerCausalHistory(snapshot.causal, snapshot.evCount, snapshot.tick, W, H, D) ||
+      !Array.isArray(snapshot.activeProcs) || !snapshot.activeProcs.every(p => typeof p === 'string')) {
+    throw new Error('Invalid SimWorker snapshot')
+  }
+
+  // Validate the complete payload before mutating live state.
+  const nextBuffer = new Float32Array(snapshot.buffer)
+  const nextBackBuffer = new Float32Array(snapshot.backBuffer)
+  if (!nextBuffer.every(Number.isFinite) || !nextBackBuffer.every(Number.isFinite)) {
+    throw new Error('SimWorker snapshot contains values outside Float32 range')
+  }
+  const nextCausal = snapshot.causal.map(event => ({ ...event }))
+  const nextProcs = new Set(snapshot.activeProcs)
+
+  buf = nextBuffer
+  backBuf = nextBackBuffer
+  tick = snapshot.tick
+  rngState = snapshot.rngState >>> 0
+  DIFF = snapshot.DIFF
+  ENT = snapshot.ENT
+  INFO = snapshot.INFO
+  BIO = snapshot.BIO
+  evCount = snapshot.evCount
+  causal = nextCausal
+  activeProcs.clear()
+  for (const proc of nextProcs) activeProcs.add(proc)
+}
 
 // ── Physics step ──────────────────────────────────────────────────────────────
 function simStep(dt: number) {
@@ -172,16 +252,16 @@ function applyPreset(name: string) {
     }
   } else if (name === 'life') {
     for (let k = 0; k < 25; k++) {
-      const x = 4 + Math.floor(Math.random() * (W - 8))
-      const y = 4 + Math.floor(Math.random() * (H - 8))
-      const z = Math.floor(Math.random() * D)
-      const e = 150 + Math.random() * 500
+      const x = 4 + Math.floor(random() * (W - 8))
+      const y = 4 + Math.floor(random() * (H - 8))
+      const z = Math.floor(random() * D)
+      const e = 150 + random() * 500
       const i = idx(x, y, z)
       buf[i + F.E]   = e
-      buf[i + F.D]   = 0.3 + Math.random() * 0.5
+      buf[i + F.D]   = 0.3 + random() * 0.5
       buf[i + F.I]   = e * 0.3
-      buf[i + F.T]   = 80 + Math.random() * 180
-      buf[i + F.BIO] = 0.2 + Math.random() * 0.5
+      buf[i + F.T]   = 80 + random() * 180
+      buf[i + F.BIO] = 0.2 + random() * 0.5
     }
   } else if (name === 'proto') {
     for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -190,7 +270,7 @@ function applyPreset(name: string) {
       buf[i + F.E]   = 50 + n * 400 * (1 - z / D * 0.5)
       buf[i + F.D]   = 0.2 + n * 0.6
       buf[i + F.T]   = 30 + n * 250
-      buf[i + F.S]   = 0.05 + Math.random() * 0.1
+      buf[i + F.S]   = 0.05 + random() * 0.1
       if (n > 0.6) {
         buf[i + F.BIO] = n * 0.4
         buf[i + F.I]   = n * 80
@@ -218,13 +298,33 @@ function applyGenerated(data: {
     buf[i + F.D] = Math.max(0, n * 0.8)
     buf[i + F.I] = Math.max(0, n2 * 100)
     buf[i + F.T] = Math.max(0, n * 250)
-    buf[i + F.S] = 0.02 + Math.random() * 0.05
+    buf[i + F.S] = 0.02 + random() * 0.05
   }
 }
 
 // ── Message handler ───────────────────────────────────────────────────────────
 self.onmessage = (e: MessageEvent) => {
   const { cmd, data } = e.data as { cmd: string; data: any }
+
+  if (cmd === 'setSeed') {
+    const seed = data?.seed
+    if (!Number.isSafeInteger(seed) || seed < 0 || seed > 0xffffffff) {
+      throw new Error('setSeed requires a uint32 seed')
+    }
+    rngState = (seed >>> 0) || 0x51ed270b
+    return
+  }
+
+  if (cmd === 'snapshot') {
+    ;(self as unknown as Worker).postMessage({ cmd: 'snapshot', data: captureWorkerSnapshot() })
+    return
+  }
+
+  if (cmd === 'restore') {
+    restoreWorkerSnapshot(data as SimWorkerSnapshot)
+    ;(self as unknown as Worker).postMessage({ cmd: 'restored', data: { tick, rngState } })
+    return
+  }
 
   if (cmd === 'tick') {
     const speed = (data?.speed as number) || 1
