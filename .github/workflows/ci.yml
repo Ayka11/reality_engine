@@ -50,6 +50,7 @@ jobs:
       - run: npm run test:script-engine-rng-recovery --if-present
       - run: npm run test:agent-worldevents-rng-recovery --if-present
       - run: npm run test:terrain-worldcomposer-rng-recovery --if-present
+      - run: npm run test:simworker-rng-recovery --if-present
       - run: npm run test:field-spatial-pattern --if-present
       - run: npm run build
       - run: npm run test:hf-runtime
