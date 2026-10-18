@@ -22,8 +22,6 @@ export interface AgentMarker {
   age: number;
 }
 
-let _agentId = 1;
-
 const BEHAVIORS: AgentBehavior[] = ['explorer', 'harvester', 'signaler', 'builder', 'destroyer'];
 
 function randomBehavior(random: () => number): AgentBehavior {
@@ -41,6 +39,7 @@ export const AGENT_COLORS: Record<AgentBehavior, [number, number, number]> = {
 export class AgentSystem {
   private agents: Map<number, Agent> = new Map();
   private _rngState = 0x0a63c9d1;
+  private _nextAgentId = 1;
   readonly maxAgents = 64;
 
   constructor(seed = 0x0a63c9d1) {
@@ -145,7 +144,7 @@ export class AgentSystem {
   }
 
   private _spawn(x: number, y: number, z: number, behavior: AgentBehavior, energy = 200): void {
-    const id = _agentId++;
+    const id = this._nextAgentId++;
     this.agents.set(id, { id, x, y, z, energy, age: 0, behavior, memory: 0, signal: 0, children: 0 });
   }
 
@@ -260,5 +259,5 @@ export class AgentSystem {
     }));
   }
 
-  clear(): void { this.agents.clear(); _agentId = 1; }
+  clear(): void { this.agents.clear(); this._nextAgentId = 1; }
 }
