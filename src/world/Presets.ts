@@ -16,10 +16,10 @@ export class Presets {
   static apply(grid: VoxelGrid, name: PresetName, random: () => number = Math.random): void {
     grid.clear();
     switch (name) {
-      case 'burst':                this._burst(grid, random);              break;
-      case 'wave':                 this._wave(grid, random);               break;
+      case 'burst':                this._burst(grid);              break;
+      case 'wave':                 this._wave(grid);               break;
       case 'life':                 this._life(grid, random);               break;
-      case 'vortex':               this._vortex(grid, random);             break;
+      case 'vortex':               this._vortex(grid);             break;
       case 'entropy_storm':        this._entropyStorm(grid, random);       break;
       case 'ecosystem':            this._ecosystem(grid, random);          break;
       case 'clear':                                                 break;
@@ -31,8 +31,8 @@ export class Presets {
       case 'fungal_ecosystem':     this._fungalEcosystem(grid, random);    break;
       case 'ocean_biosphere':      this._oceanBiosphere(grid, random);     break;
       case 'toxic_ecosystem':      this._toxicEcosystem(grid, random);     break;
-      case 'nebula':               this._nebula(grid, random);             break;
-      case 'proto_planet':         this._protoPlanet(grid, random);        break;
+      case 'nebula':               this._nebula(grid);             break;
+      case 'proto_planet':         this._protoPlanet(grid);        break;
       case 'star_formation':       this._starFormation(grid, random);      break;
       case 'abandoned_megacity':   this._abandonedMegacity(grid, random);  break;
       case 'machine_ecology':      this._machineEcology(grid, random);     break;
@@ -44,7 +44,7 @@ export class Presets {
 
   // ── Original presets ───────────────────────────────────────────────────────
 
-  private static _burst(grid: VoxelGrid, random: () => number = Math.random) {
+  private static _burst(grid: VoxelGrid) {
     const cx=grid.W/2, cy=grid.H/2, cz=grid.D/2;
     for (let z=0;z<grid.D;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const d=Math.sqrt((x-cx)**2+(y-cy)**2+(z-cz)**2);
@@ -57,7 +57,7 @@ export class Presets {
     }
   }
 
-  private static _wave(grid: VoxelGrid, random: () => number = Math.random) {
+  private static _wave(grid: VoxelGrid) {
     for (let z=0;z<grid.D;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const cell=grid.cell(x,y,z);
       cell.energy=400+400*Math.sin(x*0.6)*Math.cos(y*0.4)*Math.sin(z*0.3+0.5);
@@ -80,7 +80,7 @@ export class Presets {
     }
   }
 
-  private static _vortex(grid: VoxelGrid, random: () => number = Math.random) {
+  private static _vortex(grid: VoxelGrid) {
     const cx=grid.W/2, cy=grid.H/2;
     for (let z=0;z<grid.D;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const dx=x-cx, dy=y-cy, d=Math.sqrt(dx*dx+dy*dy);
@@ -239,7 +239,7 @@ export class Presets {
 
   // ── Astronomical Environments ─────────────────────────────────────────────
 
-  private static _nebula(grid: VoxelGrid, random: () => number = Math.random) {
+  private static _nebula(grid: VoxelGrid) {
     for (let z=0;z<grid.D;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const cell=grid.cell(x,y,z);
       const n=Math.sin(x*0.3)*Math.cos(y*0.25)*Math.sin(z*0.4+1.2);
@@ -252,7 +252,7 @@ export class Presets {
     }
   }
 
-  private static _protoPlanet(grid: VoxelGrid, random: () => number = Math.random) {
+  private static _protoPlanet(grid: VoxelGrid) {
     const cx=grid.W/2, cy=grid.H/2;
     for (let z=0;z<grid.D;z++) for (let y=0;y<grid.H;y++) for (let x=0;x<grid.W;x++) {
       const d=Math.sqrt((x-cx)**2+(y-cy)**2+(z*1.5)**2);
