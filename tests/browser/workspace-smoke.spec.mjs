@@ -101,3 +101,25 @@ test("render mode controls switch between the 3D and 2D canvases", async ({ page
   await expect(canvas2d).toBeHidden();
   expect(pageErrors, "uncaught browser exceptions during render mode changes").toEqual([]);
 });
+
+
+test("Quick Generate creates a populated world and exits the composer", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", error => pageErrors.push(error.message));
+
+  await page.goto("/", { waitUntil: "networkidle" });
+  await page.locator("button.compose-btn[onclick='generateWorld()']").click();
+
+  await expect(page.locator("#comp")).not.toHaveClass(/open/);
+  await expect(page.locator("#pb")).toHaveText("⏸ Pause");
+  const populated = await page.evaluate(() => {
+    const data = window.buf;
+    if (!data || typeof data.length !== "number") return false;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] !== 0) return true;
+    }
+    return false;
+  });
+  expect(populated, "generated world should contain non-zero field values").toBe(true);
+  expect(pageErrors, "uncaught browser exceptions during world generation").toEqual([]);
+});
