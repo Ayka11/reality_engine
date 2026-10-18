@@ -91,6 +91,42 @@ export function runSparseVoxelGridRecoveryRegression(): void {
     throw new Error("SparseVoxelGrid restore accepted unsafe chunk coordinates or mutated live state");
   }
 
+  const invalidDirtyKey = grid.captureState();
+  invalidDirtyKey.dirtyChunks = ["not-a-chunk-key"];
+  rejected = false;
+  try {
+    grid.restoreState(invalidDirtyKey);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected || !grid.dirtyChunks.has("2,0,0") || grid.chunks.get("2,0,0")?.buffer[0] !== 55) {
+    throw new Error("SparseVoxelGrid restore accepted a malformed dirty chunk key or mutated live state");
+  }
+
+  const invalidOwnerKey = grid.captureState();
+  invalidOwnerKey.chunkOwners = [["2,0,0,extra", "worker-B"]];
+  rejected = false;
+  try {
+    grid.restoreState(invalidOwnerKey);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected || grid.chunkOwners.get("2,0,0") !== "worker-A" || grid.chunks.get("2,0,0")?.buffer[0] !== 55) {
+    throw new Error("SparseVoxelGrid restore accepted a malformed owner chunk key or mutated live state");
+  }
+
+  const duplicateDirtyKey = grid.captureState();
+  duplicateDirtyKey.dirtyChunks = ["2,0,0", "2,0,0"];
+  rejected = false;
+  try {
+    grid.restoreState(duplicateDirtyKey);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected || grid.dirtyChunks.size !== 1 || grid.chunks.get("2,0,0")?.buffer[0] !== 55) {
+    throw new Error("SparseVoxelGrid restore accepted duplicate dirty chunk keys or mutated live state");
+  }
+
   const invalidDense = grid.captureState();
   invalidDense.buffer[denseIndex] = Number.NaN;
   rejected = false;
