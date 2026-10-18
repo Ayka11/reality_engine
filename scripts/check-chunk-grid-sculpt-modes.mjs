@@ -117,6 +117,36 @@ try {
   assert.equal(workerMessages.filter(message => message.cmd === "sculptHistoryApplied").at(-1)?.applied, false,
     "untracked worker mutation must clear sculpt undo history");
   assert.equal(cellEnergy(), afterOrdinaryPaint, "untracked edit must not roll back the prior sculpted cell");
+
+  // Verify the actual worker applies shell geometry and full-column geometry,
+  // rather than only echoing the requested options in its acknowledgement.
+  dispatch("brush", {
+    name: "Forest", x: 40, y: 32, z: 40, radius: 3, strength: 1,
+    geometry: "shell", falloff: "constant", verticalExtent: "bounded-volume",
+    operation: "set", shellThickness: 1, trackHistory: false,
+  });
+  assert.equal(cellValueAt(40, 32, 40, F.E), 0,
+    "shell brush must not modify its center when the center is outside the shell");
+  assert.equal(cellValueAt(41, 32, 40, F.E), 0,
+    "shell brush must leave cells inside the shell's inner radius untouched");
+  assert.equal(cellValueAt(43, 32, 40, F.E), 180,
+    "shell brush must modify cells at the requested outer radius");
+  const shellAck = workerMessages.filter(message => message.cmd === "brushApplied").at(-1);
+  assert.equal(shellAck?.geometry, "shell");
+  assert.equal(shellAck?.operation, "set");
+
+  dispatch("brush", {
+    name: "Forest", x: 60, y: 32, z: 60, radius: 2, strength: 1,
+    geometry: "column", falloff: "constant", verticalExtent: "full-column",
+    operation: "set", trackHistory: false,
+  });
+  assert.equal(cellValueAt(60, 2, 60, F.E), 180,
+    "full-column brush must affect distant vertical cells at the same horizontal position");
+  assert.equal(cellValueAt(63, 2, 60, F.E), 0,
+    "full-column brush must still respect its horizontal radius");
+  const columnAck = workerMessages.filter(message => message.cmd === "brushApplied").at(-1);
+  assert.equal(columnAck?.geometry, "column");
+  assert.equal(columnAck?.verticalExtent, "full-column");
 } finally {
   if (originalSelf === undefined) delete globalThis.self;
   else globalThis.self = originalSelf;
