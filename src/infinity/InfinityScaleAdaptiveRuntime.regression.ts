@@ -58,7 +58,7 @@ export function runInfinityScaleAdaptiveRuntimeRegression(): void {
   });
 
   if (blocked.committed) throw new Error("Conservation failure must block runtime commit");
-  if (runtime.getLOD("region-a") !== 1) {
+  if (runtime.getLOD("region-a") !== undefined) {
     throw new Error("Blocked transaction mutated runtime LOD state");
   }
 
