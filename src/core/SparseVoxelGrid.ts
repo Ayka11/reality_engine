@@ -216,15 +216,23 @@ export class SparseVoxelGrid {
       restoredChunks.set(data.key, chunk);
     }
 
+    const isValidChunkKey = (key: unknown): key is string => {
+      if (typeof key !== "string") return false;
+      const parts = key.split(",");
+      if (parts.length !== 3) return false;
+      const coords = parts.map(part => Number(part));
+      return coords.every(Number.isSafeInteger) && this.getChunkKey(coords[0], coords[1], coords[2]) === key;
+    };
     const owners = new Map<string, string>();
     for (const entry of snapshot.chunkOwners) {
       if (!Array.isArray(entry) || entry.length !== 2 ||
-          typeof entry[0] !== "string" || typeof entry[1] !== "string" || owners.has(entry[0])) {
+          !isValidChunkKey(entry[0]) || typeof entry[1] !== "string" || owners.has(entry[0])) {
         throw new Error("Invalid SparseVoxelGrid snapshot ownership entry");
       }
       owners.set(entry[0], entry[1]);
     }
-    if (!snapshot.dirtyChunks.every(key => typeof key === "string")) {
+    if (!snapshot.dirtyChunks.every(isValidChunkKey) ||
+        new Set(snapshot.dirtyChunks).size !== snapshot.dirtyChunks.length) {
       throw new Error("Invalid SparseVoxelGrid snapshot dirty-chunk list");
     }
 
