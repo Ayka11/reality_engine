@@ -48,7 +48,7 @@ export function isValidSimWorkerCausalHistory(
       (item.id as number) <= evCount &&
       Number.isSafeInteger(item.tick) && (item.tick as number) >= 0 &&
       (item.tick as number) <= snapshotTick &&
-      (!previous || (item.id as number) > previous.id) &&
+      (!previous || ((item.id as number) > previous.id && (item.tick as number) >= previous.tick)) &&
       [item.x, item.y, item.z, item.delta].every(value => typeof value === "number" && Number.isFinite(value)) &&
       Number.isInteger(item.x) && (item.x as number) >= 0 && (item.x as number) < width &&
       Number.isInteger(item.y) && (item.y as number) >= 0 && (item.y as number) < height &&
