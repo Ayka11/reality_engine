@@ -54,17 +54,19 @@ export function runInfinityScaleAdaptiveGlobalFrameBridgeRegression(): void {
     throw new Error("Bridge did not advance frame to boundary reconciliation");
   }
 
-  const result = bridge.commitAtBoundary(boundary, {
-    stateRevision: 0,
-    topologyRevision: 0,
-    mutations: [{ regionId: "r", fromLOD: 0, toLOD: 1 }],
-    gpuBudget: { maxDispatches: 8, maxWorkgroups: 8, maxDescriptors: 8 },
-    conservationValid: true,
-    gpuComplete: true,
-  });
-
-  if (!result.runtime.committed) throw new Error("Boundary adaptive commit did not complete");
-  if (result.runtime.topologyRevision !== 1) {
-    throw new Error("Adaptive topology revision did not advance");
+  let topologyRejected = false;
+  try {
+    bridge.commitAtBoundary(boundary, {
+      stateRevision: 0,
+      topologyRevision: 0,
+      mutations: [{ regionId: "r", fromLOD: 0, toLOD: 1 }],
+      gpuBudget: { maxDispatches: 8, maxWorkgroups: 8, maxDescriptors: 8 },
+      conservationValid: true,
+      gpuComplete: true,
+    });
+  } catch (error) {
+    topologyRejected = error instanceof Error && error.message.includes("physical chunk remapping");
   }
+  if (!topologyRejected) throw new Error("Boundary bridge must reject topology changes without physical remapping");
+  if (runtime.getTopologyRevision() !== 0) throw new Error("Rejected boundary topology mutation advanced revision");
 }
