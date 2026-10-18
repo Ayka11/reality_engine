@@ -18,12 +18,15 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   const frame2 = advanceInfinityScaleGlobalFrame(frame1, "local-commit");
   const frame = advanceInfinityScaleGlobalFrame(frame2, "boundary-reconciliation");
 
+  const initialStateRevision = state.getRevision();
   const bridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, state);
   bridge.begin(frame);
   const result = bridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
 
   if (!result.committed) throw new Error("Adaptive LOD transaction did not commit");
-  if (result.stateRevisionAfter !== 1) throw new Error("LOD state revision did not advance");
+  if (result.stateRevisionAfter !== initialStateRevision + 2) {
+    throw new Error("LOD state revision did not account for chunk creation and transaction commit");
+  }
   if (!state.hasChunk("0:0,0,0")) throw new Error("Committed adaptive chunk is missing");
 
   const blocked = new InfinityScaleAdaptiveLODTransactionBridge(plan, state);
