@@ -1,6 +1,6 @@
 import { runInfinityScaleLODBoundaryCellMapperRegression } from "./InfinityScaleLODBoundaryCellMapper.regression";
 import { runInfinityScaleLODBoundaryRegression } from "./InfinityScaleLODBoundarySnapshot.regression";
-import { runInfinityScaleMixedLODCPURegression, runInfinityScaleMixedLODCPUProlongationRegression, runInfinityScaleMixedLODCPURollbackRegression } from "./InfinityScaleMixedLODCPUExecutor.regression";
+import { runInfinityScaleMixedLODCPURegression, runInfinityScaleMixedLODCPUProlongationRegression, runInfinityScaleMixedLODCPURollbackRegression, runInfinityScaleLODPartialBoundaryCommitRollbackRegression } from "./InfinityScaleMixedLODCPUExecutor.regression";
 import { runInfinityScaleUnifiedTransactionRegression } from "./InfinityScaleUnifiedTransaction.regression";
 import { runInfinityScaleLODResetInvalidationRegression } from "./InfinityScaleLODState.regression";
 import { runInfinityScaleLODStateRecoveryRegression } from "./InfinityScaleLODStateRecovery.regression";
