@@ -57,6 +57,21 @@ export function runSimulationEngineCoreRecoveryRegression(): void {
     throw new Error("SimulationEngine core recovery did not roll back after rejecting an invalid snapshot");
   }
 
+  const invalidEnergySnapshot = engine.captureCoreRecoveryState();
+  invalidEnergySnapshot.prevEnergy[0] = Number.NaN;
+  let invalidEnergyRejected = false;
+  try {
+    engine.restoreCoreRecoveryState(invalidEnergySnapshot);
+  } catch {
+    invalidEnergyRejected = true;
+  }
+  if (!invalidEnergyRejected ||
+      engine.tick !== 12 ||
+      engine.grid.buffer[fieldIndex] !== 125 ||
+      engine.grid.backBuffer[fieldIndex] !== 87) {
+    throw new Error("SimulationEngine core recovery accepted non-finite previous-energy state");
+  }
+
   const detached = engine.captureCoreRecoveryState();
   detached.grid.buffer[fieldIndex] = -999;
   detached.prevEnergy.fill(-1);
