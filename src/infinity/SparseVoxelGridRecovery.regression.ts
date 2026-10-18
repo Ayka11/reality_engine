@@ -67,6 +67,30 @@ export function runSparseVoxelGridRecoveryRegression(): void {
     throw new Error("SparseVoxelGrid restore accepted an inverted active chunk range or mutated live state");
   }
 
+  const unsafeOrigin = grid.captureState();
+  unsafeOrigin.denseOrigin.x = Number.MAX_SAFE_INTEGER + 1;
+  rejected = false;
+  try {
+    grid.restoreState(unsafeOrigin);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected || grid.activeChunkRange.minX !== -2 || grid.chunks.get("2,0,0")?.buffer[0] !== 55) {
+    throw new Error("SparseVoxelGrid restore accepted an unsafe integer origin or mutated live state");
+  }
+
+  const invalidChunkCoordinates = grid.captureState();
+  invalidChunkCoordinates.chunks[0].cx = Number.MAX_SAFE_INTEGER + 1;
+  rejected = false;
+  try {
+    grid.restoreState(invalidChunkCoordinates);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected || grid.chunks.get("2,0,0")?.buffer[0] !== 55) {
+    throw new Error("SparseVoxelGrid restore accepted unsafe chunk coordinates or mutated live state");
+  }
+
   const invalidDense = grid.captureState();
   invalidDense.buffer[denseIndex] = Number.NaN;
   rejected = false;
