@@ -119,8 +119,10 @@ function restoreWorkerSnapshot(snapshot: SimWorkerSnapshot): void {
       ![snapshot.DIFF, snapshot.ENT, snapshot.INFO, snapshot.BIO].every(Number.isFinite) ||
       !Number.isSafeInteger(snapshot.evCount) || snapshot.evCount < 0 ||
       !Array.isArray(snapshot.causal) || snapshot.causal.length > 400 ||
-      !snapshot.causal.every(event => event && Number.isSafeInteger(event.id) &&
-        Number.isSafeInteger(event.tick) && event.tick >= 0 &&
+      !snapshot.causal.every((event, index) => event &&
+        Number.isSafeInteger(event.id) && event.id > 0 && event.id <= snapshot.evCount &&
+        Number.isSafeInteger(event.tick) && event.tick >= 0 && event.tick <= snapshot.tick &&
+        (index === 0 || event.id > snapshot.causal[index - 1].id) &&
         [event.x, event.y, event.z, event.delta].every(Number.isFinite) &&
         Number.isInteger(event.x) && event.x >= 0 && event.x < W &&
         Number.isInteger(event.y) && event.y >= 0 && event.y < H &&
