@@ -1,4 +1,4 @@
-import { nextXorShift32 } from "../core/SimWorkerState";
+import { isValidSimWorkerCausalHistory, nextXorShift32 } from "../core/SimWorkerState";
 
 export function runSimWorkerRNGRecoveryRegression(): void {
   const seed = 0x51ed270b;
