@@ -173,7 +173,11 @@ export class SparseVoxelGrid {
 
   restoreState(snapshot: SparseVoxelGridSnapshot): void {
     const validRange = (range: SparseVoxelGridSnapshot["activeChunkRange"]) =>
-      !!range && Object.values(range).every(Number.isInteger);
+      !!range &&
+      Object.values(range).every(Number.isInteger) &&
+      range.minX <= range.maxX &&
+      range.minY <= range.maxY &&
+      range.minZ <= range.maxZ;
     if (!snapshot ||
         snapshot.width !== this.W || snapshot.height !== this.H || snapshot.depth !== this.D ||
         !(snapshot.buffer instanceof Float32Array) || snapshot.buffer.length !== this.size * CELL_FIELDS ||
