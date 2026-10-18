@@ -77,3 +77,27 @@ test("real mouse activation switches mode and renders the Science panel", async 
   expect(pageErrors, "uncaught browser exceptions during mouse mode switch").toEqual([]);
 });
 
+
+test("render mode controls switch between the 3D and 2D canvases", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", error => pageErrors.push(error.message));
+
+  await page.goto("/", { waitUntil: "networkidle" });
+  const canvas3d = page.locator("#c3d");
+  const canvas2d = page.locator("#c2d");
+
+  await expect(page.locator("#tab3d")).toBeVisible();
+  await expect(canvas3d).toBeVisible();
+  await expect(canvas2d).toBeHidden();
+
+  await page.locator("#tab2d").click();
+  await expect(page.locator("#tab2d")).toHaveClass(/on/);
+  await expect(canvas2d).toBeVisible();
+  await expect(canvas3d).toBeHidden();
+
+  await page.locator("#tab3d").click();
+  await expect(page.locator("#tab3d")).toHaveClass(/on/);
+  await expect(canvas3d).toBeVisible();
+  await expect(canvas2d).toBeHidden();
+  expect(pageErrors, "uncaught browser exceptions during render mode changes").toEqual([]);
+});
