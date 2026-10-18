@@ -20,6 +20,7 @@ function makeSimulation() {
   const grid = {
     W,H,D,buffer:new Float32Array(W*H*D*CELL_FIELDS),
     inBounds(x,y,z){return x>=0&&x<W&&y>=0&&y<H&&z>=0&&z<D;},
+    clear(){this.buffer.fill(0);},
     idx(x,y,z){return (z*H*W+y*W+x)*CELL_FIELDS;},
     snapshot(){},
   };
