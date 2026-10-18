@@ -1,6 +1,9 @@
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
-import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import {
+  InfinityScaleLODState,
+  type InfinityScaleLODStateSnapshot,
+} from "./InfinityScaleLODState";
 import {
   InfinityScaleLODSynchronization,
   type InfinityScaleLODSynchronizationResult,
@@ -12,6 +15,8 @@ export interface InfinityScaleGlobalLODTransaction {
   synchronization: InfinityScaleLODSynchronization;
   committed: boolean;
   state: InfinityScaleLODState;
+  /** Deep state captured before any local execution writes for this frame. */
+  rollbackSnapshot: InfinityScaleLODStateSnapshot;
 }
 
 /**
@@ -30,6 +35,7 @@ export function beginInfinityScaleGlobalLODTransaction(
     throw new Error("Infinity Scale LOD transaction rejected: frame/plan revision mismatch");
   }
   const stateRevision = state.getRevision();
+  const rollbackSnapshot = state.snapshot();
   const synchronization = new InfinityScaleLODSynchronization(state);
   synchronization.begin(stateRevision);
 
@@ -39,6 +45,7 @@ export function beginInfinityScaleGlobalLODTransaction(
     synchronization,
     committed: false,
     state,
+    rollbackSnapshot,
   };
 }
 
@@ -58,9 +65,17 @@ export function commitInfinityScaleGlobalLODTransaction(
     throw new Error("Infinity Scale LOD transaction has already committed");
   }
 
-  const result = transaction.synchronization.commit();
-  transaction.committed = true;
-  return result;
+  try {
+    const result = transaction.synchronization.commit();
+    transaction.committed = true;
+    return result;
+  } catch (error) {
+    // Synchronization may fail after local CPU writes. Restore the whole frame
+    // snapshot so a failed commit cannot leave partially advanced cell state.
+    transaction.synchronization.rollback();
+    transaction.state.restore(transaction.rollbackSnapshot);
+    throw error;
+  }
 }
 
 export function rollbackInfinityScaleGlobalLODTransaction(
@@ -70,4 +85,5 @@ export function rollbackInfinityScaleGlobalLODTransaction(
     throw new Error("Infinity Scale LOD transaction cannot rollback after commit");
   }
   transaction.synchronization.rollback();
+  transaction.state.restore(transaction.rollbackSnapshot);
 }
