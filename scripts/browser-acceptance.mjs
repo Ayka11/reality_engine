@@ -730,6 +730,9 @@ try {
     gesture.workerAckStart, { timeout: acceptanceTimeout });
 
   const persistedSculptState = sculptContract.gesture.redoState;
+  // The brush UI contract switches to 2D; restore 3D before reload because subsequent
+  // worker-restore acceptance requires the primary #c3d canvas to be visible.
+  await page.evaluate(() => window.setRenderMode?.("3d"));
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
