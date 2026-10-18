@@ -525,6 +525,11 @@ export class SimulationEngine {
     }
 
     if (frameState && frameContext && selectivePlan && unifiedTransaction) {
+      // The plan is frame-scoped. A setter may run while GPU readback yields
+      // control; never commit work staged against a plan that is no longer installed.
+      if (this._infinityExecutionPlan !== selectivePlan) {
+        throw new Error('Infinity Scale execution plan changed during an active frame');
+      }
       validateInfinityScaleGlobalFrameCommit(
         frameState,
         selectivePlan,
