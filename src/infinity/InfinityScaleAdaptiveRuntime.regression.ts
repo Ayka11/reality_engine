@@ -41,12 +41,12 @@ export function runInfinityScaleAdaptiveRuntimeRegression(): void {
   }
 
   const blocked = runtime.step({
-    stateRevision: 1,
-    topologyRevision: 1,
+    stateRevision: 0,
+    topologyRevision: 0,
     mutations: [{
       regionId: "region-a",
-      fromLOD: 1,
-      toLOD: 2,
+      fromLOD: 0,
+      toLOD: 1,
     }],
     gpuBudget: {
       maxDispatches: 8,
