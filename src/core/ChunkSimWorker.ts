@@ -540,7 +540,7 @@ self.onmessage = (e: MessageEvent) => {
       })
       return
     }
-    // Failed preparation is rolled back immediately; no commit can follow.
+    // Roll back every chunk already replaced before reporting failed preparation.
     for (const [key, before] of restoreBeforeChunks) {
       if (before === null) {
         grid.chunks.delete(key)
