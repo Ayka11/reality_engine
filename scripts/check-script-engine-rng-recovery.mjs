@@ -31,15 +31,16 @@ presetsJs = presetsJs.replace(/from ['"]\.\.\/materials\/MaterialDef['"]/, `from
 presetsJs = presetsJs.replace(/from ['"]\.\.\/chemistry\/ChemLayer['"]/, `from "${chemUrl}"`);
 const presetUrl = `data:text/javascript;base64,${Buffer.from(presetsJs).toString("base64")}`;
 
-js = js.replace(/from ['"]\\.\\/Presets['"]/, `from "${presetUrl}"`);
+js = ts.transpileModule(source, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+js = js.replace(/from ['"]\.\.\/core\/CellState['"]/, `from "${cellUrl}"`);
+js = js.replace(/from ['"]\.\/Presets['"]/, `from "${presetUrl}"`);
 const { ScriptEngine } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
 const { VoxelGrid } = await import(gridUrl);
 
-const gridModuleSource = await readFile(new URL("src/core/CellState.ts", root), "utf8");
-
 function makeSimulation() {
   const W=16,H=16,D=12;
-  const GridModule = { VoxelGrid: null };
   return {grid:new VoxelGrid(W,H,D),laws:{},syncToGPU(){}};
 }
 function runScenario(engine) {
