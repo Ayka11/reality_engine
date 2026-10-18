@@ -125,6 +125,8 @@ export class InfinityScaleLODState {
       cells: new Float32Array(this.chunkSize ** 3 * CELL_FIELDS),
     };
     this.states.set(key, state);
+    // Topology changes invalidate transactions; writes to an existing chunk do not.
+    this.revision += 1;
     return state;
   }
 
@@ -137,7 +139,12 @@ export class InfinityScaleLODState {
   }
 
   deleteChunk(key: string): boolean {
-    return this.states.delete(key);
+    const deleted = this.states.delete(key);
+    if (deleted) {
+      // Removing a chunk changes the topology captured by open transactions.
+      this.revision += 1;
+    }
+    return deleted;
   }
 
   clear(): void {
