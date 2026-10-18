@@ -1,5 +1,8 @@
 import { SimulationEngine } from "../simulation/SimulationEngine";
 import { ScriptEngine } from "../world/ScriptEngine";
+import { VoxelGrid } from "../core/VoxelGrid";
+import { Presets } from "../world/Presets";
+import { TerrainGenerator } from "../world/TerrainGenerator";
 import {
   ENV_HAZARDS,
   restoreWorldComposerRandomState,
@@ -54,6 +57,23 @@ export function runWorldGenerationRNGRecoveryRegression(): void {
   restoreWorldComposerRandomState(composerState);
   hazard.fn(hazardSim.grid);
   assertSameNumbers(hazardSim.grid.buffer, expectedHazardGrid, "WorldComposer hazard RNG restore replay");
+
+  // Seeded preset and terrain generation must be independent of previous runs.
+  const presetGrid = new VoxelGrid(24, 24, 8);
+  Presets.apply(presetGrid, "life", 0x2468ace1);
+  const expectedPreset = presetGrid.buffer.slice();
+  Presets.apply(presetGrid, "life", 0x2468ace1);
+  assertSameNumbers(presetGrid.buffer, expectedPreset, "Preset seeded replay");
+
+  const terrainGrid = new VoxelGrid(12, 12, 5);
+  const terrain = new TerrainGenerator(terrainGrid);
+  const terrainLabel = terrain.generate("forest", 0x10203040);
+  const expectedTerrain = terrainGrid.buffer.slice();
+  terrain.generate("forest", 0x10203040);
+  if (terrainLabel !== 'Terrain "forest" generated (seed 270544960)') {
+    throw new Error("TerrainGenerator returned an unexpected deterministic generation label");
+  }
+  assertSameNumbers(terrainGrid.buffer, expectedTerrain, "TerrainGenerator seeded replay");
 
   // Invalid states must not be accepted as recoverable PRNG snapshots.
   let scriptRejected = false;
