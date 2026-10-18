@@ -1,11 +1,17 @@
 import { defineConfig } from 'vite'
+
 export default defineConfig({
   build: {
     target: 'esnext',
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          three: ['three'],
+        codeSplitting: {
+          groups: [
+            {
+              name: 'three',
+              test: /node_modules[\\/]three[\\/]/,
+            },
+          ],
         },
       },
     },
