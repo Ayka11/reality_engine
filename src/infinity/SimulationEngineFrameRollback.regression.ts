@@ -43,6 +43,12 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
     // Exercise recovery across domains that a later frame stage can mutate,
     // not just the field and the currently executing subsystem.
     engine.agents.seed(engine.grid, 1);
+    // Consume every subsystem PRNG explicitly so rollback is tested even if
+    // the surrounding frame path changes and no longer happens to draw from
+    // one of these generators before the injected exception.
+    (engine.agents as unknown as { _random: () => number })._random();
+    (engine.laws as unknown as { _random: () => number })._random();
+    (engine.worldEvents as unknown as { _random: () => number })._random();
     engine.laws.toggleProcess(27, false);
     engine.worldEvents.trigger(engine.grid, "meteor_strike", engine.tick);
     engine.causal.log(engine.tick, 1, 1, 1, 7, "energy_spike", 12);
