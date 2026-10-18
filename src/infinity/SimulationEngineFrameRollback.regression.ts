@@ -121,7 +121,13 @@ export async function runSimulationEngineFrameRollbackRegression(): Promise<void
 
   const recoveredFrame = engine.captureCoreRecoveryState();
   const controlFrame = control.captureCoreRecoveryState();
-  if (JSON.stringify(recoveredFrame) !== JSON.stringify(controlFrame)) {
-    throw new Error("Post-rollback frame diverged from the clean control simulation");
+  const divergentDomains = (
+    Object.keys(recoveredFrame) as Array<keyof typeof recoveredFrame>
+  ).filter(key => JSON.stringify(recoveredFrame[key]) !== JSON.stringify(controlFrame[key]));
+  if (divergentDomains.length > 0) {
+    throw new Error(
+      "Post-rollback frame diverged from the clean control simulation in: " +
+      divergentDomains.join(", "),
+    );
   }
 }
