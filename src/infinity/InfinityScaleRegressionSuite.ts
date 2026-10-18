@@ -84,6 +84,7 @@ export function runInfinityScaleRegressionSuite(): InfinityScaleRegressionResult
     ["mixed-lod-cpu-restriction", runInfinityScaleMixedLODCPURegression],
     ["mixed-lod-cpu-prolongation", runInfinityScaleMixedLODCPUProlongationRegression],
     ["mixed-lod-cpu-rollback-after-kernel-failure", runInfinityScaleMixedLODCPURollbackRegression],
+    ["lod-partial-boundary-commit-rollback", runInfinityScaleLODPartialBoundaryCommitRollbackRegression],
     ["lod-transfer-physical-invariants", runInfinityScaleLODTransferInvariantRegression],
     ["gpu-boundary-transfer-contract", runInfinityScaleGPUBoundaryTransferContractRegression],
     ["unified-transaction", runInfinityScaleUnifiedTransactionRegression],
