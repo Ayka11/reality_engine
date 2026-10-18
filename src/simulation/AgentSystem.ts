@@ -26,8 +26,8 @@ let _agentId = 1;
 
 const BEHAVIORS: AgentBehavior[] = ['explorer', 'harvester', 'signaler', 'builder', 'destroyer'];
 
-function randomBehavior(): AgentBehavior {
-  return BEHAVIORS[Math.floor(Math.random() * BEHAVIORS.length)];
+function randomBehavior(random: () => number): AgentBehavior {
+  return BEHAVIORS[Math.floor(random() * BEHAVIORS.length)];
 }
 
 export const AGENT_COLORS: Record<AgentBehavior, [number, number, number]> = {
@@ -40,14 +40,37 @@ export const AGENT_COLORS: Record<AgentBehavior, [number, number, number]> = {
 
 export class AgentSystem {
   private agents: Map<number, Agent> = new Map();
+  private _rngState = 0x0a63c9d1;
   readonly maxAgents = 64;
+
+  constructor(seed = 0x0a63c9d1) {
+    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x0a63c9d1 : 0x0a63c9d1;
+  }
+
+  private _random(): number {
+    let x = this._rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this._rngState = x >>> 0;
+    return this._rngState / 0x100000000;
+  }
+
+  snapshotRandomState(): number { return this._rngState; }
+
+  restoreRandomState(state: number): void {
+    if (!Number.isSafeInteger(state) || state <= 0 || state > 0xffffffff) {
+      throw new Error("Invalid AgentSystem PRNG state");
+    }
+    this._rngState = state >>> 0;
+  }
 
   // Seed agents + inject local energy so they survive from a cold start
   seed(grid: VoxelGrid, count = 8): void {
     for (let i = 0; i < count && this.agents.size < this.maxAgents; i++) {
-      const x = Math.floor(4 + Math.random() * (grid.W - 8));
-      const y = Math.floor(4 + Math.random() * (grid.H - 8));
-      const z = Math.floor(2 + Math.random() * (grid.D * 0.6));
+      const x = Math.floor(4 + this._random() * (grid.W - 8));
+      const y = Math.floor(4 + this._random() * (grid.H - 8));
+      const z = Math.floor(2 + this._random() * (grid.D * 0.6));
 
       // Inject a small energy patch so agents have something to harvest
       for (let dz = -1; dz <= 1; dz++)
@@ -58,7 +81,7 @@ export class AgentSystem {
         grid.buffer[base + F.ENERGY] = Math.max(grid.buffer[base + F.ENERGY], 150);
       }
 
-      this._spawn(x, y, z, randomBehavior(), 200);
+      this._spawn(x, y, z, randomBehavior(() => this._random()), 200);
     }
   }
 
@@ -95,11 +118,11 @@ export class AgentSystem {
       // Replicate when well-fed
       if (agent.energy > 300 && this.agents.size < this.maxAgents) {
         agent.energy *= 0.55;
-        const childBehavior = Math.random() < 0.15 ? randomBehavior() : agent.behavior;
+        const childBehavior = this._random() < 0.15 ? randomBehavior(() => this._random()) : agent.behavior;
         this._spawn(
-          Math.max(0, Math.min(grid.W-1, agent.x + Math.round(Math.random()*4-2))),
-          Math.max(0, Math.min(grid.H-1, agent.y + Math.round(Math.random()*4-2))),
-          Math.max(0, Math.min(grid.D-1, agent.z + Math.round(Math.random()*2-1))),
+          Math.max(0, Math.min(grid.W-1, agent.x + Math.round(this._random()*4-2))),
+          Math.max(0, Math.min(grid.H-1, agent.y + Math.round(this._random()*4-2))),
+          Math.max(0, Math.min(grid.D-1, agent.z + Math.round(this._random()*2-1))),
           childBehavior, agent.energy * 0.6,
         );
         agent.children++;
@@ -215,7 +238,7 @@ export class AgentSystem {
     // Destroyers roam randomly
     if (agent.age % 3 === 0) {
       const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
-      const [dx,dy] = dirs[Math.floor(Math.random()*4)];
+      const [dx,dy] = dirs[Math.floor(this._random()*4)];
       const nx = Math.max(0, Math.min(grid.W-1, agent.x+dx));
       const ny = Math.max(0, Math.min(grid.H-1, agent.y+dy));
       if (nx !== agent.x || ny !== agent.y) {
