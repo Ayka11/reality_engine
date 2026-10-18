@@ -15,7 +15,7 @@
  */
 
 // ── Field layout ──────────────────────────────────────────────────────────────
-import { nextXorShift32 } from './SimWorkerState';
+import { isValidSimWorkerCausalHistory, nextXorShift32 } from './SimWorkerState';
 
 const NF = 14 as const
 
@@ -118,15 +118,7 @@ function restoreWorkerSnapshot(snapshot: SimWorkerSnapshot): void {
       !snapshot.backBuffer.every(Number.isFinite) ||
       ![snapshot.DIFF, snapshot.ENT, snapshot.INFO, snapshot.BIO].every(Number.isFinite) ||
       !Number.isSafeInteger(snapshot.evCount) || snapshot.evCount < 0 ||
-      !Array.isArray(snapshot.causal) || snapshot.causal.length > 400 ||
-      !snapshot.causal.every((event, index) => event &&
-        Number.isSafeInteger(event.id) && event.id > 0 && event.id <= snapshot.evCount &&
-        Number.isSafeInteger(event.tick) && event.tick >= 0 && event.tick <= snapshot.tick &&
-        (index === 0 || event.id > snapshot.causal[index - 1].id) &&
-        [event.x, event.y, event.z, event.delta].every(Number.isFinite) &&
-        Number.isInteger(event.x) && event.x >= 0 && event.x < W &&
-        Number.isInteger(event.y) && event.y >= 0 && event.y < H &&
-        Number.isInteger(event.z) && event.z >= 0 && event.z < D) ||
+      !isValidSimWorkerCausalHistory(snapshot.causal, snapshot.evCount, snapshot.tick, W, H, D) ||
       !Array.isArray(snapshot.activeProcs) || !snapshot.activeProcs.every(p => typeof p === 'string')) {
     throw new Error('Invalid SimWorker snapshot')
   }
