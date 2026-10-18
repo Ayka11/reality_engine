@@ -7,6 +7,7 @@ import type {
 } from "./InfinityScaleChunkExecutionContext";
 import {
   InfinityScaleGlobalLODTransaction,
+  rollbackInfinityScaleGlobalLODTransaction,
 } from "./InfinityScaleGlobalLODTransaction";
 import {
   InfinityScaleLODState,
@@ -48,7 +49,8 @@ export interface InfinityScaleMixedLODCPUExecutionResult {
  * Ownership is explicit: only simulation ranges are writable. Boundary chunks
  * are read dependencies and are never mutated by the local execution pass.
  * Boundary synchronization remains staged until the global
- * boundary-reconciliation phase.
+ * boundary-reconciliation phase. Any error aborts and restores the complete
+ * transaction snapshot, including writes completed earlier in this pass.
  */
 export class InfinityScaleMixedLODCPUExecutor {
   private readonly boundaryMapper: InfinityScaleLODBoundaryCellMapper;
@@ -77,51 +79,72 @@ export class InfinityScaleMixedLODCPUExecutor {
     }
     this.state.assertRevision(transaction.stateRevision);
 
-    let executedCells = 0;
-    for (const chunk of plan.chunks) {
-      const range = this.rangeForChunk(chunk.key);
-      const scale = 2 ** chunk.lod;
-      for (let z = range.minZ; z <= range.maxZ; z += scale) {
-        for (let y = range.minY; y <= range.maxY; y += scale) {
-          for (let x = range.minX; x <= range.maxX; x += scale) {
-            const input = this.state.readBaseCell(chunk.key, chunk.lod, x, y, z);
-            if (!input) {
-              throw new Error(
-                `Infinity Scale CPU execution missing owned cell at ${chunk.key}:${x},${y},${z}`,
-              );
+    try {
+      let executedCells = 0;
+      for (const chunk of plan.chunks) {
+        const range = this.rangeForChunk(chunk.key);
+        const scale = 2 ** chunk.lod;
+        for (let z = range.minZ; z <= range.maxZ; z += scale) {
+          for (let y = range.minY; y <= range.maxY; y += scale) {
+            for (let x = range.minX; x <= range.maxX; x += scale) {
+              const input = this.state.readBaseCell(chunk.key, chunk.lod, x, y, z);
+              if (!input) {
+                throw new Error(
+                  `Infinity Scale CPU execution missing owned cell at ${chunk.key}:${x},${y},${z}`,
+                );
+              }
+
+              const output = kernel({
+                chunk: chunk.key,
+                level: chunk.lod,
+                x,
+                y,
+                z,
+                input: new Float32Array(input),
+                output: new Float32Array(input),
+              });
+
+              if (output.length !== input.length) {
+                throw new Error("Infinity Scale CPU cell kernel returned invalid field count");
+              }
+
+              this.state.writeBaseCell(chunk.key, chunk.lod, x, y, z, output);
+              executedCells++;
             }
-
-            const output = kernel({
-              chunk: chunk.key,
-              level: chunk.lod,
-              x,
-              y,
-              z,
-              input: new Float32Array(input),
-              output: new Float32Array(input),
-            });
-
-            if (output.length !== input.length) {
-              throw new Error("Infinity Scale CPU cell kernel returned invalid field count");
-            }
-
-            this.state.writeBaseCell(chunk.key, chunk.lod, x, y, z, output);
-            executedCells++;
           }
         }
       }
-    }
 
-    const stagedBoundaryUpdates = this.stageBoundaryTransfers(
-      transaction,
-      resolveBoundarySources,
-    );
-    const validation = transaction.synchronization.validate();
-    return {
-      executedCells,
-      stagedBoundaryUpdates,
-      transactionReady: validation.readyToCommit,
-    };
+      const stagedBoundaryUpdates = this.stageBoundaryTransfers(
+        transaction,
+        resolveBoundarySources,
+      );
+      const validation = transaction.synchronization.validate();
+      if (!validation.readyToCommit) {
+        throw new Error(
+          `Infinity Scale CPU execution rejected invalid transaction: invalid=${validation.invalidUpdateCount}, conservationErrors=${validation.conservationErrorFields.length}, topologyValid=${validation.topologyValid}`,
+        );
+      }
+      return {
+        executedCells,
+        stagedBoundaryUpdates,
+        transactionReady: true,
+      };
+    } catch (error) {
+      // Rollback is intentionally centralized here: kernel, boundary resolver,
+      // staging, and validation failures all restore the pre-frame state.
+      if (!transaction.committed) {
+        try {
+          rollbackInfinityScaleGlobalLODTransaction(transaction);
+        } catch (rollbackError) {
+          throw new AggregateError(
+            [error, rollbackError],
+            "Infinity Scale CPU execution failed and transaction rollback also failed",
+          );
+        }
+      }
+      throw error;
+    }
   }
 
   /**
