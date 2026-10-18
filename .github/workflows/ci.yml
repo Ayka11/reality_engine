@@ -33,6 +33,7 @@ jobs:
       - run: npm run test:solver-deployment
       - run: npm run test:field-profile --if-present
       - run: npm run test:mutable-field-profile --if-present
+      - run: npm run test:mutable-field-validation --if-present
       - run: npm run test:legacy-field-bridge --if-present
       - run: npm run test:legacy-sculpt-adapter --if-present
       - run: npm run test:authoritative-sculpt-transaction --if-present
