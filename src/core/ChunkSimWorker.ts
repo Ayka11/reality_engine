@@ -17,6 +17,7 @@ let activeRestoreId: number | null = null
 let expectedRestoreChunks = 0
 let restoredChunkCount = 0
 let restoreFailed = false
+let restorePrepared = false
 const restoredChunkKeys = new Set<number>()
 const restoreBeforeChunks = new Map<number, Float32Array | null>()
 const restoreBeforeDirtyChunks = new Set<number>()
@@ -183,6 +184,7 @@ self.onmessage = (e: MessageEvent) => {
     expectedRestoreChunks = expected
     restoredChunkCount = 0
     restoreFailed = false
+    restorePrepared = false
     restoredChunkKeys.clear()
     restoreBeforeChunks.clear()
     restoreBeforeDirtyChunks.clear()
@@ -192,7 +194,7 @@ self.onmessage = (e: MessageEvent) => {
   }
 
   // Do not let simulation or edits interleave with an atomic restore session.
-  if (activeRestoreId !== null && cmd !== 'restoreChunk' && cmd !== 'restoreEnd') return
+  if (activeRestoreId !== null && !['restoreChunk', 'restoreEnd', 'restoreCommit', 'restoreAbort'].includes(cmd)) return
 
   if (cmd === 'tick') {
     const speed = (data?.speed as number) || 1
@@ -524,35 +526,90 @@ self.onmessage = (e: MessageEvent) => {
     const restoreId = data?.restoreId
     const complete = activeRestoreId === restoreId && !restoreFailed &&
       restoredChunkCount === expectedRestoreChunks && restoredChunkKeys.size === expectedRestoreChunks
-    if (activeRestoreId === restoreId) {
-      if (!complete) {
-        // Roll back every chunk already replaced so a rejected restore is atomic.
-        for (const [key, before] of restoreBeforeChunks) {
-          if (before === null) {
-            grid.chunks.delete(key)
-            grid.dirtyChunks.add(key)
-          } else {
-            grid.restoreChunk(key, before)
-          }
-        }
-      } else {
-        clearSculptHistory()
-      }
-      // Preserve dirty work that was pending before the isolated restore began.
-      for (const key of restoreBeforeDirtyChunks) grid.dirtyChunks.add(key)
+    if (activeRestoreId !== restoreId) {
+      ;(self as unknown as Worker).postMessage({
+        cmd: 'restoreComplete', data: { restoreId, complete: false, prepared: false, reason: 'stale-restore-id', restoredChunkCount, expectedRestoreChunks },
+      })
+      return
     }
+    if (complete) {
+      // Prepare only. Keep the before-image until the main thread confirms its ACK/frame barrier.
+      restorePrepared = true
+      ;(self as unknown as Worker).postMessage({
+        cmd: 'restoreComplete', data: { restoreId, complete: true, prepared: true, restoredChunkCount, expectedRestoreChunks },
+      })
+      return
+    }
+    // Failed preparation is rolled back immediately; no commit can follow.
+    for (const [key, before] of restoreBeforeChunks) {
+      if (before === null) {
+        grid.chunks.delete(key)
+        grid.dirtyChunks.add(key)
+      } else {
+        grid.restoreChunk(key, before)
+      }
+    }
+    for (const key of restoreBeforeDirtyChunks) grid.dirtyChunks.add(key)
     ;(self as unknown as Worker).postMessage({
-      cmd: 'restoreComplete', data: { restoreId, complete, restoredChunkCount, expectedRestoreChunks },
+      cmd: 'restoreComplete', data: { restoreId, complete: false, prepared: false, restoredChunkCount, expectedRestoreChunks },
     })
-    if (activeRestoreId === restoreId) {
+    activeRestoreId = null
+    expectedRestoreChunks = 0
+    restoredChunkCount = 0
+    restoreFailed = false
+    restorePrepared = false
+    restoredChunkKeys.clear()
+    restoreBeforeChunks.clear()
+    restoreBeforeDirtyChunks.clear()
+    return
+  }
+
+  if (cmd === 'restoreCommit') {
+    const restoreId = data?.restoreId
+    const committed = activeRestoreId === restoreId && restorePrepared && !restoreFailed &&
+      restoredChunkCount === expectedRestoreChunks && restoredChunkKeys.size === expectedRestoreChunks
+    if (committed) clearSculptHistory()
+    ;(self as unknown as Worker).postMessage({
+      cmd: 'restoreCommitted', data: { restoreId, committed },
+    })
+    if (committed) {
       activeRestoreId = null
       expectedRestoreChunks = 0
       restoredChunkCount = 0
       restoreFailed = false
+      restorePrepared = false
       restoredChunkKeys.clear()
       restoreBeforeChunks.clear()
       restoreBeforeDirtyChunks.clear()
     }
+    return
+  }
+
+  if (cmd === 'restoreAbort') {
+    const restoreId = data?.restoreId
+    const aborted = activeRestoreId === restoreId && restorePrepared
+    if (aborted) {
+      for (const [key, before] of restoreBeforeChunks) {
+        if (before === null) {
+          grid.chunks.delete(key)
+          grid.dirtyChunks.add(key)
+        } else {
+          grid.restoreChunk(key, before)
+        }
+      }
+      for (const key of restoreBeforeDirtyChunks) grid.dirtyChunks.add(key)
+      activeRestoreId = null
+      expectedRestoreChunks = 0
+      restoredChunkCount = 0
+      restoreFailed = false
+      restorePrepared = false
+      restoredChunkKeys.clear()
+      restoreBeforeChunks.clear()
+      restoreBeforeDirtyChunks.clear()
+    }
+    ;(self as unknown as Worker).postMessage({
+      cmd: 'restoreAborted', data: { restoreId, aborted },
+    })
     return
   }
 
