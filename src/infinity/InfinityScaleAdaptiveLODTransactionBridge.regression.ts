@@ -39,4 +39,22 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
     staleRejected = true;
   }
   if (!staleRejected) throw new Error("Stale LOD transaction was not rejected");
+
+  // A rejected commit in the wrong frame phase must clear the active
+  // transaction so the bridge can be reused for a valid boundary commit.
+  const retryState = new InfinityScaleLODState();
+  const retryBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, retryState);
+  retryBridge.begin(frame2);
+  let phaseRejected = false;
+  try {
+    retryBridge.commit(frame2, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
+  } catch (error) {
+    phaseRejected = error instanceof Error && error.message.includes("phase");
+  }
+  if (!phaseRejected) throw new Error("Wrong-phase LOD commit was not rejected");
+  if (retryState.hasChunk("0:0,0,0")) throw new Error("Wrong-phase LOD commit leaked a staged chunk");
+
+  retryBridge.begin(frame);
+  const retried = retryBridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: 0, toLOD: 1 }]);
+  if (!retried.committed) throw new Error("LOD bridge could not commit after wrong-phase rejection");
 }
