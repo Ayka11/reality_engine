@@ -48,6 +48,7 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
     if (!this.transaction) throw new Error("Adaptive LOD transaction has not begun");
     const stateRevisionBefore = this.state.getRevision();
     const createdChunks: string[] = [];
+    let stateMutationStarted = false;
 
     try {
       // Keep all input processing inside cleanup: malformed runtime input must
@@ -78,6 +79,7 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
 
       for (const mutation of changed) {
         if (!this.state.hasChunk(mutation.regionId)) {
+          stateMutationStarted = true;
           this.state.ensureChunk(mutation.regionId, mutation.toLOD);
           createdChunks.push(mutation.regionId);
         }
@@ -113,6 +115,10 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
         this.transaction.synchronization.stageTransfer(execution.spec, execution.targetCell, execution.sourceCells);
       }
 
+      // Commit may partially write boundary cells before rejecting an invalid
+      // target. Mark the state as potentially mutated before entering it so the
+      // catch path restores the snapshot on every partial-commit failure.
+      stateMutationStarted = true;
       const synchronization = commitInfinityScaleGlobalLODTransaction(this.transaction, frame);
       if (!synchronization.readyToCommit) throw new Error("Adaptive LOD synchronization was not ready to commit");
       return {
@@ -126,8 +132,14 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
         reason: transfers.length === 0 && changed.length > 0 ? "topology-committed-without-boundary-transfer" : "committed",
       };
     } catch (error) {
-      for (const key of createdChunks) this.state.deleteChunk(key);
-      if (this.transaction && !this.transaction.committed) rollbackInfinityScaleGlobalLODTransaction(this.transaction);
+      // Fail-closed validation before any state mutation is a true no-op: do
+      // not restore an identical snapshot, because restore intentionally bumps
+      // the revision and would make a rejected topology request observable.
+      // Once chunk creation or commit starts, rollback is required to recover
+      // from partial writes and invalidate outstanding transaction tokens.
+      if (stateMutationStarted && this.transaction && !this.transaction.committed) {
+        rollbackInfinityScaleGlobalLODTransaction(this.transaction);
+      }
       throw error;
     } finally {
       this.transaction = undefined;
