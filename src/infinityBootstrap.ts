@@ -11,6 +11,7 @@ import { importDiscoveredAsset } from './worldLibrary/AssetImportService'
 import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, visualKindToWorldObject, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
 import { installScientificWorkspace } from './infinity/ScientificWorkspace'
+import { worldViewContract } from './infinity/WorldViewContract'
 import { buildCivilizationExperimentMatrix, runCivilizationInfinityBatch, runCivilizationInfinityReplication, analyzeCrossDimensionGeneralization, summarizeReplicationSnapshots, createInfinityScientificReport, serializeInfinityScientificReport, createScientificProvenance, attachScientificProvenance, validateScientificProvenance, assessInfinityClaim, type CivilizationExperimentMatrix } from './infinity'
 
 export type DockPosition = 'top' | 'left' | 'right' | 'float'
@@ -26,6 +27,14 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).infiniteWorldControls = world
   ;(window as any).worldFieldMutate = (mutation: any) => world.applyAuthoritativeFieldMutation(mutation)
   ;(window as any).worldFieldState = () => world.getAuthoritativeFieldState()
+  // Read-only scientific field inspection and deterministic 2D view-window sampling.
+  ;(window as any).worldViewContract = worldViewContract
+  ;(window as any).worldFieldSample = (x: number, y?: number, z?: number) => world.fieldSampler.sampleWorld(x, y, z)
+  ;(window as any).worldFieldViewWindow = (width: number, height: number, sliceY?: number) => world.fieldSampler.sampleViewWindow(width, height, sliceY)
+  ;(window as any).getWorldViewContract = () => worldViewContract.snapshot()
+  ;(window as any).setWorldViewCenter = (x: number, y: number, z: number) => worldViewContract.setCenter(x, y, z)
+  ;(window as any).setWorldViewSliceY = (y: number) => worldViewContract.setSliceY(y)
+  ;(window as any).setWorldViewRenderMode = (mode: any) => worldViewContract.setRenderMode(mode)
   ;(window as any).infinityApplyLegacySculptStroke = (tool: any, cell: any, radius: number, strength: number, options?: any) =>
     world.applyLegacySculptStroke(tool, cell, radius, strength, options)
   ;(window as any).infinityApplyLegacySmartBrush = (name: any, cell: any, radius: number, selectedLegacyZ?: number, options?: { strength?: number }) =>
