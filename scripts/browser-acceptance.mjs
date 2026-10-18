@@ -471,6 +471,47 @@ try {
     throw new Error("Smart Brush geometry settings did not reach ChunkSimWorker with expected runtime parameters");
   }
 
+  const brushControls = await page.evaluate(() => ({
+    geometry: !!document.getElementById("brushGeometry"),
+    falloff: !!document.getElementById("brushFalloff"),
+    verticalExtent: !!document.getElementById("brushVerticalExtent"),
+    operation: !!document.getElementById("brushOperation"),
+  }));
+  if (Object.values(brushControls).some(present => !present)) {
+    throw new Error(`Brush geometry controls are missing from the workspace: ${JSON.stringify(brushControls)}`);
+  }
+
+  // Exercise the real UI path: selected controls -> paintAt -> connector -> worker ACK.
+  await page.evaluate(() => {
+    window.setRenderMode?.("2d");
+    window.selectBrush?.("Forest");
+    document.getElementById("brushGeometry").value = "column";
+    document.getElementById("brushFalloff").value = "constant";
+    document.getElementById("brushVerticalExtent").value = "full-column";
+    document.getElementById("brushOperation").value = "add";
+    window.lastChunkBrush = null;
+  });
+  const brushUiPoint = await page.evaluate(() => {
+    const wrap = document.getElementById("viewWrap");
+    if (!wrap) return { error: "viewWrap missing" };
+    const rect = wrap.getBoundingClientRect();
+    const cellSize = Math.min(rect.width / window.W, rect.height / window.H);
+    const ox = (rect.width - cellSize * window.W) / 2, oy = (rect.height - cellSize * window.H) / 2;
+    return { x: rect.left + ox + 20.5 * cellSize, y: rect.top + oy + 20.5 * cellSize };
+  });
+  if (brushUiPoint.error) throw new Error(brushUiPoint.error);
+  await page.mouse.click(brushUiPoint.x, brushUiPoint.y);
+  await page.waitForFunction(() => window.lastChunkBrush?.geometry === "column", undefined, { timeout: acceptanceTimeout });
+  const brushUiAck = await page.evaluate(() => window.lastChunkBrush);
+  if (
+    brushUiAck?.falloff !== "constant" ||
+    brushUiAck?.verticalExtent !== "full-column" ||
+    brushUiAck?.operation !== "add"
+  ) {
+    throw new Error(`Brush settings from the workspace did not reach the Worker: ${JSON.stringify(brushUiAck)}`);
+  }
+  console.log("[acceptance] brush geometry UI -> worker contract PASS");
+
   await page.waitForFunction(() => typeof window.applyChunkPreset === "function");
   await page.evaluate(() => { window.lastChunkPreset = null; window.applyChunkPreset("town"); });
   await page.waitForFunction(() => !!window.lastChunkPreset, undefined, { timeout: acceptanceTimeout });
