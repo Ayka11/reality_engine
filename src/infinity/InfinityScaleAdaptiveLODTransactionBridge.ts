@@ -137,7 +137,15 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
       // the revision and would make a rejected topology request observable.
       // Once chunk creation or commit starts, rollback is required to recover
       // from partial writes and invalidate outstanding transaction tokens.
-      if (stateMutationStarted && this.transaction && !this.transaction.committed) {
+      if (
+        stateMutationStarted &&
+        this.transaction &&
+        !this.transaction.committed &&
+        // The global commit helper already restores the snapshot when its own
+        // commit fails. Do not run synchronization rollback a second time, and
+        // never restore over a newer revision owned by an external mutation.
+        this.state.getRevision() === this.transaction.stateRevision
+      ) {
         rollbackInfinityScaleGlobalLODTransaction(this.transaction);
       }
       throw error;
