@@ -112,4 +112,59 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   if (!originalTransactionCommitted.committed) {
     throw new Error("Duplicate begin replaced or invalidated the original adaptive LOD transaction");
   }
+
+  // Inject a failure after the bridge enters commit. The authoritative cell
+  // buffer must be restored byte-for-byte and the bridge must remain reusable.
+  const failureState = new InfinityScaleLODState();
+  const seededChunk = failureState.ensureChunk("0:0,0,0", 0);
+  seededChunk.cells[0] = 17;
+  seededChunk.cells[1] = -3.5;
+  const beforeFailureKeys = failureState.keys().sort().join("|");
+  const beforeFailureCells = new Float32Array(seededChunk.cells);
+  const failureBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, failureState);
+  const failingTransaction = failureBridge.begin(frame);
+  const synchronization = failingTransaction.synchronization;
+  const originalCommit = synchronization.commit.bind(synchronization);
+  synchronization.commit = (() => {
+    // Simulate a partial write inside the commit boundary before an exception.
+    const liveChunk = failureState.getChunk("0:0,0,0");
+    if (!liveChunk) throw new Error("Failure-injection fixture lost its seeded chunk");
+    liveChunk.cells[0] = 999;
+    liveChunk.cells[1] = 123;
+    throw new Error("Injected post-mutation synchronization failure");
+  }) as typeof synchronization.commit;
+
+  let injectedFailureObserved = false;
+  try {
+    failureBridge.commit(frame, []);
+  } catch (error) {
+    injectedFailureObserved = error instanceof Error && error.message.includes("Injected post-mutation");
+  } finally {
+    synchronization.commit = originalCommit;
+  }
+  if (!injectedFailureObserved) throw new Error("Post-mutation synchronization failure was not propagated");
+  const restoredChunk = failureState.getChunk("0:0,0,0");
+  if (!restoredChunk) throw new Error("Rollback removed a pre-existing chunk");
+  if (failureState.keys().sort().join("|") !== beforeFailureKeys) {
+    throw new Error("Post-mutation rollback changed the chunk topology");
+  }
+  if (restoredChunk.level !== 0 || restoredChunk.scale !== 1) {
+    throw new Error("Post-mutation rollback changed chunk metadata");
+  }
+  if (restoredChunk.cells.length !== beforeFailureCells.length) {
+    throw new Error("Post-mutation rollback changed cell buffer length");
+  }
+  for (let i = 0; i < beforeFailureCells.length; i++) {
+    if (!Object.is(restoredChunk.cells[i], beforeFailureCells[i])) {
+      throw new Error("Post-mutation rollback did not restore cell field at offset " + i);
+    }
+  }
+  if (failureState.getRevision() <= failingTransaction.stateRevision) {
+    throw new Error("Post-mutation rollback did not invalidate the failed transaction revision");
+  }
+  const failureRetried = failureBridge.begin(frame);
+  const recovery = failureBridge.commit(frame, []);
+  if (!recovery.committed) throw new Error("LOD bridge could not be reused after post-mutation rollback");
+  void failureRetried;
+
 }
