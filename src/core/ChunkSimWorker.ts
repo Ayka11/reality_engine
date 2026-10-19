@@ -16,6 +16,11 @@ const causal: Array<{ id: number; tick: number; x: number; y: number; z: number;
 let DIFF = 0.09, ENT = 0.0004, INFO = 0.35, BIO = 0.25
 const activeProcs = new Set<string>(['thermo', 'bio'])
 
+// Track each worker-side restore handshake independently from simulation ticks.
+let activeRestoreId: number | null = null
+let expectedRestoreChunks = 0
+let restoredChunkCount = 0
+
 function simStep(dt: number) {
   for (const { x, y, z, base, chunk } of grid.activeCells()) {
     let lapE = 0, lapT = 0, lapD = 0, lapI = 0, nc = 0
