@@ -201,6 +201,25 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
     throw new Error("valueOf() result was not routed through guarded chunk access");
   }
 
+  // Callback methods must not leak the raw receiver through their third
+  // argument, and must preserve the caller-provided thisArg.
+  const callbackChunk = directBufferState.getChunk("0:0,0,0");
+  if (!callbackChunk) throw new Error("Expected chunk for callback-buffer regression");
+  let callbackBuffer: ArrayBuffer | undefined;
+  let callbackThisPreserved = false;
+  const callbackContext = { marker: 123 };
+  callbackChunk.cells.forEach(function (this: typeof callbackContext, _value, _index, callbackCells) {
+    callbackThisPreserved = this.marker === 123;
+    callbackBuffer = callbackCells.buffer;
+  }, callbackContext);
+  if (!callbackThisPreserved) throw new Error("Typed-array callback wrapper did not preserve thisArg");
+  if (!callbackBuffer) throw new Error("Typed-array callback did not provide a guarded receiver");
+  new Float32Array(callbackBuffer)[0] = 999;
+  const afterCallbackBufferWrite = directBufferState.readBaseCell("0:0,0,0", 0, 0, 0, 0);
+  if (!afterCallbackBufferWrite || afterCallbackBufferWrite[0] !== 89) {
+    throw new Error("Typed-array callback leaked mutable authoritative buffer");
+  }
+
   // Common typed-array mutators and descriptor-based writes must invalidate
   // an active transaction just like direct numeric-index assignment.
   for (const mutation of [
