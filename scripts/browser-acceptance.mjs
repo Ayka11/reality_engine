@@ -162,7 +162,18 @@ try {
     throw new Error("2D world-field renderer did not consume sampled world-space data");
   }
   // 3D volumetric field must render actual authoritative world-field samples, not a blank tab.
-  await page.evaluate(() => window.previewRenderMode?.("field3d"));
+  // Exercise the same click path as a user; this also verifies the tab is wired to setRenderMode.
+  await page.locator("#tabField3d").click();
+  const field3dSwitch = await page.evaluate(() => ({
+    renderAvailable: typeof window.renderField3D === "function",
+    modeApiAvailable: typeof window.previewRenderMode === "function",
+    canvasDisplay: document.getElementById("c3dField")?.style.display ?? null,
+    canvasRect: (() => { const r = document.getElementById("c3dField")?.getBoundingClientRect(); return r ? { width: r.width, height: r.height } : null; })(),
+    state: window.getWorldField3DState?.() ?? null,
+  }));
+  if (!field3dSwitch.renderAvailable || !field3dSwitch.state) {
+    throw new Error(`3D volumetric field tab did not initialize its renderer: ${JSON.stringify(field3dSwitch)}`);
+  }
   await page.waitForFunction(() => {
     const state = window.getWorldField3DState?.();
     return !!state && (state.ready || !!state.reason);
