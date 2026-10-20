@@ -171,9 +171,11 @@ try {
     canvasRect: (() => { const r = document.getElementById("c3dField")?.getBoundingClientRect(); return r ? { width: r.width, height: r.height } : null; })(),
     state: window.getWorldField3DState?.() ?? null,
   }));
-  if (!field3dSwitch.renderAvailable || !field3dSwitch.state) {
-    throw new Error(`3D volumetric field tab did not initialize its renderer: ${JSON.stringify(field3dSwitch)}`);
+  if (!field3dSwitch.renderAvailable) {
+    throw new Error(`3D volumetric field renderer is not registered: ${JSON.stringify(field3dSwitch)}`);
   }
+  // Rendering may be scheduled on the next animation frame after the click.
+  // Wait for either a successful render or an explicit diagnostic before asserting.
   await page.waitForFunction(() => {
     const state = window.getWorldField3DState?.();
     return !!state && (state.ready || !!state.reason);
