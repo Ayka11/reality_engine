@@ -333,6 +333,7 @@ input[type=range]{accent-color:#a397ff}
   <div id="viewWrap">
   <canvas id="c3d"></canvas>
   <canvas id="c2d"></canvas>
+  <canvas id="c3dField" aria-label="3D volumetric scientific field" style="position:absolute;inset:0;width:100%;height:100%;display:none;z-index:2;background:#050812"></canvas>
   <div id="metricsView" style="display:none;position:absolute;inset:0;background:#07070e;padding:14px;overflow-y:auto;font-size:10px;font-family:monospace;color:var(--sub)">
     <div style="font-size:12px;color:var(--text);margin-bottom:10px;font-family:system-ui">📈 World Metrics</div>
     <div id="metricsContent"></div>
@@ -2331,6 +2332,80 @@ window.addEventListener('keydown', (e) => {
     if (shortcutsModal) shortcutsModal.style.display = 'none';
   }
 });
+
+function renderField3D(){
+  const canvas=document.getElementById('c3dField');
+  if(!canvas||currentRenderMode!=='field3d')return false;
+  const rect=canvas.getBoundingClientRect();
+  if(rect.width<2||rect.height<2)return false;
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const targetW=Math.max(1,Math.round(rect.width*dpr)),targetH=Math.max(1,Math.round(rect.height*dpr));
+  if(canvas.width!==targetW||canvas.height!==targetH){canvas.width=targetW;canvas.height=targetH;}
+  const g=canvas.getContext('2d');
+  if(!g)return false;
+  g.setTransform(dpr,0,0,dpr,0,0);
+  const w=rect.width,h=rect.height;
+  const sampler=window.worldFieldViewWindow,getView=window.getWorldViewContract;
+  if(typeof sampler!=='function'||typeof getView!=='function'){
+    g.clearRect(0,0,w,h);g.fillStyle='#ffb86b';g.font='12px monospace';g.fillText('World-field sampler unavailable',16,28);
+    window.getWorldField3DState=()=>({ready:false,renderedCells:0,sampleCount:0});
+    return false;
+  }
+  const view=getView();
+  const state=typeof window.worldFieldState==='function'?window.worldFieldState()?.field:null;
+  const cols=Math.max(12,Math.min(36,Math.floor(w/24)));
+  const rows=Math.max(10,Math.min(28,Math.floor(h/24)));
+  const depth=7,spacing=Math.max(1,Math.min(8,Math.floor((view.visibleRadius||24)*2/depth)));
+  const cacheKey=[cols,rows,view.center.x,view.center.y,view.center.z,view.sliceY,view.visibleRadius,view.seed,state?.version??0,state?.mutationCount??0,state?.lastMutation?.id??0].join('|');
+  if(!window.__worldField3DCache||window.__worldField3DCache.key!==cacheKey){
+    const slices=[];
+    for(let k=0;k<depth;k++){
+      const y=view.sliceY+(k-Math.floor(depth/2))*spacing;
+      const data=sampler(cols,rows,y);
+      if(!data?.samples?.length)continue;
+      slices.push({y,data});
+    }
+    window.__worldField3DCache={key:cacheKey,slices};
+  }
+  const slices=window.__worldField3DCache.slices;
+  g.clearRect(0,0,w,h);
+  const bg=g.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#080d1b');bg.addColorStop(1,'#101528');g.fillStyle=bg;g.fillRect(0,0,w,h);
+  const fieldIndex=Number.isInteger(layer)&&layer>=0&&layer<=5?layer:0;
+  const names=['Energy','Density','Information','Entropy','Temperature','Biology'];
+  const props=['energy','density','information','entropy','temperature','biology'];
+  const maxima=[1000,1,500,1,800,1];
+  const cellW=Math.max(3,Math.min(15,(w*.72)/(cols+rows*.55)));
+  const cellH=cellW*.55;
+  const depthStep=Math.max(2,Math.min(13,h*.018));
+  const originX=w*.5-(cols-rows*.55)*cellW*.5;
+  const originY=h*.5-(cols+rows)*cellH*.25+(depth-1)*depthStep*.5;
+  let renderedCells=0,activeCells=0,sampleCount=0;
+  for(let si=0;si<slices.length;si++){
+    const {data}=slices[si];
+    const zLayer=si-Math.floor((slices.length-1)/2);
+    for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
+      const sample=data.samples[py*data.width+px];
+      if(!sample)continue;
+      sampleCount++;
+      const value=Number(sample[props[fieldIndex]])||0;
+      const normalized=Math.max(0,Math.min(1,value/maxima[fieldIndex]));
+      const color=colorOf(fieldIndex,normalized);
+      const sx=originX+px*cellW+py*cellW*.55;
+      const sy=originY+(px+py)*cellH*.5-zLayer*depthStep;
+      const lift=Math.max(0,Math.min(depthStep*.9,normalized*depthStep*2));
+      g.beginPath();g.moveTo(sx,sy-cellH*.5-lift);g.lineTo(sx+cellW*.5,sy-lift);g.lineTo(sx,sy+cellH*.5-lift);g.lineTo(sx-cellW*.5,sy-lift);g.closePath();
+      g.fillStyle='rgba('+color[0]+','+color[1]+','+color[2]+','+(0.22+normalized*.72)+')';g.fill();
+      g.strokeStyle='rgba(160,190,255,.14)';g.lineWidth=.5;g.stroke();
+      renderedCells++;if(value>(maxima[fieldIndex]>.99?maxima[fieldIndex]*.001:.001))activeCells++;
+    }
+  }
+  g.font='bold 12px system-ui';g.fillStyle='rgba(235,242,255,.94)';g.fillText('3D VOLUMETRIC FIELD · '+names[fieldIndex],14,22);
+  g.font='10px monospace';g.fillStyle='rgba(180,200,235,.8)';
+  g.fillText('samples '+sampleCount+' · active '+activeCells+' · Y '+view.sliceY+' · center '+view.center.x.toFixed(1)+', '+view.center.y.toFixed(1)+', '+view.center.z.toFixed(1),14,h-12);
+  window.getWorldField3DState=()=>({ready:true,renderedCells,sampleCount,activeCells,slices:slices.length,field:names[fieldIndex],view});
+  return renderedCells>0;
+}
+window.renderField3D=renderField3D;
 
 function setRenderMode(mode,btn){
   currentRenderMode=mode;
