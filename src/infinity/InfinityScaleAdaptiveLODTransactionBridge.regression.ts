@@ -186,6 +186,20 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   if (!afterEscapedSubarrayWrite || afterEscapedSubarrayWrite[0] !== 43) {
     throw new Error("Public chunk subarray exposed authoritative mutable memory");
   }
+  // valueOf() must not reveal the backing typed array, whose buffer would
+  // bypass the proxy's revision tracking and rollback-conflict protection.
+  const valueOfChunk = directBufferState.getChunk("0:0,0,0");
+  if (!valueOfChunk) throw new Error("Expected chunk for valueOf escape regression");
+  const valueOfRevision = directBufferState.getRevision();
+  const valueOfResult = valueOfChunk.cells.valueOf();
+  valueOfResult[0] = 89;
+  if (directBufferState.getRevision() <= valueOfRevision) {
+    throw new Error("Typed-array valueOf() bypassed LOD state revision tracking");
+  }
+  const afterValueOfWrite = directBufferState.readBaseCell("0:0,0,0", 0, 0, 0, 0);
+  if (!afterValueOfWrite || afterValueOfWrite[0] !== 89) {
+    throw new Error("valueOf() result was not routed through guarded chunk access");
+  }
 
   // Common typed-array mutators and descriptor-based writes must invalidate
   // an active transaction just like direct numeric-index assignment.
