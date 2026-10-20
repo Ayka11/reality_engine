@@ -201,10 +201,19 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   const originalCommit = synchronization.commit.bind(synchronization);
   synchronization.commit = (() => {
     // Simulate a partial write inside the commit boundary before an exception.
-    const liveChunk = failureState.getChunk("0:0,0,0");
-    if (!liveChunk) throw new Error("Failure-injection fixture lost its seeded chunk");
-    liveChunk.cells[0] = 999;
-    liveChunk.cells[1] = 123;
+    const injectedCell = failureState.readBaseCell("0:0,0,0", 0, 0, 0, 0);
+    if (!injectedCell) throw new Error("Failure-injection fixture lost its seeded chunk");
+    injectedCell[0] = 999;
+    injectedCell[1] = 123;
+    failureState.writeBaseCellForTransaction(
+      failingTransaction.stateRevision,
+      "0:0,0,0",
+      0,
+      0,
+      0,
+      0,
+      injectedCell,
+    );
     throw new Error("Injected post-mutation synchronization failure");
   }) as typeof synchronization.commit;
 
