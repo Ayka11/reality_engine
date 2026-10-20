@@ -1,0 +1,509 @@
+import { CELL_FIELDS, F } from "../core/CellState";
+import type {
+  InfinityScaleBoundaryTransferSpec,
+} from "./InfinityScaleChunkExecutionContext";
+import {
+  getInfinityScaleFieldSemantics,
+} from "./InfinityScaleFieldSemantics";
+
+/**
+ * Field policy used by the LOD transfer operator.
+ *
+ * Continuous physical fields use volume-weighted averaging for restriction
+ * and piecewise-constant prolongation. Identity/discrete fields are never
+ * interpolated because doing so would manufacture invalid entity/material IDs.
+ */
+export type InfinityScaleLODFieldPolicy =
+  | "intensive"
+  | "extensive"
+  | "circular"
+  | "discrete"
+  | "unsupported";
+
+export interface InfinityScaleLODTransferResult {
+  operation: "copy" | "prolongation" | "restriction";
+  sourceLevel: number;
+  targetLevel: number;
+  refinementRatio: number;
+  transferredFields: number[];
+  skippedFields: number[];
+}
+
+/**
+ * Pure field-transfer kernel for the Infinity Scale AMR boundary contract.
+ *
+ * This module deliberately operates on caller-supplied cell vectors rather
+ * than SparseVoxelGrid ownership. The current dense grid has no separate
+ * coarse-level storage, so enabling this kernel does NOT by itself make
+ * mixed-LOD execution safe. SimulationEngine keeps lodBoundaryTransferReady
+ * disabled until hierarchical storage and boundary commit integration exist.
+ */
+export class InfinityScaleLODTransfer {
+  static readonly continuousFields: number[] = [
+    F.ENERGY,
+    F.DENSITY,
+    F.INFORMATION,
+    F.ENTROPY,
+    F.TEMPERATURE,
+    F.PRESSURE,
+    F.FIELD_X,
+    F.FIELD_Y,
+    F.FIELD_Z,
+    F.LOCAL_TIME,
+    F.BIO_POTENTIAL,
+    F.WAVE_AMP,
+    F.GRAVITY_POT,
+    F.SIGNAL,
+    F.MEM_FIELD,
+  ];
+
+  static readonly discreteFields: number[] = [
+    F.MATERIAL_ID,
+    F.CHEM_STATE,
+    F.CAUSALITY_ID,
+    F.AGENT_MARK,
+    F.ENTITY_ID,
+  ];
+
+  /**
+   * Circular phase policy: phase is represented in radians and must be
+   * aggregated through unit phasors, never by arithmetic averaging.
+   */
+  static circularFields: number[] = [F.WAVE_PHASE];
+
+  static policy(field: number): InfinityScaleLODFieldPolicy {
+    return getInfinityScaleFieldSemantics(field).policy;
+  }
+
+  /**
+   * Same-level transfer. No interpolation is performed.
+   */
+  static copy(
+    source: ArrayLike<number>,
+    target: number[],
+  ): InfinityScaleLODTransferResult {
+    if (source.length !== CELL_FIELDS || target.length !== CELL_FIELDS) {
+      throw new Error(
+        `Infinity Scale cell transfer requires exactly ${CELL_FIELDS} fields`,
+      );
+    }
+
+    const transferredFields: number[] = [];
+    const skippedFields: number[] = [];
+
+    for (let field = 0; field < CELL_FIELDS; field++) {
+      const policy = this.policy(field);
+      if (policy === "intensive" || policy === "extensive" || policy === "circular" || policy === "discrete") {
+        target[field] = source[field];
+        transferredFields.push(field);
+      } else {
+        skippedFields.push(field);
+      }
+    }
+
+    return {
+      operation: "copy",
+      sourceLevel: 0,
+      targetLevel: 0,
+      refinementRatio: 1,
+      transferredFields,
+      skippedFields,
+    };
+  }
+
+  /**
+   * Coarse-to-fine baseline prolongation.
+   *
+   * A coarse cell is represented as a piecewise-constant value over each of
+   * its refinementRatio^3 child cells. This is deterministic for the current
+   * field-transfer policy; conservation is not assumed for every field.
+   */
+  static prolongate(
+    source: ArrayLike<number>,
+    targets: Array<number[]>,
+    sourceLevel: number,
+    targetLevel: number,
+  ): InfinityScaleLODTransferResult {
+    const refinementRatio = this.validateLevels(sourceLevel, targetLevel, "prolongation");
+    const expected = refinementRatio ** 3;
+
+    if (targets.length !== expected) {
+      throw new Error(
+        `Infinity Scale prolongation requires ${expected} target cells; received ${targets.length}`,
+      );
+    }
+
+    if (source.length !== CELL_FIELDS) {
+      throw new Error(
+        `Infinity Scale prolongation source requires exactly ${CELL_FIELDS} fields`,
+      );
+    }
+
+    for (const target of targets) {
+      if (target.length !== CELL_FIELDS) {
+        throw new Error(
+          `Infinity Scale prolongation target requires exactly ${CELL_FIELDS} fields`,
+        );
+      }
+    }
+
+    const transferredFields: number[] = [];
+    const skippedFields: number[] = [];
+
+    for (let field = 0; field < CELL_FIELDS; field++) {
+      const policy = this.policy(field);
+      if (policy === "circular") {
+        for (const target of targets) target[field] = source[field];
+        transferredFields.push(field);
+        continue;
+      }
+
+      if (policy !== "intensive" && policy !== "extensive" && policy !== "discrete") {
+        skippedFields.push(field);
+        continue;
+      }
+
+      const childValue = policy === "extensive"
+        ? (source[field] ?? 0) / expected
+        : (source[field] ?? 0);
+      for (const target of targets) target[field] = childValue;
+      transferredFields.push(field);
+    }
+
+    return {
+      operation: "prolongation",
+      sourceLevel,
+      targetLevel,
+      refinementRatio,
+      transferredFields,
+      skippedFields,
+    };
+  }
+
+  /**
+   * Fine-to-coarse baseline restriction.
+   *
+   * Continuous fields are volume-averaged. Discrete fields use deterministic
+   * majority selection rather than arithmetic interpolation.
+   */
+  static restrict(
+    sources: ReadonlyArray<ArrayLike<number>>,
+    target: number[],
+    sourceLevel: number,
+    targetLevel: number,
+  ): InfinityScaleLODTransferResult {
+    const refinementRatio = this.validateLevels(sourceLevel, targetLevel, "restriction");
+    const expected = refinementRatio ** 3;
+
+    if (sources.length !== expected) {
+      throw new Error(
+        `Infinity Scale restriction requires ${expected} source cells; received ${sources.length}`,
+      );
+    }
+
+    for (const source of sources) {
+      if (source.length !== CELL_FIELDS) {
+        throw new Error(
+          `Infinity Scale restriction source requires exactly ${CELL_FIELDS} fields`,
+        );
+      }
+    }
+
+    if (target.length !== CELL_FIELDS) {
+      throw new Error(
+        `Infinity Scale restriction target requires exactly ${CELL_FIELDS} fields`,
+      );
+    }
+
+    const transferredFields: number[] = [];
+    const skippedFields: number[] = [];
+
+    for (let field = 0; field < CELL_FIELDS; field++) {
+      const policy = this.policy(field);
+
+      if (policy === "circular") {
+        let sumSin = 0;
+        let sumCos = 0;
+        for (const source of sources) {
+          const phase = source[field] ?? 0;
+          sumSin += Math.sin(phase);
+          sumCos += Math.cos(phase);
+        }
+        target[field] = Math.atan2(sumSin, sumCos);
+        transferredFields.push(field);
+        continue;
+      }
+
+      if (policy === "intensive") {
+        let sum = 0;
+        for (const source of sources) sum += source[field] ?? 0;
+        target[field] = sum / sources.length;
+        transferredFields.push(field);
+        continue;
+      }
+
+      if (policy === "extensive") {
+        let sum = 0;
+        for (const source of sources) sum += source[field] ?? 0;
+        target[field] = sum;
+        transferredFields.push(field);
+        continue;
+      }
+
+      if (policy === "discrete") {
+        const counts = new Map<number, number>();
+        for (const source of sources) {
+          const value = source[field] ?? 0;
+          counts.set(value, (counts.get(value) ?? 0) + 1);
+        }
+
+        let selected = 0;
+        let selectedCount = -1;
+        for (const [value, count] of counts) {
+          if (count > selectedCount || (count === selectedCount && value < selected)) {
+            selected = value;
+            selectedCount = count;
+          }
+        }
+
+        target[field] = selected;
+        transferredFields.push(field);
+        continue;
+      }
+
+      skippedFields.push(field);
+    }
+
+    return {
+      operation: "restriction",
+      sourceLevel,
+      targetLevel,
+      refinementRatio,
+      transferredFields,
+      skippedFields,
+    };
+  }
+
+  /**
+   * Round-trip invariant for an intensive field under baseline
+   * coarse-to-fine prolongation: every child must reproduce the coarse value.
+   */
+  /**
+   * Restricts a face footprint rather than a full volumetric refinement block.
+   * This is used for ghost/boundary state: the footprint contains ratio^2
+   * tangential source cells, so volumetric extensive quantities are sampled
+   * consistently instead of being summed across a partial volume.
+   */
+  static restrictFace(
+    sources: ReadonlyArray<ArrayLike<number>>,
+    target: number[],
+    sourceLevel: number,
+    targetLevel: number,
+  ): InfinityScaleLODTransferResult {
+    const refinementRatio = this.validateLevels(sourceLevel, targetLevel, "restriction");
+    const expected = refinementRatio ** 2;
+    if (sources.length !== expected || target.length !== CELL_FIELDS) {
+      throw new Error(
+        `Infinity Scale face restriction requires ${expected} source cells; received ${sources.length}`,
+      );
+    }
+    for (const source of sources) {
+      if (source.length !== CELL_FIELDS) {
+        throw new Error(`Infinity Scale face restriction source requires exactly ${CELL_FIELDS} fields`);
+      }
+    }
+
+    const transferredFields: number[] = [];
+    const skippedFields: number[] = [];
+    for (let field = 0; field < CELL_FIELDS; field++) {
+      const policy = this.policy(field);
+      if (policy === "circular") {
+        let sumSin = 0;
+        let sumCos = 0;
+        for (const source of sources) {
+          const phase = source[field] ?? 0;
+          sumSin += Math.sin(phase);
+          sumCos += Math.cos(phase);
+        }
+        target[field] = Math.atan2(sumSin, sumCos);
+        transferredFields.push(field);
+      } else if (
+        policy === "intensive" ||
+        policy === "extensive" ||
+        policy === "discrete"
+      ) {
+        if (policy === "discrete") {
+          const counts = new Map<number, number>();
+          for (const source of sources) {
+            const value = source[field] ?? 0;
+            counts.set(value, (counts.get(value) ?? 0) + 1);
+          }
+          let selected = 0;
+          let selectedCount = -1;
+          for (const [value, count] of counts) {
+            if (count > selectedCount || (count === selectedCount && value < selected)) {
+              selected = value;
+              selectedCount = count;
+            }
+          }
+          target[field] = selected;
+        } else {
+          let sum = 0;
+          for (const source of sources) sum += source[field] ?? 0;
+          // Extensive fields represent additive quantities (energy, information,
+          // memory): restriction must preserve their total. Intensive fields
+          // represent local state and are averaged over the boundary footprint.
+          target[field] = policy === "extensive" ? sum : sum / sources.length;
+        }
+        transferredFields.push(field);
+      } else {
+        skippedFields.push(field);
+      }
+    }
+
+    return {
+      operation: "restriction",
+      sourceLevel,
+      targetLevel,
+      refinementRatio,
+      transferredFields,
+      skippedFields,
+    };
+  }
+
+  static validateProlongationInvariant(
+    source: ArrayLike<number>,
+    targets: ReadonlyArray<ReadonlyArray<number>>,
+    sourceLevel: number,
+    targetLevel: number,
+    tolerance = 1e-6,
+  ): { valid: boolean; violations: number[] } {
+    const refinementRatio = this.validateLevels(sourceLevel, targetLevel, "prolongation");
+    const expected = refinementRatio ** 3;
+    if (targets.length !== expected || source.length !== CELL_FIELDS) {
+      throw new Error("Infinity Scale prolongation invariant dimensions are invalid");
+    }
+
+    const violations: number[] = [];
+    for (let field = 0; field < CELL_FIELDS; field++) {
+      const policy = this.policy(field);
+      if (policy !== "intensive" && policy !== "extensive" && policy !== "circular") continue;
+      if (policy === "circular") {
+        const phase = source[field] ?? 0;
+        const expected = Math.atan2(Math.sin(phase), Math.cos(phase));
+        for (const target of targets) {
+          const actual = target[field] ?? 0;
+          const error = Math.abs(Math.atan2(
+            Math.sin(actual - expected),
+            Math.cos(actual - expected),
+          ));
+          if (error > tolerance) {
+            if (!violations.includes(field)) violations.push(field);
+            break;
+          }
+        }
+        continue;
+      }
+
+      const expectedValue = policy === "extensive"
+        ? (source[field] ?? 0) / expected
+        : (source[field] ?? 0);
+      for (const target of targets) {
+        if (target.length !== CELL_FIELDS) {
+          throw new Error("Infinity Scale prolongation target dimensions are invalid");
+        }
+        const scale = Math.max(1, Math.abs(expectedValue), Math.abs(target[field] ?? 0));
+        if (Math.abs((target[field] ?? 0) - expectedValue) > tolerance * scale) {
+          if (!violations.includes(field)) violations.push(field);
+          break;
+        }
+      }
+    }
+
+    return { valid: violations.length === 0, violations };
+  }
+
+  static validateRestrictionInvariant(
+    sources: ReadonlyArray<ArrayLike<number>>,
+    target: ReadonlyArray<number>,
+    sourceLevel: number,
+    targetLevel: number,
+    tolerance = 1e-6,
+  ): { valid: boolean; violations: number[] } {
+    const refinementRatio = this.validateLevels(sourceLevel, targetLevel, "restriction");
+    const expected = refinementRatio ** 3;
+    if (sources.length !== expected || target.length !== CELL_FIELDS) {
+      throw new Error("Infinity Scale restriction invariant dimensions are invalid");
+    }
+
+    const violations: number[] = [];
+    for (let field = 0; field < CELL_FIELDS; field++) {
+      const policy = this.policy(field);
+      if (policy !== "intensive" && policy !== "extensive") continue;
+
+      let sum = 0;
+      for (const source of sources) sum += source[field] ?? 0;
+      const expectedValue = policy === "intensive" ? sum / sources.length : sum;
+      const scale = Math.max(1, Math.abs(expectedValue), Math.abs(target[field] ?? 0));
+      if (Math.abs((target[field] ?? 0) - expectedValue) > tolerance * scale) {
+        violations.push(field);
+      }
+    }
+
+    return { valid: violations.length === 0, violations };
+  }
+
+  static validateSpec(spec: InfinityScaleBoundaryTransferSpec): void {
+    const expectedOperation =
+      spec.relation === "same-level"
+        ? "copy"
+        : spec.relation === "coarse-to-fine"
+          ? "prolongation"
+          : "restriction";
+
+    if (spec.operation !== expectedOperation) {
+      throw new Error(
+        `Infinity Scale transfer operation mismatch: ${spec.operation} !== ${expectedOperation}`,
+      );
+    }
+
+    const expectedReadOperation =
+      spec.relation === "same-level"
+        ? "copy"
+        : spec.relation === "coarse-to-fine"
+          ? "restriction"
+          : "prolongation";
+    if (spec.readOperation !== expectedReadOperation) {
+      throw new Error(
+        `Infinity Scale boundary read operation mismatch: ${spec.readOperation} !== ${expectedReadOperation}`,
+      );
+    }
+
+    const expectedRatio = 2 ** Math.abs(spec.sourceLevel - spec.targetLevel);
+    if (spec.refinementRatio !== expectedRatio) {
+      throw new Error(
+        `Infinity Scale transfer ratio mismatch: ${spec.refinementRatio} !== ${expectedRatio}`,
+      );
+    }
+  }
+
+  private static validateLevels(
+    sourceLevel: number,
+    targetLevel: number,
+    operation: "prolongation" | "restriction",
+  ): number {
+    if (!Number.isInteger(sourceLevel) || !Number.isInteger(targetLevel)) {
+      throw new Error("Infinity Scale LOD levels must be integers");
+    }
+
+    if (operation === "prolongation" && sourceLevel <= targetLevel) {
+      throw new Error("Infinity Scale prolongation requires coarse source -> finer target");
+    }
+
+    if (operation === "restriction" && sourceLevel >= targetLevel) {
+      throw new Error("Infinity Scale restriction requires fine source -> coarser target");
+    }
+
+    return 2 ** Math.abs(sourceLevel - targetLevel);
+  }
+}

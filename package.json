@@ -35,7 +35,8 @@
     "test:script-engine-rng-recovery": "node scripts/check-script-engine-rng-recovery.mjs",
     "test:agent-worldevents-rng-recovery": "node scripts/check-agent-worldevents-rng-recovery.mjs",
     "test:terrain-worldcomposer-rng-recovery": "node scripts/check-terrain-worldcomposer-rng-recovery.mjs",
-    "test:simworker-rng-recovery": "node scripts/check-simworker-rng-recovery.mjs"
+    "test:simworker-rng-recovery": "node scripts/check-simworker-rng-recovery.mjs",
+    "test:infinity-scale-mixed-lod": "npx --yes tsx scripts/check-infinity-scale-mixed-lod.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
