@@ -164,14 +164,16 @@ export class InfinityScaleLODState {
         ]);
         if (callbackMethods.has(property)) {
           return (...args: unknown[]) => {
-            const callbackIndex = property === "reduce" || property === "reduceRight" ? 0 : 0;
-            const callback = args[callbackIndex];
+            const callback = args[0];
             if (typeof callback !== "function") {
               return Reflect.apply(value, target, args);
             }
-            args[callbackIndex] = (...callbackArgs: unknown[]) => {
+            const callbackThis = property === "reduce" || property === "reduceRight"
+              ? undefined
+              : args[1];
+            args[0] = (...callbackArgs: unknown[]) => {
               if (callbackArgs.length > 0) callbackArgs[callbackArgs.length - 1] = proxy;
-              return Reflect.apply(callback, undefined, callbackArgs);
+              return Reflect.apply(callback, callbackThis, callbackArgs);
             };
             return Reflect.apply(value, target, args);
           };
