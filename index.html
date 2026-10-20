@@ -2464,7 +2464,9 @@ function setRenderMode(mode,btn){
   const layerBar=document.getElementById('layerBar');
   if(layerBar)layerBar.style.opacity=mode==='field3d'?'1':'0.55';
 
-  resize();
+  // The legacy WebGL resize path assumes the Infinite World canvas is active.
+  // Volumetric Field owns a separate 2D canvas and sizes it in renderField3D().
+  if(mode!=='field3d') resize();
 
   if((mode==='2d'||mode==='hybrid')&&c2d.style.display!=='none'){resize2D();draw2D();}
   if((mode==='3d'||mode==='hybrid')&&c3d.style.display!=='none'){resize3D();}
