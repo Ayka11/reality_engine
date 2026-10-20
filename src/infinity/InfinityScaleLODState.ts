@@ -155,6 +155,27 @@ export class InfinityScaleLODState {
             return result === target ? proxy : result;
           };
         }
+        // Typed-array callback methods pass their receiver as a callback
+        // argument. Passing the backing target here would leak its mutable
+        // buffer even though .buffer and valueOf() are guarded.
+        const callbackMethods = new Set<PropertyKey>([
+          "every", "filter", "find", "findIndex", "findLast", "findLastIndex",
+          "forEach", "map", "some", "reduce", "reduceRight",
+        ]);
+        if (callbackMethods.has(property)) {
+          return (...args: unknown[]) => {
+            const callbackIndex = property === "reduce" || property === "reduceRight" ? 0 : 0;
+            const callback = args[callbackIndex];
+            if (typeof callback !== "function") {
+              return Reflect.apply(value, target, args);
+            }
+            args[callbackIndex] = (...callbackArgs: unknown[]) => {
+              if (callbackArgs.length > 0) callbackArgs[callbackArgs.length - 1] = proxy;
+              return Reflect.apply(callback, undefined, callbackArgs);
+            };
+            return Reflect.apply(value, target, args);
+          };
+        }
         return value.bind(target);
       },
       set(target, property, value) {
