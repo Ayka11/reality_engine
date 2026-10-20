@@ -205,7 +205,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   // argument, and must preserve the caller-provided thisArg.
   const callbackChunk = directBufferState.getChunk("0:0,0,0");
   if (!callbackChunk) throw new Error("Expected chunk for callback-buffer regression");
-  let callbackBuffer: ArrayBuffer | undefined;
+  let callbackBuffer: ArrayBufferLike | undefined;
   let callbackThisPreserved = false;
   const callbackContext = { marker: 123 };
   callbackChunk.cells.forEach(function (this: typeof callbackContext, _value, _index, callbackCells) {
