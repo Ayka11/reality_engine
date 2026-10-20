@@ -165,8 +165,15 @@ try {
   await page.evaluate(() => window.previewRenderMode?.("field3d"));
   await page.waitForFunction(() => {
     const state = window.getWorldField3DState?.();
-    return !!state?.ready && state.renderedCells > 0 && state.sampleCount > 0;
+    return !!state && (state.ready || !!state.reason);
   }, { timeout: 15000 });
+  const field3dDiagnostic = await page.evaluate(() => window.getWorldField3DState?.());
+  if (!field3dDiagnostic?.ready) {
+    throw new Error(`3D volumetric field renderer failed: ${JSON.stringify(field3dDiagnostic)}`);
+  }
+  if (field3dDiagnostic.renderedCells <= 0 || field3dDiagnostic.sampleCount <= 0) {
+    throw new Error("3D volumetric field did not render sampled cells");
+  }
   const field3dInitial = await page.evaluate(() => {
     const state = window.getWorldField3DState?.();
     const canvas = document.getElementById("c3dField");
