@@ -110,7 +110,7 @@ export class InfinityScaleLODState {
       if (existing.level !== level) {
         throw new Error(`Infinity Scale LOD chunk level mismatch for ${key}`);
       }
-      return existing;
+      return this.exposeChunk(existing);
     }
 
     if (!Number.isInteger(level) || level < 0 || level > 30) {
@@ -125,13 +125,48 @@ export class InfinityScaleLODState {
       cells: new Float32Array(this.chunkSize ** 3 * CELL_FIELDS),
     };
     this.states.set(key, state);
-    // Topology changes invalidate transactions; writes to an existing chunk do not.
     this.revision += 1;
-    return state;
+    return this.exposeChunk(state);
+  }
+
+  /**
+   * Public chunk handles never expose the authoritative ArrayBuffer. Direct
+   * index writes and mutating typed-array methods invalidate open transactions.
+   */
+  private exposeChunk(state: InfinityScaleLODChunkState): InfinityScaleLODChunkState {
+    const owner = this;
+    const cells = new Proxy(state.cells, {
+      get(target, property) {
+        if (property === "buffer") return target.slice().buffer;
+        if (property === "subarray") {
+          return (begin?: number, end?: number) => target.slice(begin, end);
+        }
+        const value = Reflect.get(target, property, target);
+        if (typeof value !== "function") return value;
+        if (property === "set" || property === "fill" || property === "copyWithin" ||
+            property === "reverse" || property === "sort") {
+          return (...args: unknown[]) => {
+            const result = Reflect.apply(value, target, args);
+            owner.revision += 1;
+            return result === target ? proxy : result;
+          };
+        }
+        return value.bind(target);
+      },
+      set(target, property, value) {
+        const ok = Reflect.set(target, property, value, target);
+        if (ok && (typeof property === "string" && /^(0|[1-9]\\d*)$/.test(property))) {
+          owner.revision += 1;
+        }
+        return ok;
+      },
+    });
+    return { key: state.key, level: state.level, scale: state.scale, cells };
   }
 
   getChunk(key: string): InfinityScaleLODChunkState | undefined {
-    return this.states.get(key);
+    const state = this.states.get(key);
+    return state ? this.exposeChunk(state) : undefined;
   }
 
   hasChunk(key: string): boolean {
@@ -244,7 +279,13 @@ export class InfinityScaleLODState {
       throw new Error(`Infinity Scale LOD cell requires ${CELL_FIELDS} fields`);
     }
 
-    const state = this.ensureChunk(key, level);
+    let state = this.states.get(key);
+    if (!state) {
+      this.ensureChunk(key, level);
+      state = this.states.get(key);
+    }
+    if (!state) throw new Error(`Failed to create Infinity Scale LOD chunk ${key}`);
+    if (state.level !== level) throw new Error(`Infinity Scale LOD chunk level mismatch for ${key}`);
     const [keyLevel, cx, cy, cz] = parseChunkKey(key);
     if (keyLevel !== level) throw new Error(`Infinity Scale LOD chunk key level mismatch for ${key}`);
     const scale = state.scale;
