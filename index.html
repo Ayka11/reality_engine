@@ -2333,7 +2333,7 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-function renderField3D(){
+function renderField3DImpl(){
   const canvas=document.getElementById('c3dField');
   const mode=typeof currentRenderMode==='undefined'?'unknown':currentRenderMode;
   if(!canvas){window.getWorldField3DState=()=>({ready:false,reason:'canvas-missing',mode});return false;}
@@ -2416,6 +2416,23 @@ function renderField3D(){
   window.__worldField3DLayoutRetryCount=0;
   window.getWorldField3DState=()=>({ready:true,renderedCells,sampleCount,activeCells,slices:slices.length,field:names[fieldIndex],view});
   return renderedCells>0;
+}
+function renderField3D(){
+  try {
+    return renderField3DImpl();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : "";
+    window.getWorldField3DState = () => ({
+      ready: false,
+      reason: "runtime-error",
+      mode: typeof currentRenderMode === "undefined" ? "unknown" : currentRenderMode,
+      message,
+      stack: String(stack || "").slice(0, 1200),
+    });
+    console.error("[field3d] render failed", error);
+    return false;
+  }
 }
 window.renderField3D=renderField3D;
 
