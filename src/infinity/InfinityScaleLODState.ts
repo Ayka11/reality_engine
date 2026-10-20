@@ -142,6 +142,9 @@ export class InfinityScaleLODState {
         if (property === "subarray") {
           return (begin?: number, end?: number) => target.slice(begin, end);
         }
+        // Object.prototype.valueOf, when bound to the backing typed array,
+        // would hand callers the raw target and bypass every mutation trap.
+        if (property === "valueOf") return () => proxy;
         const value = Reflect.get(target, property, target);
         if (typeof value !== "function") return value;
         if (property === "set" || property === "fill" || property === "copyWithin" ||
