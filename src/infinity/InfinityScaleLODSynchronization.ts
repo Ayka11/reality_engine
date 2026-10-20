@@ -188,7 +188,8 @@ export class InfinityScaleLODSynchronization {
     for (const update of result.updates) {
       const [x, y, z] = update.targetCell;
       const targetLevel = chunkLevel(update.targetChunk);
-      this.state.writeBaseCell(
+      this.state.writeBaseCellForTransaction(
+        this.revision,
         update.targetChunk,
         targetLevel,
         x,
