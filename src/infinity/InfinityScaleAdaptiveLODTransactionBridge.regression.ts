@@ -187,6 +187,66 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
     throw new Error("Public chunk subarray exposed authoritative mutable memory");
   }
 
+  // Common typed-array mutators and descriptor-based writes must invalidate
+  // an active transaction just like direct numeric-index assignment.
+  for (const mutation of [
+    {
+      label: "set()",
+      apply: (cells: Float32Array) => cells.set([51], 0),
+      expected: 51,
+    },
+    {
+      label: "fill()",
+      apply: (cells: Float32Array) => cells.fill(52, 0, 1),
+      expected: 52,
+    },
+    {
+      label: "copyWithin()",
+      apply: (cells: Float32Array) => {
+        cells[1] = 53;
+        cells.copyWithin(0, 1, 2);
+      },
+      expected: 53,
+    },
+    {
+      label: "Object.defineProperty()",
+      apply: (cells: Float32Array) => {
+        Object.defineProperty(cells, "0", {
+          value: 54,
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
+      },
+      expected: 54,
+    },
+  ]) {
+    const mutationState = new InfinityScaleLODState();
+    mutationState.ensureChunk("0:0,0,0", 0);
+    const mutationBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, mutationState);
+    mutationBridge.begin(frame);
+    const revisionBeforeMutation = mutationState.getRevision();
+    const mutationChunk = mutationState.getChunk("0:0,0,0");
+    if (!mutationChunk) throw new Error(`Expected public chunk for ${mutation.label} regression`);
+    mutation.apply(mutationChunk.cells);
+    if (mutationState.getRevision() <= revisionBeforeMutation) {
+      throw new Error(`${mutation.label} bypassed LOD state revision tracking`);
+    }
+    let mutationConflictRejected = false;
+    try {
+      mutationBridge.commit(frame, []);
+    } catch (error) {
+      mutationConflictRejected = error instanceof Error && error.message.includes("revision");
+    }
+    if (!mutationConflictRejected) {
+      throw new Error(`LOD transaction accepted a ${mutation.label} write after begin`);
+    }
+    const mutationValue = mutationState.readBaseCell("0:0,0,0", 0, 0, 0, 0);
+    if (!mutationValue || mutationValue[0] !== mutation.expected) {
+      throw new Error(`Rollback overwrote the newer ${mutation.label} value`);
+    }
+  }
+
   // Inject a failure after the bridge enters commit. The authoritative cell
   // buffer must be restored byte-for-byte and the bridge must remain reusable.
   const failureState = new InfinityScaleLODState();
