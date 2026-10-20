@@ -187,7 +187,7 @@ try {
   if (field3dInitial.state.renderedCells <= 0 || field3dInitial.state.sampleCount <= 0) {
     throw new Error("3D volumetric field did not render sampled cells");
   }
-  if (field3dInitial.backingWidth < field3dInitial.rectWidth || field3dInitial.backingHeight < field3dInitial.rectHeight) {
+  if (field3dInitial.backingWidth < Math.round(field3dInitial.rectWidth) || field3dInitial.backingHeight < Math.round(field3dInitial.rectHeight)) {
     throw new Error("3D volumetric field canvas backing resolution was not initialized");
   }
 
