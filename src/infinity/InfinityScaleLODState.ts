@@ -135,7 +135,8 @@ export class InfinityScaleLODState {
    */
   private exposeChunk(state: InfinityScaleLODChunkState): InfinityScaleLODChunkState {
     const owner = this;
-    const cells = new Proxy(state.cells, {
+    let proxy: Float32Array;
+    proxy = new Proxy(state.cells, {
       get(target, property) {
         if (property === "buffer") return target.slice().buffer;
         if (property === "subarray") {
@@ -155,13 +156,13 @@ export class InfinityScaleLODState {
       },
       set(target, property, value) {
         const ok = Reflect.set(target, property, value, target);
-        if (ok && (typeof property === "string" && /^(0|[1-9]\\d*)$/.test(property))) {
+        if (ok && (typeof property === "string" && /^(0|[1-9]\d*)$/.test(property))) {
           owner.revision += 1;
         }
         return ok;
       },
     });
-    return { key: state.key, level: state.level, scale: state.scale, cells };
+    return { key: state.key, level: state.level, scale: state.scale, cells: proxy };
   }
 
   getChunk(key: string): InfinityScaleLODChunkState | undefined {
