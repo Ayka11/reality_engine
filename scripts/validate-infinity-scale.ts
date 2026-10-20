@@ -1,6 +1,7 @@
 import { runInfinityScaleReleaseValidation } from "../src/infinity/InfinityScaleReleaseValidation";
 import { runSimulationEngineFrameRollbackRegression } from "../src/infinity/SimulationEngineFrameRollback.regression";
 import { runWorldGenerationRNGRecoveryRegression } from "../src/infinity/WorldGenerationRNGRecovery.regression";
+import { runInfinityScaleAdaptiveLODTransactionBridgeRegression } from "../src/infinity/InfinityScaleAdaptiveLODTransactionBridge.regression";
 
 const result = runInfinityScaleReleaseValidation();
 if (!result.allPassed) {
@@ -8,4 +9,10 @@ if (!result.allPassed) {
 }
 await runSimulationEngineFrameRollbackRegression();
 runWorldGenerationRNGRecoveryRegression();
-console.log(JSON.stringify({ ...result, frameRollbackRegression: "passed", worldGenerationRNGRecoveryRegression: "passed" }));
+runInfinityScaleAdaptiveLODTransactionBridgeRegression();
+console.log(JSON.stringify({
+  ...result,
+  frameRollbackRegression: "passed",
+  worldGenerationRNGRecoveryRegression: "passed",
+  adaptiveLODTransactionBridgeRegression: "passed",
+}));
