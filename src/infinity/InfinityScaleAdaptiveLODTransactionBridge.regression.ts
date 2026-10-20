@@ -113,6 +113,40 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
     throw new Error("Duplicate begin replaced or invalidated the original adaptive LOD transaction");
   }
 
+  // An out-of-transaction write to an existing chunk must invalidate the
+  // captured revision. The failed transaction must not restore its old snapshot
+  // over that newer authoritative write.
+  const externalWriteState = new InfinityScaleLODState();
+  externalWriteState.ensureChunk("0:0,0,0", 0);
+  const externalWriteBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, externalWriteState);
+  externalWriteBridge.begin(frame);
+  const revisionAtBegin = externalWriteState.getRevision();
+  const externalCell = new Float32Array(24);
+  externalCell[0] = 41;
+  externalWriteState.writeBaseCell("0:0,0,0", 0, 0, 0, 0, externalCell);
+  if (externalWriteState.getRevision() <= revisionAtBegin) {
+    throw new Error("External LOD cell write did not invalidate the captured transaction revision");
+  }
+  let externalConflictRejected = false;
+  try {
+    externalWriteBridge.commit(frame, []);
+  } catch (error) {
+    externalConflictRejected = error instanceof Error && error.message.includes("revision");
+  }
+  if (!externalConflictRejected) {
+    throw new Error("LOD transaction accepted an external write after its rollback snapshot");
+  }
+  const externalCellAfterRollback = externalWriteState.readBaseCell("0:0,0,0", 0, 0, 0, 0);
+  if (!externalCellAfterRollback || externalCellAfterRollback[0] !== 41) {
+    throw new Error("Failed LOD transaction overwrote a newer external cell write");
+  }
+  const externalWriteRetry = externalWriteBridge.begin(frame);
+  const externalWriteRecovery = externalWriteBridge.commit(frame, []);
+  if (!externalWriteRecovery.committed) {
+    throw new Error("LOD bridge could not be reused after an external-write conflict");
+  }
+  void externalWriteRetry;
+
   // Inject a failure after the bridge enters commit. The authoritative cell
   // buffer must be restored byte-for-byte and the bridge must remain reusable.
   const failureState = new InfinityScaleLODState();
