@@ -156,14 +156,14 @@ export class InfinityScaleLODState {
       },
       set(target, property, value) {
         const ok = Reflect.set(target, property, value, target);
-        if (ok && (typeof property === "string" && /^(0|[1-9]\\d*)$/.test(property))) {
+        if (ok && (typeof property === "string" && /^(0|[1-9]\d*)$/.test(property))) {
           owner.revision += 1;
         }
         return ok;
       },
       defineProperty(target, property, descriptor) {
         const ok = Reflect.defineProperty(target, property, descriptor);
-        if (ok && (typeof property === "string" && /^(0|[1-9]\\d*)$/.test(property))) {
+        if (ok && (typeof property === "string" && /^(0|[1-9]\d*)$/.test(property))) {
           owner.revision += 1;
         }
         return ok;
