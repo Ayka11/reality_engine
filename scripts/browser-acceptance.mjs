@@ -192,7 +192,9 @@ try {
   }
 
   // The selected layer must affect the field renderer, and center/slice changes must invalidate its sampling cache.
-  await page.evaluate(() => window.setLayer?.(2));
+  await page.evaluate(() => {
+    if (window.getWorldField3DState?.()?.field !== "Information") window.setLayer?.(2);
+  });
   await page.waitForFunction(() => window.getWorldField3DState?.()?.field === "Information", { timeout: 10000 });
   const originalView = await page.evaluate(() => window.getWorldViewContract());
   await page.evaluate((view) => {
