@@ -208,6 +208,38 @@ export class InfinityScaleLODState {
     baseZ: number,
     source: ArrayLike<number>,
   ): void {
+    this.writeBaseCellUnchecked(key, level, baseX, baseY, baseZ, source);
+    // Public writes are external mutations from the perspective of any open
+    // snapshot transaction. Invalidate it even when the chunk already exists.
+    this.revision += 1;
+  }
+
+  /**
+   * Transaction-owned write used only after synchronization has validated the
+   * captured revision. It deliberately defers revision advancement until the
+   * complete synchronization batch commits.
+   */
+  writeBaseCellForTransaction(
+    expectedRevision: number,
+    key: string,
+    level: number,
+    baseX: number,
+    baseY: number,
+    baseZ: number,
+    source: ArrayLike<number>,
+  ): void {
+    this.assertRevision(expectedRevision);
+    this.writeBaseCellUnchecked(key, level, baseX, baseY, baseZ, source);
+  }
+
+  private writeBaseCellUnchecked(
+    key: string,
+    level: number,
+    baseX: number,
+    baseY: number,
+    baseZ: number,
+    source: ArrayLike<number>,
+  ): void {
     if (source.length !== CELL_FIELDS) {
       throw new Error(`Infinity Scale LOD cell requires ${CELL_FIELDS} fields`);
     }
