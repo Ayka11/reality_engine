@@ -147,6 +147,46 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   }
   void externalWriteRetry;
 
+  const directBufferState = new InfinityScaleLODState();
+  directBufferState.ensureChunk("0:0,0,0", 0);
+  const directBufferBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, directBufferState);
+  directBufferBridge.begin(frame);
+  const directBufferRevision = directBufferState.getRevision();
+  const publicChunk = directBufferState.getChunk("0:0,0,0");
+  if (!publicChunk) throw new Error("Expected public chunk handle for direct-buffer regression");
+  publicChunk.cells[0] = 43;
+  if (directBufferState.getRevision() <= directBufferRevision) {
+    throw new Error("Direct cells[index] write bypassed LOD state revision tracking");
+  }
+  let directBufferConflictRejected = false;
+  try {
+    directBufferBridge.commit(frame, []);
+  } catch (error) {
+    directBufferConflictRejected = error instanceof Error && error.message.includes("revision");
+  }
+  if (!directBufferConflictRejected) {
+    throw new Error("LOD transaction accepted a direct mutable-buffer write after begin");
+  }
+  const directBufferValue = directBufferState.readBaseCell("0:0,0,0", 0, 0, 0, 0);
+  if (!directBufferValue || directBufferValue[0] !== 43) {
+    throw new Error("Direct buffer conflict rollback overwrote the newer cell value");
+  }
+
+  const escapedBufferChunk = directBufferState.getChunk("0:0,0,0");
+  if (!escapedBufferChunk) throw new Error("Expected chunk for escaped-buffer regression");
+  const escapedBuffer = escapedBufferChunk.cells.buffer;
+  new Float32Array(escapedBuffer)[0] = 77;
+  const afterEscapedBufferWrite = directBufferState.readBaseCell("0:0,0,0", 0, 0, 0, 0);
+  if (!afterEscapedBufferWrite || afterEscapedBufferWrite[0] !== 43) {
+    throw new Error("Public chunk buffer exposed authoritative mutable memory");
+  }
+  const escapedSubarray = escapedBufferChunk.cells.subarray(0, 1);
+  escapedSubarray[0] = 88;
+  const afterEscapedSubarrayWrite = directBufferState.readBaseCell("0:0,0,0", 0, 0, 0, 0);
+  if (!afterEscapedSubarrayWrite || afterEscapedSubarrayWrite[0] !== 43) {
+    throw new Error("Public chunk subarray exposed authoritative mutable memory");
+  }
+
   // Inject a failure after the bridge enters commit. The authoritative cell
   // buffer must be restored byte-for-byte and the bridge must remain reusable.
   const failureState = new InfinityScaleLODState();
