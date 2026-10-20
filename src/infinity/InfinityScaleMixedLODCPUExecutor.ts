@@ -108,7 +108,15 @@ export class InfinityScaleMixedLODCPUExecutor {
                 throw new Error("Infinity Scale CPU cell kernel returned invalid field count");
               }
 
-              this.state.writeBaseCell(chunk.key, chunk.lod, x, y, z, output);
+              this.state.writeBaseCellForTransaction(
+                transaction.stateRevision,
+                chunk.key,
+                chunk.lod,
+                x,
+                y,
+                z,
+                output,
+              );
               executedCells++;
             }
           }
