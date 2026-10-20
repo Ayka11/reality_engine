@@ -161,7 +161,73 @@ try {
   if (!renderedWorldField.view || renderedWorldField.sampleCount <= 0) {
     throw new Error("2D world-field renderer did not consume sampled world-space data");
   }
-  await page.evaluate(() => window.previewRenderMode?.("3d"));
+  // 3D volumetric field must render actual authoritative world-field samples, not a blank tab.
+  await page.evaluate(() => window.previewRenderMode?.("field3d"));
+  await page.waitForFunction(() => {
+    const state = window.getWorldField3DState?.();
+    return !!state?.ready && state.renderedCells > 0 && state.sampleCount > 0;
+  }, { timeout: 15000 });
+  const field3dInitial = await page.evaluate(() => {
+    const state = window.getWorldField3DState?.();
+    const canvas = document.getElementById("c3dField");
+    const rect = canvas?.getBoundingClientRect();
+    return {
+      state,
+      canvasExists: !!canvas,
+      visible: !!rect && rect.width > 10 && rect.height > 10 && getComputedStyle(canvas).display !== "none",
+      backingWidth: canvas?.width ?? 0,
+      backingHeight: canvas?.height ?? 0,
+      rectWidth: rect?.width ?? 0,
+      rectHeight: rect?.height ?? 0,
+    };
+  });
+  if (!field3dInitial.canvasExists || !field3dInitial.visible) {
+    throw new Error("3D volumetric field canvas is missing or not visible");
+  }
+  if (field3dInitial.state.renderedCells <= 0 || field3dInitial.state.sampleCount <= 0) {
+    throw new Error("3D volumetric field did not render sampled cells");
+  }
+  if (field3dInitial.backingWidth < field3dInitial.rectWidth || field3dInitial.backingHeight < field3dInitial.rectHeight) {
+    throw new Error("3D volumetric field canvas backing resolution was not initialized");
+  }
+
+  // The selected layer must affect the field renderer, and center/slice changes must invalidate its sampling cache.
+  await page.evaluate(() => window.setLayer?.(2));
+  await page.waitForFunction(() => window.getWorldField3DState?.()?.field === "Information", { timeout: 10000 });
+  const originalView = await page.evaluate(() => window.getWorldViewContract());
+  await page.evaluate((view) => {
+    window.setWorldViewCenter?.(view.center.x + 3, view.center.y, view.center.z - 2);
+    window.setWorldViewSliceY?.(view.sliceY + 2);
+  }, originalView);
+  await page.waitForFunction((view) => {
+    const state = window.getWorldField3DState?.();
+    return !!state?.ready && state.view.center.x === view.center.x + 3 &&
+      state.view.center.z === view.center.z - 2 && state.view.sliceY === view.sliceY + 2;
+  }, originalView, { timeout: 10000 });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForFunction(() => {
+    const state = window.getWorldField3DState?.();
+    const canvas = document.getElementById("c3dField");
+    const rect = canvas?.getBoundingClientRect();
+    return !!state?.ready && state.renderedCells > 0 && !!rect &&
+      canvas.width >= Math.round(rect.width) && canvas.height >= Math.round(rect.height);
+  }, { timeout: 10000 });
+
+  // Re-entry must re-render after another view mode hides the field canvas.
+  await page.evaluate(() => window.previewRenderMode?.("2d"));
+  await page.waitForFunction(() => getComputedStyle(document.getElementById("c3dField")).display === "none");
+  await page.evaluate(() => window.previewRenderMode?.("field3d"));
+  await page.waitForFunction(() => {
+    const state = window.getWorldField3DState?.();
+    return !!state?.ready && state.renderedCells > 0 && getComputedStyle(document.getElementById("c3dField")).display !== "none";
+  }, { timeout: 10000 });
+  await page.evaluate((view) => {
+    window.setWorldViewCenter?.(view.center.x, view.center.y, view.center.z);
+    window.setWorldViewSliceY?.(view.sliceY);
+    window.setLayer?.(0);
+    window.previewRenderMode?.("3d");
+  }, originalView);
 
   const grips = await page.locator(".sidebar-drag-grip").count();
   if (grips !== 2) throw new Error(`Expected 2 sidebar drag grips, found ${grips}`);
