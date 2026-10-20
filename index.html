@@ -2337,7 +2337,14 @@ function renderField3D(){
   const canvas=document.getElementById('c3dField');
   if(!canvas||currentRenderMode!=='field3d')return false;
   const rect=canvas.getBoundingClientRect();
-  if(rect.width<2||rect.height<2)return false;
+  if(rect.width<2||rect.height<2){
+    // Mode switches can expose the canvas before the layout has settled; retry once per frame while active.
+    if(!window.__worldField3DLayoutRetry&&currentRenderMode==='field3d'){
+      window.__worldField3DLayoutRetry=true;
+      requestAnimationFrame(()=>{window.__worldField3DLayoutRetry=false;if(currentRenderMode==='field3d')renderField3D();});
+    }
+    return false;
+  }
   const dpr=Math.min(window.devicePixelRatio||1,2);
   const targetW=Math.max(1,Math.round(rect.width*dpr)),targetH=Math.max(1,Math.round(rect.height*dpr));
   if(canvas.width!==targetW||canvas.height!==targetH){canvas.width=targetW;canvas.height=targetH;}
@@ -2439,7 +2446,10 @@ function setRenderMode(mode,btn){
 
   if((mode==='2d'||mode==='hybrid')&&c2d.style.display!=='none'){resize2D();draw2D();}
   if((mode==='3d'||mode==='hybrid')&&c3d.style.display!=='none'){resize3D();}
-  if(mode==='field3d'&&window.renderField3D)window.renderField3D();
+  if(mode==='field3d'&&window.renderField3D){
+    window.renderField3D();
+    requestAnimationFrame(()=>{if(currentRenderMode==='field3d')window.renderField3D();});
+  }
 
   if (mode === '3d' && currentPanel !== 'world' && currentPanel !== 'builder') {
     setIconPanel('world');
