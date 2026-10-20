@@ -2409,6 +2409,7 @@ window.renderField3D=renderField3D;
 
 function setRenderMode(mode,btn){
   currentRenderMode=mode;
+  window.setWorldViewRenderMode?.(mode);
   document.querySelectorAll('#tabs .ctab').forEach(t=>t.classList.remove('on'));
   if(btn)btn.classList.add('on');
 
