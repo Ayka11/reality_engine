@@ -2353,8 +2353,23 @@ function renderField3DImpl(){
   const dpr=Math.min(window.devicePixelRatio||1,2);
   const targetW=Math.max(1,Math.round(rect.width*dpr)),targetH=Math.max(1,Math.round(rect.height*dpr));
   if(canvas.width!==targetW||canvas.height!==targetH){canvas.width=targetW;canvas.height=targetH;}
-  const g=canvas.getContext('2d');
-  if(!g)return false;
+  let g=null;
+  try { g=canvas.getContext('2d'); } catch (error) {
+    window.getWorldField3DState=()=>({ready:false,reason:'canvas-context-error',mode,message:error instanceof Error?error.message:String(error)});
+    return false;
+  }
+  if(!g){
+    window.getWorldField3DState=()=>({
+      ready:false,
+      reason:'canvas-context-unavailable',
+      mode,
+      canvasWidth:canvas.width,
+      canvasHeight:canvas.height,
+      contextAttributes:canvas.getContextAttributes?.()??null,
+    });
+    window.__worldField3DTrace={phase:'canvas-context-unavailable',mode,at:Date.now()};
+    return false;
+  }
   g.setTransform(dpr,0,0,dpr,0,0);
   const w=rect.width,h=rect.height;
   const sampler=window.worldFieldViewWindow,getView=window.getWorldViewContract;
