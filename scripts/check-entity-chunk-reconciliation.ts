@@ -39,6 +39,7 @@ assert.equal(plan.commitReady, false, "incomplete mixed-LOD coverage must block 
 assert.deepEqual(plan.ambiguousMixedLodComponents, [4], "boundary component must be marked ambiguous even with zero observed source IDs");
 assert.equal(plan.proposals[0]?.safeToCommit, false, "ambiguous component must remain pending");
 assert.deepEqual(plan.extinctEntityIds, [], "unresolved topology must never infer entity extinction");
+assert.equal(planner.commitRecords(plan, [component]), null, "incomplete mixed-LOD plan must not yield commit records");
 
 const noSnapshotPlan = planner.plan([component], [entity], true, {
   ...incompleteConnectivity,
@@ -59,6 +60,7 @@ const conflictingPlan = planner.plan([component], [entity], true, completeButCon
 assert.equal(conflictingPlan.commitReady, false, "conflicting mixed-LOD source identities must block commit even with complete coverage");
 assert.deepEqual(conflictingPlan.ambiguousMixedLodComponents, [4], "multiple mixed-LOD source identities must remain ambiguous");
 assert.deepEqual(conflictingPlan.extinctEntityIds, [], "conflicting topology must suppress extinction");
+assert.equal(planner.commitRecords(conflictingPlan, [component]), null, "conflicting mixed-LOD plan must not yield commit records");
 
 const closedComponent: EntityChunkComponent = {
   id: 5,
