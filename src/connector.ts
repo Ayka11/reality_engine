@@ -60,7 +60,7 @@ const c3dCanvas = document.getElementById('c3d') as HTMLCanvasElement
 // unbounded terrain/world surface. Keeping two canvases prevents two WebGL renderers
 // from fighting over the same drawing buffer.
 const c3dFieldCanvas = document.createElement('canvas')
-c3dFieldCanvas.id = 'c3dField'
+c3dFieldCanvas.id = 'c3dChunkField'
 c3dFieldCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:2'
 c3dCanvas.parentElement?.appendChild(c3dFieldCanvas)
 const fieldRenderer = new ChunkRenderer(c3dFieldCanvas)
@@ -478,7 +478,7 @@ win['applyChunkPreset']   = (name: string) => {
 }
 
 // 3D renderer controls — routed to the Infinite World renderer
-const activeField3D = () => (document.getElementById('c3dField')?.style.display !== 'none')
+const activeField3D = () => (document.getElementById('c3dChunkField')?.style.display !== 'none')
 win['setField3DVisible'] = (visible: boolean) => {
   c3dFieldCanvas.style.display = visible ? 'block' : 'none'
   c3dCanvas.style.display = visible ? 'none' : c3dCanvas.style.display
@@ -521,7 +521,7 @@ win['setShowParticles'] = (v: boolean) => {
   else getInfiniteWorld()?.setShowParticles(v)
 }
 win['setChunkLayer'] = (l: number) => { fieldRenderer.setLayer(Math.max(-1, Math.min(5, l))) }
-win['renderField3D'] = () => fieldRenderer.render()
+win['renderChunkField3D'] = () => fieldRenderer.render()
 win['fieldSetCameraPreset'] = (p: string) => {
   const map: Record<string, 'orbit'|'top'|'iso'|'street'|'fly'> = { orbit:'orbit', top:'top', iso:'iso', street:'street', fly:'fly' }
   fieldRenderer.setCameraPreset(map[p] ?? 'orbit')
