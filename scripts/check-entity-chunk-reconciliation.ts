@@ -47,6 +47,39 @@ const noSnapshotPlan = planner.plan([component], [entity], true, {
 assert.equal(noSnapshotPlan.commitReady, false, "missing boundary evidence must fail closed");
 assert.deepEqual(noSnapshotPlan.extinctEntityIds, [], "missing boundary evidence must suppress extinction");
 
+const completeButConflictingConnectivity: EntityChunkConnectivityResult = {
+  ...incompleteConnectivity,
+  mixedLodCoverageComplete: true,
+  mixedLodTopology: [
+    { localCell: 10, neighborCell: [11, 0, 0], sourceChunk: "1:1,0,0", relation: "coarse-to-fine", occupied: true, sourceEntityId: 101 },
+    { localCell: 10, neighborCell: [12, 0, 0], sourceChunk: "1:2,0,0", relation: "fine-to-coarse", occupied: true, sourceEntityId: 102 },
+  ],
+};
+const conflictingPlan = planner.plan([component], [entity], true, completeButConflictingConnectivity);
+assert.equal(conflictingPlan.commitReady, false, "conflicting mixed-LOD source identities must block commit even with complete coverage");
+assert.deepEqual(conflictingPlan.ambiguousMixedLodComponents, [4], "multiple mixed-LOD source identities must remain ambiguous");
+assert.deepEqual(conflictingPlan.extinctEntityIds, [], "conflicting topology must suppress extinction");
+
+const closedComponent: EntityChunkComponent = {
+  id: 5,
+  cells: [0],
+  centroid: [0, 0, 0],
+  touchesSimulationBoundary: false,
+  touchesReadBoundary: false,
+  touchesMixedLODBoundary: false,
+};
+const partialDomainPlan = planner.plan([closedComponent], [entity], false, {
+  components: [closedComponent],
+  closedComponentCount: 1,
+  boundaryComponentCount: 0,
+  openReadComponentCount: 0,
+  mixedLodComponentCount: 0,
+  mixedLodTopology: [],
+  mixedLodCoverageComplete: true,
+});
+assert.deepEqual(partialDomainPlan.extinctEntityIds, [], "partial-domain reconciliation must never infer extinction");
+
+
 const connectivityGrid = new VoxelGrid(2, 1, 1);
 connectivityGrid.buffer[0 * CELL_FIELDS + F.BIO_POTENTIAL] = 1;
 connectivityGrid.buffer[1 * CELL_FIELDS + F.BIO_POTENTIAL] = 1;
