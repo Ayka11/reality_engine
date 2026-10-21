@@ -2334,7 +2334,11 @@ window.addEventListener('keydown', (e) => {
 });
 
 function renderField3DImpl(){
-  window.__worldField3DTrace={phase:'renderer-enter',mode:typeof currentRenderMode==='undefined'?'unknown':currentRenderMode,at:Date.now()};
+  const entryMode=typeof currentRenderMode==='undefined'?'unknown':currentRenderMode;
+  window.__worldField3DTrace={phase:'renderer-enter',mode:entryMode,at:Date.now()};
+  // Publish a result before any DOM/canvas/sampler operation. Browser acceptance
+  // must be able to distinguish an entered renderer from a callback that never ran.
+  window.getWorldField3DState=()=>({ready:false,reason:'renderer-entered',mode:entryMode,phase:'initializing'});
   const canvas=document.getElementById('c3dField');
   const mode=typeof currentRenderMode==='undefined'?'unknown':currentRenderMode;
   if(!canvas){window.getWorldField3DState=()=>({ready:false,reason:'canvas-missing',mode});return false;}
