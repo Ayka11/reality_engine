@@ -2334,6 +2334,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 function renderField3DImpl(){
+  window.__worldField3DTrace={phase:'renderer-enter',mode:typeof currentRenderMode==='undefined'?'unknown':currentRenderMode,at:Date.now()};
   const canvas=document.getElementById('c3dField');
   const mode=typeof currentRenderMode==='undefined'?'unknown':currentRenderMode;
   if(!canvas){window.getWorldField3DState=()=>({ready:false,reason:'canvas-missing',mode});return false;}
@@ -2437,6 +2438,7 @@ function renderField3D(){
 window.renderField3D=renderField3D;
 
 function setRenderMode(mode,btn){
+  window.__worldField3DTrace={phase:'mode-switch-enter',mode,at:Date.now()};
   currentRenderMode=mode;
   window.setWorldViewRenderMode?.(mode);
   document.querySelectorAll('#tabs .ctab').forEach(t=>t.classList.remove('on'));
@@ -2463,6 +2465,7 @@ function setRenderMode(mode,btn){
   // Start the field renderer immediately after making its canvas visible, before
   // ancillary UI/legacy resize work can interrupt the mode-switch handler.
   if(mode==='field3d'&&window.renderField3D){
+    window.__worldField3DTrace={phase:'mode-switch-render-call',mode,at:Date.now()};
     window.renderField3D();
     requestAnimationFrame(()=>{if(currentRenderMode==='field3d')window.renderField3D();});
   }
