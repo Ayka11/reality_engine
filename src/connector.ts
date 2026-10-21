@@ -155,6 +155,22 @@ function publishWorkerBoundarySnapshots() {
 }
 win['getWorldViewContract'] = () => worldViewContract.snapshot()
 win['worldFieldChunkCoord'] = worldFieldChunkCoord
+// Expose read-only diagnostics for the active authoritative sampled-field renderer.
+// The optional sparse ChunkRenderer has a separate canvas and must not override these APIs.
+win['getWorldField3DState'] = () => {
+  const getter = win['worldFieldState'] as (() => { field?: { version?: number; mutationCount?: number } } | undefined)
+  const field = typeof getter === 'function' ? getter()?.field : null
+  return {
+    ready: false,
+    reason: 'authoritative-field-renderer-pending',
+    mode: (win['currentRenderMode'] as string | undefined) ?? worldViewContract.snapshot().renderMode,
+    renderedCells: 0,
+    sampleCount: 0,
+    view: worldViewContract.snapshot(),
+    fieldVersion: field?.version ?? null,
+    mutationCount: field?.mutationCount ?? null,
+  }
+}
 win['installChunkWorldFieldProvider'] = installChunkWorldFieldProvider
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 const realityLawBridge = new RealityLawBridge()
