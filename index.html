@@ -2440,7 +2440,10 @@ function renderField3DImpl(){
   window.__worldField3DLayoutRetryCount=0;
   const diagnosticState={ready:true,renderedCells,sampleCount,activeCells,slices:slices.length,field:names[fieldIndex],view};
   window.__worldField3DCanvasState=diagnosticState;
-  window.getWorldField3DState=()=>diagnosticState;
+  window.getWorldField3DState=()=>({
+    ...diagnosticState,
+    view: window.getWorldViewContract?.() ?? diagnosticState.view,
+  });
   return renderedCells>0;
 }
 function renderField3D(){
