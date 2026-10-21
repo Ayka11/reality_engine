@@ -2606,6 +2606,7 @@ function setLayer(l){
   if(window.setChunkLayer)window.setChunkLayer(layer<0?0:layer);
   drawGrid();
   if(currentRenderMode==='field3d')window.renderField3D?.();
+  window.__worldField3DCanvasState=window.getWorldField3DState?.() ?? window.__worldField3DCanvasState;
 }
 window.setLayer=setLayer;
 
