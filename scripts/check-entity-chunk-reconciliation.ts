@@ -6,10 +6,6 @@ import type { InfinityScaleChunkExecutionContext } from "../src/infinity/Infinit
 import { EntityChunkReconciliation } from "../src/infinity/EntityChunkReconciliation.ts";
 import type { EntityChunkComponent, EntityChunkConnectivityResult } from "../src/infinity/EntityChunkConnectivity.ts";
 import type { Entity } from "../src/simulation/EntityLayer.ts";
-import { VoxelGrid } from "../src/core/VoxelGrid.ts";
-import { CELL_FIELDS, F } from "../src/core/CellState.ts";
-import { EntityChunkConnectivity } from "../src/infinity/EntityChunkConnectivity.ts";
-import type { InfinityScaleChunkExecutionContext } from "../src/infinity/InfinityScaleChunkExecutionContext.ts";
 
 const component: EntityChunkComponent = {
   id: 4,
@@ -88,7 +84,5 @@ const singletonConnectivity = new EntityChunkConnectivity().analyze(
 );
 assert.equal(singletonConnectivity.components.length, 1, "isolated occupied cell must remain visible as a singleton component");
 assert.deepEqual(singletonConnectivity.components[0]?.cells, [0], "singleton component must preserve its cell index");
-
-
 
 console.log("Entity chunk reconciliation boundary safety: PASS");
