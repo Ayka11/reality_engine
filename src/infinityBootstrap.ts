@@ -32,8 +32,25 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldFieldSample = (x: number, y?: number, z?: number) => world.fieldSampler.sampleWorld(x, y, z)
   ;(window as any).worldFieldViewWindow = (width: number, height: number, sliceY?: number) => world.fieldSampler.sampleViewWindow(width, height, sliceY)
   ;(window as any).getWorldViewContract = () => worldViewContract.snapshot()
-  ;(window as any).setWorldViewCenter = (x: number, y: number, z: number) => worldViewContract.setCenter(x, y, z)
-  ;(window as any).setWorldViewSliceY = (y: number) => worldViewContract.setSliceY(y)
+  let field3DRefreshScheduled = false
+  const refreshField3D = () => {
+    if ((window as any).currentRenderMode !== 'field3d' || field3DRefreshScheduled) return
+    field3DRefreshScheduled = true
+    requestAnimationFrame(() => {
+      field3DRefreshScheduled = false
+      if ((window as any).currentRenderMode === 'field3d') (window as any).renderField3D?.()
+    })
+  }
+  ;(window as any).setWorldViewCenter = (x: number, y: number, z: number) => {
+    const snapshot = worldViewContract.setCenter(x, y, z)
+    refreshField3D()
+    return snapshot
+  }
+  ;(window as any).setWorldViewSliceY = (y: number) => {
+    const snapshot = worldViewContract.setSliceY(y)
+    refreshField3D()
+    return snapshot
+  }
   ;(window as any).setWorldViewRenderMode = (mode: any) => worldViewContract.setRenderMode(mode)
   ;(window as any).infinityApplyLegacySculptStroke = (tool: any, cell: any, radius: number, strength: number, options?: any) =>
     world.applyLegacySculptStroke(tool, cell, radius, strength, options)
