@@ -187,7 +187,7 @@ export class EntityChunkConnectivity {
               if (boundarySnapshot) {
                 const mixedSpecs = context.getBoundaryTransferSpecsForCell(c.x, c.y, c.z)
                   .filter(spec => spec.sourceLevel !== spec.targetLevel);
-                if (mixedSpecs.some(spec => boundarySnapshot.hasSourceChunk(spec.targetChunk))) {
+                if (mixedSpecs.some(spec => boundarySnapshot.hasSourceChunk(spec.sourceChunk))) {
                   touchesMixedLODBoundary = true;
                 }
               }
@@ -281,14 +281,14 @@ export class EntityChunkConnectivity {
             const values = boundarySnapshot.read(spec, [nx, ny, nz]);
             if (!values) continue;
             const sourceEntityId = Math.round(values[F.ENTITY_ID] ?? 0);
-            const key = `${cell}|${nx},${ny},${nz}|${spec.targetChunk}|${spec.relation}`;
+            const key = `${cell}|${nx},${ny},${nz}|${spec.sourceChunk}|${spec.relation}`;
             if (seen.has(key)) continue;
             seen.add(key);
             if (spec.relation === "same-level") continue;
             samples.push({
               localCell: cell,
               neighborCell: [nx, ny, nz],
-              sourceChunk: spec.targetChunk,
+              sourceChunk: spec.sourceChunk,
               relation: spec.relation,
               occupied: sourceEntityId !== 0,
               sourceEntityId,
