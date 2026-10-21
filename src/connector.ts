@@ -60,7 +60,7 @@ const c3dCanvas = document.getElementById('c3d') as HTMLCanvasElement
 // unbounded terrain/world surface. Keeping two canvases prevents two WebGL renderers
 // from fighting over the same drawing buffer.
 const c3dFieldCanvas = document.createElement('canvas')
-c3dFieldCanvas.id = 'c3dField'
+c3dFieldCanvas.id = 'c3dChunkField'
 c3dFieldCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:2'
 c3dCanvas.parentElement?.appendChild(c3dFieldCanvas)
 const fieldRenderer = new ChunkRenderer(c3dFieldCanvas)
