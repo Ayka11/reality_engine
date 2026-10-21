@@ -38,6 +38,7 @@
     "test:simworker-rng-recovery": "node scripts/check-simworker-rng-recovery.mjs",
     "test:infinity-scale-mixed-lod": "npx --yes tsx scripts/check-infinity-scale-mixed-lod.ts",
     "test:infinity-scale-face-coverage": "npx --yes tsx scripts/check-infinity-scale-face-coverage.ts",
+    "test:infinity-scale-independent-topology": "npx --yes tsx scripts/check-infinity-scale-independent-topology.ts",
     "test:infinity-scale-adaptive-lod-bridge": "npx --yes tsx scripts/check-infinity-scale-adaptive-lod-bridge.ts",
     "test:entity-chunk-reconciliation": "npx --yes tsx scripts/check-entity-chunk-reconciliation.ts"
   },
