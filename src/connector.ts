@@ -60,7 +60,7 @@ const c3dCanvas = document.getElementById('c3d') as HTMLCanvasElement
 // unbounded terrain/world surface. Keeping two canvases prevents two WebGL renderers
 // from fighting over the same drawing buffer.
 const c3dFieldCanvas = document.createElement('canvas')
-c3dFieldCanvas.id = 'c3dField'
+c3dFieldCanvas.id = 'c3dChunkField'
 c3dFieldCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:2'
 c3dCanvas.parentElement?.appendChild(c3dFieldCanvas)
 const fieldRenderer = new ChunkRenderer(c3dFieldCanvas)
@@ -155,6 +155,49 @@ function publishWorkerBoundarySnapshots() {
 }
 win['getWorldViewContract'] = () => worldViewContract.snapshot()
 win['worldFieldChunkCoord'] = worldFieldChunkCoord
+// Expose the same authoritative FieldSampler used by InfiniteWorldRenderer to
+// the 2D/3D field canvases. Keep the browser API thin and deterministic.
+win['worldFieldViewWindow'] = (width: number, height: number, sliceY?: number) => {
+  const world = getInfiniteWorld()
+  if (!world) return null
+  return world.fieldSampler.sampleViewWindow(width, height, sliceY)
+}
+win['worldFieldSample'] = (x: number, y: number, z: number) => {
+  const world = getInfiniteWorld()
+  if (!world || ![x, y, z].every(Number.isFinite)) return null
+  return world.fieldSampler.sample(x, y, z)
+}
+win['setWorldViewCenter'] = (x: number, y: number, z: number) => worldViewContract.setCenter(x, y, z)
+win['setWorldViewSliceY'] = (y: number) => worldViewContract.setSliceY(y)
+win['setWorldViewRenderMode'] = (mode: '3d' | 'field3d' | '2d' | 'hybrid' | 'metrics') => worldViewContract.setRenderMode(mode)
+// Expose read-only diagnostics for the active authoritative sampled-field renderer.
+// The optional sparse ChunkRenderer has a separate canvas and must not override these APIs.
+win['getWorldField3DState'] = () => {
+  const getter = win['worldFieldState'] as (() => { field?: { version?: number; mutationCount?: number } } | undefined)
+  const field = typeof getter === 'function' ? getter()?.field : null
+  const rendererState = (win['getWorldField3DCanvasState'] as (() => any) | undefined)?.()
+  const mode = (win['currentRenderMode'] as string | undefined) ?? worldViewContract.snapshot().renderMode
+  const canvas = document.getElementById('c3dField') as HTMLCanvasElement | null
+  const rect = canvas?.getBoundingClientRect()
+  const visible = !!canvas && !!rect && rect.width > 10 && rect.height > 10 &&
+    getComputedStyle(canvas).display !== 'none'
+  const renderAvailable = typeof win['renderField3D'] === 'function'
+  return {
+    ready: !!rendererState?.ready && visible && mode === 'field3d',
+    reason: !visible ? 'canvas-not-visible' : mode !== 'field3d' ? 'mode-mismatch' :
+      !rendererState?.ready ? (rendererState?.reason ?? 'authoritative-field-renderer-pending') : undefined,
+    mode,
+    visible,
+    renderedCells: rendererState?.renderedCells ?? 0,
+    sampleCount: rendererState?.sampleCount ?? 0,
+    field: rendererState?.field,
+    view: rendererState?.view ?? worldViewContract.snapshot(),
+    fieldVersion: field?.version ?? null,
+    mutationCount: field?.mutationCount ?? null,
+    renderAvailable,
+    canvas: canvas && rect ? { width: rect.width, height: rect.height, backingWidth: canvas.width, backingHeight: canvas.height } : null,
+  }
+}
 win['installChunkWorldFieldProvider'] = installChunkWorldFieldProvider
 let DIFF_cw = 0.09, ENT_cw = 0.0004, INFO_cw = 0.35, BIO_cw = 0.25
 const realityLawBridge = new RealityLawBridge()
@@ -478,7 +521,7 @@ win['applyChunkPreset']   = (name: string) => {
 }
 
 // 3D renderer controls — routed to the Infinite World renderer
-const activeField3D = () => (document.getElementById('c3dField')?.style.display !== 'none')
+const activeField3D = () => (document.getElementById('c3dChunkField')?.style.display !== 'none')
 win['setField3DVisible'] = (visible: boolean) => {
   c3dFieldCanvas.style.display = visible ? 'block' : 'none'
   c3dCanvas.style.display = visible ? 'none' : c3dCanvas.style.display
@@ -521,7 +564,7 @@ win['setShowParticles'] = (v: boolean) => {
   else getInfiniteWorld()?.setShowParticles(v)
 }
 win['setChunkLayer'] = (l: number) => { fieldRenderer.setLayer(Math.max(-1, Math.min(5, l))) }
-win['renderField3D'] = () => fieldRenderer.render()
+win['renderChunkField3D'] = () => fieldRenderer.render()
 win['fieldSetCameraPreset'] = (p: string) => {
   const map: Record<string, 'orbit'|'top'|'iso'|'street'|'fly'> = { orbit:'orbit', top:'top', iso:'iso', street:'street', fly:'fly' }
   fieldRenderer.setCameraPreset(map[p] ?? 'orbit')

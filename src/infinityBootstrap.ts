@@ -32,8 +32,6 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldFieldSample = (x: number, y?: number, z?: number) => world.fieldSampler.sampleWorld(x, y, z)
   ;(window as any).worldFieldViewWindow = (width: number, height: number, sliceY?: number) => world.fieldSampler.sampleViewWindow(width, height, sliceY)
   ;(window as any).getWorldViewContract = () => worldViewContract.snapshot()
-  ;(window as any).setWorldViewCenter = (x: number, y: number, z: number) => worldViewContract.setCenter(x, y, z)
-  ;(window as any).setWorldViewSliceY = (y: number) => worldViewContract.setSliceY(y)
   ;(window as any).setWorldViewRenderMode = (mode: any) => worldViewContract.setRenderMode(mode)
   ;(window as any).infinityApplyLegacySculptStroke = (tool: any, cell: any, radius: number, strength: number, options?: any) =>
     world.applyLegacySculptStroke(tool, cell, radius, strength, options)

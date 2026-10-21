@@ -333,6 +333,7 @@ input[type=range]{accent-color:#a397ff}
   <div id="viewWrap">
   <canvas id="c3d"></canvas>
   <canvas id="c2d"></canvas>
+  <canvas id="c3dField" aria-label="3D volumetric scientific field" style="position:absolute;inset:0;width:100%;height:100%;display:none;z-index:2;background:#050812"></canvas>
   <div id="metricsView" style="display:none;position:absolute;inset:0;background:#07070e;padding:14px;overflow-y:auto;font-size:10px;font-family:monospace;color:var(--sub)">
     <div style="font-size:12px;color:var(--text);margin-bottom:10px;font-family:system-ui">📈 World Metrics</div>
     <div id="metricsContent"></div>
@@ -2332,8 +2333,157 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+function renderField3DImpl(){
+  const entryMode=typeof currentRenderMode==='undefined'?'unknown':currentRenderMode;
+  window.__worldField3DTrace={phase:'renderer-enter',mode:entryMode,at:Date.now()};
+  // Publish a result before any DOM/canvas/sampler operation. Browser acceptance
+  // must be able to distinguish an entered renderer from a callback that never ran.
+  window.getWorldField3DState=()=>({ready:false,reason:'renderer-entered',mode:entryMode,phase:'initializing'});
+  const canvas=document.getElementById('c3dField');
+  const mode=typeof currentRenderMode==='undefined'?'unknown':currentRenderMode;
+  if(!canvas){window.getWorldField3DState=()=>({ready:false,reason:'canvas-missing',mode});return false;}
+  if(mode!=='field3d'){window.getWorldField3DState=()=>({ready:false,reason:'mode-mismatch',mode});return false;}
+  const rect=canvas.getBoundingClientRect();
+  if(rect.width<2||rect.height<2){
+    // Mode switches can expose the canvas before the layout has settled; retry once per frame while active.
+    const retryCount=window.__worldField3DLayoutRetryCount||0;
+    if(retryCount<3&&currentRenderMode==='field3d'){
+      window.__worldField3DLayoutRetryCount=retryCount+1;
+      requestAnimationFrame(()=>{if(currentRenderMode==='field3d')renderField3D();});
+    }
+    window.getWorldField3DState=()=>({ready:false,reason:'zero-layout',mode,width:rect.width,height:rect.height});
+    return false;
+  }
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const targetW=Math.max(1,Math.round(rect.width*dpr)),targetH=Math.max(1,Math.round(rect.height*dpr));
+  if(canvas.width!==targetW||canvas.height!==targetH){canvas.width=targetW;canvas.height=targetH;}
+  let g=null;
+  try { g=canvas.getContext('2d'); } catch (error) {
+    window.getWorldField3DState=()=>({ready:false,reason:'canvas-context-error',mode,message:error instanceof Error?error.message:String(error)});
+    return false;
+  }
+  if(!g){
+    window.getWorldField3DState=()=>({
+      ready:false,
+      reason:'canvas-context-unavailable',
+      mode,
+      canvasWidth:canvas.width,
+      canvasHeight:canvas.height,
+      contextAttributes:canvas.getContextAttributes?.()??null,
+    });
+    window.__worldField3DTrace={phase:'canvas-context-unavailable',mode,at:Date.now()};
+    return false;
+  }
+  g.setTransform(dpr,0,0,dpr,0,0);
+  const w=rect.width,h=rect.height;
+  const sampler=window.worldFieldViewWindow,getView=window.getWorldViewContract;
+  if(typeof sampler!=='function'||typeof getView!=='function'){
+    g.clearRect(0,0,w,h);g.fillStyle='#ffb86b';g.font='12px monospace';g.fillText('World-field sampler unavailable',16,28);
+    window.getWorldField3DState=()=>({ready:false,reason:'sampler-unavailable',mode,renderedCells:0,sampleCount:0});
+    return false;
+  }
+  const view=getView();
+  const state=typeof window.worldFieldState==='function'?window.worldFieldState()?.field:null;
+  // Bound synchronous sampling cost: the authoritative sampler can perform
+  // nontrivial work per cell, so keep the interactive view to a fixed budget.
+  // Keep synchronous authoritative sampling bounded for CPU-only browsers.
+  // FieldSampler performs scientific-field calculations for every requested cell.
+  const cols=Math.max(6,Math.min(10,Math.floor(w/80)));
+  const rows=Math.max(4,Math.min(7,Math.floor(h/80)));
+  const depth=3,spacing=Math.max(1,Math.min(8,Math.floor((view.visibleRadius||24)*2/depth)));
+  const cacheKey=[cols,rows,view.center.x,view.center.y,view.center.z,view.sliceY,view.visibleRadius,view.seed,state?.version??0,state?.mutationCount??0,state?.lastMutation?.id??0].join('|');
+  if(!window.__worldField3DCache||window.__worldField3DCache.key!==cacheKey){
+    const slices=[];
+    for(let k=0;k<depth;k++){
+      const y=view.sliceY+(k-Math.floor(depth/2))*spacing;
+      const data=sampler(cols,rows,y);
+      if(!data?.samples?.length)continue;
+      slices.push({y,data});
+    }
+    window.__worldField3DCache={key:cacheKey,slices};
+  }
+  const slices=window.__worldField3DCache.slices;
+  g.clearRect(0,0,w,h);
+  const bg=g.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#080d1b');bg.addColorStop(1,'#101528');g.fillStyle=bg;g.fillRect(0,0,w,h);
+  const fieldIndex=Number.isInteger(layer)&&layer>=0&&layer<=5?layer:0;
+  const names=['Energy','Density','Information','Entropy','Temperature','Biology'];
+  const props=['energy','density','information','entropy','temperature','biology'];
+  const maxima=[1000,1,500,1,800,1];
+  const cellW=Math.max(3,Math.min(15,(w*.72)/(cols+rows*.55)));
+  const cellH=cellW*.55;
+  const depthStep=Math.max(2,Math.min(13,h*.018));
+  const originX=w*.5-(cols-rows*.55)*cellW*.5;
+  const originY=h*.5-(cols+rows)*cellH*.25+(depth-1)*depthStep*.5;
+  let renderedCells=0,activeCells=0,sampleCount=0;
+  for(let si=0;si<slices.length;si++){
+    const {data}=slices[si];
+    const zLayer=si-Math.floor((slices.length-1)/2);
+    for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
+      const sample=data.samples[py*data.width+px];
+      if(!sample)continue;
+      sampleCount++;
+      const value=Number(sample[props[fieldIndex]])||0;
+      const normalized=Math.max(0,Math.min(1,value/maxima[fieldIndex]));
+      const color=colorOf(fieldIndex,normalized);
+      const sx=originX+px*cellW+py*cellW*.55;
+      const sy=originY+(px+py)*cellH*.5-zLayer*depthStep;
+      const lift=Math.max(0,Math.min(depthStep*.9,normalized*depthStep*2));
+      g.beginPath();g.moveTo(sx,sy-cellH*.5-lift);g.lineTo(sx+cellW*.5,sy-lift);g.lineTo(sx,sy+cellH*.5-lift);g.lineTo(sx-cellW*.5,sy-lift);g.closePath();
+      g.fillStyle='rgba('+color[0]+','+color[1]+','+color[2]+','+(0.22+normalized*.72)+')';g.fill();
+      g.strokeStyle='rgba(160,190,255,.14)';g.lineWidth=.5;g.stroke();
+      renderedCells++;if(value>(maxima[fieldIndex]>.99?maxima[fieldIndex]*.001:.001))activeCells++;
+    }
+  }
+  g.font='bold 12px system-ui';g.fillStyle='rgba(235,242,255,.94)';g.fillText('3D VOLUMETRIC FIELD · '+names[fieldIndex],14,22);
+  g.font='10px monospace';g.fillStyle='rgba(180,200,235,.8)';
+  g.fillText('samples '+sampleCount+' · active '+activeCells+' · Y '+view.sliceY+' · center '+view.center.x.toFixed(1)+', '+view.center.y.toFixed(1)+', '+view.center.z.toFixed(1),14,h-12);
+  window.__worldField3DLayoutRetryCount=0;
+  const diagnosticState={ready:renderedCells>0,renderedCells,sampleCount,activeCells,slices:slices.length,field:names[fieldIndex],view};
+  window.__worldField3DCanvasState=diagnosticState;
+  window.getWorldField3DState=()=>({
+    ...diagnosticState,
+    view: window.getWorldViewContract?.() ?? diagnosticState.view,
+  });
+  return renderedCells>0;
+}
+function renderField3D(){
+  const startedAt=performance.now();
+  window.__worldField3DTrace={phase:'render-call-enter',mode:currentRenderMode,at:Date.now()};
+  try {
+    const result=renderField3DImpl();
+    window.__worldField3DTrace={
+      ...(window.__worldField3DTrace||{}),
+      phase:'render-call-returned',
+      mode:currentRenderMode,
+      durationMs:Math.round(performance.now()-startedAt),
+      at:Date.now()
+    };
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : "";
+    window.getWorldField3DState = () => ({
+      ready: false,
+      reason: "runtime-error",
+      mode: typeof currentRenderMode === "undefined" ? "unknown" : currentRenderMode,
+      message,
+      stack: String(stack || "").slice(0, 1200),
+    });
+    console.error("[field3d] render failed", error);
+    return false;
+  }
+}
+window.renderField3D=renderField3D;
+window.addEventListener('resize',()=>{
+  if(currentRenderMode!=='field3d')return;
+  requestAnimationFrame(()=>{if(currentRenderMode==='field3d')renderField3D();});
+});
+
 function setRenderMode(mode,btn){
+  window.__worldField3DTrace={phase:'mode-switch-enter',mode,at:Date.now()};
   currentRenderMode=mode;
+  window.currentRenderMode=mode;
+  window.setWorldViewRenderMode?.(mode);
   document.querySelectorAll('#tabs .ctab').forEach(t=>t.classList.remove('on'));
   if(btn)btn.classList.add('on');
 
@@ -2355,16 +2505,30 @@ function setRenderMode(mode,btn){
   if(metricsView)metricsView.style.display=mode==='metrics'?'block':'none';
   if(mode==='metrics')updateMetricsView();
 
+  // Start the field renderer immediately after making its canvas visible, before
+  // ancillary UI/legacy resize work can interrupt the mode-switch handler.
+  if(mode==='field3d'&&window.renderField3D){
+    // Yield to the browser before authoritative sampling so the tab switch and
+    // diagnostics remain responsive even on CPU-only runtimes.
+    window.__worldField3DTrace={phase:'mode-switch-render-scheduled',mode,at:Date.now()};
+    requestAnimationFrame(()=>{
+      if(currentRenderMode!=='field3d'||typeof window.renderField3D!=='function')return;
+      window.__worldField3DTrace={phase:'mode-switch-render-call',mode,at:Date.now()};
+      window.renderField3D();
+      window.__worldField3DTrace={...(window.__worldField3DTrace||{}),phase:'mode-switch-render-returned',mode,at:Date.now()};
+    });
+  }
+
   // Field controls are meaningful in the volumetric view; Infinite World keeps its own terrain/object tools.
   const layerBar=document.getElementById('layerBar');
   if(layerBar)layerBar.style.opacity=mode==='field3d'?'1':'0.55';
 
-  resize();
+  // The legacy WebGL resize path assumes the Infinite World canvas is active.
+  // Volumetric Field owns a separate 2D canvas and sizes it in renderField3D().
+  if(mode!=='field3d') resize();
 
   if((mode==='2d'||mode==='hybrid')&&c2d.style.display!=='none'){resize2D();draw2D();}
   if((mode==='3d'||mode==='hybrid')&&c3d.style.display!=='none'){resize3D();}
-  if(mode==='field3d'&&window.renderField3D)window.renderField3D();
-
   if (mode === '3d' && currentPanel !== 'world' && currentPanel !== 'builder') {
     setIconPanel('world');
   }
@@ -2451,6 +2615,8 @@ function setLayer(l){
   });
   if(window.setChunkLayer)window.setChunkLayer(layer<0?0:layer);
   drawGrid();
+  if(currentRenderMode==='field3d')window.renderField3D?.();
+  window.__worldField3DCanvasState=window.getWorldField3DState?.() ?? window.__worldField3DCanvasState;
 }
 window.setLayer=setLayer;
 
@@ -2586,7 +2752,8 @@ function loop(ts){
   }
   _tickParticles();
   drawGrid();
-  if(currentRenderMode==='field3d'&&window.renderField3D)window.renderField3D();
+  // The field view refreshes on entry and explicit view changes. Avoid invoking
+  // its synchronous sampler on every simulation tick.
   if(tick%3===0&&selX>=0){explainCell(selX,selY);drawHist();}
   if(tick%15===0){updateHealth();}
   if(playing&&window._composerGrowth&&tick>0){
