@@ -155,6 +155,21 @@ function publishWorkerBoundarySnapshots() {
 }
 win['getWorldViewContract'] = () => worldViewContract.snapshot()
 win['worldFieldChunkCoord'] = worldFieldChunkCoord
+// Expose the same authoritative FieldSampler used by InfiniteWorldRenderer to
+// the 2D/3D field canvases. Keep the browser API thin and deterministic.
+win['worldFieldViewWindow'] = (width: number, height: number, sliceY?: number) => {
+  const world = getInfiniteWorld()
+  if (!world) return null
+  return world.fieldSampler.sampleViewWindow(width, height, sliceY)
+}
+win['worldFieldSample'] = (x: number, y: number, z: number) => {
+  const world = getInfiniteWorld()
+  if (!world || ![x, y, z].every(Number.isFinite)) return null
+  return world.fieldSampler.sample(x, y, z)
+}
+win['setWorldViewCenter'] = (x: number, y: number, z: number) => worldViewContract.setCenter(x, y, z)
+win['setWorldViewSliceY'] = (y: number) => worldViewContract.setSliceY(y)
+win['setWorldViewRenderMode'] = (mode: '3d' | 'field3d' | '2d' | 'hybrid' | 'metrics') => worldViewContract.setRenderMode(mode)
 // Expose read-only diagnostics for the active authoritative sampled-field renderer.
 // The optional sparse ChunkRenderer has a separate canvas and must not override these APIs.
 win['getWorldField3DState'] = () => {
