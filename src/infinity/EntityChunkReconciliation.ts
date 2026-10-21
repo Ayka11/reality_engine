@@ -201,6 +201,9 @@ export class EntityChunkReconciliation {
     plan: EntityReconciliationPlan,
     components: EntityChunkComponent[],
   ): EntityReconciliationCommitRecord[] | null {
+    // Enforce the aggregate plan gate here too; callers must not be able to
+    // bypass commitReady by requesting only individually safe proposals.
+    if (!plan.commitReady) return null;
     const byId = new Map(components.map(component => [component.id, component]));
     return plan.proposals
       .filter(proposal => proposal.safeToCommit)
