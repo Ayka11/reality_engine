@@ -2460,6 +2460,13 @@ function setRenderMode(mode,btn){
   if(metricsView)metricsView.style.display=mode==='metrics'?'block':'none';
   if(mode==='metrics')updateMetricsView();
 
+  // Start the field renderer immediately after making its canvas visible, before
+  // ancillary UI/legacy resize work can interrupt the mode-switch handler.
+  if(mode==='field3d'&&window.renderField3D){
+    window.renderField3D();
+    requestAnimationFrame(()=>{if(currentRenderMode==='field3d')window.renderField3D();});
+  }
+
   // Field controls are meaningful in the volumetric view; Infinite World keeps its own terrain/object tools.
   const layerBar=document.getElementById('layerBar');
   if(layerBar)layerBar.style.opacity=mode==='field3d'?'1':'0.55';
@@ -2470,11 +2477,6 @@ function setRenderMode(mode,btn){
 
   if((mode==='2d'||mode==='hybrid')&&c2d.style.display!=='none'){resize2D();draw2D();}
   if((mode==='3d'||mode==='hybrid')&&c3d.style.display!=='none'){resize3D();}
-  if(mode==='field3d'&&window.renderField3D){
-    window.renderField3D();
-    requestAnimationFrame(()=>{if(currentRenderMode==='field3d')window.renderField3D();});
-  }
-
   if (mode === '3d' && currentPanel !== 'world' && currentPanel !== 'builder') {
     setIconPanel('world');
   }
