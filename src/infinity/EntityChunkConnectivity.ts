@@ -277,7 +277,7 @@ export class EntityChunkConnectivity {
           const nx = c.x + dx, ny = c.y + dy, nz = c.z + dz;
           if (nx < 0 || nx >= grid.W || ny < 0 || ny >= grid.H || nz < 0 || nz >= grid.D) continue;
           for (const spec of specs) {
-            if (!boundarySnapshot.hasSourceChunk(spec.targetChunk)) continue;
+            if (!boundarySnapshot.hasSourceChunk(spec.sourceChunk)) continue;
             const values = boundarySnapshot.read(spec, [nx, ny, nz]);
             if (!values) continue;
             const sourceEntityId = Math.round(values[F.ENTITY_ID] ?? 0);
