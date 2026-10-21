@@ -2447,8 +2447,18 @@ function renderField3DImpl(){
   return renderedCells>0;
 }
 function renderField3D(){
+  const startedAt=performance.now();
+  window.__worldField3DTrace={phase:'render-call-enter',mode:currentRenderMode,at:Date.now()};
   try {
-    return renderField3DImpl();
+    const result=renderField3DImpl();
+    window.__worldField3DTrace={
+      ...(window.__worldField3DTrace||{}),
+      phase:'render-call-returned',
+      mode:currentRenderMode,
+      durationMs:Math.round(performance.now()-startedAt),
+      at:Date.now()
+    };
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : "";
