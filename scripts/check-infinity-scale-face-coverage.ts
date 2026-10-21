@@ -17,9 +17,9 @@ function chunk(level: number, x: number, y: number, z: number, simulationEligibl
   };
 }
 
-function relations(children: Array<[number, number]>): string[] {
-  const coarse = chunk(1, 0, 0, 0, true);
-  const fine = children.map(([y, z]) => chunk(0, 2, y, z));
+function relations(children: Array<[number, number]>, coarseX = 0, fineX = 2): string[] {
+  const coarse = chunk(1, coarseX, 0, 0, true);
+  const fine = children.map(([y, z]) => chunk(0, fineX, y, z));
   const frame: InfinityScaleFramePlan = {
     observer: { x: 0, y: 0, z: 0 },
     chunks: [coarse, ...fine],
@@ -56,5 +56,9 @@ for (const key of ["0:2,0,0", "0:2,0,1", "0:2,1,0", "0:2,1,1"]) {
 const missingChild = relations([[0, 0], [0, 1], [1, 0]]);
 assert(missingChild.includes("1:1,0,0"),
   "a missing fine child that leaves a face gap must retain the fallback dependency");
+
+const completeNegativeFace = relations([[0, 0], [0, 1], [1, 0], [1, 1]], 1, 1);
+assert(!completeNegativeFace.includes("1:0,0,0"),
+  "complete coverage on a negative face must use the same contact-plane convention");
 
 console.log("Infinity Scale mixed-LOD face coverage: PASS");
