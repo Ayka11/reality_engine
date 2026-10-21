@@ -382,11 +382,11 @@ export class InfinityScaleExecutionAdapter {
       minB: number;
       maxB: number;
     }> = [
-      { key: faceKey(0, minX - 1), targetChunk: `${level}:${chunk.chunk.x - 1},${chunk.chunk.y},${chunk.chunk.z}`, minA: minY, maxA: maxY, minB: minZ, maxB: maxZ },
+      { key: faceKey(0, minX), targetChunk: `${level}:${chunk.chunk.x - 1},${chunk.chunk.y},${chunk.chunk.z}`, minA: minY, maxA: maxY, minB: minZ, maxB: maxZ },
       { key: faceKey(0, maxX + 1), targetChunk: `${level}:${chunk.chunk.x + 1},${chunk.chunk.y},${chunk.chunk.z}`, minA: minY, maxA: maxY, minB: minZ, maxB: maxZ },
-      { key: faceKey(1, minY - 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y - 1},${chunk.chunk.z}`, minA: minX, maxA: maxX, minB: minZ, maxB: maxZ },
+      { key: faceKey(1, minY), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y - 1},${chunk.chunk.z}`, minA: minX, maxA: maxX, minB: minZ, maxB: maxZ },
       { key: faceKey(1, maxY + 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y + 1},${chunk.chunk.z}`, minA: minX, maxA: maxX, minB: minZ, maxB: maxZ },
-      { key: faceKey(2, minZ - 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z - 1}`, minA: minX, maxA: maxX, minB: minY, maxB: maxY },
+      { key: faceKey(2, minZ), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z - 1}`, minA: minX, maxA: maxX, minB: minY, maxB: maxY },
       { key: faceKey(2, maxZ + 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z + 1}`, minA: minX, maxA: maxX, minB: minY, maxB: maxY },
     ];
 
