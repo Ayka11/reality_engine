@@ -5,6 +5,7 @@ import type {
   InfinityScaleBoundaryReadRelation,
 } from "./InfinityScaleChunkExecutionContext";
 import { WORLD } from "../core/WorldConstants";
+import { validateIndependentMixedLodTopology } from "./InfinityScaleIndependentTopology";
 
 export type InfinityScaleExecutionMode =
   | "advisory"
@@ -133,6 +134,17 @@ export class InfinityScaleExecutionAdapter {
           boundaryReadRelations.push(dependency);
         }
       }
+    }
+
+    const topologyAudit = validateIndependentMixedLodTopology(
+      selected,
+      frame.chunks,
+      boundaryReadRelations,
+    );
+    if (!topologyAudit.complete) {
+      throw new Error(
+        `Infinity Scale independent mixed-LOD topology mismatch: missing=[${topologyAudit.missing.join("; ")}], unexpected=[${topologyAudit.unexpected.join("; ")}]`,
+      );
     }
 
     const geometry = new InfinityScaleChunkExecutionContext(
