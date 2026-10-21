@@ -37,6 +37,7 @@ jobs:
       - run: npm run test:infinity-scale-adaptive-lod-bridge --if-present
       - run: npm run test:entity-chunk-reconciliation --if-present
       - run: npm run test:infinity-scale-face-coverage --if-present
+      - run: npm run test:infinity-scale-independent-topology --if-present
       - run: npm run test:presets --if-present
       - run: npm run test:preset-field --if-present
       - run: npm run test:construction --if-present
