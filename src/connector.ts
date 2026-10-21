@@ -160,13 +160,15 @@ win['worldFieldChunkCoord'] = worldFieldChunkCoord
 win['getWorldField3DState'] = () => {
   const getter = win['worldFieldState'] as (() => { field?: { version?: number; mutationCount?: number } } | undefined)
   const field = typeof getter === 'function' ? getter()?.field : null
+  const rendererState = (win['getWorldField3DCanvasState'] as (() => any) | undefined)?.()
   return {
-    ready: false,
-    reason: 'authoritative-field-renderer-pending',
+    ready: rendererState?.ready === true,
+    reason: rendererState?.reason ?? (rendererState?.ready ? undefined : 'authoritative-field-renderer-pending'),
     mode: (win['currentRenderMode'] as string | undefined) ?? worldViewContract.snapshot().renderMode,
-    renderedCells: 0,
-    sampleCount: 0,
-    view: worldViewContract.snapshot(),
+    renderedCells: rendererState?.renderedCells ?? 0,
+    sampleCount: rendererState?.sampleCount ?? 0,
+    field: rendererState?.field,
+    view: rendererState?.view ?? worldViewContract.snapshot(),
     fieldVersion: field?.version ?? null,
     mutationCount: field?.mutationCount ?? null,
   }
