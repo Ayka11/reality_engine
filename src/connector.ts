@@ -521,7 +521,7 @@ win['setShowParticles'] = (v: boolean) => {
   else getInfiniteWorld()?.setShowParticles(v)
 }
 win['setChunkLayer'] = (l: number) => { fieldRenderer.setLayer(Math.max(-1, Math.min(5, l))) }
-win['renderField3D'] = () => fieldRenderer.render()
+win['renderChunkField3D'] = () => fieldRenderer.render()
 win['fieldSetCameraPreset'] = (p: string) => {
   const map: Record<string, 'orbit'|'top'|'iso'|'street'|'fly'> = { orbit:'orbit', top:'top', iso:'iso', street:'street', fly:'fly' }
   fieldRenderer.setCameraPreset(map[p] ?? 'orbit')
