@@ -176,10 +176,22 @@ try {
   }
   // Rendering may be scheduled on the next animation frame after the click.
   // Wait for either a successful render or an explicit diagnostic before asserting.
-  await page.waitForFunction(() => {
-    const state = window.getWorldField3DState?.();
-    return !!state && (state.ready || !!state.reason);
-  }, { timeout: 15000 });
+  try {
+    await page.waitForFunction(() => {
+      const state = window.getWorldField3DState?.();
+      return !!state && (state.ready || !!state.reason);
+    }, null, { timeout: 12000 });
+  } catch (error) {
+    const trace = await page.evaluate(() => ({
+      state: window.getWorldField3DState?.() ?? null,
+      trace: window.__worldField3DTrace ?? null,
+      mode: window.currentRenderMode ?? null,
+      inlineMode: document.getElementById("tabField3d")?.getAttribute("onclick") ?? null,
+      canvas: (() => { const e = document.getElementById("c3dField"); const r = e?.getBoundingClientRect(); return e && r ? {display:getComputedStyle(e).display,width:r.width,height:r.height} : null; })(),
+      apis: { sampler:typeof window.worldFieldViewWindow, view:typeof window.getWorldViewContract, setMode:typeof window.setWorldViewRenderMode },
+    }));
+    throw new Error(`3D volumetric field renderer did not publish a result: ${JSON.stringify(trace)}; ${error.message}`);
+  }
   const field3dDiagnostic = await page.evaluate(() => window.getWorldField3DState?.());
   if (!field3dDiagnostic?.ready) {
     throw new Error(`3D volumetric field renderer failed: ${JSON.stringify(field3dDiagnostic)}`);
