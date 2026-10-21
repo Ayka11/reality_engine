@@ -2459,10 +2459,15 @@ function renderField3D(){
   }
 }
 window.renderField3D=renderField3D;
+window.addEventListener('resize',()=>{
+  if(currentRenderMode!=='field3d')return;
+  requestAnimationFrame(()=>{if(currentRenderMode==='field3d')renderField3D();});
+});
 
 function setRenderMode(mode,btn){
   window.__worldField3DTrace={phase:'mode-switch-enter',mode,at:Date.now()};
   currentRenderMode=mode;
+  window.currentRenderMode=mode;
   window.setWorldViewRenderMode?.(mode);
   document.querySelectorAll('#tabs .ctab').forEach(t=>t.classList.remove('on'));
   if(btn)btn.classList.add('on');
@@ -2595,6 +2600,7 @@ function setLayer(l){
   });
   if(window.setChunkLayer)window.setChunkLayer(layer<0?0:layer);
   drawGrid();
+  if(currentRenderMode==='field3d')window.renderField3D?.();
 }
 window.setLayer=setLayer;
 
