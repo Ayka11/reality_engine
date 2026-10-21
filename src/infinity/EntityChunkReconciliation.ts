@@ -172,7 +172,13 @@ export class EntityChunkReconciliation {
         .map(p => p.existingEntityId)
         .filter((id): id is number => id !== null),
     );
-    const extinctEntityIds = fullDomainCovered
+    // Never infer extinction from a partial/ambiguous plan. A caller's
+    // full-domain claim is necessary but not sufficient when this plan still
+    // contains unresolved read or mixed-LOD boundary components.
+    const extinctionSafe = fullDomainCovered &&
+      unresolvedBoundaryComponents === 0 &&
+      ambiguousMixedLodComponents.length === 0;
+    const extinctEntityIds = extinctionSafe
       ? entities
           .filter(entity => !matchedIds.has(entity.id))
           .map(entity => entity.id)
