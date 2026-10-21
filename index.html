@@ -2367,9 +2367,11 @@ function renderField3DImpl(){
   const state=typeof window.worldFieldState==='function'?window.worldFieldState()?.field:null;
   // Bound synchronous sampling cost: the authoritative sampler can perform
   // nontrivial work per cell, so keep the interactive view to a fixed budget.
-  const cols=Math.max(10,Math.min(18,Math.floor(w/48)));
-  const rows=Math.max(8,Math.min(14,Math.floor(h/48)));
-  const depth=5,spacing=Math.max(1,Math.min(8,Math.floor((view.visibleRadius||24)*2/depth)));
+  // Keep synchronous authoritative sampling bounded for CPU-only browsers.
+  // FieldSampler performs scientific-field calculations for every requested cell.
+  const cols=Math.max(6,Math.min(10,Math.floor(w/80)));
+  const rows=Math.max(4,Math.min(7,Math.floor(h/80)));
+  const depth=3,spacing=Math.max(1,Math.min(8,Math.floor((view.visibleRadius||24)*2/depth)));
   const cacheKey=[cols,rows,view.center.x,view.center.y,view.center.z,view.sliceY,view.visibleRadius,view.seed,state?.version??0,state?.mutationCount??0,state?.lastMutation?.id??0].join('|');
   if(!window.__worldField3DCache||window.__worldField3DCache.key!==cacheKey){
     const slices=[];
@@ -2467,9 +2469,15 @@ function setRenderMode(mode,btn){
   // Start the field renderer immediately after making its canvas visible, before
   // ancillary UI/legacy resize work can interrupt the mode-switch handler.
   if(mode==='field3d'&&window.renderField3D){
-    window.__worldField3DTrace={phase:'mode-switch-render-call',mode,at:Date.now()};
-    window.renderField3D();
-    requestAnimationFrame(()=>{if(currentRenderMode==='field3d')window.renderField3D();});
+    // Yield to the browser before authoritative sampling so the tab switch and
+    // diagnostics remain responsive even on CPU-only runtimes.
+    window.__worldField3DTrace={phase:'mode-switch-render-scheduled',mode,at:Date.now()};
+    requestAnimationFrame(()=>{
+      if(currentRenderMode!=='field3d'||typeof window.renderField3D!=='function')return;
+      window.__worldField3DTrace={phase:'mode-switch-render-call',mode,at:Date.now()};
+      window.renderField3D();
+      window.__worldField3DTrace={...(window.__worldField3DTrace||{}),phase:'mode-switch-render-returned',mode,at:Date.now()};
+    });
   }
 
   // Field controls are meaningful in the volumetric view; Infinite World keeps its own terrain/object tools.
@@ -2703,7 +2711,8 @@ function loop(ts){
   }
   _tickParticles();
   drawGrid();
-  if(currentRenderMode==='field3d'&&window.renderField3D)window.renderField3D();
+  // The field view refreshes on entry and explicit view changes. Avoid invoking
+  // its synchronous sampler on every simulation tick.
   if(tick%3===0&&selX>=0){explainCell(selX,selY);drawHist();}
   if(tick%15===0){updateHealth();}
   if(playing&&window._composerGrowth&&tick>0){
