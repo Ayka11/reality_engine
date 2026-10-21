@@ -161,16 +161,26 @@ win['getWorldField3DState'] = () => {
   const getter = win['worldFieldState'] as (() => { field?: { version?: number; mutationCount?: number } } | undefined)
   const field = typeof getter === 'function' ? getter()?.field : null
   const rendererState = (win['getWorldField3DCanvasState'] as (() => any) | undefined)?.()
+  const mode = (win['currentRenderMode'] as string | undefined) ?? worldViewContract.snapshot().renderMode
+  const canvas = document.getElementById('c3dField') as HTMLCanvasElement | null
+  const rect = canvas?.getBoundingClientRect()
+  const visible = !!canvas && !!rect && rect.width > 10 && rect.height > 10 &&
+    getComputedStyle(canvas).display !== 'none'
+  const renderAvailable = typeof win['renderField3D'] === 'function'
   return {
-    ready: rendererState?.ready === true,
-    reason: rendererState?.reason ?? (rendererState?.ready ? undefined : 'authoritative-field-renderer-pending'),
-    mode: (win['currentRenderMode'] as string | undefined) ?? worldViewContract.snapshot().renderMode,
+    ready: !!rendererState?.ready && visible && mode === 'field3d',
+    reason: !visible ? 'canvas-not-visible' : mode !== 'field3d' ? 'mode-mismatch' :
+      !rendererState?.ready ? (rendererState?.reason ?? 'authoritative-field-renderer-pending') : undefined,
+    mode,
+    visible,
     renderedCells: rendererState?.renderedCells ?? 0,
     sampleCount: rendererState?.sampleCount ?? 0,
     field: rendererState?.field,
     view: rendererState?.view ?? worldViewContract.snapshot(),
     fieldVersion: field?.version ?? null,
     mutationCount: field?.mutationCount ?? null,
+    renderAvailable,
+    canvas: canvas && rect ? { width: rect.width, height: rect.height, backingWidth: canvas.width, backingHeight: canvas.height } : null,
   }
 }
 win['installChunkWorldFieldProvider'] = installChunkWorldFieldProvider
