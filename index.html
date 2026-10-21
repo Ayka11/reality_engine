@@ -2365,9 +2365,11 @@ function renderField3DImpl(){
   }
   const view=getView();
   const state=typeof window.worldFieldState==='function'?window.worldFieldState()?.field:null;
-  const cols=Math.max(12,Math.min(36,Math.floor(w/24)));
-  const rows=Math.max(10,Math.min(28,Math.floor(h/24)));
-  const depth=7,spacing=Math.max(1,Math.min(8,Math.floor((view.visibleRadius||24)*2/depth)));
+  // Bound synchronous sampling cost: the authoritative sampler can perform
+  // nontrivial work per cell, so keep the interactive view to a fixed budget.
+  const cols=Math.max(10,Math.min(18,Math.floor(w/48)));
+  const rows=Math.max(8,Math.min(14,Math.floor(h/48)));
+  const depth=5,spacing=Math.max(1,Math.min(8,Math.floor((view.visibleRadius||24)*2/depth)));
   const cacheKey=[cols,rows,view.center.x,view.center.y,view.center.z,view.sliceY,view.visibleRadius,view.seed,state?.version??0,state?.mutationCount??0,state?.lastMutation?.id??0].join('|');
   if(!window.__worldField3DCache||window.__worldField3DCache.key!==cacheKey){
     const slices=[];
