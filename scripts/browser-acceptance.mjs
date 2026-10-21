@@ -164,6 +164,19 @@ try {
   // 3D volumetric field must render actual authoritative world-field samples, not a blank tab.
   // Exercise the same click path as a user; this also verifies the tab is wired to setRenderMode.
   await page.locator("#tabField3d").click();
+  const field3dCanvasCount = await page.locator("#c3dField").count();
+  if (field3dCanvasCount !== 1) {
+    throw new Error(`Expected exactly one authoritative #c3dField canvas, found ${field3dCanvasCount}`);
+  }
+  const field3dApiContract = await page.evaluate(() => ({
+    authoritative: typeof window.renderField3D === "function",
+    chunkRenderer: typeof window.renderChunkField3D === "function",
+    sameFunction: typeof window.renderChunkField3D === "function" &&
+      window.renderChunkField3D === window.renderField3D,
+  }));
+  if (!field3dApiContract.authoritative || field3dApiContract.sameFunction) {
+    throw new Error(`Field3D renderer globals overlap or are missing: ${JSON.stringify(field3dApiContract)}`);
+  }
   const field3dSwitch = await page.evaluate(() => ({
     renderAvailable: typeof window.renderField3D === "function",
     modeApiAvailable: typeof window.previewRenderMode === "function",
