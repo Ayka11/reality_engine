@@ -2438,7 +2438,7 @@ function renderField3DImpl(){
   g.font='10px monospace';g.fillStyle='rgba(180,200,235,.8)';
   g.fillText('samples '+sampleCount+' · active '+activeCells+' · Y '+view.sliceY+' · center '+view.center.x.toFixed(1)+', '+view.center.y.toFixed(1)+', '+view.center.z.toFixed(1),14,h-12);
   window.__worldField3DLayoutRetryCount=0;
-  const diagnosticState={ready:true,renderedCells,sampleCount,activeCells,slices:slices.length,field:names[fieldIndex],view};
+  const diagnosticState={ready:renderedCells>0,renderedCells,sampleCount,activeCells,slices:slices.length,field:names[fieldIndex],view};
   window.__worldField3DCanvasState=diagnosticState;
   window.getWorldField3DState=()=>({
     ...diagnosticState,
