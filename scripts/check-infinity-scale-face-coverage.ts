@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { InfinityScaleExecutionAdapter } from "../src/infinity/InfinityScaleExecutionAdapter.ts";
-import type { InfinityScaleFramePlan, InfinityScaleChunkPlan } from "../src/infinity/InfinityScaleFramePlan.ts";
+import { InfinityScaleExecutionAdapter } from "../src/infinity/InfinityScaleExecutionAdapter";
+import type { InfinityScaleFramePlan, InfinityScaleChunkPlan } from "../src/infinity/InfinityScaleFramePlan";
 
 function chunk(level: number, x: number, y: number, z: number, simulationEligible = false): InfinityScaleChunkPlan {
   const key = `${level}:${x},${y},${z}`;
