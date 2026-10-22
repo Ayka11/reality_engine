@@ -307,16 +307,20 @@ export class EntityLayer {
       grid.buffer.set(bufferSnapshot);
       for (const [id, original] of originalEntities) {
         const snapshot = entitySnapshots.get(id)!;
-        original.cells = snapshot.cells.slice();
-        original.centroid = [...snapshot.centroid];
-        original.genome = { ...snapshot.genome };
+        original.cells.splice(0, original.cells.length, ...snapshot.cells);
+        original.centroid[0] = snapshot.centroid[0];
+        original.centroid[1] = snapshot.centroid[1];
+        original.centroid[2] = snapshot.centroid[2];
+        Object.assign(original.genome, snapshot.genome);
         original.age = snapshot.age;
         original.energy = snapshot.energy;
         original.stage = snapshot.stage;
         original.memoryBuffer.set(snapshot.memoryBuffer);
         original.memPtr = snapshot.memPtr;
         original.symbol = snapshot.symbol;
-        original.colorRgb = [...snapshot.colorRgb];
+        original.colorRgb[0] = snapshot.colorRgb[0];
+        original.colorRgb[1] = snapshot.colorRgb[1];
+        original.colorRgb[2] = snapshot.colorRgb[2];
         original.children = snapshot.children;
         original.reproCounter = snapshot.reproCounter;
       }
