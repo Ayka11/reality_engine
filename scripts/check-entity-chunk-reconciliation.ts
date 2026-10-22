@@ -33,7 +33,7 @@ const incompleteConnectivity: EntityChunkConnectivityResult = {
 };
 
 const planner = new EntityChunkReconciliation();
-const plan = planner.plan([component], [entity], true, incompleteConnectivity);
+const plan = planner.plan([component], [entity], incompleteConnectivity);
 
 assert.equal(plan.commitReady, false, "incomplete mixed-LOD coverage must block commit");
 assert.deepEqual(plan.ambiguousMixedLodComponents, [4], "boundary component must be marked ambiguous even with zero observed source IDs");
@@ -41,7 +41,7 @@ assert.equal(plan.proposals[0]?.safeToCommit, false, "ambiguous component must r
 assert.deepEqual(plan.extinctEntityIds, [], "unresolved topology must never infer entity extinction");
 assert.equal(planner.commitRecords(plan, [component]), null, "incomplete mixed-LOD plan must not yield commit records");
 
-const noSnapshotPlan = planner.plan([component], [entity], true, {
+const noSnapshotPlan = planner.plan([component], [entity], {
   ...incompleteConnectivity,
   mixedLodCoverageComplete: false,
 });
@@ -70,7 +70,7 @@ const closedComponent: EntityChunkComponent = {
   touchesReadBoundary: false,
   touchesMixedLODBoundary: false,
 };
-const partialDomainPlan = planner.plan([closedComponent], [entity], false, {
+const partialDomainPlan = planner.plan([closedComponent], [entity], {
   components: [closedComponent],
   closedComponentCount: 1,
   boundaryComponentCount: 0,
@@ -79,7 +79,8 @@ const partialDomainPlan = planner.plan([closedComponent], [entity], false, {
   mixedLodTopology: [],
   mixedLodCoverageComplete: true,
 });
-assert.deepEqual(partialDomainPlan.extinctEntityIds, [], "partial-domain reconciliation must never infer extinction");
+assert.deepEqual(partialDomainPlan.extinctEntityIds, [], "extinction must remain disabled without authoritative domain evidence");
+assert.equal(partialDomainPlan.commitReady, true, "closed non-merge component may be planned without claiming global domain coverage");
 
 
 const connectivityGrid = new VoxelGrid(2, 1, 1);
