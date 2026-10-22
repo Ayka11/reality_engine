@@ -30,22 +30,19 @@ export interface Entity {
   reproCounter: number;      // energy / reproThreshold — 0..1 display gauge
 }
 
-let _nextId = 1;
-let _extinctCount = 0;
-
-function defaultGenome(): EntityGenome {
+function defaultGenome(random: () => number): EntityGenome {
   return {
-    metabolismRate:  0.4 + Math.random() * 0.4,
-    reproThreshold:  300 + Math.random() * 200,
-    signalStrength:  0.3 + Math.random() * 0.4,
-    bioAffinity:     0.3 + Math.random() * 0.5,
-    mutationRate:    0.02 + Math.random() * 0.04,
-    memoryDecay:     0.05 + Math.random() * 0.1,
+    metabolismRate:  0.4 + random() * 0.4,
+    reproThreshold:  300 + random() * 200,
+    signalStrength:  0.3 + random() * 0.4,
+    bioAffinity:     0.3 + random() * 0.5,
+    mutationRate:    0.02 + random() * 0.04,
+    memoryDecay:     0.05 + random() * 0.1,
   };
 }
 
-function mutateGenome(parent: EntityGenome, rate: number): EntityGenome {
-  const noise = () => (Math.random() - 0.5) * 2 * rate;
+function mutateGenome(parent: EntityGenome, rate: number, random: () => number): EntityGenome {
+  const noise = () => (random() - 0.5) * 2 * rate;
   return {
     metabolismRate:  Math.max(0.05, parent.metabolismRate  + noise()),
     reproThreshold:  Math.max(50,   parent.reproThreshold  + noise() * 200),
@@ -103,15 +100,57 @@ function centroid(cells: number[], W: number, H: number): [number, number, numbe
   return [sx / n, sy / n, sz / n];
 }
 
+function cloneEntity(entity: Entity): Entity {
+  return {
+    ...entity,
+    cells: entity.cells.slice(),
+    centroid: [...entity.centroid],
+    genome: { ...entity.genome },
+    memoryBuffer: entity.memoryBuffer.slice(),
+    colorRgb: [...entity.colorRgb],
+  };
+}
+
 export class EntityLayer {
   private entities: Map<number, Entity> = new Map();
   private bioThreshold = 0.05;
+  private nextId = 1;
+  private extinctCountValue = 0;
+  private rngState = 0x6d2b79f5;
   mutationStrength = 1.0;
 
-  get extinctCount(): number { return _extinctCount; }
-  get totalSpawned(): number { return _nextId - 1; }
+  get extinctCount(): number { return this.extinctCountValue; }
+  get totalSpawned(): number { return this.nextId - 1; }
+
+  /** Set a reproducible non-zero xorshift32 seed. */
+  setRandomSeed(seed: number): void {
+    if (!Number.isSafeInteger(seed) || seed <= 0 || seed > 0xffffffff) {
+      throw new Error('EntityLayer seed must be a non-zero uint32');
+    }
+    this.rngState = seed >>> 0;
+  }
+
+  private _random(): number {
+    let x = this.rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this.rngState = x >>> 0;
+    if (this.rngState === 0) throw new Error('EntityLayer RNG entered forbidden zero state');
+    return this.rngState / 0x100000000;
+  }
 
   tick(grid: VoxelGrid, dt: number): void {
+    const originalEntities = new Map(this.entities);
+    const entitySnapshots = new Map<number, Entity>();
+    for (const [id, entity] of originalEntities) entitySnapshots.set(id, cloneEntity(entity));
+    const bufferSnapshot = grid.buffer.slice();
+    const thresholdSnapshot = this.bioThreshold;
+    const nextIdSnapshot = this.nextId;
+    const extinctSnapshot = this.extinctCountValue;
+    const rngSnapshot = this.rngState;
+
+    try {
     const { W, H, D, buffer: buf } = grid;
     const n = grid.size;
 
@@ -155,18 +194,18 @@ export class EntityLayer {
         nextEntities.set(best.id, best);
       } else {
         // New entity — inherit any genome from field or start fresh
-        const id = _nextId++;
+        const id = this.nextId++;
         const ent: Entity = {
           id, cells: blob, centroid: c,
-          genome: defaultGenome(),
+          genome: defaultGenome(() => this._random()),
           age: 0, energy: 0, stage: 'juvenile',
           memoryBuffer: new Float32Array(8),
           memPtr: 0,
-          symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+          symbol: SYMBOLS[Math.floor(random() * SYMBOLS.length)],
           colorRgb: [
-            0.3 + Math.random() * 0.7,
-            0.3 + Math.random() * 0.7,
-            0.3 + Math.random() * 0.7,
+            0.3 + random() * 0.7,
+            0.3 + random() * 0.7,
+            0.3 + random() * 0.7,
           ],
           children: 0,
           reproCounter: 0,
@@ -178,7 +217,7 @@ export class EntityLayer {
     // Count extinction for entities whose blob disappeared
     for (const [id] of this.entities) {
       if (!nextEntities.has(id)) {
-        _extinctCount++;
+        this.extinctCountValue++;
         const dead = this.entities.get(id)!;
         for (const i of dead.cells) {
           const base = i * CELL_FIELDS;
@@ -263,11 +302,36 @@ export class EntityLayer {
       const base = i * CELL_FIELDS;
       buf[base + F.SIGNAL] = Math.max(0, buf[base + F.SIGNAL] - 0.5 * dt * 60);
     }
+    } catch (error) {
+      // Restore every mutable part of this tick, including pre-existing object identities.
+      grid.buffer.set(bufferSnapshot);
+      for (const [id, original] of originalEntities) {
+        const snapshot = entitySnapshots.get(id)!;
+        original.cells = snapshot.cells.slice();
+        original.centroid = [...snapshot.centroid];
+        original.genome = { ...snapshot.genome };
+        original.age = snapshot.age;
+        original.energy = snapshot.energy;
+        original.stage = snapshot.stage;
+        original.memoryBuffer.set(snapshot.memoryBuffer);
+        original.memPtr = snapshot.memPtr;
+        original.symbol = snapshot.symbol;
+        original.colorRgb = [...snapshot.colorRgb];
+        original.children = snapshot.children;
+        original.reproCounter = snapshot.reproCounter;
+      }
+      this.entities = originalEntities;
+      this.bioThreshold = thresholdSnapshot;
+      this.nextId = nextIdSnapshot;
+      this.extinctCountValue = extinctSnapshot;
+      this.rngState = rngSnapshot;
+      throw error;
+    }
   }
 
   private _spawnChild(grid: VoxelGrid, parent: Entity, W: number, H: number, D: number): void {
     // Pick a random parent cell and try to seed child in a random adjacent empty location
-    const srcIdx = parent.cells[Math.floor(Math.random() * parent.cells.length)];
+    const srcIdx = parent.cells[Math.floor(random() * parent.cells.length)];
     const WH = W * H;
     const pz = Math.floor(srcIdx / WH);
     const rem = srcIdx - pz * WH;
@@ -276,8 +340,8 @@ export class EntityLayer {
 
     // Random offset 2..4 cells away
     const offsets = [-3, -2, 2, 3];
-    const ox = offsets[Math.floor(Math.random() * 4)];
-    const oy = offsets[Math.floor(Math.random() * 4)];
+    const ox = offsets[Math.floor(random() * 4)];
+    const oy = offsets[Math.floor(random() * 4)];
     const nx = Math.max(0, Math.min(W - 1, px + ox));
     const ny = Math.max(0, Math.min(H - 1, py + oy));
     const nz = Math.max(0, Math.min(D - 1, pz));
@@ -287,7 +351,7 @@ export class EntityLayer {
 
     // Only spawn if target is low-bio
     if (buf[childBase + F.BIO_POTENTIAL] < 0.02) {
-      const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate * this.mutationStrength);
+      const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate * this.mutationStrength, () => this._random());
       buf[childBase + F.BIO_POTENTIAL] = 0.15;
       buf[childBase + F.ENERGY]        = parent.genome.reproThreshold * 0.3;
       buf[childBase + F.INFORMATION]   = 5;
@@ -295,7 +359,7 @@ export class EntityLayer {
       parent.children++;
 
       // Register new entity immediately
-      const id = _nextId++;
+      const id = this.nextId++;
       const c = centroid([nz * WH + ny * W + nx], W, H);
       this.entities.set(id, {
         id, cells: [nz * WH + ny * W + nx], centroid: c,
@@ -303,11 +367,11 @@ export class EntityLayer {
         age: 0, energy: buf[childBase + F.ENERGY], stage: 'juvenile',
         memoryBuffer: new Float32Array(8),
         memPtr: 0,
-        symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+        symbol: SYMBOLS[Math.floor(random() * SYMBOLS.length)],
         colorRgb: [
-          Math.max(0.2, parent.colorRgb[0] + (Math.random() - 0.5) * 0.3),
-          Math.max(0.2, parent.colorRgb[1] + (Math.random() - 0.5) * 0.3),
-          Math.max(0.2, parent.colorRgb[2] + (Math.random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[0] + (random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[1] + (random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[2] + (random() - 0.5) * 0.3),
         ],
         children: 0,
         reproCounter: 0,
@@ -327,7 +391,8 @@ export class EntityLayer {
 
   clear(): void {
     this.entities.clear();
-    _nextId = 1;
-    _extinctCount = 0;
+    this.nextId = 1;
+    this.extinctCountValue = 0;
+    this.rngState = 0x6d2b79f5;
   }
 }
