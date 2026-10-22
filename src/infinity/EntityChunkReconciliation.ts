@@ -50,7 +50,6 @@ export class EntityChunkReconciliation {
   plan(
     components: EntityChunkComponent[],
     entities: Entity[],
-    fullDomainCovered = false,
     connectivity?: EntityChunkConnectivityResult,
   ): EntityReconciliationPlan {
     const componentSourceIds = new Map<number, number[]>();
@@ -160,7 +159,9 @@ export class EntityChunkReconciliation {
         // A merge changes more than one entity identity. Until the whole
         // domain is covered, defer it rather than extinguishing a source
         // entity whose other cells may be outside this workset.
-        safeToCommit: continuity !== "merge" || fullDomainCovered,
+        // No authoritative, revision-bound domain-coverage proof exists yet.
+        // Never commit merges based on caller-supplied completeness claims.
+        safeToCommit: continuity !== "merge",
         continuity,
       });
     }
@@ -172,17 +173,13 @@ export class EntityChunkReconciliation {
         .map(p => p.existingEntityId)
         .filter((id): id is number => id !== null),
     );
-    // Never infer extinction from a partial/ambiguous plan. A caller's
-    // full-domain claim is necessary but not sufficient when this plan still
-    // contains unresolved read or mixed-LOD boundary components.
-    const extinctionSafe = fullDomainCovered &&
-      unresolvedBoundaryComponents === 0 &&
-      ambiguousMixedLodComponents.length === 0;
-    const extinctEntityIds = extinctionSafe
-      ? entities
-          .filter(entity => !matchedIds.has(entity.id))
-          .map(entity => entity.id)
-      : [];
+    // Extinction stays disabled until an authoritative domain inventory can
+    // produce revision-bound coverage evidence. Boundary-read completeness
+    // alone cannot prove that an entity is absent from the global domain.
+    // Keep matchedIds above for future evidence-backed reconciliation, but
+    // deliberately do not infer extinction in this planner baseline.
+    void matchedIds;
+    const extinctEntityIds: number[] = [];
 
     return {
       proposals,
