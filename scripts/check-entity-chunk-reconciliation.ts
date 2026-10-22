@@ -166,6 +166,11 @@ function makeEntityTickScenario() {
 const rollbackCase = makeEntityTickScenario();
 const controlCase = makeEntityTickScenario();
 const originalEntity = rollbackCase.entity;
+const originalCellsRef = originalEntity.cells;
+const originalCentroidRef = originalEntity.centroid;
+const originalGenomeRef = originalEntity.genome;
+const originalMemoryBufferRef = originalEntity.memoryBuffer;
+const originalColorRef = originalEntity.colorRgb;
 const beforeBuffer = Array.from(rollbackCase.grid.buffer);
 const beforeEntity = {
   cells: originalEntity.cells.slice(),
@@ -192,6 +197,11 @@ rollbackInternals._spawnChild = function (...args: unknown[]) {
 assert.throws(() => rollbackCase.layer.tick(rollbackCase.grid, 1 / 60), /injected failure/);
 assert.deepEqual(Array.from(rollbackCase.grid.buffer), beforeBuffer, "failed tick must restore every grid field");
 assert.equal(rollbackCase.layer.getEntities()[0], originalEntity, "rollback must preserve pre-existing entity object identity");
+assert.equal(originalEntity.cells, originalCellsRef, "rollback must preserve cell-array identity");
+assert.equal(originalEntity.centroid, originalCentroidRef, "rollback must preserve centroid-array identity");
+assert.equal(originalEntity.genome, originalGenomeRef, "rollback must preserve genome-object identity");
+assert.equal(originalEntity.memoryBuffer, originalMemoryBufferRef, "rollback must preserve memory-buffer identity");
+assert.equal(originalEntity.colorRgb, originalColorRef, "rollback must preserve color-array identity");
 assert.deepEqual(originalEntity.cells, beforeEntity.cells);
 assert.deepEqual(originalEntity.centroid, beforeEntity.centroid);
 assert.deepEqual(originalEntity.genome, beforeEntity.genome);
