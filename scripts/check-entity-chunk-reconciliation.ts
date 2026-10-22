@@ -56,11 +56,31 @@ const completeButConflictingConnectivity: EntityChunkConnectivityResult = {
     { localCell: 10, neighborCell: [12, 0, 0], sourceChunk: "1:2,0,0", relation: "fine-to-coarse", occupied: true, sourceEntityId: 102 },
   ],
 };
-const conflictingPlan = planner.plan([component], [entity], true, completeButConflictingConnectivity);
+const conflictingPlan = planner.plan([component], [entity], completeButConflictingConnectivity);
 assert.equal(conflictingPlan.commitReady, false, "conflicting mixed-LOD source identities must block commit even with complete coverage");
 assert.deepEqual(conflictingPlan.ambiguousMixedLodComponents, [4], "multiple mixed-LOD source identities must remain ambiguous");
 assert.deepEqual(conflictingPlan.extinctEntityIds, [], "conflicting topology must suppress extinction");
 assert.equal(planner.commitRecords(conflictingPlan, [component]), null, "conflicting mixed-LOD plan must not yield commit records");
+
+const mergeComponent: EntityChunkComponent = {
+  id: 9,
+  cells: [10, 11],
+  centroid: [10.5, 0, 0],
+  touchesSimulationBoundary: false,
+  touchesReadBoundary: false,
+  touchesMixedLODBoundary: false,
+};
+const mergeEntities = [
+  { ...entity, id: 201, cells: [10], centroid: [10, 0, 0] },
+  { ...entity, id: 202, cells: [11], centroid: [11, 0, 0] },
+] as Entity[];
+const mergePlan = planner.plan([mergeComponent], mergeEntities);
+assert.equal(mergePlan.proposals[0]?.continuity, "merge", "overlapping source identities must be recognized as a merge");
+assert.equal(mergePlan.proposals[0]?.safeToCommit, false, "merge must fail closed without authoritative domain evidence");
+assert.equal(mergePlan.commitReady, false, "an unverified merge must block the aggregate commit");
+assert.deepEqual(mergePlan.extinctEntityIds, [], "unverified merge must never extinguish source entities");
+assert.equal(planner.commitRecords(mergePlan, [mergeComponent]), null, "unverified merge must not produce commit records");
+
 
 const closedComponent: EntityChunkComponent = {
   id: 5,
