@@ -201,11 +201,11 @@ export class EntityLayer {
           age: 0, energy: 0, stage: 'juvenile',
           memoryBuffer: new Float32Array(8),
           memPtr: 0,
-          symbol: SYMBOLS[Math.floor(random() * SYMBOLS.length)],
+          symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
           colorRgb: [
-            0.3 + random() * 0.7,
-            0.3 + random() * 0.7,
-            0.3 + random() * 0.7,
+            0.3 + this._random() * 0.7,
+            0.3 + this._random() * 0.7,
+            0.3 + this._random() * 0.7,
           ],
           children: 0,
           reproCounter: 0,
@@ -331,7 +331,7 @@ export class EntityLayer {
 
   private _spawnChild(grid: VoxelGrid, parent: Entity, W: number, H: number, D: number): void {
     // Pick a random parent cell and try to seed child in a random adjacent empty location
-    const srcIdx = parent.cells[Math.floor(random() * parent.cells.length)];
+    const srcIdx = parent.cells[Math.floor(this._random() * parent.cells.length)];
     const WH = W * H;
     const pz = Math.floor(srcIdx / WH);
     const rem = srcIdx - pz * WH;
@@ -340,8 +340,8 @@ export class EntityLayer {
 
     // Random offset 2..4 cells away
     const offsets = [-3, -2, 2, 3];
-    const ox = offsets[Math.floor(random() * 4)];
-    const oy = offsets[Math.floor(random() * 4)];
+    const ox = offsets[Math.floor(this._random() * 4)];
+    const oy = offsets[Math.floor(this._random() * 4)];
     const nx = Math.max(0, Math.min(W - 1, px + ox));
     const ny = Math.max(0, Math.min(H - 1, py + oy));
     const nz = Math.max(0, Math.min(D - 1, pz));
@@ -367,11 +367,11 @@ export class EntityLayer {
         age: 0, energy: buf[childBase + F.ENERGY], stage: 'juvenile',
         memoryBuffer: new Float32Array(8),
         memPtr: 0,
-        symbol: SYMBOLS[Math.floor(random() * SYMBOLS.length)],
+        symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
         colorRgb: [
-          Math.max(0.2, parent.colorRgb[0] + (random() - 0.5) * 0.3),
-          Math.max(0.2, parent.colorRgb[1] + (random() - 0.5) * 0.3),
-          Math.max(0.2, parent.colorRgb[2] + (random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[0] + (this._random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[1] + (this._random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[2] + (this._random() - 0.5) * 0.3),
         ],
         children: 0,
         reproCounter: 0,
