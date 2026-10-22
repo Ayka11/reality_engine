@@ -5,7 +5,7 @@ import { EntityChunkConnectivity } from "../src/infinity/EntityChunkConnectivity
 import type { InfinityScaleChunkExecutionContext } from "../src/infinity/InfinityScaleChunkExecutionContext.ts";
 import { EntityChunkReconciliation } from "../src/infinity/EntityChunkReconciliation.ts";
 import type { EntityChunkComponent, EntityChunkConnectivityResult } from "../src/infinity/EntityChunkConnectivity.ts";
-import type { Entity } from "../src/simulation/EntityLayer.ts";
+import { EntityLayer, type Entity } from "../src/simulation/EntityLayer.ts";
 
 const component: EntityChunkComponent = {
   id: 4,
@@ -142,3 +142,84 @@ assert.equal(singletonConnectivity.components.length, 1, "isolated occupied cell
 assert.deepEqual(singletonConnectivity.components[0]?.cells, [0], "singleton component must preserve its cell index");
 
 console.log("Entity chunk reconciliation boundary safety: PASS");
+
+
+// Exercise the production EntityLayer tick transaction, not just the pure planner.
+function makeEntityTickScenario() {
+  const grid = new VoxelGrid(8, 8, 1);
+  const layer = new EntityLayer();
+  layer.setRandomSeed(0x12345678);
+  for (const index of [9, 10, 17, 18]) {
+    grid.buffer[index * CELL_FIELDS + F.BIO_POTENTIAL] = 1;
+    grid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
+  }
+  layer.tick(grid, 1 / 60);
+  const entity = layer.getEntities()[0];
+  assert.ok(entity, "fixture must create a real EntityLayer entity");
+  entity.age = 59;
+  entity.genome.reproThreshold = 1;
+  entity.energy = 321;
+  for (const index of entity.cells) grid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
+  return { grid, layer, entity };
+}
+
+const rollbackCase = makeEntityTickScenario();
+const controlCase = makeEntityTickScenario();
+const originalEntity = rollbackCase.entity;
+const beforeBuffer = Array.from(rollbackCase.grid.buffer);
+const beforeEntity = {
+  cells: originalEntity.cells.slice(),
+  centroid: originalEntity.centroid.slice(),
+  genome: { ...originalEntity.genome },
+  age: originalEntity.age,
+  energy: originalEntity.energy,
+  stage: originalEntity.stage,
+  memoryBuffer: Array.from(originalEntity.memoryBuffer),
+  memPtr: originalEntity.memPtr,
+  children: originalEntity.children,
+  reproCounter: originalEntity.reproCounter,
+};
+const beforeSpawned = rollbackCase.layer.totalSpawned;
+const beforeExtinct = rollbackCase.layer.extinctCount;
+const rollbackInternals = rollbackCase.layer as unknown as {
+  _spawnChild: (...args: unknown[]) => void;
+};
+const originalSpawnChild = rollbackInternals._spawnChild;
+rollbackInternals._spawnChild = function (...args: unknown[]) {
+  originalSpawnChild.apply(rollbackCase.layer, args);
+  throw new Error("injected failure after reproduction mutation");
+};
+assert.throws(() => rollbackCase.layer.tick(rollbackCase.grid, 1 / 60), /injected failure/);
+assert.deepEqual(Array.from(rollbackCase.grid.buffer), beforeBuffer, "failed tick must restore every grid field");
+assert.equal(rollbackCase.layer.getEntities()[0], originalEntity, "rollback must preserve pre-existing entity object identity");
+assert.deepEqual(originalEntity.cells, beforeEntity.cells);
+assert.deepEqual(originalEntity.centroid, beforeEntity.centroid);
+assert.deepEqual(originalEntity.genome, beforeEntity.genome);
+assert.equal(originalEntity.age, beforeEntity.age);
+assert.equal(originalEntity.energy, beforeEntity.energy);
+assert.equal(originalEntity.stage, beforeEntity.stage);
+assert.deepEqual(Array.from(originalEntity.memoryBuffer), beforeEntity.memoryBuffer);
+assert.equal(originalEntity.memPtr, beforeEntity.memPtr);
+assert.equal(originalEntity.children, beforeEntity.children);
+assert.equal(originalEntity.reproCounter, beforeEntity.reproCounter);
+assert.equal(rollbackCase.layer.totalSpawned, beforeSpawned, "failed tick must restore identity counter");
+assert.equal(rollbackCase.layer.extinctCount, beforeExtinct, "failed tick must restore extinction counter");
+
+rollbackInternals._spawnChild = originalSpawnChild;
+rollbackCase.layer.tick(rollbackCase.grid, 1 / 60);
+controlCase.layer.tick(controlCase.grid, 1 / 60);
+assert.deepEqual(
+  Array.from(rollbackCase.grid.buffer),
+  Array.from(controlCase.grid.buffer),
+  "retry after rollback must reproduce the same grid as a clean deterministic tick",
+);
+const serializeEntities = (layer: EntityLayer) => layer.getEntities().map(entity => ({
+  ...entity,
+  memoryBuffer: Array.from(entity.memoryBuffer),
+}));
+assert.deepEqual(
+  serializeEntities(rollbackCase.layer),
+  serializeEntities(controlCase.layer),
+  "retry after rollback must reproduce entity identities and state",
+);
+console.log("EntityLayer atomic tick rollback and deterministic RNG replay: PASS");
