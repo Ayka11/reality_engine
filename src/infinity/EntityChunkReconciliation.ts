@@ -1,3 +1,4 @@
+import { assertEntityDomainRevision, type EntityDomainInventory } from "./EntityDomainInventory";
 import type { Entity } from "../simulation/EntityLayer";
 import type { EntityChunkComponent, EntityBoundaryTopologySample, EntityChunkConnectivityResult } from "./EntityChunkConnectivity";
 
@@ -17,6 +18,8 @@ export interface EntityReconciliationCommit {
   extinctEntityIds: number[];
   mixedLodTopologyResolved: boolean;
   ambiguousMixedLodComponents: number[];
+  /** Captured authoritative scope/revision, present only for revision-bound plans. */
+  sourceInventory?: EntityDomainInventory;
 }
 
 export interface EntityReconciliationCommitRecord {
@@ -47,6 +50,20 @@ export interface EntityReconciliationPlan {
  * connected component is not known in the current execution workset.
  */
 export class EntityChunkReconciliation {
+  /**
+   * Plan against an immutable inventory snapshot. This binds the result to the
+   * exact domain revision; commitRecords requires the current snapshot again.
+   */
+  planAtInventory(
+    components: EntityChunkComponent[],
+    entities: Entity[],
+    inventory: EntityDomainInventory,
+    connectivity?: EntityChunkConnectivityResult,
+  ): EntityReconciliationPlan {
+    const plan = this.plan(components, entities, connectivity);
+    return { ...plan, sourceInventory: inventory };
+  }
+
   plan(
     components: EntityChunkComponent[],
     entities: Entity[],
@@ -197,7 +214,16 @@ export class EntityChunkReconciliation {
   commitRecords(
     plan: EntityReconciliationPlan,
     components: EntityChunkComponent[],
+    currentInventory?: EntityDomainInventory,
   ): EntityReconciliationCommitRecord[] | null {
+    // Revision-bound plans require a fresh snapshot immediately before staged
+    // records are emitted; absence of the current authority snapshot fails closed.
+    if (plan.sourceInventory) {
+      if (!currentInventory) {
+        throw new Error("Revision-bound entity plan requires current inventory before commit staging");
+      }
+      assertEntityDomainRevision(plan.sourceInventory, currentInventory);
+    }
     // Enforce the aggregate plan gate here too; callers must not be able to
     // bypass commitReady by requesting only individually safe proposals.
     if (!plan.commitReady) return null;
