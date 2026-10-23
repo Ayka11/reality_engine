@@ -254,10 +254,10 @@ export class EntityChunkReconciliation {
    * Synchronous transaction boundary for revision-bound reconciliation.
    *
    * stage() must only prepare data and capture the rollback snapshot; it must
-   * not mutate authoritative state. apply() performs the mutation. The source
-   * revision is checked after staging and again after apply, with rollback on
-   * any apply/postcondition failure. Keep this path synchronous: an await
-   * between the final revision check and apply would reopen the stale-plan race.
+   * not mutate authoritative state. apply() performs the mutation and may
+   * publish the resulting domain at a new revision. The source revision is
+   * checked immediately before apply; failures invoke rollback. Keep this path
+   * synchronous: no await may occur between the final revision check and apply.
    */
   commitAtomically<T>(
     plan: EntityReconciliationPlan,
