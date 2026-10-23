@@ -18,8 +18,6 @@ export interface EntityReconciliationCommit {
   extinctEntityIds: number[];
   mixedLodTopologyResolved: boolean;
   ambiguousMixedLodComponents: number[];
-  /** Captured authoritative scope/revision, present only for revision-bound plans. */
-  sourceInventory?: EntityDomainInventory;
 }
 
 export interface EntityReconciliationCommitRecord {
@@ -40,6 +38,8 @@ export interface EntityReconciliationPlan {
   extinctEntityIds: number[];
   mixedLodTopologyResolved: boolean;
   ambiguousMixedLodComponents: number[];
+  /** Captured authoritative scope/revision, present only for revision-bound plans. */
+  sourceInventory?: EntityDomainInventory;
 }
 
 /**
