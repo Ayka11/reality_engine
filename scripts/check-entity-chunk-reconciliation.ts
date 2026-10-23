@@ -6,7 +6,7 @@ import type { InfinityScaleChunkExecutionContext } from "../src/infinity/Infinit
 import { EntityChunkReconciliation } from "../src/infinity/EntityChunkReconciliation.ts";
 import type { EntityChunkComponent, EntityChunkConnectivityResult } from "../src/infinity/EntityChunkConnectivity.ts";
 import { EntityLayer, type Entity } from "../src/simulation/EntityLayer.ts";
-import { assertCompleteEntityDomain, assertEntityDomainRevision, captureEntityDomainInventory } from "../src/infinity/EntityDomainInventory.ts";
+import { assertCompleteEntityDomain, assertEntityDomainRevision, captureEntityDomainInventory, EntityDomainInventoryAuthority } from "../src/infinity/EntityDomainInventory.ts";
 
 const component: EntityChunkComponent = {
   id: 4,
@@ -292,3 +292,39 @@ assert.throws(() => captureEntityDomainInventory({
   entityIds: [7, 7], occupiedCells: [0],
 }), /duplicate entity IDs/);
 console.log("Entity domain inventory revision and completeness contract: PASS");
+
+
+// The authority owns a monotonic revision for its scope. Repeated identical
+// observations are idempotent; any domain/completeness change invalidates plans.
+const inventoryAuthority = new EntityDomainInventoryAuthority("world:runtime-test");
+const authorityInitial = inventoryAuthority.snapshot();
+assert.equal(authorityInitial.revision, 0);
+assert.equal(authorityInitial.completeness, "partial");
+const authorityFirst = inventoryAuthority.update({
+  completeness: "complete",
+  entityIds: [2, 1],
+  occupiedCells: [7, 3],
+});
+assert.equal(authorityFirst.revision, 1, "first authoritative domain publication advances revision");
+assert.deepEqual(authorityFirst.entityIds, [1, 2]);
+const authorityNoOp = inventoryAuthority.update({
+  completeness: "complete",
+  entityIds: [1, 2],
+  occupiedCells: [3, 7],
+});
+assert.equal(authorityNoOp, authorityFirst, "canonical identical publication must not advance revision");
+const authorityChanged = inventoryAuthority.update({
+  completeness: "complete",
+  entityIds: [1, 2],
+  occupiedCells: [3, 7, 8],
+});
+assert.equal(authorityChanged.revision, 2, "domain mutation must advance revision");
+assert.throws(() => assertEntityDomainRevision(authorityFirst, inventoryAuthority.snapshot()), /Stale entity reconciliation plan/);
+const authorityPartial = inventoryAuthority.update({
+  completeness: "partial",
+  entityIds: [1],
+  occupiedCells: [3],
+});
+assert.equal(authorityPartial.revision, 3, "changing completeness invalidates existing plans");
+assert.throws(() => assertCompleteEntityDomain(authorityPartial, "extinction"), /partial domain inventory/);
+console.log("Entity domain inventory authority monotonic revisions: PASS");
