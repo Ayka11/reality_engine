@@ -1,4 +1,5 @@
 import { VoxelGrid } from '../core/VoxelGrid';
+import { SparseVoxelGrid } from '../core/SparseVoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 
 export interface EntityGenome {
@@ -155,6 +156,10 @@ export class EntityLayer {
       });
     }
     const bufferSnapshot = grid.buffer.slice();
+    // EntityLayer mutates the dense front buffer. Preserve the sparse grid's
+    // back buffer too, because a failed entity tick must not leave a mixed
+    // generation that a later swapBuffers() can publish.
+    const sparseBackBufferSnapshot = grid instanceof SparseVoxelGrid ? grid.backBuffer.slice() : null;
     const thresholdSnapshot = this.bioThreshold;
     const nextIdSnapshot = this.nextId;
     const extinctSnapshot = this.extinctCountValue;
@@ -332,6 +337,13 @@ export class EntityLayer {
     } catch (error) {
       // Restore every mutable part of this tick, including pre-existing object identities.
       grid.buffer.set(bufferSnapshot);
+      if (grid instanceof SparseVoxelGrid) {
+        if (sparseBackBufferSnapshot) grid.backBuffer.set(sparseBackBufferSnapshot);
+        // The engine's dense buffer is authoritative during the tick. Restore
+        // chunk mirrors to the rolled-back dense state before any later
+        // syncChunksToDense() can reintroduce stale entity ownership.
+        grid.syncDenseToChunks();
+      }
       for (const [id, original] of originalEntities) {
         const snapshot = entitySnapshots.get(id)!;
         const refs = entityMutableRefs.get(id)!;
