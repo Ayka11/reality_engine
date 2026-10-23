@@ -125,7 +125,11 @@ export function assertEntityDomainRevision(
   }
 }
 
-/** Only a complete inventory may authorize global merge/extinction decisions. */
+/**
+ * Global merge/extinction needs both whole-domain coverage and an explicit
+ * entity-to-cell partition. A producer's "complete" flag alone cannot prove
+ * which entity owns each occupied cell, so legacy inventories fail closed.
+ */
 export function assertCompleteEntityDomain(
   inventory: EntityDomainInventory,
   operation: "merge" | "extinction",
@@ -133,6 +137,11 @@ export function assertCompleteEntityDomain(
   if (inventory.completeness !== "complete") {
     throw new Error(
       `Cannot authorize entity ${operation} from partial domain inventory`,
+    );
+  }
+  if (!inventory.entityCellOwnership) {
+    throw new Error(
+      `Cannot authorize entity ${operation} without entity-cell ownership inventory`,
     );
   }
 }
