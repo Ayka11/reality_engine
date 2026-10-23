@@ -89,3 +89,64 @@ export function assertCompleteEntityDomain(
     );
   }
 }
+
+
+/**
+ * Owns the revision counter for one inventory scope. Call update whenever the
+ * authoritative producer observes a domain change; consumers read snapshot()
+ * and compare its revision again immediately before commit.
+ *
+ * Completeness remains a trusted producer assertion, not something inferred
+ * from a chunk's read coverage. A partial inventory can never authorize global
+ * merge/extinction even when its revision is current.
+ */
+export class EntityDomainInventoryAuthority {
+  private current: EntityDomainInventory;
+
+  constructor(scopeId: string) {
+    this.current = captureEntityDomainInventory({
+      scopeId,
+      revision: 0,
+      completeness: "partial",
+      entityIds: [],
+      occupiedCells: [],
+    });
+  }
+
+  snapshot(): EntityDomainInventory {
+    return this.current;
+  }
+
+  update(input: Omit<EntityDomainInventoryInput, "scopeId" | "revision">): EntityDomainInventory {
+    const candidate = captureEntityDomainInventory({
+      scopeId: this.current.scopeId,
+      revision: this.current.revision,
+      completeness: input.completeness,
+      entityIds: input.entityIds,
+      occupiedCells: input.occupiedCells,
+    });
+
+    const unchanged =
+      candidate.completeness === this.current.completeness &&
+      sameNumbers(candidate.entityIds, this.current.entityIds) &&
+      sameNumbers(candidate.occupiedCells, this.current.occupiedCells);
+    if (unchanged) return this.current;
+
+    if (this.current.revision >= Number.MAX_SAFE_INTEGER) {
+      throw new Error("Entity domain inventory revision exhausted safe integer range");
+    }
+
+    this.current = captureEntityDomainInventory({
+      scopeId: this.current.scopeId,
+      revision: this.current.revision + 1,
+      completeness: input.completeness,
+      entityIds: input.entityIds,
+      occupiedCells: input.occupiedCells,
+    });
+    return this.current;
+  }
+}
+
+function sameNumbers(left: readonly number[], right: readonly number[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
