@@ -1,4 +1,4 @@
-import { CellState, CELL_FIELDS } from './CellState';
+import { CellState, CELL_FIELDS, F } from './CellState';
 import { Chunk, CHUNK_SIZE, CHUNK_VOLUME } from './Chunk';
 
 export interface SerializedChunk {
@@ -188,6 +188,29 @@ export class SparseVoxelGrid {
       const chunk = this.chunks.get(this.getChunkKey(cx, cy, cz));
       if (!chunk) continue;
       this.buffer.set(chunk.buffer.subarray(chunk.localIdx(lx, ly, lz), chunk.localIdx(lx, ly, lz) + CELL_FIELDS), this.idx(x, y, z));
+    }
+  }
+
+  /**
+   * Reject dense-window entity ownership that disagrees with chunk storage.
+   * This check does not establish whole-world coverage.
+   */
+  assertDenseEntityOwnershipSynchronized(): void {
+    for (let z = 0; z < this.D; z++) {
+      for (let y = 0; y < this.H; y++) {
+        for (let x = 0; x < this.W; x++) {
+          const gx = x + this.denseOrigin.x;
+          const gy = y + this.denseOrigin.y;
+          const gz = z + this.denseOrigin.z;
+          const denseId = this.buffer[this.idx(x, y, z) + F.ENTITY_ID];
+          const chunkId = this.getCell(gx, gy, gz)?.entityId ?? 0;
+          if (denseId !== chunkId) {
+            throw new Error(
+              `Dense/chunk entity ownership mismatch at (${gx}, ${gy}, ${gz}): dense=${denseId}, chunk=${chunkId}`,
+            );
+          }
+        }
+      }
     }
   }
 
