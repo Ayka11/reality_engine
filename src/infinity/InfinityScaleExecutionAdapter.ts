@@ -46,6 +46,7 @@ export interface InfinityScaleExecutionPlan {
   mixedLodExecutionReady: boolean;
   /** True only when chunk-aware entity reconciliation is wired to the runtime transaction. */
   entityExecutionReady: boolean;
+  /** True only when agent migration is integrated with the authoritative runtime transaction. */
   agentMigrationReady: boolean;
 }
 
@@ -106,7 +107,7 @@ export class InfinityScaleExecutionAdapter {
       lodBoundaryTransferReady: this.capabilities.lodBoundaryTransferReady,
       mixedLodExecutionReady: this.capabilities.mixedLodExecutionReady,
       entityExecutionReady: false,
-      agentMigrationReady: true,
+      agentMigrationReady: false,
     };
 
   }
@@ -242,7 +243,7 @@ export class InfinityScaleExecutionAdapter {
       lodBoundaryTransferReady: this.capabilities.lodBoundaryTransferReady,
       mixedLodExecutionReady: this.capabilities.mixedLodExecutionReady,
       entityExecutionReady: false,
-      agentMigrationReady: true,
+      agentMigrationReady: false,
     };
 
     return this.getPlan();
