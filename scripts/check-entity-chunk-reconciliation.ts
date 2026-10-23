@@ -259,6 +259,26 @@ const sameRevisionInventory = captureEntityDomainInventory({
   occupiedCells: [2, 5, 8],
 });
 assert.doesNotThrow(() => assertEntityDomainRevision(inventoryRevision4, sameRevisionInventory));
+const forgedSameRevisionInventory = captureEntityDomainInventory({
+  scopeId: "world:alpha",
+  revision: 4,
+  completeness: "complete",
+  entityIds: [3, 12],
+  occupiedCells: [2, 5, 8, 99],
+});
+assert.throws(
+  () => assertEntityDomainRevision(inventoryRevision4, forgedSameRevisionInventory),
+  /content mismatch/,
+  "matching revision numbers must not authorize a different inventory payload",
+);
+assert.throws(
+  () => captureEntityDomainInventory({
+    scopeId: "world:alpha", revision: 4, completeness: "unknown" as "complete",
+    entityIds: [], occupiedCells: [],
+  }),
+  /completeness must be/,
+  "inventory completeness must be validated at the runtime boundary",
+);
 const newerRevisionInventory = captureEntityDomainInventory({
   scopeId: "world:alpha",
   revision: 5,
