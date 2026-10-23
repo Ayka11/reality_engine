@@ -360,3 +360,25 @@ assert.deepEqual(splitRecords?.map(record => record.entityId), [303, null], "onl
 assert.deepEqual(splitRecords?.map(record => record.sourceEntityIds), [[303], [303]]);
 console.log("Entity split identity planning regression: PASS");
 
+// Revision-bound plans must be checked against the latest authoritative snapshot
+// before any commit records are staged.
+const revisionBoundPlan = planner.planAtInventory(
+  [closedComponent],
+  [{ ...entity, id: 404, cells: [0], centroid: [0, 0, 0] } as Entity],
+  inventoryRevision4,
+);
+assert.ok(revisionBoundPlan.sourceInventory, "revision-bound plan must retain its source inventory");
+assert.ok(planner.commitRecords(revisionBoundPlan, [closedComponent], sameRevisionInventory));
+assert.throws(
+  () => planner.commitRecords(revisionBoundPlan, [closedComponent]),
+  /requires current inventory/,
+  "revision-bound plan must not stage records without re-reading current authority",
+);
+assert.throws(
+  () => planner.commitRecords(revisionBoundPlan, [closedComponent], newerRevisionInventory),
+  /Stale entity reconciliation plan/,
+  "revision-bound plan must reject a stale source revision before staging records",
+);
+console.log("Revision-bound reconciliation plan stale-revision gate: PASS");
+
+
