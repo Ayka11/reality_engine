@@ -328,3 +328,35 @@ const authorityPartial = inventoryAuthority.update({
 assert.equal(authorityPartial.revision, 3, "changing completeness invalidates existing plans");
 assert.throws(() => assertCompleteEntityDomain(authorityPartial, "extinction"), /partial domain inventory/);
 console.log("Entity domain inventory authority monotonic revisions: PASS");
+
+// A split must retain the source identity on exactly one deterministic component
+// and allocate a new identity for the other component; planning must not claim
+// either source entity is extinct merely because the source was split.
+const splitSource = {
+  ...entity,
+  id: 303,
+  cells: [10, 11],
+  centroid: [10.5, 0, 0] as [number, number, number],
+} as Entity;
+const splitComponents: EntityChunkComponent[] = [
+  {
+    id: 31, cells: [10], centroid: [10, 0, 0],
+    touchesSimulationBoundary: false, touchesReadBoundary: false, touchesMixedLODBoundary: false,
+  },
+  {
+    id: 32, cells: [11], centroid: [11, 0, 0],
+    touchesSimulationBoundary: false, touchesReadBoundary: false, touchesMixedLODBoundary: false,
+  },
+];
+const splitPlan = planner.plan(splitComponents, [splitSource]);
+assert.equal(splitPlan.commitReady, true, "closed split components can be planned without global extinction inference");
+assert.deepEqual(splitPlan.proposals.map(proposal => proposal.continuity), ["retained", "split"]);
+assert.deepEqual(splitPlan.proposals.map(proposal => proposal.existingEntityId), [303, null]);
+assert.deepEqual(splitPlan.proposals.map(proposal => proposal.sourceEntityIds), [[303], [303]]);
+assert.deepEqual(splitPlan.extinctEntityIds, [], "splitting a source entity must not infer source extinction");
+const splitRecords = planner.commitRecords(splitPlan, splitComponents);
+assert.ok(splitRecords, "valid closed split plan should produce staged records");
+assert.deepEqual(splitRecords?.map(record => record.entityId), [303, null], "only one split component may retain the original identity");
+assert.deepEqual(splitRecords?.map(record => record.sourceEntityIds), [[303], [303]]);
+console.log("Entity split identity planning regression: PASS");
+
