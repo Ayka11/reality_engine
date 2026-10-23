@@ -6,6 +6,7 @@ import type { InfinityScaleChunkExecutionContext } from "../src/infinity/Infinit
 import { EntityChunkReconciliation } from "../src/infinity/EntityChunkReconciliation.ts";
 import type { EntityChunkComponent, EntityChunkConnectivityResult } from "../src/infinity/EntityChunkConnectivity.ts";
 import { EntityLayer, type Entity } from "../src/simulation/EntityLayer.ts";
+import { assertCompleteEntityDomain, assertEntityDomainRevision, captureEntityDomainInventory } from "../src/infinity/EntityDomainInventory.ts";
 
 const component: EntityChunkComponent = {
   id: 4,
@@ -233,3 +234,60 @@ assert.deepEqual(
   "retry after rollback must reproduce entity identities and state",
 );
 console.log("EntityLayer atomic tick rollback and deterministic RNG replay: PASS");
+
+
+// Revision-bound authoritative inventory contract: immutable snapshot, stale
+// revision rejection, and fail-closed global operations on partial worksets.
+const inventoryRevision4 = captureEntityDomainInventory({
+  scopeId: "world:alpha",
+  revision: 4,
+  completeness: "complete",
+  entityIds: [12, 3],
+  occupiedCells: [8, 2, 5],
+});
+assert.deepEqual(inventoryRevision4.entityIds, [3, 12], "inventory IDs must be canonicalized");
+assert.deepEqual(inventoryRevision4.occupiedCells, [2, 5, 8], "inventory cells must be canonicalized");
+assert.throws(() => (inventoryRevision4.entityIds as number[]).push(99), /extensible|read only|object is not extensible/i,
+  "captured inventory must not permit mutation");
+
+const sameRevisionInventory = captureEntityDomainInventory({
+  scopeId: "world:alpha",
+  revision: 4,
+  completeness: "complete",
+  entityIds: [3, 12],
+  occupiedCells: [2, 5, 8],
+});
+assert.doesNotThrow(() => assertEntityDomainRevision(inventoryRevision4, sameRevisionInventory));
+const newerRevisionInventory = captureEntityDomainInventory({
+  scopeId: "world:alpha",
+  revision: 5,
+  completeness: "complete",
+  entityIds: [3, 12],
+  occupiedCells: [2, 5, 8, 9],
+});
+assert.throws(() => assertEntityDomainRevision(inventoryRevision4, newerRevisionInventory), /Stale entity reconciliation plan/);
+const otherScopeInventory = captureEntityDomainInventory({
+  scopeId: "world:beta",
+  revision: 4,
+  completeness: "complete",
+  entityIds: [3, 12],
+  occupiedCells: [2, 5, 8],
+});
+assert.throws(() => assertEntityDomainRevision(inventoryRevision4, otherScopeInventory), /scope mismatch/);
+
+const partialInventory = captureEntityDomainInventory({
+  scopeId: "world:alpha",
+  revision: 5,
+  completeness: "partial",
+  entityIds: [3],
+  occupiedCells: [2, 5],
+});
+assert.throws(() => assertCompleteEntityDomain(partialInventory, "merge"), /partial domain inventory/);
+assert.throws(() => assertCompleteEntityDomain(partialInventory, "extinction"), /partial domain inventory/);
+assert.doesNotThrow(() => assertCompleteEntityDomain(inventoryRevision4, "merge"));
+assert.doesNotThrow(() => assertCompleteEntityDomain(inventoryRevision4, "extinction"));
+assert.throws(() => captureEntityDomainInventory({
+  scopeId: "world:alpha", revision: 1, completeness: "complete",
+  entityIds: [7, 7], occupiedCells: [0],
+}), /duplicate entity IDs/);
+console.log("Entity domain inventory revision and completeness contract: PASS");
