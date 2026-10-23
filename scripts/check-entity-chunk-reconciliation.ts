@@ -6,6 +6,7 @@ import type { InfinityScaleChunkExecutionContext } from "../src/infinity/Infinit
 import { EntityChunkReconciliation } from "../src/infinity/EntityChunkReconciliation.ts";
 import type { EntityChunkComponent, EntityChunkConnectivityResult } from "../src/infinity/EntityChunkConnectivity.ts";
 import { EntityLayer, type Entity } from "../src/simulation/EntityLayer.ts";
+import { SimulationEngine } from "../src/simulation/SimulationEngine.ts";
 import { assertCompleteEntityDomain, assertEntityDomainRevision, captureEntityDomainInventory, EntityDomainInventoryAuthority } from "../src/infinity/EntityDomainInventory.ts";
 
 const component: EntityChunkComponent = {
@@ -525,4 +526,45 @@ assert.equal(failureRollbackCalled, true);
 console.log("Entity reconciliation apply failure rollback: PASS");
 
 
+// GPU readback must not overwrite state changed while the readback promise is pending.
+async function checkStaleGpuReadbackIsRejected(): Promise<void> {
+  const engine = new SimulationEngine();
+  const internals = engine as unknown as { _gpuReady: boolean };
+  internals._gpuReady = true;
+
+  let resolveReadback!: (data: Float32Array) => void;
+  let markReadbackStarted!: () => void;
+  const readbackStarted = new Promise<void>(resolve => { markReadbackStarted = resolve; });
+  let uploadCount = 0;
+  const gpu = engine.gpu as unknown as {
+    writeParams: (...args: unknown[]) => void;
+    submitCompute: (nSteps: number) => void;
+    readback: () => Promise<Float32Array>;
+    upload: (data: Float32Array) => void;
+  };
+  gpu.writeParams = () => undefined;
+  gpu.submitCompute = () => undefined;
+  gpu.readback = () => new Promise<Float32Array>(resolve => {
+    resolveReadback = resolve;
+    markReadbackStarted();
+  });
+  gpu.upload = () => { uploadCount++; };
+
+  const stepPromise = engine.step(1 / 60);
+  await readbackStarted;
+
+  // Simulate a synchronous runtime/script mutation while GPU readback is awaiting.
+  engine.grid.buffer[0] = 123.25;
+  engine.syncTick(0);
+  const newerValue = engine.grid.buffer[0];
+  resolveReadback(new Float32Array(engine.grid.buffer.length).fill(7));
+
+  await assert.rejects(stepPromise, /Discarded stale GPU readback/);
+  assert.equal(engine.grid.buffer[0], newerValue, "stale GPU data must not overwrite newer grid state");
+  assert.equal(newerValue, 123.25, "newer synchronous mutation must survive");
+  assert.ok(uploadCount >= 1, "GPU must be resynchronized from the authoritative CPU buffer");
+  console.log("SimulationEngine rejects stale GPU readback after syncTick mutation: PASS");
+}
+
+await checkStaleGpuReadbackIsRejected();
 
