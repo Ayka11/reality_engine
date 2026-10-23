@@ -437,6 +437,14 @@ const transactionRecords = planner.commitAtomically(
   (_staged, records) => {
     transactionApplied = true;
     transactionState.value = `committed:${records.length}`;
+    // A successful reconciliation may publish the resulting domain at a newer
+    // revision. The source revision guards entry into apply; it is not a required
+    // postcondition after the transaction has committed.
+    transactionAuthority.update({
+      completeness: "complete",
+      entityIds: [404],
+      occupiedCells: [0, 1],
+    });
   },
   staged => {
     transactionRolledBack = true;
@@ -447,6 +455,7 @@ assert.ok(transactionRecords);
 assert.equal(transactionApplied, true, "revision-valid transaction must apply exactly once");
 assert.equal(transactionRolledBack, false, "successful transaction must not roll back");
 assert.equal(transactionState.value, "committed:1");
+assert.equal(transactionAuthority.snapshot().revision, transactionInventory.revision + 1, "successful apply may publish the next domain revision");
 console.log("Entity reconciliation synchronous atomic apply: PASS");
 
 // A revision change after staging but before apply must be rejected, and the
