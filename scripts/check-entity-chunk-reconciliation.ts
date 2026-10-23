@@ -568,3 +568,39 @@ async function checkStaleGpuReadbackIsRejected(): Promise<void> {
 
 await checkStaleGpuReadbackIsRejected();
 
+
+
+// Aggregate plan readiness must be enforced at the transaction boundary too:
+// incomplete mixed-LOD topology must not even enter stage/apply.
+const incompleteTransactionAuthority = new EntityDomainInventoryAuthority("world:atomic-incomplete");
+const incompleteTransactionInventory = incompleteTransactionAuthority.update({
+  completeness: "partial",
+  entityIds: [77],
+  occupiedCells: [10],
+});
+const incompleteTransactionPlan = planner.planAtInventory(
+  [component],
+  [entity],
+  incompleteTransactionInventory,
+  incompleteConnectivity,
+);
+assert.equal(incompleteTransactionPlan.commitReady, false);
+let incompleteStageCalled = false;
+let incompleteApplyCalled = false;
+let incompleteRollbackCalled = false;
+const incompleteTransactionRecords = planner.commitAtomically(
+  incompleteTransactionPlan,
+  [component],
+  () => incompleteTransactionAuthority.snapshot(),
+  () => {
+    incompleteStageCalled = true;
+    return { staged: true };
+  },
+  () => { incompleteApplyCalled = true; },
+  () => { incompleteRollbackCalled = true; },
+);
+assert.equal(incompleteTransactionRecords, null, "incomplete plan must be rejected at transaction boundary");
+assert.equal(incompleteStageCalled, false, "incomplete plan must not stage mutations");
+assert.equal(incompleteApplyCalled, false, "incomplete plan must never enter apply");
+assert.equal(incompleteRollbackCalled, false, "no rollback is needed when transaction is rejected before staging");
+console.log("Entity reconciliation incomplete plan blocked before staging: PASS");
