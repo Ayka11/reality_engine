@@ -36,11 +36,11 @@
     "test:agent-worldevents-rng-recovery": "node scripts/check-agent-worldevents-rng-recovery.mjs",
     "test:terrain-worldcomposer-rng-recovery": "node scripts/check-terrain-worldcomposer-rng-recovery.mjs",
     "test:simworker-rng-recovery": "node scripts/check-simworker-rng-recovery.mjs",
-    "test:infinity-scale-mixed-lod": "npx --yes tsx scripts/check-infinity-scale-mixed-lod.ts",
-    "test:infinity-scale-face-coverage": "npx --yes tsx scripts/check-infinity-scale-face-coverage.ts",
-    "test:infinity-scale-independent-topology": "npx --yes tsx scripts/check-infinity-scale-independent-topology.ts",
-    "test:infinity-scale-adaptive-lod-bridge": "npx --yes tsx scripts/check-infinity-scale-adaptive-lod-bridge.ts",
-    "test:entity-chunk-reconciliation": "npx --yes tsx scripts/check-entity-chunk-reconciliation.ts"
+    "test:infinity-scale-mixed-lod": "tsx scripts/check-infinity-scale-mixed-lod.ts",
+    "test:infinity-scale-face-coverage": "tsx scripts/check-infinity-scale-face-coverage.ts",
+    "test:infinity-scale-independent-topology": "tsx scripts/check-infinity-scale-independent-topology.ts",
+    "test:infinity-scale-adaptive-lod-bridge": "tsx scripts/check-infinity-scale-adaptive-lod-bridge.ts",
+    "test:entity-chunk-reconciliation": "tsx scripts/check-entity-chunk-reconciliation.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -48,6 +48,7 @@
     "@webgpu/types": "^0.1.70",
     "playwright": "^1.60.0",
     "typescript": "^5.4.0",
+    "tsx": "4.20.6",
     "vite": "^8.3.4",
     "esbuild": "^0.28.2"
   },
