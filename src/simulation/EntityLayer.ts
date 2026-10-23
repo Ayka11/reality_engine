@@ -199,6 +199,17 @@ export class EntityLayer {
 
       if (best) {
         matched.add(best.id);
+        // Remove stale ownership from the previous footprint before replacing it.
+        // Clear only markers that still name this entity: another entity may
+        // already have claimed a cell during reconciliation.
+        const nextCellSet = new Set(blob);
+        for (const previousCell of best.cells) {
+          if (nextCellSet.has(previousCell)) continue;
+          const previousBase = previousCell * CELL_FIELDS;
+          if (buf[previousBase + F.ENTITY_ID] === best.id) {
+            buf[previousBase + F.ENTITY_ID] = 0;
+          }
+        }
         best.cells = blob;
         best.centroid = c;
         nextEntities.set(best.id, best);
