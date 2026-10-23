@@ -281,10 +281,10 @@ export class EntityChunkReconciliation {
 
     try {
       assertEntityDomainRevision(plan.sourceInventory, getCurrentInventory());
+      // apply() is the synchronous critical section. It may legitimately publish
+      // the resulting domain under a newer revision, so do not compare the post-apply
+      // snapshot with the source revision. No await may occur between this check and apply.
       apply(staged, records);
-      // Defensive postcondition: if apply synchronously changed the authoritative
-      // domain revision, restore the staged state instead of accepting a torn commit.
-      assertEntityDomainRevision(plan.sourceInventory, getCurrentInventory());
     } catch (error) {
       try {
         rollback(staged);
