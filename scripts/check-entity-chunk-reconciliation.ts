@@ -245,6 +245,10 @@ const inventoryRevision4 = captureEntityDomainInventory({
   completeness: "complete",
   entityIds: [12, 3],
   occupiedCells: [8, 2, 5],
+  entityCellOwnership: [
+    { entityId: 3, cells: [2, 5] },
+    { entityId: 12, cells: [8] },
+  ],
 });
 assert.deepEqual(inventoryRevision4.entityIds, [3, 12], "inventory IDs must be canonicalized");
 assert.deepEqual(inventoryRevision4.occupiedCells, [2, 5, 8], "inventory cells must be canonicalized");
@@ -258,6 +262,10 @@ const sameRevisionInventory = captureEntityDomainInventory({
   completeness: "complete",
   entityIds: [3, 12],
   occupiedCells: [2, 5, 8],
+  entityCellOwnership: [
+    { entityId: 3, cells: [2, 5] },
+    { entityId: 12, cells: [8] },
+  ],
 });
 assert.doesNotThrow(() => assertEntityDomainRevision(inventoryRevision4, sameRevisionInventory));
 const forgedSameRevisionInventory = captureEntityDomainInventory({
@@ -266,6 +274,10 @@ const forgedSameRevisionInventory = captureEntityDomainInventory({
   completeness: "complete",
   entityIds: [3, 12],
   occupiedCells: [2, 5, 8, 99],
+  entityCellOwnership: [
+    { entityId: 3, cells: [2, 5, 99] },
+    { entityId: 12, cells: [8] },
+  ],
 });
 assert.throws(
   () => assertEntityDomainRevision(inventoryRevision4, forgedSameRevisionInventory),
@@ -286,6 +298,10 @@ const newerRevisionInventory = captureEntityDomainInventory({
   completeness: "complete",
   entityIds: [3, 12],
   occupiedCells: [2, 5, 8, 9],
+  entityCellOwnership: [
+    { entityId: 3, cells: [2, 5, 9] },
+    { entityId: 12, cells: [8] },
+  ],
 });
 assert.throws(() => assertEntityDomainRevision(inventoryRevision4, newerRevisionInventory), /Stale entity reconciliation plan/);
 const otherScopeInventory = captureEntityDomainInventory({
@@ -306,6 +322,23 @@ const partialInventory = captureEntityDomainInventory({
 });
 assert.throws(() => assertCompleteEntityDomain(partialInventory, "merge"), /partial domain inventory/);
 assert.throws(() => assertCompleteEntityDomain(partialInventory, "extinction"), /partial domain inventory/);
+const completeLegacyInventory = captureEntityDomainInventory({
+  scopeId: "world:legacy-complete",
+  revision: 1,
+  completeness: "complete",
+  entityIds: [7],
+  occupiedCells: [0],
+});
+assert.throws(
+  () => assertCompleteEntityDomain(completeLegacyInventory, "merge"),
+  /without entity-cell ownership inventory/,
+  "complete flag alone must not authorize a global merge",
+);
+assert.throws(
+  () => assertCompleteEntityDomain(completeLegacyInventory, "extinction"),
+  /without entity-cell ownership inventory/,
+  "complete flag alone must not authorize extinction",
+);
 assert.doesNotThrow(() => assertCompleteEntityDomain(inventoryRevision4, "merge"));
 assert.doesNotThrow(() => assertCompleteEntityDomain(inventoryRevision4, "extinction"));
 assert.throws(() => captureEntityDomainInventory({
