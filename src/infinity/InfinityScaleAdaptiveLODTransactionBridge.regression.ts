@@ -16,6 +16,9 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   if (defaultExecutionPlan.entityExecutionReady) {
     throw new Error("Entity reconciliation must remain not-ready until wired to runtime transactions");
   }
+  if (defaultExecutionPlan.agentMigrationReady) {
+    throw new Error("Agent migration must remain not-ready until wired to the authoritative runtime transaction");
+  }
   const plan: InfinityScaleExecutionPlan = {
     revision: 0, mode: "selective-cpu-ready", observer: { x: 0, y: 0, z: 0 },
     chunks: [], simulationBudget: 0, requestedSimulationCount: 0, selectedSimulationCount: 0,
