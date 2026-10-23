@@ -232,6 +232,12 @@ export class EntityLayer {
         for (const i of dead.cells) {
           const base = i * CELL_FIELDS;
           buf[base + F.ENERGY] = Math.min(9999, buf[base + F.ENERGY] + dead.energy * 0.3 / Math.max(1, dead.cells.length));
+          // Clear stale ownership only when the cell still names this extinct
+          // entity. A cell reassigned during this tick will be marked again
+          // by the surviving/new entity's behaviour pass below.
+          if (buf[base + F.ENTITY_ID] === id) {
+            buf[base + F.ENTITY_ID] = 0;
+          }
         }
       }
     }
