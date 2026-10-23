@@ -44,6 +44,7 @@ export interface InfinityScaleExecutionPlan {
   gpuPhysicsReady: boolean;
   lodBoundaryTransferReady: boolean;
   mixedLodExecutionReady: boolean;
+  /** True only when chunk-aware entity reconciliation is wired to the runtime transaction. */
   entityExecutionReady: boolean;
   agentMigrationReady: boolean;
 }
@@ -104,7 +105,7 @@ export class InfinityScaleExecutionAdapter {
       gpuPhysicsReady: this.capabilities.gpuPhysicsReady,
       lodBoundaryTransferReady: this.capabilities.lodBoundaryTransferReady,
       mixedLodExecutionReady: this.capabilities.mixedLodExecutionReady,
-      entityExecutionReady: true,
+      entityExecutionReady: false,
       agentMigrationReady: true,
     };
 
@@ -240,7 +241,7 @@ export class InfinityScaleExecutionAdapter {
       gpuPhysicsReady: this.capabilities.gpuPhysicsReady,
       lodBoundaryTransferReady: this.capabilities.lodBoundaryTransferReady,
       mixedLodExecutionReady: this.capabilities.mixedLodExecutionReady,
-      entityExecutionReady: true,
+      entityExecutionReady: false,
       agentMigrationReady: true,
     };
 
