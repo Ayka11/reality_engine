@@ -634,3 +634,36 @@ assert.equal(unboundStageCalled, false, "unbound plan must not enter staging");
 assert.equal(unboundApplyCalled, false, "unbound plan must not enter apply");
 assert.equal(unboundRollbackCalled, false, "unbound plan rejected before staging must not invoke rollback");
 console.log("Entity reconciliation unbound plan rejected before transaction callbacks: PASS");
+
+
+// Canonical entity-to-cell ownership must participate in same-revision checks.
+// Swapping cell membership while preserving entity IDs and the global occupied
+// cell set is a different authoritative domain and must be rejected.
+const ownershipSnapshotA = captureEntityDomainInventory({
+  scopeId: "world:ownership",
+  revision: 7,
+  completeness: "complete",
+  entityIds: [11, 12],
+  occupiedCells: [100, 101],
+  entityCellOwnership: [
+    { entityId: 11, cells: [100] },
+    { entityId: 12, cells: [101] },
+  ],
+});
+const ownershipSnapshotSwapped = captureEntityDomainInventory({
+  scopeId: "world:ownership",
+  revision: 7,
+  completeness: "complete",
+  entityIds: [12, 11],
+  occupiedCells: [101, 100],
+  entityCellOwnership: [
+    { entityId: 11, cells: [101] },
+    { entityId: 12, cells: [100] },
+  ],
+});
+assert.throws(
+  () => assertEntityDomainRevision(ownershipSnapshotA, ownershipSnapshotSwapped),
+  /content mismatch/,
+  "same revision and global cell set must not conceal changed entity-cell ownership",
+);
+console.log("Entity inventory rejects same-revision ownership reassignment: PASS");
