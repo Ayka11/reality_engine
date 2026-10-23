@@ -160,9 +160,12 @@ export class EntityChunkReconciliation {
         (sourceComponentCounts.get(sourceEntityIds[0]) ?? 0) > 1;
       const mergeSource = sourceEntityIds.length > 1;
 
+      // The first deterministically matched component keeps the source
+      // identity; only additional components from that same source are split
+      // children and require a newly allocated identity.
       const continuity = mergeSource
         ? "merge"
-        : splitSource
+        : splitSource && !best
           ? "split"
           : best
             ? "retained"
