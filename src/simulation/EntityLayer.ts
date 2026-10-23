@@ -143,7 +143,17 @@ export class EntityLayer {
   tick(grid: VoxelGrid, dt: number): void {
     const originalEntities = new Map(this.entities);
     const entitySnapshots = new Map<number, Entity>();
-    for (const [id, entity] of originalEntities) entitySnapshots.set(id, cloneEntity(entity));
+    const entityMutableRefs = new Map<number, Pick<Entity, "cells" | "centroid" | "genome" | "memoryBuffer" | "colorRgb">>();
+    for (const [id, entity] of originalEntities) {
+      entitySnapshots.set(id, cloneEntity(entity));
+      entityMutableRefs.set(id, {
+        cells: entity.cells,
+        centroid: entity.centroid,
+        genome: entity.genome,
+        memoryBuffer: entity.memoryBuffer,
+        colorRgb: entity.colorRgb,
+      });
+    }
     const bufferSnapshot = grid.buffer.slice();
     const thresholdSnapshot = this.bioThreshold;
     const nextIdSnapshot = this.nextId;
@@ -307,6 +317,14 @@ export class EntityLayer {
       grid.buffer.set(bufferSnapshot);
       for (const [id, original] of originalEntities) {
         const snapshot = entitySnapshots.get(id)!;
+        const refs = entityMutableRefs.get(id)!;
+        // Reattach the original nested references first: tick reconciliation can
+        // replace cells/centroid, so restoring values alone would lose identity.
+        original.cells = refs.cells;
+        original.centroid = refs.centroid;
+        original.genome = refs.genome;
+        original.memoryBuffer = refs.memoryBuffer;
+        original.colorRgb = refs.colorRgb;
         original.cells.splice(0, original.cells.length, ...snapshot.cells);
         original.centroid[0] = snapshot.centroid[0];
         original.centroid[1] = snapshot.centroid[1];
