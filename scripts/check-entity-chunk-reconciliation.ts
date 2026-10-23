@@ -667,3 +667,33 @@ assert.throws(
   "same revision and global cell set must not conceal changed entity-cell ownership",
 );
 console.log("Entity inventory rejects same-revision ownership reassignment: PASS");
+
+
+// The trusted inventory authority must advance its revision when ownership
+// changes, even if entity IDs and the global occupied-cell set are unchanged.
+const ownershipAuthority = new EntityDomainInventoryAuthority("world:ownership-authority");
+const ownershipRevisionA = ownershipAuthority.update({
+  completeness: "complete",
+  entityIds: [11, 12],
+  occupiedCells: [100, 101],
+  entityCellOwnership: [
+    { entityId: 11, cells: [100] },
+    { entityId: 12, cells: [101] },
+  ],
+});
+const ownershipRevisionB = ownershipAuthority.update({
+  completeness: "complete",
+  entityIds: [12, 11],
+  occupiedCells: [101, 100],
+  entityCellOwnership: [
+    { entityId: 11, cells: [101] },
+    { entityId: 12, cells: [100] },
+  ],
+});
+assert.equal(ownershipRevisionB.revision, ownershipRevisionA.revision + 1);
+assert.throws(
+  () => assertEntityDomainRevision(ownershipRevisionA, ownershipRevisionB),
+  /Stale entity reconciliation plan/,
+  "authority must invalidate plans after entity-cell ownership changes",
+);
+console.log("Entity inventory authority increments revision on ownership reassignment: PASS");
