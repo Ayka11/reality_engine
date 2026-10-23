@@ -413,4 +413,107 @@ assert.throws(
 );
 console.log("Revision-bound reconciliation plan stale-revision gate: PASS");
 
+// The synchronous transaction API checks revision immediately before apply,
+// and rolls back if apply fails or changes the authoritative revision.
+const transactionAuthority = new EntityDomainInventoryAuthority("world:atomic-transaction");
+const transactionInventory = transactionAuthority.update({
+  completeness: "complete",
+  entityIds: [404],
+  occupiedCells: [0],
+});
+const transactionPlan = planner.planAtInventory(
+  [closedComponent],
+  [{ ...entity, id: 404, cells: [0], centroid: [0, 0, 0] } as Entity],
+  transactionInventory,
+);
+const transactionState = { value: "before" };
+let transactionApplied = false;
+let transactionRolledBack = false;
+const transactionRecords = planner.commitAtomically(
+  transactionPlan,
+  [closedComponent],
+  () => transactionAuthority.snapshot(),
+  records => ({ before: transactionState.value, records }),
+  (_staged, records) => {
+    transactionApplied = true;
+    transactionState.value = `committed:${records.length}`;
+  },
+  staged => {
+    transactionRolledBack = true;
+    transactionState.value = staged.before;
+  },
+);
+assert.ok(transactionRecords);
+assert.equal(transactionApplied, true, "revision-valid transaction must apply exactly once");
+assert.equal(transactionRolledBack, false, "successful transaction must not roll back");
+assert.equal(transactionState.value, "committed:1");
+console.log("Entity reconciliation synchronous atomic apply: PASS");
+
+// A revision change after staging but before apply must be rejected, and the
+// apply callback must never run.
+const staleTransactionAuthority = new EntityDomainInventoryAuthority("world:atomic-stale");
+const staleTransactionInventory = staleTransactionAuthority.update({
+  completeness: "complete",
+  entityIds: [404],
+  occupiedCells: [0],
+});
+const staleTransactionPlan = planner.planAtInventory(
+  [closedComponent],
+  [{ ...entity, id: 404, cells: [0], centroid: [0, 0, 0] } as Entity],
+  staleTransactionInventory,
+);
+let staleApplyCalled = false;
+let staleRollbackCalled = false;
+assert.throws(() => planner.commitAtomically(
+  staleTransactionPlan,
+  [closedComponent],
+  () => staleTransactionAuthority.snapshot(),
+  () => {
+    staleTransactionAuthority.update({
+      completeness: "complete",
+      entityIds: [404],
+      occupiedCells: [0, 1],
+    });
+    return { snapshot: "pre-apply" };
+  },
+  () => { staleApplyCalled = true; },
+  () => { staleRollbackCalled = true; },
+), /Stale entity reconciliation plan/);
+assert.equal(staleApplyCalled, false, "stale plan must never enter the apply callback");
+assert.equal(staleRollbackCalled, true, "staged transaction must invoke rollback on failed pre-apply validation");
+console.log("Entity reconciliation stale revision blocks apply: PASS");
+
+// A partial apply failure must call rollback and preserve the original error.
+const failureAuthority = new EntityDomainInventoryAuthority("world:atomic-failure");
+const failureInventory = failureAuthority.update({
+  completeness: "complete",
+  entityIds: [404],
+  occupiedCells: [0],
+});
+const failurePlan = planner.planAtInventory(
+  [closedComponent],
+  [{ ...entity, id: 404, cells: [0], centroid: [0, 0, 0] } as Entity],
+  failureInventory,
+);
+const failureState = { value: "original" };
+let failureRollbackCalled = false;
+assert.throws(() => planner.commitAtomically(
+  failurePlan,
+  [closedComponent],
+  () => failureAuthority.snapshot(),
+  () => ({ before: failureState.value }),
+  () => {
+    failureState.value = "partially-mutated";
+    throw new Error("simulated apply failure");
+  },
+  staged => {
+    failureState.value = staged.before;
+    failureRollbackCalled = true;
+  },
+), /simulated apply failure/);
+assert.equal(failureState.value, "original", "rollback must restore the staged snapshot");
+assert.equal(failureRollbackCalled, true);
+console.log("Entity reconciliation apply failure rollback: PASS");
+
+
 
