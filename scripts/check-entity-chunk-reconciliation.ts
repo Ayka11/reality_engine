@@ -206,6 +206,31 @@ for (const index of extinctCells) {
 }
 console.log("Entity extinction clears stale cell ownership: PASS");
 
+// A surviving entity that loses cells must not leave stale ownership markers
+// outside its newly reconciled footprint.
+const footprintShiftCase = makeEntityTickScenario();
+const survivingEntityId = footprintShiftCase.entity.id;
+const previousFootprint = footprintShiftCase.entity.cells.slice();
+const removedFootprintCell = previousFootprint[0]!;
+footprintShiftCase.grid.buffer[removedFootprintCell * CELL_FIELDS + F.BIO_POTENTIAL] = 0;
+footprintShiftCase.layer.tick(footprintShiftCase.grid, 1 / 60);
+const survivingEntity = footprintShiftCase.layer.getEntities().find(entity => entity.id === survivingEntityId);
+assert.ok(survivingEntity, "entity must survive when its connected blob shrinks");
+assert.equal(
+  footprintShiftCase.grid.buffer[removedFootprintCell * CELL_FIELDS + F.ENTITY_ID],
+  0,
+  "cell dropped from a surviving entity footprint must lose its stale ownership marker",
+);
+for (const index of survivingEntity.cells) {
+  assert.equal(
+    footprintShiftCase.grid.buffer[index * CELL_FIELDS + F.ENTITY_ID],
+    survivingEntityId,
+    `new surviving footprint must retain ownership at cell ${index}`,
+  );
+}
+assert.equal(survivingEntity.cells.includes(removedFootprintCell), false, "removed cell must not remain in the entity footprint");
+console.log("Surviving entity footprint shift clears stale ownership: PASS");
+
 const rollbackCase = makeEntityTickScenario();
 const controlCase = makeEntityTickScenario();
 const originalEntity = rollbackCase.entity;
