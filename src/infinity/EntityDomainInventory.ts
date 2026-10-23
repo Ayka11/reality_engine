@@ -16,6 +16,8 @@ export interface EntityDomainInventoryInput {
   completeness: EntityDomainCompleteness;
   entityIds: readonly number[];
   occupiedCells: readonly number[];
+  /** Optional during migration; authoritative producers should provide this to bind cells to entity identity. */
+  entityCellOwnership?: readonly { entityId: number; cells: readonly number[] }[];
 }
 
 export interface EntityDomainInventory {
@@ -24,6 +26,7 @@ export interface EntityDomainInventory {
   readonly completeness: EntityDomainCompleteness;
   readonly entityIds: readonly number[];
   readonly occupiedCells: readonly number[];
+  readonly entityCellOwnership?: readonly { readonly entityId: number; readonly cells: readonly number[] }[];
 }
 
 export function captureEntityDomainInventory(
@@ -40,7 +43,7 @@ export function captureEntityDomainInventory(
   }
 
   const entityIds = [...input.entityIds].sort((a, b) => a - b);
-  const occupiedCells = [...input.occupiedCells].sort((a, b) => a - b);
+  const occupiedCells = [...input.occupiedCells].sort((a, b) => a - b);\n  const entityCellOwnership = input.entityCellOwnership?.map(({ entityId, cells }) => ({\n    entityId,\n    cells: [...cells].sort((a, b) => a - b),\n  })).sort((a, b) => a.entityId - b.entityId);
 
   if (entityIds.some(id => !Number.isSafeInteger(id) || id < 1)) {
     throw new Error("Entity domain inventory IDs must be positive safe integers");
@@ -55,12 +58,11 @@ export function captureEntityDomainInventory(
     throw new Error("Entity domain inventory contains duplicate occupied cells");
   }
 
-  return Object.freeze({
-    scopeId: input.scopeId,
+  if (entityCellOwnership) {\n    if (entityCellOwnership.some(entry => !Number.isSafeInteger(entry.entityId) || entry.entityId < 1)) {\n      throw new Error("Entity cell ownership IDs must be positive safe integers");\n    }\n    if (new Set(entityCellOwnership.map(entry => entry.entityId)).size !== entityCellOwnership.length) {\n      throw new Error("Entity cell ownership contains duplicate entity IDs");\n    }\n    for (const entry of entityCellOwnership) {\n      if (entry.cells.some(cell => !Number.isSafeInteger(cell) || cell < 0) || new Set(entry.cells).size !== entry.cells.length) {\n        throw new Error(`Entity cell ownership for ${entry.entityId} contains invalid or duplicate cells`);\n      }\n    }\n  }\n\n  return Object.freeze({\n    scopeId: input.scopeId,
     revision: input.revision,
     completeness: input.completeness,
     entityIds: Object.freeze(entityIds),
-    occupiedCells: Object.freeze(occupiedCells),
+    occupiedCells: Object.freeze(occupiedCells),\n    ...(entityCellOwnership ? { entityCellOwnership: Object.freeze(entityCellOwnership.map(entry => Object.freeze({\n      entityId: entry.entityId, cells: Object.freeze(entry.cells),\n    }))) } : {}),
   });
 }
 
@@ -85,8 +87,7 @@ export function assertEntityDomainRevision(
   if (
     captured.completeness !== current.completeness ||
     !sameNumbers(captured.entityIds, current.entityIds) ||
-    !sameNumbers(captured.occupiedCells, current.occupiedCells)
-  ) {
+    !sameNumbers(captured.occupiedCells, current.occupiedCells) ||\n    !sameOwnership(captured.entityCellOwnership, current.entityCellOwnership)\n  ) {
     throw new Error(
       `Entity domain inventory content mismatch at revision ${captured.revision}`,
     );
@@ -138,13 +139,10 @@ export class EntityDomainInventoryAuthority {
       revision: this.current.revision,
       completeness: input.completeness,
       entityIds: input.entityIds,
-      occupiedCells: input.occupiedCells,
-    });
-
-    const unchanged =
+      occupiedCells: input.occupiedCells,\n      entityCellOwnership: input.entityCellOwnership,\n    });\n\n    const unchanged =
       candidate.completeness === this.current.completeness &&
       sameNumbers(candidate.entityIds, this.current.entityIds) &&
-      sameNumbers(candidate.occupiedCells, this.current.occupiedCells);
+      sameNumbers(candidate.occupiedCells, this.current.occupiedCells) &&\n      sameOwnership(candidate.entityCellOwnership, this.current.entityCellOwnership);
     if (unchanged) return this.current;
 
     if (this.current.revision >= Number.MAX_SAFE_INTEGER) {
@@ -156,12 +154,10 @@ export class EntityDomainInventoryAuthority {
       revision: this.current.revision + 1,
       completeness: input.completeness,
       entityIds: input.entityIds,
-      occupiedCells: input.occupiedCells,
-    });
-    return this.current;
+      occupiedCells: input.occupiedCells,\n      entityCellOwnership: input.entityCellOwnership,\n    });\n    return this.current;
   }
 }
 
-function sameNumbers(left: readonly number[], right: readonly number[]): boolean {
+function sameOwnership(\n  left: EntityDomainInventory["entityCellOwnership"],\n  right: EntityDomainInventory["entityCellOwnership"],\n): boolean {\n  if (left === undefined || right === undefined) return left === right;\n  return left.length === right.length && left.every((entry, index) =>\n    entry.entityId === right[index]?.entityId && sameNumbers(entry.cells, right[index]?.cells ?? []),\n  );\n}\n\nfunction sameNumbers(left: readonly number[], right: readonly number[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
