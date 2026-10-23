@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { VoxelGrid } from "../src/core/VoxelGrid.ts";
+import { SparseVoxelGrid } from "../src/core/SparseVoxelGrid.ts";
 import { CELL_FIELDS, F } from "../src/core/CellState.ts";
 import { EntityChunkConnectivity } from "../src/infinity/EntityChunkConnectivity.ts";
 import type { InfinityScaleChunkExecutionContext } from "../src/infinity/InfinityScaleChunkExecutionContext.ts";
@@ -142,6 +143,23 @@ const singletonConnectivity = new EntityChunkConnectivity().analyze(
 );
 assert.equal(singletonConnectivity.components.length, 1, "isolated occupied cell must remain visible as a singleton component");
 assert.deepEqual(singletonConnectivity.components[0]?.cells, [0], "singleton component must preserve its cell index");
+
+// Sparse dense/chunk ownership must fail closed on unsynchronized writes.
+const sparseOwnershipGrid = new SparseVoxelGrid(2, 2, 2);
+sparseOwnershipGrid.assertDenseEntityOwnershipSynchronized();
+const sparseChunkCell = sparseOwnershipGrid.getCell(0, 0, 0);
+assert.ok(sparseChunkCell, "dense-window chunk cell must exist");
+sparseChunkCell.entityId = 42;
+assert.throws(
+  () => sparseOwnershipGrid.assertDenseEntityOwnershipSynchronized(),
+  /Dense\/chunk entity ownership mismatch/,
+  "chunk-only ENTITY_ID writes must be rejected before inventory capture",
+);
+sparseOwnershipGrid.syncDenseToChunks();
+assert.doesNotThrow(
+  () => sparseOwnershipGrid.assertDenseEntityOwnershipSynchronized(),
+  "explicit dense-to-chunk synchronization must restore ownership consistency",
+);
 
 console.log("Entity chunk reconciliation boundary safety: PASS");
 
