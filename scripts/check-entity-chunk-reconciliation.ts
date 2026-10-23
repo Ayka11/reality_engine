@@ -302,6 +302,60 @@ assert.deepEqual(
 );
 console.log("EntityLayer atomic tick rollback and deterministic RNG replay: PASS");
 
+// SparseVoxelGrid rollback must restore the back buffer and keep chunk mirrors
+// consistent with the restored dense front buffer.
+const sparseRollbackGrid = new SparseVoxelGrid(8, 8, 1);
+const sparseRollbackLayer = new EntityLayer();
+sparseRollbackLayer.setRandomSeed(0x12345678);
+for (const index of [9, 10, 17, 18]) {
+  sparseRollbackGrid.buffer[index * CELL_FIELDS + F.BIO_POTENTIAL] = 1;
+  sparseRollbackGrid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
+}
+sparseRollbackGrid.syncDenseToChunks();
+sparseRollbackLayer.tick(sparseRollbackGrid, 1 / 60);
+sparseRollbackGrid.syncDenseToChunks();
+const sparseRollbackEntity = sparseRollbackLayer.getEntities()[0];
+assert.ok(sparseRollbackEntity, "sparse rollback fixture must create a real entity");
+sparseRollbackEntity.age = 59;
+sparseRollbackEntity.genome.reproThreshold = 1;
+sparseRollbackEntity.energy = 321;
+for (const index of sparseRollbackEntity.cells) {
+  sparseRollbackGrid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
+}
+sparseRollbackGrid.snapshot();
+const sparseBackBufferBeforeFailure = Array.from(sparseRollbackGrid.backBuffer);
+const sparseRollbackInternals = sparseRollbackLayer as unknown as {
+  _spawnChild: (...args: unknown[]) => void;
+};
+const sparseOriginalSpawnChild = sparseRollbackInternals._spawnChild;
+sparseRollbackInternals._spawnChild = function (...args: unknown[]) {
+  sparseOriginalSpawnChild.apply(sparseRollbackLayer, args);
+  throw new Error("injected sparse-grid reproduction failure");
+};
+assert.throws(
+  () => sparseRollbackLayer.tick(sparseRollbackGrid, 1 / 60),
+  /injected sparse-grid reproduction failure/,
+);
+assert.deepEqual(
+  Array.from(sparseRollbackGrid.backBuffer),
+  sparseBackBufferBeforeFailure,
+  "failed sparse entity tick must restore backBuffer",
+);
+assert.doesNotThrow(
+  () => sparseRollbackGrid.assertDenseEntityOwnershipSynchronized(),
+  "failed sparse entity tick must restore dense/chunk ownership consistency",
+);
+const sparseDenseAfterRollback = Array.from(sparseRollbackGrid.buffer);
+sparseRollbackGrid.syncChunksToDense();
+assert.deepEqual(
+  Array.from(sparseRollbackGrid.buffer),
+  sparseDenseAfterRollback,
+  "syncChunksToDense after rollback must not reintroduce stale ownership",
+);
+sparseRollbackInternals._spawnChild = sparseOriginalSpawnChild;
+console.log("SparseVoxelGrid entity tick rollback consistency: PASS");
+
+
 
 // Revision-bound authoritative inventory contract: immutable snapshot, stale
 // revision rejection, and fail-closed global operations on partial worksets.
