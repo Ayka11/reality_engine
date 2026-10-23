@@ -247,7 +247,17 @@ export class EntityChunkReconciliation {
     });
   }
 
-  buildCommit(plan: EntityReconciliationPlan): EntityReconciliationCommit | null {
+  buildCommit(
+    plan: EntityReconciliationPlan,
+    currentInventory?: EntityDomainInventory,
+  ): EntityReconciliationCommit | null {
+    // Do not let callers bypass the revision gate through the summary API.
+    if (plan.sourceInventory) {
+      if (!currentInventory) {
+        throw new Error("Revision-bound entity plan requires current inventory before building commit");
+      }
+      assertEntityDomainRevision(plan.sourceInventory, currentInventory);
+    }
     if (!plan.commitReady) return null;
 
     return {
