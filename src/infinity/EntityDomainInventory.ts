@@ -74,6 +74,13 @@ export function captureEntityDomainInventory(
         throw new Error(`Entity cell ownership for ${entry.entityId} contains invalid or duplicate cells`);
       }
     }
+    if (!sameNumbers(entityCellOwnership.map(entry => entry.entityId), entityIds)) {
+      throw new Error("Entity cell ownership IDs must exactly match the inventory entity IDs");
+    }
+    const ownedCells = entityCellOwnership.flatMap(entry => entry.cells).sort((a, b) => a - b);
+    if (new Set(ownedCells).size !== ownedCells.length || !sameNumbers(ownedCells, occupiedCells)) {
+      throw new Error("Entity cell ownership must partition the occupied cell inventory without overlap");
+    }
   }
 
   return Object.freeze({
