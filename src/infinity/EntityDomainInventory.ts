@@ -35,6 +35,9 @@ export function captureEntityDomainInventory(
   if (!Number.isSafeInteger(input.revision) || input.revision < 0) {
     throw new Error("Entity domain inventory revision must be a non-negative safe integer");
   }
+  if (input.completeness !== "complete" && input.completeness !== "partial") {
+    throw new Error("Entity domain inventory completeness must be complete or partial");
+  }
 
   const entityIds = [...input.entityIds].sort((a, b) => a - b);
   const occupiedCells = [...input.occupiedCells].sort((a, b) => a - b);
@@ -74,6 +77,18 @@ export function assertEntityDomainRevision(
   if (captured.revision !== current.revision) {
     throw new Error(
       `Stale entity reconciliation plan: captured revision ${captured.revision}, current revision ${current.revision}`,
+    );
+  }
+  // Revision numbers are meaningful only within the trusted authority that
+  // owns them. Also compare canonical contents so a forged/reconstructed
+  // snapshot cannot reuse the same revision while describing a different domain.
+  if (
+    captured.completeness !== current.completeness ||
+    !sameNumbers(captured.entityIds, current.entityIds) ||
+    !sameNumbers(captured.occupiedCells, current.occupiedCells)
+  ) {
+    throw new Error(
+      `Entity domain inventory content mismatch at revision ${captured.revision}`,
     );
   }
 }
