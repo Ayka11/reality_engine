@@ -68,7 +68,7 @@ export interface InfinityScaleExecutionCapabilities {
 export class InfinityScaleExecutionAdapter {
   private plan: InfinityScaleExecutionPlan;
   private capabilities: InfinityScaleExecutionCapabilities = {
-    selectiveCpuReady: true,
+    selectiveCpuReady: false,
     selectiveGpuReady: false,
     gpuPhysicsReady: false,
     lodBoundaryTransferReady: false,
@@ -86,7 +86,7 @@ export class InfinityScaleExecutionAdapter {
   constructor() {
     this.plan = {
       revision: 0,
-      mode: "selective-cpu-ready",
+      mode: "advisory",
       observer: { x: 0, y: 0, z: 0 },
       chunks: [],
       simulationBudget: 0,
