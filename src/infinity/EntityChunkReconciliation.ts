@@ -250,6 +250,56 @@ export class EntityChunkReconciliation {
     });
   }
 
+  /**
+   * Synchronous transaction boundary for revision-bound reconciliation.
+   *
+   * stage() must only prepare data and capture the rollback snapshot; it must
+   * not mutate authoritative state. apply() performs the mutation. The source
+   * revision is checked after staging and again after apply, with rollback on
+   * any apply/postcondition failure. Keep this path synchronous: an await
+   * between the final revision check and apply would reopen the stale-plan race.
+   */
+  commitAtomically<T>(
+    plan: EntityReconciliationPlan,
+    components: EntityChunkComponent[],
+    getCurrentInventory: () => EntityDomainInventory,
+    stage: (records: EntityReconciliationCommitRecord[]) => T,
+    apply: (staged: T, records: EntityReconciliationCommitRecord[]) => void,
+    rollback: (staged: T) => void,
+  ): EntityReconciliationCommitRecord[] | null {
+    if (!plan.sourceInventory) {
+      throw new Error("Atomic entity reconciliation requires a revision-bound plan");
+    }
+
+    const initialInventory = getCurrentInventory();
+    const records = this.commitRecords(plan, components, initialInventory);
+    if (!records) return null;
+
+    // Contract: stage is side-effect-free; it may capture snapshots and validate
+    // all mutations before the authoritative apply callback is entered.
+    const staged = stage(records);
+
+    try {
+      assertEntityDomainRevision(plan.sourceInventory, getCurrentInventory());
+      apply(staged, records);
+      // Defensive postcondition: if apply synchronously changed the authoritative
+      // domain revision, restore the staged state instead of accepting a torn commit.
+      assertEntityDomainRevision(plan.sourceInventory, getCurrentInventory());
+    } catch (error) {
+      try {
+        rollback(staged);
+      } catch (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          "Entity reconciliation failed and rollback also failed",
+        );
+      }
+      throw error;
+    }
+
+    return records;
+  }
+
   buildCommit(
     plan: EntityReconciliationPlan,
     currentInventory?: EntityDomainInventory,
