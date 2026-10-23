@@ -247,8 +247,9 @@ const inventoryRevision4 = captureEntityDomainInventory({
 });
 assert.deepEqual(inventoryRevision4.entityIds, [3, 12], "inventory IDs must be canonicalized");
 assert.deepEqual(inventoryRevision4.occupiedCells, [2, 5, 8], "inventory cells must be canonicalized");
-assert.throws(() => (inventoryRevision4.entityIds as number[]).push(99), /extensible|read only|object is not extensible/i,
-  "captured inventory must not permit mutation");
+assert.equal(Object.isFrozen(inventoryRevision4), true, "captured inventory record must be frozen");
+assert.equal(Object.isFrozen(inventoryRevision4.entityIds), true, "captured entity IDs must be frozen");
+assert.equal(Object.isFrozen(inventoryRevision4.occupiedCells), true, "captured occupied cells must be frozen");
 
 const sameRevisionInventory = captureEntityDomainInventory({
   scopeId: "world:alpha",
