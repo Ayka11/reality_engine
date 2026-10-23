@@ -183,6 +183,29 @@ function makeEntityTickScenario() {
   return { grid, layer, entity };
 }
 
+// Extinction must remove stale ownership markers from cells that no longer
+// belong to any live entity.
+const extinctionCase = makeEntityTickScenario();
+const extinctEntityId = extinctionCase.entity.id;
+const extinctCells = extinctionCase.entity.cells.slice();
+for (const index of extinctCells) {
+  extinctionCase.grid.buffer[index * CELL_FIELDS + F.BIO_POTENTIAL] = 0;
+}
+extinctionCase.layer.tick(extinctionCase.grid, 1 / 60);
+assert.equal(
+  extinctionCase.layer.getEntities().some(entity => entity.id === extinctEntityId),
+  false,
+  "fixture entity must become extinct when its active blob disappears",
+);
+for (const index of extinctCells) {
+  assert.equal(
+    extinctionCase.grid.buffer[index * CELL_FIELDS + F.ENTITY_ID],
+    0,
+    `extinct entity ownership must be cleared at cell ${index}`,
+  );
+}
+console.log("Entity extinction clears stale cell ownership: PASS");
+
 const rollbackCase = makeEntityTickScenario();
 const controlCase = makeEntityTickScenario();
 const originalEntity = rollbackCase.entity;
