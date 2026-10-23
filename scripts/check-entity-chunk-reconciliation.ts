@@ -379,6 +379,18 @@ assert.throws(
   /Stale entity reconciliation plan/,
   "revision-bound plan must reject a stale source revision before staging records",
 );
+
+assert.throws(
+  () => planner.buildCommit(revisionBoundPlan),
+  /requires current inventory/,
+  "summary API must not bypass revision checks",
+);
+assert.ok(planner.buildCommit(revisionBoundPlan, sameRevisionInventory));
+assert.throws(
+  () => planner.buildCommit(revisionBoundPlan, newerRevisionInventory),
+  /Stale entity reconciliation plan/,
+  "summary API must reject stale plans too",
+);
 console.log("Revision-bound reconciliation plan stale-revision gate: PASS");
 
 
