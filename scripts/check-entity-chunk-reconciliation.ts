@@ -604,3 +604,33 @@ assert.equal(incompleteStageCalled, false, "incomplete plan must not stage mutat
 assert.equal(incompleteApplyCalled, false, "incomplete plan must never enter apply");
 assert.equal(incompleteRollbackCalled, false, "no rollback is needed when transaction is rejected before staging");
 console.log("Entity reconciliation incomplete plan blocked before staging: PASS");
+
+
+// The atomic entry point must reject an unbound plan before reading authority
+// or invoking any user-supplied transaction callback.
+const unboundPlan = planner.plan([closedComponent], [
+  { ...entity, id: 505, cells: [0], centroid: [0, 0, 0] } as Entity,
+]);
+let unboundAuthorityRead = false;
+let unboundStageCalled = false;
+let unboundApplyCalled = false;
+let unboundRollbackCalled = false;
+assert.throws(() => planner.commitAtomically(
+  unboundPlan,
+  [closedComponent],
+  () => {
+    unboundAuthorityRead = true;
+    return transactionAuthority.snapshot();
+  },
+  () => {
+    unboundStageCalled = true;
+    return { staged: true };
+  },
+  () => { unboundApplyCalled = true; },
+  () => { unboundRollbackCalled = true; },
+), /requires a revision-bound plan/);
+assert.equal(unboundAuthorityRead, false, "unbound plan must be rejected before authority read");
+assert.equal(unboundStageCalled, false, "unbound plan must not enter staging");
+assert.equal(unboundApplyCalled, false, "unbound plan must not enter apply");
+assert.equal(unboundRollbackCalled, false, "unbound plan rejected before staging must not invoke rollback");
+console.log("Entity reconciliation unbound plan rejected before transaction callbacks: PASS");
