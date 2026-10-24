@@ -68,6 +68,8 @@ export function runInfinityScaleGPUBoundaryTransferContractRegression(): void {
     { ...sameLevel, sourceLevel: Number.MAX_SAFE_INTEGER + 1 },
     { ...sameLevel, targetLevel: 1 },
     { ...sameLevel, operation: "restriction" },
+    { ...sameLevel, relation: "unknown" as InfinityScaleBoundaryTransferSpec["relation"] },
+    { ...sameLevel, operation: "unknown" as InfinityScaleBoundaryTransferSpec["operation"] },
     { ...coarseToFine, sourceLevel: 0 },
   ];
   for (const spec of invalidSpecs) {
