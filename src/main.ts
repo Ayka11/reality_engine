@@ -135,8 +135,7 @@ function applyChunkPreset(value: string) {
   const name = normalizePresetName(value);
   if (!name) throw new Error(`Unknown preset: ${value}`);
   if (!isWorkerPreset(value)) {
-    Presets.apply(sim.grid, name as PresetName);
-    sim.syncToGPU();
+    sim.mutateAuthoritativeState(() => Presets.apply(sim.grid, name as PresetName));
     return;
   }
   (window as unknown as Record<string, unknown>).lastChunkPreset = null;
@@ -192,7 +191,7 @@ window.addEventListener('worldGenerated', (evt: any) => {
   
   // Optionally apply terrain biome
   if (biome && BIOME_LIST.includes(biome as any)) {
-    Presets.apply(sim.grid, biome as PresetName);
+    sim.mutateAuthoritativeState(() => Presets.apply(sim.grid, biome as PresetName));
     console.log('🏔️ Applied biome preset:', biome);
   }
   
@@ -999,10 +998,10 @@ mutStrEl?.addEventListener('input', () => {
 
 // Agent controls
 document.getElementById('seedAgentsBtn')?.addEventListener('click', () => {
-  sim.agents.seed(sim.grid, 8);
+  sim.mutateAuthoritativeState(() => sim.agents.seed(sim.grid, 8));
 });
 document.getElementById('clearAgentsBtn')?.addEventListener('click', () => {
-  sim.agents.clear();
+  sim.mutateAuthoritativeState(() => sim.agents.clear());
   updateAgentPanel();
 });
 
@@ -1282,13 +1281,12 @@ if (biomeSelect) {
 document.getElementById('btnGenTerrain')?.addEventListener('click', () => {
   const biome = (biomeSelect?.value ?? 'earth') as typeof BIOME_LIST[number];
   const seed  = parseInt((document.getElementById('biomeSeed') as HTMLInputElement)?.value ?? '42');
-  const msg   = terrain.generate(biome, seed);
-  sim.syncToGPU();
+  const msg = sim.mutateAuthoritativeState(() => terrain.generate(biome, seed));
   document.getElementById('scriptLog')!.textContent = msg;
 });
 
 document.getElementById('btnSpawnAgents')?.addEventListener('click', () => {
-  sim.agents.seed(sim.grid, 5);
+  sim.mutateAuthoritativeState(() => sim.agents.seed(sim.grid, 5));
   document.getElementById('scriptLog')!.textContent = `Agents: ${sim.agents.getAgents().length} alive`;
 });
 
@@ -1315,7 +1313,7 @@ function updateTimelineSnapList(): void {
   el.querySelectorAll<HTMLDivElement>('[data-snap-idx]').forEach(d => {
     d.addEventListener('click', () => {
       const idx = parseInt(d.dataset.snapIdx!);
-      if (timeline.restore(idx)) { playing = false; sim.syncToGPU(); }
+      if (sim.mutateAuthoritativeState(() => timeline.restore(idx))) { playing = false; }
     });
   });
 }
