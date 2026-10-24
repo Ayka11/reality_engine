@@ -8,7 +8,8 @@ function mixedPlan(): InfinityScaleExecutionPlan {
     mode: "selective-cpu-ready",
     observer: { x: 32, y: 16, z: 16 },
     chunks: [{ key: "1:0,0,0", lod: 1, amr: 2, distance: 0 }],
-    simulationBudget: 65536,
+    // LOD-1 extent is 64^3, clipped to this grid's 128x64x32 depth: 131072 cells.
+    simulationBudget: 131072,
     requestedSimulationCount: 1,
     selectedSimulationCount: 1,
     maxSimulatingChunks: 1,
@@ -19,7 +20,7 @@ function mixedPlan(): InfinityScaleExecutionPlan {
       targetChunk: "1:0,0,0",
       relation: "fine-to-coarse",
     }],
-    simulationCellCount: 65536,
+    simulationCellCount: 131072,
     boundaryReadCellCount: 32768,
     localExecutionLayers: [],
     globalExecutionLayers: [],
