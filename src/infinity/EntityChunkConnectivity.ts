@@ -107,14 +107,19 @@ export class EntityChunkConnectivity {
         };
         merged.set(root, out);
       }
-      out.cells.push(...pieces[i].cells);
-      out.centroid = this.centroid(out.cells, grid);
+      // Avoid argument-list expansion for large connected components.
+      for (const cell of pieces[i].cells) out.cells.push(cell);
       out.touchesSimulationBoundary ||= pieces[i].touchesSimulationBoundary;
       out.touchesReadBoundary ||= pieces[i].touchesReadBoundary;
       out.touchesMixedLODBoundary ||= pieces[i].touchesMixedLODBoundary;
     }
 
     const components = [...merged.values()];
+    // Compute each centroid once after all piece cells are merged; recomputing
+    // after each piece makes large multi-piece components quadratic.
+    for (const component of components) {
+      component.centroid = this.centroid(component.cells, grid);
+    }
     const mixedLodTopology = this.collectMixedLodTopology(
       grid,
       context,

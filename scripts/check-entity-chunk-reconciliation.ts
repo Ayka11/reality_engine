@@ -144,6 +144,32 @@ const singletonConnectivity = new EntityChunkConnectivity().analyze(
 assert.equal(singletonConnectivity.components.length, 1, "isolated occupied cell must remain visible as a singleton component");
 assert.deepEqual(singletonConnectivity.components[0]?.cells, [0], "singleton component must preserve its cell index");
 
+// Guard against stack overflow when one connected component contains more
+// cell indices than V8 can safely pass as one function's argument list.
+const largeComponentWidth = 140_000;
+const largeConnectivityGrid = new VoxelGrid(largeComponentWidth, 1, 1);
+for (let cell = 0; cell < largeComponentWidth; cell++) {
+  largeConnectivityGrid.buffer[cell * CELL_FIELDS + F.BIO_POTENTIAL] = 1;
+}
+const largeConnectivityContext = {
+  simulationRanges: [{
+    minX: 0, maxX: largeComponentWidth - 1,
+    minY: 0, maxY: 0,
+    minZ: 0, maxZ: 0,
+  }],
+  getBoundaryTransferSpecsForCell: () => [],
+  containsReadCell: () => false,
+  containsSimulationCell: (x: number, y: number, z: number) =>
+    x >= 0 && x < largeComponentWidth && y === 0 && z === 0,
+} as unknown as InfinityScaleChunkExecutionContext;
+const largeComponentResult = new EntityChunkConnectivity().analyze(
+  largeConnectivityGrid,
+  largeConnectivityContext,
+);
+assert.equal(largeComponentResult.components.length, 1, "large occupied range must produce one connected component");
+assert.equal(largeComponentResult.components[0]?.cells.length, largeComponentWidth, "all large-component cells must be preserved");
+
+
 // Sparse dense/chunk ownership must fail closed on unsynchronized writes.
 const sparseOwnershipGrid = new SparseVoxelGrid(2, 2, 2);
 sparseOwnershipGrid.assertDenseEntityOwnershipSynchronized();
