@@ -113,4 +113,23 @@ export function runInfinityScaleGPUBoundaryTransferContractRegression(): void {
     rejectedLossyPacking = error instanceof Error;
   }
   if (!rejectedLossyPacking) throw new Error("GPU boundary contract silently lost precision during Float32 packing");
+
+  const validDescriptor = InfinityScaleGPUBoundaryTransferContract.descriptor(sameLevel, [0, 0, 0]);
+  const malformedDescriptors: unknown[] = [
+    { ...validDescriptor, relation: "unknown" },
+    { ...validDescriptor, operation: "restriction" },
+    { ...validDescriptor, sourceCellCount: 2 },
+    { ...validDescriptor, sourceLevel: -1 },
+  ];
+  for (const malformed of malformedDescriptors) {
+    let rejected = false;
+    try {
+      InfinityScaleGPUBoundaryTransferContract.pack([
+        malformed as typeof validDescriptor,
+      ]);
+    } catch (error) {
+      rejected = error instanceof Error;
+    }
+    if (!rejected) throw new Error("GPU boundary contract packed a semantically invalid descriptor");
+  }
 }
