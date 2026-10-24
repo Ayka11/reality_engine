@@ -1,5 +1,5 @@
 import { CELL_FIELDS } from "../core/CellState";
-import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import { InfinityScaleLODState, type InfinityScaleLODStateSnapshot } from "./InfinityScaleLODState";
 
 export function runInfinityScaleLODStateRecoveryRegression(): void {
   const state = new InfinityScaleLODState(2);
@@ -120,4 +120,3 @@ export function runInfinityScaleLODStateInvalidSnapshotRegression(): void {
   assertRejectedWithoutMutation(duplicateKey, "duplicate chunk key");
 }
 
-import type { InfinityScaleLODStateSnapshot } from "./InfinityScaleLODState";
