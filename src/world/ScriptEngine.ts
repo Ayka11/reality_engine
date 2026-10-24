@@ -182,15 +182,24 @@ export class ScriptEngine {
   run(code: string): { success: boolean; log: string[] } {
     const log: string[] = [];
     const api = this.buildWorldAPI(log);
+    const rngBefore = this._rngState;
     try {
       // eslint-disable-next-line no-new-func
       const scriptMath = Object.create(Math) as Math & { random: () => number };
       scriptMath.random = () => this._random();
       const fn = new Function('world', 'W', 'H', 'D', 'Math', '"use strict";\n' + code);
-      fn(api, this.sim.grid.W, this.sim.grid.H, this.sim.grid.D, scriptMath);
-      this.sim.syncToGPU();
+      this.sim.mutateAuthoritativeState(() => {
+        const result: unknown = fn(api, this.sim.grid.W, this.sim.grid.H, this.sim.grid.D, scriptMath);
+        if (result && typeof (result as { then?: unknown }).then === 'function') {
+          throw new Error('Script execution must remain synchronous inside the authoritative mutation transaction');
+        }
+      });
       if (!log.length) log.push('✓ Done.');
     } catch (e) {
+      // Grid, chunks, entity/law/event state and GPU state are rolled back by
+      // SimulationEngine. Restore the script's private RNG as part of the same
+      // transaction so retrying a failed script is deterministic.
+      this._rngState = rngBefore;
       log.push('✗ ' + (e as Error).message);
       return { success: false, log };
     }
