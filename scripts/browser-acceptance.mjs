@@ -953,6 +953,38 @@ try {
     throw new Error(`World field persistence was not durable after restore: ${JSON.stringify(durableAfterReload)}`);
   }
 
+
+  // The restore lock must be acquired before awaiting IndexedDB: overlapping
+  // dispatches otherwise pass the same pre-await guard and race their restore IDs.
+  const overlappingRestoreGuard = await page.evaluate(async () => {
+    const raw = sessionStorage.getItem("reality-engine-worker-restore-fixture");
+    if (!raw) return { error: "durable restore fixture metadata missing" };
+    const { coord } = JSON.parse(raw);
+    const before = window.worldFieldRestoreState?.();
+    const results = await Promise.all([
+      window.restoreWorldFieldChunkSnapshot?.(coord.cx, coord.cy, coord.cz),
+      window.restoreWorldFieldChunkSnapshot?.(coord.cx, coord.cy, coord.cz),
+    ]);
+    return { results, beforeRestoreId: before?.restoreId };
+  });
+  if (overlappingRestoreGuard.error ||
+      overlappingRestoreGuard.results?.[0] !== true ||
+      overlappingRestoreGuard.results?.[1] !== false) {
+    throw new Error(`Overlapping worker restore requests were not serialized: ${JSON.stringify(overlappingRestoreGuard)}`);
+  }
+  await page.waitForFunction(() => window.worldFieldRestoreState?.()?.complete === true, undefined, { timeout: acceptanceTimeout });
+  const serializedRestoreState = await page.evaluate(() => window.worldFieldRestoreState?.());
+  if (!serializedRestoreState?.complete ||
+      serializedRestoreState.restoreId !== overlappingRestoreGuard.beforeRestoreId + 1 ||
+      serializedRestoreState.acknowledged !== serializedRestoreState.expected ||
+      serializedRestoreState.staleAcks !== 0 ||
+      serializedRestoreState.staleFrames !== 0 ||
+      serializedRestoreState.duplicateAcks !== 0 ||
+      serializedRestoreState.unexpectedAcks !== 0 ||
+      serializedRestoreState.unexpectedFrames !== 0) {
+    throw new Error(`Serialized worker restore corrupted ACK/frame accounting: ${JSON.stringify(serializedRestoreState)}`);
+  }
+
   // Exercise actual pointerdown -> pointermove* -> pointerup, not only the helper.
   console.log("[acceptance] literal pointer-drag sculpt undo/redo");
   const dragSetup = await page.evaluate(() => {

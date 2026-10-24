@@ -83,6 +83,7 @@ let worldFieldRestoreId = 0
 let worldFieldRestoreCoord: { cx: number; cy: number; cz: number } | null = null
 let worldFieldRestoreSeed = ''
 let worldFieldRestoreActive = false
+let worldFieldRestoreLoading = false
 const worldFieldRestoreState = {
   restoreId: 0, expected: 0, acknowledged: 0, keys: [] as number[],
   duplicateAcks: 0, unexpectedAcks: 0, staleAcks: 0, staleFrames: 0, discardedInflightFrames: 0,
@@ -615,8 +616,16 @@ win['snapshotWorldFieldChunkPersistence'] = (cx: number, cy: number, cz: number,
 }
 win['validateWorldFieldChunkSnapshot'] = (snapshot: unknown) => worldFieldChunkPersistence.validate(snapshot as any)
 win['restoreWorldFieldChunkSnapshot'] = async (cx: number, cy: number, cz: number) => {
-  if (worldFieldRestoreActive) return false
-  const snapshot = await worldFieldChunkPersistence.loadDurable({ cx, cy, cz })
+  if (worldFieldRestoreActive || worldFieldRestoreLoading) return false
+  worldFieldRestoreLoading = true
+  let snapshot: Awaited<ReturnType<typeof worldFieldChunkPersistence.loadDurable>>
+  try {
+    snapshot = await worldFieldChunkPersistence.loadDurable({ cx, cy, cz })
+  } catch {
+    return false
+  } finally {
+    worldFieldRestoreLoading = false
+  }
   if (!snapshot || !worldFieldChunkPersistence.validate(snapshot) ||
       !((snapshot.schemaVersion === 2 && snapshot.workerChunks?.length) ||
       (snapshot.values.length === CHUNK_FLOATS && snapshot.fieldLayout?.fieldsPerCell === NF))) return false
