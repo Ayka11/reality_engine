@@ -47,7 +47,9 @@
     "test:infinity-scale-independent-topology": "tsx scripts/check-infinity-scale-independent-topology.ts",
     "test:entity-chunk-reconciliation": "tsx scripts/check-entity-chunk-reconciliation.ts",
     "test:infinity-scale-adaptive-lod-bridge": "npx --yes tsx scripts/check-infinity-scale-adaptive-lod-bridge.ts",
-    "test:simulation-engine-core-recovery": "npx --yes tsx scripts/check-simulation-engine-core-recovery.ts"
+    "test:simulation-engine-core-recovery": "npx --yes tsx scripts/check-simulation-engine-core-recovery.ts",
+    "test:civilization-system-recovery": "npx --yes tsx scripts/check-civilization-system-recovery.ts",
+    "test:cosmological-sim-recovery": "npx --yes tsx scripts/check-cosmological-sim-recovery.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
