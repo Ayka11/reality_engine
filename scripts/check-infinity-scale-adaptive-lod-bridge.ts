@@ -1,8 +1,10 @@
 import { runInfinityScaleAdaptiveLODTransactionBridgeRegression } from "../src/infinity/InfinityScaleAdaptiveLODTransactionBridge.regression";
 import { runInfinityScaleAdaptiveTransferCompilerRegression } from "../src/infinity/InfinityScaleAdaptiveTransferCompiler.regression";
 import { runInfinityScaleAdaptiveExecutionGraphCompilerRegression } from "../src/infinity/InfinityScaleAdaptiveExecutionGraphCompiler.regression";
+import { runInfinityScaleGPUBoundaryTransferContractRegression } from "../src/infinity/InfinityScaleGPUBoundaryTransferContract.regression";
 
 runInfinityScaleAdaptiveLODTransactionBridgeRegression();
 runInfinityScaleAdaptiveTransferCompilerRegression();
 runInfinityScaleAdaptiveExecutionGraphCompilerRegression();
-console.log("Infinity Scale adaptive LOD transaction bridge and transfer compiler regressions: PASS");
+runInfinityScaleGPUBoundaryTransferContractRegression();
+console.log("Infinity Scale adaptive LOD bridge, execution graph, and GPU boundary contract regressions: PASS");
