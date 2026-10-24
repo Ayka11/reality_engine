@@ -60,14 +60,35 @@ export class EntityChunkReconciliation {
     inventory: EntityDomainInventory,
     connectivity?: EntityChunkConnectivityResult,
   ): EntityReconciliationPlan {
-    const plan = this.plan(components, entities, connectivity);
-    return { ...plan, sourceInventory: inventory };
+    // A complete inventory is necessary but not sufficient: the connectivity
+    // analyzer must also attest that every in-domain cell was scanned exactly
+    // once and no read-only workset was used.
+    const verifiedFullDomain =
+      inventory.completeness === "complete" &&
+      inventory.entityCellOwnership !== undefined &&
+      connectivity?.domainCoverageComplete === true &&
+      connectivity.openReadComponentCount === 0 &&
+      (connectivity.mixedLodComponentCount === 0 || connectivity.mixedLodCoverageComplete);
+
+    const plan = this.plan(components, entities, connectivity, verifiedFullDomain);
+    const matchedIds = new Set(
+      plan.proposals
+        .filter(proposal => proposal.safeToCommit)
+        .map(proposal => proposal.existingEntityId)
+        .filter((id): id is number => id !== null),
+    );
+    const extinctEntityIds =
+      verifiedFullDomain && plan.commitReady
+        ? inventory.entityIds.filter(id => !matchedIds.has(id))
+        : [];
+    return { ...plan, extinctEntityIds, sourceInventory: inventory };
   }
 
   plan(
     components: EntityChunkComponent[],
     entities: Entity[],
     connectivity?: EntityChunkConnectivityResult,
+    verifiedFullDomain = false,
   ): EntityReconciliationPlan {
     const componentSourceIds = new Map<number, number[]>();
     const sourceComponentCounts = new Map<number, number>();
@@ -176,12 +197,12 @@ export class EntityChunkReconciliation {
         sourceEntityIds,
         centroid,
         cellCount: component.cells.length,
-        // A merge changes more than one entity identity. Until the whole
-        // domain is covered, defer it rather than extinguishing a source
-        // entity whose other cells may be outside this workset.
-        // No authoritative, revision-bound domain-coverage proof exists yet.
-        // Never commit merges based on caller-supplied completeness claims.
-        safeToCommit: continuity !== "merge",
+        // A merge changes more than one entity identity. It is admissible
+        // only when planAtInventory has an authoritative ownership inventory
+        // and the connectivity analyzer proved whole-domain coverage. A boolean
+        // supplied to plan() directly cannot authorize a merge because callers
+        // do not receive the verified flag from an inventory authority.
+        safeToCommit: continuity !== "merge" || verifiedFullDomain,
         continuity,
       });
     }
@@ -193,11 +214,9 @@ export class EntityChunkReconciliation {
         .map(p => p.existingEntityId)
         .filter((id): id is number => id !== null),
     );
-    // Extinction stays disabled until an authoritative domain inventory can
-    // produce revision-bound coverage evidence. Boundary-read completeness
-    // alone cannot prove that an entity is absent from the global domain.
-    // Keep matchedIds above for future evidence-backed reconciliation, but
-    // deliberately do not infer extinction in this planner baseline.
+    // planAtInventory computes extinction only after verifying complete
+    // entity-cell ownership and a full-domain connectivity scan. This planner
+    // baseline deliberately never infers global extinction from a partial plan.
     void matchedIds;
     const extinctEntityIds: number[] = [];
 
