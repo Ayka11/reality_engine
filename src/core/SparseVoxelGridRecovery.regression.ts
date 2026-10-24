@@ -16,7 +16,7 @@ function cloneSnapshot(snapshot: SparseVoxelGridSnapshot): SparseVoxelGridSnapsh
       backBuffer: new Float32Array(chunk.backBuffer),
     })),
     dirtyChunks: [...snapshot.dirtyChunks],
-    chunkOwners: snapshot.chunkOwners.map(([key, owner]) => [key, owner]),
+    chunkOwners: snapshot.chunkOwners.map(([key, owner]) => [key, owner] as [string, string]),
   };
 }
 
@@ -139,7 +139,7 @@ export function runSparseVoxelGridInvalidSnapshotRegression(grid = new SparseVox
   assertRejectedWithoutMutation(invalidOwner, "invalid owner chunk key");
 
   const duplicateOwner = cloneSnapshot(baseline);
-  duplicateOwner.chunkOwners.push([...duplicateOwner.chunkOwners[0]]);
+  duplicateOwner.chunkOwners.push([...duplicateOwner.chunkOwners[0]] as [string, string]);
   assertRejectedWithoutMutation(duplicateOwner, "duplicate owner key");
 
   const invalidDirtyChunk = cloneSnapshot(baseline);
