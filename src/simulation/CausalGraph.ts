@@ -30,7 +30,7 @@ export class CausalGraph {
     return {
       events: this.events.map(event => ({ ...event })),
       nextId: this.nextId,
-      lastEventByCell: [...this.lastEventByCell.entries()].map(([cellIndex, eventId]) => [cellIndex, eventId]),
+      lastEventByCell: [...this.lastEventByCell.entries()].map(([cellIndex, eventId]) => [cellIndex, eventId] as [number, number]),
     };
   }
 
