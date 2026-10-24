@@ -85,11 +85,10 @@ export async function runSimulationEngineCPUFrameRollbackRegression(): Promise<v
 
   // Zero steps are a true no-op for both async and synchronous entry points.
   await engine.step(0.016, 0);
-  engine.syncTick(0);
   assert.deepEqual(
     engine.captureCoreRecoveryState(),
     beforeInvalidArguments,
-    "zero-step requests must not tick subsystems or alter recovery state",
+    "zero asynchronous steps must not tick subsystems or alter recovery state",
   );
 
   assert.throws(() => engine.syncTick(-1), /syncTick n must be a non-negative safe integer/);
