@@ -32,6 +32,31 @@ async function load(path) {
   return url;
 }
 
+const { WorldSerializer, FIELD_ORDER } = await import(await load("src/world/save/WorldSerializer.ts"));
+const serializer = new WorldSerializer();
+const targetBuffer = new Float32Array(4 * 24);
+targetBuffer.fill(17);
+const validFields = serializer.captureAllFields(targetBuffer);
+const stableTarget = targetBuffer.slice();
+
+const missingField = { ...validFields };
+delete missingField.information;
+assert.throws(() => serializer.applyFields(missingField, targetBuffer), /field "information" has an invalid buffer size/);
+assert.deepEqual(targetBuffer, stableTarget, "missing fields must be rejected before mutating the destination");
+
+const truncatedField = { ...validFields, energy: new Float32Array([1, 2]).buffer };
+assert.throws(() => serializer.applyFields(truncatedField, targetBuffer), /field "energy" has an invalid buffer size/);
+assert.deepEqual(targetBuffer, stableTarget, "truncated fields must be rejected before mutating the destination");
+
+const nonFiniteData = new Float32Array(4);
+nonFiniteData[2] = Number.NaN;
+const nonFiniteField = { ...validFields, entropy: nonFiniteData.buffer };
+assert.throws(() => serializer.applyFields(nonFiniteField, targetBuffer), /field "entropy" contains non-finite values/);
+assert.deepEqual(targetBuffer, stableTarget, "non-finite fields must be rejected before mutating the destination");
+
+assert.deepEqual(Object.keys(validFields).sort(), [...FIELD_ORDER].sort(),
+  "the serializer must emit every supported field");
+
 const values = new Map();
 let failSet = false;
 let failGet = false;

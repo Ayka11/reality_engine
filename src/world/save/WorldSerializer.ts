@@ -92,7 +92,29 @@ export class WorldSerializer {
   }
 
   applyFields(fields: Record<string, ArrayBuffer>, target: Float32Array): void {
-    const restored = new Float32Array(this.flattenFields(fields, Math.floor(target.length / CELL_FIELDS)));
+    if (!(target instanceof Float32Array) || target.length % CELL_FIELDS !== 0) {
+      throw new Error("World snapshot target buffer has an invalid cell-field layout");
+    }
+    if (!fields || typeof fields !== "object") {
+      throw new Error("World snapshot fields must be an object");
+    }
+
+    const expectedCells = target.length / CELL_FIELDS;
+    // Validate every source before writing a single target value. Missing or
+    // truncated fields must not silently become zero-filled partial worlds.
+    for (const name of FIELD_ORDER) {
+      const sourceBuffer = fields[name];
+      if (!(sourceBuffer instanceof ArrayBuffer) ||
+          sourceBuffer.byteLength !== expectedCells * Float32Array.BYTES_PER_ELEMENT) {
+        throw new Error(`World snapshot field "${name}" has an invalid buffer size`);
+      }
+      const source = new Float32Array(sourceBuffer);
+      if (!source.every(Number.isFinite)) {
+        throw new Error(`World snapshot field "${name}" contains non-finite values`);
+      }
+    }
+
+    const restored = new Float32Array(this.flattenFields(fields, expectedCells));
     if (restored.length !== target.length) {
       throw new Error(`World snapshot field size mismatch: ${restored.length} != ${target.length}.`);
     }

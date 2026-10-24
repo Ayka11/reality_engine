@@ -82,3 +82,25 @@ After callers are migrated, narrow direct access to mutable arrays/chunk maps wh
 ## Branching guidance
 
 Do not merge the highly diverged `infinity-scale-real-diagnostics` branch wholesale. Transfer only modules proven compatible with the current `SparseVoxelGrid`, `SimulationEngine`, and authoritative entity reconciliation path. Keep topology mutation fail-closed until real refine/coarsen data transfer, boundary coverage, conservation, and rollback are verified end-to-end.
+
+
+## Implementation progress — current P1 mutation-boundary work
+
+The following production entry points have now been routed through the engine's synchronous `mutateAuthoritativeState` boundary:
+
+- `ScriptEngine.run()`: successful script writes publish once through the transaction; failed scripts restore core engine state and the script PRNG.
+- `WorldComposer.generate()` and periodic hazard batches: field/agent changes publish atomically; civilization snapshots and the composer PRNG are restored on failure.
+- Main UI entry points for synchronous presets, terrain generation, agent seeding/clearing, timeline restore, and event triggering.
+- `WorldSaveSystem.applySnapshot()` in the main application: fields/chunks/laws/processes/tick are applied under one engine transaction; graph and civilization state have external checkpoints.
+- Sculpt stroke and undo/redo entry points invalidate pending GPU readback before direct writes, then synchronize through the existing publication callback.
+
+The boundary rejects thenables and is deliberately synchronous. Returning a promise does not cancel the asynchronous continuation itself; callers must not provide async callbacks. Public mutable buffers and cell wrappers still exist, so unwrapped direct writes remain a documented limitation.
+
+The world serializer now rejects missing, truncated, wrong-sized, or non-finite field buffers **before writing to the destination**, rather than allowing missing field values to become zero-filled. Regression coverage checks that the destination remains unchanged for each rejected input.
+
+### Remaining P1 scope
+
+- Finish the write-site inventory for all direct writes, worker restores, save/recorder/timeline restore paths, reset/import APIs, and exposed browser entry points.
+- Decide which legacy direct buffer APIs remain supported and make their invalidation contract explicit; avoid pretending a local revision counter covers raw typed-array writes.
+- Improve failure injection for world-restore external domains and GPU-upload errors.
+- Keep entity merge/extinction and mixed-LOD topology fail-closed until complete-domain evidence, real transfer coverage, conservation, and rollback are tested together.
