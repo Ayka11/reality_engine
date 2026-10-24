@@ -1,6 +1,11 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { SparseVoxelGrid } from '../core/SparseVoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
+import { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
+import type { InfinityScaleExecutionPlan } from '../infinity/InfinityScaleExecutionAdapter';
+import { EntityChunkConnectivity } from '../infinity/EntityChunkConnectivity';
+import { EntityChunkReconciliation } from '../infinity/EntityChunkReconciliation';
+import { EntityDomainInventoryAuthority } from '../infinity/EntityDomainInventory';
 
 export interface EntityGenome {
   metabolismRate: number;    // 0.1..2.0 — energy consumed per tick
@@ -112,6 +117,60 @@ function centroid(cells: number[], W: number, H: number): [number, number, numbe
   return [sx / n, sy / n, sz / n];
 }
 
+function createFullDomainExecutionContext(grid: VoxelGrid): InfinityScaleChunkExecutionContext {
+  const chunkSize = 32;
+  const chunks: Array<{ key: string; lod: number; amr: number; distance: number }> = [];
+  for (let z = 0; z < Math.ceil(grid.D / chunkSize); z++) {
+    for (let y = 0; y < Math.ceil(grid.H / chunkSize); y++) {
+      for (let x = 0; x < Math.ceil(grid.W / chunkSize); x++) {
+        chunks.push({ key: `0:${x},${y},${z}`, lod: 0, amr: 0, distance: 0 });
+      }
+    }
+  }
+
+  const plan = {
+    revision: 0,
+    mode: "advisory",
+    observer: { x: 0, y: 0, z: 0 },
+    chunks,
+    simulationBudget: chunks.length,
+    requestedSimulationCount: chunks.length,
+    selectedSimulationCount: chunks.length,
+    maxSimulatingChunks: chunks.length,
+    boundaryReadChunks: [],
+    boundaryReadCount: 0,
+    boundaryReadRelations: [],
+    simulationCellCount: 0,
+    boundaryReadCellCount: 0,
+    localExecutionLayers: [],
+    globalExecutionLayers: [],
+    selectiveCpuReady: false,
+    selectiveGpuReady: false,
+    gpuPhysicsReady: false,
+    lodBoundaryTransferReady: false,
+    mixedLodExecutionReady: false,
+    entityExecutionReady: false,
+    agentMigrationReady: false,
+  } satisfies InfinityScaleExecutionPlan;
+
+  const context = new InfinityScaleChunkExecutionContext(
+    plan,
+    grid.W,
+    grid.H,
+    grid.D,
+    chunkSize,
+  );
+  if (
+    context.overlappingSimulationRangeCount !== 0 ||
+    context.simulationCellCount !== grid.size ||
+    context.readCellCount !== 0 ||
+    context.overlappingReadRangeCount !== 0
+  ) {
+    throw new Error("EntityLayer refuses reconciliation without complete, non-overlapping full-domain coverage");
+  }
+  return context;
+}
+
 function cloneEntity(entity: Entity): Entity {
   return {
     ...entity,
@@ -131,6 +190,8 @@ export class EntityLayer {
   mutationStrength = 1.0;
   private readonly initialRngState: number;
   private _rngState: number;
+  private readonly domainInventoryAuthority = new EntityDomainInventoryAuthority("entity-layer");
+  private readonly chunkReconciliation = new EntityChunkReconciliation();
 
   constructor(seed = 0x4f1bbcdc) {
     this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x4f1bbcdc : 0x4f1bbcdc;
@@ -155,6 +216,25 @@ export class EntityLayer {
       throw new Error('EntityLayer seed must be a non-zero uint32');
     }
     this._rngState = seed >>> 0;
+  }
+
+  private _captureCurrentDomainInventory(cellCount: number) {
+    const entities = [...this.entities.values()];
+    const ownership = entities.map(entity => {
+      if (
+        !Number.isSafeInteger(entity.id) || entity.id < 1 ||
+        !entity.cells.every(cell => Number.isSafeInteger(cell) && cell >= 0 && cell < cellCount)
+      ) {
+        throw new Error("EntityLayer cannot inventory invalid authoritative entity cells");
+      }
+      return { entityId: entity.id, cells: [...entity.cells] };
+    });
+    return this.domainInventoryAuthority.update({
+      completeness: "complete",
+      entityIds: entities.map(entity => entity.id),
+      occupiedCells: ownership.flatMap(entry => entry.cells),
+      entityCellOwnership: ownership,
+    });
   }
 
   snapshot(): EntityLayerSnapshot {
