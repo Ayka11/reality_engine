@@ -30,7 +30,11 @@ export class SculptManager {
   };
   lastStroke: BrushStroke | null = null;
 
-  constructor(grid: SparseVoxelGrid, private onChanged?: () => void) {
+  constructor(
+    grid: SparseVoxelGrid,
+    private onChanged?: () => void,
+    private onBeforeChange?: () => void,
+  ) {
     this.brushEngine = new BrushEngine(grid);
   }
 
