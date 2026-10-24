@@ -214,6 +214,11 @@ export class SimulationEngine {
     const recoveryBefore = this.captureCoreRecoveryState();
     try {
       const result = mutation();
+      if (result !== null &&
+          (typeof result === 'object' || typeof result === 'function') &&
+          typeof (result as { then?: unknown }).then === 'function') {
+        throw new TypeError('Authoritative mutation callback must remain synchronous');
+      }
       this.grid.syncDenseToChunks();
       if (this._gpuReady) this.gpu.upload(this.grid.buffer);
       this._stateGeneration++;
