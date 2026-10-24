@@ -18,6 +18,21 @@ export interface WorldEvent {
   description: string;
 }
 
+export interface WorldEventsSnapshot {
+  history: WorldEvent[];
+  nextAuto: number;
+  rngState: number;
+}
+
+const EVENT_TYPES: readonly EventType[] = [
+  "meteor_strike",
+  "solar_flare",
+  "radiation_storm",
+  "mutation_wave",
+  "entropy_collapse",
+  "tectonic_shift",
+];
+
 const EVENT_LABELS: Record<EventType, string> = {
   meteor_strike:    'Meteor Strike',
   solar_flare:      'Solar Flare',
@@ -54,20 +69,61 @@ export class WorldEvents {
     return this._rngState / 0x100000000;
   }
 
-  snapshotRandomState(): { rngState: number; nextAuto: number; history: WorldEvent[] } {
-    return { rngState: this._rngState, nextAuto: this._nextAuto, history: this.history.map(event => ({ ...event })) };
+  snapshot(): WorldEventsSnapshot {
+    return {
+      history: this.history.map(event => ({ ...event })),
+      nextAuto: this._nextAuto,
+      rngState: this._rngState,
+    };
   }
 
-  restoreRandomState(snapshot: { rngState: number; nextAuto: number; history: WorldEvent[] }): void {
-    if (!snapshot || !Number.isSafeInteger(snapshot.rngState) || snapshot.rngState <= 0 || snapshot.rngState > 0xffffffff ||
-        !Number.isSafeInteger(snapshot.nextAuto) || snapshot.nextAuto < 0 || !Array.isArray(snapshot.history) ||
-        snapshot.history.length > 20 || snapshot.history.some(event => !event || typeof event.type !== 'string' ||
-          !Number.isSafeInteger(event.tick) || typeof event.label !== 'string' || typeof event.description !== 'string')) {
+  restore(snapshot: WorldEventsSnapshot): void {
+    if (!snapshot ||
+        typeof snapshot !== "object" ||
+        !Array.isArray(snapshot.history) ||
+        snapshot.history.length > 20 ||
+        !Number.isSafeInteger(snapshot.nextAuto) ||
+        snapshot.nextAuto < 0 ||
+        !Number.isSafeInteger(snapshot.rngState) ||
+        snapshot.rngState <= 0 ||
+        snapshot.rngState > 0xffffffff) {
       throw new Error("Invalid WorldEvents snapshot");
     }
-    this._rngState = snapshot.rngState >>> 0;
+
+    const history: WorldEvent[] = [];
+    for (const candidate of snapshot.history as unknown[]) {
+      if (!candidate || typeof candidate !== "object") {
+        throw new Error("Invalid WorldEvents history entry");
+      }
+      const event = candidate as Partial<WorldEvent>;
+      if (!EVENT_TYPES.includes(event.type as EventType) ||
+          !Number.isSafeInteger(event.tick) ||
+          (event.tick as number) < 0 ||
+          typeof event.label !== "string" ||
+          typeof event.description !== "string") {
+        throw new Error("Invalid WorldEvents history entry");
+      }
+      history.push({
+        type: event.type as EventType,
+        tick: event.tick as number,
+        label: event.label,
+        description: event.description,
+      });
+    }
+
+    // Validate and copy the entire history before changing the live event system.
+    this.history = history;
     this._nextAuto = snapshot.nextAuto;
-    this.history = snapshot.history.map(event => ({ ...event }));
+    this._rngState = snapshot.rngState >>> 0;
+  }
+
+  // Backward-compatible names retained for existing random-state callers.
+  snapshotRandomState(): WorldEventsSnapshot {
+    return this.snapshot();
+  }
+
+  restoreRandomState(snapshot: WorldEventsSnapshot): void {
+    this.restore(snapshot);
   }
 
   trigger(grid: VoxelGrid, type: EventType, tick: number): WorldEvent {
