@@ -12,6 +12,18 @@ assert.match(saveSystemSource, /const civBefore = this\.context\.getCivSnapshot\
   "world snapshot import must checkpoint the external civilization domain");
 assert.match(saveSystemSource, /this\.context\.restoreCivSnapshot\(civBefore\)/,
   "failed world snapshot import must restore civilization state");
+assert.match(saveSystemSource, /runtimeState:\s*\{[\s\S]*entityLayer:\s*this\.context\.getEntityLayerSnapshot\?\.\(\)[\s\S]*agents:\s*this\.context\.getAgentSystemSnapshot\?\.\(\)[\s\S]*civilizations:\s*this\.context\.getCivSnapshot\?\.\(\)[\s\S]*laws:\s*this\.context\.getLawEngineSnapshot\?\.\(\)/,
+  "quick saves must carry full runtime snapshots for entity, agent, civilization and law systems");
+assert.match(saveSystemSource, /this\.context\.restoreEntityLayerSnapshot\(runtime\.entityLayer\)/,
+  "quick save restore must rehydrate the full entity layer instead of leaving stale entity instances");
+assert.match(saveSystemSource, /this\.context\.restoreAgentSystemSnapshot\(runtime\.agents\)/,
+  "quick save restore must rehydrate the full agent system and RNG");
+assert.match(saveSystemSource, /this\.context\.restoreLawEngineSnapshot\(runtime\.laws\)/,
+  "quick save restore must preserve all laws, overrides and law RNG");
+assert.match(saveSystemSource, /this\.context\.clearEntityLayerRuntime\?\.\(\)/,
+  "portable or legacy saves without full runtime state must clear stale in-memory entities");
+assert.match(saveSystemSource, /this\.context\.clearAgentRuntime\?\.\(\)/,
+  "portable or legacy saves without full runtime state must clear stale in-memory agents");
 const cache = new Map();
 async function load(path) {
   if (cache.has(path)) return cache.get(path);

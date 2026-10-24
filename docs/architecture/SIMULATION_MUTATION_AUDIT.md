@@ -104,3 +104,10 @@ The world serializer now rejects missing, truncated, wrong-sized, or non-finite 
 - Decide which legacy direct buffer APIs remain supported and make their invalidation contract explicit; avoid pretending a local revision counter covers raw typed-array writes.
 - Improve failure injection for world-restore external domains and GPU-upload errors.
 - Keep entity merge/extinction and mixed-LOD topology fail-closed until complete-domain evidence, real transfer coverage, conservation, and rollback are tested together.
+
+
+### Quick-save runtime completeness checkpoint
+
+Quick saves now retain optional full runtime snapshots for the entity layer, agents, civilizations, and law engine, alongside the packed grid fields/chunks. Applying a quick save restores these snapshots within the authoritative engine transaction. Snapshots that do not carry the runtime-only payload (portable package import or older save) clear stale in-memory entity/agent registries and their grid ownership markers rather than leaving orphan registries behind. The serializer rejects missing, truncated, wrong-sized, or non-finite field buffers before mutating the target.
+
+This does not imply byte-for-byte restoration of every external subsystem: creator graph rollback is guarded separately; the current save format does not capture all recorder/causal-graph history or external browser services. Those remain explicit future scope.

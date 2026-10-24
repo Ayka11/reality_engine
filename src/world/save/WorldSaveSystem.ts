@@ -6,6 +6,10 @@ import { PROCESS_LIBRARY } from '../../process/ProcessDef';
 import type { MetaLaw } from '../../laws/MetaLaw';
 import type { CivSnapshot, StoredWorldSnapshot, WorldSaveSummary, WorldSnapshot } from './SaveFormats';
 import { WorldSerializer } from './WorldSerializer';
+import type { EntityLayerSnapshot } from '../../simulation/EntityLayer';
+import type { AgentSystemSnapshot } from '../../simulation/AgentSystem';
+import type { CivilizationSystemSnapshot } from '../../simulation/CivilizationSystem';
+import type { LawEngineSnapshot } from '../../laws/LawEngine';
 
 interface RealitySaveDb extends DBSchema {
   saves: {
@@ -45,8 +49,16 @@ interface SaveContext {
   getEntities?: () => unknown[];
   getCivs?: () => unknown[];
   loadCivs?: (civs: CivSnapshot[]) => void;
-  getCivSnapshot?: () => unknown;
-  restoreCivSnapshot?: (snapshot: unknown) => void;
+  getEntityLayerSnapshot?: () => EntityLayerSnapshot;
+  restoreEntityLayerSnapshot?: (snapshot: EntityLayerSnapshot) => void;
+  clearEntityLayerRuntime?: () => void;
+  getAgentSystemSnapshot?: () => AgentSystemSnapshot;
+  restoreAgentSystemSnapshot?: (snapshot: AgentSystemSnapshot) => void;
+  clearAgentRuntime?: () => void;
+  getCivSnapshot?: () => CivilizationSystemSnapshot;
+  restoreCivSnapshot?: (snapshot: CivilizationSystemSnapshot) => void;
+  getLawEngineSnapshot?: () => LawEngineSnapshot;
+  restoreLawEngineSnapshot?: (snapshot: LawEngineSnapshot) => void;
   getCausalLog?: () => unknown[];
   thumbnailCanvas?: HTMLCanvasElement | null;
 }
@@ -119,6 +131,12 @@ export class WorldSaveSystem {
       name,
       gridSize: { width: this.voxelGrid.W, height: this.voxelGrid.H, depth: this.voxelGrid.D },
       fields,
+      runtimeState: {
+        entityLayer: this.context.getEntityLayerSnapshot?.(),
+        agents: this.context.getAgentSystemSnapshot?.(),
+        civilizations: this.context.getCivSnapshot?.(),
+        laws: this.context.getLawEngineSnapshot?.(),
+      },
       realityGraph: this.context.graphProvider?.(),
       activeLaws: activeLaws.map(law => this.snapshotLaw(law)),
       activeProcesses: this.captureProcesses(),
@@ -136,21 +154,51 @@ export class WorldSaveSystem {
 
   async applySnapshot(snapshot: WorldSnapshot): Promise<void> {
     const graphBefore = this.context.graphProvider?.();
+    const entityBefore = this.context.getEntityLayerSnapshot?.();
+    const agentsBefore = this.context.getAgentSystemSnapshot?.();
     const civBefore = this.context.getCivSnapshot?.();
+    const lawsBefore = this.context.getLawEngineSnapshot?.();
+
     const apply = () => {
       this.serializer.applyFields(snapshot.fields, this.voxelGrid.buffer);
       if (snapshot.chunks && this.voxelGrid.loadChunks) this.voxelGrid.loadChunks(snapshot.chunks.serialized);
       if (snapshot.realityGraph) this.context.graphLoader?.(snapshot.realityGraph);
-      this.loadLaws(snapshot.activeLaws);
-      this.loadProcesses(snapshot.activeProcesses);
-      this.context.loadCivs?.(snapshot.civilizations);
+
+      const runtime = snapshot.runtimeState;
+      if (runtime?.laws && this.context.restoreLawEngineSnapshot) {
+        this.context.restoreLawEngineSnapshot(runtime.laws);
+      } else {
+        this.loadLaws(snapshot.activeLaws);
+        this.loadProcesses(snapshot.activeProcesses);
+      }
+
+      if (runtime?.entityLayer && this.context.restoreEntityLayerSnapshot) {
+        this.context.restoreEntityLayerSnapshot(runtime.entityLayer);
+      } else {
+        // Portable/older saves do not contain the full spatial entity model.
+        // Drop stale in-memory entities instead of leaving them inconsistent
+        // with the loaded field data; the main app also clears ENTITY_ID cells.
+        this.context.clearEntityLayerRuntime?.();
+      }
+
+      if (runtime?.agents && this.context.restoreAgentSystemSnapshot) {
+        this.context.restoreAgentSystemSnapshot(runtime.agents);
+      } else {
+        this.context.clearAgentRuntime?.();
+      }
+
+      if (runtime?.civilizations && this.context.restoreCivSnapshot) {
+        this.context.restoreCivSnapshot(runtime.civilizations);
+      } else {
+        this.context.loadCivs?.(snapshot.civilizations);
+      }
       this.context.setTick?.(snapshot.metadata.simulationTicks);
     };
 
     try {
       if (this.context.mutateAuthoritativeState) {
-        // One synchronous engine transaction covers grid/chunk publication, laws,
-        // tick and the GPU upload. The callback must not await.
+        // One synchronous engine transaction covers field/chunk publication,
+        // runtime subsystems, tick and GPU upload. This callback must not await.
         this.context.mutateAuthoritativeState(apply);
       } else {
         // Compatibility fallback for standalone WorldSaveSystem users.
@@ -159,18 +207,33 @@ export class WorldSaveSystem {
       }
     } catch (error) {
       const rollbackErrors: unknown[] = [];
+      const rollback = (label: string, restore: (() => void) | undefined) => {
+        if (!restore) return;
+        try {
+          restore();
+        } catch (rollbackError) {
+          rollbackErrors.push(new Error(`${label} rollback failed: ${String(rollbackError)}`));
+        }
+      };
       if (graphBefore !== undefined && this.context.graphLoader) {
-        try { this.context.graphLoader(graphBefore); }
-        catch (rollbackError) { rollbackErrors.push(rollbackError); }
+        rollback("Graph", () => this.context.graphLoader!(graphBefore));
+      }
+      if (entityBefore !== undefined && this.context.restoreEntityLayerSnapshot) {
+        rollback("Entity layer", () => this.context.restoreEntityLayerSnapshot!(entityBefore));
+      }
+      if (agentsBefore !== undefined && this.context.restoreAgentSystemSnapshot) {
+        rollback("Agents", () => this.context.restoreAgentSystemSnapshot!(agentsBefore));
       }
       if (civBefore !== undefined && this.context.restoreCivSnapshot) {
-        try { this.context.restoreCivSnapshot(civBefore); }
-        catch (rollbackError) { rollbackErrors.push(rollbackError); }
+        rollback("Civilization", () => this.context.restoreCivSnapshot!(civBefore));
+      }
+      if (lawsBefore !== undefined && this.context.restoreLawEngineSnapshot) {
+        rollback("Laws", () => this.context.restoreLawEngineSnapshot!(lawsBefore));
       }
       if (rollbackErrors.length > 0) {
         throw new AggregateError(
           [error, ...rollbackErrors],
-          "World restore failed and one or more external-domain rollbacks also failed",
+          "World restore failed and one or more runtime-domain rollbacks also failed",
         );
       }
       throw error;

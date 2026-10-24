@@ -1260,8 +1260,26 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
     const nextId = restoredCivs.length > 0 ? Math.max(...restoredCivs.map(civ => civ.id)) + 1 : 0;
     civSystem.restore({ ...previous, civs: restoredCivs, nextId });
   },
+  getEntityLayerSnapshot: () => sim.entityLayer.snapshot(),
+  restoreEntityLayerSnapshot: snapshot => sim.entityLayer.restore(snapshot, sim.grid.size),
+  clearEntityLayerRuntime: () => {
+    sim.entityLayer.clear();
+    for (let cell = 0; cell < sim.grid.size; cell++) {
+      sim.grid.buffer[cell * CELL_FIELDS + F.ENTITY_ID] = 0;
+    }
+  },
+  getAgentSystemSnapshot: () => sim.agents.snapshot(),
+  restoreAgentSystemSnapshot: snapshot => sim.agents.restore(snapshot),
+  clearAgentRuntime: () => {
+    sim.agents.clear();
+    for (let cell = 0; cell < sim.grid.size; cell++) {
+      sim.grid.buffer[cell * CELL_FIELDS + F.AGENT_MARK] = 0;
+    }
+  },
   getCivSnapshot: () => civSystem.snapshot(),
-  restoreCivSnapshot: snapshot => civSystem.restore(snapshot as ReturnType<typeof civSystem.snapshot>),
+  restoreCivSnapshot: snapshot => civSystem.restore(snapshot),
+  getLawEngineSnapshot: () => sim.laws.snapshot(),
+  restoreLawEngineSnapshot: snapshot => sim.laws.restore(snapshot),
   getCausalLog: () => sim.causal.recent(24),
   thumbnailCanvas: canvas,
 });

@@ -1,5 +1,9 @@
 import type { EntitySnapshot, LawSnapshot, ProcessSnapshot } from '../../creator';
 import type { RealityGraph } from '../../creator/types';
+import type { AgentSystemSnapshot } from '../../simulation/AgentSystem';
+import type { EntityLayerSnapshot } from '../../simulation/EntityLayer';
+import type { CivilizationSystemSnapshot } from '../../simulation/CivilizationSystem';
+import type { LawEngineSnapshot } from '../../laws/LawEngine';
 
 export type SaveFormat = 'reality' | 'quick' | 'scientific' | 'minimal';
 
@@ -17,6 +21,14 @@ export interface CivSnapshot {
   history: string[];
 }
 
+export interface WorldRuntimeStateSnapshot {
+  /** Complete in-process snapshots for faithful quick-save restoration. */
+  entityLayer?: EntityLayerSnapshot;
+  agents?: AgentSystemSnapshot;
+  civilizations?: CivilizationSystemSnapshot;
+  laws?: LawEngineSnapshot;
+}
+
 export interface WorldSnapshot {
   version: string;
   timestamp: number;
@@ -24,6 +36,8 @@ export interface WorldSnapshot {
   seed?: number;
   gridSize: { width: number; height: number; depth: number };
   fields: Record<string, ArrayBuffer>;
+  /** Optional runtime detail retained by quick saves; portable packages may omit it. */
+  runtimeState?: WorldRuntimeStateSnapshot;
   realityGraph?: RealityGraph;
   activeLaws: LawSnapshot[];
   activeProcesses: ProcessSnapshot[];
