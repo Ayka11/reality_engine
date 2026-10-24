@@ -11,22 +11,28 @@ export async function runSimulationEngineCPUFrameRollbackRegression(): Promise<v
   engine.restoreTick(7);
   const before = engine.captureCoreRecoveryState();
 
-  const agentSystem = engine.agents as unknown as {
-    tick: (grid: typeof engine.grid, dt: number) => void;
+  // Fail after physics, causality detection, world-event processing, and recorder
+  // updates have already mutated state. This exercises rollback of late domains,
+  // not just an early physics exception.
+  const lawEngine = engine.laws as unknown as {
+    tick: (...args: Parameters<typeof engine.laws.tick>) => void;
   };
-  const originalTick = agentSystem.tick;
-  agentSystem.tick = function(grid, dt) {
-    originalTick.call(this, grid, dt);
+  const originalTick = lawEngine.tick;
+  lawEngine.tick = function(...args) {
+    originalTick.apply(this, args);
     throw new Error("injected late CPU-frame failure");
   };
 
-  await assert.rejects(engine.step(0.016), /injected late CPU-frame failure/);
-  agentSystem.tick = originalTick;
+  try {
+    await assert.rejects(engine.step(0.016), /injected late CPU-frame failure/);
+  } finally {
+    lawEngine.tick = originalTick;
+  }
 
   assert.deepEqual(
     engine.captureCoreRecoveryState(),
     before,
-    "failed CPU frame must restore all captured core domains",
+    "failed CPU frame must restore all captured core domains after a late failure",
   );
 
   await engine.step(0.016);
