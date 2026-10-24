@@ -158,6 +158,25 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
     throw new Error("Infinity Scale invalid boundary target was not rejected before staging");
   }
 
+  let sparseTargetRejected = false;
+  try {
+    guardedSync.stageTransfer({
+      sourceChunk: "0:0,0,0",
+      targetChunk: "1:1,0,0",
+      relation: "fine-to-coarse",
+      sourceLevel: 0,
+      targetLevel: 1,
+      refinementRatio: 2,
+      operation: "restriction",
+      readOperation: "prolongation",
+    }, [, 0, 0] as unknown as [number, number, number], guardedSources);
+  } catch {
+    sparseTargetRejected = true;
+  }
+  if (!sparseTargetRejected || guardedSync.getStagedUpdates().length !== 0) {
+    throw new Error("Infinity Scale sparse boundary target was not rejected before staging");
+  }
+
   const invalidSource = new Array<number>(CELL_FIELDS).fill(1);
   invalidSource[F.ENERGY] = Number.POSITIVE_INFINITY;
   let invalidSourceRejected = false;
@@ -177,5 +196,26 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
   }
   if (!invalidSourceRejected || guardedSync.getStagedUpdates().length !== 0) {
     throw new Error("Infinity Scale non-finite boundary source was not rejected before staging");
+  }
+
+  const sparseSource = new Array<number>(CELL_FIELDS).fill(1);
+  delete sparseSource[3];
+  let sparseSourceRejected = false;
+  try {
+    guardedSync.stageTransfer({
+      sourceChunk: "0:0,0,0",
+      targetChunk: "1:1,0,0",
+      relation: "fine-to-coarse",
+      sourceLevel: 0,
+      targetLevel: 1,
+      refinementRatio: 2,
+      operation: "restriction",
+      readOperation: "prolongation",
+    }, [4, 0, 0], [sparseSource, ...guardedSources.slice(1)]);
+  } catch {
+    sparseSourceRejected = true;
+  }
+  if (!sparseSourceRejected || guardedSync.getStagedUpdates().length !== 0) {
+    throw new Error("Infinity Scale sparse boundary source was not rejected before staging");
   }
 }
