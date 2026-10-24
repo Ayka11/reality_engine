@@ -148,7 +148,7 @@ function replaceImport(js, pattern, url, label) {
   assert.match(js, pattern, "missing runtime import for " + label);
   return js.replace(pattern, 'from "' + url + '"');
 }
-const runtimeCellUrl = toModuleUrl(\`
+const runtimeCellUrl = toModuleUrl(`
 export const CELL_FIELDS = 24;
 export const F = {
   ENERGY:0,DENSITY:1,INFORMATION:2,ENTROPY:3,TEMPERATURE:4,PRESSURE:5,
@@ -156,10 +156,10 @@ export const F = {
   WAVE_PHASE:12,WAVE_AMP:13,GRAVITY_POT:14,MATERIAL_ID:15,CHEM_STATE:16,
   SIGNAL:17,MEM_FIELD:18,AGENT_MARK:19,ENTITY_ID:20,SPARE_1:21,SPARE_2:22,SPARE_3:23
 };
-\`);
-const runtimeIdbUrl = toModuleUrl(\`export async function openDB() { throw new Error("IndexedDB must not be used by this unit test"); }\`);
-const runtimeCreatorUrl = toModuleUrl(\`export class PackageSerializer { constructor() {} async pack() { return null; } async unpack() { return {}; } }\`);
-const runtimeProcessUrl = toModuleUrl(\`export const PROCESS_LIBRARY = [];\`);
+`);
+const runtimeIdbUrl = toModuleUrl(`export async function openDB() { throw new Error("IndexedDB must not be used by this unit test"); }`);
+const runtimeCreatorUrl = toModuleUrl(`export class PackageSerializer { constructor() {} async pack() { return null; } async unpack() { return {}; } }`);
+const runtimeProcessUrl = toModuleUrl(`export const PROCESS_LIBRARY = [];`);
 
 const serializerSource = await readFile(new URL("src/world/save/WorldSerializer.ts", root), "utf8");
 let serializerJs = ts.transpileModule(serializerSource, {
