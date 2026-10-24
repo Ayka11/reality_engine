@@ -65,6 +65,7 @@ export function runInfinityScaleGPUBoundaryTransferContractRegression(): void {
     { ...sameLevel, refinementRatio: 1.5 },
     { ...sameLevel, refinementRatio: Number.NaN },
     { ...sameLevel, refinementRatio: Number.POSITIVE_INFINITY },
+    { ...sameLevel, sourceLevel: Number.MAX_SAFE_INTEGER + 1 },
     { ...sameLevel, targetLevel: 1 },
     { ...sameLevel, operation: "restriction" },
     { ...coarseToFine, sourceLevel: 0 },
@@ -100,4 +101,16 @@ export function runInfinityScaleGPUBoundaryTransferContractRegression(): void {
     rejectedMalformedPacking = error instanceof Error;
   }
   if (!rejectedMalformedPacking) throw new Error("GPU boundary contract packed invalid descriptor data");
+
+  const lossyFloat32Descriptor = {
+    ...InfinityScaleGPUBoundaryTransferContract.descriptor(sameLevel, [0, 0, 0]),
+    targetCell: [16_777_217, 0, 0] as [number, number, number],
+  };
+  let rejectedLossyPacking = false;
+  try {
+    InfinityScaleGPUBoundaryTransferContract.pack([lossyFloat32Descriptor]);
+  } catch (error) {
+    rejectedLossyPacking = error instanceof Error;
+  }
+  if (!rejectedLossyPacking) throw new Error("GPU boundary contract silently lost precision during Float32 packing");
 }
