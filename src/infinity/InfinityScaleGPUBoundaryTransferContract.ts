@@ -221,7 +221,7 @@ export class InfinityScaleGPUBoundaryTransferContract {
 }
 
 function validateChunkKey(key: string, expectedLevel: number, role: "source" | "target"): void {
-  const match = /^(\\d+):(-?\\d+),(-?\\d+),(-?\\d+)$/.exec(key);
+  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
   if (!match) {
     throw new Error(`GPU boundary transfer ${role} chunk has an invalid key`);
   }
