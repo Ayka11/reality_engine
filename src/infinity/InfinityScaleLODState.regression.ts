@@ -53,8 +53,10 @@ export function runInfinityScaleLODResetInvalidationRegression(): void {
   const state = new InfinityScaleLODState(4);
   state.ensureChunk("0:0,0,0", 0);
   const transaction = beginInfinityScaleGlobalLODTransaction(frame(), plan(), state);
+  const revisionBeforeClear = state.getRevision();
 
   state.clear();
+  const expectedRevisionAfterClear = revisionBeforeClear + 1;
 
   let rejected = false;
   try {
@@ -68,9 +70,9 @@ export function runInfinityScaleLODResetInvalidationRegression(): void {
     throw new Error("Expected a pre-reset LOD transaction to be rejected after state clear");
   }
 
-  if (state.getRevision() !== 1) {
+  if (state.getRevision() !== expectedRevisionAfterClear) {
     throw new Error(
-      `Expected LOD reset to advance revision to 1, received ${state.getRevision()}`,
+      `Expected LOD reset to advance revision to ${expectedRevisionAfterClear}, received ${state.getRevision()}`,
     );
   }
 
