@@ -50,14 +50,23 @@ export class InfinityScaleLODSynchronization {
     sourceCells: ReadonlyArray<ArrayLike<number>>,
   ): void {
     InfinityScaleLODTransfer.validateSpec(spec);
-    if (!Array.isArray(targetCell) || targetCell.length !== 3 ||
-        targetCell.some(value => !Number.isSafeInteger(value) || value < 0)) {
+    if (!Array.isArray(targetCell) || targetCell.length !== 3) {
       throw new Error("Infinity Scale boundary target cell must contain three non-negative safe integer coordinates");
     }
-    if (!Array.isArray(sourceCells) || sourceCells.length === 0 ||
-        sourceCells.some(source => !source || source.length !== CELL_FIELDS ||
-          Array.from(source).some(value => !Number.isFinite(value)))) {
+    for (let axis = 0; axis < 3; axis++) {
+      if (!Number.isSafeInteger(targetCell[axis]) || targetCell[axis] < 0) {
+        throw new Error("Infinity Scale boundary target cell must contain three non-negative safe integer coordinates");
+      }
+    }
+    if (!Array.isArray(sourceCells) || sourceCells.length === 0) {
       throw new Error("Infinity Scale boundary transfer requires finite source cells with the expected field count");
+    }
+    for (const source of Array.from(sourceCells)) {
+      if (!source || source.length !== CELL_FIELDS ||
+          Array.from(source).length !== CELL_FIELDS ||
+          Array.from(source).some(value => !Number.isFinite(value))) {
+        throw new Error("Infinity Scale boundary transfer requires finite source cells with the expected field count");
+      }
     }
 
     const target = new Float32Array(CELL_FIELDS);
