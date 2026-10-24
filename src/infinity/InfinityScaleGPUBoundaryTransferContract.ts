@@ -52,6 +52,9 @@ export class InfinityScaleGPUBoundaryTransferContract {
     if (!Number.isSafeInteger(spec.refinementRatio) || spec.refinementRatio < 1) {
       throw new Error("GPU boundary transfer requires an integer refinement ratio");
     }
+    if (!Array.isArray(targetCell) || targetCell.length !== 3) {
+      throw new Error("GPU boundary transfer target cell must contain exactly three coordinates");
+    }
     if (targetCell.some(value => !Number.isSafeInteger(value))) {
       throw new Error("GPU boundary transfer target cell coordinates must be safe integers");
     }
@@ -159,6 +162,9 @@ export class InfinityScaleGPUBoundaryTransferContract {
         throw new Error("GPU boundary transfer descriptor source footprint is inconsistent");
       }
 
+      if (!Array.isArray(d.targetCell) || d.targetCell.length !== 3) {
+        throw new Error("GPU boundary transfer descriptor target cell must contain exactly three coordinates");
+      }
       const numericFields = [
         d.sourceLevel,
         d.targetLevel,
