@@ -12,29 +12,64 @@ export interface InfinityScaleGPUBoundaryTransferDescriptor {
   sourceCellCount: number;
 }
 
+const PACKED_STRIDE = 12;
+
 /**
- * GPU boundary-transfer contract.
- *
- * This module is deliberately CPU-side and pure: it serializes the canonical
- * mixed-LOD transfer geometry into descriptors that a future GPU boundary
- * pass can consume. It does not execute WebGPU work and therefore cannot
- * accidentally bypass the global transaction barrier.
+ * CPU-side contract for preparing mixed-LOD boundary-transfer metadata.
+ * This module does not execute GPU work or mutate topology; callers must still
+ * pass any actual transfer through the existing LOD transaction barrier.
  */
 export class InfinityScaleGPUBoundaryTransferContract {
   static descriptor(
     spec: InfinityScaleBoundaryTransferSpec,
     targetCell: [number, number, number],
   ): InfinityScaleGPUBoundaryTransferDescriptor {
+    if (!spec.sourceChunk || !spec.targetChunk) {
+      throw new Error("GPU boundary transfer requires source and target chunks");
+    }
+    if (
+      !Number.isInteger(spec.sourceLevel) ||
+      !Number.isInteger(spec.targetLevel) ||
+      spec.sourceLevel < 0 ||
+      spec.targetLevel < 0
+    ) {
+      throw new Error("GPU boundary transfer requires non-negative integer LOD levels");
+    }
     if (spec.refinementRatio < 1 || !Number.isInteger(spec.refinementRatio)) {
       throw new Error("GPU boundary transfer requires an integer refinement ratio");
     }
+    if (targetCell.some(value => !Number.isSafeInteger(value))) {
+      throw new Error("GPU boundary transfer target cell coordinates must be safe integers");
+    }
 
-    const sourceCellCount =
+    const expectedRatio = 2 ** Math.abs(spec.sourceLevel - spec.targetLevel);
+    if (spec.refinementRatio !== expectedRatio) {
+      throw new Error("GPU boundary transfer refinement ratio does not match LOD levels");
+    }
+
+    const expectedOperation =
       spec.relation === "same-level"
-        ? 1
+        ? "copy"
         : spec.relation === "coarse-to-fine"
-          ? 1
-          : spec.refinementRatio ** 2;
+          ? "prolongation"
+          : "restriction";
+    if (spec.operation !== expectedOperation) {
+      throw new Error("GPU boundary transfer operation does not match relation");
+    }
+
+    if (spec.relation === "same-level" && spec.sourceLevel !== spec.targetLevel) {
+      throw new Error("Same-level GPU boundary transfer requires matching LOD levels");
+    }
+    if (spec.relation === "coarse-to-fine" && spec.sourceLevel <= spec.targetLevel) {
+      throw new Error("Coarse-to-fine transfer requires a coarser source level");
+    }
+    if (spec.relation === "fine-to-coarse" && spec.sourceLevel >= spec.targetLevel) {
+      throw new Error("Fine-to-coarse transfer requires a finer source level");
+    }
+
+    const sourceCellCount = spec.relation === "fine-to-coarse"
+      ? spec.refinementRatio ** 2
+      : 1;
 
     return {
       sourceChunk: spec.sourceChunk,
@@ -52,14 +87,32 @@ export class InfinityScaleGPUBoundaryTransferContract {
   static pack(
     descriptors: ReadonlyArray<InfinityScaleGPUBoundaryTransferDescriptor>,
   ): Float32Array {
-    // 12 scalar slots per descriptor:
-    // source/target levels, ratio, operation/relation codes, target xyz,
-    // source-cell count, plus reserved slots for future GPU chunk indices.
-    const stride = 12;
-    const packed = new Float32Array(descriptors.length * stride);
+    const packed = new Float32Array(descriptors.length * PACKED_STRIDE);
 
     descriptors.forEach((d, i) => {
-      const o = i * stride;
+      const numericFields = [
+        d.sourceLevel,
+        d.targetLevel,
+        d.refinementRatio,
+        ...d.targetCell,
+        d.sourceCellCount,
+      ];
+      if (numericFields.some(value => !Number.isFinite(value))) {
+        throw new Error("GPU boundary transfer descriptor contains non-finite numeric data");
+      }
+      if (
+        !Number.isInteger(d.sourceLevel) ||
+        !Number.isInteger(d.targetLevel) ||
+        !Number.isInteger(d.refinementRatio) ||
+        d.refinementRatio < 1 ||
+        d.targetCell.some(value => !Number.isSafeInteger(value)) ||
+        !Number.isInteger(d.sourceCellCount) ||
+        d.sourceCellCount < 1
+      ) {
+        throw new Error("GPU boundary transfer descriptor contains invalid numeric data");
+      }
+
+      const o = i * PACKED_STRIDE;
       packed[o] = d.sourceLevel;
       packed[o + 1] = d.targetLevel;
       packed[o + 2] = d.refinementRatio;
@@ -69,6 +122,7 @@ export class InfinityScaleGPUBoundaryTransferContract {
       packed[o + 6] = d.targetCell[1];
       packed[o + 7] = d.targetCell[2];
       packed[o + 8] = d.sourceCellCount;
+      // Reserved slots for stable future GPU chunk-index fields.
       packed[o + 9] = 0;
       packed[o + 10] = 0;
       packed[o + 11] = 0;
