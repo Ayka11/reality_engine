@@ -8,35 +8,36 @@ export async function runSimulationEngineCPUFrameRollbackRegression(): Promise<v
   engine.grid.cell(3, 3, 2).set(F.DENSITY, 0.7);
   engine.agents.seed(engine.grid, 1);
   engine.grid.syncDenseToChunks();
-  engine.restoreTick(7);
+
+  // Tick 500 activates the frame's chunk cleanup path before the injected failure.
+  engine.restoreTick(500);
   const before = engine.captureCoreRecoveryState();
 
-  // Fail after physics, causality detection, world-event processing, and recorder
-  // updates have already mutated state. This exercises rollback of late domains,
-  // not just an early physics exception.
-  const lawEngine = engine.laws as unknown as {
-    tick: (...args: Parameters<typeof engine.laws.tick>) => void;
+  // Fail only after world events, recorder, laws, and chunk metadata cleanup
+  // have run. The wrapper lets cullInactive mutate first, then forces rollback.
+  const sparseGrid = engine.grid as unknown as {
+    cullInactive: (...args: Parameters<typeof engine.grid.cullInactive>) => void;
   };
-  const originalTick = lawEngine.tick;
-  lawEngine.tick = function(...args) {
-    originalTick.apply(this, args);
-    throw new Error("injected late CPU-frame failure");
-  };
-
+  const originalCullInactive = sparseGrid.cullInactive;
   try {
-    await assert.rejects(engine.step(0.016), /injected late CPU-frame failure/);
+    sparseGrid.cullInactive = function(...args) {
+      originalCullInactive.apply(this, args);
+      throw new Error("injected post-cull CPU-frame failure");
+    };
+
+    await assert.rejects(engine.step(0.016), /injected post-cull CPU-frame failure/);
   } finally {
-    lawEngine.tick = originalTick;
+    sparseGrid.cullInactive = originalCullInactive;
   }
 
   assert.deepEqual(
     engine.captureCoreRecoveryState(),
     before,
-    "failed CPU frame must restore all captured core domains after a late failure",
+    "failed CPU frame must restore core state and sparse-grid metadata after late failure",
   );
 
   await engine.step(0.016);
-  assert.equal(engine.tick, 8, "step queue must remain usable after a rolled-back frame");
+  assert.equal(engine.tick, 501, "step queue must remain usable after a rolled-back frame");
 }
 
 await runSimulationEngineCPUFrameRollbackRegression();
