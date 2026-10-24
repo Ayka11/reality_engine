@@ -209,10 +209,8 @@ export class SimulationEngine {
     if (!Number.isSafeInteger(n) || n < 0) {
       throw new RangeError('SimulationEngine syncTick n must be a non-negative safe integer');
     }
-    // Zero synchronous ticks are a true no-op and must not invalidate an in-flight GPU readback.
-    if (n === 0) return;
-
-    // A synchronous script tick invalidates any asynchronous GPU result already in flight.
+    // Even zero ticks are a synchronization boundary: callers may have made
+    // direct grid writes that must invalidate an in-flight GPU readback.
     this._stateGeneration++;
     const dt = 0.016;
     for (let s = 0; s < n; s++) {
