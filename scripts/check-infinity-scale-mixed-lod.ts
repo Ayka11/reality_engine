@@ -10,6 +10,9 @@ import { runInfinityScaleChunkExecutionContextBoundaryRegression } from "../src/
 import { runInfinityScaleLODStateRecoveryRegression } from "../src/infinity/InfinityScaleLODStateRecovery.regression";
 import { runInfinityScaleExecutionAdapterBoundaryRegression } from "../src/infinity/InfinityScaleExecutionAdapter.regression";
 import { runInfinityScaleLODTransferInvariantRegression } from "../src/infinity/InfinityScaleLODTransfer.regression";
+import { runInfinityScaleLODResetInvalidationRegression } from "../src/infinity/InfinityScaleLODState.regression";
+import { runInfinityScaleLODMultiFrameRegression } from "../src/infinity/InfinityScaleLODMultiFrame.regression";
+import { runInfinityScaleMixedLODMultiFrameRegression } from "../src/infinity/InfinityScaleMixedLODMultiFrame.regression";
 
 runInfinityScaleMixedLODCPURegression();
 runInfinityScaleMixedLODCPUProlongationRegression();
@@ -21,5 +24,8 @@ runInfinityScaleGlobalLODTransactionRegression();
 runInfinityScaleExecutionAdapterBoundaryRegression();
 runInfinityScaleLODTransferInvariantRegression();
 runInfinityScaleLODStateRecoveryRegression();
+runInfinityScaleLODResetInvalidationRegression();
+runInfinityScaleLODMultiFrameRegression();
+runInfinityScaleMixedLODMultiFrameRegression();
 
-console.log("PASS: Infinity Scale mixed-LOD CPU, rollback, mapper, chunk context, LOD transaction, execution adapter, transfer invariants, and state recovery regressions");
+console.log("PASS: Infinity Scale mixed-LOD CPU, rollback, multi-frame commits, reset invalidation, mapper, chunk context, LOD transaction, execution adapter, transfer invariants, and state recovery regressions");
