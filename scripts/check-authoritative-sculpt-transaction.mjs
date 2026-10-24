@@ -3,6 +3,23 @@ import { readFile } from "node:fs/promises";
 import ts from "typescript";
 
 const root = new URL("../", import.meta.url);
+const sculptManagerSource = await readFile(new URL("src/sculpt/SculptManager.ts", root), "utf8");
+const mainSource = await readFile(new URL("src/main.ts", root), "utf8");
+assert.match(
+  sculptManagerSource,
+  /this\.onBeforeChange\?\.\(\);\s*this\.lastStroke = await this\.brushEngine\.applyCustomStroke/,
+  "custom sculpt writes must invalidate in-flight GPU readback before mutating the grid",
+);
+assert.match(
+  sculptManagerSource,
+  /this\.onBeforeChange\?\.\(\);\s*this\.lastStroke = await this\.brushEngine\.applyStroke/,
+  "ordinary sculpt writes must invalidate in-flight GPU readback before mutating the grid",
+);
+assert.match(
+  mainSource,
+  /new SculptManager\(sim\.grid,\s*\(\) => sim\.syncToGPU\(\),\s*\(\) => sim\.invalidatePendingGPUReadback\(\)\)/,
+  "the live sculpt manager must be wired to the engine invalidation boundary",
+);
 const cache = new Map();
 async function load(path) {
   if (cache.has(path)) return cache.get(path);
