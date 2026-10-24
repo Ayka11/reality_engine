@@ -70,39 +70,6 @@ function mutateGenome(parent: EntityGenome, rate: number, random: () => number):
   };
 }
 
-function flood(grid: VoxelGrid, seed: number, visited: Uint8Array, threshold = 0.05): number[] {
-  const { W, H, D, buffer: buf } = grid;
-  const WH = W * H;
-  const stack = [seed];
-  const cells: number[] = [];
-  visited[seed] = 1;
-  while (stack.length) {
-    const i = stack.pop()!;
-    const bio = buf[i * CELL_FIELDS + F.BIO_POTENTIAL];
-    if (bio < threshold) continue;
-    cells.push(i);
-    const z = Math.floor(i / WH);
-    const rem = i - z * WH;
-    const y = Math.floor(rem / W);
-    const x = rem - y * W;
-    const neighbors = [
-      x > 0   ? i - 1  : -1,
-      x < W-1 ? i + 1  : -1,
-      y > 0   ? i - W  : -1,
-      y < H-1 ? i + W  : -1,
-      z > 0   ? i - WH : -1,
-      z < D-1 ? i + WH : -1,
-    ];
-    for (const ni of neighbors) {
-      if (ni >= 0 && !visited[ni]) {
-        visited[ni] = 1;
-        stack.push(ni);
-      }
-    }
-  }
-  return cells;
-}
-
 function centroid(cells: number[], W: number, H: number): [number, number, number] {
   let sx = 0, sy = 0, sz = 0;
   const WH = W * H;
@@ -403,93 +370,56 @@ export class EntityLayer {
     const extinctSnapshot = this.extinctCountValue;
     const rngSnapshot = this._rngState;
 
+    // Capture one transaction snapshot for the whole EntityLayer tick. The
+    // reconciliation commit reuses this state rather than copying the large
+    // grid a second time.
+    const rollbackTick = (): void => {
+      grid.buffer.set(bufferSnapshot);
+      if (grid instanceof SparseVoxelGrid) {
+        if (sparseBackBufferSnapshot) grid.backBuffer.set(sparseBackBufferSnapshot);
+        grid.syncDenseToChunks();
+      }
+      for (const [id, original] of originalEntities) {
+        const snapshot = entitySnapshots.get(id)!;
+        const refs = entityMutableRefs.get(id)!;
+        original.cells = refs.cells;
+        original.centroid = refs.centroid;
+        original.genome = refs.genome;
+        original.memoryBuffer = refs.memoryBuffer;
+        original.colorRgb = refs.colorRgb;
+        original.cells.length = 0;
+        for (const index of snapshot.cells) original.cells.push(index);
+        original.centroid[0] = snapshot.centroid[0];
+        original.centroid[1] = snapshot.centroid[1];
+        original.centroid[2] = snapshot.centroid[2];
+        Object.assign(original.genome, snapshot.genome);
+        original.age = snapshot.age;
+        original.energy = snapshot.energy;
+        original.stage = snapshot.stage;
+        original.memoryBuffer.set(snapshot.memoryBuffer);
+        original.memPtr = snapshot.memPtr;
+        original.symbol = snapshot.symbol;
+        original.colorRgb[0] = snapshot.colorRgb[0];
+        original.colorRgb[1] = snapshot.colorRgb[1];
+        original.colorRgb[2] = snapshot.colorRgb[2];
+        original.children = snapshot.children;
+        original.reproCounter = snapshot.reproCounter;
+      }
+      this.entities = originalEntities;
+      this.bioThreshold = thresholdSnapshot;
+      this.nextId = nextIdSnapshot;
+      this.extinctCountValue = extinctSnapshot;
+      this._rngState = rngSnapshot;
+    };
+
     try {
     const { W, H, D, buffer: buf } = grid;
     const n = grid.size;
 
-    // ── Detect blobs via flood-fill ──────────────────────────────────────────
-    const visited = new Uint8Array(n);
-    const activeCells = new Set<number>();
-    for (let i = 0; i < n; i++) {
-      if (buf[i * CELL_FIELDS + F.BIO_POTENTIAL] >= this.bioThreshold) activeCells.add(i);
-    }
-
-    const blobs: number[][] = [];
-    for (const seed of activeCells) {
-      if (!visited[seed]) {
-        const blob = flood(grid, seed, visited, this.bioThreshold);
-        if (blob.length >= 2) blobs.push(blob);
-      }
-    }
-
-    // ── Reconcile blobs → entities (simple size-match) ───────────────────────
-    const matched = new Set<number>();
-    const nextEntities: Map<number, Entity> = new Map();
-
-    for (const blob of blobs) {
-      const c = centroid(blob, W, H);
-      // Try to match an existing entity by centroid proximity
-      let best: Entity | null = null;
-      let bestDist = 5; // max 5-cell centroid drift per tick
-      for (const [, ent] of this.entities) {
-        if (matched.has(ent.id)) continue;
-        const dx = c[0] - ent.centroid[0];
-        const dy = c[1] - ent.centroid[1];
-        const dz = c[2] - ent.centroid[2];
-        const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
-        if (d < bestDist) { bestDist = d; best = ent; }
-      }
-
-      if (best) {
-        matched.add(best.id);
-        const nextCellSet = new Set(blob);
-        for (const previousCell of best.cells) {
-          if (nextCellSet.has(previousCell)) continue;
-          const previousBase = previousCell * CELL_FIELDS;
-          if (buf[previousBase + F.ENTITY_ID] === best.id) {
-            buf[previousBase + F.ENTITY_ID] = 0;
-          }
-        }
-        best.cells = blob;
-        best.centroid = c;
-        nextEntities.set(best.id, best);
-      } else {
-        // New entity — inherit any genome from field or start fresh
-        const id = this.nextId++;
-        const ent: Entity = {
-          id, cells: blob, centroid: c,
-          genome: defaultGenome(() => this._random()),
-          age: 0, energy: 0, stage: 'juvenile',
-          memoryBuffer: new Float32Array(8),
-          memPtr: 0,
-          symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
-          colorRgb: [
-            0.3 + this._random() * 0.7,
-            0.3 + this._random() * 0.7,
-            0.3 + this._random() * 0.7,
-          ],
-          children: 0,
-          reproCounter: 0,
-        };
-        nextEntities.set(id, ent);
-      }
-    }
-
-    // Count extinction for entities whose blob disappeared
-    for (const [id] of this.entities) {
-      if (!nextEntities.has(id)) {
-        this.extinctCountValue++;
-        const dead = this.entities.get(id)!;
-        for (const i of dead.cells) {
-          const base = i * CELL_FIELDS;
-          buf[base + F.ENERGY] = Math.min(9999, buf[base + F.ENERGY] + dead.energy * 0.3 / Math.max(1, dead.cells.length));
-          if (buf[base + F.ENTITY_ID] === id) {
-            buf[base + F.ENTITY_ID] = 0;
-          }
-        }
-      }
-    }
-    this.entities = nextEntities;
+    // Entity identity reconciliation now runs through a full-domain,
+    // revision-bound chunk plan. The adapter remains advisory for selective LOD;
+    // this path proves complete coverage of the current authoritative grid.
+    this._reconcileFullDomain(grid, rollbackTick);
 
     // ── Per-entity behaviour ─────────────────────────────────────────────────
     for (const [, ent] of this.entities) {
@@ -567,43 +497,114 @@ export class EntityLayer {
       buf[base + F.SIGNAL] = Math.max(0, buf[base + F.SIGNAL] - 0.5 * dt * 60);
     }
     } catch (error) {
-      grid.buffer.set(bufferSnapshot);
-      if (grid instanceof SparseVoxelGrid) {
-        if (sparseBackBufferSnapshot) grid.backBuffer.set(sparseBackBufferSnapshot);
-        grid.syncDenseToChunks();
-      }
-      for (const [id, original] of originalEntities) {
-        const snapshot = entitySnapshots.get(id)!;
-        const refs = entityMutableRefs.get(id)!;
-        original.cells = refs.cells;
-        original.centroid = refs.centroid;
-        original.genome = refs.genome;
-        original.memoryBuffer = refs.memoryBuffer;
-        original.colorRgb = refs.colorRgb;
-        original.cells.length = 0;
-        for (const index of snapshot.cells) original.cells.push(index);
-        original.centroid[0] = snapshot.centroid[0];
-        original.centroid[1] = snapshot.centroid[1];
-        original.centroid[2] = snapshot.centroid[2];
-        Object.assign(original.genome, snapshot.genome);
-        original.age = snapshot.age;
-        original.energy = snapshot.energy;
-        original.stage = snapshot.stage;
-        original.memoryBuffer.set(snapshot.memoryBuffer);
-        original.memPtr = snapshot.memPtr;
-        original.symbol = snapshot.symbol;
-        original.colorRgb[0] = snapshot.colorRgb[0];
-        original.colorRgb[1] = snapshot.colorRgb[1];
-        original.colorRgb[2] = snapshot.colorRgb[2];
-        original.children = snapshot.children;
-        original.reproCounter = snapshot.reproCounter;
-      }
-      this.entities = originalEntities;
-      this.bioThreshold = thresholdSnapshot;
-      this.nextId = nextIdSnapshot;
-      this.extinctCountValue = extinctSnapshot;
-      this._rngState = rngSnapshot;
+      rollbackTick();
       throw error;
+    }
+  }
+
+  private _reconcileFullDomain(grid: VoxelGrid, rollbackTick: () => void): void {
+    const context = createFullDomainExecutionContext(grid);
+    const connectivity = new EntityChunkConnectivity(this.bioThreshold).analyze(grid, context);
+    if (connectivity.domainCoverageComplete !== true) {
+      throw new Error("EntityLayer refuses identity changes without verified whole-grid connectivity");
+    }
+
+    // Preserve the existing lifecycle policy: singleton bio-cells do not
+    // become entities. They are nevertheless scanned, so the resulting domain
+    // proof remains complete for the registered entity lifecycle semantics.
+    const components = connectivity.components.filter(component => component.cells.length >= 2);
+    const entitiesBeforeCommit = new Map(this.entities);
+    const sourceInventory = this._captureCurrentDomainInventory(grid.size);
+    const plan = this.chunkReconciliation.planAtInventory(
+      components,
+      [...entitiesBeforeCommit.values()],
+      sourceInventory,
+      connectivity,
+    );
+    if (!plan.commitReady) {
+      throw new Error(
+        `EntityLayer full-domain reconciliation refused an incomplete plan: unresolved=${plan.unresolvedBoundaryComponents}, ambiguousMixedLod=${plan.ambiguousMixedLodComponents.length}`,
+      );
+    }
+
+    const componentById = new Map(components.map(component => [component.id, component]));
+    const commitResult = this.chunkReconciliation.commitAtomically(
+      plan,
+      components,
+      () => this._captureCurrentDomainInventory(grid.size),
+      // The outer tick already captured an authoritative grid/entity snapshot.
+      // Reuse that snapshot, so a transaction does not allocate a second copy of
+      // the large front/back buffers.
+      () => undefined,
+      (_staged, records) => {
+        const buf = grid.buffer;
+        // ENTITY_ID is owned by this layer. Clear all previous markers first;
+        // the behavior pass below re-stamps every entity in the committed plan.
+        for (let index = 0; index < grid.size; index++) {
+          buf[index * CELL_FIELDS + F.ENTITY_ID] = 0;
+        }
+
+        for (const extinctId of plan.extinctEntityIds) {
+          const dead = entitiesBeforeCommit.get(extinctId);
+          if (!dead) throw new Error(`EntityLayer extinction plan references unknown entity ${extinctId}`);
+          const energyShare = dead.energy * 0.3 / Math.max(1, dead.cells.length);
+          for (const cellIndex of dead.cells) {
+            const base = cellIndex * CELL_FIELDS;
+            buf[base + F.ENERGY] = Math.min(9999, buf[base + F.ENERGY] + energyShare);
+          }
+          this.extinctCountValue++;
+        }
+
+        const nextEntities = new Map<number, Entity>();
+        for (const record of records) {
+          const component = componentById.get(record.componentId);
+          if (!component) {
+            throw new Error(`EntityLayer reconciliation references missing component ${record.componentId}`);
+          }
+
+          let entity: Entity;
+          if (record.entityId !== null) {
+            const existing = entitiesBeforeCommit.get(record.entityId);
+            if (!existing) {
+              throw new Error(`EntityLayer reconciliation references unknown entity ${record.entityId}`);
+            }
+            entity = existing;
+          } else {
+            const id = this.nextId++;
+            entity = {
+              id,
+              cells: [...record.cells],
+              centroid: [...record.centroid] as [number, number, number],
+              genome: defaultGenome(() => this._random()),
+              age: 0,
+              energy: 0,
+              stage: "juvenile",
+              memoryBuffer: new Float32Array(8),
+              memPtr: 0,
+              symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
+              colorRgb: [
+                0.3 + this._random() * 0.7,
+                0.3 + this._random() * 0.7,
+                0.3 + this._random() * 0.7,
+              ],
+              children: 0,
+              reproCounter: 0,
+            };
+          }
+
+          entity.cells = [...record.cells];
+          entity.centroid = [...record.centroid] as [number, number, number];
+          if (nextEntities.has(entity.id)) {
+            throw new Error(`EntityLayer reconciliation assigned duplicate identity ${entity.id}`);
+          }
+          nextEntities.set(entity.id, entity);
+        }
+        this.entities = nextEntities;
+      },
+      () => rollbackTick(),
+    );
+    if (commitResult === null) {
+      throw new Error("EntityLayer rejected a reconciliation plan before commit");
     }
   }
 
