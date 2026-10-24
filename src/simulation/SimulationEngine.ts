@@ -713,7 +713,7 @@ export class SimulationEngine {
     ]);
 
     for (const key of keys) {
-      const match = /^(\\d+):(-?\\d+),(-?\\d+),(-?\\d+)$/.exec(key);
+      const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
       if (!match) throw new Error("Invalid Infinity Scale chunk key: " + key);
       const level = Number(match[1]);
       const cx = Number(match[2]);
