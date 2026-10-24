@@ -90,6 +90,38 @@ assert.equal(clearedAgents.rngState, resetSeed, 'AgentSystem.clear must rewind i
 assert.equal(clearedAgents.nextAgentId, 1, 'AgentSystem.clear must reset the identity allocator');
 assert.equal(clearedAgents.agents.length, 0, 'AgentSystem.clear must remove all agents');
 
+// A failed synchronous script tick must restore every engine-owned mutable
+// domain after an inner subsystem has already changed CPU state.
+const syncRollbackEngine = new SimulationEngine(8, 8, 4);
+const syncRollbackEnergy = syncRollbackEngine.grid.idx(2, 2, 1) + F.ENERGY;
+syncRollbackEngine.grid.buffer[syncRollbackEnergy] = 400;
+syncRollbackEngine.grid.buffer[syncRollbackEngine.grid.idx(3, 2, 1) + F.ENERGY] = 3;
+syncRollbackEngine.grid.syncDenseToChunks();
+const beforeSyncTickFailure = syncRollbackEngine.captureCoreRecoveryState();
+const syncRollbackChemistry = (syncRollbackEngine as unknown as {
+  chemLayer: { tick: (...args: any[]) => void };
+}).chemLayer;
+const originalSyncRollbackChemistryTick = syncRollbackChemistry.tick;
+syncRollbackChemistry.tick = function (...args: any[]) {
+  originalSyncRollbackChemistryTick.apply(syncRollbackChemistry, args);
+  throw new Error("injected synchronous tick chemistry failure");
+};
+try {
+  assert.throws(
+    () => syncRollbackEngine.syncTick(1),
+    /injected synchronous tick chemistry failure/,
+  );
+} finally {
+  syncRollbackChemistry.tick = originalSyncRollbackChemistryTick;
+}
+assert.deepEqual(
+  syncRollbackEngine.captureCoreRecoveryState(),
+  beforeSyncTickFailure,
+  "failed syncTick must roll back changes from earlier physics layers and chemistry",
+);
+syncRollbackEngine.syncTick(1);
+assert.equal(syncRollbackEngine.tick, 1, "syncTick must remain usable after rollback");
+
 // A zero-step sync remains an explicit mutation boundary for public typed-array
 // writes: invalidate an in-flight GPU result and preserve the newer CPU state.
 const staleGpuEngine = new SimulationEngine(8, 8, 4);
