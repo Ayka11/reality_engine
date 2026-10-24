@@ -1248,7 +1248,6 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
   graphLoader: graph => {
     creatorEditor?.loadGraph(graph);
   },
-  syncToGPU: () => sim.syncToGPU(),
   mutateAuthoritativeState: mutation => sim.mutateAuthoritativeState(mutation),
   getTick: () => sim.tick,
   setTick: tick => sim.restoreTick(tick),

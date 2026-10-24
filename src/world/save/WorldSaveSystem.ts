@@ -44,7 +44,6 @@ interface LawEngineLike {
 interface SaveContext {
   graphProvider?: () => RealityGraph | undefined;
   graphLoader?: (graph: RealityGraph) => void;
-  syncToGPU?: () => void;
   /** Synchronous engine-owned transaction used for field import/restore publication. */
   mutateAuthoritativeState?: <T>(mutation: () => T) => T;
   getTick?: () => number;
@@ -173,6 +172,10 @@ export class WorldSaveSystem {
   }
 
   async applySnapshot(snapshot: WorldSnapshot): Promise<void> {
+    const mutate = this.context.mutateAuthoritativeState;
+    if (!mutate) {
+      throw new Error("World restore requires an engine-owned mutation transaction");
+    }
     const graphBefore = this.context.graphProvider?.();
     const entityBefore = this.context.getEntityLayerSnapshot?.();
     const agentsBefore = this.context.getAgentSystemSnapshot?.();
@@ -245,15 +248,9 @@ export class WorldSaveSystem {
     };
 
     try {
-      if (this.context.mutateAuthoritativeState) {
-        // One synchronous engine transaction covers field/chunk publication,
-        // runtime subsystems, tick and GPU upload. This callback must not await.
-        this.context.mutateAuthoritativeState(apply);
-      } else {
-        // Compatibility fallback for standalone WorldSaveSystem users.
-        apply();
-        this.context.syncToGPU?.();
-      }
+      // One synchronous engine transaction covers field/chunk publication,
+      // runtime subsystems, tick and GPU upload. This callback must not await.
+      mutate(apply);
     } catch (error) {
       const rollbackErrors: unknown[] = [];
       const rollback = (label: string, restore: (() => void) | undefined) => {

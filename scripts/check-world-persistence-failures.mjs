@@ -5,8 +5,12 @@ import ts from "typescript";
 const root = new URL("../", import.meta.url);
 const saveSystemSource = await readFile(new URL("src/world/save/WorldSaveSystem.ts", root), "utf8");
 const mainSource = await readFile(new URL("src/main.ts", root), "utf8");
-assert.match(saveSystemSource, /this\.context\.mutateAuthoritativeState\(apply\)/,
-  "world snapshot import must commit through the authoritative simulation transaction");
+assert.match(saveSystemSource, /const mutate = this\.context\.mutateAuthoritativeState;/,
+  "world snapshot import must use the authoritative simulation transaction");
+assert.match(saveSystemSource, /if \(!mutate\)\s*\{\s*throw new Error\("World restore requires an engine-owned mutation transaction"\)/,
+  "world snapshot import must fail closed if the authoritative transaction port is missing");
+assert.doesNotMatch(saveSystemSource, /this\.context\.syncToGPU\?\.\(\)/,
+  "world snapshot import must not use an untransactional compatibility fallback");
 assert.match(saveSystemSource, /const graphBefore = this\.context\.graphProvider\?\.\(\)/,
   "world snapshot import must checkpoint the external graph domain");
 assert.match(saveSystemSource, /const civBefore = this\.context\.getCivSnapshot\?\.\(\)/,
@@ -135,6 +139,198 @@ assert.equal(persistence.deleteFieldState(), false,
 failRemove = false;
 assert.equal(persistence.deleteFieldState(), true);
 assert.equal(persistence.loadFieldState(), null);
+
+
+function toModuleUrl(source) {
+  return "data:text/javascript;base64," + Buffer.from(source).toString("base64");
+}
+function replaceImport(js, pattern, url, label) {
+  assert.match(js, pattern, "missing runtime import for " + label);
+  return js.replace(pattern, 'from "' + url + '"');
+}
+const runtimeCellUrl = toModuleUrl(\`
+export const CELL_FIELDS = 24;
+export const F = {
+  ENERGY:0,DENSITY:1,INFORMATION:2,ENTROPY:3,TEMPERATURE:4,PRESSURE:5,
+  FIELD_X:6,FIELD_Y:7,FIELD_Z:8,LOCAL_TIME:9,CAUSALITY_ID:10,BIO_POTENTIAL:11,
+  WAVE_PHASE:12,WAVE_AMP:13,GRAVITY_POT:14,MATERIAL_ID:15,CHEM_STATE:16,
+  SIGNAL:17,MEM_FIELD:18,AGENT_MARK:19,ENTITY_ID:20,SPARE_1:21,SPARE_2:22,SPARE_3:23
+};
+\`);
+const runtimeIdbUrl = toModuleUrl(\`export async function openDB() { throw new Error("IndexedDB must not be used by this unit test"); }\`);
+const runtimeCreatorUrl = toModuleUrl(\`export class PackageSerializer { constructor() {} async pack() { return null; } async unpack() { return {}; } }\`);
+const runtimeProcessUrl = toModuleUrl(\`export const PROCESS_LIBRARY = [];\`);
+
+const serializerSource = await readFile(new URL("src/world/save/WorldSerializer.ts", root), "utf8");
+let serializerJs = ts.transpileModule(serializerSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+serializerJs = replaceImport(serializerJs, /from\s+["']\.\.\/\.\.\/core\/CellState["']/, runtimeCellUrl, "WorldSerializer CellState");
+const runtimeSerializerUrl = toModuleUrl(serializerJs);
+
+let saveSystemJs = ts.transpileModule(saveSystemSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+saveSystemJs = replaceImport(saveSystemJs, /from\s+["']idb["']/, runtimeIdbUrl, "idb");
+saveSystemJs = replaceImport(saveSystemJs, /from\s+["']\.\.\/\.\.\/creator["']/, runtimeCreatorUrl, "PackageSerializer");
+saveSystemJs = replaceImport(saveSystemJs, /from\s+["']\.\.\/\.\.\/core\/CellState["']/, runtimeCellUrl, "CellState fields");
+saveSystemJs = replaceImport(saveSystemJs, /from\s+["']\.\.\/\.\.\/process\/ProcessDef["']/, runtimeProcessUrl, "PROCESS_LIBRARY");
+saveSystemJs = replaceImport(saveSystemJs, /from\s+["']\.\/WorldSerializer["']/, runtimeSerializerUrl, "WorldSerializer");
+const runtimeSaveUrl = toModuleUrl(saveSystemJs);
+const { WorldSaveSystem: RuntimeWorldSaveSystem } = await import(runtimeSaveUrl);
+
+const runtimeGrid = {
+  W: 2, H: 1, D: 1, size: 2,
+  buffer: new Float32Array(2 * 24),
+  totalField(fieldIndex) {
+    let sum = 0;
+    for (let offset = fieldIndex; offset < this.buffer.length; offset += 24) sum += this.buffer[offset];
+    return sum;
+  },
+};
+runtimeGrid.buffer[0] = 51;
+runtimeGrid.buffer[17] = 2;
+runtimeGrid.buffer[18] = 8;
+runtimeGrid.buffer[19] = 3;
+runtimeGrid.buffer[20] = 4;
+runtimeGrid.buffer[24] = 29;
+const runtimeState = {
+  entityRuntime: { source: "runtime-save", ids: [4] },
+  agentRuntime: { source: "runtime-save", ids: [9] },
+  civilizationRuntime: { source: "runtime-save", ids: [2], tickCount: 3, historyLog: ["old-world"], rngState: 19 },
+  civs: [],
+  lawRuntime: { source: "runtime-save", override: "keep" },
+  chemistry: { pendingDensityTransfers: [[1, 0.25]] },
+  worldEvents: { history: [], nextAuto: 177, rngState: 12345 },
+  causal: { events: [], nextId: 7, lastEventByCell: [[1, 6]] },
+  previousEnergy: new Float32Array([5, 6]),
+  tick: 44,
+  recorderClears: 0,
+  entityClearCount: 0,
+  agentClearCount: 0,
+};
+const cloneValue = value => structuredClone(value);
+const mockLawEngine = {
+  laws: [],
+  activeProcessMask: 0,
+  applyGraphPlan(plan) {
+    this.activeProcessMask = (plan.activeProcessIds ?? []).reduce((mask,id) => mask | (1 << id), 0);
+  },
+};
+const transactionContext = {
+  mutateAuthoritativeState(mutation) {
+    const beforeBuffer = runtimeGrid.buffer.slice();
+    const beforeState = cloneValue(runtimeState);
+    const beforeLaws = cloneValue(mockLawEngine.laws);
+    const beforeMask = mockLawEngine.activeProcessMask;
+    try {
+      return mutation();
+    } catch (error) {
+      runtimeGrid.buffer.set(beforeBuffer);
+      Object.assign(runtimeState, beforeState);
+      mockLawEngine.laws = beforeLaws;
+      mockLawEngine.activeProcessMask = beforeMask;
+      throw error;
+    }
+  },
+  graphProvider: () => undefined,
+  getTick: () => runtimeState.tick,
+  setTick: tick => { runtimeState.tick = tick; },
+  getEntities: () => [],
+  getCivs: () => cloneValue(runtimeState.civs),
+  loadCivs: civs => { runtimeState.civilizationRuntime = { mode: "portable", civs: cloneValue(civs), tickCount: 0, historyLog: [], rngState: 123 }; },
+  getEntityLayerSnapshot: () => cloneValue(runtimeState.entityRuntime),
+  restoreEntityLayerSnapshot: snapshot => { runtimeState.entityRuntime = cloneValue(snapshot); },
+  clearEntityLayerRuntime: () => {
+    runtimeState.entityRuntime = { mode: "cleared" };
+    runtimeState.entityClearCount++;
+    for (let cell = 0; cell < runtimeGrid.size; cell++) runtimeGrid.buffer[cell * 24 + 20] = 0;
+  },
+  getAgentSystemSnapshot: () => cloneValue(runtimeState.agentRuntime),
+  restoreAgentSystemSnapshot: snapshot => { runtimeState.agentRuntime = cloneValue(snapshot); },
+  clearAgentRuntime: () => {
+    runtimeState.agentRuntime = { mode: "cleared" };
+    runtimeState.agentClearCount++;
+    for (let cell = 0; cell < runtimeGrid.size; cell++) runtimeGrid.buffer[cell * 24 + 19] = 0;
+  },
+  getCivSnapshot: () => cloneValue(runtimeState.civilizationRuntime),
+  restoreCivSnapshot: snapshot => { runtimeState.civilizationRuntime = cloneValue(snapshot); },
+  getLawEngineSnapshot: () => cloneValue(runtimeState.lawRuntime),
+  restoreLawEngineSnapshot: snapshot => { runtimeState.lawRuntime = cloneValue(snapshot); },
+  getChemistrySnapshot: () => cloneValue(runtimeState.chemistry),
+  restoreChemistrySnapshot: snapshot => { runtimeState.chemistry = cloneValue(snapshot); },
+  resetChemistry: () => { runtimeState.chemistry = { pendingDensityTransfers: [] }; },
+  getWorldEventsSnapshot: () => cloneValue(runtimeState.worldEvents),
+  restoreWorldEventsSnapshot: snapshot => { runtimeState.worldEvents = cloneValue(snapshot); },
+  resetWorldEvents: () => { runtimeState.worldEvents = { history: [], nextAuto: 600, rngState: 0x6d2b79f5 }; },
+  getCausalSnapshot: () => cloneValue(runtimeState.causal),
+  restoreCausalSnapshot: snapshot => { runtimeState.causal = cloneValue(snapshot); },
+  resetCausal: () => { runtimeState.causal = { events: [], nextId: 1, lastEventByCell: [] }; },
+  getPreviousEnergySnapshot: () => new Float32Array(runtimeState.previousEnergy),
+  restorePreviousEnergySnapshot: snapshot => { runtimeState.previousEnergy = new Float32Array(snapshot); },
+  resetPreviousEnergy: () => { runtimeState.previousEnergy = new Float32Array(runtimeGrid.size); },
+  clearRecorderSnapshots: () => { runtimeState.recorderClears++; },
+  getCausalLog: () => cloneValue(runtimeState.causal.events),
+};
+const saveHarness = new RuntimeWorldSaveSystem(runtimeGrid, mockLawEngine, null, transactionContext);
+const savedRuntimeWorld = saveHarness.captureSnapshot("Runtime checkpoint");
+const expectedRuntimeBuffer = runtimeGrid.buffer.slice();
+const expectedRuntimeState = cloneValue(runtimeState);
+
+runtimeGrid.buffer.fill(99);
+runtimeState.entityRuntime = { source: "wrong-world" };
+runtimeState.agentRuntime = { source: "wrong-world" };
+runtimeState.civilizationRuntime = { source: "wrong-world" };
+runtimeState.lawRuntime = { source: "wrong-world" };
+runtimeState.chemistry = { pendingDensityTransfers: [[0, 999]] };
+runtimeState.worldEvents = { history: [], nextAuto: 1, rngState: 999 };
+runtimeState.causal = { events: [], nextId: 900, lastEventByCell: [] };
+runtimeState.previousEnergy.fill(999);
+runtimeState.tick = 900;
+
+await saveHarness.applySnapshot(savedRuntimeWorld);
+assert.deepEqual(runtimeGrid.buffer, expectedRuntimeBuffer, "quick-save restore must restore every field value");
+assert.deepEqual(runtimeState.entityRuntime, expectedRuntimeState.entityRuntime, "quick-save restore must recover entity runtime");
+assert.deepEqual(runtimeState.agentRuntime, expectedRuntimeState.agentRuntime, "quick-save restore must recover agent runtime");
+assert.deepEqual(runtimeState.civilizationRuntime, expectedRuntimeState.civilizationRuntime, "quick-save restore must recover civilization runtime");
+assert.deepEqual(runtimeState.lawRuntime, expectedRuntimeState.lawRuntime, "quick-save restore must recover full law runtime");
+assert.deepEqual(runtimeState.chemistry, expectedRuntimeState.chemistry, "quick-save restore must recover pending chemistry transfers");
+assert.deepEqual(runtimeState.worldEvents, expectedRuntimeState.worldEvents, "quick-save restore must recover event queue and PRNG");
+assert.deepEqual(runtimeState.causal, expectedRuntimeState.causal, "quick-save restore must recover causal graph identity state");
+assert.deepEqual(runtimeState.previousEnergy, expectedRuntimeState.previousEnergy, "quick-save restore must recover previous-energy baseline");
+assert.equal(runtimeState.tick, savedRuntimeWorld.metadata.simulationTicks, "quick-save restore must restore simulation tick");
+assert.equal(runtimeState.recorderClears, 1, "successful restore must clear field-only recorder history");
+
+const legacySnapshot = { ...savedRuntimeWorld, civilizations: [] };
+delete legacySnapshot.runtimeState;
+runtimeState.entityRuntime = { source: "stale-entity" };
+runtimeState.agentRuntime = { source: "stale-agent" };
+runtimeState.civilizationRuntime = { source: "stale-civilization" };
+runtimeState.chemistry = { pendingDensityTransfers: [[0, 999]] };
+runtimeState.worldEvents = { history: [], nextAuto: 1, rngState: 999 };
+runtimeState.causal = { events: [], nextId: 900, lastEventByCell: [] };
+runtimeState.previousEnergy.fill(777);
+runtimeGrid.buffer.fill(0);
+await saveHarness.applySnapshot(legacySnapshot);
+assert.deepEqual(runtimeState.entityRuntime, { mode: "cleared" }, "legacy restore must clear stale entity runtime");
+assert.deepEqual(runtimeState.agentRuntime, { mode: "cleared" }, "legacy restore must clear stale agent runtime");
+assert.deepEqual(runtimeState.civilizationRuntime, { mode: "portable", civs: [], tickCount: 0, historyLog: [], rngState: 123 },
+  "legacy restore must reset civilization transient state rather than inherit the previous world");
+assert.deepEqual(runtimeState.chemistry, { pendingDensityTransfers: [] }, "legacy restore must clear pending chemistry transfers");
+assert.deepEqual(runtimeState.worldEvents, { history: [], nextAuto: 600, rngState: 0x6d2b79f5 }, "legacy restore must reset world-event history and PRNG");
+assert.deepEqual(runtimeState.causal, { events: [], nextId: 1, lastEventByCell: [] }, "legacy restore must clear stale causal history");
+assert.deepEqual(runtimeState.previousEnergy, new Float32Array(runtimeGrid.size), "legacy restore must reset the previous-energy baseline");
+assert.equal(runtimeState.recorderClears, 2, "each world restore must clear stale recorder history");
+assert.equal(runtimeGrid.buffer[20], 0, "legacy restore must clear stale entity ownership marker");
+assert.equal(runtimeGrid.buffer[19], 0, "legacy restore must clear stale agent marker");
+
+const noTransactionSaver = new RuntimeWorldSaveSystem(runtimeGrid, mockLawEngine, null, {});
+const beforeRejectedRestore = runtimeGrid.buffer.slice();
+await assert.rejects(
+  noTransactionSaver.applySnapshot(savedRuntimeWorld),
+  /World restore requires an engine-owned mutation transaction/,
+);
+assert.deepEqual(runtimeGrid.buffer, beforeRejectedRestore, "restore without a transaction port must fail before mutation");
 
 console.log("PASS: field persistence round-trip and seed isolation");
 console.log("PASS: quota, read, delete, and corrupt-storage failures are contained");

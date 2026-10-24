@@ -118,3 +118,8 @@ This does not imply byte-for-byte restoration of every external subsystem: creat
 Quick saves additionally preserve chemistry's pending density-transfer queue, world-event history/auto-event countdown/PRNG, causal graph identity state, and the previous-energy baseline used for causal spike detection. Portable/legacy saves that omit those details reset these transient domains to their configured initial states instead of inheriting data from the previously loaded world. Civilization summaries from portable saves are loaded with a fresh per-world tick/history/PRNG baseline.
 
 Scientific Recorder frames are intentionally **field-only snapshots**, not full runtime checkpoints. All UI restore/replay writes now go through `mutateAuthoritativeState`, invalidating pending GPU readback before the write and publishing dense/chunk/GPU state together. On world import, old Recorder history is cleared so it cannot be mistaken for frames from the newly loaded world. Replaying a Recorder field frame should not be described as restoring every entity, agent, law, or external subsystem; that remains distinct from quick-save restoration.
+
+
+### World-save restore transaction contract
+
+`WorldSaveSystem.applySnapshot()` now refuses to mutate state if the engine-owned synchronous transaction callback is absent; the former partial fallback could have applied fields/laws without a complete rollback boundary. The persistence regression harness instantiates the actual `WorldSaveSystem` implementation with deterministic ports and verifies quick-save restoration of each runtime domain, portable/legacy reset behavior, ownership-marker clearing, recorder-history invalidation, and failure-closed behavior when no transaction is supplied.
