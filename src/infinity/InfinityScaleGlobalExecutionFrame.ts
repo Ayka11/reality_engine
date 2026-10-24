@@ -118,10 +118,8 @@ export function validateInfinityScaleGlobalFrameCommit(
   if (frame.finalized) {
     throw new Error("Infinity Scale commit rejected: frame already finalized");
   }
-  if (
-    capabilities &&
-    frame.capabilityFingerprint !==
-      fingerprintCapabilities({
+  const actualCapabilityFingerprint = capabilities
+    ? fingerprintCapabilities({
         mode: plan.mode,
         selectiveCpuReady: capabilities.selectiveCpuReady,
         selectiveGpuReady: capabilities.selectiveGpuReady,
@@ -131,9 +129,10 @@ export function validateInfinityScaleGlobalFrameCommit(
         entityExecutionReady: plan.entityExecutionReady,
         agentMigrationReady: plan.agentMigrationReady,
       })
-  ) {
+    : frame.capabilityFingerprint;
+  if (capabilities && frame.capabilityFingerprint !== actualCapabilityFingerprint) {
     throw new Error(
-      "Infinity Scale commit rejected: execution capabilities changed",
+      `Infinity Scale commit rejected: execution capabilities changed (expected ${frame.capabilityFingerprint}; actual ${actualCapabilityFingerprint})`,
     );
   }
 }
