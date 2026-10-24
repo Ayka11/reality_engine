@@ -55,8 +55,8 @@ export class InfinityScaleGPUBoundaryTransferContract {
     if (!Array.isArray(targetCell) || targetCell.length !== 3) {
       throw new Error("GPU boundary transfer target cell must contain exactly three coordinates");
     }
-    if (targetCell.some(value => !Number.isSafeInteger(value))) {
-      throw new Error("GPU boundary transfer target cell coordinates must be safe integers");
+    if (targetCell.some(value => !Number.isSafeInteger(value) || value < 0)) {
+      throw new Error("GPU boundary transfer target cell coordinates must be non-negative safe integers");
     }
 
     const expectedRatio = 2 ** Math.abs(spec.sourceLevel - spec.targetLevel);
@@ -185,7 +185,7 @@ export class InfinityScaleGPUBoundaryTransferContract {
         !Number.isInteger(d.targetLevel) ||
         !Number.isInteger(d.refinementRatio) ||
         d.refinementRatio < 1 ||
-        d.targetCell.some(value => !Number.isSafeInteger(value)) ||
+        d.targetCell.some(value => !Number.isSafeInteger(value) || value < 0) ||
         !Number.isInteger(d.sourceCellCount) ||
         d.sourceCellCount < 1
       ) {
