@@ -1017,6 +1017,155 @@ try {
   }
 
 
+
+  // Restore adjacent world chunks one at a time (the current restore contract
+  // serializes operations) and verify that x/y/z field seams remain paired.
+  const restoredChunkSeamContract = await page.evaluate(async () => {
+    const raw = sessionStorage.getItem("reality-engine-worker-restore-fixture");
+    if (!raw) return { error: "durable restore fixture metadata missing" };
+    const fixture = JSON.parse(raw);
+    const { cx, cy, cz } = fixture.coord;
+    const coords = [
+      [cx, cy, cz],
+      [cx + 1, cy, cz],
+      [cx, cy + 1, cz],
+      [cx, cy, cz + 1],
+    ];
+    const view = window.getWorldViewContract?.();
+    if (!view) return { error: "world view contract unavailable for seam fixture" };
+
+    // Ensure each world chunk intersects a worker cell that is persisted in its snapshot.
+    for (const [chunkX, chunkY, chunkZ] of coords) {
+      const worldX = chunkX * 32 + 16;
+      const worldY = chunkY * 32 + 16;
+      const worldZ = chunkZ * 32 + 16;
+      const workerX = Math.round(worldX - view.center.x + 64);
+      const workerY = Math.round(worldY - view.center.y + 64 * 0.45);
+      const workerZ = Math.round(worldZ - view.center.z + 64);
+      window.paintChunkAt?.(workerX, workerY, workerZ, 0, 0.25, 2, "add");
+      window.populateWorldFieldChunk?.(chunkX, chunkY, chunkZ);
+    }
+
+    let snapshots = [];
+    for (let attempt = 0; attempt < 80; attempt++) {
+      window.tickChunkWorker?.(true, 1);
+      snapshots = coords.map(([chunkX, chunkY, chunkZ]) =>
+        window.snapshotWorldFieldChunkPersistence?.(chunkX, chunkY, chunkZ));
+      if (snapshots.every(snapshot =>
+        !!snapshot &&
+        snapshot.schemaVersion === 2 &&
+        !!snapshot.workerChunks?.length &&
+        window.validateWorldFieldChunkSnapshot?.(snapshot))) break;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const validSnapshots = snapshots.every(snapshot =>
+      !!snapshot &&
+      snapshot.schemaVersion === 2 &&
+      !!snapshot.workerChunks?.length &&
+      window.validateWorldFieldChunkSnapshot?.(snapshot));
+    if (!validSnapshots) {
+      return {
+        error: "could not persist complete adjacent worker chunk snapshots",
+        savedChunks: snapshots.map(snapshot => snapshot?.workerChunks?.length ?? 0),
+      };
+    }
+    const durable = await window.flushWorldFieldChunkPersistence?.();
+    if (!durable?.durable || durable.pending) {
+      return { error: "adjacent worker chunk snapshots were not durably committed", durable };
+    }
+
+    const axes = [
+      { axis: "x", base: coords[0], next: coords[1] },
+      { axis: "y", base: coords[0], next: coords[2] },
+      { axis: "z", base: coords[0], next: coords[3] },
+    ];
+    const validateSeams = () => axes.map(({ axis, base, next }) => {
+      const left = window.snapshotWorldFieldBoundary?.(
+        base[0], base[1], base[2], axis, 1, 8,
+      );
+      const right = window.snapshotWorldFieldBoundary?.(
+        next[0], next[1], next[2], axis, -1, 8,
+      );
+      return {
+        axis,
+        leftPublished: !!left,
+        rightPublished: !!right,
+        ...window.validateWorldFieldBoundary?.(base[0], base[1], base[2], axis),
+      };
+    });
+    const beforeRestore = validateSeams();
+    for (const [chunkX, chunkY, chunkZ] of coords) {
+      window.evictWorldFieldChunk?.(chunkX, chunkY, chunkZ);
+    }
+
+    const restored = [];
+    for (const [chunkX, chunkY, chunkZ] of coords) {
+      const started = await window.restoreWorldFieldChunkSnapshot?.(chunkX, chunkY, chunkZ);
+      if (!started) {
+        return { error: "adjacent worker chunk restore was rejected", coords, restored };
+      }
+      let state;
+      for (let attempt = 0; attempt < 600; attempt++) {
+        state = window.worldFieldRestoreState?.();
+        if (state?.complete === true) break;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      state = window.worldFieldRestoreState?.();
+      if (!state?.complete ||
+          state.acknowledged !== state.expected ||
+          state.duplicateAcks !== 0 ||
+          state.unexpectedAcks !== 0 ||
+          state.unexpectedFrames !== 0 ||
+          state.staleAcks !== 0 ||
+          state.staleFrames !== 0) {
+        return {
+          error: "adjacent worker chunk restore did not pass the ACK/frame barrier",
+          coords: [chunkX, chunkY, chunkZ],
+          state,
+          restored,
+        };
+      }
+      restored.push({
+        coord: [chunkX, chunkY, chunkZ],
+        expected: state.expected,
+        acknowledged: state.acknowledged,
+        complete: state.complete,
+      });
+    }
+    const afterRestore = validateSeams();
+    return {
+      validSnapshots,
+      savedChunks: snapshots.map(snapshot => snapshot?.workerChunks?.length ?? 0),
+      durable,
+      beforeRestore,
+      afterRestore,
+      restored,
+    };
+  });
+  const seamSetIsValid = seams => Array.isArray(seams) && seams.length === 3 &&
+    seams.every(seam =>
+      seam.leftPublished &&
+      seam.rightPublished &&
+      seam.paired === true &&
+      seam.samples === 64 &&
+      Number.isFinite(seam.maxDelta) &&
+      seam.maxDelta <= 1e-6);
+  if (
+    restoredChunkSeamContract.error ||
+    !restoredChunkSeamContract.validSnapshots ||
+    !restoredChunkSeamContract.durable?.durable ||
+    restoredChunkSeamContract.durable.pending ||
+    restoredChunkSeamContract.savedChunks?.some(count => count < 1) ||
+    restoredChunkSeamContract.restored?.length !== 4 ||
+    restoredChunkSeamContract.restored.some(result =>
+      !result.complete || result.expected !== result.acknowledged) ||
+    !seamSetIsValid(restoredChunkSeamContract.beforeRestore) ||
+    !seamSetIsValid(restoredChunkSeamContract.afterRestore)
+  ) {
+    throw new Error("Cross-chunk seam validation failed after persistence eviction/restore: " + JSON.stringify(restoredChunkSeamContract));
+  }
+
+
   // The restore lock must be acquired before awaiting IndexedDB: overlapping
   // dispatches otherwise pass the same pre-await guard and race their restore IDs.
   const overlappingRestoreGuard = await page.evaluate(async () => {
