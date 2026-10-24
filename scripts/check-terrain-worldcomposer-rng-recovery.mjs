@@ -33,7 +33,11 @@ const { WorldComposer } = await compile(composerSource, [
   [/from ['"]\.\.\/core\/CellState['"]/, cellUrl],
 ]);
 
-function makeGrid(W = 32, H = 32, D = 8) {
+assert.match(composerSource, /sim\.mutateAuthoritativeState\(\(\) => \{/,
+  "world generation and periodic hazards must use the authoritative simulation mutation boundary");
+assert.match(composerSource, /this\._rngState = rngBefore/,
+  "failed periodic hazards must restore the composer RNG");
+\nfunction makeGrid(W = 32, H = 32, D = 8) {
   return new VoxelGrid(W, H, D);
 }
 function generate(biome, seed) {
@@ -54,11 +58,34 @@ globalThis.setInterval = (callback) => { intervalCallback = callback; return 123
 globalThis.clearInterval = () => { intervalCallback = null; };
 try {
   const grid = makeGrid(8, 8, 4);
-  const sim = { grid, agents: { seed() {} }, syncToGPU() {} };
+  const sim = {
+    grid,
+    agents: { seed() {} },
+    transactionCount: 0,
+    failNextMutation: false,
+    syncToGPU() {},
+    mutateAuthoritativeState(mutation) {
+      const before = grid.buffer.slice();
+      try {
+        const result = mutation();
+        if (this.failNextMutation) {
+          this.failNextMutation = false;
+          throw new Error("injected mutation publication failure");
+        }
+        this.transactionCount++;
+        this.syncToGPU();
+        return result;
+      } catch (error) {
+        grid.buffer.set(before);
+        throw error;
+      }
+    },
+  };
   const composer = new WorldComposer(sim, null, 0x12345678);
   composer.selection.phi = "Harmonic";
   composer.selection.spacetime = "High Radiation";
   composer.generate();
+  assert.equal(sim.transactionCount, 1, "world generation must publish through one mutation transaction");
   assert.equal(typeof intervalCallback, "function", "hazard interval should be configured");
   const checkpoint = composer.snapshotRandomState();
   const baseline = grid.buffer.slice();
@@ -70,6 +97,16 @@ try {
   intervalCallback();
   assert.deepEqual(Array.from(grid.buffer), expectedGrid, "world hazard effects must replay after RNG restore");
   assert.equal(composer.snapshotRandomState(), expectedState, "world hazard RNG state must replay");
+  assert.equal(sim.transactionCount, 3, "each periodic hazard batch must commit through one mutation transaction");
+
+  const beforeFailedHazard = grid.buffer.slice();
+  const hazardRngBeforeFailure = composer.snapshotRandomState();
+  sim.failNextMutation = true;
+  intervalCallback();
+  assert.deepEqual(Array.from(grid.buffer), Array.from(beforeFailedHazard),
+    "failed hazard publication must roll back its grid writes");
+  assert.equal(composer.snapshotRandomState(), hazardRngBeforeFailure,
+    "failed hazard publication must rewind the composer RNG for deterministic retry");
   assert.throws(() => composer.restoreRandomState(0), /Invalid WorldComposer PRNG state/);
   composer._clearHazards();
 } finally {
