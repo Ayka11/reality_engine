@@ -212,20 +212,39 @@ export class SimulationEngine {
     // Even zero ticks are a synchronization boundary: callers may have made
     // direct grid writes that must invalidate an in-flight GPU readback.
     this._stateGeneration++;
+    // Positive syncTicks are synchronous transactions. Because no await occurs
+    // between capture and completion, rollback cannot erase interleaved external
+    // mutations; zero remains a lightweight sync/invalidation boundary.
+    const recoveryBefore = n > 0 ? this.captureCoreRecoveryState() : null;
     const dt = 0.016;
-    for (let s = 0; s < n; s++) {
-      this.fieldPhysics.tick(this.grid, dt, this.laws.params, this.laws.activeProcessMask);
-      this.entropyLayer.tick(this.grid, dt, this.laws.params, this.laws.activeProcessMask);
-      this.chemLayer.tick(this.grid, dt);
-      this.entityLayer.tick(this.grid, dt);
-      this.temporalLayer.tick(this.grid, dt);
-      this.infoPhysics.tick(this.grid, dt);
-      this.agents.tick(this.grid, dt);
-      this.laws.tick(this._worldMetrics());
-      this._tick++;
+    try {
+      for (let s = 0; s < n; s++) {
+        this.fieldPhysics.tick(this.grid, dt, this.laws.params, this.laws.activeProcessMask);
+        this.entropyLayer.tick(this.grid, dt, this.laws.params, this.laws.activeProcessMask);
+        this.chemLayer.tick(this.grid, dt);
+        this.entityLayer.tick(this.grid, dt);
+        this.temporalLayer.tick(this.grid, dt);
+        this.infoPhysics.tick(this.grid, dt);
+        this.agents.tick(this.grid, dt);
+        this.laws.tick(this._worldMetrics());
+        this._tick++;
+      }
+      this.grid.syncDenseToChunks();
+      this._stateGeneration++;
+    } catch (error) {
+      if (recoveryBefore) {
+        try {
+          this.restoreCoreRecoveryState(recoveryBefore);
+        } catch (rollbackError) {
+          const originalMessage = error instanceof Error ? error.message : String(error);
+          const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          throw new Error(
+            `Synchronous script tick failed (${originalMessage}) and rollback failed (${rollbackMessage})`,
+          );
+        }
+      }
+      throw error;
     }
-    this.grid.syncDenseToChunks();
-    this._stateGeneration++;
   }
 
   /**
