@@ -172,47 +172,74 @@ export class WorldComposer {
     const st   = SPACETIME_PROFILES[selection.spacetime] ?? SPACETIME_PROFILES['Standard'];
     const { grid } = sim;
     const { W, H, D, buffer: buf } = grid;
+    const civilizationBefore = cplx.growth >= 1.3 && this.civSystem
+      ? this.civSystem.snapshot()
+      : null;
 
-    // Fill grid — dV noise shaped by sNoise
-    for (let z = 0; z < D; z++) {
-      for (let y = 0; y < H; y++) {
-        for (let x = 0; x < W; x++) {
-          const n  = (Math.sin(x * 0.4) * Math.cos(y * 0.3) + 1) / 2;
-          const nz = (Math.sin(x * 0.7 * st.sNoise) * Math.cos(y * 0.6 * st.sNoise) + 1) / 2;
-          const bi = grid.idx(x, y, z);
-          buf[bi + F.ENERGY]        = Math.max(0, (n*0.7+nz*0.3) * 600 * fld.E * phi.phiStrength + 20);
-          buf[bi + F.DENSITY]       = Math.max(0, n * fld.rho);
-          buf[bi + F.INFORMATION]   = Math.max(0, nz * 100 * fld.I * phi.phiStrength);
-          buf[bi + F.ENTROPY]       = Math.max(0, 0.02 + (1 - phi.phiStrength) * 0.1);
-          buf[bi + F.TEMPERATURE]   = Math.max(0, n * 300 * fld.E);
-          buf[bi + F.BIO_POTENTIAL] = Math.max(0, nz * fld.I * 0.5);
+    try {
+      sim.mutateAuthoritativeState(() => {
+        // Fill grid — dV noise shaped by sNoise.
+        for (let z = 0; z < D; z++) {
+          for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+              const n  = (Math.sin(x * 0.4) * Math.cos(y * 0.3) + 1) / 2;
+              const nz = (Math.sin(x * 0.7 * st.sNoise) * Math.cos(y * 0.6 * st.sNoise) + 1) / 2;
+              const bi = grid.idx(x, y, z);
+              buf[bi + F.ENERGY]        = Math.max(0, (n*0.7+nz*0.3) * 600 * fld.E * phi.phiStrength + 20);
+              buf[bi + F.DENSITY]       = Math.max(0, n * fld.rho);
+              buf[bi + F.INFORMATION]   = Math.max(0, nz * 100 * fld.I * phi.phiStrength);
+              buf[bi + F.ENTROPY]       = Math.max(0, 0.02 + (1 - phi.phiStrength) * 0.1);
+              buf[bi + F.TEMPERATURE]   = Math.max(0, n * 300 * fld.E);
+              buf[bi + F.BIO_POTENTIAL] = Math.max(0, nz * fld.I * 0.5);
+            }
+          }
+        }
+
+        // The initial population is part of the same simulation transaction.
+        const nAgents = Math.round(cplx.agents * st.timeDil * 1.5);
+        if (nAgents > 0) sim.agents.seed(grid, nAgents);
+
+        // Civilization seeding reads the freshly-generated grid. Restore its
+        // independent state if a later publication/synchronization step fails.
+        if (cplx.growth >= 1.3 && this.civSystem) {
+          this.civSystem.seedFromGrid();
+        }
+      });
+    } catch (error) {
+      if (civilizationBefore && this.civSystem) {
+        try {
+          this.civSystem.restore(civilizationBefore);
+        } catch (rollbackError) {
+          throw new AggregateError(
+            [error, rollbackError],
+            "World generation failed and civilization rollback also failed",
+          );
         }
       }
-    }
-
-    // Spawn agents scaled by C and dτ
-    const nAgents = Math.round(cplx.agents * st.timeDil * 1.5);
-    if (nAgents > 0) sim.agents.seed(grid, nAgents);
-
-    // Spawn civs for high-complexity modes
-    if (cplx.growth >= 1.3 && this.civSystem) {
-      this.civSystem.seedFromGrid();
+      throw error;
     }
 
     // Apply spacetime hazards
     this._clearHazards();
     if (st.hazards.length > 0) {
       this.activeHazardInterval = setInterval(() => {
-        for (const h of st.hazards) {
-          if (h === 'radiation') _hazardRadiation(sim.grid, () => this._random());
-          if (h === 'meteors')   _hazardMeteors(sim.grid, () => this._random());
-          if (h === 'solar')     _hazardSolarStorm(sim.grid, () => this._random());
-          if (h === 'freeze')    _hazardFreezing(sim.grid);
+        const rngBefore = this._rngState;
+        try {
+          sim.mutateAuthoritativeState(() => {
+            for (const h of st.hazards) {
+              if (h === 'radiation') _hazardRadiation(sim.grid, () => this._random());
+              if (h === 'meteors')   _hazardMeteors(sim.grid, () => this._random());
+              if (h === 'solar')     _hazardSolarStorm(sim.grid, () => this._random());
+              if (h === 'freeze')    _hazardFreezing(sim.grid);
+            }
+          });
+        } catch (error) {
+          this._rngState = rngBefore;
+          console.error('[WorldComposer] Hazard mutation rolled back', error);
         }
       }, 5000);
     }
 
-    sim.syncToGPU();
     return `∫ Φ=${selection.phi} · ${selection.fields} · C=${selection.complexity} → reality generated`;
   }
 
