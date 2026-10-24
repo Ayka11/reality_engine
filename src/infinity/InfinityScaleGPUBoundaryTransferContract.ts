@@ -93,6 +93,58 @@ export class InfinityScaleGPUBoundaryTransferContract {
     const packed = new Float32Array(descriptors.length * PACKED_STRIDE);
 
     descriptors.forEach((d, i) => {
+      if (!d.sourceChunk || !d.targetChunk) {
+        throw new Error("GPU boundary transfer descriptor requires source and target chunks");
+      }
+      if (
+        d.relation !== "same-level" &&
+        d.relation !== "coarse-to-fine" &&
+        d.relation !== "fine-to-coarse"
+      ) {
+        throw new Error("GPU boundary transfer descriptor contains an unknown relation");
+      }
+      if (
+        d.operation !== "copy" &&
+        d.operation !== "prolongation" &&
+        d.operation !== "restriction"
+      ) {
+        throw new Error("GPU boundary transfer descriptor contains an unknown operation");
+      }
+      const expectedOperation =
+        d.relation === "same-level"
+          ? "copy"
+          : d.relation === "coarse-to-fine"
+            ? "prolongation"
+            : "restriction";
+      if (d.operation !== expectedOperation) {
+        throw new Error("GPU boundary transfer descriptor operation does not match relation");
+      }
+      if (
+        !Number.isSafeInteger(d.sourceLevel) ||
+        !Number.isSafeInteger(d.targetLevel) ||
+        d.sourceLevel < 0 ||
+        d.targetLevel < 0
+      ) {
+        throw new Error("GPU boundary transfer descriptor contains invalid LOD levels");
+      }
+      const expectedRatio = 2 ** Math.abs(d.sourceLevel - d.targetLevel);
+      if (!Number.isSafeInteger(expectedRatio) || d.refinementRatio !== expectedRatio) {
+        throw new Error("GPU boundary transfer descriptor refinement ratio does not match LOD levels");
+      }
+      if (
+        (d.relation === "same-level" && d.sourceLevel !== d.targetLevel) ||
+        (d.relation === "coarse-to-fine" && d.sourceLevel <= d.targetLevel) ||
+        (d.relation === "fine-to-coarse" && d.sourceLevel >= d.targetLevel)
+      ) {
+        throw new Error("GPU boundary transfer descriptor relation does not match LOD levels");
+      }
+      const expectedSourceCellCount = d.relation === "fine-to-coarse"
+        ? d.refinementRatio ** 2
+        : 1;
+      if (!Number.isSafeInteger(expectedSourceCellCount) || d.sourceCellCount !== expectedSourceCellCount) {
+        throw new Error("GPU boundary transfer descriptor source footprint is inconsistent");
+      }
+
       const numericFields = [
         d.sourceLevel,
         d.targetLevel,
