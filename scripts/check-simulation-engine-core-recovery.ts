@@ -2,18 +2,24 @@ import assert from 'node:assert/strict';
 import { F } from '../src/core/CellState.ts';
 import { SimulationEngine } from '../src/simulation/SimulationEngine.ts';
 
-const engine = new SimulationEngine(4, 4, 2);
-const fieldIndex = engine.grid.idx(1, 1, 1) + F.ENERGY;
+const engine = new SimulationEngine(16, 16, 8);
+const fieldIndex = engine.grid.idx(7, 7, 3) + F.ENERGY;
 engine.grid.buffer[fieldIndex] = 125;
 engine.grid.backBuffer[fieldIndex] = 87;
 engine.grid.syncDenseToChunks();
-const agentId = engine.agents.spawnAt(1, 1, 1, 'explorer', 210);
+engine.agents.seed(engine.grid, 1);
+const initialAgent = engine.agents.getAgents()[0];
+assert.ok(initialAgent, 'seeded recovery fixture must create an agent');
+const agentId = initialAgent.id;
+initialAgent.energy = 210;
+engine.grid.syncDenseToChunks();
 engine.restoreTick(12);
 engine.laws.setLawOverride('law_radiation', 'on');
 engine.laws.toggleProcess(27, false);
 engine.recorder.startRecording();
 engine.causal.log(12, 1, 1, 1, 21, 'energy_spike', 45);
 engine.worldEvents.trigger(engine.grid, 'meteor_strike', 12);
+engine.grid.syncDenseToChunks();
 
 // The local law RNG and generated IDs must replay from an identical snapshot.
 const lawSnapshot = engine.laws.snapshot();
@@ -28,7 +34,7 @@ const expectedLawMask = engine.laws.activeProcessMask;
 engine.grid.buffer[fieldIndex] = -10;
 engine.grid.backBuffer[fieldIndex] = -20;
 engine.agents.getAgents()[0]!.energy = 1;
-engine.agents.spawnAt(2, 2, 1, 'builder', 80);
+engine.agents.seed(engine.grid, 1);
 engine.restoreTick(99);
 engine.laws.setLawOverride('law_radiation', 'off');
 engine.laws.toggleProcess(27, true);
