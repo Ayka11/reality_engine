@@ -36,6 +36,7 @@ jobs:
       - run: npm run test:sparse-voxel-grid-recovery --if-present
       - run: npm run test:causal-graph-recovery --if-present
       - run: npm run test:recorder-recovery --if-present
+      - run: npm run test:agent-system-recovery --if-present
       - run: npm run test:infinity-scale-mixed-lod --if-present
       - run: npm run test:infinity-scale-adaptive-lod-bridge --if-present
       - run: npm run test:presets --if-present

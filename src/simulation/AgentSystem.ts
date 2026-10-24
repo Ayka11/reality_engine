@@ -22,6 +22,12 @@ export interface AgentMarker {
   age: number;
 }
 
+export interface AgentSystemSnapshot {
+  agents: Agent[];
+  nextAgentId: number;
+  rngState: number;
+}
+
 const BEHAVIORS: AgentBehavior[] = ['explorer', 'harvester', 'signaler', 'builder', 'destroyer'];
 
 function randomBehavior(random: () => number): AgentBehavior {
@@ -62,6 +68,78 @@ export class AgentSystem {
       throw new Error("Invalid AgentSystem PRNG state");
     }
     this._rngState = state >>> 0;
+  }
+
+  snapshot(): AgentSystemSnapshot {
+    return {
+      agents: [...this.agents.values()].map(agent => ({ ...agent })),
+      nextAgentId: this._nextAgentId,
+      rngState: this._rngState,
+    };
+  }
+
+  restore(snapshot: AgentSystemSnapshot): void {
+    if (!snapshot ||
+        typeof snapshot !== "object" ||
+        !Array.isArray(snapshot.agents) ||
+        snapshot.agents.length > this.maxAgents ||
+        !Number.isSafeInteger(snapshot.nextAgentId) ||
+        snapshot.nextAgentId < 1 ||
+        !Number.isSafeInteger(snapshot.rngState) ||
+        snapshot.rngState <= 0 ||
+        snapshot.rngState > 0xffffffff) {
+      throw new Error("Invalid AgentSystem snapshot envelope");
+    }
+
+    const restored = new Map<number, Agent>();
+    let maxId = 0;
+    for (const candidate of snapshot.agents as unknown[]) {
+      if (!candidate || typeof candidate !== "object") {
+        throw new Error("Invalid AgentSystem snapshot agent");
+      }
+      const agent = candidate as Partial<Agent>;
+      if (!Number.isSafeInteger(agent.id) ||
+          (agent.id as number) < 1 ||
+          restored.has(agent.id as number) ||
+          !Number.isSafeInteger(agent.x) || (agent.x as number) < 0 ||
+          !Number.isSafeInteger(agent.y) || (agent.y as number) < 0 ||
+          !Number.isSafeInteger(agent.z) || (agent.z as number) < 0 ||
+          typeof agent.energy !== "number" ||
+          !Number.isFinite(agent.energy) || agent.energy < 0 ||
+          !Number.isSafeInteger(agent.age) || (agent.age as number) < 0 ||
+          typeof agent.behavior !== "string" ||
+          !BEHAVIORS.includes(agent.behavior as AgentBehavior) ||
+          typeof agent.memory !== "number" || !Number.isFinite(agent.memory) ||
+          typeof agent.signal !== "number" || !Number.isFinite(agent.signal) ||
+          !Number.isSafeInteger(agent.children) || (agent.children as number) < 0) {
+        throw new Error("Invalid AgentSystem snapshot agent state");
+      }
+
+      const restoredAgent: Agent = {
+        id: agent.id as number,
+        x: agent.x as number,
+        y: agent.y as number,
+        z: agent.z as number,
+        energy: agent.energy,
+        age: agent.age as number,
+        behavior: agent.behavior as AgentBehavior,
+        memory: agent.memory,
+        signal: agent.signal,
+        children: agent.children as number,
+      };
+      restored.set(restoredAgent.id, restoredAgent);
+      maxId = Math.max(maxId, restoredAgent.id);
+    }
+
+    if (snapshot.nextAgentId <= maxId) {
+      throw new Error("Invalid AgentSystem snapshot allocator state");
+    }
+
+    // Replace live state only after the whole candidate has been validated
+    // and detached from its caller-owned objects.
+    this.agents = restored;
+    this._nextAgentId = snapshot.nextAgentId;
+    this._rngState = snapshot.rngState >>> 0;
   }
 
   // Seed agents + inject local energy so they survive from a cold start
