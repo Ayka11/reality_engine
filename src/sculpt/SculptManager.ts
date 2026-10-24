@@ -40,6 +40,7 @@ export class SculptManager {
 
   async applyCustomStroke(stroke: BrushStroke, apply: () => void): Promise<BrushStroke> {
     try {
+      this.onBeforeChange?.();
       this.lastStroke = await this.brushEngine.applyCustomStroke(stroke, apply);
       this.onChanged?.();
       return this.lastStroke;
@@ -71,6 +72,7 @@ export class SculptManager {
     };
 
     try {
+      this.onBeforeChange?.();
       this.lastStroke = await this.brushEngine.applyStroke(stroke);
       this.onChanged?.();
       return this.lastStroke;
@@ -93,12 +95,16 @@ export class SculptManager {
   }
 
   undo(): BrushStroke | null {
+    if (this.brushEngine.historyLength === 0) return null;
+    this.onBeforeChange?.();
     const stroke = this.brushEngine.undo();
     if (stroke) this.onChanged?.();
     return stroke;
   }
 
   redo(): BrushStroke | null {
+    if (this.brushEngine.redoLength === 0) return null;
+    this.onBeforeChange?.();
     const stroke = this.brushEngine.redo();
     if (stroke) this.onChanged?.();
     return stroke;
