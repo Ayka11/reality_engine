@@ -2,8 +2,23 @@ import { InfinityScaleAdaptiveLODTransactionBridge } from "./InfinityScaleAdapti
 import { beginInfinityScaleGlobalFrame, advanceInfinityScaleGlobalFrame } from "./InfinityScaleGlobalExecutionFrame";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
+import { InfinityScaleExecutionAdapter } from "./InfinityScaleExecutionAdapter";
 
 export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
+  // The adapter is advisory until the production solver actually consumes its work set.
+  const defaultExecutionPlan = new InfinityScaleExecutionAdapter().getPlan();
+  if (defaultExecutionPlan.mode !== "advisory") {
+    throw new Error("Unwired Infinity Scale runtime must default to advisory execution mode");
+  }
+  if (defaultExecutionPlan.selectiveCpuReady) {
+    throw new Error("Unwired Infinity Scale runtime must not claim selective CPU readiness");
+  }
+  if (defaultExecutionPlan.entityExecutionReady) {
+    throw new Error("Entity reconciliation must remain not-ready until wired to runtime transactions");
+  }
+  if (defaultExecutionPlan.agentMigrationReady) {
+    throw new Error("Agent migration must remain not-ready until wired to the authoritative runtime transaction");
+  }
   const plan: InfinityScaleExecutionPlan = {
     revision: 0, mode: "selective-cpu-ready", observer: { x: 0, y: 0, z: 0 },
     chunks: [], simulationBudget: 0, requestedSimulationCount: 0, selectedSimulationCount: 0,

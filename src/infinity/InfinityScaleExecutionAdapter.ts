@@ -5,6 +5,7 @@ import type {
   InfinityScaleBoundaryReadRelation,
 } from "./InfinityScaleChunkExecutionContext";
 import { WORLD } from "../core/WorldConstants";
+import { validateIndependentMixedLodTopology } from "./InfinityScaleIndependentTopology";
 
 export type InfinityScaleExecutionMode =
   | "advisory"
@@ -43,7 +44,9 @@ export interface InfinityScaleExecutionPlan {
   gpuPhysicsReady: boolean;
   lodBoundaryTransferReady: boolean;
   mixedLodExecutionReady: boolean;
+  /** True only when chunk-aware entity reconciliation is wired to the runtime transaction. */
   entityExecutionReady: boolean;
+  /** True only when agent migration is integrated with the authoritative runtime transaction. */
   agentMigrationReady: boolean;
 }
 
@@ -66,7 +69,7 @@ export interface InfinityScaleExecutionCapabilities {
 export class InfinityScaleExecutionAdapter {
   private plan: InfinityScaleExecutionPlan;
   private capabilities: InfinityScaleExecutionCapabilities = {
-    selectiveCpuReady: true,
+    selectiveCpuReady: false,
     selectiveGpuReady: false,
     gpuPhysicsReady: false,
     lodBoundaryTransferReady: false,
@@ -84,7 +87,7 @@ export class InfinityScaleExecutionAdapter {
   constructor() {
     this.plan = {
       revision: 0,
-      mode: "selective-cpu-ready",
+      mode: "advisory",
       observer: { x: 0, y: 0, z: 0 },
       chunks: [],
       simulationBudget: 0,
@@ -103,8 +106,8 @@ export class InfinityScaleExecutionAdapter {
       gpuPhysicsReady: this.capabilities.gpuPhysicsReady,
       lodBoundaryTransferReady: this.capabilities.lodBoundaryTransferReady,
       mixedLodExecutionReady: this.capabilities.mixedLodExecutionReady,
-      entityExecutionReady: true,
-      agentMigrationReady: true,
+      entityExecutionReady: false,
+      agentMigrationReady: false,
     };
 
   }
@@ -133,6 +136,17 @@ export class InfinityScaleExecutionAdapter {
           boundaryReadRelations.push(dependency);
         }
       }
+    }
+
+    const topologyAudit = validateIndependentMixedLodTopology(
+      selected,
+      frame.chunks,
+      boundaryReadRelations,
+    );
+    if (!topologyAudit.complete) {
+      throw new Error(
+        `Infinity Scale independent mixed-LOD topology mismatch: missing=[${topologyAudit.missing.join("; ")}], unexpected=[${topologyAudit.unexpected.join("; ")}]`,
+      );
     }
 
     const geometry = new InfinityScaleChunkExecutionContext(
@@ -228,8 +242,8 @@ export class InfinityScaleExecutionAdapter {
       gpuPhysicsReady: this.capabilities.gpuPhysicsReady,
       lodBoundaryTransferReady: this.capabilities.lodBoundaryTransferReady,
       mixedLodExecutionReady: this.capabilities.mixedLodExecutionReady,
-      entityExecutionReady: true,
-      agentMigrationReady: true,
+      entityExecutionReady: false,
+      agentMigrationReady: false,
     };
 
     return this.getPlan();
@@ -240,7 +254,8 @@ export class InfinityScaleExecutionAdapter {
     candidates: InfinityScaleFramePlan["chunks"],
   ): InfinityScaleBoundaryReadRelation[] {
     const out = new Map<string, InfinityScaleBoundaryReadRelation>();
-    const coveredFaces = new Set<string>();
+    type FaceRect = { minA: number; maxA: number; minB: number; maxB: number };
+    const faceCoverage = new Map<string, FaceRect[]>();
     const level = chunk.chunk.level;
     // FramePlan chunk coordinates are level-local chunk indices. For adapter
     // topology, normalize each chunk into base-chunk units (not world cells).
@@ -299,7 +314,30 @@ export class InfinityScaleExecutionAdapter {
       }
 
       if (axis === null) continue;
-      coveredFaces.add(faceKey(axis, coveredCoordinate!));
+      const coverageKey = faceKey(axis, coveredCoordinate!);
+      const rect: FaceRect = axis === 0
+        ? {
+            minA: Math.max(minY, otherMinY),
+            maxA: Math.min(maxY, otherMaxY),
+            minB: Math.max(minZ, otherMinZ),
+            maxB: Math.min(maxZ, otherMaxZ),
+          }
+        : axis === 1
+          ? {
+              minA: Math.max(minX, otherMinX),
+              maxA: Math.min(maxX, otherMaxX),
+              minB: Math.max(minZ, otherMinZ),
+              maxB: Math.min(maxZ, otherMaxZ),
+            }
+          : {
+              minA: Math.max(minX, otherMinX),
+              maxA: Math.min(maxX, otherMaxX),
+              minB: Math.max(minY, otherMinY),
+              maxB: Math.min(maxY, otherMaxY),
+            };
+      const rectangles = faceCoverage.get(coverageKey) ?? [];
+      rectangles.push(rect);
+      faceCoverage.set(coverageKey, rectangles);
       const key = `${other.key}|${relation}`;
       out.set(key, {
         sourceChunk: chunk.key,
@@ -308,20 +346,72 @@ export class InfinityScaleExecutionAdapter {
       });
     }
 
+    const faceIsFullyCovered = (
+      key: string,
+      minA: number,
+      maxA: number,
+      minB: number,
+      maxB: number,
+    ): boolean => {
+      const rectangles = faceCoverage.get(key) ?? [];
+      if (rectangles.length === 0) return false;
+      // Coordinate compression checks the union of rectangles without
+      // iterating every base-chunk unit (which can be large at high LOD).
+      const aEdges = new Set<number>([minA, maxA + 1]);
+      const bEdges = new Set<number>([minB, maxB + 1]);
+      for (const rect of rectangles) {
+        const a0 = Math.max(minA, rect.minA);
+        const a1 = Math.min(maxA + 1, rect.maxA + 1);
+        const b0 = Math.max(minB, rect.minB);
+        const b1 = Math.min(maxB + 1, rect.maxB + 1);
+        if (a0 < a1 && b0 < b1) {
+          aEdges.add(a0);
+          aEdges.add(a1);
+          bEdges.add(b0);
+          bEdges.add(b1);
+        }
+      }
+      const as = [...aEdges].sort((a, b) => a - b);
+      const bs = [...bEdges].sort((a, b) => a - b);
+      for (let ai = 0; ai < as.length - 1; ai++) {
+        for (let bi = 0; bi < bs.length - 1; bi++) {
+          const a = as[ai];
+          const b = bs[bi];
+          if (a < minA || as[ai + 1] > maxA + 1 ||
+              b < minB || bs[bi + 1] > maxB + 1) continue;
+          if (!rectangles.some(rect =>
+            rect.minA <= a && rect.maxA + 1 >= as[ai + 1] &&
+            rect.minB <= b && rect.maxB + 1 >= bs[bi + 1]
+          )) return false;
+        }
+      }
+      return true;
+    };
+
     const fallbackFaces: Array<{
       key: string;
       targetChunk: string;
+      minA: number;
+      maxA: number;
+      minB: number;
+      maxB: number;
     }> = [
-      { key: faceKey(0, minX - 1), targetChunk: `${level}:${chunk.chunk.x - 1},${chunk.chunk.y},${chunk.chunk.z}` },
-      { key: faceKey(0, maxX + 1), targetChunk: `${level}:${chunk.chunk.x + 1},${chunk.chunk.y},${chunk.chunk.z}` },
-      { key: faceKey(1, minY - 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y - 1},${chunk.chunk.z}` },
-      { key: faceKey(1, maxY + 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y + 1},${chunk.chunk.z}` },
-      { key: faceKey(2, minZ - 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z - 1}` },
-      { key: faceKey(2, maxZ + 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z + 1}` },
+      { key: faceKey(0, minX), targetChunk: `${level}:${chunk.chunk.x - 1},${chunk.chunk.y},${chunk.chunk.z}`, minA: minY, maxA: maxY, minB: minZ, maxB: maxZ },
+      { key: faceKey(0, maxX + 1), targetChunk: `${level}:${chunk.chunk.x + 1},${chunk.chunk.y},${chunk.chunk.z}`, minA: minY, maxA: maxY, minB: minZ, maxB: maxZ },
+      { key: faceKey(1, minY), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y - 1},${chunk.chunk.z}`, minA: minX, maxA: maxX, minB: minZ, maxB: maxZ },
+      { key: faceKey(1, maxY + 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y + 1},${chunk.chunk.z}`, minA: minX, maxA: maxX, minB: minZ, maxB: maxZ },
+      { key: faceKey(2, minZ), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z - 1}`, minA: minX, maxA: maxX, minB: minY, maxB: maxY },
+      { key: faceKey(2, maxZ + 1), targetChunk: `${level}:${chunk.chunk.x},${chunk.chunk.y},${chunk.chunk.z + 1}`, minA: minX, maxA: maxX, minB: minY, maxB: maxY },
     ];
 
     for (const fallback of fallbackFaces) {
-      if (coveredFaces.has(fallback.key)) continue;
+      if (faceIsFullyCovered(
+        fallback.key,
+        fallback.minA,
+        fallback.maxA,
+        fallback.minB,
+        fallback.maxB,
+      )) continue;
       out.set(`${fallback.targetChunk}|same-level`, {
         sourceChunk: chunk.key,
         targetChunk: fallback.targetChunk,

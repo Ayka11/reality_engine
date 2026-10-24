@@ -1,4 +1,5 @@
 import { VoxelGrid } from '../core/VoxelGrid';
+import { SparseVoxelGrid } from '../core/SparseVoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 
 export interface EntityGenome {
@@ -111,6 +112,17 @@ function centroid(cells: number[], W: number, H: number): [number, number, numbe
   return [sx / n, sy / n, sz / n];
 }
 
+function cloneEntity(entity: Entity): Entity {
+  return {
+    ...entity,
+    cells: entity.cells.slice(),
+    centroid: [...entity.centroid] as [number, number, number],
+    genome: { ...entity.genome },
+    memoryBuffer: new Float32Array(entity.memoryBuffer),
+    colorRgb: [...entity.colorRgb] as [number, number, number],
+  };
+}
+
 export class EntityLayer {
   private entities: Map<number, Entity> = new Map();
   private nextId = 1;
@@ -136,6 +148,14 @@ export class EntityLayer {
 
   get extinctCount(): number { return this.extinctCountValue; }
   get totalSpawned(): number { return this.nextId - 1; }
+
+  /** Set a reproducible non-zero xorshift32 seed. */
+  setRandomSeed(seed: number): void {
+    if (!Number.isSafeInteger(seed) || seed <= 0 || seed > 0xffffffff) {
+      throw new Error('EntityLayer seed must be a non-zero uint32');
+    }
+    this._rngState = seed >>> 0;
+  }
 
   snapshot(): EntityLayerSnapshot {
     return {
@@ -283,6 +303,27 @@ export class EntityLayer {
   }
 
   tick(grid: VoxelGrid, dt: number): void {
+    const originalEntities = new Map(this.entities);
+    const entitySnapshots = new Map<number, Entity>();
+    const entityMutableRefs = new Map<number, Pick<Entity, "cells" | "centroid" | "genome" | "memoryBuffer" | "colorRgb">>();
+    for (const [id, currentEntity] of originalEntities) {
+      entitySnapshots.set(id, cloneEntity(currentEntity));
+      entityMutableRefs.set(id, {
+        cells: currentEntity.cells,
+        centroid: currentEntity.centroid,
+        genome: currentEntity.genome,
+        memoryBuffer: currentEntity.memoryBuffer,
+        colorRgb: currentEntity.colorRgb,
+      });
+    }
+    const bufferSnapshot = grid.buffer.slice();
+    const sparseBackBufferSnapshot = grid instanceof SparseVoxelGrid ? grid.backBuffer.slice() : null;
+    const thresholdSnapshot = this.bioThreshold;
+    const nextIdSnapshot = this.nextId;
+    const extinctSnapshot = this.extinctCountValue;
+    const rngSnapshot = this._rngState;
+
+    try {
     const { W, H, D, buffer: buf } = grid;
     const n = grid.size;
 
@@ -321,6 +362,14 @@ export class EntityLayer {
 
       if (best) {
         matched.add(best.id);
+        const nextCellSet = new Set(blob);
+        for (const previousCell of best.cells) {
+          if (nextCellSet.has(previousCell)) continue;
+          const previousBase = previousCell * CELL_FIELDS;
+          if (buf[previousBase + F.ENTITY_ID] === best.id) {
+            buf[previousBase + F.ENTITY_ID] = 0;
+          }
+        }
         best.cells = blob;
         best.centroid = c;
         nextEntities.set(best.id, best);
@@ -354,6 +403,9 @@ export class EntityLayer {
         for (const i of dead.cells) {
           const base = i * CELL_FIELDS;
           buf[base + F.ENERGY] = Math.min(9999, buf[base + F.ENERGY] + dead.energy * 0.3 / Math.max(1, dead.cells.length));
+          if (buf[base + F.ENTITY_ID] === id) {
+            buf[base + F.ENTITY_ID] = 0;
+          }
         }
       }
     }
@@ -434,6 +486,45 @@ export class EntityLayer {
       const base = i * CELL_FIELDS;
       buf[base + F.SIGNAL] = Math.max(0, buf[base + F.SIGNAL] - 0.5 * dt * 60);
     }
+    } catch (error) {
+      grid.buffer.set(bufferSnapshot);
+      if (grid instanceof SparseVoxelGrid) {
+        if (sparseBackBufferSnapshot) grid.backBuffer.set(sparseBackBufferSnapshot);
+        grid.syncDenseToChunks();
+      }
+      for (const [id, original] of originalEntities) {
+        const snapshot = entitySnapshots.get(id)!;
+        const refs = entityMutableRefs.get(id)!;
+        original.cells = refs.cells;
+        original.centroid = refs.centroid;
+        original.genome = refs.genome;
+        original.memoryBuffer = refs.memoryBuffer;
+        original.colorRgb = refs.colorRgb;
+        original.cells.length = 0;
+        for (const index of snapshot.cells) original.cells.push(index);
+        original.centroid[0] = snapshot.centroid[0];
+        original.centroid[1] = snapshot.centroid[1];
+        original.centroid[2] = snapshot.centroid[2];
+        Object.assign(original.genome, snapshot.genome);
+        original.age = snapshot.age;
+        original.energy = snapshot.energy;
+        original.stage = snapshot.stage;
+        original.memoryBuffer.set(snapshot.memoryBuffer);
+        original.memPtr = snapshot.memPtr;
+        original.symbol = snapshot.symbol;
+        original.colorRgb[0] = snapshot.colorRgb[0];
+        original.colorRgb[1] = snapshot.colorRgb[1];
+        original.colorRgb[2] = snapshot.colorRgb[2];
+        original.children = snapshot.children;
+        original.reproCounter = snapshot.reproCounter;
+      }
+      this.entities = originalEntities;
+      this.bioThreshold = thresholdSnapshot;
+      this.nextId = nextIdSnapshot;
+      this.extinctCountValue = extinctSnapshot;
+      this._rngState = rngSnapshot;
+      throw error;
+    }
   }
 
   private _spawnChild(grid: VoxelGrid, parent: Entity, W: number, H: number, D: number): void {
@@ -500,5 +591,6 @@ export class EntityLayer {
     this.entities.clear();
     this.nextId = 1;
     this.extinctCountValue = 0;
+    this._rngState = this.initialRngState;
   }
 }
