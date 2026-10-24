@@ -39,7 +39,6 @@ jobs:
       - run: npm run test:agent-system-recovery --if-present
       - run: npm run test:worldevents-recovery --if-present
       - run: npm run test:entity-layer-recovery --if-present
-      - run: npm run test:entity-layer-recovery --if-present
       - run: npm run test:infinity-scale-mixed-lod --if-present
       - run: npm run test:infinity-scale-adaptive-lod-bridge --if-present
       - run: npm run test:presets --if-present
