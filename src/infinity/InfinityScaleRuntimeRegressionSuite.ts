@@ -22,8 +22,8 @@ export async function runInfinityScaleRuntimeRegressionSuite(): Promise<Infinity
       await test();
       results.push({ name, passed: true });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Infinity Scale runtime regression failed [${name}]: ${message}`);
+      const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+      throw new Error(`Infinity Scale runtime regression failed [${name}]: ${detail}`);
     }
   }
   return results;
