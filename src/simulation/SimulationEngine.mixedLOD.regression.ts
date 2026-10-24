@@ -1,6 +1,7 @@
 import { SimulationEngine } from "./SimulationEngine";
 import { F } from "../core/CellState";
 import type { InfinityScaleExecutionPlan } from "../infinity/InfinityScaleExecutionAdapter";
+import { PROC } from "../process/ProcessDef";
 
 function mixedPlan(): InfinityScaleExecutionPlan {
   return {
@@ -39,6 +40,10 @@ export async function runSimulationEngineMixedLODMultiFrameRegression(): Promise
   // 128-wide world permits a genuine 64-cell coarse LOD chunk adjacent to a
   // 32^3 fine chunk without overlapping simulation ownership.
   const engine = new SimulationEngine(128, 64, 32);
+  // Isolate field-boundary transfer from the separate entity-topology gate.
+  // The default BIO_POTENTIAL rule gives empty cells a baseline 0.1 value,
+  // which intentionally creates entity connectivity at threshold 0.05.
+  engine.laws.toggleProcess(PROC.BIO_POTENTIAL, false);
   engine.grid.cell(20, 20, 16).set(F.ENERGY, 100);
   // Place the source directly on the fine chunk's inner boundary so the
   // coarse solver must consume it through the mixed-LOD boundary snapshot.
