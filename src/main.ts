@@ -337,7 +337,7 @@ const zSlice  = document.getElementById('zslice')      as HTMLInputElement;
 const speedSl = document.getElementById('speedSlider') as HTMLInputElement;
 const falloffEl = document.getElementById('brushFalloff') as HTMLSelectElement;
 const sculptStatusEl = document.getElementById('sculptStatus');
-const sculptManager = new SculptManager(sim.grid, () => sim.syncToGPU());
+const sculptManager = new SculptManager(sim.grid, () => sim.syncToGPU(), () => sim.invalidatePendingGPUReadback());
 const unifiedSculptTransactions = new UnifiedSculptTransactionCoordinator({
   undoLegacy: () => sculptManager.undo(),
   redoLegacy: () => sculptManager.redo(),
@@ -1001,7 +1001,12 @@ document.getElementById('seedAgentsBtn')?.addEventListener('click', () => {
   sim.mutateAuthoritativeState(() => sim.agents.seed(sim.grid, 8));
 });
 document.getElementById('clearAgentsBtn')?.addEventListener('click', () => {
-  sim.mutateAuthoritativeState(() => sim.agents.clear());
+  sim.mutateAuthoritativeState(() => {
+    sim.agents.clear();
+    for (let cell = 0; cell < sim.grid.size; cell++) {
+      sim.grid.buffer[cell * CELL_FIELDS + F.AGENT_MARK] = 0;
+    }
+  });
   updateAgentPanel();
 });
 
