@@ -9,6 +9,7 @@ import {
   beginInfinityScaleGlobalLODTransaction,
   commitInfinityScaleGlobalLODTransaction,
 } from "./InfinityScaleGlobalLODTransaction";
+import { InfinityScaleLODSynchronization } from "./InfinityScaleLODSynchronization";
 
 export function runInfinityScaleGlobalLODTransactionRegression(): void {
   const state = new InfinityScaleLODState(2);
@@ -131,5 +132,50 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
   }
   if (!rejected || staleStateRevision === state.getRevision()) {
     throw new Error("Infinity Scale stale revision regression failed");
+  }
+
+  // Invalid target coordinates must be rejected before they can be coerced to
+  // typed-array offset zero during a boundary commit.
+  const guardedSync = new InfinityScaleLODSynchronization(state);
+  guardedSync.begin(state.getRevision());
+  const guardedSources = Array.from({ length: 4 }, () => new Array<number>(CELL_FIELDS).fill(1));
+  let invalidTargetRejected = false;
+  try {
+    guardedSync.stageTransfer({
+      sourceChunk: "0:0,0,0",
+      targetChunk: "1:1,0,0",
+      relation: "fine-to-coarse",
+      sourceLevel: 0,
+      targetLevel: 1,
+      refinementRatio: 2,
+      operation: "restriction",
+      readOperation: "prolongation",
+    }, [Number.NaN, 0, 0] as [number, number, number], guardedSources);
+  } catch {
+    invalidTargetRejected = true;
+  }
+  if (!invalidTargetRejected || guardedSync.getStagedUpdates().length !== 0) {
+    throw new Error("Infinity Scale invalid boundary target was not rejected before staging");
+  }
+
+  const invalidSource = new Array<number>(CELL_FIELDS).fill(1);
+  invalidSource[F.ENERGY] = Number.POSITIVE_INFINITY;
+  let invalidSourceRejected = false;
+  try {
+    guardedSync.stageTransfer({
+      sourceChunk: "0:0,0,0",
+      targetChunk: "1:1,0,0",
+      relation: "fine-to-coarse",
+      sourceLevel: 0,
+      targetLevel: 1,
+      refinementRatio: 2,
+      operation: "restriction",
+      readOperation: "prolongation",
+    }, [4, 0, 0], [invalidSource, ...guardedSources.slice(1)]);
+  } catch {
+    invalidSourceRejected = true;
+  }
+  if (!invalidSourceRejected || guardedSync.getStagedUpdates().length !== 0) {
+    throw new Error("Infinity Scale non-finite boundary source was not rejected before staging");
   }
 }
