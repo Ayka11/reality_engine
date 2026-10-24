@@ -91,6 +91,7 @@ export function runInfinityScaleMixedLODMultiFrameRegression(): void {
   const context = new InfinityScaleChunkExecutionContext(plan, 8, 8, 8, 4);
 
   for (let frameRevision = 1; frameRevision <= 2; frameRevision++) {
+    const stateRevisionBeforeFrame = state.getRevision();
     const frame = makeFrame(frameRevision);
     const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
     const executor = new InfinityScaleMixedLODCPUExecutor(state, context);
@@ -110,9 +111,10 @@ export function runInfinityScaleMixedLODMultiFrameRegression(): void {
     frame.phase = "boundary-reconciliation";
     commitInfinityScaleGlobalLODTransaction(transaction, frame);
 
-    if (state.getRevision() !== frameRevision) {
+    const expectedStateRevision = stateRevisionBeforeFrame + 1;
+    if (state.getRevision() !== expectedStateRevision) {
       throw new Error(
-        `Frame ${frameRevision}: expected state revision ${frameRevision}, received ${state.getRevision()}`,
+        `Frame ${frameRevision}: expected state revision ${expectedStateRevision}, received ${state.getRevision()}`,
       );
     }
   }
