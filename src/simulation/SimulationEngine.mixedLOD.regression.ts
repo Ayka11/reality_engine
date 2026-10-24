@@ -13,10 +13,11 @@ function mixedPlan(): InfinityScaleExecutionPlan {
     requestedSimulationCount: 1,
     selectedSimulationCount: 1,
     maxSimulatingChunks: 1,
-    boundaryReadChunks: ["0:64,0,0"],
+    // Level-0 logical chunk x=2 begins at world x=64 (chunk size 32).
+    boundaryReadChunks: ["0:2,0,0"],
     boundaryReadCount: 1,
     boundaryReadRelations: [{
-      sourceChunk: "0:64,0,0",
+      sourceChunk: "0:2,0,0",
       targetChunk: "1:0,0,0",
       relation: "fine-to-coarse",
     }],
