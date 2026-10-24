@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import { AgentSystem } from '../src/simulation/AgentSystem.ts';
 import { F } from '../src/core/CellState.ts';
 import { SimulationEngine } from '../src/simulation/SimulationEngine.ts';
+import type { ChemLayerSnapshot } from '../src/chemistry/ChemLayer.ts';
 
 const engine = new SimulationEngine(16, 16, 8);
+const chemistry = (engine as unknown as { chemLayer: { restore(snapshot: ChemLayerSnapshot, cellCount?: number): void; snapshot(): ChemLayerSnapshot } }).chemLayer;
+chemistry.restore({ pendingDensityTransfers: [[17, -0.125], [31, 0.25]] }, engine.grid.size);
 const fieldIndex = engine.grid.idx(7, 7, 3) + F.ENERGY;
 engine.grid.buffer[fieldIndex] = 125;
 engine.grid.backBuffer[fieldIndex] = 87;
@@ -42,9 +45,11 @@ engine.laws.toggleProcess(27, true);
 engine.recorder.stopRecording();
 engine.causal.clear();
 engine.worldEvents.trigger(engine.grid, 'meteor_strike', 99);
+chemistry.restore({ pendingDensityTransfers: [[9, 0.75]] }, engine.grid.size);
 
 engine.restoreCoreRecoveryState(before);
 assert.deepEqual(engine.captureCoreRecoveryState(), before, 'core recovery must restore all included subsystem state');
+assert.deepEqual(chemistry.snapshot(), before.chemistry, 'core recovery must restore deferred chemistry boundary transfers');
 assert.equal(engine.tick, 12);
 assert.equal(engine.grid.buffer[fieldIndex], 125);
 assert.equal(engine.grid.backBuffer[fieldIndex], 87);
