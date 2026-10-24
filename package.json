@@ -16,6 +16,7 @@
     "test:brushes": "node scripts/check-brush-math.mjs && node scripts/check-brush-geometry.mjs",
     "test:world-field": "node scripts/check-world-field-contract.mjs && node scripts/check-world-field-view-window.mjs",
     "test:infinity-scale-core": "node scripts/check-infinity-scale-core.mjs",
+    "test:sparse-voxel-grid-recovery": "npx --yes tsx scripts/check-sparse-voxel-grid-recovery.ts",
     "test:presets": "node scripts/check-preset-contract.mjs",
     "test:preset-field": "node scripts/check-preset-field-provenance.mjs",
     "test:construction": "node scripts/check-world-construction-contract.mjs",
