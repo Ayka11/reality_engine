@@ -28,7 +28,12 @@ export class ClimateSystem {
     }
   }
 
-  tick(dt: number): void {
+  willWriteGridOnNextTick(): boolean {
+    const nextTick = this.tickCount + 1;
+    return nextTick % 5 === 0 || nextTick % 8 === 0;
+  }
+
+  tick(dt: number): boolean {
     const { grid } = this;
     const { W, H, D } = grid;
     this.tickCount++;
@@ -43,9 +48,17 @@ export class ClimateSystem {
       totalT += localT;
     }
     this.globalTemp = totalT / (W * H);
-    if (this.tickCount % 5 === 0) this._advectEnergy(dt * 5);
-    if (this.tickCount % 8 === 0) this._precipitation();
+    let gridWritePassRan = false;
+    if (this.tickCount % 5 === 0) {
+      this._advectEnergy(dt * 5);
+      gridWritePassRan = true;
+    }
+    if (this.tickCount % 8 === 0) {
+      this._precipitation();
+      gridWritePassRan = true;
+    }
     this._updateWind(dt);
+    return gridWritePassRan;
   }
 
   private _advectEnergy(dt: number): void {

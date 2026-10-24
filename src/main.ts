@@ -1821,14 +1821,28 @@ async function loop(ts: number) {
           infinityDiagnostics.gradientRMS,
       },
     );
-    if (climateActive) climate.tick(dt * nSteps);
-    timeline.autoSave(sim.tick);
-    multiScale.tick();
-    metaLawEvol.tick(sim.tick);
-    civSystem.tick();
-    langSys.tick();
-    econSys.tick(dt);
-    if (sim.tick % 5 === 0) cosmoSim.step(dt * 5);
+    const externalGridWriteExpected =
+      (climateActive && climate.willWriteGridOnNextTick()) ||
+      multiScale.willWriteGridOnNextTick() ||
+      langSys.willWriteGridOnNextTick();
+    if (externalGridWriteExpected) sim.invalidatePendingGPUReadback();
+
+    let externalGridChanged = false;
+    try {
+      if (climateActive) externalGridChanged = climate.tick(dt * nSteps) || externalGridChanged;
+      timeline.autoSave(sim.tick);
+      externalGridChanged = multiScale.tick() || externalGridChanged;
+      metaLawEvol.tick(sim.tick);
+      civSystem.tick();
+      externalGridChanged = langSys.tick() || externalGridChanged;
+      econSys.tick(dt);
+      if (sim.tick % 5 === 0) cosmoSim.step(dt * 5);
+    } finally {
+      // These systems write the public CPU grid outside SimulationEngine.step().
+      // Publish once after the batch so chunks and the GPU see the same authority,
+      // including when an expected field-writing pass throws partway through.
+      if (externalGridWriteExpected || externalGridChanged) sim.syncToGPU();
+    }
 
     // Tick chunk worker (non-blocking — skip if previous frame not yet returned)
     if (!workerBusy) {

@@ -26,10 +26,23 @@ export class LanguageSystem {
     this.sim = sim;
   }
 
-  tick(): void {
-    if (++this.tickCount % 5 !== 0) return; // throttle
+  willWriteGridOnNextTick(): boolean {
+    if ((this.tickCount + 1) % 5 !== 0) return false;
     const agents = this.sim.agents.getAgents();
-    if (agents.length < 2) return;
+    for (let i = 0; i < agents.length; i++) {
+      for (let j = i + 1; j < agents.length; j++) {
+        const a = agents[i], b = agents[j];
+        if (Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2) <= 5) return true;
+      }
+    }
+    return false;
+  }
+
+  tick(): boolean {
+    if (++this.tickCount % 5 !== 0) return false; // throttle
+    const agents = this.sim.agents.getAgents();
+    if (agents.length < 2) return false;
+    let gridChanged = false;
 
     for (let i = 0; i < agents.length; i++) {
       for (let j = i + 1; j < agents.length; j++) {
@@ -58,8 +71,10 @@ export class LanguageSystem {
           }
         }
         this._propagateSignal(a.x, a.y, a.z, signal);
+        gridChanged = true;
       }
     }
+    return gridChanged;
   }
 
   private _encodeSignal(agent: { energy: number; signal: number; behavior: string }): number[] {

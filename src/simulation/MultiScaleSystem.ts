@@ -31,11 +31,16 @@ export class MultiScaleSystem {
     this._count       = new Float32Array(sz);
   }
 
-  tick(): void {
-    if (++this.tickCount % UPDATE_INTERVAL !== 0) return;
+  willWriteGridOnNextTick(): boolean {
+    return (this.tickCount + 1) % UPDATE_INTERVAL === 0;
+  }
+
+  tick(): boolean {
+    if (++this.tickCount % UPDATE_INTERVAL !== 0) return false;
     this._downscale();
     this._microTick();
     this._upscale();
+    return true;
   }
 
   private _mi(mx: number, my: number, mz: number): number {

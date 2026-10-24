@@ -5,6 +5,9 @@ import ts from "typescript";
 const root = new URL("../", import.meta.url);
 const saveSystemSource = await readFile(new URL("src/world/save/WorldSaveSystem.ts", root), "utf8");
 const mainSource = await readFile(new URL("src/main.ts", root), "utf8");
+const climateSource = await readFile(new URL("src/simulation/ClimateSystem.ts", root), "utf8");
+const multiScaleSource = await readFile(new URL("src/simulation/MultiScaleSystem.ts", root), "utf8");
+const languageSource = await readFile(new URL("src/simulation/LanguageEmergence.ts", root), "utf8");
 assert.match(saveSystemSource, /const mutate = this\.context\.mutateAuthoritativeState;/,
   "world snapshot import must use the authoritative simulation transaction");
 assert.match(saveSystemSource, /if \(!mutate\)\s*\{\s*throw new Error\("World restore requires an engine-owned mutation transaction"\)/,
@@ -43,6 +46,13 @@ assert.match(mainSource, /sim\.mutateAuthoritativeState\(\(\) => sim\.recorder\.
   "recorded grid frames must invalidate stale GPU work before writing the grid");
 assert.match(mainSource, /loadCivs: civs => \{\s*civSystem\.loadPortableCivs/,
   "portable civilization imports must reset the previous world's transient state");
+assert.match(climateSource, /willWriteGridOnNextTick\(\): boolean/);
+assert.match(multiScaleSource, /willWriteGridOnNextTick\(\): boolean/);
+assert.match(languageSource, /willWriteGridOnNextTick\(\): boolean/);
+assert.match(mainSource, /if \(externalGridWriteExpected\) sim\.invalidatePendingGPUReadback\(\)/,
+  "post-step CPU writers must invalidate outstanding GPU readback before a grid-writing pass");
+assert.match(mainSource, /if \(externalGridWriteExpected \|\| externalGridChanged\) sim\.syncToGPU\(\)/,
+  "post-step CPU writers must publish dense/chunk/GPU state after a grid-writing pass");
 const cache = new Map();
 async function load(path) {
   if (cache.has(path)) return cache.get(path);
@@ -396,6 +406,50 @@ for (const chunk of runtimeGridReal.chunks.values()) {
   assert.deepEqual(chunk.backBuffer, chunk.buffer, "world restore must reset sparse double-buffer baseline");
 }
 
+
+
+const { VoxelGrid: PostStepVoxelGrid } = await import(await load("src/core/VoxelGrid.ts"));
+const { ClimateSystem: PostStepClimateSystem } = await import(await load("src/simulation/ClimateSystem.ts"));
+const { MultiScaleSystem: PostStepMultiScaleSystem } = await import(await load("src/simulation/MultiScaleSystem.ts"));
+const { LanguageSystem: PostStepLanguageSystem } = await import(await load("src/simulation/LanguageEmergence.ts"));
+
+const climateGrid = new PostStepVoxelGrid(6, 6, 4);
+const climate = new PostStepClimateSystem(climateGrid);
+for (let tick = 1; tick <= 8; tick++) {
+  const expectedWrite = tick % 5 === 0 || tick % 8 === 0;
+  assert.equal(climate.willWriteGridOnNextTick(), expectedWrite,
+    "ClimateSystem must predict its scheduled field-writing passes");
+  assert.equal(climate.tick(0.016), expectedWrite,
+    "ClimateSystem must report every scheduled field-writing pass");
+}
+
+const multiScaleGrid = new PostStepVoxelGrid(16, 16, 8);
+const multiScale = new PostStepMultiScaleSystem(multiScaleGrid);
+for (let tick = 1; tick <= 20; tick++) {
+  assert.equal(multiScale.willWriteGridOnNextTick(), tick === 20,
+    "MultiScaleSystem must predict its 20-tick field coupling pass");
+  assert.equal(multiScale.tick(), tick === 20,
+    "MultiScaleSystem must report its field coupling pass");
+}
+
+const languageGrid = new PostStepVoxelGrid(8, 8, 4);
+const languageSim = {
+  grid: languageGrid,
+  agents: { getAgents: () => [
+    { id: 1, x: 1, y: 1, z: 1, energy: 120, signal: 14, behavior: "signaler" },
+    { id: 2, x: 2, y: 1, z: 1, energy: 180, signal: 20, behavior: "explorer" },
+  ] },
+  tick: 1,
+};
+const language = new PostStepLanguageSystem(languageSim);
+for (let tick = 1; tick <= 5; tick++) {
+  assert.equal(language.willWriteGridOnNextTick(), tick === 5,
+    "LanguageSystem must predict its throttled field-writing pass only when agents can interact");
+  assert.equal(language.tick(), tick === 5,
+    "LanguageSystem must report when it writes information fields");
+}
+assert.ok(languageGrid.buffer.some(value => value > 0),
+  "language propagation must actually mutate the test field");
 
 console.log("PASS: field persistence round-trip and seed isolation");
 console.log("PASS: quota, read, delete, and corrupt-storage failures are contained");

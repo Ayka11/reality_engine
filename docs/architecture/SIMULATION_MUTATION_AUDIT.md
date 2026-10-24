@@ -128,3 +128,8 @@ Scientific Recorder frames are intentionally **field-only snapshots**, not full 
 ### Dense/sparse save restoration authority
 
 Sparse chunk persistence now treats a chunk as empty only when all fields of all cells are zero; energy alone is not a sufficient emptiness signal. `loadChunks()` validates every chunk record and its complete numeric buffer before replacing the live chunk map, clears dirty/ownership metadata from the prior world, and synchronizes front/back buffers. During world restore, sparse chunks are loaded first, the packed field arrays then overwrite the dense window as the authoritative dense representation, and the dense window is published back into the overlapping chunks. Saves without chunk payload clear prior sparse topology instead of keeping chunks from another world.
+
+
+### Post-step subsystem publication
+
+The main animation loop now predicts whether climate, multiscale, or language ticks will write the public CPU grid. Before a scheduled writer pass it invalidates any pending GPU readback, and after the synchronous batch it publishes dense/chunk/GPU state once. Non-writing ticks do not trigger an unnecessary whole-grid GPU upload. If a scheduled pass throws after partial writes, the `finally` publication keeps CPU, chunk and GPU representations aligned, although the independent subsystem's own non-grid state is not rolled back by the core engine snapshot.
