@@ -90,4 +90,48 @@ assert.equal(clearedAgents.rngState, resetSeed, 'AgentSystem.clear must rewind i
 assert.equal(clearedAgents.nextAgentId, 1, 'AgentSystem.clear must reset the identity allocator');
 assert.equal(clearedAgents.agents.length, 0, 'AgentSystem.clear must remove all agents');
 
+// Exercise the GPU readback commit path with a deterministic test double. The
+// injected failure occurs after readback is applied and causality updates, so
+// the frame must restore its local pre-commit snapshot without discarding any
+// external state (there is none in this controlled case).
+const gpuEngine = new SimulationEngine(8, 8, 4);
+const gpuState = gpuEngine as unknown as { _gpuReady: boolean };
+gpuState._gpuReady = true;
+const gpuMock = gpuEngine.gpu as unknown as {
+  writeParams: (...args: unknown[]) => void;
+  submitCompute: (nSteps: number) => void;
+  readback: () => Promise<Float32Array>;
+  upload: (data: Float32Array) => void;
+};
+gpuMock.writeParams = () => undefined;
+gpuMock.submitCompute = () => undefined;
+gpuMock.upload = () => undefined;
+const gpuEnergyIndex = gpuEngine.grid.idx(2, 2, 1) + F.ENERGY;
+gpuEngine.grid.buffer[gpuEnergyIndex] = 14;
+gpuEngine.grid.syncDenseToChunks();
+const gpuReadback = new Float32Array(gpuEngine.grid.buffer);
+gpuReadback[gpuEnergyIndex] = 999;
+gpuMock.readback = async () => new Float32Array(gpuReadback);
+
+const eventsDouble = gpuEngine.worldEvents as unknown as {
+  autoTick: (...args: unknown[]) => void;
+};
+const originalAutoTick = eventsDouble.autoTick;
+const beforeGpuCommit = gpuEngine.captureCoreRecoveryState();
+eventsDouble.autoTick = () => {
+  throw new Error("injected post-readback GPU-frame failure");
+};
+await assert.rejects(
+  gpuEngine.step(0.016),
+  /injected post-readback GPU-frame failure/,
+);
+eventsDouble.autoTick = originalAutoTick;
+assert.deepEqual(
+  gpuEngine.captureCoreRecoveryState(),
+  beforeGpuCommit,
+  "failed GPU CPU-commit must restore the state captured after validating the readback revision",
+);
+await gpuEngine.step(0.016);
+assert.equal(gpuEngine.tick, 1, "GPU step queue must remain usable after a rolled-back commit");
+
 console.log('SimulationEngine core recovery and deterministic LawEngine replay: PASS');
