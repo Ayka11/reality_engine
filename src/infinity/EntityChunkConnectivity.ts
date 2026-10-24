@@ -31,6 +31,8 @@ export interface EntityChunkConnectivityResult {
   openReadComponentCount: number;
   mixedLodComponentCount: number;
   mixedLodTopology: EntityBoundaryTopologySample[];
+  /** True only when the connected-component scan covers each in-domain cell exactly once and no read-only workset is used. */
+  domainCoverageComplete?: boolean;
   /** True only when every required mixed-LOD face read validates against a complete snapshot. */
   mixedLodCoverageComplete: boolean;
 }
@@ -129,6 +131,12 @@ export class EntityChunkConnectivity {
     const mixedLodCoverageComplete = boundarySnapshot
       ? boundarySnapshot.validateFaceCoverage(context).complete
       : false;
+    const domainCoverageComplete =
+      context.simulationCellCount === grid.size &&
+      context.overlappingSimulationRangeCount === 0 &&
+      context.readCellCount === 0 &&
+      context.overlappingReadRangeCount === 0;
+
     return {
       components,
       closedComponentCount: components.filter(c => !c.touchesReadBoundary && !c.touchesMixedLODBoundary).length,
@@ -136,6 +144,7 @@ export class EntityChunkConnectivity {
       openReadComponentCount: components.filter(c => c.touchesReadBoundary).length,
       mixedLodComponentCount: components.filter(c => c.touchesMixedLODBoundary).length,
       mixedLodTopology,
+      domainCoverageComplete,
       mixedLodCoverageComplete,
     };
   }
