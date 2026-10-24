@@ -108,6 +108,10 @@ export class SimulationEngine {
   }
 
   private async _stepInternal(dt: number, nSteps: number): Promise<void> {
+    // Full-frame rollback is currently limited to CPU frames: an async GPU frame
+    // may overlap external state changes, so restoring its old snapshot could erase them.
+    const cpuRecoveryBefore = this._gpuReady ? null : this.captureCoreRecoveryState();
+    try {
     const clampedDt = Math.min(dt, 0.05);
 
     if (this._gpuReady) {
@@ -162,6 +166,18 @@ export class SimulationEngine {
 
     this._tick += nSteps;
     this._stateGeneration++;
+    } catch (error) {
+      if (cpuRecoveryBefore) {
+        try {
+          this.restoreCoreRecoveryState(cpuRecoveryBefore);
+        } catch (rollbackError) {
+          const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          const originalMessage = error instanceof Error ? error.message : String(error);
+          throw new Error(`CPU frame failed (${originalMessage}) and rollback failed (${rollbackMessage})`);
+        }
+      }
+      throw error;
+    }
   }
 
   // Called after user paints/erases so GPU buffer stays consistent
