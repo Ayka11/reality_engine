@@ -65,6 +65,9 @@ export function runInfinityScaleGPUBoundaryTransferContractRegression(): void {
     { ...sameLevel, refinementRatio: 1.5 },
     { ...sameLevel, refinementRatio: Number.NaN },
     { ...sameLevel, refinementRatio: Number.POSITIVE_INFINITY },
+    { ...sameLevel, sourceChunk: "1:0,0,0" },
+    { ...sameLevel, targetChunk: "not-a-chunk-key" },
+    { ...sameLevel, sourceLevel: 31, targetLevel: 31, sourceChunk: "31:0,0,0", targetChunk: "31:8,0,0" },
     { ...sameLevel, sourceLevel: Number.MAX_SAFE_INTEGER + 1 },
     { ...sameLevel, targetLevel: 1 },
     { ...sameLevel, operation: "restriction" },
@@ -125,6 +128,9 @@ export function runInfinityScaleGPUBoundaryTransferContractRegression(): void {
     { ...validDescriptor, targetCell: [0, 0] as unknown as [number, number, number] },
     { ...validDescriptor, targetCell: [0, 0, 0, 1] as unknown as [number, number, number] },
     { ...validDescriptor, targetCell: [-1, 0, 0] },
+    { ...validDescriptor, sourceChunk: "1:0,0,0" },
+    { ...validDescriptor, targetChunk: "bad-key" },
+    { ...validDescriptor, sourceLevel: 31, targetLevel: 31, refinementRatio: 1, sourceChunk: "31:0,0,0", targetChunk: "31:8,0,0" },
   ];
   for (const malformed of malformedDescriptors) {
     let rejected = false;
