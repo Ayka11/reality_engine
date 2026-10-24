@@ -169,18 +169,9 @@ export class SimulationEngine {
       return;
     }
 
-    const capabilities = this.getInfinityScaleExecutionCapabilities();
-
-    if (plan.mode === 'selective-gpu-ready' && !capabilities.selectiveGpuReady) {
-      throw new Error(
-        'Infinity Scale GPU execution plan is incompatible with current GPU capability',
-      );
-    }
+    // Reject mixed-LOD GPU plans before checking device availability so this
+    // safety boundary remains explicit even on CPU-only test/build runners.
     if (plan.mode !== 'advisory') {
-      // Mixed-LOD capability depends on frame-local entity/topology evidence,
-      // which does not exist until a concrete execution context is built.
-      // Installation therefore records the contract; step() performs the
-      // authoritative runtime readiness gate immediately before execution.
       const hasMixedLodBoundary = plan.boundaryReadRelations.some(
         relation => relation.relation !== 'same-level',
       );
@@ -189,6 +180,13 @@ export class SimulationEngine {
           'Infinity Scale mixed-LOD GPU execution is not enabled by the current runtime',
         );
       }
+    }
+
+    const capabilities = this.getInfinityScaleExecutionCapabilities();
+    if (plan.mode === 'selective-gpu-ready' && !capabilities.selectiveGpuReady) {
+      throw new Error(
+        'Infinity Scale GPU execution plan is incompatible with current GPU capability',
+      );
     }
 
     this._infinityExecutionPlan = {
