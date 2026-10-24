@@ -90,6 +90,52 @@ assert.equal(clearedAgents.rngState, resetSeed, 'AgentSystem.clear must rewind i
 assert.equal(clearedAgents.nextAgentId, 1, 'AgentSystem.clear must reset the identity allocator');
 assert.equal(clearedAgents.agents.length, 0, 'AgentSystem.clear must remove all agents');
 
+// A zero-step sync remains an explicit mutation boundary for public typed-array
+// writes: invalidate an in-flight GPU result and preserve the newer CPU state.
+const staleGpuEngine = new SimulationEngine(8, 8, 4);
+(staleGpuEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+const staleGpuMock = staleGpuEngine.gpu as unknown as {
+  writeParams: (...args: unknown[]) => void;
+  submitCompute: (nSteps: number) => void;
+  readback: () => Promise<Float32Array>;
+  upload: (data: Float32Array) => void;
+};
+staleGpuMock.writeParams = () => undefined;
+staleGpuMock.submitCompute = () => undefined;
+staleGpuMock.upload = () => undefined;
+const staleEnergyIndex = staleGpuEngine.grid.idx(2, 2, 1) + F.ENERGY;
+const staleGpuReadback = new Float32Array(staleGpuEngine.grid.buffer);
+staleGpuReadback[staleEnergyIndex] = 7;
+let signalReadbackStarted: (() => void) | undefined;
+let finishStaleReadback: (data: Float32Array) => void = () => {
+  throw new Error("stale readback was not requested");
+};
+const staleReadbackStarted = new Promise<void>(resolve => {
+  signalReadbackStarted = resolve;
+});
+staleGpuMock.readback = () => {
+  signalReadbackStarted?.();
+  return new Promise<Float32Array>(resolve => {
+    finishStaleReadback = resolve;
+  });
+};
+const staleStep = staleGpuEngine.step(0.016);
+await staleReadbackStarted;
+staleGpuEngine.grid.buffer[staleEnergyIndex] = 42;
+staleGpuEngine.syncTick(0);
+const authoritativeAfterSync = staleGpuEngine.captureCoreRecoveryState();
+finishStaleReadback(staleGpuReadback);
+await assert.rejects(staleStep, /Discarded stale GPU readback/);
+assert.deepEqual(
+  staleGpuEngine.captureCoreRecoveryState(),
+  authoritativeAfterSync,
+  "stale GPU readback must not overwrite direct grid changes synchronized through syncTick(0)",
+);
+assert.equal(staleGpuEngine.tick, 0, "stale GPU readback must not advance the authoritative tick");
+staleGpuMock.readback = async () => new Float32Array(staleGpuEngine.grid.buffer);
+await staleGpuEngine.step(0.016);
+assert.equal(staleGpuEngine.tick, 1, "GPU queue must remain usable after rejecting stale readback");
+
 // Exercise the GPU readback commit path with a deterministic test double. The
 // injected failure occurs after readback is applied and causality updates, so
 // the frame must restore its local pre-commit snapshot without discarding any
