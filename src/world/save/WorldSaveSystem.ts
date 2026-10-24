@@ -38,11 +38,15 @@ interface SaveContext {
   graphProvider?: () => RealityGraph | undefined;
   graphLoader?: (graph: RealityGraph) => void;
   syncToGPU?: () => void;
+  /** Synchronous engine-owned transaction used for field import/restore publication. */
+  mutateAuthoritativeState?: <T>(mutation: () => T) => T;
   getTick?: () => number;
   setTick?: (tick: number) => void;
   getEntities?: () => unknown[];
   getCivs?: () => unknown[];
   loadCivs?: (civs: CivSnapshot[]) => void;
+  getCivSnapshot?: () => unknown;
+  restoreCivSnapshot?: (snapshot: unknown) => void;
   getCausalLog?: () => unknown[];
   thumbnailCanvas?: HTMLCanvasElement | null;
 }
@@ -131,14 +135,47 @@ export class WorldSaveSystem {
   }
 
   async applySnapshot(snapshot: WorldSnapshot): Promise<void> {
-    this.serializer.applyFields(snapshot.fields, this.voxelGrid.buffer);
-    if (snapshot.chunks && this.voxelGrid.loadChunks) this.voxelGrid.loadChunks(snapshot.chunks.serialized);
-    if (snapshot.realityGraph) this.context.graphLoader?.(snapshot.realityGraph);
-    this.loadLaws(snapshot.activeLaws);
-    this.loadProcesses(snapshot.activeProcesses);
-    this.context.loadCivs?.(snapshot.civilizations);
-    this.context.setTick?.(snapshot.metadata.simulationTicks);
-    this.context.syncToGPU?.();
+    const graphBefore = this.context.graphProvider?.();
+    const civBefore = this.context.getCivSnapshot?.();
+    const apply = () => {
+      this.serializer.applyFields(snapshot.fields, this.voxelGrid.buffer);
+      if (snapshot.chunks && this.voxelGrid.loadChunks) this.voxelGrid.loadChunks(snapshot.chunks.serialized);
+      if (snapshot.realityGraph) this.context.graphLoader?.(snapshot.realityGraph);
+      this.loadLaws(snapshot.activeLaws);
+      this.loadProcesses(snapshot.activeProcesses);
+      this.context.loadCivs?.(snapshot.civilizations);
+      this.context.setTick?.(snapshot.metadata.simulationTicks);
+    };
+
+    try {
+      if (this.context.mutateAuthoritativeState) {
+        // One synchronous engine transaction covers grid/chunk publication, laws,
+        // tick and the GPU upload. The callback must not await.
+        this.context.mutateAuthoritativeState(apply);
+      } else {
+        // Compatibility fallback for standalone WorldSaveSystem users.
+        apply();
+        this.context.syncToGPU?.();
+      }
+    } catch (error) {
+      const rollbackErrors: unknown[] = [];
+      if (graphBefore !== undefined && this.context.graphLoader) {
+        try { this.context.graphLoader(graphBefore); }
+        catch (rollbackError) { rollbackErrors.push(rollbackError); }
+      }
+      if (civBefore !== undefined && this.context.restoreCivSnapshot) {
+        try { this.context.restoreCivSnapshot(civBefore); }
+        catch (rollbackError) { rollbackErrors.push(rollbackError); }
+      }
+      if (rollbackErrors.length > 0) {
+        throw new AggregateError(
+          [error, ...rollbackErrors],
+          "World restore failed and one or more external-domain rollbacks also failed",
+        );
+      }
+      throw error;
+    }
+
     this.currentSnapshot = snapshot;
     console.info(`World "${snapshot.name}" fully restored.`);
   }
