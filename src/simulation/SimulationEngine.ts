@@ -1,20 +1,35 @@
-import { SparseVoxelGrid } from '../core/SparseVoxelGrid';
+import { SparseVoxelGrid, type SparseVoxelGridSnapshot } from '../core/SparseVoxelGrid';
 import { WORLD } from '../core/WorldConstants';
 import { F, CELL_FIELDS } from '../core/CellState';
 import { FieldPhysics } from './FieldPhysics';
 import { EntropyLayer } from './EntropyLayer';
-import { CausalGraph } from './CausalGraph';
-import { LawEngine } from '../laws/LawEngine';
+import { CausalGraph, type CausalGraphSnapshot } from './CausalGraph';
+import { LawEngine, type LawEngineSnapshot } from '../laws/LawEngine';
 import { WorldMetrics } from '../laws/MetaLaw';
 import { GPUBackend } from '../gpu/GPUBackend';
 import { buildMaterialBuffer } from '../materials/MaterialDef';
 import { ChemLayer } from '../chemistry/ChemLayer';
-import { EntityLayer } from './EntityLayer';
-import { WorldEvents, EventType } from '../world/WorldEvents';
+import { EntityLayer, type EntityLayerSnapshot } from './EntityLayer';
+import { WorldEvents, type EventType, type WorldEventsSnapshot } from '../world/WorldEvents';
 import { TemporalLayer } from './TemporalLayer';
 import { InfoPhysics } from './InfoPhysics';
-import { Recorder } from './Recorder';
-import { AgentSystem } from './AgentSystem';
+import { Recorder, type RecorderStateSnapshot } from './Recorder';
+import { AgentSystem, type AgentSystemSnapshot } from './AgentSystem';
+
+export interface SimulationEngineCoreRecoverySnapshot {
+  width: number;
+  height: number;
+  depth: number;
+  tick: number;
+  prevEnergy: Float32Array;
+  grid: SparseVoxelGridSnapshot;
+  entities: EntityLayerSnapshot;
+  agents: AgentSystemSnapshot;
+  worldEvents: WorldEventsSnapshot;
+  causal: CausalGraphSnapshot;
+  laws: LawEngineSnapshot;
+  recorder: RecorderStateSnapshot;
+}
 
 export class SimulationEngine {
   readonly grid: SparseVoxelGrid;
@@ -39,8 +54,17 @@ export class SimulationEngine {
   /** Serialize async steps so GPU submit/readback pairs cannot overlap. */
   private _stepQueue: Promise<void> = Promise.resolve();
 
-  constructor() {
-    this.grid = new SparseVoxelGrid(WORLD.W, WORLD.H, WORLD.D);
+  constructor(
+    width: number = WORLD.W,
+    height: number = WORLD.H,
+    depth: number = WORLD.D,
+  ) {
+    if (!Number.isSafeInteger(width) || width <= 0 ||
+        !Number.isSafeInteger(height) || height <= 0 ||
+        !Number.isSafeInteger(depth) || depth <= 0) {
+      throw new Error('SimulationEngine dimensions must be positive integers');
+    }
+    this.grid = new SparseVoxelGrid(width, height, depth);
     this.causal = new CausalGraph();
     this.laws = new LawEngine();
     this.gpu = new GPUBackend();
@@ -57,7 +81,7 @@ export class SimulationEngine {
   }
 
   async initGPU(): Promise<boolean> {
-    this._gpuReady = await this.gpu.init(WORLD.W, WORLD.H, WORLD.D);
+    this._gpuReady = await this.gpu.init(this.grid.W, this.grid.H, this.grid.D);
     if (this._gpuReady) {
       this.gpu.upload(this.grid.buffer);
       this.gpu.uploadMaterials(buildMaterialBuffer());
@@ -69,6 +93,7 @@ export class SimulationEngine {
   get gpuActive() { return this._gpuReady; }
 
   restoreTick(tick: number): void {
+    this._stateGeneration++;
     this._tick = Math.max(0, Math.floor(tick));
   }
 
@@ -163,6 +188,79 @@ export class SimulationEngine {
     }
     this.grid.syncDenseToChunks();
     this._stateGeneration++;
+  }
+
+  /**
+   * Capture the mutable core domains that this engine can recover.
+   * GPU device state is excluded and rebuilt from the CPU grid after restore.
+   */
+  captureCoreRecoveryState(): SimulationEngineCoreRecoverySnapshot {
+    return {
+      width: this.grid.W,
+      height: this.grid.H,
+      depth: this.grid.D,
+      tick: this._tick,
+      prevEnergy: new Float32Array(this.prevEnergy),
+      grid: this.grid.captureState(),
+      entities: this.entityLayer.snapshot(),
+      agents: this.agents.snapshot(),
+      worldEvents: this.worldEvents.snapshot(),
+      causal: this.causal.snapshot(),
+      laws: this.laws.snapshot(),
+      recorder: this.recorder.snapshotState(),
+    };
+  }
+
+  /**
+   * Restore core domains atomically. If any nested subsystem rejects the
+   * candidate, restore the pre-call snapshot before rethrowing the failure.
+   * This does not roll back omitted physics internals or external side effects.
+   */
+  restoreCoreRecoveryState(snapshot: SimulationEngineCoreRecoverySnapshot): void {
+    if (!snapshot || typeof snapshot !== 'object' ||
+        snapshot.width !== this.grid.W ||
+        snapshot.height !== this.grid.H ||
+        snapshot.depth !== this.grid.D ||
+        !Number.isSafeInteger(snapshot.tick) || snapshot.tick < 0 ||
+        !(snapshot.prevEnergy instanceof Float32Array) ||
+        snapshot.prevEnergy.length !== this.prevEnergy.length ||
+        !snapshot.prevEnergy.every(Number.isFinite)) {
+      throw new Error('Invalid SimulationEngine core recovery snapshot');
+    }
+
+    const previous = this.captureCoreRecoveryState();
+    const apply = (state: SimulationEngineCoreRecoverySnapshot): void => {
+      this.grid.restoreState(state.grid);
+      this.entityLayer.restore(state.entities, this.grid.size);
+      this.agents.restore(state.agents);
+      this.worldEvents.restore(state.worldEvents);
+      this.causal.restore(state.causal);
+      this.laws.restore(state.laws);
+      this.recorder.restoreState(state.recorder, this.grid.buffer.length);
+      this.prevEnergy = new Float32Array(state.prevEnergy);
+      this._tick = state.tick;
+    };
+
+    // Do not restore the monotonic generation counter: every recovery attempt
+    // invalidates in-flight GPU results, including a rejected snapshot.
+    this._stateGeneration++;
+    try {
+      apply(snapshot);
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+    } catch (error) {
+      try {
+        apply(previous);
+        if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+      } catch (rollbackError) {
+        const rollbackMessage = rollbackError instanceof Error
+          ? rollbackError.message
+          : String(rollbackError);
+        throw new Error(
+          `Core recovery failed and rollback could not restore prior state: ${rollbackMessage}`,
+        );
+      }
+      throw error;
+    }
   }
 
   private _worldMetrics(): WorldMetrics {

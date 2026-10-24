@@ -46,7 +46,8 @@
     "test:infinity-scale-face-coverage": "tsx scripts/check-infinity-scale-face-coverage.ts",
     "test:infinity-scale-independent-topology": "tsx scripts/check-infinity-scale-independent-topology.ts",
     "test:entity-chunk-reconciliation": "tsx scripts/check-entity-chunk-reconciliation.ts",
-    "test:infinity-scale-adaptive-lod-bridge": "npx --yes tsx scripts/check-infinity-scale-adaptive-lod-bridge.ts"
+    "test:infinity-scale-adaptive-lod-bridge": "npx --yes tsx scripts/check-infinity-scale-adaptive-lod-bridge.ts",
+    "test:simulation-engine-core-recovery": "npx --yes tsx scripts/check-simulation-engine-core-recovery.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
