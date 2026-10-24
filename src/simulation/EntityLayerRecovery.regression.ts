@@ -90,6 +90,9 @@ export function runEntityLayerRecoveryRegression(): void {
     throw new Error("EntityLayer restore retained references to caller-owned snapshot data");
   }
 
+  // Run malformed snapshots against a two-entity state so cross-entity
+  // duplicate-cell rejection is exercised, not just the single-entity case.
+  layer.restore(expectedState, grid.size);
   runEntityLayerInvalidSnapshotRegression(layer, grid.size);
 
   // Entity IDs and extinction counters are per instance, not module-global.
