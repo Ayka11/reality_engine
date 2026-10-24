@@ -402,9 +402,9 @@ export class SimulationEngine {
   }
 
   triggerEvent(type: EventType): void {
-    this._stateGeneration++;
-    this.worldEvents.trigger(this.grid, type, this._tick);
-    if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+    this.mutateAuthoritativeState(() => {
+      this.worldEvents.trigger(this.grid, type, this._tick);
+    });
   }
 
   agentMarkers() { return this.agents.agentMarkers(); }
@@ -417,6 +417,11 @@ export class SimulationEngine {
   }
 
   setEntityMutationStrength(v: number): void {
+    if (!Number.isFinite(v)) {
+      throw new RangeError('Entity mutation strength must be finite');
+    }
+    if (this.entityLayer.mutationStrength === v) return;
+    this._stateGeneration++;
     this.entityLayer.mutationStrength = v;
   }
 
@@ -435,15 +440,14 @@ export class SimulationEngine {
   }
 
   reset(): void {
-    this._stateGeneration++;
-    this.grid.clear();
-    this.causal.clear();
-    this.entityLayer.clear();
-    this.agents.clear();
-    this.recorder.clearSnapshots();
-    this.prevEnergy.fill(0);
-    this._tick = 0;
-    this.grid.syncDenseToChunks();
-    if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+    this.mutateAuthoritativeState(() => {
+      this.grid.clear();
+      this.causal.clear();
+      this.entityLayer.clear();
+      this.agents.clear();
+      this.recorder.clearSnapshots();
+      this.prevEnergy.fill(0);
+      this._tick = 0;
+    });
   }
 }
