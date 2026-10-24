@@ -7,6 +7,14 @@ export interface Snapshot {
   metrics: { totalEnergy: number; avgEntropy: number; avgInfo: number; avgBio: number };
 }
 
+export interface RecorderStateSnapshot {
+  recording: boolean;
+  maxSnapshots: number;
+  intervalTicks: number;
+  lastSnapTick: number;
+  snapshots: Snapshot[];
+}
+
 export class Recorder {
   private snapshots: Snapshot[] = [];
   private maxSnapshots: number;
@@ -22,6 +30,84 @@ export class Recorder {
   get recording() { return this._recording; }
   get count() { return this.snapshots.length; }
   get snapList(): Snapshot[] { return this.snapshots; }
+
+  snapshotState(): RecorderStateSnapshot {
+    return {
+      recording: this._recording,
+      maxSnapshots: this.maxSnapshots,
+      intervalTicks: this._intervalTicks,
+      lastSnapTick: this._lastSnapTick,
+      snapshots: this.snapshots.map(snapshot => ({
+        tick: snapshot.tick,
+        buffer: new Float32Array(snapshot.buffer),
+        metrics: { ...snapshot.metrics },
+      })),
+    };
+  }
+
+  restoreState(snapshot: RecorderStateSnapshot, expectedBufferLength?: number): void {
+    if (!snapshot ||
+        typeof snapshot !== "object" ||
+        typeof snapshot.recording !== "boolean" ||
+        !Number.isSafeInteger(snapshot.maxSnapshots) || snapshot.maxSnapshots < 1 ||
+        !Number.isSafeInteger(snapshot.intervalTicks) || snapshot.intervalTicks < 1 ||
+        !Number.isSafeInteger(snapshot.lastSnapTick) || snapshot.lastSnapTick < 0 ||
+        !Array.isArray(snapshot.snapshots) ||
+        snapshot.snapshots.length > snapshot.maxSnapshots) {
+      throw new Error("Invalid Recorder state snapshot");
+    }
+    if (expectedBufferLength !== undefined &&
+        (!Number.isSafeInteger(expectedBufferLength) ||
+         expectedBufferLength < 0 ||
+         expectedBufferLength % CELL_FIELDS !== 0)) {
+      throw new Error("Invalid expected Recorder buffer length");
+    }
+
+    // Validate and deep-copy the complete history before mutating any live field.
+    const restored: Snapshot[] = [];
+    let previousTick = -1;
+    let bufferLength = expectedBufferLength;
+    for (const entry of snapshot.snapshots as unknown[]) {
+      if (!entry || typeof entry !== "object") {
+        throw new Error("Invalid Recorder history entry");
+      }
+      const item = entry as Partial<Snapshot>;
+      if (!Number.isSafeInteger(item.tick) ||
+          (item.tick as number) < 0 ||
+          (item.tick as number) <= previousTick ||
+          !(item.buffer instanceof Float32Array) ||
+          item.buffer.length % CELL_FIELDS !== 0 ||
+          (bufferLength !== undefined && item.buffer.length !== bufferLength) ||
+          !item.buffer.every(Number.isFinite) ||
+          !item.metrics ||
+          ![
+            item.metrics.totalEnergy,
+            item.metrics.avgEntropy,
+            item.metrics.avgInfo,
+            item.metrics.avgBio,
+          ].every(Number.isFinite)) {
+        throw new Error("Invalid Recorder history entry");
+      }
+
+      previousTick = item.tick as number;
+      bufferLength ??= item.buffer.length;
+      restored.push({
+        tick: item.tick as number,
+        buffer: new Float32Array(item.buffer),
+        metrics: { ...item.metrics },
+      });
+    }
+
+    if (restored.length > 0 && snapshot.lastSnapTick < restored[restored.length - 1].tick) {
+      throw new Error("Recorder last-snapshot tick precedes its history");
+    }
+
+    this._recording = snapshot.recording;
+    this.maxSnapshots = snapshot.maxSnapshots;
+    this._intervalTicks = snapshot.intervalTicks;
+    this._lastSnapTick = snapshot.lastSnapTick;
+    this.snapshots = restored;
+  }
 
   startRecording(): void { this._recording = true; }
   stopRecording(): void  { this._recording = false; }
