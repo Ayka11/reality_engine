@@ -3,18 +3,29 @@ import { F } from "../src/core/CellState.ts";
 import { SimulationEngine } from "../src/simulation/SimulationEngine.ts";
 
 export async function runSimulationEngineCPUFrameRollbackRegression(): Promise<void> {
-  const engine = new SimulationEngine(8, 8, 4);
-  engine.grid.cell(3, 3, 2).set(F.ENERGY, 900);
-  engine.grid.cell(3, 3, 2).set(F.DENSITY, 0.7);
+  const engine = new SimulationEngine(16, 16, 8);
+  const fieldIndex = engine.grid.idx(7, 7, 3) + F.ENERGY;
+  engine.grid.buffer[fieldIndex] = 25;
+  engine.grid.backBuffer[fieldIndex] = 17;
   engine.agents.seed(engine.grid, 1);
+  const initialAgent = engine.agents.getAgents()[0];
+  assert.ok(initialAgent, "rollback fixture must contain one initial agent");
+  initialAgent.energy = 90;
   engine.grid.syncDenseToChunks();
+  engine.grid.clearDirtyChunks();
 
-  // Tick 500 activates the frame's chunk cleanup path before the injected failure.
   engine.restoreTick(500);
+  engine.laws.toggleProcess(27, false);
+  engine.worldEvents.trigger(engine.grid, "meteor_strike", engine.tick);
+  engine.causal.log(engine.tick, 1, 1, 1, 21, "energy_spike", 45);
+  engine.recorder.startRecording();
+  engine.grid.assignChunkOwner("0,0,0", "baseline-owner");
+  engine.grid.syncDenseToChunks();
+  engine.grid.clearDirtyChunks();
   const before = engine.captureCoreRecoveryState();
 
-  // Fail only after world events, recorder, laws, and chunk metadata cleanup
-  // have run. The wrapper lets cullInactive mutate first, then forces rollback.
+  // Tick 500 enters the post-frame chunk-cleanup path. Let cleanup mutate,
+  // then inject late mutations in every captured domain before forcing rollback.
   const sparseGrid = engine.grid as unknown as {
     cullInactive: (...args: Parameters<typeof engine.grid.cullInactive>) => void;
   };
@@ -22,6 +33,26 @@ export async function runSimulationEngineCPUFrameRollbackRegression(): Promise<v
   try {
     sparseGrid.cullInactive = function(...args) {
       originalCullInactive.apply(this, args);
+
+      engine.grid.buffer[fieldIndex] = 999;
+      engine.grid.backBuffer[fieldIndex] = 123;
+      const agent = engine.agents.getAgents()[0];
+      if (agent) agent.energy = 1;
+      engine.agents.seed(engine.grid, 1);
+
+      // Consume private PRNGs explicitly so deterministic state recovery is
+      // tested even if later runtime changes stop drawing from one of them.
+      (engine.agents as unknown as { _random: () => number })._random();
+      (engine.entityLayer as unknown as { _random: () => number })._random();
+      (engine.laws as unknown as { _random: () => number })._random();
+      (engine.worldEvents as unknown as { _random: () => number })._random();
+
+      engine.laws.toggleProcess(27, true);
+      engine.worldEvents.trigger(engine.grid, "meteor_strike", engine.tick);
+      engine.causal.log(engine.tick, 1, 1, 1, 7, "energy_spike", 12);
+      engine.recorder.stopRecording();
+      engine.grid.assignChunkOwner("0,0,0", "rollback-test-owner");
+      engine.grid.markChunksDirty(["0,0,0"]);
       throw new Error("injected post-cull CPU-frame failure");
     };
 
@@ -33,7 +64,7 @@ export async function runSimulationEngineCPUFrameRollbackRegression(): Promise<v
   assert.deepEqual(
     engine.captureCoreRecoveryState(),
     before,
-    "failed CPU frame must restore core state and sparse-grid metadata after late failure",
+    "failed CPU frame must restore grid, entity/agent/law/event/causal/recorder state and RNG",
   );
 
   await engine.step(0.016);
