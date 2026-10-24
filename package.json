@@ -21,6 +21,7 @@
     "test:recorder-recovery": "npx --yes tsx scripts/check-recorder-recovery.ts",
     "test:agent-system-recovery": "npx --yes tsx scripts/check-agent-system-recovery.ts",
     "test:worldevents-recovery": "npx --yes tsx scripts/check-worldevents-recovery.ts",
+    "test:entity-layer-recovery": "npx --yes tsx scripts/check-entity-layer-recovery.ts",
     "test:presets": "node scripts/check-preset-contract.mjs",
     "test:preset-field": "node scripts/check-preset-field-provenance.mjs",
     "test:construction": "node scripts/check-world-construction-contract.mjs",
