@@ -50,7 +50,8 @@
     "test:simulation-engine-core-recovery": "npx --yes tsx scripts/check-simulation-engine-core-recovery.ts",
     "test:civilization-system-recovery": "npx --yes tsx scripts/check-civilization-system-recovery.ts",
     "test:cosmological-sim-recovery": "npx --yes tsx scripts/check-cosmological-sim-recovery.ts",
-    "test:chem-layer-recovery": "npx --yes tsx scripts/check-chem-layer-recovery.ts"
+    "test:chem-layer-recovery": "npx --yes tsx scripts/check-chem-layer-recovery.ts",
+    "test:simulation-engine-cpu-frame-rollback": "npx --yes tsx scripts/check-simulation-engine-cpu-frame-rollback.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
