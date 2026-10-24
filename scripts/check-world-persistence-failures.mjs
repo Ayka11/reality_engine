@@ -10,8 +10,8 @@ assert.match(saveSystemSource, /const graphBefore = this\.context\.graphProvider
   "world snapshot import must checkpoint the external graph domain");
 assert.match(saveSystemSource, /const civBefore = this\.context\.getCivSnapshot\?\.\(\)/,
   "world snapshot import must checkpoint the external civilization domain");
-assert.match(saveSystemSource, /this\.context\.restoreCivSnapshot\(civBefore\)/,
-  "failed world snapshot import must restore civilization state");
+assert.match(saveSystemSource, /rollback\("Civilization", \(\) => this\.context\.restoreCivSnapshot!\(civBefore\)\)/,
+  "failed world snapshot import must restore civilization state through the rollback coordinator");
 assert.match(saveSystemSource, /runtimeState:\s*\{[\s\S]*entityLayer:\s*this\.context\.getEntityLayerSnapshot\?\.\(\)[\s\S]*agents:\s*this\.context\.getAgentSystemSnapshot\?\.\(\)[\s\S]*civilizations:\s*this\.context\.getCivSnapshot\?\.\(\)[\s\S]*laws:\s*this\.context\.getLawEngineSnapshot\?\.\(\)/,
   "quick saves must carry full runtime snapshots for entity, agent, civilization and law systems");
 assert.match(saveSystemSource, /this\.context\.restoreEntityLayerSnapshot\(runtime\.entityLayer\)/,
