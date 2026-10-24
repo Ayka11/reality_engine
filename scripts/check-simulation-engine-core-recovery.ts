@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { AgentSystem } from '../src/simulation/AgentSystem.ts';
 import { F } from '../src/core/CellState.ts';
 import { SimulationEngine } from '../src/simulation/SimulationEngine.ts';
 
@@ -70,4 +71,18 @@ const beforeInvalidRestore = engine.captureCoreRecoveryState();
 assert.throws(() => engine.restoreCoreRecoveryState(invalid), /Invalid SparseVoxelGrid snapshot/);
 assert.deepEqual(engine.captureCoreRecoveryState(), beforeInvalidRestore,
   'failed restore must roll back grid, entities, agents, laws, events, causal graph and recorder');
+// Clearing a population is a deterministic reset boundary for its local RNG.
+const resetSeed = 0x12345678;
+const advancedRngState = 0x76543210;
+const resetAgents = new AgentSystem(resetSeed);
+resetAgents.seed(engine.grid, 2);
+const populatedAgentSnapshot = resetAgents.snapshot();
+assert.equal(populatedAgentSnapshot.agents.length, 2);
+resetAgents.restore({ ...populatedAgentSnapshot, rngState: advancedRngState });
+resetAgents.clear();
+const clearedAgents = resetAgents.snapshot();
+assert.equal(clearedAgents.rngState, resetSeed, 'AgentSystem.clear must rewind its local RNG to the constructor seed');
+assert.equal(clearedAgents.nextAgentId, 1, 'AgentSystem.clear must reset the identity allocator');
+assert.equal(clearedAgents.agents.length, 0, 'AgentSystem.clear must remove all agents');
+
 console.log('SimulationEngine core recovery and deterministic LawEngine replay: PASS');
