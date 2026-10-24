@@ -1255,8 +1255,13 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
   getEntities: () => sim.entityLayer.getEntities(),
   getCivs: () => civSystem.civs,
   loadCivs: civs => {
-    civSystem.civs = civs.map(civ => structuredClone(civ));
+    const restoredCivs = civs.map(civ => structuredClone(civ));
+    const previous = civSystem.snapshot();
+    const nextId = restoredCivs.length > 0 ? Math.max(...restoredCivs.map(civ => civ.id)) + 1 : 0;
+    civSystem.restore({ ...previous, civs: restoredCivs, nextId });
   },
+  getCivSnapshot: () => civSystem.snapshot(),
+  restoreCivSnapshot: snapshot => civSystem.restore(snapshot as ReturnType<typeof civSystem.snapshot>),
   getCausalLog: () => sim.causal.recent(24),
   thumbnailCanvas: canvas,
 });
