@@ -82,7 +82,7 @@ export function runInfinityScaleGPUBoundaryTransferContractRegression(): void {
     if (!rejected) throw new Error("GPU boundary contract accepted inconsistent transfer metadata");
   }
 
-  for (const invalidCell of [[0, Number.NaN, 0], [0, 0, Number.POSITIVE_INFINITY], [0, 0, 1.5]] as [number, number, number][]) {
+  for (const invalidCell of [[0, Number.NaN, 0], [0, 0, Number.POSITIVE_INFINITY], [0, 0, 1.5], [0, 0] as unknown as [number, number, number], [0, 0, 0, 1] as unknown as [number, number, number]] as [number, number, number][]) {
     let rejected = false;
     try {
       InfinityScaleGPUBoundaryTransferContract.descriptor(sameLevel, invalidCell);
@@ -122,6 +122,8 @@ export function runInfinityScaleGPUBoundaryTransferContractRegression(): void {
     { ...validDescriptor, operation: "restriction" },
     { ...validDescriptor, sourceCellCount: 2 },
     { ...validDescriptor, sourceLevel: -1 },
+    { ...validDescriptor, targetCell: [0, 0] as unknown as [number, number, number] },
+    { ...validDescriptor, targetCell: [0, 0, 0, 1] as unknown as [number, number, number] },
   ];
   for (const malformed of malformedDescriptors) {
     let rejected = false;
