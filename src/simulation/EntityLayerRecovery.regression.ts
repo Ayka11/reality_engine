@@ -42,7 +42,6 @@ export function runEntityLayerRecoveryRegression(): void {
   layer.tick(grid, 1 / 60);
 
   const checkpoint = layer.snapshot();
-  const checkpointGrid = grid.buffer.slice();
   if (checkpoint.entities.length !== 1 ||
       checkpoint.entities[0].id !== 1 ||
       checkpoint.nextId !== 2 ||
