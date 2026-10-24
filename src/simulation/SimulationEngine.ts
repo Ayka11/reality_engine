@@ -101,6 +101,15 @@ export class SimulationEngine {
   // nSteps allows batching multiple physics ticks per animation frame.
   // Keep each GPU submit/readback pair serialized, even if callers overlap step().
   step(dt: number, nSteps = 1): Promise<void> {
+    if (!Number.isFinite(dt) || dt < 0) {
+      return Promise.reject(new RangeError('SimulationEngine step dt must be a finite non-negative number'));
+    }
+    if (!Number.isSafeInteger(nSteps) || nSteps < 0) {
+      return Promise.reject(new RangeError('SimulationEngine step nSteps must be a non-negative safe integer'));
+    }
+    // A zero-step request is a true no-op: it must not run events, laws, or the recorder.
+    if (nSteps === 0) return Promise.resolve();
+
     const run = this._stepQueue.then(() => this._stepInternal(dt, nSteps));
     // A failed step must not permanently poison the queue; the caller still receives its rejection.
     this._stepQueue = run.catch(() => undefined);
@@ -110,7 +119,10 @@ export class SimulationEngine {
   private async _stepInternal(dt: number, nSteps: number): Promise<void> {
     // Full-frame rollback is currently limited to CPU frames: an async GPU frame
     // may overlap external state changes, so restoring its old snapshot could erase them.
-    const cpuRecoveryBefore = this._gpuReady ? null : this.captureCoreRecoveryState();
+    // CPU frames snapshot before mutation. GPU frames take their recovery snapshot
+    // only after readback is current, immediately before applying it to CPU state.
+    // This preserves unrelated external changes made while awaiting the GPU.
+    let frameRecoveryBefore = this._gpuReady ? null : this.captureCoreRecoveryState();
     try {
       const clampedDt = Math.min(dt, 0.05);
 
@@ -121,9 +133,13 @@ export class SimulationEngine {
         const data = await this.gpu.readback();
         if (readbackGeneration !== this._stateGeneration) {
           // Discard stale GPU output and resynchronize the device with the newer authoritative CPU state.
+          // Do not roll back: the newer CPU state belongs to an external/authoritative mutation.
           this.gpu.upload(this.grid.buffer);
           throw new Error('Discarded stale GPU readback: simulation state changed while awaiting GPU results');
         }
+        // From here until the frame completes, this synchronous commit path owns
+        // its mutations. Roll back to this post-readback snapshot if any subsystem fails.
+        frameRecoveryBefore = this.captureCoreRecoveryState();
         if (data.length > 0) this.grid.buffer.set(data);
         this.grid.syncDenseToChunks();
         this.chemLayer.tick(this.grid, clampedDt * nSteps);
@@ -168,9 +184,9 @@ export class SimulationEngine {
       this._stateGeneration++;
 
     } catch (error) {
-      if (cpuRecoveryBefore) {
+      if (frameRecoveryBefore) {
         try {
-          this.restoreCoreRecoveryState(cpuRecoveryBefore);
+          this.restoreCoreRecoveryState(frameRecoveryBefore);
         } catch (rollbackError) {
           const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
           const originalMessage = error instanceof Error ? error.message : String(error);
@@ -190,6 +206,12 @@ export class SimulationEngine {
 
   // Synchronous CPU-only step used by ScriptEngine (bypasses GPU/await)
   syncTick(n: number): void {
+    if (!Number.isSafeInteger(n) || n < 0) {
+      throw new RangeError('SimulationEngine syncTick n must be a non-negative safe integer');
+    }
+    // Zero synchronous ticks are a true no-op and must not invalidate an in-flight GPU readback.
+    if (n === 0) return;
+
     // A synchronous script tick invalidates any asynchronous GPU result already in flight.
     this._stateGeneration++;
     const dt = 0.016;
