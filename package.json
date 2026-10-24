@@ -49,7 +49,8 @@
     "test:infinity-scale-adaptive-lod-bridge": "npx --yes tsx scripts/check-infinity-scale-adaptive-lod-bridge.ts",
     "test:simulation-engine-core-recovery": "npx --yes tsx scripts/check-simulation-engine-core-recovery.ts",
     "test:civilization-system-recovery": "npx --yes tsx scripts/check-civilization-system-recovery.ts",
-    "test:cosmological-sim-recovery": "npx --yes tsx scripts/check-cosmological-sim-recovery.ts"
+    "test:cosmological-sim-recovery": "npx --yes tsx scripts/check-cosmological-sim-recovery.ts",
+    "test:chem-layer-recovery": "npx --yes tsx scripts/check-chem-layer-recovery.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
