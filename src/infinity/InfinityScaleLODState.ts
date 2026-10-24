@@ -54,27 +54,73 @@ export class InfinityScaleLODState {
    * transactions cannot become valid again.
    */
   restore(snapshot: InfinityScaleLODStateSnapshot): void {
+    // Validate and materialize the entire candidate state before touching the
+    // authoritative map or revision. A rejected snapshot must be a no-op.
+    if (!snapshot || typeof snapshot !== "object" || !Array.isArray(snapshot.chunks)) {
+      throw new Error("Cannot restore invalid Infinity Scale LOD snapshot");
+    }
+
     const restored = new Map<string, InfinityScaleLODChunkState>();
-    for (const chunk of snapshot.chunks) {
-      if (restored.has(chunk.key)) {
-        throw new Error(`Cannot restore duplicate Infinity Scale LOD chunk ${chunk.key}`);
+    const expectedCellCount = this.chunkSize ** 3 * CELL_FIELDS;
+    for (const candidate of snapshot.chunks as unknown[]) {
+      if (!candidate || typeof candidate !== "object") {
+        throw new Error("Cannot restore invalid Infinity Scale LOD chunk");
       }
+
+      const chunk = candidate as Partial<InfinityScaleLODChunkState>;
+      const key = chunk.key;
+      const level = chunk.level;
+      const scale = chunk.scale;
+      const cells = chunk.cells;
+      if (typeof key !== "string") {
+        throw new Error("Cannot restore Infinity Scale LOD chunk with an invalid key");
+      }
+
+      // Match the key grammar used by parseChunkKey(), then reject non-canonical
+      // or unsafe numeric components so malformed coordinates cannot alias keys.
+      const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
+      if (!match) {
+        throw new Error(`Cannot restore invalid Infinity Scale LOD chunk key ${key}`);
+      }
+      const [keyLevel, cx, cy, cz] = match.slice(1).map(Number);
       if (
-        !Number.isInteger(chunk.level) ||
-        chunk.level < 0 ||
-        chunk.level > 30 ||
-        chunk.scale !== 2 ** chunk.level ||
-        chunk.cells.length !== this.chunkSize ** 3 * CELL_FIELDS
+        ![keyLevel, cx, cy, cz].every(Number.isSafeInteger) ||
+        String(keyLevel) !== match[1] ||
+        String(cx) !== match[2] ||
+        String(cy) !== match[3] ||
+        String(cz) !== match[4]
       ) {
-        throw new Error(`Cannot restore invalid Infinity Scale LOD chunk ${chunk.key}`);
+        throw new Error(`Cannot restore invalid Infinity Scale LOD chunk coordinates ${key}`);
       }
-      restored.set(chunk.key, {
-        key: chunk.key,
-        level: chunk.level,
-        scale: chunk.scale,
-        cells: new Float32Array(chunk.cells),
+
+      if (
+        typeof level !== "number" ||
+        !Number.isInteger(level) ||
+        level < 0 ||
+        level > 30 ||
+        keyLevel !== level ||
+        typeof scale !== "number" ||
+        scale !== 2 ** level ||
+        !(cells instanceof Float32Array) ||
+        cells.length !== expectedCellCount ||
+        !cells.every(Number.isFinite)
+      ) {
+        throw new Error(`Cannot restore invalid Infinity Scale LOD chunk ${key}`);
+      }
+      if (restored.has(key)) {
+        throw new Error(`Cannot restore duplicate Infinity Scale LOD chunk ${key}`);
+      }
+
+      restored.set(key, {
+        key,
+        level,
+        scale,
+        cells: new Float32Array(cells),
       });
     }
+
+    // No validation remains after this point. Commit the complete, detached map
+    // in one synchronous section and invalidate every outstanding transaction.
     this.states.clear();
     for (const [key, chunk] of restored) this.states.set(key, chunk);
     this.revision += 1;
