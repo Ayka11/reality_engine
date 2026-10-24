@@ -185,7 +185,7 @@ export class EntityLayer {
         throw new Error("Invalid EntityLayer snapshot entity");
       }
       const entity = candidate as Partial<Entity>;
-      const genome = entity.genome as Partial<EntityGenome> | undefined;
+      const genome = entity.genome as EntityGenome | undefined;
       const genomeValues = genome ? [
         genome.metabolismRate,
         genome.reproThreshold,
