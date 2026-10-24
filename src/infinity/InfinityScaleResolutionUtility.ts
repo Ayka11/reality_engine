@@ -77,16 +77,17 @@ export class InfinityScaleResolutionUtilityEngine {
     validateCandidate(candidate);
     validatePrediction(prediction);
 
-    const weighted = weightedSignal(
+    const causalPhysicalBenefit = candidate.causalPhysicalBenefit ?? 1;
+    const causalTransitionDisturbance = candidate.causalTransitionDisturbance ?? 0;
+    const signal = weightedSignal(
+      prediction.predictedError,
       candidate.goalRelevance,
       candidate.physicalCriticality,
+      this.config.errorWeight,
       this.config.goalWeight,
       this.config.criticalityWeight,
     );
-    const causalPhysicalBenefit = candidate.causalPhysicalBenefit ?? 1;
-    const causalTransitionDisturbance = candidate.causalTransitionDisturbance ?? 0;
-    const baselineBenefit = prediction.predictedError * prediction.confidence *
-      candidate.estimatedErrorReduction * weighted;
+    const baselineBenefit = prediction.confidence * candidate.estimatedErrorReduction * signal;
     const benefit = clamp01(
       baselineBenefit * causalPhysicalBenefit * (1 - causalTransitionDisturbance),
     );
@@ -212,9 +213,17 @@ function validateBudget(budget: InfinityScaleResolutionBudget): void {
   }
 }
 
-function weightedSignal(goal: number, criticality: number, goalWeight: number, criticalityWeight: number): number {
-  const denominator = Math.max(1e-9, goalWeight + criticalityWeight);
-  return clamp01((goal * goalWeight + criticality * criticalityWeight) / denominator);
+function weightedSignal(
+  error: number,
+  goal: number,
+  criticality: number,
+  errorWeight: number,
+  goalWeight: number,
+  criticalityWeight: number,
+): number {
+  const denominator = errorWeight + goalWeight + criticalityWeight;
+  if (denominator === 0) return 0;
+  return clamp01((error * errorWeight + goal * goalWeight + criticality * criticalityWeight) / denominator);
 }
 
 function normalizeCost(value: number): number {
