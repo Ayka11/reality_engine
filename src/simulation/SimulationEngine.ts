@@ -112,60 +112,61 @@ export class SimulationEngine {
     // may overlap external state changes, so restoring its old snapshot could erase them.
     const cpuRecoveryBefore = this._gpuReady ? null : this.captureCoreRecoveryState();
     try {
-    const clampedDt = Math.min(dt, 0.05);
+      const clampedDt = Math.min(dt, 0.05);
 
-    if (this._gpuReady) {
-      const readbackGeneration = this._stateGeneration;
-      this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
-      this.gpu.submitCompute(nSteps);
-      const data = await this.gpu.readback();
-      if (readbackGeneration !== this._stateGeneration) {
-        // Discard stale GPU output and resynchronize the device with the newer authoritative CPU state.
-        this.gpu.upload(this.grid.buffer);
-        throw new Error('Discarded stale GPU readback: simulation state changed while awaiting GPU results');
+      if (this._gpuReady) {
+        const readbackGeneration = this._stateGeneration;
+        this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
+        this.gpu.submitCompute(nSteps);
+        const data = await this.gpu.readback();
+        if (readbackGeneration !== this._stateGeneration) {
+          // Discard stale GPU output and resynchronize the device with the newer authoritative CPU state.
+          this.gpu.upload(this.grid.buffer);
+          throw new Error('Discarded stale GPU readback: simulation state changed while awaiting GPU results');
+        }
+        if (data.length > 0) this.grid.buffer.set(data);
+        this.grid.syncDenseToChunks();
+        this.chemLayer.tick(this.grid, clampedDt * nSteps);
+        this.entityLayer.tick(this.grid, clampedDt * nSteps);
+        this.temporalLayer.tick(this.grid, clampedDt * nSteps);
+        this.infoPhysics.tick(this.grid, clampedDt * nSteps);
+        this.agents.tick(this.grid, clampedDt * nSteps);
+      } else {
+        // CPU fallback — runs each step serially
+        for (let s = 0; s < nSteps; s++) {
+          this.grid.snapshot();
+          this.fieldPhysics.tick(this.grid, clampedDt, this.laws.params, this.laws.activeProcessMask);
+          this.entropyLayer.tick(this.grid, clampedDt, this.laws.params, this.laws.activeProcessMask);
+          this.chemLayer.tick(this.grid, clampedDt);
+          this.entityLayer.tick(this.grid, clampedDt);
+          this.temporalLayer.tick(this.grid, clampedDt);
+          this.infoPhysics.tick(this.grid, clampedDt);
+          this.agents.tick(this.grid, clampedDt);
+        }
+        this.grid.syncDenseToChunks();
       }
-      if (data.length > 0) this.grid.buffer.set(data);
-      this.grid.syncDenseToChunks();
-      this.chemLayer.tick(this.grid, clampedDt * nSteps);
-      this.entityLayer.tick(this.grid, clampedDt * nSteps);
-      this.temporalLayer.tick(this.grid, clampedDt * nSteps);
-      this.infoPhysics.tick(this.grid, clampedDt * nSteps);
-      this.agents.tick(this.grid, clampedDt * nSteps);
-    } else {
-      // CPU fallback — runs each step serially
-      for (let s = 0; s < nSteps; s++) {
-        this.grid.snapshot();
-        this.fieldPhysics.tick(this.grid, clampedDt, this.laws.params, this.laws.activeProcessMask);
-        this.entropyLayer.tick(this.grid, clampedDt, this.laws.params, this.laws.activeProcessMask);
-        this.chemLayer.tick(this.grid, clampedDt);
-        this.entityLayer.tick(this.grid, clampedDt);
-        this.temporalLayer.tick(this.grid, clampedDt);
-        this.infoPhysics.tick(this.grid, clampedDt);
-        this.agents.tick(this.grid, clampedDt);
+
+      this._detectCausality();
+
+      // Auto world events
+      this.worldEvents.autoTick(this.grid, this._tick);
+
+      // Scientific recorder
+      this.recorder.tick(this.grid, this._tick);
+
+      // Law engine uses global metrics to evolve which laws are active
+      this.laws.tick(this._worldMetrics());
+
+      // Keep GPU in sync after CPU changes (presets, painting)
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+      if (this._tick % 500 === 0) {
+        this.grid.markEmptyChunksInactive();
+        this.grid.cullInactive();
       }
-      this.grid.syncDenseToChunks();
-    }
 
-    this._detectCausality();
+      this._tick += nSteps;
+      this._stateGeneration++;
 
-    // Auto world events
-    this.worldEvents.autoTick(this.grid, this._tick);
-
-    // Scientific recorder
-    this.recorder.tick(this.grid, this._tick);
-
-    // Law engine uses global metrics to evolve which laws are active
-    this.laws.tick(this._worldMetrics());
-
-    // Keep GPU in sync after CPU changes (presets, painting)
-    if (this._gpuReady) this.gpu.upload(this.grid.buffer);
-    if (this._tick % 500 === 0) {
-      this.grid.markEmptyChunksInactive();
-      this.grid.cullInactive();
-    }
-
-    this._tick += nSteps;
-    this._stateGeneration++;
     } catch (error) {
       if (cpuRecoveryBefore) {
         try {
