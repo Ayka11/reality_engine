@@ -30,22 +30,30 @@ export interface Entity {
   reproCounter: number;      // energy / reproThreshold — 0..1 display gauge
 }
 
-let _nextId = 1;
-let _extinctCount = 0;
+export interface EntityLayerSnapshot {
+  entities: Entity[];
+  bioThreshold: number;
+  mutationStrength: number;
+  nextId: number;
+  extinctCount: number;
+  rngState: number;
+}
 
-function defaultGenome(): EntityGenome {
+const LIFE_STAGES: readonly LifeStage[] = ['juvenile', 'mature', 'elder'];
+
+function defaultGenome(random: () => number): EntityGenome {
   return {
-    metabolismRate:  0.4 + Math.random() * 0.4,
-    reproThreshold:  300 + Math.random() * 200,
-    signalStrength:  0.3 + Math.random() * 0.4,
-    bioAffinity:     0.3 + Math.random() * 0.5,
-    mutationRate:    0.02 + Math.random() * 0.04,
-    memoryDecay:     0.05 + Math.random() * 0.1,
+    metabolismRate:  0.4 + random() * 0.4,
+    reproThreshold:  300 + random() * 200,
+    signalStrength:  0.3 + random() * 0.4,
+    bioAffinity:     0.3 + random() * 0.5,
+    mutationRate:    0.02 + random() * 0.04,
+    memoryDecay:     0.05 + random() * 0.1,
   };
 }
 
-function mutateGenome(parent: EntityGenome, rate: number): EntityGenome {
-  const noise = () => (Math.random() - 0.5) * 2 * rate;
+function mutateGenome(parent: EntityGenome, rate: number, random: () => number): EntityGenome {
+  const noise = () => (random() - 0.5) * 2 * rate;
   return {
     metabolismRate:  Math.max(0.05, parent.metabolismRate  + noise()),
     reproThreshold:  Math.max(50,   parent.reproThreshold  + noise() * 200),
@@ -105,11 +113,174 @@ function centroid(cells: number[], W: number, H: number): [number, number, numbe
 
 export class EntityLayer {
   private entities: Map<number, Entity> = new Map();
+  private nextId = 1;
+  private extinctCountValue = 0;
   private bioThreshold = 0.05;
   mutationStrength = 1.0;
+  private readonly initialRngState: number;
+  private _rngState: number;
 
-  get extinctCount(): number { return _extinctCount; }
-  get totalSpawned(): number { return _nextId - 1; }
+  constructor(seed = 0x4f1bbcdc) {
+    this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x4f1bbcdc : 0x4f1bbcdc;
+    this._rngState = this.initialRngState;
+  }
+
+  private _random(): number {
+    let x = this._rngState >>> 0;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this._rngState = x >>> 0;
+    return this._rngState / 0x100000000;
+  }
+
+  get extinctCount(): number { return this.extinctCountValue; }
+  get totalSpawned(): number { return this.nextId - 1; }
+
+  snapshot(): EntityLayerSnapshot {
+    return {
+      entities: [...this.entities.values()].map(entity => ({
+        ...entity,
+        cells: [...entity.cells],
+        centroid: [...entity.centroid] as [number, number, number],
+        genome: { ...entity.genome },
+        memoryBuffer: new Float32Array(entity.memoryBuffer),
+        colorRgb: [...entity.colorRgb] as [number, number, number],
+      })),
+      bioThreshold: this.bioThreshold,
+      mutationStrength: this.mutationStrength,
+      nextId: this.nextId,
+      extinctCount: this.extinctCountValue,
+      rngState: this._rngState,
+    };
+  }
+
+  restore(snapshot: EntityLayerSnapshot, cellCount?: number): void {
+    if (cellCount !== undefined &&
+        (!Number.isSafeInteger(cellCount) || cellCount < 0)) {
+      throw new Error("Invalid EntityLayer expected cell count");
+    }
+    if (!snapshot ||
+        typeof snapshot !== "object" ||
+        !Array.isArray(snapshot.entities) ||
+        !Number.isFinite(snapshot.bioThreshold) ||
+        snapshot.bioThreshold <= 0 ||
+        !Number.isFinite(snapshot.mutationStrength) ||
+        snapshot.mutationStrength < 0 ||
+        !Number.isSafeInteger(snapshot.nextId) ||
+        snapshot.nextId < 1 ||
+        !Number.isSafeInteger(snapshot.extinctCount) ||
+        snapshot.extinctCount < 0 ||
+        !Number.isSafeInteger(snapshot.rngState) ||
+        snapshot.rngState <= 0 ||
+        snapshot.rngState > 0xffffffff) {
+      throw new Error("Invalid EntityLayer snapshot envelope");
+    }
+
+    const restored = new Map<number, Entity>();
+    const seenCells = new Set<number>();
+    let maxId = 0;
+    for (const candidate of snapshot.entities as unknown[]) {
+      if (!candidate || typeof candidate !== "object") {
+        throw new Error("Invalid EntityLayer snapshot entity");
+      }
+      const entity = candidate as Partial<Entity>;
+      const genome = entity.genome as EntityGenome | undefined;
+      const genomeValues = genome ? [
+        genome.metabolismRate,
+        genome.reproThreshold,
+        genome.signalStrength,
+        genome.bioAffinity,
+        genome.mutationRate,
+        genome.memoryDecay,
+      ] : [];
+
+      if (!Number.isSafeInteger(entity.id) ||
+          (entity.id as number) < 1 ||
+          restored.has(entity.id as number) ||
+          !Array.isArray(entity.cells) ||
+          entity.cells.length < 1 ||
+          !entity.cells.every(index =>
+            Number.isSafeInteger(index) &&
+            index >= 0 &&
+            (cellCount === undefined || index < cellCount)) ||
+          !Array.isArray(entity.centroid) ||
+          entity.centroid.length !== 3 ||
+          !entity.centroid.every(value => Number.isFinite(value) && value >= 0) ||
+          !genome ||
+          genomeValues.length !== 6 ||
+          !genomeValues.every(value => typeof value === "number" && Number.isFinite(value)) ||
+          genome.metabolismRate < 0.05 ||
+          genome.reproThreshold < 50 ||
+          genome.signalStrength < 0 || genome.signalStrength > 1 ||
+          genome.bioAffinity < 0 || genome.bioAffinity > 1 ||
+          genome.mutationRate < 0.001 || genome.mutationRate > 0.2 ||
+          genome.memoryDecay < 0.01 || genome.memoryDecay > 0.5 ||
+          !Number.isSafeInteger(entity.age) ||
+          (entity.age as number) < 0 ||
+          typeof entity.energy !== "number" ||
+          !Number.isFinite(entity.energy) ||
+          !LIFE_STAGES.includes(entity.stage as LifeStage) ||
+          !(entity.memoryBuffer instanceof Float32Array) ||
+          entity.memoryBuffer.length !== 8 ||
+          !Array.from(entity.memoryBuffer).every(Number.isFinite) ||
+          !Number.isSafeInteger(entity.memPtr) ||
+          (entity.memPtr as number) < 0 ||
+          typeof entity.symbol !== "string" ||
+          !SYMBOLS.includes(entity.symbol as typeof SYMBOLS[number]) ||
+          !Array.isArray(entity.colorRgb) ||
+          entity.colorRgb.length !== 3 ||
+          !entity.colorRgb.every(Number.isFinite) ||
+          !Number.isSafeInteger(entity.children) ||
+          (entity.children as number) < 0 ||
+          typeof entity.reproCounter !== "number" ||
+          !Number.isFinite(entity.reproCounter) ||
+          entity.reproCounter < 0 ||
+          entity.reproCounter > 1) {
+        throw new Error("Invalid EntityLayer snapshot entity state");
+      }
+
+      const entityCells = entity.cells as number[];
+      const localCells = new Set<number>();
+      for (const cellIndex of entityCells) {
+        if (localCells.has(cellIndex) || seenCells.has(cellIndex)) {
+          throw new Error("Invalid EntityLayer snapshot: overlapping entity cells");
+        }
+        localCells.add(cellIndex);
+      }
+      for (const cellIndex of localCells) seenCells.add(cellIndex);
+
+      const id = entity.id as number;
+      restored.set(id, {
+        id,
+        cells: [...entityCells],
+        centroid: [...entity.centroid] as [number, number, number],
+        genome: { ...genome },
+        age: entity.age as number,
+        energy: entity.energy,
+        stage: entity.stage as LifeStage,
+        memoryBuffer: new Float32Array(entity.memoryBuffer),
+        memPtr: entity.memPtr as number,
+        symbol: entity.symbol,
+        colorRgb: [...entity.colorRgb] as [number, number, number],
+        children: entity.children as number,
+        reproCounter: entity.reproCounter,
+      });
+      maxId = Math.max(maxId, id);
+    }
+
+    if (snapshot.nextId <= maxId) {
+      throw new Error("Invalid EntityLayer snapshot allocator state");
+    }
+
+    // Install the fully validated, detached candidate as one state transition.
+    this.entities = restored;
+    this.bioThreshold = snapshot.bioThreshold;
+    this.mutationStrength = snapshot.mutationStrength;
+    this.nextId = snapshot.nextId;
+    this.extinctCountValue = snapshot.extinctCount;
+    this._rngState = snapshot.rngState >>> 0;
+  }
 
   tick(grid: VoxelGrid, dt: number): void {
     const { W, H, D, buffer: buf } = grid;
@@ -155,18 +326,18 @@ export class EntityLayer {
         nextEntities.set(best.id, best);
       } else {
         // New entity — inherit any genome from field or start fresh
-        const id = _nextId++;
+        const id = this.nextId++;
         const ent: Entity = {
           id, cells: blob, centroid: c,
-          genome: defaultGenome(),
+          genome: defaultGenome(() => this._random()),
           age: 0, energy: 0, stage: 'juvenile',
           memoryBuffer: new Float32Array(8),
           memPtr: 0,
-          symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+          symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
           colorRgb: [
-            0.3 + Math.random() * 0.7,
-            0.3 + Math.random() * 0.7,
-            0.3 + Math.random() * 0.7,
+            0.3 + this._random() * 0.7,
+            0.3 + this._random() * 0.7,
+            0.3 + this._random() * 0.7,
           ],
           children: 0,
           reproCounter: 0,
@@ -178,7 +349,7 @@ export class EntityLayer {
     // Count extinction for entities whose blob disappeared
     for (const [id] of this.entities) {
       if (!nextEntities.has(id)) {
-        _extinctCount++;
+        this.extinctCountValue++;
         const dead = this.entities.get(id)!;
         for (const i of dead.cells) {
           const base = i * CELL_FIELDS;
@@ -267,7 +438,7 @@ export class EntityLayer {
 
   private _spawnChild(grid: VoxelGrid, parent: Entity, W: number, H: number, D: number): void {
     // Pick a random parent cell and try to seed child in a random adjacent empty location
-    const srcIdx = parent.cells[Math.floor(Math.random() * parent.cells.length)];
+    const srcIdx = parent.cells[Math.floor(this._random() * parent.cells.length)];
     const WH = W * H;
     const pz = Math.floor(srcIdx / WH);
     const rem = srcIdx - pz * WH;
@@ -276,8 +447,8 @@ export class EntityLayer {
 
     // Random offset 2..4 cells away
     const offsets = [-3, -2, 2, 3];
-    const ox = offsets[Math.floor(Math.random() * 4)];
-    const oy = offsets[Math.floor(Math.random() * 4)];
+    const ox = offsets[Math.floor(this._random() * 4)];
+    const oy = offsets[Math.floor(this._random() * 4)];
     const nx = Math.max(0, Math.min(W - 1, px + ox));
     const ny = Math.max(0, Math.min(H - 1, py + oy));
     const nz = Math.max(0, Math.min(D - 1, pz));
@@ -287,7 +458,7 @@ export class EntityLayer {
 
     // Only spawn if target is low-bio
     if (buf[childBase + F.BIO_POTENTIAL] < 0.02) {
-      const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate * this.mutationStrength);
+      const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate * this.mutationStrength, () => this._random());
       buf[childBase + F.BIO_POTENTIAL] = 0.15;
       buf[childBase + F.ENERGY]        = parent.genome.reproThreshold * 0.3;
       buf[childBase + F.INFORMATION]   = 5;
@@ -295,7 +466,7 @@ export class EntityLayer {
       parent.children++;
 
       // Register new entity immediately
-      const id = _nextId++;
+      const id = this.nextId++;
       const c = centroid([nz * WH + ny * W + nx], W, H);
       this.entities.set(id, {
         id, cells: [nz * WH + ny * W + nx], centroid: c,
@@ -303,11 +474,11 @@ export class EntityLayer {
         age: 0, energy: buf[childBase + F.ENERGY], stage: 'juvenile',
         memoryBuffer: new Float32Array(8),
         memPtr: 0,
-        symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+        symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
         colorRgb: [
-          Math.max(0.2, parent.colorRgb[0] + (Math.random() - 0.5) * 0.3),
-          Math.max(0.2, parent.colorRgb[1] + (Math.random() - 0.5) * 0.3),
-          Math.max(0.2, parent.colorRgb[2] + (Math.random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[0] + (this._random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[1] + (this._random() - 0.5) * 0.3),
+          Math.max(0.2, parent.colorRgb[2] + (this._random() - 0.5) * 0.3),
         ],
         children: 0,
         reproCounter: 0,
@@ -327,7 +498,7 @@ export class EntityLayer {
 
   clear(): void {
     this.entities.clear();
-    _nextId = 1;
-    _extinctCount = 0;
+    this.nextId = 1;
+    this.extinctCountValue = 0;
   }
 }
