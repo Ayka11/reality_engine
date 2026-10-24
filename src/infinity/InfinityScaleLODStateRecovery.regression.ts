@@ -117,6 +117,8 @@ export function runInfinityScaleLODStateInvalidSnapshotRegression(): void {
 
   const duplicateKey = cloneBaseline();
   duplicateKey.chunks[1].key = duplicateKey.chunks[0].key;
+  duplicateKey.chunks[1].level = duplicateKey.chunks[0].level;
+  duplicateKey.chunks[1].scale = duplicateKey.chunks[0].scale;
   assertRejectedWithoutMutation(duplicateKey, "duplicate chunk key");
 }
 
