@@ -342,10 +342,18 @@ export class SimulationEngine {
       // dense fields, entities, agents, or the simulation tick. The same check
       // remains at commit time because GPU readback and later frame work can
       // yield control after this preflight.
+      const preflightCapabilities = this.getInfinityScaleExecutionCapabilities();
       validateInfinityScaleGlobalFrameCommit(
         frameState,
         selectivePlan!,
-        this.getInfinityScaleExecutionCapabilities(),
+        {
+          ...preflightCapabilities,
+          // Mixed-LOD readiness depends on topology evidence prepared below.
+          // Check the actual runtime values immediately after prepareChunkExecution
+          // and again at commit; do not reject before that evidence exists.
+          lodBoundaryTransferReady: selectivePlan!.lodBoundaryTransferReady,
+          mixedLodExecutionReady: selectivePlan!.mixedLodExecutionReady,
+        },
       );
 
       // Establish the entity/topology evidence before the runtime capability
