@@ -8,7 +8,11 @@ const presetsSource = await readFile(new URL("src/world/Presets.ts", root), "utf
 assert.match(source, /Presets\.apply\(grid, name as PresetName, random\)/, "ScriptEngine must inject its seeded RNG into presets");
 assert.match(presetsSource, /static apply\(grid: VoxelGrid, name: PresetName, random: \(\) => number = Math\.random\)/, "Presets must accept an injectable RNG while preserving backward compatibility");
 assert.doesNotMatch(presetsSource, /Math\.random\(\)/, "preset implementations must not bypass the injected RNG");
-const cellModule = `export const CELL_FIELDS=24; export const F={ENERGY:0,DENSITY:1,INFORMATION:2,ENTROPY:3,TEMPERATURE:4,BIO_POTENTIAL:11,SIGNAL:17,MEM_FIELD:18,FIELD_X:20,FIELD_Y:21,CHEM_STATE:22}; export class CellState { constructor(buffer,base){this.buffer=buffer;this.base=base;} get energy(){return this.buffer[this.base+F.ENERGY]} set energy(v){this.buffer[this.base+F.ENERGY]=v} get density(){return this.buffer[this.base+F.DENSITY]} set density(v){this.buffer[this.base+F.DENSITY]=v} get information(){return this.buffer[this.base+F.INFORMATION]} set information(v){this.buffer[this.base+F.INFORMATION]=v} get entropy(){return this.buffer[this.base+F.ENTROPY]} set entropy(v){this.buffer[this.base+F.ENTROPY]=v} get temperature(){return this.buffer[this.base+F.TEMPERATURE]} set temperature(v){this.buffer[this.base+F.TEMPERATURE]=v} get bioPotential(){return this.buffer[this.base+F.BIO_POTENTIAL]} set bioPotential(v){this.buffer[this.base+F.BIO_POTENTIAL]=v} set(field,v){this.buffer[this.base+field]=v} }`;
+assert.match(source, /this\.sim\.mutateAuthoritativeState\(\(\) => \{/,
+  "script world mutations must execute inside the authoritative simulation transaction");
+assert.match(source, /this\._rngState = rngBefore/,
+  "a failed script must restore its private RNG to permit deterministic retries");
+\nconst cellModule = `export const CELL_FIELDS=24; export const F={ENERGY:0,DENSITY:1,INFORMATION:2,ENTROPY:3,TEMPERATURE:4,BIO_POTENTIAL:11,SIGNAL:17,MEM_FIELD:18,FIELD_X:20,FIELD_Y:21,CHEM_STATE:22}; export class CellState { constructor(buffer,base){this.buffer=buffer;this.base=base;} get energy(){return this.buffer[this.base+F.ENERGY]} set energy(v){this.buffer[this.base+F.ENERGY]=v} get density(){return this.buffer[this.base+F.DENSITY]} set density(v){this.buffer[this.base+F.DENSITY]=v} get information(){return this.buffer[this.base+F.INFORMATION]} set information(v){this.buffer[this.base+F.INFORMATION]=v} get entropy(){return this.buffer[this.base+F.ENTROPY]} set entropy(v){this.buffer[this.base+F.ENTROPY]=v} get temperature(){return this.buffer[this.base+F.TEMPERATURE]} set temperature(v){this.buffer[this.base+F.TEMPERATURE]=v} get bioPotential(){return this.buffer[this.base+F.BIO_POTENTIAL]} set bioPotential(v){this.buffer[this.base+F.BIO_POTENTIAL]=v} set(field,v){this.buffer[this.base+field]=v} }`;
 const materialModule = `export const MAT={VACUUM:0,STONE:1,SAND:2,CRYSTAL:3,METAL:4,MAGMA:5,ICE:6,ORGANIC_TISSUE:7,SPORES:8,MEMBRANE:9,BIOMASS:10,PLASMA:11,SUPERCONDUCTIVE_MATTER:12,INFORMATION_SUBSTRATE:13};`;
 const chemModule = `export const CHEM={GAS:0,LIQUID:1,SOLID:2,ORGANIC:3,REACTIVE:4};`;
 const cellUrl = `data:text/javascript;base64,${Buffer.from(cellModule).toString("base64")}`;
@@ -41,7 +45,23 @@ const { VoxelGrid } = await import(gridUrl);
 
 function makeSimulation() {
   const W=16,H=16,D=12;
-  return {grid:new VoxelGrid(W,H,D),laws:{},syncToGPU(){}};
+  const grid = new VoxelGrid(W,H,D);
+  return {
+    grid,
+    laws:{},
+    syncToGPU(){},
+    mutateAuthoritativeState(mutation) {
+      const before = grid.buffer.slice();
+      try {
+        const result = mutation();
+        this.syncToGPU();
+        return result;
+      } catch (error) {
+        grid.buffer.set(before);
+        throw error;
+      }
+    },
+  };
 }
 function runScenario(engine) {
   const result=engine.run(`
@@ -68,4 +88,33 @@ assert.deepEqual([...replayed],[...expected],"script RNG replay must reproduce i
 assert.throws(()=>engine.restoreRandomState(0),/Invalid ScriptEngine PRNG state/);
 assert.throws(()=>engine.restoreRandomState(-1),/Invalid ScriptEngine PRNG state/);
 assert.throws(()=>engine.restoreRandomState(0x100000000),/Invalid ScriptEngine PRNG state/);
-console.log("ScriptEngine RNG recovery: PASS");
+
+// A failed script may have changed multiple cells and consumed random values.
+// The simulation transaction must undo the writes and ScriptEngine must rewind
+// its local RNG so a retry starts from the same deterministic checkpoint.
+const beforeFailureBuffer = sim.grid.buffer.slice();
+const beforeFailureRng = engine.snapshotRandomState();
+const failedScript = engine.run(`
+  world.fill(1, 2, 3, 'energy', 987);
+  world.fill(2, 2, 3, 'density', 0.9);
+  Math.random();
+  Math.random();
+  throw new Error('injected script failure');
+`);
+assert.equal(failedScript.success, false, 'a throwing script must fail');
+assert.match(failedScript.log.join('; '), /injected script failure/);
+assert.deepEqual([...sim.grid.buffer], [...beforeFailureBuffer],
+  'failed script must restore every grid field');
+assert.equal(engine.snapshotRandomState(), beforeFailureRng,
+  'failed script must restore its PRNG state');
+assert.equal(sim.grid.buffer[sim.grid.idx(1,2,3)], beforeFailureBuffer[sim.grid.idx(1,2,3)],
+  'the first mutated cell must be rolled back');
+
+const asyncResult = engine.run('return Promise.resolve("not synchronous")');
+assert.equal(asyncResult.success, false, 'async script result must be rejected inside synchronous transaction');
+assert.match(asyncResult.log.join('; '), /must remain synchronous/);
+assert.deepEqual([...sim.grid.buffer], [...beforeFailureBuffer],
+  'rejected asynchronous result must not leave grid mutations behind');
+assert.equal(engine.snapshotRandomState(), beforeFailureRng,
+  'rejected asynchronous script must restore RNG state');
+console.log("ScriptEngine transactional mutation and RNG recovery: PASS");
