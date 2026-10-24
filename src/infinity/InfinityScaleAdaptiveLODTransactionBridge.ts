@@ -8,6 +8,8 @@ import {
 } from "./InfinityScaleGlobalLODTransaction";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import type { InfinityScaleAdaptiveMutation, InfinityScaleCompiledTransfer } from "./InfinityScaleAdaptiveTransferCompiler";
+import { InfinityScaleAdaptiveTransferCompiler } from "./InfinityScaleAdaptiveTransferCompiler";
+import { InfinityScaleAdaptiveExecutionGraphCompiler } from "./InfinityScaleAdaptiveExecutionGraphCompiler";
 import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
 
 export interface InfinityScaleAdaptiveTransferExecution {
@@ -55,6 +57,11 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
       // not leave a failed transaction attached to this bridge.
       if (!Array.isArray(mutations) || !Array.isArray(transfers)) {
         throw new Error("Adaptive LOD transaction requires mutation and transfer arrays");
+      }
+      const compiledPlan = new InfinityScaleAdaptiveTransferCompiler().compile(mutations);
+      const executionGraph = new InfinityScaleAdaptiveExecutionGraphCompiler().compile(compiledPlan);
+      if (!executionGraph.valid) {
+        throw new Error("Adaptive LOD transaction rejected: execution dependency graph is invalid");
       }
       const changed = mutations.filter(m => m.fromLOD !== m.toLOD).slice().sort((a, b) => a.regionId.localeCompare(b.regionId));
       const expectedTransferIds = new Set(changed.map(m => m.regionId + ":" + m.fromLOD + "->" + m.toLOD));
