@@ -39,6 +39,8 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
   const frame = beginInfinityScaleGlobalFrame(plan, 0, 1);
   const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
 
+  // Fine-to-coarse restriction sums extensive ENERGY across four source cells
+  // (2 each => 8) while intensive DENSITY is averaged (10 remains 10).
   const sources = Array.from({ length: 4 }, () => {
     const cell = new Array<number>(CELL_FIELDS).fill(0);
     cell[F.ENERGY] = 2;
@@ -91,7 +93,7 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
   }
   const stagedAfterDuplicate = transaction.synchronization.getStagedUpdates();
   if (!duplicateRejected || stagedAfterDuplicate.length !== 1 ||
-      stagedAfterDuplicate[0].value[F.ENERGY] !== 2 ||
+      stagedAfterDuplicate[0].value[F.ENERGY] !== 8 ||
       stagedAfterDuplicate[0].value[F.DENSITY] !== 10) {
     throw new Error("Infinity Scale duplicate boundary target regression failed");
   }
@@ -109,7 +111,7 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
   }
 
   const committed = state.readBaseCell("1:1,0,0", 1, 4, 0, 0);
-  if (!committed || committed[F.ENERGY] !== 2 || committed[F.DENSITY] !== 10) {
+  if (!committed || committed[F.ENERGY] !== 8 || committed[F.DENSITY] !== 10) {
     throw new Error("Infinity Scale global LOD conservation regression failed");
   }
 
