@@ -8,7 +8,7 @@ import { LawEngine, type LawEngineSnapshot } from '../laws/LawEngine';
 import { WorldMetrics } from '../laws/MetaLaw';
 import { GPUBackend } from '../gpu/GPUBackend';
 import { buildMaterialBuffer } from '../materials/MaterialDef';
-import { ChemLayer } from '../chemistry/ChemLayer';
+import { ChemLayer, type ChemLayerSnapshot } from '../chemistry/ChemLayer';
 import { EntityLayer, type EntityLayerSnapshot } from './EntityLayer';
 import { WorldEvents, type EventType, type WorldEventsSnapshot } from '../world/WorldEvents';
 import { TemporalLayer } from './TemporalLayer';
@@ -25,6 +25,7 @@ export interface SimulationEngineCoreRecoverySnapshot {
   grid: SparseVoxelGridSnapshot;
   entities: EntityLayerSnapshot;
   agents: AgentSystemSnapshot;
+  chemistry: ChemLayerSnapshot;
   worldEvents: WorldEventsSnapshot;
   causal: CausalGraphSnapshot;
   laws: LawEngineSnapshot;
@@ -204,6 +205,7 @@ export class SimulationEngine {
       grid: this.grid.captureState(),
       entities: this.entityLayer.snapshot(),
       agents: this.agents.snapshot(),
+      chemistry: this.chemLayer.snapshot(),
       worldEvents: this.worldEvents.snapshot(),
       causal: this.causal.snapshot(),
       laws: this.laws.snapshot(),
@@ -233,6 +235,7 @@ export class SimulationEngine {
       this.grid.restoreState(state.grid);
       this.entityLayer.restore(state.entities, this.grid.size);
       this.agents.restore(state.agents);
+      this.chemLayer.restore(state.chemistry, this.grid.size);
       this.worldEvents.restore(state.worldEvents);
       this.causal.restore(state.causal);
       this.laws.restore(state.laws);
