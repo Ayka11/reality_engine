@@ -870,3 +870,24 @@ for (const invalidIndex of [-1, boundsGrid.size, 0.5, Number.NaN, Number.POSITIV
   assert.throws(() => boundsGrid.cellAt(invalidIndex), RangeError, `cellAt must reject invalid linear index ${invalidIndex}`);
 }
 console.log("SparseVoxelGrid rejects invalid dense coordinates and linear indices: PASS");
+
+// Characterize the production legacy lifecycle policy before replacing it with
+// chunk reconciliation: a connected component that shrinks to one cell is
+// currently discarded by EntityLayer.tick(). This is intentionally a
+// migration guard, not a statement that singleton extinction is the desired
+// long-term policy.
+const singletonLifecycleGrid = new VoxelGrid(3, 1, 1);
+singletonLifecycleGrid.buffer[0 * CELL_FIELDS + F.BIO_POTENTIAL] = 1;
+singletonLifecycleGrid.buffer[1 * CELL_FIELDS + F.BIO_POTENTIAL] = 1;
+const singletonLifecycleLayer = new EntityLayer();
+singletonLifecycleLayer.tick(singletonLifecycleGrid, 0.016);
+assert.equal(singletonLifecycleLayer.getEntities().length, 1,
+  "legacy EntityLayer must recognize the initial two-cell blob");
+singletonLifecycleGrid.buffer[1 * CELL_FIELDS + F.BIO_POTENTIAL] = 0;
+singletonLifecycleLayer.tick(singletonLifecycleGrid, 0.016);
+assert.equal(singletonLifecycleLayer.getEntities().length, 0,
+  "legacy lifecycle currently discards a blob after it shrinks to one cell");
+assert.equal(singletonLifecycleLayer.extinctCount, 1,
+  "legacy singleton disappearance is currently counted as extinction");
+console.log("EntityLayer legacy singleton lifecycle characterization: PASS");
+
