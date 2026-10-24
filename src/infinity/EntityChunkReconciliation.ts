@@ -70,7 +70,7 @@ export class EntityChunkReconciliation {
       connectivity.openReadComponentCount === 0 &&
       (connectivity.mixedLodComponentCount === 0 || connectivity.mixedLodCoverageComplete);
 
-    const plan = this.plan(components, entities, connectivity, verifiedFullDomain);
+    const plan = this.planInternal(components, entities, connectivity, verifiedFullDomain);
     const matchedIds = new Set(
       plan.proposals
         .filter(proposal => proposal.safeToCommit)
@@ -88,7 +88,15 @@ export class EntityChunkReconciliation {
     components: EntityChunkComponent[],
     entities: Entity[],
     connectivity?: EntityChunkConnectivityResult,
-    verifiedFullDomain = false,
+  ): EntityReconciliationPlan {
+    return this.planInternal(components, entities, connectivity, false);
+  }
+
+  private planInternal(
+    components: EntityChunkComponent[],
+    entities: Entity[],
+    connectivity: EntityChunkConnectivityResult | undefined,
+    verifiedFullDomain: boolean,
   ): EntityReconciliationPlan {
     const componentSourceIds = new Map<number, number[]>();
     const sourceComponentCounts = new Map<number, number>();
