@@ -40,6 +40,10 @@ jobs:
       - run: npm run test:worldevents-recovery --if-present
       - run: npm run test:entity-layer-recovery --if-present
       - run: npm run test:simulation-engine-core-recovery --if-present
+      - run: npm run test:chem-layer-recovery --if-present
+      - run: npm run test:civilization-system-recovery --if-present
+      - run: npm run test:cosmological-sim-recovery --if-present
+      - run: npm run test:simulation-engine-cpu-frame-rollback --if-present
       - run: npm run test:infinity-scale-mixed-lod --if-present
       - run: npm run test:infinity-scale-adaptive-lod-bridge --if-present
       - name: Run entity chunk reconciliation regression
