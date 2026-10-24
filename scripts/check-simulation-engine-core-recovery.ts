@@ -122,6 +122,47 @@ assert.deepEqual(
 syncRollbackEngine.syncTick(1);
 assert.equal(syncRollbackEngine.tick, 1, "syncTick must remain usable after rollback");
 
+// External edits should invalidate pending work, publish dense/chunk state in
+// one synchronous boundary, and roll back every covered domain on exceptions.
+const mutationBoundaryEngine = new SimulationEngine(8, 8, 4);
+const mutationBoundaryIndex = mutationBoundaryEngine.grid.idx(2, 2, 1) + F.ENERGY;
+mutationBoundaryEngine.grid.buffer[mutationBoundaryIndex] = 11;
+mutationBoundaryEngine.grid.syncDenseToChunks();
+const beforeExternalMutationFailure = mutationBoundaryEngine.captureCoreRecoveryState();
+assert.throws(() => mutationBoundaryEngine.mutateAuthoritativeState(() => {
+  mutationBoundaryEngine.grid.buffer[mutationBoundaryIndex] = 777;
+  mutationBoundaryEngine.agents.seed(mutationBoundaryEngine.grid, 1);
+  mutationBoundaryEngine.laws.toggleProcess(15, true);
+  throw new Error("injected external mutation failure");
+}), /injected external mutation failure/);
+assert.deepEqual(
+  mutationBoundaryEngine.captureCoreRecoveryState(),
+  beforeExternalMutationFailure,
+  "failed authoritative mutation must restore grid, chunk metadata, agents/RNG and laws",
+);
+
+mutationBoundaryEngine.mutateAuthoritativeState(() => {
+  mutationBoundaryEngine.grid.buffer[mutationBoundaryIndex] = 72;
+});
+assert.equal(mutationBoundaryEngine.grid.buffer[mutationBoundaryIndex], 72);
+assert.equal(
+  mutationBoundaryEngine.grid.getCell(2, 2, 1)?.energy,
+  72,
+  "successful mutation must publish dense changes to the chunk mirror",
+);
+const committedExternalMutation = mutationBoundaryEngine.captureCoreRecoveryState();
+assert.throws(
+  () => mutationBoundaryEngine.mutateAuthoritativeState(
+    () => Promise.resolve("async mutation must be rejected"),
+  ),
+  /must remain synchronous/,
+);
+assert.deepEqual(
+  mutationBoundaryEngine.captureCoreRecoveryState(),
+  committedExternalMutation,
+  "an async callback must be rejected and its synchronous prefix rolled back",
+);
+
 // A zero-step sync remains an explicit mutation boundary for public typed-array
 // writes: invalidate an in-flight GPU result and preserve the newer CPU state.
 const staleGpuEngine = new SimulationEngine(8, 8, 4);
