@@ -1,4 +1,4 @@
-import { CellState, CELL_FIELDS } from './CellState';
+import { CellState, CELL_FIELDS, F } from './CellState';
 import { Chunk, CHUNK_SIZE, CHUNK_VOLUME } from './Chunk';
 
 export interface SerializedChunk {
@@ -122,15 +122,20 @@ export class SparseVoxelGrid {
   }
 
   cell(x: number, y: number, z: number): CellState {
+    this.assertDenseCoordinates(x, y, z, "cell");
     this.getOrCreateChunkForGlobal(x, y, z);
     return new CellState(this.buffer, this.idx(x, y, z));
   }
 
   cellAt(linearIdx: number): CellState {
+    if (!Number.isSafeInteger(linearIdx) || linearIdx < 0 || linearIdx >= this.size) {
+      throw new RangeError(`cellAt index out of bounds: ${linearIdx}`);
+    }
     return new CellState(this.buffer, linearIdx * CELL_FIELDS);
   }
 
   cellBack(x: number, y: number, z: number): CellState {
+    this.assertDenseCoordinates(x, y, z, "cellBack");
     return new CellState(this.backBuffer, this.idx(x, y, z));
   }
 
@@ -241,6 +246,29 @@ export class SparseVoxelGrid {
     for (const key of snapshot.dirtyChunks) this.dirtyChunks.add(key);
     this.chunkOwners.clear();
     for (const [key, owner] of owners) this.chunkOwners.set(key, owner);
+  }
+
+  /**
+   * Reject dense-window entity ownership that disagrees with chunk storage.
+   * This check does not establish whole-world coverage.
+   */
+  assertDenseEntityOwnershipSynchronized(): void {
+    for (let z = 0; z < this.D; z++) {
+      for (let y = 0; y < this.H; y++) {
+        for (let x = 0; x < this.W; x++) {
+          const gx = x + this.denseOrigin.x;
+          const gy = y + this.denseOrigin.y;
+          const gz = z + this.denseOrigin.z;
+          const denseId = this.buffer[this.idx(x, y, z) + F.ENTITY_ID];
+          const chunkId = this.getCell(gx, gy, gz)?.entityId ?? 0;
+          if (denseId !== chunkId) {
+            throw new Error(
+              `Dense/chunk entity ownership mismatch at (${gx}, ${gy}, ${gz}): dense=${denseId}, chunk=${chunkId}`,
+            );
+          }
+        }
+      }
+    }
   }
 
   snapshot(): void {
@@ -374,6 +402,15 @@ export class SparseVoxelGrid {
     for (let cz = minCz; cz <= maxCz; cz++)
     for (let cy = minCy; cy <= maxCy; cy++)
     for (let cx = minCx; cx <= maxCx; cx++) this.getOrCreateChunk(cx, cy, cz);
+  }
+
+  private assertDenseCoordinates(x: number, y: number, z: number, method: string): void {
+    if (
+      !Number.isSafeInteger(x) || !Number.isSafeInteger(y) || !Number.isSafeInteger(z) ||
+      !this.inBounds(x, y, z)
+    ) {
+      throw new RangeError(`${method} coordinates out of bounds: (${x}, ${y}, ${z})`);
+    }
   }
 
   private getOrCreateChunkForGlobal(gx: number, gy: number, gz: number): Chunk {

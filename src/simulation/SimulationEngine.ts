@@ -34,6 +34,10 @@ export class SimulationEngine {
   private prevEnergy: Float32Array;
   private _tick = 0;
   private _gpuReady = false;
+  /** Changes whenever an engine-owned operation invalidates an in-flight GPU readback. */
+  private _stateGeneration = 0;
+  /** Serialize async steps so GPU submit/readback pairs cannot overlap. */
+  private _stepQueue: Promise<void> = Promise.resolve();
 
   constructor() {
     this.grid = new SparseVoxelGrid(WORLD.W, WORLD.H, WORLD.D);
@@ -68,14 +72,28 @@ export class SimulationEngine {
     this._tick = Math.max(0, Math.floor(tick));
   }
 
-  // nSteps allows batching multiple physics ticks per animation frame
-  async step(dt: number, nSteps = 1): Promise<void> {
+  // nSteps allows batching multiple physics ticks per animation frame.
+  // Keep each GPU submit/readback pair serialized, even if callers overlap step().
+  step(dt: number, nSteps = 1): Promise<void> {
+    const run = this._stepQueue.then(() => this._stepInternal(dt, nSteps));
+    // A failed step must not permanently poison the queue; the caller still receives its rejection.
+    this._stepQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  private async _stepInternal(dt: number, nSteps: number): Promise<void> {
     const clampedDt = Math.min(dt, 0.05);
 
     if (this._gpuReady) {
+      const readbackGeneration = this._stateGeneration;
       this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
       this.gpu.submitCompute(nSteps);
       const data = await this.gpu.readback();
+      if (readbackGeneration !== this._stateGeneration) {
+        // Discard stale GPU output and resynchronize the device with the newer authoritative CPU state.
+        this.gpu.upload(this.grid.buffer);
+        throw new Error('Discarded stale GPU readback: simulation state changed while awaiting GPU results');
+      }
       if (data.length > 0) this.grid.buffer.set(data);
       this.grid.syncDenseToChunks();
       this.chemLayer.tick(this.grid, clampedDt * nSteps);
@@ -117,16 +135,20 @@ export class SimulationEngine {
     }
 
     this._tick += nSteps;
+    this._stateGeneration++;
   }
 
   // Called after user paints/erases so GPU buffer stays consistent
   syncToGPU(): void {
+    this._stateGeneration++;
     this.grid.syncDenseToChunks();
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
   }
 
   // Synchronous CPU-only step used by ScriptEngine (bypasses GPU/await)
   syncTick(n: number): void {
+    // A synchronous script tick invalidates any asynchronous GPU result already in flight.
+    this._stateGeneration++;
     const dt = 0.016;
     for (let s = 0; s < n; s++) {
       this.fieldPhysics.tick(this.grid, dt, this.laws.params, this.laws.activeProcessMask);
@@ -140,6 +162,7 @@ export class SimulationEngine {
       this._tick++;
     }
     this.grid.syncDenseToChunks();
+    this._stateGeneration++;
   }
 
   private _worldMetrics(): WorldMetrics {
@@ -182,6 +205,7 @@ export class SimulationEngine {
   }
 
   triggerEvent(type: EventType): void {
+    this._stateGeneration++;
     this.worldEvents.trigger(this.grid, type, this._tick);
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
   }
@@ -214,6 +238,7 @@ export class SimulationEngine {
   }
 
   reset(): void {
+    this._stateGeneration++;
     this.grid.clear();
     this.causal.clear();
     this.entityLayer.clear();
