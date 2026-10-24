@@ -59,16 +59,45 @@ export function runInfinityScaleGPUBoundaryTransferContractRegression(): void {
     throw new Error("GPU boundary contract packed incorrect same-level metadata");
   }
 
-  for (const invalidRatio of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+  const invalidSpecs: InfinityScaleBoundaryTransferSpec[] = [
+    { ...sameLevel, refinementRatio: 0 },
+    { ...sameLevel, refinementRatio: -1 },
+    { ...sameLevel, refinementRatio: 1.5 },
+    { ...sameLevel, refinementRatio: Number.NaN },
+    { ...sameLevel, refinementRatio: Number.POSITIVE_INFINITY },
+    { ...sameLevel, targetLevel: 1 },
+    { ...sameLevel, operation: "restriction" },
+    { ...coarseToFine, sourceLevel: 0 },
+  ];
+  for (const spec of invalidSpecs) {
     let rejected = false;
     try {
-      InfinityScaleGPUBoundaryTransferContract.descriptor(
-        { ...sameLevel, refinementRatio: invalidRatio },
-        [0, 0, 0],
-      );
+      InfinityScaleGPUBoundaryTransferContract.descriptor(spec, [0, 0, 0]);
     } catch (error) {
-      rejected = error instanceof Error && error.message.includes("integer refinement ratio");
+      rejected = error instanceof Error;
     }
-    if (!rejected) throw new Error("GPU boundary contract accepted invalid refinement ratio");
+    if (!rejected) throw new Error("GPU boundary contract accepted inconsistent transfer metadata");
   }
+
+  for (const invalidCell of [[0, Number.NaN, 0], [0, 0, Number.POSITIVE_INFINITY], [0, 0, 1.5]] as [number, number, number][]) {
+    let rejected = false;
+    try {
+      InfinityScaleGPUBoundaryTransferContract.descriptor(sameLevel, invalidCell);
+    } catch (error) {
+      rejected = error instanceof Error;
+    }
+    if (!rejected) throw new Error("GPU boundary contract accepted invalid target-cell coordinates");
+  }
+
+  const malformedDescriptor = {
+    ...InfinityScaleGPUBoundaryTransferContract.descriptor(sameLevel, [0, 0, 0]),
+    sourceCellCount: Number.NaN,
+  };
+  let rejectedMalformedPacking = false;
+  try {
+    InfinityScaleGPUBoundaryTransferContract.pack([malformedDescriptor]);
+  } catch (error) {
+    rejectedMalformedPacking = error instanceof Error;
+  }
+  if (!rejectedMalformedPacking) throw new Error("GPU boundary contract packed invalid descriptor data");
 }
