@@ -197,6 +197,41 @@ export class SimulationEngine {
     }
   }
 
+  /**
+   * Run one synchronous external mutation against the authoritative simulation.
+   * This is the supported boundary for scripts/imports/edit operations that
+   * directly write the public grid buffers: invalidate pending GPU readbacks
+   * before entering the callback, then publish dense/chunk/GPU state together.
+   * The callback must not await or publish unrelated external side effects.
+   */
+  mutateAuthoritativeState<T>(mutation: () => T): T {
+    if (typeof mutation !== 'function') {
+      throw new TypeError('Authoritative mutation requires a synchronous callback');
+    }
+
+    // Invalidate any in-flight GPU result before snapshotting or exposing mutation.
+    this._stateGeneration++;
+    const recoveryBefore = this.captureCoreRecoveryState();
+    try {
+      const result = mutation();
+      this.grid.syncDenseToChunks();
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+      this._stateGeneration++;
+      return result;
+    } catch (error) {
+      try {
+        this.restoreCoreRecoveryState(recoveryBefore);
+      } catch (rollbackError) {
+        const originalMessage = error instanceof Error ? error.message : String(error);
+        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        throw new Error(
+          `Authoritative mutation failed (${originalMessage}) and rollback failed (${rollbackMessage})`,
+        );
+      }
+      throw error;
+    }
+  }
+
   // Called after user paints/erases so GPU buffer stays consistent
   syncToGPU(): void {
     this._stateGeneration++;
