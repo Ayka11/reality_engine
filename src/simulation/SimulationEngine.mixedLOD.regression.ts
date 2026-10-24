@@ -53,11 +53,12 @@ export async function runSimulationEngineMixedLODMultiFrameRegression(): Promise
 
   await engine.step(0.016);
   const firstTick = engine.tick;
-  const firstBoundaryEnergy = engine.grid.cell(64, 20, 16).get(F.ENERGY);
+  // Read the active-side cell adjacent to the read-only source chunk; the source itself must not be mutated.
+  const firstBoundaryEnergy = engine.grid.cell(63, 20, 16).get(F.ENERGY);
 
   await engine.step(0.016);
   const secondTick = engine.tick;
-  const secondBoundaryEnergy = engine.grid.cell(64, 20, 16).get(F.ENERGY);
+  const secondBoundaryEnergy = engine.grid.cell(63, 20, 16).get(F.ENERGY);
 
   if (firstTick !== 1 || secondTick !== 2) {
     throw new Error(`Expected mixed-LOD runtime ticks 1 and 2, received ${firstTick} and ${secondTick}`);
