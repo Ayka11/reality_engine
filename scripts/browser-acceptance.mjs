@@ -985,6 +985,67 @@ try {
     throw new Error(`Serialized worker restore corrupted ACK/frame accounting: ${JSON.stringify(serializedRestoreState)}`);
   }
 
+  // A normal worker mutation queued during a live restore must not be counted
+  // as a restore ACK/frame or invalidate the restore's expected key set.
+  const mutationDuringRestoreDispatch = await page.evaluate(async () => {
+    const raw = sessionStorage.getItem("reality-engine-worker-restore-fixture");
+    if (!raw) return { started: false, error: "durable restore fixture metadata missing" };
+    const { coord } = JSON.parse(raw);
+    const started = await window.restoreWorldFieldChunkSnapshot?.(coord.cx, coord.cy, coord.cz);
+    if (!started) return { started: false, error: "durable snapshot restore was rejected" };
+    const restoreId = window.worldFieldRestoreState?.()?.restoreId;
+    window.paintChunkAt?.(64, 29, 64, 0, 0.5, 1, "add");
+    return { started, restoreId };
+  });
+  if (!mutationDuringRestoreDispatch.started ||
+      mutationDuringRestoreDispatch.restoreId !== serializedRestoreState.restoreId + 1) {
+    throw new Error(`Mutation-vs-restore setup failed: ${JSON.stringify(mutationDuringRestoreDispatch)}`);
+  }
+  await page.waitForFunction(() => window.worldFieldRestoreState?.()?.complete === true,
+    undefined, { timeout: acceptanceTimeout });
+  const restoreAccountingAfterMutation = await page.evaluate(async () => {
+    const before = window.worldFieldRestoreState?.();
+    window.paintChunkAt?.(64, 29, 64, 0, 1, 1, "add");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const after = window.worldFieldRestoreState?.();
+    return {
+      restoreId: before?.restoreId,
+      expected: before?.expected,
+      acknowledged: before?.acknowledged,
+      frameKeys: before?.restoreFrameKeys ?? [],
+      complete: before?.complete,
+      workerBarrierComplete: before?.workerBarrierComplete,
+      afterRestoreId: after?.restoreId,
+      afterExpected: after?.expected,
+      afterAcknowledged: after?.acknowledged,
+      afterFrameKeys: after?.restoreFrameKeys ?? [],
+      afterComplete: after?.complete,
+      afterWorkerBarrierComplete: after?.workerBarrierComplete,
+      staleAcks: after?.staleAcks,
+      staleFrames: after?.staleFrames,
+      duplicateAcks: after?.duplicateAcks,
+      unexpectedAcks: after?.unexpectedAcks,
+      unexpectedFrames: after?.unexpectedFrames,
+    };
+  });
+  if (
+    restoreAccountingAfterMutation.restoreId !== restoreAccountingAfterMutation.afterRestoreId ||
+    restoreAccountingAfterMutation.expected !== restoreAccountingAfterMutation.afterExpected ||
+    restoreAccountingAfterMutation.acknowledged !== restoreAccountingAfterMutation.afterAcknowledged ||
+    JSON.stringify(restoreAccountingAfterMutation.frameKeys) !== JSON.stringify(restoreAccountingAfterMutation.afterFrameKeys) ||
+    restoreAccountingAfterMutation.complete !== true ||
+    restoreAccountingAfterMutation.afterComplete !== true ||
+    restoreAccountingAfterMutation.workerBarrierComplete !== true ||
+    restoreAccountingAfterMutation.afterWorkerBarrierComplete !== true ||
+    restoreAccountingAfterMutation.staleAcks !== 0 ||
+    restoreAccountingAfterMutation.staleFrames !== 0 ||
+    restoreAccountingAfterMutation.duplicateAcks !== 0 ||
+    restoreAccountingAfterMutation.unexpectedAcks !== 0 ||
+    restoreAccountingAfterMutation.unexpectedFrames !== 0
+  ) {
+    throw new Error(`Worker mutation contaminated restore accounting: ${JSON.stringify(restoreAccountingAfterMutation)}`);
+  }
+
   // Exercise actual pointerdown -> pointermove* -> pointerup, not only the helper.
   console.log("[acceptance] literal pointer-drag sculpt undo/redo");
   const dragSetup = await page.evaluate(() => {
