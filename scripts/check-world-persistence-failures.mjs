@@ -3,6 +3,15 @@ import { readFile } from "node:fs/promises";
 import ts from "typescript";
 
 const root = new URL("../", import.meta.url);
+const saveSystemSource = await readFile(new URL("src/world/save/WorldSaveSystem.ts", root), "utf8");
+assert.match(saveSystemSource, /this\.context\.mutateAuthoritativeState\(apply\)/,
+  "world snapshot import must commit through the authoritative simulation transaction");
+assert.match(saveSystemSource, /const graphBefore = this\.context\.graphProvider\?\.\(\)/,
+  "world snapshot import must checkpoint the external graph domain");
+assert.match(saveSystemSource, /const civBefore = this\.context\.getCivSnapshot\?\.\(\)/,
+  "world snapshot import must checkpoint the external civilization domain");
+assert.match(saveSystemSource, /this\.context\.restoreCivSnapshot\(civBefore\)/,
+  "failed world snapshot import must restore civilization state");
 const cache = new Map();
 async function load(path) {
   if (cache.has(path)) return cache.get(path);
