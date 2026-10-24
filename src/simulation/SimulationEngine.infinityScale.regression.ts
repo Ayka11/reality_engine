@@ -22,7 +22,8 @@ export async function runSimulationEngineInfinityScaleSelectiveCPURegression(): 
     selectiveCpuReady: true,
     selectiveGpuReady: false,
     gpuPhysicsReady: false,
-    lodBoundaryTransferReady: false,
+    // With no mixed-LOD boundary relations, boundary transfer is vacuously ready.
+    lodBoundaryTransferReady: true,
     mixedLodExecutionReady: true,
     entityExecutionReady: true,
     agentMigrationReady: true,
