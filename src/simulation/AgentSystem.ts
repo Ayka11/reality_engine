@@ -44,12 +44,14 @@ export const AGENT_COLORS: Record<AgentBehavior, [number, number, number]> = {
 
 export class AgentSystem {
   private agents: Map<number, Agent> = new Map();
+  private readonly initialRngState: number;
   private _rngState = 0x0a63c9d1;
   private _nextAgentId = 1;
   readonly maxAgents = 64;
 
   constructor(seed = 0x0a63c9d1) {
-    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x0a63c9d1 : 0x0a63c9d1;
+    this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x0a63c9d1 : 0x0a63c9d1;
+    this._rngState = this.initialRngState;
   }
 
   private _random(): number {
@@ -337,5 +339,9 @@ export class AgentSystem {
     }));
   }
 
-  clear(): void { this.agents.clear(); this._nextAgentId = 1; }
+  clear(): void {
+    this.agents.clear();
+    this._nextAgentId = 1;
+    this._rngState = this.initialRngState;
+  }
 }
