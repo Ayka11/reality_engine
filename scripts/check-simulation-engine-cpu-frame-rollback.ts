@@ -69,6 +69,40 @@ export async function runSimulationEngineCPUFrameRollbackRegression(): Promise<v
 
   await engine.step(0.016);
   assert.equal(engine.tick, 501, "step queue must remain usable after a rolled-back frame");
+
+  // Invalid frame arguments must be rejected before any state mutation or queue poisoning.
+  const beforeInvalidArguments = engine.captureCoreRecoveryState();
+  await assert.rejects(engine.step(Number.NaN), /dt must be a finite non-negative number/);
+  await assert.rejects(engine.step(-0.01), /dt must be a finite non-negative number/);
+  await assert.rejects(engine.step(0.016, Number.POSITIVE_INFINITY), /nSteps must be a non-negative safe integer/);
+  await assert.rejects(engine.step(0.016, 1.5), /nSteps must be a non-negative safe integer/);
+  await assert.rejects(engine.step(0.016, -1), /nSteps must be a non-negative safe integer/);
+  assert.deepEqual(
+    engine.captureCoreRecoveryState(),
+    beforeInvalidArguments,
+    "invalid asynchronous step arguments must not mutate simulation state",
+  );
+
+  // Zero steps are a true no-op for both async and synchronous entry points.
+  await engine.step(0.016, 0);
+  engine.syncTick(0);
+  assert.deepEqual(
+    engine.captureCoreRecoveryState(),
+    beforeInvalidArguments,
+    "zero-step requests must not tick subsystems or alter recovery state",
+  );
+
+  assert.throws(() => engine.syncTick(-1), /syncTick n must be a non-negative safe integer/);
+  assert.throws(() => engine.syncTick(1.5), /syncTick n must be a non-negative safe integer/);
+  assert.throws(() => engine.syncTick(Number.NaN), /syncTick n must be a non-negative safe integer/);
+  assert.deepEqual(
+    engine.captureCoreRecoveryState(),
+    beforeInvalidArguments,
+    "invalid synchronous step arguments must not mutate simulation state",
+  );
+
+  await engine.step(0.016);
+  assert.equal(engine.tick, 502, "step queue must remain usable after invalid requests");
 }
 
 await runSimulationEngineCPUFrameRollbackRegression();
