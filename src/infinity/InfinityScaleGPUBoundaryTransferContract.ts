@@ -28,14 +28,14 @@ export class InfinityScaleGPUBoundaryTransferContract {
       throw new Error("GPU boundary transfer requires source and target chunks");
     }
     if (
-      !Number.isInteger(spec.sourceLevel) ||
-      !Number.isInteger(spec.targetLevel) ||
+      !Number.isSafeInteger(spec.sourceLevel) ||
+      !Number.isSafeInteger(spec.targetLevel) ||
       spec.sourceLevel < 0 ||
       spec.targetLevel < 0
     ) {
       throw new Error("GPU boundary transfer requires non-negative integer LOD levels");
     }
-    if (spec.refinementRatio < 1 || !Number.isInteger(spec.refinementRatio)) {
+    if (!Number.isSafeInteger(spec.refinementRatio) || spec.refinementRatio < 1) {
       throw new Error("GPU boundary transfer requires an integer refinement ratio");
     }
     if (targetCell.some(value => !Number.isSafeInteger(value))) {
@@ -43,7 +43,7 @@ export class InfinityScaleGPUBoundaryTransferContract {
     }
 
     const expectedRatio = 2 ** Math.abs(spec.sourceLevel - spec.targetLevel);
-    if (spec.refinementRatio !== expectedRatio) {
+    if (!Number.isSafeInteger(expectedRatio) || spec.refinementRatio !== expectedRatio) {
       throw new Error("GPU boundary transfer refinement ratio does not match LOD levels");
     }
 
@@ -70,6 +70,9 @@ export class InfinityScaleGPUBoundaryTransferContract {
     const sourceCellCount = spec.relation === "fine-to-coarse"
       ? spec.refinementRatio ** 2
       : 1;
+    if (!Number.isSafeInteger(sourceCellCount)) {
+      throw new Error("GPU boundary transfer source footprint exceeds safe integer range");
+    }
 
     return {
       sourceChunk: spec.sourceChunk,
@@ -99,6 +102,11 @@ export class InfinityScaleGPUBoundaryTransferContract {
       ];
       if (numericFields.some(value => !Number.isFinite(value))) {
         throw new Error("GPU boundary transfer descriptor contains non-finite numeric data");
+      }
+      // Float32 packing is lossy for integers above 2^24; reject rather than
+      // silently dispatching a descriptor with altered cell/LOD coordinates.
+      if (numericFields.some(value => Math.fround(value) !== value)) {
+        throw new Error("GPU boundary transfer descriptor is not exactly representable in Float32");
       }
       if (
         !Number.isInteger(d.sourceLevel) ||
