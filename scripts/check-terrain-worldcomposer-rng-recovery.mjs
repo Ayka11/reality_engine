@@ -37,7 +37,7 @@ assert.match(composerSource, /sim\.mutateAuthoritativeState\(\(\) => \{/,
   "world generation and periodic hazards must use the authoritative simulation mutation boundary");
 assert.match(composerSource, /this\._rngState = rngBefore/,
   "failed periodic hazards must restore the composer RNG");
-\nfunction makeGrid(W = 32, H = 32, D = 8) {
+function makeGrid(W = 32, H = 32, D = 8) {
   return new VoxelGrid(W, H, D);
 }
 function generate(biome, seed) {
