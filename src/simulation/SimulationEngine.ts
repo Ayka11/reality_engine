@@ -237,9 +237,18 @@ export class SimulationEngine {
     }
   }
 
+  /**
+   * Invalidate GPU work that may be in flight before a legacy synchronous
+   * writer mutates exposed grid buffers. Call the writer's publication/sync
+   * method after its synchronous apply/rollback completes.
+   */
+  invalidatePendingGPUReadback(): void {
+    this._stateGeneration++;
+  }
+
   // Called after user paints/erases so GPU buffer stays consistent
   syncToGPU(): void {
-    this._stateGeneration++;
+    this.invalidatePendingGPUReadback();
     this.grid.syncDenseToChunks();
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
   }
