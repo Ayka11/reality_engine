@@ -1,0 +1,238 @@
+import { CELL_FIELDS } from "../core/CellState";
+import {
+  InfinityScaleLODState,
+  type InfinityScaleLODChunkState,
+} from "./InfinityScaleLODState";
+import type {
+  InfinityScaleBoundaryTransferSpec,
+  InfinityScaleChunkExecutionContext,
+} from "./InfinityScaleChunkExecutionContext";
+import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
+import { mapInfinityScaleBoundaryCell } from "./InfinityScaleLODBoundaryCellMapper";
+import { validateInfinityScaleBoundaryGeometry } from "./InfinityScaleLODBoundaryGeometry";
+
+export interface InfinityScaleLODTransferSample {
+  sourceChunk: string;
+  targetChunk: string;
+  relation: "same-level" | "coarse-to-fine" | "fine-to-coarse";
+  targetCell: [number, number, number];
+  value: Float32Array;
+}
+
+export interface InfinityScaleLODBoundaryCoverage {
+  requiredSourceChunks: string[];
+  missingSourceChunks: string[];
+  complete: boolean;
+  invalidBoundaryReads: number;
+  firstInvalidRead?: {
+    sourceChunk: string;
+    targetChunk: string;
+    relation: string;
+    targetCell: [number, number, number];
+  };
+}
+
+export class InfinityScaleLODBoundarySnapshot {
+  private readonly chunks = new Map<string, InfinityScaleLODChunkState>();
+
+  private constructor(
+    readonly specs: InfinityScaleBoundaryTransferSpec[],
+    chunkStates: InfinityScaleLODChunkState[],
+    readonly revision: number,
+    readonly chunkSize = 32,
+  ) {
+    for (const state of chunkStates) {
+      this.chunks.set(state.key, {
+        key: state.key,
+        level: state.level,
+        scale: state.scale,
+        cells: new Float32Array(state.cells),
+      });
+    }
+  }
+
+  static capture(
+    state: InfinityScaleLODState,
+    specs: InfinityScaleBoundaryTransferSpec[],
+    revision: number,
+    chunkSize = 32,
+  ): InfinityScaleLODBoundarySnapshot {
+    const sourceKeys = new Set<string>();
+    for (const spec of specs) sourceKeys.add(spec.sourceChunk);
+
+    const chunks: InfinityScaleLODChunkState[] = [];
+    for (const key of sourceKeys) {
+      const source = state.getChunk(key);
+      if (source) chunks.push(source);
+    }
+
+    return new InfinityScaleLODBoundarySnapshot(
+      specs.map(spec => ({ ...spec })),
+      chunks,
+      revision,
+      chunkSize,
+    );
+  }
+
+  hasSourceChunk(key: string): boolean {
+    return this.chunks.has(key);
+  }
+
+  getCoverage(): InfinityScaleLODBoundaryCoverage {
+    const requiredSourceChunks = [...new Set(this.specs.map(spec => spec.sourceChunk))].sort();
+    const missingSourceChunks = requiredSourceChunks.filter(key => !this.chunks.has(key));
+    return {
+      requiredSourceChunks,
+      missingSourceChunks,
+      complete: missingSourceChunks.length === 0,
+      invalidBoundaryReads: 0,
+    };
+  }
+
+  validateFaceCoverage(
+    context: InfinityScaleChunkExecutionContext,
+  ): InfinityScaleLODBoundaryCoverage {
+    const base = this.getCoverage();
+    let invalidBoundaryReads = 0;
+    let firstInvalidRead = base.firstInvalidRead;
+
+    for (const range of context.simulationRanges) {
+      const faces = [
+        { axis: "x", value: range.minX },
+        { axis: "x", value: range.maxX },
+        { axis: "y", value: range.minY },
+        { axis: "y", value: range.maxY },
+        { axis: "z", value: range.minZ },
+        { axis: "z", value: range.maxZ },
+      ] as const;
+
+      const seen = new Set<string>();
+      for (const face of faces) {
+        for (let z = range.minZ; z <= range.maxZ; z++) {
+          for (let y = range.minY; y <= range.maxY; y++) {
+            for (let x = range.minX; x <= range.maxX; x++) {
+              if (
+                (face.axis === "x" && x !== face.value) ||
+                (face.axis === "y" && y !== face.value) ||
+                (face.axis === "z" && z !== face.value)
+              ) continue;
+
+              const key = `${x},${y},${z}`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+
+              const specs = context.getBoundaryTransferSpecsForCell(x, y, z)
+                .filter(spec => spec.sourceLevel !== spec.targetLevel);
+
+              for (const spec of specs) {
+                const read = this.read(spec, [x, y, z]);
+                if (!this.hasSourceChunk(spec.sourceChunk) || !read) {
+                  invalidBoundaryReads++;
+                  if (!firstInvalidRead) {
+                    firstInvalidRead = {
+                      sourceChunk: spec.sourceChunk,
+                      targetChunk: spec.targetChunk,
+                      relation: spec.relation,
+                      targetCell: [x, y, z],
+                    };
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      ...base,
+      complete: base.complete && invalidBoundaryReads === 0,
+      invalidBoundaryReads,
+      ...(firstInvalidRead ? { firstInvalidRead } : {}),
+    };
+  }
+
+  assertCoverage(): void {
+    const coverage = this.getCoverage();
+    if (!coverage.complete) {
+      throw new Error(
+        `Infinity Scale mixed-LOD boundary snapshot is incomplete; missing source chunks: ${coverage.missingSourceChunks.join(", ")}`,
+      );
+    }
+  }
+
+  assertFaceCoverage(context: InfinityScaleChunkExecutionContext): void {
+    const coverage = this.validateFaceCoverage(context);
+    if (!coverage.complete) {
+      const detail = coverage.firstInvalidRead
+        ? ` at ${coverage.firstInvalidRead.targetCell.join(",")}`
+        : "";
+      throw new Error(
+        `Infinity Scale mixed-LOD boundary face coverage is incomplete: ${coverage.invalidBoundaryReads} invalid reads${detail}`,
+      );
+    }
+  }
+
+  read(
+    spec: InfinityScaleBoundaryTransferSpec,
+    targetCell: [number, number, number],
+  ): Float32Array | null {
+    const source = this.chunks.get(spec.sourceChunk);
+    if (!source) return null;
+
+    // A boundary snapshot is valid only for a cell on the target-side face.
+    // Reject interior and out-of-chunk coordinates before reading source data.
+    if (!validateInfinityScaleBoundaryGeometry(spec, targetCell, this.chunkSize)) return null;
+
+    const mapping = mapInfinityScaleBoundaryCell(spec, targetCell, this.chunkSize);
+    const sourceRange = chunkRangeForKey(spec.sourceChunk, this.chunkSize);
+    const sourceScale = 2 ** spec.sourceLevel;
+    const sources: Float32Array[] = [];
+
+    for (const coords of mapping.sourceCells) {
+      const lx = Math.floor((coords[0] - sourceRange.minX) / sourceScale);
+      const ly = Math.floor((coords[1] - sourceRange.minY) / sourceScale);
+      const lz = Math.floor((coords[2] - sourceRange.minZ) / sourceScale);
+      if (lx < 0 || lx >= this.chunkSize || ly < 0 || ly >= this.chunkSize || lz < 0 || lz >= this.chunkSize) return null;
+      const offset = ((lz * this.chunkSize * this.chunkSize) + ly * this.chunkSize + lx) * CELL_FIELDS;
+      const cell = new Float32Array(CELL_FIELDS);
+      cell.set(source.cells.subarray(offset, offset + CELL_FIELDS));
+      sources.push(cell);
+    }
+
+    const out = new Float32Array(CELL_FIELDS);
+    if (spec.relation === "same-level") {
+      out.set(sources[0]);
+      return out;
+    }
+    if (spec.relation === "coarse-to-fine") {
+      const childCount = (2 ** (spec.sourceLevel - spec.targetLevel)) ** 3;
+      const children = Array.from({ length: childCount }, () => new Array<number>(CELL_FIELDS).fill(0));
+      InfinityScaleLODTransfer.prolongate(sources[0], children, spec.sourceLevel, spec.targetLevel);
+      out.set(children[0]);
+      return out;
+    }
+    const restricted = new Array<number>(CELL_FIELDS).fill(0);
+    InfinityScaleLODTransfer.restrictFace(sources, restricted, spec.sourceLevel, spec.targetLevel);
+    out.set(restricted);
+    return out;
+  }
+
+  getSpecs(): InfinityScaleBoundaryTransferSpec[] {
+    return this.specs.map(spec => ({ ...spec }));
+  }
+
+  get revisionId(): number {
+    return this.revision;
+  }
+}
+
+function chunkRangeForKey(key: string, chunkSize: number): { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number } {
+  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
+  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
+  const level = Number(match[1]);
+  if (!Number.isInteger(level) || level < 0 || level > 30) throw new Error(`Invalid Infinity Scale LOD level: ${level}`);
+  const extent = chunkSize * (2 ** level);
+  const x = Number(match[2]) * extent, y = Number(match[3]) * extent, z = Number(match[4]) * extent;
+  return { minX: x, maxX: x + extent - 1, minY: y, maxY: y + extent - 1, minZ: z, maxZ: z + extent - 1 };
+}

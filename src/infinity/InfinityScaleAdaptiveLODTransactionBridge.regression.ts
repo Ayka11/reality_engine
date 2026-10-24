@@ -2,8 +2,23 @@ import { InfinityScaleAdaptiveLODTransactionBridge } from "./InfinityScaleAdapti
 import { beginInfinityScaleGlobalFrame, advanceInfinityScaleGlobalFrame } from "./InfinityScaleGlobalExecutionFrame";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
+import { InfinityScaleExecutionAdapter } from "./InfinityScaleExecutionAdapter";
 
 export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
+  // The adapter is advisory until the production solver actually consumes its work set.
+  const defaultExecutionPlan = new InfinityScaleExecutionAdapter().getPlan();
+  if (defaultExecutionPlan.mode !== "advisory") {
+    throw new Error("Unwired Infinity Scale runtime must default to advisory execution mode");
+  }
+  if (defaultExecutionPlan.selectiveCpuReady) {
+    throw new Error("Unwired Infinity Scale runtime must not claim selective CPU readiness");
+  }
+  if (defaultExecutionPlan.entityExecutionReady) {
+    throw new Error("Entity reconciliation must remain not-ready until wired to runtime transactions");
+  }
+  if (defaultExecutionPlan.agentMigrationReady) {
+    throw new Error("Agent migration must remain not-ready until wired to the authoritative runtime transaction");
+  }
   const plan: InfinityScaleExecutionPlan = {
     revision: 0, mode: "selective-cpu-ready", observer: { x: 0, y: 0, z: 0 },
     chunks: [], simulationBudget: 0, requestedSimulationCount: 0, selectedSimulationCount: 0,
@@ -12,7 +27,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
     selectiveCpuReady: true, selectiveGpuReady: false, gpuPhysicsReady: false,
     lodBoundaryTransferReady: false, mixedLodExecutionReady: false, entityExecutionReady: false, agentMigrationReady: false,
   };
-  const state = new InfinityScaleLODState();
+  const state = new InfinityScaleLODState(1);
   const frame0 = beginInfinityScaleGlobalFrame(plan, 0, 1);
   const frame1 = advanceInfinityScaleGlobalFrame(frame0, "local-execution");
   const frame2 = advanceInfinityScaleGlobalFrame(frame1, "local-commit");
@@ -44,7 +59,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
 
   // A rejected commit in the wrong frame phase must clear the active
   // transaction so the bridge can be reused for a valid boundary commit.
-  const retryState = new InfinityScaleLODState();
+  const retryState = new InfinityScaleLODState(1);
   const retryBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, retryState);
   retryBridge.begin(frame2);
   let phaseRejected = false;
@@ -62,7 +77,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
 
   // A stale-revision rejection must also detach the failed transaction and
   // allow a new transaction to start from the current state revision.
-  const staleRetryState = new InfinityScaleLODState();
+  const staleRetryState = new InfinityScaleLODState(1);
   const staleRetryBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, staleRetryState);
   staleRetryBridge.begin(frame);
   staleRetryState.beginRevision();
@@ -81,7 +96,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
 
   // Runtime callers can violate TypeScript's array contract; this must still
   // reject through finally and leave the bridge reusable.
-  const malformedState = new InfinityScaleLODState();
+  const malformedState = new InfinityScaleLODState(1);
   const malformedBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, malformedState);
   malformedBridge.begin(frame);
   let malformedRejected = false;
@@ -97,7 +112,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
 
   // A duplicate begin must reject without replacing the already active
   // transaction; the original transaction must still be able to commit.
-  const duplicateBeginState = new InfinityScaleLODState();
+  const duplicateBeginState = new InfinityScaleLODState(1);
   const duplicateBeginBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, duplicateBeginState);
   duplicateBeginBridge.begin(frame);
   let duplicateBeginRejected = false;
@@ -116,7 +131,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   // An out-of-transaction write to an existing chunk must invalidate the
   // captured revision. The failed transaction must not restore its old snapshot
   // over that newer authoritative write.
-  const externalWriteState = new InfinityScaleLODState();
+  const externalWriteState = new InfinityScaleLODState(1);
   externalWriteState.ensureChunk("0:0,0,0", 0);
   const externalWriteBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, externalWriteState);
   externalWriteBridge.begin(frame);
@@ -147,7 +162,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   }
   void externalWriteRetry;
 
-  const directBufferState = new InfinityScaleLODState();
+  const directBufferState = new InfinityScaleLODState(1);
   directBufferState.ensureChunk("0:0,0,0", 0);
   const directBufferBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, directBufferState);
   directBufferBridge.begin(frame);
@@ -254,7 +269,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
       expected: 54,
     },
   ]) {
-    const mutationState = new InfinityScaleLODState();
+    const mutationState = new InfinityScaleLODState(1);
     mutationState.ensureChunk("0:0,0,0", 0);
     const mutationBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, mutationState);
     mutationBridge.begin(frame);
@@ -282,7 +297,7 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
 
   // Inject a failure after the bridge enters commit. The authoritative cell
   // buffer must be restored byte-for-byte and the bridge must remain reusable.
-  const failureState = new InfinityScaleLODState();
+  const failureState = new InfinityScaleLODState(1);
   const seededChunk = failureState.ensureChunk("0:0,0,0", 0);
   seededChunk.cells[0] = 17;
   seededChunk.cells[1] = -3.5;
