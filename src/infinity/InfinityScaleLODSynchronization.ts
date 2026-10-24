@@ -50,6 +50,15 @@ export class InfinityScaleLODSynchronization {
     sourceCells: ReadonlyArray<ArrayLike<number>>,
   ): void {
     InfinityScaleLODTransfer.validateSpec(spec);
+    if (!Array.isArray(targetCell) || targetCell.length !== 3 ||
+        targetCell.some(value => !Number.isSafeInteger(value) || value < 0)) {
+      throw new Error("Infinity Scale boundary target cell must contain three non-negative safe integer coordinates");
+    }
+    if (!Array.isArray(sourceCells) || sourceCells.length === 0 ||
+        sourceCells.some(source => !source || source.length !== CELL_FIELDS ||
+          Array.from(source).some(value => !Number.isFinite(value)))) {
+      throw new Error("Infinity Scale boundary transfer requires finite source cells with the expected field count");
+    }
 
     const target = new Float32Array(CELL_FIELDS);
     if (spec.operation === "copy") {
