@@ -953,6 +953,69 @@ try {
     throw new Error(`World field persistence was not durable after restore: ${JSON.stringify(durableAfterReload)}`);
   }
 
+  // Restoring after an intentional LRU eviction must rehydrate both durable
+  // storage and the bounded runtime chunk store without changing worker data.
+  const workerRestoreRoundTrip = await page.evaluate(async () => {
+    const raw = sessionStorage.getItem("reality-engine-worker-restore-fixture");
+    if (!raw) return { error: "durable restore fixture metadata missing" };
+    const fixture = JSON.parse(raw);
+    const { cx, cy, cz } = fixture.coord;
+    const storeKey = `${cx},${cy},${cz}`;
+    const before = window.loadWorldFieldChunkSnapshot?.(cx, cy, cz);
+    if (!before?.workerChunks?.length) return { error: "durable worker snapshot missing after restore" };
+    const beforeValid = !!window.validateWorldFieldChunkSnapshot?.(before);
+    const beforeChecksum = before.checksum;
+    const beforeKeys = before.workerChunks.map((chunk) => chunk.key).sort((a, b) => a - b);
+    const expectedKeys = [...(fixture.expectedKeys ?? [])].sort((a, b) => a - b);
+    const storeBefore = window.worldFieldChunkStoreState?.();
+    const storeRehydrated = !!storeBefore?.keys?.includes(storeKey);
+
+    const after = window.snapshotWorldFieldChunkPersistence?.(cx, cy, cz, before.seed);
+    const durable = await window.flushWorldFieldChunkPersistence?.();
+    const afterValid = !!after && !!window.validateWorldFieldChunkSnapshot?.(after);
+    const afterKeys = after?.workerChunks?.map((chunk) => chunk.key).sort((a, b) => a - b) ?? [];
+    const exact = !!after &&
+      before.workerChunks.length === after.workerChunks.length &&
+      beforeKeys.length === afterKeys.length &&
+      beforeKeys.every((key, i) => key === afterKeys[i]) &&
+      before.workerChunks.every((chunk, i) => {
+        const other = after.workerChunks[i];
+        return !!other && chunk.key === other.key &&
+          chunk.data.length === other.data.length &&
+          chunk.data.every((value, j) => Math.abs(value - other.data[j]) <= 1e-6);
+      });
+    const storeAfter = window.worldFieldChunkStoreState?.();
+    return {
+      beforeValid,
+      afterValid,
+      beforeChecksum,
+      fixtureChecksum: fixture.checksum,
+      afterChecksum: after?.checksum,
+      expectedKeySetMatches: JSON.stringify(beforeKeys) === JSON.stringify(expectedKeys),
+      exact,
+      storeRehydrated,
+      storeHasTargetAfterRoundTrip: !!storeAfter?.keys?.includes(storeKey),
+      storeWithinCapacity: !!storeAfter && storeAfter.loaded <= storeAfter.capacity,
+      durable,
+    };
+  });
+  if (
+    workerRestoreRoundTrip.error ||
+    !workerRestoreRoundTrip.beforeValid ||
+    !workerRestoreRoundTrip.afterValid ||
+    workerRestoreRoundTrip.beforeChecksum !== workerRestoreRoundTrip.fixtureChecksum ||
+    workerRestoreRoundTrip.afterChecksum !== workerRestoreRoundTrip.beforeChecksum ||
+    !workerRestoreRoundTrip.expectedKeySetMatches ||
+    !workerRestoreRoundTrip.exact ||
+    !workerRestoreRoundTrip.storeRehydrated ||
+    !workerRestoreRoundTrip.storeHasTargetAfterRoundTrip ||
+    !workerRestoreRoundTrip.storeWithinCapacity ||
+    !workerRestoreRoundTrip.durable?.durable ||
+    workerRestoreRoundTrip.durable.pending
+  ) {
+    throw new Error(`Worker restore persistence/store round-trip failed: ${JSON.stringify(workerRestoreRoundTrip)}`);
+  }
+
 
   // The restore lock must be acquired before awaiting IndexedDB: overlapping
   // dispatches otherwise pass the same pre-await guard and race their restore IDs.
