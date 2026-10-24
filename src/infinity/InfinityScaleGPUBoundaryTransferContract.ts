@@ -45,10 +45,14 @@ export class InfinityScaleGPUBoundaryTransferContract {
       !Number.isSafeInteger(spec.sourceLevel) ||
       !Number.isSafeInteger(spec.targetLevel) ||
       spec.sourceLevel < 0 ||
-      spec.targetLevel < 0
+      spec.targetLevel < 0 ||
+      spec.sourceLevel > 30 ||
+      spec.targetLevel > 30
     ) {
-      throw new Error("GPU boundary transfer requires non-negative integer LOD levels");
+      throw new Error("GPU boundary transfer requires integer LOD levels in the runtime-supported range 0..30");
     }
+    validateChunkKey(spec.sourceChunk, spec.sourceLevel, "source");
+    validateChunkKey(spec.targetChunk, spec.targetLevel, "target");
     if (!Number.isSafeInteger(spec.refinementRatio) || spec.refinementRatio < 1) {
       throw new Error("GPU boundary transfer requires an integer refinement ratio");
     }
@@ -140,10 +144,14 @@ export class InfinityScaleGPUBoundaryTransferContract {
         !Number.isSafeInteger(d.sourceLevel) ||
         !Number.isSafeInteger(d.targetLevel) ||
         d.sourceLevel < 0 ||
-        d.targetLevel < 0
+        d.targetLevel < 0 ||
+        d.sourceLevel > 30 ||
+        d.targetLevel > 30
       ) {
-        throw new Error("GPU boundary transfer descriptor contains invalid LOD levels");
+        throw new Error("GPU boundary transfer descriptor contains LOD levels outside the runtime-supported range 0..30");
       }
+      validateChunkKey(d.sourceChunk, d.sourceLevel, "source");
+      validateChunkKey(d.targetChunk, d.targetLevel, "target");
       const expectedRatio = 2 ** Math.abs(d.sourceLevel - d.targetLevel);
       if (!Number.isSafeInteger(expectedRatio) || d.refinementRatio !== expectedRatio) {
         throw new Error("GPU boundary transfer descriptor refinement ratio does not match LOD levels");
@@ -209,6 +217,25 @@ export class InfinityScaleGPUBoundaryTransferContract {
     });
 
     return packed;
+  }
+}
+
+function validateChunkKey(key: string, expectedLevel: number, role: "source" | "target"): void {
+  const match = /^(\\d+):(-?\\d+),(-?\\d+),(-?\\d+)$/.exec(key);
+  if (!match) {
+    throw new Error(`GPU boundary transfer ${role} chunk has an invalid key`);
+  }
+
+  const level = Number(match[1]);
+  const coordinates = match.slice(2).map(Number);
+  if (
+    !Number.isSafeInteger(level) ||
+    level < 0 ||
+    level > 30 ||
+    level !== expectedLevel ||
+    coordinates.some(value => !Number.isSafeInteger(value))
+  ) {
+    throw new Error(`GPU boundary transfer ${role} chunk key does not match its declared LOD level or safe coordinates`);
   }
 }
 
