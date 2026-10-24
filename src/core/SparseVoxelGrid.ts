@@ -372,7 +372,9 @@ export class SparseVoxelGrid {
   serializeChunks(includeEmpty = false): SerializedChunk[] {
     const chunks: SerializedChunk[] = [];
     for (const [key, chunk] of this.chunks) {
-      if (!includeEmpty && chunk.isEmpty()) continue;
+      // World saves must preserve every non-zero field, not just energy and
+      // not merely values above the runtime inactivity threshold.
+      if (!includeEmpty && chunk.isEmpty(0)) continue;
       const copy = new Float32Array(chunk.buffer.length);
       copy.set(chunk.buffer);
       chunks.push({ key, cx: chunk.cx, cy: chunk.cy, cz: chunk.cz, active: chunk.active, buffer: copy.buffer });
@@ -381,15 +383,43 @@ export class SparseVoxelGrid {
   }
 
   loadChunks(chunks: SerializedChunk[]): void {
-    this.chunks.clear();
+    if (!Array.isArray(chunks)) throw new Error("Invalid serialized chunk list");
+    const restored = new Map<string, Chunk>();
+    const expectedBytes = CHUNK_VOLUME * CELL_FIELDS * Float32Array.BYTES_PER_ELEMENT;
     for (const data of chunks) {
+      if (!data ||
+          !Number.isSafeInteger(data.cx) || !Number.isSafeInteger(data.cy) || !Number.isSafeInteger(data.cz) ||
+          typeof data.active !== "boolean" ||
+          !(data.buffer instanceof ArrayBuffer) || data.buffer.byteLength !== expectedBytes) {
+        throw new Error("Invalid serialized chunk record");
+      }
+      const expectedKey = this.getChunkKey(data.cx, data.cy, data.cz);
+      if (data.key !== expectedKey || restored.has(data.key)) {
+        throw new Error("Invalid serialized chunk identity");
+      }
+      const source = new Float32Array(data.buffer);
+      if (!source.every(Number.isFinite)) throw new Error("Serialized chunk contains non-finite fields");
       const chunk = new Chunk(data.cx, data.cy, data.cz);
-      chunk.buffer.set(new Float32Array(data.buffer));
+      chunk.buffer.set(source);
+      chunk.backBuffer.set(source);
       chunk.active = data.active;
-      this.chunks.set(data.key, chunk);
+      restored.set(expectedKey, chunk);
     }
+
+    // Validate all records before mutating the live sparse topology.
+    this.chunks.clear();
+    for (const [key, chunk] of restored) this.chunks.set(key, chunk);
+    this.dirtyChunks.clear();
+    this.chunkOwners.clear();
     this.updateActiveRange();
     this.syncChunksToDense();
+    this.syncBackBuffersFromFront();
+  }
+
+  /** Keep front/back buffers consistent after replacing a world's authoritative state. */
+  syncBackBuffersFromFront(): void {
+    this.backBuffer.set(this.buffer);
+    for (const chunk of this.chunks.values()) chunk.backBuffer.set(chunk.buffer);
   }
 
   private seedDenseWindowChunks(): void {

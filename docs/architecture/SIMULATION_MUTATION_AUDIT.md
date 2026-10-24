@@ -123,3 +123,8 @@ Scientific Recorder frames are intentionally **field-only snapshots**, not full 
 ### World-save restore transaction contract
 
 `WorldSaveSystem.applySnapshot()` now refuses to mutate state if the engine-owned synchronous transaction callback is absent; the former partial fallback could have applied fields/laws without a complete rollback boundary. The persistence regression harness instantiates the actual `WorldSaveSystem` implementation with deterministic ports and verifies quick-save restoration of each runtime domain, portable/legacy reset behavior, ownership-marker clearing, recorder-history invalidation, and failure-closed behavior when no transaction is supplied.
+
+
+### Dense/sparse save restoration authority
+
+Sparse chunk persistence now treats a chunk as empty only when all fields of all cells are zero; energy alone is not a sufficient emptiness signal. `loadChunks()` validates every chunk record and its complete numeric buffer before replacing the live chunk map, clears dirty/ownership metadata from the prior world, and synchronizes front/back buffers. During world restore, sparse chunks are loaded first, the packed field arrays then overwrite the dense window as the authoritative dense representation, and the dense window is published back into the overlapping chunks. Saves without chunk payload clear prior sparse topology instead of keeping chunks from another world.

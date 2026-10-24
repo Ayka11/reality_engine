@@ -1,4 +1,4 @@
-import { CELL_FIELDS } from "./CellState";
+import { CELL_FIELDS, F } from "./CellState";
 import { SparseVoxelGrid, type SparseVoxelGridSnapshot } from "./SparseVoxelGrid";
 
 function cloneSnapshot(snapshot: SparseVoxelGridSnapshot): SparseVoxelGridSnapshot {
@@ -71,6 +71,67 @@ export function runSparseVoxelGridRecoveryRegression(): void {
   }
 
   runSparseVoxelGridInvalidSnapshotRegression(grid);
+  runSparseChunkSerializationAndLoadRegression();
+}
+
+function runSparseChunkSerializationAndLoadRegression(): void {
+  const source = new SparseVoxelGrid(4, 4, 4);
+  const denseCell = source.idx(1, 1, 1);
+  // Energy is zero, but another field is meaningful. Serialization must not
+  // classify this chunk as empty and silently discard information/entropy.
+  source.buffer[denseCell + F.ENERGY] = 0;
+  source.buffer[denseCell + F.INFORMATION] = 0.75;
+  source.buffer[denseCell + F.ENTROPY] = 0.125;
+  source.syncDenseToChunks();
+
+  const remote = source.getOrCreateChunk(1, 0, 0);
+  const remoteCell = remote.localIdx(0, 0, 0);
+  remote.buffer[remoteCell + F.DENSITY] = 0.875;
+  remote.backBuffer[remoteCell + F.DENSITY] = 0.25;
+
+  const serialized = source.serializeChunks(false);
+  if (!serialized.some(chunk => chunk.key === "0,0,0")) {
+    throw new Error("Sparse chunk serializer dropped non-energy fields when energy was zero");
+  }
+  if (!serialized.some(chunk => chunk.key === "1,0,0")) {
+    throw new Error("Sparse chunk serializer dropped non-energy fields outside the dense window");
+  }
+
+  const target = new SparseVoxelGrid(4, 4, 4);
+  target.assignChunkOwner("0,0,0", "stale-owner");
+  target.markChunksDirty(["0,0,0", "99,0,0"]);
+  target.buffer.fill(99);
+  target.backBuffer.fill(88);
+  target.loadChunks(serialized);
+
+  if (target.buffer[target.idx(1, 1, 1) + F.INFORMATION] !== 0.75 ||
+      target.buffer[target.idx(1, 1, 1) + F.ENTROPY] !== 0.125) {
+    throw new Error("Sparse chunk load did not restore non-energy fields");
+  }
+  if (target.getCell(32, 0, 0)?.density !== 0.875) {
+    throw new Error("Sparse chunk load did not preserve data outside the dense window");
+  }
+  if (target.chunkOwners.size !== 0 || target.dirtyChunks.size !== 0) {
+    throw new Error("Sparse chunk load retained ownership/dirty metadata from the previous world");
+  }
+  for (const chunk of target.chunks.values()) {
+    if (chunk.backBuffer.some((value, i) => value !== chunk.buffer[i])) {
+      throw new Error("Sparse chunk load left front/back chunk buffers inconsistent");
+    }
+  }
+  if (target.backBuffer.some((value, i) => value !== target.buffer[i])) {
+    throw new Error("Sparse chunk load left dense front/back buffers inconsistent");
+  }
+
+  const beforeMalformedLoad = JSON.stringify(target.captureState());
+  const malformed = serialized.map(chunk => ({ ...chunk }));
+  malformed[0] = { ...malformed[0], buffer: new Float32Array([1]).buffer };
+  let rejected = false;
+  try { target.loadChunks(malformed); } catch { rejected = true; }
+  if (!rejected) throw new Error("Sparse chunk load accepted a malformed chunk buffer");
+  if (JSON.stringify(target.captureState()) !== beforeMalformedLoad) {
+    throw new Error("Sparse chunk load partially mutated state after rejecting malformed input");
+  }
 }
 
 export function runSparseVoxelGridInvalidSnapshotRegression(grid = new SparseVoxelGrid(4, 3, 2)): void {

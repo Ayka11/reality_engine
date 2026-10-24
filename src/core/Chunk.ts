@@ -41,7 +41,9 @@ export class Chunk {
 
   isEmpty(threshold = 0.0001): boolean {
     for (let i = 0; i < this.buffer.length; i += CELL_FIELDS) {
-      if (Math.abs(this.buffer[i]) > threshold) return false;
+      for (let field = 0; field < CELL_FIELDS; field++) {
+        if (Math.abs(this.buffer[i + field]) > threshold) return false;
+      }
     }
     return true;
   }

@@ -88,6 +88,70 @@ assert.deepEqual(targetBuffer, stableTarget, "non-finite fields must be rejected
 assert.deepEqual(Object.keys(validFields).sort(), [...FIELD_ORDER].sort(),
   "the serializer must emit every supported field");
 
+// Exercise the real sparse grid through WorldSaveSystem. The dense field
+// payload is authoritative in the dense window, while serialized chunks retain
+// data outside the window. Loading a world must also discard previous dirty/owner
+// metadata and align the double buffers before the next tick.
+const { SparseVoxelGrid: RuntimeSparseVoxelGrid } = await import(await load("src/core/SparseVoxelGrid.ts"));
+const runtimeCellModule = await import(await load("src/core/CellState.ts"));
+const runtimeGridReal = new RuntimeSparseVoxelGrid(4, 4, 4);
+const denseIndexReal = runtimeGridReal.idx(1, 1, 1);
+runtimeGridReal.buffer[denseIndexReal + runtimeCellModule.F.INFORMATION] = 0.75;
+runtimeGridReal.buffer[denseIndexReal + runtimeCellModule.F.ENTROPY] = 0.125;
+runtimeGridReal.syncDenseToChunks();
+const remoteReal = runtimeGridReal.getOrCreateChunk(1, 0, 0);
+remoteReal.buffer[remoteReal.localIdx(0, 0, 0) + runtimeCellModule.F.DENSITY] = 0.875;
+runtimeGridReal.syncDenseToChunks();
+const realSaveSystem = new RuntimeWorldSaveSystem(runtimeGridReal, mockLawEngine, null, {
+  mutateAuthoritativeState(mutation) {
+    const before = runtimeGridReal.captureState();
+    try {
+      const result = mutation();
+      runtimeGridReal.syncDenseToChunks();
+      runtimeGridReal.syncBackBuffersFromFront();
+      return result;
+    } catch (error) {
+      runtimeGridReal.restoreState(before);
+      throw error;
+    }
+  },
+  getTick: () => 5,
+  setTick() {},
+  clearEntityLayerRuntime() {},
+  clearAgentRuntime() {},
+  resetChemistry() {},
+  resetWorldEvents() {},
+  resetCausal() {},
+  resetPreviousEnergy() {},
+  clearRecorderSnapshots() {},
+});
+const realSnapshot = realSaveSystem.captureSnapshot("Sparse field authority");
+assert.ok(realSnapshot.chunks?.serialized.some(chunk => chunk.key === "0,0,0"),
+  "sparse save must serialize a chunk with non-energy fields and zero energy");
+assert.ok(realSnapshot.chunks?.serialized.some(chunk => chunk.key === "1,0,0"),
+  "sparse save must serialize non-energy values outside the dense window");
+runtimeGridReal.buffer.fill(42);
+runtimeGridReal.backBuffer.fill(84);
+runtimeGridReal.getOrCreateChunk(5, 0, 0).buffer[0] = 123;
+runtimeGridReal.assignChunkOwner("5,0,0", "old-world-owner");
+runtimeGridReal.markChunksDirty(["5,0,0"]);
+await realSaveSystem.applySnapshot(realSnapshot);
+assert.equal(runtimeGridReal.buffer[denseIndexReal + runtimeCellModule.F.INFORMATION], 0.75,
+  "world restore must preserve the packed information field as dense-window authority");
+assert.equal(runtimeGridReal.buffer[denseIndexReal + runtimeCellModule.F.ENTROPY], 0.125,
+  "world restore must preserve the packed entropy field as dense-window authority");
+assert.equal(runtimeGridReal.getCell(32, 0, 0)?.density, 0.875,
+  "world restore must preserve chunk data outside the dense window");
+assert.equal(runtimeGridReal.chunks.has("5,0,0"), false,
+  "world restore must discard sparse chunks from the prior world");
+assert.equal(runtimeGridReal.chunkOwners.size, 0, "world restore must discard stale chunk ownership");
+assert.equal(runtimeGridReal.dirtyChunks.size, 0, "world restore must discard stale dirty-chunk flags");
+assert.deepEqual(runtimeGridReal.backBuffer, runtimeGridReal.buffer,
+  "world restore must reset dense double-buffer baseline");
+for (const chunk of runtimeGridReal.chunks.values()) {
+  assert.deepEqual(chunk.backBuffer, chunk.buffer, "world restore must reset sparse double-buffer baseline");
+}
+
 const values = new Map();
 let failSet = false;
 let failGet = false;

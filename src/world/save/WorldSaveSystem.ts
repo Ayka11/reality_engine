@@ -33,6 +33,8 @@ interface GridLike {
   activeChunkCount?: number;
   serializeChunks?: (includeEmpty?: boolean) => NonNullable<WorldSnapshot['chunks']>['serialized'];
   loadChunks?: (chunks: NonNullable<WorldSnapshot['chunks']>['serialized']) => void;
+  syncDenseToChunks?: () => void;
+  syncBackBuffersFromFront?: () => void;
 }
 
 interface LawEngineLike {
@@ -187,8 +189,20 @@ export class WorldSaveSystem {
     const previousEnergyBefore = this.context.getPreviousEnergySnapshot?.();
 
     const apply = () => {
+      if (snapshot.chunks && !this.voxelGrid.loadChunks) {
+        throw new Error("World snapshot contains sparse chunks but the target grid cannot load them");
+      }
+      // Clear stale sparse chunks even for portable saves without a chunk payload.
+      // Load chunks first because loadChunks synchronizes their state into the dense
+      // window; the packed field snapshot is authoritative for that dense window.
+      if (this.voxelGrid.loadChunks) {
+        this.voxelGrid.loadChunks(snapshot.chunks?.serialized ?? []);
+      }
       this.serializer.applyFields(snapshot.fields, this.voxelGrid.buffer);
-      if (snapshot.chunks && this.voxelGrid.loadChunks) this.voxelGrid.loadChunks(snapshot.chunks.serialized);
+      // Publish packed dense fields into overlapping chunks and align front/back
+      // buffers before the enclosing engine transaction uploads to the GPU.
+      this.voxelGrid.syncDenseToChunks?.();
+      this.voxelGrid.syncBackBuffersFromFront?.();
       if (snapshot.realityGraph) this.context.graphLoader?.(snapshot.realityGraph);
 
       const runtime = snapshot.runtimeState;
