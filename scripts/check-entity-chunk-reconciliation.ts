@@ -850,3 +850,23 @@ assert.throws(
   "authority must invalidate plans after entity-cell ownership changes",
 );
 console.log("Entity inventory authority increments revision on ownership reassignment: PASS");
+
+
+// SparseVoxelGrid dense access must reject coordinates that would otherwise
+// alias a valid dense linear index while creating an unrelated chunk.
+const boundsGrid = new SparseVoxelGrid(4, 3, 2);
+const boundsLastCell = boundsGrid.cell(3, 2, 1);
+boundsLastCell.energy = 123;
+const boundsLastIndex = (1 * 3 * 4 + 2 * 4 + 3);
+assert.equal(boundsGrid.cellAt(boundsLastIndex).energy, 123, "last valid dense cell must remain addressable");
+const chunksBeforeRejectedAccess = boundsGrid.chunks.size;
+for (const [x, y, z] of [[4, 0, 0], [0, 3, 0], [0, 0, 2], [-1, 0, 0], [0.5, 0, 0]] as const) {
+  assert.throws(() => boundsGrid.cell(x, y, z), RangeError, `cell must reject out-of-range/non-integer coordinate (${x}, ${y}, ${z})`);
+  assert.throws(() => boundsGrid.cellBack(x, y, z), RangeError, `cellBack must reject out-of-range/non-integer coordinate (${x}, ${y}, ${z})`);
+}
+assert.equal(boundsGrid.chunks.size, chunksBeforeRejectedAccess, "rejected dense coordinates must not create out-of-window chunks");
+assert.equal(boundsGrid.cellAt(boundsLastIndex).energy, 123, "rejected coordinates must not alias or overwrite a valid dense cell");
+for (const invalidIndex of [-1, boundsGrid.size, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+  assert.throws(() => boundsGrid.cellAt(invalidIndex), RangeError, `cellAt must reject invalid linear index ${invalidIndex}`);
+}
+console.log("SparseVoxelGrid rejects invalid dense coordinates and linear indices: PASS");
