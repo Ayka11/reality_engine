@@ -28,6 +28,20 @@ export class InfinityScaleGPUBoundaryTransferContract {
       throw new Error("GPU boundary transfer requires source and target chunks");
     }
     if (
+      spec.relation !== "same-level" &&
+      spec.relation !== "coarse-to-fine" &&
+      spec.relation !== "fine-to-coarse"
+    ) {
+      throw new Error("GPU boundary transfer requires a known boundary relation");
+    }
+    if (
+      spec.operation !== "copy" &&
+      spec.operation !== "prolongation" &&
+      spec.operation !== "restriction"
+    ) {
+      throw new Error("GPU boundary transfer requires a known operation");
+    }
+    if (
       !Number.isSafeInteger(spec.sourceLevel) ||
       !Number.isSafeInteger(spec.targetLevel) ||
       spec.sourceLevel < 0 ||
