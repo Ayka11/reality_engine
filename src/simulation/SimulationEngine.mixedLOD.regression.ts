@@ -73,7 +73,15 @@ export async function runSimulationEngineMixedLODMultiFrameRegression(): Promise
   }
   if (secondBoundaryEnergy === firstBoundaryEnergy) {
     throw new Error(
-      "Expected second frame to consume an updated fine-side boundary state",
+      `Expected second frame to consume an updated fine-side boundary state: ${JSON.stringify({
+        firstBoundaryEnergy,
+        secondBoundaryEnergy,
+        sourceEnergy: engine.grid.cell(64, 20, 16).get(F.ENERGY),
+        energyDiffusion: engine.laws.params.energyDiffusion,
+        energyDiffusionEnabled: (engine.laws.activeProcessMask & (1 << PROC.ENERGY_DIFFUSION)) !== 0,
+        cell62Energy: engine.grid.cell(62, 20, 16).get(F.ENERGY),
+        cell63Energy: engine.grid.cell(63, 20, 16).get(F.ENERGY),
+      })}`,
     );
   }
 
