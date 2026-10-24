@@ -315,6 +315,12 @@ export class SimulationEngine {
     const frameContext = selectivePlan
       ? new InfinityScaleChunkExecutionContext(selectivePlan, this.grid.W, this.grid.H, this.grid.D)
       : null;
+    // Create the transaction's LOD topology before its revision token is captured.
+    // The post-physics dense sync writes cell values only; it must not add chunks
+    // while a revision-bound boundary transaction is already open.
+    if (selectivePlan && frameContext) {
+      this.ensureInfinityScaleDenseStateChunks(frameContext);
+    }
     const lodTransaction =
       frameState && selectivePlan
         ? beginInfinityScaleGlobalLODTransaction(
@@ -701,6 +707,22 @@ export class SimulationEngine {
     this._tick = 0;
     this.grid.syncDenseToChunks();
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+  }
+
+  private ensureInfinityScaleDenseStateChunks(
+    context: InfinityScaleChunkExecutionContext,
+  ): void {
+    const keys = new Set([
+      ...this._infinityExecutionPlan!.chunks.map(chunk => chunk.key),
+      ...context.boundaryReadRelations.map(relation => relation.sourceChunk),
+      ...context.boundaryReadRelations.map(relation => relation.targetChunk),
+    ]);
+
+    for (const key of keys) {
+      const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
+      if (!match) throw new Error("Invalid Infinity Scale chunk key: " + key);
+      this.infinityScaleLODState.ensureChunk(key, Number(match[1]));
+    }
   }
 
   private syncInfinityScaleDenseState(
