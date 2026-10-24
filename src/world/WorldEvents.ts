@@ -54,10 +54,18 @@ const EVENT_DESC: Record<EventType, string> = {
 export class WorldEvents {
   private history: WorldEvent[] = [];
   private _nextAuto = 600; // ticks until next random event
+  private readonly initialRngState: number;
   private _rngState = 0x6d2b79f5;
 
   constructor(seed = 0x6d2b79f5) {
-    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6d2b79f5 : 0x6d2b79f5;
+    this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6d2b79f5 : 0x6d2b79f5;
+    this._rngState = this.initialRngState;
+  }
+
+  reset(): void {
+    this.history = [];
+    this._nextAuto = 600;
+    this._rngState = this.initialRngState;
   }
 
   private _random(): number {

@@ -121,5 +121,8 @@ assert.deepEqual(autoReplay, autoExpected, "automatic event selection must repla
 assert.deepEqual(Array.from(autoGrid.buffer), autoGridExpected, "automatic event effects must replay");
 assert.deepEqual(autoEvents.snapshotRandomState(), autoStateExpected, "automatic interval and event history must replay");
 assert.throws(() => events.restoreRandomState({ rngState: 0, nextAuto: -1, history: [] }), /Invalid WorldEvents snapshot/);
+events.reset();
+assert.deepEqual(events.snapshot(), eventCheckpoint,
+  "reset must clear event history/interval and restore the constructor seed");
 
 console.log("AgentSystem + WorldEvents deterministic RNG recovery: PASS");

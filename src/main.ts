@@ -1033,8 +1033,8 @@ scrubber?.addEventListener('input', () => {
 });
 
 restoreBtn?.addEventListener('click', () => {
-  const ok = sim.recorder.restoreSnapshot(sim.grid, scrubberIdx);
-  if (ok) { playing = false; sim.syncToGPU(); }
+  const ok = sim.mutateAuthoritativeState(() => sim.recorder.restoreSnapshot(sim.grid, scrubberIdx));
+  if (ok) playing = false;
 });
 
 exportCsvBtn?.addEventListener('click', () => {
@@ -1066,18 +1066,18 @@ diffBtn?.addEventListener('click', () => {
   }
 });
 
-// Replay controls
+// Replay controls: these historical frames contain grid fields only, not full subsystem checkpoints.
 replayBackBtn?.addEventListener('click', () => {
   scrubberIdx = Math.max(0, scrubberIdx - 1);
-  const ok = sim.recorder.restoreSnapshot(sim.grid, scrubberIdx);
-  if (ok) sim.syncToGPU();
+  const ok = sim.mutateAuthoritativeState(() => sim.recorder.restoreSnapshot(sim.grid, scrubberIdx));
+  
   _applyDiffIfActive(); renderSciPanel();
 });
 replayFwdBtn?.addEventListener('click', () => {
   const n = sim.recorder.snapList.length;
   scrubberIdx = Math.min(n - 1, scrubberIdx + 1);
-  const ok = sim.recorder.restoreSnapshot(sim.grid, scrubberIdx);
-  if (ok) sim.syncToGPU();
+  const ok = sim.mutateAuthoritativeState(() => sim.recorder.restoreSnapshot(sim.grid, scrubberIdx));
+  
   _applyDiffIfActive(); renderSciPanel();
 });
 replayPlayBtn?.addEventListener('click', () => {
@@ -1100,8 +1100,8 @@ replayPlayBtn?.addEventListener('click', () => {
         clearInterval(replayTimer!); replayTimer = null; replayPlaying = false;
         replayPlayBtn.textContent = '▶ Replay';
       }
-      const ok = sim.recorder.restoreSnapshot(sim.grid, scrubberIdx);
-      if (ok) sim.syncToGPU();
+      const ok = sim.mutateAuthoritativeState(() => sim.recorder.restoreSnapshot(sim.grid, scrubberIdx));
+      
       _applyDiffIfActive(); renderSciPanel();
     }, 120); // ~8fps playback
   }
@@ -1255,10 +1255,7 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
   getEntities: () => sim.entityLayer.getEntities(),
   getCivs: () => civSystem.civs,
   loadCivs: civs => {
-    const restoredCivs = civs.map(civ => structuredClone(civ));
-    const previous = civSystem.snapshot();
-    const nextId = restoredCivs.length > 0 ? Math.max(...restoredCivs.map(civ => civ.id)) + 1 : 0;
-    civSystem.restore({ ...previous, civs: restoredCivs, nextId });
+    civSystem.loadPortableCivs(civs.map(civ => structuredClone(civ)));
   },
   getEntityLayerSnapshot: () => sim.entityLayer.snapshot(),
   restoreEntityLayerSnapshot: snapshot => sim.entityLayer.restore(snapshot, sim.grid.size),
@@ -1280,6 +1277,19 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
   restoreCivSnapshot: snapshot => civSystem.restore(snapshot),
   getLawEngineSnapshot: () => sim.laws.snapshot(),
   restoreLawEngineSnapshot: snapshot => sim.laws.restore(snapshot),
+  getChemistrySnapshot: () => sim.chemLayer.snapshot(),
+  restoreChemistrySnapshot: snapshot => sim.chemLayer.restore(snapshot, sim.grid.size),
+  resetChemistry: () => sim.chemLayer.restore({ pendingDensityTransfers: [] }, sim.grid.size),
+  getWorldEventsSnapshot: () => sim.worldEvents.snapshot(),
+  restoreWorldEventsSnapshot: snapshot => sim.worldEvents.restore(snapshot),
+  resetWorldEvents: () => sim.worldEvents.reset(),
+  getCausalSnapshot: () => sim.causal.snapshot(),
+  restoreCausalSnapshot: snapshot => sim.causal.restore(snapshot),
+  resetCausal: () => sim.causal.clear(),
+  getPreviousEnergySnapshot: () => sim.snapshotPrevEnergy(),
+  restorePreviousEnergySnapshot: snapshot => sim.restorePrevEnergy(snapshot),
+  resetPreviousEnergy: () => sim.resetPreviousEnergy(),
+  clearRecorderSnapshots: () => sim.recorder.clearSnapshots(),
   getCausalLog: () => sim.causal.recent(24),
   thumbnailCanvas: canvas,
 });

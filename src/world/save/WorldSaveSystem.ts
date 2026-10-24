@@ -10,6 +10,9 @@ import type { EntityLayerSnapshot } from '../../simulation/EntityLayer';
 import type { AgentSystemSnapshot } from '../../simulation/AgentSystem';
 import type { CivilizationSystemSnapshot } from '../../simulation/CivilizationSystem';
 import type { LawEngineSnapshot } from '../../laws/LawEngine';
+import type { ChemLayerSnapshot } from '../../chemistry/ChemLayer';
+import type { WorldEventsSnapshot } from '../WorldEvents';
+import type { CausalGraphSnapshot } from '../../simulation/CausalGraph';
 
 interface RealitySaveDb extends DBSchema {
   saves: {
@@ -59,6 +62,19 @@ interface SaveContext {
   restoreCivSnapshot?: (snapshot: CivilizationSystemSnapshot) => void;
   getLawEngineSnapshot?: () => LawEngineSnapshot;
   restoreLawEngineSnapshot?: (snapshot: LawEngineSnapshot) => void;
+  getChemistrySnapshot?: () => ChemLayerSnapshot;
+  restoreChemistrySnapshot?: (snapshot: ChemLayerSnapshot) => void;
+  resetChemistry?: () => void;
+  getWorldEventsSnapshot?: () => WorldEventsSnapshot;
+  restoreWorldEventsSnapshot?: (snapshot: WorldEventsSnapshot) => void;
+  resetWorldEvents?: () => void;
+  getCausalSnapshot?: () => CausalGraphSnapshot;
+  restoreCausalSnapshot?: (snapshot: CausalGraphSnapshot) => void;
+  resetCausal?: () => void;
+  getPreviousEnergySnapshot?: () => Float32Array;
+  restorePreviousEnergySnapshot?: (snapshot: Float32Array) => void;
+  resetPreviousEnergy?: () => void;
+  clearRecorderSnapshots?: () => void;
   getCausalLog?: () => unknown[];
   thumbnailCanvas?: HTMLCanvasElement | null;
 }
@@ -136,6 +152,10 @@ export class WorldSaveSystem {
         agents: this.context.getAgentSystemSnapshot?.(),
         civilizations: this.context.getCivSnapshot?.(),
         laws: this.context.getLawEngineSnapshot?.(),
+        chemistry: this.context.getChemistrySnapshot?.(),
+        worldEvents: this.context.getWorldEventsSnapshot?.(),
+        causal: this.context.getCausalSnapshot?.(),
+        previousEnergy: this.context.getPreviousEnergySnapshot?.(),
       },
       realityGraph: this.context.graphProvider?.(),
       activeLaws: activeLaws.map(law => this.snapshotLaw(law)),
@@ -158,6 +178,10 @@ export class WorldSaveSystem {
     const agentsBefore = this.context.getAgentSystemSnapshot?.();
     const civBefore = this.context.getCivSnapshot?.();
     const lawsBefore = this.context.getLawEngineSnapshot?.();
+    const chemistryBefore = this.context.getChemistrySnapshot?.();
+    const worldEventsBefore = this.context.getWorldEventsSnapshot?.();
+    const causalBefore = this.context.getCausalSnapshot?.();
+    const previousEnergyBefore = this.context.getPreviousEnergySnapshot?.();
 
     const apply = () => {
       this.serializer.applyFields(snapshot.fields, this.voxelGrid.buffer);
@@ -192,6 +216,31 @@ export class WorldSaveSystem {
       } else {
         this.context.loadCivs?.(snapshot.civilizations);
       }
+
+      if (runtime?.chemistry && this.context.restoreChemistrySnapshot) {
+        this.context.restoreChemistrySnapshot(runtime.chemistry);
+      } else {
+        this.context.resetChemistry?.();
+      }
+      if (runtime?.worldEvents && this.context.restoreWorldEventsSnapshot) {
+        this.context.restoreWorldEventsSnapshot(runtime.worldEvents);
+      } else {
+        this.context.resetWorldEvents?.();
+      }
+      if (runtime?.causal && this.context.restoreCausalSnapshot) {
+        this.context.restoreCausalSnapshot(runtime.causal);
+      } else {
+        this.context.resetCausal?.();
+      }
+      if (runtime?.previousEnergy && this.context.restorePreviousEnergySnapshot) {
+        this.context.restorePreviousEnergySnapshot(runtime.previousEnergy);
+      } else {
+        this.context.resetPreviousEnergy?.();
+      }
+
+      // Recorder entries currently store field frames, not full runtime checkpoints.
+      // Never leave history from the previous world attached to the restored field.
+      this.context.clearRecorderSnapshots?.();
       this.context.setTick?.(snapshot.metadata.simulationTicks);
     };
 
@@ -229,6 +278,18 @@ export class WorldSaveSystem {
       }
       if (lawsBefore !== undefined && this.context.restoreLawEngineSnapshot) {
         rollback("Laws", () => this.context.restoreLawEngineSnapshot!(lawsBefore));
+      }
+      if (chemistryBefore !== undefined && this.context.restoreChemistrySnapshot) {
+        rollback("Chemistry", () => this.context.restoreChemistrySnapshot!(chemistryBefore));
+      }
+      if (worldEventsBefore !== undefined && this.context.restoreWorldEventsSnapshot) {
+        rollback("World events", () => this.context.restoreWorldEventsSnapshot!(worldEventsBefore));
+      }
+      if (causalBefore !== undefined && this.context.restoreCausalSnapshot) {
+        rollback("Causal graph", () => this.context.restoreCausalSnapshot!(causalBefore));
+      }
+      if (previousEnergyBefore !== undefined && this.context.restorePreviousEnergySnapshot) {
+        rollback("Previous-energy baseline", () => this.context.restorePreviousEnergySnapshot!(previousEnergyBefore));
       }
       if (rollbackErrors.length > 0) {
         throw new AggregateError(

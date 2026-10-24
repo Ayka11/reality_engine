@@ -36,11 +36,13 @@ export class CivilizationSystem {
   private nextId = 0;
   private tickCount = 0;
   historyLog: string[] = [];
+  private readonly initialRngState: number;
   private _rngState: number;
 
   constructor(grid: VoxelGrid, seed = 0x6c8e9cf5) {
     this.grid = grid;
-    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6c8e9cf5 : 0x6c8e9cf5;
+    this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6c8e9cf5 : 0x6c8e9cf5;
+    this._rngState = this.initialRngState;
   }
 
   private _random(): number {
@@ -50,6 +52,27 @@ export class CivilizationSystem {
     x ^= x << 5;
     this._rngState = x >>> 0;
     return this._rngState / 0x100000000;
+  }
+
+  /** Load portable civilization summaries without inheriting transient state from another world. */
+  loadPortableCivs(civs: Civilization[]): void {
+    if (!Array.isArray(civs) || civs.length > MAX_CIVS) {
+      throw new Error("Invalid portable civilization list");
+    }
+    let maxId = -1;
+    for (const civ of civs) {
+      if (!civ || !Number.isSafeInteger(civ.id) || civ.id < 0) {
+        throw new Error("Invalid portable civilization identity");
+      }
+      maxId = Math.max(maxId, civ.id);
+    }
+    this.restore({
+      civs,
+      nextId: maxId + 1,
+      tickCount: 0,
+      historyLog: [],
+      rngState: this.initialRngState,
+    });
   }
 
   snapshot(): CivilizationSystemSnapshot {

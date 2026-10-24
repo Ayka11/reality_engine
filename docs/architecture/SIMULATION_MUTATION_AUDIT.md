@@ -111,3 +111,10 @@ The world serializer now rejects missing, truncated, wrong-sized, or non-finite 
 Quick saves now retain optional full runtime snapshots for the entity layer, agents, civilizations, and law engine, alongside the packed grid fields/chunks. Applying a quick save restores these snapshots within the authoritative engine transaction. Snapshots that do not carry the runtime-only payload (portable package import or older save) clear stale in-memory entity/agent registries and their grid ownership markers rather than leaving orphan registries behind. The serializer rejects missing, truncated, wrong-sized, or non-finite field buffers before mutating the target.
 
 This does not imply byte-for-byte restoration of every external subsystem: creator graph rollback is guarded separately; the current save format does not capture all recorder/causal-graph history or external browser services. Those remain explicit future scope.
+
+
+### Runtime save completeness — second pass
+
+Quick saves additionally preserve chemistry's pending density-transfer queue, world-event history/auto-event countdown/PRNG, causal graph identity state, and the previous-energy baseline used for causal spike detection. Portable/legacy saves that omit those details reset these transient domains to their configured initial states instead of inheriting data from the previously loaded world. Civilization summaries from portable saves are loaded with a fresh per-world tick/history/PRNG baseline.
+
+Scientific Recorder frames are intentionally **field-only snapshots**, not full runtime checkpoints. All UI restore/replay writes now go through `mutateAuthoritativeState`, invalidating pending GPU readback before the write and publishing dense/chunk/GPU state together. On world import, old Recorder history is cleared so it cannot be mistaken for frames from the newly loaded world. Replaying a Recorder field frame should not be described as restoring every entity, agent, law, or external subsystem; that remains distinct from quick-save restoration.

@@ -4,6 +4,9 @@ import type { AgentSystemSnapshot } from '../../simulation/AgentSystem';
 import type { EntityLayerSnapshot } from '../../simulation/EntityLayer';
 import type { CivilizationSystemSnapshot } from '../../simulation/CivilizationSystem';
 import type { LawEngineSnapshot } from '../../laws/LawEngine';
+import type { ChemLayerSnapshot } from '../../chemistry/ChemLayer';
+import type { WorldEventsSnapshot } from '../../world/WorldEvents';
+import type { CausalGraphSnapshot } from '../../simulation/CausalGraph';
 
 export type SaveFormat = 'reality' | 'quick' | 'scientific' | 'minimal';
 
@@ -27,6 +30,11 @@ export interface WorldRuntimeStateSnapshot {
   agents?: AgentSystemSnapshot;
   civilizations?: CivilizationSystemSnapshot;
   laws?: LawEngineSnapshot;
+  chemistry?: ChemLayerSnapshot;
+  worldEvents?: WorldEventsSnapshot;
+  causal?: CausalGraphSnapshot;
+  /** Energy baseline used to calculate causal spikes after the next frame. */
+  previousEnergy?: Float32Array;
 }
 
 export interface WorldSnapshot {

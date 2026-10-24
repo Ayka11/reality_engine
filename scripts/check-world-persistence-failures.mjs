@@ -4,6 +4,7 @@ import ts from "typescript";
 
 const root = new URL("../", import.meta.url);
 const saveSystemSource = await readFile(new URL("src/world/save/WorldSaveSystem.ts", root), "utf8");
+const mainSource = await readFile(new URL("src/main.ts", root), "utf8");
 assert.match(saveSystemSource, /this\.context\.mutateAuthoritativeState\(apply\)/,
   "world snapshot import must commit through the authoritative simulation transaction");
 assert.match(saveSystemSource, /const graphBefore = this\.context\.graphProvider\?\.\(\)/,
@@ -24,6 +25,20 @@ assert.match(saveSystemSource, /this\.context\.clearEntityLayerRuntime\?\.\(\)/,
   "portable or legacy saves without full runtime state must clear stale in-memory entities");
 assert.match(saveSystemSource, /this\.context\.clearAgentRuntime\?\.\(\)/,
   "portable or legacy saves without full runtime state must clear stale in-memory agents");
+assert.match(saveSystemSource, /chemistry: this\.context\.getChemistrySnapshot\?\.\(\)/,
+  "quick saves must include deferred chemistry transfers");
+assert.match(saveSystemSource, /worldEvents: this\.context\.getWorldEventsSnapshot\?\.\(\)/,
+  "quick saves must include event history, interval state and event PRNG");
+assert.match(saveSystemSource, /causal: this\.context\.getCausalSnapshot\?\.\(\)/,
+  "quick saves must include causal graph identity/history");
+assert.match(saveSystemSource, /previousEnergy: this\.context\.getPreviousEnergySnapshot\?\.\(\)/,
+  "quick saves must include the previous-energy baseline used by causality tracking");
+assert.match(saveSystemSource, /this\.context\.clearRecorderSnapshots\?\.\(\)/,
+  "restoring another world must clear field-only recorder history from the previous world");
+assert.match(mainSource, /sim\.mutateAuthoritativeState\(\(\) => sim\.recorder\.restoreSnapshot\(sim\.grid, scrubberIdx\)\)/,
+  "recorded grid frames must invalidate stale GPU work before writing the grid");
+assert.match(mainSource, /loadCivs: civs => \{\s*civSystem\.loadPortableCivs/,
+  "portable civilization imports must reset the previous world's transient state");
 const cache = new Map();
 async function load(path) {
   if (cache.has(path)) return cache.get(path);

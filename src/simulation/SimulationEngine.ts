@@ -98,6 +98,23 @@ export class SimulationEngine {
     this._tick = Math.max(0, Math.floor(tick));
   }
 
+  snapshotPrevEnergy(): Float32Array {
+    return new Float32Array(this.prevEnergy);
+  }
+
+  restorePrevEnergy(snapshot: Float32Array): void {
+    if (!(snapshot instanceof Float32Array) ||
+        snapshot.length !== this.prevEnergy.length ||
+        !snapshot.every(Number.isFinite)) {
+      throw new Error("Invalid previous-energy recovery snapshot");
+    }
+    this.prevEnergy = new Float32Array(snapshot);
+  }
+
+  resetPreviousEnergy(): void {
+    this.prevEnergy.fill(0);
+  }
+
   // nSteps allows batching multiple physics ticks per animation frame.
   // Keep each GPU submit/readback pair serialized, even if callers overlap step().
   step(dt: number, nSteps = 1): Promise<void> {
