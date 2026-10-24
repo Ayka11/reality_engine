@@ -1069,16 +1069,16 @@ diffBtn?.addEventListener('click', () => {
 // Replay controls: these historical frames contain grid fields only, not full subsystem checkpoints.
 replayBackBtn?.addEventListener('click', () => {
   scrubberIdx = Math.max(0, scrubberIdx - 1);
-  const ok = sim.mutateAuthoritativeState(() => sim.recorder.restoreSnapshot(sim.grid, scrubberIdx));
-  
-  _applyDiffIfActive(); renderSciPanel();
+  if (sim.mutateAuthoritativeState(() => sim.recorder.restoreSnapshot(sim.grid, scrubberIdx))) {
+    _applyDiffIfActive(); renderSciPanel();
+  }
 });
 replayFwdBtn?.addEventListener('click', () => {
   const n = sim.recorder.snapList.length;
   scrubberIdx = Math.min(n - 1, scrubberIdx + 1);
-  const ok = sim.mutateAuthoritativeState(() => sim.recorder.restoreSnapshot(sim.grid, scrubberIdx));
-  
-  _applyDiffIfActive(); renderSciPanel();
+  if (sim.mutateAuthoritativeState(() => sim.recorder.restoreSnapshot(sim.grid, scrubberIdx))) {
+    _applyDiffIfActive(); renderSciPanel();
+  }
 });
 replayPlayBtn?.addEventListener('click', () => {
   if (replayPlaying) {
@@ -1100,9 +1100,9 @@ replayPlayBtn?.addEventListener('click', () => {
         clearInterval(replayTimer!); replayTimer = null; replayPlaying = false;
         replayPlayBtn.textContent = '▶ Replay';
       }
-      const ok = sim.mutateAuthoritativeState(() => sim.recorder.restoreSnapshot(sim.grid, scrubberIdx));
-      
-      _applyDiffIfActive(); renderSciPanel();
+      if (sim.mutateAuthoritativeState(() => sim.recorder.restoreSnapshot(sim.grid, scrubberIdx))) {
+        _applyDiffIfActive(); renderSciPanel();
+      }
     }, 120); // ~8fps playback
   }
 });
@@ -1277,9 +1277,9 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
   restoreCivSnapshot: snapshot => civSystem.restore(snapshot),
   getLawEngineSnapshot: () => sim.laws.snapshot(),
   restoreLawEngineSnapshot: snapshot => sim.laws.restore(snapshot),
-  getChemistrySnapshot: () => sim.chemLayer.snapshot(),
-  restoreChemistrySnapshot: snapshot => sim.chemLayer.restore(snapshot, sim.grid.size),
-  resetChemistry: () => sim.chemLayer.restore({ pendingDensityTransfers: [] }, sim.grid.size),
+  getChemistrySnapshot: () => sim.snapshotChemistryState(),
+  restoreChemistrySnapshot: snapshot => sim.restoreChemistryState(snapshot),
+  resetChemistry: () => sim.resetChemistryState(),
   getWorldEventsSnapshot: () => sim.worldEvents.snapshot(),
   restoreWorldEventsSnapshot: snapshot => sim.worldEvents.restore(snapshot),
   resetWorldEvents: () => sim.worldEvents.reset(),

@@ -115,6 +115,18 @@ export class SimulationEngine {
     this.prevEnergy.fill(0);
   }
 
+  snapshotChemistryState(): ChemLayerSnapshot {
+    return this.chemLayer.snapshot();
+  }
+
+  restoreChemistryState(snapshot: ChemLayerSnapshot): void {
+    this.chemLayer.restore(snapshot, this.grid.size);
+  }
+
+  resetChemistryState(): void {
+    this.chemLayer.restore({ pendingDensityTransfers: [] }, this.grid.size);
+  }
+
   // nSteps allows batching multiple physics ticks per animation frame.
   // Keep each GPU submit/readback pair serialized, even if callers overlap step().
   step(dt: number, nSteps = 1): Promise<void> {
