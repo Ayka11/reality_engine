@@ -17,7 +17,13 @@ export class Chunk {
   lastAccessed = Date.now();
 
   constructor(cx: number, cy: number, cz: number) {
-    this.cx = cx; this.cy = cy; this.cz = cz;
+    // TypeScript readonly is erased at runtime. Spatial identity must stay
+    // immutable because the owning grid's map key is derived from these fields.
+    Object.defineProperties(this, {
+      cx: { value: cx, enumerable: true, writable: false, configurable: false },
+      cy: { value: cy, enumerable: true, writable: false, configurable: false },
+      cz: { value: cz, enumerable: true, writable: false, configurable: false },
+    });
     this._buffer = new Float32Array(CHUNK_VOLUME * CELL_FIELDS);
     this._backBuffer = new Float32Array(CHUNK_VOLUME * CELL_FIELDS);
     this._bufferView = createTrackedFloat32Array(this._buffer, () => this.markMutation());

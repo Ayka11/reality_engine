@@ -106,6 +106,18 @@ export function runSparseVoxelGridRecoveryRegression(): void {
   grid.backBuffer[denseIndex] = 27;
 
   const sparse = grid.getOrCreateChunk(-2, 1, 0);
+  const revisionBeforeCoordinateTamper = grid.mutationRevision;
+  const cxWriteAccepted = Reflect.set(sparse, "cx", 99);
+  const cyWriteAccepted = Reflect.set(sparse, "cy", -99);
+  const czWriteAccepted = Reflect.set(sparse, "cz", 99);
+  if (cxWriteAccepted || cyWriteAccepted || czWriteAccepted ||
+      sparse.cx !== -2 || sparse.cy !== 1 || sparse.cz !== 0 ||
+      grid.chunks.get("-2,1,0") !== sparse) {
+    throw new Error("Chunk spatial coordinates must remain immutable after insertion into the grid");
+  }
+  if (grid.mutationRevision !== revisionBeforeCoordinateTamper) {
+    throw new Error("Rejected chunk-coordinate writes must not mutate the owning grid revision");
+  }
   sparse.buffer[0] = 31;
   sparse.backBuffer[1] = 15;
   sparse.active = false;
