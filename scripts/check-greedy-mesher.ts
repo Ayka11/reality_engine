@@ -34,6 +34,13 @@ const boundary = buildGreedyChunkMesh({
 })
 assert.equal(boundary.quadCount, 5, 'neighboring chunk occupancy culls the shared boundary face')
 
+const materialBoundary = buildGreedyChunkMesh({
+  size: [1, 1, 1],
+  origin: [0, 0, 0],
+  sampleMaterial: solid(new Map([['0,0,0', 1], ['1,0,0', 2]])),
+})
+assert.equal(materialBoundary.quadCount, 6, 'different material across a chunk boundary emits only the local side')
+
 const empty = buildGreedyChunkMesh({ size: [3, 2, 4], sampleMaterial: () => 0 })
 assert.equal(empty.quadCount, 0, 'empty chunk emits no faces')
 
