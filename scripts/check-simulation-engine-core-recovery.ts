@@ -5,6 +5,33 @@ import { PROC } from '../src/process/ProcessDef.ts';
 import { SimulationEngine } from '../src/simulation/SimulationEngine.ts';
 import type { ChemLayerSnapshot } from '../src/chemistry/ChemLayer.ts';
 
+// Recovery entry points must invalidate outstanding GPU readbacks whenever
+// they mutate core state. Invalid tick restores must fail before changing either
+// the tick value or the generation token.
+const mutatorGuardEngine = new SimulationEngine(4, 4, 2);
+const engineInternals = mutatorGuardEngine as unknown as { _stateGeneration: number };
+const assertGenerationAdvances = (label: string, mutate: () => void): void => {
+  const beforeGeneration = engineInternals._stateGeneration;
+  mutate();
+  assert.ok(engineInternals._stateGeneration > beforeGeneration,
+    `${label} must invalidate pending GPU readback`);
+};
+assertGenerationAdvances("restorePrevEnergy", () =>
+  mutatorGuardEngine.restorePrevEnergy(mutatorGuardEngine.snapshotPrevEnergy()));
+assertGenerationAdvances("resetPreviousEnergy", () => mutatorGuardEngine.resetPreviousEnergy());
+assertGenerationAdvances("restoreChemistryState", () =>
+  mutatorGuardEngine.restoreChemistryState(mutatorGuardEngine.snapshotChemistryState()));
+assertGenerationAdvances("resetChemistryState", () => mutatorGuardEngine.resetChemistryState());
+const beforeInvalidTickRestore = mutatorGuardEngine.captureCoreRecoveryState();
+const generationBeforeInvalidTickRestore = engineInternals._stateGeneration;
+for (const invalidTick of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.MAX_VALUE]) {
+  assert.throws(() => mutatorGuardEngine.restoreTick(invalidTick), /restoreTick requires/);
+}
+assert.equal(engineInternals._stateGeneration, generationBeforeInvalidTickRestore,
+  "invalid restoreTick arguments must not invalidate or mutate the engine");
+assert.deepEqual(mutatorGuardEngine.captureCoreRecoveryState(), beforeInvalidTickRestore,
+  "invalid restoreTick arguments must not poison the recoverable tick");
+
 const engine = new SimulationEngine(16, 16, 8);
 const chemistry = (engine as unknown as { chemLayer: { restore(snapshot: ChemLayerSnapshot, cellCount?: number): void; snapshot(): ChemLayerSnapshot } }).chemLayer;
 chemistry.restore({ pendingDensityTransfers: [[17, -0.125], [31, 0.25]] }, engine.grid.size);

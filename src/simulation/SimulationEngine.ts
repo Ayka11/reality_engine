@@ -94,8 +94,15 @@ export class SimulationEngine {
   get gpuActive() { return this._gpuReady; }
 
   restoreTick(tick: number): void {
+    if (!Number.isFinite(tick)) {
+      throw new RangeError("SimulationEngine restoreTick requires a finite tick");
+    }
+    const normalizedTick = Math.max(0, Math.floor(tick));
+    if (!Number.isSafeInteger(normalizedTick)) {
+      throw new RangeError("SimulationEngine restoreTick requires a safe integer tick");
+    }
     this._stateGeneration++;
-    this._tick = Math.max(0, Math.floor(tick));
+    this._tick = normalizedTick;
   }
 
   snapshotPrevEnergy(): Float32Array {
@@ -109,10 +116,12 @@ export class SimulationEngine {
       throw new Error("Invalid previous-energy recovery snapshot");
     }
     this.prevEnergy = new Float32Array(snapshot);
+    this.invalidatePendingGPUReadback();
   }
 
   resetPreviousEnergy(): void {
     this.prevEnergy.fill(0);
+    this.invalidatePendingGPUReadback();
   }
 
   snapshotChemistryState(): ChemLayerSnapshot {
@@ -121,10 +130,12 @@ export class SimulationEngine {
 
   restoreChemistryState(snapshot: ChemLayerSnapshot): void {
     this.chemLayer.restore(snapshot, this.grid.size);
+    this.invalidatePendingGPUReadback();
   }
 
   resetChemistryState(): void {
     this.chemLayer.restore({ pendingDensityTransfers: [] }, this.grid.size);
+    this.invalidatePendingGPUReadback();
   }
 
   /**
