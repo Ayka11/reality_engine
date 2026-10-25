@@ -452,4 +452,37 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
     throw new Error("Adaptive LOD bridge could not be reused after changed LOD/AMR rejection");
   }
 
+
+  // Runtime capability flags are part of the frame contract too. A plan may
+  // keep the same revision while its readiness claim changes; commit must reject.
+  const capabilityPlan: InfinityScaleExecutionPlan = { ...plan };
+  const capabilityFrame0 = beginInfinityScaleGlobalFrame(capabilityPlan, 0, 1);
+  const capabilityFrame1 = advanceInfinityScaleGlobalFrame(capabilityFrame0, "local-execution");
+  const capabilityFrame2 = advanceInfinityScaleGlobalFrame(capabilityFrame1, "local-commit");
+  const capabilityFrame = advanceInfinityScaleGlobalFrame(capabilityFrame2, "boundary-reconciliation");
+  const capabilityState = new InfinityScaleLODState(2);
+  const capabilityStateRevision = capabilityState.getRevision();
+  const capabilityBridge = new InfinityScaleAdaptiveLODTransactionBridge(capabilityPlan, capabilityState);
+
+  capabilityBridge.begin(capabilityFrame);
+  capabilityPlan.selectiveGpuReady = !capabilityPlan.selectiveGpuReady;
+  let changedCapabilityRejected = false;
+  try {
+    capabilityBridge.commit(capabilityFrame, []);
+  } catch (error) {
+    changedCapabilityRejected = error instanceof Error && error.message.includes("execution capabilities changed");
+  }
+  if (!changedCapabilityRejected) {
+    throw new Error("Adaptive LOD bridge accepted changed plan capabilities under the same revision");
+  }
+  if (capabilityState.getRevision() !== capabilityStateRevision || capabilityState.keys().length !== 0) {
+    throw new Error("Stale capability rejection mutated authoritative LOD state");
+  }
+
+  capabilityPlan.selectiveGpuReady = !capabilityPlan.selectiveGpuReady;
+  capabilityBridge.begin(capabilityFrame);
+  if (!capabilityBridge.commit(capabilityFrame, []).committed) {
+    throw new Error("Adaptive LOD bridge could not be reused after capability rejection");
+  }
+
 }
