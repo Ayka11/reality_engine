@@ -101,7 +101,11 @@ export class InfinityScaleAdaptiveExecutionGraphCompiler {
 }
 
 function validateGraph(nodes: InfinityScaleExecutionNode[], terminalNodeId: string): boolean {
-  const ids = new Set(nodes.map((node) => node.nodeId));
+  const ids = new Set<string>();
+  for (const node of nodes) {
+    if (!node.nodeId || ids.has(node.nodeId)) return false;
+    ids.add(node.nodeId);
+  }
   if (!ids.has(terminalNodeId)) return false;
 
   for (const node of nodes) {
