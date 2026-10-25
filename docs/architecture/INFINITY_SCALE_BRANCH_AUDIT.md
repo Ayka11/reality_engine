@@ -61,10 +61,13 @@ The release-evidence workflow is a concrete unique capability validated by RC ru
 
 On `main`, `src/infinity/InfinityScaleAdaptiveLODTransactionBridge.ts` deliberately rejects any changed LOD topology until physical chunk remapping and full-cell transfer exist. The branch's own `InfinityScaleAdaptiveRuntime.regression.ts` also expects topology mutation to be rejected and revisions to remain unchanged when physical remapping is unavailable.
 
+There is an additional integration mismatch: the branch-only `InfinityScaleUnifiedTransaction` types its authoritative grid as `VoxelGrid` and its regression exercises a dense `VoxelGrid` plus logical `InfinityScaleLODState`. The current production `SimulationEngine.grid` is `SparseVoxelGrid`. That legacy regression is useful evidence about the prototype's staged transaction and rollback, but it is not a production-path proof that physical sparse chunks are remapped or synchronized.
+
 Therefore:
 - Do not enable adaptive topology changes merely because planning, predictive metrics, replay, or RC packaging passes.
 - Do not merge the branch wholesale over `main`.
 - Retain the current authoritative transaction/rollback implementation and its fail-closed gate.
+- Treat `InfinityScaleUnifiedTransaction` as a research prototype until it is adapted to the sparse authoritative grid and proves full chunk membership/geometry remapping as well as cell data transfer.
 - Require physical chunk remapping, complete cell transfer/conservation, atomic rollback, stale-revision rejection, and regression coverage before a production topology commit can be enabled.
 
 ## Branch deletion gate
