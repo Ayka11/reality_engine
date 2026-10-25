@@ -81,8 +81,19 @@ export class SparseVoxelGrid {
     this.H = H;
     this.D = D;
     this.size = W * H * D;
-    this.dirtyChunks = new MutationTrackedSet(() => this.markMutation());
-    this.chunkOwners = new MutationTrackedMap(() => this.markMutation());
+    this.dirtyChunks = new MutationTrackedSet(
+      () => this.markMutation(),
+      key => {
+        if (!this.isValidChunkKey(key)) throw new Error(`Invalid dirty chunk key: ${String(key)}`);
+      },
+    );
+    this.chunkOwners = new MutationTrackedMap(
+      () => this.markMutation(),
+      (key, ownerId) => {
+        if (!this.isValidChunkKey(key)) throw new Error(`Invalid chunk owner key: ${String(key)}`);
+        if (typeof ownerId !== "string") throw new Error("Chunk owner ID must be a string");
+      },
+    );
     this._sparseDenseBuffer = new Float32Array(this.size * CELL_FIELDS);
     this._sparseDenseBackBuffer = new Float32Array(this.size * CELL_FIELDS);
     this._sparseDenseBufferView = createTrackedFloat32Array(this._sparseDenseBuffer, () => this.markMutation());
@@ -134,8 +145,8 @@ export class SparseVoxelGrid {
   }
 
   getChunkBoundary(chunkKey: string): { neighbors: string[] } {
+    if (!this.isValidChunkKey(chunkKey)) return { neighbors: [] };
     const parts = chunkKey.split(',').map(n => Number(n));
-    if (parts.length !== 3) return { neighbors: [] };
     const [cx, cy, cz] = parts;
     const neigh: string[] = [];
     for (const dz of [-1, 0, 1]) for (const dy of [-1, 0, 1]) for (const dx of [-1, 0, 1]) {
@@ -147,6 +158,15 @@ export class SparseVoxelGrid {
 
   getChunkKey(cx: number, cy: number, cz: number): string {
     return `${cx},${cy},${cz}`;
+  }
+
+  private isValidChunkKey(key: unknown): key is string {
+    if (typeof key !== "string") return false;
+    const parts = key.split(",");
+    if (parts.length !== 3) return false;
+    const coords = parts.map(part => Number(part));
+    return coords.every(Number.isSafeInteger) &&
+      this.getChunkKey(coords[0], coords[1], coords[2]) === key;
   }
 
   getOrCreateChunk(cx: number, cy: number, cz: number): Chunk {
@@ -293,13 +313,7 @@ export class SparseVoxelGrid {
       throw new Error("Invalid SparseVoxelGrid snapshot active chunk range");
     }
 
-    const isValidChunkKey = (key: unknown): key is string => {
-      if (typeof key !== "string") return false;
-      const parts = key.split(",");
-      if (parts.length !== 3) return false;
-      const coords = parts.map(part => Number(part));
-      return coords.every(Number.isSafeInteger) && this.getChunkKey(coords[0], coords[1], coords[2]) === key;
-    };
+    const isValidChunkKey = (key: unknown): key is string => this.isValidChunkKey(key);
     const owners = new Map<string, string>();
     for (const entry of snapshot.chunkOwners) {
       if (!Array.isArray(entry) || entry.length !== 2 ||
@@ -770,9 +784,13 @@ export { CHUNK_SIZE, CHUNK_VOLUME };
 
 
 class MutationTrackedSet<T> extends Set<T> {
-  constructor(private readonly onMutation: () => void) { super(); }
+  constructor(
+    private readonly onMutation: () => void,
+    private readonly validateValue?: (value: T) => void,
+  ) { super(); }
 
   override add(value: T): this {
+    this.validateValue?.(value);
     const existed = this.has(value);
     super.add(value);
     if (!existed) this.onMutation();
@@ -793,9 +811,13 @@ class MutationTrackedSet<T> extends Set<T> {
 }
 
 class MutationTrackedMap<K, V> extends Map<K, V> {
-  constructor(private readonly onMutation: () => void) { super(); }
+  constructor(
+    private readonly onMutation: () => void,
+    private readonly validateEntry?: (key: K, value: V) => void,
+  ) { super(); }
 
   override set(key: K, value: V): this {
+    this.validateEntry?.(key, value);
     const existed = this.has(key);
     const previous = this.get(key);
     super.set(key, value);

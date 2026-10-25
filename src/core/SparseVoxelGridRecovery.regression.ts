@@ -36,6 +36,29 @@ export function runSparseVoxelGridRecoveryRegression(): void {
   // Dirty chunks may be known before the corresponding sparse chunk is resident.
   grid.markChunksDirty(["-2,1,0", "99,0,0"]);
 
+  const metadataRevision = grid.mutationRevision;
+  let invalidDirtyKeyRejected = false;
+  try { grid.dirtyChunks.add("not-a-chunk-key"); } catch { invalidDirtyKeyRejected = true; }
+  if (!invalidDirtyKeyRejected || grid.mutationRevision !== metadataRevision ||
+      grid.dirtyChunks.has("not-a-chunk-key")) {
+    throw new Error("Invalid dirty-chunk key was not rejected atomically");
+  }
+  let invalidOwnerKeyRejected = false;
+  try { grid.chunkOwners.set("not-a-chunk-key", "worker-B"); } catch { invalidOwnerKeyRejected = true; }
+  if (!invalidOwnerKeyRejected || grid.mutationRevision !== metadataRevision ||
+      grid.chunkOwners.has("not-a-chunk-key")) {
+    throw new Error("Invalid chunk-owner key was not rejected atomically");
+  }
+  let invalidOwnerValueRejected = false;
+  try { grid.chunkOwners.set("0,0,0", 42 as unknown as string); } catch { invalidOwnerValueRejected = true; }
+  if (!invalidOwnerValueRejected || grid.mutationRevision !== metadataRevision ||
+      grid.chunkOwners.has("0,0,0")) {
+    throw new Error("Invalid chunk-owner value was not rejected atomically");
+  }
+  if (grid.getChunkBoundary("NaN,0,0").neighbors.length !== 0) {
+    throw new Error("Invalid chunk key generated a boundary with NaN coordinates");
+  }
+
   const snapshot = grid.captureState();
   const expected = JSON.stringify(snapshot);
 
