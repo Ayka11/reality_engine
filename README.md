@@ -21,8 +21,8 @@ custom_headers:
 > *"A universe you can paint — where physics evolves, civilizations rise, and an AI director watches over it all."*
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
-[![Three.js](https://img.shields.io/badge/Three.js-r165-green)](https://threejs.org/)
-[![Vite](https://img.shields.io/badge/Vite-8.3.4-purple)](https://vitejs.dev/)
+[![Three.js](https://img.shields.io/badge/Three.js-rendering-green)](https://threejs.org/)
+[![Vite](https://img.shields.io/badge/Vite-8.x-purple)](https://vitejs.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![HuggingFace](https://img.shields.io/badge/🤗-Live%20Demo-yellow)](https://huggingface.co/spaces/Aygun1489/Reality_Engine_SImulator)
 
@@ -42,6 +42,21 @@ Reality Engine is an **interactive physics sandbox** where the rules of physics 
 **This is not a game about matter. It is a game about the rules that govern matter.**
 
 ---
+
+## Release status: experimental / pre-release
+
+Reality Engine is suitable for demonstrations, prototyping, and exploratory testing. The current `main` branch is **not certified as a production-ready scientific instrument**. Passing CI validates the checks listed in the workflow; it does not validate every advertised capability or establish that simulation results describe real-world physics.
+
+Known operational boundaries:
+
+- **Mutable state and GPU readback:** `VoxelGrid` and `SparseVoxelGrid` expose mutable typed-array buffers and `CellState` views. External writes that bypass engine-owned synchronization can evade the GPU state-generation guard. Use the supported synchronization path; see [issue #62](https://github.com/Ayka11/reality_engine/issues/62).
+- **Adaptive LOD topology changes:** refine/coarsen commits remain disabled when an operation changes LOD until physical chunk remapping and complete cell-data transfer are implemented and validated. Do not treat adaptive topology changes as a production feature; see [issue #50](https://github.com/Ayka11/reality_engine/issues/50).
+- **Scientific interpretation:** the Science Lab evaluates computational experiments over the configurations represented in the simulator. Its results are not, by themselves, empirical evidence of real-world causal or physical validity.
+- **Dependency reproducibility:** there is not yet a committed root `package-lock.json`. CI currently resolves dependencies during installation and then runs `npm ci` against the generated lockfile. Independent builds are therefore not fully pinned until the lockfile is reviewed and committed.
+
+Remove this notice only after the release candidate passes production integration and acceptance criteria on the exact release commit.
+
+
 
 ## Infinity Scale & Scientific Workspace
 
@@ -815,16 +830,25 @@ MIT — see [LICENSE](LICENSE).
 
 *Built with [Claude Code](https://claude.ai/claude-code) by Anthropic.*
 
-## CPU Edition / Hugging Face
+## Hugging Face deployment
 
-This branch also contains a CPU-first Static Space deployment path for Hugging Face. The simulator executes in the visitor browser; no GPU-backed server is required.
+This README declares `sdk: docker` in its Space metadata. The Docker deployment builds the Vite frontend and starts `server/hf-server.js` on port `7860` using `Dockerfile` / `Dockerfile.hf`.
 
-For the Static Space, build the deployable artifact before publishing:
+A browser-first Static Space is a **separate deployment target**. Its metadata uses `sdk: static` and `app_file: dist/index.html`; see [README_HF.md](README_HF.md) and [HF_CPU_DEPLOYMENT.md](HF_CPU_DEPLOYMENT.md). Do not combine the Static Space configuration with this Docker Space's metadata. Confirm the target Space's actual configuration before publishing.
+
+For reproducible production builds, first commit the reviewed root `package-lock.json`, then update CI and both Dockerfiles to install from that exact lockfile with `npm ci`. Until then, dependency resolution can differ between independent builds.
+
+## Release validation checklist
+
+Run these checks on the exact candidate commit:
 
 ```bash
-npm ci
+npm run lint
 npm run build
+npm run audit:report
+npm run hf:smoke
 npm run hf:cpu:check
+npm run hf:browser:acceptance
 ```
 
-The Hugging Face Space is configured with `app_file: dist/index.html`, so `dist/` must be present in the Space repository when deploying the static edition.
+Also build both Docker images and confirm the Hugging Face runtime smoke test. Treat all runtime limitations above as release blockers unless they are explicitly excluded from the product scope.

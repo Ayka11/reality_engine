@@ -27,13 +27,6 @@ jobs:
             if [ -n "$debug_log" ]; then cat "$debug_log"; fi
             exit 1
           }
-      - name: Capture temporary dependency lockfile for release bootstrap
-        uses: actions/upload-artifact@v4
-        with:
-          name: package-lock-bootstrap
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
       - run: npm ci --legacy-peer-deps
       - run: npm run audit:report
       - run: npm run lint
