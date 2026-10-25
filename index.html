@@ -329,6 +329,7 @@ input[type=range]{accent-color:#a397ff}
     <button class="mode-btn" id="matField"   onclick="setMatMode3D('field',this)"   style="padding:3px 9px;font-size:10px">Field</button>
     <button class="mode-btn" id="matMaterial" onclick="setMatMode3D('material',this)" style="padding:3px 9px;font-size:10px">PBR</button>
     <button class="mode-btn" id="matHeight"  onclick="setMatMode3D('height',this)"   style="padding:3px 9px;font-size:10px">Height</button>
+    <button class="mode-btn" id="greedySurfaceBtn" type="button" aria-pressed="false" onclick="toggleGreedySurfacePreview()" style="padding:3px 9px;font-size:10px" title="Preview the sparse chunk surface using greedy meshing">Greedy Surface</button>
   </div>
   <div id="viewWrap">
   <canvas id="c3d"></canvas>
@@ -556,6 +557,7 @@ let activeProcs=new Set(['thermo','bio']);
 let activeBrush=null;
 let histE=[],histT=[],histI=[],histS=[],histB=[];
 let currentAppMode='create',currentPanel='world',currentRenderMode='3d';
+let greedySurfacePreviewActive=false,greedySurfacePreviewPreviousMode=null;
 
 // Physics constants (adjustable by laws & composer)
 let DIFFUSION=0.09,ENTROPY_BASE=0.0004,INFO_RATE=0.35,BIO_THRESH=0.25;
@@ -2480,6 +2482,8 @@ window.addEventListener('resize',()=>{
 });
 
 function setRenderMode(mode,btn){
+  // A deliberate render-mode change leaves the optional chunk-surface preview first.
+  if(greedySurfacePreviewActive)teardownGreedySurfacePreview(false);
   window.__worldField3DTrace={phase:'mode-switch-enter',mode,at:Date.now()};
   currentRenderMode=mode;
   window.currentRenderMode=mode;
@@ -2535,6 +2539,61 @@ function setRenderMode(mode,btn){
 
   log(`Switched to ${mode.toUpperCase()} render mode`);
 }
+function updateGreedySurfaceButton(active, unavailable=false){
+  const btn=document.getElementById('greedySurfaceBtn');
+  if(!btn)return;
+  btn.classList.toggle('active',active);
+  btn.setAttribute('aria-pressed',String(active));
+  btn.textContent=active?'Greedy Surface ✓':unavailable?'Greedy Surface unavailable':'Greedy Surface';
+  btn.title=unavailable
+    ? 'Greedy mesh is unavailable for the current chunk set; instanced fallback remains active.'
+    : active
+      ? 'Greedy chunk surface active. Click to return to the previous render mode.'
+      : 'Preview the sparse worker chunk field with greedy surface meshing (PBR mode).';
+}
+function teardownGreedySurfacePreview(restoreMode){
+  if(!greedySurfacePreviewActive)return;
+  const previousMode=greedySurfacePreviewPreviousMode;
+  window.setGreedyMeshingEnabled?.(false);
+  window.setField3DVisible?.(false);
+  greedySurfacePreviewActive=false;
+  greedySurfacePreviewPreviousMode=null;
+  updateGreedySurfaceButton(false);
+  if(restoreMode&&previousMode&&previousMode!==currentRenderMode){
+    const tabs={'3d':'tab3d','field3d':'tabField3d','2d':'tab2d','hybrid':'tabHybrid','metrics':'tabMetrics'};
+    setRenderMode(previousMode,document.getElementById(tabs[previousMode]));
+  }
+}
+function toggleGreedySurfacePreview(){
+  if(greedySurfacePreviewActive){
+    teardownGreedySurfacePreview(true);
+    return false;
+  }
+  const previousMode=currentRenderMode;
+  greedySurfacePreviewPreviousMode=previousMode;
+  if(currentRenderMode!=='field3d'){
+    setRenderMode('field3d',document.getElementById('tabField3d'));
+  }
+  // Set the renderer mode explicitly before showing its canvas; the public
+  // generic mode switch intentionally targets InfiniteWorld while the canvas is hidden.
+  window.setFieldMatMode?.('material');
+  const result=window.setGreedyMeshingEnabled?.(true);
+  if(!result?.active||!(result.quadCount>0)){
+    window.setGreedyMeshingEnabled?.(false);
+    greedySurfacePreviewPreviousMode=null;
+    updateGreedySurfaceButton(false,true);
+    if(previousMode!==currentRenderMode){
+      const tabs={'3d':'tab3d','field3d':'tabField3d','2d':'tab2d','hybrid':'tabHybrid','metrics':'tabMetrics'};
+      setRenderMode(previousMode,document.getElementById(tabs[previousMode]));
+    }
+    return false;
+  }
+  window.setField3DVisible?.(true);
+  greedySurfacePreviewActive=true;
+  updateGreedySurfaceButton(true);
+  return true;
+}
+window.toggleGreedySurfacePreview=toggleGreedySurfacePreview;
 window.setRenderMode=setRenderMode;
 window.setView=setRenderMode;
 
