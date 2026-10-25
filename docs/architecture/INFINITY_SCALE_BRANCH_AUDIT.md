@@ -36,7 +36,12 @@ The following older branch tests have current `main` test entry points covering 
 | `WorldEventsRecovery.regression.ts` | `test:worldevents-recovery` |
 | `WorldGenerationRNGRecovery.regression.ts` | Split across `test:script-engine-rng-recovery`, `test:agent-worldevents-rng-recovery`, and `test:terrain-worldcomposer-rng-recovery` |
 
-This is an entry-point/coverage overlap audit, not a claim of assertion-by-assertion equivalence for every legacy test. Before branch deletion, explicitly compare the branch-only `LawEngineRecovery.regression.ts`, `SimulationRNGReset.regression.ts`, and `SimulationStochasticReplay.regression.ts` against current core-recovery and RNG checks; their names do not have one-to-one dedicated scripts on `main`. Keep any distinct failure conditions or deterministic replay cases by porting the assertions into maintained `main` tests, not by restoring the old runtime tree.
+This is an entry-point/coverage-overlap audit, not a byte-for-byte test equivalence claim. A follow-up assertion review confirmed that the three files without one-to-one script names also have current overlap on `main`:
+- `LawEngineRecovery.regression.ts`: `test:simulation-engine-core-recovery` checks law snapshot replay, invalid RNG state, duplicate identities, rejection atomicity, and detached snapshot state.
+- `SimulationRNGReset.regression.ts`: the core-recovery suite checks `AgentSystem.clear()` resets RNG and the ID allocator; `EntityLayerRecovery.regression.ts` checks `EntityLayer.clear()` resets RNG, IDs, and population.
+- `SimulationStochasticReplay.regression.ts`: `test:agent-worldevents-rng-recovery` exercises agent/grid replay after RNG restore, event effect/history replay, auto-event replay, and the next stochastic event sequence.
+
+The older recovery files therefore do not need to be copied wholesale. Retain any specific missing assertion discovered by a later diff in the maintained `main` tests, rather than restoring the old regression directory.
 
 Other branch-only recovery/replay tests—especially `InfinityScaleDeterministicReplay`, `InfinityScaleFailureReplay`, `InfinityScaleFullPipelineReplay`, and `InfinityScaleRuntimeReplay`—are Infinity Scale experimental evidence, not generic subsystem recovery tests. They need separate evaluation.
 
