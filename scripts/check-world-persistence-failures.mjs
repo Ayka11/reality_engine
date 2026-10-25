@@ -690,7 +690,9 @@ await directorJsonStarted;
 directorUnit.reset();
 if (!resolveDirectorPayload) throw new Error('SceneDirector response resolver was not installed');
 const fence = String.fromCharCode(96).repeat(3);
-const oldWorldResponseText = "old response\\n" + fence + "js\\nworld.fill(1, 1, 1, 'energy', 999);\\n" + fence;
+const oldWorldResponseText = "old response\n" + fence + "js\nworld.fill(1, 1, 1, 'energy', 999);\n" + fence;
+assert.equal(oldWorldResponseText.split(fence)[1], "js\nworld.fill(1, 1, 1, 'energy', 999);\n",
+  'stale-response fixture must contain a valid runnable JS fence before it is discarded');
 resolveDirectorPayload({ content: [{ type: 'text', text: oldWorldResponseText }] });
 const oldWorldResult = await inFlightOldWorldAsk;
 assert.equal(oldWorldResult.code, null, 'late response from a previous world must not expose runnable code');
