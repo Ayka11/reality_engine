@@ -41,6 +41,9 @@ send('tick', { speed: 1 })
 const energyAfterEnabled = readField(latestFrame(), point.x, point.y, point.z, F.E)
 assert.ok(Math.abs(energyAfterEnabled - 99.04) < 0.02,
   `energyDiffusion and bit 0 should control the worker step (got ${energyAfterEnabled})`)
+const energyHalo = readField(latestFrame(), point.x + 1, point.y, point.z, F.E)
+assert.ok(energyHalo > 0 && energyHalo < 1,
+  `energy diffusion should reach a previously empty neighboring cell (got ${energyHalo})`)
 
 // The same field is unchanged when its process bit is disabled.
 send('setPhysics', { params, processMask: 0 })
