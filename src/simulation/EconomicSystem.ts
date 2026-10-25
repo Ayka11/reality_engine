@@ -2,11 +2,28 @@ import { SimulationEngine } from './SimulationEngine';
 import { CivilizationSystem, Civilization } from './CivilizationSystem';
 import { F } from '../core/CellState';
 
-interface MarketHistory {
+export interface MarketHistory {
   tick: number;
   pE: number;
   pI: number;
   vol: number;
+}
+
+export interface EconomicMarketSnapshot {
+  x: number;
+  y: number;
+  prices: { energy: number; density: number; information: number };
+  volume: { energy: number; density: number; information: number };
+  history: MarketHistory[];
+  age: number;
+}
+
+export interface EconomicSystemSnapshot {
+  markets: EconomicMarketSnapshot[];
+  gdp: Array<[number, number]>;
+  globalGDP: number;
+  gini: number;
+  tickCount: number;
 }
 
 class Market {
@@ -20,6 +37,42 @@ class Market {
 
   constructor(x: number, y: number, sim: SimulationEngine) {
     this.x = x; this.y = y; this.sim = sim;
+  }
+
+  snapshot(): EconomicMarketSnapshot {
+    return {
+      x: this.x,
+      y: this.y,
+      prices: { ...this.prices },
+      volume: { ...this.volume },
+      history: this.history.map(entry => ({ ...entry })),
+      age: this.age,
+    };
+  }
+
+  restore(snapshot: EconomicMarketSnapshot): void {
+    if (!snapshot ||
+        !Number.isSafeInteger(snapshot.x) || snapshot.x !== this.x ||
+        !Number.isSafeInteger(snapshot.y) || snapshot.y !== this.y ||
+        !snapshot.prices || !snapshot.volume ||
+        ![snapshot.prices.energy, snapshot.prices.density, snapshot.prices.information,
+          snapshot.volume.energy, snapshot.volume.density, snapshot.volume.information,
+          snapshot.age].every(Number.isFinite) ||
+        snapshot.age < 0 || !Array.isArray(snapshot.history) || snapshot.history.length > 30) {
+      throw new Error("Invalid economic market snapshot");
+    }
+    const history: MarketHistory[] = [];
+    for (const item of snapshot.history) {
+      if (!item || !Number.isSafeInteger(item.tick) || item.tick < 0 ||
+          ![item.pE, item.pI, item.vol].every(Number.isFinite)) {
+        throw new Error("Invalid economic market history");
+      }
+      history.push({ ...item });
+    }
+    this.prices = { ...snapshot.prices };
+    this.volume = { ...snapshot.volume };
+    this.history.splice(0, this.history.length, ...history);
+    this.age = snapshot.age;
   }
 
   tick(dt: number, civs: Civilization[], gdpMap: Map<number, number>): void {
@@ -93,6 +146,55 @@ export class EconomicSystem {
   constructor(sim: SimulationEngine, civSys: CivilizationSystem) {
     this.sim = sim;
     this.civSys = civSys;
+  }
+
+  snapshot(): EconomicSystemSnapshot {
+    return {
+      markets: this.markets.map(market => market.snapshot()),
+      gdp: [...this.gdpMap.entries()].map(([id, value]) => [id, value]),
+      globalGDP: this.globalGDP,
+      gini: this.gini,
+      tickCount: this.tickCount,
+    };
+  }
+
+  restore(snapshot: EconomicSystemSnapshot): void {
+    if (!snapshot ||
+        !Array.isArray(snapshot.markets) || snapshot.markets.length > 6 ||
+        !Array.isArray(snapshot.gdp) || snapshot.gdp.length > 100_000 ||
+        !Number.isFinite(snapshot.globalGDP) ||
+        !Number.isFinite(snapshot.gini) || snapshot.gini < 0 ||
+        !Number.isSafeInteger(snapshot.tickCount) || snapshot.tickCount < 0) {
+      throw new Error("Invalid EconomicSystem snapshot");
+    }
+    const gdp = new Map<number, number>();
+    for (const entry of snapshot.gdp) {
+      if (!Array.isArray(entry) || entry.length !== 2 ||
+          !Number.isSafeInteger(entry[0]) || entry[0] < 0 ||
+          !Number.isFinite(entry[1]) || gdp.has(entry[0])) {
+        throw new Error("Invalid economic GDP entry");
+      }
+      gdp.set(entry[0], entry[1]);
+    }
+    const markets = snapshot.markets.map(data => {
+      const market = new Market(data.x, data.y, this.sim);
+      market.restore(data);
+      return market;
+    });
+    this.markets.splice(0, this.markets.length, ...markets);
+    this.gdpMap.clear();
+    for (const [id, value] of gdp) this.gdpMap.set(id, value);
+    this.globalGDP = snapshot.globalGDP;
+    this.gini = snapshot.gini;
+    this.tickCount = snapshot.tickCount;
+  }
+
+  reset(): void {
+    this.markets.length = 0;
+    this.gdpMap.clear();
+    this.globalGDP = 0;
+    this.gini = 0;
+    this.tickCount = 0;
   }
 
   tick(dt: number): void {

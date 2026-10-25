@@ -5,6 +5,15 @@ const MACRO_DIV = 8;
 const UPDATE_INTERVAL = 20;
 const COUPLING = 0.0015;
 
+export interface MultiScaleSystemSnapshot {
+  macroEnergy: Float32Array;
+  macroEntropy: Float32Array;
+  macroBio: Float32Array;
+  macroTemp: Float32Array;
+  count: Float32Array;
+  tickCount: number;
+}
+
 export class MultiScaleSystem {
   private grid: VoxelGrid;
   readonly mW: number;
@@ -29,6 +38,46 @@ export class MultiScaleSystem {
     this.macroBio     = new Float32Array(sz);
     this.macroTemp    = new Float32Array(sz);
     this._count       = new Float32Array(sz);
+  }
+
+  snapshot(): MultiScaleSystemSnapshot {
+    return {
+      macroEnergy: new Float32Array(this.macroEnergy),
+      macroEntropy: new Float32Array(this.macroEntropy),
+      macroBio: new Float32Array(this.macroBio),
+      macroTemp: new Float32Array(this.macroTemp),
+      count: new Float32Array(this._count),
+      tickCount: this.tickCount,
+    };
+  }
+
+  restore(snapshot: MultiScaleSystemSnapshot): void {
+    const expectedLength = this.macroEnergy.length;
+    const arrays = [
+      snapshot?.macroEnergy, snapshot?.macroEntropy, snapshot?.macroBio,
+      snapshot?.macroTemp, snapshot?.count,
+    ];
+    if (!snapshot ||
+        !arrays.every(array => array instanceof Float32Array &&
+          array.length === expectedLength && array.every(Number.isFinite)) ||
+        !Number.isSafeInteger(snapshot.tickCount) || snapshot.tickCount < 0) {
+      throw new Error("Invalid MultiScaleSystem snapshot");
+    }
+    this.macroEnergy.set(snapshot.macroEnergy);
+    this.macroEntropy.set(snapshot.macroEntropy);
+    this.macroBio.set(snapshot.macroBio);
+    this.macroTemp.set(snapshot.macroTemp);
+    this._count.set(snapshot.count);
+    this.tickCount = snapshot.tickCount;
+  }
+
+  reset(): void {
+    this.macroEnergy.fill(0);
+    this.macroEntropy.fill(0);
+    this.macroBio.fill(0);
+    this.macroTemp.fill(0);
+    this._count.fill(0);
+    this.tickCount = 0;
   }
 
   willWriteGridOnNextTick(): boolean {

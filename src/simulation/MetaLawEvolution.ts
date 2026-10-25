@@ -3,6 +3,13 @@ import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import { WorldMetrics } from '../laws/MetaLaw';
 
+export interface MetaLawEvolutionSnapshot {
+  lastCycle: number;
+  lastAction: string;
+  cycleCount: number;
+  topLaw: string;
+}
+
 export class MetaLawEvolution {
   private laws: LawEngine;
   private grid: VoxelGrid;
@@ -15,6 +22,36 @@ export class MetaLawEvolution {
   constructor(laws: LawEngine, grid: VoxelGrid) {
     this.laws = laws;
     this.grid = grid;
+  }
+
+  snapshot(): MetaLawEvolutionSnapshot {
+    return {
+      lastCycle: this.lastCycle,
+      lastAction: this.lastAction,
+      cycleCount: this.cycleCount,
+      topLaw: this.topLaw,
+    };
+  }
+
+  restore(snapshot: MetaLawEvolutionSnapshot): void {
+    if (!snapshot ||
+        !Number.isSafeInteger(snapshot.lastCycle) || snapshot.lastCycle < 0 ||
+        typeof snapshot.lastAction !== "string" ||
+        !Number.isSafeInteger(snapshot.cycleCount) || snapshot.cycleCount < 0 ||
+        typeof snapshot.topLaw !== "string") {
+      throw new Error("Invalid MetaLawEvolution snapshot");
+    }
+    this.lastCycle = snapshot.lastCycle;
+    this.lastAction = snapshot.lastAction;
+    this.cycleCount = snapshot.cycleCount;
+    this.topLaw = snapshot.topLaw;
+  }
+
+  reset(): void {
+    this.lastCycle = 0;
+    this.lastAction = "awaiting first cycle";
+    this.cycleCount = 0;
+    this.topLaw = "";
   }
 
   tick(tick: number): void {

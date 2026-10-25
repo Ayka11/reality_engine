@@ -1,6 +1,14 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 
+export interface ClimateSystemSnapshot {
+  windX: Float32Array;
+  windY: Float32Array;
+  pressure: Float32Array;
+  globalTemp: number;
+  tickCount: number;
+}
+
 export class ClimateSystem {
   private grid: VoxelGrid;
   windX: Float32Array;
@@ -15,6 +23,43 @@ export class ClimateSystem {
     this.windX    = new Float32Array(W * H);
     this.windY    = new Float32Array(W * H);
     this.pressure = new Float32Array(W * H);
+    this._initWind();
+  }
+
+  snapshot(): ClimateSystemSnapshot {
+    return {
+      windX: new Float32Array(this.windX),
+      windY: new Float32Array(this.windY),
+      pressure: new Float32Array(this.pressure),
+      globalTemp: this.globalTemp,
+      tickCount: this.tickCount,
+    };
+  }
+
+  restore(snapshot: ClimateSystemSnapshot): void {
+    const expectedLength = this.grid.W * this.grid.H;
+    if (!snapshot ||
+        !(snapshot.windX instanceof Float32Array) || snapshot.windX.length !== expectedLength ||
+        !(snapshot.windY instanceof Float32Array) || snapshot.windY.length !== expectedLength ||
+        !(snapshot.pressure instanceof Float32Array) || snapshot.pressure.length !== expectedLength ||
+        !snapshot.windX.every(Number.isFinite) ||
+        !snapshot.windY.every(Number.isFinite) ||
+        !snapshot.pressure.every(Number.isFinite) ||
+        !Number.isFinite(snapshot.globalTemp) ||
+        !Number.isSafeInteger(snapshot.tickCount) || snapshot.tickCount < 0) {
+      throw new Error("Invalid ClimateSystem snapshot");
+    }
+    this.windX = new Float32Array(snapshot.windX);
+    this.windY = new Float32Array(snapshot.windY);
+    this.pressure = new Float32Array(snapshot.pressure);
+    this.globalTemp = snapshot.globalTemp;
+    this.tickCount = snapshot.tickCount;
+  }
+
+  reset(): void {
+    this.tickCount = 0;
+    this.globalTemp = 0;
+    this.pressure.fill(0);
     this._initWind();
   }
 

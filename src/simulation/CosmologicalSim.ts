@@ -29,11 +29,20 @@ export class CosmologicalSim {
   readonly grid: SparseGrid;
   tick = 0;
   readonly galaxies: Galaxy[] = [];
+  private readonly initialRngState: number;
   private _rngState: number;
 
   constructor(seed = 0x3c6ef372) {
     this.grid = new SparseGrid(this.W, this.H, this.D, NF);
-    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x3c6ef372 : 0x3c6ef372;
+    this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x3c6ef372 : 0x3c6ef372;
+    this._rngState = this.initialRngState;
+  }
+
+  reset(): void {
+    this.grid.clear();
+    this.galaxies.length = 0;
+    this.tick = 0;
+    this._rngState = this.initialRngState;
   }
 
   private _random(): number {

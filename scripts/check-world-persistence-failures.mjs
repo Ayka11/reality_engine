@@ -8,6 +8,10 @@ const mainSource = await readFile(new URL("src/main.ts", root), "utf8");
 const climateSource = await readFile(new URL("src/simulation/ClimateSystem.ts", root), "utf8");
 const multiScaleSource = await readFile(new URL("src/simulation/MultiScaleSystem.ts", root), "utf8");
 const languageSource = await readFile(new URL("src/simulation/LanguageEmergence.ts", root), "utf8");
+const economicSource = await readFile(new URL("src/simulation/EconomicSystem.ts", root), "utf8");
+const metaLawSource = await readFile(new URL("src/simulation/MetaLawEvolution.ts", root), "utf8");
+const cosmologicalSource = await readFile(new URL("src/simulation/CosmologicalSim.ts", root), "utf8");
+const timelineSource = await readFile(new URL("src/world/Timeline.ts", root), "utf8");
 assert.match(saveSystemSource, /const mutate = this\.context\.mutateAuthoritativeState;/,
   "world snapshot import must use the authoritative simulation transaction");
 assert.match(saveSystemSource, /if \(!mutate\)\s*\{\s*throw new Error\("World restore requires an engine-owned mutation transaction"\)/,
@@ -53,6 +57,21 @@ assert.match(mainSource, /if \(externalGridWriteExpected\) sim\.invalidatePendin
   "post-step CPU writers must invalidate outstanding GPU readback before a grid-writing pass");
 assert.match(mainSource, /if \(externalGridWriteExpected \|\| externalGridChanged\) sim\.syncToGPU\(\)/,
   "post-step CPU writers must publish dense/chunk/GPU state after a grid-writing pass");
+for (const field of ["climate", "multiScale", "language", "economy", "metaLawEvolution", "cosmologicalSim"]) {
+  assert.match(saveSystemSource, new RegExp(field + ": this\\.context\\.get[^\\n]+\\?\\.\\(\\)"),
+    "quick saves must capture auxiliary runtime domain: " + field);
+}
+assert.match(saveSystemSource, /this\.context\.resetClimate\?\.\(\)/);
+assert.match(saveSystemSource, /this\.context\.resetMultiScale\?\.\(\)/);
+assert.match(saveSystemSource, /this\.context\.resetLanguage\?\.\(\)/);
+assert.match(saveSystemSource, /this\.context\.resetEconomic\?\.\(\)/);
+assert.match(saveSystemSource, /this\.context\.resetMetaLawEvolution\?\.\(\)/);
+assert.match(saveSystemSource, /this\.context\.resetCosmological\?\.\(\)/);
+assert.match(saveSystemSource, /this\.context\.clearTimeline\?\.\(\)/);
+assert.match(economicSource, /snapshot\(\): EconomicSystemSnapshot/);
+assert.match(metaLawSource, /snapshot\(\): MetaLawEvolutionSnapshot/);
+assert.match(cosmologicalSource, /snapshot\(\): CosmologicalSimSnapshot/);
+assert.match(timelineSource, /reset\(\): void/);
 const cache = new Map();
 async function load(path) {
   if (cache.has(path)) return cache.get(path);
@@ -450,6 +469,131 @@ for (let tick = 1; tick <= 5; tick++) {
 }
 assert.ok(languageGrid.buffer.some(value => value > 0),
   "language propagation must actually mutate the test field");
+
+
+const { ClimateSystem: RuntimeClimate } = await import(await load("src/simulation/ClimateSystem.ts"));
+const { MultiScaleSystem: RuntimeMultiScale } = await import(await load("src/simulation/MultiScaleSystem.ts"));
+const { LanguageSystem: RuntimeLanguage } = await import(await load("src/simulation/LanguageEmergence.ts"));
+const { EconomicSystem: RuntimeEconomy } = await import(await load("src/simulation/EconomicSystem.ts"));
+const { MetaLawEvolution: RuntimeMetaLaw } = await import(await load("src/simulation/MetaLawEvolution.ts"));
+const { CosmologicalSim: RuntimeCosmological } = await import(await load("src/simulation/CosmologicalSim.ts"));
+const { Timeline: RuntimeTimeline } = await import(await load("src/world/Timeline.ts"));
+
+function fakeGrid(W, H, D) {
+  return {
+    W, H, D, size: W * H * D, buffer: new Float32Array(W * H * D * 24),
+    idx(x, y, z) { return (z * H * W + y * W + x) * 24; },
+    inBounds(x, y, z) { return x >= 0 && x < W && y >= 0 && y < H && z >= 0 && z < D; },
+  };
+}
+const climateGrid = fakeGrid(8, 8, 4);
+const climateRuntime = new RuntimeClimate(climateGrid);
+for (let i = 0; i < 8; i++) climateRuntime.tick(0.016);
+const climateSaved = climateRuntime.snapshot();
+climateRuntime.tick(0.016);
+climateRuntime.restore(climateSaved);
+assert.deepEqual(climateRuntime.snapshot(), climateSaved, "climate snapshot must restore wind/pressure and tick phase");
+climateRuntime.reset();
+assert.deepEqual(climateRuntime.snapshot(), new RuntimeClimate(climateGrid).snapshot(),
+  "climate reset must return to constructor baseline");
+
+const multiscaleGrid = fakeGrid(16, 16, 8);
+const multiscaleRuntime = new RuntimeMultiScale(multiscaleGrid);
+for (let i = 0; i < 20; i++) multiscaleRuntime.tick();
+const multiscaleSaved = multiscaleRuntime.snapshot();
+multiscaleRuntime.tick();
+multiscaleRuntime.restore(multiscaleSaved);
+assert.deepEqual(multiscaleRuntime.snapshot(), multiscaleSaved,
+  "multiscale snapshot must restore macro caches and tick phase");
+multiscaleRuntime.reset();
+assert.equal(multiscaleRuntime.snapshot().tickCount, 0, "multiscale reset must clear the tick phase");
+
+const languageGrid = fakeGrid(8, 8, 4);
+const languageRuntime = new RuntimeLanguage({
+  grid: languageGrid,
+  tick: 10,
+  agents: { getAgents: () => [
+    { id: 1, x: 1, y: 1, z: 1, energy: 120, signal: 14, behavior: "signaler" },
+    { id: 2, x: 2, y: 1, z: 1, energy: 180, signal: 20, behavior: "explorer" },
+  ] },
+});
+const languageSaved = {
+  vocabulary: [["1,2", { id: 1, meaning: { type: "contact", value: "nearby" }, firstSeen: 4 }]],
+  signalLog: [{ tick: 4, word: "W1", meaning: "contact" }],
+  lexiconAge: [["2,3", 3]],
+  nextWordId: 2,
+  communicationEvents: 7,
+  tickCount: 5,
+};
+languageRuntime.restore(languageSaved);
+assert.deepEqual(languageRuntime.snapshot(), languageSaved, "language snapshot must preserve vocabulary/log/learning counters");
+const beforeInvalidLanguage = languageRuntime.snapshot();
+assert.throws(() => languageRuntime.restore({ ...languageSaved, nextWordId: 1 }), /Invalid LanguageSystem next word id/);
+assert.deepEqual(languageRuntime.snapshot(), beforeInvalidLanguage,
+  "invalid language snapshots must be rejected without partial mutation");
+languageRuntime.reset();
+assert.equal(languageRuntime.snapshot().vocabulary.length, 0, "language reset must clear prior world vocabulary");
+
+const economySim = { grid: fakeGrid(8, 8, 4), tick: 42 };
+const civilizationSystemStub = { civs: [] };
+const economyRuntime = new RuntimeEconomy(economySim, civilizationSystemStub);
+const economySaved = {
+  markets: [{
+    x: 2, y: 3,
+    prices: { energy: 1.5, density: 2.0, information: 3.0 },
+    volume: { energy: 5, density: 6, information: 7 },
+    history: [{ tick: 50, pE: 1.5, pI: 3.0, vol: 5 }],
+    age: 77,
+  }],
+  gdp: [[1, 1200], [2, 900]],
+  globalGDP: 2100,
+  gini: 0.25,
+  tickCount: 200,
+};
+economyRuntime.restore(economySaved);
+assert.deepEqual(economyRuntime.snapshot(), economySaved, "economic snapshot must restore market state and GDP map");
+const beforeInvalidEconomy = economyRuntime.snapshot();
+assert.throws(() => economyRuntime.restore({ ...economySaved, gdp: [[1, Number.NaN]] }), /Invalid economic GDP entry/);
+assert.deepEqual(economyRuntime.snapshot(), beforeInvalidEconomy,
+  "invalid economy snapshots must leave live state unchanged");
+economyRuntime.reset();
+assert.equal(economyRuntime.snapshot().markets.length, 0, "economy reset must clear markets from prior world");
+
+const fakeLawEngine = { laws: [], tick() {}, removeLaw() {}, spawnMutation() {} };
+const metaLawRuntime = new RuntimeMetaLaw(fakeLawEngine, fakeGrid(2, 2, 2));
+metaLawRuntime.tick(500);
+const metaLawSaved = metaLawRuntime.snapshot();
+metaLawRuntime.tick(1000);
+metaLawRuntime.restore(metaLawSaved);
+assert.deepEqual(metaLawRuntime.snapshot(), metaLawSaved, "meta-law snapshot must restore evolution cycle state");
+metaLawRuntime.reset();
+assert.deepEqual(metaLawRuntime.snapshot(), {
+  lastCycle: 0, lastAction: "awaiting first cycle", cycleCount: 0, topLaw: "",
+}, "meta-law reset must return to initial evolution phase");
+
+const cosmologicalRuntime = new RuntimeCosmological(12345);
+cosmologicalRuntime.bigBang();
+cosmologicalRuntime.seedGalaxies(1);
+cosmologicalRuntime.step(0.01);
+const cosmologicalSaved = cosmologicalRuntime.snapshot();
+cosmologicalRuntime.step(0.02);
+cosmologicalRuntime.restore(cosmologicalSaved);
+assert.deepEqual(cosmologicalRuntime.snapshot(), cosmologicalSaved,
+  "cosmological snapshot must preserve sparse field contents, galaxies, tick and RNG");
+cosmologicalRuntime.reset();
+assert.equal(cosmologicalRuntime.tick, 0, "cosmological reset must clear tick");
+assert.equal(cosmologicalRuntime.galaxies.length, 0, "cosmological reset must clear old galaxies");
+assert.equal(cosmologicalRuntime.grid.size(), 0, "cosmological reset must clear old sparse cells");
+
+const timelineGrid = fakeGrid(4, 4, 2);
+const timelineRuntime = new RuntimeTimeline(timelineGrid, () => 0);
+timelineGrid.buffer[0] = 10;
+timelineRuntime.saveSnapshot("old world");
+timelineRuntime.autoSave(1);
+assert.ok(timelineRuntime.snapshots.length > 0, "timeline test must create old-world snapshots");
+timelineRuntime.reset();
+assert.equal(timelineRuntime.snapshots.length, 0, "timeline reset must clear previous-world field snapshots");
+assert.equal(timelineRuntime.metrics.length, 0, "timeline reset must clear previous-world metrics");
 
 console.log("PASS: field persistence round-trip and seed isolation");
 console.log("PASS: quota, read, delete, and corrupt-storage failures are contained");

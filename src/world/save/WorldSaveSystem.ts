@@ -13,6 +13,12 @@ import type { LawEngineSnapshot } from '../../laws/LawEngine';
 import type { ChemLayerSnapshot } from '../../chemistry/ChemLayer';
 import type { WorldEventsSnapshot } from '../WorldEvents';
 import type { CausalGraphSnapshot } from '../../simulation/CausalGraph';
+import type { ClimateSystemSnapshot } from '../../simulation/ClimateSystem';
+import type { MultiScaleSystemSnapshot } from '../../simulation/MultiScaleSystem';
+import type { LanguageSystemSnapshot } from '../../simulation/LanguageEmergence';
+import type { EconomicSystemSnapshot } from '../../simulation/EconomicSystem';
+import type { MetaLawEvolutionSnapshot } from '../../simulation/MetaLawEvolution';
+import type { CosmologicalSimSnapshot } from '../../simulation/CosmologicalSim';
 
 interface RealitySaveDb extends DBSchema {
   saves: {
@@ -76,6 +82,25 @@ interface SaveContext {
   restorePreviousEnergySnapshot?: (snapshot: Float32Array) => void;
   resetPreviousEnergy?: () => void;
   clearRecorderSnapshots?: () => void;
+  getClimateSnapshot?: () => ClimateSystemSnapshot;
+  restoreClimateSnapshot?: (snapshot: ClimateSystemSnapshot) => void;
+  resetClimate?: () => void;
+  getMultiScaleSnapshot?: () => MultiScaleSystemSnapshot;
+  restoreMultiScaleSnapshot?: (snapshot: MultiScaleSystemSnapshot) => void;
+  resetMultiScale?: () => void;
+  getLanguageSnapshot?: () => LanguageSystemSnapshot;
+  restoreLanguageSnapshot?: (snapshot: LanguageSystemSnapshot) => void;
+  resetLanguage?: () => void;
+  getEconomicSnapshot?: () => EconomicSystemSnapshot;
+  restoreEconomicSnapshot?: (snapshot: EconomicSystemSnapshot) => void;
+  resetEconomic?: () => void;
+  getMetaLawEvolutionSnapshot?: () => MetaLawEvolutionSnapshot;
+  restoreMetaLawEvolutionSnapshot?: (snapshot: MetaLawEvolutionSnapshot) => void;
+  resetMetaLawEvolution?: () => void;
+  getCosmologicalSnapshot?: () => CosmologicalSimSnapshot;
+  restoreCosmologicalSnapshot?: (snapshot: CosmologicalSimSnapshot) => void;
+  resetCosmological?: () => void;
+  clearTimeline?: () => void;
   getCausalLog?: () => unknown[];
   thumbnailCanvas?: HTMLCanvasElement | null;
 }
@@ -157,6 +182,12 @@ export class WorldSaveSystem {
         worldEvents: this.context.getWorldEventsSnapshot?.(),
         causal: this.context.getCausalSnapshot?.(),
         previousEnergy: this.context.getPreviousEnergySnapshot?.(),
+        climate: this.context.getClimateSnapshot?.(),
+        multiScale: this.context.getMultiScaleSnapshot?.(),
+        language: this.context.getLanguageSnapshot?.(),
+        economy: this.context.getEconomicSnapshot?.(),
+        metaLawEvolution: this.context.getMetaLawEvolutionSnapshot?.(),
+        cosmologicalSim: this.context.getCosmologicalSnapshot?.(),
       },
       realityGraph: this.context.graphProvider?.(),
       activeLaws: activeLaws.map(law => this.snapshotLaw(law)),
@@ -187,6 +218,12 @@ export class WorldSaveSystem {
     const worldEventsBefore = this.context.getWorldEventsSnapshot?.();
     const causalBefore = this.context.getCausalSnapshot?.();
     const previousEnergyBefore = this.context.getPreviousEnergySnapshot?.();
+    const climateBefore = this.context.getClimateSnapshot?.();
+    const multiScaleBefore = this.context.getMultiScaleSnapshot?.();
+    const languageBefore = this.context.getLanguageSnapshot?.();
+    const economicBefore = this.context.getEconomicSnapshot?.();
+    const metaLawEvolutionBefore = this.context.getMetaLawEvolutionSnapshot?.();
+    const cosmologicalBefore = this.context.getCosmologicalSnapshot?.();
 
     const apply = () => {
       if (snapshot.chunks && !this.voxelGrid.loadChunks) {
@@ -254,6 +291,36 @@ export class WorldSaveSystem {
       } else {
         this.context.resetPreviousEnergy?.();
       }
+      if (runtime?.climate && this.context.restoreClimateSnapshot) {
+        this.context.restoreClimateSnapshot(runtime.climate);
+      } else {
+        this.context.resetClimate?.();
+      }
+      if (runtime?.multiScale && this.context.restoreMultiScaleSnapshot) {
+        this.context.restoreMultiScaleSnapshot(runtime.multiScale);
+      } else {
+        this.context.resetMultiScale?.();
+      }
+      if (runtime?.language && this.context.restoreLanguageSnapshot) {
+        this.context.restoreLanguageSnapshot(runtime.language);
+      } else {
+        this.context.resetLanguage?.();
+      }
+      if (runtime?.economy && this.context.restoreEconomicSnapshot) {
+        this.context.restoreEconomicSnapshot(runtime.economy);
+      } else {
+        this.context.resetEconomic?.();
+      }
+      if (runtime?.metaLawEvolution && this.context.restoreMetaLawEvolutionSnapshot) {
+        this.context.restoreMetaLawEvolutionSnapshot(runtime.metaLawEvolution);
+      } else {
+        this.context.resetMetaLawEvolution?.();
+      }
+      if (runtime?.cosmologicalSim && this.context.restoreCosmologicalSnapshot) {
+        this.context.restoreCosmologicalSnapshot(runtime.cosmologicalSim);
+      } else {
+        this.context.resetCosmological?.();
+      }
 
       // Recorder entries currently store field frames, not full runtime checkpoints.
       // Never leave history from the previous world attached to the restored field.
@@ -302,6 +369,24 @@ export class WorldSaveSystem {
       if (previousEnergyBefore !== undefined && this.context.restorePreviousEnergySnapshot) {
         rollback("Previous-energy baseline", () => this.context.restorePreviousEnergySnapshot!(previousEnergyBefore));
       }
+      if (climateBefore !== undefined && this.context.restoreClimateSnapshot) {
+        rollback("Climate", () => this.context.restoreClimateSnapshot!(climateBefore));
+      }
+      if (multiScaleBefore !== undefined && this.context.restoreMultiScaleSnapshot) {
+        rollback("Multiscale", () => this.context.restoreMultiScaleSnapshot!(multiScaleBefore));
+      }
+      if (languageBefore !== undefined && this.context.restoreLanguageSnapshot) {
+        rollback("Language", () => this.context.restoreLanguageSnapshot!(languageBefore));
+      }
+      if (economicBefore !== undefined && this.context.restoreEconomicSnapshot) {
+        rollback("Economy", () => this.context.restoreEconomicSnapshot!(economicBefore));
+      }
+      if (metaLawEvolutionBefore !== undefined && this.context.restoreMetaLawEvolutionSnapshot) {
+        rollback("Meta-law evolution", () => this.context.restoreMetaLawEvolutionSnapshot!(metaLawEvolutionBefore));
+      }
+      if (cosmologicalBefore !== undefined && this.context.restoreCosmologicalSnapshot) {
+        rollback("Cosmological simulation", () => this.context.restoreCosmologicalSnapshot!(cosmologicalBefore));
+      }
       if (rollbackErrors.length > 0) {
         throw new AggregateError(
           [error, ...rollbackErrors],
@@ -311,6 +396,9 @@ export class WorldSaveSystem {
       throw error;
     }
 
+    // Timeline is a history of grid-only frames, not a full world checkpoint.
+    // Clear it only after the new world transaction commits successfully.
+    this.context.clearTimeline?.();
     this.currentSnapshot = snapshot;
     console.info(`World "${snapshot.name}" fully restored.`);
   }

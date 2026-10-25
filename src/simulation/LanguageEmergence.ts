@@ -1,16 +1,25 @@
 import { SimulationEngine } from './SimulationEngine';
 import { F } from '../core/CellState';
 
-interface SignalPattern {
+export interface SignalPattern {
   id: number;
   meaning: { type: string; value: string };
   firstSeen: number;
 }
 
-interface SignalEntry {
+export interface SignalEntry {
   tick: number;
   word: string;
   meaning: string;
+}
+
+export interface LanguageSystemSnapshot {
+  vocabulary: Array<[string, SignalPattern]>;
+  signalLog: SignalEntry[];
+  lexiconAge: Array<[string, number]>;
+  nextWordId: number;
+  communicationEvents: number;
+  tickCount: number;
 }
 
 export class LanguageSystem {
@@ -24,6 +33,85 @@ export class LanguageSystem {
 
   constructor(sim: SimulationEngine) {
     this.sim = sim;
+  }
+
+  snapshot(): LanguageSystemSnapshot {
+    return {
+      vocabulary: [...this.vocabulary.entries()].map(([key, pattern]) => [
+        key,
+        { ...pattern, meaning: { ...pattern.meaning } },
+      ]),
+      signalLog: this.signalLog.map(entry => ({ ...entry })),
+      lexiconAge: [...this.lexiconAge.entries()],
+      nextWordId: this.nextWordId,
+      communicationEvents: this.communicationEvents,
+      tickCount: this.tickCount,
+    };
+  }
+
+  restore(snapshot: LanguageSystemSnapshot): void {
+    if (!snapshot ||
+        !Array.isArray(snapshot.vocabulary) || snapshot.vocabulary.length > 100_000 ||
+        !Array.isArray(snapshot.signalLog) || snapshot.signalLog.length > 20 ||
+        !Array.isArray(snapshot.lexiconAge) || snapshot.lexiconAge.length > 100_000 ||
+        !Number.isSafeInteger(snapshot.nextWordId) || snapshot.nextWordId < 1 ||
+        !Number.isSafeInteger(snapshot.communicationEvents) || snapshot.communicationEvents < 0 ||
+        !Number.isSafeInteger(snapshot.tickCount) || snapshot.tickCount < 0) {
+      throw new Error("Invalid LanguageSystem snapshot");
+    }
+    const vocabulary = new Map<string, SignalPattern>();
+    let maxWordId = 0;
+    for (const entry of snapshot.vocabulary) {
+      if (!Array.isArray(entry) || entry.length !== 2 ||
+          typeof entry[0] !== "string" || vocabulary.has(entry[0])) {
+        throw new Error("Invalid LanguageSystem vocabulary entry");
+      }
+      const pattern = entry[1];
+      if (!pattern || !Number.isSafeInteger(pattern.id) || pattern.id < 1 ||
+          !Number.isSafeInteger(pattern.firstSeen) || pattern.firstSeen < 0 ||
+          !pattern.meaning || typeof pattern.meaning.type !== "string" ||
+          typeof pattern.meaning.value !== "string") {
+        throw new Error("Invalid LanguageSystem signal pattern");
+      }
+      maxWordId = Math.max(maxWordId, pattern.id);
+      vocabulary.set(entry[0], { ...pattern, meaning: { ...pattern.meaning } });
+    }
+    if (snapshot.nextWordId <= maxWordId) throw new Error("Invalid LanguageSystem next word id");
+
+    const signalLog: SignalEntry[] = [];
+    for (const entry of snapshot.signalLog) {
+      if (!entry || !Number.isSafeInteger(entry.tick) || entry.tick < 0 ||
+          typeof entry.word !== "string" || typeof entry.meaning !== "string") {
+        throw new Error("Invalid LanguageSystem signal log");
+      }
+      signalLog.push({ ...entry });
+    }
+    const lexiconAge = new Map<string, number>();
+    for (const entry of snapshot.lexiconAge) {
+      if (!Array.isArray(entry) || entry.length !== 2 ||
+          typeof entry[0] !== "string" || !Number.isSafeInteger(entry[1]) ||
+          entry[1] < 0 || lexiconAge.has(entry[0])) {
+        throw new Error("Invalid LanguageSystem lexicon age");
+      }
+      lexiconAge.set(entry[0], entry[1]);
+    }
+    this.vocabulary.clear();
+    for (const [key, value] of vocabulary) this.vocabulary.set(key, value);
+    this.signalLog.splice(0, this.signalLog.length, ...signalLog);
+    this.lexiconAge.clear();
+    for (const [key, value] of lexiconAge) this.lexiconAge.set(key, value);
+    this.nextWordId = snapshot.nextWordId;
+    this.communicationEvents = snapshot.communicationEvents;
+    this.tickCount = snapshot.tickCount;
+  }
+
+  reset(): void {
+    this.vocabulary.clear();
+    this.signalLog.length = 0;
+    this.lexiconAge.clear();
+    this.nextWordId = 1;
+    this.communicationEvents = 0;
+    this.tickCount = 0;
   }
 
   willWriteGridOnNextTick(): boolean {

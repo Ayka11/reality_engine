@@ -7,6 +7,12 @@ import type { LawEngineSnapshot } from '../../laws/LawEngine';
 import type { ChemLayerSnapshot } from '../../chemistry/ChemLayer';
 import type { WorldEventsSnapshot } from '../../world/WorldEvents';
 import type { CausalGraphSnapshot } from '../../simulation/CausalGraph';
+import type { ClimateSystemSnapshot } from '../../simulation/ClimateSystem';
+import type { MultiScaleSystemSnapshot } from '../../simulation/MultiScaleSystem';
+import type { LanguageSystemSnapshot } from '../../simulation/LanguageEmergence';
+import type { EconomicSystemSnapshot } from '../../simulation/EconomicSystem';
+import type { MetaLawEvolutionSnapshot } from '../../simulation/MetaLawEvolution';
+import type { CosmologicalSimSnapshot } from '../../simulation/CosmologicalSim';
 
 export type SaveFormat = 'reality' | 'quick' | 'scientific' | 'minimal';
 
@@ -35,6 +41,12 @@ export interface WorldRuntimeStateSnapshot {
   causal?: CausalGraphSnapshot;
   /** Energy baseline used to calculate causal spikes after the next frame. */
   previousEnergy?: Float32Array;
+  climate?: ClimateSystemSnapshot;
+  multiScale?: MultiScaleSystemSnapshot;
+  language?: LanguageSystemSnapshot;
+  economy?: EconomicSystemSnapshot;
+  metaLawEvolution?: MetaLawEvolutionSnapshot;
+  cosmologicalSim?: CosmologicalSimSnapshot;
 }
 
 export interface WorldSnapshot {

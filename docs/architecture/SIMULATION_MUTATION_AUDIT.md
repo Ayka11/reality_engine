@@ -138,3 +138,8 @@ The main animation loop now predicts whether climate, multiscale, or language ti
 ### Synchronous mutation callback preflight
 
 The authoritative mutation boundary now rejects native async, async-generator, and generator callbacks before invoking them. Rejecting only the returned Promise is too late for an `async` callback: code before its first `await` may mutate state, and its continuation can resume after rollback. Regression coverage verifies an async callback's body is never entered and a returned thenable still triggers synchronous-prefix rollback. Callbacks must still avoid scheduling detached side effects themselves; JavaScript cannot cancel arbitrary external work created by a nominally synchronous function.
+
+
+### Auxiliary runtime state in quick saves
+
+Quick saves now retain the in-process state that changes how future ticks evolve beyond the core grid: climate wind/pressure and cadence, multiscale caches/cadence, learned vocabulary and communication history, market/GDP state, meta-law evolution phase, and the cosmological sparse simulation including its RNG. These states use validated detached snapshots and are restored within the engine-owned world transaction, with previous-state rollback if a domain rejects a candidate. Portable/legacy imports reset omitted auxiliary engines instead of accidentally continuing the previous world's learning, market, climate, or cosmological state. Timeline field-only history is cleared only after the world restore commits successfully.

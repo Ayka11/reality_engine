@@ -64,6 +64,11 @@ export class Timeline {
     return snap;
   }
 
+  reset(): void {
+    this.snapshots.length = 0;
+    this.metrics.length = 0;
+  }
+
   restore(index: number): boolean {
     const snap = this.snapshots[index];
     if (!snap) return false;
