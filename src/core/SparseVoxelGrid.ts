@@ -87,7 +87,7 @@ export class SparseVoxelGrid {
     this._sparseDenseBackBuffer = new Float32Array(this.size * CELL_FIELDS);
     this._sparseDenseBufferView = createTrackedFloat32Array(this._sparseDenseBuffer, () => this.markMutation());
     this._sparseDenseBackBufferView = createTrackedFloat32Array(this._sparseDenseBackBuffer, () => this.markMutation());
-    this.chunks = new MutationTrackedChunkMap(() => this.markMutation());
+    this.chunks = new MutationTrackedChunkMap(() => this.onChunkMapMutation());
     this.seedDenseWindowChunks();
   }
 
@@ -155,7 +155,6 @@ export class SparseVoxelGrid {
     if (!chunk) {
       chunk = new Chunk(cx, cy, cz);
       this.chunks.set(key, chunk);
-      this.updateActiveRange();
     }
     chunk.active = true;
     chunk.lastAccessed = Date.now();
@@ -282,6 +281,16 @@ export class SparseVoxelGrid {
       chunk.active = data.active;
       chunk.lastAccessed = data.lastAccessed;
       restoredChunks.set(data.key, chunk);
+    }
+
+    const restoredRange = this.chunkRangeFor(restoredChunks.values());
+    if (restoredRange.minX !== snapshot.activeChunkRange.minX ||
+        restoredRange.maxX !== snapshot.activeChunkRange.maxX ||
+        restoredRange.minY !== snapshot.activeChunkRange.minY ||
+        restoredRange.maxY !== snapshot.activeChunkRange.maxY ||
+        restoredRange.minZ !== snapshot.activeChunkRange.minZ ||
+        restoredRange.maxZ !== snapshot.activeChunkRange.maxZ) {
+      throw new Error("Invalid SparseVoxelGrid snapshot active chunk range");
     }
 
     const isValidChunkKey = (key: unknown): key is string => {
@@ -575,12 +584,17 @@ export class SparseVoxelGrid {
   }
 
   cullInactive(maxAgeMs = 300_000): void {
-    for (const [key, chunk] of this.chunks) {
-      if (!chunk.active && Date.now() - chunk.lastAccessed > maxAgeMs && chunk.isEmpty()) {
-        this.chunks.delete(key);
+    const endMutation = this.beginMutation();
+    try {
+      for (const [key, chunk] of this.chunks) {
+        if (!chunk.active && Date.now() - chunk.lastAccessed > maxAgeMs && chunk.isEmpty()) {
+          this.chunks.delete(key);
+        }
       }
+      this.updateActiveRange();
+    } finally {
+      endMutation();
     }
-    this.updateActiveRange();
   }
 
   markEmptyChunksInactive(threshold = 0.0001): void {
@@ -665,15 +679,22 @@ export class SparseVoxelGrid {
   }
 
   private seedDenseWindowChunks(): void {
-    const maxCx = Math.ceil((this.denseOrigin.x + this.W) / CHUNK_SIZE) - 1;
-    const maxCy = Math.ceil((this.denseOrigin.y + this.H) / CHUNK_SIZE) - 1;
-    const maxCz = Math.ceil((this.denseOrigin.z + this.D) / CHUNK_SIZE) - 1;
-    const [minCx] = this.globalToChunk(this.denseOrigin.x);
-    const [minCy] = this.globalToChunk(this.denseOrigin.y);
-    const [minCz] = this.globalToChunk(this.denseOrigin.z);
-    for (let cz = minCz; cz <= maxCz; cz++)
-    for (let cy = minCy; cy <= maxCy; cy++)
-    for (let cx = minCx; cx <= maxCx; cx++) this.getOrCreateChunk(cx, cy, cz);
+    // Batch topology changes and recompute the derived range once after seeding.
+    const endMutation = this.beginMutation();
+    try {
+      const maxCx = Math.ceil((this.denseOrigin.x + this.W) / CHUNK_SIZE) - 1;
+      const maxCy = Math.ceil((this.denseOrigin.y + this.H) / CHUNK_SIZE) - 1;
+      const maxCz = Math.ceil((this.denseOrigin.z + this.D) / CHUNK_SIZE) - 1;
+      const [minCx] = this.globalToChunk(this.denseOrigin.x);
+      const [minCy] = this.globalToChunk(this.denseOrigin.y);
+      const [minCz] = this.globalToChunk(this.denseOrigin.z);
+      for (let cz = minCz; cz <= maxCz; cz++)
+      for (let cy = minCy; cy <= maxCy; cy++)
+      for (let cx = minCx; cx <= maxCx; cx++) this.getOrCreateChunk(cx, cy, cz);
+      this.updateActiveRange();
+    } finally {
+      endMutation();
+    }
   }
 
   private assertDenseCoordinates(x: number, y: number, z: number, method: string): void {
@@ -698,20 +719,50 @@ export class SparseVoxelGrid {
     return [c, l];
   }
 
-  private updateActiveRange(): void {
-    const chunks = [...this.chunks.values()];
-    if (!chunks.length) {
-      this.activeChunkRange = { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 };
+  private onChunkMapMutation(): void {
+    // Internal bulk operations call beginMutation() and update the derived range
+    // once after their batch; direct public Map writes must keep it synchronized.
+    if (this.sparseMutationDepth > 0) {
+      this.markMutation();
       return;
     }
-    this.activeChunkRange = {
-      minX: Math.min(...chunks.map(chunk => chunk.cx)),
-      maxX: Math.max(...chunks.map(chunk => chunk.cx)),
-      minY: Math.min(...chunks.map(chunk => chunk.cy)),
-      maxY: Math.max(...chunks.map(chunk => chunk.cy)),
-      minZ: Math.min(...chunks.map(chunk => chunk.cz)),
-      maxZ: Math.max(...chunks.map(chunk => chunk.cz)),
-    };
+    const previous = this._activeChunkRange;
+    this.updateActiveRange();
+    const current = this._activeChunkRange;
+    if (previous.minX === current.minX && previous.maxX === current.maxX &&
+        previous.minY === current.minY && previous.maxY === current.maxY &&
+        previous.minZ === current.minZ && previous.maxZ === current.maxZ) {
+      // Topology changed within the existing bounds, so the range setter did not
+      // register the mutation; advance the revision for the map change itself.
+      this.markMutation();
+    }
+  }
+
+  private chunkRangeFor(chunks: Iterable<Chunk>): {
+    minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number;
+  } {
+    let hasChunks = false;
+    let minX = 0, maxX = 0, minY = 0, maxY = 0, minZ = 0, maxZ = 0;
+    for (const chunk of chunks) {
+      if (!hasChunks) {
+        minX = maxX = chunk.cx;
+        minY = maxY = chunk.cy;
+        minZ = maxZ = chunk.cz;
+        hasChunks = true;
+      } else {
+        minX = Math.min(minX, chunk.cx);
+        maxX = Math.max(maxX, chunk.cx);
+        minY = Math.min(minY, chunk.cy);
+        maxY = Math.max(maxY, chunk.cy);
+        minZ = Math.min(minZ, chunk.cz);
+        maxZ = Math.max(maxZ, chunk.cz);
+      }
+    }
+    return { minX, maxX, minY, maxY, minZ, maxZ };
+  }
+
+  private updateActiveRange(): void {
+    this.activeChunkRange = this.chunkRangeFor(this.chunks.values());
   }
 }
 

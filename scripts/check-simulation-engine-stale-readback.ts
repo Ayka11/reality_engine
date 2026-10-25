@@ -180,7 +180,11 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   const deleteGrid = new SparseVoxelGrid(1, 1, 1);
   const deletedChunk = deleteGrid.getOrCreateChunk(3, 3, 3);
   const deletedKey = deleteGrid.getChunkKey(3, 3, 3);
+  assert.equal(deleteGrid.activeChunkRange.maxX, 3, "creating an edge chunk must expand active range");
   assert.equal(deleteGrid.chunks.delete(deletedKey), true);
+  assert.deepEqual(deleteGrid.activeChunkRange,
+    { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 },
+    "deleting an edge chunk must recompute the active range from remaining topology");
   const beforeDeletedChunkWrite = deleteGrid.mutationRevision;
   deletedChunk.buffer[0] = 701;
   assert.equal(deleteGrid.mutationRevision, beforeDeletedChunkWrite,
@@ -190,6 +194,9 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   const clearGrid = new SparseVoxelGrid(1, 1, 1);
   const clearedChunk = clearGrid.getOrCreateChunk(3, 3, 3);
   clearGrid.chunks.clear();
+  assert.deepEqual(clearGrid.activeChunkRange,
+    { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 },
+    "clearing the chunk map must reset the derived active range");
   const beforeClearedChunkWrite = clearGrid.mutationRevision;
   clearedChunk.buffer[0] = 702;
   assert.equal(clearGrid.mutationRevision, beforeClearedChunkWrite,

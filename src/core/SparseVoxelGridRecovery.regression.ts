@@ -176,6 +176,10 @@ export function runSparseVoxelGridInvalidSnapshotRegression(grid = new SparseVox
   invalidRange.activeChunkRange.minX = invalidRange.activeChunkRange.maxX + 1;
   assertRejectedWithoutMutation(invalidRange, "inverted active chunk range");
 
+  const inconsistentRange = cloneSnapshot(baseline);
+  inconsistentRange.activeChunkRange.maxX += 100;
+  assertRejectedWithoutMutation(inconsistentRange, "active range inconsistent with chunk topology");
+
   const invalidChunkKey = cloneSnapshot(baseline);
   invalidChunkKey.chunks[0].key = "not-a-grid-key";
   assertRejectedWithoutMutation(invalidChunkKey, "invalid chunk key");
