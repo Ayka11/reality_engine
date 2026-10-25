@@ -27,6 +27,7 @@
     "test:construction": "node scripts/check-world-construction-contract.mjs",
     "test:law-physics": "node scripts/check-law-physics-contract.mjs",
     "test:chunk-worker-physics": "node scripts/check-chunk-worker-physics-contract.mjs",
+    "test:chunk-worker-physics-runtime": "npx --yes tsx scripts/check-chunk-worker-physics.ts",
     "test:legacy-field-bridge": "node scripts/check-legacy-field-bridge.mjs",
     "test:field-profile": "node scripts/check-scientific-field-profile.mjs",
     "test:mutable-field-profile": "node scripts/check-mutable-field-profile.mjs",
