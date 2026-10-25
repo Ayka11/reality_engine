@@ -168,7 +168,7 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   clear(){this.mutations=[];this.globalOverlays.clear();this.versionCounter++}
   getVersion(){return this.versionCounter}
   getMutationCount(){return this.mutations.length}
-  serialize(){return structuredClone({schemaVersion:'world-field-state-v2',providerId:this.id,providerVersion:this.version,version:this.versionCounter,nextId:this.nextId,mutations:this.mutations,globalOverlays:Array.from(this.globalOverlays.entries()).map(([kind,value])=>({kind,scale:value.scale,delta:value.delta,metadata:value.metadata}))})}
+  serialize(){return structuredClone({schemaVersion:'world-field-state-v2',providerId:this.id,providerVersion:this.version,version:this.versionCounter,nextId:this.nextId,mutations:this.mutations.map(m=>({...m,metadata:m.metadata===undefined?undefined:m.metadata})),globalOverlays:Array.from(this.globalOverlays.entries()).map(([kind,value])=>({kind,scale:value.scale,delta:value.delta,metadata:value.metadata===undefined?undefined:value.metadata}))})}
   restore(state:ReturnType<MutableWorldFieldProvider['serialize']>){
     // Clone before validation/commit so the caller cannot mutate restored nested state.
     const detached=structuredClone(state)
