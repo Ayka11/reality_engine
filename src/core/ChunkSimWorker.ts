@@ -300,7 +300,9 @@ function simStep(dt: number) {
         const rate = 0.003 * materialRate
         grid.set(x, y, z, F.D, Math.min(1, density + rate * (0.18 - entropy) * dt * 60))
         grid.set(x, y, z, F.S, Math.max(0, entropy - rate * 0.5 * dt * 60))
-        if ([MAT.VACUUM, MAT.STONE, MAT.SAND].includes(currentMaterialId as typeof MAT[keyof typeof MAT])) {
+        if (currentMaterialId === MAT.VACUUM ||
+            currentMaterialId === MAT.STONE ||
+            currentMaterialId === MAT.SAND) {
           grid.set(x, y, z, F.MAT, MAT.CRYSTAL)
         }
       }
