@@ -1,5 +1,5 @@
 import { InfinityScaleAdaptiveLODTransactionBridge } from "./InfinityScaleAdaptiveLODTransactionBridge";
-import { beginInfinityScaleGlobalFrame, advanceInfinityScaleGlobalFrame } from "./InfinityScaleGlobalExecutionFrame";
+import { assertInfinityScaleGlobalFramePlan, beginInfinityScaleGlobalFrame, advanceInfinityScaleGlobalFrame } from "./InfinityScaleGlobalExecutionFrame";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 import { InfinityScaleExecutionAdapter } from "./InfinityScaleExecutionAdapter";
@@ -475,6 +475,15 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   schedulingBridge.begin(schedulingFrame);
   const originalDistance = schedulingPlan.chunks[0].distance;
   schedulingPlan.chunks[0].distance = originalDistance + 1;
+  let assertChangedDistanceRejected = false;
+  try {
+    assertInfinityScaleGlobalFramePlan(schedulingFrame, schedulingPlan);
+  } catch (error) {
+    assertChangedDistanceRejected = error instanceof Error && error.message.includes("ownership changed");
+  }
+  if (!assertChangedDistanceRejected) {
+    throw new Error("Frame-plan assertion accepted changed chunk distance without a context");
+  }
   let changedDistanceRejected = false;
   try {
     schedulingBridge.commit(schedulingFrame, []);
@@ -525,6 +534,15 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
 
   capabilityBridge.begin(capabilityFrame);
   capabilityPlan.selectiveGpuReady = !capabilityPlan.selectiveGpuReady;
+  let assertChangedCapabilityRejected = false;
+  try {
+    assertInfinityScaleGlobalFramePlan(capabilityFrame, capabilityPlan);
+  } catch (error) {
+    assertChangedCapabilityRejected = error instanceof Error && error.message.includes("capabilities changed");
+  }
+  if (!assertChangedCapabilityRejected) {
+    throw new Error("Frame-plan assertion accepted changed capabilities without a context");
+  }
   let changedCapabilityRejected = false;
   try {
     capabilityBridge.commit(capabilityFrame, []);
