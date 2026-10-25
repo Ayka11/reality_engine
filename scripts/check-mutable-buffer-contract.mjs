@@ -271,6 +271,14 @@ for (const filePath of sourcePaths) {
           containsAwaitOrYield(fn)) return false;
       let passedToReconcile = false;
       let invalidReference = false;
+      function isInsideCatch(node) {
+        let current = node.parent;
+        while (current && current !== methodNode) {
+          if (ts.isCatchClause(current)) return true;
+          current = current.parent;
+        }
+        return false;
+      }
       function visitOwner(current) {
         if (ts.isIdentifier(current) && current.text === "rollbackTick") {
           const parent = current.parent;
@@ -281,8 +289,10 @@ for (const filePath of sourcePaths) {
               ts.isPropertyAccessExpression(parent.expression) &&
               parent.expression.name.text === "_reconcileFullDomain" &&
               parent.arguments.some(argument => argument === current);
+            const synchronousRollbackCall = ts.isCallExpression(parent) &&
+              parent.expression === current && parent.arguments.length === 0 && isInsideCatch(current);
             if (expectedArgument) passedToReconcile = true;
-            else invalidReference = true;
+            else if (!synchronousRollbackCall) invalidReference = true;
           }
         }
         ts.forEachChild(current, visitOwner);
