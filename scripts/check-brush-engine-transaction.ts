@@ -25,6 +25,39 @@ grid.buffer[grid.idx(3, 3, 3) + F.ENERGY] = 7;
 grid.syncDenseToChunks();
 const sync = grid.syncDenseToChunks.bind(grid);
 
+// Segment planning must map non-aligned and negative dense origins across
+// multiple physical chunks without losing or shifting any field values.
+const offsetGrid = new SparseVoxelGrid(19, 3, 2);
+offsetGrid.denseOrigin = { x: 14, y: -2, z: 31 };
+for (let z = 0; z < offsetGrid.D; z++) {
+  for (let y = 0; y < offsetGrid.H; y++) {
+    for (let x = 0; x < offsetGrid.W; x++) {
+      const base = offsetGrid.idx(x, y, z);
+      offsetGrid.buffer[base + F.ENERGY] = 1000 + x + 100 * y + 10000 * z;
+      offsetGrid.buffer[base + F.INFORMATION] = x + y + z + 0.25;
+    }
+  }
+}
+const offsetBaseline = offsetGrid.buffer.slice();
+offsetGrid.syncDenseToChunks();
+for (let z = 0; z < offsetGrid.D; z++) {
+  for (let y = 0; y < offsetGrid.H; y++) {
+    for (let x = 0; x < offsetGrid.W; x++) {
+      const gx = x + offsetGrid.denseOrigin.x;
+      const gy = y + offsetGrid.denseOrigin.y;
+      const gz = z + offsetGrid.denseOrigin.z;
+      const cell = offsetGrid.getCell(gx, gy, gz);
+      assert.ok(cell, `chunk cell must exist at (${gx}, ${gy}, ${gz})`);
+      const base = offsetGrid.idx(x, y, z);
+      assert.equal(cell.energy, offsetBaseline[base + F.ENERGY], "segmented sync must preserve energy across chunk boundaries");
+      assert.equal(cell.information, offsetBaseline[base + F.INFORMATION], "segmented sync must preserve information across chunk boundaries");
+    }
+  }
+}
+offsetGrid.buffer.fill(0);
+offsetGrid.syncChunksToDense();
+assertBufferEqual(offsetGrid.buffer, offsetBaseline, "chunk-to-dense round-trip must preserve non-aligned multi-chunk windows");
+
 // A staging failure must not publish a partial dense-to-chunk copy.
 const seededChunk = grid.chunks.values().next().value!;
 const chunkBeforeStagingFailure = seededChunk.buffer.slice();
