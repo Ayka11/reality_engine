@@ -107,6 +107,22 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(engine.grid.chunkOwners.get("7,8,9"), "test-owner",
     "stale GPU data must not overwrite newer chunk ownership metadata");
 
+  const beforeDirtyDelete = engine.grid.mutationRevision;
+  assert.equal(engine.grid.dirtyChunks.delete("7,8,9"), true);
+  assert.ok(engine.grid.mutationRevision > beforeDirtyDelete, "dirty-chunk Set.delete must advance grid revision");
+  engine.grid.dirtyChunks.add("7,8,9");
+  const beforeDirtyClear = engine.grid.mutationRevision;
+  engine.grid.dirtyChunks.clear();
+  assert.ok(engine.grid.mutationRevision > beforeDirtyClear, "dirty-chunk Set.clear must advance grid revision");
+
+  const beforeOwnerDelete = engine.grid.mutationRevision;
+  assert.equal(engine.grid.chunkOwners.delete("7,8,9"), true);
+  assert.ok(engine.grid.mutationRevision > beforeOwnerDelete, "chunk-owner Map.delete must advance grid revision");
+  engine.grid.chunkOwners.set("7,8,9", "test-owner");
+  const beforeOwnerClear = engine.grid.mutationRevision;
+  engine.grid.chunkOwners.clear();
+  assert.ok(engine.grid.mutationRevision > beforeOwnerClear, "chunk-owner Map.clear must advance grid revision");
+
   assert.ok(engine.grid.mutationRevision > publicRevision, "all external mutation scenarios should be revision-visible");
   console.log("SimulationEngine stale GPU readback mutation-revision regression: PASS");
 }
