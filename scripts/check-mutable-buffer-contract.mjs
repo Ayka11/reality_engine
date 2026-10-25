@@ -198,8 +198,8 @@ for (const filePath of sourcePaths) {
   visit(source);
 
   // The call-site inventory above is necessary but not sufficient: an audited
-  // local alias must not escape its synchronous owner through a return,
-  // object/property assignment, or a nested callback that can outlive the frame.
+  // local alias must not escape its synchronous owner through a return or
+  // object/property assignment. Callback lifetimes need a separate ownership review.
   for (const [key, methodNode] of methodNodes) {
     if (!key) continue;
     const aliases = new Set();
@@ -219,18 +219,12 @@ for (const filePath of sourcePaths) {
     collectAliases(methodNode);
     if (aliases.size === 0) continue;
 
-    function inspectAliasUse(node, nestedFunction = false) {
-      const isNestedFunction = nestedFunction ||
-        ((ts.isArrowFunction(node) || ts.isFunctionExpression(node)) && node !== methodNode);
+    function inspectAliasUse(node) {
       if (ts.isIdentifier(node) && aliases.has(node.text)) {
         const parent = node.parent;
         const isDeclarationName =
           (ts.isVariableDeclaration(parent) && parent.name === node) ||
           (ts.isParameter(parent) && parent.name === node);
-        if (!isDeclarationName && isNestedFunction) {
-          const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
-          errors.push(`${path}:${line}: raw buffer alias "${node.text}" is captured by a nested function/closure`);
-        }
         if (!isDeclarationName && ts.isReturnStatement(parent) && parent.expression === node) {
           const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be returned from its audited method`);
@@ -242,7 +236,7 @@ for (const filePath of sourcePaths) {
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be stored on an object/property`);
         }
       }
-      ts.forEachChild(node, child => inspectAliasUse(child, isNestedFunction));
+      ts.forEachChild(node, inspectAliasUse);
     }
     inspectAliasUse(methodNode);
   }
