@@ -47,8 +47,59 @@ function runGridDimensionValidationRegression(): void {
   }
 }
 
+function runDenseOriginMutationContractRegression(): void {
+  const grid = new SparseVoxelGrid(2, 2, 2);
+  const internalView = grid as unknown as {
+    denseOrigin: { x: number; y: number; z: number };
+  };
+  const origin = internalView.denseOrigin;
+  const initialRevision = grid.mutationRevision;
+
+  let nestedWriteRejected = false;
+  try {
+    origin.x = 7;
+  } catch {
+    nestedWriteRejected = true;
+  }
+  if (!nestedWriteRejected || internalView.denseOrigin.x !== 0) {
+    throw new Error("Dense origin nested writes must not mutate the internal coordinate object");
+  }
+  if (grid.mutationRevision !== initialRevision) {
+    throw new Error("Rejected nested dense origin write must not advance the mutation revision");
+  }
+
+  let invalidReplacementRejected = false;
+  try {
+    internalView.denseOrigin = { x: 0.5, y: 0, z: 0 };
+  } catch {
+    invalidReplacementRejected = true;
+  }
+  if (!invalidReplacementRejected || internalView.denseOrigin.x !== 0 ||
+      grid.mutationRevision !== initialRevision) {
+    throw new Error("Invalid dense origin replacement must be rejected atomically");
+  }
+
+  internalView.denseOrigin = { x: -3, y: 4, z: 5 };
+  if (grid.mutationRevision <= initialRevision ||
+      internalView.denseOrigin.x !== -3 ||
+      internalView.denseOrigin.y !== 4 ||
+      internalView.denseOrigin.z !== 5) {
+    throw new Error("Valid dense origin replacement must be tracked and installed atomically");
+  }
+  let replacementNestedWriteRejected = false;
+  try {
+    internalView.denseOrigin.z = 99;
+  } catch {
+    replacementNestedWriteRejected = true;
+  }
+  if (!replacementNestedWriteRejected || internalView.denseOrigin.z !== 5) {
+    throw new Error("Replaced dense origin must remain immutable to nested writes");
+  }
+}
+
 export function runSparseVoxelGridRecoveryRegression(): void {
   runGridDimensionValidationRegression();
+  runDenseOriginMutationContractRegression();
   const grid = new SparseVoxelGrid(4, 3, 2);
   const denseIndex = grid.idx(1, 1, 1) + CELL_FIELDS - 1;
   grid.buffer[denseIndex] = 13;

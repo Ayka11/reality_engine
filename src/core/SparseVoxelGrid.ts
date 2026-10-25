@@ -74,7 +74,24 @@ export class SparseVoxelGrid {
   private sparseMutationDepth = 0;
   private sparseMutationPending = false;
   private _sparseMutationRevision = 0;
-  private denseOrigin = { x: 0, y: 0, z: 0 };
+  private _denseOrigin: Readonly<{ x: number; y: number; z: number }> =
+    Object.freeze({ x: 0, y: 0, z: 0 });
+
+  /** Internal origin coordinates are immutable when read and revisioned when replaced. */
+  private get denseOrigin(): Readonly<{ x: number; y: number; z: number }> {
+    return this._denseOrigin;
+  }
+
+  private set denseOrigin(origin: { x: number; y: number; z: number }) {
+    if (!origin ||
+        ![origin.x, origin.y, origin.z].every(Number.isSafeInteger)) {
+      throw new Error("Invalid dense origin");
+    }
+    const previous = this._denseOrigin;
+    if (previous.x === origin.x && previous.y === origin.y && previous.z === origin.z) return;
+    this._denseOrigin = Object.freeze({ x: origin.x, y: origin.y, z: origin.z });
+    this.markMutation();
+  }
 
   constructor(W = 64, H = 64, D = 32) {
     const size = validateGridDimensions(W, H, D, "SparseVoxelGrid");
