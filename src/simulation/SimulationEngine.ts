@@ -199,7 +199,6 @@ export class SimulationEngine {
         // its mutations. Roll back to this post-readback snapshot if any subsystem fails.
         frameRecoveryBefore = this.captureCoreRecoveryState();
         if (data.length > 0) this.grid.buffer.set(data);
-        this.grid.syncDenseToChunks();
         this.chemLayer.tick(this.grid, clampedDt * nSteps);
         this.entityLayer.tick(this.grid, clampedDt * nSteps);
         this.temporalLayer.tick(this.grid, clampedDt * nSteps);
@@ -217,13 +216,15 @@ export class SimulationEngine {
           this.infoPhysics.tick(this.grid, clampedDt);
           this.agents.tick(this.grid, clampedDt);
         }
-        this.grid.syncDenseToChunks();
       }
 
       this._detectCausality();
 
-      // Auto world events
+      // Auto world events may mutate through VoxelGrid.cell()/cellAt(), which
+      // write the authoritative dense buffer directly. Publish only after all
+      // per-frame field writers and events have run so chunks cannot lag one step.
       this.worldEvents.autoTick(this.grid, this._tick);
+      this.grid.syncDenseToChunks();
 
       // Scientific recorder
       this.recorder.tick(this.grid, this._tick);

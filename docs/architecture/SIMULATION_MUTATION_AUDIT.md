@@ -172,3 +172,6 @@ Quick saves and portable exports now capture state through the same serialized q
 Quick saves and portable exports now wait for the entire application loop to settle, including post-step climate, multiscale, language, economy, cosmological, rendering, and timeline work, and then queue their synchronous capture behind any remaining engine frame. The loop releases the boundary in a `finally` block and logs frame errors so one rejected/stale frame does not permanently stop the animation loop.
 
 SceneDirector requests carry a world-context generation. Restoring or resetting director state advances that generation, causing a network response begun for a previous world to be discarded rather than appending stale history or returning runnable code into the new world. The UI clears cached runnable code and prior director log content whenever director context is restored/reset.
+### Per-frame event publication
+
+The CPU and GPU paths no longer publish dense-to-chunk state before all post-physics writers have completed. One shared synchronization runs after `WorldEvents.autoTick()`, which writes through `CellState` wrappers and can otherwise leave the sparse chunk mirror one event behind the authoritative dense buffer. Regression coverage injects the same direct event mutation into CPU and GPU frame paths and verifies dense/chunk agreement before the step resolves.

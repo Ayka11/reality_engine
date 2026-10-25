@@ -336,4 +336,42 @@ assert.equal(capturedBoundaryState.tick, boundaryGpuEngine.tick,
 assert.equal(capturedBoundaryState.energy, boundaryGpuEngine.grid.buffer[boundaryEnergyIndex],
   'snapshot fields must match the settled authoritative CPU state');
 
+async function assertPostEventChunkConsistency(useGpu: boolean): Promise<void> {
+  const consistencyEngine = new SimulationEngine(8, 8, 4);
+  const eventFieldIndex = consistencyEngine.grid.idx(2, 2, 1) + F.ENERGY;
+  if (useGpu) {
+    (consistencyEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+    const backend = consistencyEngine.gpu as unknown as {
+      writeParams: (...args: unknown[]) => void;
+      submitCompute: (nSteps: number) => void;
+      readback: () => Promise<Float32Array>;
+      upload: (data: Float32Array) => void;
+    };
+    backend.writeParams = () => undefined;
+    backend.submitCompute = () => undefined;
+    backend.readback = async () => new Float32Array(consistencyEngine.grid.buffer);
+    backend.upload = () => undefined;
+  }
+  const events = consistencyEngine.worldEvents as unknown as {
+    autoTick: (grid: unknown, tick: number) => unknown;
+  };
+  const originalAutoTick = events.autoTick;
+  events.autoTick = grid => {
+    (grid as { cell: (x: number, y: number, z: number) => { energy: number } })
+      .cell(2, 2, 1).energy = 321;
+    return null;
+  };
+  try {
+    await consistencyEngine.step(0.016);
+  } finally {
+    events.autoTick = originalAutoTick;
+  }
+  assert.equal(consistencyEngine.grid.buffer[eventFieldIndex], 321,
+    `${useGpu ? 'GPU' : 'CPU'} frame must keep the event's dense field mutation`);
+  assert.equal(consistencyEngine.grid.getCell(2, 2, 1)?.energy, 321,
+    `${useGpu ? 'GPU' : 'CPU'} frame must publish event mutations to sparse chunks before resolving`);
+}
+await assertPostEventChunkConsistency(false);
+await assertPostEventChunkConsistency(true);
+
 console.log('SimulationEngine core recovery and deterministic LawEngine replay: PASS');
