@@ -16,7 +16,7 @@ const expectedCalls = new Map([
   ["src/chemistry/ChemLayer.ts#tickRegion", 1],
   ["src/simulation/AgentSystem.ts#seed", 1],
   ["src/simulation/AgentSystem.ts#tick", 1],
-  ["src/simulation/EntityLayer.ts#tick", 1],
+  ["src/simulation/EntityLayer.ts#tick", 2],
   ["src/simulation/EntityLayer.ts#_reconcileFullDomain", 1],
   ["src/simulation/EntityLayer.ts#_spawnChild", 1],
   ["src/simulation/EntropyLayer.ts#tick", 1],
