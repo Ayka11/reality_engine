@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { F } from "../src/core/CellState.ts";
+import { Chunk } from "../src/core/Chunk.ts";
 import { SimulationEngine } from "../src/simulation/SimulationEngine.ts";
 
 async function beginPendingReadback(engine: SimulationEngine, stale: Float32Array) {
@@ -61,6 +62,28 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   const beforeChunkMapWrite = engine.grid.mutationRevision;
   engine.grid.getOrCreateChunk(5, 5, 5);
   assert.ok(engine.grid.mutationRevision > beforeChunkMapWrite, "chunk-map topology changes must advance grid revision");
+
+  // Re-inserting the same chunk must not register duplicate mutation listeners.
+  const listenerChunk = engine.grid.getOrCreateChunk(12, 12, 12);
+  const listenerChunkKey = engine.grid.getChunkKey(12, 12, 12);
+  engine.grid.chunks.set(listenerChunkKey, listenerChunk);
+  const beforeSingleChunkWrite = engine.grid.mutationRevision;
+  listenerChunk.buffer[0] = 313;
+  assert.equal(engine.grid.mutationRevision, beforeSingleChunkWrite + 1,
+    "one chunk write must notify the grid exactly once after idempotent map insertion");
+
+  // Replacing a chunk must unregister the old instance while tracking the new one.
+  const replacementChunk = new Chunk(12, 12, 12);
+  engine.grid.chunks.set(listenerChunkKey, replacementChunk);
+  const beforeDetachedChunkWrite = engine.grid.mutationRevision;
+  listenerChunk.buffer[0] = 314;
+  assert.equal(engine.grid.mutationRevision, beforeDetachedChunkWrite,
+    "mutating a replaced chunk must not invalidate the current grid revision");
+  const beforeReplacementChunkWrite = engine.grid.mutationRevision;
+  replacementChunk.buffer[0] = 315;
+  assert.equal(engine.grid.mutationRevision, beforeReplacementChunkWrite + 1,
+    "mutating the currently mapped replacement chunk must advance grid revision exactly once");
+
   const staleChunkStep = await beginPendingReadback(engine, engine.grid.buffer.slice());
   const beforeChunkWrite = engine.grid.mutationRevision;
   chunk.buffer[chunkFieldIndex] = 202;
