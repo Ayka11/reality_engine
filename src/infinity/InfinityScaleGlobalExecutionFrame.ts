@@ -94,7 +94,7 @@ function fingerprintPlan(plan: InfinityScaleExecutionPlan): string {
   // chunk keys. The plan object is mutable, so a same-revision change to a
   // distance, budget, observer, dependency, or layer order must invalidate the
   // in-flight frame instead of silently committing against a different plan.
-  const chunks = plan.chunks
+  const chunks = (plan.chunks ?? [])
     .map(chunk => ({
       key: chunk.key,
       lod: chunk.lod,
@@ -103,7 +103,7 @@ function fingerprintPlan(plan: InfinityScaleExecutionPlan): string {
     }))
     .sort((a, b) => a.key.localeCompare(b.key));
 
-  const relations = plan.boundaryReadRelations
+  const relations = (plan.boundaryReadRelations ?? [])
     .map(relation => ({
       sourceChunk: relation.sourceChunk,
       targetChunk: relation.targetChunk,
@@ -115,26 +115,30 @@ function fingerprintPlan(plan: InfinityScaleExecutionPlan): string {
       ),
     );
 
+  const observer = plan.observer
+    ? { x: plan.observer.x, y: plan.observer.y, z: plan.observer.z }
+    : null;
+
   return JSON.stringify({
     revision: plan.revision,
-    observer: {
-      x: plan.observer.x,
-      y: plan.observer.y,
-      z: plan.observer.z,
-    },
+    observer,
     chunks,
     simulationBudget: plan.simulationBudget,
     requestedSimulationCount: plan.requestedSimulationCount,
     selectedSimulationCount: plan.selectedSimulationCount,
     maxSimulatingChunks: plan.maxSimulatingChunks,
-    boundaryReadChunks: [...plan.boundaryReadChunks].sort(),
+    boundaryReadChunks: [...(plan.boundaryReadChunks ?? [])].sort(),
     boundaryReadCount: plan.boundaryReadCount,
     boundaryReadRelations: relations,
     simulationCellCount: plan.simulationCellCount,
     boundaryReadCellCount: plan.boundaryReadCellCount,
     // Layer order can affect execution order, so preserve it exactly.
-    localExecutionLayers: [...plan.localExecutionLayers],
-    globalExecutionLayers: [...plan.globalExecutionLayers],
+    localExecutionLayers: plan.localExecutionLayers
+      ? [...plan.localExecutionLayers]
+      : null,
+    globalExecutionLayers: plan.globalExecutionLayers
+      ? [...plan.globalExecutionLayers]
+      : null,
   });
 }
 
