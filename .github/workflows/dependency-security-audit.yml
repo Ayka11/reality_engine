@@ -5,11 +5,15 @@ on:
     branches: [main]
     paths:
       - "package.json"
+      - "package-lock.json"
+      - "scripts/check-npm-audit-gate.mjs"
       - ".github/workflows/dependency-security-audit.yml"
   pull_request:
     branches: [main]
     paths:
       - "package.json"
+      - "package-lock.json"
+      - "scripts/check-npm-audit-gate.mjs"
       - ".github/workflows/dependency-security-audit.yml"
   workflow_dispatch:
 
@@ -33,8 +37,8 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies and generate an ephemeral lockfile
-        run: npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+      - name: Install exact dependencies from committed lockfile
+        run: npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
 
       - name: Generate JSON audit report
         id: audit
@@ -105,7 +109,7 @@ jobs:
             '| Info | ' + summary.vulnerabilities.info + ' |',
             '| **Total** | **' + summary.vulnerabilities.total + ' |',
             '',
-            'The current repository does not track a package lockfile. The lockfile generated during this run is ephemeral; this audit is therefore not yet reproducible from a committed dependency lock.',
+            'This audit installs from the committed package-lock.json with npm ci, so dependency resolution is tied to the reviewed lockfile.',
           ];
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
           console.log(JSON.stringify(summary, null, 2));
