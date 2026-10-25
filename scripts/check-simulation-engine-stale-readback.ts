@@ -176,6 +176,8 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   await assert.rejects(staleDirtyClearStep.step, /Discarded stale GPU readback/);
   assert.equal(engine.grid.dirtyChunks.size, 0,
     "stale GPU readback must not restore cleared dirty-chunk entries");
+  // Restore the legacy fixture key used by the original delete/clear assertions below.
+  engine.grid.dirtyChunks.add("7,8,9");
 
   engine.grid.chunkOwners.set("8,8,8", "delete-owner");
   const staleOwnerDeleteStep = await beginPendingReadback(engine, engine.grid.buffer.slice());
@@ -193,6 +195,8 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   await assert.rejects(staleOwnerClearStep.step, /Discarded stale GPU readback/);
   assert.equal(engine.grid.chunkOwners.size, 0,
     "stale GPU readback must not restore cleared chunk-owner entries");
+  // Restore the legacy fixture key used by the original delete/clear assertions below.
+  engine.grid.chunkOwners.set("7,8,9", "test-owner");
 
   // Public chunk map writes must preserve the key-to-spatial-coordinate contract.
   const mapInvariantGrid = new SparseVoxelGrid(1, 1, 1);
