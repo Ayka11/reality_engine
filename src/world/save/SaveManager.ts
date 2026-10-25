@@ -8,7 +8,9 @@ export class SaveManager {
   startAutoSave(intervalMs = 120000): void {
     this.stopAutoSave();
     this.timer = setInterval(() => {
-      void this.saveSystem.quickSave(`Autosave_${Date.now()}`);
+      void this.saveSystem.quickSave(`Autosave_${Date.now()}`).catch(error => {
+        console.error('[SaveManager] Autosave failed', error);
+      });
     }, intervalMs);
   }
 

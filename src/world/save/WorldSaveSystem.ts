@@ -29,6 +29,8 @@ interface RealitySaveDb extends DBSchema {
   };
 }
 
+const MAX_AUTOSAVE_SNAPSHOTS = 12;
+
 interface GridLike {
   W: number;
   H: number;
@@ -122,8 +124,9 @@ export class WorldSaveSystem {
 
   async quickSave(name = `World_${Date.now()}`): Promise<string> {
     const snapshot = this.captureSnapshot(name);
-    this.currentSnapshot = snapshot;
     await this.saveToIndexedDB(snapshot);
+    // Do not advertise a snapshot as persisted when the IndexedDB commit failed.
+    this.currentSnapshot = snapshot;
     return snapshot.name;
   }
 
@@ -420,7 +423,36 @@ export class WorldSaveSystem {
   private async saveToIndexedDB(snapshot: WorldSnapshot): Promise<void> {
     const db = await this.db();
     const id = `${snapshot.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${snapshot.timestamp}`;
-    await db.put('saves', { id, name: snapshot.name, timestamp: snapshot.timestamp, format: 'quick', snapshot });
+    const record: StoredWorldSnapshot = {
+      id, name: snapshot.name, timestamp: snapshot.timestamp, format: 'quick', snapshot,
+    };
+
+    if (!snapshot.name.startsWith('Autosave_')) {
+      await db.put('saves', record);
+      return;
+    }
+
+    // A quick save includes dense fields, sparse chunks, and runtime subsystem
+    // snapshots, so keep a bounded rolling window of automatic checkpoints.
+    // Pruning and insertion share one read/write transaction: quota failure must
+    // abort both operations instead of deleting old autosaves without a replacement.
+    const tx = db.transaction('saves', 'readwrite');
+    const store = tx.objectStore('saves');
+    try {
+      const saves = await store.getAll();
+      const autosaves = saves
+        .filter(save => save.name.startsWith('Autosave_') && save.id !== id)
+        .sort((a, b) => b.timestamp - a.timestamp);
+      const expired = autosaves.slice(MAX_AUTOSAVE_SNAPSHOTS - 1);
+      const operations: Promise<unknown>[] = expired.map(save => store.delete(save.id));
+      operations.push(store.put(record));
+      await Promise.all(operations);
+      await tx.done;
+    } catch (error) {
+      try { tx.abort(); } catch {}
+      try { await tx.done; } catch {}
+      throw error;
+    }
   }
 
   private db(): Promise<IDBPDatabase<RealitySaveDb>> {

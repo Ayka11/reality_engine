@@ -4,6 +4,7 @@ import ts from "typescript";
 
 const root = new URL("../", import.meta.url);
 const saveSystemSource = await readFile(new URL("src/world/save/WorldSaveSystem.ts", root), "utf8");
+const saveManagerSource = await readFile(new URL("src/world/save/SaveManager.ts", root), "utf8");
 const mainSource = await readFile(new URL("src/main.ts", root), "utf8");
 const climateSource = await readFile(new URL("src/simulation/ClimateSystem.ts", root), "utf8");
 const multiScaleSource = await readFile(new URL("src/simulation/MultiScaleSystem.ts", root), "utf8");
@@ -75,6 +76,14 @@ assert.match(saveSystemSource, /director: this\.context\.getDirectorSnapshot\?\.
   "quick saves must preserve SceneDirector history and world log");
 assert.match(saveSystemSource, /this\.context\.resetDirector\?\.\(\)/,
   "portable/legacy imports must clear stale SceneDirector context");
+assert.match(saveSystemSource, /MAX_AUTOSAVE_SNAPSHOTS = 12/,
+  "runtime-heavy autosaves must have a bounded retention window");
+assert.match(saveSystemSource, /db\.transaction\('saves', 'readwrite'\)/,
+  "autosave pruning and insert must occur inside one IndexedDB transaction");
+assert.match(saveSystemSource, /autosaves\.slice\(MAX_AUTOSAVE_SNAPSHOTS - 1\)/,
+  "autosaves must prune only the oldest rows beyond the rolling limit");
+assert.match(saveManagerSource, /quickSave.*Autosave_.*\.catch/s,
+  "autosave quota/storage errors must be handled rather than becoming unhandled rejections");
 assert.match(mainSource, /getDirectorSnapshot: \(\) => director\.snapshot\(\)/,
   "the application must wire SceneDirector snapshots into world saves");
 assert.match(directorSource, /snapshot\(\): SceneDirectorSnapshot/);
@@ -714,4 +723,65 @@ assert.deepEqual(multiplayerGrid.buffer, beforeInvalidFullState,
   "invalid full-state messages must leave the current world unchanged");
 
 console.log("PASS: field persistence round-trip and seed isolation");
+
+let storedWorldRows = [
+  ...Array.from({ length: 12 }, (_, index) => ({
+    id: 'autosave-' + (index + 1),
+    name: 'Autosave_' + (index + 1),
+    timestamp: 100 + index,
+    format: 'quick',
+    snapshot: savedRuntimeWorld,
+  })),
+  {
+    id: "manual-world-save",
+    name: "Manual world snapshot",
+    timestamp: 9999,
+    format: "quick",
+    snapshot: savedRuntimeWorld,
+  },
+];
+let failAutosaveWrite = false;
+const fakeSaveStore = {
+  async getAll() { return storedWorldRows.slice(); },
+  async delete(id) { storedWorldRows = storedWorldRows.filter(row => row.id !== id); },
+  async put(row) {
+    if (failAutosaveWrite) {
+      failAutosaveWrite = false;
+      throw new Error("injected IndexedDB quota failure");
+    }
+    storedWorldRows = storedWorldRows.filter(existing => existing.id !== row.id);
+    storedWorldRows.push(row);
+    return row.id;
+  },
+};
+const fakeSaveDb = {
+  put: async (_storeName, row) => fakeSaveStore.put(row),
+  transaction(storeName, mode) {
+    assert.equal(storeName, "saves");
+    assert.equal(mode, "readwrite");
+    return {
+      objectStore: () => fakeSaveStore,
+      done: Promise.resolve(),
+      abort() {},
+    };
+  },
+};
+saveHarness.dbPromise = Promise.resolve(fakeSaveDb);
+await saveHarness.quickSave("Autosave_latest");
+const autosavesAfterPrune = storedWorldRows.filter(row => row.name.startsWith("Autosave_"));
+assert.equal(autosavesAfterPrune.length, 12,
+  "successful autosave must keep exactly the configured rolling window");
+assert.equal(storedWorldRows.some(row => row.id === "autosave-1"), false,
+  "autosave retention must remove the oldest automatic checkpoint first");
+assert.equal(storedWorldRows.some(row => row.id === "manual-world-save"), true,
+  "autosave retention must never delete a manual world save");
+assert.equal(saveHarness.getCurrentSnapshot()?.name, "Autosave_latest",
+  "current snapshot must reflect a successfully persisted autosave");
+
+const lastCommittedSnapshot = saveHarness.getCurrentSnapshot();
+failAutosaveWrite = true;
+await assert.rejects(saveHarness.quickSave("Autosave_quota_failure"), /injected IndexedDB quota failure/);
+assert.equal(saveHarness.getCurrentSnapshot(), lastCommittedSnapshot,
+  "failed autosave persistence must not replace the last committed current snapshot");
+
 console.log("PASS: quota, read, delete, and corrupt-storage failures are contained");

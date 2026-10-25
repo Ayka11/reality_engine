@@ -158,3 +158,8 @@ Incoming remote `paint`, `delta`, and accepted host `full_state` messages now va
 ### Legacy publication and dense double buffers
 
 The compatibility method `SimulationEngine.syncToGPU()` now synchronizes dense fields to sparse chunks **and** aligns dense/chunk back buffers before GPU upload. This closes the remaining sculpt undo/redo path, which uses a pre-write invalidation callback and then the legacy publication method rather than the engine's full-state snapshot transaction. A regression test verifies the dense back-buffer and chunk mirror both contain the direct edit after publication.
+
+
+### Autosave storage bound
+
+Because each quick save now includes both dense fields and sparse chunks plus runtime state (including the cosmological simulation), automatic saves are bounded to the latest 12 records. This retains 24 minutes of checkpoints at the current two-minute interval while leaving manually named saves untouched. The prune-and-insert operations share one IndexedDB read/write transaction so a failed write can abort the deletion work, and the previous `currentSnapshot` is only updated after persistence succeeds. Autosave timer failures are caught and reported rather than becoming unhandled promise rejections.
