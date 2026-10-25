@@ -1,5 +1,23 @@
 # Simulation Mutation and GPU Readback Audit
 
+## Current implementation update — 2026-10-25
+
+**Current code head:** `5fd7c918a773be18b111deddeb310e965ef5281d`  
+**Validation:** CI #1344 passed on this exact commit: lint, recovery/regression suite, production build, both Docker builds, Hugging Face runtime/smoke/CPU checks, and Playwright browser acceptance (59/59 steps).
+
+This update supersedes earlier statements below that public dense/chunk buffer writes and `CellState` setters are entirely untracked. The current implementation adds:
+
+- `VoxelGrid` and `SparseVoxelGrid` mutation revisions, including tracked public front/back typed-array views.
+- `Chunk` mutation listeners and tracked chunk buffer views.
+- A public buffer view whose `.buffer` accessor returns a detached copy; indexed writes and supported mutating typed-array methods invalidate the owning revision.
+- `CellState.set()` mutation callbacks for grid/chunk cell wrappers.
+- `SimulationEngine.step()` captures both engine generation and grid mutation revision before GPU readback, and rejects GPU output if either changes while awaiting the result.
+- Regression tests cover tracked buffer writes and stale GPU readback; exact-head CI #1344 also passes browser acceptance.
+
+**Remaining limitation:** this does not close the entire mutation contract. The repository still has an internal raw-buffer escape hatch for performance-sensitive engine code, mutable chunk/map and subsystem metadata, and direct writer/restore paths that need a complete inventory and explicit ownership rules. The audit below should be read as the original inventory and migration plan, with completed items superseded by this dated update; it is not evidence that every arbitrary internal write is guarded. Keep issue [#62](https://github.com/Ayka11/reality_engine/issues/62) open until the supported mutation surfaces and failure/rollback paths are fully enumerated and tested. Keep adaptive LOD topology changes fail-closed under [#50](https://github.com/Ayka11/reality_engine/issues/50).
+
+---
+
 **Audit checkpoint:** 2026-10-24  
 **Code head reviewed:** `aaa7f79a042d73e351dc7c62f2add624c5572cb6`  
 **Validation:** Reality Engine CI Run #1246 passed, including lint, recovery/regression tests, build, both Docker builds, HF smoke/CPU checks, and browser acceptance.
