@@ -59,6 +59,18 @@ The 133 branch-only paths include:
 
 The release-evidence workflow is a concrete unique capability validated by RC run #378. Before porting it to `main`, audit whether the evidence package can be made to use the current `main` test suite and current topology capability flags without importing legacy implementation assumptions. The branch's successful RC validation does not by itself prove topology mutation is implemented.
 
+## Scientific telemetry / benchmark validity
+
+The branch-only scientific and comparison modules are valuable as an experimental framework, but they are **not yet authoritative runtime evidence** and should not be ported or cited as proof of adaptive LOD performance without semantic fixes:
+
+- `InfinityScaleAdaptiveTelemetryRecord` has `commitReady` but no actual `committed` outcome. `analyzeInfinityScaleAdaptiveTelemetry()` computes `commitSuccessRate` by counting `commitReady`; that metric is commit-readiness rate, not commit-success rate.
+- `deterministicProvenanceRate` currently checks only that four hash strings are non-empty. It does not recompute or verify those hashes, establish that they came from an actual executor, or prove replay equivalence.
+- `lodStabilityRate` treats an epoch with `mutationCount <= 1` as stable. A single committed LOD change can still be a topology change; this definition is not a direct measure of oscillation, stability over time, or thrashing.
+- `telemetryFromBenchmarkScenario()` synthesizes telemetry directly from a hand-generated error series. It sets fields such as `conservationValid` and `executable` to `true`, and fills hash fields with scenario/policy/index strings. This is useful as a deterministic controller unit-test fixture, but not as measured GPU/solver execution or physical conservation evidence.
+- The reporting layer therefore measures properties of its synthetic inputs unless records are collected from the real executor and checked against verifiable execution-completion evidence.
+
+Before any of this suite is used for scientific claims or release gating, introduce an explicit actual outcome (e.g. `committed`, `commitRejected`, `rollbackSucceeded`) in the schema; rename current readiness metric or compute success only from authoritative outcomes; verify hashes against canonical payloads; and separate synthetic-controller benchmarks from runtime/physics benchmarks. Keep a record of scenario generation, seed, executor version, plan ID, actual completion IDs and conservation residuals. Treat current metrics and benchmark results as prototype telemetry until these gates are implemented.
+
 ## Critical topology gate — preserve fail-closed behavior
 
 On `main`, `src/infinity/InfinityScaleAdaptiveLODTransactionBridge.ts` deliberately rejects any changed LOD topology until physical chunk remapping and full-cell transfer exist. The branch's own `InfinityScaleAdaptiveRuntime.regression.ts` also expects topology mutation to be rejected and revisions to remain unchanged when physical remapping is unavailable.
