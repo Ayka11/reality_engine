@@ -186,14 +186,23 @@ export class SimulationEngine {
 
       if (this._gpuReady) {
         const readbackGeneration = this._stateGeneration;
-        this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
-        this.gpu.submitCompute(nSteps);
-        const data = await this.gpu.readback();
+        let data: Float32Array;
+        try {
+          this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
+          this.gpu.submitCompute(nSteps);
+          data = await this.gpu.readback();
+        } catch (error) {
+          // submitCompute may already have advanced the device-side source buffer.
+          // If readback then fails, restore the device from the authoritative CPU grid
+          // before allowing a later step to proceed.
+          this.resynchronizeGPUAndThrow(error, "GPU compute/readback failed");
+        }
         if (readbackGeneration !== this._stateGeneration) {
-          // Discard stale GPU output and resynchronize the device with the newer authoritative CPU state.
-          // Do not roll back: the newer CPU state belongs to an external/authoritative mutation.
-          this.gpu.upload(this.grid.buffer);
-          throw new Error('Discarded stale GPU readback: simulation state changed while awaiting GPU results');
+          // Discard stale output without overwriting newer authoritative CPU state.
+          this.resynchronizeGPUAndThrow(
+            new Error('Discarded stale GPU readback: simulation state changed while awaiting GPU results'),
+            "Stale GPU readback rejected",
+          );
         }
         // From here until the frame completes, this synchronous commit path owns
         // its mutations. Roll back to this post-readback snapshot if any subsystem fails.
@@ -205,16 +214,7 @@ export class SimulationEngine {
           );
           // Keep the CPU grid authoritative if the device returns an empty or
           // truncated payload; never treat a malformed readback as a successful tick.
-          try {
-            this.gpu.upload(this.grid.buffer);
-          } catch (uploadError) {
-            const uploadMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
-            throw new AggregateError(
-              [readbackError, uploadError],
-              `Invalid GPU readback and failed to resynchronize the device: ${uploadMessage}`,
-            );
-          }
-          throw readbackError;
+          this.resynchronizeGPUAndThrow(readbackError, "Malformed GPU readback rejected");
         }
         this.grid.buffer.set(data);
         this.chemLayer.tick(this.grid, clampedDt * nSteps);
@@ -272,6 +272,24 @@ export class SimulationEngine {
       }
       throw error;
     }
+  }
+
+  /**
+   * Restore the device mirror from the authoritative CPU grid after rejecting
+   * a GPU result. Preserve both failures if this recovery upload also throws.
+   */
+  private resynchronizeGPUAndThrow(primaryError: unknown, context: string): never {
+    try {
+      this.gpu.upload(this.grid.buffer);
+    } catch (syncError) {
+      const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
+      const syncMessage = syncError instanceof Error ? syncError.message : String(syncError);
+      throw new AggregateError(
+        [primaryError, syncError],
+        `${context} (${primaryMessage}); GPU resynchronization failed (${syncMessage})`,
+      );
+    }
+    throw primaryError;
   }
 
   /**

@@ -303,6 +303,32 @@ staleGpuMock.readback = async () => new Float32Array(staleGpuEngine.grid.buffer)
 await staleGpuEngine.step(0.016);
 assert.equal(staleGpuEngine.tick, 1, "GPU queue must remain usable after rejecting stale readback");
 
+// A failed asynchronous readback may occur after submitCompute advanced the
+// device-side buffer. It must resynchronize from CPU state and leave the step queue usable.
+const rejectedReadbackEngine = new SimulationEngine(8, 8, 4);
+(rejectedReadbackEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+const rejectedReadbackGpu = rejectedReadbackEngine.gpu as unknown as {
+  writeParams: (...args: unknown[]) => void;
+  submitCompute: (nSteps: number) => void;
+  readback: () => Promise<Float32Array>;
+  upload: (data: Float32Array) => void;
+};
+rejectedReadbackGpu.writeParams = () => undefined;
+rejectedReadbackGpu.submitCompute = () => undefined;
+let rejectedReadbackUploadCount = 0;
+rejectedReadbackGpu.upload = () => { rejectedReadbackUploadCount++; };
+rejectedReadbackGpu.readback = async () => { throw new Error("injected GPU readback failure"); };
+const beforeRejectedReadback = rejectedReadbackEngine.captureCoreRecoveryState();
+await assert.rejects(rejectedReadbackEngine.step(0.016), /injected GPU readback failure/);
+assert.deepEqual(rejectedReadbackEngine.captureCoreRecoveryState(), beforeRejectedReadback,
+  "failed readback must preserve the authoritative CPU state and tick");
+assert.equal(rejectedReadbackUploadCount, 1,
+  "failed readback must re-upload the authoritative CPU grid to the device");
+rejectedReadbackGpu.readback = async () => new Float32Array(rejectedReadbackEngine.grid.buffer);
+await rejectedReadbackEngine.step(0.016);
+assert.equal(rejectedReadbackEngine.tick, 1,
+  "GPU step queue must remain usable after readback rejection");
+
 // Empty/truncated GPU readback must fail closed instead of silently advancing
 // the simulation without a valid device result, and must keep CPU state intact.
 const malformedReadbackEngine = new SimulationEngine(8, 8, 4);
