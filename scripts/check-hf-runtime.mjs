@@ -19,7 +19,10 @@ const sockets = [];
 const multiplayerSource = await readFile(new URL('../src/network/MultiplayerSync.ts', import.meta.url), 'utf8');
 assert.ok(multiplayerSource.includes("data.userId === [this.userId, ...this.peers.keys()].sort()[0]"), 'full state must come from the elected host');
 assert.ok(multiplayerSource.includes('this.userId < smallestPeerId'), 'host election must use the same lexical ordering as peer sorting');
-assert.ok(multiplayerSource.includes('cell.field >= CELL_FIELDS'), 'remote field index must be bounded');
+assert.ok(
+  multiplayerSource.includes('cell.field >= 0') && multiplayerSource.includes('cell.field < CELL_FIELDS'),
+  'remote field index must be bounded to the supported cell fields',
+);
 assert.ok(multiplayerSource.includes('if (!this.connected) return;'), 'disconnected client must ignore late messages');
 assert.ok(multiplayerSource.includes("this._handleMessage({ type: 'join', userId: message.from, color: '#888' })"), 'late room roster announcements must populate peer state');
 assert.ok(multiplayerSource.includes("this._sendSocket({ type: 'announce', from: this.userId })"), 'connect must request a fresh room roster');
