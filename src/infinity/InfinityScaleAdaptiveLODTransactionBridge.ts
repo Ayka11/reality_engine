@@ -1,5 +1,6 @@
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
+import { validateInfinityScaleGlobalFrameCommit } from "./InfinityScaleGlobalExecutionFrame";
 import {
   beginInfinityScaleGlobalLODTransaction,
   commitInfinityScaleGlobalLODTransaction,
@@ -58,6 +59,10 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
       if (!Array.isArray(mutations) || !Array.isArray(transfers)) {
         throw new Error("Adaptive LOD transaction requires mutation and transfer arrays");
       }
+      // Revalidate the captured frame against the live plan at commit time.
+      // The plan object may have changed after begin(); never commit under stale
+      // revision or ownership geometry, even for an otherwise empty mutation set.
+      validateInfinityScaleGlobalFrameCommit(frame, this.plan);
       const compiledPlan = new InfinityScaleAdaptiveTransferCompiler().compile(mutations);
       const executionGraph = new InfinityScaleAdaptiveExecutionGraphCompiler().compile(compiledPlan);
       if (!executionGraph.valid) {
