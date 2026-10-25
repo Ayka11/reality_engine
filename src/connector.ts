@@ -573,6 +573,21 @@ win['fieldSetCameraPreset'] = (p: string) => {
 win['fieldSetTimeOfDay'] = (h: number) => fieldRenderer.setTimeOfDay(h)
 win['fieldSetFogDensity'] = (d: number) => fieldRenderer.setFogDensity(d)
 win['fieldSetMatMode'] = (m: string) => fieldRenderer.setMatMode(m as 'field'|'material'|'height')
+win['setGreedyMeshingEnabled'] = (enabled: boolean) => {
+  fieldRenderer.setGreedyMeshingEnabled(Boolean(enabled))
+  return {
+    enabled: fieldRenderer.isGreedyMeshingEnabled,
+    active: fieldRenderer.isGreedySurfaceActive,
+    mode: fieldRenderer.matMode,
+    quadCount: fieldRenderer.greedySurfaceQuadCount,
+  }
+}
+win['getGreedyMeshingState'] = () => ({
+  enabled: fieldRenderer.isGreedyMeshingEnabled,
+  active: fieldRenderer.isGreedySurfaceActive,
+  mode: fieldRenderer.matMode,
+  quadCount: fieldRenderer.greedySurfaceQuadCount,
+})
 win['fieldSetShowParticles'] = (v: boolean) => { fieldRenderer.showParticles = v }
 win['resizeChunkRenderer'] = (hybrid: boolean) => {
   const parent = c3dCanvas.parentElement
