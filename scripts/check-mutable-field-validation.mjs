@@ -66,13 +66,20 @@ console.log("PASS: corrupt snapshots and overlays fail closed without partial re
 const detachedField = new MutableWorldFieldProvider(base);
 const nestedDelta = { energy: 10 };
 const nestedMetadata = { legacyFalloff: "linear", nested: { source: "caller" } };
-detachedField.apply({ kind: "brush", x: 0, y: 0, z: 0, radius: 4, delta: nestedDelta, metadata: nestedMetadata });
+const returnedMutation = detachedField.apply({ kind: "brush", x: 0, y: 0, z: 0, radius: 4, delta: nestedDelta, metadata: nestedMetadata });
 const afterApply = detachedField.serialize();
 const afterApplyVersion = detachedField.getVersion();
+returnedMutation.delta.energy = 888;
+returnedMutation.metadata.nested.source = "return-value-mutated";
+const stateView = detachedField.getState();
+const expectedStateView = detachedField.getState();
+stateView.lastMutation.delta.energy = 777;
+stateView.lastMutation.metadata.nested.source = "get-state-mutated";
+assert.deepEqual(detachedField.getState(), expectedStateView, "getState must not expose the live last mutation");
 nestedDelta.energy = 999;
 nestedMetadata.legacyFalloff = "sharp";
 nestedMetadata.nested.source = "mutated";
-assert.deepEqual(detachedField.serialize(), afterApply, "caller mutations must not alter committed payloads or revision");
+assert.deepEqual(detachedField.serialize(), afterApply, "caller and return-value mutations must not alter committed payloads or revision");
 assert.equal(detachedField.getVersion(), afterApplyVersion);
 
 const returnedSnapshot = detachedField.serialize();
