@@ -5,9 +5,9 @@ export const CHUNK_SIZE = 32;
 export const CHUNK_VOLUME = CHUNK_SIZE ** 3;
 
 export class Chunk {
-  readonly cx: number;
-  readonly cy: number;
-  readonly cz: number;
+  readonly cx!: number;
+  readonly cy!: number;
+  readonly cz!: number;
   private _buffer: Float32Array;
   private _backBuffer: Float32Array;
   private _bufferView: Float32Array;
