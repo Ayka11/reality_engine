@@ -24,8 +24,8 @@ const mixed = buildGreedyChunkMesh({
   size: [2, 1, 1],
   sampleMaterial: solid(new Map([['0,0,0', 1], ['1,0,0', 2]])),
 })
-assert.equal(mixed.quadCount, 10, 'different materials retain their shared interface')
-assert.equal(mixed.materialIds.length, 10)
+assert.equal(mixed.quadCount, 12, 'different materials retain both sides of their shared interface')
+assert.equal(mixed.materialIds.length, 12)
 
 const boundary = buildGreedyChunkMesh({
   size: [1, 1, 1],
