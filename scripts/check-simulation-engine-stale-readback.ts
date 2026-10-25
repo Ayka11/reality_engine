@@ -69,6 +69,27 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   await assert.rejects(staleChunkStep.step, /Discarded stale GPU readback/);
   assert.equal(chunk.buffer[chunkFieldIndex], 202, "stale GPU readback must not mutate newer chunk state");
 
+  // Public chunk metadata collections are authoritative mutation surfaces too.
+  // Mutating them while readback is pending must invalidate the in-flight result.
+  const staleDirtyStep = await beginPendingReadback(engine, engine.grid.buffer.slice());
+  const beforeDirtyMutation = engine.grid.mutationRevision;
+  engine.grid.dirtyChunks.add("7,8,9");
+  assert.ok(engine.grid.mutationRevision > beforeDirtyMutation,
+    "dirty-chunk Set.add must advance grid revision");
+  staleDirtyStep.release();
+  await assert.rejects(staleDirtyStep.step, /Discarded stale GPU readback/);
+  assert.ok(engine.grid.dirtyChunks.has("7,8,9"), "stale GPU data must not undo newer dirty-chunk metadata");
+
+  const staleOwnerStep = await beginPendingReadback(engine, engine.grid.buffer.slice());
+  const beforeOwnerMutation = engine.grid.mutationRevision;
+  engine.grid.chunkOwners.set("7,8,9", "test-owner");
+  assert.ok(engine.grid.mutationRevision > beforeOwnerMutation,
+    "chunk-owner Map.set must advance grid revision");
+  staleOwnerStep.release();
+  await assert.rejects(staleOwnerStep.step, /Discarded stale GPU readback/);
+  assert.equal(engine.grid.chunkOwners.get("7,8,9"), "test-owner",
+    "stale GPU data must not overwrite newer chunk ownership metadata");
+
   assert.ok(engine.grid.mutationRevision > publicRevision, "all external mutation scenarios should be revision-visible");
   console.log("SimulationEngine stale GPU readback mutation-revision regression: PASS");
 }
