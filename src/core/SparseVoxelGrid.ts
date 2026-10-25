@@ -87,10 +87,7 @@ export class SparseVoxelGrid {
     this._sparseDenseBackBuffer = new Float32Array(this.size * CELL_FIELDS);
     this._sparseDenseBufferView = createTrackedFloat32Array(this._sparseDenseBuffer, () => this.markMutation());
     this._sparseDenseBackBufferView = createTrackedFloat32Array(this._sparseDenseBackBuffer, () => this.markMutation());
-    this.chunks = new MutationTrackedChunkMap(
-      () => this.markMutation(),
-      chunk => chunk.addMutationListener(() => this.markMutation()),
-    );
+    this.chunks = new MutationTrackedChunkMap(() => this.markMutation());
     this.seedDenseWindowChunks();
   }
 
@@ -743,28 +740,58 @@ class MutationTrackedMap<K, V> extends Map<K, V> {
 }
 
 class MutationTrackedChunkMap extends Map<string, Chunk> {
-  constructor(
-    private readonly onMutation: () => void,
-    private readonly onAttach: (chunk: Chunk) => void,
-  ) { super(); }
+  private readonly registrations = new Map<Chunk, { listener: () => void; references: number }>();
+
+  constructor(private readonly onMutation: () => void) { super(); }
+
+  private attach(chunk: Chunk): void {
+    const existing = this.registrations.get(chunk);
+    if (existing) {
+      existing.references++;
+      return;
+    }
+    const listener = () => this.onMutation();
+    this.registrations.set(chunk, { listener, references: 1 });
+    chunk.addMutationListener(listener);
+  }
+
+  private detach(chunk: Chunk): void {
+    const registration = this.registrations.get(chunk);
+    if (!registration) return;
+    registration.references--;
+    if (registration.references > 0) return;
+    chunk.removeMutationListener(registration.listener);
+    this.registrations.delete(chunk);
+  }
 
   override set(key: string, chunk: Chunk): this {
+    const existed = this.has(key);
     const previous = this.get(key);
+    if (existed && previous === chunk) return this;
+
     super.set(key, chunk);
-    this.onAttach(chunk);
-    if (previous !== chunk) this.onMutation();
+    if (existed && previous) this.detach(previous);
+    this.attach(chunk);
+    this.onMutation();
     return this;
   }
 
   override delete(key: string): boolean {
+    if (!this.has(key)) return false;
+    const previous = this.get(key);
     const deleted = super.delete(key);
-    if (deleted) this.onMutation();
+    if (deleted && previous) {
+      this.detach(previous);
+      this.onMutation();
+    }
     return deleted;
   }
 
   override clear(): void {
     if (this.size === 0) return;
+    const chunks = [...this.values()];
     super.clear();
+    for (const chunk of chunks) this.detach(chunk);
     this.onMutation();
   }
 }
