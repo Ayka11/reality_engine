@@ -33,7 +33,7 @@
     "test:worker-restore-two-phase": "node scripts/check-worker-restore-two-phase.mjs",
     "test:field-spatial-pattern": "node scripts/check-scientific-field-spatial-pattern.mjs",
     "test:legacy-sculpt-adapter": "node scripts/check-legacy-sculpt-runtime-adapter.mjs",
-    "test:authoritative-sculpt-transaction": "node scripts/check-authoritative-sculpt-transaction.mjs && node scripts/check-unified-sculpt-transaction.mjs && node scripts/check-chunk-grid-sculpt-modes.mjs",
+    "test:authoritative-sculpt-transaction": "node scripts/check-authoritative-sculpt-transaction.mjs && node scripts/check-unified-sculpt-transaction.mjs && node scripts/check-chunk-grid-sculpt-modes.mjs && npm run test:brush-engine-transaction",
     "test:world-persistence-failures": "node scripts/check-world-persistence-failures.mjs",
     "audit:report": "node scripts/report-npm-audit.mjs",
     "test:npm-audit-gate": "node scripts/check-npm-audit-gate.mjs",
@@ -54,7 +54,8 @@
     "test:chem-layer-recovery": "npx --yes tsx scripts/check-chem-layer-recovery.ts",
     "test:simulation-engine-cpu-frame-rollback": "npx --yes tsx scripts/check-simulation-engine-cpu-frame-rollback.ts",
     "test:simulation-engine-stale-readback": "npx --yes tsx scripts/check-simulation-engine-stale-readback.ts",
-    "test:mutable-buffer-contract": "node scripts/check-mutable-buffer-contract.mjs"
+    "test:mutable-buffer-contract": "node scripts/check-mutable-buffer-contract.mjs",
+    "test:brush-engine-transaction": "npx --yes tsx scripts/check-brush-engine-transaction.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

@@ -541,7 +541,9 @@ export class SparseVoxelGrid {
     const endMutation = this.beginMutation();
     try {
       this.seedDenseWindowChunks();
-      const rawBuffers = new Map<Chunk, Float32Array>();
+      // Prepare complete replacement buffers first. A coordinate/mapping/allocation
+      // failure during staging must not leave a subset of chunks published.
+      const stagedBuffers = new Map<Chunk, Float32Array>();
       for (let z = 0; z < this.D; z++)
       for (let y = 0; y < this.H; y++)
       for (let x = 0; x < this.W; x++) {
@@ -552,14 +554,16 @@ export class SparseVoxelGrid {
         const [, lx] = this.globalToChunk(gx);
         const [, ly] = this.globalToChunk(gy);
         const [, lz] = this.globalToChunk(gz);
-        let chunkBuffer = rawBuffers.get(chunk);
+        let chunkBuffer = stagedBuffers.get(chunk);
         if (!chunkBuffer) {
-          chunkBuffer = getMutableBuffer(chunk);
-          rawBuffers.set(chunk, chunkBuffer);
+          chunkBuffer = chunk.buffer.slice();
+          stagedBuffers.set(chunk, chunkBuffer);
         }
         const start = this.idx(x, y, z);
         chunkBuffer.set(this._sparseDenseBuffer.subarray(start, start + CELL_FIELDS), chunk.localIdx(lx, ly, lz));
       }
+      // Publication begins only after every source cell has been staged.
+      for (const [chunk, buffer] of stagedBuffers) chunk.buffer.set(buffer);
       this.markMutation();
     } finally {
       endMutation();

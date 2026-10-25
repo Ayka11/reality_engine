@@ -51,12 +51,17 @@ export class BrushEngine {
       after = this.grid.buffer.slice();
     } catch (error) {
       this.grid.buffer.set(before);
-      this.grid.syncDenseToChunks();
-      this.grid.markChunksDirty(stroke.affectedChunks);
       throw error;
     }
-    this.grid.syncDenseToChunks();
-    this.grid.markChunksDirty(stroke.affectedChunks);
+
+    try {
+      this.grid.syncDenseToChunks();
+      this.grid.markChunksDirty(stroke.affectedChunks);
+    } catch (error) {
+      this.grid.buffer.set(before);
+      throw error;
+    }
+
     this.history.push({
       stroke: { ...stroke, affectedChunks: [...stroke.affectedChunks] },
       edits: [],
@@ -100,13 +105,17 @@ export class BrushEngine {
       }
     } catch (error) {
       for (const [offset, edit] of edits) this.grid.buffer.set(edit.before, offset);
-      this.grid.syncDenseToChunks();
-      this.grid.markChunksDirty(stroke.affectedChunks);
       throw error;
     }
 
-    this.grid.syncDenseToChunks();
-    this.grid.markChunksDirty(stroke.affectedChunks);
+    try {
+      this.grid.syncDenseToChunks();
+      this.grid.markChunksDirty(stroke.affectedChunks);
+    } catch (error) {
+      for (const [offset, edit] of edits) this.grid.buffer.set(edit.before, offset);
+      throw error;
+    }
+
     this.history.push({
       stroke: { ...stroke, affectedChunks: [...stroke.affectedChunks] },
       edits: [...edits.entries()].map(([offset, edit]) => ({ offset, before: edit.before, after: edit.after })),
@@ -117,23 +126,49 @@ export class BrushEngine {
   }
 
   undo(): BrushStroke | null {
-    const record = this.history.pop();
+    const record = this.history[this.history.length - 1];
     if (!record) return null;
+    const current = record.fullBefore
+      ? this.grid.buffer.slice()
+      : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
+
     if (record.fullBefore) this.grid.buffer.set(record.fullBefore);
     else for (const edit of record.edits) this.grid.buffer.set(edit.before, edit.offset);
-    this.grid.syncDenseToChunks();
-    this.grid.markChunksDirty(record.stroke.affectedChunks);
+
+    try {
+      this.grid.syncDenseToChunks();
+      this.grid.markChunksDirty(record.stroke.affectedChunks);
+    } catch (error) {
+      if (record.fullBefore) this.grid.buffer.set(current as Float32Array);
+      else for (const item of current as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
+      throw error;
+    }
+
+    this.history.pop();
     this.redoStack.push(record);
     return record.stroke;
   }
 
   redo(): BrushStroke | null {
-    const record = this.redoStack.pop();
+    const record = this.redoStack[this.redoStack.length - 1];
     if (!record) return null;
+    const current = record.fullAfter
+      ? this.grid.buffer.slice()
+      : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
+
     if (record.fullAfter) this.grid.buffer.set(record.fullAfter);
     else for (const edit of record.edits) this.grid.buffer.set(edit.after, edit.offset);
-    this.grid.syncDenseToChunks();
-    this.grid.markChunksDirty(record.stroke.affectedChunks);
+
+    try {
+      this.grid.syncDenseToChunks();
+      this.grid.markChunksDirty(record.stroke.affectedChunks);
+    } catch (error) {
+      if (record.fullAfter) this.grid.buffer.set(current as Float32Array);
+      else for (const item of current as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
+      throw error;
+    }
+
+    this.redoStack.pop();
     this.history.push(record);
     return record.stroke;
   }
