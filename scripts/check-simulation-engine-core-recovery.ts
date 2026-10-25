@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { AgentSystem } from '../src/simulation/AgentSystem.ts';
 import { F } from '../src/core/CellState.ts';
+import { PROC } from '../src/process/ProcessDef.ts';
 import { SimulationEngine } from '../src/simulation/SimulationEngine.ts';
 import type { ChemLayerSnapshot } from '../src/chemistry/ChemLayer.ts';
 
@@ -121,6 +122,21 @@ assert.deepEqual(
 );
 syncRollbackEngine.syncTick(1);
 assert.equal(syncRollbackEngine.tick, 1, "syncTick must remain usable after rollback");
+
+// syncTick must rotate the dense/back buffers before physics reads backBuffer.
+// A direct front-buffer edit with a stale zero back buffer must not disappear.
+const syncBufferEngine = new SimulationEngine(8, 8, 4);
+const syncBufferEnergy = syncBufferEngine.grid.idx(3, 3, 2) + F.ENERGY;
+syncBufferEngine.grid.buffer[syncBufferEnergy] = 100;
+syncBufferEngine.grid.backBuffer[syncBufferEnergy] = 0;
+if ((syncBufferEngine.laws.activeProcessMask & (1 << PROC.ENERGY_DIFFUSION)) === 0) {
+  syncBufferEngine.laws.toggleProcess(PROC.ENERGY_DIFFUSION, true);
+}
+syncBufferEngine.syncTick(1);
+assert.ok(syncBufferEngine.grid.buffer[syncBufferEnergy] > 0,
+  "syncTick must read the direct front-buffer mutation after rotating buffers");
+assert.equal(syncBufferEngine.grid.getCell(3, 3, 2)?.energy, syncBufferEngine.grid.buffer[syncBufferEnergy],
+  "syncTick must publish the computed energy into the sparse chunk mirror");
 
 // External edits should invalidate pending work, publish dense/chunk state in
 // one synchronous boundary, and roll back every covered domain on exceptions.

@@ -338,6 +338,9 @@ export class SimulationEngine {
     const dt = 0.016;
     try {
       for (let s = 0; s < n; s++) {
+        // Match the asynchronous CPU frame: field physics reads the previous
+        // authoritative front buffer through backBuffer for every tick.
+        this.grid.snapshot();
         this.fieldPhysics.tick(this.grid, dt, this.laws.params, this.laws.activeProcessMask);
         this.entropyLayer.tick(this.grid, dt, this.laws.params, this.laws.activeProcessMask);
         this.chemLayer.tick(this.grid, dt);
