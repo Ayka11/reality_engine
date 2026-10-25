@@ -300,9 +300,8 @@ export class EntityChunkConnectivity {
           if (!neighborRelations.length) continue;
           for (const spec of specs) {
             if (!boundarySnapshot.hasSourceChunk(spec.sourceChunk)) continue;
-            // read() expects the target-side face coordinate (the current
-            // component cell), not the neighbor's source-side coordinate.
-            // Keep the sample's neighbor coordinate separate from read input.
+            // Topology reads the exact source-side neighbor cell, not the
+            // target-side field-transfer sample or an aggregated face value.
             // At an edge/corner, use only the transfer that owns this neighbor.
             const matchesTransfer = neighborRelations.some(relation =>
               relation.sourceChunk === spec.sourceChunk &&

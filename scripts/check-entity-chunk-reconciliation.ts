@@ -1250,7 +1250,7 @@ assert.equal(singletonLifecycleLayer.extinctCount, 1,
     sample.sourceChunk === coarseSourceKey &&
     sample.occupied &&
     sample.sourceEntityId === 99),
-    "fine-to-coarse topology must preserve the exact source coarse cell ID");
+    "coarse-to-fine topology must preserve the exact source coarse cell ID");
 }
 
 console.log("EntityLayer legacy singleton lifecycle characterization: PASS");
