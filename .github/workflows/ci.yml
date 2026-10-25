@@ -64,6 +64,7 @@ jobs:
       - run: npm run test:construction
       - run: npm run test:law-physics
       - run: npm run test:chunk-worker-physics
+      - run: npm run test:chunk-worker-physics-runtime
       - run: npm run test:signalling
       - run: npm run test:solver-deployment
       - run: npm run test:field-profile
