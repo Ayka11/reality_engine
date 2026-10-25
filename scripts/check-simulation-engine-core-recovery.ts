@@ -314,6 +314,27 @@ assert.deepEqual(
   "a synchronous callback returning a Promise must roll back its synchronous prefix",
 );
 
+let spoofedEngineAsyncInvoked = false;
+const spoofedEngineAsyncMutation = async () => {
+  spoofedEngineAsyncInvoked = true;
+  mutationBoundaryEngine.grid.buffer[mutationBoundaryIndex] = 777;
+  await Promise.resolve();
+  mutationBoundaryEngine.grid.buffer[mutationBoundaryIndex] = 999;
+};
+Object.defineProperty(spoofedEngineAsyncMutation, Symbol.toStringTag, { value: "Function" });
+assert.throws(
+  () => mutationBoundaryEngine.mutateAuthoritativeState(spoofedEngineAsyncMutation),
+  /must remain synchronous/,
+);
+await Promise.resolve();
+assert.equal(spoofedEngineAsyncInvoked, false,
+  "Symbol.toStringTag must not bypass async callback preflight");
+assert.deepEqual(
+  mutationBoundaryEngine.captureCoreRecoveryState(),
+  committedExternalMutation,
+  "spoofed async callbacks must be rejected before mutating authoritative state",
+);
+
 // Legacy publication paths (sculpt undo/redo, older edit adapters) must update
 // the chunk mirror, the back-buffer baseline, and GPU state as one sync boundary.
 const legacySyncEngine = new SimulationEngine(8, 8, 4);

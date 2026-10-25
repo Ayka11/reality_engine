@@ -350,10 +350,21 @@ export class SimulationEngine {
     // Async functions begin executing as soon as they are called; rejecting their
     // returned Promise afterwards cannot cancel code scheduled after the first await.
     // Reject async/generator callbacks before invoking them at all.
+    // Do not rely only on Object.prototype.toString: Symbol.toStringTag can spoof it.
     const mutationKind = Object.prototype.toString.call(mutation);
+    const mutationPrototype = Object.getPrototypeOf(mutation) as { constructor?: { name?: string } } | null;
+    const mutationConstructorName = mutationPrototype?.constructor?.name ?? '';
+    const mutationSource = Function.prototype.toString.call(mutation);
+    const asyncSource = /^\s*async\b/.test(mutationSource);
+    const generatorSource = /^\s*(?:function\s*\*|\*\s*[\w$]*\s*\()/.test(mutationSource);
     if (mutationKind === '[object AsyncFunction]' ||
         mutationKind === '[object AsyncGeneratorFunction]' ||
-        mutationKind === '[object GeneratorFunction]') {
+        mutationKind === '[object GeneratorFunction]' ||
+        mutationConstructorName === 'AsyncFunction' ||
+        mutationConstructorName === 'AsyncGeneratorFunction' ||
+        mutationConstructorName === 'GeneratorFunction' ||
+        asyncSource ||
+        generatorSource) {
       throw new TypeError('Authoritative mutation callback must remain synchronous');
     }
 

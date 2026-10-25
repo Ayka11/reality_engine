@@ -134,6 +134,67 @@ assert.throws(() => atomicCoordinator.commit(() => {
 assert.deepEqual(atomicField.serialize(), atomicInitial, "failed commit must roll back partial field mutation");
 assert.equal(atomicCoordinator.historyLength, 0, "failed commit must not create undo history");
 
+// Invalid callback results must roll back any synchronous field mutation.
+const invalidReturnField = new MutableWorldFieldProvider(base);
+const invalidReturnCoordinator = new AuthoritativeSculptTransactionCoordinator(invalidReturnField);
+const invalidReturnInitial = invalidReturnField.serialize();
+assert.throws(() => invalidReturnCoordinator.commit(() => {
+  invalidReturnField.apply({
+    kind: "brush", x: 2, y: 3, z: 4, radius: 2,
+    delta: { energy: 13 }, metadata: { transaction: "invalid-return" },
+  });
+  return undefined;
+}), /newly committed mutation/);
+assert.deepEqual(invalidReturnField.serialize(), invalidReturnInitial,
+  "invalid callback result must roll back its synchronous field write");
+assert.equal(invalidReturnCoordinator.historyLength, 0);
+
+// Async callbacks must be rejected before invocation, even if Symbol.toStringTag is spoofed.
+const asyncContractField = new MutableWorldFieldProvider(base);
+const asyncContractCoordinator = new AuthoritativeSculptTransactionCoordinator(asyncContractField);
+const asyncContractInitial = asyncContractField.serialize();
+let asyncContractInvoked = false;
+const spoofedAsyncCallback = async () => {
+  asyncContractInvoked = true;
+  asyncContractField.apply({
+    kind: "brush", x: 2, y: 3, z: 4, radius: 2,
+    delta: { energy: 99 }, metadata: { transaction: "spoofed-async" },
+  });
+  await Promise.resolve();
+};
+Object.defineProperty(spoofedAsyncCallback, Symbol.toStringTag, { value: "Function" });
+assert.throws(() => asyncContractCoordinator.commit(spoofedAsyncCallback), /must remain synchronous/);
+await Promise.resolve();
+assert.equal(asyncContractInvoked, false, "spoofed async callback must not be invoked");
+assert.deepEqual(asyncContractField.serialize(), asyncContractInitial);
+
+// Public commit/undo/redo results must not alias the coordinator's stored history.
+const exposedField = new MutableWorldFieldProvider(base);
+const exposedCoordinator = new AuthoritativeSculptTransactionCoordinator(exposedField);
+const exposedInitial = exposedField.serialize();
+const exposedCommit = exposedCoordinator.commit(() => exposedField.apply({
+  kind: "brush", x: 4, y: 5, z: 6, radius: 3,
+  delta: { energy: 7 }, metadata: { nested: { source: "history" } },
+}));
+const exposedCommittedState = exposedField.serialize();
+exposedCommit.after.mutations[0].delta.energy = 777;
+exposedCommit.mutation.metadata.nested.source = "caller-mutated";
+assert.deepEqual(exposedField.serialize(), exposedCommittedState,
+  "mutating commit return values must not change field state");
+const exposedUndo = exposedCoordinator.undo();
+assert.equal(exposedUndo?.transactionId, 1);
+assert.deepEqual(exposedField.serialize(), exposedInitial);
+exposedUndo.after.mutations[0].delta.energy = 888;
+const exposedRedo = exposedCoordinator.redo();
+assert.equal(exposedRedo?.transactionId, 1);
+assert.deepEqual(exposedField.serialize(), exposedCommittedState,
+  "mutating an undo result must not corrupt redo history");
+exposedRedo.after.mutations[0].delta.energy = 999;
+const exposedUndoAgain = exposedCoordinator.undo();
+assert.equal(exposedUndoAgain?.transactionId, 1);
+assert.deepEqual(exposedField.serialize(), exposedInitial,
+  "mutating a redo result must not corrupt undo history");
+
 // Redo must likewise refuse to overwrite a field changed after undo.
 const redoGuardField = new MutableWorldFieldProvider(base);
 const redoGuardCoordinator = new AuthoritativeSculptTransactionCoordinator(redoGuardField);
