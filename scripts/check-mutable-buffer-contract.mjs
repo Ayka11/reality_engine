@@ -264,7 +264,7 @@ for (const filePath of sourcePaths) {
     }
     function isApprovedSynchronousRollbackClosure(fn, aliasName) {
       // Explicit exception: the rollback closure belongs to the synchronous EntityLayer reconciliation transaction.
-      if (path !== "src/simulation/EntityLayer.ts" || key !== "src/simulation/EntityLayer.ts#tick" || aliasName !== "buf") return false;
+      if (path !== "src/simulation/EntityLayer.ts" || key !== "tick" || aliasName !== "buf") return false;
       const declaration = fn.parent;
       if (!ts.isVariableDeclaration(declaration) || declaration.initializer !== fn ||
           !ts.isIdentifier(declaration.name) || declaration.name.text !== "rollbackTick" ||
