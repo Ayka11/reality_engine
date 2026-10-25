@@ -25,6 +25,23 @@ grid.buffer[grid.idx(3, 3, 3) + F.ENERGY] = 7;
 grid.syncDenseToChunks();
 const sync = grid.syncDenseToChunks.bind(grid);
 
+// A staging failure must not publish a partial dense-to-chunk copy.
+const seededChunk = grid.chunks.values().next().value!;
+const chunkBeforeStagingFailure = seededChunk.buffer.slice();
+const denseBeforeStagingFailure = grid.buffer.slice();
+const originalLocalIdx = seededChunk.localIdx.bind(seededChunk);
+let localIdxCalls = 0;
+seededChunk.localIdx = (lx: number, ly: number, lz: number) => {
+  localIdxCalls++;
+  if (localIdxCalls === 12) throw new Error("injected staging failure");
+  return originalLocalIdx(lx, ly, lz);
+};
+grid.buffer[grid.idx(3, 3, 3) + F.ENERGY] = 777;
+assert.throws(() => grid.syncDenseToChunks(), /injected staging failure/);
+assertBufferEqual(seededChunk.buffer, chunkBeforeStagingFailure, "staging failure must not publish partial chunk data");
+seededChunk.localIdx = originalLocalIdx;
+grid.buffer.set(denseBeforeStagingFailure);
+
 const beforeFailedApply = grid.buffer.slice();
 grid.syncDenseToChunks = () => { throw new Error("injected sync failure"); };
 await assert.rejects(() => engine.applyStroke(makeStroke()), /injected sync failure/);
