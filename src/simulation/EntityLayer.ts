@@ -497,7 +497,16 @@ export class EntityLayer {
       buf[base + F.SIGNAL] = Math.max(0, buf[base + F.SIGNAL] - 0.5 * dt * 60);
     }
     } catch (error) {
-      rollbackTick();
+      try {
+        rollbackTick();
+      } catch (rollbackError) {
+        const originalMessage = error instanceof Error ? error.message : String(error);
+        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        throw new AggregateError(
+          [error, rollbackError],
+          `EntityLayer tick failed (${originalMessage}) and rollback failed (${rollbackMessage})`,
+        );
+      }
       throw error;
     }
   }
@@ -508,7 +517,7 @@ export class EntityLayer {
     // ignored when authorizing global entity extinction or merge.
     if (
       grid instanceof SparseVoxelGrid &&
-      grid.hasEntityActivityOutsideDenseWindow(this.bioThreshold)
+      grid.hasUnverifiedEntityDomainOutsideDenseWindow(this.bioThreshold)
     ) {
       throw new Error(
         "EntityLayer refuses global reconciliation while sparse entity activity exists outside the dense simulation window",

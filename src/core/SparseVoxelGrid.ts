@@ -276,7 +276,7 @@ export class SparseVoxelGrid {
    * outside the dense window scanned by EntityLayer. A dense-window flood fill
    * cannot authorize world-wide merge/extinction while any such cell is active.
    */
-  hasEntityActivityOutsideDenseWindow(bioThreshold: number): boolean {
+  hasUnverifiedEntityDomainOutsideDenseWindow(bioThreshold: number): boolean {
     if (!Number.isFinite(bioThreshold) || bioThreshold < 0) {
       throw new RangeError("Entity-domain visibility threshold must be finite and non-negative");
     }
@@ -297,6 +297,15 @@ export class SparseVoxelGrid {
         chunkMinY >= this.denseOrigin.y && chunkMaxY <= denseMaxY &&
         chunkMinZ >= this.denseOrigin.z && chunkMaxZ <= denseMaxZ;
       if (fullyInsideDenseWindow) continue;
+
+      const overlapsDenseWindow =
+        chunkMinX < denseMaxX && chunkMaxX > this.denseOrigin.x &&
+        chunkMinY < denseMaxY && chunkMaxY > this.denseOrigin.y &&
+        chunkMinZ < denseMaxZ && chunkMaxZ > this.denseOrigin.z;
+      // A wholly external sparse chunk is outside the authority of this
+      // dense-window scan. Treat its domain as unverified without scanning every
+      // off-window cell on every simulation tick.
+      if (!overlapsDenseWindow) return true;
 
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         const gz = chunkMinZ + lz;

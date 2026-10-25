@@ -401,7 +401,7 @@ const externalDomainExtinctBefore = externalDomainLayer.extinctCount;
 const externalBioCell = externalDomainGrid.getCell(12, 2, 0);
 assert.ok(externalBioCell, "outside-window cell must be addressable through sparse chunk storage");
 externalBioCell.bioPotential = 1;
-assert.equal(externalDomainGrid.hasEntityActivityOutsideDenseWindow(0.05), true,
+assert.equal(externalDomainGrid.hasUnverifiedEntityDomainOutsideDenseWindow(0.05), true,
   "sparse chunks must report entity-relevant activity outside the dense window");
 assert.throws(
   () => externalDomainLayer.tick(externalDomainGrid, 1 / 60),
@@ -419,6 +419,57 @@ assert.doesNotThrow(
   "rejecting an incomplete sparse domain must preserve dense/chunk entity ownership consistency",
 );
 console.log("Sparse external entity domain fails closed: PASS");
+
+// When EntityLayer rollback itself throws, keep the original mutation fault and
+// the rollback fault observable rather than masking the first with the second.
+const rollbackFailureGrid = new SparseVoxelGrid(8, 8, 1);
+const rollbackFailureLayer = new EntityLayer();
+rollbackFailureLayer.setRandomSeed(0x12345678);
+for (const index of [9, 10, 17, 18]) {
+  rollbackFailureGrid.buffer[index * CELL_FIELDS + F.BIO_POTENTIAL] = 1;
+  rollbackFailureGrid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
+}
+rollbackFailureGrid.syncDenseToChunks();
+rollbackFailureLayer.tick(rollbackFailureGrid, 1 / 60);
+rollbackFailureGrid.syncDenseToChunks();
+const rollbackFailureEntity = rollbackFailureLayer.getEntities()[0];
+assert.ok(rollbackFailureEntity, "rollback-failure fixture must create an entity");
+rollbackFailureEntity.age = 59;
+rollbackFailureEntity.genome.reproThreshold = 1;
+for (const index of rollbackFailureEntity.cells) {
+  rollbackFailureGrid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
+}
+rollbackFailureGrid.syncDenseToChunks();
+const rollbackFailureInternals = rollbackFailureLayer as unknown as {
+  _spawnChild: (...args: unknown[]) => void;
+};
+const rollbackFailureOriginalSpawn = rollbackFailureInternals._spawnChild;
+const rollbackFailureOriginalSync = rollbackFailureGrid.syncDenseToChunks;
+rollbackFailureInternals._spawnChild = function (...args: unknown[]) {
+  rollbackFailureOriginalSpawn.apply(rollbackFailureLayer, args);
+  throw new Error("injected EntityLayer mutation failure");
+};
+rollbackFailureGrid.syncDenseToChunks = () => {
+  throw new Error("injected EntityLayer rollback failure");
+};
+let entityRollbackAggregate: unknown;
+try {
+  rollbackFailureLayer.tick(rollbackFailureGrid, 1 / 60);
+} catch (error) {
+  entityRollbackAggregate = error;
+} finally {
+  rollbackFailureInternals._spawnChild = rollbackFailureOriginalSpawn;
+  rollbackFailureGrid.syncDenseToChunks = rollbackFailureOriginalSync;
+}
+assert.ok(entityRollbackAggregate instanceof AggregateError,
+  "a failed EntityLayer rollback must raise AggregateError");
+assert.match((entityRollbackAggregate as Error).message, /injected EntityLayer mutation failure/,
+  "aggregate error must retain the original mutation failure");
+assert.match((entityRollbackAggregate as Error).message, /injected EntityLayer rollback failure/,
+  "aggregate error must retain the rollback failure");
+assert.equal((entityRollbackAggregate as AggregateError).errors.length, 2,
+  "aggregate error must preserve both exception objects");
+console.log("EntityLayer rollback failure preserves both causes: PASS");
 
 
 
