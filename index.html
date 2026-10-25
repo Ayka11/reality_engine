@@ -2576,7 +2576,7 @@ function toggleGreedySurfacePreview(){
   }
   // Set the renderer mode explicitly before showing its canvas; the public
   // generic mode switch intentionally targets InfiniteWorld while the canvas is hidden.
-  window.setFieldMatMode?.('material');
+  window.fieldSetMatMode?.('material');
   const result=window.setGreedyMeshingEnabled?.(true);
   if(!result?.active||!(result.quadCount>0)){
     window.setGreedyMeshingEnabled?.(false);
