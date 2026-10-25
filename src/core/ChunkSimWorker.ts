@@ -208,9 +208,14 @@ function simStep(dt: number) {
       ? (p.entropyGrowthRate + newE * p.entropyEnergyCoupling
         + (chunk[base + F.T] || 0) * 0.000015) * dt * 60
       : 0
-    const newS = Math.max(0, Math.min(1, chunk[base + F.S] + dS))
-    grid.set(x, y, z, F.S, newS)
-    grid.set(x, y, z, F.E, Math.max(0, newE * (1 - newS * 0.0002 * dt * 60)))
+    const entropyEnabled = isProcessActive(PROC.ENTROPY_GROWTH)
+    const newS = entropyEnabled
+      ? Math.max(0, Math.min(1, chunk[base + F.S] + dS))
+      : chunk[base + F.S]
+    if (entropyEnabled) {
+      grid.set(x, y, z, F.S, newS)
+      grid.set(x, y, z, F.E, Math.max(0, newE * (1 - newS * 0.0002 * dt * 60)))
+    }
 
     if (isProcessActive(PROC.BIO_POTENTIAL) || isProcessActive(PROC.METABOLISM)) {
       const sup = Math.max(0, 1 - newS * p.infoEntropySupp)
