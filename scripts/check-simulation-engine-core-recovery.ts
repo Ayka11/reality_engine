@@ -335,6 +335,25 @@ assert.deepEqual(
   "spoofed async callbacks must be rejected before mutating authoritative state",
 );
 
+let spoofedBoundaryAsyncInvoked = false;
+const spoofedBoundaryAsyncOperation = async () => {
+  spoofedBoundaryAsyncInvoked = true;
+  await Promise.resolve();
+};
+Object.defineProperty(spoofedBoundaryAsyncOperation, Symbol.toStringTag, { value: "Function" });
+await assert.rejects(
+  () => mutationBoundaryEngine.runAtStepBoundary(spoofedBoundaryAsyncOperation),
+  /must remain synchronous/,
+);
+await Promise.resolve();
+assert.equal(spoofedBoundaryAsyncInvoked, false,
+  "runAtStepBoundary must reject a spoofed async callback before invocation");
+assert.deepEqual(
+  mutationBoundaryEngine.captureCoreRecoveryState(),
+  committedExternalMutation,
+  "a spoofed async step-boundary callback must not mutate authoritative state",
+);
+
 // Legacy publication paths (sculpt undo/redo, older edit adapters) must update
 // the chunk mirror, the back-buffer baseline, and GPU state as one sync boundary.
 const legacySyncEngine = new SimulationEngine(8, 8, 4);
