@@ -5,6 +5,7 @@ import {
   runInfinityScaleLODPartialBoundaryCommitRollbackRegression,
 } from "../src/infinity/InfinityScaleMixedLODCPUExecutor.regression";
 import { runInfinityScaleLODBoundaryCellMapperRegression } from "../src/infinity/InfinityScaleLODBoundaryCellMapper.regression";
+import { runInfinityScaleLODBoundaryRegression } from "../src/infinity/InfinityScaleLODBoundarySnapshot.regression";
 import { runInfinityScaleGlobalLODTransactionRegression } from "../src/infinity/InfinityScaleGlobalLODTransaction.regression";
 import { runInfinityScaleChunkExecutionContextBoundaryRegression } from "../src/infinity/InfinityScaleChunkExecutionContext.regression";
 import { runInfinityScaleLODStateRecoveryRegression } from "../src/infinity/InfinityScaleLODStateRecovery.regression";
@@ -19,6 +20,7 @@ runInfinityScaleMixedLODCPUProlongationRegression();
 runInfinityScaleMixedLODCPURollbackRegression();
 runInfinityScaleLODPartialBoundaryCommitRollbackRegression();
 runInfinityScaleLODBoundaryCellMapperRegression();
+runInfinityScaleLODBoundaryRegression();
 runInfinityScaleChunkExecutionContextBoundaryRegression();
 runInfinityScaleGlobalLODTransactionRegression();
 runInfinityScaleExecutionAdapterBoundaryRegression();
