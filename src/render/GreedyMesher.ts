@@ -57,7 +57,8 @@ export function buildGreedyChunkMesh(input: GreedyChunkMeshInput): GreedyChunkMe
     p2[vAxis] += height
     p3[vAxis] += height
     // Reverse winding for negative faces so front-face orientation follows the normal.
-    const corners = face.sign > 0 ? [p, p1, p2, p3] : [p, p3, p2, p1]
+    const windingSign = face.sign * (axis === 1 ? -1 : 1)
+    const corners = windingSign > 0 ? [p, p1, p2, p3] : [p, p3, p2, p1]
     const base = positions.length / 3
     for (const corner of corners) {
       positions.push(corner[0], corner[1], corner[2])
@@ -85,6 +86,13 @@ export function buildGreedyChunkMesh(input: GreedyChunkMeshInput): GreedyChunkMe
         // At chunk boundaries, the outside sample remains global and can cull
         // the face when a neighboring chunk contains the same solid material.
         if (ma === mb) continue
+        // A material boundary has two visible sides when both voxels are solid.
+        // Keep each material's face rather than arbitrarily hiding one side.
+        if (ma !== 0 && mb !== 0) {
+          emit(axis, slice, uAxis, vAxis, u, v, 1, 1, { material: ma, sign: -1 })
+          emit(axis, slice, uAxis, vAxis, u, v, 1, 1, { material: mb, sign: 1 })
+          continue
+        }
         const visible = ma !== 0 ? { material: ma, sign: -1 as const } :
                         mb !== 0 ? { material: mb, sign: 1 as const } : null
         if (visible) mask[v * uSize + u] = visible
