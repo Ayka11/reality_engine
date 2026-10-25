@@ -16,6 +16,12 @@ export interface SurfaceNetsMeshInput {
   size: readonly [number, number, number]
   origin?: readonly [number, number, number]
   isoLevel: number
+  /**
+   * "closed" emits low-side ghost edges for a standalone closed volume.
+   * "low-endpoint" assigns each lattice edge to the chunk containing its
+   * low-coordinate endpoint, preventing duplicate seam quads in streamed chunks.
+   */
+  edgeOwnership?: 'closed' | 'low-endpoint'
   sampleValue: (x: number, y: number, z: number) => number
 }
 
@@ -208,8 +214,11 @@ export function buildSurfaceNetsMesh(input: SurfaceNetsMeshInput): SurfaceNetsMe
   }
 
   // X-oriented lattice edges; cross-sectional cube ordering is +X when the
-  // low-coordinate endpoint is inside and -X otherwise.
-  for (let z = 0; z < sz; z++) for (let y = 0; y < sy; y++) for (let x = -1; x < sx; x++) {
+  // low-coordinate endpoint is inside and -X otherwise. In low-endpoint mode,
+  // only edges anchored inside this chunk are emitted; ghost cubes still
+  // supply neighboring topology for the quad vertices.
+  const edgeStartX = input.edgeOwnership === 'low-endpoint' ? 0 : -1
+  for (let z = 0; z < sz; z++) for (let y = 0; y < sy; y++) for (let x = edgeStartX; x < sx; x++) {
     const a = sampleGrid[sampleIndex(x, y, z)]
     const b = sampleGrid[sampleIndex(x + 1, y, z)]
     if (inside(a) === inside(b)) continue
@@ -219,7 +228,8 @@ export function buildSurfaceNetsMesh(input: SurfaceNetsMeshInput): SurfaceNetsMe
   }
 
   // Y-oriented edges have the opposite base winding because x × z = -y.
-  for (let z = 0; z < sz; z++) for (let x = 0; x < sx; x++) for (let y = -1; y < sy; y++) {
+  const edgeStartY = input.edgeOwnership === 'low-endpoint' ? 0 : -1
+  for (let z = 0; z < sz; z++) for (let x = 0; x < sx; x++) for (let y = edgeStartY; y < sy; y++) {
     const a = sampleGrid[sampleIndex(x, y, z)]
     const b = sampleGrid[sampleIndex(x, y + 1, z)]
     if (inside(a) === inside(b)) continue
@@ -230,7 +240,8 @@ export function buildSurfaceNetsMesh(input: SurfaceNetsMeshInput): SurfaceNetsMe
 
   // Z-oriented lattice edges; cross-sectional cube ordering is +Z when the
   // low-coordinate endpoint is inside and -Z otherwise.
-  for (let y = 0; y < sy; y++) for (let x = 0; x < sx; x++) for (let z = -1; z < sz; z++) {
+  const edgeStartZ = input.edgeOwnership === 'low-endpoint' ? 0 : -1
+  for (let y = 0; y < sy; y++) for (let x = 0; x < sx; x++) for (let z = edgeStartZ; z < sz; z++) {
     const a = sampleGrid[sampleIndex(x, y, z)]
     const b = sampleGrid[sampleIndex(x, y, z + 1)]
     if (inside(a) === inside(b)) continue
