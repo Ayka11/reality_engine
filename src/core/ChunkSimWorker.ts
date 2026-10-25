@@ -167,7 +167,8 @@ function clearSculptHistory():void {sculptUndo.length=0;sculptRedo.length=0}
 
 function simStep(dt: number) {
   for (const { x, y, z, base, chunk } of grid.activeCells()) {
-    let lapE = 0, lapT = 0, lapD = 0, lapI = 0, nc = 0
+    let lapE = 0, lapT = 0, lapD = 0, lapI = 0, lapP = 0, lapWave = 0, nc = 0
+    let fxSum = 0, fySum = 0
     const dirs: Array<[number, number, number]> = [
       [-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1],
     ]
@@ -178,11 +179,18 @@ function simStep(dt: number) {
       lapT += grid.get(nx, ny, nz, F.T)
       lapD += grid.get(nx, ny, nz, F.D)
       lapI += grid.get(nx, ny, nz, F.I)
+      lapP += grid.get(nx, ny, nz, F.P)
+      lapWave += grid.get(nx, ny, nz, F.WAVE)
+      fxSum += grid.get(nx, ny, nz, F.FX)
+      fySum += grid.get(nx, ny, nz, F.FY)
       nc++
     }
     const E = chunk[base + F.E], T = chunk[base + F.T]
     const D_ = chunk[base + F.D], I = chunk[base + F.I]
+    const P = chunk[base + F.P], wave = chunk[base + F.WAVE]
+    const FX = chunk[base + F.FX], FY = chunk[base + F.FY]
     lapE -= nc * E; lapT -= nc * T; lapD -= nc * D_; lapI -= nc * I
+    lapP -= nc * P; lapWave -= nc * wave
 
     const p = physicsParams
     const newE = isProcessActive(PROC.ENERGY_DIFFUSION)
@@ -198,16 +206,17 @@ function simStep(dt: number) {
       grid.set(x, y, z, F.D, Math.max(0, Math.min(1, D_ + 0.012 * lapD * dt)))
     }
     if (isProcessActive(PROC.INFORMATION)) {
-      const infoGrowth = newE > p.infoGrowthThreshE && D_ > p.infoGrowthThreshD
-        ? p.infoGrowthRate * Math.max(0, 1 - chunk[base + F.S] * p.infoEntropySupp) * dt
-        : 0
-      grid.set(x, y, z, F.I, Math.max(0, Math.min(999,
-        I + 0.04 * lapI * dt + infoGrowth)))
+      const supp = 1 - chunk[base + F.S] * p.infoEntropySupp
+      if (newE > p.infoGrowthThreshE && D_ > p.infoGrowthThreshD && supp > 0) {
+        grid.set(x, y, z, F.I, Math.max(0, Math.min(999, I + p.infoGrowthRate * supp * dt)))
+      } else {
+        grid.set(x, y, z, F.I, Math.max(0, I * Math.pow(0.999, dt * 60)))
+      }
     }
 
     const dS = isProcessActive(PROC.ENTROPY_GROWTH)
       ? (p.entropyGrowthRate + newE * p.entropyEnergyCoupling
-        + (chunk[base + F.T] || 0) * 0.000015) * dt * 60
+        + (chunk[base + F.T] || 0) * 0.00005) * dt
       : 0
     const entropyEnabled = isProcessActive(PROC.ENTROPY_GROWTH)
     const newS = entropyEnabled
@@ -215,24 +224,96 @@ function simStep(dt: number) {
       : chunk[base + F.S]
     if (entropyEnabled) {
       grid.set(x, y, z, F.S, newS)
-      grid.set(x, y, z, F.E, Math.max(0, newE * (1 - newS * 0.0002 * dt * 60)))
+      grid.set(x, y, z, F.E, Math.max(0, newE * (1 - newS * 0.0005 * dt * 60)))
     }
 
-    if (isProcessActive(PROC.BIO_POTENTIAL) || isProcessActive(PROC.METABOLISM)) {
-      const sup = Math.max(0, 1 - newS * p.infoEntropySupp)
-      const D2 = grid.get(x, y, z, F.D)
-      if (newE > p.infoGrowthThreshE && D2 > p.infoGrowthThreshD && sup > 0) {
-        if (isProcessActive(PROC.METABOLISM)) {
-          grid.add(x, y, z, F.I, p.infoGrowthRate * sup * dt)
-          grid.add(x, y, z, F.BIO, 0.015 * sup * dt)
-        } else {
-          grid.add(x, y, z, F.BIO, 0.015 * sup * dt)
-        }
-      } else {
-        if (isProcessActive(PROC.METABOLISM)) {
-          grid.set(x, y, z, F.I, Math.max(0, (grid.get(x, y, z, F.I) || 0) * Math.pow(0.9985, dt * 60)))
-        }
-        grid.set(x, y, z, F.BIO, Math.max(0, (grid.get(x, y, z, F.BIO) || 0) * Math.pow(0.996, dt * 60)))
+    if (isProcessActive(PROC.BIO_POTENTIAL)) {
+      const bio = (grid.get(x, y, z, F.I) / 200) * 0.4
+        + Math.min(newE / 500, 1) * 0.3
+        + grid.get(x, y, z, F.D) * 0.2
+        + (1 - newS) * 0.1
+      grid.set(x, y, z, F.BIO, Math.max(0, Math.min(1, bio)))
+    }
+
+    if (isProcessActive(PROC.METABOLISM)) {
+      const bio = grid.get(x, y, z, F.BIO)
+      if (bio > 0.45) {
+        const rate = bio * 0.12 * dt
+        grid.set(x, y, z, F.E, Math.max(0, grid.get(x, y, z, F.E) - rate * 60))
+        grid.set(x, y, z, F.I, Math.min(999, grid.get(x, y, z, F.I) + rate * 25))
+        grid.set(x, y, z, F.S, Math.min(1, grid.get(x, y, z, F.S) + rate * 0.008))
+      }
+    }
+
+    if (isProcessActive(PROC.SIGNAL_PROPAGATION)) {
+      grid.set(x, y, z, F.I, Math.max(0, Math.min(999,
+        I + 0.06 * p.infoGrowthRate * dt * lapI)))
+    }
+
+    if (isProcessActive(PROC.WAVE_PROPAGATION)) {
+      const nextWave = Math.max(-9999, Math.min(9999,
+        (wave + p.waveSpeed * p.waveSpeed * lapWave * dt * dt) * p.waveDamping))
+      grid.set(x, y, z, F.WAVE, nextWave)
+      grid.add(x, y, z, F.E, wave * Math.sin(tick * dt * p.waveSpeed) * 0.008 * dt)
+    }
+
+    if (isProcessActive(PROC.GRAVITY)) {
+      const leftD = grid.get(x - 1, y, z, F.D), rightD = grid.get(x + 1, y, z, F.D)
+      const downD = grid.get(x, y - 1, z, F.D), upD = grid.get(x, y + 1, z, F.D)
+      grid.set(x, y, z, F.FX, FX - p.gravityDensityCoupling * (rightD - leftD) * 0.5 * dt)
+      grid.set(x, y, z, F.FY, FY - p.gravityDensityCoupling * (upD - downD) * 0.5 * dt)
+    }
+
+    if (isProcessActive(PROC.PRESSURE_DIFFUSION)) {
+      const equilibriumPressure = grid.get(x, y, z, F.D) * p.pressureDensityCoupling
+        - grid.get(x, y, z, F.T) * 0.1
+      grid.set(x, y, z, F.P, Math.max(-9999, Math.min(9999,
+        P + p.tempDiffusion * lapP * dt + (equilibriumPressure - P) * dt)))
+    }
+
+    if (isProcessActive(PROC.PHASE_TRANSITION)) {
+      const density = grid.get(x, y, z, F.D)
+      const temperature = grid.get(x, y, z, F.T)
+      if (temperature > 500 && density > 0.5) {
+        grid.set(x, y, z, F.D, Math.max(0, density - 0.008 * dt * 60))
+        grid.set(x, y, z, F.S, Math.min(1, grid.get(x, y, z, F.S) + 0.008 * dt * 60))
+        grid.set(x, y, z, F.I, Math.max(0, grid.get(x, y, z, F.I) - 3 * dt))
+      } else if (temperature < 40 && density > 0.55) {
+        grid.set(x, y, z, F.D, Math.min(1, density + 0.004 * dt * 60))
+        grid.set(x, y, z, F.S, Math.max(0, grid.get(x, y, z, F.S) - 0.004 * dt * 60))
+      }
+    }
+
+    if (isProcessActive(PROC.CRYSTALLIZATION)) {
+      const entropy = grid.get(x, y, z, F.S)
+      const density = grid.get(x, y, z, F.D)
+      if (entropy < 0.18 && density > 0.38) {
+        const rate = 0.003
+        grid.set(x, y, z, F.D, Math.min(1, density + rate * (0.18 - entropy) * dt * 60))
+        grid.set(x, y, z, F.S, Math.max(0, entropy - rate * 0.5 * dt * 60))
+        grid.set(x, y, z, F.MAT, Math.max(1, grid.get(x, y, z, F.MAT)))
+      }
+    }
+
+    if (isProcessActive(PROC.RADIATION)) {
+      const energy = grid.get(x, y, z, F.E)
+      if (energy > 400) {
+        grid.set(x, y, z, F.D, Math.max(0, grid.get(x, y, z, F.D) - (energy - 400) * 0.00008 * dt * 60))
+        grid.set(x, y, z, F.E, Math.max(0, energy - (energy - 400) * 0.0001 * dt * 60))
+      }
+    }
+
+    if (isProcessActive(PROC.FIELD_ROTATION)) {
+      grid.set(x, y, z, F.FX, FX * 0.94 + fxSum / Math.max(nc, 1) * 0.05 + FY * 0.01)
+      grid.set(x, y, z, F.FY, FY * 0.94 + fySum / Math.max(nc, 1) * 0.05 - FX * 0.01)
+    }
+
+    if (isProcessActive(PROC.EROSION)) {
+      const density = grid.get(x, y, z, F.D)
+      const flow = Math.abs(grid.get(x, y, z, F.FX)) + Math.abs(grid.get(x, y, z, F.FY))
+      if (density > 0.65 && flow > 8) {
+        grid.set(x, y, z, F.D, Math.max(0, density - 0.0018 * dt * 60))
+        grid.set(x, y, z, F.I, Math.max(0, grid.get(x, y, z, F.I) - 0.4 * dt))
       }
     }
 
