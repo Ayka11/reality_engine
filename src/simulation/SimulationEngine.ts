@@ -204,17 +204,21 @@ export class SimulationEngine {
             "Stale GPU readback rejected",
           );
         }
-        // From here until the frame completes, this synchronous commit path owns
-        // its mutations. Roll back to this post-readback snapshot if any subsystem fails.
-        frameRecoveryBefore = this.captureCoreRecoveryState();
         if (!(data instanceof Float32Array) || data.length !== this.grid.buffer.length) {
           const receivedLength = data instanceof Float32Array ? data.length : "non-Float32Array";
           const readbackError = new Error(
             `Invalid GPU readback: expected ${this.grid.buffer.length} floats, received ${receivedLength}`,
           );
-          // Keep the CPU grid authoritative if the device returns an empty or
-          // truncated payload; never treat a malformed readback as a successful tick.
+          // Reject malformed output before capturing a commit snapshot: no CPU
+          // mutation has happened yet, so resync once and preserve the real cause.
           this.resynchronizeGPUAndThrow(readbackError, "Malformed GPU readback rejected");
+        }
+        // Only capture once a readback has passed shape validation. From here
+        // until the frame completes, the synchronous commit path owns mutations.
+        try {
+          frameRecoveryBefore = this.captureCoreRecoveryState();
+        } catch (error) {
+          this.resynchronizeGPUAndThrow(error, "GPU frame recovery snapshot failed");
         }
         this.grid.buffer.set(data);
         this.chemLayer.tick(this.grid, clampedDt * nSteps);
