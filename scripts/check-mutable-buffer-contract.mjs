@@ -219,4 +219,4 @@ assert.deepEqual(errors, [], [
   "Mutable-buffer ownership contract violations:",
   ...errors.map(error => `- ${error}`),
 ].join("\n"));
-console.log("Mutable-buffer contract inventory: PASS (29 audited call sites; no new raw-buffer escapes)");
+console.log(`Mutable-buffer contract inventory: PASS (${[...expectedCalls.values()].reduce((sum, count) => sum + count, 0)} audited call sites; no new raw-buffer escapes)`);

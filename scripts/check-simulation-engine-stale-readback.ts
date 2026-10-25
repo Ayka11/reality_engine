@@ -24,8 +24,29 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
 
   const fieldIndex = engine.grid.idx(2, 2, 2) + F.ENERGY;
 
+  // Seed known field values at two cells and verify the multi-field accumulator.
+  const metricCellA = engine.grid.idx(0, 0, 0);
+  const metricCellB = engine.grid.idx(1, 0, 0);
+  engine.grid.buffer[metricCellA + F.ENERGY] = 10;
+  engine.grid.buffer[metricCellB + F.ENERGY] = 15;
+  engine.grid.buffer[metricCellA + F.ENTROPY] = 2;
+  engine.grid.buffer[metricCellB + F.ENTROPY] = 4;
+  engine.grid.buffer[metricCellA + F.INFORMATION] = 3;
+  engine.grid.buffer[metricCellB + F.INFORMATION] = 7;
+  engine.grid.buffer[metricCellA + F.DENSITY] = 0.25;
+  engine.grid.buffer[metricCellB + F.DENSITY] = 0.75;
+  engine.grid.buffer[metricCellA + F.BIO_POTENTIAL] = 0.1;
+  engine.grid.buffer[metricCellB + F.BIO_POTENTIAL] = 0.3;
+
   const beforeReadOnlyMetrics = engine.grid.mutationRevision;
-  (engine as unknown as { _worldMetrics: () => unknown })._worldMetrics();
+  const metrics = (engine as unknown as { _worldMetrics: () => {
+    totalEnergy: number; avgEntropy: number; avgInfo: number; avgDensity: number; avgBio: number;
+  } })._worldMetrics();
+  assert.equal(metrics.totalEnergy, 25, "world metrics must sum total energy");
+  assert.ok(Math.abs(metrics.avgEntropy - 6 / engine.grid.size) < 1e-7, "world metrics must average entropy");
+  assert.ok(Math.abs(metrics.avgInfo - 10 / engine.grid.size) < 1e-7, "world metrics must average information");
+  assert.ok(Math.abs(metrics.avgDensity - 1 / engine.grid.size) < 1e-7, "world metrics must average density");
+  assert.ok(Math.abs(metrics.avgBio - 0.4 / engine.grid.size) < 1e-7, "world metrics must average bio potential");
   assert.equal(engine.grid.mutationRevision, beforeReadOnlyMetrics,
     "read-only world metrics must not advance the grid mutation revision");
 

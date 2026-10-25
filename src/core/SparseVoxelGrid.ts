@@ -482,9 +482,35 @@ export class SparseVoxelGrid {
   }
 
   totalField(fieldOffset: number): number {
+    this.assertFieldOffset(fieldOffset);
     let sum = 0;
     for (let i = fieldOffset; i < this._sparseDenseBuffer.length; i += CELL_FIELDS) sum += this._sparseDenseBuffer[i];
     return sum;
+  }
+
+  /**
+   * Sum selected cell fields in one backing-buffer pass without exposing a raw
+   * mutable alias or paying public Proxy access overhead in read-only hot paths.
+   */
+  sumFields(fieldOffsets: readonly number[]): number[] {
+    if (!Array.isArray(fieldOffsets) || fieldOffsets.some(offset =>
+      !Number.isSafeInteger(offset) || offset < 0 || offset >= CELL_FIELDS)) {
+      throw new RangeError("SparseVoxelGrid field offsets must be valid cell-field indices");
+    }
+    const sums = fieldOffsets.map(() => 0);
+    const buffer = this._sparseDenseBuffer;
+    for (let base = 0; base < buffer.length; base += CELL_FIELDS) {
+      for (let index = 0; index < fieldOffsets.length; index++) {
+        sums[index] += buffer[base + fieldOffsets[index]];
+      }
+    }
+    return sums;
+  }
+
+  private assertFieldOffset(fieldOffset: number): void {
+    if (!Number.isSafeInteger(fieldOffset) || fieldOffset < 0 || fieldOffset >= CELL_FIELDS) {
+      throw new RangeError("SparseVoxelGrid field offset must be a valid cell-field index");
+    }
   }
 
   syncDenseToChunks(): void {

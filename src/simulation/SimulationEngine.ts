@@ -560,13 +560,11 @@ export class SimulationEngine {
   private _worldMetrics(): WorldMetrics {
     const { grid } = this;
     const n = grid.size;
-    // totalField reads the authoritative backing buffer without exposing a raw
-    // alias or falsely advancing mutationRevision. Keep the hot path unproxied.
-    const totalE = grid.totalField(F.ENERGY);
-    const sumS = grid.totalField(F.ENTROPY);
-    const sumI = grid.totalField(F.INFORMATION);
-    const sumD = grid.totalField(F.DENSITY);
-    const sumB = grid.totalField(F.BIO_POTENTIAL);
+    // One read-only pass avoids mutable-alias revision bumps, Proxy overhead,
+    // and five separate full-grid traversals in this per-frame summary.
+    const [totalE, sumS, sumI, sumD, sumB] = grid.sumFields([
+      F.ENERGY, F.ENTROPY, F.INFORMATION, F.DENSITY, F.BIO_POTENTIAL,
+    ]);
     return {
       totalEnergy: totalE,
       avgEntropy:  sumS / n,
