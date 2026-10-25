@@ -82,12 +82,20 @@ export class SimulationEngine {
   }
 
   async initGPU(): Promise<boolean> {
-    this._gpuReady = await this.gpu.init(this.grid.W, this.grid.H, this.grid.D);
-    if (this._gpuReady) {
+    // Do not advertise GPU execution until device creation and both initial
+    // uploads have completed. A partially initialized device is not trusted.
+    this._gpuReady = false;
+    try {
+      const initialized = await this.gpu.init(this.grid.W, this.grid.H, this.grid.D);
+      if (!initialized) return false;
       this.gpu.upload(this.grid.buffer);
       this.gpu.uploadMaterials(buildMaterialBuffer());
+      this._gpuReady = true;
+      return true;
+    } catch (error) {
+      this._gpuReady = false;
+      throw error;
     }
-    return this._gpuReady;
   }
 
   get tick() { return this._tick; }
@@ -384,9 +392,16 @@ export class SimulationEngine {
   // Called after user paints/erases so GPU buffer stays consistent
   syncToGPU(): void {
     this.invalidatePendingGPUReadback();
-    this.grid.syncDenseToChunks();
-    this.grid.syncBackBuffersFromFront();
-    if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+    try {
+      this.grid.syncDenseToChunks();
+      this.grid.syncBackBuffersFromFront();
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+    } catch (error) {
+      // Publication failed after the CPU state may already have changed.
+      // Fail closed: a later GPU step must not overwrite it from an uncertain mirror.
+      this._gpuReady = false;
+      throw error;
+    }
   }
 
   // Synchronous CPU-only step used by ScriptEngine (bypasses GPU/await)

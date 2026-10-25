@@ -685,4 +685,48 @@ function assertRollbackAggregate(
   }
 }
 
+
+
+// GPU initialization is not considered active until device and material uploads both succeed.
+{
+  const engine = new SimulationEngine(4, 4, 2);
+  const initialUploadFailure = new Error("injected initial material upload failure");
+  const backend = engine.gpu as unknown as {
+    init: (...args: unknown[]) => Promise<boolean>;
+    upload: (data: Float32Array) => void;
+    uploadMaterials: (data: Float32Array) => void;
+  };
+  backend.init = async () => true;
+  backend.upload = () => undefined;
+  backend.uploadMaterials = () => { throw initialUploadFailure; };
+  await assert.rejects(engine.initGPU(), error => error === initialUploadFailure);
+  assert.equal(engine.gpuActive, false,
+    "GPU must remain disabled when any initial device publication fails");
+}
+
+// If a runtime upload fails after CPU edits, keep CPU state authoritative and disable GPU fallback.
+{
+  const engine = new SimulationEngine(4, 4, 2);
+  (engine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const uploadFailure = new Error("injected syncToGPU upload failure");
+  const backend = engine.gpu as unknown as {
+    upload: (data: Float32Array) => void;
+  };
+  backend.upload = () => { throw uploadFailure; };
+  const energyIndex = engine.grid.idx(2, 2, 1) + F.ENERGY;
+  engine.grid.buffer[energyIndex] = 47;
+  assert.throws(() => engine.syncToGPU(), error => error === uploadFailure);
+  assert.equal(engine.gpuActive, false,
+    "syncToGPU must disable a device whose authoritative upload failed");
+  assert.equal(engine.grid.buffer[energyIndex], 47,
+    "failed GPU publication must not discard the authoritative CPU edit");
+  assert.equal(engine.grid.backBuffer[energyIndex], 47,
+    "syncToGPU must complete CPU buffer alignment before attempting the failing upload");
+  assert.equal(engine.grid.getCell(2, 2, 1)?.energy, 47,
+    "failed GPU publication must still leave the CPU dense/chunk state published");
+  await engine.step(0.016);
+  assert.equal(engine.tick, 1,
+    "simulation must continue on the CPU after syncToGPU disables an untrusted device");
+}
+
 console.log('SimulationEngine core recovery and deterministic LawEngine replay: PASS');
