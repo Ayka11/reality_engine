@@ -72,7 +72,7 @@ const afterApplyVersion = detachedField.getVersion();
 returnedMutation.delta.energy = 888;
 returnedMutation.metadata.nested.source = "return-value-mutated";
 const stateView = detachedField.getState();
-const expectedStateView = detachedField.getState();
+const expectedStateView = structuredClone(detachedField.getState());
 stateView.lastMutation.delta.energy = 777;
 stateView.lastMutation.metadata.nested.source = "get-state-mutated";
 assert.deepEqual(detachedField.getState(), expectedStateView, "getState must not expose the live last mutation");
