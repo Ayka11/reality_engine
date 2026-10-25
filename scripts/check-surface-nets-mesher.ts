@@ -55,6 +55,41 @@ for (let i = 0; i < plane.indices.length; i += 3) {
   assert.ok(normalX < -1e-9, 'plane triangles must face toward the below-isovalue side')
 }
 
+// Validate winding for all three principal plane orientations. High values
+// are inside, so outward-facing triangles must point toward the lower-value side.
+for (const axis of [0, 1, 2] as const) {
+  const planeByAxis = buildSurfaceNetsMesh({
+    size: [4, 4, 4],
+    isoLevel: 1.5,
+    sampleValue: (x, y, z) => [x, y, z][axis],
+  })
+  assert.ok(planeByAxis.quadCount > 0, `axis ${axis} plane must produce geometry`)
+  for (let i = 0; i < planeByAxis.indices.length; i += 3) {
+    const ai = planeByAxis.indices[i] * 3
+    const bi = planeByAxis.indices[i + 1] * 3
+    const ci = planeByAxis.indices[i + 2] * 3
+    const ab = [
+      planeByAxis.positions[bi] - planeByAxis.positions[ai],
+      planeByAxis.positions[bi + 1] - planeByAxis.positions[ai + 1],
+      planeByAxis.positions[bi + 2] - planeByAxis.positions[ai + 2],
+    ]
+    const ac = [
+      planeByAxis.positions[ci] - planeByAxis.positions[ai],
+      planeByAxis.positions[ci + 1] - planeByAxis.positions[ai + 1],
+      planeByAxis.positions[ci + 2] - planeByAxis.positions[ai + 2],
+    ]
+    const cross = [
+      ab[1] * ac[2] - ab[2] * ac[1],
+      ab[2] * ac[0] - ab[0] * ac[2],
+      ab[0] * ac[1] - ab[1] * ac[0],
+    ]
+    assert.ok(cross[axis] < -1e-9, `axis ${axis} triangle winding faces toward the below-isovalue side`)
+  }
+  for (const index of planeByAxis.indices) {
+    assert.ok(index >= 0 && index < planeByAxis.positions.length / 3, 'triangle indices must reference existing vertices')
+  }
+}
+
 const translated = buildSurfaceNetsMesh({
   size: [1, 1, 1],
   origin: [10, 20, 30],
