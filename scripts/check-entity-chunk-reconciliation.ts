@@ -3,7 +3,13 @@ import { VoxelGrid } from "../src/core/VoxelGrid.ts";
 import { SparseVoxelGrid } from "../src/core/SparseVoxelGrid.ts";
 import { CELL_FIELDS, F } from "../src/core/CellState.ts";
 import { EntityChunkConnectivity } from "../src/infinity/EntityChunkConnectivity.ts";
-import type { InfinityScaleChunkExecutionContext } from "../src/infinity/InfinityScaleChunkExecutionContext.ts";
+import {
+  InfinityScaleChunkExecutionContext,
+  type InfinityScaleBoundaryTransferSpec,
+} from "../src/infinity/InfinityScaleChunkExecutionContext.ts";
+import type { InfinityScaleExecutionPlan } from "../src/infinity/InfinityScaleExecutionAdapter.ts";
+import { InfinityScaleLODState } from "../src/infinity/InfinityScaleLODState.ts";
+import { InfinityScaleLODBoundarySnapshot } from "../src/infinity/InfinityScaleLODBoundarySnapshot.ts";
 import { EntityChunkReconciliation } from "../src/infinity/EntityChunkReconciliation.ts";
 import type { EntityChunkComponent, EntityChunkConnectivityResult } from "../src/infinity/EntityChunkConnectivity.ts";
 import { EntityLayer, type Entity } from "../src/simulation/EntityLayer.ts";
@@ -1005,5 +1011,89 @@ assert.equal(singletonLifecycleLayer.getEntities().length, 0,
   "legacy lifecycle currently discards a blob after it shrinks to one cell");
 assert.equal(singletonLifecycleLayer.extinctCount, 1,
   "legacy singleton disappearance is currently counted as extinction");
+
+
+// Mixed-LOD topology evidence must be read at the target face cell while its
+// neighborCell identifies the actual read-only source-side cell. This catches
+// a target/source coordinate inversion that could otherwise drop or mislabel
+// boundary entity IDs without raising an exception.
+{
+  const topologyPlan: InfinityScaleExecutionPlan = {
+    revision: 912,
+    mode: "advisory",
+    observer: { x: 0, y: 0, z: 0 },
+    chunks: [{ key: "1:0,0,0", lod: 1, amr: 0, distance: 0 }],
+    simulationBudget: 1,
+    requestedSimulationCount: 1,
+    selectedSimulationCount: 1,
+    maxSimulatingChunks: 1,
+    boundaryReadChunks: ["0:2,0,0"],
+    boundaryReadCount: 1,
+    boundaryReadRelations: [{
+      sourceChunk: "0:2,0,0",
+      targetChunk: "1:0,0,0",
+      relation: "fine-to-coarse",
+    }],
+    simulationCellCount: 512,
+    boundaryReadCellCount: 64,
+    localExecutionLayers: [],
+    globalExecutionLayers: [],
+    selectiveCpuReady: false,
+    selectiveGpuReady: false,
+    gpuPhysicsReady: false,
+    lodBoundaryTransferReady: false,
+    mixedLodExecutionReady: false,
+    entityExecutionReady: false,
+    agentMigrationReady: false,
+  };
+  const topologyContext = new InfinityScaleChunkExecutionContext(topologyPlan, 12, 8, 8, 4);
+  const boundarySpecs = topologyContext.getBoundaryTransferSpecsForCell(7, 2, 2);
+  assert.equal(boundarySpecs.length, 1, "fixture must expose one coarse/fine boundary relation");
+  const boundarySpec: InfinityScaleBoundaryTransferSpec = boundarySpecs[0];
+
+  const lodState = new InfinityScaleLODState(4);
+  // A fine source face footprint for the coarse target cell (7,2,2).
+  for (const y of [2, 3]) {
+    for (const z of [2, 3]) {
+      const values = new Float32Array(CELL_FIELDS);
+      values[F.ENTITY_ID] = 77;
+      lodState.writeBaseCell(boundarySpec.sourceChunk, boundarySpec.sourceLevel, 8, y, z, values);
+    }
+  }
+  const boundarySnapshot = InfinityScaleLODBoundarySnapshot.capture(
+    lodState,
+    [boundarySpec],
+    topologyPlan.revision,
+    4,
+  );
+  assert.equal(boundarySnapshot.hasSourceChunk(boundarySpec.sourceChunk), true);
+
+  const topologyGrid = new VoxelGrid(12, 8, 8);
+  topologyGrid.buffer[topologyGrid.idx(7, 2, 2) + F.BIO_POTENTIAL] = 0.8;
+  const topologyResult = new EntityChunkConnectivity().analyze(
+    topologyGrid,
+    topologyContext,
+    boundarySnapshot,
+  );
+  const targetCellIndex = 2 * topologyGrid.W * topologyGrid.H + 2 * topologyGrid.W + 7;
+  assert.equal(topologyResult.mixedLodComponentCount, 1,
+    "connected component on the target face must be identified as mixed-LOD");
+  assert.equal(topologyResult.mixedLodCoverageComplete, true,
+    "the snapshot must provide complete source-side face coverage");
+  const boundaryEvidence = topologyResult.mixedLodTopology.filter(sample =>
+    sample.localCell === targetCellIndex && sample.sourceChunk === boundarySpec.sourceChunk);
+  assert.ok(boundaryEvidence.some(sample =>
+    sample.occupied &&
+    sample.sourceEntityId === 77 &&
+    sample.neighborCell[0] === 8 &&
+    sample.neighborCell[1] === 2 &&
+    sample.neighborCell[2] === 2),
+    "topology evidence must read entity ID 77 from the true read-only neighbor at (8,2,2)");
+  assert.ok(boundaryEvidence.every(sample =>
+    topologyContext.containsReadCell(...sample.neighborCell) &&
+    !topologyContext.containsSimulationCell(...sample.neighborCell)),
+    "mixed-LOD topology samples must refer only to actual read-only neighbor cells");
+}
+
 console.log("EntityLayer legacy singleton lifecycle characterization: PASS");
 

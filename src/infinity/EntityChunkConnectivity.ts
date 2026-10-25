@@ -292,7 +292,15 @@ export class EntityChunkConnectivity {
           if (nx < 0 || nx >= grid.W || ny < 0 || ny >= grid.H || nz < 0 || nz >= grid.D) continue;
           for (const spec of specs) {
             if (!boundarySnapshot.hasSourceChunk(spec.sourceChunk)) continue;
-            const values = boundarySnapshot.read(spec, [nx, ny, nz]);
+            // Only a cell outside the simulation ownership range is a
+            // real mixed-LOD neighbor. read() expects the target-side face
+            // coordinate (the current component cell), not the neighbor's
+            // source-side coordinate; keep those coordinates distinct.
+            if (
+              !context.containsReadCell(nx, ny, nz) ||
+              context.containsSimulationCell(nx, ny, nz)
+            ) continue;
+            const values = boundarySnapshot.read(spec, [c.x, c.y, c.z]);
             if (!values) continue;
             const sourceEntityId = Math.round(values[F.ENTITY_ID] ?? 0);
             const key = `${cell}|${nx},${ny},${nz}|${spec.sourceChunk}|${spec.relation}`;
