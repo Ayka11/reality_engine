@@ -246,7 +246,7 @@ function simStep(dt: number) {
         T + p.tempDiffusion * lapT * dt + newE * p.tempEnergyCoupling * dt)))
     }
     if (isProcessActive(PROC.DENSITY_FLOW)) {
-      grid.set(x, y, z, F.D, Math.max(0, Math.min(1, D_ + 0.02 * p.energyDiffusion * lapD * dt)))
+      grid.set(x, y, z, F.D, Math.max(0, Math.min(1, D_ + p.densityDiffusion * lapD * dt)))
     }
     if (isProcessActive(PROC.INFORMATION)) {
       const supp = 1 - chunk[base + F.S] * p.infoEntropySupp
@@ -285,7 +285,7 @@ function simStep(dt: number) {
     if (isProcessActive(PROC.METABOLISM)) {
       const bio = grid.get(x, y, z, F.BIO)
       if (bio > 0.45) {
-        const rate = bio * 0.12 * dt
+        const rate = bio * p.metabolismRate * dt
         grid.set(x, y, z, F.E, Math.max(0, grid.get(x, y, z, F.E) - rate * 60))
         grid.set(x, y, z, F.I, Math.min(999, grid.get(x, y, z, F.I) + rate * 25))
         grid.set(x, y, z, F.S, Math.min(1, grid.get(x, y, z, F.S) + rate * 0.008))
@@ -294,7 +294,7 @@ function simStep(dt: number) {
 
     if (isProcessActive(PROC.SIGNAL_PROPAGATION)) {
       grid.set(x, y, z, F.I, Math.max(0, Math.min(999,
-        I + 0.06 * p.infoGrowthRate * dt * lapI)))
+        I + p.signalPropagationRate * p.infoGrowthRate * dt * lapI)))
     }
 
     if (isProcessActive(PROC.WAVE_PROPAGATION)) {
@@ -315,19 +315,19 @@ function simStep(dt: number) {
       const equilibriumPressure = grid.get(x, y, z, F.D) * p.pressureDensityCoupling
         - grid.get(x, y, z, F.T) * 0.1
       grid.set(x, y, z, F.P, Math.max(-9999, Math.min(9999,
-        P + p.tempDiffusion * lapP * dt + (equilibriumPressure - P) * dt)))
+        P + p.pressureDiffusion * lapP * dt + (equilibriumPressure - P) * dt)))
     }
 
     if (isProcessActive(PROC.PHASE_TRANSITION)) {
       const density = grid.get(x, y, z, F.D)
       const temperature = grid.get(x, y, z, F.T)
       if (temperature > 500 && density > 0.5) {
-        grid.set(x, y, z, F.D, Math.max(0, density - 0.008 * dt * 60))
-        grid.set(x, y, z, F.S, Math.min(1, grid.get(x, y, z, F.S) + 0.008 * dt * 60))
+        grid.set(x, y, z, F.D, Math.max(0, density - p.phaseTransitionRate * dt * 60))
+        grid.set(x, y, z, F.S, Math.min(1, grid.get(x, y, z, F.S) + p.phaseTransitionRate * dt * 60))
         grid.set(x, y, z, F.I, Math.max(0, grid.get(x, y, z, F.I) - 3 * dt))
       } else if (temperature < 40 && density > 0.55) {
-        grid.set(x, y, z, F.D, Math.min(1, density + 0.004 * dt * 60))
-        grid.set(x, y, z, F.S, Math.max(0, grid.get(x, y, z, F.S) - 0.004 * dt * 60))
+        grid.set(x, y, z, F.D, Math.min(1, density + p.phaseTransitionRate * 0.5 * dt * 60))
+        grid.set(x, y, z, F.S, Math.max(0, grid.get(x, y, z, F.S) - p.phaseTransitionRate * 0.5 * dt * 60))
       }
     }
 
@@ -339,7 +339,7 @@ function simStep(dt: number) {
           Math.floor(grid.get(x, y, z, F.MAT))))
         const currentMaterial = MATERIAL_LIBRARY[currentMaterialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
         const materialRate = currentMaterialId === MAT.VACUUM ? 1 : currentMaterial.crystallizationRate
-        const rate = 0.003 * materialRate
+        const rate = p.crystallizationRate * materialRate
         grid.set(x, y, z, F.D, Math.min(1, density + rate * (0.18 - entropy) * dt * 60))
         grid.set(x, y, z, F.S, Math.max(0, entropy - rate * 0.5 * dt * 60))
         if (currentMaterialId === MAT.VACUUM ||
@@ -352,19 +352,19 @@ function simStep(dt: number) {
 
     if (isProcessActive(PROC.RADIATION)) {
       const energy = grid.get(x, y, z, F.E)
-      if (energy > 400) {
+      if (energy > p.radiationThreshold) {
         const materialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
           Math.floor(grid.get(x, y, z, F.MAT))))
         const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
         grid.set(x, y, z, F.D, Math.max(0, grid.get(x, y, z, F.D)
-          - (energy - 400) * 0.00008 * (1 - material.radiationAbsorption) * dt * 60))
-        grid.set(x, y, z, F.E, Math.max(0, energy - (energy - 400) * 0.0001 * dt * 60))
+          - (energy - p.radiationThreshold) * p.radiationDensityRate * (1 - material.radiationAbsorption) * dt * 60))
+        grid.set(x, y, z, F.E, Math.max(0, energy - (energy - p.radiationThreshold) * p.radiationEnergyRate * dt * 60))
       }
     }
 
     if (isProcessActive(PROC.FIELD_ROTATION)) {
-      grid.set(x, y, z, F.FX, FX * 0.94 + fxSum / Math.max(nc, 1) * 0.05 + FY * 0.01)
-      grid.set(x, y, z, F.FY, FY * 0.94 + fySum / Math.max(nc, 1) * 0.05 - FX * 0.01)
+      grid.set(x, y, z, F.FX, FX * p.fieldRotationDamping + fxSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling + FY * p.fieldRotationCrossCoupling)
+      grid.set(x, y, z, F.FY, FY * p.fieldRotationDamping + fySum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling - FX * p.fieldRotationCrossCoupling)
     }
 
     if (isProcessActive(PROC.EROSION)) {
@@ -375,7 +375,7 @@ function simStep(dt: number) {
       const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
       if (density > 0.65 && flow > 0.01) {
         const erodibility = 1 - material.erosionResistance
-        grid.set(x, y, z, F.D, Math.max(0, density - 0.0018 * erodibility * dt * 60))
+        grid.set(x, y, z, F.D, Math.max(0, density - p.erosionRate * erodibility * dt * 60))
         grid.set(x, y, z, F.I, Math.max(0, grid.get(x, y, z, F.I) - 0.4 * erodibility * dt))
       }
     }
