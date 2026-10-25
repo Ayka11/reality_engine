@@ -8,12 +8,13 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
-  NF, F, GRID_W, GRID_H, GRID_D, CX, CY, CZ, CHUNK_FLOATS, decodeChunkKey,
+  NF, F, GRID_W, GRID_H, GRID_D, CX, CY, CZ, CHUNK_FLOATS, chunkKey, decodeChunkKey,
 } from '../core/ChunkGrid'
 import {
   classifyVoxel, getMat, blendEnergyGlow, lerpPalette, LAYER_PALS,
   type MatType,
 } from './VoxelMaterials'
+import { buildGreedyChunkMesh } from './GreedyMesher'
 
 // Field lookup (layer index → F.* index, and display max)
 const LAYER_FIELD = [F.E, F.D, F.I, F.S, F.T, F.BIO]
@@ -36,6 +37,15 @@ export class ChunkRenderer {
   // Per-material meshes for material mode
   private matMeshes = new Map<MatType, THREE.InstancedMesh>()
   private matCounts = new Map<MatType, number>()
+
+  // Optional greedy surface meshes for opaque voxel volumes in PBR/material mode.
+  private greedyMaterialSurfaces = new Map<MatType, THREE.Mesh>()
+  private greedyMeshingEnabled = false
+  private greedyDataRevision = 0
+  private greedyCacheKey = ''
+  private greedyCacheSucceeded = false
+  private greedyQuadCount = 0
+  private readonly MAX_GREEDY_QUADS = 200_000
 
   // Agent mesh
   private agentMesh!: THREE.InstancedMesh
@@ -176,6 +186,10 @@ export class ChunkRenderer {
       this.scene.add(mesh)
       this.matMeshes.set(type, mesh)
       this.matCounts.set(type, 0)
+      const surface = new THREE.Mesh(new THREE.BufferGeometry(), mat)
+      surface.visible = false
+      this.scene.add(surface)
+      this.greedyMaterialSurfaces.set(type, surface)
     }
 
     // ── Agent mesh ──
@@ -266,11 +280,14 @@ export class ChunkRenderer {
       this.shadowChunks.set(key, f32.slice(start, start + CHUNK_FLOATS))
       offset += 1 + CHUNK_FLOATS
     }
+    if (numChunks > 0) this.greedyDataRevision++
     this._rebuild()
   }
 
   private _rebuild() {
-    if (this.matMode === 'material') this._rebuildMaterial()
+    if (this.matMode === 'material' && this.greedyMeshingEnabled) {
+      if (!this._rebuildGreedyMaterial()) this._rebuildMaterial()
+    } else if (this.matMode === 'material') this._rebuildMaterial()
     else this._rebuildLayer()
     this._animateParticles()
   }
@@ -278,6 +295,7 @@ export class ChunkRenderer {
   // ── Rebuild: field / height mode ─────────────────────────────────────────────
 
   private _rebuildLayer() {
+    for (const surface of this.greedyMaterialSurfaces.values()) surface.visible = false
     this.layerMesh.visible = true
     for (const m of this.matMeshes.values()) m.visible = false
 
@@ -345,6 +363,7 @@ export class ChunkRenderer {
   // ── Rebuild: material mode ────────────────────────────────────────────────────
 
   private _rebuildMaterial() {
+    for (const surface of this.greedyMaterialSurfaces.values()) surface.visible = false
     this.layerMesh.visible = false
     this.matCounts.forEach((_, k) => this.matCounts.set(k, 0))
 
@@ -393,6 +412,166 @@ export class ChunkRenderer {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
     }
   }
+
+
+  /**
+   * Build a boundary-only mesh for the sparse worker field.
+   * This is opt-in because dense/checkerboard fields can be more expensive to
+   * polygonize than to draw with instancing. Overflow safely falls back to the
+   * established instanced renderer.
+   */
+  private _greedyMaterialColorKey(E: number, D: number, I: number, S: number, T: number, B: number): number {
+    if (E < 0.5 && D < 0.05) return 0
+    const type = classifyVoxel(E, D, I, S, T, B)
+    const typeIndex = MAT_TYPES.indexOf(type)
+    if (typeIndex < 0) return 0
+    const vm = blendEnergyGlow(getMat(type), E)
+    const r = Math.round(Math.max(0, Math.min(1, vm.r + vm.emissR * vm.emissStr * 0.12)) * 31)
+    const g = Math.round(Math.max(0, Math.min(1, vm.g + vm.emissG * vm.emissStr * 0.12)) * 31)
+    const b = Math.round(Math.max(0, Math.min(1, vm.b + vm.emissB * vm.emissStr * 0.12)) * 31)
+    const colorKey = (r << 10) | (g << 5) | b
+    return ((typeIndex << 15) | colorKey) + 1
+  }
+
+  private _rebuildGreedyMaterial(): boolean {
+    this.layerMesh.visible = false
+    for (const mesh of this.matMeshes.values()) mesh.visible = false
+    for (const surface of this.greedyMaterialSurfaces.values()) surface.visible = false
+
+    const cacheKey = String(this.greedyDataRevision) + ':' + String(this.zSlice)
+    if (cacheKey === this.greedyCacheKey) {
+      if (this.greedyCacheSucceeded) {
+        for (const surface of this.greedyMaterialSurfaces.values()) {
+          surface.visible = (surface.geometry.getAttribute('position')?.count ?? 0) > 0
+        }
+      }
+      return this.greedyCacheSucceeded
+    }
+
+    // Precompute sparse cell labels once. A label contains material class and a
+    // quantized color, but occupancy—not color—controls face culling.
+    const cellMaterials = new Int32Array(GRID_W * GRID_H * GRID_D)
+    for (const [key, chunk] of this.shadowChunks) {
+      const [cx, cy, cz] = decodeChunkKey(key)
+      const bx = cx * CX, by = cy * CY, bz = cz * CZ
+      if (bz > this.zSlice) continue
+      for (let lz = 0; lz < CZ && bz + lz <= this.zSlice; lz++)
+      for (let ly = 0; ly < CY; ly++)
+      for (let lx = 0; lx < CX; lx++) {
+        const base = (lz * CY * CX + ly * CX + lx) * NF
+        const material = this._greedyMaterialColorKey(
+          chunk[base + F.E] || 0,
+          chunk[base + F.D] || 0,
+          chunk[base + F.I] || 0,
+          chunk[base + F.S] || 0,
+          chunk[base + F.T] || 0,
+          chunk[base + F.BIO] || 0,
+        )
+        if (material === 0) continue
+        const x = bx + lx, y = by + ly, z = bz + lz
+        cellMaterials[(z * GRID_H + y) * GRID_W + x] = material
+      }
+    }
+
+    type SurfaceBuffers = { positions: number[]; normals: number[]; colors: number[]; indices: number[] }
+    const surfaces = new Map<MatType, SurfaceBuffers>()
+    for (const type of MAT_TYPES) {
+      surfaces.set(type, { positions: [], normals: [], colors: [], indices: [] })
+    }
+    let totalQuads = 0
+
+    for (const [key] of this.shadowChunks) {
+      const [cx, cy, cz] = decodeChunkKey(key)
+      const bx = cx * CX, by = cy * CY, bz = cz * CZ
+      if (bz > this.zSlice) continue
+      const chunkMesh = buildGreedyChunkMesh({
+        size: [CX, CY, CZ],
+        origin: [bx, by, bz],
+        emitMaterialInterfaces: false,
+        sampleMaterial: (x, y, z) => {
+          if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H || z < 0 || z >= GRID_D) return 0
+          return cellMaterials[(z * GRID_H + y) * GRID_W + x]
+        },
+      })
+      if (totalQuads + chunkMesh.quadCount > this.MAX_GREEDY_QUADS) {
+        this.greedyCacheKey = cacheKey
+        this.greedyCacheSucceeded = false
+        this.greedyQuadCount = 0
+        for (const surface of this.greedyMaterialSurfaces.values()) {
+          surface.geometry.dispose()
+          surface.geometry = new THREE.BufferGeometry()
+          surface.visible = false
+        }
+        return false
+      }
+      totalQuads += chunkMesh.quadCount
+
+      for (let q = 0; q < chunkMesh.quadCount; q++) {
+        const packed = chunkMesh.materialIds[q] - 1
+        const typeIndex = packed >> 15
+        const type = MAT_TYPES[typeIndex]
+        const target = type ? surfaces.get(type) : undefined
+        if (!target) continue
+        const colorKey = packed & 0x7fff
+        const r = ((colorKey >> 10) & 31) / 31
+        const g = ((colorKey >> 5) & 31) / 31
+        const b = (colorKey & 31) / 31
+        const vertexBase = target.positions.length / 3
+
+        for (let corner = 0; corner < 4; corner++) {
+          const offset = q * 12 + corner * 3
+          const px = chunkMesh.positions[offset]
+          const py = chunkMesh.positions[offset + 1]
+          const pz = chunkMesh.positions[offset + 2]
+          // ChunkGrid axes are (x,y,z); Three.js scene axes are (x,z,y).
+          // The half-cell offset aligns faces with the legacy voxel centers.
+          target.positions.push(bx + px - 0.5, (bz + pz - 0.5) * 0.9, by + py - 0.5)
+          target.normals.push(
+            chunkMesh.normals[offset],
+            chunkMesh.normals[offset + 2],
+            chunkMesh.normals[offset + 1],
+          )
+          target.colors.push(r, g, b)
+        }
+        // Swapping the scene Y/Z axes reverses handedness; reverse winding too.
+        target.indices.push(
+          vertexBase, vertexBase + 2, vertexBase + 1,
+          vertexBase, vertexBase + 3, vertexBase + 2,
+        )
+      }
+    }
+
+    for (const type of MAT_TYPES) {
+      const target = surfaces.get(type)!
+      const surface = this.greedyMaterialSurfaces.get(type)!
+      const geometry = new THREE.BufferGeometry()
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(target.positions, 3))
+      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(target.normals, 3))
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(target.colors, 3))
+      geometry.setIndex(target.indices)
+      geometry.computeBoundingSphere()
+      const previous = surface.geometry
+      surface.geometry = geometry
+      previous.dispose()
+      surface.visible = target.positions.length > 0
+    }
+
+    this.greedyCacheKey = cacheKey
+    this.greedyCacheSucceeded = true
+    this.greedyQuadCount = totalQuads
+    return true
+  }
+
+  setGreedyMeshingEnabled(enabled: boolean): void {
+    this.greedyMeshingEnabled = enabled
+    this._rebuild()
+  }
+
+  get isGreedyMeshingEnabled(): boolean { return this.greedyMeshingEnabled }
+  get isGreedySurfaceActive(): boolean {
+    return this.greedyMeshingEnabled && this.matMode === 'material' && this.greedyCacheSucceeded
+  }
+  get greedySurfaceQuadCount(): number { return this.greedyQuadCount }
 
   // ── Agents ────────────────────────────────────────────────────────────────────
 
