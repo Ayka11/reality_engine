@@ -70,6 +70,33 @@ export async function runSimulationEngineCPUFrameRollbackRegression(): Promise<v
   await engine.step(0.016);
   assert.equal(engine.tick, 501, "step queue must remain usable after a rolled-back frame");
 
+  // A recovered engine must produce the same next frame as a clean control
+  // restored from the exact pre-failure snapshot. Compare all domains, not
+  // only the tick; wall-clock chunk lastAccessed is a cache/eviction hint.
+  const control = new SimulationEngine(16, 16, 8);
+  control.restoreCoreRecoveryState(before);
+  await control.step(0.016);
+  const recoveredAfterRetry = engine.captureCoreRecoveryState();
+  const controlAfterRetry = control.captureCoreRecoveryState();
+  const normalizeGrid = (grid: typeof recoveredAfterRetry.grid) => ({
+    ...grid,
+    chunks: grid.chunks
+      .map(({ lastAccessed: _lastAccessed, ...chunk }) => chunk)
+      .sort((a, b) => a.key.localeCompare(b.key)),
+    dirtyChunks: [...grid.dirtyChunks].sort(),
+    chunkOwners: [...grid.chunkOwners].sort(([a], [b]) => a.localeCompare(b)),
+  });
+  const divergentDomains = (
+    Object.keys(recoveredAfterRetry) as Array<keyof typeof recoveredAfterRetry>
+  ).filter(key => key === "grid"
+    ? JSON.stringify(normalizeGrid(recoveredAfterRetry.grid)) !== JSON.stringify(normalizeGrid(controlAfterRetry.grid))
+    : JSON.stringify(recoveredAfterRetry[key]) !== JSON.stringify(controlAfterRetry[key]));
+  assert.deepEqual(
+    divergentDomains,
+    [],
+    `post-rollback frame must match the clean control in every simulation domain: ${divergentDomains.join(", ")}`,
+  );
+
   // Invalid frame arguments must be rejected before any state mutation or queue poisoning.
   const beforeInvalidArguments = engine.captureCoreRecoveryState();
   await assert.rejects(engine.step(Number.NaN), /dt must be a finite non-negative number/);
