@@ -1095,5 +1095,95 @@ assert.equal(singletonLifecycleLayer.extinctCount, 1,
     "mixed-LOD topology samples must refer only to actual read-only neighbor cells");
 }
 
+
+
+// At a target corner, two different source chunks may be valid read-only
+// neighbors. Evidence from one source must never be attached to the other
+// neighbor merely because both cells are read-only.
+{
+  const cornerPlan: InfinityScaleExecutionPlan = {
+    revision: 913,
+    mode: "advisory",
+    observer: { x: 0, y: 0, z: 0 },
+    chunks: [{ key: "1:0,0,0", lod: 1, amr: 0, distance: 0 }],
+    simulationBudget: 1,
+    requestedSimulationCount: 1,
+    selectedSimulationCount: 1,
+    maxSimulatingChunks: 1,
+    boundaryReadChunks: ["0:2,1,0", "0:1,2,0"],
+    boundaryReadCount: 2,
+    boundaryReadRelations: [
+      { sourceChunk: "0:2,1,0", targetChunk: "1:0,0,0", relation: "fine-to-coarse" },
+      { sourceChunk: "0:1,2,0", targetChunk: "1:0,0,0", relation: "fine-to-coarse" },
+    ],
+    simulationCellCount: 512,
+    boundaryReadCellCount: 128,
+    localExecutionLayers: [],
+    globalExecutionLayers: [],
+    selectiveCpuReady: false,
+    selectiveGpuReady: false,
+    gpuPhysicsReady: false,
+    lodBoundaryTransferReady: false,
+    mixedLodExecutionReady: false,
+    entityExecutionReady: false,
+    agentMigrationReady: false,
+  };
+  const cornerContext = new InfinityScaleChunkExecutionContext(cornerPlan, 12, 12, 8, 4);
+  const cornerSpecs = cornerContext.getBoundaryTransferSpecsForCell(7, 7, 2);
+  assert.equal(cornerSpecs.length, 2, "corner fixture must expose two distinct mixed-LOD source relations");
+  const xSpec = cornerSpecs.find(spec => spec.sourceChunk === "0:2,1,0");
+  const ySpec = cornerSpecs.find(spec => spec.sourceChunk === "0:1,2,0");
+  assert.ok(xSpec && ySpec, "corner fixture must include the X-face and Y-face source chunks");
+
+  const cornerState = new InfinityScaleLODState(4);
+  for (const y of [6, 7]) {
+    for (const z of [2, 3]) {
+      const values = new Float32Array(CELL_FIELDS);
+      values[F.ENTITY_ID] = 77;
+      cornerState.writeBaseCell(xSpec.sourceChunk, xSpec.sourceLevel, 8, y, z, values);
+    }
+  }
+  for (const x of [6, 7]) {
+    for (const z of [2, 3]) {
+      const values = new Float32Array(CELL_FIELDS);
+      values[F.ENTITY_ID] = 88;
+      cornerState.writeBaseCell(ySpec.sourceChunk, ySpec.sourceLevel, x, 8, z, values);
+    }
+  }
+  const cornerSnapshot = InfinityScaleLODBoundarySnapshot.capture(
+    cornerState,
+    cornerSpecs,
+    cornerPlan.revision,
+    4,
+  );
+  const cornerGrid = new VoxelGrid(12, 12, 8);
+  cornerGrid.buffer[cornerGrid.idx(7, 7, 2) + F.BIO_POTENTIAL] = 0.8;
+  const cornerResult = new EntityChunkConnectivity().analyze(
+    cornerGrid,
+    cornerContext,
+    cornerSnapshot,
+  );
+  const cornerIndex = 2 * cornerGrid.W * cornerGrid.H + 7 * cornerGrid.W + 7;
+  const evidence = cornerResult.mixedLodTopology.filter(sample => sample.localCell === cornerIndex);
+  assert.ok(evidence.some(sample =>
+    sample.neighborCell[0] === 8 && sample.neighborCell[1] === 7 &&
+    sample.sourceChunk === xSpec.sourceChunk && sample.sourceEntityId === 77),
+    "X-face neighbor must be attributed only to its own source chunk/entity ID");
+  assert.ok(evidence.some(sample =>
+    sample.neighborCell[0] === 7 && sample.neighborCell[1] === 8 &&
+    sample.sourceChunk === ySpec.sourceChunk && sample.sourceEntityId === 88),
+    "Y-face neighbor must be attributed only to its own source chunk/entity ID");
+  assert.equal(evidence.some(sample =>
+    sample.neighborCell[0] === 8 && sample.neighborCell[1] === 7 &&
+    sample.sourceChunk === ySpec.sourceChunk),
+    false,
+    "Y-face source entity must not be mislabeled as the X-face neighbor");
+  assert.equal(evidence.some(sample =>
+    sample.neighborCell[0] === 7 && sample.neighborCell[1] === 8 &&
+    sample.sourceChunk === xSpec.sourceChunk),
+    false,
+    "X-face source entity must not be mislabeled as the Y-face neighbor");
+}
+
 console.log("EntityLayer legacy singleton lifecycle characterization: PASS");
 

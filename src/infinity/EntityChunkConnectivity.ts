@@ -300,6 +300,15 @@ export class EntityChunkConnectivity {
               !context.containsReadCell(nx, ny, nz) ||
               context.containsSimulationCell(nx, ny, nz)
             ) continue;
+            // At a corner/edge, one target cell can touch multiple read-only
+            // chunks. Attribute a sample only to the specific transfer whose
+            // source/target pair owns this neighbor face.
+            const matchesTransfer = context.getBoundaryRelationsForCell(nx, ny, nz)
+              .some(relation =>
+                relation.sourceChunk === spec.sourceChunk &&
+                relation.targetChunk === spec.targetChunk &&
+                relation.relation === spec.relation);
+            if (!matchesTransfer) continue;
             const values = boundarySnapshot.read(spec, [c.x, c.y, c.z]);
             if (!values) continue;
             const sourceEntityId = Math.round(values[F.ENTITY_ID] ?? 0);
