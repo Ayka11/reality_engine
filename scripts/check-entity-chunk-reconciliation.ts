@@ -202,6 +202,25 @@ assert.doesNotThrow(
   "a clean retry must succeed after rollback restores dense/chunk ownership",
 );
 
+// A successful sparse EntityLayer substep may change entity IDs. Publish those
+// markers before a second substep, rather than waiting for frame-end full sync.
+const sparseSubstepGrid = new SparseVoxelGrid(8, 8, 1);
+for (const cell of [9, 10]) {
+  sparseSubstepGrid.buffer[cell * CELL_FIELDS + F.BIO_POTENTIAL] = 1;
+  sparseSubstepGrid.buffer[cell * CELL_FIELDS + F.ENERGY] = 200;
+}
+sparseSubstepGrid.syncDenseToChunks();
+const sparseSubstepLayer = new EntityLayer();
+sparseSubstepLayer.setRandomSeed(0x12345678);
+sparseSubstepLayer.tick(sparseSubstepGrid, 1 / 60);
+assert.equal(sparseSubstepLayer.getEntities().length, 1,
+  "the first sparse substep must construct an entity from the connected bio-cell pair");
+assert.doesNotThrow(() => sparseSubstepGrid.assertDenseEntityOwnershipSynchronized(),
+  "successful entity reconciliation must publish the new ID to chunk storage");
+sparseSubstepLayer.tick(sparseSubstepGrid, 1 / 60);
+assert.doesNotThrow(() => sparseSubstepGrid.assertDenseEntityOwnershipSynchronized(),
+  "the following sparse substep must begin with consistent ownership");
+
 console.log("Entity chunk reconciliation boundary safety: PASS");
 
 

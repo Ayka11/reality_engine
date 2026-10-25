@@ -272,6 +272,31 @@ export class SparseVoxelGrid {
   }
 
   /**
+   * Publish entity IDs from the dense simulation window without copying every
+   * field. EntityLayer may run more than once inside a frame (nSteps > 1), so
+   * chunk ownership must stay aligned between substeps even though the full
+   * dense-to-chunk synchronization is deferred until the frame ends.
+   */
+  syncDenseEntityOwnershipToChunks(): void {
+    this.seedDenseWindowChunks();
+    for (let z = 0; z < this.D; z++) {
+      for (let y = 0; y < this.H; y++) {
+        for (let x = 0; x < this.W; x++) {
+          const gx = x + this.denseOrigin.x;
+          const gy = y + this.denseOrigin.y;
+          const gz = z + this.denseOrigin.z;
+          const chunk = this.getOrCreateChunkForGlobal(gx, gy, gz);
+          const [, lx] = this.globalToChunk(gx);
+          const [, ly] = this.globalToChunk(gy);
+          const [, lz] = this.globalToChunk(gz);
+          chunk.buffer[chunk.localIdx(lx, ly, lz) + F.ENTITY_ID] =
+            this.buffer[this.idx(x, y, z) + F.ENTITY_ID];
+        }
+      }
+    }
+  }
+
+  /**
    * Detect entity-relevant cells that exist in sparse chunk storage but are
    * outside the dense window scanned by EntityLayer. A dense-window flood fill
    * cannot authorize world-wide merge/extinction while any such cell is active.

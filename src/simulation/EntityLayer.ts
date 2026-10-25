@@ -496,6 +496,11 @@ export class EntityLayer {
       const base = i * CELL_FIELDS;
       buf[base + F.SIGNAL] = Math.max(0, buf[base + F.SIGNAL] - 0.5 * dt * 60);
     }
+    // The full chunk sync happens at frame end, but the next logical substep
+    // may enter EntityLayer immediately and requires authoritative ID mirrors.
+    if (grid instanceof SparseVoxelGrid) {
+      grid.syncDenseEntityOwnershipToChunks();
+    }
     } catch (error) {
       try {
         rollbackTick();
