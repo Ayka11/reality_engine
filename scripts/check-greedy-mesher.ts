@@ -32,7 +32,7 @@ const mixedOpaque = buildGreedyChunkMesh({
   emitMaterialInterfaces: false,
   sampleMaterial: solid(new Map([['0,0,0', 1], ['1,0,0', 2]])),
 })
-assert.equal(mixedOpaque.quadCount, 6, 'opaque surfaces suppress the coincident interface between two occupied materials')
+assert.equal(mixedOpaque.quadCount, 10, 'opaque surfaces keep the differently colored outside faces but suppress their coincident interface')
 
 const boundary = buildGreedyChunkMesh({
   size: [1, 1, 1],
