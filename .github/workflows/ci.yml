@@ -30,52 +30,52 @@ jobs:
       - run: npm run test:npm-audit-gate
       - run: npm run audit:report
       - run: npm run lint
-      - run: npm run test:brushes --if-present
-      - run: npm run test:world-field --if-present
-      - run: npm run test:infinity-scale-core --if-present
+      - run: npm run test:brushes
+      - run: npm run test:world-field
+      - run: npm run test:infinity-scale-core
       - run: npm run test:sparse-voxel-grid-recovery
-      - run: npm run test:causal-graph-recovery --if-present
-      - run: npm run test:recorder-recovery --if-present
-      - run: npm run test:agent-system-recovery --if-present
-      - run: npm run test:worldevents-recovery --if-present
-      - run: npm run test:entity-layer-recovery --if-present
+      - run: npm run test:causal-graph-recovery
+      - run: npm run test:recorder-recovery
+      - run: npm run test:agent-system-recovery
+      - run: npm run test:worldevents-recovery
+      - run: npm run test:entity-layer-recovery
       - run: npm run test:simulation-engine-core-recovery
-      - run: npm run test:chem-layer-recovery --if-present
-      - run: npm run test:civilization-system-recovery --if-present
-      - run: npm run test:cosmological-sim-recovery --if-present
+      - run: npm run test:chem-layer-recovery
+      - run: npm run test:civilization-system-recovery
+      - run: npm run test:cosmological-sim-recovery
       - run: npm run test:simulation-engine-cpu-frame-rollback
       - run: npm run test:simulation-engine-stale-readback
       - run: npm run test:mutable-buffer-contract
-      - run: npm run test:infinity-scale-mixed-lod --if-present
-      - run: npm run test:infinity-scale-adaptive-lod-bridge --if-present
+      - run: npm run test:infinity-scale-mixed-lod
+      - run: npm run test:infinity-scale-adaptive-lod-bridge
       - name: Run entity chunk reconciliation regression
-        run: npm run test:entity-chunk-reconciliation --if-present
+        run: npm run test:entity-chunk-reconciliation
         timeout-minutes: 5
       - name: Run Infinity Scale face coverage regression
-        run: npm run test:infinity-scale-face-coverage --if-present
+        run: npm run test:infinity-scale-face-coverage
         timeout-minutes: 3
       - name: Run Infinity Scale independent topology regression
-        run: npm run test:infinity-scale-independent-topology --if-present
+        run: npm run test:infinity-scale-independent-topology
         timeout-minutes: 3
-      - run: npm run test:presets --if-present
-      - run: npm run test:preset-field --if-present
-      - run: npm run test:construction --if-present
-      - run: npm run test:law-physics --if-present
+      - run: npm run test:presets
+      - run: npm run test:preset-field
+      - run: npm run test:construction
+      - run: npm run test:law-physics
       - run: npm run test:signalling
       - run: npm run test:solver-deployment
-      - run: npm run test:field-profile --if-present
-      - run: npm run test:mutable-field-profile --if-present
-      - run: npm run test:mutable-field-validation --if-present
-      - run: npm run test:worker-restore-two-phase --if-present
-      - run: npm run test:legacy-field-bridge --if-present
-      - run: npm run test:legacy-sculpt-adapter --if-present
+      - run: npm run test:field-profile
+      - run: npm run test:mutable-field-profile
+      - run: npm run test:mutable-field-validation
+      - run: npm run test:worker-restore-two-phase
+      - run: npm run test:legacy-field-bridge
+      - run: npm run test:legacy-sculpt-adapter
       - run: npm run test:authoritative-sculpt-transaction
-      - run: npm run test:world-persistence-failures --if-present
-      - run: npm run test:script-engine-rng-recovery --if-present
-      - run: npm run test:agent-worldevents-rng-recovery --if-present
-      - run: npm run test:terrain-worldcomposer-rng-recovery --if-present
-      - run: npm run test:simworker-rng-recovery --if-present
-      - run: npm run test:field-spatial-pattern --if-present
+      - run: npm run test:world-persistence-failures
+      - run: npm run test:script-engine-rng-recovery
+      - run: npm run test:agent-worldevents-rng-recovery
+      - run: npm run test:terrain-worldcomposer-rng-recovery
+      - run: npm run test:simworker-rng-recovery
+      - run: npm run test:field-spatial-pattern
       - run: npm run build
       - run: npm run test:hf-runtime
       - run: docker build --file Dockerfile --tag reality-engine:ci .
