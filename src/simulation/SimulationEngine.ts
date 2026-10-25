@@ -163,8 +163,8 @@ export class SimulationEngine {
     const operationPrototype = Object.getPrototypeOf(operation) as { constructor?: { name?: string } } | null;
     const operationConstructorName = operationPrototype?.constructor?.name ?? '';
     const operationSource = Function.prototype.toString.call(operation);
-    const asyncSource = /^\\s*async\\b/.test(operationSource);
-    const generatorSource = /^\\s*(?:function\\s*\\*|\\*\\s*[\\w$]*\\s*\\()/.test(operationSource);
+    const asyncSource = /^\s*async\b/.test(operationSource);
+    const generatorSource = /^\s*(?:function\s*\*|\*\s*[\w$]*\s*\()/.test(operationSource);
     if (operationKind === '[object AsyncFunction]' ||
         operationKind === '[object AsyncGeneratorFunction]' ||
         operationKind === '[object GeneratorFunction]' ||
