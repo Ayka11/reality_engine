@@ -42,7 +42,30 @@ export class SparseVoxelGrid {
   readonly chunks: Map<string, Chunk>;
   readonly dirtyChunks: Set<string>;
   readonly chunkOwners: Map<string, string>;
-  activeChunkRange = { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 };
+  private _activeChunkRange = { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 };
+
+  /** Return a detached range so nested writes cannot bypass revision tracking. */
+  get activeChunkRange() {
+    return { ...this._activeChunkRange };
+  }
+
+  /** Replace the range atomically; invalid ranges are rejected and valid changes tracked. */
+  set activeChunkRange(range: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number }) {
+    if (!range ||
+        !Object.values(range).every(Number.isSafeInteger) ||
+        range.minX > range.maxX ||
+        range.minY > range.maxY ||
+        range.minZ > range.maxZ) {
+      throw new Error("Invalid active chunk range");
+    }
+    const next = { ...range };
+    const previous = this._activeChunkRange;
+    if (previous.minX === next.minX && previous.maxX === next.maxX &&
+        previous.minY === next.minY && previous.maxY === next.maxY &&
+        previous.minZ === next.minZ && previous.maxZ === next.maxZ) return;
+    this._activeChunkRange = next;
+    this.markMutation();
+  }
 
   private _sparseDenseBuffer: Float32Array;
   private _sparseDenseBackBuffer: Float32Array;
