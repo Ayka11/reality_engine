@@ -176,8 +176,9 @@ export class SimulationEngine {
     if (!Number.isSafeInteger(nSteps) || nSteps < 0) {
       return Promise.reject(new RangeError('SimulationEngine step nSteps must be a non-negative safe integer'));
     }
-    // A zero-step request is a true no-op: it must not run events, laws, or the recorder.
-    if (nSteps === 0) return Promise.resolve();
+    // A zero-step request or zero elapsed time is a true no-op: logical age,
+    // events, laws and the recorder must not advance without elapsed simulation time.
+    if (nSteps === 0 || dt === 0) return Promise.resolve();
 
     const run = this._stepQueue.then(() => this._stepInternal(dt, nSteps));
     // A failed step must not permanently poison the queue; the caller still receives its rejection.
@@ -232,11 +233,18 @@ export class SimulationEngine {
           this.resynchronizeGPUAndThrow(error, "GPU frame recovery snapshot failed");
         }
         this.grid.buffer.set(data);
-        this.chemLayer.tick(this.grid, clampedDt * nSteps);
-        this.entityLayer.tick(this.grid, clampedDt * nSteps);
-        this.temporalLayer.tick(this.grid, clampedDt * nSteps);
-        this.infoPhysics.tick(this.grid, clampedDt * nSteps);
-        this.agents.tick(this.grid, clampedDt * nSteps);
+        // The GPU solver has already advanced its field kernels nSteps times.
+        // CPU-only subsystems must also advance once per logical substep with dt;
+        // a single dt*nSteps call incorrectly increments age/PRNG-driven behavior
+        // only once. This remains operator-split for nSteps>1, so scientific
+        // CPU/GPU comparisons should use nSteps=1 for numerical consistency.
+        for (let s = 0; s < nSteps; s++) {
+          this.chemLayer.tick(this.grid, clampedDt);
+          this.entityLayer.tick(this.grid, clampedDt);
+          this.temporalLayer.tick(this.grid, clampedDt);
+          this.infoPhysics.tick(this.grid, clampedDt);
+          this.agents.tick(this.grid, clampedDt);
+        }
       } else {
         // CPU fallback — runs each step serially
         for (let s = 0; s < nSteps; s++) {

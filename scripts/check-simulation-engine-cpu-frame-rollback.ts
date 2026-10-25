@@ -90,6 +90,13 @@ export async function runSimulationEngineCPUFrameRollbackRegression(): Promise<v
     beforeInvalidArguments,
     "zero asynchronous steps must not tick subsystems or alter recovery state",
   );
+  await engine.step(0, 1);
+  await engine.step(0, 20);
+  assert.deepEqual(
+    engine.captureCoreRecoveryState(),
+    beforeInvalidArguments,
+    "zero elapsed time must not age entities, advance events/laws, or write recorder frames",
+  );
 
   assert.throws(() => engine.syncTick(-1), /syncTick n must be a non-negative safe integer/);
   assert.throws(() => engine.syncTick(1.5), /syncTick n must be a non-negative safe integer/);

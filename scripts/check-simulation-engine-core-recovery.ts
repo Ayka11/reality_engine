@@ -387,6 +387,52 @@ await malformedReadbackEngine.step(0.016);
 assert.equal(malformedReadbackEngine.tick, 1,
   "GPU step queue must remain usable after malformed readback rejection");
 
+// GPU batching dispatches N field substeps and must advance every CPU-only
+// subsystem N times too, using the one-step dt. The ordering is still operator
+// split (GPU field integration precedes CPU layers), which is documented above.
+const gpuBatchEngine = new SimulationEngine(4, 4, 2);
+(gpuBatchEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+const gpuBatchBackend = gpuBatchEngine.gpu as unknown as {
+  writeParams: (...args: unknown[]) => void;
+  submitCompute: (nSteps: number) => void;
+  readback: () => Promise<Float32Array>;
+  upload: (data: Float32Array) => void;
+};
+let gpuBatchDispatchSteps = 0;
+gpuBatchBackend.writeParams = () => undefined;
+gpuBatchBackend.submitCompute = nSteps => { gpuBatchDispatchSteps += nSteps; };
+gpuBatchBackend.readback = async () => new Float32Array(gpuBatchEngine.grid.buffer);
+gpuBatchBackend.upload = () => undefined;
+const gpuBatchCounts = { chemistry: 0, entity: 0, temporal: 0, info: 0, agents: 0 };
+const gpuBatchInternals = gpuBatchEngine as unknown as {
+  chemLayer: { tick: (...args: any[]) => void };
+  temporalLayer: { tick: (...args: any[]) => void };
+  infoPhysics: { tick: (...args: any[]) => void };
+};
+const originalBatchChemistry = gpuBatchInternals.chemLayer.tick;
+const originalBatchEntity = gpuBatchEngine.entityLayer.tick;
+const originalBatchTemporal = gpuBatchInternals.temporalLayer.tick;
+const originalBatchInfo = gpuBatchInternals.infoPhysics.tick;
+const originalBatchAgents = gpuBatchEngine.agents.tick;
+gpuBatchInternals.chemLayer.tick = () => { gpuBatchCounts.chemistry++; };
+gpuBatchEngine.entityLayer.tick = () => { gpuBatchCounts.entity++; };
+gpuBatchInternals.temporalLayer.tick = () => { gpuBatchCounts.temporal++; };
+gpuBatchInternals.infoPhysics.tick = () => { gpuBatchCounts.info++; };
+gpuBatchEngine.agents.tick = () => { gpuBatchCounts.agents++; };
+try {
+  await gpuBatchEngine.step(0.016, 3);
+} finally {
+  gpuBatchInternals.chemLayer.tick = originalBatchChemistry;
+  gpuBatchEngine.entityLayer.tick = originalBatchEntity;
+  gpuBatchInternals.temporalLayer.tick = originalBatchTemporal;
+  gpuBatchInternals.infoPhysics.tick = originalBatchInfo;
+  gpuBatchEngine.agents.tick = originalBatchAgents;
+}
+assert.equal(gpuBatchDispatchSteps, 3, "GPU field solver must receive all requested substeps");
+assert.deepEqual(gpuBatchCounts, { chemistry: 3, entity: 3, temporal: 3, info: 3, agents: 3 },
+  "each CPU-only subsystem must advance once per logical GPU substep");
+assert.equal(gpuBatchEngine.tick, 3, "batched GPU step must advance logical tick by nSteps");
+
 // Exercise the GPU readback commit path with a deterministic test double. The
 // injected failure occurs after readback is applied and causality updates, so
 // the frame must restore its local pre-commit snapshot without discarding any
