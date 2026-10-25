@@ -196,6 +196,56 @@ for (const filePath of sourcePaths) {
     ts.forEachChild(node, child => visit(child, method));
   }
   visit(source);
+
+  // The call-site inventory above is necessary but not sufficient: an audited
+  // local alias must not escape its synchronous owner through a return,
+  // object/property assignment, or a nested callback that can outlive the frame.
+  for (const [key, methodNode] of methodNodes) {
+    if (!key) continue;
+    const aliases = new Set();
+    function collectAliases(node) {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+          node.expression.text === "getMutableBuffer") {
+        const parent = node.parent;
+        if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name) &&
+            ["buf", "front", "back"].includes(parent.name.text)) aliases.add(parent.name.text);
+        if (ts.isBinaryExpression(parent) &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isIdentifier(parent.left) &&
+            ["chunkBuffer", "sourceBuffer"].includes(parent.left.text)) aliases.add(parent.left.text);
+      }
+      ts.forEachChild(node, collectAliases);
+    }
+    collectAliases(methodNode);
+    if (aliases.size === 0) continue;
+
+    function inspectAliasUse(node, nestedFunction = false) {
+      const isNestedFunction = nestedFunction ||
+        ((ts.isArrowFunction(node) || ts.isFunctionExpression(node)) && node !== methodNode);
+      if (ts.isIdentifier(node) && aliases.has(node.text)) {
+        const parent = node.parent;
+        const isDeclarationName =
+          (ts.isVariableDeclaration(parent) && parent.name === node) ||
+          (ts.isParameter(parent) && parent.name === node);
+        if (!isDeclarationName && isNestedFunction) {
+          const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+          errors.push(`${path}:${line}: raw buffer alias "${node.text}" is captured by a nested function/closure`);
+        }
+        if (!isDeclarationName && ts.isReturnStatement(parent) && parent.expression === node) {
+          const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be returned from its audited method`);
+        }
+        if (!isDeclarationName && ts.isBinaryExpression(parent) &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && parent.right === node &&
+            (ts.isPropertyAccessExpression(parent.left) || ts.isElementAccessExpression(parent.left))) {
+          const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be stored on an object/property`);
+        }
+      }
+      ts.forEachChild(node, child => inspectAliasUse(child, isNestedFunction));
+    }
+    inspectAliasUse(methodNode);
+  }
 }
 
 for (const [key, expectedCount] of expectedCalls) {
