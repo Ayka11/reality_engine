@@ -39,8 +39,12 @@ for (const process of [
   'RADIATION', 'PRESSURE_DIFFUSION', 'FIELD_ROTATION', 'EROSION',
 ]) assert.ok(defs.includes(process), `missing process registry entry: ${process}`)
 for (const parameter of [
-  'energyDiffusion', 'tempDiffusion', 'tempEnergyCoupling',
-  'pressureDensityCoupling', 'entropyGrowthRate', 'entropyEnergyCoupling',
+  'energyDiffusion', 'tempDiffusion', 'tempEnergyCoupling', 'densityDiffusion',
+  'pressureDiffusion', 'pressureDensityCoupling', 'phaseTransitionRate', 'crystallizationRate',
+  'metabolismRate', 'signalPropagationRate', 'radiationDensityRate', 'radiationEnergyRate',
+  'radiationThreshold', 'erosionRate', 'fieldRotationDamping',
+  'fieldRotationNeighborCoupling', 'fieldRotationCrossCoupling',
+  'entropyGrowthRate', 'entropyEnergyCoupling',
   'infoGrowthRate', 'infoEntropySupp', 'infoGrowthThreshE',
   'infoGrowthThreshD', 'waveSpeed', 'waveDamping',
   'gravityDensityCoupling', 'timeBaseRate', 'timeEnergyBoost',
