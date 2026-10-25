@@ -167,7 +167,49 @@ function commitSculptEdit(indices:number[],before:CellImage):void {
 function clearSculptHistory():void {sculptUndo.length=0;sculptRedo.length=0}
 
 function simStep(dt: number) {
-  for (const { x, y, z, base, chunk } of grid.activeCells()) {
+  // Jacobi-style input snapshot: spatial derivatives read the same pre-tick
+  // state regardless of iteration order. Candidate cells include a one-cell
+  // halo so fields can enter previously empty cells and neighboring chunks.
+  const sourceChunks = new Map<number, Float32Array>(
+    [...grid.chunks].map(([key, values]) => [key, values.slice()]),
+  )
+  const sourceRead = (x: number, y: number, z: number, field: number): number => {
+    if (x < 0 || x >= W || y < 0 || y >= H || z < 0 || z >= D) return 0
+    const key = chunkKey(Math.floor(x / CX), Math.floor(y / CY), Math.floor(z / CZ))
+    const source = sourceChunks.get(key)
+    if (!source) return 0
+    const base = (((z & 7) * CY * CX) + ((y & 7) * CX) + (x & 7)) * NF
+    return source[base + field]
+  }
+  const candidates = new Map<number, { x: number; y: number; z: number }>()
+  const addCandidate = (x: number, y: number, z: number) => {
+    if (x < 0 || x >= W || y < 0 || y >= H || z < 0 || z >= D) return
+    candidates.set((z * H + y) * W + x, { x, y, z })
+  }
+  const sourceCells = [...grid.activeCells()]
+  for (const { x, y, z } of sourceCells) {
+    addCandidate(x, y, z)
+    addCandidate(x - 1, y, z); addCandidate(x + 1, y, z)
+    addCandidate(x, y - 1, z); addCandidate(x, y + 1, z)
+    addCandidate(x, y, z - 1); addCandidate(x, y, z + 1)
+  }
+  const zeroChunk = new Float32Array(CHUNK_FLOATS)
+  const orderedCandidates = [...candidates.values()].sort((a, b) =>
+    (a.z * H + a.y) * W + a.x - ((b.z * H + b.y) * W + b.x))
+  for (const { x, y, z } of orderedCandidates) {
+    const key = chunkKey(Math.floor(x / CX), Math.floor(y / CY), Math.floor(z / CZ))
+    const chunk = sourceChunks.get(key) ?? zeroChunk
+    const base = (((z & 7) * CY * CX) + ((y & 7) * CX) + (x & 7)) * NF
+    let hasLocalState = false
+    for (let field = 0; field < NF; field++) {
+      if (Math.abs(chunk[base + field]) > 0.001) { hasLocalState = true; break }
+    }
+    const hasNeighborSignal = [
+      [-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1],
+    ].some(([dx, dy, dz]) =>
+      [F.E, F.T, F.D, F.I, F.P, F.WAVE].some(field =>
+        Math.abs(sourceRead(x + dx, y + dy, z + dz, field)) > 0.001))
+    if (!hasLocalState && !hasNeighborSignal) continue
     let lapE = 0, lapT = 0, lapD = 0, lapI = 0, lapP = 0, lapWave = 0, nc = 0
     let fxSum = 0, fySum = 0
     const dirs: Array<[number, number, number]> = [
@@ -176,14 +218,14 @@ function simStep(dt: number) {
     for (const [dx, dy, dz] of dirs) {
       const nx = x + dx, ny = y + dy, nz = z + dz
       if (nx < 0 || nx >= W || ny < 0 || ny >= H || nz < 0 || nz >= D) continue
-      lapE += grid.get(nx, ny, nz, F.E)
-      lapT += grid.get(nx, ny, nz, F.T)
-      lapD += grid.get(nx, ny, nz, F.D)
-      lapI += grid.get(nx, ny, nz, F.I)
-      lapP += grid.get(nx, ny, nz, F.P)
-      lapWave += grid.get(nx, ny, nz, F.WAVE)
-      fxSum += grid.get(nx, ny, nz, F.FX)
-      fySum += grid.get(nx, ny, nz, F.FY)
+      lapE += sourceRead(nx, ny, nz, F.E)
+      lapT += sourceRead(nx, ny, nz, F.T)
+      lapD += sourceRead(nx, ny, nz, F.D)
+      lapI += sourceRead(nx, ny, nz, F.I)
+      lapP += sourceRead(nx, ny, nz, F.P)
+      lapWave += sourceRead(nx, ny, nz, F.WAVE)
+      fxSum += sourceRead(nx, ny, nz, F.FX)
+      fySum += sourceRead(nx, ny, nz, F.FY)
       nc++
     }
     const E = chunk[base + F.E], T = chunk[base + F.T]
@@ -263,8 +305,8 @@ function simStep(dt: number) {
     }
 
     if (isProcessActive(PROC.GRAVITY)) {
-      const leftD = grid.get(x - 1, y, z, F.D), rightD = grid.get(x + 1, y, z, F.D)
-      const downD = grid.get(x, y - 1, z, F.D), upD = grid.get(x, y + 1, z, F.D)
+      const leftD = sourceRead(x - 1, y, z, F.D), rightD = sourceRead(x + 1, y, z, F.D)
+      const downD = sourceRead(x, y - 1, z, F.D), upD = sourceRead(x, y + 1, z, F.D)
       grid.set(x, y, z, F.FX, FX - p.gravityDensityCoupling * (rightD - leftD) * 0.5 * dt)
       grid.set(x, y, z, F.FY, FY - p.gravityDensityCoupling * (upD - downD) * 0.5 * dt)
     }
