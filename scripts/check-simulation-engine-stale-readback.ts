@@ -158,6 +158,24 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(engine.grid.chunkOwners.get("7,8,9"), "test-owner",
     "stale GPU data must not overwrite newer chunk ownership metadata");
 
+  // Public chunk map writes must preserve the key-to-spatial-coordinate contract.
+  const mapInvariantGrid = new SparseVoxelGrid(1, 1, 1);
+  const badCoordinateChunk = new Chunk(4, 5, 6);
+  const beforeInvalidChunkInsert = mapInvariantGrid.mutationRevision;
+  assert.throws(
+    () => mapInvariantGrid.chunks.set("4,5,7", badCoordinateChunk),
+    /Chunk map key must match chunk coordinates/,
+    "chunk map must reject a key that disagrees with the physical chunk coordinates",
+  );
+  assert.equal(mapInvariantGrid.chunks.has("4,5,7"), false,
+    "rejected chunk map insertion must not change topology");
+  assert.equal(mapInvariantGrid.mutationRevision, beforeInvalidChunkInsert,
+    "rejected chunk map insertion must not advance mutation revision");
+  const badCoordinateRevision = mapInvariantGrid.mutationRevision;
+  badCoordinateChunk.buffer[0] = 10;
+  assert.equal(mapInvariantGrid.mutationRevision, badCoordinateRevision,
+    "rejected chunk instance must not attach a grid mutation listener");
+
   const beforeDirtyDelete = engine.grid.mutationRevision;
   assert.equal(engine.grid.dirtyChunks.delete("7,8,9"), true);
   assert.ok(engine.grid.mutationRevision > beforeDirtyDelete, "dirty-chunk Set.delete must advance grid revision");

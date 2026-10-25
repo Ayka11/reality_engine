@@ -842,6 +842,15 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
   }
 
   override set(key: string, chunk: Chunk): this {
+    if (!(chunk instanceof Chunk) ||
+        ![chunk.cx, chunk.cy, chunk.cz].every(Number.isSafeInteger)) {
+      throw new TypeError("SparseVoxelGrid chunk map requires a Chunk with integer coordinates");
+    }
+    const expectedKey = `${chunk.cx},${chunk.cy},${chunk.cz}`;
+    if (key !== expectedKey) {
+      throw new Error(`Chunk map key must match chunk coordinates: expected ${expectedKey}, received ${key}`);
+    }
+
     const existed = this.has(key);
     const previous = this.get(key);
     if (existed && previous === chunk) return this;
