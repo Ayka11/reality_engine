@@ -101,6 +101,7 @@ export function runEntityLayerRecoveryRegression(): void {
   writeBlob(gridB, [[2, 2, 1], [3, 2, 1]]);
   const layerA = new EntityLayer(11);
   const layerB = new EntityLayer(22);
+  const layerAInitialRngState = layerA.snapshot().rngState;
   layerA.tick(gridA, 1 / 60);
   layerB.tick(gridB, 1 / 60);
   if (layerA.getEntities()[0]?.id !== 1 ||
@@ -109,7 +110,17 @@ export function runEntityLayerRecoveryRegression(): void {
       layerB.totalSpawned !== 1) {
     throw new Error("EntityLayer IDs are not isolated per instance");
   }
+  if (layerA.snapshot().rngState === layerAInitialRngState) {
+    throw new Error("EntityLayer reset fixture did not advance its constructor PRNG stream");
+  }
   layerA.clear();
+  const clearedLayerA = layerA.snapshot();
+  if (clearedLayerA.rngState !== layerAInitialRngState ||
+      clearedLayerA.nextId !== 1 ||
+      clearedLayerA.entities.length !== 0 ||
+      clearedLayerA.extinctCount !== 0) {
+    throw new Error("EntityLayer.clear did not reset its constructor RNG, identity allocator, and population");
+  }
   if (layerB.totalSpawned !== 1 || layerB.extinctCount !== 0) {
     throw new Error("Clearing one EntityLayer changed another instance's counters");
   }
