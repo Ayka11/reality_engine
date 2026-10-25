@@ -15,6 +15,8 @@ The old branch has a useful, independently passing RC validation harness. It als
 
 These runs validate different revisions and workflows. The branch RC run is evidence for that branch's own harness, not evidence that its entire implementation has been integrated into or validated as part of `main`.
 
+The branch's `INFINITY_SCALE_RC1_STATUS.md` has stale status text stating that automated CI is pending/no run exists. That statement is superseded by the actual successful RC #378 run above; use GitHub's run record and exact SHA as the authoritative evidence rather than the old status page.
+
 The Git tree comparison found 378 paths on the branch, 461 on `main`, and 133 branch-only paths. The compare API reports 626 commits ahead and 966 behind the merge base. The branch is materially divergent; a bulk merge or cherry-pick sequence is not a safe integration strategy. [Compare refs](https://github.com/Ayka11/reality_engine/compare/main...infinity-scale-real-diagnostics)
 
 ## Recovery-test overlap
@@ -61,7 +63,9 @@ The release-evidence workflow is a concrete unique capability validated by RC ru
 
 On `main`, `src/infinity/InfinityScaleAdaptiveLODTransactionBridge.ts` deliberately rejects any changed LOD topology until physical chunk remapping and full-cell transfer exist. The branch's own `InfinityScaleAdaptiveRuntime.regression.ts` also expects topology mutation to be rejected and revisions to remain unchanged when physical remapping is unavailable.
 
-There is an additional integration mismatch: the branch-only `InfinityScaleUnifiedTransaction` types its authoritative grid as `VoxelGrid` and its regression exercises a dense `VoxelGrid` plus logical `InfinityScaleLODState`. The current production `SimulationEngine.grid` is `SparseVoxelGrid`. That legacy regression is useful evidence about the prototype's staged transaction and rollback, but it is not a production-path proof that physical sparse chunks are remapped or synchronized.
+There are additional integration mismatches:
+- The branch-only `InfinityScaleUnifiedTransaction` types its authoritative grid as `VoxelGrid` and its regression exercises a dense `VoxelGrid` plus logical `InfinityScaleLODState`. The current production `SimulationEngine.grid` is `SparseVoxelGrid`. That legacy regression is useful evidence about the prototype's staged transaction and rollback, but it is not a production-path proof that physical sparse chunks are remapped or synchronized.
+- The branch-only `SimulationEngine.infinityScale.regression.ts`, `SimulationEngine.mixedLOD.regression.ts`, and `SimulationEngine.mixedLODGPU.regression.ts` call `SimulationEngine.setInfinityScaleExecutionPlan()`. This API is absent from current `main`'s `SimulationEngine`, so those tests target a removed/legacy runtime integration and cannot be ported unchanged. Current `main` exercises the LOD state, transfer compiler, transaction bridge, CPU transfer, rollback, and GPU-readiness gates through their present contracts.
 
 Therefore:
 - Do not enable adaptive topology changes merely because planning, predictive metrics, replay, or RC packaging passes.
