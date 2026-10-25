@@ -605,4 +605,84 @@ async function assertPostEventChunkConsistency(useGpu: boolean): Promise<void> {
 await assertPostEventChunkConsistency(false);
 await assertPostEventChunkConsistency(true);
 
+
+
+// Rollback wrappers must preserve both exception objects, not only their messages.
+function assertRollbackAggregate(
+  error: unknown,
+  primary: Error,
+  rollback: Error,
+  context: string,
+): void {
+  assert.ok(error instanceof AggregateError, `${context} must expose AggregateError`);
+  assert.equal(error.errors.length, 2, `${context} must preserve exactly both failure causes`);
+  assert.equal(error.errors[0], primary, `${context} must preserve the original failure object`);
+  assert.equal(error.errors[1], rollback, `${context} must preserve the rollback failure object`);
+  assert.match(error.message, /rollback failed/, `${context} must identify rollback failure`);
+}
+
+// CPU async frame: both the original frame cause and failed rollback remain inspectable.
+{
+  const engine = new SimulationEngine(4, 4, 2);
+  const primary = new Error("injected CPU frame cause");
+  const rollback = new Error("injected CPU frame rollback cause");
+  const events = engine.worldEvents as unknown as { autoTick: (...args: unknown[]) => void };
+  const originalAutoTick = events.autoTick;
+  const originalRestore = engine.restoreCoreRecoveryState.bind(engine);
+  events.autoTick = () => { throw primary; };
+  (engine as unknown as { restoreCoreRecoveryState: (snapshot: any) => void })
+    .restoreCoreRecoveryState = () => { throw rollback; };
+  try {
+    let observed: unknown;
+    try { await engine.step(0.016); } catch (error) { observed = error; }
+    assertRollbackAggregate(observed, primary, rollback, "CPU frame rollback");
+  } finally {
+    events.autoTick = originalAutoTick;
+    (engine as unknown as { restoreCoreRecoveryState: (snapshot: any) => void })
+      .restoreCoreRecoveryState = originalRestore;
+  }
+}
+
+// Explicit authoritative mutation: structured causes survive a failed rollback.
+{
+  const engine = new SimulationEngine(4, 4, 2);
+  const primary = new Error("injected authoritative mutation cause");
+  const rollback = new Error("injected authoritative mutation rollback cause");
+  const originalRestore = engine.restoreCoreRecoveryState.bind(engine);
+  (engine as unknown as { restoreCoreRecoveryState: (snapshot: any) => void })
+    .restoreCoreRecoveryState = () => { throw rollback; };
+  try {
+    let observed: unknown;
+    try { engine.mutateAuthoritativeState(() => { throw primary; }); }
+    catch (error) { observed = error; }
+    assertRollbackAggregate(observed, primary, rollback, "authoritative mutation rollback");
+  } finally {
+    (engine as unknown as { restoreCoreRecoveryState: (snapshot: any) => void })
+      .restoreCoreRecoveryState = originalRestore;
+  }
+}
+
+// Synchronous script tick: both lower-layer and rollback errors remain inspectable.
+{
+  const engine = new SimulationEngine(4, 4, 2);
+  const primary = new Error("injected syncTick cause");
+  const rollback = new Error("injected syncTick rollback cause");
+  const internals = engine as unknown as {
+    chemLayer: { tick: (...args: any[]) => void };
+    restoreCoreRecoveryState: (snapshot: any) => void;
+  };
+  const originalChemTick = internals.chemLayer.tick;
+  const originalRestore = engine.restoreCoreRecoveryState.bind(engine);
+  internals.chemLayer.tick = () => { throw primary; };
+  internals.restoreCoreRecoveryState = () => { throw rollback; };
+  try {
+    let observed: unknown;
+    try { engine.syncTick(1); } catch (error) { observed = error; }
+    assertRollbackAggregate(observed, primary, rollback, "syncTick rollback");
+  } finally {
+    internals.chemLayer.tick = originalChemTick;
+    internals.restoreCoreRecoveryState = originalRestore;
+  }
+}
+
 console.log('SimulationEngine core recovery and deterministic LawEngine replay: PASS');

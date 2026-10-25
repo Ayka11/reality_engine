@@ -290,7 +290,10 @@ export class SimulationEngine {
         } catch (rollbackError) {
           const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
           const originalMessage = error instanceof Error ? error.message : String(error);
-          throw new Error(`CPU frame failed (${originalMessage}) and rollback failed (${rollbackMessage})`);
+          throw new AggregateError(
+            [error, rollbackError],
+            `CPU frame failed (${originalMessage}) and rollback failed (${rollbackMessage})`,
+          );
         }
       }
       throw error;
@@ -360,7 +363,8 @@ export class SimulationEngine {
       } catch (rollbackError) {
         const originalMessage = error instanceof Error ? error.message : String(error);
         const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-        throw new Error(
+        throw new AggregateError(
+          [error, rollbackError],
           `Authoritative mutation failed (${originalMessage}) and rollback failed (${rollbackMessage})`,
         );
       }
@@ -426,7 +430,8 @@ export class SimulationEngine {
         } catch (rollbackError) {
           const originalMessage = error instanceof Error ? error.message : String(error);
           const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-          throw new Error(
+          throw new AggregateError(
+            [error, rollbackError],
             `Synchronous script tick failed (${originalMessage}) and rollback failed (${rollbackMessage})`,
           );
         }
