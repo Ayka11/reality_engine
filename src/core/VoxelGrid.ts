@@ -1,4 +1,5 @@
 import { CellState, CELL_FIELDS } from "./CellState";
+import { validateGridDimensions } from "./GridDimensions";
 import { createTrackedFloat32Array, INTERNAL_MUTABLE_BUFFER, type MutableBufferSide } from "./TrackedFloat32Array";
 
 interface VoxelGridStorage {
@@ -32,10 +33,11 @@ export class VoxelGrid {
   readonly size: number;
 
   constructor(W: number, H: number, D: number) {
+    const size = validateGridDimensions(W, H, D, "VoxelGrid");
     this.W = W;
     this.H = H;
     this.D = D;
-    this.size = W * H * D;
+    this.size = size;
     const state: VoxelGridStorage = {
       buffer: new Float32Array(this.size * CELL_FIELDS),
       backBuffer: new Float32Array(this.size * CELL_FIELDS),

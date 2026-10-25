@@ -33,19 +33,19 @@ jobs:
       - run: npm run test:brushes --if-present
       - run: npm run test:world-field --if-present
       - run: npm run test:infinity-scale-core --if-present
-      - run: npm run test:sparse-voxel-grid-recovery --if-present
+      - run: npm run test:sparse-voxel-grid-recovery
       - run: npm run test:causal-graph-recovery --if-present
       - run: npm run test:recorder-recovery --if-present
       - run: npm run test:agent-system-recovery --if-present
       - run: npm run test:worldevents-recovery --if-present
       - run: npm run test:entity-layer-recovery --if-present
-      - run: npm run test:simulation-engine-core-recovery --if-present
+      - run: npm run test:simulation-engine-core-recovery
       - run: npm run test:chem-layer-recovery --if-present
       - run: npm run test:civilization-system-recovery --if-present
       - run: npm run test:cosmological-sim-recovery --if-present
-      - run: npm run test:simulation-engine-cpu-frame-rollback --if-present
-      - run: npm run test:simulation-engine-stale-readback --if-present
-      - run: npm run test:mutable-buffer-contract --if-present
+      - run: npm run test:simulation-engine-cpu-frame-rollback
+      - run: npm run test:simulation-engine-stale-readback
+      - run: npm run test:mutable-buffer-contract
       - run: npm run test:infinity-scale-mixed-lod --if-present
       - run: npm run test:infinity-scale-adaptive-lod-bridge --if-present
       - name: Run entity chunk reconciliation regression
@@ -69,7 +69,7 @@ jobs:
       - run: npm run test:worker-restore-two-phase --if-present
       - run: npm run test:legacy-field-bridge --if-present
       - run: npm run test:legacy-sculpt-adapter --if-present
-      - run: npm run test:authoritative-sculpt-transaction --if-present
+      - run: npm run test:authoritative-sculpt-transaction
       - run: npm run test:world-persistence-failures --if-present
       - run: npm run test:script-engine-rng-recovery --if-present
       - run: npm run test:agent-worldevents-rng-recovery --if-present

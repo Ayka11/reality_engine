@@ -1,5 +1,6 @@
 import { CELL_FIELDS, F } from "./CellState";
 import { SparseVoxelGrid, type SparseVoxelGridSnapshot } from "./SparseVoxelGrid";
+import { VoxelGrid } from "./VoxelGrid";
 
 function cloneSnapshot(snapshot: SparseVoxelGridSnapshot): SparseVoxelGridSnapshot {
   return {
@@ -20,7 +21,34 @@ function cloneSnapshot(snapshot: SparseVoxelGridSnapshot): SparseVoxelGridSnapsh
   };
 }
 
+function runGridDimensionValidationRegression(): void {
+  const invalidCases: Array<[number, number, number]> = [
+    [0, 1, 1],
+    [-1, 1, 1],
+    [1.5, 1, 1],
+    [Number.NaN, 1, 1],
+    [1, Number.POSITIVE_INFINITY, 1],
+    [Number.MAX_SAFE_INTEGER, 1, 1],
+    [Number.MAX_SAFE_INTEGER, 2, 2],
+  ];
+
+  for (const dimensions of invalidCases) {
+    let sparseRejected = false;
+    try { new SparseVoxelGrid(...dimensions); } catch { sparseRejected = true; }
+    if (!sparseRejected) {
+      throw new Error(`SparseVoxelGrid accepted invalid dimensions: ${dimensions.join("x")}`);
+    }
+
+    let denseRejected = false;
+    try { new VoxelGrid(...dimensions); } catch { denseRejected = true; }
+    if (!denseRejected) {
+      throw new Error(`VoxelGrid accepted invalid dimensions: ${dimensions.join("x")}`);
+    }
+  }
+}
+
 export function runSparseVoxelGridRecoveryRegression(): void {
+  runGridDimensionValidationRegression();
   const grid = new SparseVoxelGrid(4, 3, 2);
   const denseIndex = grid.idx(1, 1, 1) + CELL_FIELDS - 1;
   grid.buffer[denseIndex] = 13;
