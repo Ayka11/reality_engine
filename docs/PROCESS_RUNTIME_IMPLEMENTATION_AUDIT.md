@@ -2,48 +2,54 @@
 
 Audit scope: `main`, `src/process/ProcessDef.ts`, `src/laws/MetaLaw.ts`,
 `src/laws/LawEngine.ts`, `src/core/ChunkSimWorker.ts`,
-`src/simulation/FieldPhysics.ts`, `src/simulation/EntropyLayer.ts`,
-`src/simulation/InfoPhysics.ts`, and `src/simulation/SimulationEngine.ts`.
+`src/gpu/GPUBackend.ts`, `src/simulation/FieldPhysics.ts`,
+`src/simulation/EntropyLayer.ts`, `src/simulation/InfoPhysics.ts`, and
+`src/simulation/SimulationEngine.ts`.
 
-This document distinguishes the **authoritative SimulationEngine path** from the
-separate sparse `ChunkSimWorker` path. A process implemented in one does not mean
-it is implemented in the other.
+This document distinguishes the authoritative `SimulationEngine` path (GPU
+compute when available, CPU field layers otherwise) from the separate sparse
+`ChunkSimWorker` path. A process implemented in one does not mean it is
+implemented in the other. A GPU branch is counted as code present, not as proof
+of a complete or scientifically validated solver.
 
 ## Inventory (16 declared processes)
 
-| ID | Process | ChunkSimWorker | SimulationEngine path | Assessment |
-|---:|---|---|---|---|
-| 0 | Energy diffusion | Implemented, gated by legacy string `energy`; coefficient `DIFF` | Implemented in `FieldPhysics`, gated by bitmask and `PhysicsParams.energyDiffusion` | Present in both, inconsistent contracts |
-| 1 | Temperature diffusion | Partial: coupled to legacy `thermo`; hardcoded `0.07` and `0.002` | Implemented in `FieldPhysics` using `tempDiffusion` and `tempEnergyCoupling` | Present in both, worker parameters mismatch |
-| 2 | Density flow | Partial: Laplacian computed but only used in `thermo`; no process-specific gate | Implemented as a density Laplacian in `FieldPhysics`, but coefficient reuses `energyDiffusion` | Partial; lacks dedicated parameter |
-| 3 | Entropy growth | Implemented, gated by legacy string `entropy`; mixed hardcoded terms | Implemented in `EntropyLayer` using `entropyGrowthRate` and `entropyEnergyCoupling` | Present in both, worker parameter mismatch |
-| 4 | Information | Implemented, gated by legacy string `info`; hardcoded growth/diffusion terms | Implemented in `EntropyLayer`/ `InfoPhysics`; part uses `PhysicsParams` | Present in both, worker parameter mismatch |
-| 5 | Bio potential | Implemented, gated by legacy string `bio`; thresholds and rates hardcoded | Implemented in `EntropyLayer` | Present in both, worker parameter mismatch |
-| 6 | Wave propagation | Not implemented as a process | Phase and amplitude updated in `FieldPhysics`; not a full spatial wave equation | Partial |
-| 7 | Gravity | Not implemented as a process | Density receives `gravityDensityCoupling * GRAVITY_POT`; depends on how potential is populated | Partial; verify potential source and conservation |
-| 8 | Phase transition | Not implemented as a process | Temperature/density threshold branch in `FieldPhysics` | Partial phenomenological rule; no explicit phase state |
-| 9 | Metabolism | Not implemented as a process | Implemented in `EntropyLayer` when bio potential exceeds threshold | Present in authoritative path only |
-| 10 | Signal propagation | Not implemented as a process | Diffusion-like update of information in `FieldPhysics`; separate signal effects in `InfoPhysics` | Partial; no explicit signal transport equation in FieldPhysics |
-| 11 | Crystallization | Not implemented as a process | Low-entropy/high-density threshold rule in `FieldPhysics` | Partial phenomenological rule |
-| 12 | Radiation | Not implemented as a process | High-energy density/energy reduction in `FieldPhysics` | Partial; hardcoded coefficients |
-| 13 | Pressure diffusion | Not implemented as a process | Pressure assigned from density and temperature; no spatial pressure-wave diffusion | Partial; label overstates implementation |
-| 14 | Field rotation | Not implemented as a process | Heuristic FX/FY/FZ neighbor smoothing and cross-coupling | Partial; not a curl-based field solver |
-| 15 | Erosion | Not implemented as a process | No erosion branch found in `FieldPhysics` or `EntropyLayer` | Missing from inspected runtime paths |
+| ID | Process | ChunkSimWorker | GPUBackend | CPU SimulationEngine layers | Assessment |
+|---:|---|---|---|---|---|
+| 0 | Energy diffusion | Implemented, gated by legacy string `energy`; coefficient `DIFF` | Implemented with `energyDiffusion` and material conductivity | Implemented with `energyDiffusion` | Present in both; worker was inconsistent |
+| 1 | Temperature diffusion | Partial: legacy `thermo`; hardcoded coefficients | Implemented with `tempDiffusion`, heat capacity, `tempEnergyCoupling` | Implemented with `tempDiffusion`, `tempEnergyCoupling` | Present; CPU/GPU have different discretization |
+| 2 | Density flow | Partial: Laplacian but legacy `thermo` gate; hardcoded rate | Density Laplacian with `0.02 * energyDiffusion` | Density Laplacian with `0.02 * energyDiffusion` | Present, but no dedicated density mobility parameter |
+| 3 | Entropy growth | Implemented with legacy `entropy`; hardcoded terms | Implemented with `entropyGrowthRate`, `entropyEnergyCoupling`, plus hardcoded temperature term | Implemented with `PhysicsParams`; temperature term is not fully parameterized | Present; hardcoded terms remain |
+| 4 | Information | Implemented with legacy `info`; hardcoded diffusion/growth | Thresholded growth and decay using info parameters | `EntropyLayer` and `InfoPhysics`; mixed parameterized and hardcoded rules | Present; exact semantics differ by backend |
+| 5 | Bio potential | Implemented with legacy `bio`; hardcoded thresholds/rates | Computed from information, energy, density, entropy and material affinity | Implemented in `EntropyLayer` | Present; worker and GPU algorithms differ |
+| 6 | Wave propagation | Missing | Updates phase/amplitude and energy; no spatial wave equation | Phase/amplitude update in `FieldPhysics`; not a full spatial wave equation | Partial; name overstates spatial propagation |
+| 7 | Gravity | Missing | Density updated using `gravityDensityCoupling * gravity_pot` | Density updated using `gravityDensityCoupling * GRAVITY_POT` | Partial; validate potential source and stability |
+| 8 | Phase transition | Missing | Temperature/density threshold rules | Temperature/density threshold rules | Partial phenomenological rule; no explicit phase state |
+| 9 | Metabolism | Missing | Converts energy to information at bio threshold | Implemented in `EntropyLayer` | Present in authoritative path only |
+| 10 | Signal propagation | Missing | Diffusion-like information update | Information diffusion plus separate signal effects | Partial; not a distinct signal-field transport model |
+| 11 | Crystallization | Missing | Thresholded density/entropy update with material coefficient | Low-entropy/high-density threshold rule | Partial phenomenological rule |
+| 12 | Radiation | Missing | High-energy density/energy reduction with material absorption | High-energy density/energy reduction | Partial; hardcoded coefficients |
+| 13 | Pressure diffusion | Missing | Computes pressure from density and temperature; no spatial pressure diffusion | Computes pressure from density and temperature; no spatial pressure diffusion | Partial; label overstates implementation |
+| 14 | Field rotation | Missing | Vector smoothing and cross-coupling heuristic | Vector smoothing and cross-coupling heuristic | Partial; not a true curl-based solver |
+| 15 | Erosion | Missing | Flow/density threshold reduces density and information using material resistance | No erosion branch found in inspected CPU layers | Partial; GPU only |
 
 ## Contract findings
 
 1. `PROCESS_LIBRARY` and `LawEngine.activeProcessMask` are the canonical
    process registry and activation contract for `SimulationEngine`.
 2. `SimulationEngine` passes `this.laws.params` and
-   `this.laws.activeProcessMask` into `FieldPhysics` and `EntropyLayer`.
-   The authoritative path is therefore partly parameterized already; several
-   process implementations still use magic numbers or are only qualitative.
-3. `ChunkSimWorker` instead uses `Set<string>` values such as `thermo`,
-   `bio`, `info`, and four legacy scalars (`DIFF`, `ENT`, `INFO`, `BIO`).
-   It does not consume the full process bitmask or `PhysicsParams`.
-4. `main.ts` creates the chunk worker independently and sends legacy parameters
-   at startup/compile. Law UI interactions update `sim.laws`, but the current
-   code does not synchronize the full mask/parameter object into this worker.
+   `this.laws.activeProcessMask` into `GPUBackend.writeParams`, `FieldPhysics`,
+   and `EntropyLayer`. The GPU shader has code branches for all 16 process IDs,
+   but several branches are heuristic, reuse unrelated coefficients, or do not
+   implement the process description literally.
+3. `ChunkSimWorker` previously used `Set<string>` values such as `thermo`,
+   `bio`, `info`, and four legacy scalars. It did not consume the full mask or
+   `PhysicsParams`. The current change replaces that activation Set with the
+   canonical process bitmask and forwards resolved parameters from `sim.laws`.
+4. `main.ts` creates the chunk worker independently. It now sends the canonical
+   mask and parameter object at startup and before each worker tick, so law
+   overrides are reflected in that worker. Legacy node-editor scalar inputs are
+   still adapted, but the authoritative LawEngine sync wins on the next tick.
 5. The `PhysicsParams` type has no dedicated coefficients for erosion,
    crystallization, radiation, density mobility, or pressure relaxation. Those
    processes cannot all be made fully configurable without extending the
