@@ -143,8 +143,26 @@ function applyChunkPreset(value: string) {
 }
 (window as unknown as Record<string, unknown>).applyChunkPreset = applyChunkPreset;
 
-// Seed initial world in worker
-chunkWorker.postMessage({ cmd: 'generate', data: { DIFF: DIFF_cw, ENT: ENT_cw, INFO: INFO_cw, BIO: BIO_cw } });
+// Keep the sparse worker on the same resolved laws/parameters as the authoritative engine.
+function syncChunkWorkerPhysics() {
+  chunkWorker.postMessage({
+    cmd: 'setPhysics',
+    data: {
+      params: { ...sim.laws.params },
+      processMask: sim.laws.activeProcessMask,
+    },
+  });
+}
+
+// Seed initial world using the current LawEngine contract, not legacy scalar defaults.
+syncChunkWorkerPhysics();
+chunkWorker.postMessage({
+  cmd: 'generate',
+  data: {
+    params: { ...sim.laws.params },
+    processMask: sim.laws.activeProcessMask,
+  },
+});
 
 // Compile node graph and push params to worker
 function chunkWorkerCompile() {
@@ -1906,6 +1924,7 @@ async function loop(ts: number) {
     // Tick chunk worker (non-blocking — skip if previous frame not yet returned)
     if (!workerBusy) {
       workerBusy = true;
+      syncChunkWorkerPhysics();
       chunkWorker.postMessage({ cmd: 'tick', data: { speed: Math.min(nSteps, 3) } });
     }
   }
