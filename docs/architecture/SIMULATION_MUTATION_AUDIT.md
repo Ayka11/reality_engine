@@ -2,27 +2,29 @@
 
 ## Current implementation update — 2026-10-25
 
-**Validated implementation head:** `2b5bb7b4650cb02f75a13fd1cd9b8a6404eaf1bf`  
-**Validation:** Reality Engine CI #1370 passed on this exact head, including lint, recovery/regression checks, the stale-readback and mutable-buffer contract tests, both Docker builds, Hugging Face container smoke, HF smoke/CPU checks, and browser acceptance. [Run #1370](https://github.com/Ayka11/reality_engine/actions/runs/40201717422). Dependency security audit #149 also passed on the same head: [run #149](https://github.com/Ayka11/reality_engine/actions/runs/40201717433). This verifies the configured checks, not every scientific capability or every possible internal mutation path.
+**Validated implementation head:** `95a4a39f5313fd7844f075deb8f292c482fe5f55`  
+**Validation:** Reality Engine CI #1386 passed on this exact head: [run #1386](https://github.com/Ayka11/reality_engine/actions/runs/40206544029). The run included lint, all declared recovery/regression suites (now mandatory rather than `--if-present`), stale-readback and mutable-buffer ownership checks, build, both Docker images, Hugging Face container smoke, HF smoke/CPU checks, and Playwright browser acceptance. Dependency Security Audit #150 passed on the same package manifest/lockfile state before the later source-only fixes: [run #150](https://github.com/Ayka11/reality_engine/actions/runs/40205819069). These checks do not establish scientific validity or production readiness of every feature.
 
-This update supersedes earlier statements below that public dense/chunk buffer writes and `CellState` setters are entirely untracked. The current implementation adds:
+This update supersedes earlier statements below that public dense/chunk buffer writes and `CellState` setters are entirely untracked. The current implementation includes:
 
 - `VoxelGrid` and `SparseVoxelGrid` mutation revisions, including tracked public front/back typed-array views.
 - `Chunk` mutation listeners and tracked chunk buffer views.
-- A public buffer view whose `.buffer` accessor returns a detached copy; indexed writes and supported mutating typed-array methods invalidate the owning revision.
+- Public buffer views whose `.buffer` accessor returns a detached copy; indexed writes and supported mutating typed-array methods invalidate the owning revision.
 - `CellState.set()` mutation callbacks for grid/chunk cell wrappers.
-- `SimulationEngine.step()` captures both engine generation and grid mutation revision before GPU readback, and rejects GPU output if either changes while awaiting the result.
-- Regression tests cover tracked buffer writes, chunk listener lifecycle, mutation metadata, concrete read-only metric totals/averages, and stale GPU readback; CI #1370 passed these checks with browser acceptance on the validated implementation head.
-- `scripts/check-mutable-buffer-contract.mjs` statically inventories 30 known `getMutableBuffer()` call sites across core storage and synchronous simulation hot paths. It rejects unreviewed new call sites/imports and raw-buffer use forms outside the audited synchronous ownership patterns.
-- `SparseVoxelGrid.sumFields()` aggregates the five world metrics in one backing-buffer pass without exposing a mutable alias, causing a false revision increment, or traversing the grid five times.
-- Public chunk metadata collections (`dirtyChunks`, `chunkOwners`) and `activeChunkRange` now participate in mutation revision tracking, with regression coverage for pending readback invalidation and Set/Map delete/clear operations.
-- `MutationTrackedChunkMap` now registers one grid listener per distinct chunk instance with reference counting, detaches it when the chunk is replaced/deleted/cleared, and avoids duplicate registration on same-key re-insertion. The stale-readback regression verifies idempotent insertion, replacement, deletion, and clear behavior.
+- `SimulationEngine.step()` checks both engine generation and grid mutation revision across GPU readback and rejects stale output.
+- Public chunk metadata collections (`dirtyChunks`, `chunkOwners`) and `activeChunkRange` participate in mutation revision tracking, with regression coverage for pending-readback invalidation and Set/Map delete/clear operations.
+- `MutationTrackedChunkMap` registers one grid listener per distinct chunk instance with reference counting and detaches it on replacement/deletion/clear.
+- `SparseVoxelGrid.syncDenseToChunks()` preflights all dense-to-chunk destinations before writing, uses a compact coordinate plan rather than cloning whole multi-megabyte chunks per frame, and has a regression that injects a mapping failure before publication.
+- `BrushEngine.applyStroke()`, `applyCustomStroke()`, `undo()`, and `redo()` preserve dense state/history when synchronization fails; custom-callback failure also re-publishes restored dense state over direct chunk edits. Injected-failure tests are part of the mandatory authoritative-sculpt test suite.
+- `VoxelGrid` and `SparseVoxelGrid` reject non-positive, fractional, non-finite, and unsafe dimensions before buffer allocation.
+- `scripts/check-mutable-buffer-contract.mjs` statically inventories raw `getMutableBuffer()` access sites and rejects unreviewed imports/call sites or use outside the approved synchronous ownership patterns.
+- CI no longer silently skips any of the 32 declared test steps via `--if-present`.
 
-**Important internal-alias caveat:** `getMutableBuffer()` advances the revision when it returns a raw mutable typed-array alias, but cannot observe later writes through that same alias. Such aliases must remain synchronous and transaction-local; never retain one across `await` or an ownership boundary. The remaining audit must verify all call sites and replace any cross-boundary alias with a scoped mutation API.
+**Important internal-alias caveat:** `getMutableBuffer()` still returns a raw mutable typed-array alias and cannot observe later writes through an alias that is retained. The audited call sites are constrained to synchronous, transaction-local uses or direct upload arguments; do not retain one across `await` or an ownership boundary. This is a static ownership contract, not a language-level guarantee, so issue [#62](https://github.com/Ayka11/reality_engine/issues/62) remains open until the supported mutation surfaces and failure/rollback paths are fully enumerated and tested.
 
-The GitHub workflows now pin `actions/checkout@v7` and `actions/setup-node@v7`; the Node.js 20 action-runtime deprecation warning was absent from the CI #1370 logs.
+**Remaining release limitation:** adaptive LOD topology changes remain fail-closed because physical chunk remapping and full cell-data transfer are not implemented end-to-end. Keep [issue #50](https://github.com/Ayka11/reality_engine/issues/50) open; passing CI validates the disabled/guarded path, not production refine/coarsen. Reality Engine remains experimental/pre-release, not a certified scientific instrument.
 
-**Remaining limitation:** this does not close the entire mutation contract. The repository still has an internal raw-buffer escape hatch for performance-sensitive engine code, mutable chunk/map and subsystem metadata, and direct writer/restore paths that need a complete inventory and explicit ownership rules. The audit below should be read as the original inventory and migration plan, with completed items superseded by this dated update; it is not evidence that every arbitrary internal write is guarded. Keep issue [#62](https://github.com/Ayka11/reality_engine/issues/62) open until the supported mutation surfaces and failure/rollback paths are fully enumerated and tested. Keep adaptive LOD topology changes fail-closed under [#50](https://github.com/Ayka11/reality_engine/issues/50).
+The GitHub workflows pin `actions/checkout@v7` and `actions/setup-node@v7`. This update records the implementation and acceptance evidence available on the exact head above; the historical audit checkpoint and original mutation inventory follow.
 
 ---
 
