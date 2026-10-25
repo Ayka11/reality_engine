@@ -248,8 +248,11 @@ syncTickGpuEngine.grid.buffer[syncTickGpuEnergy] = 100;
 syncTickGpuEngine.syncTick(1);
 assert.equal(syncTickGpuUploads.length, 1,
   "syncTick must upload the committed CPU state once when GPU execution is enabled");
-assert.deepEqual(syncTickGpuUploads[0], syncTickGpuEngine.grid.buffer,
-  "the GPU mirror after syncTick must equal the authoritative CPU front buffer");
+assert.deepEqual(
+  Array.from(syncTickGpuUploads[0]),
+  Array.from(syncTickGpuEngine.grid.buffer),
+  "the GPU mirror after syncTick must equal the authoritative CPU front buffer",
+);
 
 // External edits should invalidate pending work, publish dense/chunk state in
 // one synchronous boundary, and roll back every covered domain on exceptions.
