@@ -58,6 +58,15 @@ const tempAfter = readField(latestFrame(), thermalPoint.x, thermalPoint.y, therm
 assert.ok(Math.abs(tempAfter - 99.04) < 0.02,
   `tempDiffusion should be resolved from PhysicsParams (got ${tempAfter})`)
 
+// Density flow is controlled by the canonical energy-diffusion mobility coefficient.
+const densityPoint = { x: 25, y: 25, z: 10 }
+send('setPhysics', { params: { ...params, energyDiffusion: 0.1 }, processMask: 1 << 2 })
+send('paint', { ...densityPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const densityAfter = readField(latestFrame(), densityPoint.x, densityPoint.y, densityPoint.z, F.D)
+assert.ok(Math.abs(densityAfter - 0.499904) < 0.00002,
+  `density flow should use configured mobility (got ${densityAfter})`)
+
 // Pressure process: the pressure field relaxes toward the density/temperature
 // equation of state using the configured pressure-density coupling.
 const pressurePoint = { x: 30, y: 10, z: 10 }
