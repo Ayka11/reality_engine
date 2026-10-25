@@ -486,8 +486,8 @@ function fakeGrid(W, H, D) {
     inBounds(x, y, z) { return x >= 0 && x < W && y >= 0 && y < H && z >= 0 && z < D; },
   };
 }
-const climateGrid = fakeGrid(8, 8, 4);
-const climateRuntime = new RuntimeClimate(climateGrid);
+const auxiliaryClimateGrid = fakeGrid(8, 8, 4);
+const climateRuntime = new RuntimeClimate(auxiliaryClimateGrid);
 for (let i = 0; i < 8; i++) climateRuntime.tick(0.016);
 const climateSaved = climateRuntime.snapshot();
 climateRuntime.tick(0.016);
@@ -497,8 +497,8 @@ climateRuntime.reset();
 assert.deepEqual(climateRuntime.snapshot(), new RuntimeClimate(climateGrid).snapshot(),
   "climate reset must return to constructor baseline");
 
-const multiscaleGrid = fakeGrid(16, 16, 8);
-const multiscaleRuntime = new RuntimeMultiScale(multiscaleGrid);
+const auxiliaryMultiscaleGrid = fakeGrid(16, 16, 8);
+const multiscaleRuntime = new RuntimeMultiScale(auxiliaryMultiscaleGrid);
 for (let i = 0; i < 20; i++) multiscaleRuntime.tick();
 const multiscaleSaved = multiscaleRuntime.snapshot();
 multiscaleRuntime.tick();
@@ -508,9 +508,9 @@ assert.deepEqual(multiscaleRuntime.snapshot(), multiscaleSaved,
 multiscaleRuntime.reset();
 assert.equal(multiscaleRuntime.snapshot().tickCount, 0, "multiscale reset must clear the tick phase");
 
-const languageGrid = fakeGrid(8, 8, 4);
+const auxiliaryLanguageGrid = fakeGrid(8, 8, 4);
 const languageRuntime = new RuntimeLanguage({
-  grid: languageGrid,
+  grid: auxiliaryLanguageGrid,
   tick: 10,
   agents: { getAgents: () => [
     { id: 1, x: 1, y: 1, z: 1, energy: 120, signal: 14, behavior: "signaler" },
