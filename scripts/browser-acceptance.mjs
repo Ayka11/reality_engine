@@ -1486,6 +1486,48 @@ try {
     throw new Error("Greedy surface probe did not restore the legacy instanced renderer");
   }
 
+  // Exercise the real UI toggle, visible canvas, render loop, and return path.
+  const greedyPreviewUI = await page.evaluate(() => {
+    const button = document.getElementById("greedySurfaceBtn");
+    const previousMode = window.currentRenderMode;
+    if (!button || typeof window.toggleGreedySurfacePreview !== "function") {
+      return { error: "Greedy surface preview UI is not wired" };
+    }
+    button.click();
+    const activeState = window.getGreedyMeshingState?.();
+    const active = {
+      mode: window.currentRenderMode,
+      buttonPressed: button.getAttribute("aria-pressed"),
+      chunkCanvasDisplay: getComputedStyle(document.getElementById("c3dChunkField")).display,
+      authoritativeCanvasDisplay: getComputedStyle(document.getElementById("c3dField")).display,
+      activeState,
+    };
+    button.click();
+    const restored = {
+      mode: window.currentRenderMode,
+      buttonPressed: button.getAttribute("aria-pressed"),
+      chunkCanvasDisplay: getComputedStyle(document.getElementById("c3dChunkField")).display,
+      authoritativeCanvasDisplay: getComputedStyle(document.getElementById("c3dField")).display,
+      greedyState: window.getGreedyMeshingState?.(),
+    };
+    return { previousMode, active, restored };
+  });
+  if (greedyPreviewUI.error) throw new Error(greedyPreviewUI.error);
+  if (greedyPreviewUI.active.mode !== "field3d" ||
+      greedyPreviewUI.active.buttonPressed !== "true" ||
+      greedyPreviewUI.active.chunkCanvasDisplay === "none" ||
+      greedyPreviewUI.active.authoritativeCanvasDisplay !== "none" ||
+      !greedyPreviewUI.active.activeState?.active ||
+      greedyPreviewUI.active.activeState.quadCount <= 0) {
+    throw new Error("Greedy preview UI did not expose the active mesh canvas: " + JSON.stringify(greedyPreviewUI));
+  }
+  if (greedyPreviewUI.restored.mode !== greedyPreviewUI.previousMode ||
+      greedyPreviewUI.restored.buttonPressed !== "false" ||
+      greedyPreviewUI.restored.chunkCanvasDisplay !== "none" ||
+      greedyPreviewUI.restored.greedyState?.enabled !== false) {
+    throw new Error("Greedy preview UI did not restore the previous renderer: " + JSON.stringify(greedyPreviewUI));
+  }
+
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
