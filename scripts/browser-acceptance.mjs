@@ -1490,9 +1490,12 @@ try {
   const greedyPreviewUI = await page.evaluate(() => {
     const button = document.getElementById("greedySurfaceBtn");
     const previousMode = window.currentRenderMode;
-    if (!button || typeof window.toggleGreedySurfacePreview !== "function") {
+    if (!button || typeof window.toggleGreedySurfacePreview !== "function" ||
+        typeof window.fieldSetMatMode !== "function") {
       return { error: "Greedy surface preview UI is not wired" };
     }
+    // Start from field-color mode so the UI must explicitly select material mode.
+    window.fieldSetMatMode("field");
     button.click();
     const activeState = window.getGreedyMeshingState?.();
     const active = {
@@ -1501,6 +1504,7 @@ try {
       chunkCanvasDisplay: getComputedStyle(document.getElementById("c3dChunkField")).display,
       authoritativeCanvasDisplay: getComputedStyle(document.getElementById("c3dField")).display,
       activeState,
+      rendererMode: window.getGreedyMeshingState?.()?.mode,
     };
     button.click();
     const restored = {
@@ -1518,6 +1522,7 @@ try {
       greedyPreviewUI.active.chunkCanvasDisplay === "none" ||
       greedyPreviewUI.active.authoritativeCanvasDisplay !== "none" ||
       !greedyPreviewUI.active.activeState?.active ||
+      greedyPreviewUI.active.rendererMode !== "material" ||
       greedyPreviewUI.active.activeState.quadCount <= 0) {
     throw new Error("Greedy preview UI did not expose the active mesh canvas: " + JSON.stringify(greedyPreviewUI));
   }
