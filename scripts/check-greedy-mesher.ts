@@ -27,6 +27,13 @@ const mixed = buildGreedyChunkMesh({
 assert.equal(mixed.quadCount, 12, 'different materials retain both sides of their shared interface')
 assert.equal(mixed.materialIds.length, 12)
 
+const mixedOpaque = buildGreedyChunkMesh({
+  size: [2, 1, 1],
+  emitMaterialInterfaces: false,
+  sampleMaterial: solid(new Map([['0,0,0', 1], ['1,0,0', 2]])),
+})
+assert.equal(mixedOpaque.quadCount, 6, 'opaque surfaces suppress the coincident interface between two occupied materials')
+
 const boundary = buildGreedyChunkMesh({
   size: [1, 1, 1],
   origin: [0, 0, 0],
@@ -39,7 +46,14 @@ const materialBoundary = buildGreedyChunkMesh({
   origin: [0, 0, 0],
   sampleMaterial: solid(new Map([['0,0,0', 1], ['1,0,0', 2]])),
 })
-assert.equal(materialBoundary.quadCount, 6, 'different material across a chunk boundary emits only the local side')
+assert.equal(materialBoundary.quadCount, 6, 'legacy mode emits the local material side at a chunk boundary')
+const materialBoundaryOpaque = buildGreedyChunkMesh({
+  size: [1, 1, 1],
+  origin: [0, 0, 0],
+  emitMaterialInterfaces: false,
+  sampleMaterial: solid(new Map([['0,0,0', 1], ['1,0,0', 2]])),
+})
+assert.equal(materialBoundaryOpaque.quadCount, 5, 'opaque surfaces cull any occupied neighbor across a chunk boundary')
 
 const empty = buildGreedyChunkMesh({ size: [3, 2, 4], sampleMaterial: () => 0 })
 assert.equal(empty.quadCount, 0, 'empty chunk emits no faces')
