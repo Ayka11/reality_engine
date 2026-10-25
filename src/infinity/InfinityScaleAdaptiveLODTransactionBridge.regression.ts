@@ -358,4 +358,59 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   if (!recovery.committed) throw new Error("LOD bridge could not be reused after post-mutation rollback");
   void failureRetried;
 
+
+  // A plan can be replaced after begin(); commit must fail closed even for an
+  // empty mutation set and must leave the authoritative LOD state untouched.
+  const guardedState = new InfinityScaleLODState(2);
+  const guardedPlan: InfinityScaleExecutionPlan = {
+    ...plan,
+    chunks: plan.chunks.map(chunk => ({ ...chunk })),
+    boundaryReadChunks: [...plan.boundaryReadChunks],
+    boundaryReadRelations: plan.boundaryReadRelations.map(relation => ({ ...relation })),
+  };
+  const guardedBridge = new InfinityScaleAdaptiveLODTransactionBridge(guardedPlan, guardedState);
+  const guardedRevision = guardedState.getRevision();
+  const guardedKeys = guardedState.keys().join("|");
+
+  guardedBridge.begin(frame);
+  guardedPlan.revision += 1;
+  let changedPlanRejected = false;
+  try {
+    guardedBridge.commit(frame, []);
+  } catch (error) {
+    changedPlanRejected = error instanceof Error && error.message.includes("plan revision changed");
+  }
+  if (!changedPlanRejected) {
+    throw new Error("Adaptive LOD bridge accepted a changed execution-plan revision");
+  }
+  if (guardedState.getRevision() !== guardedRevision || guardedState.keys().join("|") !== guardedKeys) {
+    throw new Error("Stale execution-plan rejection mutated authoritative LOD state");
+  }
+
+  // Matching revision numbers are not enough: ownership geometry is part of
+  // the captured frame contract and must also remain unchanged until commit.
+  guardedPlan.revision = plan.revision;
+  guardedBridge.begin(frame);
+  guardedPlan.boundaryReadChunks.push("0:4,0,0");
+  let changedOwnershipRejected = false;
+  try {
+    guardedBridge.commit(frame, []);
+  } catch (error) {
+    changedOwnershipRejected = error instanceof Error && error.message.includes("ownership geometry changed");
+  }
+  if (!changedOwnershipRejected) {
+    throw new Error("Adaptive LOD bridge accepted changed execution-plan ownership geometry");
+  }
+  if (guardedState.getRevision() !== guardedRevision || guardedState.keys().join("|") !== guardedKeys) {
+    throw new Error("Stale ownership rejection mutated authoritative LOD state");
+  }
+
+  // Both fail-closed paths must detach the rejected transaction and permit reuse.
+  guardedPlan.boundaryReadChunks.pop();
+  guardedBridge.begin(frame);
+  const planGuardRetry = guardedBridge.commit(frame, []);
+  if (!planGuardRetry.committed) {
+    throw new Error("Adaptive LOD bridge could not be reused after stale-plan rejection");
+  }
+
 }
