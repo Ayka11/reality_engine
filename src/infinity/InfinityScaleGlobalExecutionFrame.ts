@@ -219,10 +219,17 @@ export function assertInfinityScaleGlobalFramePlan(
     );
   }
 
+  // Frame/plan integrity does not depend on the optional cell context.
+  // Always validate execution inputs and capability claims, even when callers
+  // only need the lightweight revision/plan assertion.
+  if (frame.ownershipFingerprint !== fingerprintPlan(plan)) {
+    throw new Error("Infinity Scale frame ownership changed");
+  }
+  if (frame.capabilityFingerprint !== fingerprintCapabilities(plan)) {
+    throw new Error("Infinity Scale frame capabilities changed");
+  }
+
   if (context) {
-    if (fingerprintPlan(plan) !== frame.ownershipFingerprint) {
-      throw new Error("Infinity Scale frame ownership changed");
-    }
     if (context.simulationCellCount !== frame.simulationCellCount) {
       throw new Error("Infinity Scale simulation geometry changed during frame");
     }
