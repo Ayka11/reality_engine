@@ -194,5 +194,5 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
     this.nextId=detached.nextId
     this.versionCounter=detached.version
   }
-  getState(){return {schemaVersion:'world-field-state-v1',providerId:this.id,providerVersion:this.version,version:this.versionCounter,mutationCount:this.mutations.length,lastMutation:this.mutations[this.mutations.length-1]??null}}
+  getState(){return structuredClone({schemaVersion:'world-field-state-v1',providerId:this.id,providerVersion:this.version,version:this.versionCounter,mutationCount:this.mutations.length,lastMutation:this.mutations[this.mutations.length-1]??null})}
 }
