@@ -61,6 +61,32 @@ engine.laws.restore(lawSnapshot);
 const replayedMutation = engine.laws.spawnMutation('law_radiation');
 assert.deepEqual(replayedMutation, firstMutation, 'LawEngine RNG and mutation state must replay deterministically');
 
+// Reject malformed LawEngine snapshots without partially changing live laws,
+// overrides, process masks, graph selection, or the local PRNG stream.
+const lawRestoreBaseline = engine.laws.snapshot();
+const invalidLawRngSnapshot = engine.laws.snapshot();
+invalidLawRngSnapshot.rngState = 0;
+assert.throws(
+  () => engine.laws.restore(invalidLawRngSnapshot),
+  /Invalid LawEngine snapshot/,
+  'LawEngine must reject an invalid PRNG state',
+);
+assert.deepEqual(engine.laws.snapshot(), lawRestoreBaseline,
+  'rejected LawEngine RNG snapshot must not mutate live state');
+
+const duplicateLawIdSnapshot = engine.laws.snapshot();
+assert.ok(duplicateLawIdSnapshot.laws.length >= 2,
+  'LawEngine snapshot fixture must contain multiple laws');
+duplicateLawIdSnapshot.laws[1]!.id = duplicateLawIdSnapshot.laws[0]!.id;
+assert.throws(
+  () => engine.laws.restore(duplicateLawIdSnapshot),
+  /Invalid LawEngine snapshot state/,
+  'LawEngine must reject duplicate law identities',
+);
+assert.deepEqual(engine.laws.snapshot(), lawRestoreBaseline,
+  'rejected duplicate-ID LawEngine snapshot must not partially mutate live state');
+
+
 const before = engine.captureCoreRecoveryState();
 const expectedLawMask = engine.laws.activeProcessMask;
 engine.grid.buffer[fieldIndex] = -10;
