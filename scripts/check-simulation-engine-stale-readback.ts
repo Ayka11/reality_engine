@@ -158,6 +158,42 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(engine.grid.chunkOwners.get("7,8,9"), "test-owner",
     "stale GPU data must not overwrite newer chunk ownership metadata");
 
+  // delete() and clear() must also invalidate pending readbacks, not only advance
+  // the revision in isolated unit assertions.
+  engine.grid.dirtyChunks.add("8,8,8");
+  const staleDirtyDeleteStep = await beginPendingReadback(engine, engine.grid.buffer.slice());
+  assert.equal(engine.grid.dirtyChunks.delete("8,8,8"), true);
+  staleDirtyDeleteStep.release();
+  await assert.rejects(staleDirtyDeleteStep.step, /Discarded stale GPU readback/);
+  assert.equal(engine.grid.dirtyChunks.has("8,8,8"), false,
+    "stale GPU readback must not resurrect a deleted dirty-chunk entry");
+
+  engine.grid.dirtyChunks.add("8,8,8");
+  engine.grid.dirtyChunks.add("9,8,8");
+  const staleDirtyClearStep = await beginPendingReadback(engine, engine.grid.buffer.slice());
+  engine.grid.dirtyChunks.clear();
+  staleDirtyClearStep.release();
+  await assert.rejects(staleDirtyClearStep.step, /Discarded stale GPU readback/);
+  assert.equal(engine.grid.dirtyChunks.size, 0,
+    "stale GPU readback must not restore cleared dirty-chunk entries");
+
+  engine.grid.chunkOwners.set("8,8,8", "delete-owner");
+  const staleOwnerDeleteStep = await beginPendingReadback(engine, engine.grid.buffer.slice());
+  assert.equal(engine.grid.chunkOwners.delete("8,8,8"), true);
+  staleOwnerDeleteStep.release();
+  await assert.rejects(staleOwnerDeleteStep.step, /Discarded stale GPU readback/);
+  assert.equal(engine.grid.chunkOwners.has("8,8,8"), false,
+    "stale GPU readback must not resurrect a deleted chunk-owner entry");
+
+  engine.grid.chunkOwners.set("8,8,8", "clear-owner-a");
+  engine.grid.chunkOwners.set("9,8,8", "clear-owner-b");
+  const staleOwnerClearStep = await beginPendingReadback(engine, engine.grid.buffer.slice());
+  engine.grid.chunkOwners.clear();
+  staleOwnerClearStep.release();
+  await assert.rejects(staleOwnerClearStep.step, /Discarded stale GPU readback/);
+  assert.equal(engine.grid.chunkOwners.size, 0,
+    "stale GPU readback must not restore cleared chunk-owner entries");
+
   // Public chunk map writes must preserve the key-to-spatial-coordinate contract.
   const mapInvariantGrid = new SparseVoxelGrid(1, 1, 1);
   const badCoordinateChunk = new Chunk(4, 5, 6);
