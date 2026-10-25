@@ -13,6 +13,7 @@ import { applyBrushOperation } from '../brushes/BrushMath'
 import type { BrushFalloff, BrushOperation, BrushShape, BrushVerticalExtent } from '../brushes/BrushContract'
 import { PROC, defaultProcessMask } from '../process/ProcessDef'
 import { DEFAULT_PARAMS, type PhysicsParams } from '../laws/MetaLaw'
+import { MAT, MATERIAL_LIBRARY } from '../materials/MaterialDef'
 
 const grid = new ChunkGrid()
 const W = GRID_W, H = GRID_H, D = GRID_D
@@ -228,10 +229,14 @@ function simStep(dt: number) {
     }
 
     if (isProcessActive(PROC.BIO_POTENTIAL)) {
+      const materialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
+        Math.floor(grid.get(x, y, z, F.MAT))))
+      const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
       const bio = (grid.get(x, y, z, F.I) / 200) * 0.4
         + Math.min(newE / 500, 1) * 0.3
         + grid.get(x, y, z, F.D) * 0.2
         + (1 - newS) * 0.1
+        + material.bioAffinity
       grid.set(x, y, z, F.BIO, Math.max(0, Math.min(1, bio)))
     }
 
@@ -288,17 +293,27 @@ function simStep(dt: number) {
       const entropy = grid.get(x, y, z, F.S)
       const density = grid.get(x, y, z, F.D)
       if (entropy < 0.18 && density > 0.38) {
-        const rate = 0.003
+        const currentMaterialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
+          Math.floor(grid.get(x, y, z, F.MAT))))
+        const currentMaterial = MATERIAL_LIBRARY[currentMaterialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
+        const materialRate = currentMaterialId === MAT.VACUUM ? 1 : currentMaterial.crystallizationRate
+        const rate = 0.003 * materialRate
         grid.set(x, y, z, F.D, Math.min(1, density + rate * (0.18 - entropy) * dt * 60))
         grid.set(x, y, z, F.S, Math.max(0, entropy - rate * 0.5 * dt * 60))
-        grid.set(x, y, z, F.MAT, Math.max(1, grid.get(x, y, z, F.MAT)))
+        if ([MAT.VACUUM, MAT.STONE, MAT.SAND].includes(currentMaterialId as typeof MAT[keyof typeof MAT])) {
+          grid.set(x, y, z, F.MAT, MAT.CRYSTAL)
+        }
       }
     }
 
     if (isProcessActive(PROC.RADIATION)) {
       const energy = grid.get(x, y, z, F.E)
       if (energy > 400) {
-        grid.set(x, y, z, F.D, Math.max(0, grid.get(x, y, z, F.D) - (energy - 400) * 0.00008 * dt * 60))
+        const materialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
+          Math.floor(grid.get(x, y, z, F.MAT))))
+        const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
+        grid.set(x, y, z, F.D, Math.max(0, grid.get(x, y, z, F.D)
+          - (energy - 400) * 0.00008 * (1 - material.radiationAbsorption) * dt * 60))
         grid.set(x, y, z, F.E, Math.max(0, energy - (energy - 400) * 0.0001 * dt * 60))
       }
     }
@@ -311,9 +326,13 @@ function simStep(dt: number) {
     if (isProcessActive(PROC.EROSION)) {
       const density = grid.get(x, y, z, F.D)
       const flow = Math.abs(grid.get(x, y, z, F.FX)) + Math.abs(grid.get(x, y, z, F.FY))
+      const materialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
+        Math.floor(grid.get(x, y, z, F.MAT))))
+      const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
       if (density > 0.65 && flow > 8) {
-        grid.set(x, y, z, F.D, Math.max(0, density - 0.0018 * dt * 60))
-        grid.set(x, y, z, F.I, Math.max(0, grid.get(x, y, z, F.I) - 0.4 * dt))
+        const erodibility = 1 - material.erosionResistance
+        grid.set(x, y, z, F.D, Math.max(0, density - 0.0018 * erodibility * dt * 60))
+        grid.set(x, y, z, F.I, Math.max(0, grid.get(x, y, z, F.I) - 0.4 * erodibility * dt))
       }
     }
 
