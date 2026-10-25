@@ -542,13 +542,10 @@ export class SparseVoxelGrid {
     try {
       this.seedDenseWindowChunks();
 
-      // Preflight every coordinate and destination before writing any chunk.
-      // Compact index plans avoid cloning multi-megabyte chunk buffers each frame.
-      const chunkIds = new Uint32Array(this.size);
-      const targetOffsets = new Uint32Array(this.size);
+      // Preflight each coordinate before writing any chunk. Keep only the
+      // unique chunk list, not two size-sized index arrays on every frame.
       const chunks: Chunk[] = [];
-      const chunkIdByRef = new Map<Chunk, number>();
-      let cellIndex = 0;
+      const seenChunks = new Set<Chunk>();
       for (let z = 0; z < this.D; z++)
       for (let y = 0; y < this.H; y++)
       for (let x = 0; x < this.W; x++) {
@@ -559,38 +556,44 @@ export class SparseVoxelGrid {
         const [, lx] = this.globalToChunk(gx);
         const [, ly] = this.globalToChunk(gy);
         const [, lz] = this.globalToChunk(gz);
-        let chunkId = chunkIdByRef.get(chunk);
-        if (chunkId === undefined) {
-          chunkId = chunks.length;
-          chunkIdByRef.set(chunk, chunkId);
-          chunks.push(chunk);
-        }
         const targetOffset = chunk.localIdx(lx, ly, lz);
         if (!Number.isSafeInteger(targetOffset) || targetOffset < 0 ||
             targetOffset + CELL_FIELDS > CHUNK_VOLUME * CELL_FIELDS) {
           throw new Error("Dense-to-chunk synchronization produced an invalid target offset");
         }
-        chunkIds[cellIndex] = chunkId;
-        targetOffsets[cellIndex] = targetOffset;
-        cellIndex++;
+        if (!seenChunks.has(chunk)) {
+          seenChunks.add(chunk);
+          chunks.push(chunk);
+        }
       }
 
-      const rawBuffers: Float32Array[] = [];
+      const rawBuffers = new Map<Chunk, Float32Array>();
       for (const chunk of chunks) {
         const buf = getMutableBuffer(chunk);
         if (buf.length !== CHUNK_VOLUME * CELL_FIELDS) {
           throw new Error("Dense-to-chunk synchronization found an invalid chunk buffer");
         }
-        rawBuffers.push(buf);
+        rawBuffers.set(chunk, buf);
       }
 
-      // The preflight guarantees valid mappings; commit copies only the dense
-      // window's cells, without per-frame copies of whole physical chunks.
-      for (let index = 0; index < this.size; index++) {
-        const sourceOffset = index * CELL_FIELDS;
-        rawBuffers[chunkIds[index]].set(
+      // This synchronous commit repeats the validated coordinate mapping, but
+      // avoids per-cell planning allocations and full-buffer chunk copies.
+      for (let z = 0; z < this.D; z++)
+      for (let y = 0; y < this.H; y++)
+      for (let x = 0; x < this.W; x++) {
+        const gx = x + this.denseOrigin.x;
+        const gy = y + this.denseOrigin.y;
+        const gz = z + this.denseOrigin.z;
+        const chunk = this.getOrCreateChunkForGlobal(gx, gy, gz);
+        const [, lx] = this.globalToChunk(gx);
+        const [, ly] = this.globalToChunk(gy);
+        const [, lz] = this.globalToChunk(gz);
+        const buf = rawBuffers.get(chunk);
+        if (!buf) throw new Error("Dense-to-chunk synchronization lost a preflighted chunk");
+        const sourceOffset = this.idx(x, y, z);
+        buf.set(
           this._sparseDenseBuffer.subarray(sourceOffset, sourceOffset + CELL_FIELDS),
-          targetOffsets[index],
+          chunk.localIdx(lx, ly, lz),
         );
       }
       this.markMutation();
