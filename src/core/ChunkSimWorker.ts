@@ -204,7 +204,7 @@ function simStep(dt: number) {
         T + p.tempDiffusion * lapT * dt + newE * p.tempEnergyCoupling * dt)))
     }
     if (isProcessActive(PROC.DENSITY_FLOW)) {
-      grid.set(x, y, z, F.D, Math.max(0, Math.min(1, D_ + 0.012 * lapD * dt)))
+      grid.set(x, y, z, F.D, Math.max(0, Math.min(1, D_ + 0.02 * p.energyDiffusion * lapD * dt)))
     }
     if (isProcessActive(PROC.INFORMATION)) {
       const supp = 1 - chunk[base + F.S] * p.infoEntropySupp
@@ -329,7 +329,7 @@ function simStep(dt: number) {
       const materialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
         Math.floor(grid.get(x, y, z, F.MAT))))
       const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
-      if (density > 0.65 && flow > 8) {
+      if (density > 0.65 && flow > 0.01) {
         const erodibility = 1 - material.erosionResistance
         grid.set(x, y, z, F.D, Math.max(0, density - 0.0018 * erodibility * dt * 60))
         grid.set(x, y, z, F.I, Math.max(0, grid.get(x, y, z, F.I) - 0.4 * erodibility * dt))
