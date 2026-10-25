@@ -41,6 +41,15 @@ export function runInfinityScaleAdaptiveExecutionGraphCompilerRegression(): void
     throw new Error("Execution graph hash is not deterministic");
   }
 
+  const duplicateTransferPlan = transferCompiler.compile([
+    { regionId: "A", fromLOD: 1, toLOD: 2 },
+    { regionId: "A", fromLOD: 1, toLOD: 2 },
+  ]);
+  const duplicateTransferGraph = graphCompiler.compile(duplicateTransferPlan);
+  if (duplicateTransferGraph.valid) {
+    throw new Error("Execution graph accepted duplicate transfer node ids");
+  }
+
   const noopPlan = transferCompiler.compile([
     { regionId: "A", fromLOD: 1, toLOD: 1 },
   ]);
