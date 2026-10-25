@@ -208,6 +208,40 @@ function runSparseChunkSerializationAndLoadRegression(): void {
   if (target.mutationRevision <= revisionBeforePublicationFailure) {
     throw new Error("Failed sparse chunk load did not invalidate the mutation revision");
   }
+
+  // Inject a later failure after syncChunksToDense() has already copied the
+  // replacement payload into the dense buffer. Rollback must restore that
+  // dense field as well as the prior chunk topology/front/back buffers.
+  const beforeLateFailure = JSON.stringify(target.captureState());
+  const revisionBeforeLateFailure = target.mutationRevision;
+  const replacement = serialized.map(chunk => ({ ...chunk, buffer: chunk.buffer.slice(0) }));
+  const replacementBase = replacement.find(chunk => chunk.key === "0,0,0");
+  if (!replacementBase) throw new Error("Replacement payload omitted the dense-window chunk");
+  const replacementFields = new Float32Array(replacementBase.buffer);
+  const sourceCenter = source.chunks.get("0,0,0");
+  if (!sourceCenter) throw new Error("Source world omitted the center chunk");
+  replacementFields[sourceCenter.localIdx(1, 1, 1) + F.INFORMATION] = 0.99;
+  replacementBase.buffer = replacementFields.buffer;
+
+  const originalSyncBackBuffers = target.syncBackBuffersFromFront.bind(target);
+  target.syncBackBuffersFromFront = () => { throw new Error("injected back-buffer publication failure"); };
+  let lateFailureRejected = false;
+  try {
+    target.loadChunks(replacement);
+  } catch (error) {
+    lateFailureRejected = error instanceof Error && error.message.includes("injected back-buffer publication failure");
+  } finally {
+    target.syncBackBuffersFromFront = originalSyncBackBuffers;
+  }
+  if (!lateFailureRejected) {
+    throw new Error("Sparse chunk load did not surface the injected back-buffer publication failure");
+  }
+  if (JSON.stringify(target.captureState()) !== beforeLateFailure) {
+    throw new Error("Sparse chunk load failed to roll back dense data after post-sync publication failure");
+  }
+  if (target.mutationRevision <= revisionBeforeLateFailure) {
+    throw new Error("Late sparse chunk load failure did not invalidate the mutation revision");
+  }
 }
 
 export function runSparseVoxelGridInvalidSnapshotRegression(grid = new SparseVoxelGrid(4, 3, 2)): void {
