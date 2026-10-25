@@ -305,6 +305,9 @@ export class SimulationEngine {
     try {
       this.gpu.upload(this.grid.buffer);
     } catch (syncError) {
+      // The device state is no longer trustworthy. Fail closed to CPU execution
+      // so a later step cannot consume or overwrite from a stale GPU buffer.
+      this._gpuReady = false;
       const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
       const syncMessage = syncError instanceof Error ? syncError.message : String(syncError);
       throw new AggregateError(
@@ -496,6 +499,9 @@ export class SimulationEngine {
         apply(previous);
         if (this._gpuReady) this.gpu.upload(this.grid.buffer);
       } catch (rollbackError) {
+        // A failed rollback may leave device buffers inconsistent with CPU state.
+        // Disable GPU execution rather than allowing a later step to trust them.
+        this._gpuReady = false;
         const recoveryMessage = error instanceof Error ? error.message : String(error);
         const rollbackMessage = rollbackError instanceof Error
           ? rollbackError.message

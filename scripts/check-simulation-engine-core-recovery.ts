@@ -373,6 +373,31 @@ await rejectedReadbackEngine.step(0.016);
 assert.equal(rejectedReadbackEngine.tick, 1,
   "GPU step queue must remain usable after readback rejection");
 
+// If recovery upload itself fails, stop trusting the device and fall back to CPU.
+const failedResyncEngine = new SimulationEngine(8, 8, 4);
+(failedResyncEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+const failedResyncGpu = failedResyncEngine.gpu as unknown as {
+  writeParams: (...args: any[]) => void;
+  submitCompute: (nSteps: number) => void;
+  readback: () => Promise<Float32Array>;
+  upload: (data: Float32Array) => void;
+};
+failedResyncGpu.writeParams = () => undefined;
+failedResyncGpu.submitCompute = () => undefined;
+failedResyncGpu.readback = async () => { throw new Error("injected readback failure before resync"); };
+failedResyncGpu.upload = () => { throw new Error("injected persistent GPU upload failure"); };
+await assert.rejects(failedResyncEngine.step(0.016), error =>
+  error instanceof AggregateError &&
+  error.message.includes("GPU resynchronization failed") &&
+  error.errors.some((nested: unknown) => nested instanceof Error && nested.message.includes("injected readback failure")) &&
+  error.errors.some((nested: unknown) => nested instanceof Error && nested.message.includes("persistent GPU upload failure")),
+  "failed GPU recovery must preserve both the original error and the resync error");
+assert.equal(failedResyncEngine.gpuActive, false,
+  "failed GPU resynchronization must disable the untrusted device path");
+await failedResyncEngine.step(0.016);
+assert.equal(failedResyncEngine.tick, 1,
+  "the simulation must continue on CPU after GPU resynchronization failure");
+
 // Empty/truncated GPU readback must fail closed instead of silently advancing
 // the simulation without a valid device result, and must keep CPU state intact.
 const malformedReadbackEngine = new SimulationEngine(8, 8, 4);
