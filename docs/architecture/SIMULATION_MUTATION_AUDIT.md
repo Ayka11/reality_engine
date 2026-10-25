@@ -203,3 +203,14 @@ SceneDirector requests carry a world-context generation. Restoring or resetting 
 ### Per-frame event publication
 
 The CPU and GPU paths no longer publish dense-to-chunk state before all post-physics writers have completed. One shared synchronization runs after `WorldEvents.autoTick()`, which writes through `CellState` wrappers and can otherwise leave the sparse chunk mirror one event behind the authoritative dense buffer. Regression coverage injects the same direct event mutation into CPU and GPU frame paths and verifies dense/chunk agreement before the step resolves.
+
+### Runtime metadata immutability follow-up — 2026-10-25
+
+The mutation audit found two additional metadata paths where TypeScript-level intent was not sufficient at runtime:
+
+- `SparseVoxelGrid.denseOrigin` now stores a frozen coordinate object and validates/revisions replacements. Regression coverage rejects nested coordinate writes, rejects fractional replacements without changing state/revision, and verifies valid replacement advances the revision.
+- `Chunk.cx/cy/cz` now use non-writable, non-configurable runtime properties. Regression coverage attempts writes through `Reflect.set` and verifies coordinates, map identity, and grid revision remain unchanged.
+
+The same-head run #1395 passed on `4de11b57e85987807f275927f6851e4f2996d28f`, including lint, regression/recovery suites, build, Docker/Hugging Face checks, and Playwright browser acceptance: https://github.com/Ayka11/reality_engine/actions/runs/40209549019.
+
+These fixes close the specific metadata mutation paths above, not the entire issue. The raw `getMutableBuffer()` alias can still be retained and written after acquisition without a fresh revision, and the end-to-end ownership inventory across worker transfer, undo/redo, restore, subsystem state, and rollback is not yet complete. Keep issue #62 open.
