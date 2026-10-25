@@ -2,8 +2,8 @@
 
 ## Current implementation update — 2026-10-25
 
-**Current code head:** `5fd7c918a773be18b111deddeb310e965ef5281d`  
-**Validation:** CI #1344 passed on this exact commit: lint, recovery/regression suite, production build, both Docker builds, Hugging Face runtime/smoke/CPU checks, and Playwright browser acceptance (59/59 steps).
+**Current code head at this audit update:** `186cbc5a541f9433b86c7d09088fbd10129e48f6`  
+**Validation:** Reality Engine CI #1358 passed on this exact head, including the configured recovery/regression suite, build, Docker/Hugging Face checks, and browser acceptance. [Run #1358](https://github.com/Ayka11/reality_engine/actions/runs/40198814461). This validates the current change set, not every untracked internal mutation path.
 
 This update supersedes earlier statements below that public dense/chunk buffer writes and `CellState` setters are entirely untracked. The current implementation adds:
 
@@ -12,7 +12,10 @@ This update supersedes earlier statements below that public dense/chunk buffer w
 - A public buffer view whose `.buffer` accessor returns a detached copy; indexed writes and supported mutating typed-array methods invalidate the owning revision.
 - `CellState.set()` mutation callbacks for grid/chunk cell wrappers.
 - `SimulationEngine.step()` captures both engine generation and grid mutation revision before GPU readback, and rejects GPU output if either changes while awaiting the result.
-- Regression tests cover tracked buffer writes and stale GPU readback; exact-head CI #1344 also passes browser acceptance.
+- Regression tests cover tracked buffer writes and stale GPU readback; latest-head CI #1358 also passes browser acceptance.
+- Public chunk metadata collections (`dirtyChunks`, `chunkOwners`) and `activeChunkRange` now participate in mutation revision tracking, with regression coverage for pending readback invalidation and Set/Map delete/clear operations.
+
+**Important internal-alias caveat:** `getMutableBuffer()` advances the revision when it returns a raw mutable typed-array alias, but cannot observe later writes through that same alias. Such aliases must remain synchronous and transaction-local; never retain one across `await` or an ownership boundary. The remaining audit must verify all call sites and replace any cross-boundary alias with a scoped mutation API.
 
 **Remaining limitation:** this does not close the entire mutation contract. The repository still has an internal raw-buffer escape hatch for performance-sensitive engine code, mutable chunk/map and subsystem metadata, and direct writer/restore paths that need a complete inventory and explicit ownership rules. The audit below should be read as the original inventory and migration plan, with completed items superseded by this dated update; it is not evidence that every arbitrary internal write is guarded. Keep issue [#62](https://github.com/Ayka11/reality_engine/issues/62) open until the supported mutation surfaces and failure/rollback paths are fully enumerated and tested. Keep adaptive LOD topology changes fail-closed under [#50](https://github.com/Ayka11/reality_engine/issues/50).
 
