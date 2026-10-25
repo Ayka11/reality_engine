@@ -292,6 +292,10 @@ export class SparseVoxelGrid {
     for (const key of snapshot.dirtyChunks) this.dirtyChunks.add(key);
     this.chunkOwners.clear();
     for (const [key, owner] of owners) this.chunkOwners.set(key, owner);
+    this.markMutation();
+    } finally {
+      endMutation();
+    }
   }
 
   /**
