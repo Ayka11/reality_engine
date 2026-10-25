@@ -15,10 +15,10 @@ assert.match(source, /this\._rngState = rngBefore/,
 const cellModule = `export const CELL_FIELDS=24;
 export function validateGridDimensions(width,height,depth,gridName) {
   if (![width,height,depth].every(Number.isSafeInteger) || width<=0 || height<=0 || depth<=0)
-    throw new RangeError(${gridName} dimensions must be positive safe integers);
+    throw new RangeError(\`\${gridName} dimensions must be positive safe integers\`);
   const size=width*height*depth, bufferLength=size*CELL_FIELDS;
   if (!Number.isSafeInteger(size) || size<=0 || !Number.isSafeInteger(bufferLength) || bufferLength<=0)
-    throw new RangeError(${gridName} dimensions exceed the supported typed-buffer index range);
+    throw new RangeError(\`\${gridName} dimensions exceed the supported typed-buffer index range\`);
   return size;
 }
 export const F={ENERGY:0,DENSITY:1,INFORMATION:2,ENTROPY:3,TEMPERATURE:4,BIO_POTENTIAL:11,SIGNAL:17,MEM_FIELD:18,FIELD_X:20,FIELD_Y:21,CHEM_STATE:22};
