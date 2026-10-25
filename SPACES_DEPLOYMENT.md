@@ -1,70 +1,38 @@
-# HuggingFace Spaces Deployment Guide
+# Hugging Face Spaces deployment guide
 
-This Reality Engine app is deployed as a **Docker Space** on Hugging Face.
+## Current repository target: Docker Space
 
-## Setup Steps
+The root `README.md` declares `sdk: docker`. The Docker image installs dependencies from the committed `package-lock.json`, builds the Vite frontend, and starts `server/hf-server.js` on port `7860` using `Dockerfile` or `Dockerfile.hf`.
 
-### 1. Create a Space on HF
-- Go to https://huggingface.co/new-space
-- **Owner**: Your username (`Aygun1489`)
-- **Space name**: `reality-engine` (or your choice)
-- **License**: MIT or Apache 2.0 (recommended)
-- **Space SDK**: `Docker`
-- **Visibility**: Public or Private (your choice)
+The Space referenced by the root README is:
 
-### 2. Clone the Space locally
+- Demo: https://huggingface.co/spaces/Aygun1489/Reality_Engine_SImulator
+
+Before updating an existing Space repository, compare its current contents and metadata with this repository. Do not blindly overwrite an existing deployment or assume its slug/owner matches a local example.
+
+## Validation before publishing
+
+Run from the repository root:
+
 ```bash
-git clone https://huggingface.co/spaces/Aygun1489/reality-engine
-cd reality-engine
+npm ci --legacy-peer-deps
+npm run lint
+npm run build
+npm run hf:smoke
+npm run hf:cpu:check
+npm run hf:browser:acceptance
+docker build --file Dockerfile.hf --tag reality-engine-hf:local .
 ```
 
-### 3. Copy your Reality Engine files
-```bash
-# From your desktop repo, copy all files into the cloned Space folder
-cp -r /path/to/your/reality/* .
-```
+The GitHub Actions workflow also builds both Docker images and performs a Hugging Face container HTTP smoke test. Check the Hugging Face Space build/runtime logs after publishing.
 
-### 4. Push to HF
-```bash
-git add .
-git commit -m "Initial Reality Engine deployment"
-git push
-```
+## Static CPU-first deployment is a separate target
 
-HuggingFace will automatically:
-- Detect the `Dockerfile`
-- Build the Docker image
-- Launch the Space
-- Make it accessible at: `https://huggingface.co/spaces/Aygun1489/reality-engine`
+`README_HF.md` and `HF_CPU_DEPLOYMENT.md` describe a browser-first Static Space profile using `sdk: static` and `app_file: dist/index.html`. Use that metadata only when deploying a separate Static Space; it must not replace the root Docker Space metadata.
 
-## Access Your Space
+## Runtime limitations
 
-Once deployed, your app runs at:
-- **Main app**: `https://huggingface.co/spaces/Aygun1489/reality-engine`
-- **Signalling server**: Runs internally on port 8888
-- **Web server**: Runs on port 3000 (mapped by HF)
-
-## Notes
-
-- **WebGPU support**: Works in Chrome/Edge. Firefox falls back to CPU.
-- **Multiplayer**: BroadcastChannel works within the same Space iframe.
-- **GPU acceleration**: Available if your Space is upgraded to GPU (GPU spaces cost credits).
-- **File uploads**: The Space has read-write access to `/tmp` if you need to save snapshots.
-
-## Troubleshooting
-
-If the Space doesn't start:
-1. Check the **Logs** tab in the Space settings
-2. Verify `Dockerfile` syntax
-3. Ensure `package.json` has all required dependencies
-4. Make sure `npm run build` succeeds locally first
-
-## Next Steps
-
-- Share the Space URL with others
-- Use the **Community** tab for feedback
-- Consider upgrading to **GPU Space** if you need heavy simulation
-
----
-
-For more HF Spaces docs: https://huggingface.co/docs/hub/spaces
+- The core simulation runs in the browser; optional solver/signalling capabilities require the matching service to be deployed and configured.
+- Passing build and browser tests does not establish scientific validity of simulation outputs.
+- Adaptive LOD topology-changing operations remain disabled until spatial remapping and full-cell data transfer are implemented and validated.
+- Keep the project marked experimental/pre-release until the open release blockers are resolved or explicitly scoped out.

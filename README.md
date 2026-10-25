@@ -52,7 +52,7 @@ Known operational boundaries:
 - **Mutable state and GPU readback:** `VoxelGrid` and `SparseVoxelGrid` expose mutable typed-array buffers and `CellState` views. External writes that bypass engine-owned synchronization can evade the GPU state-generation guard. Use the supported synchronization path; see [issue #62](https://github.com/Ayka11/reality_engine/issues/62).
 - **Adaptive LOD topology changes:** refine/coarsen commits remain disabled when an operation changes LOD until physical chunk remapping and complete cell-data transfer are implemented and validated. Do not treat adaptive topology changes as a production feature; see [issue #50](https://github.com/Ayka11/reality_engine/issues/50).
 - **Scientific interpretation:** the Science Lab evaluates computational experiments over the configurations represented in the simulator. Its results are not, by themselves, empirical evidence of real-world causal or physical validity.
-- **Dependency reproducibility:** there is not yet a committed root `package-lock.json`. CI currently resolves dependencies during installation and then runs `npm ci` against the generated lockfile. Independent builds are therefore not fully pinned until the lockfile is reviewed and committed.
+- **Dependency reproducibility:** the root `package-lock.json` is committed. CI and both Dockerfiles install from that lockfile with `npm ci` and the repository's `--legacy-peer-deps` setting.
 
 Remove this notice only after the release candidate passes production integration and acceptance criteria on the exact release commit.
 
@@ -141,7 +141,7 @@ The UI is implemented in `src/infinity/ScientificWorkspace.ts` and mounted by `s
 ```bash
 git clone https://github.com/Ayka11/reality_engine.git
 cd reality_engine
-npm install
+npm ci
 npm run dev
 # → http://localhost:3000
 ```
@@ -836,7 +836,7 @@ This README declares `sdk: docker` in its Space metadata. The Docker deployment 
 
 A browser-first Static Space is a **separate deployment target**. Its metadata uses `sdk: static` and `app_file: dist/index.html`; see [README_HF.md](README_HF.md) and [HF_CPU_DEPLOYMENT.md](HF_CPU_DEPLOYMENT.md). Do not combine the Static Space configuration with this Docker Space's metadata. Confirm the target Space's actual configuration before publishing.
 
-For reproducible production builds, first commit the reviewed root `package-lock.json`, then update CI and both Dockerfiles to install from that exact lockfile with `npm ci`. Until then, dependency resolution can differ between independent builds.
+The root `package-lock.json` is committed and is used by CI and both Dockerfiles with `npm ci --legacy-peer-deps`. Keep `package.json` and the lockfile synchronized when changing dependencies, then rerun the complete CI suite.
 
 ## Release validation checklist
 

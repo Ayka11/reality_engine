@@ -18,7 +18,7 @@ custom_headers:
 
 # Reality Engine — Hugging Face Static Space
 
-This branch targets a browser-first Hugging Face Static Space.
+This file is the metadata and deployment contract for a separate browser-first Hugging Face Static Space profile. The repository-root README.md is configured for the Docker Space; do not substitute this Static metadata into that Docker Space.
 
 ## Deployment target
 

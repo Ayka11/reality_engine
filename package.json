@@ -36,6 +36,7 @@
     "test:authoritative-sculpt-transaction": "node scripts/check-authoritative-sculpt-transaction.mjs && node scripts/check-unified-sculpt-transaction.mjs && node scripts/check-chunk-grid-sculpt-modes.mjs",
     "test:world-persistence-failures": "node scripts/check-world-persistence-failures.mjs",
     "audit:report": "node scripts/report-npm-audit.mjs",
+    "test:npm-audit-gate": "node scripts/check-npm-audit-gate.mjs",
     "test:solver-deployment": "node scripts/check-solver-client-deployment.mjs",
     "test:hf-runtime": "node scripts/check-hf-runtime.mjs",
     "test:script-engine-rng-recovery": "node scripts/check-script-engine-rng-recovery.mjs",

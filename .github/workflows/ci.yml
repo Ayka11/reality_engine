@@ -19,15 +19,15 @@ jobs:
         with:
           node-version: 20
       - run: npm install --global npm@10.9.2
-      - name: Install dependencies and report npm resolver diagnostics
+      - name: Install pinned dependencies and report npm resolver diagnostics
         shell: bash
         run: |
-          npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund || {
+          npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund || {
             debug_log="$(ls -t "$HOME"/.npm/_logs/*debug-0.log 2>/dev/null | head -n 1)"
             if [ -n "$debug_log" ]; then cat "$debug_log"; fi
             exit 1
           }
-      - run: npm ci --legacy-peer-deps
+      - run: npm run test:npm-audit-gate
       - run: npm run audit:report
       - run: npm run lint
       - run: npm run test:brushes --if-present

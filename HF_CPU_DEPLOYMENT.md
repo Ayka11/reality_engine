@@ -1,6 +1,6 @@
 # Reality Engine — CPU Edition
 
-This branch is prepared for a CPU-first Hugging Face deployment.
+This document describes the alternate browser-first Static Space deployment profile; it does not describe the repository-root Docker Space configuration.
 
 ## Deployment model
 
