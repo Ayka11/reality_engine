@@ -1,5 +1,30 @@
 export const CELL_FIELDS = 24 as const;
 
+/**
+ * Validate grid geometry before allocating typed arrays. This lives beside
+ * the shared cell layout so lightweight test/runtime loaders need no extra
+ * module-resolution step for this invariant.
+ */
+export function validateGridDimensions(
+  width: number,
+  height: number,
+  depth: number,
+  gridName: string,
+): number {
+  if (![width, height, depth].every(Number.isSafeInteger) ||
+      width <= 0 || height <= 0 || depth <= 0) {
+    throw new RangeError(`${gridName} dimensions must be positive safe integers`);
+  }
+
+  const size = width * height * depth;
+  const bufferLength = size * CELL_FIELDS;
+  if (!Number.isSafeInteger(size) || size <= 0 ||
+      !Number.isSafeInteger(bufferLength) || bufferLength <= 0) {
+    throw new RangeError(`${gridName} dimensions exceed the supported typed-buffer index range`);
+  }
+  return size;
+}
+
 export const F = {
   ENERGY: 0, DENSITY: 1, INFORMATION: 2, ENTROPY: 3, TEMPERATURE: 4, PRESSURE: 5,
   FIELD_X: 6, FIELD_Y: 7, FIELD_Z: 8, LOCAL_TIME: 9, CAUSALITY_ID: 10,

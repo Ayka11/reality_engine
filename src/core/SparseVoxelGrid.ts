@@ -1,5 +1,4 @@
-import { CellState, CELL_FIELDS, F } from "./CellState";
-import { validateGridDimensions } from "./GridDimensions";
+import { CellState, CELL_FIELDS, F, validateGridDimensions } from "./CellState";
 import { Chunk, CHUNK_SIZE, CHUNK_VOLUME } from "./Chunk";
 import { createTrackedFloat32Array, getMutableBuffer, INTERNAL_MUTABLE_BUFFER, type MutableBufferSide } from "./TrackedFloat32Array";
 

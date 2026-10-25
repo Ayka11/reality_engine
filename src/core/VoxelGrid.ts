@@ -1,5 +1,4 @@
-import { CellState, CELL_FIELDS } from "./CellState";
-import { validateGridDimensions } from "./GridDimensions";
+import { CellState, CELL_FIELDS, validateGridDimensions } from "./CellState";
 import { createTrackedFloat32Array, INTERNAL_MUTABLE_BUFFER, type MutableBufferSide } from "./TrackedFloat32Array";
 
 interface VoxelGridStorage {
