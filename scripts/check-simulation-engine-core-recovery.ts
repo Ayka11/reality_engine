@@ -182,6 +182,22 @@ assert.deepEqual(
   "a synchronous callback returning a Promise must roll back its synchronous prefix",
 );
 
+// Legacy publication paths (sculpt undo/redo, older edit adapters) must update
+// the chunk mirror, the back-buffer baseline, and GPU state as one sync boundary.
+const legacySyncEngine = new SimulationEngine(8, 8, 4);
+(legacySyncEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+const legacySyncGpu = legacySyncEngine.gpu as unknown as {
+  upload: (data: Float32Array) => void;
+};
+legacySyncGpu.upload = () => undefined;
+const legacySyncIndex = legacySyncEngine.grid.idx(2, 2, 1) + F.ENERGY;
+legacySyncEngine.grid.buffer[legacySyncIndex] = 23;
+legacySyncEngine.syncToGPU();
+assert.equal(legacySyncEngine.grid.backBuffer[legacySyncIndex], 23,
+  "legacy syncToGPU must align dense back-buffer state after direct writes");
+assert.equal(legacySyncEngine.grid.getCell(2, 2, 1)?.energy, 23,
+  "legacy syncToGPU must publish direct writes to the sparse chunk mirror");
+
 // A zero-step sync remains an explicit mutation boundary for public typed-array
 // writes: invalidate an in-flight GPU result and preserve the newer CPU state.
 const staleGpuEngine = new SimulationEngine(8, 8, 4);

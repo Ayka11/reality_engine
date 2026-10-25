@@ -153,3 +153,8 @@ Quick saves now preserve the Scene Director's bounded conversation history and w
 ### Multiplayer inbound mutation boundary
 
 Incoming remote `paint`, `delta`, and accepted host `full_state` messages now validate their payload before mutation and apply through `SimulationEngine.mutateAuthoritativeState()`. The transaction invalidates pending GPU readbacks before writes, synchronizes dense state to chunks and front/back buffers, and uploads the authoritative result to GPU. Invalid or all-filtered batches are rejected without opening a transaction. This prevents remote edits from being overwritten by stale GPU readback and avoids dense/chunk/back-buffer divergence.
+
+
+### Legacy publication and dense double buffers
+
+The compatibility method `SimulationEngine.syncToGPU()` now synchronizes dense fields to sparse chunks **and** aligns dense/chunk back buffers before GPU upload. This closes the remaining sculpt undo/redo path, which uses a pre-write invalidation callback and then the legacy publication method rather than the engine's full-state snapshot transaction. A regression test verifies the dense back-buffer and chunk mirror both contain the direct edit after publication.

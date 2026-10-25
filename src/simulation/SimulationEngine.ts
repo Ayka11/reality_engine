@@ -289,6 +289,7 @@ export class SimulationEngine {
   syncToGPU(): void {
     this.invalidatePendingGPUReadback();
     this.grid.syncDenseToChunks();
+    this.grid.syncBackBuffersFromFront();
     if (this._gpuReady) this.gpu.upload(this.grid.buffer);
   }
 
