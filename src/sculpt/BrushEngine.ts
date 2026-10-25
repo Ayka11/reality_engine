@@ -51,6 +51,19 @@ export class BrushEngine {
       after = this.grid.buffer.slice();
     } catch (error) {
       this.grid.buffer.set(before);
+      try {
+        // Custom callbacks may touch chunk storage directly as well as dense
+        // fields; republish the restored dense state before surfacing failure.
+        this.grid.syncDenseToChunks();
+        this.grid.markChunksDirty(stroke.affectedChunks);
+      } catch (rollbackError) {
+        const originalMessage = error instanceof Error ? error.message : String(error);
+        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        throw new AggregateError(
+          [error, rollbackError],
+          `Custom sculpt callback failed (${originalMessage}) and dense/chunk rollback failed (${rollbackMessage})`,
+        );
+      }
       throw error;
     }
 
