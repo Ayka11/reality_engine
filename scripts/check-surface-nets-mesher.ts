@@ -90,6 +90,26 @@ for (const axis of [0, 1, 2] as const) {
   }
 }
 
+// Adjacent chunks use global sampling but local output positions. In
+// low-endpoint ownership mode the chunk containing the low endpoint emits the
+// seam quad, while the neighboring chunk does not duplicate it.
+const seamLeft = buildSurfaceNetsMesh({
+  size: [4, 4, 4],
+  origin: [0, 0, 0],
+  isoLevel: 3.5,
+  edgeOwnership: 'low-endpoint',
+  sampleValue: x => x,
+})
+const seamRight = buildSurfaceNetsMesh({
+  size: [4, 4, 4],
+  origin: [4, 0, 0],
+  isoLevel: 3.5,
+  edgeOwnership: 'low-endpoint',
+  sampleValue: x => x,
+})
+assert.equal(seamLeft.quadCount, 16, 'left chunk owns the plane crossing at its high boundary')
+assert.equal(seamRight.quadCount, 0, 'right chunk must not duplicate the low-boundary seam surface')
+
 const translated = buildSurfaceNetsMesh({
   size: [1, 1, 1],
   origin: [10, 20, 30],
