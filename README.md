@@ -22,7 +22,7 @@ custom_headers:
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 [![Three.js](https://img.shields.io/badge/Three.js-r165-green)](https://threejs.org/)
-[![Vite](https://img.shields.io/badge/Vite-5.x-purple)](https://vitejs.dev/)
+[![Vite](https://img.shields.io/badge/Vite-8.3.4-purple)](https://vitejs.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![HuggingFace](https://img.shields.io/badge/🤗-Live%20Demo-yellow)](https://huggingface.co/spaces/Aygun1489/Reality_Engine_SImulator)
 
@@ -128,7 +128,7 @@ git clone https://github.com/Ayka11/reality_engine.git
 cd reality_engine
 npm install
 npm run dev
-# → http://localhost:5173
+# → http://localhost:3000
 ```
 
 Or open the **[live demo on Hugging Face](https://huggingface.co/spaces/Aygun1489/Reality_Engine_SImulator)** — no install needed.
@@ -785,7 +785,7 @@ py -3 -m uvicorn reality_solver_api:app --port 8765 --reload
 ## Development
 
 ```bash
-npm run dev      # Vite dev server (HMR) → http://localhost:5173
+npm run dev      # Vite dev server (HMR) → http://localhost:3000
 npm run build    # Production build → dist/
 npm run preview  # Preview production build locally
 npx tsc --noEmit # Type check (must produce zero errors)
