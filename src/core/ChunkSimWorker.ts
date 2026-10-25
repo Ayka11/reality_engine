@@ -81,6 +81,7 @@ function applyLegacyScalars(data: Record<string, unknown>): void {
     ['DIFF', 'energyDiffusion'],
     ['ENT', 'entropyGrowthRate'],
     ['INFO', 'infoGrowthRate'],
+    ['BIO', 'infoGrowthThreshD'],
   ]
   for (const [legacy, canonical] of aliases) {
     const value = data[legacy]
