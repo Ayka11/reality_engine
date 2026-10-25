@@ -411,6 +411,10 @@ export class SimulationEngine {
         this._tick++;
       }
       this.grid.syncDenseToChunks();
+      // syncTick is a CPU-authoritative physical step. Publish its committed
+      // front buffer to the device so a subsequent GPU step cannot start from
+      // stale pre-script state and overwrite the synchronous result.
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer);
       this._stateGeneration++;
     } catch (error) {
       if (recoveryBefore) {

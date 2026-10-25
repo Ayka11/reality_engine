@@ -208,6 +208,23 @@ assert.ok(syncBufferEngine.grid.buffer[syncBufferEnergy] > 0,
 assert.equal(syncBufferEngine.grid.getCell(3, 3, 2)?.energy, syncBufferEngine.grid.buffer[syncBufferEnergy],
   "syncTick must publish the computed energy into the sparse chunk mirror");
 
+// A successful synchronous CPU tick must also publish its final state to the
+// device mirror; otherwise the next GPU frame can overwrite the CPU result.
+const syncTickGpuEngine = new SimulationEngine(8, 8, 4);
+(syncTickGpuEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+const syncTickGpuUploads: Float32Array[] = [];
+const syncTickGpuBackend = syncTickGpuEngine.gpu as unknown as {
+  upload: (data: Float32Array) => void;
+};
+syncTickGpuBackend.upload = data => { syncTickGpuUploads.push(new Float32Array(data)); };
+const syncTickGpuEnergy = syncTickGpuEngine.grid.idx(3, 3, 2) + F.ENERGY;
+syncTickGpuEngine.grid.buffer[syncTickGpuEnergy] = 100;
+syncTickGpuEngine.syncTick(1);
+assert.equal(syncTickGpuUploads.length, 1,
+  "syncTick must upload the committed CPU state once when GPU execution is enabled");
+assert.deepEqual(syncTickGpuUploads[0], syncTickGpuEngine.grid.buffer,
+  "the GPU mirror after syncTick must equal the authoritative CPU front buffer");
+
 // External edits should invalidate pending work, publish dense/chunk state in
 // one synchronous boundary, and roll back every covered domain on exceptions.
 const mutationBoundaryEngine = new SimulationEngine(8, 8, 4);
