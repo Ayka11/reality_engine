@@ -155,10 +155,24 @@ export class SimulationEngine {
     if (typeof operation !== 'function') {
       return Promise.reject(new TypeError('Step-boundary operation requires a synchronous callback'));
     }
+    // Async callbacks execute their synchronous prefix immediately, and rejecting
+    // their Promise later cannot cancel continuations scheduled after an await.
+    // Symbol.toStringTag can spoof Object.prototype.toString, so also inspect the
+    // function prototype and source before the callback is ever invoked.
     const operationKind = Object.prototype.toString.call(operation);
+    const operationPrototype = Object.getPrototypeOf(operation) as { constructor?: { name?: string } } | null;
+    const operationConstructorName = operationPrototype?.constructor?.name ?? '';
+    const operationSource = Function.prototype.toString.call(operation);
+    const asyncSource = /^\\s*async\\b/.test(operationSource);
+    const generatorSource = /^\\s*(?:function\\s*\\*|\\*\\s*[\\w$]*\\s*\\()/.test(operationSource);
     if (operationKind === '[object AsyncFunction]' ||
         operationKind === '[object AsyncGeneratorFunction]' ||
-        operationKind === '[object GeneratorFunction]') {
+        operationKind === '[object GeneratorFunction]' ||
+        operationConstructorName === 'AsyncFunction' ||
+        operationConstructorName === 'AsyncGeneratorFunction' ||
+        operationConstructorName === 'GeneratorFunction' ||
+        asyncSource ||
+        generatorSource) {
       return Promise.reject(new TypeError('Step-boundary operation callback must remain synchronous'));
     }
 
