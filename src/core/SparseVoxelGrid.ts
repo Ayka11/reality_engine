@@ -542,28 +542,44 @@ export class SparseVoxelGrid {
     try {
       this.seedDenseWindowChunks();
 
-      // Preflight each coordinate before writing any chunk. Keep only the
-      // unique chunk list, not two size-sized index arrays on every frame.
+      // A segment is one contiguous x-run within a physical chunk. Planning at
+      // segment granularity avoids per-cell index arrays and a second coordinate
+      // traversal, while preserving a preflight-before-publish transaction.
+      const segments: Array<{
+        chunk: Chunk;
+        sourceOffset: number;
+        targetOffset: number;
+        fieldCount: number;
+      }> = [];
       const chunks: Chunk[] = [];
       const seenChunks = new Set<Chunk>();
       for (let z = 0; z < this.D; z++)
-      for (let y = 0; y < this.H; y++)
-      for (let x = 0; x < this.W; x++) {
-        const gx = x + this.denseOrigin.x;
-        const gy = y + this.denseOrigin.y;
-        const gz = z + this.denseOrigin.z;
-        const chunk = this.getOrCreateChunkForGlobal(gx, gy, gz);
-        const [, lx] = this.globalToChunk(gx);
-        const [, ly] = this.globalToChunk(gy);
-        const [, lz] = this.globalToChunk(gz);
-        const targetOffset = chunk.localIdx(lx, ly, lz);
-        if (!Number.isSafeInteger(targetOffset) || targetOffset < 0 ||
-            targetOffset + CELL_FIELDS > CHUNK_VOLUME * CELL_FIELDS) {
-          throw new Error("Dense-to-chunk synchronization produced an invalid target offset");
-        }
-        if (!seenChunks.has(chunk)) {
-          seenChunks.add(chunk);
-          chunks.push(chunk);
+      for (let y = 0; y < this.H; y++) {
+        let x = 0;
+        while (x < this.W) {
+          const gx = x + this.denseOrigin.x;
+          const gy = y + this.denseOrigin.y;
+          const gz = z + this.denseOrigin.z;
+          const chunk = this.getOrCreateChunkForGlobal(gx, gy, gz);
+          const [, lx] = this.globalToChunk(gx);
+          const [, ly] = this.globalToChunk(gy);
+          const [, lz] = this.globalToChunk(gz);
+          const cellCount = Math.min(this.W - x, CHUNK_SIZE - lx);
+          const fieldCount = cellCount * CELL_FIELDS;
+          const sourceOffset = this.idx(x, y, z);
+          const targetOffset = chunk.localIdx(lx, ly, lz);
+          if (!Number.isSafeInteger(targetOffset) || targetOffset < 0 ||
+              !Number.isSafeInteger(fieldCount) || fieldCount <= 0 ||
+              targetOffset + fieldCount > CHUNK_VOLUME * CELL_FIELDS ||
+              sourceOffset < 0 || sourceOffset + fieldCount > this._sparseDenseBuffer.length) {
+            throw new Error("Dense-to-chunk synchronization produced an invalid segment");
+          }
+          segments.push({ chunk, sourceOffset, targetOffset, fieldCount });
+          if (!seenChunks.has(chunk)) {
+            seenChunks.add(chunk);
+            chunks.push(chunk);
+          }
+          x += cellCount;
         }
       }
 
@@ -576,24 +592,16 @@ export class SparseVoxelGrid {
         rawBuffers.set(chunk, buf);
       }
 
-      // This synchronous commit repeats the validated coordinate mapping, but
-      // avoids per-cell planning allocations and full-buffer chunk copies.
-      for (let z = 0; z < this.D; z++)
-      for (let y = 0; y < this.H; y++)
-      for (let x = 0; x < this.W; x++) {
-        const gx = x + this.denseOrigin.x;
-        const gy = y + this.denseOrigin.y;
-        const gz = z + this.denseOrigin.z;
-        const chunk = this.getOrCreateChunkForGlobal(gx, gy, gz);
-        const [, lx] = this.globalToChunk(gx);
-        const [, ly] = this.globalToChunk(gy);
-        const [, lz] = this.globalToChunk(gz);
-        const buf = rawBuffers.get(chunk);
+      // All destination/source spans are validated before the first write.
+      for (const segment of segments) {
+        const buf = rawBuffers.get(segment.chunk);
         if (!buf) throw new Error("Dense-to-chunk synchronization lost a preflighted chunk");
-        const sourceOffset = this.idx(x, y, z);
         buf.set(
-          this._sparseDenseBuffer.subarray(sourceOffset, sourceOffset + CELL_FIELDS),
-          chunk.localIdx(lx, ly, lz),
+          this._sparseDenseBuffer.subarray(
+            segment.sourceOffset,
+            segment.sourceOffset + segment.fieldCount,
+          ),
+          segment.targetOffset,
         );
       }
       this.markMutation();
