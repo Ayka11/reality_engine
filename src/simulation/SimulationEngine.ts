@@ -559,7 +559,9 @@ export class SimulationEngine {
 
   private _worldMetrics(): WorldMetrics {
     const { grid } = this;
-    const buf = getMutableBuffer(grid);
+    // Metrics only read state. Do not acquire a mutable alias: doing so advances
+    // mutationRevision and can falsely invalidate an otherwise current GPU readback.
+    const buf = grid.buffer;
     const n = grid.size;
     let totalE = 0, sumS = 0, sumI = 0, sumD = 0, sumB = 0;
     for (let i = 0; i < n; i++) {

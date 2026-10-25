@@ -23,6 +23,12 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   (engine as unknown as { _gpuReady: boolean })._gpuReady = true;
 
   const fieldIndex = engine.grid.idx(2, 2, 2) + F.ENERGY;
+
+  const beforeReadOnlyMetrics = engine.grid.mutationRevision;
+  (engine as unknown as { _worldMetrics: () => unknown })._worldMetrics();
+  assert.equal(engine.grid.mutationRevision, beforeReadOnlyMetrics,
+    "read-only world metrics must not advance the grid mutation revision");
+
   const publicRevision = engine.grid.mutationRevision;
 
   // .buffer must never leak authoritative memory through its ArrayBuffer.
