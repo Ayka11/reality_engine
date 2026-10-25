@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { CHUNK_FLOATS, F, NF, chunkKey } from '../src/core/ChunkGrid.ts'
 import { DEFAULT_PARAMS } from '../src/laws/MetaLaw.ts'
+import { MAT } from '../src/materials/MaterialDef.ts'
 
 type WorkerMessage = { cmd: string; data?: any; ab?: ArrayBuffer; tick?: number }
 const messages: WorkerMessage[] = []
@@ -56,6 +57,57 @@ send('tick', { speed: 1 })
 const tempAfter = readField(latestFrame(), thermalPoint.x, thermalPoint.y, thermalPoint.z, F.T)
 assert.ok(Math.abs(tempAfter - 99.04) < 0.02,
   `tempDiffusion should be resolved from PhysicsParams (got ${tempAfter})`)
+
+// Pressure process: the pressure field relaxes toward the density/temperature
+// equation of state using the configured pressure-density coupling.
+const pressurePoint = { x: 30, y: 10, z: 10 }
+send('setPhysics', { params: { ...params, pressureDensityCoupling: 100 }, processMask: 1 << 13 })
+send('paint', { ...pressurePoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const pressureAfter = readField(latestFrame(), pressurePoint.x, pressurePoint.y, pressurePoint.z, F.P)
+assert.ok(Math.abs(pressureAfter - 0.8) < 0.03,
+  `pressureDensityCoupling should affect pressure relaxation (got ${pressureAfter})`)
+
+// Wave process: the scalar wave field responds to its spatial Laplacian.
+const wavePoint = { x: 50, y: 10, z: 10 }
+send('setPhysics', { params: { ...params, waveSpeed: 2, waveDamping: 1 }, processMask: 1 << 6 })
+send('paint', { ...wavePoint, f: F.WAVE, v: 1, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const waveAfter = readField(latestFrame(), wavePoint.x, wavePoint.y, wavePoint.z, F.WAVE)
+assert.ok(waveAfter < 1 && waveAfter > 0.98,
+  `waveSpeed should propagate the wave field (got ${waveAfter})`)
+
+// Crystallization is observable in both field values and the material ID.
+const crystalPoint = { x: 70, y: 10, z: 10 }
+send('setPhysics', { params, processMask: 1 << 11 })
+send('paint', { ...crystalPoint, f: F.D, v: 0.6, r: 0, mode: 'set' })
+send('paint', { ...crystalPoint, f: F.S, v: 0.1, r: 0, mode: 'set' })
+send('paint', { ...crystalPoint, f: F.MAT, v: MAT.STONE, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const crystalMaterial = readField(latestFrame(), crystalPoint.x, crystalPoint.y, crystalPoint.z, F.MAT)
+const crystalEntropy = readField(latestFrame(), crystalPoint.x, crystalPoint.y, crystalPoint.z, F.S)
+assert.equal(crystalMaterial, MAT.CRYSTAL, 'crystallization should convert eligible stone to crystal')
+assert.ok(crystalEntropy < 0.1, 'crystallization should reduce entropy in ordered regions')
+
+// Gravity uses density gradients to update the field vector.
+const gravityPoint = { x: 90, y: 10, z: 10 }
+send('setPhysics', { params: { ...params, gravityDensityCoupling: 0.1 }, processMask: 1 << 7 })
+send('paint', { ...gravityPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('paint', { x: gravityPoint.x + 1, y: gravityPoint.y, z: gravityPoint.z, f: F.D, v: 1, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const gravityFx = readField(latestFrame(), gravityPoint.x, gravityPoint.y, gravityPoint.z, F.FX)
+assert.ok(gravityFx < 0, `gravity should respond to the density gradient (got ${gravityFx})`)
+
+// Erosion responds to material resistance rather than removing density uniformly.
+const erosionPoint = { x: 110, y: 10, z: 10 }
+send('setPhysics', { params, processMask: 1 << 15 })
+send('paint', { ...erosionPoint, f: F.D, v: 0.8, r: 0, mode: 'set' })
+send('paint', { ...erosionPoint, f: F.FX, v: 10, r: 0, mode: 'set' })
+send('paint', { ...erosionPoint, f: F.MAT, v: MAT.SAND, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const erodedDensity = readField(latestFrame(), erosionPoint.x, erosionPoint.y, erosionPoint.z, F.D)
+assert.ok(erodedDensity < 0.8 && erodedDensity > 0.79,
+  `erosion should remove density according to material resistance (got ${erodedDensity})`)
 
 console.log(JSON.stringify({
   status: 'PASS',
