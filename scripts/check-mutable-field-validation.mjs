@@ -60,3 +60,42 @@ assert.deepEqual(target.serialize(), beforeRestore, "invalid overlay restore mus
 console.log("PASS: rejects non-finite mutation coordinates, radius, deltas, scales and operations");
 console.log("PASS: rejected mutations and overlays leave version, IDs and history unchanged");
 console.log("PASS: corrupt snapshots and overlays fail closed without partial restore");
+
+
+// Authoritative payloads must be detached from caller-owned nested objects.
+const detachedField = new MutableWorldFieldProvider(base);
+const nestedDelta = { energy: 10 };
+const nestedMetadata = { legacyFalloff: "linear", nested: { source: "caller" } };
+detachedField.apply({ kind: "brush", x: 0, y: 0, z: 0, radius: 4, delta: nestedDelta, metadata: nestedMetadata });
+const afterApply = detachedField.serialize();
+const afterApplyVersion = detachedField.getVersion();
+nestedDelta.energy = 999;
+nestedMetadata.legacyFalloff = "sharp";
+nestedMetadata.nested.source = "mutated";
+assert.deepEqual(detachedField.serialize(), afterApply, "caller mutations must not alter committed payloads or revision");
+assert.equal(detachedField.getVersion(), afterApplyVersion);
+
+const returnedSnapshot = detachedField.serialize();
+returnedSnapshot.mutations[0].delta.energy = 1234;
+returnedSnapshot.mutations[0].metadata.nested.source = "snapshot-mutated";
+assert.deepEqual(detachedField.serialize(), afterApply, "mutating a serialized snapshot must not mutate live state");
+
+const globalScale = { energy: 2 };
+const globalDelta = { density: 0.1 };
+const globalMetadata = { nested: { owner: "caller" } };
+detachedField.setGlobal("law", globalScale, globalDelta, globalMetadata);
+const afterGlobal = detachedField.serialize();
+globalScale.energy = 99;
+globalDelta.density = 0.9;
+globalMetadata.nested.owner = "changed";
+assert.deepEqual(detachedField.serialize(), afterGlobal, "setGlobal must detach scale, delta, and metadata");
+
+const restoreTarget = new MutableWorldFieldProvider(base);
+const restoreInput = detachedField.serialize();
+restoreTarget.restore(restoreInput);
+const restoredState = restoreTarget.serialize();
+restoreInput.mutations[0].delta.energy = 4321;
+restoreInput.mutations[0].metadata.nested.source = "restore-input-mutated";
+assert.deepEqual(restoreTarget.serialize(), restoredState, "restore must detach nested snapshot data");
+
+console.log("PASS: caller payloads, returned snapshots, global overlays and restore inputs are detached");
