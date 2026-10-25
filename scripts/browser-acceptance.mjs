@@ -1456,6 +1456,36 @@ try {
   }
   await page.evaluate(() => window.redo());
 
+  // Exercise the opt-in greedy mesher on the active sparse-chunk renderer.
+  // Restore the prior view immediately so this probe does not affect generation checks.
+  const greedySurfaceContract = await page.evaluate(() => {
+    if (typeof window.getGreedyMeshingState !== "function" ||
+        typeof window.setGreedyMeshingEnabled !== "function" ||
+        typeof window.setFieldMatMode !== "function") {
+      return { error: "Greedy surface renderer controls are not exposed" };
+    }
+    const before = window.getGreedyMeshingState();
+    let result;
+    try {
+      window.setFieldMatMode("material");
+      window.setGreedyMeshingEnabled(true);
+      result = window.getGreedyMeshingState();
+    } finally {
+      window.setGreedyMeshingEnabled(false);
+      window.setFieldMatMode(before.mode || "field");
+    }
+    return { before, result, restored: window.getGreedyMeshingState() };
+  });
+  if (greedySurfaceContract.error) throw new Error(greedySurfaceContract.error);
+  if (!greedySurfaceContract.result?.enabled ||
+      !greedySurfaceContract.result?.active ||
+      greedySurfaceContract.result.quadCount <= 0) {
+    throw new Error("Greedy surface renderer did not produce an active non-empty mesh: " + JSON.stringify(greedySurfaceContract));
+  }
+  if (greedySurfaceContract.restored?.enabled !== false) {
+    throw new Error("Greedy surface probe did not restore the legacy instanced renderer");
+  }
+
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
