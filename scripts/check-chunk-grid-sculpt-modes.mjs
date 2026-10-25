@@ -18,6 +18,21 @@ const geometryJs = ts.transpileModule(geometrySource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText.replace(/from ['"]\.\/BrushMath['"]/, `from "${mathUrl}"`);
 const geometryUrl = "data:text/javascript;base64," + Buffer.from(geometryJs).toString("base64");
+const processSource = await readFile(new URL("src/process/ProcessDef.ts", root), "utf8");
+const processJs = ts.transpileModule(processSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const processUrl = "data:text/javascript;base64," + Buffer.from(processJs).toString("base64");
+const lawSource = await readFile(new URL("src/laws/MetaLaw.ts", root), "utf8");
+const lawJs = ts.transpileModule(lawSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const lawUrl = "data:text/javascript;base64," + Buffer.from(lawJs).toString("base64");
+const materialSource = await readFile(new URL("src/materials/MaterialDef.ts", root), "utf8");
+const materialJs = ts.transpileModule(materialSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const materialUrl = "data:text/javascript;base64," + Buffer.from(materialJs).toString("base64");
 const { ChunkGrid, F } = await import(moduleUrl);
 const grid = new ChunkGrid();
 
@@ -55,7 +70,10 @@ const workerJs = ts.transpileModule(workerSource, {
 }).outputText
   .replace("from './ChunkGrid'", `from '${chunkGridUrl}'`)
   .replace("from '../brushes/BrushGeometry'", `from '${geometryUrl}'`)
-  .replace("from '../brushes/BrushMath'", `from '${mathUrl}'`);
+  .replace("from '../brushes/BrushMath'", `from '${mathUrl}'`)
+  .replace("from '../process/ProcessDef'", `from '${processUrl}'`)
+  .replace("from '../laws/MetaLaw'", `from '${lawUrl}'`)
+  .replace("from '../materials/MaterialDef'", `from '${materialUrl}'`);
 const workerModuleUrl = "data:text/javascript;base64," + Buffer.from(workerJs).toString("base64");
 const originalSelf = globalThis.self;
 const workerMessages = [];
