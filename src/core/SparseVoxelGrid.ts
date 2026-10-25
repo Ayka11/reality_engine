@@ -271,6 +271,56 @@ export class SparseVoxelGrid {
     }
   }
 
+  /**
+   * Detect entity-relevant cells that exist in sparse chunk storage but are
+   * outside the dense window scanned by EntityLayer. A dense-window flood fill
+   * cannot authorize world-wide merge/extinction while any such cell is active.
+   */
+  hasEntityActivityOutsideDenseWindow(bioThreshold: number): boolean {
+    if (!Number.isFinite(bioThreshold) || bioThreshold < 0) {
+      throw new RangeError("Entity-domain visibility threshold must be finite and non-negative");
+    }
+
+    const denseMaxX = this.denseOrigin.x + this.W;
+    const denseMaxY = this.denseOrigin.y + this.H;
+    const denseMaxZ = this.denseOrigin.z + this.D;
+
+    for (const chunk of this.chunks.values()) {
+      const chunkMinX = chunk.cx * CHUNK_SIZE;
+      const chunkMinY = chunk.cy * CHUNK_SIZE;
+      const chunkMinZ = chunk.cz * CHUNK_SIZE;
+      const chunkMaxX = chunkMinX + CHUNK_SIZE;
+      const chunkMaxY = chunkMinY + CHUNK_SIZE;
+      const chunkMaxZ = chunkMinZ + CHUNK_SIZE;
+      const fullyInsideDenseWindow =
+        chunkMinX >= this.denseOrigin.x && chunkMaxX <= denseMaxX &&
+        chunkMinY >= this.denseOrigin.y && chunkMaxY <= denseMaxY &&
+        chunkMinZ >= this.denseOrigin.z && chunkMaxZ <= denseMaxZ;
+      if (fullyInsideDenseWindow) continue;
+
+      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+        const gz = chunkMinZ + lz;
+        for (let ly = 0; ly < CHUNK_SIZE; ly++) {
+          const gy = chunkMinY + ly;
+          for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+            const gx = chunkMinX + lx;
+            if (
+              gx >= this.denseOrigin.x && gx < denseMaxX &&
+              gy >= this.denseOrigin.y && gy < denseMaxY &&
+              gz >= this.denseOrigin.z && gz < denseMaxZ
+            ) continue;
+
+            const base = chunk.localIdx(lx, ly, lz);
+            const bio = chunk.buffer[base + F.BIO_POTENTIAL];
+            const entityId = chunk.buffer[base + F.ENTITY_ID];
+            if (!Number.isFinite(bio) || bio >= bioThreshold || entityId !== 0) return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   snapshot(): void {
     this.backBuffer.set(this.buffer);
     for (const chunk of this.chunks.values()) chunk.snapshot();

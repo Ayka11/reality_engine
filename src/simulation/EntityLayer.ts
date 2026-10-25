@@ -503,6 +503,17 @@ export class EntityLayer {
   }
 
   private _reconcileFullDomain(grid: VoxelGrid, rollbackTick: () => void): void {
+    // SparseVoxelGrid may store cells beyond its dense simulation window. Those
+    // cells are outside this tick's connectivity scan and therefore cannot be
+    // ignored when authorizing global entity extinction or merge.
+    if (
+      grid instanceof SparseVoxelGrid &&
+      grid.hasEntityActivityOutsideDenseWindow(this.bioThreshold)
+    ) {
+      throw new Error(
+        "EntityLayer refuses global reconciliation while sparse entity activity exists outside the dense simulation window",
+      );
+    }
     const context = createFullDomainExecutionContext(grid);
     const connectivity = new EntityChunkConnectivity(this.bioThreshold).analyze(grid, context);
     if (connectivity.domainCoverageComplete !== true) {

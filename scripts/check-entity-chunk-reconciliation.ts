@@ -381,6 +381,45 @@ assert.deepEqual(
 sparseRollbackInternals._spawnChild = sparseOriginalSpawnChild;
 console.log("SparseVoxelGrid entity tick rollback consistency: PASS");
 
+// A dense-window scan must not treat entities outside the sparse window as
+// extinct. The guard rejects global reconciliation before any entity lifecycle
+// mutation and preserves the unseen sparse cell.
+const externalDomainGrid = new SparseVoxelGrid(8, 8, 1);
+const externalDomainLayer = new EntityLayer();
+externalDomainLayer.setRandomSeed(0x12345678);
+for (const index of [9, 10, 17, 18]) {
+  externalDomainGrid.buffer[index * CELL_FIELDS + F.BIO_POTENTIAL] = 1;
+  externalDomainGrid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
+}
+externalDomainGrid.syncDenseToChunks();
+externalDomainLayer.tick(externalDomainGrid, 1 / 60);
+externalDomainGrid.syncDenseToChunks();
+const externalDomainEntity = externalDomainLayer.getEntities()[0];
+assert.ok(externalDomainEntity, "external-domain guard fixture must create a real entity");
+const externalDomainEntitySnapshot = externalDomainLayer.snapshot();
+const externalDomainExtinctBefore = externalDomainLayer.extinctCount;
+const externalBioCell = externalDomainGrid.getCell(12, 2, 0);
+assert.ok(externalBioCell, "outside-window cell must be addressable through sparse chunk storage");
+externalBioCell.bioPotential = 1;
+assert.equal(externalDomainGrid.hasEntityActivityOutsideDenseWindow(0.05), true,
+  "sparse chunks must report entity-relevant activity outside the dense window");
+assert.throws(
+  () => externalDomainLayer.tick(externalDomainGrid, 1 / 60),
+  /outside the dense simulation window/,
+  "global reconciliation must fail closed rather than infer extinction from a partial dense window",
+);
+assert.deepEqual(externalDomainLayer.snapshot(), externalDomainEntitySnapshot,
+  "rejected partial-domain reconciliation must not mutate entity registry, RNG, or lifecycle state");
+assert.equal(externalDomainLayer.extinctCount, externalDomainExtinctBefore,
+  "unobserved sparse cells must not authorize extinction accounting");
+assert.equal(externalDomainGrid.getCell(12, 2, 0)?.bioPotential, 1,
+  "fail-closed reconciliation must preserve outside-window sparse cell state");
+assert.doesNotThrow(
+  () => externalDomainGrid.assertDenseEntityOwnershipSynchronized(),
+  "rejecting an incomplete sparse domain must preserve dense/chunk entity ownership consistency",
+);
+console.log("Sparse external entity domain fails closed: PASS");
+
 
 
 // Revision-bound authoritative inventory contract: immutable snapshot, stale
