@@ -143,3 +143,8 @@ The authoritative mutation boundary now rejects native async, async-generator, a
 ### Auxiliary runtime state in quick saves
 
 Quick saves now retain the in-process state that changes how future ticks evolve beyond the core grid: climate wind/pressure and cadence, multiscale caches/cadence, learned vocabulary and communication history, market/GDP state, meta-law evolution phase, and the cosmological sparse simulation including its RNG. These states use validated detached snapshots and are restored within the engine-owned world transaction, with previous-state rollback if a domain rejects a candidate. Portable/legacy imports reset omitted auxiliary engines instead of accidentally continuing the previous world's learning, market, climate, or cosmological state. Timeline field-only history is cleared only after the world restore commits successfully.
+
+
+### Scene Director world-context isolation
+
+Quick saves now preserve the Scene Director's bounded conversation history and world-action log. Portable/legacy loads reset that context so the AI director does not carry stale assumptions or observations from a different world. The API key remains app-local and is deliberately excluded from saved snapshots; the auto-directing interval is likewise application runtime state rather than part of a world's data. Regression coverage checks state round-trip, invalid-snapshot rejection without partial mutation, and reset behavior.

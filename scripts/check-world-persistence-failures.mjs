@@ -12,6 +12,7 @@ const economicSource = await readFile(new URL("src/simulation/EconomicSystem.ts"
 const metaLawSource = await readFile(new URL("src/simulation/MetaLawEvolution.ts", root), "utf8");
 const cosmologicalSource = await readFile(new URL("src/simulation/CosmologicalSim.ts", root), "utf8");
 const timelineSource = await readFile(new URL("src/world/Timeline.ts", root), "utf8");
+const directorSource = await readFile(new URL("src/ai/SceneDirector.ts", root), "utf8");
 assert.match(saveSystemSource, /const mutate = this\.context\.mutateAuthoritativeState;/,
   "world snapshot import must use the authoritative simulation transaction");
 assert.match(saveSystemSource, /if \(!mutate\)\s*\{\s*throw new Error\("World restore requires an engine-owned mutation transaction"\)/,
@@ -68,6 +69,14 @@ assert.match(saveSystemSource, /this\.context\.resetEconomic\?\.\(\)/);
 assert.match(saveSystemSource, /this\.context\.resetMetaLawEvolution\?\.\(\)/);
 assert.match(saveSystemSource, /this\.context\.resetCosmological\?\.\(\)/);
 assert.match(saveSystemSource, /this\.context\.clearTimeline\?\.\(\)/);
+assert.match(saveSystemSource, /director: this\.context\.getDirectorSnapshot\?\.\(\)/,
+  "quick saves must preserve SceneDirector history and world log");
+assert.match(saveSystemSource, /this\.context\.resetDirector\?\.\(\)/,
+  "portable/legacy imports must clear stale SceneDirector context");
+assert.match(mainSource, /getDirectorSnapshot: \(\) => director\.snapshot\(\)/,
+  "the application must wire SceneDirector snapshots into world saves");
+assert.match(directorSource, /snapshot\(\): SceneDirectorSnapshot/);
+assert.match(directorSource, /reset\(\): void/);
 assert.match(economicSource, /snapshot\(\): EconomicSystemSnapshot/);
 assert.match(metaLawSource, /snapshot\(\): MetaLawEvolutionSnapshot/);
 assert.match(cosmologicalSource, /snapshot\(\): CosmologicalSimSnapshot/);
@@ -233,6 +242,10 @@ const runtimeState = {
   worldEvents: { history: [], nextAuto: 177, rngState: 12345 },
   causal: { events: [], nextId: 7, lastEventByCell: [[1, 6]] },
   previousEnergy: new Float32Array([5, 6]),
+  director: {
+    history: [{ role: "user", content: "old world question" }, { role: "assistant", content: "old world answer" }],
+    worldLog: [{ tick: 31, director: "old-world prompt", action: "old-world event" }],
+  },
   tick: 44,
   recorderClears: 0,
   entityClearCount: 0,
@@ -299,6 +312,9 @@ const transactionContext = {
   restorePreviousEnergySnapshot: snapshot => { runtimeState.previousEnergy = new Float32Array(snapshot); },
   resetPreviousEnergy: () => { runtimeState.previousEnergy = new Float32Array(runtimeGrid.size); },
   clearRecorderSnapshots: () => { runtimeState.recorderClears++; },
+  getDirectorSnapshot: () => cloneValue(runtimeState.director),
+  restoreDirectorSnapshot: snapshot => { runtimeState.director = cloneValue(snapshot); },
+  resetDirector: () => { runtimeState.director = { history: [], worldLog: [] }; },
   getCausalLog: () => cloneValue(runtimeState.causal.events),
 };
 const saveHarness = new RuntimeWorldSaveSystem(runtimeGrid, mockLawEngine, null, transactionContext);
@@ -327,6 +343,7 @@ assert.deepEqual(runtimeState.chemistry, expectedRuntimeState.chemistry, "quick-
 assert.deepEqual(runtimeState.worldEvents, expectedRuntimeState.worldEvents, "quick-save restore must recover event queue and PRNG");
 assert.deepEqual(runtimeState.causal, expectedRuntimeState.causal, "quick-save restore must recover causal graph identity state");
 assert.deepEqual(runtimeState.previousEnergy, expectedRuntimeState.previousEnergy, "quick-save restore must recover previous-energy baseline");
+assert.deepEqual(runtimeState.director, expectedRuntimeState.director, "quick-save restore must recover SceneDirector history and world log");
 assert.equal(runtimeState.tick, savedRuntimeWorld.metadata.simulationTicks, "quick-save restore must restore simulation tick");
 assert.equal(runtimeState.recorderClears, 1, "successful restore must clear field-only recorder history");
 
@@ -339,6 +356,7 @@ runtimeState.chemistry = { pendingDensityTransfers: [[0, 999]] };
 runtimeState.worldEvents = { history: [], nextAuto: 1, rngState: 999 };
 runtimeState.causal = { events: [], nextId: 900, lastEventByCell: [] };
 runtimeState.previousEnergy.fill(777);
+runtimeState.director = { history: [{ role: "assistant", content: "stale context" }], worldLog: [{ tick: 999, director: "stale", action: "stale" }] };
 runtimeGrid.buffer.fill(0);
 await saveHarness.applySnapshot(legacySnapshot);
 assert.deepEqual(runtimeState.entityRuntime, { mode: "cleared" }, "legacy restore must clear stale entity runtime");
@@ -349,6 +367,7 @@ assert.deepEqual(runtimeState.chemistry, { pendingDensityTransfers: [] }, "legac
 assert.deepEqual(runtimeState.worldEvents, { history: [], nextAuto: 600, rngState: 0x6d2b79f5 }, "legacy restore must reset world-event history and PRNG");
 assert.deepEqual(runtimeState.causal, { events: [], nextId: 1, lastEventByCell: [] }, "legacy restore must clear stale causal history");
 assert.deepEqual(runtimeState.previousEnergy, new Float32Array(runtimeGrid.size), "legacy restore must reset the previous-energy baseline");
+assert.deepEqual(runtimeState.director, { history: [], worldLog: [] }, "legacy restore must clear stale SceneDirector context");
 assert.equal(runtimeState.recorderClears, 2, "each world restore must clear stale recorder history");
 assert.equal(runtimeGrid.buffer[20], 0, "legacy restore must clear stale entity ownership marker");
 assert.equal(runtimeGrid.buffer[19], 0, "legacy restore must clear stale agent marker");
@@ -478,6 +497,7 @@ const { EconomicSystem: RuntimeEconomy } = await import(await load("src/simulati
 const { MetaLawEvolution: RuntimeMetaLaw } = await import(await load("src/simulation/MetaLawEvolution.ts"));
 const { CosmologicalSim: RuntimeCosmological } = await import(await load("src/simulation/CosmologicalSim.ts"));
 const { Timeline: RuntimeTimeline } = await import(await load("src/world/Timeline.ts"));
+const { SceneDirector: RuntimeSceneDirector } = await import(await load("src/ai/SceneDirector.ts"));
 
 function fakeGrid(W, H, D) {
   return {
@@ -594,6 +614,29 @@ assert.ok(timelineRuntime.snapshots.length > 0, "timeline test must create old-w
 timelineRuntime.reset();
 assert.equal(timelineRuntime.snapshots.length, 0, "timeline reset must clear previous-world field snapshots");
 assert.equal(timelineRuntime.metrics.length, 0, "timeline reset must clear previous-world metrics");
+
+
+const directorUnit = new RuntimeSceneDirector({});
+const directorCheckpoint = {
+  history: [
+    { role: "user", content: "describe this world" },
+    { role: "assistant", content: "the field is ordered" },
+  ],
+  worldLog: [{ tick: 22, director: "seed structure", action: "created an energy pattern" }],
+};
+directorUnit.restore(directorCheckpoint);
+assert.deepEqual(directorUnit.snapshot(), directorCheckpoint,
+  "SceneDirector snapshot must preserve context and world log");
+const directorBeforeInvalid = directorUnit.snapshot();
+assert.throws(() => directorUnit.restore({
+  ...directorCheckpoint,
+  worldLog: [{ tick: -1, director: "bad", action: "invalid tick" }],
+}), /Invalid SceneDirector world log entry/);
+assert.deepEqual(directorUnit.snapshot(), directorBeforeInvalid,
+  "invalid SceneDirector snapshots must be rejected without partial mutation");
+directorUnit.reset();
+assert.deepEqual(directorUnit.snapshot(), { history: [], worldLog: [] },
+  "SceneDirector reset must clear world context without including or changing the API key");
 
 console.log("PASS: field persistence round-trip and seed isolation");
 console.log("PASS: quota, read, delete, and corrupt-storage failures are contained");

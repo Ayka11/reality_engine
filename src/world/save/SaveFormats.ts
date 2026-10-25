@@ -13,6 +13,7 @@ import type { LanguageSystemSnapshot } from '../../simulation/LanguageEmergence'
 import type { EconomicSystemSnapshot } from '../../simulation/EconomicSystem';
 import type { MetaLawEvolutionSnapshot } from '../../simulation/MetaLawEvolution';
 import type { CosmologicalSimSnapshot } from '../../simulation/CosmologicalSim';
+import type { SceneDirectorSnapshot } from '../../ai/SceneDirector';
 
 export type SaveFormat = 'reality' | 'quick' | 'scientific' | 'minimal';
 
@@ -47,6 +48,7 @@ export interface WorldRuntimeStateSnapshot {
   economy?: EconomicSystemSnapshot;
   metaLawEvolution?: MetaLawEvolutionSnapshot;
   cosmologicalSim?: CosmologicalSimSnapshot;
+  director?: SceneDirectorSnapshot;
 }
 
 export interface WorldSnapshot {

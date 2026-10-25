@@ -19,6 +19,7 @@ import type { LanguageSystemSnapshot } from '../../simulation/LanguageEmergence'
 import type { EconomicSystemSnapshot } from '../../simulation/EconomicSystem';
 import type { MetaLawEvolutionSnapshot } from '../../simulation/MetaLawEvolution';
 import type { CosmologicalSimSnapshot } from '../../simulation/CosmologicalSim';
+import type { SceneDirectorSnapshot } from '../../ai/SceneDirector';
 
 interface RealitySaveDb extends DBSchema {
   saves: {
@@ -101,6 +102,9 @@ interface SaveContext {
   restoreCosmologicalSnapshot?: (snapshot: CosmologicalSimSnapshot) => void;
   resetCosmological?: () => void;
   clearTimeline?: () => void;
+  getDirectorSnapshot?: () => SceneDirectorSnapshot;
+  restoreDirectorSnapshot?: (snapshot: SceneDirectorSnapshot) => void;
+  resetDirector?: () => void;
   getCausalLog?: () => unknown[];
   thumbnailCanvas?: HTMLCanvasElement | null;
 }
@@ -188,6 +192,7 @@ export class WorldSaveSystem {
         economy: this.context.getEconomicSnapshot?.(),
         metaLawEvolution: this.context.getMetaLawEvolutionSnapshot?.(),
         cosmologicalSim: this.context.getCosmologicalSnapshot?.(),
+        director: this.context.getDirectorSnapshot?.(),
       },
       realityGraph: this.context.graphProvider?.(),
       activeLaws: activeLaws.map(law => this.snapshotLaw(law)),
@@ -224,6 +229,7 @@ export class WorldSaveSystem {
     const economicBefore = this.context.getEconomicSnapshot?.();
     const metaLawEvolutionBefore = this.context.getMetaLawEvolutionSnapshot?.();
     const cosmologicalBefore = this.context.getCosmologicalSnapshot?.();
+    const directorBefore = this.context.getDirectorSnapshot?.();
 
     const apply = () => {
       if (snapshot.chunks && !this.voxelGrid.loadChunks) {
@@ -321,6 +327,11 @@ export class WorldSaveSystem {
       } else {
         this.context.resetCosmological?.();
       }
+      if (runtime?.director && this.context.restoreDirectorSnapshot) {
+        this.context.restoreDirectorSnapshot(runtime.director);
+      } else {
+        this.context.resetDirector?.();
+      }
 
       // Recorder entries currently store field frames, not full runtime checkpoints.
       // Never leave history from the previous world attached to the restored field.
@@ -386,6 +397,9 @@ export class WorldSaveSystem {
       }
       if (cosmologicalBefore !== undefined && this.context.restoreCosmologicalSnapshot) {
         rollback("Cosmological simulation", () => this.context.restoreCosmologicalSnapshot!(cosmologicalBefore));
+      }
+      if (directorBefore !== undefined && this.context.restoreDirectorSnapshot) {
+        rollback("Scene director", () => this.context.restoreDirectorSnapshot!(directorBefore));
       }
       if (rollbackErrors.length > 0) {
         throw new AggregateError(

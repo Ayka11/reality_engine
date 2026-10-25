@@ -10,16 +10,21 @@ interface DirectorResult {
   code: string | null;
 }
 
-interface Message {
+export interface SceneDirectorMessage {
   role: 'user' | 'assistant';
   content: string;
+}
+
+export interface SceneDirectorSnapshot {
+  history: SceneDirectorMessage[];
+  worldLog: Array<{ tick: number; director: string; action: string }>;
 }
 
 export class SceneDirector {
   private sim: SimulationEngine;
   private civSystem?: CivilizationSystem;
   private metaLawEvol?: MetaLawEvolution;
-  private history: Message[] = [];
+  private history: SceneDirectorMessage[] = [];
   readonly worldLog: Array<{ tick: number; director: string; action: string }> = [];
   private autoInterval: ReturnType<typeof setInterval> | null = null;
   autoDirecting = false;
@@ -30,6 +35,45 @@ export class SceneDirector {
     this.civSystem = civSystem;
     this.metaLawEvol = metaLawEvol;
     try { this.apiKey = localStorage.getItem('re_director_key') ?? ''; } catch {}
+  }
+
+  snapshot(): SceneDirectorSnapshot {
+    return {
+      history: this.history.map(message => ({ ...message })),
+      worldLog: this.worldLog.map(entry => ({ ...entry })),
+    };
+  }
+
+  restore(snapshot: SceneDirectorSnapshot): void {
+    if (!snapshot ||
+        !Array.isArray(snapshot.history) || snapshot.history.length > 20 ||
+        !Array.isArray(snapshot.worldLog) || snapshot.worldLog.length > 50) {
+      throw new Error("Invalid SceneDirector snapshot");
+    }
+    const history: SceneDirectorMessage[] = [];
+    for (const message of snapshot.history) {
+      if (!message ||
+          (message.role !== "user" && message.role !== "assistant") ||
+          typeof message.content !== "string" || message.content.length > 100_000) {
+        throw new Error("Invalid SceneDirector history entry");
+      }
+      history.push({ ...message });
+    }
+    const worldLog: Array<{ tick: number; director: string; action: string }> = [];
+    for (const entry of snapshot.worldLog) {
+      if (!entry || !Number.isSafeInteger(entry.tick) || entry.tick < 0 ||
+          typeof entry.director !== "string" || typeof entry.action !== "string") {
+        throw new Error("Invalid SceneDirector world log entry");
+      }
+      worldLog.push({ ...entry });
+    }
+    this.history = history;
+    this.worldLog.splice(0, this.worldLog.length, ...worldLog);
+  }
+
+  reset(): void {
+    this.history = [];
+    this.worldLog.length = 0;
   }
 
   setApiKey(key: string): void {
