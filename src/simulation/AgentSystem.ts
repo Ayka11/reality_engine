@@ -1,4 +1,5 @@
 import { VoxelGrid } from '../core/VoxelGrid';
+import { getMutableBuffer } from '../core/TrackedFloat32Array';
 import { CELL_FIELDS, F } from '../core/CellState';
 
 export type AgentBehavior = 'explorer' | 'harvester' | 'signaler' | 'builder' | 'destroyer';
@@ -146,6 +147,7 @@ export class AgentSystem {
 
   // Seed agents + inject local energy so they survive from a cold start
   seed(grid: VoxelGrid, count = 8): void {
+    const buf = getMutableBuffer(grid);
     for (let i = 0; i < count && this.agents.size < this.maxAgents; i++) {
       const x = Math.floor(4 + this._random() * (grid.W - 8));
       const y = Math.floor(4 + this._random() * (grid.H - 8));
@@ -157,7 +159,7 @@ export class AgentSystem {
       for (let dx = -2; dx <= 2; dx++) {
         if (!grid.inBounds(x+dx, y+dy, z+dz)) continue;
         const base = (((z+dz) * grid.H * grid.W) + (y+dy) * grid.W + (x+dx)) * CELL_FIELDS;
-        grid.buffer[base + F.ENERGY] = Math.max(grid.buffer[base + F.ENERGY], 150);
+        buf[base + F.ENERGY] = Math.max(buf[base + F.ENERGY], 150);
       }
 
       this._spawn(x, y, z, randomBehavior(() => this._random()), 200);
@@ -165,13 +167,13 @@ export class AgentSystem {
   }
 
   tick(grid: VoxelGrid, dt: number): void {
+    const buf = getMutableBuffer(grid);
     const dead: number[] = [];
 
     for (const [id, agent] of this.agents) {
       agent.age++;
 
       const base = this._base(grid, agent.x, agent.y, agent.z);
-      const buf  = grid.buffer;
       const localEnergy = buf[base + F.ENERGY];
 
       agent.memory = agent.memory * 0.95 + (localEnergy / 1000) * 0.05;
@@ -184,11 +186,11 @@ export class AgentSystem {
       if (agent.energy <= 0) { dead.push(id); continue; }
 
       switch (agent.behavior) {
-        case 'explorer':  this._explore(grid, agent, dt);  break;
-        case 'harvester': this._harvest(grid, agent, dt);  break;
-        case 'signaler':  this._signal(grid, agent, dt);   break;
-        case 'builder':   this._build(grid, agent, dt);    break;
-        case 'destroyer': this._destroy(grid, agent, dt);  break;
+        case 'explorer':  this._explore(grid, agent, dt, buf);  break;
+        case 'harvester': this._harvest(grid, agent, dt, buf);  break;
+        case 'signaler':  this._signal(grid, agent, dt, buf);   break;
+        case 'builder':   this._build(grid, agent, dt, buf);    break;
+        case 'destroyer': this._destroy(grid, agent, dt, buf);  break;
       }
 
       // Stamp presence
@@ -212,9 +214,9 @@ export class AgentSystem {
       const agent = this.agents.get(id)!;
       const base = this._base(grid, agent.x, agent.y, agent.z);
       // Leave energy ghost on death
-      grid.buffer[base + F.ENERGY] = Math.min(9999,
-        grid.buffer[base + F.ENERGY] + agent.energy);
-      grid.buffer[base + F.AGENT_MARK] = 0;
+      buf[base + F.ENERGY] = Math.min(9999,
+        buf[base + F.ENERGY] + agent.energy);
+      buf[base + F.AGENT_MARK] = 0;
       this.agents.delete(id);
     }
   }
@@ -228,8 +230,8 @@ export class AgentSystem {
     this.agents.set(id, { id, x, y, z, energy, age: 0, behavior, memory: 0, signal: 0, children: 0 });
   }
 
-  private _explore(grid: VoxelGrid, agent: Agent, dt: number): void {
-    const { W, H, D, buffer: buf } = grid;
+  private _explore(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
+    const { W, H, D } = grid;
     let bestE = -1, bx = agent.x, by = agent.y, bz = agent.z;
     const dirs = [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]] as const;
     for (const [dx,dy,dz] of dirs) {
@@ -241,27 +243,27 @@ export class AgentSystem {
     // Always move (not probability-gated) — makes explorers visibly traverse the world
     if (bx !== agent.x || by !== agent.y || bz !== agent.z) {
       // Clear old mark
-      grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
+      buf[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
       agent.x=bx; agent.y=by; agent.z=bz;
     }
     // Explorers passively harvest a tiny amount while moving
     const base = this._base(grid, agent.x, agent.y, agent.z);
-    const take = Math.min(3 * dt * 60, grid.buffer[base + F.ENERGY]);
-    grid.buffer[base + F.ENERGY] -= take;
+    const take = Math.min(3 * dt * 60, buf[base + F.ENERGY]);
+    buf[base + F.ENERGY] -= take;
     agent.energy = Math.min(500, agent.energy + take);
   }
 
-  private _harvest(grid: VoxelGrid, agent: Agent, dt: number): void {
+  private _harvest(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
     // Harvest locally, then move to richest neighbor
     const base = this._base(grid, agent.x, agent.y, agent.z);
-    const take = Math.min(20 * dt * 60, grid.buffer[base + F.ENERGY]);
-    grid.buffer[base + F.ENERGY] -= take;
+    const take = Math.min(20 * dt * 60, buf[base + F.ENERGY]);
+    buf[base + F.ENERGY] -= take;
     agent.energy = Math.min(600, agent.energy + take);
 
     // Move toward richest neighbor every few ticks
     if (agent.age % 4 === 0) {
-      const { W, H, D, buffer: buf } = grid;
-      let bestE = grid.buffer[base + F.ENERGY], bx = agent.x, by = agent.y, bz = agent.z;
+      const { W, H, D } = grid;
+      let bestE = buf[base + F.ENERGY], bx = agent.x, by = agent.y, bz = agent.z;
       const dirs = [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]] as const;
       for (const [dx,dy,dz] of dirs) {
         const nx=agent.x+dx, ny=agent.y+dy, nz=agent.z+dz;
@@ -270,20 +272,20 @@ export class AgentSystem {
         if (e > bestE) { bestE=e; bx=nx; by=ny; bz=nz; }
       }
       if (bx !== agent.x || by !== agent.y || bz !== agent.z) {
-        grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
+        buf[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
         agent.x=bx; agent.y=by; agent.z=bz;
       }
     }
   }
 
-  private _signal(grid: VoxelGrid, agent: Agent, dt: number): void {
+  private _signal(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
     const base = this._base(grid, agent.x, agent.y, agent.z);
     agent.signal = Math.min(100, agent.signal + 8 * dt * 60);
-    grid.buffer[base + F.SIGNAL] = Math.min(100,
-      grid.buffer[base + F.SIGNAL] + agent.signal * 0.5 * dt);
+    buf[base + F.SIGNAL] = Math.min(100,
+      buf[base + F.SIGNAL] + agent.signal * 0.5 * dt);
     // Signalers also move slowly toward high-signal neighbors
     if (agent.age % 6 === 0) {
-      const { W, H, buffer: buf } = grid;
+      const { W, H } = grid;
       let bestS = -1, bx = agent.x, by = agent.y;
       const dirs = [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0]] as const;
       for (const [dx,dy] of dirs) {
@@ -293,26 +295,26 @@ export class AgentSystem {
         if (s > bestS) { bestS = s; bx = nx; by = ny; }
       }
       if (bx !== agent.x || by !== agent.y) {
-        grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
+        buf[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
         agent.x = bx; agent.y = by;
       }
     }
     agent.energy -= agent.signal * 0.005 * dt * 60;
   }
 
-  private _build(grid: VoxelGrid, agent: Agent, dt: number): void {
+  private _build(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
     const base = this._base(grid, agent.x, agent.y, agent.z);
-    grid.buffer[base + F.INFORMATION]   = Math.min(999, grid.buffer[base + F.INFORMATION]   + 5  * dt * 60);
-    grid.buffer[base + F.BIO_POTENTIAL] = Math.min(1,   grid.buffer[base + F.BIO_POTENTIAL] + 0.015 * dt * 60);
-    grid.buffer[base + F.ENTROPY]       = Math.max(0,   grid.buffer[base + F.ENTROPY]       - 0.005 * dt * 60);
+    buf[base + F.INFORMATION]   = Math.min(999, buf[base + F.INFORMATION]   + 5  * dt * 60);
+    buf[base + F.BIO_POTENTIAL] = Math.min(1,   buf[base + F.BIO_POTENTIAL] + 0.015 * dt * 60);
+    buf[base + F.ENTROPY]       = Math.max(0,   buf[base + F.ENTROPY]       - 0.005 * dt * 60);
     agent.energy -= 0.8 * dt * 60;
   }
 
-  private _destroy(grid: VoxelGrid, agent: Agent, dt: number): void {
+  private _destroy(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
     const base = this._base(grid, agent.x, agent.y, agent.z);
-    const stolenE = Math.min(15 * dt * 60, grid.buffer[base + F.ENERGY]);
-    grid.buffer[base + F.ENERGY]  = Math.max(0, grid.buffer[base + F.ENERGY] - stolenE);
-    grid.buffer[base + F.ENTROPY] = Math.min(1, grid.buffer[base + F.ENTROPY] + 0.03 * dt * 60);
+    const stolenE = Math.min(15 * dt * 60, buf[base + F.ENERGY]);
+    buf[base + F.ENERGY]  = Math.max(0, buf[base + F.ENERGY] - stolenE);
+    buf[base + F.ENTROPY] = Math.min(1, buf[base + F.ENTROPY] + 0.03 * dt * 60);
     agent.energy = Math.min(500, agent.energy + stolenE * 0.7);
     // Destroyers roam randomly
     if (agent.age % 3 === 0) {
@@ -321,7 +323,7 @@ export class AgentSystem {
       const nx = Math.max(0, Math.min(grid.W-1, agent.x+dx));
       const ny = Math.max(0, Math.min(grid.H-1, agent.y+dy));
       if (nx !== agent.x || ny !== agent.y) {
-        grid.buffer[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
+        buf[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
         agent.x=nx; agent.y=ny;
       }
     }

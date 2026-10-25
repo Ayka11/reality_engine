@@ -1,4 +1,5 @@
 import { VoxelGrid } from '../core/VoxelGrid';
+import { getMutableBuffer } from '../core/TrackedFloat32Array';
 import { CELL_FIELDS, F } from '../core/CellState';
 
 // Local time field (F.LOCAL_TIME) controls how fast a cell's physics ticks
@@ -7,7 +8,8 @@ import { CELL_FIELDS, F } from '../core/CellState';
 
 export class TemporalLayer {
   tick(grid: VoxelGrid, dt: number): void {
-    const { buffer: buf, size } = grid;
+    const { size } = grid;
+    const buf = getMutableBuffer(grid);
 
     for (let i = 0; i < size; i++) {
       const base = i * CELL_FIELDS;
@@ -36,7 +38,8 @@ export class TemporalLayer {
   }
 
   private _diffuseTime(grid: VoxelGrid, dt: number): void {
-    const { W, H, D, buffer: buf } = grid;
+    const { W, H, D } = grid;
+    const buf = getMutableBuffer(grid);
     const WH = W * H;
     const α = 0.02 * dt * 60; // diffusion coefficient
 

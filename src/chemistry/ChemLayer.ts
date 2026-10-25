@@ -1,4 +1,5 @@
 import { VoxelGrid } from '../core/VoxelGrid';
+import { getMutableBuffer } from '../core/TrackedFloat32Array';
 import { CELL_FIELDS, F } from '../core/CellState';
 import type { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
 import type { InfinityScaleLODBoundarySnapshot } from '../infinity/InfinityScaleLODBoundarySnapshot';
@@ -81,7 +82,8 @@ export class ChemLayer {
     grid: VoxelGrid,
     context: InfinityScaleChunkExecutionContext,
   ): number {
-    const { W, H, buffer: buf } = grid;
+    const { W, H } = grid;
+    const buf = getMutableBuffer(grid);
     const WH = W * H;
     let committed = 0;
     for (const [index, delta] of [...this.pendingDensityTransfers]) {
@@ -107,7 +109,8 @@ export class ChemLayer {
     context: InfinityScaleChunkExecutionContext | null,
     boundarySnapshot?: InfinityScaleLODBoundarySnapshot,
   ): void {
-    const { W, H, D, buffer: buf } = grid;
+    const { W, H, D } = grid;
+    const buf = getMutableBuffer(grid);
     const WH = W * H;
     const densityTransfers = context ? new Map<number, number>() : null;
 

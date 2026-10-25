@@ -1,4 +1,5 @@
 import { VoxelGrid } from '../core/VoxelGrid';
+import { getMutableBuffer } from '../core/TrackedFloat32Array';
 import { SparseVoxelGrid } from '../core/SparseVoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
@@ -350,6 +351,7 @@ export class EntityLayer {
   }
 
   tick(grid: VoxelGrid, dt: number): void {
+    const buf = getMutableBuffer(grid);
     const originalEntities = new Map(this.entities);
     const entitySnapshots = new Map<number, Entity>();
     const entityMutableRefs = new Map<number, Pick<Entity, "cells" | "centroid" | "genome" | "memoryBuffer" | "colorRgb">>();
@@ -363,8 +365,8 @@ export class EntityLayer {
         colorRgb: currentEntity.colorRgb,
       });
     }
-    const bufferSnapshot = grid.buffer.slice();
-    const sparseBackBufferSnapshot = grid instanceof SparseVoxelGrid ? grid.backBuffer.slice() : null;
+    const bufferSnapshot = buf.slice();
+    const sparseBackBufferSnapshot = grid instanceof SparseVoxelGrid ? getMutableBuffer(grid, "back").slice() : null;
     const thresholdSnapshot = this.bioThreshold;
     const nextIdSnapshot = this.nextId;
     const extinctSnapshot = this.extinctCountValue;
@@ -374,9 +376,9 @@ export class EntityLayer {
     // reconciliation commit reuses this state rather than copying the large
     // grid a second time.
     const rollbackTick = (): void => {
-      grid.buffer.set(bufferSnapshot);
+      buf.set(bufferSnapshot);
       if (grid instanceof SparseVoxelGrid) {
-        if (sparseBackBufferSnapshot) grid.backBuffer.set(sparseBackBufferSnapshot);
+        if (sparseBackBufferSnapshot) getMutableBuffer(grid, "back").set(sparseBackBufferSnapshot);
         grid.syncDenseToChunks();
       }
       for (const [id, original] of originalEntities) {
@@ -413,7 +415,7 @@ export class EntityLayer {
     };
 
     try {
-    const { W, H, D, buffer: buf } = grid;
+    const { W, H, D } = grid;
     const n = grid.size;
 
     // Entity identity reconciliation now runs through a full-domain,
@@ -565,7 +567,7 @@ export class EntityLayer {
       // the large front/back buffers.
       () => undefined,
       (_staged, records) => {
-        const buf = grid.buffer;
+        const buf = getMutableBuffer(grid);
         // ENTITY_ID is owned by this layer. Clear all previous markers first;
         // the behavior pass below re-stamps every entity in the committed plan.
         for (let index = 0; index < grid.size; index++) {
@@ -654,7 +656,7 @@ export class EntityLayer {
     const nz = Math.max(0, Math.min(D - 1, pz));
 
     const childBase = (nz * WH + ny * W + nx) * CELL_FIELDS;
-    const buf = grid.buffer;
+    const buf = getMutableBuffer(grid);
 
     // Only spawn if target is low-bio
     if (buf[childBase + F.BIO_POTENTIAL] < 0.02) {

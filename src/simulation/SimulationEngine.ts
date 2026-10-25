@@ -1,4 +1,5 @@
 import { SparseVoxelGrid, type SparseVoxelGridSnapshot } from '../core/SparseVoxelGrid';
+import { getMutableBuffer } from '../core/TrackedFloat32Array';
 import { WORLD } from '../core/WorldConstants';
 import { F, CELL_FIELDS } from '../core/CellState';
 import { FieldPhysics } from './FieldPhysics';
@@ -88,7 +89,7 @@ export class SimulationEngine {
     try {
       const initialized = await this.gpu.init(this.grid.W, this.grid.H, this.grid.D);
       if (!initialized) return false;
-      this.gpu.upload(this.grid.buffer);
+      this.gpu.upload(getMutableBuffer(this.grid));
       this.gpu.uploadMaterials(buildMaterialBuffer());
       this._gpuReady = true;
       return true;
@@ -206,6 +207,7 @@ export class SimulationEngine {
 
       if (this._gpuReady) {
         const readbackGeneration = this._stateGeneration;
+        const readbackGridRevision = this.grid.mutationRevision;
         let data: Float32Array;
         try {
           this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
@@ -217,8 +219,13 @@ export class SimulationEngine {
           // before allowing a later step to proceed.
           this.resynchronizeGPUAndThrow(error, "GPU compute/readback failed");
         }
-        if (readbackGeneration !== this._stateGeneration) {
-          // Discard stale output without overwriting newer authoritative CPU state.
+        if (
+          readbackGeneration !== this._stateGeneration ||
+          readbackGridRevision !== this.grid.mutationRevision
+        ) {
+          // Direct buffers, CellState views, and sparse chunk writes advance the
+          // grid revision as well as engine-owned mutation generation. Never
+          // publish GPU output if either changed while readback was pending.
           this.resynchronizeGPUAndThrow(
             new Error('Discarded stale GPU readback: simulation state changed while awaiting GPU results'),
             "Stale GPU readback rejected",
@@ -282,7 +289,7 @@ export class SimulationEngine {
       this.laws.tick(this._worldMetrics());
 
       // Keep GPU in sync after CPU changes (presets, painting)
-      if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+      if (this._gpuReady) this.gpu.upload(getMutableBuffer(this.grid));
       if (this._tick % 500 === 0) {
         this.grid.markEmptyChunksInactive();
         this.grid.cullInactive();
@@ -314,7 +321,7 @@ export class SimulationEngine {
    */
   private resynchronizeGPUAndThrow(primaryError: unknown, context: string): never {
     try {
-      this.gpu.upload(this.grid.buffer);
+      this.gpu.upload(getMutableBuffer(this.grid));
     } catch (syncError) {
       // The device state is no longer trustworthy. Fail closed to CPU execution
       // so a later step cannot consume or overwrite from a stale GPU buffer.
@@ -353,6 +360,7 @@ export class SimulationEngine {
     // Invalidate any in-flight GPU result before snapshotting or exposing mutation.
     this._stateGeneration++;
     const recoveryBefore = this.captureCoreRecoveryState();
+    const endGridMutation = this.grid.beginMutation();
     try {
       const result = mutation();
       if (result !== null &&
@@ -362,7 +370,7 @@ export class SimulationEngine {
       }
       this.grid.syncDenseToChunks();
       this.grid.syncBackBuffersFromFront();
-      if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+      if (this._gpuReady) this.gpu.upload(getMutableBuffer(this.grid));
       this._stateGeneration++;
       return result;
     } catch (error) {
@@ -377,6 +385,8 @@ export class SimulationEngine {
         );
       }
       throw error;
+    } finally {
+      endGridMutation();
     }
   }
 
@@ -403,7 +413,7 @@ export class SimulationEngine {
 
     if (this._gpuReady) {
       try {
-        this.gpu.upload(this.grid.buffer);
+        this.gpu.upload(getMutableBuffer(this.grid));
       } catch (error) {
         // GPU upload is optional once the CPU state is coherent. Disable the
         // uncertain device path and keep the UI/runtime alive on CPU execution.
@@ -445,7 +455,7 @@ export class SimulationEngine {
       // syncTick is a CPU-authoritative physical step. Publish its committed
       // front buffer to the device so a subsequent GPU step cannot start from
       // stale pre-script state and overwrite the synchronous result.
-      if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+      if (this._gpuReady) this.gpu.upload(getMutableBuffer(this.grid));
       this._stateGeneration++;
     } catch (error) {
       if (recoveryBefore) {
@@ -522,11 +532,11 @@ export class SimulationEngine {
     this._stateGeneration++;
     try {
       apply(snapshot);
-      if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+      if (this._gpuReady) this.gpu.upload(getMutableBuffer(this.grid));
     } catch (error) {
       try {
         apply(previous);
-        if (this._gpuReady) this.gpu.upload(this.grid.buffer);
+        if (this._gpuReady) this.gpu.upload(getMutableBuffer(this.grid));
       } catch (rollbackError) {
         // A failed rollback may leave device buffers inconsistent with CPU state.
         // Disable GPU execution rather than allowing a later step to trust them.
@@ -549,15 +559,16 @@ export class SimulationEngine {
 
   private _worldMetrics(): WorldMetrics {
     const { grid } = this;
+    const buf = getMutableBuffer(grid);
     const n = grid.size;
     let totalE = 0, sumS = 0, sumI = 0, sumD = 0, sumB = 0;
     for (let i = 0; i < n; i++) {
       const o = i * CELL_FIELDS;
-      totalE += grid.buffer[o + F.ENERGY];
-      sumS   += grid.buffer[o + F.ENTROPY];
-      sumI   += grid.buffer[o + F.INFORMATION];
-      sumD   += grid.buffer[o + F.DENSITY];
-      sumB   += grid.buffer[o + F.BIO_POTENTIAL];
+      totalE += buf[o + F.ENERGY];
+      sumS   += buf[o + F.ENTROPY];
+      sumI   += buf[o + F.INFORMATION];
+      sumD   += buf[o + F.DENSITY];
+      sumB   += buf[o + F.BIO_POTENTIAL];
     }
     return {
       totalEnergy: totalE,
@@ -572,17 +583,19 @@ export class SimulationEngine {
   private _detectCausality(): void {
     const { grid } = this;
     const { W, H, D } = grid;
+    const buf = getMutableBuffer(grid);
     for (let z = 0; z < D; z++)
     for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
-      const cell = grid.cell(x, y, z);
-      const lin  = z * H * W + y * W + x;
-      const delta = cell.energy - this.prevEnergy[lin];
+      const lin = z * H * W + y * W + x;
+      const base = lin * CELL_FIELDS;
+      const energy = buf[base + F.ENERGY];
+      const delta = energy - this.prevEnergy[lin];
       if (Math.abs(delta) > WORLD.CAUSALITY_THRESHOLD) {
         this.causal.log(this._tick, x, y, z, lin, 'energy_spike', Math.round(delta));
-        cell.set(F.CAUSALITY_ID, this.causal.recent(1)[0]?.id ?? 0);
+        buf[base + F.CAUSALITY_ID] = this.causal.recent(1)[0]?.id ?? 0;
       }
-      this.prevEnergy[lin] = cell.energy;
+      this.prevEnergy[lin] = energy;
     }
   }
 

@@ -1,4 +1,5 @@
 import { VoxelGrid } from '../core/VoxelGrid';
+import { getMutableBuffer } from '../core/TrackedFloat32Array';
 import { CELL_FIELDS, F } from '../core/CellState';
 
 // Information physics treats the INFORMATION field as a physical quantity with:
@@ -9,7 +10,8 @@ import { CELL_FIELDS, F } from '../core/CellState';
 
 export class InfoPhysics {
   tick(grid: VoxelGrid, dt: number): void {
-    const { W, H, D, buffer: buf } = grid;
+    const { W, H, D } = grid;
+    const buf = getMutableBuffer(grid);
     const WH = W * H;
     const dtN = dt * 60; // normalized to 60 fps
 
