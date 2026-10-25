@@ -140,51 +140,59 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   }
 
   apply(mutation:Omit<WorldFieldMutation,'id'>):WorldFieldMutation {
-    assertMutation(mutation)
-    const committed={...mutation,id:this.nextId++}
+    // Detach all nested caller-owned payloads before retaining authoritative state.
+    const detached=structuredClone(mutation)
+    assertMutation(detached)
+    const committed={...detached,id:this.nextId}
+    this.nextId++
     this.mutations.push(committed);this.versionCounter++
     if(this.mutations.length>4096)this.mutations.splice(0,this.mutations.length-4096)
-    return committed
+    return structuredClone(committed)
   }
 
   applyRadial(kind:WorldFieldMutation['kind'],x:number,y:number,z:number,radius:number,delta:Partial<ScientificFieldSample>,metadata?:Record<string,unknown>){
     return this.apply({kind,x,y,z,radius,delta,metadata})
   }
   setGlobal(kind:'preset'|'law'|'composer',scale:Partial<Record<keyof ScientificFieldSample,number>>={},delta:Partial<ScientificFieldSample>={},metadata?:Record<string,unknown>){
-    assertOverlay({kind,scale,delta})
-    const committed={id:this.nextId,kind,metadata:{...metadata,globalScale:scale,globalDelta:delta,replacesPrevious:true}}
-    this.globalOverlays.set(kind,{scale:{...scale},delta:{...delta},metadata})
+    const detachedScale=structuredClone(scale)
+    const detachedDelta=structuredClone(delta)
+    const detachedMetadata=metadata===undefined?undefined:structuredClone(metadata)
+    assertOverlay({kind,scale:detachedScale,delta:detachedDelta})
+    const committed=structuredClone({id:this.nextId,kind,metadata:{...detachedMetadata,globalScale:detachedScale,globalDelta:detachedDelta,replacesPrevious:true}})
+    this.globalOverlays.set(kind,{scale:structuredClone(detachedScale),delta:structuredClone(detachedDelta),metadata:detachedMetadata===undefined?undefined:structuredClone(detachedMetadata)})
     this.versionCounter++
     this.nextId++
-    this.mutations.push(committed);if(this.mutations.length>4096)this.mutations.splice(0,this.mutations.length-4096);return committed
+    this.mutations.push(committed);if(this.mutations.length>4096)this.mutations.splice(0,this.mutations.length-4096);return structuredClone(committed)
   }
   clearGlobal(kind:'preset'|'law'|'composer'){if(!this.globalOverlays.delete(kind))return false;this.versionCounter++;return true}
   clear(){this.mutations=[];this.globalOverlays.clear();this.versionCounter++}
   getVersion(){return this.versionCounter}
   getMutationCount(){return this.mutations.length}
-  serialize(){return {schemaVersion:'world-field-state-v2',providerId:this.id,providerVersion:this.version,version:this.versionCounter,nextId:this.nextId,mutations:this.mutations.map(m=>({...m,metadata:m.metadata?{...m.metadata}:undefined})),globalOverlays:Array.from(this.globalOverlays.entries()).map(([kind,value])=>({kind,scale:{...value.scale},delta:{...value.delta},metadata:value.metadata?{...value.metadata}:undefined}))}}
+  serialize(){return structuredClone({schemaVersion:'world-field-state-v2',providerId:this.id,providerVersion:this.version,version:this.versionCounter,nextId:this.nextId,mutations:this.mutations,globalOverlays:Array.from(this.globalOverlays.entries()).map(([kind,value])=>({kind,scale:value.scale,delta:value.delta,metadata:value.metadata}))})}
   restore(state:ReturnType<MutableWorldFieldProvider['serialize']>){
-    if(!state||state.schemaVersion!=='world-field-state-v2'||state.providerId!==this.id||state.providerVersion!==this.version) throw new Error('Unsupported world field state')
-    if(!Number.isInteger(state.nextId)||state.nextId<1||!Number.isInteger(state.version)||state.version<0) throw new Error('Invalid world field state counters')
-    if(!Array.isArray(state.mutations)||!Array.isArray(state.globalOverlays)) throw new Error('Invalid world field state collections')
+    // Clone before validation/commit so the caller cannot mutate restored nested detached.
+    const detached=structuredClone(state)
+    if(!detached||detached.schemaVersion!=='world-field-state-v2'||detached.providerId!==this.id||detached.providerVersion!==this.version) throw new Error('Unsupported world field state')
+    if(!Number.isInteger(detached.nextId)||detached.nextId<1||!Number.isInteger(detached.version)||detached.version<0) throw new Error('Invalid world field state counters')
+    if(!Array.isArray(detached.mutations)||!Array.isArray(detached.globalOverlays)) throw new Error('Invalid world field state collections')
     let previousId = 0
-    for(const mutation of state.mutations){
+    for(const mutation of detached.mutations){
       if(!Number.isInteger(mutation.id)||mutation.id<=previousId) throw new Error('Invalid world field mutation id sequence')
       previousId = mutation.id
       const { id: _id, ...withoutId } = mutation
       assertMutation(withoutId)
     }
-    if(state.mutations.length>4096 || (state.mutations.length>0 && state.nextId<=state.mutations[state.mutations.length-1].id)) throw new Error('Invalid world field mutation counter')
-    const overlays = state.globalOverlays.map(entry => {
+    if(detached.mutations.length>4096 || (detached.mutations.length>0 && detached.nextId<=detached.mutations[detached.mutations.length-1].id)) throw new Error('Invalid world field mutation counter')
+    const overlays = detached.globalOverlays.map(entry => {
       assertOverlay(entry)
       return {kind:entry.kind,scale:{...entry.scale},delta:{...entry.delta},metadata:entry.metadata?{...entry.metadata}:undefined}
     })
-    // Commit only after every item has validated, so a corrupt snapshot cannot partially restore state.
-    this.mutations=state.mutations.map(m=>({...m,metadata:m.metadata?{...m.metadata}:undefined}))
+    // Commit only after every item has validated, so a corrupt snapshot cannot partially restore detached.
+    this.mutations=detached.mutations.map(m=>({...m,metadata:m.metadata?{...m.metadata}:undefined}))
     this.globalOverlays.clear()
     for(const entry of overlays) this.globalOverlays.set(entry.kind,{scale:entry.scale,delta:entry.delta,metadata:entry.metadata})
-    this.nextId=state.nextId
-    this.versionCounter=state.version
+    this.nextId=detached.nextId
+    this.versionCounter=detached.version
   }
   getState(){return {schemaVersion:'world-field-state-v1',providerId:this.id,providerVersion:this.version,version:this.versionCounter,mutationCount:this.mutations.length,lastMutation:this.mutations[this.mutations.length-1]??null}}
 }
