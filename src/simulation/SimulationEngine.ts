@@ -198,7 +198,25 @@ export class SimulationEngine {
         // From here until the frame completes, this synchronous commit path owns
         // its mutations. Roll back to this post-readback snapshot if any subsystem fails.
         frameRecoveryBefore = this.captureCoreRecoveryState();
-        if (data.length > 0) this.grid.buffer.set(data);
+        if (!(data instanceof Float32Array) || data.length !== this.grid.buffer.length) {
+          const receivedLength = data instanceof Float32Array ? data.length : "non-Float32Array";
+          const readbackError = new Error(
+            `Invalid GPU readback: expected ${this.grid.buffer.length} floats, received ${receivedLength}`,
+          );
+          // Keep the CPU grid authoritative if the device returns an empty or
+          // truncated payload; never treat a malformed readback as a successful tick.
+          try {
+            this.gpu.upload(this.grid.buffer);
+          } catch (uploadError) {
+            const uploadMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
+            throw new AggregateError(
+              [readbackError, uploadError],
+              `Invalid GPU readback and failed to resynchronize the device: ${uploadMessage}`,
+            );
+          }
+          throw readbackError;
+        }
+        this.grid.buffer.set(data);
         this.chemLayer.tick(this.grid, clampedDt * nSteps);
         this.entityLayer.tick(this.grid, clampedDt * nSteps);
         this.temporalLayer.tick(this.grid, clampedDt * nSteps);

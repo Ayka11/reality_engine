@@ -303,6 +303,37 @@ staleGpuMock.readback = async () => new Float32Array(staleGpuEngine.grid.buffer)
 await staleGpuEngine.step(0.016);
 assert.equal(staleGpuEngine.tick, 1, "GPU queue must remain usable after rejecting stale readback");
 
+// Empty/truncated GPU readback must fail closed instead of silently advancing
+// the simulation without a valid device result, and must keep CPU state intact.
+const malformedReadbackEngine = new SimulationEngine(8, 8, 4);
+(malformedReadbackEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+const malformedReadbackGpu = malformedReadbackEngine.gpu as unknown as {
+  writeParams: (...args: unknown[]) => void;
+  submitCompute: (nSteps: number) => void;
+  readback: () => Promise<Float32Array>;
+  upload: (data: Float32Array) => void;
+};
+malformedReadbackGpu.writeParams = () => undefined;
+malformedReadbackGpu.submitCompute = () => undefined;
+let malformedPayload = new Float32Array(0);
+let malformedReadbackUploadCount = 0;
+malformedReadbackGpu.readback = async () => new Float32Array(malformedPayload);
+malformedReadbackGpu.upload = () => { malformedReadbackUploadCount++; };
+const beforeMalformedReadback = malformedReadbackEngine.captureCoreRecoveryState();
+await assert.rejects(malformedReadbackEngine.step(0.016), /Invalid GPU readback: expected .* floats, received 0/);
+assert.deepEqual(malformedReadbackEngine.captureCoreRecoveryState(), beforeMalformedReadback,
+  "empty GPU readback must not mutate grid or advance simulation tick");
+malformedPayload = new Float32Array(malformedReadbackEngine.grid.buffer.length - 1);
+await assert.rejects(malformedReadbackEngine.step(0.016), /Invalid GPU readback: expected .* floats, received/);
+assert.deepEqual(malformedReadbackEngine.captureCoreRecoveryState(), beforeMalformedReadback,
+  "truncated GPU readback must not partially overwrite the authoritative grid");
+assert.equal(malformedReadbackUploadCount, 2,
+  "malformed GPU readback must attempt device resynchronization from the authoritative CPU grid");
+malformedPayload = new Float32Array(malformedReadbackEngine.grid.buffer);
+await malformedReadbackEngine.step(0.016);
+assert.equal(malformedReadbackEngine.tick, 1,
+  "GPU step queue must remain usable after malformed readback rejection");
+
 // Exercise the GPU readback commit path with a deterministic test double. The
 // injected failure occurs after readback is applied and causality updates, so
 // the frame must restore its local pre-commit snapshot without discarding any
