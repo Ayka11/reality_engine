@@ -87,4 +87,17 @@ await assert.rejects(() => customEngine.applyCustomStroke(makeStroke(), () => {
 assertBufferEqual(grid.buffer, beforeCustom, "failed custom stroke must restore dense state");
 assert.equal(customEngine.historyLength, 0, "failed custom stroke must not create history");
 
+grid.syncDenseToChunks = sync;
+const beforeCallbackFailure = grid.buffer.slice();
+const affectedChunk = grid.getOrCreateChunk(0, 0, 0);
+const chunkBeforeCallbackFailure = affectedChunk.buffer.slice();
+await assert.rejects(() => customEngine.applyCustomStroke(makeStroke(), () => {
+  grid.buffer[grid.idx(3, 3, 3) + F.ENERGY] = 555;
+  affectedChunk.buffer[affectedChunk.localIdx(3, 3, 3) + F.ENERGY] = 666;
+  throw new Error("injected custom callback failure");
+}), /injected custom callback failure/);
+assertBufferEqual(grid.buffer, beforeCallbackFailure, "failed custom callback must restore dense state");
+assertBufferEqual(affectedChunk.buffer, chunkBeforeCallbackFailure, "failed custom callback must restore direct chunk writes");
+assert.equal(customEngine.historyLength, 0, "failed custom callback must not create history");
+
 console.log("PASS: BrushEngine commit/undo/redo rollback on chunk synchronization failure");
