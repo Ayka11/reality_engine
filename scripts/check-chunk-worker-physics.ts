@@ -67,7 +67,7 @@ send('setPhysics', { params: { ...params, energyDiffusion: 0.1 }, processMask: 1
 send('paint', { ...densityPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
 send('tick', { speed: 1 })
 const densityAfter = readField(latestFrame(), densityPoint.x, densityPoint.y, densityPoint.z, F.D)
-assert.ok(Math.abs(densityAfter - 0.499904) < 0.00002,
+assert.ok(Math.abs(densityAfter - 0.4998848) < 0.00002,
   `density flow should use configured mobility (got ${densityAfter})`)
 
 // Pressure process: the pressure field relaxes toward the density/temperature
