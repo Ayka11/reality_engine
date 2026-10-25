@@ -170,7 +170,7 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   getMutationCount(){return this.mutations.length}
   serialize(){return structuredClone({schemaVersion:'world-field-state-v2',providerId:this.id,providerVersion:this.version,version:this.versionCounter,nextId:this.nextId,mutations:this.mutations,globalOverlays:Array.from(this.globalOverlays.entries()).map(([kind,value])=>({kind,scale:value.scale,delta:value.delta,metadata:value.metadata}))})}
   restore(state:ReturnType<MutableWorldFieldProvider['serialize']>){
-    // Clone before validation/commit so the caller cannot mutate restored nested detached.
+    // Clone before validation/commit so the caller cannot mutate restored nested state.
     const detached=structuredClone(state)
     if(!detached||detached.schemaVersion!=='world-field-state-v2'||detached.providerId!==this.id||detached.providerVersion!==this.version) throw new Error('Unsupported world field state')
     if(!Number.isInteger(detached.nextId)||detached.nextId<1||!Number.isInteger(detached.version)||detached.version<0) throw new Error('Invalid world field state counters')
@@ -187,7 +187,7 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
       assertOverlay(entry)
       return {kind:entry.kind,scale:{...entry.scale},delta:{...entry.delta},metadata:entry.metadata?{...entry.metadata}:undefined}
     })
-    // Commit only after every item has validated, so a corrupt snapshot cannot partially restore detached.
+    // Commit only after every item has validated, so a corrupt snapshot cannot partially restore state.
     this.mutations=detached.mutations.map(m=>({...m,metadata:m.metadata?{...m.metadata}:undefined}))
     this.globalOverlays.clear()
     for(const entry of overlays) this.globalOverlays.set(entry.kind,{scale:entry.scale,delta:entry.delta,metadata:entry.metadata})
