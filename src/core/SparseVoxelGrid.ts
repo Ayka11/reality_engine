@@ -541,9 +541,14 @@ export class SparseVoxelGrid {
     const endMutation = this.beginMutation();
     try {
       this.seedDenseWindowChunks();
-      // Prepare complete replacement buffers first. A coordinate/mapping/allocation
-      // failure during staging must not leave a subset of chunks published.
-      const stagedBuffers = new Map<Chunk, Float32Array>();
+
+      // Preflight every coordinate and destination before writing any chunk.
+      // Compact index plans avoid cloning multi-megabyte chunk buffers each frame.
+      const chunkIds = new Uint32Array(this.size);
+      const targetOffsets = new Uint32Array(this.size);
+      const chunks: Chunk[] = [];
+      const chunkIdByRef = new Map<Chunk, number>();
+      let cellIndex = 0;
       for (let z = 0; z < this.D; z++)
       for (let y = 0; y < this.H; y++)
       for (let x = 0; x < this.W; x++) {
@@ -554,16 +559,40 @@ export class SparseVoxelGrid {
         const [, lx] = this.globalToChunk(gx);
         const [, ly] = this.globalToChunk(gy);
         const [, lz] = this.globalToChunk(gz);
-        let chunkBuffer = stagedBuffers.get(chunk);
-        if (!chunkBuffer) {
-          chunkBuffer = chunk.buffer.slice();
-          stagedBuffers.set(chunk, chunkBuffer);
+        let chunkId = chunkIdByRef.get(chunk);
+        if (chunkId === undefined) {
+          chunkId = chunks.length;
+          chunkIdByRef.set(chunk, chunkId);
+          chunks.push(chunk);
         }
-        const start = this.idx(x, y, z);
-        chunkBuffer.set(this._sparseDenseBuffer.subarray(start, start + CELL_FIELDS), chunk.localIdx(lx, ly, lz));
+        const targetOffset = chunk.localIdx(lx, ly, lz);
+        if (!Number.isSafeInteger(targetOffset) || targetOffset < 0 ||
+            targetOffset + CELL_FIELDS > CHUNK_VOLUME * CELL_FIELDS) {
+          throw new Error("Dense-to-chunk synchronization produced an invalid target offset");
+        }
+        chunkIds[cellIndex] = chunkId;
+        targetOffsets[cellIndex] = targetOffset;
+        cellIndex++;
       }
-      // Publication begins only after every source cell has been staged.
-      for (const [chunk, buffer] of stagedBuffers) chunk.buffer.set(buffer);
+
+      const rawBuffers: Float32Array[] = [];
+      for (const chunk of chunks) {
+        const rawBuffer = getMutableBuffer(chunk);
+        if (rawBuffer.length !== CHUNK_VOLUME * CELL_FIELDS) {
+          throw new Error("Dense-to-chunk synchronization found an invalid chunk buffer");
+        }
+        rawBuffers.push(rawBuffer);
+      }
+
+      // The preflight guarantees valid mappings; commit copies only the dense
+      // window's cells, without per-frame copies of whole physical chunks.
+      for (let index = 0; index < this.size; index++) {
+        const sourceOffset = index * CELL_FIELDS;
+        rawBuffers[chunkIds[index]].set(
+          this._sparseDenseBuffer.subarray(sourceOffset, sourceOffset + CELL_FIELDS),
+          targetOffsets[index],
+        );
+      }
       this.markMutation();
     } finally {
       endMutation();
