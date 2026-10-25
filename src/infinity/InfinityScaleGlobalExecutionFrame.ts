@@ -90,22 +90,52 @@ export function fingerprintRuntimeCapabilities(
 }
 
 function fingerprintPlan(plan: InfinityScaleExecutionPlan): string {
-  return [
-    plan.revision,
-    // Chunk identity alone is insufficient: a changed LOD/AMR assignment alters
-    // ownership geometry even if the chunk key and plan revision are unchanged.
-    ...plan.chunks.map(chunk => `${chunk.key}:${chunk.lod}:${chunk.amr}`).sort(),
-    `|simulation-cells:${plan.simulationCellCount}`,
-    `|boundary-read-cells:${plan.boundaryReadCellCount}`,
-    "|",
-    ...plan.boundaryReadChunks.slice().sort(),
-    "|relations",
-    ...plan.boundaryReadRelations
-      .map(relation =>
-        `${relation.sourceChunk}>${relation.targetChunk}:${relation.relation}`,
-      )
-      .sort(),
-  ].join("|");
+  // Include all execution-affecting scheduling and geometry fields, not just
+  // chunk keys. The plan object is mutable, so a same-revision change to a
+  // distance, budget, observer, dependency, or layer order must invalidate the
+  // in-flight frame instead of silently committing against a different plan.
+  const chunks = plan.chunks
+    .map(chunk => ({
+      key: chunk.key,
+      lod: chunk.lod,
+      amr: chunk.amr,
+      distance: chunk.distance,
+    }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+
+  const relations = plan.boundaryReadRelations
+    .map(relation => ({
+      sourceChunk: relation.sourceChunk,
+      targetChunk: relation.targetChunk,
+      relation: relation.relation,
+    }))
+    .sort((a, b) =>
+      `${a.sourceChunk}>${a.targetChunk}:${a.relation}`.localeCompare(
+        `${b.sourceChunk}>${b.targetChunk}:${b.relation}`,
+      ),
+    );
+
+  return JSON.stringify({
+    revision: plan.revision,
+    observer: {
+      x: plan.observer.x,
+      y: plan.observer.y,
+      z: plan.observer.z,
+    },
+    chunks,
+    simulationBudget: plan.simulationBudget,
+    requestedSimulationCount: plan.requestedSimulationCount,
+    selectedSimulationCount: plan.selectedSimulationCount,
+    maxSimulatingChunks: plan.maxSimulatingChunks,
+    boundaryReadChunks: [...plan.boundaryReadChunks].sort(),
+    boundaryReadCount: plan.boundaryReadCount,
+    boundaryReadRelations: relations,
+    simulationCellCount: plan.simulationCellCount,
+    boundaryReadCellCount: plan.boundaryReadCellCount,
+    // Layer order can affect execution order, so preserve it exactly.
+    localExecutionLayers: [...plan.localExecutionLayers],
+    globalExecutionLayers: [...plan.globalExecutionLayers],
+  });
 }
 
 export function validateInfinityScaleGlobalFrameCommit(
