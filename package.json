@@ -55,7 +55,8 @@
     "test:simulation-engine-cpu-frame-rollback": "npx --yes tsx scripts/check-simulation-engine-cpu-frame-rollback.ts",
     "test:simulation-engine-stale-readback": "npx --yes tsx scripts/check-simulation-engine-stale-readback.ts",
     "test:mutable-buffer-contract": "node scripts/check-mutable-buffer-contract.mjs",
-    "test:brush-engine-transaction": "npx --yes tsx scripts/check-brush-engine-transaction.ts"
+    "test:brush-engine-transaction": "npx --yes tsx scripts/check-brush-engine-transaction.ts",
+    "test:greedy-mesher": "npx --yes tsx scripts/check-greedy-mesher.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
