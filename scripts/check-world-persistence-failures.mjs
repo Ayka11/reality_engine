@@ -494,7 +494,7 @@ climateRuntime.tick(0.016);
 climateRuntime.restore(climateSaved);
 assert.deepEqual(climateRuntime.snapshot(), climateSaved, "climate snapshot must restore wind/pressure and tick phase");
 climateRuntime.reset();
-assert.deepEqual(climateRuntime.snapshot(), new RuntimeClimate(climateGrid).snapshot(),
+assert.deepEqual(climateRuntime.snapshot(), new RuntimeClimate(auxiliaryClimateGrid).snapshot(),
   "climate reset must return to constructor baseline");
 
 const auxiliaryMultiscaleGrid = fakeGrid(16, 16, 8);
