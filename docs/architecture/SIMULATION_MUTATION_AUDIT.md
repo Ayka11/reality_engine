@@ -2,8 +2,8 @@
 
 ## Current implementation update — 2026-10-25
 
-**Current code head at this audit update:** `186cbc5a541f9433b86c7d09088fbd10129e48f6`  
-**Validation:** Reality Engine CI #1358 passed on this exact head, including the configured recovery/regression suite, build, Docker/Hugging Face checks, and browser acceptance. [Run #1358](https://github.com/Ayka11/reality_engine/actions/runs/40198814461). This validates the current change set, not every untracked internal mutation path.
+**Current code head at this audit update:** `a5c446184c0e11513b21478bd3e0c2e05803dfbd`  
+**Validation:** Reality Engine CI #1364 passed on this exact head, including the stale-readback regression, build, Docker/Hugging Face checks, and browser acceptance. [Run #1364](https://github.com/Ayka11/reality_engine/actions/runs/40199850125). This validates the checked change set, not every internal mutation path.
 
 This update supersedes earlier statements below that public dense/chunk buffer writes and `CellState` setters are entirely untracked. The current implementation adds:
 
@@ -14,6 +14,7 @@ This update supersedes earlier statements below that public dense/chunk buffer w
 - `SimulationEngine.step()` captures both engine generation and grid mutation revision before GPU readback, and rejects GPU output if either changes while awaiting the result.
 - Regression tests cover tracked buffer writes and stale GPU readback; latest-head CI #1358 also passes browser acceptance.
 - Public chunk metadata collections (`dirtyChunks`, `chunkOwners`) and `activeChunkRange` now participate in mutation revision tracking, with regression coverage for pending readback invalidation and Set/Map delete/clear operations.
+- `MutationTrackedChunkMap` now registers one grid listener per distinct chunk instance with reference counting, detaches it when the chunk is replaced/deleted/cleared, and avoids duplicate registration on same-key re-insertion. The stale-readback regression verifies idempotent insertion, replacement, deletion, and clear behavior.
 
 **Important internal-alias caveat:** `getMutableBuffer()` advances the revision when it returns a raw mutable typed-array alias, but cannot observe later writes through that same alias. Such aliases must remain synchronous and transaction-local; never retain one across `await` or an ownership boundary. The remaining audit must verify all call sites and replace any cross-boundary alias with a scoped mutation API.
 
