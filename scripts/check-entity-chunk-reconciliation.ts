@@ -193,10 +193,13 @@ assert.throws(
   /Dense\/chunk entity ownership mismatch/,
   "production EntityLayer tick must reject chunk-only ENTITY_ID writes before reconciliation",
 );
-sparseOwnershipGrid.syncDenseToChunks();
 assert.doesNotThrow(
   () => sparseOwnershipGrid.assertDenseEntityOwnershipSynchronized(),
-  "explicit dense-to-chunk synchronization must restore ownership consistency",
+  "EntityLayer rollback must restore dense/chunk ownership after rejecting the inconsistent tick",
+);
+assert.doesNotThrow(
+  () => sparseOwnershipLayer.tick(sparseOwnershipGrid, 1 / 60),
+  "a clean retry must succeed after rollback restores dense/chunk ownership",
 );
 
 console.log("Entity chunk reconciliation boundary safety: PASS");
