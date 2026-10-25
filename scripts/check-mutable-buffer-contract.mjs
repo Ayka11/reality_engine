@@ -203,28 +203,116 @@ for (const filePath of sourcePaths) {
   for (const [key, methodNode] of methodNodes) {
     if (!key) continue;
     const aliases = new Set();
+    const aliasDeclarations = [];
+    function isFunctionNode(node) {
+      return ts.isArrowFunction(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isFunctionDeclaration(node) ||
+        ts.isMethodDeclaration(node) ||
+        ts.isGetAccessorDeclaration(node) ||
+        ts.isSetAccessorDeclaration(node) ||
+        ts.isConstructorDeclaration(node);
+    }
+    function functionOwnerFor(node) {
+      let current = node;
+      while (current) {
+        if (isFunctionNode(current)) return current;
+        if (current === methodNode) break;
+        current = current.parent;
+      }
+      return methodNode;
+    }
+    function isFunctionAncestor(ancestor, descendant) {
+      let current = descendant;
+      while (current) {
+        if (current === ancestor) return true;
+        current = current.parent;
+      }
+      return false;
+    }
     function collectAliases(node) {
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
           node.expression.text === "getMutableBuffer") {
         const parent = node.parent;
         if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name) &&
-            ["buf", "front", "back"].includes(parent.name.text)) aliases.add(parent.name.text);
+            ["buf", "front", "back"].includes(parent.name.text)) {
+          aliases.add(parent.name.text);
+          aliasDeclarations.push({ name: parent.name.text, owner: functionOwnerFor(parent), node: parent.name });
+        }
         if (ts.isBinaryExpression(parent) &&
             parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
             ts.isIdentifier(parent.left) &&
-            ["chunkBuffer", "sourceBuffer"].includes(parent.left.text)) aliases.add(parent.left.text);
+            ["chunkBuffer", "sourceBuffer"].includes(parent.left.text)) {
+          aliases.add(parent.left.text);
+          aliasDeclarations.push({ name: parent.left.text, owner: functionOwnerFor(node), node: parent.left });
+        }
       }
       ts.forEachChild(node, collectAliases);
     }
     collectAliases(methodNode);
     if (aliases.size === 0) continue;
 
+    function containsAwaitOrYield(fn) {
+      let found = false;
+      function visit(current) {
+        if (current !== fn && isFunctionNode(current)) return;
+        if (ts.isAwaitExpression(current) || ts.isYieldExpression(current)) found = true;
+        ts.forEachChild(current, visit);
+      }
+      visit(fn);
+      return found;
+    }
+    function isApprovedSynchronousRollbackClosure(fn, aliasName) {
+      // Explicit exception: the rollback closure belongs to the synchronous EntityLayer reconciliation transaction.
+      if (path !== "src/simulation/EntityLayer.ts" || method !== "tick" || aliasName !== "buf") return false;
+      const declaration = fn.parent;
+      if (!ts.isVariableDeclaration(declaration) || declaration.initializer !== fn ||
+          !ts.isIdentifier(declaration.name) || declaration.name.text !== "rollbackTick" ||
+          containsAwaitOrYield(fn)) return false;
+      let passedToReconcile = false;
+      let invalidReference = false;
+      function visitOwner(current) {
+        if (ts.isIdentifier(current) && current.text === "rollbackTick") {
+          const parent = current.parent;
+          if (ts.isVariableDeclaration(parent) && parent.name === current) {
+            // Declaration name.
+          } else {
+            const expectedArgument = ts.isCallExpression(parent) &&
+              ts.isPropertyAccessExpression(parent.expression) &&
+              parent.expression.name.text === "_reconcileFullDomain" &&
+              parent.arguments.some(argument => argument === current);
+            if (expectedArgument) passedToReconcile = true;
+            else invalidReference = true;
+          }
+        }
+        ts.forEachChild(current, visitOwner);
+      }
+      visitOwner(methodNode);
+      return passedToReconcile && !invalidReference;
+    }
+
+    const reportedClosureAliases = new Set();
     function inspectAliasUse(node) {
       if (ts.isIdentifier(node) && aliases.has(node.text)) {
         const parent = node.parent;
         const isDeclarationName =
           (ts.isVariableDeclaration(parent) && parent.name === node) ||
           (ts.isParameter(parent) && parent.name === node);
+        const occurrenceOwner = functionOwnerFor(node);
+        let binding = null;
+        for (const candidate of aliasDeclarations) {
+          if (candidate.name !== node.text || !isFunctionAncestor(candidate.owner, occurrenceOwner)) continue;
+          if (!binding || isFunctionAncestor(binding.owner, candidate.owner)) binding = candidate;
+        }
+        if (!isDeclarationName && binding && binding.owner !== occurrenceOwner &&
+            !isApprovedSynchronousRollbackClosure(occurrenceOwner, node.text)) {
+          const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+          const key = `${line}:${node.text}`;
+          if (!reportedClosureAliases.has(key)) {
+            reportedClosureAliases.add(key);
+            errors.push(`${path}:${line}: raw buffer alias "${node.text}" is captured by a nested callback; prove synchronous transaction-local lifetime or remove the capture`);
+          }
+        }
         if (!isDeclarationName && ts.isReturnStatement(parent) && parent.expression === node) {
           const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be returned from its audited method`);
