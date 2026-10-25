@@ -413,4 +413,43 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
     throw new Error("Adaptive LOD bridge could not be reused after stale-plan rejection");
   }
 
+
+  // A geometry mutation with the same plan revision and chunk key must still
+  // invalidate the frame when LOD/AMR ownership changes.
+  const geometryPlan: InfinityScaleExecutionPlan = {
+    ...plan,
+    chunks: [{ key: "0:0,0,0", lod: 0, amr: 1, distance: 0 }],
+    simulationCellCount: 8,
+  };
+  const geometryFrame0 = beginInfinityScaleGlobalFrame(geometryPlan, 0, 1);
+  const geometryFrame1 = advanceInfinityScaleGlobalFrame(geometryFrame0, "local-execution");
+  const geometryFrame2 = advanceInfinityScaleGlobalFrame(geometryFrame1, "local-commit");
+  const geometryFrame = advanceInfinityScaleGlobalFrame(geometryFrame2, "boundary-reconciliation");
+  const geometryState = new InfinityScaleLODState(2);
+  const geometryStateRevision = geometryState.getRevision();
+  const geometryBridge = new InfinityScaleAdaptiveLODTransactionBridge(geometryPlan, geometryState);
+
+  geometryBridge.begin(geometryFrame);
+  geometryPlan.chunks[0].lod = 1;
+  geometryPlan.chunks[0].amr = 2;
+  let changedLODRejected = false;
+  try {
+    geometryBridge.commit(geometryFrame, []);
+  } catch (error) {
+    changedLODRejected = error instanceof Error && error.message.includes("ownership geometry changed");
+  }
+  if (!changedLODRejected) {
+    throw new Error("Adaptive LOD bridge accepted changed chunk LOD/AMR under the same plan revision");
+  }
+  if (geometryState.getRevision() !== geometryStateRevision || geometryState.keys().length !== 0) {
+    throw new Error("Stale chunk LOD/AMR rejection mutated authoritative LOD state");
+  }
+
+  geometryPlan.chunks[0].lod = 0;
+  geometryPlan.chunks[0].amr = 1;
+  geometryBridge.begin(geometryFrame);
+  if (!geometryBridge.commit(geometryFrame, []).committed) {
+    throw new Error("Adaptive LOD bridge could not be reused after changed LOD/AMR rejection");
+  }
+
 }
