@@ -221,6 +221,20 @@ sparseSubstepLayer.tick(sparseSubstepGrid, 1 / 60);
 assert.doesNotThrow(() => sparseSubstepGrid.assertDenseEntityOwnershipSynchronized(),
   "the following sparse substep must begin with consistent ownership");
 
+// Exercise the actual frame batcher: SimulationEngine invokes EntityLayer once
+// for each logical substep before its frame-end full chunk synchronization.
+const batchedEngine = new SimulationEngine(8, 8, 1);
+for (const cell of [9, 10]) {
+  batchedEngine.grid.buffer[cell * CELL_FIELDS + F.BIO_POTENTIAL] = 1;
+  batchedEngine.grid.buffer[cell * CELL_FIELDS + F.ENERGY] = 200;
+}
+batchedEngine.grid.syncDenseToChunks();
+await batchedEngine.step(1 / 60, 2);
+assert.equal(batchedEngine.entityLayer.getEntities().length, 1,
+  "a two-substep production frame must preserve the entity across both substeps");
+assert.doesNotThrow(() => batchedEngine.grid.assertDenseEntityOwnershipSynchronized(),
+  "SimulationEngine must finish a batched frame with dense/chunk entity IDs synchronized");
+
 console.log("Entity chunk reconciliation boundary safety: PASS");
 
 
