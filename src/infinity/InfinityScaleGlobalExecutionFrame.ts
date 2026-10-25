@@ -92,7 +92,11 @@ export function fingerprintRuntimeCapabilities(
 function fingerprintPlan(plan: InfinityScaleExecutionPlan): string {
   return [
     plan.revision,
-    ...plan.chunks.map(chunk => chunk.key).sort(),
+    // Chunk identity alone is insufficient: a changed LOD/AMR assignment alters
+    // ownership geometry even if the chunk key and plan revision are unchanged.
+    ...plan.chunks.map(chunk => `${chunk.key}:${chunk.lod}:${chunk.amr}`).sort(),
+    `|simulation-cells:${plan.simulationCellCount}` ,
+    `|boundary-read-cells:${plan.boundaryReadCellCount}` ,
     "|",
     ...plan.boundaryReadChunks.slice().sort(),
     "|relations",
