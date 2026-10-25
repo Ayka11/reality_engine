@@ -11,6 +11,8 @@ import {
 import { brushGeometryWeight } from '../brushes/BrushGeometry'
 import { applyBrushOperation } from '../brushes/BrushMath'
 import type { BrushFalloff, BrushOperation, BrushShape, BrushVerticalExtent } from '../brushes/BrushContract'
+import { PROC, defaultProcessMask } from '../process/ProcessDef'
+import { DEFAULT_PARAMS, type PhysicsParams } from '../laws/MetaLaw'
 
 const grid = new ChunkGrid()
 const W = GRID_W, H = GRID_H, D = GRID_D
@@ -25,8 +27,68 @@ const restoredChunkKeys = new Set<number>()
 const restoreBeforeChunks = new Map<number, Float32Array | null>()
 const restoreBeforeDirtyChunks = new Set<number>()
 const causal: Array<{ id: number; tick: number; x: number; y: number; z: number; delta: number }> = []
-let DIFF = 0.09, ENT = 0.0004, INFO = 0.35, BIO = 0.25
-const activeProcs = new Set<string>(['thermo', 'bio'])
+let physicsParams: PhysicsParams = { ...DEFAULT_PARAMS }
+let processMask = defaultProcessMask()
+
+const LEGACY_PROCESS_IDS: Record<string, number> = {
+  energy: PROC.ENERGY_DIFFUSION,
+  thermo: PROC.TEMP_DIFFUSION,
+  density: PROC.DENSITY_FLOW,
+  entropy: PROC.ENTROPY_GROWTH,
+  info: PROC.INFORMATION,
+  bio: PROC.BIO_POTENTIAL,
+  wave: PROC.WAVE_PROPAGATION,
+  gravity: PROC.GRAVITY,
+  phase: PROC.PHASE_TRANSITION,
+  metabolism: PROC.METABOLISM,
+  signal: PROC.SIGNAL_PROPAGATION,
+  crystallization: PROC.CRYSTALLIZATION,
+  radiation: PROC.RADIATION,
+  pressure: PROC.PRESSURE_DIFFUSION,
+  rotation: PROC.FIELD_ROTATION,
+  erosion: PROC.EROSION,
+}
+
+function isProcessActive(id: number): boolean {
+  return (processMask & (1 << id)) !== 0
+}
+
+function setLegacyProcesses(names: string[]): void {
+  processMask = 0
+  for (const name of names) {
+    const id = LEGACY_PROCESS_IDS[name]
+    if (id !== undefined) processMask |= 1 << id
+  }
+}
+
+function applyPhysicsParams(candidate: unknown): void {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return
+  const next = { ...physicsParams }
+  for (const key of Object.keys(DEFAULT_PARAMS) as (keyof PhysicsParams)[]) {
+    const value = (candidate as Record<string, unknown>)[key]
+    if (value !== undefined) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw new TypeError(`Invalid physics parameter: ${key}`)
+      }
+      next[key] = value
+    }
+  }
+  physicsParams = next
+}
+
+function applyLegacyScalars(data: Record<string, unknown>): void {
+  const aliases: Array<[string, keyof PhysicsParams]> = [
+    ['DIFF', 'energyDiffusion'],
+    ['ENT', 'entropyGrowthRate'],
+    ['INFO', 'infoGrowthRate'],
+  ]
+  for (const [legacy, canonical] of aliases) {
+    const value = data[legacy]
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      physicsParams = { ...physicsParams, [canonical]: value }
+    }
+  }
+}
 
 type CellImage = Map<number, Float32Array>
 type SculptHistoryRecord = { before: CellImage; after: CellImage }
@@ -121,38 +183,54 @@ function simStep(dt: number) {
     const D_ = chunk[base + F.D], I = chunk[base + F.I]
     lapE -= nc * E; lapT -= nc * T; lapD -= nc * D_; lapI -= nc * I
 
-    const newE = activeProcs.has('energy')
-      ? Math.max(0, Math.min(9999, E + DIFF * lapE * dt))
+    const p = physicsParams
+    const newE = isProcessActive(PROC.ENERGY_DIFFUSION)
+      ? Math.max(0, Math.min(9999, E + p.energyDiffusion * lapE * dt))
       : E
     grid.set(x, y, z, F.E, newE)
 
-    if (activeProcs.has('thermo')) {
-      grid.set(x, y, z, F.T, Math.max(0, Math.min(2000, T + 0.07 * lapT * dt + newE * 0.002 * dt)))
+    if (isProcessActive(PROC.TEMP_DIFFUSION)) {
+      grid.set(x, y, z, F.T, Math.max(0, Math.min(2000,
+        T + p.tempDiffusion * lapT * dt + newE * p.tempEnergyCoupling * dt)))
+    }
+    if (isProcessActive(PROC.DENSITY_FLOW)) {
       grid.set(x, y, z, F.D, Math.max(0, Math.min(1, D_ + 0.012 * lapD * dt)))
     }
-    if (activeProcs.has('info'))
-      grid.set(x, y, z, F.I, Math.max(0, Math.min(999, I + 0.04 * lapI * dt - chunk[base + F.S] * 0.2 * dt)))
+    if (isProcessActive(PROC.INFORMATION)) {
+      const infoGrowth = newE > p.infoGrowthThreshE && D_ > p.infoGrowthThreshD
+        ? p.infoGrowthRate * Math.max(0, 1 - chunk[base + F.S] * p.infoEntropySupp) * dt
+        : 0
+      grid.set(x, y, z, F.I, Math.max(0, Math.min(999,
+        I + 0.04 * lapI * dt + infoGrowth)))
+    }
 
-    const dS = activeProcs.has('entropy')
-      ? (ENT + newE * 0.00004 + (chunk[base + F.T] || 0) * 0.000015) * dt * 60
+    const dS = isProcessActive(PROC.ENTROPY_GROWTH)
+      ? (p.entropyGrowthRate + newE * p.entropyEnergyCoupling
+        + (chunk[base + F.T] || 0) * 0.000015) * dt * 60
       : 0
     const newS = Math.max(0, Math.min(1, chunk[base + F.S] + dS))
     grid.set(x, y, z, F.S, newS)
     grid.set(x, y, z, F.E, Math.max(0, newE * (1 - newS * 0.0002 * dt * 60)))
 
-    if (activeProcs.has('bio')) {
-      const sup = Math.max(0, 1 - newS * 0.9)
+    if (isProcessActive(PROC.BIO_POTENTIAL) || isProcessActive(PROC.METABOLISM)) {
+      const sup = Math.max(0, 1 - newS * p.infoEntropySupp)
       const D2 = grid.get(x, y, z, F.D)
-      if (newE > 80 && D2 > BIO && sup > 0) {
-        grid.add(x, y, z, F.I, INFO * sup * dt)
-        grid.add(x, y, z, F.BIO, 0.015 * sup * dt)
+      if (newE > p.infoGrowthThreshE && D2 > p.infoGrowthThreshD && sup > 0) {
+        if (isProcessActive(PROC.METABOLISM)) {
+          grid.add(x, y, z, F.I, p.infoGrowthRate * sup * dt)
+          grid.add(x, y, z, F.BIO, 0.015 * sup * dt)
+        } else {
+          grid.add(x, y, z, F.BIO, 0.015 * sup * dt)
+        }
       } else {
-        grid.set(x, y, z, F.I,   Math.max(0, (grid.get(x, y, z, F.I)   || 0) * Math.pow(0.9985, dt * 60)))
-        grid.set(x, y, z, F.BIO, Math.max(0, (grid.get(x, y, z, F.BIO) || 0) * Math.pow(0.996,  dt * 60)))
+        if (isProcessActive(PROC.METABOLISM)) {
+          grid.set(x, y, z, F.I, Math.max(0, (grid.get(x, y, z, F.I) || 0) * Math.pow(0.9985, dt * 60)))
+        }
+        grid.set(x, y, z, F.BIO, Math.max(0, (grid.get(x, y, z, F.BIO) || 0) * Math.pow(0.996, dt * 60)))
       }
     }
 
-    grid.add(x, y, z, F.TAU, dt * (1 + newE * 0.0008 + newS * 0.2))
+    grid.add(x, y, z, F.TAU, dt * (p.timeBaseRate + newE * p.timeEnergyBoost + newS * 0.2))
 
     const delta = grid.get(x, y, z, F.E) - E
     if (Math.abs(delta) > 55) {
@@ -342,9 +420,13 @@ self.onmessage = (e: MessageEvent) => {
     clearSculptHistory()
     grid.clear()
     const a = data
-    DIFF = a.DIFF || 0.09; ENT = a.ENT || 0.0004
-    INFO = a.INFO || 0.35; BIO  = a.BIO  || 0.25
-    activeProcs.clear();(a.procs || ['thermo', 'bio']).forEach((p: string) => activeProcs.add(p))
+    if (a.params) applyPhysicsParams(a.params)
+    else applyLegacyScalars(a)
+    if (Number.isSafeInteger(a.processMask) && a.processMask >= 0 && a.processMask <= 0xffff) {
+      processMask = a.processMask
+    } else if (Array.isArray(a.procs)) {
+      setLegacyProcesses(a.procs as string[])
+    }
     tick = 0; causal.length = 0; evCount = 0
 
     for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -397,7 +479,7 @@ self.onmessage = (e: MessageEvent) => {
       }
     } else if (nm === 'clear') {
       // grid was already cleared above; keep the explicit runtime contract.
-      activeProcs.clear()
+      processMask = 0
     } else if (nm === 'life') {
       for (let k = 0; k < 60; k++) {
         const x = 10 + Math.floor(Math.random() * (W - 20))
@@ -513,26 +595,33 @@ self.onmessage = (e: MessageEvent) => {
         }
       }
       // Set realistic town physics params
-      DIFF = 0.12; ENT = 0.00015; INFO = 0.45; BIO = 0.32
-      activeProcs.clear(); ['thermo', 'bio', 'info'].forEach(p => activeProcs.add(p))
+      physicsParams = { ...physicsParams, energyDiffusion: 0.12, entropyGrowthRate: 0.00015, infoGrowthRate: 0.45 }
+      setLegacyProcesses(['thermo', 'bio', 'info'])
     }
     ;(self as unknown as Worker).postMessage({
       cmd: 'presetApplied',
       name: nm,
       tick,
       stats: { ...grid.stats },
-      processes: Array.from(activeProcs),
-      params: { DIFF, ENT, INFO, BIO }
+      processMask,
+      processes: Object.entries(LEGACY_PROCESS_IDS).filter(([, id]) => isProcessActive(id)).map(([name]) => name),
+      params: { ...physicsParams }
     })
     return
   }
 
+  if (cmd === 'setPhysics') {
+    if (data.params) applyPhysicsParams(data.params)
+    if (Number.isSafeInteger(data.processMask) && data.processMask >= 0 && data.processMask <= 0xffff) {
+      processMask = data.processMask
+    }
+    return
+  }
+
   if (cmd === 'setParams') {
-    if (data.DIFF !== undefined) DIFF = data.DIFF
-    if (data.ENT  !== undefined) ENT  = data.ENT
-    if (data.INFO !== undefined) INFO = data.INFO
-    if (data.BIO  !== undefined) BIO  = data.BIO
-    if (data.procs) { activeProcs.clear(); (data.procs as string[]).forEach(p => activeProcs.add(p)) }
+    // Backward-compatible adapter for the node-law editor's legacy scalar names.
+    applyLegacyScalars(data as Record<string, unknown>)
+    if (data.procs) setLegacyProcesses(data.procs as string[])
     return
   }
 
