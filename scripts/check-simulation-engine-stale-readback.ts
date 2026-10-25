@@ -69,6 +69,23 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   await assert.rejects(staleChunkStep.step, /Discarded stale GPU readback/);
   assert.equal(chunk.buffer[chunkFieldIndex], 202, "stale GPU readback must not mutate newer chunk state");
 
+  // The range getter must be detached; whole-range replacement is revision-tracked.
+  const originalRange = engine.grid.activeChunkRange;
+  const detachedRange = engine.grid.activeChunkRange;
+  detachedRange.minX = originalRange.minX - 100;
+  assert.equal(engine.grid.activeChunkRange.minX, originalRange.minX,
+    "nested writes to a returned active-chunk range must not mutate authoritative state");
+  const staleRangeStep = await beginPendingReadback(engine, engine.grid.buffer.slice());
+  const beforeRangeMutation = engine.grid.mutationRevision;
+  engine.grid.activeChunkRange = { ...originalRange, minX: originalRange.minX - 1 };
+  assert.ok(engine.grid.mutationRevision > beforeRangeMutation,
+    "active-chunk range replacement must advance grid revision");
+  staleRangeStep.release();
+  await assert.rejects(staleRangeStep.step, /Discarded stale GPU readback/);
+  assert.equal(engine.grid.activeChunkRange.minX, originalRange.minX - 1,
+    "stale GPU data must not overwrite newer active-chunk range metadata");
+  engine.grid.activeChunkRange = originalRange;
+
   // Public chunk metadata collections are authoritative mutation surfaces too.
   // Mutating them while readback is pending must invalidate the in-flight result.
   const staleDirtyStep = await beginPendingReadback(engine, engine.grid.buffer.slice());
