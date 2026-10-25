@@ -40,8 +40,8 @@ export class SparseVoxelGrid {
   readonly D: number;
   readonly size: number;
   readonly chunks: Map<string, Chunk>;
-  readonly dirtyChunks = new Set<string>();
-  readonly chunkOwners = new Map<string, string>();
+  readonly dirtyChunks: Set<string>;
+  readonly chunkOwners: Map<string, string>;
   activeChunkRange = { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 };
 
   private _sparseDenseBuffer: Float32Array;
@@ -58,6 +58,8 @@ export class SparseVoxelGrid {
     this.H = H;
     this.D = D;
     this.size = W * H * D;
+    this.dirtyChunks = new MutationTrackedSet(() => this.markMutation());
+    this.chunkOwners = new MutationTrackedMap(() => this.markMutation());
     this._sparseDenseBuffer = new Float32Array(this.size * CELL_FIELDS);
     this._sparseDenseBackBuffer = new Float32Array(this.size * CELL_FIELDS);
     this._sparseDenseBufferView = createTrackedFloat32Array(this._sparseDenseBuffer, () => this.markMutation());
@@ -669,6 +671,53 @@ export class SparseVoxelGrid {
 
 export { CHUNK_SIZE, CHUNK_VOLUME };
 
+
+class MutationTrackedSet<T> extends Set<T> {
+  constructor(private readonly onMutation: () => void) { super(); }
+
+  override add(value: T): this {
+    const existed = this.has(value);
+    super.add(value);
+    if (!existed) this.onMutation();
+    return this;
+  }
+
+  override delete(value: T): boolean {
+    const deleted = super.delete(value);
+    if (deleted) this.onMutation();
+    return deleted;
+  }
+
+  override clear(): void {
+    if (this.size === 0) return;
+    super.clear();
+    this.onMutation();
+  }
+}
+
+class MutationTrackedMap<K, V> extends Map<K, V> {
+  constructor(private readonly onMutation: () => void) { super(); }
+
+  override set(key: K, value: V): this {
+    const existed = this.has(key);
+    const previous = this.get(key);
+    super.set(key, value);
+    if (!existed || previous !== value) this.onMutation();
+    return this;
+  }
+
+  override delete(key: K): boolean {
+    const deleted = super.delete(key);
+    if (deleted) this.onMutation();
+    return deleted;
+  }
+
+  override clear(): void {
+    if (this.size === 0) return;
+    super.clear();
+    this.onMutation();
+  }
+}
 
 class MutationTrackedChunkMap extends Map<string, Chunk> {
   constructor(
