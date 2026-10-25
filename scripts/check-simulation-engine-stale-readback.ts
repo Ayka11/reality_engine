@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { F } from "../src/core/CellState.ts";
 import { Chunk } from "../src/core/Chunk.ts";
+import { SparseVoxelGrid } from "../src/core/SparseVoxelGrid.ts";
 import { SimulationEngine } from "../src/simulation/SimulationEngine.ts";
 
 async function beginPendingReadback(engine: SimulationEngine, stale: Float32Array) {
@@ -147,6 +148,26 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.ok(engine.grid.mutationRevision > beforeOwnerClear, "chunk-owner Map.clear must advance grid revision");
 
   assert.ok(engine.grid.mutationRevision > publicRevision, "all external mutation scenarios should be revision-visible");
+
+  // Removed chunks must stop reporting mutations to the grid that no longer owns them.
+  const deleteGrid = new SparseVoxelGrid(1, 1, 1);
+  const deletedChunk = deleteGrid.getOrCreateChunk(3, 3, 3);
+  const deletedKey = deleteGrid.getChunkKey(3, 3, 3);
+  assert.equal(deleteGrid.chunks.delete(deletedKey), true);
+  const beforeDeletedChunkWrite = deleteGrid.mutationRevision;
+  deletedChunk.buffer[0] = 701;
+  assert.equal(deleteGrid.mutationRevision, beforeDeletedChunkWrite,
+    "deleting a chunk must detach its grid mutation listener");
+
+  // clear() must detach listeners for every removed entry as well.
+  const clearGrid = new SparseVoxelGrid(1, 1, 1);
+  const clearedChunk = clearGrid.getOrCreateChunk(3, 3, 3);
+  clearGrid.chunks.clear();
+  const beforeClearedChunkWrite = clearGrid.mutationRevision;
+  clearedChunk.buffer[0] = 702;
+  assert.equal(clearGrid.mutationRevision, beforeClearedChunkWrite,
+    "clearing the chunk map must detach all grid mutation listeners");
+
   console.log("SimulationEngine stale GPU readback mutation-revision regression: PASS");
 }
 
