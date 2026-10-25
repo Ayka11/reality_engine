@@ -43,8 +43,11 @@ export class InfinityScaleAdaptiveTransferCompiler {
 
       const delta = mutation.toLOD - mutation.fromLOD;
       const ratio = 2 ** Math.abs(delta);
+      // In InfinityScaleLODState, higher levels cover larger/coarser cells.
+      // Refinement moves to a lower level and requires prolongation; coarsening
+      // moves to a higher level and requires restriction.
       const operation =
-        delta > 0 ? "TOPOLOGY_PROLONGATION" : "TOPOLOGY_RESTRICTION";
+        delta < 0 ? "TOPOLOGY_PROLONGATION" : "TOPOLOGY_RESTRICTION";
 
       transfers.push({
         transferId: `${mutation.regionId}:${mutation.fromLOD}->${mutation.toLOD}`,

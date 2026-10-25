@@ -12,8 +12,8 @@ export function runInfinityScaleAdaptiveTransferCompilerRegression(): void {
   if (plan.transfers[0].regionId !== "A" || plan.transfers[1].regionId !== "B") {
     throw new Error("Transfer compilation ordering is not deterministic");
   }
-  if (plan.transfers[0].operation !== "TOPOLOGY_PROLONGATION" || plan.transfers[1].operation !== "TOPOLOGY_RESTRICTION") {
-    throw new Error("Incorrect topology transfer operation");
+  if (plan.transfers[0].operation !== "TOPOLOGY_RESTRICTION" || plan.transfers[1].operation !== "TOPOLOGY_PROLONGATION") {
+    throw new Error("Incorrect topology transfer direction for coarse/fine LOD levels");
   }
   if (plan.transfers[0].ratio !== 2 || plan.transfers[1].ratio !== 2) {
     throw new Error("Incorrect refinement ratio");
