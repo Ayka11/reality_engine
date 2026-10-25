@@ -395,12 +395,21 @@ export class SimulationEngine {
     try {
       this.grid.syncDenseToChunks();
       this.grid.syncBackBuffersFromFront();
-      if (this._gpuReady) this.gpu.upload(this.grid.buffer);
     } catch (error) {
-      // Publication failed after the CPU state may already have changed.
-      // Fail closed: a later GPU step must not overwrite it from an uncertain mirror.
+      // CPU publication must succeed before the state is considered coherent.
       this._gpuReady = false;
       throw error;
+    }
+
+    if (this._gpuReady) {
+      try {
+        this.gpu.upload(this.grid.buffer);
+      } catch (error) {
+        // GPU upload is optional once the CPU state is coherent. Disable the
+        // uncertain device path and keep the UI/runtime alive on CPU execution.
+        this._gpuReady = false;
+        console.warn('[GPU] State upload failed; CPU fallback active', error);
+      }
     }
   }
 

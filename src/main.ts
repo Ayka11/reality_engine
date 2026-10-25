@@ -218,6 +218,14 @@ sim.initGPU().then(ok => {
   const badge = document.getElementById('gpubadge')!;
   badge.textContent = ok ? 'GPU' : 'CPU';
   if (ok) badge.classList.remove('cpu');
+  else badge.classList.add('cpu');
+}).catch(error => {
+  const badge = document.getElementById('gpubadge');
+  if (badge) {
+    badge.textContent = 'CPU';
+    badge.classList.add('cpu');
+  }
+  console.warn('[GPU] Initialization failed; CPU fallback active', error);
 });
 
 // ── State ─────────────────────────────────────────────────────────────────────

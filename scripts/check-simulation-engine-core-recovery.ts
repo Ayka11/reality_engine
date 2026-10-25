@@ -715,7 +715,17 @@ function assertRollbackAggregate(
   backend.upload = () => { throw uploadFailure; };
   const energyIndex = engine.grid.idx(2, 2, 1) + F.ENERGY;
   engine.grid.buffer[energyIndex] = 47;
-  assert.throws(() => engine.syncToGPU(), error => error === uploadFailure);
+  const originalWarn = console.warn;
+  let warningArgs: unknown[] = [];
+  console.warn = (...args: unknown[]) => { warningArgs = args; };
+  try {
+    assert.doesNotThrow(() => engine.syncToGPU(),
+      "GPU upload failure should fall back instead of aborting the caller's frame");
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(warningArgs.includes(uploadFailure),
+    "GPU fallback warning must preserve the upload failure for diagnostics");
   assert.equal(engine.gpuActive, false,
     "syncToGPU must disable a device whose authoritative upload failed");
   assert.equal(engine.grid.buffer[energyIndex], 47,
