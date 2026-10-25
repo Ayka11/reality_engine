@@ -713,15 +713,32 @@ export class SparseVoxelGrid {
       restored.set(expectedKey, chunk);
     }
 
-    // Validate all records before mutating the live sparse topology.
-    this.chunks.clear();
-    for (const [key, chunk] of restored) this.chunks.set(key, chunk);
-    this.dirtyChunks.clear();
-    this.chunkOwners.clear();
-    this.updateActiveRange();
-    this.syncChunksToDense();
-    this.syncBackBuffersFromFront();
-    this.markMutation();
+    // Validate all records and construct detached chunks before touching live
+    // state. Keep a detached rollback snapshot for failures during publication
+    // or dense/back-buffer synchronization.
+    const previous = this.captureState();
+    try {
+      this.chunks.clear();
+      for (const [key, chunk] of restored) this.chunks.set(key, chunk);
+      this.dirtyChunks.clear();
+      this.chunkOwners.clear();
+      this.updateActiveRange();
+      this.syncChunksToDense();
+      this.syncBackBuffersFromFront();
+      this.markMutation();
+    } catch (error) {
+      try {
+        this.restoreState(previous);
+      } catch (rollbackError) {
+        const originalMessage = error instanceof Error ? error.message : String(error);
+        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        throw new AggregateError(
+          [error, rollbackError],
+          `SparseVoxelGrid chunk load failed (${originalMessage}) and rollback failed (${rollbackMessage})`,
+        );
+      }
+      throw error;
+    }
     } finally { endMutation(); }
   }
 

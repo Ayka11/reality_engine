@@ -183,6 +183,31 @@ function runSparseChunkSerializationAndLoadRegression(): void {
   if (JSON.stringify(target.captureState()) !== beforeMalformedLoad) {
     throw new Error("Sparse chunk load partially mutated state after rejecting malformed input");
   }
+
+  // A runtime failure after live topology publication must restore the old
+  // dense/sparse buffers, chunk keys and metadata, while still invalidating
+  // revisions so a pending readback cannot overwrite the recovery boundary.
+  const beforePublicationFailure = JSON.stringify(target.captureState());
+  const revisionBeforePublicationFailure = target.mutationRevision;
+  const originalSyncChunksToDense = target.syncChunksToDense.bind(target);
+  target.syncChunksToDense = () => { throw new Error("injected load publication failure"); };
+  let publicationFailureRejected = false;
+  try {
+    target.loadChunks(serialized);
+  } catch (error) {
+    publicationFailureRejected = error instanceof Error && error.message.includes("injected load publication failure");
+  } finally {
+    target.syncChunksToDense = originalSyncChunksToDense;
+  }
+  if (!publicationFailureRejected) {
+    throw new Error("Sparse chunk load did not surface the injected publication failure");
+  }
+  if (JSON.stringify(target.captureState()) !== beforePublicationFailure) {
+    throw new Error("Sparse chunk load failed to roll back after a post-publication synchronization error");
+  }
+  if (target.mutationRevision <= revisionBeforePublicationFailure) {
+    throw new Error("Failed sparse chunk load did not invalidate the mutation revision");
+  }
 }
 
 export function runSparseVoxelGridInvalidSnapshotRegression(grid = new SparseVoxelGrid(4, 3, 2)): void {
