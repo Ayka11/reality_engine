@@ -163,3 +163,7 @@ The compatibility method `SimulationEngine.syncToGPU()` now synchronizes dense f
 ### Autosave storage bound
 
 Because each quick save now includes both dense fields and sparse chunks plus runtime state (including the cosmological simulation), automatic saves are bounded to the latest 12 records. This retains 24 minutes of checkpoints at the current two-minute interval while leaving manually named saves untouched. The prune-and-insert operations share one IndexedDB read/write transaction so a failed write can abort the deletion work, and the previous `currentSnapshot` is only updated after persistence succeeds. Autosave timer failures are caught and reported rather than becoming unhandled promise rejections.
+
+### Frame-consistent quick-save/export capture
+
+Quick saves and portable exports now capture state through the same serialized queue as asynchronous simulation frames. A save request arriving during GPU readback waits until the frame's readback, CPU-side commit, and tick update settle, preventing an old dense buffer from being paired with newer runtime state. The capture callback is synchronous and cannot return a thenable; a failed capture is reported to its caller without poisoning later frames.

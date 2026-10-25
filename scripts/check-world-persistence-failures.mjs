@@ -18,6 +18,14 @@ const multiplayerSource = await readFile(new URL("src/network/MultiplayerSync.ts
 const simulationEngineSource = await readFile(new URL("src/simulation/SimulationEngine.ts", root), "utf8");
 assert.match(saveSystemSource, /const mutate = this\.context\.mutateAuthoritativeState;/,
   "world snapshot import must use the authoritative simulation transaction");
+assert.match(saveSystemSource, /await this\.captureSnapshotAtBoundary\(name\)/,
+  "quick save and package export must capture at a frame boundary");
+assert.match(saveSystemSource, /this\.context\.runAtStepBoundary/,
+  "save capture must use the simulation queue when configured");
+assert.match(simulationEngineSource, /runAtStepBoundary<T>\(operation: \(\) => T\): Promise<T>/,
+  "SimulationEngine must expose a serialized capture boundary");
+assert.match(mainSource, /runAtStepBoundary: operation => sim\.runAtStepBoundary\(operation\)/,
+  "the main app must wire world-save capture to the serialized step queue");
 assert.match(saveSystemSource, /if \(!mutate\)\s*\{\s*throw new Error\("World restore requires an engine-owned mutation transaction"\)/,
   "world snapshot import must fail closed if the authoritative transaction port is missing");
 assert.doesNotMatch(saveSystemSource, /this\.context\.syncToGPU\?\.\(\)/,

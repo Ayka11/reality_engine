@@ -288,4 +288,52 @@ assert.deepEqual(
 await gpuEngine.step(0.016);
 assert.equal(gpuEngine.tick, 1, "GPU step queue must remain usable after a rolled-back commit");
 
+const boundaryGpuEngine = new SimulationEngine(8, 8, 4);
+(boundaryGpuEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+const boundaryGpuMock = boundaryGpuEngine.gpu as unknown as {
+  writeParams: (...args: unknown[]) => void;
+  submitCompute: (nSteps: number) => void;
+  readback: () => Promise<Float32Array>;
+  upload: (data: Float32Array) => void;
+};
+boundaryGpuMock.writeParams = () => undefined;
+boundaryGpuMock.submitCompute = () => undefined;
+boundaryGpuMock.upload = () => undefined;
+const boundaryEnergyIndex = boundaryGpuEngine.grid.idx(2, 2, 1) + F.ENERGY;
+let signalBoundaryReadbackStarted: (() => void) | undefined;
+let finishBoundaryReadback: ((data: Float32Array) => void) | undefined;
+const boundaryReadbackStarted = new Promise<void>(resolve => {
+  signalBoundaryReadbackStarted = resolve;
+});
+boundaryGpuMock.readback = () => new Promise<Float32Array>(resolve => {
+  finishBoundaryReadback = resolve;
+  signalBoundaryReadbackStarted?.();
+});
+const boundaryFrame = boundaryGpuEngine.step(0.016);
+await boundaryReadbackStarted;
+let boundaryCaptureExecuted = false;
+const queuedSnapshot = boundaryGpuEngine.runAtStepBoundary(() => {
+  boundaryCaptureExecuted = true;
+  return {
+    tick: boundaryGpuEngine.tick,
+    energy: boundaryGpuEngine.grid.buffer[boundaryEnergyIndex],
+  };
+});
+await Promise.resolve();
+assert.equal(boundaryCaptureExecuted, false,
+  'snapshot capture must wait while a GPU frame is awaiting readback');
+
+const boundaryReadbackData = new Float32Array(boundaryGpuEngine.grid.buffer);
+boundaryReadbackData[boundaryEnergyIndex] = 314;
+if (!finishBoundaryReadback) throw new Error('Boundary GPU readback resolver was not installed');
+finishBoundaryReadback(boundaryReadbackData);
+await boundaryFrame;
+const capturedBoundaryState = await queuedSnapshot;
+assert.equal(capturedBoundaryState.tick, 1,
+  'snapshot capture must run after the queued GPU frame increments tick');
+assert.equal(capturedBoundaryState.tick, boundaryGpuEngine.tick,
+  'snapshot tick must match the settled engine tick');
+assert.equal(capturedBoundaryState.energy, boundaryGpuEngine.grid.buffer[boundaryEnergyIndex],
+  'snapshot fields must match the settled authoritative CPU state');
+
 console.log('SimulationEngine core recovery and deterministic LawEngine replay: PASS');

@@ -127,6 +127,35 @@ export class SimulationEngine {
     this.chemLayer.restore({ pendingDensityTransfers: [] }, this.grid.size);
   }
 
+  /**
+   * Run a synchronous capture after all frames already in the queue have settled.
+   * Used for coherent quick-save/export snapshots during asynchronous GPU readback.
+   */
+  runAtStepBoundary<T>(operation: () => T): Promise<T> {
+    if (typeof operation !== 'function') {
+      return Promise.reject(new TypeError('Step-boundary operation requires a synchronous callback'));
+    }
+    const operationKind = Object.prototype.toString.call(operation);
+    if (operationKind === '[object AsyncFunction]' ||
+        operationKind === '[object AsyncGeneratorFunction]' ||
+        operationKind === '[object GeneratorFunction]') {
+      return Promise.reject(new TypeError('Step-boundary operation callback must remain synchronous'));
+    }
+
+    const run = this._stepQueue.then(() => {
+      const result: unknown = operation();
+      if (result !== null &&
+          (typeof result === 'object' || typeof result === 'function') &&
+          typeof (result as { then?: unknown }).then === 'function') {
+        throw new TypeError('Step-boundary operation callback must remain synchronous');
+      }
+      return result as T;
+    });
+    // A failed capture is reported to the caller without poisoning future frames.
+    this._stepQueue = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
   // nSteps allows batching multiple physics ticks per animation frame.
   // Keep each GPU submit/readback pair serialized, even if callers overlap step().
   step(dt: number, nSteps = 1): Promise<void> {

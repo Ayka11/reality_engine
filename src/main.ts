@@ -1249,6 +1249,7 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
     creatorEditor?.loadGraph(graph);
   },
   mutateAuthoritativeState: mutation => sim.mutateAuthoritativeState(mutation),
+  runAtStepBoundary: operation => sim.runAtStepBoundary(operation),
   getTick: () => sim.tick,
   setTick: tick => sim.restoreTick(tick),
   getEntities: () => sim.entityLayer.getEntities(),

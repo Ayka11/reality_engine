@@ -57,6 +57,8 @@ interface SaveContext {
   graphLoader?: (graph: RealityGraph) => void;
   /** Synchronous engine-owned transaction used for field import/restore publication. */
   mutateAuthoritativeState?: <T>(mutation: () => T) => T;
+  /** Queue a synchronous capture after already-queued frames settle. */
+  runAtStepBoundary?: <T>(operation: () => T) => Promise<T>;
   getTick?: () => number;
   setTick?: (tick: number) => void;
   getEntities?: () => unknown[];
@@ -123,11 +125,17 @@ export class WorldSaveSystem {
   }
 
   async quickSave(name = `World_${Date.now()}`): Promise<string> {
-    const snapshot = this.captureSnapshot(name);
+    const snapshot = await this.captureSnapshotAtBoundary(name);
     await this.saveToIndexedDB(snapshot);
     // Do not advertise a snapshot as persisted when the IndexedDB commit failed.
     this.currentSnapshot = snapshot;
     return snapshot.name;
+  }
+
+  private async captureSnapshotAtBoundary(name: string): Promise<WorldSnapshot> {
+    const runAtStepBoundary = this.context.runAtStepBoundary;
+    if (!runAtStepBoundary) return this.captureSnapshot(name);
+    return await runAtStepBoundary(() => this.captureSnapshot(name));
   }
 
   getCurrentSnapshot(): WorldSnapshot | null {
@@ -161,7 +169,7 @@ export class WorldSaveSystem {
   }
 
   async exportRealityPackage(name: string): Promise<Blob> {
-    const snapshot = this.captureSnapshot(name);
+    const snapshot = await this.captureSnapshotAtBoundary(name);
     return this.packageSerializer.pack(this.snapshotToPackage(snapshot));
   }
 
