@@ -8,7 +8,6 @@ import ts from "typescript";
 // async-boundary review rather than silently expanding the escape hatch.
 const expectedCalls = new Map([
   ["src/core/SparseVoxelGrid.ts#syncDenseEntityOwnershipToChunks", 1],
-  ["src/core/SparseVoxelGrid.ts#syncDenseToChunks", 1],
   ["src/core/SparseVoxelGrid.ts#syncChunksToDense", 1],
   ["src/core/SparseVoxelGrid.ts#loadChunks", 2],
   ["src/core/SparseVoxelGrid.ts#syncBackBuffersFromFront", 2],
