@@ -2,7 +2,20 @@ export interface PhysicsParams {
   energyDiffusion: number;
   tempDiffusion: number;
   tempEnergyCoupling: number;
+  densityDiffusion: number;
+  pressureDiffusion: number;
   pressureDensityCoupling: number;
+  phaseTransitionRate: number;
+  crystallizationRate: number;
+  metabolismRate: number;
+  signalPropagationRate: number;
+  radiationDensityRate: number;
+  radiationEnergyRate: number;
+  radiationThreshold: number;
+  erosionRate: number;
+  fieldRotationDamping: number;
+  fieldRotationNeighborCoupling: number;
+  fieldRotationCrossCoupling: number;
   entropyGrowthRate: number;
   entropyEnergyCoupling: number;
   infoGrowthRate: number;
@@ -20,7 +33,20 @@ export const DEFAULT_PARAMS: PhysicsParams = {
   energyDiffusion:        0.12,
   tempDiffusion:          0.08,
   tempEnergyCoupling:     0.005,
+  densityDiffusion:       0.0024,
+  pressureDiffusion:      0.08,
   pressureDensityCoupling:100,
+  phaseTransitionRate:    0.008,
+  crystallizationRate:    0.003,
+  metabolismRate:         0.12,
+  signalPropagationRate:  0.06,
+  radiationDensityRate:   0.00008,
+  radiationEnergyRate:    0.0001,
+  radiationThreshold:     400,
+  erosionRate:            0.0018,
+  fieldRotationDamping:   0.94,
+  fieldRotationNeighborCoupling: 0.05,
+  fieldRotationCrossCoupling: 0.01,
   entropyGrowthRate:      0.001,
   entropyEnergyCoupling:  0.0005,
   infoGrowthRate:         0.3,
