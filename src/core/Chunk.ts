@@ -32,6 +32,7 @@ export class Chunk {
   set active(value: boolean) { if (this._active !== value) { this._active = value; this.markMutation(); } }
 
   addMutationListener(listener: () => void): void { this.mutationListeners.add(listener); }
+  removeMutationListener(listener: () => void): void { this.mutationListeners.delete(listener); }
   private assertBuffer(value: Float32Array): void {
     if (!(value instanceof Float32Array) || value.length !== CHUNK_VOLUME * CELL_FIELDS) {
       throw new Error("Chunk buffer must be a Float32Array with the canonical chunk size");
