@@ -15,7 +15,12 @@ const tempDir = mkdtempSync(join(tmpdir(), "npm-audit-gate-"));
 const fakeNpm = join(tempDir, "npm");
 writeFileSync(
   fakeNpm,
-  '#!/bin/sh\\nprintf "%s" "$MOCK_AUDIT_OUTPUT"\\nexit "\${MOCK_AUDIT_EXIT:-0}"\\n',
+  [
+    "#!/bin/sh",
+    'printf "%s" "$MOCK_AUDIT_OUTPUT"',
+    'exit "${MOCK_AUDIT_EXIT:-0}"',
+    "",
+  ].join("\n"),
   "utf8",
 );
 chmodSync(fakeNpm, 0o755);
