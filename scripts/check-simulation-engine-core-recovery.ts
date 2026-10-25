@@ -77,6 +77,49 @@ const beforeInvalidRestore = engine.captureCoreRecoveryState();
 assert.throws(() => engine.restoreCoreRecoveryState(invalid), /Invalid SparseVoxelGrid snapshot/);
 assert.deepEqual(engine.captureCoreRecoveryState(), beforeInvalidRestore,
   'failed restore must roll back grid, entities, agents, laws, events, causal graph and recorder');
+
+// A failed candidate restore followed by a failed rollback must preserve both
+// root causes instead of replacing the candidate failure with only the rollback
+// failure message. The grid is partially changed by the first apply, so verify
+// the previous grid data is restored even though another domain's rollback fails.
+const doubleRestoreFailureEngine = new SimulationEngine(4, 4, 2);
+const doubleRestoreBaseline = doubleRestoreFailureEngine.captureCoreRecoveryState();
+const doubleRestoreCandidate = doubleRestoreFailureEngine.captureCoreRecoveryState();
+const doubleRestoreFieldIndex = doubleRestoreFailureEngine.grid.idx(1, 1, 1) + F.ENERGY;
+doubleRestoreCandidate.grid.buffer[doubleRestoreFieldIndex] = 123;
+doubleRestoreCandidate.tick = 9;
+const failingEntityLayer = doubleRestoreFailureEngine.entityLayer as unknown as {
+  restore: (...args: any[]) => void;
+};
+const originalEntityRestore = failingEntityLayer.restore;
+let entityRestoreAttempt = 0;
+failingEntityLayer.restore = function (...args: any[]) {
+  entityRestoreAttempt++;
+  if (entityRestoreAttempt === 1) throw new Error('injected candidate entity restore failure');
+  if (entityRestoreAttempt === 2) throw new Error('injected rollback entity restore failure');
+  return originalEntityRestore.apply(this, args);
+};
+let combinedRestoreError: unknown;
+try {
+  doubleRestoreFailureEngine.restoreCoreRecoveryState(doubleRestoreCandidate);
+} catch (error) {
+  combinedRestoreError = error;
+} finally {
+  failingEntityLayer.restore = originalEntityRestore;
+}
+assert.ok(combinedRestoreError instanceof AggregateError,
+  'double restore failure must be exposed as AggregateError');
+assert.match((combinedRestoreError as Error).message, /injected candidate entity restore failure/,
+  'combined error must preserve the candidate apply failure');
+assert.match((combinedRestoreError as Error).message, /injected rollback entity restore failure/,
+  'combined error must preserve the rollback failure');
+assert.equal((combinedRestoreError as AggregateError).errors.length, 2,
+  'combined error must retain both original exception objects');
+assert.equal(doubleRestoreFailureEngine.grid.buffer[doubleRestoreFieldIndex],
+  doubleRestoreBaseline.grid.buffer[doubleRestoreFieldIndex],
+  'rollback must restore grid state even when a later domain restore fails');
+
+// Clearing a population is a deterministic reset boundary for its local RNG.
 // Clearing a population is a deterministic reset boundary for its local RNG.
 const resetSeed = 0x12345678;
 const advancedRngState = 0x76543210;

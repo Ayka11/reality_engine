@@ -433,11 +433,16 @@ export class SimulationEngine {
         apply(previous);
         if (this._gpuReady) this.gpu.upload(this.grid.buffer);
       } catch (rollbackError) {
+        const recoveryMessage = error instanceof Error ? error.message : String(error);
         const rollbackMessage = rollbackError instanceof Error
           ? rollbackError.message
           : String(rollbackError);
-        throw new Error(
-          `Core recovery failed and rollback could not restore prior state: ${rollbackMessage}`,
+        // Keep both failures observable: the candidate-restore failure is the
+        // original fault, while the second failure explains why atomic restore
+        // could not return the engine to its pre-call state.
+        throw new AggregateError(
+          [error, rollbackError],
+          `Core recovery failed while applying candidate (${recoveryMessage}) and restoring prior state (${rollbackMessage})`,
         );
       }
       throw error;
