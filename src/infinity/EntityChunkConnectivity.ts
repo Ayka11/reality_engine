@@ -290,24 +290,24 @@ export class EntityChunkConnectivity {
         for (const [dx, dy, dz] of dirs) {
           const nx = c.x + dx, ny = c.y + dy, nz = c.z + dz;
           if (nx < 0 || nx >= grid.W || ny < 0 || ny >= grid.H || nz < 0 || nz >= grid.D) continue;
+          // Resolve ownership relations once per neighbor, not once per
+          // transfer spec; a boundary cell may have several face relations.
+          if (
+            !context.containsReadCell(nx, ny, nz) ||
+            context.containsSimulationCell(nx, ny, nz)
+          ) continue;
+          const neighborRelations = context.getBoundaryRelationsForCell(nx, ny, nz);
+          if (!neighborRelations.length) continue;
           for (const spec of specs) {
             if (!boundarySnapshot.hasSourceChunk(spec.sourceChunk)) continue;
-            // Only a cell outside the simulation ownership range is a
-            // real mixed-LOD neighbor. read() expects the target-side face
-            // coordinate (the current component cell), not the neighbor's
-            // source-side coordinate; keep those coordinates distinct.
-            if (
-              !context.containsReadCell(nx, ny, nz) ||
-              context.containsSimulationCell(nx, ny, nz)
-            ) continue;
-            // At a corner/edge, one target cell can touch multiple read-only
-            // chunks. Attribute a sample only to the specific transfer whose
-            // source/target pair owns this neighbor face.
-            const matchesTransfer = context.getBoundaryRelationsForCell(nx, ny, nz)
-              .some(relation =>
-                relation.sourceChunk === spec.sourceChunk &&
-                relation.targetChunk === spec.targetChunk &&
-                relation.relation === spec.relation);
+            // read() expects the target-side face coordinate (the current
+            // component cell), not the neighbor's source-side coordinate.
+            // Keep the sample's neighbor coordinate separate from read input.
+            // At an edge/corner, use only the transfer that owns this neighbor.
+            const matchesTransfer = neighborRelations.some(relation =>
+              relation.sourceChunk === spec.sourceChunk &&
+              relation.targetChunk === spec.targetChunk &&
+              relation.relation === spec.relation);
             if (!matchesTransfer) continue;
             const values = boundarySnapshot.read(spec, [c.x, c.y, c.z]);
             if (!values) continue;
