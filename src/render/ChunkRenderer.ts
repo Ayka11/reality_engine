@@ -8,7 +8,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
-  NF, F, GRID_W, GRID_H, GRID_D, CX, CY, CZ, CHUNK_FLOATS, chunkKey, decodeChunkKey,
+  NF, F, GRID_W, GRID_H, GRID_D, CX, CY, CZ, CHUNK_FLOATS, decodeChunkKey,
 } from '../core/ChunkGrid'
 import {
   classifyVoxel, getMat, blendEnergyGlow, lerpPalette, LAYER_PALS,
