@@ -95,6 +95,12 @@ assert.match(saveManagerSource, /quickSave.*Autosave_.*\.catch/s,
 assert.match(mainSource, /getDirectorSnapshot: \(\) => director\.snapshot\(\)/,
   "the application must wire SceneDirector snapshots into world saves");
 assert.match(directorSource, /snapshot\(\): SceneDirectorSnapshot/);
+assert.match(directorSource, /private contextGeneration = 0/);
+assert.match(directorSource, /requestGeneration !== this\.contextGeneration/,
+  'SceneDirector must discard requests started in an older world context');
+assert.match(mainSource, /function clearDirectorUiContext\(\): void/);
+assert.match(mainSource, /await _applicationFrameSettled/,
+  'world capture must wait for the full application frame, including post-step systems');
 assert.match(directorSource, /reset\(\): void/);
 assert.match(multiplayerSource, /this\.sim\.mutateAuthoritativeState\(\(\) => \{/,
   "network paint/delta and full-state writes must use the engine-owned mutation transaction");
@@ -640,7 +646,13 @@ assert.equal(timelineRuntime.snapshots.length, 0, "timeline reset must clear pre
 assert.equal(timelineRuntime.metrics.length, 0, "timeline reset must clear previous-world metrics");
 
 
-const directorUnit = new RuntimeSceneDirector({});
+const directorUnit = new RuntimeSceneDirector({
+  grid: fakeGrid(2, 2, 2),
+  agents: { getAgents: () => [] },
+  laws: { laws: [] },
+  tick: 0,
+  causal: { recent: () => [] },
+});
 const directorCheckpoint = {
   history: [
     { role: "user", content: "describe this world" },
@@ -661,6 +673,32 @@ assert.deepEqual(directorUnit.snapshot(), directorBeforeInvalid,
 directorUnit.reset();
 assert.deepEqual(directorUnit.snapshot(), { history: [], worldLog: [] },
   "SceneDirector reset must clear world context without including or changing the API key");
+
+const originalDirectorFetch = globalThis.fetch;
+let resolveDirectorPayload;
+let signalDirectorJsonStarted;
+const directorJsonStarted = new Promise(resolve => { signalDirectorJsonStarted = resolve; });
+directorUnit.apiKey = 'unit-test-key';
+globalThis.fetch = async () => ({
+  json: () => new Promise(resolve => {
+    resolveDirectorPayload = resolve;
+    signalDirectorJsonStarted();
+  }),
+});
+const inFlightOldWorldAsk = directorUnit.ask('create an action for the old world');
+await directorJsonStarted;
+directorUnit.reset();
+if (!resolveDirectorPayload) throw new Error('SceneDirector response resolver was not installed');
+const fence = String.fromCharCode(96).repeat(3);
+const oldWorldResponseText = "old response\\n" + fence + "js\\nworld.fill(1, 1, 1, 'energy', 999);\\n" + fence;
+resolveDirectorPayload({ content: [{ type: 'text', text: oldWorldResponseText }] });
+const oldWorldResult = await inFlightOldWorldAsk;
+assert.equal(oldWorldResult.code, null, 'late response from a previous world must not expose runnable code');
+assert.match(oldWorldResult.text, /context changed/);
+assert.deepEqual(directorUnit.snapshot(), { history: [], worldLog: [] },
+  'late response must not repopulate reset SceneDirector context');
+globalThis.fetch = originalDirectorFetch;
+
 
 
 const multiplayerGrid = {

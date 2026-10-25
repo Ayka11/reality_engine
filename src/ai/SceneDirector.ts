@@ -25,6 +25,7 @@ export class SceneDirector {
   private civSystem?: CivilizationSystem;
   private metaLawEvol?: MetaLawEvolution;
   private history: SceneDirectorMessage[] = [];
+  private contextGeneration = 0;
   readonly worldLog: Array<{ tick: number; director: string; action: string }> = [];
   private autoInterval: ReturnType<typeof setInterval> | null = null;
   autoDirecting = false;
@@ -67,13 +68,27 @@ export class SceneDirector {
       }
       worldLog.push({ ...entry });
     }
+    this.contextGeneration++;
     this.history = history;
     this.worldLog.splice(0, this.worldLog.length, ...worldLog);
   }
 
   reset(): void {
+    this.contextGeneration++;
     this.history = [];
     this.worldLog.length = 0;
+  }
+
+  private removeHistoryEntry(entry: SceneDirectorMessage): void {
+    const index = this.history.indexOf(entry);
+    if (index >= 0) this.history.splice(index, 1);
+  }
+
+  private staleWorldResponse(): DirectorResult {
+    return {
+      text: 'Response discarded because the world context changed while the request was in flight.',
+      code: null,
+    };
   }
 
   setApiKey(key: string): void {
@@ -118,6 +133,7 @@ World age: ${this.sim.tick} ticks`;
       return { text: 'API key not set. Enter your Anthropic API key in the Director panel.', code: null };
     }
 
+    const requestGeneration = this.contextGeneration;
     const worldState = this.summarizeWorld();
     const systemPrompt = `You are the AI director of a physics simulation called Reality Engine.
 You have full control over the simulation world through a JavaScript API.
@@ -143,7 +159,11 @@ When asked to DO something, respond with:
 When asked to DESCRIBE or ANALYZE, give a vivid scientific + poetic description.
 Keep responses concise. Use simulation terminology naturally.`;
 
-    this.history.push({ role: 'user', content: `${worldState}\n\nUser: ${userMessage}` });
+    const userEntry: SceneDirectorMessage = {
+      role: 'user',
+      content: `${worldState}\n\nUser: ${userMessage}`,
+    };
+    this.history.push(userEntry);
 
     try {
       const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -162,9 +182,10 @@ Keep responses concise. Use simulation terminology naturally.`;
         }),
       });
       const data = await resp.json();
+      if (requestGeneration !== this.contextGeneration) return this.staleWorldResponse();
       if (data.error) {
         const errText = `API error: ${data.error.message}`;
-        this.history.pop();
+        this.removeHistoryEntry(userEntry);
         return { text: errText, code: null };
       }
       const text: string = data.content?.find((b: { type: string }) => b.type === 'text')?.text ?? 'No response';
@@ -173,7 +194,8 @@ Keep responses concise. Use simulation terminology naturally.`;
       const codeMatch = text.match(/```(?:js|javascript)?\n([\s\S]*?)```/);
       return { text, code: codeMatch?.[1]?.trim() ?? null };
     } catch (e: unknown) {
-      this.history.pop();
+      if (requestGeneration !== this.contextGeneration) return this.staleWorldResponse();
+      this.removeHistoryEntry(userEntry);
       const msg = e instanceof Error ? e.message : String(e);
       return { text: `Director error: ${msg}`, code: null };
     }

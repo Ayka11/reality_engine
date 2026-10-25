@@ -167,3 +167,8 @@ Because each quick save now includes both dense fields and sparse chunks plus ru
 ### Frame-consistent quick-save/export capture
 
 Quick saves and portable exports now capture state through the same serialized queue as asynchronous simulation frames. A save request arriving during GPU readback waits until the frame's readback, CPU-side commit, and tick update settle, preventing an old dense buffer from being paired with newer runtime state. The capture callback is synchronous and cannot return a thenable; a failed capture is reported to its caller without poisoning later frames.
+### Full application-frame save boundary and director-context invalidation
+
+Quick saves and portable exports now wait for the entire application loop to settle, including post-step climate, multiscale, language, economy, cosmological, rendering, and timeline work, and then queue their synchronous capture behind any remaining engine frame. The loop releases the boundary in a `finally` block and logs frame errors so one rejected/stale frame does not permanently stop the animation loop.
+
+SceneDirector requests carry a world-context generation. Restoring or resetting director state advances that generation, causing a network response begun for a previous world to be discarded rather than appending stale history or returning runnable code into the new world. The UI clears cached runnable code and prior director log content whenever director context is restored/reset.

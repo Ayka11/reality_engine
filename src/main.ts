@@ -1249,7 +1249,10 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
     creatorEditor?.loadGraph(graph);
   },
   mutateAuthoritativeState: mutation => sim.mutateAuthoritativeState(mutation),
-  runAtStepBoundary: operation => sim.runAtStepBoundary(operation),
+  runAtStepBoundary: async operation => {
+    await _applicationFrameSettled;
+    return sim.runAtStepBoundary(operation);
+  },
   getTick: () => sim.tick,
   setTick: tick => sim.restoreTick(tick),
   getEntities: () => sim.entityLayer.getEntities(),
@@ -1309,8 +1312,14 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
   restoreCosmologicalSnapshot: snapshot => cosmoSim.restore(snapshot),
   resetCosmological: () => cosmoSim.reset(),
   getDirectorSnapshot: () => director.snapshot(),
-  restoreDirectorSnapshot: snapshot => director.restore(snapshot),
-  resetDirector: () => director.reset(),
+  restoreDirectorSnapshot: snapshot => {
+    director.restore(snapshot);
+    clearDirectorUiContext();
+  },
+  resetDirector: () => {
+    director.reset();
+    clearDirectorUiContext();
+  },
   clearTimeline: () => timeline.reset(),
   getCausalLog: () => sim.causal.recent(24),
   thumbnailCanvas: canvas,
@@ -1430,6 +1439,17 @@ function updateCivPanel(): void {
 // AI Director
 let lastDirectorCode: string | null = null;
 
+function clearDirectorUiContext(): void {
+  lastDirectorCode = null;
+  const codeEl = document.getElementById('directorCode');
+  if (codeEl) {
+    codeEl.textContent = '';
+    codeEl.style.display = 'none';
+  }
+  const logEl = document.getElementById('directorLog');
+  if (logEl) logEl.innerHTML = '';
+}
+
 document.getElementById('btnAskDirector')?.addEventListener('click', async () => {
   const input = document.getElementById('directorInput') as HTMLInputElement;
   const msg = input.value.trim();
@@ -1438,6 +1458,7 @@ document.getElementById('btnAskDirector')?.addEventListener('click', async () =>
   const log = document.getElementById('directorLog')!;
   log.innerHTML += `<div style="color:#888">You: ${msg}</div>`;
   const result = await director.ask(msg);
+  if (result.text.startsWith('Response discarded because the world context changed')) return;
   log.innerHTML += `<div style="color:#c0c8f0;margin-top:3px">Director: ${result.text}</div><br>`;
   log.scrollTop = log.scrollHeight;
   if (result.code) {
@@ -1810,8 +1831,15 @@ function _updateInfinityObserver(): void {
   infinityScale.setObserver(observer);
 }
 
+let _applicationFrameSettled: Promise<void> = Promise.resolve();
+
 async function loop(ts: number) {
-  const dt = Math.min((ts - lastTs) / 1000, 0.05);
+  let finishApplicationFrame!: () => void;
+  _applicationFrameSettled = new Promise<void>(resolve => {
+    finishApplicationFrame = resolve;
+  });
+  try {
+    const dt = Math.min((ts - lastTs) / 1000, 0.05);
   lastTs = ts;
   frameCount++;
   if (ts - fpsTimer > 600) {
@@ -1932,7 +1960,13 @@ async function loop(ts: number) {
   document.getElementById('chunkMemOut')!.textContent = `${(sim.grid.memoryBytes / 1048576).toFixed(1)} MB`;
   document.getElementById('fpsOut')!.textContent     = String(fpsSmooth);
 
-  requestAnimationFrame(loop);
+  } catch (error) {
+    console.error('[RealityEngine] Animation frame failed', error);
+  } finally {
+    // Release waiting save/export captures only after engine + external systems + UI settle.
+    finishApplicationFrame();
+    requestAnimationFrame(loop);
+  }
 }
 
 requestAnimationFrame(ts => { lastTs = ts; fpsTimer = ts; requestAnimationFrame(loop); });
