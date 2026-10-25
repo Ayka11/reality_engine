@@ -45,6 +45,7 @@ jobs:
       - run: npm run test:cosmological-sim-recovery --if-present
       - run: npm run test:simulation-engine-cpu-frame-rollback --if-present
       - run: npm run test:simulation-engine-stale-readback --if-present
+      - run: npm run test:mutable-buffer-contract --if-present
       - run: npm run test:infinity-scale-mixed-lod --if-present
       - run: npm run test:infinity-scale-adaptive-lod-bridge --if-present
       - name: Run entity chunk reconciliation regression
