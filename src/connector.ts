@@ -64,6 +64,30 @@ c3dFieldCanvas.id = 'c3dChunkField'
 c3dFieldCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:2'
 c3dCanvas.parentElement?.appendChild(c3dFieldCanvas)
 const fieldRenderer = new ChunkRenderer(c3dFieldCanvas)
+let chunkFieldRenderFrame = 0
+function renderVisibleChunkFieldFrame() {
+  if (c3dFieldCanvas.style.display === 'none') {
+    chunkFieldRenderFrame = 0
+    return
+  }
+  try {
+    fieldRenderer.render()
+  } catch (error) {
+    chunkFieldRenderFrame = 0
+    console.error('[ChunkRenderer] render loop failed', error)
+    return
+  }
+  chunkFieldRenderFrame = window.requestAnimationFrame(renderVisibleChunkFieldFrame)
+}
+function startChunkFieldRenderLoop() {
+  if (chunkFieldRenderFrame === 0) {
+    chunkFieldRenderFrame = window.requestAnimationFrame(renderVisibleChunkFieldFrame)
+  }
+}
+function stopChunkFieldRenderLoop() {
+  if (chunkFieldRenderFrame !== 0) window.cancelAnimationFrame(chunkFieldRenderFrame)
+  chunkFieldRenderFrame = 0
+}
 try {
   const saved = JSON.parse(localStorage.getItem('reality_engine_ui_state') || '{}')
   if (saved.currentRenderMode === 'field3d') {
@@ -524,9 +548,24 @@ win['applyChunkPreset']   = (name: string) => {
 // 3D renderer controls — routed to the Infinite World renderer
 const activeField3D = () => (document.getElementById('c3dChunkField')?.style.display !== 'none')
 win['setField3DVisible'] = (visible: boolean) => {
+  const authoritativeCanvas = document.getElementById('c3dField') as HTMLCanvasElement | null
+  const canvas2D = document.getElementById('c2d') as HTMLCanvasElement | null
   c3dFieldCanvas.style.display = visible ? 'block' : 'none'
-  c3dCanvas.style.display = visible ? 'none' : c3dCanvas.style.display
-  if (visible) fieldRenderer.controls.enabled = true
+  if (visible) {
+    c3dCanvas.style.display = 'none'
+    if (authoritativeCanvas) authoritativeCanvas.style.display = 'none'
+    if (canvas2D) canvas2D.style.display = 'none'
+    fieldRenderer.controls.enabled = true
+    startChunkFieldRenderLoop()
+    return
+  }
+
+  stopChunkFieldRenderLoop()
+  fieldRenderer.controls.enabled = false
+  const mode = win['currentRenderMode']
+  if (authoritativeCanvas) authoritativeCanvas.style.display = mode === 'field3d' ? 'block' : 'none'
+  c3dCanvas.style.display = mode === '3d' || mode === 'hybrid' ? 'block' : 'none'
+  if (canvas2D) canvas2D.style.display = mode === '2d' || mode === 'hybrid' ? 'block' : 'none'
 }
 win['setFieldLayer'] = (layer: number) => { fieldRenderer.setLayer(Math.max(-1, Math.min(5, layer))) }
 win['setFieldZSlice'] = (z: number) => { fieldRenderer.setZSlice(Math.max(0, Math.min(63, Math.round(z)))) }
