@@ -366,7 +366,7 @@ export class EntityLayer {
       });
     }
     const bufferSnapshot = buf.slice();
-    const sparseBackBufferSnapshot = grid instanceof SparseVoxelGrid ? getMutableBuffer(grid, "back").slice() : null;
+    const sparseBackBufferSnapshot = grid instanceof SparseVoxelGrid ? grid.backBuffer.slice() : null;
     const thresholdSnapshot = this.bioThreshold;
     const nextIdSnapshot = this.nextId;
     const extinctSnapshot = this.extinctCountValue;

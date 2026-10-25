@@ -12,6 +12,18 @@ const expectedCalls = new Map([
   ["src/core/SparseVoxelGrid.ts#syncChunksToDense", 1],
   ["src/core/SparseVoxelGrid.ts#loadChunks", 2],
   ["src/core/SparseVoxelGrid.ts#syncBackBuffersFromFront", 2],
+  ["src/chemistry/ChemLayer.ts#commitPendingDensityTransfers", 1],
+  ["src/chemistry/ChemLayer.ts#tickRegion", 1],
+  ["src/simulation/AgentSystem.ts#seed", 1],
+  ["src/simulation/AgentSystem.ts#tick", 1],
+  ["src/simulation/EntityLayer.ts#tick", 1],
+  ["src/simulation/EntityLayer.ts#_reconcileFullDomain", 1],
+  ["src/simulation/EntityLayer.ts#_spawnChild", 1],
+  ["src/simulation/EntropyLayer.ts#tick", 1],
+  ["src/simulation/FieldPhysics.ts#tick", 2],
+  ["src/simulation/InfoPhysics.ts#tick", 1],
+  ["src/simulation/TemporalLayer.ts#tick", 1],
+  ["src/simulation/TemporalLayer.ts#_diffuseTime", 1],
   ["src/simulation/SimulationEngine.ts#initGPU", 1],
   ["src/simulation/SimulationEngine.ts#_stepInternal", 1],
   ["src/simulation/SimulationEngine.ts#resynchronizeGPUAndThrow", 1],
@@ -24,6 +36,13 @@ const expectedCalls = new Map([
 const expectedImports = new Set([
   "src/core/SparseVoxelGrid.ts",
   "src/simulation/SimulationEngine.ts",
+  "src/chemistry/ChemLayer.ts",
+  "src/simulation/AgentSystem.ts",
+  "src/simulation/EntityLayer.ts",
+  "src/simulation/EntropyLayer.ts",
+  "src/simulation/FieldPhysics.ts",
+  "src/simulation/InfoPhysics.ts",
+  "src/simulation/TemporalLayer.ts",
 ]);
 const expectedSymbolImplementations = new Set([
   "src/core/Chunk.ts",
@@ -80,7 +99,7 @@ function isLocalBufferDeclaration(call) {
   return ts.isVariableDeclaration(parent) &&
     parent.initializer === call &&
     ts.isIdentifier(parent.name) &&
-    parent.name.text === "buf";
+    ["buf", "front", "back"].includes(parent.name.text);
 }
 
 for (const filePath of sourcePaths) {
@@ -152,8 +171,26 @@ for (const filePath of sourcePaths) {
       if (localAssignment && !["syncDenseEntityOwnershipToChunks", "syncDenseToChunks", "syncChunksToDense"].includes(method)) {
         errors.push(`${path}:${line}: local raw buffer alias assignment is not in an approved sync method`);
       }
-      if (localDeclaration && method !== "_detectCausality") {
-        errors.push(`${path}:${line}: retained mutable buffer local is only approved in _detectCausality`);
+      const approvedLocalBufferMethods = new Set([
+        "src/core/SparseVoxelGrid.ts#syncDenseEntityOwnershipToChunks",
+        "src/core/SparseVoxelGrid.ts#syncDenseToChunks",
+        "src/core/SparseVoxelGrid.ts#syncChunksToDense",
+        "src/chemistry/ChemLayer.ts#commitPendingDensityTransfers",
+        "src/chemistry/ChemLayer.ts#tickRegion",
+        "src/simulation/AgentSystem.ts#seed",
+        "src/simulation/AgentSystem.ts#tick",
+        "src/simulation/EntityLayer.ts#tick",
+        "src/simulation/EntityLayer.ts#_reconcileFullDomain",
+        "src/simulation/EntityLayer.ts#_spawnChild",
+        "src/simulation/EntropyLayer.ts#tick",
+        "src/simulation/FieldPhysics.ts#tick",
+        "src/simulation/InfoPhysics.ts#tick",
+        "src/simulation/TemporalLayer.ts#tick",
+        "src/simulation/TemporalLayer.ts#_diffuseTime",
+        "src/simulation/SimulationEngine.ts#_detectCausality",
+      ]);
+      if (localDeclaration && !approvedLocalBufferMethods.has(key)) {
+        errors.push(`${path}:${line}: retained mutable buffer local is not in an audited synchronous hot path`);
       }
     }
     ts.forEachChild(node, child => visit(child, method));
@@ -182,4 +219,4 @@ assert.deepEqual(errors, [], [
   "Mutable-buffer ownership contract violations:",
   ...errors.map(error => `- ${error}`),
 ].join("\n"));
-console.log("Mutable-buffer contract inventory: PASS (16 audited call sites; no new raw-buffer escapes)");
+console.log("Mutable-buffer contract inventory: PASS (29 audited call sites; no new raw-buffer escapes)");

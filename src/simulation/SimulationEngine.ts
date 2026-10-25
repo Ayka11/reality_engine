@@ -559,19 +559,14 @@ export class SimulationEngine {
 
   private _worldMetrics(): WorldMetrics {
     const { grid } = this;
-    // Metrics only read state. Do not acquire a mutable alias: doing so advances
-    // mutationRevision and can falsely invalidate an otherwise current GPU readback.
-    const buf = grid.buffer;
     const n = grid.size;
-    let totalE = 0, sumS = 0, sumI = 0, sumD = 0, sumB = 0;
-    for (let i = 0; i < n; i++) {
-      const o = i * CELL_FIELDS;
-      totalE += buf[o + F.ENERGY];
-      sumS   += buf[o + F.ENTROPY];
-      sumI   += buf[o + F.INFORMATION];
-      sumD   += buf[o + F.DENSITY];
-      sumB   += buf[o + F.BIO_POTENTIAL];
-    }
+    // totalField reads the authoritative backing buffer without exposing a raw
+    // alias or falsely advancing mutationRevision. Keep the hot path unproxied.
+    const totalE = grid.totalField(F.ENERGY);
+    const sumS = grid.totalField(F.ENTROPY);
+    const sumI = grid.totalField(F.INFORMATION);
+    const sumD = grid.totalField(F.DENSITY);
+    const sumB = grid.totalField(F.BIO_POTENTIAL);
     return {
       totalEnergy: totalE,
       avgEntropy:  sumS / n,
