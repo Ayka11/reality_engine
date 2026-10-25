@@ -19,6 +19,12 @@ const geometryJs = await compile("src/brushes/BrushGeometry.ts", [
   [/from ['"]\.\/BrushMath['"]/, `from "${mathUrl}"`],
 ]);
 const geometryUrl = `data:text/javascript;base64,${Buffer.from(geometryJs).toString("base64")}`;
+const processJs = await compile("src/process/ProcessDef.ts");
+const processUrl = `data:text/javascript;base64,${Buffer.from(processJs).toString("base64")}`;
+const lawJs = await compile("src/laws/MetaLaw.ts");
+const lawUrl = `data:text/javascript;base64,${Buffer.from(lawJs).toString("base64")}`;
+const materialJs = await compile("src/materials/MaterialDef.ts");
+const materialUrl = `data:text/javascript;base64,${Buffer.from(materialJs).toString("base64")}`;
 const { CHUNK_FLOATS } = await import(gridUrl);
 const messages = [];
 globalThis.self = {
@@ -29,6 +35,9 @@ const workerJs = await compile("src/core/ChunkSimWorker.ts", [
   [/from ['"]\.\/ChunkGrid['"]/, `from "${gridUrl}"`],
   [/from ['"]\.\.\/brushes\/BrushGeometry['"]/, `from "${geometryUrl}"`],
   [/from ['"]\.\.\/brushes\/BrushMath['"]/, `from "${mathUrl}"`],
+  [/from ['"]\.\.\/process\/ProcessDef['"]/, `from "${processUrl}"`],
+  [/from ['"]\.\.\/laws\/MetaLaw['"]/, `from "${lawUrl}"`],
+  [/from ['"]\.\.\/materials\/MaterialDef['"]/, `from "${materialUrl}"`],
 ]);
 await import(`data:text/javascript;base64,${Buffer.from(workerJs).toString("base64")}`);
 assert.equal(typeof globalThis.self.onmessage, "function");
