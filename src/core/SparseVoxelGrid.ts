@@ -577,11 +577,11 @@ export class SparseVoxelGrid {
 
       const rawBuffers: Float32Array[] = [];
       for (const chunk of chunks) {
-        const rawBuffer = getMutableBuffer(chunk);
-        if (rawBuffer.length !== CHUNK_VOLUME * CELL_FIELDS) {
+        const buf = getMutableBuffer(chunk);
+        if (buf.length !== CHUNK_VOLUME * CELL_FIELDS) {
           throw new Error("Dense-to-chunk synchronization found an invalid chunk buffer");
         }
-        rawBuffers.push(rawBuffer);
+        rawBuffers.push(buf);
       }
 
       // The preflight guarantees valid mappings; commit copies only the dense
