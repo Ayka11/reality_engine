@@ -89,8 +89,14 @@ export function buildGreedyChunkMesh(input: GreedyChunkMeshInput): GreedyChunkMe
         // A material boundary has two visible sides when both voxels are solid.
         // Keep each material's face rather than arbitrarily hiding one side.
         if (ma !== 0 && mb !== 0) {
-          emit(axis, slice, uAxis, vAxis, u, v, 1, 1, { material: ma, sign: -1 })
-          emit(axis, slice, uAxis, vAxis, u, v, 1, 1, { material: mb, sign: 1 })
+          if (slice > 0 && slice < axisSize) {
+            emit(axis, slice, uAxis, vAxis, u, v, 1, 1, { material: ma, sign: -1 })
+            emit(axis, slice, uAxis, vAxis, u, v, 1, 1, { material: mb, sign: 1 })
+          } else if (slice === 0) {
+            emit(axis, slice, uAxis, vAxis, u, v, 1, 1, { material: mb, sign: 1 })
+          } else {
+            emit(axis, slice, uAxis, vAxis, u, v, 1, 1, { material: ma, sign: -1 })
+          }
           continue
         }
         const visible = ma !== 0 ? { material: ma, sign: -1 as const } :
