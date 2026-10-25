@@ -9,6 +9,8 @@ export interface GreedyChunkMeshInput {
   size: readonly [number, number, number]
   origin?: readonly [number, number, number]
   sampleMaterial: (x: number, y: number, z: number) => number
+  /** When false, suppress internal faces between any two occupied voxels. */
+  emitMaterialInterfaces?: boolean
 }
 
 export interface GreedyChunkMesh {
@@ -86,6 +88,9 @@ export function buildGreedyChunkMesh(input: GreedyChunkMeshInput): GreedyChunkMe
         // At chunk boundaries, the outside sample remains global and can cull
         // the face when a neighboring chunk contains the same solid material.
         if (ma === mb) continue
+        // Opaque surface meshes do not render interfaces between occupied cells.
+        // Keep the legacy double-sided interface policy available for specialized callers.
+        if (ma !== 0 && mb !== 0 && input.emitMaterialInterfaces === false) continue
         // A material boundary has two visible sides when both voxels are solid.
         // Keep each material's face rather than arbitrarily hiding one side.
         if (ma !== 0 && mb !== 0) {
