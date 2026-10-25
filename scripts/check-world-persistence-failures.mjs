@@ -13,6 +13,8 @@ const metaLawSource = await readFile(new URL("src/simulation/MetaLawEvolution.ts
 const cosmologicalSource = await readFile(new URL("src/simulation/CosmologicalSim.ts", root), "utf8");
 const timelineSource = await readFile(new URL("src/world/Timeline.ts", root), "utf8");
 const directorSource = await readFile(new URL("src/ai/SceneDirector.ts", root), "utf8");
+const multiplayerSource = await readFile(new URL("src/network/MultiplayerSync.ts", root), "utf8");
+const simulationEngineSource = await readFile(new URL("src/simulation/SimulationEngine.ts", root), "utf8");
 assert.match(saveSystemSource, /const mutate = this\.context\.mutateAuthoritativeState;/,
   "world snapshot import must use the authoritative simulation transaction");
 assert.match(saveSystemSource, /if \(!mutate\)\s*\{\s*throw new Error\("World restore requires an engine-owned mutation transaction"\)/,
@@ -77,6 +79,10 @@ assert.match(mainSource, /getDirectorSnapshot: \(\) => director\.snapshot\(\)/,
   "the application must wire SceneDirector snapshots into world saves");
 assert.match(directorSource, /snapshot\(\): SceneDirectorSnapshot/);
 assert.match(directorSource, /reset\(\): void/);
+assert.match(multiplayerSource, /this\.sim\.mutateAuthoritativeState\(\(\) => \{/,
+  "network paint/delta and full-state writes must use the engine-owned mutation transaction");
+assert.match(simulationEngineSource, /this\.grid\.syncDenseToChunks\(\);\s*this\.grid\.syncBackBuffersFromFront\(\);/,
+  "authoritative mutation commit must publish the dense state to sparse chunks and back buffers");
 assert.match(economicSource, /snapshot\(\): EconomicSystemSnapshot/);
 assert.match(metaLawSource, /snapshot\(\): MetaLawEvolutionSnapshot/);
 assert.match(cosmologicalSource, /snapshot\(\): CosmologicalSimSnapshot/);
@@ -498,6 +504,7 @@ const { MetaLawEvolution: RuntimeMetaLaw } = await import(await load("src/simula
 const { CosmologicalSim: RuntimeCosmological } = await import(await load("src/simulation/CosmologicalSim.ts"));
 const { Timeline: RuntimeTimeline } = await import(await load("src/world/Timeline.ts"));
 const { SceneDirector: RuntimeSceneDirector } = await import(await load("src/ai/SceneDirector.ts"));
+const { MultiplayerSync: RuntimeMultiplayerSync } = await import(await load("src/network/MultiplayerSync.ts"));
 
 function fakeGrid(W, H, D) {
   return {
@@ -637,6 +644,74 @@ assert.deepEqual(directorUnit.snapshot(), directorBeforeInvalid,
 directorUnit.reset();
 assert.deepEqual(directorUnit.snapshot(), { history: [], worldLog: [] },
   "SceneDirector reset must clear world context without including or changing the API key");
+
+
+const multiplayerGrid = {
+  W: 2, H: 1, D: 1, size: 2, buffer: new Float32Array(2 * 24),
+  idx(x, y, z) { return (z * this.H * this.W + y * this.W + x) * 24; },
+  inBounds(x, y, z) { return x >= 0 && x < this.W && y >= 0 && y < this.H && z >= 0 && z < this.D; },
+};
+const multiplayerStats = { transactions: 0, publications: 0 };
+const multiplayerSim = {
+  grid: multiplayerGrid,
+  mutateAuthoritativeState(mutation) {
+    multiplayerStats.transactions++;
+    mutation();
+    multiplayerGrid.backBuffer = new Float32Array(multiplayerGrid.buffer);
+    multiplayerStats.publications++;
+  },
+};
+const multiplayerUnit = Object.create(RuntimeMultiplayerSync.prototype);
+Object.assign(multiplayerUnit, {
+  sim: multiplayerSim,
+  userId: "z-local",
+  connected: true,
+  isHost: false,
+  peers: new Map([["a-remote", { color: "#fff", lastSeen: 0 }]]),
+  cursors: new Map(),
+  pendingDeltas: [],
+});
+multiplayerUnit._handleMessage({
+  type: "delta", userId: "peer-delta",
+  cells: [{ x: 1, y: 0, z: 0, field: 2, value: 5 }],
+});
+assert.equal(multiplayerStats.transactions, 1,
+  "incoming remote deltas must use the authoritative mutation boundary");
+assert.equal(multiplayerStats.publications, 1,
+  "incoming remote deltas must publish after one transaction");
+assert.equal(multiplayerGrid.buffer[24 + 2], 5,
+  "valid remote delta must be applied to the target cell");
+assert.equal(multiplayerGrid.backBuffer[24 + 2], 5,
+  "remote delta publication must update the back-buffer baseline");
+
+multiplayerUnit._handleMessage({
+  type: "paint", userId: "peer-paint",
+  cells: [{ x: 99, y: 0, z: 0, field: 2, value: 7 }],
+});
+assert.equal(multiplayerStats.transactions, 1,
+  "all-invalid remote paint batches must not open a mutation transaction");
+
+const fullState = Array.from({ length: multiplayerGrid.buffer.length }, (_, i) => i / 10);
+multiplayerUnit._handleMessage({
+  type: "full_state", userId: "a-remote", buf: fullState,
+});
+assert.equal(multiplayerStats.transactions, 2,
+  "valid authoritative full-state sync must use exactly one mutation transaction");
+assert.equal(multiplayerStats.publications, 2,
+  "full-state sync must publish exactly once");
+assert.deepEqual(multiplayerGrid.buffer, new Float32Array(fullState),
+  "valid remote full-state sync must replace the dense buffer atomically");
+assert.deepEqual(multiplayerGrid.backBuffer, multiplayerGrid.buffer,
+  "full-state sync must keep dense front/back buffers coherent");
+
+const beforeInvalidFullState = multiplayerGrid.buffer.slice();
+multiplayerUnit._handleMessage({
+  type: "full_state", userId: "a-remote", buf: [Number.NaN],
+});
+assert.equal(multiplayerStats.transactions, 2,
+  "invalid full-state messages must be rejected before mutation");
+assert.deepEqual(multiplayerGrid.buffer, beforeInvalidFullState,
+  "invalid full-state messages must leave the current world unchanged");
 
 console.log("PASS: field persistence round-trip and seed isolation");
 console.log("PASS: quota, read, delete, and corrupt-storage failures are contained");

@@ -258,6 +258,7 @@ export class SimulationEngine {
         throw new TypeError('Authoritative mutation callback must remain synchronous');
       }
       this.grid.syncDenseToChunks();
+      this.grid.syncBackBuffersFromFront();
       if (this._gpuReady) this.gpu.upload(this.grid.buffer);
       this._stateGeneration++;
       return result;

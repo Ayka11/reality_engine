@@ -148,3 +148,8 @@ Quick saves now retain the in-process state that changes how future ticks evolve
 ### Scene Director world-context isolation
 
 Quick saves now preserve the Scene Director's bounded conversation history and world-action log. Portable/legacy loads reset that context so the AI director does not carry stale assumptions or observations from a different world. The API key remains app-local and is deliberately excluded from saved snapshots; the auto-directing interval is likewise application runtime state rather than part of a world's data. Regression coverage checks state round-trip, invalid-snapshot rejection without partial mutation, and reset behavior.
+
+
+### Multiplayer inbound mutation boundary
+
+Incoming remote `paint`, `delta`, and accepted host `full_state` messages now validate their payload before mutation and apply through `SimulationEngine.mutateAuthoritativeState()`. The transaction invalidates pending GPU readbacks before writes, synchronizes dense state to chunks and front/back buffers, and uploads the authoritative result to GPU. Invalid or all-filtered batches are rejected without opening a transaction. This prevents remote edits from being overwritten by stale GPU readback and avoids dense/chunk/back-buffer divergence.

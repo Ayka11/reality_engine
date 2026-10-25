@@ -158,21 +158,30 @@ export class MultiplayerSync {
       const maxCells = data.type === 'paint' ? 50 : 100;
       if (data.cells.length > maxCells) return;
       const { grid } = this.sim;
-      const buf = grid.buffer;
-      for (const cell of data.cells) {
-        if (!cell || !Number.isInteger(cell.x) || !Number.isInteger(cell.y) || !Number.isInteger(cell.z)
-          || !Number.isInteger(cell.field) || cell.field < 0 || cell.field >= CELL_FIELDS
-          || !Number.isFinite(cell.value) || Math.abs(cell.value) > 1e9
-          || !grid.inBounds(cell.x, cell.y, cell.z)) continue;
-        buf[grid.idx(cell.x, cell.y, cell.z) + cell.field] = cell.value;
-      }
+      const validCells = data.cells.filter(cell =>
+        !!cell &&
+        Number.isInteger(cell.x) && Number.isInteger(cell.y) && Number.isInteger(cell.z) &&
+        Number.isInteger(cell.field) && cell.field >= 0 && cell.field < CELL_FIELDS &&
+        Number.isFinite(cell.value) && Math.abs(cell.value) <= 1e9 &&
+        grid.inBounds(cell.x, cell.y, cell.z)
+      );
+      if (validCells.length === 0) return;
+      this.sim.mutateAuthoritativeState(() => {
+        const buf = grid.buffer;
+        for (const cell of validCells) {
+          buf[grid.idx(cell.x, cell.y, cell.z) + cell.field] = cell.value;
+        }
+      });
     }
 
     if (data.type === 'full_state' && !this.isHost && data.userId === [this.userId, ...this.peers.keys()].sort()[0] && Array.isArray(data.buf)) {
-      const buf = this.sim.grid.buffer;
-      // Check size before allocating a typed-array copy.
-      if (data.buf.length !== buf.length || !data.buf.every(value => Number.isFinite(value) && Math.abs(value) <= 1e9)) return;
-      buf.set(new Float32Array(data.buf));
+      const grid = this.sim.grid;
+      // Check size and numeric range before allocating or mutating authoritative state.
+      if (data.buf.length !== grid.buffer.length || !data.buf.every(value => Number.isFinite(value) && Math.abs(value) <= 1e9)) return;
+      const nextBuffer = new Float32Array(data.buf);
+      this.sim.mutateAuthoritativeState(() => {
+        grid.buffer.set(nextBuffer);
+      });
     }
 
     if (data.type === 'request_state' && this.isHost) this._sendFullState();
