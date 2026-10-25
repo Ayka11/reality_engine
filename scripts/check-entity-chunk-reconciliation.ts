@@ -187,6 +187,12 @@ assert.throws(
   /Dense\/chunk entity ownership mismatch/,
   "chunk-only ENTITY_ID writes must be rejected before inventory capture",
 );
+const sparseOwnershipLayer = new EntityLayer();
+assert.throws(
+  () => sparseOwnershipLayer.tick(sparseOwnershipGrid, 1 / 60),
+  /Dense\/chunk entity ownership mismatch/,
+  "production EntityLayer tick must reject chunk-only ENTITY_ID writes before reconciliation",
+);
 sparseOwnershipGrid.syncDenseToChunks();
 assert.doesNotThrow(
   () => sparseOwnershipGrid.assertDenseEntityOwnershipSynchronized(),

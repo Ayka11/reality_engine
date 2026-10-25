@@ -515,13 +515,16 @@ export class EntityLayer {
     // SparseVoxelGrid may store cells beyond its dense simulation window. Those
     // cells are outside this tick's connectivity scan and therefore cannot be
     // ignored when authorizing global entity extinction or merge.
-    if (
-      grid instanceof SparseVoxelGrid &&
-      grid.hasUnverifiedEntityDomainOutsideDenseWindow(this.bioThreshold)
-    ) {
-      throw new Error(
-        "EntityLayer refuses global reconciliation while sparse entity activity exists outside the dense simulation window",
-      );
+    if (grid instanceof SparseVoxelGrid) {
+      // The dense-window connectivity proof is only trustworthy when the
+      // entity-ownership markers it reads agree with authoritative chunk
+      // storage. Fail closed on chunk-only or dense-only ENTITY_ID mutations.
+      grid.assertDenseEntityOwnershipSynchronized();
+      if (grid.hasUnverifiedEntityDomainOutsideDenseWindow(this.bioThreshold)) {
+        throw new Error(
+          "EntityLayer refuses global reconciliation while sparse entity activity exists outside the dense simulation window",
+        );
+      }
     }
     const context = createFullDomainExecutionContext(grid);
     const connectivity = new EntityChunkConnectivity(this.bioThreshold).analyze(grid, context);
