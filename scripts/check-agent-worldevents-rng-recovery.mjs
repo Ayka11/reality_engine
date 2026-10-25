@@ -8,7 +8,9 @@ const eventsSource = await readFile(new URL("src/world/WorldEvents.ts", root), "
 
 const cellModule = "export const CELL_FIELDS=24; export const F={ENERGY:0,DENSITY:1,INFORMATION:2,ENTROPY:3,TEMPERATURE:4,PRESSURE:5,FIELD_X:6,FIELD_Y:7,FIELD_Z:8,LOCAL_TIME:9,CAUSALITY_ID:10,BIO_POTENTIAL:11,WAVE_PHASE:12,WAVE_AMP:13,GRAVITY_POT:14,MATERIAL_ID:15,CHEM_STATE:16,SIGNAL:17,MEM_FIELD:18,AGENT_MARK:19,ENTITY_ID:20,SPARE_1:21,SPARE_2:22,SPARE_3:23}; export class CellState { constructor(buffer,offset){this.buffer=buffer;this.offset=offset;} get(field){return this.buffer[this.offset+field]} set(field,value){this.buffer[this.offset+field]=value} get energy(){return this.get(F.ENERGY)} set energy(v){this.set(F.ENERGY,v)} get density(){return this.get(F.DENSITY)} set density(v){this.set(F.DENSITY,v)} get information(){return this.get(F.INFORMATION)} set information(v){this.set(F.INFORMATION,v)} get entropy(){return this.get(F.ENTROPY)} set entropy(v){this.set(F.ENTROPY,v)} get temperature(){return this.get(F.TEMPERATURE)} set temperature(v){this.set(F.TEMPERATURE,v)} get bioPotential(){return this.get(F.BIO_POTENTIAL)} set bioPotential(v){this.set(F.BIO_POTENTIAL,v)} get materialId(){return this.get(F.MATERIAL_ID)} set materialId(v){this.set(F.MATERIAL_ID,v)} }";
 const cellUrl = "data:text/javascript;base64," + Buffer.from(cellModule).toString("base64");
-const gridModule = "import {CellState,CELL_FIELDS} from '" + cellUrl + "'; export class VoxelGrid { constructor(W,H,D){this.W=W;this.H=H;this.D=D;this.size=W*H*D;this.buffer=new Float32Array(this.size*CELL_FIELDS);this.backBuffer=new Float32Array(this.buffer.length)} inBounds(x,y,z){return x>=0&&x<this.W&&y>=0&&y<this.H&&z>=0&&z<this.D} idx(x,y,z){return (z*this.H*this.W+y*this.W+x)*CELL_FIELDS} cell(x,y,z){return new CellState(this.buffer,this.idx(x,y,z))} cellAt(i){return new CellState(this.buffer,i*CELL_FIELDS)} clear(){this.buffer.fill(0);this.backBuffer.fill(0)} }";
+const trackedModule = "export const INTERNAL_MUTABLE_BUFFER=Symbol('test-internal-mutable-buffer'); export function getMutableBuffer(owner,side='front'){return owner[INTERNAL_MUTABLE_BUFFER](side)};";
+const trackedUrl = "data:text/javascript;base64," + Buffer.from(trackedModule).toString("base64");
+const gridModule = "import {CellState,CELL_FIELDS} from '" + cellUrl + "'; import {INTERNAL_MUTABLE_BUFFER} from '" + trackedUrl + "'; export class VoxelGrid { constructor(W,H,D){this.W=W;this.H=H;this.D=D;this.size=W*H*D;this.buffer=new Float32Array(this.size*CELL_FIELDS);this.backBuffer=new Float32Array(this.buffer.length)} [INTERNAL_MUTABLE_BUFFER](side='front'){return side==='back'?this.backBuffer:this.buffer} inBounds(x,y,z){return x>=0&&x<this.W&&y>=0&&y<this.H&&z>=0&&z<this.D} idx(x,y,z){return (z*this.H*this.W+y*this.W+x)*CELL_FIELDS} cell(x,y,z){return new CellState(this.buffer,this.idx(x,y,z))} cellAt(i){return new CellState(this.buffer,i*CELL_FIELDS)} clear(){this.buffer.fill(0);this.backBuffer.fill(0)} }";
 const gridUrl = "data:text/javascript;base64," + Buffer.from(gridModule).toString("base64");
 const materialModule = "export const MAT={VACUUM:0,STONE:1,SAND:2,CRYSTAL:3,METAL:4,MAGMA:5,ICE:6,ORGANIC_TISSUE:7,SPORES:8,MEMBRANE:9,BIOMASS:10,PLASMA:11,SUPERCONDUCTIVE_MATTER:12,INFORMATION_SUBSTRATE:13};";
 const chemModule = "export const CHEM={GAS:0,LIQUID:1,SOLID:2,ORGANIC:3,REACTIVE:4};";
@@ -28,12 +30,14 @@ const { VoxelGrid } = await import(gridUrl);
 const { AgentSystem } = await compile(agentSource, [
   [/from ['"]\.\.\/core\/VoxelGrid['"]/, gridUrl],
   [/from ['"]\.\.\/core\/CellState['"]/, cellUrl],
+  [/from ['"]\.\.\/core\/TrackedFloat32Array['"]/, trackedUrl],
 ]);
 const { WorldEvents } = await compile(eventsSource, [
   [/from ['"]\.\.\/core\/VoxelGrid['"]/, gridUrl],
   [/from ['"]\.\.\/core\/CellState['"]/, cellUrl],
   [/from ['"]\.\.\/materials\/MaterialDef['"]/, materialUrl],
   [/from ['"]\.\.\/chemistry\/ChemLayer['"]/, chemUrl],
+  [/from ['"]\.\.\/core\/TrackedFloat32Array['"]/, trackedUrl],
 ]);
 
 function makeGrid() {
