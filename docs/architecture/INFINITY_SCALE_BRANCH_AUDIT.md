@@ -11,11 +11,11 @@ The old branch has a useful, independently passing RC validation harness. It als
 | Ref | SHA | Verification |
 |---|---|---|
 | `main` | `dcf11851055994bc56841e111f60282fc16d5784` | Reality Engine CI #1345 passed, including npm audit gate/report, lint, regression/recovery checks, production build, both Docker images, HF smoke/CPU checks, and browser acceptance. [Run #1345](https://github.com/Ayka11/reality_engine/actions/runs/40197004428) |
-| `infinity-scale-real-diagnostics` | `c95bebc75c3cf4a0ebcb06242e10deb6a5896b97` | Infinity Scale RC Validation #378 passed TypeScript validation, production build, browser smoke, Infinity Scale release validation, release-evidence validation, reproducible package check, provenance integrity, and RC evidence artifact upload. [Run #378](https://github.com/Ayka11/reality_engine/actions/runs/40090197500) |
+| `infinity-scale-real-diagnostics` | `c95bebc75c3cf4a0ebcb06242e10deb6a5896b97` | Infinity Scale RC Validation #378 passed TypeScript validation, production build, 6 browser smoke tests, 76/76 release-suite tests, 4 additional runtime regressions, release-evidence validation, reproducible package check, provenance integrity, and RC evidence artifact upload. Validation hash: `7f1d16ba`; provenance hash: `a9413326`; artifact ID: `12559000711`. [Run #378](https://github.com/Ayka11/reality_engine/actions/runs/40090197500) |
 
 These runs validate different revisions and workflows. The branch RC run is evidence for that branch's own harness, not evidence that its entire implementation has been integrated into or validated as part of `main`.
 
-The branch's `INFINITY_SCALE_RC1_STATUS.md` has stale status text stating that automated CI is pending/no run exists. That statement is superseded by the actual successful RC #378 run above; use GitHub's run record and exact SHA as the authoritative evidence rather than the old status page.
+The branch's `INFINITY_SCALE_RC1_STATUS.md` has stale status text stating that automated CI is pending/no run exists and describes a 59-test suite. The actual RC #378 log reports 76/76 release-suite tests, plus 4 runtime regressions and 6 browser smoke tests. This status text is superseded by the successful run above; use GitHub's run record, result hashes, artifact, and exact SHA as the authoritative evidence rather than the old status page.
 
 The Git tree comparison found 378 paths on the branch, 461 on `main`, and 133 branch-only paths. The compare API reports 626 commits ahead and 966 behind the merge base. The branch is materially divergent; a bulk merge or cherry-pick sequence is not a safe integration strategy. [Compare refs](https://github.com/Ayka11/reality_engine/compare/main...infinity-scale-real-diagnostics)
 
