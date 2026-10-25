@@ -133,3 +133,8 @@ Sparse chunk persistence now treats a chunk as empty only when all fields of all
 ### Post-step subsystem publication
 
 The main animation loop now predicts whether climate, multiscale, or language ticks will write the public CPU grid. Before a scheduled writer pass it invalidates any pending GPU readback, and after the synchronous batch it publishes dense/chunk/GPU state once. Non-writing ticks do not trigger an unnecessary whole-grid GPU upload. If a scheduled pass throws after partial writes, the `finally` publication keeps CPU, chunk and GPU representations aligned, although the independent subsystem's own non-grid state is not rolled back by the core engine snapshot.
+
+
+### Synchronous mutation callback preflight
+
+The authoritative mutation boundary now rejects native async, async-generator, and generator callbacks before invoking them. Rejecting only the returned Promise is too late for an `async` callback: code before its first `await` may mutate state, and its continuation can resume after rollback. Regression coverage verifies an async callback's body is never entered and a returned thenable still triggers synchronous-prefix rollback. Callbacks must still avoid scheduling detached side effects themselves; JavaScript cannot cancel arbitrary external work created by a nominally synchronous function.

@@ -237,6 +237,15 @@ export class SimulationEngine {
     if (typeof mutation !== 'function') {
       throw new TypeError('Authoritative mutation requires a synchronous callback');
     }
+    // Async functions begin executing as soon as they are called; rejecting their
+    // returned Promise afterwards cannot cancel code scheduled after the first await.
+    // Reject async/generator callbacks before invoking them at all.
+    const mutationKind = Object.prototype.toString.call(mutation);
+    if (mutationKind === '[object AsyncFunction]' ||
+        mutationKind === '[object AsyncGeneratorFunction]' ||
+        mutationKind === '[object GeneratorFunction]') {
+      throw new TypeError('Authoritative mutation callback must remain synchronous');
+    }
 
     // Invalidate any in-flight GPU result before snapshotting or exposing mutation.
     this._stateGeneration++;

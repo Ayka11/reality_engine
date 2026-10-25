@@ -151,16 +151,35 @@ assert.equal(
   "successful mutation must publish dense changes to the chunk mirror",
 );
 const committedExternalMutation = mutationBoundaryEngine.captureCoreRecoveryState();
+let asyncContinuationRan = false;
+const asyncMutation = async () => {
+  mutationBoundaryEngine.grid.buffer[mutationBoundaryIndex] = 888;
+  await Promise.resolve();
+  asyncContinuationRan = true;
+  mutationBoundaryEngine.grid.buffer[mutationBoundaryIndex] = 999;
+};
+assert.throws(
+  () => mutationBoundaryEngine.mutateAuthoritativeState(asyncMutation),
+  /must remain synchronous/,
+);
+await Promise.resolve();
+assert.equal(asyncContinuationRan, false,
+  "an async callback must be rejected before invocation so its continuation cannot mutate after rollback");
+assert.deepEqual(
+  mutationBoundaryEngine.captureCoreRecoveryState(),
+  committedExternalMutation,
+  "an async callback must leave the authoritative state unchanged");
+
 assert.throws(
   () => mutationBoundaryEngine.mutateAuthoritativeState(
-    () => Promise.resolve("async mutation must be rejected"),
+    () => Promise.resolve("thenable result must be rejected"),
   ),
   /must remain synchronous/,
 );
 assert.deepEqual(
   mutationBoundaryEngine.captureCoreRecoveryState(),
   committedExternalMutation,
-  "an async callback must be rejected and its synchronous prefix rolled back",
+  "a synchronous callback returning a Promise must roll back its synchronous prefix",
 );
 
 // A zero-step sync remains an explicit mutation boundary for public typed-array
