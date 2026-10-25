@@ -1056,7 +1056,10 @@ assert.equal(singletonLifecycleLayer.extinctCount, 1,
   for (const y of [2, 3]) {
     for (const z of [2, 3]) {
       const values = new Float32Array(CELL_FIELDS);
-      values[F.ENTITY_ID] = 77;
+      // Give the face footprint distinct identity values. The exact neighbor
+      // at (8,2,2) owns ID 77; restriction over the full face must not be used
+      // to infer a particular neighbor's identity.
+      values[F.ENTITY_ID] = y === 2 && z === 2 ? 77 : y === 3 && z === 2 ? 88 : 0;
       lodState.writeBaseCell(boundarySpec.sourceChunk, boundarySpec.sourceLevel, 8, y, z, values);
     }
   }
@@ -1183,6 +1186,71 @@ assert.equal(singletonLifecycleLayer.extinctCount, 1,
     sample.sourceChunk === xSpec.sourceChunk),
     false,
     "X-face source entity must not be mislabeled as the Y-face neighbor");
+}
+
+
+
+// Coarse-to-fine topology must also read the exact neighboring coarse cell,
+// while the numerical field-transfer path remains responsible for prolongation.
+{
+  const coarseSourceKey = "1:0,0,0";
+  const fineTargetKey = "0:2,0,0";
+  const coarseToFinePlan: InfinityScaleExecutionPlan = {
+    revision: 914,
+    mode: "advisory",
+    observer: { x: 0, y: 0, z: 0 },
+    chunks: [{ key: fineTargetKey, lod: 0, amr: 0, distance: 0 }],
+    simulationBudget: 1,
+    requestedSimulationCount: 1,
+    selectedSimulationCount: 1,
+    maxSimulatingChunks: 1,
+    boundaryReadChunks: [coarseSourceKey],
+    boundaryReadCount: 1,
+    boundaryReadRelations: [{
+      sourceChunk: coarseSourceKey,
+      targetChunk: fineTargetKey,
+      relation: "coarse-to-fine",
+    }],
+    simulationCellCount: 64,
+    boundaryReadCellCount: 512,
+    localExecutionLayers: [],
+    globalExecutionLayers: [],
+    selectiveCpuReady: false,
+    selectiveGpuReady: false,
+    gpuPhysicsReady: false,
+    lodBoundaryTransferReady: false,
+    mixedLodExecutionReady: false,
+    entityExecutionReady: false,
+    agentMigrationReady: false,
+  };
+  const coarseToFineContext = new InfinityScaleChunkExecutionContext(
+    coarseToFinePlan, 12, 8, 8, 4,
+  );
+  const coarseToFineSpecs = coarseToFineContext.getBoundaryTransferSpecsForCell(8, 2, 2);
+  assert.equal(coarseToFineSpecs.length, 1);
+  const coarseToFineSpec = coarseToFineSpecs[0];
+  const coarseToFineState = new InfinityScaleLODState(4);
+  const coarseValues = new Float32Array(CELL_FIELDS);
+  coarseValues[F.ENTITY_ID] = 99;
+  coarseToFineState.writeBaseCell(coarseSourceKey, 1, 6, 2, 2, coarseValues);
+  const coarseToFineSnapshot = InfinityScaleLODBoundarySnapshot.capture(
+    coarseToFineState, coarseToFineSpecs, coarseToFinePlan.revision, 4,
+  );
+  const fineGrid = new VoxelGrid(12, 8, 8);
+  fineGrid.buffer[fineGrid.idx(8, 2, 2) + F.BIO_POTENTIAL] = 0.8;
+  const coarseToFineResult = new EntityChunkConnectivity().analyze(
+    fineGrid, coarseToFineContext, coarseToFineSnapshot,
+  );
+  const fineTargetIndex = 2 * fineGrid.W * fineGrid.H + 2 * fineGrid.W + 8;
+  assert.ok(coarseToFineResult.mixedLodTopology.some(sample =>
+    sample.localCell === fineTargetIndex &&
+    sample.neighborCell[0] === 7 &&
+    sample.neighborCell[1] === 2 &&
+    sample.neighborCell[2] === 2 &&
+    sample.sourceChunk === coarseSourceKey &&
+    sample.occupied &&
+    sample.sourceEntityId === 99),
+    "fine-to-coarse topology must preserve the exact source coarse cell ID");
 }
 
 console.log("EntityLayer legacy singleton lifecycle characterization: PASS");

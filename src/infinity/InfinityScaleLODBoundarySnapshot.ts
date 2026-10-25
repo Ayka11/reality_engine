@@ -8,7 +8,7 @@ import type {
   InfinityScaleChunkExecutionContext,
 } from "./InfinityScaleChunkExecutionContext";
 import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
-import { mapInfinityScaleBoundaryCell } from "./InfinityScaleLODBoundaryCellMapper";
+import { isInfinityScaleSourceBoundaryCell, mapInfinityScaleBoundaryCell } from "./InfinityScaleLODBoundaryCellMapper";
 import { validateInfinityScaleBoundaryGeometry } from "./InfinityScaleLODBoundaryGeometry";
 
 export interface InfinityScaleLODTransferSample {
@@ -77,6 +77,42 @@ export class InfinityScaleLODBoundarySnapshot {
   hasSourceChunk(key: string): boolean {
     return this.chunks.has(key);
   }
+
+  /**
+   * Read the exact source-side cell at a mixed-LOD boundary without applying
+   * field restriction/prolongation. Entity topology needs the actual ENTITY_ID
+   * of a neighbor, not the majority/averaged value produced for field transfer.
+   */
+  readSourceCell(
+    spec: InfinityScaleBoundaryTransferSpec,
+    sourceCell: [number, number, number],
+  ): Float32Array | null {
+    const source = this.chunks.get(spec.sourceChunk);
+    if (!source ||
+        source.level !== spec.sourceLevel ||
+        source.scale !== 2 ** spec.sourceLevel ||
+        !sourceCell.every(Number.isSafeInteger) ||
+        !isInfinityScaleSourceBoundaryCell(spec, sourceCell, this.chunkSize)) {
+      return null;
+    }
+
+    const sourceRange = chunkRangeForKey(spec.sourceChunk, this.chunkSize);
+    const sourceScale = 2 ** spec.sourceLevel;
+    const lx = Math.floor((sourceCell[0] - sourceRange.minX) / sourceScale);
+    const ly = Math.floor((sourceCell[1] - sourceRange.minY) / sourceScale);
+    const lz = Math.floor((sourceCell[2] - sourceRange.minZ) / sourceScale);
+    if (lx < 0 || lx >= this.chunkSize ||
+        ly < 0 || ly >= this.chunkSize ||
+        lz < 0 || lz >= this.chunkSize) {
+      return null;
+    }
+
+    const offset = ((lz * this.chunkSize * this.chunkSize) + ly * this.chunkSize + lx) * CELL_FIELDS;
+    const values = new Float32Array(CELL_FIELDS);
+    values.set(source.cells.subarray(offset, offset + CELL_FIELDS));
+    return values;
+  }
+
 
   getCoverage(): InfinityScaleLODBoundaryCoverage {
     const requiredSourceChunks = [...new Set(this.specs.map(spec => spec.sourceChunk))].sort();

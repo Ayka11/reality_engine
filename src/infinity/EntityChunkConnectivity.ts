@@ -309,7 +309,7 @@ export class EntityChunkConnectivity {
               relation.targetChunk === spec.targetChunk &&
               relation.relation === spec.relation);
             if (!matchesTransfer) continue;
-            const values = boundarySnapshot.read(spec, [c.x, c.y, c.z]);
+            const values = boundarySnapshot.readSourceCell(spec, [nx, ny, nz]);
             if (!values) continue;
             const sourceEntityId = Math.round(values[F.ENTITY_ID] ?? 0);
             const key = `${cell}|${nx},${ny},${nz}|${spec.sourceChunk}|${spec.relation}`;
