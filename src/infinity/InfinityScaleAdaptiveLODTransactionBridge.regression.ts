@@ -453,6 +453,65 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   }
 
 
+  // Scheduling inputs are part of the captured plan too. Distances and
+  // budgets can change the selected work set without changing revision or keys.
+  const schedulingPlan: InfinityScaleExecutionPlan = {
+    ...geometryPlan,
+    chunks: geometryPlan.chunks.map(chunk => ({ ...chunk })),
+    observer: { ...geometryPlan.observer },
+    boundaryReadChunks: [...geometryPlan.boundaryReadChunks],
+    boundaryReadRelations: geometryPlan.boundaryReadRelations.map(relation => ({ ...relation })),
+    localExecutionLayers: [...geometryPlan.localExecutionLayers],
+    globalExecutionLayers: [...geometryPlan.globalExecutionLayers],
+  };
+  const schedulingFrame0 = beginInfinityScaleGlobalFrame(schedulingPlan, 0, 1);
+  const schedulingFrame1 = advanceInfinityScaleGlobalFrame(schedulingFrame0, "local-execution");
+  const schedulingFrame2 = advanceInfinityScaleGlobalFrame(schedulingFrame1, "local-commit");
+  const schedulingFrame = advanceInfinityScaleGlobalFrame(schedulingFrame2, "boundary-reconciliation");
+  const schedulingState = new InfinityScaleLODState(2);
+  const schedulingStateRevision = schedulingState.getRevision();
+  const schedulingBridge = new InfinityScaleAdaptiveLODTransactionBridge(schedulingPlan, schedulingState);
+
+  schedulingBridge.begin(schedulingFrame);
+  const originalDistance = schedulingPlan.chunks[0].distance;
+  schedulingPlan.chunks[0].distance = originalDistance + 1;
+  let changedDistanceRejected = false;
+  try {
+    schedulingBridge.commit(schedulingFrame, []);
+  } catch (error) {
+    changedDistanceRejected = error instanceof Error && error.message.includes("ownership geometry changed");
+  }
+  if (!changedDistanceRejected) {
+    throw new Error("Adaptive LOD bridge accepted changed chunk distance under the same plan revision");
+  }
+  if (schedulingState.getRevision() !== schedulingStateRevision || schedulingState.keys().length !== 0) {
+    throw new Error("Stale scheduling-distance rejection mutated authoritative LOD state");
+  }
+
+  schedulingPlan.chunks[0].distance = originalDistance;
+  schedulingBridge.begin(schedulingFrame);
+  const originalBudget = schedulingPlan.simulationBudget;
+  schedulingPlan.simulationBudget = originalBudget + 1;
+  let changedBudgetRejected = false;
+  try {
+    schedulingBridge.commit(schedulingFrame, []);
+  } catch (error) {
+    changedBudgetRejected = error instanceof Error && error.message.includes("ownership geometry changed");
+  }
+  if (!changedBudgetRejected) {
+    throw new Error("Adaptive LOD bridge accepted changed simulation budget under the same plan revision");
+  }
+  if (schedulingState.getRevision() !== schedulingStateRevision || schedulingState.keys().length !== 0) {
+    throw new Error("Stale scheduling-budget rejection mutated authoritative LOD state");
+  }
+
+  schedulingPlan.simulationBudget = originalBudget;
+  schedulingBridge.begin(schedulingFrame);
+  if (!schedulingBridge.commit(schedulingFrame, []).committed) {
+    throw new Error("Adaptive LOD bridge could not be reused after scheduling-plan rejection");
+  }
+
+
   // Runtime capability flags are part of the frame contract too. A plan may
   // keep the same revision while its readiness claim changes; commit must reject.
   const capabilityPlan: InfinityScaleExecutionPlan = { ...plan };
