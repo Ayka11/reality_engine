@@ -178,7 +178,10 @@ export class ChunkGrid {
   }
 
   restore(snap: Array<{ key: number; data: number[] }>): void {
-    this.chunks.clear(); this.dirtyChunks.clear()
+    // Snapshot restore replaces the complete chunk set. Mark removed keys so
+    // frame consumers can clear any geometry/state retained for those chunks.
+    for (const key of this.chunks.keys()) this.dirtyChunks.add(key)
+    this.chunks.clear()
     for (const { key, data } of snap) {
       this.chunks.set(key, new Float32Array(data))
       this.dirtyChunks.add(key)
