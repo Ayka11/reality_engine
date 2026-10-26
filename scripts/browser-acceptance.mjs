@@ -123,6 +123,10 @@ try {
 
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
+  const noGenerationCheck = await page.evaluate((before) => window.worldVerifyGeneration?.(before), initial);
+  if (noGenerationCheck?.ok !== false || noGenerationCheck?.reason !== "generation-revision-did-not-advance") {
+    throw new Error("World generation verifier must reject unchanged state even when the stats object exists: " + JSON.stringify(noGenerationCheck));
+  }
 
   // Bottom-bar counters must describe the selected runtime, not the unrelated legacy 2D grid.
   await page.waitForFunction(() => {
@@ -1918,13 +1922,18 @@ try {
   await page.getByRole("button", { name: /Quick Generate/ }).click();
   await page.waitForFunction((b) => {
     const a = window.worldGenerationHealth();
-    return Number(a?.stats?.objects ?? 0) !== Number(b?.stats?.objects ?? 0)
-      || Number(a?.stats?.loadedChunks ?? 0) !== Number(b?.stats?.loadedChunks ?? 0)
-      || !!a?.lastGeneration;
+    return Number(a?.lastGeneration?.generationRevision ?? 0) > Number(b?.lastGeneration?.generationRevision ?? 0);
   }, before, { timeout: acceptanceTimeout });
 
-  const afterQuick = await page.evaluate(() => window.worldGenerationHealth());
-  if (!afterQuick?.lastGeneration) throw new Error("Quick Generate did not record a generation result");
+  const quickResult = await page.evaluate((beforeState) => ({
+    after: window.worldGenerationHealth(),
+    verification: window.worldVerifyGeneration?.(beforeState),
+  }), before);
+  const afterQuick = quickResult.after;
+  if (!quickResult.verification?.ok || !quickResult.verification?.generationAdvanced ||
+      Number(afterQuick?.stats?.objects ?? 0) <= 0) {
+    throw new Error("Quick Generate did not prove a new non-empty world generation: " + JSON.stringify(quickResult));
+  }
 
   // Quick Generate has been fully validated. Close its continuously rendering page
   // before opening the independent Composer page so headless Chromium does not run
@@ -1945,6 +1954,7 @@ try {
   await composePage.waitForSelector("#c3d");
   await composePage.waitForFunction(() => typeof window.worldGenerationHealth === "function");
 
+  const beforeCompose = await composePage.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Compose World");
   await composePage.getByRole("button", { name: /Compose World/ }).click();
   await composePage.waitForSelector("#comp.open");
@@ -1954,13 +1964,20 @@ try {
   for (let i = 0; i < 4; i++) await composePage.locator("#cnext").click();
   console.log("[acceptance] Generate Reality");
   await composePage.getByRole("button", { name: /Generate Reality/ }).click({ timeout: acceptanceTimeout });
-  await composePage.waitForFunction(() => {
+  await composePage.waitForFunction((beforeState) => {
     const health = window.worldGenerationHealth();
-    return !!health?.lastGeneration;
-  }, undefined, { timeout: acceptanceTimeout });
+    return Number(health?.lastGeneration?.generationRevision ?? 0) > Number(beforeState?.lastGeneration?.generationRevision ?? 0);
+  }, beforeCompose, { timeout: acceptanceTimeout });
 
-  const afterCompose = await composePage.evaluate(() => window.worldGenerationHealth());
-  if (!afterCompose?.lastGeneration) throw new Error("Compose World did not produce a generation record");
+  const composeResult = await composePage.evaluate((beforeState) => ({
+    after: window.worldGenerationHealth(),
+    verification: window.worldVerifyGeneration?.(beforeState),
+  }), beforeCompose);
+  const afterCompose = composeResult.after;
+  if (!composeResult.verification?.ok || !composeResult.verification?.generationAdvanced ||
+      Number(afterCompose?.stats?.objects ?? 0) <= 0) {
+    throw new Error("Compose World did not prove a new non-empty world generation: " + JSON.stringify(composeResult));
+  }
   await composePage.close();
 
   acceptancePassed = true;
