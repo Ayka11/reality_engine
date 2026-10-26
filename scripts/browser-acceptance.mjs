@@ -560,15 +560,21 @@ try {
     infiniteWorldRunning: window.getInfiniteWorldSimulationRunning?.(),
     nonZeroFields: Array.from(window.buf).filter(value => value !== 0).length,
     buttonText: document.getElementById("pb")?.textContent?.trim(),
+    hudLabel: document.getElementById("tkLabel")?.textContent?.trim(),
     tickLabel: document.getElementById("tkOut")?.textContent?.trim(),
   }));
+  // The bottom HUD is bound to the selected runtime. In Infinite World mode,
+  // updateHealth() intentionally renders "World: Ready" rather than the
+  // unrelated legacy 2D tick counter; the legacy counter is checked above.
+  const expectedHudValue = resetState.hudLabel === "World:" ? "Ready" : "0";
   if (
     resetState.tick !== 0 ||
     resetState.playing !== false ||
     resetState.infiniteWorldRunning !== false ||
     resetState.nonZeroFields !== 0 ||
     resetState.buttonText !== "▶ Play" ||
-    resetState.tickLabel !== "0"
+    !resetState.tickLabel ||
+    resetState.tickLabel !== expectedHudValue
   ) {
     throw new Error(`2D field reset failed to restore its documented baseline: ${JSON.stringify(resetState)}`);
   }
