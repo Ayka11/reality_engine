@@ -246,6 +246,48 @@ try {
     throw new Error(`Mixed-LOD terrain seam is not stitched: ${JSON.stringify(terrainSeam)}`);
   }
 
+  // Global Play/Pause controls 3D simulation effects without stopping rendering or streaming.
+  const playPauseBaseline = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (!world || typeof window.getInfiniteWorldSimulationRunning !== "function" ||
+        typeof window.setInfiniteWorldSimulationRunning !== "function") return { error: "simulation lifecycle bridge unavailable" };
+    world.setShowParticles(true);
+    return {
+      running: window.getInfiniteWorldSimulationRunning(),
+      tick: Number(window.tick) || 0,
+      positions: Array.from(world.physicsParticlePositions.slice(0, 60)),
+    };
+  });
+  if (playPauseBaseline.error || playPauseBaseline.running !== false) {
+    throw new Error(`3D simulation should start paused with the global Play button: ${JSON.stringify(playPauseBaseline.error ?? playPauseBaseline.running)}`);
+  }
+  await page.locator("#pb").click();
+  await page.waitForFunction((before) => {
+    const world = window.infiniteWorld;
+    const current = Array.from(world.physicsParticlePositions.slice(0, before.positions.length));
+    return window.getInfiniteWorldSimulationRunning?.() === true &&
+      Number(window.tick) > before.tick &&
+      current.some((value, index) => Math.abs(value - before.positions[index]) > 1e-6);
+  }, playPauseBaseline, { timeout: 8000 });
+  await page.locator("#pb").click();
+  await page.waitForFunction(() =>
+    window.getInfiniteWorldSimulationRunning?.() === false &&
+    document.getElementById("pb")?.textContent?.includes("Play"));
+  const pausedSnapshot = await page.evaluate(() => ({
+    tick: Number(window.tick) || 0,
+    positions: Array.from(window.infiniteWorld.physicsParticlePositions.slice(0, 60)),
+  }));
+  await page.waitForTimeout(250);
+  const pausedAfter = await page.evaluate(() => ({
+    tick: Number(window.tick) || 0,
+    positions: Array.from(window.infiniteWorld.physicsParticlePositions.slice(0, 60)),
+  }));
+  if (pausedAfter.tick !== pausedSnapshot.tick ||
+      pausedAfter.positions.some((value, index) => Math.abs(value - pausedSnapshot.positions[index]) > 1e-6)) {
+    throw new Error("Pause stopped the legacy tick but not the 3D particle simulation");
+  }
+  await page.evaluate(() => window.infiniteWorld?.setShowParticles(false));
+
   // Deterministic scientific view-window sampling must be available to the browser runtime.
   const viewWindowContract = await page.evaluate(() => {
     const sampleWindow = window.worldFieldViewWindow;

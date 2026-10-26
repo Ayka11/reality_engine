@@ -550,6 +550,7 @@ const FE=0,FD=1,FI=2,FS=3,FT=4,FFX=5,FFY=6,FTau=8,FCid=9,FBio=10,FProc=11;
 let buf=new Float32Array(SZ*NF),bbuf=new Float32Array(SZ*NF);
 window.W=W;window.H=H;window.D=D;window.NF=NF;window.buf=buf;
 let causal=[],tick=0,playing=false,layer=-1;
+window.realityEnginePlaying=playing;
 let selX=-1,selY=-1,painting=false,tool='paint';
 let lastTs=0,fps=0,fc=0,fpt=0;
 const UNDO_MAX=5;const _undoRing=[];let _undoHead=0,_undoCount=0;
@@ -1857,6 +1858,8 @@ function generateWorld(){
     closeComp();
     drawGrid();
     playing=true;
+    window.realityEnginePlaying=playing;
+    window.setInfiniteWorldSimulationRunning?.(playing);
     document.getElementById('pb').textContent='⏸ Pause';
   }
 }
@@ -2801,6 +2804,8 @@ window.setMoodPill=setMoodPill;
 
 function togglePlay(){
   playing=!playing;
+  window.realityEnginePlaying=playing;
+  window.setInfiniteWorldSimulationRunning?.(playing);
   if(currentAppMode==='game')isPaused=!playing;
   document.getElementById('pb').textContent=playing?'⏸ Pause':'▶ Play';
 }

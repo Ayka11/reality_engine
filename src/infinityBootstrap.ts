@@ -23,8 +23,11 @@ export function bootstrapInfiniteWorld() {
   if (!canvas) return null
   const seed = (window as any).worldSeed || 'reality-seed-1'
   const world = new InfiniteWorldRenderer(canvas, seed)
+  world.setSimulationRunning(Boolean((window as any).realityEnginePlaying))
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world
+  ;(window as any).setInfiniteWorldSimulationRunning = (running: boolean) => world.setSimulationRunning(running)
+  ;(window as any).getInfiniteWorldSimulationRunning = () => world.isSimulationRunning()
   ;(window as any).worldFieldMutate = (mutation: any) => world.applyAuthoritativeFieldMutation(mutation)
   ;(window as any).worldFieldState = () => world.getAuthoritativeFieldState()
   // Read-only scientific field inspection and deterministic 2D view-window sampling.

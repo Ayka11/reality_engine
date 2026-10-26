@@ -109,11 +109,20 @@ export class InfiniteWorldRenderer {
   private analyticalOverlayMode: 'suitability' | 'flood' | 'slope' | null = null
   private analyticalOverlayMesh?: THREE.Points
   private enabled = true
+  private simulationRunning = false
   private lastCenter: ChunkCoord | null = null
   private worldY = 45
   private worldPosition = new THREE.Vector3(28, 45, 52)
 
   getWorldPosition() { return this.worldPosition.clone() }
+
+  setSimulationRunning(running: boolean) {
+    this.simulationRunning = Boolean(running)
+  }
+
+  isSimulationRunning() {
+    return this.simulationRunning
+  }
 
   private worldToLocal(position: THREE.Vector3): THREE.Vector3 {
     return position.clone().sub(this.worldAnchor)
@@ -2785,7 +2794,7 @@ export class InfiniteWorldRenderer {
     this.syncObjects()
     this.runtimeDiagnostics.recordChunkSync(performance.now() - chunkStart)
 
-    this.animatePhysicsObjects(dt)
+    if (this.simulationRunning) this.animatePhysicsObjects(dt)
 
     const physicsStart = performance.now()
     this.updatePhysicsParticles(dt)
@@ -2852,7 +2861,7 @@ export class InfiniteWorldRenderer {
   private updatePhysicsParticles(dt: number) {
     this.physicsFrameQueries = 0
     this.physicsFrameInteractions = 0
-    if (!this.physicsParticlePoints || !this.showParticles) return
+    if (!this.simulationRunning || !this.physicsParticlePoints || !this.showParticles) return
     const pos = this.physicsParticlePositions
     const vel = this.physicsParticleVelocities
     const col = this.physicsParticleColors
