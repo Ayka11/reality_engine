@@ -188,11 +188,13 @@ try {
   await page.waitForFunction(() => {
     const world = window.infiniteWorld;
     const patches = [...(world?.patches?.values?.() ?? [])];
-    if (patches.length < 8) return false;
-    const keys = new Set(patches.map(p => `${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`));
-    return patches.some(p =>
-      keys.has(`${p.chunk.cx + 1},${p.chunk.cy},${p.chunk.cz}`) ||
-      keys.has(`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz + 1}`));
+    if (patches.length < 13) return false;
+    const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
+    return patches.some(p => {
+      const east = byKey.get(`${p.chunk.cx + 1},${p.chunk.cy},${p.chunk.cz}`);
+      const south = byKey.get(`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz + 1}`);
+      return (!!east && east.lod !== p.lod) || (!!south && south.lod !== p.lod);
+    });
   }, null, { timeout: 15000 });
   const terrainSeam = await page.evaluate(() => {
     const world = window.infiniteWorld;
