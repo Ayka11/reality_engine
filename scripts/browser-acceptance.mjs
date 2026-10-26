@@ -228,6 +228,33 @@ try {
     throw new Error(`Fly camera did not move while W was held: before=${JSON.stringify(flyBefore)}, after=${JSON.stringify(flyAfter)}`);
   }
 
+  // Fly must support mouse-look as well as translation; otherwise it is just
+  // a fixed-heading camera with OrbitControls disabled.
+  const flyCanvasBounds = await page.locator("#c3d").boundingBox();
+  if (!flyCanvasBounds || flyCanvasBounds.width < 100 || flyCanvasBounds.height < 100) {
+    throw new Error("Fly camera test cannot access a visible Infinite World canvas");
+  }
+  const flyLookStart = {
+    x: flyCanvasBounds.x + flyCanvasBounds.width / 2,
+    y: flyCanvasBounds.y + flyCanvasBounds.height / 2,
+  };
+  const flyRotationBefore = await page.evaluate(() => {
+    const r = window.infiniteWorld?.camera?.rotation;
+    return r ? [r.x, r.y, r.z] : null;
+  });
+  await page.mouse.move(flyLookStart.x, flyLookStart.y);
+  await page.mouse.down({ button: "left" });
+  await page.mouse.move(flyLookStart.x + 72, flyLookStart.y - 28, { steps: 6 });
+  await page.mouse.up({ button: "left" });
+  const flyRotationAfter = await page.evaluate(() => {
+    const r = window.infiniteWorld?.camera?.rotation;
+    return r ? [r.x, r.y, r.z] : null;
+  });
+  if (!flyRotationBefore || !flyRotationAfter ||
+      Math.hypot(flyRotationAfter[0] - flyRotationBefore[0], flyRotationAfter[1] - flyRotationBefore[1]) < 0.01) {
+    throw new Error(`Fly camera did not respond to mouse-look drag: before=${JSON.stringify(flyRotationBefore)}, after=${JSON.stringify(flyRotationAfter)}`);
+  }
+
   // Leave the application in the normal OrbitControls mode for subsequent tests.
   await page.locator("#cam_orbit").click();
 

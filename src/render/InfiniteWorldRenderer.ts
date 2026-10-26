@@ -340,6 +340,16 @@ export class InfiniteWorldRenderer {
       if (distance <= 5 && elapsed <= 450) this.handlePointer(e.clientX, e.clientY)
     }
     const pointerMoveHandler = (e: PointerEvent) => {
+      // In Fly mode, drag the left mouse button to look around. OrbitControls
+      // are intentionally disabled in first-person mode, so this is the direct look path.
+      if (this.flyMode && (e.buttons & 1) !== 0) {
+        const deltaX = e.clientX - this.pointerDownX
+        const deltaY = e.clientY - this.pointerDownY
+        this.pointerDownX = e.clientX
+        this.pointerDownY = e.clientY
+        if (deltaX !== 0 || deltaY !== 0) this.rotateFlyCamera(deltaX, deltaY)
+        return
+      }
       if (this.objectTool === 'place') {
         this.pickAtScreen(e.clientX, e.clientY)
       } else if (this.hoverMarker.visible) {
@@ -2732,6 +2742,23 @@ export class InfiniteWorldRenderer {
     this.syncObjects()
     this.scheduleSave()
     return created
+  }
+
+  private rotateFlyCamera(deltaX: number, deltaY: number) {
+    const direction = this.camera.getWorldDirection(new THREE.Vector3())
+    let yaw = Math.atan2(-direction.x, -direction.z)
+    let pitch = Math.asin(THREE.MathUtils.clamp(direction.y, -1, 1))
+    const sensitivity = 0.002
+    yaw -= deltaX * sensitivity
+    pitch = THREE.MathUtils.clamp(
+      pitch - deltaY * sensitivity,
+      -Math.PI / 2 + 0.01,
+      Math.PI / 2 - 0.01,
+    )
+    this.camera.rotation.order = 'YXZ'
+    this.camera.rotation.set(pitch, yaw, 0)
+    const forward = this.camera.getWorldDirection(new THREE.Vector3())
+    this.controls.target.copy(this.camera.position).addScaledVector(forward, 30)
   }
 
   private updateFly(dt: number) {
