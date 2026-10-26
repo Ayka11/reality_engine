@@ -325,6 +325,78 @@ try {
     throw new Error(`Mixed-LOD terrain seam is not stitched: ${JSON.stringify(terrainSeam)}`);
   }
 
+  // Validate the actual rendered terrain geometry, not only generator arrays or
+  // renderer counters. Catch collapsed heightfields, non-finite vertices, invalid
+  // indices, and degenerate triangles before visual defects reach release.
+  const terrainGeometry = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const patches = [...(world?.patches?.values?.() ?? [])];
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let vertexCount = 0;
+    let triangleCount = 0;
+    let degenerateTriangles = 0;
+    let invalidIndices = 0;
+    let nonFiniteVertices = 0;
+    const distinctHeights = new Set();
+
+    for (const patch of patches) {
+      const mesh = patch.group.children.find(child => child.userData?.terrain);
+      const geometry = mesh?.geometry;
+      const position = geometry?.getAttribute?.("position");
+      const index = geometry?.index;
+      if (!position || !index || position.count < 3 || index.count < 3) continue;
+
+      vertexCount += position.count;
+      for (let i = 0; i < position.count; i++) {
+        const x = position.getX(i);
+        const y = position.getY(i);
+        const z = position.getZ(i);
+        if (![x, y, z].every(Number.isFinite)) {
+          nonFiniteVertices++;
+          continue;
+        }
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+        distinctHeights.add(Math.round(y * 1000) / 1000);
+      }
+
+      const ax = new Float64Array(3);
+      const bx = new Float64Array(3);
+      const cx = new Float64Array(3);
+      for (let i = 0; i + 2 < index.count; i += 3) {
+        const ia = index.getX(i), ib = index.getX(i + 1), ic = index.getX(i + 2);
+        triangleCount++;
+        if ([ia, ib, ic].some(v => !Number.isInteger(v) || v < 0 || v >= position.count)) {
+          invalidIndices++;
+          continue;
+        }
+        ax[0] = position.getX(ib) - position.getX(ia);
+        ax[1] = position.getY(ib) - position.getY(ia);
+        ax[2] = position.getZ(ib) - position.getZ(ia);
+        bx[0] = position.getX(ic) - position.getX(ia);
+        bx[1] = position.getY(ic) - position.getY(ia);
+        bx[2] = position.getZ(ic) - position.getZ(ia);
+        cx[0] = ax[1] * bx[2] - ax[2] * bx[1];
+        cx[1] = ax[2] * bx[0] - ax[0] * bx[2];
+        cx[2] = ax[0] * bx[1] - ax[1] * bx[0];
+        if (Math.hypot(cx[0], cx[1], cx[2]) < 1e-6) degenerateTriangles++;
+      }
+    }
+    return {
+      loadedPatches: patches.length, vertexCount, triangleCount,
+      minY, maxY, relief: maxY - minY, distinctHeightSamples: distinctHeights.size,
+      degenerateTriangles, invalidIndices, nonFiniteVertices,
+    };
+  });
+  if (terrainGeometry.loadedPatches < 13 || terrainGeometry.vertexCount <= 0 ||
+      terrainGeometry.triangleCount <= 0 || !Number.isFinite(terrainGeometry.relief) ||
+      terrainGeometry.relief < 1 || terrainGeometry.distinctHeightSamples < 8 ||
+      terrainGeometry.degenerateTriangles > 0 || terrainGeometry.invalidIndices > 0 ||
+      terrainGeometry.nonFiniteVertices > 0) {
+    throw new Error(`Rendered terrain geometry contract failed: ${JSON.stringify(terrainGeometry)}`);
+  }
+
   // The rendered sea-level mesh must cover exactly the wet cells reported by the generator,
   // not one full plane per terrain chunk.
   const waterCoverage = await page.evaluate(() =>
