@@ -2367,8 +2367,8 @@ function renderField3DImpl(){
   const fieldState=typeof window.worldFieldState==='function'?window.worldFieldState()?.field:null;
   const cols=Math.max(6,Math.min(10,Math.floor(rect.width/80)));
   const rows=Math.max(4,Math.min(7,Math.floor(rect.height/80)));
-  const depth=3,spacing=Math.max(1,Math.min(8,Math.floor((view.visibleRadius||24)*2/depth)));
-  const cacheKey=[cols,rows,view.center.x,view.center.y,view.center.z,view.sliceY,view.visibleRadius,view.seed,fieldState?.version??0,fieldState?.mutationCount??0,fieldState?.lastMutation?.id??0].join('|');
+  const depth=7,spacing=Math.max(1,Math.min(8,Math.floor((view.visibleRadius||24)*2/depth)));
+  const cacheKey=[cols,rows,depth,spacing,view.center.x,view.center.y,view.center.z,view.sliceY,view.visibleRadius,view.seed,fieldState?.version??0,fieldState?.mutationCount??0,fieldState?.lastMutation?.id??0].join('|');
   if(!window.__worldField3DCache||window.__worldField3DCache.key!==cacheKey){
     const slices=[];
     for(let k=0;k<depth;k++){

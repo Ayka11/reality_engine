@@ -469,6 +469,38 @@ try {
       field3dDiagnostic.triangles < field3dDiagnostic.renderedCells * 12) {
     throw new Error("3D volumetric field is not backed by rendered WebGL volume geometry: " + JSON.stringify(field3dDiagnostic));
   }
+  if (field3dDiagnostic.slices < 5) {
+    throw new Error("3D volume has insufficient vertical sampling depth: " + JSON.stringify(field3dDiagnostic));
+  }
+
+  // The WebGL volume scene must also respond to normal pointer rotation.
+  const volumeCanvasBounds = await page.locator("#c3dField").boundingBox();
+  if (!volumeCanvasBounds || volumeCanvasBounds.width < 100 || volumeCanvasBounds.height < 100) {
+    throw new Error("3D volume camera test cannot access a visible canvas");
+  }
+  const volumeCameraBefore = await page.evaluate(() => {
+    const p = window.worldFieldVolumeRenderer?.camera?.position;
+    return p ? [p.x, p.y, p.z] : null;
+  });
+  const volumeLookStart = {
+    x: volumeCanvasBounds.x + volumeCanvasBounds.width / 2,
+    y: volumeCanvasBounds.y + volumeCanvasBounds.height / 2,
+  };
+  await page.mouse.move(volumeLookStart.x, volumeLookStart.y);
+  await page.mouse.down({ button: "left" });
+  await page.mouse.move(volumeLookStart.x + 56, volumeLookStart.y + 24, { steps: 5 });
+  await page.mouse.up({ button: "left" });
+  const volumeCameraAfter = await page.evaluate(() => {
+    const p = window.worldFieldVolumeRenderer?.camera?.position;
+    return p ? [p.x, p.y, p.z] : null;
+  });
+  if (!volumeCameraBefore || !volumeCameraAfter ||
+      Math.hypot(volumeCameraAfter[0] - volumeCameraBefore[0],
+        volumeCameraAfter[1] - volumeCameraBefore[1],
+        volumeCameraAfter[2] - volumeCameraBefore[2]) < 0.1) {
+    throw new Error("3D volume camera did not respond to pointer rotation: before=" +
+      JSON.stringify(volumeCameraBefore) + ", after=" + JSON.stringify(volumeCameraAfter));
+  }
 
   const volumeHud = await page.evaluate(() => ({
     fieldLabel: document.getElementById("tkLabel")?.textContent?.trim(),

@@ -232,7 +232,7 @@ export class WorldFieldVolumeRenderer {
     this.gridHelper.position.y = lowestLayer - 0.14
 
     if (!this.cameraFramed) {
-      const span = Math.max(frame.cols, frame.rows, 6)
+      const span = Math.max(frame.cols, frame.rows, frame.slices.length * 2.2, 6)
       this.camera.position.set(span * 1.15, span * 0.95 + 2, span * 1.25)
       this.controls.target.set(0, 0.15, 0)
       this.controls.update()

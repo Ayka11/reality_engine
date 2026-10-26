@@ -593,14 +593,17 @@ Capture a cluster → stamp it anywhere. Built-ins: Life Bloom, Energy Source, C
 
 ## Render Modes
 
-The four tabs at the top of the viewport:
+The viewport exposes distinct render paths with separate canvas contexts:
 
 | Tab | What You See |
 |---|---|
-| **🔲 3D Volumetric** | Three.js PBR renderer — 10 material types, particles, atmosphere |
-| **⬛ 2D Multi-Slice** | Four-quadrant view: Energy, Bio, Info, Entropy simultaneously |
-| **⟐ Hybrid** | Left: 4-field 2D overview (Energy/Bio/Info/Entropy) · Right: 3D PBR |
+| **🌍 3D Infinite World** | Three.js terrain chunks, streamed LOD, objects, water, and world-building tools |
+| **🧊 3D Volumetric Field** | WebGL instanced 3D voxel geometry sampled from the authoritative `WorldField`; drag to orbit and use the wheel to zoom |
+| **⬛ 2D Multi-Slice** | 2D multi-slice field inspection |
+| **⟐ Hybrid** | 2D field view alongside the Infinite World renderer |
 | **📈 Metrics** | Live numerical dashboard |
+
+The volumetric field canvas is rendered by `src/render/WorldFieldVolumeRenderer.ts`. Its diagnostic state reports the renderer, rendered instances, draw calls, triangle count, and sampling depth. When the WebGL renderer is unavailable, the fallback is explicitly reported as an isometric preview rather than being advertised as true 3D.
 
 ---
 
