@@ -44,6 +44,7 @@ export class ChunkRenderer {
   private greedyDataRevision = 0
   private greedyCacheKey = ''
   private greedyCacheSucceeded = false
+  private greedyCellMaterials: Int32Array | null = null
   private greedyQuadCount = 0
   private readonly MAX_GREEDY_QUADS = 200_000
 
@@ -458,7 +459,12 @@ export class ChunkRenderer {
 
     // Precompute sparse cell labels once. A label contains material class and a
     // quantized color, but occupancy—not color—controls face culling.
-    const cellMaterials = new Int32Array(GRID_W * GRID_H * GRID_D)
+    if (!this.greedyCellMaterials) {
+      this.greedyCellMaterials = new Int32Array(GRID_W * GRID_H * GRID_D)
+    } else {
+      this.greedyCellMaterials.fill(0)
+    }
+    const cellMaterials = this.greedyCellMaterials
     for (const [key, chunk] of this.shadowChunks) {
       const [cx, cy, cz] = decodeChunkKey(key)
       const bx = cx * CX, by = cy * CY, bz = cz * CZ
