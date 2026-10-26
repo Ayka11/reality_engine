@@ -157,26 +157,27 @@ try {
     throw new Error("Infinite World did not start in a valid 3D rendering state: " + JSON.stringify(renderLifecycleBaseline));
   }
 
-  await page.evaluate(() => window.setRenderMode("2d"));
+  const renderPausedBaseline = await page.evaluate(() => {
+    window.setRenderMode("2d");
+    return {
+      enabled: window.infiniteWorld?.isEnabled,
+      mode: window.currentRenderMode,
+      calls: window.__infiniteWorldRenderProbe?.calls ?? -1,
+    };
+  });
   await page.waitForTimeout(250);
   const renderPaused = await page.evaluate(() => ({
     enabled: window.infiniteWorld?.isEnabled,
     mode: window.currentRenderMode,
     calls: window.__infiniteWorldRenderProbe?.calls ?? -1,
   }));
-  if (renderPaused.enabled !== false || renderPaused.mode !== "2d" ||
-      renderPaused.calls !== renderLifecycleBaseline.calls) {
-    // The baseline count is captured below if the first paint happened after instrumentation.
-    const actualPaused = await page.evaluate(() => ({
-      enabled: window.infiniteWorld?.isEnabled,
-      mode: window.currentRenderMode,
-      calls: window.__infiniteWorldRenderProbe?.calls ?? -1,
-    }));
-    if (actualPaused.enabled !== false || actualPaused.mode !== "2d") {
-      throw new Error("Infinite World renderer was not disabled in 2D mode: " + JSON.stringify(actualPaused));
-    }
+  if (renderPausedBaseline.enabled !== false || renderPausedBaseline.mode !== "2d" ||
+      renderPaused.enabled !== false || renderPaused.mode !== "2d" ||
+      renderPaused.calls !== renderPausedBaseline.calls) {
+    throw new Error("Infinite World renderer continued drawing in 2D mode: " +
+      JSON.stringify({ baseline: renderPausedBaseline, paused: renderPaused }));
   }
-  const pausedRenderCalls = await page.evaluate(() => window.__infiniteWorldRenderProbe?.calls ?? -1);
+  const pausedRenderCalls = renderPaused.calls;
   await page.evaluate(() => window.setRenderMode("3d"));
   await page.waitForFunction((before) => {
     const world = window.infiniteWorld;
