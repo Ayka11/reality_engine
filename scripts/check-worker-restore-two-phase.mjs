@@ -109,6 +109,27 @@ for (let i = 0; i < dirtyCount; i++) {
 }
 assert.ok(frameKeys.includes(0), "next frame must publish a tombstone for the omitted old chunk");
 
+
+send("restoreBegin", { restoreId: 5, expected: 0 });
+const emptyReady = send("restoreEnd", { restoreId: 5 }).find(message => message.cmd === "restoreComplete");
+assert.equal(emptyReady.data.complete, true, "empty snapshots should be valid atomic restore targets");
+assert.equal(emptyReady.data.prepared, true);
+const emptyCommit = send("restoreCommit", { restoreId: 5 }).find(message => message.cmd === "restoreCommitted");
+assert.equal(emptyCommit.data.committed, true);
+assert.deepEqual(send("snapshot").find(message => message.cmd === "snapshot").data.snap, [],
+  "committing an empty snapshot must clear the entire prior chunk set");
+const emptyFrame = send("tick", { speed: 1 }).find(message => message.cmd === "frame");
+assert.ok(emptyFrame, "worker should publish cleanup after empty restore");
+const emptyFrameView = new DataView(emptyFrame.ab);
+const emptyDirtyCount = emptyFrameView.getUint32(0, true);
+const emptyFrameKeys = [];
+let emptyOffset = 4;
+for (let i = 0; i < emptyDirtyCount; i++) {
+  emptyFrameKeys.push(emptyFrameView.getUint32(emptyOffset, true));
+  emptyOffset += 4 + CHUNK_FLOATS * 4;
+}
+assert.ok(emptyFrameKeys.includes(1), "empty restore must publish a tombstone for every prior chunk");
+
 console.log("PASS: restoreEnd prepares without committing worker state");
 console.log("PASS: restoreAbort rolls back a prepared restore");
 console.log("PASS: restoreCommit makes prepared chunks durable in worker state");
