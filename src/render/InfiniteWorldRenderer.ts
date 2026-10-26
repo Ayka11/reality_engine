@@ -199,6 +199,7 @@ export class InfiniteWorldRenderer {
         default: throw new Error(`Unsupported legacy sculpt tool: ${tool}`)
       }
     })
+    this.refreshTerrainPatches()
     this.persistAuthoritativeFieldState()
     return transaction.mutation
   }
@@ -217,18 +218,25 @@ export class InfiniteWorldRenderer {
         legacyCoordinate: { ...cell },
       }, options.strength ?? 1),
     )
+    this.refreshTerrainPatches()
     this.persistAuthoritativeFieldState()
     return transaction.mutation
   }
   undoLegacySculptAuthoritative() {
     const transaction = this.authoritativeSculptTransactions.undo()
-    if (transaction) this.persistAuthoritativeFieldState()
+    if (transaction) {
+      this.refreshTerrainPatches()
+      this.persistAuthoritativeFieldState()
+    }
     return transaction
   }
 
   redoLegacySculptAuthoritative() {
     const transaction = this.authoritativeSculptTransactions.redo()
-    if (transaction) this.persistAuthoritativeFieldState()
+    if (transaction) {
+      this.refreshTerrainPatches()
+      this.persistAuthoritativeFieldState()
+    }
     return transaction
   }
 
