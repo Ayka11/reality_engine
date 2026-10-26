@@ -2831,14 +2831,12 @@ function resetLegacyFieldSimulation(){
   // This control intentionally resets only the legacy 2D field simulation.
   // Infinite World terrain/objects are a separate runtime and are not silently
   // destroyed by a control labelled for the 2D fields.
-  if(playing){
-    playing=false;
-    window.realityEnginePlaying=false;
-    window.setInfiniteWorldSimulationRunning?.(false);
-    if(currentAppMode==='game')isPaused=true;
-    const playButton=document.getElementById('pb');
-    if(playButton)playButton.textContent='▶ Play';
-  }
+  playing=false;
+  window.realityEnginePlaying=false;
+  window.setInfiniteWorldSimulationRunning?.(false);
+  if(currentAppMode==='game')isPaused=true;
+  const playButton=document.getElementById('pb');
+  if(playButton)playButton.textContent='▶ Play';
   buf.fill(0);
   bbuf.fill(0);
   causal.length=0;
