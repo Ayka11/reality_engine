@@ -527,6 +527,55 @@ try {
       ", input=" + JSON.stringify(inputDiagnostics));
   }
 
+  // Rotation alone is not enough: verify OrbitControls zoom and pan affect
+  // the actual camera/target, rather than only exposing enabled control flags.
+  const cameraDistanceBeforeZoom = await page.evaluate(() => {
+    const renderer = window.worldFieldVolumeRenderer;
+    return renderer?.camera && renderer?.controls?.target
+      ? renderer.camera.position.distanceTo(renderer.controls.target)
+      : null;
+  });
+  await page.mouse.move(
+    volumeCanvasBounds.x + volumeCanvasBounds.width * 0.55,
+    volumeCanvasBounds.y + volumeCanvasBounds.height * 0.55,
+  );
+  await page.mouse.wheel(0, -420);
+  await page.waitForTimeout(100);
+  const cameraDistanceAfterZoom = await page.evaluate(() => {
+    const renderer = window.worldFieldVolumeRenderer;
+    return renderer?.camera && renderer?.controls?.target
+      ? renderer.camera.position.distanceTo(renderer.controls.target)
+      : null;
+  });
+  if (cameraDistanceBeforeZoom == null || cameraDistanceAfterZoom == null ||
+      cameraDistanceBeforeZoom - cameraDistanceAfterZoom < 0.1) {
+    throw new Error("3D volume camera did not zoom in on wheel input: before=" +
+      JSON.stringify(cameraDistanceBeforeZoom) + ", after=" + JSON.stringify(cameraDistanceAfterZoom));
+  }
+
+  const volumeTargetBeforePan = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.controls?.target?.toArray?.() ?? null
+  );
+  const panStart = {
+    x: volumeCanvasBounds.x + volumeCanvasBounds.width * 0.52,
+    y: volumeCanvasBounds.y + volumeCanvasBounds.height * 0.52,
+  };
+  await page.mouse.move(panStart.x, panStart.y);
+  await page.mouse.down({ button: "right" });
+  await page.mouse.move(panStart.x + 90, panStart.y + 35, { steps: 10 });
+  await page.mouse.up({ button: "right" });
+  await page.waitForTimeout(100);
+  const volumeTargetAfterPan = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.controls?.target?.toArray?.() ?? null
+  );
+  if (!volumeTargetBeforePan || !volumeTargetAfterPan ||
+      Math.hypot(volumeTargetAfterPan[0] - volumeTargetBeforePan[0],
+        volumeTargetAfterPan[1] - volumeTargetBeforePan[1],
+        volumeTargetAfterPan[2] - volumeTargetBeforePan[2]) < 0.05) {
+    throw new Error("3D volume camera did not pan on right-button drag: before=" +
+      JSON.stringify(volumeTargetBeforePan) + ", after=" + JSON.stringify(volumeTargetAfterPan));
+  }
+
   const volumeHud = await page.evaluate(() => ({
     fieldLabel: document.getElementById("tkLabel")?.textContent?.trim(),
     cellLabel: document.getElementById("energyLabel")?.textContent?.trim(),
