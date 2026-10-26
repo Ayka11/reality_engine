@@ -361,13 +361,18 @@ try {
     let nonFiniteVertices = 0;
     let invalidGeometryPatches = 0;
     let malformedIndexBuffers = 0;
+    let missingNormalAttributes = 0;
+    let nonFiniteNormals = 0;
+    let nonUnitNormals = 0;
     const distinctHeights = new Set();
 
     for (const patch of patches) {
       const mesh = patch.group.children.find(child => child.userData?.terrain);
       const geometry = mesh?.geometry;
       const position = geometry?.getAttribute?.("position");
+      const normal = geometry?.getAttribute?.("normal");
       const index = geometry?.index;
+      if (!normal || normal.count !== position?.count) missingNormalAttributes++;
       if (!position || !index || position.count < 3 || index.count < 3) {
         invalidGeometryPatches++;
         continue;
@@ -382,6 +387,14 @@ try {
         if (![x, y, z].every(Number.isFinite)) {
           nonFiniteVertices++;
           continue;
+        }
+        if (normal && normal.count === position.count) {
+          const nx = normal.getX(i), ny = normal.getY(i), nz = normal.getZ(i);
+          if (![nx, ny, nz].every(Number.isFinite)) {
+            nonFiniteNormals++;
+          } else if (Math.abs(Math.hypot(nx, ny, nz) - 1) > 0.02) {
+            nonUnitNormals++;
+          }
         }
         minY = Math.min(minY, y);
         maxY = Math.max(maxY, y);
@@ -415,6 +428,7 @@ try {
       minY, maxY, relief: maxY - minY, distinctHeightSamples: distinctHeights.size,
       degenerateTriangles, invalidIndices, nonFiniteVertices,
       invalidGeometryPatches, malformedIndexBuffers,
+      missingNormalAttributes, nonFiniteNormals, nonUnitNormals,
     };
   });
   if (terrainGeometry.loadedPatches < 13 || terrainGeometry.vertexCount <= 0 ||
@@ -422,7 +436,8 @@ try {
       terrainGeometry.relief < 1 || terrainGeometry.distinctHeightSamples < 8 ||
       terrainGeometry.degenerateTriangles > 0 || terrainGeometry.invalidIndices > 0 ||
       terrainGeometry.nonFiniteVertices > 0 || terrainGeometry.invalidGeometryPatches > 0 ||
-      terrainGeometry.malformedIndexBuffers > 0) {
+      terrainGeometry.malformedIndexBuffers > 0 || terrainGeometry.missingNormalAttributes > 0 ||
+      terrainGeometry.nonFiniteNormals > 0 || terrainGeometry.nonUnitNormals > 0) {
     throw new Error(`Rendered terrain geometry contract failed: ${JSON.stringify(terrainGeometry)}`);
   }
 
