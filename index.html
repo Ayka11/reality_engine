@@ -532,12 +532,12 @@ input[type=range]{accent-color:#a397ff}
   <input type="range" id="spd" min="1" max="20" value="4" step="1" oninput="document.getElementById('spdOut').textContent=this.value+'x'">
   <span class="bst">Speed:</span><span class="bsv" id="spdOut">4x</span>
   <div class="tbsep"></div>
-  <span class="bst">Tick:</span><span class="bsv" id="tkOut">0</span>
-  <span class="bst" style="margin-left:6px">Energy:</span><span class="bsv" id="eOut">0</span>
-  <span class="bst" style="margin-left:6px">Entropy:</span><span class="bsv" id="sOut">0</span>
-  <span class="bst" style="margin-left:6px">Agents:</span><span class="bsv" id="agOut">0</span>
+  <span class="bst" id="tkLabel">Tick:</span><span class="bsv" id="tkOut">0</span>
+  <span class="bst" id="energyLabel" style="margin-left:6px">Energy:</span><span class="bsv" id="eOut">0</span>
+  <span class="bst" id="entropyLabel" style="margin-left:6px">Entropy:</span><span class="bsv" id="sOut">0</span>
+  <span class="bst" id="agentsLabel" style="margin-left:6px">Agents:</span><span class="bsv" id="agOut">0</span>
   <div class="tbsep"></div>
-  <span class="bst">Chunks:</span><span class="bsv" id="chunkStats">—</span>
+  <span class="bst" id="chunksLabel">Worker chunks:</span><span class="bsv" id="chunkStats">—</span>
   <div style="flex:1"></div>
   <span style="font-size:9px;color:var(--sub)" id="modeLabel">Create Mode</span>
 </div>
@@ -557,6 +557,7 @@ let activeProcs=new Set(['thermo','bio']);
 let activeBrush=null;
 let histE=[],histT=[],histI=[],histS=[],histB=[];
 let currentAppMode='create',currentPanel='world',currentRenderMode='3d';
+window.currentRenderMode=currentRenderMode;
 let greedySurfacePreviewActive=false,greedySurfacePreviewPreviousMode=null;
 
 // Physics constants (adjustable by laws & composer)
@@ -2481,12 +2482,85 @@ window.addEventListener('resize',()=>{
   requestAnimationFrame(()=>{if(currentRenderMode==='field3d')renderField3D();});
 });
 
+let bottomBarContext = '';
+function updateBottomBarContext(){
+  const mode = currentRenderMode || '3d';
+  const context = mode === '3d' ? 'world' : mode === 'field3d' ? 'volume' : 'field';
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(value);
+  };
+  const setVisible = (id, visible) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = visible ? '' : 'none';
+  };
+  const world = window.infiniteWorld;
+  const worldStats = typeof window.infinityStats === 'function' ? window.infinityStats() : null;
+  const loadedChunks = Math.max(0, Number(worldStats?.loadedChunks ?? world?.getLoadedChunkCount?.() ?? 0));
+  const objectCount = Math.max(0, Number(worldStats?.objects ?? world?.getObjectCount?.() ?? 0));
+  const runtimeDiagnostics = typeof world?.getRuntimeDiagnostics === 'function' ? world.getRuntimeDiagnostics() : null;
+  const field3d = typeof window.getWorldField3DState === 'function' ? window.getWorldField3DState() : null;
+
+  if (context !== bottomBarContext) {
+    if (context === 'world') {
+      setText('tkLabel', 'World:');
+      setText('energyLabel', 'Objects:');
+      setText('entropyLabel', 'FPS:');
+      setText('chunksLabel', 'Chunks:');
+      setVisible('agentsLabel', false);
+      setVisible('agOut', false);
+    } else if (context === 'volume') {
+      setText('tkLabel', 'Field:');
+      setText('energyLabel', 'Cells:');
+      setText('entropyLabel', 'Samples:');
+      setText('chunksLabel', 'World:');
+      setVisible('agentsLabel', false);
+      setVisible('agOut', false);
+    } else {
+      setText('tkLabel', 'Field tick:');
+      setText('energyLabel', 'Energy:');
+      setText('entropyLabel', 'Entropy:');
+      setText('agentsLabel', 'Agents:');
+      setText('chunksLabel', 'Worker chunks:');
+      setVisible('agentsLabel', true);
+      setVisible('agOut', true);
+      if (bottomBarContext === 'world' || bottomBarContext === 'volume') {
+        setText('tkOut', tick);
+        let energyTotal = 0, entropyTotal = 0;
+        for (let i = 0; i < SZ; i++) {
+          energyTotal += buf[i * NF + FE];
+          entropyTotal += buf[i * NF + FS];
+        }
+        setText('eOut', Math.round(energyTotal).toLocaleString());
+        setText('sOut', (entropyTotal / SZ).toFixed(4));
+        setText('agOut', window.agentSystem?.count ?? 0);
+        setText('chunkStats', '—');
+      }
+    }
+    bottomBarContext = context;
+  }
+
+  if (context === 'world') {
+    setText('tkOut', !world ? 'Unavailable' : loadedChunks > 0 ? 'Ready' : 'Loading');
+    setText('eOut', worldStats ? objectCount.toLocaleString() : '—');
+    const fps = Number(runtimeDiagnostics?.fps ?? 0);
+    setText('sOut', fps > 0 ? Math.round(fps) : '…');
+    setText('chunkStats', loadedChunks > 0 ? `${loadedChunks} loaded` : 'Loading…');
+  } else if (context === 'volume') {
+    setText('tkOut', field3d?.ready ? 'Ready' : field3d?.reason ? 'Error' : 'Loading');
+    setText('eOut', field3d ? Number(field3d.renderedCells ?? 0).toLocaleString() : '—');
+    setText('sOut', field3d ? Number(field3d.sampleCount ?? 0).toLocaleString() : '—');
+    setText('chunkStats', loadedChunks > 0 ? `${loadedChunks} world chunks` : 'World loading…');
+  }
+}
+
 function setRenderMode(mode,btn){
   // A deliberate render-mode change leaves the optional chunk-surface preview first.
   if(greedySurfacePreviewActive)teardownGreedySurfacePreview(false);
   window.__worldField3DTrace={phase:'mode-switch-enter',mode,at:Date.now()};
   currentRenderMode=mode;
   window.currentRenderMode=mode;
+  updateBottomBarContext();
   window.setWorldViewRenderMode?.(mode);
   document.querySelectorAll('#tabs .ctab').forEach(t=>t.classList.remove('on'));
   if(btn)btn.classList.add('on');
@@ -2852,6 +2926,7 @@ function loop(ts){
     }
   }
   document.getElementById('agOut').textContent=window.agentSystem?.count??0;
+  updateBottomBarContext();
   document.getElementById('fpsOut').textContent=fps;
 }
 
@@ -2982,6 +3057,7 @@ function restoreUIState(){
     if(state.layer!==undefined)layer=state.layer;
     if(state.currentPanel)currentPanel=state.currentPanel;
     if(state.currentRenderMode)currentRenderMode=state.currentRenderMode;
+    window.currentRenderMode=currentRenderMode;
     if(state.tool)tool=state.tool;
     log(`✓ UI state restored`);
   }catch(e){console.warn('Failed to restore UI state:',e);}

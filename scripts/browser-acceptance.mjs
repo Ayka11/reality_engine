@@ -124,6 +124,27 @@ try {
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
 
+  // Bottom-bar counters must describe the selected runtime, not the unrelated legacy 2D grid.
+  await page.waitForFunction(() => {
+    const stats = window.infinityStats?.();
+    return document.getElementById("tkLabel")?.textContent?.trim() === "World:" &&
+      Number(stats?.loadedChunks) > 0 &&
+      document.getElementById("chunkStats")?.textContent?.includes("loaded");
+  }, null, { timeout: 15000 });
+  const worldHud = await page.evaluate(() => ({
+    worldLabel: document.getElementById("tkLabel")?.textContent?.trim(),
+    objectLabel: document.getElementById("energyLabel")?.textContent?.trim(),
+    fpsLabel: document.getElementById("entropyLabel")?.textContent?.trim(),
+    chunksLabel: document.getElementById("chunksLabel")?.textContent?.trim(),
+    legacyAgentsHidden: getComputedStyle(document.getElementById("agOut")).display === "none",
+    stats: window.infinityStats?.() ?? null,
+  }));
+  if (worldHud.worldLabel !== "World:" || worldHud.objectLabel !== "Objects:" ||
+      worldHud.fpsLabel !== "FPS:" || worldHud.chunksLabel !== "Chunks:" ||
+      !worldHud.legacyAgentsHidden || Number(worldHud.stats?.loadedChunks) <= 0) {
+    throw new Error(`Infinite World HUD is not bound to authoritative runtime stats: ${JSON.stringify(worldHud)}`);
+  }
+
   // Deterministic scientific view-window sampling must be available to the browser runtime.
   const viewWindowContract = await page.evaluate(() => {
     const sampleWindow = window.worldFieldViewWindow;
@@ -211,6 +232,22 @@ try {
   }
   if (field3dDiagnostic.renderedCells <= 0 || field3dDiagnostic.sampleCount <= 0) {
     throw new Error("3D volumetric field did not render sampled cells");
+  }
+
+  const volumeHud = await page.evaluate(() => ({
+    fieldLabel: document.getElementById("tkLabel")?.textContent?.trim(),
+    cellLabel: document.getElementById("energyLabel")?.textContent?.trim(),
+    sampleLabel: document.getElementById("entropyLabel")?.textContent?.trim(),
+    worldLabel: document.getElementById("chunksLabel")?.textContent?.trim(),
+    status: document.getElementById("tkOut")?.textContent?.trim(),
+    cells: document.getElementById("eOut")?.textContent?.trim(),
+    samples: document.getElementById("sOut")?.textContent?.trim(),
+  }));
+  if (volumeHud.fieldLabel !== "Field:" || volumeHud.cellLabel !== "Cells:" ||
+      volumeHud.sampleLabel !== "Samples:" || volumeHud.worldLabel !== "World:" ||
+      volumeHud.status !== "Ready" || Number(volumeHud.cells?.replaceAll(",", "")) <= 0 ||
+      Number(volumeHud.samples?.replaceAll(",", "")) <= 0) {
+    throw new Error(`Volumetric HUD is not bound to rendered field diagnostics: ${JSON.stringify(volumeHud)}`);
   }
   const field3dInitial = await page.evaluate(() => {
     const state = window.getWorldField3DState?.();
