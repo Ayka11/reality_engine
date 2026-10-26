@@ -3,6 +3,17 @@ import { readFile } from "node:fs/promises";
 import ts from "typescript";
 
 const root = new URL("../", import.meta.url);
+const terrainLod = await load("src/infinity/LODManager.ts");
+assert.deepEqual(
+  [0, 1, 2, 3].map(level => terrainLod.lodResolution(level)),
+  [32, 16, 8, 4],
+  "terrain mesh resolution must decrease with distance: finest near the observer, coarsest far away",
+);
+assert.deepEqual(
+  [0, 2, 4, 8, 20].map(distance => terrainLod.lodForDistance(distance)),
+  [0, 0, 1, 2, 3],
+  "LOD selection must assign the finest level to nearby chunks",
+);
 async function load(path, replacements = []) {
   const source = await readFile(new URL(path, root), "utf8");
   let js = ts.transpileModule(source, {

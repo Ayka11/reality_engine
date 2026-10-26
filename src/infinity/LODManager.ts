@@ -8,10 +8,12 @@ export function lodForDistance(distanceChunks: number): LODLevel {
 }
 
 export function lodResolution(level: LODLevel): number {
+  // LOD 0 is nearest to the observer and must have the finest mesh.
+  // A 32-cell chunk uses progressively coarser grids as distance increases.
   switch (level) {
-    case 0: return 1
-    case 1: return 2
-    case 2: return 4
-    default: return 8
+    case 0: return 32
+    case 1: return 16
+    case 2: return 8
+    default: return 4
   }
 }
