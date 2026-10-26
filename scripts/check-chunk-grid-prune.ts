@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { ChunkGrid, F, chunkKey } from '../src/core/ChunkGrid.ts'
+import { CHUNK_FLOATS, ChunkGrid, F, chunkKey } from '../src/core/ChunkGrid.ts'
 
 const grid = new ChunkGrid()
 const key = chunkKey(1, 2, 1)
@@ -24,3 +24,15 @@ assert.equal(clearGrid.chunks.size, 0, 'clear should remove stored chunks')
 assert.ok(clearGrid.dirtyChunks.has(clearedKey), 'clear must preserve a dirty tombstone for every removed chunk')
 
 console.log('ChunkGrid clear dirty-payload regression: PASS')
+
+const restoreGrid = new ChunkGrid()
+const oldKey = chunkKey(2, 2, 2)
+const newKey = chunkKey(4, 4, 1)
+restoreGrid.set(16, 16, 16, F.E, 10)
+restoreGrid.dirtyChunks.clear()
+restoreGrid.restore([{ key: newKey, data: Array(CHUNK_FLOATS).fill(0) }])
+assert.equal(restoreGrid.chunks.has(oldKey), false, 'snapshot restore should replace the prior chunk set')
+assert.ok(restoreGrid.dirtyChunks.has(oldKey), 'snapshot restore must publish a tombstone for omitted old chunks')
+assert.ok(restoreGrid.dirtyChunks.has(newKey), 'snapshot restore must publish the restored chunk')
+
+console.log('ChunkGrid restore dirty-payload regression: PASS')
