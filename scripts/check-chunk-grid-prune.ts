@@ -13,3 +13,14 @@ assert.equal(grid.chunks.has(key), false, 'pruned chunk should no longer be stor
 assert.ok(grid.dirtyChunks.has(key), 'pruned chunk key must be dirty so downstream consumers clear stale state')
 
 console.log('ChunkGrid prune dirty-payload regression: PASS')
+const clearGrid = new ChunkGrid()
+const clearedKey = chunkKey(3, 4, 2)
+clearGrid.set(24, 32, 16, F.E, 10)
+assert.ok(clearGrid.chunks.has(clearedKey), 'test chunk should exist before clear')
+clearGrid.dirtyChunks.clear()
+
+clearGrid.clear()
+assert.equal(clearGrid.chunks.size, 0, 'clear should remove stored chunks')
+assert.ok(clearGrid.dirtyChunks.has(clearedKey), 'clear must preserve a dirty tombstone for every removed chunk')
+
+console.log('ChunkGrid clear dirty-payload regression: PASS')
