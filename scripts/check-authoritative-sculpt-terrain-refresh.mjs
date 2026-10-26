@@ -5,14 +5,34 @@ const root = new URL("../", import.meta.url);
 const source = await readFile(new URL("src/render/InfiniteWorldRenderer.ts", root), "utf8");
 
 function methodBody(name) {
-  const signature = new RegExp("\\b" + name + "\\s*\\([^)]*\\)\\s*(?::[^\\{]+)?\\{", "m");
+  // Anchor to a class method declaration, not a call site or an object-shaped
+  // parameter type. The parameter list can itself contain nested braces.
+  const signature = new RegExp("^\\s{2}(?:private\\s+)?" + name + "\\s*\\(", "m");
   const match = signature.exec(source);
   assert.ok(match, `Expected method ${name} to exist`);
-  const open = source.indexOf("{", match.index);
+  const openParen = source.indexOf("(", match.index);
+  let parenDepth = 0;
+  let closeParen = -1;
+  for (let i = openParen; i < source.length; i++) {
+    if (source[i] === "(") parenDepth++;
+    else if (source[i] === ")") {
+      parenDepth--;
+      if (parenDepth === 0) {
+        closeParen = i;
+        break;
+      }
+    }
+  }
+  assert.ok(closeParen >= 0, `Method ${name} has an unbalanced parameter list`);
+  const open = source.indexOf("{", closeParen);
+  assert.ok(open >= 0, `Method ${name} has no body`);
   let depth = 0;
   for (let i = open; i < source.length; i++) {
     if (source[i] === "{") depth++;
-    else if (source[i] === "}" && --depth === 0) return source.slice(open + 1, i);
+    else if (source[i] === "}") {
+      depth--;
+      if (depth === 0) return source.slice(open + 1, i);
+    }
   }
   assert.fail(`Method ${name} has unbalanced braces`);
 }
