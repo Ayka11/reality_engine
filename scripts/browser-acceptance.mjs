@@ -920,7 +920,8 @@ try {
     // Legacy logical coordinates map as (legacy x, legacy y, legacy z)
     // -> (world x, world z, world y). Keep the brush centered at this world point.
     const legacyCell = { x, y: z, z: height };
-    const sampleDensity = () => world.fieldSampler.sample(x, y, z).density;
+    const worldProbe = { x, y: height, z };
+    const sampleDensity = () => world.fieldSampler.sample(worldProbe.x, worldProbe.y, worldProbe.z).density;
     const captureGroups = () => new Map([...world.patches].map(([key, patch]) => [key, patch.group]));
     const changedGroups = (before) => [...before].filter(([key, group]) => world.patches.get(key)?.group !== group).length;
 
