@@ -92,7 +92,10 @@ export class InfiniteWorldRenderer {
   private readonly storageKey: string
   private readonly pointerHandler: (e: PointerEvent) => void
   private readonly pointerUpHandler: (e: PointerEvent) => void
+  private readonly pointerMoveHandler: (e: PointerEvent) => void
   private readonly contextMenuHandler: (e: MouseEvent) => void
+  private readonly keyDownHandler: (e: KeyboardEvent) => void
+  private readonly keyUpHandler: (e: KeyboardEvent) => void
   private pointerDownX = 0
   private pointerDownY = 0
   private pointerDownTime = 0
@@ -353,7 +356,7 @@ export class InfiniteWorldRenderer {
       const elapsed = performance.now() - this.pointerDownTime
       if (distance <= 5 && elapsed <= 450) this.handlePointer(e.clientX, e.clientY)
     }
-    const pointerMoveHandler = (e: PointerEvent) => {
+    this.pointerMoveHandler = (e: PointerEvent) => {
       // In Fly mode, drag the left mouse button to look around. OrbitControls
       // are intentionally disabled in first-person mode, so this is the direct look path.
       if (this.flyMode && (e.buttons & 1) !== 0) {
@@ -375,7 +378,7 @@ export class InfiniteWorldRenderer {
     canvas.addEventListener('contextmenu', this.contextMenuHandler)
     canvas.addEventListener('pointerdown', this.pointerHandler)
     canvas.addEventListener('pointerup', this.pointerUpHandler)
-    canvas.addEventListener('pointermove', pointerMoveHandler)
+    canvas.addEventListener('pointermove', this.pointerMoveHandler)
 
     this.transformControls = new TransformControls(this.camera, canvas)
     this.transformControls.setMode('translate')
@@ -396,7 +399,7 @@ export class InfiniteWorldRenderer {
     })
     this.transformControls.addEventListener('objectChange', () => this.syncSelectedFromGizmo())
 
-    const onKeyDown = (e: KeyboardEvent) => {
+    this.keyDownHandler = (e: KeyboardEvent) => {
       const tgt = e.target
       if (tgt instanceof HTMLInputElement || tgt instanceof HTMLTextAreaElement || (tgt instanceof HTMLElement && tgt.isContentEditable)) return
       if (['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','ShiftRight','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyQ','KeyE'].includes(e.code)) {
@@ -418,14 +421,14 @@ export class InfiniteWorldRenderer {
         this.zoom(-1)
       }
     }
-    const onKeyUp = (e: KeyboardEvent) => {
+    this.keyUpHandler = (e: KeyboardEvent) => {
       this.keys.delete(e.code)
       if (e.code === 'Space' || e.key === 'Shift') {
         this.updateControlButtons()
       }
     }
-    window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('keydown', this.keyDownHandler)
+    window.addEventListener('keyup', this.keyUpHandler)
 
     this.controls.target.set(16, 10, 16)
     this.controls.update()
@@ -574,9 +577,19 @@ export class InfiniteWorldRenderer {
   }
 
   dispose() {
+    // A disposed renderer may still be referenced by the app's frame loop; disable its work first.
+    this.enabled = false
+    this.controls.enabled = false
+    if (this.saveTimer !== null) {
+      window.clearTimeout(this.saveTimer)
+      this.saveTimer = null
+    }
     this.renderer.domElement.removeEventListener('contextmenu', this.contextMenuHandler)
     this.renderer.domElement.removeEventListener('pointerdown', this.pointerHandler)
     this.renderer.domElement.removeEventListener('pointerup', this.pointerUpHandler)
+    this.renderer.domElement.removeEventListener('pointermove', this.pointerMoveHandler)
+    window.removeEventListener('keydown', this.keyDownHandler)
+    window.removeEventListener('keyup', this.keyUpHandler)
     this.controls.dispose()
     this.transformControls.dispose()
     this.scene.traverse(obj => {
