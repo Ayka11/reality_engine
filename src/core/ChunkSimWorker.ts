@@ -428,7 +428,7 @@ self.onmessage = (e: MessageEvent) => {
     const restoreId = data?.restoreId
     const expected = data?.expected
     if (!Number.isInteger(restoreId) || restoreId < 1 ||
-        !Number.isInteger(expected) || expected < 1 || activeRestoreId !== null) {
+        !Number.isInteger(expected) || expected < 0 || activeRestoreId !== null) {
       ;(self as unknown as Worker).postMessage({
         cmd: 'restoreComplete',
         data: { restoreId, complete: false, reason: 'invalid-or-concurrent-restore', restoredChunkCount, expectedRestoreChunks },
