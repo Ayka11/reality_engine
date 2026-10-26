@@ -249,14 +249,25 @@ function simStep(dt: number) {
     if (isProcessActive(PROC.DENSITY_FLOW)) {
       grid.set(x, y, z, F.D, Math.max(0, Math.min(1, D_ + p.densityDiffusion * lapD * dt)))
     }
-    if (isProcessActive(PROC.INFORMATION)) {
+    // Accumulate information growth and signal propagation into one value.
+    // Writing F.I independently in each block made SIGNAL_PROPAGATION overwrite
+    // INFORMATION whenever both processes were enabled.
+    const informationActive = isProcessActive(PROC.INFORMATION)
+    const signalActive = isProcessActive(PROC.SIGNAL_PROPAGATION)
+    let nextI = I
+    if (informationActive) {
       const supp = 1 - chunk[base + F.S] * p.infoEntropySupp
       if (newE > p.infoGrowthThreshE && D_ > p.infoGrowthThreshD && supp > 0) {
-        grid.set(x, y, z, F.I, Math.max(0, Math.min(999, I + p.infoGrowthRate * supp * dt)))
+        nextI = Math.max(0, Math.min(999, I + p.infoGrowthRate * supp * dt))
       } else {
-        grid.set(x, y, z, F.I, Math.max(0, I * Math.pow(0.999, dt * 60)))
+        nextI = Math.max(0, I * Math.pow(0.999, dt * 60))
       }
     }
+    if (signalActive) {
+      nextI = Math.max(0, Math.min(999,
+        nextI + p.signalPropagationRate * p.infoGrowthRate * dt * lapI))
+    }
+    if (informationActive || signalActive) grid.set(x, y, z, F.I, nextI)
 
     const dS = isProcessActive(PROC.ENTROPY_GROWTH)
       ? (p.entropyGrowthRate + newE * p.entropyEnergyCoupling
@@ -291,11 +302,6 @@ function simStep(dt: number) {
         grid.set(x, y, z, F.I, Math.min(999, grid.get(x, y, z, F.I) + rate * 25))
         grid.set(x, y, z, F.S, Math.min(1, grid.get(x, y, z, F.S) + rate * 0.008))
       }
-    }
-
-    if (isProcessActive(PROC.SIGNAL_PROPAGATION)) {
-      grid.set(x, y, z, F.I, Math.max(0, Math.min(999,
-        I + p.signalPropagationRate * p.infoGrowthRate * dt * lapI)))
     }
 
     if (isProcessActive(PROC.WAVE_PROPAGATION)) {
