@@ -2624,6 +2624,12 @@ function setRenderMode(mode,btn){
   document.querySelectorAll('#tabs .ctab').forEach(t=>t.classList.remove('on'));
   if(btn)btn.classList.add('on');
 
+  // Suspend the Infinite World render path when its WebGL canvas is hidden.
+  const infiniteWorld=window.infiniteWorld;
+  if(infiniteWorld&&typeof infiniteWorld.setEnabled==='function'){
+    infiniteWorld.setEnabled(mode==='3d'||mode==='hybrid');
+  }
+
   const c3d=document.getElementById('c3d');
   const c3dField=document.getElementById('c3dField');
   const c2d=document.getElementById('c2d');
