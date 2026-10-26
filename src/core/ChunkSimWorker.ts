@@ -197,6 +197,11 @@ function simStep(dt: number) {
   const zeroChunk = new Float32Array(CHUNK_FLOATS)
   const orderedCandidates = [...candidates.values()].sort((a, b) =>
     (a.z * H + a.y) * W + a.x - ((b.z * H + b.y) * W + b.x))
+  // Reuse the six-neighbor stencil and signal-field list for every candidate.
+  const dirs: Array<[number, number, number]> = [
+    [-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1],
+  ]
+  const signalFields = [F.E, F.T, F.D, F.I, F.P, F.WAVE]
   for (const { x, y, z } of orderedCandidates) {
     const key = chunkKey(Math.floor(x / CX), Math.floor(y / CY), Math.floor(z / CZ))
     const chunk = sourceChunks.get(key) ?? zeroChunk
@@ -205,17 +210,19 @@ function simStep(dt: number) {
     for (let field = 0; field < NF; field++) {
       if (Math.abs(chunk[base + field]) > 0.001) { hasLocalState = true; break }
     }
-    const hasNeighborSignal = [
-      [-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1],
-    ].some(([dx, dy, dz]) =>
-      [F.E, F.T, F.D, F.I, F.P, F.WAVE].some(field =>
-        Math.abs(sourceRead(x + dx, y + dy, z + dz, field)) > 0.001))
+    let hasNeighborSignal = false
+    for (const [dx, dy, dz] of dirs) {
+      for (const field of signalFields) {
+        if (Math.abs(sourceRead(x + dx, y + dy, z + dz, field)) > 0.001) {
+          hasNeighborSignal = true
+          break
+        }
+      }
+      if (hasNeighborSignal) break
+    }
     if (!hasLocalState && !hasNeighborSignal) continue
     let lapE = 0, lapT = 0, lapD = 0, lapI = 0, lapP = 0, lapWave = 0, nc = 0
     let fxSum = 0, fySum = 0
-    const dirs: Array<[number, number, number]> = [
-      [-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1],
-    ]
     for (const [dx, dy, dz] of dirs) {
       const nx = x + dx, ny = y + dy, nz = z + dz
       if (nx < 0 || nx >= W || ny < 0 || ny >= H || nz < 0 || nz >= D) continue
