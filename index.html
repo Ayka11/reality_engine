@@ -787,22 +787,38 @@ function _drawParticles(cx_){
   }
   cx_.restore();cx_.globalAlpha=1;
 }
+let _cachedMood = { mr: 0, mg: 0, mb: 0, ma: 0, lastTick: -99 };
 function _drawAtmosphere(cx_,cw,ch){
-  // Vignette — depth darkening at edges
+  // Vignette — depth darkening at edges.
   const vig=cx_.createRadialGradient(cw*.5,ch*.48,ch*.22,cw*.5,ch*.48,ch*.78);
-  vig.addColorStop(0,'rgba(0,0,0,0)');vig.addColorStop(1,'rgba(4,4,16,.72)');
-  cx_.fillStyle=vig;cx_.fillRect(0,0,cw,ch);
-  // World-state mood tint (sampled cheaply)
-  let totS=0,totB=0,totE=0;
-  for(let i=0;i<SZ;i++){totS+=buf[i*NF+FS];totB+=buf[i*NF+FBio];totE+=buf[i*NF+FE];}
-  const avgS=totS/SZ,avgB=totB/SZ,avgE=totE/SZ;
-  let mr=0,mg=0,mb=0,ma=0;
-  if(avgS>0.55){mr=50;mg=0;mb=0;ma=(avgS-.55)/.45*.14;}
-  else if(avgB>0.06){mr=0;mg=22;mb=0;ma=Math.min((avgB-.06)/.94*.12,.1);}
-  else if(avgE<25){mr=0;mg=0;mb=35;ma=.08;}
-  if(ma>.005){cx_.fillStyle=`rgba(${mr},${mg},${mb},${ma.toFixed(3)})`;cx_.fillRect(0,0,cw,ch);}
-}
+  vig.addColorStop(0,'rgba(0,0,0,0)');
+  vig.addColorStop(1,'rgba(4,4,16,.72)');
+  cx_.fillStyle=vig;
+  cx_.fillRect(0,0,cw,ch);
 
+  // Mood is approximate visual telemetry, so refresh it sparsely rather than
+  // scanning the full field on every rendered frame.
+  if(tick-_cachedMood.lastTick>=15){
+    let totS=0,totB=0,totE=0,samples=0;
+    const stride=4;
+    for(let i=0;i<SZ;i+=stride){
+      totS+=buf[i*NF+FS];
+      totB+=buf[i*NF+FBio];
+      totE+=buf[i*NF+FE];
+      samples++;
+    }
+    const avgS=totS/samples,avgB=totB/samples,avgE=totE/samples;
+    let mr=0,mg=0,mb=0,ma=0;
+    if(avgS>0.55){mr=50;ma=(avgS-.55)/.45*.14;}
+    else if(avgB>0.06){mg=22;ma=Math.min((avgB-.06)/.94*.12,.1);}
+    else if(avgE<25){mb=35;ma=.08;}
+    _cachedMood={mr,mg,mb,ma,lastTick:tick};
+  }
+  if(_cachedMood.ma>.005){
+    cx_.fillStyle=`rgba(${_cachedMood.mr},${_cachedMood.mg},${_cachedMood.mb},${_cachedMood.ma.toFixed(3)})`;
+    cx_.fillRect(0,0,cw,ch);
+  }
+}
 function _drawIso(){
   // Draw isometric view of inline sim on c2d (c3d is WebGL-only, no 2D context)
   const cw=canvas.width,ch=canvas.height;
@@ -1048,11 +1064,26 @@ function _drawHybrid(){
 function simStep(dt){
   bbuf.set(buf);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const ns=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]].filter(([nx,ny])=>nx>=0&&nx<W&&ny>=0&&ny<H);
-    const nc=ns.length;
-    let lapE=0,lapD=0,lapT=0,lapI=0;
-    for(const[nx,ny]of ns){lapE+=bbuf[idx(nx,ny)+FE];lapD+=bbuf[idx(nx,ny)+FD];lapT+=bbuf[idx(nx,ny)+FT];lapI+=bbuf[idx(nx,ny)+FI];}
-    lapE-=nc*bbuf[idx(x,y)+FE];lapD-=nc*bbuf[idx(x,y)+FD];lapT-=nc*bbuf[idx(x,y)+FT];lapI-=nc*bbuf[idx(x,y)+FI];
+    const center=idx(x,y);
+    const cE=bbuf[center+FE],cD=bbuf[center+FD],cT=bbuf[center+FT],cI=bbuf[center+FI];
+    let lapE=0,lapD=0,lapT=0,lapI=0,nc=0;
+    if(x>0){
+      const i=center-NF;
+      lapE+=bbuf[i+FE];lapD+=bbuf[i+FD];lapT+=bbuf[i+FT];lapI+=bbuf[i+FI];nc++;
+    }
+    if(x<W-1){
+      const i=center+NF;
+      lapE+=bbuf[i+FE];lapD+=bbuf[i+FD];lapT+=bbuf[i+FT];lapI+=bbuf[i+FI];nc++;
+    }
+    if(y>0){
+      const i=center-W*NF;
+      lapE+=bbuf[i+FE];lapD+=bbuf[i+FD];lapT+=bbuf[i+FT];lapI+=bbuf[i+FI];nc++;
+    }
+    if(y<H-1){
+      const i=center+W*NF;
+      lapE+=bbuf[i+FE];lapD+=bbuf[i+FD];lapT+=bbuf[i+FI];lapI+=bbuf[i+FI];nc++;
+    }
+    lapE-=nc*cE;lapD-=nc*cD;lapT-=nc*cT;lapI-=nc*cI;
     set_(x,y,FE,clamp(bbuf[idx(x,y)+FE]+DIFFUSION*lapE*dt,0,9999));
     if(activeProcs.has('thermo')){
       set_(x,y,FT,clamp(bbuf[idx(x,y)+FT]+0.07*lapT*dt+get(x,y,FE)*0.002*dt,0,2000));
