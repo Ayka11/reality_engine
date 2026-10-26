@@ -273,6 +273,17 @@ Always visible in the **right panel**. Controls the Three.js renderer in real ti
 
 ---
 
+## Simulation Lifecycle Controls
+
+The bottom bar exposes the legacy field simulation's **Play/Pause**, **Speed**, and **Reset 2D** controls.
+
+- **Play/Pause** starts or stops legacy field ticks and synchronizes the Infinite World simulation-effects running flag; rendering and world streaming continue while paused.
+- **Speed** controls the number of legacy field steps attempted per animation frame. The runtime has a per-frame work budget, so actual throughput can be lower than the slider's nominal multiplier on slower devices.
+- **Reset 2D** stops simulation effects, clears the legacy 2D field buffers and causal history, resets its tick counter, and clears its short undo ring.
+- **Scope limitation:** Reset 2D does **not** delete or regenerate Infinite World terrain or placed objects, and it is not a full reset of every scientific subsystem. Use it only when you intend to clear the legacy 2D field simulation.
+
+These behaviors are covered by Playwright browser acceptance checks, including real step-call counts at different speeds and a reset case where the legacy play flag is already paused while the separate 3D runtime is still marked running.
+
 ## Four Editor Modes
 
 Switch with the top bar buttons: **Create · Science · Cinema · Game Dev**
