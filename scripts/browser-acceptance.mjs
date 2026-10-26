@@ -209,6 +209,25 @@ try {
       throw new Error(`Camera preset ${preset.name} did not activate its expected controls: ${JSON.stringify(cameraState)}`);
     }
   }
+  // Verify Fly is operational, not merely enabled: holding W must move the camera.
+  await page.locator("#cam_fly").click();
+  const flyBefore = await page.evaluate(() => {
+    const p = window.infiniteWorld?.camera?.position;
+    return p ? [p.x, p.y, p.z] : null;
+  });
+  await page.keyboard.down("w");
+  await page.waitForTimeout(250);
+  await page.keyboard.up("w");
+  const flyAfter = await page.evaluate(() => {
+    const p = window.infiniteWorld?.camera?.position;
+    return p ? [p.x, p.y, p.z] : null;
+  });
+  if (!flyBefore || !flyAfter || Math.hypot(
+    flyAfter[0] - flyBefore[0], flyAfter[1] - flyBefore[1], flyAfter[2] - flyBefore[2]
+  ) < 0.1) {
+    throw new Error(`Fly camera did not move while W was held: before=${JSON.stringify(flyBefore)}, after=${JSON.stringify(flyAfter)}`);
+  }
+
   // Leave the application in the normal OrbitControls mode for subsequent tests.
   await page.locator("#cam_orbit").click();
 
