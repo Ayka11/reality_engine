@@ -473,23 +473,37 @@ try {
     throw new Error("3D volume has insufficient vertical sampling depth: " + JSON.stringify(field3dDiagnostic));
   }
 
-  // The WebGL volume scene must also respond to normal pointer rotation.
-  const volumeCanvasBounds = await page.locator("#c3dField").boundingBox();
+  // Verify that the WebGL volume canvas receives pointer input and OrbitControls
+  // changes its camera. Move to a clear center point and use Playwright's pointer API.
+  const volumeCanvas = page.locator("#c3dField");
+  const volumeCanvasBounds = await volumeCanvas.boundingBox();
   if (!volumeCanvasBounds || volumeCanvasBounds.width < 100 || volumeCanvasBounds.height < 100) {
     throw new Error("3D volume camera test cannot access a visible canvas");
+  }
+  const volumeControlState = await page.evaluate(() => ({
+    enabled: window.worldFieldVolumeRenderer?.controls?.enabled,
+    rotating: window.worldFieldVolumeRenderer?.controls?.enableRotate,
+    canvasPointerEvents: getComputedStyle(document.querySelector("#c3dField")).pointerEvents,
+    canvasDisplay: getComputedStyle(document.querySelector("#c3dField")).display,
+    canvasZ: getComputedStyle(document.querySelector("#c3dField")).zIndex,
+  }));
+  if (volumeControlState.enabled !== true || volumeControlState.rotating !== true ||
+      volumeControlState.canvasPointerEvents === "none" || volumeControlState.canvasDisplay === "none") {
+    throw new Error("3D volume input is disabled or canvas is not interactive: " + JSON.stringify(volumeControlState));
   }
   const volumeCameraBefore = await page.evaluate(() => {
     const p = window.worldFieldVolumeRenderer?.camera?.position;
     return p ? [p.x, p.y, p.z] : null;
   });
   const volumeLookStart = {
-    x: volumeCanvasBounds.x + volumeCanvasBounds.width / 2,
-    y: volumeCanvasBounds.y + volumeCanvasBounds.height / 2,
+    x: volumeCanvasBounds.x + volumeCanvasBounds.width * 0.6,
+    y: volumeCanvasBounds.y + volumeCanvasBounds.height * 0.55,
   };
   await page.mouse.move(volumeLookStart.x, volumeLookStart.y);
   await page.mouse.down({ button: "left" });
-  await page.mouse.move(volumeLookStart.x + 56, volumeLookStart.y + 24, { steps: 5 });
+  await page.mouse.move(volumeLookStart.x + 140, volumeLookStart.y + 70, { steps: 12 });
   await page.mouse.up({ button: "left" });
+  await page.waitForTimeout(100);
   const volumeCameraAfter = await page.evaluate(() => {
     const p = window.worldFieldVolumeRenderer?.camera?.position;
     return p ? [p.x, p.y, p.z] : null;
@@ -498,8 +512,19 @@ try {
       Math.hypot(volumeCameraAfter[0] - volumeCameraBefore[0],
         volumeCameraAfter[1] - volumeCameraBefore[1],
         volumeCameraAfter[2] - volumeCameraBefore[2]) < 0.1) {
+    const inputDiagnostics = await page.evaluate(() => ({
+      before: window.worldFieldVolumeRenderer?.camera?.position?.toArray?.(),
+      after: window.worldFieldVolumeRenderer?.camera?.position?.toArray?.(),
+      controls: {
+        enabled: window.worldFieldVolumeRenderer?.controls?.enabled,
+        rotating: window.worldFieldVolumeRenderer?.controls?.enableRotate,
+        dragging: window.worldFieldVolumeRenderer?.controls?.state,
+      },
+      activeElement: document.activeElement?.id,
+    }));
     throw new Error("3D volume camera did not respond to pointer rotation: before=" +
-      JSON.stringify(volumeCameraBefore) + ", after=" + JSON.stringify(volumeCameraAfter));
+      JSON.stringify(volumeCameraBefore) + ", after=" + JSON.stringify(volumeCameraAfter) +
+      ", input=" + JSON.stringify(inputDiagnostics));
   }
 
   const volumeHud = await page.evaluate(() => ({

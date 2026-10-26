@@ -101,6 +101,10 @@ export class WorldFieldVolumeRenderer {
     this.scene.fog = new THREE.Fog(0x050812, 34, 120)
 
     this.controls = new OrbitControls(this.camera, canvas)
+    this.controls.enabled = true
+    this.controls.enableRotate = true
+    this.controls.enableZoom = true
+    this.controls.enablePan = true
     this.controls.enableDamping = false
     this.controls.minDistance = 3
     this.controls.maxDistance = 100
