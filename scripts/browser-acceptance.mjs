@@ -183,6 +183,35 @@ try {
     throw new Error(`OrbitControls target drifted from absolute world coordinates: ${JSON.stringify(cameraAfterPan)}`);
   }
 
+  // Every visible camera preset must select a distinct supported runtime mode.
+  // Street used to fall through to Orbit, and Fly used to be immediately disabled.
+  const cameraPresets = [
+    { id: "cam_orbit", name: "orbit", fly: false },
+    { id: "cam_top", name: "top", fly: false },
+    { id: "cam_iso", name: "iso", fly: false },
+    { id: "cam_street", name: "street", fly: false },
+    { id: "cam_fly", name: "fly", fly: true },
+  ];
+  for (const preset of cameraPresets) {
+    await page.locator(`#${preset.id}`).click();
+    const cameraState = await page.evaluate(() => {
+      const world = window.infiniteWorld;
+      const p = world?.camera?.position;
+      return {
+        flyMode: world?.flyMode,
+        controlsEnabled: world?.controls?.enabled,
+        position: p ? [p.x, p.y, p.z] : null,
+      };
+    });
+    if (!cameraState.position?.every(Number.isFinite) ||
+        cameraState.flyMode !== preset.fly ||
+        cameraState.controlsEnabled === preset.fly) {
+      throw new Error(`Camera preset ${preset.name} did not activate its expected controls: ${JSON.stringify(cameraState)}`);
+    }
+  }
+  // Leave the application in the normal OrbitControls mode for subsequent tests.
+  await page.locator("#cam_orbit").click();
+
   // Adjacent terrain chunks with different LODs must share the same piecewise-linear
   // boundary heights; otherwise finer edges can leave T-junction cracks.
   await page.waitForFunction(() => {
