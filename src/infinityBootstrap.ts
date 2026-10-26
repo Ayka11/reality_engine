@@ -24,6 +24,8 @@ export function bootstrapInfiniteWorld() {
   if (!canvas) return null
   const seed = (window as any).worldSeed || 'reality-seed-1'
   const world = new InfiniteWorldRenderer(canvas, seed)
+  // Monotonic proof that the Infinite World generation transaction completed.
+  let worldGenerationRevision = 0
   // The scientific field canvas has its own WebGL scene. It consumes the same
   // authoritative samples that are also exposed by worldFieldViewWindow.
   const fieldCanvas = document.getElementById('c3dField') as HTMLCanvasElement | null
@@ -833,7 +835,9 @@ export function bootstrapInfiniteWorld() {
     }
 
     const stats = world.getRuntimeStats()
+    worldGenerationRevision += 1
     ;(window as any).lastInfinityGeneration = {
+      generationRevision: worldGenerationRevision,
       config: { phi, fields, complexity, spacetime },
       seed: newSeed,
       environment: worldEnvironment,
@@ -877,6 +881,8 @@ export function bootstrapInfiniteWorld() {
       canvas: canvasState,
       generatedRegion: stats.world ?? null,
       lastGeneration: last ? {
+        generationRevision: last.generationRevision,
+        generatedAt: last.generatedAt,
         seed: last.seed,
         config: last.config,
         plannedElements: last.generationPlan?.plannedElements ?? 0,
@@ -891,12 +897,29 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldVerifyGeneration = (before: any = null) => {
     const after = (window as any).worldGenerationHealth()
     const beforeStats = before?.stats ?? before ?? null
+    const beforeGeneration = before?.lastGeneration ?? beforeStats?.lastGeneration ?? null
+    const beforeGenerationRevision = Number(beforeGeneration?.generationRevision ?? 0)
+    const afterGenerationRevision = Number(after.lastGeneration?.generationRevision ?? 0)
     const beforeObjects = Number(beforeStats?.objects ?? 0)
     const beforeChunks = Number(beforeStats?.loadedChunks ?? 0)
     const afterObjects = Number(after.stats?.objects ?? 0)
     const afterChunks = Number(after.stats?.loadedChunks ?? 0)
+    const generationAdvanced = afterGenerationRevision > beforeGenerationRevision
+    const worldHasObjects = afterObjects > 0
+    const reason = !after.ok
+      ? 'renderer-unavailable'
+      : !generationAdvanced
+        ? 'generation-revision-did-not-advance'
+        : !worldHasObjects
+          ? 'generated-world-has-no-objects'
+          : null
     return {
-      ok: after.ok && (afterObjects !== beforeObjects || afterChunks !== beforeChunks || Boolean(after.stats?.world)),
+      ok: reason === null,
+      reason,
+      generationAdvanced,
+      beforeGenerationRevision,
+      afterGenerationRevision,
+      worldHasObjects,
       before: beforeStats,
       after: after.stats,
       delta: {
