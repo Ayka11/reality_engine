@@ -145,6 +145,44 @@ try {
     throw new Error(`Infinite World HUD is not bound to authoritative runtime stats: ${JSON.stringify(worldHud)}`);
   }
 
+  // A real right-button pan is routed through OrbitControls; its absolute-world target
+  // must stay synchronized with the world coordinate frame used for chunk streaming.
+  const cameraBeforePan = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const position = world?.getWorldPosition?.();
+    return position ? { x: position.x, z: position.z } : null;
+  });
+  const worldCanvasBounds = await page.locator("#c3d").boundingBox();
+  if (!cameraBeforePan || !worldCanvasBounds || worldCanvasBounds.width < 100 || worldCanvasBounds.height < 100) {
+    throw new Error("Infinite World canvas/camera is unavailable for the OrbitControls regression");
+  }
+  const panStartX = worldCanvasBounds.x + worldCanvasBounds.width * 0.55;
+  const panStartY = worldCanvasBounds.y + worldCanvasBounds.height * 0.52;
+  await page.mouse.move(panStartX, panStartY);
+  await page.mouse.down({ button: "right" });
+  await page.mouse.move(panStartX + 75, panStartY + 38, { steps: 6 });
+  await page.mouse.up({ button: "right" });
+  await page.waitForFunction((before) => {
+    const position = window.infiniteWorld?.getWorldPosition?.();
+    return !!position && Math.hypot(position.x - before.x, position.z - before.z) > 1;
+  }, cameraBeforePan, { timeout: 6000 });
+  const cameraAfterPan = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const position = world?.getWorldPosition?.();
+    const target = world?.controls?.target;
+    const anchor = world?.worldAnchor;
+    return position && target && anchor ? {
+      x: position.x, z: position.z,
+      targetX: target.x, targetZ: target.z,
+      anchorX: anchor.x, anchorZ: anchor.z,
+    } : null;
+  });
+  if (!cameraAfterPan ||
+      Math.abs(cameraAfterPan.x - cameraAfterPan.targetX - cameraAfterPan.anchorX) > 0.5 ||
+      Math.abs(cameraAfterPan.z - cameraAfterPan.targetZ - cameraAfterPan.anchorZ) > 0.5) {
+    throw new Error(`OrbitControls target drifted from absolute world coordinates: ${JSON.stringify(cameraAfterPan)}`);
+  }
+
   // Deterministic scientific view-window sampling must be available to the browser runtime.
   const viewWindowContract = await page.evaluate(() => {
     const sampleWindow = window.worldFieldViewWindow;

@@ -115,6 +115,15 @@ export class InfiniteWorldRenderer {
 
   getWorldPosition() { return this.worldPosition.clone() }
 
+  private worldToLocal(position: THREE.Vector3): THREE.Vector3 {
+    return position.clone().sub(this.worldAnchor)
+  }
+
+  private syncWorldPositionFromControls(): void {
+    // OrbitControls works in rebased render coordinates; simulation/LOD use absolute world coordinates.
+    this.worldPosition.copy(this.controls.target).add(this.worldAnchor)
+  }
+
   applyAuthoritativeFieldMutation(input: Parameters<MutableWorldFieldProvider['apply']>[0]) {
     const event = runtimeProvenance.record(input.kind === 'composer' ? 'world-state' : input.kind, {
       ...input.metadata,
@@ -292,6 +301,7 @@ export class InfiniteWorldRenderer {
     this.controls.panSpeed = 1.1
     this.controls.rotateSpeed = 0.85
     this.controls.zoomSpeed = 1.3
+    this.controls.addEventListener('change', () => this.syncWorldPositionFromControls())
     this.updateControlButtons()
     this.flyMode = false
 
@@ -385,7 +395,7 @@ export class InfiniteWorldRenderer {
 
     this.controls.target.set(16, 10, 16)
     this.controls.update()
-    this.worldPosition.copy(this.controls.target)
+    this.worldPosition.copy(this.controls.target).add(this.worldAnchor)
     // Startup restores the latest autosaved field; the explicit Load action uses the saved checkpoint.
     this.loadWorld({ restoreFieldCheckpoint: false })
 
@@ -516,12 +526,13 @@ export class InfiniteWorldRenderer {
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
     this.history = new WorldEditHistory()
 
-    const groundY = this.generator.sampleHeight(16, 16)
-    this.controls.target.set(16, groundY, 16)
-    this.camera.position.set(16 + 48, groundY + 36, 16 + 48)
-    this.camera.lookAt(this.controls.target)
-    this.worldPosition.copy(this.controls.target)
+    const targetWorld = new THREE.Vector3(16, this.generator.sampleHeight(16, 16), 16)
+    const targetLocal = this.worldToLocal(targetWorld)
+    this.controls.target.copy(targetLocal)
+    this.camera.position.copy(targetLocal).add(new THREE.Vector3(48, 36, 48))
+    this.camera.lookAt(targetLocal)
     this.controls.update()
+    this.worldPosition.copy(targetWorld)
 
     // Terrain streaming is intentionally deferred to the render loop. Reseeding
     // is a UI transaction and must not synchronously build the entire visible
@@ -637,11 +648,13 @@ export class InfiniteWorldRenderer {
     const radius = Math.max(24, Math.hypot(maxX - minX, maxZ - minZ) * 0.5)
     const distance = Math.min(1800, Math.max(70, radius * 2.25 * padding))
 
-    this.worldPosition.set(centerX, centerY, centerZ)
-    this.controls.target.set(centerX, centerY, centerZ)
-    this.camera.position.set(centerX + distance, centerY + distance * 0.62, centerZ + distance)
-    this.camera.lookAt(this.controls.target)
+    const targetWorld = new THREE.Vector3(centerX, centerY, centerZ)
+    const targetLocal = this.worldToLocal(targetWorld)
+    this.controls.target.copy(targetLocal)
+    this.camera.position.copy(targetLocal).add(new THREE.Vector3(distance, distance * 0.62, distance))
+    this.camera.lookAt(targetLocal)
     this.controls.update()
+    this.worldPosition.copy(targetWorld)
     // Terrain/object synchronization is handled by the render loop. Keeping
     // focusGeneratedRegion non-blocking prevents Composer from freezing the UI.
 
@@ -721,47 +734,55 @@ export class InfiniteWorldRenderer {
     const shift = new THREE.Vector3().addScaledVector(right, deltaX).addScaledVector(forward, deltaZ)
     this.camera.position.add(shift)
     this.controls.target.add(shift)
-    this.worldPosition.copy(this.controls.target)
     this.controls.update()
+    this.syncWorldPositionFromControls()
   }
 
   focusSelection() {
     const obj = this.getSelectedObject()
-    const target = obj ? new THREE.Vector3(obj.x, obj.y, obj.z) : new THREE.Vector3(16, 12, 16)
-    this.controls.target.copy(target)
-    this.camera.position.set(target.x + 38, target.y + 28, target.z + 38)
-    this.camera.lookAt(target)
-    this.worldPosition.copy(this.controls.target)
+    const targetWorld = obj ? new THREE.Vector3(obj.x, obj.y, obj.z) : new THREE.Vector3(16, 12, 16)
+    const targetLocal = this.worldToLocal(targetWorld)
+    this.controls.target.copy(targetLocal)
+    this.camera.position.copy(targetLocal).add(new THREE.Vector3(38, 28, 38))
+    this.camera.lookAt(targetLocal)
     this.controls.update()
+    this.worldPosition.copy(targetWorld)
   }
 
   resetCameraView() {
     this.flyMode = false
     this.controls.enabled = true
-    const groundY = this.generator.sampleHeight(16, 16)
-    this.controls.target.set(16, groundY, 16)
-    this.camera.position.set(16 + 48, groundY + 36, 16 + 48)
-    this.camera.lookAt(this.controls.target)
-    this.worldPosition.copy(this.controls.target)
+    const targetWorld = new THREE.Vector3(16, this.generator.sampleHeight(16, 16), 16)
+    const targetLocal = this.worldToLocal(targetWorld)
+    this.controls.target.copy(targetLocal)
+    this.camera.position.copy(targetLocal).add(new THREE.Vector3(48, 36, 48))
+    this.camera.lookAt(targetLocal)
     this.controls.update()
+    this.worldPosition.copy(targetWorld)
   }
 
   setCameraPreset(preset: 'top' | 'front' | 'orbit' | 'iso') {
     this.flyMode = false
     this.controls.enabled = true
-    const target = new THREE.Vector3(this.worldPosition.x, this.generator.sampleHeight(this.worldPosition.x, this.worldPosition.z), this.worldPosition.z)
-    this.controls.target.copy(target)
+    const targetWorld = new THREE.Vector3(
+      this.worldPosition.x,
+      this.generator.sampleHeight(this.worldPosition.x, this.worldPosition.z),
+      this.worldPosition.z,
+    )
+    const targetLocal = this.worldToLocal(targetWorld)
+    this.controls.target.copy(targetLocal)
     if (preset === 'top') {
-      this.camera.position.set(target.x, target.y + 220, target.z + 0.01)
+      this.camera.position.copy(targetLocal).add(new THREE.Vector3(0, 220, 0.01))
     } else if (preset === 'front') {
-      this.camera.position.set(target.x, target.y + 24, target.z + 90)
+      this.camera.position.copy(targetLocal).add(new THREE.Vector3(0, 24, 90))
     } else if (preset === 'iso') {
-      this.camera.position.set(target.x + 110, target.y + 85, target.z + 110)
+      this.camera.position.copy(targetLocal).add(new THREE.Vector3(110, 85, 110))
     } else {
-      this.camera.position.set(target.x + 48, target.y + 36, target.z + 48)
+      this.camera.position.copy(targetLocal).add(new THREE.Vector3(48, 36, 48))
     }
-    this.camera.lookAt(target)
+    this.camera.lookAt(targetLocal)
     this.controls.update()
+    this.worldPosition.copy(targetWorld)
   }
 
 
@@ -2662,7 +2683,7 @@ export class InfiniteWorldRenderer {
     if (move.lengthSq() > 0) {
       this.camera.position.add(move)
       this.controls.target.add(move)
-      this.worldPosition.copy(this.controls.target)
+      this.syncWorldPositionFromControls()
     }
 
     if (this.keys.has('KeyQ')) {
