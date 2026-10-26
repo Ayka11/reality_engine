@@ -1124,6 +1124,7 @@ try {
       restoreBarrier.duplicateAcks !== 0 ||
       restoreBarrier.unexpectedAcks !== 0 ||
       restoreBarrier.unexpectedFrames !== 0 ||
+      Number(restoreBarrier.tombstonesApplied) <= 0 ||
       JSON.stringify([...restoreBarrier.expectedKeys].sort((a, b) => a - b)) !==
         JSON.stringify([...restoreBarrier.restoreFrameKeys].sort((a, b) => a - b))) {
     throw new Error(`Worker restore ACK/frame barrier failed after reload: ${JSON.stringify(restoreBarrier)}`);

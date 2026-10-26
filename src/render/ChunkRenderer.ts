@@ -273,11 +273,19 @@ export class ChunkRenderer {
     const u32 = new Uint32Array(ab)
     const f32 = new Float32Array(ab)
     const numChunks = u32[0]
+    const expectedBytes = 4 + numChunks * (4 + CHUNK_FLOATS * 4)
+    if (ab.byteLength !== expectedBytes) throw new Error('Invalid worker frame payload length')
     let offset = 1
     for (let c = 0; c < numChunks; c++) {
-      const key   = u32[offset]
+      const key = u32[offset]
       const start = offset + 1
-      this.shadowChunks.set(key, f32.slice(start, start + CHUNK_FLOATS))
+      const chunk = f32.slice(start, start + CHUNK_FLOATS)
+      let empty = true
+      for (let i = 0; i < chunk.length; i++) {
+        if (chunk[i] !== 0) { empty = false; break }
+      }
+      if (empty) this.shadowChunks.delete(key)
+      else this.shadowChunks.set(key, chunk)
       offset += 1 + CHUNK_FLOATS
     }
     if (numChunks > 0) this.greedyDataRevision++

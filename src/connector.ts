@@ -104,6 +104,7 @@ const nodeEditor    = new NodeLawEditor()
 const localChunks = new Map<number, Float32Array>()
 let chunkTick = 0, chunkEvCount = 0, workerBusy = false
 let worldFieldRestoreId = 0
+let worldFieldRestorePhase: 'idle' | 'preparing' | 'committing' | 'aborting' = 'idle'
 let worldFieldRestoreCoord: { cx: number; cy: number; cz: number } | null = null
 let worldFieldRestoreSeed = ''
 let worldFieldRestoreActive = false
@@ -112,12 +113,82 @@ const worldFieldRestoreState = {
   restoreId: 0, expected: 0, acknowledged: 0, keys: [] as number[],
   duplicateAcks: 0, unexpectedAcks: 0, staleAcks: 0, staleFrames: 0, discardedInflightFrames: 0,
   unexpectedFrames: 0, restoreFrameRestoreId: 0, restoreFrameKeys: [] as number[],
+  tombstonesApplied: 0,
   workerBarrierComplete: false,
 }
 const worldFieldRestoreExpectedKeys = new Set<number>()
 const worldFieldRestoreAcknowledgedKeys = new Set<number>()
 const worldFieldRestoreFrameKeys = new Set<number>()
 const worldFieldRestorePendingFrames = new Map<number, ArrayBuffer>()
+const worldFieldRestoreExpectedData = new Map<number, Float32Array>()
+
+type DecodedWorkerFrameChunk = { key: number; data: Float32Array }
+
+function decodeWorkerFrame(ab: ArrayBuffer): DecodedWorkerFrameChunk[] | null {
+  if (!(ab instanceof ArrayBuffer) || ab.byteLength < 4) return null
+  const u32 = new Uint32Array(ab)
+  const f32 = new Float32Array(ab)
+  const count = u32[0]
+  const bytesPerChunk = 4 + CHUNK_FLOATS * 4
+  if (ab.byteLength !== 4 + count * bytesPerChunk) return null
+  const chunks: DecodedWorkerFrameChunk[] = []
+  const seen = new Set<number>()
+  let off = 1
+  for (let i = 0; i < count; i++) {
+    const key = u32[off]
+    if (seen.has(key)) return null
+    seen.add(key)
+    const data = f32.slice(off + 1, off + 1 + CHUNK_FLOATS)
+    if (!data.every(Number.isFinite)) return null
+    chunks.push({ key, data })
+    off += 1 + CHUNK_FLOATS
+  }
+  return chunks
+}
+
+function isZeroChunk(data: Float32Array): boolean {
+  for (let i = 0; i < data.length; i++) if (data[i] !== 0) return false
+  return true
+}
+
+function matchesExpectedChunk(actual: Float32Array, expected: Float32Array): boolean {
+  if (actual.length !== expected.length) return false
+  for (let i = 0; i < actual.length; i++) if (actual[i] !== expected[i]) return false
+  return true
+}
+
+/** Apply an authoritative set of worker-frame deltas after transaction outcome is known. */
+function applyWorkerFrameBatch(frames: Iterable<ArrayBuffer>, preserveZeroKeys?: ReadonlySet<number>): number | null {
+  const updates = new Map<number, Float32Array>()
+  for (const frame of frames) {
+    const decoded = decodeWorkerFrame(frame)
+    if (!decoded) return null
+    for (const chunk of decoded) updates.set(chunk.key, chunk.data)
+  }
+  const entries = [...updates.entries()]
+  if (entries.length === 0) return 0
+  const combined = new ArrayBuffer(4 + entries.length * (4 + CHUNK_FLOATS * 4))
+  const targetU32 = new Uint32Array(combined)
+  const targetF32 = new Float32Array(combined)
+  targetU32[0] = entries.length
+  let targetOff = 1
+  let tombstones = 0
+  for (const [key, data] of entries) {
+    const zero = isZeroChunk(data)
+    if (zero && !preserveZeroKeys?.has(key)) {
+      localChunks.delete(key)
+      tombstones++
+    } else {
+      localChunks.set(key, new Float32Array(data))
+    }
+    targetU32[targetOff] = key
+    targetF32.set(data, targetOff + 1)
+    targetOff += 1 + CHUNK_FLOATS
+  }
+  fieldRenderer.applyWorkerFrame(combined)
+  return tombstones
+}
+
 let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
 let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
 const worldFieldChunkStore = new WorldFieldChunkStore(128, (chunk) => {
@@ -285,27 +356,40 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       return
     }
     if (result.complete !== true || result.prepared !== true) {
+      // The worker has already rolled back and emits that rollback frame before this
+      // acknowledgement. Apply it only now that the transaction outcome is known.
       worldFieldRestoreState.workerBarrierComplete = false
       worldFieldRestoreState.unexpectedAcks++
+      const appliedTombstones = applyWorkerFrameBatch(worldFieldRestorePendingFrames.values())
+      if (appliedTombstones === null) worldFieldRestoreState.unexpectedFrames++
+      else worldFieldRestoreState.tombstonesApplied += appliedTombstones
       worldFieldRestoreActive = false
+      worldFieldRestorePhase = 'idle'
       worldFieldRestorePendingFrames.clear()
+      worldFieldRestoreExpectedData.clear()
       return
     }
-    const barrierComplete =
+
+    // During prepare the worker must not publish state. A frame here is a protocol
+    // violation; do not treat the commit frame as if it had arrived before commit.
+    if (worldFieldRestorePendingFrames.size > 0) {
+      worldFieldRestoreState.unexpectedFrames += worldFieldRestorePendingFrames.size
+      worldFieldRestorePendingFrames.clear()
+    }
+    const ackBarrierComplete =
       worldFieldRestoreExpectedKeys.size > 0 &&
       worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
       worldFieldRestoreState.unexpectedAcks === 0 &&
-      worldFieldRestoreState.unexpectedFrames === 0 &&
       worldFieldRestoreState.duplicateAcks === 0 &&
-      worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
-      worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
-      [...worldFieldRestoreExpectedKeys].every(key =>
-        worldFieldRestoreAcknowledgedKeys.has(key) && worldFieldRestoreFrameKeys.has(key))
-    if (barrierComplete) {
-      // The worker retains its before-image until this explicit second-phase commit.
+      worldFieldRestoreState.unexpectedFrames === 0
+    if (ackBarrierComplete) {
+      worldFieldRestorePhase = 'committing'
+      // The authoritative frame is emitted by restoreCommit, immediately before
+      // restoreCommitted. Validate the actual committed frame in that phase.
       chunkWorker.postMessage({ cmd: 'restoreCommit', data: { restoreId: result.restoreId } })
     } else {
       worldFieldRestoreState.unexpectedAcks++
+      worldFieldRestorePhase = 'aborting'
       chunkWorker.postMessage({ cmd: 'restoreAbort', data: { restoreId: result.restoreId } })
     }
     return
@@ -320,32 +404,42 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     if (result.committed !== true) {
       worldFieldRestoreState.unexpectedAcks++
       worldFieldRestoreState.workerBarrierComplete = false
+      const appliedTombstones = applyWorkerFrameBatch(worldFieldRestorePendingFrames.values())
+      if (appliedTombstones === null) worldFieldRestoreState.unexpectedFrames++
+      else worldFieldRestoreState.tombstonesApplied += appliedTombstones
       worldFieldRestoreActive = false
+      worldFieldRestorePhase = 'idle'
       worldFieldRestorePendingFrames.clear()
+      worldFieldRestoreExpectedData.clear()
       return
     }
-    // Only publish to the renderer after the worker confirms the second phase.
-    worldFieldRestoreState.workerBarrierComplete = true
-    const combined = new ArrayBuffer(4 + worldFieldRestoreExpectedKeys.size * (4 + CHUNK_FLOATS * 4))
-    const targetU32 = new Uint32Array(combined)
-    const targetF32 = new Float32Array(combined)
-    targetU32[0] = worldFieldRestoreExpectedKeys.size
-    let targetOff = 1
-    for (const frame of worldFieldRestorePendingFrames.values()) {
-      const sourceU32 = new Uint32Array(frame), sourceF32 = new Float32Array(frame)
-      const count = sourceU32[0]
-      let sourceOff = 1
-      for (let i = 0; i < count; i++) {
-        const chunkKey = sourceU32[sourceOff]
-        const chunkData = sourceF32.subarray(sourceOff + 1, sourceOff + 1 + CHUNK_FLOATS)
-        localChunks.set(chunkKey, new Float32Array(chunkData))
-        targetU32[targetOff] = chunkKey
-        targetF32.set(chunkData, targetOff + 1)
-        targetOff += 1 + CHUNK_FLOATS
-        sourceOff += 1 + CHUNK_FLOATS
-      }
+
+    const finalFrameValid =
+      worldFieldRestorePhase === 'committing' &&
+      worldFieldRestorePendingFrames.size === 1 &&
+      worldFieldRestoreState.restoreFrameRestoreId === worldFieldRestoreState.restoreId &&
+      worldFieldRestoreState.unexpectedFrames === 0 &&
+      worldFieldRestoreState.unexpectedAcks === 0 &&
+      worldFieldRestoreState.duplicateAcks === 0 &&
+      worldFieldRestoreAcknowledgedKeys.size === worldFieldRestoreExpectedKeys.size &&
+      worldFieldRestoreFrameKeys.size === worldFieldRestoreExpectedKeys.size &&
+      [...worldFieldRestoreExpectedKeys].every(key =>
+        worldFieldRestoreAcknowledgedKeys.has(key) && worldFieldRestoreFrameKeys.has(key))
+    // The worker has committed even if a protocol validation failed. Always apply
+    // its authoritative delta to keep the main-thread shadow and renderer in sync,
+    // but never report a successful barrier for an invalid frame.
+    const appliedTombstones = applyWorkerFrameBatch(
+      worldFieldRestorePendingFrames.values(), worldFieldRestoreExpectedKeys)
+    if (appliedTombstones === null) {
+      worldFieldRestoreState.unexpectedFrames++
+      worldFieldRestoreState.unexpectedAcks++
+      worldFieldRestoreState.workerBarrierComplete = false
+    } else {
+      worldFieldRestoreState.tombstonesApplied += appliedTombstones
+      worldFieldRestoreState.workerBarrierComplete = finalFrameValid
+      if (!finalFrameValid) worldFieldRestoreState.unexpectedAcks++
     }
-    fieldRenderer.applyWorkerFrame(combined)
+
     installChunkWorldFieldProvider()
     publishWorkerBoundarySnapshots()
     if (worldFieldRestoreCoord) {
@@ -353,7 +447,9 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       populateWorldFieldChunk(worldFieldRestoreCoord.cx, worldFieldRestoreCoord.cy, worldFieldRestoreCoord.cz, worldFieldRestoreSeed)
     }
     worldFieldRestoreActive = false
+    worldFieldRestorePhase = 'idle'
     worldFieldRestorePendingFrames.clear()
+    worldFieldRestoreExpectedData.clear()
     return
   }
 
@@ -365,8 +461,13 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     }
     if (result.aborted !== true) worldFieldRestoreState.unexpectedAcks++
     worldFieldRestoreState.workerBarrierComplete = false
+    const appliedTombstones = applyWorkerFrameBatch(worldFieldRestorePendingFrames.values())
+    if (appliedTombstones === null) worldFieldRestoreState.unexpectedFrames++
+    else worldFieldRestoreState.tombstonesApplied += appliedTombstones
     worldFieldRestoreActive = false
+    worldFieldRestorePhase = 'idle'
     worldFieldRestorePendingFrames.clear()
+    worldFieldRestoreExpectedData.clear()
     return
   }
 
@@ -436,18 +537,38 @@ chunkWorker.onmessage = (e: MessageEvent) => {
         worldFieldRestoreState.staleFrames++
         return
       }
-      worldFieldRestoreState.restoreFrameRestoreId = frameRestoreId
       const frame = ab as ArrayBuffer
-      const u32 = new Uint32Array(frame)
-      let off = 1
-      for (let i = 0; i < u32[0]; i++) {
-        const key = u32[off]
-        if (!worldFieldRestoreExpectedKeys.has(key) || worldFieldRestoreFrameKeys.has(key)) {
+      const decoded = decodeWorkerFrame(frame)
+      if (!decoded) {
+        worldFieldRestoreState.unexpectedFrames++
+        return
+      }
+      if (worldFieldRestorePhase === 'preparing' || worldFieldRestorePhase === 'aborting') {
+        // A failed prepare/abort publishes a rollback frame before its result
+        // message. Buffer it until the worker confirms the rollback outcome.
+        worldFieldRestorePendingFrames.set(worldFieldRestorePendingFrames.size, frame.slice(0))
+        return
+      }
+      if (worldFieldRestorePhase !== 'committing') {
+        worldFieldRestoreState.staleFrames++
+        return
+      }
+      if (worldFieldRestorePendingFrames.size > 0) worldFieldRestoreState.unexpectedFrames++
+      worldFieldRestoreState.restoreFrameRestoreId = frameRestoreId
+      for (const chunk of decoded) {
+        const expected = worldFieldRestoreExpectedData.get(chunk.key)
+        if (expected) {
+          if (worldFieldRestoreFrameKeys.has(chunk.key)) {
+            worldFieldRestoreState.unexpectedFrames++
+          } else {
+            worldFieldRestoreFrameKeys.add(chunk.key)
+            if (!matchesExpectedChunk(chunk.data, expected)) worldFieldRestoreState.unexpectedFrames++
+          }
+        } else if (!isZeroChunk(chunk.data)) {
+          // Only zero payloads for keys omitted by a replacement snapshot are valid
+          // extras; they are tombstones that remove chunks from the old worker state.
           worldFieldRestoreState.unexpectedFrames++
-        } else {
-          worldFieldRestoreFrameKeys.add(key)
         }
-        off += 1 + CHUNK_FLOATS
       }
       worldFieldRestoreState.restoreFrameKeys = [...worldFieldRestoreFrameKeys]
       worldFieldRestorePendingFrames.set(worldFieldRestorePendingFrames.size, frame.slice(0))
@@ -455,18 +576,18 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     }
     chunkTick    = wTick    ?? chunkTick
     chunkEvCount = wEv      ?? chunkEvCount
-    const NF_W = 14, CF = 512 * NF_W
-    const u32 = new Uint32Array(ab as ArrayBuffer)
-    const f32 = new Float32Array(ab as ArrayBuffer)
-    const num = u32[0]
-    let off = 1
-    for (let c = 0; c < num; c++) {
-      const key = u32[off]
-      localChunks.set(key, f32.slice(off + 1, off + 1 + CF))
-      off += 1 + CF
+    const frame = ab as ArrayBuffer
+    const decoded = decodeWorkerFrame(frame)
+    if (!decoded) {
+      console.error('[ChunkWorker] Rejected malformed worker frame payload')
+      return
+    }
+    for (const chunk of decoded) {
+      if (isZeroChunk(chunk.data)) localChunks.delete(chunk.key)
+      else localChunks.set(chunk.key, new Float32Array(chunk.data))
     }
     // Feed the scientific field state directly into the dedicated volumetric renderer.
-    fieldRenderer.applyWorkerFrame(ab as ArrayBuffer)
+    fieldRenderer.applyWorkerFrame(frame)
     // These counters describe the finite worker grid, not the infinite terrain
     // or the currently rendered volumetric projection.
     const activeRenderMode = (win['currentRenderMode'] as string | undefined) ?? worldViewContract.snapshot().renderMode
@@ -714,13 +835,19 @@ win['restoreWorldFieldChunkSnapshot'] = async (cx: number, cy: number, cz: numbe
   Object.assign(worldFieldRestoreState, {
     restoreId, expected: restoreChunks.length, acknowledged: 0, keys: [],
     duplicateAcks: 0, unexpectedAcks: 0, staleAcks: 0, staleFrames: 0, discardedInflightFrames: 0,
-    unexpectedFrames: 0, restoreFrameRestoreId: 0, restoreFrameKeys: [], workerBarrierComplete: false,
+    unexpectedFrames: 0, restoreFrameRestoreId: 0, restoreFrameKeys: [], tombstonesApplied: 0, workerBarrierComplete: false,
   })
   worldFieldRestoreExpectedKeys.clear()
   worldFieldRestoreAcknowledgedKeys.clear()
   worldFieldRestoreFrameKeys.clear()
   worldFieldRestorePendingFrames.clear()
-  for (const chunk of restoreChunks) worldFieldRestoreExpectedKeys.add(chunk.key)
+  worldFieldRestoreExpectedData.clear()
+  for (const chunk of restoreChunks) {
+    worldFieldRestoreExpectedKeys.add(chunk.key)
+    // Preserve a typed-array copy because each payload buffer is transferred to the worker.
+    worldFieldRestoreExpectedData.set(chunk.key, new Float32Array(chunk.data))
+  }
+  worldFieldRestorePhase = 'preparing'
   chunkWorker.postMessage({ cmd: 'restoreBegin', data: { restoreId, expected: restoreChunks.length } })
   for (const chunk of restoreChunks) {
     // Transfer typed-array storage instead of cloning thousands of boxed numbers.
