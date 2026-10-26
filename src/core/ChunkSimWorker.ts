@@ -26,6 +26,7 @@ let restoreFailed = false
 let restorePrepared = false
 const restoredChunkKeys = new Set<number>()
 const restoreBeforeChunks = new Map<number, Float32Array | null>()
+const restoreBeforeKeys = new Set<number>()
 const restoreBeforeDirtyChunks = new Set<number>()
 const causal: Array<{ id: number; tick: number; x: number; y: number; z: number; delta: number }> = []
 let physicsParams: PhysicsParams = { ...DEFAULT_PARAMS }
@@ -441,6 +442,8 @@ self.onmessage = (e: MessageEvent) => {
     restorePrepared = false
     restoredChunkKeys.clear()
     restoreBeforeChunks.clear()
+    restoreBeforeKeys.clear()
+    for (const key of grid.chunks.keys()) restoreBeforeKeys.add(key)
     restoreBeforeDirtyChunks.clear()
     for (const key of grid.dirtyChunks) restoreBeforeDirtyChunks.add(key)
     grid.dirtyChunks.clear()
@@ -868,6 +871,14 @@ self.onmessage = (e: MessageEvent) => {
     const committed = matchesActive && restorePrepared && !restoreFailed &&
       restoredChunkCount === expectedRestoreChunks && restoredChunkKeys.size === expectedRestoreChunks
     if (committed) {
+      // A restore replaces the complete chunk set, not merely the chunks present
+      // in the incoming snapshot. Publish tombstones for old keys omitted by it.
+      for (const key of restoreBeforeKeys) {
+        if (!restoredChunkKeys.has(key)) {
+          grid.chunks.delete(key)
+          grid.dirtyChunks.add(key)
+        }
+      }
       clearSculptHistory()
       for (const key of restoreBeforeDirtyChunks) grid.dirtyChunks.add(key)
     } else if (matchesActive) {
@@ -892,6 +903,7 @@ self.onmessage = (e: MessageEvent) => {
       restorePrepared = false
       restoredChunkKeys.clear()
       restoreBeforeChunks.clear()
+      restoreBeforeKeys.clear()
       restoreBeforeDirtyChunks.clear()
     }
     return
