@@ -818,7 +818,8 @@ self.onmessage = (e: MessageEvent) => {
     }
     restoredChunkKeys.add(key)
     restoredChunkCount++
-    emitRestoreFrame(restoreId)
+    // Do not publish uncommitted chunk state. The transaction emits one
+    // authoritative frame only after commit or after restoring the before-image.
     ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key, restoreId, accepted: true } })
     return
   }
@@ -851,6 +852,7 @@ self.onmessage = (e: MessageEvent) => {
       }
     }
     for (const key of restoreBeforeDirtyChunks) grid.dirtyChunks.add(key)
+    emitRestoreFrame(restoreId)
     ;(self as unknown as Worker).postMessage({
       cmd: 'restoreComplete', data: { restoreId, complete: false, prepared: false, restoredChunkCount, expectedRestoreChunks },
     })
@@ -893,6 +895,7 @@ self.onmessage = (e: MessageEvent) => {
       }
       for (const key of restoreBeforeDirtyChunks) grid.dirtyChunks.add(key)
     }
+    if (matchesActive) emitRestoreFrame(restoreId)
     ;(self as unknown as Worker).postMessage({
       cmd: 'restoreCommitted', data: { restoreId, committed },
     })
@@ -923,6 +926,7 @@ self.onmessage = (e: MessageEvent) => {
         }
       }
       for (const key of restoreBeforeDirtyChunks) grid.dirtyChunks.add(key)
+      emitRestoreFrame(restoreId)
       activeRestoreId = null
       expectedRestoreChunks = 0
       restoredChunkCount = 0
