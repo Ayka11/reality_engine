@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { InfiniteChunkManager } from '../infinity/ChunkManager'
 import { WorldGenerator, BIOME_ID, type WorldChunk } from '../infinity/WorldGenerator'
+import { buildWaterSurfaceMeshData } from '../infinity/WaterSurfaceMesh'
 import { worldToChunk, WORLD_CHUNK_SIZE, type ChunkCoord } from '../infinity/WorldCoordinate'
 import { WorldObjectManager } from '../infinity/ObjectManager'
 import { lodForDistance, lodResolution, type LODLevel } from '../infinity/LODManager'
@@ -732,6 +733,25 @@ export class InfiniteWorldRenderer {
 
   getAnalyticalOverlayMode() { return this.analyticalOverlayMode }
   getPatchResolution() { return this.patchResolution }
+
+  /** Diagnostics for verifying that rendered water coverage matches generator data. */
+  getTerrainWaterDiagnostics() {
+    let expectedWaterQuads = 0
+    for (const patch of this.patches.values()) {
+      for (const depth of patch.chunk.water) if (depth > 0) expectedWaterQuads++
+    }
+    let actualWaterQuads = 0
+    for (const mesh of this.waterMeshes.values()) {
+      actualWaterQuads += (mesh.geometry.index?.count ?? 0) / 6
+    }
+    return {
+      loadedChunks: this.patches.size,
+      chunksWithWater: this.waterMeshes.size,
+      expectedWaterQuads,
+      actualWaterQuads,
+      maxWaterQuads: this.patches.size * WORLD_CHUNK_SIZE * WORLD_CHUNK_SIZE,
+    }
+  }
   getLodDistance() { return this.lodDistance }
 
   pan(deltaX: number, deltaZ: number) {
@@ -1027,14 +1047,24 @@ export class InfiniteWorldRenderer {
       group.add(wire)
     }
 
-    const waterGeometry = new THREE.PlaneGeometry(WORLD_CHUNK_SIZE, WORLD_CHUNK_SIZE)
-    waterGeometry.rotateX(-Math.PI / 2)
-    const waterMaterial = new THREE.MeshBasicMaterial({ color: 0x2b78b5, transparent: true, opacity: 0.42, depthWrite: false })
-    const water = new THREE.Mesh(waterGeometry, waterMaterial)
-    water.position.set(originX + WORLD_CHUNK_SIZE / 2, this.generator.seaLevel + 0.05, originZ + WORLD_CHUNK_SIZE / 2)
-    group.add(water)
+    const waterKey = `${chunk.cx},${chunk.cy},${chunk.cz}`
+    const waterData = buildWaterSurfaceMeshData(chunk, this.generator.seaLevel)
+    if (waterData.wetCellCount > 0) {
+      const waterGeometry = new THREE.BufferGeometry()
+      waterGeometry.setAttribute('position', new THREE.BufferAttribute(waterData.positions, 3))
+      waterGeometry.setIndex(waterData.indices)
+      waterGeometry.computeBoundingSphere()
+      const waterMaterial = new THREE.MeshBasicMaterial({
+        color: 0x2b78b5, transparent: true, opacity: 0.42, depthWrite: false,
+      })
+      const water = new THREE.Mesh(waterGeometry, waterMaterial)
+      group.add(water)
+      this.waterMeshes.set(waterKey, water)
+    } else {
+      // Do not leave a prior mesh reference when this patch is rebuilt for a dry chunk.
+      this.waterMeshes.delete(waterKey)
+    }
     group.position.set(-this.worldAnchor.x, -this.worldAnchor.y, -this.worldAnchor.z)
-    this.waterMeshes.set(`${chunk.cx},${chunk.cy},${chunk.cz}`, water)
 
     void sample
     return group

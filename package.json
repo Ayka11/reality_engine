@@ -15,6 +15,7 @@
     "test:signalling": "node scripts/check-signalling-server.mjs",
     "test:brushes": "node scripts/check-brush-math.mjs && node scripts/check-brush-geometry.mjs",
     "test:world-field": "node scripts/check-world-field-contract.mjs && node scripts/check-world-field-view-window.mjs",
+    "test:water-surface": "npx --yes tsx scripts/check-water-surface-mesh.ts",
     "test:infinity-scale-core": "node scripts/check-infinity-scale-core.mjs",
     "test:sparse-voxel-grid-recovery": "npx --yes tsx scripts/check-sparse-voxel-grid-recovery.ts",
     "test:causal-graph-recovery": "npx --yes tsx scripts/check-causal-graph-recovery.ts",

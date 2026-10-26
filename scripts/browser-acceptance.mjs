@@ -246,6 +246,17 @@ try {
     throw new Error(`Mixed-LOD terrain seam is not stitched: ${JSON.stringify(terrainSeam)}`);
   }
 
+  // The rendered sea-level mesh must cover exactly the wet cells reported by the generator,
+  // not one full plane per terrain chunk.
+  const waterCoverage = await page.evaluate(() =>
+    window.infiniteWorld?.getTerrainWaterDiagnostics?.() ?? null
+  );
+  if (!waterCoverage || waterCoverage.loadedChunks < 13 ||
+      waterCoverage.actualWaterQuads !== waterCoverage.expectedWaterQuads ||
+      waterCoverage.actualWaterQuads > waterCoverage.maxWaterQuads) {
+    throw new Error(`Terrain water mesh does not match the generator mask: ${JSON.stringify(waterCoverage)}`);
+  }
+
   // Global Play/Pause controls 3D simulation effects without stopping rendering or streaming.
   const playPauseBaseline = await page.evaluate(() => {
     const world = window.infiniteWorld;
