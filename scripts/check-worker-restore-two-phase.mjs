@@ -87,6 +87,28 @@ assert.equal(rejected.data.complete, false, "missing chunks must reject preparat
 const afterRejected = send("snapshot").find(message => message.cmd === "snapshot").data.snap;
 assert.deepEqual(afterRejected, afterCommit, "failed preparation must roll back immediately");
 
+
+send("restoreBegin", { restoreId: 4, expected: 1 });
+send("restoreChunk", { restoreId: 4, key: 1, data: payload });
+const replacementReady = send("restoreEnd", { restoreId: 4 }).find(message => message.cmd === "restoreComplete");
+assert.equal(replacementReady.data.prepared, true);
+const replacementCommit = send("restoreCommit", { restoreId: 4 }).find(message => message.cmd === "restoreCommitted");
+assert.equal(replacementCommit.data.committed, true);
+const afterReplacement = send("snapshot").find(message => message.cmd === "snapshot").data.snap;
+assert.equal(afterReplacement.length, 1, "committed restore must replace, not merge with, the previous chunk set");
+assert.equal(afterReplacement[0].key, 1, "chunk omitted from replacement snapshot must be removed");
+const nextFrame = send("tick", { speed: 1 }).find(message => message.cmd === "frame");
+assert.ok(nextFrame, "worker should publish a frame after replacement commit");
+const frameView = new DataView(nextFrame.ab);
+const dirtyCount = frameView.getUint32(0, true);
+const frameKeys = [];
+let frameOffset = 4;
+for (let i = 0; i < dirtyCount; i++) {
+  frameKeys.push(frameView.getUint32(frameOffset, true));
+  frameOffset += 4 + CHUNK_FLOATS * 4;
+}
+assert.ok(frameKeys.includes(0), "next frame must publish a tombstone for the omitted old chunk");
+
 console.log("PASS: restoreEnd prepares without committing worker state");
 console.log("PASS: restoreAbort rolls back a prepared restore");
 console.log("PASS: restoreCommit makes prepared chunks durable in worker state");
