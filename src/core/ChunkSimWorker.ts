@@ -308,7 +308,10 @@ function simStep(dt: number) {
       const nextWave = Math.max(-9999, Math.min(9999,
         (wave + p.waveSpeed * p.waveSpeed * lapWave * dt * dt) * p.waveDamping))
       grid.set(x, y, z, F.WAVE, nextWave)
-      grid.add(x, y, z, F.E, wave * Math.sin(tick * dt * p.waveSpeed) * 0.008 * dt)
+      // Wave-to-energy coupling is an additive source, but energy remains a
+      // non-negative bounded field even when the wave phase removes energy.
+      grid.set(x, y, z, F.E, Math.max(0, Math.min(9999,
+        grid.get(x, y, z, F.E) + wave * Math.sin(tick * dt * p.waveSpeed) * 0.008 * dt)))
     }
 
     if (isProcessActive(PROC.GRAVITY)) {
