@@ -548,11 +548,16 @@ try {
     window.buf[0] = 123;
     window.buf[1] = 0.75;
     window.tick = 17;
+    // Exercise the stale-state edge case: the legacy flag is already paused
+    // while the independent 3D runtime is running.
+    window.realityEnginePlaying = false;
+    window.setInfiniteWorldSimulationRunning?.(true);
     window.resetLegacyFieldSimulation?.();
   });
   const resetState = await page.evaluate(() => ({
     tick: window.tick,
     playing: window.realityEnginePlaying,
+    infiniteWorldRunning: window.getInfiniteWorldSimulationRunning?.(),
     nonZeroFields: Array.from(window.buf).filter(value => value !== 0).length,
     buttonText: document.getElementById("pb")?.textContent?.trim(),
     tickLabel: document.getElementById("tkOut")?.textContent?.trim(),
@@ -560,6 +565,7 @@ try {
   if (
     resetState.tick !== 0 ||
     resetState.playing !== false ||
+    resetState.infiniteWorldRunning !== false ||
     resetState.nonZeroFields !== 0 ||
     resetState.buttonText !== "▶ Play" ||
     resetState.tickLabel !== "0"
