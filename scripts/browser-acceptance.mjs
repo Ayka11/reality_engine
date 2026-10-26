@@ -916,8 +916,10 @@ try {
     const chunkSize = Math.sqrt(firstPatch.chunk.heights.length);
     const x = firstPatch.chunk.cx * chunkSize + chunkSize / 2;
     const z = firstPatch.chunk.cz * chunkSize + chunkSize / 2;
-    const y = world.generator.sampleHeight(x, z);
-    const legacyCell = { x, y: z, z: y };
+    const height = world.generator.sampleHeight(x, z);
+    // Legacy logical coordinates map as (legacy x, legacy y, legacy z)
+    // -> (world x, world z, world y). Keep the brush centered at this world point.
+    const legacyCell = { x, y: z, z: height };
     const sampleDensity = () => world.fieldSampler.sample(x, y, z).density;
     const captureGroups = () => new Map([...world.patches].map(([key, patch]) => [key, patch.group]));
     const changedGroups = (before) => [...before].filter(([key, group]) => world.patches.get(key)?.group !== group).length;
