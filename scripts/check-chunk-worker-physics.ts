@@ -45,20 +45,21 @@ const energyHalo = readField(latestFrame(), point.x + 1, point.y, point.z, F.E)
 assert.ok(energyHalo > 0 && energyHalo < 1,
   `energy diffusion should reach a previously empty neighboring cell (got ${energyHalo})`)
 
-// Diffusion must cross the x=7/8 chunk boundary into a newly allocated chunk.
-const boundaryPoint = { x: 7, y: 40, z: 10 }
-send('paint', { ...boundaryPoint, f: F.E, v: 100, r: 0, mode: 'set' })
-send('tick', { speed: 1 })
-const boundaryHalo = readField(latestFrame(), boundaryPoint.x + 1, boundaryPoint.y, boundaryPoint.z, F.E)
-assert.ok(boundaryHalo > 0 && boundaryHalo < 1,
-  `energy diffusion should cross a chunk boundary into an empty cell (got ${boundaryHalo})`)
-
 // The same field is unchanged when its process bit is disabled.
 send('setPhysics', { params, processMask: 0 })
 send('tick', { speed: 1 })
 const energyAfterDisabled = readField(latestFrame(), point.x, point.y, point.z, F.E)
 assert.ok(Math.abs(energyAfterDisabled - energyAfterEnabled) < 1e-5,
   'disabled energy diffusion must not change energy')
+
+// Diffusion must cross the x=7/8 chunk boundary into a newly allocated chunk.
+send('setPhysics', { params, processMask: 1 << 0 })
+const boundaryPoint = { x: 7, y: 40, z: 10 }
+send('paint', { ...boundaryPoint, f: F.E, v: 100, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const boundaryHalo = readField(latestFrame(), boundaryPoint.x + 1, boundaryPoint.y, boundaryPoint.z, F.E)
+assert.ok(boundaryHalo > 0 && boundaryHalo < 1,
+  `energy diffusion should cross a chunk boundary into an empty cell (got ${boundaryHalo})`)
 
 // Temperature diffusion uses PhysicsParams.tempDiffusion, not the old 0.07 literal.
 const thermalPoint = { x: 20, y: 10, z: 10 }
