@@ -891,6 +891,80 @@ try {
     );
   }
 
+  // Verify legacy sculpt mutations rebuild the live terrain renderer and that
+  // authoritative Undo/Redo restore both field samples and rendered patch groups.
+  const legacySculptTerrain = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (!world ||
+        typeof world.applyLegacySculptStroke !== "function" ||
+        typeof world.undoLegacySculptAuthoritative !== "function" ||
+        typeof world.redoLegacySculptAuthoritative !== "function" ||
+        typeof world.setMaterialMode !== "function" ||
+        !(world.patches instanceof Map) || world.patches.size === 0) {
+      return { error: "legacy sculpt transaction or loaded terrain patch API unavailable" };
+    }
+
+    const previousMode = world.getMaterialMode?.() ?? "height";
+    world.setMaterialMode("field");
+    const firstPatch = [...world.patches.values()].find((patch) =>
+      patch?.chunk?.heights?.length > 0 && patch.group);
+    if (!firstPatch) {
+      world.setMaterialMode(previousMode);
+      return { error: "no loaded terrain patch available for sculpt refresh probe" };
+    }
+
+    const chunkSize = Math.sqrt(firstPatch.chunk.heights.length);
+    const x = firstPatch.chunk.cx * chunkSize + chunkSize / 2;
+    const z = firstPatch.chunk.cz * chunkSize + chunkSize / 2;
+    const y = world.generator.sampleHeight(x, z);
+    const legacyCell = { x, y: z, z: y };
+    const sampleDensity = () => world.fieldSampler.sample(x, y, z).density;
+    const captureGroups = () => new Map([...world.patches].map(([key, patch]) => [key, patch.group]));
+    const changedGroups = (before) => [...before].filter(([key, group]) => world.patches.get(key)?.group !== group).length;
+
+    const beforeDensity = sampleDensity();
+    const targetDensity = beforeDensity < 0.5 ? 1 : 0;
+    const groupsBefore = captureGroups();
+    world.applyLegacySculptStroke("paint", legacyCell, 16, 1, { fields: { density: targetDensity } });
+    const afterDensity = sampleDensity();
+    const groupsAfterMutation = captureGroups();
+    const mutationRebuiltPatches = changedGroups(groupsBefore);
+
+    const undone = world.undoLegacySculptAuthoritative();
+    const undoDensity = sampleDensity();
+    const groupsAfterUndo = captureGroups();
+    const undoRebuiltPatches = changedGroups(groupsAfterMutation);
+
+    const redone = world.redoLegacySculptAuthoritative();
+    const redoDensity = sampleDensity();
+    const redoRebuiltPatches = changedGroups(groupsAfterUndo);
+    world.setMaterialMode(previousMode);
+
+    return {
+      beforeDensity, afterDensity, undoDensity, redoDensity, targetDensity,
+      mutationId: undone?.mutationId ?? null,
+      mutationRebuiltPatches, undoRebuiltPatches, redoRebuiltPatches,
+      loadedPatches: world.patches.size,
+      restoredMode: world.getMaterialMode?.(),
+      previousMode,
+    };
+  });
+  if (legacySculptTerrain.error) throw new Error(legacySculptTerrain.error);
+  if (!Number.isFinite(legacySculptTerrain.beforeDensity) ||
+      Math.abs(legacySculptTerrain.afterDensity - legacySculptTerrain.targetDensity) > 1e-6 ||
+      Math.abs(legacySculptTerrain.undoDensity - legacySculptTerrain.beforeDensity) > 1e-6 ||
+      Math.abs(legacySculptTerrain.redoDensity - legacySculptTerrain.targetDensity) > 1e-6) {
+    throw new Error("Legacy sculpt field values did not round-trip through Undo/Redo: " + JSON.stringify(legacySculptTerrain));
+  }
+  if (legacySculptTerrain.mutationRebuiltPatches <= 0 ||
+      legacySculptTerrain.undoRebuiltPatches <= 0 ||
+      legacySculptTerrain.redoRebuiltPatches <= 0) {
+    throw new Error("Legacy sculpt mutation/Undo/Redo did not rebuild loaded terrain patches: " + JSON.stringify(legacySculptTerrain));
+  }
+  if (legacySculptTerrain.restoredMode !== legacySculptTerrain.previousMode) {
+    throw new Error("Legacy sculpt terrain probe did not restore the prior terrain material mode: " + JSON.stringify(legacySculptTerrain));
+  }
+
   if (!fieldMutation?.metadata?.provenanceEventId) {
     throw new Error("Field mutation did not receive runtime provenance");
   }
