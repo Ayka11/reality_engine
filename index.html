@@ -1081,7 +1081,7 @@ function simStep(dt){
     }
     if(y<H-1){
       const i=center+W*NF;
-      lapE+=bbuf[i+FE];lapD+=bbuf[i+FD];lapT+=bbuf[i+FI];lapI+=bbuf[i+FI];nc++;
+      lapE+=bbuf[i+FE];lapD+=bbuf[i+FD];lapT+=bbuf[i+FT];lapI+=bbuf[i+FI];nc++;
     }
     lapE-=nc*cE;lapD-=nc*cD;lapT-=nc*cT;lapI-=nc*cI;
     set_(x,y,FE,clamp(bbuf[idx(x,y)+FE]+DIFFUSION*lapE*dt,0,9999));
