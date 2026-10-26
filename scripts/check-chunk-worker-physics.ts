@@ -119,6 +119,40 @@ send('tick', { speed: 1 })
 const gravityFx = readField(latestFrame(), gravityPoint.x, gravityPoint.y, gravityPoint.z, F.FX)
 assert.ok(gravityFx < 0, `gravity should respond to the density gradient (got ${gravityFx})`)
 
+// INFORMATION and SIGNAL_PROPAGATION must compose, not overwrite one another.
+const informationPoint = { x: 120, y: 40, z: 10 }
+const informationParams = {
+  ...params,
+  infoGrowthRate: 2,
+  infoGrowthThreshE: 1,
+  infoGrowthThreshD: 0.1,
+  infoEntropySupp: 0,
+  signalPropagationRate: 1,
+}
+send('setPhysics', {
+  params: informationParams,
+  processMask: (1 << 4) | (1 << 10),
+})
+send('paint', { ...informationPoint, f: F.E, v: 100, r: 0, mode: 'set' })
+send('paint', { ...informationPoint, f: F.D, v: 0.8, r: 0, mode: 'set' })
+send('paint', { ...informationPoint, f: F.I, v: 10, r: 0, mode: 'set' })
+// Equal neighboring information makes the signal Laplacian zero. The combined
+// processes must still retain the positive INFORMATION growth contribution.
+for (const [dx, dy, dz] of [[-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1]]) {
+  send('paint', {
+    x: informationPoint.x + dx,
+    y: informationPoint.y + dy,
+    z: informationPoint.z + dz,
+    f: F.I, v: 10, r: 0, mode: 'set',
+  })
+}
+send('tick', { speed: 1 })
+const informationAfterCombined = readField(
+  latestFrame(), informationPoint.x, informationPoint.y, informationPoint.z, F.I,
+)
+assert.ok(informationAfterCombined > 10,
+  `INFORMATION growth must survive when SIGNAL_PROPAGATION is also enabled (got ${informationAfterCombined})`)
+
 // Erosion responds to material resistance rather than removing density uniformly.
 const erosionPoint = { x: 110, y: 10, z: 10 }
 send('setPhysics', { params, processMask: 1 << 15 })
