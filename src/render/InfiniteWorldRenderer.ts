@@ -39,7 +39,7 @@ import { civilizationRuntime, type CivilizationType } from '../worldLibrary/Civi
 import { productionInfrastructureRuntime } from '../worldLibrary/ProductionInfrastructureRuntime'
 import { resolveWorldLibraryEntry, resourceVisualKind, visualKindToWorldObject } from '../worldLibrary/WorldLibraryAdapter'
 
-type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number }
+type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number; edgeLodSignature: string }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
 
 const BIOME_COLORS: Record<number, number> = {
@@ -841,6 +841,43 @@ export class InfiniteWorldRenderer {
     return w.chunk
   }
 
+  private terrainEdgeLodSignature(chunk: WorldChunk): string {
+    return [
+      this.patches.get(`${chunk.cx - 1},${chunk.cy},${chunk.cz}`)?.lod ?? 'x',
+      this.patches.get(`${chunk.cx + 1},${chunk.cy},${chunk.cz}`)?.lod ?? 'x',
+      this.patches.get(`${chunk.cx},${chunk.cy},${chunk.cz - 1}`)?.lod ?? 'x',
+      this.patches.get(`${chunk.cx},${chunk.cy},${chunk.cz + 1}`)?.lod ?? 'x',
+    ].join(':')
+  }
+
+  private snappedTerrainEdgeHeight(
+    chunk: WorldChunk,
+    edge: 'west' | 'east' | 'north' | 'south',
+    alongIndex: number,
+    resolution: number,
+    neighborResolution: number,
+  ): number {
+    const ratio = resolution / neighborResolution
+    if (!Number.isInteger(ratio) || ratio < 2) {
+      const x = edge === 'west' ? 0 : edge === 'east' ? WORLD_CHUNK_SIZE : alongIndex * WORLD_CHUNK_SIZE / resolution
+      const z = edge === 'north' ? 0 : edge === 'south' ? WORLD_CHUNK_SIZE : alongIndex * WORLD_CHUNK_SIZE / resolution
+      return this.generator.sampleHeight(chunk.cx * WORLD_CHUNK_SIZE + x, chunk.cz * WORLD_CHUNK_SIZE + z)
+    }
+    const lower = Math.floor(alongIndex / ratio) * ratio
+    const upper = Math.min(resolution, lower + ratio)
+    const sampleAt = (index: number) => {
+      const along = index * WORLD_CHUNK_SIZE / resolution
+      const x = edge === 'west' ? 0 : edge === 'east' ? WORLD_CHUNK_SIZE : along
+      const z = edge === 'north' ? 0 : edge === 'south' ? WORLD_CHUNK_SIZE : along
+      return this.generator.sampleHeight(chunk.cx * WORLD_CHUNK_SIZE + x, chunk.cz * WORLD_CHUNK_SIZE + z)
+    }
+    const lowerHeight = sampleAt(lower)
+    if (upper === lower) return lowerHeight
+    const upperHeight = sampleAt(upper)
+    const t = (alongIndex - lower) / (upper - lower)
+    return lowerHeight + (upperHeight - lowerHeight) * t
+  }
+
   private buildTerrainPatch(chunk: WorldChunk, lod = 1): THREE.Group {
     const group = new THREE.Group()
     const geometry = new THREE.BufferGeometry()
@@ -854,6 +891,18 @@ export class InfiniteWorldRenderer {
 
     const originX = chunk.cx * WORLD_CHUNK_SIZE
     const originZ = chunk.cz * WORLD_CHUNK_SIZE
+    const neighborResolution = (dx: number, dz: number) => {
+      const neighbor = this.patches.get(`${chunk.cx + dx},${chunk.cy},${chunk.cz + dz}`)
+      if (!neighbor) return null
+      const neighborResolution = lodResolution(neighbor.lod as LODLevel)
+      return neighborResolution < resolution && resolution % neighborResolution === 0
+        ? neighborResolution
+        : null
+    }
+    const westResolution = neighborResolution(-1, 0)
+    const eastResolution = neighborResolution(1, 0)
+    const northResolution = neighborResolution(0, -1)
+    const southResolution = neighborResolution(0, 1)
 
     const sample = (gx: number, gz: number) => {
       const lx = Math.min(WORLD_CHUNK_SIZE - 1, Math.floor(gx))
@@ -866,7 +915,20 @@ export class InfiniteWorldRenderer {
         const i = z * n + x
         const gx = x * scale
         const gz = z * scale
-        const h = this.generator.sampleHeight(originX + gx, originZ + gz)
+        let h = this.generator.sampleHeight(originX + gx, originZ + gz)
+        // When this edge is finer than a loaded neighbor, place its border on the
+        // neighbor's piecewise-linear edge. This eliminates T-junction cracks
+        // without disabling distance-based LOD for the interior of either chunk.
+        if (x === 0 && westResolution !== null) {
+          h = this.snappedTerrainEdgeHeight(chunk, 'west', z, resolution, westResolution)
+        } else if (x === resolution && eastResolution !== null) {
+          h = this.snappedTerrainEdgeHeight(chunk, 'east', z, resolution, eastResolution)
+        }
+        if (z === 0 && northResolution !== null) {
+          h = this.snappedTerrainEdgeHeight(chunk, 'north', x, resolution, northResolution)
+        } else if (z === resolution && southResolution !== null) {
+          h = this.snappedTerrainEdgeHeight(chunk, 'south', x, resolution, southResolution)
+        }
         positions[i * 3] = originX + gx
         positions[i * 3 + 1] = h
         positions[i * 3 + 2] = originZ + gz
@@ -979,7 +1041,7 @@ export class InfiniteWorldRenderer {
         else if (mesh.material) { mesh.material.dispose(); this.terrainMaterials.delete(mesh.material as THREE.MeshStandardMaterial) }
       })
       const group = this.buildTerrainPatch(patch.chunk, patch.lod)
-      this.patches.set(key, { group, chunk: patch.chunk, lod: patch.lod })
+      this.patches.set(key, { group, chunk: patch.chunk, lod: patch.lod, edgeLodSignature: this.terrainEdgeLodSignature(patch.chunk) })
       this.scene.add(group)
     }
   }
@@ -1009,7 +1071,8 @@ export class InfiniteWorldRenderer {
   private updateTerrainLod() {
     for (const [key, patch] of this.patches) {
       const lod = this.desiredLod(patch.chunk)
-      if (lod === patch.lod) continue
+      const edgeLodSignature = this.terrainEdgeLodSignature(patch.chunk)
+      if (lod === patch.lod && edgeLodSignature === patch.edgeLodSignature) continue
       this.scene.remove(patch.group)
       patch.group.traverse(obj => {
         const mesh = obj as THREE.Mesh
@@ -1018,7 +1081,7 @@ export class InfiniteWorldRenderer {
         else if (mesh.material) mesh.material.dispose()
       })
       const group = this.buildTerrainPatch(patch.chunk, lod)
-      this.patches.set(key, { group, chunk: patch.chunk, lod })
+      this.patches.set(key, { group, chunk: patch.chunk, lod, edgeLodSignature: this.terrainEdgeLodSignature(patch.chunk) })
       this.scene.add(group)
     }
   }
@@ -1036,8 +1099,9 @@ export class InfiniteWorldRenderer {
     for (const chunk of delta.loaded) {
       const key = `${chunk.cx},${chunk.cy},${chunk.cz}`
       if (!this.patches.has(key)) {
-        const group = this.buildTerrainPatch(chunk, 1)
-        this.patches.set(key, { group, chunk, lod: 1 })
+        const lod = this.desiredLod(chunk)
+        const group = this.buildTerrainPatch(chunk, lod)
+        this.patches.set(key, { group, chunk, lod, edgeLodSignature: this.terrainEdgeLodSignature(chunk) })
         this.scene.add(group)
       }
     }

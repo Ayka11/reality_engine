@@ -183,6 +183,67 @@ try {
     throw new Error(`OrbitControls target drifted from absolute world coordinates: ${JSON.stringify(cameraAfterPan)}`);
   }
 
+  // Adjacent terrain chunks with different LODs must share the same piecewise-linear
+  // boundary heights; otherwise finer edges can leave T-junction cracks.
+  await page.waitForFunction(() => {
+    const world = window.infiniteWorld;
+    const patches = [...(world?.patches?.values?.() ?? [])];
+    if (patches.length < 8) return false;
+    const keys = new Set(patches.map(p => `${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`));
+    return patches.some(p =>
+      keys.has(`${p.chunk.cx + 1},${p.chunk.cy},${p.chunk.cz}`) ||
+      keys.has(`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz + 1}`));
+  }, null, { timeout: 15000 });
+  const terrainSeam = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const patches = [...(world?.patches?.values?.() ?? [])];
+    const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
+    const edge = (patch, side) => {
+      const mesh = patch.group.children.find(child => child.userData?.terrain);
+      const position = mesh?.geometry?.getAttribute?.("position");
+      if (!position) return null;
+      const n = Math.round(Math.sqrt(position.count));
+      const resolution = n - 1;
+      const heights = [];
+      for (let i = 0; i < n; i++) {
+        const index = side === "west" ? i * n : side === "east" ? i * n + resolution
+          : side === "north" ? i : resolution * n + i;
+        heights.push(position.getY(index));
+      }
+      return { resolution, heights };
+    };
+    for (const patch of patches) {
+      const east = byKey.get(`${patch.chunk.cx + 1},${patch.chunk.cy},${patch.chunk.cz}`);
+      const south = byKey.get(`${patch.chunk.cx},${patch.chunk.cy},${patch.chunk.cz + 1}`);
+      for (const [neighbor, sideA, sideB] of [[east, "east", "west"], [south, "south", "north"]]) {
+        if (!neighbor || neighbor.lod === patch.lod) continue;
+        const a = edge(patch, sideA), b = edge(neighbor, sideB);
+        if (!a || !b || a.resolution === b.resolution) continue;
+        const coarse = a.resolution < b.resolution ? a : b;
+        const fine = a.resolution < b.resolution ? b : a;
+        const ratio = fine.resolution / coarse.resolution;
+        if (!Number.isInteger(ratio)) return { error: "LOD grid resolutions are not nested", ratio };
+        let maxError = 0;
+        for (let i = 0; i <= fine.resolution; i++) {
+          const lo = Math.floor(i / ratio);
+          const hi = Math.min(coarse.resolution, lo + 1);
+          const t = hi === lo ? 0 : (i / ratio - lo);
+          const expected = coarse.heights[lo] + (coarse.heights[hi] - coarse.heights[lo]) * t;
+          maxError = Math.max(maxError, Math.abs(fine.heights[i] - expected));
+        }
+        return {
+          lodA: patch.lod, lodB: neighbor.lod,
+          coarseResolution: coarse.resolution, fineResolution: fine.resolution,
+          maxBoundaryHeightError: maxError,
+        };
+      }
+    }
+    return null;
+  });
+  if (!terrainSeam || terrainSeam.error || terrainSeam.maxBoundaryHeightError > 0.002) {
+    throw new Error(`Mixed-LOD terrain seam is not stitched: ${JSON.stringify(terrainSeam)}`);
+  }
+
   // Deterministic scientific view-window sampling must be available to the browser runtime.
   const viewWindowContract = await page.evaluate(() => {
     const sampleWindow = window.worldFieldViewWindow;
