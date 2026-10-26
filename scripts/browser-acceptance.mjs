@@ -492,6 +492,54 @@ try {
       pausedAfter.positions.some((value, index) => Math.abs(value - pausedSnapshot.positions[index]) > 1e-6)) {
     throw new Error("Pause stopped the legacy tick but not the 3D particle simulation");
   }
+  // The speed slider must change simulation work, not only its label.
+  // Count real simStep invocations at two slider settings while the global
+  // Play/Pause path is active; restore the original function before continuing.
+  const speedProbeAvailable = await page.evaluate(() => typeof window.simStep === "function");
+  if (!speedProbeAvailable) throw new Error("Simulation speed acceptance cannot access the authoritative simStep function");
+  const speedProbeSetup = await page.evaluate(() => {
+    const original = window.simStep;
+    window.__realitySpeedProbe = { original, calls: 0 };
+    window.simStep = function (...args) {
+      window.__realitySpeedProbe.calls++;
+      return original.apply(this, args);
+    };
+    return true;
+  });
+  if (!speedProbeSetup) throw new Error("Unable to instrument simulation step counter");
+  const measureSpeed = async (speed) => {
+    await page.locator("#spd").evaluate((input, value) => {
+      input.value = String(value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, speed);
+    await page.locator("#pb").click();
+    await page.waitForTimeout(350);
+    await page.locator("#pb").click();
+    await page.waitForFunction(() => window.getInfiniteWorldSimulationRunning?.() === false);
+    return page.evaluate(() => window.__realitySpeedProbe.calls);
+  };
+  let slowSpeedCalls = 0;
+  let fastSpeedCalls = 0;
+  try {
+    slowSpeedCalls = await measureSpeed(1);
+    await page.waitForTimeout(100);
+    await page.evaluate(() => { window.__realitySpeedProbe.calls = 0; });
+    fastSpeedCalls = await measureSpeed(12);
+  } finally {
+    await page.evaluate(() => {
+      if (window.__realitySpeedProbe?.original) window.simStep = window.__realitySpeedProbe.original;
+      delete window.__realitySpeedProbe;
+      const speed = document.getElementById("spd");
+      if (speed) {
+        speed.value = "4";
+        speed.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+  }
+  if (slowSpeedCalls <= 0 || fastSpeedCalls <= slowSpeedCalls) {
+    throw new Error(`Simulation speed slider did not increase real simulation work: 1x=${slowSpeedCalls}, 12x=${fastSpeedCalls}`);
+  }
+  console.log(`[acceptance] simulation speed control: 1x=${slowSpeedCalls} steps, 12x=${fastSpeedCalls} steps`);
   await page.evaluate(() => window.infiniteWorld?.setShowParticles(false));
 
   // Deterministic scientific view-window sampling must be available to the browser runtime.
