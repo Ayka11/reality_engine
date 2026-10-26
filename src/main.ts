@@ -118,7 +118,16 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     let off = 1;
     for (let c = 0; c < num; c++) {
       const key = u32[off];
-      localChunks.set(key, f32.slice(off + 1, off + 1 + CF));
+      const chunkData = f32.slice(off + 1, off + 1 + CF);
+      // A zero-filled payload is the worker protocol's tombstone for a pruned,
+      // cleared, or snapshot-removed chunk. Delete it from the shadow map rather
+      // than retaining a stale chunk entry for monitor sampling.
+      let hasNonZeroValue = false;
+      for (let i = 0; i < chunkData.length; i++) {
+        if (chunkData[i] !== 0) { hasNonZeroValue = true; break; }
+      }
+      if (hasNonZeroValue) localChunks.set(key, chunkData);
+      else localChunks.delete(key);
       off += 1 + CF;
     }
 
