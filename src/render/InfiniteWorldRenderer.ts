@@ -110,6 +110,11 @@ export class InfiniteWorldRenderer {
   private analyticalOverlayMode: 'suitability' | 'flood' | 'slope' | null = null
   private analyticalOverlayMesh?: THREE.Points
   private enabled = true
+  private currentPixelRatio = 1
+  private readonly maxPixelRatio = Math.max(1, Math.min(window.devicePixelRatio || 1, 2))
+  private adaptiveFrameCount = 0
+  private adaptiveFrameTimeMs = 0
+  private lastAdaptiveFrameMs = 0
   private simulationRunning = false
   private lastCenter: ChunkCoord | null = null
   private worldY = 45
@@ -271,7 +276,8 @@ export class InfiniteWorldRenderer {
 
   constructor(canvas: HTMLCanvasElement, seed = 'reality-engine-infinity-v1') {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.currentPixelRatio = this.maxPixelRatio
+    this.renderer.setPixelRatio(this.currentPixelRatio)
     this.renderer.setSize(Math.max(1, canvas.clientWidth), Math.max(1, canvas.clientHeight), false)
     this.renderer.shadowMap.enabled = false
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -2893,6 +2899,24 @@ export class InfiniteWorldRenderer {
 
     this.renderer.render(this.scene, this.camera)
     this.runtimeDiagnostics.recordFrame(frameStart)
+
+    // Adapt backing-buffer resolution slowly to sustained load, not single-frame spikes.
+    const frameTimeMs = performance.now() - frameStart
+    this.adaptiveFrameCount += 1
+    this.adaptiveFrameTimeMs += frameTimeMs
+    if (this.adaptiveFrameCount >= 45) {
+      const averageFrameMs = this.adaptiveFrameTimeMs / this.adaptiveFrameCount
+      let nextRatio = this.currentPixelRatio
+      if (averageFrameMs > 28) nextRatio = Math.max(1, this.currentPixelRatio - 0.25)
+      else if (averageFrameMs < 15) nextRatio = Math.min(this.maxPixelRatio, this.currentPixelRatio + 0.25)
+      if (nextRatio !== this.currentPixelRatio) {
+        this.currentPixelRatio = nextRatio
+        this.renderer.setPixelRatio(nextRatio)
+      }
+      this.lastAdaptiveFrameMs = averageFrameMs
+      this.adaptiveFrameCount = 0
+      this.adaptiveFrameTimeMs = 0
+    }
   }
 
   private initPhysicsParticleSystem(count = 700) {
@@ -3146,11 +3170,17 @@ export class InfiniteWorldRenderer {
   }
 
   getRuntimeDiagnostics() {
-    return this.runtimeDiagnostics.snapshot(
-      this.getLoadedChunkCount(),
-      this.objectMeshes.size,
-      this.physicsParticlePositions.length / 3,
-    )
+    return {
+      ...this.runtimeDiagnostics.snapshot(
+        this.getLoadedChunkCount(),
+        this.objectMeshes.size,
+        this.physicsParticlePositions.length / 3,
+      ),
+      pixelRatio: this.currentPixelRatio,
+      maxPixelRatio: this.maxPixelRatio,
+      adaptiveFrameMs: this.lastAdaptiveFrameMs,
+      enabled: this.enabled,
+    }
   }
 
   getPhysicsInteractionSnapshot(limit = 100) {
