@@ -101,6 +101,7 @@ export class InfiniteWorldRenderer {
   private pointerDownTime = 0
   private readonly transformControls: TransformControls
   private gizmoBefore: WorldObject | null = null
+  private transformDragging = false
   private readonly selectionMarker = new THREE.Mesh(
     new THREE.BoxGeometry(1.2, 1.2, 1.2),
     new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true, transparent: true, opacity: 0.9 })
@@ -386,8 +387,9 @@ export class InfiniteWorldRenderer {
     ;(this.transformControls as any).visible = false
     this.scene.add(this.transformControls as unknown as THREE.Object3D)
     this.transformControls.addEventListener('dragging-changed', (event) => {
-      this.controls.enabled = !Boolean((event as { value: boolean }).value) && !this.flyMode
-      if ((event as { value: boolean }).value) {
+      this.transformDragging = Boolean((event as { value: boolean }).value)
+      this.controls.enabled = this.enabled && !this.transformDragging && !this.flyMode
+      if (this.transformDragging) {
         const object = this.getSelectedObject()
         this.gizmoBefore = object ? { ...object } : null
       } else if (this.gizmoBefore) {
@@ -400,6 +402,7 @@ export class InfiniteWorldRenderer {
     this.transformControls.addEventListener('objectChange', () => this.syncSelectedFromGizmo())
 
     this.keyDownHandler = (e: KeyboardEvent) => {
+      if (!this.enabled) return
       const tgt = e.target
       if (tgt instanceof HTMLInputElement || tgt instanceof HTMLTextAreaElement || (tgt instanceof HTMLElement && tgt.isContentEditable)) return
       if (['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','ShiftRight','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyQ','KeyE'].includes(e.code)) {
@@ -602,7 +605,7 @@ export class InfiniteWorldRenderer {
 
   setEnabled(value: boolean) {
     this.enabled = value
-    this.controls.enabled = value
+    this.controls.enabled = value && !this.flyMode && !this.transformDragging
   }
 
   get isEnabled() { return this.enabled }
@@ -743,7 +746,7 @@ export class InfiniteWorldRenderer {
   }
   setFlyMode(enabled: boolean) {
     this.flyMode = enabled
-    this.controls.enabled = !enabled
+    this.controls.enabled = this.enabled && !enabled && !this.transformDragging
   }
 
   zoom(delta: number) {
@@ -817,7 +820,7 @@ export class InfiniteWorldRenderer {
 
   resetCameraView() {
     this.flyMode = false
-    this.controls.enabled = true
+    this.controls.enabled = this.enabled && !this.transformDragging
     const targetWorld = new THREE.Vector3(16, this.generator.sampleHeight(16, 16), 16)
     const targetLocal = this.worldToLocal(targetWorld)
     this.controls.target.copy(targetLocal)
@@ -849,7 +852,7 @@ export class InfiniteWorldRenderer {
     }
 
     this.flyMode = false
-    this.controls.enabled = true
+    this.controls.enabled = this.enabled && !this.transformDragging
     if (preset === 'top') {
       this.camera.position.copy(targetLocal).add(new THREE.Vector3(0, 220, 0.01))
     } else if (preset === 'front') {
