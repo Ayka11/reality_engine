@@ -31,6 +31,16 @@ for (const name of ["undoLegacySculptAuthoritative", "redoLegacySculptAuthoritat
     `${name} must refresh and persist only when the coordinator changes field state`);
 }
 
+const authoritativeMutation = methodBody("applyAuthoritativeFieldMutation");
+assert.match(authoritativeMutation, /this\\.refreshTerrainPatches\\(\\)/,
+  "the canonical authoritative mutation path must refresh the renderer");
+
+const terrainBuilder = methodBody("buildTerrainPatch");
+assert.match(terrainBuilder, /if\\s*\\(this\\.materialMode\\s*===\\s*'field'\\)[\\s\\S]*?this\\.fieldSampler\\.sample\\(/,
+  "field visualization must sample the authoritative scientific field");
+assert.match(terrainBuilder, /const\\s+density\\s*=\\s*Math\\.max\\(0,\\s*Math\\.min\\(1,\\s*field\\.density\\)\\)/,
+  "field visualization must derive vertex color from the sampled field");
+
 const refresh = methodBody("refreshTerrainPatches");
 assert.match(refresh, /for\s*\(const\s*\[key,\s*patch\]\s*of\s*this\.patches\)/, "refresh must visit every loaded patch");
 assert.match(refresh, /patch\.group\.traverse/, "refresh must dispose old patch resources");
@@ -40,4 +50,5 @@ assert.match(refresh, /this\.scene\.add\(group\)/, "rebuilt patches must be atta
 
 console.log("PASS: legacy sculpt and Smart Brush refresh rendered terrain");
 console.log("PASS: authoritative Undo/Redo refresh after successful transactions");
+console.log("PASS: authoritative field mode colors terrain from sampled field values");
 console.log("PASS: refresh rebuilds loaded patches and edge-LOD metadata");
