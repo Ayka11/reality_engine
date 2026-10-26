@@ -52,20 +52,38 @@ function last(cmd) {
   assert.ok(found, `expected worker message ${cmd}`);
   return found;
 }
+function frameKeys(frame) {
+  assert.ok(frame?.ab instanceof ArrayBuffer, "expected a worker frame payload");
+  const view = new DataView(frame.ab);
+  const count = view.getUint32(0, true);
+  const keys = [];
+  let offset = 4;
+  for (let i = 0; i < count; i++) {
+    keys.push(view.getUint32(offset, true));
+    offset += 4 + CHUNK_FLOATS * 4;
+  }
+  assert.equal(offset, frame.ab.byteLength, "frame payload must have exact declared length");
+  return keys;
+}
 const initial = send("snapshot").find(message => message.cmd === "snapshot").data.snap;
 const payload = new Float32Array(CHUNK_FLOATS);
 payload[0] = 321;
 
 send("restoreBegin", { restoreId: 1, expected: 1 });
-send("restoreChunk", { restoreId: 1, key: 0, data: payload });
+const firstChunkMessages = send("restoreChunk", { restoreId: 1, key: 0, data: payload });
 assert.equal(last("restoreChunkAck").data.accepted, true);
+assert.equal(firstChunkMessages.some(message => message.cmd === "frame"), false,
+  "restore preparation must not publish uncommitted chunk state");
 const prepared = send("restoreEnd", { restoreId: 1 }).find(message => message.cmd === "restoreComplete");
 assert.equal(prepared.data.complete, true);
 assert.equal(prepared.data.prepared, true);
 assert.equal(messages.some(message => message.cmd === "restoreCommitted" && message.data.restoreId === 1), false,
   "restoreEnd must prepare, not commit or discard the rollback image");
-const aborted = send("restoreAbort", { restoreId: 1 }).find(message => message.cmd === "restoreAborted");
+const abortMessages = send("restoreAbort", { restoreId: 1 });
+const aborted = abortMessages.find(message => message.cmd === "restoreAborted");
 assert.equal(aborted.data.aborted, true);
+assert.ok(abortMessages.some(message => message.cmd === "frame"),
+  "abort must publish the rolled-back state to the main thread");
 const afterAbort = send("snapshot").find(message => message.cmd === "snapshot").data.snap;
 assert.deepEqual(afterAbort, initial, "abort after prepare must restore the exact pre-restore chunk set");
 
@@ -73,8 +91,12 @@ send("restoreBegin", { restoreId: 2, expected: 1 });
 send("restoreChunk", { restoreId: 2, key: 0, data: payload });
 const ready = send("restoreEnd", { restoreId: 2 }).find(message => message.cmd === "restoreComplete");
 assert.equal(ready.data.prepared, true);
-const committed = send("restoreCommit", { restoreId: 2 }).find(message => message.cmd === "restoreCommitted");
+const commitMessages = send("restoreCommit", { restoreId: 2 });
+const committed = commitMessages.find(message => message.cmd === "restoreCommitted");
 assert.equal(committed.data.committed, true);
+const committedFrame = commitMessages.find(message => message.cmd === "frame");
+assert.ok(committedFrame, "commit must publish the authoritative restored state immediately");
+assert.ok(frameKeys(committedFrame).includes(0));
 const afterCommit = send("snapshot").find(message => message.cmd === "snapshot").data.snap;
 assert.equal(afterCommit.length, 1);
 assert.equal(afterCommit[0].key, 0);
@@ -82,8 +104,11 @@ assert.equal(afterCommit[0].data[0], 321);
 
 send("restoreBegin", { restoreId: 3, expected: 2 });
 send("restoreChunk", { restoreId: 3, key: 1, data: payload });
-const rejected = send("restoreEnd", { restoreId: 3 }).find(message => message.cmd === "restoreComplete");
+const rejectedMessages = send("restoreEnd", { restoreId: 3 });
+const rejected = rejectedMessages.find(message => message.cmd === "restoreComplete");
 assert.equal(rejected.data.complete, false, "missing chunks must reject preparation");
+assert.ok(rejectedMessages.some(message => message.cmd === "frame"),
+  "failed preparation must publish the rolled-back state");
 const afterRejected = send("snapshot").find(message => message.cmd === "snapshot").data.snap;
 assert.deepEqual(afterRejected, afterCommit, "failed preparation must roll back immediately");
 
@@ -92,43 +117,35 @@ send("restoreBegin", { restoreId: 4, expected: 1 });
 send("restoreChunk", { restoreId: 4, key: 1, data: payload });
 const replacementReady = send("restoreEnd", { restoreId: 4 }).find(message => message.cmd === "restoreComplete");
 assert.equal(replacementReady.data.prepared, true);
-const replacementCommit = send("restoreCommit", { restoreId: 4 }).find(message => message.cmd === "restoreCommitted");
+const replacementMessages = send("restoreCommit", { restoreId: 4 });
+const replacementCommit = replacementMessages.find(message => message.cmd === "restoreCommitted");
 assert.equal(replacementCommit.data.committed, true);
+const replacementFrame = replacementMessages.find(message => message.cmd === "frame");
+assert.ok(replacementFrame, "replacement commit must publish its final frame immediately");
+assert.ok(frameKeys(replacementFrame).includes(0),
+  "replacement commit frame must include a tombstone for the omitted old chunk");
 const afterReplacement = send("snapshot").find(message => message.cmd === "snapshot").data.snap;
 assert.equal(afterReplacement.length, 1, "committed restore must replace, not merge with, the previous chunk set");
 assert.equal(afterReplacement[0].key, 1, "chunk omitted from replacement snapshot must be removed");
 const nextFrame = send("tick", { speed: 1 }).find(message => message.cmd === "frame");
-assert.ok(nextFrame, "worker should publish a frame after replacement commit");
-const frameView = new DataView(nextFrame.ab);
-const dirtyCount = frameView.getUint32(0, true);
-const frameKeys = [];
-let frameOffset = 4;
-for (let i = 0; i < dirtyCount; i++) {
-  frameKeys.push(frameView.getUint32(frameOffset, true));
-  frameOffset += 4 + CHUNK_FLOATS * 4;
-}
-assert.ok(frameKeys.includes(0), "next frame must publish a tombstone for the omitted old chunk");
+assert.ok(nextFrame, "worker should continue publishing simulation frames after restore commit");
 
 
 send("restoreBegin", { restoreId: 5, expected: 0 });
 const emptyReady = send("restoreEnd", { restoreId: 5 }).find(message => message.cmd === "restoreComplete");
 assert.equal(emptyReady.data.complete, true, "empty snapshots should be valid atomic restore targets");
 assert.equal(emptyReady.data.prepared, true);
-const emptyCommit = send("restoreCommit", { restoreId: 5 }).find(message => message.cmd === "restoreCommitted");
+const emptyCommitMessages = send("restoreCommit", { restoreId: 5 });
+const emptyCommit = emptyCommitMessages.find(message => message.cmd === "restoreCommitted");
 assert.equal(emptyCommit.data.committed, true);
+const emptyCommitFrame = emptyCommitMessages.find(message => message.cmd === "frame");
+assert.ok(emptyCommitFrame, "empty restore commit must publish cleanup immediately");
+assert.ok(frameKeys(emptyCommitFrame).includes(1),
+  "empty restore frame must tombstone every previously existing chunk");
 assert.deepEqual(send("snapshot").find(message => message.cmd === "snapshot").data.snap, [],
   "committing an empty snapshot must clear the entire prior chunk set");
 const emptyFrame = send("tick", { speed: 1 }).find(message => message.cmd === "frame");
-assert.ok(emptyFrame, "worker should publish cleanup after empty restore");
-const emptyFrameView = new DataView(emptyFrame.ab);
-const emptyDirtyCount = emptyFrameView.getUint32(0, true);
-const emptyFrameKeys = [];
-let emptyOffset = 4;
-for (let i = 0; i < emptyDirtyCount; i++) {
-  emptyFrameKeys.push(emptyFrameView.getUint32(emptyOffset, true));
-  emptyOffset += 4 + CHUNK_FLOATS * 4;
-}
-assert.ok(emptyFrameKeys.includes(1), "empty restore must publish a tombstone for every prior chunk");
+assert.ok(emptyFrame, "worker should continue ticking after empty restore");
 
 console.log("PASS: restoreEnd prepares without committing worker state");
 console.log("PASS: restoreAbort rolls back a prepared restore");
