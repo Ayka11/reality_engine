@@ -153,6 +153,16 @@ const informationAfterCombined = readField(
 assert.ok(informationAfterCombined > 10,
   `INFORMATION growth must survive when SIGNAL_PROPAGATION is also enabled (got ${informationAfterCombined})`)
 
+// Wave-to-energy coupling must not push the energy field below zero.
+const waveEnergyPoint = { x: 145, y: 40, z: 10 }
+send('setPhysics', { params: { ...params, waveSpeed: 2, waveDamping: 1 }, processMask: 1 << 6 })
+send('paint', { ...waveEnergyPoint, f: F.E, v: 0, r: 0, mode: 'set' })
+send('paint', { ...waveEnergyPoint, f: F.WAVE, v: -1000, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const energyAfterNegativeWave = readField(latestFrame(), waveEnergyPoint.x, waveEnergyPoint.y, waveEnergyPoint.z, F.E)
+assert.ok(energyAfterNegativeWave >= 0,
+  `wave-to-energy coupling must preserve the non-negative energy invariant (got ${energyAfterNegativeWave})`)
+
 // Erosion responds to material resistance rather than removing density uniformly.
 const erosionPoint = { x: 110, y: 10, z: 10 }
 send('setPhysics', { params, processMask: 1 << 15 })
