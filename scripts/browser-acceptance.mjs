@@ -157,10 +157,21 @@ try {
     throw new Error("Infinite World did not start in a valid 3D rendering state: " + JSON.stringify(renderLifecycleBaseline));
   }
 
+  const flyModeBaseline = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (typeof world?.setFlyMode !== "function") return { error: "Fly Camera API is unavailable" };
+    world.setFlyMode(true);
+    return { runtimeEnabled: world.isEnabled, controlsEnabled: world.controls?.enabled };
+  });
+  if (flyModeBaseline.error || !flyModeBaseline.runtimeEnabled || flyModeBaseline.controlsEnabled !== false) {
+    throw new Error("Fly Camera must disable OrbitControls while Infinite World is active: " + JSON.stringify(flyModeBaseline));
+  }
+
   const renderPausedBaseline = await page.evaluate(() => {
     window.setRenderMode("2d");
     return {
       enabled: window.infiniteWorld?.isEnabled,
+      controlsEnabled: window.infiniteWorld?.controls?.enabled,
       mode: window.currentRenderMode,
       calls: window.__infiniteWorldRenderProbe?.calls ?? -1,
     };
@@ -168,11 +179,13 @@ try {
   await page.waitForTimeout(250);
   const renderPaused = await page.evaluate(() => ({
     enabled: window.infiniteWorld?.isEnabled,
+    controlsEnabled: window.infiniteWorld?.controls?.enabled,
     mode: window.currentRenderMode,
     calls: window.__infiniteWorldRenderProbe?.calls ?? -1,
   }));
-  if (renderPausedBaseline.enabled !== false || renderPausedBaseline.mode !== "2d" ||
-      renderPaused.enabled !== false || renderPaused.mode !== "2d" ||
+  if (renderPausedBaseline.enabled !== false || renderPausedBaseline.controlsEnabled !== false ||
+      renderPausedBaseline.mode !== "2d" || renderPaused.enabled !== false ||
+      renderPaused.controlsEnabled !== false || renderPaused.mode !== "2d" ||
       renderPaused.calls !== renderPausedBaseline.calls) {
     throw new Error("Infinite World renderer continued drawing in 2D mode: " +
       JSON.stringify({ baseline: renderPausedBaseline, paused: renderPaused }));
@@ -183,21 +196,33 @@ try {
     const world = window.infiniteWorld;
     const probe = window.__infiniteWorldRenderProbe;
     return window.currentRenderMode === "3d" && world?.isEnabled === true &&
-      probe && probe.calls > before;
+      world.controls?.enabled === false && probe && probe.calls > before;
   }, pausedRenderCalls, { timeout: 6000 });
   const renderResumed = await page.evaluate(() => {
     const world = window.infiniteWorld;
     const probe = window.__infiniteWorldRenderProbe;
-    const result = { enabled: world?.isEnabled, mode: window.currentRenderMode, calls: probe?.calls ?? -1 };
+    const result = {
+      enabled: world?.isEnabled,
+      controlsEnabled: world?.controls?.enabled,
+      mode: window.currentRenderMode,
+      calls: probe?.calls ?? -1,
+    };
     if (world?.renderer && probe) world.renderer.render = probe.original;
     delete window.__infiniteWorldRenderProbe;
     return result;
   });
-  if (renderResumed.enabled !== true || renderResumed.mode !== "3d" ||
-      renderResumed.calls <= pausedRenderCalls) {
-    throw new Error("Infinite World renderer did not resume after returning to 3D: " + JSON.stringify(renderResumed));
+  if (renderResumed.enabled !== true || renderResumed.controlsEnabled !== false ||
+      renderResumed.mode !== "3d" || renderResumed.calls <= pausedRenderCalls) {
+    throw new Error("Infinite World renderer did not resume with Fly Camera controls preserved: " + JSON.stringify(renderResumed));
   }
-  console.log("[acceptance] hidden Infinite World renderer pause/resume and adaptive DPR diagnostics PASS");
+  const orbitRestored = await page.evaluate(() => {
+    window.infiniteWorld?.setFlyMode?.(false);
+    return { enabled: window.infiniteWorld?.isEnabled, controlsEnabled: window.infiniteWorld?.controls?.enabled };
+  });
+  if (orbitRestored.enabled !== true || orbitRestored.controlsEnabled !== true) {
+    throw new Error("OrbitControls did not re-enable after leaving Fly Camera: " + JSON.stringify(orbitRestored));
+  }
+  console.log("[acceptance] hidden renderer pause/resume, Fly Camera control preservation, adaptive DPR diagnostics PASS");
 
   // Bottom-bar counters must describe the selected runtime, not the unrelated legacy 2D grid.
   await page.waitForFunction(() => {
