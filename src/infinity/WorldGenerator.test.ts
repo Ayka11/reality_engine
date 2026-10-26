@@ -21,4 +21,27 @@ for (let z = 0; z < 32; z++) {
 const neg = world.generateChunk(-1, 0, -1)
 if (neg.cx !== -1 || neg.cz !== -1) throw new Error('Negative chunk coordinate failure')
 
+// The default visible-world seed must create measurable relief over several
+// neighboring chunks, not merely finite/repeatable heights. This guards against
+// accidental coordinate scaling or normalization that flattens the heightfield.
+for (const seed of ['reality-engine-infinity-v1', 'reality-harmonic-balanced-emergent-standard']) {
+  const worldBySeed = new WorldGenerator(seed)
+  const chunks = [
+    worldBySeed.generateChunk(0, 0, 0),
+    worldBySeed.generateChunk(1, 0, 0),
+    worldBySeed.generateChunk(0, 0, 1),
+    worldBySeed.generateChunk(-1, 0, -1),
+  ]
+  const heights = chunks.flatMap(chunk => Array.from(chunk.heights))
+  if (!heights.every(Number.isFinite)) throw new Error(`Non-finite terrain height for seed ${seed}`)
+  const minHeight = Math.min(...heights)
+  const maxHeight = Math.max(...heights)
+  if (maxHeight - minHeight < 1.0) {
+    throw new Error(`Terrain relief collapsed for seed ${seed}: min=${minHeight}, max=${maxHeight}`)
+  }
+  if (new Set(chunks.flatMap(chunk => Array.from(chunk.biome))).size < 2) {
+    throw new Error(`Terrain climate/biome diversity collapsed for seed ${seed}`)
+  }
+}
+
 console.log('Infinite world kernel tests: PASS')
