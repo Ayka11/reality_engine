@@ -32,13 +32,13 @@ for (const name of ["undoLegacySculptAuthoritative", "redoLegacySculptAuthoritat
 }
 
 const authoritativeMutation = methodBody("applyAuthoritativeFieldMutation");
-assert.match(authoritativeMutation, /this\\.refreshTerrainPatches\\(\\)/,
+assert.match(authoritativeMutation, /this\.refreshTerrainPatches\(\)/,
   "the canonical authoritative mutation path must refresh the renderer");
 
 const terrainBuilder = methodBody("buildTerrainPatch");
-assert.match(terrainBuilder, /if\\s*\\(this\\.materialMode\\s*===\\s*'field'\\)[\\s\\S]*?this\\.fieldSampler\\.sample\\(/,
+assert.match(terrainBuilder, /if\s*\(this\.materialMode\s*===\s*'field'\)[\s\S]*?this\.fieldSampler\.sample\(/,
   "field visualization must sample the authoritative scientific field");
-assert.match(terrainBuilder, /const\\s+density\\s*=\\s*Math\\.max\\(0,\\s*Math\\.min\\(1,\\s*field\\.density\\)\\)/,
+assert.match(terrainBuilder, /const\s+density\s*=\s*Math\.max\(0,\s*Math\.min\(1,\s*field\.density\)\)/,
   "field visualization must derive vertex color from the sampled field");
 
 const refresh = methodBody("refreshTerrainPatches");
