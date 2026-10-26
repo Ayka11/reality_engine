@@ -531,6 +531,7 @@ input[type=range]{accent-color:#a397ff}
 <!-- BOTTOM BAR -->
 <div id="bot">
   <button id="pb" onclick="togglePlay()">▶ Play</button>
+  <button id="resetFieldsBtn" onclick="resetLegacyFieldSimulation()" title="Clear the 2D field simulation and reset its tick counter; does not reset Infinite World terrain">↺ Reset 2D</button>
   <input type="range" id="spd" min="1" max="20" value="4" step="1" oninput="document.getElementById('spdOut').textContent=this.value+'x'">
   <span class="bst">Speed:</span><span class="bsv" id="spdOut">4x</span>
   <div class="tbsep"></div>
@@ -2825,6 +2826,39 @@ function setMoodPill(type,btn,val){
   log(`${type}: ${val}`);
 }
 window.setMoodPill=setMoodPill;
+
+function resetLegacyFieldSimulation(){
+  // This control intentionally resets only the legacy 2D field simulation.
+  // Infinite World terrain/objects are a separate runtime and are not silently
+  // destroyed by a control labelled for the 2D fields.
+  if(playing){
+    playing=false;
+    window.realityEnginePlaying=false;
+    window.setInfiniteWorldSimulationRunning?.(false);
+    if(currentAppMode==='game')isPaused=true;
+    const playButton=document.getElementById('pb');
+    if(playButton)playButton.textContent='▶ Play';
+  }
+  buf.fill(0);
+  bbuf.fill(0);
+  causal.length=0;
+  tick=0;
+  _particles.length=0;
+  _undoRing.length=0;
+  _undoHead=0;
+  _undoCount=0;
+  window.buf=buf;
+  window.tick=tick;
+  const tickOut=document.getElementById('tkOut');
+  if(tickOut)tickOut.textContent='0';
+  const energyOut=document.getElementById('eOut');
+  if(energyOut)energyOut.textContent='0';
+  const entropyOut=document.getElementById('sOut');
+  if(entropyOut)entropyOut.textContent='0.0000';
+  drawGrid();
+  updateHealth();
+}
+window.resetLegacyFieldSimulation=resetLegacyFieldSimulation;
 
 function togglePlay(){
   playing=!playing;
