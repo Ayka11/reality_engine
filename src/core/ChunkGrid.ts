@@ -98,7 +98,13 @@ export class ChunkGrid {
     for (const [key, chunk] of this.chunks) {
       let maxVal = 0
       for (let i = 0; i < CHUNK_FLOATS; i++) maxVal = Math.max(maxVal, Math.abs(chunk[i]))
-      if (maxVal < threshold) { this.chunks.delete(key); pruned++ }
+      if (maxVal < threshold) {
+        // Publish a zero-filled dirty payload for removed chunks so consumers
+        // can clear stale geometry/state instead of retaining deleted data.
+        this.chunks.delete(key)
+        this.dirtyChunks.add(key)
+        pruned++
+      }
     }
     return pruned
   }
