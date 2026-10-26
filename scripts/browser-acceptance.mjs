@@ -462,6 +462,13 @@ try {
   if (field3dDiagnostic.renderedCells <= 0 || field3dDiagnostic.sampleCount <= 0) {
     throw new Error("3D volumetric field did not render sampled cells");
   }
+  if (field3dDiagnostic.renderer !== "three-webgl-instanced-volume" ||
+      field3dDiagnostic.true3D !== true ||
+      field3dDiagnostic.meshInstances <= 0 ||
+      field3dDiagnostic.drawCalls <= 0 ||
+      field3dDiagnostic.triangles < field3dDiagnostic.renderedCells * 12) {
+    throw new Error("3D volumetric field is not backed by rendered WebGL volume geometry: " + JSON.stringify(field3dDiagnostic));
+  }
 
   const volumeHud = await page.evaluate(() => ({
     fieldLabel: document.getElementById("tkLabel")?.textContent?.trim(),

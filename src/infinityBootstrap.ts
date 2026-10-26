@@ -1,4 +1,5 @@
 import { InfiniteWorldRenderer } from './render/InfiniteWorldRenderer'
+import { WorldFieldVolumeRenderer } from './render/WorldFieldVolumeRenderer'
 import { worldResourceEconomy } from './worldLibrary/WorldResourceEconomy'
 import { settlementGrowthModel } from './worldLibrary/SettlementGrowthModel'
 import { civilizationRuntime } from './worldLibrary/CivilizationRuntime'
@@ -23,6 +24,19 @@ export function bootstrapInfiniteWorld() {
   if (!canvas) return null
   const seed = (window as any).worldSeed || 'reality-seed-1'
   const world = new InfiniteWorldRenderer(canvas, seed)
+  // The scientific field canvas has its own WebGL scene. It consumes the same
+  // authoritative samples that are also exposed by worldFieldViewWindow.
+  const fieldCanvas = document.getElementById('c3dField') as HTMLCanvasElement | null
+  if (fieldCanvas) {
+    try {
+      const fieldVolumeRenderer = new WorldFieldVolumeRenderer(fieldCanvas)
+      ;(window as any).worldFieldVolumeRenderer = fieldVolumeRenderer
+      ;(window as any).renderWorldFieldVolume = (frame: any) => fieldVolumeRenderer.render(frame)
+      ;(window as any).getWorldFieldVolumeRendererDiagnostics = () => fieldVolumeRenderer.diagnostics()
+    } catch (error) {
+      console.warn('[Field3D] WebGL volume renderer unavailable; isometric fallback retained.', error)
+    }
+  }
   world.setSimulationRunning(Boolean((window as any).realityEnginePlaying))
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world

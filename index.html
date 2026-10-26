@@ -2342,8 +2342,6 @@ window.addEventListener('keydown', (e) => {
 function renderField3DImpl(){
   const entryMode=typeof currentRenderMode==='undefined'?'unknown':currentRenderMode;
   window.__worldField3DTrace={phase:'renderer-enter',mode:entryMode,at:Date.now()};
-  // Publish a result before any DOM/canvas/sampler operation. Browser acceptance
-  // must be able to distinguish an entered renderer from a callback that never ran.
   window.getWorldField3DState=()=>({ready:false,reason:'renderer-entered',mode:entryMode,phase:'initializing'});
   const canvas=document.getElementById('c3dField');
   const mode=typeof currentRenderMode==='undefined'?'unknown':currentRenderMode;
@@ -2351,7 +2349,6 @@ function renderField3DImpl(){
   if(mode!=='field3d'){window.getWorldField3DState=()=>({ready:false,reason:'mode-mismatch',mode});return false;}
   const rect=canvas.getBoundingClientRect();
   if(rect.width<2||rect.height<2){
-    // Mode switches can expose the canvas before the layout has settled; retry once per frame while active.
     const retryCount=window.__worldField3DLayoutRetryCount||0;
     if(retryCount<3&&currentRenderMode==='field3d'){
       window.__worldField3DLayoutRetryCount=retryCount+1;
@@ -2360,44 +2357,18 @@ function renderField3DImpl(){
     window.getWorldField3DState=()=>({ready:false,reason:'zero-layout',mode,width:rect.width,height:rect.height});
     return false;
   }
-  const dpr=Math.min(window.devicePixelRatio||1,2);
-  const targetW=Math.max(1,Math.round(rect.width*dpr)),targetH=Math.max(1,Math.round(rect.height*dpr));
-  if(canvas.width!==targetW||canvas.height!==targetH){canvas.width=targetW;canvas.height=targetH;}
-  let g=null;
-  try { g=canvas.getContext('2d'); } catch (error) {
-    window.getWorldField3DState=()=>({ready:false,reason:'canvas-context-error',mode,message:error instanceof Error?error.message:String(error)});
-    return false;
-  }
-  if(!g){
-    window.getWorldField3DState=()=>({
-      ready:false,
-      reason:'canvas-context-unavailable',
-      mode,
-      canvasWidth:canvas.width,
-      canvasHeight:canvas.height,
-      contextAttributes:canvas.getContextAttributes?.()??null,
-    });
-    window.__worldField3DTrace={phase:'canvas-context-unavailable',mode,at:Date.now()};
-    return false;
-  }
-  g.setTransform(dpr,0,0,dpr,0,0);
-  const w=rect.width,h=rect.height;
+
   const sampler=window.worldFieldViewWindow,getView=window.getWorldViewContract;
   if(typeof sampler!=='function'||typeof getView!=='function'){
-    g.clearRect(0,0,w,h);g.fillStyle='#ffb86b';g.font='12px monospace';g.fillText('World-field sampler unavailable',16,28);
     window.getWorldField3DState=()=>({ready:false,reason:'sampler-unavailable',mode,renderedCells:0,sampleCount:0});
     return false;
   }
   const view=getView();
-  const state=typeof window.worldFieldState==='function'?window.worldFieldState()?.field:null;
-  // Bound synchronous sampling cost: the authoritative sampler can perform
-  // nontrivial work per cell, so keep the interactive view to a fixed budget.
-  // Keep synchronous authoritative sampling bounded for CPU-only browsers.
-  // FieldSampler performs scientific-field calculations for every requested cell.
-  const cols=Math.max(6,Math.min(10,Math.floor(w/80)));
-  const rows=Math.max(4,Math.min(7,Math.floor(h/80)));
+  const fieldState=typeof window.worldFieldState==='function'?window.worldFieldState()?.field:null;
+  const cols=Math.max(6,Math.min(10,Math.floor(rect.width/80)));
+  const rows=Math.max(4,Math.min(7,Math.floor(rect.height/80)));
   const depth=3,spacing=Math.max(1,Math.min(8,Math.floor((view.visibleRadius||24)*2/depth)));
-  const cacheKey=[cols,rows,view.center.x,view.center.y,view.center.z,view.sliceY,view.visibleRadius,view.seed,state?.version??0,state?.mutationCount??0,state?.lastMutation?.id??0].join('|');
+  const cacheKey=[cols,rows,view.center.x,view.center.y,view.center.z,view.sliceY,view.visibleRadius,view.seed,fieldState?.version??0,fieldState?.mutationCount??0,fieldState?.lastMutation?.id??0].join('|');
   if(!window.__worldField3DCache||window.__worldField3DCache.key!==cacheKey){
     const slices=[];
     for(let k=0;k<depth;k++){
@@ -2409,47 +2380,96 @@ function renderField3DImpl(){
     window.__worldField3DCache={key:cacheKey,slices};
   }
   const slices=window.__worldField3DCache.slices;
-  g.clearRect(0,0,w,h);
-  const bg=g.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#080d1b');bg.addColorStop(1,'#101528');g.fillStyle=bg;g.fillRect(0,0,w,h);
   const fieldIndex=Number.isInteger(layer)&&layer>=0&&layer<=5?layer:0;
   const names=['Energy','Density','Information','Entropy','Temperature','Biology'];
   const props=['energy','density','information','entropy','temperature','biology'];
   const maxima=[1000,1,500,1,800,1];
+  const sampleCount=slices.reduce((total,slice)=>total+(slice.data.samples||[]).filter(Boolean).length,0);
+
+  // Preferred path: render the authoritative samples as instanced 3D voxels through WebGL.
+  if(typeof window.renderWorldFieldVolume==='function'){
+    try{
+      const rendered=window.renderWorldFieldVolume({
+        slices,view,fieldIndex,fieldName:names[fieldIndex],property:props[fieldIndex],
+        maximum:maxima[fieldIndex],cols,rows,spacing
+      });
+      const diagnosticState={
+        ready:rendered?.ready===true&&Number(rendered?.renderedCells)>0,
+        renderer:rendered?.renderer??'unknown',
+        true3D:rendered?.true3D===true,
+        renderedCells:Number(rendered?.renderedCells??0),
+        sampleCount:Number(rendered?.sampleCount??sampleCount),
+        activeCells:Number(rendered?.activeCells??0),
+        slices:Number(rendered?.slices??slices.length),
+        meshInstances:Number(rendered?.meshInstances??0),
+        drawCalls:Number(rendered?.drawCalls??0),
+        triangles:Number(rendered?.triangles??0),
+        field:names[fieldIndex],
+        view,
+        reason:rendered?.reason
+      };
+      window.__worldField3DCanvasState=diagnosticState;
+      window.getWorldField3DState=()=>({...diagnosticState,view:window.getWorldViewContract?.()??diagnosticState.view});
+      window.__worldField3DLayoutRetryCount=0;
+      return diagnosticState.ready;
+    }catch(error){
+      const message=error instanceof Error?error.message:String(error);
+      window.getWorldField3DState=()=>({ready:false,reason:'webgl-volume-render-error',mode,message});
+      console.error('[field3d] WebGL volume render failed',error);
+      return false;
+    }
+  }
+
+  // Explicit CPU-only fallback. It is an isometric preview, not a true 3D renderer.
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const targetW=Math.max(1,Math.round(rect.width*dpr)),targetH=Math.max(1,Math.round(rect.height*dpr));
+  if(canvas.width!==targetW||canvas.height!==targetH){canvas.width=targetW;canvas.height=targetH;}
+  let g=null;
+  try{g=canvas.getContext('2d');}catch(error){
+    window.getWorldField3DState=()=>({ready:false,reason:'canvas-context-error',mode,message:error instanceof Error?error.message:String(error)});
+    return false;
+  }
+  if(!g){
+    window.getWorldField3DState=()=>({ready:false,reason:'canvas-context-unavailable',mode,canvasWidth:canvas.width,canvasHeight:canvas.height});
+    window.__worldField3DTrace={phase:'canvas-context-unavailable',mode,at:Date.now()};
+    return false;
+  }
+  g.setTransform(dpr,0,0,dpr,0,0);
+  const w=rect.width,h=rect.height;
+  g.clearRect(0,0,w,h);
+  const bg=g.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#080d1b');bg.addColorStop(1,'#101528');g.fillStyle=bg;g.fillRect(0,0,w,h);
+  const fieldIndexSafe=fieldIndex;
   const cellW=Math.max(3,Math.min(15,(w*.72)/(cols+rows*.55)));
   const cellH=cellW*.55;
   const depthStep=Math.max(2,Math.min(13,h*.018));
   const originX=w*.5-(cols-rows*.55)*cellW*.5;
   const originY=h*.5-(cols+rows)*cellH*.25+(depth-1)*depthStep*.5;
-  let renderedCells=0,activeCells=0,sampleCount=0;
+  let renderedCells=0,activeCells=0;
   for(let si=0;si<slices.length;si++){
     const {data}=slices[si];
     const zLayer=si-Math.floor((slices.length-1)/2);
     for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
       const sample=data.samples[py*data.width+px];
       if(!sample)continue;
-      sampleCount++;
-      const value=Number(sample[props[fieldIndex]])||0;
-      const normalized=Math.max(0,Math.min(1,value/maxima[fieldIndex]));
-      const color=colorOf(fieldIndex,normalized);
+      const value=Number(sample[props[fieldIndexSafe]])||0;
+      const normalized=Math.max(0,Math.min(1,value/maxima[fieldIndexSafe]));
+      const color=colorOf(fieldIndexSafe,normalized);
       const sx=originX+px*cellW+py*cellW*.55;
       const sy=originY+(px+py)*cellH*.5-zLayer*depthStep;
       const lift=Math.max(0,Math.min(depthStep*.9,normalized*depthStep*2));
       g.beginPath();g.moveTo(sx,sy-cellH*.5-lift);g.lineTo(sx+cellW*.5,sy-lift);g.lineTo(sx,sy+cellH*.5-lift);g.lineTo(sx-cellW*.5,sy-lift);g.closePath();
       g.fillStyle='rgba('+color[0]+','+color[1]+','+color[2]+','+(0.22+normalized*.72)+')';g.fill();
       g.strokeStyle='rgba(160,190,255,.14)';g.lineWidth=.5;g.stroke();
-      renderedCells++;if(value>(maxima[fieldIndex]>.99?maxima[fieldIndex]*.001:.001))activeCells++;
+      renderedCells++;if(value>(maxima[fieldIndexSafe]>.99?maxima[fieldIndexSafe]*.001:.001))activeCells++;
     }
   }
-  g.font='bold 12px system-ui';g.fillStyle='rgba(235,242,255,.94)';g.fillText('3D VOLUMETRIC FIELD · '+names[fieldIndex],14,22);
+  g.font='bold 12px system-ui';g.fillStyle='rgba(235,242,255,.94)';g.fillText('ISOMETRIC FIELD PREVIEW · '+names[fieldIndexSafe],14,22);
   g.font='10px monospace';g.fillStyle='rgba(180,200,235,.8)';
   g.fillText('samples '+sampleCount+' · active '+activeCells+' · Y '+view.sliceY+' · center '+view.center.x.toFixed(1)+', '+view.center.y.toFixed(1)+', '+view.center.z.toFixed(1),14,h-12);
   window.__worldField3DLayoutRetryCount=0;
-  const diagnosticState={ready:renderedCells>0,renderedCells,sampleCount,activeCells,slices:slices.length,field:names[fieldIndex],view};
+  const diagnosticState={ready:renderedCells>0,renderedCells,sampleCount,activeCells,slices:slices.length,field:names[fieldIndexSafe],view,renderer:'canvas2d-isometric-preview',true3D:false,meshInstances:0,drawCalls:0,triangles:0};
   window.__worldField3DCanvasState=diagnosticState;
-  window.getWorldField3DState=()=>({
-    ...diagnosticState,
-    view: window.getWorldViewContract?.() ?? diagnosticState.view,
-  });
+  window.getWorldField3DState=()=>({...diagnosticState,view:window.getWorldViewContract?.()??diagnosticState.view});
   return renderedCells>0;
 }
 function renderField3D(){
