@@ -540,6 +540,34 @@ try {
     throw new Error(`Simulation speed slider did not increase real simulation work: 1x=${slowSpeedCalls}, 12x=${fastSpeedCalls}`);
   }
   console.log(`[acceptance] simulation speed control: 1x=${slowSpeedCalls} steps, 12x=${fastSpeedCalls} steps`);
+
+  // Reset is deliberately scoped to the legacy 2D field simulation. It must
+  // stop playback, clear its field buffer/causal history, and reset the tick,
+  // without pretending to reset the separate Infinite World terrain runtime.
+  await page.evaluate(() => {
+    window.buf[0] = 123;
+    window.buf[1] = 0.75;
+    window.tick = 17;
+    window.resetLegacyFieldSimulation?.();
+  });
+  const resetState = await page.evaluate(() => ({
+    tick: window.tick,
+    playing: window.realityEnginePlaying,
+    nonZeroFields: Array.from(window.buf).filter(value => value !== 0).length,
+    buttonText: document.getElementById("pb")?.textContent?.trim(),
+    tickLabel: document.getElementById("tkOut")?.textContent?.trim(),
+  }));
+  if (
+    resetState.tick !== 0 ||
+    resetState.playing !== false ||
+    resetState.nonZeroFields !== 0 ||
+    resetState.buttonText !== "▶ Play" ||
+    resetState.tickLabel !== "0"
+  ) {
+    throw new Error(`2D field reset failed to restore its documented baseline: ${JSON.stringify(resetState)}`);
+  }
+  console.log("[acceptance] scoped 2D field reset: playback stopped, fields cleared, tick reset");
+
   await page.evaluate(() => window.infiniteWorld?.setShowParticles(false));
 
   // Deterministic scientific view-window sampling must be available to the browser runtime.
