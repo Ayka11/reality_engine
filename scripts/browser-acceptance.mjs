@@ -293,36 +293,57 @@ try {
       }
       return { resolution, heights };
     };
+    let checkedPairs = 0;
+    let maxBoundaryHeightError = 0;
+    const failures = [];
     for (const patch of patches) {
       const east = byKey.get(`${patch.chunk.cx + 1},${patch.chunk.cy},${patch.chunk.cz}`);
       const south = byKey.get(`${patch.chunk.cx},${patch.chunk.cy},${patch.chunk.cz + 1}`);
-      for (const [neighbor, sideA, sideB] of [[east, "east", "west"], [south, "south", "north"]]) {
+      for (const [neighbor, sideA, sideB, direction] of [
+        [east, "east", "west", "east-west"],
+        [south, "south", "north", "north-south"],
+      ]) {
         if (!neighbor || neighbor.lod === patch.lod) continue;
         const a = edge(patch, sideA), b = edge(neighbor, sideB);
-        if (!a || !b || a.resolution === b.resolution) continue;
+        if (!a || !b) {
+          failures.push({ direction, reason: "missing terrain edge geometry",
+            a: [patch.chunk.cx, patch.chunk.cy, patch.chunk.cz],
+            b: [neighbor.chunk.cx, neighbor.chunk.cy, neighbor.chunk.cz] });
+          continue;
+        }
+        if (a.resolution === b.resolution) continue;
         const coarse = a.resolution < b.resolution ? a : b;
         const fine = a.resolution < b.resolution ? b : a;
         const ratio = fine.resolution / coarse.resolution;
-        if (!Number.isInteger(ratio)) return { error: "LOD grid resolutions are not nested", ratio };
-        let maxError = 0;
+        if (!Number.isInteger(ratio)) {
+          failures.push({ direction, reason: "LOD grid resolutions are not nested", ratio,
+            a: [patch.chunk.cx, patch.chunk.cy, patch.chunk.cz],
+            b: [neighbor.chunk.cx, neighbor.chunk.cy, neighbor.chunk.cz] });
+          continue;
+        }
+        checkedPairs++;
+        let pairMaxError = 0;
         for (let i = 0; i <= fine.resolution; i++) {
           const lo = Math.floor(i / ratio);
           const hi = Math.min(coarse.resolution, lo + 1);
           const t = hi === lo ? 0 : (i / ratio - lo);
           const expected = coarse.heights[lo] + (coarse.heights[hi] - coarse.heights[lo]) * t;
-          maxError = Math.max(maxError, Math.abs(fine.heights[i] - expected));
+          pairMaxError = Math.max(pairMaxError, Math.abs(fine.heights[i] - expected));
         }
-        return {
-          lodA: patch.lod, lodB: neighbor.lod,
-          coarseResolution: coarse.resolution, fineResolution: fine.resolution,
-          maxBoundaryHeightError: maxError,
-        };
+        maxBoundaryHeightError = Math.max(maxBoundaryHeightError, pairMaxError);
+        if (pairMaxError > 0.002) {
+          failures.push({ direction, lodA: patch.lod, lodB: neighbor.lod,
+            coarseResolution: coarse.resolution, fineResolution: fine.resolution,
+            maxBoundaryHeightError: pairMaxError,
+            a: [patch.chunk.cx, patch.chunk.cy, patch.chunk.cz],
+            b: [neighbor.chunk.cx, neighbor.chunk.cy, neighbor.chunk.cz] });
+        }
       }
     }
-    return null;
+    return { checkedPairs, maxBoundaryHeightError, failures };
   });
-  if (!terrainSeam || terrainSeam.error || terrainSeam.maxBoundaryHeightError > 0.002) {
-    throw new Error(`Mixed-LOD terrain seam is not stitched: ${JSON.stringify(terrainSeam)}`);
+  if (!terrainSeam || terrainSeam.checkedPairs < 1 || terrainSeam.failures.length > 0) {
+    throw new Error(`Mixed-LOD terrain seam validation failed: ${JSON.stringify(terrainSeam)}`);
   }
 
   // Validate the actual rendered terrain geometry, not only generator arrays or
