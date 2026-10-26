@@ -861,6 +861,7 @@ self.onmessage = (e: MessageEvent) => {
     restorePrepared = false
     restoredChunkKeys.clear()
     restoreBeforeChunks.clear()
+    restoreBeforeKeys.clear()
     restoreBeforeDirtyChunks.clear()
     return
   }
@@ -929,6 +930,7 @@ self.onmessage = (e: MessageEvent) => {
       restorePrepared = false
       restoredChunkKeys.clear()
       restoreBeforeChunks.clear()
+      restoreBeforeKeys.clear()
       restoreBeforeDirtyChunks.clear()
     }
     ;(self as unknown as Worker).postMessage({
