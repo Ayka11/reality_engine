@@ -122,10 +122,8 @@ chunkWorker.onmessage = (e: MessageEvent) => {
       off += 1 + CF;
     }
 
-    // These stats belong to the finite worker field. Do not overwrite the
-    // active Infinite World / volumetric HUD with counters from another runtime.
-    const renderMode = (window as unknown as Record<string, unknown>).currentRenderMode ?? '3d';
-    if (stats && renderMode !== '3d' && renderMode !== 'field3d') {
+    // Update bottom-bar chunk stats
+    if (stats) {
       const el = document.getElementById('chunkStats');
       if (el) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`;
     }

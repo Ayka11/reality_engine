@@ -467,8 +467,13 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     }
     // Feed the scientific field state directly into the dedicated volumetric renderer.
     fieldRenderer.applyWorkerFrame(ab as ArrayBuffer)
+    // These counters describe the finite worker grid, not the infinite terrain
+    // or the currently rendered volumetric projection.
+    const activeRenderMode = (win['currentRenderMode'] as string | undefined) ?? worldViewContract.snapshot().renderMode
     const el = document.getElementById('chunkStats')
-    if (el && stats) el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`
+    if (el && stats && activeRenderMode !== '3d' && activeRenderMode !== 'field3d') {
+      el.textContent = `${stats.activeChunks}/${stats.totalChunks} · ${stats.memoryMB}MB`
+    }
   }
 }
 
