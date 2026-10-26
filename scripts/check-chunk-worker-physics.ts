@@ -45,6 +45,14 @@ const energyHalo = readField(latestFrame(), point.x + 1, point.y, point.z, F.E)
 assert.ok(energyHalo > 0 && energyHalo < 1,
   `energy diffusion should reach a previously empty neighboring cell (got ${energyHalo})`)
 
+// Diffusion must cross the x=7/8 chunk boundary into a newly allocated chunk.
+const boundaryPoint = { x: 7, y: 40, z: 10 }
+send('paint', { ...boundaryPoint, f: F.E, v: 100, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const boundaryHalo = readField(latestFrame(), boundaryPoint.x + 1, boundaryPoint.y, boundaryPoint.z, F.E)
+assert.ok(boundaryHalo > 0 && boundaryHalo < 1,
+  `energy diffusion should cross a chunk boundary into an empty cell (got ${boundaryHalo})`)
+
 // The same field is unchanged when its process bit is disabled.
 send('setPhysics', { params, processMask: 0 })
 send('tick', { speed: 1 })
