@@ -2192,14 +2192,16 @@ function paintAt(x,y){
   _applyUnifiedStroke(tool,{x,y,z:0},bs,str/400,_fieldsForLayer(selectedLayer),selectedLayer);
 }
 wrap.addEventListener('pointerdown',e=>{
-  if(currentRenderMode==='3d')return;
+  // The volumetric renderer owns pointer input on #c3dField; do not let the
+  // legacy sculpt handler capture the pointer on #viewWrap and starve OrbitControls.
+  if(currentRenderMode==='3d'||currentRenderMode==='field3d')return;
   const c=getCellAt(e);if(!c)return;
   painting=true;wrap.setPointerCapture(e.pointerId);
   if(tool==='inspect'){selX=c.x;selY=c.y;histE=[];histT=[];histI=[];histS=[];histB=[];explainCell(c.x,c.y);}
   else{_beginSculptGesture();paintAt(c.x,c.y);}
 });
 wrap.addEventListener('pointermove',e=>{
-  if(currentRenderMode==='3d'||!painting)return;const c=getCellAt(e);if(!c)return;
+  if(currentRenderMode==='3d'||currentRenderMode==='field3d'||!painting)return;const c=getCellAt(e);if(!c)return;
   if(tool==='inspect'){selX=c.x;selY=c.y;}else paintAt(c.x,c.y);
 });
 wrap.addEventListener('pointerup',()=>{painting=false;_finishSculptGesture();});
