@@ -790,9 +790,7 @@ export class InfiniteWorldRenderer {
     this.worldPosition.copy(targetWorld)
   }
 
-  setCameraPreset(preset: 'top' | 'front' | 'orbit' | 'iso') {
-    this.flyMode = false
-    this.controls.enabled = true
+  setCameraPreset(preset: 'top' | 'front' | 'orbit' | 'iso' | 'street' | 'fly') {
     const targetWorld = new THREE.Vector3(
       this.worldPosition.x,
       this.generator.sampleHeight(this.worldPosition.x, this.worldPosition.z),
@@ -800,10 +798,27 @@ export class InfiniteWorldRenderer {
     )
     const targetLocal = this.worldToLocal(targetWorld)
     this.controls.target.copy(targetLocal)
+
+    if (preset === 'fly') {
+      // Fly uses first-person movement rather than OrbitControls. Keep the
+      // camera/world position in the same absolute coordinate frame.
+      this.flyMode = true
+      this.controls.enabled = false
+      this.worldPosition.copy(targetWorld).add(new THREE.Vector3(0, 8, 0))
+      this.camera.position.copy(this.worldToLocal(this.worldPosition))
+      this.camera.lookAt(this.camera.position.clone().add(new THREE.Vector3(0, 0, -30)))
+      this.controls.target.copy(this.camera.position).add(new THREE.Vector3(0, 0, -30))
+      return
+    }
+
+    this.flyMode = false
+    this.controls.enabled = true
     if (preset === 'top') {
       this.camera.position.copy(targetLocal).add(new THREE.Vector3(0, 220, 0.01))
     } else if (preset === 'front') {
       this.camera.position.copy(targetLocal).add(new THREE.Vector3(0, 24, 90))
+    } else if (preset === 'street') {
+      this.camera.position.copy(targetLocal).add(new THREE.Vector3(0, 3, 12))
     } else if (preset === 'iso') {
       this.camera.position.copy(targetLocal).add(new THREE.Vector3(110, 85, 110))
     } else {
