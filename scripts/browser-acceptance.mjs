@@ -338,6 +338,8 @@ try {
     let degenerateTriangles = 0;
     let invalidIndices = 0;
     let nonFiniteVertices = 0;
+    let invalidGeometryPatches = 0;
+    let malformedIndexBuffers = 0;
     const distinctHeights = new Set();
 
     for (const patch of patches) {
@@ -345,7 +347,11 @@ try {
       const geometry = mesh?.geometry;
       const position = geometry?.getAttribute?.("position");
       const index = geometry?.index;
-      if (!position || !index || position.count < 3 || index.count < 3) continue;
+      if (!position || !index || position.count < 3 || index.count < 3) {
+        invalidGeometryPatches++;
+        continue;
+      }
+      if (index.count % 3 !== 0) malformedIndexBuffers++;
 
       vertexCount += position.count;
       for (let i = 0; i < position.count; i++) {
@@ -387,13 +393,15 @@ try {
       loadedPatches: patches.length, vertexCount, triangleCount,
       minY, maxY, relief: maxY - minY, distinctHeightSamples: distinctHeights.size,
       degenerateTriangles, invalidIndices, nonFiniteVertices,
+      invalidGeometryPatches, malformedIndexBuffers,
     };
   });
   if (terrainGeometry.loadedPatches < 13 || terrainGeometry.vertexCount <= 0 ||
       terrainGeometry.triangleCount <= 0 || !Number.isFinite(terrainGeometry.relief) ||
       terrainGeometry.relief < 1 || terrainGeometry.distinctHeightSamples < 8 ||
       terrainGeometry.degenerateTriangles > 0 || terrainGeometry.invalidIndices > 0 ||
-      terrainGeometry.nonFiniteVertices > 0) {
+      terrainGeometry.nonFiniteVertices > 0 || terrainGeometry.invalidGeometryPatches > 0 ||
+      terrainGeometry.malformedIndexBuffers > 0) {
     throw new Error(`Rendered terrain geometry contract failed: ${JSON.stringify(terrainGeometry)}`);
   }
 
