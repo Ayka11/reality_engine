@@ -746,7 +746,13 @@ try {
   try {
     await page.waitForFunction(() => {
       const state = window.getWorldField3DState?.();
-      return !!state && (state.ready || !!state.reason);
+      const transientReasons = new Set([
+        "authoritative-field-renderer-pending",
+        "renderer-entered",
+        "initializing",
+      ]);
+      return !!state && (state.ready ||
+        (!!state.reason && !transientReasons.has(String(state.reason))));
     }, null, { timeout: 12000 });
   } catch (error) {
     const trace = await page.evaluate(() => ({
@@ -756,6 +762,7 @@ try {
       inlineMode: document.getElementById("tabField3d")?.getAttribute("onclick") ?? null,
       canvas: (() => { const e = document.getElementById("c3dField"); const r = e?.getBoundingClientRect(); return e && r ? {display:getComputedStyle(e).display,width:r.width,height:r.height} : null; })(),
       apis: { sampler:typeof window.worldFieldViewWindow, view:typeof window.getWorldViewContract, setMode:typeof window.setWorldViewRenderMode },
+      volumeDiagnostics: window.getWorldFieldVolumeRendererDiagnostics?.() ?? null,
     }));
     throw new Error(`3D volumetric field renderer did not publish a result: ${JSON.stringify(trace)}; ${error.message}`);
   }
