@@ -154,7 +154,7 @@ assert.ok(informationAfterCombined > 10,
   `INFORMATION growth must survive when SIGNAL_PROPAGATION is also enabled (got ${informationAfterCombined})`)
 
 // Wave-to-energy coupling must not push the energy field below zero.
-const waveEnergyPoint = { x: 145, y: 40, z: 10 }
+const waveEnergyPoint = { x: 100, y: 40, z: 20 }
 send('setPhysics', { params: { ...params, waveSpeed: 2, waveDamping: 1 }, processMask: 1 << 6 })
 send('paint', { ...waveEnergyPoint, f: F.E, v: 0, r: 0, mode: 'set' })
 send('paint', { ...waveEnergyPoint, f: F.WAVE, v: -1000, r: 0, mode: 'set' })
