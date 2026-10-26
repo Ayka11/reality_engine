@@ -185,7 +185,12 @@ export class ChunkGrid {
     }
   }
 
-  clear(): void { this.chunks.clear(); this.dirtyChunks.clear() }
+  clear(): void {
+    // Every previously materialized chunk may already exist downstream. Publish
+    // zero-filled dirty payloads for those keys before dropping local storage.
+    for (const key of this.chunks.keys()) this.dirtyChunks.add(key)
+    this.chunks.clear()
+  }
 
   get stats() {
     const active = this.chunks.size
