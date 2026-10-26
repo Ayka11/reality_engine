@@ -128,6 +128,76 @@ try {
     throw new Error("World generation verifier must reject unchanged state even when the stats object exists: " + JSON.stringify(noGenerationCheck));
   }
 
+  // The hidden Infinite World renderer must stop drawing in 2D and resume on return to 3D.
+  const renderLifecycleBaseline = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const renderer = world?.renderer;
+    if (!world || !renderer || typeof renderer.render !== "function" ||
+        typeof world.getRuntimeDiagnostics !== "function" ||
+        typeof window.setRenderMode !== "function") {
+      return { error: "Infinite World render lifecycle API is unavailable" };
+    }
+    const diagnostics = world.getRuntimeDiagnostics();
+    const pixelRatio = Number(diagnostics.pixelRatio);
+    const maxPixelRatio = Number(diagnostics.maxPixelRatio);
+    if (!Number.isFinite(pixelRatio) || !Number.isFinite(maxPixelRatio) ||
+        pixelRatio < 1 || pixelRatio > maxPixelRatio || !Number.isFinite(Number(diagnostics.adaptiveFrameMs))) {
+      return { error: "Adaptive renderer diagnostics are out of bounds", diagnostics };
+    }
+    const probe = { calls: 0, original: renderer.render };
+    renderer.render = function (...args) {
+      probe.calls += 1;
+      return probe.original.apply(this, args);
+    };
+    window.__infiniteWorldRenderProbe = probe;
+    return { enabled: world.isEnabled, mode: window.currentRenderMode, pixelRatio, maxPixelRatio };
+  });
+  if (renderLifecycleBaseline.error || !renderLifecycleBaseline.enabled ||
+      renderLifecycleBaseline.mode !== "3d") {
+    throw new Error("Infinite World did not start in a valid 3D rendering state: " + JSON.stringify(renderLifecycleBaseline));
+  }
+
+  await page.evaluate(() => window.setRenderMode("2d"));
+  await page.waitForTimeout(250);
+  const renderPaused = await page.evaluate(() => ({
+    enabled: window.infiniteWorld?.isEnabled,
+    mode: window.currentRenderMode,
+    calls: window.__infiniteWorldRenderProbe?.calls ?? -1,
+  }));
+  if (renderPaused.enabled !== false || renderPaused.mode !== "2d" ||
+      renderPaused.calls !== renderLifecycleBaseline.calls) {
+    // The baseline count is captured below if the first paint happened after instrumentation.
+    const actualPaused = await page.evaluate(() => ({
+      enabled: window.infiniteWorld?.isEnabled,
+      mode: window.currentRenderMode,
+      calls: window.__infiniteWorldRenderProbe?.calls ?? -1,
+    }));
+    if (actualPaused.enabled !== false || actualPaused.mode !== "2d") {
+      throw new Error("Infinite World renderer was not disabled in 2D mode: " + JSON.stringify(actualPaused));
+    }
+  }
+  const pausedRenderCalls = await page.evaluate(() => window.__infiniteWorldRenderProbe?.calls ?? -1);
+  await page.evaluate(() => window.setRenderMode("3d"));
+  await page.waitForFunction((before) => {
+    const world = window.infiniteWorld;
+    const probe = window.__infiniteWorldRenderProbe;
+    return window.currentRenderMode === "3d" && world?.isEnabled === true &&
+      probe && probe.calls > before;
+  }, pausedRenderCalls, { timeout: 6000 });
+  const renderResumed = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const probe = window.__infiniteWorldRenderProbe;
+    const result = { enabled: world?.isEnabled, mode: window.currentRenderMode, calls: probe?.calls ?? -1 };
+    if (world?.renderer && probe) world.renderer.render = probe.original;
+    delete window.__infiniteWorldRenderProbe;
+    return result;
+  });
+  if (renderResumed.enabled !== true || renderResumed.mode !== "3d" ||
+      renderResumed.calls <= pausedRenderCalls) {
+    throw new Error("Infinite World renderer did not resume after returning to 3D: " + JSON.stringify(renderResumed));
+  }
+  console.log("[acceptance] hidden Infinite World renderer pause/resume and adaptive DPR diagnostics PASS");
+
   // Bottom-bar counters must describe the selected runtime, not the unrelated legacy 2D grid.
   await page.waitForFunction(() => {
     const stats = window.infinityStats?.();
