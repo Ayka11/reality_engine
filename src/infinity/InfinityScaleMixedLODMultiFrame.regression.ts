@@ -48,10 +48,13 @@ function makePlan(): InfinityScaleExecutionPlan {
 }
 
 function makeFrame(revision: number): InfinityScaleGlobalExecutionFrame {
-  return advanceInfinityScaleGlobalFrame(
+  const canonicalFrame = advanceInfinityScaleGlobalFrame(
     beginInfinityScaleGlobalFrame(makePlan(), revision - 1, revision),
     "local-execution",
   );
+  // Frame/tick revision can advance while the immutable execution plan remains
+  // the same; retain the factory's canonical ownership/capability fingerprints.
+  return { ...canonicalFrame, revision };
 }
 
 export function runInfinityScaleMixedLODMultiFrameRegression(): void {
