@@ -15,11 +15,7 @@ import {
 import type {
   InfinityScaleBoundaryTransferSpec,
 } from "./InfinityScaleChunkExecutionContext";
-import {
-  assertInfinityScaleGlobalFramePlan,
-  advanceInfinityScaleGlobalFrame,
-  beginInfinityScaleGlobalFrame,
-} from "./InfinityScaleGlobalExecutionFrame";
+import { assertInfinityScaleGlobalFramePlan } from "./InfinityScaleGlobalExecutionFrame";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
 import { InfinityScaleLODBoundaryCellMapper } from "./InfinityScaleLODBoundaryCellMapper";
 
