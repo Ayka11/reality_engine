@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 
 const worker = await fs.readFile('src/core/ChunkSimWorker.ts', 'utf8')
+const cpu = await fs.readFile('src/simulation/FieldPhysics.ts', 'utf8')
 const main = await fs.readFile('src/main.ts', 'utf8')
 const defs = await fs.readFile('src/process/ProcessDef.ts', 'utf8')
 const params = await fs.readFile('src/laws/MetaLaw.ts', 'utf8')
