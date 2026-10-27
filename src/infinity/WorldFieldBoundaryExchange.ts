@@ -105,15 +105,23 @@ export class WorldFieldBoundaryExchange {
     const negative = this.get(next, axis, -1)
     if (!positive || !negative) return { paired: false, samples: 0, maxDelta: Infinity }
     const count = Math.min(positive.samples.length, negative.samples.length)
+    // A seam is not valid merely because both arrays happen to have the same
+    // length: empty, truncated, or non-finite samples cannot establish continuity.
+    if (count === 0 || positive.samples.length !== negative.samples.length) {
+      return { paired: false, samples: count, maxDelta: Infinity }
+    }
     let maxDelta = 0
     for (let i = 0; i < count; i++) {
       const a = positive.samples[i]
       const b = negative.samples[i]
       for (const field of ['energy','density','information','entropy','temperature','biology','material'] as const) {
+        if (!Number.isFinite(a[field]) || !Number.isFinite(b[field])) {
+          return { paired: false, samples: count, maxDelta: Infinity }
+        }
         maxDelta = Math.max(maxDelta, Math.abs(a[field] - b[field]))
       }
     }
-    return { paired: positive.samples.length === negative.samples.length, samples: count, maxDelta }
+    return { paired: true, samples: count, maxDelta }
   }
 }
 
