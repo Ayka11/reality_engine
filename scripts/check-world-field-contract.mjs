@@ -183,6 +183,20 @@ assert.equal(persistence.validate({ ...saved, coord: {cx:Number.MAX_SAFE_INTEGER
 assert.equal(persistence.loadValid({cx:0,cy:0,cz:0})?.workerChunks?.[0]?.data.length, 7168);
 const tampered = { ...saved, values: [...saved.values, 99] };
 assert.equal(persistence.validate(tampered), false);
+const cachedWorkerSnapshot = persistence.load({cx:0,cy:0,cz:0});
+const inconsistent = { ...cachedWorkerSnapshot, values: [...cachedWorkerSnapshot.values] };
+inconsistent.values[1] = 123456;
+assert.equal(persistence.validate(inconsistent), false,
+  "v2 snapshots must reject values that differ from canonical worker chunk data");
+const orderedCoord = {cx:2,cy:0,cz:0};
+persistence.save(orderedCoord, "first", [1, 2]);
+assert.equal(persistence.remove(orderedCoord), true);
+persistence.save(orderedCoord, "second", [7, 8]);
+assert.deepEqual(persistence.loadValid(orderedCoord)?.values, [7, 8],
+  "save-remove-save must leave the last snapshot in cache");
+persistence.save({cx:3,cy:0,cz:0}, "clear-target", [9]);
+persistence.clear();
+assert.equal(persistence.size(), 0, "clear must synchronously empty the in-memory cache");
 
 const provenanceMod = await load("src/infinity/RuntimeProvenance.ts");
 const { RuntimeProvenance } = provenanceMod;

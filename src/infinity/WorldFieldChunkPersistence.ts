@@ -209,7 +209,11 @@ export class WorldFieldChunkPersistence {
         .map(chunk => ({ key: chunk.key, data: [...chunk.data] }))
         .sort((a, b) => a.key - b.key)
       const flat = canonical.flatMap(chunk => [chunk.key, ...chunk.data])
-      return checksum(flat) === snapshot.checksum && checksum(snapshot.values) === snapshot.checksum
+      const valuesMatchCanonical = snapshot.values.length === flat.length
+        && snapshot.values.every((value, index) => Object.is(value, flat[index]))
+      return valuesMatchCanonical
+        && checksum(flat) === snapshot.checksum
+        && checksum(snapshot.values) === snapshot.checksum
     }
     return false
   }
