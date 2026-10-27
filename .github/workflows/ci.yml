@@ -67,6 +67,7 @@ jobs:
       - run: npm run test:info-physics-process-mask
       - run: npm run test:field-physics-erosion
       - run: npm run test:field-physics-pressure
+      - run: npm run test:field-physics-density
       - run: npm run test:chunk-worker-physics
       - run: npm run test:chunk-grid-prune
       - run: npm run test:chunk-worker-physics-runtime
