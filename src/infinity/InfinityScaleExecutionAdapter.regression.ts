@@ -81,4 +81,57 @@ export function runInfinityScaleExecutionAdapterBoundaryRegression(): void {
   if (!minusXFallback) {
     throw new Error("Canonical adapter regression: uncovered negative-X face lost same-level fallback");
   }
+
+  const planBeforeRejectedUpdate = adapter.getPlan();
+  const capabilitiesBeforeRejectedUpdate = adapter.getCapabilities();
+  const requestedCapabilities = {
+    selectiveCpuReady: true,
+    selectiveGpuReady: false,
+    gpuPhysicsReady: false,
+    lodBoundaryTransferReady: true,
+    mixedLodExecutionReady: true,
+  };
+
+  const mismatchedIdentityFrame = {
+    ...frame,
+    chunks: frame.chunks.map((candidate, index) =>
+      index === 0 ? { ...candidate, lod: candidate.lod + 1 } : candidate
+    ),
+  } as InfinityScaleFramePlan;
+  let identityRejected = false;
+  try {
+    adapter.update(mismatchedIdentityFrame, requestedCapabilities);
+  } catch (error) {
+    identityRejected = error instanceof Error && error.message.includes("identity/LOD mismatch");
+  }
+  if (!identityRejected) {
+    throw new Error("Execution adapter accepted mismatched canonical chunk identity and LOD");
+  }
+
+  const overlappingFrame = {
+    ...frame,
+    chunks: [
+      chunk("1:0,0,0", 1, 0, 0, 0, 0, true),
+      chunk("0:0,0,0", 0, 0, 0, 0, 1, true),
+    ],
+    simulating: ["1:0,0,0", "0:0,0,0"],
+    maxSimulatingChunks: 2,
+  } as InfinityScaleFramePlan;
+  let overlapRejected = false;
+  try {
+    adapter.update(overlappingFrame, requestedCapabilities);
+  } catch (error) {
+    overlapRejected = error instanceof Error &&
+      error.message.includes("overlapping simulation ownership ranges");
+  }
+  if (!overlapRejected) {
+    throw new Error("Execution adapter did not reject overlapping simulation ownership");
+  }
+
+  if (JSON.stringify(adapter.getCapabilities()) !== JSON.stringify(capabilitiesBeforeRejectedUpdate)) {
+    throw new Error("Rejected execution plan mutated adapter capabilities");
+  }
+  if (JSON.stringify(adapter.getPlan()) !== JSON.stringify(planBeforeRejectedUpdate)) {
+    throw new Error("Rejected execution plan replaced the last valid plan");
+  }
 }

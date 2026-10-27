@@ -85,6 +85,15 @@ export class InfinityScaleChunkExecutionContext {
       throw new Error("Infinity Scale execution context grid cell count must be a safe integer");
     }
 
+    for (const chunk of plan.chunks) {
+      const parsed = parseInfinityScaleChunkKey(chunk.key);
+      if (chunk.lod !== parsed.level) {
+        throw new Error(
+          `Infinity Scale execution plan chunk LOD/key mismatch for ${chunk.key}: key=${parsed.level}, lod=${chunk.lod}`,
+        );
+      }
+    }
+
     const rawSimulationRanges = plan.chunks.map(chunk =>
       this.chunkRange(chunk.key),
     );

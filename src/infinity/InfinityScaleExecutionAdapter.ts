@@ -5,6 +5,7 @@ import type {
   InfinityScaleBoundaryReadRelation,
 } from "./InfinityScaleChunkExecutionContext";
 import { WORLD } from "../core/WorldConstants";
+import { parseInfinityScaleChunkKey } from "./InfinityScaleChunkKey";
 import { validateIndependentMixedLodTopology } from "./InfinityScaleIndependentTopology";
 
 export type InfinityScaleExecutionMode =
@@ -116,7 +117,24 @@ export class InfinityScaleExecutionAdapter {
     frame: InfinityScaleFramePlan,
     capabilities: InfinityScaleExecutionCapabilities = this.capabilities,
   ): InfinityScaleExecutionPlan {
-    this.setCapabilities(capabilities);
+    const nextCapabilities = { ...capabilities };
+
+    // Frame geometry is represented twice (canonical key and decoded chunk
+    // coordinates); reject any disagreement before touching adapter state.
+    for (const candidate of frame.chunks) {
+      const parsed = parseInfinityScaleChunkKey(candidate.key);
+      if (
+        !candidate.chunk ||
+        candidate.chunk.level !== parsed.level ||
+        candidate.chunk.x !== parsed.x ||
+        candidate.chunk.y !== parsed.y ||
+        candidate.chunk.z !== parsed.z ||
+        candidate.lod !== parsed.level
+      ) {
+        throw new Error(`Infinity Scale frame chunk identity/LOD mismatch for ${candidate.key}`);
+      }
+    }
+
     const selected = frame.chunks
       .filter(chunk => chunk.simulationEligible)
       .sort((a, b) => a.distance - b.distance)
@@ -192,18 +210,18 @@ export class InfinityScaleExecutionAdapter {
     const lodBoundaryReady =
       !hasMixedLodBoundary ||
       (
-        this.capabilities.lodBoundaryTransferReady &&
-        this.capabilities.mixedLodExecutionReady
+        nextCapabilities.lodBoundaryTransferReady &&
+        nextCapabilities.mixedLodExecutionReady
       );
 
     const mode: InfinityScaleExecutionMode =
-      lodBoundaryReady && this.capabilities.selectiveGpuReady && this.capabilities.gpuPhysicsReady
+      lodBoundaryReady && nextCapabilities.selectiveGpuReady && nextCapabilities.gpuPhysicsReady
         ? "selective-gpu-ready"
-        : lodBoundaryReady && this.capabilities.selectiveCpuReady
+        : lodBoundaryReady && nextCapabilities.selectiveCpuReady
           ? "selective-cpu-ready"
           : "advisory";
 
-    this.plan = {
+    const nextPlan: InfinityScaleExecutionPlan = {
       revision: frame.revision,
       mode,
       observer: { ...frame.observer },
@@ -237,15 +255,19 @@ export class InfinityScaleExecutionAdapter {
         "LawEngine",
         "WorldEvents",
       ],
-      selectiveCpuReady: this.capabilities.selectiveCpuReady,
-      selectiveGpuReady: this.capabilities.selectiveGpuReady,
-      gpuPhysicsReady: this.capabilities.gpuPhysicsReady,
-      lodBoundaryTransferReady: this.capabilities.lodBoundaryTransferReady,
-      mixedLodExecutionReady: this.capabilities.mixedLodExecutionReady,
+      selectiveCpuReady: nextCapabilities.selectiveCpuReady,
+      selectiveGpuReady: nextCapabilities.selectiveGpuReady,
+      gpuPhysicsReady: nextCapabilities.gpuPhysicsReady,
+      lodBoundaryTransferReady: nextCapabilities.lodBoundaryTransferReady,
+      mixedLodExecutionReady: nextCapabilities.mixedLodExecutionReady,
       entityExecutionReady: false,
       agentMigrationReady: false,
     };
 
+    // Failed topology/geometry validation must leave the previous plan and
+    // capability declaration intact.
+    this.capabilities = nextCapabilities;
+    this.plan = nextPlan;
     return this.getPlan();
   }
 

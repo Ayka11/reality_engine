@@ -84,6 +84,21 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
   }
 
   const validPlan = makePlan("0:0,0,0", "0:1,0,0", "same-level", 0, 0);
+
+  const mismatchedExecutionLODPlan = {
+    ...validPlan,
+    chunks: [{ ...validPlan.chunks[0], key: "1:0,0,0" }],
+  };
+  let mismatchedExecutionLODRejected = false;
+  try {
+    new InfinityScaleChunkExecutionContext(mismatchedExecutionLODPlan, 16, 16, 16, 4);
+  } catch {
+    mismatchedExecutionLODRejected = true;
+  }
+  if (!mismatchedExecutionLODRejected) {
+    throw new Error("Chunk context accepted an execution LOD that disagrees with its canonical chunk key");
+  }
+
   const invalidDimensions: Array<[number, number, number, number]> = [
     [0, 16, 16, 4],
     [16, -1, 16, 4],
