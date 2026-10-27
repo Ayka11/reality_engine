@@ -21,6 +21,24 @@ export function runAgentSystemRecoveryRegression(): void {
   const checkpointGrid = grid.buffer.slice();
   const checkpointJson = JSON.stringify(checkpoint);
 
+  // Direct tick calls must reject invalid time steps without changing either
+  // the population/PRNG state or any cell value.
+  for (const invalidDt of [Number.NaN, Number.POSITIVE_INFINITY, -1]) {
+    const beforeState = JSON.stringify(agents.snapshot());
+    const beforeGrid = grid.buffer.slice();
+    let rejected = false;
+    try {
+      agents.tick(grid, invalidDt);
+    } catch (error) {
+      rejected = error instanceof RangeError;
+    }
+    if (!rejected ||
+        JSON.stringify(agents.snapshot()) !== beforeState ||
+        grid.buffer.some((value, index) => value !== beforeGrid[index])) {
+      throw new Error("AgentSystem accepted invalid dt or mutated state before rejecting it");
+    }
+  }
+
   if (checkpoint.agents.length !== 5 ||
       checkpoint.nextAgentId !== 6 ||
       checkpoint.rngState === 0) {

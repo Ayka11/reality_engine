@@ -167,6 +167,12 @@ export class AgentSystem {
   }
 
   tick(grid: VoxelGrid, dt: number): void {
+    // Public callers may bypass SimulationEngine; reject invalid time before
+    // agent counters, PRNG state, or grid fields can be changed.
+    if (!Number.isFinite(dt) || dt < 0) {
+      throw new RangeError("AgentSystem tick dt must be a finite non-negative number");
+    }
+
     const buf = getMutableBuffer(grid);
     const dead: number[] = [];
 
