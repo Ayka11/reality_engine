@@ -15,6 +15,13 @@ export type WorldFieldChunkSnapshot = {
   savedAt: number
 }
 
+function chunkCoordKey(coord: WorldFieldChunkCoord): string {
+  if (!coord || !Number.isSafeInteger(coord.cx) || !Number.isSafeInteger(coord.cy) || !Number.isSafeInteger(coord.cz)) {
+    throw new RangeError('Chunk coordinates must be safe integers')
+  }
+  return `${coord.cx},${coord.cy},${coord.cz}`
+}
+
 function checksum(values: number[]): string {
   let h = 2166136261 >>> 0
   for (const value of values) {
@@ -164,7 +171,7 @@ export class WorldFieldChunkPersistence {
   validate(snapshot: WorldFieldChunkSnapshot): boolean {
     if (!snapshot || !Array.isArray(snapshot.values) || !snapshot.values.every(Number.isFinite)) return false
     if (typeof snapshot.key !== 'string' || typeof snapshot.seed !== 'string') return false
-    if (!snapshot.coord || !Number.isInteger(snapshot.coord.cx) || !Number.isInteger(snapshot.coord.cy) || !Number.isInteger(snapshot.coord.cz)) return false
+    if (!snapshot.coord || !Number.isSafeInteger(snapshot.coord.cx) || !Number.isSafeInteger(snapshot.coord.cy) || !Number.isSafeInteger(snapshot.coord.cz)) return false
     if (snapshot.key !== snapshot.coord.cx + ',' + snapshot.coord.cy + ',' + snapshot.coord.cz) return false
     if (!Number.isFinite(snapshot.providerVersion) || !Number.isFinite(snapshot.savedAt)) return false
     if (typeof snapshot.checksum !== 'string' || snapshot.checksum.length !== 8) return false

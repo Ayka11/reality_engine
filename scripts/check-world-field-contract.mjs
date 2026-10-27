@@ -71,6 +71,12 @@ store.get({cx:0,cy:0,cz:0});
 store.set({cx:2,cy:0,cz:0}, "s", fakeProvider);
 assert.equal(store.stats().loaded, 2);
 assert.equal(worldFieldChunkCoord(-1, 0, 32).cx, -1);
+assert.equal(WorldFieldChunkStore.coord("1000,0,0")?.cx, 1000);
+assert.equal(WorldFieldChunkStore.coord("1e3,0,0"), null, "chunk keys must use canonical integer notation");
+assert.equal(WorldFieldChunkStore.coord("9007199254740992,0,0"), null, "unsafe chunk coordinates must be rejected");
+assert.throws(() => WorldFieldChunkStore.key({cx:Number.MAX_SAFE_INTEGER + 1,cy:0,cz:0}), RangeError);
+assert.throws(() => worldFieldChunkCoord(Infinity, 0, 0), RangeError);
+assert.throws(() => worldFieldChunkCoord(Number.MAX_VALUE, 0, 0), RangeError);
 assert.equal(new WorldFieldChunkStore(Number.NaN).stats().capacity, 128, "NaN capacity must use a safe default");
 assert.equal(new WorldFieldChunkStore(Infinity).stats().capacity, 128, "infinite capacity must use a safe default");
 assert.equal(new WorldFieldChunkStore(1000000).stats().capacity, 4096, "chunk capacity must have a hard upper bound");
@@ -157,6 +163,9 @@ const saved = persistence.saveWorkerChunks(
   { center: {x:0,y:0,z:0}, sliceY:0, seed:"seed" },
 );
 assert.equal(persistence.validate(saved), true);
+assert.throws(() => persistence.save({cx:Number.MAX_SAFE_INTEGER + 1,cy:0,cz:0}, "seed", [1]), RangeError);
+assert.equal(persistence.validate({ ...saved, coord: {cx:Number.MAX_SAFE_INTEGER + 1,cy:0,cz:0}, key:"9007199254740992,0,0" }), false,
+  "snapshots with unsafe coordinates must be rejected");
 assert.equal(persistence.loadValid({cx:0,cy:0,cz:0})?.workerChunks?.[0]?.data.length, 7168);
 const tampered = { ...saved, values: [...saved.values, 99] };
 assert.equal(persistence.validate(tampered), false);

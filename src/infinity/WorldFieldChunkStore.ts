@@ -47,13 +47,18 @@ export class WorldFieldChunkStore {
   }
 
   static key(coord: WorldFieldChunkCoord): string {
+    if (!coord || !Number.isSafeInteger(coord.cx) || !Number.isSafeInteger(coord.cy) || !Number.isSafeInteger(coord.cz)) {
+      throw new RangeError('Chunk coordinates must be safe integers')
+    }
     return `${coord.cx},${coord.cy},${coord.cz}`
   }
 
   static coord(key: string): WorldFieldChunkCoord | null {
+    if (typeof key !== 'string') return null
     const values = key.split(',').map(Number)
-    if (values.length !== 3 || values.some((v) => !Number.isInteger(v))) return null
-    return { cx: values[0], cy: values[1], cz: values[2] }
+    if (values.length !== 3 || values.some((v) => !Number.isSafeInteger(v))) return null
+    const coord = { cx: values[0], cy: values[1], cz: values[2] }
+    return WorldFieldChunkStore.key(coord) === key ? coord : null
   }
 
   get(coord: WorldFieldChunkCoord): WorldFieldChunk | null {
@@ -111,14 +116,20 @@ export class WorldFieldChunkStore {
 export const WORLD_FIELD_CHUNK_SIZE = 32
 
 export function worldFieldChunkCoord(x: number, y: number, z: number): WorldFieldChunkCoord {
-  return {
+  if (![x, y, z].every(Number.isFinite)) {
+    throw new RangeError('World coordinates must be finite numbers')
+  }
+  const coord = {
     cx: Math.floor(x / WORLD_FIELD_CHUNK_SIZE),
     cy: Math.floor(y / WORLD_FIELD_CHUNK_SIZE),
     cz: Math.floor(z / WORLD_FIELD_CHUNK_SIZE),
   }
+  WorldFieldChunkStore.key(coord)
+  return coord
 }
 
 export function worldFieldChunkOrigin(coord: WorldFieldChunkCoord) {
+  WorldFieldChunkStore.key(coord)
   return {
     x: coord.cx * WORLD_FIELD_CHUNK_SIZE,
     y: coord.cy * WORLD_FIELD_CHUNK_SIZE,
