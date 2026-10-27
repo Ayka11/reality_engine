@@ -284,12 +284,25 @@ export class InfinityScaleChunkExecutionContext {
   }
 
   private isFullyContainedBySimulation(range: ExecutionCellRange): boolean {
-    for (let z = range.minZ; z <= range.maxZ; z++)
-    for (let y = range.minY; y <= range.maxY; y++)
-    for (let x = range.minX; x <= range.maxX; x++) {
-      if (!this.containsSimulationCell(x, y, z)) return false;
-    }
-    return true;
+    const expectedCellCount = this.rangeCellCount(range);
+    if (expectedCellCount === 0) return true;
+
+    const intersections = this.simulationRanges
+      .map(simulation => ({
+        minX: Math.max(range.minX, simulation.minX),
+        maxX: Math.min(range.maxX, simulation.maxX),
+        minY: Math.max(range.minY, simulation.minY),
+        maxY: Math.min(range.maxY, simulation.maxY),
+        minZ: Math.max(range.minZ, simulation.minZ),
+        maxZ: Math.min(range.maxZ, simulation.maxZ),
+      }))
+      .filter(candidate =>
+        candidate.minX <= candidate.maxX &&
+        candidate.minY <= candidate.maxY &&
+        candidate.minZ <= candidate.maxZ
+      );
+
+    return this.countUniqueCells(intersections) === expectedCellCount;
   }
 
   private countOverlappingRanges(ranges: ExecutionCellRange[]): number {
@@ -302,16 +315,94 @@ export class InfinityScaleChunkExecutionContext {
     return overlaps;
   }
 
+  /**
+   * Count the union of inclusive axis-aligned cell ranges without visiting
+   * individual cells. Coordinate compression keeps runtime dependent on the
+   * number of chunk ranges rather than the represented world volume.
+   */
   private countUniqueCells(ranges: ExecutionCellRange[]): number {
-    const seen = new Set<number>();
-    for (const range of ranges) {
-      for (let z = range.minZ; z <= range.maxZ; z++)
-      for (let y = range.minY; y <= range.maxY; y++)
-      for (let x = range.minX; x <= range.maxX; x++) {
-        seen.add(z * this.gridHeight * this.gridWidth + y * this.gridWidth + x);
-      }
+    const nonEmpty = ranges.filter(range =>
+      range.minX <= range.maxX &&
+      range.minY <= range.maxY &&
+      range.minZ <= range.maxZ
+    );
+    if (nonEmpty.length === 0) return 0;
+
+    const xEdges = new Set<number>();
+    for (const range of nonEmpty) {
+      xEdges.add(range.minX);
+      xEdges.add(range.maxX + 1);
     }
-    return seen.size;
+    const sortedX = [...xEdges].sort((a, b) => a - b);
+    let total = 0;
+
+    for (let index = 0; index < sortedX.length - 1; index++) {
+      const xStart = sortedX[index];
+      const xEnd = sortedX[index + 1];
+      if (xStart >= xEnd) continue;
+
+      const active = nonEmpty.filter(range =>
+        range.minX <= xStart && range.maxX + 1 >= xEnd
+      );
+      if (active.length === 0) continue;
+      total += (xEnd - xStart) * this.countUniqueYZCells(active);
+    }
+
+    return total;
+  }
+
+  private countUniqueYZCells(ranges: ExecutionCellRange[]): number {
+    const yEdges = new Set<number>();
+    for (const range of ranges) {
+      yEdges.add(range.minY);
+      yEdges.add(range.maxY + 1);
+    }
+    const sortedY = [...yEdges].sort((a, b) => a - b);
+    let area = 0;
+
+    for (let index = 0; index < sortedY.length - 1; index++) {
+      const yStart = sortedY[index];
+      const yEnd = sortedY[index + 1];
+      if (yStart >= yEnd) continue;
+
+      const zIntervals = ranges
+        .filter(range => range.minY <= yStart && range.maxY + 1 >= yEnd)
+        .map(range => [range.minZ, range.maxZ + 1] as const)
+        .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      if (zIntervals.length === 0) continue;
+
+      let coveredStart = zIntervals[0][0];
+      let coveredEnd = zIntervals[0][1];
+      let coveredLength = 0;
+      for (let intervalIndex = 1; intervalIndex < zIntervals.length; intervalIndex++) {
+        const [start, end] = zIntervals[intervalIndex];
+        if (start > coveredEnd) {
+          coveredLength += coveredEnd - coveredStart;
+          coveredStart = start;
+          coveredEnd = end;
+        } else if (end > coveredEnd) {
+          coveredEnd = end;
+        }
+      }
+      coveredLength += coveredEnd - coveredStart;
+      area += (yEnd - yStart) * coveredLength;
+    }
+
+    return area;
+  }
+
+  private rangeCellCount(range: ExecutionCellRange): number {
+    if (
+      range.minX > range.maxX ||
+      range.minY > range.maxY ||
+      range.minZ > range.maxZ
+    ) return 0;
+
+    return (
+      (range.maxX - range.minX + 1) *
+      (range.maxY - range.minY + 1) *
+      (range.maxZ - range.minZ + 1)
+    );
   }
 
   private rangesOverlap(a: ExecutionCellRange, b: ExecutionCellRange): boolean {
