@@ -82,4 +82,27 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
     }
     if (!rejected) throw new Error(`Chunk context accepted inconsistent LOD identity/relation ${index}`);
   }
+
+  const validPlan = makePlan("0:0,0,0", "0:1,0,0", "same-level", 0, 0);
+  const invalidDimensions: Array<[number, number, number, number]> = [
+    [0, 16, 16, 4],
+    [16, -1, 16, 4],
+    [16, Number.NaN, 16, 4],
+    [16, 16, Number.POSITIVE_INFINITY, 4],
+    [16.5, 16, 16, 4],
+    [16, 16, 16, 0],
+    [16, 16, 16, 1.25],
+    [16, 16, 16, Number.MAX_SAFE_INTEGER + 1],
+  ];
+  for (const [index, [width, height, depth, size]] of invalidDimensions.entries()) {
+    let rejected = false;
+    try {
+      new InfinityScaleChunkExecutionContext(validPlan, width, height, depth, size);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) {
+      throw new Error(`Chunk context accepted invalid grid/chunk dimensions ${index}: ${width},${height},${depth},${size}`);
+    }
+  }
 }

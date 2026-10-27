@@ -64,6 +64,17 @@ export class InfinityScaleChunkExecutionContext {
     readonly gridDepth: number,
     readonly chunkSize = 32,
   ) {
+    for (const [name, dimension] of [
+      ["gridWidth", gridWidth],
+      ["gridHeight", gridHeight],
+      ["gridDepth", gridDepth],
+      ["chunkSize", chunkSize],
+    ] as const) {
+      if (!Number.isSafeInteger(dimension) || dimension <= 0) {
+        throw new Error(`Infinity Scale execution context ${name} must be a positive safe integer`);
+      }
+    }
+
     const rawSimulationRanges = plan.chunks.map(chunk =>
       this.chunkRange(chunk.key),
     );
