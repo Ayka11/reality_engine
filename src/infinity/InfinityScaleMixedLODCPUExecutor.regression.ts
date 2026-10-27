@@ -477,7 +477,9 @@ export function runInfinityScaleMixedLODCPURollbackRegression(): void {
 export function runInfinityScaleLODPartialBoundaryCommitRollbackRegression(): void {
   const state = new InfinityScaleLODState(4);
   const key = "0:0,0,0";
+  const targetKey = "0:1,0,0";
   state.ensureChunk(key, 0);
+  state.ensureChunk(targetKey, 0);
   const initial = new Float32Array(CELL_FIELDS);
   initial[0] = 17;
   initial[1] = 3;
@@ -493,11 +495,15 @@ export function runInfinityScaleLODPartialBoundaryCommitRollbackRegression(): vo
     requestedSimulationCount: 1,
     selectedSimulationCount: 1,
     maxSimulatingChunks: 1,
-    boundaryReadChunks: [],
-    boundaryReadCount: 0,
-    boundaryReadRelations: [],
+    boundaryReadChunks: [targetKey],
+    boundaryReadCount: 1,
+    boundaryReadRelations: [{
+      sourceChunk: key,
+      targetChunk: targetKey,
+      relation: "same-level",
+    }],
     simulationCellCount: 64,
-    boundaryReadCellCount: 0,
+    boundaryReadCellCount: 64,
     localExecutionLayers: [],
     globalExecutionLayers: [],
     selectiveCpuReady: true,
@@ -515,7 +521,7 @@ export function runInfinityScaleLODPartialBoundaryCommitRollbackRegression(): vo
     phase: "boundary-reconciliation",
     planRevision: 101,
     simulationCellCount: 64,
-    boundaryReadCellCount: 0,
+    boundaryReadCellCount: 64,
     committed: false,
     finalized: false,
     ownershipFingerprint: "partial-boundary-rollback",
@@ -524,7 +530,7 @@ export function runInfinityScaleLODPartialBoundaryCommitRollbackRegression(): vo
   const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
   const spec = {
     sourceChunk: key,
-    targetChunk: key,
+    targetChunk: targetKey,
     relation: "same-level" as const,
     sourceLevel: 0,
     targetLevel: 0,
@@ -534,20 +540,37 @@ export function runInfinityScaleLODPartialBoundaryCommitRollbackRegression(): vo
   };
   const stagedValue = new Float32Array(initial);
   stagedValue[0] = 99;
-  transaction.synchronization.stageTransfer(spec, [0, 0, 0], [stagedValue]);
-  // Staging validates the transfer schema but intentionally leaves coordinate
-  // bounds to the authoritative state write, injecting a failure after the
-  // preceding valid target has already been changed during commit.
   transaction.synchronization.stageTransfer(spec, [4, 0, 0], [stagedValue]);
+  transaction.synchronization.stageTransfer(spec, [4, 1, 0], [stagedValue]);
+
+  // Inject a failure on the second authoritative write after both valid face
+  // updates have passed preflight. The transaction must restore the snapshot.
+  const originalWrite = state.writeBaseCellForTransaction.bind(state);
+  let boundaryWriteCalls = 0;
+  state.writeBaseCellForTransaction = (
+    expectedRevision,
+    targetChunk,
+    level,
+    x,
+    y,
+    z,
+    source,
+  ) => {
+    boundaryWriteCalls++;
+    if (boundaryWriteCalls === 2) {
+      throw new Error("injected boundary write failure");
+    }
+    originalWrite(expectedRevision, targetChunk, level, x, y, z, source);
+  };
 
   let failed = false;
   try {
     commitInfinityScaleGlobalLODTransaction(transaction, frame);
   } catch (error) {
-    failed = error instanceof Error && error.message.includes("outside LOD chunk");
+    failed = error instanceof Error && error.message.includes("injected boundary write failure");
   }
-  if (!failed) {
-    throw new Error("Expected the invalid second boundary target to fail after the first write");
+  if (!failed || boundaryWriteCalls !== 2) {
+    throw new Error("Expected an injected partial boundary write failure after the first target was written");
   }
 
   const after = state.snapshot();
