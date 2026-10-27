@@ -147,6 +147,12 @@ export class AgentSystem {
 
   // Seed agents + inject local energy so they survive from a cold start
   seed(grid: VoxelGrid, count = 8): void {
+    if (!Number.isSafeInteger(count) || count < 0 || count > this.maxAgents) {
+      throw new RangeError(`AgentSystem seed count must be a safe integer from 0 to ${this.maxAgents}`);
+    }
+    // A no-op seed must not acquire a mutable grid buffer (which advances the
+    // tracked mutation revision) when no agents can be added.
+    if (count === 0 || this.agents.size >= this.maxAgents) return;
     const buf = getMutableBuffer(grid);
     for (let i = 0; i < count && this.agents.size < this.maxAgents; i++) {
       // Keep seeded agents in-bounds for small test worlds as well as the

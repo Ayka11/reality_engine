@@ -32,6 +32,31 @@ export function runAgentSystemRecoveryRegression(): void {
     }
   }
 
+  const seedValidationGrid = new VoxelGrid(4, 3, 2);
+  const seedValidationAgents = new AgentSystem(0x1234abcd);
+  for (const invalidCount of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5, 65]) {
+    const beforeSnapshot = JSON.stringify(seedValidationAgents.snapshot());
+    const beforeGrid = Array.from(seedValidationGrid.buffer);
+    const beforeRevision = seedValidationGrid.mutationRevision;
+    let rejected = false;
+    try {
+      seedValidationAgents.seed(seedValidationGrid, invalidCount);
+    } catch (error) {
+      rejected = error instanceof RangeError;
+    }
+    if (!rejected ||
+        JSON.stringify(seedValidationAgents.snapshot()) !== beforeSnapshot ||
+        seedValidationGrid.mutationRevision !== beforeRevision ||
+        seedValidationGrid.buffer.some((value, index) => value !== beforeGrid[index])) {
+      throw new Error(`AgentSystem.seed accepted invalid count or mutated state: ${invalidCount}`);
+    }
+  }
+  const noOpRevision = seedValidationGrid.mutationRevision;
+  seedValidationAgents.seed(seedValidationGrid, 0);
+  if (seedValidationGrid.mutationRevision !== noOpRevision || seedValidationAgents.getAgents().length !== 0) {
+    throw new Error("AgentSystem.seed(0) must be a no-op without advancing grid revision");
+  }
+
   const grid = new VoxelGrid(24, 24, 12);
   const agents = new AgentSystem(0x1234abcd);
   agents.seed(grid, 5);
