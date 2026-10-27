@@ -224,8 +224,9 @@ export class InfinityScaleChunkExecutionContext {
   private relationToTransferSpec(
     relation: InfinityScaleBoundaryReadRelation,
   ): InfinityScaleBoundaryTransferSpec {
-    const sourceLevel = chunkLevel(relation.sourceChunk);
-    const targetLevel = chunkLevel(relation.targetChunk);
+    const pair = validateInfinityScaleChunkPair(relation.sourceChunk, relation.targetChunk, relation.relation);
+    const sourceLevel = pair.source.level;
+    const targetLevel = pair.target.level;
     const refinementRatio = 2 ** Math.abs(sourceLevel - targetLevel);
     return {
       sourceChunk: relation.sourceChunk,

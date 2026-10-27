@@ -77,8 +77,7 @@ export class InfinityScaleLODState {
         throw new Error("Cannot restore Infinity Scale LOD chunk with an invalid key");
       }
 
-      const parsedKey = parseInfinityScaleChunkKey(key);
-      const { level: keyLevel, x: cx, y: cy, z: cz } = parsedKey;
+      const { level: keyLevel } = parseInfinityScaleChunkKey(key);
 
       if (
         typeof level !== "number" ||
