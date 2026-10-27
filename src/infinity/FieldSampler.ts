@@ -57,7 +57,10 @@ export class FieldSampler {
 
   setGenerator(generator: WorldGenerator) {
     this.generator = generator
-    this.provider = new GeneratorFieldProvider(generator)
+    const provider = new GeneratorFieldProvider(generator)
+    this.provider = provider
+    // Keep direct sampling and the public provider registry in sync after a generator swap.
+    this.registry.register(provider, true)
   }
 
   sample(x: number, y: number, z: number): ScientificFieldSample {

@@ -87,6 +87,10 @@ const profileJs = await readFile(new URL("src/infinity/ScientificFieldProfile.ts
 const profileCompiled = ts.transpileModule(profileJs, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 const profileUrl = `data:text/javascript;base64,${Buffer.from(profileCompiled).toString("base64")}`;
 
+const fieldSamplerSource = await readFile(new URL("src/infinity/FieldSampler.ts", root), "utf8");
+assert.match(fieldSamplerSource, /setGenerator\(generator: WorldGenerator\)[\s\S]*?this\.registry\.register\(provider, true\)/,
+  "setGenerator must update the active provider registry as well as direct sampling");
+
 const mutableMod = await load("src/infinity/MutableWorldFieldProvider.ts", [
   [/from ['"]\.\/ScientificFieldSpatialPattern['"]/, `from "${spatialUrl}"`],
   [/from ['"]\.\/ScientificFieldProfile['"]/, `from "${profileUrl}"`],
