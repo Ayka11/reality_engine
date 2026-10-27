@@ -94,12 +94,12 @@ export class FieldPhysics {
 
       if (on(mask, PROC.PHASE_TRANSITION)) {
         if (cT > 500 && cD > 0.5) {
-          front[base + F.DENSITY] = Math.max(0, front[base + F.DENSITY] - 0.008 * dt * 60);
-          front[base + F.ENTROPY] = Math.min(1, front[base + F.ENTROPY] + 0.008 * dt * 60);
+          front[base + F.DENSITY] = Math.max(0, front[base + F.DENSITY] - p.phaseTransitionRate * dt * 60);
+          front[base + F.ENTROPY] = Math.min(1, front[base + F.ENTROPY] + p.phaseTransitionRate * dt * 60);
           front[base + F.INFORMATION] = Math.max(0, front[base + F.INFORMATION] - 3 * dt);
         } else if (cT < 40 && cD > 0.55) {
-          front[base + F.DENSITY] = Math.min(1, front[base + F.DENSITY] + 0.004 * dt * 60);
-          front[base + F.ENTROPY] = Math.max(0, front[base + F.ENTROPY] - 0.004 * dt * 60);
+          front[base + F.DENSITY] = Math.min(1, front[base + F.DENSITY] + p.phaseTransitionRate * 0.5 * dt * 60);
+          front[base + F.ENTROPY] = Math.max(0, front[base + F.ENTROPY] - p.phaseTransitionRate * 0.5 * dt * 60);
         }
       }
 
