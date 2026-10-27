@@ -19,7 +19,7 @@ function chunkCoordKey(coord: WorldFieldChunkCoord): string {
   if (!coord || !Number.isSafeInteger(coord.cx) || !Number.isSafeInteger(coord.cy) || !Number.isSafeInteger(coord.cz)) {
     throw new RangeError('Chunk coordinates must be safe integers')
   }
-  return chunkCoordKey(coord)
+  return `${coord.cx},${coord.cy},${coord.cz}`
 }
 
 function checksum(values: number[]): string {
