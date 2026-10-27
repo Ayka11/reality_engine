@@ -434,7 +434,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
 
     const s = spec(fine, coarse, "fine-to-coarse", 0, 1);
     const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [s], 11, CHUNK);
-    const out = assertNotNull(snapshot.read(s, [7, 1, 1]), "fine-to-coarse face restriction");
+    const out = assertNotNull(snapshot.read(s, [7, 0, 0]), "fine-to-coarse face restriction");
 
     // ENERGY is extensive, so the boundary face sample is the sum of the four
     // fine cells: 1 + 2 + 3 + 4 = 10.
