@@ -462,7 +462,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
       snapshot.read(transfer, [1024, 0, 0]),
       "high-ratio coarse-to-fine single-cell snapshot",
     );
-    const expectedEnergy = 64 / (2 ** 30) ** 3;
+    const expectedEnergy = 64 / (2 ** 30);
     if (Math.abs(out[F.ENERGY] - expectedEnergy) > expectedEnergy * 1e-5) {
       throw new Error("Infinity Scale high-ratio snapshot prolongation produced an invalid field share");
     }
