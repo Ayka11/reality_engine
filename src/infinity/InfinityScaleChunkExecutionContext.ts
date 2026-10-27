@@ -37,6 +37,24 @@ function chunkLevel(key: string): number {
   return parseInfinityScaleChunkKey(key).level;
 }
 
+function executionGeometryFingerprint(plan: InfinityScaleExecutionPlan): string {
+  const chunks = plan.chunks
+    .map(chunk => [chunk.key, chunk.lod, chunk.amr, chunk.distance])
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  const relations = plan.boundaryReadRelations
+    .map(relation => [relation.sourceChunk, relation.targetChunk, relation.relation])
+    .sort((a, b) =>
+      `${a[0]}>${a[1]}:${a[2]}`.localeCompare(`${b[0]}>${b[1]}:${b[2]}`)
+    );
+
+  return JSON.stringify({
+    revision: plan.revision,
+    chunks,
+    boundaryReadChunks: [...plan.boundaryReadChunks].sort(),
+    boundaryReadRelations: relations,
+  });
+}
+
 export class InfinityScaleChunkExecutionContext {
   readonly simulationRanges: ExecutionCellRange[];
   readonly readRanges: ExecutionCellRange[];
@@ -51,6 +69,8 @@ export class InfinityScaleChunkExecutionContext {
   readonly sameLevelTransferCount: number;
   readonly prolongationTransferCount: number;
   readonly restrictionTransferCount: number;
+
+  private readonly planFingerprint: string;
 
   private readonly boundaryRelationsBySource = new Map<
     string,
@@ -75,9 +95,9 @@ export class InfinityScaleChunkExecutionContext {
       }
     }
 
-    // Cell coordinates are linearized with z * gridHeight * gridWidth +
-    // y * gridWidth + x in countUniqueCells(). Individually safe dimensions
-    // are not sufficient: their products must also remain exact safe integers.
+    // Range volumes and linear cell counts rely on exact safe-integer products.
+    // Individually safe dimensions are not sufficient: their products must
+    // also remain exact safe integers.
     const gridPlaneCellCount = gridWidth * gridHeight;
     const gridCellCount = gridPlaneCellCount * gridDepth;
     if (!Number.isSafeInteger(gridPlaneCellCount) ||
@@ -93,6 +113,7 @@ export class InfinityScaleChunkExecutionContext {
         );
       }
     }
+    this.planFingerprint = executionGeometryFingerprint(plan);
 
     const rawSimulationRanges = plan.chunks.map(chunk =>
       this.chunkRange(chunk.key),
@@ -118,6 +139,12 @@ export class InfinityScaleChunkExecutionContext {
       this.readRanges.filter((range) => !this.isFullyContainedBySimulation(range)),
     );
     this.readCellCount = this.uniqueBoundaryReadCellCount;
+  }
+
+  assertCompatiblePlan(plan: InfinityScaleExecutionPlan): void {
+    if (executionGeometryFingerprint(plan) !== this.planFingerprint) {
+      throw new Error("Infinity Scale execution context/plan geometry mismatch");
+    }
   }
 
   containsSimulationCell(x: number, y: number, z: number): boolean {

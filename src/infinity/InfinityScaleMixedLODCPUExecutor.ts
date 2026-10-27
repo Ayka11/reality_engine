@@ -77,6 +77,23 @@ export class InfinityScaleMixedLODCPUExecutor {
     if (frame.planRevision !== plan.revision) {
       throw new Error("Infinity Scale CPU execution rejected: plan revision changed");
     }
+    if (transaction.frameRevision !== frame.revision) {
+      throw new Error("Infinity Scale CPU execution rejected: frame/transaction revision mismatch");
+    }
+    if (transaction.state !== this.state) {
+      throw new Error("Infinity Scale CPU execution rejected: transaction belongs to a different LOD state");
+    }
+    this.context.assertCompatiblePlan(plan);
+    if (plan.mode === "advisory" || plan.selectiveCpuReady !== true) {
+      throw new Error("Infinity Scale CPU execution requires a selective CPU-ready plan");
+    }
+    const hasMixedLodBoundary = this.context.boundaryTransferSpecs.some(
+      spec => spec.relation !== "same-level",
+    );
+    if (hasMixedLodBoundary &&
+        (!plan.lodBoundaryTransferReady || !plan.mixedLodExecutionReady)) {
+      throw new Error("Infinity Scale CPU execution rejected: mixed-LOD boundary transfer is not ready");
+    }
     this.state.assertRevision(transaction.stateRevision);
 
     try {

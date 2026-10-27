@@ -93,6 +93,47 @@ export function runInfinityScaleMixedLODCPURegression(): void {
 
   const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
   const executor = new InfinityScaleMixedLODCPUExecutor(state, context);
+  const snapshotFingerprint = () => JSON.stringify(
+    state.snapshot().chunks
+      .map(chunk => ({
+        key: chunk.key,
+        level: chunk.level,
+        scale: chunk.scale,
+        cells: Array.from(chunk.cells),
+      }))
+      .sort((a, b) => a.key.localeCompare(b.key)),
+  );
+  const beforeRejectedExecution = snapshotFingerprint();
+
+  const alteredPlan: InfinityScaleExecutionPlan = {
+    ...plan,
+    chunks: [{ ...plan.chunks[0], key: fineKeys[0], lod: 0, amr: 1 }],
+  };
+  let alteredPlanRejected = false;
+  try {
+    executor.execute(frame, alteredPlan, transaction, cell => new Float32Array(cell.input));
+  } catch (error) {
+    alteredPlanRejected = error instanceof Error &&
+      error.message.includes("context/plan geometry mismatch");
+  }
+  if (!alteredPlanRejected) {
+    throw new Error("CPU executor accepted changed chunk ownership under the same plan revision");
+  }
+
+  const wrongFrame = { ...frame, revision: frame.revision + 1 };
+  let wrongFrameRejected = false;
+  try {
+    executor.execute(wrongFrame, plan, transaction, cell => new Float32Array(cell.input));
+  } catch (error) {
+    wrongFrameRejected = error instanceof Error &&
+      error.message.includes("frame/transaction revision mismatch");
+  }
+  if (!wrongFrameRejected) {
+    throw new Error("CPU executor accepted a transaction created for a different frame revision");
+  }
+  if (snapshotFingerprint() !== beforeRejectedExecution) {
+    throw new Error("Rejected CPU execution mutated LOD state before validation");
+  }
 
   const result = executor.execute(
     frame,
@@ -134,6 +175,44 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   const sample = state.readBaseCell(coarseKey, 1, 0, 0, 0);
   if (!sample || sample[0] !== 9) {
     throw new Error("CPU mixed-LOD local execution did not commit owned coarse state");
+  }
+
+  const advisoryPlan: InfinityScaleExecutionPlan = {
+    ...plan,
+    revision: plan.revision + 1,
+    mode: "advisory",
+    selectiveCpuReady: false,
+  };
+  const advisoryContext = new InfinityScaleChunkExecutionContext(advisoryPlan, 8, 8, 8, 4);
+  const advisoryFrame: InfinityScaleGlobalExecutionFrame = {
+    ...frame,
+    revision: advisoryPlan.revision,
+    planRevision: advisoryPlan.revision,
+    phase: "local-execution",
+  };
+  const advisoryTransaction = beginInfinityScaleGlobalLODTransaction(
+    advisoryFrame,
+    advisoryPlan,
+    state,
+  );
+  const beforeAdvisoryExecution = snapshotFingerprint();
+  let advisoryRejected = false;
+  try {
+    new InfinityScaleMixedLODCPUExecutor(state, advisoryContext).execute(
+      advisoryFrame,
+      advisoryPlan,
+      advisoryTransaction,
+      cell => new Float32Array(cell.input),
+    );
+  } catch (error) {
+    advisoryRejected = error instanceof Error &&
+      error.message.includes("selective CPU-ready plan");
+  }
+  if (!advisoryRejected) {
+    throw new Error("CPU executor accepted an advisory plan with selective execution disabled");
+  }
+  if (snapshotFingerprint() !== beforeAdvisoryExecution) {
+    throw new Error("Advisory CPU execution mutated LOD state despite readiness gates");
   }
 }
 
