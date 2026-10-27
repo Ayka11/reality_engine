@@ -251,12 +251,10 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
   const hugeDimension = 1_000_000_000_000;
   const hugePlan = {
     ...validPlan,
+    // Model a read dependency that aliases the same owned region solely to
+    // exercise containment/deduplication; no boundary transfer is declared.
     boundaryReadChunks: ["0:0,0,0"],
-    boundaryReadRelations: [{
-      sourceChunk: "0:0,0,0",
-      targetChunk: "0:0,0,0",
-      relation: "same-level" as const,
-    }],
+    boundaryReadRelations: [],
   };
   const hugeContext = new InfinityScaleChunkExecutionContext(
     hugePlan,
