@@ -57,6 +57,7 @@ struct SimParams {
   pressureDiffusion: f32,       // [21]
   densityDiffusion: f32,        // [22]
   phaseTransitionRate: f32,     // [23]
+  crystallizationRate: f32,     // [24]
 }
 
 // Material coefficients: MAT_COUNT × 7 floats
@@ -235,9 +236,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // ── PROC 11: Crystallization ──────────────────────────────────────────────
   if (active(2048u)) {
     if (c.entropy < 0.18 && c.density > 0.38) {
-      let cRate = 0.003 * mat.crystallizationRate;
+      let materialRate = select(mat.crystallizationRate, 1.0, matIdx == 0u);
+      let cRate = params.crystallizationRate * materialRate;
       o.density = min(1.0, c.density + cRate * (0.18 - c.entropy) * dt * 60.0);
       o.entropy = max(0.0, c.entropy - cRate * 0.5 * dt * 60.0);
+      if (matIdx == 0u || matIdx == 1u || matIdx == 2u) {
+        o.material_id = 3.0;
+      }
     }
   }
 
@@ -291,7 +296,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // Byte layout of SimParams in the storage buffer (matches WGSL struct)
-const PARAMS_FLOATS = 24; // 24 × 4 bytes = 96 bytes
+const PARAMS_FLOATS = 25; // 25 × 4 bytes = 100 bytes
 
 export class GPUBackend {
   private device: GPUDevice | null = null;
@@ -407,6 +412,7 @@ export class GPUBackend {
     f32[21] = p.pressureDiffusion;
     f32[22] = p.densityDiffusion;
     f32[23] = p.phaseTransitionRate;
+    f32[24] = p.crystallizationRate;
     this.device.queue.writeBuffer(this.paramsBuf, 0, ab);
   }
 
