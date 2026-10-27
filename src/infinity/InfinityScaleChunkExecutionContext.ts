@@ -75,6 +75,16 @@ export class InfinityScaleChunkExecutionContext {
       }
     }
 
+    // Cell coordinates are linearized with z * gridHeight * gridWidth +
+    // y * gridWidth + x in countUniqueCells(). Individually safe dimensions
+    // are not sufficient: their products must also remain exact safe integers.
+    const gridPlaneCellCount = gridWidth * gridHeight;
+    const gridCellCount = gridPlaneCellCount * gridDepth;
+    if (!Number.isSafeInteger(gridPlaneCellCount) ||
+        !Number.isSafeInteger(gridCellCount)) {
+      throw new Error("Infinity Scale execution context grid cell count must be a safe integer");
+    }
+
     const rawSimulationRanges = plan.chunks.map(chunk =>
       this.chunkRange(chunk.key),
     );
