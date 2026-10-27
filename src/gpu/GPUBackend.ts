@@ -55,6 +55,7 @@ struct SimParams {
   timeEnergyBoost: f32,        // [19]
   erosionRate: f32,            // [20]
   pressureDiffusion: f32,       // [21]
+  densityDiffusion: f32,        // [22]
 }
 
 // Material coefficients: MAT_COUNT × 7 floats
@@ -155,7 +156,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   // ── PROC 2: Density Flow ───────────────────────────────────────────────────
   if (active(4u)) {
-    o.density = clamp(c.density + 0.02 * params.energyDiffusion * dt * lapD, 0.0, 1.0);
+    o.density = clamp(c.density + params.densityDiffusion * dt * lapD, 0.0, 1.0);
   }
 
   // ── PROC 3: Entropy Growth (second law — cannot be disabled by MetaLaw) ───
@@ -289,7 +290,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // Byte layout of SimParams in the storage buffer (matches WGSL struct)
-const PARAMS_FLOATS = 22; // 22 × 4 bytes = 88 bytes
+const PARAMS_FLOATS = 23; // 23 × 4 bytes = 92 bytes
 
 export class GPUBackend {
   private device: GPUDevice | null = null;
@@ -403,6 +404,7 @@ export class GPUBackend {
     f32[19] = p.timeEnergyBoost;
     f32[20] = p.erosionRate;
     f32[21] = p.pressureDiffusion;
+    f32[22] = p.densityDiffusion;
     this.device.queue.writeBuffer(this.paramsBuf, 0, ab);
   }
 
