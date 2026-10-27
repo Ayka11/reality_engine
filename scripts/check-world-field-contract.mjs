@@ -150,6 +150,18 @@ worldPersistence.saveFieldState({schemaVersion:"world-field-state-v2",mutationCo
 assert.deepEqual(worldPersistence.loadFieldState(), {schemaVersion:"world-field-state-v2",mutationCount:1});
 worldPersistence.deleteFieldState();
 assert.equal(worldPersistence.loadFieldState(), null);
+const persistenceSource = await readFile(new URL("src/infinity/WorldFieldChunkPersistence.ts", root), "utf8");
+assert.match(persistenceSource, /private readonly durabilityFailures = new Map<string, string>\(\)/,
+  "durability failures must be tracked per persisted chunk");
+assert.match(persistenceSource, /private globalDurabilityError: string \| null = null/,
+  "clear/open failures must remain global until a successful durable clear");
+assert.match(persistenceSource, /if \(key === null\) \{\s*this\.durabilityFailures\.clear\(\)\s*this\.globalDurabilityError = null/s,
+  "only a successful clear may reset global durability failures");
+assert.match(persistenceSource, /this\.durabilityFailures\.delete\(key\)/,
+  "a successful write may clear only the failure for its own key");
+assert.match(persistenceSource, /this\.globalDurabilityError\s*\?\?\s*this\.durabilityFailures\.values\(\)\.next\(\)\.value/,
+  "flush status must preserve failures from unrelated pending durable state");
+
 const persistenceMod = await load("src/infinity/WorldFieldChunkPersistence.ts", [
   [/import \{ CHUNK_FLOATS \} from [^;]+;/, "const CHUNK_FLOATS = 7168;"],
 ]);

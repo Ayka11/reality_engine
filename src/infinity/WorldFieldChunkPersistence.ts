@@ -54,6 +54,8 @@ export class WorldFieldChunkPersistence {
   private databasePromise: Promise<IDBDatabase | null> | null = null
   private writeQueue: Promise<void> = Promise.resolve()
   private lastDurabilityError: string | null = null
+  private readonly durabilityFailures = new Map<string, string>()
+  private globalDurabilityError: string | null = null
 
   private openDatabase(): Promise<IDBDatabase | null> {
     if (this.databasePromise) return this.databasePromise
@@ -67,32 +69,50 @@ export class WorldFieldChunkPersistence {
         }
         request.onsuccess = () => resolve(request.result)
         request.onerror = () => {
-          this.lastDurabilityError = request.error?.message ?? 'IndexedDB open failed'
+          this.globalDurabilityError = request.error?.message ?? 'IndexedDB open failed'
+          this.lastDurabilityError = this.globalDurabilityError
           resolve(null)
         }
         request.onblocked = () => {
-          this.lastDurabilityError = 'IndexedDB upgrade blocked by another open tab'
+          this.globalDurabilityError = 'IndexedDB upgrade blocked by another open tab'
+          this.lastDurabilityError = this.globalDurabilityError
           resolve(null)
         }
       } catch (error) {
-        this.lastDurabilityError = error instanceof Error ? error.message : String(error)
+        this.globalDurabilityError = error instanceof Error ? error.message : String(error)
+        this.lastDurabilityError = this.globalDurabilityError
         resolve(null)
       }
     })
     return this.databasePromise
   }
 
-  private enqueueWrite(operation: (store: IDBObjectStore) => IDBRequest): void {
+  private enqueueWrite(
+    key: string | null,
+    operation: (store: IDBObjectStore) => IDBRequest,
+  ): void {
     this.writeQueue = this.writeQueue.then(async () => {
       const db = await this.openDatabase()
-      if (!db) return
+      if (!db) {
+        this.globalDurabilityError ??= this.lastDurabilityError ?? 'IndexedDB unavailable'
+        this.lastDurabilityError = this.globalDurabilityError
+        return
+      }
       await new Promise<void>((resolve, reject) => {
         try {
           const transaction = db.transaction(OBJECT_STORE, 'readwrite')
           const request = operation(transaction.objectStore(OBJECT_STORE))
           request.onerror = () => reject(request.error ?? new Error('IndexedDB write failed'))
           transaction.oncomplete = () => {
-            this.lastDurabilityError = null
+            if (key === null) {
+              this.durabilityFailures.clear()
+              this.globalDurabilityError = null
+            } else {
+              this.durabilityFailures.delete(key)
+            }
+            this.lastDurabilityError = this.globalDurabilityError
+              ?? this.durabilityFailures.values().next().value
+              ?? null
             resolve()
           }
           transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB transaction failed'))
@@ -100,7 +120,12 @@ export class WorldFieldChunkPersistence {
         } catch (error) { reject(error) }
       })
     }).catch((error) => {
-      this.lastDurabilityError = error instanceof Error ? error.message : String(error)
+      const message = error instanceof Error ? error.message : String(error)
+      if (key === null) this.globalDurabilityError = message
+      else this.durabilityFailures.set(key, message)
+      this.lastDurabilityError = this.globalDurabilityError
+        ?? this.durabilityFailures.values().next().value
+        ?? message
     })
   }
 
@@ -153,7 +178,7 @@ export class WorldFieldChunkPersistence {
     }
     const isolated = cloneSnapshot(snapshot)
     this.snapshots.set(snapshot.key, isolated)
-    this.enqueueWrite(store => store.put(cloneSnapshot(isolated)))
+    this.enqueueWrite(snapshot.key, store => store.put(cloneSnapshot(isolated)))
     return cloneSnapshot(isolated)
   }
 
@@ -221,13 +246,13 @@ export class WorldFieldChunkPersistence {
   remove(coord: WorldFieldChunkCoord): boolean {
     const key = chunkCoordKey(coord)
     const removed = this.snapshots.delete(key)
-    this.enqueueWrite(store => store.delete(key))
+    this.enqueueWrite(key, store => store.delete(key))
     return removed
   }
 
   clear(): void {
     this.snapshots.clear()
-    this.enqueueWrite(store => store.clear())
+    this.enqueueWrite(null, store => store.clear())
   }
   size(): number { return this.snapshots.size }
 }
