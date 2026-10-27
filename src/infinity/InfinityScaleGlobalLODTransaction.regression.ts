@@ -156,6 +156,58 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
     throw new Error("Infinity Scale stale revision regression failed");
   }
 
+  // The public synchronization handle must not let a stale transaction rebase
+  // itself after an external write and then commit over that newer state.
+  const staleRebaseState = new InfinityScaleLODState(2);
+  staleRebaseState.ensureChunk("0:2,0,0", 0);
+  staleRebaseState.ensureChunk("1:0,0,0", 1);
+  const staleRebaseFrame0 = beginInfinityScaleGlobalFrame(plan, 0, 1);
+  const staleRebaseTransaction = beginInfinityScaleGlobalLODTransaction(
+    staleRebaseFrame0,
+    plan,
+    staleRebaseState,
+  );
+  const authoritativeExternalCell = new Array<number>(CELL_FIELDS).fill(0);
+  authoritativeExternalCell[F.ENERGY] = 77;
+  staleRebaseState.writeBaseCell("1:0,0,0", 1, 3, 0, 0, authoritativeExternalCell);
+  const externalRevision = staleRebaseState.getRevision();
+  // Attempt to rebase only the staging helper, leaving the transaction's
+  // private rollback ownership at the older revision.
+  staleRebaseTransaction.synchronization.begin(externalRevision);
+  const staleSources = Array.from({ length: 4 }, () => {
+    const cell = new Array<number>(CELL_FIELDS).fill(0);
+    cell[F.ENERGY] = 99;
+    return cell;
+  });
+  staleRebaseTransaction.synchronization.stageTransfer({
+    sourceChunk: "0:2,0,0",
+    targetChunk: "1:0,0,0",
+    relation: "fine-to-coarse",
+    sourceLevel: 0,
+    targetLevel: 1,
+    refinementRatio: 2,
+    operation: "restriction",
+    readOperation: "prolongation",
+  }, [3, 0, 0], staleSources);
+
+  const staleRebaseFrame1 = advanceInfinityScaleGlobalFrame(staleRebaseFrame0, "local-execution");
+  const staleRebaseFrame2 = advanceInfinityScaleGlobalFrame(staleRebaseFrame1, "local-commit");
+  const staleRebaseBoundaryFrame = advanceInfinityScaleGlobalFrame(staleRebaseFrame2, "boundary-reconciliation");
+  let staleRebaseRejected = false;
+  try {
+    commitInfinityScaleGlobalLODTransaction(staleRebaseTransaction, staleRebaseBoundaryFrame);
+  } catch (error) {
+    staleRebaseRejected = error instanceof Error &&
+      error.message.includes("revision");
+  }
+  if (!staleRebaseRejected) {
+    throw new Error("Stale LOD transaction was able to rebase synchronization and commit over an external write");
+  }
+  const preservedExternalCell = staleRebaseState.readBaseCell("1:0,0,0", 1, 3, 0, 0);
+  if (!preservedExternalCell || preservedExternalCell[F.ENERGY] !== 77) {
+    throw new Error("Rejected stale synchronization rebase overwrote a newer external cell value");
+  }
+
   // Invalid target coordinates must be rejected before they can be coerced to
   // typed-array offset zero during a boundary commit.
   const guardedSync = new InfinityScaleLODSynchronization(state);

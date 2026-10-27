@@ -93,6 +93,11 @@ export function commitInfinityScaleGlobalLODTransaction(
       throw new Error("Infinity Scale LOD transaction has already committed");
     }
 
+    // The synchronization object is intentionally exposed for staging, but
+    // callers must not be able to rebase it onto a newer state revision after
+    // an external mutation. Validate ownership against the private snapshot
+    // revision before it applies any authoritative writes.
+    transaction.state.assertRevision(internals.stateRevision);
     const result = transaction.synchronization.commit();
     internals.committed = true;
     return result;
