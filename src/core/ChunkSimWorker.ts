@@ -390,7 +390,8 @@ function simStep(dt: number) {
       const materialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
         Math.floor(grid.get(x, y, z, F.MAT))))
       const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
-      if (density > 0.65 && flow > 0.01) {
+      // Keep the threshold consistent with CPU FieldPhysics and GPUBackend.
+      if (density > 0.65 && flow > 8.0) {
         const erodibility = 1 - material.erosionResistance
         grid.set(x, y, z, F.D, Math.max(0, density - p.erosionRate * erodibility * dt * 60))
         grid.set(x, y, z, F.I, Math.max(0, grid.get(x, y, z, F.I) - 0.4 * erodibility * dt))

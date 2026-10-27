@@ -53,6 +53,7 @@ struct SimParams {
   gravityDensityCoupling: f32, // [17]
   timeBaseRate: f32,           // [18]
   timeEnergyBoost: f32,        // [19]
+  erosionRate: f32,            // [20]
 }
 
 // Material coefficients: MAT_COUNT × 7 floats
@@ -265,7 +266,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let flow = abs(c.field_x) + abs(c.field_y) + abs(c.field_z);
     if (c.density > 0.65 && flow > 8.0) {
       let resistance = mat.erosionResistance;
-      o.density     = max(0.0, c.density - 0.0018 * (1.0 - resistance) * dt * 60.0);
+      o.density     = max(0.0, c.density - params.erosionRate * (1.0 - resistance) * dt * 60.0);
       o.information = max(0.0, c.information - 0.4 * (1.0 - resistance) * dt);
     }
   }
@@ -279,7 +280,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // Byte layout of SimParams in the storage buffer (matches WGSL struct)
-const PARAMS_FLOATS = 20; // 20 × 4 bytes = 80 bytes
+const PARAMS_FLOATS = 21; // 21 × 4 bytes = 84 bytes
 
 export class GPUBackend {
   private device: GPUDevice | null = null;
@@ -391,6 +392,7 @@ export class GPUBackend {
     f32[17] = p.gravityDensityCoupling;
     f32[18] = p.timeBaseRate;
     f32[19] = p.timeEnergyBoost;
+    f32[20] = p.erosionRate;
     this.device.queue.writeBuffer(this.paramsBuf, 0, ab);
   }
 

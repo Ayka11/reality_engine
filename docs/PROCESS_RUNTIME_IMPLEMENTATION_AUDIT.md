@@ -16,22 +16,22 @@ of a complete or scientifically validated solver.
 
 | ID | Process | ChunkSimWorker | GPUBackend | CPU SimulationEngine layers | Assessment |
 |---:|---|---|---|---|---|
-| 0 | Energy diffusion | Implemented, gated by legacy string `energy`; coefficient `DIFF` | Implemented with `energyDiffusion` and material conductivity | Implemented with `energyDiffusion` | Present in both; worker was inconsistent |
-| 1 | Temperature diffusion | Partial: legacy `thermo`; hardcoded coefficients | Implemented with `tempDiffusion`, heat capacity, `tempEnergyCoupling` | Implemented with `tempDiffusion`, `tempEnergyCoupling` | Present; CPU/GPU have different discretization |
-| 2 | Density flow | Partial: Laplacian but legacy `thermo` gate; hardcoded rate | Density Laplacian with `0.02 * energyDiffusion` | Density Laplacian with `0.02 * energyDiffusion` | Present, but no dedicated density mobility parameter |
-| 3 | Entropy growth | Implemented with legacy `entropy`; hardcoded terms | Implemented with `entropyGrowthRate`, `entropyEnergyCoupling`, plus hardcoded temperature term | Implemented with `PhysicsParams`; temperature term is not fully parameterized | Present; hardcoded terms remain |
-| 4 | Information | Implemented with legacy `info`; hardcoded diffusion/growth | Thresholded growth and decay using info parameters | `EntropyLayer` and `InfoPhysics`; mixed parameterized and hardcoded rules | Present; exact semantics differ by backend |
-| 5 | Bio potential | Implemented with legacy `bio`; hardcoded thresholds/rates | Computed from information, energy, density, entropy and material affinity | Implemented in `EntropyLayer` | Present; worker and GPU algorithms differ |
-| 6 | Wave propagation | Missing | Updates phase/amplitude and energy; no spatial wave equation | Phase/amplitude update in `FieldPhysics`; not a full spatial wave equation | Partial; name overstates spatial propagation |
-| 7 | Gravity | Missing | Density updated using `gravityDensityCoupling * gravity_pot` | Density updated using `gravityDensityCoupling * GRAVITY_POT` | Partial; validate potential source and stability |
-| 8 | Phase transition | Missing | Temperature/density threshold rules | Temperature/density threshold rules | Partial phenomenological rule; no explicit phase state |
-| 9 | Metabolism | Missing | Converts energy to information at bio threshold | Implemented in `EntropyLayer` | Present in authoritative path only |
-| 10 | Signal propagation | Missing | Diffusion-like information update | Information diffusion plus separate signal effects | Partial; not a distinct signal-field transport model |
-| 11 | Crystallization | Missing | Thresholded density/entropy update with material coefficient | Low-entropy/high-density threshold rule | Partial phenomenological rule |
-| 12 | Radiation | Missing | High-energy density/energy reduction with material absorption | High-energy density/energy reduction | Partial; hardcoded coefficients |
-| 13 | Pressure diffusion | Missing | Computes pressure from density and temperature; no spatial pressure diffusion | Computes pressure from density and temperature; no spatial pressure diffusion | Partial; label overstates implementation |
-| 14 | Field rotation | Missing | Vector smoothing and cross-coupling heuristic | Vector smoothing and cross-coupling heuristic | Partial; not a true curl-based solver |
-| 15 | Erosion | Missing | Flow/density threshold reduces density and information using material resistance | No erosion branch found in inspected CPU layers | Partial; GPU only |
+| 0 | Energy diffusion | 3D sparse stencil using `p.energyDiffusion` and the canonical mask | Uses `energyDiffusion` × material conductivity | Uses `energyDiffusion` without the material-conductivity multiplier | Implemented, but CPU/GPU coefficient semantics differ from the worker |
+| 1 | Temperature diffusion | Uses `tempDiffusion` and `tempEnergyCoupling` | Uses `tempDiffusion / heatCapacity` plus energy coupling | Uses `tempDiffusion` and energy coupling without material heat capacity | Implemented; material and discretization semantics differ |
+| 2 | Density flow | Uses `p.densityDiffusion` in a Laplacian | Uses `0.02 × energyDiffusion` | Uses `0.02 × energyDiffusion` | Implemented, but CPU/GPU ignore the dedicated `densityDiffusion` value |
+| 3 | Entropy growth | Masked; parameterized rate/coupling plus a temperature term | Masked; parameterized rate/coupling plus a temperature term | `EntropyLayer` uses parameterized rate/coupling plus a temperature term | Present; the temperature and energy-decay terms remain partly heuristic |
+| 4 | Information | Parameterized threshold growth/decay; combines information and signal updates; no memory field in compact worker layout | Parameterized threshold growth/decay | `EntropyLayer` plus `InfoPhysics` decay, coherence, memory and resonance (both process-mask gated) | Present, but the equations and state variables differ substantially across backends |
+| 5 | Bio potential | Uses field values and material `bioAffinity` | Uses field values and material `bioAffinity` | Computes from information, energy, density and entropy; no material-affinity term | Implemented with inconsistent material response |
+| 6 | Wave propagation | Spatial Laplacian on scalar wave field plus energy coupling | Updates phase/amplitude and energy; no spatial wave equation | Updates phase/amplitude; no spatial wave equation | Not equivalent across backends; not a calibrated wave solver |
+| 7 | Gravity | Density gradients modify the compact worker's 2D `FX/FY` vector | Changes density using `gravity_pot` | Changes density using `GRAVITY_POT` | Different modeled quantities across the worker and authoritative grid solvers |
+| 8 | Phase transition | Threshold rule using `p.phaseTransitionRate` | Threshold rules with hard-coded rates | Threshold rules with hard-coded rates | Phenomenological transitions; CPU/GPU ignore the canonical rate |
+| 9 | Metabolism | Uses `p.metabolismRate` | Uses hard-coded `0.12` | Uses hard-coded `0.12` | Implemented, but parameter sensitivity differs across backends |
+| 10 | Signal propagation | Adds Laplacian-based transport into the information field using `p.signalPropagationRate` | Diffusion-like update of information using `infoGrowthRate` | Diffusion-like update of information using `infoGrowthRate` | Does not transport a distinct signal field; parameter mapping differs |
+| 11 | Crystallization | Uses `p.crystallizationRate` and material rates; can change eligible material IDs | Changes density/entropy with a hard-coded base rate; no material conversion | Changes density/entropy with a hard-coded base rate; no material conversion | Incomplete parity; CPU/GPU do not use the canonical rate or reproduce the worker's material change |
+| 12 | Radiation | Uses `radiationThreshold`, density/energy rates and material absorption | Uses hard-coded threshold/rates; material absorption affects density reduction | Uses hard-coded threshold/rates without the material absorption term | Implemented with inconsistent parameterization and material response |
+| 13 | Pressure diffusion | Pressure Laplacian plus relaxation toward a density/temperature equation of state | Computes the equation-of-state value only; no spatial pressure diffusion | Computes the equation-of-state value only; no spatial pressure diffusion | CPU/GPU omit `pressureDiffusion` transport |
+| 14 | Field rotation | Parameterized 2D `FX/FY` smoothing/cross-coupling | 3D vector smoothing/cross-coupling with hard-coded constants | 3D vector smoothing/cross-coupling with hard-coded constants | Heuristic vector update, not a true curl-based solver; dimensions and parameters differ |
+| 15 | Erosion | Material resistance and `p.erosionRate`; planar `FX/FY` flow threshold | Material resistance and `p.erosionRate`; 3D `FX/FY/FZ` flow threshold | Material resistance and `p.erosionRate`; 3D `FIELD_X/Y/Z` flow threshold | Now present in all three paths; worker's compact field schema lacks a Z-flow component |
 
 ## Contract findings
 
@@ -50,28 +50,49 @@ of a complete or scientifically validated solver.
    mask and parameter object at startup and before each worker tick, so law
    overrides are reflected in that worker. Legacy node-editor scalar inputs are
    still adapted, but the authoritative LawEngine sync wins on the next tick.
-5. The `PhysicsParams` type has no dedicated coefficients for erosion,
-   crystallization, radiation, density mobility, or pressure relaxation. Those
-   processes cannot all be made fully configurable without extending the
-   parameter contract and adding validation/tests.
+5. `PhysicsParams` includes dedicated coefficients for density mobility,
+   pressure diffusion, phase transitions, metabolism, crystallization, radiation,
+   field rotation, and erosion. However, the CPU/GPU paths do not consume all of
+   those values: the worker uses more of the canonical parameters, while GPU
+   `SimParams` and CPU `FieldPhysics` still contain hard-coded rates. A declared
+   parameter is not considered operational until tests prove parameter sensitivity
+   on each backend that claims to support it.
 
 ## Recommended implementation order
 
-1. Synchronize `PhysicsParams` + the process bitmask to the chunk worker without
-   changing its sparse chunk storage or frame-transfer protocol.
-2. Replace worker string activation with `PROC` bitmask checks; keep a narrow
-   legacy adapter only if an existing caller requires it.
-3. Add deterministic tests for each process, parameter sensitivity, disabled
-   process invariance, finite bounds, and sparse-chunk allocation behavior.
-4. Implement missing/partial processes in small groups with explicit numerical
-   contracts: density/gravity and pressure first; then wave propagation; then
-   erosion/crystallization/phase transition.
+1. Finish the cross-backend parameter map: every `PhysicsParams` field used by a
+   process must reach the GPU kernel or be explicitly documented as unsupported.
+2. Align CPU, GPU, and worker process equations one process at a time, beginning
+   with pressure transport and density mobility after the erosion contract.
+3. Add deterministic tests per process for enabled/disabled invariance, parameter
+   sensitivity, finite bounds, chunk-boundary transport, and rollback behavior.
+4. Keep backend-specific model differences explicit, especially the worker's
+   compact two-component force vector and the CPU/GPU finite-grid boundary rules.
 5. Do not label a process "implemented" solely because a branch exists: tests
-   must demonstrate that enabling it changes the intended fields, disabling it
-   leaves those fields unchanged, and parameters affect the expected response.
+   must demonstrate that enabling it changes intended fields and that disabling
+   it leaves those fields unchanged. These computational tests are not proof of
+   empirical or physical validity.
 
 ## Explicit non-goals
 
 This audit does not claim that the heuristic rules are validated physical models.
 It also does not replace the authoritative `SimulationEngine` with the chunk
 worker or change the sparse chunk storage format.
+
+
+## Mainline follow-up — 2026-10-27
+
+- `InfoPhysics` now receives the authoritative `activeProcessMask` in all three
+  `SimulationEngine` call sites and returns without changing information, memory,
+  entropy, or energy when `PROC.INFORMATION` is disabled. A focused regression is
+  a mandatory CI step.
+- CPU `FieldPhysics` now has a mask-gated erosion branch using the canonical
+  `erosionRate`, material resistance, density gate, and flow threshold. Tests
+  cover disabled erosion, sub-threshold flow, material sensitivity, and finite
+  outputs.
+- The subsequent cross-backend erosion patch maps `erosionRate` into GPU
+  `SimParams` and aligns the worker flow threshold. The sparse worker's schema
+  still exposes only `FX/FY`; it cannot currently represent Z-directed flow.
+- These changes close two specific activation/parameter gaps. The pressure,
+  density-mobility, wave, gravity, crystallization and radiation rows above remain
+  documented backend differences, not validated physical laws.

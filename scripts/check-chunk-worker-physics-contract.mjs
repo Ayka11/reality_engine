@@ -5,6 +5,7 @@ const worker = await fs.readFile('src/core/ChunkSimWorker.ts', 'utf8')
 const main = await fs.readFile('src/main.ts', 'utf8')
 const defs = await fs.readFile('src/process/ProcessDef.ts', 'utf8')
 const params = await fs.readFile('src/laws/MetaLaw.ts', 'utf8')
+const gpu = await fs.readFile('src/gpu/GPUBackend.ts', 'utf8')
 
 // The sparse worker must use the canonical bitmask, not its former string Set.
 assert.ok(worker.includes("import { PROC, defaultProcessMask } from '../process/ProcessDef'"))
@@ -24,6 +25,14 @@ assert.ok(worker.includes('p.infoGrowthThreshD'))
 assert.ok(worker.includes('p.infoEntropySupp'))
 assert.ok(worker.includes('p.timeBaseRate'))
 assert.ok(worker.includes('p.timeEnergyBoost'))
+
+// Erosion uses the canonical rate and the same threshold across backends.
+assert.ok(worker.includes('density > 0.65 && flow > 8.0'))
+assert.ok(gpu.includes('erosionRate: f32,            // [20]'))
+assert.ok(gpu.includes('const PARAMS_FLOATS = 21;'))
+assert.ok(gpu.includes('f32[20] = p.erosionRate;'))
+assert.ok(gpu.includes('params.erosionRate * (1.0 - resistance)'))
+assert.ok(gpu.includes('flow > 8.0'))
 
 // Main must forward resolved LawEngine state to the sparse worker at startup and ticks.
 assert.ok(main.includes("cmd: 'setPhysics'"))
@@ -50,4 +59,4 @@ for (const parameter of [
   'gravityDensityCoupling', 'timeBaseRate', 'timeEnergyBoost',
 ]) assert.ok(params.includes(parameter), `missing PhysicsParams field: ${parameter}`)
 
-console.log('Chunk worker physics parameter/mask contract: PASS')
+console.log('CPU/GPU/chunk-worker physics parameter/mask contract: PASS')

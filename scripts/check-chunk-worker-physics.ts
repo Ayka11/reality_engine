@@ -163,16 +163,27 @@ const energyAfterNegativeWave = readField(latestFrame(), waveEnergyPoint.x, wave
 assert.ok(energyAfterNegativeWave >= 0,
   `wave-to-energy coupling must preserve the non-negative energy invariant (got ${energyAfterNegativeWave})`)
 
-// Erosion responds to material resistance rather than removing density uniformly.
+// Erosion responds to the canonical rate, material resistance, and flow threshold.
+const erosionParams = { ...params, erosionRate: 0.01 }
 const erosionPoint = { x: 110, y: 10, z: 10 }
-send('setPhysics', { params, processMask: 1 << 15 })
+send('setPhysics', { params: erosionParams, processMask: 1 << 15 })
 send('paint', { ...erosionPoint, f: F.D, v: 0.8, r: 0, mode: 'set' })
 send('paint', { ...erosionPoint, f: F.FX, v: 10, r: 0, mode: 'set' })
 send('paint', { ...erosionPoint, f: F.MAT, v: MAT.SAND, r: 0, mode: 'set' })
 send('tick', { speed: 1 })
 const erodedDensity = readField(latestFrame(), erosionPoint.x, erosionPoint.y, erosionPoint.z, F.D)
-assert.ok(erodedDensity < 0.8 && erodedDensity > 0.79,
-  `erosion should remove density according to material resistance (got ${erodedDensity})`)
+assert.ok(Math.abs(erodedDensity - 0.792) < 1e-6,
+  `erosion should honor the configured rate and sand resistance (got ${erodedDensity})`)
+
+// Low flow must not erode, even with EROSION enabled.
+const lowFlowPoint = { x: 100, y: 10, z: 10 }
+send('paint', { ...lowFlowPoint, f: F.D, v: 0.8, r: 0, mode: 'set' })
+send('paint', { ...lowFlowPoint, f: F.FX, v: 1, r: 0, mode: 'set' })
+send('paint', { ...lowFlowPoint, f: F.MAT, v: MAT.SAND, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const lowFlowDensity = readField(latestFrame(), lowFlowPoint.x, lowFlowPoint.y, lowFlowPoint.z, F.D)
+assert.ok(Math.abs(lowFlowDensity - 0.8) < 1e-5,
+  `sub-threshold worker flow must not erode density (got ${lowFlowDensity})`)
 
 console.log(JSON.stringify({
   status: 'PASS',
