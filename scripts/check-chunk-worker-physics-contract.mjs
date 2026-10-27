@@ -61,6 +61,18 @@ assert.ok(gpu.includes('const PARAMS_FLOATS = 24;'))
 assert.ok(gpu.includes('f32[23] = p.phaseTransitionRate;'))
 assert.ok(gpu.includes('params.phaseTransitionRate * dt * 60.0'))
 assert.ok(gpu.includes('params.phaseTransitionRate * 0.5 * dt * 60.0'))
+ 
+// Crystallization uses the canonical configured rate and material multiplier on all backends.
+assert.ok(cpu.includes('p.crystallizationRate * materialRate'))
+assert.ok(cpu.includes('front[base + F.MATERIAL_ID] = MAT.CRYSTAL'))
+assert.ok(worker.includes('p.crystallizationRate * materialRate'))
+assert.ok(worker.includes('rate > 0 && (currentMaterialId === MAT.VACUUM'))
+assert.ok(gpu.includes('crystallizationRate: f32,     // [24]'))
+assert.ok(gpu.includes('const PARAMS_FLOATS = 25;'))
+assert.ok(gpu.includes('f32[24] = p.crystallizationRate;'))
+assert.ok(gpu.includes('params.crystallizationRate * materialRate'))
+assert.ok(gpu.includes('o.material_id = 3.0;'))
+
 
 // Main must forward resolved LawEngine state to the sparse worker at startup and ticks.
 assert.ok(main.includes("cmd: 'setPhysics'"))
