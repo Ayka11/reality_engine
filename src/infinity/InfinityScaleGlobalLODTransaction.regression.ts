@@ -121,6 +121,50 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
     throw new Error("Infinity Scale duplicate boundary target regression failed");
   }
 
+  // Different face-plane coordinates can still address the same stored coarse
+  // cell. Reject the alias instead of allowing last-face-wins overwrites.
+  const aliasState = new InfinityScaleLODState(2);
+  for (const key of ["1:0,0,0", "0:2,1,0", "0:1,2,0"]) {
+    aliasState.ensureChunk(key, Number(key.split(":")[0]));
+  }
+  const aliasSync = new InfinityScaleLODSynchronization(aliasState);
+  aliasSync.begin(aliasState.getRevision());
+  const aliasSources = Array.from({ length: 4 }, () => {
+    const value = new Array<number>(CELL_FIELDS).fill(0);
+    value[F.ENERGY] = 4;
+    value[F.DENSITY] = 5;
+    return value;
+  });
+  aliasSync.stageTransfer({
+    sourceChunk: "0:2,1,0",
+    targetChunk: "1:0,0,0",
+    relation: "fine-to-coarse",
+    sourceLevel: 0,
+    targetLevel: 1,
+    refinementRatio: 2,
+    operation: "restriction",
+    readOperation: "prolongation",
+  }, [3, 2, 0], aliasSources);
+  let aliasedFaceRejected = false;
+  try {
+    aliasSync.stageTransfer({
+      sourceChunk: "0:1,2,0",
+      targetChunk: "1:0,0,0",
+      relation: "fine-to-coarse",
+      sourceLevel: 0,
+      targetLevel: 1,
+      refinementRatio: 2,
+      operation: "restriction",
+      readOperation: "prolongation",
+    }, [2, 3, 0], aliasSources);
+  } catch (error) {
+    aliasedFaceRejected = error instanceof Error &&
+      error.message.includes("duplicate target cell");
+  }
+  if (!aliasedFaceRejected || aliasSync.getStagedUpdates().length !== 1) {
+    throw new Error("Infinity Scale synchronization allowed two faces to overwrite one physical coarse cell");
+  }
+
   const readyFrame = advanceInfinityScaleGlobalFrame(frame, "local-execution");
   const localCommittedFrame = advanceInfinityScaleGlobalFrame(readyFrame, "local-commit");
   const boundaryFrame = advanceInfinityScaleGlobalFrame(

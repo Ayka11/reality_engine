@@ -132,50 +132,55 @@ export class InfinityScaleLODBoundarySnapshot {
     let invalidBoundaryReads = 0;
     let firstInvalidRead = base.firstInvalidRead;
 
-    for (const range of context.simulationRanges) {
-      const faces = [
-        { axis: "x", value: range.minX },
-        { axis: "x", value: range.maxX },
-        { axis: "y", value: range.minY },
-        { axis: "y", value: range.maxY },
-        { axis: "z", value: range.minZ },
-        { axis: "z", value: range.maxZ },
-      ] as const;
-
+    for (let rangeIndex = 0; rangeIndex < context.simulationRanges.length; rangeIndex++) {
+      const range = context.simulationRanges[rangeIndex];
+      const scale = context.levelRangeScales[rangeIndex] ?? 1;
       const seen = new Set<string>();
-      for (const face of faces) {
-        for (let z = range.minZ; z <= range.maxZ; z++) {
-          for (let y = range.minY; y <= range.maxY; y++) {
-            for (let x = range.minX; x <= range.maxX; x++) {
-              if (
-                (face.axis === "x" && x !== face.value) ||
-                (face.axis === "y" && y !== face.value) ||
-                (face.axis === "z" && z !== face.value)
-              ) continue;
 
-              const key = `${x},${y},${z}`;
-              if (seen.has(key)) continue;
-              seen.add(key);
+      const visit = (cell: [number, number, number]): void => {
+        const [x, y, z] = cell;
+        const key = `${x},${y},${z}`;
+        if (seen.has(key)) return;
+        seen.add(key);
 
-              const specs = context.getBoundaryTransferSpecsForCell(x, y, z)
-                .filter(spec => spec.sourceLevel !== spec.targetLevel);
+        const specs = context.getBoundaryTransferSpecsForCell(x, y, z)
+          .filter(spec => spec.sourceLevel !== spec.targetLevel);
 
-              for (const spec of specs) {
-                const read = this.read(spec, [x, y, z]);
-                if (!this.hasSourceChunk(spec.sourceChunk) || !read) {
-                  invalidBoundaryReads++;
-                  if (!firstInvalidRead) {
-                    firstInvalidRead = {
-                      sourceChunk: spec.sourceChunk,
-                      targetChunk: spec.targetChunk,
-                      relation: spec.relation,
-                      targetCell: [x, y, z],
-                    };
-                  }
-                }
-              }
+        for (const spec of specs) {
+          const read = this.read(spec, [x, y, z]);
+          if (!this.hasSourceChunk(spec.sourceChunk) || !read) {
+            invalidBoundaryReads++;
+            if (!firstInvalidRead) {
+              firstInvalidRead = {
+                sourceChunk: spec.sourceChunk,
+                targetChunk: spec.targetChunk,
+                relation: spec.relation,
+                targetCell: [x, y, z],
+              };
             }
           }
+        }
+      };
+
+      // The normal coordinate is the boundary-plane marker (min or inclusive
+      // max), while the two tangential coordinates must be canonical cell
+      // origins at this chunk's LOD spacing.
+      for (let z = range.minZ; z <= range.maxZ; z += scale) {
+        for (let y = range.minY; y <= range.maxY; y += scale) {
+          visit([range.minX, y, z]);
+          visit([range.maxX, y, z]);
+        }
+      }
+      for (let z = range.minZ; z <= range.maxZ; z += scale) {
+        for (let x = range.minX; x <= range.maxX; x += scale) {
+          visit([x, range.minY, z]);
+          visit([x, range.maxY, z]);
+        }
+      }
+      for (let y = range.minY; y <= range.maxY; y += scale) {
+        for (let x = range.minX; x <= range.maxX; x += scale) {
+          visit([x, y, range.minZ]);
+          visit([x, y, range.maxZ]);
         }
       }
     }

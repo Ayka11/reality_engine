@@ -250,7 +250,13 @@ export class InfinityScaleLODSynchronization {
   }
 
   private updateKey(targetChunk: string, cell: [number, number, number]): string {
-    return `${targetChunk}|${cell[0]},${cell[1]},${cell[2]}`;
+    // A face-normal coordinate may use the inclusive max-face marker (e.g. 7
+    // for a coarse cell anchored at 6). Canonicalize to the target chunk's
+    // actual stored cell origin so writes from adjacent faces cannot alias the
+    // same physical coarse cell under different boundary-plane coordinates.
+    const scale = 2 ** chunkLevel(targetChunk);
+    const canonical = cell.map(value => Math.floor(value / scale) * scale);
+    return `${targetChunk}|${canonical[0]},${canonical[1]},${canonical[2]}`;
   }
 }
 
