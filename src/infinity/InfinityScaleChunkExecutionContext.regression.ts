@@ -85,6 +85,56 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
 
   const validPlan = makePlan("0:0,0,0", "0:1,0,0", "same-level", 0, 0);
 
+  const immutableContext = new InfinityScaleChunkExecutionContext(
+    validPlan,
+    16,
+    16,
+    16,
+    4,
+  );
+  if (
+    !Object.isFrozen(immutableContext.simulationRanges) ||
+    !Object.isFrozen(immutableContext.readRanges) ||
+    !Object.isFrozen(immutableContext.levelRangeScales) ||
+    !Object.isFrozen(immutableContext.boundaryReadRelations) ||
+    !Object.isFrozen(immutableContext.boundaryTransferSpecs) ||
+    immutableContext.simulationRanges.some(range => !Object.isFrozen(range)) ||
+    immutableContext.readRanges.some(range => !Object.isFrozen(range)) ||
+    immutableContext.boundaryReadRelations.some(relation => !Object.isFrozen(relation)) ||
+    immutableContext.boundaryTransferSpecs.some(spec => !Object.isFrozen(spec))
+  ) {
+    throw new Error("Chunk execution context exposed mutable geometry or transfer contracts");
+  }
+
+  const mutableRanges = immutableContext.simulationRanges as unknown as Array<{ minX: number }>;
+  let rangeAppendRejected = false;
+  try {
+    mutableRanges.push({ minX: 999 });
+  } catch {
+    rangeAppendRejected = true;
+  }
+  if (!rangeAppendRejected || immutableContext.simulationRanges.length !== 1) {
+    throw new Error("Chunk execution context allowed public simulation ownership ranges to be appended");
+  }
+  let rangeMutationRejected = false;
+  try {
+    (immutableContext.simulationRanges[0] as unknown as { minX: number }).minX = 999;
+  } catch {
+    rangeMutationRejected = true;
+  }
+  if (!rangeMutationRejected || immutableContext.simulationRanges[0].minX !== 0) {
+    throw new Error("Chunk execution context allowed public simulation geometry to be mutated");
+  }
+  let transferMutationRejected = false;
+  try {
+    (immutableContext.boundaryTransferSpecs[0] as unknown as { targetChunk: string }).targetChunk = "0:99,0,0";
+  } catch {
+    transferMutationRejected = true;
+  }
+  if (!transferMutationRejected || immutableContext.boundaryTransferSpecs[0].targetChunk !== "0:1,0,0") {
+    throw new Error("Chunk execution context allowed a public boundary transfer target to be changed");
+  }
+
   const mismatchedExecutionLODPlan = {
     ...validPlan,
     chunks: [{ ...validPlan.chunks[0], key: "1:0,0,0" }],

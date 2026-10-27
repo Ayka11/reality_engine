@@ -56,16 +56,16 @@ function executionGeometryFingerprint(plan: InfinityScaleExecutionPlan): string 
 }
 
 export class InfinityScaleChunkExecutionContext {
-  readonly simulationRanges: ExecutionCellRange[];
-  readonly readRanges: ExecutionCellRange[];
+  readonly simulationRanges: ReadonlyArray<Readonly<ExecutionCellRange>>;
+  readonly readRanges: ReadonlyArray<Readonly<ExecutionCellRange>>;
   readonly simulationCellCount: number;
   readonly readCellCount: number;
   readonly overlappingSimulationRangeCount: number;
   readonly overlappingReadRangeCount: number;
   readonly uniqueBoundaryReadCellCount: number;
-  readonly levelRangeScales: number[];
-  readonly boundaryReadRelations: InfinityScaleBoundaryReadRelation[];
-  readonly boundaryTransferSpecs: InfinityScaleBoundaryTransferSpec[];
+  readonly levelRangeScales: ReadonlyArray<number>;
+  readonly boundaryReadRelations: ReadonlyArray<Readonly<InfinityScaleBoundaryReadRelation>>;
+  readonly boundaryTransferSpecs: ReadonlyArray<Readonly<InfinityScaleBoundaryTransferSpec>>;
   readonly sameLevelTransferCount: number;
   readonly prolongationTransferCount: number;
   readonly restrictionTransferCount: number;
@@ -119,11 +119,20 @@ export class InfinityScaleChunkExecutionContext {
       this.chunkRange(chunk.key),
     );
     this.overlappingSimulationRangeCount = this.countOverlappingRanges(rawSimulationRanges);
-    this.levelRangeScales = plan.chunks.map(chunk => 2 ** chunkLevel(chunk.key));
-    this.simulationRanges = rawSimulationRanges;
-    this.readRanges = plan.boundaryReadChunks.map(key => this.chunkRange(key));
-    this.boundaryReadRelations = plan.boundaryReadRelations.map(relation => ({ ...relation }));
-    this.boundaryTransferSpecs = this.buildBoundaryTransferSpecs();
+    this.levelRangeScales = Object.freeze(plan.chunks.map(chunk => 2 ** chunkLevel(chunk.key)));
+    this.simulationRanges = Object.freeze(
+      rawSimulationRanges.map(range => Object.freeze({ ...range })),
+    );
+    const rawReadRanges = plan.boundaryReadChunks.map(key => this.chunkRange(key));
+    this.readRanges = Object.freeze(
+      rawReadRanges.map(range => Object.freeze({ ...range })),
+    );
+    this.boundaryReadRelations = Object.freeze(
+      plan.boundaryReadRelations.map(relation => Object.freeze({ ...relation })),
+    );
+    this.boundaryTransferSpecs = Object.freeze(
+      this.buildBoundaryTransferSpecs().map(spec => Object.freeze({ ...spec })),
+    );
     this.sameLevelTransferCount = this.boundaryTransferSpecs.filter(spec => spec.operation === "copy").length;
     this.prolongationTransferCount = this.boundaryTransferSpecs.filter(spec => spec.operation === "prolongation").length;
     this.restrictionTransferCount = this.boundaryTransferSpecs.filter(spec => spec.operation === "restriction").length;
@@ -341,7 +350,7 @@ export class InfinityScaleChunkExecutionContext {
     return this.countUniqueCells(intersections) === expectedCellCount;
   }
 
-  private countOverlappingRanges(ranges: ExecutionCellRange[]): number {
+  private countOverlappingRanges(ranges: ReadonlyArray<Readonly<ExecutionCellRange>>): number {
     let overlaps = 0;
     for (let i = 0; i < ranges.length; i++) {
       for (let j = i + 1; j < ranges.length; j++) {
@@ -356,7 +365,7 @@ export class InfinityScaleChunkExecutionContext {
    * individual cells. Coordinate compression keeps runtime dependent on the
    * number of chunk ranges rather than the represented world volume.
    */
-  private countUniqueCells(ranges: ExecutionCellRange[]): number {
+  private countUniqueCells(ranges: ReadonlyArray<Readonly<ExecutionCellRange>>): number {
     const nonEmpty = ranges.filter(range =>
       range.minX <= range.maxX &&
       range.minY <= range.maxY &&
@@ -441,7 +450,7 @@ export class InfinityScaleChunkExecutionContext {
     );
   }
 
-  private rangesOverlap(a: ExecutionCellRange, b: ExecutionCellRange): boolean {
+  private rangesOverlap(a: Readonly<ExecutionCellRange>, b: Readonly<ExecutionCellRange>): boolean {
     return (
       a.minX <= b.maxX && a.maxX >= b.minX &&
       a.minY <= b.maxY && a.maxY >= b.minY &&
@@ -449,7 +458,7 @@ export class InfinityScaleChunkExecutionContext {
     );
   }
 
-  private contains(range: ExecutionCellRange, x: number, y: number, z: number): boolean {
+  private contains(range: Readonly<ExecutionCellRange>, x: number, y: number, z: number): boolean {
     return (
       x >= range.minX && x <= range.maxX &&
       y >= range.minY && y <= range.maxY &&
