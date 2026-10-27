@@ -55,8 +55,8 @@ export class InfinityScaleLODSynchronization {
       throw new Error("Infinity Scale boundary target cell must contain three non-negative safe integer coordinates");
     }
     for (let axis = 0; axis < 3; axis++) {
-      if (!Number.isSafeInteger(targetCell[axis]) || targetCell[axis] < 0) {
-        throw new Error("Infinity Scale boundary target cell must contain three non-negative safe integer coordinates");
+      if (!Number.isSafeInteger(targetCell[axis])) {
+        throw new Error("Infinity Scale boundary target cell must contain three safe integer coordinates");
       }
     }
     if (!validateInfinityScaleBoundaryGeometry(spec, targetCell, this.state.chunkSize)) {
@@ -82,18 +82,15 @@ export class InfinityScaleLODSynchronization {
       }
       InfinityScaleLODTransfer.copy(sourceCells[0], target as unknown as number[]);
     } else if (spec.operation === "prolongation") {
-      const expected = spec.refinementRatio ** 3;
       if (sourceCells.length !== 1) {
         throw new Error("Infinity Scale prolongation boundary staging requires one coarse source cell");
       }
-      const children = Array.from({ length: expected }, () => new Array<number>(CELL_FIELDS).fill(0));
-      InfinityScaleLODTransfer.prolongate(
+      InfinityScaleLODTransfer.prolongateBoundaryCell(
         sourceCells[0],
-        children,
+        target as unknown as number[],
         spec.sourceLevel,
         spec.targetLevel,
       );
-      target.set(children[0]);
     } else {
       InfinityScaleLODTransfer.restrictFace(
         sourceCells,

@@ -152,6 +152,18 @@ export function runInfinityScaleLODBoundaryCellMapperRegression(): void {
         `fine-to-coarse face alignment mismatch: ${fineMapping.sourceCells[0].join(",")}`,
       );
     }
+    for (const invalidTarget of [[6, 2, 2], [7, 3, 2]] as Array<[number, number, number]>) {
+      let rejected = false;
+      try {
+        mapper.map(fineToCoarse, invalidTarget);
+      } catch (error) {
+        rejected = error instanceof Error &&
+          error.message.includes("aligned target face cell");
+      }
+      if (!rejected) {
+        throw new Error(`Boundary mapper accepted non-canonical target cell ${invalidTarget.join(",")}`);
+      }
+    }
   }
 
   // Canonical same-level mapping must read the adjacent source cell, not the target itself.

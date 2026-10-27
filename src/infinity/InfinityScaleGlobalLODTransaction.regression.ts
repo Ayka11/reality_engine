@@ -208,6 +208,58 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
     throw new Error("Rejected stale synchronization rebase overwrote a newer external cell value");
   }
 
+  // Negative-coordinate chunk keys are supported by the canonical geometry contract.
+  const negativeState = new InfinityScaleLODState(2);
+  negativeState.ensureChunk("0:-2,0,0", 0);
+  negativeState.ensureChunk("0:-1,0,0", 0);
+  const negativeSync = new InfinityScaleLODSynchronization(negativeState);
+  negativeSync.begin(negativeState.getRevision());
+  const negativeValues = new Array<number>(CELL_FIELDS).fill(0);
+  negativeValues[F.ENERGY] = 5;
+  negativeSync.stageTransfer({
+    sourceChunk: "0:-2,0,0",
+    targetChunk: "0:-1,0,0",
+    relation: "same-level",
+    sourceLevel: 0,
+    targetLevel: 0,
+    refinementRatio: 1,
+    operation: "copy",
+    readOperation: "copy",
+  }, [-2, 0, 0], [negativeValues]);
+  if (negativeSync.getStagedUpdates().length !== 1) {
+    throw new Error("Infinity Scale synchronization rejected a valid negative-coordinate boundary cell");
+  }
+  negativeSync.commit();
+  const negativeCommitted = negativeState.readBaseCell("0:-1,0,0", 0, -2, 0, 0);
+  if (!negativeCommitted || negativeCommitted[F.ENERGY] !== 5) {
+    throw new Error("Infinity Scale synchronization did not commit a valid negative-coordinate boundary");
+  }
+
+  // Large coarse-to-fine differences only need one boundary child at a time.
+  // This ratio would allocate over a billion target arrays in a volumetric path.
+  const largeRatioState = new InfinityScaleLODState(1);
+  const largeRatioSync = new InfinityScaleLODSynchronization(largeRatioState);
+  largeRatioSync.begin(largeRatioState.getRevision());
+  const largeRatioSource = new Array<number>(CELL_FIELDS).fill(0);
+  largeRatioSource[F.ENERGY] = 64;
+  largeRatioSource[F.DENSITY] = 8;
+  largeRatioSync.stageTransfer({
+    sourceChunk: "30:0,0,0",
+    targetChunk: "0:1073741824,0,0",
+    relation: "coarse-to-fine",
+    sourceLevel: 30,
+    targetLevel: 0,
+    refinementRatio: 2 ** 30,
+    operation: "prolongation",
+    readOperation: "restriction",
+  }, [1073741824, 0, 0], [largeRatioSource]);
+  const largeRatioStaged = largeRatioSync.getStagedUpdates();
+  if (largeRatioStaged.length !== 1 ||
+      largeRatioStaged[0].value[F.ENERGY] !== largeRatioSource[F.ENERGY] / (2 ** 90) ||
+      largeRatioStaged[0].value[F.DENSITY] !== largeRatioSource[F.DENSITY]) {
+    throw new Error("Infinity Scale high-ratio boundary prolongation produced an invalid single-cell result");
+  }
+
   // Invalid target coordinates must be rejected before they can be coerced to
   // typed-array offset zero during a boundary commit.
   const guardedSync = new InfinityScaleLODSynchronization(state);

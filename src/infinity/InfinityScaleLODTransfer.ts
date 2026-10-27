@@ -182,6 +182,54 @@ export class InfinityScaleLODTransfer {
   }
 
   /**
+   * Prolongate one boundary target cell without constructing the entire 3D
+   * refinement block. Boundary reconciliation consumes one child at a time;
+   * allocating ratio^3 arrays for a single target can otherwise grow
+   * exponentially with LOD difference.
+   */
+  static prolongateBoundaryCell(
+    source: ArrayLike<number>,
+    target: number[],
+    sourceLevel: number,
+    targetLevel: number,
+  ): InfinityScaleLODTransferResult {
+    const refinementRatio = this.validateLevels(sourceLevel, targetLevel, "prolongation");
+    if (source.length !== CELL_FIELDS || target.length !== CELL_FIELDS) {
+      throw new Error(
+        `Infinity Scale boundary prolongation requires exactly ${CELL_FIELDS} fields`,
+      );
+    }
+
+    const childCount = refinementRatio ** 3;
+    const transferredFields: number[] = [];
+    const skippedFields: number[] = [];
+    for (let field = 0; field < CELL_FIELDS; field++) {
+      const policy = this.policy(field);
+      if (policy === "circular") {
+        target[field] = source[field] ?? 0;
+        transferredFields.push(field);
+      } else if (policy === "intensive" || policy === "discrete") {
+        target[field] = source[field] ?? 0;
+        transferredFields.push(field);
+      } else if (policy === "extensive") {
+        target[field] = (source[field] ?? 0) / childCount;
+        transferredFields.push(field);
+      } else {
+        skippedFields.push(field);
+      }
+    }
+
+    return {
+      operation: "prolongation",
+      sourceLevel,
+      targetLevel,
+      refinementRatio,
+      transferredFields,
+      skippedFields,
+    };
+  }
+
+  /**
    * Fine-to-coarse baseline restriction.
    *
    * Continuous fields are volume-averaged. Discrete fields use deterministic

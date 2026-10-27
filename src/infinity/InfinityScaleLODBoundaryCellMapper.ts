@@ -142,6 +142,36 @@ export function mapInfinityScaleBoundaryCell(
   );
   const targetScale = 2 ** pair.target.level;
   const sourceScale = 2 ** pair.source.level;
+  const faceGeometry = resolveInfinityScaleBoundaryFaceGeometry(spec, chunkSize);
+  if (!faceGeometry) {
+    throw new Error(`Boundary mapping requires adjacent chunks: ${spec.sourceChunk} -> ${spec.targetChunk}`);
+  }
+  if (!Array.isArray(targetCell) || targetCell.length !== 3 ||
+      !targetCell.every(Number.isSafeInteger)) {
+    throw new Error("Boundary mapping requires three safe integer target coordinates");
+  }
+  const targetRangeForValidation = rangeForChunk(spec.targetChunk, chunkSize);
+  const targetMins = [
+    targetRangeForValidation.minX,
+    targetRangeForValidation.minY,
+    targetRangeForValidation.minZ,
+  ];
+  const tangentAxes = faceGeometry.axis === 0
+    ? [1, 2] as const
+    : faceGeometry.axis === 1
+      ? [0, 2] as const
+      : [0, 1] as const;
+  const u = targetCell[tangentAxes[0]];
+  const v = targetCell[tangentAxes[1]];
+  if (
+    targetCell[faceGeometry.axis] !== faceGeometry.coordinate ||
+    u < faceGeometry.minU || u > faceGeometry.maxU ||
+    v < faceGeometry.minV || v > faceGeometry.maxV ||
+    (u - targetMins[tangentAxes[0]]) % targetScale !== 0 ||
+    (v - targetMins[tangentAxes[1]]) % targetScale !== 0
+  ) {
+    throw new Error("Boundary mapping requires an aligned target face cell");
+  }
 
   if (spec.relation === "same-level") {
     const sourceRange = rangeForChunk(spec.sourceChunk, chunkSize);
