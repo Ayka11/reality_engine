@@ -12,9 +12,9 @@ const coarse = chunk("1:1,0,0", 1, 1, 0, 0);
 const selected = [fine];
 const candidates = [fine, coarse];
 const requiredRelation: InfinityScaleBoundaryReadRelation = {
-  sourceChunk: fine.key,
-  targetChunk: coarse.key,
-  relation: "fine-to-coarse",
+  sourceChunk: coarse.key,
+  targetChunk: fine.key,
+  relation: "coarse-to-fine",
 };
 
 const complete = validateIndependentMixedLodTopology(selected, candidates, [requiredRelation]);
@@ -22,7 +22,7 @@ assert.equal(complete.complete, true, "observed relation matching independent fr
 
 const missing = validateIndependentMixedLodTopology(selected, candidates, []);
 assert.equal(missing.complete, false, "missing relation must fail even when the source chunk remains present");
-assert.deepEqual(missing.missing, ["0:1,0,0|1:1,0,0|fine-to-coarse"]);
+assert.deepEqual(missing.missing, ["1:1,0,0|0:1,0,0|coarse-to-fine"]);
 
 const unexpected = validateIndependentMixedLodTopology(selected, candidates, [{
   ...requiredRelation,
