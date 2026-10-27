@@ -29,7 +29,7 @@ assert.ok(worker.includes('p.timeEnergyBoost'))
 // Erosion uses the canonical rate and the same threshold across backends.
 assert.ok(worker.includes('density > 0.65 && flow > 8.0'))
 assert.ok(gpu.includes('erosionRate: f32,            // [20]'))
-assert.ok(gpu.includes('const PARAMS_FLOATS = 21;'))
+assert.ok(gpu.includes('const PARAMS_FLOATS = 22;'))
 assert.ok(gpu.includes('f32[20] = p.erosionRate;'))
 assert.ok(gpu.includes('params.erosionRate * (1.0 - resistance)'))
 assert.ok(gpu.includes('flow > 8.0'))
