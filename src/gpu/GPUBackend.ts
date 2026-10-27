@@ -56,6 +56,7 @@ struct SimParams {
   erosionRate: f32,            // [20]
   pressureDiffusion: f32,       // [21]
   densityDiffusion: f32,        // [22]
+  phaseTransitionRate: f32,     // [23]
 }
 
 // Material coefficients: MAT_COUNT × 7 floats
@@ -205,13 +206,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (active(256u)) {
     if (c.temperature > 500.0 && c.density > 0.5) {
       // Boiling
-      o.density   = max(0.0, c.density - 0.008 * dt * 60.0);
-      o.entropy   = min(1.0, c.entropy + 0.008 * dt * 60.0);
+      o.density   = max(0.0, c.density - params.phaseTransitionRate * dt * 60.0);
+      o.entropy   = min(1.0, c.entropy + params.phaseTransitionRate * dt * 60.0);
       o.information = max(0.0, c.information - 3.0 * dt);
     } else if (c.temperature < 40.0 && c.density > 0.55) {
       // Freezing / solidification
-      o.density = min(1.0, c.density + 0.004 * dt * 60.0);
-      o.entropy = max(0.0, c.entropy - 0.004 * dt * 60.0);
+      o.density = min(1.0, c.density + params.phaseTransitionRate * 0.5 * dt * 60.0);
+      o.entropy = max(0.0, c.entropy - params.phaseTransitionRate * 0.5 * dt * 60.0);
     }
   }
 
@@ -290,7 +291,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // Byte layout of SimParams in the storage buffer (matches WGSL struct)
-const PARAMS_FLOATS = 23; // 23 × 4 bytes = 92 bytes
+const PARAMS_FLOATS = 24; // 24 × 4 bytes = 96 bytes
 
 export class GPUBackend {
   private device: GPUDevice | null = null;
@@ -405,6 +406,7 @@ export class GPUBackend {
     f32[20] = p.erosionRate;
     f32[21] = p.pressureDiffusion;
     f32[22] = p.densityDiffusion;
+    f32[23] = p.phaseTransitionRate;
     this.device.queue.writeBuffer(this.paramsBuf, 0, ab);
   }
 
