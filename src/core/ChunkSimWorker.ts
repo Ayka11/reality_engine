@@ -359,9 +359,9 @@ function simStep(dt: number) {
         const rate = p.crystallizationRate * materialRate
         grid.set(x, y, z, F.D, Math.min(1, density + rate * (0.18 - entropy) * dt * 60))
         grid.set(x, y, z, F.S, Math.max(0, entropy - rate * 0.5 * dt * 60))
-        if (currentMaterialId === MAT.VACUUM ||
+        if (rate > 0 && (currentMaterialId === MAT.VACUUM ||
             currentMaterialId === MAT.STONE ||
-            currentMaterialId === MAT.SAND) {
+            currentMaterialId === MAT.SAND)) {
           grid.set(x, y, z, F.MAT, MAT.CRYSTAL)
         }
       }
