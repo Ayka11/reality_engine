@@ -291,7 +291,8 @@ win['getWorldField3DState'] = () => {
     renderedCells: rendererState?.renderedCells ?? 0,
     sampleCount: rendererState?.sampleCount ?? 0,
     field: rendererState?.field,
-    view: rendererState?.view ?? worldViewContract.snapshot(),
+    // Keep the public view diagnostic live as the view contract changes, even between render frames.
+    view: worldViewContract.snapshot(),
     fieldVersion: field?.version ?? null,
     mutationCount: field?.mutationCount ?? null,
     renderAvailable,
