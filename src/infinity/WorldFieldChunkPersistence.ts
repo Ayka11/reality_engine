@@ -196,7 +196,7 @@ export class WorldFieldChunkPersistence {
     }
     const isolated = cloneSnapshot(snapshot)
     this.snapshots.set(snapshot.key, isolated)
-    this.enqueueWrite(store => store.put(cloneSnapshot(isolated)))
+    this.enqueueWrite(snapshot.key, store => store.put(cloneSnapshot(isolated)))
     return cloneSnapshot(isolated)
   }
 
