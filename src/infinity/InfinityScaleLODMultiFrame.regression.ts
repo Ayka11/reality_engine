@@ -15,11 +15,15 @@ const plan: InfinityScaleExecutionPlan = {
   requestedSimulationCount: 1,
   selectedSimulationCount: 1,
   maxSimulatingChunks: 1,
-  boundaryReadChunks: [],
-  boundaryReadCount: 0,
-  boundaryReadRelations: [],
+  boundaryReadChunks: ["0:1,0,0"],
+  boundaryReadCount: 1,
+  boundaryReadRelations: [{
+    sourceChunk: "0:0,0,0",
+    targetChunk: "0:1,0,0",
+    relation: "same-level",
+  }],
   simulationCellCount: 64,
-  boundaryReadCellCount: 0,
+  boundaryReadCellCount: 64,
   localExecutionLayers: [],
   globalExecutionLayers: [],
   selectiveCpuReady: true,
@@ -39,7 +43,7 @@ function makeFrame(revision: number): InfinityScaleGlobalExecutionFrame {
     phase: "boundary-reconciliation",
     planRevision: 1,
     simulationCellCount: 64,
-    boundaryReadCellCount: 0,
+    boundaryReadCellCount: 64,
     committed: false,
     finalized: false,
     ownershipFingerprint: "multi-frame",
@@ -50,14 +54,16 @@ function makeFrame(revision: number): InfinityScaleGlobalExecutionFrame {
 export function runInfinityScaleLODMultiFrameRegression(): void {
   const state = new InfinityScaleLODState(4);
   const key = "0:0,0,0";
+  const targetKey = "0:1,0,0";
   state.ensureChunk(key, 0);
+  state.ensureChunk(targetKey, 0);
   const initialRevision = state.getRevision();
 
   const first = beginInfinityScaleGlobalLODTransaction(makeFrame(1), plan, state);
   first.synchronization.stageTransfer(
     {
       sourceChunk: key,
-      targetChunk: key,
+      targetChunk: targetKey,
       relation: "same-level",
       sourceLevel: 0,
       targetLevel: 0,
@@ -65,7 +71,7 @@ export function runInfinityScaleLODMultiFrameRegression(): void {
       operation: "copy",
       readOperation: "copy",
     },
-    [0, 0, 0],
+    [4, 0, 0],
     [new Float32Array(24)],
   );
   const firstResult = commitInfinityScaleGlobalLODTransaction(first, makeFrame(1));
@@ -83,7 +89,7 @@ export function runInfinityScaleLODMultiFrameRegression(): void {
   second.synchronization.stageTransfer(
     {
       sourceChunk: key,
-      targetChunk: key,
+      targetChunk: targetKey,
       relation: "same-level",
       sourceLevel: 0,
       targetLevel: 0,
@@ -91,7 +97,7 @@ export function runInfinityScaleLODMultiFrameRegression(): void {
       operation: "copy",
       readOperation: "copy",
     },
-    [1, 0, 0],
+    [4, 1, 0],
     [new Float32Array(24)],
   );
   commitInfinityScaleGlobalLODTransaction(second, makeFrame(2));
@@ -115,7 +121,7 @@ export function runInfinityScaleLODMultiFrameRegression(): void {
     );
   }
 
-  const persisted = state.readBaseCell(key, 0, 1, 0, 0);
+  const persisted = state.readBaseCell(targetKey, 0, 4, 1, 0);
   if (!persisted || persisted.length !== 24) {
     throw new Error("Expected hierarchical LOD state to persist across committed frames");
   }
