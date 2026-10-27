@@ -164,7 +164,7 @@ assert.match(persistenceSource, /this\.durabilityFailures\.delete\(key\)/,
 assert.match(persistenceSource, /this\.globalDurabilityError\s*\?\?\s*this\.durabilityFailures\.values\(\)\.next\(\)\.value/,
   "flush status must preserve failures from unrelated pending durable state");
 
-const persistenceSource = await readFile(new URL("src/infinity/WorldFieldChunkPersistence.ts", root), "utf8");
+
 assert.match(persistenceSource, /if \(db === null && this\.databasePromise === cachedPromise\) this\.databasePromise = null/,
   "failed IndexedDB opens must clear their cached promise so later calls can retry");
 assert.match(persistenceSource, /if \(settled\) \{\s*db\.close\(\)\s*return\s*\}/,
