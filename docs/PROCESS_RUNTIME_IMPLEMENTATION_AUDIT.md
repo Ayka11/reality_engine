@@ -18,7 +18,7 @@ of a complete or scientifically validated solver.
 |---:|---|---|---|---|---|
 | 0 | Energy diffusion | 3D sparse stencil using `p.energyDiffusion` and the canonical mask | Uses `energyDiffusion` × material conductivity | Uses `energyDiffusion` without the material-conductivity multiplier | Implemented, but CPU/GPU coefficient semantics differ from the worker |
 | 1 | Temperature diffusion | Uses `tempDiffusion` and `tempEnergyCoupling` | Uses `tempDiffusion / heatCapacity` plus energy coupling | Uses `tempDiffusion` and energy coupling without material heat capacity | Implemented; material and discretization semantics differ |
-| 2 | Density flow | Uses `p.densityDiffusion` in a Laplacian | Uses `0.02 × energyDiffusion` | Uses `0.02 × energyDiffusion` | Implemented, but CPU/GPU ignore the dedicated `densityDiffusion` value |
+| 2 | Density flow | Uses `p.densityDiffusion` in a Laplacian | Six-neighbor Laplacian uses `p.densityDiffusion` | Six-neighbor Laplacian uses `p.densityDiffusion` | Dedicated density mobility is wired across all three paths; boundary and sparse allocation semantics still differ |
 | 3 | Entropy growth | Masked; parameterized rate/coupling plus a temperature term | Masked; parameterized rate/coupling plus a temperature term | `EntropyLayer` uses parameterized rate/coupling plus a temperature term | Present; the temperature and energy-decay terms remain partly heuristic |
 | 4 | Information | Parameterized threshold growth/decay; combines information and signal updates; no memory field in compact worker layout | Parameterized threshold growth/decay | `EntropyLayer` plus `InfoPhysics` decay, coherence, memory and resonance (both process-mask gated) | Present, but the equations and state variables differ substantially across backends |
 | 5 | Bio potential | Uses field values and material `bioAffinity` | Uses field values and material `bioAffinity` | Computes from information, energy, density and entropy; no material-affinity term | Implemented with inconsistent material response |
@@ -101,3 +101,8 @@ worker or change the sparse chunk storage format.
 ### Pressure diffusion parity follow-up — 2026-10-27
 
 The CPU and GPU solvers now compute a six-neighbor pressure Laplacian and relax pressure toward the density/temperature equation of state. The GPU parameter ABI forwards `PhysicsParams.pressureDiffusion`; the sparse worker uses the same pre-step density/temperature sample and retains its sparse-neighbor boundary semantics. New deterministic CPU and worker regressions check disabled-mask invariance, coefficient sensitivity, and finite pressure values. These tests verify implementation consistency, not empirical validity of the pressure equation.
+
+
+### Density-flow coefficient parity follow-up — 2026-10-27
+
+The CPU and GPU solvers now use the dedicated `PhysicsParams.densityDiffusion` coefficient instead of deriving mobility from `energyDiffusion`. The GPU parameter ABI forwards the coefficient explicitly. The CPU regression holds `energyDiffusion` nonzero while toggling `densityDiffusion` to zero and to its configured value, verifying that the intended parameter alone controls density transport. This verifies implementation sensitivity, not empirical calibration of the density model.
