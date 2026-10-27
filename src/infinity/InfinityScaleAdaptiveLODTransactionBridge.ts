@@ -8,7 +8,7 @@ import {
   type InfinityScaleGlobalLODTransaction,
 } from "./InfinityScaleGlobalLODTransaction";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
-import type { InfinityScaleAdaptiveMutation, InfinityScaleCompiledTransfer } from "./InfinityScaleAdaptiveTransferCompiler";
+import type { InfinityScaleAdaptiveMutation } from "./InfinityScaleAdaptiveTransferCompiler";
 import { InfinityScaleAdaptiveTransferCompiler } from "./InfinityScaleAdaptiveTransferCompiler";
 import { InfinityScaleAdaptiveExecutionGraphCompiler } from "./InfinityScaleAdaptiveExecutionGraphCompiler";
 import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
@@ -50,7 +50,6 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
   ): InfinityScaleAdaptiveLODTransactionResult {
     if (!this.transaction) throw new Error("Adaptive LOD transaction has not begun");
     const stateRevisionBefore = this.state.getRevision();
-    const createdChunks: string[] = [];
     let stateMutationStarted = false;
 
     try {
@@ -68,9 +67,9 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
       if (!executionGraph.valid) {
         throw new Error("Adaptive LOD transaction rejected: execution dependency graph is invalid");
       }
-      const changed = mutations.filter(m => m.fromLOD !== m.toLOD).slice().sort((a, b) => a.regionId.localeCompare(b.regionId));
-      const expectedTransferIds = new Set(changed.map(m => m.regionId + ":" + m.fromLOD + "->" + m.toLOD));
-      const executionById = new Map(transfers.map(t => [t.transferId, t]));
+      const changed = mutations.filter(m => m.fromLOD !== m.toLOD)
+        .slice()
+        .sort((a, b) => a.regionId.localeCompare(b.regionId));
 
       // Every rejection after begin must pass through cleanup so this bridge
       // cannot retain a failed transaction and accidentally reuse it.
@@ -81,55 +80,14 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
       if (changed.length > 0) {
         throw new Error("Adaptive LOD topology commit is disabled until physical chunk remapping and full-cell transfer are implemented");
       }
-      for (const mutation of changed) {
-        const chunk = this.state.getChunk(mutation.regionId);
-        if (chunk && chunk.level !== mutation.fromLOD) throw new Error("Adaptive LOD state conflict for region: " + mutation.regionId);
-      }
-      for (const execution of transfers) {
-        if (!expectedTransferIds.has(execution.transferId)) throw new Error("Unexpected adaptive transfer: " + execution.transferId);
+      // No topology changes are allowed above, so there can be no valid
+      // transfer execution in the current fail-closed mode.
+      if (transfers.length > 0) {
+        throw new Error("Unexpected adaptive transfer: " + transfers[0].transferId);
       }
 
-      for (const mutation of changed) {
-        if (!this.state.hasChunk(mutation.regionId)) {
-          stateMutationStarted = true;
-          this.state.ensureChunk(mutation.regionId, mutation.toLOD);
-          createdChunks.push(mutation.regionId);
-        }
-      }
-
-      if (createdChunks.length > 0) {
-        // Chunk creation is an owned topology mutation in this transaction.
-        // Rebase only across the exact revision delta caused by these chunks;
-        // any additional change means another mutation raced with this commit.
-        const expectedRevision = this.transaction.stateRevision + createdChunks.length;
-        if (this.state.getRevision() !== expectedRevision) {
-          throw new Error("Adaptive LOD transaction rejected: unexpected state revision during topology staging");
-        }
-        this.transaction.stateRevision = expectedRevision;
-        this.transaction.synchronization.begin(expectedRevision);
-      }
-
-      for (const mutation of changed) {
-        const transferId = mutation.regionId + ":" + mutation.fromLOD + "->" + mutation.toLOD;
-        const execution = executionById.get(transferId);
-        if (!execution) continue;
-        const compiled: InfinityScaleCompiledTransfer = {
-          transferId,
-          regionId: mutation.regionId,
-          operation: transferOperation(mutation),
-          ratio: 2 ** Math.abs(mutation.toLOD - mutation.fromLOD),
-          sourceLOD: mutation.fromLOD,
-          targetLOD: mutation.toLOD,
-          conservationRequired: true,
-          dependencyIds: [],
-        };
-        validateConcreteTransfer(compiled, execution);
-        this.transaction.synchronization.stageTransfer(execution.spec, execution.targetCell, execution.sourceCells);
-      }
-
-      // Commit may partially write boundary cells before rejecting an invalid
-      // target. Mark the state as potentially mutated before entering it so the
-      // catch path restores the snapshot on every partial-commit failure.
+      // Commit may partially write boundary cells during a no-op synchronization
+      // only if an injected failure occurs. Keep rollback centralized here.
       stateMutationStarted = true;
       const synchronization = commitInfinityScaleGlobalLODTransaction(this.transaction, frame);
       if (!synchronization.readyToCommit) throw new Error("Adaptive LOD synchronization was not ready to commit");
@@ -173,15 +131,3 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
   }
 }
 
-function transferOperation(mutation: InfinityScaleAdaptiveMutation): InfinityScaleCompiledTransfer["operation"] {
-  return mutation.toLOD < mutation.fromLOD ? "TOPOLOGY_PROLONGATION" : "TOPOLOGY_RESTRICTION";
-}
-
-function validateConcreteTransfer(compiled: InfinityScaleCompiledTransfer, execution: InfinityScaleAdaptiveTransferExecution): void {
-  const expectedRelation = compiled.operation === "TOPOLOGY_PROLONGATION" ? "coarse-to-fine" : "fine-to-coarse";
-  if (execution.spec.relation !== expectedRelation) throw new Error("Adaptive transfer relation mismatch: " + compiled.transferId);
-  if (execution.spec.sourceLevel !== compiled.sourceLOD || execution.spec.targetLevel !== compiled.targetLOD) {
-    throw new Error("Adaptive transfer level mismatch: " + compiled.transferId);
-  }
-  if (execution.spec.refinementRatio !== compiled.ratio) throw new Error("Adaptive transfer ratio mismatch: " + compiled.transferId);
-}

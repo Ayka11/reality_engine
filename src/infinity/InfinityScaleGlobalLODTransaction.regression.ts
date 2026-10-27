@@ -39,6 +39,28 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
 
   const frame = beginInfinityScaleGlobalFrame(plan, 0, 1);
   const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
+  const revisionAtBegin = transaction.stateRevision;
+  if (!Object.isFrozen(transaction) || "rollbackSnapshot" in transaction) {
+    throw new Error("LOD transaction exposed mutable rollback metadata");
+  }
+  let transactionRevisionMutationRejected = false;
+  try {
+    (transaction as unknown as { stateRevision: number }).stateRevision = revisionAtBegin + 1;
+  } catch {
+    transactionRevisionMutationRejected = true;
+  }
+  if (!transactionRevisionMutationRejected || transaction.stateRevision !== revisionAtBegin) {
+    throw new Error("LOD transaction allowed external code to rewrite captured state revision");
+  }
+  let transactionCommitFlagMutationRejected = false;
+  try {
+    (transaction as unknown as { committed: boolean }).committed = true;
+  } catch {
+    transactionCommitFlagMutationRejected = true;
+  }
+  if (!transactionCommitFlagMutationRejected || transaction.committed) {
+    throw new Error("LOD transaction allowed external code to forge committed state");
+  }
 
   // Fine-to-coarse restriction sums extensive ENERGY across four source cells
   // (2 each => 8) while intensive DENSITY is averaged (10 remains 10).
