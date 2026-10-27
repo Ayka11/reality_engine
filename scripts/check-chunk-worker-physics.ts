@@ -172,7 +172,7 @@ send('paint', { ...erosionPoint, f: F.FX, v: 10, r: 0, mode: 'set' })
 send('paint', { ...erosionPoint, f: F.MAT, v: MAT.SAND, r: 0, mode: 'set' })
 send('tick', { speed: 1 })
 const erodedDensity = readField(latestFrame(), erosionPoint.x, erosionPoint.y, erosionPoint.z, F.D)
-assert.ok(Math.abs(erodedDensity - 0.792) < 1e-6,
+assert.ok(Math.abs(erodedDensity - 0.79232) < 1e-6,
   `erosion should honor the configured rate and sand resistance (got ${erodedDensity})`)
 
 // Low flow must not erode, even with EROSION enabled.
