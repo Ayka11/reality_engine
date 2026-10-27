@@ -7,6 +7,8 @@ export interface ResidencyRecord {
   lod: number;
   amr: number;
   pinned: boolean;
+  /** Chebyshev distance from the observer chunk to this chunk's footprint, in base-chunk units. */
+  distance: number;
 }
 
 /**
@@ -49,6 +51,7 @@ export class ChunkResidencyManager {
         lod: this.scale.selectLOD(distance),
         amr: 0,
         pinned: false,
+        distance,
       };
     });
   }
