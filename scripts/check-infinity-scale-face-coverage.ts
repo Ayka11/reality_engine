@@ -37,7 +37,7 @@ function relations(children: Array<[number, number]>, coarseX = 0, fineX = 2): s
     generatedAt: 0,
   };
   return new InfinityScaleExecutionAdapter().update(frame).boundaryReadRelations
-    .map(relation => relation.targetChunk);
+    .map(relation => relation.sourceChunk);
 }
 
 const partial = relations([[0, 0]]);
