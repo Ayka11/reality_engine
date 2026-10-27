@@ -82,6 +82,10 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     if (interior !== null) {
       throw new Error("Infinity Scale regression failed: interior target cell accepted as boundary");
     }
+    const unaligned = validateInfinityScaleBoundaryGeometry(s, [8, 3, 2], CHUNK);
+    if (unaligned !== null) {
+      throw new Error("Infinity Scale regression failed: unaligned coarse target cell accepted as boundary");
+    }
   }
 
   // Cross-layer contract: the immutable snapshot and state-backed mapper must
@@ -333,8 +337,9 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     };
     const context = new InfinityScaleChunkExecutionContext(plan, 16, 16, 16, 4);
     if (context.getBoundaryRelationsForCell(7, 6, 6).length !== 1) throw new Error("context exact face lookup failed");
-    // This fixture uses the fine chunk at tangential key (1,1), covering coordinates 4..7.
-    if (context.getBoundaryRelationsForCell(7, 7, 7).length !== 1) throw new Error("context shared-face corner lookup failed");
+    // The last coarse face cell is anchored at (6,6); (7,7) lies inside
+    // that same coarse cell and must not create a second transaction target.
+    if (context.getBoundaryRelationsForCell(7, 7, 7).length !== 0) throw new Error("context accepted an unaligned coarse face coordinate");
     if (context.getBoundaryRelationsForCell(6, 6, 6).length !== 0) throw new Error("context admitted non-face target");
   }
 

@@ -85,32 +85,48 @@ export function isInfinityScaleSourceBoundaryCell(
   targetCell: [number, number, number],
   chunkSize = 32,
 ): boolean {
+  if (!Array.isArray(targetCell) || targetCell.length !== 3 ||
+      !targetCell.every(Number.isSafeInteger)) return false;
   const face = resolveInfinityScaleBoundaryFaceGeometry(spec, chunkSize);
   if (!face) return false;
 
   const source = rangeForChunk(spec.sourceChunk, chunkSize);
-  const [x, y, z] = targetCell;
+  const sourceScale = 2 ** spec.sourceLevel;
+  const coordinates = targetCell;
+  const aligned = (value: number, scale: number) => value % scale === 0;
 
-  // Execution-context callers can address the dependency from either side:
-  // the source chunk's outer cell (solver-side lookup) or the target face cell
-  // (simulation-side lookup). Accept only those two canonical face planes;
-  // never broaden the test to an interior cell or a corner-only adjacency.
+  // Source-side anchors use source LOD spacing; target-side anchors use target
+  // LOD spacing. A base coordinate inside a coarse cell must not alias a
+  // second transaction key for the same underlying hierarchical cell.
+  const belongsToFace = (
+    normalCoordinate: number,
+    sourceCoordinate: number,
+    tangentAxes: readonly [0 | 1 | 2, 0 | 1 | 2],
+    minU: number,
+    maxU: number,
+    minV: number,
+    maxV: number,
+  ): boolean => {
+    const onTargetSide = normalCoordinate === face.coordinate;
+    const onSourceSide = normalCoordinate === sourceCoordinate;
+    if (!onTargetSide && !onSourceSide) return false;
+    if (coordinates[tangentAxes[0]] < minU || coordinates[tangentAxes[0]] > maxU ||
+        coordinates[tangentAxes[1]] < minV || coordinates[tangentAxes[1]] > maxV) return false;
+    const scale = onTargetSide ? face.scale : sourceScale;
+    return aligned(coordinates[tangentAxes[0]], scale) &&
+      aligned(coordinates[tangentAxes[1]], scale);
+  };
+
   if (face.axis === 0) {
     const sourceCoordinate = source.maxX < face.coordinate ? source.maxX : source.minX;
-    return (x === sourceCoordinate || x === face.coordinate) &&
-      y >= face.minU && y <= face.maxU &&
-      z >= face.minV && z <= face.maxV;
+    return belongsToFace(coordinates[0], sourceCoordinate, [1, 2], face.minU, face.maxU, face.minV, face.maxV);
   }
   if (face.axis === 1) {
     const sourceCoordinate = source.maxY < face.coordinate ? source.maxY : source.minY;
-    return (y === sourceCoordinate || y === face.coordinate) &&
-      x >= face.minU && x <= face.maxU &&
-      z >= face.minV && z <= face.maxV;
+    return belongsToFace(coordinates[1], sourceCoordinate, [0, 2], face.minU, face.maxU, face.minV, face.maxV);
   }
   const sourceCoordinate = source.maxZ < face.coordinate ? source.maxZ : source.minZ;
-  return (z === sourceCoordinate || z === face.coordinate) &&
-    x >= face.minU && x <= face.maxU &&
-    y >= face.minV && y <= face.maxV;
+  return belongsToFace(coordinates[2], sourceCoordinate, [0, 1], face.minU, face.maxU, face.minV, face.maxV);
 }
 
 /** Backward-compatible alias; new solver code should use the explicit source-side name. */

@@ -33,6 +33,8 @@ export function validateInfinityScaleBoundaryGeometry(
   const face = resolveInfinityScaleBoundaryFaceGeometry(spec, chunkSize);
   if (!face) return null;
 
+  if (!Array.isArray(targetCell) || targetCell.length !== 3 ||
+      !targetCell.every(Number.isSafeInteger)) return null;
   const [x, y, z] = targetCell;
   const onFace =
     face.axis === 0
@@ -43,13 +45,20 @@ export function validateInfinityScaleBoundaryGeometry(
 
   if (!onFace) return null;
 
-  // The canonical face coordinate is on the target side. The source lies
-  // outside that face. Resolve direction from the target chunk bounds without
-  // maintaining an independent source/target adjacency algorithm.
+  // Coordinates on tangential axes denote actual target cells. Coarse cells
+  // cover multiple base coordinates; accepting an unaligned coordinate would
+  // create two distinct transaction keys for the same coarse storage cell.
   const targetLevel = pair.target.level;
   const targetBounds = getInfinityScaleChunkBounds(spec.targetChunk, chunkSize);
   const targetScale = 2 ** targetLevel;
   const targetMin = [targetBounds.minX, targetBounds.minY, targetBounds.minZ];
+  const coordinates = [x, y, z];
+  for (const tangentAxis of [0, 1, 2] as const) {
+    if (tangentAxis === face.axis) continue;
+    if ((coordinates[tangentAxis] - targetMin[tangentAxis]) % targetScale !== 0) {
+      return null;
+    }
+  }
   const axis = face.axis;
   const resolvedDirection: -1 | 1 = face.coordinate === targetMin[axis] ? -1 : 1;
 

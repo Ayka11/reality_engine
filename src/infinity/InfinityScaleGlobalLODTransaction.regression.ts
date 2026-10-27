@@ -252,6 +252,26 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
     throw new Error("Infinity Scale synchronization accepted an interior cell as a boundary target");
   }
 
+  let unalignedTargetRejected = false;
+  try {
+    guardedSync.stageTransfer({
+      sourceChunk: "0:2,0,0",
+      targetChunk: "1:0,0,0",
+      relation: "fine-to-coarse",
+      sourceLevel: 0,
+      targetLevel: 1,
+      refinementRatio: 2,
+      operation: "restriction",
+      readOperation: "prolongation",
+    }, [3, 1, 0], guardedSources);
+  } catch (error) {
+    unalignedTargetRejected = error instanceof Error &&
+      error.message.includes("canonical shared face");
+  }
+  if (!unalignedTargetRejected || guardedSync.getStagedUpdates().length !== 0) {
+    throw new Error("Infinity Scale synchronization accepted an unaligned coarse boundary target");
+  }
+
   let sparseTargetRejected = false;
   try {
     guardedSync.stageTransfer({
