@@ -354,6 +354,38 @@ assert.deepEqual(
   "a spoofed async step-boundary callback must not mutate authoritative state",
 );
 
+let boundEngineAsyncInvoked = false;
+const boundEngineAsyncMutation = (async () => {
+  boundEngineAsyncInvoked = true;
+  mutationBoundaryEngine.grid.buffer[mutationBoundaryIndex] = 456;
+  await Promise.resolve();
+  mutationBoundaryEngine.grid.buffer[mutationBoundaryIndex] = 789;
+}).bind(null);
+assert.throws(
+  () => mutationBoundaryEngine.mutateAuthoritativeState(boundEngineAsyncMutation),
+  /must remain synchronous/,
+);
+await Promise.resolve();
+assert.equal(boundEngineAsyncInvoked, false,
+  "bound async mutation callbacks must be rejected before invocation");
+assert.deepEqual(mutationBoundaryEngine.captureCoreRecoveryState(), committedExternalMutation,
+  "bound async mutation callbacks must not mutate authoritative state");
+
+let boundBoundaryAsyncInvoked = false;
+const boundBoundaryAsyncOperation = (async () => {
+  boundBoundaryAsyncInvoked = true;
+  await Promise.resolve();
+}).bind(null);
+await assert.rejects(
+  () => mutationBoundaryEngine.runAtStepBoundary(boundBoundaryAsyncOperation),
+  /must remain synchronous/,
+);
+await Promise.resolve();
+assert.equal(boundBoundaryAsyncInvoked, false,
+  "bound async step-boundary callbacks must be rejected before invocation");
+assert.deepEqual(mutationBoundaryEngine.captureCoreRecoveryState(), committedExternalMutation,
+  "bound async step-boundary callbacks must not mutate authoritative state");
+
 // Legacy publication paths (sculpt undo/redo, older edit adapters) must update
 // the chunk mirror, the back-buffer baseline, and GPU state as one sync boundary.
 const legacySyncEngine = new SimulationEngine(8, 8, 4);

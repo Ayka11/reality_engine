@@ -165,6 +165,9 @@ export class SimulationEngine {
     const operationSource = Function.prototype.toString.call(operation);
     const asyncSource = /^\s*async\b/.test(operationSource);
     const generatorSource = /^\s*(?:function\s*\*|\*\s*[\w$]*\s*\()/.test(operationSource);
+    // Bound functions stringify as native code, hiding whether the target is async.
+    // Fail closed for opaque wrappers to prevent async prefixes mutating state.
+    const nativeSource = /\{\s*\[native code\]\s*\}/.test(operationSource);
     if (operationKind === '[object AsyncFunction]' ||
         operationKind === '[object AsyncGeneratorFunction]' ||
         operationKind === '[object GeneratorFunction]' ||
@@ -172,7 +175,8 @@ export class SimulationEngine {
         operationConstructorName === 'AsyncGeneratorFunction' ||
         operationConstructorName === 'GeneratorFunction' ||
         asyncSource ||
-        generatorSource) {
+        generatorSource ||
+        nativeSource) {
       return Promise.reject(new TypeError('Step-boundary operation callback must remain synchronous'));
     }
 
@@ -371,6 +375,9 @@ export class SimulationEngine {
     const mutationSource = Function.prototype.toString.call(mutation);
     const asyncSource = /^\s*async\b/.test(mutationSource);
     const generatorSource = /^\s*(?:function\s*\*|\*\s*[\w$]*\s*\()/.test(mutationSource);
+    // Bound functions stringify as native code, hiding whether the target is async.
+    // Fail closed for opaque wrappers to prevent async prefixes mutating state.
+    const nativeSource = /\{\s*\[native code\]\s*\}/.test(mutationSource);
     if (mutationKind === '[object AsyncFunction]' ||
         mutationKind === '[object AsyncGeneratorFunction]' ||
         mutationKind === '[object GeneratorFunction]' ||
@@ -378,7 +385,8 @@ export class SimulationEngine {
         mutationConstructorName === 'AsyncGeneratorFunction' ||
         mutationConstructorName === 'GeneratorFunction' ||
         asyncSource ||
-        generatorSource) {
+        generatorSource ||
+        nativeSource) {
       throw new TypeError('Authoritative mutation callback must remain synchronous');
     }
 
