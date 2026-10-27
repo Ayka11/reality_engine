@@ -444,6 +444,31 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     assertEqual(out[F.DENSITY], 25, "fine-to-coarse face intensive density");
   }
 
+  // A boundary snapshot needs one child cell even at a large LOD gap.
+  // The volumetric prolongation path would allocate 2^30 child vectors here.
+  {
+    const state = new InfinityScaleLODState(1);
+    const coarseKey = key(10, 0);
+    const fineKey = key(0, 1024);
+    const source = cell(0);
+    source[F.ENERGY] = 64;
+    source[F.DENSITY] = 8;
+    state.ensureChunk(coarseKey, 10);
+    state.ensureChunk(fineKey, 0);
+    state.writeBaseCell(coarseKey, 10, 0, 0, 0, source);
+    const transfer = spec(coarseKey, fineKey, "coarse-to-fine", 10, 0);
+    const snapshot = InfinityScaleLODBoundarySnapshot.capture(state, [transfer], 109, 1);
+    const out = assertNotNull(
+      snapshot.read(transfer, [1024, 0, 0]),
+      "high-ratio coarse-to-fine single-cell snapshot",
+    );
+    const expectedEnergy = 64 / (2 ** 30) ** 3;
+    if (Math.abs(out[F.ENERGY] - expectedEnergy) > expectedEnergy * 1e-5) {
+      throw new Error("Infinity Scale high-ratio snapshot prolongation produced an invalid field share");
+    }
+    assertEqual(out[F.DENSITY], 8, "high-ratio snapshot intensive field");
+  }
+
   // Numerical conservation: fine -> coarse restriction preserves extensive
   // quantities as a sum and intensive quantities as a volume average.
   {

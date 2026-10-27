@@ -247,10 +247,16 @@ export class InfinityScaleLODBoundarySnapshot {
       return out;
     }
     if (spec.relation === "coarse-to-fine") {
-      const childCount = (2 ** (spec.sourceLevel - spec.targetLevel)) ** 3;
-      const children = Array.from({ length: childCount }, () => new Array<number>(CELL_FIELDS).fill(0));
-      InfinityScaleLODTransfer.prolongate(sources[0], children, spec.sourceLevel, spec.targetLevel);
-      out.set(children[0]);
+      // Snapshot reads resolve exactly one fine target cell. Do not build the
+      // entire ratio^3 volume of children for a single boundary sample.
+      const value = new Array<number>(CELL_FIELDS).fill(0);
+      InfinityScaleLODTransfer.prolongateBoundaryCell(
+        sources[0],
+        value,
+        spec.sourceLevel,
+        spec.targetLevel,
+      );
+      out.set(value);
       return out;
     }
     const restricted = new Array<number>(CELL_FIELDS).fill(0);
