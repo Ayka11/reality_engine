@@ -6,6 +6,10 @@ import {
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import { CELL_FIELDS } from "../core/CellState";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
+import {
+  advanceInfinityScaleGlobalFrame,
+  beginInfinityScaleGlobalFrame,
+} from "./InfinityScaleGlobalExecutionFrame";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
 import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
 
@@ -44,19 +48,10 @@ function makePlan(): InfinityScaleExecutionPlan {
 }
 
 function makeFrame(revision: number): InfinityScaleGlobalExecutionFrame {
-  return {
-    revision,
-    tickStart: revision - 1,
-    tickEnd: revision,
-    phase: "local-execution",
-    planRevision: 1,
-    simulationCellCount: 64,
-    boundaryReadCellCount: 64,
-    committed: false,
-    finalized: false,
-    ownershipFingerprint: "mixed-lod-multi-frame",
-    capabilityFingerprint: "mixed-lod-multi-frame",
-  };
+  return advanceInfinityScaleGlobalFrame(
+    beginInfinityScaleGlobalFrame(makePlan(), revision - 1, revision),
+    "local-execution",
+  );
 }
 
 export function runInfinityScaleMixedLODMultiFrameRegression(): void {
@@ -108,8 +103,12 @@ export function runInfinityScaleMixedLODMultiFrameRegression(): void {
       );
     }
 
-    frame.phase = "boundary-reconciliation";
-    commitInfinityScaleGlobalLODTransaction(transaction, frame);
+    const localCommittedFrame = advanceInfinityScaleGlobalFrame(frame, "local-commit");
+    const boundaryFrame = advanceInfinityScaleGlobalFrame(
+      localCommittedFrame,
+      "boundary-reconciliation",
+    );
+    commitInfinityScaleGlobalLODTransaction(transaction, boundaryFrame);
 
     const expectedStateRevision = stateRevisionBeforeFrame + 1;
     if (state.getRevision() !== expectedStateRevision) {
