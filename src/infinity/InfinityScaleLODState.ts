@@ -428,11 +428,15 @@ export class InfinityScaleLODState {
     // Only materialize a missing chunk after every input and coordinate check
     // has passed, so rejected writes cannot leave a placeholder behind.
     if (!state) {
-      state = this.ensureChunk(key, level) as InfinityScaleLODChunkState & { cells: Float32Array };
+      this.ensureChunk(key, level);
+      state = this.states.get(key);
     }
+    if (!state) throw new Error(`Failed to create Infinity Scale LOD chunk ${key}`);
 
     const offset = ((lz * this.chunkSize * this.chunkSize) +
       (ly * this.chunkSize) + lx) * CELL_FIELDS;
+    // Use the private backing record here; public chunk handles wrap cells in
+    // a proxy and belong only at API boundaries.
     state.cells.set(source, offset);
   }
 

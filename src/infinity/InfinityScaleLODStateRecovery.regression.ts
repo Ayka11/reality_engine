@@ -138,6 +138,16 @@ export function runInfinityScaleLODCellWriteValidationRegression(): void {
   if (!nonFiniteWriteRejected || state.getRevision() !== rangeRevision || JSON.stringify(state.keys()) !== rangeKeys) {
     throw new Error("Rejected non-finite base-cell write changed state or revision");
   }
+
+  const freshState = new InfinityScaleLODState(2);
+  const freshValues = new Array<number>(CELL_FIELDS).fill(0);
+  freshValues[0] = 7;
+  const freshRevision = freshState.getRevision();
+  freshState.writeBaseCell("0:1,0,0", 0, 2, 0, 0, freshValues);
+  const freshCell = freshState.readBaseCell("0:1,0,0", 0, 2, 0, 0);
+  if (!freshCell || freshCell[0] !== 7 || freshState.getRevision() <= freshRevision) {
+    throw new Error("Valid writeBaseCell did not atomically materialize a new chunk and publish its cell values");
+  }
 }
 
 export function runInfinityScaleLODChunkIdentityValidationRegression(): void {
