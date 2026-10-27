@@ -2377,12 +2377,13 @@ window.addEventListener('keydown', (e) => {
 
 function renderField3DImpl(){
   const entryMode=typeof currentRenderMode==='undefined'?'unknown':currentRenderMode;
+  window.getWorldField3DCanvasState=()=>window.__worldField3DCanvasState??null;
   window.__worldField3DTrace={phase:'renderer-enter',mode:entryMode,at:Date.now()};
-  window.getWorldField3DState=()=>({ready:false,reason:'renderer-entered',mode:entryMode,phase:'initializing'});
+  window.__worldField3DCanvasState={ready:false,reason:'renderer-entered',mode:entryMode,phase:'initializing'};
   const canvas=document.getElementById('c3dField');
   const mode=typeof currentRenderMode==='undefined'?'unknown':currentRenderMode;
-  if(!canvas){window.getWorldField3DState=()=>({ready:false,reason:'canvas-missing',mode});return false;}
-  if(mode!=='field3d'){window.getWorldField3DState=()=>({ready:false,reason:'mode-mismatch',mode});return false;}
+  if(!canvas){window.__worldField3DCanvasState={ready:false,reason:'canvas-missing',mode};return false;}
+  if(mode!=='field3d'){window.__worldField3DCanvasState={ready:false,reason:'mode-mismatch',mode};return false;}
   const rect=canvas.getBoundingClientRect();
   if(rect.width<2||rect.height<2){
     const retryCount=window.__worldField3DLayoutRetryCount||0;
@@ -2390,13 +2391,13 @@ function renderField3DImpl(){
       window.__worldField3DLayoutRetryCount=retryCount+1;
       requestAnimationFrame(()=>{if(currentRenderMode==='field3d')renderField3D();});
     }
-    window.getWorldField3DState=()=>({ready:false,reason:'zero-layout',mode,width:rect.width,height:rect.height});
+    window.__worldField3DCanvasState={ready:false,reason:'zero-layout',mode,width:rect.width,height:rect.height};
     return false;
   }
 
   const sampler=window.worldFieldViewWindow,getView=window.getWorldViewContract;
   if(typeof sampler!=='function'||typeof getView!=='function'){
-    window.getWorldField3DState=()=>({ready:false,reason:'sampler-unavailable',mode,renderedCells:0,sampleCount:0});
+    window.__worldField3DCanvasState={ready:false,reason:'sampler-unavailable',mode,renderedCells:0,sampleCount:0};
     return false;
   }
   const view=getView();
@@ -2445,12 +2446,11 @@ function renderField3DImpl(){
         reason:rendered?.reason
       };
       window.__worldField3DCanvasState=diagnosticState;
-      window.getWorldField3DState=()=>({...diagnosticState,view:window.getWorldViewContract?.()??diagnosticState.view});
       window.__worldField3DLayoutRetryCount=0;
       return diagnosticState.ready;
     }catch(error){
       const message=error instanceof Error?error.message:String(error);
-      window.getWorldField3DState=()=>({ready:false,reason:'webgl-volume-render-error',mode,message});
+      window.__worldField3DCanvasState={ready:false,reason:'webgl-volume-render-error',mode,message};
       console.error('[field3d] WebGL volume render failed',error);
       return false;
     }
@@ -2462,11 +2462,11 @@ function renderField3DImpl(){
   if(canvas.width!==targetW||canvas.height!==targetH){canvas.width=targetW;canvas.height=targetH;}
   let g=null;
   try{g=canvas.getContext('2d');}catch(error){
-    window.getWorldField3DState=()=>({ready:false,reason:'canvas-context-error',mode,message:error instanceof Error?error.message:String(error)});
+    window.__worldField3DCanvasState={ready:false,reason:'canvas-context-error',mode,message:error instanceof Error?error.message:String(error)};
     return false;
   }
   if(!g){
-    window.getWorldField3DState=()=>({ready:false,reason:'canvas-context-unavailable',mode,canvasWidth:canvas.width,canvasHeight:canvas.height});
+    window.__worldField3DCanvasState={ready:false,reason:'canvas-context-unavailable',mode,canvasWidth:canvas.width,canvasHeight:canvas.height};
     window.__worldField3DTrace={phase:'canvas-context-unavailable',mode,at:Date.now()};
     return false;
   }
@@ -2505,7 +2505,6 @@ function renderField3DImpl(){
   window.__worldField3DLayoutRetryCount=0;
   const diagnosticState={ready:renderedCells>0,renderedCells,sampleCount,activeCells,slices:slices.length,field:names[fieldIndexSafe],view,renderer:'canvas2d-isometric-preview',true3D:false,meshInstances:0,drawCalls:0,triangles:0};
   window.__worldField3DCanvasState=diagnosticState;
-  window.getWorldField3DState=()=>({...diagnosticState,view:window.getWorldViewContract?.()??diagnosticState.view});
   return renderedCells>0;
 }
 function renderField3D(){
@@ -2524,13 +2523,13 @@ function renderField3D(){
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : "";
-    window.getWorldField3DState = () => ({
+    window.__worldField3DCanvasState = {
       ready: false,
       reason: "runtime-error",
       mode: typeof currentRenderMode === "undefined" ? "unknown" : currentRenderMode,
       message,
       stack: String(stack || "").slice(0, 1200),
-    });
+    };
     console.error("[field3d] render failed", error);
     return false;
   }
@@ -2814,7 +2813,7 @@ function setLayer(l){
   if(window.setChunkLayer)window.setChunkLayer(layer<0?0:layer);
   drawGrid();
   if(currentRenderMode==='field3d')window.renderField3D?.();
-  window.__worldField3DCanvasState=window.getWorldField3DState?.() ?? window.__worldField3DCanvasState;
+  // The connector owns the public getWorldField3DState() contract; keep renderer diagnostics separate.
 }
 window.setLayer=setLayer;
 
