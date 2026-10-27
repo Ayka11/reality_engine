@@ -3,6 +3,7 @@ import { F } from '../core/CellState';
 import { WORLD } from '../core/WorldConstants';
 import { PhysicsParams } from '../laws/MetaLaw';
 import { PROC } from '../process/ProcessDef';
+import { MATERIAL_LIBRARY } from '../materials/MaterialDef';
 import { getMutableBuffer } from '../core/TrackedFloat32Array';
 
 function on(mask: number, proc: number) { return (mask & (1 << proc)) !== 0; }
@@ -110,6 +111,32 @@ export class FieldPhysics {
           front[base + F.ENTROPY] = Math.max(0, front[base + F.ENTROPY] - 0.0015 * dt * 60);
         }
       }
+      // Keep the CPU fallback's erosion contract aligned with GPUBackend and
+      // the sparse worker: material resistance and a meaningful flow threshold
+      // govern removal; the canonical PhysicsParams rate controls its magnitude.
+      if (on(mask, PROC.EROSION)) {
+        const flow =
+          Math.abs(back[base + F.FIELD_X]) +
+          Math.abs(back[base + F.FIELD_Y]) +
+          Math.abs(back[base + F.FIELD_Z]);
+        if (cD > 0.65 && flow > 8.0) {
+          const rawMaterialId = back[base + F.MATERIAL_ID];
+          const materialIndex = Number.isFinite(rawMaterialId)
+            ? Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1, Math.floor(rawMaterialId)))
+            : 0;
+          const material = MATERIAL_LIBRARY[materialIndex] ?? MATERIAL_LIBRARY[0];
+          const erodibility = 1 - (material?.erosionResistance ?? 0);
+          front[base + F.DENSITY] = Math.max(
+            0,
+            front[base + F.DENSITY] - p.erosionRate * erodibility * dt * 60,
+          );
+          front[base + F.INFORMATION] = Math.max(
+            0,
+            front[base + F.INFORMATION] - 0.4 * erodibility * dt,
+          );
+        }
+      }
+
     }
   }
 }
