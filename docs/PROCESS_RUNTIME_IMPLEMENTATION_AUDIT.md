@@ -24,7 +24,7 @@ of a complete or scientifically validated solver.
 | 5 | Bio potential | Uses field values and material `bioAffinity` | Uses field values and material `bioAffinity` | Computes from information, energy, density and entropy; no material-affinity term | Implemented with inconsistent material response |
 | 6 | Wave propagation | Spatial Laplacian on scalar wave field plus energy coupling | Updates phase/amplitude and energy; no spatial wave equation | Updates phase/amplitude; no spatial wave equation | Not equivalent across backends; not a calibrated wave solver |
 | 7 | Gravity | Density gradients modify the compact worker's 2D `FX/FY` vector | Changes density using `gravity_pot` | Changes density using `GRAVITY_POT` | Different modeled quantities across the worker and authoritative grid solvers |
-| 8 | Phase transition | Threshold rule using `p.phaseTransitionRate` | Threshold rules with hard-coded rates | Threshold rules with hard-coded rates | Phenomenological transitions; CPU/GPU ignore the canonical rate |
+| 8 | Phase transition | Threshold rule using `p.phaseTransitionRate` | Threshold rules use `p.phaseTransitionRate` | Threshold rules use `p.phaseTransitionRate` from the GPU parameter buffer | Rate parameter is now shared across CPU/GPU/worker; thresholds remain phenomenological and are not empirically calibrated |
 | 9 | Metabolism | Uses `p.metabolismRate` | Uses hard-coded `0.12` | Uses hard-coded `0.12` | Implemented, but parameter sensitivity differs across backends |
 | 10 | Signal propagation | Adds Laplacian-based transport into the information field using `p.signalPropagationRate` | Diffusion-like update of information using `infoGrowthRate` | Diffusion-like update of information using `infoGrowthRate` | Does not transport a distinct signal field; parameter mapping differs |
 | 11 | Crystallization | Uses `p.crystallizationRate` and material rates; can change eligible material IDs | Changes density/entropy with a hard-coded base rate; no material conversion | Changes density/entropy with a hard-coded base rate; no material conversion | Incomplete parity; CPU/GPU do not use the canonical rate or reproduce the worker's material change |
@@ -106,3 +106,8 @@ The CPU and GPU solvers now compute a six-neighbor pressure Laplacian and relax 
 ### Density-flow coefficient parity follow-up — 2026-10-27
 
 The CPU and GPU solvers now use the dedicated `PhysicsParams.densityDiffusion` coefficient instead of deriving mobility from `energyDiffusion`. The GPU parameter ABI forwards the coefficient explicitly. The CPU regression holds `energyDiffusion` nonzero while toggling `densityDiffusion` to zero and to its configured value, verifying that the intended parameter alone controls density transport. This verifies implementation sensitivity, not empirical calibration of the density model.
+
+
+### Phase-transition coefficient parity follow-up — 2026-10-27
+
+The CPU and GPU phase-transition rules now consume `PhysicsParams.phaseTransitionRate`, matching the sparse worker. The GPU parameter ABI grows from 23 to 24 floats (96 bytes), with `phaseTransitionRate` at index 23. A CPU regression covers the process mask, zero-rate behavior, boiling and freezing branches, and finite outputs. The static cross-backend contract verifies parameter forwarding and use; this establishes coefficient wiring, not the empirical validity of the phenomenological thresholds.
