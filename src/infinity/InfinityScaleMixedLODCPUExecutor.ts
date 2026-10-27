@@ -84,6 +84,11 @@ export class InfinityScaleMixedLODCPUExecutor {
       throw new Error("Infinity Scale CPU execution rejected: transaction belongs to a different LOD state");
     }
     this.context.assertCompatiblePlan(plan);
+    if (this.context.overlappingSimulationRangeCount > 0) {
+      throw new Error(
+        `Infinity Scale CPU execution rejected: overlapping simulation ownership ranges ${this.context.overlappingSimulationRangeCount}`,
+      );
+    }
     if (plan.mode === "advisory" || plan.selectiveCpuReady !== true) {
       throw new Error("Infinity Scale CPU execution requires a selective CPU-ready plan");
     }

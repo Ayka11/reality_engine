@@ -2,6 +2,7 @@ import { InfinityScaleMixedLODCPUExecutor } from "./InfinityScaleMixedLODCPUExec
 import {
   beginInfinityScaleGlobalLODTransaction,
   commitInfinityScaleGlobalLODTransaction,
+  rollbackInfinityScaleGlobalLODTransaction,
 } from "./InfinityScaleGlobalLODTransaction";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import { CELL_FIELDS } from "../core/CellState";
@@ -214,6 +215,81 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   if (snapshotFingerprint() !== beforeAdvisoryExecution) {
     throw new Error("Advisory CPU execution mutated LOD state despite readiness gates");
   }
+
+  // The adapter normally rejects overlapping writable ownership. Exercise the
+  // lower-level CPU executor directly so it cannot be used to write the same
+  // physical cells through two different LOD chunks.
+  const overlapState = new InfinityScaleLODState(4);
+  overlapState.ensureChunk("1:0,0,0", 1);
+  overlapState.ensureChunk("0:0,0,0", 0);
+  const overlapPlan: InfinityScaleExecutionPlan = {
+    ...plan,
+    revision: 203,
+    mode: "selective-cpu-ready",
+    chunks: [
+      { key: "1:0,0,0", lod: 1, amr: 2, distance: 0 },
+      { key: "0:0,0,0", lod: 0, amr: 1, distance: 1 },
+    ],
+    boundaryReadChunks: [],
+    boundaryReadCount: 0,
+    boundaryReadRelations: [],
+    simulationCellCount: 512,
+    boundaryReadCellCount: 0,
+  };
+  const overlapContext = new InfinityScaleChunkExecutionContext(
+    overlapPlan,
+    8,
+    8,
+    8,
+    4,
+  );
+  if (overlapContext.overlappingSimulationRangeCount === 0) {
+    throw new Error("Overlap regression fixture does not contain overlapping physical ownership");
+  }
+  const overlapFrame: InfinityScaleGlobalExecutionFrame = {
+    ...frame,
+    revision: overlapPlan.revision,
+    planRevision: overlapPlan.revision,
+    phase: "local-execution",
+  };
+  const overlapTransaction = beginInfinityScaleGlobalLODTransaction(
+    overlapFrame,
+    overlapPlan,
+    overlapState,
+  );
+  const overlapStateBefore = JSON.stringify(
+    overlapState.snapshot().chunks.map(chunk => ({
+      key: chunk.key,
+      level: chunk.level,
+      cells: Array.from(chunk.cells),
+    })).sort((a, b) => a.key.localeCompare(b.key)),
+  );
+  let overlapExecutionRejected = false;
+  try {
+    new InfinityScaleMixedLODCPUExecutor(overlapState, overlapContext).execute(
+      overlapFrame,
+      overlapPlan,
+      overlapTransaction,
+      cell => new Float32Array(cell.input),
+    );
+  } catch (error) {
+    overlapExecutionRejected = error instanceof Error &&
+      error.message.includes("overlapping simulation ownership");
+  }
+  if (!overlapExecutionRejected) {
+    throw new Error("CPU executor accepted overlapping simulation ownership");
+  }
+  const overlapStateAfter = JSON.stringify(
+    overlapState.snapshot().chunks.map(chunk => ({
+      key: chunk.key,
+      level: chunk.level,
+      cells: Array.from(chunk.cells),
+    })).sort((a, b) => a.key.localeCompare(b.key)),
+  );
+  if (overlapStateAfter !== overlapStateBefore) {
+    throw new Error("Rejected overlapping CPU execution mutated hierarchical state");
+  }
+  rollbackInfinityScaleGlobalLODTransaction(overlapTransaction);
 }
 
 
