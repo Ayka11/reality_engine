@@ -130,8 +130,17 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
   // Huge but safe integer ranges must be counted mathematically, not by
   // iterating their represented cells (this range contains one trillion cells).
   const hugeDimension = 1_000_000_000_000;
+  const hugePlan = {
+    ...validPlan,
+    boundaryReadChunks: ["0:0,0,0"],
+    boundaryReadRelations: [{
+      sourceChunk: "0:0,0,0",
+      targetChunk: "0:0,0,0",
+      relation: "same-level" as const,
+    }],
+  };
   const hugeContext = new InfinityScaleChunkExecutionContext(
-    validPlan,
+    hugePlan,
     hugeDimension,
     1,
     1,
