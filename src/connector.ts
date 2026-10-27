@@ -271,7 +271,10 @@ win['setWorldViewRenderMode'] = (mode: '3d' | 'field3d' | '2d' | 'hybrid' | 'met
 win['getWorldField3DState'] = () => {
   const getter = win['worldFieldState'] as (() => { field?: { version?: number; mutationCount?: number } } | undefined)
   const field = typeof getter === 'function' ? getter()?.field : null
-  const rendererState = (win['getWorldField3DCanvasState'] as (() => any) | undefined)?.()
+  const canvasStateGetter = win['getWorldField3DCanvasState'] as (() => any) | undefined
+  const rendererState = (typeof canvasStateGetter === 'function' ? canvasStateGetter() : null)
+    ?? win['__worldField3DCanvasState']
+    ?? null
   const mode = (win['currentRenderMode'] as string | undefined) ?? worldViewContract.snapshot().renderMode
   const canvas = document.getElementById('c3dField') as HTMLCanvasElement | null
   const rect = canvas?.getBoundingClientRect()
@@ -279,6 +282,7 @@ win['getWorldField3DState'] = () => {
     getComputedStyle(canvas).display !== 'none'
   const renderAvailable = typeof win['renderField3D'] === 'function'
   return {
+    ...rendererState,
     ready: !!rendererState?.ready && visible && mode === 'field3d',
     reason: !visible ? 'canvas-not-visible' : mode !== 'field3d' ? 'mode-mismatch' :
       !rendererState?.ready ? (rendererState?.reason ?? 'authoritative-field-renderer-pending') : undefined,
