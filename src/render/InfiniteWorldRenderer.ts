@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { InfiniteChunkManager } from '../infinity/ChunkManager'
 import { WorldGenerator, BIOME_ID, type WorldChunk } from '../infinity/WorldGenerator'
+import { worldViewContract } from '../infinity/WorldViewContract'
 import { buildWaterSurfaceMeshData } from '../infinity/WaterSurfaceMesh'
 import { worldToChunk, WORLD_CHUNK_SIZE, type ChunkCoord } from '../infinity/WorldCoordinate'
 import { WorldObjectManager } from '../infinity/ObjectManager'
@@ -290,6 +291,7 @@ export class InfiniteWorldRenderer {
     this.scene.add(this.terrainGroup)
     this.worldAssetRuntime = new WorldAssetRuntime(this.scene)
     this.generator = new WorldGenerator(seed)
+    worldViewContract.setSeed(seed)
     this.authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
     this.fieldSampler = new FieldSampler(this.generator, this.authoritativeField)
     this.legacySculptRuntimeAdapter = new LegacySculptRuntimeAdapter((mutation) => {
@@ -556,6 +558,7 @@ export class InfiniteWorldRenderer {
     this.clearSavedWorld()
 
     this.generator = new WorldGenerator(newSeed)
+    worldViewContract.setSeed(newSeed)
     this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
     this.authoritativeField.clear()
     this.authoritativeSculptTransactions.clear()

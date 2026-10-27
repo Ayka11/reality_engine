@@ -2310,6 +2310,17 @@ try {
       Number(afterCompose?.stats?.objects ?? 0) <= 0) {
     throw new Error("Compose World did not prove a new non-empty world generation: " + JSON.stringify(composeResult));
   }
+  const directReseed = await composePage.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (!world || typeof world.reseed !== "function") return { error: "Public reseed API unavailable" };
+    const probeSeed = "reality-engine-direct-reseed-contract-probe";
+    world.reseed(probeSeed);
+    return { worldSeed: world.generator?.seed ?? null, viewSeed: window.getWorldViewContract?.()?.seed ?? null };
+  });
+  if (directReseed.error || directReseed.worldSeed !== directReseed.viewSeed ||
+      directReseed.worldSeed !== "reality-engine-direct-reseed-contract-probe") {
+    throw new Error("Direct WorldGenerator reseed did not synchronize WorldViewContract: " + JSON.stringify(directReseed));
+  }
   await composePage.close();
 
   acceptancePassed = true;

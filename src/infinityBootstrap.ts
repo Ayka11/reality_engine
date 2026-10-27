@@ -24,7 +24,6 @@ export function bootstrapInfiniteWorld() {
   if (!canvas) return null
   const seed = (window as any).worldSeed || 'reality-seed-1'
   const world = new InfiniteWorldRenderer(canvas, seed)
-  worldViewContract.setSeed(seed)
   // Monotonic proof that the Infinite World generation transaction completed.
   let worldGenerationRevision = 0
   // The scientific field canvas has its own WebGL scene. It consumes the same
@@ -656,7 +655,6 @@ export function bootstrapInfiniteWorld() {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
     world.reseed(newSeed)
-    worldViewContract.setSeed(newSeed)
 
     const x = 16
     const z = 16
