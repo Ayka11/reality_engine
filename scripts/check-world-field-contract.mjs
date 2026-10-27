@@ -163,6 +163,20 @@ const saved = persistence.saveWorkerChunks(
   { center: {x:0,y:0,z:0}, sliceY:0, seed:"seed" },
 );
 assert.equal(persistence.validate(saved), true);
+saved.values[0] = 999;
+saved.workerChunks[0].data[0] = 999;
+assert.equal(persistence.loadValid({cx:0,cy:0,cz:0})?.values[0], 0,
+  "mutating a returned worker snapshot must not mutate the cache");
+assert.equal(persistence.loadValid({cx:0,cy:0,cz:0})?.workerChunks?.[0]?.data[0], 1,
+  "nested worker data must be isolated from callers");
+const loaded = persistence.load({cx:0,cy:0,cz:0});
+loaded.values[0] = 888;
+assert.equal(persistence.loadValid({cx:0,cy:0,cz:0})?.values[0], 0,
+  "mutating a loaded snapshot must not mutate the cache");
+const legacy = persistence.save({cx:1,cy:0,cz:0}, "seed", [3, 4]);
+legacy.values[0] = 100;
+assert.deepEqual(persistence.load({cx:1,cy:0,cz:0})?.values, [3, 4],
+  "mutating a returned legacy snapshot must not mutate the cache");
 assert.throws(() => persistence.save({cx:Number.MAX_SAFE_INTEGER + 1,cy:0,cz:0}, "seed", [1]), RangeError);
 assert.equal(persistence.validate({ ...saved, coord: {cx:Number.MAX_SAFE_INTEGER + 1,cy:0,cz:0}, key:"9007199254740992,0,0" }), false,
   "snapshots with unsafe coordinates must be rejected");

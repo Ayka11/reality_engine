@@ -22,6 +22,19 @@ function chunkCoordKey(coord: WorldFieldChunkCoord): string {
   return `${coord.cx},${coord.cy},${coord.cz}`
 }
 
+function cloneSnapshot(snapshot: WorldFieldChunkSnapshot): WorldFieldChunkSnapshot {
+  return {
+    ...snapshot,
+    coord: { ...snapshot.coord },
+    values: [...snapshot.values],
+    workerChunks: snapshot.workerChunks?.map((chunk) => ({ key: chunk.key, data: [...chunk.data] })),
+    workerView: snapshot.workerView
+      ? { ...snapshot.workerView, center: { ...snapshot.workerView.center } }
+      : undefined,
+    fieldLayout: snapshot.fieldLayout ? { ...snapshot.fieldLayout } : undefined,
+  }
+}
+
 function checksum(values: number[]): string {
   let h = 2166136261 >>> 0
   for (const value of values) {
@@ -101,7 +114,7 @@ export class WorldFieldChunkPersistence {
     await this.writeQueue
     const key = chunkCoordKey(coord)
     const cached = this.snapshots.get(key)
-    if (cached && this.validate(cached)) return cached
+    if (cached && this.validate(cached)) return cloneSnapshot(cached)
     const db = await this.openDatabase()
     if (!db) return null
     const snapshot = await new Promise<WorldFieldChunkSnapshot | null>((resolve) => {
@@ -118,8 +131,9 @@ export class WorldFieldChunkPersistence {
       }
     })
     if (snapshot && this.validate(snapshot)) {
-      this.snapshots.set(key, snapshot)
-      return snapshot
+      const isolated = cloneSnapshot(snapshot)
+      this.snapshots.set(key, isolated)
+      return cloneSnapshot(isolated)
     }
     return null
   }
@@ -137,9 +151,10 @@ export class WorldFieldChunkPersistence {
       workerView: { center: { ...workerView.center }, sliceY: workerView.sliceY, seed: workerView.seed },
       checksum: checksum(flat), savedAt: Date.now(),
     }
-    this.snapshots.set(snapshot.key, snapshot)
-    this.enqueueWrite(store => store.put(snapshot))
-    return snapshot
+    const isolated = cloneSnapshot(snapshot)
+    this.snapshots.set(snapshot.key, isolated)
+    this.enqueueWrite(store => store.put(cloneSnapshot(isolated)))
+    return cloneSnapshot(isolated)
   }
 
   save(coord: WorldFieldChunkCoord, seed: string, values: number[], providerVersion = 1, fieldLayout?: { fieldsPerCell: number; cellCount: number }): WorldFieldChunkSnapshot {
@@ -154,13 +169,15 @@ export class WorldFieldChunkPersistence {
       checksum: checksum(values),
       savedAt: Date.now(),
     }
-    this.snapshots.set(snapshot.key, snapshot)
-    this.enqueueWrite(store => store.put(snapshot))
-    return snapshot
+    const isolated = cloneSnapshot(snapshot)
+    this.snapshots.set(snapshot.key, isolated)
+    this.enqueueWrite(store => store.put(cloneSnapshot(isolated)))
+    return cloneSnapshot(isolated)
   }
 
   load(coord: WorldFieldChunkCoord): WorldFieldChunkSnapshot | null {
-    return this.snapshots.get(chunkCoordKey(coord)) ?? null
+    const snapshot = this.snapshots.get(chunkCoordKey(coord))
+    return snapshot ? cloneSnapshot(snapshot) : null
   }
 
   loadValid(coord: WorldFieldChunkCoord): WorldFieldChunkSnapshot | null {
