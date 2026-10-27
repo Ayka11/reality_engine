@@ -126,4 +126,44 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
       );
     }
   }
+
+  // Huge but safe integer ranges must be counted mathematically, not by
+  // iterating their represented cells (this range contains one trillion cells).
+  const hugeDimension = 1_000_000_000_000;
+  const hugeContext = new InfinityScaleChunkExecutionContext(
+    validPlan,
+    hugeDimension,
+    1,
+    1,
+    hugeDimension,
+  );
+  if (hugeContext.simulationCellCount !== hugeDimension) {
+    throw new Error(
+      `Chunk context counted huge range incorrectly: expected ${hugeDimension}, received ${hugeContext.simulationCellCount}`,
+    );
+  }
+  if (hugeContext.readCellCount !== 0) {
+    throw new Error("Chunk context failed to deduplicate a read range fully covered by simulation ownership");
+  }
+
+  // Overlapping ranges must count the union only once.
+  const overlappingPlan = {
+    ...validPlan,
+    chunks: [
+      { key: "1:0,0,0", lod: 1, amr: 2, distance: 0 },
+      { key: "0:1,0,0", lod: 0, amr: 1, distance: 1 },
+    ],
+    boundaryReadChunks: [],
+    boundaryReadRelations: [],
+  };
+  const overlappingContext = new InfinityScaleChunkExecutionContext(
+    overlappingPlan,
+    8,
+    4,
+    4,
+    4,
+  );
+  if (overlappingContext.simulationCellCount !== 8 * 4 * 4) {
+    throw new Error("Chunk context counted overlapping simulation ranges more than once");
+  }
 }
