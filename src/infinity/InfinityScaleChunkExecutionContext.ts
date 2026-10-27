@@ -1,5 +1,8 @@
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
-import { isInfinityScaleSourceBoundaryCell } from "./InfinityScaleLODBoundaryCellMapper";
+import {
+  isInfinityScaleSourceBoundaryCell,
+  resolveInfinityScaleBoundaryFaceGeometry,
+} from "./InfinityScaleLODBoundaryCellMapper";
 import { getInfinityScaleChunkBounds, parseInfinityScaleChunkKey, validateInfinityScaleChunkPair } from "./InfinityScaleChunkKey";
 
 export interface ExecutionCellRange {
@@ -181,7 +184,7 @@ export class InfinityScaleChunkExecutionContext {
       const sourceLevel = pair.source.level;
       const targetLevel = pair.target.level;
       const refinementRatio = 2 ** Math.abs(sourceLevel - targetLevel);
-      return {
+      const spec: InfinityScaleBoundaryTransferSpec = {
         sourceChunk: relation.sourceChunk,
         targetChunk: relation.targetChunk,
         relation: relation.relation,
@@ -201,6 +204,16 @@ export class InfinityScaleChunkExecutionContext {
               ? "restriction"
               : "prolongation",
       };
+
+      // A valid LOD-level relation is not enough: the chunks must really share
+      // a physical face. Otherwise the executor could silently stage zero cells
+      // and still report a transaction as ready to commit.
+      if (!resolveInfinityScaleBoundaryFaceGeometry(spec, this.chunkSize)) {
+        throw new Error(
+          `Infinity Scale boundary relation does not share a face: ${relation.sourceChunk} -> ${relation.targetChunk}`,
+        );
+      }
+      return spec;
     });
   }
 

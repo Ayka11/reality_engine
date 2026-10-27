@@ -72,6 +72,10 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
     makePlan("00:0,0,0", "0:1,0,0", "same-level", 0, 0),
     makePlan("0:0,0,0", "1:0,0,0", "same-level", 0, 1),
     makePlan("0:0,0,0", "1:0,0,0", "coarse-to-fine", 0, 1),
+    // Relations must describe a physical face, not merely compatible LODs.
+    makePlan("0:0,0,0", "0:2,0,0", "same-level", 0, 0),
+    makePlan("0:0,0,0", "0:1,1,0", "same-level", 0, 0),
+    makePlan("0:0,0,0", "1:5,0,0", "fine-to-coarse", 0, 1),
   ];
   for (const [index, invalidPlan] of malformedPlans.entries()) {
     let rejected = false;
