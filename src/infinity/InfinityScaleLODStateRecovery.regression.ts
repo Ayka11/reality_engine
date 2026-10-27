@@ -39,6 +39,90 @@ export function runInfinityScaleLODStateRecoveryRegression(): void {
 
   runInfinityScaleLODStateInvalidSnapshotRegression();
   runInfinityScaleLODChunkIdentityValidationRegression();
+  runInfinityScaleLODCellWriteValidationRegression();
+}
+
+export function runInfinityScaleLODCellWriteValidationRegression(): void {
+  const state = new InfinityScaleLODState(2);
+  const chunk = state.ensureChunk("0:0,0,0", 0);
+  chunk.cells[0] = 5;
+
+  const assertRejectedWithoutMutation = (label: string, operation: () => void): void => {
+    const beforeRevision = state.getRevision();
+    const beforeKeys = JSON.stringify(state.keys());
+    const before = state.snapshot().chunks.find(candidate => candidate.key === "0:0,0,0")!.cells;
+    let rejected = false;
+    try {
+      operation();
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) throw new Error(`LOD state accepted invalid cell mutation: ${label}`);
+    if (state.getRevision() !== beforeRevision || JSON.stringify(state.keys()) !== beforeKeys) {
+      throw new Error(`Rejected LOD cell mutation changed topology/revision: ${label}`);
+    }
+    const after = state.snapshot().chunks.find(candidate => candidate.key === "0:0,0,0")!.cells;
+    for (let index = 0; index < before.length; index++) {
+      if (after[index] !== before[index]) {
+        throw new Error(`Rejected LOD cell mutation partially changed data at field ${index}: ${label}`);
+      }
+    }
+  };
+
+  assertRejectedWithoutMutation("indexed NaN", () => { chunk.cells[0] = Number.NaN; });
+  assertRejectedWithoutMutation("indexed Infinity", () => { chunk.cells[0] = Number.POSITIVE_INFINITY; });
+  assertRejectedWithoutMutation("indexed Float32 overflow", () => { chunk.cells[0] = 1e100; });
+  assertRejectedWithoutMutation("defineProperty Infinity", () => {
+    Object.defineProperty(chunk.cells, "0", { value: Number.NEGATIVE_INFINITY });
+  });
+  assertRejectedWithoutMutation("fill NaN", () => { chunk.cells.fill(Number.NaN); });
+  assertRejectedWithoutMutation("set with late NaN", () => {
+    const values = new Array<number>(CELL_FIELDS).fill(12);
+    values[CELL_FIELDS - 1] = Number.NaN;
+    chunk.cells.set(values);
+  });
+
+  const nonFiniteSource = new Array<number>(CELL_FIELDS).fill(4);
+  nonFiniteSource[5] = Number.POSITIVE_INFINITY;
+  assertRejectedWithoutMutation("writeBaseCell with Infinity", () => {
+    state.writeBaseCell("0:0,0,0", 0, 0, 0, 0, nonFiniteSource);
+  });
+
+  const missingKey = "0:1,0,0";
+  const missingRevision = state.getRevision();
+  const missingKeys = JSON.stringify(state.keys());
+  let missingRejected = false;
+  try {
+    state.writeBaseCellForTransaction(missingRevision, missingKey, 0, 2, 0, 0, new Array<number>(CELL_FIELDS).fill(1));
+  } catch {
+    missingRejected = true;
+  }
+  if (!missingRejected || state.getRevision() !== missingRevision || JSON.stringify(state.keys()) !== missingKeys) {
+    throw new Error("Transaction-owned LOD write created a missing target chunk or changed revision");
+  }
+
+  const outOfRangeKey = "0:4,0,0";
+  const rangeRevision = state.getRevision();
+  const rangeKeys = JSON.stringify(state.keys());
+  let rangeRejected = false;
+  try {
+    state.writeBaseCell(outOfRangeKey, 0, 999, 0, 0, new Array<number>(CELL_FIELDS).fill(1));
+  } catch {
+    rangeRejected = true;
+  }
+  if (!rangeRejected || state.getRevision() !== rangeRevision || JSON.stringify(state.keys()) !== rangeKeys) {
+    throw new Error("Rejected out-of-range LOD cell write left a placeholder chunk behind");
+  }
+
+  let nonFiniteWriteRejected = false;
+  try {
+    state.writeBaseCell("0:0,0,0", 0, 0, 0, 0, nonFiniteSource);
+  } catch {
+    nonFiniteWriteRejected = true;
+  }
+  if (!nonFiniteWriteRejected || state.getRevision() !== rangeRevision || JSON.stringify(state.keys()) !== rangeKeys) {
+    throw new Error("Rejected non-finite base-cell write changed state or revision");
+  }
 }
 
 export function runInfinityScaleLODChunkIdentityValidationRegression(): void {

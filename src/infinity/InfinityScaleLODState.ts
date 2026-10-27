@@ -199,12 +199,37 @@ export class InfinityScaleLODState {
         if (property === "valueOf") return () => proxy;
         const value = Reflect.get(target, property, target);
         if (typeof value !== "function") return value;
-        if (property === "set" || property === "fill" || property === "copyWithin" ||
-            property === "reverse" || property === "sort") {
+        if (property === "set") {
+          return (source: ArrayLike<number>, offset?: number) => {
+            assertFiniteFloat32ArrayLike(source, undefined, "LOD chunk cells.set");
+            try {
+              return Reflect.apply(value, target, [source, offset]);
+            } finally {
+              // The native operation may have partially written before throwing;
+              // invalidate any transaction that captured the prior contents.
+              owner.revision += 1;
+            }
+          };
+        }
+        if (property === "fill") {
+          return (fillValue: number, start?: number, end?: number) => {
+            assertFiniteFloat32Value(fillValue, "LOD chunk cells.fill");
+            try {
+              return Reflect.apply(value, target, [fillValue, start, end]);
+            } finally {
+              owner.revision += 1;
+            }
+          };
+        }
+        if (property === "copyWithin" || property === "reverse" || property === "sort") {
           return (...args: unknown[]) => {
-            const result = Reflect.apply(value, target, args);
-            owner.revision += 1;
-            return result === target ? proxy : result;
+            try {
+              const result = Reflect.apply(value, target, args);
+              return result === target ? proxy : result;
+            } finally {
+              // sort callbacks may throw after changing part of the target.
+              owner.revision += 1;
+            }
           };
         }
         // Typed-array callback methods pass their receiver as a callback
@@ -233,17 +258,19 @@ export class InfinityScaleLODState {
         return value.bind(target);
       },
       set(target, property, value) {
+        const isIndex = typeof property === "string" && /^(0|[1-9]\d*)$/.test(property);
+        if (isIndex) assertFiniteFloat32Value(value, "LOD chunk indexed write");
         const ok = Reflect.set(target, property, value, target);
-        if (ok && (typeof property === "string" && /^(0|[1-9]\d*)$/.test(property))) {
-          owner.revision += 1;
-        }
+        if (ok && isIndex) owner.revision += 1;
         return ok;
       },
       defineProperty(target, property, descriptor) {
-        const ok = Reflect.defineProperty(target, property, descriptor);
-        if (ok && (typeof property === "string" && /^(0|[1-9]\d*)$/.test(property))) {
-          owner.revision += 1;
+        const isIndex = typeof property === "string" && /^(0|[1-9]\d*)$/.test(property);
+        if (isIndex && "value" in descriptor) {
+          assertFiniteFloat32Value(descriptor.value, "LOD chunk indexed defineProperty");
         }
+        const ok = Reflect.defineProperty(target, property, descriptor);
+        if (ok && isIndex) owner.revision += 1;
         return ok;
       },
     });
@@ -350,6 +377,11 @@ export class InfinityScaleLODState {
     source: ArrayLike<number>,
   ): void {
     this.assertRevision(expectedRevision);
+    const state = this.states.get(key);
+    if (!state) throw new Error(`LOD transaction target chunk is missing: ${key}`);
+    if (state.level !== level) {
+      throw new Error(`LOD transaction target level mismatch for ${key}: expected ${state.level}, received ${level}`);
+    }
     this.writeBaseCellUnchecked(key, level, baseX, baseY, baseZ, source);
   }
 
@@ -361,20 +393,16 @@ export class InfinityScaleLODState {
     baseZ: number,
     source: ArrayLike<number>,
   ): void {
-    if (source.length !== CELL_FIELDS) {
-      throw new Error(`Infinity Scale LOD cell requires ${CELL_FIELDS} fields`);
+    assertFiniteFloat32ArrayLike(source, CELL_FIELDS, "Infinity Scale LOD cell write");
+    if (!Number.isInteger(level) || level < 0 || level > 30) {
+      throw new Error(`Invalid Infinity Scale LOD level: ${level}`);
     }
-
-    let state = this.states.get(key);
-    if (!state) {
-      this.ensureChunk(key, level);
-      state = this.states.get(key);
+    if (![baseX, baseY, baseZ].every(Number.isSafeInteger)) {
+      throw new Error("Infinity Scale LOD base coordinates must be safe integers");
     }
-    if (!state) throw new Error(`Failed to create Infinity Scale LOD chunk ${key}`);
-    if (state.level !== level) throw new Error(`Infinity Scale LOD chunk level mismatch for ${key}`);
     const [keyLevel, cx, cy, cz] = parseChunkKey(key);
-    if (keyLevel !== level) throw new Error(`Infinity Scale LOD chunk key level mismatch for ${key}`);
-    const scale = state.scale;
+    if (keyLevel !== level) throw new Error(`Infinity Scale LOD chunk key/level mismatch for ${key}`);
+    const scale = 2 ** level;
 
     const originX = cx * this.chunkSize * scale;
     const originY = cy * this.chunkSize * scale;
@@ -390,6 +418,16 @@ export class InfinityScaleLODState {
       lz < 0 || lz >= this.chunkSize
     ) {
       throw new Error(`Base coordinate is outside LOD chunk ${key}`);
+    }
+
+    let state = this.states.get(key);
+    if (state && state.level !== level) {
+      throw new Error(`Infinity Scale LOD chunk level mismatch for ${key}`);
+    }
+    // Only materialize a missing chunk after every input and coordinate check
+    // has passed, so rejected writes cannot leave a placeholder behind.
+    if (!state) {
+      state = this.ensureChunk(key, level) as InfinityScaleLODChunkState & { cells: Float32Array };
     }
 
     const offset = ((lz * this.chunkSize * this.chunkSize) +
@@ -429,6 +467,28 @@ export class InfinityScaleLODState {
       sourceLevel,
       targetLevel,
     );
+  }
+}
+
+function assertFiniteFloat32Value(value: unknown, context: string): asserts value is number {
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isFinite(Math.fround(value))) {
+    throw new Error(`${context} requires a finite Float32 value`);
+  }
+}
+
+function assertFiniteFloat32ArrayLike(
+  source: ArrayLike<number>,
+  expectedLength: number | undefined,
+  context: string,
+): void {
+  if (!source || !Number.isSafeInteger(source.length) || source.length < 0) {
+    throw new Error(`${context} requires a valid array-like source`);
+  }
+  if (expectedLength !== undefined && source.length !== expectedLength) {
+    throw new Error(`${context} requires exactly ${expectedLength} fields; received ${source.length}`);
+  }
+  for (let index = 0; index < source.length; index++) {
+    assertFiniteFloat32Value(source[index], `${context} at field ${index}`);
   }
 }
 
