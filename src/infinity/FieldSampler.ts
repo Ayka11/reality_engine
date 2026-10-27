@@ -64,7 +64,12 @@ export class FieldSampler {
   }
 
   sample(x: number, y: number, z: number): ScientificFieldSample {
-    return this.provider.sample(x, y, z)
+    // The registry is public for runtime tooling; honor its active selection even
+    // when a provider is activated or removed through that registry directly.
+    const activeProvider = this.registry.getActive()
+    if (!activeProvider) throw new Error('No active scientific field provider')
+    this.provider = activeProvider
+    return activeProvider.sample(x, y, z)
   }
 
   sampleWorld(x: number, y?: number, z?: number): WorldContextSample {

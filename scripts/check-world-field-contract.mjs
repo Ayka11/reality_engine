@@ -88,6 +88,10 @@ const profileCompiled = ts.transpileModule(profileJs, { compilerOptions: { modul
 const profileUrl = `data:text/javascript;base64,${Buffer.from(profileCompiled).toString("base64")}`;
 
 const fieldSamplerSource = await readFile(new URL("src/infinity/FieldSampler.ts", root), "utf8");
+assert.ok(fieldSamplerSource.includes("const activeProvider = this.registry.getActive()"), "sample must follow the registry active provider");
+assert.ok(fieldSamplerSource.includes("No active scientific field provider"), "sample must fail closed when the registry has no active provider");
+assert.ok(fieldSamplerSource.includes("return activeProvider.sample(x, y, z)"), "sample must use the active registry provider");
+
 assert.match(fieldSamplerSource, /setGenerator\(generator: WorldGenerator\)[\s\S]*?this\.registry\.register\(provider, true\)/,
   "setGenerator must update the active provider registry as well as direct sampling");
 
