@@ -1,15 +1,18 @@
 import { VoxelGrid } from '../core/VoxelGrid';
 import { getMutableBuffer } from '../core/TrackedFloat32Array';
 import { CELL_FIELDS, F } from '../core/CellState';
+import { PROC, defaultProcessMask } from '../process/ProcessDef';
 
-// Information physics treats the INFORMATION field as a physical quantity with:
-// - Coherence: information clusters resist entropy when signals align
-// - Decay: information degrades toward max-entropy equilibrium
-// - Memory (MEM_FIELD): long-lived imprint of peak information states
-// - Resonance: neighboring cells with similar info amplify each other
+function on(mask: number, proc: number) { return (mask & (1 << proc)) !== 0; }
 
+// Information physics treats INFORMATION as a process-governed quantity.
+// It must not mutate information, memory, entropy, or energy when that process
+// is disabled; the caller supplies the same canonical process mask as the
+// finite CPU/GPU solvers.
 export class InfoPhysics {
-  tick(grid: VoxelGrid, dt: number): void {
+  tick(grid: VoxelGrid, dt: number, mask: number = defaultProcessMask()): void {
+    if (!on(mask, PROC.INFORMATION)) return;
+
     const { W, H, D } = grid;
     const buf = getMutableBuffer(grid);
     const WH = W * H;
@@ -29,28 +32,26 @@ export class InfoPhysics {
 
       if (info < 0.5 && mem < 0.001) continue;
 
-      // ── Information decay toward entropy-driven equilibrium ───────────────
+      // Information decay toward entropy-driven equilibrium.
       const decayRate = 0.004 * entropy * dtN;
       buf[base + F.INFORMATION] = Math.max(0, info - decayRate * info);
 
-      // ── Coherence: signal boosts information stability ────────────────────
-      // When signal is present, information decays slower and amplifies
+      // Coherence: a present signal boosts information stability.
       if (signal > 5) {
         const coherence = Math.min(1, signal / 100);
         buf[base + F.INFORMATION] = Math.min(999,
           buf[base + F.INFORMATION] + coherence * 0.8 * dtN);
       }
 
-      // ── Memory imprint: when info peaks, leave a trace in MEM_FIELD ──────
+      // Memory imprint: when information peaks, leave a trace in MEM_FIELD.
       if (info > 200) {
         const imprint = (info / 999) * 0.02 * dtN;
         buf[base + F.MEM_FIELD] = Math.min(1, mem + imprint);
       } else {
-        // Memory fades slowly
         buf[base + F.MEM_FIELD] = Math.max(0, mem - 0.001 * dtN);
       }
 
-      // ── Resonance: check neighbors for similar info levels ────────────────
+      // Resonance: nearby information clusters amplify each other.
       let resonanceSum = 0, resonanceCount = 0;
       const neighbors = [
         x > 0   ? (i-1)   : -1,
@@ -70,14 +71,12 @@ export class InfoPhysics {
       }
 
       if (resonanceCount >= 3) {
-        // Resonance: information cluster amplifies itself
         const boost = (resonanceSum / resonanceCount / 999) * 1.5 * dtN;
         buf[base + F.INFORMATION] = Math.min(999, buf[base + F.INFORMATION] + boost);
-        // Also slightly suppress entropy in resonating cells
         buf[base + F.ENTROPY] = Math.max(0, entropy - 0.001 * dtN);
       }
 
-      // ── Information → energy pathway: very high info radiates energy ──────
+      // High information can radiate energy only as part of enabled information dynamics.
       if (info > 700) {
         buf[base + F.ENERGY] = Math.min(9999, energy + (info - 700) / 999 * 2 * dtN);
         buf[base + F.INFORMATION] = Math.max(0, buf[base + F.INFORMATION] - 0.5 * dtN);

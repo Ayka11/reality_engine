@@ -64,6 +64,7 @@ jobs:
       - run: npm run test:preset-field
       - run: npm run test:construction
       - run: npm run test:law-physics
+      - run: npm run test:info-physics-process-mask
       - run: npm run test:chunk-worker-physics
       - run: npm run test:chunk-grid-prune
       - run: npm run test:chunk-worker-physics-runtime

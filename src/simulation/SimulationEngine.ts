@@ -275,7 +275,7 @@ export class SimulationEngine {
           this.chemLayer.tick(this.grid, clampedDt);
           this.entityLayer.tick(this.grid, clampedDt);
           this.temporalLayer.tick(this.grid, clampedDt);
-          this.infoPhysics.tick(this.grid, clampedDt);
+          this.infoPhysics.tick(this.grid, clampedDt, this.laws.activeProcessMask);
           this.agents.tick(this.grid, clampedDt);
         }
       } else {
@@ -287,7 +287,7 @@ export class SimulationEngine {
           this.chemLayer.tick(this.grid, clampedDt);
           this.entityLayer.tick(this.grid, clampedDt);
           this.temporalLayer.tick(this.grid, clampedDt);
-          this.infoPhysics.tick(this.grid, clampedDt);
+          this.infoPhysics.tick(this.grid, clampedDt, this.laws.activeProcessMask);
           this.agents.tick(this.grid, clampedDt);
         }
       }
@@ -479,7 +479,7 @@ export class SimulationEngine {
         this.chemLayer.tick(this.grid, dt);
         this.entityLayer.tick(this.grid, dt);
         this.temporalLayer.tick(this.grid, dt);
-        this.infoPhysics.tick(this.grid, dt);
+        this.infoPhysics.tick(this.grid, dt, this.laws.activeProcessMask)
         this.agents.tick(this.grid, dt);
         this.laws.tick(this._worldMetrics());
         this._tick++;
