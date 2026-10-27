@@ -195,7 +195,7 @@ export class InfinityScaleLODState {
         if (typeof value !== "function") return value;
         if (property === "set") {
           return (source: ArrayLike<number>, offset?: number) => {
-            const safeSource = copyFiniteFloat32ArrayLike(source, undefined, "LOD chunk cells.set");
+            const safeSource = copyFiniteFloat32ArrayLike(source, undefined, "LOD chunk cells.set", target.length);
             try {
               return Reflect.apply(value, target, [safeSource, offset]);
             } finally {
@@ -476,19 +476,21 @@ function copyFiniteFloat32ArrayLike(
   source: ArrayLike<number>,
   expectedLength: number | undefined,
   context: string,
+  maxLength?: number,
 ): Float32Array {
-  if (!source || !Number.isSafeInteger(source.length) || source.length < 0 || source.length > 0xffff_ffff) {
-    throw new Error(`${context} requires a valid array-like source`);
+  if (!source) throw new Error(`${context} requires a valid array-like source`);
+  const length = source.length;
+  if (!Number.isSafeInteger(length) || length < 0 || length > 0xffff_ffff ||
+      (maxLength !== undefined && length > maxLength)) {
+    throw new Error(`${context} requires a valid array-like source length`);
   }
-  if (expectedLength !== undefined && source.length !== expectedLength) {
-    throw new Error(`${context} requires exactly ${expectedLength} fields; received ${source.length}`);
+  if (expectedLength !== undefined && length !== expectedLength) {
+    throw new Error(`${context} requires exactly ${expectedLength} fields; received ${length}`);
   }
 
-  // Read each source element exactly once. Validation followed by a second
-  // native TypedArray#set read would let accessor-backed sources change values
-  // between validation and commit.
-  const snapshot = new Float32Array(source.length);
-  for (let index = 0; index < source.length; index++) {
+  // Capture length and every element exactly once before committing writes.
+  const snapshot = new Float32Array(length);
+  for (let index = 0; index < length; index++) {
     const value = source[index];
     assertFiniteFloat32Value(value, `${context} at field ${index}`);
     snapshot[index] = value;
