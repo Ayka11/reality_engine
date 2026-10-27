@@ -38,6 +38,11 @@ assert.throws(() => new InfinityScaleV2({ amrLevels: 4 }), RangeError);
 assert.throws(() => new InfinityScaleV2({ maxCoordinate: Number.NaN }), RangeError);
 assert.throws(() => new InfinityScaleV2({ visibleRadiusChunks: { x: 5, y: 5, z: -1 } }), RangeError);
 assert.throws(() => new InfinityScaleV2({ activeRadiusChunks: { x: 6, y: 2, z: 1 } }), RangeError);
+assert.throws(
+  () => new InfinityScaleV2({ visibleRadiusChunks: { x: 15, y: 15, z: 10 } }),
+  RangeError,
+  "visible candidate enumeration must be bounded before residency pruning",
+);
 
 const suppliedRadius = { x: 1, y: 1, z: 1 };
 const isolatedConfig = new InfinityScaleV2({ activeRadiusChunks: suppliedRadius });
@@ -107,6 +112,29 @@ assert.equal(records[0].state, "simulating");
 assert.equal(records[0].lod, 0);
 assert.equal(records[1].state, "unloaded");
 assert.equal(manager.updateAMR(records, 1.2, 0).every(record => record.amr === 2), true);
+
+const validationScale = new InfinityScaleV2();
+validationScale.setObserver({ x: 0, y: 0, z: 0 });
+const validationManager = new ChunkResidencyManager(validationScale);
+const observerBeforeBadChunk = validationScale.getObserver();
+assert.throws(
+  () => validationManager.plan({ x: 3200, y: 0, z: 0 }, [
+    { x: Number.NaN, y: 0, z: 0, level: 0 },
+  ]),
+  RangeError,
+  "non-finite chunk coordinates must be rejected",
+);
+assert.deepEqual(validationScale.getObserver(), observerBeforeBadChunk,
+  "invalid chunk input must not mutate the planner observer");
+assert.throws(
+  () => validationManager.plan({ x: 3200, y: 0, z: 0 }, [
+    { x: Number.MAX_SAFE_INTEGER, y: 0, z: 0, level: 30 },
+  ]),
+  RangeError,
+  "chunk footprints outside safe geometry must be rejected",
+);
+assert.deepEqual(validationScale.getObserver(), observerBeforeBadChunk,
+  "unsafe chunk geometry must be rejected before observer updates");
 
 const originalChunk = { x: 5, y: 0, z: 0, level: 0 };
 const detachedManagerRecord = manager.plan({ x: 160, y: 0, z: 0 }, [originalChunk])[0];

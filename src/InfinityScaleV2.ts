@@ -59,6 +59,10 @@ export const DEFAULT_INFINITY_SCALE_V2: ReadonlyInfinityScaleConfigV2 = Object.f
   maxCoordinate: Number.MAX_SAFE_INTEGER,
 });
 
+// replan() builds the visible candidate set before it can enforce maxResidentChunks.
+// Bound this pre-pruning workload so a valid-but-enormous radius cannot stall startup.
+const MAX_VISIBLE_CANDIDATE_CHUNKS = 10_000;
+
 function floorDiv(a: number, b: number): number {
   return Math.floor(a / b);
 }
@@ -165,6 +169,17 @@ export class InfinityScaleV2 {
           merged.backgroundRadiusChunks[axis] > merged.visibleRadiusChunks[axis]) {
         throw new RangeError("active/background radii cannot exceed visibleRadiusChunks." + axis);
       }
+    }
+    const visibleCandidateCount =
+      (2 * merged.visibleRadiusChunks.x + 1) *
+      (2 * merged.visibleRadiusChunks.y + 1) *
+      (2 * merged.visibleRadiusChunks.z + 1);
+    if (!Number.isSafeInteger(visibleCandidateCount) ||
+        visibleCandidateCount > MAX_VISIBLE_CANDIDATE_CHUNKS) {
+      throw new RangeError(
+        "visibleRadiusChunks exceeds the bounded candidate budget of " +
+        MAX_VISIBLE_CANDIDATE_CHUNKS + " chunks",
+      );
     }
 
     this.config = Object.freeze({

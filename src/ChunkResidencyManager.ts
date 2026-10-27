@@ -1,5 +1,23 @@
 import { ChunkKey, ChunkState, InfinityScaleV2, Vec3i, cellToChunk, chunkKeyString } from "./InfinityScaleV2";
 
+function validateResidencyChunkKey(chunk: ChunkKey): void {
+  if (!chunk || typeof chunk !== "object" ||
+      ![chunk.x, chunk.y, chunk.z, chunk.level].every(Number.isSafeInteger) ||
+      chunk.level < 0 || chunk.level > 30) {
+    throw new RangeError("ChunkResidencyManager received an invalid chunk key or LOD level");
+  }
+
+  const scale = 2 ** chunk.level;
+  const min = [chunk.x * scale, chunk.y * scale, chunk.z * scale];
+  const max = min.map(value => value + scale - 1);
+  if (![...min, ...max].every(Number.isSafeInteger)) {
+    throw new RangeError(
+      "ChunkResidencyManager chunk geometry exceeds safe integer bounds: " +
+      chunkKeyString(chunk),
+    );
+  }
+}
+
 export interface ResidencyRecord {
   key: string;
   chunk: ChunkKey;
@@ -20,6 +38,13 @@ export class ChunkResidencyManager {
   constructor(private readonly scale: InfinityScaleV2) {}
 
   plan(observer: Vec3i, chunkKeys: ChunkKey[]): ResidencyRecord[] {
+    if (!Array.isArray(chunkKeys)) {
+      throw new TypeError("ChunkResidencyManager.plan requires a chunk-key array");
+    }
+    for (const chunk of chunkKeys) validateResidencyChunkKey(chunk);
+
+    // Preflight all supplied keys before changing the planner's observer. A
+    // malformed late item must not leave a partially updated residency frame.
     this.scale.setObserver(observer);
     return chunkKeys.map(chunk => {
       // Observer coordinates are cells; ChunkKey coordinates are

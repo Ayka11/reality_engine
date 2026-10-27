@@ -60,7 +60,7 @@ Remove this notice only after the release candidate passes production integratio
 
 ## Infinity Scale & Scientific Workspace
 
-Reality Engine now includes an **Infinity Scale** world runtime and a connected scientific experimentation layer.
+Reality Engine now includes an **Infinity Scale** world runtime and a connected scientific experimentation layer. The reference residency planner freezes validated configuration and rejects visible-radius envelopes that would enumerate more than 10,000 candidates before residency pruning.
 
 ### Infinity Scale World Tools
 
