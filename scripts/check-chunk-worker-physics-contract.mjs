@@ -51,6 +51,16 @@ assert.ok(gpu.includes('f32[22] = p.densityDiffusion;'))
 assert.ok(gpu.includes('params.densityDiffusion * dt * lapD'))
 assert.ok(worker.includes('p.densityDiffusion * lapD * dt'))
 
+// Phase transition rate is a shared model parameter, not a backend-specific constant.
+assert.ok(cpu.includes('p.phaseTransitionRate * dt * 60'))
+assert.ok(cpu.includes('p.phaseTransitionRate * 0.5 * dt * 60'))
+assert.ok(worker.includes('p.phaseTransitionRate * dt * 60'))
+assert.ok(gpu.includes('phaseTransitionRate: f32,     // [23]'))
+assert.ok(gpu.includes('const PARAMS_FLOATS = 24;'))
+assert.ok(gpu.includes('f32[23] = p.phaseTransitionRate;'))
+assert.ok(gpu.includes('params.phaseTransitionRate * dt * 60.0'))
+assert.ok(gpu.includes('params.phaseTransitionRate * 0.5 * dt * 60.0'))
+
 // Main must forward resolved LawEngine state to the sparse worker at startup and ticks.
 assert.ok(main.includes("cmd: 'setPhysics'"))
 assert.ok(main.includes('params: { ...sim.laws.params }'))
