@@ -5,6 +5,7 @@ import { runInfinityScaleGPUBoundaryTransferContractRegression } from "../src/in
 import { runInfinityScaleCausalAdaptiveAttributionRegression } from "../src/infinity/InfinityScaleCausalAdaptiveAttribution.regression";
 import { runInfinityScaleResolutionUtilityRegression } from "../src/infinity/InfinityScaleResolutionUtility.regression";
 import { runInfinityScaleAdaptiveTransactionPreflightRegression } from "../src/infinity/InfinityScaleAdaptiveTransactionPreflight.regression";
+import { runInfinityScaleLODStateRecoveryRegression } from "../src/infinity/InfinityScaleLODStateRecovery.regression";
 
 runInfinityScaleAdaptiveLODTransactionBridgeRegression();
 runInfinityScaleAdaptiveTransferCompilerRegression();
@@ -13,4 +14,5 @@ runInfinityScaleGPUBoundaryTransferContractRegression();
 runInfinityScaleCausalAdaptiveAttributionRegression();
 runInfinityScaleResolutionUtilityRegression();
 runInfinityScaleAdaptiveTransactionPreflightRegression();
-console.log("Infinity Scale adaptive LOD bridge, execution graph, GPU boundary contract, causal attribution, and isolated resolution utility and transaction preflight regressions: PASS");
+runInfinityScaleLODStateRecoveryRegression();
+console.log("Infinity Scale adaptive LOD bridge, execution graph, GPU boundary contract, causal attribution, resolution utility, transaction preflight, and hierarchical state recovery/key validation regressions: PASS");

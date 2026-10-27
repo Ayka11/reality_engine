@@ -151,16 +151,22 @@ export class InfinityScaleLODState {
   }
 
   ensureChunk(key: string, level: number): InfinityScaleLODChunkState {
+    if (!Number.isInteger(level) || level < 0 || level > 30) {
+      throw new Error(`Invalid Infinity Scale LOD level: ${level}`);
+    }
+    // The LOD level is part of the physical chunk identity, not just metadata.
+    // Reject non-canonical or mismatched keys before reading or mutating the map.
+    const [keyLevel] = parseChunkKey(key);
+    if (keyLevel !== level) {
+      throw new Error(`Infinity Scale LOD chunk key/level mismatch for ${key}: key=${keyLevel}, level=${level}`);
+    }
+
     const existing = this.states.get(key);
     if (existing) {
       if (existing.level !== level) {
         throw new Error(`Infinity Scale LOD chunk level mismatch for ${key}`);
       }
       return this.exposeChunk(existing);
-    }
-
-    if (!Number.isInteger(level) || level < 0 || level > 30) {
-      throw new Error(`Invalid Infinity Scale LOD level: ${level}`);
     }
 
     const scale = 2 ** level;
@@ -427,7 +433,19 @@ export class InfinityScaleLODState {
 }
 
 function parseChunkKey(key: string): [number, number, number, number] {
-  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
-  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
-  return [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4])];
+  const match = typeof key === "string"
+    ? /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key)
+    : null;
+  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${String(key)}`);
+
+  const raw = match.slice(1);
+  const values = raw.map(Number);
+  if (
+    !values.every(Number.isSafeInteger) ||
+    values[0] < 0 || values[0] > 30 ||
+    values.some((value, index) => String(value) !== raw[index])
+  ) {
+    throw new Error(`Invalid or non-canonical Infinity Scale chunk key: ${key}`);
+  }
+  return values as [number, number, number, number];
 }

@@ -38,6 +38,45 @@ export function runInfinityScaleLODStateRecoveryRegression(): void {
   }
 
   runInfinityScaleLODStateInvalidSnapshotRegression();
+  runInfinityScaleLODChunkIdentityValidationRegression();
+}
+
+export function runInfinityScaleLODChunkIdentityValidationRegression(): void {
+  const state = new InfinityScaleLODState(2);
+  const invalidRequests = [
+    { key: "00:0,0,0", level: 0, label: "non-canonical level" },
+    { key: "1:-0,0,0", level: 1, label: "negative-zero coordinate" },
+    { key: "0:9007199254740992,0,0", level: 0, label: "unsafe coordinate" },
+    { key: "0:0,0,0", level: 1, label: "key/argument level mismatch" },
+    { key: "1:0,0,0", level: 0, label: "coarse key with fine level argument" },
+    { key: "31:0,0,0", level: 31, label: "out-of-range LOD level" },
+  ];
+
+  for (const request of invalidRequests) {
+    const revisionBefore = state.getRevision();
+    const keysBefore = JSON.stringify(state.keys());
+    let rejected = false;
+    try {
+      state.ensureChunk(request.key, request.level);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) {
+      throw new Error(`LOD state accepted invalid chunk identity: ${request.label}`);
+    }
+    if (state.getRevision() !== revisionBefore || JSON.stringify(state.keys()) !== keysBefore) {
+      throw new Error(`Rejected chunk identity changed authoritative state: ${request.label}`);
+    }
+  }
+
+  const negativeChunk = state.ensureChunk("1:-1,0,0", 1);
+  if (negativeChunk.key !== "1:-1,0,0" || negativeChunk.level !== 1 || negativeChunk.scale !== 2) {
+    throw new Error("Canonical negative-coordinate LOD chunk identity was not preserved");
+  }
+  const baseCell = state.readBaseCell("1:-1,0,0", 1, -1, 0, 0);
+  if (!baseCell || baseCell.length !== CELL_FIELDS) {
+    throw new Error("Canonical negative-coordinate LOD chunk could not be resolved in base coordinates");
+  }
 }
 
 export function runInfinityScaleLODStateInvalidSnapshotRegression(): void {
