@@ -88,6 +88,15 @@ assert.equal(records[0].lod, 0);
 assert.equal(records[1].state, "unloaded");
 assert.equal(manager.updateAMR(records, 1.2, 0).every(record => record.amr === 2), true);
 
+const originalChunk = { x: 5, y: 0, z: 0, level: 0 };
+const detachedManagerRecord = manager.plan({ x: 160, y: 0, z: 0 }, [originalChunk])[0];
+originalChunk.x = 99;
+assert.equal(detachedManagerRecord.chunk.x, 5,
+  "residency manager must not retain a caller-owned mutable ChunkKey");
+detachedManagerRecord.chunk.x = 123;
+assert.equal(originalChunk.x, 99,
+  "residency manager must return a detached ChunkKey");
+
 // Runtime observer updates are atomic and must not silently truncate invalid
 // coordinates before the authoritative InfinityScaleV2 validates them.
 globalThis.__infinityScaleCoreForTest = core;
@@ -115,6 +124,23 @@ const runtime = new InfinityScaleRuntime({});
 runtime.setObserver({ x: 3200, y: -64, z: 0 });
 assert.deepEqual(runtime.getObserver(), { x: 3200, y: -64, z: 0 });
 assert.deepEqual(runtime.scale.getObserver(), { x: 3200, y: -64, z: 0 });
+
+// The returned array, each record, its nested ChunkKey, and the original input
+// must all be detached from the runtime's internal residency snapshot.
+const runtimeInputChunk = { x: 100, y: -2, z: 0, level: 0 };
+const exposedRecords = runtime.plan([runtimeInputChunk]);
+const storedBeforeMutation = runtime.residencyRecords()[0];
+runtimeInputChunk.x = 777;
+exposedRecords[0].lod = 99;
+exposedRecords[0].distance = 999;
+exposedRecords[0].chunk.x = 888;
+const exposedAgain = runtime.residencyRecords()[0];
+assert.equal(exposedAgain.lod, storedBeforeMutation.lod,
+  "mutating a public residency record must not change internal LOD");
+assert.equal(exposedAgain.distance, storedBeforeMutation.distance,
+  "mutating a public residency record must not change internal distance");
+assert.equal(exposedAgain.chunk.x, 100,
+  "mutating returned/input ChunkKeys must not change internal chunk identity");
 const lastGoodObserver = runtime.getObserver();
 const lastGoodPlannerObserver = runtime.scale.getObserver();
 assert.throws(() => runtime.setObserver({ x: 0.5, y: 0, z: 0 }), RangeError);

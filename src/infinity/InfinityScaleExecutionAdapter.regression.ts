@@ -86,6 +86,31 @@ export function runInfinityScaleExecutionAdapterBoundaryRegression(): void {
     throw new Error("Canonical adapter regression: uncovered negative-X face lost same-level fallback");
   }
 
+  // Equal-distance candidates must select the same bounded work-set regardless
+  // of Map/insertion order. A key tie-break makes the result reproducible.
+  const tieAdapter = new InfinityScaleExecutionAdapter();
+  const tieFrame = {
+    ...frame,
+    chunks: [
+      chunk("0:2,0,0", 0, 2, 0, 0, 1, true),
+      chunk("0:1,0,0", 0, 1, 0, 0, 1, true),
+    ],
+    simulating: ["0:2,0,0", "0:1,0,0"],
+    visible: ["0:2,0,0", "0:1,0,0"],
+    background: [],
+    cached: [],
+    unloaded: [],
+    residentCount: 2,
+    simulationCount: 2,
+    visibleCount: 2,
+    maxSimulatingChunks: 1,
+    maxResidentChunks: 2,
+  } as InfinityScaleFramePlan;
+  const tiePlan = tieAdapter.update(tieFrame);
+  if (tiePlan.chunks.length !== 1 || tiePlan.chunks[0].key !== "0:1,0,0") {
+    throw new Error("Execution adapter tie-break did not select the canonical nearest chunk");
+  }
+
   const planBeforeRejectedUpdate = adapter.getPlan();
   const capabilitiesBeforeRejectedUpdate = adapter.getCapabilities();
   const requestedCapabilities = {
@@ -110,6 +135,23 @@ export function runInfinityScaleExecutionAdapterBoundaryRegression(): void {
   }
   if (!identityRejected) {
     throw new Error("Execution adapter accepted mismatched canonical chunk identity and LOD");
+  }
+
+  const invalidDistanceFrame = {
+    ...frame,
+    chunks: frame.chunks.map((candidate, index) =>
+      index === 0 ? { ...candidate, distance: Number.NaN } : candidate
+    ),
+  } as InfinityScaleFramePlan;
+  let invalidDistanceRejected = false;
+  try {
+    adapter.update(invalidDistanceFrame, requestedCapabilities);
+  } catch (error) {
+    invalidDistanceRejected = error instanceof Error &&
+      error.message.includes("distance must be finite and non-negative");
+  }
+  if (!invalidDistanceRejected) {
+    throw new Error("Execution adapter accepted an invalid distance into the simulation work-set");
   }
 
   const overlappingFrame = {

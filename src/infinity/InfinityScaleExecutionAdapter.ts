@@ -135,9 +135,18 @@ export class InfinityScaleExecutionAdapter {
       }
     }
 
+    if (!Number.isSafeInteger(frame.maxSimulatingChunks) || frame.maxSimulatingChunks < 0) {
+      throw new Error("Infinity Scale execution frame maxSimulatingChunks must be a non-negative safe integer");
+    }
+    for (const candidate of frame.chunks) {
+      if (!Number.isFinite(candidate.distance) || candidate.distance < 0) {
+        throw new Error("Infinity Scale execution chunk distance must be finite and non-negative: " + candidate.key);
+      }
+    }
+
     const selected = frame.chunks
       .filter(chunk => chunk.simulationEligible)
-      .sort((a, b) => a.distance - b.distance)
+      .sort((a, b) => a.distance - b.distance || a.key.localeCompare(b.key))
       .slice(0, frame.maxSimulatingChunks);
 
     const simulationKeys = new Set(selected.map(chunk => chunk.key));

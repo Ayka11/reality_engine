@@ -41,6 +41,13 @@ export class InfinityScaleRuntime {
   private observer: Vec3i = { x: 0, y: 0, z: 0 };
   private lastRecords: ResidencyRecord[] = [];
 
+  private copyRecords(): ResidencyRecord[] {
+    return this.lastRecords.map(record => ({
+      ...record,
+      chunk: { ...record.chunk },
+    }));
+  }
+
   constructor(store: ChunkStore = new MemoryChunkStore()) {
     this.scale = new InfinityScaleV2(DEFAULT_INFINITY_SCALE_V2);
     this.residency = new ChunkResidencyManager(this.scale);
@@ -66,7 +73,7 @@ export class InfinityScaleRuntime {
       chunks,
     );
 
-    return [...this.lastRecords];
+    return this.copyRecords();
   }
 
   /**
@@ -96,7 +103,7 @@ export class InfinityScaleRuntime {
       );
     }
 
-    return [...this.lastRecords];
+    return this.copyRecords();
   }
 
   /**
@@ -131,7 +138,7 @@ export class InfinityScaleRuntime {
   }
 
   residencyRecords(): ResidencyRecord[] {
-    return [...this.lastRecords];
+    return this.copyRecords();
   }
 }
 

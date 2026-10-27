@@ -46,7 +46,7 @@ export class ChunkResidencyManager {
       );
       return {
         key: chunkKeyString(chunk),
-        chunk,
+        chunk: { ...chunk },
         state: this.scale.state(chunk),
         lod: this.scale.selectLOD(distance),
         amr: 0,
