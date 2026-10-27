@@ -89,6 +89,30 @@ const pressureAfter = readField(latestFrame(), pressurePoint.x, pressurePoint.y,
 assert.ok(Math.abs(pressureAfter - 0.8) < 0.03,
   `pressureDensityCoupling should affect pressure relaxation (got ${pressureAfter})`)
 
+// Pressure diffusion must move pressure from an isolated high-pressure cell,
+// and the parameter must affect the result independently from EOS relaxation.
+const pressureDiffusionPoint = { x: 42, y: 42, z: 26 }
+send('setPhysics', {
+  params: { ...params, pressureDensityCoupling: 0, pressureDiffusion: 0.1 },
+  processMask: 1 << 13,
+})
+send('paint', { ...pressureDiffusionPoint, f: F.P, v: 100, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const pressureAfterDiffusion = readField(latestFrame(), pressureDiffusionPoint.x, pressureDiffusionPoint.y, pressureDiffusionPoint.z, F.P)
+assert.ok(Math.abs(pressureAfterDiffusion - 97.44) < 0.02,
+  `pressure diffusion should use the six-neighbor Laplacian (got ${pressureAfterDiffusion})`)
+
+const pressureNoTransportPoint = { x: 54, y: 42, z: 26 }
+send('setPhysics', {
+  params: { ...params, pressureDensityCoupling: 0, pressureDiffusion: 0 },
+  processMask: 1 << 13,
+})
+send('paint', { ...pressureNoTransportPoint, f: F.P, v: 100, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const pressureWithoutTransport = readField(latestFrame(), pressureNoTransportPoint.x, pressureNoTransportPoint.y, pressureNoTransportPoint.z, F.P)
+assert.ok(Math.abs(pressureWithoutTransport - 98.4) < 0.02,
+  `zero pressureDiffusion must leave only equation-of-state relaxation (got ${pressureWithoutTransport})`)
+
 // Wave process: the scalar wave field responds to its spatial Laplacian.
 const wavePoint = { x: 50, y: 10, z: 10 }
 send('setPhysics', { params: { ...params, waveSpeed: 2, waveDamping: 1 }, processMask: 1 << 6 })

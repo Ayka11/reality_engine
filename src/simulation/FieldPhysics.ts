@@ -22,6 +22,7 @@ export class FieldPhysics {
       const cT = back[base + F.TEMPERATURE];
       const cD = back[base + F.DENSITY];
       const cI = back[base + F.INFORMATION];
+      const cP = back[base + F.PRESSURE];
       const nbrs = grid.neighbors6(x, y, z);
       const nCount = nbrs.length || 1;
 
@@ -29,6 +30,7 @@ export class FieldPhysics {
       let lapT = -nCount * cT;
       let lapD = -nCount * cD;
       let lapI = -nCount * cI;
+      let lapP = 0;
       let fxSum = 0, fySum = 0, fzSum = 0;
 
       for (const [nx, ny, nz] of nbrs) {
@@ -37,6 +39,7 @@ export class FieldPhysics {
         lapT += back[nb + F.TEMPERATURE];
         lapD += back[nb + F.DENSITY];
         lapI += back[nb + F.INFORMATION];
+        lapP += back[nb + F.PRESSURE] - cP;
         fxSum += back[nb + F.FIELD_X];
         fySum += back[nb + F.FIELD_Y];
         fzSum += back[nb + F.FIELD_Z];
@@ -63,7 +66,9 @@ export class FieldPhysics {
       }
 
       if (on(mask, PROC.PRESSURE_DIFFUSION)) {
-        front[base + F.PRESSURE] = cD * p.pressureDensityCoupling - front[base + F.TEMPERATURE] * 0.1;
+        const equilibriumPressure = cD * p.pressureDensityCoupling - cT * 0.1;
+        front[base + F.PRESSURE] = Math.max(-9999, Math.min(9999,
+          cP + p.pressureDiffusion * dt * lapP + (equilibriumPressure - cP) * dt));
       }
 
       if (on(mask, PROC.WAVE_PROPAGATION)) {

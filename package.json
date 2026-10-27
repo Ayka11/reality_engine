@@ -63,7 +63,8 @@
     "test:greedy-mesher": "npx --yes tsx scripts/check-greedy-mesher.ts",
     "test:surface-nets-mesher": "npx --yes tsx scripts/check-surface-nets-mesher.ts",
     "test:info-physics-process-mask": "npx --yes tsx scripts/check-info-physics-process-mask.ts",
-    "test:field-physics-erosion": "npx --yes tsx scripts/check-field-physics-erosion.ts"
+    "test:field-physics-erosion": "npx --yes tsx scripts/check-field-physics-erosion.ts",
+    "test:field-physics-pressure": "npx --yes tsx scripts/check-field-physics-pressure.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

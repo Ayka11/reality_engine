@@ -34,6 +34,16 @@ assert.ok(gpu.includes('f32[20] = p.erosionRate;'))
 assert.ok(gpu.includes('params.erosionRate * (1.0 - resistance)'))
 assert.ok(gpu.includes('flow > 8.0'))
 
+// Pressure diffusion must be parameterized in the GPU ABI and used by the shader.
+assert.ok(gpu.includes('pressureDiffusion: f32,       // [21]'))
+assert.ok(gpu.includes('const PARAMS_FLOATS = 22;'))
+assert.ok(gpu.includes('f32[21] = p.pressureDiffusion;'))
+assert.ok(gpu.includes('var nbP = array<f32,6>(c.pressure,c.pressure,c.pressure,c.pressure,c.pressure,c.pressure);'))
+assert.ok(gpu.includes('lapP += nbP[d] - c.pressure;'))
+assert.ok(gpu.includes('params.pressureDiffusion * dt * lapP'))
+assert.ok(worker.includes('D_ * p.pressureDensityCoupling - T * 0.1'))
+assert.ok(worker.includes('P + p.pressureDiffusion * lapP * dt'))
+
 // Main must forward resolved LawEngine state to the sparse worker at startup and ticks.
 assert.ok(main.includes("cmd: 'setPhysics'"))
 assert.ok(main.includes('params: { ...sim.laws.params }'))

@@ -29,7 +29,7 @@ of a complete or scientifically validated solver.
 | 10 | Signal propagation | Adds Laplacian-based transport into the information field using `p.signalPropagationRate` | Diffusion-like update of information using `infoGrowthRate` | Diffusion-like update of information using `infoGrowthRate` | Does not transport a distinct signal field; parameter mapping differs |
 | 11 | Crystallization | Uses `p.crystallizationRate` and material rates; can change eligible material IDs | Changes density/entropy with a hard-coded base rate; no material conversion | Changes density/entropy with a hard-coded base rate; no material conversion | Incomplete parity; CPU/GPU do not use the canonical rate or reproduce the worker's material change |
 | 12 | Radiation | Uses `radiationThreshold`, density/energy rates and material absorption | Uses hard-coded threshold/rates; material absorption affects density reduction | Uses hard-coded threshold/rates without the material absorption term | Implemented with inconsistent parameterization and material response |
-| 13 | Pressure diffusion | Pressure Laplacian plus relaxation toward a density/temperature equation of state | Computes the equation-of-state value only; no spatial pressure diffusion | Computes the equation-of-state value only; no spatial pressure diffusion | CPU/GPU omit `pressureDiffusion` transport |
+| 13 | Pressure diffusion | Pressure Laplacian plus relaxation toward the density/temperature equation of state | Six-neighbor pressure Laplacian plus equation-of-state relaxation, parameterized by `pressureDiffusion` | Six-neighbor pressure Laplacian plus equation-of-state relaxation, parameterized by `pressureDiffusion` | Transport is present in all three paths; CPU/GPU use Neumann boundaries and worker samples sparse neighbors |
 | 14 | Field rotation | Parameterized 2D `FX/FY` smoothing/cross-coupling | 3D vector smoothing/cross-coupling with hard-coded constants | 3D vector smoothing/cross-coupling with hard-coded constants | Heuristic vector update, not a true curl-based solver; dimensions and parameters differ |
 | 15 | Erosion | Material resistance and `p.erosionRate`; planar `FX/FY` flow threshold | Material resistance and `p.erosionRate`; 3D `FX/FY/FZ` flow threshold | Material resistance and `p.erosionRate`; 3D `FIELD_X/Y/Z` flow threshold | Now present in all three paths; worker's compact field schema lacks a Z-flow component |
 
@@ -96,3 +96,8 @@ worker or change the sparse chunk storage format.
 - These changes close two specific activation/parameter gaps. The pressure,
   density-mobility, wave, gravity, crystallization and radiation rows above remain
   documented backend differences, not validated physical laws.
+
+
+### Pressure diffusion parity follow-up — 2026-10-27
+
+The CPU and GPU solvers now compute a six-neighbor pressure Laplacian and relax pressure toward the density/temperature equation of state. The GPU parameter ABI forwards `PhysicsParams.pressureDiffusion`; the sparse worker uses the same pre-step density/temperature sample and retains its sparse-neighbor boundary semantics. New deterministic CPU and worker regressions check disabled-mask invariance, coefficient sensitivity, and finite pressure values. These tests verify implementation consistency, not empirical validity of the pressure equation.

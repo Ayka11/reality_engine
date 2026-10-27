@@ -54,6 +54,7 @@ struct SimParams {
   timeBaseRate: f32,           // [18]
   timeEnergyBoost: f32,        // [19]
   erosionRate: f32,            // [20]
+  pressureDiffusion: f32,       // [21]
 }
 
 // Material coefficients: MAT_COUNT × 7 floats
@@ -100,7 +101,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let mat = matBuf[matIdx];
 
   // ── 6-neighbor Laplacians ──────────────────────────────────────────────────
-  var lapE = 0.0; var lapT = 0.0; var lapD = 0.0; var lapI = 0.0;
+  var lapE = 0.0; var lapT = 0.0; var lapD = 0.0; var lapI = 0.0; var lapP = 0.0;
   var fxSum = 0.0; var fySum = 0.0; var fzSum = 0.0;
 
   // Neumann boundary: out-of-bounds neighbors reflect (same as center cell)
@@ -108,6 +109,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   var nbT = array<f32,6>(c.temperature,c.temperature,c.temperature,c.temperature,c.temperature,c.temperature);
   var nbD = array<f32,6>(c.density,c.density,c.density,c.density,c.density,c.density);
   var nbI = array<f32,6>(c.information,c.information,c.information,c.information,c.information,c.information);
+  var nbP = array<f32,6>(c.pressure,c.pressure,c.pressure,c.pressure,c.pressure,c.pressure);
   var nbFx = array<f32,6>(c.field_x,c.field_x,c.field_x,c.field_x,c.field_x,c.field_x);
   var nbFy = array<f32,6>(c.field_y,c.field_y,c.field_y,c.field_y,c.field_y,c.field_y);
   var nbFz = array<f32,6>(c.field_z,c.field_z,c.field_z,c.field_z,c.field_z,c.field_z);
@@ -124,6 +126,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       nbT[d]  = nb.temperature;
       nbD[d]  = nb.density;
       nbI[d]  = nb.information;
+      nbP[d]  = nb.pressure;
       nbFx[d] = nb.field_x;
       nbFy[d] = nb.field_y;
       nbFz[d] = nb.field_z;
@@ -132,6 +135,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     lapT += nbT[d] - c.temperature;
     lapD += nbD[d] - c.density;
     lapI += nbI[d] - c.information;
+    lapP += nbP[d] - c.pressure;
     fxSum += nbFx[d];
     fySum += nbFy[d];
     fzSum += nbFz[d];
@@ -246,7 +250,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   // ── PROC 13: Pressure Diffusion ───────────────────────────────────────────
   if (active(8192u)) {
-    o.pressure = c.density * params.pressureDensityCoupling - c.temperature * 0.1;
+    let equilibriumPressure = c.density * params.pressureDensityCoupling - c.temperature * 0.1;
+    o.pressure = clamp(
+      c.pressure + params.pressureDiffusion * dt * lapP
+        + (equilibriumPressure - c.pressure) * dt,
+      -9999.0, 9999.0
+    );
   }
 
   // ── PROC 14: Field Rotation (curl) ────────────────────────────────────────
@@ -280,7 +289,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // Byte layout of SimParams in the storage buffer (matches WGSL struct)
-const PARAMS_FLOATS = 21; // 21 × 4 bytes = 84 bytes
+const PARAMS_FLOATS = 22; // 22 × 4 bytes = 88 bytes
 
 export class GPUBackend {
   private device: GPUDevice | null = null;
@@ -393,6 +402,7 @@ export class GPUBackend {
     f32[18] = p.timeBaseRate;
     f32[19] = p.timeEnergyBoost;
     f32[20] = p.erosionRate;
+    f32[21] = p.pressureDiffusion;
     this.device.queue.writeBuffer(this.paramsBuf, 0, ab);
   }
 
