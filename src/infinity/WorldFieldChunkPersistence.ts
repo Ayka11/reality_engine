@@ -60,31 +60,57 @@ export class WorldFieldChunkPersistence {
   private openDatabase(): Promise<IDBDatabase | null> {
     if (this.databasePromise) return this.databasePromise
     if (typeof indexedDB === 'undefined') return Promise.resolve(null)
-    this.databasePromise = new Promise((resolve) => {
+
+    const opening = new Promise<IDBDatabase | null>((resolve) => {
+      let settled = false
       try {
         const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
         request.onupgradeneeded = () => {
           const db = request.result
           if (!db.objectStoreNames.contains(OBJECT_STORE)) db.createObjectStore(OBJECT_STORE, { keyPath: 'key' })
         }
-        request.onsuccess = () => resolve(request.result)
+        request.onsuccess = () => {
+          const db = request.result
+          // A blocked request may later succeed after we already returned null.
+          // Do not leak a connection that the settled promise can no longer return.
+          if (settled) {
+            db.close()
+            return
+          }
+          settled = true
+          resolve(db)
+        }
         request.onerror = () => {
+          if (settled) return
+          settled = true
           this.globalDurabilityError = request.error?.message ?? 'IndexedDB open failed'
           this.lastDurabilityError = this.globalDurabilityError
           resolve(null)
         }
         request.onblocked = () => {
+          if (settled) return
+          settled = true
           this.globalDurabilityError = 'IndexedDB upgrade blocked by another open tab'
           this.lastDurabilityError = this.globalDurabilityError
           resolve(null)
         }
       } catch (error) {
+        if (settled) return
+        settled = true
         this.globalDurabilityError = error instanceof Error ? error.message : String(error)
         this.lastDurabilityError = this.globalDurabilityError
         resolve(null)
       }
     })
-    return this.databasePromise
+
+    // Clear only the failed cached attempt so transient failures can be retried.
+    let cachedPromise: Promise<IDBDatabase | null>
+    cachedPromise = opening.then((db) => {
+      if (db === null && this.databasePromise === cachedPromise) this.databasePromise = null
+      return db
+    })
+    this.databasePromise = cachedPromise
+    return cachedPromise
   }
 
   private enqueueWrite(

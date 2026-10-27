@@ -164,6 +164,14 @@ assert.match(persistenceSource, /this\.durabilityFailures\.delete\(key\)/,
 assert.match(persistenceSource, /this\.globalDurabilityError\s*\?\?\s*this\.durabilityFailures\.values\(\)\.next\(\)\.value/,
   "flush status must preserve failures from unrelated pending durable state");
 
+const persistenceSource = await readFile(new URL("src/infinity/WorldFieldChunkPersistence.ts", root), "utf8");
+assert.match(persistenceSource, /if \(db === null && this\.databasePromise === cachedPromise\) this\.databasePromise = null/,
+  "failed IndexedDB opens must clear their cached promise so later calls can retry");
+assert.match(persistenceSource, /if \(settled\) \{\s*db\.close\(\)\s*return\s*\}/,
+  "late success after an already-settled blocked request must close its unused connection");
+assert.match(persistenceSource, /request\.onblocked = \(\) => \{\s*if \(settled\) return/,
+  "IndexedDB callbacks must not settle an open request more than once");
+
 const persistenceMod = await load("src/infinity/WorldFieldChunkPersistence.ts", [
   [/import \{ CHUNK_FLOATS \} from [^;]+;/, "const CHUNK_FLOATS = 7168;"],
 ]);
