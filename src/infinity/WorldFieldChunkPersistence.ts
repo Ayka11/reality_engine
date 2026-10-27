@@ -19,7 +19,7 @@ function chunkCoordKey(coord: WorldFieldChunkCoord): string {
   if (!coord || !Number.isSafeInteger(coord.cx) || !Number.isSafeInteger(coord.cy) || !Number.isSafeInteger(coord.cz)) {
     throw new RangeError('Chunk coordinates must be safe integers')
   }
-  return `${coord.cx},${coord.cy},${coord.cz}`
+  return chunkCoordKey(coord)
 }
 
 function checksum(values: number[]): string {
@@ -99,7 +99,7 @@ export class WorldFieldChunkPersistence {
 
   async loadDurable(coord: WorldFieldChunkCoord): Promise<WorldFieldChunkSnapshot | null> {
     await this.writeQueue
-    const key = `${coord.cx},${coord.cy},${coord.cz}`
+    const key = chunkCoordKey(coord)
     const cached = this.snapshots.get(key)
     if (cached && this.validate(cached)) return cached
     const db = await this.openDatabase()
@@ -131,7 +131,7 @@ export class WorldFieldChunkPersistence {
     const flat = canonical.flatMap(chunk => [chunk.key, ...chunk.data])
     const snapshot: WorldFieldChunkSnapshot = {
       schemaVersion: 2,
-      key: `${coord.cx},${coord.cy},${coord.cz}`,
+      key: chunkCoordKey(coord),
       coord: { ...coord }, seed, providerVersion, values: flat,
       workerChunks: canonical,
       workerView: { center: { ...workerView.center }, sliceY: workerView.sliceY, seed: workerView.seed },
@@ -145,7 +145,7 @@ export class WorldFieldChunkPersistence {
   save(coord: WorldFieldChunkCoord, seed: string, values: number[], providerVersion = 1, fieldLayout?: { fieldsPerCell: number; cellCount: number }): WorldFieldChunkSnapshot {
     const snapshot: WorldFieldChunkSnapshot = {
       schemaVersion: 1,
-      key: `${coord.cx},${coord.cy},${coord.cz}`,
+      key: chunkCoordKey(coord),
       coord: { ...coord },
       seed,
       providerVersion,
@@ -160,7 +160,7 @@ export class WorldFieldChunkPersistence {
   }
 
   load(coord: WorldFieldChunkCoord): WorldFieldChunkSnapshot | null {
-    return this.snapshots.get(`${coord.cx},${coord.cy},${coord.cz}`) ?? null
+    return this.snapshots.get(chunkCoordKey(coord)) ?? null
   }
 
   loadValid(coord: WorldFieldChunkCoord): WorldFieldChunkSnapshot | null {
@@ -198,7 +198,7 @@ export class WorldFieldChunkPersistence {
   }
 
   remove(coord: WorldFieldChunkCoord): boolean {
-    const key = `${coord.cx},${coord.cy},${coord.cz}`
+    const key = chunkCoordKey(coord)
     const removed = this.snapshots.delete(key)
     this.enqueueWrite(store => store.delete(key))
     return removed
