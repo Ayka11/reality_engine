@@ -57,7 +57,7 @@ export class FieldPhysics {
 
       if (on(mask, PROC.DENSITY_FLOW)) {
         front[base + F.DENSITY] = Math.max(0, Math.min(1,
-          cD + 0.02 * p.energyDiffusion * dt * lapD));
+          cD + p.densityDiffusion * dt * lapD));
       }
 
       if (on(mask, PROC.GRAVITY)) {
