@@ -195,9 +195,9 @@ export class InfinityScaleLODState {
         if (typeof value !== "function") return value;
         if (property === "set") {
           return (source: ArrayLike<number>, offset?: number) => {
-            assertFiniteFloat32ArrayLike(source, undefined, "LOD chunk cells.set");
+            const safeSource = copyFiniteFloat32ArrayLike(source, undefined, "LOD chunk cells.set");
             try {
-              return Reflect.apply(value, target, [source, offset]);
+              return Reflect.apply(value, target, [safeSource, offset]);
             } finally {
               // The native operation may have partially written before throwing;
               // invalidate any transaction that captured the prior contents.
@@ -391,7 +391,7 @@ export class InfinityScaleLODState {
     baseZ: number,
     source: ArrayLike<number>,
   ): void {
-    assertFiniteFloat32ArrayLike(source, CELL_FIELDS, "Infinity Scale LOD cell write");
+    const safeSource = copyFiniteFloat32ArrayLike(source, CELL_FIELDS, "Infinity Scale LOD cell write");
     if (!Number.isInteger(level) || level < 0 || level > 30) {
       throw new Error(`Invalid Infinity Scale LOD level: ${level}`);
     }
@@ -428,7 +428,7 @@ export class InfinityScaleLODState {
       (ly * this.chunkSize) + lx) * CELL_FIELDS;
     // Use the private backing record here; public chunk handles wrap cells in
     // a proxy and belong only at API boundaries.
-    state.cells.set(source, offset);
+    state.cells.set(safeSource, offset);
   }
 
   /**
@@ -472,19 +472,27 @@ function assertFiniteFloat32Value(value: unknown, context: string): asserts valu
   }
 }
 
-function assertFiniteFloat32ArrayLike(
+function copyFiniteFloat32ArrayLike(
   source: ArrayLike<number>,
   expectedLength: number | undefined,
   context: string,
-): void {
-  if (!source || !Number.isSafeInteger(source.length) || source.length < 0) {
+): Float32Array {
+  if (!source || !Number.isSafeInteger(source.length) || source.length < 0 || source.length > 0xffff_ffff) {
     throw new Error(`${context} requires a valid array-like source`);
   }
   if (expectedLength !== undefined && source.length !== expectedLength) {
     throw new Error(`${context} requires exactly ${expectedLength} fields; received ${source.length}`);
   }
+
+  // Read each source element exactly once. Validation followed by a second
+  // native TypedArray#set read would let accessor-backed sources change values
+  // between validation and commit.
+  const snapshot = new Float32Array(source.length);
   for (let index = 0; index < source.length; index++) {
-    assertFiniteFloat32Value(source[index], `${context} at field ${index}`);
+    const value = source[index];
+    assertFiniteFloat32Value(value, `${context} at field ${index}`);
+    snapshot[index] = value;
   }
+  return snapshot;
 }
 

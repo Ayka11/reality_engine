@@ -91,6 +91,17 @@ export function runInfinityScaleLODCellWriteValidationRegression(): void {
     values[CELL_FIELDS - 1] = Number.NaN;
     chunk.cells.set(values);
   });
+  assertRejectedWithoutMutation("forEach callback cannot mutate raw backing storage", () => {
+    chunk.cells.forEach((_value, _index, backing) => {
+      backing[0] = Number.POSITIVE_INFINITY;
+    });
+  });
+  assertRejectedWithoutMutation("reduce callback cannot mutate raw backing storage", () => {
+    chunk.cells.reduce((sum, _value, _index, backing) => {
+      backing[0] = Number.NaN;
+      return sum;
+    }, 0);
+  });
 
   const validCellView = chunk.cells;
   const fillRevisionBefore = state.getRevision();
@@ -105,6 +116,25 @@ export function runInfinityScaleLODCellWriteValidationRegression(): void {
   new Float32Array(detachedBuffer)[0] = 99;
   if (validCellView[0] !== 2) {
     throw new Error("LOD cells.fill returned a buffer view that could mutate authoritative storage");
+  }
+
+  const changingSource = Object.defineProperty(
+    { length: CELL_FIELDS },
+    "0",
+    {
+      configurable: true,
+      get: (() => {
+        let reads = 0;
+        return () => (++reads === 1 ? 23 : Number.POSITIVE_INFINITY);
+      })(),
+    },
+  ) as ArrayLike<number>;
+  for (let index = 1; index < CELL_FIELDS; index++) {
+    Object.defineProperty(changingSource, String(index), { value: 23, enumerable: true });
+  }
+  chunk.cells.set(changingSource);
+  if (chunk.cells[0] !== 23 || !Number.isFinite(chunk.cells[0])) {
+    throw new Error("LOD cells.set reread a changing ArrayLike after validation");
   }
 
   const nonFiniteSource = new Array<number>(CELL_FIELDS).fill(4);
