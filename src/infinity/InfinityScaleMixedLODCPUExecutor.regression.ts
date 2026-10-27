@@ -203,12 +203,11 @@ export function runInfinityScaleMixedLODCPURegression(): void {
     selectiveCpuReady: false,
   };
   const advisoryContext = new InfinityScaleChunkExecutionContext(advisoryPlan, 8, 8, 8, 4);
-  const advisoryFrame: InfinityScaleGlobalExecutionFrame = {
-    ...frame,
-    revision: advisoryPlan.revision,
-    planRevision: advisoryPlan.revision,
-    phase: "local-execution",
-  };
+  const advisoryFrame: InfinityScaleGlobalExecutionFrame = makeLocalExecutionFrame(
+    advisoryPlan,
+    frame.tickEnd,
+    frame.tickEnd + 1,
+  );
   const advisoryTransaction = beginInfinityScaleGlobalLODTransaction(
     advisoryFrame,
     advisoryPlan,
@@ -264,12 +263,11 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   if (overlapContext.overlappingSimulationRangeCount === 0) {
     throw new Error("Overlap regression fixture does not contain overlapping physical ownership");
   }
-  const overlapFrame: InfinityScaleGlobalExecutionFrame = {
-    ...frame,
-    revision: overlapPlan.revision,
-    planRevision: overlapPlan.revision,
-    phase: "local-execution",
-  };
+  const overlapFrame: InfinityScaleGlobalExecutionFrame = makeLocalExecutionFrame(
+    overlapPlan,
+    2,
+    3,
+  );
   const overlapTransaction = beginInfinityScaleGlobalLODTransaction(
     overlapFrame,
     overlapPlan,
