@@ -75,7 +75,7 @@ assert.equal(constrained.telemetry().residentChunks, 405,
 
 const managerMod = await load("src/ChunkResidencyManager.ts", [[
   /import \{[^}]+\} from "\.\/InfinityScaleV2";?/,
-  'const chunkKeyString = (k) => `${k.level}:${k.x},${k.y},${k.z}`;'
+  'const chunkKeyString = (k) => `${k.level}:${k.x},${k.y},${k.z}`; const cellToChunk = (g, size = 32) => [Math.floor(g / size), ((g % size) + size) % size];'
 ]]);
 const { ChunkResidencyManager } = managerMod;
 const manager = new ChunkResidencyManager(scale);
@@ -87,6 +87,35 @@ assert.equal(records[0].state, "simulating");
 assert.equal(records[0].lod, 0);
 assert.equal(records[1].state, "unloaded");
 assert.equal(manager.updateAMR(records, 1.2, 0).every(record => record.amr === 2), true);
+
+// ChunkResidencyManager receives observer coordinates in cells and must
+// derive LOD distance in chunk units. The old implementation compared 3200
+// cells directly with chunk index 100 and incorrectly selected LOD 3 nearby.
+const translatedObserverRecords = manager.plan({ x: 3200, y: -64, z: 0 }, [
+  { x: 99, y: -2, z: 0, level: 0 },
+  { x: 100, y: -2, z: 0, level: 0 },
+  { x: 101, y: -2, z: 0, level: 0 },
+  { x: 102, y: -2, z: 0, level: 0 },
+]);
+assert.deepEqual(
+  translatedObserverRecords.map(record => record.lod),
+  [0, 0, 0, 1],
+  "LOD selection must remain local after translating observer coordinates",
+);
+assert.deepEqual(
+  translatedObserverRecords.map(record => record.distance),
+  [1, 0, 1, 2],
+  "distance must be measured from the observer chunk to the chunk footprint",
+);
+const negativeObserverRecords = manager.plan({ x: -1, y: 0, z: 0 }, [
+  { x: -1, y: 0, z: 0, level: 0 },
+  { x: 0, y: 0, z: 0, level: 0 },
+]);
+assert.deepEqual(
+  negativeObserverRecords.map(record => record.distance),
+  [0, 1],
+  "negative observer coordinates must use floor-based chunk coordinates",
+);
 
 const storeMod = await load("src/ChunkStore.ts");
 const { MemoryChunkStore } = storeMod;

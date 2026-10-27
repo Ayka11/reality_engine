@@ -1,4 +1,4 @@
-import { ChunkKey, ChunkState, InfinityScaleV2, Vec3i, chunkKeyString } from "./InfinityScaleV2";
+import { ChunkKey, ChunkState, InfinityScaleV2, Vec3i, cellToChunk, chunkKeyString } from "./InfinityScaleV2";
 
 export interface ResidencyRecord {
   key: string;
@@ -20,10 +20,27 @@ export class ChunkResidencyManager {
   plan(observer: Vec3i, chunkKeys: ChunkKey[]): ResidencyRecord[] {
     this.scale.setObserver(observer);
     return chunkKeys.map(chunk => {
+      // Observer coordinates are cells; ChunkKey coordinates are
+      // LOD-local chunk indices. Compare in base-chunk units so an observer at
+      // cell 3200 is near chunk x=100, not thousands of chunks away.
+      const observerChunk = [
+        cellToChunk(observer.x, this.scale.config.chunkSize)[0],
+        cellToChunk(observer.y, this.scale.config.chunkSize)[0],
+        cellToChunk(observer.z, this.scale.config.chunkSize)[0],
+      ];
+      const chunkScale = 2 ** chunk.level;
+      const chunkMin = [
+        chunk.x * chunkScale,
+        chunk.y * chunkScale,
+        chunk.z * chunkScale,
+      ];
+      const chunkMax = chunkMin.map(value => value + chunkScale - 1);
+      const distanceAxis = (coordinate: number, min: number, max: number) =>
+        coordinate < min ? min - coordinate : coordinate > max ? coordinate - max : 0;
       const distance = Math.max(
-        Math.abs(chunk.x - observer.x),
-        Math.abs(chunk.y - observer.y),
-        Math.abs(chunk.z - observer.z),
+        distanceAxis(observerChunk[0], chunkMin[0], chunkMax[0]),
+        distanceAxis(observerChunk[1], chunkMin[1], chunkMax[1]),
+        distanceAxis(observerChunk[2], chunkMin[2], chunkMax[2]),
       );
       return {
         key: chunkKeyString(chunk),
