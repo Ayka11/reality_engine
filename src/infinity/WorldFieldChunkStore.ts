@@ -34,7 +34,17 @@ export class WorldFieldChunkStore {
   private tick = 0
   private evictions = 0
 
-  constructor(private readonly capacity = 128, private readonly onEvict?: WorldFieldChunkEvictionHandler) {}
+  private readonly capacity: number
+  private readonly onEvict?: WorldFieldChunkEvictionHandler
+
+  constructor(capacity = 128, onEvict?: WorldFieldChunkEvictionHandler) {
+    // Keep malformed capacity values from disabling eviction, and bound the
+    // maximum retained chunk count even if configuration is externally supplied.
+    this.capacity = Number.isSafeInteger(capacity)
+      ? Math.min(4096, Math.max(1, capacity))
+      : 128
+    this.onEvict = onEvict
+  }
 
   static key(coord: WorldFieldChunkCoord): string {
     return `${coord.cx},${coord.cy},${coord.cz}`

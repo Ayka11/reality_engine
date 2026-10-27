@@ -71,6 +71,13 @@ store.get({cx:0,cy:0,cz:0});
 store.set({cx:2,cy:0,cz:0}, "s", fakeProvider);
 assert.equal(store.stats().loaded, 2);
 assert.equal(worldFieldChunkCoord(-1, 0, 32).cx, -1);
+assert.equal(new WorldFieldChunkStore(Number.NaN).stats().capacity, 128, "NaN capacity must use a safe default");
+assert.equal(new WorldFieldChunkStore(Infinity).stats().capacity, 128, "infinite capacity must use a safe default");
+assert.equal(new WorldFieldChunkStore(1000000).stats().capacity, 4096, "chunk capacity must have a hard upper bound");
+const boundedStore = new WorldFieldChunkStore(Number.NaN);
+for (let i = 0; i < 140; i++) boundedStore.set({cx:i,cy:0,cz:0}, "s", fakeProvider);
+assert.equal(boundedStore.stats().loaded, 128, "invalid capacity must not disable eviction");
+
 
 const boundaryMod = await load("src/infinity/WorldFieldBoundaryExchange.ts");
 const { WorldFieldBoundaryExchange } = boundaryMod;
