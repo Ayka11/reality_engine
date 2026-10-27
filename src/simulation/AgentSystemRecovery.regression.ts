@@ -14,6 +14,24 @@ function equal(a: unknown, b: unknown, message: string): void {
 }
 
 export function runAgentSystemRecoveryRegression(): void {
+  // Tiny worlds are valid VoxelGrids. Seed placement must never create agents
+  // whose coordinates point outside the allocated cell buffer.
+  for (const [width, height, depth] of [[1, 1, 1], [4, 3, 2], [7, 7, 3]] as const) {
+    const smallGrid = new VoxelGrid(width, height, depth);
+    const smallAgents = new AgentSystem(0x1234abcd);
+    smallAgents.seed(smallGrid, 8);
+    const spawned = smallAgents.getAgents();
+    if (spawned.some(agent =>
+      !smallGrid.inBounds(agent.x, agent.y, agent.z) ||
+      ![agent.x, agent.y, agent.z].every(Number.isSafeInteger))) {
+      throw new Error(`AgentSystem.seed created out-of-bounds agent in ${width}x${height}x${depth} grid`);
+    }
+    smallAgents.tick(smallGrid, 1 / 60);
+    if (smallGrid.buffer.some(value => !Number.isFinite(value))) {
+      throw new Error(`AgentSystem.seed/tick corrupted numeric cell state in ${width}x${height}x${depth} grid`);
+    }
+  }
+
   const grid = new VoxelGrid(24, 24, 12);
   const agents = new AgentSystem(0x1234abcd);
   agents.seed(grid, 5);

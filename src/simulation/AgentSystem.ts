@@ -149,9 +149,12 @@ export class AgentSystem {
   seed(grid: VoxelGrid, count = 8): void {
     const buf = getMutableBuffer(grid);
     for (let i = 0; i < count && this.agents.size < this.maxAgents; i++) {
-      const x = Math.floor(4 + this._random() * (grid.W - 8));
-      const y = Math.floor(4 + this._random() * (grid.H - 8));
-      const z = Math.floor(2 + this._random() * (grid.D * 0.6));
+      // Keep seeded agents in-bounds for small test worlds as well as the
+      // default world. The previous fixed margins could create coordinates
+      // outside grids narrower than eight cells or shallower than three.
+      const x = Math.min(grid.W - 1, Math.max(0, Math.floor(4 + this._random() * Math.max(1, grid.W - 8))));
+      const y = Math.min(grid.H - 1, Math.max(0, Math.floor(4 + this._random() * Math.max(1, grid.H - 8))));
+      const z = Math.min(grid.D - 1, Math.max(0, Math.floor(2 + this._random() * Math.max(1, grid.D * 0.6))));
 
       // Inject a small energy patch so agents have something to harvest
       for (let dz = -1; dz <= 1; dz++)
