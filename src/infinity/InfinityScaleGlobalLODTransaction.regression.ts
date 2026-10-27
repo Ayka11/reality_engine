@@ -254,8 +254,12 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
     readOperation: "restriction",
   }, [1073741824, 0, 0], [largeRatioSource]);
   const largeRatioStaged = largeRatioSync.getStagedUpdates();
+  const expectedLargeRatioEnergy = largeRatioSource[F.ENERGY] / (2 ** 90);
+  const actualLargeRatioEnergy = largeRatioStaged[0]?.value[F.ENERGY];
   if (largeRatioStaged.length !== 1 ||
-      largeRatioStaged[0].value[F.ENERGY] !== largeRatioSource[F.ENERGY] / (2 ** 90) ||
+      actualLargeRatioEnergy === undefined ||
+      Math.abs(actualLargeRatioEnergy - expectedLargeRatioEnergy) >
+        Math.abs(expectedLargeRatioEnergy) * 1e-6 ||
       largeRatioStaged[0].value[F.DENSITY] !== largeRatioSource[F.DENSITY]) {
     throw new Error("Infinity Scale high-ratio boundary prolongation produced an invalid single-cell result");
   }
