@@ -1,5 +1,6 @@
 import { CELL_FIELDS } from "../core/CellState";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import { validateInfinityScaleBoundaryGeometry } from "./InfinityScaleLODBoundaryGeometry";
 import { getInfinityScaleFieldSemantics } from "./InfinityScaleFieldSemantics";
 import {
   InfinityScaleLODTransfer,
@@ -57,6 +58,11 @@ export class InfinityScaleLODSynchronization {
       if (!Number.isSafeInteger(targetCell[axis]) || targetCell[axis] < 0) {
         throw new Error("Infinity Scale boundary target cell must contain three non-negative safe integer coordinates");
       }
+    }
+    if (!validateInfinityScaleBoundaryGeometry(spec, targetCell, this.state.chunkSize)) {
+      throw new Error(
+        `Infinity Scale boundary target cell is not on the canonical shared face: ${spec.targetChunk}:${targetCell.join(",")}`,
+      );
     }
     if (!Array.isArray(sourceCells) || sourceCells.length === 0) {
       throw new Error("Infinity Scale boundary transfer requires finite source cells with the expected field count");

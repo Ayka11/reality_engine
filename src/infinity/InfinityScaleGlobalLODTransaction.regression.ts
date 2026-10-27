@@ -13,17 +13,17 @@ import { InfinityScaleLODSynchronization } from "./InfinityScaleLODSynchronizati
 
 export function runInfinityScaleGlobalLODTransactionRegression(): void {
   const state = new InfinityScaleLODState(2);
-  state.ensureChunk("0:0,0,0", 0);
-  state.ensureChunk("1:1,0,0", 1);
+  state.ensureChunk("0:2,0,0", 0);
+  state.ensureChunk("1:0,0,0", 1);
 
   const plan = {
     revision: 1,
     mode: "advisory",
-    chunks: [{ key: "0:0,0,0" }],
-    boundaryReadChunks: ["1:1,0,0"],
+    chunks: [{ key: "0:2,0,0" }],
+    boundaryReadChunks: ["1:0,0,0"],
     boundaryReadRelations: [{
-      sourceChunk: "0:0,0,0",
-      targetChunk: "1:1,0,0",
+      sourceChunk: "0:2,0,0",
+      targetChunk: "1:0,0,0",
       relation: "fine-to-coarse",
     }],
     simulationCellCount: 8,
@@ -51,8 +51,8 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
 
   transaction.synchronization.stageTransfer(
     {
-      sourceChunk: "0:0,0,0",
-      targetChunk: "1:1,0,0",
+      sourceChunk: "0:2,0,0",
+      targetChunk: "1:0,0,0",
       relation: "fine-to-coarse",
       sourceLevel: 0,
       targetLevel: 1,
@@ -60,7 +60,7 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
       operation: "restriction",
       readOperation: "prolongation",
     },
-    [4, 0, 0],
+    [3, 0, 0],
     sources,
   );
 
@@ -76,8 +76,8 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
   try {
     transaction.synchronization.stageTransfer(
       {
-        sourceChunk: "0:0,0,0",
-        targetChunk: "1:1,0,0",
+        sourceChunk: "0:2,0,0",
+        targetChunk: "1:0,0,0",
         relation: "fine-to-coarse",
         sourceLevel: 0,
         targetLevel: 1,
@@ -85,7 +85,7 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
         operation: "restriction",
         readOperation: "prolongation",
       },
-      [4, 0, 0],
+      [3, 0, 0],
       conflictingSources,
     );
   } catch (error) {
@@ -111,7 +111,7 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
     throw new Error("Infinity Scale global LOD transaction regression failed");
   }
 
-  const committed = state.readBaseCell("1:1,0,0", 1, 4, 0, 0);
+  const committed = state.readBaseCell("1:0,0,0", 1, 3, 0, 0);
   if (!committed || committed[F.ENERGY] !== 8 || committed[F.DENSITY] !== 10) {
     throw new Error("Infinity Scale global LOD conservation regression failed");
   }
@@ -142,8 +142,8 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
   let invalidTargetRejected = false;
   try {
     guardedSync.stageTransfer({
-      sourceChunk: "0:0,0,0",
-      targetChunk: "1:1,0,0",
+      sourceChunk: "0:2,0,0",
+      targetChunk: "1:0,0,0",
       relation: "fine-to-coarse",
       sourceLevel: 0,
       targetLevel: 1,
@@ -158,11 +158,31 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
     throw new Error("Infinity Scale invalid boundary target was not rejected before staging");
   }
 
+  let interiorTargetRejected = false;
+  try {
+    guardedSync.stageTransfer({
+      sourceChunk: "0:2,0,0",
+      targetChunk: "1:0,0,0",
+      relation: "fine-to-coarse",
+      sourceLevel: 0,
+      targetLevel: 1,
+      refinementRatio: 2,
+      operation: "restriction",
+      readOperation: "prolongation",
+    }, [2, 0, 0], guardedSources);
+  } catch (error) {
+    interiorTargetRejected = error instanceof Error &&
+      error.message.includes("canonical shared face");
+  }
+  if (!interiorTargetRejected || guardedSync.getStagedUpdates().length !== 0) {
+    throw new Error("Infinity Scale synchronization accepted an interior cell as a boundary target");
+  }
+
   let sparseTargetRejected = false;
   try {
     guardedSync.stageTransfer({
-      sourceChunk: "0:0,0,0",
-      targetChunk: "1:1,0,0",
+      sourceChunk: "0:2,0,0",
+      targetChunk: "1:0,0,0",
       relation: "fine-to-coarse",
       sourceLevel: 0,
       targetLevel: 1,
@@ -182,15 +202,15 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
   let invalidSourceRejected = false;
   try {
     guardedSync.stageTransfer({
-      sourceChunk: "0:0,0,0",
-      targetChunk: "1:1,0,0",
+      sourceChunk: "0:2,0,0",
+      targetChunk: "1:0,0,0",
       relation: "fine-to-coarse",
       sourceLevel: 0,
       targetLevel: 1,
       refinementRatio: 2,
       operation: "restriction",
       readOperation: "prolongation",
-    }, [4, 0, 0], [invalidSource, ...guardedSources.slice(1)]);
+    }, [3, 0, 0], [invalidSource, ...guardedSources.slice(1)]);
   } catch {
     invalidSourceRejected = true;
   }
@@ -203,15 +223,15 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
   let sparseSourceRejected = false;
   try {
     guardedSync.stageTransfer({
-      sourceChunk: "0:0,0,0",
-      targetChunk: "1:1,0,0",
+      sourceChunk: "0:2,0,0",
+      targetChunk: "1:0,0,0",
       relation: "fine-to-coarse",
       sourceLevel: 0,
       targetLevel: 1,
       refinementRatio: 2,
       operation: "restriction",
       readOperation: "prolongation",
-    }, [4, 0, 0], [sparseSource, ...guardedSources.slice(1)]);
+    }, [3, 0, 0], [sparseSource, ...guardedSources.slice(1)]);
   } catch {
     sparseSourceRejected = true;
   }
