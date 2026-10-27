@@ -19,8 +19,8 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
   const plan = {
     revision: 1,
     mode: "advisory",
-    chunks: [{ key: "0:2,0,0" }],
-    boundaryReadChunks: ["1:0,0,0"],
+    chunks: [{ key: "1:0,0,0" }],
+    boundaryReadChunks: ["0:2,0,0"],
     boundaryReadRelations: [{
       sourceChunk: "0:2,0,0",
       targetChunk: "1:0,0,0",

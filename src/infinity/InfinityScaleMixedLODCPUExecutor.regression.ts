@@ -566,8 +566,8 @@ export function runInfinityScaleLODPartialBoundaryCommitRollbackRegression(): vo
     boundaryReadChunks: [targetKey],
     boundaryReadCount: 1,
     boundaryReadRelations: [{
-      sourceChunk: key,
-      targetChunk: targetKey,
+      sourceChunk: targetKey,
+      targetChunk: key,
       relation: "same-level",
     }],
     simulationCellCount: 64,
@@ -597,8 +597,8 @@ export function runInfinityScaleLODPartialBoundaryCommitRollbackRegression(): vo
   };
   const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
   const spec = {
-    sourceChunk: key,
-    targetChunk: targetKey,
+    sourceChunk: targetKey,
+    targetChunk: key,
     relation: "same-level" as const,
     sourceLevel: 0,
     targetLevel: 0,
@@ -608,8 +608,8 @@ export function runInfinityScaleLODPartialBoundaryCommitRollbackRegression(): vo
   };
   const stagedValue = new Float32Array(initial);
   stagedValue[0] = 99;
-  transaction.synchronization.stageTransfer(spec, [4, 0, 0], [stagedValue]);
-  transaction.synchronization.stageTransfer(spec, [4, 1, 0], [stagedValue]);
+  transaction.synchronization.stageTransfer(spec, [3, 0, 0], [stagedValue]);
+  transaction.synchronization.stageTransfer(spec, [3, 1, 0], [stagedValue]);
 
   // Inject a failure on the second authoritative write after both valid face
   // updates have passed preflight. The transaction must restore the snapshot.
