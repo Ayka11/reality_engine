@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { VoxelGrid } from '../src/core/VoxelGrid.ts';
-import { CELL_FIELDS, F } from '../src/core/CellState.ts';
+import { F } from '../src/core/CellState.ts';
 import { PROC, defaultProcessMask } from '../src/process/ProcessDef.ts';
 import { InfoPhysics } from '../src/simulation/InfoPhysics.ts';
 
