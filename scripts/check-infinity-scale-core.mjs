@@ -88,6 +88,43 @@ assert.equal(records[0].lod, 0);
 assert.equal(records[1].state, "unloaded");
 assert.equal(manager.updateAMR(records, 1.2, 0).every(record => record.amr === 2), true);
 
+// Runtime observer updates are atomic and must not silently truncate invalid
+// coordinates before the authoritative InfinityScaleV2 validates them.
+globalThis.__infinityScaleCoreForTest = core;
+globalThis.__infinityScaleManagerForTest = managerMod;
+const runtimeMod = await load("src/infinity/InfinityScaleRuntime.ts", [
+  [
+    /import \{\s*InfinityScaleV2,[\s\S]*?\} from "\.\.\/InfinityScaleV2";?/,
+    "const { InfinityScaleV2, DEFAULT_INFINITY_SCALE_V2 } = globalThis.__infinityScaleCoreForTest;",
+  ],
+  [
+    /import \{\s*ChunkResidencyManager,[\s\S]*?\} from "\.\.\/ChunkResidencyManager";?/,
+    "const { ChunkResidencyManager } = globalThis.__infinityScaleManagerForTest;",
+  ],
+  [
+    /import \{\s*MemoryChunkStore,[\s\S]*?\} from "\.\.\/ChunkStore";?/,
+    "class MemoryChunkStore {}",
+  ],
+  [
+    /import type \{\s*ScaleTelemetry\s*\} from "\.\.\/ScaleTelemetry";?/,
+    "",
+  ],
+]);
+const { InfinityScaleRuntime } = runtimeMod;
+const runtime = new InfinityScaleRuntime({});
+runtime.setObserver({ x: 3200, y: -64, z: 0 });
+assert.deepEqual(runtime.getObserver(), { x: 3200, y: -64, z: 0 });
+assert.deepEqual(runtime.scale.getObserver(), { x: 3200, y: -64, z: 0 });
+const lastGoodObserver = runtime.getObserver();
+const lastGoodPlannerObserver = runtime.scale.getObserver();
+assert.throws(() => runtime.setObserver({ x: 0.5, y: 0, z: 0 }), RangeError);
+assert.deepEqual(runtime.getObserver(), lastGoodObserver,
+  "failed runtime observer update must not publish a truncated coordinate");
+assert.deepEqual(runtime.scale.getObserver(), lastGoodPlannerObserver,
+  "failed runtime observer update must not mutate the authoritative planner");
+delete globalThis.__infinityScaleCoreForTest;
+delete globalThis.__infinityScaleManagerForTest;
+
 // ChunkResidencyManager receives observer coordinates in cells and must
 // derive LOD distance in chunk units. The old implementation compared 3200
 // cells directly with chunk index 100 and incorrectly selected LOD 3 nearby.

@@ -48,13 +48,12 @@ export class InfinityScaleRuntime {
   }
 
   setObserver(observer: Vec3i): void {
-    this.observer = {
-      x: Math.trunc(observer.x),
-      y: Math.trunc(observer.y),
-      z: Math.trunc(observer.z),
-    };
-
-    this.scale.setObserver(this.observer);
+    // Validate and replan before publishing the new observer. InfinityScaleV2
+    // rejects fractional, unsafe, or out-of-range coordinates; silently
+    // truncating them here would make the runtime and planner disagree.
+    const next = { x: observer.x, y: observer.y, z: observer.z };
+    this.scale.setObserver(next);
+    this.observer = next;
   }
 
   getObserver(): Vec3i {
