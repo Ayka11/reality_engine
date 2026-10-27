@@ -67,6 +67,30 @@ export interface InfinityScaleExecutionCapabilities {
   mixedLodExecutionReady: boolean;
 }
 
+const CAPABILITY_KEYS = [
+  "selectiveCpuReady",
+  "selectiveGpuReady",
+  "gpuPhysicsReady",
+  "lodBoundaryTransferReady",
+  "mixedLodExecutionReady",
+] as const;
+
+function normalizeCapabilities(
+  capabilities: InfinityScaleExecutionCapabilities,
+): InfinityScaleExecutionCapabilities {
+  if (!capabilities || typeof capabilities !== "object") {
+    throw new TypeError("Infinity Scale execution capabilities must be an object");
+  }
+  for (const key of CAPABILITY_KEYS) {
+    if (typeof capabilities[key] !== "boolean") {
+      throw new TypeError(
+        "Infinity Scale execution capability " + key + " must be a boolean",
+      );
+    }
+  }
+  return { ...capabilities };
+}
+
 export class InfinityScaleExecutionAdapter {
   private plan: InfinityScaleExecutionPlan;
   private capabilities: InfinityScaleExecutionCapabilities = {
@@ -78,7 +102,7 @@ export class InfinityScaleExecutionAdapter {
   };
 
   setCapabilities(capabilities: InfinityScaleExecutionCapabilities): void {
-    this.capabilities = { ...capabilities };
+    this.capabilities = normalizeCapabilities(capabilities);
   }
 
   getCapabilities(): InfinityScaleExecutionCapabilities {
@@ -117,7 +141,7 @@ export class InfinityScaleExecutionAdapter {
     frame: InfinityScaleFramePlan,
     capabilities: InfinityScaleExecutionCapabilities = this.capabilities,
   ): InfinityScaleExecutionPlan {
-    const nextCapabilities = { ...capabilities };
+    const nextCapabilities = normalizeCapabilities(capabilities);
 
     // Frame geometry is represented twice (canonical key and decoded chunk
     // coordinates); reject any disagreement before touching adapter state.

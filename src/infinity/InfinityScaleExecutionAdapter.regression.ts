@@ -113,6 +113,42 @@ export function runInfinityScaleExecutionAdapterBoundaryRegression(): void {
 
   const planBeforeRejectedUpdate = adapter.getPlan();
   const capabilitiesBeforeRejectedUpdate = adapter.getCapabilities();
+  const malformedCapabilities = {
+    selectiveCpuReady: "true",
+    selectiveGpuReady: false,
+    gpuPhysicsReady: false,
+    lodBoundaryTransferReady: true,
+    mixedLodExecutionReady: true,
+  } as unknown as Parameters<InfinityScaleExecutionAdapter["setCapabilities"]>[0];
+
+  let malformedSetterRejected = false;
+  try {
+    adapter.setCapabilities(malformedCapabilities);
+  } catch (error) {
+    malformedSetterRejected = error instanceof TypeError &&
+      error.message.includes("selectiveCpuReady must be a boolean");
+  }
+  if (!malformedSetterRejected) {
+    throw new Error("Execution adapter accepted a non-boolean capability flag");
+  }
+
+  let malformedUpdateRejected = false;
+  try {
+    adapter.update(frame, malformedCapabilities);
+  } catch (error) {
+    malformedUpdateRejected = error instanceof TypeError &&
+      error.message.includes("selectiveCpuReady must be a boolean");
+  }
+  if (!malformedUpdateRejected) {
+    throw new Error("Execution adapter update accepted a non-boolean capability flag");
+  }
+  if (JSON.stringify(adapter.getCapabilities()) !== JSON.stringify(capabilitiesBeforeRejectedUpdate)) {
+    throw new Error("Malformed capability input mutated adapter capabilities");
+  }
+  if (JSON.stringify(adapter.getPlan()) !== JSON.stringify(planBeforeRejectedUpdate)) {
+    throw new Error("Malformed capability input replaced the last valid execution plan");
+  }
+
   const requestedCapabilities = {
     selectiveCpuReady: true,
     selectiveGpuReady: false,
