@@ -8,7 +8,22 @@ import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import { CELL_FIELDS } from "../core/CellState";
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
+import {
+  advanceInfinityScaleGlobalFrame,
+  beginInfinityScaleGlobalFrame,
+} from "./InfinityScaleGlobalExecutionFrame";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
+
+function makeLocalExecutionFrame(
+  plan: InfinityScaleExecutionPlan,
+  tickStart: number,
+  tickEnd: number,
+): InfinityScaleGlobalExecutionFrame {
+  return advanceInfinityScaleGlobalFrame(
+    beginInfinityScaleGlobalFrame(plan, tickStart, tickEnd),
+    "local-execution",
+  );
+}
 
 export function runInfinityScaleMixedLODCPURegression(): void {
   const state = new InfinityScaleLODState(4);
@@ -78,19 +93,7 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   };
 
   const context = new InfinityScaleChunkExecutionContext(plan, 8, 8, 8, 4);
-  const frame: InfinityScaleGlobalExecutionFrame = {
-    revision: 1,
-    tickStart: 0,
-    tickEnd: 1,
-    phase: "local-execution",
-    planRevision: 1,
-    simulationCellCount: 64,
-    boundaryReadCellCount: 64,
-    committed: false,
-    finalized: false,
-    ownershipFingerprint: "regression",
-    capabilityFingerprint: "regression",
-  };
+  const frame: InfinityScaleGlobalExecutionFrame = makeLocalExecutionFrame(plan, 0, 1);
 
   const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
   const executor = new InfinityScaleMixedLODCPUExecutor(state, context);
@@ -119,6 +122,21 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   }
   if (!alteredPlanRejected) {
     throw new Error("CPU executor accepted changed chunk ownership under the same plan revision");
+  }
+
+  const changedBudgetPlan: InfinityScaleExecutionPlan = {
+    ...plan,
+    simulationBudget: plan.simulationBudget + 1,
+  };
+  let changedBudgetRejected = false;
+  try {
+    executor.execute(frame, changedBudgetPlan, transaction, cell => new Float32Array(cell.input));
+  } catch (error) {
+    changedBudgetRejected = error instanceof Error &&
+      error.message.includes("frame ownership changed");
+  }
+  if (!changedBudgetRejected) {
+    throw new Error("CPU executor accepted a same-revision plan with changed scheduling budget");
   }
 
   const wrongFrame = { ...frame, revision: frame.revision + 1 };
@@ -362,19 +380,7 @@ export function runInfinityScaleMixedLODCPUProlongationRegression(): void {
   };
 
   const context = new InfinityScaleChunkExecutionContext(plan, 12, 8, 8, 4);
-  const frame: InfinityScaleGlobalExecutionFrame = {
-    revision: 2,
-    tickStart: 1,
-    tickEnd: 2,
-    phase: "local-execution",
-    planRevision: 2,
-    simulationCellCount: 256,
-    boundaryReadCellCount: 64,
-    committed: false,
-    finalized: false,
-    ownershipFingerprint: "prolongation-regression",
-    capabilityFingerprint: "prolongation-regression",
-  };
+  const frame: InfinityScaleGlobalExecutionFrame = makeLocalExecutionFrame(plan, 1, 2);
 
   const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
   const executor = new InfinityScaleMixedLODCPUExecutor(state, context);
@@ -488,19 +494,7 @@ export function runInfinityScaleMixedLODCPURollbackRegression(): void {
     agentMigrationReady: false,
   } as unknown as InfinityScaleExecutionPlan;
   const context = new InfinityScaleChunkExecutionContext(plan, 4, 4, 4, 4);
-  const frame: InfinityScaleGlobalExecutionFrame = {
-    revision: 99,
-    tickStart: 0,
-    tickEnd: 1,
-    phase: "local-execution",
-    planRevision: 99,
-    simulationCellCount: 64,
-    boundaryReadCellCount: 0,
-    committed: false,
-    finalized: false,
-    ownershipFingerprint: "rollback-regression",
-    capabilityFingerprint: "rollback-regression",
-  };
+  const frame: InfinityScaleGlobalExecutionFrame = makeLocalExecutionFrame(plan, 0, 1);
   const before = state.snapshot();
   const revisionBefore = state.getRevision();
   const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);

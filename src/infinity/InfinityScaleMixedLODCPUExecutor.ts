@@ -15,6 +15,11 @@ import {
 import type {
   InfinityScaleBoundaryTransferSpec,
 } from "./InfinityScaleChunkExecutionContext";
+import {
+  assertInfinityScaleGlobalFramePlan,
+  advanceInfinityScaleGlobalFrame,
+  beginInfinityScaleGlobalFrame,
+} from "./InfinityScaleGlobalExecutionFrame";
 import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
 import { InfinityScaleLODBoundaryCellMapper } from "./InfinityScaleLODBoundaryCellMapper";
 
@@ -84,6 +89,7 @@ export class InfinityScaleMixedLODCPUExecutor {
       throw new Error("Infinity Scale CPU execution rejected: transaction belongs to a different LOD state");
     }
     this.context.assertCompatiblePlan(plan);
+    assertInfinityScaleGlobalFramePlan(frame, plan);
     if (this.context.overlappingSimulationRangeCount > 0) {
       throw new Error(
         `Infinity Scale CPU execution rejected: overlapping simulation ownership ranges ${this.context.overlappingSimulationRangeCount}`,
