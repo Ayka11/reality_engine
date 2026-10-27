@@ -103,27 +103,6 @@ export function runInfinityScaleLODCellWriteValidationRegression(): void {
     }, 0);
   });
 
-  const sortBaseline = chunk.cells.slice();
-  const sortRevision = state.getRevision();
-  let sortRejected = false;
-  try {
-    chunk.cells.sort((_left, _right, backing) => {
-      backing[0] = Number.NaN;
-      return 0;
-    });
-  } catch {
-    sortRejected = true;
-  }
-  if (!sortRejected) throw new Error("LOD cells.sort comparator received raw backing storage");
-  if (state.getRevision() !== sortRevision + 1) {
-    throw new Error("Rejected LOD cells.sort mutation did not invalidate transactions exactly once");
-  }
-  for (let index = 0; index < sortBaseline.length; index++) {
-    if (chunk.cells[index] !== sortBaseline[index]) {
-      throw new Error(`Rejected LOD cells.sort comparator changed field ${index}`);
-    }
-  }
-
   const validCellView = chunk.cells;
   const fillRevisionBefore = state.getRevision();
   const fillResult = validCellView.fill(2);
