@@ -123,6 +123,13 @@ try {
 
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
+  const initialViewSeed = await page.evaluate(() => ({
+    worldSeed: window.infiniteWorld?.generator?.seed ?? null,
+    viewSeed: window.getWorldViewContract?.()?.seed ?? null,
+  }));
+  if (!initialViewSeed.worldSeed || initialViewSeed.viewSeed !== initialViewSeed.worldSeed) {
+    throw new Error("WorldViewContract seed does not match the active WorldGenerator: " + JSON.stringify(initialViewSeed));
+  }
   const noGenerationCheck = await page.evaluate((before) => window.worldVerifyGeneration?.(before), initial);
   if (noGenerationCheck?.ok !== false || noGenerationCheck?.reason !== "generation-revision-did-not-advance") {
     throw new Error("World generation verifier must reject unchanged state even when the stats object exists: " + JSON.stringify(noGenerationCheck));
@@ -717,6 +724,10 @@ try {
   }
   // 3D volumetric field must render actual authoritative world-field samples, not a blank tab.
   // Exercise the same click path as a user; this also verifies the tab is wired to setRenderMode.
+  await page.evaluate(() => {
+    if (typeof window.getWorldField3DState !== "function") throw new Error("Public Field 3D diagnostics API is missing before render");
+    window.__field3dPublicGetterProbe = window.getWorldField3DState;
+  });
   await page.locator("#tabField3d").click();
   const field3dCanvasCount = await page.locator("#c3dField").count();
   if (field3dCanvasCount !== 1) {
@@ -767,6 +778,12 @@ try {
     throw new Error(`3D volumetric field renderer did not publish a result: ${JSON.stringify(trace)}; ${error.message}`);
   }
   const field3dDiagnostic = await page.evaluate(() => window.getWorldField3DState?.());
+  const field3dGetterStable = await page.evaluate(() => {
+    const stable = window.getWorldField3DState === window.__field3dPublicGetterProbe;
+    delete window.__field3dPublicGetterProbe;
+    return stable;
+  });
+  if (!field3dGetterStable) throw new Error("Field 3D renderer replaced the connector-owned diagnostics API");
   if (!field3dDiagnostic?.ready) {
     throw new Error(`3D volumetric field renderer failed: ${JSON.stringify(field3dDiagnostic)}`);
   }
@@ -2282,7 +2299,12 @@ try {
   const composeResult = await composePage.evaluate((beforeState) => ({
     after: window.worldGenerationHealth(),
     verification: window.worldVerifyGeneration?.(beforeState),
+    worldSeed: window.infiniteWorld?.generator?.seed ?? null,
+    viewSeed: window.getWorldViewContract?.()?.seed ?? null,
   }), beforeCompose);
+  if (!composeResult.worldSeed || composeResult.viewSeed !== composeResult.worldSeed) {
+    throw new Error("Compose World did not synchronize the WorldViewContract seed: " + JSON.stringify({worldSeed:composeResult.worldSeed,viewSeed:composeResult.viewSeed}));
+  }
   const afterCompose = composeResult.after;
   if (!composeResult.verification?.ok || !composeResult.verification?.generationAdvanced ||
       Number(afterCompose?.stats?.objects ?? 0) <= 0) {

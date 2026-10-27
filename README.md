@@ -616,6 +616,8 @@ The viewport exposes distinct render paths with separate canvas contexts:
 
 The volumetric field canvas is rendered by `src/render/WorldFieldVolumeRenderer.ts`. Its diagnostic state reports the renderer, rendered instances, draw calls, triangle count, and sampling depth. When the WebGL renderer is unavailable, the fallback is explicitly reported as an isometric preview rather than being advertised as true 3D.
 
+When the Infinite World canvas is hidden (for example in 2D, Field 3D, or Metrics), its runtime render loop is suspended, including chunk streaming and optional 3D physics animation; it resumes when 3D or Hybrid becomes active. `getRuntimeDiagnostics()` exposes `pixelRatio`, `maxPixelRatio`, `adaptiveFrameMs`, and `enabled`. Every 45 rendered frames, backing-buffer resolution is reduced by 0.25 when mean synchronous render-path time exceeds 28 ms, or raised by 0.25 below 15 ms, within `[1, maxPixelRatio]` (maximum device pixel ratio capped at 2). `adaptiveFrameMs` is JavaScript-side execution time, not a direct GPU timer.
+
 ---
 
 ## Architecture

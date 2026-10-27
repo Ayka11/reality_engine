@@ -788,6 +788,7 @@ function _drawParticles(cx_){
   cx_.restore();cx_.globalAlpha=1;
 }
 let _cachedMood = { mr: 0, mg: 0, mb: 0, ma: 0, lastTick: -99 };
+function _invalidateAtmosphereMoodCache(){_cachedMood.lastTick=-99;}
 function _drawAtmosphere(cx_,cw,ch){
   // Vignette — depth darkening at edges.
   const vig=cx_.createRadialGradient(cw*.5,ch*.48,ch*.22,cw*.5,ch*.48,ch*.78);
@@ -798,7 +799,7 @@ function _drawAtmosphere(cx_,cw,ch){
 
   // Mood is approximate visual telemetry, so refresh it sparsely rather than
   // scanning the full field on every rendered frame.
-  if(tick-_cachedMood.lastTick>=15){
+  if(tick<_cachedMood.lastTick||tick-_cachedMood.lastTick>=15){
     let totS=0,totB=0,totE=0,samples=0;
     const stride=4;
     for(let i=0;i<SZ;i+=stride){
@@ -1827,6 +1828,7 @@ function generateWorld(){
   const st=SPACETIME_PROFILES[compSel.spacetime]||SPACETIME_PROFILES['Standard'];
   pushUndo();
   buf.fill(0);causal=[];tick=0;
+  _invalidateAtmosphereMoodCache();
   // Map Φ·ρ·E·I·C → engine constants
   // DIFFUSION: coupling drives energy spread; denser fields slow it slightly
   DIFFUSION=0.09*phi.coupling*(0.4+fld.rho*0.6);
@@ -2007,6 +2009,7 @@ function _finishSculptGesture(){
   if(!gesture||gesture.authoritativeOps===0)return null;
   const record={label:gesture.authoritativeOps===1?gesture.label:'gesture ('+gesture.authoritativeOps+' samples)',before:gesture.before,after:new Float32Array(buf),authoritativeOps:gesture.authoritativeOps};
   _unifiedSculptUndo.push(record);if(_unifiedSculptUndo.length>50)_unifiedSculptUndo.shift();_unifiedSculptRedo.length=0;
+  _invalidateAtmosphereMoodCache();
   return record;
 }
 function _beginSculptGesture(){
@@ -2045,11 +2048,13 @@ function _unifiedSculptApply(label,applyLegacy,applyAuthoritative){
     }else{
       const record={label,before,after:new Float32Array(buf),authoritativeOps:1};
       _unifiedSculptUndo.push(record);if(_unifiedSculptUndo.length>50)_unifiedSculptUndo.shift();_unifiedSculptRedo.length=0;
+      _invalidateAtmosphereMoodCache();
     }
     window.buf=buf;drawGrid();
     return result;
   }catch(error){
     buf.set(before);
+    _invalidateAtmosphereMoodCache();
     const mutationCountAfter=field?.getMutationCount?.()??mutationCountBefore;
     if(mutationCountAfter!==mutationCountBefore)window.infinityUndoLegacySculptAuthoritative?.();
     window.buf=buf;drawGrid();
@@ -2090,12 +2095,14 @@ async function _undoSculptTransaction(){
       throw error;
     }
     _unifiedSculptUndo.pop();buf.set(record.before);_unifiedSculptRedo.push(record);
+    _invalidateAtmosphereMoodCache();
     window.buf=buf;drawGrid();log('↩ Undo '+record.label);return record.label;
   }
   if(_undoCount===0){log('Nothing to undo');return null;}
   _undoHead--;if(_undoHead<0)_undoHead=UNDO_MAX-1;
   _undoCount--;
   buf.set(_undoRing[_undoHead%UNDO_MAX]);
+  _invalidateAtmosphereMoodCache();
   window.buf=buf;drawGrid();log('↩ Undo');return 'legacy-snapshot';
 }
 async function _redoSculptTransaction(){
@@ -2132,6 +2139,7 @@ async function _redoSculptTransaction(){
     throw error;
   }
   _unifiedSculptRedo.pop();buf.set(record.after);_unifiedSculptUndo.push(record);
+  _invalidateAtmosphereMoodCache();
   window.buf=buf;drawGrid();log('↪ Redo '+record.label);return record.label;
 }
 async function undo(){
@@ -2215,7 +2223,7 @@ window.realitySculptTransactionRuntime={
 function paintAt(x,y){
   const bs=parseInt(document.getElementById('bsize')?.value||2);
   const str=parseInt(document.getElementById('bstr')?.value||400);
-  if(tool==='stamp_prefab'&&window.gamedevMode){pushUndo();window.gamedevMode.stampAt(x,y);return;}
+  if(tool==='stamp_prefab'&&window.gamedevMode){pushUndo();window.gamedevMode.stampAt(x,y);_invalidateAtmosphereMoodCache();return;}
   if(activeBrush&&BRUSHES[activeBrush]){
     _applyUnifiedSmartBrush(activeBrush,x,y,bs+1,str/400);
     return;
@@ -2243,6 +2251,7 @@ wrap.addEventListener('pointercancel',()=>{painting=false;_finishSculptGesture()
 window.applyPreset=function(p){
   pushUndo();
   buf.fill(0);causal=[];tick=0;
+  _invalidateAtmosphereMoodCache();
   const cx=W/2,cy=H/2;
   if(p==='burst'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const d=Math.sqrt((x-cx)**2+(y-cy)**2);if(d<8){const g=Math.exp(-d*d/20);set_(x,y,FE,900*g);set_(x,y,FT,400*g);set_(x,y,FD,0.7*g);}}}
   else if(p==='wave'){for(let y=0;y<H;y++)for(let x=0;x<W;x++){set_(x,y,FE,400+400*Math.sin(x*.7)*Math.cos(y*.5));set_(x,y,FD,.4+.3*Math.sin(x*.3+y*.3));set_(x,y,FT,150+100*Math.cos(x*.4));}}
@@ -2877,6 +2886,7 @@ function resetLegacyFieldSimulation(){
   bbuf.fill(0);
   causal.length=0;
   tick=0;
+  _invalidateAtmosphereMoodCache();
   _particles.length=0;
   _undoRing.length=0;
   _undoHead=0;
@@ -2949,6 +2959,7 @@ window.loadWorld=function(input){
       if(!data.cells||!data.W||!data.H){log('Invalid .reality file');return;}
       pushUndo();
       buf.fill(0);causal=[];tick=data.tick||0;
+      _invalidateAtmosphereMoodCache();
       const nf=data.NF||NF;
       for(const {i,d} of data.cells){
         if(i>=SZ)continue;
@@ -3334,6 +3345,7 @@ function loadGameLevel(key){
     const levelData=JSON.parse(saved);
     buf.set(levelData.worldState);
     tick=levelData.tick;
+    _invalidateAtmosphereMoodCache();
     if(levelData.health)health=new Float32Array(levelData.health);
     currentDifficulty=levelData.difficulty||'normal';
     setDifficulty(currentDifficulty);
