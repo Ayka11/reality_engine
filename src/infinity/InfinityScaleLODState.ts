@@ -218,11 +218,20 @@ export class InfinityScaleLODState {
         }
         if (property === "copyWithin" || property === "reverse" || property === "sort") {
           return (...args: unknown[]) => {
+            // TypedArray.sort passes its receiver as the comparator's third
+            // argument. Never expose the raw backing target to user callbacks.
+            if (property === "sort" && typeof args[0] === "function") {
+              const comparator = args[0] as (...values: unknown[]) => unknown;
+              args[0] = (...comparatorArgs: unknown[]) => {
+                if (comparatorArgs.length > 0) comparatorArgs[comparatorArgs.length - 1] = proxy;
+                return Reflect.apply(comparator, undefined, comparatorArgs);
+              };
+            }
             try {
               const result = Reflect.apply(value, target, args);
               return result === target ? proxy : result;
             } finally {
-              // sort callbacks may throw after changing part of the target.
+              // Sort comparators can throw after inspecting or mutating values.
               owner.revision += 1;
             }
           };
