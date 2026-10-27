@@ -215,7 +215,8 @@ export class InfinityScaleLODState {
           return (fillValue: number, start?: number, end?: number) => {
             assertFiniteFloat32Value(fillValue, "LOD chunk cells.fill");
             try {
-              return Reflect.apply(value, target, [fillValue, start, end]);
+              const result = Reflect.apply(value, target, [fillValue, start, end]);
+              return result === target ? proxy : result;
             } finally {
               owner.revision += 1;
             }

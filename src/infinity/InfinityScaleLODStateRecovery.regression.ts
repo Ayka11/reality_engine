@@ -82,6 +82,21 @@ export function runInfinityScaleLODCellWriteValidationRegression(): void {
     chunk.cells.set(values);
   });
 
+  const validCellView = chunk.cells;
+  const fillRevisionBefore = state.getRevision();
+  const fillResult = validCellView.fill(2);
+  if (fillResult !== validCellView) {
+    throw new Error("Valid LOD cells.fill returned the raw backing array instead of the guarded proxy");
+  }
+  if (state.getRevision() !== fillRevisionBefore + 1) {
+    throw new Error("Valid LOD cells.fill did not advance the mutation revision exactly once");
+  }
+  const detachedBuffer = fillResult.buffer;
+  new Float32Array(detachedBuffer)[0] = 99;
+  if (validCellView[0] !== 2) {
+    throw new Error("LOD cells.fill returned a buffer view that could mutate authoritative storage");
+  }
+
   const nonFiniteSource = new Array<number>(CELL_FIELDS).fill(4);
   nonFiniteSource[5] = Number.POSITIVE_INFINITY;
   assertRejectedWithoutMutation("writeBaseCell with Infinity", () => {
