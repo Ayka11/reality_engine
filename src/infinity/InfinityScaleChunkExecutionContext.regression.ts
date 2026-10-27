@@ -85,6 +85,56 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
 
   const validPlan = makePlan("0:0,0,0", "0:1,0,0", "same-level", 0, 0);
 
+  const advisoryPlan: InfinityScaleExecutionPlan = {
+    ...validPlan,
+    mode: "advisory",
+    selectiveCpuReady: false,
+    selectiveGpuReady: false,
+    gpuPhysicsReady: false,
+    lodBoundaryTransferReady: false,
+    mixedLodExecutionReady: false,
+  };
+  const advisoryContext = new InfinityScaleChunkExecutionContext(
+    advisoryPlan,
+    16,
+    16,
+    16,
+    4,
+  );
+  const forgedReadyPlan: InfinityScaleExecutionPlan = {
+    ...advisoryPlan,
+    mode: "selective-cpu-ready",
+    selectiveCpuReady: true,
+    lodBoundaryTransferReady: true,
+    mixedLodExecutionReady: true,
+  };
+  let readinessEscalationRejected = false;
+  try {
+    advisoryContext.assertCompatiblePlan(forgedReadyPlan);
+  } catch (error) {
+    readinessEscalationRejected = error instanceof Error &&
+      error.message.includes("context/plan geometry mismatch");
+  }
+  if (!readinessEscalationRejected) {
+    throw new Error("Chunk context allowed an advisory plan to be upgraded to execution-ready without rebuilding context");
+  }
+
+  const validContext = new InfinityScaleChunkExecutionContext(validPlan, 16, 16, 16, 4);
+  const downgradedPlan: InfinityScaleExecutionPlan = {
+    ...validPlan,
+    mode: "advisory",
+    selectiveCpuReady: false,
+  };
+  let readinessDowngradeDetected = false;
+  try {
+    validContext.assertCompatiblePlan(downgradedPlan);
+  } catch {
+    readinessDowngradeDetected = true;
+  }
+  if (!readinessDowngradeDetected) {
+    throw new Error("Chunk context failed to detect changed execution readiness flags");
+  }
+
   const immutableContext = new InfinityScaleChunkExecutionContext(
     validPlan,
     16,

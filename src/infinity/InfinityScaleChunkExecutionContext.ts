@@ -49,6 +49,16 @@ function executionGeometryFingerprint(plan: InfinityScaleExecutionPlan): string 
 
   return JSON.stringify({
     revision: plan.revision,
+    mode: plan.mode,
+    readiness: {
+      selectiveCpuReady: plan.selectiveCpuReady,
+      selectiveGpuReady: plan.selectiveGpuReady,
+      gpuPhysicsReady: plan.gpuPhysicsReady,
+      lodBoundaryTransferReady: plan.lodBoundaryTransferReady,
+      mixedLodExecutionReady: plan.mixedLodExecutionReady,
+      entityExecutionReady: plan.entityExecutionReady,
+      agentMigrationReady: plan.agentMigrationReady,
+    },
     chunks,
     boundaryReadChunks: [...plan.boundaryReadChunks].sort(),
     boundaryReadRelations: relations,
