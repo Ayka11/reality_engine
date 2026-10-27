@@ -1,5 +1,6 @@
 import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
 import { isInfinityScaleSourceBoundaryCell } from "./InfinityScaleLODBoundaryCellMapper";
+import { getInfinityScaleChunkBounds, parseInfinityScaleChunkKey, validateInfinityScaleChunkPair } from "./InfinityScaleChunkKey";
 
 export interface ExecutionCellRange {
   minX: number;
@@ -33,9 +34,7 @@ export interface InfinityScaleBoundaryTransferSpec {
 }
 
 function chunkLevel(key: string): number {
-  const match = /^(\d+):/.exec(key);
-  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
-  return Number(match[1]);
+  return parseInfinityScaleChunkKey(key).level;
 }
 
 export class InfinityScaleChunkExecutionContext {
@@ -102,8 +101,9 @@ export class InfinityScaleChunkExecutionContext {
 
   private buildBoundaryTransferSpecs(): InfinityScaleBoundaryTransferSpec[] {
     return this.boundaryReadRelations.map(relation => {
-      const sourceLevel = chunkLevel(relation.sourceChunk);
-      const targetLevel = chunkLevel(relation.targetChunk);
+      const pair = validateInfinityScaleChunkPair(relation.sourceChunk, relation.targetChunk, relation.relation);
+      const sourceLevel = pair.source.level;
+      const targetLevel = pair.target.level;
       const refinementRatio = 2 ** Math.abs(sourceLevel - targetLevel);
       return {
         sourceChunk: relation.sourceChunk,
@@ -134,8 +134,9 @@ export class InfinityScaleChunkExecutionContext {
       : this.boundaryRelationsBySource.get(sourceChunk) ?? [];
 
     return relations.map(relation => {
-      const sourceLevel = chunkLevel(relation.sourceChunk);
-      const targetLevel = chunkLevel(relation.targetChunk);
+      const pair = validateInfinityScaleChunkPair(relation.sourceChunk, relation.targetChunk, relation.relation);
+      const sourceLevel = pair.source.level;
+      const targetLevel = pair.target.level;
       const refinementRatio = 2 ** Math.abs(sourceLevel - targetLevel);
 
       return {
@@ -175,8 +176,9 @@ export class InfinityScaleChunkExecutionContext {
   ): InfinityScaleBoundaryTransferSpec[] {
     const relations = this.getBoundaryRelationsForCell(x, y, z);
     return relations.map(relation => {
-      const sourceLevel = chunkLevel(relation.sourceChunk);
-      const targetLevel = chunkLevel(relation.targetChunk);
+      const pair = validateInfinityScaleChunkPair(relation.sourceChunk, relation.targetChunk, relation.relation);
+      const sourceLevel = pair.source.level;
+      const targetLevel = pair.target.level;
       return {
         sourceChunk: relation.sourceChunk,
         targetChunk: relation.targetChunk,
@@ -248,29 +250,14 @@ export class InfinityScaleChunkExecutionContext {
   }
 
   private chunkRange(key: string): ExecutionCellRange {
-    const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
-    if (!match) {
-      throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
-    }
-
-    const level = Number(match[1]);
-    if (!Number.isInteger(level) || level < 0 || level > 30) {
-      throw new Error(`Invalid Infinity Scale LOD level: ${match[1]}`);
-    }
-
-    const scale = 2 ** level;
-    const extent = this.chunkSize * scale;
-    const x = Number(match[2]) * extent;
-    const y = Number(match[3]) * extent;
-    const z = Number(match[4]) * extent;
-
+    const bounds = getInfinityScaleChunkBounds(key, this.chunkSize);
     return {
-      minX: Math.max(0, x),
-      maxX: Math.min(this.gridWidth - 1, x + extent - 1),
-      minY: Math.max(0, y),
-      maxY: Math.min(this.gridHeight - 1, y + extent - 1),
-      minZ: Math.max(0, z),
-      maxZ: Math.min(this.gridDepth - 1, z + extent - 1),
+      minX: Math.max(0, bounds.minX),
+      maxX: Math.min(this.gridWidth - 1, bounds.maxX),
+      minY: Math.max(0, bounds.minY),
+      maxY: Math.min(this.gridHeight - 1, bounds.maxY),
+      minZ: Math.max(0, bounds.minZ),
+      maxZ: Math.min(this.gridDepth - 1, bounds.maxZ),
     };
   }
 

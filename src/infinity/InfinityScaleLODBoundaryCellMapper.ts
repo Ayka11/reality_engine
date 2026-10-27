@@ -1,5 +1,6 @@
 import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import { getInfinityScaleChunkBounds, validateInfinityScaleChunkPair } from "./InfinityScaleChunkKey";
 
 export interface InfinityScaleBoundaryCellMapping {
   targetCell: [number, number, number];
@@ -34,9 +35,12 @@ export function resolveInfinityScaleBoundaryFaceGeometry(
   spec: InfinityScaleBoundaryTransferSpec,
   chunkSize = 32,
 ): InfinityScaleBoundaryFaceGeometry | null {
+  const pair = validateInfinityScaleChunkPair(
+    spec.sourceChunk, spec.targetChunk, spec.relation, spec.sourceLevel, spec.targetLevel,
+  );
   const target = rangeForChunk(spec.targetChunk, chunkSize);
   const source = rangeForChunk(spec.sourceChunk, chunkSize);
-  const scale = 2 ** spec.targetLevel;
+  const scale = 2 ** pair.target.level;
 
   type Axis = 0 | 1 | 2;
   const axes: Axis[] = [0, 1, 2];
@@ -117,8 +121,11 @@ export function mapInfinityScaleBoundaryCell(
   targetCell: [number, number, number],
   chunkSize = 32,
 ): InfinityScaleBoundaryCellMapping {
-  const targetScale = 2 ** spec.targetLevel;
-  const sourceScale = 2 ** spec.sourceLevel;
+  const pair = validateInfinityScaleChunkPair(
+    spec.sourceChunk, spec.targetChunk, spec.relation, spec.sourceLevel, spec.targetLevel,
+  );
+  const targetScale = 2 ** pair.target.level;
+  const sourceScale = 2 ** pair.source.level;
 
   if (spec.relation === "same-level") {
     const sourceRange = rangeForChunk(spec.sourceChunk, chunkSize);
@@ -213,14 +220,14 @@ export class InfinityScaleLODBoundaryCellMapper {
 
 
 function rangeForChunk(key: string, chunkSize: number): ChunkRange {
-  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(key);
-  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${key}`);
-  const level = Number(match[1]);
-  if (!Number.isInteger(level) || level < 0 || level > 30) throw new Error(`Invalid Infinity Scale LOD level: ${match[1]}`);
-  const keyX = Number(match[2]), keyY = Number(match[3]), keyZ = Number(match[4]);
-  const extent = chunkSize * (2 ** level);
-  const x = keyX * extent, y = keyY * extent, z = keyZ * extent;
-  return { minX: x, maxX: x + extent - 1, minY: y, maxY: y + extent - 1, minZ: z, maxZ: z + extent - 1, level, chunkSize, keyX, keyY, keyZ };
+  const bounds = getInfinityScaleChunkBounds(key, chunkSize);
+  return {
+    minX: bounds.minX, maxX: bounds.maxX,
+    minY: bounds.minY, maxY: bounds.maxY,
+    minZ: bounds.minZ, maxZ: bounds.maxZ,
+    level: bounds.level, chunkSize: bounds.chunkSize,
+    keyX: bounds.x, keyY: bounds.y, keyZ: bounds.z,
+  };
 }
 function sharedFaceAxis(a: ChunkRange, b: ChunkRange): 0 | 1 | 2 | null {
   const overlapsX = a.minX <= b.maxX && a.maxX >= b.minX;

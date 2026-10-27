@@ -188,4 +188,22 @@ export function runInfinityScaleLODBoundaryCellMapperRegression(): void {
   if (resolved.length !== 4) {
     throw new Error("resolveValues returned an incomplete fine-face footprint");
   }
+
+  // Runtime-facing geometry APIs must share key parsing and reject key/LOD
+  // inconsistencies before producing face mappings.
+  const malformedSpecs: InfinityScaleBoundaryTransferSpec[] = [
+    spec("00:2,0,0", "1:0,0,0", 0, 1, "fine-to-coarse"),
+    spec("0:9007199254740992,0,0", "1:0,0,0", 0, 1, "fine-to-coarse"),
+    spec("0:2,0,0", "0:0,0,0", 0, 1, "fine-to-coarse"),
+    spec("1:0,0,0", "0:2,0,0", 0, 0, "coarse-to-fine"),
+  ];
+  for (const [index, malformed] of malformedSpecs.entries()) {
+    let rejected = false;
+    try {
+      resolveInfinityScaleBoundaryFaceGeometry(malformed, 4);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) throw new Error(`LOD boundary mapper accepted malformed key/level pair ${index}`);
+  }
 }

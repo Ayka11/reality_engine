@@ -1,5 +1,6 @@
 import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
 import { mapInfinityScaleBoundaryCell, resolveInfinityScaleBoundaryFaceGeometry } from "./InfinityScaleLODBoundaryCellMapper";
+import { getInfinityScaleChunkBounds, validateInfinityScaleChunkPair } from "./InfinityScaleChunkKey";
 
 export function validateInfinityScaleBoundaryChunks(
   spec: InfinityScaleBoundaryTransferSpec,
@@ -26,6 +27,9 @@ export function validateInfinityScaleBoundaryGeometry(
   targetCell: [number, number, number],
   chunkSize = 32,
 ): InfinityScaleBoundaryGeometry | null {
+  const pair = validateInfinityScaleChunkPair(
+    spec.sourceChunk, spec.targetChunk, spec.relation, spec.sourceLevel, spec.targetLevel,
+  );
   const face = resolveInfinityScaleBoundaryFaceGeometry(spec, chunkSize);
   if (!face) return null;
 
@@ -42,15 +46,10 @@ export function validateInfinityScaleBoundaryGeometry(
   // The canonical face coordinate is on the target side. The source lies
   // outside that face. Resolve direction from the target chunk bounds without
   // maintaining an independent source/target adjacency algorithm.
-  const targetLevel = spec.targetLevel;
+  const targetLevel = pair.target.level;
+  const targetBounds = getInfinityScaleChunkBounds(spec.targetChunk, chunkSize);
   const targetScale = 2 ** targetLevel;
-  const match = /^(\d+):(-?\d+),(-?\d+),(-?\d+)$/.exec(spec.targetChunk);
-  if (!match) throw new Error(`Invalid Infinity Scale chunk key: ${spec.targetChunk}`);
-  const extent = chunkSize * targetScale;
-  const tx = Number(match[2]) * extent;
-  const ty = Number(match[3]) * extent;
-  const tz = Number(match[4]) * extent;
-  const targetMin = [tx, ty, tz];
+  const targetMin = [targetBounds.minX, targetBounds.minY, targetBounds.minZ];
   const axis = face.axis;
   const resolvedDirection: -1 | 1 = face.coordinate === targetMin[axis] ? -1 : 1;
 

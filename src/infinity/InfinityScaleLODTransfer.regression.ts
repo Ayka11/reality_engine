@@ -54,4 +54,32 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
     throw new Error(`Face restriction stage: ${error instanceof Error ? error.message : String(error)}`);
   }
   if (faceTarget[F.ENERGY] !== 10 || faceTarget[F.DENSITY] !== 21.5) throw new Error("Face restriction extensive-sum/intensive-average semantics failed");
+
+  const validSpec = {
+    sourceChunk: "1:0,0,0",
+    targetChunk: "0:2,0,0",
+    sourceLevel: 1,
+    targetLevel: 0,
+    refinementRatio: 2,
+    relation: "coarse-to-fine" as const,
+    operation: "prolongation" as const,
+    readOperation: "restriction" as const,
+  };
+  InfinityScaleLODTransfer.validateSpec(validSpec);
+  const invalidSpecs = [
+    { ...validSpec, sourceChunk: "01:0,0,0" },
+    { ...validSpec, sourceChunk: "0:0,0,0" },
+    { ...validSpec, targetChunk: "1:2,0,0" },
+    { ...validSpec, relation: "fine-to-coarse" as const },
+    { ...validSpec, sourceChunk: "1:9007199254740992,0,0" },
+  ];
+  for (const [index, invalidSpec] of invalidSpecs.entries()) {
+    let rejected = false;
+    try {
+      InfinityScaleLODTransfer.validateSpec(invalidSpec);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) throw new Error(`LOD transfer accepted inconsistent/non-canonical spec ${index}`);
+  }
 }

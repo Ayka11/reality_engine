@@ -5,6 +5,7 @@ import type {
 import {
   getInfinityScaleFieldSemantics,
 } from "./InfinityScaleFieldSemantics";
+import { validateInfinityScaleChunkPair } from "./InfinityScaleChunkKey";
 
 /**
  * Field policy used by the LOD transfer operator.
@@ -454,6 +455,9 @@ export class InfinityScaleLODTransfer {
   }
 
   static validateSpec(spec: InfinityScaleBoundaryTransferSpec): void {
+    const pair = validateInfinityScaleChunkPair(
+      spec.sourceChunk, spec.targetChunk, spec.relation, spec.sourceLevel, spec.targetLevel,
+    );
     const expectedOperation =
       spec.relation === "same-level"
         ? "copy"
@@ -479,7 +483,7 @@ export class InfinityScaleLODTransfer {
       );
     }
 
-    const expectedRatio = 2 ** Math.abs(spec.sourceLevel - spec.targetLevel);
+    const expectedRatio = 2 ** Math.abs(pair.source.level - pair.target.level);
     if (spec.refinementRatio !== expectedRatio) {
       throw new Error(
         `Infinity Scale transfer ratio mismatch: ${spec.refinementRatio} !== ${expectedRatio}`,
