@@ -337,9 +337,10 @@ export function runInfinityScaleLODBoundaryRegression(): void {
     };
     const context = new InfinityScaleChunkExecutionContext(plan, 16, 16, 16, 4);
     if (context.getBoundaryRelationsForCell(7, 6, 6).length !== 1) throw new Error("context exact face lookup failed");
-    // The last coarse face cell is anchored at (6,6); (7,7) lies inside
-    // that same coarse cell and must not create a second transaction target.
-    if (context.getBoundaryRelationsForCell(7, 7, 7).length !== 0) throw new Error("context accepted an unaligned coarse face coordinate");
+    // Face evidence may query a coarse corner from either face plane. This
+    // lookup is read-only; strict target-cell alignment is enforced by map()
+    // and boundary staging before any authoritative write.
+    if (context.getBoundaryRelationsForCell(7, 7, 7).length !== 1) throw new Error("context lost coarse-corner face evidence");
     if (context.getBoundaryRelationsForCell(6, 6, 6).length !== 0) throw new Error("context admitted non-face target");
   }
 

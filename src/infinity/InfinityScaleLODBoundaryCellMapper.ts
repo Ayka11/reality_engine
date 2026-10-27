@@ -91,13 +91,13 @@ export function isInfinityScaleSourceBoundaryCell(
   if (!face) return false;
 
   const source = rangeForChunk(spec.sourceChunk, chunkSize);
-  const sourceScale = 2 ** spec.sourceLevel;
   const coordinates = targetCell;
-  const aligned = (value: number, scale: number) => value % scale === 0;
 
-  // Source-side anchors use source LOD spacing; target-side anchors use target
-  // LOD spacing. A base coordinate inside a coarse cell must not alias a
-  // second transaction key for the same underlying hierarchical cell.
+  // This predicate identifies face evidence, not a staged write address.
+  // Keep every integer coordinate in the overlap, including coarse-face
+  // corners where one coordinate is the normal-plane marker for a second
+  // face. Actual transfer/write addresses are separately canonicalized by
+  // mapInfinityScaleBoundaryCell and validateInfinityScaleBoundaryGeometry.
   const belongsToFace = (
     normalCoordinate: number,
     sourceCoordinate: number,
@@ -110,11 +110,10 @@ export function isInfinityScaleSourceBoundaryCell(
     const onTargetSide = normalCoordinate === face.coordinate;
     const onSourceSide = normalCoordinate === sourceCoordinate;
     if (!onTargetSide && !onSourceSide) return false;
-    if (coordinates[tangentAxes[0]] < minU || coordinates[tangentAxes[0]] > maxU ||
-        coordinates[tangentAxes[1]] < minV || coordinates[tangentAxes[1]] > maxV) return false;
-    const scale = onTargetSide ? face.scale : sourceScale;
-    return aligned(coordinates[tangentAxes[0]], scale) &&
-      aligned(coordinates[tangentAxes[1]], scale);
+    return coordinates[tangentAxes[0]] >= minU &&
+      coordinates[tangentAxes[0]] <= maxU &&
+      coordinates[tangentAxes[1]] >= minV &&
+      coordinates[tangentAxes[1]] <= maxV;
   };
 
   if (face.axis === 0) {
