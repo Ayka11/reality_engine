@@ -79,8 +79,8 @@ export function runInfinityScaleMixedLODCPURegression(): void {
       targetChunk: coarseKey,
       relation: "fine-to-coarse" as const,
     })),
-    simulationCellCount: 64,
-    boundaryReadCellCount: 64,
+    simulationCellCount: 512,
+    boundaryReadCellCount: 256,
     localExecutionLayers: [],
     globalExecutionLayers: [],
     selectiveCpuReady: true,
@@ -92,7 +92,7 @@ export function runInfinityScaleMixedLODCPURegression(): void {
     agentMigrationReady: false,
   };
 
-  const context = new InfinityScaleChunkExecutionContext(plan, 8, 8, 8, 4);
+  const context = new InfinityScaleChunkExecutionContext(plan, 12, 8, 8, 4);
   const frame: InfinityScaleGlobalExecutionFrame = makeLocalExecutionFrame(plan, 0, 1);
 
   const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
@@ -137,6 +137,27 @@ export function runInfinityScaleMixedLODCPURegression(): void {
   }
   if (!changedBudgetRejected) {
     throw new Error("CPU executor accepted a same-revision plan with changed scheduling budget");
+  }
+
+  const changedCellCountPlan: InfinityScaleExecutionPlan = {
+    ...plan,
+    simulationCellCount: plan.simulationCellCount + 1,
+  };
+  const changedCellCountFrame = makeLocalExecutionFrame(changedCellCountPlan, 0, 1);
+  let changedCellCountRejected = false;
+  try {
+    executor.execute(
+      changedCellCountFrame,
+      changedCellCountPlan,
+      transaction,
+      cell => new Float32Array(cell.input),
+    );
+  } catch (error) {
+    changedCellCountRejected = error instanceof Error &&
+      error.message.includes("simulation geometry changed during frame");
+  }
+  if (!changedCellCountRejected) {
+    throw new Error("CPU executor accepted frame cell counts inconsistent with its captured geometry context");
   }
 
   const wrongFrame = { ...frame, revision: frame.revision + 1 };
@@ -202,7 +223,7 @@ export function runInfinityScaleMixedLODCPURegression(): void {
     mode: "advisory",
     selectiveCpuReady: false,
   };
-  const advisoryContext = new InfinityScaleChunkExecutionContext(advisoryPlan, 8, 8, 8, 4);
+  const advisoryContext = new InfinityScaleChunkExecutionContext(advisoryPlan, 12, 8, 8, 4);
   const advisoryFrame: InfinityScaleGlobalExecutionFrame = makeLocalExecutionFrame(
     advisoryPlan,
     frame.tickEnd,
@@ -365,7 +386,7 @@ export function runInfinityScaleMixedLODCPUProlongationRegression(): void {
       relation: "coarse-to-fine" as const,
     })),
     simulationCellCount: 256,
-    boundaryReadCellCount: 64,
+    boundaryReadCellCount: 512,
     localExecutionLayers: [],
     globalExecutionLayers: [],
     selectiveCpuReady: true,

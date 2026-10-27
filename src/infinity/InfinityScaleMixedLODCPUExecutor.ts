@@ -85,7 +85,7 @@ export class InfinityScaleMixedLODCPUExecutor {
       throw new Error("Infinity Scale CPU execution rejected: transaction belongs to a different LOD state");
     }
     this.context.assertCompatiblePlan(plan);
-    assertInfinityScaleGlobalFramePlan(frame, plan);
+    assertInfinityScaleGlobalFramePlan(frame, plan, this.context);
     if (this.context.overlappingSimulationRangeCount > 0) {
       throw new Error(
         `Infinity Scale CPU execution rejected: overlapping simulation ownership ranges ${this.context.overlappingSimulationRangeCount}`,

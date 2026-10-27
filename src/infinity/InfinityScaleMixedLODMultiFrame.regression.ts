@@ -33,8 +33,8 @@ function makePlan(): InfinityScaleExecutionPlan {
       targetChunk: coarseKey,
       relation: "fine-to-coarse" as const,
     })),
-    simulationCellCount: 64,
-    boundaryReadCellCount: 64,
+    simulationCellCount: 512,
+  boundaryReadCellCount: 256,
     localExecutionLayers: [],
     globalExecutionLayers: [],
     selectiveCpuReady: true,
@@ -86,7 +86,7 @@ export function runInfinityScaleMixedLODMultiFrameRegression(): void {
   }
 
   const plan = makePlan();
-  const context = new InfinityScaleChunkExecutionContext(plan, 8, 8, 8, 4);
+  const context = new InfinityScaleChunkExecutionContext(plan, 12, 8, 8, 4);
 
   for (let frameRevision = 1; frameRevision <= 2; frameRevision++) {
     const stateRevisionBeforeFrame = state.getRevision();

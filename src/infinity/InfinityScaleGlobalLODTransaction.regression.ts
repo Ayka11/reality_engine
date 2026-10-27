@@ -26,7 +26,7 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
       targetChunk: "1:0,0,0",
       relation: "fine-to-coarse",
     }],
-    simulationCellCount: 8,
+    simulationCellCount: 64,
     boundaryReadCellCount: 8,
     entityExecutionReady: true,
     agentMigrationReady: true,
