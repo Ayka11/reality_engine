@@ -240,7 +240,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       let cRate = params.crystallizationRate * materialRate;
       o.density = min(1.0, c.density + cRate * (0.18 - c.entropy) * dt * 60.0);
       o.entropy = max(0.0, c.entropy - cRate * 0.5 * dt * 60.0);
-      if (matIdx == 0u || matIdx == 1u || matIdx == 2u) {
+      if (cRate > 0.0 && (matIdx == 0u || matIdx == 1u || matIdx == 2u)) {
         o.material_id = 3.0;
       }
     }
