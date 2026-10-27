@@ -124,7 +124,7 @@ export class FieldPhysics {
             front[base + F.DENSITY] + rate * (0.18 - entropy) * dt * 60);
           front[base + F.ENTROPY] = Math.max(0,
             front[base + F.ENTROPY] - rate * 0.5 * dt * 60);
-          if (materialIndex === MAT.VACUUM || materialIndex === MAT.STONE || materialIndex === MAT.SAND) {
+          if (rate > 0 && (materialIndex === MAT.VACUUM || materialIndex === MAT.STONE || materialIndex === MAT.SAND)) {
             front[base + F.MATERIAL_ID] = MAT.CRYSTAL;
           }
         }
