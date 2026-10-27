@@ -34,7 +34,11 @@ export class WorldFieldBoundaryExchange {
     const size = 32
     const edge = side > 0 ? size : 0
     const samples: ScientificFieldSample[] = []
-    const count = Math.max(2, Math.trunc(resolution))
+    // Bound work per face: untrusted Infinity/NaN/fractional inputs must not
+    // produce unbounded loops or silently create an empty boundary snapshot.
+    const count = Number.isSafeInteger(resolution)
+      ? Math.min(64, Math.max(2, resolution))
+      : 8
     for (let v = 0; v < count; v++) {
       for (let u = 0; u < count; u++) {
         const a = (u / (count - 1)) * size

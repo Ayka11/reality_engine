@@ -79,6 +79,10 @@ const face = exchange.snapshotFace(fakeProvider, {cx:0,cy:0,cz:0}, "x", 1, 2);
 exchange.publish({cx:1,cy:0,cz:0}, "x", -1, face.samples);
 assert.equal(exchange.validatePair({cx:0,cy:0,cz:0}, "x").paired, true);
 assert.equal(exchange.validatePair({cx:0,cy:0,cz:0}, "x").maxDelta, 0);
+assert.equal(exchange.snapshotFace(fakeProvider, {cx:0,cy:0,cz:0}, "y", 1, Infinity).samples.length, 64, "infinite resolution must use a bounded fallback");
+assert.equal(exchange.snapshotFace(fakeProvider, {cx:0,cy:0,cz:0}, "y", 1, NaN).samples.length, 64, "NaN resolution must use a bounded fallback");
+assert.equal(exchange.snapshotFace(fakeProvider, {cx:0,cy:0,cz:0}, "y", 1, 1000000).samples.length, 4096, "large resolution must be capped at 64 per edge");
+
 
 const spatialJs = await readFile(new URL("src/infinity/ScientificFieldSpatialPattern.ts", root), "utf8");
 const spatialCompiled = ts.transpileModule(spatialJs, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
