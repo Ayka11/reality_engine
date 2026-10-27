@@ -194,6 +194,7 @@ export function runInfinityScaleLODBoundaryCellMapperRegression(): void {
   const malformedSpecs: InfinityScaleBoundaryTransferSpec[] = [
     spec("00:2,0,0", "1:0,0,0", 0, 1, "fine-to-coarse"),
     spec("0:9007199254740992,0,0", "1:0,0,0", 0, 1, "fine-to-coarse"),
+    spec("0:9007199254740991,0,0", "1:0,0,0", 0, 1, "fine-to-coarse"),
     spec("0:2,0,0", "0:0,0,0", 0, 1, "fine-to-coarse"),
     spec("1:0,0,0", "0:2,0,0", 0, 0, "coarse-to-fine"),
   ];

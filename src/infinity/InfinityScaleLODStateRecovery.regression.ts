@@ -44,6 +44,16 @@ export function runInfinityScaleLODStateRecoveryRegression(): void {
 
 export function runInfinityScaleLODCellWriteValidationRegression(): void {
   const state = new InfinityScaleLODState(2);
+
+  for (const invalidChunkSize of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    let rejected = false;
+    try {
+      new InfinityScaleLODState(invalidChunkSize);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) throw new Error(`LOD state accepted invalid chunk size ${invalidChunkSize}`);
+  }
   const chunk = state.ensureChunk("0:0,0,0", 0);
   chunk.cells[0] = 5;
 
@@ -185,6 +195,25 @@ export function runInfinityScaleLODChunkIdentityValidationRegression(): void {
   const baseCell = state.readBaseCell("1:-1,0,0", 1, -1, 0, 0);
   if (!baseCell || baseCell.length !== CELL_FIELDS) {
     throw new Error("Canonical negative-coordinate LOD chunk could not be resolved in base coordinates");
+  }
+
+  const invalidReads = [
+    { key: "00:0,0,0", level: 0, x: 0, label: "non-canonical absent key" },
+    { key: "0:9,0,0", level: 1, x: 18, label: "key/level mismatch for absent chunk" },
+    { key: "0:9007199254740991,0,0", level: 0, x: 0, label: "unsafe derived bounds" },
+    { key: "0:0,0,0", level: 0, x: 0.5, label: "non-integer base coordinate" },
+  ];
+  for (const invalid of invalidReads) {
+    let rejected = false;
+    try {
+      state.readBaseCell(invalid.key, invalid.level, invalid.x, 0, 0);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) throw new Error(`LOD state read accepted invalid input: ${invalid.label}`);
+  }
+  if (state.readBaseCell("0:3,0,0", 0, 6, 0, 0) !== null) {
+    throw new Error("Valid read of a missing but representable LOD chunk should return null");
   }
 }
 

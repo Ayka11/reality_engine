@@ -1,6 +1,6 @@
 import { CELL_FIELDS } from "../core/CellState";
 import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
-import { parseInfinityScaleChunkKey } from "./InfinityScaleChunkKey";
+import { getInfinityScaleChunkBounds } from "./InfinityScaleChunkKey";
 
 export interface InfinityScaleLODChunkState {
   key: string;
@@ -27,7 +27,15 @@ export class InfinityScaleLODState {
   private readonly states = new Map<string, InfinityScaleLODChunkState>();
   private revision = 0;
 
-  constructor(readonly chunkSize = 32) {}
+  constructor(readonly chunkSize = 32) {
+    if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0) {
+      throw new Error("Infinity Scale LOD chunk size must be a positive safe integer");
+    }
+    const cellCount = chunkSize ** 3 * CELL_FIELDS;
+    if (!Number.isSafeInteger(cellCount) || cellCount > 0xffff_ffff) {
+      throw new Error("Infinity Scale LOD chunk buffer length exceeds the typed-array limit");
+    }
+  }
 
   getRevision(): number {
     return this.revision;
@@ -77,7 +85,7 @@ export class InfinityScaleLODState {
         throw new Error("Cannot restore Infinity Scale LOD chunk with an invalid key");
       }
 
-      const { level: keyLevel } = parseInfinityScaleChunkKey(key);
+      const { level: keyLevel } = getInfinityScaleChunkBounds(key, this.chunkSize);
 
       if (
         typeof level !== "number" ||
@@ -142,7 +150,7 @@ export class InfinityScaleLODState {
     }
     // The LOD level is part of the physical chunk identity, not just metadata.
     // Reject non-canonical or mismatched keys before reading or mutating the map.
-    const { level: keyLevel } = parseInfinityScaleChunkKey(key);
+    const { level: keyLevel } = getInfinityScaleChunkBounds(key, this.chunkSize);
     if (keyLevel !== level) {
       throw new Error(`Infinity Scale LOD chunk key/level mismatch for ${key}: key=${keyLevel}, level=${level}`);
     }
@@ -303,31 +311,33 @@ export class InfinityScaleLODState {
     baseY: number,
     baseZ: number,
   ): Float32Array | null {
+    if (!Number.isInteger(level) || level < 0 || level > 30) {
+      throw new Error(`Invalid Infinity Scale LOD level: ${level}`);
+    }
+    const bounds = getInfinityScaleChunkBounds(key, this.chunkSize);
+    if (bounds.level !== level) {
+      throw new Error(`Infinity Scale LOD chunk key/level mismatch for ${key}`);
+    }
+    if (![baseX, baseY, baseZ].every(Number.isSafeInteger)) {
+      throw new Error("Infinity Scale LOD read coordinates must be safe integers");
+    }
+    if (
+      baseX < bounds.minX || baseX > bounds.maxX ||
+      baseY < bounds.minY || baseY > bounds.maxY ||
+      baseZ < bounds.minZ || baseZ > bounds.maxZ
+    ) {
+      throw new Error(`Base coordinate is outside LOD chunk ${key}`);
+    }
+
     const state = this.states.get(key);
     if (!state) return null;
     if (state.level !== level) {
       throw new Error(`Infinity Scale LOD chunk level mismatch for ${key}`);
     }
-    const parsedKey = parseInfinityScaleChunkKey(key);
-    const { level: keyLevel, x: cx, y: cy, z: cz } = parsedKey;
-    if (keyLevel !== level) throw new Error(`Infinity Scale LOD chunk key level mismatch for ${key}`);
     const scale = state.scale;
-
-    const originX = cx * this.chunkSize * scale;
-    const originY = cy * this.chunkSize * scale;
-    const originZ = cz * this.chunkSize * scale;
-
-    const lx = Math.floor((baseX - originX) / scale);
-    const ly = Math.floor((baseY - originY) / scale);
-    const lz = Math.floor((baseZ - originZ) / scale);
-
-    if (
-      lx < 0 || lx >= this.chunkSize ||
-      ly < 0 || ly >= this.chunkSize ||
-      lz < 0 || lz >= this.chunkSize
-    ) {
-      throw new Error(`Base coordinate is outside LOD chunk ${key}`);
-    }
+    const lx = Math.floor((baseX - bounds.minX) / scale);
+    const ly = Math.floor((baseY - bounds.minY) / scale);
+    const lz = Math.floor((baseZ - bounds.minZ) / scale);
 
     const out = new Float32Array(CELL_FIELDS);
     const offset = ((lz * this.chunkSize * this.chunkSize) +
@@ -388,26 +398,19 @@ export class InfinityScaleLODState {
     if (![baseX, baseY, baseZ].every(Number.isSafeInteger)) {
       throw new Error("Infinity Scale LOD base coordinates must be safe integers");
     }
-    const parsedKey = parseInfinityScaleChunkKey(key);
-    const { level: keyLevel, x: cx, y: cy, z: cz } = parsedKey;
-    if (keyLevel !== level) throw new Error(`Infinity Scale LOD chunk key/level mismatch for ${key}`);
-    const scale = 2 ** level;
-
-    const originX = cx * this.chunkSize * scale;
-    const originY = cy * this.chunkSize * scale;
-    const originZ = cz * this.chunkSize * scale;
-
-    const lx = Math.floor((baseX - originX) / scale);
-    const ly = Math.floor((baseY - originY) / scale);
-    const lz = Math.floor((baseZ - originZ) / scale);
-
+    const bounds = getInfinityScaleChunkBounds(key, this.chunkSize);
+    if (bounds.level !== level) throw new Error(`Infinity Scale LOD chunk key/level mismatch for ${key}`);
     if (
-      lx < 0 || lx >= this.chunkSize ||
-      ly < 0 || ly >= this.chunkSize ||
-      lz < 0 || lz >= this.chunkSize
+      baseX < bounds.minX || baseX > bounds.maxX ||
+      baseY < bounds.minY || baseY > bounds.maxY ||
+      baseZ < bounds.minZ || baseZ > bounds.maxZ
     ) {
       throw new Error(`Base coordinate is outside LOD chunk ${key}`);
     }
+    const scale = 2 ** level;
+    const lx = Math.floor((baseX - bounds.minX) / scale);
+    const ly = Math.floor((baseY - bounds.minY) / scale);
+    const lz = Math.floor((baseZ - bounds.minZ) / scale);
 
     let state = this.states.get(key);
     if (state && state.level !== level) {

@@ -67,4 +67,19 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
       throw new Error("Chunk context regression: mixed-LOD interior cell accepted");
     }
   }
+
+  const malformedPlans = [
+    makePlan("00:0,0,0", "0:1,0,0", "same-level", 0, 0),
+    makePlan("0:0,0,0", "1:0,0,0", "same-level", 0, 1),
+    makePlan("0:0,0,0", "1:0,0,0", "coarse-to-fine", 0, 1),
+  ];
+  for (const [index, invalidPlan] of malformedPlans.entries()) {
+    let rejected = false;
+    try {
+      new InfinityScaleChunkExecutionContext(invalidPlan, 16, 16, 16, 4);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) throw new Error(`Chunk context accepted inconsistent LOD identity/relation ${index}`);
+  }
 }
