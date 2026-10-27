@@ -8,6 +8,12 @@ function makePlan(
   sourceLevel: number,
   _targetLevel: number,
 ): InfinityScaleExecutionPlan {
+  const readRelation =
+    relation === "same-level"
+      ? "same-level"
+      : relation === "coarse-to-fine"
+        ? "fine-to-coarse"
+        : "coarse-to-fine";
   return {
     revision: 1,
     mode: "selective-cpu-ready",
@@ -24,7 +30,11 @@ function makePlan(
     maxSimulatingChunks: 1,
     boundaryReadChunks: [targetChunk],
     boundaryReadCount: 1,
-    boundaryReadRelations: [{ sourceChunk, targetChunk, relation }],
+    boundaryReadRelations: [{
+      sourceChunk: targetChunk,
+      targetChunk: sourceChunk,
+      relation: readRelation,
+    }],
     simulationCellCount: 0,
     boundaryReadCellCount: 0,
     localExecutionLayers: [],
@@ -46,7 +56,11 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
       16, 16, 16, 4,
     );
     const boundary = context.getBoundaryRelationsForCell(3, 2, 2);
-    if (boundary.length !== 1 || boundary[0].targetChunk !== "0:1,0,0") {
+    if (
+      boundary.length !== 1 ||
+      boundary[0].sourceChunk !== "0:1,0,0" ||
+      boundary[0].targetChunk !== "0:0,0,0"
+    ) {
       throw new Error("Chunk context regression: same-level face lookup failed");
     }
     if (context.getBoundaryRelationsForCell(2, 2, 2).length !== 0) {
@@ -60,7 +74,12 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
       32, 16, 16, 4,
     );
     const boundary = context.getBoundaryRelationsForCell(7, 2, 2);
-    if (boundary.length !== 1 || boundary[0].relation !== "fine-to-coarse") {
+    if (
+      boundary.length !== 1 ||
+      boundary[0].relation !== "coarse-to-fine" ||
+      boundary[0].sourceChunk !== "1:1,0,0" ||
+      boundary[0].targetChunk !== "0:1,0,0"
+    ) {
       throw new Error("Chunk context regression: mixed-LOD source face lookup failed");
     }
     if (context.getBoundaryRelationsForCell(6, 2, 2).length !== 0) {
@@ -185,7 +204,7 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
   } catch {
     transferMutationRejected = true;
   }
-  if (!transferMutationRejected || immutableContext.boundaryTransferSpecs[0].targetChunk !== "0:1,0,0") {
+  if (!transferMutationRejected || immutableContext.boundaryTransferSpecs[0].targetChunk !== "0:0,0,0") {
     throw new Error("Chunk execution context allowed a public boundary transfer target to be changed");
   }
 

@@ -51,14 +51,18 @@ export function runInfinityScaleExecutionAdapterBoundaryRegression(): void {
 
   const plan = adapter.update(frame);
   const mixed = plan.boundaryReadRelations.find(
-    relation => relation.targetChunk === "1:1,0,0",
+    relation => relation.sourceChunk === "1:1,0,0",
   );
-  if (!mixed || mixed.relation !== "fine-to-coarse") {
-    throw new Error("Canonical adapter regression: fine-to-coarse face neighbor was not resolved");
+  if (
+    !mixed ||
+    mixed.targetChunk !== "0:1,0,0" ||
+    mixed.relation !== "coarse-to-fine"
+  ) {
+    throw new Error("Canonical adapter regression: coarse read dependency was not directed into the selected fine chunk");
   }
 
   const corner = plan.boundaryReadRelations.find(
-    relation => relation.targetChunk === "1:1,1,0",
+    relation => relation.sourceChunk === "1:1,1,0",
   );
   if (corner) {
     throw new Error("Canonical adapter regression: corner-only chunk was accepted as a face neighbor");
@@ -66,7 +70,7 @@ export function runInfinityScaleExecutionAdapterBoundaryRegression(): void {
 
   const plusXFallback = plan.boundaryReadRelations.find(
     relation =>
-      relation.targetChunk === "0:2,0,0" &&
+      relation.sourceChunk === "0:2,0,0" &&
       relation.relation === "same-level",
   );
   if (plusXFallback) {
@@ -75,7 +79,7 @@ export function runInfinityScaleExecutionAdapterBoundaryRegression(): void {
 
   const minusXFallback = plan.boundaryReadRelations.find(
     relation =>
-      relation.targetChunk === "0:0,0,0" &&
+      relation.sourceChunk === "0:0,0,0" &&
       relation.relation === "same-level",
   );
   if (!minusXFallback) {

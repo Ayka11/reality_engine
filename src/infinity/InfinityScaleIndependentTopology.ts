@@ -57,8 +57,10 @@ export function validateIndependentMixedLodTopology(
         ((sMax[2] + 1 === tMin[2] || tMax[2] + 1 === sMin[2]) && overlap(0) && overlap(1));
       if (!faceContact) continue;
 
-      const relation = sourceLevel < targetLevel ? "fine-to-coarse" : "coarse-to-fine";
-      expected.add(signature(source.key, target.key, relation));
+      // The target candidate is the read dependency (source of transferred
+      // values); the selected chunk is the writable destination.
+      const relation = targetLevel > sourceLevel ? "coarse-to-fine" : "fine-to-coarse";
+      expected.add(signature(target.key, source.key, relation));
     }
   }
 

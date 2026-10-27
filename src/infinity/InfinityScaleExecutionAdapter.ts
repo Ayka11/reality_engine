@@ -149,8 +149,8 @@ export class InfinityScaleExecutionAdapter {
     // logical neighbor whose dense footprint can intersect that face.
     for (const chunk of selected) {
       for (const dependency of this.resolveFaceNeighbors(chunk, frame.chunks)) {
-        boundaryReadKeys.add(dependency.targetChunk);
-        if (!simulationKeys.has(dependency.targetChunk)) {
+        boundaryReadKeys.add(dependency.sourceChunk);
+        if (!simulationKeys.has(dependency.sourceChunk)) {
           boundaryReadRelations.push(dependency);
         }
       }
@@ -304,12 +304,14 @@ export class InfinityScaleExecutionAdapter {
       const otherMaxY = otherMinY + otherScale - 1;
       const otherMaxZ = otherMinZ + otherScale - 1;
 
+      // Transfer direction is from the read dependency into the selected
+      // simulation chunk, not from the selected chunk out to its neighbor.
       const relation: InfinityScaleBoundaryRelation =
         otherLevel === level
           ? "same-level"
-          : level < otherLevel
-            ? "fine-to-coarse"
-            : "coarse-to-fine";
+          : otherLevel > level
+            ? "coarse-to-fine"
+            : "fine-to-coarse";
 
       const overlaps = (aMin: number, aMax: number, bMin: number, bMax: number) =>
         aMin <= bMax && aMax >= bMin;
@@ -362,8 +364,8 @@ export class InfinityScaleExecutionAdapter {
       faceCoverage.set(coverageKey, rectangles);
       const key = `${other.key}|${relation}`;
       out.set(key, {
-        sourceChunk: chunk.key,
-        targetChunk: other.key,
+        sourceChunk: other.key,
+        targetChunk: chunk.key,
         relation,
       });
     }
@@ -435,8 +437,8 @@ export class InfinityScaleExecutionAdapter {
         fallback.maxB,
       )) continue;
       out.set(`${fallback.targetChunk}|same-level`, {
-        sourceChunk: chunk.key,
-        targetChunk: fallback.targetChunk,
+        sourceChunk: fallback.targetChunk,
+        targetChunk: chunk.key,
         relation: "same-level",
       });
     }
