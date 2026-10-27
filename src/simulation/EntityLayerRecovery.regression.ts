@@ -42,6 +42,25 @@ export function runEntityLayerRecoveryRegression(): void {
   layer.tick(grid, 1 / 60);
 
   const checkpoint = layer.snapshot();
+
+  // Public direct calls must reject malformed time steps atomically, even
+  // when bypassing SimulationEngine's own dt validation.
+  for (const invalidDt of [Number.NaN, Number.POSITIVE_INFINITY, -1]) {
+    const beforeState = JSON.stringify(layer.snapshot());
+    const beforeGrid = grid.buffer.slice();
+    let rejected = false;
+    try {
+      layer.tick(grid, invalidDt);
+    } catch (error) {
+      rejected = error instanceof RangeError;
+    }
+    if (!rejected ||
+        JSON.stringify(layer.snapshot()) !== beforeState ||
+        grid.buffer.some((value, index) => value !== beforeGrid[index])) {
+      throw new Error("EntityLayer accepted invalid dt or mutated state before rejecting it");
+    }
+  }
+
   if (checkpoint.entities.length !== 1 ||
       checkpoint.entities[0].id !== 1 ||
       checkpoint.nextId !== 2 ||
