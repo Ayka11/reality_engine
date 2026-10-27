@@ -3,7 +3,7 @@ import { F } from '../core/CellState';
 import { WORLD } from '../core/WorldConstants';
 import { PhysicsParams } from '../laws/MetaLaw';
 import { PROC } from '../process/ProcessDef';
-import { MATERIAL_LIBRARY } from '../materials/MaterialDef';
+import { MAT, MATERIAL_LIBRARY } from '../materials/MaterialDef';
 import { getMutableBuffer } from '../core/TrackedFloat32Array';
 
 function on(mask: number, proc: number) { return (mask & (1 << proc)) !== 0; }
@@ -111,9 +111,22 @@ export class FieldPhysics {
       }
 
       if (on(mask, PROC.CRYSTALLIZATION)) {
-        if (back[base + F.ENTROPY] < 0.18 && cD > 0.38) {
-          front[base + F.DENSITY] = Math.min(1, front[base + F.DENSITY] + 0.003 * (0.18 - back[base + F.ENTROPY]) * dt * 60);
-          front[base + F.ENTROPY] = Math.max(0, front[base + F.ENTROPY] - 0.0015 * dt * 60);
+        const entropy = back[base + F.ENTROPY];
+        if (entropy < 0.18 && cD > 0.38) {
+          const rawMaterialId = back[base + F.MATERIAL_ID];
+          const materialIndex = Number.isFinite(rawMaterialId)
+            ? Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1, Math.floor(rawMaterialId)))
+            : MAT.VACUUM;
+          const material = MATERIAL_LIBRARY[materialIndex] ?? MATERIAL_LIBRARY[MAT.VACUUM];
+          const materialRate = materialIndex === MAT.VACUUM ? 1 : material.crystallizationRate;
+          const rate = p.crystallizationRate * materialRate;
+          front[base + F.DENSITY] = Math.min(1,
+            front[base + F.DENSITY] + rate * (0.18 - entropy) * dt * 60);
+          front[base + F.ENTROPY] = Math.max(0,
+            front[base + F.ENTROPY] - rate * 0.5 * dt * 60);
+          if (materialIndex === MAT.VACUUM || materialIndex === MAT.STONE || materialIndex === MAT.SAND) {
+            front[base + F.MATERIAL_ID] = MAT.CRYSTAL;
+          }
         }
       }
       // Keep the CPU fallback's erosion contract aligned with GPUBackend and
