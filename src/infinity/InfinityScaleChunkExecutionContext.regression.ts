@@ -105,4 +105,25 @@ export function runInfinityScaleChunkExecutionContextBoundaryRegression(): void 
       throw new Error(`Chunk context accepted invalid grid/chunk dimensions ${index}: ${width},${height},${depth},${size}`);
     }
   }
+
+  // Each dimension is individually safe, but the linearized grid volume is not.
+  // Reject it before coordinate indexing can lose integer precision.
+  const unsafeVolumes: Array<[number, number, number]> = [
+    [Number.MAX_SAFE_INTEGER, 2, 1],
+    [2 ** 27, 2 ** 27, 1],
+    [Number.MAX_SAFE_INTEGER, 1, 2],
+  ];
+  for (const [index, [width, height, depth]] of unsafeVolumes.entries()) {
+    let rejected = false;
+    try {
+      new InfinityScaleChunkExecutionContext(validPlan, width, height, depth, 4);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) {
+      throw new Error(
+        `Chunk context accepted unsafe linearized grid volume ${index}: ${width},${height},${depth}`,
+      );
+    }
+  }
 }
