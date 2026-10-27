@@ -31,6 +31,26 @@ assert.deepEqual(cellToChunk(32, 32), [1, 0]);
 assert.deepEqual(chunkCenter({ x: -1, y: 2, z: 0, level: 1 }, 32), { x: -32, y: 160, z: 32 });
 assert.equal(chunkKeyString({ x: -1, y: 2, z: 0, level: 1 }), "1:-1,2,0");
 
+assert.throws(() => new InfinityScaleV2({ lodLevels: 1.5 }), RangeError);
+assert.throws(() => new InfinityScaleV2({ lodLevels: 32 }), RangeError);
+assert.throws(() => new InfinityScaleV2({ amrLevels: Number.NaN }), RangeError);
+assert.throws(() => new InfinityScaleV2({ amrLevels: 4 }), RangeError);
+assert.throws(() => new InfinityScaleV2({ maxCoordinate: Number.NaN }), RangeError);
+assert.throws(() => new InfinityScaleV2({ visibleRadiusChunks: { x: 5, y: 5, z: -1 } }), RangeError);
+assert.throws(() => new InfinityScaleV2({ activeRadiusChunks: { x: 6, y: 2, z: 1 } }), RangeError);
+
+const suppliedRadius = { x: 1, y: 1, z: 1 };
+const isolatedConfig = new InfinityScaleV2({ activeRadiusChunks: suppliedRadius });
+suppliedRadius.x = 0;
+assert.equal(isolatedConfig.config.activeRadiusChunks.x, 1,
+  "planner config must deep-copy caller-owned radius vectors");
+assert.throws(() => { isolatedConfig.config.activeRadiusChunks.x = 99; }, TypeError,
+  "planner config vectors must be immutable");
+assert.throws(() => { core.DEFAULT_INFINITY_SCALE_V2.activeRadiusChunks.x = 99; }, TypeError,
+  "shared default config vectors must be immutable");
+assert.equal(new InfinityScaleV2().config.activeRadiusChunks.x, 2,
+  "custom planner configuration must not mutate global defaults");
+
 const scale = new InfinityScaleV2();
 scale.setObserver({ x: 0, y: 0, z: 0 });
 const telemetry = scale.telemetry();

@@ -27,19 +27,37 @@ export interface InfinityScaleConfigV2 {
   maxCoordinate: number;
 }
 
-export const DEFAULT_INFINITY_SCALE_V2: InfinityScaleConfigV2 = {
+export type ReadonlyInfinityScaleConfigV2 =
+  Readonly<Omit<
+    InfinityScaleConfigV2,
+    "logicalExtentCells" |
+    "activeWindowCells" |
+    "activeRadiusChunks" |
+    "backgroundRadiusChunks" |
+    "visibleRadiusChunks"
+  >> & {
+    readonly logicalExtentCells: Readonly<Vec3i>;
+    readonly activeWindowCells: Readonly<Vec3i>;
+    readonly activeRadiusChunks: Readonly<Vec3i>;
+    readonly backgroundRadiusChunks: Readonly<Vec3i>;
+    readonly visibleRadiusChunks: Readonly<Vec3i>;
+  };
+
+// Keep the shared default immutable. Every instance also receives deep copies,
+// so neither an instance nor a caller-owned override can mutate other planners.
+export const DEFAULT_INFINITY_SCALE_V2: ReadonlyInfinityScaleConfigV2 = Object.freeze({
   chunkSize: 32,
-  logicalExtentCells: { x: 512, y: 512, z: 256 },
-  activeWindowCells: { x: 512, y: 512, z: 256 },
-  activeRadiusChunks: { x: 2, y: 2, z: 1 },       // 5×5×3 = 75
-  backgroundRadiusChunks: { x: 4, y: 4, z: 2 },   // 9×9×5 = 405
-  visibleRadiusChunks: { x: 5, y: 5, z: 2 },      // 11×11×5 = 605
+  logicalExtentCells: Object.freeze({ x: 512, y: 512, z: 256 }),
+  activeWindowCells: Object.freeze({ x: 512, y: 512, z: 256 }),
+  activeRadiusChunks: Object.freeze({ x: 2, y: 2, z: 1 }),       // 5×5×3 = 75
+  backgroundRadiusChunks: Object.freeze({ x: 4, y: 4, z: 2 }),   // 9×9×5 = 405
+  visibleRadiusChunks: Object.freeze({ x: 5, y: 5, z: 2 }),      // 11×11×5 = 605
   maxSimulatingChunks: 75,
   maxResidentChunks: 512,
   lodLevels: 4,
   amrLevels: 3,
   maxCoordinate: Number.MAX_SAFE_INTEGER,
-};
+});
 
 function floorDiv(a: number, b: number): number {
   return Math.floor(a / b);
@@ -66,26 +84,97 @@ export function chunkCenter(k: ChunkKey, chunkSize = 32): Vec3i {
 }
 
 export class InfinityScaleV2 {
-  readonly config: InfinityScaleConfigV2;
+  readonly config: ReadonlyInfinityScaleConfigV2;
   private observer: Vec3i = { x: 0, y: 0, z: 0 };
   private states = new Map<string, ChunkState>();
   private pinned = new Set<string>();
   private touched = new Map<string, number>();
 
   constructor(config: Partial<InfinityScaleConfigV2> = {}) {
-    this.config = { ...DEFAULT_INFINITY_SCALE_V2, ...config };
-    if (this.config.chunkSize !== 32) {
+    if (!config || typeof config !== "object") {
+      throw new TypeError("Infinity Scale config must be an object");
+    }
+
+    const mergeVector = (
+      name: string,
+      base: Readonly<Vec3i>,
+      override: Vec3i | undefined,
+    ): Vec3i => {
+      if (override === undefined) return { ...base };
+      if (!override || typeof override !== "object") {
+        throw new RangeError(name + " must be a three-axis integer vector");
+      }
+      return { x: override.x, y: override.y, z: override.z };
+    };
+
+    const merged = {
+      ...DEFAULT_INFINITY_SCALE_V2,
+      ...config,
+      logicalExtentCells: mergeVector("logicalExtentCells", DEFAULT_INFINITY_SCALE_V2.logicalExtentCells, config.logicalExtentCells),
+      activeWindowCells: mergeVector("activeWindowCells", DEFAULT_INFINITY_SCALE_V2.activeWindowCells, config.activeWindowCells),
+      activeRadiusChunks: mergeVector("activeRadiusChunks", DEFAULT_INFINITY_SCALE_V2.activeRadiusChunks, config.activeRadiusChunks),
+      backgroundRadiusChunks: mergeVector("backgroundRadiusChunks", DEFAULT_INFINITY_SCALE_V2.backgroundRadiusChunks, config.backgroundRadiusChunks),
+      visibleRadiusChunks: mergeVector("visibleRadiusChunks", DEFAULT_INFINITY_SCALE_V2.visibleRadiusChunks, config.visibleRadiusChunks),
+    };
+
+    if (merged.chunkSize !== 32) {
       throw new Error("Infinity Scale v2 requires chunkSize=32 for the reference implementation.");
     }
-    if (this.config.lodLevels < 1 || this.config.amrLevels < 1) {
-      throw new Error("lodLevels and amrLevels must be >= 1.");
+    if (!Number.isSafeInteger(merged.lodLevels) || merged.lodLevels < 1 || merged.lodLevels > 31) {
+      throw new RangeError("lodLevels must be a safe integer from 1 to 31.");
     }
-    if (!Number.isSafeInteger(this.config.maxSimulatingChunks) || this.config.maxSimulatingChunks < 0) {
+    if (!Number.isSafeInteger(merged.amrLevels) || merged.amrLevels < 1 || merged.amrLevels > 3) {
+      throw new RangeError("amrLevels must be a safe integer from 1 to 3 for the reference implementation.");
+    }
+    if (!Number.isSafeInteger(merged.maxSimulatingChunks) || merged.maxSimulatingChunks < 0) {
       throw new RangeError("maxSimulatingChunks must be a non-negative safe integer.");
     }
-    if (!Number.isSafeInteger(this.config.maxResidentChunks) || this.config.maxResidentChunks < 1) {
+    if (!Number.isSafeInteger(merged.maxResidentChunks) || merged.maxResidentChunks < 1) {
       throw new RangeError("maxResidentChunks must be a positive safe integer.");
     }
+    if (!Number.isSafeInteger(merged.maxCoordinate) || merged.maxCoordinate < 0) {
+      throw new RangeError("maxCoordinate must be a non-negative safe integer.");
+    }
+
+    const positiveVectors = [
+      ["logicalExtentCells", merged.logicalExtentCells],
+      ["activeWindowCells", merged.activeWindowCells],
+    ] as const;
+    for (const [name, vector] of positiveVectors) {
+      if (![vector.x, vector.y, vector.z].every(value =>
+        Number.isSafeInteger(value) && value > 0
+      )) {
+        throw new RangeError(name + " must contain positive safe integers");
+      }
+    }
+
+    const radiusVectors = [
+      ["activeRadiusChunks", merged.activeRadiusChunks],
+      ["backgroundRadiusChunks", merged.backgroundRadiusChunks],
+      ["visibleRadiusChunks", merged.visibleRadiusChunks],
+    ] as const;
+    for (const [name, vector] of radiusVectors) {
+      if (![vector.x, vector.y, vector.z].every(value =>
+        Number.isSafeInteger(value) && value >= 0
+      )) {
+        throw new RangeError(name + " must contain non-negative safe integers");
+      }
+    }
+    for (const axis of ["x", "y", "z"] as const) {
+      if (merged.activeRadiusChunks[axis] > merged.visibleRadiusChunks[axis] ||
+          merged.backgroundRadiusChunks[axis] > merged.visibleRadiusChunks[axis]) {
+        throw new RangeError("active/background radii cannot exceed visibleRadiusChunks." + axis);
+      }
+    }
+
+    this.config = Object.freeze({
+      ...merged,
+      logicalExtentCells: Object.freeze({ ...merged.logicalExtentCells }),
+      activeWindowCells: Object.freeze({ ...merged.activeWindowCells }),
+      activeRadiusChunks: Object.freeze({ ...merged.activeRadiusChunks }),
+      backgroundRadiusChunks: Object.freeze({ ...merged.backgroundRadiusChunks }),
+      visibleRadiusChunks: Object.freeze({ ...merged.visibleRadiusChunks }),
+    });
   }
 
   setObserver(cell: Vec3i): void {
