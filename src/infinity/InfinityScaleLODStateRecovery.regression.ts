@@ -137,6 +137,19 @@ export function runInfinityScaleLODCellWriteValidationRegression(): void {
     throw new Error("LOD cells.set reread a changing ArrayLike after validation");
   }
 
+  let lengthReads = 0;
+  const changingLengthSource: { length: number; [index: number]: number } = {
+    get length() {
+      lengthReads += 1;
+      return lengthReads === 1 ? CELL_FIELDS : CELL_FIELDS - 1;
+    },
+  };
+  for (let index = 0; index < CELL_FIELDS; index++) changingLengthSource[index] = 31;
+  chunk.cells.set(changingLengthSource);
+  if (lengthReads !== 1 || chunk.cells[CELL_FIELDS - 1] !== 31) {
+    throw new Error("LOD cells.set did not capture ArrayLike length exactly once");
+  }
+
   const nonFiniteSource = new Array<number>(CELL_FIELDS).fill(4);
   nonFiniteSource[5] = Number.POSITIVE_INFINITY;
   assertRejectedWithoutMutation("writeBaseCell with Infinity", () => {
