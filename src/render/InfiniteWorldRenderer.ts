@@ -473,6 +473,14 @@ export class InfiniteWorldRenderer {
     this.initPhysicsParticleSystem(700)
   }
 
+  private persistTerrainDeformationState() {
+    const saved = this.persistence.saveTerrainDeformationState(this.terrainDeformations.serialize())
+    if (!saved) {
+      console.warn('[persistence] Terrain deformation autosave failed; edits remain in memory but may not survive reload')
+    }
+    return saved
+  }
+
   private scheduleSave() {
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer)
     this.saveTimer = window.setTimeout(() => {
@@ -485,10 +493,13 @@ export class InfiniteWorldRenderer {
     // Explicit Save creates a stable checkpoint; autosave must not move that checkpoint.
     const fieldSnapshot = this.authoritativeField.serialize()
     this.persistAuthoritativeFieldState()
-    this.persistence.saveTerrainDeformationState(this.terrainDeformations.serialize())
+    this.persistTerrainDeformationState()
     if (options.checkpoint !== false) {
       this.persistence.saveFieldCheckpoint(fieldSnapshot)
-      this.persistence.saveTerrainDeformationCheckpoint(this.terrainDeformations.serialize())
+      const checkpointSaved = this.persistence.saveTerrainDeformationCheckpoint(this.terrainDeformations.serialize())
+      if (!checkpointSaved) {
+        console.warn('[persistence] Terrain deformation checkpoint failed; saved terrain edits may not survive reload')
+      }
     }
     const objects = this.objects.values()
     const groups = new Map<string, WorldObject[]>()
@@ -2018,7 +2029,7 @@ export class InfiniteWorldRenderer {
     const changed = this.terrainDeformations.applyBrush(x, z, radius, strength, mode)
     if (changed > 0) {
       this.refreshTerrainPatches()
-      this.persistence.saveTerrainDeformationState(this.terrainDeformations.serialize())
+      this.persistTerrainDeformationState()
     }
     return { changed, canUndo: this.terrainDeformations.canUndo, canRedo: this.terrainDeformations.canRedo }
   }
@@ -2026,14 +2037,14 @@ export class InfiniteWorldRenderer {
   undoTerrainSculpt() {
     if (!this.terrainDeformations.undo()) return false
     this.refreshTerrainPatches()
-    this.persistence.saveTerrainDeformationState(this.terrainDeformations.serialize())
+    this.persistTerrainDeformationState()
     return true
   }
 
   redoTerrainSculpt() {
     if (!this.terrainDeformations.redo()) return false
     this.refreshTerrainPatches()
-    this.persistence.saveTerrainDeformationState(this.terrainDeformations.serialize())
+    this.persistTerrainDeformationState()
     return true
   }
 
