@@ -222,7 +222,7 @@ function simStep(dt: number) {
     }
     if (!hasLocalState && !hasNeighborSignal) continue
     let lapE = 0, lapT = 0, lapD = 0, lapI = 0, lapP = 0, lapWave = 0, nc = 0
-    let fxSum = 0, fySum = 0
+    let fxSum = 0, fySum = 0, fzSum = 0
     for (const [dx, dy, dz] of dirs) {
       const nx = x + dx, ny = y + dy, nz = z + dz
       if (nx < 0 || nx >= W || ny < 0 || ny >= H || nz < 0 || nz >= D) continue
@@ -234,12 +234,13 @@ function simStep(dt: number) {
       lapWave += sourceRead(nx, ny, nz, F.WAVE)
       fxSum += sourceRead(nx, ny, nz, F.FX)
       fySum += sourceRead(nx, ny, nz, F.FY)
+      fzSum += sourceRead(nx, ny, nz, F.FZ)
       nc++
     }
     const E = chunk[base + F.E], T = chunk[base + F.T]
     const D_ = chunk[base + F.D], I = chunk[base + F.I]
     const P = chunk[base + F.P], wave = chunk[base + F.WAVE]
-    const FX = chunk[base + F.FX], FY = chunk[base + F.FY]
+    const FX = chunk[base + F.FX], FY = chunk[base + F.FY], FZ = chunk[base + F.FZ]
     lapE -= nc * E; lapT -= nc * T; lapD -= nc * D_; lapI -= nc * I
     lapP -= nc * P; lapWave -= nc * wave
 
@@ -385,6 +386,7 @@ function simStep(dt: number) {
     if (isProcessActive(PROC.FIELD_ROTATION)) {
       grid.set(x, y, z, F.FX, FX * p.fieldRotationDamping + fxSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling + FY * p.fieldRotationCrossCoupling)
       grid.set(x, y, z, F.FY, FY * p.fieldRotationDamping + fySum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling - FX * p.fieldRotationCrossCoupling)
+      grid.set(x, y, z, F.FZ, FZ * p.fieldRotationDamping + fzSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling)
     }
 
     if (isProcessActive(PROC.EROSION)) {
