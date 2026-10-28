@@ -87,6 +87,24 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(rawAliasEngine.grid.buffer[rawAliasIndex], 606,
     "internal hot-path accessor is currently a direct writable alias; callers must remain transaction-local");
 
+  // A retained raw alias can be mutated while the GPU readback promise is pending.
+  // Indexed writes to the raw Float32Array do not notify the grid, so the readback
+  // path must detect the content change independently of mutationRevision.
+  const aliasDuringReadbackEngine = new SimulationEngine(4, 4, 4);
+  (aliasDuringReadbackEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const aliasDuringReadbackIndex = aliasDuringReadbackEngine.grid.idx(1, 1, 1) + F.ENERGY;
+  const retainedAlias = getMutableBuffer(aliasDuringReadbackEngine.grid);
+  const staleAliasReadback = aliasDuringReadbackEngine.grid.buffer.slice();
+  const pendingAliasReadback = await beginPendingReadback(aliasDuringReadbackEngine, staleAliasReadback);
+  const revisionBeforeUntrackedAliasWrite = aliasDuringReadbackEngine.grid.mutationRevision;
+  retainedAlias[aliasDuringReadbackIndex] = 707;
+  assert.equal(aliasDuringReadbackEngine.grid.mutationRevision, revisionBeforeUntrackedAliasWrite,
+    "raw alias writes are not intrinsically revision-tracked; the pending-readback guard must cover them");
+  pendingAliasReadback.release(staleAliasReadback);
+  await assert.rejects(pendingAliasReadback.step, /Discarded stale GPU readback/);
+  assert.equal(aliasDuringReadbackEngine.grid.buffer[aliasDuringReadbackIndex], 707,
+    "an untracked alias write during readback must survive stale GPU result rejection");
+
   // Any dense-grid write while a GPU readback is pending must invalidate that result.
   const staleDense = engine.grid.buffer.slice();
   const pendingDense = await beginPendingReadback(engine, staleDense);
