@@ -99,6 +99,15 @@ export class SparseVoxelGrid {
     this.H = H;
     this.D = D;
     this.size = size;
+    // TypeScript readonly is erased at runtime. Keep grid geometry immutable
+    // because it is the layout contract for every dense/sparse buffer and index.
+    Object.defineProperties(this, {
+      chunkSize: { writable: false, configurable: false },
+      W: { writable: false, configurable: false },
+      H: { writable: false, configurable: false },
+      D: { writable: false, configurable: false },
+      size: { writable: false, configurable: false },
+    });
     this.dirtyChunks = new MutationTrackedSet(
       () => this.markMutation(),
       key => {
