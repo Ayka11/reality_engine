@@ -1060,6 +1060,47 @@ try {
   if (Math.abs(terrainRedoDelta - terrainEdit.after) > 1e-6) {
     throw new Error("Terrain Redo did not restore the raised deformation: " + terrainRedoDelta);
   }
+  // Exercise the actual canvas pointer path, not just the renderer method directly.
+  const terrainPointerTarget = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const canvas = world.renderer.domElement;
+    const rect = canvas.getBoundingClientRect();
+    for (let y = rect.top + rect.height * 0.22; y < rect.bottom - 8; y += 18) {
+      for (let x = rect.left + rect.width * 0.58; x < rect.right - 8; x += 18) {
+        const point = world.pickAtScreen(x, y);
+        if (point) {
+          return {
+            screenX: x,
+            screenY: y,
+            worldX: point.x,
+            worldZ: point.z,
+            before: world.terrainDeformations.sampleDelta(point.x, point.z),
+          };
+        }
+      }
+    }
+    return null;
+  });
+  if (!terrainPointerTarget) throw new Error("Could not find a visible terrain surface for pointer-driven sculpt acceptance");
+  await page.locator("#vTerrainRaise").click();
+  await page.mouse.click(terrainPointerTarget.screenX, terrainPointerTarget.screenY);
+  const terrainPointerAfter = await page.evaluate((target) => ({
+    delta: window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ),
+    status: document.getElementById("vTerrainStatus")?.textContent ?? "",
+  }), terrainPointerTarget);
+  if (!(terrainPointerAfter.delta > terrainPointerTarget.before)) {
+    throw new Error("Canvas pointer click did not apply geometric terrain sculpt: " + JSON.stringify({ target: terrainPointerTarget, after: terrainPointerAfter }));
+  }
+  await page.locator("#vTerrainUndo").click();
+  const pointerUndoDelta = await page.evaluate((target) => window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ), terrainPointerTarget);
+  if (Math.abs(pointerUndoDelta - terrainPointerTarget.before) > 1e-6) {
+    throw new Error("Undo after real canvas pointer sculpt did not restore terrain: " + pointerUndoDelta);
+  }
+  await page.locator("#vTerrainRedo").click();
+  const pointerRedoDelta = await page.evaluate((target) => window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ), terrainPointerTarget);
+  if (!(pointerRedoDelta > terrainPointerTarget.before)) {
+    throw new Error("Redo after real canvas pointer sculpt did not restore terrain: " + pointerRedoDelta);
+  }
   await page.locator("#vTerrainOff").click();
   await page.evaluate(() => window.setInfinityDockPosition?.("top"));
 
