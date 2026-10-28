@@ -209,6 +209,34 @@ const lowFlowDensity = readField(latestFrame(), lowFlowPoint.x, lowFlowPoint.y, 
 assert.ok(Math.abs(lowFlowDensity - 0.8) < 1e-5,
   `sub-threshold worker flow must not erode density (got ${lowFlowDensity})`)
 
+// Field rotation must preserve and evolve all three vector components in the worker layout.
+const rotationPoint = { x: 60, y: 60, z: 40 }
+send('setPhysics', {
+  params: {
+    ...params,
+    fieldRotationDamping: 0.8,
+    fieldRotationNeighborCoupling: 0.2,
+    fieldRotationCrossCoupling: 0.1,
+  },
+  processMask: 1 << 14,
+})
+send('paint', { ...rotationPoint, f: F.FX, v: 10, r: 0, mode: 'set' })
+send('paint', { ...rotationPoint, f: F.FY, v: 4, r: 0, mode: 'set' })
+send('paint', { ...rotationPoint, f: F.FZ, v: 5, r: 0, mode: 'set' })
+send('paint', { x: rotationPoint.x - 1, y: rotationPoint.y, z: rotationPoint.z, f: F.FX, v: 2, r: 0, mode: 'set' })
+send('paint', { x: rotationPoint.x - 1, y: rotationPoint.y, z: rotationPoint.z, f: F.FY, v: 6, r: 0, mode: 'set' })
+send('paint', { x: rotationPoint.x - 1, y: rotationPoint.y, z: rotationPoint.z, f: F.FZ, v: 7, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const rotatedX = readField(latestFrame(), rotationPoint.x, rotationPoint.y, rotationPoint.z, F.FX)
+const rotatedY = readField(latestFrame(), rotationPoint.x, rotationPoint.y, rotationPoint.z, F.FY)
+const rotatedZ = readField(latestFrame(), rotationPoint.x, rotationPoint.y, rotationPoint.z, F.FZ)
+assert.ok(Math.abs(rotatedX - (10 * 0.8 + (2 / 6) * 0.2 + 4 * 0.1)) < 1e-5,
+  `worker rotation must apply X damping, neighbor coupling, and cross coupling (got ${rotatedX})`)
+assert.ok(Math.abs(rotatedY - (4 * 0.8 + (6 / 6) * 0.2 - 10 * 0.1)) < 1e-5,
+  `worker rotation must apply Y damping, neighbor coupling, and cross coupling (got ${rotatedY})`)
+assert.ok(Math.abs(rotatedZ - (5 * 0.8 + (7 / 6) * 0.2)) < 1e-5,
+  `worker rotation must preserve the Z component with damping and neighbor coupling (got ${rotatedZ})`)
+
 console.log(JSON.stringify({
   status: 'PASS',
   energyAfterEnabled,
