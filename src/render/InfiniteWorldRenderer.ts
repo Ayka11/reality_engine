@@ -92,6 +92,8 @@ export class InfiniteWorldRenderer {
   private selectedKind: WorldObjectKind = 'tree'
   private objectTool: 'navigate' | 'select' | 'place' | 'erase' = 'navigate'
   private terrainBrushMode: 'raise' | 'lower' | null = null
+  private terrainBrushRadius = 8
+  private terrainBrushStrength = 1
   private saveTimer: number | null = null
   private readonly storageKey: string
   private readonly pointerHandler: (e: PointerEvent) => void
@@ -770,6 +772,13 @@ export class InfiniteWorldRenderer {
       }
       canvas.style.cursor = this.objectTool === 'place' ? 'crosshair' : (this.objectTool === 'erase' ? 'not-allowed' : 'default')
     }
+  }
+
+  setTerrainBrushSettings(radius: number, strength: number) {
+    if (!Number.isFinite(radius) || radius < 1 || radius > 64) throw new RangeError('Terrain brush radius must be between 1 and 64')
+    if (!Number.isFinite(strength) || strength <= 0 || strength > 8) throw new RangeError('Terrain brush strength must be between 0 and 8')
+    this.terrainBrushRadius = radius
+    this.terrainBrushStrength = strength
   }
 
   setTerrainBrushMode(mode: 'raise' | 'lower' | null) {
@@ -2069,7 +2078,7 @@ export class InfiniteWorldRenderer {
   handlePointer(clientX: number, clientY: number) {
     if (this.terrainBrushMode) {
       const point = this.pickAtScreen(clientX, clientY)
-      return point ? this.sculptTerrainAt(point.x, point.z, 8, 1, this.terrainBrushMode) : null
+      return point ? this.sculptTerrainAt(point.x, point.z, this.terrainBrushRadius, this.terrainBrushStrength, this.terrainBrushMode) : null
     }
     if (this.objectTool === 'place') return this.placeAtScreen(this.selectedKind, clientX, clientY)
     if (this.objectTool === 'erase') return this.eraseAtScreen(clientX, clientY)
