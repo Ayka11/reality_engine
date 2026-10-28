@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { F } from "../src/core/CellState.ts";
+import { CELL_FIELDS, F } from "../src/core/CellState.ts";
 import { Chunk } from "../src/core/Chunk.ts";
 import { SparseVoxelGrid } from "../src/core/SparseVoxelGrid.ts";
 import { SimulationEngine } from "../src/simulation/SimulationEngine.ts";
@@ -390,7 +390,7 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
 
   const worldSnapshot = worldSave.captureSnapshot("pending-readback-world-restore");
   const restoredEnergyField = new Float32Array(worldSnapshot.fields.energy);
-  restoredEnergyField[restoreCell] = 123;
+  restoredEnergyField[restoreCell / CELL_FIELDS] = 123;
   worldSnapshot.fields.energy = restoredEnergyField.buffer;
   restoreEngine.grid.buffer[restoreEnergyIndex] = 77;
 
