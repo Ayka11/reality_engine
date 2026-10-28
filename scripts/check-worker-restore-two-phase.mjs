@@ -147,6 +147,19 @@ assert.deepEqual(send("snapshot").find(message => message.cmd === "snapshot").da
 const emptyFrame = send("tick", { speed: 1 }).find(message => message.cmd === "frame");
 assert.ok(emptyFrame, "worker should continue ticking after empty restore");
 
+// The legacy one-shot restore must invalidate history from the world it replaces.
+const legacyBaseline = send("snapshot").find(message => message.cmd === "snapshot").data.snap;
+send("paint", { x: 1, y: 1, z: 1, f: 0, v: 17, mode: "set", r: 0, trackHistory: true });
+const legacyRestore = send("restore", { snap: legacyBaseline, tick: -5 });
+assert.equal(legacyRestore.length, 0, "legacy restore remains a synchronous, non-publishing command");
+const staleUndoAfterRestore = send("undoSculpt").find(message => message.cmd === "sculptHistoryApplied");
+assert.equal(staleUndoAfterRestore.data.applied, false,
+  "legacy restore must clear sculpt undo history from the replaced world");
+const legacySnapshotAfterRestore = send("snapshot").find(message => message.cmd === "snapshot").data;
+assert.equal(legacySnapshotAfterRestore.tick, 0, "legacy restore must normalize invalid ticks to zero");
+assert.deepEqual(legacySnapshotAfterRestore.snap, legacyBaseline,
+  "legacy restore must preserve the restored chunk snapshot after stale undo is rejected");
+
 console.log("PASS: restoreEnd prepares without committing worker state");
 console.log("PASS: restoreAbort rolls back a prepared restore");
 console.log("PASS: restoreCommit makes prepared chunks durable in worker state");
