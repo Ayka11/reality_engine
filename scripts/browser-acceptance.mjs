@@ -1032,8 +1032,14 @@ try {
     };
   });
   if (!terrainBrushUi.controlsPresent) throw new Error("Terrain sculpt controls are missing from the active World Tools dock");
-  await page.locator("#vTerrainRadius").fill("3");
-  await page.locator("#vTerrainStrength").fill("1");
+  await page.locator("#vTerrainRadius").evaluate((el) => {
+    el.value = "3";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.locator("#vTerrainStrength").evaluate((el) => {
+    el.value = "1";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
   await page.locator("#vTerrainRaise").click();
   const terrainEdit = await page.evaluate(() => {
     const world = window.infiniteWorld;
