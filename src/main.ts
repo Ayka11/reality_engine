@@ -1,4 +1,5 @@
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+import { CHUNK_FLOATS } from './core/ChunkGrid';
 import { SimulationEngine } from './simulation/SimulationEngine';
 import { VoxelRenderer, LayerName } from './render/VoxelRenderer';
 import { Entity } from './simulation/EntityLayer';
@@ -111,7 +112,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     chunkEvCount = wEv   ?? chunkEvCount;
 
     // Merge dirty chunks into shadow map
-    const NF_W = 15, CF = 512 * NF_W;
+    const CF = CHUNK_FLOATS;
     const u32 = new Uint32Array(ab as ArrayBuffer);
     const f32 = new Float32Array(ab as ArrayBuffer);
     const num = u32[0];

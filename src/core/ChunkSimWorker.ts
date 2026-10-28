@@ -201,7 +201,7 @@ function simStep(dt: number) {
   const dirs: Array<[number, number, number]> = [
     [-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1],
   ]
-  const signalFields = [F.E, F.T, F.D, F.I, F.P, F.WAVE]
+  const activationFields = [F.E, F.T, F.D, F.I, F.P, F.WAVE, F.FX, F.FY, F.FZ]
   for (const { x, y, z } of orderedCandidates) {
     const key = chunkKey(Math.floor(x / CX), Math.floor(y / CY), Math.floor(z / CZ))
     const chunk = sourceChunks.get(key) ?? zeroChunk
@@ -212,7 +212,7 @@ function simStep(dt: number) {
     }
     let hasNeighborSignal = false
     for (const [dx, dy, dz] of dirs) {
-      for (const field of signalFields) {
+      for (const field of activationFields) {
         if (Math.abs(sourceRead(x + dx, y + dy, z + dz, field)) > 0.001) {
           hasNeighborSignal = true
           break

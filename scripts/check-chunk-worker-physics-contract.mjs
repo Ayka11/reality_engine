@@ -98,7 +98,8 @@ assert.ok(gpu.includes('c.energy > params.radiationThreshold'))
 // Sparse worker's transferable cell layout must carry the full 3D field vector.
 assert.ok(chunkGrid.includes('export const NF = 15'))
 assert.ok(chunkGrid.includes('FZ:  14'))
-assert.ok(main.includes('const NF_W = 15, CF = 512 * NF_W;'))
+assert.ok(main.includes("import { CHUNK_FLOATS } from './core/ChunkGrid';"))
+assert.ok(main.includes('const CF = CHUNK_FLOATS;'))
 assert.ok(worker.includes('F.FZ'))
 
 // Field rotation is parameterized and process-mask gated in all available paths.
@@ -108,6 +109,7 @@ assert.ok(cpu.includes('p.fieldRotationCrossCoupling'))
 assert.ok(worker.includes('FX * p.fieldRotationDamping'))
 assert.ok(worker.includes('p.fieldRotationNeighborCoupling'))
 assert.ok(worker.includes('p.fieldRotationCrossCoupling'))
+assert.ok(worker.includes('const activationFields = [F.E, F.T, F.D, F.I, F.P, F.WAVE, F.FX, F.FY, F.FZ]'))
 assert.ok(worker.includes('fzSum += sourceRead(nx, ny, nz, F.FZ)'))
 assert.ok(worker.includes('grid.set(x, y, z, F.FZ, FZ * p.fieldRotationDamping + fzSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling)'))
 assert.ok(gpu.includes('fieldRotationDamping: f32,   // [28]'))

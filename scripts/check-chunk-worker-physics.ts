@@ -237,6 +237,25 @@ assert.ok(Math.abs(rotatedY - (4 * 0.8 + (6 / 6) * 0.2 - 10 * 0.1)) < 1e-5,
 assert.ok(Math.abs(rotatedZ - (5 * 0.8 + (7 / 6) * 0.2)) < 1e-5,
   `worker rotation must preserve the Z component with damping and neighbor coupling (got ${rotatedZ})`)
 
+// A vector-only cell must activate adjacent empty cells for sparse field-rotation coupling.
+const vectorHaloPoint = { x: 72, y: 60, z: 40 }
+send('setPhysics', {
+  params: {
+    ...params,
+    fieldRotationDamping: 0,
+    fieldRotationNeighborCoupling: 0.6,
+    fieldRotationCrossCoupling: 0,
+  },
+  processMask: 1 << 14,
+})
+send('paint', { ...vectorHaloPoint, f: F.FX, v: 6, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const vectorHaloFx = readField(
+  latestFrame(), vectorHaloPoint.x + 1, vectorHaloPoint.y, vectorHaloPoint.z, F.FX,
+)
+assert.ok(Math.abs(vectorHaloFx - 0.6) < 1e-5,
+  `a vector-only source must activate its empty neighbor for rotation coupling (got ${vectorHaloFx})`)
+
 console.log(JSON.stringify({
   status: 'PASS',
   energyAfterEnabled,

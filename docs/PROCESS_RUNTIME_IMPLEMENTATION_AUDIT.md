@@ -126,8 +126,8 @@ material `radiationAbsorption` fraction to density reduction and clamp density
 and energy to non-negative values. The trigger and rate delta are based on the
 immutable pre-step energy sample; output losses are applied to the current
 per-step result so earlier enabled processes are not overwritten. GPU
-`SimParams` now uses 28 floats (112 bytes), with radiation parameters at
-indices 25–27. Mandatory CI includes a deterministic CPU regression for disabled
+`SimParams` carries 31 floats (124 bytes) in the current combined ABI, with
+radiation parameters at indices 25–27. Mandatory CI includes a deterministic CPU regression for disabled
 mask, below-threshold energy, zero rates, material absorption, parameter
 sensitivity, clamping and finite outputs, plus static cross-backend contract
 checks. These checks verify implementation wiring, not physical calibration;
@@ -152,4 +152,4 @@ update rather than a calibrated curl-based solver.
 
 ### Sparse-worker field-vector Z component parity — 2026-10-28
 
-The follow-up cross-backend audit found that the sparse worker applied configured field rotation to X/Y but left Z unchanged, despite CPU and GPU rotating all three components. The worker layout now appends FZ at index 14 (NF=15), without shifting the existing fields; the main-thread transfer parser uses the same expanded stride. The worker accumulates the Z-neighbor stencil and updates FZ with the same damping and neighbor-coupling coefficients. Static contract checks and a deterministic worker runtime test guard all three components. This closes the representation mismatch in software paths; GPU numerical equivalence still requires hardware-backed comparison.
+The follow-up cross-backend audit found that the sparse worker applied configured field rotation to X/Y but left Z unchanged, despite CPU and GPU rotating all three components. The worker layout now appends FZ at index 14 (NF=15), without shifting the existing fields; the main-thread transfer parser uses the same expanded stride. The worker accumulates the Z-neighbor stencil and updates FZ with the same damping and neighbor-coupling coefficients. Static contract checks and a deterministic worker runtime test guard all three components. The sparse activation halo now treats FX/FY/FZ as activity sources too, so vector-only cells can couple into adjacent empty cells instead of being skipped. This closes the representation mismatch in software paths; GPU numerical equivalence still requires hardware-backed comparison.

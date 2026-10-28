@@ -11,7 +11,7 @@ async function load(path, replacements = []) {
 }
 
 const gridMod = await load("src/core/ChunkGrid.ts");
-const { ChunkGrid, CHUNK_FLOATS } = gridMod;
+const { ChunkGrid, CHUNK_FLOATS, NF } = gridMod;
 const restoreGrid = new ChunkGrid();
 const validChunk = new Float32Array(CHUNK_FLOATS).fill(0.25);
 assert.equal(restoreGrid.restoreChunk(0, validChunk), true);
@@ -44,7 +44,7 @@ const gridConstants = await load("src/core/ChunkGrid.ts");
 const { F, NF, chunkKey } = gridConstants;
 const workerProviderMod = await load("src/infinity/WorkerWorldFieldChunkProvider.ts", [[
   /import \{ F, CHUNK_FLOATS, CX, CY, GRID_D, GRID_H, GRID_W, NF \} from '\.\.\/core\/ChunkGrid';?/,
-  "const F = { E: 0, D: 1, I: 2, S: 3, T: 4, BIO: 10, MAT: 11 }; const CHUNK_FLOATS = 7680; const CX = 8; const CY = 8; const GRID_D = 64; const GRID_H = 128; const GRID_W = 128; const NF = 15;"
+  `const F = { E: 0, D: 1, I: 2, S: 3, T: 4, BIO: 10, MAT: 11 }; const CHUNK_FLOATS = ${CHUNK_FLOATS}; const CX = 8; const CY = 8; const GRID_D = 64; const GRID_H = 128; const GRID_W = 128; const NF = ${NF};`
 ]]);
 const { WorkerWorldFieldChunkProvider } = workerProviderMod;
 const defaultView = {
