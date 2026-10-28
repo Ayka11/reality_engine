@@ -9,6 +9,7 @@ export class WorldPersistence {
   private readonly fieldStateKey: string
   private readonly fieldCheckpointKey: string
   private readonly terrainDeformationKey: string
+  private readonly terrainDeformationCheckpointKey: string
   private readonly loaded = new Set<string>()
   private readonly cache = new Map<string, WorldObject[]>()
 
@@ -18,6 +19,7 @@ export class WorldPersistence {
     this.fieldStateKey = `reality-engine-world:${seed}:field-state`
     this.fieldCheckpointKey = `reality-engine-world:${seed}:field-checkpoint`
     this.terrainDeformationKey = `reality-engine-world:${seed}:terrain-deformation`
+    this.terrainDeformationCheckpointKey = `reality-engine-world:${seed}:terrain-deformation-checkpoint`
   }
 
   private key(cx: number, cy: number, cz: number) {
@@ -112,6 +114,27 @@ export class WorldPersistence {
     }
   }
 
+  saveTerrainDeformationCheckpoint(state: unknown): boolean {
+    try {
+      localStorage.setItem(this.terrainDeformationCheckpointKey, JSON.stringify({ version: 1, seed: this.seed, state }))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  loadTerrainDeformationCheckpoint<T = unknown>(): T | null {
+    try {
+      const raw = localStorage.getItem(this.terrainDeformationCheckpointKey)
+      if (!raw) return null
+      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
+      if (payload.version !== 1 || payload.seed !== this.seed) return null
+      return payload.state
+    } catch {
+      return null
+    }
+  }
+
   deleteTerrainDeformationState(): boolean {
     try {
       localStorage.removeItem(this.terrainDeformationKey)
@@ -174,6 +197,7 @@ export class WorldPersistence {
     localStorage.removeItem(this.fieldStateKey)
     localStorage.removeItem(this.fieldCheckpointKey)
     localStorage.removeItem(this.terrainDeformationKey)
+    localStorage.removeItem(this.terrainDeformationCheckpointKey)
     this.loaded.clear()
     this.cache.clear()
   }
