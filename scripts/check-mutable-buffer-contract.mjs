@@ -311,8 +311,8 @@ for (const filePath of sourcePaths) {
             !isApprovedSynchronousRollbackClosure(occurrenceOwner, node.text)) {
           const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
         // Unwrap type/parentheses assertions so a raw alias cannot escape disguised as a new expression.
-        let valueExpression: ts.Expression = node;
-        let valueParent: ts.Node = valueExpression.parent;
+        let valueExpression = node;
+        let valueParent = valueExpression.parent;
         while (
           (ts.isParenthesizedExpression(valueParent) && valueParent.expression === valueExpression) ||
           (ts.isAsExpression(valueParent) && valueParent.expression === valueExpression) ||
@@ -320,7 +320,7 @@ for (const filePath of sourcePaths) {
           (ts.isNonNullExpression(valueParent) && valueParent.expression === valueExpression) ||
           (ts.isSatisfiesExpression(valueParent) && valueParent.expression === valueExpression)
         ) {
-          valueExpression = valueParent as ts.Expression;
+          valueExpression = valueParent;
           valueParent = valueExpression.parent;
         }
         if (!isDeclarationName && ts.isReturnStatement(valueParent) && valueParent.expression === valueExpression) {
