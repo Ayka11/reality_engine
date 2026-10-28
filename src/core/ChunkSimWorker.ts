@@ -964,7 +964,11 @@ self.onmessage = (e: MessageEvent) => {
   }
 
   if (cmd === 'restore') {
-    grid.restore(data.snap); tick = data.tick || 0
+    // Legacy one-shot restore replaces the authoritative world too; old sculpt
+    // history belongs to the pre-restore state and must not be replayed onto it.
+    grid.restore(data.snap)
+    tick = Number.isSafeInteger(data.tick) && data.tick >= 0 ? data.tick : 0
+    clearSculptHistory()
     return
   }
 }
