@@ -316,15 +316,65 @@ for (const filePath of sourcePaths) {
             errors.push(`${path}:${line}: raw buffer alias "${node.text}" is captured by a nested callback; prove synchronous transaction-local lifetime or remove the capture`);
           }
         }
+        const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
         if (!isDeclarationName && ts.isReturnStatement(parent) && parent.expression === node) {
-          const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be returned from its audited method`);
         }
         if (!isDeclarationName && ts.isBinaryExpression(parent) &&
             parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && parent.right === node &&
+            ts.isIdentifier(parent.left)) {
+          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be copied to another variable`);
+        }
+        if (!isDeclarationName && ts.isBinaryExpression(parent) &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && parent.right === node &&
             (ts.isPropertyAccessExpression(parent.left) || ts.isElementAccessExpression(parent.left))) {
-          const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be stored on an object/property`);
+        }
+        if (!isDeclarationName && ts.isVariableDeclaration(parent) && parent.initializer === node) {
+          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not initialize another variable`);
+        }
+        if (!isDeclarationName && ts.isPropertyAssignment(parent) && parent.initializer === node) {
+          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not escape through an object literal`);
+        }
+        if (!isDeclarationName && ts.isArrayLiteralExpression(parent)) {
+          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not escape through an array literal`);
+        }
+        if (!isDeclarationName && ts.isSpreadElement(parent)) {
+          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be spread into another container or call`);
+        }
+        if (!isDeclarationName && ts.isPropertyAccessExpression(parent) &&
+            parent.expression === node && parent.name.text === "buffer") {
+          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not expose its backing ArrayBuffer`);
+        }
+        if (!isDeclarationName && ts.isPropertyAccessExpression(parent) &&
+            parent.expression === node && parent.name.text === "subarray") {
+          const subarrayCall = parent.parent;
+          const outerCall = subarrayCall.parent;
+          const copiedSynchronously = ts.isCallExpression(subarrayCall) &&
+            ts.isCallExpression(outerCall) &&
+            ts.isPropertyAccessExpression(outerCall.expression) &&
+            outerCall.expression.name.text === "set" &&
+            outerCall.arguments.some(argument => argument === subarrayCall);
+          if (!copiedSynchronously) {
+            errors.push(`${path}:${line}: raw buffer subarray must be copied synchronously rather than retained`);
+          }
+        }
+        if (!isDeclarationName && ts.isCallExpression(parent) &&
+            parent.arguments.some(argument => argument === node)) {
+          const receiver = ts.isPropertyAccessExpression(parent.expression)
+            ? parent.expression.expression
+            : null;
+          const isTypedArrayCopy = ts.isPropertyAccessExpression(parent.expression) &&
+            parent.expression.name.text === "set" &&
+            ts.isIdentifier(receiver) && aliases.has(receiver.text);
+          const isAuditedLocalBufferCache = path === "src/core/SparseVoxelGrid.ts" &&
+            ["syncDenseEntityOwnershipToChunks", "syncDenseToChunks", "syncChunksToDense"].includes(key.split("#")[1]) &&
+            ts.isPropertyAccessExpression(parent.expression) &&
+            parent.expression.name.text === "set" &&
+            ts.isIdentifier(receiver) && receiver.text === "rawBuffers";
+          if (!isTypedArrayCopy && !isAuditedLocalBufferCache) {
+            errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be passed to an arbitrary function which could retain it`);
+          }
         }
       }
       ts.forEachChild(node, inspectAliasUse);
