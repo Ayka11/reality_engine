@@ -46,7 +46,15 @@ export class Chunk {
   get backBuffer(): Float32Array { return this._backBufferView; }
   set backBuffer(value: Float32Array) { this.assertBuffer(value); this._backBuffer.set(value); this.markMutation(); }
   get active(): boolean { return this._active; }
-  set active(value: boolean) { if (this._active !== value) { this._active = value; this.markMutation(); } }
+  set active(value: boolean) {
+    if (typeof value !== "boolean") {
+      throw new TypeError("Chunk.active must be a boolean");
+    }
+    if (this._active !== value) {
+      this._active = value;
+      this.markMutation();
+    }
+  }
 
   addMutationListener(listener: () => void): void { this.mutationListeners.add(listener); }
   removeMutationListener(listener: () => void): void { this.mutationListeners.delete(listener); }
