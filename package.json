@@ -67,7 +67,8 @@
     "test:field-physics-pressure": "npx --yes tsx scripts/check-field-physics-pressure.ts",
     "test:field-physics-density": "npx --yes tsx scripts/check-field-physics-density.ts",
     "test:field-physics-phase-transition": "npx --yes tsx scripts/check-field-physics-phase-transition.ts",
-    "test:field-physics-crystallization": "npx --yes tsx scripts/check-field-physics-crystallization.ts"
+    "test:field-physics-crystallization": "npx --yes tsx scripts/check-field-physics-crystallization.ts",
+    "test:field-physics-radiation": "npx --yes tsx scripts/check-field-physics-radiation.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
