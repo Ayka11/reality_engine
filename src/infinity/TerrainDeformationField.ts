@@ -51,8 +51,10 @@ export class TerrainDeformationField {
   }
 
   applyBrush(x: number, z: number, radius: number, strength: number, mode: TerrainBrushMode): number {
-    if (![x, z, radius, strength].every(Number.isFinite) || radius <= 0 || strength <= 0) {
-      throw new RangeError('Terrain brush coordinates, radius, and strength must be finite and positive')
+    if (![x, z, radius, strength].every(Number.isFinite) ||
+        radius <= 0 || radius > 64 || strength <= 0 || strength > 8 ||
+        Math.abs(x) > Number.MAX_SAFE_INTEGER - 64 || Math.abs(z) > Number.MAX_SAFE_INTEGER - 64) {
+      throw new RangeError('Terrain brush coordinates must be safe and radius/strength must be within supported limits')
     }
     if (mode !== 'raise' && mode !== 'lower') throw new TypeError('Unsupported terrain brush mode')
     const before = new Map(this.deltas)
@@ -119,15 +121,17 @@ export class TerrainDeformationField {
       throw new TypeError('Terrain deformation snapshot has an unsupported schema or seed')
     }
     const next = new Map<string, number>()
+    const seenKeys = new Set<string>()
     for (const entry of snapshot.deltas) {
       const parsedKey = Array.isArray(entry) && typeof entry[0] === 'string'
         ? parseKey(entry[0])
         : null
       if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string' ||
           !parsedKey || entry[0] !== keyOf(parsedKey.x, parsedKey.z) ||
-          next.has(entry[0]) || !Number.isFinite(entry[1]) || Math.abs(entry[1]) > 1e6) {
+          seenKeys.has(entry[0]) || !Number.isFinite(entry[1]) || Math.abs(entry[1]) > 1e6) {
         throw new TypeError('Terrain deformation snapshot contains an invalid delta')
       }
+      seenKeys.add(entry[0])
       if (Math.abs(entry[1]) >= 1e-6) next.set(entry[0], entry[1])
     }
     this.deltas = next
