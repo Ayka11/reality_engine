@@ -52,6 +52,10 @@ for (const name of ["undoLegacySculptAuthoritative", "redoLegacySculptAuthoritat
 }
 
 const worldEnvironment = methodBody("getWorldEnvironment");
+const settlementGeneration = methodBody("generateSettlement");
+assert.match(settlementGeneration, /this\.fieldSampler\.sample\(cx \+ i, 0, cz\)\.entropy/,
+  "settlement placement must use the authoritative entropy field");
+
 assert.match(worldEnvironment, /this\.fieldSampler\.sample\(x, y, z\)/,
   "environment-driven civilization/production systems must consume the authoritative field");
 assert.doesNotMatch(worldEnvironment, /this\.generator\.sampleField\(x, y, z\)/,
