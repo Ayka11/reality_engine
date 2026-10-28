@@ -59,6 +59,12 @@ export class SparseVoxelGrid {
       throw new Error("Invalid active chunk range");
     }
     const next = { ...range };
+    const topologyRange = this.chunkRangeFor(this.chunks.values());
+    if (topologyRange.minX !== next.minX || topologyRange.maxX !== next.maxX ||
+        topologyRange.minY !== next.minY || topologyRange.maxY !== next.maxY ||
+        topologyRange.minZ !== next.minZ || topologyRange.maxZ !== next.maxZ) {
+      throw new Error("Active chunk range must match current chunk topology");
+    }
     const previous = this._activeChunkRange;
     if (previous.minX === next.minX && previous.maxX === next.maxX &&
         previous.minY === next.minY && previous.maxY === next.maxY &&
@@ -357,9 +363,11 @@ export class SparseVoxelGrid {
     this._sparseDenseBuffer.set(snapshot.buffer);
     this._sparseDenseBackBuffer.set(snapshot.backBuffer);
     this.denseOrigin = { ...snapshot.denseOrigin };
-    this.activeChunkRange = { ...snapshot.activeChunkRange };
     this.chunks.clear();
     for (const [key, chunk] of restoredChunks) this.chunks.set(key, chunk);
+    // The range is derived from the fully restored chunk topology, so install it
+    // only after the new chunk map has been published.
+    this.activeChunkRange = { ...snapshot.activeChunkRange };
     this.dirtyChunks.clear();
     for (const key of snapshot.dirtyChunks) this.dirtyChunks.add(key);
     this.chunkOwners.clear();
