@@ -144,18 +144,24 @@ export class WorldPersistence {
     }
   }
 
-  saveChunk(cx: number, cy: number, cz: number, objects: WorldObject[]) {
+  /**
+   * Cache the live chunk even if browser storage is unavailable, but report
+   * whether both the chunk payload and its manifest entry became durable.
+   */
+  saveChunk(cx: number, cy: number, cz: number, objects: WorldObject[]): boolean {
     const payload: StoredChunk = { version: 1, seed: this.seed, objects }
     const key = chunkKey(cx, cy, cz)
+    let chunkSaved = false
     try {
       localStorage.setItem(this.key(cx, cy, cz), JSON.stringify(payload))
+      chunkSaved = true
     } catch {
-      // Keep the live chunk usable when durable browser storage is unavailable.
+      // The cache remains usable, but callers must be told persistence failed.
     }
     this.cache.set(key, objects)
     this.loaded.add(key)
-    this.updateManifest()
-    return objects.length
+    if (!chunkSaved) return false
+    return this.updateManifest()
   }
 
   loadChunk(cx: number, cy: number, cz: number): WorldObject[] {
@@ -187,16 +193,20 @@ export class WorldPersistence {
     this.cache.delete(key)
   }
 
-  deleteChunk(cx: number, cy: number, cz: number) {
+  /**
+   * Only forget a chunk in memory after its stored payload was actually
+   * removed. A failed remove must remain visible to callers and retain cache.
+   */
+  deleteChunk(cx: number, cy: number, cz: number): boolean {
     const key = chunkKey(cx, cy, cz)
     try {
       localStorage.removeItem(this.key(cx, cy, cz))
     } catch {
-      // Remove the in-memory copy even when browser storage is unavailable.
+      return false
     }
     this.loaded.delete(key)
     this.cache.delete(key)
-    this.updateManifest(key)
+    return this.updateManifest(key)
   }
 
   clear() {
@@ -238,41 +248,79 @@ export class WorldPersistence {
 
   loadedChunks(): string[] { return [...this.loaded] }
 
-  knownChunks(): string[] {
+  knownChunks(options: { recoverOrphans?: boolean } = {}): string[] {
     let raw: string | null
     try {
       raw = localStorage.getItem(this.manifestKey)
     } catch {
-      return []
+      return options.recoverOrphans ? this.scanStoredChunkKeys() : []
     }
-    if (!raw) return []
-    try {
-      const keys = JSON.parse(raw)
-      return Array.isArray(keys) ? keys.filter((k): k is string => typeof k === 'string') : []
-    } catch {
-      return []
+
+    let keys: string[] = []
+    if (raw) {
+      try {
+        const parsed: unknown = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          keys = parsed.filter((key): key is string => this.isValidChunkKey(key))
+        } else if (!options.recoverOrphans) {
+          return []
+        }
+      } catch {
+        if (!options.recoverOrphans) return []
+      }
     }
+
+    if (!options.recoverOrphans) return [...new Set(keys)]
+    // The manifest is an index, not the chunk data itself. Recover valid chunk
+    // payloads that were written successfully just before a manifest write failed.
+    return [...new Set([...keys, ...this.scanStoredChunkKeys()])]
   }
 
-  private updateManifest(removeKey?: string) {
+  private isValidChunkKey(value: unknown): value is string {
+    if (typeof value !== 'string' || value.split(',').length !== 3) return false
+    const [cx, cy, cz] = value.split(',').map(Number)
+    return [cx, cy, cz].every(Number.isSafeInteger) && chunkKey(cx, cy, cz) === value
+  }
+
+  private scanStoredChunkKeys(): string[] {
+    const keys: string[] = []
+    try {
+      for (let index = 0; index < localStorage.length; index++) {
+        const storageKey = localStorage.key(index)
+        if (!storageKey?.startsWith(this.prefix)) continue
+        const candidate = storageKey.slice(this.prefix.length)
+        if (this.isValidChunkKey(candidate)) keys.push(candidate)
+      }
+    } catch {
+      // Storage enumeration can be blocked just like reads and writes.
+    }
+    return [...new Set(keys)]
+  }
+
+  private updateManifest(removeKey?: string): boolean {
     let raw: string | null
     try {
       raw = localStorage.getItem(this.manifestKey)
     } catch {
-      return
+      return false
     }
-    let keys: string[] = []
+    let keys: string[]
     try {
-      const parsed = raw ? JSON.parse(raw) : []
-      if (Array.isArray(parsed)) keys = parsed.filter((k): k is string => typeof k === 'string')
-    } catch {}
+      const parsed: unknown = raw ? JSON.parse(raw) : []
+      if (!Array.isArray(parsed)) return false
+      keys = parsed.filter((key): key is string => this.isValidChunkKey(key))
+    } catch {
+      // Do not overwrite a corrupt manifest with a partial index.
+      return false
+    }
     const present = new Set(keys)
     for (const key of this.loaded) present.add(key)
     if (removeKey) present.delete(removeKey)
     try {
       localStorage.setItem(this.manifestKey, JSON.stringify([...present]))
+      return true
     } catch {
-      // The manifest is an index only; in-memory state remains usable.
+      return false
     }
   }
 }

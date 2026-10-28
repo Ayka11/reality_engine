@@ -157,11 +157,14 @@ assert.deepEqual(Object.keys(validFields).sort(), [...FIELD_ORDER].sort(),
 
 const values = new Map();
 let failSet = false;
+let failSetForKey = null;
 let failGet = false;
 let failRemove = false;
 globalThis.localStorage = {
   setItem(key, value) {
-    if (failSet) throw new Error("QuotaExceededError");
+    if (failSet || (failSetForKey !== null && String(key) === failSetForKey)) {
+      throw new Error("QuotaExceededError");
+    }
     values.set(String(key), String(value));
   },
   getItem(key) {
@@ -171,6 +174,12 @@ globalThis.localStorage = {
   removeItem(key) {
     if (failRemove) throw new Error("SecurityError");
     values.delete(String(key));
+  },
+  key(index) {
+    return [...values.keys()][index] ?? null;
+  },
+  get length() {
+    return values.size;
   },
 };
 
@@ -243,20 +252,78 @@ assert.equal(persistence.loadTerrainDeformationState(), null);
 
 const chunkObjects = [{ id: 'in-memory-chunk-object', x: 1, y: 2, z: 3, kind: 'tree' }];
 failSet = true;
-assert.doesNotThrow(() => persistence.saveChunk(0, 0, 0, chunkObjects),
-  "chunk save must not crash the renderer when storage writes fail");
+assert.equal(persistence.saveChunk(0, 0, 0, chunkObjects), false,
+  "chunk save must report browser storage write failures");
 assert.deepEqual(persistence.loadChunk(0, 0, 0), chunkObjects,
-  "chunk data should remain usable in memory after a failed durable write");
+  "live chunk data should remain usable in memory after a failed durable write");
 assert.deepEqual(persistence.knownChunks(), [],
-  "manifest reads must tolerate unavailable storage");
+  "a failed payload write must not claim a new durable chunk in the manifest");
 failSet = false;
 
 failRemove = true;
-assert.doesNotThrow(() => persistence.deleteChunk(0, 0, 0),
-  "chunk deletion must not crash when browser storage cannot remove keys");
-assert.equal(persistence.isLoaded(0, 0, 0), false,
-  "chunk deletion must clear in-memory loaded state even when storage removal fails");
+assert.equal(persistence.deleteChunk(0, 0, 0), false,
+  "chunk deletion must report browser storage removal failures");
+assert.equal(persistence.isLoaded(0, 0, 0), true,
+  "failed deletion must retain live cache state rather than claiming the chunk was removed");
+assert.deepEqual(persistence.loadChunk(0, 0, 0), chunkObjects,
+  "a failed removal must keep the cached chunk accessible");
 failRemove = false;
+assert.equal(persistence.deleteChunk(0, 0, 0), true,
+  "successful chunk deletion must report durable completion");
+assert.equal(persistence.isLoaded(0, 0, 0), false);
+assert.deepEqual(persistence.knownChunks(), []);
+
+const durableChunkObjects = [{ id: 'durable-chunk-object', x: 3, y: 1, z: -5, kind: 'house' }];
+assert.equal(persistence.saveChunk(0, 0, -1, durableChunkObjects), true,
+  "a successful chunk write and manifest update must report success");
+assert.deepEqual(persistence.knownChunks(), ["0,0,-1"]);
+assert.deepEqual(persistence.loadChunk(0, 0, -1), durableChunkObjects);
+const durableChunkKey = "reality-engine-world:seed-a:chunk:0,0,-1";
+const durableChunkPayload = values.get(durableChunkKey);
+const updatedChunkObjects = [{ id: 'updated-chunk-object', x: 3, y: 1, z: -5, kind: 'house' }];
+failSet = true;
+assert.equal(persistence.saveChunk(0, 0, -1, updatedChunkObjects), false,
+  "a failed update must not be reported as a durable chunk save");
+assert.equal(values.get(durableChunkKey), durableChunkPayload,
+  "a failed update must preserve the last durable chunk payload");
+assert.deepEqual(persistence.loadChunk(0, 0, -1), updatedChunkObjects,
+  "the in-memory chunk should continue serving the latest live data after a failed update");
+failSet = false;
+failRemove = true;
+assert.equal(persistence.deleteChunk(0, 0, -1), false);
+assert.equal(persistence.isLoaded(0, 0, -1), true);
+assert.deepEqual(persistence.loadChunk(0, 0, -1), updatedChunkObjects);
+failRemove = false;
+assert.equal(persistence.deleteChunk(0, 0, -1), true);
+assert.deepEqual(persistence.knownChunks(), []);
+
+const manifestKey = "reality-engine-world:seed-a:manifest";
+const orphanObjects = [{ id: 'orphaned-index-object', x: 70, y: 0, z: -65, kind: 'rock' }];
+const orphanChunkKey = "reality-engine-world:seed-a:chunk:2,0,-3";
+failSetForKey = manifestKey;
+assert.equal(persistence.saveChunk(2, 0, -3, orphanObjects), false,
+  "chunk persistence must report a manifest write failure even when the payload itself was stored");
+assert.equal(values.has(orphanChunkKey), true,
+  "the durable chunk payload should remain available when only the manifest write fails");
+assert.deepEqual(persistence.knownChunks(), [],
+  "normal manifest lookup should not silently pretend the manifest write succeeded");
+assert.deepEqual(persistence.knownChunks({ recoverOrphans: true }), ["2,0,-3"],
+  "recovery enumeration should discover valid stored chunks missing from the manifest");
+const restartedPersistence = new WorldPersistence("seed-a");
+assert.deepEqual(restartedPersistence.knownChunks({ recoverOrphans: true }), ["2,0,-3"],
+  "a new persistence instance should recover orphaned chunks after manifest write failure");
+assert.deepEqual(restartedPersistence.loadChunk(2, 0, -3), orphanObjects,
+  "recovered orphaned chunk payloads must be loadable after a restart");
+failSetForKey = null;
+values.set(manifestKey, "{corrupt-manifest");
+assert.deepEqual(persistence.knownChunks({ recoverOrphans: true }), ["2,0,-3"],
+  "recovery enumeration should also discover chunks when the manifest JSON is corrupt");
+assert.equal(persistence.saveChunk(2, 0, -3, orphanObjects), false,
+  "manifest updates must fail visibly instead of overwriting a corrupt manifest with a partial index");
+values.set(manifestKey, "[]");
+assert.equal(persistence.deleteChunk(2, 0, -3), true);
+assert.deepEqual(persistence.knownChunks(), [],
+  "deleting the recovered orphan should leave a clean manifest");
 
 failGet = true;
 failRemove = true;

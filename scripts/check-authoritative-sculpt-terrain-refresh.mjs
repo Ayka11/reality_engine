@@ -104,8 +104,16 @@ assert.match(saveWorldBody, /if \(!fieldCheckpointSaved\)/,
 assert.match(saveWorldBody, /saveTerrainDeformationCheckpoint/);
 assert.match(saveWorldBody, /if \(!checkpointSaved\)/,
   "manual terrain checkpoint failures must be diagnosed rather than silently ignored");
-assert.match(saveWorldBody, /console\.warn/);
+assert.match(saveWorldBody, /const failedPersistenceOperations: string\[\] = \[\]/);
+assert.match(saveWorldBody, /if \(!this\.persistence\.deleteChunk\(cx, cy, cz\)\)/,
+  "world save must detect failed chunk deletions");
+assert.match(saveWorldBody, /if \(!this\.persistence\.saveChunk\(cx, cy, cz, list\)\)/,
+  "world save must detect failed chunk writes");
+assert.match(saveWorldBody, /World object persistence incomplete/,
+  "world save must diagnose incomplete object persistence");
 assert.match(methodBody("loadWorld"), /loadTerrainDeformationCheckpoint/);
+assert.match(methodBody("loadWorld"), /knownChunks\(\{\s*recoverOrphans:\s*true\s*\}\)/,
+  "world load must recover persisted chunk payloads omitted from a failed/corrupt manifest");
 
 const refresh = methodBody("refreshTerrainPatches");
 assert.match(refresh, /for\s*\(const\s*\[key,\s*patch\]\s*of\s*this\.patches\)/, "refresh must visit every loaded patch");

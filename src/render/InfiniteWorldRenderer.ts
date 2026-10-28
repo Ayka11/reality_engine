@@ -513,15 +513,25 @@ export class InfiniteWorldRenderer {
       list.push(object)
       groups.set(key, list)
     }
+    const failedPersistenceOperations: string[] = []
     for (const key of this.persistence.knownChunks()) {
       if (!groups.has(key)) {
         const [cx, cy, cz] = key.split(',').map(Number)
-        this.persistence.deleteChunk(cx, cy, cz)
+        if (!this.persistence.deleteChunk(cx, cy, cz)) {
+          failedPersistenceOperations.push(`delete chunk ${key}`)
+        }
       }
     }
     for (const [key, list] of groups) {
       const [cx, cy, cz] = key.split(',').map(Number)
-      this.persistence.saveChunk(cx, cy, cz, list)
+      if (!this.persistence.saveChunk(cx, cy, cz, list)) {
+        failedPersistenceOperations.push(`save chunk ${key}`)
+      }
+    }
+    if (failedPersistenceOperations.length > 0) {
+      console.warn(
+        `[persistence] World object persistence incomplete (${failedPersistenceOperations.join(', ')}); object changes may not survive reload`,
+      )
     }
     return objects.length
   }
@@ -559,7 +569,7 @@ export class InfiniteWorldRenderer {
     this.objects.clear()
     this.objectSpatialIndex.clear()
     let count = 0
-    for (const key of this.persistence.knownChunks()) {
+    for (const key of this.persistence.knownChunks({ recoverOrphans: true })) {
       const [cx, cy, cz] = key.split(',').map(Number)
       for (const object of this.persistence.loadChunk(cx, cy, cz)) {
         this.objects.add(object)
