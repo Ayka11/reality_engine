@@ -28,7 +28,7 @@ of a complete or scientifically validated solver.
 | 9 | Metabolism | Uses `p.metabolismRate` | Uses hard-coded `0.12` | Uses hard-coded `0.12` | Implemented, but parameter sensitivity differs across backends |
 | 10 | Signal propagation | Adds Laplacian-based transport into the information field using `p.signalPropagationRate` | Diffusion-like update of information using `infoGrowthRate` | Diffusion-like update of information using `infoGrowthRate` | Does not transport a distinct signal field; parameter mapping differs |
 | 11 | Crystallization | Uses `p.crystallizationRate` × material rate; converts Vacuum/Stone/Sand to Crystal | Uses `p.crystallizationRate` × material rate; converts Vacuum/Stone/Sand to Crystal | Uses `p.crystallizationRate` × material rate; converts Vacuum/Stone/Sand to Crystal | Parameter and material-transition behavior aligned; regression covers mask, zero rate, material sensitivity and finite outputs. GPU runtime still requires hardware-backed numerical comparison |
-| 12 | Radiation | Uses `radiationThreshold`, density/energy rates and material absorption | Uses hard-coded threshold/rates; material absorption affects density reduction | Uses hard-coded threshold/rates without the material absorption term | Implemented with inconsistent parameterization and material response |
+| 12 | Radiation | Uses shared threshold/rates and material absorption; threshold delta uses pre-step energy | Uses shared threshold/rates and material absorption; WGSL parameter ABI indexes 25–27 | Uses shared threshold/rates and material absorption; threshold delta uses pre-step energy | Parameter/material response aligned in code; deterministic CPU and static cross-backend regressions added, but WebGPU numerical parity still needs hardware-backed verification |
 | 13 | Pressure diffusion | Pressure Laplacian plus relaxation toward the density/temperature equation of state | Six-neighbor pressure Laplacian plus equation-of-state relaxation, parameterized by `pressureDiffusion` | Six-neighbor pressure Laplacian plus equation-of-state relaxation, parameterized by `pressureDiffusion` | Transport is present in all three paths; CPU/GPU use Neumann boundaries and worker samples sparse neighbors |
 | 14 | Field rotation | Parameterized 2D `FX/FY` smoothing/cross-coupling | 3D vector smoothing/cross-coupling with hard-coded constants | 3D vector smoothing/cross-coupling with hard-coded constants | Heuristic vector update, not a true curl-based solver; dimensions and parameters differ |
 | 15 | Erosion | Material resistance and `p.erosionRate`; planar `FX/FY` flow threshold | Material resistance and `p.erosionRate`; 3D `FX/FY/FZ` flow threshold | Material resistance and `p.erosionRate`; 3D `FIELD_X/Y/Z` flow threshold | Now present in all three paths; worker's compact field schema lacks a Z-flow component |
@@ -110,9 +110,25 @@ The CPU and GPU solvers now use the dedicated `PhysicsParams.densityDiffusion` c
 
 ### Phase-transition coefficient parity follow-up — 2026-10-27
 
-The CPU and GPU phase-transition rules now consume `PhysicsParams.phaseTransitionRate`, matching the sparse worker. The GPU parameter ABI grows from 23 to 24 floats (96 bytes), with `phaseTransitionRate` at index 23. A CPU regression covers the process mask, zero-rate behavior, boiling and freezing branches, and finite outputs. The static cross-backend contract verifies parameter forwarding and use; this establishes coefficient wiring, not the empirical validity of the phenomenological thresholds.
+The CPU and GPU phase-transition rules now consume `PhysicsParams.phaseTransitionRate`, matching the sparse worker. The GPU parameter ABI has since grown to 28 floats (112 bytes); `phaseTransitionRate` remains at index 23. A CPU regression covers the process mask, zero-rate behavior, boiling and freezing branches, and finite outputs. The static cross-backend contract verifies parameter forwarding and use; this establishes coefficient wiring, not the empirical validity of the phenomenological thresholds.
 
 
 ### Crystallization parity follow-up — 2026-10-27
 
-CPU, GPU and sparse worker crystallization now use the configured `PhysicsParams.crystallizationRate` multiplied by the material coefficient; Vacuum retains the worker's explicit unit multiplier despite its library coefficient being zero. All three paths convert only Vacuum, Stone and Sand to Crystal, and zero rate no longer changes the material ID. GPU `SimParams` now carries the coefficient at index 24 (25 floats total). Mandatory CI includes a deterministic CPU regression and static cross-backend contract checks. This is implementation parity evidence, not a physically calibrated phase-transition model; a real WebGPU numerical parity test remains outstanding.
+CPU, GPU and sparse worker crystallization now use the configured `PhysicsParams.crystallizationRate` multiplied by the material coefficient; Vacuum retains the worker's explicit unit multiplier despite its library coefficient being zero. All three paths convert only Vacuum, Stone and Sand to Crystal, and zero rate no longer changes the material ID. GPU `SimParams` carries the coefficient at index 24; the current ABI has 28 floats (112 bytes). Mandatory CI includes a deterministic CPU regression and static cross-backend contract checks. This is implementation parity evidence, not a physically calibrated phase-transition model; a real WebGPU numerical parity test remains outstanding.
+
+
+### Radiation parameter parity follow-up — 2026-10-28
+
+CPU, GPU and sparse worker radiation now use `PhysicsParams.radiationThreshold`,
+`radiationDensityRate`, and `radiationEnergyRate`. All three paths apply the
+material `radiationAbsorption` fraction to density reduction and clamp density
+and energy to non-negative values. The trigger and rate delta are based on the
+immutable pre-step energy sample; output losses are applied to the current
+per-step result so earlier enabled processes are not overwritten. GPU
+`SimParams` now uses 28 floats (112 bytes), with radiation parameters at
+indices 25–27. Mandatory CI includes a deterministic CPU regression for disabled
+mask, below-threshold energy, zero rates, material absorption, parameter
+sensitivity, clamping and finite outputs, plus static cross-backend contract
+checks. These checks verify implementation wiring, not physical calibration;
+hardware-backed GPU numerical comparison remains outstanding.
