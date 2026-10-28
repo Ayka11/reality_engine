@@ -147,7 +147,11 @@ export class WorldPersistence {
   saveChunk(cx: number, cy: number, cz: number, objects: WorldObject[]) {
     const payload: StoredChunk = { version: 1, seed: this.seed, objects }
     const key = chunkKey(cx, cy, cz)
-    localStorage.setItem(this.key(cx, cy, cz), JSON.stringify(payload))
+    try {
+      localStorage.setItem(this.key(cx, cy, cz), JSON.stringify(payload))
+    } catch {
+      // Keep the live chunk usable when durable browser storage is unavailable.
+    }
     this.cache.set(key, objects)
     this.loaded.add(key)
     this.updateManifest()
@@ -158,7 +162,13 @@ export class WorldPersistence {
     const key = chunkKey(cx, cy, cz)
     const cached = this.cache.get(key)
     if (cached) return cached
-    const raw = localStorage.getItem(this.key(cx, cy, cz))
+    let raw: string | null
+    try {
+      raw = localStorage.getItem(this.key(cx, cy, cz))
+    } catch {
+      this.loaded.add(key)
+      return []
+    }
     this.loaded.add(key)
     if (!raw) return []
     try {
@@ -179,25 +189,43 @@ export class WorldPersistence {
 
   deleteChunk(cx: number, cy: number, cz: number) {
     const key = chunkKey(cx, cy, cz)
-    localStorage.removeItem(this.key(cx, cy, cz))
+    try {
+      localStorage.removeItem(this.key(cx, cy, cz))
+    } catch {
+      // Remove the in-memory copy even when browser storage is unavailable.
+    }
     this.loaded.delete(key)
     this.cache.delete(key)
-    this.updateManifest()
+    this.updateManifest(key)
   }
 
   clear() {
-    const raw = localStorage.getItem(this.manifestKey)
+    let raw: string | null = null
+    try {
+      raw = localStorage.getItem(this.manifestKey)
+    } catch {
+      // Storage may be disabled; still clear the in-memory cache below.
+    }
     if (raw) {
       try {
-        const keys = JSON.parse(raw) as string[]
-        for (const key of keys) localStorage.removeItem(this.prefix + key)
+        const keys = JSON.parse(raw) as unknown
+        if (Array.isArray(keys)) {
+          for (const key of keys) {
+            if (typeof key !== 'string' || key.split(',').length !== 3 || !key.split(',').every(part => Number.isSafeInteger(Number(part)))) continue
+            try { localStorage.removeItem(this.prefix + key) } catch {}
+          }
+        }
       } catch {}
     }
-    localStorage.removeItem(this.manifestKey)
-    localStorage.removeItem(this.fieldStateKey)
-    localStorage.removeItem(this.fieldCheckpointKey)
-    localStorage.removeItem(this.terrainDeformationKey)
-    localStorage.removeItem(this.terrainDeformationCheckpointKey)
+    for (const key of [
+      this.manifestKey,
+      this.fieldStateKey,
+      this.fieldCheckpointKey,
+      this.terrainDeformationKey,
+      this.terrainDeformationCheckpointKey,
+    ]) {
+      try { localStorage.removeItem(key) } catch {}
+    }
     this.loaded.clear()
     this.cache.clear()
   }
@@ -211,7 +239,12 @@ export class WorldPersistence {
   loadedChunks(): string[] { return [...this.loaded] }
 
   knownChunks(): string[] {
-    const raw = localStorage.getItem(this.manifestKey)
+    let raw: string | null
+    try {
+      raw = localStorage.getItem(this.manifestKey)
+    } catch {
+      return []
+    }
     if (!raw) return []
     try {
       const keys = JSON.parse(raw)
@@ -221,8 +254,13 @@ export class WorldPersistence {
     }
   }
 
-  private updateManifest() {
-    const raw = localStorage.getItem(this.manifestKey)
+  private updateManifest(removeKey?: string) {
+    let raw: string | null
+    try {
+      raw = localStorage.getItem(this.manifestKey)
+    } catch {
+      return
+    }
     let keys: string[] = []
     try {
       const parsed = raw ? JSON.parse(raw) : []
@@ -230,6 +268,11 @@ export class WorldPersistence {
     } catch {}
     const present = new Set(keys)
     for (const key of this.loaded) present.add(key)
-    localStorage.setItem(this.manifestKey, JSON.stringify([...present]))
+    if (removeKey) present.delete(removeKey)
+    try {
+      localStorage.setItem(this.manifestKey, JSON.stringify([...present]))
+    } catch {
+      // The manifest is an index only; in-memory state remains usable.
+    }
   }
 }
