@@ -142,13 +142,14 @@ the sparse worker already used those coefficients. CPU/GPU no longer smooth the
 field vector when `PROC.FIELD_ROTATION` is disabled. The GPU neighbor average
 now counts only in-bounds neighbors, matching the CPU and sparse-worker stencil
 semantics. The parameter ABI has 31 floats (124 bytes), with field-rotation
-coefficients at indices 28–30. Mandatory CI includes deterministic CPU checks
-for disabled-mask invariance and parameter sensitivity plus static parameter
-forwarding checks across backends. The worker still stores only its 2D FX/FY
-vector, and this remains a heuristic vector update rather than a calibrated
-curl-based solver.
+coefficients at indices 28–30. The worker layout now carries FX, FY, and FZ;
+FZ is appended at field index 14 so existing indices remain stable, and the
+transfer parser consumes 15 fields per cell. Mandatory CI includes deterministic
+CPU checks for disabled-mask invariance and parameter sensitivity plus static
+parameter-forwarding checks across backends. This remains a heuristic vector
+update rather than a calibrated curl-based solver.
 
 
 ### Sparse-worker field-vector Z component parity — 2026-10-28
 
-The follow-up cross-backend audit found that the sparse worker applied configured field rotation to X/Y but left Z unchanged, despite CPU and GPU rotating all three components. The worker now accumulates the Z-neighbor stencil and updates FZ with the same damping and neighbor-coupling coefficients. The static backend contract explicitly guards the Z-neighbor accumulation and update. This closes a software-path mismatch; GPU numerical equivalence still requires hardware-backed comparison.
+The follow-up cross-backend audit found that the sparse worker applied configured field rotation to X/Y but left Z unchanged, despite CPU and GPU rotating all three components. The worker layout now appends FZ at index 14 (NF=15), without shifting the existing fields; the main-thread transfer parser uses the same expanded stride. The worker accumulates the Z-neighbor stencil and updates FZ with the same damping and neighbor-coupling coefficients. Static contract checks and a deterministic worker runtime test guard all three components. This closes the representation mismatch in software paths; GPU numerical equivalence still requires hardware-backed comparison.
