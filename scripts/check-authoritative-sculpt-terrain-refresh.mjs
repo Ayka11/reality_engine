@@ -78,20 +78,30 @@ assert.match(terrainGeometryFinalization, /geometry\.computeVertexNormals\(\)/,
 const terrainHeight = methodBody("sampleTerrainHeight");
 assert.match(terrainHeight, /this\.generator\.sampleHeight\(x, z\)\s*\+\s*this\.terrainDeformations\.sampleDelta\(x, z\)/,
   "terrain geometry must add the authoritative deformation overlay to the deterministic baseline");
+const terrainPersistence = methodBody("persistTerrainDeformationState");
+assert.match(terrainPersistence, /const saved = this\.persistence\.saveTerrainDeformationState/);
+assert.match(terrainPersistence, /if \(!saved\)/,
+  "renderer must detect failed terrain autosaves instead of silently ignoring storage errors");
+assert.match(terrainPersistence, /console\.warn/,
+  "failed terrain autosaves must surface a diagnostic while keeping in-memory edits usable");
 const terrainSculpt = methodBody("sculptTerrainAt");
 assert.match(terrainSculpt, /this\.terrainDeformations\.applyBrush/);
 assert.match(terrainSculpt, /this\.refreshTerrainPatches\(\)/);
-assert.match(terrainSculpt, /saveTerrainDeformationState/);
+assert.match(terrainSculpt, /this\.persistTerrainDeformationState\(\)/);
 for (const name of ["undoTerrainSculpt", "redoTerrainSculpt"]) {
   const body = methodBody(name);
   assert.match(body, /this\.terrainDeformations\.(?:undo|redo)\(\)/);
   assert.match(body, /this\.refreshTerrainPatches\(\)/);
-  assert.match(body, /saveTerrainDeformationState/);
+  assert.match(body, /this\.persistTerrainDeformationState\(\)/);
 }
 const terrainBuilderSource = methodBody("buildTerrainPatch");
 assert.match(terrainBuilderSource, /this\.sampleTerrainHeight\(originX \+ gx, originZ \+ gz\)/,
   "terrain mesh vertices must sample deformation-aware heights");
-assert.match(methodBody("saveWorld"), /saveTerrainDeformationCheckpoint/);
+const saveWorldBody = methodBody("saveWorld");
+assert.match(saveWorldBody, /saveTerrainDeformationCheckpoint/);
+assert.match(saveWorldBody, /if \(!checkpointSaved\)/,
+  "manual terrain checkpoint failures must be diagnosed rather than silently ignored");
+assert.match(saveWorldBody, /console\.warn/);
 assert.match(methodBody("loadWorld"), /loadTerrainDeformationCheckpoint/);
 
 const refresh = methodBody("refreshTerrainPatches");
