@@ -33,7 +33,7 @@ const materialJs = ts.transpileModule(materialSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const materialUrl = "data:text/javascript;base64," + Buffer.from(materialJs).toString("base64");
-const { ChunkGrid, F } = await import(moduleUrl);
+const { ChunkGrid, F, NF } = await import(moduleUrl);
 const grid = new ChunkGrid();
 
 grid.set(12, 12, 12, F.E, 100);
@@ -88,7 +88,7 @@ try {
     const response = workerMessages.filter(message => message.cmd === "snapshot").at(-1);
     const chunkKeyValue = Math.floor(cx / 8) + Math.floor(cy / 8) * 16 + Math.floor(cz / 8) * 256;
     const chunk = response.data.snap.find(item => item.key === chunkKeyValue);
-    const localOffset = (((cz & 7) * 8 * 8) + ((cy & 7) * 8) + (cx & 7)) * 14;
+    const localOffset = (((cz & 7) * 8 * 8) + ((cy & 7) * 8) + (cx & 7)) * NF;
     return chunk ? chunk.data[localOffset + field] : 0;
   };
   const cellEnergy = () => cellValueAt(x, y, z, F.E);
