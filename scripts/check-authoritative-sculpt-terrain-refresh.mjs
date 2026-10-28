@@ -76,20 +76,20 @@ assert.match(terrainGeometryFinalization, /geometry\.computeVertexNormals\(\)/,
   "terrain normals must be recomputed from final indexed geometry so LOD-snapped edges and lighting agree");
 
 const terrainHeight = methodBody("sampleTerrainHeight");
-assert.match(terrainHeight, /this\\.generator\\.sampleHeight\\(x, z\\)\\s*\\+\\s*this\\.terrainDeformations\\.sampleDelta\\(x, z\\)/,
+assert.match(terrainHeight, /this\.generator\.sampleHeight\(x, z\)\s*\+\s*this\.terrainDeformations\.sampleDelta\(x, z\)/,
   "terrain geometry must add the authoritative deformation overlay to the deterministic baseline");
 const terrainSculpt = methodBody("sculptTerrainAt");
-assert.match(terrainSculpt, /this\\.terrainDeformations\\.applyBrush/);
-assert.match(terrainSculpt, /this\\.refreshTerrainPatches\\(\\)/);
+assert.match(terrainSculpt, /this\.terrainDeformations\.applyBrush/);
+assert.match(terrainSculpt, /this\.refreshTerrainPatches\(\)/);
 assert.match(terrainSculpt, /saveTerrainDeformationState/);
 for (const name of ["undoTerrainSculpt", "redoTerrainSculpt"]) {
   const body = methodBody(name);
-  assert.match(body, /this\\.terrainDeformations\\.(?:undo|redo)\\(\\)/);
-  assert.match(body, /this\\.refreshTerrainPatches\\(\\)/);
+  assert.match(body, /this\.terrainDeformations\.(?:undo|redo)\(\)/);
+  assert.match(body, /this\.refreshTerrainPatches\(\)/);
   assert.match(body, /saveTerrainDeformationState/);
 }
 const terrainBuilderSource = methodBody("buildTerrainPatch");
-assert.match(terrainBuilderSource, /this\\.sampleTerrainHeight\\(originX \\+ gx, originZ \\+ gz\\)/,
+assert.match(terrainBuilderSource, /this\.sampleTerrainHeight\(originX \+ gx, originZ \+ gz\)/,
   "terrain mesh vertices must sample deformation-aware heights");
 assert.match(methodBody("saveWorld"), /saveTerrainDeformationCheckpoint/);
 assert.match(methodBody("loadWorld"), /loadTerrainDeformationCheckpoint/);
