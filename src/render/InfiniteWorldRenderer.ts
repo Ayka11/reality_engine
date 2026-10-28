@@ -1066,6 +1066,10 @@ export class InfiniteWorldRenderer {
     geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
     geometry.setIndex(indices)
+    // Derive normals from the final indexed surface, including LOD-snapped edge heights.
+    // Sampling the unsnapped generator here creates lighting normals that disagree with
+    // the actual border geometry and can accentuate seams between neighboring LOD patches.
+    geometry.computeVertexNormals()
     geometry.computeBoundingSphere()
 
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 })
