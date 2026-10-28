@@ -368,14 +368,17 @@ function simStep(dt: number) {
     }
 
     if (isProcessActive(PROC.RADIATION)) {
-      const energy = grid.get(x, y, z, F.E)
-      if (energy > p.radiationThreshold) {
-        const materialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
-          Math.floor(grid.get(x, y, z, F.MAT))))
+      // Trigger/rate delta use the immutable pre-step energy sample, matching CPU and GPU.
+      if (E > p.radiationThreshold) {
+        const rawMaterialId = chunk[base + F.MAT]
+        const materialId = Number.isFinite(rawMaterialId)
+          ? Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1, Math.floor(rawMaterialId)))
+          : MAT.VACUUM
         const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
         grid.set(x, y, z, F.D, Math.max(0, grid.get(x, y, z, F.D)
-          - (energy - p.radiationThreshold) * p.radiationDensityRate * (1 - material.radiationAbsorption) * dt * 60))
-        grid.set(x, y, z, F.E, Math.max(0, energy - (energy - p.radiationThreshold) * p.radiationEnergyRate * dt * 60))
+          - (E - p.radiationThreshold) * p.radiationDensityRate * (1 - material.radiationAbsorption) * dt * 60))
+        grid.set(x, y, z, F.E, Math.max(0, grid.get(x, y, z, F.E)
+          - (E - p.radiationThreshold) * p.radiationEnergyRate * dt * 60))
       }
     }
 
