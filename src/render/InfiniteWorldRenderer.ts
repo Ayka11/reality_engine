@@ -91,6 +91,7 @@ export class InfiniteWorldRenderer {
   private selectedObjectId: string | null = null
   private selectedKind: WorldObjectKind = 'tree'
   private objectTool: 'navigate' | 'select' | 'place' | 'erase' = 'navigate'
+  private terrainBrushMode: 'raise' | 'lower' | null = null
   private saveTimer: number | null = null
   private readonly storageKey: string
   private readonly pointerHandler: (e: PointerEvent) => void
@@ -351,7 +352,9 @@ export class InfiniteWorldRenderer {
       }
     }
     this.pointerUpHandler = (e: PointerEvent) => {
-      if (this.objectTool === 'navigate') {
+      if (this.terrainBrushMode) {
+        canvas.style.cursor = 'crosshair'
+      } else if (this.objectTool === 'navigate') {
         canvas.style.cursor = 'grab'
       } else if (this.objectTool === 'place') {
         canvas.style.cursor = 'crosshair'
@@ -377,7 +380,7 @@ export class InfiniteWorldRenderer {
         if (deltaX !== 0 || deltaY !== 0) this.rotateFlyCamera(deltaX, deltaY)
         return
       }
-      if (this.objectTool === 'place') {
+      if (this.objectTool === 'place' || this.terrainBrushMode) {
         this.pickAtScreen(e.clientX, e.clientY)
       } else if (this.hoverMarker.visible) {
         this.hoverMarker.visible = false
@@ -745,7 +748,14 @@ export class InfiniteWorldRenderer {
   }
   updateControlButtons() {
     const canvas = this.renderer.domElement
-    if (this.objectTool === 'navigate') {
+    if (this.terrainBrushMode) {
+      this.controls.mouseButtons = {
+        LEFT: -1 as any,
+        MIDDLE: THREE.MOUSE.PAN,
+        RIGHT: THREE.MOUSE.ROTATE,
+      }
+      canvas.style.cursor = 'crosshair'
+    } else if (this.objectTool === 'navigate') {
       this.controls.mouseButtons = {
         LEFT: THREE.MOUSE.ROTATE,
         MIDDLE: THREE.MOUSE.DOLLY,
@@ -762,7 +772,17 @@ export class InfiniteWorldRenderer {
     }
   }
 
+  setTerrainBrushMode(mode: 'raise' | 'lower' | null) {
+    this.terrainBrushMode = mode
+    if (mode) {
+      this.flyMode = false
+      this.controls.enabled = this.enabled && !this.transformDragging
+    }
+    this.updateControlButtons()
+  }
+
   setObjectTool(tool: 'navigate' | 'select' | 'place' | 'erase') {
+    this.terrainBrushMode = null
     this.objectTool = tool
     this.updateControlButtons()
     if (tool !== 'select') {
@@ -2047,6 +2067,10 @@ export class InfiniteWorldRenderer {
   }
 
   handlePointer(clientX: number, clientY: number) {
+    if (this.terrainBrushMode) {
+      const point = this.pickAtScreen(clientX, clientY)
+      return point ? this.sculptTerrainAt(point.x, point.z, 8, 1, this.terrainBrushMode) : null
+    }
     if (this.objectTool === 'place') return this.placeAtScreen(this.selectedKind, clientX, clientY)
     if (this.objectTool === 'erase') return this.eraseAtScreen(clientX, clientY)
     return this.selectAtScreen(clientX, clientY)
