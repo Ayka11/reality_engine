@@ -420,6 +420,39 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(restoreEngine.grid.buffer[restoreEnergyIndex], beforeRejectedWorldRestore,
     "a failed world restore must roll back CPU state and reject old GPU output");
 
+  // Chunk-map membership is authoritative too: set/delete/clear while a GPU
+  // result is pending must reject the result before it can be committed.
+  const topologyEngine = new SimulationEngine(8, 8, 8);
+  (topologyEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const topologyKey = topologyEngine.grid.getChunkKey(12, 12, 12);
+  topologyEngine.grid.getOrCreateChunk(12, 12, 12);
+  const staleTopologySet = topologyEngine.grid.buffer.slice();
+  const pendingTopologySet = await beginPendingReadback(topologyEngine, staleTopologySet);
+  const topologyReplacement = new Chunk(12, 12, 12);
+  topologyEngine.grid.chunks.set(topologyKey, topologyReplacement);
+  pendingTopologySet.release(staleTopologySet);
+  await assert.rejects(pendingTopologySet.step, /Discarded stale GPU readback/);
+  assert.equal(topologyEngine.grid.chunks.get(topologyKey), topologyReplacement,
+    "stale GPU output must not override a newer chunk-map replacement");
+
+  const staleTopologyDelete = topologyEngine.grid.buffer.slice();
+  const pendingTopologyDelete = await beginPendingReadback(topologyEngine, staleTopologyDelete);
+  assert.equal(topologyEngine.grid.chunks.delete(topologyKey), true);
+  pendingTopologyDelete.release(staleTopologyDelete);
+  await assert.rejects(pendingTopologyDelete.step, /Discarded stale GPU readback/);
+  assert.equal(topologyEngine.grid.chunks.has(topologyKey), false,
+    "stale GPU output must not resurrect a deleted chunk");
+
+  const clearTopologyEngine = new SimulationEngine(8, 8, 8);
+  (clearTopologyEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const staleTopologyClear = clearTopologyEngine.grid.buffer.slice();
+  const pendingTopologyClear = await beginPendingReadback(clearTopologyEngine, staleTopologyClear);
+  clearTopologyEngine.grid.chunks.clear();
+  pendingTopologyClear.release(staleTopologyClear);
+  await assert.rejects(pendingTopologyClear.step, /Discarded stale GPU readback/);
+  assert.equal(clearTopologyEngine.grid.chunks.size, 0,
+    "stale GPU output must not repopulate a cleared chunk map");
+
   console.log("SimulationEngine stale GPU readback mutation-revision regression: PASS");
 }
 
