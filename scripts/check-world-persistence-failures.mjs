@@ -207,6 +207,40 @@ failRemove = false;
 assert.equal(persistence.deleteFieldState(), true);
 assert.equal(persistence.loadFieldState(), null);
 
+const terrainSnapshot = { schemaVersion: 1, seed: "seed-a", deltas: [["0,0", 1.25]] };
+assert.equal(persistence.saveTerrainDeformationState(terrainSnapshot), true);
+assert.deepEqual(persistence.loadTerrainDeformationState(), terrainSnapshot,
+  "terrain deformation autosave must round-trip independently of field state");
+const terrainStateKey = "reality-engine-world:seed-a:terrain-deformation";
+const durableTerrainState = values.get(terrainStateKey);
+failSet = true;
+assert.equal(persistence.saveTerrainDeformationState({ ...terrainSnapshot, deltas: [["0,0", 2]] }), false,
+  "terrain autosave must report browser storage write failures");
+assert.equal(values.get(terrainStateKey), durableTerrainState,
+  "failed terrain autosave must preserve the last durable deformation snapshot");
+assert.equal(persistence.saveTerrainDeformationCheckpoint(terrainSnapshot), false,
+  "terrain checkpoint writes must report browser storage failures");
+failSet = false;
+failGet = true;
+assert.equal(persistence.loadTerrainDeformationState(), null,
+  "terrain autosave reads must contain browser storage access failures");
+assert.equal(persistence.loadTerrainDeformationCheckpoint(), null,
+  "terrain checkpoint reads must contain browser storage access failures");
+failGet = false;
+values.set(terrainStateKey, "{broken-terrain-json");
+assert.equal(persistence.loadTerrainDeformationState(), null,
+  "malformed terrain autosave JSON must be rejected");
+values.set(terrainStateKey, durableTerrainState);
+assert.equal(persistence.saveTerrainDeformationCheckpoint(terrainSnapshot), true);
+assert.deepEqual(persistence.loadTerrainDeformationCheckpoint(), terrainSnapshot,
+  "terrain checkpoint must round-trip independently of autosave");
+failRemove = true;
+assert.equal(persistence.deleteTerrainDeformationState(), false,
+  "terrain state deletion must report browser storage failures");
+failRemove = false;
+assert.equal(persistence.deleteTerrainDeformationState(), true);
+assert.equal(persistence.loadTerrainDeformationState(), null);
+
 const chunkObjects = [{ id: 'in-memory-chunk-object', x: 1, y: 2, z: 3, kind: 'tree' }];
 failSet = true;
 assert.doesNotThrow(() => persistence.saveChunk(0, 0, 0, chunkObjects),
