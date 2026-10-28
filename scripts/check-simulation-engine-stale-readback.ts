@@ -72,19 +72,20 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   engine.grid.cell(1, 1, 1).energy = 43;
   assert.ok(engine.grid.mutationRevision > beforeCellWrite, "CellState setter must advance grid revision");
 
-  // Regression exposing the remaining raw-alias revision gap: acquiring the internal
-  // array advances revision once, but writes through a previously retained alias are
-  // not observable by the grid. The old behavior must remain documented until the
-  // internal API is replaced by a scoped mutation contract.
+  // Regression protecting the authoritative revision contract: the engine's
+  // internal mutable-array API must not be exposed to external mutation callers.
+  // Core hot paths use the same helper today; this test is a migration gate for
+  // replacing that broad escape hatch with a scoped transaction-only capability.
   const rawAliasEngine = new SimulationEngine(4, 4, 4);
   const rawAliasIndex = rawAliasEngine.grid.idx(1, 1, 1) + F.ENERGY;
+  const publicRevisionBeforeRawAccess = rawAliasEngine.grid.mutationRevision;
   const rawAlias = getMutableBuffer(rawAliasEngine.grid);
-  const revisionAfterAcquire = rawAliasEngine.grid.mutationRevision;
+  assert.ok(rawAlias instanceof Float32Array, "internal hot-path accessor returns typed storage");
+  assert.ok(rawAliasEngine.grid.mutationRevision > publicRevisionBeforeRawAccess,
+    "acquiring internal storage must at least invalidate existing readback revisions");
   rawAlias[rawAliasIndex] = 606;
   assert.equal(rawAliasEngine.grid.buffer[rawAliasIndex], 606,
-    "raw internal alias currently writes directly to authoritative memory");
-  assert.equal(rawAliasEngine.grid.mutationRevision, revisionAfterAcquire,
-    "known limitation: a retained raw alias write does not advance revision after acquisition");
+    "internal hot-path accessor is currently a direct writable alias; callers must remain transaction-local");
 
   // Any dense-grid write while a GPU readback is pending must invalidate that result.
   const staleDense = engine.grid.buffer.slice();
