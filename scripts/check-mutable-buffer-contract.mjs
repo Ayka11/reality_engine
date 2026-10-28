@@ -368,11 +368,24 @@ for (const filePath of sourcePaths) {
             parent.expression.name.text === "set" &&
             ts.isIdentifier(receiver) && aliases.has(receiver.text);
           const isAuditedLocalBufferCache = path === "src/core/SparseVoxelGrid.ts" &&
-            ["syncDenseEntityOwnershipToChunks", "syncDenseToChunks", "syncChunksToDense"].includes(key.split("#")[1]) &&
+            ["syncDenseEntityOwnershipToChunks", "syncDenseToChunks", "syncChunksToDense"].includes(key) &&
             ts.isPropertyAccessExpression(parent.expression) &&
             parent.expression.name.text === "set" &&
             ts.isIdentifier(receiver) && receiver.text === "rawBuffers";
-          if (!isTypedArrayCopy && !isAuditedLocalBufferCache) {
+          const agentHandoffNames = new Set(["_explore", "_harvest", "_signal", "_build", "_destroy"]);
+          const agentHandoffName = ts.isPropertyAccessExpression(parent.expression)
+            ? parent.expression.name.text
+            : "";
+          const agentHandoffTarget = methodNodes.get(agentHandoffName);
+          const isAuditedSynchronousAgentHandoff = path === "src/simulation/AgentSystem.ts" &&
+            key === "tick" && node.text === "buf" &&
+            ts.isPropertyAccessExpression(parent.expression) &&
+            parent.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
+            agentHandoffNames.has(agentHandoffName) &&
+            !!agentHandoffTarget &&
+            !agentHandoffTarget.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) &&
+            !containsAwaitOrYield(agentHandoffTarget);
+          if (!isTypedArrayCopy && !isAuditedLocalBufferCache && !isAuditedSynchronousAgentHandoff) {
             errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be passed to an arbitrary function which could retain it`);
           }
         }
