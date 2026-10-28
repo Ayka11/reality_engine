@@ -7,8 +7,9 @@ export type TerrainDeformationSnapshot = {
 }
 
 type TerrainTransaction = {
-  before: Map<string, number>
-  after: Map<string, number>
+  // Store only touched lattice points, not a full-world copy per brush stroke.
+  before: Map<string, number | undefined>
+  after: Map<string, number | undefined>
 }
 
 function keyOf(x: number, z: number): string {
@@ -57,7 +58,7 @@ export class TerrainDeformationField {
       throw new RangeError('Terrain brush coordinates must be safe and radius/strength must be within supported limits')
     }
     if (mode !== 'raise' && mode !== 'lower') throw new TypeError('Unsupported terrain brush mode')
-    const before = new Map(this.deltas)
+    const before = new Map<string, number | undefined>()
     const sign = mode === 'raise' ? 1 : -1
     const minX = Math.floor(x - radius)
     const maxX = Math.ceil(x + radius)
@@ -68,16 +69,20 @@ export class TerrainDeformationField {
       for (let gx = minX; gx <= maxX; gx++) {
         const distance = Math.hypot(gx - x, gz - z)
         if (distance > radius) continue
+        const key = keyOf(gx, gz)
+        if (!before.has(key)) before.set(key, this.deltas.get(key))
         const falloff = 1 - distance / radius
-        const next = (this.deltas.get(keyOf(gx, gz)) ?? 0) + sign * strength * falloff * falloff
+        const next = (this.deltas.get(key) ?? 0) + sign * strength * falloff * falloff
         if (!Number.isFinite(next)) throw new Error('Terrain brush produced a non-finite height delta')
-        if (Math.abs(next) < 1e-6) this.deltas.delete(keyOf(gx, gz))
-        else this.deltas.set(keyOf(gx, gz), next)
+        if (Math.abs(next) < 1e-6) this.deltas.delete(key)
+        else this.deltas.set(key, next)
         changed++
       }
     }
     if (changed > 0) {
-      this.undoStack.push({ before, after: new Map(this.deltas) })
+      const after = new Map<string, number | undefined>()
+      for (const key of before.keys()) after.set(key, this.deltas.get(key))
+      this.undoStack.push({ before, after })
       if (this.undoStack.length > this.maxHistory) this.undoStack.shift()
       this.redoStack = []
     }
@@ -87,11 +92,11 @@ export class TerrainDeformationField {
   undo(): boolean {
     const transaction = this.undoStack.pop()
     if (!transaction) return false
-    if (!this.mapsEqual(this.deltas, transaction.after)) {
+    if (!this.patchMatches(transaction.after)) {
       this.undoStack.push(transaction)
       return false
     }
-    this.deltas = new Map(transaction.before)
+    this.applyPatch(transaction.before)
     this.redoStack.push(transaction)
     return true
   }
@@ -99,11 +104,11 @@ export class TerrainDeformationField {
   redo(): boolean {
     const transaction = this.redoStack.pop()
     if (!transaction) return false
-    if (!this.mapsEqual(this.deltas, transaction.before)) {
+    if (!this.patchMatches(transaction.before)) {
       this.redoStack.push(transaction)
       return false
     }
-    this.deltas = new Map(transaction.after)
+    this.applyPatch(transaction.after)
     this.undoStack.push(transaction)
     return true
   }
@@ -149,9 +154,17 @@ export class TerrainDeformationField {
   get canUndo(): boolean { return this.undoStack.length > 0 }
   get canRedo(): boolean { return this.redoStack.length > 0 }
 
-  private mapsEqual(a: Map<string, number>, b: Map<string, number>): boolean {
-    if (a.size !== b.size) return false
-    for (const [key, value] of a) if (b.get(key) !== value) return false
+  private patchMatches(expected: Map<string, number | undefined>): boolean {
+    for (const [key, value] of expected) {
+      if (this.deltas.get(key) !== value) return false
+    }
     return true
+  }
+
+  private applyPatch(patch: Map<string, number | undefined>): void {
+    for (const [key, value] of patch) {
+      if (value === undefined) this.deltas.delete(key)
+      else this.deltas.set(key, value)
+    }
   }
 }
