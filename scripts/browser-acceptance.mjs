@@ -2359,6 +2359,151 @@ try {
     throw new Error("Greedy preview UI did not restore the previous renderer: " + JSON.stringify(greedyPreviewUI));
   }
 
+  console.log("[acceptance] terrain persistence across full page reload");
+  const savedTerrainOnDisk = await page.evaluate((target) => {
+    const world = window.infiniteWorld;
+    const seed = world.generator.seed;
+    const key = `reality-engine-world:${seed}:terrain-deformation`;
+    return {
+      seed,
+      key,
+      raw: localStorage.getItem(key),
+      delta: world.terrainDeformations.sampleDelta(target.worldX, target.worldZ),
+    };
+  }, terrainPointerTarget);
+  if (!savedTerrainOnDisk.raw || Math.abs(savedTerrainOnDisk.delta - terrainCheckpoint) > 1e-6) {
+    throw new Error("Terrain autosave was not durable before reload: " + JSON.stringify(savedTerrainOnDisk));
+  }
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForSelector("#c3d");
+  await page.waitForFunction(() =>
+    typeof window.worldGenerationHealth === "function" &&
+    !!window.infiniteWorld?.terrainDeformations,
+  );
+  const terrainAfterReload = await page.evaluate((target) => ({
+    seed: window.infiniteWorld.generator.seed,
+    delta: window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ),
+  }), terrainPointerTarget);
+  if (terrainAfterReload.seed !== savedTerrainOnDisk.seed ||
+      Math.abs(terrainAfterReload.delta - terrainCheckpoint) > 1e-6) {
+    throw new Error("Terrain deformation did not survive full page reload: " + JSON.stringify({
+      seedBefore: savedTerrainOnDisk.seed,
+      seedAfter: terrainAfterReload.seed,
+      expected: terrainCheckpoint,
+      actual: terrainAfterReload.delta,
+    }));
+  }
+
+  console.log("[acceptance] corrupt terrain snapshot rejection and recovery");
+  await page.evaluate(({ key }) => localStorage.setItem(key, "{malformed terrain snapshot"), {
+    key: savedTerrainOnDisk.key,
+  });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForSelector("#c3d");
+  await page.waitForFunction(() =>
+    typeof window.worldGenerationHealth === "function" &&
+    !!window.infiniteWorld?.terrainDeformations,
+  );
+  const corruptTerrainResult = await page.evaluate((target) => ({
+    seed: window.infiniteWorld.generator.seed,
+    size: window.infiniteWorld.terrainDeformations.size,
+    delta: window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ),
+  }), terrainPointerTarget);
+  if (corruptTerrainResult.seed !== savedTerrainOnDisk.seed || corruptTerrainResult.size !== 0) {
+    throw new Error("Malformed terrain storage was not rejected cleanly: " + JSON.stringify(corruptTerrainResult));
+  }
+  await page.evaluate(({ key, raw }) => localStorage.setItem(key, raw), {
+    key: savedTerrainOnDisk.key,
+    raw: savedTerrainOnDisk.raw,
+  });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForSelector("#c3d");
+  await page.waitForFunction(() =>
+    typeof window.worldGenerationHealth === "function" &&
+    !!window.infiniteWorld?.terrainDeformations,
+  );
+  const terrainAfterRecovery = await page.evaluate((target) => ({
+    seed: window.infiniteWorld.generator.seed,
+    delta: window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ),
+  }), terrainPointerTarget);
+  if (terrainAfterRecovery.seed !== savedTerrainOnDisk.seed ||
+      Math.abs(terrainAfterRecovery.delta - terrainCheckpoint) > 1e-6) {
+    throw new Error("Terrain snapshot did not recover after restoring valid storage: " + JSON.stringify({
+      seedBefore: savedTerrainOnDisk.seed,
+      seedAfter: terrainAfterRecovery.seed,
+      expected: terrainCheckpoint,
+      actual: terrainAfterRecovery.delta,
+    }));
+  }
+
+  await page.waitForFunction(() => {
+    const patches = [...(window.infiniteWorld?.patches?.values?.() ?? [])];
+    const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
+    return patches.length >= 13 && patches.some(p => {
+      const east = byKey.get(`${p.chunk.cx + 1},${p.chunk.cy},${p.chunk.cz}`);
+      const south = byKey.get(`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz + 1}`);
+      return (!!east && east.lod !== p.lod) || (!!south && south.lod !== p.lod);
+    });
+  }, null, { timeout: 15000 });
+  const sculptedTerrainSeams = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const patches = [...(world?.patches?.values?.() ?? [])];
+    const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
+    const edge = (patch, side) => {
+      const mesh = patch.group.children.find(child => child.userData?.terrain);
+      const position = mesh?.geometry?.getAttribute?.("position");
+      if (!position) return null;
+      const n = Math.round(Math.sqrt(position.count));
+      const resolution = n - 1;
+      const heights = [];
+      for (let i = 0; i < n; i++) {
+        const index = side === "west" ? i * n : side === "east" ? i * n + resolution
+          : side === "north" ? i : resolution * n + i;
+        heights.push(position.getY(index));
+      }
+      return { resolution, heights };
+    };
+    let checkedPairs = 0;
+    let maxBoundaryHeightError = 0;
+    const failures = [];
+    for (const patch of patches) {
+      const east = byKey.get(`${patch.chunk.cx + 1},${patch.chunk.cy},${patch.chunk.cz}`);
+      const south = byKey.get(`${patch.chunk.cx},${patch.chunk.cy},${patch.chunk.cz + 1}`);
+      for (const [neighbor, sideA, sideB] of [
+        [east, "east", "west"],
+        [south, "south", "north"],
+      ]) {
+        if (!neighbor || neighbor.lod === patch.lod) continue;
+        const a = edge(patch, sideA), b = edge(neighbor, sideB);
+        if (!a || !b) {
+          failures.push("missing mixed-LOD edge geometry");
+          continue;
+        }
+        if (a.resolution === b.resolution) continue;
+        const coarse = a.resolution < b.resolution ? a : b;
+        const fine = a.resolution < b.resolution ? b : a;
+        const ratio = fine.resolution / coarse.resolution;
+        if (!Number.isInteger(ratio)) {
+          failures.push("non-nested mixed-LOD edge grids");
+          continue;
+        }
+        checkedPairs++;
+        for (let i = 0; i <= fine.resolution; i++) {
+          const lo = Math.floor(i / ratio);
+          const hi = Math.min(coarse.resolution, lo + 1);
+          const t = hi === lo ? 0 : i / ratio - lo;
+          const expected = coarse.heights[lo] + (coarse.heights[hi] - coarse.heights[lo]) * t;
+          maxBoundaryHeightError = Math.max(maxBoundaryHeightError, Math.abs(fine.heights[i] - expected));
+        }
+      }
+    }
+    return { checkedPairs, maxBoundaryHeightError, failures };
+  });
+  if (sculptedTerrainSeams.checkedPairs < 1 || sculptedTerrainSeams.failures.length > 0 ||
+      sculptedTerrainSeams.maxBoundaryHeightError > 0.002) {
+    throw new Error("Mixed-LOD terrain seams failed after terrain persistence recovery: " + JSON.stringify(sculptedTerrainSeams));
+  }
+
   const before = await page.evaluate(() => window.worldGenerationHealth());
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
