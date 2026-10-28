@@ -4,6 +4,7 @@ import { Chunk } from "../src/core/Chunk.ts";
 import { SparseVoxelGrid } from "../src/core/SparseVoxelGrid.ts";
 import { SimulationEngine } from "../src/simulation/SimulationEngine.ts";
 import { SculptManager } from "../src/sculpt/SculptManager.ts";
+import { WorldSaveSystem } from "../src/world/save/WorldSaveSystem.ts";
 
 async function beginPendingReadback(engine: SimulationEngine, stale: Float32Array) {
   let release!: (data: Float32Array) => void;
@@ -365,6 +366,59 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   await assert.rejects(pendingRedo.step, /Discarded stale GPU readback/);
   assert.equal(boundaryEngine.grid.buffer[boundaryFieldIndex], sculptAfterEnergy,
     "stale GPU output must not overwrite the state restored by sculpt redo");
+
+  // Exercise the real WorldSaveSystem -> engine mutation boundary while GPU readback
+  // is pending. This covers successful world restore and rollback of an invalid save.
+  const restoreEngine = new SimulationEngine(4, 4, 4);
+  (restoreEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const restoreCell = restoreEngine.grid.idx(1, 1, 1);
+  const restoreEnergyIndex = restoreCell + F.ENERGY;
+  restoreEngine.grid.buffer[restoreEnergyIndex] = 41;
+
+  const worldSave = new WorldSaveSystem(restoreEngine.grid, restoreEngine.laws, null, {
+    mutateAuthoritativeState: mutation => restoreEngine.mutateAuthoritativeState(mutation),
+    getTick: () => restoreEngine.tick,
+    setTick: tick => restoreEngine.restoreTick(tick),
+    getEntities: () => restoreEngine.entityLayer.getEntities(),
+    getEntityLayerSnapshot: () => restoreEngine.entityLayer.snapshot(),
+    restoreEntityLayerSnapshot: snapshot => restoreEngine.entityLayer.restore(snapshot, restoreEngine.grid.size),
+    getAgentSystemSnapshot: () => restoreEngine.agents.snapshot(),
+    restoreAgentSystemSnapshot: snapshot => restoreEngine.agents.restore(snapshot),
+    getLawEngineSnapshot: () => restoreEngine.laws.snapshot(),
+    restoreLawEngineSnapshot: snapshot => restoreEngine.laws.restore(snapshot),
+  });
+
+  const worldSnapshot = worldSave.captureSnapshot("pending-readback-world-restore");
+  const restoredEnergyField = new Float32Array(worldSnapshot.fields.energy);
+  restoredEnergyField[restoreCell] = 123;
+  worldSnapshot.fields.energy = restoredEnergyField.buffer;
+  restoreEngine.grid.buffer[restoreEnergyIndex] = 77;
+
+  const staleWorldRestore = restoreEngine.grid.buffer.slice();
+  staleWorldRestore[restoreEnergyIndex] = 9008;
+  const pendingWorldRestore = await beginPendingReadback(restoreEngine, staleWorldRestore);
+  await worldSave.applySnapshot(worldSnapshot);
+  pendingWorldRestore.release(staleWorldRestore);
+  await assert.rejects(pendingWorldRestore.step, /Discarded stale GPU readback/);
+  assert.equal(restoreEngine.grid.buffer[restoreEnergyIndex], 123,
+    "a stale GPU result must not overwrite a successfully restored world snapshot");
+
+  const beforeRejectedWorldRestore = restoreEngine.grid.buffer[restoreEnergyIndex];
+  const invalidWorldSnapshot = {
+    ...worldSave.captureSnapshot("invalid-pending-readback-restore"),
+    fields: {
+      ...worldSave.captureSnapshot("invalid-pending-readback-restore").fields,
+      energy: new Float32Array([1]).buffer,
+    },
+  };
+  const staleInvalidRestore = restoreEngine.grid.buffer.slice();
+  staleInvalidRestore[restoreEnergyIndex] = 9009;
+  const pendingInvalidRestore = await beginPendingReadback(restoreEngine, staleInvalidRestore);
+  await assert.rejects(worldSave.applySnapshot(invalidWorldSnapshot), /field "energy" has an invalid buffer size/);
+  pendingInvalidRestore.release(staleInvalidRestore);
+  await assert.rejects(pendingInvalidRestore.step, /Discarded stale GPU readback/);
+  assert.equal(restoreEngine.grid.buffer[restoreEnergyIndex], beforeRejectedWorldRestore,
+    "a failed world restore must roll back CPU state and reject old GPU output");
 
   console.log("SimulationEngine stale GPU readback mutation-revision regression: PASS");
 }
