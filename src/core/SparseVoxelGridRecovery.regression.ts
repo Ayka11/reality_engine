@@ -150,6 +150,13 @@ export function runSparseVoxelGridRecoveryRegression(): void {
   sparse.buffer[0] = 31;
   sparse.backBuffer[1] = 15;
   sparse.active = false;
+  const beforeInvalidActiveWrite = grid.mutationRevision;
+  let invalidActiveRejected = false;
+  try { Reflect.set(sparse, "active", "false"); } catch { invalidActiveRejected = true; }
+  if (!invalidActiveRejected || sparse.active !== false ||
+      grid.mutationRevision !== beforeInvalidActiveWrite) {
+    throw new Error("Chunk.active must reject non-boolean writes without mutating state");
+  }
   sparse.lastAccessed = 1234;
 
   grid.assignChunkOwner("-2,1,0", "worker-A");
