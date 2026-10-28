@@ -633,13 +633,13 @@ export class InfiniteWorldRenderer {
   getWorldEnvironment() {
     const x = this.worldPosition.x
     const z = this.worldPosition.z
-    const y = this.generator.sampleHeight(x, z)
+    const y = this.sampleTerrainHeight(x, z)
     const climate = this.generator.sampleClimate(x, z, y)
     const step = 2
-    const hL = this.generator.sampleHeight(x - step, z)
-    const hR = this.generator.sampleHeight(x + step, z)
-    const hD = this.generator.sampleHeight(x, z - step)
-    const hU = this.generator.sampleHeight(x, z + step)
+    const hL = this.sampleTerrainHeight(x - step, z)
+    const hR = this.sampleTerrainHeight(x + step, z)
+    const hD = this.sampleTerrainHeight(x, z - step)
+    const hU = this.sampleTerrainHeight(x, z + step)
     const dx = (hR - hL) / (step * 2)
     const dz = (hU - hD) / (step * 2)
     const slope = Math.min(1, Math.sqrt(dx * dx + dz * dz) / 3)
@@ -716,7 +716,7 @@ export class InfiniteWorldRenderer {
 
     const centerX = (minX + maxX) * 0.5
     const centerZ = (minZ + maxZ) * 0.5
-    const centerY = this.generator.sampleHeight(centerX, centerZ)
+    const centerY = this.sampleTerrainHeight(centerX, centerZ)
     const radius = Math.max(24, Math.hypot(maxX - minX, maxZ - minZ) * 0.5)
     const distance = Math.min(1800, Math.max(70, radius * 2.25 * padding))
 
@@ -843,7 +843,7 @@ export class InfiniteWorldRenderer {
   resetCameraView() {
     this.flyMode = false
     this.controls.enabled = this.enabled && !this.transformDragging
-    const targetWorld = new THREE.Vector3(16, this.generator.sampleHeight(16, 16), 16)
+    const targetWorld = new THREE.Vector3(16, this.sampleTerrainHeight(16, 16), 16)
     const targetLocal = this.worldToLocal(targetWorld)
     this.controls.target.copy(targetLocal)
     this.camera.position.copy(targetLocal).add(new THREE.Vector3(48, 36, 48))
@@ -855,7 +855,7 @@ export class InfiniteWorldRenderer {
   setCameraPreset(preset: 'top' | 'front' | 'orbit' | 'iso' | 'street' | 'fly') {
     const targetWorld = new THREE.Vector3(
       this.worldPosition.x,
-      this.generator.sampleHeight(this.worldPosition.x, this.worldPosition.z),
+      this.sampleTerrainHeight(this.worldPosition.x, this.worldPosition.z),
       this.worldPosition.z,
     )
     const targetLocal = this.worldToLocal(targetWorld)
@@ -967,7 +967,7 @@ export class InfiniteWorldRenderer {
     if (!Number.isInteger(ratio) || ratio < 2) {
       const x = edge === 'west' ? 0 : edge === 'east' ? WORLD_CHUNK_SIZE : alongIndex * WORLD_CHUNK_SIZE / resolution
       const z = edge === 'north' ? 0 : edge === 'south' ? WORLD_CHUNK_SIZE : alongIndex * WORLD_CHUNK_SIZE / resolution
-      return this.generator.sampleHeight(chunk.cx * WORLD_CHUNK_SIZE + x, chunk.cz * WORLD_CHUNK_SIZE + z)
+      return this.sampleTerrainHeight(chunk.cx * WORLD_CHUNK_SIZE + x, chunk.cz * WORLD_CHUNK_SIZE + z)
     }
     const lower = Math.floor(alongIndex / ratio) * ratio
     const upper = Math.min(resolution, lower + ratio)
@@ -975,7 +975,7 @@ export class InfiniteWorldRenderer {
       const along = index * WORLD_CHUNK_SIZE / resolution
       const x = edge === 'west' ? 0 : edge === 'east' ? WORLD_CHUNK_SIZE : along
       const z = edge === 'north' ? 0 : edge === 'south' ? WORLD_CHUNK_SIZE : along
-      return this.generator.sampleHeight(chunk.cx * WORLD_CHUNK_SIZE + x, chunk.cz * WORLD_CHUNK_SIZE + z)
+      return this.sampleTerrainHeight(chunk.cx * WORLD_CHUNK_SIZE + x, chunk.cz * WORLD_CHUNK_SIZE + z)
     }
     const lowerHeight = sampleAt(lower)
     if (upper === lower) return lowerHeight
@@ -1021,7 +1021,7 @@ export class InfiniteWorldRenderer {
         const i = z * n + x
         const gx = x * scale
         const gz = z * scale
-        let h = this.generator.sampleHeight(originX + gx, originZ + gz)
+        let h = this.sampleTerrainHeight(originX + gx, originZ + gz)
         // When this edge is finer than a loaded neighbor, place its border on the
         // neighbor's piecewise-linear edge. This eliminates T-junction cracks
         // without disabling distance-based LOD for the interior of either chunk.
@@ -1039,10 +1039,10 @@ export class InfiniteWorldRenderer {
         positions[i * 3 + 1] = h
         positions[i * 3 + 2] = originZ + gz
 
-        const hL = this.generator.sampleHeight(originX + gx - 1, originZ + gz)
-        const hR = this.generator.sampleHeight(originX + gx + 1, originZ + gz)
-        const hD = this.generator.sampleHeight(originX + gx, originZ + gz - 1)
-        const hU = this.generator.sampleHeight(originX + gx, originZ + gz + 1)
+        const hL = this.sampleTerrainHeight(originX + gx - 1, originZ + gz)
+        const hR = this.sampleTerrainHeight(originX + gx + 1, originZ + gz)
+        const hD = this.sampleTerrainHeight(originX + gx, originZ + gz - 1)
+        const hU = this.sampleTerrainHeight(originX + gx, originZ + gz + 1)
         const normal = new THREE.Vector3(hL - hR, 2, hD - hU).normalize()
         normals[i * 3] = normal.x
         normals[i * 3 + 1] = normal.y
@@ -1550,7 +1550,7 @@ export class InfiniteWorldRenderer {
     return this.worldAssetRuntime.load(assetId, sourceUrl, {
       semanticEntryId,
       x,
-      y: this.generator.sampleHeight(x, z),
+      y: this.sampleTerrainHeight(x, z),
       z,
       scale,
     })
@@ -1590,7 +1590,7 @@ export class InfiniteWorldRenderer {
       placed.forEach((instance) => {
         const worldX = instance.position.x
         const worldZ = instance.position.z
-        const worldY = this.generator.sampleHeight(worldX, worldZ)
+        const worldY = this.sampleTerrainHeight(worldX, worldZ)
         instance.position.y = worldY
         instance.userData.worldPosition = { x: worldX, y: worldY, z: worldZ }
       })
@@ -1790,7 +1790,7 @@ export class InfiniteWorldRenderer {
         placed.forEach((instance) => {
           const x = instance.position.x
           const z = instance.position.z
-          const y = this.generator.sampleHeight(x, z)
+          const y = this.sampleTerrainHeight(x, z)
           instance.position.y = y
           instance.userData.worldPosition = { x, y, z }
         })
@@ -1890,7 +1890,7 @@ export class InfiniteWorldRenderer {
     instances.forEach((instance) => {
       const worldX = instance.position.x
       const worldZ = instance.position.z
-      const worldY = this.generator.sampleHeight(worldX, worldZ)
+      const worldY = this.sampleTerrainHeight(worldX, worldZ)
       instance.position.y = worldY
       instance.userData.worldPosition = { x: worldX, y: worldY, z: worldZ }
     })
@@ -2083,7 +2083,7 @@ export class InfiniteWorldRenderer {
   place(kind: WorldObjectKind, x: number, z: number, y?: number, scale = 1) {
     const lawGate = this.lawGateForBuild(kind, x, z)
     if (!lawGate.allowed) return null
-    const snapped = this.snapWorld(x, y ?? this.generator.sampleHeight(x, z), z, kind)
+    const snapped = this.snapWorld(x, y ?? this.sampleTerrainHeight(x, z), z, kind)
     x = snapped.x
     z = snapped.z
     y = snapped.y
@@ -2121,12 +2121,12 @@ export class InfiniteWorldRenderer {
   analyzeRoute(x0: number, z0: number, x1: number, z1: number, samples = 32) {
     const result: Array<{ x: number; z: number; y: number; slope: number; water: boolean }> = []
     const count = Math.max(2, Math.floor(samples))
-    let previousY = this.generator.sampleHeight(x0, z0)
+    let previousY = this.sampleTerrainHeight(x0, z0)
     for (let i = 0; i < count; i++) {
       const t = i / (count - 1)
       const x = x0 + (x1 - x0) * t
       const z = z0 + (z1 - z0) * t
-      const y = this.generator.sampleHeight(x, z)
+      const y = this.sampleTerrainHeight(x, z)
       const distance = Math.max(1, Math.hypot(x1 - x0, z1 - z0) / (count - 1))
       const slope = Math.abs(y - previousY) / distance
       result.push({ x, z, y, slope, water: y < this.generator.seaLevel - 0.25 })
@@ -2163,7 +2163,7 @@ export class InfiniteWorldRenderer {
           const [px, pz] = cursor.split(',').map(Number)
           const wx = px * step
           const wz = pz * step
-          const y = this.generator.sampleHeight(wx, wz)
+          const y = this.sampleTerrainHeight(wx, wz)
           path.push({ x: wx, z: wz, y, water: y < this.generator.seaLevel - 0.25, slope: 0 })
           const previous = came.get(cursor)
           if (!previous) break
@@ -2255,7 +2255,7 @@ export class InfiniteWorldRenderer {
       const z = z0 + dz * t
       const lawGate = this.lawGateForBuild('road', x, z)
       if (!lawGate.allowed) continue
-      const y = this.generator.sampleHeight(x, z) + 0.08
+      const y = this.sampleTerrainHeight(x, z) + 0.08
       const object = this.objects.add({
         kind: 'road', x, y, z, rotationY, scale: Math.max(0.5, spacing / 12),
         seed: i, properties: {
@@ -2340,7 +2340,7 @@ export class InfiniteWorldRenderer {
       if (mode === 'flood') value = zone.floodRisk
       else if (mode === 'slope') value = zone.slopeRisk
       else value = 1 - zone.cost
-      positions.push(x, this.generator.sampleHeight(x, z) + 0.12, z)
+      positions.push(x, this.sampleTerrainHeight(x, z) + 0.12, z)
       values.push(Math.max(0, Math.min(1, value)))
     }
     return { center:{x:cx,z:cz}, radius, samples:n, mode, positions, values }
@@ -2359,7 +2359,7 @@ export class InfiniteWorldRenderer {
         {x: cell.x, z: cell.z - e},
       ]
       let lowest = cell.y
-      for (const n of neighbors) lowest = Math.min(lowest, this.generator.sampleHeight(n.x, n.z))
+      for (const n of neighbors) lowest = Math.min(lowest, this.sampleTerrainHeight(n.x, n.z))
       const basin = Math.round((lowest - this.generator.seaLevel) / 4)
       basins.push({ x: cell.x, z: cell.z, y: cell.y, flow: cell.flow, basin })
     }
@@ -2371,7 +2371,7 @@ export class InfiniteWorldRenderer {
   }
 
   buildZoneCost(x: number, z: number) {
-    const y = this.generator.sampleHeight(x, z)
+    const y = this.sampleTerrainHeight(x, z)
     const hydro = this.analyzeHydrology(x, z, 16, 7)
     const river = hydro.rivers.length > 0
     const floodRisk = y <= this.generator.seaLevel + 4 ? 0.7 : river ? 0.45 : 0
@@ -2396,10 +2396,10 @@ export class InfiniteWorldRenderer {
     for (let ix = 0; ix < n; ix++) for (let iz = 0; iz < n; iz++) {
       const x = cx - radius + ix * step
       const z = cz - radius + iz * step
-      const y = this.generator.sampleHeight(x, z)
+      const y = this.sampleTerrainHeight(x, z)
       const e = Math.max(2, step * 0.5)
-      const gx = this.generator.sampleHeight(x + e, z) - this.generator.sampleHeight(x - e, z)
-      const gz = this.generator.sampleHeight(x, z + e) - this.generator.sampleHeight(x, z - e)
+      const gx = this.sampleTerrainHeight(x + e, z) - this.sampleTerrainHeight(x - e, z)
+      const gz = this.sampleTerrainHeight(x, z + e) - this.sampleTerrainHeight(x, z - e)
       const downhill = Math.max(0, -gx) + Math.max(0, -gz)
       const basin = Math.max(0, this.generator.seaLevel + 8 - y)
       const flow = basin * 0.35 + downhill * 0.8
@@ -2455,19 +2455,19 @@ export class InfiniteWorldRenderer {
     const path: Array<{x:number;z:number;y:number}> = []
     let px = x
     let pz = z
-    let previousY = this.generator.sampleHeight(px, pz)
+    let previousY = this.sampleTerrainHeight(px, pz)
     for (let i = 0; i < maxSteps; i++) {
-      const y = this.generator.sampleHeight(px, pz)
+      const y = this.sampleTerrainHeight(px, pz)
       path.push({ x: px, z: pz, y })
       if (y <= this.generator.seaLevel + 0.5) break
       const e = Math.max(2, step * 0.35)
-      const dx = this.generator.sampleHeight(px + e, pz) - this.generator.sampleHeight(px - e, pz)
-      const dz = this.generator.sampleHeight(px, pz + e) - this.generator.sampleHeight(px, pz - e)
+      const dx = this.sampleTerrainHeight(px + e, pz) - this.sampleTerrainHeight(px - e, pz)
+      const dz = this.sampleTerrainHeight(px, pz + e) - this.sampleTerrainHeight(px, pz - e)
       const length = Math.hypot(dx, dz)
       if (length < 0.05) break
       const nx = px - (dx / length) * step
       const nz = pz - (dz / length) * step
-      const nextY = this.generator.sampleHeight(nx, nz)
+      const nextY = this.sampleTerrainHeight(nx, nz)
       if (nextY > previousY + 0.25) break
       px = nx
       pz = nz
@@ -2536,10 +2536,10 @@ export class InfiniteWorldRenderer {
       for (let iz = 0; iz < n; iz++) {
         const x = cx - radius + ix * step
         const z = cz - radius + iz * step
-        const y = this.generator.sampleHeight(x, z)
+        const y = this.sampleTerrainHeight(x, z)
         const e = Math.max(1, step * 0.5)
-        const gx = this.generator.sampleHeight(x + e, z) - this.generator.sampleHeight(x - e, z)
-        const gz = this.generator.sampleHeight(x, z + e) - this.generator.sampleHeight(x, z - e)
+        const gx = this.sampleTerrainHeight(x + e, z) - this.sampleTerrainHeight(x - e, z)
+        const gz = this.sampleTerrainHeight(x, z + e) - this.sampleTerrainHeight(x, z - e)
         const slope = Math.hypot(gx, gz) / (2 * e)
         const water = y < this.generator.seaLevel - 0.25
         const elevationPenalty = Math.abs(y - (this.generator.seaLevel + 10)) / 30
@@ -2813,7 +2813,7 @@ export class InfiniteWorldRenderer {
         this.objects.remove(object.id)
         continue
       }
-      object.y = this.generator.sampleHeight(object.x, object.z)
+      object.y = this.sampleTerrainHeight(object.x, object.z)
       object.properties = {
         ...object.properties,
         lawPenalty: lawGate.decision?.laws.penalty ?? 0,
