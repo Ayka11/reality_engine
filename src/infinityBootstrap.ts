@@ -946,6 +946,9 @@ export function bootstrapInfiniteWorld() {
     let isOpen = savedOpen === null ? false : savedOpen !== 'false'
     let activeTab: 'camera' | 'objects' | 'persist' | 'analysis' | 'display' | 'library' | 'field' = 'objects'
     let fieldBrushRadius = 8
+    let terrainBrushRadius = 8
+    let terrainBrushStrength = 1
+    let terrainBrushMode: 'raise' | 'lower' | null = null
     let libraryQuery = ''
     let libraryCategory: import('./worldLibrary/WorldLibrary').WorldLibraryCategory | '' = ''
     let librarySelected = ''
@@ -1417,6 +1420,30 @@ export function bootstrapInfiniteWorld() {
                 </div>
                 <div style="font-size: 8px; color: var(--sub); margin-top: 6px;">Radius <button class="pill" id="vFieldRadius4" style="font-size:8px;padding:2px 5px;">4m</button> <button class="pill on" id="vFieldRadius8" style="font-size:8px;padding:2px 5px;">8m</button> <button class="pill" id="vFieldRadius16" style="font-size:8px;padding:2px 5px;">16m</button></div>
                 <div data-authoritative-field-status style="font-size: 7.5px; color: #40c080; margin-top: 5px;">Authoritative field · ready</div>
+                <div style="border-top:1px solid rgba(255,255,255,.08);margin-top:9px;padding-top:8px;">
+                  <div style="font-size:9.5px;color:var(--sub);margin-bottom:4px;text-transform:uppercase;">Geometric Terrain Sculpt</div>
+                  <div style="font-size:8px;color:#8f88d8;margin-bottom:6px;">Changes terrain elevation directly. Click the terrain to raise or lower it; Undo/Redo and world save checkpoints preserve edits.</div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;">
+                    <button class="brush-btn ${terrainBrushMode === 'raise' ? 'active' : ''}" id="vTerrainRaise">▲ Raise</button>
+                    <button class="brush-btn ${terrainBrushMode === 'lower' ? 'active' : ''}" id="vTerrainLower">▼ Lower</button>
+                    <button class="brush-btn ${terrainBrushMode === null ? 'active' : ''}" id="vTerrainOff">✕ Off</button>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:8px;color:var(--sub);">
+                    <label for="vTerrainRadius" style="min-width:44px;">Radius</label>
+                    <input id="vTerrainRadius" type="range" min="2" max="24" step="1" value="${terrainBrushRadius}" style="flex:1;min-width:50px;">
+                    <span id="vTerrainRadiusOut" style="min-width:24px;text-align:right;">${terrainBrushRadius}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:5px;font-size:8px;color:var(--sub);">
+                    <label for="vTerrainStrength" style="min-width:44px;">Strength</label>
+                    <input id="vTerrainStrength" type="range" min="0.25" max="4" step="0.25" value="${terrainBrushStrength}" style="flex:1;min-width:50px;">
+                    <span id="vTerrainStrengthOut" style="min-width:24px;text-align:right;">${terrainBrushStrength.toFixed(2)}</span>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:7px;">
+                    <button class="brush-btn" id="vTerrainUndo">↩ Undo terrain</button>
+                    <button class="brush-btn" id="vTerrainRedo">↪ Redo terrain</button>
+                  </div>
+                  <div id="vTerrainStatus" style="font-size:7.5px;color:var(--sub);margin-top:5px;">Terrain brush inactive</div>
+                </div>
               </div>
             ` : activeTab === 'library' ? `
               <div>
@@ -1697,6 +1724,40 @@ export function bootstrapInfiniteWorld() {
       document.getElementById('vFieldRadius4')?.addEventListener('click', () => { fieldBrushRadius = 4; render() })
       document.getElementById('vFieldRadius8')?.addEventListener('click', () => { fieldBrushRadius = 8; render() })
       document.getElementById('vFieldRadius16')?.addEventListener('click', () => { fieldBrushRadius = 16; render() })
+      const terrainRadiusInput = document.getElementById('vTerrainRadius') as HTMLInputElement | null
+      const terrainStrengthInput = document.getElementById('vTerrainStrength') as HTMLInputElement | null
+      const updateTerrainBrushSettings = () => {
+        terrainBrushRadius = Number(terrainRadiusInput?.value ?? terrainBrushRadius)
+        terrainBrushStrength = Number(terrainStrengthInput?.value ?? terrainBrushStrength)
+        world.setTerrainBrushSettings(terrainBrushRadius, terrainBrushStrength)
+        const radiusOut = document.getElementById('vTerrainRadiusOut')
+        const strengthOut = document.getElementById('vTerrainStrengthOut')
+        if (radiusOut) radiusOut.textContent = String(terrainBrushRadius)
+        if (strengthOut) strengthOut.textContent = terrainBrushStrength.toFixed(2)
+      }
+      terrainRadiusInput?.addEventListener('input', updateTerrainBrushSettings)
+      terrainStrengthInput?.addEventListener('input', updateTerrainBrushSettings)
+      updateTerrainBrushSettings()
+      const setTerrainMode = (mode: 'raise' | 'lower' | null) => {
+        terrainBrushMode = mode
+        world.setTerrainBrushMode(mode)
+        const status = document.getElementById('vTerrainStatus')
+        if (status) status.textContent = mode ? `Terrain ${mode} active · click terrain to sculpt` : 'Terrain brush inactive'
+        render()
+      }
+      document.getElementById('vTerrainRaise')?.addEventListener('click', () => setTerrainMode('raise'))
+      document.getElementById('vTerrainLower')?.addEventListener('click', () => setTerrainMode('lower'))
+      document.getElementById('vTerrainOff')?.addEventListener('click', () => setTerrainMode(null))
+      document.getElementById('vTerrainUndo')?.addEventListener('click', () => {
+        const changed = world.undoTerrainSculpt()
+        const status = document.getElementById('vTerrainStatus')
+        if (status) status.textContent = changed ? 'Terrain edit undone' : 'No terrain edit to undo'
+      })
+      document.getElementById('vTerrainRedo')?.addEventListener('click', () => {
+        const changed = world.redoTerrainSculpt()
+        const status = document.getElementById('vTerrainStatus')
+        if (status) status.textContent = changed ? 'Terrain edit redone' : 'No terrain edit to redo'
+      })
       document.getElementById('topLibrary')?.addEventListener('click', () => { activeTab = activeTab === 'library' ? 'objects' : 'library'; render(); })
       container.querySelectorAll('.libraryGenerate').forEach((button) => {
         button.addEventListener('click', () => {
