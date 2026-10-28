@@ -260,6 +260,74 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(clearGrid.mutationRevision, beforeClearedChunkWrite,
     "clearing the chunk map must detach all grid mutation listeners");
 
+  // Supported mutation boundaries must invalidate a GPU result already in flight.
+  // Keep these separate from the raw public-view checks above so rollback, restore,
+  // publication, and legacy synchronous ticks are all exercised explicitly.
+  const boundaryEngine = new SimulationEngine(4, 4, 4);
+  (boundaryEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const boundaryFieldIndex = boundaryEngine.grid.idx(1, 1, 1) + F.ENERGY;
+  boundaryEngine.grid.buffer[boundaryFieldIndex] = 10;
+
+  // A successful authoritative transaction must reject the older readback.
+  const authoritativeStale = boundaryEngine.grid.buffer.slice();
+  authoritativeStale[boundaryFieldIndex] = 9001;
+  const pendingAuthoritative = await beginPendingReadback(boundaryEngine, authoritativeStale);
+  boundaryEngine.mutateAuthoritativeState(() => {
+    boundaryEngine.grid.buffer[boundaryFieldIndex] = 30;
+  });
+  pendingAuthoritative.release(authoritativeStale);
+  await assert.rejects(pendingAuthoritative.step, /Discarded stale GPU readback/);
+  assert.equal(boundaryEngine.grid.buffer[boundaryFieldIndex], 30,
+    "stale GPU data must not overwrite a committed authoritative mutation");
+
+  // Failed authoritative mutation must roll CPU state back and still invalidate
+  // any readback that began before the failed transaction.
+  const beforeFailedTransaction = boundaryEngine.grid.buffer[boundaryFieldIndex];
+  const rollbackStale = boundaryEngine.grid.buffer.slice();
+  rollbackStale[boundaryFieldIndex] = 9002;
+  const pendingRollback = await beginPendingReadback(boundaryEngine, rollbackStale);
+  assert.throws(() => boundaryEngine.mutateAuthoritativeState(() => {
+    boundaryEngine.grid.buffer[boundaryFieldIndex] = 99;
+    throw new Error("injected-authoritative-mutation-failure");
+  }), /injected-authoritative-mutation-failure/);
+  pendingRollback.release(rollbackStale);
+  await assert.rejects(pendingRollback.step, /Discarded stale GPU readback/);
+  assert.equal(boundaryEngine.grid.buffer[boundaryFieldIndex], beforeFailedTransaction,
+    "failed authoritative transaction must restore CPU state without stale GPU overwrite");
+
+  // Recovery restore must invalidate pending work and preserve the restored snapshot.
+  const recoverySnapshot = boundaryEngine.captureCoreRecoveryState();
+  boundaryEngine.grid.buffer[boundaryFieldIndex] = 42;
+  const restoreStale = boundaryEngine.grid.buffer.slice();
+  restoreStale[boundaryFieldIndex] = 9003;
+  const pendingRestore = await beginPendingReadback(boundaryEngine, restoreStale);
+  boundaryEngine.restoreCoreRecoveryState(recoverySnapshot);
+  pendingRestore.release(restoreStale);
+  await assert.rejects(pendingRestore.step, /Discarded stale GPU readback/);
+  assert.equal(boundaryEngine.grid.buffer[boundaryFieldIndex], beforeFailedTransaction,
+    "stale GPU result must not overwrite recovery-restored CPU state");
+
+  // The legacy publication boundary and zero-step synchronous tick also invalidate.
+  boundaryEngine.grid.buffer[boundaryFieldIndex] = 55;
+  const syncStale = boundaryEngine.grid.buffer.slice();
+  syncStale[boundaryFieldIndex] = 9004;
+  const pendingSync = await beginPendingReadback(boundaryEngine, syncStale);
+  boundaryEngine.syncToGPU();
+  pendingSync.release(syncStale);
+  await assert.rejects(pendingSync.step, /Discarded stale GPU readback/);
+  assert.equal(boundaryEngine.grid.buffer[boundaryFieldIndex], 55,
+    "syncToGPU publication must preserve newer CPU state");
+
+  boundaryEngine.grid.buffer[boundaryFieldIndex] = 65;
+  const syncTickStale = boundaryEngine.grid.buffer.slice();
+  syncTickStale[boundaryFieldIndex] = 9005;
+  const pendingSyncTick = await beginPendingReadback(boundaryEngine, syncTickStale);
+  boundaryEngine.syncTick(0);
+  pendingSyncTick.release(syncTickStale);
+  await assert.rejects(pendingSyncTick.step, /Discarded stale GPU readback/);
+  assert.equal(boundaryEngine.grid.buffer[boundaryFieldIndex], 65,
+    "syncTick(0) must invalidate any readback already in flight");
+
   console.log("SimulationEngine stale GPU readback mutation-revision regression: PASS");
 }
 
