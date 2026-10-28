@@ -106,4 +106,16 @@ console.log("PASS: authoritative Undo/Redo refresh after successful transactions
 console.log("PASS: environment-driven systems sample the authoritative field");
 console.log("PASS: authoritative field mode colors terrain from sampled field values");
 console.log("PASS: refresh rebuilds loaded patches and edge-LOD metadata");
+const bootstrap = await readFile(new URL("src/infinityBootstrap.ts", root), "utf8");
+assert.match(bootstrap, /id="vTerrainRaise"/, "world dock must expose terrain raise control");
+assert.match(bootstrap, /id="vTerrainLower"/, "world dock must expose terrain lower control");
+assert.match(bootstrap, /world\.setTerrainBrushMode\(mode\)/, "terrain UI mode must activate renderer brush mode");
+assert.match(bootstrap, /world\.setTerrainBrushSettings\(terrainBrushRadius, terrainBrushStrength\)/,
+  "terrain UI radius/strength must configure the renderer brush");
+assert.match(bootstrap, /world\.undoTerrainSculpt\(\)/, "terrain UI must expose geometric undo");
+assert.match(bootstrap, /world\.redoTerrainSculpt\(\)/, "terrain UI must expose geometric redo");
+assert.match(source, /if\s*\(this\.terrainBrushMode\)\s*\{[\s\S]*?this\.sculptTerrainAt\(point\.x, point\.z, this\.terrainBrushRadius, this\.terrainBrushStrength, this\.terrainBrushMode\)/,
+  "terrain pointer hits must commit geometry edits using configured brush settings");
+
 console.log("PASS: terrain geometry uses persisted deformation overlay with Undo/Redo and save checkpoints");
+console.log("PASS: active world dock wires terrain Raise/Lower, brush settings, and Undo/Redo");
