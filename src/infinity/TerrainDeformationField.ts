@@ -120,8 +120,12 @@ export class TerrainDeformationField {
     }
     const next = new Map<string, number>()
     for (const entry of snapshot.deltas) {
+      const parsedKey = Array.isArray(entry) && typeof entry[0] === 'string'
+        ? parseKey(entry[0])
+        : null
       if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string' ||
-          !parseKey(entry[0]) || !Number.isFinite(entry[1]) || Math.abs(entry[1]) > 1e6) {
+          !parsedKey || entry[0] !== keyOf(parsedKey.x, parsedKey.z) ||
+          next.has(entry[0]) || !Number.isFinite(entry[1]) || Math.abs(entry[1]) > 1e6) {
         throw new TypeError('Terrain deformation snapshot contains an invalid delta')
       }
       if (Math.abs(entry[1]) >= 1e-6) next.set(entry[0], entry[1])
