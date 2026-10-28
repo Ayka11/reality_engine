@@ -481,7 +481,10 @@ export class InfiniteWorldRenderer {
     const fieldSnapshot = this.authoritativeField.serialize()
     this.persistAuthoritativeFieldState()
     this.persistence.saveTerrainDeformationState(this.terrainDeformations.serialize())
-    if (options.checkpoint !== false) this.persistence.saveFieldCheckpoint(fieldSnapshot)
+    if (options.checkpoint !== false) {
+      this.persistence.saveFieldCheckpoint(fieldSnapshot)
+      this.persistence.saveTerrainDeformationCheckpoint(this.terrainDeformations.serialize())
+    }
     const objects = this.objects.values()
     const groups = new Map<string, WorldObject[]>()
     for (const object of objects) {
@@ -510,7 +513,10 @@ export class InfiniteWorldRenderer {
       ? null
       : this.persistence.loadFieldCheckpoint<ReturnType<MutableWorldFieldProvider['serialize']>>()
     const persistedField = checkpoint ?? this.persistence.loadFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
-    const terrainSnapshot = this.persistence.loadTerrainDeformationState<TerrainDeformationSnapshot>()
+    const terrainSnapshot = options.restoreFieldCheckpoint === false
+      ? this.persistence.loadTerrainDeformationState<TerrainDeformationSnapshot>()
+      : this.persistence.loadTerrainDeformationCheckpoint<TerrainDeformationSnapshot>()
+        ?? this.persistence.loadTerrainDeformationState<TerrainDeformationSnapshot>()
     if (terrainSnapshot) {
       try {
         this.terrainDeformations.restore(terrainSnapshot)
@@ -518,6 +524,9 @@ export class InfiniteWorldRenderer {
       } catch (error) {
         console.warn('[persistence] Could not restore terrain deformation state', error)
       }
+    } else if (options.restoreFieldCheckpoint !== false) {
+      this.terrainDeformations.clear()
+      this.refreshTerrainPatches()
     }
     if (persistedField) {
       try {
@@ -549,6 +558,8 @@ export class InfiniteWorldRenderer {
 
   clearSavedWorld() {
     this.persistence.clear()
+    this.terrainDeformations.clear()
+    this.refreshTerrainPatches()
     this.objects.clear()
     this.objectSpatialIndex.clear()
     this.syncObjects()
