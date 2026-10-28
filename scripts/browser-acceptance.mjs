@@ -2436,6 +2436,15 @@ try {
     }));
   }
 
+  // Reloaded UI state can keep the primary renderer hidden/paused. Force the
+  // renderer awake and materialize the budgeted chunk queue before inspecting LOD edges.
+  await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (!world) throw new Error("Infinite World renderer unavailable after persistence recovery");
+    world.setEnabled(true);
+    for (let frame = 0; frame < 12; frame++) world.render(0.016);
+  });
+
   await page.waitForFunction(() => {
     const patches = [...(window.infiniteWorld?.patches?.values?.() ?? [])];
     const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
