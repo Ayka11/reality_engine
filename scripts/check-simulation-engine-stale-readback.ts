@@ -3,6 +3,7 @@ import { F } from "../src/core/CellState.ts";
 import { Chunk } from "../src/core/Chunk.ts";
 import { SparseVoxelGrid } from "../src/core/SparseVoxelGrid.ts";
 import { SimulationEngine } from "../src/simulation/SimulationEngine.ts";
+import { SculptManager } from "../src/sculpt/SculptManager.ts";
 
 async function beginPendingReadback(engine: SimulationEngine, stale: Float32Array) {
   let release!: (data: Float32Array) => void;
@@ -327,6 +328,43 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   await assert.rejects(pendingSyncTick.step, /Discarded stale GPU readback/);
   assert.equal(boundaryEngine.grid.buffer[boundaryFieldIndex], 65,
     "syncTick(0) must invalidate any readback already in flight");
+
+  // Sculpt undo/redo must invalidate pending GPU results before applying history,
+  // then publish the resulting dense/chunk state as one synchronous UI operation.
+  const sculptManager = new SculptManager(
+    boundaryEngine.grid,
+    () => boundaryEngine.syncToGPU(),
+    () => boundaryEngine.invalidatePendingGPUReadback(),
+  );
+  sculptManager.currentBrush.radius = 1;
+  sculptManager.currentBrush.fields = {
+    energy: 1, density: 0, temperature: 0, bio: 0, information: 0, entropy: 0,
+  };
+  const sculptStartEnergy = boundaryEngine.grid.buffer[boundaryFieldIndex];
+  await sculptManager.onMouseDrag([1, 1, 1], "inject");
+  const sculptAfterEnergy = boundaryEngine.grid.buffer[boundaryFieldIndex];
+  assert.ok(sculptAfterEnergy > sculptStartEnergy,
+    "sculpt regression setup must commit a measurable energy change");
+
+  const staleUndo = boundaryEngine.grid.buffer.slice();
+  staleUndo[boundaryFieldIndex] = 9006;
+  const pendingUndo = await beginPendingReadback(boundaryEngine, staleUndo);
+  const undoStroke = sculptManager.undo();
+  assert.ok(undoStroke, "sculpt undo must find the committed stroke");
+  pendingUndo.release(staleUndo);
+  await assert.rejects(pendingUndo.step, /Discarded stale GPU readback/);
+  assert.equal(boundaryEngine.grid.buffer[boundaryFieldIndex], sculptStartEnergy,
+    "stale GPU output must not overwrite the state restored by sculpt undo");
+
+  const staleRedo = boundaryEngine.grid.buffer.slice();
+  staleRedo[boundaryFieldIndex] = 9007;
+  const pendingRedo = await beginPendingReadback(boundaryEngine, staleRedo);
+  const redoStroke = sculptManager.redo();
+  assert.ok(redoStroke, "sculpt redo must find the undone stroke");
+  pendingRedo.release(staleRedo);
+  await assert.rejects(pendingRedo.step, /Discarded stale GPU readback/);
+  assert.equal(boundaryEngine.grid.buffer[boundaryFieldIndex], sculptAfterEnergy,
+    "stale GPU output must not overwrite the state restored by sculpt redo");
 
   console.log("SimulationEngine stale GPU readback mutation-revision regression: PASS");
 }
