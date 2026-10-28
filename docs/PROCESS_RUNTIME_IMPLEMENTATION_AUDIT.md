@@ -147,3 +147,8 @@ for disabled-mask invariance and parameter sensitivity plus static parameter
 forwarding checks across backends. The worker still stores only its 2D FX/FY
 vector, and this remains a heuristic vector update rather than a calibrated
 curl-based solver.
+
+
+### Sparse-worker field-vector Z component parity — 2026-10-28
+
+The follow-up cross-backend audit found that the sparse worker applied configured field rotation to X/Y but left Z unchanged, despite CPU and GPU rotating all three components. The worker now accumulates the Z-neighbor stencil and updates FZ with the same damping and neighbor-coupling coefficients. The static backend contract explicitly guards the Z-neighbor accumulation and update. This closes a software-path mismatch; GPU numerical equivalence still requires hardware-backed comparison.
