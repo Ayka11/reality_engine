@@ -71,6 +71,7 @@ jobs:
       - run: npm run test:field-physics-phase-transition
       - run: npm run test:field-physics-crystallization
       - run: npm run test:field-physics-radiation
+      - run: npm run test:field-physics-rotation
       - run: npm run test:chunk-worker-physics
       - run: npm run test:chunk-grid-prune
       - run: npm run test:chunk-worker-physics-runtime
