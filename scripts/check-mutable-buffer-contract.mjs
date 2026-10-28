@@ -394,7 +394,7 @@ for (const filePath of sourcePaths) {
             valueParent.expression.name.text === "set" &&
             ts.isIdentifier(receiver) && aliases.has(receiver.text);
           const isAuditedLocalBufferCache = path === "src/core/SparseVoxelGrid.ts" &&
-            ["syncDenseEntityOwnershipToChunks", "syncDenseToChunks", "syncChunksToDense"].includes(key.split("#")[1]) &&
+            ["syncDenseEntityOwnershipToChunks", "syncDenseToChunks", "syncChunksToDense"].includes(key) &&
             ts.isPropertyAccessExpression(valueParent.expression) &&
             valueParent.expression.name.text === "set" &&
             ts.isIdentifier(receiver) && receiver.text === "rawBuffers";
@@ -404,7 +404,7 @@ for (const filePath of sourcePaths) {
             : "";
           const agentHandoffTarget = methodNodes.get(agentHandoffName);
           const isAuditedSynchronousAgentHandoff = path === "src/simulation/AgentSystem.ts" &&
-            key === "src/simulation/AgentSystem.ts#tick" && node.text === "buf" &&
+            key === "tick" && node.text === "buf" &&
             ts.isPropertyAccessExpression(valueParent.expression) &&
             valueParent.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
             agentHandoffNames.has(agentHandoffName) &&
