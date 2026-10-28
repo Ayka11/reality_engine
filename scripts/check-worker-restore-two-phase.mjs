@@ -153,7 +153,7 @@ send("paint", { x: 1, y: 1, z: 1, f: 0, v: 17, mode: "set", r: 0, trackHistory: 
 const legacyRestore = send("restore", { snap: legacyBaseline, tick: -5 });
 assert.equal(legacyRestore.length, 0, "legacy restore remains a synchronous, non-publishing command");
 const staleUndoAfterRestore = send("undoSculpt").find(message => message.cmd === "sculptHistoryApplied");
-assert.equal(staleUndoAfterRestore.data.applied, false,
+assert.equal(staleUndoAfterRestore.applied, false,
   "legacy restore must clear sculpt undo history from the replaced world");
 const legacySnapshotAfterRestore = send("snapshot").find(message => message.cmd === "snapshot").data;
 assert.equal(legacySnapshotAfterRestore.tick, 0, "legacy restore must normalize invalid ticks to zero");
