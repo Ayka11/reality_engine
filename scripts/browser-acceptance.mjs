@@ -22,11 +22,15 @@ const waitForServer = async () => {
 const browser = await chromium.launch({ headless: true, args: ["--disable-gpu", "--disable-dev-shm-usage"] });
 const acceptanceTimeout = 30000;
 let acceptancePassed = false;
+const uncaughtPageErrors = [];
 try {
   await waitForServer();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.on("console", (msg) => console.log(`[browser:${msg.type()}] ${msg.text()}`));
-  page.on("pageerror", (error) => console.log(`[browser:pageerror] ${error.stack || error.message}`));
+  page.on("pageerror", (error) => {
+    uncaughtPageErrors.push(error.stack || error.message);
+    console.log(`[browser:pageerror] ${error.stack || error.message}`);
+  });
   page.on("requestfailed", (request) => console.log(`[browser:requestfailed] ${request.method()} ${request.url()} :: ${request.failure()?.errorText || "unknown"}`));
   await page.addInitScript(() => {
     if (sessionStorage.getItem("reality-engine-acceptance-cleaned") !== "1") {
@@ -997,7 +1001,6 @@ try {
   if (!worldToolsHeader.includes("WORLD TOOLS")) {
     throw new Error("World Tools header/label is missing");
   }
-
   await page.locator("#dockCloseBtn").click();
   await page.waitForFunction(() => localStorage.getItem("infinity_dock_open") === "false");
 
@@ -2270,8 +2273,12 @@ try {
   // Test Compose World in a fresh browser page so this acceptance path is independent
   // from Quick Generate and cannot fail merely because two large generations are stacked.
   const composePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const composerPageErrors = [];
   composePage.on("console", (msg) => console.log(`[composer:${msg.type()}] ${msg.text()}`));
-  composePage.on("pageerror", (error) => console.log(`[composer:pageerror] ${error.stack || error.message}`));
+  composePage.on("pageerror", (error) => {
+    composerPageErrors.push(error.stack || error.message);
+    console.log(`[composer:pageerror] ${error.stack || error.message}`);
+  });
   composePage.on("requestfailed", (request) => console.log(`[composer:requestfailed] ${request.method()} ${request.url()} :: ${request.failure()?.errorText || "unknown"}`));
   await composePage.addInitScript(() => {
     localStorage.clear();
@@ -2322,6 +2329,10 @@ try {
     throw new Error("Direct WorldGenerator reseed did not synchronize WorldViewContract: " + JSON.stringify(directReseed));
   }
   await composePage.close();
+
+  if (uncaughtPageErrors.length > 0 || composerPageErrors.length > 0) {
+    throw new Error(`Uncaught browser runtime errors: ${JSON.stringify({ primary: uncaughtPageErrors, composer: composerPageErrors })}`);
+  }
 
   acceptancePassed = true;
   console.log(JSON.stringify({
