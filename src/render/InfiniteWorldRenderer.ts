@@ -625,7 +625,8 @@ export class InfiniteWorldRenderer {
     const dx = (hR - hL) / (step * 2)
     const dz = (hU - hD) / (step * 2)
     const slope = Math.min(1, Math.sqrt(dx * dx + dz * dz) / 3)
-    const field = this.generator.sampleField(x, y, z)
+    // Use the authoritative field provider so committed brush/composer mutations affect environment-driven systems.
+    const field = this.fieldSampler.sample(x, y, z)
     const radiation = Math.max(0, Math.min(1, field.entropy * 8))
     const stability = Math.max(0, Math.min(1, 1 - field.entropy * 8))
     return {
