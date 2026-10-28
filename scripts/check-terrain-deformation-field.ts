@@ -18,6 +18,20 @@ assert.equal(terrain.redo(), true)
 assert.equal(terrain.sampleDelta(0, 0), center)
 assert.deepEqual(terrain.serialize(), afterRaise)
 
+// Overlapping sparse transactions must undo/redo in LIFO order without reverting
+// unrelated terrain cells introduced by later brush strokes.
+const historyField = new TerrainDeformationField('history-seed')
+historyField.applyBrush(0, 0, 2, 2, 'raise')
+historyField.applyBrush(1, 0, 2, 1, 'raise')
+const overlappingFinal = historyField.serialize()
+assert.equal(historyField.undo(), true)
+assert.ok(historyField.sampleDelta(0, 0) < overlappingFinal.deltas.find(([key]) => key === '0,0')?.[1]!)
+assert.equal(historyField.undo(), true)
+assert.equal(historyField.size, 0)
+assert.equal(historyField.redo(), true)
+assert.equal(historyField.redo(), true)
+assert.deepEqual(historyField.serialize(), overlappingFinal)
+
 terrain.applyBrush(0, 0, 2, 1, 'lower')
 assert.ok(terrain.sampleDelta(0, 0) < center)
 const snapshot = terrain.serialize()
