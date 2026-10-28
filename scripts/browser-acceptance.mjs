@@ -2375,7 +2375,7 @@ try {
     throw new Error("Terrain autosave was not durable before reload: " + JSON.stringify(savedTerrainOnDisk));
   }
   await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
-  await page.waitForSelector("#c3d");
+  await page.waitForSelector("#c3d", { state: "attached" });
   await page.waitForFunction(() =>
     typeof window.worldGenerationHealth === "function" &&
     !!window.infiniteWorld?.terrainDeformations,
@@ -2399,7 +2399,7 @@ try {
     key: savedTerrainOnDisk.key,
   });
   await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
-  await page.waitForSelector("#c3d");
+  await page.waitForSelector("#c3d", { state: "attached" });
   await page.waitForFunction(() =>
     typeof window.worldGenerationHealth === "function" &&
     !!window.infiniteWorld?.terrainDeformations,
@@ -2417,7 +2417,7 @@ try {
     raw: savedTerrainOnDisk.raw,
   });
   await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
-  await page.waitForSelector("#c3d");
+  await page.waitForSelector("#c3d", { state: "attached" });
   await page.waitForFunction(() =>
     typeof window.worldGenerationHealth === "function" &&
     !!window.infiniteWorld?.terrainDeformations,
