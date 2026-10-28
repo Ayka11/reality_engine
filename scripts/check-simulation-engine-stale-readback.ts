@@ -80,6 +80,53 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   pendingDense.release(staleDense);
   await assert.rejects(pendingDense.step, /Discarded stale GPU readback/);
   assert.equal(engine.grid.buffer[fieldIndex], 101, "stale GPU data must not overwrite newer dense state");
+  
+  // The public back-buffer views are also authoritative mutable state.
+  const backBufferEngine = new SimulationEngine(4, 4, 4);
+  (backBufferEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const backBufferIndex = backBufferEngine.grid.idx(1, 1, 1) + F.ENTROPY;
+  const staleBackBuffer = backBufferEngine.grid.buffer.slice();
+  staleBackBuffer[fieldIndex] = 9101;
+  const pendingBackBuffer = await beginPendingReadback(backBufferEngine, staleBackBuffer);
+  const beforeBackBufferWrite = backBufferEngine.grid.mutationRevision;
+  backBufferEngine.grid.backBuffer[backBufferIndex] = 0.75;
+  assert.ok(backBufferEngine.grid.mutationRevision > beforeBackBufferWrite,
+    "direct back-buffer writes must advance grid revision");
+  pendingBackBuffer.release(staleBackBuffer);
+  await assert.rejects(pendingBackBuffer.step, /Discarded stale GPU readback/);
+  assert.equal(backBufferEngine.grid.backBuffer[backBufferIndex], Math.fround(0.75),
+    "stale GPU readback must preserve a newer back-buffer write");
+
+  // CellState views into the back buffer must obey the same invalidation contract.
+  const cellBackIndex = backBufferEngine.grid.idx(2, 2, 2) + F.TEMPERATURE;
+  const staleCellBack = backBufferEngine.grid.buffer.slice();
+  staleCellBack[cellBackIndex] = 9102;
+  const pendingCellBack = await beginPendingReadback(backBufferEngine, staleCellBack);
+  const beforeCellBackWrite = backBufferEngine.grid.mutationRevision;
+  backBufferEngine.grid.cellBack(2, 2, 2).temperature = 321;
+  assert.ok(backBufferEngine.grid.mutationRevision > beforeCellBackWrite,
+    "CellState writes through cellBack must advance grid revision");
+  pendingCellBack.release(staleCellBack);
+  await assert.rejects(pendingCellBack.step, /Discarded stale GPU readback/);
+  assert.equal(backBufferEngine.grid.backBuffer[cellBackIndex], Math.fround(321),
+    "stale GPU readback must preserve a newer cellBack write");
+
+  // Direct SparseVoxelGrid.restoreState calls must invalidate an in-flight GPU
+  // result even when the caller does not go through SimulationEngine's wrapper.
+  const directRestoreEngine = new SimulationEngine(4, 4, 4);
+  (directRestoreEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const directRestoreIndex = directRestoreEngine.grid.idx(1, 1, 1) + F.ENERGY;
+  const directRestoreSnapshot = directRestoreEngine.grid.captureState();
+  directRestoreSnapshot.buffer[directRestoreIndex] = 124;
+  const staleDirectRestore = directRestoreEngine.grid.buffer.slice();
+  staleDirectRestore[directRestoreIndex] = 9103;
+  const pendingDirectRestore = await beginPendingReadback(directRestoreEngine, staleDirectRestore);
+  directRestoreEngine.grid.restoreState(directRestoreSnapshot);
+  pendingDirectRestore.release(staleDirectRestore);
+  await assert.rejects(pendingDirectRestore.step, /Discarded stale GPU readback/);
+  assert.equal(directRestoreEngine.grid.buffer[directRestoreIndex], Math.fround(124),
+    "stale GPU output must not overwrite state restored directly through SparseVoxelGrid");
+
 
   // Chunk storage is a separate physical representation. Its writes must invalidate
   // the same grid revision so a dense GPU readback cannot commit over newer chunk state.
