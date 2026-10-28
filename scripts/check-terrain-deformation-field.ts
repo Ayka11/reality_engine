@@ -26,11 +26,17 @@ restored.restore(snapshot)
 assert.deepEqual(restored.serialize(), snapshot)
 assert.equal(restored.sampleDelta(0, 0), terrain.sampleDelta(0, 0))
 assert.throws(() => new TerrainDeformationField('other-seed').restore(snapshot), /schema or seed/)
-assert.throws(() => restored.applyBrush(0, 0, 0, 1, 'raise'), /finite and positive/)
+assert.throws(() => restored.applyBrush(0, 0, 0, 1, 'raise'), /supported limits/)
+assert.throws(() => restored.applyBrush(0, 0, 65, 1, 'raise'), /supported limits/,
+  'public brush calls must not allow unbounded work beyond the UI-supported radius')
+assert.throws(() => restored.applyBrush(0, 0, 2, 9, 'raise'), /supported limits/)
+assert.throws(() => restored.applyBrush(Number.MAX_VALUE, 0, 2, 1, 'raise'), /supported limits/)
 assert.throws(() => restored.restore({ version: 1, seed: 'regression-seed', deltas: [['bad', 1]] }), /invalid delta/)
 assert.throws(() => restored.restore({ version: 1, seed: 'regression-seed', deltas: [['01,2', 1]] }), /invalid delta/,
   'snapshot keys must use canonical integer coordinates so every restored delta is sampleable')
 assert.throws(() => restored.restore({ version: 1, seed: 'regression-seed', deltas: [['1,2', 1], ['1,2', 2]] }), /invalid delta/,
   'duplicate snapshot keys must be rejected instead of silently overriding prior deltas')
+assert.throws(() => restored.restore({ version: 1, seed: 'regression-seed', deltas: [['1,2', 0], ['1,2', 2]] }), /invalid delta/,
+  'duplicate keys must be rejected even when the first delta would be discarded as near-zero')
 
 console.log('PASS: sparse terrain deformation, smooth interpolation, raise/lower, undo/redo, and validated persistence snapshot')
