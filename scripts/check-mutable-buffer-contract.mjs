@@ -126,7 +126,8 @@ for (const filePath of sourcePaths) {
 
     if (ts.isImportDeclaration(node) && node.importClause?.namedBindings &&
         ts.isNamedImports(node.importClause.namedBindings)) {
-      if (node.importClause.namedBindings.elements.some(element => element.name.text === "getMutableBuffer")) {
+      if (node.importClause.namedBindings.elements.some(element => element.name.text === "getMutableBuffer") &&
+          path !== "scripts/check-simulation-engine-stale-readback.ts") {
         importedFrom.add(path);
       }
     }
@@ -146,8 +147,12 @@ for (const filePath of sourcePaths) {
       errors.push(`${path}: direct internal-buffer symbol access outside the approved helper at line ${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`);
     }
 
+    // The stale-readback regression deliberately obtains raw aliases to simulate
+    // the known escape hatch. Keep this narrowly scoped test fixture outside the
+    // production call-site inventory; every src/ call remains strictly audited.
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
-        node.expression.text === "getMutableBuffer") {
+        node.expression.text === "getMutableBuffer" &&
+        path !== "scripts/check-simulation-engine-stale-readback.ts") {
       const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
       const key = `${path}#${method ?? "<top-level>"}`;
       actualCalls.set(key, (actualCalls.get(key) ?? 0) + 1);
