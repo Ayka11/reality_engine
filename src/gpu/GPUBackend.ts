@@ -58,6 +58,9 @@ struct SimParams {
   densityDiffusion: f32,        // [22]
   phaseTransitionRate: f32,     // [23]
   crystallizationRate: f32,     // [24]
+  radiationDensityRate: f32,   // [25]
+  radiationEnergyRate: f32,    // [26]
+  radiationThreshold: f32,     // [27]
 }
 
 // Material coefficients: MAT_COUNT × 7 floats
@@ -248,10 +251,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   // ── PROC 12: Radiation Pressure ───────────────────────────────────────────
   if (active(4096u)) {
-    if (c.energy > 400.0) {
+    if (c.energy > params.radiationThreshold) {
       let absorbed = mat.radiationAbsorption;
-      o.density = max(0.0, c.density - (c.energy - 400.0) * 0.00008 * (1.0 - absorbed) * dt * 60.0);
-      o.energy  = max(0.0, o.energy - (c.energy - 400.0) * 0.0001 * dt * 60.0);
+      o.density = max(0.0, o.density - (c.energy - params.radiationThreshold)
+        * params.radiationDensityRate * (1.0 - absorbed) * dt * 60.0);
+      o.energy = max(0.0, o.energy - (c.energy - params.radiationThreshold)
+        * params.radiationEnergyRate * dt * 60.0);
     }
   }
 
@@ -296,7 +301,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // Byte layout of SimParams in the storage buffer (matches WGSL struct)
-const PARAMS_FLOATS = 25; // 25 × 4 bytes = 100 bytes
+const PARAMS_FLOATS = 28; // 28 × 4 bytes = 112 bytes
 
 export class GPUBackend {
   private device: GPUDevice | null = null;
@@ -413,6 +418,9 @@ export class GPUBackend {
     f32[22] = p.densityDiffusion;
     f32[23] = p.phaseTransitionRate;
     f32[24] = p.crystallizationRate;
+    f32[25] = p.radiationDensityRate;
+    f32[26] = p.radiationEnergyRate;
+    f32[27] = p.radiationThreshold;
     this.device.queue.writeBuffer(this.paramsBuf, 0, ab);
   }
 
