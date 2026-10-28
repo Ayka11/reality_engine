@@ -5,6 +5,15 @@ export interface InternalMutableBufferOwner {
   [INTERNAL_MUTABLE_BUFFER](side?: MutableBufferSide): Float32Array;
 }
 
+/**
+ * Return the live internal array for a synchronous, transaction-local hot path.
+ *
+ * SAFETY CONTRACT: the revision is advanced when the alias is acquired, not on
+ * each subsequent typed-array write. Callers must not retain the returned array
+ * across an await, worker/message handoff, callback boundary, or after the
+ * synchronous owning operation returns. Use a tracked public view or a scoped
+ * owner mutation API when a mutation can outlive the current call stack.
+ */
 export function getMutableBuffer(owner: InternalMutableBufferOwner, side: MutableBufferSide = "front"): Float32Array {
   return owner[INTERNAL_MUTABLE_BUFFER](side);
 }
