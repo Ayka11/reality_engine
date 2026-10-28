@@ -500,6 +500,34 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(clearTopologyEngine.grid.chunks.size, 0,
     "stale GPU output must not repopulate a cleared chunk map");
 
+  // Explicit chunk-access timestamp writes influence inactive-chunk eviction and
+  // therefore must be revision-visible. Internal getCell() LRU refreshes remain
+  // bookkeeping-only so ordinary reads do not constantly invalidate GPU work.
+  const recencyEngine = new SimulationEngine(4, 4, 4);
+  (recencyEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const recencyChunk = recencyEngine.grid.chunks.get("0,0,0");
+  assert.ok(recencyChunk, "expected dense-window chunk for access-time regression");
+  const beforeInvalidAccessTime = recencyEngine.grid.mutationRevision;
+  assert.throws(() => { recencyChunk.lastAccessed = Number.NaN; },
+    /Chunk\.lastAccessed must be a finite non-negative timestamp/);
+  assert.equal(recencyEngine.grid.mutationRevision, beforeInvalidAccessTime,
+    "rejected invalid access-time writes must not advance mutation revision");
+
+  const recencyIndex = recencyEngine.grid.idx(1, 1, 1) + F.ENERGY;
+  const staleRecency = recencyEngine.grid.buffer.slice();
+  staleRecency[recencyIndex] = 9104;
+  const pendingRecency = await beginPendingReadback(recencyEngine, staleRecency);
+  const olderAccessTime = Math.max(0, recencyChunk.lastAccessed - 1);
+  const beforeAccessTimeWrite = recencyEngine.grid.mutationRevision;
+  recencyChunk.lastAccessed = olderAccessTime;
+  assert.ok(recencyEngine.grid.mutationRevision > beforeAccessTimeWrite,
+    "external chunk.lastAccessed writes must advance grid revision");
+  pendingRecency.release(staleRecency);
+  await assert.rejects(pendingRecency.step, /Discarded stale GPU readback/);
+  assert.equal(recencyChunk.lastAccessed, olderAccessTime,
+    "stale GPU output must not erase explicit chunk access-time changes");
+
+
   console.log("SimulationEngine stale GPU readback mutation-revision regression: PASS");
 }
 
