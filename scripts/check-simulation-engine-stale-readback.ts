@@ -86,7 +86,7 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   (backBufferEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
   const backBufferIndex = backBufferEngine.grid.idx(1, 1, 1) + F.ENTROPY;
   const staleBackBuffer = backBufferEngine.grid.buffer.slice();
-  staleBackBuffer[fieldIndex] = 9101;
+  staleBackBuffer[backBufferIndex] = 9101;
   const pendingBackBuffer = await beginPendingReadback(backBufferEngine, staleBackBuffer);
   const beforeBackBufferWrite = backBufferEngine.grid.mutationRevision;
   backBufferEngine.grid.backBuffer[backBufferIndex] = 0.75;
