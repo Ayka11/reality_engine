@@ -1,7 +1,7 @@
 // Sparse chunk grid — 128×128×64, chunk size 8×8×8
 // At 15% fill: ~200 active chunks out of 1024 total = ~9 MB
 
-export const NF = 14  // fields per cell (matches SimWorker field layout)
+export const NF = 15  // fields per cell (matches SimWorker field layout, including field Z)
 
 // Field indices — short names matching the worker's F layout
 export const F = {
@@ -19,6 +19,7 @@ export const F = {
   MAT: 11, // material ID
   WAVE:12, // wave amplitude
   PROC:13, // process activity
+  FZ:  14, // field vector Z
 } as const
 
 export const CX = 8   // chunk size X
