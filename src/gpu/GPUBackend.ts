@@ -61,6 +61,9 @@ struct SimParams {
   radiationDensityRate: f32,   // [25]
   radiationEnergyRate: f32,    // [26]
   radiationThreshold: f32,     // [27]
+  fieldRotationDamping: f32,   // [28]
+  fieldRotationNeighborCoupling: f32, // [29]
+  fieldRotationCrossCoupling: f32, // [30]
 }
 
 // Material coefficients: MAT_COUNT × 7 floats
@@ -108,7 +111,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   // ── 6-neighbor Laplacians ──────────────────────────────────────────────────
   var lapE = 0.0; var lapT = 0.0; var lapD = 0.0; var lapI = 0.0; var lapP = 0.0;
-  var fxSum = 0.0; var fySum = 0.0; var fzSum = 0.0;
+  var fxSum = 0.0; var fySum = 0.0; var fzSum = 0.0; var fieldNeighborCount = 0.0;
 
   // Neumann boundary: out-of-bounds neighbors reflect (same as center cell)
   var nbE = array<f32,6>(c.energy,c.energy,c.energy,c.energy,c.energy,c.energy);
@@ -116,9 +119,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   var nbD = array<f32,6>(c.density,c.density,c.density,c.density,c.density,c.density);
   var nbI = array<f32,6>(c.information,c.information,c.information,c.information,c.information,c.information);
   var nbP = array<f32,6>(c.pressure,c.pressure,c.pressure,c.pressure,c.pressure,c.pressure);
-  var nbFx = array<f32,6>(c.field_x,c.field_x,c.field_x,c.field_x,c.field_x,c.field_x);
-  var nbFy = array<f32,6>(c.field_y,c.field_y,c.field_y,c.field_y,c.field_y,c.field_y);
-  var nbFz = array<f32,6>(c.field_z,c.field_z,c.field_z,c.field_z,c.field_z,c.field_z);
 
   let dx = array<i32,6>(-1, 1, 0, 0, 0, 0);
   let dy = array<i32,6>( 0, 0,-1, 1, 0, 0);
@@ -133,18 +133,16 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       nbD[d]  = nb.density;
       nbI[d]  = nb.information;
       nbP[d]  = nb.pressure;
-      nbFx[d] = nb.field_x;
-      nbFy[d] = nb.field_y;
-      nbFz[d] = nb.field_z;
+      fxSum += nb.field_x;
+      fySum += nb.field_y;
+      fzSum += nb.field_z;
+      fieldNeighborCount += 1.0;
     }
     lapE += nbE[d] - c.energy;
     lapT += nbT[d] - c.temperature;
     lapD += nbD[d] - c.density;
     lapI += nbI[d] - c.information;
     lapP += nbP[d] - c.pressure;
-    fxSum += nbFx[d];
-    fySum += nbFy[d];
-    fzSum += nbFz[d];
   }
 
   // ── PROC 0: Energy Diffusion ───────────────────────────────────────────────
@@ -270,16 +268,20 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     );
   }
 
-  // ── PROC 14: Field Rotation (curl) ────────────────────────────────────────
+  // ── PROC 14: Field Rotation (heuristic vector relaxation) ──────────────────
   if (active(16384u)) {
-    let avgFx = fxSum / 6.0; let avgFy = fySum / 6.0; let avgFz = fzSum / 6.0;
-    o.field_x = c.field_x * 0.94 + avgFx * 0.05 + c.field_y * 0.01;
-    o.field_y = c.field_y * 0.94 + avgFy * 0.05 - c.field_x * 0.01;
-    o.field_z = c.field_z * 0.94 + avgFz * 0.05;
-  } else {
-    o.field_x = c.field_x * 0.95 + (fxSum / 6.0) * 0.05;
-    o.field_y = c.field_y * 0.95 + (fySum / 6.0) * 0.05;
-    o.field_z = c.field_z * 0.95 + (fzSum / 6.0) * 0.05;
+    let neighborCount = max(fieldNeighborCount, 1.0);
+    let avgFx = fxSum / neighborCount;
+    let avgFy = fySum / neighborCount;
+    let avgFz = fzSum / neighborCount;
+    o.field_x = c.field_x * params.fieldRotationDamping
+      + avgFx * params.fieldRotationNeighborCoupling
+      + c.field_y * params.fieldRotationCrossCoupling;
+    o.field_y = c.field_y * params.fieldRotationDamping
+      + avgFy * params.fieldRotationNeighborCoupling
+      - c.field_x * params.fieldRotationCrossCoupling;
+    o.field_z = c.field_z * params.fieldRotationDamping
+      + avgFz * params.fieldRotationNeighborCoupling;
   }
 
   // ── PROC 15: Erosion ──────────────────────────────────────────────────────
@@ -301,7 +303,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // Byte layout of SimParams in the storage buffer (matches WGSL struct)
-const PARAMS_FLOATS = 28; // 28 × 4 bytes = 112 bytes
+const PARAMS_FLOATS = 31; // 31 × 4 bytes = 124 bytes
 
 export class GPUBackend {
   private device: GPUDevice | null = null;
@@ -421,6 +423,9 @@ export class GPUBackend {
     f32[25] = p.radiationDensityRate;
     f32[26] = p.radiationEnergyRate;
     f32[27] = p.radiationThreshold;
+    f32[28] = p.fieldRotationDamping;
+    f32[29] = p.fieldRotationNeighborCoupling;
+    f32[30] = p.fieldRotationCrossCoupling;
     this.device.queue.writeBuffer(this.paramsBuf, 0, ab);
   }
 
