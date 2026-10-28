@@ -1442,7 +1442,7 @@ export function bootstrapInfiniteWorld() {
                     <button class="brush-btn" id="vTerrainUndo">↩ Undo terrain</button>
                     <button class="brush-btn" id="vTerrainRedo">↪ Redo terrain</button>
                   </div>
-                  <div id="vTerrainStatus" style="font-size:7.5px;color:var(--sub);margin-top:5px;">Terrain brush inactive</div>
+                  <div id="vTerrainStatus" style="font-size:7.5px;color:var(--sub);margin-top:5px;">${terrainBrushMode ? `Terrain ${terrainBrushMode} active · click terrain to sculpt` : "Terrain brush inactive"}</div>
                 </div>
               </div>
             ` : activeTab === 'library' ? `
