@@ -37,7 +37,7 @@
     "test:worker-restore-two-phase": "node scripts/check-worker-restore-two-phase.mjs",
     "test:field-spatial-pattern": "node scripts/check-scientific-field-spatial-pattern.mjs",
     "test:legacy-sculpt-adapter": "node scripts/check-legacy-sculpt-runtime-adapter.mjs",
-    "test:terrain-deformation": "node scripts/check-terrain-deformation-field.mjs",
+    "test:terrain-deformation": "npx --yes tsx scripts/check-terrain-deformation-field.ts",
     "test:authoritative-sculpt-transaction": "node scripts/check-authoritative-sculpt-transaction.mjs && node scripts/check-unified-sculpt-transaction.mjs && node scripts/check-chunk-grid-sculpt-modes.mjs && npm run test:brush-engine-transaction && node scripts/check-authoritative-sculpt-terrain-refresh.mjs",
     "test:world-persistence-failures": "node scripts/check-world-persistence-failures.mjs",
     "audit:report": "node scripts/report-npm-audit.mjs",
