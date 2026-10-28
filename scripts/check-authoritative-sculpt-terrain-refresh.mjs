@@ -51,6 +51,12 @@ for (const name of ["undoLegacySculptAuthoritative", "redoLegacySculptAuthoritat
     `${name} must refresh and persist only when the coordinator changes field state`);
 }
 
+const worldEnvironment = methodBody("getWorldEnvironment");
+assert.match(worldEnvironment, /this\.fieldSampler\.sample\(x, y, z\)/,
+  "environment-driven civilization/production systems must consume the authoritative field");
+assert.doesNotMatch(worldEnvironment, /this\.generator\.sampleField\(x, y, z\)/,
+  "environment sampling must not bypass committed authoritative field mutations");
+
 const authoritativeMutation = methodBody("applyAuthoritativeFieldMutation");
 assert.match(authoritativeMutation, /this\.refreshTerrainPatches\(\)/,
   "the canonical authoritative mutation path must refresh the renderer");
@@ -70,5 +76,6 @@ assert.match(refresh, /this\.scene\.add\(group\)/, "rebuilt patches must be atta
 
 console.log("PASS: legacy sculpt and Smart Brush refresh rendered terrain");
 console.log("PASS: authoritative Undo/Redo refresh after successful transactions");
+console.log("PASS: environment-driven systems sample the authoritative field");
 console.log("PASS: authoritative field mode colors terrain from sampled field values");
 console.log("PASS: refresh rebuilds loaded patches and edge-LOD metadata");
