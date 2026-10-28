@@ -3,6 +3,7 @@ import { CELL_FIELDS, F } from "../src/core/CellState.ts";
 import { Chunk } from "../src/core/Chunk.ts";
 import { SparseVoxelGrid } from "../src/core/SparseVoxelGrid.ts";
 import { SimulationEngine } from "../src/simulation/SimulationEngine.ts";
+import { getMutableBuffer } from "../src/core/TrackedFloat32Array.ts";
 import { SculptManager } from "../src/sculpt/SculptManager.ts";
 import { WorldSaveSystem } from "../src/world/save/WorldSaveSystem.ts";
 
@@ -70,6 +71,20 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   const beforeCellWrite = engine.grid.mutationRevision;
   engine.grid.cell(1, 1, 1).energy = 43;
   assert.ok(engine.grid.mutationRevision > beforeCellWrite, "CellState setter must advance grid revision");
+
+  // Regression exposing the remaining raw-alias revision gap: acquiring the internal
+  // array advances revision once, but writes through a previously retained alias are
+  // not observable by the grid. The old behavior must remain documented until the
+  // internal API is replaced by a scoped mutation contract.
+  const rawAliasEngine = new SimulationEngine(4, 4, 4);
+  const rawAliasIndex = rawAliasEngine.grid.idx(1, 1, 1) + F.ENERGY;
+  const rawAlias = getMutableBuffer(rawAliasEngine.grid);
+  const revisionAfterAcquire = rawAliasEngine.grid.mutationRevision;
+  rawAlias[rawAliasIndex] = 606;
+  assert.equal(rawAliasEngine.grid.buffer[rawAliasIndex], 606,
+    "raw internal alias currently writes directly to authoritative memory");
+  assert.equal(rawAliasEngine.grid.mutationRevision, revisionAfterAcquire,
+    "known limitation: a retained raw alias write does not advance revision after acquisition");
 
   // Any dense-grid write while a GPU readback is pending must invalidate that result.
   const staleDense = engine.grid.buffer.slice();
