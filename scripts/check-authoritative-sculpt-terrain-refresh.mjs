@@ -98,6 +98,9 @@ const terrainBuilderSource = methodBody("buildTerrainPatch");
 assert.match(terrainBuilderSource, /this\.sampleTerrainHeight\(originX \+ gx, originZ \+ gz\)/,
   "terrain mesh vertices must sample deformation-aware heights");
 const saveWorldBody = methodBody("saveWorld");
+assert.match(saveWorldBody, /saveFieldCheckpoint/);
+assert.match(saveWorldBody, /if \(!fieldCheckpointSaved\)/,
+  "manual authoritative field checkpoint failures must be diagnosed rather than silently ignored");
 assert.match(saveWorldBody, /saveTerrainDeformationCheckpoint/);
 assert.match(saveWorldBody, /if \(!checkpointSaved\)/,
   "manual terrain checkpoint failures must be diagnosed rather than silently ignored");
