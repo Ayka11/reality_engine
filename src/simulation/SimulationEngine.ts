@@ -226,6 +226,12 @@ export class SimulationEngine {
       if (this._gpuReady) {
         const readbackGeneration = this._stateGeneration;
         const readbackGridRevision = this.grid.mutationRevision;
+        // Raw Float32Array aliases returned by the internal hot-path helper cannot
+        // intercept writes. Capture the authoritative front buffer while readback
+        // is in flight so an alias write cannot evade revision-based stale checks.
+        // The comparison is skipped when a tracked revision/generation already
+        // changed, keeping this fallback specific to otherwise-invisible writes.
+        const readbackBufferSnapshot = this.grid.buffer.slice();
         let data: Float32Array;
         try {
           this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
@@ -237,13 +243,27 @@ export class SimulationEngine {
           // before allowing a later step to proceed.
           this.resynchronizeGPUAndThrow(error, "GPU compute/readback failed");
         }
-        if (
-          readbackGeneration !== this._stateGeneration ||
-          readbackGridRevision !== this.grid.mutationRevision
-        ) {
-          // Direct buffers, CellState views, and sparse chunk writes advance the
-          // grid revision as well as engine-owned mutation generation. Never
-          // publish GPU output if either changed while readback was pending.
+        const generationChanged = readbackGeneration !== this._stateGeneration;
+        const revisionChanged = readbackGridRevision !== this.grid.mutationRevision;
+        let untrackedFrontBufferWrite = false;
+        if (!generationChanged && !revisionChanged) {
+          const currentBuffer = this.grid.buffer;
+          if (currentBuffer.length !== readbackBufferSnapshot.length) {
+            untrackedFrontBufferWrite = true;
+          } else {
+            for (let i = 0; i < currentBuffer.length; i++) {
+              if (!Object.is(currentBuffer[i], readbackBufferSnapshot[i])) {
+                untrackedFrontBufferWrite = true;
+                break;
+              }
+            }
+          }
+        }
+        if (generationChanged || revisionChanged || untrackedFrontBufferWrite) {
+          // Tracked writes are rejected through revision/generation. Compare the
+          // front buffer snapshot as a final guard for writes through a retained
+          // raw Float32Array alias, whose indexed stores cannot trigger revision
+          // tracking. Do not publish stale output over any observed newer value.
           this.resynchronizeGPUAndThrow(
             new Error('Discarded stale GPU readback: simulation state changed while awaiting GPU results'),
             "Stale GPU readback rejected",
