@@ -307,10 +307,19 @@ for (const filePath of sourcePaths) {
           if (candidate.name !== node.text || !isFunctionAncestor(candidate.owner, occurrenceOwner)) continue;
           if (!binding || isFunctionAncestor(binding.owner, candidate.owner)) binding = candidate;
         }
+
         if (!isDeclarationName && binding && binding.owner !== occurrenceOwner &&
             !isApprovedSynchronousRollbackClosure(occurrenceOwner, node.text)) {
           const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
-        // Unwrap type/parentheses assertions so a raw alias cannot escape disguised as a new expression.
+          const reportKey = `${line}:${node.text}`;
+          if (!reportedClosureAliases.has(reportKey)) {
+            reportedClosureAliases.add(reportKey);
+            errors.push(`${path}:${line}: raw buffer alias "${node.text}" is captured by a nested callback; prove synchronous transaction-local lifetime or remove the capture`);
+          }
+        }
+
+        const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+        // Unwrap expression wrappers so the underlying alias cannot escape disguised as a new expression.
         let valueExpression = node;
         let valueParent = valueExpression.parent;
         while (
@@ -323,6 +332,7 @@ for (const filePath of sourcePaths) {
           valueExpression = valueParent;
           valueParent = valueExpression.parent;
         }
+
         if (!isDeclarationName && ts.isReturnStatement(valueParent) && valueParent.expression === valueExpression) {
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be returned from its audited method`);
         }
@@ -342,7 +352,8 @@ for (const filePath of sourcePaths) {
         if (!isDeclarationName && ts.isShorthandPropertyAssignment(parent) && parent.name === node) {
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not escape through an object shorthand property`);
         }
-        if (!isDeclarationName && ts.isArrayLiteralExpression(valueParent) && valueParent.elements.some(element => element === valueExpression)) {
+        if (!isDeclarationName && ts.isArrayLiteralExpression(valueParent) &&
+            valueParent.elements.some(element => element === valueExpression)) {
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not escape through an array literal`);
         }
         if (!isDeclarationName && ts.isSpreadElement(valueParent) && valueParent.expression === valueExpression) {
@@ -383,7 +394,7 @@ for (const filePath of sourcePaths) {
             valueParent.expression.name.text === "set" &&
             ts.isIdentifier(receiver) && aliases.has(receiver.text);
           const isAuditedLocalBufferCache = path === "src/core/SparseVoxelGrid.ts" &&
-            ["syncDenseEntityOwnershipToChunks", "syncDenseToChunks", "syncChunksToDense"].includes(key) &&
+            ["syncDenseEntityOwnershipToChunks", "syncDenseToChunks", "syncChunksToDense"].includes(key.split("#")[1]) &&
             ts.isPropertyAccessExpression(valueParent.expression) &&
             valueParent.expression.name.text === "set" &&
             ts.isIdentifier(receiver) && receiver.text === "rawBuffers";
@@ -393,7 +404,7 @@ for (const filePath of sourcePaths) {
             : "";
           const agentHandoffTarget = methodNodes.get(agentHandoffName);
           const isAuditedSynchronousAgentHandoff = path === "src/simulation/AgentSystem.ts" &&
-            key === "tick" && node.text === "buf" &&
+            key === "src/simulation/AgentSystem.ts#tick" && node.text === "buf" &&
             ts.isPropertyAccessExpression(valueParent.expression) &&
             valueParent.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
             agentHandoffNames.has(agentHandoffName) &&
