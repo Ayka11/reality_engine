@@ -2,8 +2,8 @@
 
 ## Current implementation update — 2026-10-25
 
-**Validated implementation head:** `95a4a39f5313fd7844f075deb8f292c482fe5f55`  
-**Validation:** Reality Engine CI #1386 passed on this exact head: [run #1386](https://github.com/Ayka11/reality_engine/actions/runs/40206544029). The run included lint, all declared recovery/regression suites (now mandatory rather than `--if-present`), stale-readback and mutable-buffer ownership checks, build, both Docker images, Hugging Face container smoke, HF smoke/CPU checks, and Playwright browser acceptance. Dependency Security Audit #150 passed on the same package manifest/lockfile state before the later source-only fixes: [run #150](https://github.com/Ayka11/reality_engine/actions/runs/40205819069). These checks do not establish scientific validity or production readiness of every feature.
+**Validated implementation head:** `46eead6457f861c9e5f97ea181ca235a112e889e`  
+**Validation:** Reality Engine CI #40643503606 passed on this exact head: [run #40643503606](https://github.com/Ayka11/reality_engine/actions/runs/40643503606). All 74 steps passed, including lint, recovery/regression suites, stale-readback transaction tests, the mutable-buffer ownership guard, build, both Docker images, Hugging Face smoke/CPU checks, and Playwright browser acceptance. These checks do not establish scientific validity or production readiness of every feature.
 
 This update supersedes earlier statements below that public dense/chunk buffer writes and `CellState` setters are entirely untracked. The current implementation includes:
 
@@ -17,7 +17,7 @@ This update supersedes earlier statements below that public dense/chunk buffer w
 - `SparseVoxelGrid.syncDenseToChunks()` preflights all dense-to-chunk destinations before writing, uses a compact coordinate plan rather than cloning whole multi-megabyte chunks per frame, and has a regression that injects a mapping failure before publication.
 - `BrushEngine.applyStroke()`, `applyCustomStroke()`, `undo()`, and `redo()` preserve dense state/history when synchronization fails; custom-callback failure also re-publishes restored dense state over direct chunk edits. Injected-failure tests are part of the mandatory authoritative-sculpt test suite.
 - `VoxelGrid` and `SparseVoxelGrid` reject non-positive, fractional, non-finite, and unsafe dimensions before buffer allocation.
-- `scripts/check-mutable-buffer-contract.mjs` statically inventories raw `getMutableBuffer()` access sites and rejects unreviewed imports/call sites or use outside the approved synchronous ownership patterns.
+- `scripts/check-mutable-buffer-contract.mjs` statically inventories raw `getMutableBuffer()` access sites and rejects unreviewed imports/call sites, alias copies, object/array/container escapes, backing-ArrayBuffer exposure, retained subarrays, unreviewed function arguments, and nested callback captures outside exact audited synchronous exceptions.
 - CI no longer silently skips any of the 32 declared test steps via `--if-present`.
 
 **Important internal-alias caveat:** `getMutableBuffer()` still returns a raw mutable typed-array alias and cannot observe later writes through an alias that is retained. The audited call sites are constrained to synchronous, transaction-local uses or direct upload arguments; do not retain one across `await` or an ownership boundary. This is a static ownership contract, not a language-level guarantee, so issue [#62](https://github.com/Ayka11/reality_engine/issues/62) remains open until the supported mutation surfaces and failure/rollback paths are fully enumerated and tested.
@@ -214,3 +214,30 @@ The mutation audit found two additional metadata paths where TypeScript-level in
 The same-head run #1395 passed on `4de11b57e85987807f275927f6851e4f2996d28f`, including lint, regression/recovery suites, build, Docker/Hugging Face checks, and Playwright browser acceptance: https://github.com/Ayka11/reality_engine/actions/runs/40209549019.
 
 These fixes close the specific metadata mutation paths above, not the entire issue. The raw `getMutableBuffer()` alias can still be retained and written after acquisition without a fresh revision, and the end-to-end ownership inventory across worker transfer, undo/redo, restore, subsystem state, and rollback is not yet complete. Keep issue #62 open.
+
+
+### Raw-buffer ownership guard and transaction readback validation — 2026-10-28
+
+The raw-buffer checker was hardened to reject aliases copied to another variable,
+stored in object or array literals, spread into containers/calls, used to expose
+the backing `ArrayBuffer`, retained through `subarray()`, or passed to an
+unreviewed function. Explicit exceptions are limited to synchronous typed-array
+copies, local per-method chunk-buffer caches, the five synchronous
+`AgentSystem.tick()` behavior handlers, and the already-audited synchronous
+`EntityLayer` rollback closure. The guard also checks that async methods do not
+retain raw aliases across their asynchronous boundary.
+
+The mandatory stale-readback regression now additionally covers:
+- an in-flight readback concurrent with a successful `mutateAuthoritativeState()`;
+- a thrown authoritative mutation that rolls back CPU state;
+- a recovery snapshot restore while an older readback is pending;
+- `syncToGPU()` publication while readback is pending; and
+- `syncTick(0)` invalidating an in-flight readback.
+
+Exact-head CI #40643503606 passed on `46eead6457f861c9e5f97ea181ca235a112e889e`,
+including all these new scenarios and browser acceptance. Issue #62 remains open:
+the checker is still a source-level ownership contract, not language-enforced
+revocation of every raw alias, and end-to-end ownership validation across all
+worker-transfer, import, undo/redo, subsystem-state, and rollback boundaries is
+not complete. Do not close the issue or infer total production readiness from
+the currently covered paths.
