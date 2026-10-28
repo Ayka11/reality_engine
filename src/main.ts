@@ -111,7 +111,7 @@ chunkWorker.onmessage = (e: MessageEvent) => {
     chunkEvCount = wEv   ?? chunkEvCount;
 
     // Merge dirty chunks into shadow map
-    const NF_W = 14, CF = 512 * NF_W;
+    const NF_W = 15, CF = 512 * NF_W;
     const u32 = new Uint32Array(ab as ArrayBuffer);
     const f32 = new Float32Array(ab as ArrayBuffer);
     const num = u32[0];
