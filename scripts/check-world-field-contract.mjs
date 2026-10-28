@@ -137,6 +137,67 @@ mutable.applyRadial("brush", 0,0,0,10,{ energy: 9 });
 assert.ok(mutable.sample(0,0,0).energy > before);
 assert.ok(mutable.getVersion() > 0);
 
+// Authoritative field mutations must not retain caller-owned nested payloads,
+// expose live references from apply(), or alias serialize/restore snapshots.
+const aliasProbe = new MutableWorldFieldProvider(fakeProvider);
+const callerMutation = {
+  kind: "brush", x: 0, y: 0, z: 0, radius: 10,
+  delta: { energy: 9 },
+  operations: { energy: { mode: "add", value: 2 } },
+  metadata: { legacyFalloff: "linear", nested: { label: "original" } },
+};
+const applied = aliasProbe.apply(callerMutation);
+const stableVersion = aliasProbe.getVersion();
+callerMutation.delta.energy = 90;
+callerMutation.operations.energy.value = 200;
+callerMutation.metadata.nested.label = "mutated-input";
+assert.equal(aliasProbe.sample(0, 0, 0).energy, 12,
+  "mutating caller-owned nested apply payload must not alter authoritative sampling");
+applied.delta.energy = 800;
+applied.operations.energy.value = 900;
+applied.metadata.nested.label = "mutated-return";
+assert.equal(aliasProbe.sample(0, 0, 0).energy, 12,
+  "mutating apply() return value must not alter authoritative sampling");
+assert.equal(aliasProbe.getVersion(), stableVersion,
+  "external payload mutation must not change provider revision");
+
+const serializedAliasProbe = aliasProbe.serialize();
+serializedAliasProbe.mutations[0].delta.energy = 700;
+serializedAliasProbe.mutations[0].operations.energy.value = 700;
+serializedAliasProbe.mutations[0].metadata.nested.label = "mutated-snapshot";
+assert.equal(aliasProbe.sample(0, 0, 0).energy, 12,
+  "mutating serialize() output must not alter live provider state");
+const restoreTarget = new MutableWorldFieldProvider(fakeProvider);
+const restoreSnapshot = aliasProbe.serialize();
+restoreTarget.restore(restoreSnapshot);
+const restoredValue = restoreTarget.sample(0, 0, 0).energy;
+restoreSnapshot.mutations[0].delta.energy = 600;
+restoreSnapshot.mutations[0].operations.energy.value = 600;
+restoreSnapshot.mutations[0].metadata.nested.label = "mutated-after-restore";
+assert.equal(restoreTarget.sample(0, 0, 0).energy, restoredValue,
+  "mutating restore input after commit must not alter restored state");
+
+const globalAliasProbe = new MutableWorldFieldProvider(fakeProvider);
+const callerScale = { energy: 2 };
+const callerGlobalDelta = { energy: 3 };
+const callerMetadata = { nested: { label: "original-global" } };
+const globalResult = globalAliasProbe.setGlobal("preset", callerScale, callerGlobalDelta, callerMetadata);
+const globalVersion = globalAliasProbe.getVersion();
+callerScale.energy = 99;
+callerGlobalDelta.energy = 99;
+callerMetadata.nested.label = "mutated-global-input";
+globalResult.metadata.nested.label = "mutated-global-return";
+assert.equal(globalAliasProbe.sample(0, 0, 0).energy, 5,
+  "setGlobal() must detach scale, delta, metadata, and its returned payload");
+assert.equal(globalAliasProbe.getVersion(), globalVersion,
+  "mutating setGlobal() input/output must not change provider revision");
+const globalSnapshot = globalAliasProbe.serialize();
+globalSnapshot.globalOverlays[0].scale.energy = 50;
+globalSnapshot.globalOverlays[0].delta.energy = 50;
+globalSnapshot.globalOverlays[0].metadata.nested.label = "mutated-global-snapshot";
+assert.equal(globalAliasProbe.sample(0, 0, 0).energy, 5,
+  "mutating serialized global overlay must not change live provider state");
+
 globalThis.localStorage = { data:new Map(), setItem(k,v){this.data.set(k,v)}, getItem(k){return this.data.get(k)??null}, removeItem(k){this.data.delete(k)} };
 const worldCoordinateJs = await readFile(new URL("src/infinity/WorldCoordinate.ts", root), "utf8");
 const worldCoordinateCompiled = ts.transpileModule(worldCoordinateJs, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
