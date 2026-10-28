@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 
 const worker = await fs.readFile('src/core/ChunkSimWorker.ts', 'utf8')
+const chunkGrid = await fs.readFile('src/core/ChunkGrid.ts', 'utf8')
 const cpu = await fs.readFile('src/simulation/FieldPhysics.ts', 'utf8')
 const main = await fs.readFile('src/main.ts', 'utf8')
 const defs = await fs.readFile('src/process/ProcessDef.ts', 'utf8')
@@ -93,6 +94,12 @@ assert.ok(gpu.includes('f32[27] = p.radiationThreshold;'))
 assert.ok(gpu.includes('params.radiationDensityRate * (1.0 - absorbed)'))
 assert.ok(gpu.includes('params.radiationEnergyRate'))
 assert.ok(gpu.includes('c.energy > params.radiationThreshold'))
+
+// Sparse worker's transferable cell layout must carry the full 3D field vector.
+assert.ok(chunkGrid.includes('export const NF = 15'))
+assert.ok(chunkGrid.includes('FZ:  14'))
+assert.ok(main.includes('const NF_W = 15, CF = 512 * NF_W;'))
+assert.ok(worker.includes('F.FZ'))
 
 // Field rotation is parameterized and process-mask gated in all available paths.
 assert.ok(cpu.includes('p.fieldRotationDamping'))
