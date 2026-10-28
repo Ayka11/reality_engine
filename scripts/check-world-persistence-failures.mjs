@@ -207,6 +207,33 @@ failRemove = false;
 assert.equal(persistence.deleteFieldState(), true);
 assert.equal(persistence.loadFieldState(), null);
 
+const chunkObjects = [{ id: 'in-memory-chunk-object', x: 1, y: 2, z: 3, kind: 'tree' }];
+failSet = true;
+assert.doesNotThrow(() => persistence.saveChunk(0, 0, 0, chunkObjects),
+  "chunk save must not crash the renderer when storage writes fail");
+assert.deepEqual(persistence.loadChunk(0, 0, 0), chunkObjects,
+  "chunk data should remain usable in memory after a failed durable write");
+assert.deepEqual(persistence.knownChunks(), [],
+  "manifest reads must tolerate unavailable storage");
+failSet = false;
+
+failRemove = true;
+assert.doesNotThrow(() => persistence.deleteChunk(0, 0, 0),
+  "chunk deletion must not crash when browser storage cannot remove keys");
+assert.equal(persistence.isLoaded(0, 0, 0), false,
+  "chunk deletion must clear in-memory loaded state even when storage removal fails");
+failRemove = false;
+
+failGet = true;
+failRemove = true;
+assert.doesNotThrow(() => persistence.clear(),
+  "clearing the world must not crash when browser storage is unavailable");
+assert.deepEqual(persistence.loadedChunks(), [],
+  "clear must reset in-memory loaded chunk state despite storage failures");
+assert.deepEqual(persistence.loadChunk(0, 0, 0), [],
+  "clear must discard the in-memory chunk cache");
+failGet = false;
+failRemove = false;
 
 function toModuleUrl(source) {
   return "data:text/javascript;base64," + Buffer.from(source).toString("base64");
