@@ -114,6 +114,10 @@ assert.match(saveWorldBody, /World object persistence incomplete/,
 assert.match(methodBody("loadWorld"), /loadTerrainDeformationCheckpoint/);
 assert.match(methodBody("loadWorld"), /knownChunks\(\{\s*recoverOrphans:\s*true\s*\}\)/,
   "world load must recover persisted chunk payloads omitted from a failed/corrupt manifest");
+const clearSavedWorldBody = methodBody("clearSavedWorld");
+assert.match(clearSavedWorldBody, /const cleared = this\.persistence\.clear\(\)/);
+assert.match(clearSavedWorldBody, /if\s*\(!cleared\)[\s\S]*?console\.warn/,
+  "the renderer must warn if persisted world cleanup was incomplete");
 
 const refresh = methodBody("refreshTerrainPatches");
 assert.match(refresh, /for\s*\(const\s*\[key,\s*patch\]\s*of\s*this\.patches\)/, "refresh must visit every loaded patch");

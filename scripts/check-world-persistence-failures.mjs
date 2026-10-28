@@ -325,10 +325,24 @@ assert.equal(persistence.deleteChunk(2, 0, -3), true);
 assert.deepEqual(persistence.knownChunks(), [],
   "deleting the recovered orphan should leave a clean manifest");
 
+const clearOrphanObjects = [{ id: 'clear-orphan-object', x: -35, y: 1, z: 33, kind: 'tower' }];
+const clearOrphanStorageKey = "reality-engine-world:seed-a:chunk:-2,0,1";
+failSetForKey = manifestKey;
+assert.equal(persistence.saveChunk(-2, 0, 1, clearOrphanObjects), false,
+  "fixture must produce a durable chunk whose manifest update fails");
+failSetForKey = null;
+assert.equal(values.has(clearOrphanStorageKey), true);
+assert.equal(persistence.clear(), true,
+  "clear must successfully remove orphaned chunk payloads even when they were never indexed");
+assert.equal(values.has(clearOrphanStorageKey), false,
+  "clear must remove actual stored chunk keys rather than trusting manifest alone");
+assert.deepEqual(persistence.knownChunks({ recoverOrphans: true }), [],
+  "clear must not leave orphaned chunks that can reappear on the next world load");
+
 failGet = true;
 failRemove = true;
-assert.doesNotThrow(() => persistence.clear(),
-  "clearing the world must not crash when browser storage is unavailable");
+assert.equal(persistence.clear(), false,
+  "clearing the world must report incomplete storage cleanup when browser storage fails");
 assert.deepEqual(persistence.loadedChunks(), [],
   "clear must reset in-memory loaded chunk state despite storage failures");
 assert.deepEqual(persistence.loadChunk(0, 0, 0), [],

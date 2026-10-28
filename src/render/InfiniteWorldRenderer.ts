@@ -586,7 +586,10 @@ export class InfiniteWorldRenderer {
   }
 
   clearSavedWorld() {
-    this.persistence.clear()
+    const cleared = this.persistence.clear()
+    if (!cleared) {
+      console.warn('[persistence] Could not remove every saved world record; some objects or edits may return after reload')
+    }
     this.terrainDeformations.clear()
     this.refreshTerrainPatches()
     this.objects.clear()

@@ -209,23 +209,41 @@ export class WorldPersistence {
     return this.updateManifest(key)
   }
 
-  clear() {
+  /**
+   * Remove persisted world data, including orphaned chunks omitted from a stale
+   * or corrupt manifest. Returns false when storage prevented a complete clear.
+   */
+  clear(): boolean {
+    let cleared = true
+    const scannedChunkKeys = this.scanStoredChunkStorageKeys()
+    if (scannedChunkKeys === null) cleared = false
+    const chunkStorageKeys = new Set(scannedChunkKeys ?? [])
+
     let raw: string | null = null
     try {
       raw = localStorage.getItem(this.manifestKey)
     } catch {
-      // Storage may be disabled; still clear the in-memory cache below.
+      cleared = false
     }
     if (raw) {
       try {
-        const keys = JSON.parse(raw) as unknown
+        const keys: unknown = JSON.parse(raw)
         if (Array.isArray(keys)) {
           for (const key of keys) {
-            if (typeof key !== 'string' || key.split(',').length !== 3 || !key.split(',').every(part => Number.isSafeInteger(Number(part)))) continue
-            try { localStorage.removeItem(this.prefix + key) } catch {}
+            if (this.isValidChunkKey(key)) chunkStorageKeys.add(this.prefix + key)
           }
         }
-      } catch {}
+      } catch {
+        // The storage scan above is the recovery path for corrupt manifests.
+      }
+    }
+
+    for (const key of chunkStorageKeys) {
+      try {
+        localStorage.removeItem(key)
+      } catch {
+        cleared = false
+      }
     }
     for (const key of [
       this.manifestKey,
@@ -234,10 +252,15 @@ export class WorldPersistence {
       this.terrainDeformationKey,
       this.terrainDeformationCheckpointKey,
     ]) {
-      try { localStorage.removeItem(key) } catch {}
+      try {
+        localStorage.removeItem(key)
+      } catch {
+        cleared = false
+      }
     }
     this.loaded.clear()
     this.cache.clear()
+    return cleared
   }
 
   chunkForObject(object: WorldObject) {
@@ -282,19 +305,26 @@ export class WorldPersistence {
     return [cx, cy, cz].every(Number.isSafeInteger) && chunkKey(cx, cy, cz) === value
   }
 
-  private scanStoredChunkKeys(): string[] {
+  private scanStoredChunkStorageKeys(): string[] | null {
     const keys: string[] = []
     try {
       for (let index = 0; index < localStorage.length; index++) {
         const storageKey = localStorage.key(index)
-        if (!storageKey?.startsWith(this.prefix)) continue
-        const candidate = storageKey.slice(this.prefix.length)
-        if (this.isValidChunkKey(candidate)) keys.push(candidate)
+        if (storageKey?.startsWith(this.prefix)) keys.push(storageKey)
       }
     } catch {
       // Storage enumeration can be blocked just like reads and writes.
+      return null
     }
     return [...new Set(keys)]
+  }
+
+  private scanStoredChunkKeys(): string[] {
+    const storageKeys = this.scanStoredChunkStorageKeys()
+    if (storageKeys === null) return []
+    return [...new Set(storageKeys
+      .map(storageKey => storageKey.slice(this.prefix.length))
+      .filter((key): key is string => this.isValidChunkKey(key)))]
   }
 
   private updateManifest(removeKey?: string): boolean {
