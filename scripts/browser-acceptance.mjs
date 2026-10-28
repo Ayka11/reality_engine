@@ -1123,6 +1123,75 @@ try {
   if (Math.abs(terrainRestoredDelta - terrainCheckpoint) > 1e-6) {
     throw new Error(`Terrain deformation did not restore from Save -> Load: saved=${terrainCheckpoint}, restored=${terrainRestoredDelta}`);
   }
+  await page.waitForFunction(() => {
+    const patches = [...(window.infiniteWorld?.patches?.values?.() ?? [])];
+    const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
+    return patches.length >= 13 && patches.some(p => {
+      const east = byKey.get(`${p.chunk.cx + 1},${p.chunk.cy},${p.chunk.cz}`);
+      const south = byKey.get(`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz + 1}`);
+      return (!!east && east.lod !== p.lod) || (!!south && south.lod !== p.lod);
+    });
+  }, null, { timeout: 15000 });
+  const restoredTerrainSeams = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const patches = [...(world?.patches?.values?.() ?? [])];
+    const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
+    const edge = (patch, side) => {
+      const mesh = patch.group.children.find(child => child.userData?.terrain);
+      const position = mesh?.geometry?.getAttribute?.("position");
+      if (!position) return null;
+      const n = Math.round(Math.sqrt(position.count));
+      const resolution = n - 1;
+      const heights = [];
+      for (let i = 0; i < n; i++) {
+        const index = side === "west" ? i * n : side === "east" ? i * n + resolution
+          : side === "north" ? i : resolution * n + i;
+        heights.push(position.getY(index));
+      }
+      return { resolution, heights };
+    };
+    let checkedPairs = 0;
+    let maxBoundaryHeightError = 0;
+    const failures = [];
+    for (const patch of patches) {
+      const east = byKey.get(`${patch.chunk.cx + 1},${patch.chunk.cy},${patch.chunk.cz}`);
+      const south = byKey.get(`${patch.chunk.cx},${patch.chunk.cy},${patch.chunk.cz + 1}`);
+      for (const [neighbor, sideA, sideB] of [
+        [east, "east", "west"],
+        [south, "south", "north"],
+      ]) {
+        if (!neighbor || neighbor.lod === patch.lod) continue;
+        const a = edge(patch, sideA), b = edge(neighbor, sideB);
+        if (!a || !b) {
+          failures.push("missing mixed-LOD edge geometry");
+          continue;
+        }
+        if (a.resolution === b.resolution) continue;
+        const coarse = a.resolution < b.resolution ? a : b;
+        const fine = a.resolution < b.resolution ? b : a;
+        const ratio = fine.resolution / coarse.resolution;
+        if (!Number.isInteger(ratio)) {
+          failures.push("non-nested mixed-LOD edge grids");
+          continue;
+        }
+        checkedPairs++;
+        for (let i = 0; i <= fine.resolution; i++) {
+          const lo = Math.floor(i / ratio);
+          const hi = Math.min(coarse.resolution, lo + 1);
+          const t = hi === lo ? 0 : i / ratio - lo;
+          const expected = coarse.heights[lo] + (coarse.heights[hi] - coarse.heights[lo]) * t;
+          maxBoundaryHeightError = Math.max(maxBoundaryHeightError, Math.abs(fine.heights[i] - expected));
+        }
+      }
+    }
+    return { checkedPairs, maxBoundaryHeightError, failures };
+  });
+  if (restoredTerrainSeams.checkedPairs < 1 || restoredTerrainSeams.failures.length > 0 ||
+      restoredTerrainSeams.maxBoundaryHeightError > 0.002) {
+    throw new Error("Mixed-LOD terrain seams failed after same-page Save -> Load: " + JSON.stringify(restoredTerrainSeams));
+  }
+
+
   await page.locator("#vTerrainOff").click();
   await page.evaluate(() => window.setInfinityDockPosition?.("top"));
 
@@ -2434,83 +2503,6 @@ try {
       expected: terrainCheckpoint,
       actual: terrainAfterRecovery.delta,
     }));
-  }
-
-  // Reloaded UI state can keep the primary renderer hidden/paused. Force the
-  // renderer awake and materialize the budgeted chunk queue before inspecting LOD edges.
-  await page.evaluate(() => {
-    const world = window.infiniteWorld;
-    if (!world) throw new Error("Infinite World renderer unavailable after persistence recovery");
-    world.setEnabled(true);
-    for (let frame = 0; frame < 12; frame++) world.render(0.016);
-  });
-
-  await page.waitForFunction(() => {
-    const patches = [...(window.infiniteWorld?.patches?.values?.() ?? [])];
-    const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
-    return patches.length >= 13 && patches.some(p => {
-      const east = byKey.get(`${p.chunk.cx + 1},${p.chunk.cy},${p.chunk.cz}`);
-      const south = byKey.get(`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz + 1}`);
-      return (!!east && east.lod !== p.lod) || (!!south && south.lod !== p.lod);
-    });
-  }, null, { timeout: 15000 });
-  const sculptedTerrainSeams = await page.evaluate(() => {
-    const world = window.infiniteWorld;
-    const patches = [...(world?.patches?.values?.() ?? [])];
-    const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
-    const edge = (patch, side) => {
-      const mesh = patch.group.children.find(child => child.userData?.terrain);
-      const position = mesh?.geometry?.getAttribute?.("position");
-      if (!position) return null;
-      const n = Math.round(Math.sqrt(position.count));
-      const resolution = n - 1;
-      const heights = [];
-      for (let i = 0; i < n; i++) {
-        const index = side === "west" ? i * n : side === "east" ? i * n + resolution
-          : side === "north" ? i : resolution * n + i;
-        heights.push(position.getY(index));
-      }
-      return { resolution, heights };
-    };
-    let checkedPairs = 0;
-    let maxBoundaryHeightError = 0;
-    const failures = [];
-    for (const patch of patches) {
-      const east = byKey.get(`${patch.chunk.cx + 1},${patch.chunk.cy},${patch.chunk.cz}`);
-      const south = byKey.get(`${patch.chunk.cx},${patch.chunk.cy},${patch.chunk.cz + 1}`);
-      for (const [neighbor, sideA, sideB] of [
-        [east, "east", "west"],
-        [south, "south", "north"],
-      ]) {
-        if (!neighbor || neighbor.lod === patch.lod) continue;
-        const a = edge(patch, sideA), b = edge(neighbor, sideB);
-        if (!a || !b) {
-          failures.push("missing mixed-LOD edge geometry");
-          continue;
-        }
-        if (a.resolution === b.resolution) continue;
-        const coarse = a.resolution < b.resolution ? a : b;
-        const fine = a.resolution < b.resolution ? b : a;
-        const ratio = fine.resolution / coarse.resolution;
-        if (!Number.isInteger(ratio)) {
-          failures.push("non-nested mixed-LOD edge grids");
-          continue;
-        }
-        checkedPairs++;
-        for (let i = 0; i <= fine.resolution; i++) {
-          const lo = Math.floor(i / ratio);
-          const hi = Math.min(coarse.resolution, lo + 1);
-          const t = hi === lo ? 0 : i / ratio - lo;
-          const expected = coarse.heights[lo] + (coarse.heights[hi] - coarse.heights[lo]) * t;
-          maxBoundaryHeightError = Math.max(maxBoundaryHeightError, Math.abs(fine.heights[i] - expected));
-        }
-      }
-    }
-    return { checkedPairs, maxBoundaryHeightError, failures };
-  });
-  if (sculptedTerrainSeams.checkedPairs < 1 || sculptedTerrainSeams.failures.length > 0 ||
-      sculptedTerrainSeams.maxBoundaryHeightError > 0.002) {
-    throw new Error("Mixed-LOD terrain seams failed after terrain persistence recovery: " + JSON.stringify(sculptedTerrainSeams));
   }
 
   const before = await page.evaluate(() => window.worldGenerationHealth());
