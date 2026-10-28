@@ -83,13 +83,14 @@ export class FieldPhysics {
       }
 
       if (on(mask, PROC.FIELD_ROTATION)) {
-        front[base + F.FIELD_X] = back[base + F.FIELD_X] * 0.94 + fxSum / nCount * 0.05 + back[base + F.FIELD_Y] * 0.01;
-        front[base + F.FIELD_Y] = back[base + F.FIELD_Y] * 0.94 + fySum / nCount * 0.05 - back[base + F.FIELD_X] * 0.01;
-        front[base + F.FIELD_Z] = back[base + F.FIELD_Z] * 0.94 + fzSum / nCount * 0.05;
-      } else {
-        front[base + F.FIELD_X] = back[base + F.FIELD_X] * 0.95 + fxSum / nCount * 0.05;
-        front[base + F.FIELD_Y] = back[base + F.FIELD_Y] * 0.95 + fySum / nCount * 0.05;
-        front[base + F.FIELD_Z] = back[base + F.FIELD_Z] * 0.95 + fzSum / nCount * 0.05;
+        front[base + F.FIELD_X] = back[base + F.FIELD_X] * p.fieldRotationDamping
+          + fxSum / nCount * p.fieldRotationNeighborCoupling
+          + back[base + F.FIELD_Y] * p.fieldRotationCrossCoupling;
+        front[base + F.FIELD_Y] = back[base + F.FIELD_Y] * p.fieldRotationDamping
+          + fySum / nCount * p.fieldRotationNeighborCoupling
+          - back[base + F.FIELD_X] * p.fieldRotationCrossCoupling;
+        front[base + F.FIELD_Z] = back[base + F.FIELD_Z] * p.fieldRotationDamping
+          + fzSum / nCount * p.fieldRotationNeighborCoupling;
       }
 
       if (on(mask, PROC.PHASE_TRANSITION)) {
