@@ -310,45 +310,60 @@ for (const filePath of sourcePaths) {
         if (!isDeclarationName && binding && binding.owner !== occurrenceOwner &&
             !isApprovedSynchronousRollbackClosure(occurrenceOwner, node.text)) {
           const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
-          const key = `${line}:${node.text}`;
-          if (!reportedClosureAliases.has(key)) {
-            reportedClosureAliases.add(key);
-            errors.push(`${path}:${line}: raw buffer alias "${node.text}" is captured by a nested callback; prove synchronous transaction-local lifetime or remove the capture`);
-          }
+        // Unwrap type/parentheses assertions so a raw alias cannot escape disguised as a new expression.
+        let valueExpression: ts.Expression = node;
+        let valueParent: ts.Node = valueExpression.parent;
+        while (
+          (ts.isParenthesizedExpression(valueParent) && valueParent.expression === valueExpression) ||
+          (ts.isAsExpression(valueParent) && valueParent.expression === valueExpression) ||
+          (ts.isTypeAssertionExpression(valueParent) && valueParent.expression === valueExpression) ||
+          (ts.isNonNullExpression(valueParent) && valueParent.expression === valueExpression) ||
+          (ts.isSatisfiesExpression(valueParent) && valueParent.expression === valueExpression)
+        ) {
+          valueExpression = valueParent as ts.Expression;
+          valueParent = valueExpression.parent;
         }
-        const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
-        if (!isDeclarationName && ts.isReturnStatement(parent) && parent.expression === node) {
+        if (!isDeclarationName && ts.isReturnStatement(valueParent) && valueParent.expression === valueExpression) {
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be returned from its audited method`);
         }
-        if (!isDeclarationName && ts.isBinaryExpression(parent) &&
-            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && parent.right === node &&
-            ts.isIdentifier(parent.left)) {
-          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be copied to another variable`);
-        }
-        if (!isDeclarationName && ts.isBinaryExpression(parent) &&
-            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && parent.right === node &&
-            (ts.isPropertyAccessExpression(parent.left) || ts.isElementAccessExpression(parent.left))) {
-          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be stored on an object/property`);
-        }
-        if (!isDeclarationName && ts.isVariableDeclaration(parent) && parent.initializer === node) {
+        if (!isDeclarationName && ts.isVariableDeclaration(valueParent) && valueParent.initializer === valueExpression) {
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not initialize another variable`);
         }
-        if (!isDeclarationName && ts.isPropertyAssignment(parent) && parent.initializer === node) {
+        if (!isDeclarationName && ts.isBinaryExpression(valueParent) && valueParent.right === valueExpression) {
+          if (ts.isIdentifier(valueParent.left)) {
+            errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be copied to another variable`);
+          } else if (ts.isPropertyAccessExpression(valueParent.left) || ts.isElementAccessExpression(valueParent.left)) {
+            errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be stored on an object/property`);
+          }
+        }
+        if (!isDeclarationName && ts.isPropertyAssignment(valueParent) && valueParent.initializer === valueExpression) {
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not escape through an object literal`);
         }
-        if (!isDeclarationName && ts.isArrayLiteralExpression(parent)) {
+        if (!isDeclarationName && ts.isShorthandPropertyAssignment(parent) && parent.name === node) {
+          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not escape through an object shorthand property`);
+        }
+        if (!isDeclarationName && ts.isArrayLiteralExpression(valueParent) && valueParent.elements.some(element => element === valueExpression)) {
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not escape through an array literal`);
         }
-        if (!isDeclarationName && ts.isSpreadElement(parent)) {
+        if (!isDeclarationName && ts.isSpreadElement(valueParent) && valueParent.expression === valueExpression) {
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be spread into another container or call`);
         }
-        if (!isDeclarationName && ts.isPropertyAccessExpression(parent) &&
-            parent.expression === node && parent.name.text === "buffer") {
+        if (!isDeclarationName && ts.isConditionalExpression(valueParent) &&
+            (valueParent.whenTrue === valueExpression || valueParent.whenFalse === valueExpression)) {
+          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be used as a conditional result value`);
+        }
+        if (!isDeclarationName && ts.isBinaryExpression(valueParent) &&
+            [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.QuestionQuestionToken].includes(valueParent.operatorToken.kind) &&
+            (valueParent.left === valueExpression || valueParent.right === valueExpression)) {
+          errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not be propagated through a logical/nullish expression`);
+        }
+        if (!isDeclarationName && ts.isPropertyAccessExpression(valueParent) &&
+            valueParent.expression === valueExpression && valueParent.name.text === "buffer") {
           errors.push(`${path}:${line}: raw buffer alias "${node.text}" may not expose its backing ArrayBuffer`);
         }
-        if (!isDeclarationName && ts.isPropertyAccessExpression(parent) &&
-            parent.expression === node && parent.name.text === "subarray") {
-          const subarrayCall = parent.parent;
+        if (!isDeclarationName && ts.isPropertyAccessExpression(valueParent) &&
+            valueParent.expression === valueExpression && valueParent.name.text === "subarray") {
+          const subarrayCall = valueParent.parent;
           const outerCall = subarrayCall.parent;
           const copiedSynchronously = ts.isCallExpression(subarrayCall) &&
             ts.isCallExpression(outerCall) &&
@@ -359,28 +374,28 @@ for (const filePath of sourcePaths) {
             errors.push(`${path}:${line}: raw buffer subarray must be copied synchronously rather than retained`);
           }
         }
-        if (!isDeclarationName && ts.isCallExpression(parent) &&
-            parent.arguments.some(argument => argument === node)) {
-          const receiver = ts.isPropertyAccessExpression(parent.expression)
-            ? parent.expression.expression
+        if (!isDeclarationName && ts.isCallExpression(valueParent) &&
+            valueParent.arguments.some(argument => argument === valueExpression)) {
+          const receiver = ts.isPropertyAccessExpression(valueParent.expression)
+            ? valueParent.expression.expression
             : null;
-          const isTypedArrayCopy = ts.isPropertyAccessExpression(parent.expression) &&
-            parent.expression.name.text === "set" &&
+          const isTypedArrayCopy = ts.isPropertyAccessExpression(valueParent.expression) &&
+            valueParent.expression.name.text === "set" &&
             ts.isIdentifier(receiver) && aliases.has(receiver.text);
           const isAuditedLocalBufferCache = path === "src/core/SparseVoxelGrid.ts" &&
             ["syncDenseEntityOwnershipToChunks", "syncDenseToChunks", "syncChunksToDense"].includes(key) &&
-            ts.isPropertyAccessExpression(parent.expression) &&
-            parent.expression.name.text === "set" &&
+            ts.isPropertyAccessExpression(valueParent.expression) &&
+            valueParent.expression.name.text === "set" &&
             ts.isIdentifier(receiver) && receiver.text === "rawBuffers";
           const agentHandoffNames = new Set(["_explore", "_harvest", "_signal", "_build", "_destroy"]);
-          const agentHandoffName = ts.isPropertyAccessExpression(parent.expression)
-            ? parent.expression.name.text
+          const agentHandoffName = ts.isPropertyAccessExpression(valueParent.expression)
+            ? valueParent.expression.name.text
             : "";
           const agentHandoffTarget = methodNodes.get(agentHandoffName);
           const isAuditedSynchronousAgentHandoff = path === "src/simulation/AgentSystem.ts" &&
             key === "tick" && node.text === "buf" &&
-            ts.isPropertyAccessExpression(parent.expression) &&
-            parent.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
+            ts.isPropertyAccessExpression(valueParent.expression) &&
+            valueParent.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
             agentHandoffNames.has(agentHandoffName) &&
             !!agentHandoffTarget &&
             !agentHandoffTarget.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) &&
