@@ -169,22 +169,26 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   await assert.rejects(staleChunkStep.step, /Discarded stale GPU readback/);
   assert.equal(chunk.buffer[chunkFieldIndex], 202, "stale GPU readback must not mutate newer chunk state");
 
-  // The range getter must be detached; whole-range replacement is revision-tracked.
+  // The range getter must be detached. Because the range is derived from chunk
+  // topology, callers cannot install a valid-looking but physically inconsistent override.
   const originalRange = engine.grid.activeChunkRange;
   const detachedRange = engine.grid.activeChunkRange;
   detachedRange.minX = originalRange.minX - 100;
   assert.equal(engine.grid.activeChunkRange.minX, originalRange.minX,
     "nested writes to a returned active-chunk range must not mutate authoritative state");
-  const staleRangeStep = await beginPendingReadback(engine, engine.grid.buffer.slice());
-  const beforeRangeMutation = engine.grid.mutationRevision;
-  engine.grid.activeChunkRange = { ...originalRange, minX: originalRange.minX - 1 };
-  assert.ok(engine.grid.mutationRevision > beforeRangeMutation,
-    "active-chunk range replacement must advance grid revision");
-  staleRangeStep.release();
-  await assert.rejects(staleRangeStep.step, /Discarded stale GPU readback/);
-  assert.equal(engine.grid.activeChunkRange.minX, originalRange.minX - 1,
-    "stale GPU data must not overwrite newer active-chunk range metadata");
-  engine.grid.activeChunkRange = originalRange;
+  const beforeInvalidRange = engine.grid.mutationRevision;
+  let inconsistentRangeRejected = false;
+  try {
+    engine.grid.activeChunkRange = { ...originalRange, minX: originalRange.minX - 1 };
+  } catch {
+    inconsistentRangeRejected = true;
+  }
+  assert.ok(inconsistentRangeRejected,
+    "active-chunk range replacement must reject values inconsistent with chunk topology");
+  assert.equal(engine.grid.mutationRevision, beforeInvalidRange,
+    "rejected active-chunk range overrides must not advance grid revision");
+  assert.deepEqual(engine.grid.activeChunkRange, originalRange,
+    "rejected range override must preserve the topology-derived range");
 
   // Public chunk metadata collections are authoritative mutation surfaces too.
   // Mutating them while readback is pending must invalidate the in-flight result.
