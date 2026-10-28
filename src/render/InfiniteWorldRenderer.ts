@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { InfiniteChunkManager } from '../infinity/ChunkManager'
 import { WorldGenerator, BIOME_ID, type WorldChunk } from '../infinity/WorldGenerator'
+import { TerrainDeformationField, type TerrainBrushMode, type TerrainDeformationSnapshot } from '../infinity/TerrainDeformationField'
 import { worldViewContract } from '../infinity/WorldViewContract'
 import { buildWaterSurfaceMeshData } from '../infinity/WaterSurfaceMesh'
 import { worldToChunk, WORLD_CHUNK_SIZE, type ChunkCoord } from '../infinity/WorldCoordinate'
@@ -69,6 +70,7 @@ export class InfiniteWorldRenderer {
   readonly authoritativeField: MutableWorldFieldProvider
   readonly legacySculptRuntimeAdapter: LegacySculptRuntimeAdapter
   readonly authoritativeSculptTransactions: AuthoritativeSculptTransactionCoordinator
+  terrainDeformations: TerrainDeformationField
   decisionLayer: WorldDecisionLayer
   constructionContract: WorldConstructionContract
   readonly decisionGraph = new DecisionGraph()
@@ -291,6 +293,7 @@ export class InfiniteWorldRenderer {
     this.scene.add(this.terrainGroup)
     this.worldAssetRuntime = new WorldAssetRuntime(this.scene)
     this.generator = new WorldGenerator(seed)
+    this.terrainDeformations = new TerrainDeformationField(seed)
     worldViewContract.setSeed(seed)
     this.authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
     this.fieldSampler = new FieldSampler(this.generator, this.authoritativeField)
@@ -309,6 +312,10 @@ export class InfiniteWorldRenderer {
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
     this.storageKey = `reality-engine-world:${seed}:objects`
     this.persistence = new WorldPersistence(seed)
+    const persistedTerrain = this.persistence.loadTerrainDeformationState<TerrainDeformationSnapshot>()
+    if (persistedTerrain) {
+      try { this.terrainDeformations.restore(persistedTerrain) } catch { this.persistence.deleteTerrainDeformationState() }
+    }
     const persistedField = this.persistence.loadFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
     if (persistedField) {
       try {
@@ -473,6 +480,7 @@ export class InfiniteWorldRenderer {
     // Explicit Save creates a stable checkpoint; autosave must not move that checkpoint.
     const fieldSnapshot = this.authoritativeField.serialize()
     this.persistAuthoritativeFieldState()
+    this.persistence.saveTerrainDeformationState(this.terrainDeformations.serialize())
     if (options.checkpoint !== false) this.persistence.saveFieldCheckpoint(fieldSnapshot)
     const objects = this.objects.values()
     const groups = new Map<string, WorldObject[]>()
@@ -502,6 +510,15 @@ export class InfiniteWorldRenderer {
       ? null
       : this.persistence.loadFieldCheckpoint<ReturnType<MutableWorldFieldProvider['serialize']>>()
     const persistedField = checkpoint ?? this.persistence.loadFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
+    const terrainSnapshot = this.persistence.loadTerrainDeformationState<TerrainDeformationSnapshot>()
+    if (terrainSnapshot) {
+      try {
+        this.terrainDeformations.restore(terrainSnapshot)
+        this.refreshTerrainPatches()
+      } catch (error) {
+        console.warn('[persistence] Could not restore terrain deformation state', error)
+      }
+    }
     if (persistedField) {
       try {
         this.authoritativeField.restore(persistedField)
@@ -561,6 +578,7 @@ export class InfiniteWorldRenderer {
     worldViewContract.setSeed(newSeed)
     this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
     this.authoritativeField.clear()
+    this.terrainDeformations = new TerrainDeformationField(newSeed)
     this.authoritativeSculptTransactions.clear()
     this.fieldSampler.setProvider(this.authoritativeField)
     this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights, () => (window as any).getRealityLawState?.() ?? null)
@@ -569,7 +587,7 @@ export class InfiniteWorldRenderer {
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
     this.history = new WorldEditHistory()
 
-    const targetWorld = new THREE.Vector3(16, this.generator.sampleHeight(16, 16), 16)
+    const targetWorld = new THREE.Vector3(16, this.sampleTerrainHeight(16, 16), 16)
     const targetLocal = this.worldToLocal(targetWorld)
     this.controls.target.copy(targetLocal)
     this.camera.position.copy(targetLocal).add(new THREE.Vector3(48, 36, 48))
@@ -1951,7 +1969,35 @@ export class InfiniteWorldRenderer {
   setSnapToGrid(size: number) { this.snapToGrid = Math.max(0.1, size) }
   getSnapToGrid() { return this.snapToGrid }
 
-  private terrainY(x: number, z: number) { return this.generator.sampleHeight(x, z) }
+  private sampleTerrainHeight(x: number, z: number) {
+    return Math.max(0, Math.min(this.generator.maxElevation, this.generator.sampleHeight(x, z) + this.terrainDeformations.sampleDelta(x, z)))
+  }
+
+  /** Apply a real heightfield deformation, independent of scientific density/entropy fields. */
+  sculptTerrainAt(x: number, z: number, radius: number, strength: number, mode: TerrainBrushMode) {
+    const changed = this.terrainDeformations.applyBrush(x, z, radius, strength, mode)
+    if (changed > 0) {
+      this.refreshTerrainPatches()
+      this.persistence.saveTerrainDeformationState(this.terrainDeformations.serialize())
+    }
+    return { changed, canUndo: this.terrainDeformations.canUndo, canRedo: this.terrainDeformations.canRedo }
+  }
+
+  undoTerrainSculpt() {
+    if (!this.terrainDeformations.undo()) return false
+    this.refreshTerrainPatches()
+    this.persistence.saveTerrainDeformationState(this.terrainDeformations.serialize())
+    return true
+  }
+
+  redoTerrainSculpt() {
+    if (!this.terrainDeformations.redo()) return false
+    this.refreshTerrainPatches()
+    this.persistence.saveTerrainDeformationState(this.terrainDeformations.serialize())
+    return true
+  }
+
+  private terrainY(x: number, z: number) { return this.sampleTerrainHeight(x, z) }
 
   snapWorld(x: number, y: number, z: number, kind: WorldObjectKind) {
     const s = this.snapToGrid
