@@ -1101,6 +1101,28 @@ try {
   if (!(pointerRedoDelta > terrainPointerTarget.before)) {
     throw new Error("Redo after real canvas pointer sculpt did not restore terrain: " + pointerRedoDelta);
   }
+
+  // Geometric edits must survive the real world Save -> perturb -> Load path.
+  const terrainCheckpoint = await page.evaluate((target) => {
+    const world = window.infiniteWorld;
+    world.saveWorld();
+    return world.terrainDeformations.sampleDelta(target.worldX, target.worldZ);
+  }, terrainPointerTarget);
+  await page.evaluate((target) => {
+    const world = window.infiniteWorld;
+    world.sculptTerrainAt(target.worldX, target.worldZ, 3, 1, "lower");
+  }, terrainPointerTarget);
+  const terrainPerturbedDelta = await page.evaluate((target) =>
+    window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ), terrainPointerTarget);
+  if (!(terrainPerturbedDelta < terrainCheckpoint)) {
+    throw new Error("Terrain persistence perturbation did not lower the saved terrain sample");
+  }
+  await page.evaluate(() => window.infiniteWorld.loadWorld());
+  const terrainRestoredDelta = await page.evaluate((target) =>
+    window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ), terrainPointerTarget);
+  if (Math.abs(terrainRestoredDelta - terrainCheckpoint) > 1e-6) {
+    throw new Error(`Terrain deformation did not restore from Save -> Load: saved=${terrainCheckpoint}, restored=${terrainRestoredDelta}`);
+  }
   await page.locator("#vTerrainOff").click();
   await page.evaluate(() => window.setInfinityDockPosition?.("top"));
 
