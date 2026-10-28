@@ -76,7 +76,6 @@ export class WorldPersistence {
   deleteFieldCheckpoint(): boolean {
     try {
       localStorage.removeItem(this.fieldCheckpointKey)
-    localStorage.removeItem(this.terrainDeformationKey)
       return true
     } catch {
       return false
@@ -174,6 +173,7 @@ export class WorldPersistence {
     localStorage.removeItem(this.manifestKey)
     localStorage.removeItem(this.fieldStateKey)
     localStorage.removeItem(this.fieldCheckpointKey)
+    localStorage.removeItem(this.terrainDeformationKey)
     this.loaded.clear()
     this.cache.clear()
   }
