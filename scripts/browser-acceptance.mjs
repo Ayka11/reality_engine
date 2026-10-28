@@ -1014,6 +1014,49 @@ try {
     throw new Error("Density Gravity could not be established as active before the build-law test");
   }
 
+  // Geometric terrain sculpt must be reachable through the actual World Tools dock,
+  // and its UI Undo/Redo must restore the deformation overlay rather than only field data.
+  await page.evaluate(() => window.setInfinityDockPosition?.("left"));
+  await page.waitForFunction(() => document.getElementById("vTabField") !== null);
+  await page.locator("#vTabField").click();
+  await page.waitForSelector("#vTerrainRaise");
+  const terrainBrushUi = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const raise = document.getElementById("vTerrainRaise");
+    const lower = document.getElementById("vTerrainLower");
+    const radius = document.getElementById("vTerrainRadius");
+    const strength = document.getElementById("vTerrainStrength");
+    return {
+      controlsPresent: !!raise && !!lower && !!radius && !!strength,
+      baseline: world.terrainDeformations.sampleDelta(12, 12),
+    };
+  });
+  if (!terrainBrushUi.controlsPresent) throw new Error("Terrain sculpt controls are missing from the active World Tools dock");
+  await page.locator("#vTerrainRadius").fill("3");
+  await page.locator("#vTerrainStrength").fill("1");
+  await page.locator("#vTerrainRaise").click();
+  const terrainEdit = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const before = world.terrainDeformations.sampleDelta(12, 12);
+    const result = world.sculptTerrainAt(12, 12, 3, 1, "raise");
+    return { before, after: world.terrainDeformations.sampleDelta(12, 12), changed: result.changed };
+  });
+  if (!terrainEdit.changed || !(terrainEdit.after > terrainEdit.before)) {
+    throw new Error("Raise terrain brush did not change geometric elevation: " + JSON.stringify(terrainEdit));
+  }
+  await page.locator("#vTerrainUndo").click();
+  const terrainUndoDelta = await page.evaluate(() => window.infiniteWorld.terrainDeformations.sampleDelta(12, 12));
+  if (Math.abs(terrainUndoDelta - terrainEdit.before) > 1e-6) {
+    throw new Error("Terrain Undo did not restore the previous deformation: " + terrainUndoDelta);
+  }
+  await page.locator("#vTerrainRedo").click();
+  const terrainRedoDelta = await page.evaluate(() => window.infiniteWorld.terrainDeformations.sampleDelta(12, 12));
+  if (Math.abs(terrainRedoDelta - terrainEdit.after) > 1e-6) {
+    throw new Error("Terrain Redo did not restore the raised deformation: " + terrainRedoDelta);
+  }
+  await page.locator("#vTerrainOff").click();
+  await page.evaluate(() => window.setInfinityDockPosition?.("top"));
+
   const fieldProbe = await page.evaluate(() => {
     const world = window.infiniteWorld;
     const candidates = [
