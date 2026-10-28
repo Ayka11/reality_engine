@@ -30,7 +30,7 @@ of a complete or scientifically validated solver.
 | 11 | Crystallization | Uses `p.crystallizationRate` × material rate; converts Vacuum/Stone/Sand to Crystal | Uses `p.crystallizationRate` × material rate; converts Vacuum/Stone/Sand to Crystal | Uses `p.crystallizationRate` × material rate; converts Vacuum/Stone/Sand to Crystal | Parameter and material-transition behavior aligned; regression covers mask, zero rate, material sensitivity and finite outputs. GPU runtime still requires hardware-backed numerical comparison |
 | 12 | Radiation | Uses shared threshold/rates and material absorption; threshold delta uses pre-step energy | Uses shared threshold/rates and material absorption; WGSL parameter ABI indexes 25–27 | Uses shared threshold/rates and material absorption; threshold delta uses pre-step energy | Parameter/material response aligned in code; deterministic CPU and static cross-backend regressions added, but WebGPU numerical parity still needs hardware-backed verification |
 | 13 | Pressure diffusion | Pressure Laplacian plus relaxation toward the density/temperature equation of state | Six-neighbor pressure Laplacian plus equation-of-state relaxation, parameterized by `pressureDiffusion` | Six-neighbor pressure Laplacian plus equation-of-state relaxation, parameterized by `pressureDiffusion` | Transport is present in all three paths; CPU/GPU use Neumann boundaries and worker samples sparse neighbors |
-| 14 | Field rotation | Parameterized 2D `FX/FY` smoothing/cross-coupling | 3D vector smoothing/cross-coupling with hard-coded constants | 3D vector smoothing/cross-coupling with hard-coded constants | Heuristic vector update, not a true curl-based solver; dimensions and parameters differ |
+| 14 | Field rotation | Parameterized `FX/FY` smoothing/cross-coupling; no updates when disabled | Parameterized 3D vector update; only in-bounds neighbors enter its average; no updates when disabled | Parameterized 3D vector update; no updates when disabled | Mask and coefficients are covered by CPU regression and cross-backend contract; worker retains a 2D vector schema and the rule remains heuristic, not a true curl solver |
 | 15 | Erosion | Material resistance and `p.erosionRate`; planar `FX/FY` flow threshold | Material resistance and `p.erosionRate`; 3D `FX/FY/FZ` flow threshold | Material resistance and `p.erosionRate`; 3D `FIELD_X/Y/Z` flow threshold | Now present in all three paths; worker's compact field schema lacks a Z-flow component |
 
 ## Contract findings
@@ -110,12 +110,12 @@ The CPU and GPU solvers now use the dedicated `PhysicsParams.densityDiffusion` c
 
 ### Phase-transition coefficient parity follow-up — 2026-10-27
 
-The CPU and GPU phase-transition rules now consume `PhysicsParams.phaseTransitionRate`, matching the sparse worker. The GPU parameter ABI has since grown to 28 floats (112 bytes); `phaseTransitionRate` remains at index 23. A CPU regression covers the process mask, zero-rate behavior, boiling and freezing branches, and finite outputs. The static cross-backend contract verifies parameter forwarding and use; this establishes coefficient wiring, not the empirical validity of the phenomenological thresholds.
+The CPU and GPU phase-transition rules now consume `PhysicsParams.phaseTransitionRate`, matching the sparse worker. The GPU parameter ABI has since grown to 31 floats (124 bytes); `phaseTransitionRate` remains at index 23. A CPU regression covers the process mask, zero-rate behavior, boiling and freezing branches, and finite outputs. The static cross-backend contract verifies parameter forwarding and use; this establishes coefficient wiring, not the empirical validity of the phenomenological thresholds.
 
 
 ### Crystallization parity follow-up — 2026-10-27
 
-CPU, GPU and sparse worker crystallization now use the configured `PhysicsParams.crystallizationRate` multiplied by the material coefficient; Vacuum retains the worker's explicit unit multiplier despite its library coefficient being zero. All three paths convert only Vacuum, Stone and Sand to Crystal, and zero rate no longer changes the material ID. GPU `SimParams` carries the coefficient at index 24; the current ABI has 28 floats (112 bytes). Mandatory CI includes a deterministic CPU regression and static cross-backend contract checks. This is implementation parity evidence, not a physically calibrated phase-transition model; a real WebGPU numerical parity test remains outstanding.
+CPU, GPU and sparse worker crystallization now use the configured `PhysicsParams.crystallizationRate` multiplied by the material coefficient; Vacuum retains the worker's explicit unit multiplier despite its library coefficient being zero. All three paths convert only Vacuum, Stone and Sand to Crystal, and zero rate no longer changes the material ID. GPU `SimParams` carries the coefficient at index 24; the current ABI has since grown to 31 floats (124 bytes). Mandatory CI includes a deterministic CPU regression and static cross-backend contract checks. This is implementation parity evidence, not a physically calibrated phase-transition model; a real WebGPU numerical parity test remains outstanding.
 
 
 ### Radiation parameter parity follow-up — 2026-10-28
@@ -132,3 +132,18 @@ mask, below-threshold energy, zero rates, material absorption, parameter
 sensitivity, clamping and finite outputs, plus static cross-backend contract
 checks. These checks verify implementation wiring, not physical calibration;
 hardware-backed GPU numerical comparison remains outstanding.
+
+
+### Field-rotation parameter and mask follow-up — 2026-10-28
+
+CPU and GPU field rotation now use the configured `fieldRotationDamping`,
+`fieldRotationNeighborCoupling`, and `fieldRotationCrossCoupling` values;
+the sparse worker already used those coefficients. CPU/GPU no longer smooth the
+field vector when `PROC.FIELD_ROTATION` is disabled. The GPU neighbor average
+now counts only in-bounds neighbors, matching the CPU and sparse-worker stencil
+semantics. The parameter ABI has 31 floats (124 bytes), with field-rotation
+coefficients at indices 28–30. Mandatory CI includes deterministic CPU checks
+for disabled-mask invariance and parameter sensitivity plus static parameter
+forwarding checks across backends. The worker still stores only its 2D FX/FY
+vector, and this remains a heuristic vector update rather than a calibrated
+curl-based solver.
