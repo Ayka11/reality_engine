@@ -2715,7 +2715,7 @@ export class InfiniteWorldRenderer {
     const created: WorldObject[] = []
     const seed = this.generator.seed
     for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2 + this.generator.sampleField(cx + i, 0, cz).entropy * 4
+      const angle = (i / count) * Math.PI * 2 + this.fieldSampler.sample(cx + i, 0, cz).entropy * 4
       const radial = radius * (0.35 + (i % 5) / 8)
       const x = cx + Math.cos(angle) * radial
       const z = cz + Math.sin(angle) * radial
