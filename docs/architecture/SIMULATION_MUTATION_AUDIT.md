@@ -2,8 +2,8 @@
 
 ## Current implementation update — 2026-10-25
 
-**Validated implementation head:** `46eead6457f861c9e5f97ea181ca235a112e889e`  
-**Validation:** Reality Engine CI #40643503606 passed on this exact head: [run #40643503606](https://github.com/Ayka11/reality_engine/actions/runs/40643503606). All 74 steps passed, including lint, recovery/regression suites, stale-readback transaction tests, the mutable-buffer ownership guard, build, both Docker images, Hugging Face smoke/CPU checks, and Playwright browser acceptance. These checks do not establish scientific validity or production readiness of every feature.
+**Validated implementation head:** `79ad27c791f25c906040223e457a514a9a2a20ac`  
+**Validation:** Reality Engine CI #40646952626 passed on this exact head: [run #40646952626](https://github.com/Ayka11/reality_engine/actions/runs/40646952626). All 74 steps passed, including lint, recovery/regression suites, stale-readback mutation and sculpt undo/redo tests, the expanded mutable-buffer ownership guard, build, both Docker images, Hugging Face smoke/CPU checks, and Playwright browser acceptance. These checks do not establish scientific validity or production readiness of every feature.
 
 This update supersedes earlier statements below that public dense/chunk buffer writes and `CellState` setters are entirely untracked. The current implementation includes:
 
@@ -241,3 +241,29 @@ revocation of every raw alias, and end-to-end ownership validation across all
 worker-transfer, import, undo/redo, subsystem-state, and rollback boundaries is
 not complete. Do not close the issue or infer total production readiness from
 the currently covered paths.
+
+
+### Sculpt history and raw-buffer escape follow-up — 2026-10-28
+
+The stale-readback regression now exercises a real `SculptManager` brush stroke
+followed by undo and redo while a mocked GPU readback is pending. Each operation
+must reject the stale result, and assertions confirm the restored field value is
+not overwritten. The authoritative sculpt contract script also requires
+`SculptManager.undo()` and `redo()` to invoke `onBeforeChange` before applying
+history, complementing the existing invalidation-order checks for ordinary and
+custom strokes.
+
+The source-level raw-buffer guard now checks wrapped expressions in addition to
+direct uses, including parenthesized/type assertion/non-null/satisfies wrappers,
+object shorthand properties, logical/nullish propagation and conditional
+result values. Its only non-copy call exceptions are exact audited synchronous
+buffer-cache and AgentSystem handoff paths; these exceptions are keyed by the
+actual method names and preserve the fail-closed default.
+
+Exact-head CI #40646952626 passed on
+`79ad27c791f25c906040223e457a514a9a2a20ac`, all 74 steps including browser
+acceptance. Issue #62 remains open because raw aliases remain possible inside
+approved synchronous hot paths and the end-to-end writer inventory across all
+worker transfer, import, undo/redo, subsystem snapshots, restore and rollback
+boundaries is not yet complete. The new tests close only the specific paths
+listed above.
