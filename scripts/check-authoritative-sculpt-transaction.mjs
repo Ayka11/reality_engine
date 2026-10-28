@@ -16,6 +16,16 @@ assert.match(
   "ordinary sculpt writes must invalidate in-flight GPU readback before mutating the grid",
 );
 assert.match(
+  sculptManagerSource,
+  /undo\(\): BrushStroke \| null \{\s*if \(this\.brushEngine\.historyLength === 0\) return null;\s*this\.onBeforeChange\?\.\(\);\s*const stroke = this\.brushEngine\.undo\(\);/,
+  "sculpt undo must invalidate in-flight GPU readback before restoring history",
+);
+assert.match(
+  sculptManagerSource,
+  /redo\(\): BrushStroke \| null \{\s*if \(this\.brushEngine\.redoLength === 0\) return null;\s*this\.onBeforeChange\?\.\(\);\s*const stroke = this\.brushEngine\.redo\(\);/,
+  "sculpt redo must invalidate in-flight GPU readback before restoring history",
+);
+assert.match(
   mainSource,
   /new SculptManager\(sim\.grid,\s*\(\) => sim\.syncToGPU\(\),\s*\(\) => sim\.invalidatePendingGPUReadback\(\)\)/,
   "the live sculpt manager must be wired to the engine invalidation boundary",
