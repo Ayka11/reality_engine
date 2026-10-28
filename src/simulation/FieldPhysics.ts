@@ -104,9 +104,17 @@ export class FieldPhysics {
       }
 
       if (on(mask, PROC.RADIATION)) {
-        if (cE > 400) {
-          front[base + F.DENSITY] = Math.max(0, front[base + F.DENSITY] - (cE - 400) * 0.00008 * dt * 60);
-          front[base + F.ENERGY] = Math.max(0, front[base + F.ENERGY] - (cE - 400) * 0.0001 * dt * 60);
+        if (cE > p.radiationThreshold) {
+          const rawMaterialId = back[base + F.MATERIAL_ID];
+          const materialIndex = Number.isFinite(rawMaterialId)
+            ? Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1, Math.floor(rawMaterialId)))
+            : MAT.VACUUM;
+          const material = MATERIAL_LIBRARY[materialIndex] ?? MATERIAL_LIBRARY[MAT.VACUUM];
+          front[base + F.DENSITY] = Math.max(0, front[base + F.DENSITY]
+            - (cE - p.radiationThreshold) * p.radiationDensityRate
+              * (1 - material.radiationAbsorption) * dt * 60);
+          front[base + F.ENERGY] = Math.max(0, front[base + F.ENERGY]
+            - (cE - p.radiationThreshold) * p.radiationEnergyRate * dt * 60);
         }
       }
 
