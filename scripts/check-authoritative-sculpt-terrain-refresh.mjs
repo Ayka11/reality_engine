@@ -71,6 +71,10 @@ assert.match(terrainBuilder, /if\s*\(this\.materialMode\s*===\s*'field'\)[\s\S]*
 assert.match(terrainBuilder, /const\s+density\s*=\s*Math\.max\(0,\s*Math\.min\(1,\s*field\.density\)\)/,
   "field visualization must derive vertex color from the sampled field");
 
+const terrainGeometryFinalization = source.slice(source.indexOf("geometry.setIndex(indices)"), source.indexOf("geometry.computeBoundingSphere()", source.indexOf("geometry.setIndex(indices)")));
+assert.match(terrainGeometryFinalization, /geometry\.computeVertexNormals\(\)/,
+  "terrain normals must be recomputed from final indexed geometry so LOD-snapped edges and lighting agree");
+
 const refresh = methodBody("refreshTerrainPatches");
 assert.match(refresh, /for\s*\(const\s*\[key,\s*patch\]\s*of\s*this\.patches\)/, "refresh must visit every loaded patch");
 assert.match(refresh, /patch\.group\.traverse/, "refresh must dispose old patch resources");
