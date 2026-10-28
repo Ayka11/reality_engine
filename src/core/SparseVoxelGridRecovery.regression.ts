@@ -47,6 +47,34 @@ function runGridDimensionValidationRegression(): void {
   }
 }
 
+function runGridDimensionImmutabilityRegression(): void {
+  const grid = new SparseVoxelGrid(2, 3, 4);
+  const dimensions: Array<[string, number]> = [
+    ["chunkSize", grid.chunkSize],
+    ["W", grid.W],
+    ["H", grid.H],
+    ["D", grid.D],
+    ["size", grid.size],
+  ];
+  const initialRevision = grid.mutationRevision;
+
+  for (const [field, value] of dimensions) {
+    if (Reflect.set(grid, field, value + 1)) {
+      throw new Error(`SparseVoxelGrid.${field} must be immutable at runtime`);
+    }
+    if ((grid as unknown as Record<string, unknown>)[field] !== value) {
+      throw new Error(`Rejected SparseVoxelGrid.${field} write changed its value`);
+    }
+    if (Reflect.defineProperty(grid, field, { value: value + 1 })) {
+      throw new Error(`SparseVoxelGrid.${field} must not be redefineable at runtime`);
+    }
+  }
+
+  if (grid.mutationRevision !== initialRevision) {
+    throw new Error("Rejected grid-geometry writes must not change the mutation revision");
+  }
+}
+
 function runDenseOriginMutationContractRegression(): void {
   const grid = new SparseVoxelGrid(2, 2, 2);
   const internalView = grid as unknown as {
@@ -99,6 +127,7 @@ function runDenseOriginMutationContractRegression(): void {
 
 export function runSparseVoxelGridRecoveryRegression(): void {
   runGridDimensionValidationRegression();
+  runGridDimensionImmutabilityRegression();
   runDenseOriginMutationContractRegression();
   const grid = new SparseVoxelGrid(4, 3, 2);
   const denseIndex = grid.idx(1, 1, 1) + CELL_FIELDS - 1;
