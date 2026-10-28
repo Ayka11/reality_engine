@@ -14,7 +14,18 @@ export class Chunk {
   private _backBufferView: Float32Array;
   private mutationListeners = new Set<() => void>();
   private _active = true;
-  lastAccessed = Date.now();
+  private _lastAccessed = Date.now();
+
+  get lastAccessed(): number { return this._lastAccessed; }
+  set lastAccessed(value: number) {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new RangeError("Chunk.lastAccessed must be a finite non-negative timestamp");
+    }
+    if (value !== this._lastAccessed) {
+      this._lastAccessed = value;
+      this.markMutation();
+    }
+  }
 
   constructor(cx: number, cy: number, cz: number) {
     // TypeScript readonly is erased at runtime. Spatial identity must stay
@@ -55,7 +66,10 @@ export class Chunk {
     return ((lz * CHUNK_SIZE + ly) * CHUNK_SIZE + lx) * CELL_FIELDS;
   }
   getCell(lx: number, ly: number, lz: number): CellState {
-    this.lastAccessed = Date.now();
+    // Treat LRU refresh as internal access bookkeeping, not a field/topology mutation.
+    // Explicit external writes still go through the revision-tracked setter above.
+    const accessTime = Date.now();
+    if (accessTime > this._lastAccessed) this._lastAccessed = accessTime;
     return new CellState(this._buffer, this.localIdx(lx, ly, lz), () => this.markMutation());
   }
   snapshot(): void { this._backBuffer.set(this._buffer); this.markMutation(); }
