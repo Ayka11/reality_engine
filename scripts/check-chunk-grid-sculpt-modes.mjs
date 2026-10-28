@@ -95,9 +95,16 @@ try {
   // Put a live simulation cell outside the brush radius but inside the same chunk.
   dispatch("paint", { x: unrelatedX, y, z, f: F.E, v: 200, r: 0, mode: "set" });
   dispatch("paint", { x: unrelatedX, y, z, f: F.T, v: 100, r: 0, mode: "set" });
-  dispatch("brush", { name: "Forest", x, y, z, radius: 2, strength: 0.5, trackHistory: true });
+  dispatch("brush", {
+    name: "Forest", x, y, z, radius: 2, strength: 0.5,
+    geometry: "sphere", falloff: "constant", verticalExtent: "bounded-volume",
+    operation: "set", trackHistory: true,
+  });
   const afterSmartBrush = cellEnergy();
-  assert.ok(afterSmartBrush > 0, "SmartBrush must create sparse worker data");
+  const smartBrushAck = workerMessages.filter(message => message.cmd === "brushApplied").at(-1);
+  assert.equal(smartBrushAck?.name, "Forest", "SmartBrush must acknowledge the applied worker operation");
+  assert.ok(afterSmartBrush > 0,
+    "SmartBrush must create sparse worker data at (" + x + "," + y + "," + z + "); got " + afterSmartBrush);
   dispatch("paint", { x, y, z, f: F.E, v: 25, r: 0, mode: "add", trackHistory: true });
   const afterOrdinaryPaint = cellEnergy();
   assert.ok(afterOrdinaryPaint > afterSmartBrush, "ordinary paint must apply after SmartBrush");
