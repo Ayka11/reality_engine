@@ -1,5 +1,5 @@
 import { SparseVoxelGrid, type SparseVoxelGridSnapshot } from '../core/SparseVoxelGrid';
-import { getMutableBuffer, withMutableBuffers } from '../core/TrackedFloat32Array';
+import { withMutableBuffers } from '../core/TrackedFloat32Array';
 import { WORLD } from '../core/WorldConstants';
 import { F, CELL_FIELDS } from '../core/CellState';
 import { FieldPhysics } from './FieldPhysics';
