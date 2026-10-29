@@ -18,9 +18,12 @@ assert.match(rendererSource, /setWorldSurfaceProvider\(provider: WorldSurfacePro
 assert.match(rendererSource, /resetWorldSurfaceProviderToGenerator\(\)/)
 assert.match(rendererSource, /const surface = provider\.sampleSurface\(x, z\)/)
 assert.match(rendererSource, /const biome = this\.fieldSampler\.surfaceProvider\.sampleSurface\(originX \+ gx, originZ \+ gz, h\)\.biome/)
-assert.match(rendererSource, /const waterLevel = surfaceProvider\.waterLevel/)
+assert.match(rendererSource, /const waterLevel = this\.getWorldWaterLevel\(\)/)
+assert.match(rendererSource, /surfaceProvider\.getWaterMaskForChunk\(chunk\)/)
 assert.match(rendererSource, /buildWaterSurfaceMeshData\(\{ cx: chunk\.cx, cz: chunk\.cz, water \}, waterLevel\)/)
 assert.match(rendererSource, /const deformedHeight = surface\.height \+ this\.terrainDeformations\.sampleDelta\(x, z\)/)
+assert.equal(rendererSource.includes('this.generator.seaLevel'), false,
+  'hydrology, route placement and flood analysis must consume the selected surface water level')
 assert.equal(rendererSource.includes('this.generator.sampleHeight(x, z)'), false, 'terrain vertices must not bypass the selected surface source')
 assert.equal(rendererSource.includes('this.generator.sampleClimate('), false, 'rendered climate must not bypass the selected surface source')
 

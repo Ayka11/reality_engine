@@ -22,7 +22,7 @@ import type { LegacyVoxelCoordinate } from '../infinity/LegacyScientificFieldBri
 import { runtimeProvenance } from '../infinity/RuntimeProvenance'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { WorldConstructionContract } from '../infinity/WorldConstructionContract'
-import type { WorldSurfaceProvider } from '../infinity/WorldSurfaceProvider'
+import { isBelowWorldWaterSurface, resolveBridgeDeckHeight, resolveWorldWaterLevel, type WorldSurfaceProvider } from '../infinity/WorldSurfaceProvider'
 import { DecisionGraph } from '../infinity/DecisionGraph'
 import { WorldObjectSpatialIndex } from '../infinity/WorldObjectSpatialIndex'
 import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
@@ -686,7 +686,8 @@ export class InfiniteWorldRenderer {
     if (!provider || typeof provider.sampleSurface !== 'function' ||
         typeof provider.id !== 'string' || !provider.id.trim() ||
         typeof provider.version !== 'string' || !provider.version.trim() ||
-        typeof provider.seed !== 'string' || !provider.seed.trim()) {
+        typeof provider.seed !== 'string' || !provider.seed.trim() ||
+        !Number.isFinite(provider.referenceBuildElevation)) {
       throw new TypeError('World surface provider requires a non-empty id, version, seed, and sampleSurface()')
     }
     const probe = provider.sampleSurface(0, 0)
@@ -1280,20 +1281,25 @@ export class InfiniteWorldRenderer {
 
     const waterKey = `${chunk.cx},${chunk.cy},${chunk.cz}`
     const surfaceProvider = this.fieldSampler.surfaceProvider
-    const waterLevel = surfaceProvider.waterLevel
+    const waterLevel = this.getWorldWaterLevel()
     let waterData: ReturnType<typeof buildWaterSurfaceMeshData> | null = null
-    if (typeof waterLevel === 'number' && Number.isFinite(waterLevel)) {
-      const water = new Float32Array(WORLD_CHUNK_SIZE * WORLD_CHUNK_SIZE)
-      const originX = chunk.cx * WORLD_CHUNK_SIZE
-      const originZ = chunk.cz * WORLD_CHUNK_SIZE
-      for (let z = 0; z < WORLD_CHUNK_SIZE; z++) {
-        for (let x = 0; x < WORLD_CHUNK_SIZE; x++) {
-          const sample = surfaceProvider.sampleSurface(originX + x, originZ + z)
-          const depth = sample.waterDepth
-          water[z * WORLD_CHUNK_SIZE + x] = Number.isFinite(depth) ? Math.max(0, depth) : 0
+    if (waterLevel !== null) {
+      let water: Float32Array | null = null
+      if (surfaceProvider.getWaterMaskForChunk) {
+        water = surfaceProvider.getWaterMaskForChunk(chunk)
+      } else {
+        water = new Float32Array(WORLD_CHUNK_SIZE * WORLD_CHUNK_SIZE)
+        const originX = chunk.cx * WORLD_CHUNK_SIZE
+        const originZ = chunk.cz * WORLD_CHUNK_SIZE
+        for (let z = 0; z < WORLD_CHUNK_SIZE; z++) {
+          for (let x = 0; x < WORLD_CHUNK_SIZE; x++) {
+            const sample = surfaceProvider.sampleSurface(originX + x, originZ + z)
+            const depth = sample.waterDepth
+            water[z * WORLD_CHUNK_SIZE + x] = Number.isFinite(depth) ? Math.max(0, depth) : 0
+          }
         }
       }
-      waterData = buildWaterSurfaceMeshData({ cx: chunk.cx, cz: chunk.cz, water }, waterLevel)
+      if (water) waterData = buildWaterSurfaceMeshData({ cx: chunk.cx, cz: chunk.cz, water }, waterLevel)
     }
 
     if (waterData && waterData.wetCellCount > 0) {
@@ -2150,6 +2156,18 @@ export class InfiniteWorldRenderer {
     return Math.max(minimum, Math.min(maximum, deformedHeight))
   }
 
+  private getWorldWaterLevel(): number | null {
+    return resolveWorldWaterLevel(this.fieldSampler.surfaceProvider)
+  }
+
+  private isBelowWaterSurface(height: number, clearance = 0.25): boolean {
+    return isBelowWorldWaterSurface(this.fieldSampler.surfaceProvider, height, clearance)
+  }
+
+  private bridgeDeckHeight(startHeight: number, endHeight: number, clearance = 0.45): number {
+    return resolveBridgeDeckHeight(this.fieldSampler.surfaceProvider, startHeight, endHeight, clearance)
+  }
+
   /** Apply a real heightfield deformation, independent of scientific density/entropy fields. */
   sculptTerrainAt(x: number, z: number, radius: number, strength: number, mode: TerrainBrushMode) {
     const changed = this.terrainDeformations.applyBrush(x, z, radius, strength, mode)
@@ -2322,7 +2340,7 @@ export class InfiniteWorldRenderer {
       const y = this.sampleTerrainHeight(x, z)
       const distance = Math.max(1, Math.hypot(x1 - x0, z1 - z0) / (count - 1))
       const slope = Math.abs(y - previousY) / distance
-      result.push({ x, z, y, slope, water: y < this.generator.seaLevel - 0.25 })
+      result.push({ x, z, y, slope, water: this.isBelowWaterSurface(y) })
       previousY = y
     }
     return result
@@ -2357,7 +2375,7 @@ export class InfiniteWorldRenderer {
           const wx = px * step
           const wz = pz * step
           const y = this.sampleTerrainHeight(wx, wz)
-          path.push({ x: wx, z: wz, y, water: y < this.generator.seaLevel - 0.25, slope: 0 })
+          path.push({ x: wx, z: wz, y, water: this.isBelowWaterSurface(y), slope: 0 })
           const previous = came.get(cursor)
           if (!previous) break
           cursor = previous
@@ -2411,7 +2429,7 @@ export class InfiniteWorldRenderer {
       const segmentZ = (a.z + b.z) * 0.5
       const lawGate = this.lawGateForBuild(kind, segmentX, segmentZ)
       if (!lawGate.allowed) continue
-      const y = crossesWater ? this.generator.seaLevel + 0.45 : (a.y + b.y) * 0.5 + 0.08
+      const y = crossesWater ? this.bridgeDeckHeight(a.y, b.y) : (a.y + b.y) * 0.5 + 0.08
       const object = this.objects.add({
         kind, x: segmentX, y, z: segmentZ,
         rotationY, scale: Math.max(0.5, length / 12),
@@ -2542,6 +2560,7 @@ export class InfiniteWorldRenderer {
   analyzeWatershed(cx: number, cz: number, radius = 220, samples = 41) {
     const hydro = this.analyzeHydrology(cx, cz, radius, samples)
     const cells = hydro.samples
+    const waterLevel = this.getWorldWaterLevel()
     const basins: Array<{x:number;z:number;y:number;flow:number;basin:number}> = []
     for (const cell of cells) {
       const e = 6
@@ -2553,21 +2572,24 @@ export class InfiniteWorldRenderer {
       ]
       let lowest = cell.y
       for (const n of neighbors) lowest = Math.min(lowest, this.sampleTerrainHeight(n.x, n.z))
-      const basin = Math.round((lowest - this.generator.seaLevel) / 4)
+      const basin = waterLevel === null ? 0 : Math.round((lowest - waterLevel) / 4)
       basins.push({ x: cell.x, z: cell.z, y: cell.y, flow: cell.flow, basin })
     }
     const floodRisk = basins.map((cell) => ({
       ...cell,
-      risk: cell.y <= this.generator.seaLevel + 4 ? Math.min(1, cell.flow / 12 + 0.35) : Math.min(1, cell.flow / 24),
+      risk: waterLevel !== null && cell.y <= waterLevel + 4
+        ? Math.min(1, cell.flow / 12 + 0.35)
+        : Math.min(1, cell.flow / 24),
     }))
     return { center:{x:cx,z:cz}, radius, samples:floodRisk }
   }
 
   buildZoneCost(x: number, z: number) {
     const y = this.sampleTerrainHeight(x, z)
+    const waterLevel = this.getWorldWaterLevel()
     const hydro = this.analyzeHydrology(x, z, 16, 7)
     const river = hydro.rivers.length > 0
-    const floodRisk = y <= this.generator.seaLevel + 4 ? 0.7 : river ? 0.45 : 0
+    const floodRisk = waterLevel !== null && y <= waterLevel + 4 ? 0.7 : river ? 0.45 : 0
     const decision = this.decisionLayer.buildZoneCost(x, z)
     const slopeRisk = Math.min(1, decision.buildability.slope / 0.5)
     const legacyTerrainCost = slopeRisk * 0.5 + floodRisk * 0.5
@@ -2585,6 +2607,7 @@ export class InfiniteWorldRenderer {
   analyzeHydrology(cx: number, cz: number, radius = 220, samples = 41) {
     const n = Math.max(9, Math.floor(samples))
     const step = (radius * 2) / (n - 1)
+    const waterLevel = this.getWorldWaterLevel()
     const cells: Array<{x:number;z:number;y:number;flow:number;river:boolean}> = []
     for (let ix = 0; ix < n; ix++) for (let iz = 0; iz < n; iz++) {
       const x = cx - radius + ix * step
@@ -2594,9 +2617,9 @@ export class InfiniteWorldRenderer {
       const gx = this.sampleTerrainHeight(x + e, z) - this.sampleTerrainHeight(x - e, z)
       const gz = this.sampleTerrainHeight(x, z + e) - this.sampleTerrainHeight(x, z - e)
       const downhill = Math.max(0, -gx) + Math.max(0, -gz)
-      const basin = Math.max(0, this.generator.seaLevel + 8 - y)
+      const basin = waterLevel === null ? 0 : Math.max(0, waterLevel + 8 - y)
       const flow = basin * 0.35 + downhill * 0.8
-      cells.push({x,z,y,flow,river: flow > 8 && y > this.generator.seaLevel})
+      cells.push({x,z,y,flow,river: waterLevel !== null && flow > 8 && y > waterLevel})
     }
     const rivers = cells.filter((c) => c.river).sort((a,b) => b.flow-a.flow)
     return { center:{x:cx,z:cz}, radius, samples:cells, rivers }
@@ -2646,13 +2669,14 @@ export class InfiniteWorldRenderer {
 
   traceRiverSource(x: number, z: number, maxSteps = 160, step = 8) {
     const path: Array<{x:number;z:number;y:number}> = []
+    const waterLevel = this.getWorldWaterLevel()
     let px = x
     let pz = z
     let previousY = this.sampleTerrainHeight(px, pz)
     for (let i = 0; i < maxSteps; i++) {
       const y = this.sampleTerrainHeight(px, pz)
       path.push({ x: px, z: pz, y })
-      if (y <= this.generator.seaLevel + 0.5) break
+      if (waterLevel !== null && y <= waterLevel + 0.5) break
       const e = Math.max(2, step * 0.35)
       const dx = this.sampleTerrainHeight(px + e, pz) - this.sampleTerrainHeight(px - e, pz)
       const dz = this.sampleTerrainHeight(px, pz + e) - this.sampleTerrainHeight(px, pz - e)
@@ -2670,8 +2694,10 @@ export class InfiniteWorldRenderer {
   }
 
   generateRiverTraces(cx: number, cz: number, radius = 220, sources = 6) {
+    const waterLevel = this.getWorldWaterLevel()
+    if (waterLevel === null) return []
     const candidates = this.analyzeHydrology(cx, cz, radius, 41).rivers
-      .filter((r) => r.y > this.generator.seaLevel + 12)
+      .filter((r) => r.y > waterLevel + 12)
       .slice(0, Math.max(1, sources))
     const traces: Array<Array<{x:number;z:number;y:number}>> = []
     for (const source of candidates) {
@@ -2683,6 +2709,7 @@ export class InfiniteWorldRenderer {
 
   generateRiverNetwork(cx: number, cz: number, radius = 220, samples = 41) {
     const hydro = this.analyzeHydrology(cx, cz, radius, samples)
+    const waterLevel = this.getWorldWaterLevel()
     const created: WorldObject[] = []
     const selected = this.generateRiverTraces(cx, cz, radius, 6)
 
@@ -2699,7 +2726,7 @@ export class InfiniteWorldRenderer {
         const water = this.constructionContract.materialize('water', (a.x + b.x) * 0.5, (a.z + b.z) * 0.5, (gate) => this.objects.add({
           kind: 'water',
           x: (a.x + b.x) * 0.5,
-          y: Math.max(this.generator.seaLevel, (a.y + b.y) * 0.5 - 0.15),
+          y: waterLevel === null ? (a.y + b.y) * 0.5 - 0.15 : Math.max(waterLevel, (a.y + b.y) * 0.5 - 0.15),
           z: (a.z + b.z) * 0.5,
           rotationY: Math.atan2(dx, dz),
           scale: Math.max(0.6, Math.min(8, length / 8)),
@@ -2734,8 +2761,8 @@ export class InfiniteWorldRenderer {
         const gx = this.sampleTerrainHeight(x + e, z) - this.sampleTerrainHeight(x - e, z)
         const gz = this.sampleTerrainHeight(x, z + e) - this.sampleTerrainHeight(x, z - e)
         const slope = Math.hypot(gx, gz) / (2 * e)
-        const water = y < this.generator.seaLevel - 0.25
-        const elevationPenalty = Math.abs(y - (this.generator.seaLevel + 10)) / 30
+        const water = this.isBelowWaterSurface(y)
+        const elevationPenalty = Math.abs(y - this.fieldSampler.surfaceProvider.referenceBuildElevation) / 30
         const slopePenalty = Math.min(1, slope / 0.45)
         const score = water ? 0 : Math.max(0, 1 - slopePenalty) * Math.max(0, 1 - elevationPenalty)
         result.push({ x, z, y, slope, water, score })
@@ -2814,7 +2841,7 @@ export class InfiniteWorldRenderer {
         const object = this.objects.add({
           kind,
           x: segmentX,
-          y: water ? this.generator.seaLevel + 0.45 : (a.y + b.y) * 0.5 + 0.08,
+          y: water ? this.bridgeDeckHeight(a.y, b.y) : (a.y + b.y) * 0.5 + 0.08,
           z: segmentZ,
           rotationY: Math.atan2(b.x - a.x, b.z - a.z),
           scale: Math.max(0.5, Math.hypot(b.x - a.x, b.z - a.z) / 12),
@@ -2900,7 +2927,7 @@ export class InfiniteWorldRenderer {
         const object = this.objects.add({
           kind,
           x: segmentX,
-          y: kind === 'bridge' ? this.generator.seaLevel + 0.45 : (a.y + b.y) * 0.5 + 0.08,
+          y: kind === 'bridge' ? this.bridgeDeckHeight(a.y, b.y) : (a.y + b.y) * 0.5 + 0.08,
           z: segmentZ,
           rotationY: Math.atan2(b.x - a.x, b.z - a.z),
           scale: Math.max(0.5, length / 12),

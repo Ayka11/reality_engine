@@ -25,7 +25,49 @@ export interface WorldSurfaceProvider {
   readonly maximumElevation?: number
   /** Null/absent means this surface has no global sea plane. */
   readonly waterLevel?: number | null
+  /**
+   * Optional fast path for a chunk water mask. Returning null means the
+   * provider has no water mask for this chunk; omitting the method requests
+   * that the renderer derive a mask from sampleSurface().
+   */
+  getWaterMaskForChunk?(chunk: WorldSurfaceWaterChunk): Float32Array | null
   sampleSurface(x: number, z: number, heightOverride?: number): WorldSurfaceSample
+}
+
+export type WorldSurfaceWaterChunk = {
+  cx: number
+  cz: number
+  water: Float32Array
+}
+
+type WaterLevelSource = Pick<WorldSurfaceProvider, 'waterLevel'>
+
+/** Resolve a valid global water plane; absent, null and non-finite values fail closed. */
+export function resolveWorldWaterLevel(provider: WaterLevelSource): number | null {
+  const level = provider.waterLevel
+  return typeof level === 'number' && Number.isFinite(level) ? level : null
+}
+
+export function isBelowWorldWaterSurface(
+  provider: WaterLevelSource,
+  height: number,
+  clearance = 0.25,
+): boolean {
+  const level = resolveWorldWaterLevel(provider)
+  return level !== null && Number.isFinite(height) && Number.isFinite(clearance) &&
+    clearance >= 0 && height < level - clearance
+}
+
+/** Use the global water plane when present, otherwise a local terrain midpoint. */
+export function resolveBridgeDeckHeight(
+  provider: WaterLevelSource,
+  startHeight: number,
+  endHeight: number,
+  clearance = 0.45,
+): number {
+  const level = resolveWorldWaterLevel(provider)
+  const base = level ?? (startHeight + endHeight) * 0.5
+  return base + clearance
 }
 
 /** Adapts the existing deterministic generator without changing its results. */
@@ -53,6 +95,12 @@ export class GeneratorWorldSurfaceProvider implements WorldSurfaceProvider {
 
   get waterLevel(): number {
     return this.generator.seaLevel
+  }
+
+  getWaterMaskForChunk(chunk: WorldSurfaceWaterChunk): Float32Array {
+    // InfiniteChunkManager has already generated this deterministic mask.
+    // Reuse it instead of re-sampling 1024 cells during every terrain patch rebuild.
+    return chunk.water
   }
 
   sampleSurface(x: number, z: number, heightOverride?: number): WorldSurfaceSample {

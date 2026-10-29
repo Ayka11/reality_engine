@@ -59,6 +59,25 @@ assert.equal(terrain.biome, climate.biome, 'default surface adapter must preserv
 assert.equal(terrain.waterDepth, Math.max(0, generator.seaLevel - height), 'default adapter must preserve water depth')
 assert.equal(sampler.surfaceProvider.referenceBuildElevation, generator.seaLevel + 10)
 assert.equal(sampler.surfaceProvider.seed, generator.seed)
+assert.equal(resolveWorldWaterLevel(sampler.surfaceProvider), generator.seaLevel)
+const fastWaterMask = new Float32Array(32 * 32).fill(0.75)
+assert.equal(
+  sampler.surfaceProvider.getWaterMaskForChunk({ cx: 0, cz: 0, water: fastWaterMask }),
+  fastWaterMask,
+  'generator surface adapter must reuse the already generated chunk water mask by reference',
+)
+assert.equal(isBelowWorldWaterSurface(sampler.surfaceProvider, generator.seaLevel - 1), true)
+assert.equal(isBelowWorldWaterSurface(sampler.surfaceProvider, generator.seaLevel - 0.25), false,
+  'water clearance boundary remains strict and deterministic')
+assert.equal(resolveBridgeDeckHeight(sampler.surfaceProvider, 10, 12), generator.seaLevel + 0.45)
+const noSeaPlane = { waterLevel: null }
+assert.equal(resolveWorldWaterLevel(noSeaPlane), null)
+assert.equal(isBelowWorldWaterSurface(noSeaPlane, -100), false,
+  'a surface without global water level must not invent sea crossings')
+assert.equal(resolveBridgeDeckHeight(noSeaPlane, 10, 14), 12.45,
+  'bridge height must fall back to local terrain midpoint when no sea plane exists')
+assert.equal(resolveWorldWaterLevel({ waterLevel: Number.NaN }), null)
+assert.equal(resolveWorldWaterLevel({ waterLevel: Number.POSITIVE_INFINITY }), null)
 
 const nextGenerator = new WorldGenerator('surface-adapter-next', 22, 60)
 sampler.setGenerator(nextGenerator)
