@@ -17,7 +17,7 @@ for (const [name, source] of [['renderer', rendererSource], ['surface provider',
 assert.match(rendererSource, /setWorldSurfaceProvider\(provider: WorldSurfaceProvider\)/)
 assert.match(rendererSource, /resetWorldSurfaceProviderToGenerator\(\)/)
 assert.match(rendererSource, /const surface = provider\.sampleSurface\(x, z\)/)
-assert.match(rendererSource, /const surface = this\.fieldSampler\.surfaceProvider\.sampleSurface\(originX \+ gx, originZ \+ gz, h\)\.biome/)
+assert.match(rendererSource, /const biome = this\.fieldSampler\.surfaceProvider\.sampleSurface\(originX \+ gx, originZ \+ gz, h\)\.biome/)
 assert.match(rendererSource, /const waterLevel = surfaceProvider\.waterLevel/)
 assert.match(rendererSource, /buildWaterSurfaceMeshData\(\{ cx: chunk\.cx, cz: chunk\.cz, water \}, waterLevel\)/)
 assert.match(rendererSource, /const deformedHeight = surface\.height \+ this\.terrainDeformations\.sampleDelta\(x, z\)/)
