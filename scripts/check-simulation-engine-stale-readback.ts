@@ -602,6 +602,20 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(lawBoundaryEngine.grid.buffer[lawBoundaryFieldIndex], 21,
     "stale GPU output computed with an old process mask must not overwrite current CPU state");
 
+  // Restoring LawEngine state while a readback is in flight also invalidates it.
+  const restoreLawSnapshot = lawBoundaryEngine.laws.snapshot();
+  restoreLawSnapshot.laws[0].paramOverrides.energyDiffusion = 0.2;
+  const staleRestoreLawResult = lawBoundaryEngine.grid.buffer.slice();
+  staleRestoreLawResult[lawBoundaryFieldIndex] = 9008;
+  const pendingLawRestore = await beginPendingReadback(lawBoundaryEngine, staleRestoreLawResult);
+  lawBoundaryEngine.laws.restore(restoreLawSnapshot);
+  pendingLawRestore.release(staleRestoreLawResult);
+  await assert.rejects(pendingLawRestore.step, /Discarded stale GPU readback/);
+  assert.equal(lawBoundaryEngine.grid.buffer[lawBoundaryFieldIndex], 21,
+    "restoring law definitions must prevent stale GPU output from overwriting CPU state");
+  assert.equal(lawBoundaryEngine.laws.params.energyDiffusion, 0.2,
+    "restored law parameter overrides must be reflected in the effective solver configuration");
+
   // Sculpt undo/redo must invalidate pending GPU results before applying history,
   // then publish the resulting dense/chunk state as one synchronous UI operation.
   const sculptManager = new SculptManager(
