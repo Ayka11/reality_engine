@@ -70,6 +70,17 @@ function trackLawState<T extends object>(
       }
       return value;
     },
+    getOwnPropertyDescriptor(current, property) {
+      const descriptor = Reflect.getOwnPropertyDescriptor(current, property);
+      if (!descriptor || !("value" in descriptor) ||
+          descriptor.value === null || typeof descriptor.value !== "object") {
+        return descriptor;
+      }
+      // Object.getOwnPropertyDescriptor() must not reveal a raw nested object
+      // alias outside the tracked get() path.
+      if (descriptor.configurable === false && descriptor.writable === false) return descriptor;
+      return { ...descriptor, value: trackLawState(descriptor.value, onMutation, cache) };
+    },
     set(current, property, value) {
       const previous = Reflect.get(current, property, current) as unknown;
       if (Object.is(previous, value)) return true;
@@ -87,6 +98,19 @@ function trackLawState<T extends object>(
       return deleted;
     },
     defineProperty(current, property, descriptor) {
+      if ("get" in descriptor || "set" in descriptor) {
+        throw new TypeError("LawEngine tracked state supports data properties only");
+      }
+      const previous = Reflect.getOwnPropertyDescriptor(current, property);
+      const nextConfigurable = descriptor.configurable ?? previous?.configurable ?? false;
+      const nextWritable = descriptor.writable ?? previous?.writable ?? false;
+      const candidateValue = "value" in descriptor
+        ? descriptor.value
+        : previous && "value" in previous ? previous.value : undefined;
+      if (candidateValue !== null && typeof candidateValue === "object" &&
+          nextConfigurable === false && nextWritable === false) {
+        throw new TypeError("LawEngine tracked object properties must remain observable");
+      }
       const detachedDescriptor = "value" in descriptor && descriptor.value !== null &&
         typeof descriptor.value === "object"
         ? { ...descriptor, value: detachLawStateValue(descriptor.value) }
@@ -94,6 +118,9 @@ function trackLawState<T extends object>(
       const defined = Reflect.defineProperty(current, property, detachedDescriptor);
       if (defined) onMutation();
       return defined;
+    },
+    preventExtensions() {
+      throw new TypeError("LawEngine tracked state must remain extensible for revision tracking");
     },
   });
   cache.set(target, proxy);

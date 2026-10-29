@@ -586,6 +586,30 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(lawBoundaryEngine.laws.mutationRevision, revisionAfterOverridesInsert,
     "mutating a detached configuration alias must not change authoritative revision");
 
+  const overridesDescriptor = Object.getOwnPropertyDescriptor(
+    lawBoundaryEngine.laws.laws[0], "paramOverrides",
+  );
+  assert.ok(overridesDescriptor && "value" in overridesDescriptor,
+    "tracked law objects must expose a data descriptor for parameter overrides");
+  const revisionBeforeDescriptorMutation = lawBoundaryEngine.laws.mutationRevision;
+  overridesDescriptor.value.energyDiffusion = 0.16;
+  assert.ok(lawBoundaryEngine.laws.mutationRevision > revisionBeforeDescriptorMutation,
+    "nested objects returned by Object.getOwnPropertyDescriptor must remain revision-tracked");
+  assert.equal(lawBoundaryEngine.laws.params.energyDiffusion, 0.16,
+    "descriptor-based law edits must refresh effective solver parameters");
+
+  const accessorAlias = { energyDiffusion: 0.99 };
+  const revisionBeforeAccessorAttempt = lawBoundaryEngine.laws.mutationRevision;
+  assert.throws(() => Object.defineProperty(lawBoundaryEngine.laws.laws[0], "paramOverrides", {
+    configurable: true, enumerable: true, get: () => accessorAlias,
+  }), /data properties only/);
+  assert.equal(lawBoundaryEngine.laws.mutationRevision, revisionBeforeAccessorAttempt,
+    "accessor descriptors must be rejected before changing law state");
+  assert.equal(lawBoundaryEngine.laws.params.energyDiffusion, 0.16,
+    "rejected accessor descriptors must preserve the authoritative solver configuration");
+  assert.throws(() => Object.freeze(lawBoundaryEngine.laws.laws[0].paramOverrides),
+    /must remain extensible/);
+
   lawBoundaryEngine.laws.laws[0].conditions[0].value = 4;
   assert.ok(lawBoundaryEngine.laws.mutationRevision > revisionAfterOverridesInsert,
     "nested law edits must continue advancing revision after alias-detached replacement");
