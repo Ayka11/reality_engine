@@ -56,7 +56,7 @@ Known operational boundaries:
 
 Remove this notice only after the release candidate passes production integration and acceptance criteria on the exact release commit.
 
-The current browser acceptance suite additionally checks these integration contracts on the exact tested commit: `Quick Generate → generation revision → loaded chunks → every active terrain patch's valid indexed geometry → rendered WebGL canvas`; non-flat terrain relief, finite vertices, valid triangle indices and non-degenerate triangles; positive simulation `Tick`; world/view seed coherence; pause/resume when switching to 2D; actual 3D volumetric WebGL geometry; and simultaneous 2D + 3D rendering in Hybrid mode. These are automated runtime checks, not a claim of scientific validity or production certification.
+The current browser acceptance suite additionally checks these integration contracts on the exact tested commit: `Quick Generate → generation revision → loaded chunks → every active terrain patch's valid indexed geometry → rendered WebGL canvas`; non-flat terrain relief, finite vertices, valid triangle indices and non-degenerate triangles; positive simulation `Tick`; world/view seed coherence; pause/resume when switching to 2D; actual 3D volumetric WebGL geometry; and simultaneous 2D + 3D rendering in Hybrid mode. These are automated runtime checks, not a claim of scientific validity or production certification. The CPU `FieldPhysics` matrix also sweeps `dt` and coefficients for energy, density, temperature, and pressure diffusion, checks disabled-process invariance and field bounds, verifies closed-grid density conservation, and replays an identical step for deterministic equality; the chunk-worker suite separately checks cross-chunk diffusion.
 
 
 
@@ -866,6 +866,7 @@ npm run build
 npm run audit:report
 npm run test:simulation-engine-stale-readback
 npm run test:mutable-buffer-contract
+npm run test:field-physics-matrix
 npm run test:infinity-scale-mixed-lod
 npm run test:infinity-scale-adaptive-lod-bridge
 npm run hf:smoke
