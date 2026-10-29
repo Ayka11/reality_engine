@@ -1,5 +1,5 @@
 import { VoxelGrid } from '../core/VoxelGrid';
-import { getMutableBuffer, withMutableBuffers } from '../core/TrackedFloat32Array';
+import { withMutableBuffers } from '../core/TrackedFloat32Array';
 import { CELL_FIELDS, F } from '../core/CellState';
 
 export type AgentBehavior = 'explorer' | 'harvester' | 'signaler' | 'builder' | 'destroyer';
@@ -183,58 +183,59 @@ export class AgentSystem {
       throw new RangeError("AgentSystem tick dt must be a finite non-negative number");
     }
 
-    const buf = getMutableBuffer(grid);
-    const dead: number[] = [];
+    withMutableBuffers(grid, (front, _back) => {
+      const dead: number[] = [];
 
-    for (const [id, agent] of this.agents) {
-      agent.age++;
+      for (const [id, agent] of this.agents) {
+        agent.age++;
 
-      const base = this._base(grid, agent.x, agent.y, agent.z);
-      const localEnergy = buf[base + F.ENERGY];
+        const base = this._base(grid, agent.x, agent.y, agent.z);
+        const localEnergy = front[base + F.ENERGY];
 
-      agent.memory = agent.memory * 0.95 + (localEnergy / 1000) * 0.05;
+        agent.memory = agent.memory * 0.95 + (localEnergy / 1000) * 0.05;
 
-      // Low base metabolism — agents can survive without a rich world
-      const consume = 0.4 * dt * 60;
-      agent.energy -= consume;
-      buf[base + F.ENERGY] = Math.max(0, localEnergy - consume * 0.5);
+        // Low base metabolism — agents can survive without a rich world
+        const consume = 0.4 * dt * 60;
+        agent.energy -= consume;
+        front[base + F.ENERGY] = Math.max(0, localEnergy - consume * 0.5);
 
-      if (agent.energy <= 0) { dead.push(id); continue; }
+        if (agent.energy <= 0) { dead.push(id); continue; }
 
-      switch (agent.behavior) {
-        case 'explorer':  this._explore(grid, agent, dt, buf);  break;
-        case 'harvester': this._harvest(grid, agent, dt, buf);  break;
-        case 'signaler':  this._signal(grid, agent, dt, buf);   break;
-        case 'builder':   this._build(grid, agent, dt, buf);    break;
-        case 'destroyer': this._destroy(grid, agent, dt, buf);  break;
+        switch (agent.behavior) {
+          case 'explorer':  this._explore(grid, agent, dt, front);  break;
+          case 'harvester': this._harvest(grid, agent, dt, front);  break;
+          case 'signaler':  this._signal(grid, agent, dt, front);   break;
+          case 'builder':   this._build(grid, agent, dt, front);    break;
+          case 'destroyer': this._destroy(grid, agent, dt, front);  break;
+        }
+
+        // Stamp presence
+        front[base + F.AGENT_MARK] = agent.id;
+
+        // Replicate when well-fed
+        if (agent.energy > 300 && this.agents.size < this.maxAgents) {
+          agent.energy *= 0.55;
+          const childBehavior = this._random() < 0.15 ? randomBehavior(() => this._random()) : agent.behavior;
+          this._spawn(
+            Math.max(0, Math.min(grid.W-1, agent.x + Math.round(this._random()*4-2))),
+            Math.max(0, Math.min(grid.H-1, agent.y + Math.round(this._random()*4-2))),
+            Math.max(0, Math.min(grid.D-1, agent.z + Math.round(this._random()*2-1))),
+            childBehavior, agent.energy * 0.6,
+          );
+          agent.children++;
+        }
       }
 
-      // Stamp presence
-      buf[base + F.AGENT_MARK] = agent.id;
-
-      // Replicate when well-fed
-      if (agent.energy > 300 && this.agents.size < this.maxAgents) {
-        agent.energy *= 0.55;
-        const childBehavior = this._random() < 0.15 ? randomBehavior(() => this._random()) : agent.behavior;
-        this._spawn(
-          Math.max(0, Math.min(grid.W-1, agent.x + Math.round(this._random()*4-2))),
-          Math.max(0, Math.min(grid.H-1, agent.y + Math.round(this._random()*4-2))),
-          Math.max(0, Math.min(grid.D-1, agent.z + Math.round(this._random()*2-1))),
-          childBehavior, agent.energy * 0.6,
-        );
-        agent.children++;
+      for (const id of dead) {
+        const agent = this.agents.get(id)!;
+        const base = this._base(grid, agent.x, agent.y, agent.z);
+        // Leave energy ghost on death
+        front[base + F.ENERGY] = Math.min(9999,
+          front[base + F.ENERGY] + agent.energy);
+        front[base + F.AGENT_MARK] = 0;
+        this.agents.delete(id);
       }
-    }
-
-    for (const id of dead) {
-      const agent = this.agents.get(id)!;
-      const base = this._base(grid, agent.x, agent.y, agent.z);
-      // Leave energy ghost on death
-      buf[base + F.ENERGY] = Math.min(9999,
-        buf[base + F.ENERGY] + agent.energy);
-      buf[base + F.AGENT_MARK] = 0;
-      this.agents.delete(id);
-    }
+    });
   }
 
   private _base(grid: VoxelGrid, x: number, y: number, z: number): number {

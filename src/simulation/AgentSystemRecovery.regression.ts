@@ -135,6 +135,15 @@ export function runAgentSystemRecoveryRegression(): void {
   if (JSON.stringify(agents.snapshot()) !== checkpointJson) {
     throw new Error("Invalid-snapshot regression changed the original AgentSystem state");
   }
+
+  const revisionBeforeTick = grid.mutationRevision;
+  agents.tick(grid, 1 / 60);
+  if (grid.mutationRevision !== revisionBeforeTick + 1) {
+    throw new Error("AgentSystem.tick must scope front/back buffer acquisition and writes to one mutation revision");
+  }
+  if (grid.buffer.some(value => !Number.isFinite(value))) {
+    throw new Error("AgentSystem.tick produced non-finite fields through the scoped buffer path");
+  }
 }
 
 export function runAgentSystemInvalidSnapshotRegression(system = new AgentSystem(0x1234abcd)): void {

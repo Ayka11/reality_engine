@@ -12,7 +12,6 @@ const expectedCalls = new Map([
   ["src/core/SparseVoxelGrid.ts#syncChunksToDense", 1],
   ["src/core/SparseVoxelGrid.ts#loadChunks", 2],
   ["src/core/SparseVoxelGrid.ts#syncBackBuffersFromFront", 2],
-  ["src/simulation/AgentSystem.ts#tick", 1],
   ["src/simulation/EntityLayer.ts#tick", 2],
   ["src/simulation/EntityLayer.ts#_reconcileFullDomain", 1],
   ["src/simulation/EntityLayer.ts#_spawnChild", 1],
@@ -28,7 +27,6 @@ const expectedCalls = new Map([
 const expectedImports = new Set([
   "src/core/SparseVoxelGrid.ts",
   "src/simulation/SimulationEngine.ts",
-  "src/simulation/AgentSystem.ts",
   "src/simulation/EntityLayer.ts",
 ]);
 const expectedScopedCalls = new Map([
@@ -40,6 +38,7 @@ const expectedScopedCalls = new Map([
   ["src/chemistry/ChemLayer.ts#commitPendingDensityTransfers", 1],
   ["src/chemistry/ChemLayer.ts#tickRegion", 1],
   ["src/simulation/AgentSystem.ts#seed", 1],
+  ["src/simulation/AgentSystem.ts#tick", 1],
 ]);
 const actualScopedCalls = new Map();
 const expectedSymbolImplementations = new Set([
@@ -168,8 +167,31 @@ for (const filePath of sourcePaths) {
             const parent = current.parent;
             const isParameter = ts.isParameter(parent) && parent.name === current;
             const directIndexedAccess = ts.isElementAccessExpression(parent) && parent.expression === current;
-            if (!isParameter && !directIndexedAccess) {
-              errors.push(`${path}:${source.getLineAndCharacterOfPosition(current.getStart()).line + 1}: scoped buffer aliases may only be used for direct indexed access`);
+            let approvedAgentHandoff = false;
+            if (path === "src/simulation/AgentSystem.ts" && key === "src/simulation/AgentSystem.ts#tick" &&
+                current.text === "front" && ts.isCallExpression(parent) &&
+                parent.arguments[parent.arguments.length - 1] === current &&
+                ts.isPropertyAccessExpression(parent.expression) &&
+                parent.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
+              const targetName = parent.expression.name.text;
+              const allowedTargets = new Set(["_explore", "_harvest", "_signal", "_build", "_destroy"]);
+              const target = methodNodes.get(targetName);
+              if (allowedTargets.has(targetName) && target &&
+                  !target.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) &&
+                  !(ts.isMethodDeclaration(target) && target.asteriskToken)) {
+                let invalidAsyncControl = false;
+                function inspectTarget(node) {
+                  if (node !== target && (ts.isArrowFunction(node) || ts.isFunctionExpression(node) ||
+                      ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node))) return;
+                  if (ts.isAwaitExpression(node) || ts.isYieldExpression(node)) invalidAsyncControl = true;
+                  ts.forEachChild(node, inspectTarget);
+                }
+                inspectTarget(target);
+                approvedAgentHandoff = !invalidAsyncControl;
+              }
+            }
+            if (!isParameter && !directIndexedAccess && !approvedAgentHandoff) {
+              errors.push(`${path}:${source.getLineAndCharacterOfPosition(current.getStart()).line + 1}: scoped buffer aliases may only use direct indexed access or an explicitly audited synchronous AgentSystem behavior handoff`);
             }
           }
           if (ts.isReturnStatement(current) && current.expression) {
@@ -237,7 +259,6 @@ for (const filePath of sourcePaths) {
         "src/core/SparseVoxelGrid.ts#syncDenseEntityOwnershipToChunks",
         "src/core/SparseVoxelGrid.ts#syncDenseToChunks",
         "src/core/SparseVoxelGrid.ts#syncChunksToDense",
-        "src/simulation/AgentSystem.ts#tick",
         "src/simulation/EntityLayer.ts#tick",
         "src/simulation/EntityLayer.ts#_reconcileFullDomain",
         "src/simulation/EntityLayer.ts#_spawnChild",
