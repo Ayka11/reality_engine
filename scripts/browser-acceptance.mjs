@@ -2620,6 +2620,25 @@ try {
     throw new Error("Quick Generate did not prove the state → chunks → terrain mesh → rendered canvas chain: " +
       JSON.stringify(quickResult));
   }
+  const unifiedRuntime = await page.evaluate(() =>
+    window.getRealityRuntimeDiagnostics?.() ?? null
+  );
+  if (!unifiedRuntime?.snapshotValid ||
+      !Number.isSafeInteger(unifiedRuntime.legacySimulation?.tick) ||
+      unifiedRuntime.legacySimulation.tick < 0 ||
+      !Number.isFinite(unifiedRuntime.legacySimulation?.activeCells) ||
+      unifiedRuntime.legacySimulation.activeCells < 0 ||
+      unifiedRuntime.legacySimulation.activeCells > unifiedRuntime.legacySimulation.totalCells ||
+      !unifiedRuntime.infiniteWorld?.renderReady ||
+      unifiedRuntime.infiniteWorld.objects <= 0 ||
+      unifiedRuntime.infiniteWorld.loadedChunks <= 0 ||
+      unifiedRuntime.infiniteWorld.terrainMeshPatches <= 0 ||
+      unifiedRuntime.infiniteWorld.triangles <= 0 ||
+      unifiedRuntime.infiniteWorld.renderedFrames <= 0 ||
+      !unifiedRuntime.infiniteWorld.seedCoherent) {
+    throw new Error("Unified runtime diagnostic did not confirm Tick/active cells/objects/chunks/meshes/render: " +
+      JSON.stringify(unifiedRuntime));
+  }
   console.log("[acceptance] Quick Generate state → chunks → terrain mesh → rendered canvas PASS: " +
     JSON.stringify({
       objects: quickResult.rendered.objects,
@@ -2628,6 +2647,18 @@ try {
       triangles: quickResult.rendered.triangleCount,
       renderCalls: quickResult.rendered.calls,
       seedCoherent: quickResult.rendered.worldSeed === quickResult.rendered.viewSeed,
+    }));
+  console.log("[acceptance] unified runtime diagnostics PASS: " +
+    JSON.stringify({
+      tick: unifiedRuntime.legacySimulation.tick,
+      activeCells: unifiedRuntime.legacySimulation.activeCells,
+      totalCells: unifiedRuntime.legacySimulation.totalCells,
+      objects: unifiedRuntime.infiniteWorld.objects,
+      loadedChunks: unifiedRuntime.infiniteWorld.loadedChunks,
+      terrainMeshes: unifiedRuntime.infiniteWorld.terrainMeshPatches,
+      triangles: unifiedRuntime.infiniteWorld.triangles,
+      renderedFrames: unifiedRuntime.infiniteWorld.renderedFrames,
+      renderReady: unifiedRuntime.infiniteWorld.renderReady,
     }));
 
   // Quick Generate has been fully validated. Close its continuously rendering page

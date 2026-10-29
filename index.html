@@ -1949,6 +1949,86 @@ function quickGenerateWorld(){
   requestAnimationFrame(verifyRenderedWorld);
 }
 window.quickGenerateWorld=quickGenerateWorld;
+
+// Unified read-only snapshot for the causal chain from legacy simulation state
+// through Infinite World chunks/meshes to actual render-loop evidence.
+window.getRealityRuntimeDiagnostics = function () {
+  const health = typeof window.worldGenerationHealth === 'function'
+    ? window.worldGenerationHealth()
+    : null;
+  let activeCells = 0;
+  let invalidCells = 0;
+  for (let cell = 0; cell < SZ; cell++) {
+    const base = cell * NF;
+    const values = [FE, FD, FI, FT, FBio].map(field => buf[base + field]);
+    if (!values.every(Number.isFinite)) {
+      invalidCells++;
+      continue;
+    }
+    if (values.some(value => Math.abs(value) > 1e-3)) activeCells++;
+  }
+
+  const stats = health?.stats ?? {};
+  const terrain = health?.terrainMeshDiagnostics ?? {};
+  const runtime = health?.runtimeDiagnostics ?? {};
+  const canvas = health?.canvas ?? {};
+  const field3D = window.__worldField3DCanvasState ?? null;
+  const volumeRenderer = typeof window.getWorldFieldVolumeRendererDiagnostics === 'function'
+    ? window.getWorldFieldVolumeRendererDiagnostics()
+    : null;
+  const generationRevision = Number(health?.lastGeneration?.generationRevision ?? 0);
+  const tickValue = Number(tick);
+
+  return {
+    capturedAt: new Date().toISOString(),
+    snapshotValid: Number.isSafeInteger(tickValue) && tickValue >= 0 &&
+      Number.isSafeInteger(SZ) && SZ > 0 && invalidCells === 0 &&
+      activeCells >= 0 && activeCells <= SZ,
+    renderMode: currentRenderMode,
+    legacySimulation: {
+      tick: tickValue,
+      playing: Boolean(playing),
+      totalCells: SZ,
+      activeCells,
+      invalidCells,
+      activeCellRule: 'any of energy, density, information, temperature, biology has abs(value) > 0.001',
+    },
+    infiniteWorld: {
+      generationRevision,
+      worldSeed: health?.seeds?.world ?? null,
+      viewSeed: health?.seeds?.viewContract ?? null,
+      seedCoherent: health?.seeds?.coherent === true,
+      objects: Number(stats.objects ?? 0),
+      loadedChunks: Number(stats.loadedChunks ?? 0),
+      targetChunks: Number(stats.targetChunks ?? 0),
+      terrainMeshPatches: Number(terrain.terrainMeshPatches ?? 0),
+      vertices: Number(terrain.vertexCount ?? 0),
+      triangles: Number(terrain.triangleCount ?? 0),
+      invalidGeometryPatches: Number(terrain.invalidGeometryPatches ?? 0),
+      renderedFrames: Number(runtime.renderedFrames ?? 0),
+      renderReady: health?.renderReady === true,
+      renderReason: health?.renderReason ?? 'diagnostics-unavailable',
+      canvasConnected: canvas.connected === true,
+      canvasWidth: Number(canvas.width ?? 0),
+      canvasHeight: Number(canvas.height ?? 0),
+      canvasClientWidth: Number(canvas.clientWidth ?? 0),
+      canvasClientHeight: Number(canvas.clientHeight ?? 0),
+    },
+    field3D: {
+      active: currentRenderMode === 'field3d',
+      ready: field3D?.ready === true || volumeRenderer?.ready === true,
+      renderer: field3D?.renderer ?? volumeRenderer?.renderer ?? null,
+      true3D: field3D?.true3D === true || volumeRenderer?.true3D === true,
+      renderedCells: Number(field3D?.renderedCells ?? volumeRenderer?.renderedCells ?? 0),
+      sampleCount: Number(field3D?.sampleCount ?? volumeRenderer?.sampleCount ?? 0),
+      activeCells: Number(field3D?.activeCells ?? volumeRenderer?.activeCells ?? 0),
+      meshInstances: Number(field3D?.meshInstances ?? volumeRenderer?.meshInstances ?? 0),
+      drawCalls: Number(field3D?.drawCalls ?? volumeRenderer?.drawCalls ?? 0),
+      triangles: Number(field3D?.triangles ?? volumeRenderer?.triangles ?? 0),
+      reason: field3D?.reason ?? volumeRenderer?.reason ?? null,
+    },
+  };
+};
 function _clearComposerHazards(){if(window._composerHazardInterval){clearInterval(window._composerHazardInterval);window._composerHazardInterval=null;}}
 function _hazardMeteors(){
   for(let i=0;i<2+Math.floor(Math.random()*2);i++){
