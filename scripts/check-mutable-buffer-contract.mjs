@@ -11,7 +11,6 @@ const expectedCalls = new Map([
   ["src/core/SparseVoxelGrid.ts#syncDenseToChunks", 1],
   ["src/core/SparseVoxelGrid.ts#syncChunksToDense", 1],
   ["src/core/SparseVoxelGrid.ts#loadChunks", 2],
-  ["src/core/SparseVoxelGrid.ts#syncBackBuffersFromFront", 2],
   ["src/simulation/EntityLayer.ts#tick", 2],
 ]);
 const expectedImports = new Set([
@@ -20,6 +19,7 @@ const expectedImports = new Set([
   "src/simulation/EntityLayer.ts",
 ]);
 const expectedScopedCalls = new Map([
+  ["src/core/SparseVoxelGrid.ts#syncBackBuffersFromFront", 1],
   ["src/simulation/FieldPhysics.ts#tick", 1],
   ["src/simulation/EntropyLayer.ts#tick", 1],
   ["src/simulation/InfoPhysics.ts#tick", 1],

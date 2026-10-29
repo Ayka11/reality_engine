@@ -1,6 +1,6 @@
 import { CellState, CELL_FIELDS, F, validateGridDimensions } from "./CellState";
 import { Chunk, CHUNK_SIZE, CHUNK_VOLUME } from "./Chunk";
-import { createTrackedFloat32Array, getMutableBuffer, INTERNAL_MUTABLE_BUFFER, type MutableBufferSide } from "./TrackedFloat32Array";
+import { createTrackedFloat32Array, getMutableBuffer, withMutableBuffers, INTERNAL_MUTABLE_BUFFER, type MutableBufferSide } from "./TrackedFloat32Array";
 
 export interface SerializedChunk {
   key: string;
@@ -801,7 +801,9 @@ export class SparseVoxelGrid {
     try {
       this._sparseDenseBackBuffer.set(this._sparseDenseBuffer);
       for (const chunk of this.chunks.values()) {
-        getMutableBuffer(chunk, "back").set(getMutableBuffer(chunk));
+        withMutableBuffers(chunk, (front, back) => {
+          back.set(front);
+        });
       }
       this.markMutation();
     } finally { endMutation(); }
