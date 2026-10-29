@@ -1,5 +1,5 @@
 import { SparseVoxelGrid, type SparseVoxelGridSnapshot } from '../core/SparseVoxelGrid';
-import { getMutableBuffer, withMutableBuffers } from '../core/TrackedFloat32Array';
+import { withMutableBuffers } from '../core/TrackedFloat32Array';
 import { WORLD } from '../core/WorldConstants';
 import { F, CELL_FIELDS } from '../core/CellState';
 import { FieldPhysics } from './FieldPhysics';
@@ -326,7 +326,7 @@ export class SimulationEngine {
       this.laws.tick(this._worldMetrics());
 
       // Keep GPU in sync after CPU changes (presets, painting)
-      if (this._gpuReady) this.gpu.upload(getMutableBuffer(this.grid));
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer.slice());
       if (this._tick % 500 === 0) {
         this.grid.markEmptyChunksInactive();
         this.grid.cullInactive();
@@ -358,7 +358,7 @@ export class SimulationEngine {
    */
   private resynchronizeGPUAndThrow(primaryError: unknown, context: string): never {
     try {
-      this.gpu.upload(getMutableBuffer(this.grid));
+      this.gpu.upload(this.grid.buffer.slice());
     } catch (syncError) {
       // The device state is no longer trustworthy. Fail closed to CPU execution
       // so a later step cannot consume or overwrite from a stale GPU buffer.
@@ -422,7 +422,7 @@ export class SimulationEngine {
       }
       this.grid.syncDenseToChunks();
       this.grid.syncBackBuffersFromFront();
-      if (this._gpuReady) this.gpu.upload(getMutableBuffer(this.grid));
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer.slice());
       this._stateGeneration++;
       return result;
     } catch (error) {
@@ -465,7 +465,7 @@ export class SimulationEngine {
 
     if (this._gpuReady) {
       try {
-        this.gpu.upload(getMutableBuffer(this.grid));
+        this.gpu.upload(this.grid.buffer.slice());
       } catch (error) {
         // GPU upload is optional once the CPU state is coherent. Disable the
         // uncertain device path and keep the UI/runtime alive on CPU execution.
@@ -507,7 +507,7 @@ export class SimulationEngine {
       // syncTick is a CPU-authoritative physical step. Publish its committed
       // front buffer to the device so a subsequent GPU step cannot start from
       // stale pre-script state and overwrite the synchronous result.
-      if (this._gpuReady) this.gpu.upload(getMutableBuffer(this.grid));
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer.slice());
       this._stateGeneration++;
     } catch (error) {
       if (recoveryBefore) {
@@ -584,11 +584,11 @@ export class SimulationEngine {
     this._stateGeneration++;
     try {
       apply(snapshot);
-      if (this._gpuReady) this.gpu.upload(getMutableBuffer(this.grid));
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer.slice());
     } catch (error) {
       try {
         apply(previous);
-        if (this._gpuReady) this.gpu.upload(getMutableBuffer(this.grid));
+        if (this._gpuReady) this.gpu.upload(this.grid.buffer.slice());
       } catch (rollbackError) {
         // A failed rollback may leave device buffers inconsistent with CPU state.
         // Disable GPU execution rather than allowing a later step to trust them.
