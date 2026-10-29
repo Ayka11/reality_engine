@@ -28,6 +28,7 @@
     "test:construction": "node scripts/check-world-construction-contract.mjs",
     "test:world-object-identity": "node scripts/check-world-object-identity.mjs",
     "test:world-placement-api": "node scripts/check-world-placement-api.mjs",
+    "test:world-surface-provider": "node scripts/check-world-surface-provider.mjs",
     "test:law-physics": "node scripts/check-law-physics-contract.mjs",
     "test:chunk-worker-physics": "node scripts/check-chunk-worker-physics-contract.mjs",
     "test:chunk-grid-prune": "npx --yes tsx scripts/check-chunk-grid-prune.ts",

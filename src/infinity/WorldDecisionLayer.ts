@@ -73,8 +73,9 @@ export class WorldDecisionLayer {
   }
 
   private slopeAt(x: number, z: number, step = 2) {
-    const gx = this.sampler.generator.sampleHeight(x + step, z) - this.sampler.generator.sampleHeight(x - step, z)
-    const gz = this.sampler.generator.sampleHeight(x, z + step) - this.sampler.generator.sampleHeight(x, z - step)
+    const surface = this.sampler.surfaceProvider
+    const gx = surface.sampleSurface(x + step, z).height - surface.sampleSurface(x - step, z).height
+    const gz = surface.sampleSurface(x, z + step).height - surface.sampleSurface(x, z - step).height
     return Math.hypot(gx, gz) / (2 * step)
   }
 
@@ -84,7 +85,7 @@ export class WorldDecisionLayer {
 
     const slopeScore = 1 - this.clamp01(slope / 0.45)
     const waterScore = 1 - this.clamp01(field.waterDepth / 8)
-    const elevationScore = 1 - this.clamp01(Math.abs(field.height - (this.sampler.generator.seaLevel + 10)) / 30)
+    const elevationScore = 1 - this.clamp01(Math.abs(field.height - this.sampler.surfaceProvider.referenceBuildElevation) / 30)
     const entropyScore = 1 - this.clamp01(field.entropy / 0.12)
     const densityScore = 1 - this.clamp01(field.density)
     const biologyScore = this.clamp01(field.biology)
@@ -187,7 +188,7 @@ export class WorldDecisionLayer {
     const result = this.buildZoneCost(x, z, distanceFromHub)
     return createDecisionRecord(
       'zone-cost',
-      this.sampler.generator.seed,
+      this.sampler.surfaceProvider.seed,
       { x, z, distanceFromHub },
       this.weights,
       {

@@ -100,6 +100,15 @@ const {WorldDecisionLayer}=decisionModule.exports;
 const {WorldConstructionContract}=constructionModule.exports;
 const decisionSampler={
   generator:{seaLevel:16,sampleHeight:()=>26},
+  surfaceProvider:{
+    id:'preset-test-surface',
+    version:'preset-test-surface-v1',
+    seed:'preset-test-seed',
+    referenceBuildElevation:26,
+    sampleSurface(){
+      return {height:26,temperature:.5,moisture:.5,biome:'plains',biomeId:2,waterDepth:0};
+    },
+  },
   sampleWorld(x,y,z){
     return {...realField.sample(x,26,z),x,y:26,z,height:26,moisture:.5,biome:'plains',waterDepth:0};
   },

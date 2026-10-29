@@ -618,6 +618,7 @@ export class InfiniteWorldRenderer {
     this.clearSavedWorld()
 
     this.generator = new WorldGenerator(newSeed)
+    this.fieldSampler.setGenerator(this.generator)
     worldViewContract.setSeed(newSeed)
     this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
     this.authoritativeField.clear()

@@ -1,4 +1,5 @@
-import { WorldGenerator, BIOME_ID, type Biome } from './WorldGenerator'
+import { WorldGenerator, type Biome } from './WorldGenerator'
+import { GeneratorWorldSurfaceProvider, type WorldSurfaceProvider } from './WorldSurfaceProvider'
 import type { ScientificFieldProvider } from './ScientificFieldProvider'
 import { GeneratorFieldProvider } from './ScientificFieldProvider'
 import { ScientificFieldRegistry } from './ScientificFieldRegistry'
@@ -31,11 +32,36 @@ export type WorldContextSample = ScientificFieldSample & {
 export class FieldSampler {
   private provider: ScientificFieldProvider
   readonly registry: ScientificFieldRegistry
+  private worldSurface: WorldSurfaceProvider
+  private followsGeneratorSurface: boolean
 
-  constructor(public generator: WorldGenerator, provider?: ScientificFieldProvider) {
+  constructor(
+    public generator: WorldGenerator,
+    provider?: ScientificFieldProvider,
+    surfaceProvider?: WorldSurfaceProvider,
+  ) {
     this.provider = provider ?? new GeneratorFieldProvider(generator)
+    this.worldSurface = surfaceProvider ?? new GeneratorWorldSurfaceProvider(generator)
+    this.followsGeneratorSurface = surfaceProvider === undefined
     this.registry = new ScientificFieldRegistry()
     this.registry.register(this.provider, true)
+  }
+
+  /** Active surface source; scientific-field sampling remains a separate provider. */
+  get surfaceProvider(): WorldSurfaceProvider {
+    return this.worldSurface
+  }
+
+  /** Switch the spatial surface without replacing the active scientific field provider. */
+  setSurfaceProvider(provider: WorldSurfaceProvider) {
+    this.worldSurface = provider
+    this.followsGeneratorSurface = false
+  }
+
+  /** Explicitly restore the default procedural surface adapter. */
+  resetSurfaceProviderToGenerator() {
+    this.worldSurface = new GeneratorWorldSurfaceProvider(this.generator)
+    this.followsGeneratorSurface = true
   }
 
   setProvider(provider: ScientificFieldProvider) {
@@ -57,6 +83,11 @@ export class FieldSampler {
 
   setGenerator(generator: WorldGenerator) {
     this.generator = generator
+    // Keep the generator-backed surface in sync, but do not replace a deliberately
+    // selected surface provider when only the scientific generator changes.
+    if (this.followsGeneratorSurface) {
+      this.worldSurface = new GeneratorWorldSurfaceProvider(generator)
+    }
     const provider = new GeneratorFieldProvider(generator)
     this.provider = provider
     // Keep direct sampling and the public provider registry in sync after a generator swap.
@@ -74,18 +105,17 @@ export class FieldSampler {
 
   sampleWorld(x: number, y?: number, z?: number): WorldContextSample {
     const zz = z ?? 0
-    const yy = y ?? this.generator.sampleHeight(x, zz)
-    const height = this.generator.sampleHeight(x, zz)
-    const climate = this.generator.sampleClimate(x, zz, height)
+    const surface = this.worldSurface.sampleSurface(x, zz)
+    const yy = y ?? surface.height
     const field = this.sample(x, yy, zz)
 
     return {
       x, y: yy, z: zz,
       ...field,
-      height,
-      moisture: climate.moisture,
-      biome: climate.biome,
-      waterDepth: Math.max(0, this.generator.seaLevel - height),
+      height: surface.height,
+      moisture: surface.moisture,
+      biome: surface.biome,
+      waterDepth: surface.waterDepth,
     }
   }
 
@@ -114,15 +144,6 @@ export class FieldSampler {
   }
 
   sampleTerrain(x: number, z: number) {
-    const height = this.generator.sampleHeight(x, z)
-    const climate = this.generator.sampleClimate(x, z, height)
-    return {
-      x, z, height,
-      temperature: climate.temperature,
-      moisture: climate.moisture,
-      biome: climate.biome,
-      biomeId: BIOME_ID[climate.biome],
-      waterDepth: Math.max(0, this.generator.seaLevel - height),
-    }
+    return { x, z, ...this.worldSurface.sampleSurface(x, z) }
   }
 }

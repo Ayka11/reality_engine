@@ -65,6 +65,7 @@ jobs:
       - run: npm run test:construction
       - run: npm run test:world-object-identity
       - run: npm run test:world-placement-api
+      - run: npm run test:world-surface-provider
       - run: npm run test:law-physics
       - run: npm run test:info-physics-process-mask
       - run: npm run test:field-physics-erosion
