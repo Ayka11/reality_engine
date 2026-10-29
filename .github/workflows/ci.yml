@@ -1,0 +1,120 @@
+name: Reality Engine CI
+
+on:
+  push:
+    branches: [main, reality-engine-hf-infinity, 'integration/**']
+  pull_request:
+    branches: [main, reality-engine-hf-infinity, 'integration/**']
+
+concurrency:
+  group: reality-engine-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - run: npm install --global npm@10.9.2
+      - name: Install pinned dependencies and report npm resolver diagnostics
+        shell: bash
+        run: |
+          npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund || {
+            debug_log="$(ls -t "$HOME"/.npm/_logs/*debug-0.log 2>/dev/null | head -n 1)"
+            if [ -n "$debug_log" ]; then cat "$debug_log"; fi
+            exit 1
+          }
+      - run: npm run test:npm-audit-gate
+      - run: npm run audit:report
+      - run: npm run lint
+      - run: npm run test:brushes
+      - run: npm run test:greedy-mesher
+      - run: npm run test:surface-nets-mesher
+      - run: npm run test:world-field
+      - run: npm run test:water-surface
+      - run: npm run test:infinity-scale-core
+      - run: npm run test:sparse-voxel-grid-recovery
+      - run: npm run test:causal-graph-recovery
+      - run: npm run test:recorder-recovery
+      - run: npm run test:agent-system-recovery
+      - run: npm run test:worldevents-recovery
+      - run: npm run test:entity-layer-recovery
+      - run: npm run test:simulation-engine-core-recovery
+      - run: npm run test:chem-layer-recovery
+      - run: npm run test:civilization-system-recovery
+      - run: npm run test:cosmological-sim-recovery
+      - run: npm run test:simulation-engine-cpu-frame-rollback
+      - run: npm run test:simulation-engine-stale-readback
+      - run: npm run test:mutable-buffer-contract
+      - run: npm run test:infinity-scale-mixed-lod
+      - run: npm run test:infinity-scale-adaptive-lod-bridge
+      - name: Run entity chunk reconciliation regression
+        run: npm run test:entity-chunk-reconciliation
+        timeout-minutes: 5
+      - name: Run Infinity Scale face coverage regression
+        run: npm run test:infinity-scale-face-coverage
+        timeout-minutes: 3
+      - name: Run Infinity Scale independent topology regression
+        run: npm run test:infinity-scale-independent-topology
+        timeout-minutes: 3
+      - run: npm run test:presets
+      - run: npm run test:preset-field
+      - run: npm run test:construction
+      - run: npm run test:law-physics
+      - run: npm run test:info-physics-process-mask
+      - run: npm run test:field-physics-erosion
+      - run: npm run test:field-physics-pressure
+      - run: npm run test:field-physics-density
+      - run: npm run test:field-physics-phase-transition
+      - run: npm run test:field-physics-crystallization
+      - run: npm run test:field-physics-radiation
+      - run: npm run test:field-physics-rotation
+      - run: npm run test:chunk-worker-physics
+      - run: npm run test:chunk-grid-prune
+      - run: npm run test:chunk-worker-physics-runtime
+      - run: npm run test:signalling
+      - run: npm run test:solver-deployment
+      - run: npm run test:field-profile
+      - run: npm run test:mutable-field-profile
+      - run: npm run test:mutable-field-validation
+      - run: npm run test:worker-restore-two-phase
+      - run: npm run test:legacy-field-bridge
+      - run: npm run test:legacy-sculpt-adapter
+      - run: npm run test:authoritative-sculpt-transaction
+      - run: npm run test:terrain-deformation
+      - run: npm run test:world-persistence-failures
+      - run: npm run test:script-engine-rng-recovery
+      - run: npm run test:agent-worldevents-rng-recovery
+      - run: npm run test:terrain-worldcomposer-rng-recovery
+      - run: npm run test:simworker-rng-recovery
+      - run: npm run test:field-spatial-pattern
+      - run: npm run build
+      - run: npm run test:hf-runtime
+      - run: docker build --file Dockerfile --tag reality-engine:ci .
+      - run: docker build --file Dockerfile.hf --tag reality-engine-hf:ci .
+      - name: Smoke-test Hugging Face Docker container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name reality-engine-hf-smoke --publish 7860:7860 reality-engine-hf:ci
+          cleanup() {
+            docker logs reality-engine-hf-smoke || true
+            docker rm --force reality-engine-hf-smoke >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:7860/ >/dev/null; then
+              echo "Docker HF runtime HTTP smoke: PASS"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Docker HF runtime did not serve HTTP on port 7860"
+          exit 1
+      - run: npm run hf:smoke
+      - run: npm run hf:cpu:check
+      - run: npx playwright install chromium
+      - run: timeout 180s npm run hf:browser:acceptance

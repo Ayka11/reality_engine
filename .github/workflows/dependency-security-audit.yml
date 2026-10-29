@@ -1,0 +1,135 @@
+name: Dependency Security Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/check-npm-audit-gate.mjs"
+      - ".github/workflows/dependency-security-audit.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/check-npm-audit-gate.mjs"
+      - ".github/workflows/dependency-security-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-security-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: npm dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      - name: Install exact dependencies from committed lockfile
+        run: npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+
+      - name: Generate JSON audit report
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          npm audit --json > npm-audit.json
+          audit_exit_code=$?
+          set -e
+          echo "npm_audit_exit_code=$audit_exit_code" >> "$GITHUB_OUTPUT"
+
+      - name: Validate report and enforce moderate-or-higher threshold
+        if: always()
+        shell: bash
+        run: |
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+          let report;
+          try {
+            report = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));
+          } catch (error) {
+            console.error('npm audit did not produce valid JSON:', String(error));
+            process.exit(2);
+          }
+
+          const v = report.metadata?.vulnerabilities;
+          if (!v || typeof v !== 'object') {
+            console.error('npm audit JSON is missing metadata.vulnerabilities.');
+            process.exit(2);
+          }
+
+          const summary = {
+            reportValid: true,
+            auditReportVersion: report.auditReportVersion ?? null,
+            vulnerabilities: {
+              critical: Number(v.critical ?? 0),
+              high: Number(v.high ?? 0),
+              moderate: Number(v.moderate ?? 0),
+              low: Number(v.low ?? 0),
+              info: Number(v.info ?? 0),
+              total: Number(v.total ?? 0),
+            },
+            packagesWithFindings: Object.entries(report.vulnerabilities ?? {}).map(([name, item]) => ({
+              name,
+              severity: item.severity,
+              isDirect: item.isDirect,
+              range: item.range,
+              fixAvailable: item.fixAvailable,
+              via: (item.via ?? []).map(entry => typeof entry === 'string' ? entry : ({
+                title: entry.title,
+                url: entry.url,
+                severity: entry.severity,
+                range: entry.range,
+              })),
+            })),
+          };
+          fs.writeFileSync('npm-audit-summary.json', JSON.stringify(summary, null, 2) + '\n');
+
+          const lines = [
+            '## Dependency security audit',
+            '',
+            '| Severity | Count |',
+            '|---|---:|',
+            '| Critical | ' + summary.vulnerabilities.critical + ' |',
+            '| High | ' + summary.vulnerabilities.high + ' |',
+            '| Moderate | ' + summary.vulnerabilities.moderate + ' |',
+            '| Low | ' + summary.vulnerabilities.low + ' |',
+            '| Info | ' + summary.vulnerabilities.info + ' |',
+            '| **Total** | **' + summary.vulnerabilities.total + ' |',
+            '',
+            'This audit installs from the committed package-lock.json with npm ci, so dependency resolution is tied to the reviewed lockfile.',
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+          console.log(JSON.stringify(summary, null, 2));
+
+          const blocking = summary.vulnerabilities.critical +
+            summary.vulnerabilities.high + summary.vulnerabilities.moderate;
+          if (blocking > 0) {
+            console.error('Blocking moderate-or-higher vulnerability findings: ' + blocking);
+            process.exit(1);
+          }
+          NODE
+
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-dependency-audit
+          path: |
+            npm-audit.json
+            npm-audit-summary.json
+            package-lock.json
+          if-no-files-found: warn
+          retention-days: 14

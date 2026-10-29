@@ -1,0 +1,137 @@
+import { InfinityScaleMixedLODCPUExecutor } from "./InfinityScaleMixedLODCPUExecutor";
+import {
+  beginInfinityScaleGlobalLODTransaction,
+  commitInfinityScaleGlobalLODTransaction,
+} from "./InfinityScaleGlobalLODTransaction";
+import { InfinityScaleLODState } from "./InfinityScaleLODState";
+import { CELL_FIELDS } from "../core/CellState";
+import type { InfinityScaleExecutionPlan } from "./InfinityScaleExecutionAdapter";
+import {
+  advanceInfinityScaleGlobalFrame,
+  beginInfinityScaleGlobalFrame,
+} from "./InfinityScaleGlobalExecutionFrame";
+import type { InfinityScaleGlobalExecutionFrame } from "./InfinityScaleGlobalExecutionFrame";
+import { InfinityScaleChunkExecutionContext } from "./InfinityScaleChunkExecutionContext";
+
+const coarseKey = "1:0,0,0";
+const fineKeys = ["0:2,0,0", "0:2,1,0", "0:2,0,1", "0:2,1,1"];
+
+function makePlan(): InfinityScaleExecutionPlan {
+  return {
+    revision: 1,
+    mode: "selective-cpu-ready",
+    observer: { x: 0, y: 0, z: 0 },
+    chunks: [{ key: coarseKey, lod: 1, amr: 2, distance: 0 }],
+    simulationBudget: 64,
+    requestedSimulationCount: 1,
+    selectedSimulationCount: 1,
+    maxSimulatingChunks: 1,
+    boundaryReadChunks: [...fineKeys],
+    boundaryReadCount: fineKeys.length,
+    boundaryReadRelations: fineKeys.map(sourceChunk => ({
+      sourceChunk,
+      targetChunk: coarseKey,
+      relation: "fine-to-coarse" as const,
+    })),
+    simulationCellCount: 512,
+  boundaryReadCellCount: 256,
+    localExecutionLayers: [],
+    globalExecutionLayers: [],
+    selectiveCpuReady: true,
+    selectiveGpuReady: false,
+    gpuPhysicsReady: false,
+    lodBoundaryTransferReady: true,
+    mixedLodExecutionReady: true,
+    entityExecutionReady: false,
+    agentMigrationReady: false,
+  };
+}
+
+function makeFrame(revision: number): InfinityScaleGlobalExecutionFrame {
+  const canonicalFrame = advanceInfinityScaleGlobalFrame(
+    beginInfinityScaleGlobalFrame(makePlan(), revision - 1, revision),
+    "local-execution",
+  );
+  // Frame/tick revision can advance while the immutable execution plan remains
+  // the same; retain the factory's canonical ownership/capability fingerprints.
+  return { ...canonicalFrame, revision };
+}
+
+export function runInfinityScaleMixedLODMultiFrameRegression(): void {
+  const state = new InfinityScaleLODState(4);
+  state.ensureChunk(coarseKey, 1);
+  for (const fineKey of fineKeys) state.ensureChunk(fineKey, 0);
+
+  for (let z = 0; z < 4; z++) {
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 4; x++) {
+        const coarse = new Float32Array(CELL_FIELDS);
+        coarse[0] = 10;
+        state.writeBaseCell(coarseKey, 1, x * 2, y * 2, z * 2, coarse);
+      }
+    }
+  }
+
+  for (const fineKey of fineKeys) {
+    const [baseX, baseY, baseZ] = fineKey.split(":")[1].split(",").map(Number).map(v => v * 4);
+    for (let z = 0; z < 4; z++) {
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          const fine = new Float32Array(CELL_FIELDS);
+          fine[0] = 2;
+          state.writeBaseCell(fineKey, 0, baseX + x, baseY + y, baseZ + z, fine);
+        }
+      }
+    }
+  }
+
+  const plan = makePlan();
+  const context = new InfinityScaleChunkExecutionContext(plan, 12, 8, 8, 4);
+
+  for (let frameRevision = 1; frameRevision <= 2; frameRevision++) {
+    const stateRevisionBeforeFrame = state.getRevision();
+    const frame = makeFrame(frameRevision);
+    const transaction = beginInfinityScaleGlobalLODTransaction(frame, plan, state);
+    const executor = new InfinityScaleMixedLODCPUExecutor(state, context);
+
+    const result = executor.execute(frame, plan, transaction, cell => {
+      const output = new Float32Array(cell.input);
+      output[0] += 1;
+      return output;
+    });
+
+    if (result.executedCells !== 64 || result.stagedBoundaryUpdates !== 16) {
+      throw new Error(
+        `Frame ${frameRevision}: expected 64 executions and 16 boundary updates, received ${result.executedCells}/${result.stagedBoundaryUpdates}`,
+      );
+    }
+
+    const localCommittedFrame = advanceInfinityScaleGlobalFrame(frame, "local-commit");
+    const boundaryFrame = advanceInfinityScaleGlobalFrame(
+      localCommittedFrame,
+      "boundary-reconciliation",
+    );
+    commitInfinityScaleGlobalLODTransaction(transaction, boundaryFrame);
+
+    const expectedStateRevision = stateRevisionBeforeFrame + 1;
+    if (state.getRevision() !== expectedStateRevision) {
+      throw new Error(
+        `Frame ${frameRevision}: expected state revision ${expectedStateRevision}, received ${state.getRevision()}`,
+      );
+    }
+  }
+
+  const owned = state.readBaseCell(coarseKey, 1, 0, 0, 0);
+  if (!owned || owned[0] !== 12) {
+    throw new Error(
+      `Expected owned coarse state to persist and advance across two frames to 12, received ${owned?.[0]}`,
+    );
+  }
+
+  const boundary = state.readBaseCell(coarseKey, 1, 6, 0, 0);
+  if (!boundary || boundary[0] !== 8) {
+    throw new Error(
+      `Expected fine-to-coarse boundary energy to sum four source cells to 8 across frames, received ${boundary?.[0]}`,
+    );
+  }
+}
