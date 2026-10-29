@@ -147,5 +147,8 @@ export function installScientificWorkspace() {
   const wrap = document.getElementById('c3d')?.parentElement
   if (wrap) wrap.appendChild(host)
   ;(window as any).toggleScientificWorkspace = toggleScientificWorkspace
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && state.open) toggleScientificWorkspace(false)
+  })
   render()
 }

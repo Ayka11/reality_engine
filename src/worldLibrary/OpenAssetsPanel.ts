@@ -136,7 +136,7 @@ export function mountOpenAssetsPanel() {
   button.id = 'openAssetsButton'
   button.textContent = '📚 Open Assets'
   button.className = 'brush-btn'
-  button.style.cssText = 'position:absolute;top:48px;right:18px;z-index:41;font-size:10px;padding:5px 9px;pointer-events:auto;'
+  button.style.cssText = 'position:fixed;bottom:44px;right:18px;z-index:41;font-size:10px;padding:5px 9px;pointer-events:auto;'
   button.addEventListener('click',()=>{open=!open;render()})
   document.body.appendChild(button)
   render()
