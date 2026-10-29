@@ -9,7 +9,6 @@ import ts from "typescript";
 const expectedCalls = new Map([
   ["src/core/SparseVoxelGrid.ts#syncDenseEntityOwnershipToChunks", 1],
   ["src/core/SparseVoxelGrid.ts#syncDenseToChunks", 1],
-  ["src/core/SparseVoxelGrid.ts#syncChunksToDense", 1],
   ["src/simulation/EntityLayer.ts#tick", 2],
 ]);
 const expectedImports = new Set([

@@ -80,6 +80,28 @@ export class Chunk {
     if (accessTime > this._lastAccessed) this._lastAccessed = accessTime;
     return new CellState(this._buffer, this.localIdx(lx, ly, lz), () => this.markMutation());
   }
+  /**
+   * Copy a range from the authoritative front buffer into a caller-owned target.
+   * The internal source view never escapes; the caller remains responsible for
+   * tracking any mutation to its own destination buffer.
+   */
+  copyFrontRangeTo(
+    target: Float32Array,
+    sourceOffset: number,
+    targetOffset: number,
+    length: number,
+  ): void {
+    if (!(target instanceof Float32Array) ||
+        !Number.isSafeInteger(sourceOffset) || sourceOffset < 0 ||
+        !Number.isSafeInteger(targetOffset) || targetOffset < 0 ||
+        !Number.isSafeInteger(length) || length < 0 ||
+        sourceOffset + length > this._buffer.length ||
+        targetOffset + length > target.length) {
+      throw new RangeError("Chunk front-buffer copy range is invalid");
+    }
+    target.set(this._buffer.subarray(sourceOffset, sourceOffset + length), targetOffset);
+  }
+
   /** Copy the current front buffer to back without exposing internal typed arrays. */
   copyFrontToBackBuffer(): void {
     this._backBuffer.set(this._buffer);

@@ -667,27 +667,27 @@ export class SparseVoxelGrid {
     const endMutation = this.beginMutation();
     try {
       this._sparseDenseBuffer.fill(0);
-      const rawBuffers = new Map<Chunk, Float32Array>();
       for (let z = 0; z < this.D; z++)
       for (let y = 0; y < this.H; y++)
       for (let x = 0; x < this.W; x++) {
         const gx = x + this.denseOrigin.x;
         const gy = y + this.denseOrigin.y;
         const gz = z + this.denseOrigin.z;
-        // Resolve the physical chunk directly from coordinates; avoid exposing raw buffers through public views.
+        // Resolve the physical chunk directly from coordinates. Copy out the
+        // needed fields through a non-aliasing API; this is a read, not mutation.
         const [cx, lx] = this.globalToChunk(gx);
         const [cy, ly] = this.globalToChunk(gy);
         const [cz, lz] = this.globalToChunk(gz);
         const sourceChunk = this.chunks.get(this.getChunkKey(cx, cy, cz));
         if (!sourceChunk) continue;
         sourceChunk.lastAccessed = Date.now();
-        let sourceBuffer = rawBuffers.get(sourceChunk);
-        if (!sourceBuffer) {
-          sourceBuffer = getMutableBuffer(sourceChunk);
-          rawBuffers.set(sourceChunk, sourceBuffer);
-        }
         const sourceStart = sourceChunk.localIdx(lx, ly, lz);
-        this._sparseDenseBuffer.set(sourceBuffer.subarray(sourceStart, sourceStart + CELL_FIELDS), this.idx(x, y, z));
+        sourceChunk.copyFrontRangeTo(
+          this._sparseDenseBuffer,
+          sourceStart,
+          this.idx(x, y, z),
+          CELL_FIELDS,
+        );
       }
       this.markMutation();
     } finally {
