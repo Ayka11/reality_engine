@@ -4,10 +4,35 @@ import { WORLD } from "../src/core/WorldConstants.ts";
 import { Chunk } from "../src/core/Chunk.ts";
 import { SparseVoxelGrid } from "../src/core/SparseVoxelGrid.ts";
 import { SimulationEngine } from "../src/simulation/SimulationEngine.ts";
+import { LawEngine } from "../src/laws/LawEngine.ts";
 import { getMutableBuffer, withMutableBuffers } from "../src/core/TrackedFloat32Array.ts";
 import { SculptManager } from "../src/sculpt/SculptManager.ts";
 import { WorldSaveSystem } from "../src/world/save/WorldSaveSystem.ts";
 import { PROC } from "../src/process/ProcessDef.ts";
+
+function checkLawSnapshotValidationIsAtomic(): void {
+  const engine = new LawEngine(12345);
+  const before = JSON.stringify(engine.snapshot());
+  const revisionBefore = engine.mutationRevision;
+
+  const invalidMetric = engine.snapshot();
+  invalidMetric.laws[0].conditions = [
+    { metric: "unrecognized-metric" as never, op: "gt", value: 1 },
+  ];
+  assert.throws(() => engine.restore(invalidMetric), /Invalid LawEngine snapshot/);
+  assert.equal(JSON.stringify(engine.snapshot()), before,
+    "rejected snapshots with unknown metrics must leave law state unchanged");
+  assert.equal(engine.mutationRevision, revisionBefore,
+    "rejected snapshots must not advance the authoritative law revision");
+
+  const invalidOverride = engine.snapshot();
+  invalidOverride.laws[0].paramOverrides = { unknownPhysicsParameter: 1 } as never;
+  assert.throws(() => engine.restore(invalidOverride), /Invalid LawEngine snapshot/);
+  assert.equal(JSON.stringify(engine.snapshot()), before,
+    "rejected snapshots with unknown physics parameters must leave law state unchanged");
+  assert.equal(engine.mutationRevision, revisionBefore,
+    "rejected snapshot validation must be atomic for mutation revision too");
+}
 
 async function beginPendingReadback(engine: SimulationEngine, stale: Float32Array) {
   let release!: (data: Float32Array) => void;
@@ -23,6 +48,7 @@ async function beginPendingReadback(engine: SimulationEngine, stale: Float32Arra
 }
 
 export async function runSimulationEngineStaleReadbackRegression(): Promise<void> {
+  checkLawSnapshotValidationIsAtomic();
   const engine = new SimulationEngine(8, 8, 8);
   // Exercise the async GPU control path deterministically without a GPU device.
   (engine as unknown as { _gpuReady: boolean })._gpuReady = true;

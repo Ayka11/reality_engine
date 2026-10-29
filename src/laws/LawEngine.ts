@@ -31,7 +31,6 @@ function cloneLaw(law: MetaLaw): MetaLaw {
   };
 }
 
-/** Deeply track the publicly exposed law tree so nested edits invalidate pending GPU work. */
 /**
  * Detach object values before they enter the tracked law tree. Without this,
  * a caller could assign an object through the proxy and then mutate its
@@ -55,6 +54,7 @@ function detachLawStateValue<T>(value: T, seen = new WeakMap<object, object>()):
   return copy as T;
 }
 
+/** Deeply track the publicly exposed law tree so nested edits invalidate pending GPU work. */
 function trackLawState<T extends object>(
   target: T,
   onMutation: () => void,
@@ -106,6 +106,11 @@ function isProcessIdList(value: unknown): value is number[] {
     new Set(value).size === value.length;
 }
 
+const VALID_LAW_METRICS = new Set([
+  'totalEnergy', 'avgEntropy', 'avgInfo', 'avgDensity', 'avgBio', 'tick',
+]);
+const VALID_PARAM_OVERRIDE_KEYS = new Set(Object.keys(DEFAULT_PARAMS));
+
 function isMetaLaw(value: unknown): value is MetaLaw {
   if (!value || typeof value !== 'object') return false;
   const law = value as Partial<MetaLaw>;
@@ -113,13 +118,15 @@ function isMetaLaw(value: unknown): value is MetaLaw {
   return typeof law.id === 'string' && law.id.length > 0 &&
     typeof law.name === 'string' && typeof law.active === 'boolean' &&
     Array.isArray(law.conditions) && law.conditions.every(condition =>
-      !!condition && typeof condition.metric === 'string' &&
-      ['gt', 'lt', 'gte', 'lte'].includes(condition.op) &&
-      Number.isFinite(condition.value)) &&
+      !!condition && typeof condition === 'object' &&
+      typeof condition.metric === 'string' && VALID_LAW_METRICS.has(condition.metric) &&
+      typeof condition.op === 'string' && ['gt', 'lt', 'gte', 'lte'].includes(condition.op) &&
+      typeof condition.value === 'number' && Number.isFinite(condition.value)) &&
     isProcessIdList(law.enablesProcesses) &&
     isProcessIdList(law.disablesProcesses) &&
     !!overrides && typeof overrides === 'object' && !Array.isArray(overrides) &&
-    Object.values(overrides).every(item => typeof item === 'number' && Number.isFinite(item)) &&
+    Object.entries(overrides).every(([key, item]) =>
+      VALID_PARAM_OVERRIDE_KEYS.has(key) && typeof item === 'number' && Number.isFinite(item)) &&
     Number.isFinite(law.fitness) &&
     Number.isSafeInteger(law.age) && (law.age as number) >= 0 &&
     Number.isFinite(law.mutationRate) && (law.mutationRate as number) >= 0 && (law.mutationRate as number) <= 1 &&
