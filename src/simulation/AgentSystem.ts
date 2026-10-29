@@ -1,5 +1,5 @@
 import { VoxelGrid } from '../core/VoxelGrid';
-import { getMutableBuffer } from '../core/TrackedFloat32Array';
+import { withMutableBuffers } from '../core/TrackedFloat32Array';
 import { CELL_FIELDS, F } from '../core/CellState';
 
 export type AgentBehavior = 'explorer' | 'harvester' | 'signaler' | 'builder' | 'destroyer';
@@ -153,26 +153,27 @@ export class AgentSystem {
     // A no-op seed must not acquire a mutable grid buffer (which advances the
     // tracked mutation revision) when no agents can be added.
     if (count === 0 || this.agents.size >= this.maxAgents) return;
-    const buf = getMutableBuffer(grid);
-    for (let i = 0; i < count && this.agents.size < this.maxAgents; i++) {
-      // Keep seeded agents in-bounds for small test worlds as well as the
-      // default world. The previous fixed margins could create coordinates
-      // outside grids narrower than eight cells or shallower than three.
-      const x = Math.min(grid.W - 1, Math.max(0, Math.floor(4 + this._random() * Math.max(1, grid.W - 8))));
-      const y = Math.min(grid.H - 1, Math.max(0, Math.floor(4 + this._random() * Math.max(1, grid.H - 8))));
-      const z = Math.min(grid.D - 1, Math.max(0, Math.floor(2 + this._random() * Math.max(1, grid.D * 0.6))));
+    withMutableBuffers(grid, (front, _back) => {
+      for (let i = 0; i < count && this.agents.size < this.maxAgents; i++) {
+        // Keep seeded agents in-bounds for small test worlds as well as the
+        // default world. The previous fixed margins could create coordinates
+        // outside grids narrower than eight cells or shallower than three.
+        const x = Math.min(grid.W - 1, Math.max(0, Math.floor(4 + this._random() * Math.max(1, grid.W - 8))));
+        const y = Math.min(grid.H - 1, Math.max(0, Math.floor(4 + this._random() * Math.max(1, grid.H - 8))));
+        const z = Math.min(grid.D - 1, Math.max(0, Math.floor(2 + this._random() * Math.max(1, grid.D * 0.6))));
 
-      // Inject a small energy patch so agents have something to harvest
-      for (let dz = -1; dz <= 1; dz++)
-      for (let dy = -2; dy <= 2; dy++)
-      for (let dx = -2; dx <= 2; dx++) {
-        if (!grid.inBounds(x+dx, y+dy, z+dz)) continue;
-        const base = (((z+dz) * grid.H * grid.W) + (y+dy) * grid.W + (x+dx)) * CELL_FIELDS;
-        buf[base + F.ENERGY] = Math.max(buf[base + F.ENERGY], 150);
+        // Inject a small energy patch so agents have something to harvest
+        for (let dz = -1; dz <= 1; dz++)
+        for (let dy = -2; dy <= 2; dy++)
+        for (let dx = -2; dx <= 2; dx++) {
+          if (!grid.inBounds(x+dx, y+dy, z+dz)) continue;
+          const base = (((z+dz) * grid.H * grid.W) + (y+dy) * grid.W + (x+dx)) * CELL_FIELDS;
+          front[base + F.ENERGY] = Math.max(front[base + F.ENERGY], 150);
+        }
+
+        this._spawn(x, y, z, randomBehavior(() => this._random()), 200);
       }
-
-      this._spawn(x, y, z, randomBehavior(() => this._random()), 200);
-    }
+    });
   }
 
   tick(grid: VoxelGrid, dt: number): void {

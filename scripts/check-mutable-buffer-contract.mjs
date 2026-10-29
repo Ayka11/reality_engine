@@ -12,9 +12,6 @@ const expectedCalls = new Map([
   ["src/core/SparseVoxelGrid.ts#syncChunksToDense", 1],
   ["src/core/SparseVoxelGrid.ts#loadChunks", 2],
   ["src/core/SparseVoxelGrid.ts#syncBackBuffersFromFront", 2],
-  ["src/chemistry/ChemLayer.ts#commitPendingDensityTransfers", 1],
-  ["src/chemistry/ChemLayer.ts#tickRegion", 1],
-  ["src/simulation/AgentSystem.ts#seed", 1],
   ["src/simulation/AgentSystem.ts#tick", 1],
   ["src/simulation/EntityLayer.ts#tick", 2],
   ["src/simulation/EntityLayer.ts#_reconcileFullDomain", 1],
@@ -31,7 +28,6 @@ const expectedCalls = new Map([
 const expectedImports = new Set([
   "src/core/SparseVoxelGrid.ts",
   "src/simulation/SimulationEngine.ts",
-  "src/chemistry/ChemLayer.ts",
   "src/simulation/AgentSystem.ts",
   "src/simulation/EntityLayer.ts",
 ]);
@@ -41,6 +37,9 @@ const expectedScopedCalls = new Map([
   ["src/simulation/InfoPhysics.ts#tick", 1],
   ["src/simulation/TemporalLayer.ts#tick", 1],
   ["src/simulation/TemporalLayer.ts#_diffuseTime", 1],
+  ["src/chemistry/ChemLayer.ts#commitPendingDensityTransfers", 1],
+  ["src/chemistry/ChemLayer.ts#tickRegion", 1],
+  ["src/simulation/AgentSystem.ts#seed", 1],
 ]);
 const actualScopedCalls = new Map();
 const expectedSymbolImplementations = new Set([
@@ -238,9 +237,6 @@ for (const filePath of sourcePaths) {
         "src/core/SparseVoxelGrid.ts#syncDenseEntityOwnershipToChunks",
         "src/core/SparseVoxelGrid.ts#syncDenseToChunks",
         "src/core/SparseVoxelGrid.ts#syncChunksToDense",
-        "src/chemistry/ChemLayer.ts#commitPendingDensityTransfers",
-        "src/chemistry/ChemLayer.ts#tickRegion",
-        "src/simulation/AgentSystem.ts#seed",
         "src/simulation/AgentSystem.ts#tick",
         "src/simulation/EntityLayer.ts#tick",
         "src/simulation/EntityLayer.ts#_reconcileFullDomain",
