@@ -68,6 +68,7 @@ jobs:
       - run: npm run test:field-physics-erosion
       - run: npm run test:field-physics-pressure
       - run: npm run test:field-physics-density
+      - run: npm run test:field-physics-matrix
       - run: npm run test:field-physics-phase-transition
       - run: npm run test:field-physics-crystallization
       - run: npm run test:field-physics-radiation

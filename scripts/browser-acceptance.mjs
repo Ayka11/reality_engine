@@ -2608,9 +2608,13 @@ try {
       // The generation commit is synchronous, but chunks and terrain meshes are
       // materialized incrementally by the render loop. Keep sampling until a
       // representative terrain window is loaded; don't accept a single early mesh.
-      if (generationRevision > baselineRevision &&
-          (!probe.last || probe.last.generationRevision < generationRevision ||
-            !probe.last.geometryReviewed)) {
+      const sampleGeometryNow = !probe.last ||
+        probe.last.generationRevision < generationRevision ||
+        (!probe.last.geometryReviewed && probe.calls - probe.last.calls >= 6);
+      // Full vertex/index validation is O(triangle count); throttle the deep scan
+      // while terrain streaming is incomplete so this diagnostic cannot starve
+      // the browser event loop it is meant to observe.
+      if (generationRevision > baselineRevision && sampleGeometryNow) {
         const stats = world.getRuntimeStats();
         const patches = [...(world.patches?.values?.() ?? [])];
         const terrainMeshes = [];
