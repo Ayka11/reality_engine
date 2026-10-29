@@ -80,6 +80,11 @@ export class Chunk {
     if (accessTime > this._lastAccessed) this._lastAccessed = accessTime;
     return new CellState(this._buffer, this.localIdx(lx, ly, lz), () => this.markMutation());
   }
+  /** Copy the current front buffer to back without exposing internal typed arrays. */
+  copyFrontToBackBuffer(): void {
+    this._backBuffer.set(this._buffer);
+    this.markMutation();
+  }
   snapshot(): void { this._backBuffer.set(this._buffer); this.markMutation(); }
   swapBuffers(): void {
     const raw = this._buffer; this._buffer = this._backBuffer; this._backBuffer = raw;

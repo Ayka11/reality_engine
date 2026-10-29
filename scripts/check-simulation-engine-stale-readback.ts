@@ -263,6 +263,18 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   await assert.rejects(staleChunkStep.step, /Discarded stale GPU readback/);
   assert.equal(chunk.buffer[chunkFieldIndex], 202, "stale GPU readback must not mutate newer chunk state");
 
+  // Chunk back-buffer writes are also authoritative, even though GPU readback
+  // targets the dense front buffer. They must invalidate any older GPU result.
+  const staleChunkBackStep = await beginPendingReadback(engine, engine.grid.buffer.slice());
+  const beforeChunkBackWrite = engine.grid.mutationRevision;
+  chunk.backBuffer[chunkFieldIndex] = 212;
+  assert.ok(engine.grid.mutationRevision > beforeChunkBackWrite,
+    "direct chunk back-buffer writes must advance the grid mutation revision");
+  staleChunkBackStep.release();
+  await assert.rejects(staleChunkBackStep.step, /Discarded stale GPU readback/);
+  assert.equal(chunk.backBuffer[chunkFieldIndex], 212,
+    "stale GPU readback must not overwrite newer chunk back-buffer state");
+
   // The range getter must be detached. Because the range is derived from chunk
   // topology, callers cannot install a valid-looking but physically inconsistent override.
   const originalRange = engine.grid.activeChunkRange;

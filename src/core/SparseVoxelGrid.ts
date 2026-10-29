@@ -801,7 +801,7 @@ export class SparseVoxelGrid {
     try {
       this._sparseDenseBackBuffer.set(this._sparseDenseBuffer);
       for (const chunk of this.chunks.values()) {
-        chunk.backBuffer.set(chunk.buffer);
+        chunk.copyFrontToBackBuffer();
       }
       this.markMutation();
     } finally { endMutation(); }
