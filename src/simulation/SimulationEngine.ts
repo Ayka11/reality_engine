@@ -89,7 +89,7 @@ export class SimulationEngine {
     try {
       const initialized = await this.gpu.init(this.grid.W, this.grid.H, this.grid.D);
       if (!initialized) return false;
-      this.gpu.upload(getMutableBuffer(this.grid));
+      this.gpu.upload(this.grid.buffer.slice());
       this.gpu.uploadMaterials(buildMaterialBuffer());
       this._gpuReady = true;
       return true;
