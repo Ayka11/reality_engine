@@ -77,6 +77,16 @@ const boundaryDensityHalo = readField(
 assert.ok(boundaryDensityHalo > 0 && boundaryDensityHalo < 0.5,
   `density diffusion should cross a chunk boundary into an empty cell (got ${boundaryDensityHalo})`)
 
+// The normal prune pass runs every 100 ticks. A low-density destination chunk
+// must survive that pass while the neighboring source continues to feed it.
+send('tick', { speed: 100 })
+const sustainedBoundaryDensityHalo = readField(
+  latestFrame(), boundaryDensityPoint.x + 1, boundaryDensityPoint.y, boundaryDensityPoint.z, F.D,
+)
+assert.ok(sustainedBoundaryDensityHalo > boundaryDensityHalo + 0.0001 &&
+  sustainedBoundaryDensityHalo < 0.5,
+  `density halo should keep accumulating across a chunk boundary after the 100-tick prune (initial ${boundaryDensityHalo}, later ${sustainedBoundaryDensityHalo})`)
+
 const boundaryTemperaturePoint = { x: 7, y: 32, z: 20 }
 send('setPhysics', {
   params: { ...params, energyDiffusion: 0, densityDiffusion: 0,

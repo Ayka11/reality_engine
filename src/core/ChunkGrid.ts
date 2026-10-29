@@ -222,7 +222,9 @@ export class ChunkGrid {
     for (const c of this.chunks.values()) {
       for (let i = 0; i < CHUNK_FLOATS; i += NF) {
         let any = false
-        for (let f = 0; f < NF; f++) if (Math.abs(c[i + f]) > 0.001) { any = true; break }
+        for (let f = 0; f < NF; f++) {
+          if (Math.abs(c[i + f]) > fieldActivityEpsilon(f)) { any = true; break }
+        }
         if (any) cells++
       }
     }

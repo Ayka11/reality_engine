@@ -156,7 +156,12 @@ function restoreCells(image:CellImage):void {
     const chunk=grid.chunks.get(key)
     if(!chunk)continue
     let nonzero=false
-    for(let i=0;i<chunk.length;i++)if(Math.abs(chunk[i])>0.001){nonzero=true;break}
+    for(let base=0;base<chunk.length;base+=NF){
+      for(let field=0;field<NF;field++){
+        if(Math.abs(chunk[base+field])>fieldActivityEpsilon(field)){nonzero=true;break}
+      }
+      if(nonzero)break
+    }
     if(!nonzero){grid.chunks.delete(key);grid.dirtyChunks.add(key)}
   }
 }

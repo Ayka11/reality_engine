@@ -712,6 +712,8 @@ Each tick applies across all active 8×8×8 chunks:
 8. **Causal logging** — |ΔE| > 55 per tick → causal event logged
 9. **Chunk pruning** — every 100 ticks removes empty chunks
 
+Sparse worker residency is field-aware: density uses a `10^{-6}` activity floor because the canonical density mobility can transfer less than `10^{-3}` into an empty neighbor per step. Density-only chunks remain active and are not discarded by the generic low-amplitude prune while their density exceeds this floor; runtime statistics and sculpt-undo cleanup use the same field-aware threshold. Other fields keep the standard `10^{-3}` activity threshold.
+
 ---
 
 ## MetaLaw System
