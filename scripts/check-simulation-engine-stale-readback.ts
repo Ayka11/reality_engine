@@ -498,6 +498,26 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   lawBoundaryEngine.laws.laws[0].name = "Tracked law definition";
   assert.ok(lawBoundaryEngine.laws.mutationRevision > lawTreeRevision,
     "nested public law-definition edits must advance the law revision");
+
+  // Replacing the public law list must detach caller-owned objects, while the
+  // tracked replacement continues to invalidate revisions for nested edits.
+  const externalLaw = {
+    ...lawBoundaryEngine.laws.laws[0],
+    conditions: [{ metric: "tick" as const, op: "gte" as const, value: 0 }],
+    enablesProcesses: [...lawBoundaryEngine.laws.laws[0].enablesProcesses],
+    disablesProcesses: [...lawBoundaryEngine.laws.laws[0].disablesProcesses],
+    paramOverrides: { ...lawBoundaryEngine.laws.laws[0].paramOverrides },
+  };
+  lawBoundaryEngine.laws.laws = [externalLaw];
+  const revisionAfterLawReplacement = lawBoundaryEngine.laws.mutationRevision;
+  externalLaw.name = "escaped caller alias";
+  assert.notEqual(lawBoundaryEngine.laws.laws[0].name, externalLaw.name,
+    "caller-owned law objects must be detached when installed");
+  assert.equal(lawBoundaryEngine.laws.mutationRevision, revisionAfterLawReplacement,
+    "mutating a detached caller alias must not affect authoritative state or its revision");
+  lawBoundaryEngine.laws.laws[0].conditions[0].value = 1;
+  assert.ok(lawBoundaryEngine.laws.mutationRevision > revisionAfterLawReplacement,
+    "nested condition edits on the installed law tree must advance the law revision");
   const staleLawResult = lawBoundaryEngine.grid.buffer.slice();
   staleLawResult[lawBoundaryFieldIndex] = 9006;
   const pendingLawReadback = await beginPendingReadback(lawBoundaryEngine, staleLawResult);
