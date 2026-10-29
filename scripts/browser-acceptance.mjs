@@ -2614,6 +2614,7 @@ try {
         const stats = world.getRuntimeStats();
         const patches = [...(world.patches?.values?.() ?? [])];
         const terrainMeshes = [];
+        let invalidGeometryPatches = 0;
         let vertexCount = 0;
         let triangleCount = 0;
         for (const patch of patches) {
@@ -2621,14 +2622,20 @@ try {
           const geometry = mesh?.geometry;
           const position = geometry?.getAttribute?.("position");
           const index = geometry?.index;
-          if (position && index && position.count >= 3 && index.count >= 3 && index.count % 3 === 0) {
-            terrainMeshes.push({ position, index });
-            vertexCount += position.count;
-            triangleCount += index.count / 3;
+          if (!position || !index || position.count < 3 || index.count < 3 || index.count % 3 !== 0) {
+            invalidGeometryPatches++;
+            continue;
           }
+          terrainMeshes.push({ position, index });
+          vertexCount += position.count;
+          triangleCount += index.count / 3;
         }
 
-        const geometryReviewed = patches.length >= 13 && terrainMeshes.length >= 13;
+        // Do not let a large collection of good meshes hide a single missing or
+        // malformed patch. Every active patch must contribute valid geometry.
+        const geometryReviewed = patches.length >= 13 &&
+          terrainMeshes.length === patches.length &&
+          invalidGeometryPatches === 0;
         let minY = Infinity;
         let maxY = -Infinity;
         let distinctHeights = 0;
@@ -2684,6 +2691,8 @@ try {
           vertexCount,
           triangleCount,
           geometryReviewed,
+          invalidGeometryPatches,
+          activePatches: patches.length,
           minY,
           maxY,
           relief: maxY - minY,
@@ -2760,6 +2769,8 @@ try {
       Number(quickResult.rendered?.terrainMeshPatches ?? 0) < 13 ||
       Number(quickResult.rendered?.triangleCount ?? 0) <= 0 ||
       quickResult.rendered?.geometryReviewed !== true ||
+      Number(quickResult.rendered?.invalidGeometryPatches ?? 0) !== 0 ||
+      Number(quickResult.rendered?.terrainMeshPatches ?? 0) !== Number(quickResult.rendered?.activePatches ?? -1) ||
       !Number.isFinite(quickResult.rendered?.relief) ||
       quickResult.rendered.relief < 1 ||
       Number(quickResult.rendered?.distinctHeightSamples ?? 0) < 8 ||
