@@ -141,6 +141,25 @@ export class SparseVoxelGrid {
   set backBuffer(value: Float32Array) { this.assertSparseBuffer(value); this._sparseDenseBackBuffer.set(value); this.markMutation(); }
   get mutationRevision(): number { return this._sparseMutationRevision; }
 
+  /**
+   * Detect writes made through a previously acquired raw internal alias while
+   * asynchronous GPU readback is pending. Snapshots must be detached copies.
+   * This method reads private backing arrays directly to avoid per-element
+   * Proxy overhead on the public revision-tracked views.
+   */
+  buffersMatchSnapshots(frontSnapshot: Float32Array, backSnapshot: Float32Array): boolean {
+    const front = this._sparseDenseBuffer;
+    const back = this._sparseDenseBackBuffer;
+    if (!(frontSnapshot instanceof Float32Array) || !(backSnapshot instanceof Float32Array) ||
+        frontSnapshot.length !== front.length || backSnapshot.length !== back.length) {
+      return false;
+    }
+    for (let i = 0; i < front.length; i++) {
+      if (!Object.is(front[i], frontSnapshot[i]) || !Object.is(back[i], backSnapshot[i])) return false;
+    }
+    return true;
+  }
+
   beginMutation(): () => void {
     this.sparseMutationDepth++;
     let ended = false;

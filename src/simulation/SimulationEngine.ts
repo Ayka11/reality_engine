@@ -248,22 +248,13 @@ export class SimulationEngine {
         const revisionChanged = readbackGridRevision !== this.grid.mutationRevision;
         let untrackedBufferWrite = false;
         if (!generationChanged && !revisionChanged) {
-          const buffers = [
-            [this.grid.buffer, readbackBufferSnapshot],
-            [this.grid.backBuffer, readbackBackBufferSnapshot],
-          ] as const;
-          outer: for (const [currentBuffer, snapshot] of buffers) {
-            if (currentBuffer.length !== snapshot.length) {
-              untrackedBufferWrite = true;
-              break;
-            }
-            for (let i = 0; i < currentBuffer.length; i++) {
-              if (!Object.is(currentBuffer[i], snapshot[i])) {
-                untrackedBufferWrite = true;
-                break outer;
-              }
-            }
-          }
+          // Compare against the grid's private backing arrays directly. Reading
+          // through the tracked Proxy here added per-element trap overhead to
+          // both full-buffer scans without improving mutation coverage.
+          untrackedBufferWrite = !this.grid.buffersMatchSnapshots(
+            readbackBufferSnapshot,
+            readbackBackBufferSnapshot,
+          );
         }
         if (generationChanged || revisionChanged || untrackedBufferWrite) {
           // Tracked writes are rejected through revision/generation. Compare the
