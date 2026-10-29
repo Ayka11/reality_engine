@@ -2518,15 +2518,15 @@ try {
       const result = probe.original.apply(this, args);
       probe.calls++;
       const generationRevision = Number(window.lastInfinityGeneration?.generationRevision ?? 0);
-      // Only inspect the generated world after the generation transaction advances.
-      // Retry on later frames until a real terrain mesh is present, rather than
-      // treating an empty patch map immediately after reseed as a successful render.
+      // The generation commit is synchronous, but chunks and terrain meshes are
+      // materialized incrementally by the render loop. Keep sampling until a
+      // representative terrain window is loaded; don't accept a single early mesh.
       if (generationRevision > baselineRevision &&
           (!probe.last || probe.last.generationRevision < generationRevision ||
-            probe.last.terrainMeshPatches === 0 || probe.last.triangleCount === 0)) {
+            !probe.last.geometryReviewed)) {
         const stats = world.getRuntimeStats();
         const patches = [...(world.patches?.values?.() ?? [])];
-        let terrainMeshPatches = 0;
+        const terrainMeshes = [];
         let vertexCount = 0;
         let triangleCount = 0;
         for (const patch of patches) {
@@ -2535,11 +2535,57 @@ try {
           const position = geometry?.getAttribute?.("position");
           const index = geometry?.index;
           if (position && index && position.count >= 3 && index.count >= 3 && index.count % 3 === 0) {
-            terrainMeshPatches++;
+            terrainMeshes.push({ position, index });
             vertexCount += position.count;
             triangleCount += index.count / 3;
           }
         }
+
+        const geometryReviewed = patches.length >= 13 && terrainMeshes.length >= 13;
+        let minY = Infinity;
+        let maxY = -Infinity;
+        let distinctHeights = 0;
+        let degenerateTriangles = 0;
+        let invalidIndices = 0;
+        let nonFiniteVertices = 0;
+        let malformedIndexBuffers = 0;
+        if (geometryReviewed) {
+          const heights = new Set();
+          for (const { position, index } of terrainMeshes) {
+            for (let i = 0; i < position.count; i++) {
+              const x = position.getX(i);
+              const y = position.getY(i);
+              const z = position.getZ(i);
+              if (![x, y, z].every(Number.isFinite)) {
+                nonFiniteVertices++;
+                continue;
+              }
+              minY = Math.min(minY, y);
+              maxY = Math.max(maxY, y);
+              heights.add(Math.round(y * 1000) / 1000);
+            }
+            if (index.count % 3 !== 0) malformedIndexBuffers++;
+            for (let i = 0; i + 2 < index.count; i += 3) {
+              const ia = index.getX(i), ib = index.getX(i + 1), ic = index.getX(i + 2);
+              if ([ia, ib, ic].some(v => !Number.isInteger(v) || v < 0 || v >= position.count)) {
+                invalidIndices++;
+                continue;
+              }
+              const ax = position.getX(ib) - position.getX(ia);
+              const ay = position.getY(ib) - position.getY(ia);
+              const az = position.getZ(ib) - position.getZ(ia);
+              const bx = position.getX(ic) - position.getX(ia);
+              const by = position.getY(ic) - position.getY(ia);
+              const bz = position.getZ(ic) - position.getZ(ia);
+              const cx = ay * bz - az * by;
+              const cy = az * bx - ax * bz;
+              const cz = ax * by - ay * bx;
+              if (Math.hypot(cx, cy, cz) < 1e-6) degenerateTriangles++;
+            }
+          }
+          distinctHeights = heights.size;
+        }
+
         const canvas = renderer.domElement;
         probe.last = {
           calls: probe.calls,
@@ -2547,9 +2593,18 @@ try {
           objects: Number(stats?.objects ?? 0),
           loadedChunks: Number(stats?.loadedChunks ?? 0),
           targetChunks: Number(stats?.targetChunks ?? 0),
-          terrainMeshPatches,
+          terrainMeshPatches: terrainMeshes.length,
           vertexCount,
           triangleCount,
+          geometryReviewed,
+          minY,
+          maxY,
+          relief: maxY - minY,
+          distinctHeightSamples: distinctHeights,
+          degenerateTriangles,
+          invalidIndices,
+          nonFiniteVertices,
+          malformedIndexBuffers,
           rendererEnabled: Boolean(world.isEnabled),
           renderMode: window.currentRenderMode,
           canvasConnected: Boolean(canvas?.isConnected),
@@ -2584,9 +2639,10 @@ try {
       Number(rendered?.generationRevision ?? 0) > baselineRevision &&
       Number(rendered?.objects ?? 0) > 0 &&
       Number(rendered?.loadedChunks ?? 0) > 0 &&
-      Number(rendered?.terrainMeshPatches ?? 0) > 0 &&
+      Number(rendered?.terrainMeshPatches ?? 0) >= 13 &&
       Number(rendered?.vertexCount ?? 0) >= 3 &&
       Number(rendered?.triangleCount ?? 0) > 0 &&
+      rendered?.geometryReviewed === true &&
       rendered?.rendererEnabled === true &&
       rendered?.renderMode === "3d" &&
       rendered?.canvasConnected === true &&
@@ -2613,11 +2669,19 @@ try {
   const afterQuick = quickResult.after;
   if (!quickResult.verification?.ok || !quickResult.verification?.generationAdvanced ||
       Number(afterQuick?.stats?.objects ?? 0) <= 0 ||
-      Number(quickResult.rendered?.loadedChunks ?? 0) <= 0 ||
-      Number(quickResult.rendered?.terrainMeshPatches ?? 0) <= 0 ||
+      Number(quickResult.rendered?.loadedChunks ?? 0) < 13 ||
+      Number(quickResult.rendered?.terrainMeshPatches ?? 0) < 13 ||
       Number(quickResult.rendered?.triangleCount ?? 0) <= 0 ||
+      quickResult.rendered?.geometryReviewed !== true ||
+      !Number.isFinite(quickResult.rendered?.relief) ||
+      quickResult.rendered.relief < 1 ||
+      Number(quickResult.rendered?.distinctHeightSamples ?? 0) < 8 ||
+      Number(quickResult.rendered?.degenerateTriangles ?? 0) > 0 ||
+      Number(quickResult.rendered?.invalidIndices ?? 0) > 0 ||
+      Number(quickResult.rendered?.nonFiniteVertices ?? 0) > 0 ||
+      Number(quickResult.rendered?.malformedIndexBuffers ?? 0) > 0 ||
       quickResult.rendered?.worldSeed !== quickResult.rendered?.viewSeed) {
-    throw new Error("Quick Generate did not prove the state → chunks → terrain mesh → rendered canvas chain: " +
+    throw new Error("Quick Generate did not prove a non-flat, valid state → chunks → terrain mesh → rendered canvas chain: " +
       JSON.stringify(quickResult));
   }
   const unifiedRuntime = await page.evaluate(() =>
