@@ -32,6 +32,29 @@ function cloneLaw(law: MetaLaw): MetaLaw {
 }
 
 /** Deeply track the publicly exposed law tree so nested edits invalidate pending GPU work. */
+/**
+ * Detach object values before they enter the tracked law tree. Without this,
+ * a caller could assign an object through the proxy and then mutate its
+ * retained alias without passing through a proxy trap or advancing revision.
+ */
+function detachLawStateValue<T>(value: T, seen = new WeakMap<object, object>()): T {
+  if (value === null || typeof value !== "object") return value;
+  const source = value as unknown as object;
+  const known = seen.get(source);
+  if (known) return known as T;
+
+  const copy: Record<string, unknown> | unknown[] = Array.isArray(value) ? [] : {};
+  seen.set(source, copy as object);
+  for (const key of Object.keys(source)) {
+    (copy as Record<string, unknown>)[key] = detachLawStateValue(
+      (source as Record<string, unknown>)[key],
+      seen,
+    );
+  }
+  if (Array.isArray(value)) (copy as unknown[]).length = value.length;
+  return copy as T;
+}
+
 function trackLawState<T extends object>(
   target: T,
   onMutation: () => void,
@@ -50,7 +73,10 @@ function trackLawState<T extends object>(
     set(current, property, value) {
       const previous = Reflect.get(current, property, current) as unknown;
       if (Object.is(previous, value)) return true;
-      const changed = Reflect.set(current, property, value, current);
+      const detachedValue = value !== null && typeof value === "object"
+        ? detachLawStateValue(value)
+        : value;
+      const changed = Reflect.set(current, property, detachedValue, current);
       if (changed) onMutation();
       return changed;
     },
@@ -61,7 +87,11 @@ function trackLawState<T extends object>(
       return deleted;
     },
     defineProperty(current, property, descriptor) {
-      const defined = Reflect.defineProperty(current, property, descriptor);
+      const detachedDescriptor = "value" in descriptor && descriptor.value !== null &&
+        typeof descriptor.value === "object"
+        ? { ...descriptor, value: detachLawStateValue(descriptor.value) }
+        : descriptor;
+      const defined = Reflect.defineProperty(current, property, detachedDescriptor);
       if (defined) onMutation();
       return defined;
     },

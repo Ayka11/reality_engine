@@ -515,9 +515,40 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
     "caller-owned law objects must be detached when installed");
   assert.equal(lawBoundaryEngine.laws.mutationRevision, revisionAfterLawReplacement,
     "mutating a detached caller alias must not affect authoritative state or its revision");
-  lawBoundaryEngine.laws.laws[0].conditions[0].value = 1;
-  assert.ok(lawBoundaryEngine.laws.mutationRevision > revisionAfterLawReplacement,
-    "nested condition edits on the installed law tree must advance the law revision");
+  // Assigning a nested object must detach it, both through ordinary assignment
+  // and defineProperty; otherwise retained caller aliases bypass the proxy.
+  const insertedConditionAlias = { metric: "tick" as const, op: "gte" as const, value: 2 };
+  lawBoundaryEngine.laws.laws[0].conditions[0] = insertedConditionAlias;
+  const revisionAfterConditionInsert = lawBoundaryEngine.laws.mutationRevision;
+  insertedConditionAlias.value = 100;
+  assert.equal(lawBoundaryEngine.laws.laws[0].conditions[0].value, 2,
+    "assigned nested law objects must be detached from caller aliases");
+  assert.equal(lawBoundaryEngine.laws.mutationRevision, revisionAfterConditionInsert,
+    "mutating a detached nested alias must not change the authoritative revision");
+
+  const definedConditionAlias = { metric: "tick" as const, op: "gte" as const, value: 3 };
+  Object.defineProperty(lawBoundaryEngine.laws.laws[0].conditions, "0", {
+    configurable: true, enumerable: true, writable: true, value: definedConditionAlias,
+  });
+  const revisionAfterDefinedCondition = lawBoundaryEngine.laws.mutationRevision;
+  definedConditionAlias.value = 101;
+  assert.equal(lawBoundaryEngine.laws.laws[0].conditions[0].value, 3,
+    "defineProperty must detach object values before installing them in the tracked law tree");
+  assert.equal(lawBoundaryEngine.laws.mutationRevision, revisionAfterDefinedCondition,
+    "mutating an object passed to defineProperty must not bypass revision tracking");
+
+  const insertedOverridesAlias = { energyDiffusion: 0.15 };
+  lawBoundaryEngine.laws.laws[0].paramOverrides = insertedOverridesAlias;
+  const revisionAfterOverridesInsert = lawBoundaryEngine.laws.mutationRevision;
+  insertedOverridesAlias.energyDiffusion = 0.75;
+  assert.equal(lawBoundaryEngine.laws.laws[0].paramOverrides.energyDiffusion, 0.15,
+    "replacing nested configuration objects must detach caller aliases");
+  assert.equal(lawBoundaryEngine.laws.mutationRevision, revisionAfterOverridesInsert,
+    "mutating a detached configuration alias must not change authoritative revision");
+
+  lawBoundaryEngine.laws.laws[0].conditions[0].value = 4;
+  assert.ok(lawBoundaryEngine.laws.mutationRevision > revisionAfterOverridesInsert,
+    "nested law edits must continue advancing revision after alias-detached replacement");
   const staleLawResult = lawBoundaryEngine.grid.buffer.slice();
   staleLawResult[lawBoundaryFieldIndex] = 9006;
   const pendingLawReadback = await beginPendingReadback(lawBoundaryEngine, staleLawResult);
