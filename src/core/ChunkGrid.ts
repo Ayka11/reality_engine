@@ -91,7 +91,7 @@ export class ChunkGrid {
     const [key, li] = this.chunkOf(x, y, z)
     let chunk = this.chunks.get(key)
     if (!chunk) {
-      if (Math.abs(v) < fieldActivityEpsilon(f)) return
+      if (Math.abs(v) <= fieldActivityEpsilon(f)) return
       chunk = new Float32Array(CHUNK_FLOATS)
       this.chunks.set(key, chunk)
     }

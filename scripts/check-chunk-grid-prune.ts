@@ -23,10 +23,21 @@ densityGrid.set(8, 16, 8, F.D, 0.00002)
 assert.ok(densityGrid.chunks.has(densityKey), 'sub-0.001 density should allocate its destination chunk')
 assert.equal([...densityGrid.activeCells()].length, 1,
   'a density-only cell above the density activity floor must remain active')
+assert.equal(densityGrid.stats.activeCells, 1,
+  'runtime active-cell statistics must use the same field-aware density threshold')
 assert.equal(densityGrid.prune(0.01), 0,
   'chunk pruning must preserve resolvable density even when all values are below 0.01')
 assert.ok(densityGrid.chunks.has(densityKey), 'density-only chunk should survive pruning')
 console.log('ChunkGrid density sparse-floor/pruning regression: PASS')
+
+// Activity is strictly greater than the configured epsilon everywhere. A
+// value exactly on the boundary must not allocate an otherwise empty chunk.
+const exactFloorGrid = new ChunkGrid()
+exactFloorGrid.set(8, 16, 8, F.D, 1e-6)
+assert.equal(exactFloorGrid.chunks.size, 0,
+  'density exactly at the activity floor must not allocate a sparse chunk')
+assert.equal(exactFloorGrid.stats.activeCells, 0,
+  'density exactly at the activity floor must not count as an active cell')
 const clearGrid = new ChunkGrid()
 const clearedKey = chunkKey(3, 4, 2)
 clearGrid.set(24, 32, 16, F.E, 10)

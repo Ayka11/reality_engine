@@ -87,6 +87,25 @@ assert.ok(sustainedBoundaryDensityHalo > boundaryDensityHalo + 0.0001 &&
   sustainedBoundaryDensityHalo < 0.5,
   `density halo should keep accumulating across a chunk boundary after the 100-tick prune (initial ${boundaryDensityHalo}, later ${sustainedBoundaryDensityHalo})`)
 
+// Sculpt undo must not delete a density-only chunk merely because its values
+// fall below the generic 0.001 threshold. The edit is in a different cell of
+// the same chunk so restoring that edit leaves the small density cell untouched.
+const undoDensityPoint = { x: 32, y: 96, z: 40 }
+send('setPhysics', {
+  params: { ...params, energyDiffusion: 0, densityDiffusion: 0,
+    tempDiffusion: 0, tempEnergyCoupling: 0, pressureDiffusion: 0, pressureDensityCoupling: 0 },
+  processMask: 1 << 2,
+})
+send('paint', { ...undoDensityPoint, f: F.D, v: 0.00002, r: 0, mode: 'set' })
+send('paint', { x: 33, y: 96, z: 40, f: F.E, v: 10, r: 0, mode: 'set', trackHistory: true })
+send('undoSculpt')
+send('tick', { speed: 1 })
+const densityAfterUndoCleanup = readField(
+  latestFrame(), undoDensityPoint.x, undoDensityPoint.y, undoDensityPoint.z, F.D,
+)
+assert.ok(densityAfterUndoCleanup > 0.00001,
+  `undo cleanup must preserve low-density payload in a chunk with no other active fields (got ${densityAfterUndoCleanup})`)
+
 const boundaryTemperaturePoint = { x: 7, y: 32, z: 20 }
 send('setPhysics', {
   params: { ...params, energyDiffusion: 0, densityDiffusion: 0,
