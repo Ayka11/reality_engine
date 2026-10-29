@@ -19,7 +19,6 @@ const expectedImports = new Set([
   "src/simulation/EntityLayer.ts",
 ]);
 const expectedScopedCalls = new Map([
-  ["src/core/SparseVoxelGrid.ts#syncBackBuffersFromFront", 1],
   ["src/simulation/FieldPhysics.ts#tick", 1],
   ["src/simulation/EntropyLayer.ts#tick", 1],
   ["src/simulation/InfoPhysics.ts#tick", 1],
