@@ -41,7 +41,7 @@ const decisionUrl = await moduleUrl('src/infinity/WorldDecisionLayer.ts', [
   [/from ['"]\.\/DecisionRecord['"]/g, 'from "' + decisionRecordUrl + '"'],
 ])
 const { WorldGenerator } = await import(generatorUrl)
-const { GeneratorWorldSurfaceProvider } = await import(surfaceUrl)
+const { GeneratorWorldSurfaceProvider, resolveWorldWaterLevel, isBelowWorldWaterSurface, resolveBridgeDeckHeight } = await import(surfaceUrl)
 const { FieldSampler } = await import(samplerUrl)
 const { WorldDecisionLayer } = await import(decisionUrl)
 
