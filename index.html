@@ -1960,12 +1960,18 @@ window.getRealityRuntimeDiagnostics = function () {
   let invalidCells = 0;
   for (let cell = 0; cell < SZ; cell++) {
     const base = cell * NF;
-    const values = [FE, FD, FI, FT, FBio].map(field => buf[base + field]);
-    if (!values.every(Number.isFinite)) {
+    let validCell = true;
+    for (let field = 0; field < NF; field++) {
+      if (!Number.isFinite(buf[base + field])) {
+        validCell = false;
+        break;
+      }
+    }
+    if (!validCell) {
       invalidCells++;
       continue;
     }
-    if (values.some(value => Math.abs(value) > 1e-3)) activeCells++;
+    if ([FE, FD, FI, FT, FBio].some(field => Math.abs(buf[base + field]) > 1e-3)) activeCells++;
   }
 
   const stats = health?.stats ?? {};

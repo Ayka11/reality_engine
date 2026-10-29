@@ -2684,12 +2684,21 @@ try {
     throw new Error("Quick Generate did not prove a non-flat, valid state → chunks → terrain mesh → rendered canvas chain: " +
       JSON.stringify(quickResult));
   }
+  // Quick Generate resets the legacy tick to zero and starts playback. Require
+  // proof of an actual simulation step instead of treating a valid counter as enough.
+  await page.waitForFunction(() => {
+    const diagnostics = window.getRealityRuntimeDiagnostics?.();
+    return diagnostics?.legacySimulation?.playing === true &&
+      Number.isSafeInteger(diagnostics.legacySimulation.tick) &&
+      diagnostics.legacySimulation.tick > 0;
+  }, null, { timeout: acceptanceTimeout });
   const unifiedRuntime = await page.evaluate(() =>
     window.getRealityRuntimeDiagnostics?.() ?? null
   );
   if (!unifiedRuntime?.snapshotValid ||
       !Number.isSafeInteger(unifiedRuntime.legacySimulation?.tick) ||
-      unifiedRuntime.legacySimulation.tick < 0 ||
+      unifiedRuntime.legacySimulation.tick <= 0 ||
+      unifiedRuntime.legacySimulation.playing !== true ||
       !Number.isFinite(unifiedRuntime.legacySimulation?.activeCells) ||
       unifiedRuntime.legacySimulation.activeCells < 0 ||
       unifiedRuntime.legacySimulation.activeCells > unifiedRuntime.legacySimulation.totalCells ||
