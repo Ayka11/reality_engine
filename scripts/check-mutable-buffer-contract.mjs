@@ -19,8 +19,6 @@ const expectedCalls = new Map([
   ["src/simulation/EntityLayer.ts#tick", 2],
   ["src/simulation/EntityLayer.ts#_reconcileFullDomain", 1],
   ["src/simulation/EntityLayer.ts#_spawnChild", 1],
-  ["src/simulation/EntropyLayer.ts#tick", 1],
-  ["src/simulation/InfoPhysics.ts#tick", 1],
   ["src/simulation/TemporalLayer.ts#tick", 1],
   ["src/simulation/TemporalLayer.ts#_diffuseTime", 1],
   ["src/simulation/SimulationEngine.ts#initGPU", 1],
@@ -38,12 +36,12 @@ const expectedImports = new Set([
   "src/chemistry/ChemLayer.ts",
   "src/simulation/AgentSystem.ts",
   "src/simulation/EntityLayer.ts",
-  "src/simulation/EntropyLayer.ts",
-  "src/simulation/InfoPhysics.ts",
   "src/simulation/TemporalLayer.ts",
 ]);
 const expectedScopedCalls = new Map([
   ["src/simulation/FieldPhysics.ts#tick", 1],
+  ["src/simulation/EntropyLayer.ts#tick", 1],
+  ["src/simulation/InfoPhysics.ts#tick", 1],
 ]);
 const actualScopedCalls = new Map();
 const expectedSymbolImplementations = new Set([
@@ -152,7 +150,7 @@ for (const filePath of sourcePaths) {
 
         const parameters = callback.parameters.map(parameter =>
           ts.isIdentifier(parameter.name) ? parameter.name.text : "");
-        if (parameters[0] !== "front" || parameters[1] !== "back") {
+        if (parameters[0] !== "front" || !["back", "_back"].includes(parameters[1])) {
           errors.push(`${path}:${line}: scoped buffer parameters must be named front and back for ownership auditing`);
         }
 
@@ -248,9 +246,7 @@ for (const filePath of sourcePaths) {
         "src/simulation/EntityLayer.ts#tick",
         "src/simulation/EntityLayer.ts#_reconcileFullDomain",
         "src/simulation/EntityLayer.ts#_spawnChild",
-        "src/simulation/EntropyLayer.ts#tick",
         "src/simulation/FieldPhysics.ts#tick",
-        "src/simulation/InfoPhysics.ts#tick",
         "src/simulation/TemporalLayer.ts#tick",
         "src/simulation/TemporalLayer.ts#_diffuseTime",
         "src/simulation/SimulationEngine.ts#_detectCausality",
