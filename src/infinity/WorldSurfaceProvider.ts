@@ -20,7 +20,12 @@ export interface WorldSurfaceProvider {
   readonly seed: string
   /** Reference elevation used by construction scoring, defined by the surface source. */
   readonly referenceBuildElevation: number
-  sampleSurface(x: number, z: number): WorldSurfaceSample
+  /** Optional bounds; absent bounds mean the source is not vertically clamped. */
+  readonly minimumElevation?: number
+  readonly maximumElevation?: number
+  /** Null/absent means this surface has no global sea plane. */
+  readonly waterLevel?: number | null
+  sampleSurface(x: number, z: number, heightOverride?: number): WorldSurfaceSample
 }
 
 /** Adapts the existing deterministic generator without changing its results. */
@@ -38,9 +43,24 @@ export class GeneratorWorldSurfaceProvider implements WorldSurfaceProvider {
     return this.generator.seaLevel + 10
   }
 
-  sampleSurface(x: number, z: number): WorldSurfaceSample {
+  get minimumElevation(): number {
+    return 0
+  }
+
+  get maximumElevation(): number {
+    return this.generator.maxElevation
+  }
+
+  get waterLevel(): number {
+    return this.generator.seaLevel
+  }
+
+  sampleSurface(x: number, z: number, heightOverride?: number): WorldSurfaceSample {
     const height = this.generator.sampleHeight(x, z)
-    const climate = this.generator.sampleClimate(x, z, height)
+    const climateHeight = typeof heightOverride === 'number' && Number.isFinite(heightOverride)
+      ? heightOverride
+      : height
+    const climate = this.generator.sampleClimate(x, z, climateHeight)
     return {
       height,
       temperature: climate.temperature,

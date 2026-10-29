@@ -103,6 +103,18 @@ const setAuthoritativeProviderAt = renderer.indexOf('this.fieldSampler.setProvid
 assert.ok(setGeneratorAt > resetAt && setAuthoritativeBaseAt > setGeneratorAt && setAuthoritativeProviderAt > setAuthoritativeBaseAt,
   'seed reset must update the sampler surface and then restore the authoritative scientific-field provider')
 
+const surfaceContractSource = await readFile(new URL('src/infinity/WorldSurfaceProvider.ts', root), 'utf8')
+assert.match(surfaceContractSource, /minimumElevation\?: number/)
+assert.match(surfaceContractSource, /maximumElevation\?: number/)
+assert.match(surfaceContractSource, /waterLevel\?: number \| null/)
+const rendererSource = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8')
+assert.match(rendererSource, /setWorldSurfaceProvider\(provider: WorldSurfaceProvider\)/)
+assert.match(rendererSource, /provider\.sampleSurface\(x, z\)\s*\n\s*if \(!Number\.isFinite\(surface\.height\)\)/)
+assert.match(rendererSource, /surfaceProvider\.sampleSurface\(originX \+ x, originZ \+ z\)/)
+assert.equal(rendererSource.includes('this.generator.sampleHeight(x, z)'), false, 'renderer terrain height must use the selected surface provider')
+assert.equal(rendererSource.includes('this.generator.sampleClimate('), false, 'renderer climate and biome must use the selected surface provider')
+assert.match(rendererSource, /resetWorldSurfaceProviderToGenerator\(\)/)
+
 const decisionSource = await readFile(new URL('src/infinity/WorldDecisionLayer.ts', root), 'utf8')
 assert.equal(decisionSource.includes('this.sampler.generator'), false, 'decision layer must not directly depend on WorldGenerator')
 

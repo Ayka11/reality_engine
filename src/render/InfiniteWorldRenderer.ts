@@ -22,6 +22,7 @@ import type { LegacyVoxelCoordinate } from '../infinity/LegacyScientificFieldBri
 import { runtimeProvenance } from '../infinity/RuntimeProvenance'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { WorldConstructionContract } from '../infinity/WorldConstructionContract'
+import type { WorldSurfaceProvider } from '../infinity/WorldSurfaceProvider'
 import { DecisionGraph } from '../infinity/DecisionGraph'
 import { WorldObjectSpatialIndex } from '../infinity/WorldObjectSpatialIndex'
 import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
@@ -625,8 +626,7 @@ export class InfiniteWorldRenderer {
     this.terrainDeformations = new TerrainDeformationField(newSeed)
     this.authoritativeSculptTransactions.clear()
     this.fieldSampler.setProvider(this.authoritativeField)
-    this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, this.decisionLayer.weights, () => (window as any).getRealityLawState?.() ?? null)
-    this.constructionContract = new WorldConstructionContract(this.decisionLayer)
+    this.rebuildDecisionLayer()
     this.persistence = new WorldPersistence(newSeed)
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
     this.history = new WorldEditHistory()
@@ -668,6 +668,54 @@ export class InfiniteWorldRenderer {
     this.renderer.dispose()
   }
 
+  private rebuildDecisionLayer() {
+    const weights = this.decisionLayer?.weights ?? DEFAULT_DECISION_WEIGHTS
+    this.decisionLayer = new WorldDecisionLayer(
+      this.fieldSampler,
+      weights,
+      () => (window as any).getRealityLawState?.() ?? null,
+    )
+    this.constructionContract = new WorldConstructionContract(this.decisionLayer)
+  }
+
+  /**
+   * Select a surface source for rendering and construction without replacing
+   * the authoritative scientific-field provider or moving existing objects.
+   */
+  setWorldSurfaceProvider(provider: WorldSurfaceProvider) {
+    if (!provider || typeof provider.sampleSurface !== 'function' ||
+        typeof provider.id !== 'string' || !provider.id.trim() ||
+        typeof provider.version !== 'string' || !provider.version.trim() ||
+        typeof provider.seed !== 'string' || !provider.seed.trim()) {
+      throw new TypeError('World surface provider requires a non-empty id, version, seed, and sampleSurface()')
+    }
+    const probe = provider.sampleSurface(0, 0)
+    if (!probe || ![probe.height, probe.temperature, probe.moisture, probe.biomeId, probe.waterDepth].every(Number.isFinite) ||
+        typeof probe.biome !== 'string' ||
+        (provider.waterLevel != null && !Number.isFinite(provider.waterLevel)) ||
+        (provider.minimumElevation !== undefined && !Number.isFinite(provider.minimumElevation)) ||
+        (provider.maximumElevation !== undefined && !Number.isFinite(provider.maximumElevation)) ||
+        (provider.minimumElevation !== undefined && provider.maximumElevation !== undefined &&
+          provider.minimumElevation > provider.maximumElevation)) {
+      throw new TypeError('World surface provider returned an invalid sample or vertical range')
+    }
+
+    this.fieldSampler.setSurfaceProvider(provider)
+    worldViewContract.setSeed(provider.seed)
+    this.rebuildDecisionLayer()
+    this.refreshTerrainPatches()
+    return { id: provider.id, version: provider.version, seed: provider.seed }
+  }
+
+  resetWorldSurfaceProviderToGenerator() {
+    this.fieldSampler.resetSurfaceProviderToGenerator()
+    const provider = this.fieldSampler.surfaceProvider
+    worldViewContract.setSeed(provider.seed)
+    this.rebuildDecisionLayer()
+    this.refreshTerrainPatches()
+    return { id: provider.id, version: provider.version, seed: provider.seed }
+  }
+
   setEnabled(value: boolean) {
     this.enabled = value
     this.controls.enabled = value && !this.flyMode && !this.transformDragging
@@ -678,7 +726,7 @@ export class InfiniteWorldRenderer {
     const x = this.worldPosition.x
     const z = this.worldPosition.z
     const y = this.sampleTerrainHeight(x, z)
-    const climate = this.generator.sampleClimate(x, z, y)
+    const surface = this.fieldSampler.surfaceProvider.sampleSurface(x, z, y)
     const step = 2
     const hL = this.sampleTerrainHeight(x - step, z)
     const hR = this.sampleTerrainHeight(x + step, z)
@@ -691,14 +739,17 @@ export class InfiniteWorldRenderer {
     const field = this.fieldSampler.sample(x, y, z)
     const radiation = Math.max(0, Math.min(1, field.entropy * 8))
     const stability = Math.max(0, Math.min(1, 1 - field.entropy * 8))
+    const maximumElevation = this.fieldSampler.surfaceProvider.maximumElevation
     return {
-      temperature: climate.temperature,
-      moisture: climate.moisture,
-      elevation: y / this.generator.maxElevation,
+      temperature: surface.temperature,
+      moisture: surface.moisture,
+      elevation: typeof maximumElevation === 'number' && Number.isFinite(maximumElevation) && maximumElevation > 0
+        ? y / maximumElevation
+        : y,
       slope,
       radiation,
       stability,
-      biome: `biome.${climate.biome}`,
+      biome: `biome.${surface.biome}`,
       worldPosition: { x, y, z },
     }
   }
@@ -1147,7 +1198,7 @@ export class InfiniteWorldRenderer {
         normals[i * 3 + 1] = normal.y
         normals[i * 3 + 2] = normal.z
 
-        const biome = this.generator.sampleClimate(originX + gx, originZ + gz, h).biome
+        const biome = this.fieldSampler.surfaceProvider.sampleSurface(originX + gx, originZ + gz, h).biome
         const color = new THREE.Color(BIOME_COLORS[BIOME_ID[biome]])
         const slope = Math.max(0, 1 - normal.y)
         color.offsetHSL(0, 0, -slope * 0.18)
@@ -1228,8 +1279,24 @@ export class InfiniteWorldRenderer {
     }
 
     const waterKey = `${chunk.cx},${chunk.cy},${chunk.cz}`
-    const waterData = buildWaterSurfaceMeshData(chunk, this.generator.seaLevel)
-    if (waterData.wetCellCount > 0) {
+    const surfaceProvider = this.fieldSampler.surfaceProvider
+    const waterLevel = surfaceProvider.waterLevel
+    let waterData: ReturnType<typeof buildWaterSurfaceMeshData> | null = null
+    if (typeof waterLevel === 'number' && Number.isFinite(waterLevel)) {
+      const water = new Float32Array(WORLD_CHUNK_SIZE * WORLD_CHUNK_SIZE)
+      const originX = chunk.cx * WORLD_CHUNK_SIZE
+      const originZ = chunk.cz * WORLD_CHUNK_SIZE
+      for (let z = 0; z < WORLD_CHUNK_SIZE; z++) {
+        for (let x = 0; x < WORLD_CHUNK_SIZE; x++) {
+          const sample = surfaceProvider.sampleSurface(originX + x, originZ + z)
+          const depth = sample.waterDepth
+          water[z * WORLD_CHUNK_SIZE + x] = Number.isFinite(depth) ? Math.max(0, depth) : 0
+        }
+      }
+      waterData = buildWaterSurfaceMeshData({ cx: chunk.cx, cz: chunk.cz, water }, waterLevel)
+    }
+
+    if (waterData && waterData.wetCellCount > 0) {
       const waterGeometry = new THREE.BufferGeometry()
       waterGeometry.setAttribute('position', new THREE.BufferAttribute(waterData.positions, 3))
       waterGeometry.setIndex(waterData.indices)
@@ -1241,7 +1308,7 @@ export class InfiniteWorldRenderer {
       group.add(water)
       this.waterMeshes.set(waterKey, water)
     } else {
-      // Do not leave a prior mesh reference when this patch is rebuilt for a dry chunk.
+      // Do not leave a prior mesh reference when this patch is rebuilt for a dry chunk or non-sea surface.
       this.waterMeshes.delete(waterKey)
     }
     group.position.set(-this.worldAnchor.x, -this.worldAnchor.y, -this.worldAnchor.z)
@@ -2069,7 +2136,18 @@ export class InfiniteWorldRenderer {
   getSnapToGrid() { return this.snapToGrid }
 
   private sampleTerrainHeight(x: number, z: number) {
-    return Math.max(0, Math.min(this.generator.maxElevation, this.generator.sampleHeight(x, z) + this.terrainDeformations.sampleDelta(x, z)))
+    const provider = this.fieldSampler.surfaceProvider
+    const surface = provider.sampleSurface(x, z)
+    if (!Number.isFinite(surface.height)) throw new RangeError('World surface height must be finite')
+    const deformedHeight = surface.height + this.terrainDeformations.sampleDelta(x, z)
+    const minimum = typeof provider.minimumElevation === 'number' && Number.isFinite(provider.minimumElevation)
+      ? provider.minimumElevation
+      : Number.NEGATIVE_INFINITY
+    const maximum = typeof provider.maximumElevation === 'number' && Number.isFinite(provider.maximumElevation)
+      ? provider.maximumElevation
+      : Number.POSITIVE_INFINITY
+    if (minimum > maximum) throw new RangeError('World surface minimum elevation exceeds maximum elevation')
+    return Math.max(minimum, Math.min(maximum, deformedHeight))
   }
 
   /** Apply a real heightfield deformation, independent of scientific density/entropy fields. */
@@ -2103,7 +2181,10 @@ export class InfiniteWorldRenderer {
     const sx = Math.round(x / s) * s
     const sz = Math.round(z / s) * s
     const ground = this.terrainY(sx, sz)
-    const sy = kind === 'water' ? this.generator.seaLevel : (Math.abs(y - ground) < 8 ? ground : y)
+    const waterLevel = this.fieldSampler.surfaceProvider.waterLevel
+    const sy = kind === 'water'
+      ? (typeof waterLevel === 'number' && Number.isFinite(waterLevel) ? waterLevel : y)
+      : (Math.abs(y - ground) < 8 ? ground : y)
     return { x: sx, y: sy, z: sz }
   }
 
