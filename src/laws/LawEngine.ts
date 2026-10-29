@@ -31,6 +31,45 @@ function cloneLaw(law: MetaLaw): MetaLaw {
   };
 }
 
+/** Deeply track the publicly exposed law tree so nested edits invalidate pending GPU work. */
+function trackLawState<T extends object>(
+  target: T,
+  onMutation: () => void,
+  cache = new WeakMap<object, object>(),
+): T {
+  const known = cache.get(target);
+  if (known) return known as T;
+  const proxy = new Proxy(target, {
+    get(current, property, receiver) {
+      const value = Reflect.get(current, property, receiver) as unknown;
+      if (value !== null && typeof value === "object") {
+        return trackLawState(value, onMutation, cache);
+      }
+      return value;
+    },
+    set(current, property, value) {
+      const previous = Reflect.get(current, property, current) as unknown;
+      if (Object.is(previous, value)) return true;
+      const changed = Reflect.set(current, property, value, current);
+      if (changed) onMutation();
+      return changed;
+    },
+    deleteProperty(current, property) {
+      if (!Reflect.has(current, property)) return true;
+      const deleted = Reflect.deleteProperty(current, property);
+      if (deleted) onMutation();
+      return deleted;
+    },
+    defineProperty(current, property, descriptor) {
+      const defined = Reflect.defineProperty(current, property, descriptor);
+      if (defined) onMutation();
+      return defined;
+    },
+  });
+  cache.set(target, proxy);
+  return proxy;
+}
+
 function isProcessIdList(value: unknown): value is number[] {
   return Array.isArray(value) &&
     value.every(id => Number.isSafeInteger(id) && id >= 0 && id <= 10_000) &&
@@ -60,10 +99,23 @@ function isMetaLaw(value: unknown): value is MetaLaw {
 }
 
 export class LawEngine {
-  laws: MetaLaw[];
+  private _laws!: MetaLaw[];
+  private _mutationRevision = 0;
   private _mask = 0;
   private _params: PhysicsParams = { ...DEFAULT_PARAMS };
   private _rngState: number;
+
+  /** Monotonic revision for law definitions, overrides, and effective process configuration. */
+  get mutationRevision(): number { return this._mutationRevision; }
+
+  /** Expose tracked law objects; replacements are detached so escaped caller objects cannot bypass tracking. */
+  get laws(): MetaLaw[] { return this._laws; }
+  set laws(value: MetaLaw[]) {
+    if (!Array.isArray(value)) throw new TypeError("LawEngine laws must be an array");
+    const detached = value.map(cloneLaw);
+    this._laws = trackLawState(detached, () => { this._mutationRevision++; });
+    this._mutationRevision++;
+  }
 
   constructor(seed = 0x6d2b79f5) {
     this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6d2b79f5 : 0x6d2b79f5;
@@ -197,6 +249,7 @@ export class LawEngine {
     this._graphProcessIds = restoredGraphIds;
     this._rngState = snapshot.rngState >>> 0;
     this._recompute();
+    this._mutationRevision++;
   }
 
   tick(metrics: WorldMetrics): void {
@@ -225,6 +278,7 @@ export class LawEngine {
       }
     }
     if (dirty) this._recompute();
+    this._mutationRevision++;
   }
 
   private _mutate(law: MetaLaw): void {
@@ -264,6 +318,9 @@ export class LawEngine {
 
     for (const pid of this._manualOn)  this._mask |= (1 << pid);
     for (const pid of this._manualOff) this._mask &= ~(1 << pid);
+    // Consumers receive the live params object for hot paths; freeze it so a
+    // caller cannot change solver inputs without advancing the law revision.
+    Object.freeze(this._params);
   }
 
   get activeProcessMask(): number { return this._mask; }
@@ -299,7 +356,8 @@ export class LawEngine {
 
     this.laws.push(child);
     this._recompute();
-    return child;
+    // Return the tracked public object, not the detached construction alias.
+    return this.laws.find(law => law.id === child.id) ?? null;
   }
 
   removeLaw(id: string): void {
@@ -316,6 +374,7 @@ export class LawEngine {
   setLawOverride(id: string, state: 'auto' | 'on' | 'off'): void {
     if (state === 'auto') this._lawOverride.delete(id);
     else this._lawOverride.set(id, state);
+    this._mutationRevision++;
   }
 
   getLawOverride(id: string): 'auto' | 'on' | 'off' {
@@ -332,20 +391,24 @@ export class LawEngine {
     else    { this._manualOff.add(procId); this._manualOn.delete(procId);  }
     if (on) this._mask |= (1 << procId);
     else    this._mask &= ~(1 << procId);
+    this._mutationRevision++;
   }
 
   clearManualOverrides(): void {
     this._manualOn.clear(); this._manualOff.clear();
     this._recompute();
+    this._mutationRevision++;
   }
 
   applyGraphPlan(plan: GraphExecutionPlan): void {
     this._graphProcessIds = new Set(plan.activeProcessIds);
     this._recompute();
+    this._mutationRevision++;
   }
 
   clearGraphPlan(): void {
     this._graphProcessIds = null;
     this._recompute();
+    this._mutationRevision++;
   }
 }

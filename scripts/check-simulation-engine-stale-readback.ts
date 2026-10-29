@@ -7,6 +7,7 @@ import { SimulationEngine } from "../src/simulation/SimulationEngine.ts";
 import { getMutableBuffer, withMutableBuffers } from "../src/core/TrackedFloat32Array.ts";
 import { SculptManager } from "../src/sculpt/SculptManager.ts";
 import { WorldSaveSystem } from "../src/world/save/WorldSaveSystem.ts";
+import { PROC } from "../src/process/ProcessDef.ts";
 
 async function beginPendingReadback(engine: SimulationEngine, stale: Float32Array) {
   let release!: (data: Float32Array) => void;
@@ -486,6 +487,29 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   await assert.rejects(pendingSyncTick.step, /Discarded stale GPU readback/);
   assert.equal(boundaryEngine.grid.buffer[boundaryFieldIndex], 65,
     "syncTick(0) must invalidate any readback already in flight");
+
+  // Law/process changes made while GPU readback is pending must reject the
+  // result computed using the earlier mask/configuration.
+  const lawBoundaryEngine = new SimulationEngine(4, 4, 4);
+  (lawBoundaryEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const lawBoundaryFieldIndex = lawBoundaryEngine.grid.idx(1, 1, 1) + F.ENERGY;
+  lawBoundaryEngine.grid.buffer[lawBoundaryFieldIndex] = 21;
+  const lawTreeRevision = lawBoundaryEngine.laws.mutationRevision;
+  lawBoundaryEngine.laws[0].name = "Tracked law definition";
+  assert.ok(lawBoundaryEngine.laws.mutationRevision > lawTreeRevision,
+    "nested public law-definition edits must advance the law revision");
+  const staleLawResult = lawBoundaryEngine.grid.buffer.slice();
+  staleLawResult[lawBoundaryFieldIndex] = 9006;
+  const pendingLawReadback = await beginPendingReadback(lawBoundaryEngine, staleLawResult);
+  const beforeProcessMutation = lawBoundaryEngine.laws.mutationRevision;
+  const waveWasEnabled = (lawBoundaryEngine.laws.activeProcessMask & (1 << PROC.WAVE_PROPAGATION)) !== 0;
+  lawBoundaryEngine.laws.toggleProcess(PROC.WAVE_PROPAGATION, !waveWasEnabled);
+  assert.ok(lawBoundaryEngine.laws.mutationRevision > beforeProcessMutation,
+    "manual process-mask changes must advance the law revision");
+  pendingLawReadback.release(staleLawResult);
+  await assert.rejects(pendingLawReadback.step, /Discarded stale GPU readback/);
+  assert.equal(lawBoundaryEngine.grid.buffer[lawBoundaryFieldIndex], 21,
+    "stale GPU output computed with an old process mask must not overwrite current CPU state");
 
   // Sculpt undo/redo must invalidate pending GPU results before applying history,
   // then publish the resulting dense/chunk state as one synchronous UI operation.

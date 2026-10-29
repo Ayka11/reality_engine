@@ -226,6 +226,7 @@ export class SimulationEngine {
       if (this._gpuReady) {
         const readbackGeneration = this._stateGeneration;
         const readbackGridRevision = this.grid.mutationRevision;
+        const readbackLawRevision = this.laws.mutationRevision;
         // Raw Float32Array aliases returned by the internal hot-path helper cannot
         // intercept writes. Capture the authoritative front buffer while readback
         // is in flight so an alias write cannot evade revision-based stale checks.
@@ -246,8 +247,9 @@ export class SimulationEngine {
         }
         const generationChanged = readbackGeneration !== this._stateGeneration;
         const revisionChanged = readbackGridRevision !== this.grid.mutationRevision;
+        const lawRevisionChanged = readbackLawRevision !== this.laws.mutationRevision;
         let untrackedBufferWrite = false;
-        if (!generationChanged && !revisionChanged) {
+        if (!generationChanged && !revisionChanged && !lawRevisionChanged) {
           // Compare against the grid's private backing arrays directly. Reading
           // through the tracked Proxy here added per-element trap overhead to
           // both full-buffer scans without improving mutation coverage.
@@ -256,7 +258,7 @@ export class SimulationEngine {
             readbackBackBufferSnapshot,
           );
         }
-        if (generationChanged || revisionChanged || untrackedBufferWrite) {
+        if (generationChanged || revisionChanged || lawRevisionChanged || untrackedBufferWrite) {
           // Tracked writes are rejected through revision/generation. Compare the
           // front and back snapshots as a final guard for writes through a
           // retained raw Float32Array alias, whose indexed stores cannot trigger
