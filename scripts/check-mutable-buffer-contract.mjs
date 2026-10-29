@@ -14,7 +14,6 @@ const expectedCalls = new Map([
 ]);
 const expectedImports = new Set([
   "src/core/SparseVoxelGrid.ts",
-  "src/simulation/SimulationEngine.ts",
   "src/simulation/EntityLayer.ts",
 ]);
 const expectedScopedCalls = new Map([
