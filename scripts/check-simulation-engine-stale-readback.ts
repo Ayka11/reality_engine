@@ -105,6 +105,21 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(aliasDuringReadbackEngine.grid.buffer[aliasDuringReadbackIndex], 707,
     "an untracked alias write during readback must survive stale GPU result rejection");
 
+  const aliasDuringBackReadbackEngine = new SimulationEngine(4, 4, 4);
+  (aliasDuringBackReadbackEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const aliasDuringBackIndex = aliasDuringBackReadbackEngine.grid.idx(1, 1, 1) + F.ENTROPY;
+  const retainedBackAlias = getMutableBuffer(aliasDuringBackReadbackEngine.grid, "back");
+  const staleBackAliasReadback = aliasDuringBackReadbackEngine.grid.buffer.slice();
+  const pendingBackAliasReadback = await beginPendingReadback(aliasDuringBackReadbackEngine, staleBackAliasReadback);
+  const revisionBeforeUntrackedBackWrite = aliasDuringBackReadbackEngine.grid.mutationRevision;
+  retainedBackAlias[aliasDuringBackIndex] = 808;
+  assert.equal(aliasDuringBackReadbackEngine.grid.mutationRevision, revisionBeforeUntrackedBackWrite,
+    "raw back-alias writes also bypass direct revision tracking");
+  pendingBackAliasReadback.release(staleBackAliasReadback);
+  await assert.rejects(pendingBackAliasReadback.step, /Discarded stale GPU readback/);
+  assert.equal(aliasDuringBackReadbackEngine.grid.backBuffer[aliasDuringBackIndex], 808,
+    "an untracked back-buffer alias write must be preserved when stale readback is rejected");
+
   // Any dense-grid write while a GPU readback is pending must invalidate that result.
   const staleDense = engine.grid.buffer.slice();
   const pendingDense = await beginPendingReadback(engine, staleDense);
