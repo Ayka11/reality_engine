@@ -32,13 +32,38 @@ export interface InfinityScaleAdaptiveCompiledPlan {
 
 export class InfinityScaleAdaptiveTransferCompiler {
   compile(mutations: InfinityScaleAdaptiveMutation[]): InfinityScaleAdaptiveCompiledPlan {
-    const ordered = [...mutations].sort((a, b) => a.regionId.localeCompare(b.regionId));
+    if (!Array.isArray(mutations)) {
+      throw new Error("Adaptive LOD compiler requires a mutation array");
+    }
+
+    const seenRegionIds = new Set<string>();
+    // Snapshot caller-owned records before sorting or compiling. A region may
+    // only have one target LOD in an atomic frame; accepting duplicate IDs or
+    // mutable input objects can make the compiled plan disagree with its hash.
+    const ordered = mutations.map((candidate, index) => {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+        throw new Error("Adaptive LOD mutation " + index + " must be an object");
+      }
+      const regionId = candidate.regionId;
+      const fromLOD = candidate.fromLOD;
+      const toLOD = candidate.toLOD;
+      if (typeof regionId !== "string" || regionId.length === 0 || regionId.trim() !== regionId) {
+        throw new Error("Adaptive LOD region ID must be a non-empty canonical string");
+      }
+      if (seenRegionIds.has(regionId)) {
+        throw new Error("Adaptive LOD mutation contains duplicate region ID: " + regionId);
+      }
+      seenRegionIds.add(regionId);
+      if (!Number.isInteger(fromLOD) || !Number.isInteger(toLOD) ||
+          fromLOD < 0 || fromLOD > 30 || toLOD < 0 || toLOD > 30) {
+        throw new Error("Adaptive mutation LOD values must be integers in the range 0..30");
+      }
+      return { regionId, fromLOD, toLOD };
+    }).sort((a, b) => a.regionId.localeCompare(b.regionId));
+
     const transfers: InfinityScaleCompiledTransfer[] = [];
 
     for (const mutation of ordered) {
-      if (!Number.isInteger(mutation.fromLOD) || !Number.isInteger(mutation.toLOD)) {
-        throw new Error("Adaptive mutation LOD values must be integers");
-      }
       if (mutation.fromLOD === mutation.toLOD) continue;
 
       const delta = mutation.toLOD - mutation.fromLOD;

@@ -75,6 +75,27 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   const retried = retryBridge.commit(frame, []);
   if (!retried.committed) throw new Error("LOD bridge could not commit after wrong-phase rejection");
 
+  // Invalid same-LOD commands must not become successful no-op commits.
+  // Reject before state mutation and release the bridge transaction for retry.
+  const invalidNoopState = new InfinityScaleLODState(2);
+  const invalidNoopBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, invalidNoopState);
+  invalidNoopBridge.begin(frame);
+  const invalidNoopRevision = invalidNoopState.getRevision();
+  let invalidNoopRejected = false;
+  try {
+    invalidNoopBridge.commit(frame, [{ regionId: "0:0,0,0", fromLOD: -1, toLOD: -1 }]);
+  } catch (error) {
+    invalidNoopRejected = error instanceof Error && error.message.includes("range 0..30");
+  }
+  if (!invalidNoopRejected) throw new Error("Adaptive LOD bridge accepted an invalid same-level no-op");
+  if (invalidNoopState.getRevision() !== invalidNoopRevision || invalidNoopState.hasChunk("0:0,0,0")) {
+    throw new Error("Invalid no-op command mutated authoritative LOD state");
+  }
+  invalidNoopBridge.begin(frame);
+  if (!invalidNoopBridge.commit(frame, []).committed) {
+    throw new Error("Adaptive LOD bridge could not be reused after invalid no-op rejection");
+  }
+
   // A stale-revision rejection must also detach the failed transaction and
   // allow a new transaction to start from the current state revision.
   const staleRetryState = new InfinityScaleLODState(2);

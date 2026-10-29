@@ -35,4 +35,31 @@ export function runInfinityScaleAdaptiveTransferCompilerRegression(): void {
   if (noop.transfers.length !== 0 || noop.gpuExecutionRequired) {
     throw new Error("No-op mutation generated executable transfer work");
   }
+
+  const invalidInputs: Array<{ label: string; input: unknown }> = [
+    { label: "negative no-op LOD", input: [{ regionId: "A", fromLOD: -1, toLOD: -1 }] },
+    { label: "above-range no-op LOD", input: [{ regionId: "A", fromLOD: 31, toLOD: 31 }] },
+    { label: "empty region ID", input: [{ regionId: " ", fromLOD: 0, toLOD: 0 }] },
+    { label: "duplicate region ID", input: [
+      { regionId: "A", fromLOD: 0, toLOD: 0 },
+      { regionId: "A", fromLOD: 0, toLOD: 0 },
+    ] },
+    { label: "non-array input", input: undefined },
+  ];
+  for (const invalid of invalidInputs) {
+    let rejected = false;
+    try {
+      compiler.compile(invalid.input as never);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) throw new Error("Adaptive transfer compiler accepted " + invalid.label);
+  }
+
+  const callerOwned = { regionId: "snapshot", fromLOD: 1, toLOD: 1 };
+  const detachedPlan = compiler.compile([callerOwned]);
+  callerOwned.toLOD = 2;
+  if (detachedPlan.mutations[0]?.toLOD !== 1 || detachedPlan.transfers.length !== 0) {
+    throw new Error("Compiled plan retained a caller-owned mutable mutation record");
+  }
 }

@@ -67,7 +67,10 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
       if (!executionGraph.valid) {
         throw new Error("Adaptive LOD transaction rejected: execution dependency graph is invalid");
       }
-      const changed = mutations.filter(m => m.fromLOD !== m.toLOD)
+      // Decide whether the request changes topology from the compiler's
+      // detached snapshot, not caller-owned objects that may contain accessors
+      // or be mutated after compilation.
+      const changed = compiledPlan.mutations.filter(m => m.fromLOD !== m.toLOD)
         .slice()
         .sort((a, b) => a.regionId.localeCompare(b.regionId));
 
