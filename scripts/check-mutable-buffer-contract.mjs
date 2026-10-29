@@ -20,7 +20,6 @@ const expectedCalls = new Map([
   ["src/simulation/EntityLayer.ts#_reconcileFullDomain", 1],
   ["src/simulation/EntityLayer.ts#_spawnChild", 1],
   ["src/simulation/EntropyLayer.ts#tick", 1],
-  ["src/simulation/FieldPhysics.ts#tick", 2],
   ["src/simulation/InfoPhysics.ts#tick", 1],
   ["src/simulation/TemporalLayer.ts#tick", 1],
   ["src/simulation/TemporalLayer.ts#_diffuseTime", 1],
@@ -40,10 +39,13 @@ const expectedImports = new Set([
   "src/simulation/AgentSystem.ts",
   "src/simulation/EntityLayer.ts",
   "src/simulation/EntropyLayer.ts",
-  "src/simulation/FieldPhysics.ts",
   "src/simulation/InfoPhysics.ts",
   "src/simulation/TemporalLayer.ts",
 ]);
+const expectedScopedCalls = new Map([
+  ["src/simulation/FieldPhysics.ts#tick", 1],
+]);
+const actualScopedCalls = new Map();
 const expectedSymbolImplementations = new Set([
   "src/core/Chunk.ts",
   "src/core/SparseVoxelGrid.ts",
@@ -123,6 +125,65 @@ for (const filePath of sourcePaths) {
     const method = ts.isMethodDeclaration(node) && node.name
       ? node.name.getText(source)
       : currentMethod;
+
+    if (path !== "scripts/check-simulation-engine-stale-readback.ts" &&
+        ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+        node.expression.text === "withMutableBuffers") {
+      const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+      const key = `${path}#${method ?? "<top-level>"}`;
+      actualScopedCalls.set(key, (actualScopedCalls.get(key) ?? 0) + 1);
+      const callback = node.arguments[1];
+      if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) {
+        errors.push(`${path}:${line}: withMutableBuffers requires an inline auditable synchronous callback`);
+      } else {
+        const asyncCallback = !!callback.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+        const generatorCallback = ts.isFunctionExpression(callback) && !!callback.asteriskToken;
+        let invalidControlFlow = false;
+        function inspectControlFlow(current) {
+          if (current !== callback && (ts.isArrowFunction(current) || ts.isFunctionExpression(current) ||
+              ts.isFunctionDeclaration(current) || ts.isMethodDeclaration(current))) return;
+          if (ts.isAwaitExpression(current) || ts.isYieldExpression(current)) invalidControlFlow = true;
+          ts.forEachChild(current, inspectControlFlow);
+        }
+        inspectControlFlow(callback);
+        if (asyncCallback || generatorCallback || invalidControlFlow) {
+          errors.push(`${path}:${line}: scoped mutable-buffer callback must not be async, a generator, or contain await/yield`);
+        }
+
+        const parameters = callback.parameters.map(parameter =>
+          ts.isIdentifier(parameter.name) ? parameter.name.text : "");
+        if (parameters[0] !== "front" || parameters[1] !== "back") {
+          errors.push(`${path}:${line}: scoped buffer parameters must be named front and back for ownership auditing`);
+        }
+
+        function inspectBufferUse(current) {
+          if (current !== callback && (ts.isArrowFunction(current) || ts.isFunctionExpression(current) ||
+              ts.isFunctionDeclaration(current) || ts.isMethodDeclaration(current))) {
+            let captured = false;
+            function findCapture(candidate) {
+              if (ts.isIdentifier(candidate) && (candidate.text === "front" || candidate.text === "back")) captured = true;
+              ts.forEachChild(candidate, findCapture);
+            }
+            findCapture(current);
+            if (captured) errors.push(`${path}:${source.getLineAndCharacterOfPosition(current.getStart()).line + 1}: scoped buffer aliases may not be captured by nested callbacks`);
+            return;
+          }
+          if (ts.isIdentifier(current) && (current.text === "front" || current.text === "back")) {
+            const parent = current.parent;
+            const isParameter = ts.isParameter(parent) && parent.name === current;
+            const directIndexedAccess = ts.isElementAccessExpression(parent) && parent.expression === current;
+            if (!isParameter && !directIndexedAccess) {
+              errors.push(`${path}:${source.getLineAndCharacterOfPosition(current.getStart()).line + 1}: scoped buffer aliases may only be used for direct indexed access`);
+            }
+          }
+          if (ts.isReturnStatement(current) && current.expression) {
+            errors.push(`${path}:${source.getLineAndCharacterOfPosition(current.getStart()).line + 1}: scoped mutable-buffer callback may not return a value`);
+          }
+          ts.forEachChild(current, inspectBufferUse);
+        }
+        inspectBufferUse(callback);
+      }
+    }
 
     if (ts.isImportDeclaration(node) && node.importClause?.namedBindings &&
         ts.isNamedImports(node.importClause.namedBindings)) {
@@ -434,6 +495,13 @@ for (const [key, expectedCount] of expectedCalls) {
 }
 for (const [key, count] of actualCalls) errors.push(`${key}: unexpected raw-buffer call site count ${count}`);
 
+for (const [key, expectedCount] of expectedScopedCalls) {
+  const count = actualScopedCalls.get(key) ?? 0;
+  if (count !== expectedCount) errors.push(`${key}: expected ${expectedCount} scoped mutable-buffer call(s), found ${count}`);
+  actualScopedCalls.delete(key);
+}
+for (const [key, count] of actualScopedCalls) errors.push(`${key}: unexpected scoped mutable-buffer call site count ${count}`);
+
 for (const path of expectedImports) {
   if (!importedFrom.has(path)) errors.push(`${path}: expected import of getMutableBuffer was not found`);
   importedFrom.delete(path);
@@ -448,4 +516,4 @@ assert.deepEqual(errors, [], [
   "Mutable-buffer ownership contract violations:",
   ...errors.map(error => `- ${error}`),
 ].join("\n"));
-console.log(`Mutable-buffer contract inventory: PASS (${[...expectedCalls.values()].reduce((sum, count) => sum + count, 0)} audited call sites; no new raw-buffer escapes)`);
+console.log(`Mutable-buffer contract inventory: PASS (${[...expectedCalls.values()].reduce((sum, count) => sum + count, 0)} raw call sites, ${[...expectedScopedCalls.values()].reduce((sum, count) => sum + count, 0)} scoped mutation call site; no unreviewed buffer escapes)`);

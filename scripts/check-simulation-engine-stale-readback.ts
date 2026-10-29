@@ -3,7 +3,7 @@ import { CELL_FIELDS, F } from "../src/core/CellState.ts";
 import { Chunk } from "../src/core/Chunk.ts";
 import { SparseVoxelGrid } from "../src/core/SparseVoxelGrid.ts";
 import { SimulationEngine } from "../src/simulation/SimulationEngine.ts";
-import { getMutableBuffer } from "../src/core/TrackedFloat32Array.ts";
+import { getMutableBuffer, withMutableBuffers } from "../src/core/TrackedFloat32Array.ts";
 import { SculptManager } from "../src/sculpt/SculptManager.ts";
 import { WorldSaveSystem } from "../src/world/save/WorldSaveSystem.ts";
 
@@ -71,6 +71,38 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   const beforeCellWrite = engine.grid.mutationRevision;
   engine.grid.cell(1, 1, 1).energy = 43;
   assert.ok(engine.grid.mutationRevision > beforeCellWrite, "CellState setter must advance grid revision");
+
+  // Scoped mutation coalesces front/back writes into one revision and
+  // rejects asynchronous callbacks before their synchronous prefix can execute.
+  const scopedBufferEngine = new SimulationEngine(4, 4, 4);
+  const scopedFrontIndex = scopedBufferEngine.grid.idx(1, 1, 1) + F.ENERGY;
+  const scopedBackIndex = scopedBufferEngine.grid.idx(1, 1, 1) + F.DENSITY;
+  const scopedRevision = scopedBufferEngine.grid.mutationRevision;
+  withMutableBuffers(scopedBufferEngine.grid, (front, back) => {
+    front[scopedFrontIndex] = 606;
+    back[scopedBackIndex] = 0.25;
+  });
+  assert.equal(scopedBufferEngine.grid.buffer[scopedFrontIndex], 606,
+    "scoped mutation must commit front-buffer writes");
+  assert.equal(scopedBufferEngine.grid.backBuffer[scopedBackIndex], Math.fround(0.25),
+    "scoped mutation must commit back-buffer writes");
+  assert.equal(scopedBufferEngine.grid.mutationRevision, scopedRevision + 1,
+    "front/back writes in one scope must advance the revision exactly once");
+
+  let asyncMutationInvoked = false;
+  const revisionBeforeAsyncReject = scopedBufferEngine.grid.mutationRevision;
+  assert.throws(() => withMutableBuffers(scopedBufferEngine.grid, async () => {
+    asyncMutationInvoked = true;
+  }), /callbacks are forbidden/);
+  assert.equal(asyncMutationInvoked, false,
+    "async callback must be rejected before its synchronous prefix can run");
+  assert.equal(scopedBufferEngine.grid.mutationRevision, revisionBeforeAsyncReject,
+    "rejecting an async callback before invocation must not mutate the grid");
+
+  assert.throws(() => withMutableBuffers(scopedBufferEngine.grid, (front) => front),
+    /must not return a value or buffer alias/);
+  assert.throws(() => withMutableBuffers(scopedBufferEngine.grid, () => Promise.resolve()),
+    /must be synchronous and must not return a Promise/);
 
   // Regression protecting the authoritative revision contract: the engine's
   // internal mutable-array API must not be exposed to external mutation callers.

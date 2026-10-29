@@ -18,6 +18,70 @@ export function getMutableBuffer(owner: InternalMutableBufferOwner, side: Mutabl
   return owner[INTERNAL_MUTABLE_BUFFER](side);
 }
 
+export interface ScopedMutableBufferOwner extends InternalMutableBufferOwner {
+  beginMutation(): () => void;
+}
+
+function isAsyncOrGeneratorCallback(callback: Function): boolean {
+  const source = Function.prototype.toString.call(callback).trimStart();
+  const prototype = Object.getPrototypeOf(callback) as { constructor?: { name?: string } } | null;
+  const constructorName = prototype?.constructor?.name ?? "";
+  return constructorName === "AsyncFunction" ||
+    constructorName === "GeneratorFunction" ||
+    constructorName === "AsyncGeneratorFunction" ||
+    source.startsWith("async") ||
+    source.startsWith("function*") ||
+    source.startsWith("function *");
+}
+
+/**
+ * Acquire front/back arrays inside one synchronous mutation scope.
+ *
+ * Use only in reviewed hot paths. The callback must not await, schedule
+ * asynchronous work, capture/store either alias, or return a value derived from
+ * the live arrays. This API coalesces buffer acquisition/writes into one revision.
+ * Static ownership checks audit permitted callsites and alias escapes.
+ */
+export function withMutableBuffers(
+  owner: ScopedMutableBufferOwner,
+  mutation: (front: Float32Array, back: Float32Array) => unknown,
+): void {
+  if (!owner || typeof owner.beginMutation !== "function" ||
+      typeof owner[INTERNAL_MUTABLE_BUFFER] !== "function") {
+    throw new TypeError("withMutableBuffers requires a scoped internal-buffer owner");
+  }
+  if (typeof mutation !== "function") {
+    throw new TypeError("withMutableBuffers requires a synchronous callback");
+  }
+  // Async functions execute their prefix immediately, so reject before invoking.
+  if (isAsyncOrGeneratorCallback(mutation)) {
+    throw new TypeError("withMutableBuffers callback must be synchronous; async/generator callbacks are forbidden");
+  }
+
+  const endMutation = owner.beginMutation();
+  try {
+    const front = owner[INTERNAL_MUTABLE_BUFFER]("front");
+    const back = owner[INTERNAL_MUTABLE_BUFFER]("back");
+    const result = mutation(front, back);
+    let thenable = false;
+    if ((typeof result === "object" && result !== null) || typeof result === "function") {
+      try {
+        thenable = typeof (result as { then?: unknown }).then === "function";
+      } catch {
+        throw new TypeError("withMutableBuffers callback result must be a plain synchronous value");
+      }
+    }
+    if (thenable) {
+      throw new TypeError("withMutableBuffers callback must be synchronous and must not return a Promise/thenable");
+    }
+    if (result !== undefined) {
+      throw new TypeError("withMutableBuffers callback must not return a value or buffer alias");
+    }
+  } finally {
+    endMutation();
+  }
+}
+
 const MUTATING_METHODS = new Set<PropertyKey>(["set", "fill", "copyWithin", "reverse", "sort"]);
 const CALLBACK_METHODS = new Set<PropertyKey>([
   "every", "filter", "find", "findIndex", "forEach", "map", "some", "reduce", "reduceRight",
