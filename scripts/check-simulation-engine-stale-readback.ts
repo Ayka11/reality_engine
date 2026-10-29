@@ -495,7 +495,7 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   const lawBoundaryFieldIndex = lawBoundaryEngine.grid.idx(1, 1, 1) + F.ENERGY;
   lawBoundaryEngine.grid.buffer[lawBoundaryFieldIndex] = 21;
   const lawTreeRevision = lawBoundaryEngine.laws.mutationRevision;
-  lawBoundaryEngine.laws[0].name = "Tracked law definition";
+  lawBoundaryEngine.laws.laws[0].name = "Tracked law definition";
   assert.ok(lawBoundaryEngine.laws.mutationRevision > lawTreeRevision,
     "nested public law-definition edits must advance the law revision");
   const staleLawResult = lawBoundaryEngine.grid.buffer.slice();
