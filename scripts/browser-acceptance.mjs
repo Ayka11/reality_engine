@@ -320,6 +320,98 @@ try {
     throw new Error("Hybrid mode failed to render both 2D and 3D panels: " + JSON.stringify(hybridResult));
   }
   console.log("[acceptance] Hybrid 2D/3D co-rendering PASS: " + JSON.stringify(hybridResult));
+
+  // Dedicated 2D Multi-Slice smoke: a visible canvas and a mode flag alone do
+  // not prove pixels were drawn. Count actual Canvas 2D paint operations and
+  // inspect the resulting backing store after the normal RAF loop has run.
+  const multiSliceBaseline = await page.evaluate(() => {
+    const canvas = document.getElementById("c2d");
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) return { error: "2D Multi-Slice canvas/context is unavailable" };
+    const probe = {
+      drawImageCalls: 0,
+      fillRectCalls: 0,
+      fillTextCalls: 0,
+      originalDrawImage: context.drawImage,
+      originalFillRect: context.fillRect,
+      originalFillText: context.fillText,
+      context,
+    };
+    context.drawImage = function (...args) {
+      probe.drawImageCalls++;
+      return probe.originalDrawImage.apply(this, args);
+    };
+    context.fillRect = function (...args) {
+      probe.fillRectCalls++;
+      return probe.originalFillRect.apply(this, args);
+    };
+    context.fillText = function (...args) {
+      probe.fillTextCalls++;
+      return probe.originalFillText.apply(this, args);
+    };
+    window.__multiSliceProbe = probe;
+    return {
+      mode: window.currentRenderMode,
+      drawImageCalls: probe.drawImageCalls,
+      fillRectCalls: probe.fillRectCalls,
+    };
+  });
+  if (multiSliceBaseline.error) throw new Error(multiSliceBaseline.error);
+  await page.evaluate(() => window.setRenderMode("2d"));
+  await page.waitForFunction((baseline) => {
+    const canvas = document.getElementById("c2d");
+    const context = canvas?.getContext("2d");
+    const probe = window.__multiSliceProbe;
+    if (!canvas || !context || !probe || window.currentRenderMode !== "2d" ||
+        getComputedStyle(canvas).display === "none" || canvas.width <= 0 || canvas.height <= 0) {
+      return false;
+    }
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    let paintedPixels = 0;
+    for (let i = 3; i < image.data.length; i += 4 * 16) {
+      if (image.data[i] > 0) paintedPixels++;
+    }
+    const paintCalls = probe.drawImageCalls + probe.fillRectCalls;
+    return paintCalls > baseline.drawImageCalls + baseline.fillRectCalls &&
+      paintedPixels > 100;
+  }, multiSliceBaseline, { timeout: 6000 });
+  const multiSliceResult = await page.evaluate(() => {
+    const canvas = document.getElementById("c2d");
+    const context = canvas?.getContext("2d");
+    const probe = window.__multiSliceProbe;
+    const image = context && canvas ? context.getImageData(0, 0, canvas.width, canvas.height) : null;
+    let paintedPixels = 0;
+    if (image) {
+      for (let i = 3; i < image.data.length; i += 4 * 16) {
+        if (image.data[i] > 0) paintedPixels++;
+      }
+    }
+    const result = {
+      mode: window.currentRenderMode,
+      width: canvas?.width ?? 0,
+      height: canvas?.height ?? 0,
+      drawImageCalls: probe?.drawImageCalls ?? -1,
+      fillRectCalls: probe?.fillRectCalls ?? -1,
+      fillTextCalls: probe?.fillTextCalls ?? -1,
+      sampledPaintedPixels: paintedPixels,
+    };
+    if (context && probe) {
+      context.drawImage = probe.originalDrawImage;
+      context.fillRect = probe.originalFillRect;
+      context.fillText = probe.originalFillText;
+    }
+    delete window.__multiSliceProbe;
+    window.setRenderMode("3d");
+    return result;
+  });
+  if (multiSliceResult.mode !== "2d" ||
+      multiSliceResult.width <= 0 || multiSliceResult.height <= 0 ||
+      multiSliceResult.drawImageCalls + multiSliceResult.fillRectCalls <=
+        multiSliceBaseline.drawImageCalls + multiSliceBaseline.fillRectCalls ||
+      multiSliceResult.sampledPaintedPixels <= 100) {
+    throw new Error("2D Multi-Slice failed to paint visible canvas pixels: " + JSON.stringify(multiSliceResult));
+  }
+  console.log("[acceptance] 2D Multi-Slice visible canvas painting PASS: " + JSON.stringify(multiSliceResult));
   console.log("[acceptance] hidden renderer pause/resume, Fly Camera control preservation, adaptive DPR diagnostics PASS");
 
   // Bottom-bar counters must describe the selected runtime, not the unrelated legacy 2D grid.
