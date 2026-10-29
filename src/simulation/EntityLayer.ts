@@ -664,42 +664,43 @@ export class EntityLayer {
     const nz = Math.max(0, Math.min(D - 1, pz));
 
     const childBase = (nz * WH + ny * W + nx) * CELL_FIELDS;
-    const buf = getMutableBuffer(grid);
+    withMutableBuffers(grid, (front, _back) => {
 
-    // Only spawn if target is low-bio
-    if (buf[childBase + F.BIO_POTENTIAL] < 0.02) {
-      const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate * this.mutationStrength, () => this._random());
-      buf[childBase + F.BIO_POTENTIAL] = 0.15;
-      buf[childBase + F.ENERGY]        = parent.genome.reproThreshold * 0.3;
-      buf[childBase + F.INFORMATION]   = 5;
+      // Only spawn if target is low-bio
+      if (front[childBase + F.BIO_POTENTIAL] < 0.02) {
+        const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate * this.mutationStrength, () => this._random());
+        front[childBase + F.BIO_POTENTIAL] = 0.15;
+        front[childBase + F.ENERGY]        = parent.genome.reproThreshold * 0.3;
+        front[childBase + F.INFORMATION]   = 5;
 
-      parent.children++;
+        parent.children++;
 
-      // Register new entity immediately
-      const id = this.nextId++;
-      const c = centroid([nz * WH + ny * W + nx], W, H);
-      this.entities.set(id, {
-        id, cells: [nz * WH + ny * W + nx], centroid: c,
-        genome: childGenome,
-        age: 0, energy: buf[childBase + F.ENERGY], stage: 'juvenile',
-        memoryBuffer: new Float32Array(8),
-        memPtr: 0,
-        symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
-        colorRgb: [
-          Math.max(0.2, parent.colorRgb[0] + (this._random() - 0.5) * 0.3),
-          Math.max(0.2, parent.colorRgb[1] + (this._random() - 0.5) * 0.3),
-          Math.max(0.2, parent.colorRgb[2] + (this._random() - 0.5) * 0.3),
-        ],
-        children: 0,
-        reproCounter: 0,
-      });
+        // Register new entity immediately
+        const id = this.nextId++;
+        const c = centroid([nz * WH + ny * W + nx], W, H);
+        this.entities.set(id, {
+          id, cells: [nz * WH + ny * W + nx], centroid: c,
+          genome: childGenome,
+          age: 0, energy: front[childBase + F.ENERGY], stage: 'juvenile',
+          memoryBuffer: new Float32Array(8),
+          memPtr: 0,
+          symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
+          colorRgb: [
+            Math.max(0.2, parent.colorRgb[0] + (this._random() - 0.5) * 0.3),
+            Math.max(0.2, parent.colorRgb[1] + (this._random() - 0.5) * 0.3),
+            Math.max(0.2, parent.colorRgb[2] + (this._random() - 0.5) * 0.3),
+          ],
+          children: 0,
+          reproCounter: 0,
+        });
 
-      // Drain energy from parent
-      const drainPer = parent.genome.reproThreshold * 0.35 / parent.cells.length;
-      for (const i of parent.cells) {
-        buf[i * CELL_FIELDS + F.ENERGY] = Math.max(0, buf[i * CELL_FIELDS + F.ENERGY] - drainPer);
+        // Drain energy from parent
+        const drainPer = parent.genome.reproThreshold * 0.35 / parent.cells.length;
+        for (const i of parent.cells) {
+          front[i * CELL_FIELDS + F.ENERGY] = Math.max(0, front[i * CELL_FIELDS + F.ENERGY] - drainPer);
+        }
       }
-    }
+    });
   }
 
   getEntities(): Entity[] {
