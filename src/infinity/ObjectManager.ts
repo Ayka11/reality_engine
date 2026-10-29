@@ -10,8 +10,29 @@ export class WorldObjectManager {
   private objects = new Map<string, WorldObject>()
   get size(): number { return this.objects.size }
 
-  add(placement: ObjectPlacement): WorldObject {
-    const id = objectId(placement.kind, placement.x, placement.y, placement.z)
+  /**
+   * New placements get collision-safe IDs. Re-inserting an existing WorldObject
+   * (history undo/redo, chunk restore, or a transform rollback) preserves its
+   * stable identity instead of deriving a new ID from its changed coordinates.
+   */
+  add(placement: ObjectPlacement | WorldObject): WorldObject {
+    let id: string
+    if ('id' in placement && typeof placement.id === 'string' && placement.id.length > 0) {
+      id = placement.id
+      const existing = this.objects.get(id)
+      if (existing && existing !== placement) {
+        throw new Error(`World object ID collision: ${id}`)
+      }
+    } else {
+      const baseId = objectId(placement.kind, placement.x, placement.y, placement.z)
+      id = baseId
+      let suffix = 1
+      while (this.objects.has(id)) {
+        id = `${baseId}#${suffix}`
+        suffix++
+      }
+    }
+
     const object: WorldObject = { ...placement, id }
     this.objects.set(id, object)
     return object
