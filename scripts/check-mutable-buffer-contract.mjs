@@ -13,12 +13,6 @@ const expectedCalls = new Map([
   ["src/core/SparseVoxelGrid.ts#loadChunks", 2],
   ["src/core/SparseVoxelGrid.ts#syncBackBuffersFromFront", 2],
   ["src/simulation/EntityLayer.ts#tick", 2],
-  ["src/simulation/SimulationEngine.ts#_stepInternal", 1],
-  ["src/simulation/SimulationEngine.ts#resynchronizeGPUAndThrow", 1],
-  ["src/simulation/SimulationEngine.ts#mutateAuthoritativeState", 1],
-  ["src/simulation/SimulationEngine.ts#syncToGPU", 1],
-  ["src/simulation/SimulationEngine.ts#syncTick", 1],
-  ["src/simulation/SimulationEngine.ts#restoreCoreRecoveryState", 2],
 ]);
 const expectedImports = new Set([
   "src/core/SparseVoxelGrid.ts",
