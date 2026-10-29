@@ -1,6 +1,6 @@
 import { CellState, CELL_FIELDS, F, validateGridDimensions } from "./CellState";
 import { Chunk, CHUNK_SIZE, CHUNK_VOLUME } from "./Chunk";
-import { createTrackedFloat32Array, getMutableBuffer, withMutableBuffers, INTERNAL_MUTABLE_BUFFER, type MutableBufferSide } from "./TrackedFloat32Array";
+import { createTrackedFloat32Array, getMutableBuffer, INTERNAL_MUTABLE_BUFFER, type MutableBufferSide } from "./TrackedFloat32Array";
 
 export interface SerializedChunk {
   key: string;
