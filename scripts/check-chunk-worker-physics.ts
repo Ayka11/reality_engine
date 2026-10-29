@@ -61,6 +61,50 @@ const boundaryHalo = readField(latestFrame(), boundaryPoint.x + 1, boundaryPoint
 assert.ok(boundaryHalo > 0 && boundaryHalo < 1,
   `energy diffusion should cross a chunk boundary into an empty cell (got ${boundaryHalo})`)
 
+// Cross-chunk diffusion must apply to every independently enabled scalar stencil,
+// not only energy. Each case uses a fresh x=7/8 boundary cell and its own process bit.
+const boundaryDensityPoint = { x: 7, y: 40, z: 20 }
+send('setPhysics', {
+  params: { ...params, energyDiffusion: 0, densityDiffusion: 0.0024,
+    tempDiffusion: 0, tempEnergyCoupling: 0, pressureDiffusion: 0, pressureDensityCoupling: 0 },
+  processMask: 1 << 2,
+})
+send('paint', { ...boundaryDensityPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const boundaryDensityHalo = readField(
+  latestFrame(), boundaryDensityPoint.x + 1, boundaryDensityPoint.y, boundaryDensityPoint.z, F.D,
+)
+assert.ok(boundaryDensityHalo > 0 && boundaryDensityHalo < 0.5,
+  `density diffusion should cross a chunk boundary into an empty cell (got ${boundaryDensityHalo})`)
+
+const boundaryTemperaturePoint = { x: 7, y: 32, z: 20 }
+send('setPhysics', {
+  params: { ...params, energyDiffusion: 0, densityDiffusion: 0,
+    tempDiffusion: 0.1, tempEnergyCoupling: 0, pressureDiffusion: 0, pressureDensityCoupling: 0 },
+  processMask: 1 << 1,
+})
+send('paint', { ...boundaryTemperaturePoint, f: F.T, v: 100, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const boundaryTemperatureHalo = readField(
+  latestFrame(), boundaryTemperaturePoint.x + 1, boundaryTemperaturePoint.y, boundaryTemperaturePoint.z, F.T,
+)
+assert.ok(boundaryTemperatureHalo > 0 && boundaryTemperatureHalo < 1,
+  `temperature diffusion should cross a chunk boundary into an empty cell (got ${boundaryTemperatureHalo})`)
+
+const boundaryPressurePoint = { x: 7, y: 48, z: 20 }
+send('setPhysics', {
+  params: { ...params, energyDiffusion: 0, densityDiffusion: 0,
+    tempDiffusion: 0, tempEnergyCoupling: 0, pressureDiffusion: 0.1, pressureDensityCoupling: 0 },
+  processMask: 1 << 13,
+})
+send('paint', { ...boundaryPressurePoint, f: F.P, v: 100, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const boundaryPressureHalo = readField(
+  latestFrame(), boundaryPressurePoint.x + 1, boundaryPressurePoint.y, boundaryPressurePoint.z, F.P,
+)
+assert.ok(boundaryPressureHalo > 0 && boundaryPressureHalo < 100,
+  `pressure diffusion should cross a chunk boundary into an empty cell (got ${boundaryPressureHalo})`)
+
 // Temperature diffusion uses PhysicsParams.tempDiffusion, not the old 0.07 literal.
 const thermalPoint = { x: 20, y: 10, z: 10 }
 send('setPhysics', { params, processMask: 1 << 1 })
