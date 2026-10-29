@@ -1,4 +1,5 @@
 export type RuntimeDiagnosticsSnapshot = {
+  renderedFrames: number
   fps: number
   frameTimeMs: number
   physicsTimeMs: number
@@ -13,6 +14,7 @@ export type RuntimeDiagnosticsSnapshot = {
 
 export class RuntimeDiagnostics {
   private frames = 0
+  private renderedFrames = 0
   private elapsed = 0
   private frameTimeMs = 0
   private physicsTimeMs = 0
@@ -29,6 +31,7 @@ export class RuntimeDiagnostics {
   recordFrame(start: number) {
     const wallClockMs = Math.max(0.001, performance.now() - start)
     this.frames++
+    this.renderedFrames++
     this.elapsed += wallClockMs
     this.frameTimeMs = this.frameTimeMs * 0.9 + wallClockMs * 0.1
     if (this.elapsed >= 1000) {
@@ -55,6 +58,7 @@ export class RuntimeDiagnostics {
 
   snapshot(loadedChunks: number, visibleObjects: number, particleCount: number): RuntimeDiagnosticsSnapshot {
     return {
+      renderedFrames: this.renderedFrames,
       fps: this.fps,
       frameTimeMs: this.frameTimeMs,
       physicsTimeMs: this.physicsTimeMs,

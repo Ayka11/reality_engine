@@ -1913,9 +1913,40 @@ function quickGenerateWorld(){
   if(verification && !verification.ok){
     console.warn('[Reality Engine] Quick Generate verification did not detect a world change', verification);
     log('⚠ Quick Generate completed, but generation verification detected no measurable Infinite World change.');
-  } else if(verification){
-    log('✓ Quick Generate verified: '+verification.delta.objects+' object delta · '+verification.delta.loadedChunks+' chunk delta');
+    return;
   }
+  if(!verification) return;
+
+  const generationHealth=window.worldGenerationHealth?.();
+  const expectedRevision=Number(generationHealth?.lastGeneration?.generationRevision ?? 0);
+  log('✓ Quick Generate state committed: '+verification.delta.objects+' object delta · waiting for terrain meshes.');
+
+  // Generation state is synchronous, but terrain streaming and mesh creation happen
+  // in the normal render loop. Report full success only after that second phase is real.
+  let renderedFrames=0;
+  const verifyRenderedWorld=()=>{
+    const health=window.worldGenerationHealth?.();
+    const currentRevision=Number(health?.lastGeneration?.generationRevision ?? 0);
+    if(currentRevision!==expectedRevision) return; // A newer generation owns the UI now.
+    if(health?.renderReady){
+      const meshes=health.terrainMeshDiagnostics||{};
+      const runtime=health.runtimeDiagnostics||{};
+      log('✓ Quick Generate rendered: '+Number(health.stats?.objects||0)+' objects · '+
+        Number(health.stats?.loadedChunks||0)+' chunks · '+Number(meshes.terrainMeshPatches||0)+
+        ' terrain meshes · '+Number(meshes.triangleCount||0)+' triangles · '+
+        Number(runtime.renderedFrames||0)+' rendered frames.');
+      return;
+    }
+    renderedFrames++;
+    if(renderedFrames>=180){
+      const reason=health?.renderReason||'render-readiness-unavailable';
+      console.warn('[Reality Engine] Quick Generate terrain rendering did not become ready', {reason,health});
+      log('⚠ Quick Generate updated state, but terrain rendering was not verified: '+reason+'.');
+      return;
+    }
+    requestAnimationFrame(verifyRenderedWorld);
+  };
+  requestAnimationFrame(verifyRenderedWorld);
 }
 window.quickGenerateWorld=quickGenerateWorld;
 function _clearComposerHazards(){if(window._composerHazardInterval){clearInterval(window._composerHazardInterval);window._composerHazardInterval=null;}}

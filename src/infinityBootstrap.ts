@@ -866,6 +866,11 @@ export function bootstrapInfiniteWorld() {
     const stats = world.getRuntimeStats()
     const last = (window as any).lastInfinityGeneration
     const worldStats = stats.world ?? {}
+    const runtimeDiagnostics = world.getRuntimeDiagnostics()
+    const terrainMeshDiagnostics = world.getTerrainMeshDiagnostics()
+    const worldSeed = world.generator?.seed ?? null
+    const viewSeed = worldViewContract.snapshot()?.seed ?? null
+    const seedCoherent = Boolean(worldSeed && worldSeed === viewSeed)
 
     const canvasState = {
       width: canvas.width,
@@ -874,10 +879,31 @@ export function bootstrapInfiniteWorld() {
       clientHeight: canvas.clientHeight,
       connected: canvas.isConnected,
     }
+    const renderReason =
+      !canvasState.connected || canvasState.clientWidth <= 0 || canvasState.clientHeight <= 0
+        ? 'canvas-unavailable'
+        : !runtimeDiagnostics.enabled
+          ? 'renderer-disabled'
+          : stats.loadedChunks <= 0
+            ? 'terrain-chunks-not-loaded'
+            : terrainMeshDiagnostics.terrainMeshPatches <= 0
+              ? 'terrain-mesh-not-materialized'
+              : terrainMeshDiagnostics.triangleCount <= 0
+                ? 'terrain-mesh-empty'
+                : runtimeDiagnostics.renderedFrames <= 0
+                  ? 'renderer-has-not-produced-a-frame'
+                  : !seedCoherent
+                    ? 'world-view-seed-mismatch'
+                    : null
     return {
       ok: Boolean(canvas.isConnected && stats),
+      renderReady: renderReason === null,
+      renderReason,
       renderer: 'InfiniteWorldRenderer',
       stats,
+      runtimeDiagnostics,
+      terrainMeshDiagnostics,
+      seeds: { world: worldSeed, viewContract: viewSeed, coherent: seedCoherent },
       canvas: canvasState,
       generatedRegion: stats.world ?? null,
       lastGeneration: last ? {
@@ -916,12 +942,16 @@ export function bootstrapInfiniteWorld() {
     return {
       ok: reason === null,
       reason,
+      renderReady: after.renderReady === true,
+      renderReason: after.renderReason ?? 'render-diagnostics-unavailable',
       generationAdvanced,
       beforeGenerationRevision,
       afterGenerationRevision,
       worldHasObjects,
       before: beforeStats,
       after: after.stats,
+      runtimeDiagnostics: after.runtimeDiagnostics,
+      terrainMeshDiagnostics: after.terrainMeshDiagnostics,
       delta: {
         objects: afterObjects - beforeObjects,
         loadedChunks: afterChunks - beforeChunks,

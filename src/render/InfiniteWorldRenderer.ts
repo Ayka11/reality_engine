@@ -738,6 +738,37 @@ export class InfiniteWorldRenderer {
     }
   }
 
+  /** Coarse, allocation-light health check of the actual materialized terrain meshes. */
+  getTerrainMeshDiagnostics() {
+    const patches = [...this.patches.values()]
+    let terrainMeshPatches = 0
+    let vertexCount = 0
+    let triangleCount = 0
+    let invalidGeometryPatches = 0
+
+    for (const patch of patches) {
+      const mesh = patch.group.children.find(child => child.userData?.terrain) as THREE.Mesh | undefined
+      const geometry = mesh?.geometry
+      const position = geometry?.getAttribute('position')
+      const index = geometry?.index
+      if (!position || !index || position.count < 3 || index.count < 3 || index.count % 3 !== 0) {
+        invalidGeometryPatches++
+        continue
+      }
+      terrainMeshPatches++
+      vertexCount += position.count
+      triangleCount += index.count / 3
+    }
+
+    return {
+      loadedChunks: patches.length,
+      terrainMeshPatches,
+      vertexCount,
+      triangleCount,
+      invalidGeometryPatches,
+    }
+  }
+
   focusGeneratedRegion(padding = 1.35) {
     const objects = this.objects.values()
     if (!objects.length) {
