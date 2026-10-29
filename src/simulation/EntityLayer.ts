@@ -1,5 +1,5 @@
 import { VoxelGrid } from '../core/VoxelGrid';
-import { getMutableBuffer } from '../core/TrackedFloat32Array';
+import { getMutableBuffer, withMutableBuffers } from '../core/TrackedFloat32Array';
 import { SparseVoxelGrid } from '../core/SparseVoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
