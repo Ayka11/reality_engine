@@ -19,8 +19,6 @@ const expectedCalls = new Map([
   ["src/simulation/EntityLayer.ts#tick", 2],
   ["src/simulation/EntityLayer.ts#_reconcileFullDomain", 1],
   ["src/simulation/EntityLayer.ts#_spawnChild", 1],
-  ["src/simulation/TemporalLayer.ts#tick", 1],
-  ["src/simulation/TemporalLayer.ts#_diffuseTime", 1],
   ["src/simulation/SimulationEngine.ts#initGPU", 1],
   ["src/simulation/SimulationEngine.ts#_stepInternal", 1],
   ["src/simulation/SimulationEngine.ts#resynchronizeGPUAndThrow", 1],
@@ -36,12 +34,13 @@ const expectedImports = new Set([
   "src/chemistry/ChemLayer.ts",
   "src/simulation/AgentSystem.ts",
   "src/simulation/EntityLayer.ts",
-  "src/simulation/TemporalLayer.ts",
 ]);
 const expectedScopedCalls = new Map([
   ["src/simulation/FieldPhysics.ts#tick", 1],
   ["src/simulation/EntropyLayer.ts#tick", 1],
   ["src/simulation/InfoPhysics.ts#tick", 1],
+  ["src/simulation/TemporalLayer.ts#tick", 1],
+  ["src/simulation/TemporalLayer.ts#_diffuseTime", 1],
 ]);
 const actualScopedCalls = new Map();
 const expectedSymbolImplementations = new Set([
@@ -247,8 +246,6 @@ for (const filePath of sourcePaths) {
         "src/simulation/EntityLayer.ts#_reconcileFullDomain",
         "src/simulation/EntityLayer.ts#_spawnChild",
         "src/simulation/FieldPhysics.ts#tick",
-        "src/simulation/TemporalLayer.ts#tick",
-        "src/simulation/TemporalLayer.ts#_diffuseTime",
         "src/simulation/SimulationEngine.ts#_detectCausality",
       ]);
       if (localDeclaration && !approvedLocalBufferMethods.has(key)) {
