@@ -13,7 +13,6 @@ const expectedCalls = new Map([
   ["src/core/SparseVoxelGrid.ts#loadChunks", 2],
   ["src/core/SparseVoxelGrid.ts#syncBackBuffersFromFront", 2],
   ["src/simulation/EntityLayer.ts#tick", 2],
-  ["src/simulation/EntityLayer.ts#_reconcileFullDomain", 1],
   ["src/simulation/EntityLayer.ts#_spawnChild", 1],
   ["src/simulation/SimulationEngine.ts#initGPU", 1],
   ["src/simulation/SimulationEngine.ts#_stepInternal", 1],
@@ -39,6 +38,7 @@ const expectedScopedCalls = new Map([
   ["src/simulation/AgentSystem.ts#seed", 1],
   ["src/simulation/AgentSystem.ts#tick", 1],
   ["src/simulation/SimulationEngine.ts#_detectCausality", 1],
+  ["src/simulation/EntityLayer.ts#_reconcileFullDomain", 1],
 ]);
 const actualScopedCalls = new Map();
 const expectedSymbolImplementations = new Set([
@@ -260,7 +260,6 @@ for (const filePath of sourcePaths) {
         "src/core/SparseVoxelGrid.ts#syncDenseToChunks",
         "src/core/SparseVoxelGrid.ts#syncChunksToDense",
         "src/simulation/EntityLayer.ts#tick",
-        "src/simulation/EntityLayer.ts#_reconcileFullDomain",
         "src/simulation/EntityLayer.ts#_spawnChild",
         "src/simulation/FieldPhysics.ts#tick",
       ]);

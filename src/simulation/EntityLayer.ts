@@ -574,69 +574,70 @@ export class EntityLayer {
       // the large front/back buffers.
       () => undefined,
       (_staged, records) => {
-        const buf = getMutableBuffer(grid);
-        // ENTITY_ID is owned by this layer. Clear all previous markers first;
-        // the behavior pass below re-stamps every entity in the committed plan.
-        for (let index = 0; index < grid.size; index++) {
-          buf[index * CELL_FIELDS + F.ENTITY_ID] = 0;
-        }
-
-        for (const extinctId of plan.extinctEntityIds) {
-          const dead = entitiesBeforeCommit.get(extinctId);
-          if (!dead) throw new Error(`EntityLayer extinction plan references unknown entity ${extinctId}`);
-          const energyShare = dead.energy * 0.3 / Math.max(1, dead.cells.length);
-          for (const cellIndex of dead.cells) {
-            const base = cellIndex * CELL_FIELDS;
-            buf[base + F.ENERGY] = Math.min(9999, buf[base + F.ENERGY] + energyShare);
-          }
-          this.extinctCountValue++;
-        }
-
-        const nextEntities = new Map<number, Entity>();
-        for (const record of records) {
-          const component = componentById.get(record.componentId);
-          if (!component) {
-            throw new Error(`EntityLayer reconciliation references missing component ${record.componentId}`);
+        withMutableBuffers(grid, (front, _back) => {
+          // ENTITY_ID is owned by this layer. Clear all previous markers first;
+          // the behavior pass below re-stamps every entity in the committed plan.
+          for (let index = 0; index < grid.size; index++) {
+            front[index * CELL_FIELDS + F.ENTITY_ID] = 0;
           }
 
-          let entity: Entity;
-          if (record.entityId !== null) {
-            const existing = entitiesBeforeCommit.get(record.entityId);
-            if (!existing) {
-              throw new Error(`EntityLayer reconciliation references unknown entity ${record.entityId}`);
+          for (const extinctId of plan.extinctEntityIds) {
+            const dead = entitiesBeforeCommit.get(extinctId);
+            if (!dead) throw new Error(`EntityLayer extinction plan references unknown entity ${extinctId}`);
+            const energyShare = dead.energy * 0.3 / Math.max(1, dead.cells.length);
+            for (const cellIndex of dead.cells) {
+              const base = cellIndex * CELL_FIELDS;
+              front[base + F.ENERGY] = Math.min(9999, front[base + F.ENERGY] + energyShare);
             }
-            entity = existing;
-          } else {
-            const id = this.nextId++;
-            entity = {
-              id,
-              cells: [...record.cells],
-              centroid: [...record.centroid] as [number, number, number],
-              genome: defaultGenome(() => this._random()),
-              age: 0,
-              energy: 0,
-              stage: "juvenile",
-              memoryBuffer: new Float32Array(8),
-              memPtr: 0,
-              symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
-              colorRgb: [
-                0.3 + this._random() * 0.7,
-                0.3 + this._random() * 0.7,
-                0.3 + this._random() * 0.7,
-              ],
-              children: 0,
-              reproCounter: 0,
-            };
+            this.extinctCountValue++;
           }
 
-          entity.cells = [...record.cells];
-          entity.centroid = [...record.centroid] as [number, number, number];
-          if (nextEntities.has(entity.id)) {
-            throw new Error(`EntityLayer reconciliation assigned duplicate identity ${entity.id}`);
+          const nextEntities = new Map<number, Entity>();
+          for (const record of records) {
+            const component = componentById.get(record.componentId);
+            if (!component) {
+              throw new Error(`EntityLayer reconciliation references missing component ${record.componentId}`);
+            }
+
+            let entity: Entity;
+            if (record.entityId !== null) {
+              const existing = entitiesBeforeCommit.get(record.entityId);
+              if (!existing) {
+                throw new Error(`EntityLayer reconciliation references unknown entity ${record.entityId}`);
+              }
+              entity = existing;
+            } else {
+              const id = this.nextId++;
+              entity = {
+                id,
+                cells: [...record.cells],
+                centroid: [...record.centroid] as [number, number, number],
+                genome: defaultGenome(() => this._random()),
+                age: 0,
+                energy: 0,
+                stage: "juvenile",
+                memoryBuffer: new Float32Array(8),
+                memPtr: 0,
+                symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
+                colorRgb: [
+                  0.3 + this._random() * 0.7,
+                  0.3 + this._random() * 0.7,
+                  0.3 + this._random() * 0.7,
+                ],
+                children: 0,
+                reproCounter: 0,
+              };
+            }
+
+            entity.cells = [...record.cells];
+            entity.centroid = [...record.centroid] as [number, number, number];
+            if (nextEntities.has(entity.id)) {
+              throw new Error(`EntityLayer reconciliation assigned duplicate identity ${entity.id}`);
+            }
+            nextEntities.set(entity.id, entity);
           }
-          nextEntities.set(entity.id, entity);
-        }
-        this.entities = nextEntities;
+          this.entities = nextEntities;
+        });
       },
       () => rollbackTick(),
     );
