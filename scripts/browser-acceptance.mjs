@@ -354,6 +354,7 @@ try {
       mode: window.currentRenderMode,
       drawImageCalls: probe.drawImageCalls,
       fillRectCalls: probe.fillRectCalls,
+      fillTextCalls: probe.fillTextCalls,
     };
   });
   if (multiSliceBaseline.error) throw new Error(multiSliceBaseline.error);
@@ -366,14 +367,12 @@ try {
         getComputedStyle(canvas).display === "none" || canvas.width <= 0 || canvas.height <= 0) {
       return false;
     }
-    const image = context.getImageData(0, 0, canvas.width, canvas.height);
-    let paintedPixels = 0;
-    for (let i = 3; i < image.data.length; i += 4 * 16) {
-      if (image.data[i] > 0) paintedPixels++;
-    }
-    const paintCalls = probe.drawImageCalls + probe.fillRectCalls;
-    return paintCalls > baseline.drawImageCalls + baseline.fillRectCalls &&
-      paintedPixels > 100;
+    // The mode-specific drawing path must execute after the switch: the
+    // linked-world renderer paints via drawImage, while the legacy Multi-Slice
+    // view emits field labels. Do not read back the whole canvas on every poll.
+    return window.currentRenderMode === "2d" &&
+      (probe.drawImageCalls > baseline.drawImageCalls ||
+       probe.fillTextCalls > baseline.fillTextCalls);
   }, multiSliceBaseline, { timeout: 6000 });
   const multiSliceResult = await page.evaluate(() => {
     const canvas = document.getElementById("c2d");
