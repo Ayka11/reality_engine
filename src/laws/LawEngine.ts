@@ -138,6 +138,7 @@ function isMetaLaw(value: unknown): value is MetaLaw {
 export class LawEngine {
   private _laws!: MetaLaw[];
   private _mutationRevision = 0;
+  private _internalLawMutationDepth = 0;
   private _mask = 0;
   private _params: PhysicsParams = { ...DEFAULT_PARAMS };
   private _rngState: number;
@@ -150,14 +151,17 @@ export class LawEngine {
   set laws(value: MetaLaw[]) {
     if (!Array.isArray(value)) throw new TypeError("LawEngine laws must be an array");
     const detached = value.map(cloneLaw);
-    this._laws = trackLawState(detached, () => { this._mutationRevision++; });
+    this._laws = trackLawState(detached, () => {
+      this._mutationRevision++;
+      if (this._internalLawMutationDepth === 0) this._recompute();
+    });
     this._mutationRevision++;
+    if (this._internalLawMutationDepth === 0) this._recompute();
   }
 
   constructor(seed = 0x6d2b79f5) {
     this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6d2b79f5 : 0x6d2b79f5;
     this.laws = this._defaultLaws();
-    this._recompute();
   }
 
   private _defaultLaws(): MetaLaw[] {
@@ -279,40 +283,50 @@ export class LawEngine {
     const restoredGraphIds = snapshot.graphProcessIds === null
       ? null
       : new Set(snapshot.graphProcessIds);
-    this.laws = restoredLaws;
-    this._lawOverride = restoredOverrides;
-    this._manualOn = new Set(snapshot.manualOn);
-    this._manualOff = new Set(snapshot.manualOff);
-    this._graphProcessIds = restoredGraphIds;
-    this._rngState = snapshot.rngState >>> 0;
+    this._internalLawMutationDepth++;
+    try {
+      this.laws = restoredLaws;
+      this._lawOverride = restoredOverrides;
+      this._manualOn = new Set(snapshot.manualOn);
+      this._manualOff = new Set(snapshot.manualOff);
+      this._graphProcessIds = restoredGraphIds;
+      this._rngState = snapshot.rngState >>> 0;
+    } finally {
+      this._internalLawMutationDepth--;
+    }
     this._recompute();
     this._mutationRevision++;
   }
 
   tick(metrics: WorldMetrics): void {
     let dirty = false;
-    for (const law of this.laws) {
-      const _override = this._lawOverride.get(law.id);
-      const shouldBeActive = _override === 'on' ? true
-        : _override === 'off' ? false
-        : (law.conditions.length === 0 || law.conditions.every(c => evalCond(c, metrics)));
+    this._internalLawMutationDepth++;
+    try {
+      for (const law of this.laws) {
+        const _override = this._lawOverride.get(law.id);
+        const shouldBeActive = _override === 'on' ? true
+          : _override === 'off' ? false
+          : (law.conditions.length === 0 || law.conditions.every(c => evalCond(c, metrics)));
 
-      if (shouldBeActive !== law.active) {
-        law.active = shouldBeActive;
-        dirty = true;
+        if (shouldBeActive !== law.active) {
+          law.active = shouldBeActive;
+          dirty = true;
+        }
+
+        law.age++;
+
+        // Fitness: reward laws that are active during high-complexity states
+        const complexity = metrics.avgInfo / 500 + metrics.avgBio;
+        law.fitness = law.fitness * 0.999 + (law.active ? complexity * 0.001 : 0);
+
+        // Mutation: slowly drift law thresholds and param overrides
+        if (law.mutationRate > 0 && this._random() < law.mutationRate) {
+          this._mutate(law);
+          dirty = true;
+        }
       }
-
-      law.age++;
-
-      // Fitness: reward laws that are active during high-complexity states
-      const complexity = metrics.avgInfo / 500 + metrics.avgBio;
-      law.fitness = law.fitness * 0.999 + (law.active ? complexity * 0.001 : 0);
-
-      // Mutation: slowly drift law thresholds and param overrides
-      if (law.mutationRate > 0 && this._random() < law.mutationRate) {
-        this._mutate(law);
-        dirty = true;
-      }
+    } finally {
+      this._internalLawMutationDepth--;
     }
     if (dirty) this._recompute();
     this._mutationRevision++;
@@ -392,7 +406,7 @@ export class LawEngine {
     }
 
     this.laws.push(child);
-    this._recompute();
+    // The tracked mutation boundary recomputes the effective law configuration.
     // Return the tracked public object, not the detached construction alias.
     return this.laws.find(law => law.id === child.id) ?? null;
   }
@@ -402,7 +416,6 @@ export class LawEngine {
     // Never remove the 3 core permanent laws
     if (!law || ['law_thermo', 'law_gravity', 'law_info'].includes(id)) return;
     this.laws = this.laws.filter(l => l.id !== id);
-    this._recompute();
   }
 
   // Per-law activation overrides (independent of conditions)

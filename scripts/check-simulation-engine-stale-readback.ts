@@ -9,6 +9,7 @@ import { getMutableBuffer, withMutableBuffers } from "../src/core/TrackedFloat32
 import { SculptManager } from "../src/sculpt/SculptManager.ts";
 import { WorldSaveSystem } from "../src/world/save/WorldSaveSystem.ts";
 import { PROC } from "../src/process/ProcessDef.ts";
+import { DEFAULT_PARAMS } from "../src/laws/MetaLaw.ts";
 
 function checkLawSnapshotValidationIsAtomic(): void {
   const engine = new LawEngine(12345);
@@ -535,6 +536,15 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
     paramOverrides: { ...lawBoundaryEngine.laws.laws[0].paramOverrides },
   };
   lawBoundaryEngine.laws.laws = [externalLaw];
+  assert.equal(lawBoundaryEngine.laws.params.energyDiffusion, DEFAULT_PARAMS.energyDiffusion,
+    "replacing the public law list must refresh effective physics parameters");
+  const energyDiffusionBit = 1 << PROC.ENERGY_DIFFUSION;
+  lawBoundaryEngine.laws.laws[0].disablesProcesses = [PROC.ENERGY_DIFFUSION];
+  assert.equal(lawBoundaryEngine.laws.activeProcessMask & energyDiffusionBit, 0,
+    "direct law process-list edits must refresh the effective process mask");
+  lawBoundaryEngine.laws.laws[0].disablesProcesses = [];
+  assert.notEqual(lawBoundaryEngine.laws.activeProcessMask & energyDiffusionBit, 0,
+    "removing a direct law process override must refresh the effective process mask");
   const revisionAfterLawReplacement = lawBoundaryEngine.laws.mutationRevision;
   externalLaw.name = "escaped caller alias";
   assert.notEqual(lawBoundaryEngine.laws.laws[0].name, externalLaw.name,
@@ -566,9 +576,13 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   const insertedOverridesAlias = { energyDiffusion: 0.15 };
   lawBoundaryEngine.laws.laws[0].paramOverrides = insertedOverridesAlias;
   const revisionAfterOverridesInsert = lawBoundaryEngine.laws.mutationRevision;
+  assert.equal(lawBoundaryEngine.laws.params.energyDiffusion, 0.15,
+    "direct law parameter edits must refresh effective solver parameters");
   insertedOverridesAlias.energyDiffusion = 0.75;
   assert.equal(lawBoundaryEngine.laws.laws[0].paramOverrides.energyDiffusion, 0.15,
     "replacing nested configuration objects must detach caller aliases");
+  assert.equal(lawBoundaryEngine.laws.params.energyDiffusion, 0.15,
+    "mutating the detached alias must not change effective solver parameters");
   assert.equal(lawBoundaryEngine.laws.mutationRevision, revisionAfterOverridesInsert,
     "mutating a detached configuration alias must not change authoritative revision");
 
