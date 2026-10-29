@@ -22,7 +22,6 @@ const expectedCalls = new Map([
   ["src/simulation/SimulationEngine.ts#syncToGPU", 1],
   ["src/simulation/SimulationEngine.ts#syncTick", 1],
   ["src/simulation/SimulationEngine.ts#restoreCoreRecoveryState", 2],
-  ["src/simulation/SimulationEngine.ts#_detectCausality", 1],
 ]);
 const expectedImports = new Set([
   "src/core/SparseVoxelGrid.ts",
@@ -39,6 +38,7 @@ const expectedScopedCalls = new Map([
   ["src/chemistry/ChemLayer.ts#tickRegion", 1],
   ["src/simulation/AgentSystem.ts#seed", 1],
   ["src/simulation/AgentSystem.ts#tick", 1],
+  ["src/simulation/SimulationEngine.ts#_detectCausality", 1],
 ]);
 const actualScopedCalls = new Map();
 const expectedSymbolImplementations = new Set([
@@ -263,7 +263,6 @@ for (const filePath of sourcePaths) {
         "src/simulation/EntityLayer.ts#_reconcileFullDomain",
         "src/simulation/EntityLayer.ts#_spawnChild",
         "src/simulation/FieldPhysics.ts#tick",
-        "src/simulation/SimulationEngine.ts#_detectCausality",
       ]);
       if (localDeclaration && !approvedLocalBufferMethods.has(key)) {
         errors.push(`${path}:${line}: retained mutable buffer local is not in an audited synchronous hot path`);

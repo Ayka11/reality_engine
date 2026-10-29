@@ -1,5 +1,5 @@
 import { SparseVoxelGrid, type SparseVoxelGridSnapshot } from '../core/SparseVoxelGrid';
-import { getMutableBuffer } from '../core/TrackedFloat32Array';
+import { getMutableBuffer, withMutableBuffers } from '../core/TrackedFloat32Array';
 import { WORLD } from '../core/WorldConstants';
 import { F, CELL_FIELDS } from '../core/CellState';
 import { FieldPhysics } from './FieldPhysics';
@@ -628,20 +628,21 @@ export class SimulationEngine {
   private _detectCausality(): void {
     const { grid } = this;
     const { W, H, D } = grid;
-    const buf = getMutableBuffer(grid);
-    for (let z = 0; z < D; z++)
-    for (let y = 0; y < H; y++)
-    for (let x = 0; x < W; x++) {
-      const lin = z * H * W + y * W + x;
-      const base = lin * CELL_FIELDS;
-      const energy = buf[base + F.ENERGY];
-      const delta = energy - this.prevEnergy[lin];
-      if (Math.abs(delta) > WORLD.CAUSALITY_THRESHOLD) {
-        this.causal.log(this._tick, x, y, z, lin, 'energy_spike', Math.round(delta));
-        buf[base + F.CAUSALITY_ID] = this.causal.recent(1)[0]?.id ?? 0;
+    withMutableBuffers(grid, (front, _back) => {
+      for (let z = 0; z < D; z++)
+      for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const lin = z * H * W + y * W + x;
+        const base = lin * CELL_FIELDS;
+        const energy = front[base + F.ENERGY];
+        const delta = energy - this.prevEnergy[lin];
+        if (Math.abs(delta) > WORLD.CAUSALITY_THRESHOLD) {
+          this.causal.log(this._tick, x, y, z, lin, 'energy_spike', Math.round(delta));
+          front[base + F.CAUSALITY_ID] = this.causal.recent(1)[0]?.id ?? 0;
+        }
+        this.prevEnergy[lin] = energy;
       }
-      this.prevEnergy[lin] = energy;
-    }
+    });
   }
 
   triggerEvent(type: EventType): void {

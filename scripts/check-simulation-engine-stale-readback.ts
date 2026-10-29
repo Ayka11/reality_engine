@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { CELL_FIELDS, F } from "../src/core/CellState.ts";
+import { WORLD } from "../src/core/WorldConstants.ts";
 import { Chunk } from "../src/core/Chunk.ts";
 import { SparseVoxelGrid } from "../src/core/SparseVoxelGrid.ts";
 import { SimulationEngine } from "../src/simulation/SimulationEngine.ts";
@@ -54,6 +55,18 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
     "read-only world metrics must not advance the grid mutation revision");
 
   const publicRevision = engine.grid.mutationRevision;
+
+  // Causality detection updates energy-spike IDs and previous-energy history in
+  // one scoped buffer transaction. This also guards the >threshold event path.
+  const causalityEngine = new SimulationEngine(4, 4, 4);
+  const causalityCell = causalityEngine.grid.idx(1, 1, 1);
+  causalityEngine.grid.buffer[causalityCell + F.ENERGY] = WORLD.CAUSALITY_THRESHOLD + 1;
+  const causalityRevision = causalityEngine.grid.mutationRevision;
+  (causalityEngine as unknown as { _detectCausality: () => void })._detectCausality();
+  assert.equal(causalityEngine.grid.mutationRevision, causalityRevision + 1,
+    "causality detection must use one synchronous scoped buffer revision");
+  assert.ok(causalityEngine.grid.buffer[causalityCell + F.CAUSALITY_ID] > 0,
+    "causality detection must still write an event ID for an above-threshold energy spike");
 
   // .buffer must never leak authoritative memory through its ArrayBuffer.
   const detachedBuffer = engine.grid.buffer.buffer;
