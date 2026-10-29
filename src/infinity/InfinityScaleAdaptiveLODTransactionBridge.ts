@@ -63,6 +63,13 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
       // revision or ownership geometry, even for an otherwise empty mutation set.
       validateInfinityScaleGlobalFrameCommit(frame, this.plan);
       const compiledPlan = new InfinityScaleAdaptiveTransferCompiler().compile(mutations);
+      const seenRegionIds = new Set<string>();
+      for (const mutation of compiledPlan.mutations) {
+        if (seenRegionIds.has(mutation.regionId)) {
+          throw new Error("Adaptive LOD transaction rejected: duplicate region ID " + mutation.regionId);
+        }
+        seenRegionIds.add(mutation.regionId);
+      }
       const executionGraph = new InfinityScaleAdaptiveExecutionGraphCompiler().compile(compiledPlan);
       if (!executionGraph.valid) {
         throw new Error("Adaptive LOD transaction rejected: execution dependency graph is invalid");

@@ -96,6 +96,28 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
     throw new Error("Adaptive LOD bridge could not be reused after invalid no-op rejection");
   }
 
+  const duplicateNoopState = new InfinityScaleLODState(2);
+  const duplicateNoopBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, duplicateNoopState);
+  duplicateNoopBridge.begin(frame);
+  const duplicateNoopRevision = duplicateNoopState.getRevision();
+  let duplicateNoopRejected = false;
+  try {
+    duplicateNoopBridge.commit(frame, [
+      { regionId: "0:0,0,0", fromLOD: 0, toLOD: 0 },
+      { regionId: "0:0,0,0", fromLOD: 0, toLOD: 0 },
+    ]);
+  } catch (error) {
+    duplicateNoopRejected = error instanceof Error && error.message.includes("duplicate region ID");
+  }
+  if (!duplicateNoopRejected) throw new Error("Adaptive LOD bridge accepted duplicate no-op region IDs");
+  if (duplicateNoopState.getRevision() !== duplicateNoopRevision || duplicateNoopState.hasChunk("0:0,0,0")) {
+    throw new Error("Duplicate no-op region request mutated authoritative LOD state");
+  }
+  duplicateNoopBridge.begin(frame);
+  if (!duplicateNoopBridge.commit(frame, []).committed) {
+    throw new Error("Adaptive LOD bridge could not be reused after duplicate region rejection");
+  }
+
   // A stale-revision rejection must also detach the failed transaction and
   // allow a new transaction to start from the current state revision.
   const staleRetryState = new InfinityScaleLODState(2);

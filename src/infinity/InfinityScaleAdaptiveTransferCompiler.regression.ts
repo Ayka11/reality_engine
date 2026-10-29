@@ -40,10 +40,6 @@ export function runInfinityScaleAdaptiveTransferCompilerRegression(): void {
     { label: "negative no-op LOD", input: [{ regionId: "A", fromLOD: -1, toLOD: -1 }] },
     { label: "above-range no-op LOD", input: [{ regionId: "A", fromLOD: 31, toLOD: 31 }] },
     { label: "empty region ID", input: [{ regionId: " ", fromLOD: 0, toLOD: 0 }] },
-    { label: "duplicate region ID", input: [
-      { regionId: "A", fromLOD: 0, toLOD: 0 },
-      { regionId: "A", fromLOD: 0, toLOD: 0 },
-    ] },
     { label: "non-array input", input: undefined },
   ];
   for (const invalid of invalidInputs) {

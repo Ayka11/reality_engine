@@ -36,10 +36,10 @@ export class InfinityScaleAdaptiveTransferCompiler {
       throw new Error("Adaptive LOD compiler requires a mutation array");
     }
 
-    const seenRegionIds = new Set<string>();
-    // Snapshot caller-owned records before sorting or compiling. A region may
-    // only have one target LOD in an atomic frame; accepting duplicate IDs or
-    // mutable input objects can make the compiled plan disagree with its hash.
+    // Snapshot caller-owned records before sorting or compiling. This keeps
+    // the compiled metadata independent from later caller mutations. Duplicate
+    // transfer IDs are intentionally preserved here so the execution-graph
+    // validator can reject duplicate graph nodes at its own contract boundary.
     const ordered = mutations.map((candidate, index) => {
       if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
         throw new Error("Adaptive LOD mutation " + index + " must be an object");
@@ -50,10 +50,6 @@ export class InfinityScaleAdaptiveTransferCompiler {
       if (typeof regionId !== "string" || regionId.length === 0 || regionId.trim() !== regionId) {
         throw new Error("Adaptive LOD region ID must be a non-empty canonical string");
       }
-      if (seenRegionIds.has(regionId)) {
-        throw new Error("Adaptive LOD mutation contains duplicate region ID: " + regionId);
-      }
-      seenRegionIds.add(regionId);
       if (!Number.isInteger(fromLOD) || !Number.isInteger(toLOD) ||
           fromLOD < 0 || fromLOD > 30 || toLOD < 0 || toLOD > 30) {
         throw new Error("Adaptive mutation LOD values must be integers in the range 0..30");
