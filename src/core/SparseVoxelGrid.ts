@@ -760,8 +760,8 @@ export class SparseVoxelGrid {
       const source = new Float32Array(data.buffer);
       if (!source.every(Number.isFinite)) throw new Error("Serialized chunk contains non-finite fields");
       const chunk = new Chunk(data.cx, data.cy, data.cz);
-      getMutableBuffer(chunk).set(source);
-      getMutableBuffer(chunk, "back").set(source);
+      chunk.buffer.set(source);
+      chunk.backBuffer.set(source);
       chunk.active = data.active;
       restored.set(expectedKey, chunk);
     }
@@ -801,7 +801,7 @@ export class SparseVoxelGrid {
     try {
       this._sparseDenseBackBuffer.set(this._sparseDenseBuffer);
       for (const chunk of this.chunks.values()) {
-        chunk.backBuffer.set(chunk.buffer.slice());
+        chunk.backBuffer.set(chunk.buffer);
       }
       this.markMutation();
     } finally { endMutation(); }
