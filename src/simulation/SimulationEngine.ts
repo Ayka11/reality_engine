@@ -232,6 +232,7 @@ export class SimulationEngine {
         // The comparison is skipped when a tracked revision/generation already
         // changed, keeping this fallback specific to otherwise-invisible writes.
         const readbackBufferSnapshot = this.grid.buffer.slice();
+        const readbackBackBufferSnapshot = this.grid.backBuffer.slice();
         let data: Float32Array;
         try {
           this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
@@ -245,25 +246,30 @@ export class SimulationEngine {
         }
         const generationChanged = readbackGeneration !== this._stateGeneration;
         const revisionChanged = readbackGridRevision !== this.grid.mutationRevision;
-        let untrackedFrontBufferWrite = false;
+        let untrackedBufferWrite = false;
         if (!generationChanged && !revisionChanged) {
-          const currentBuffer = this.grid.buffer;
-          if (currentBuffer.length !== readbackBufferSnapshot.length) {
-            untrackedFrontBufferWrite = true;
-          } else {
+          const buffers = [
+            [this.grid.buffer, readbackBufferSnapshot],
+            [this.grid.backBuffer, readbackBackBufferSnapshot],
+          ] as const;
+          outer: for (const [currentBuffer, snapshot] of buffers) {
+            if (currentBuffer.length !== snapshot.length) {
+              untrackedBufferWrite = true;
+              break;
+            }
             for (let i = 0; i < currentBuffer.length; i++) {
-              if (!Object.is(currentBuffer[i], readbackBufferSnapshot[i])) {
-                untrackedFrontBufferWrite = true;
-                break;
+              if (!Object.is(currentBuffer[i], snapshot[i])) {
+                untrackedBufferWrite = true;
+                break outer;
               }
             }
           }
         }
-        if (generationChanged || revisionChanged || untrackedFrontBufferWrite) {
+        if (generationChanged || revisionChanged || untrackedBufferWrite) {
           // Tracked writes are rejected through revision/generation. Compare the
-          // front buffer snapshot as a final guard for writes through a retained
-          // raw Float32Array alias, whose indexed stores cannot trigger revision
-          // tracking. Do not publish stale output over any observed newer value.
+          // front and back snapshots as a final guard for writes through a
+          // retained raw Float32Array alias, whose indexed stores cannot trigger
+          // revision tracking. Do not publish stale output over newer state.
           this.resynchronizeGPUAndThrow(
             new Error('Discarded stale GPU readback: simulation state changed while awaiting GPU results'),
             "Stale GPU readback rejected",
