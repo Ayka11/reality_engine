@@ -1,5 +1,5 @@
 import { VoxelGrid } from '../core/VoxelGrid';
-import { withMutableBuffers } from '../core/TrackedFloat32Array';
+import { getMutableBuffer, withMutableBuffers } from '../core/TrackedFloat32Array';
 import { CELL_FIELDS, F } from '../core/CellState';
 
 export type AgentBehavior = 'explorer' | 'harvester' | 'signaler' | 'builder' | 'destroyer';
