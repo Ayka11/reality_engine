@@ -1719,11 +1719,11 @@ export class InfiniteWorldRenderer {
       this.buildRoad(x, z - radius * 0.55, x, z + radius * 0.55, roadSpacing)
     }
     if (tier === 'city' || tier === 'megacity') {
-      this.place('building', x + radius * 0.22, z + radius * 0.18, tier === 'megacity' ? 2 : 1.4)
-      this.place('building', x - radius * 0.22, z - radius * 0.18, tier === 'megacity' ? 1.8 : 1.2)
+      this.placeScaled('building', x + radius * 0.22, z + radius * 0.18, tier === 'megacity' ? 2 : 1.4)
+      this.placeScaled('building', x - radius * 0.22, z - radius * 0.18, tier === 'megacity' ? 1.8 : 1.2)
     }
     if (tier === 'megacity') {
-      this.place('quantum_emitter', x, z, 1.5)
+      this.placeScaled('quantum_emitter', x, z, 1.5)
     }
 
     this.syncObjects()
@@ -1776,7 +1776,7 @@ export class InfiniteWorldRenderer {
           materialized.push({ eventId: consequence.eventId, action: action.type, result: this.materializeSettlementTier(action.tier, x, z) })
         } else if (action.civilization === 'post-scarcity') {
           this.generateCityPlan(x, z, 240, 41)
-          this.place('quantum_emitter', x, z, 1.5)
+          this.placeScaled('quantum_emitter', x, z, 1.5)
           this.syncObjects()
           this.scheduleSave()
           materialized.push({ eventId: consequence.eventId, action: action.type, result: { civilization: action.civilization, form: 'post-scarcity-city' } })
@@ -1817,7 +1817,7 @@ export class InfiniteWorldRenderer {
       const distance = 25 + (i % 5) * 14
       const bx = x + Math.cos(angle) * distance
       const bz = z + Math.sin(angle) * distance
-      this.place('building', bx, bz, 0.9 + (i % 3) * 0.15)
+      this.placeScaled('building', bx, bz, 0.9 + (i % 3) * 0.15)
     }
 
     this.syncObjects()
@@ -1849,7 +1849,7 @@ export class InfiniteWorldRenderer {
       this.generateCityPlan(x, z, Math.min(radius, 240), 41)
       this.buildRoad(x - radius * 0.7, z, x + radius * 0.7, z, 12)
       this.buildRoad(x, z - radius * 0.7, x, z + radius * 0.7, 12)
-      this.place('quantum_emitter', x, z, 1.5)
+      this.placeScaled('quantum_emitter', x, z, 1.5)
       result.generated.push('post-scarcity-city', 'road-network', 'quantum-emitter')
     }
 
@@ -1908,7 +1908,7 @@ export class InfiniteWorldRenderer {
           this.scatter(visual, x - 35, z - 35, x + 35, z + 35, Math.min(0.08, 0.025 * density * rule.weight))
           count = 1
         } else if (rule.semanticEntryId === 'resource.water') {
-          this.place('water', x, z, 1)
+          this.placeScaled('water', x, z, 1)
           count = 1
         }
       } else if (rule.layer === 'infrastructure') {
@@ -1919,13 +1919,13 @@ export class InfiniteWorldRenderer {
           this.scheduleSave()
           count = 1
         } else if (rule.semanticEntryId === 'infrastructure.bridge') {
-          this.place('bridge', x, z, 1)
+          this.placeScaled('bridge', x, z, 1)
           count = 1
         } else if (rule.semanticEntryId === 'infrastructure.harbor') {
-          this.place('building', x, z, 1.25)
+          this.placeScaled('building', x, z, 1.25)
           count = 1
         } else if (rule.semanticEntryId === 'infrastructure.power-grid') {
-          this.place('building', x, z, 1.1)
+          this.placeScaled('building', x, z, 1.1)
           count = 1
         } else if (rule.semanticEntryId === 'settlement.city' || rule.semanticEntryId === 'settlement.megacity') {
           this.generateCityPlan(x, z, rule.semanticEntryId === 'settlement.megacity' ? 240 : 180, 31)
@@ -1936,7 +1936,7 @@ export class InfiniteWorldRenderer {
         } else if (entry) {
           const visual = visualKindToWorldObject(entry)
           if (visual) {
-            this.place(visual, x, z, rule.scale)
+            this.placeScaled(visual, x, z, rule.scale)
             count = 1
           }
         }
@@ -1946,14 +1946,14 @@ export class InfiniteWorldRenderer {
           count = 1
         } else if (rule.semanticEntryId === 'civilization.post-scarcity') {
           this.generateCityPlan(x, z, 240, 41)
-          this.place('quantum_emitter', x, z, 1.5)
+          this.placeScaled('quantum_emitter', x, z, 1.5)
           count = 1
         } else if (rule.semanticEntryId === 'civilization.agricultural') {
           this.generateSettlementV2(x, z, 150, 6)
           count = 1
         }
       } else if (rule.layer === 'biological') {
-        this.place('spawn', x, z, rule.scale)
+        this.placeScaled('spawn', x, z, rule.scale)
         count = 1
       } else if (rule.layer === 'visual' && entry) {
         const visual = visualKindToWorldObject(entry)
@@ -2180,6 +2180,15 @@ export class InfiniteWorldRenderer {
 
   private lawGateForBuild(kind: WorldObjectKind, x: number, z: number) {
     return this.constructionContract.authorize(kind, x, z)
+  }
+
+  /**
+   * Unambiguous helper for generated/preset placements where the fourth
+   * argument is a size multiplier, not a world-space height.
+   * Screen placement keeps using place(..., y, scale) explicitly.
+   */
+  placeScaled(kind: WorldObjectKind, x: number, z: number, scale = 1) {
+    return this.place(kind, x, z, undefined, scale)
   }
 
   place(kind: WorldObjectKind, x: number, z: number, y?: number, scale = 1) {

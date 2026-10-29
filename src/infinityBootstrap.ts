@@ -234,7 +234,7 @@ export function bootstrapInfiniteWorld() {
     const x = world.worldCoordinates.x || 16
     const z = world.worldCoordinates.z || 16
     if (visual === 'tree' || visual === 'rock' || visual === 'crystal') world.scatter(visual, x - 70, z - 70, x + 70, z + 70, 0.045)
-    else world.place(visual, x, z, 1)
+    else world.placeScaled(visual, x, z, 1)
     world.render(0)
     return { id: entry.id, visual, objects: world.getRuntimeStats().objects }
   }
@@ -723,39 +723,39 @@ export function bootstrapInfiniteWorld() {
       tod = 0.5; fog = 0.004; mat = 'material'
       world.scatter('rock', x - 120, z - 120, x + 120, z + 120, 0.04 * fs.density)
       world.scatter('crystal', x - 90, z - 90, x + 90, z + 90, 0.03 * fs.info)
-      world.place('gravity_well', x, z, 1.4)
+      world.placeScaled('gravity_well', x, z, 1.4)
     } else if (phi === 'Living') {
       world.scatter('tree', x - 140, z - 140, x + 140, z + 140, 0.10 * fs.density)
       world.scatter('tree', x - 70, z - 70, x + 70, z + 70, 0.05 * fs.info)
       world.scatter('rock', x - 100, z - 100, x + 100, z + 100, 0.04 * fs.density)
-      world.place('quantum_emitter', x + 25, z + 25, 1.2)
+      world.placeScaled('quantum_emitter', x + 25, z + 25, 1.2)
     } else if (phi === 'Chaotic') {
       tod = 18.5; fog = 0.024; mat = 'height'
       world.scatter('rock', x - 130, z - 130, x + 130, z + 130, 0.10 * fs.density)
       world.scatter('crystal', x - 90, z - 90, x + 90, z + 90, 0.07 * fs.info)
-      world.place('gravity_well', x, z, 1.7)
-      world.place('entropy_sink', x + 40, z - 40, 1.2)
+      world.placeScaled('gravity_well', x, z, 1.7)
+      world.placeScaled('entropy_sink', x + 40, z - 40, 1.2)
     } else if (phi === 'Crystalline') {
       tod = 8.5; fog = 0.007
       world.scatter('crystal', x - 130, z - 130, x + 130, z + 130, 0.10 * fs.info)
       world.scatter('rock', x - 90, z - 90, x + 90, z + 90, 0.04 * fs.density)
-      world.place('entropy_sink', x, z, 1.4)
-      world.place('metalaw', x + 45, z + 45, 1.2)
+      world.placeScaled('entropy_sink', x, z, 1.4)
+      world.placeScaled('metalaw', x + 45, z + 45, 1.2)
     } else if (phi === 'Resonant') {
       tod = 15.5; fog = 0.010
       world.scatter('crystal', x - 110, z - 110, x + 110, z + 110, 0.06 * fs.info)
-      world.place('quantum_emitter', x + 30, z + 20, 1.2)
-      world.place('metalaw', x - 25, z - 25, 1.0)
+      world.placeScaled('quantum_emitter', x + 30, z + 20, 1.2)
+      world.placeScaled('metalaw', x - 25, z - 25, 1.0)
     } else {
       // Harmonic.
       world.scatter('tree', x - 110, z - 110, x + 110, z + 110, 0.07 * fs.density)
       world.scatter('rock', x - 80, z - 80, x + 80, z + 80, 0.04 * fs.density)
-      world.place('metalaw', x - 25, z - 25, 1.0)
+      world.placeScaled('metalaw', x - 25, z - 25, 1.0)
     }
 
     // ρ·E·I: field balance.
     if (fields === 'Energy Dominant') {
-      world.place('gravity_well', x + 55, z - 45, 1.0 + 0.3 * fs.energy)
+      world.placeScaled('gravity_well', x + 55, z - 45, 1.0 + 0.3 * fs.energy)
     } else if (fields === 'Mass Dominant') {
       world.scatter('rock', x - 150, z - 150, x + 150, z + 150, 0.08 * fs.density)
       world.generateCityPlan(x, z, Math.min(cs.radius, 120), 17)
@@ -772,15 +772,15 @@ export function bootstrapInfiniteWorld() {
     // Settlement materialization is also delegated to the bounded semantic plan
     // below. Keep a lightweight landmark here so complexity still has a visible
     // structural anchor without duplicating expensive route generation.
-    world.place('landmark', x, z, 1.15)
+    world.placeScaled('landmark', x, z, 1.15)
     if (complexity === 'Explosive') {
-      world.place('gravity_well', x - 55, z + 55, 1.4)
-      world.place('quantum_emitter', x + 60, z - 60, 1.2)
+      world.placeScaled('gravity_well', x - 55, z + 55, 1.4)
+      world.placeScaled('quantum_emitter', x + 60, z - 60, 1.2)
     } else if (complexity === 'Collapsing') {
-      world.place('entropy_sink', x + 35, z - 30, 1.4)
+      world.placeScaled('entropy_sink', x + 35, z - 30, 1.4)
     } else if (complexity === 'Oscillating') {
-      world.place('force_field', x + 55, z + 20, 1.0)
-      world.place('quantum_emitter', x - 60, z - 45, 1.0)
+      world.placeScaled('force_field', x + 55, z + 20, 1.0)
+      world.placeScaled('quantum_emitter', x - 60, z - 45, 1.0)
     }
 
     // Execute the semantic plan after the baseline procedural pass. The plan
@@ -796,15 +796,15 @@ export function bootstrapInfiniteWorld() {
       world.scatter('crystal', x - 180, z - 180, x + 180, z + 180, 0.04 * fs.info)
     } else if (spacetime === 'High Radiation') {
       tod = 17.5; fog = 0.028
-      world.place('entropy_sink', x + 75, z + 10, 1.3)
-      world.place('gravity_well', x - 70, z + 35, 1.1)
+      world.placeScaled('entropy_sink', x + 75, z + 10, 1.3)
+      world.placeScaled('gravity_well', x - 70, z + 35, 1.1)
     } else if (spacetime === 'Meteor Zone') {
       tod = 16; fog = 0.020
-      world.place('gravity_well', x - 80, z - 55, 1.2)
-      world.place('force_field', x + 75, z + 55, 1.0)
+      world.placeScaled('gravity_well', x - 80, z - 55, 1.2)
+      world.placeScaled('force_field', x + 75, z + 55, 1.0)
     } else if (spacetime === 'Frozen Topology') {
       tod = 6; fog = 0.022; mat = 'material'
-      world.place('entropy_sink', x + 45, z + 35, 1.5)
+      world.placeScaled('entropy_sink', x + 45, z + 35, 1.5)
     }
 
     world.setTimeOfDay(tod)
