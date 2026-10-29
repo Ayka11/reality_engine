@@ -28,6 +28,16 @@ export const CZ = 8   // chunk size Z
 export const CHUNK_CELLS = CX * CY * CZ        // 512
 export const CHUNK_FLOATS = CHUNK_CELLS * NF   // 7168
 
+// The global sparse threshold is suitable for energy-like fields but not for
+// density in [0, 1]: the default density mobility (0.0024) transfers ~1.9e-5
+// from a 0.5 source into an empty neighbor in one 1/60s step.
+export const SPARSE_FIELD_EPSILON = 0.001
+export const DENSITY_ACTIVITY_EPSILON = 1e-6
+
+export function fieldActivityEpsilon(field: number): number {
+  return field === F.D ? DENSITY_ACTIVITY_EPSILON : SPARSE_FIELD_EPSILON
+}
+
 export const GRID_W = 128
 export const GRID_H = 128
 export const GRID_D = 64
@@ -81,7 +91,7 @@ export class ChunkGrid {
     const [key, li] = this.chunkOf(x, y, z)
     let chunk = this.chunks.get(key)
     if (!chunk) {
-      if (Math.abs(v) < 0.001) return
+      if (Math.abs(v) < fieldActivityEpsilon(f)) return
       chunk = new Float32Array(CHUNK_FLOATS)
       this.chunks.set(key, chunk)
     }
@@ -98,8 +108,15 @@ export class ChunkGrid {
     let pruned = 0
     for (const [key, chunk] of this.chunks) {
       let maxVal = 0
-      for (let i = 0; i < CHUNK_FLOATS; i++) maxVal = Math.max(maxVal, Math.abs(chunk[i]))
-      if (maxVal < threshold) {
+      let maxDensity = 0
+      for (let i = 0; i < CHUNK_FLOATS; i++) {
+        const value = Math.abs(chunk[i])
+        maxVal = Math.max(maxVal, value)
+        if (i % NF === F.D) maxDensity = Math.max(maxDensity, value)
+      }
+      // A sub-threshold chunk that carries resolvable density is not empty:
+      // pruning it discards mass that is still being transported across cells.
+      if (maxVal < threshold && maxDensity <= DENSITY_ACTIVITY_EPSILON) {
         // Publish a zero-filled dirty payload for removed chunks so consumers
         // can clear stale geometry/state instead of retaining deleted data.
         this.chunks.delete(key)
@@ -117,7 +134,9 @@ export class ChunkGrid {
       for (let lz = 0; lz < CZ; lz++) for (let ly = 0; ly < CY; ly++) for (let lx = 0; lx < CX; lx++) {
         const base = (lz * CY * CX + ly * CX + lx) * NF
         let hasVal = false
-        for (let f = 0; f < NF; f++) if (Math.abs(chunk[base + f]) > 0.001) { hasVal = true; break }
+        for (let f = 0; f < NF; f++) {
+          if (Math.abs(chunk[base + f]) > fieldActivityEpsilon(f)) { hasVal = true; break }
+        }
         if (hasVal) yield { x: bx + lx, y: by + ly, z: bz + lz, base, chunk }
       }
     }

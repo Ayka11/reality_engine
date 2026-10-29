@@ -6,7 +6,7 @@
 
 import {
   ChunkGrid, GRID_W, GRID_H, GRID_D,
-  CHUNK_FLOATS, F, NF, CX, CY, CZ, chunkKey,
+  CHUNK_FLOATS, F, NF, CX, CY, CZ, chunkKey, fieldActivityEpsilon,
 } from './ChunkGrid'
 import { brushGeometryWeight } from '../brushes/BrushGeometry'
 import { applyBrushOperation } from '../brushes/BrushMath'
@@ -208,12 +208,12 @@ function simStep(dt: number) {
     const base = (((z & 7) * CY * CX) + ((y & 7) * CX) + (x & 7)) * NF
     let hasLocalState = false
     for (let field = 0; field < NF; field++) {
-      if (Math.abs(chunk[base + field]) > 0.001) { hasLocalState = true; break }
+      if (Math.abs(chunk[base + field]) > fieldActivityEpsilon(field)) { hasLocalState = true; break }
     }
     let hasNeighborSignal = false
     for (const [dx, dy, dz] of dirs) {
       for (const field of activationFields) {
-        if (Math.abs(sourceRead(x + dx, y + dy, z + dz, field)) > 0.001) {
+        if (Math.abs(sourceRead(x + dx, y + dy, z + dz, field)) > fieldActivityEpsilon(field)) {
           hasNeighborSignal = true
           break
         }

@@ -13,6 +13,20 @@ assert.equal(grid.chunks.has(key), false, 'pruned chunk should no longer be stor
 assert.ok(grid.dirtyChunks.has(key), 'pruned chunk key must be dirty so downstream consumers clear stale state')
 
 console.log('ChunkGrid prune dirty-payload regression: PASS')
+
+// Density is dimensionless and uses a lower sparse activity floor than energy.
+// A small but resolvable density halo must be retained by active-cell iteration
+// and must not be discarded by the generic 0.01 chunk-pruning threshold.
+const densityGrid = new ChunkGrid()
+const densityKey = chunkKey(1, 2, 1)
+densityGrid.set(8, 16, 8, F.D, 0.00002)
+assert.ok(densityGrid.chunks.has(densityKey), 'sub-0.001 density should allocate its destination chunk')
+assert.equal([...densityGrid.activeCells()].length, 1,
+  'a density-only cell above the density activity floor must remain active')
+assert.equal(densityGrid.prune(0.01), 0,
+  'chunk pruning must preserve resolvable density even when all values are below 0.01')
+assert.ok(densityGrid.chunks.has(densityKey), 'density-only chunk should survive pruning')
+console.log('ChunkGrid density sparse-floor/pruning regression: PASS')
 const clearGrid = new ChunkGrid()
 const clearedKey = chunkKey(3, 4, 2)
 clearGrid.set(24, 32, 16, F.E, 10)
