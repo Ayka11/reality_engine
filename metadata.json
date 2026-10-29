@@ -1,7 +1,0 @@
-{
-  "name": "Reality Engine",
-  "description": "Meta-Law physics, procedural voxel universe, infinite world generator, and kernel foundation.",
-  "capabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}

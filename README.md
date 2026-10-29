@@ -49,12 +49,14 @@ Reality Engine is suitable for demonstrations, prototyping, and exploratory test
 
 Known operational boundaries:
 
-- **Mutable state and GPU readback:** Public dense-grid and chunk buffers are now revision-tracked views; their `.buffer` accessor returns a detached copy, and `CellState` setters invalidate the state revision. The stale-readback regression verifies that newer CPU writes through supported buffer/cell paths are not overwritten by pending GPU results. Keep [issue #62](https://github.com/Ayka11/reality_engine/issues/62) open until every supported mutation surface is covered by the authoritative mutation contract and release-candidate acceptance; do not assume arbitrary writes to unrelated metadata or unsupported internal surfaces are guarded.
+- **Mutable state and GPU readback:** Public dense-grid and chunk buffers are revision-tracked views; their `.buffer` accessor returns a detached copy, and `CellState` setters invalidate the state revision. The GPU readback path also compares detached front/back snapshots with the grid's private backing arrays, so a write through a retained internal raw `Float32Array` alias during an outstanding readback cannot evade revision tracking and silently overwrite newer data. This fallback has O(N) scan/copy cost and is not a replacement for a complete ownership contract. Keep [issue #62](https://github.com/Ayka11/reality_engine/issues/62) open until mutation ownership and asynchronous boundaries are fully covered; raw aliases still bypass per-write revision tracking.
 - **Adaptive LOD topology changes:** refine/coarsen commits remain disabled when an operation changes LOD until physical chunk remapping and complete cell-data transfer are implemented and validated. Do not treat adaptive topology changes as a production feature; see [issue #50](https://github.com/Ayka11/reality_engine/issues/50).
 - **Scientific interpretation:** the Science Lab evaluates computational experiments over the configurations represented in the simulator. Its results are not, by themselves, empirical evidence of real-world causal or physical validity.
 - **Dependency reproducibility:** the root `package-lock.json` is committed. CI and both Dockerfiles install from that lockfile with `npm ci` and the repository's `--legacy-peer-deps` setting.
 
 Remove this notice only after the release candidate passes production integration and acceptance criteria on the exact release commit.
+
+The current browser acceptance suite additionally checks these integration contracts on the exact tested commit: `Quick Generate → generation revision → loaded chunks → every active terrain patch's valid indexed geometry → rendered WebGL canvas`; non-flat terrain relief, finite vertices, valid triangle indices and non-degenerate triangles; positive simulation `Tick`; world/view seed coherence; pause/resume when switching to 2D; actual 3D volumetric WebGL geometry; and simultaneous 2D + 3D rendering in Hybrid mode. These are automated runtime checks, not a claim of scientific validity or production certification.
 
 
 
@@ -862,6 +864,10 @@ Run these checks on the exact candidate commit:
 npm run lint
 npm run build
 npm run audit:report
+npm run test:simulation-engine-stale-readback
+npm run test:mutable-buffer-contract
+npm run test:infinity-scale-mixed-lod
+npm run test:infinity-scale-adaptive-lod-bridge
 npm run hf:smoke
 npm run hf:cpu:check
 npm run hf:browser:acceptance
