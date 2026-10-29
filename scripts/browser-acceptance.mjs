@@ -2506,22 +2506,129 @@ try {
   }
 
   const before = await page.evaluate(() => window.worldGenerationHealth());
+  const quickRenderProbeSetup = await page.evaluate((beforeState) => {
+    const world = window.infiniteWorld;
+    const renderer = world?.renderer;
+    if (!world || !renderer || typeof renderer.render !== "function") {
+      return { error: "Quick Generate cannot instrument the active WebGL renderer" };
+    }
+    const baselineRevision = Number(beforeState?.lastGeneration?.generationRevision ?? 0);
+    const probe = { original: renderer.render, calls: 0, last: null };
+    renderer.render = function (...args) {
+      const result = probe.original.apply(this, args);
+      probe.calls++;
+      const generationRevision = Number(window.lastInfinityGeneration?.generationRevision ?? 0);
+      // Only inspect the generated world after the generation transaction advances.
+      // Retry on later frames until a real terrain mesh is present, rather than
+      // treating an empty patch map immediately after reseed as a successful render.
+      if (generationRevision > baselineRevision &&
+          (!probe.last || probe.last.generationRevision < generationRevision ||
+            probe.last.terrainMeshPatches === 0 || probe.last.triangleCount === 0)) {
+        const stats = world.getRuntimeStats();
+        const patches = [...(world.patches?.values?.() ?? [])];
+        let terrainMeshPatches = 0;
+        let vertexCount = 0;
+        let triangleCount = 0;
+        for (const patch of patches) {
+          const mesh = patch.group?.children?.find(child => child.userData?.terrain);
+          const geometry = mesh?.geometry;
+          const position = geometry?.getAttribute?.("position");
+          const index = geometry?.index;
+          if (position && index && position.count >= 3 && index.count >= 3 && index.count % 3 === 0) {
+            terrainMeshPatches++;
+            vertexCount += position.count;
+            triangleCount += index.count / 3;
+          }
+        }
+        const canvas = renderer.domElement;
+        probe.last = {
+          calls: probe.calls,
+          generationRevision,
+          objects: Number(stats?.objects ?? 0),
+          loadedChunks: Number(stats?.loadedChunks ?? 0),
+          targetChunks: Number(stats?.targetChunks ?? 0),
+          terrainMeshPatches,
+          vertexCount,
+          triangleCount,
+          rendererEnabled: Boolean(world.isEnabled),
+          renderMode: window.currentRenderMode,
+          canvasConnected: Boolean(canvas?.isConnected),
+          canvasWidth: Number(canvas?.width ?? 0),
+          canvasHeight: Number(canvas?.height ?? 0),
+          canvasClientWidth: Number(canvas?.clientWidth ?? 0),
+          canvasClientHeight: Number(canvas?.clientHeight ?? 0),
+          worldSeed: world.generator?.seed ?? null,
+          viewSeed: window.getWorldViewContract?.()?.seed ?? null,
+        };
+      }
+      return result;
+    };
+    window.__quickGenerateRenderProbe = probe;
+    return { error: null, baselineRevision, initialRenderCalls: probe.calls };
+  }, before);
+  if (quickRenderProbeSetup.error) throw new Error(quickRenderProbeSetup.error);
+
   console.log("[acceptance] Quick Generate");
   await page.getByRole("button", { name: /Quick Generate/ }).click();
-  await page.waitForFunction((b) => {
-    const a = window.worldGenerationHealth();
-    return Number(a?.lastGeneration?.generationRevision ?? 0) > Number(b?.lastGeneration?.generationRevision ?? 0);
+  await page.waitForFunction((beforeState) => {
+    const after = window.worldGenerationHealth();
+    return Number(after?.lastGeneration?.generationRevision ?? 0) >
+      Number(beforeState?.lastGeneration?.generationRevision ?? 0);
+  }, before, { timeout: acceptanceTimeout });
+  await page.waitForFunction((beforeState) => {
+    const baselineRevision = Number(beforeState?.lastGeneration?.generationRevision ?? 0);
+    const generation = window.worldGenerationHealth?.()?.lastGeneration;
+    const probe = window.__quickGenerateRenderProbe;
+    const rendered = probe?.last;
+    return Number(generation?.generationRevision ?? 0) > baselineRevision &&
+      Number(rendered?.generationRevision ?? 0) > baselineRevision &&
+      Number(rendered?.objects ?? 0) > 0 &&
+      Number(rendered?.loadedChunks ?? 0) > 0 &&
+      Number(rendered?.terrainMeshPatches ?? 0) > 0 &&
+      Number(rendered?.vertexCount ?? 0) >= 3 &&
+      Number(rendered?.triangleCount ?? 0) > 0 &&
+      rendered?.rendererEnabled === true &&
+      rendered?.renderMode === "3d" &&
+      rendered?.canvasConnected === true &&
+      Number(rendered?.canvasWidth ?? 0) > 0 &&
+      Number(rendered?.canvasHeight ?? 0) > 0 &&
+      Number(rendered?.canvasClientWidth ?? 0) > 0 &&
+      Number(rendered?.canvasClientHeight ?? 0) > 0 &&
+      !!rendered?.worldSeed && rendered.viewSeed === rendered.worldSeed;
   }, before, { timeout: acceptanceTimeout });
 
-  const quickResult = await page.evaluate((beforeState) => ({
-    after: window.worldGenerationHealth(),
-    verification: window.worldVerifyGeneration?.(beforeState),
-  }), before);
+  const quickResult = await page.evaluate((beforeState) => {
+    const after = window.worldGenerationHealth();
+    const probe = window.__quickGenerateRenderProbe;
+    if (probe && window.infiniteWorld?.renderer) {
+      window.infiniteWorld.renderer.render = probe.original;
+    }
+    delete window.__quickGenerateRenderProbe;
+    return {
+      after,
+      verification: window.worldVerifyGeneration?.(beforeState),
+      rendered: probe?.last ?? null,
+    };
+  }, before);
   const afterQuick = quickResult.after;
   if (!quickResult.verification?.ok || !quickResult.verification?.generationAdvanced ||
-      Number(afterQuick?.stats?.objects ?? 0) <= 0) {
-    throw new Error("Quick Generate did not prove a new non-empty world generation: " + JSON.stringify(quickResult));
+      Number(afterQuick?.stats?.objects ?? 0) <= 0 ||
+      Number(quickResult.rendered?.loadedChunks ?? 0) <= 0 ||
+      Number(quickResult.rendered?.terrainMeshPatches ?? 0) <= 0 ||
+      Number(quickResult.rendered?.triangleCount ?? 0) <= 0 ||
+      quickResult.rendered?.worldSeed !== quickResult.rendered?.viewSeed) {
+    throw new Error("Quick Generate did not prove the state → chunks → terrain mesh → rendered canvas chain: " +
+      JSON.stringify(quickResult));
   }
+  console.log("[acceptance] Quick Generate state → chunks → terrain mesh → rendered canvas PASS: " +
+    JSON.stringify({
+      objects: quickResult.rendered.objects,
+      loadedChunks: quickResult.rendered.loadedChunks,
+      terrainMeshPatches: quickResult.rendered.terrainMeshPatches,
+      triangles: quickResult.rendered.triangleCount,
+      renderCalls: quickResult.rendered.calls,
+      seedCoherent: quickResult.rendered.worldSeed === quickResult.rendered.viewSeed,
+    }));
 
   // Quick Generate has been fully validated. Close its continuously rendering page
   // before opening the independent Composer page so headless Chromium does not run
