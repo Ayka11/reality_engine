@@ -233,6 +233,93 @@ try {
   if (orbitRestored.enabled !== true || orbitRestored.controlsEnabled !== true) {
     throw new Error("OrbitControls did not re-enable after leaving Fly Camera: " + JSON.stringify(orbitRestored));
   }
+
+  // Hybrid is a two-renderer contract: the 2D field view and authoritative
+  // Infinite World WebGL canvas must both be visible and actively drawing.
+  const hybridBaseline = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const renderer = world?.renderer;
+    const canvas2d = document.getElementById("c2d");
+    const context2d = canvas2d?.getContext("2d");
+    if (!world || !renderer || typeof renderer.render !== "function" || !context2d) {
+      return { error: "Hybrid mode requires both 2D canvas and Infinite World renderer" };
+    }
+    const probe = {
+      renderCalls: 0,
+      textCalls: 0,
+      labels: [],
+      originalRender: renderer.render,
+      originalFillText: context2d.fillText,
+      renderer,
+      context2d,
+    };
+    renderer.render = function (...args) {
+      probe.renderCalls++;
+      return probe.originalRender.apply(this, args);
+    };
+    context2d.fillText = function (text, ...args) {
+      probe.textCalls++;
+      if (probe.labels.length < 32) probe.labels.push(String(text));
+      return probe.originalFillText.call(this, text, ...args);
+    };
+    window.__hybridModeProbe = probe;
+    return { renderCalls: probe.renderCalls, textCalls: probe.textCalls };
+  });
+  if (hybridBaseline.error) throw new Error(hybridBaseline.error);
+  await page.evaluate(() => window.setRenderMode("hybrid"));
+  await page.waitForFunction((baseline) => {
+    const probe = window.__hybridModeProbe;
+    const world = window.infiniteWorld;
+    const wrap = document.getElementById("viewWrap")?.getBoundingClientRect();
+    const canvas2d = document.getElementById("c2d");
+    const canvas3d = document.getElementById("c3d");
+    if (!probe || !world || !wrap || !canvas2d || !canvas3d) return false;
+    const rect2d = canvas2d.getBoundingClientRect();
+    const rect3d = canvas3d.getBoundingClientRect();
+    return window.currentRenderMode === "hybrid" &&
+      world.isEnabled === true &&
+      probe.renderCalls > baseline.renderCalls &&
+      probe.textCalls > baseline.textCalls &&
+      probe.labels.includes("◧ 2D Fields") &&
+      getComputedStyle(canvas2d).display !== "none" &&
+      getComputedStyle(canvas3d).display !== "none" &&
+      rect2d.width >= wrap.width * 0.4 &&
+      rect2d.width <= wrap.width * 0.6 &&
+      rect3d.width >= wrap.width * 0.4 &&
+      rect3d.width <= wrap.width * 0.6 &&
+      rect3d.left >= wrap.left + wrap.width * 0.4 &&
+      rect2d.height >= wrap.height * 0.8 &&
+      rect3d.height >= wrap.height * 0.8 &&
+      canvas2d.width > 0 && canvas2d.height > 0;
+  }, hybridBaseline, { timeout: 6000 });
+  const hybridResult = await page.evaluate(() => {
+    const probe = window.__hybridModeProbe;
+    const wrap = document.getElementById("viewWrap")?.getBoundingClientRect();
+    const rect2d = document.getElementById("c2d")?.getBoundingClientRect();
+    const rect3d = document.getElementById("c3d")?.getBoundingClientRect();
+    const result = {
+      mode: window.currentRenderMode,
+      worldEnabled: window.infiniteWorld?.isEnabled,
+      renderCalls: probe?.renderCalls ?? -1,
+      twoDTextCalls: probe?.textCalls ?? -1,
+      hasTwoDLabel: Boolean(probe?.labels.includes("◧ 2D Fields")),
+      twoDRect: rect2d ? { x: rect2d.x, width: rect2d.width, height: rect2d.height } : null,
+      threeDRect: rect3d ? { x: rect3d.x, width: rect3d.width, height: rect3d.height } : null,
+      wrapRect: wrap ? { x: wrap.x, width: wrap.width, height: wrap.height } : null,
+    };
+    if (probe?.renderer) probe.renderer.render = probe.originalRender;
+    if (probe?.context2d) probe.context2d.fillText = probe.originalFillText;
+    delete window.__hybridModeProbe;
+    window.setRenderMode("3d");
+    return result;
+  });
+  if (hybridResult.mode !== "hybrid" || hybridResult.worldEnabled !== true ||
+      hybridResult.renderCalls <= hybridBaseline.renderCalls ||
+      hybridResult.twoDTextCalls <= hybridBaseline.textCalls ||
+      !hybridResult.hasTwoDLabel) {
+    throw new Error("Hybrid mode failed to render both 2D and 3D panels: " + JSON.stringify(hybridResult));
+  }
+  console.log("[acceptance] Hybrid 2D/3D co-rendering PASS: " + JSON.stringify(hybridResult));
   console.log("[acceptance] hidden renderer pause/resume, Fly Camera control preservation, adaptive DPR diagnostics PASS");
 
   // Bottom-bar counters must describe the selected runtime, not the unrelated legacy 2D grid.
