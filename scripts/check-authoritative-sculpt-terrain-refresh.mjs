@@ -76,9 +76,9 @@ assert.match(terrainGeometryFinalization, /geometry\.computeVertexNormals\(\)/,
   "terrain normals must be recomputed from final indexed geometry so LOD-snapped edges and lighting agree");
 
 const terrainHeight = methodBody("sampleTerrainHeight");
-assert.match(terrainHeight, /provider\\.sampleSurface\\(x, z\\)/,
+assert.ok(terrainHeight.includes('provider.sampleSurface(x, z)'),
   "terrain geometry must sample its selected surface provider baseline");
-assert.match(terrainHeight, /surface\\.height\\s*\\+\\s*this\\.terrainDeformations\\.sampleDelta\\(x, z\\)/,
+assert.ok(terrainHeight.includes('surface.height + this.terrainDeformations.sampleDelta(x, z)'),
   "terrain geometry must add the authoritative deformation overlay to the selected surface baseline");
 const terrainPersistence = methodBody("persistTerrainDeformationState");
 assert.match(terrainPersistence, /const saved = this\.persistence\.saveTerrainDeformationState/);
