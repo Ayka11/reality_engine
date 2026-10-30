@@ -8,6 +8,7 @@ export class WorldPersistence {
   private readonly manifestKey: string
   private readonly fieldStateKey: string
   private readonly fieldCheckpointKey: string
+  private readonly surfaceProviderKey: string
   private readonly terrainDeformationKey: string
   private readonly terrainDeformationCheckpointKey: string
   private readonly loaded = new Set<string>()
@@ -18,6 +19,7 @@ export class WorldPersistence {
     this.manifestKey = `reality-engine-world:${seed}:manifest`
     this.fieldStateKey = `reality-engine-world:${seed}:field-state`
     this.fieldCheckpointKey = `reality-engine-world:${seed}:field-checkpoint`
+    this.surfaceProviderKey = `reality-engine-world:${seed}:surface-provider`
     this.terrainDeformationKey = `reality-engine-world:${seed}:terrain-deformation`
     this.terrainDeformationCheckpointKey = `reality-engine-world:${seed}:terrain-deformation-checkpoint`
   }
@@ -87,6 +89,41 @@ export class WorldPersistence {
   deleteFieldState(): boolean {
     try {
       localStorage.removeItem(this.fieldStateKey)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** Persist a versioned, serializable world-surface provider snapshot. */
+  saveSurfaceProviderState(state: unknown): boolean {
+    try {
+      localStorage.setItem(this.surfaceProviderKey, JSON.stringify({
+        version: 1,
+        seed: this.seed,
+        state,
+      }))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  loadSurfaceProviderState<T = unknown>(): T | null {
+    try {
+      const raw = localStorage.getItem(this.surfaceProviderKey)
+      if (!raw) return null
+      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
+      if (payload.version !== 1 || payload.seed !== this.seed || !payload.state) return null
+      return payload.state
+    } catch {
+      return null
+    }
+  }
+
+  deleteSurfaceProviderState(): boolean {
+    try {
+      localStorage.removeItem(this.surfaceProviderKey)
       return true
     } catch {
       return false
@@ -249,6 +286,7 @@ export class WorldPersistence {
       this.manifestKey,
       this.fieldStateKey,
       this.fieldCheckpointKey,
+      this.surfaceProviderKey,
       this.terrainDeformationKey,
       this.terrainDeformationCheckpointKey,
     ]) {

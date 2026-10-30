@@ -41,7 +41,7 @@ const decisionUrl = await moduleUrl('src/infinity/WorldDecisionLayer.ts', [
   [/from ['"]\.\/DecisionRecord['"]/g, 'from "' + decisionRecordUrl + '"'],
 ])
 const { WorldGenerator } = await import(generatorUrl)
-const { GeneratorWorldSurfaceProvider, FlatWorldSurfaceProvider, resolveWorldWaterLevel, isBelowWorldWaterSurface, resolveBridgeDeckHeight } = await import(surfaceUrl)
+const { GeneratorWorldSurfaceProvider, FlatWorldSurfaceProvider, serializeWorldSurfaceProvider, restoreWorldSurfaceProvider, resolveWorldWaterLevel, isBelowWorldWaterSurface, resolveBridgeDeckHeight } = await import(surfaceUrl)
 const { FieldSampler } = await import(samplerUrl)
 const { WorldDecisionLayer } = await import(decisionUrl)
 
@@ -94,6 +94,25 @@ assert.deepEqual(flatSurface.sampleSurface(-12, 19), {
 assert.throws(() => new FlatWorldSurfaceProvider({ elevation: Number.NaN }), /finite elevation/)
 assert.throws(() => new FlatWorldSurfaceProvider({ temperature: 1.1 }), /normalized climate/)
 assert.throws(() => new FlatWorldSurfaceProvider({ seed: '   ' }), /non-empty string/)
+const flatSnapshot = serializeWorldSurfaceProvider(flatSurface)
+assert.deepEqual(flatSnapshot, {
+  version: 1,
+  kind: 'flat-workspace-surface',
+  seed: 'flat-workspace-test',
+  elevation: 3,
+  temperature: 0.55,
+  moisture: 0.35,
+  biome: 'plains',
+})
+const restoredFlatSurface = restoreWorldSurfaceProvider(flatSnapshot)
+assert.ok(restoredFlatSurface instanceof FlatWorldSurfaceProvider)
+assert.deepEqual(restoredFlatSurface.sampleSurface(100, -100), flatSurface.sampleSurface(100, -100))
+assert.equal(serializeWorldSurfaceProvider(sampler.surfaceProvider), null,
+  'arbitrary custom surface providers must not be serialized implicitly')
+assert.equal(restoreWorldSurfaceProvider({ version: 99, kind: 'flat-workspace-surface' }), null,
+  'unknown surface snapshot versions must fail closed')
+assert.equal(restoreWorldSurfaceProvider({ version: 1, kind: 'flat-workspace-surface', seed: 'bad', elevation: NaN }), null,
+  'invalid stored provider settings must fail closed')
 
 const nextGenerator = new WorldGenerator('surface-adapter-next', 22, 60)
 sampler.setGenerator(nextGenerator)

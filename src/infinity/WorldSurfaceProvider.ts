@@ -131,6 +131,51 @@ export class FlatWorldSurfaceProvider implements WorldSurfaceProvider {
   }
 }
 
+export type WorldSurfaceProviderSnapshot = {
+  version: 1
+  kind: 'flat-workspace-surface'
+  seed: string
+  elevation: number
+  temperature: number
+  moisture: number
+  biome: Biome
+}
+
+/** Serialize only built-in providers with a known, versioned reconstruction path. */
+export function serializeWorldSurfaceProvider(provider: WorldSurfaceProvider): WorldSurfaceProviderSnapshot | null {
+  if (!(provider instanceof FlatWorldSurfaceProvider)) return null
+  return {
+    version: 1,
+    kind: 'flat-workspace-surface',
+    seed: provider.seed,
+    elevation: provider.elevation,
+    temperature: provider.temperature,
+    moisture: provider.moisture,
+    biome: provider.biome,
+  }
+}
+
+/** Restore a trusted built-in surface snapshot; malformed or unknown versions fail closed. */
+export function restoreWorldSurfaceProvider(snapshot: unknown): WorldSurfaceProvider | null {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null
+  const value = snapshot as Partial<WorldSurfaceProviderSnapshot>
+  if (value.version !== 1 || value.kind !== 'flat-workspace-surface' ||
+      typeof value.seed !== 'string' || typeof value.elevation !== 'number' ||
+      typeof value.temperature !== 'number' || typeof value.moisture !== 'number' ||
+      typeof value.biome !== 'string') return null
+  try {
+    return new FlatWorldSurfaceProvider({
+      seed: value.seed,
+      elevation: value.elevation,
+      temperature: value.temperature,
+      moisture: value.moisture,
+      biome: value.biome as Biome,
+    })
+  } catch {
+    return null
+  }
+}
+
 /** Adapts the existing deterministic generator without changing its results. */
 export class GeneratorWorldSurfaceProvider implements WorldSurfaceProvider {
   readonly id = 'world-generator-surface'

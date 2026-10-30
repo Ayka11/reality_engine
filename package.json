@@ -31,6 +31,7 @@
     "test:world-surface-provider": "node scripts/check-world-surface-provider.mjs",
     "test:renderer-surface-provider": "node scripts/check-renderer-surface-provider.mjs",
     "test:world-seed-provenance": "node scripts/check-world-seed-provenance.mjs",
+    "test:world-surface-persistence": "node scripts/check-world-surface-persistence.mjs",
     "test:law-physics": "node scripts/check-law-physics-contract.mjs",
     "test:chunk-worker-physics": "node scripts/check-chunk-worker-physics-contract.mjs",
     "test:chunk-grid-prune": "npx --yes tsx scripts/check-chunk-grid-prune.ts",

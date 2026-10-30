@@ -174,8 +174,9 @@ try {
         generatorPreserved: world.generator === generator,
         fieldProviderPreserved: world.fieldSampler.registry.activeProviderId === fieldProviderId,
       };
-    } finally {
+    } catch (error) {
       window.worldResetSurfaceProvider();
+      throw error;
     }
   });
   if (flatSurfaceContract.error ||
@@ -204,7 +205,34 @@ try {
       restoredSurfaceState?.generatorSeed !== initialViewSeed.worldSeed) {
     throw new Error("Reset did not restore the original generator-backed surface: " + JSON.stringify(restoredSurfaceState));
   }
-  console.log("[acceptance] flat surface swaps into and out of the renderer without changing generator or scientific field");
+  console.log("[acceptance] flat surface selection persistence across full page reload");
+  if (flatSurfaceContract.selected?.persistence !== "stored") {
+    throw new Error("Built-in flat surface was not durably selected: " + JSON.stringify(flatSurfaceContract.selected));
+  }
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForSelector("#c3d", { state: "attached" });
+  await page.waitForFunction(() =>
+    typeof window.worldGetSurfaceProviderState === "function" &&
+    !!window.infiniteWorld?.fieldSampler?.surfaceProvider
+  );
+  const persistedFlatState = await page.evaluate(() => ({
+    state: window.worldGetSurfaceProviderState(),
+    height: window.infiniteWorld.sampleTerrainHeight(16, 16),
+    worldSeed: window.infiniteWorld.worldSeed,
+    generatorSeed: window.infiniteWorld.generator.seed,
+  }));
+  if (persistedFlatState.state?.id !== "flat-workspace-surface" ||
+      persistedFlatState.state?.seed !== "acceptance-flat-workspace" ||
+      persistedFlatState.height !== 3 ||
+      persistedFlatState.worldSeed !== "acceptance-flat-workspace" ||
+      persistedFlatState.generatorSeed !== initialViewSeed.worldSeed) {
+    throw new Error("Flat surface selection was not restored across reload: " + JSON.stringify(persistedFlatState));
+  }
+  const resetAfterReload = await page.evaluate(() => window.worldResetSurfaceProvider());
+  if (resetAfterReload?.id !== "world-generator-surface" || resetAfterReload.persistence !== "cleared") {
+    throw new Error("Reset after reload did not remove the persisted surface override: " + JSON.stringify(resetAfterReload));
+  }
+  console.log("[acceptance] flat surface restored after reload and generator surface reset cleanly");
 
   const noGenerationCheck = await page.evaluate((before) => window.worldVerifyGeneration?.(before), initial);
   if (noGenerationCheck?.ok !== false || noGenerationCheck?.reason !== "generation-revision-did-not-advance") {

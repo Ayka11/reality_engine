@@ -22,7 +22,7 @@ import type { LegacyVoxelCoordinate } from '../infinity/LegacyScientificFieldBri
 import { runtimeProvenance } from '../infinity/RuntimeProvenance'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { WorldConstructionContract } from '../infinity/WorldConstructionContract'
-import { isBelowWorldWaterSurface, resolveBridgeDeckHeight, resolveWorldWaterLevel, type WorldSurfaceProvider } from '../infinity/WorldSurfaceProvider'
+import { isBelowWorldWaterSurface, resolveBridgeDeckHeight, resolveWorldWaterLevel, restoreWorldSurfaceProvider, serializeWorldSurfaceProvider, type WorldSurfaceProvider, type WorldSurfaceProviderSnapshot } from '../infinity/WorldSurfaceProvider'
 import { DecisionGraph } from '../infinity/DecisionGraph'
 import { WorldObjectSpatialIndex } from '../infinity/WorldObjectSpatialIndex'
 import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
@@ -301,6 +301,18 @@ export class InfiniteWorldRenderer {
     worldViewContract.setSeed(seed)
     this.authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
     this.fieldSampler = new FieldSampler(this.generator, this.authoritativeField)
+    this.persistence = new WorldPersistence(seed)
+    const persistedSurface = this.persistence.loadSurfaceProviderState<WorldSurfaceProviderSnapshot>()
+    if (persistedSurface) {
+      const restoredSurface = restoreWorldSurfaceProvider(persistedSurface)
+      if (restoredSurface) {
+        this.fieldSampler.setSurfaceProvider(restoredSurface)
+        worldViewContract.setSeed(restoredSurface.seed)
+      } else {
+        this.persistence.deleteSurfaceProviderState()
+        console.warn('[persistence] Invalid world surface snapshot was rejected; generator-backed surface restored')
+      }
+    }
     this.legacySculptRuntimeAdapter = new LegacySculptRuntimeAdapter((mutation) => {
       const committed = this.authoritativeField.apply(mutation)
       runtimeProvenance.record('brush', {
@@ -315,7 +327,6 @@ export class InfiniteWorldRenderer {
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
     this.storageKey = `reality-engine-world:${seed}:objects`
-    this.persistence = new WorldPersistence(seed)
     const persistedTerrain = this.persistence.loadTerrainDeformationState<TerrainDeformationSnapshot>()
     if (persistedTerrain) {
       try { this.terrainDeformations.restore(persistedTerrain) } catch { this.persistence.deleteTerrainDeformationState() }
@@ -628,6 +639,7 @@ export class InfiniteWorldRenderer {
     this.fieldSampler.setProvider(this.authoritativeField)
     this.rebuildDecisionLayer()
     this.persistence = new WorldPersistence(newSeed)
+    this.persistActiveSurfaceProvider()
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
     this.history = new WorldEditHistory()
 
@@ -705,7 +717,8 @@ export class InfiniteWorldRenderer {
     worldViewContract.setSeed(provider.seed)
     this.rebuildDecisionLayer()
     this.refreshTerrainPatches()
-    return { id: provider.id, version: provider.version, seed: provider.seed }
+    const persistence = this.persistActiveSurfaceProvider()
+    return { id: provider.id, version: provider.version, seed: provider.seed, persistence }
   }
 
   resetWorldSurfaceProviderToGenerator() {
@@ -714,7 +727,9 @@ export class InfiniteWorldRenderer {
     worldViewContract.setSeed(provider.seed)
     this.rebuildDecisionLayer()
     this.refreshTerrainPatches()
-    return { id: provider.id, version: provider.version, seed: provider.seed }
+    const cleared = this.persistence.deleteSurfaceProviderState()
+    if (!cleared) console.warn('[persistence] Could not remove the saved world-surface override; it may return after reload')
+    return { id: provider.id, version: provider.version, seed: provider.seed, persistence: cleared ? 'cleared' : 'failed' }
   }
 
   setEnabled(value: boolean) {
@@ -2156,6 +2171,22 @@ export class InfiniteWorldRenderer {
       : Number.POSITIVE_INFINITY
     if (minimum > maximum) throw new RangeError('World surface minimum elevation exceeds maximum elevation')
     return Math.max(minimum, Math.min(maximum, deformedHeight))
+  }
+
+  private persistActiveSurfaceProvider(): 'stored' | 'unsupported' | 'failed' {
+    const snapshot = serializeWorldSurfaceProvider(this.fieldSampler.surfaceProvider)
+    if (!snapshot) {
+      if (!this.persistence.deleteSurfaceProviderState()) {
+        console.warn('[persistence] Could not clear stale world-surface override; a previous built-in surface may return after reload')
+        return 'failed'
+      }
+      return 'unsupported'
+    }
+    if (!this.persistence.saveSurfaceProviderState(snapshot)) {
+      console.warn('[persistence] World-surface snapshot could not be saved; the selected surface may not survive reload')
+      return 'failed'
+    }
+    return 'stored'
   }
 
   private getWorldWaterLevel(): number | null {
