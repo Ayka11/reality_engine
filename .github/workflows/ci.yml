@@ -64,6 +64,7 @@ jobs:
       - run: npm run test:preset-field
       - run: npm run test:construction
       - run: npm run test:world-object-identity
+      - run: npm run benchmark:world-object-index
       - run: npm run test:world-placement-api
       - run: npm run test:world-plan-runtime-adapter
       - run: npm run test:world-surface-provider

@@ -78,7 +78,8 @@
     "test:field-physics-phase-transition": "npx --yes tsx scripts/check-field-physics-phase-transition.ts",
     "test:field-physics-crystallization": "npx --yes tsx scripts/check-field-physics-crystallization.ts",
     "test:field-physics-radiation": "npx --yes tsx scripts/check-field-physics-radiation.ts",
-    "test:field-physics-rotation": "npx --yes tsx scripts/check-field-physics-rotation.ts"
+    "test:field-physics-rotation": "npx --yes tsx scripts/check-field-physics-rotation.ts",
+    "benchmark:world-object-index": "node scripts/benchmark-world-object-index.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
