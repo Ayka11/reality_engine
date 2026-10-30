@@ -64,7 +64,8 @@ export class InfiniteWorldRenderer {
   readonly controls: OrbitControls
   generator: WorldGenerator
   chunks: InfiniteChunkManager
-  readonly objects = new WorldObjectManager()
+  private readonly objectSpatialIndex = new WorldObjectSpatialIndex()
+  readonly objects = new WorldObjectManager(this.objectSpatialIndex)
   persistence: WorldPersistence
   history = new WorldEditHistory()
   readonly fieldSampler: FieldSampler
@@ -75,7 +76,6 @@ export class InfiniteWorldRenderer {
   decisionLayer: WorldDecisionLayer
   constructionContract: WorldConstructionContract
   readonly decisionGraph = new DecisionGraph()
-  readonly objectSpatialIndex = new WorldObjectSpatialIndex()
   readonly fieldPhysics = new FieldModulatedPhysics()
   readonly lawPhysicsContract: LawPhysicsContract
   readonly physicsInteractionLog = new PhysicsInteractionLog()
@@ -1710,15 +1710,17 @@ export class InfiniteWorldRenderer {
 
   private syncSelectedFromGizmo() {
     if (!this.selectedObjectId) return
-    const object = this.objects.get(this.selectedObjectId)
     const entry = this.objectMeshes.get(this.selectedObjectId)
-    if (!object || !entry) return
-    object.x = entry.group.position.x + this.worldAnchor.x
-    object.y = entry.group.position.y + this.worldAnchor.y
-    object.z = entry.group.position.z + this.worldAnchor.z
-    object.rotationY = entry.group.rotation.y
-    object.scale = entry.group.scale.x
-    this.objectSpatialIndex.upsert(object)
+    if (!entry) return
+    const object = this.objects.updateTransform(this.selectedObjectId, {
+      x: entry.group.position.x + this.worldAnchor.x,
+      y: entry.group.position.y + this.worldAnchor.y,
+      z: entry.group.position.z + this.worldAnchor.z,
+      rotationY: entry.group.rotation.y,
+      scale: entry.group.scale.x,
+    })
+    if (!object) return
+    entry.object = object
     this.selectionMarker.position.set(entry.group.position.x, entry.group.position.y + 1.5, entry.group.position.z)
     this.selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
   }
@@ -2095,15 +2097,15 @@ export class InfiniteWorldRenderer {
 
   transformSelected(patch: Partial<Pick<WorldObject, 'x'|'y'|'z'|'rotationY'|'scale'>>) {
     if (!this.selectedObjectId) return null
-    const object = this.objects.get(this.selectedObjectId)
+    const before = this.objects.get(this.selectedObjectId)
+    if (!before) return null
+    const object = this.objects.updateTransform(this.selectedObjectId, patch)
     if (!object) return null
-    const before = { ...object }
-    Object.assign(object, patch)
-    this.history.push({ type: 'transform', before, after: { ...object } })
+    this.history.push({ type: 'transform', before, after: object })
     this.scheduleSave()
     const entry = this.objectMeshes.get(object.id)
-    this.objectSpatialIndex.upsert(object)
     if (entry) {
+      entry.object = object
       entry.group.position.set(object.x - this.worldAnchor.x, object.y - this.worldAnchor.y, object.z - this.worldAnchor.z)
       entry.group.rotation.y = object.rotationY
       entry.group.scale.setScalar(Math.max(0.1, object.scale))
