@@ -41,7 +41,7 @@ const decisionUrl = await moduleUrl('src/infinity/WorldDecisionLayer.ts', [
   [/from ['"]\.\/DecisionRecord['"]/g, 'from "' + decisionRecordUrl + '"'],
 ])
 const { WorldGenerator } = await import(generatorUrl)
-const { GeneratorWorldSurfaceProvider, resolveWorldWaterLevel, isBelowWorldWaterSurface, resolveBridgeDeckHeight } = await import(surfaceUrl)
+const { GeneratorWorldSurfaceProvider, FlatWorldSurfaceProvider, resolveWorldWaterLevel, isBelowWorldWaterSurface, resolveBridgeDeckHeight } = await import(surfaceUrl)
 const { FieldSampler } = await import(samplerUrl)
 const { WorldDecisionLayer } = await import(decisionUrl)
 
@@ -78,6 +78,22 @@ assert.equal(resolveBridgeDeckHeight(noSeaPlane, 10, 14), 12.45,
   'bridge height must fall back to local terrain midpoint when no sea plane exists')
 assert.equal(resolveWorldWaterLevel({ waterLevel: Number.NaN }), null)
 assert.equal(resolveWorldWaterLevel({ waterLevel: Number.POSITIVE_INFINITY }), null)
+const flatSurface = new FlatWorldSurfaceProvider({
+  seed: 'flat-workspace-test',
+  elevation: 3,
+  temperature: 0.55,
+  moisture: 0.35,
+})
+assert.equal(flatSurface.id, 'flat-workspace-surface')
+assert.equal(flatSurface.referenceBuildElevation, 3)
+assert.equal(flatSurface.waterLevel, null)
+assert.equal(flatSurface.minimumElevation, undefined, 'flat workspace must remain vertically unbounded for sculpting')
+assert.deepEqual(flatSurface.sampleSurface(-12, 19), {
+  height: 3, temperature: 0.55, moisture: 0.35, biome: 'plains', biomeId: 2, waterDepth: 0,
+})
+assert.throws(() => new FlatWorldSurfaceProvider({ elevation: Number.NaN }), /finite elevation/)
+assert.throws(() => new FlatWorldSurfaceProvider({ temperature: 1.1 }), /normalized climate/)
+assert.throws(() => new FlatWorldSurfaceProvider({ seed: '   ' }), /non-empty string/)
 
 const nextGenerator = new WorldGenerator('surface-adapter-next', 22, 60)
 sampler.setGenerator(nextGenerator)

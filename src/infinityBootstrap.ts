@@ -13,6 +13,7 @@ import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEnt
 import type { WorldObjectKind } from './infinity/WorldObject'
 import { installScientificWorkspace } from './infinity/ScientificWorkspace'
 import { worldViewContract } from './infinity/WorldViewContract'
+import { FlatWorldSurfaceProvider, type FlatWorldSurfaceOptions } from './infinity/WorldSurfaceProvider'
 import { buildCivilizationExperimentMatrix, runCivilizationInfinityBatch, runCivilizationInfinityReplication, analyzeCrossDimensionGeneralization, summarizeReplicationSnapshots, createInfinityScientificReport, serializeInfinityScientificReport, createScientificProvenance, attachScientificProvenance, validateScientificProvenance, assessInfinityClaim, type CivilizationExperimentMatrix } from './infinity'
 
 export type DockPosition = 'top' | 'left' | 'right' | 'float'
@@ -52,6 +53,22 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldFieldViewWindow = (width: number, height: number, sliceY?: number) => world.fieldSampler.sampleViewWindow(width, height, sliceY)
   ;(window as any).getWorldViewContract = () => worldViewContract.snapshot()
   ;(window as any).setWorldViewRenderMode = (mode: any) => worldViewContract.setRenderMode(mode)
+  ;(window as any).worldSetSurfaceProvider = (provider: any) => world.setWorldSurfaceProvider(provider)
+  ;(window as any).worldResetSurfaceProvider = () => world.resetWorldSurfaceProviderToGenerator()
+  ;(window as any).worldGetSurfaceProviderState = () => {
+    const provider = world.fieldSampler.surfaceProvider
+    return {
+      id: provider.id,
+      version: provider.version,
+      seed: provider.seed,
+      referenceBuildElevation: provider.referenceBuildElevation,
+      minimumElevation: provider.minimumElevation ?? null,
+      maximumElevation: provider.maximumElevation ?? null,
+      waterLevel: provider.waterLevel ?? null,
+    }
+  }
+  ;(window as any).worldCreateFlatSurfaceProvider = (options: FlatWorldSurfaceOptions = {}) =>
+    new FlatWorldSurfaceProvider(options)
   ;(window as any).infinityApplyLegacySculptStroke = (tool: any, cell: any, radius: number, strength: number, options?: any) =>
     world.applyLegacySculptStroke(tool, cell, radius, strength, options)
   ;(window as any).infinityApplyLegacySmartBrush = (name: any, cell: any, radius: number, selectedLegacyZ?: number, options?: { strength?: number }) =>

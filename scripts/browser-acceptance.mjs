@@ -134,6 +134,72 @@ try {
   if (!initialViewSeed.worldSeed || initialViewSeed.viewSeed !== initialViewSeed.worldSeed) {
     throw new Error("WorldViewContract seed does not match the active WorldGenerator: " + JSON.stringify(initialViewSeed));
   }
+
+  console.log("[acceptance] selectable flat surface workspace without replacing the generator");
+  const flatSurfaceContract = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (!world || typeof window.worldCreateFlatSurfaceProvider !== "function" ||
+        typeof window.worldSetSurfaceProvider !== "function" ||
+        typeof window.worldResetSurfaceProvider !== "function" ||
+        typeof window.worldGetSurfaceProviderState !== "function") {
+      return { error: "Public world surface provider API is unavailable" };
+    }
+    const generator = world.generator;
+    const fieldProviderId = world.fieldSampler.registry.activeProviderId;
+    const flat = window.worldCreateFlatSurfaceProvider({
+      seed: "acceptance-flat-workspace",
+      elevation: 3,
+      temperature: 0.55,
+      moisture: 0.35,
+    });
+    let selected;
+    let sampled;
+    let environment;
+    let terrainHeight;
+    let routeHasWater;
+    try {
+      selected = window.worldSetSurfaceProvider(flat);
+      sampled = world.fieldSampler.sampleWorld(16, undefined, 16);
+      environment = world.getWorldEnvironment();
+      terrainHeight = world.sampleTerrainHeight(16, 16);
+      routeHasWater = world.analyzeRoute(0, 0, 12, 12, 2).some(point => point.water);
+      return {
+        selected,
+        state: window.worldGetSurfaceProviderState(),
+        sampled: { height: sampled.height, moisture: sampled.moisture, waterDepth: sampled.waterDepth },
+        environment: { temperature: environment.temperature, moisture: environment.moisture, biome: environment.biome },
+        terrainHeight,
+        routeHasWater,
+        generatorPreserved: world.generator === generator,
+        fieldProviderPreserved: world.fieldSampler.registry.activeProviderId === fieldProviderId,
+      };
+    } finally {
+      window.worldResetSurfaceProvider();
+    }
+  });
+  if (flatSurfaceContract.error ||
+      flatSurfaceContract.selected?.id !== "flat-workspace-surface" ||
+      flatSurfaceContract.state?.waterLevel !== null ||
+      flatSurfaceContract.state?.seed !== "acceptance-flat-workspace" ||
+      flatSurfaceContract.sampled?.height !== 3 ||
+      flatSurfaceContract.sampled?.moisture !== 0.35 ||
+      flatSurfaceContract.sampled?.waterDepth !== 0 ||
+      flatSurfaceContract.environment?.temperature !== 0.55 ||
+      flatSurfaceContract.environment?.moisture !== 0.35 ||
+      flatSurfaceContract.environment?.biome !== "biome.plains" ||
+      flatSurfaceContract.terrainHeight !== 3 ||
+      flatSurfaceContract.routeHasWater !== false ||
+      flatSurfaceContract.generatorPreserved !== true ||
+      flatSurfaceContract.fieldProviderPreserved !== true) {
+    throw new Error("Flat workspace provider violated surface/generator/field separation: " + JSON.stringify(flatSurfaceContract));
+  }
+  const restoredSurfaceState = await page.evaluate(() => window.worldGetSurfaceProviderState?.());
+  if (restoredSurfaceState?.id !== "world-generator-surface" ||
+      restoredSurfaceState?.seed !== initialViewSeed.worldSeed) {
+    throw new Error("Reset did not restore the original generator-backed surface: " + JSON.stringify(restoredSurfaceState));
+  }
+  console.log("[acceptance] flat surface swaps into and out of the renderer without changing generator or scientific field");
+
   const noGenerationCheck = await page.evaluate((before) => window.worldVerifyGeneration?.(before), initial);
   if (noGenerationCheck?.ok !== false || noGenerationCheck?.reason !== "generation-revision-did-not-advance") {
     throw new Error("World generation verifier must reject unchanged state even when the stats object exists: " + JSON.stringify(noGenerationCheck));

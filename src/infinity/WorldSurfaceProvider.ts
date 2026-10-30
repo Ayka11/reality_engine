@@ -70,6 +70,67 @@ export function resolveBridgeDeckHeight(
   return base + clearance
 }
 
+export type FlatWorldSurfaceOptions = {
+  seed?: string
+  elevation?: number
+  temperature?: number
+  moisture?: number
+  biome?: Biome
+}
+
+/**
+ * Neutral, unbounded construction surface for a tool-first workspace.
+ * It deliberately declares no global water plane; scientific-field state
+ * remains owned by the separately selected ScientificFieldProvider.
+ */
+export class FlatWorldSurfaceProvider implements WorldSurfaceProvider {
+  readonly id = 'flat-workspace-surface'
+  readonly version = 'flat-workspace-surface-v1'
+  readonly seed: string
+  readonly referenceBuildElevation: number
+  readonly elevation: number
+  readonly temperature: number
+  readonly moisture: number
+  readonly biome: Biome
+  readonly waterLevel = null
+
+  constructor(options: FlatWorldSurfaceOptions = {}) {
+    const seed = options.seed ?? 'reality-engine-empty-workspace-v1'
+    const elevation = options.elevation ?? 0
+    const temperature = options.temperature ?? 0.5
+    const moisture = options.moisture ?? 0.5
+    const biome = options.biome ?? 'plains'
+    if (typeof seed !== 'string' || !seed.trim()) {
+      throw new TypeError('Flat world surface seed must be a non-empty string')
+    }
+    if (!Number.isFinite(elevation) || !Number.isFinite(temperature) ||
+        temperature < 0 || temperature > 1 || !Number.isFinite(moisture) ||
+        moisture < 0 || moisture > 1 || !(biome in BIOME_ID)) {
+      throw new RangeError('Flat world surface requires finite elevation and normalized climate values')
+    }
+    this.seed = seed
+    this.elevation = elevation
+    this.referenceBuildElevation = elevation
+    this.temperature = temperature
+    this.moisture = moisture
+    this.biome = biome
+  }
+
+  sampleSurface(x: number, z: number): WorldSurfaceSample {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) {
+      throw new RangeError('Flat world surface coordinates must be finite')
+    }
+    return {
+      height: this.elevation,
+      temperature: this.temperature,
+      moisture: this.moisture,
+      biome: this.biome,
+      biomeId: BIOME_ID[this.biome],
+      waterDepth: 0,
+    }
+  }
+}
+
 /** Adapts the existing deterministic generator without changing its results. */
 export class GeneratorWorldSurfaceProvider implements WorldSurfaceProvider {
   readonly id = 'world-generator-surface'
