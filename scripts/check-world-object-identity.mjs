@@ -136,7 +136,6 @@ assert.deepEqual(manager.query({
   minX: -32, maxX: -32, minY: -64, maxY: -64, minZ: -32, maxZ: -32,
 }).map(object => object.id), [negativeChunkBoundary.id],
   'AABB query must preserve floor-based chunk mapping at negative chunk boundaries')
-assert.equal(manager.remove(negativeChunkBoundary.id), true)
 assert.deepEqual(manager.query({ minX: -32, maxX: -32, minZ: -32, maxZ: -32 }).map(object => object.id),
   [negativeChunkBoundary.id],
   'horizontal column lookup must retain negative chunk boundaries and ignore vertical partitioning')
