@@ -105,7 +105,7 @@ export class FlatWorldSurfaceProvider implements WorldSurfaceProvider {
     }
     if (!Number.isFinite(elevation) || !Number.isFinite(temperature) ||
         temperature < 0 || temperature > 1 || !Number.isFinite(moisture) ||
-        moisture < 0 || moisture > 1 || !(biome in BIOME_ID)) {
+        moisture < 0 || moisture > 1 || !Object.prototype.hasOwnProperty.call(BIOME_ID, biome)) {
       throw new RangeError('Flat world surface requires finite elevation and normalized climate values')
     }
     this.seed = seed

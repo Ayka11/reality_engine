@@ -110,13 +110,23 @@ export class WorldPersistence {
   }
 
   loadSurfaceProviderState<T = unknown>(): T | null {
+    let raw: string | null
     try {
-      const raw = localStorage.getItem(this.surfaceProviderKey)
-      if (!raw) return null
+      raw = localStorage.getItem(this.surfaceProviderKey)
+    } catch {
+      return null
+    }
+    if (!raw) return null
+    try {
       const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
-      if (payload.version !== 1 || payload.seed !== this.seed || !payload.state) return null
+      if (payload.version !== 1 || payload.seed !== this.seed ||
+          !payload.state || typeof payload.state !== 'object' || Array.isArray(payload.state)) {
+        localStorage.removeItem(this.surfaceProviderKey)
+        return null
+      }
       return payload.state
     } catch {
+      try { localStorage.removeItem(this.surfaceProviderKey) } catch {}
       return null
     }
   }

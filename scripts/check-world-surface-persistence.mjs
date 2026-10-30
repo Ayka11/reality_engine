@@ -42,10 +42,18 @@ const snapshot = {
 assert.equal(persistence.saveSurfaceProviderState(snapshot), true)
 assert.deepEqual(persistence.loadSurfaceProviderState(), snapshot,
   'valid provider snapshot must round-trip under the matching world seed')
-assert.equal(persistence.loadSurfaceProviderState('another-seed'), null,
+const otherWorldPersistence = new WorldPersistence('another-seed')
+assert.equal(otherWorldPersistence.loadSurfaceProviderState(), null,
   'surface snapshot state is isolated by the owning world seed')
 assert.equal(persistence.deleteSurfaceProviderState(), true)
 assert.equal(persistence.loadSurfaceProviderState(), null)
+
+const surfaceKey = 'reality-engine-world:surface-save-seed:surface-provider'
+entries.set(surfaceKey, '{corrupt-surface-snapshot')
+assert.equal(persistence.loadSurfaceProviderState(), null,
+  'malformed surface snapshot must be rejected')
+assert.equal(entries.has(surfaceKey), false,
+  'malformed surface snapshot must be removed rather than retried on every reload')
 
 assert.equal(persistence.saveSurfaceProviderState(snapshot), true)
 assert.equal(persistence.clear(), true,

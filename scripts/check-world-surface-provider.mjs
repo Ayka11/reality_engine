@@ -93,6 +93,8 @@ assert.deepEqual(flatSurface.sampleSurface(-12, 19), {
 })
 assert.throws(() => new FlatWorldSurfaceProvider({ elevation: Number.NaN }), /finite elevation/)
 assert.throws(() => new FlatWorldSurfaceProvider({ temperature: 1.1 }), /normalized climate/)
+assert.throws(() => new FlatWorldSurfaceProvider({ biome: 'toString' }), /normalized climate/,
+  'inherited object keys must not be accepted as biome identifiers')
 assert.throws(() => new FlatWorldSurfaceProvider({ seed: '   ' }), /non-empty string/)
 const flatSnapshot = serializeWorldSurfaceProvider(flatSurface)
 assert.deepEqual(flatSnapshot, {
