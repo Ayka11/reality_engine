@@ -113,6 +113,29 @@ export class TerrainDeformationField {
     return true
   }
 
+  /** Return whether this chunk contains authored height samples. */
+  hasDeformationsInChunk(cx: number, cz: number, chunkSize = 32): boolean {
+    if (!Number.isSafeInteger(cx) || !Number.isSafeInteger(cz) ||
+        !Number.isSafeInteger(chunkSize) || chunkSize < 1) {
+      throw new RangeError('Terrain deformation chunk query requires safe integer coordinates and a positive chunk size')
+    }
+    const originX = cx * chunkSize
+    const originZ = cz * chunkSize
+    if (!Number.isSafeInteger(originX) || !Number.isSafeInteger(originZ) ||
+        !Number.isSafeInteger(originX + chunkSize - 1) ||
+        !Number.isSafeInteger(originZ + chunkSize - 1)) {
+      throw new RangeError('Terrain deformation chunk query exceeds safe world coordinates')
+    }
+    for (const key of this.deltas.keys()) {
+      const point = parseKey(key)
+      if (!point) continue
+      if (Math.floor(point.x / chunkSize) === cx && Math.floor(point.z / chunkSize) === cz) {
+        return true
+      }
+    }
+    return false
+  }
+
   serialize(): TerrainDeformationSnapshot {
     return {
       version: 1,
