@@ -104,18 +104,29 @@ assert.equal(spatialIndex.queryRadius(96, 70, -96, 0).some(o => o.id === second.
 assert.equal(spatialIndex.queryRadius(secondOriginal.x, secondOriginal.y, secondOriginal.z, 0).some(o => o.id === second.id), false,
   'previous spatial bucket must no longer return the moved object')
 
+// Metadata and elevation changes also go through the manager-owned index.
+const scatteredUpdate = manager.update(second.id, {
+  y: 71,
+  properties: { origin: 'scatter', lawPenalty: 0.1 },
+})
+assert.ok(scatteredUpdate)
+assert.equal(scatteredUpdate.properties.origin, 'scatter')
+assert.equal(spatialIndex.queryRadius(96, 71, -96, 0).some(o => o.id === second.id), true,
+  'metadata/elevation updates must refresh the index using the new position')
+assert.equal(spatialIndex.queryRadius(96, 70, -96, 0).some(o => o.id === second.id), false)
+
 // Direct spatial-index reads must also be detached.
-const indexedRead = spatialIndex.queryRadius(96, 70, -96, 0)[0]
+const indexedRead = spatialIndex.queryRadius(96, 71, -96, 0)[0]
 assert.ok(indexedRead)
 indexedRead.x = -500
 indexedRead.properties.injected = true
-assert.equal(spatialIndex.queryRadius(96, 70, -96, 0)[0]?.x, 96)
+assert.equal(spatialIndex.queryRadius(96, 71, -96, 0)[0]?.x, 96)
 assert.equal(manager.get(second.id)?.properties.injected, undefined)
 
 assert.throws(() => manager.updateTransform(second.id, { x: Number.NaN }), /finite transform/,
   'invalid transforms must be rejected before authoritative manager/index state changes')
 assert.equal(manager.get(second.id)?.x, 96)
-assert.equal(spatialIndex.queryRadius(96, 70, -96, 0).some(o => o.id === second.id), true)
+assert.equal(spatialIndex.queryRadius(96, 71, -96, 0).some(o => o.id === second.id), true)
 
 assert.equal(manager.remove(second.id), true)
 assert.equal(spatialIndex.size, 1, 'manager removal must clear only the removed object index entry')
@@ -130,6 +141,8 @@ assert.match(rendererSource, /this\.objects\.updateTransform\(this\.selectedObje
   'gizmo transforms must commit through the object manager')
 assert.match(rendererSource, /const object = this\.objects\.updateTransform\(this\.selectedObjectId, patch\)/,
   'programmatic object transforms must commit through the object manager')
+assert.match(rendererSource, /const updated = this\.objects\.update\(object\.id,\s*\{/,
+  'scattered object elevation/metadata must commit through the object manager');
 assert.doesNotMatch(rendererSource, /object\.x\s*=\s*entry\.group\.position/,
   'gizmo updates must not mutate detached manager read snapshots')
 
