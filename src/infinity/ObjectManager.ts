@@ -1,17 +1,26 @@
 import { hash3 } from './WorldSeed'
-import { objectId, type ObjectPlacement, type WorldObject, type WorldObjectKind } from './WorldObject'
+import { cloneWorldObject, objectId, type ObjectPlacement, type WorldObject, type WorldObjectKind } from './WorldObject'
+import { WorldObjectSpatialIndex } from './WorldObjectSpatialIndex'
 
 export type ObjectQuery = {
   minX?: number; maxX?: number; minY?: number; maxY?: number
   minZ?: number; maxZ?: number; kind?: WorldObjectKind
 }
 
+export type WorldObjectTransform = Partial<Pick<WorldObject, 'x' | 'y' | 'z' | 'rotationY' | 'scale'>>
+
+/**
+ * Owns authoritative world-object values. Public reads and write results are
+ * detached snapshots; spatial membership is updated only through this manager.
+ */
 export class WorldObjectManager {
   private objects = new Map<string, WorldObject>()
   get size(): number { return this.objects.size }
 
+  constructor(private readonly spatialIndex?: WorldObjectSpatialIndex) {}
+
   /**
-   * New placements get collision-safe IDs. Re-inserting an existing WorldObject
+   * New placements get collision-safe IDs. Re-inserting an object after delete
    * (history undo/redo, chunk restore, or a transform rollback) preserves its
    * stable identity instead of deriving a new ID from its changed coordinates.
    */
@@ -19,8 +28,7 @@ export class WorldObjectManager {
     let id: string
     if ('id' in placement && typeof placement.id === 'string' && placement.id.length > 0) {
       id = placement.id
-      const existing = this.objects.get(id)
-      if (existing && existing !== placement) {
+      if (this.objects.has(id)) {
         throw new Error(`World object ID collision: ${id}`)
       }
     } else {
@@ -33,24 +41,52 @@ export class WorldObjectManager {
       }
     }
 
-    const object: WorldObject = { ...placement, id }
+    const object = cloneWorldObject({ ...placement, id } as WorldObject)
+    this.assertValidObject(object)
     this.objects.set(id, object)
-    return object
+    this.spatialIndex?.upsert(object)
+    return cloneWorldObject(object)
   }
 
-  remove(id: string): boolean { return this.objects.delete(id) }
-  get(id: string): WorldObject | undefined { return this.objects.get(id) }
-  clear(): void { this.objects.clear() }
+  remove(id: string): boolean {
+    const removed = this.objects.delete(id)
+    if (removed) this.spatialIndex?.remove(id)
+    return removed
+  }
+
+  /** Read a detached value; modifying it cannot bypass spatial-index updates. */
+  get(id: string): WorldObject | undefined {
+    const object = this.objects.get(id)
+    return object ? cloneWorldObject(object) : undefined
+  }
+
+  /** Update coordinates/transform atomically with the spatial index. */
+  updateTransform(id: string, patch: WorldObjectTransform): WorldObject | undefined {
+    const current = this.objects.get(id)
+    if (!current) return undefined
+    const next: WorldObject = { ...current, ...patch, properties: { ...current.properties } }
+    this.assertValidObject(next)
+    this.objects.set(id, next)
+    this.spatialIndex?.upsert(next)
+    return cloneWorldObject(next)
+  }
+
+  clear(): void {
+    this.objects.clear()
+    this.spatialIndex?.clear()
+  }
 
   query(query: ObjectQuery = {}): WorldObject[] {
-    return [...this.objects.values()].filter(o =>
-      (query.kind === undefined || o.kind === query.kind) &&
-      (query.minX === undefined || o.x >= query.minX) &&
-      (query.maxX === undefined || o.x <= query.maxX) &&
-      (query.minY === undefined || o.y >= query.minY) &&
-      (query.maxY === undefined || o.y <= query.maxY) &&
-      (query.minZ === undefined || o.z >= query.minZ) &&
-      (query.maxZ === undefined || o.z <= query.maxZ))
+    return [...this.objects.values()]
+      .filter(o =>
+        (query.kind === undefined || o.kind === query.kind) &&
+        (query.minX === undefined || o.x >= query.minX) &&
+        (query.maxX === undefined || o.x <= query.maxX) &&
+        (query.minY === undefined || o.y >= query.minY) &&
+        (query.maxY === undefined || o.y <= query.maxY) &&
+        (query.minZ === undefined || o.z >= query.minZ) &&
+        (query.maxZ === undefined || o.z <= query.maxZ))
+      .map(cloneWorldObject)
   }
 
   scatter(seed: string | number, kind: WorldObjectKind, x0: number, z0: number, x1: number, z1: number, spacing = 32, density = 0.15): WorldObject[] {
@@ -73,5 +109,24 @@ export class WorldObjectManager {
     return added
   }
 
-  values(): WorldObject[] { return [...this.objects.values()] }
+  /** Return detached snapshots, never the manager's authoritative records. */
+  values(): WorldObject[] {
+    return [...this.objects.values()].map(cloneWorldObject)
+  }
+
+  private assertValidObject(object: WorldObject): void {
+    if (typeof object.id !== 'string' || !object.id.trim() ||
+        typeof object.kind !== 'string' ||
+        ![object.x, object.y, object.z, object.rotationY, object.scale, object.seed].every(Number.isFinite) ||
+        object.scale <= 0 ||
+        !object.properties || typeof object.properties !== 'object' || Array.isArray(object.properties)) {
+      throw new TypeError('World object requires a stable ID, finite transform, positive scale, and properties record')
+    }
+    for (const value of Object.values(object.properties)) {
+      if (!(typeof value === 'string' || typeof value === 'boolean' ||
+          (typeof value === 'number' && Number.isFinite(value)))) {
+        throw new TypeError('World object properties must contain only strings, finite numbers, or booleans')
+      }
+    }
+  }
 }
