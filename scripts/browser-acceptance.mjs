@@ -1316,11 +1316,11 @@ try {
     !!document.getElementById("vSurfaceEmpty") && !!document.getElementById("vSurfaceProcedural")
   );
   if (!surfaceUiPresent) throw new Error("World surface selection controls are missing from the active World Tools dock");
-  const surfaceBeforeUiSwitch = await page.evaluate(() => ({
-    generator: window.infiniteWorld.generator,
-    generatorSeed: window.infiniteWorld.generator.seed,
-    fieldProviderId: window.infiniteWorld.fieldSampler.registry.activeProviderId,
-  }));
+  const surfaceBeforeUiSwitch = await page.evaluate(() => {
+    window.__surfaceAcceptanceGenerator = window.infiniteWorld.generator;
+    window.__surfaceAcceptanceFieldProviderId = window.infiniteWorld.fieldSampler.registry.activeProviderId;
+    return { generatorSeed: window.infiniteWorld.generator.seed };
+  });
   await page.locator("#vSurfaceEmpty").click();
   await page.waitForFunction(() => window.worldGetSurfaceProviderState?.()?.id === "flat-workspace-surface");
   const emptySurfaceUiState = await page.evaluate((before) => {
@@ -1329,8 +1329,8 @@ try {
     return {
       state,
       storedKind: saved?.state?.kind ?? null,
-      generatorPreserved: window.infiniteWorld.generator === before.generator,
-      fieldProviderPreserved: window.infiniteWorld.fieldSampler.registry.activeProviderId === before.fieldProviderId,
+      generatorPreserved: window.infiniteWorld.generator === window.__surfaceAcceptanceGenerator,
+      fieldProviderPreserved: window.infiniteWorld.fieldSampler.registry.activeProviderId === window.__surfaceAcceptanceFieldProviderId,
     };
   }, surfaceBeforeUiSwitch);
   if (emptySurfaceUiState.state?.seed !== `empty-workspace:${surfaceBeforeUiSwitch.generatorSeed}` ||
