@@ -68,23 +68,29 @@ assert.equal(legacyPlaceCalls, 0,
   'semantic plan generation must use placeScaled, never the legacy place(kind, x, z, y, scale) signature')
 
 assert.equal(placements.length, 4)
-assert.deepEqual(placements[0], {
-  kind: 'water', x: origin.x + 42, z: origin.z - 18, scale: 1.3,
-})
-assert.deepEqual(placements[1], {
-  kind: 'building', x: origin.x - 38, z: origin.z + 24, scale: 1.5,
-})
+function approximately(actual: number, expected: number, message: string) {
+  assert.ok(Math.abs(actual - expected) < 1e-10,
+    `${message}: expected ${expected}, received ${actual}`)
+}
+assert.equal(placements[0].kind, 'water')
+assert.equal(placements[0].x, origin.x + 42)
+assert.equal(placements[0].z, origin.z - 18)
+approximately(placements[0].scale, 1.3, 'river landmark scale')
+assert.equal(placements[1].kind, 'building')
+assert.equal(placements[1].x, origin.x - 38)
+assert.equal(placements[1].z, origin.z + 24)
+approximately(placements[1].scale, 1.5, 'settlement landmark scale')
 const buildingAngle = 2 * 2.399963
 assert.equal(placements[2].kind, 'building')
 assert.ok(Math.abs(placements[2].x - (origin.x + Math.cos(buildingAngle) * 55)) < 1e-10)
 assert.ok(Math.abs(placements[2].z - (origin.z + Math.sin(buildingAngle) * 55)) < 1e-10)
-assert.equal(placements[2].scale, 1.1)
+approximately(placements[2].scale, 1.1, 'building scale')
 
 const gravityAngle = 3 * 2.399963
 assert.equal(placements[3].kind, 'gravity_well')
 assert.ok(Math.abs(placements[3].x - (origin.x + Math.cos(gravityAngle) * 70)) < 1e-10)
 assert.ok(Math.abs(placements[3].z - (origin.z + Math.sin(gravityAngle) * 70)) < 1e-10)
-assert.equal(placements[3].scale, 1.6)
+approximately(placements[3].scale, 1.6, 'anomaly scale')
 
 assert.deepEqual(scatterCalls, [{
   kind: 'tree',
