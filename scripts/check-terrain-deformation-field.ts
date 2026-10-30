@@ -15,7 +15,7 @@ assert.equal(terrain.hasDeformationsInChunk(1, 0), false,
   'chunk-scoped deformation queries must not report unrelated chunks')
 
 const boundaryField = new TerrainDeformationField('boundary-seed')
-boundaryField.applyBrush(-32, 64, 1, 2, 'raise')
+boundaryField.applyBrush(-32, 64, 2, 2, 'raise')
 assert.equal(boundaryField.hasDeformationsInChunk(-1, 2), true,
   'negative chunk coordinates must use floor-based world-to-chunk mapping')
 assert.equal(boundaryField.hasDeformationsInChunk(-2, 2), true,
