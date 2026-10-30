@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { WORLD_CHUNK_SIZE } from '../src/infinity/WorldCoordinate.ts'
-import { buildWaterSurfaceMeshData } from '../src/infinity/WaterSurfaceMesh.ts'
+import { buildWaterDepthMaskFromHeightField, buildWaterSurfaceMeshData } from '../src/infinity/WaterSurfaceMesh.ts'
 
 const cellCount = WORLD_CHUNK_SIZE * WORLD_CHUNK_SIZE
 const dryChunk = { cx: 0, cz: 0, water: new Float32Array(cellCount) }
@@ -37,6 +37,42 @@ for (let i = 0; i < partial.indices.length; i += 3) {
   const normalY = abz * acx - abx * acz
   assert.ok(normalY > 0, 'water triangles must face upward')
 }
+
+// Sculpted terrain must change the hydrology mask: higher cells dry out and
+// lower cells become wet using the same sea plane as the water mesh.
+let sampledHeights = 0
+const sculptedMask = buildWaterDepthMaskFromHeightField({
+  cx: 0,
+  cz: 0,
+  seaLevel: 10,
+  sampleHeight: (x, z) => {
+    sampledHeights++
+    if (x === 0 && z === 0) return 12
+    if (x === 1 && z === 0) return 8
+    return 10
+  },
+})
+assert.equal(sampledHeights, cellCount, 'every cell must use the current terrain height sampler')
+assert.equal(sculptedMask[0], 0, 'raised terrain above sea level must become dry')
+assert.equal(sculptedMask[1], 2, 'lowered terrain below sea level must gain water depth')
+assert.equal(sculptedMask[2], 0, 'terrain exactly at sea level must not create wet cells')
+
+const negativeChunkMask = buildWaterDepthMaskFromHeightField({
+  cx: -1,
+  cz: 2,
+  seaLevel: 5,
+  sampleHeight: (x, z) => x === -WORLD_CHUNK_SIZE && z === WORLD_CHUNK_SIZE * 2 ? 4 : 6,
+})
+assert.equal(negativeChunkMask[0], 1, 'height sampling must use absolute coordinates for negative chunk origins')
+assert.equal(negativeChunkMask[1], 0)
+
+assert.throws(
+  () => buildWaterDepthMaskFromHeightField({
+    cx: 0, cz: 0, seaLevel: 5, sampleHeight: () => Number.NaN,
+  }),
+  /non-finite height/,
+  'invalid terrain samples must fail closed instead of silently corrupting hydrology',
+)
 
 const oceanMask = new Float32Array(cellCount)
 oceanMask.fill(1)
