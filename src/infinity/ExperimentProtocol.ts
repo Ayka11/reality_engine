@@ -6,8 +6,15 @@ export type ExperimentProtocol = {
   experimentId: string
   timestamp: number
   world: {
+    /** Procedural generator seed retained for backwards compatibility. */
     seed: string
     generatorVersion: string
+    /** Active authoring surface identity; absent in historical protocol snapshots. */
+    surface?: {
+      seed: string
+      providerId: string
+      providerVersion: string
+    }
   }
   field: {
     providerId: string

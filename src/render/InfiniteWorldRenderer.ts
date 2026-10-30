@@ -723,6 +723,8 @@ export class InfiniteWorldRenderer {
   }
 
   get isEnabled() { return this.enabled }
+  get worldSeed(): string { return this.fieldSampler.surfaceProvider.seed }
+
   getWorldEnvironment() {
     const x = this.worldPosition.x
     const z = this.worldPosition.z
@@ -2894,7 +2896,7 @@ export class InfiniteWorldRenderer {
 
   generateSettlementV2(cx: number, cz: number, radius = 120, blocks = 4) {
     const created: WorldObject[] = []
-    const seed = this.generator.seed
+    const seed = this.worldSeed
     const blockCount = Math.max(2, Math.floor(blocks))
     const ringRadius = radius * 0.62
     const centerDecision = this.decisionLayer.analyzeBuildability(cx, cz)
@@ -2983,7 +2985,7 @@ export class InfiniteWorldRenderer {
 
   generateSettlement(cx: number, cz: number, radius = 80, count = 12) {
     const created: WorldObject[] = []
-    const seed = this.generator.seed
+    const seed = this.worldSeed
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2 + this.fieldSampler.sample(cx + i, 0, cz).entropy * 4
       const radial = radius * (0.35 + (i % 5) / 8)
@@ -3025,7 +3027,7 @@ export class InfiniteWorldRenderer {
   }
 
   scatter(kind: WorldObjectKind, x0: number, z0: number, x1: number, z1: number, density = 0.15) {
-    const candidates = this.objects.scatter(this.generator.seed, kind, x0, z0, x1, z1, 32, density)
+    const candidates = this.objects.scatter(this.worldSeed, kind, x0, z0, x1, z1, 32, density)
     const created: WorldObject[] = []
     for (const object of candidates) {
       const lawGate = this.lawGateForBuild(kind, object.x, object.z)
@@ -3408,9 +3410,18 @@ export class InfiniteWorldRenderer {
 
   startExperiment(metadata: Record<string, string | number | boolean> = {}) {
     const provider = this.fieldSampler.registry.getActive()
+    const surfaceProvider = this.fieldSampler.surfaceProvider
     const protocol = createExperimentProtocol({
       experimentId: `exp-${Date.now().toString(36)}`,
-      world: { seed: this.generator.seed, generatorVersion: 'world-generator-v1' },
+      world: {
+        seed: this.generator.seed,
+        generatorVersion: 'world-generator-v1',
+        surface: {
+          seed: surfaceProvider.seed,
+          providerId: surfaceProvider.id,
+          providerVersion: surfaceProvider.version,
+        },
+      },
       field: {
         providerId: provider?.id ?? 'unknown',
         providerVersion: provider?.version ?? 'unknown',

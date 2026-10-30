@@ -170,6 +170,7 @@ try {
         environment: { temperature: environment.temperature, moisture: environment.moisture, biome: environment.biome },
         terrainHeight,
         routeHasWater,
+        worldSeed: world.worldSeed,
         generatorPreserved: world.generator === generator,
         fieldProviderPreserved: world.fieldSampler.registry.activeProviderId === fieldProviderId,
       };
@@ -181,6 +182,9 @@ try {
       flatSurfaceContract.selected?.id !== "flat-workspace-surface" ||
       flatSurfaceContract.state?.waterLevel !== null ||
       flatSurfaceContract.state?.seed !== "acceptance-flat-workspace" ||
+      flatSurfaceContract.state?.worldSeed !== "acceptance-flat-workspace" ||
+      flatSurfaceContract.state?.generatorSeed !== initialViewSeed.worldSeed ||
+      flatSurfaceContract.worldSeed !== "acceptance-flat-workspace" ||
       flatSurfaceContract.sampled?.height !== 3 ||
       flatSurfaceContract.sampled?.moisture !== 0.35 ||
       flatSurfaceContract.sampled?.waterDepth !== 0 ||
@@ -195,7 +199,9 @@ try {
   }
   const restoredSurfaceState = await page.evaluate(() => window.worldGetSurfaceProviderState?.());
   if (restoredSurfaceState?.id !== "world-generator-surface" ||
-      restoredSurfaceState?.seed !== initialViewSeed.worldSeed) {
+      restoredSurfaceState?.seed !== initialViewSeed.worldSeed ||
+      restoredSurfaceState?.worldSeed !== initialViewSeed.worldSeed ||
+      restoredSurfaceState?.generatorSeed !== initialViewSeed.worldSeed) {
     throw new Error("Reset did not restore the original generator-backed surface: " + JSON.stringify(restoredSurfaceState));
   }
   console.log("[acceptance] flat surface swaps into and out of the renderer without changing generator or scientific field");

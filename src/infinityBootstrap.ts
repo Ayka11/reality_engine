@@ -61,6 +61,8 @@ export function bootstrapInfiniteWorld() {
       id: provider.id,
       version: provider.version,
       seed: provider.seed,
+      worldSeed: world.worldSeed,
+      generatorSeed: world.generator.seed,
       referenceBuildElevation: provider.referenceBuildElevation,
       minimumElevation: provider.minimumElevation ?? null,
       maximumElevation: provider.maximumElevation ?? null,
