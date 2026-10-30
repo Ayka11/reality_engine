@@ -5,7 +5,7 @@ import { InfiniteChunkManager } from '../infinity/ChunkManager'
 import { WorldGenerator, BIOME_ID, type WorldChunk } from '../infinity/WorldGenerator'
 import { TerrainDeformationField, type TerrainBrushMode, type TerrainDeformationSnapshot } from '../infinity/TerrainDeformationField'
 import { worldViewContract } from '../infinity/WorldViewContract'
-import { buildWaterSurfaceMeshData } from '../infinity/WaterSurfaceMesh'
+import { buildWaterDepthMaskFromHeightField, buildWaterSurfaceMeshData } from '../infinity/WaterSurfaceMesh'
 import { worldToChunk, WORLD_CHUNK_SIZE, type ChunkCoord } from '../infinity/WorldCoordinate'
 import { WorldObjectManager } from '../infinity/ObjectManager'
 import { lodForDistance, lodResolution, type LODLevel } from '../infinity/LODManager'
@@ -1286,7 +1286,17 @@ export class InfiniteWorldRenderer {
     let waterData: ReturnType<typeof buildWaterSurfaceMeshData> | null = null
     if (waterLevel !== null) {
       let water: Float32Array | null = null
-      if (surfaceProvider.getWaterMaskForChunk) {
+      if (this.terrainDeformations.size > 0) {
+        // Provider masks are cached for the immutable baseline. Once terrain is
+        // sculpted, derive current wet cells from the exact height sampler used
+        // by terrain geometry so raised land dries and lowered land floods.
+        water = buildWaterDepthMaskFromHeightField({
+          cx: chunk.cx,
+          cz: chunk.cz,
+          seaLevel: waterLevel,
+          sampleHeight: (x, z) => this.sampleTerrainHeight(x, z),
+        })
+      } else if (surfaceProvider.getWaterMaskForChunk) {
         water = surfaceProvider.getWaterMaskForChunk(chunk)
       } else {
         water = new Float32Array(WORLD_CHUNK_SIZE * WORLD_CHUNK_SIZE)
