@@ -110,7 +110,9 @@ export class WorldObjectSpatialIndex {
       const columnDepth = maxCz - minCz + 1
       const columnArea = columnWidth * columnDepth
       const relevantColumns: string[] = []
-      if (Number.isSafeInteger(columnArea) && columnArea <= Math.max(256, this.columns.size * 2)) {
+      const safeChunkCoordinates = [minCx, maxCx, minCz, maxCz].every(Number.isSafeInteger)
+      if (safeChunkCoordinates && Number.isSafeInteger(columnArea) &&
+          columnArea <= Math.max(256, this.columns.size * 2)) {
         for (let cx = minCx; cx <= maxCx; cx++) {
           for (let cz = minCz; cz <= maxCz; cz++) relevantColumns.push(`${cx},${cz}`)
         }

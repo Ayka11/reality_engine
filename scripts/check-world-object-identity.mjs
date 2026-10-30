@@ -150,6 +150,8 @@ assert.deepEqual(manager.query({ minX: -32, maxX: -32, minZ: -32, maxZ: -32 }).m
 assert.equal(manager.remove(negativeOtherElevation.id), true)
 assert.equal(manager.query({ minX: Number.NaN }).length, 0,
   'non-finite bounds must use the compatibility fallback and preserve comparison semantics')
+assert.equal(manager.query({ minX: 1e308, maxX: 1e308, minZ: 1e308, maxZ: 1e308 }).length, 0,
+  'finite but unsafe chunk coordinates must inspect occupied columns instead of incrementing an unrepresentable integer')
 
 // Direct spatial-index reads must also be detached.
 const indexedRead = spatialIndex.queryRadius(96, 71, -96, 0)[0]
