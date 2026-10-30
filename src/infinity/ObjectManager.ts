@@ -91,6 +91,12 @@ export class WorldObjectManager {
   }
 
   query(query: ObjectQuery = {}): WorldObject[] {
+    const bounds = [query.minX, query.maxX, query.minY, query.maxY, query.minZ, query.maxZ]
+    // Preserve the legacy comparison semantics for NaN/Infinity bounds; the
+    // spatial grid is used whenever all supplied numeric bounds are finite.
+    if (this.spatialIndex && bounds.every(value => value === undefined || Number.isFinite(value))) {
+      return this.spatialIndex.queryBounds(query)
+    }
     return [...this.objects.values()]
       .filter(o =>
         (query.kind === undefined || o.kind === query.kind) &&

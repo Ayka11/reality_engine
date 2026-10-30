@@ -115,6 +115,26 @@ assert.equal(spatialIndex.queryRadius(96, 71, -96, 0).some(o => o.id === second.
   'metadata/elevation updates must refresh the index using the new position')
 assert.equal(spatialIndex.queryRadius(96, 70, -96, 0).some(o => o.id === second.id), false)
 
+// Manager AABB queries must use the spatial buckets and retain exact inclusive bounds.
+const boundedObjects = manager.query({
+  minX: 96, maxX: 96, minY: 71, maxY: 71, minZ: -96, maxZ: -96, kind: 'building',
+})
+assert.deepEqual(boundedObjects.map(object => object.id), [second.id],
+  'AABB query must find the updated object at an exact positive/negative coordinate boundary')
+const detachedBoundsResult = boundedObjects[0]
+detachedBoundsResult.x = -123
+assert.equal(manager.get(second.id)?.x, 96,
+  'spatial-index-backed manager queries must continue returning detached snapshots')
+
+const negativeChunkBoundary = manager.add({ ...placement, x: -32, y: -64, z: -32 })
+assert.deepEqual(manager.query({
+  minX: -32, maxX: -32, minY: -64, maxY: -64, minZ: -32, maxZ: -32,
+}).map(object => object.id), [negativeChunkBoundary.id],
+  'AABB query must preserve floor-based chunk mapping at negative chunk boundaries')
+assert.equal(manager.remove(negativeChunkBoundary.id), true)
+assert.equal(manager.query({ minX: Number.NaN }).length, 0,
+  'non-finite bounds must use the compatibility fallback and preserve comparison semantics')
+
 // Direct spatial-index reads must also be detached.
 const indexedRead = spatialIndex.queryRadius(96, 71, -96, 0)[0]
 assert.ok(indexedRead)
@@ -137,6 +157,8 @@ assert.equal(spatialIndex.size, 0, 'manager clear must clear spatial-index membe
 const rendererSource = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8')
 assert.match(rendererSource, /readonly objects = new WorldObjectManager\(this\.objectSpatialIndex\)/,
   'renderer-owned object manager must update its spatial index as one transaction')
+assert.match(managerSource, /this\.spatialIndex\.queryBounds\(query\)/,
+  'manager AABB queries must use the shared spatial index instead of scanning all objects')
 
 assert.doesNotMatch(rendererSource, /this\.objectSpatialIndex\.(?:upsert|remove|clear)\s*\(/,
   'renderer must not mutate spatial-index membership outside the manager-owned transaction path')

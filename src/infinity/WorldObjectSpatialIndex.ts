@@ -1,5 +1,10 @@
 import { cloneWorldObject, type WorldObject } from './WorldObject'
-import { chunkKey, worldToChunk } from './WorldCoordinate'
+import { chunkKey, worldToChunk, WORLD_CHUNK_SIZE, WORLD_CHUNK_HEIGHT } from './WorldCoordinate'
+
+export type WorldObjectSpatialQuery = {
+  minX?: number; maxX?: number; minY?: number; maxY?: number
+  minZ?: number; maxZ?: number; kind?: WorldObject['kind']
+}
 
 /**
  * Sparse spatial index for world objects.
@@ -49,6 +54,49 @@ export class WorldObjectSpatialIndex {
     }
     this.objectChunks.delete(id)
     this.objects.delete(id)
+  }
+
+  /** Query only occupied spatial buckets intersecting an axis-aligned world-space box. */
+  queryBounds(query: WorldObjectSpatialQuery = {}) {
+    const bounds = [query.minX, query.maxX, query.minY, query.maxY, query.minZ, query.maxZ]
+    if (bounds.some(value => value !== undefined && !Number.isFinite(value))) {
+      throw new TypeError('World object query bounds must be finite numbers')
+    }
+    if ((query.minX !== undefined && query.maxX !== undefined && query.minX > query.maxX) ||
+        (query.minY !== undefined && query.maxY !== undefined && query.minY > query.maxY) ||
+        (query.minZ !== undefined && query.maxZ !== undefined && query.minZ > query.maxZ)) {
+      return []
+    }
+
+    // Use floor-based world chunk coordinates so negative positions and exact
+    // chunk edges follow the same partitioning rules as object insertion.
+    const minCx = query.minX === undefined ? undefined : Math.floor(query.minX / WORLD_CHUNK_SIZE)
+    const maxCx = query.maxX === undefined ? undefined : Math.floor(query.maxX / WORLD_CHUNK_SIZE)
+    const minCy = query.minY === undefined ? undefined : Math.floor(query.minY / WORLD_CHUNK_HEIGHT)
+    const maxCy = query.maxY === undefined ? undefined : Math.floor(query.maxY / WORLD_CHUNK_HEIGHT)
+    const minCz = query.minZ === undefined ? undefined : Math.floor(query.minZ / WORLD_CHUNK_SIZE)
+    const maxCz = query.maxZ === undefined ? undefined : Math.floor(query.maxZ / WORLD_CHUNK_SIZE)
+    const result: WorldObject[] = []
+
+    for (const [key, bucket] of this.buckets) {
+      const [cx, cy, cz] = key.split(',').map(Number)
+      if ((minCx !== undefined && cx < minCx) || (maxCx !== undefined && cx > maxCx) ||
+          (minCy !== undefined && cy < minCy) || (maxCy !== undefined && cy > maxCy) ||
+          (minCz !== undefined && cz < minCz) || (maxCz !== undefined && cz > maxCz)) continue
+
+      for (const id of bucket) {
+        const object = this.objects.get(id)
+        if (!object || (query.kind !== undefined && object.kind !== query.kind) ||
+            (query.minX !== undefined && object.x < query.minX) ||
+            (query.maxX !== undefined && object.x > query.maxX) ||
+            (query.minY !== undefined && object.y < query.minY) ||
+            (query.maxY !== undefined && object.y > query.maxY) ||
+            (query.minZ !== undefined && object.z < query.minZ) ||
+            (query.maxZ !== undefined && object.z > query.maxZ)) continue
+        result.push(cloneWorldObject(object))
+      }
+    }
+    return result
   }
 
   queryRadius(x: number, y: number, z: number, radius: number, kinds?: Set<WorldObject['kind']>) {
