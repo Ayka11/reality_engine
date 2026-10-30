@@ -3063,15 +3063,18 @@ export class InfiniteWorldRenderer {
         this.objects.remove(object.id)
         continue
       }
-      object.y = this.sampleTerrainHeight(object.x, object.z)
-      object.properties = {
-        ...object.properties,
-        lawPenalty: lawGate.decision?.laws.penalty ?? 0,
-        activeLawProcesses: lawGate.decision?.laws.activeProcesses.join(',') ?? '',
-      }
-      this.objectSpatialIndex.upsert(object)
-      this.history.push({ type: 'add', object: { ...object } })
-      created.push(object)
+      const updated = this.objects.update(object.id, {
+        y: this.sampleTerrainHeight(object.x, object.z),
+        properties: {
+          ...object.properties,
+          lawPenalty: lawGate.decision?.laws.penalty ?? 0,
+          activeLawProcesses: lawGate.decision?.laws.activeProcesses.join(',') ?? '',
+        },
+      })
+      if (!updated) continue
+      this.objectSpatialIndex.upsert(updated)
+      this.history.push({ type: 'add', object: updated })
+      created.push(updated)
     }
     this.syncObjects()
     this.scheduleSave()
