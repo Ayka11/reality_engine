@@ -1310,6 +1310,45 @@ try {
     };
   });
   if (!terrainBrushUi.controlsPresent) throw new Error("Terrain sculpt controls are missing from the active World Tools dock");
+
+  // The surface source must be selectable through the actual tool dock, not only through a debug API.
+  const surfaceUiPresent = await page.evaluate(() =>
+    !!document.getElementById("vSurfaceEmpty") && !!document.getElementById("vSurfaceProcedural")
+  );
+  if (!surfaceUiPresent) throw new Error("World surface selection controls are missing from the active World Tools dock");
+  const surfaceBeforeUiSwitch = await page.evaluate(() => ({
+    generator: window.infiniteWorld.generator,
+    generatorSeed: window.infiniteWorld.generator.seed,
+    fieldProviderId: window.infiniteWorld.fieldSampler.registry.activeProviderId,
+  }));
+  await page.locator("#vSurfaceEmpty").click();
+  await page.waitForFunction(() => window.worldGetSurfaceProviderState?.()?.id === "flat-workspace-surface");
+  const emptySurfaceUiState = await page.evaluate((before) => {
+    const state = window.worldGetSurfaceProviderState();
+    const saved = JSON.parse(localStorage.getItem(`reality-engine-world:${before.generatorSeed}:surface-provider`) || "null");
+    return {
+      state,
+      storedKind: saved?.state?.kind ?? null,
+      generatorPreserved: window.infiniteWorld.generator === before.generator,
+      fieldProviderPreserved: window.infiniteWorld.fieldSampler.registry.activeProviderId === before.fieldProviderId,
+    };
+  }, surfaceBeforeUiSwitch);
+  if (emptySurfaceUiState.state?.seed !== `empty-workspace:${surfaceBeforeUiSwitch.generatorSeed}` ||
+      emptySurfaceUiState.storedKind !== "flat-workspace-surface" ||
+      emptySurfaceUiState.generatorPreserved !== true ||
+      emptySurfaceUiState.fieldProviderPreserved !== true) {
+    throw new Error("Empty workspace UI selection did not persist independently from generator/field state: " + JSON.stringify(emptySurfaceUiState));
+  }
+  await page.locator("#vSurfaceProcedural").click();
+  await page.waitForFunction(() => window.worldGetSurfaceProviderState?.()?.id === "world-generator-surface");
+  const proceduralSurfaceUiState = await page.evaluate((seed) => ({
+    state: window.worldGetSurfaceProviderState(),
+    stored: localStorage.getItem(`reality-engine-world:${seed}:surface-provider`),
+  }), surfaceBeforeUiSwitch.generatorSeed);
+  if (proceduralSurfaceUiState.state?.seed !== surfaceBeforeUiSwitch.generatorSeed ||
+      proceduralSurfaceUiState.stored !== null) {
+    throw new Error("Procedural surface UI reset did not restore the generator and clear the persisted override: " + JSON.stringify(proceduralSurfaceUiState));
+  }
   await page.locator("#vTerrainRadius").evaluate((el) => {
     el.value = "3";
     el.dispatchEvent(new Event("input", { bubbles: true }));
