@@ -40,6 +40,55 @@ export type WorldSurfaceWaterChunk = {
   water: Float32Array
 }
 
+/** Validate the complete spatial/environment contract before a provider becomes authoritative. */
+export function validateWorldSurfaceProvider(provider: unknown): asserts provider is WorldSurfaceProvider {
+  if (!provider || typeof provider !== 'object') {
+    throw new TypeError('World surface provider must be an object')
+  }
+
+  const candidate = provider as WorldSurfaceProvider
+  if (typeof candidate.id !== 'string' || !candidate.id.trim() ||
+      typeof candidate.version !== 'string' || !candidate.version.trim() ||
+      typeof candidate.seed !== 'string' || !candidate.seed.trim() ||
+      typeof candidate.sampleSurface !== 'function' ||
+      !Number.isFinite(candidate.referenceBuildElevation)) {
+    throw new TypeError('World surface provider requires a non-empty id, version, seed, finite reference elevation, and sampleSurface()')
+  }
+
+  if (candidate.waterLevel != null && !Number.isFinite(candidate.waterLevel)) {
+    throw new TypeError('World surface provider waterLevel must be finite or null')
+  }
+  if ((candidate.minimumElevation !== undefined && !Number.isFinite(candidate.minimumElevation)) ||
+      (candidate.maximumElevation !== undefined && !Number.isFinite(candidate.maximumElevation)) ||
+      (candidate.minimumElevation !== undefined && candidate.maximumElevation !== undefined &&
+        candidate.minimumElevation > candidate.maximumElevation)) {
+    throw new TypeError('World surface provider has an invalid vertical range')
+  }
+  if (candidate.getWaterMaskForChunk !== undefined && typeof candidate.getWaterMaskForChunk !== 'function') {
+    throw new TypeError('World surface provider water-mask hook must be a function when supplied')
+  }
+
+  // Probe separated coordinates so a provider cannot pass validation with a
+  // valid origin sample while returning malformed values elsewhere in its domain.
+  for (const [x, z] of [[0, 0], [17.25, -23.75], [-31.5, 9.125]] as const) {
+    const sample = candidate.sampleSurface(x, z)
+    if (!sample || typeof sample !== 'object' ||
+        !Number.isFinite(sample.height) ||
+        !Number.isFinite(sample.temperature) || sample.temperature < 0 || sample.temperature > 1 ||
+        !Number.isFinite(sample.moisture) || sample.moisture < 0 || sample.moisture > 1 ||
+        typeof sample.biome !== 'string' ||
+        !Object.prototype.hasOwnProperty.call(BIOME_ID, sample.biome) ||
+        sample.biomeId !== BIOME_ID[sample.biome as Biome] ||
+        !Number.isFinite(sample.waterDepth) || sample.waterDepth < 0) {
+      throw new TypeError(`World surface provider returned an invalid sample at (${x}, ${z})`)
+    }
+    if ((candidate.minimumElevation !== undefined && sample.height < candidate.minimumElevation) ||
+        (candidate.maximumElevation !== undefined && sample.height > candidate.maximumElevation)) {
+      throw new RangeError(`World surface provider sample at (${x}, ${z}) exceeds its declared elevation range`)
+    }
+  }
+}
+
 type WaterLevelSource = Pick<WorldSurfaceProvider, 'waterLevel'>
 
 /** Resolve a valid global water plane; absent, null and non-finite values fail closed. */
