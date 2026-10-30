@@ -248,7 +248,9 @@ function makeEntityTickScenario() {
     grid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
   }
   layer.tick(grid, 1 / 60);
-  const entity = layer.getEntities()[0];
+  // This failure-injection fixture must alter authoritative in-memory entity
+  // state. Public getEntities() is intentionally a detached read API.
+  const entity = (layer as unknown as { entities: Map<number, Entity> }).entities.values().next().value;
   assert.ok(entity, "fixture must create a real EntityLayer entity");
   entity.age = 59;
   entity.genome.reproThreshold = 1;
@@ -338,7 +340,11 @@ rollbackInternals._spawnChild = function (...args: unknown[]) {
 };
 assert.throws(() => rollbackCase.layer.tick(rollbackCase.grid, 1 / 60), /injected failure/);
 assert.deepEqual(Array.from(rollbackCase.grid.buffer), beforeBuffer, "failed tick must restore every grid field");
-assert.equal(rollbackCase.layer.getEntities()[0], originalEntity, "rollback must preserve pre-existing entity object identity");
+assert.equal(
+  (rollbackCase.layer as unknown as { entities: Map<number, Entity> }).entities.get(originalEntity.id),
+  originalEntity,
+  "rollback must preserve pre-existing entity object identity",
+);
 assert.equal(originalEntity.cells, originalCellsRef, "rollback must preserve cell-array identity");
 assert.equal(originalEntity.centroid, originalCentroidRef, "rollback must preserve centroid-array identity");
 assert.equal(originalEntity.genome, originalGenomeRef, "rollback must preserve genome-object identity");
