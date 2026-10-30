@@ -97,6 +97,18 @@ export function runEntityLayerRecoveryRegression(): void {
   detached.entities[0].colorRgb[0] = -99;
   equal(layer.snapshot(), liveBeforeDetachedMutation, "EntityLayer snapshot aliases nested live entity data");
 
+  // The public entity collection is a detached read API, not a writable
+  // backdoor into authoritative simulation state.
+  const exposedEntities = layer.getEntities()
+  exposedEntities[0].age += 100
+  exposedEntities[0].cells.push(999999)
+  exposedEntities[0].centroid[0] += 100
+  exposedEntities[0].genome.metabolismRate += 100
+  exposedEntities[0].memoryBuffer[0] += 100
+  exposedEntities[0].colorRgb[0] += 100
+  equal(layer.snapshot(), liveBeforeDetachedMutation,
+    "EntityLayer.getEntities() exposed nested mutable references to authoritative entity state")
+
   const suppliedSnapshot = cloneSnapshot(checkpoint);
   layer.restore(suppliedSnapshot, grid.size);
   suppliedSnapshot.entities[0].cells[0] = -100;
