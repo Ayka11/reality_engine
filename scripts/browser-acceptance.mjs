@@ -198,12 +198,12 @@ try {
       flatSurfaceContract.fieldProviderPreserved !== true) {
     throw new Error("Flat workspace provider violated surface/generator/field separation: " + JSON.stringify(flatSurfaceContract));
   }
-  const restoredSurfaceState = await page.evaluate(() => window.worldGetSurfaceProviderState?.());
-  if (restoredSurfaceState?.id !== "world-generator-surface" ||
-      restoredSurfaceState?.seed !== initialViewSeed.worldSeed ||
-      restoredSurfaceState?.worldSeed !== initialViewSeed.worldSeed ||
-      restoredSurfaceState?.generatorSeed !== initialViewSeed.worldSeed) {
-    throw new Error("Reset did not restore the original generator-backed surface: " + JSON.stringify(restoredSurfaceState));
+  const selectedSurfaceState = await page.evaluate(() => window.worldGetSurfaceProviderState?.());
+  if (selectedSurfaceState?.id !== "flat-workspace-surface" ||
+      selectedSurfaceState?.seed !== "acceptance-flat-workspace" ||
+      selectedSurfaceState?.worldSeed !== "acceptance-flat-workspace" ||
+      selectedSurfaceState?.generatorSeed !== initialViewSeed.worldSeed) {
+    throw new Error("Flat surface must remain selected and persisted until reload: " + JSON.stringify(selectedSurfaceState));
   }
   console.log("[acceptance] flat surface selection persistence across full page reload");
   if (flatSurfaceContract.selected?.persistence !== "stored") {
