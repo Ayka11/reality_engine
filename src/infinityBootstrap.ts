@@ -1470,6 +1470,15 @@ export function bootstrapInfiniteWorld() {
                 <div style="font-size: 8px; color: var(--sub); margin-top: 6px;">Radius <button class="pill" id="vFieldRadius4" style="font-size:8px;padding:2px 5px;">4m</button> <button class="pill on" id="vFieldRadius8" style="font-size:8px;padding:2px 5px;">8m</button> <button class="pill" id="vFieldRadius16" style="font-size:8px;padding:2px 5px;">16m</button></div>
                 <div data-authoritative-field-status style="font-size: 7.5px; color: #40c080; margin-top: 5px;">Authoritative field · ready</div>
                 <div style="border-top:1px solid rgba(255,255,255,.08);margin-top:9px;padding-top:8px;">
+                  <div style="font-size:9.5px;color:var(--sub);margin-bottom:4px;text-transform:uppercase;">World Surface Workspace</div>
+                  <div style="font-size:8px;color:#8f88d8;margin-bottom:6px;">Choose a neutral surface to build from scratch, or restore the procedural terrain. Existing objects keep their absolute world positions.</div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+                    <button class="brush-btn ${world.fieldSampler.surfaceProvider.id === 'flat-workspace-surface' ? 'active' : ''}" id="vSurfaceEmpty">＋ Empty workspace</button>
+                    <button class="brush-btn ${world.fieldSampler.surfaceProvider.id === 'world-generator-surface' ? 'active' : ''}" id="vSurfaceProcedural">◇ Procedural surface</button>
+                  </div>
+                  <div id="vSurfaceStatus" style="font-size:7.5px;color:var(--sub);margin-top:5px;">Active: ${escLibrary(world.fieldSampler.surfaceProvider.id)} · seed ${escLibrary(world.fieldSampler.surfaceProvider.seed)}</div>
+                </div>
+                <div style="border-top:1px solid rgba(255,255,255,.08);margin-top:9px;padding-top:8px;">
                   <div style="font-size:9.5px;color:var(--sub);margin-bottom:4px;text-transform:uppercase;">Geometric Terrain Sculpt</div>
                   <div style="font-size:8px;color:#8f88d8;margin-bottom:6px;">Changes terrain elevation directly. Click the terrain to raise or lower it; Undo/Redo and world save checkpoints preserve edits.</div>
                   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;">
@@ -1794,6 +1803,21 @@ export function bootstrapInfiniteWorld() {
         if (status) status.textContent = mode ? `Terrain ${mode} active · click terrain to sculpt` : 'Terrain brush inactive'
         render()
       }
+      const setWorldSurfaceMode = (mode: 'empty' | 'procedural') => {
+        const result = mode === 'empty'
+          ? world.setWorldSurfaceProvider(new FlatWorldSurfaceProvider({
+              seed: `empty-workspace:${world.generator.seed}`,
+              elevation: 0,
+              temperature: 0.5,
+              moisture: 0.5,
+            }))
+          : world.resetWorldSurfaceProviderToGenerator()
+        const status = document.getElementById('vSurfaceStatus')
+        if (status) status.textContent = `Active: ${result.id} · persistence ${result.persistence}`
+        render()
+      }
+      document.getElementById('vSurfaceEmpty')?.addEventListener('click', () => setWorldSurfaceMode('empty'))
+      document.getElementById('vSurfaceProcedural')?.addEventListener('click', () => setWorldSurfaceMode('procedural'))
       document.getElementById('vTerrainRaise')?.addEventListener('click', () => setTerrainMode('raise'))
       document.getElementById('vTerrainLower')?.addEventListener('click', () => setTerrainMode('lower'))
       document.getElementById('vTerrainOff')?.addEventListener('click', () => setTerrainMode(null))
