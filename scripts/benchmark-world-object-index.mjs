@@ -24,6 +24,7 @@ spatialIndexJs = spatialIndexJs
   .replaceAll("'./WorldObject'", `'${objectModuleUrl}'`)
   .replaceAll("'./WorldCoordinate'", `'${coordinateModuleUrl}'`)
 const spatialIndexModuleUrl = `data:text/javascript;base64,${Buffer.from(spatialIndexJs).toString('base64')}`
+const { WorldObjectSpatialIndex } = await import(spatialIndexModuleUrl)
 const managerSource = await readFile(new URL('src/infinity/ObjectManager.ts', root), 'utf8')
 let managerJs = ts.transpileModule(managerSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
@@ -117,7 +118,7 @@ function measure(queryFn, queries) {
 const reports = []
 for (const [datasetIndex, count] of SIZES.entries()) {
   const placements = buildDataset(count, 0x51a7 + datasetIndex)
-  const manager = new WorldObjectManager()
+  const manager = new WorldObjectManager(new WorldObjectSpatialIndex())
   // Build through the public manager API so its index is populated exactly as in runtime.
   for (const placement of placements) manager.add(placement)
   const queries = QUERY_CENTERS.map(([x, z]) => makeQuery(x, z))
