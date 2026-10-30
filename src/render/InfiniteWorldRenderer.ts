@@ -1286,7 +1286,7 @@ export class InfiniteWorldRenderer {
     let waterData: ReturnType<typeof buildWaterSurfaceMeshData> | null = null
     if (waterLevel !== null) {
       let water: Float32Array | null = null
-      if (this.terrainDeformations.size > 0) {
+      if (this.terrainDeformations.hasDeformationsInChunk(chunk.cx, chunk.cz, WORLD_CHUNK_SIZE)) {
         // Provider masks are cached for the immutable baseline. Once terrain is
         // sculpted, derive current wet cells from the exact height sampler used
         // by terrain geometry so raised land dries and lowered land floods.
