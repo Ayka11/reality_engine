@@ -239,6 +239,14 @@ console.log("Entity chunk reconciliation boundary safety: PASS");
 
 
 // Exercise the production EntityLayer tick transaction, not just the pure planner.
+function firstLiveEntityForRollbackFixture(layer: EntityLayer): Entity {
+  // Private state access is deliberately confined to failure-injection tests.
+  // Public getEntities() returns detached values and must never mutate engine state.
+  const liveEntity = (layer as unknown as { entities: Map<number, Entity> }).entities.values().next().value;
+  assert.ok(liveEntity, "fixture must create a real EntityLayer entity");
+  return liveEntity;
+}
+
 function makeEntityTickScenario() {
   const grid = new VoxelGrid(8, 8, 1);
   const layer = new EntityLayer();
@@ -248,10 +256,7 @@ function makeEntityTickScenario() {
     grid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
   }
   layer.tick(grid, 1 / 60);
-  // This failure-injection fixture must alter authoritative in-memory entity
-  // state. Public getEntities() is intentionally a detached read API.
-  const entity = (layer as unknown as { entities: Map<number, Entity> }).entities.values().next().value;
-  assert.ok(entity, "fixture must create a real EntityLayer entity");
+  const entity = firstLiveEntityForRollbackFixture(layer);
   entity.age = 59;
   entity.genome.reproThreshold = 1;
   entity.energy = 321;
@@ -394,8 +399,7 @@ for (const index of [9, 10, 17, 18]) {
 sparseRollbackGrid.syncDenseToChunks();
 sparseRollbackLayer.tick(sparseRollbackGrid, 1 / 60);
 sparseRollbackGrid.syncDenseToChunks();
-const sparseRollbackEntity = sparseRollbackLayer.getEntities()[0];
-assert.ok(sparseRollbackEntity, "sparse rollback fixture must create a real entity");
+const sparseRollbackEntity = firstLiveEntityForRollbackFixture(sparseRollbackLayer);
 sparseRollbackEntity.age = 59;
 sparseRollbackEntity.genome.reproThreshold = 1;
 sparseRollbackEntity.energy = 321;
@@ -486,8 +490,7 @@ for (const index of [9, 10, 17, 18]) {
 rollbackFailureGrid.syncDenseToChunks();
 rollbackFailureLayer.tick(rollbackFailureGrid, 1 / 60);
 rollbackFailureGrid.syncDenseToChunks();
-const rollbackFailureEntity = rollbackFailureLayer.getEntities()[0];
-assert.ok(rollbackFailureEntity, "rollback-failure fixture must create an entity");
+const rollbackFailureEntity = firstLiveEntityForRollbackFixture(rollbackFailureLayer);
 rollbackFailureEntity.age = 59;
 rollbackFailureEntity.genome.reproThreshold = 1;
 for (const index of rollbackFailureEntity.cells) {
