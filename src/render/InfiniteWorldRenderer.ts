@@ -323,7 +323,7 @@ export class InfiniteWorldRenderer {
       return committed
     })
     this.authoritativeSculptTransactions = new AuthoritativeSculptTransactionCoordinator(this.authoritativeField)
-    this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null)
+    this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null, (x, z) => this.sampleTerrainHeight(x, z))
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
     this.storageKey = `reality-engine-world:${seed}:objects`
@@ -688,6 +688,7 @@ export class InfiniteWorldRenderer {
       this.fieldSampler,
       weights,
       () => (window as any).getRealityLawState?.() ?? null,
+      (x, z) => this.sampleTerrainHeight(x, z),
     )
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
   }
