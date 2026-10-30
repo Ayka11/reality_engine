@@ -6,6 +6,8 @@ export type WorldObjectSpatialQuery = {
   minZ?: number; maxZ?: number; kind?: WorldObject['kind']
 }
 
+type ObjectChunkMembership = { chunkKey: string; columnKey: string }
+
 /**
  * Sparse spatial index for world objects.
  * Queries only chunks intersecting the requested radius.
@@ -14,7 +16,7 @@ export class WorldObjectSpatialIndex {
   private buckets = new Map<string, Set<string>>()
   private columns = new Map<string, Set<string>>()
   private objects = new Map<string, WorldObject>()
-  private objectChunks = new Map<string, string>()
+  private objectChunks = new Map<string, ObjectChunkMembership>()
 
   clear() {
     this.buckets.clear()
@@ -23,9 +25,12 @@ export class WorldObjectSpatialIndex {
     this.objectChunks.clear()
   }
 
-  private chunkFor(x: number, y: number, z: number) {
+  private chunkFor(x: number, y: number, z: number): ObjectChunkMembership {
     const { chunk } = worldToChunk(x, y, z)
-    return chunkKey(chunk.cx, chunk.cy, chunk.cz)
+    return {
+      chunkKey: chunkKey(chunk.cx, chunk.cy, chunk.cz),
+      columnKey: `${chunk.cx},${chunk.cz}`,
+    }
   }
 
   /** Public insertion detaches caller-owned inputs before retaining them. */
@@ -42,51 +47,47 @@ export class WorldObjectSpatialIndex {
   }
 
   private upsertSnapshot(object: WorldObject) {
-    const nextChunk = this.chunkFor(object.x, object.y, object.z)
-    const previousChunk = this.objectChunks.get(object.id)
-    if (previousChunk && previousChunk !== nextChunk) {
-      const previousBucket = this.buckets.get(previousChunk)
-      previousBucket?.delete(object.id)
-      if (previousBucket?.size === 0) {
-        this.buckets.delete(previousChunk)
-        const [previousCx, , previousCz] = previousChunk.split(',').map(Number)
-        const previousColumnKey = `${previousCx},${previousCz}`
-        const previousColumn = this.columns.get(previousColumnKey)
-        previousColumn?.delete(previousChunk)
-        if (previousColumn?.size === 0) this.columns.delete(previousColumnKey)
+    const nextMembership = this.chunkFor(object.x, object.y, object.z)
+    const previousMembership = this.objectChunks.get(object.id)
+    if (!previousMembership || previousMembership.chunkKey !== nextMembership.chunkKey) {
+      if (previousMembership) {
+        const previousBucket = this.buckets.get(previousMembership.chunkKey)
+        previousBucket?.delete(object.id)
+        if (previousBucket?.size === 0) {
+          this.buckets.delete(previousMembership.chunkKey)
+          const previousColumn = this.columns.get(previousMembership.columnKey)
+          previousColumn?.delete(previousMembership.chunkKey)
+          if (previousColumn?.size === 0) this.columns.delete(previousMembership.columnKey)
+        }
       }
-    }
 
-    let bucket = this.buckets.get(nextChunk)
-    if (!bucket) {
-      bucket = new Set<string>()
-      this.buckets.set(nextChunk, bucket)
-      const { chunk } = worldToChunk(object.x, object.y, object.z)
-      const columnKey = `${chunk.cx},${chunk.cz}`
-      let column = this.columns.get(columnKey)
-      if (!column) {
-        column = new Set<string>()
-        this.columns.set(columnKey, column)
+      let bucket = this.buckets.get(nextMembership.chunkKey)
+      if (!bucket) {
+        bucket = new Set<string>()
+        this.buckets.set(nextMembership.chunkKey, bucket)
+        let column = this.columns.get(nextMembership.columnKey)
+        if (!column) {
+          column = new Set<string>()
+          this.columns.set(nextMembership.columnKey, column)
+        }
+        column.add(nextMembership.chunkKey)
       }
-      column.add(nextChunk)
+      bucket.add(object.id)
+      this.objectChunks.set(object.id, nextMembership)
     }
-    bucket.add(object.id)
     this.objects.set(object.id, object)
-    this.objectChunks.set(object.id, nextChunk)
   }
 
   remove(id: string) {
-    const key = this.objectChunks.get(id)
-    if (key) {
-      const bucket = this.buckets.get(key)
+    const membership = this.objectChunks.get(id)
+    if (membership) {
+      const bucket = this.buckets.get(membership.chunkKey)
       bucket?.delete(id)
       if (bucket?.size === 0) {
-        this.buckets.delete(key)
-        const [cx, , cz] = key.split(',').map(Number)
-        const columnKey = `${cx},${cz}`
-        const column = this.columns.get(columnKey)
-        column?.delete(key)
-        if (column?.size === 0) this.columns.delete(columnKey)
+        this.buckets.delete(membership.chunkKey)
+        const column = this.columns.get(membership.columnKey)
+        column?.delete(membership.chunkKey)
+        if (column?.size === 0) this.columns.delete(membership.columnKey)
       }
     }
     this.objectChunks.delete(id)

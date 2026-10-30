@@ -101,6 +101,16 @@ assert.ok(movedSecond)
 assert.equal(movedSecond.x, 96)
 assert.equal(spatialIndex.queryRadius(96, 70, -96, 0).some(o => o.id === second.id), true,
   'manager transform updates must move the spatial index entry')
+const movedAcrossAxes = manager.updateTransform(second.id, { x: -33, y: -65, z: 32 })
+assert.ok(movedAcrossAxes)
+assert.equal(spatialIndex.queryRadius(-33, -65, 32, 0).some(o => o.id === second.id), true,
+  'moving across X, Y, and Z chunk boundaries must update all membership coordinates')
+assert.equal(spatialIndex.queryRadius(96, 70, -96, 0).some(o => o.id === second.id), false,
+  'cross-axis movement must remove stale membership from the previous 3D bucket')
+const restoredAcrossAxes = manager.updateTransform(second.id, { x: 96, y: 70, z: -96 })
+assert.ok(restoredAcrossAxes)
+assert.equal(spatialIndex.queryRadius(96, 70, -96, 0).some(o => o.id === second.id), true,
+  'moving back across all three axes must restore the matching bucket and column membership')
 assert.equal(spatialIndex.queryRadius(secondOriginal.x, secondOriginal.y, secondOriginal.z, 0).some(o => o.id === second.id), false,
   'previous spatial bucket must no longer return the moved object')
 
