@@ -1,4 +1,4 @@
-import type { WorldObject } from './WorldObject'
+import { cloneWorldObject, type WorldObject } from './WorldObject'
 import { chunkKey, worldToChunk } from './WorldCoordinate'
 
 /**
@@ -25,7 +25,9 @@ export class WorldObjectSpatialIndex {
     const nextChunk = this.chunkFor(object.x, object.y, object.z)
     const previousChunk = this.objectChunks.get(object.id)
     if (previousChunk && previousChunk !== nextChunk) {
-      this.buckets.get(previousChunk)?.delete(object.id)
+      const previousBucket = this.buckets.get(previousChunk)
+      previousBucket?.delete(object.id)
+      if (previousBucket?.size === 0) this.buckets.delete(previousChunk)
     }
 
     let bucket = this.buckets.get(nextChunk)
@@ -34,7 +36,7 @@ export class WorldObjectSpatialIndex {
       this.buckets.set(nextChunk, bucket)
     }
     bucket.add(object.id)
-    this.objects.set(object.id, object)
+    this.objects.set(object.id, cloneWorldObject(object))
     this.objectChunks.set(object.id, nextChunk)
   }
 
@@ -67,7 +69,7 @@ export class WorldObjectSpatialIndex {
             const dx = object.x - x
             const dy = object.y - y
             const dz = object.z - z
-            if (dx * dx + dy * dy + dz * dz <= r2) result.push(object)
+            if (dx * dx + dy * dy + dz * dz <= r2) result.push(cloneWorldObject(object))
           }
         }
       }
