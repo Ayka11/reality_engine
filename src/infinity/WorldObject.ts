@@ -20,3 +20,11 @@ export type ObjectPlacement = Omit<WorldObject, 'id'>
 export function objectId(kind: WorldObjectKind, x: number, y: number, z: number): string {
   return kind + ':' + x + ':' + y + ':' + z
 }
+
+/** Return a detached world-object value, including nested metadata. */
+export function cloneWorldObject(object: WorldObject): WorldObject {
+  return {
+    ...object,
+    properties: { ...object.properties },
+  }
+}
