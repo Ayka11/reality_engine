@@ -8,6 +8,7 @@ export type ObjectQuery = {
 }
 
 export type WorldObjectTransform = Partial<Pick<WorldObject, 'x' | 'y' | 'z' | 'rotationY' | 'scale'>>
+export type WorldObjectUpdate = Partial<Pick<WorldObject, 'x' | 'y' | 'z' | 'rotationY' | 'scale' | 'seed' | 'properties'>>
 
 /**
  * Owns authoritative world-object values. Public reads and write results are
@@ -60,15 +61,28 @@ export class WorldObjectManager {
     return object ? cloneWorldObject(object) : undefined
   }
 
-  /** Update coordinates/transform atomically with the spatial index. */
-  updateTransform(id: string, patch: WorldObjectTransform): WorldObject | undefined {
+  /** Update object state atomically with spatial-index membership. */
+  update(id: string, patch: WorldObjectUpdate): WorldObject | undefined {
     const current = this.objects.get(id)
     if (!current) return undefined
-    const next: WorldObject = { ...current, ...patch, properties: { ...current.properties } }
+    if (patch.properties !== undefined &&
+        (!patch.properties || typeof patch.properties !== 'object' || Array.isArray(patch.properties))) {
+      throw new TypeError('World object properties must be a record')
+    }
+    const next: WorldObject = {
+      ...current,
+      ...patch,
+      properties: { ...(patch.properties ?? current.properties) },
+    }
     this.assertValidObject(next)
     this.objects.set(id, next)
     this.spatialIndex?.upsert(next)
     return cloneWorldObject(next)
+  }
+
+  /** Update only transform fields through the same authoritative commit path. */
+  updateTransform(id: string, patch: WorldObjectTransform): WorldObject | undefined {
+    return this.update(id, patch)
   }
 
   clear(): void {
