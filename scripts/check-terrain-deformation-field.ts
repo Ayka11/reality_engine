@@ -10,6 +10,19 @@ assert.ok(terrain.sampleDelta(1, 0) > 0)
 assert.equal(terrain.sampleDelta(2, 0), 0)
 assert.equal(terrain.sampleDelta(0.5, 0), (terrain.sampleDelta(0, 0) + terrain.sampleDelta(1, 0)) / 2)
 
+assert.equal(terrain.hasDeformationsInChunk(0, 0), true)
+assert.equal(terrain.hasDeformationsInChunk(1, 0), false,
+  'chunk-scoped deformation queries must not report unrelated chunks')
+
+const boundaryField = new TerrainDeformationField('boundary-seed')
+boundaryField.applyBrush(-32, 64, 1, 2, 'raise')
+assert.equal(boundaryField.hasDeformationsInChunk(-1, 2), true,
+  'negative chunk coordinates must use floor-based world-to-chunk mapping')
+assert.equal(boundaryField.hasDeformationsInChunk(-2, 2), true,
+  'brush samples crossing a chunk boundary must mark both touched chunks')
+assert.equal(boundaryField.hasDeformationsInChunk(0, 2), false)
+assert.throws(() => boundaryField.hasDeformationsInChunk(0, 0, 0), /positive chunk size/)
+
 const afterRaise = terrain.serialize()
 assert.equal(terrain.undo(), true)
 assert.equal(terrain.size, 0)
