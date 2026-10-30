@@ -41,7 +41,7 @@ const decisionUrl = await moduleUrl('src/infinity/WorldDecisionLayer.ts', [
   [/from ['"]\.\/DecisionRecord['"]/g, 'from "' + decisionRecordUrl + '"'],
 ])
 const { WorldGenerator } = await import(generatorUrl)
-const { GeneratorWorldSurfaceProvider, FlatWorldSurfaceProvider, serializeWorldSurfaceProvider, restoreWorldSurfaceProvider, resolveWorldWaterLevel, isBelowWorldWaterSurface, resolveBridgeDeckHeight } = await import(surfaceUrl)
+const { GeneratorWorldSurfaceProvider, FlatWorldSurfaceProvider, serializeWorldSurfaceProvider, restoreWorldSurfaceProvider, resolveWorldWaterLevel, isBelowWorldWaterSurface, resolveBridgeDeckHeight, validateWorldSurfaceProvider } = await import(surfaceUrl)
 const { FieldSampler } = await import(samplerUrl)
 const { WorldDecisionLayer } = await import(decisionUrl)
 
@@ -88,6 +88,53 @@ assert.equal(flatSurface.id, 'flat-workspace-surface')
 assert.equal(flatSurface.referenceBuildElevation, 3)
 assert.equal(flatSurface.waterLevel, null)
 assert.equal(flatSurface.minimumElevation, undefined, 'flat workspace must remain vertically unbounded for sculpting')
+assert.doesNotThrow(() => validateWorldSurfaceProvider(flatSurface),
+  'the built-in flat provider must satisfy the complete provider contract')
+
+const validSurfaceSample = flatSurface.sampleSurface(0, 0)
+const makeSurfaceProvider = (sample, overrides = {}) => ({
+  id: 'contract-test-surface',
+  version: 'contract-test-v1',
+  seed: 'contract-test-seed',
+  referenceBuildElevation: 0,
+  sampleSurface: () => sample,
+  ...overrides,
+})
+assert.throws(
+  () => validateWorldSurfaceProvider(makeSurfaceProvider({ ...validSurfaceSample, temperature: 1.7 })),
+  /invalid sample/,
+  'surface temperatures outside [0, 1] must be rejected',
+)
+assert.throws(
+  () => validateWorldSurfaceProvider(makeSurfaceProvider({ ...validSurfaceSample, moisture: -0.3 })),
+  /invalid sample/,
+  'surface moisture outside [0, 1] must be rejected',
+)
+assert.throws(
+  () => validateWorldSurfaceProvider(makeSurfaceProvider({ ...validSurfaceSample, biomeId: 999 })),
+  /invalid sample/,
+  'biome identifiers must match the declared biome',
+)
+assert.throws(
+  () => validateWorldSurfaceProvider(makeSurfaceProvider({ ...validSurfaceSample, waterDepth: -1 })),
+  /invalid sample/,
+  'negative water depth must be rejected',
+)
+assert.throws(
+  () => validateWorldSurfaceProvider(makeSurfaceProvider(validSurfaceSample, { minimumElevation: 4 })),
+  /exceeds its declared elevation range/,
+  'samples outside declared vertical bounds must be rejected',
+)
+assert.throws(
+  () => validateWorldSurfaceProvider(makeSurfaceProvider(validSurfaceSample, {
+    sampleSurface: (x, z) => ({
+      ...validSurfaceSample,
+      temperature: x === 0 && z === 0 ? 0.5 : 1.2,
+    }),
+  })),
+  /invalid sample at \(17.25, -23.75\)/,
+  'provider validation must probe multiple separated world coordinates',
+)
 assert.deepEqual(flatSurface.sampleSurface(-12, 19), {
   height: 3, temperature: 0.55, moisture: 0.35, biome: 'plains', biomeId: 2, waterDepth: 0,
 })
@@ -165,7 +212,7 @@ assert.match(surfaceContractSource, /maximumElevation\?: number/)
 assert.match(surfaceContractSource, /waterLevel\?: number \| null/)
 const rendererSource = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8')
 assert.match(rendererSource, /setWorldSurfaceProvider\(provider: WorldSurfaceProvider\)/)
-assert.match(rendererSource, /provider\.sampleSurface\(x, z\)\s*\n\s*if \(!Number\.isFinite\(surface\.height\)\)/)
+assert.match(rendererSource, /validateWorldSurfaceProvider\(provider\)/)
 assert.match(rendererSource, /surfaceProvider\.sampleSurface\(originX \+ x, originZ \+ z\)/)
 assert.equal(rendererSource.includes('this.generator.sampleHeight(x, z)'), false, 'renderer terrain height must use the selected surface provider')
 assert.equal(rendererSource.includes('this.generator.sampleClimate('), false, 'renderer climate and biome must use the selected surface provider')
@@ -179,3 +226,6 @@ console.log('PASS: generator adapter preserves existing terrain/environment samp
 console.log('PASS: authored surface is independent from the scientific generator')
 console.log('PASS: construction scoring and provenance use the selected surface')
 console.log('PASS: seed reset updates both generator-backed surface and authoritative field provider')
+
+console.log('PASS: surface provider rejects invalid climate, hydrology, biome, and elevation samples')
+console.log('PASS: surface provider validation probes multiple separated world coordinates')
