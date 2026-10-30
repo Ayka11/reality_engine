@@ -25,14 +25,6 @@ export class WorldObjectSpatialIndex {
     this.objectChunks.clear()
   }
 
-  private chunkFor(x: number, y: number, z: number): ObjectChunkMembership {
-    const { chunk } = worldToChunk(x, y, z)
-    return {
-      chunkKey: chunkKey(chunk.cx, chunk.cy, chunk.cz),
-      columnKey: `${chunk.cx},${chunk.cz}`,
-    }
-  }
-
   /** Public insertion detaches caller-owned inputs before retaining them. */
   upsert(object: WorldObject) {
     this.upsertSnapshot(cloneWorldObject(object))
@@ -47,9 +39,13 @@ export class WorldObjectSpatialIndex {
   }
 
   private upsertSnapshot(object: WorldObject) {
-    const nextMembership = this.chunkFor(object.x, object.y, object.z)
+    // Avoid allocating worldToChunk's chunk/local objects on this hot write path.
+    const cx = Math.floor(object.x / WORLD_CHUNK_SIZE)
+    const cy = Math.floor(object.y / WORLD_CHUNK_HEIGHT)
+    const cz = Math.floor(object.z / WORLD_CHUNK_SIZE)
+    const nextChunkKey = chunkKey(cx, cy, cz)
     const previousMembership = this.objectChunks.get(object.id)
-    if (!previousMembership || previousMembership.chunkKey !== nextMembership.chunkKey) {
+    if (!previousMembership || previousMembership.chunkKey !== nextChunkKey) {
       if (previousMembership) {
         const previousBucket = this.buckets.get(previousMembership.chunkKey)
         previousBucket?.delete(object.id)
@@ -61,19 +57,20 @@ export class WorldObjectSpatialIndex {
         }
       }
 
-      let bucket = this.buckets.get(nextMembership.chunkKey)
+      const nextColumnKey = `${cx},${cz}`
+      let bucket = this.buckets.get(nextChunkKey)
       if (!bucket) {
         bucket = new Set<string>()
-        this.buckets.set(nextMembership.chunkKey, bucket)
-        let column = this.columns.get(nextMembership.columnKey)
+        this.buckets.set(nextChunkKey, bucket)
+        let column = this.columns.get(nextColumnKey)
         if (!column) {
           column = new Set<string>()
-          this.columns.set(nextMembership.columnKey, column)
+          this.columns.set(nextColumnKey, column)
         }
-        column.add(nextMembership.chunkKey)
+        column.add(nextChunkKey)
       }
       bucket.add(object.id)
-      this.objectChunks.set(object.id, nextMembership)
+      this.objectChunks.set(object.id, { chunkKey: nextChunkKey, columnKey: nextColumnKey })
     }
     this.objects.set(object.id, object)
   }
