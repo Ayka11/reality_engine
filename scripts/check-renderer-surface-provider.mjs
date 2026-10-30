@@ -24,7 +24,7 @@ assert.match(rendererSource, /buildWaterDepthMaskFromHeightField/);
 assert.match(rendererSource, /if\s*\(this\.terrainDeformations\.size\s*>\s*0\)[\s\S]*?sampleHeight:\s*\(x,\s*z\)\s*=>\s*this\.sampleTerrainHeight\(x,\s*z\)/,
   'sculpted terrain must rebuild water depth from the same height sampler used by terrain geometry');
 assert.ok(
-  rendererSource.indexOf('if (this.terrainDeformations.size > 0)') < rendererSource.indexOf('surfaceProvider.getWaterMaskForChunk(chunk)'),
+  rendererSource.indexOf('if (this.terrainDeformations.hasDeformationsInChunk(chunk.cx, chunk.cz, WORLD_CHUNK_SIZE))') < rendererSource.indexOf('surfaceProvider.getWaterMaskForChunk(chunk)'),
   'deformation-aware hydrology must take precedence over the immutable cached provider mask',
 );
 assert.match(rendererSource, /buildWaterSurfaceMeshData\(\{ cx: chunk\.cx, cz: chunk\.cz, water \}, waterLevel\)/)
