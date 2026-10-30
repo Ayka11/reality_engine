@@ -110,7 +110,6 @@ function measure(queryFn, queries) {
   for (const query of queries) {
     const result = queryFn(query)
     checksum += result.length
-    if (result.length > 0) checksum += result[0].id.length
   }
   return { elapsedMs: performance.now() - start, checksum }
 }
