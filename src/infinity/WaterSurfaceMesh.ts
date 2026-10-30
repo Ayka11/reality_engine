@@ -6,6 +6,52 @@ export type WaterMaskChunk = Readonly<{
   water: Float32Array
 }>
 
+
+export type WaterDepthFromHeightFieldOptions = Readonly<{
+  cx: number
+  cz: number
+  seaLevel: number
+  sampleHeight: (x: number, z: number) => number
+}>
+
+/**
+ * Rebuild a sea-plane water mask from the current terrain heightfield.
+ * This is required after sculpting: cached generator masks describe the
+ * unedited baseline and otherwise leave water covering raised land or fail
+ * to flood newly lowered cells.
+ */
+export function buildWaterDepthMaskFromHeightField(
+  options: WaterDepthFromHeightFieldOptions,
+): Float32Array {
+  const { cx, cz, seaLevel, sampleHeight } = options
+  if (!Number.isSafeInteger(cx) || !Number.isSafeInteger(cz) ||
+      !Number.isFinite(seaLevel) || typeof sampleHeight !== 'function') {
+    throw new TypeError('Water depth mask requires safe chunk coordinates, a finite sea level, and a height sampler')
+  }
+
+  const originX = cx * WORLD_CHUNK_SIZE
+  const originZ = cz * WORLD_CHUNK_SIZE
+  if (!Number.isSafeInteger(originX) || !Number.isSafeInteger(originZ)) {
+    throw new RangeError('Water depth mask chunk origin exceeds safe world coordinates')
+  }
+
+  const water = new Float32Array(WORLD_CHUNK_SIZE * WORLD_CHUNK_SIZE)
+  for (let z = 0; z < WORLD_CHUNK_SIZE; z++) {
+    for (let x = 0; x < WORLD_CHUNK_SIZE; x++) {
+      const height = sampleHeight(originX + x, originZ + z)
+      if (!Number.isFinite(height)) {
+        throw new RangeError(`Water depth sampler returned a non-finite height at (${originX + x}, ${originZ + z})`)
+      }
+      const depth = Math.max(0, seaLevel - height)
+      if (!Number.isFinite(depth)) {
+        throw new RangeError('Water depth calculation produced a non-finite value')
+      }
+      water[z * WORLD_CHUNK_SIZE + x] = depth
+    }
+  }
+  return water
+}
+
 export type WaterSurfaceMeshData = {
   positions: Float32Array
   indices: number[]
