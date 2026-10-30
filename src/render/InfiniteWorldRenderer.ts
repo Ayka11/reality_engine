@@ -22,7 +22,7 @@ import type { LegacyVoxelCoordinate } from '../infinity/LegacyScientificFieldBri
 import { runtimeProvenance } from '../infinity/RuntimeProvenance'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { WorldConstructionContract } from '../infinity/WorldConstructionContract'
-import { isBelowWorldWaterSurface, resolveBridgeDeckHeight, resolveWorldWaterLevel, restoreWorldSurfaceProvider, serializeWorldSurfaceProvider, type WorldSurfaceProvider, type WorldSurfaceProviderSnapshot } from '../infinity/WorldSurfaceProvider'
+import { isBelowWorldWaterSurface, resolveBridgeDeckHeight, resolveWorldWaterLevel, restoreWorldSurfaceProvider, serializeWorldSurfaceProvider, validateWorldSurfaceProvider, type WorldSurfaceProvider, type WorldSurfaceProviderSnapshot } from '../infinity/WorldSurfaceProvider'
 import { DecisionGraph } from '../infinity/DecisionGraph'
 import { WorldObjectSpatialIndex } from '../infinity/WorldObjectSpatialIndex'
 import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
@@ -697,23 +697,7 @@ export class InfiniteWorldRenderer {
    * the authoritative scientific-field provider or moving existing objects.
    */
   setWorldSurfaceProvider(provider: WorldSurfaceProvider) {
-    if (!provider || typeof provider.sampleSurface !== 'function' ||
-        typeof provider.id !== 'string' || !provider.id.trim() ||
-        typeof provider.version !== 'string' || !provider.version.trim() ||
-        typeof provider.seed !== 'string' || !provider.seed.trim() ||
-        !Number.isFinite(provider.referenceBuildElevation)) {
-      throw new TypeError('World surface provider requires a non-empty id, version, seed, and sampleSurface()')
-    }
-    const probe = provider.sampleSurface(0, 0)
-    if (!probe || ![probe.height, probe.temperature, probe.moisture, probe.biomeId, probe.waterDepth].every(Number.isFinite) ||
-        typeof probe.biome !== 'string' ||
-        (provider.waterLevel != null && !Number.isFinite(provider.waterLevel)) ||
-        (provider.minimumElevation !== undefined && !Number.isFinite(provider.minimumElevation)) ||
-        (provider.maximumElevation !== undefined && !Number.isFinite(provider.maximumElevation)) ||
-        (provider.minimumElevation !== undefined && provider.maximumElevation !== undefined &&
-          provider.minimumElevation > provider.maximumElevation)) {
-      throw new TypeError('World surface provider returned an invalid sample or vertical range')
-    }
+    validateWorldSurfaceProvider(provider)
 
     this.fieldSampler.setSurfaceProvider(provider)
     worldViewContract.setSeed(provider.seed)
