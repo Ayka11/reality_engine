@@ -97,11 +97,13 @@ const routeDecision = decisionLayer.routeCost(4, 0, 2, 0, 'safe');
 assert.ok(Math.abs(routeDecision.slope - 0.5) < 1e-9,
   'route cost must compare deformed elevations at both route endpoints');
 
-assert.equal(
-  (renderer.match(/\(x, z\) => this\.sampleTerrainHeight\(x, z\)/g) ?? []).length,
-  2,
-  'both initial and rebuilt WorldDecisionLayer instances must receive the renderer terrain sampler',
-);
+const decisionLayerConstructors = renderer.split('new WorldDecisionLayer(').slice(1);
+assert.equal(decisionLayerConstructors.length, 2,
+  'renderer must own exactly one initial and one rebuildable WorldDecisionLayer instance');
+for (const constructorSource of decisionLayerConstructors) {
+  assert.match(constructorSource.slice(0, 500), /\(x, z\) => this\.sampleTerrainHeight\(x, z\)/,
+    'both initial and rebuilt WorldDecisionLayer instances must receive the renderer terrain sampler');
+}
 
 console.log('World decision terrain-overlay regression: PASS');
 
