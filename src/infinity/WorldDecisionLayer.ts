@@ -66,21 +66,65 @@ export class WorldDecisionLayer {
     readonly sampler: FieldSampler,
     readonly weights: DecisionWeights = DEFAULT_DECISION_WEIGHTS,
     readonly lawProvider?: () => { processes?: string[] } | null,
+    private readonly terrainHeight?: (x: number, z: number) => number,
   ) {}
 
   private clamp01(value: number) {
     return Math.max(0, Math.min(1, value))
   }
 
+  private heightAt(x: number, z: number): number {
+    const height = this.terrainHeight
+      ? this.terrainHeight(x, z)
+      : this.sampler.surfaceProvider.sampleSurface(x, z).height
+    if (!Number.isFinite(height)) {
+      throw new RangeError(`World decision terrain sampler returned a non-finite height at (${x}, ${z})`)
+    }
+    return height
+  }
+
+  /**
+   * Build decisions must consume the same edited heightfield as the renderer.
+   * Without an injected terrain sampler, preserve FieldSampler's standalone
+   * behavior for non-renderer consumers and existing analytical tests.
+   */
+  private sampleWorld(x: number, z: number): WorldContextSample {
+    if (!this.terrainHeight) return this.sampler.sampleWorld(x, undefined, z)
+
+    const height = this.heightAt(x, z)
+    const surfaceProvider = this.sampler.surfaceProvider
+    const surface = surfaceProvider.sampleSurface(x, z, height)
+    const field = this.sampler.sample(x, height, z)
+    const waterLevel = surfaceProvider.waterLevel
+    let waterDepth = surface.waterDepth
+    if (waterLevel !== undefined && waterLevel !== null) {
+      if (!Number.isFinite(waterLevel)) {
+        throw new RangeError('World decision surface water level must be finite or null')
+      }
+      waterDepth = Math.max(0, waterLevel - height)
+    }
+    if (!Number.isFinite(waterDepth) || waterDepth < 0) {
+      throw new RangeError(`World decision terrain sampler produced invalid water depth at (${x}, ${z})`)
+    }
+
+    return {
+      x, y: height, z,
+      ...field,
+      height,
+      moisture: surface.moisture,
+      biome: surface.biome,
+      waterDepth,
+    }
+  }
+
   private slopeAt(x: number, z: number, step = 2) {
-    const surface = this.sampler.surfaceProvider
-    const gx = surface.sampleSurface(x + step, z).height - surface.sampleSurface(x - step, z).height
-    const gz = surface.sampleSurface(x, z + step).height - surface.sampleSurface(x, z - step).height
+    const gx = this.heightAt(x + step, z) - this.heightAt(x - step, z)
+    const gz = this.heightAt(x, z + step) - this.heightAt(x, z - step)
     return Math.hypot(gx, gz) / (2 * step)
   }
 
   analyzeBuildability(x: number, z: number): BuildabilityResult {
-    const field = this.sampler.sampleWorld(x, undefined, z)
+    const field = this.sampleWorld(x, z)
     const slope = this.slopeAt(x, z)
 
     const slopeScore = 1 - this.clamp01(slope / 0.45)
@@ -153,7 +197,7 @@ export class WorldDecisionLayer {
 
   routeCost(x: number, z: number, previousX: number, previousZ: number, profile: RouteProfile = 'balanced'): RouteCostResult {
     const current = this.analyzeBuildability(x, z)
-    const previous = this.sampler.sampleWorld(previousX, undefined, previousZ)
+    const previous = this.sampleWorld(previousX, previousZ)
     const distance = Math.max(1, Math.hypot(x - previousX, z - previousZ))
     const slope = Math.abs(current.elevation - previous.height) / distance
     const water = current.waterDepth > 0.25 ? 1 : 0
