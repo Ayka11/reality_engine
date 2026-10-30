@@ -21,13 +21,33 @@ assert.equal(boundaryField.hasDeformationsInChunk(-1, 2), true,
 assert.equal(boundaryField.hasDeformationsInChunk(-2, 2), true,
   'brush samples crossing a chunk boundary must mark both touched chunks')
 assert.equal(boundaryField.hasDeformationsInChunk(0, 2), false)
+assert.equal(boundaryField.undo(), true)
+assert.equal(boundaryField.hasDeformationsInChunk(-1, 2), false,
+  'undo must remove the chunk index entry when its last point disappears')
+assert.equal(boundaryField.hasDeformationsInChunk(-2, 2), false)
+assert.equal(boundaryField.redo(), true)
+assert.equal(boundaryField.hasDeformationsInChunk(-1, 2), true,
+  'redo must recreate chunk index entries after boundary edits')
+assert.equal(boundaryField.hasDeformationsInChunk(-2, 2), true)
+const boundaryRestored = new TerrainDeformationField('boundary-seed')
+boundaryRestored.restore(boundaryField.serialize())
+assert.equal(boundaryRestored.hasDeformationsInChunk(-1, 2), true,
+  'restoring a snapshot must rebuild the chunk occupancy index')
+assert.equal(boundaryRestored.hasDeformationsInChunk(-2, 2), true)
+boundaryRestored.clear()
+assert.equal(boundaryRestored.hasDeformationsInChunk(-1, 2), false,
+  'clear must remove all derived chunk occupancy entries')
 assert.throws(() => boundaryField.hasDeformationsInChunk(0, 0, 0), /positive chunk size/)
 
 const afterRaise = terrain.serialize()
 assert.equal(terrain.undo(), true)
 assert.equal(terrain.size, 0)
+assert.equal(terrain.hasDeformationsInChunk(0, 0), false,
+  'undo must clear chunk occupancy when the final authored point is removed')
 assert.equal(terrain.sampleDelta(0, 0), 0)
 assert.equal(terrain.redo(), true)
+assert.equal(terrain.hasDeformationsInChunk(0, 0), true,
+  'redo must restore chunk occupancy')
 assert.equal(terrain.sampleDelta(0, 0), center)
 assert.deepEqual(terrain.serialize(), afterRaise)
 
