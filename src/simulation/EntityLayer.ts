@@ -703,8 +703,13 @@ export class EntityLayer {
     });
   }
 
+  /**
+   * Detached read view for UI/export consumers. Returning live entity records
+   * would let external code mutate cells, genome, memory and identity state
+   * without passing through EntityLayer's tick/restore ownership boundary.
+   */
   getEntities(): Entity[] {
-    return [...this.entities.values()];
+    return [...this.entities.values()].map(cloneEntity);
   }
 
   clear(): void {
