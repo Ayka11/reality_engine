@@ -153,6 +153,20 @@ assert.equal(manager.query({ minX: Number.NaN }).length, 0,
 assert.equal(manager.query({ minX: 1e308, maxX: 1e308, minZ: 1e308, maxZ: 1e308 }).length, 0,
   'finite but unsafe chunk coordinates must inspect occupied columns instead of incrementing an unrepresentable integer')
 
+// Public index insertion must detach caller-owned inputs even though manager-owned snapshots are shared.
+const externalIndexInput = {
+  id: 'external-index-input', kind: 'rock', x: 12, y: 3, z: 14,
+  rotationY: 0, scale: 1, seed: 0, properties: { source: 'caller' },
+}
+spatialIndex.upsert(externalIndexInput)
+externalIndexInput.x = 1200
+externalIndexInput.properties.source = 'mutated'
+assert.equal(spatialIndex.queryRadius(12, 3, 14, 0).some(object => object.id === externalIndexInput.id), true,
+  'public spatial-index insertion must detach mutable caller-owned input')
+assert.equal(spatialIndex.queryRadius(1200, 3, 14, 0).some(object => object.id === externalIndexInput.id), false,
+  'mutating a value passed to public upsert must not mutate the retained index snapshot')
+spatialIndex.remove(externalIndexInput.id)
+
 // Direct spatial-index reads must also be detached.
 const indexedRead = spatialIndex.queryRadius(96, 71, -96, 0)[0]
 assert.ok(indexedRead)
@@ -179,6 +193,10 @@ assert.match(rendererSource, /readonly objects = new WorldObjectManager\(this\.o
   'renderer-owned object manager must update its spatial index as one transaction')
 assert.match(managerSource, /this\.spatialIndex\.queryBounds\(query\)/,
   'manager AABB queries must use the shared spatial index instead of scanning all objects')
+assert.match(managerSource, /this\.spatialIndex\?\.upsertManagedSnapshot\(object\)/,
+  'manager add must share its private authoritative snapshot with the index without cloning it again')
+assert.match(managerSource, /this\.spatialIndex\?\.upsertManagedSnapshot\(next\)/,
+  'manager update must share its private authoritative snapshot with the index without cloning it again')
 
 assert.doesNotMatch(rendererSource, /this\.objectSpatialIndex\.(?:upsert|remove|clear)\s*\(/,
   'renderer must not mutate spatial-index membership outside the manager-owned transaction path')

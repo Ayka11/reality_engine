@@ -45,7 +45,7 @@ export class WorldObjectManager {
     const object = cloneWorldObject({ ...placement, id } as WorldObject)
     this.assertValidObject(object)
     this.objects.set(id, object)
-    this.spatialIndex?.upsert(object)
+    this.spatialIndex?.upsertManagedSnapshot(object)
     return cloneWorldObject(object)
   }
 
@@ -76,7 +76,7 @@ export class WorldObjectManager {
     }
     this.assertValidObject(next)
     this.objects.set(id, next)
-    this.spatialIndex?.upsert(next)
+    this.spatialIndex?.upsertManagedSnapshot(next)
     return cloneWorldObject(next)
   }
 

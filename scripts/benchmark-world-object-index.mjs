@@ -111,6 +111,18 @@ function buildDataset(count, seed) {
   return placements
 }
 
+function measureTransformUpdates(manager, placements, offset) {
+  const start = performance.now()
+  for (const placement of placements) {
+    const updated = manager.updateTransform(placement.id, {
+      x: placement.x + offset,
+      z: placement.z - offset,
+    })
+    assert.ok(updated, `transform update must find ${placement.id}`)
+  }
+  return performance.now() - start
+}
+
 function measure(queryFn, queries) {
   let checksum = 0
   const start = performance.now()
@@ -185,11 +197,46 @@ for (const [datasetIndex, count] of SIZES.entries()) {
 
   const indexedMedianMs = median(indexedSamples)
   const linearMedianMs = median(linearSamples)
+  const updateBaselineManager = new WorldObjectManager()
+  for (const placement of placements) updateBaselineManager.add(placement)
+  const indexedUpdateSamples = []
+  const linearUpdateSamples = []
+  const UPDATE_SAMPLE_COUNT = 5
+  for (let sample = 0; sample < UPDATE_SAMPLE_COUNT; sample++) {
+    const indexedFirst = sample % 2 === 0
+    const offset = sample % 2 === 0 ? 37 : -53
+    let indexedElapsed
+    let linearElapsed
+    if (indexedFirst) {
+      indexedElapsed = measureTransformUpdates(manager, placements, offset)
+      linearElapsed = measureTransformUpdates(updateBaselineManager, placements, offset)
+    } else {
+      linearElapsed = measureTransformUpdates(updateBaselineManager, placements, offset)
+      indexedElapsed = measureTransformUpdates(manager, placements, offset)
+    }
+    indexedUpdateSamples.push(indexedElapsed)
+    linearUpdateSamples.push(linearElapsed)
+  }
+  const finalOffset = (UPDATE_SAMPLE_COUNT - 1) % 2 === 0 ? 37 : -53
+  for (const placement of placements.filter((_, index) => index < 8)) {
+    assert.equal(manager.get(placement.id)?.x, placement.x + finalOffset)
+    assert.equal(updateBaselineManager.get(placement.id)?.x, placement.x + finalOffset)
+  }
+  const finalQuery = makeQuery(finalOffset, -finalOffset)
+  assert.deepEqual(
+    sortedIds(manager.query(finalQuery)),
+    sortedIds(updateBaselineManager.query(finalQuery)),
+    'indexed and unindexed manager results must remain equivalent after mass cross-chunk transforms',
+  )
+
   const indexedBuildMedianMs = median(indexedBuildSamples)
   const linearBuildMedianMs = median(linearBuildSamples)
+  const indexedUpdateMedianMs = median(indexedUpdateSamples)
+  const linearUpdateMedianMs = median(linearUpdateSamples)
   const report = {
     objects: count,
     queriesPerSample: queries.length,
+    transformUpdatesPerSample: count,
     returnedPerQuery: queries.map(query => manager.query(query).length),
     indexedMedianMs: Number(indexedMedianMs.toFixed(3)),
     linearMedianMs: Number(linearMedianMs.toFixed(3)),
@@ -197,6 +244,9 @@ for (const [datasetIndex, count] of SIZES.entries()) {
     indexedBuildMedianMs: Number(indexedBuildMedianMs.toFixed(3)),
     linearBuildMedianMs: Number(linearBuildMedianMs.toFixed(3)),
     writeOverheadPercent: Number(((indexedBuildMedianMs / Math.max(linearBuildMedianMs, 0.000001) - 1) * 100).toFixed(1)),
+    indexedUpdateMedianMs: Number(indexedUpdateMedianMs.toFixed(3)),
+    linearUpdateMedianMs: Number(linearUpdateMedianMs.toFixed(3)),
+    updateOverheadPercent: Number(((indexedUpdateMedianMs / Math.max(linearUpdateMedianMs, 0.000001) - 1) * 100).toFixed(1)),
   }
   reports.push(report)
 }

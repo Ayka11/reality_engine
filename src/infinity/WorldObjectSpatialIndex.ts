@@ -28,7 +28,20 @@ export class WorldObjectSpatialIndex {
     return chunkKey(chunk.cx, chunk.cy, chunk.cz)
   }
 
+  /** Public insertion detaches caller-owned inputs before retaining them. */
   upsert(object: WorldObject) {
+    this.upsertSnapshot(cloneWorldObject(object))
+  }
+
+  /**
+   * Internal ownership-transfer path for WorldObjectManager. The manager never
+   * mutates authoritative snapshots in place and never exposes them to callers.
+   */
+  upsertManagedSnapshot(object: WorldObject) {
+    this.upsertSnapshot(object)
+  }
+
+  private upsertSnapshot(object: WorldObject) {
     const nextChunk = this.chunkFor(object.x, object.y, object.z)
     const previousChunk = this.objectChunks.get(object.id)
     if (previousChunk && previousChunk !== nextChunk) {
@@ -58,7 +71,7 @@ export class WorldObjectSpatialIndex {
       column.add(nextChunk)
     }
     bucket.add(object.id)
-    this.objects.set(object.id, cloneWorldObject(object))
+    this.objects.set(object.id, object)
     this.objectChunks.set(object.id, nextChunk)
   }
 
