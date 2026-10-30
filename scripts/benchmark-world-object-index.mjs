@@ -130,18 +130,20 @@ for (const [datasetIndex, count] of SIZES.entries()) {
   let manager
   for (let sample = 0; sample < 3; sample++) {
     const indexedFirst = sample % 2 === 0
-    const indexedBuild = measureBuild(placements, true)
-    const linearBuild = measureBuild(placements, false)
+    let indexedBuild
+    let linearBuild
+    if (indexedFirst) {
+      indexedBuild = measureBuild(placements, true)
+      linearBuild = measureBuild(placements, false)
+    } else {
+      linearBuild = measureBuild(placements, false)
+      indexedBuild = measureBuild(placements, true)
+    }
     indexedBuildSamples.push(indexedBuild.elapsedMs)
     linearBuildSamples.push(linearBuild.elapsedMs)
     if (sample === 2) manager = indexedBuild.manager
     else indexedBuild.manager.clear()
     linearBuild.manager.clear()
-    // Alternate the conceptual first-measured path to reduce fixed order bias.
-    if (!indexedFirst) {
-      indexedBuildSamples[indexedBuildSamples.length - 1] = indexedBuild.elapsedMs
-      linearBuildSamples[linearBuildSamples.length - 1] = linearBuild.elapsedMs
-    }
   }
   const queries = QUERY_CENTERS.map(([x, z]) => makeQuery(x, z))
 
