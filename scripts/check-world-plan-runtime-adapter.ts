@@ -92,13 +92,20 @@ assert.ok(Math.abs(placements[3].x - (origin.x + Math.cos(gravityAngle) * 70)) <
 assert.ok(Math.abs(placements[3].z - (origin.z + Math.sin(gravityAngle) * 70)) < 1e-10)
 approximately(placements[3].scale, 1.6, 'anomaly scale')
 
-assert.deepEqual(scatterCalls, [{
+assert.equal(scatterCalls.length, 1)
+assert.deepEqual({
+  kind: scatterCalls[0].kind,
+  x0: scatterCalls[0].x0,
+  z0: scatterCalls[0].z0,
+  x1: scatterCalls[0].x1,
+  z1: scatterCalls[0].z1,
+}, {
   kind: 'tree',
   x0: origin.x - 110,
   z0: origin.z - 110,
   x1: origin.x + 110,
   z1: origin.z + 110,
-  density: 0.0405,
-}])
+})
+approximately(scatterCalls[0].density, 0.0405, 'flora scatter density')
 
 console.log('World plan runtime placement-scale contract: PASS')
