@@ -579,13 +579,11 @@ export class InfiniteWorldRenderer {
       }
     }
     this.objects.clear()
-    this.objectSpatialIndex.clear()
     let count = 0
     for (const key of this.persistence.knownChunks({ recoverOrphans: true })) {
       const [cx, cy, cz] = key.split(',').map(Number)
       for (const object of this.persistence.loadChunk(cx, cy, cz)) {
         this.objects.add(object)
-        this.objectSpatialIndex.upsert(object)
         count++
       }
     }
@@ -605,7 +603,6 @@ export class InfiniteWorldRenderer {
     this.terrainDeformations.clear()
     this.refreshTerrainPatches()
     this.objects.clear()
-    this.objectSpatialIndex.clear()
     this.syncObjects()
     this.selectedObjectId = null
     this.transformControls.detach()
@@ -1625,7 +1622,6 @@ export class InfiniteWorldRenderer {
         for (const object of objects) {
           if (!this.objects.get(object.id)) {
             this.objects.add(object)
-            this.objectSpatialIndex.upsert(object)
           }
         }
       }
@@ -2117,17 +2113,15 @@ export class InfiniteWorldRenderer {
 
   private applyHistoryEdit(edit: WorldEdit, reverse: boolean) {
     if (edit.type === 'add') {
-      if (reverse) { this.objects.remove(edit.object.id); this.objectSpatialIndex.remove(edit.object.id) }
-      else { this.objects.add(edit.object); this.objectSpatialIndex.upsert(edit.object) }
+      if (reverse) this.objects.remove(edit.object.id)
+      else this.objects.add(edit.object)
     } else if (edit.type === 'remove') {
-      if (reverse) { this.objects.add(edit.object); this.objectSpatialIndex.upsert(edit.object) }
-      else { this.objects.remove(edit.object.id); this.objectSpatialIndex.remove(edit.object.id) }
+      if (reverse) this.objects.add(edit.object)
+      else this.objects.remove(edit.object.id)
     } else {
       const object = reverse ? edit.before : edit.after
       this.objects.remove(object.id)
-      this.objectSpatialIndex.remove(object.id)
       this.objects.add(object)
-      this.objectSpatialIndex.upsert(object)
     }
     this.syncObjects()
     this.scheduleSave()
@@ -2242,7 +2236,6 @@ export class InfiniteWorldRenderer {
     const object = this.objects.get(id)
     if (object) {
       this.objects.remove(id)
-      this.objectSpatialIndex.remove(id)
       this.history.push({ type: 'remove', object: { ...object } })
     }
     const entry = this.objectMeshes.get(id)
@@ -2336,7 +2329,6 @@ export class InfiniteWorldRenderer {
         activeLawProcesses: lawGate.decision?.laws.activeProcesses.join(',') ?? '',
       },
     })
-    this.objectSpatialIndex.upsert(object)
     this.history.push({ type: 'add', object: { ...object } })
     this.syncObjects()
     this.scheduleSave()
@@ -2351,7 +2343,6 @@ export class InfiniteWorldRenderer {
     })
     for (const object of removed) {
       this.objects.remove(object.id)
-      this.objectSpatialIndex.remove(object.id)
       this.history.push({ type: 'remove', object: { ...object } })
     }
     this.syncObjects()
@@ -2470,7 +2461,6 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(object)
-      this.objectSpatialIndex.upsert(object)
       this.history.push({ type: 'add', object: { ...object } })
     }
     this.syncObjects()
@@ -2506,7 +2496,6 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(object)
-      this.objectSpatialIndex.upsert(object)
       this.history.push({ type: 'add', object: { ...object } })
     }
     this.syncObjects()
@@ -2769,7 +2758,6 @@ export class InfiniteWorldRenderer {
         }))
         if (!water) continue
         created.push(water)
-        this.objectSpatialIndex.upsert(water)
         this.history.push({ type: 'add', object: { ...water } })
       }
     }
@@ -2853,7 +2841,6 @@ export class InfiniteWorldRenderer {
       properties: { city: 'hub', role: 'civic' },
     })
     created.push(hubObject)
-    this.objectSpatialIndex.upsert(hubObject)
     this.history.push({ type: 'add', object: { ...hubObject } })
     for (let i = 0; i < plan.districts.length; i++) {
       const d = plan.districts[i]
@@ -2883,7 +2870,6 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(object)
-    this.objectSpatialIndex.upsert(object)
         this.history.push({ type: 'add', object: { ...object } })
       }
       const count = d.role === 'civic' ? 3 : 5
@@ -2913,7 +2899,6 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(building)
-    this.objectSpatialIndex.upsert(building)
         this.history.push({ type: 'add', object: { ...building } })
       }
     }
@@ -2935,7 +2920,6 @@ export class InfiniteWorldRenderer {
       properties: { settlement: 'hub', seed },
     })
     created.push(hub)
-    this.objectSpatialIndex.upsert(hub)
     this.history.push({ type: 'add', object: { ...hub } })
 
     for (let i = 0; i < blockCount; i++) {
@@ -2969,7 +2953,6 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(object)
-    this.objectSpatialIndex.upsert(object)
         this.history.push({ type: 'add', object: { ...object } })
       }
 
@@ -3001,7 +2984,6 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(building)
-    this.objectSpatialIndex.upsert(building)
         this.history.push({ type: 'add', object: { ...building } })
       }
     }
@@ -3038,7 +3020,6 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(building)
-    this.objectSpatialIndex.upsert(building)
       this.history.push({ type: 'add', object: { ...building } })
     }
     if (created.length > 1) {
@@ -3072,7 +3053,6 @@ export class InfiniteWorldRenderer {
         },
       })
       if (!updated) continue
-      this.objectSpatialIndex.upsert(updated)
       this.history.push({ type: 'add', object: updated })
       created.push(updated)
     }

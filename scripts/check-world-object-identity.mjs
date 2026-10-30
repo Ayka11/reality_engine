@@ -137,6 +137,9 @@ assert.equal(spatialIndex.size, 0, 'manager clear must clear spatial-index membe
 const rendererSource = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8')
 assert.match(rendererSource, /readonly objects = new WorldObjectManager\(this\.objectSpatialIndex\)/,
   'renderer-owned object manager must update its spatial index as one transaction')
+
+assert.doesNotMatch(rendererSource, /this\.objectSpatialIndex\.(?:upsert|remove|clear)\s*\(/,
+  'renderer must not mutate spatial-index membership outside the manager-owned transaction path')
 assert.match(rendererSource, /this\.objects\.updateTransform\(this\.selectedObjectId,\s*\{/,
   'gizmo transforms must commit through the object manager')
 assert.match(rendererSource, /const object = this\.objects\.updateTransform\(this\.selectedObjectId, patch\)/,
