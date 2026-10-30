@@ -118,7 +118,9 @@ assert.equal(manager.get(second.id)?.x, 96)
 assert.equal(spatialIndex.queryRadius(96, 70, -96, 0).some(o => o.id === second.id), true)
 
 assert.equal(manager.remove(second.id), true)
-assert.equal(spatialIndex.size, 0, 'manager removal must clear spatial-index membership')
+assert.equal(spatialIndex.size, 1, 'manager removal must clear only the removed object index entry')
+assert.equal(spatialIndex.queryRadius(40, 7, -20, 0).some(o => o.id === first.id), true,
+  'unrelated object index entries must survive removal')
 manager.clear()
 assert.equal(spatialIndex.size, 0, 'manager clear must clear spatial-index membership')
 console.log('World object identity, detached reads, and spatial-index ownership regression: PASS')
