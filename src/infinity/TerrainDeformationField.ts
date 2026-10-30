@@ -1,3 +1,5 @@
+import { WORLD_CHUNK_SIZE } from './WorldCoordinate'
+
 export type TerrainBrushMode = 'raise' | 'lower'
 
 export type TerrainDeformationSnapshot = {
@@ -30,6 +32,8 @@ function parseKey(key: string): { x: number; z: number } | null {
  */
 export class TerrainDeformationField {
   private deltas = new Map<string, number>()
+  /** O(1) occupancy index for world-sized chunks used by terrain mesh rebuilds. */
+  private chunkDeformationCounts = new Map<string, number>()
   private undoStack: TerrainTransaction[] = []
   private redoStack: TerrainTransaction[] = []
 
@@ -74,8 +78,7 @@ export class TerrainDeformationField {
         const falloff = 1 - distance / radius
         const next = (this.deltas.get(key) ?? 0) + sign * strength * falloff * falloff
         if (!Number.isFinite(next)) throw new Error('Terrain brush produced a non-finite height delta')
-        if (Math.abs(next) < 1e-6) this.deltas.delete(key)
-        else this.deltas.set(key, next)
+        this.setDelta(key, Math.abs(next) < 1e-6 ? undefined : next)
         changed++
       }
     }
@@ -126,6 +129,9 @@ export class TerrainDeformationField {
         !Number.isSafeInteger(originZ + chunkSize - 1)) {
       throw new RangeError('Terrain deformation chunk query exceeds safe world coordinates')
     }
+    if (chunkSize === WORLD_CHUNK_SIZE) {
+      return this.chunkDeformationCounts.has(keyOf(cx, cz))
+    }
     for (const key of this.deltas.keys()) {
       const point = parseKey(key)
       if (!point) continue
@@ -162,13 +168,24 @@ export class TerrainDeformationField {
       seenKeys.add(entry[0])
       if (Math.abs(entry[1]) >= 1e-6) next.set(entry[0], entry[1])
     }
+    const nextChunkCounts = new Map<string, number>()
+    for (const key of next.keys()) {
+      const point = parseKey(key)!
+      const chunkKey = keyOf(
+        Math.floor(point.x / WORLD_CHUNK_SIZE),
+        Math.floor(point.z / WORLD_CHUNK_SIZE),
+      )
+      nextChunkCounts.set(chunkKey, (nextChunkCounts.get(chunkKey) ?? 0) + 1)
+    }
     this.deltas = next
+    this.chunkDeformationCounts = nextChunkCounts
     this.undoStack = []
     this.redoStack = []
   }
 
   clear(): void {
     this.deltas.clear()
+    this.chunkDeformationCounts.clear()
     this.undoStack = []
     this.redoStack = []
   }
@@ -184,10 +201,27 @@ export class TerrainDeformationField {
     return true
   }
 
-  private applyPatch(patch: Map<string, number | undefined>): void {
-    for (const [key, value] of patch) {
-      if (value === undefined) this.deltas.delete(key)
-      else this.deltas.set(key, value)
+  private setDelta(key: string, value: number | undefined): void {
+    const previous = this.deltas.get(key)
+    if (previous === value || (previous === undefined && value === undefined)) return
+    const point = parseKey(key)
+    if (!point) throw new TypeError('Terrain deformation delta key is invalid')
+    const chunkKey = keyOf(
+      Math.floor(point.x / WORLD_CHUNK_SIZE),
+      Math.floor(point.z / WORLD_CHUNK_SIZE),
+    )
+    if (previous === undefined && value !== undefined) {
+      this.chunkDeformationCounts.set(chunkKey, (this.chunkDeformationCounts.get(chunkKey) ?? 0) + 1)
+    } else if (previous !== undefined && value === undefined) {
+      const count = this.chunkDeformationCounts.get(chunkKey) ?? 0
+      if (count <= 1) this.chunkDeformationCounts.delete(chunkKey)
+      else this.chunkDeformationCounts.set(chunkKey, count - 1)
     }
+    if (value === undefined) this.deltas.delete(key)
+    else this.deltas.set(key, value)
+  }
+
+  private applyPatch(patch: Map<string, number | undefined>): void {
+    for (const [key, value] of patch) this.setDelta(key, value)
   }
 }
