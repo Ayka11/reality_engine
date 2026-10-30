@@ -22,7 +22,7 @@ import type { LegacyVoxelCoordinate } from '../infinity/LegacyScientificFieldBri
 import { runtimeProvenance } from '../infinity/RuntimeProvenance'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { WorldConstructionContract } from '../infinity/WorldConstructionContract'
-import { isBelowWorldWaterSurface, resolveBridgeDeckHeight, resolveWorldWaterLevel, restoreWorldSurfaceProvider, serializeWorldSurfaceProvider, validateWorldSurfaceProvider, type WorldSurfaceProvider, type WorldSurfaceProviderSnapshot } from '../infinity/WorldSurfaceProvider'
+import { isBelowWorldWaterSurface, resolveBridgeDeckHeight, resolveWorldWaterLevel, restoreWorldSurfaceProvider, serializeWorldSurfaceProvider, type WorldSurfaceProvider, type WorldSurfaceProviderSnapshot } from '../infinity/WorldSurfaceProvider'
 import { DecisionGraph } from '../infinity/DecisionGraph'
 import { WorldObjectSpatialIndex } from '../infinity/WorldObjectSpatialIndex'
 import { FieldModulatedPhysics } from '../infinity/FieldModulatedPhysics'
@@ -697,8 +697,6 @@ export class InfiniteWorldRenderer {
    * the authoritative scientific-field provider or moving existing objects.
    */
   setWorldSurfaceProvider(provider: WorldSurfaceProvider) {
-    validateWorldSurfaceProvider(provider)
-
     this.fieldSampler.setSurfaceProvider(provider)
     worldViewContract.setSeed(provider.seed)
     this.rebuildDecisionLayer()
