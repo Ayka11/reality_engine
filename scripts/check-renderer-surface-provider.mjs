@@ -20,6 +20,13 @@ assert.match(rendererSource, /const surface = provider\.sampleSurface\(x, z\)/)
 assert.match(rendererSource, /const biome = this\.fieldSampler\.surfaceProvider\.sampleSurface\(originX \+ gx, originZ \+ gz, h\)\.biome/)
 assert.match(rendererSource, /const waterLevel = this\.getWorldWaterLevel\(\)/)
 assert.match(rendererSource, /surfaceProvider\.getWaterMaskForChunk\(chunk\)/)
+assert.match(rendererSource, /buildWaterDepthMaskFromHeightField/);
+assert.match(rendererSource, /if\s*\(this\.terrainDeformations\.size\s*>\s*0\)[\s\S]*?sampleHeight:\s*\(x,\s*z\)\s*=>\s*this\.sampleTerrainHeight\(x,\s*z\)/,
+  'sculpted terrain must rebuild water depth from the same height sampler used by terrain geometry');
+assert.ok(
+  rendererSource.indexOf('if (this.terrainDeformations.size > 0)') < rendererSource.indexOf('surfaceProvider.getWaterMaskForChunk(chunk)'),
+  'deformation-aware hydrology must take precedence over the immutable cached provider mask',
+);
 assert.match(rendererSource, /buildWaterSurfaceMeshData\(\{ cx: chunk\.cx, cz: chunk\.cz, water \}, waterLevel\)/)
 assert.match(rendererSource, /const deformedHeight = surface\.height \+ this\.terrainDeformations\.sampleDelta\(x, z\)/)
 assert.equal(rendererSource.includes('this.generator.seaLevel'), false,
