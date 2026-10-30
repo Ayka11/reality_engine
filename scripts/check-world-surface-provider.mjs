@@ -106,6 +106,18 @@ assert.throws(
   'surface temperatures outside [0, 1] must be rejected',
 )
 assert.throws(
+  () => sampler.setSurfaceProvider(makeSurfaceProvider({ ...validSurfaceSample, temperature: 1.7 })),
+  /invalid sample/,
+  'FieldSampler must reject invalid providers before changing the active surface',
+)
+assert.equal(sampler.surfaceProvider.id, 'world-generator-surface',
+  'rejected surface providers must leave the previous active surface unchanged')
+assert.throws(
+  () => new FieldSampler(generator, undefined, makeSurfaceProvider({ ...validSurfaceSample, moisture: -0.3 })),
+  /invalid sample/,
+  'FieldSampler construction must enforce the same surface contract as later provider switches',
+)
+assert.throws(
   () => validateWorldSurfaceProvider(makeSurfaceProvider({ ...validSurfaceSample, moisture: -0.3 })),
   /invalid sample/,
   'surface moisture outside [0, 1] must be rejected',
@@ -212,7 +224,9 @@ assert.match(surfaceContractSource, /maximumElevation\?: number/)
 assert.match(surfaceContractSource, /waterLevel\?: number \| null/)
 const rendererSource = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8')
 assert.match(rendererSource, /setWorldSurfaceProvider\(provider: WorldSurfaceProvider\)/)
-assert.match(rendererSource, /validateWorldSurfaceProvider\(provider\)/)
+const samplerContractSource = await readFile(new URL('src/infinity/FieldSampler.ts', root), 'utf8')
+assert.match(samplerContractSource, /validateWorldSurfaceProvider\(this\.worldSurface\)/)
+assert.match(samplerContractSource, /setSurfaceProvider\(provider: WorldSurfaceProvider\)\s*\{\s*validateWorldSurfaceProvider\(provider\)/)
 assert.match(rendererSource, /surfaceProvider\.sampleSurface\(originX \+ x, originZ \+ z\)/)
 assert.equal(rendererSource.includes('this.generator.sampleHeight(x, z)'), false, 'renderer terrain height must use the selected surface provider')
 assert.equal(rendererSource.includes('this.generator.sampleClimate('), false, 'renderer climate and biome must use the selected surface provider')
@@ -229,3 +243,4 @@ console.log('PASS: seed reset updates both generator-backed surface and authorit
 
 console.log('PASS: surface provider rejects invalid climate, hydrology, biome, and elevation samples')
 console.log('PASS: surface provider validation probes multiple separated world coordinates')
+console.log('PASS: FieldSampler enforces validation during construction and provider replacement')
