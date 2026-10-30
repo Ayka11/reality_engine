@@ -1,5 +1,5 @@
 import { WorldGenerator, type Biome } from './WorldGenerator'
-import { GeneratorWorldSurfaceProvider, type WorldSurfaceProvider } from './WorldSurfaceProvider'
+import { GeneratorWorldSurfaceProvider, validateWorldSurfaceProvider, type WorldSurfaceProvider } from './WorldSurfaceProvider'
 import type { ScientificFieldProvider } from './ScientificFieldProvider'
 import { GeneratorFieldProvider } from './ScientificFieldProvider'
 import { ScientificFieldRegistry } from './ScientificFieldRegistry'
@@ -42,6 +42,7 @@ export class FieldSampler {
   ) {
     this.provider = provider ?? new GeneratorFieldProvider(generator)
     this.worldSurface = surfaceProvider ?? new GeneratorWorldSurfaceProvider(generator)
+    validateWorldSurfaceProvider(this.worldSurface)
     this.followsGeneratorSurface = surfaceProvider === undefined
     this.registry = new ScientificFieldRegistry()
     this.registry.register(this.provider, true)
@@ -54,6 +55,7 @@ export class FieldSampler {
 
   /** Switch the spatial surface without replacing the active scientific field provider. */
   setSurfaceProvider(provider: WorldSurfaceProvider) {
+    validateWorldSurfaceProvider(provider)
     this.worldSurface = provider
     this.followsGeneratorSurface = false
   }
