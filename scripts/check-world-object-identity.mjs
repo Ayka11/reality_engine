@@ -119,8 +119,18 @@ assert.equal(spatialIndex.queryRadius(96, 70, -96, 0).some(o => o.id === second.
 
 assert.equal(manager.remove(second.id), true)
 assert.equal(spatialIndex.size, 1, 'manager removal must clear only the removed object index entry')
-assert.equal(spatialIndex.queryRadius(40, 7, -20, 0).some(o => o.id === first.id), true,
+assert.equal(spatialIndex.queryRadius(4, 2, -8, 0).some(o => o.id === first.id), true,
   'unrelated object index entries must survive removal')
 manager.clear()
 assert.equal(spatialIndex.size, 0, 'manager clear must clear spatial-index membership')
+const rendererSource = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8')
+assert.match(rendererSource, /readonly objects = new WorldObjectManager\(this\.objectSpatialIndex\)/,
+  'renderer-owned object manager must update its spatial index as one transaction')
+assert.match(rendererSource, /this\.objects\.updateTransform\(this\.selectedObjectId,\s*\{/,
+  'gizmo transforms must commit through the object manager')
+assert.match(rendererSource, /const object = this\.objects\.updateTransform\(this\.selectedObjectId, patch\)/,
+  'programmatic object transforms must commit through the object manager')
+assert.doesNotMatch(rendererSource, /object\.x\s*=\s*entry\.group\.position/,
+  'gizmo updates must not mutate detached manager read snapshots')
+
 console.log('World object identity, detached reads, and spatial-index ownership regression: PASS')
