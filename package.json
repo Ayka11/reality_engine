@@ -28,6 +28,7 @@
     "test:construction": "node scripts/check-world-construction-contract.mjs",
     "test:world-object-identity": "node scripts/check-world-object-identity.mjs",
     "test:world-placement-api": "node scripts/check-world-placement-api.mjs",
+    "test:world-plan-runtime-adapter": "npx --yes tsx scripts/check-world-plan-runtime-adapter.ts",
     "test:world-surface-provider": "node scripts/check-world-surface-provider.mjs",
     "test:renderer-surface-provider": "node scripts/check-renderer-surface-provider.mjs",
     "test:world-seed-provenance": "node scripts/check-world-seed-provenance.mjs",

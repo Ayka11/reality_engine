@@ -65,6 +65,7 @@ jobs:
       - run: npm run test:construction
       - run: npm run test:world-object-identity
       - run: npm run test:world-placement-api
+      - run: npm run test:world-plan-runtime-adapter
       - run: npm run test:world-surface-provider
       - run: npm run test:renderer-surface-provider
       - run: npm run test:world-seed-provenance

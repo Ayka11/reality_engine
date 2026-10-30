@@ -4,7 +4,7 @@ import type { WorldObjectKind } from '../infinity/WorldObject';
 
 type WorldRuntime = {
   scatter: (kind: WorldObjectKind, x0: number, z0: number, x1: number, z1: number, density?: number) => unknown;
-  place: (kind: WorldObjectKind, x: number, z: number, scale?: number) => unknown;
+  placeScaled: (kind: WorldObjectKind, x: number, z: number, scale?: number) => unknown;
   generateRiverNetwork: (x: number, z: number, radius?: number, samples?: number) => unknown;
   generateSettlementV2: (x: number, z: number, radius?: number, blocks?: number) => unknown;
   generateCityPlan: (x: number, z: number, radius?: number, samples?: number) => unknown;
@@ -51,7 +51,7 @@ export function applyWorldGenerationPlan(
       // The interactive composer must stay responsive. Materialize the
       // semantic river as a lightweight water landmark here; full hydrology
       // remains available as an explicit World Tool.
-      world.place('water', x + 42, z - 18, scale);
+      world.placeScaled('water', x + 42, z - 18, scale);
       riverGenerated = true;
       applied.push(entry.id);
       continue;
@@ -70,7 +70,7 @@ export function applyWorldGenerationPlan(
         entry.id === 'settlement.city' || entry.id === 'settlement.megacity'
           ? 'building'
           : 'landmark';
-      world.place(semanticKind, x - 38, z + 24, scale);
+      world.placeScaled(semanticKind, x - 38, z + 24, scale);
       settlementGenerated = true;
       applied.push(entry.id);
       continue;
@@ -78,7 +78,7 @@ export function applyWorldGenerationPlan(
 
     if (visual === 'building' || visual === 'landmark' || visual === 'road' || visual === 'bridge') {
       const angle = (applied.length * 2.399963) % (Math.PI * 2);
-      world.place(visual, x + Math.cos(angle) * 55, z + Math.sin(angle) * 55, scale);
+      world.placeScaled(visual, x + Math.cos(angle) * 55, z + Math.sin(angle) * 55, scale);
       applied.push(entry.id);
       continue;
     }
@@ -91,7 +91,7 @@ export function applyWorldGenerationPlan(
       visual === 'metalaw'
     ) {
       const angle = (applied.length * 2.399963) % (Math.PI * 2);
-      world.place(visual, x + Math.cos(angle) * 70, z + Math.sin(angle) * 70, scale);
+      world.placeScaled(visual, x + Math.cos(angle) * 70, z + Math.sin(angle) * 70, scale);
       applied.push(entry.id);
       continue;
     }
