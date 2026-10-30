@@ -37,6 +37,13 @@ const { WorldObjectManager } = await import(
   `data:text/javascript;base64,${Buffer.from(managerJs).toString('base64')}`
 )
 
+function measureBuild(placements, withSpatialIndex) {
+  const manager = new WorldObjectManager(withSpatialIndex ? new WorldObjectSpatialIndex() : undefined)
+  const start = performance.now()
+  for (const placement of placements) manager.add(placement)
+  return { manager, elapsedMs: performance.now() - start }
+}
+
 const SIZES = [10_000, 50_000, 100_000]
 const WORLD_HALF_EXTENT = 8192
 const VIEW_HALF_EXTENT = 96
@@ -117,9 +124,25 @@ function measure(queryFn, queries) {
 const reports = []
 for (const [datasetIndex, count] of SIZES.entries()) {
   const placements = buildDataset(count, 0x51a7 + datasetIndex)
-  const manager = new WorldObjectManager(new WorldObjectSpatialIndex())
-  // Build through the public manager API so its index is populated exactly as in runtime.
-  for (const placement of placements) manager.add(placement)
+  // Measure write-side cost separately, using the same placement objects and manager API.
+  const indexedBuildSamples = []
+  const linearBuildSamples = []
+  let manager
+  for (let sample = 0; sample < 3; sample++) {
+    const indexedFirst = sample % 2 === 0
+    const indexedBuild = measureBuild(placements, true)
+    const linearBuild = measureBuild(placements, false)
+    indexedBuildSamples.push(indexedBuild.elapsedMs)
+    linearBuildSamples.push(linearBuild.elapsedMs)
+    if (sample === 2) manager = indexedBuild.manager
+    else indexedBuild.manager.clear()
+    linearBuild.manager.clear()
+    // Alternate the conceptual first-measured path to reduce fixed order bias.
+    if (!indexedFirst) {
+      indexedBuildSamples[indexedBuildSamples.length - 1] = indexedBuild.elapsedMs
+      linearBuildSamples[linearBuildSamples.length - 1] = linearBuild.elapsedMs
+    }
+  }
   const queries = QUERY_CENTERS.map(([x, z]) => makeQuery(x, z))
 
   for (const query of queries) {
@@ -160,13 +183,18 @@ for (const [datasetIndex, count] of SIZES.entries()) {
 
   const indexedMedianMs = median(indexedSamples)
   const linearMedianMs = median(linearSamples)
+  const indexedBuildMedianMs = median(indexedBuildSamples)
+  const linearBuildMedianMs = median(linearBuildSamples)
   const report = {
     objects: count,
     queriesPerSample: queries.length,
     returnedPerQuery: queries.map(query => manager.query(query).length),
     indexedMedianMs: Number(indexedMedianMs.toFixed(3)),
     linearMedianMs: Number(linearMedianMs.toFixed(3)),
-    speedup: Number((linearMedianMs / Math.max(indexedMedianMs, 0.000001)).toFixed(2)),
+    querySpeedup: Number((linearMedianMs / Math.max(indexedMedianMs, 0.000001)).toFixed(2)),
+    indexedBuildMedianMs: Number(indexedBuildMedianMs.toFixed(3)),
+    linearBuildMedianMs: Number(linearBuildMedianMs.toFixed(3)),
+    writeOverheadPercent: Number(((indexedBuildMedianMs / Math.max(linearBuildMedianMs, 0.000001) - 1) * 100).toFixed(1)),
   }
   reports.push(report)
 }

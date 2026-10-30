@@ -126,7 +126,9 @@ export class WorldObjectSpatialIndex {
       const selectedChunks: string[] = []
       for (const columnKey of relevantColumns) {
         const chunks = this.columns.get(columnKey)
-        if (chunks) selectedChunks.push(...chunks)
+        if (chunks) {
+          for (const chunkKey of chunks) selectedChunks.push(chunkKey)
+        }
       }
       candidateChunkKeys = selectedChunks
     }
