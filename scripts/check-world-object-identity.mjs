@@ -121,6 +121,11 @@ const boundedObjects = manager.query({
 })
 assert.deepEqual(boundedObjects.map(object => object.id), [second.id],
   'AABB query must find the updated object at an exact positive/negative coordinate boundary')
+assert.deepEqual(manager.query({ minX: 96, maxX: 96, minZ: -96, maxZ: -96 }).map(object => object.id), [second.id],
+  'horizontal AABB queries must find objects across all vertical buckets in a selected column')
+assert.equal(manager.query({ minX: secondOriginal.x, maxX: secondOriginal.x, minZ: secondOriginal.z, maxZ: secondOriginal.z })
+  .some(object => object.id === second.id), false,
+  'moving an object must remove its old horizontal-column membership')
 const detachedBoundsResult = boundedObjects[0]
 detachedBoundsResult.x = -123
 assert.equal(manager.get(second.id)?.x, 96,
@@ -132,6 +137,18 @@ assert.deepEqual(manager.query({
 }).map(object => object.id), [negativeChunkBoundary.id],
   'AABB query must preserve floor-based chunk mapping at negative chunk boundaries')
 assert.equal(manager.remove(negativeChunkBoundary.id), true)
+assert.deepEqual(manager.query({ minX: -32, maxX: -32, minZ: -32, maxZ: -32 }).map(object => object.id),
+  [negativeChunkBoundary.id],
+  'horizontal column lookup must retain negative chunk boundaries and ignore vertical partitioning')
+const negativeOtherElevation = manager.add({ ...placement, x: -32, y: 0, z: -32 })
+assert.deepEqual(manager.query({ minX: -32, maxX: -32, minZ: -32, maxZ: -32 })
+  .map(object => object.id).sort(), [negativeChunkBoundary.id, negativeOtherElevation.id].sort(),
+  'one horizontal column must return objects from multiple vertical chunks')
+assert.equal(manager.remove(negativeChunkBoundary.id), true)
+assert.deepEqual(manager.query({ minX: -32, maxX: -32, minZ: -32, maxZ: -32 }).map(object => object.id),
+  [negativeOtherElevation.id],
+  'removing the last object in one vertical bucket must not remove other buckets in the same column')
+assert.equal(manager.remove(negativeOtherElevation.id), true)
 assert.equal(manager.query({ minX: Number.NaN }).length, 0,
   'non-finite bounds must use the compatibility fallback and preserve comparison semantics')
 
@@ -154,6 +171,8 @@ assert.equal(spatialIndex.queryRadius(4, 2, -8, 0).some(o => o.id === first.id),
   'unrelated object index entries must survive removal')
 manager.clear()
 assert.equal(spatialIndex.size, 0, 'manager clear must clear spatial-index membership')
+assert.equal(manager.query({ minX: 96, maxX: 96, minZ: -96, maxZ: -96 }).length, 0,
+  'manager clear must also clear horizontal-column lookup state')
 const rendererSource = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8')
 assert.match(rendererSource, /readonly objects = new WorldObjectManager\(this\.objectSpatialIndex\)/,
   'renderer-owned object manager must update its spatial index as one transaction')

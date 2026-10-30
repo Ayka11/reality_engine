@@ -12,11 +12,13 @@ export type WorldObjectSpatialQuery = {
  */
 export class WorldObjectSpatialIndex {
   private buckets = new Map<string, Set<string>>()
+  private columns = new Map<string, Set<string>>()
   private objects = new Map<string, WorldObject>()
   private objectChunks = new Map<string, string>()
 
   clear() {
     this.buckets.clear()
+    this.columns.clear()
     this.objects.clear()
     this.objectChunks.clear()
   }
@@ -32,13 +34,28 @@ export class WorldObjectSpatialIndex {
     if (previousChunk && previousChunk !== nextChunk) {
       const previousBucket = this.buckets.get(previousChunk)
       previousBucket?.delete(object.id)
-      if (previousBucket?.size === 0) this.buckets.delete(previousChunk)
+      if (previousBucket?.size === 0) {
+        this.buckets.delete(previousChunk)
+        const [previousCx, , previousCz] = previousChunk.split(',').map(Number)
+        const previousColumnKey = `${previousCx},${previousCz}`
+        const previousColumn = this.columns.get(previousColumnKey)
+        previousColumn?.delete(previousChunk)
+        if (previousColumn?.size === 0) this.columns.delete(previousColumnKey)
+      }
     }
 
     let bucket = this.buckets.get(nextChunk)
     if (!bucket) {
       bucket = new Set<string>()
       this.buckets.set(nextChunk, bucket)
+      const { chunk } = worldToChunk(object.x, object.y, object.z)
+      const columnKey = `${chunk.cx},${chunk.cz}`
+      let column = this.columns.get(columnKey)
+      if (!column) {
+        column = new Set<string>()
+        this.columns.set(columnKey, column)
+      }
+      column.add(nextChunk)
     }
     bucket.add(object.id)
     this.objects.set(object.id, cloneWorldObject(object))
@@ -50,7 +67,14 @@ export class WorldObjectSpatialIndex {
     if (key) {
       const bucket = this.buckets.get(key)
       bucket?.delete(id)
-      if (bucket?.size === 0) this.buckets.delete(key)
+      if (bucket?.size === 0) {
+        this.buckets.delete(key)
+        const [cx, , cz] = key.split(',').map(Number)
+        const columnKey = `${cx},${cz}`
+        const column = this.columns.get(columnKey)
+        column?.delete(key)
+        if (column?.size === 0) this.columns.delete(columnKey)
+      }
     }
     this.objectChunks.delete(id)
     this.objects.delete(id)
@@ -78,7 +102,36 @@ export class WorldObjectSpatialIndex {
     const maxCz = query.maxZ === undefined ? undefined : Math.floor(query.maxZ / WORLD_CHUNK_SIZE)
     const result: WorldObject[] = []
 
-    for (const [key, bucket] of this.buckets) {
+    let candidateChunkKeys: Iterable<string> = this.buckets.keys()
+    const hasHorizontalBounds = minCx !== undefined && maxCx !== undefined &&
+      minCz !== undefined && maxCz !== undefined && minCy === undefined && maxCy === undefined
+    if (hasHorizontalBounds) {
+      const columnWidth = maxCx - minCx + 1
+      const columnDepth = maxCz - minCz + 1
+      const columnArea = columnWidth * columnDepth
+      const relevantColumns: string[] = []
+      if (Number.isSafeInteger(columnArea) && columnArea <= Math.max(256, this.columns.size * 2)) {
+        for (let cx = minCx; cx <= maxCx; cx++) {
+          for (let cz = minCz; cz <= maxCz; cz++) relevantColumns.push(`${cx},${cz}`)
+        }
+      } else {
+        // Very broad queries avoid iterating a huge empty coordinate range.
+        for (const columnKey of this.columns.keys()) {
+          const [cx, cz] = columnKey.split(',').map(Number)
+          if (cx >= minCx && cx <= maxCx && cz >= minCz && cz <= maxCz) relevantColumns.push(columnKey)
+        }
+      }
+      const selectedChunks: string[] = []
+      for (const columnKey of relevantColumns) {
+        const chunks = this.columns.get(columnKey)
+        if (chunks) selectedChunks.push(...chunks)
+      }
+      candidateChunkKeys = selectedChunks
+    }
+
+    for (const key of candidateChunkKeys) {
+      const bucket = this.buckets.get(key)
+      if (!bucket) continue
       const [cx, cy, cz] = key.split(',').map(Number)
       if ((minCx !== undefined && cx < minCx) || (maxCx !== undefined && cx > maxCx) ||
           (minCy !== undefined && cy < minCy) || (maxCy !== undefined && cy > maxCy) ||
