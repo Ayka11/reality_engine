@@ -631,7 +631,9 @@ export class InfiniteWorldRenderer {
 
     this.generator = new WorldGenerator(newSeed)
     this.fieldSampler.setGenerator(this.generator)
-    worldViewContract.setSeed(newSeed)
+    // The procedural generator may be reseeded independently; the current
+    // authored surface continues to own the world/view identity until reset.
+    worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)
     this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
     this.authoritativeField.clear()
     this.terrainDeformations = new TerrainDeformationField(newSeed)

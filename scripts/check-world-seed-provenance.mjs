@@ -18,6 +18,14 @@ assert.ok(renderer.includes('this.objects.scatter(this.worldSeed, kind'),
   'scatter placement must use the active surface seed')
 assert.equal(renderer.includes('this.objects.scatter(this.generator.seed, kind'), false)
 assert.equal(renderer.includes('const seed = this.generator.seed'), false)
+const reseedAt = renderer.indexOf('  reseed(newSeed: string)')
+assert.ok(reseedAt >= 0, 'renderer reseed must exist')
+const reseedBody = renderer.slice(reseedAt, renderer.indexOf('\n  dispose()', reseedAt))
+assert.ok(reseedBody.includes('this.fieldSampler.setGenerator(this.generator)'))
+assert.ok(reseedBody.includes('worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)'),
+  'reseed must retain the selected authored surface identity')
+assert.equal(reseedBody.includes('worldViewContract.setSeed(newSeed)'), false,
+  'procedural generator reseed must not overwrite an independently selected surface seed')
 
 const startAt = renderer.indexOf('  startExperiment(metadata:')
 assert.ok(startAt >= 0, 'startExperiment method must exist')
