@@ -116,7 +116,7 @@ export class FieldPhysics {
 
         if (on(mask, PROC.SIGNAL_PROPAGATION)) {
           front[base + F.INFORMATION] = Math.max(0, Math.min(999,
-            cI + 0.06 * p.infoGrowthRate * dt * lapI));
+            cI + p.signalPropagationRate * p.infoGrowthRate * dt * lapI));
         }
 
         if (on(mask, PROC.FIELD_ROTATION)) {
