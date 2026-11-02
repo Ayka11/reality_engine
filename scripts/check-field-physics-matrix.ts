@@ -161,27 +161,46 @@ for (const scenario of scenarios) {
   }
 }
 
-// Gravity consumes the explicit scalar GRAVITY_POT field on the dense CPU path.
-function runGravityPotential(potential: number, processEnabled: boolean): number {
+// Gravity is a density-gradient acceleration and must not directly create or destroy density.
+function runGravityGradient(includeX: boolean, includeZ: boolean, processEnabled = true): {
+  density: number; fx: number; fy: number; fz: number;
+} {
   const grid = new VoxelGrid(3, 3, 3);
   const center = grid.idx(1, 1, 1);
   grid.buffer[center + F.DENSITY] = 0.4;
-  grid.buffer[center + F.GRAVITY_POT] = potential;
+  if (includeX) grid.buffer[grid.idx(2, 1, 1) + F.DENSITY] = 0.8;
+  if (includeZ) grid.buffer[grid.idx(1, 1, 2) + F.DENSITY] = 0.8;
   grid.snapshot();
   const mask = processEnabled ? (1 << PROC.GRAVITY) : 0;
   new FieldPhysics().tick(grid, 1 / 60, {
     ...DEFAULT_PARAMS,
     gravityDensityCoupling: 0.1,
   }, mask);
-  return grid.buffer[center + F.DENSITY];
+  return {
+    density: grid.buffer[center + F.DENSITY],
+    fx: grid.buffer[center + F.FIELD_X],
+    fy: grid.buffer[center + F.FIELD_Y],
+    fz: grid.buffer[center + F.FIELD_Z],
+  };
 }
-const gravityPotentialAfter = runGravityPotential(0.5, true);
-assert.ok(Math.abs(gravityPotentialAfter - (0.4 + 0.1 * 0.5 / 60)) < 1e-6,
-  `CPU gravity must apply the configured potential and coupling (got ${gravityPotentialAfter})`);
-assert.equal(runGravityPotential(0.5, false), 0.4,
-  "disabled gravity must not change density");
-assert.equal(runGravityPotential(0, true), 0.4,
-  "zero gravity potential must be a no-op");
+const gravityGradient = runGravityGradient(true, true);
+assert.equal(gravityGradient.density, 0.4,
+  "gravity acceleration must not directly modify density");
+assert.ok(gravityGradient.fx < 0 && gravityGradient.fz < 0,
+  "CPU gravity must accelerate down both positive density gradients");
+assert.equal(gravityGradient.fy, 0,
+  "a zero Y density gradient must not create Y acceleration");
+assert.equal(runGravityGradient(true, true, false).fx, 0,
+  "disabled gravity must leave the field vector unchanged");
+const gravityBoundaryGrid = new VoxelGrid(3, 3, 3);
+gravityBoundaryGrid.buffer[gravityBoundaryGrid.idx(0, 1, 1) + F.DENSITY] = 0.4;
+gravityBoundaryGrid.buffer[gravityBoundaryGrid.idx(1, 1, 1) + F.DENSITY] = 0.8;
+gravityBoundaryGrid.snapshot();
+new FieldPhysics().tick(gravityBoundaryGrid, 1 / 60, {
+  ...DEFAULT_PARAMS, gravityDensityCoupling: 0.1,
+}, 1 << PROC.GRAVITY);
+assert.ok(gravityBoundaryGrid.buffer[gravityBoundaryGrid.idx(0, 1, 1) + F.FIELD_X] < 0,
+  "CPU gravity must use a mirrored Neumann boundary instead of creating an edge force toward empty space");
 
 const densityScenario = scenarios.find(s => s.name === "density")!;
 const densityConservation = runCentered(densityScenario, 1 / 60, 0.0024);
