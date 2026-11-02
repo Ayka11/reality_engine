@@ -578,6 +578,29 @@ const workerSignalInformation = readField(
 )
 assert.ok(Math.abs(workerSignalInformation - 99.04) < 1e-5,
   `worker signal propagation must use PhysicsParams.signalPropagationRate (got ${workerSignalInformation})`)
+// Combined signal/information must apply the same stage order as the dense CPU solver.
+const signalInfoPoint = { x: 88, y: 112, z: 48 }
+const signalInfoParams = {
+  ...params,
+  infoGrowthRate: 0.5,
+  infoEntropySupp: 0.5,
+  infoGrowthThreshE: 100,
+  infoGrowthThreshD: 0.3,
+  signalPropagationRate: 0.2,
+}
+send('setPhysics', {
+  params: signalInfoParams,
+  processMask: (1 << 10) | (1 << 4),
+})
+send('paint', { ...signalInfoPoint, f: F.E, v: 1000, r: 0, mode: 'set' })
+send('paint', { ...signalInfoPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('paint', { ...signalInfoPoint, f: F.S, v: 0.2, r: 0, mode: 'set' })
+send('paint', { ...signalInfoPoint, f: F.I, v: 100, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const workerSignalInfo = readField(latestFrame(), signalInfoPoint.x, signalInfoPoint.y, signalInfoPoint.z, F.I)
+assert.ok(Math.abs(workerSignalInfo - 99.0472) < 1e-5,
+  `worker information growth must follow signal propagation (expected 99.0472, got ${workerSignalInfo})`)
+
 
 // Material elasticity scales the worker equation-of-state pressure response.
 const stonePressurePoint = { x: 96, y: 104, z: 48 }
