@@ -137,7 +137,7 @@ assert.ok((await fs.readFile('scripts/check-gpu-density-advection-runtime.mjs', 
 // Material bio-affinity and metabolism rate must be consistent across CPU/worker/GPU.
 assert.ok(entropyLayer.includes('material.bioAffinity'))
 assert.ok(entropyLayer.includes('front[base + F.BIO_POTENTIAL] * p.metabolismRate * dt'))
-assert.ok(worker.includes('material.bioAffinity'))
+assert.ok(worker.includes('currentMaterial.bioAffinity'))
 assert.ok(worker.includes('bio * p.metabolismRate * dt'))
 assert.ok(gpu.includes('metabolismRate: f32,          // [31]'))
 assert.ok(gpu.includes('f32[31] = p.metabolismRate;'))
