@@ -407,11 +407,15 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   // ── PROC 5: Bio-Emergence ─────────────────────────────────────────────────
   if (isProcessEnabled(32u)) {
-    let bio = (c.information / 200.0) * 0.4
-            + min(c.energy / 500.0, 1.0) * 0.3
-            + c.density * 0.2
-            + (1.0 - c.entropy) * 0.1
-            + mat.bioAffinity;
+    // Bio-emergence follows crystallization and other field processes.
+    // Resolve affinity from the material ID produced by this same step.
+    let bioMaterialIndex = u32(clamp(o.material_id, 0.0, 13.0));
+    let bioAffinity = matBuf[bioMaterialIndex].bioAffinity;
+    let bio = (o.information / 200.0) * 0.4
+            + min(o.energy / 500.0, 1.0) * 0.3
+            + o.density * 0.2
+            + (1.0 - o.entropy) * 0.1
+            + bioAffinity;
     o.bio_potential = clamp(bio, 0.0, 1.0);
   }
 
