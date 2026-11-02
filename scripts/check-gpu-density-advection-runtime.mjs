@@ -204,6 +204,12 @@ try {
       { densityDiffusion: 0.01, erosionRate: 0.01 },
       0.016, 10, MAT.SAND,
     );
+    const crystallizationErosion = await runCombinedDensityProcess(
+      0.8, 0.1, 0, 10,
+      (1 << PROC.CRYSTALLIZATION) | (1 << PROC.EROSION),
+      { crystallizationRate: 0.003, erosionRate: 0.01 },
+      0.016, 10, MAT.VACUUM,
+    );
     const materialDiffusion = {
       energyVacuum: await runMaterialDiffusion(
         MAT.VACUUM, F.ENERGY, PROC.ENERGY_DIFFUSION, "energyDiffusion",
@@ -225,7 +231,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion };
+    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -270,6 +276,10 @@ try {
       "GPU must crystallize a material that was eligible in the pre-step state");
     assert.ok(Math.abs(result.combinedErosion.density - 0.64174595) < 1e-4,
       `GPU erosion must compose with density diffusion using pre-step density eligibility (got ${result.combinedErosion.density})`);
+    assert.ok(Math.abs(result.crystallizationErosion.density - 0.7906304) < 1e-4,
+      `GPU erosion must use pre-step vacuum resistance after same-step crystallization (got ${result.crystallizationErosion.density})`);
+    assert.equal(result.crystallizationErosion.materialId, MAT.CRYSTAL,
+      "GPU same-step crystallization must publish the new material");
     console.log("WebGPU density-advection/material/phase runtime: PASS " + JSON.stringify(result));
   }
 } finally {
