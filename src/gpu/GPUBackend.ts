@@ -93,6 +93,93 @@ fn active(flag: u32) -> bool {
   return (params.activeProcesses & flag) != 0u;
 }
 
+fn densityAfterDiffusion(x: i32, y: i32, z: i32) -> f32 {
+  let center = src[cidx(u32(x), u32(y), u32(z))].density;
+  if (!active(4u)) { return center; }
+  let dx = array<i32,6>(-1, 1, 0, 0, 0, 0);
+  let dy = array<i32,6>( 0, 0,-1, 1, 0, 0);
+  let dz = array<i32,6>( 0, 0, 0, 0,-1, 1);
+  var laplacian = 0.0;
+  for (var d = 0; d < 6; d++) {
+    let nx = x + dx[d]; let ny = y + dy[d]; let nz = z + dz[d];
+    if (nx >= 0 && nx < i32(params.W) &&
+        ny >= 0 && ny < i32(params.H) &&
+        nz >= 0 && nz < i32(params.D)) {
+      laplacian += src[cidx(u32(nx), u32(ny), u32(nz))].density - center;
+    }
+  }
+  return clamp(center + params.densityDiffusion * params.dt * laplacian, 0.0, 1.0);
+}
+
+fn velocityAlong(cell: Cell, dx: i32, dy: i32, dz: i32) -> f32 {
+  if (dx != 0) { return cell.velocity_x; }
+  if (dy != 0) { return cell.velocity_y; }
+  return cell.velocity_z;
+}
+
+// x = outgoing scale, y = incoming scale for this cell.
+fn densityFluxLimiter(x: i32, y: i32, z: i32) -> vec2<f32> {
+  let centerCell = src[cidx(u32(x), u32(y), u32(z))];
+  let centerDensity = densityAfterDiffusion(x, y, z);
+  let dx = array<i32,6>(-1, 1, 0, 0, 0, 0);
+  let dy = array<i32,6>( 0, 0,-1, 1, 0, 0);
+  let dz = array<i32,6>( 0, 0, 0, 0,-1, 1);
+  var outgoing = 0.0;
+  var incoming = 0.0;
+  for (var d = 0; d < 6; d++) {
+    let nx = x + dx[d]; let ny = y + dy[d]; let nz = z + dz[d];
+    if (nx < 0 || nx >= i32(params.W) ||
+        ny < 0 || ny >= i32(params.H) ||
+        nz < 0 || nz >= i32(params.D)) { continue; }
+    let neighbor = src[cidx(u32(nx), u32(ny), u32(nz))];
+    let faceVelocity = 0.5 * (
+      velocityAlong(centerCell, dx[d], dy[d], dz[d]) +
+      velocityAlong(neighbor, dx[d], dy[d], dz[d])
+    ) * f32(dx[d] + dy[d] + dz[d]);
+    if (faceVelocity > 0.0) {
+      outgoing += faceVelocity * params.dt * centerDensity;
+    } else if (faceVelocity < 0.0) {
+      incoming += -faceVelocity * params.dt * densityAfterDiffusion(nx, ny, nz);
+    }
+  }
+  let outgoingScale = select(1.0, centerDensity / outgoing, outgoing > centerDensity && outgoing > 0.0);
+  let freeCapacity = 1.0 - centerDensity;
+  let incomingScale = select(1.0, freeCapacity / incoming, incoming > freeCapacity && incoming > 0.0);
+  return vec2<f32>(outgoingScale, incomingScale);
+}
+
+fn densityAdvectionDelta(x: i32, y: i32, z: i32) -> f32 {
+  let centerCell = src[cidx(u32(x), u32(y), u32(z))];
+  let centerScale = densityFluxLimiter(x, y, z);
+  let dx = array<i32,6>(-1, 1, 0, 0, 0, 0);
+  let dy = array<i32,6>( 0, 0,-1, 1, 0, 0);
+  let dz = array<i32,6>( 0, 0, 0, 0,-1, 1);
+  var delta = 0.0;
+  for (var d = 0; d < 6; d++) {
+    let nx = x + dx[d]; let ny = y + dy[d]; let nz = z + dz[d];
+    if (nx < 0 || nx >= i32(params.W) ||
+        ny < 0 || ny >= i32(params.H) ||
+        nz < 0 || nz >= i32(params.D)) { continue; }
+    let neighbor = src[cidx(u32(nx), u32(ny), u32(nz))];
+    let faceVelocity = 0.5 * (
+      velocityAlong(centerCell, dx[d], dy[d], dz[d]) +
+      velocityAlong(neighbor, dx[d], dy[d], dz[d])
+    ) * f32(dx[d] + dy[d] + dz[d]);
+    if (faceVelocity > 0.0) {
+      let neighborScale = densityFluxLimiter(nx, ny, nz);
+      let flux = faceVelocity * params.dt * densityAfterDiffusion(x, y, z)
+        * min(centerScale.x, neighborScale.y);
+      delta -= flux;
+    } else if (faceVelocity < 0.0) {
+      let neighborScale = densityFluxLimiter(nx, ny, nz);
+      let flux = -faceVelocity * params.dt * densityAfterDiffusion(nx, ny, nz)
+        * min(neighborScale.x, centerScale.y);
+      delta += flux;
+    }
+  }
+  return delta;
+}
+
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let x = gid.x; let y = gid.y; let z = gid.z;
@@ -160,6 +247,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // ── PROC 2: Density Flow ───────────────────────────────────────────────────
   if (active(4u)) {
     o.density = clamp(c.density + params.densityDiffusion * dt * lapD, 0.0, 1.0);
+  }
+  // PROC 16: Conservative density advection (closed boundaries, limited face fluxes).
+  if (active(65536u)) {
+    o.density = clamp(
+      densityAfterDiffusion(ix, iy, iz) + densityAdvectionDelta(ix, iy, iz),
+      0.0, 1.0,
+    );
   }
 
   // ── PROC 3: Entropy Growth (second law — cannot be disabled by MetaLaw) ───
