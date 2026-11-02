@@ -161,6 +161,17 @@ assert.ok((await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8'))
 assert.ok((await fs.readFile('scripts/check-gpu-density-advection-runtime.mjs', 'utf8'))
   .includes('GPU Bio-Potential must include organic material affinity'))
 
+// Material elasticity is a constitutive pressure-response multiplier on all backends.
+assert.ok(cpu.includes('(cD * p.pressureDensityCoupling - cT * 0.1) * material.elasticity'))
+assert.ok(worker.includes('(D_ * p.pressureDensityCoupling - T * 0.1) * material.elasticity'))
+assert.ok(gpu.includes('(c.density * params.pressureDensityCoupling - c.temperature * 0.1) * mat.elasticity'))
+assert.ok((await fs.readFile('scripts/check-field-physics-pressure.ts', 'utf8'))
+  .includes('pressure response must scale with'))
+assert.ok((await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8'))
+  .includes('worker pressure response must scale with metal elasticity'))
+assert.ok((await fs.readFile('scripts/check-gpu-density-advection-runtime.mjs', 'utf8'))
+  .includes('GPU pressure response must scale with metal elasticity'))
+
 // Signal propagation is configured identically in CPU, worker and GPU parameter ABI.
 assert.ok(cpu.includes('p.signalPropagationRate * p.infoGrowthRate * dt * lapI'))
 assert.ok(worker.includes('p.signalPropagationRate * p.infoGrowthRate * dt * lapI'))
