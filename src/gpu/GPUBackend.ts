@@ -64,6 +64,7 @@ struct SimParams {
   fieldRotationDamping: f32,   // [28]
   fieldRotationNeighborCoupling: f32, // [29]
   fieldRotationCrossCoupling: f32, // [30]
+  metabolismRate: f32,          // [31]
 }
 
 // Material coefficients: MAT_COUNT × 7 floats
@@ -433,7 +434,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // Byte layout of SimParams in the storage buffer (matches WGSL struct)
-const PARAMS_FLOATS = 31; // 31 × 4 bytes = 124 bytes
+const PARAMS_FLOATS = 32; // 32 × 4 bytes = 128 bytes
 
 export class GPUBackend {
   private device: GPUDevice | null = null;
@@ -564,6 +565,7 @@ export class GPUBackend {
     f32[28] = p.fieldRotationDamping;
     f32[29] = p.fieldRotationNeighborCoupling;
     f32[30] = p.fieldRotationCrossCoupling;
+    f32[31] = p.metabolismRate;
     this.device.queue.writeBuffer(this.paramsBuf, 0, ab);
   }
 
