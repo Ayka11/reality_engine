@@ -491,6 +491,28 @@ new FieldPhysics().tick(signalGrid, 1 / 60, {
 assert.ok(Math.abs(signalGrid.buffer[signalBase + F.INFORMATION] - 99) < 1e-5,
   `CPU signal propagation must use PhysicsParams.signalPropagationRate (got ${signalGrid.buffer[signalBase + F.INFORMATION]})`);
 
+const signalInfoGrid = new VoxelGrid(3, 3, 3);
+const signalInfoBase = signalInfoGrid.idx(1, 1, 1);
+signalInfoGrid.buffer[signalInfoBase + F.ENERGY] = 1000;
+signalInfoGrid.buffer[signalInfoBase + F.DENSITY] = 0.5;
+signalInfoGrid.buffer[signalInfoBase + F.ENTROPY] = 0.2;
+signalInfoGrid.buffer[signalInfoBase + F.INFORMATION] = 100;
+signalInfoGrid.snapshot();
+const signalInfoParams: PhysicsParams = {
+  ...DEFAULT_PARAMS,
+  infoGrowthRate: 0.5,
+  infoEntropySupp: 0.5,
+  infoGrowthThreshE: 100,
+  infoGrowthThreshD: 0.3,
+  signalPropagationRate: 0.2,
+};
+const signalInfoMask = (1 << PROC.SIGNAL_PROPAGATION) | (1 << PROC.INFORMATION);
+new FieldPhysics().tick(signalInfoGrid, 1 / 60, signalInfoParams, signalInfoMask);
+new EntropyLayer().tick(signalInfoGrid, 1 / 60, signalInfoParams, signalInfoMask);
+assert.ok(Math.abs(signalInfoGrid.buffer[signalInfoBase + F.INFORMATION] - 99.0075) < 1e-5,
+  `CPU information growth must follow signal propagation (expected 99.0075, got ${signalInfoGrid.buffer[signalInfoBase + F.INFORMATION]})`);
+
+
 
 console.log("CPU material bio-affinity/metabolism parameter regression: PASS");
 
