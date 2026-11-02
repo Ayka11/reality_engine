@@ -134,6 +134,9 @@ assert.ok(defs.includes("mass transport is a separate process"))
 assert.ok(defs.includes("inputs:['fieldVector'], outputs:['fieldVector']"))
 assert.ok(!defs.includes("Mass flows along pressure gradients."))
 assert.ok(!defs.includes("Density curves the field, attracting mass."))
+assert.ok(defs.includes("Pressure diffuses between neighbors and relaxes toward a density/temperature equilibrium."))
+assert.ok(defs.includes("inputs:['pressure','density','temperature'], outputs:['pressure']"))
+assert.ok(defs.includes("inputs:['density','fieldVector','materialId'], outputs:['density','information']"))
 
 // CPU, GPU, and sparse worker use the same density-gradient acceleration model.
 assert.ok(cpu.includes('p.gravityDensityCoupling * (rightD - leftD)'))
