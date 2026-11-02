@@ -246,6 +246,7 @@ function simStep(dt: number) {
     const D_ = chunk[base + F.D], I = chunk[base + F.I]
     const P = chunk[base + F.P], wave = chunk[base + F.WAVE]
     const FX = chunk[base + F.FX], FY = chunk[base + F.FY], FZ = chunk[base + F.FZ]
+    const VX = chunk[base + F.VX], VY = chunk[base + F.VY], VZ = chunk[base + F.VZ]
     let nextFX = FX, nextFY = FY, nextFZ = FZ
     const gravityActive = isProcessActive(PROC.GRAVITY)
     const rotationActive = isProcessActive(PROC.FIELD_ROTATION)
@@ -338,9 +339,15 @@ function simStep(dt: number) {
       const upD = y + 1 < H ? sourceRead(x, y + 1, z, F.D) : D_
       const backD = z > 0 ? sourceRead(x, y, z - 1, F.D) : D_
       const frontD = z + 1 < D ? sourceRead(x, y, z + 1, F.D) : D_
-      nextFX -= p.gravityDensityCoupling * (rightD - leftD) * 0.5 * dt
-      nextFY -= p.gravityDensityCoupling * (upD - downD) * 0.5 * dt
-      nextFZ -= p.gravityDensityCoupling * (frontD - backD) * 0.5 * dt
+      const accelerationX = -p.gravityDensityCoupling * (rightD - leftD) * 0.5
+      const accelerationY = -p.gravityDensityCoupling * (upD - downD) * 0.5
+      const accelerationZ = -p.gravityDensityCoupling * (frontD - backD) * 0.5
+      nextFX += accelerationX * dt
+      nextFY += accelerationY * dt
+      nextFZ += accelerationZ * dt
+      grid.set(x, y, z, F.VX, VX + accelerationX * dt)
+      grid.set(x, y, z, F.VY, VY + accelerationY * dt)
+      grid.set(x, y, z, F.VZ, VZ + accelerationZ * dt)
     }
 
     if (isProcessActive(PROC.PRESSURE_DIFFUSION)) {

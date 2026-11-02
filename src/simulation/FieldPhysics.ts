@@ -25,6 +25,9 @@ export class FieldPhysics {
         let nextFx = back[base + F.FIELD_X];
         let nextFy = back[base + F.FIELD_Y];
         let nextFz = back[base + F.FIELD_Z];
+        let nextVx = back[base + F.VELOCITY_X];
+        let nextVy = back[base + F.VELOCITY_Y];
+        let nextVz = back[base + F.VELOCITY_Z];
         const nbrs = grid.neighbors6(x, y, z);
         const nCount = nbrs.length || 1;
 
@@ -69,9 +72,17 @@ export class FieldPhysics {
           const upD = y + 1 < H ? back[grid.idx(x, y + 1, z) + F.DENSITY] : cD;
           const backD = z > 0 ? back[grid.idx(x, y, z - 1) + F.DENSITY] : cD;
           const frontD = z + 1 < D ? back[grid.idx(x, y, z + 1) + F.DENSITY] : cD;
-          nextFx -= p.gravityDensityCoupling * (rightD - leftD) * 0.5 * dt;
-          nextFy -= p.gravityDensityCoupling * (upD - downD) * 0.5 * dt;
-          nextFz -= p.gravityDensityCoupling * (frontD - backD) * 0.5 * dt;
+          const accelerationX = -p.gravityDensityCoupling * (rightD - leftD) * 0.5;
+          const accelerationY = -p.gravityDensityCoupling * (upD - downD) * 0.5;
+          const accelerationZ = -p.gravityDensityCoupling * (frontD - backD) * 0.5;
+          // The legacy field vector remains available to rotation/erosion; the
+          // dedicated velocity state integrates the same density-gradient acceleration.
+          nextFx += accelerationX * dt;
+          nextFy += accelerationY * dt;
+          nextFz += accelerationZ * dt;
+          nextVx += accelerationX * dt;
+          nextVy += accelerationY * dt;
+          nextVz += accelerationZ * dt;
         }
 
         if (on(mask, PROC.PRESSURE_DIFFUSION)) {
@@ -106,6 +117,11 @@ export class FieldPhysics {
           front[base + F.FIELD_X] = nextFx;
           front[base + F.FIELD_Y] = nextFy;
           front[base + F.FIELD_Z] = nextFz;
+        }
+        if (on(mask, PROC.GRAVITY)) {
+          front[base + F.VELOCITY_X] = nextVx;
+          front[base + F.VELOCITY_Y] = nextVy;
+          front[base + F.VELOCITY_Z] = nextVz;
         }
 
         if (on(mask, PROC.PHASE_TRANSITION)) {

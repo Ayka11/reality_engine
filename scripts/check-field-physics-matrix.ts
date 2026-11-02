@@ -164,7 +164,7 @@ for (const scenario of scenarios) {
 // Gravity is a density-gradient acceleration and must not directly create or destroy density.
 function runGravityGradient(
   includeX: boolean, includeZ: boolean, processEnabled = true, rotationEnabled = false,
-): { density: number; fx: number; fy: number; fz: number } {
+): { density: number; fx: number; fy: number; fz: number; vx: number; vy: number; vz: number } {
   const grid = new VoxelGrid(3, 3, 3);
   const center = grid.idx(1, 1, 1);
   grid.buffer[center + F.DENSITY] = 0.4;
@@ -185,19 +185,32 @@ function runGravityGradient(
     fx: grid.buffer[center + F.FIELD_X],
     fy: grid.buffer[center + F.FIELD_Y],
     fz: grid.buffer[center + F.FIELD_Z],
+    vx: grid.buffer[center + F.VELOCITY_X],
+    vy: grid.buffer[center + F.VELOCITY_Y],
+    vz: grid.buffer[center + F.VELOCITY_Z],
   };
 }
 const gravityGradient = runGravityGradient(true, true);
 assert.ok(Math.abs(gravityGradient.density - 0.4) < 1e-7,
   "gravity acceleration must not directly modify density (within Float32 precision)");
 assert.ok(gravityGradient.fx < 0 && gravityGradient.fz < 0,
-  "CPU gravity must accelerate down both positive density gradients");
+  "CPU gravity must update the legacy field vector down both positive density gradients");
+assert.ok(gravityGradient.vx < 0 && gravityGradient.vz < 0,
+  "CPU gravity must integrate density-gradient acceleration into dedicated velocity");
+assert.equal(gravityGradient.vy, 0,
+  "zero Y density gradient must not create Y velocity");
 assert.equal(gravityGradient.fy, 0,
   "a zero Y density gradient must not create Y acceleration");
-assert.equal(runGravityGradient(true, true, false).fx, 0,
+const gravityDisabled = runGravityGradient(true, true, false);
+assert.equal(gravityDisabled.fx, 0,
   "disabled gravity must leave the field vector unchanged");
-assert.ok(runGravityGradient(true, false, true, true).fx < 0,
+assert.equal(gravityDisabled.vx, 0,
+  "disabled gravity must leave dedicated velocity unchanged");
+const gravityRotated = runGravityGradient(true, false, true, true);
+assert.ok(gravityRotated.fx < 0,
   "field rotation must preserve gravity acceleration when both processes are enabled");
+assert.ok(gravityRotated.vx < 0,
+  "gravity must integrate velocity when field rotation is enabled too");
 const gravityBoundaryGrid = new VoxelGrid(3, 3, 3);
 gravityBoundaryGrid.buffer[gravityBoundaryGrid.idx(0, 1, 1) + F.DENSITY] = 0.4;
 gravityBoundaryGrid.buffer[gravityBoundaryGrid.idx(1, 1, 1) + F.DENSITY] = 0.8;

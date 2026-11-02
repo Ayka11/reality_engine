@@ -217,8 +217,13 @@ send('tick', { speed: 1 })
 const gravityFrame = latestFrame()
 const gravityFx = readField(gravityFrame, gravityPoint.x, gravityPoint.y, gravityPoint.z, F.FX)
 const gravityFz = readField(gravityFrame, gravityPoint.x, gravityPoint.y, gravityPoint.z, F.FZ)
+const gravityVx = readField(gravityFrame, gravityPoint.x, gravityPoint.y, gravityPoint.z, F.VX)
+const gravityVy = readField(gravityFrame, gravityPoint.x, gravityPoint.y, gravityPoint.z, F.VY)
+const gravityVz = readField(gravityFrame, gravityPoint.x, gravityPoint.y, gravityPoint.z, F.VZ)
 assert.ok(gravityFx < 0, `gravity should respond to the x density gradient (got ${gravityFx})`)
 assert.ok(gravityFz < 0, `gravity should respond to the z density gradient across a chunk boundary (got ${gravityFz})`)
+assert.ok(gravityVx < 0 && gravityVz < 0, 'gravity must integrate velocity on X and Z')
+assert.equal(gravityVy, 0, 'zero Y density gradient must not create Y velocity')
 
  // Gravity and field rotation must compose instead of rotation overwriting acceleration.
 const combinedGravityPoint = { x: 100, y: 20, z: 20 }
@@ -235,11 +240,17 @@ send('setPhysics', {
 send('paint', { ...combinedGravityPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
 send('paint', { x: combinedGravityPoint.x + 1, y: combinedGravityPoint.y, z: combinedGravityPoint.z, f: F.D, v: 1, r: 0, mode: 'set' })
 send('tick', { speed: 1 })
+const combinedGravityFrame = latestFrame()
 const combinedGravityFx = readField(
-  latestFrame(), combinedGravityPoint.x, combinedGravityPoint.y, combinedGravityPoint.z, F.FX,
+  combinedGravityFrame, combinedGravityPoint.x, combinedGravityPoint.y, combinedGravityPoint.z, F.FX,
+)
+const combinedGravityVx = readField(
+  combinedGravityFrame, combinedGravityPoint.x, combinedGravityPoint.y, combinedGravityPoint.z, F.VX,
 )
 assert.ok(combinedGravityFx < 0,
   `field rotation must preserve the gravity acceleration when both processes are enabled (got ${combinedGravityFx})`)
+assert.ok(combinedGravityVx < 0,
+  'gravity must integrate velocity when field rotation is enabled too')
 
 // Neumann world boundaries mirror the center density; they must not create a false force.
 const gravityEdgePoint = { x: 0, y: 30, z: 30 }
@@ -254,6 +265,9 @@ const gravityEdgeFx = readField(
 const expectedGravityEdgeFx = -0.1 * 0.25 * 0.016;
 assert.ok(gravityEdgeFx < 0 && Math.abs(gravityEdgeFx - expectedGravityEdgeFx) < 1e-6,
   `worker gravity must use the mirrored Neumann boundary at x=0 (expected ${expectedGravityEdgeFx}, got ${gravityEdgeFx})`)
+const gravityEdgeVx = readField(latestFrame(), gravityEdgePoint.x, gravityEdgePoint.y, gravityEdgePoint.z, F.VX)
+assert.ok(Math.abs(gravityEdgeVx - expectedGravityEdgeFx) < 1e-6,
+  `worker velocity must use the same mirrored-boundary acceleration (got ${gravityEdgeVx})`)
 
 // A sub-threshold acceleration in a previously empty chunk must not be lost
 // by the sparse field epsilon at a chunk boundary.
@@ -266,6 +280,9 @@ const gravityHaloFx = readField(
 )
 assert.ok(gravityHaloFx > 0 && gravityHaloFx < 0.001,
   `gravity acceleration should allocate a neighboring sparse chunk even below the generic 0.001 threshold (got ${gravityHaloFx})`)
+const gravityHaloVx = readField(latestFrame(), gravityHaloPoint.x + 1, gravityHaloPoint.y, gravityHaloPoint.z, F.VX)
+assert.ok(gravityHaloVx > 0 && gravityHaloVx < 0.001,
+  `gravity must allocate the neighboring velocity chunk below the generic sparse threshold (got ${gravityHaloVx})`)
 
 // INFORMATION and SIGNAL_PROPAGATION must compose, not overwrite one another.
 const informationPoint = { x: 120, y: 40, z: 10 }

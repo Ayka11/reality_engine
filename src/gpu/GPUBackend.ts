@@ -201,9 +201,15 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   // ── PROC 7: Gravity (density-gradient acceleration; Neumann boundaries) ──
   if (active(128u)) {
-    o.field_x = c.field_x - params.gravityDensityCoupling * (nbD[1] - nbD[0]) * 0.5 * dt;
-    o.field_y = c.field_y - params.gravityDensityCoupling * (nbD[3] - nbD[2]) * 0.5 * dt;
-    o.field_z = c.field_z - params.gravityDensityCoupling * (nbD[5] - nbD[4]) * 0.5 * dt;
+    let acceleration_x = -params.gravityDensityCoupling * (nbD[1] - nbD[0]) * 0.5;
+    let acceleration_y = -params.gravityDensityCoupling * (nbD[3] - nbD[2]) * 0.5;
+    let acceleration_z = -params.gravityDensityCoupling * (nbD[5] - nbD[4]) * 0.5;
+    o.field_x = c.field_x + acceleration_x * dt;
+    o.field_y = c.field_y + acceleration_y * dt;
+    o.field_z = c.field_z + acceleration_z * dt;
+    o.velocity_x = c.velocity_x + acceleration_x * dt;
+    o.velocity_y = c.velocity_y + acceleration_y * dt;
+    o.velocity_z = c.velocity_z + acceleration_z * dt;
   }
 
   // ── PROC 8: Phase Transitions ─────────────────────────────────────────────
