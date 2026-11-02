@@ -415,8 +415,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let flow = abs(c.field_x) + abs(c.field_y) + abs(c.field_z);
     if (c.density > 0.65 && flow > 8.0) {
       let resistance = mat.erosionResistance;
-      o.density     = max(0.0, c.density - params.erosionRate * (1.0 - resistance) * dt * 60.0);
-      o.information = max(0.0, c.information - 0.4 * (1.0 - resistance) * dt);
+      o.density     = max(0.0, o.density - params.erosionRate * (1.0 - resistance) * dt * 60.0);
+      o.information = max(0.0, o.information - 0.4 * (1.0 - resistance) * dt);
     }
   }
 
