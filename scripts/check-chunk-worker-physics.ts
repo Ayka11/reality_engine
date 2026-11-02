@@ -565,6 +565,20 @@ const expectedWorkerLocalTime = 0.016 * 1.5 * (1 + 100 * 0.002 + 0.2 * 0.5)
 assert.ok(Math.abs(workerLocalTime - expectedWorkerLocalTime) < 1e-6,
   `worker local time must use normalized base-rate/energy/entropy formula (expected ${expectedWorkerLocalTime}, got ${workerLocalTime})`)
 
+// Signal propagation must use the configured signalPropagationRate.
+const signalPoint = { x: 88, y: 104, z: 48 }
+send('setPhysics', {
+  params: { ...params, infoGrowthRate: 0.5, signalPropagationRate: 0.2 },
+  processMask: 1 << 10,
+})
+send('paint', { ...signalPoint, f: F.I, v: 100, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const workerSignalInformation = readField(
+  latestFrame(), signalPoint.x, signalPoint.y, signalPoint.z, F.I,
+)
+assert.ok(Math.abs(workerSignalInformation - 99.04) < 1e-5,
+  `worker signal propagation must use PhysicsParams.signalPropagationRate (got ${workerSignalInformation})`)
+
 // Erosion responds to the canonical rate, material resistance, and flow threshold.
 const erosionParams = { ...params, erosionRate: 0.01 }
 const erosionPoint = { x: 110, y: 10, z: 10 }
