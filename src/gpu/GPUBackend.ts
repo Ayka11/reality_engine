@@ -483,6 +483,14 @@ export class GPUBackend {
     });
 
     const mod = this.device.createShaderModule({ code: SHADER });
+    const compilation = await mod.getCompilationInfo();
+    const shaderErrors = compilation.messages.filter(message => message.type === 'error');
+    if (shaderErrors.length > 0) {
+      const details = shaderErrors.map(message =>
+        `line ${message.lineNum}, column ${message.linePos}: ${message.message}`
+      ).join('\\n');
+      throw new Error(`[GPU] WGSL shader compilation failed:\\n${details}`);
+    }
     this.pipeline = await this.device.createComputePipelineAsync({
       layout: 'auto',
       compute: { module: mod, entryPoint: 'main' },
