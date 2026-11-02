@@ -415,6 +415,41 @@ const energyAfterNegativeWave = readField(latestFrame(), waveEnergyPoint.x, wave
 assert.ok(energyAfterNegativeWave >= 0,
   `wave-to-energy coupling must preserve the non-negative energy invariant (got ${energyAfterNegativeWave})`)
 
+// Entropy growth consumes energy and temperature after same-step diffusion.
+const entropyPoint = { x: 60, y: 100, z: 48 }
+const entropyParams = {
+  ...params,
+  energyDiffusion: 0.1,
+  tempDiffusion: 0.1,
+  tempEnergyCoupling: 0,
+  entropyGrowthRate: 0.01,
+  entropyEnergyCoupling: 0.001,
+}
+send('setPhysics', {
+  params: entropyParams,
+  processMask: (1 << 0) | (1 << 1) | (1 << 3),
+})
+send('paint', { ...entropyPoint, f: F.E, v: 100, r: 0, mode: 'set' })
+send('paint', { ...entropyPoint, f: F.T, v: 100, r: 0, mode: 'set' })
+send('paint', { ...entropyPoint, f: F.S, v: 0.2, r: 0, mode: 'set' })
+send('paint', { ...entropyPoint, f: F.MAT, v: MAT.VACUUM, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const entropyEnergyAfter = readField(latestFrame(), entropyPoint.x, entropyPoint.y, entropyPoint.z, F.E)
+const entropyTemperatureAfter = readField(latestFrame(), entropyPoint.x, entropyPoint.y, entropyPoint.z, F.T)
+const entropyAfter = readField(latestFrame(), entropyPoint.x, entropyPoint.y, entropyPoint.z, F.S)
+const expectedEntropyAfter = 0.2 + (
+  entropyParams.entropyGrowthRate +
+  99.952 * entropyParams.entropyEnergyCoupling +
+  90.4 * 0.00005
+) * 0.016
+const expectedEntropyEnergyAfter = 99.952 * (1 - expectedEntropyAfter * 0.0005 * 0.016 * 60)
+assert.ok(Math.abs(entropyTemperatureAfter - 90.4) < 0.002,
+  `worker thermal diffusion expected 90.4 before entropy (got ${entropyTemperatureAfter})`)
+assert.ok(Math.abs(entropyAfter - expectedEntropyAfter) < 1e-5,
+  `worker entropy growth must consume post-diffusion energy and temperature (got ${entropyAfter})`)
+assert.ok(Math.abs(entropyEnergyAfter - expectedEntropyEnergyAfter) < 1e-4,
+  `worker entropy attenuation must use new entropy (got ${entropyEnergyAfter})`)
+
 // Erosion responds to the canonical rate, material resistance, and flow threshold.
 const erosionParams = { ...params, erosionRate: 0.01 }
 const erosionPoint = { x: 110, y: 10, z: 10 }
