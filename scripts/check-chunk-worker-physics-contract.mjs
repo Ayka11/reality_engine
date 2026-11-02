@@ -127,16 +127,22 @@ assert.ok(gpu.includes('fieldNeighborCount += 1.0;'))
 assert.ok(gpu.includes('if (active(16384u))'))
 assert.ok(!gpu.includes('o.field_x = c.field_x * 0.95'))
 
-// Gravity currently has an explicit potential-driven dense CPU/GPU contract.
-assert.ok(cpu.includes('p.gravityDensityCoupling * back[base + F.GRAVITY_POT] * dt'),
-  'CPU gravity must consume the canonical GRAVITY_POT field')
-assert.ok(gpu.includes('if (active(128u))') &&
-  gpu.includes('params.gravityDensityCoupling * c.gravity_pot * dt'),
-  'GPU gravity must consume the matching gravity_pot field and process bit')
-// The sparse worker remains a density-gradient approximation until its field ABI is unified.
+// CPU, GPU, and sparse worker use the same density-gradient acceleration model.
+assert.ok(cpu.includes('p.gravityDensityCoupling * (rightD - leftD)'))
+assert.ok(cpu.includes('p.gravityDensityCoupling * (upD - downD)'))
+assert.ok(cpu.includes('p.gravityDensityCoupling * (frontD - backD)'))
+assert.ok(cpu.includes('nextFx -=') && cpu.includes('nextFy -=') && cpu.includes('nextFz -='))
+assert.ok(gpu.includes('if (active(128u))'))
+assert.ok(gpu.includes('params.gravityDensityCoupling * (nbD[1] - nbD[0])'))
+assert.ok(gpu.includes('params.gravityDensityCoupling * (nbD[3] - nbD[2])'))
+assert.ok(gpu.includes('params.gravityDensityCoupling * (nbD[5] - nbD[4])'))
 assert.ok(worker.includes('p.gravityDensityCoupling * (rightD - leftD)'))
 assert.ok(worker.includes('p.gravityDensityCoupling * (upD - downD)'))
 assert.ok(worker.includes('p.gravityDensityCoupling * (frontD - backD)'))
+// Gravity acceleration must survive same-tick field rotation on all backends.
+assert.ok(cpu.includes('const rotateFx = nextFx, rotateFy = nextFy, rotateFz = nextFz'))
+assert.ok(gpu.includes('let rotateFx = o.field_x;'))
+assert.ok(worker.includes('const rotateFX = nextFX, rotateFY = nextFY, rotateFZ = nextFZ'))
 
 // Main must forward resolved LawEngine state to the sparse worker at startup and ticks.
 assert.ok(main.includes("cmd: 'setPhysics'"))
