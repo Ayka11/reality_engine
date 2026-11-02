@@ -459,7 +459,10 @@ function simStep(dt: number) {
       }
     }
 
-    grid.add(x, y, z, F.TAU, dt * (p.timeBaseRate + newE * p.timeEnergyBoost + newS * 0.2))
+    // Match CPU/GPU local-time integration and use the fields after this step's processes.
+    grid.add(x, y, z, F.TAU,
+      dt * p.timeBaseRate * (1 + grid.get(x, y, z, F.E) * p.timeEnergyBoost
+        + grid.get(x, y, z, F.S) * 0.5))
 
     const delta = grid.get(x, y, z, F.E) - E
     if (Math.abs(delta) > 55) {
