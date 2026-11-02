@@ -329,14 +329,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // ── PROC 8: Phase Transitions ─────────────────────────────────────────────
   if (isProcessEnabled(256u)) {
     if (c.temperature > 500.0 && c.density > 0.5) {
-      // Boiling
-      o.density   = max(0.0, c.density - params.phaseTransitionRate * dt * 60.0);
-      o.entropy   = min(1.0, c.entropy + params.phaseTransitionRate * dt * 60.0);
-      o.information = max(0.0, c.information - 3.0 * dt);
+      // Boiling: gate on the pre-step state, but compose with prior outputs in this step.
+      o.density = max(0.0, o.density - params.phaseTransitionRate * dt * 60.0);
+      o.entropy = min(1.0, o.entropy + params.phaseTransitionRate * dt * 60.0);
+      o.information = max(0.0, o.information - 3.0 * dt);
     } else if (c.temperature < 40.0 && c.density > 0.55) {
-      // Freezing / solidification
-      o.density = min(1.0, c.density + params.phaseTransitionRate * 0.5 * dt * 60.0);
-      o.entropy = max(0.0, c.entropy - params.phaseTransitionRate * 0.5 * dt * 60.0);
+      // Freezing / solidification: preserve density diffusion/advection output.
+      o.density = min(1.0, o.density + params.phaseTransitionRate * 0.5 * dt * 60.0);
+      o.entropy = max(0.0, o.entropy - params.phaseTransitionRate * 0.5 * dt * 60.0);
     }
   }
 
@@ -361,8 +361,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (c.entropy < 0.18 && c.density > 0.38) {
       let materialRate = select(mat.crystallizationRate, 1.0, matIdx == 0u);
       let cRate = params.crystallizationRate * materialRate;
-      o.density = min(1.0, c.density + cRate * (0.18 - c.entropy) * dt * 60.0);
-      o.entropy = max(0.0, c.entropy - cRate * 0.5 * dt * 60.0);
+      // Use the immutable pre-step state for eligibility, then compose with prior field updates.
+      o.density = min(1.0, o.density + cRate * (0.18 - c.entropy) * dt * 60.0);
+      o.entropy = max(0.0, o.entropy - cRate * 0.5 * dt * 60.0);
       if (cRate > 0.0 && (matIdx == 0u || matIdx == 1u || matIdx == 2u)) {
         o.material_id = 3.0;
       }
