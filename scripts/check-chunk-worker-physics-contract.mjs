@@ -51,9 +51,9 @@ assert.ok(cpu.includes('let lapD = -nCount * cD;'))
 assert.ok(gpu.includes('var nbD = array<f32,6>(c.density,c.density,c.density,c.density,c.density,c.density);'))
 assert.ok(gpu.includes('lapD += nbD[d] - c.density;'))
 assert.ok(worker.includes('lapD -= nc * D_'))
-assert.ok(fs.readFileSync('scripts/check-field-physics-matrix.ts', 'utf8')
+assert.ok((await fs.readFile('scripts/check-field-physics-matrix.ts', 'utf8'))
   .includes('density diffusion failed the closed-grid mass-conservation check'))
-assert.ok(fs.readFileSync('scripts/check-chunk-worker-physics.ts', 'utf8')
+assert.ok((await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8'))
   .includes('closed-grid worker density diffusion must conserve total density'))
 
 // Density flow must use its dedicated coefficient in CPU, GPU, and worker paths.
