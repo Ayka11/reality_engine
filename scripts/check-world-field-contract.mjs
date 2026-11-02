@@ -234,11 +234,11 @@ assert.match(persistenceSource, /request\.onblocked = \(\) => \{\s*if \(settled\
   "IndexedDB callbacks must not settle an open request more than once");
 
 const persistenceMod = await load("src/infinity/WorldFieldChunkPersistence.ts", [
-  [/import \{ CHUNK_FLOATS \} from [^;]+;/, "const CHUNK_FLOATS = 7168;"],
+  [/import \{ CHUNK_FLOATS \} from [^;]+;/, "const CHUNK_FLOATS = ${CHUNK_FLOATS};"],
 ]);
 const { WorldFieldChunkPersistence } = persistenceMod;
 const persistence = new WorldFieldChunkPersistence();
-const workerData = [{ key: 0, data: Array(7168).fill(1) }];
+const workerData = [{ key: 0, data: Array(CHUNK_FLOATS).fill(1) }];
 const saved = persistence.saveWorkerChunks(
   {cx:0,cy:0,cz:0},
   "seed",
@@ -263,7 +263,7 @@ assert.deepEqual(persistence.load({cx:1,cy:0,cz:0})?.values, [3, 4],
 assert.throws(() => persistence.save({cx:Number.MAX_SAFE_INTEGER + 1,cy:0,cz:0}, "seed", [1]), RangeError);
 assert.equal(persistence.validate({ ...saved, coord: {cx:Number.MAX_SAFE_INTEGER + 1,cy:0,cz:0}, key:"9007199254740992,0,0" }), false,
   "snapshots with unsafe coordinates must be rejected");
-assert.equal(persistence.loadValid({cx:0,cy:0,cz:0})?.workerChunks?.[0]?.data.length, 7168);
+assert.equal(persistence.loadValid({cx:0,cy:0,cz:0})?.workerChunks?.[0]?.data.length, CHUNK_FLOATS);
 const tampered = { ...saved, values: [...saved.values, 99] };
 assert.equal(persistence.validate(tampered), false);
 const cachedWorkerSnapshot = persistence.load({cx:0,cy:0,cz:0});
