@@ -278,6 +278,111 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     );
   }
 
+  // ── PROC 7: Gravity (density-gradient acceleration; Neumann boundaries) ──
+  if (isProcessEnabled(128u)) {
+    let acceleration_x = -params.gravityDensityCoupling * (nbD[1] - nbD[0]) * 0.5;
+    let acceleration_y = -params.gravityDensityCoupling * (nbD[3] - nbD[2]) * 0.5;
+    let acceleration_z = -params.gravityDensityCoupling * (nbD[5] - nbD[4]) * 0.5;
+    o.field_x = c.field_x + acceleration_x * dt;
+    o.field_y = c.field_y + acceleration_y * dt;
+    o.field_z = c.field_z + acceleration_z * dt;
+    o.velocity_x = c.velocity_x + acceleration_x * dt;
+    o.velocity_y = c.velocity_y + acceleration_y * dt;
+    o.velocity_z = c.velocity_z + acceleration_z * dt;
+  }
+
+  // ── PROC 13: Pressure Diffusion ───────────────────────────────────────────
+  if (isProcessEnabled(8192u)) {
+    let equilibriumPressure = (c.density * params.pressureDensityCoupling - c.temperature * 0.1) * mat.elasticity;
+    o.pressure = clamp(
+      c.pressure + params.pressureDiffusion * dt * lapP
+        + (equilibriumPressure - c.pressure) * dt,
+      -9999.0, 9999.0
+    );
+  }
+
+  // ── PROC 6: Wave Propagation ──────────────────────────────────────────────
+  if (isProcessEnabled(64u)) {
+    o.wave_phase = (c.wave_phase + params.waveSpeed * dt) % 6.28318530;
+    o.wave_amp   = c.wave_amp * params.waveDamping;
+    o.energy     = o.energy + c.wave_amp * sin(c.wave_phase) * 0.008;
+  }
+
+  // Signal propagation is a FieldPhysics-stage output. Information dynamics
+  // then consumes the updated information and the post-entropy field state.
+  if (isProcessEnabled(1024u)) {
+    let sigRate = params.signalPropagationRate * params.infoGrowthRate * dt;
+    o.information = clamp(c.information + sigRate * lapI, 0.0, 999.0);
+  }
+
+  // ── PROC 14: Field Rotation (heuristic vector relaxation) ──────────────────
+  if (isProcessEnabled(16384u)) {
+    let neighborCount = max(fieldNeighborCount, 1.0);
+    let avgFx = fxSum / neighborCount;
+    let avgFy = fySum / neighborCount;
+    let avgFz = fzSum / neighborCount;
+    let rotateFx = o.field_x;
+    let rotateFy = o.field_y;
+    let rotateFz = o.field_z;
+    o.field_x = rotateFx * params.fieldRotationDamping
+      + avgFx * params.fieldRotationNeighborCoupling
+      + rotateFy * params.fieldRotationCrossCoupling;
+    o.field_y = rotateFy * params.fieldRotationDamping
+      + avgFy * params.fieldRotationNeighborCoupling
+      - rotateFx * params.fieldRotationCrossCoupling;
+    o.field_z = rotateFz * params.fieldRotationDamping
+      + avgFz * params.fieldRotationNeighborCoupling;
+  }
+
+  // ── PROC 8: Phase Transitions ─────────────────────────────────────────────
+  if (isProcessEnabled(256u)) {
+    if (c.temperature > 500.0 && c.density > 0.5) {
+      // Boiling: gate on the pre-step state, but compose with prior outputs in this step.
+      o.density = max(0.0, o.density - params.phaseTransitionRate * dt * 60.0);
+      o.entropy = min(1.0, o.entropy + params.phaseTransitionRate * dt * 60.0);
+      o.information = max(0.0, o.information - 3.0 * dt);
+    } else if (c.temperature < 40.0 && c.density > 0.55) {
+      // Freezing / solidification: preserve density diffusion/advection output.
+      o.density = min(1.0, o.density + params.phaseTransitionRate * 0.5 * dt * 60.0);
+      o.entropy = max(0.0, o.entropy - params.phaseTransitionRate * 0.5 * dt * 60.0);
+    }
+  }
+
+  // ── PROC 12: Radiation Pressure ───────────────────────────────────────────
+  if (isProcessEnabled(4096u)) {
+    if (c.energy > params.radiationThreshold) {
+      let absorbed = mat.radiationAbsorption;
+      o.density = max(0.0, o.density - (c.energy - params.radiationThreshold)
+        * params.radiationDensityRate * (1.0 - absorbed) * dt * 60.0);
+      o.energy = max(0.0, o.energy - (c.energy - params.radiationThreshold)
+        * params.radiationEnergyRate * dt * 60.0);
+    }
+  }
+
+  // ── PROC 11: Crystallization ──────────────────────────────────────────────
+  if (isProcessEnabled(2048u)) {
+    if (c.entropy < 0.18 && c.density > 0.38) {
+      let materialRate = select(mat.crystallizationRate, 1.0, matIdx == 0u);
+      let cRate = params.crystallizationRate * materialRate;
+      // Use the immutable pre-step state for eligibility, then compose with prior field updates.
+      o.density = min(1.0, o.density + cRate * (0.18 - c.entropy) * dt * 60.0);
+      o.entropy = max(0.0, o.entropy - cRate * 0.5 * dt * 60.0);
+      if (cRate > 0.0 && (matIdx == 0u || matIdx == 1u || matIdx == 2u)) {
+        o.material_id = 3.0;
+      }
+    }
+  }
+
+  // ── PROC 15: Erosion ──────────────────────────────────────────────────────
+  if (isProcessEnabled(32768u)) {
+    let flow = abs(c.field_x) + abs(c.field_y) + abs(c.field_z);
+    if (c.density > 0.65 && flow > 8.0) {
+      let resistance = mat.erosionResistance;
+      o.density     = max(0.0, o.density - params.erosionRate * (1.0 - resistance) * dt * 60.0);
+      o.information = max(0.0, o.information - 0.4 * (1.0 - resistance) * dt);
+    }
+  }
+
   // ── PROC 3: Entropy Growth (second law — cannot be disabled by MetaLaw) ───
   if (isProcessEnabled(8u)) {
     // Match the CPU operator order: energy/thermal diffusion has already
@@ -288,13 +393,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     o.entropy = min(1.0, o.entropy + dS);
     // Energy attenuation uses the newly integrated entropy state.
     o.energy = max(0.0, o.energy * (1.0 - o.entropy * 0.0005 * dt * 60.0));
-  }
-
-  // Signal propagation is a FieldPhysics-stage output. Information dynamics
-  // then consumes the updated information and the post-entropy field state.
-  if (isProcessEnabled(1024u)) {
-    let sigRate = params.signalPropagationRate * params.infoGrowthRate * dt;
-    o.information = clamp(c.information + sigRate * lapI, 0.0, 999.0);
   }
 
   // ── PROC 4: Information Dynamics ──────────────────────────────────────────
@@ -317,40 +415,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     o.bio_potential = clamp(bio, 0.0, 1.0);
   }
 
-  // ── PROC 6: Wave Propagation ──────────────────────────────────────────────
-  if (isProcessEnabled(64u)) {
-    o.wave_phase = (c.wave_phase + params.waveSpeed * dt) % 6.28318530;
-    o.wave_amp   = c.wave_amp * params.waveDamping;
-    o.energy     = o.energy + c.wave_amp * sin(c.wave_phase) * 0.008;
-  }
-
-  // ── PROC 7: Gravity (density-gradient acceleration; Neumann boundaries) ──
-  if (isProcessEnabled(128u)) {
-    let acceleration_x = -params.gravityDensityCoupling * (nbD[1] - nbD[0]) * 0.5;
-    let acceleration_y = -params.gravityDensityCoupling * (nbD[3] - nbD[2]) * 0.5;
-    let acceleration_z = -params.gravityDensityCoupling * (nbD[5] - nbD[4]) * 0.5;
-    o.field_x = c.field_x + acceleration_x * dt;
-    o.field_y = c.field_y + acceleration_y * dt;
-    o.field_z = c.field_z + acceleration_z * dt;
-    o.velocity_x = c.velocity_x + acceleration_x * dt;
-    o.velocity_y = c.velocity_y + acceleration_y * dt;
-    o.velocity_z = c.velocity_z + acceleration_z * dt;
-  }
-
-  // ── PROC 8: Phase Transitions ─────────────────────────────────────────────
-  if (isProcessEnabled(256u)) {
-    if (c.temperature > 500.0 && c.density > 0.5) {
-      // Boiling: gate on the pre-step state, but compose with prior outputs in this step.
-      o.density = max(0.0, o.density - params.phaseTransitionRate * dt * 60.0);
-      o.entropy = min(1.0, o.entropy + params.phaseTransitionRate * dt * 60.0);
-      o.information = max(0.0, o.information - 3.0 * dt);
-    } else if (c.temperature < 40.0 && c.density > 0.55) {
-      // Freezing / solidification: preserve density diffusion/advection output.
-      o.density = min(1.0, o.density + params.phaseTransitionRate * 0.5 * dt * 60.0);
-      o.entropy = max(0.0, o.entropy - params.phaseTransitionRate * 0.5 * dt * 60.0);
-    }
-  }
-
   // ── PROC 9: Metabolism ────────────────────────────────────────────────────
   if (isProcessEnabled(512u)) {
     // Bio potential may have been recalculated earlier in this shader step.
@@ -360,70 +424,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       o.energy      = max(0.0, o.energy - rate * 60.0);
       o.information = min(999.0, o.information + rate * 25.0);
       o.entropy     = min(1.0, o.entropy + rate * 0.008);
-    }
-  }
-
-  // ── PROC 11: Crystallization ──────────────────────────────────────────────
-  if (isProcessEnabled(2048u)) {
-    if (c.entropy < 0.18 && c.density > 0.38) {
-      let materialRate = select(mat.crystallizationRate, 1.0, matIdx == 0u);
-      let cRate = params.crystallizationRate * materialRate;
-      // Use the immutable pre-step state for eligibility, then compose with prior field updates.
-      o.density = min(1.0, o.density + cRate * (0.18 - c.entropy) * dt * 60.0);
-      o.entropy = max(0.0, o.entropy - cRate * 0.5 * dt * 60.0);
-      if (cRate > 0.0 && (matIdx == 0u || matIdx == 1u || matIdx == 2u)) {
-        o.material_id = 3.0;
-      }
-    }
-  }
-
-  // ── PROC 12: Radiation Pressure ───────────────────────────────────────────
-  if (isProcessEnabled(4096u)) {
-    if (c.energy > params.radiationThreshold) {
-      let absorbed = mat.radiationAbsorption;
-      o.density = max(0.0, o.density - (c.energy - params.radiationThreshold)
-        * params.radiationDensityRate * (1.0 - absorbed) * dt * 60.0);
-      o.energy = max(0.0, o.energy - (c.energy - params.radiationThreshold)
-        * params.radiationEnergyRate * dt * 60.0);
-    }
-  }
-
-  // ── PROC 13: Pressure Diffusion ───────────────────────────────────────────
-  if (isProcessEnabled(8192u)) {
-    let equilibriumPressure = (c.density * params.pressureDensityCoupling - c.temperature * 0.1) * mat.elasticity;
-    o.pressure = clamp(
-      c.pressure + params.pressureDiffusion * dt * lapP
-        + (equilibriumPressure - c.pressure) * dt,
-      -9999.0, 9999.0
-    );
-  }
-
-  // ── PROC 14: Field Rotation (heuristic vector relaxation) ──────────────────
-  if (isProcessEnabled(16384u)) {
-    let neighborCount = max(fieldNeighborCount, 1.0);
-    let avgFx = fxSum / neighborCount;
-    let avgFy = fySum / neighborCount;
-    let avgFz = fzSum / neighborCount;
-    let rotateFx = o.field_x;
-    let rotateFy = o.field_y;
-    let rotateFz = o.field_z;
-    o.field_x = rotateFx * params.fieldRotationDamping
-      + avgFx * params.fieldRotationNeighborCoupling
-      + rotateFy * params.fieldRotationCrossCoupling;
-    o.field_y = rotateFy * params.fieldRotationDamping
-      + avgFy * params.fieldRotationNeighborCoupling
-      - rotateFx * params.fieldRotationCrossCoupling;
-    o.field_z = rotateFz * params.fieldRotationDamping
-      + avgFz * params.fieldRotationNeighborCoupling;
-  }
-
-  // ── PROC 15: Erosion ──────────────────────────────────────────────────────
-  if (isProcessEnabled(32768u)) {
-    let flow = abs(c.field_x) + abs(c.field_y) + abs(c.field_z);
-    if (c.density > 0.65 && flow > 8.0) {
-      let resistance = mat.erosionResistance;
-      o.density     = max(0.0, o.density - params.erosionRate * (1.0 - resistance) * dt * 60.0);
-      o.information = max(0.0, o.information - 0.4 * (1.0 - resistance) * dt);
     }
   }
 
