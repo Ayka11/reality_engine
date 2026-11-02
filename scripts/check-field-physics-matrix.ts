@@ -162,19 +162,23 @@ for (const scenario of scenarios) {
 }
 
 // Gravity is a density-gradient acceleration and must not directly create or destroy density.
-function runGravityGradient(includeX: boolean, includeZ: boolean, processEnabled = true): {
-  density: number; fx: number; fy: number; fz: number;
-} {
+function runGravityGradient(
+  includeX: boolean, includeZ: boolean, processEnabled = true, rotationEnabled = false,
+): { density: number; fx: number; fy: number; fz: number } {
   const grid = new VoxelGrid(3, 3, 3);
   const center = grid.idx(1, 1, 1);
   grid.buffer[center + F.DENSITY] = 0.4;
   if (includeX) grid.buffer[grid.idx(2, 1, 1) + F.DENSITY] = 0.8;
   if (includeZ) grid.buffer[grid.idx(1, 1, 2) + F.DENSITY] = 0.8;
   grid.snapshot();
-  const mask = processEnabled ? (1 << PROC.GRAVITY) : 0;
+  const mask = (processEnabled ? (1 << PROC.GRAVITY) : 0)
+    | (rotationEnabled ? (1 << PROC.FIELD_ROTATION) : 0);
   new FieldPhysics().tick(grid, 1 / 60, {
     ...DEFAULT_PARAMS,
     gravityDensityCoupling: 0.1,
+    fieldRotationDamping: 1,
+    fieldRotationNeighborCoupling: 0,
+    fieldRotationCrossCoupling: 0,
   }, mask);
   return {
     density: grid.buffer[center + F.DENSITY],
@@ -192,6 +196,8 @@ assert.equal(gravityGradient.fy, 0,
   "a zero Y density gradient must not create Y acceleration");
 assert.equal(runGravityGradient(true, true, false).fx, 0,
   "disabled gravity must leave the field vector unchanged");
+assert.ok(runGravityGradient(true, false, true, true).fx < 0,
+  "field rotation must preserve gravity acceleration when both processes are enabled");
 const gravityBoundaryGrid = new VoxelGrid(3, 3, 3);
 gravityBoundaryGrid.buffer[gravityBoundaryGrid.idx(0, 1, 1) + F.DENSITY] = 0.4;
 gravityBoundaryGrid.buffer[gravityBoundaryGrid.idx(1, 1, 1) + F.DENSITY] = 0.8;
