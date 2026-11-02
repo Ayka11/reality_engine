@@ -246,6 +246,9 @@ function simStep(dt: number) {
     const D_ = chunk[base + F.D], I = chunk[base + F.I]
     const P = chunk[base + F.P], wave = chunk[base + F.WAVE]
     const FX = chunk[base + F.FX], FY = chunk[base + F.FY], FZ = chunk[base + F.FZ]
+    let nextFX = FX, nextFY = FY, nextFZ = FZ
+    const gravityActive = isProcessActive(PROC.GRAVITY)
+    const rotationActive = isProcessActive(PROC.FIELD_ROTATION)
     lapE -= nc * E; lapT -= nc * T; lapD -= nc * D_; lapI -= nc * I
     lapP -= nc * P; lapWave -= nc * wave
 
@@ -327,13 +330,17 @@ function simStep(dt: number) {
         grid.get(x, y, z, F.E) + wave * Math.sin(tick * dt * p.waveSpeed) * 0.008 * dt)))
     }
 
-    if (isProcessActive(PROC.GRAVITY)) {
-      const leftD = sourceRead(x - 1, y, z, F.D), rightD = sourceRead(x + 1, y, z, F.D)
-      const downD = sourceRead(x, y - 1, z, F.D), upD = sourceRead(x, y + 1, z, F.D)
-      const backD = sourceRead(x, y, z - 1, F.D), frontD = sourceRead(x, y, z + 1, F.D)
-      grid.set(x, y, z, F.FX, FX - p.gravityDensityCoupling * (rightD - leftD) * 0.5 * dt)
-      grid.set(x, y, z, F.FY, FY - p.gravityDensityCoupling * (upD - downD) * 0.5 * dt)
-      grid.set(x, y, z, F.FZ, FZ - p.gravityDensityCoupling * (frontD - backD) * 0.5 * dt)
+    if (gravityActive) {
+      // Neumann boundaries: a missing neighbor mirrors the center density.
+      const leftD = x > 0 ? sourceRead(x - 1, y, z, F.D) : D_
+      const rightD = x + 1 < W ? sourceRead(x + 1, y, z, F.D) : D_
+      const downD = y > 0 ? sourceRead(x, y - 1, z, F.D) : D_
+      const upD = y + 1 < H ? sourceRead(x, y + 1, z, F.D) : D_
+      const backD = z > 0 ? sourceRead(x, y, z - 1, F.D) : D_
+      const frontD = z + 1 < D ? sourceRead(x, y, z + 1, F.D) : D_
+      nextFX -= p.gravityDensityCoupling * (rightD - leftD) * 0.5 * dt
+      nextFY -= p.gravityDensityCoupling * (upD - downD) * 0.5 * dt
+      nextFZ -= p.gravityDensityCoupling * (frontD - backD) * 0.5 * dt
     }
 
     if (isProcessActive(PROC.PRESSURE_DIFFUSION)) {
@@ -390,15 +397,21 @@ function simStep(dt: number) {
       }
     }
 
-    if (isProcessActive(PROC.FIELD_ROTATION)) {
-      grid.set(x, y, z, F.FX, FX * p.fieldRotationDamping + fxSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling + FY * p.fieldRotationCrossCoupling)
-      grid.set(x, y, z, F.FY, FY * p.fieldRotationDamping + fySum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling - FX * p.fieldRotationCrossCoupling)
-      grid.set(x, y, z, F.FZ, FZ * p.fieldRotationDamping + fzSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling)
+    if (rotationActive) {
+      const rotateFX = nextFX, rotateFY = nextFY, rotateFZ = nextFZ
+      nextFX = rotateFX * p.fieldRotationDamping + fxSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling + rotateFY * p.fieldRotationCrossCoupling
+      nextFY = rotateFY * p.fieldRotationDamping + fySum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling - rotateFX * p.fieldRotationCrossCoupling
+      nextFZ = rotateFZ * p.fieldRotationDamping + fzSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling
+    }
+    if (gravityActive || rotationActive) {
+      grid.set(x, y, z, F.FX, nextFX)
+      grid.set(x, y, z, F.FY, nextFY)
+      grid.set(x, y, z, F.FZ, nextFZ)
     }
 
     if (isProcessActive(PROC.EROSION)) {
       const density = grid.get(x, y, z, F.D)
-      const flow = Math.abs(grid.get(x, y, z, F.FX)) + Math.abs(grid.get(x, y, z, F.FY))
+      const flow = Math.abs(FX) + Math.abs(FY) + Math.abs(FZ)
       const materialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
         Math.floor(grid.get(x, y, z, F.MAT))))
       const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
