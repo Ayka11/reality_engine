@@ -259,10 +259,37 @@ try {
       }
     }
 
+    async function runLocalTimeStep() {
+      const width = 3, height = 3, depth = 3;
+      const backend = new GPUBackend();
+      try {
+        const initialized = await backend.init(width, height, depth);
+        if (!initialized) throw new Error("WebGPU adapter disappeared during local-time parity initialization");
+        backend.uploadMaterials(buildMaterialBuffer());
+        const cells = new Float32Array(width * height * depth * CELL_FIELDS);
+        const center = (1 * height + 1) * width + 1;
+        cells[center * CELL_FIELDS + F.ENERGY] = 100;
+        cells[center * CELL_FIELDS + F.ENTROPY] = 0.2;
+        cells[center * CELL_FIELDS + F.LOCAL_TIME] = 0;
+        backend.upload(cells);
+        backend.writeParams({
+          ...DEFAULT_PARAMS,
+          timeBaseRate: 1.5,
+          timeEnergyBoost: 0.002,
+        }, 0, 0.016);
+        backend.submitCompute(1);
+        const output = await backend.readback();
+        return output[center * CELL_FIELDS + F.LOCAL_TIME];
+      } finally {
+        backend.destroy();
+      }
+    }
+
     const adapterInfo = adapter.info?.description || adapter.info?.device || "unknown";
     const coupledMaterial = await runCoupledMaterialStep();
     const entropyCoupled = await runEntropyCoupledStep();
     const bioMetabolism = await runBioMetabolismStep();
+    const localTime = await runLocalTimeStep();
     const combinedPhase = await runCombinedDensityProcess(
       0.50005, 0.2, 600, 10,
       (1 << PROC.DENSITY_FLOW) | (1 << PROC.PHASE_TRANSITION),
@@ -308,7 +335,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, bioMetabolism };
+    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, bioMetabolism, localTime };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -374,6 +401,9 @@ try {
       `GPU metabolism information output mismatch (got ${result.bioMetabolism.information})`);
     assert.ok(Math.abs(result.bioMetabolism.entropy - (0.2 + expectedBioMetabolismRate * 0.008)) < 1e-5,
       `GPU metabolism entropy output mismatch (got ${result.bioMetabolism.entropy})`);
+    const expectedLocalTime = 0.016 * 1.5 * (1 + 100 * 0.002 + 0.2 * 0.5);
+    assert.ok(Math.abs(result.localTime - expectedLocalTime) < 1e-5,
+      `GPU local time must use normalized base-rate/energy/entropy formula (expected ${expectedLocalTime}, got ${result.localTime})`);
     console.log("WebGPU density-advection/material/phase runtime: PASS " + JSON.stringify(result));
   }
 } finally {
