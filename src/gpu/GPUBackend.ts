@@ -142,9 +142,15 @@ fn densityFluxLimiter(x: i32, y: i32, z: i32) -> vec2<f32> {
       incoming += -faceVelocity * params.dt * densityAfterDiffusion(nx, ny, nz);
     }
   }
-  let outgoingScale = select(1.0, centerDensity / outgoing, outgoing > centerDensity && outgoing > 0.0);
+  var outgoingScale = 1.0;
+  if (outgoing > centerDensity && outgoing > 0.0) {
+    outgoingScale = centerDensity / outgoing;
+  }
   let freeCapacity = 1.0 - centerDensity;
-  let incomingScale = select(1.0, freeCapacity / incoming, incoming > freeCapacity && incoming > 0.0);
+  var incomingScale = 1.0;
+  if (incoming > freeCapacity && incoming > 0.0) {
+    incomingScale = freeCapacity / incoming;
+  }
   return vec2<f32>(outgoingScale, incomingScale);
 }
 
