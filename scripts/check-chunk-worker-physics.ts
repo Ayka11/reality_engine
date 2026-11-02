@@ -250,8 +250,10 @@ send('tick', { speed: 1 })
 const gravityEdgeFx = readField(
   latestFrame(), gravityEdgePoint.x, gravityEdgePoint.y, gravityEdgePoint.z, F.FX,
 )
-assert.ok(gravityEdgeFx < 0 && Math.abs(gravityEdgeFx + (0.1 * 0.25 / 60)) < 1e-6,
-  `worker gravity must use a mirrored Neumann boundary at x=0 (got ${gravityEdgeFx})`)
+// ChunkSimWorker advances with a fixed 16 ms step (0.016 s), not 1/60 s.
+const expectedGravityEdgeFx = -0.1 * 0.25 * 0.016;
+assert.ok(gravityEdgeFx < 0 && Math.abs(gravityEdgeFx - expectedGravityEdgeFx) < 1e-6,
+  `worker gravity must use the mirrored Neumann boundary at x=0 (expected ${expectedGravityEdgeFx}, got ${gravityEdgeFx})`)
 
 // A sub-threshold acceleration in a previously empty chunk must not be lost
 // by the sparse field epsilon at a chunk boundary.
