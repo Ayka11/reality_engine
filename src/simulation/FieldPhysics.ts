@@ -13,6 +13,12 @@ export class FieldPhysics {
   tick(grid: VoxelGrid, dt: number, p: Readonly<PhysicsParams>, mask: number): void {
     withMutableBuffers(grid, (front, back) => {
       const { W, H, D } = grid;
+      const readBackDensityField = (rx: number, ry: number, rz: number, field: 'density' | 'velocityX' | 'velocityY' | 'velocityZ') =>
+        back[grid.idx(rx, ry, rz) + (
+          field === 'density' ? F.DENSITY :
+          field === 'velocityX' ? F.VELOCITY_X :
+          field === 'velocityY' ? F.VELOCITY_Y : F.VELOCITY_Z
+        )];
 
       for (let z = 0; z < D; z++)
       for (let y = 0; y < H; y++)
@@ -69,11 +75,7 @@ export class FieldPhysics {
             : cD;
           const advectionDelta = densityAdvectionActive
             ? densityAdvectionDelta(
-                (rx, ry, rz, field) => back[grid.idx(rx, ry, rz) + (
-                  field === 'density' ? F.DENSITY :
-                  field === 'velocityX' ? F.VELOCITY_X :
-                  field === 'velocityY' ? F.VELOCITY_Y : F.VELOCITY_Z
-                )],
+                readBackDensityField,
                 x, y, z, W, H, D, dt,
                 densityDiffusionActive ? p.densityDiffusion : 0,
               )
