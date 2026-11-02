@@ -423,6 +423,50 @@ assert.ok(Math.abs(entropyGrid.buffer[entropyBase + F.ENTROPY] - expectedEntropy
 assert.ok(Math.abs(entropyGrid.buffer[entropyBase + F.ENERGY] - expectedEntropyEnergy) < 1e-5,
   "CPU entropy attenuation must use the newly integrated entropy");
 
+
+function runCpuBioMetabolism(
+  materialId: number,
+  processMask: number,
+): { bio: number; energy: number; information: number; entropy: number } {
+  const grid = new VoxelGrid(3, 3, 3);
+  const base = grid.idx(1, 1, 1);
+  grid.buffer[base + F.MATERIAL_ID] = materialId;
+  grid.buffer[base + F.ENERGY] = 100;
+  grid.buffer[base + F.INFORMATION] = 40;
+  grid.buffer[base + F.DENSITY] = 0.5;
+  grid.buffer[base + F.ENTROPY] = 0.2;
+  grid.buffer[base + F.BIO_POTENTIAL] = 0;
+  new EntropyLayer().tick(grid, 1 / 60, {
+    ...DEFAULT_PARAMS,
+    metabolismRate: 0.6,
+  }, processMask);
+  return {
+    bio: grid.buffer[base + F.BIO_POTENTIAL],
+    energy: grid.buffer[base + F.ENERGY],
+    information: grid.buffer[base + F.INFORMATION],
+    entropy: grid.buffer[base + F.ENTROPY],
+  };
+}
+
+const bioMask = 1 << PROC.BIO_POTENTIAL;
+const metabolismMask = (1 << PROC.BIO_POTENTIAL) | (1 << PROC.METABOLISM);
+const organicBio = runCpuBioMetabolism(MAT.ORGANIC_TISSUE, bioMask);
+const stoneBio = runCpuBioMetabolism(MAT.STONE, bioMask);
+assert.ok(Math.abs(organicBio.bio - 0.67) < 1e-5,
+  `CPU Bio-Potential must include organic material affinity (expected 0.67, got ${organicBio.bio})`);
+assert.ok(Math.abs(stoneBio.bio - 0.27) < 1e-5,
+  `CPU Bio-Potential must include stone material affinity (expected 0.27, got ${stoneBio.bio})`);
+const organicMetabolism = runCpuBioMetabolism(MAT.ORGANIC_TISSUE, metabolismMask);
+const expectedMetabolismRate = 0.67 * 0.6 / 60;
+assert.ok(Math.abs(organicMetabolism.energy - (100 - expectedMetabolismRate * 60)) < 1e-5,
+  `CPU metabolism must use PhysicsParams.metabolismRate (got energy ${organicMetabolism.energy})`);
+assert.ok(Math.abs(organicMetabolism.information - (40 + expectedMetabolismRate * 25)) < 1e-5,
+  `CPU metabolism information output mismatch (got ${organicMetabolism.information})`);
+assert.ok(Math.abs(organicMetabolism.entropy - (0.2 + expectedMetabolismRate * 0.008)) < 1e-5,
+  `CPU metabolism entropy output mismatch (got ${organicMetabolism.entropy})`);
+
+console.log("CPU material bio-affinity/metabolism parameter regression: PASS");
+
 console.log("CPU energy/thermal/entropy operator-order regression: PASS");
 
 console.log("Material-dependent energy/thermal diffusion regression: PASS");
