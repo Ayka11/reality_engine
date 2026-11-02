@@ -142,8 +142,57 @@ try {
       }
     }
 
+    async function runCombinedDensityProcess(density, entropy, temperature, information, processMask, params, dt) {
+      const width = 3, height = 3, depth = 3;
+      const backend = new GPUBackend();
+      try {
+        const initialized = await backend.init(width, height, depth);
+        if (!initialized) throw new Error("WebGPU adapter disappeared during combined density-process initialization");
+        backend.uploadMaterials(buildMaterialBuffer());
+        const cells = new Float32Array(width * height * depth * CELL_FIELDS);
+        for (let cell = 0; cell < width * height * depth; cell++) {
+          cells[cell * CELL_FIELDS + F.MATERIAL_ID] = MAT.VACUUM;
+        }
+        const center = (1 * height + 1) * width + 1;
+        cells[center * CELL_FIELDS + F.DENSITY] = density;
+        cells[center * CELL_FIELDS + F.ENTROPY] = entropy;
+        cells[center * CELL_FIELDS + F.TEMPERATURE] = temperature;
+        cells[center * CELL_FIELDS + F.INFORMATION] = information;
+        backend.upload(cells);
+        backend.writeParams({
+          ...DEFAULT_PARAMS,
+          energyDiffusion: 0,
+          tempDiffusion: 0,
+          tempEnergyCoupling: 0,
+          ...params,
+        }, processMask, dt);
+        backend.submitCompute(1);
+        const output = await backend.readback();
+        return {
+          density: output[center * CELL_FIELDS + F.DENSITY],
+          entropy: output[center * CELL_FIELDS + F.ENTROPY],
+          information: output[center * CELL_FIELDS + F.INFORMATION],
+          materialId: output[center * CELL_FIELDS + F.MATERIAL_ID],
+        };
+      } finally {
+        backend.destroy();
+      }
+    }
+
     const adapterInfo = adapter.info?.description || adapter.info?.device || "unknown";
     const coupledMaterial = await runCoupledMaterialStep();
+    const combinedPhase = await runCombinedDensityProcess(
+      0.50005, 0.2, 600, 10,
+      (1 << PROC.DENSITY_FLOW) | (1 << PROC.PHASE_TRANSITION),
+      { densityDiffusion: 0.01, phaseTransitionRate: 0.008 },
+      0.016,
+    );
+    const combinedCrystallization = await runCombinedDensityProcess(
+      0.38005, 0.1, 0, 0,
+      (1 << PROC.DENSITY_FLOW) | (1 << PROC.CRYSTALLIZATION),
+      { densityDiffusion: 0.01, crystallizationRate: 0.003 },
+      0.016,
+    );
     const materialDiffusion = {
       energyVacuum: await runMaterialDiffusion(
         MAT.VACUUM, F.ENERGY, PROC.ENERGY_DIFFUSION, "energyDiffusion",
@@ -165,7 +214,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial };
+    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -196,7 +245,19 @@ try {
       `GPU combined energy step must apply metal conductivity (expected 97.12, got ${result.coupledMaterial.energy})`);
     assert.ok(Math.abs(result.coupledMaterial.temperature - 0.8) < 1e-4,
       `GPU thermal coupling must use pre-step energy (expected 0.8, got ${result.coupledMaterial.temperature})`);
-    console.log("WebGPU density-advection/material-physics runtime: PASS " + JSON.stringify(result));
+    assert.ok(Math.abs(result.combinedPhase.density - 0.49188995) < 1e-4,
+      `GPU phase transition must preserve density diffusion output (expected 0.49188995, got ${result.combinedPhase.density})`);
+    assert.ok(Math.abs(result.combinedPhase.entropy - 0.20768) < 1e-4,
+      `GPU boiling entropy increment mismatch (got ${result.combinedPhase.entropy})`);
+    assert.ok(Math.abs(result.combinedPhase.information - 9.952) < 1e-4,
+      `GPU boiling information reduction mismatch (got ${result.combinedPhase.information})`);
+    assert.ok(Math.abs(result.combinedCrystallization.density - 0.37991555) < 1e-4,
+      `GPU crystallization must preserve density diffusion output (expected 0.37991555, got ${result.combinedCrystallization.density})`);
+    assert.ok(Math.abs(result.combinedCrystallization.entropy - 0.09856) < 1e-4,
+      `GPU crystallization entropy reduction mismatch (got ${result.combinedCrystallization.entropy})`);
+    assert.equal(result.combinedCrystallization.materialId, MAT.CRYSTAL,
+      "GPU must crystallize a material that was eligible in the pre-step state");
+    console.log("WebGPU density-advection/material/phase runtime: PASS " + JSON.stringify(result));
   }
 } finally {
   await browser?.close();
