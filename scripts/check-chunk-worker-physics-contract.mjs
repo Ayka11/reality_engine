@@ -94,6 +94,12 @@ assert.ok((await fs.readFile('scripts/check-field-physics-matrix.ts', 'utf8'))
   .includes('Material-dependent energy/thermal diffusion regression: PASS'))
 assert.ok((await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8'))
   .includes('metal heat capacity must inversely scale worker thermal diffusion'))
+assert.ok((await fs.readFile('scripts/check-field-physics-matrix.ts', 'utf8'))
+  .includes('thermal energy coupling must read pre-step energy'))
+assert.ok((await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8'))
+  .includes('thermal coupling must use pre-step energy in the worker'))
+assert.ok((await fs.readFile('scripts/check-gpu-density-advection-runtime.mjs', 'utf8'))
+  .includes('GPU thermal coupling must use pre-step energy'))
 
 // Density flow must use its dedicated coefficient in CPU, GPU, and worker paths.
 assert.ok(gpu.includes('densityDiffusion: f32,        // [22]'))
