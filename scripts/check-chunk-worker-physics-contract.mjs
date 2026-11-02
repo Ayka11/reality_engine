@@ -101,7 +101,7 @@ assert.ok(chunkGrid.includes('FZ:  14'))
 assert.ok(main.includes("import { CHUNK_FLOATS } from './core/ChunkGrid';"))
 assert.ok(main.includes('const CF = CHUNK_FLOATS;'))
 assert.ok(worker.includes('F.FZ'))
-assert.ok(worker.includes('grid.set(x, y, z, F.FZ, FZ - p.gravityDensityCoupling * (frontD - backD) * 0.5 * dt)'),
+assert.ok(worker.includes('nextFZ -= p.gravityDensityCoupling * (frontD - backD) * 0.5 * dt'),
   'worker gravity must apply the z-axis density gradient to the third field-vector component')
 
 // Field rotation is parameterized and process-mask gated in all available paths.
@@ -113,7 +113,7 @@ assert.ok(worker.includes('p.fieldRotationNeighborCoupling'))
 assert.ok(worker.includes('p.fieldRotationCrossCoupling'))
 assert.ok(worker.includes('const activationFields = [F.E, F.T, F.D, F.I, F.P, F.WAVE, F.FX, F.FY, F.FZ]'))
 assert.ok(worker.includes('fzSum += sourceRead(nx, ny, nz, F.FZ)'))
-assert.ok(worker.includes('grid.set(x, y, z, F.FZ, FZ * p.fieldRotationDamping + fzSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling)'))
+assert.ok(worker.includes('nextFZ = rotateFZ * p.fieldRotationDamping + fzSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling'))
 assert.ok(gpu.includes('fieldRotationDamping: f32,   // [28]'))
 assert.ok(gpu.includes('fieldRotationNeighborCoupling: f32, // [29]'))
 assert.ok(gpu.includes('fieldRotationCrossCoupling: f32, // [30]'))
