@@ -256,6 +256,23 @@ const stationary = runDensityAdvection([0.5, 0], [0, 0], 1);
 assert.deepEqual(stationary, [0.5, 0],
   "zero velocity must produce no density transport");
 
+for (const [axis, field] of [
+  [0, F.VELOCITY_X], [1, F.VELOCITY_Y], [2, F.VELOCITY_Z],
+] as const) {
+  const grid = new VoxelGrid(3, 3, 3);
+  const donor = [1, 1, 1] as const;
+  const receiver = [1 + (axis === 0 ? 1 : 0), 1 + (axis === 1 ? 1 : 0), 1 + (axis === 2 ? 1 : 0)] as const;
+  grid.buffer[grid.idx(...donor) + F.DENSITY] = 0.5;
+  grid.buffer[grid.idx(...donor) + field] = 1;
+  grid.buffer[grid.idx(...receiver) + field] = 1;
+  grid.snapshot();
+  new FieldPhysics().tick(grid, 0.25, DEFAULT_PARAMS, 1 << PROC.DENSITY_ADVECTION);
+  const donorAfter = grid.buffer[grid.idx(...donor) + F.DENSITY];
+  const receiverAfter = grid.buffer[grid.idx(...receiver) + F.DENSITY];
+  assert.ok(donorAfter < 0.5 && receiverAfter > 0,
+    `density advection must transport along axis ${axis} (donor ${donorAfter}, receiver ${receiverAfter})`);
+}
+
 const densityScenario = scenarios.find(s => s.name === "density")!;
 const densityConservation = runCentered(densityScenario, 1 / 60, 0.0024);
 assert.ok(Math.abs(densityConservation.totalAfter - densityConservation.totalBefore) < 1e-6,
