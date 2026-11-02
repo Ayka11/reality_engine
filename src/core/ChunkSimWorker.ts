@@ -291,78 +291,9 @@ function simStep(dt: number) {
       grid.set(x, y, z, F.D,
         Math.max(0, Math.min(1, densityAfterDiffusion + advectionDelta)))
     }
-    // Signal propagation is a FieldPhysics-stage output. Information growth
-    // follows in the entropy/information stage, matching the dense CPU solver.
-    const informationActive = isProcessActive(PROC.INFORMATION)
-    const signalActive = isProcessActive(PROC.SIGNAL_PROPAGATION)
-    let nextI = I
-    if (signalActive) {
-      nextI = Math.max(0, Math.min(999,
-        I + p.signalPropagationRate * p.infoGrowthRate * dt * lapI))
-    }
-
-    const entropyEnabled = isProcessActive(PROC.ENTROPY_GROWTH)
-    const entropyEnergy = grid.get(x, y, z, F.E)
-    const entropyBase = grid.get(x, y, z, F.S)
-    const dS = entropyEnabled
-      ? (p.entropyGrowthRate + entropyEnergy * p.entropyEnergyCoupling
-        + grid.get(x, y, z, F.T) * 0.00005) * dt
-      : 0
-    const newS = entropyEnabled
-      ? Math.max(0, Math.min(1, entropyBase + dS))
-      : entropyBase
-    if (entropyEnabled) {
-      grid.set(x, y, z, F.S, newS)
-      grid.set(x, y, z, F.E, Math.max(0,
-        entropyEnergy * (1 - newS * 0.0005 * dt * 60)))
-    }
-
-    if (informationActive) {
-      const supp = 1 - grid.get(x, y, z, F.S) * p.infoEntropySupp
-      if (grid.get(x, y, z, F.E) > p.infoGrowthThreshE &&
-          grid.get(x, y, z, F.D) > p.infoGrowthThreshD && supp > 0) {
-        nextI = Math.max(0, Math.min(999,
-          nextI + p.infoGrowthRate * supp * dt))
-      } else {
-        nextI = Math.max(0, nextI * Math.pow(0.999, dt * 60))
-      }
-    }
-    if (informationActive || signalActive) grid.set(x, y, z, F.I, nextI)
-
-    if (isProcessActive(PROC.BIO_POTENTIAL)) {
-      const materialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
-        Math.floor(grid.get(x, y, z, F.MAT))))
-      const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
-      const bio = (grid.get(x, y, z, F.I) / 200) * 0.4
-        + Math.min(newE / 500, 1) * 0.3
-        + grid.get(x, y, z, F.D) * 0.2
-        + (1 - newS) * 0.1
-        + material.bioAffinity
-      grid.set(x, y, z, F.BIO, Math.max(0, Math.min(1, bio)))
-    }
-
-    if (isProcessActive(PROC.METABOLISM)) {
-      const bio = grid.get(x, y, z, F.BIO)
-      if (bio > 0.45) {
-        const rate = bio * p.metabolismRate * dt
-        grid.set(x, y, z, F.E, Math.max(0, grid.get(x, y, z, F.E) - rate * 60))
-        grid.set(x, y, z, F.I, Math.min(999, grid.get(x, y, z, F.I) + rate * 25))
-        grid.set(x, y, z, F.S, Math.min(1, grid.get(x, y, z, F.S) + rate * 0.008))
-      }
-    }
-
-    if (isProcessActive(PROC.WAVE_PROPAGATION)) {
-      const nextWave = Math.max(-9999, Math.min(9999,
-        (wave + p.waveSpeed * p.waveSpeed * lapWave * dt * dt) * p.waveDamping))
-      grid.set(x, y, z, F.WAVE, nextWave)
-      // Wave-to-energy coupling is an additive source, but energy remains a
-      // non-negative bounded field even when the wave phase removes energy.
-      grid.set(x, y, z, F.E, Math.max(0, Math.min(9999,
-        grid.get(x, y, z, F.E) + wave * Math.sin(tick * dt * p.waveSpeed) * 0.008 * dt)))
-    }
-
+    // FieldPhysics stage order: gravity -> pressure -> wave -> signal -> rotation
+    // -> phase transition -> radiation -> crystallization -> erosion.
     if (gravityActive) {
-      // Neumann boundaries: a missing neighbor mirrors the center density.
       const leftD = x > 0 ? sourceRead(x - 1, y, z, F.D) : D_
       const rightD = x + 1 < W ? sourceRead(x + 1, y, z, F.D) : D_
       const downD = y > 0 ? sourceRead(x, y - 1, z, F.D) : D_
@@ -381,35 +312,77 @@ function simStep(dt: number) {
     }
 
     if (isProcessActive(PROC.PRESSURE_DIFFUSION)) {
-      // Use the same pre-step density/temperature sample as the CPU and GPU solvers.
       const equilibriumPressure = (D_ * p.pressureDensityCoupling - T * 0.1) * material.elasticity
       grid.set(x, y, z, F.P, Math.max(-9999, Math.min(9999,
         P + p.pressureDiffusion * lapP * dt + (equilibriumPressure - P) * dt)))
     }
 
+    if (isProcessActive(PROC.WAVE_PROPAGATION)) {
+      const nextWave = Math.max(-9999, Math.min(9999,
+        (wave + p.waveSpeed * p.waveSpeed * lapWave * dt * dt) * p.waveDamping))
+      grid.set(x, y, z, F.WAVE, nextWave)
+      // Keep the worker's scalar-wave coupling bounded and non-negative in energy.
+      grid.set(x, y, z, F.E, Math.max(0, Math.min(9999,
+        grid.get(x, y, z, F.E) + wave * Math.sin(tick * dt * p.waveSpeed) * 0.008 * dt)))
+    }
+
+    const signalActive = isProcessActive(PROC.SIGNAL_PROPAGATION)
+    const informationActive = isProcessActive(PROC.INFORMATION)
+    if (signalActive) {
+      grid.set(x, y, z, F.I, Math.max(0, Math.min(999,
+        I + p.signalPropagationRate * p.infoGrowthRate * dt * lapI)))
+    }
+
+    if (rotationActive) {
+      const rotateFX = nextFX, rotateFY = nextFY, rotateFZ = nextFZ
+      nextFX = rotateFX * p.fieldRotationDamping
+        + fxSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling
+        + rotateFY * p.fieldRotationCrossCoupling
+      nextFY = rotateFY * p.fieldRotationDamping
+        + fySum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling
+        - rotateFX * p.fieldRotationCrossCoupling
+      nextFZ = rotateFZ * p.fieldRotationDamping
+        + fzSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling
+    }
+    if (gravityActive || rotationActive) {
+      grid.set(x, y, z, F.FX, nextFX)
+      grid.set(x, y, z, F.FY, nextFY)
+      grid.set(x, y, z, F.FZ, nextFZ)
+    }
+
     if (isProcessActive(PROC.PHASE_TRANSITION)) {
-      // Eligibility uses the immutable pre-step density/temperature like CPU and GPU.
       const density = D_
       const temperature = T
       if (temperature > 500 && density > 0.5) {
-        grid.set(x, y, z, F.D, Math.max(0, grid.get(x, y, z, F.D) - p.phaseTransitionRate * dt * 60))
-        grid.set(x, y, z, F.S, Math.min(1, grid.get(x, y, z, F.S) + p.phaseTransitionRate * dt * 60))
-        grid.set(x, y, z, F.I, Math.max(0, grid.get(x, y, z, F.I) - 3 * dt))
+        grid.set(x, y, z, F.D,
+          Math.max(0, grid.get(x, y, z, F.D) - p.phaseTransitionRate * dt * 60))
+        grid.set(x, y, z, F.S,
+          Math.min(1, grid.get(x, y, z, F.S) + p.phaseTransitionRate * dt * 60))
+        grid.set(x, y, z, F.I,
+          Math.max(0, grid.get(x, y, z, F.I) - 3 * dt))
       } else if (temperature < 40 && density > 0.55) {
-        grid.set(x, y, z, F.D, Math.min(1, grid.get(x, y, z, F.D) + p.phaseTransitionRate * 0.5 * dt * 60))
-        grid.set(x, y, z, F.S, Math.max(0, grid.get(x, y, z, F.S) - p.phaseTransitionRate * 0.5 * dt * 60))
+        grid.set(x, y, z, F.D,
+          Math.min(1, grid.get(x, y, z, F.D) + p.phaseTransitionRate * 0.5 * dt * 60))
+        grid.set(x, y, z, F.S,
+          Math.max(0, grid.get(x, y, z, F.S) - p.phaseTransitionRate * 0.5 * dt * 60))
       }
     }
 
+    if (isProcessActive(PROC.RADIATION) && E > p.radiationThreshold) {
+      grid.set(x, y, z, F.D, Math.max(0, grid.get(x, y, z, F.D)
+        - (E - p.radiationThreshold) * p.radiationDensityRate
+          * (1 - material.radiationAbsorption) * dt * 60))
+      grid.set(x, y, z, F.E, Math.max(0, grid.get(x, y, z, F.E)
+        - (E - p.radiationThreshold) * p.radiationEnergyRate * dt * 60))
+    }
+
     if (isProcessActive(PROC.CRYSTALLIZATION)) {
-      // Eligibility is based on the pre-step state; updates compose with density/entropy outputs.
+      // Eligibility is based on the immutable pre-step state; output composes with prior field processes.
       const entropy = S_
       const density = D_
       if (entropy < 0.18 && density > 0.38) {
-        const currentMaterialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
-          Math.floor(grid.get(x, y, z, F.MAT))))
-        const currentMaterial = MATERIAL_LIBRARY[currentMaterialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
-        const materialRate = currentMaterialId === MAT.VACUUM ? 1 : currentMaterial.crystallizationRate
+        const currentMaterialId = materialIndex
+        const materialRate = currentMaterialId === MAT.VACUUM ? 1 : material.crystallizationRate
         const rate = p.crystallizationRate * materialRate
         grid.set(x, y, z, F.D, Math.min(1,
           grid.get(x, y, z, F.D) + rate * (0.18 - entropy) * dt * 60))
@@ -423,44 +396,68 @@ function simStep(dt: number) {
       }
     }
 
-    if (isProcessActive(PROC.RADIATION)) {
-      // Trigger/rate delta use the immutable pre-step energy sample, matching CPU and GPU.
-      if (E > p.radiationThreshold) {
-        const rawMaterialId = chunk[base + F.MAT]
-        const materialId = Number.isFinite(rawMaterialId)
-          ? Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1, Math.floor(rawMaterialId)))
-          : MAT.VACUUM
-        const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
-        grid.set(x, y, z, F.D, Math.max(0, grid.get(x, y, z, F.D)
-          - (E - p.radiationThreshold) * p.radiationDensityRate * (1 - material.radiationAbsorption) * dt * 60))
-        grid.set(x, y, z, F.E, Math.max(0, grid.get(x, y, z, F.E)
-          - (E - p.radiationThreshold) * p.radiationEnergyRate * dt * 60))
-      }
-    }
-
-    if (rotationActive) {
-      const rotateFX = nextFX, rotateFY = nextFY, rotateFZ = nextFZ
-      nextFX = rotateFX * p.fieldRotationDamping + fxSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling + rotateFY * p.fieldRotationCrossCoupling
-      nextFY = rotateFY * p.fieldRotationDamping + fySum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling - rotateFX * p.fieldRotationCrossCoupling
-      nextFZ = rotateFZ * p.fieldRotationDamping + fzSum / Math.max(nc, 1) * p.fieldRotationNeighborCoupling
-    }
-    if (gravityActive || rotationActive) {
-      grid.set(x, y, z, F.FX, nextFX)
-      grid.set(x, y, z, F.FY, nextFY)
-      grid.set(x, y, z, F.FZ, nextFZ)
-    }
-
     if (isProcessActive(PROC.EROSION)) {
-      // Eligibility and material use the immutable pre-step snapshot; erosion composes
-      // with the density/information outputs already produced by earlier processes.
+      // Eligibility and resistance use the pre-step snapshot; erosion composes with field outputs.
       const flow = Math.abs(FX) + Math.abs(FY) + Math.abs(FZ)
-      // Reuse the material resolved from the immutable pre-step chunk sample above.
       if (D_ > 0.65 && flow > 8.0) {
         const erodibility = 1 - material.erosionResistance
         grid.set(x, y, z, F.D, Math.max(0,
           grid.get(x, y, z, F.D) - p.erosionRate * erodibility * dt * 60))
         grid.set(x, y, z, F.I, Math.max(0,
           grid.get(x, y, z, F.I) - 0.4 * erodibility * dt))
+      }
+    }
+
+    // Entropy/Information/Biology stage follows all field processes, matching
+    // FieldPhysics -> EntropyLayer in the dense CPU engine.
+    const entropyEnabled = isProcessActive(PROC.ENTROPY_GROWTH)
+    const entropyEnergy = grid.get(x, y, z, F.E)
+    const entropyBase = grid.get(x, y, z, F.S)
+    const dS = entropyEnabled
+      ? (p.entropyGrowthRate + entropyEnergy * p.entropyEnergyCoupling
+        + grid.get(x, y, z, F.T) * 0.00005) * dt
+      : 0
+    const newS = entropyEnabled
+      ? Math.max(0, Math.min(1, entropyBase + dS))
+      : entropyBase
+    if (entropyEnabled) {
+      grid.set(x, y, z, F.S, newS)
+      grid.set(x, y, z, F.E, Math.max(0,
+        entropyEnergy * (1 - newS * 0.0005 * dt * 60)))
+    }
+
+    if (informationActive) {
+      const currentInformation = grid.get(x, y, z, F.I)
+      const supp = 1 - grid.get(x, y, z, F.S) * p.infoEntropySupp
+      if (grid.get(x, y, z, F.E) > p.infoGrowthThreshE &&
+          grid.get(x, y, z, F.D) > p.infoGrowthThreshD && supp > 0) {
+        grid.set(x, y, z, F.I,
+          Math.max(0, Math.min(999, currentInformation + p.infoGrowthRate * supp * dt)))
+      } else {
+        grid.set(x, y, z, F.I,
+          Math.max(0, currentInformation * Math.pow(0.999, dt * 60)))
+      }
+    }
+
+    if (isProcessActive(PROC.BIO_POTENTIAL)) {
+      const materialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
+        Math.floor(grid.get(x, y, z, F.MAT))))
+      const currentMaterial = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
+      const bio = (grid.get(x, y, z, F.I) / 200) * 0.4
+        + Math.min(grid.get(x, y, z, F.E) / 500, 1) * 0.3
+        + grid.get(x, y, z, F.D) * 0.2
+        + (1 - grid.get(x, y, z, F.S)) * 0.1
+        + currentMaterial.bioAffinity
+      grid.set(x, y, z, F.BIO, Math.max(0, Math.min(1, bio)))
+    }
+
+    if (isProcessActive(PROC.METABOLISM)) {
+      const bio = grid.get(x, y, z, F.BIO)
+      if (bio > 0.45) {
+        const rate = bio * p.metabolismRate * dt
+        grid.set(x, y, z, F.E, Math.max(0, grid.get(x, y, z, F.E) - rate * 60))
+        grid.set(x, y, z, F.I, Math.min(999, grid.get(x, y, z, F.I) + rate * 25))
+        grid.set(x, y, z, F.S, Math.min(1, grid.get(x, y, z, F.S) + rate * 0.008))
       }
     }
 
