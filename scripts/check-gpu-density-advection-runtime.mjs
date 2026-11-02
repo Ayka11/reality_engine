@@ -370,7 +370,6 @@ try {
 
     const adapterInfo = adapter.info?.description || adapter.info?.device || "unknown";
     const coupledMaterial = await runCoupledMaterialStep();
-    const signalInformation = await runSignalInformationStep();
     const entropyCoupled = await runEntropyCoupledStep();
     const bioMetabolism = await runBioMetabolismStep();
     const localTime = await runLocalTimeStep();
