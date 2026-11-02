@@ -68,7 +68,7 @@ export class FieldPhysics {
             : cD;
           const advectionDelta = densityAdvectionActive
             ? densityAdvectionDeltaDense(
-                back, x, y, z, W, H, D, dt,
+                grid.backBuffer, x, y, z, W, H, D, dt,
                 densityDiffusionActive ? p.densityDiffusion : 0,
               )
             : 0;
