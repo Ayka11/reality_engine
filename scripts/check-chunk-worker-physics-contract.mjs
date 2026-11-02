@@ -101,6 +101,8 @@ assert.ok(chunkGrid.includes('FZ:  14'))
 assert.ok(main.includes("import { CHUNK_FLOATS } from './core/ChunkGrid';"))
 assert.ok(main.includes('const CF = CHUNK_FLOATS;'))
 assert.ok(worker.includes('F.FZ'))
+assert.ok(worker.includes('grid.set(x, y, z, F.FZ, FZ - p.gravityDensityCoupling * (frontD - backD) * 0.5 * dt)'),
+  'worker gravity must apply the z-axis density gradient to the third field-vector component')
 
 // Field rotation is parameterized and process-mask gated in all available paths.
 assert.ok(cpu.includes('p.fieldRotationDamping'))
