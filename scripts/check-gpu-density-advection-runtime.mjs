@@ -184,8 +184,49 @@ try {
       }
     }
 
+    async function runEntropyCoupledStep() {
+      const width = 3, height = 3, depth = 3;
+      const backend = new GPUBackend();
+      try {
+        const initialized = await backend.init(width, height, depth);
+        if (!initialized) throw new Error("WebGPU adapter disappeared during entropy parity initialization");
+        backend.uploadMaterials(buildMaterialBuffer());
+        const cells = new Float32Array(width * height * depth * CELL_FIELDS);
+        for (let cell = 0; cell < width * height * depth; cell++) {
+          cells[cell * CELL_FIELDS + F.MATERIAL_ID] = MAT.VACUUM;
+        }
+        const center = (1 * height + 1) * width + 1;
+        cells[center * CELL_FIELDS + F.ENERGY] = 100;
+        cells[center * CELL_FIELDS + F.TEMPERATURE] = 100;
+        cells[center * CELL_FIELDS + F.ENTROPY] = 0.2;
+        backend.upload(cells);
+        const params = {
+          ...DEFAULT_PARAMS,
+          energyDiffusion: 0.1,
+          tempDiffusion: 0.1,
+          tempEnergyCoupling: 0,
+          entropyGrowthRate: 0.01,
+          entropyEnergyCoupling: 0.001,
+        };
+        const processMask = (1 << PROC.ENERGY_DIFFUSION) |
+          (1 << PROC.TEMP_DIFFUSION) |
+          (1 << PROC.ENTROPY_GROWTH);
+        backend.writeParams(params, processMask, 0.016);
+        backend.submitCompute(1);
+        const output = await backend.readback();
+        return {
+          energy: output[center * CELL_FIELDS + F.ENERGY],
+          temperature: output[center * CELL_FIELDS + F.TEMPERATURE],
+          entropy: output[center * CELL_FIELDS + F.ENTROPY],
+        };
+      } finally {
+        backend.destroy();
+      }
+    }
+
     const adapterInfo = adapter.info?.description || adapter.info?.device || "unknown";
     const coupledMaterial = await runCoupledMaterialStep();
+    const entropyCoupled = await runEntropyCoupledStep();
     const combinedPhase = await runCombinedDensityProcess(
       0.50005, 0.2, 600, 10,
       (1 << PROC.DENSITY_FLOW) | (1 << PROC.PHASE_TRANSITION),
@@ -231,7 +272,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion };
+    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -280,6 +321,14 @@ try {
       `GPU erosion must use pre-step vacuum resistance after same-step crystallization (got ${result.crystallizationErosion.density})`);
     assert.equal(result.crystallizationErosion.materialId, MAT.CRYSTAL,
       "GPU same-step crystallization must publish the new material");
+    const expectedEntropy = 0.2 + (0.01 + 99.952 * 0.001 + 90.4 * 0.00005) * 0.016;
+    const expectedEntropyEnergy = 99.952 * (1 - expectedEntropy * 0.0005 * 0.016 * 60);
+    assert.ok(Math.abs(result.entropyCoupled.temperature - 90.4) < 1e-4,
+      `GPU thermal output must precede entropy growth (got ${result.entropyCoupled.temperature})`);
+    assert.ok(Math.abs(result.entropyCoupled.entropy - expectedEntropy) < 1e-5,
+      `GPU entropy growth must use post-diffusion energy and temperature (got ${result.entropyCoupled.entropy})`);
+    assert.ok(Math.abs(result.entropyCoupled.energy - expectedEntropyEnergy) < 1e-4,
+      `GPU entropy attenuation must use new entropy (got ${result.entropyCoupled.energy})`);
     console.log("WebGPU density-advection/material/phase runtime: PASS " + JSON.stringify(result));
   }
 } finally {
