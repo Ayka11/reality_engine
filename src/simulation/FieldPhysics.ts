@@ -22,6 +22,11 @@ export class FieldPhysics {
         const cD = back[base + F.DENSITY];
         const cI = back[base + F.INFORMATION];
         const cP = back[base + F.PRESSURE];
+        const rawMaterialId = back[base + F.MATERIAL_ID];
+        const materialIndex = Number.isFinite(rawMaterialId)
+          ? Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1, Math.floor(rawMaterialId)))
+          : MAT.VACUUM;
+        const material = MATERIAL_LIBRARY[materialIndex] ?? MATERIAL_LIBRARY[MAT.VACUUM];
         let nextFx = back[base + F.FIELD_X];
         let nextFy = back[base + F.FIELD_Y];
         let nextFz = back[base + F.FIELD_Z];
@@ -52,12 +57,13 @@ export class FieldPhysics {
 
         if (on(mask, PROC.ENERGY_DIFFUSION)) {
           front[base + F.ENERGY] = Math.min(WORLD.ENERGY_MAX,
-            Math.max(0, cE + p.energyDiffusion * dt * lapE));
+            Math.max(0, cE + p.energyDiffusion * material.conductivity * dt * lapE));
         }
 
         if (on(mask, PROC.TEMP_DIFFUSION)) {
           const heat = cE * p.tempEnergyCoupling * dt;
-          front[base + F.TEMPERATURE] = Math.max(0, cT + p.tempDiffusion * dt * lapT + heat);
+          const tDiff = p.tempDiffusion / Math.max(material.heatCapacity, 0.1);
+          front[base + F.TEMPERATURE] = Math.max(0, cT + tDiff * dt * lapT + heat);
         }
 
         const densityDiffusionActive = on(mask, PROC.DENSITY_FLOW);
