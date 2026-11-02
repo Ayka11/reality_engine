@@ -489,7 +489,7 @@ const metabolismBio = readField(latestFrame(), metabolismPoint.x, metabolismPoin
 const metabolismEnergy = readField(latestFrame(), metabolismPoint.x, metabolismPoint.y, metabolismPoint.z, F.E)
 const metabolismInformation = readField(latestFrame(), metabolismPoint.x, metabolismPoint.y, metabolismPoint.z, F.I)
 const metabolismEntropy = readField(latestFrame(), metabolismPoint.x, metabolismPoint.y, metabolismPoint.z, F.S)
-const expectedMetabolismRate = 0.67 * 0.6 / 60
+const expectedMetabolismRate = 0.67 * 0.6 * 0.016
 assert.ok(Math.abs(metabolismBio - 0.67) < 1e-5,
   `worker metabolism must consume the updated organic Bio-Potential (got ${metabolismBio})`)
 assert.ok(Math.abs(metabolismEnergy - (100 - expectedMetabolismRate * 60)) < 1e-5,
