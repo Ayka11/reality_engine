@@ -65,6 +65,7 @@ struct SimParams {
   fieldRotationNeighborCoupling: f32, // [29]
   fieldRotationCrossCoupling: f32, // [30]
   metabolismRate: f32,          // [31]
+  signalPropagationRate: f32,   // [32]
 }
 
 // Material coefficients: MAT_COUNT × 7 floats
@@ -357,7 +358,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   // ── PROC 10: Signal Propagation ───────────────────────────────────────────
   if (isProcessEnabled(1024u)) {
-    let sigRate = 0.06 * params.infoGrowthRate * dt;
+    let sigRate = params.signalPropagationRate * params.infoGrowthRate * dt;
     o.information = clamp(c.information + sigRate * lapI, 0.0, 999.0);
   }
 
@@ -435,7 +436,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // Byte layout of SimParams in the storage buffer (matches WGSL struct)
-const PARAMS_FLOATS = 32; // 32 × 4 bytes = 128 bytes
+const PARAMS_FLOATS = 33; // 33 × 4 bytes = 132 bytes
 
 export class GPUBackend {
   private device: GPUDevice | null = null;
@@ -567,6 +568,7 @@ export class GPUBackend {
     f32[29] = p.fieldRotationNeighborCoupling;
     f32[30] = p.fieldRotationCrossCoupling;
     f32[31] = p.metabolismRate;
+    f32[32] = p.signalPropagationRate;
     this.device.queue.writeBuffer(this.paramsBuf, 0, ab);
   }
 
