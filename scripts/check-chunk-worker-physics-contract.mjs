@@ -11,6 +11,9 @@ const params = await fs.readFile('src/laws/MetaLaw.ts', 'utf8')
 const bridge = await fs.readFile('src/laws/RealityLawBridge.ts', 'utf8')
 const advection = await fs.readFile('src/simulation/DensityAdvection.ts', 'utf8')
 const gpu = await fs.readFile('src/gpu/GPUBackend.ts', 'utf8')
+const workerParityTest = await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8')
+const gpuParityTest = await fs.readFile('scripts/check-gpu-density-advection-runtime.mjs', 'utf8')
+const parityReference = await fs.readFile('scripts/physics-parity-reference.ts', 'utf8')
 
 // The sparse worker must use the canonical bitmask, not its former string Set.
 assert.ok(worker.includes("import { PROC, defaultProcessMask } from '../process/ProcessDef'"))
@@ -190,6 +193,19 @@ assert.ok((await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8'))
   .includes('worker information growth must follow signal propagation'))
 assert.ok((await fs.readFile('scripts/check-gpu-density-advection-runtime.mjs', 'utf8'))
   .includes('GPU information growth must follow signal propagation'))
+
+// CPU, sparse Worker and GPU run the same integrated biology fixture at dt=0.016.
+assert.ok(parityReference.includes('new FieldPhysics().tick'))
+assert.ok(parityReference.includes('new EntropyLayer().tick'))
+assert.ok(parityReference.includes('INTEGRATED_BIOLOGY_PARITY_DT = 0.016'))
+assert.ok(parityReference.includes('PROC.CRYSTALLIZATION'))
+assert.ok(parityReference.includes('PROC.ENTROPY_GROWTH'))
+assert.ok(parityReference.includes('PROC.BIO_POTENTIAL'))
+assert.ok(parityReference.includes('PROC.METABOLISM'))
+assert.ok(workerParityTest.includes('runIntegratedBiologyParityReference'))
+assert.ok(workerParityTest.includes('CPU/Worker integrated biology parity mismatch'))
+assert.ok(gpuParityTest.includes('runIntegratedBiologyParityReference'))
+assert.ok(gpuParityTest.includes('CPU/GPU integrated biology parity mismatch'))
 
 // Wave propagation shares one phase/amplitude representation without changing chunk stride.
 assert.ok(chunkGrid.includes('export const NF = 18'))

@@ -10,6 +10,14 @@ const entry = `
   export { PROC } from "./src/process/ProcessDef";
   export { MAT } from "./src/materials/MaterialDef";
   export { CELL_FIELDS, F } from "./src/core/CellState";
+  export {
+    INTEGRATED_BIOLOGY_PARITY_DT,
+    INTEGRATED_BIOLOGY_PARITY_FIELDS,
+    INTEGRATED_BIOLOGY_PARITY_INITIAL,
+    INTEGRATED_BIOLOGY_PARITY_PARAMS,
+    INTEGRATED_BIOLOGY_PARITY_PROCESS_MASK,
+    runIntegratedBiologyParityReference,
+  } from "./scripts/physics-parity-reference";
 `;
 const bundled = await build({
   stdin: { contents: entry, resolveDir: process.cwd(), sourcefile: "gpu-runtime-entry.ts" },
@@ -58,6 +66,9 @@ try {
 
     const {
       GPUBackend, DEFAULT_PARAMS, buildMaterialBuffer, PROC, MAT, CELL_FIELDS, F,
+      INTEGRATED_BIOLOGY_PARITY_DT, INTEGRATED_BIOLOGY_PARITY_FIELDS,
+      INTEGRATED_BIOLOGY_PARITY_INITIAL, INTEGRATED_BIOLOGY_PARITY_PARAMS,
+      INTEGRATED_BIOLOGY_PARITY_PROCESS_MASK, runIntegratedBiologyParityReference,
     } = await import(url);
 
     async function run(width, density, velocity, dt, activeMask) {
@@ -289,6 +300,49 @@ try {
       }
     }
 
+    async function runIntegratedBiologyParityStep() {
+      const width = 3, height = 3, depth = 3;
+      const backend = new GPUBackend();
+      try {
+        const initialized = await backend.init(width, height, depth);
+        if (!initialized) throw new Error("WebGPU adapter disappeared during integrated CPU/GPU parity initialization");
+        backend.uploadMaterials(buildMaterialBuffer());
+        const cells = new Float32Array(width * height * depth * CELL_FIELDS);
+        for (let cell = 0; cell < width * height * depth; cell++) {
+          cells[cell * CELL_FIELDS + F.MATERIAL_ID] = MAT.VACUUM;
+        }
+        const center = (1 * height + 1) * width + 1;
+        const initial = INTEGRATED_BIOLOGY_PARITY_INITIAL;
+        cells[center * CELL_FIELDS + F.ENERGY] = initial.energy;
+        cells[center * CELL_FIELDS + F.DENSITY] = initial.density;
+        cells[center * CELL_FIELDS + F.INFORMATION] = initial.information;
+        cells[center * CELL_FIELDS + F.ENTROPY] = initial.entropy;
+        cells[center * CELL_FIELDS + F.TEMPERATURE] = initial.temperature;
+        cells[center * CELL_FIELDS + F.MATERIAL_ID] = initial.materialId;
+        cells[center * CELL_FIELDS + F.BIO_POTENTIAL] = initial.bioPotential;
+        cells[center * CELL_FIELDS + F.LOCAL_TIME] = initial.localTime;
+        backend.upload(cells);
+        backend.writeParams(
+          INTEGRATED_BIOLOGY_PARITY_PARAMS,
+          INTEGRATED_BIOLOGY_PARITY_PROCESS_MASK,
+          INTEGRATED_BIOLOGY_PARITY_DT,
+        );
+        backend.submitCompute(1);
+        const output = await backend.readback();
+        return {
+          energy: output[center * CELL_FIELDS + F.ENERGY],
+          density: output[center * CELL_FIELDS + F.DENSITY],
+          information: output[center * CELL_FIELDS + F.INFORMATION],
+          entropy: output[center * CELL_FIELDS + F.ENTROPY],
+          materialId: output[center * CELL_FIELDS + F.MATERIAL_ID],
+          bioPotential: output[center * CELL_FIELDS + F.BIO_POTENTIAL],
+          localTime: output[center * CELL_FIELDS + F.LOCAL_TIME],
+        };
+      } finally {
+        backend.destroy();
+      }
+    }
+
     async function runBioMetabolismStep() {
       const width = 3, height = 3, depth = 3;
       const backend = new GPUBackend();
@@ -435,6 +489,8 @@ try {
 
     const adapterInfo = adapter.info?.description || adapter.info?.device || "unknown";
     const coupledMaterial = await runCoupledMaterialStep();
+    const integratedBiologyReference = runIntegratedBiologyParityReference();
+    const integratedBiologyGpu = await runIntegratedBiologyParityStep();
     const entropyCoupled = await runEntropyCoupledStep();
     const wave = await runWaveStep();
     const bioMetabolism = await runBioMetabolismStep();
@@ -491,7 +547,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, materialIds: { crystal: MAT.CRYSTAL }, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, wave, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure };
+    return { status: "PASS", adapterInfo, materialIds: { crystal: MAT.CRYSTAL }, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, wave, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure, integratedBiologyReference, integratedBiologyGpu };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -548,6 +604,15 @@ try {
       `GPU entropy growth must use post-diffusion energy and temperature (got ${result.entropyCoupled.entropy})`);
     assert.ok(Math.abs(result.entropyCoupled.energy - expectedEntropyEnergy) < 1e-4,
       `GPU entropy attenuation must use new entropy (got ${result.entropyCoupled.energy})`);
+    assert.equal(result.integratedBiologyReference.materialId, result.materialIds.crystal,
+      "dense CPU parity reference must crystallize the same Vacuum fixture");
+    assert.equal(result.integratedBiologyGpu.materialId, result.materialIds.crystal,
+      "GPU parity fixture must crystallize Vacuum before Bio-Potential");
+    for (const field of ["energy", "density", "information", "entropy", "bioPotential", "localTime"]) {
+      const difference = Math.abs(result.integratedBiologyGpu[field] - result.integratedBiologyReference[field]);
+      assert.ok(difference < 2e-4,
+        `CPU/GPU integrated biology parity mismatch for ${field}: CPU ${result.integratedBiologyReference[field]}, GPU ${result.integratedBiologyGpu[field]}, delta ${difference}`);
+    }
     const expectedBioMetabolismRate = 0.67 * 0.6 / 60;
     assert.ok(Math.abs(result.wave.phase - (Math.PI / 2 + 0.032)) < 1e-4,
       `GPU wave phase must advance by waveSpeed * dt (got ${result.wave.phase})`);

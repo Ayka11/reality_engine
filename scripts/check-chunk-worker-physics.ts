@@ -2,6 +2,15 @@ import assert from 'node:assert/strict'
 import { CHUNK_FLOATS, F, NF, chunkKey } from '../src/core/ChunkGrid.ts'
 import { DEFAULT_PARAMS } from '../src/laws/MetaLaw.ts'
 import { MAT } from '../src/materials/MaterialDef.ts'
+import { PROC } from '../src/process/ProcessDef.ts'
+import {
+  INTEGRATED_BIOLOGY_PARITY_DT,
+  INTEGRATED_BIOLOGY_PARITY_FIELDS,
+  INTEGRATED_BIOLOGY_PARITY_INITIAL,
+  INTEGRATED_BIOLOGY_PARITY_PARAMS,
+  INTEGRATED_BIOLOGY_PARITY_PROCESS_MASK,
+  runIntegratedBiologyParityReference,
+} from './physics-parity-reference.ts'
 
 type WorkerMessage = { cmd: string; data?: any; ab?: ArrayBuffer; tick?: number }
 const messages: WorkerMessage[] = []
@@ -767,6 +776,46 @@ assert.ok(advectionSourceAfter < 0.5 && advectionDestinationAfter > 0,
   `velocity must move density across the x=23/24 chunk boundary (source ${advectionSourceAfter}, destination ${advectionDestinationAfter})`)
 assert.ok(Math.abs(advectionTotalAfter - advectionTotalBefore) < 1e-5,
   `worker density advection must conserve total density across chunks (before ${advectionTotalBefore}, after ${advectionTotalAfter})`)
+
+// Shared CPU/Worker differential scenario: Vacuum crystallizes, the new
+// Crystal affinity feeds Bio-Potential, then metabolism and local time advance.
+const integratedBiologyReference = runIntegratedBiologyParityReference()
+const integratedBiologyPoint = { x: 120, y: 120, z: 60 }
+send('setPhysics', {
+  params: { ...INTEGRATED_BIOLOGY_PARITY_PARAMS },
+  processMask: INTEGRATED_BIOLOGY_PARITY_PROCESS_MASK,
+})
+const integratedInitial = INTEGRATED_BIOLOGY_PARITY_INITIAL
+const integratedWorkerInputs: Array<[number, number]> = [
+  [F.E, integratedInitial.energy],
+  [F.D, integratedInitial.density],
+  [F.I, integratedInitial.information],
+  [F.S, integratedInitial.entropy],
+  [F.T, integratedInitial.temperature],
+  [F.MAT, integratedInitial.materialId],
+  [F.BIO, integratedInitial.bioPotential],
+  [F.TAU, integratedInitial.localTime],
+]
+for (const [field, value] of integratedWorkerInputs) {
+  send('paint', { ...integratedBiologyPoint, f: field, v: value, r: 0, mode: 'set' })
+}
+send('tick', { speed: 1 })
+const integratedBiologyWorker = {
+  energy: readField(latestFrame(), integratedBiologyPoint.x, integratedBiologyPoint.y, integratedBiologyPoint.z, F.E),
+  density: readField(latestFrame(), integratedBiologyPoint.x, integratedBiologyPoint.y, integratedBiologyPoint.z, F.D),
+  information: readField(latestFrame(), integratedBiologyPoint.x, integratedBiologyPoint.y, integratedBiologyPoint.z, F.I),
+  entropy: readField(latestFrame(), integratedBiologyPoint.x, integratedBiologyPoint.y, integratedBiologyPoint.z, F.S),
+  materialId: readField(latestFrame(), integratedBiologyPoint.x, integratedBiologyPoint.y, integratedBiologyPoint.z, F.MAT),
+  bioPotential: readField(latestFrame(), integratedBiologyPoint.x, integratedBiologyPoint.y, integratedBiologyPoint.z, F.BIO),
+  localTime: readField(latestFrame(), integratedBiologyPoint.x, integratedBiologyPoint.y, integratedBiologyPoint.z, F.TAU),
+}
+assert.equal(integratedBiologyWorker.materialId, MAT.CRYSTAL,
+  "integrated worker parity fixture must crystallize Vacuum before Bio-Potential")
+for (const field of INTEGRATED_BIOLOGY_PARITY_FIELDS) {
+  const difference = Math.abs(integratedBiologyWorker[field] - integratedBiologyReference[field])
+  assert.ok(difference < 2e-4,
+    `CPU/Worker integrated biology parity mismatch for ${field}: CPU ${integratedBiologyReference[field]}, Worker ${integratedBiologyWorker[field]}, delta ${difference}`)
+}
 
 console.log(JSON.stringify({
   status: 'PASS',
