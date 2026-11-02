@@ -260,14 +260,20 @@ function simStep(dt: number) {
     lapP -= nc * P; lapWave -= nc * wave
 
     const p = physicsParams
+    const rawMaterialId = chunk[base + F.MAT]
+    const materialIndex = Number.isFinite(rawMaterialId)
+      ? Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1, Math.floor(rawMaterialId)))
+      : MAT.VACUUM
+    const material = MATERIAL_LIBRARY[materialIndex] ?? MATERIAL_LIBRARY[MAT.VACUUM]
     const newE = isProcessActive(PROC.ENERGY_DIFFUSION)
-      ? Math.max(0, Math.min(9999, E + p.energyDiffusion * lapE * dt))
+      ? Math.max(0, Math.min(9999, E + p.energyDiffusion * material.conductivity * lapE * dt))
       : E
     grid.set(x, y, z, F.E, newE)
 
     if (isProcessActive(PROC.TEMP_DIFFUSION)) {
+      const tDiff = p.tempDiffusion / Math.max(material.heatCapacity, 0.1)
       grid.set(x, y, z, F.T, Math.max(0, Math.min(2000,
-        T + p.tempDiffusion * lapT * dt + newE * p.tempEnergyCoupling * dt)))
+        T + tDiff * lapT * dt + E * p.tempEnergyCoupling * dt)))
     }
     const densityDiffusionActive = isProcessActive(PROC.DENSITY_FLOW)
     const densityAdvectionActive = isProcessActive(PROC.DENSITY_ADVECTION)
