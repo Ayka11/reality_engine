@@ -117,8 +117,8 @@ send('tick', { speed: 1 })
 const boundaryTemperatureHalo = readField(
   latestFrame(), boundaryTemperaturePoint.x + 1, boundaryTemperaturePoint.y, boundaryTemperaturePoint.z, F.T,
 )
-assert.ok(boundaryTemperatureHalo > 0 && boundaryTemperatureHalo < 1,
-  `temperature diffusion should cross a chunk boundary into an empty cell (got ${boundaryTemperatureHalo})`)
+assert.ok(Math.abs(boundaryTemperatureHalo - 1.6) < 0.02,
+  `temperature diffusion must cross the chunk boundary with Vacuum heat capacity (expected 1.6, got ${boundaryTemperatureHalo})`)
 
 const boundaryPressurePoint = { x: 7, y: 48, z: 20 }
 send('setPhysics', {
