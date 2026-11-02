@@ -95,3 +95,31 @@ export function runIntegratedBiologyParityReference(): IntegratedBiologyParitySt
     localTime: grid.buffer[base + F.LOCAL_TIME],
   };
 }
+
+
+export const HIGH_TEMPERATURE_PARITY_DT = 0.016;
+export const HIGH_TEMPERATURE_PARITY_INITIAL = Object.freeze({
+  temperature: 2100,
+  materialId: MAT.VACUUM,
+});
+export const HIGH_TEMPERATURE_PARITY_PARAMS: Readonly<PhysicsParams> = Object.freeze({
+  ...DEFAULT_PARAMS,
+  tempDiffusion: 0.01,
+  tempEnergyCoupling: 0,
+});
+export const HIGH_TEMPERATURE_PARITY_PROCESS_MASK = 1 << PROC.TEMP_DIFFUSION;
+
+export function runDenseHighTemperatureDiffusionReference(): number {
+  const grid = new VoxelGrid(3, 3, 3);
+  const base = grid.idx(1, 1, 1);
+  grid.buffer[base + F.TEMPERATURE] = HIGH_TEMPERATURE_PARITY_INITIAL.temperature;
+  grid.buffer[base + F.MATERIAL_ID] = HIGH_TEMPERATURE_PARITY_INITIAL.materialId;
+  grid.snapshot();
+  new FieldPhysics().tick(
+    grid,
+    HIGH_TEMPERATURE_PARITY_DT,
+    HIGH_TEMPERATURE_PARITY_PARAMS,
+    HIGH_TEMPERATURE_PARITY_PROCESS_MASK,
+  );
+  return grid.buffer[base + F.TEMPERATURE];
+}

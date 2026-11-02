@@ -276,8 +276,8 @@ function simStep(dt: number) {
 
     if (isProcessActive(PROC.TEMP_DIFFUSION)) {
       const tDiff = p.tempDiffusion / Math.max(material.heatCapacity, 0.1)
-      grid.set(x, y, z, F.T, Math.max(0, Math.min(2000,
-        T + tDiff * lapT * dt + E * p.tempEnergyCoupling * dt)))
+      grid.set(x, y, z, F.T, Math.max(0,
+        T + tDiff * lapT * dt + E * p.tempEnergyCoupling * dt))
     }
     const densityDiffusionActive = isProcessActive(PROC.DENSITY_FLOW)
     const densityAdvectionActive = isProcessActive(PROC.DENSITY_ADVECTION)

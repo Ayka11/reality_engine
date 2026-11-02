@@ -17,6 +17,11 @@ const entry = `
     INTEGRATED_BIOLOGY_PARITY_PARAMS,
     INTEGRATED_BIOLOGY_PARITY_PROCESS_MASK,
     runIntegratedBiologyParityReference,
+    HIGH_TEMPERATURE_PARITY_DT,
+    HIGH_TEMPERATURE_PARITY_INITIAL,
+    HIGH_TEMPERATURE_PARITY_PARAMS,
+    HIGH_TEMPERATURE_PARITY_PROCESS_MASK,
+    runDenseHighTemperatureDiffusionReference,
   } from "./scripts/physics-parity-reference";
 `;
 const bundled = await build({
@@ -69,6 +74,9 @@ try {
       INTEGRATED_BIOLOGY_PARITY_DT, INTEGRATED_BIOLOGY_PARITY_FIELDS,
       INTEGRATED_BIOLOGY_PARITY_INITIAL, INTEGRATED_BIOLOGY_PARITY_PARAMS,
       INTEGRATED_BIOLOGY_PARITY_PROCESS_MASK, runIntegratedBiologyParityReference,
+      HIGH_TEMPERATURE_PARITY_DT, HIGH_TEMPERATURE_PARITY_INITIAL,
+      HIGH_TEMPERATURE_PARITY_PARAMS, HIGH_TEMPERATURE_PARITY_PROCESS_MASK,
+      runDenseHighTemperatureDiffusionReference,
     } = await import(url);
 
     async function run(width, density, velocity, dt, activeMask) {
@@ -300,6 +308,34 @@ try {
       }
     }
 
+    async function runHighTemperatureDiffusionStep() {
+      const width = 3, height = 3, depth = 3;
+      const backend = new GPUBackend();
+      try {
+        const initialized = await backend.init(width, height, depth);
+        if (!initialized) throw new Error("WebGPU adapter disappeared during high-temperature diffusion parity initialization");
+        backend.uploadMaterials(buildMaterialBuffer());
+        const cells = new Float32Array(width * height * depth * CELL_FIELDS);
+        for (let cell = 0; cell < width * height * depth; cell++) {
+          cells[cell * CELL_FIELDS + F.MATERIAL_ID] = MAT.VACUUM;
+        }
+        const center = (1 * height + 1) * width + 1;
+        cells[center * CELL_FIELDS + F.TEMPERATURE] = HIGH_TEMPERATURE_PARITY_INITIAL.temperature;
+        cells[center * CELL_FIELDS + F.MATERIAL_ID] = HIGH_TEMPERATURE_PARITY_INITIAL.materialId;
+        backend.upload(cells);
+        backend.writeParams(
+          HIGH_TEMPERATURE_PARITY_PARAMS,
+          HIGH_TEMPERATURE_PARITY_PROCESS_MASK,
+          HIGH_TEMPERATURE_PARITY_DT,
+        );
+        backend.submitCompute(1);
+        const output = await backend.readback();
+        return output[center * CELL_FIELDS + F.TEMPERATURE];
+      } finally {
+        backend.destroy();
+      }
+    }
+
     async function runIntegratedBiologyParityStep() {
       const width = 3, height = 3, depth = 3;
       const backend = new GPUBackend();
@@ -491,6 +527,8 @@ try {
     const coupledMaterial = await runCoupledMaterialStep();
     const integratedBiologyReference = runIntegratedBiologyParityReference();
     const integratedBiologyGpu = await runIntegratedBiologyParityStep();
+    const highTemperatureCpuReference = runDenseHighTemperatureDiffusionReference();
+    const highTemperatureGpu = await runHighTemperatureDiffusionStep();
     const entropyCoupled = await runEntropyCoupledStep();
     const wave = await runWaveStep();
     const bioMetabolism = await runBioMetabolismStep();
@@ -547,7 +585,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, materialIds: { crystal: MAT.CRYSTAL }, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, wave, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure, integratedBiologyReference, integratedBiologyGpu };
+    return { status: "PASS", adapterInfo, materialIds: { crystal: MAT.CRYSTAL }, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, wave, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure, integratedBiologyReference, integratedBiologyGpu, highTemperatureCpuReference, highTemperatureGpu };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -604,6 +642,12 @@ try {
       `GPU entropy growth must use post-diffusion energy and temperature (got ${result.entropyCoupled.entropy})`);
     assert.ok(Math.abs(result.entropyCoupled.energy - expectedEntropyEnergy) < 1e-4,
       `GPU entropy attenuation must use new entropy (got ${result.entropyCoupled.energy})`);
+    assert.ok(result.highTemperatureCpuReference > 2000,
+      "dense CPU reference must preserve temperatures above 2000");
+    assert.ok(Math.abs(result.highTemperatureCpuReference - 2079.84) < 1e-3,
+      `dense CPU high-temperature reference mismatch (got ${result.highTemperatureCpuReference})`);
+    assert.ok(Math.abs(result.highTemperatureGpu - result.highTemperatureCpuReference) < 1e-4,
+      `CPU/GPU high-temperature diffusion mismatch: CPU ${result.highTemperatureCpuReference}, GPU ${result.highTemperatureGpu}`);
     assert.equal(result.integratedBiologyReference.materialId, result.materialIds.crystal,
       "dense CPU parity reference must crystallize the same Vacuum fixture");
     assert.equal(result.integratedBiologyGpu.materialId, result.materialIds.crystal,

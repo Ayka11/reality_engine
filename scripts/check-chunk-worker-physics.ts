@@ -10,6 +10,10 @@ import {
   INTEGRATED_BIOLOGY_PARITY_PARAMS,
   INTEGRATED_BIOLOGY_PARITY_PROCESS_MASK,
   runIntegratedBiologyParityReference,
+  HIGH_TEMPERATURE_PARITY_INITIAL,
+  HIGH_TEMPERATURE_PARITY_PARAMS,
+  HIGH_TEMPERATURE_PARITY_PROCESS_MASK,
+  runDenseHighTemperatureDiffusionReference,
 } from './physics-parity-reference.ts'
 
 type WorkerMessage = { cmd: string; data?: any; ab?: ArrayBuffer; tick?: number }
@@ -816,6 +820,36 @@ for (const field of INTEGRATED_BIOLOGY_PARITY_FIELDS) {
   assert.ok(difference < 2e-4,
     `CPU/Worker integrated biology parity mismatch for ${field}: CPU ${integratedBiologyReference[field]}, Worker ${integratedBiologyWorker[field]}, delta ${difference}`)
 }
+
+// High-temperature diffusion must match dense CPU semantics above 2000 units.
+const denseHighTemperatureReference = runDenseHighTemperatureDiffusionReference()
+const highTemperaturePoint = { x: 40, y: 120, z: 58 }
+send('setPhysics', {
+  params: { ...HIGH_TEMPERATURE_PARITY_PARAMS },
+  processMask: HIGH_TEMPERATURE_PARITY_PROCESS_MASK,
+})
+send('paint', {
+  ...highTemperaturePoint,
+  f: F.T,
+  v: HIGH_TEMPERATURE_PARITY_INITIAL.temperature,
+  r: 0,
+  mode: 'set',
+})
+send('paint', {
+  ...highTemperaturePoint,
+  f: F.MAT,
+  v: HIGH_TEMPERATURE_PARITY_INITIAL.materialId,
+  r: 0,
+  mode: 'set',
+})
+send('tick', { speed: 1 })
+const workerHighTemperature = readField(
+  latestFrame(), highTemperaturePoint.x, highTemperaturePoint.y, highTemperaturePoint.z, F.T,
+)
+assert.ok(denseHighTemperatureReference > 2000,
+  "dense CPU high-temperature reference must remain above 2000")
+assert.ok(Math.abs(workerHighTemperature - denseHighTemperatureReference) < 1e-4,
+  `CPU/Worker high-temperature diffusion mismatch: CPU ${denseHighTemperatureReference}, Worker ${workerHighTemperature}`)
 
 console.log(JSON.stringify({
   status: 'PASS',

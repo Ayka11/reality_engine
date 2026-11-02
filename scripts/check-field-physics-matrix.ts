@@ -7,6 +7,7 @@ import { WORLD } from "../src/core/WorldConstants.ts";
 import { FieldPhysics } from "../src/simulation/FieldPhysics.ts";
 import { EntropyLayer } from "../src/simulation/EntropyLayer.ts";
 import { MAT, MATERIAL_LIBRARY } from "../src/materials/MaterialDef.ts";
+import { runDenseHighTemperatureDiffusionReference } from "./physics-parity-reference.ts";
 
 type DiffusionParameter =
   | "energyDiffusion"
@@ -558,6 +559,12 @@ assert.ok(Math.abs(waveGrid.buffer[waveBase + F.WAVE_PHASE] - (Math.PI / 2 + 0.0
   "CPU wave phase must advance by waveSpeed * dt");
 assert.ok(Math.abs(waveGrid.buffer[waveBase + F.ENERGY] - 50) < 1e-5,
   "CPU wave propagation must not add unmodelled energy coupling");
+
+const highTemperatureReference = runDenseHighTemperatureDiffusionReference();
+assert.ok(Math.abs(highTemperatureReference - 2079.84) < 1e-3,
+  `CPU high-temperature diffusion reference mismatch (expected 2079.84, got ${highTemperatureReference})`);
+assert.ok(highTemperatureReference > 2000,
+  "CPU high-temperature diffusion must not introduce a 2000-unit upper clamp");
 
 console.log("CPU material bio-affinity/metabolism parameter regression: PASS");
 

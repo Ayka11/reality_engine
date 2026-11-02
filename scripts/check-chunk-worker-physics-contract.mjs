@@ -194,6 +194,15 @@ assert.ok((await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8'))
 assert.ok((await fs.readFile('scripts/check-gpu-density-advection-runtime.mjs', 'utf8'))
   .includes('GPU information growth must follow signal propagation'))
 
+// Temperature diffusion has a lower bound but no Worker-only 2000 ceiling.
+assert.ok(cpu.includes('Math.max(0, cT + tDiff * dt * lapT + heat)'))
+assert.ok(worker.includes('T + tDiff * lapT * dt + E * p.tempEnergyCoupling * dt'))
+assert.ok(!worker.includes('Math.min(2000'))
+assert.ok(gpu.includes('o.temperature = max(0.0, c.temperature + tDiff * dt * lapT + heat);'))
+assert.ok(parityReference.includes('HIGH_TEMPERATURE_PARITY_DT = 0.016'))
+assert.ok(workerParityTest.includes('CPU/Worker high-temperature diffusion mismatch'))
+assert.ok(gpuParityTest.includes('CPU/GPU high-temperature diffusion mismatch'))
+
 // CPU, sparse Worker and GPU run the same integrated biology fixture at dt=0.016.
 assert.ok(parityReference.includes('new FieldPhysics().tick'))
 assert.ok(parityReference.includes('new EntropyLayer().tick'))
