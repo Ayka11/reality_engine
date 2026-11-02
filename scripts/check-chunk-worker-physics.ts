@@ -220,6 +220,39 @@ const gravityFz = readField(gravityFrame, gravityPoint.x, gravityPoint.y, gravit
 assert.ok(gravityFx < 0, `gravity should respond to the x density gradient (got ${gravityFx})`)
 assert.ok(gravityFz < 0, `gravity should respond to the z density gradient across a chunk boundary (got ${gravityFz})`)
 
+ // Gravity and field rotation must compose instead of rotation overwriting acceleration.
+const combinedGravityPoint = { x: 100, y: 20, z: 20 }
+send('setPhysics', {
+  params: {
+    ...params,
+    gravityDensityCoupling: 0.1,
+    fieldRotationDamping: 1,
+    fieldRotationNeighborCoupling: 0,
+    fieldRotationCrossCoupling: 0,
+  },
+  processMask: (1 << 7) | (1 << 14),
+})
+send('paint', { ...combinedGravityPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('paint', { x: combinedGravityPoint.x + 1, y: combinedGravityPoint.y, z: combinedGravityPoint.z, f: F.D, v: 1, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const combinedGravityFx = readField(
+  latestFrame(), combinedGravityPoint.x, combinedGravityPoint.y, combinedGravityPoint.z, F.FX,
+)
+assert.ok(combinedGravityFx < 0,
+  `field rotation must preserve the gravity acceleration when both processes are enabled (got ${combinedGravityFx})`)
+
+// Neumann world boundaries mirror the center density; they must not create a false force.
+const gravityEdgePoint = { x: 0, y: 30, z: 30 }
+send('setPhysics', { params: { ...params, gravityDensityCoupling: 0.1 }, processMask: 1 << 7 })
+send('paint', { ...gravityEdgePoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('paint', { x: gravityEdgePoint.x + 1, y: gravityEdgePoint.y, z: gravityEdgePoint.z, f: F.D, v: 1, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const gravityEdgeFx = readField(
+  latestFrame(), gravityEdgePoint.x, gravityEdgePoint.y, gravityEdgePoint.z, F.FX,
+)
+assert.ok(gravityEdgeFx < 0 && Math.abs(gravityEdgeFx + (0.1 * 0.25 / 60)) < 1e-6,
+  `worker gravity must use a mirrored Neumann boundary at x=0 (got ${gravityEdgeFx})`)
+
 // INFORMATION and SIGNAL_PROPAGATION must compose, not overwrite one another.
 const informationPoint = { x: 120, y: 40, z: 10 }
 const informationParams = {
