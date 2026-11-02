@@ -190,6 +190,46 @@ assert.ok(Math.abs(coupledEnergy - 97.12) < 0.002,
 assert.ok(Math.abs(coupledTemperature - 0.8) < 0.002,
   `thermal coupling must use pre-step energy in the worker (expected 0.8, got ${coupledTemperature})`)
 
+// Phase transition eligibility uses pre-step density and composes with diffused density.
+const phaseDiffusionPoint = { x: 116, y: 96, z: 30 }
+send('setPhysics', {
+  params: { ...params, energyDiffusion: 0, tempDiffusion: 0, tempEnergyCoupling: 0,
+    densityDiffusion: 0.01, phaseTransitionRate: 0.008 },
+  processMask: (1 << 2) | (1 << 8),
+})
+send('paint', { ...phaseDiffusionPoint, f: F.D, v: 0.50005, r: 0, mode: 'set' })
+send('paint', { ...phaseDiffusionPoint, f: F.T, v: 600, r: 0, mode: 'set' })
+send('paint', { ...phaseDiffusionPoint, f: F.S, v: 0.2, r: 0, mode: 'set' })
+send('paint', { ...phaseDiffusionPoint, f: F.I, v: 10, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const phaseDiffusionDensity = readField(
+  latestFrame(), phaseDiffusionPoint.x, phaseDiffusionPoint.y, phaseDiffusionPoint.z, F.D,
+)
+assert.ok(Math.abs(phaseDiffusionDensity - 0.49188995) < 0.002,
+  `worker phase transition must use pre-step density and retain diffusion output (got ${phaseDiffusionDensity})`)
+
+// Crystallization must use pre-step eligibility and add to the density-diffusion output.
+const crystalDiffusionPoint = { x: 116, y: 112, z: 30 }
+send('setPhysics', {
+  params: { ...params, energyDiffusion: 0, tempDiffusion: 0, tempEnergyCoupling: 0,
+    densityDiffusion: 0.01, crystallizationRate: 0.003 },
+  processMask: (1 << 2) | (1 << 11),
+})
+send('paint', { ...crystalDiffusionPoint, f: F.D, v: 0.38005, r: 0, mode: 'set' })
+send('paint', { ...crystalDiffusionPoint, f: F.S, v: 0.1, r: 0, mode: 'set' })
+send('paint', { ...crystalDiffusionPoint, f: F.MAT, v: MAT.VACUUM, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const crystalDiffusionDensity = readField(
+  latestFrame(), crystalDiffusionPoint.x, crystalDiffusionPoint.y, crystalDiffusionPoint.z, F.D,
+)
+const crystalDiffusionMaterial = readField(
+  latestFrame(), crystalDiffusionPoint.x, crystalDiffusionPoint.y, crystalDiffusionPoint.z, F.MAT,
+)
+assert.ok(Math.abs(crystalDiffusionDensity - 0.37991555) < 0.002,
+  `worker crystallization must compose with density diffusion (got ${crystalDiffusionDensity})`)
+assert.equal(crystalDiffusionMaterial, MAT.CRYSTAL,
+  "pre-step eligible vacuum must crystallize even if diffusion moves density below threshold")
+
 // Density flow uses densityDiffusion independently of energyDiffusion.
 const densityPoint = { x: 25, y: 25, z: 10 }
 send('setPhysics', { params: { ...params, energyDiffusion: 0.1, densityDiffusion: 0.0024 }, processMask: 1 << 2 })
