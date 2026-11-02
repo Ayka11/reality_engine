@@ -103,7 +103,7 @@ export class FieldPhysics {
         }
 
         if (on(mask, PROC.PRESSURE_DIFFUSION)) {
-          const equilibriumPressure = cD * p.pressureDensityCoupling - cT * 0.1;
+          const equilibriumPressure = (cD * p.pressureDensityCoupling - cT * 0.1) * material.elasticity;
           front[base + F.PRESSURE] = Math.max(-9999, Math.min(9999,
             cP + p.pressureDiffusion * dt * lapP + (equilibriumPressure - cP) * dt));
         }
