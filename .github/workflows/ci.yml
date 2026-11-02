@@ -77,9 +77,6 @@ jobs:
       - run: npm run test:field-physics-pressure
       - run: npm run test:field-physics-density
       - run: npm run test:field-physics-matrix
-      - name: Run optional WebGPU density-advection numerical probe
-        run: npm run test:gpu-density-advection-runtime
-        timeout-minutes: 3
       - run: npm run test:field-physics-phase-transition
       - run: npm run test:field-physics-crystallization
       - run: npm run test:field-physics-radiation
@@ -129,4 +126,7 @@ jobs:
       - run: npm run hf:smoke
       - run: npm run hf:cpu:check
       - run: npx playwright install chromium
+      - name: Run optional WebGPU density-advection numerical probe
+        run: npm run test:gpu-density-advection-runtime
+        timeout-minutes: 3
       - run: timeout 240s npm run hf:browser:acceptance
