@@ -39,7 +39,7 @@ send('setPhysics', { params, processMask: 1 << 0 })
 send('paint', { ...point, f: F.E, v: 100, r: 0, mode: 'set' })
 send('tick', { speed: 1 })
 const energyAfterEnabled = readField(latestFrame(), point.x, point.y, point.z, F.E)
-assert.ok(Math.abs(energyAfterEnabled - 99.04) < 0.02,
+assert.ok(Math.abs(energyAfterEnabled - 99.952) < 0.002,
   `energyDiffusion and bit 0 should control the worker step (got ${energyAfterEnabled})`)
 const energyHalo = readField(latestFrame(), point.x + 1, point.y, point.z, F.E)
 assert.ok(energyHalo > 0 && energyHalo < 1,
@@ -140,8 +140,34 @@ send('setPhysics', { params, processMask: 1 << 1 })
 send('paint', { ...thermalPoint, f: F.T, v: 100, r: 0, mode: 'set' })
 send('tick', { speed: 1 })
 const tempAfter = readField(latestFrame(), thermalPoint.x, thermalPoint.y, thermalPoint.z, F.T)
-assert.ok(Math.abs(tempAfter - 99.04) < 0.02,
+assert.ok(Math.abs(tempAfter - 90.4) < 0.002,
   `tempDiffusion should be resolved from PhysicsParams (got ${tempAfter})`)
+
+// Material coefficients affect energy and thermal diffusion identically to the GPU solver.
+const materialEnergyPoint = { x: 116, y: 48, z: 30 }
+send('setPhysics', { params: { ...params, energyDiffusion: 0.1 }, processMask: 1 << 0 })
+send('paint', { ...materialEnergyPoint, f: F.E, v: 100, r: 0, mode: 'set' })
+send('paint', { ...materialEnergyPoint, f: F.MAT, v: MAT.METAL, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const metalEnergyAfter = readField(
+  latestFrame(), materialEnergyPoint.x, materialEnergyPoint.y, materialEnergyPoint.z, F.E,
+)
+assert.ok(Math.abs(metalEnergyAfter - 97.12) < 0.002,
+  `metal conductivity must scale worker energy diffusion (expected 97.12, got ${metalEnergyAfter})`)
+
+const materialTemperaturePoint = { x: 116, y: 64, z: 30 }
+send('setPhysics', {
+  params: { ...params, tempDiffusion: 0.1, tempEnergyCoupling: 0 },
+  processMask: 1 << 1,
+})
+send('paint', { ...materialTemperaturePoint, f: F.T, v: 100, r: 0, mode: 'set' })
+send('paint', { ...materialTemperaturePoint, f: F.MAT, v: MAT.METAL, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const metalTemperatureAfter = readField(
+  latestFrame(), materialTemperaturePoint.x, materialTemperaturePoint.y, materialTemperaturePoint.z, F.T,
+)
+assert.ok(Math.abs(metalTemperatureAfter - 99.52) < 0.002,
+  `metal heat capacity must inversely scale worker thermal diffusion (expected 99.52, got ${metalTemperatureAfter})`)
 
 // Density flow uses densityDiffusion independently of energyDiffusion.
 const densityPoint = { x: 25, y: 25, z: 10 }
