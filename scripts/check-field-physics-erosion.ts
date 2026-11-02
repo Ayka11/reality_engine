@@ -59,4 +59,24 @@ assert.ok(sand.information < 10 && stone.information < 10,
 assert.ok([sand.density, sand.information, stone.density, stone.information].every(Number.isFinite),
   'erosion must preserve finite field values');
 
+
+const combinedGrid = new VoxelGrid(3, 3, 3);
+const combinedBase = combinedGrid.idx(1, 1, 1);
+combinedGrid.buffer[combinedBase + F.DENSITY] = 0.65005;
+combinedGrid.buffer[combinedBase + F.INFORMATION] = 10;
+combinedGrid.buffer[combinedBase + F.FIELD_X] = 10;
+combinedGrid.buffer[combinedBase + F.MATERIAL_ID] = MAT.SAND;
+combinedGrid.snapshot();
+new FieldPhysics().tick(combinedGrid, 1 / 60, {
+  ...DEFAULT_PARAMS,
+  densityDiffusion: 0.01,
+  erosionRate: 0.01,
+}, (1 << PROC.DENSITY_FLOW) | (1 << PROC.EROSION));
+const combinedDensity = combinedGrid.buffer[combinedBase + F.DENSITY];
+assert.ok(Math.abs(combinedDensity - 0.64139995) < 2e-6,
+  `erosion must gate on pre-step density and compose with density diffusion (got ${combinedDensity})`);
+const combinedInformation = combinedGrid.buffer[combinedBase + F.INFORMATION];
+assert.ok(Math.abs(combinedInformation - (10 - 0.4 * 0.8 / 60)) < 1e-5,
+  `combined density flow/erosion information update mismatch (got ${combinedInformation})`);
+
 console.log('FieldPhysics erosion process/mask/material regression: PASS');
