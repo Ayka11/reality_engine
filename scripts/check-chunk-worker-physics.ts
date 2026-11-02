@@ -444,6 +444,30 @@ const combinedErosionDensity = readField(
 assert.ok(Math.abs(combinedErosionDensity - 0.64174595) < 0.002,
   `worker erosion must use pre-step eligibility and compose with density diffusion (got ${combinedErosionDensity})`)
 
+// Erosion resistance must come from the pre-step material even when crystallization changes MAT first.
+const crystalErosionPoint = { x: 104, y: 120, z: 52 }
+send('setPhysics', {
+  params: { ...params, energyDiffusion: 0, tempDiffusion: 0,
+    tempEnergyCoupling: 0, densityDiffusion: 0,
+    crystallizationRate: 0.003, erosionRate: 0.01 },
+  processMask: (1 << 11) | (1 << 15),
+})
+send('paint', { ...crystalErosionPoint, f: F.D, v: 0.8, r: 0, mode: 'set' })
+send('paint', { ...crystalErosionPoint, f: F.S, v: 0.1, r: 0, mode: 'set' })
+send('paint', { ...crystalErosionPoint, f: F.FX, v: 10, r: 0, mode: 'set' })
+send('paint', { ...crystalErosionPoint, f: F.MAT, v: MAT.VACUUM, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const crystalErosionDensity = readField(
+  latestFrame(), crystalErosionPoint.x, crystalErosionPoint.y, crystalErosionPoint.z, F.D,
+)
+const crystalErosionMaterial = readField(
+  latestFrame(), crystalErosionPoint.x, crystalErosionPoint.y, crystalErosionPoint.z, F.MAT,
+)
+assert.ok(Math.abs(crystalErosionDensity - 0.7906304) < 0.002,
+  `worker erosion must use pre-step vacuum resistance after same-step crystallization (got ${crystalErosionDensity})`)
+assert.equal(crystalErosionMaterial, MAT.CRYSTAL,
+  "same-step crystallization must still publish its material output")
+
 // Low flow must not erode, even with EROSION enabled.
 const lowFlowPoint = { x: 100, y: 10, z: 10 }
 send('paint', { ...lowFlowPoint, f: F.D, v: 0.8, r: 0, mode: 'set' })
