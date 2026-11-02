@@ -550,6 +550,21 @@ assert.ok(Math.abs(metabolismInformation - (40 + expectedMetabolismRate * 25)) <
 assert.ok(Math.abs(metabolismEntropy - (0.2 + expectedMetabolismRate * 0.008)) < 1e-5,
   `worker metabolism entropy output mismatch (got ${metabolismEntropy})`)
 
+// Worker local time uses the same normalized base-rate formula as CPU/GPU.
+const localTimePoint = { x: 72, y: 104, z: 48 }
+send('setPhysics', {
+  params: { ...params, timeBaseRate: 1.5, timeEnergyBoost: 0.002 },
+  processMask: 0,
+})
+send('paint', { ...localTimePoint, f: F.E, v: 100, r: 0, mode: 'set' })
+send('paint', { ...localTimePoint, f: F.S, v: 0.2, r: 0, mode: 'set' })
+send('paint', { ...localTimePoint, f: F.TAU, v: 0, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const workerLocalTime = readField(latestFrame(), localTimePoint.x, localTimePoint.y, localTimePoint.z, F.TAU)
+const expectedWorkerLocalTime = 0.016 * 1.5 * (1 + 100 * 0.002 + 0.2 * 0.5)
+assert.ok(Math.abs(workerLocalTime - expectedWorkerLocalTime) < 1e-6,
+  `worker local time must use normalized base-rate/energy/entropy formula (expected ${expectedWorkerLocalTime}, got ${workerLocalTime})`)
+
 // Erosion responds to the canonical rate, material resistance, and flow threshold.
 const erosionParams = { ...params, erosionRate: 0.01 }
 const erosionPoint = { x: 110, y: 10, z: 10 }
