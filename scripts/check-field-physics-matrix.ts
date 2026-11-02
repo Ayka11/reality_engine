@@ -368,5 +368,22 @@ for (const materialId of [MAT.VACUUM, MAT.METAL]) {
     `thermal diffusion must use inverse ${material.name} heat capacity (expected ${expectedTemperature}, got ${temperature})`);
 }
 
+
+const coupledGrid = new VoxelGrid(3, 3, 3);
+const coupledBase = coupledGrid.idx(1, 1, 1);
+coupledGrid.buffer[coupledBase + F.MATERIAL_ID] = MAT.METAL;
+coupledGrid.buffer[coupledBase + F.ENERGY] = 100;
+coupledGrid.snapshot();
+new FieldPhysics().tick(coupledGrid, 0.016, {
+  ...DEFAULT_PARAMS,
+  energyDiffusion: 0.1,
+  tempDiffusion: 0,
+  tempEnergyCoupling: 0.5,
+}, (1 << PROC.ENERGY_DIFFUSION) | (1 << PROC.TEMP_DIFFUSION));
+assert.ok(Math.abs(coupledGrid.buffer[coupledBase + F.ENERGY] - 97.12) < 1e-5,
+  "metal conductivity must affect energy diffusion during combined thermal coupling");
+assert.ok(Math.abs(coupledGrid.buffer[coupledBase + F.TEMPERATURE] - 0.8) < 1e-5,
+  "thermal energy coupling must read pre-step energy, not the diffused energy candidate");
+
 console.log("Material-dependent energy/thermal diffusion regression: PASS");
 
