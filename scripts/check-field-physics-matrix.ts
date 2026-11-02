@@ -465,6 +465,20 @@ assert.ok(Math.abs(organicMetabolism.information - (40 + expectedMetabolismRate 
 assert.ok(Math.abs(organicMetabolism.entropy - (0.2 + expectedMetabolismRate * 0.008)) < 1e-5,
   `CPU metabolism entropy output mismatch (got ${organicMetabolism.entropy})`);
 
+
+const localTimeGrid = new VoxelGrid(3, 3, 3);
+const localTimeBase = localTimeGrid.idx(1, 1, 1);
+localTimeGrid.buffer[localTimeBase + F.ENERGY] = 100;
+localTimeGrid.buffer[localTimeBase + F.ENTROPY] = 0.2;
+new EntropyLayer().tick(localTimeGrid, 0.016, {
+  ...DEFAULT_PARAMS,
+  timeBaseRate: 1.5,
+  timeEnergyBoost: 0.002,
+}, 0);
+const expectedLocalTime = 0.016 * 1.5 * (1 + 100 * 0.002 + 0.2 * 0.5);
+assert.ok(Math.abs(localTimeGrid.buffer[localTimeBase + F.LOCAL_TIME] - expectedLocalTime) < 1e-6,
+  "CPU local time must use the normalized base-rate/energy/entropy formula");
+
 console.log("CPU material bio-affinity/metabolism parameter regression: PASS");
 
 console.log("CPU energy/thermal/entropy operator-order regression: PASS");
