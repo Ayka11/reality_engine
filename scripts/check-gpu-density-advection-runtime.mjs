@@ -8,6 +8,7 @@ const entry = `
   export { DEFAULT_PARAMS } from "./src/laws/MetaLaw";
   export { buildMaterialBuffer } from "./src/materials/MaterialDef";
   export { PROC } from "./src/process/ProcessDef";
+  export { MAT } from "./src/materials/MaterialDef";
   export { CELL_FIELDS, F } from "./src/core/CellState";
 `;
 const bundled = await build({
@@ -56,7 +57,7 @@ try {
     if (!adapter) return { status: "SKIP", reason: "WebGPU adapter unavailable" };
 
     const {
-      GPUBackend, DEFAULT_PARAMS, buildMaterialBuffer, PROC, CELL_FIELDS, F,
+      GPUBackend, DEFAULT_PARAMS, buildMaterialBuffer, PROC, MAT, CELL_FIELDS, F,
     } = await import(url);
 
     async function run(width, density, velocity, dt, activeMask) {
@@ -80,7 +81,51 @@ try {
       }
     }
 
+    async function runMaterialDiffusion(materialId, field, process, parameter) {
+      const width = 3, height = 3, depth = 3;
+      const backend = new GPUBackend();
+      try {
+        const initialized = await backend.init(width, height, depth);
+        if (!initialized) throw new Error("WebGPU adapter disappeared during material diffusion initialization");
+        backend.uploadMaterials(buildMaterialBuffer());
+        const cells = new Float32Array(width * height * depth * CELL_FIELDS);
+        for (let cell = 0; cell < width * height * depth; cell++) {
+          cells[cell * CELL_FIELDS + F.MATERIAL_ID] = materialId;
+        }
+        const center = (1 * height + 1) * width + 1;
+        cells[center * CELL_FIELDS + field] = 100;
+        backend.upload(cells);
+        const params = {
+          ...DEFAULT_PARAMS,
+          energyDiffusion: 0,
+          tempDiffusion: 0,
+          tempEnergyCoupling: 0,
+          [parameter]: 0.01,
+        };
+        backend.writeParams(params, 1 << process, 1 / 60);
+        backend.submitCompute(1);
+        const output = await backend.readback();
+        return output[center * CELL_FIELDS + field];
+      } finally {
+        backend.destroy();
+      }
+    }
+
     const adapterInfo = adapter.info?.description || adapter.info?.device || "unknown";
+    const materialDiffusion = {
+      energyVacuum: await runMaterialDiffusion(
+        MAT.VACUUM, F.ENERGY, PROC.ENERGY_DIFFUSION, "energyDiffusion",
+      ),
+      energyMetal: await runMaterialDiffusion(
+        MAT.METAL, F.ENERGY, PROC.ENERGY_DIFFUSION, "energyDiffusion",
+      ),
+      temperatureVacuum: await runMaterialDiffusion(
+        MAT.VACUUM, F.TEMPERATURE, PROC.TEMP_DIFFUSION, "tempDiffusion",
+      ),
+      temperatureMetal: await runMaterialDiffusion(
+        MAT.METAL, F.TEMPERATURE, PROC.TEMP_DIFFUSION, "tempDiffusion",
+      ),
+    };
     const enabled = await run(
       3, [0.5, 0, 0], [1, 1, 1], 0.25, 1 << PROC.DENSITY_ADVECTION,
     );
@@ -88,7 +133,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, enabled, limited, disabled };
+    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -107,7 +152,15 @@ try {
       "GPU flux limiter must conserve mass while respecting density bounds");
     assert.deepEqual(result.disabled, [0.5, 0, 0],
       "disabled GPU density advection must leave density unchanged");
-    console.log("WebGPU density-advection runtime: PASS " + JSON.stringify(result));
+    assert.ok(Math.abs(result.materialDiffusion.energyVacuum - 99.995) < 1e-4,
+      `GPU vacuum conductivity mismatch (expected 99.995, got ${result.materialDiffusion.energyVacuum})`);
+    assert.ok(Math.abs(result.materialDiffusion.energyMetal - 99.7) < 1e-4,
+      `GPU metal conductivity mismatch (expected 99.7, got ${result.materialDiffusion.energyMetal})`);
+    assert.ok(Math.abs(result.materialDiffusion.temperatureVacuum - 99) < 1e-4,
+      `GPU vacuum heat-capacity mismatch (expected 99, got ${result.materialDiffusion.temperatureVacuum})`);
+    assert.ok(Math.abs(result.materialDiffusion.temperatureMetal - 99.95) < 1e-4,
+      `GPU metal heat-capacity mismatch (expected 99.95, got ${result.materialDiffusion.temperatureMetal})`);
+    console.log("WebGPU density-advection/material-physics runtime: PASS " + JSON.stringify(result));
   }
 } finally {
   await browser?.close();
