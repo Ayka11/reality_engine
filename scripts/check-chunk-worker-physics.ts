@@ -579,6 +579,35 @@ const workerSignalInformation = readField(
 assert.ok(Math.abs(workerSignalInformation - 99.04) < 1e-5,
   `worker signal propagation must use PhysicsParams.signalPropagationRate (got ${workerSignalInformation})`)
 
+// Material elasticity scales the worker equation-of-state pressure response.
+const stonePressurePoint = { x: 96, y: 104, z: 48 }
+send('setPhysics', {
+  params: { ...params, pressureDensityCoupling: 100, pressureDiffusion: 0 },
+  processMask: 1 << 13,
+})
+send('paint', { ...stonePressurePoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('paint', { ...stonePressurePoint, f: F.T, v: 0, r: 0, mode: 'set' })
+send('paint', { ...stonePressurePoint, f: F.P, v: 0, r: 0, mode: 'set' })
+send('paint', { ...stonePressurePoint, f: F.MAT, v: MAT.STONE, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const workerStonePressure = readField(
+  latestFrame(), stonePressurePoint.x, stonePressurePoint.y, stonePressurePoint.z, F.P,
+)
+assert.ok(Math.abs(workerStonePressure - 0.64) < 1e-5,
+  `worker pressure response must scale with stone elasticity (expected 0.64, got ${workerStonePressure})`)
+
+const metalPressurePoint = { x: 104, y: 104, z: 48 }
+send('paint', { ...metalPressurePoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('paint', { ...metalPressurePoint, f: F.T, v: 0, r: 0, mode: 'set' })
+send('paint', { ...metalPressurePoint, f: F.P, v: 0, r: 0, mode: 'set' })
+send('paint', { ...metalPressurePoint, f: F.MAT, v: MAT.METAL, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const workerMetalPressure = readField(
+  latestFrame(), metalPressurePoint.x, metalPressurePoint.y, metalPressurePoint.z, F.P,
+)
+assert.ok(Math.abs(workerMetalPressure - 1.6) < 1e-5,
+  `worker pressure response must scale with metal elasticity (expected 1.6, got ${workerMetalPressure})`)
+
 // Erosion responds to the canonical rate, material resistance, and flow threshold.
 const erosionParams = { ...params, erosionRate: 0.01 }
 const erosionPoint = { x: 110, y: 10, z: 10 }
