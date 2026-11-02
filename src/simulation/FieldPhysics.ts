@@ -5,6 +5,7 @@ import { PhysicsParams } from '../laws/MetaLaw';
 import { PROC } from '../process/ProcessDef';
 import { MAT, MATERIAL_LIBRARY } from '../materials/MaterialDef';
 import { withMutableBuffers } from '../core/TrackedFloat32Array';
+import { densityAdvectionDelta } from './DensityAdvection';
 
 function on(mask: number, proc: number) { return (mask & (1 << proc)) !== 0; }
 
@@ -60,9 +61,21 @@ export class FieldPhysics {
           front[base + F.TEMPERATURE] = Math.max(0, cT + p.tempDiffusion * dt * lapT + heat);
         }
 
-        if (on(mask, PROC.DENSITY_FLOW)) {
+        const densityDiffusionActive = on(mask, PROC.DENSITY_FLOW);
+        const densityAdvectionActive = on(mask, PROC.DENSITY_ADVECTION);
+        if (densityDiffusionActive || densityAdvectionActive) {
+          const densityAfterDiffusion = densityDiffusionActive
+            ? Math.max(0, Math.min(1, cD + p.densityDiffusion * dt * lapD))
+            : cD;
+          const advectionDelta = densityAdvectionActive
+            ? densityAdvectionDelta(
+                (rx, ry, rz, field) => back[grid.idx(rx, ry, rz) + field],
+                x, y, z, W, H, D, dt,
+                densityDiffusionActive ? p.densityDiffusion : 0,
+              )
+            : 0;
           front[base + F.DENSITY] = Math.max(0, Math.min(1,
-            cD + p.densityDiffusion * dt * lapD));
+            densityAfterDiffusion + advectionDelta));
         }
 
         if (on(mask, PROC.GRAVITY)) {
