@@ -16,6 +16,7 @@ export const PROC = {
   PRESSURE_DIFFUSION: 13,
   FIELD_ROTATION:     14,
   EROSION:            15,
+  DENSITY_ADVECTION:  16,
 } as const;
 
 export type ProcId = typeof PROC[keyof typeof PROC];
@@ -51,6 +52,7 @@ export const PROCESS_LIBRARY: ProcessDef[] = [
   { id: PROC.PRESSURE_DIFFUSION, name:'PRESSURE_DIFFUSION', label:'Pressure Relaxation', description:'Pressure diffuses between neighbors and relaxes toward a density/temperature equilibrium.', category:'physical', defaultActive:true, entropyCost:0.0001, mutable:true, inputs:['pressure','density','temperature'], outputs:['pressure'], stabilityImpact:0.0 },
   { id: PROC.FIELD_ROTATION,     name:'FIELD_ROTATION',     label:'Field Rotation',      description:'Vector fields are damped, coupled to neighbors, and cross-coupled in the XY plane.', category:'physical', defaultActive:false, entropyCost:0.0001, mutable:true, inputs:['fieldVector'], outputs:['fieldVector'], stabilityImpact:-0.1 },
   { id: PROC.EROSION,            name:'EROSION',            label:'Erosion',             description:'High vector-field magnitude removes density and information according to material resistance.', category:'geological', defaultActive:false, entropyCost:0.002, mutable:true, inputs:['density','fieldVector','materialId'], outputs:['density','information'], stabilityImpact:-0.4 },
+  { id: PROC.DENSITY_ADVECTION,   name:'DENSITY_ADVECTION',   label:'Density Advection',    description:'Velocity transports density through conservative upwind face fluxes with closed world boundaries.', category:'physical', defaultActive:false, entropyCost:0, mutable:true, inputs:['density','velocity'], outputs:['density'], stabilityImpact:0.0 },
 ];
 
 export function defaultProcessMask(): number {
