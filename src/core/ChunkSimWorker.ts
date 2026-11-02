@@ -446,16 +446,20 @@ function simStep(dt: number) {
     }
 
     if (isProcessActive(PROC.EROSION)) {
-      const density = grid.get(x, y, z, F.D)
+      // Eligibility and material use the immutable pre-step snapshot; erosion composes
+      // with the density/information outputs already produced by earlier processes.
       const flow = Math.abs(FX) + Math.abs(FY) + Math.abs(FZ)
-      const materialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
-        Math.floor(grid.get(x, y, z, F.MAT))))
+      const rawMaterialId = chunk[base + F.MAT]
+      const materialId = Number.isFinite(rawMaterialId)
+        ? Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1, Math.floor(rawMaterialId)))
+        : MAT.VACUUM
       const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
-      // Keep the threshold consistent with CPU FieldPhysics and GPUBackend.
-      if (density > 0.65 && flow > 8.0) {
+      if (D_ > 0.65 && flow > 8.0) {
         const erodibility = 1 - material.erosionResistance
-        grid.set(x, y, z, F.D, Math.max(0, density - p.erosionRate * erodibility * dt * 60))
-        grid.set(x, y, z, F.I, Math.max(0, grid.get(x, y, z, F.I) - 0.4 * erodibility * dt))
+        grid.set(x, y, z, F.D, Math.max(0,
+          grid.get(x, y, z, F.D) - p.erosionRate * erodibility * dt * 60))
+        grid.set(x, y, z, F.I, Math.max(0,
+          grid.get(x, y, z, F.I) - 0.4 * erodibility * dt))
       }
     }
 
