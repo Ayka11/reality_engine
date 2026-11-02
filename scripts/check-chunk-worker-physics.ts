@@ -207,14 +207,18 @@ const crystalEntropy = readField(latestFrame(), crystalPoint.x, crystalPoint.y, 
 assert.equal(crystalMaterial, MAT.CRYSTAL, 'crystallization should convert eligible stone to crystal')
 assert.ok(crystalEntropy < 0.1, 'crystallization should reduce entropy in ordered regions')
 
-// Gravity uses density gradients to update the field vector.
-const gravityPoint = { x: 90, y: 10, z: 10 }
+// Gravity must respond to density gradients on all three axes, including across chunk boundaries.
+const gravityPoint = { x: 90, y: 10, z: 7 }
 send('setPhysics', { params: { ...params, gravityDensityCoupling: 0.1 }, processMask: 1 << 7 })
 send('paint', { ...gravityPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
 send('paint', { x: gravityPoint.x + 1, y: gravityPoint.y, z: gravityPoint.z, f: F.D, v: 1, r: 0, mode: 'set' })
+send('paint', { x: gravityPoint.x, y: gravityPoint.y, z: gravityPoint.z + 1, f: F.D, v: 1, r: 0, mode: 'set' })
 send('tick', { speed: 1 })
-const gravityFx = readField(latestFrame(), gravityPoint.x, gravityPoint.y, gravityPoint.z, F.FX)
-assert.ok(gravityFx < 0, `gravity should respond to the density gradient (got ${gravityFx})`)
+const gravityFrame = latestFrame()
+const gravityFx = readField(gravityFrame, gravityPoint.x, gravityPoint.y, gravityPoint.z, F.FX)
+const gravityFz = readField(gravityFrame, gravityPoint.x, gravityPoint.y, gravityPoint.z, F.FZ)
+assert.ok(gravityFx < 0, `gravity should respond to the x density gradient (got ${gravityFx})`)
+assert.ok(gravityFz < 0, `gravity should respond to the z density gradient across a chunk boundary (got ${gravityFz})`)
 
 // INFORMATION and SIGNAL_PROPAGATION must compose, not overwrite one another.
 const informationPoint = { x: 120, y: 40, z: 10 }
