@@ -224,6 +224,11 @@ assert.deepEqual(worldPersistence.loadFieldState(), {schemaVersion:"world-field-
 worldPersistence.deleteFieldState();
 assert.equal(worldPersistence.loadFieldState(), null);
 const persistenceSource = await readFile(new URL("src/infinity/WorldFieldChunkPersistence.ts", root), "utf8");
+const connectorSource = await readFile(new URL("src/connector.ts", root), "utf8");
+assert.match(connectorSource, /snapshot\.schemaVersion === 2 \|\| snapshot\.schemaVersion === 3/,
+  "durable worker restore must accept both legacy v2 and current v3 worker snapshot schemas");
+assert.match(connectorSource, /const restoreChunks = workerChunks\?\.length/,
+  "durable worker restore must dispatch validated workerChunks after schema migration");
 assert.match(persistenceSource, /private readonly durabilityFailures = new Map<string, string>\(\)/,
   "durability failures must be tracked per persisted chunk");
 assert.match(persistenceSource, /private globalDurabilityError: string \| null = null/,

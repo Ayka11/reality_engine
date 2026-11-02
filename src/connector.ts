@@ -811,11 +811,16 @@ win['restoreWorldFieldChunkSnapshot'] = async (cx: number, cy: number, cz: numbe
   } finally {
     worldFieldRestoreLoading = false
   }
-  if (!snapshot || !worldFieldChunkPersistence.validate(snapshot) ||
-      !((snapshot.schemaVersion === 2 && snapshot.workerChunks?.length) ||
-      (snapshot.values.length === CHUNK_FLOATS && snapshot.fieldLayout?.fieldsPerCell === NF))) return false
+  if (!snapshot || !worldFieldChunkPersistence.validate(snapshot)) return false
+  // loadDurable promotes schema v2 worker snapshots to schema v3. Both layouts
+  // carry the workerChunks payload; restore must accept the validated current schema.
+  const workerChunks = (snapshot.schemaVersion === 2 || snapshot.schemaVersion === 3)
+    ? snapshot.workerChunks
+    : undefined
+  if (!(workerChunks?.length) &&
+      !(snapshot.values.length === CHUNK_FLOATS && snapshot.fieldLayout?.fieldsPerCell === NF)) return false
   const view = worldViewContract.snapshot()
-  if (snapshot.schemaVersion === 2 && snapshot.workerView &&
+  if (workerChunks?.length && snapshot.workerView &&
       (snapshot.workerView.seed !== view.seed ||
        snapshot.workerView.sliceY !== view.sliceY ||
        snapshot.workerView.center.x !== view.center.x ||
@@ -829,8 +834,8 @@ win['restoreWorldFieldChunkSnapshot'] = async (cx: number, cy: number, cz: numbe
   if (wx < 0 || wx >= GRID_W || wy < 0 || wy >= GRID_D || wz < 0 || wz >= GRID_H) return false
   const key = chunkKey(wx >> 3, wz >> 3, wy >> 3)
   const restoreId = ++worldFieldRestoreId
-  const restoreChunks = snapshot.schemaVersion === 2 && snapshot.workerChunks?.length
-    ? snapshot.workerChunks.map(chunk => ({ key: chunk.key, data: new Float32Array(chunk.data) }))
+  const restoreChunks = workerChunks?.length
+    ? workerChunks.map(chunk => ({ key: chunk.key, data: new Float32Array(chunk.data) }))
     : [{ key, data: new Float32Array(snapshot.values) }]
   if (!restoreChunks.length || restoreChunks.some(chunk => chunk.data.length !== CHUNK_FLOATS) ||
       new Set(restoreChunks.map(chunk => chunk.key)).size !== restoreChunks.length) return false
