@@ -156,10 +156,24 @@ fn densityFluxLimiter(x: i32, y: i32, z: i32) -> vec2<f32> {
 
 fn densityAdvectionDelta(x: i32, y: i32, z: i32) -> f32 {
   let centerCell = src[cidx(u32(x), u32(y), u32(z))];
-  let centerScale = densityFluxLimiter(x, y, z);
   let dx = array<i32,6>(-1, 1, 0, 0, 0, 0);
   let dy = array<i32,6>( 0, 0,-1, 1, 0, 0);
   let dz = array<i32,6>( 0, 0, 0, 0,-1, 1);
+  var hasMovingFace = false;
+  for (var d = 0; d < 6; d++) {
+    let nx = x + dx[d]; let ny = y + dy[d]; let nz = z + dz[d];
+    if (nx < 0 || nx >= i32(params.W) ||
+        ny < 0 || ny >= i32(params.H) ||
+        nz < 0 || nz >= i32(params.D)) { continue; }
+    let neighbor = src[cidx(u32(nx), u32(ny), u32(nz))];
+    let faceVelocity = 0.5 * (
+      velocityAlong(centerCell, dx[d], dy[d], dz[d]) +
+      velocityAlong(neighbor, dx[d], dy[d], dz[d])
+    ) * f32(dx[d] + dy[d] + dz[d]);
+    if (faceVelocity != 0.0) { hasMovingFace = true; break; }
+  }
+  if (!hasMovingFace) { return 0.0; }
+  let centerScale = densityFluxLimiter(x, y, z);
   var delta = 0.0;
   for (var d = 0; d < 6; d++) {
     let nx = x + dx[d]; let ny = y + dy[d]; let nz = z + dz[d];
