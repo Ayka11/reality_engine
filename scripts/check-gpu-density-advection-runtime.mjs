@@ -491,7 +491,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, wave, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure };
+    return { status: "PASS", adapterInfo, materialIds: { crystal: MAT.CRYSTAL }, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, wave, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -532,13 +532,13 @@ try {
       `GPU crystallization must preserve density diffusion output (expected 0.37991555, got ${result.combinedCrystallization.density})`);
     assert.ok(Math.abs(result.combinedCrystallization.entropy - 0.09856) < 1e-4,
       `GPU crystallization entropy reduction mismatch (got ${result.combinedCrystallization.entropy})`);
-    assert.equal(result.combinedCrystallization.materialId, MAT.CRYSTAL,
+    assert.equal(result.combinedCrystallization.materialId, result.materialIds.crystal,
       "GPU must crystallize a material that was eligible in the pre-step state");
     assert.ok(Math.abs(result.combinedErosion.density - 0.64174595) < 1e-4,
       `GPU erosion must compose with density diffusion using pre-step density eligibility (got ${result.combinedErosion.density})`);
     assert.ok(Math.abs(result.crystallizationErosion.density - 0.7906304) < 1e-4,
       `GPU erosion must use pre-step vacuum resistance after same-step crystallization (got ${result.crystallizationErosion.density})`);
-    assert.equal(result.crystallizationErosion.materialId, MAT.CRYSTAL,
+    assert.equal(result.crystallizationErosion.materialId, result.materialIds.crystal,
       "GPU same-step crystallization must publish the new material");
     const expectedEntropy = 0.2 + (0.01 + 99.952 * 0.001 + 90.4 * 0.00005) * 0.016;
     const expectedEntropyEnergy = 99.952 * (1 - expectedEntropy * 0.0005 * 0.016 * 60);
@@ -565,7 +565,7 @@ try {
       `GPU metabolism entropy output mismatch (got ${result.bioMetabolism.entropy})`);
     const expectedCrystallizationBio = 0.08 + 0.3
       + 0.5002304 * 0.2 + (1 - 0.09856) * 0.1 + 0.05;
-    assert.equal(result.crystallizationBio.materialId, MAT.CRYSTAL,
+    assert.equal(result.crystallizationBio.materialId, result.materialIds.crystal,
       "GPU crystallization must publish crystal before Bio-Potential");
     assert.ok(Math.abs(result.crystallizationBio.bio - expectedCrystallizationBio) < 1e-4,
       `GPU Bio-Potential must use post-crystallization Crystal affinity (expected ${expectedCrystallizationBio}, got ${result.crystallizationBio.bio})`);
