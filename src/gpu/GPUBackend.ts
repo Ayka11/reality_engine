@@ -290,13 +290,20 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     o.energy = max(0.0, o.energy * (1.0 - o.entropy * 0.0005 * dt * 60.0));
   }
 
+  // Signal propagation is a FieldPhysics-stage output. Information dynamics
+  // then consumes the updated information and the post-entropy field state.
+  if (isProcessEnabled(1024u)) {
+    let sigRate = params.signalPropagationRate * params.infoGrowthRate * dt;
+    o.information = clamp(c.information + sigRate * lapI, 0.0, 999.0);
+  }
+
   // ── PROC 4: Information Dynamics ──────────────────────────────────────────
   if (isProcessEnabled(16u)) {
-    let supp = 1.0 - c.entropy * params.infoEntropySupp;
-    if (c.energy > params.infoGrowthThreshE && c.density > params.infoGrowthThreshD && supp > 0.0) {
-      o.information = min(999.0, c.information + params.infoGrowthRate * supp * dt);
+    let supp = 1.0 - o.entropy * params.infoEntropySupp;
+    if (o.energy > params.infoGrowthThreshE && o.density > params.infoGrowthThreshD && supp > 0.0) {
+      o.information = min(999.0, o.information + params.infoGrowthRate * supp * dt);
     } else {
-      o.information = c.information * pow(0.999, dt * 60.0);
+      o.information = o.information * pow(0.999, dt * 60.0);
     }
   }
 
@@ -354,12 +361,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       o.information = min(999.0, o.information + rate * 25.0);
       o.entropy     = min(1.0, o.entropy + rate * 0.008);
     }
-  }
-
-  // ── PROC 10: Signal Propagation ───────────────────────────────────────────
-  if (isProcessEnabled(1024u)) {
-    let sigRate = params.signalPropagationRate * params.infoGrowthRate * dt;
-    o.information = clamp(c.information + sigRate * lapI, 0.0, 999.0);
   }
 
   // ── PROC 11: Crystallization ──────────────────────────────────────────────
