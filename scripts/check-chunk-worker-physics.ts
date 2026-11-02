@@ -379,13 +379,14 @@ assert.ok(Math.abs(vectorHaloFx - 0.6) < 1e-5,
   `a vector-only source must activate its empty neighbor for rotation coupling (got ${vectorHaloFx})`)
 
 // Density diffusion must conserve total density on the closed worker grid.
-function sumFrameField(ab: ArrayBuffer, field: number): number {
-  const u32 = new Uint32Array(ab)
-  const f32 = new Float32Array(ab)
+function sumSnapshotField(field: number): number {
+  send('snapshot')
+  const snapshot = messages.filter(message => message.cmd === 'snapshot').at(-1)
+  assert.ok(snapshot?.data?.snap, 'worker must expose a complete snapshot for conservation accounting')
   let total = 0
-  for (let chunk = 0, offset = 1; chunk < u32[0]; chunk++, offset += 1 + CHUNK_FLOATS) {
+  for (const chunk of snapshot!.data.snap as Array<{ key: number; data: number[] }>) {
     for (let cell = 0; cell < CHUNK_FLOATS / NF; cell++) {
-      total += f32[offset + 1 + cell * NF + field]
+      total += chunk.data[cell * NF + field]
     }
   }
   return total
@@ -393,11 +394,10 @@ function sumFrameField(ab: ArrayBuffer, field: number): number {
 const conservationPoint = { x: 84, y: 84, z: 30 }
 send('setPhysics', { params: { ...params, densityDiffusion: 0.0024 }, processMask: 0 })
 send('paint', { ...conservationPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
-send('tick', { speed: 1 })
-const densityTotalBefore = sumFrameField(latestFrame(), F.D)
+const densityTotalBefore = sumSnapshotField(F.D)
 send('setPhysics', { params: { ...params, densityDiffusion: 0.0024 }, processMask: 1 << 2 })
 send('tick', { speed: 1 })
-const densityTotalAfter = sumFrameField(latestFrame(), F.D)
+const densityTotalAfter = sumSnapshotField(F.D)
 assert.ok(Math.abs(densityTotalAfter - densityTotalBefore) < 1e-5,
   `closed-grid worker density diffusion must conserve total density (before ${densityTotalBefore}, after ${densityTotalAfter})`)
 
