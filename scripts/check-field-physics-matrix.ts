@@ -5,6 +5,7 @@ import { DEFAULT_PARAMS, type PhysicsParams } from "../src/laws/MetaLaw.ts";
 import { PROC } from "../src/process/ProcessDef.ts";
 import { WORLD } from "../src/core/WorldConstants.ts";
 import { FieldPhysics } from "../src/simulation/FieldPhysics.ts";
+import { densityAdvectionDelta } from "../src/simulation/DensityAdvection.ts";
 
 type DiffusionParameter =
   | "energyDiffusion"
@@ -220,6 +221,41 @@ new FieldPhysics().tick(gravityBoundaryGrid, 1 / 60, {
 }, 1 << PROC.GRAVITY);
 assert.ok(gravityBoundaryGrid.buffer[gravityBoundaryGrid.idx(0, 1, 1) + F.FIELD_X] < 0,
   "CPU gravity must use a mirrored Neumann boundary instead of creating an edge force toward empty space");
+
+// Density advection is a separate process and must transport mass without clipping it away.
+function runDensityAdvection(
+  densities: number[], velocities: number[], dt: number, enabled = true,
+): number[] {
+  const grid = new VoxelGrid(densities.length, 1, 1);
+  for (let x = 0; x < densities.length; x++) {
+    const base = grid.idx(x, 0, 0);
+    grid.buffer[base + F.DENSITY] = densities[x];
+    grid.buffer[base + F.VELOCITY_X] = velocities[x];
+  }
+  grid.snapshot();
+  new FieldPhysics().tick(grid, dt, DEFAULT_PARAMS,
+    enabled ? (1 << PROC.DENSITY_ADVECTION) : 0);
+  return Array.from({ length: densities.length }, (_, x) =>
+    grid.buffer[grid.idx(x, 0, 0) + F.DENSITY]);
+}
+const advected = runDensityAdvection([0.5, 0, 0], [1, 1, 1], 0.25);
+assert.ok(Math.abs(advected[0] - 0.375) < 1e-6 &&
+  Math.abs(advected[1] - 0.125) < 1e-6,
+  `positive X velocity must move density into the downstream cell (got ${advected})`);
+assert.ok(Math.abs(advected.reduce((sum, value) => sum + value, 0) - 0.5) < 1e-6,
+  "density advection must conserve mass on a closed grid");
+assert.deepEqual(runDensityAdvection([0.5, 0, 0], [1, 1, 1], 0.25, false), [0.5, 0, 0],
+  "disabled density advection must leave density unchanged");
+const limited = runDensityAdvection([0.1, 0.95], [100, 100], 1);
+assert.ok(limited.every(value => value >= 0 && value <= 1),
+  `flux limiting must keep density within [0,1] (got ${limited})`);
+assert.ok(Math.abs(limited[0] + limited[1] - 1.05) < 1e-6,
+  "flux limiting must conserve mass when donor and receiver approach their bounds");
+assert.ok(Math.abs(limited[1] - 1) < 1e-6,
+  "incoming flux limiter must respect the receiver's remaining capacity");
+const stationary = runDensityAdvection([0.5, 0], [0, 0], 1);
+assert.deepEqual(stationary, [0.5, 0],
+  "zero velocity must produce no density transport");
 
 const densityScenario = scenarios.find(s => s.name === "density")!;
 const densityConservation = runCentered(densityScenario, 1 / 60, 0.0024);
