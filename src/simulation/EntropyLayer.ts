@@ -2,6 +2,7 @@ import { VoxelGrid } from '../core/VoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import { PhysicsParams } from '../laws/MetaLaw';
 import { PROC } from '../process/ProcessDef';
+import { MAT, MATERIAL_LIBRARY } from '../materials/MaterialDef';
 import { withMutableBuffers } from '../core/TrackedFloat32Array';
 
 function on(mask: number, proc: number) { return (mask & (1 << proc)) !== 0; }
@@ -35,15 +36,21 @@ export class EntropyLayer {
         }
 
         if (on(mask, PROC.BIO_POTENTIAL)) {
+          const rawMaterialId = front[base + F.MATERIAL_ID];
+          const materialId = Number.isFinite(rawMaterialId)
+            ? Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1, Math.floor(rawMaterialId)))
+            : MAT.VACUUM;
+          const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM];
           const bio = (front[base + F.INFORMATION] / 200) * 0.4
             + Math.min(front[base + F.ENERGY] / 500, 1) * 0.3
             + front[base + F.DENSITY] * 0.2
-            + (1 - front[base + F.ENTROPY]) * 0.1;
+            + (1 - front[base + F.ENTROPY]) * 0.1
+            + material.bioAffinity;
           front[base + F.BIO_POTENTIAL] = Math.max(0, Math.min(1, bio));
         }
 
         if (on(mask, PROC.METABOLISM) && front[base + F.BIO_POTENTIAL] > 0.45) {
-          const rate = front[base + F.BIO_POTENTIAL] * 0.12 * dt;
+          const rate = front[base + F.BIO_POTENTIAL] * p.metabolismRate * dt;
           front[base + F.ENERGY] = Math.max(0, front[base + F.ENERGY] - rate * 60);
           front[base + F.INFORMATION] = Math.min(999, front[base + F.INFORMATION] + rate * 25);
           front[base + F.ENTROPY] = Math.min(1, front[base + F.ENTROPY] + rate * 0.008);
