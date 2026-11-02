@@ -426,8 +426,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── Always: local time ────────────────────────────────────────────────────
+  // Match CPU operator order: local time consumes the fields after all enabled processes.
   o.local_time = c.local_time + params.timeBaseRate * dt
-    * (1.0 + c.energy * params.timeEnergyBoost + c.entropy * 0.5);
+    * (1.0 + o.energy * params.timeEnergyBoost + o.entropy * 0.5);
 
   dst[i] = o;
 }
