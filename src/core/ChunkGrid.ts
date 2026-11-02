@@ -33,9 +33,12 @@ export const CHUNK_FLOATS = CHUNK_CELLS * NF   // 7168
 // from a 0.5 source into an empty neighbor in one 1/60s step.
 export const SPARSE_FIELD_EPSILON = 0.001
 export const DENSITY_ACTIVITY_EPSILON = 1e-6
+export const VECTOR_ACTIVITY_EPSILON = 1e-6
 
 export function fieldActivityEpsilon(field: number): number {
-  return field === F.D ? DENSITY_ACTIVITY_EPSILON : SPARSE_FIELD_EPSILON
+  if (field === F.D) return DENSITY_ACTIVITY_EPSILON
+  if (field === F.FX || field === F.FY || field === F.FZ) return VECTOR_ACTIVITY_EPSILON
+  return SPARSE_FIELD_EPSILON
 }
 
 export const GRID_W = 128
@@ -109,14 +112,18 @@ export class ChunkGrid {
     for (const [key, chunk] of this.chunks) {
       let maxVal = 0
       let maxDensity = 0
+      let maxVector = 0
       for (let i = 0; i < CHUNK_FLOATS; i++) {
         const value = Math.abs(chunk[i])
         maxVal = Math.max(maxVal, value)
-        if (i % NF === F.D) maxDensity = Math.max(maxDensity, value)
+        const field = i % NF
+        if (field === F.D) maxDensity = Math.max(maxDensity, value)
+        if (field === F.FX || field === F.FY || field === F.FZ) maxVector = Math.max(maxVector, value)
       }
-      // A sub-threshold chunk that carries resolvable density is not empty:
-      // pruning it discards mass that is still being transported across cells.
-      if (maxVal < threshold && maxDensity <= DENSITY_ACTIVITY_EPSILON) {
+      // Sub-threshold chunks carrying resolvable density or acceleration are
+      // not empty: pruning them would erase transported mass or gravity fields.
+      if (maxVal < threshold && maxDensity <= DENSITY_ACTIVITY_EPSILON &&
+          maxVector <= VECTOR_ACTIVITY_EPSILON) {
         // Publish a zero-filled dirty payload for removed chunks so consumers
         // can clear stale geometry/state instead of retaining deleted data.
         this.chunks.delete(key)
