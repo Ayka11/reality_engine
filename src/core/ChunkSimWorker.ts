@@ -313,7 +313,7 @@ function simStep(dt: number) {
 
     const dS = isProcessActive(PROC.ENTROPY_GROWTH)
       ? (p.entropyGrowthRate + newE * p.entropyEnergyCoupling
-        + (chunk[base + F.T] || 0) * 0.00005) * dt
+        + grid.get(x, y, z, F.T) * 0.00005) * dt
       : 0
     const entropyEnabled = isProcessActive(PROC.ENTROPY_GROWTH)
     const newS = entropyEnabled
