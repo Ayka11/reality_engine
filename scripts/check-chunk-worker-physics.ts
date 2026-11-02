@@ -631,6 +631,32 @@ const workerMetalPressure = readField(
 assert.ok(Math.abs(workerMetalPressure - 1.6) < 1e-5,
   `worker pressure response must scale with metal elasticity (expected 1.6, got ${workerMetalPressure})`)
 
+// Worker Bio-Potential must read the material produced by crystallization in the same step.
+const crystallizationBioPoint = { x: 32, y: 112, z: 48 }
+send('setPhysics', {
+  params: { ...params, crystallizationRate: 0.003 },
+  processMask: (1 << 11) | (1 << 5),
+})
+send('paint', { ...crystallizationBioPoint, f: F.E, v: 1000, r: 0, mode: 'set' })
+send('paint', { ...crystallizationBioPoint, f: F.I, v: 40, r: 0, mode: 'set' })
+send('paint', { ...crystallizationBioPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('paint', { ...crystallizationBioPoint, f: F.S, v: 0.1, r: 0, mode: 'set' })
+send('paint', { ...crystallizationBioPoint, f: F.BIO, v: 0, r: 0, mode: 'set' })
+send('paint', { ...crystallizationBioPoint, f: F.MAT, v: MAT.VACUUM, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const workerCrystallizedMaterial = readField(
+  latestFrame(), crystallizationBioPoint.x, crystallizationBioPoint.y, crystallizationBioPoint.z, F.MAT,
+)
+const workerBioAfterCrystallization = readField(
+  latestFrame(), crystallizationBioPoint.x, crystallizationBioPoint.y, crystallizationBioPoint.z, F.BIO,
+)
+const workerExpectedBioAfterCrystallization =
+  0.08 + 0.3 + 0.5002304 * 0.2 + (1 - 0.09856) * 0.1 + 0.05
+assert.equal(workerCrystallizedMaterial, MAT.CRYSTAL,
+  "worker crystallization must publish crystal before Bio-Potential")
+assert.ok(Math.abs(workerBioAfterCrystallization - workerExpectedBioAfterCrystallization) < 1e-5,
+  `worker Bio-Potential must use post-crystallization affinity (expected ${workerExpectedBioAfterCrystallization}, got ${workerBioAfterCrystallization})`)
+
 // Erosion responds to the canonical rate, material resistance, and flow threshold.
 const erosionParams = { ...params, erosionRate: 0.01 }
 const erosionPoint = { x: 110, y: 10, z: 10 }
