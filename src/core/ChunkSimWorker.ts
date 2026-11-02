@@ -291,38 +291,43 @@ function simStep(dt: number) {
       grid.set(x, y, z, F.D,
         Math.max(0, Math.min(1, densityAfterDiffusion + advectionDelta)))
     }
-    // Accumulate information growth and signal propagation into one value.
-    // Writing F.I independently in each block made SIGNAL_PROPAGATION overwrite
-    // INFORMATION whenever both processes were enabled.
+    // Signal propagation is a FieldPhysics-stage output. Information growth
+    // follows in the entropy/information stage, matching the dense CPU solver.
     const informationActive = isProcessActive(PROC.INFORMATION)
     const signalActive = isProcessActive(PROC.SIGNAL_PROPAGATION)
     let nextI = I
-    if (informationActive) {
-      const supp = 1 - chunk[base + F.S] * p.infoEntropySupp
-      if (newE > p.infoGrowthThreshE && D_ > p.infoGrowthThreshD && supp > 0) {
-        nextI = Math.max(0, Math.min(999, I + p.infoGrowthRate * supp * dt))
-      } else {
-        nextI = Math.max(0, I * Math.pow(0.999, dt * 60))
-      }
-    }
     if (signalActive) {
       nextI = Math.max(0, Math.min(999,
-        nextI + p.signalPropagationRate * p.infoGrowthRate * dt * lapI))
+        I + p.signalPropagationRate * p.infoGrowthRate * dt * lapI))
     }
-    if (informationActive || signalActive) grid.set(x, y, z, F.I, nextI)
 
-    const dS = isProcessActive(PROC.ENTROPY_GROWTH)
-      ? (p.entropyGrowthRate + newE * p.entropyEnergyCoupling
+    const entropyEnabled = isProcessActive(PROC.ENTROPY_GROWTH)
+    const entropyEnergy = grid.get(x, y, z, F.E)
+    const entropyBase = grid.get(x, y, z, F.S)
+    const dS = entropyEnabled
+      ? (p.entropyGrowthRate + entropyEnergy * p.entropyEnergyCoupling
         + grid.get(x, y, z, F.T) * 0.00005) * dt
       : 0
-    const entropyEnabled = isProcessActive(PROC.ENTROPY_GROWTH)
     const newS = entropyEnabled
-      ? Math.max(0, Math.min(1, chunk[base + F.S] + dS))
-      : chunk[base + F.S]
+      ? Math.max(0, Math.min(1, entropyBase + dS))
+      : entropyBase
     if (entropyEnabled) {
       grid.set(x, y, z, F.S, newS)
-      grid.set(x, y, z, F.E, Math.max(0, newE * (1 - newS * 0.0005 * dt * 60)))
+      grid.set(x, y, z, F.E, Math.max(0,
+        entropyEnergy * (1 - newS * 0.0005 * dt * 60)))
     }
+
+    if (informationActive) {
+      const supp = 1 - grid.get(x, y, z, F.S) * p.infoEntropySupp
+      if (grid.get(x, y, z, F.E) > p.infoGrowthThreshE &&
+          grid.get(x, y, z, F.D) > p.infoGrowthThreshD && supp > 0) {
+        nextI = Math.max(0, Math.min(999,
+          nextI + p.infoGrowthRate * supp * dt))
+      } else {
+        nextI = Math.max(0, nextI * Math.pow(0.999, dt * 60))
+      }
+    }
+    if (informationActive || signalActive) grid.set(x, y, z, F.I, nextI)
 
     if (isProcessActive(PROC.BIO_POTENTIAL)) {
       const materialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
