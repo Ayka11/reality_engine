@@ -420,6 +420,31 @@ const densityTotalAfter = sumSnapshotField(F.D)
 assert.ok(Math.abs(densityTotalAfter - densityTotalBefore) < 1e-5,
   `closed-grid worker density diffusion must conserve total density (before ${densityTotalBefore}, after ${densityTotalAfter})`)
 
+// Conservative advection crosses sparse chunk boundaries without losing mass.
+const advectionSource = { x: 23, y: 84, z: 33 }
+const advectionDestination = { x: 24, y: 84, z: 33 }
+send('setPhysics', {
+  params: { ...params, densityDiffusion: 0 },
+  processMask: 1 << 16,
+})
+send('paint', { ...advectionSource, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('paint', { ...advectionSource, f: F.VX, v: 1, r: 0, mode: 'set' })
+send('paint', { ...advectionDestination, f: F.VX, v: 1, r: 0, mode: 'set' })
+const advectionTotalBefore = sumSnapshotField(F.D)
+send('tick', { speed: 1 })
+const advectionFrame = latestFrame()
+const advectionSourceAfter = readField(
+  advectionFrame, advectionSource.x, advectionSource.y, advectionSource.z, F.D,
+)
+const advectionDestinationAfter = readField(
+  advectionFrame, advectionDestination.x, advectionDestination.y, advectionDestination.z, F.D,
+)
+const advectionTotalAfter = sumSnapshotField(F.D)
+assert.ok(advectionSourceAfter < 0.5 && advectionDestinationAfter > 0,
+  `velocity must move density across the x=23/24 chunk boundary (source ${advectionSourceAfter}, destination ${advectionDestinationAfter})`)
+assert.ok(Math.abs(advectionTotalAfter - advectionTotalBefore) < 1e-5,
+  `worker density advection must conserve total density across chunks (before ${advectionTotalBefore}, after ${advectionTotalAfter})`)
+
 console.log(JSON.stringify({
   status: 'PASS',
   energyAfterEnabled,
