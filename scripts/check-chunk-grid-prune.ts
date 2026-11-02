@@ -43,7 +43,19 @@ assert.equal(vectorGrid.prune(0.01), 0,
   'chunk pruning must preserve resolvable acceleration below the generic threshold')
 assert.ok(vectorGrid.chunks.has(vectorKey),
   'gravity acceleration chunk should survive pruning')
+
 console.log('ChunkGrid vector sparse-floor/pruning regression: PASS')
+
+// Velocity is a first-class sparse field in the v3 Worker ABI. A velocity-only
+// cell must remain active and its chunk must survive the generic prune threshold.
+const velocityGrid = new ChunkGrid()
+const velocityKey = chunkKey(2, 2, 2)
+velocityGrid.set(16, 16, 16, F.VX, 0.00002)
+assert.ok(velocityGrid.chunks.has(velocityKey), 'a small velocity must allocate its destination chunk')
+assert.equal([...velocityGrid.activeCells()].length, 1, 'a velocity-only cell above its activity floor must remain active')
+assert.equal(velocityGrid.prune(0.01), 0, 'pruning must preserve velocity below the generic chunk threshold')
+assert.ok(velocityGrid.chunks.has(velocityKey), 'velocity-only chunk should survive pruning')
+console.log('ChunkGrid velocity sparse-floor/pruning regression: PASS')
 
 // Activity is strictly greater than the configured epsilon everywhere. A
 // value exactly on the boundary must not allocate an otherwise empty chunk.

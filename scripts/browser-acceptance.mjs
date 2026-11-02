@@ -1679,7 +1679,7 @@ try {
     if (!coord) return { error: "world chunk coordinate unavailable" };
     const snapshot = window.snapshotWorldFieldChunkPersistence?.(coord.cx, coord.cy, coord.cz);
     const durable = await window.flushWorldFieldChunkPersistence?.();
-    if (!snapshot || snapshot.schemaVersion !== 2 || !snapshot.workerChunks?.length) {
+    if (!snapshot || snapshot.schemaVersion !== 3 || !snapshot.workerChunks?.length) {
       return { error: "valid worker snapshot was not produced", coord, schemaVersion: snapshot?.schemaVersion };
     }
     sessionStorage.setItem("reality-engine-worker-restore-fixture", JSON.stringify({
@@ -2265,14 +2265,14 @@ try {
         window.snapshotWorldFieldChunkPersistence?.(chunkX, chunkY, chunkZ));
       if (snapshots.every(snapshot =>
         !!snapshot &&
-        snapshot.schemaVersion === 2 &&
+        snapshot.schemaVersion === 3 &&
         !!snapshot.workerChunks?.length &&
         window.validateWorldFieldChunkSnapshot?.(snapshot))) break;
       await new Promise(resolve => setTimeout(resolve, 25));
     }
     const validSnapshots = snapshots.every(snapshot =>
       !!snapshot &&
-      snapshot.schemaVersion === 2 &&
+      snapshot.schemaVersion === 3 &&
       !!snapshot.workerChunks?.length &&
       window.validateWorldFieldChunkSnapshot?.(snapshot));
     if (!validSnapshots) {
