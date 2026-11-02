@@ -273,14 +273,22 @@ const pressureWithoutTransport = readField(latestFrame(), pressureNoTransportPoi
 assert.ok(Math.abs(pressureWithoutTransport - 98.4) < 0.02,
   `zero pressureDiffusion must leave only equation-of-state relaxation (got ${pressureWithoutTransport})`)
 
-// Wave process: the scalar wave field responds to its spatial Laplacian.
+// Wave process: phase advances and amplitude damps independently, matching FieldPhysics.
 const wavePoint = { x: 50, y: 10, z: 10 }
-send('setPhysics', { params: { ...params, waveSpeed: 2, waveDamping: 1 }, processMask: 1 << 6 })
+send('setPhysics', { params: { ...params, waveSpeed: 2, waveDamping: 0.98 }, processMask: 1 << 6 })
+send('paint', { ...wavePoint, f: F.E, v: 50, r: 0, mode: 'set' })
 send('paint', { ...wavePoint, f: F.WAVE, v: 1, r: 0, mode: 'set' })
+send('paint', { ...wavePoint, f: F.WAVE_PHASE, v: Math.PI / 2, r: 0, mode: 'set' })
 send('tick', { speed: 1 })
 const waveAfter = readField(latestFrame(), wavePoint.x, wavePoint.y, wavePoint.z, F.WAVE)
-assert.ok(waveAfter < 1 && waveAfter > 0.98,
-  `waveSpeed should propagate the wave field (got ${waveAfter})`)
+const wavePhaseAfter = readField(latestFrame(), wavePoint.x, wavePoint.y, wavePoint.z, F.WAVE_PHASE)
+const waveEnergyAfter = readField(latestFrame(), wavePoint.x, wavePoint.y, wavePoint.z, F.E)
+assert.ok(Math.abs(waveAfter - 0.98) < 1e-5,
+  `wave amplitude must use waveDamping (expected 0.98, got ${waveAfter})`)
+assert.ok(Math.abs(wavePhaseAfter - (Math.PI / 2 + 0.032)) < 1e-5,
+  `wave phase must advance by waveSpeed * dt (got ${wavePhaseAfter})`)
+assert.ok(Math.abs(waveEnergyAfter - 50) < 1e-5,
+  `wave propagation must not inject energy outside the CPU physics contract (got ${waveEnergyAfter})`)
 
 // Crystallization is observable in both field values and the material ID.
 const crystalPoint = { x: 70, y: 10, z: 10 }
@@ -404,16 +412,6 @@ const informationAfterCombined = readField(
 )
 assert.ok(informationAfterCombined > 10,
   `INFORMATION growth must survive when SIGNAL_PROPAGATION is also enabled (got ${informationAfterCombined})`)
-
-// Wave-to-energy coupling must not push the energy field below zero.
-const waveEnergyPoint = { x: 100, y: 40, z: 20 }
-send('setPhysics', { params: { ...params, waveSpeed: 2, waveDamping: 1 }, processMask: 1 << 6 })
-send('paint', { ...waveEnergyPoint, f: F.E, v: 0, r: 0, mode: 'set' })
-send('paint', { ...waveEnergyPoint, f: F.WAVE, v: -1000, r: 0, mode: 'set' })
-send('tick', { speed: 1 })
-const energyAfterNegativeWave = readField(latestFrame(), waveEnergyPoint.x, waveEnergyPoint.y, waveEnergyPoint.z, F.E)
-assert.ok(energyAfterNegativeWave >= 0,
-  `wave-to-energy coupling must preserve the non-negative energy invariant (got ${energyAfterNegativeWave})`)
 
 // Entropy growth consumes energy and temperature after same-step diffusion.
 const entropyPoint = { x: 60, y: 100, z: 48 }

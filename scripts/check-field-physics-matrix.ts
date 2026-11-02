@@ -540,6 +540,25 @@ assert.equal(crystallizedMaterialId, MAT.CRYSTAL,
 assert.ok(Math.abs(bioAfterCrystallization - expectedBioAfterCrystallization) < 1e-5,
   `CPU Bio-Potential must use post-crystallization material affinity (expected ${expectedBioAfterCrystallization}, got ${bioAfterCrystallization})`);
 
+
+const waveGrid = new VoxelGrid(3, 3, 3);
+const waveBase = waveGrid.idx(1, 1, 1);
+waveGrid.buffer[waveBase + F.ENERGY] = 50;
+waveGrid.buffer[waveBase + F.WAVE_PHASE] = Math.PI / 2;
+waveGrid.buffer[waveBase + F.WAVE_AMP] = 1;
+waveGrid.snapshot();
+new FieldPhysics().tick(waveGrid, 0.016, {
+  ...DEFAULT_PARAMS,
+  waveSpeed: 2,
+  waveDamping: 0.98,
+}, 1 << PROC.WAVE_PROPAGATION);
+assert.ok(Math.abs(waveGrid.buffer[waveBase + F.WAVE_AMP] - 0.98) < 1e-5,
+  "CPU wave amplitude must use waveDamping");
+assert.ok(Math.abs(waveGrid.buffer[waveBase + F.WAVE_PHASE] - (Math.PI / 2 + 0.032)) < 1e-5,
+  "CPU wave phase must advance by waveSpeed * dt");
+assert.ok(Math.abs(waveGrid.buffer[waveBase + F.ENERGY] - 50) < 1e-5,
+  "CPU wave propagation must not add unmodelled energy coupling");
+
 console.log("CPU material bio-affinity/metabolism parameter regression: PASS");
 
 console.log("CPU energy/thermal/entropy operator-order regression: PASS");

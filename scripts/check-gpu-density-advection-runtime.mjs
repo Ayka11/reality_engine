@@ -259,6 +259,36 @@ try {
       }
     }
 
+    async function runWaveStep() {
+      const width = 3, height = 3, depth = 3;
+      const backend = new GPUBackend();
+      try {
+        const initialized = await backend.init(width, height, depth);
+        if (!initialized) throw new Error("WebGPU adapter disappeared during wave parity initialization");
+        backend.uploadMaterials(buildMaterialBuffer());
+        const cells = new Float32Array(width * height * depth * CELL_FIELDS);
+        const center = (1 * height + 1) * width + 1;
+        cells[center * CELL_FIELDS + F.ENERGY] = 50;
+        cells[center * CELL_FIELDS + F.WAVE_PHASE] = Math.PI / 2;
+        cells[center * CELL_FIELDS + F.WAVE_AMP] = 1;
+        backend.upload(cells);
+        backend.writeParams({
+          ...DEFAULT_PARAMS,
+          waveSpeed: 2,
+          waveDamping: 0.98,
+        }, 1 << PROC.WAVE_PROPAGATION, 0.016);
+        backend.submitCompute(1);
+        const output = await backend.readback();
+        return {
+          phase: output[center * CELL_FIELDS + F.WAVE_PHASE],
+          amplitude: output[center * CELL_FIELDS + F.WAVE_AMP],
+          energy: output[center * CELL_FIELDS + F.ENERGY],
+        };
+      } finally {
+        backend.destroy();
+      }
+    }
+
     async function runBioMetabolismStep() {
       const width = 3, height = 3, depth = 3;
       const backend = new GPUBackend();
@@ -406,6 +436,7 @@ try {
     const adapterInfo = adapter.info?.description || adapter.info?.device || "unknown";
     const coupledMaterial = await runCoupledMaterialStep();
     const entropyCoupled = await runEntropyCoupledStep();
+    const wave = await runWaveStep();
     const bioMetabolism = await runBioMetabolismStep();
     const crystallizationBio = await runCrystallizationBioStep();
     const localTime = await runLocalTimeStep();
@@ -460,7 +491,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure };
+    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, wave, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -518,6 +549,12 @@ try {
     assert.ok(Math.abs(result.entropyCoupled.energy - expectedEntropyEnergy) < 1e-4,
       `GPU entropy attenuation must use new entropy (got ${result.entropyCoupled.energy})`);
     const expectedBioMetabolismRate = 0.67 * 0.6 / 60;
+    assert.ok(Math.abs(result.wave.phase - (Math.PI / 2 + 0.032)) < 1e-4,
+      `GPU wave phase must advance by waveSpeed * dt (got ${result.wave.phase})`);
+    assert.ok(Math.abs(result.wave.amplitude - 0.98) < 1e-4,
+      `GPU wave amplitude must use waveDamping (got ${result.wave.amplitude})`);
+    assert.ok(Math.abs(result.wave.energy - 50) < 1e-4,
+      `GPU wave propagation must not add unmodelled energy coupling (got ${result.wave.energy})`);
     assert.ok(Math.abs(result.bioMetabolism.bio - 0.67) < 1e-4,
       `GPU Bio-Potential must include organic material affinity (expected 0.67, got ${result.bioMetabolism.bio})`);
     assert.ok(Math.abs(result.bioMetabolism.energy - (100 - expectedBioMetabolismRate * 60)) < 1e-4,

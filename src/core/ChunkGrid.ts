@@ -18,7 +18,8 @@ export const F = {
   BIO: 10, // bio potential
   MAT: 11, // material ID
   WAVE:12, // wave amplitude
-  PROC:13, // process activity
+  WAVE_PHASE: 13, // wave phase; reuses the retired process-metadata slot
+  PROC:13, // deprecated alias retained for persisted/source compatibility
   FZ:  14, // field vector Z / acceleration-like field
   VX:  15, // velocity X (grid units per simulation second)
   VY:  16, // velocity Y (grid units per simulation second)

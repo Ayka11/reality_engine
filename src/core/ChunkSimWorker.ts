@@ -219,6 +219,9 @@ function simStep(dt: number) {
     const base = (((z & 7) * CY * CX) + ((y & 7) * CX) + (x & 7)) * NF
     let hasLocalState = false
     for (let field = 0; field < NF; field++) {
+      // A phase value without wave amplitude carries no physical signal and
+      // must not keep an otherwise empty sparse chunk resident indefinitely.
+      if (field === F.WAVE_PHASE) continue
       if (Math.abs(chunk[base + field]) > fieldActivityEpsilon(field)) { hasLocalState = true; break }
     }
     let hasNeighborSignal = false
@@ -232,7 +235,7 @@ function simStep(dt: number) {
       if (hasNeighborSignal) break
     }
     if (!hasLocalState && !hasNeighborSignal) continue
-    let lapE = 0, lapT = 0, lapD = 0, lapI = 0, lapP = 0, lapWave = 0, nc = 0
+    let lapE = 0, lapT = 0, lapD = 0, lapI = 0, lapP = 0, nc = 0
     let fxSum = 0, fySum = 0, fzSum = 0
     for (const [dx, dy, dz] of dirs) {
       const nx = x + dx, ny = y + dy, nz = z + dz
@@ -242,7 +245,6 @@ function simStep(dt: number) {
       lapD += sourceRead(nx, ny, nz, F.D)
       lapI += sourceRead(nx, ny, nz, F.I)
       lapP += sourceRead(nx, ny, nz, F.P)
-      lapWave += sourceRead(nx, ny, nz, F.WAVE)
       fxSum += sourceRead(nx, ny, nz, F.FX)
       fySum += sourceRead(nx, ny, nz, F.FY)
       fzSum += sourceRead(nx, ny, nz, F.FZ)
@@ -250,14 +252,16 @@ function simStep(dt: number) {
     }
     const E = chunk[base + F.E], T = chunk[base + F.T]
     const D_ = chunk[base + F.D], I = chunk[base + F.I]
-    const P = chunk[base + F.P], wave = chunk[base + F.WAVE], S_ = chunk[base + F.S]
+    const P = chunk[base + F.P], waveAmplitude = chunk[base + F.WAVE]
+    const wavePhase = chunk[base + F.WAVE_PHASE]
+    const S_ = chunk[base + F.S]
     const FX = chunk[base + F.FX], FY = chunk[base + F.FY], FZ = chunk[base + F.FZ]
     const VX = chunk[base + F.VX], VY = chunk[base + F.VY], VZ = chunk[base + F.VZ]
     let nextFX = FX, nextFY = FY, nextFZ = FZ
     const gravityActive = isProcessActive(PROC.GRAVITY)
     const rotationActive = isProcessActive(PROC.FIELD_ROTATION)
     lapE -= nc * E; lapT -= nc * T; lapD -= nc * D_; lapI -= nc * I
-    lapP -= nc * P; lapWave -= nc * wave
+    lapP -= nc * P
 
     const p = physicsParams
     const rawMaterialId = chunk[base + F.MAT]
@@ -318,12 +322,9 @@ function simStep(dt: number) {
     }
 
     if (isProcessActive(PROC.WAVE_PROPAGATION)) {
-      const nextWave = Math.max(-9999, Math.min(9999,
-        (wave + p.waveSpeed * p.waveSpeed * lapWave * dt * dt) * p.waveDamping))
-      grid.set(x, y, z, F.WAVE, nextWave)
-      // Keep the worker's scalar-wave coupling bounded and non-negative in energy.
-      grid.set(x, y, z, F.E, Math.max(0, Math.min(9999,
-        grid.get(x, y, z, F.E) + wave * Math.sin(tick * dt * p.waveSpeed) * 0.008 * dt)))
+      // Match dense CPU/GPU wave state: independent phase and damped amplitude.
+      grid.set(x, y, z, F.WAVE_PHASE, (wavePhase + p.waveSpeed * dt) % (2 * Math.PI))
+      grid.set(x, y, z, F.WAVE, waveAmplitude * p.waveDamping)
     }
 
     const signalActive = isProcessActive(PROC.SIGNAL_PROPAGATION)

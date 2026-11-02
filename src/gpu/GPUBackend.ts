@@ -305,7 +305,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (isProcessEnabled(64u)) {
     o.wave_phase = (c.wave_phase + params.waveSpeed * dt) % 6.28318530;
     o.wave_amp   = c.wave_amp * params.waveDamping;
-    o.energy     = o.energy + c.wave_amp * sin(c.wave_phase) * 0.008;
   }
 
   // Signal propagation is a FieldPhysics-stage output. Information dynamics
