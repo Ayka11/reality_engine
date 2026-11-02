@@ -33,6 +33,16 @@ const materialJs = ts.transpileModule(materialSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const materialUrl = "data:text/javascript;base64," + Buffer.from(materialJs).toString("base64");
+const cellStateSource = await readFile(new URL("src/core/CellState.ts", root), "utf8");
+const cellStateJs = ts.transpileModule(cellStateSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const cellStateUrl = "data:text/javascript;base64," + Buffer.from(cellStateJs).toString("base64");
+const densityAdvectionSource = await readFile(new URL("src/simulation/DensityAdvection.ts", root), "utf8");
+const densityAdvectionJs = ts.transpileModule(densityAdvectionSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText.replace(/from ['"]\.\.\/core\/CellState['"]/, `from "${cellStateUrl}"`);
+const densityAdvectionUrl = "data:text/javascript;base64," + Buffer.from(densityAdvectionJs).toString("base64");
 const { ChunkGrid, F, NF } = await import(moduleUrl);
 const grid = new ChunkGrid();
 
@@ -73,7 +83,8 @@ const workerJs = ts.transpileModule(workerSource, {
   .replace("from '../brushes/BrushMath'", `from '${mathUrl}'`)
   .replace("from '../process/ProcessDef'", `from '${processUrl}'`)
   .replace("from '../laws/MetaLaw'", `from '${lawUrl}'`)
-  .replace("from '../materials/MaterialDef'", `from '${materialUrl}'`);
+  .replace("from '../materials/MaterialDef'", `from '${materialUrl}'`)
+  .replace("from '../simulation/DensityAdvection'", `from '${densityAdvectionUrl}'`);
 const workerModuleUrl = "data:text/javascript;base64," + Buffer.from(workerJs).toString("base64");
 const originalSelf = globalThis.self;
 const workerMessages = [];
