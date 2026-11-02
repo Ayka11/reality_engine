@@ -224,6 +224,41 @@ try {
       }
     }
 
+    async function runCrystallizationBioStep() {
+      const width = 3, height = 3, depth = 3;
+      const backend = new GPUBackend();
+      try {
+        const initialized = await backend.init(width, height, depth);
+        if (!initialized) throw new Error("WebGPU adapter disappeared during crystallization/bio parity initialization");
+        backend.uploadMaterials(buildMaterialBuffer());
+        const cells = new Float32Array(width * height * depth * CELL_FIELDS);
+        for (let cell = 0; cell < width * height * depth; cell++) {
+          cells[cell * CELL_FIELDS + F.MATERIAL_ID] = MAT.VACUUM;
+        }
+        const center = (1 * height + 1) * width + 1;
+        cells[center * CELL_FIELDS + F.ENERGY] = 1000;
+        cells[center * CELL_FIELDS + F.INFORMATION] = 40;
+        cells[center * CELL_FIELDS + F.DENSITY] = 0.5;
+        cells[center * CELL_FIELDS + F.ENTROPY] = 0.1;
+        cells[center * CELL_FIELDS + F.BIO_POTENTIAL] = 0;
+        backend.upload(cells);
+        backend.writeParams({
+          ...DEFAULT_PARAMS,
+          crystallizationRate: 0.003,
+        }, (1 << PROC.CRYSTALLIZATION) | (1 << PROC.BIO_POTENTIAL), 0.016);
+        backend.submitCompute(1);
+        const output = await backend.readback();
+        return {
+          materialId: output[center * CELL_FIELDS + F.MATERIAL_ID],
+          density: output[center * CELL_FIELDS + F.DENSITY],
+          entropy: output[center * CELL_FIELDS + F.ENTROPY],
+          bio: output[center * CELL_FIELDS + F.BIO_POTENTIAL],
+        };
+      } finally {
+        backend.destroy();
+      }
+    }
+
     async function runBioMetabolismStep() {
       const width = 3, height = 3, depth = 3;
       const backend = new GPUBackend();
@@ -372,6 +407,7 @@ try {
     const coupledMaterial = await runCoupledMaterialStep();
     const entropyCoupled = await runEntropyCoupledStep();
     const bioMetabolism = await runBioMetabolismStep();
+    const crystallizationBio = await runCrystallizationBioStep();
     const localTime = await runLocalTimeStep();
     const signalPropagation = await runSignalPropagationStep();
     const signalInformation = await runSignalInformationStep();
@@ -424,7 +460,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, bioMetabolism, localTime, signalPropagation, signalInformation, materialPressure };
+    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -490,6 +526,12 @@ try {
       `GPU metabolism information output mismatch (got ${result.bioMetabolism.information})`);
     assert.ok(Math.abs(result.bioMetabolism.entropy - (0.2 + expectedBioMetabolismRate * 0.008)) < 1e-5,
       `GPU metabolism entropy output mismatch (got ${result.bioMetabolism.entropy})`);
+    const expectedCrystallizationBio = 0.08 + 0.3
+      + 0.5002304 * 0.2 + (1 - 0.09856) * 0.1 + 0.05;
+    assert.equal(result.crystallizationBio.materialId, MAT.CRYSTAL,
+      "GPU crystallization must publish crystal before Bio-Potential");
+    assert.ok(Math.abs(result.crystallizationBio.bio - expectedCrystallizationBio) < 1e-4,
+      `GPU Bio-Potential must use post-crystallization Crystal affinity (expected ${expectedCrystallizationBio}, got ${result.crystallizationBio.bio})`);
     const expectedLocalTime = 0.016 * 1.5 * (1 + 100 * 0.002 + 0.2 * 0.5);
     assert.ok(Math.abs(result.localTime - expectedLocalTime) < 1e-5,
       `GPU local time must use normalized base-rate/energy/entropy formula (expected ${expectedLocalTime}, got ${result.localTime})`);
