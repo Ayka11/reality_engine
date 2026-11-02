@@ -6,7 +6,7 @@
 
 import {
   ChunkGrid, GRID_W, GRID_H, GRID_D,
-  CHUNK_FLOATS, F, NF, CX, CY, CZ, chunkKey, fieldActivityEpsilon,
+  CHUNK_FLOATS, LEGACY_CHUNK_FLOATS_V2, F, NF, CX, CY, CZ, chunkKey, fieldActivityEpsilon,
 } from './ChunkGrid'
 import { brushGeometryWeight } from '../brushes/BrushGeometry'
 import { applyBrushOperation } from '../brushes/BrushMath'
@@ -206,7 +206,7 @@ function simStep(dt: number) {
   const dirs: Array<[number, number, number]> = [
     [-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1],
   ]
-  const activationFields = [F.E, F.T, F.D, F.I, F.P, F.WAVE, F.FX, F.FY, F.FZ]
+  const activationFields = [F.E, F.T, F.D, F.I, F.P, F.WAVE, F.FX, F.FY, F.FZ, F.VX, F.VY, F.VZ]
   for (const { x, y, z } of orderedCandidates) {
     const key = chunkKey(Math.floor(x / CX), Math.floor(y / CY), Math.floor(z / CZ))
     const chunk = sourceChunks.get(key) ?? zeroChunk
@@ -835,7 +835,8 @@ self.onmessage = (e: MessageEvent) => {
     const key = data?.key
     const payload = data?.data as number[] | Float32Array | undefined
     if (activeRestoreId === null || restoreId !== activeRestoreId) return
-    if (!Number.isInteger(key) || key < 0 || !payload || payload.length !== CHUNK_FLOATS) {
+    if (!Number.isInteger(key) || key < 0 || !payload ||
+        (payload.length !== CHUNK_FLOATS && payload.length !== LEGACY_CHUNK_FLOATS_V2)) {
       restoreFailed = true
       ;(self as unknown as Worker).postMessage({ cmd: 'restoreChunkAck', data: { key, restoreId, accepted: false } })
       return

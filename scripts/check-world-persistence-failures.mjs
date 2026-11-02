@@ -154,6 +154,11 @@ assert.deepEqual(targetBuffer, stableTarget, "non-finite fields must be rejected
 
 assert.deepEqual(Object.keys(validFields).sort(), [...FIELD_ORDER].sort(),
   "the serializer must emit every supported field");
+const oldFields = { ...validFields, spare1: validFields.velocityX, spare2: validFields.velocityY, spare3: validFields.velocityZ };
+delete oldFields.velocityX; delete oldFields.velocityY; delete oldFields.velocityZ;
+const oldTarget = new Float32Array(targetBuffer.length);
+serializer.applyFields(oldFields, oldTarget);
+assert.deepEqual(oldTarget, targetBuffer, "v4.1 spare fields must restore into velocity slots");
 
 const values = new Map();
 let failSet = false;
@@ -363,7 +368,8 @@ export const F = {
   ENERGY:0,DENSITY:1,INFORMATION:2,ENTROPY:3,TEMPERATURE:4,PRESSURE:5,
   FIELD_X:6,FIELD_Y:7,FIELD_Z:8,LOCAL_TIME:9,CAUSALITY_ID:10,BIO_POTENTIAL:11,
   WAVE_PHASE:12,WAVE_AMP:13,GRAVITY_POT:14,MATERIAL_ID:15,CHEM_STATE:16,
-  SIGNAL:17,MEM_FIELD:18,AGENT_MARK:19,ENTITY_ID:20,SPARE_1:21,SPARE_2:22,SPARE_3:23
+  SIGNAL:17,MEM_FIELD:18,AGENT_MARK:19,ENTITY_ID:20,VELOCITY_X:21,VELOCITY_Y:22,VELOCITY_Z:23,
+  SPARE_1:21,SPARE_2:22,SPARE_3:23
 };
 `);
 const runtimeIdbUrl = toModuleUrl(`export async function openDB() { throw new Error("IndexedDB must not be used by this unit test"); }`);

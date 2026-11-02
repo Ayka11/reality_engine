@@ -26,9 +26,9 @@ struct Cell {
   mem_field:    f32,  // 18 — information memory trace
   agent_mark:   f32,  // 19 — AI agent occupancy
   entity_id:    f32,  // 20 — entity membership id
-  spare1:       f32,  // 21
-  spare2:       f32,  // 22
-  spare3:       f32,  // 23
+  velocity_x:   f32,  // 21 — dedicated velocity X
+  velocity_y:   f32,  // 22 — dedicated velocity Y
+  velocity_z:   f32,  // 23 — dedicated velocity Z
 }
 
 // Flat storage layout (4-byte aligned, no padding needed)

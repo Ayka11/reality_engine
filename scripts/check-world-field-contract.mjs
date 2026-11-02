@@ -11,7 +11,10 @@ async function load(path, replacements = []) {
 }
 
 const gridMod = await load("src/core/ChunkGrid.ts");
-const { ChunkGrid, CHUNK_FLOATS, NF: WORKER_NF } = gridMod;
+const { ChunkGrid, CHUNK_FLOATS, NF: WORKER_NF, CHUNK_CELLS, LEGACY_NF_V2, LEGACY_CHUNK_FLOATS_V2, migrateLegacyWorkerChunkV2 } = gridMod;
+assert.equal(WORKER_NF, 18);
+assert.equal(CHUNK_FLOATS, CHUNK_CELLS * WORKER_NF);
+assert.equal(LEGACY_CHUNK_FLOATS_V2, CHUNK_CELLS * LEGACY_NF_V2);
 const restoreGrid = new ChunkGrid();
 const validChunk = new Float32Array(CHUNK_FLOATS).fill(0.25);
 assert.equal(restoreGrid.restoreChunk(0, validChunk), true);
@@ -24,6 +27,15 @@ const invalidChunk = new Float32Array(CHUNK_FLOATS).fill(0.5);
 invalidChunk[12] = Number.NaN;
 assert.equal(restoreGrid.restoreChunk(1, invalidChunk), false);
 assert.equal(restoreGrid.chunks.has(1), false);
+const oldData = new Float32Array(LEGACY_CHUNK_FLOATS_V2);
+oldData[0] = 42; oldData[6] = 1.25; oldData[LEGACY_NF_V2 + 14] = -2.5;
+assert.equal(restoreGrid.restoreChunk(2, oldData), true);
+const migrated = restoreGrid.chunks.get(2);
+assert.equal(migrated.length, CHUNK_FLOATS);
+assert.equal(migrated[0], 42); assert.equal(migrated[6], 1.25);
+assert.equal(migrated[WORKER_NF + 14], -2.5);
+assert.deepEqual(Array.from(migrated.slice(15,18)), [0,0,0]);
+assert.equal(migrateLegacyWorkerChunkV2(oldData)?.length, CHUNK_FLOATS);
 const workerSource = await readFile(new URL("src/core/ChunkSimWorker.ts", root), "utf8");
 assert.ok(workerSource.includes("cmd === 'restoreBegin'"), "worker restore begin command missing");
 assert.ok(workerSource.includes("cmd === 'restoreChunkAck'") === false, "worker must emit ACKs, not consume its own ACK command");
@@ -234,7 +246,8 @@ assert.match(persistenceSource, /request\.onblocked = \(\) => \{\s*if \(settled\
   "IndexedDB callbacks must not settle an open request more than once");
 
 const persistenceMod = await load("src/infinity/WorldFieldChunkPersistence.ts", [
-  [/import \{ CHUNK_FLOATS \} from [^;]+;/, `const CHUNK_FLOATS = ${CHUNK_FLOATS};`],
+  [/import \{ CHUNK_FLOATS, LEGACY_CHUNK_FLOATS_V2, migrateLegacyWorkerChunkV2 \} from [^;]+;/,
+    `const CHUNK_FLOATS = ${CHUNK_FLOATS}; const LEGACY_CHUNK_FLOATS_V2 = ${LEGACY_CHUNK_FLOATS_V2}; const migrateLegacyWorkerChunkV2 = ${migrateLegacyWorkerChunkV2.toString()};`],
 ]);
 const { WorldFieldChunkPersistence } = persistenceMod;
 const persistence = new WorldFieldChunkPersistence();
@@ -245,6 +258,7 @@ const saved = persistence.saveWorkerChunks(
   workerData,
   { center: {x:0,y:0,z:0}, sliceY:0, seed:"seed" },
 );
+assert.equal(saved.schemaVersion, 3);
 assert.equal(persistence.validate(saved), true);
 saved.values[0] = 999;
 saved.workerChunks[0].data[0] = 999;
@@ -269,8 +283,30 @@ assert.equal(persistence.validate(tampered), false);
 const cachedWorkerSnapshot = persistence.load({cx:0,cy:0,cz:0});
 const inconsistent = { ...cachedWorkerSnapshot, values: [...cachedWorkerSnapshot.values] };
 inconsistent.values[1] = 123456;
-assert.equal(persistence.validate(inconsistent), false,
-  "v2 snapshots must reject values that differ from canonical worker chunk data");
+assert.equal(persistence.validate(inconsistent), false, "v3 snapshots must reject noncanonical flattened values");
+
+function checksumForTest(values) {
+  let h = 2166136261 >>> 0;
+  for (const value of values) { const scaled = Math.round(value * 1000000); h ^= scaled >>> 0; h = Math.imul(h, 16777619) >>> 0; }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+const oldChunk = new Array(LEGACY_CHUNK_FLOATS_V2).fill(0);
+oldChunk[1] = 0.8; oldChunk[6] = 1.25; oldChunk[14] = -2.5;
+const oldFlat = [17, ...oldChunk];
+const oldSnapshot = { schemaVersion: 2, key: '1,0,0', coord: {cx:1,cy:0,cz:0}, seed: 'old-seed',
+  providerVersion: 2, values: oldFlat, workerChunks: [{key:17,data:oldChunk}],
+  workerView: {center:{x:0,y:0,z:0},sliceY:0,seed:'old-seed'}, checksum: checksumForTest(oldFlat), savedAt:1 };
+assert.equal(persistence.validate(oldSnapshot), true);
+persistence.snapshots.set(oldSnapshot.key, oldSnapshot);
+const upgraded = persistence.loadValid({cx:1,cy:0,cz:0});
+assert.equal(upgraded?.schemaVersion, 3);
+assert.equal(upgraded?.workerChunks?.[0]?.data.length, CHUNK_FLOATS);
+assert.equal(upgraded.workerChunks[0].data[1], 0.8);
+assert.equal(upgraded.workerChunks[0].data[6], 1.25);
+assert.equal(upgraded.workerChunks[0].data[14], -2.5);
+assert.deepEqual(upgraded.workerChunks[0].data.slice(15,18), [0,0,0]);
+assert.equal(persistence.load({cx:1,cy:0,cz:0}).schemaVersion, 3);
+assert.equal(persistence.validate(upgraded), true);
 const orderedCoord = {cx:2,cy:0,cz:0};
 persistence.save(orderedCoord, "first", [1, 2]);
 assert.equal(persistence.remove(orderedCoord), true);

@@ -30,7 +30,9 @@ export const F = {
   FIELD_X: 6, FIELD_Y: 7, FIELD_Z: 8, LOCAL_TIME: 9, CAUSALITY_ID: 10,
   BIO_POTENTIAL: 11, WAVE_PHASE: 12, WAVE_AMP: 13, GRAVITY_POT: 14,
   MATERIAL_ID: 15, CHEM_STATE: 16, SIGNAL: 17, MEM_FIELD: 18, AGENT_MARK: 19,
-  ENTITY_ID: 20, SPARE_1: 21, SPARE_2: 22, SPARE_3: 23,
+  ENTITY_ID: 20, VELOCITY_X: 21, VELOCITY_Y: 22, VELOCITY_Z: 23,
+  // Deprecated aliases preserve source compatibility with v4.1 snapshots.
+  SPARE_1: 21, SPARE_2: 22, SPARE_3: 23,
 } as const;
 export type FieldKey = keyof typeof F;
 
@@ -55,6 +57,9 @@ export class CellState {
   get fieldX() { return this.get(F.FIELD_X); }
   get fieldY() { return this.get(F.FIELD_Y); }
   get fieldZ() { return this.get(F.FIELD_Z); }
+  get velocityX() { return this.get(F.VELOCITY_X); }
+  get velocityY() { return this.get(F.VELOCITY_Y); }
+  get velocityZ() { return this.get(F.VELOCITY_Z); }
   get localTime() { return this.get(F.LOCAL_TIME); }
   get causalityId() { return this.get(F.CAUSALITY_ID); }
   get bioPotential() { return this.get(F.BIO_POTENTIAL); }
@@ -70,6 +75,9 @@ export class CellState {
   set entropy(v: number) { this.set(F.ENTROPY, v); }
   set temperature(v: number) { this.set(F.TEMPERATURE, v); }
   set pressure(v: number) { this.set(F.PRESSURE, v); }
+  set velocityX(v: number) { this.set(F.VELOCITY_X, v); }
+  set velocityY(v: number) { this.set(F.VELOCITY_Y, v); }
+  set velocityZ(v: number) { this.set(F.VELOCITY_Z, v); }
   set localTime(v: number) { this.set(F.LOCAL_TIME, v); }
   set causalityId(v: number) { this.set(F.CAUSALITY_ID, v); }
   set bioPotential(v: number) { this.set(F.BIO_POTENTIAL, v); }

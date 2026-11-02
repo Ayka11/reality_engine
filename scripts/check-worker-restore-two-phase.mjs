@@ -25,7 +25,7 @@ const lawJs = await compile("src/laws/MetaLaw.ts");
 const lawUrl = `data:text/javascript;base64,${Buffer.from(lawJs).toString("base64")}`;
 const materialJs = await compile("src/materials/MaterialDef.ts");
 const materialUrl = `data:text/javascript;base64,${Buffer.from(materialJs).toString("base64")}`;
-const { CHUNK_FLOATS } = await import(gridUrl);
+const { CHUNK_FLOATS, LEGACY_NF_V2, LEGACY_CHUNK_FLOATS_V2, NF } = await import(gridUrl);
 const messages = [];
 globalThis.self = {
   onmessage: null,
@@ -146,6 +146,18 @@ assert.deepEqual(send("snapshot").find(message => message.cmd === "snapshot").da
   "committing an empty snapshot must clear the entire prior chunk set");
 const emptyFrame = send("tick", { speed: 1 }).find(message => message.cmd === "frame");
 assert.ok(emptyFrame, "worker should continue ticking after empty restore");
+const oldPayload = new Float32Array(LEGACY_CHUNK_FLOATS_V2);
+oldPayload[1] = 0.75; oldPayload[6] = 1.5; oldPayload[LEGACY_NF_V2 + 14] = -2.25;
+send("restoreBegin", { restoreId: 6, expected: 1 });
+const oldAck = send("restoreChunk", { restoreId: 6, key: 0, data: oldPayload }).find(m => m.cmd === "restoreChunkAck");
+assert.equal(oldAck.data.accepted, true);
+assert.equal(send("restoreEnd", { restoreId: 6 }).find(m => m.cmd === "restoreComplete").data.prepared, true);
+assert.equal(send("restoreCommit", { restoreId: 6 }).find(m => m.cmd === "restoreCommitted").data.committed, true);
+const upgradedWorker = send("snapshot").find(m => m.cmd === "snapshot").data.snap[0].data;
+assert.equal(upgradedWorker.length, CHUNK_FLOATS);
+assert.equal(upgradedWorker[1], 0.75); assert.equal(upgradedWorker[6], 1.5);
+assert.equal(upgradedWorker[NF + 14], -2.25);
+assert.deepEqual(upgradedWorker.slice(15,18), [0,0,0]);
 
 // The legacy one-shot restore must invalidate history from the world it replaces.
 const legacyBaseline = send("snapshot").find(message => message.cmd === "snapshot").data.snap;
@@ -163,4 +175,5 @@ assert.deepEqual(legacySnapshotAfterRestore.snap, legacyBaseline,
 console.log("PASS: restoreEnd prepares without committing worker state");
 console.log("PASS: restoreAbort rolls back a prepared restore");
 console.log("PASS: restoreCommit makes prepared chunks durable in worker state");
+console.log("PASS: schema v2 chunks migrate atomically to v3");
 console.log("PASS: incomplete restore preparation rolls back atomically");

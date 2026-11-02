@@ -1,8 +1,8 @@
-import { CHUNK_FLOATS } from '../core/ChunkGrid'
+import { CHUNK_FLOATS, LEGACY_CHUNK_FLOATS_V2, migrateLegacyWorkerChunkV2 } from '../core/ChunkGrid'
 import type { WorldFieldChunkCoord } from './WorldFieldChunkStore'
 
 export type WorldFieldChunkSnapshot = {
-  schemaVersion: 1 | 2
+  schemaVersion: 1 | 2 | 3
   key: string
   coord: WorldFieldChunkCoord
   seed: string
@@ -165,7 +165,7 @@ export class WorldFieldChunkPersistence {
     await this.writeQueue
     const key = chunkCoordKey(coord)
     const cached = this.snapshots.get(key)
-    if (cached && this.validate(cached)) return cloneSnapshot(cached)
+    if (cached && this.validate(cached)) return cloneSnapshot(this.promoteWorkerSnapshot(cached))
     const db = await this.openDatabase()
     if (!db) return null
     const snapshot = await new Promise<WorldFieldChunkSnapshot | null>((resolve) => {
@@ -182,8 +182,8 @@ export class WorldFieldChunkPersistence {
       }
     })
     if (snapshot && this.validate(snapshot)) {
-      const isolated = cloneSnapshot(snapshot)
-      this.snapshots.set(key, isolated)
+      const isolated = this.promoteWorkerSnapshot(snapshot)
+      this.snapshots.set(key, cloneSnapshot(isolated))
       return cloneSnapshot(isolated)
     }
     return null
@@ -195,7 +195,7 @@ export class WorldFieldChunkPersistence {
       .sort((a, b) => a.key - b.key)
     const flat = canonical.flatMap(chunk => [chunk.key, ...chunk.data])
     const snapshot: WorldFieldChunkSnapshot = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       key: chunkCoordKey(coord),
       coord: { ...coord }, seed, providerVersion, values: flat,
       workerChunks: canonical,
@@ -233,7 +233,25 @@ export class WorldFieldChunkPersistence {
 
   loadValid(coord: WorldFieldChunkCoord): WorldFieldChunkSnapshot | null {
     const snapshot = this.load(coord)
-    return snapshot && this.validate(snapshot) ? snapshot : null
+    return snapshot && this.validate(snapshot) ? cloneSnapshot(this.promoteWorkerSnapshot(snapshot)) : null
+  }
+
+  /** Promote validated v2 worker chunks in memory and durably rewrite them as v3. */
+  private promoteWorkerSnapshot(snapshot: WorldFieldChunkSnapshot): WorldFieldChunkSnapshot {
+    if (snapshot.schemaVersion !== 2 || !snapshot.workerChunks) return cloneSnapshot(snapshot)
+    const workerChunks = snapshot.workerChunks.map((chunk) => {
+      const data = migrateLegacyWorkerChunkV2(chunk.data)
+      if (!data) throw new Error('Validated v2 worker chunk could not be migrated')
+      return { key: chunk.key, data: Array.from(data) }
+    })
+    const flat = workerChunks.flatMap(chunk => [chunk.key, ...chunk.data])
+    const migrated: WorldFieldChunkSnapshot = {
+      ...snapshot, schemaVersion: 3, values: flat, workerChunks, checksum: checksum(flat),
+    }
+    const isolated = cloneSnapshot(migrated)
+    this.snapshots.set(snapshot.key, isolated)
+    this.enqueueWrite(snapshot.key, store => store.put(cloneSnapshot(isolated)))
+    return isolated
   }
 
   validate(snapshot: WorldFieldChunkSnapshot): boolean {
@@ -244,12 +262,13 @@ export class WorldFieldChunkPersistence {
     if (!Number.isFinite(snapshot.providerVersion) || !Number.isFinite(snapshot.savedAt)) return false
     if (typeof snapshot.checksum !== 'string' || snapshot.checksum.length !== 8) return false
     if (snapshot.schemaVersion === 1) return checksum(snapshot.values) === snapshot.checksum
-    if (snapshot.schemaVersion === 2) {
+    if (snapshot.schemaVersion === 2 || snapshot.schemaVersion === 3) {
       if (!Array.isArray(snapshot.workerChunks) || snapshot.workerChunks.length === 0) return false
+      const expectedChunkFloats = snapshot.schemaVersion === 2 ? LEGACY_CHUNK_FLOATS_V2 : CHUNK_FLOATS
       const keys = new Set<number>()
       for (const chunk of snapshot.workerChunks) {
         if (!Number.isInteger(chunk.key) || keys.has(chunk.key)) return false
-        if (!Array.isArray(chunk.data) || chunk.data.length !== CHUNK_FLOATS) return false
+        if (!Array.isArray(chunk.data) || chunk.data.length !== expectedChunkFloats) return false
         if (!chunk.data.every(Number.isFinite)) return false
         keys.add(chunk.key)
       }

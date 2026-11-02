@@ -1,7 +1,7 @@
 // Sparse chunk grid — 128×128×64, chunk size 8×8×8
 // At 15% fill: ~200 active chunks out of 1024 total = ~9 MB
 
-export const NF = 15  // fields per cell in the sparse worker layout
+export const NF = 18  // v3: v2 fields plus dedicated velocity X/Y/Z
 
 // Field indices — short names matching the worker's F layout
 export const F = {
@@ -19,14 +19,37 @@ export const F = {
   MAT: 11, // material ID
   WAVE:12, // wave amplitude
   PROC:13, // process activity
-  FZ:  14, // field vector Z
+  FZ:  14, // field vector Z / acceleration-like field
+  VX:  15, // velocity X (grid units per simulation second)
+  VY:  16, // velocity Y (grid units per simulation second)
+  VZ:  17, // velocity Z (grid units per simulation second)
 } as const
 
 export const CX = 8   // chunk size X
 export const CY = 8   // chunk size Y
 export const CZ = 8   // chunk size Z
 export const CHUNK_CELLS = CX * CY * CZ        // 512
-export const CHUNK_FLOATS = CHUNK_CELLS * NF   // 7168
+export const CHUNK_FLOATS = CHUNK_CELLS * NF
+
+// Worker persistence schema v2 used 15 floats per cell; preserve that stride.
+export const LEGACY_NF_V2 = 15
+export const LEGACY_CHUNK_FLOATS_V2 = CHUNK_CELLS * LEGACY_NF_V2
+
+/** Expand a v2 worker chunk to v3; preserve fields 0..14 and initialize velocity to zero. */
+export function migrateLegacyWorkerChunkV2(data: ArrayLike<number>): Float32Array | null {
+  if (!data || data.length !== LEGACY_CHUNK_FLOATS_V2) return null
+  const migrated = new Float32Array(CHUNK_FLOATS)
+  for (let cell = 0; cell < CHUNK_CELLS; cell++) {
+    const oldBase = cell * LEGACY_NF_V2
+    const newBase = cell * NF
+    for (let field = 0; field < LEGACY_NF_V2; field++) {
+      const value = data[oldBase + field]
+      if (!Number.isFinite(value)) return null
+      migrated[newBase + field] = value
+    }
+  }
+  return migrated
+}
 
 // The global sparse threshold is suitable for energy-like fields but not for
 // density in [0, 1]: the default density mobility (0.0024) transfers ~1.9e-5
@@ -37,7 +60,8 @@ export const VECTOR_ACTIVITY_EPSILON = 1e-6
 
 export function fieldActivityEpsilon(field: number): number {
   if (field === F.D) return DENSITY_ACTIVITY_EPSILON
-  if (field === F.FX || field === F.FY || field === F.FZ) return VECTOR_ACTIVITY_EPSILON
+  if (field === F.FX || field === F.FY || field === F.FZ ||
+      field === F.VX || field === F.VY || field === F.VZ) return VECTOR_ACTIVITY_EPSILON
   return SPARSE_FIELD_EPSILON
 }
 
@@ -113,17 +137,19 @@ export class ChunkGrid {
       let maxVal = 0
       let maxDensity = 0
       let maxVector = 0
+      let maxVelocity = 0
       for (let i = 0; i < CHUNK_FLOATS; i++) {
         const value = Math.abs(chunk[i])
         maxVal = Math.max(maxVal, value)
         const field = i % NF
         if (field === F.D) maxDensity = Math.max(maxDensity, value)
         if (field === F.FX || field === F.FY || field === F.FZ) maxVector = Math.max(maxVector, value)
+        if (field === F.VX || field === F.VY || field === F.VZ) maxVelocity = Math.max(maxVelocity, value)
       }
-      // Sub-threshold chunks carrying resolvable density or acceleration are
-      // not empty: pruning them would erase transported mass or gravity fields.
+      // Sub-threshold chunks carrying density, field vectors, or velocity are
+      // not empty: pruning them would erase mass or kinematic state.
       if (maxVal < threshold && maxDensity <= DENSITY_ACTIVITY_EPSILON &&
-          maxVector <= VECTOR_ACTIVITY_EPSILON) {
+          maxVector <= VECTOR_ACTIVITY_EPSILON && maxVelocity <= VECTOR_ACTIVITY_EPSILON) {
         // Publish a zero-filled dirty payload for removed chunks so consumers
         // can clear stale geometry/state instead of retaining deleted data.
         this.chunks.delete(key)
@@ -196,21 +222,29 @@ export class ChunkGrid {
   }
 
   restoreChunk(key: number, data: number[] | Float32Array): boolean {
-    if (!Number.isInteger(key) || key < 0 || key >= CHUNKS_X * CHUNKS_Y * CHUNKS_Z ||
-        !data || data.length !== CHUNK_FLOATS) return false
-    for (let i = 0; i < data.length; i++) if (!Number.isFinite(data[i])) return false
-    this.chunks.set(key, new Float32Array(data))
+    if (!Number.isInteger(key) || key < 0 || key >= CHUNKS_X * CHUNKS_Y * CHUNKS_Z || !data) return false
+    const normalized = data.length === CHUNK_FLOATS ? new Float32Array(data) : migrateLegacyWorkerChunkV2(data)
+    if (!normalized || !normalized.every(Number.isFinite)) return false
+    this.chunks.set(key, normalized)
     this.dirtyChunks.add(key)
     return true
   }
 
   restore(snap: Array<{ key: number; data: number[] }>): void {
-    // Snapshot restore replaces the complete chunk set. Mark removed keys so
-    // frame consumers can clear any geometry/state retained for those chunks.
+    // Validate and normalize the entire candidate before mutating authoritative state.
+    const prepared = new Map<number, Float32Array>()
+    for (const { key, data } of snap) {
+      if (!Number.isInteger(key) || key < 0 || key >= CHUNKS_X * CHUNKS_Y * CHUNKS_Z || prepared.has(key) || !data) {
+        throw new RangeError('Invalid worker chunk snapshot')
+      }
+      const normalized = data.length === CHUNK_FLOATS ? new Float32Array(data) : migrateLegacyWorkerChunkV2(data)
+      if (!normalized || !normalized.every(Number.isFinite)) throw new RangeError('Invalid worker chunk payload')
+      prepared.set(key, normalized)
+    }
     for (const key of this.chunks.keys()) this.dirtyChunks.add(key)
     this.chunks.clear()
-    for (const { key, data } of snap) {
-      this.chunks.set(key, new Float32Array(data))
+    for (const [key, data] of prepared) {
+      this.chunks.set(key, data)
       this.dirtyChunks.add(key)
     }
   }

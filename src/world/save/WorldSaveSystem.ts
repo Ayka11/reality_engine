@@ -183,7 +183,7 @@ export class WorldSaveSystem {
     const activeLaws = this.lawEngine.laws.filter(law => law.active);
 
     return {
-      version: '4.1',
+      version: '5.0',
       timestamp: Date.now(),
       name,
       gridSize: { width: this.voxelGrid.W, height: this.voxelGrid.H, depth: this.voxelGrid.D },
@@ -482,7 +482,7 @@ export class WorldSaveSystem {
         created: new Date(snapshot.timestamp).toISOString(),
         description: 'World Save System export.',
         tags: ['world-save', 'reality-package'],
-        compatibility: 'v4+',
+        compatibility: 'v5+',
       },
       graph: snapshot.realityGraph ?? {
         nodes: [],
@@ -505,7 +505,7 @@ export class WorldSaveSystem {
 
   private packageToSnapshot(pkg: RealityPackage): WorldSnapshot {
     return {
-      version: '4.1',
+      version: '5.0',
       timestamp: Date.now(),
       name: pkg.manifest.name,
       gridSize: { width: pkg.metadata.gridSize.x, height: pkg.metadata.gridSize.y, depth: pkg.metadata.gridSize.z },
