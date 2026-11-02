@@ -161,6 +161,28 @@ for (const scenario of scenarios) {
   }
 }
 
+// Gravity consumes the explicit scalar GRAVITY_POT field on the dense CPU path.
+function runGravityPotential(potential: number, processEnabled: boolean): number {
+  const grid = new VoxelGrid(3, 3, 3);
+  const center = grid.idx(1, 1, 1);
+  grid.buffer[center + F.DENSITY] = 0.4;
+  grid.buffer[center + F.GRAVITY_POT] = potential;
+  grid.snapshot();
+  const mask = processEnabled ? (1 << PROC.GRAVITY) : 0;
+  new FieldPhysics().tick(grid, 1 / 60, {
+    ...DEFAULT_PARAMS,
+    gravityDensityCoupling: 0.1,
+  }, mask);
+  return grid.buffer[center + F.DENSITY];
+}
+const gravityPotentialAfter = runGravityPotential(0.5, true);
+assert.ok(Math.abs(gravityPotentialAfter - (0.4 + 0.1 * 0.5 / 60)) < 1e-6,
+  `CPU gravity must apply the configured potential and coupling (got ${gravityPotentialAfter})`);
+assert.equal(runGravityPotential(0.5, false), 0.4,
+  "disabled gravity must not change density");
+assert.equal(runGravityPotential(0, true), 0.4,
+  "zero gravity potential must be a no-op");
+
 const densityScenario = scenarios.find(s => s.name === "density")!;
 const densityConservation = runCentered(densityScenario, 1 / 60, 0.0024);
 assert.ok(Math.abs(densityConservation.totalAfter - densityConservation.totalBefore) < 1e-6,
