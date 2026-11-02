@@ -5,6 +5,7 @@ import { DEFAULT_PARAMS, type PhysicsParams } from "../src/laws/MetaLaw.ts";
 import { PROC } from "../src/process/ProcessDef.ts";
 import { WORLD } from "../src/core/WorldConstants.ts";
 import { FieldPhysics } from "../src/simulation/FieldPhysics.ts";
+import { EntropyLayer } from "../src/simulation/EntropyLayer.ts";
 import { MAT, MATERIAL_LIBRARY } from "../src/materials/MaterialDef.ts";
 
 type DiffusionParameter =
@@ -384,6 +385,45 @@ assert.ok(Math.abs(coupledGrid.buffer[coupledBase + F.ENERGY] - 97.12) < 1e-5,
   "metal conductivity must affect energy diffusion during combined thermal coupling");
 assert.ok(Math.abs(coupledGrid.buffer[coupledBase + F.TEMPERATURE] - 0.8) < 1e-5,
   "thermal energy coupling must read pre-step energy, not the diffused energy candidate");
+
+
+const entropyGrid = new VoxelGrid(3, 3, 3);
+const entropyBase = entropyGrid.idx(1, 1, 1);
+entropyGrid.buffer[entropyBase + F.MATERIAL_ID] = MAT.VACUUM;
+entropyGrid.buffer[entropyBase + F.ENERGY] = 100;
+entropyGrid.buffer[entropyBase + F.TEMPERATURE] = 100;
+entropyGrid.buffer[entropyBase + F.ENTROPY] = 0.2;
+entropyGrid.snapshot();
+const entropyParams: PhysicsParams = {
+  ...DEFAULT_PARAMS,
+  energyDiffusion: 0.1,
+  tempDiffusion: 0.1,
+  tempEnergyCoupling: 0,
+  entropyGrowthRate: 0.01,
+  entropyEnergyCoupling: 0.001,
+};
+const entropyMask = (1 << PROC.ENERGY_DIFFUSION) |
+  (1 << PROC.TEMP_DIFFUSION) |
+  (1 << PROC.ENTROPY_GROWTH);
+new FieldPhysics().tick(entropyGrid, 0.016, entropyParams, entropyMask);
+new EntropyLayer().tick(entropyGrid, 0.016, entropyParams, entropyMask);
+const expectedPostDiffusionEnergy = 99.952;
+const expectedPostDiffusionTemperature = 90.4;
+const expectedEntropy = 0.2 + (
+  entropyParams.entropyGrowthRate
+  + expectedPostDiffusionEnergy * entropyParams.entropyEnergyCoupling
+  + expectedPostDiffusionTemperature * 0.00005
+) * 0.016;
+const expectedEntropyEnergy = expectedPostDiffusionEnergy *
+  (1 - expectedEntropy * 0.0005 * 0.016 * 60);
+assert.ok(Math.abs(entropyGrid.buffer[entropyBase + F.TEMPERATURE] - expectedPostDiffusionTemperature) < 1e-5,
+  "CPU thermal diffusion must run before entropy growth");
+assert.ok(Math.abs(entropyGrid.buffer[entropyBase + F.ENTROPY] - expectedEntropy) < 1e-5,
+  "CPU entropy growth must use the post-diffusion energy and temperature");
+assert.ok(Math.abs(entropyGrid.buffer[entropyBase + F.ENERGY] - expectedEntropyEnergy) < 1e-5,
+  "CPU entropy attenuation must use the newly integrated entropy");
+
+console.log("CPU energy/thermal/entropy operator-order regression: PASS");
 
 console.log("Material-dependent energy/thermal diffusion regression: PASS");
 
