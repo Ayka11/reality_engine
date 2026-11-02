@@ -503,6 +503,10 @@ assert.ok(Math.abs(crystalErosionDensity - 0.7906304) < 0.002,
 assert.equal(crystalErosionMaterial, MAT.CRYSTAL,
   "same-step crystallization must still publish its material output")
 
+// Reset the mask so this scenario isolates EROSION from the preceding
+// crystallization + erosion case.
+send('setPhysics', { params: erosionParams, processMask: 1 << 15 })
+
 // Low flow must not erode, even with EROSION enabled.
 const lowFlowPoint = { x: 100, y: 10, z: 10 }
 send('paint', { ...lowFlowPoint, f: F.D, v: 0.8, r: 0, mode: 'set' })
