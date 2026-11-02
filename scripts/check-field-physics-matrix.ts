@@ -479,6 +479,19 @@ const expectedLocalTime = 0.016 * 1.5 * (1 + 100 * 0.002 + 0.2 * 0.5);
 assert.ok(Math.abs(localTimeGrid.buffer[localTimeBase + F.LOCAL_TIME] - expectedLocalTime) < 1e-6,
   "CPU local time must use the normalized base-rate/energy/entropy formula");
 
+const signalGrid = new VoxelGrid(3, 3, 3);
+const signalBase = signalGrid.idx(1, 1, 1);
+signalGrid.buffer[signalBase + F.INFORMATION] = 100;
+signalGrid.snapshot();
+new FieldPhysics().tick(signalGrid, 1 / 60, {
+  ...DEFAULT_PARAMS,
+  infoGrowthRate: 0.5,
+  signalPropagationRate: 0.2,
+}, 1 << PROC.SIGNAL_PROPAGATION);
+assert.ok(Math.abs(signalGrid.buffer[signalBase + F.INFORMATION] - 99) < 1e-5,
+  `CPU signal propagation must use PhysicsParams.signalPropagationRate (got ${signalGrid.buffer[signalBase + F.INFORMATION]})`);
+
+
 console.log("CPU material bio-affinity/metabolism parameter regression: PASS");
 
 console.log("CPU energy/thermal/entropy operator-order regression: PASS");
