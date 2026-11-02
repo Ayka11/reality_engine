@@ -111,7 +111,39 @@ try {
       }
     }
 
+    async function runCoupledMaterialStep() {
+      const width = 3, height = 3, depth = 3;
+      const backend = new GPUBackend();
+      try {
+        const initialized = await backend.init(width, height, depth);
+        if (!initialized) throw new Error("WebGPU adapter disappeared during coupled material initialization");
+        backend.uploadMaterials(buildMaterialBuffer());
+        const cells = new Float32Array(width * height * depth * CELL_FIELDS);
+        for (let cell = 0; cell < width * height * depth; cell++) {
+          cells[cell * CELL_FIELDS + F.MATERIAL_ID] = MAT.METAL;
+        }
+        const center = (1 * height + 1) * width + 1;
+        cells[center * CELL_FIELDS + F.ENERGY] = 100;
+        backend.upload(cells);
+        backend.writeParams({
+          ...DEFAULT_PARAMS,
+          energyDiffusion: 0.1,
+          tempDiffusion: 0,
+          tempEnergyCoupling: 0.5,
+        }, (1 << PROC.ENERGY_DIFFUSION) | (1 << PROC.TEMP_DIFFUSION), 0.016);
+        backend.submitCompute(1);
+        const output = await backend.readback();
+        return {
+          energy: output[center * CELL_FIELDS + F.ENERGY],
+          temperature: output[center * CELL_FIELDS + F.TEMPERATURE],
+        };
+      } finally {
+        backend.destroy();
+      }
+    }
+
     const adapterInfo = adapter.info?.description || adapter.info?.device || "unknown";
+    const coupledMaterial = await runCoupledMaterialStep();
     const materialDiffusion = {
       energyVacuum: await runMaterialDiffusion(
         MAT.VACUUM, F.ENERGY, PROC.ENERGY_DIFFUSION, "energyDiffusion",
@@ -133,7 +165,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion };
+    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -160,6 +192,10 @@ try {
       `GPU vacuum heat-capacity mismatch (expected 99, got ${result.materialDiffusion.temperatureVacuum})`);
     assert.ok(Math.abs(result.materialDiffusion.temperatureMetal - 99.95) < 1e-4,
       `GPU metal heat-capacity mismatch (expected 99.95, got ${result.materialDiffusion.temperatureMetal})`);
+    assert.ok(Math.abs(result.coupledMaterial.energy - 97.12) < 1e-4,
+      `GPU combined energy step must apply metal conductivity (expected 97.12, got ${result.coupledMaterial.energy})`);
+    assert.ok(Math.abs(result.coupledMaterial.temperature - 0.8) < 1e-4,
+      `GPU thermal coupling must use pre-step energy (expected 0.8, got ${result.coupledMaterial.temperature})`);
     console.log("WebGPU density-advection/material-physics runtime: PASS " + JSON.stringify(result));
   }
 } finally {
