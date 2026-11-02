@@ -26,6 +26,7 @@ const PROCESS_NAMES: Record<number, string> = {
   [PROC.PRESSURE_DIFFUSION]: 'pressure',
   [PROC.FIELD_ROTATION]: 'rotation',
   [PROC.EROSION]: 'erosion',
+  [PROC.DENSITY_ADVECTION]: 'densityAdvection',
 }
 
 const UI_TO_PROCESS: Record<string, number[]> = {
@@ -35,6 +36,7 @@ const UI_TO_PROCESS: Record<string, number[]> = {
   'Bio Emergence': [PROC.BIO_POTENTIAL],
   'Thermal Coupling': [PROC.TEMP_DIFFUSION],
   'Density Gravity': [PROC.DENSITY_FLOW, PROC.GRAVITY],
+  'Density Advection': [PROC.DENSITY_ADVECTION],
   'Neural Plasticity': [PROC.METABOLISM],
   'Wave Resonance': [PROC.WAVE_PROPAGATION],
 }
