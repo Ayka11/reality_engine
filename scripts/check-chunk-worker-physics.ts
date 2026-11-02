@@ -427,6 +427,23 @@ const erodedDensity = readField(latestFrame(), erosionPoint.x, erosionPoint.y, e
 assert.ok(Math.abs(erodedDensity - 0.79232) < 1e-6,
   `erosion should honor the configured rate and sand resistance (got ${erodedDensity})`)
 
+// Erosion uses pre-step density eligibility and composes with density diffusion.
+const combinedErosionPoint = { x: 116, y: 120, z: 48 }
+send('setPhysics', {
+  params: { ...params, energyDiffusion: 0, tempDiffusion: 0,
+    tempEnergyCoupling: 0, densityDiffusion: 0.01, erosionRate: 0.01 },
+  processMask: (1 << 2) | (1 << 15),
+})
+send('paint', { ...combinedErosionPoint, f: F.D, v: 0.65005, r: 0, mode: 'set' })
+send('paint', { ...combinedErosionPoint, f: F.FX, v: 10, r: 0, mode: 'set' })
+send('paint', { ...combinedErosionPoint, f: F.MAT, v: MAT.SAND, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const combinedErosionDensity = readField(
+  latestFrame(), combinedErosionPoint.x, combinedErosionPoint.y, combinedErosionPoint.z, F.D,
+)
+assert.ok(Math.abs(combinedErosionDensity - 0.64174595) < 0.002,
+  `worker erosion must use pre-step eligibility and compose with density diffusion (got ${combinedErosionDensity})`)
+
 // Low flow must not erode, even with EROSION enabled.
 const lowFlowPoint = { x: 100, y: 10, z: 10 }
 send('paint', { ...lowFlowPoint, f: F.D, v: 0.8, r: 0, mode: 'set' })
