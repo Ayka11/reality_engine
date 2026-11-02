@@ -278,12 +278,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   // ── PROC 3: Entropy Growth (second law — cannot be disabled by MetaLaw) ───
   if (isProcessEnabled(8u)) {
+    // Match the CPU operator order: energy/thermal diffusion has already
+    // populated o.energy/o.temperature before entropy growth is evaluated.
     let dS = (params.entropyGrowthRate
-              + c.energy * params.entropyEnergyCoupling
-              + c.temperature * 0.00005) * dt;
-    o.entropy = min(1.0, c.entropy + dS);
-    // Entropy degrades energy
-    o.energy = max(0.0, o.energy * (1.0 - c.entropy * 0.0005 * dt * 60.0));
+              + o.energy * params.entropyEnergyCoupling
+              + o.temperature * 0.00005) * dt;
+    o.entropy = min(1.0, o.entropy + dS);
+    // Energy attenuation uses the newly integrated entropy state.
+    o.energy = max(0.0, o.energy * (1.0 - o.entropy * 0.0005 * dt * 60.0));
   }
 
   // ── PROC 4: Information Dynamics ──────────────────────────────────────────
