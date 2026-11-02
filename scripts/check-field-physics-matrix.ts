@@ -188,8 +188,8 @@ function runGravityGradient(
   };
 }
 const gravityGradient = runGravityGradient(true, true);
-assert.equal(gravityGradient.density, 0.4,
-  "gravity acceleration must not directly modify density");
+assert.ok(Math.abs(gravityGradient.density - 0.4) < 1e-7,
+  "gravity acceleration must not directly modify density (within Float32 precision)");
 assert.ok(gravityGradient.fx < 0 && gravityGradient.fz < 0,
   "CPU gravity must accelerate down both positive density gradients");
 assert.equal(gravityGradient.fy, 0,

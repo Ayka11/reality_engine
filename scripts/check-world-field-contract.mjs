@@ -247,7 +247,7 @@ assert.match(persistenceSource, /request\.onblocked = \(\) => \{\s*if \(settled\
 
 const persistenceMod = await load("src/infinity/WorldFieldChunkPersistence.ts", [
   [/import \{ CHUNK_FLOATS, LEGACY_CHUNK_FLOATS_V2, migrateLegacyWorkerChunkV2 \} from [^;]+;/,
-    `const CHUNK_FLOATS = ${CHUNK_FLOATS}; const LEGACY_CHUNK_FLOATS_V2 = ${LEGACY_CHUNK_FLOATS_V2}; const migrateLegacyWorkerChunkV2 = ${migrateLegacyWorkerChunkV2.toString()};`],
+    `const CHUNK_CELLS = ${CHUNK_CELLS}; const NF = ${WORKER_NF}; const LEGACY_NF_V2 = ${LEGACY_NF_V2}; const CHUNK_FLOATS = ${CHUNK_FLOATS}; const LEGACY_CHUNK_FLOATS_V2 = ${LEGACY_CHUNK_FLOATS_V2}; const migrateLegacyWorkerChunkV2 = ${migrateLegacyWorkerChunkV2.toString()};`],
 ]);
 const { WorldFieldChunkPersistence } = persistenceMod;
 const persistence = new WorldFieldChunkPersistence();
