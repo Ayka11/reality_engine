@@ -80,6 +80,21 @@ assert.ok((await fs.readFile('scripts/check-field-physics-matrix.ts', 'utf8'))
 assert.ok((await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8'))
   .includes('closed-grid worker density diffusion must conserve total density'))
 
+// Energy and thermal diffusion must consume the same material coefficients in all backends.
+assert.ok(cpu.includes('p.energyDiffusion * material.conductivity * dt * lapE'))
+assert.ok(worker.includes('p.energyDiffusion * material.conductivity * lapE * dt'))
+assert.ok(gpu.includes('params.energyDiffusion * mat.conductivity * dt * lapE'))
+assert.ok(cpu.includes('p.tempDiffusion / Math.max(material.heatCapacity, 0.1)'))
+assert.ok(worker.includes('p.tempDiffusion / Math.max(material.heatCapacity, 0.1)'))
+assert.ok(gpu.includes('params.tempDiffusion / max(mat.heatCapacity, 0.1)'))
+assert.ok(cpu.includes('const heat = cE * p.tempEnergyCoupling * dt;'))
+assert.ok(worker.includes('T + tDiff * lapT * dt + E * p.tempEnergyCoupling * dt'))
+assert.ok(gpu.includes('let heat = c.energy * params.tempEnergyCoupling * dt;'))
+assert.ok((await fs.readFile('scripts/check-field-physics-matrix.ts', 'utf8'))
+  .includes('Material-dependent energy/thermal diffusion regression: PASS'))
+assert.ok((await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8'))
+  .includes('metal heat capacity must inversely scale worker thermal diffusion'))
+
 // Density flow must use its dedicated coefficient in CPU, GPU, and worker paths.
 assert.ok(gpu.includes('densityDiffusion: f32,        // [22]'))
 assert.ok(gpu.includes('const PARAMS_FLOATS = 31;'))
