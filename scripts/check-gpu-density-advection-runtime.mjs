@@ -224,9 +224,45 @@ try {
       }
     }
 
+    async function runBioMetabolismStep() {
+      const width = 3, height = 3, depth = 3;
+      const backend = new GPUBackend();
+      try {
+        const initialized = await backend.init(width, height, depth);
+        if (!initialized) throw new Error("WebGPU adapter disappeared during biological parity initialization");
+        backend.uploadMaterials(buildMaterialBuffer());
+        const cells = new Float32Array(width * height * depth * CELL_FIELDS);
+        for (let cell = 0; cell < width * height * depth; cell++) {
+          cells[cell * CELL_FIELDS + F.MATERIAL_ID] = MAT.ORGANIC_TISSUE;
+        }
+        const center = (1 * height + 1) * width + 1;
+        cells[center * CELL_FIELDS + F.ENERGY] = 100;
+        cells[center * CELL_FIELDS + F.INFORMATION] = 40;
+        cells[center * CELL_FIELDS + F.DENSITY] = 0.5;
+        cells[center * CELL_FIELDS + F.ENTROPY] = 0.2;
+        cells[center * CELL_FIELDS + F.BIO_POTENTIAL] = 0;
+        backend.upload(cells);
+        backend.writeParams({
+          ...DEFAULT_PARAMS,
+          metabolismRate: 0.6,
+        }, (1 << PROC.BIO_POTENTIAL) | (1 << PROC.METABOLISM), 1 / 60);
+        backend.submitCompute(1);
+        const output = await backend.readback();
+        return {
+          bio: output[center * CELL_FIELDS + F.BIO_POTENTIAL],
+          energy: output[center * CELL_FIELDS + F.ENERGY],
+          information: output[center * CELL_FIELDS + F.INFORMATION],
+          entropy: output[center * CELL_FIELDS + F.ENTROPY],
+        };
+      } finally {
+        backend.destroy();
+      }
+    }
+
     const adapterInfo = adapter.info?.description || adapter.info?.device || "unknown";
     const coupledMaterial = await runCoupledMaterialStep();
     const entropyCoupled = await runEntropyCoupledStep();
+    const bioMetabolism = await runBioMetabolismStep();
     const combinedPhase = await runCombinedDensityProcess(
       0.50005, 0.2, 600, 10,
       (1 << PROC.DENSITY_FLOW) | (1 << PROC.PHASE_TRANSITION),
@@ -272,7 +308,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled };
+    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, bioMetabolism };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -329,6 +365,15 @@ try {
       `GPU entropy growth must use post-diffusion energy and temperature (got ${result.entropyCoupled.entropy})`);
     assert.ok(Math.abs(result.entropyCoupled.energy - expectedEntropyEnergy) < 1e-4,
       `GPU entropy attenuation must use new entropy (got ${result.entropyCoupled.energy})`);
+    const expectedBioMetabolismRate = 0.67 * 0.6 / 60;
+    assert.ok(Math.abs(result.bioMetabolism.bio - 0.67) < 1e-4,
+      `GPU Bio-Potential must include organic material affinity (expected 0.67, got ${result.bioMetabolism.bio})`);
+    assert.ok(Math.abs(result.bioMetabolism.energy - (100 - expectedBioMetabolismRate * 60)) < 1e-4,
+      `GPU metabolism must use metabolismRate and updated Bio-Potential (got energy ${result.bioMetabolism.energy})`);
+    assert.ok(Math.abs(result.bioMetabolism.information - (40 + expectedBioMetabolismRate * 25)) < 1e-4,
+      `GPU metabolism information output mismatch (got ${result.bioMetabolism.information})`);
+    assert.ok(Math.abs(result.bioMetabolism.entropy - (0.2 + expectedBioMetabolismRate * 0.008)) < 1e-5,
+      `GPU metabolism entropy output mismatch (got ${result.bioMetabolism.entropy})`);
     console.log("WebGPU density-advection/material/phase runtime: PASS " + JSON.stringify(result));
   }
 } finally {
