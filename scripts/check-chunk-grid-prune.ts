@@ -30,6 +30,21 @@ assert.equal(densityGrid.prune(0.01), 0,
 assert.ok(densityGrid.chunks.has(densityKey), 'density-only chunk should survive pruning')
 console.log('ChunkGrid density sparse-floor/pruning regression: PASS')
 
+ // Small gravity accelerations are physically meaningful and must allocate
+ // sparse chunks and survive the generic 0.01 prune threshold.
+const vectorGrid = new ChunkGrid()
+const vectorKey = chunkKey(2, 2, 2)
+vectorGrid.set(16, 16, 16, F.FX, 0.00002)
+assert.ok(vectorGrid.chunks.has(vectorKey),
+  'sub-0.001 gravity acceleration should allocate its destination chunk')
+assert.equal([...vectorGrid.activeCells()].length, 1,
+  'a small but resolvable vector field must remain active')
+assert.equal(vectorGrid.prune(0.01), 0,
+  'chunk pruning must preserve resolvable acceleration below the generic threshold')
+assert.ok(vectorGrid.chunks.has(vectorKey),
+  'gravity acceleration chunk should survive pruning')
+console.log('ChunkGrid vector sparse-floor/pruning regression: PASS')
+
 // Activity is strictly greater than the configured epsilon everywhere. A
 // value exactly on the boundary must not allocate an otherwise empty chunk.
 const exactFloorGrid = new ChunkGrid()
