@@ -49,4 +49,21 @@ assert.ok(Math.abs(freezing.entropy - 0.196) < 1e-6, `freezing entropy must use 
 assert.ok([disabled, zeroRate, boiling, freezing].every(r => [r.density, r.entropy, r.information].every(Number.isFinite)),
   'phase transition must preserve finite values');
 
+
+const combinedGrid = new VoxelGrid(3, 3, 3);
+const combinedBase = combinedGrid.idx(1, 1, 1);
+combinedGrid.buffer[combinedBase + F.TEMPERATURE] = 600;
+combinedGrid.buffer[combinedBase + F.DENSITY] = 0.50005;
+combinedGrid.buffer[combinedBase + F.ENTROPY] = 0.2;
+combinedGrid.buffer[combinedBase + F.INFORMATION] = 10;
+combinedGrid.snapshot();
+new FieldPhysics().tick(combinedGrid, 1 / 60, {
+  ...DEFAULT_PARAMS,
+  densityDiffusion: 0.01,
+  phaseTransitionRate: 0.008,
+}, (1 << PROC.DENSITY_FLOW) | (1 << PROC.PHASE_TRANSITION));
+const combinedDensity = combinedGrid.buffer[combinedBase + F.DENSITY];
+assert.ok(Math.abs(combinedDensity - 0.49154995) < 1e-6,
+  `phase transition must compose with density diffusion while gating on pre-step density (got ${combinedDensity})`);
+
 console.log('FieldPhysics phase-transition rate/mask regression: PASS');
