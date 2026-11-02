@@ -5,6 +5,7 @@ import { DEFAULT_PARAMS, type PhysicsParams } from "../src/laws/MetaLaw.ts";
 import { PROC } from "../src/process/ProcessDef.ts";
 import { WORLD } from "../src/core/WorldConstants.ts";
 import { FieldPhysics } from "../src/simulation/FieldPhysics.ts";
+import { MAT, MATERIAL_LIBRARY } from "../src/materials/MaterialDef.ts";
 
 type DiffusionParameter =
   | "energyDiffusion"
@@ -18,6 +19,7 @@ type Scenario = {
   process: number;
   parameter: DiffusionParameter;
   amplitude: number;
+  materialScale: number;
   coefficients: number[];
   expected: (amplitude: number, coefficient: number, dt: number) => number;
   tolerance: number;
@@ -35,6 +37,7 @@ const scenarios: Scenario[] = [
     process: PROC.ENERGY_DIFFUSION,
     parameter: "energyDiffusion",
     amplitude: 100,
+    materialScale: MATERIAL_LIBRARY[MAT.VACUUM].conductivity,
     coefficients: [0, 0.01, 0.05, 0.1],
     expected: commonDiffusion,
     tolerance: 1e-5,
@@ -47,6 +50,7 @@ const scenarios: Scenario[] = [
     process: PROC.DENSITY_FLOW,
     parameter: "densityDiffusion",
     amplitude: 0.5,
+    materialScale: 1,
     coefficients: [0, 0.0008, 0.0016, 0.0024],
     expected: commonDiffusion,
     tolerance: 1e-6,
@@ -59,6 +63,7 @@ const scenarios: Scenario[] = [
     process: PROC.TEMP_DIFFUSION,
     parameter: "tempDiffusion",
     amplitude: 100,
+    materialScale: 1 / Math.max(MATERIAL_LIBRARY[MAT.VACUUM].heatCapacity, 0.1),
     coefficients: [0, 0.01, 0.05, 0.1],
     expected: commonDiffusion,
     tolerance: 1e-5,
@@ -71,6 +76,7 @@ const scenarios: Scenario[] = [
     process: PROC.PRESSURE_DIFFUSION,
     parameter: "pressureDiffusion",
     amplitude: 100,
+    materialScale: 1,
     coefficients: [0, 0.025, 0.05, 0.1],
     expected: (amplitude, coefficient, dt) =>
       amplitude - 6 * amplitude * coefficient * dt - amplitude * dt,
@@ -104,7 +110,9 @@ function runCentered(
   mask = 1 << scenario.process,
 ) {
   const grid = new VoxelGrid(3, 3, 3);
-  const centerIndex = grid.idx(1, 1, 1) + scenario.field;
+  const centerBase = grid.idx(1, 1, 1);
+  const centerIndex = centerBase + scenario.field;
+  grid.buffer[centerBase + F.MATERIAL_ID] = MAT.VACUUM;
   grid.buffer[centerIndex] = scenario.amplitude;
   grid.snapshot();
   const before = Array.from(grid.buffer);
@@ -137,7 +145,7 @@ for (const scenario of scenarios) {
     let previousChange = -Infinity;
     for (const coefficient of scenario.coefficients) {
       const run = runCentered(scenario, dt, coefficient);
-      const expected = scenario.expected(scenario.amplitude, coefficient, dt);
+      const expected = scenario.expected(scenario.amplitude, coefficient * scenario.materialScale, dt);
       assert.ok(Math.abs(run.actual - expected) <= scenario.tolerance,
         scenario.name + " matrix mismatch: dt=" + dt + ", coefficient=" + coefficient +
         ", expected=" + expected + ", actual=" + run.actual);
@@ -319,3 +327,46 @@ function replay(): number[] {
 assert.deepEqual(replay(), replay(), "CPU FieldPhysics is not deterministic for identical input and process mask");
 
 console.log("FieldPhysics dt/coefficient/process-mask/bounds/conservation/reproducibility matrix: PASS");
+
+// Material coefficients are part of the canonical diffusion model, not GPU-only hints.
+function runMaterialDiffusion(
+  materialId: number,
+  field: number,
+  process: number,
+  parameter: "energyDiffusion" | "tempDiffusion",
+): number {
+  const grid = new VoxelGrid(3, 3, 3);
+  const base = grid.idx(1, 1, 1);
+  grid.buffer[base + F.MATERIAL_ID] = materialId;
+  grid.buffer[base + field] = 100;
+  grid.snapshot();
+  const params: PhysicsParams = {
+    ...DEFAULT_PARAMS,
+    energyDiffusion: 0,
+    tempDiffusion: 0,
+    tempEnergyCoupling: 0,
+    [parameter]: 0.01,
+  };
+  new FieldPhysics().tick(grid, 1 / 60, params, 1 << process);
+  return grid.buffer[base + field];
+}
+
+for (const materialId of [MAT.VACUUM, MAT.METAL]) {
+  const material = MATERIAL_LIBRARY[materialId];
+  const energy = runMaterialDiffusion(
+    materialId, F.ENERGY, PROC.ENERGY_DIFFUSION, "energyDiffusion",
+  );
+  const expectedEnergy = 100 - 0.1 * material.conductivity;
+  assert.ok(Math.abs(energy - expectedEnergy) < 1e-5,
+    `energy diffusion must scale by ${material.name} conductivity (expected ${expectedEnergy}, got ${energy})`);
+
+  const temperature = runMaterialDiffusion(
+    materialId, F.TEMPERATURE, PROC.TEMP_DIFFUSION, "tempDiffusion",
+  );
+  const expectedTemperature = 100 - 0.1 / Math.max(material.heatCapacity, 0.1);
+  assert.ok(Math.abs(temperature - expectedTemperature) < 1e-5,
+    `thermal diffusion must use inverse ${material.name} heat capacity (expected ${expectedTemperature}, got ${temperature})`);
+}
+
+console.log("Material-dependent energy/thermal diffusion regression: PASS");
+
