@@ -47,7 +47,12 @@ try {
   await page.goto(`http://127.0.0.1:${address.port}/`, { waitUntil: "domcontentloaded" });
   const result = await page.evaluate(async (url) => {
     if (!navigator.gpu) return { status: "SKIP", reason: "navigator.gpu unavailable" };
-    const adapter = await navigator.gpu.requestAdapter();
+    let adapter;
+    try {
+      adapter = await navigator.gpu.requestAdapter();
+    } catch (error) {
+      return { status: "SKIP", reason: `WebGPU adapter request failed: ${error?.message || error}` };
+    }
     if (!adapter) return { status: "SKIP", reason: "WebGPU adapter unavailable" };
 
     const {
