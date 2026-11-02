@@ -77,6 +77,9 @@ jobs:
       - run: npm run test:field-physics-pressure
       - run: npm run test:field-physics-density
       - run: npm run test:field-physics-matrix
+      - name: Run optional WebGPU density-advection numerical probe
+        run: npm run test:gpu-density-advection-runtime
+        timeout-minutes: 3
       - run: npm run test:field-physics-phase-transition
       - run: npm run test:field-physics-crystallization
       - run: npm run test:field-physics-radiation
