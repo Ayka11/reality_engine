@@ -344,8 +344,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   // ── PROC 9: Metabolism ────────────────────────────────────────────────────
   if (isProcessEnabled(512u)) {
-    if (c.bio_potential > 0.45) {
-      let rate = c.bio_potential * 0.12 * dt;
+    // Bio potential may have been recalculated earlier in this shader step.
+    // Match CPU/worker ordering and use the canonical metabolism parameter.
+    if (o.bio_potential > 0.45) {
+      let rate = o.bio_potential * params.metabolismRate * dt;
       o.energy      = max(0.0, o.energy - rate * 60.0);
       o.information = min(999.0, o.information + rate * 25.0);
       o.entropy     = min(1.0, o.entropy + rate * 0.008);
