@@ -35,7 +35,7 @@ function densityAt(
 function axisVelocity(
   read: DensityFieldReader,
   x: number, y: number, z: number,
-  dx: number, dy: number, dz: number,
+  dx: number, dy: number,
 ): number {
   if (dx !== 0) return read(x, y, z, 'velocityX');
   if (dy !== 0) return read(x, y, z, 'velocityY');
@@ -55,8 +55,8 @@ function cellLimiter(
     const nx = x + dx, ny = y + dy, nz = z + dz;
     if (!inside(nx, ny, nz, W, H, D)) continue;
     const faceVelocity = 0.5 * (
-      axisVelocity(read, x, y, z, dx, dy, dz) +
-      axisVelocity(read, nx, ny, nz, dx, dy, dz)
+      axisVelocity(read, x, y, z, dx, dy) +
+      axisVelocity(read, nx, ny, nz, dx, dy)
     ) * (dx + dy + dz);
     if (faceVelocity > 0) {
       proposedOutgoing += faceVelocity * dt * density;
@@ -95,8 +95,8 @@ export function densityAdvectionDelta(
     const nx = x + dx, ny = y + dy, nz = z + dz;
     if (!inside(nx, ny, nz, W, H, D)) continue;
     const faceVelocity = 0.5 * (
-      axisVelocity(read, x, y, z, dx, dy, dz) +
-      axisVelocity(read, nx, ny, nz, dx, dy, dz)
+      axisVelocity(read, x, y, z, dx, dy) +
+      axisVelocity(read, nx, ny, nz, dx, dy)
     ) * (dx + dy + dz);
     if (faceVelocity !== 0) { hasMovingFace = true; break; }
   }
@@ -108,8 +108,8 @@ export function densityAdvectionDelta(
     const nx = x + dx, ny = y + dy, nz = z + dz;
     if (!inside(nx, ny, nz, W, H, D)) continue;
     const faceVelocity = 0.5 * (
-      axisVelocity(read, x, y, z, dx, dy, dz) +
-      axisVelocity(read, nx, ny, nz, dx, dy, dz)
+      axisVelocity(read, x, y, z, dx, dy) +
+      axisVelocity(read, nx, ny, nz, dx, dy)
     ) * (dx + dy + dz);
     if (faceVelocity === 0) continue;
 
