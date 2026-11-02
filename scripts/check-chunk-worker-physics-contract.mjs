@@ -127,6 +127,14 @@ assert.ok(gpu.includes('fieldNeighborCount += 1.0;'))
 assert.ok(gpu.includes('if (active(16384u))'))
 assert.ok(!gpu.includes('o.field_x = c.field_x * 0.95'))
 
+// Process registry metadata must describe the implemented operators, not aspirational physics.
+assert.ok(defs.includes("Density smooths through a six-neighbor Laplacian"))
+assert.ok(defs.includes("outputs:['fieldVector']"))
+assert.ok(defs.includes("mass transport is a separate process"))
+assert.ok(defs.includes("inputs:['fieldVector'], outputs:['fieldVector']"))
+assert.ok(!defs.includes("Mass flows along pressure gradients."))
+assert.ok(!defs.includes("Density curves the field, attracting mass."))
+
 // CPU, GPU, and sparse worker use the same density-gradient acceleration model.
 assert.ok(cpu.includes('p.gravityDensityCoupling * (rightD - leftD)'))
 assert.ok(cpu.includes('p.gravityDensityCoupling * (upD - downD)'))
