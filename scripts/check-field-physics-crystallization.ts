@@ -54,4 +54,22 @@ assert.ok([disabled, zeroRate, vacuum, stone, sand, metal].every(r =>
   [r.density, r.entropy, r.materialId].every(Number.isFinite)),
   'crystallization must preserve finite fields');
 
+
+const combinedGrid = new VoxelGrid(3, 3, 3);
+const combinedBase = combinedGrid.idx(1, 1, 1);
+combinedGrid.buffer[combinedBase + F.DENSITY] = 0.38005;
+combinedGrid.buffer[combinedBase + F.ENTROPY] = 0.1;
+combinedGrid.buffer[combinedBase + F.MATERIAL_ID] = MAT.VACUUM;
+combinedGrid.snapshot();
+new FieldPhysics().tick(combinedGrid, 1 / 60, {
+  ...DEFAULT_PARAMS,
+  densityDiffusion: 0.01,
+  crystallizationRate: 0.003,
+}, (1 << PROC.DENSITY_FLOW) | (1 << PROC.CRYSTALLIZATION));
+const combinedDensity = combinedGrid.buffer[combinedBase + F.DENSITY];
+assert.ok(Math.abs(combinedDensity - 0.37990995) < 1e-6,
+  `crystallization must add to density-diffusion output while gating on pre-step density (got ${combinedDensity})`);
+assert.equal(combinedGrid.buffer[combinedBase + F.MATERIAL_ID], MAT.CRYSTAL,
+  "pre-step eligible vacuum must crystallize even when diffusion moves density below threshold");
+
 console.log('FieldPhysics crystallization rate/mask/material regression: PASS');
