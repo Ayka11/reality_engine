@@ -5,7 +5,7 @@ import { PhysicsParams } from '../laws/MetaLaw';
 import { PROC } from '../process/ProcessDef';
 import { MAT, MATERIAL_LIBRARY } from '../materials/MaterialDef';
 import { withMutableBuffers } from '../core/TrackedFloat32Array';
-import { densityAdvectionDelta } from './DensityAdvection';
+import { densityAdvectionDeltaDense } from './DensityAdvection';
 
 function on(mask: number, proc: number) { return (mask & (1 << proc)) !== 0; }
 
@@ -13,13 +13,6 @@ export class FieldPhysics {
   tick(grid: VoxelGrid, dt: number, p: Readonly<PhysicsParams>, mask: number): void {
     withMutableBuffers(grid, (front, back) => {
       const { W, H, D } = grid;
-      const readBackDensityField = (rx: number, ry: number, rz: number, field: 'density' | 'velocityX' | 'velocityY' | 'velocityZ') =>
-        back[grid.idx(rx, ry, rz) + (
-          field === 'density' ? F.DENSITY :
-          field === 'velocityX' ? F.VELOCITY_X :
-          field === 'velocityY' ? F.VELOCITY_Y : F.VELOCITY_Z
-        )];
-
       for (let z = 0; z < D; z++)
       for (let y = 0; y < H; y++)
       for (let x = 0; x < W; x++) {
@@ -74,9 +67,8 @@ export class FieldPhysics {
             ? Math.max(0, Math.min(1, cD + p.densityDiffusion * dt * lapD))
             : cD;
           const advectionDelta = densityAdvectionActive
-            ? densityAdvectionDelta(
-                readBackDensityField,
-                x, y, z, W, H, D, dt,
+            ? densityAdvectionDeltaDense(
+                back, x, y, z, W, H, D, dt,
                 densityDiffusionActive ? p.densityDiffusion : 0,
               )
             : 0;
