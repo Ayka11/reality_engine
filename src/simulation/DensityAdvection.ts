@@ -88,6 +88,19 @@ export function densityAdvectionDelta(
   diffusion = 0,
 ): number {
   if (!(dt > 0) || !Number.isFinite(dt)) return 0;
+  // Most world cells are stationary; avoid evaluating limiter stencils when
+  // every adjacent face has zero normal velocity.
+  let hasMovingFace = false;
+  for (const [dx, dy, dz] of DIRECTIONS) {
+    const nx = x + dx, ny = y + dy, nz = z + dz;
+    if (!inside(nx, ny, nz, W, H, D)) continue;
+    const faceVelocity = 0.5 * (
+      axisVelocity(read, x, y, z, dx, dy, dz) +
+      axisVelocity(read, nx, ny, nz, dx, dy, dz)
+    ) * (dx + dy + dz);
+    if (faceVelocity !== 0) { hasMovingFace = true; break; }
+  }
+  if (!hasMovingFace) return 0;
   const [outgoingScale, incomingScale] =
     cellLimiter(read, x, y, z, W, H, D, dt, diffusion);
   let delta = 0;
