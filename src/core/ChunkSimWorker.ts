@@ -250,7 +250,7 @@ function simStep(dt: number) {
     }
     const E = chunk[base + F.E], T = chunk[base + F.T]
     const D_ = chunk[base + F.D], I = chunk[base + F.I]
-    const P = chunk[base + F.P], wave = chunk[base + F.WAVE]
+    const P = chunk[base + F.P], wave = chunk[base + F.WAVE], S_ = chunk[base + F.S]
     const FX = chunk[base + F.FX], FY = chunk[base + F.FY], FZ = chunk[base + F.FZ]
     const VX = chunk[base + F.VX], VY = chunk[base + F.VY], VZ = chunk[base + F.VZ]
     let nextFX = FX, nextFY = FY, nextFZ = FZ
@@ -383,29 +383,33 @@ function simStep(dt: number) {
     }
 
     if (isProcessActive(PROC.PHASE_TRANSITION)) {
-      const density = grid.get(x, y, z, F.D)
-      const temperature = grid.get(x, y, z, F.T)
+      // Eligibility uses the immutable pre-step density/temperature like CPU and GPU.
+      const density = D_
+      const temperature = T
       if (temperature > 500 && density > 0.5) {
-        grid.set(x, y, z, F.D, Math.max(0, density - p.phaseTransitionRate * dt * 60))
+        grid.set(x, y, z, F.D, Math.max(0, grid.get(x, y, z, F.D) - p.phaseTransitionRate * dt * 60))
         grid.set(x, y, z, F.S, Math.min(1, grid.get(x, y, z, F.S) + p.phaseTransitionRate * dt * 60))
         grid.set(x, y, z, F.I, Math.max(0, grid.get(x, y, z, F.I) - 3 * dt))
       } else if (temperature < 40 && density > 0.55) {
-        grid.set(x, y, z, F.D, Math.min(1, density + p.phaseTransitionRate * 0.5 * dt * 60))
+        grid.set(x, y, z, F.D, Math.min(1, grid.get(x, y, z, F.D) + p.phaseTransitionRate * 0.5 * dt * 60))
         grid.set(x, y, z, F.S, Math.max(0, grid.get(x, y, z, F.S) - p.phaseTransitionRate * 0.5 * dt * 60))
       }
     }
 
     if (isProcessActive(PROC.CRYSTALLIZATION)) {
-      const entropy = grid.get(x, y, z, F.S)
-      const density = grid.get(x, y, z, F.D)
+      // Eligibility is based on the pre-step state; updates compose with density/entropy outputs.
+      const entropy = S_
+      const density = D_
       if (entropy < 0.18 && density > 0.38) {
         const currentMaterialId = Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1,
           Math.floor(grid.get(x, y, z, F.MAT))))
         const currentMaterial = MATERIAL_LIBRARY[currentMaterialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
         const materialRate = currentMaterialId === MAT.VACUUM ? 1 : currentMaterial.crystallizationRate
         const rate = p.crystallizationRate * materialRate
-        grid.set(x, y, z, F.D, Math.min(1, density + rate * (0.18 - entropy) * dt * 60))
-        grid.set(x, y, z, F.S, Math.max(0, entropy - rate * 0.5 * dt * 60))
+        grid.set(x, y, z, F.D, Math.min(1,
+          grid.get(x, y, z, F.D) + rate * (0.18 - entropy) * dt * 60))
+        grid.set(x, y, z, F.S, Math.max(0,
+          grid.get(x, y, z, F.S) - rate * 0.5 * dt * 60))
         if (rate > 0 && (currentMaterialId === MAT.VACUUM ||
             currentMaterialId === MAT.STONE ||
             currentMaterialId === MAT.SAND)) {
