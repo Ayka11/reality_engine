@@ -189,6 +189,10 @@ function simStep(dt: number) {
     const base = (((z & 7) * CY * CX) + ((y & 7) * CX) + (x & 7)) * NF
     return source[base + field]
   }
+  const readSourceDensityField = (x: number, y: number, z: number, field: 'density' | 'velocityX' | 'velocityY' | 'velocityZ') =>
+    sourceRead(x, y, z, field === 'density' ? F.D :
+      field === 'velocityX' ? F.VX :
+      field === 'velocityY' ? F.VY : F.VZ)
   const candidates = new Map<number, { x: number; y: number; z: number }>()
   const addCandidate = (x: number, y: number, z: number) => {
     if (x < 0 || x >= W || y < 0 || y >= H || z < 0 || z >= D) return
@@ -273,10 +277,7 @@ function simStep(dt: number) {
         : D_
       const advectionDelta = densityAdvectionActive
         ? densityAdvectionDelta(
-            (rx, ry, rz, field) => sourceRead(rx, ry, rz,
-              field === 'density' ? F.D :
-              field === 'velocityX' ? F.VX :
-              field === 'velocityY' ? F.VY : F.VZ),
+            readSourceDensityField,
             x, y, z, W, H, D, dt,
             densityDiffusionActive ? p.densityDiffusion : 0,
           )
