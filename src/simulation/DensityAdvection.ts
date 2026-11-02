@@ -1,3 +1,5 @@
+import { CELL_FIELDS, F } from '../core/CellState';
+
 export type DensityField = 'density' | 'velocityX' | 'velocityY' | 'velocityZ';
 export type DensityFieldReader = (x: number, y: number, z: number, field: DensityField) => number;
 
@@ -129,4 +131,21 @@ export function densityAdvectionDelta(
     }
   }
   return delta;
+}
+
+/** Dense VoxelGrid adapter; keeps mutable buffer aliases out of solver callbacks. */
+export function densityAdvectionDeltaDense(
+  buffer: Float32Array,
+  x: number, y: number, z: number,
+  W: number, H: number, D: number,
+  dt: number,
+  diffusion = 0,
+): number {
+  return densityAdvectionDelta((rx, ry, rz, field) => {
+    const base = ((rz * H + ry) * W + rx) * CELL_FIELDS;
+    const index = field === 'density' ? F.DENSITY :
+      field === 'velocityX' ? F.VELOCITY_X :
+      field === 'velocityY' ? F.VELOCITY_Y : F.VELOCITY_Z;
+    return buffer[base + index];
+  }, x, y, z, W, H, D, dt, diffusion);
 }
