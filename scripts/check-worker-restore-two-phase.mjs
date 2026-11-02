@@ -25,6 +25,12 @@ const lawJs = await compile("src/laws/MetaLaw.ts");
 const lawUrl = `data:text/javascript;base64,${Buffer.from(lawJs).toString("base64")}`;
 const materialJs = await compile("src/materials/MaterialDef.ts");
 const materialUrl = `data:text/javascript;base64,${Buffer.from(materialJs).toString("base64")}`;
+const cellStateJs = await compile("src/core/CellState.ts");
+const cellStateUrl = `data:text/javascript;base64,${Buffer.from(cellStateJs).toString("base64")}`;
+const densityAdvectionJs = await compile("src/simulation/DensityAdvection.ts", [
+  [/from ['"]\.\.\/core\/CellState['"]/, `from "${cellStateUrl}"`],
+]);
+const densityAdvectionUrl = `data:text/javascript;base64,${Buffer.from(densityAdvectionJs).toString("base64")}`;
 const { CHUNK_FLOATS, LEGACY_NF_V2, LEGACY_CHUNK_FLOATS_V2, NF } = await import(gridUrl);
 const messages = [];
 globalThis.self = {
@@ -38,6 +44,7 @@ const workerJs = await compile("src/core/ChunkSimWorker.ts", [
   [/from ['"]\.\.\/process\/ProcessDef['"]/, `from "${processUrl}"`],
   [/from ['"]\.\.\/laws\/MetaLaw['"]/, `from "${lawUrl}"`],
   [/from ['"]\.\.\/materials\/MaterialDef['"]/, `from "${materialUrl}"`],
+  [/from ['"]\.\.\/simulation\/DensityAdvection['"]/, `from "${densityAdvectionUrl}"`],
 ]);
 await import(`data:text/javascript;base64,${Buffer.from(workerJs).toString("base64")}`);
 assert.equal(typeof globalThis.self.onmessage, "function");
