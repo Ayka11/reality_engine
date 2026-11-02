@@ -199,9 +199,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     o.energy     = o.energy + c.wave_amp * sin(c.wave_phase) * 0.008;
   }
 
-  // ── PROC 7: Gravity ───────────────────────────────────────────────────────
+  // ── PROC 7: Gravity (density-gradient acceleration; Neumann boundaries) ──
   if (active(128u)) {
-    o.density = clamp(c.density + params.gravityDensityCoupling * c.gravity_pot * dt, 0.0, 1.0);
+    o.field_x = c.field_x - params.gravityDensityCoupling * (nbD[1] - nbD[0]) * 0.5 * dt;
+    o.field_y = c.field_y - params.gravityDensityCoupling * (nbD[3] - nbD[2]) * 0.5 * dt;
+    o.field_z = c.field_z - params.gravityDensityCoupling * (nbD[5] - nbD[4]) * 0.5 * dt;
   }
 
   // ── PROC 8: Phase Transitions ─────────────────────────────────────────────
@@ -274,13 +276,16 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let avgFx = fxSum / neighborCount;
     let avgFy = fySum / neighborCount;
     let avgFz = fzSum / neighborCount;
-    o.field_x = c.field_x * params.fieldRotationDamping
+    let rotateFx = o.field_x;
+    let rotateFy = o.field_y;
+    let rotateFz = o.field_z;
+    o.field_x = rotateFx * params.fieldRotationDamping
       + avgFx * params.fieldRotationNeighborCoupling
-      + c.field_y * params.fieldRotationCrossCoupling;
-    o.field_y = c.field_y * params.fieldRotationDamping
+      + rotateFy * params.fieldRotationCrossCoupling;
+    o.field_y = rotateFy * params.fieldRotationDamping
       + avgFy * params.fieldRotationNeighborCoupling
-      - c.field_x * params.fieldRotationCrossCoupling;
-    o.field_z = c.field_z * params.fieldRotationDamping
+      - rotateFx * params.fieldRotationCrossCoupling;
+    o.field_z = rotateFz * params.fieldRotationDamping
       + avgFz * params.fieldRotationNeighborCoupling;
   }
 
