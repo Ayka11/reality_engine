@@ -514,6 +514,32 @@ assert.ok(Math.abs(signalInfoGrid.buffer[signalInfoBase + F.INFORMATION] - 99.00
 
 
 
+
+const crystallizationBioGrid = new VoxelGrid(3, 3, 3);
+const crystallizationBioBase = crystallizationBioGrid.idx(1, 1, 1);
+crystallizationBioGrid.buffer[crystallizationBioBase + F.ENERGY] = 1000;
+crystallizationBioGrid.buffer[crystallizationBioBase + F.INFORMATION] = 40;
+crystallizationBioGrid.buffer[crystallizationBioBase + F.DENSITY] = 0.5;
+crystallizationBioGrid.buffer[crystallizationBioBase + F.ENTROPY] = 0.1;
+crystallizationBioGrid.buffer[crystallizationBioBase + F.MATERIAL_ID] = MAT.VACUUM;
+crystallizationBioGrid.snapshot();
+const crystallizationBioMask =
+  (1 << PROC.CRYSTALLIZATION) | (1 << PROC.BIO_POTENTIAL);
+const crystallizationBioParams = {
+  ...DEFAULT_PARAMS,
+  crystallizationRate: 0.003,
+};
+new FieldPhysics().tick(crystallizationBioGrid, 1 / 60, crystallizationBioParams, crystallizationBioMask);
+new EntropyLayer().tick(crystallizationBioGrid, 1 / 60, crystallizationBioParams, crystallizationBioMask);
+const crystallizedMaterialId = crystallizationBioGrid.buffer[crystallizationBioBase + F.MATERIAL_ID];
+const bioAfterCrystallization = crystallizationBioGrid.buffer[crystallizationBioBase + F.BIO_POTENTIAL];
+const expectedBioAfterCrystallization = 0.08 + 0.3
+  + 0.50024 * 0.2 + (1 - 0.0985) * 0.1 + MATERIAL_LIBRARY[MAT.CRYSTAL].bioAffinity;
+assert.equal(crystallizedMaterialId, MAT.CRYSTAL,
+  "CPU crystallization must publish the crystal material before Bio-Potential");
+assert.ok(Math.abs(bioAfterCrystallization - expectedBioAfterCrystallization) < 1e-5,
+  `CPU Bio-Potential must use post-crystallization material affinity (expected ${expectedBioAfterCrystallization}, got ${bioAfterCrystallization})`);
+
 console.log("CPU material bio-affinity/metabolism parameter regression: PASS");
 
 console.log("CPU energy/thermal/entropy operator-order regression: PASS");
