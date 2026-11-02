@@ -142,7 +142,10 @@ try {
       }
     }
 
-    async function runCombinedDensityProcess(density, entropy, temperature, information, processMask, params, dt) {
+    async function runCombinedDensityProcess(
+      density, entropy, temperature, information, processMask, params, dt,
+      fieldX = 0, materialId = MAT.VACUUM,
+    ) {
       const width = 3, height = 3, depth = 3;
       const backend = new GPUBackend();
       try {
@@ -154,6 +157,8 @@ try {
           cells[cell * CELL_FIELDS + F.MATERIAL_ID] = MAT.VACUUM;
         }
         const center = (1 * height + 1) * width + 1;
+        cells[center * CELL_FIELDS + F.MATERIAL_ID] = materialId;
+        cells[center * CELL_FIELDS + F.FIELD_X] = fieldX;
         cells[center * CELL_FIELDS + F.DENSITY] = density;
         cells[center * CELL_FIELDS + F.ENTROPY] = entropy;
         cells[center * CELL_FIELDS + F.TEMPERATURE] = temperature;
@@ -193,6 +198,12 @@ try {
       { densityDiffusion: 0.01, crystallizationRate: 0.003 },
       0.016,
     );
+    const combinedErosion = await runCombinedDensityProcess(
+      0.65005, 0.2, 0, 10,
+      (1 << PROC.DENSITY_FLOW) | (1 << PROC.EROSION),
+      { densityDiffusion: 0.01, erosionRate: 0.01 },
+      0.016, 10, MAT.SAND,
+    );
     const materialDiffusion = {
       energyVacuum: await runMaterialDiffusion(
         MAT.VACUUM, F.ENERGY, PROC.ENERGY_DIFFUSION, "energyDiffusion",
@@ -214,7 +225,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization };
+    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -257,6 +268,8 @@ try {
       `GPU crystallization entropy reduction mismatch (got ${result.combinedCrystallization.entropy})`);
     assert.equal(result.combinedCrystallization.materialId, MAT.CRYSTAL,
       "GPU must crystallize a material that was eligible in the pre-step state");
+    assert.ok(Math.abs(result.combinedErosion.density - 0.64174595) < 1e-4,
+      `GPU erosion must compose with density diffusion using pre-step density eligibility (got ${result.combinedErosion.density})`);
     console.log("WebGPU density-advection/material/phase runtime: PASS " + JSON.stringify(result));
   }
 } finally {
