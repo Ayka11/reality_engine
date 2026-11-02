@@ -330,8 +330,10 @@ function simStep(dt: number) {
     if (isProcessActive(PROC.GRAVITY)) {
       const leftD = sourceRead(x - 1, y, z, F.D), rightD = sourceRead(x + 1, y, z, F.D)
       const downD = sourceRead(x, y - 1, z, F.D), upD = sourceRead(x, y + 1, z, F.D)
+      const backD = sourceRead(x, y, z - 1, F.D), frontD = sourceRead(x, y, z + 1, F.D)
       grid.set(x, y, z, F.FX, FX - p.gravityDensityCoupling * (rightD - leftD) * 0.5 * dt)
       grid.set(x, y, z, F.FY, FY - p.gravityDensityCoupling * (upD - downD) * 0.5 * dt)
+      grid.set(x, y, z, F.FZ, FZ - p.gravityDensityCoupling * (frontD - backD) * 0.5 * dt)
     }
 
     if (isProcessActive(PROC.PRESSURE_DIFFUSION)) {
