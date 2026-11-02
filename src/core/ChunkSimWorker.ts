@@ -14,6 +14,7 @@ import type { BrushFalloff, BrushOperation, BrushShape, BrushVerticalExtent } fr
 import { PROC, defaultProcessMask } from '../process/ProcessDef'
 import { DEFAULT_PARAMS, type PhysicsParams } from '../laws/MetaLaw'
 import { MAT, MATERIAL_LIBRARY } from '../materials/MaterialDef'
+import { densityAdvectionDelta } from '../simulation/DensityAdvection'
 
 const grid = new ChunkGrid()
 const W = GRID_W, H = GRID_H, D = GRID_D
@@ -49,6 +50,7 @@ const LEGACY_PROCESS_IDS: Record<string, number> = {
   pressure: PROC.PRESSURE_DIFFUSION,
   rotation: PROC.FIELD_ROTATION,
   erosion: PROC.EROSION,
+  densityAdvection: PROC.DENSITY_ADVECTION,
 }
 
 function isProcessActive(id: number): boolean {
@@ -263,8 +265,24 @@ function simStep(dt: number) {
       grid.set(x, y, z, F.T, Math.max(0, Math.min(2000,
         T + p.tempDiffusion * lapT * dt + newE * p.tempEnergyCoupling * dt)))
     }
-    if (isProcessActive(PROC.DENSITY_FLOW)) {
-      grid.set(x, y, z, F.D, Math.max(0, Math.min(1, D_ + p.densityDiffusion * lapD * dt)))
+    const densityDiffusionActive = isProcessActive(PROC.DENSITY_FLOW)
+    const densityAdvectionActive = isProcessActive(PROC.DENSITY_ADVECTION)
+    if (densityDiffusionActive || densityAdvectionActive) {
+      const densityAfterDiffusion = densityDiffusionActive
+        ? Math.max(0, Math.min(1, D_ + p.densityDiffusion * lapD * dt))
+        : D_
+      const advectionDelta = densityAdvectionActive
+        ? densityAdvectionDelta(
+            (rx, ry, rz, field) => sourceRead(rx, ry, rz,
+              field === 'density' ? F.D :
+              field === 'velocityX' ? F.VX :
+              field === 'velocityY' ? F.VY : F.VZ),
+            x, y, z, W, H, D, dt,
+            densityDiffusionActive ? p.densityDiffusion : 0,
+          )
+        : 0
+      grid.set(x, y, z, F.D,
+        Math.max(0, Math.min(1, densityAfterDiffusion + advectionDelta)))
     }
     // Accumulate information growth and signal propagation into one value.
     // Writing F.I independently in each block made SIGNAL_PROPAGATION overwrite
@@ -624,7 +642,7 @@ self.onmessage = (e: MessageEvent) => {
     const a = data
     if (a.params) applyPhysicsParams(a.params)
     else applyLegacyScalars(a)
-    if (Number.isSafeInteger(a.processMask) && a.processMask >= 0 && a.processMask <= 0xffff) {
+    if (Number.isSafeInteger(a.processMask) && a.processMask >= 0 && a.processMask <= 0x1ffff) {
       processMask = a.processMask
     } else if (Array.isArray(a.procs)) {
       setLegacyProcesses(a.procs as string[])
@@ -814,7 +832,7 @@ self.onmessage = (e: MessageEvent) => {
 
   if (cmd === 'setPhysics') {
     if (data.params) applyPhysicsParams(data.params)
-    if (Number.isSafeInteger(data.processMask) && data.processMask >= 0 && data.processMask <= 0xffff) {
+    if (Number.isSafeInteger(data.processMask) && data.processMask >= 0 && data.processMask <= 0x1ffff) {
       processMask = data.processMask
     }
     return
