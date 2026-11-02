@@ -234,7 +234,7 @@ assert.match(persistenceSource, /request\.onblocked = \(\) => \{\s*if \(settled\
   "IndexedDB callbacks must not settle an open request more than once");
 
 const persistenceMod = await load("src/infinity/WorldFieldChunkPersistence.ts", [
-  [/import \{ CHUNK_FLOATS \} from [^;]+;/, "const CHUNK_FLOATS = ${CHUNK_FLOATS};"],
+  [/import \{ CHUNK_FLOATS \} from [^;]+;/, `const CHUNK_FLOATS = ${CHUNK_FLOATS};`],
 ]);
 const { WorldFieldChunkPersistence } = persistenceMod;
 const persistence = new WorldFieldChunkPersistence();
