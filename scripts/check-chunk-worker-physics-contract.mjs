@@ -7,6 +7,8 @@ const cpu = await fs.readFile('src/simulation/FieldPhysics.ts', 'utf8')
 const main = await fs.readFile('src/main.ts', 'utf8')
 const defs = await fs.readFile('src/process/ProcessDef.ts', 'utf8')
 const params = await fs.readFile('src/laws/MetaLaw.ts', 'utf8')
+const bridge = await fs.readFile('src/laws/RealityLawBridge.ts', 'utf8')
+const advection = await fs.readFile('src/simulation/DensityAdvection.ts', 'utf8')
 const gpu = await fs.readFile('src/gpu/GPUBackend.ts', 'utf8')
 
 // The sparse worker must use the canonical bitmask, not its former string Set.
@@ -15,6 +17,28 @@ assert.ok(worker.includes("import { DEFAULT_PARAMS, type PhysicsParams } from '.
 assert.ok(worker.includes('let physicsParams: PhysicsParams = { ...DEFAULT_PARAMS }'))
 assert.ok(worker.includes('let processMask = defaultProcessMask()'))
 assert.ok(worker.includes("cmd === 'setPhysics'"))
+assert.ok(worker.includes('densityAdvection: PROC.DENSITY_ADVECTION'))
+assert.ok(worker.includes('a.processMask <= 0x1ffff'))
+assert.ok(worker.includes('data.processMask <= 0x1ffff'))
+assert.ok(worker.includes('isProcessActive(PROC.DENSITY_ADVECTION)'))
+assert.ok(cpu.includes('on(mask, PROC.DENSITY_ADVECTION)'))
+assert.ok(cpu.includes("import { densityAdvectionDelta } from './DensityAdvection'"))
+assert.ok(worker.includes("import { densityAdvectionDelta } from '../simulation/DensityAdvection'"))
+assert.ok(main.includes("16: 'densityAdvection'"))
+assert.ok(bridge.includes("[PROC.DENSITY_ADVECTION]: 'densityAdvection'"))
+assert.ok(bridge.includes("'Density Advection': [PROC.DENSITY_ADVECTION]"))
+assert.ok(defs.includes('DENSITY_ADVECTION:  16'))
+assert.ok(defs.includes("name:'DENSITY_ADVECTION'"))
+assert.ok(defs.includes("inputs:['density','velocity'], outputs:['density']"))
+assert.ok(gpu.includes('if (active(65536u))'))
+assert.ok(gpu.includes('densityAdvectionDelta(ix, iy, iz)'))
+assert.ok(gpu.includes('fn densityFluxLimiter('))
+assert.ok(advection.includes('proposedOutgoing'))
+assert.ok(advection.includes('proposedIncoming'))
+assert.ok(advection.includes('const flux = faceVelocity * dt'))
+assert.ok(advection.includes('Math.min(outgoingScale, neighborScales[1])'))
+assert.ok(advection.includes('Math.min(neighborScales[0], incomingScale)'))
+
 assert.ok(!worker.includes('activeProcs'), 'legacy Set<string> activation must not return')
 assert.ok(worker.includes('isProcessActive(PROC.ENERGY_DIFFUSION)'))
 assert.ok(worker.includes('p.energyDiffusion * lapE * dt'))
@@ -190,7 +214,7 @@ for (const process of [
   'ENERGY_DIFFUSION', 'TEMP_DIFFUSION', 'DENSITY_FLOW', 'ENTROPY_GROWTH',
   'INFORMATION', 'BIO_POTENTIAL', 'WAVE_PROPAGATION', 'GRAVITY',
   'PHASE_TRANSITION', 'METABOLISM', 'SIGNAL_PROPAGATION', 'CRYSTALLIZATION',
-  'RADIATION', 'PRESSURE_DIFFUSION', 'FIELD_ROTATION', 'EROSION',
+  'RADIATION', 'PRESSURE_DIFFUSION', 'FIELD_ROTATION', 'EROSION', 'DENSITY_ADVECTION',
 ]) assert.ok(defs.includes(process), `missing process registry entry: ${process}`)
 for (const parameter of [
   'energyDiffusion', 'tempDiffusion', 'tempEnergyCoupling', 'densityDiffusion',
