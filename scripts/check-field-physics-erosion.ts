@@ -79,4 +79,22 @@ const combinedInformation = combinedGrid.buffer[combinedBase + F.INFORMATION];
 assert.ok(Math.abs(combinedInformation - (10 - 0.4 * 0.8 / 60)) < 1e-5,
   `combined density flow/erosion information update mismatch (got ${combinedInformation})`);
 
+
+const crystallizedGrid = new VoxelGrid(3, 3, 3);
+const crystallizedBase = crystallizedGrid.idx(1, 1, 1);
+crystallizedGrid.buffer[crystallizedBase + F.DENSITY] = 0.8;
+crystallizedGrid.buffer[crystallizedBase + F.ENTROPY] = 0.1;
+crystallizedGrid.buffer[crystallizedBase + F.FIELD_X] = 10;
+crystallizedGrid.buffer[crystallizedBase + F.MATERIAL_ID] = MAT.VACUUM;
+crystallizedGrid.snapshot();
+new FieldPhysics().tick(crystallizedGrid, 1 / 60, {
+  ...DEFAULT_PARAMS,
+  crystallizationRate: 0.003,
+  erosionRate: 0.01,
+}, (1 << PROC.CRYSTALLIZATION) | (1 << PROC.EROSION));
+assert.equal(crystallizedGrid.buffer[crystallizedBase + F.MATERIAL_ID], MAT.CRYSTAL,
+  "eligible vacuum must crystallize before erosion output is finalized");
+assert.ok(Math.abs(crystallizedGrid.buffer[crystallizedBase + F.DENSITY] - 0.79024) < 1e-6,
+  "same-step erosion must use pre-step vacuum resistance after crystallization changes the output material");
+
 console.log('FieldPhysics erosion process/mask/material regression: PASS');
