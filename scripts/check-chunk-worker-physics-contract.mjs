@@ -127,6 +127,17 @@ assert.ok(gpu.includes('fieldNeighborCount += 1.0;'))
 assert.ok(gpu.includes('if (active(16384u))'))
 assert.ok(!gpu.includes('o.field_x = c.field_x * 0.95'))
 
+// Gravity currently has an explicit potential-driven dense CPU/GPU contract.
+assert.ok(cpu.includes('p.gravityDensityCoupling * back[base + F.GRAVITY_POT] * dt'),
+  'CPU gravity must consume the canonical GRAVITY_POT field')
+assert.ok(gpu.includes('if (active(128u))') &&
+  gpu.includes('params.gravityDensityCoupling * c.gravity_pot * dt'),
+  'GPU gravity must consume the matching gravity_pot field and process bit')
+// The sparse worker remains a density-gradient approximation until its field ABI is unified.
+assert.ok(worker.includes('p.gravityDensityCoupling * (rightD - leftD)'))
+assert.ok(worker.includes('p.gravityDensityCoupling * (upD - downD)'))
+assert.ok(worker.includes('p.gravityDensityCoupling * (frontD - backD)'))
+
 // Main must forward resolved LawEngine state to the sparse worker at startup and ticks.
 assert.ok(main.includes("cmd: 'setPhysics'"))
 assert.ok(main.includes('params: { ...sim.laws.params }'))
