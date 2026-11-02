@@ -377,7 +377,7 @@ function simStep(dt: number) {
 
     if (isProcessActive(PROC.PRESSURE_DIFFUSION)) {
       // Use the same pre-step density/temperature sample as the CPU and GPU solvers.
-      const equilibriumPressure = D_ * p.pressureDensityCoupling - T * 0.1
+      const equilibriumPressure = (D_ * p.pressureDensityCoupling - T * 0.1) * material.elasticity
       grid.set(x, y, z, F.P, Math.max(-9999, Math.min(9999,
         P + p.pressureDiffusion * lapP * dt + (equilibriumPressure - P) * dt)))
     }
