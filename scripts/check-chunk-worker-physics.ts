@@ -169,6 +169,27 @@ const metalTemperatureAfter = readField(
 assert.ok(Math.abs(metalTemperatureAfter - 99.52) < 0.002,
   `metal heat capacity must inversely scale worker thermal diffusion (expected 99.52, got ${metalTemperatureAfter})`)
 
+// Combined energy/thermal execution must use the same pre-step energy source as CPU and GPU.
+const coupledMaterialPoint = { x: 116, y: 80, z: 30 }
+send('setPhysics', {
+  params: { ...params, energyDiffusion: 0.1, tempDiffusion: 0,
+    tempEnergyCoupling: 0.5 },
+  processMask: (1 << 0) | (1 << 1),
+})
+send('paint', { ...coupledMaterialPoint, f: F.E, v: 100, r: 0, mode: 'set' })
+send('paint', { ...coupledMaterialPoint, f: F.MAT, v: MAT.METAL, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const coupledEnergy = readField(
+  latestFrame(), coupledMaterialPoint.x, coupledMaterialPoint.y, coupledMaterialPoint.z, F.E,
+)
+const coupledTemperature = readField(
+  latestFrame(), coupledMaterialPoint.x, coupledMaterialPoint.y, coupledMaterialPoint.z, F.T,
+)
+assert.ok(Math.abs(coupledEnergy - 97.12) < 0.002,
+  `combined worker step must apply metal conductivity (got ${coupledEnergy})`)
+assert.ok(Math.abs(coupledTemperature - 0.8) < 0.002,
+  `thermal coupling must use pre-step energy in the worker (expected 0.8, got ${coupledTemperature})`)
+
 // Density flow uses densityDiffusion independently of energyDiffusion.
 const densityPoint = { x: 25, y: 25, z: 10 }
 send('setPhysics', { params: { ...params, energyDiffusion: 0.1, densityDiffusion: 0.0024 }, processMask: 1 << 2 })
