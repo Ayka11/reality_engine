@@ -161,6 +161,17 @@ assert.ok((await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8'))
 assert.ok((await fs.readFile('scripts/check-gpu-density-advection-runtime.mjs', 'utf8'))
   .includes('GPU Bio-Potential must include organic material affinity'))
 
+// Signal transport precedes information growth on CPU, worker and GPU.
+assert.ok(worker.indexOf('if (signalActive)') < worker.indexOf('if (informationActive)'))
+assert.ok(gpu.indexOf('if (isProcessEnabled(1024u))') < gpu.indexOf('if (isProcessEnabled(16u))'))
+assert.ok(cpu.includes('front[base + F.INFORMATION] = Math.max(0, Math.min(999,'))
+assert.ok((await fs.readFile('scripts/check-field-physics-matrix.ts', 'utf8'))
+  .includes('CPU information growth must follow signal propagation'))
+assert.ok((await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8'))
+  .includes('worker information growth must follow signal propagation'))
+assert.ok((await fs.readFile('scripts/check-gpu-density-advection-runtime.mjs', 'utf8'))
+  .includes('GPU information growth must follow signal propagation'))
+
 // Material elasticity is a constitutive pressure-response multiplier on all backends.
 assert.ok(cpu.includes('(cD * p.pressureDensityCoupling - cT * 0.1) * material.elasticity'))
 assert.ok(worker.includes('(D_ * p.pressureDensityCoupling - T * 0.1) * material.elasticity'))
