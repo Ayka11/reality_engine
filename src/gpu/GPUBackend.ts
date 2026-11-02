@@ -89,13 +89,13 @@ fn cidx(x: u32, y: u32, z: u32) -> u32 {
   return z * params.H * params.W + y * params.W + x;
 }
 
-fn active(flag: u32) -> bool {
+fn isProcessEnabled(flag: u32) -> bool {
   return (params.activeProcesses & flag) != 0u;
 }
 
 fn densityAfterDiffusion(x: i32, y: i32, z: i32) -> f32 {
   let center = src[cidx(u32(x), u32(y), u32(z))].density;
-  if (!active(4u)) { return center; }
+  if (!isProcessEnabled(4u)) { return center; }
   let dx = array<i32,6>(-1, 1, 0, 0, 0, 0);
   let dy = array<i32,6>( 0, 0,-1, 1, 0, 0);
   let dz = array<i32,6>( 0, 0, 0, 0,-1, 1);
@@ -253,23 +253,23 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── PROC 0: Energy Diffusion ───────────────────────────────────────────────
-  if (active(1u)) {
+  if (isProcessEnabled(1u)) {
     o.energy = clamp(c.energy + params.energyDiffusion * mat.conductivity * dt * lapE, 0.0, 9999.0);
   }
 
   // ── PROC 1: Thermal Flow ───────────────────────────────────────────────────
-  if (active(2u)) {
+  if (isProcessEnabled(2u)) {
     let heat = c.energy * params.tempEnergyCoupling * dt;
     let tDiff = params.tempDiffusion / max(mat.heatCapacity, 0.1);
     o.temperature = max(0.0, c.temperature + tDiff * dt * lapT + heat);
   }
 
   // ── PROC 2: Density Flow ───────────────────────────────────────────────────
-  if (active(4u)) {
+  if (isProcessEnabled(4u)) {
     o.density = clamp(c.density + params.densityDiffusion * dt * lapD, 0.0, 1.0);
   }
   // PROC 16: Conservative density advection (closed boundaries, limited face fluxes).
-  if (active(65536u)) {
+  if (isProcessEnabled(65536u)) {
     o.density = clamp(
       densityAfterDiffusion(ix, iy, iz) + densityAdvectionDelta(ix, iy, iz),
       0.0, 1.0,
@@ -277,7 +277,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── PROC 3: Entropy Growth (second law — cannot be disabled by MetaLaw) ───
-  if (active(8u)) {
+  if (isProcessEnabled(8u)) {
     let dS = (params.entropyGrowthRate
               + c.energy * params.entropyEnergyCoupling
               + c.temperature * 0.00005) * dt;
@@ -287,7 +287,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── PROC 4: Information Dynamics ──────────────────────────────────────────
-  if (active(16u)) {
+  if (isProcessEnabled(16u)) {
     let supp = 1.0 - c.entropy * params.infoEntropySupp;
     if (c.energy > params.infoGrowthThreshE && c.density > params.infoGrowthThreshD && supp > 0.0) {
       o.information = min(999.0, c.information + params.infoGrowthRate * supp * dt);
@@ -297,7 +297,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── PROC 5: Bio-Emergence ─────────────────────────────────────────────────
-  if (active(32u)) {
+  if (isProcessEnabled(32u)) {
     let bio = (c.information / 200.0) * 0.4
             + min(c.energy / 500.0, 1.0) * 0.3
             + c.density * 0.2
@@ -307,14 +307,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── PROC 6: Wave Propagation ──────────────────────────────────────────────
-  if (active(64u)) {
+  if (isProcessEnabled(64u)) {
     o.wave_phase = (c.wave_phase + params.waveSpeed * dt) % 6.28318530;
     o.wave_amp   = c.wave_amp * params.waveDamping;
     o.energy     = o.energy + c.wave_amp * sin(c.wave_phase) * 0.008;
   }
 
   // ── PROC 7: Gravity (density-gradient acceleration; Neumann boundaries) ──
-  if (active(128u)) {
+  if (isProcessEnabled(128u)) {
     let acceleration_x = -params.gravityDensityCoupling * (nbD[1] - nbD[0]) * 0.5;
     let acceleration_y = -params.gravityDensityCoupling * (nbD[3] - nbD[2]) * 0.5;
     let acceleration_z = -params.gravityDensityCoupling * (nbD[5] - nbD[4]) * 0.5;
@@ -327,7 +327,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── PROC 8: Phase Transitions ─────────────────────────────────────────────
-  if (active(256u)) {
+  if (isProcessEnabled(256u)) {
     if (c.temperature > 500.0 && c.density > 0.5) {
       // Boiling
       o.density   = max(0.0, c.density - params.phaseTransitionRate * dt * 60.0);
@@ -341,7 +341,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── PROC 9: Metabolism ────────────────────────────────────────────────────
-  if (active(512u)) {
+  if (isProcessEnabled(512u)) {
     if (c.bio_potential > 0.45) {
       let rate = c.bio_potential * 0.12 * dt;
       o.energy      = max(0.0, o.energy - rate * 60.0);
@@ -351,13 +351,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── PROC 10: Signal Propagation ───────────────────────────────────────────
-  if (active(1024u)) {
+  if (isProcessEnabled(1024u)) {
     let sigRate = 0.06 * params.infoGrowthRate * dt;
     o.information = clamp(c.information + sigRate * lapI, 0.0, 999.0);
   }
 
   // ── PROC 11: Crystallization ──────────────────────────────────────────────
-  if (active(2048u)) {
+  if (isProcessEnabled(2048u)) {
     if (c.entropy < 0.18 && c.density > 0.38) {
       let materialRate = select(mat.crystallizationRate, 1.0, matIdx == 0u);
       let cRate = params.crystallizationRate * materialRate;
@@ -370,7 +370,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── PROC 12: Radiation Pressure ───────────────────────────────────────────
-  if (active(4096u)) {
+  if (isProcessEnabled(4096u)) {
     if (c.energy > params.radiationThreshold) {
       let absorbed = mat.radiationAbsorption;
       o.density = max(0.0, o.density - (c.energy - params.radiationThreshold)
@@ -381,7 +381,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── PROC 13: Pressure Diffusion ───────────────────────────────────────────
-  if (active(8192u)) {
+  if (isProcessEnabled(8192u)) {
     let equilibriumPressure = c.density * params.pressureDensityCoupling - c.temperature * 0.1;
     o.pressure = clamp(
       c.pressure + params.pressureDiffusion * dt * lapP
@@ -391,7 +391,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── PROC 14: Field Rotation (heuristic vector relaxation) ──────────────────
-  if (active(16384u)) {
+  if (isProcessEnabled(16384u)) {
     let neighborCount = max(fieldNeighborCount, 1.0);
     let avgFx = fxSum / neighborCount;
     let avgFy = fySum / neighborCount;
@@ -410,7 +410,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // ── PROC 15: Erosion ──────────────────────────────────────────────────────
-  if (active(32768u)) {
+  if (isProcessEnabled(32768u)) {
     let flow = abs(c.field_x) + abs(c.field_y) + abs(c.field_z);
     if (c.density > 0.65 && flow > 8.0) {
       let resistance = mat.erosionResistance;
