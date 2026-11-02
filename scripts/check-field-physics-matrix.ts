@@ -255,6 +255,9 @@ assert.ok(Math.abs(limited[1] - 1) < 1e-6,
 const stationary = runDensityAdvection([0.5, 0], [0, 0], 1);
 assert.deepEqual(stationary, [0.5, 0],
   "zero velocity must produce no density transport");
+const closedEdge = runDensityAdvection([0.5, 0], [-1, -1], 0.25);
+assert.deepEqual(closedEdge, [0.5, 0],
+  "world edge must have zero normal flux rather than leaking density");
 
 for (const [axis, field] of [
   [0, F.VELOCITY_X], [1, F.VELOCITY_Y], [2, F.VELOCITY_Z],
