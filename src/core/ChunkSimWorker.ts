@@ -449,11 +449,7 @@ function simStep(dt: number) {
       // Eligibility and material use the immutable pre-step snapshot; erosion composes
       // with the density/information outputs already produced by earlier processes.
       const flow = Math.abs(FX) + Math.abs(FY) + Math.abs(FZ)
-      const rawMaterialId = chunk[base + F.MAT]
-      const materialId = Number.isFinite(rawMaterialId)
-        ? Math.max(0, Math.min(MATERIAL_LIBRARY.length - 1, Math.floor(rawMaterialId)))
-        : MAT.VACUUM
-      const material = MATERIAL_LIBRARY[materialId] ?? MATERIAL_LIBRARY[MAT.VACUUM]
+      // Reuse the material resolved from the immutable pre-step chunk sample above.
       if (D_ > 0.65 && flow > 8.0) {
         const erodibility = 1 - material.erosionResistance
         grid.set(x, y, z, F.D, Math.max(0,
