@@ -46,6 +46,16 @@ assert.ok(gpu.includes('params.pressureDiffusion * dt * lapP'))
 assert.ok(worker.includes('D_ * p.pressureDensityCoupling - T * 0.1'))
 assert.ok(worker.includes('P + p.pressureDiffusion * lapP * dt'))
 
+// Density diffusion uses a conservative six-neighbor Laplacian with mirrored closed boundaries.
+assert.ok(cpu.includes('let lapD = -nCount * cD;'))
+assert.ok(gpu.includes('var nbD = array<f32,6>(c.density,c.density,c.density,c.density,c.density,c.density);'))
+assert.ok(gpu.includes('lapD += nbD[d] - c.density;'))
+assert.ok(worker.includes('lapD -= nc * D_'))
+assert.ok(fs.readFileSync('scripts/check-field-physics-matrix.ts', 'utf8')
+  .includes('density diffusion failed the closed-grid mass-conservation check'))
+assert.ok(fs.readFileSync('scripts/check-chunk-worker-physics.ts', 'utf8')
+  .includes('closed-grid worker density diffusion must conserve total density'))
+
 // Density flow must use its dedicated coefficient in CPU, GPU, and worker paths.
 assert.ok(gpu.includes('densityDiffusion: f32,        // [22]'))
 assert.ok(gpu.includes('const PARAMS_FLOATS = 31;'))
