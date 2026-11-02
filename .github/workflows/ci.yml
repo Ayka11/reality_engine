@@ -126,7 +126,9 @@ jobs:
       - run: npm run hf:smoke
       - run: npm run hf:cpu:check
       - run: npx playwright install chromium
-      - name: Run optional WebGPU density-advection numerical probe
+      - name: Run required WebGPU SwiftShader density-advection numerical probe
         run: npm run test:gpu-density-advection-runtime
+        env:
+          REALITY_ENGINE_REQUIRE_WEBGPU: '1'
         timeout-minutes: 3
       - run: timeout 240s npm run hf:browser:acceptance
