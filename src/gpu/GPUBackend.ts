@@ -389,7 +389,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   // ── PROC 13: Pressure Diffusion ───────────────────────────────────────────
   if (isProcessEnabled(8192u)) {
-    let equilibriumPressure = c.density * params.pressureDensityCoupling - c.temperature * 0.1;
+    let equilibriumPressure = (c.density * params.pressureDensityCoupling - c.temperature * 0.1) * mat.elasticity;
     o.pressure = clamp(
       c.pressure + params.pressureDiffusion * dt * lapP
         + (equilibriumPressure - c.pressure) * dt,
