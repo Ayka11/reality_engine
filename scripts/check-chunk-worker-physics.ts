@@ -253,6 +253,18 @@ const gravityEdgeFx = readField(
 assert.ok(gravityEdgeFx < 0 && Math.abs(gravityEdgeFx + (0.1 * 0.25 / 60)) < 1e-6,
   `worker gravity must use a mirrored Neumann boundary at x=0 (got ${gravityEdgeFx})`)
 
+// A sub-threshold acceleration in a previously empty chunk must not be lost
+// by the sparse field epsilon at a chunk boundary.
+const gravityHaloPoint = { x: 15, y: 50, z: 40 }
+send('setPhysics', { params: { ...params, gravityDensityCoupling: 0.1 }, processMask: 1 << 7 })
+send('paint', { ...gravityHaloPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('tick', { speed: 1 })
+const gravityHaloFx = readField(
+  latestFrame(), gravityHaloPoint.x + 1, gravityHaloPoint.y, gravityHaloPoint.z, F.FX,
+)
+assert.ok(gravityHaloFx > 0 && gravityHaloFx < 0.001,
+  `gravity acceleration should allocate a neighboring sparse chunk even below the generic 0.001 threshold (got ${gravityHaloFx})`)
+
 // INFORMATION and SIGNAL_PROPAGATION must compose, not overwrite one another.
 const informationPoint = { x: 120, y: 40, z: 10 }
 const informationParams = {
