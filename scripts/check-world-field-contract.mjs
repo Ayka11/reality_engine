@@ -301,7 +301,7 @@ persistence.snapshots.set(oldSnapshot.key, oldSnapshot);
 const upgraded = persistence.loadValid({cx:1,cy:0,cz:0});
 assert.equal(upgraded?.schemaVersion, 3);
 assert.equal(upgraded?.workerChunks?.[0]?.data.length, CHUNK_FLOATS);
-assert.equal(upgraded.workerChunks[0].data[1], 0.8);
+assert.ok(Math.abs(upgraded.workerChunks[0].data[1] - 0.8) < 1e-6, 'migrated float32 density stays within tolerance');
 assert.equal(upgraded.workerChunks[0].data[6], 1.25);
 assert.equal(upgraded.workerChunks[0].data[14], -2.5);
 assert.deepEqual(upgraded.workerChunks[0].data.slice(15,18), [0,0,0]);
