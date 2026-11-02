@@ -59,6 +59,7 @@ const REALITY_LAW_PROCESS_NAMES: Record<number, string> = {
   0: 'energy', 1: 'thermo', 2: 'density', 3: 'entropy', 4: 'info', 5: 'bio',
   6: 'wave', 7: 'gravity', 8: 'phase', 9: 'metabolism', 10: 'signal',
   11: 'crystallization', 12: 'radiation', 13: 'pressure', 14: 'rotation', 15: 'erosion',
+  16: 'densityAdvection',
 };
 (window as unknown as Record<string, unknown>).getRealityLawState = () => {
   const mask = sim.laws.activeProcessMask;
