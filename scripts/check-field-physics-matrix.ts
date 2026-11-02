@@ -5,7 +5,6 @@ import { DEFAULT_PARAMS, type PhysicsParams } from "../src/laws/MetaLaw.ts";
 import { PROC } from "../src/process/ProcessDef.ts";
 import { WORLD } from "../src/core/WorldConstants.ts";
 import { FieldPhysics } from "../src/simulation/FieldPhysics.ts";
-import { densityAdvectionDelta } from "../src/simulation/DensityAdvection.ts";
 
 type DiffusionParameter =
   | "energyDiffusion"
