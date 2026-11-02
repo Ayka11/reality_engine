@@ -309,12 +309,45 @@ try {
       }
     }
 
+    async function runMaterialPressure(materialId) {
+      const width = 3, height = 3, depth = 3;
+      const backend = new GPUBackend();
+      try {
+        const initialized = await backend.init(width, height, depth);
+        if (!initialized) throw new Error("WebGPU adapter disappeared during material-pressure parity initialization");
+        backend.uploadMaterials(buildMaterialBuffer());
+        const cells = new Float32Array(width * height * depth * CELL_FIELDS);
+        for (let cell = 0; cell < width * height * depth; cell++) {
+          cells[cell * CELL_FIELDS + F.MATERIAL_ID] = materialId;
+        }
+        const center = (1 * height + 1) * width + 1;
+        cells[center * CELL_FIELDS + F.DENSITY] = 0.5;
+        cells[center * CELL_FIELDS + F.TEMPERATURE] = 0;
+        cells[center * CELL_FIELDS + F.PRESSURE] = 0;
+        backend.upload(cells);
+        backend.writeParams({
+          ...DEFAULT_PARAMS,
+          pressureDensityCoupling: 100,
+          pressureDiffusion: 0,
+        }, 1 << PROC.PRESSURE_DIFFUSION, 0.016);
+        backend.submitCompute(1);
+        const output = await backend.readback();
+        return output[center * CELL_FIELDS + F.PRESSURE];
+      } finally {
+        backend.destroy();
+      }
+    }
+
     const adapterInfo = adapter.info?.description || adapter.info?.device || "unknown";
     const coupledMaterial = await runCoupledMaterialStep();
     const entropyCoupled = await runEntropyCoupledStep();
     const bioMetabolism = await runBioMetabolismStep();
     const localTime = await runLocalTimeStep();
     const signalPropagation = await runSignalPropagationStep();
+    const materialPressure = {
+      stone: await runMaterialPressure(MAT.STONE),
+      metal: await runMaterialPressure(MAT.METAL),
+    };
     const combinedPhase = await runCombinedDensityProcess(
       0.50005, 0.2, 600, 10,
       (1 << PROC.DENSITY_FLOW) | (1 << PROC.PHASE_TRANSITION),
@@ -360,7 +393,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, bioMetabolism, localTime, signalPropagation };
+    return { status: "PASS", adapterInfo, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, bioMetabolism, localTime, signalPropagation, materialPressure };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -431,6 +464,10 @@ try {
       `GPU local time must use normalized base-rate/energy/entropy formula (expected ${expectedLocalTime}, got ${result.localTime})`);
     assert.ok(Math.abs(result.signalPropagation - 99) < 1e-4,
       `GPU signal propagation must use PhysicsParams.signalPropagationRate (expected 99, got ${result.signalPropagation})`);
+    assert.ok(Math.abs(result.materialPressure.stone - 0.64) < 1e-4,
+      `GPU pressure response must scale with stone elasticity (expected 0.64, got ${result.materialPressure.stone})`);
+    assert.ok(Math.abs(result.materialPressure.metal - 1.6) < 1e-4,
+      `GPU pressure response must scale with metal elasticity (expected 1.6, got ${result.materialPressure.metal})`);
     console.log("WebGPU density-advection/material/phase runtime: PASS " + JSON.stringify(result));
   }
 } finally {
