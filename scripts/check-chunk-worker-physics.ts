@@ -244,10 +244,11 @@ assert.ok(Math.abs(densityAfter - 0.4998848) < 0.00002,
 const pressurePoint = { x: 30, y: 10, z: 10 }
 send('setPhysics', { params: { ...params, pressureDensityCoupling: 100 }, processMask: 1 << 13 })
 send('paint', { ...pressurePoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
+send('paint', { ...pressurePoint, f: F.MAT, v: MAT.STONE, r: 0, mode: 'set' })
 send('tick', { speed: 1 })
 const pressureAfter = readField(latestFrame(), pressurePoint.x, pressurePoint.y, pressurePoint.z, F.P)
-assert.ok(Math.abs(pressureAfter - 0.8) < 0.03,
-  `pressureDensityCoupling should affect pressure relaxation (got ${pressureAfter})`)
+assert.ok(Math.abs(pressureAfter - 0.64) < 0.03,
+  `pressureDensityCoupling and stone elasticity should affect pressure relaxation (got ${pressureAfter})`)
 
 // Pressure diffusion must move pressure from an isolated high-pressure cell,
 // and the parameter must affect the result independently from EOS relaxation.
