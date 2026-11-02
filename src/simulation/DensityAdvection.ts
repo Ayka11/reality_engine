@@ -1,6 +1,5 @@
-import { F } from '../core/CellState';
-
-export type DensityFieldReader = (x: number, y: number, z: number, field: number) => number;
+export type DensityField = 'density' | 'velocityX' | 'velocityY' | 'velocityZ';
+export type DensityFieldReader = (x: number, y: number, z: number, field: DensityField) => number;
 
 type Direction = readonly [dx: number, dy: number, dz: number];
 
@@ -21,13 +20,13 @@ function densityAt(
   W: number, H: number, D: number,
   dt: number, diffusion: number,
 ): number {
-  const density = read(x, y, z, F.DENSITY);
+  const density = read(x, y, z, 'density');
   if (diffusion === 0 || dt === 0) return Math.max(0, Math.min(1, density));
   let laplacian = 0;
   for (const [dx, dy, dz] of DIRECTIONS) {
     const nx = x + dx, ny = y + dy, nz = z + dz;
     if (inside(nx, ny, nz, W, H, D)) {
-      laplacian += read(nx, ny, nz, F.DENSITY) - density;
+      laplacian += read(nx, ny, nz, 'density') - density;
     }
   }
   return Math.max(0, Math.min(1, density + diffusion * dt * laplacian));
@@ -38,9 +37,9 @@ function axisVelocity(
   x: number, y: number, z: number,
   dx: number, dy: number, dz: number,
 ): number {
-  if (dx !== 0) return read(x, y, z, F.VELOCITY_X);
-  if (dy !== 0) return read(x, y, z, F.VELOCITY_Y);
-  return read(x, y, z, F.VELOCITY_Z);
+  if (dx !== 0) return read(x, y, z, 'velocityX');
+  if (dy !== 0) return read(x, y, z, 'velocityY');
+  return read(x, y, z, 'velocityZ');
 }
 
 function cellLimiter(
