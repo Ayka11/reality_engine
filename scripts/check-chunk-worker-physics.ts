@@ -498,56 +498,6 @@ assert.ok(Math.abs(metabolismInformation - (40 + expectedMetabolismRate * 25)) <
 assert.ok(Math.abs(metabolismEntropy - (0.2 + expectedMetabolismRate * 0.008)) < 1e-5,
   `worker metabolism entropy output mismatch (got ${metabolismEntropy})`)
 
-// Material bio-affinity and metabolismRate must match the CPU/GPU biology model.
-const bioParams = { ...params, metabolismRate: 0.6 }
-const organicBioPoint = { x: 40, y: 104, z: 48 }
-send('setPhysics', { params: bioParams, processMask: 1 << 5 })
-send('paint', { ...organicBioPoint, f: F.E, v: 100, r: 0, mode: 'set' })
-send('paint', { ...organicBioPoint, f: F.I, v: 40, r: 0, mode: 'set' })
-send('paint', { ...organicBioPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
-send('paint', { ...organicBioPoint, f: F.S, v: 0.2, r: 0, mode: 'set' })
-send('paint', { ...organicBioPoint, f: F.BIO, v: 0, r: 0, mode: 'set' })
-send('paint', { ...organicBioPoint, f: F.MAT, v: MAT.ORGANIC_TISSUE, r: 0, mode: 'set' })
-send('tick', { speed: 1 })
-const organicBio = readField(latestFrame(), organicBioPoint.x, organicBioPoint.y, organicBioPoint.z, F.BIO)
-assert.ok(Math.abs(organicBio - 0.67) < 1e-5,
-  `worker Bio-Potential must include organic material affinity (expected 0.67, got ${organicBio})`)
-
-const stoneBioPoint = { x: 48, y: 104, z: 48 }
-send('paint', { ...stoneBioPoint, f: F.E, v: 100, r: 0, mode: 'set' })
-send('paint', { ...stoneBioPoint, f: F.I, v: 40, r: 0, mode: 'set' })
-send('paint', { ...stoneBioPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
-send('paint', { ...stoneBioPoint, f: F.S, v: 0.2, r: 0, mode: 'set' })
-send('paint', { ...stoneBioPoint, f: F.BIO, v: 0, r: 0, mode: 'set' })
-send('paint', { ...stoneBioPoint, f: F.MAT, v: MAT.STONE, r: 0, mode: 'set' })
-send('tick', { speed: 1 })
-const stoneBio = readField(latestFrame(), stoneBioPoint.x, stoneBioPoint.y, stoneBioPoint.z, F.BIO)
-assert.ok(Math.abs(stoneBio - 0.27) < 1e-5,
-  `worker Bio-Potential must include stone material affinity (expected 0.27, got ${stoneBio})`)
-
-const metabolismPoint = { x: 56, y: 104, z: 48 }
-send('setPhysics', { params: bioParams, processMask: (1 << 5) | (1 << 9) })
-send('paint', { ...metabolismPoint, f: F.E, v: 100, r: 0, mode: 'set' })
-send('paint', { ...metabolismPoint, f: F.I, v: 40, r: 0, mode: 'set' })
-send('paint', { ...metabolismPoint, f: F.D, v: 0.5, r: 0, mode: 'set' })
-send('paint', { ...metabolismPoint, f: F.S, v: 0.2, r: 0, mode: 'set' })
-send('paint', { ...metabolismPoint, f: F.BIO, v: 0, r: 0, mode: 'set' })
-send('paint', { ...metabolismPoint, f: F.MAT, v: MAT.ORGANIC_TISSUE, r: 0, mode: 'set' })
-send('tick', { speed: 1 })
-const metabolismBio = readField(latestFrame(), metabolismPoint.x, metabolismPoint.y, metabolismPoint.z, F.BIO)
-const metabolismEnergy = readField(latestFrame(), metabolismPoint.x, metabolismPoint.y, metabolismPoint.z, F.E)
-const metabolismInformation = readField(latestFrame(), metabolismPoint.x, metabolismPoint.y, metabolismPoint.z, F.I)
-const metabolismEntropy = readField(latestFrame(), metabolismPoint.x, metabolismPoint.y, metabolismPoint.z, F.S)
-const expectedMetabolismRate = 0.67 * 0.6 / 60
-assert.ok(Math.abs(metabolismBio - 0.67) < 1e-5,
-  `worker metabolism must consume the updated organic Bio-Potential (got ${metabolismBio})`)
-assert.ok(Math.abs(metabolismEnergy - (100 - expectedMetabolismRate * 60)) < 1e-5,
-  `worker metabolism must use PhysicsParams.metabolismRate (got energy ${metabolismEnergy})`)
-assert.ok(Math.abs(metabolismInformation - (40 + expectedMetabolismRate * 25)) < 1e-5,
-  `worker metabolism information output mismatch (got ${metabolismInformation})`)
-assert.ok(Math.abs(metabolismEntropy - (0.2 + expectedMetabolismRate * 0.008)) < 1e-5,
-  `worker metabolism entropy output mismatch (got ${metabolismEntropy})`)
-
 // Worker local time uses the same normalized base-rate formula as CPU/GPU.
 const localTimePoint = { x: 72, y: 104, z: 48 }
 send('setPhysics', {
