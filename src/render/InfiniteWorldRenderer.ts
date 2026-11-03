@@ -151,21 +151,23 @@ export class InfiniteWorldRenderer {
   }
 
   applyAuthoritativeFieldMutation(input: Parameters<MutableWorldFieldProvider['apply']>[0]) {
-    const event = runtimeProvenance.record(input.kind === 'composer' ? 'world-state' : input.kind, {
-      ...input.metadata,
-      mutationKind: input.kind,
-      x: input.x,
-      y: input.y,
-      z: input.z,
-      radius: input.radius,
-    })
-    const mutation = this.authoritativeField.apply({
-      ...input,
-      metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id },
+    const transaction = this.authoritativeSculptTransactions.commit(() => {
+      const event = runtimeProvenance.record(input.kind === 'composer' ? 'world-state' : input.kind, {
+        ...input.metadata,
+        mutationKind: input.kind,
+        x: input.x,
+        y: input.y,
+        z: input.z,
+        radius: input.radius,
+      })
+      return this.authoritativeField.apply({
+        ...input,
+        metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id },
+      })
     })
     this.refreshTerrainPatches()
     this.persistAuthoritativeFieldState()
-    return mutation
+    return transaction.mutation
   }
 
   getAuthoritativeFieldState() {

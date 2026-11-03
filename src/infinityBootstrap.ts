@@ -1469,6 +1469,11 @@ export function bootstrapInfiniteWorld() {
                 </div>
                 <div style="font-size: 8px; color: var(--sub); margin-top: 6px;">Radius <button class="pill" id="vFieldRadius4" style="font-size:8px;padding:2px 5px;">4m</button> <button class="pill on" id="vFieldRadius8" style="font-size:8px;padding:2px 5px;">8m</button> <button class="pill" id="vFieldRadius16" style="font-size:8px;padding:2px 5px;">16m</button></div>
                 <div data-authoritative-field-status style="font-size: 7.5px; color: #40c080; margin-top: 5px;">Authoritative field · ready</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:5px;">
+                  <button class="brush-btn" id="vFieldUndo" type="button">↶ Undo Field</button>
+                  <button class="brush-btn" id="vFieldRedo" type="button">↷ Redo Field</button>
+                </div>
+                <div id="vFieldHistoryStatus" style="font-size:7.5px;color:var(--sub);margin-top:3px;">Undo/Redo tracks authoritative field edits</div>
                 <div style="border-top:1px solid rgba(255,255,255,.08);margin-top:9px;padding-top:8px;">
                   <div style="font-size:9.5px;color:var(--sub);margin-bottom:4px;text-transform:uppercase;">World Surface Workspace</div>
                   <div style="font-size:8px;color:#8f88d8;margin-bottom:6px;">Choose a neutral surface to build from scratch, or restore the procedural terrain. Existing objects keep their absolute world positions.</div>
@@ -1771,8 +1776,35 @@ export function bootstrapInfiniteWorld() {
         document.querySelectorAll<HTMLElement>('[data-authoritative-field-status]').forEach((el) => {
           el.textContent = 'Authoritative field · ' + label + ' · mutation #' + mutation.id
         })
+        updateAuthoritativeFieldHistoryUI()
         return mutation
       }
+      const updateAuthoritativeFieldHistoryUI = () => {
+        const history = world.getLegacySculptAuthoritativeHistory()
+        const undo = document.getElementById('vFieldUndo') as HTMLButtonElement | null
+        const redo = document.getElementById('vFieldRedo') as HTMLButtonElement | null
+        const status = document.getElementById('vFieldHistoryStatus')
+        if (undo) undo.disabled = history.undo === 0
+        if (redo) redo.disabled = history.redo === 0
+        if (status) status.textContent = `Authoritative field history · ${history.undo} undo · ${history.redo} redo`
+      }
+      document.getElementById('vFieldUndo')?.addEventListener('click', () => {
+        const transaction = world.undoLegacySculptAuthoritative()
+        const status = document.getElementById('vFieldHistoryStatus')
+        if (status) status.textContent = transaction
+          ? `Undo field mutation #${transaction.mutationId}`
+          : 'Nothing to undo · authoritative field changed outside this history'
+        updateAuthoritativeFieldHistoryUI()
+      })
+      document.getElementById('vFieldRedo')?.addEventListener('click', () => {
+        const transaction = world.redoLegacySculptAuthoritative()
+        const status = document.getElementById('vFieldHistoryStatus')
+        if (status) status.textContent = transaction
+          ? `Redo field mutation #${transaction.mutationId}`
+          : 'Nothing to redo · authoritative field changed outside this history'
+        updateAuthoritativeFieldHistoryUI()
+      })
+      updateAuthoritativeFieldHistoryUI()
       document.getElementById('vFieldDensity')?.addEventListener('click', () => applyFieldBrush({ density: 0.12 }, 'density +'))
       document.getElementById('vFieldDensityDown')?.addEventListener('click', () => applyFieldBrush({ density: -0.12 }, 'density −'))
       document.getElementById('vFieldEnergy')?.addEventListener('click', () => applyFieldBrush({ energy: 12 }, 'energy +'))
