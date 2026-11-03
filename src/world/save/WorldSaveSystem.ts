@@ -516,7 +516,9 @@ export class WorldSaveSystem {
       },
       voxelState: this.serializer.flattenFields(snapshot.fields, this.voxelGrid.size),
       entities: snapshot.entities,
+      runtimeEntityLayer: snapshot.runtimeState?.entityLayer,
       laws: snapshot.activeLaws,
+      lawEngineState: snapshot.runtimeState?.laws,
       processes: snapshot.activeProcesses,
       metadata: {
         gridSize: { x: snapshot.gridSize.width, y: snapshot.gridSize.height, z: snapshot.gridSize.depth },
@@ -524,6 +526,7 @@ export class WorldSaveSystem {
         entropy: snapshot.metadata.entropy,
         complexityScore: snapshot.metadata.complexity,
         dominantLaws: snapshot.activeLaws.slice(0, 5).map(law => law.name),
+        simulationTicks: snapshot.metadata.simulationTicks,
       },
     };
   }
@@ -540,13 +543,17 @@ export class WorldSaveSystem {
       activeProcesses: pkg.processes,
       entities: pkg.entities,
       civilizations: [],
+      runtimeState: {
+        entityLayer: pkg.runtimeEntityLayer,
+        laws: pkg.lawEngineState,
+      },
       metadata: {
         totalEnergy: pkg.metadata.totalEnergy,
         entropy: pkg.metadata.entropy,
         complexity: pkg.metadata.complexityScore,
         activeLawsCount: pkg.laws.length,
         entityCount: pkg.entities.length,
-        simulationTicks: this.context.getTick?.() ?? 0,
+        simulationTicks: pkg.metadata.simulationTicks ?? this.context.getTick?.() ?? 0,
         dominantBiome: 'imported',
       },
     };
