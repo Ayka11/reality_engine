@@ -87,6 +87,7 @@ interface SaveContext {
   restorePreviousEnergySnapshot?: (snapshot: Float32Array) => void;
   resetPreviousEnergy?: () => void;
   clearRecorderSnapshots?: () => void;
+  clearSculptHistory?: () => void;
   getClimateSnapshot?: () => ClimateSystemSnapshot;
   restoreClimateSnapshot?: (snapshot: ClimateSystemSnapshot) => void;
   resetClimate?: () => void;
@@ -424,6 +425,7 @@ export class WorldSaveSystem {
     // Timeline is a history of grid-only frames, not a full world checkpoint.
     // Clear it only after the new world transaction commits successfully.
     this.context.clearTimeline?.();
+    this.context.clearSculptHistory?.();
     this.currentSnapshot = snapshot;
     console.info(`World "${snapshot.name}" fully restored.`);
   }
