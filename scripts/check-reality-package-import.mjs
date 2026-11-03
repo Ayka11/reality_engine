@@ -188,6 +188,12 @@ assert.ok(editorSource.includes("await simulation.runAtStepBoundary(() => this.b
   'Creator Studio export must capture state at a coherent simulation boundary');
 assert.ok(mainSource.includes("exportWorldPackage: name => saveSystem.exportRealityPackage(name)"),
   'the primary Creator Studio export button must delegate to WorldSaveSystem full-world capture');
+assert.ok(editorSource.includes("importWorldPackage?: (file: File) => Promise<void>;"),
+  'Creator Studio must expose the complete World Save import contract');
+assert.ok(editorSource.includes("await this.options.importWorldPackage(file)"),
+  'Creator Studio file picker must prefer the complete World Save restore path');
+assert.ok(mainSource.includes("importWorldPackage: file => saveSystem.importRealityPackage(file)"),
+  'the primary Creator Studio import button must restore all runtime domains through WorldSaveSystem');
 assert.ok(editorSource.includes("await this.options.exportWorldPackage(packageName)"),
   'Creator Studio must use the complete application export callback when available');
 assert.ok(editorSource.includes("await simulation.runAtStepBoundary(() => this.buildPackage())"),
