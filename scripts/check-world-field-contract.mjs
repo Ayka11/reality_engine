@@ -189,6 +189,56 @@ restoreSnapshot.mutations[0].metadata.nested.label = "mutated-after-restore";
 assert.equal(restoreTarget.sample(0, 0, 0).energy, restoredValue,
   "mutating restore input after commit must not alter restored state");
 
+// Persisted world-field counters are part of the authoritative identity contract.
+// Reject unsafe integers before replacing live state, and refuse new mutations when
+// a valid counter has reached its safe-integer boundary.
+const counterProbe = new MutableWorldFieldProvider(fakeProvider);
+counterProbe.applyRadial("brush", 0, 0, 0, 4, { energy: 1 });
+const stableCounterSnapshot = counterProbe.serialize();
+const counterBeforeInvalidRestore = counterProbe.serialize();
+for (const invalidCounters of [
+  { ...stableCounterSnapshot, nextId: Number.MAX_SAFE_INTEGER + 1 },
+  { ...stableCounterSnapshot, version: Number.MAX_SAFE_INTEGER + 1 },
+]) {
+  assert.throws(() => counterProbe.restore(invalidCounters), /Invalid world field state counters/,
+    "unsafe world-field counters must be rejected during restore");
+  assert.deepEqual(counterProbe.serialize(), counterBeforeInvalidRestore,
+    "invalid counters must be rejected without mutating live world-field state");
+}
+const unsafeMutationId = structuredClone(stableCounterSnapshot);
+unsafeMutationId.mutations[0].id = Number.MAX_SAFE_INTEGER + 1;
+unsafeMutationId.nextId = Number.MAX_SAFE_INTEGER;
+assert.throws(() => counterProbe.restore(unsafeMutationId), /Invalid world field mutation id sequence/,
+  "unsafe mutation IDs must be rejected independently of the next-ID counter");
+assert.deepEqual(counterProbe.serialize(), counterBeforeInvalidRestore,
+  "an unsafe mutation ID must not partially replace the live mutation history");
+
+const exhaustedIdSnapshot = { ...stableCounterSnapshot, nextId: Number.MAX_SAFE_INTEGER };
+counterProbe.restore(exhaustedIdSnapshot);
+const exhaustedIdBefore = counterProbe.serialize();
+assert.throws(() => counterProbe.applyRadial("brush", 1, 0, 0, 4, { energy: 1 }),
+  /World field mutation ID counter is exhausted/,
+  "the provider must stop allocating mutation IDs when the next increment would become unsafe");
+assert.deepEqual(counterProbe.serialize(), exhaustedIdBefore,
+  "exhausted mutation IDs must not append a mutation or advance the revision");
+
+counterProbe.restore({ ...stableCounterSnapshot, version: Number.MAX_SAFE_INTEGER });
+const exhaustedVersionBefore = counterProbe.serialize();
+assert.throws(() => counterProbe.clear(), /World field version counter is exhausted/,
+  "the provider must stop advancing its revision when the next increment would become unsafe");
+assert.deepEqual(counterProbe.serialize(), exhaustedVersionBefore,
+  "exhausted revisions must not clear field state");
+
+const duplicateOverlay = new MutableWorldFieldProvider(fakeProvider);
+duplicateOverlay.setGlobal("preset", { energy: 2 });
+const duplicateOverlaySnapshot = duplicateOverlay.serialize();
+duplicateOverlaySnapshot.globalOverlays.push(structuredClone(duplicateOverlaySnapshot.globalOverlays[0]));
+const duplicateOverlayBefore = duplicateOverlay.serialize();
+assert.throws(() => duplicateOverlay.restore(duplicateOverlaySnapshot), /Duplicate world field global overlay kind/,
+  "duplicate global overlays must not be silently collapsed during restore");
+assert.deepEqual(duplicateOverlay.serialize(), duplicateOverlayBefore,
+  "duplicate overlays must be rejected before replacing authoritative state");
+
 const globalAliasProbe = new MutableWorldFieldProvider(fakeProvider);
 const callerScale = { energy: 2 };
 const callerGlobalDelta = { energy: 3 };
