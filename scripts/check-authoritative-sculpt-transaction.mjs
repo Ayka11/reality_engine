@@ -220,6 +220,35 @@ assert.equal(guardedCoordinator.undo(), null, "undo must refuse a stale snapshot
 assert.deepEqual(guardedField.serialize(), stateBeforeConflictedUndo, "conflicted undo must preserve external mutation");
 assert.equal(guardedCoordinator.historyLength, 1, "conflicted undo must keep history available");
 
+// Failed provider restores must not consume undo/redo history.
+const restoreFailureField = new MutableWorldFieldProvider(base);
+const restoreFailureCoordinator = new AuthoritativeSculptTransactionCoordinator(restoreFailureField);
+restoreFailureCoordinator.commit(() => restoreFailureField.apply({
+  kind: "brush", x: 3, y: 4, z: 5, radius: 2,
+  delta: { energy: 6 }, metadata: { transaction: "restore-failure" },
+}));
+const originalRestore = restoreFailureField.restore.bind(restoreFailureField);
+restoreFailureField.restore = () => { throw new Error("simulated restore failure"); };
+assert.throws(() => restoreFailureCoordinator.undo(), /simulated restore failure/);
+assert.equal(restoreFailureCoordinator.historyLength, 1,
+  "failed undo restore must retain the undo entry");
+assert.equal(restoreFailureCoordinator.redoLength, 0,
+  "failed undo restore must not create a redo entry");
+restoreFailureField.restore = originalRestore;
+assert.ok(restoreFailureCoordinator.undo(),
+  "undo must remain retryable after a failed restore");
+
+const originalRedoRestore = restoreFailureField.restore.bind(restoreFailureField);
+restoreFailureField.restore = () => { throw new Error("simulated redo restore failure"); };
+assert.throws(() => restoreFailureCoordinator.redo(), /simulated redo restore failure/);
+assert.equal(restoreFailureCoordinator.historyLength, 0,
+  "failed redo restore must not create an undo entry");
+assert.equal(restoreFailureCoordinator.redoLength, 1,
+  "failed redo restore must retain the redo entry");
+restoreFailureField.restore = originalRedoRestore;
+assert.ok(restoreFailureCoordinator.redo(),
+  "redo must remain retryable after a failed restore");
+
 // A callback that mutates the field and then throws must leave no partial mutation.
 const atomicField = new MutableWorldFieldProvider(base);
 const atomicCoordinator = new AuthoritativeSculptTransactionCoordinator(atomicField);
