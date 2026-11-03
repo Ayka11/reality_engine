@@ -55,6 +55,9 @@ export class PackageSerializer {
     if (pkg.runtimeState) {
       zip.file('runtime-state.json', serializePackageJson(pkg.runtimeState));
     }
+    if (pkg.worldEditor) {
+      zip.file('world-editor.json', serializePackageJson(pkg.worldEditor));
+    }
     if (pkg.chunks) {
       zip.file('chunks/manifest.json', serializePackageJson({
         chunkSize: pkg.chunks.chunkSize,
@@ -96,6 +99,15 @@ export class PackageSerializer {
     if (runtimeState !== undefined &&
         (!runtimeState || typeof runtimeState !== 'object' || Array.isArray(runtimeState))) {
       throw new Error('Reality package runtime state envelope is invalid.');
+    }
+    const worldEditorFile = zip.file('world-editor.json');
+    const worldEditor = worldEditorFile
+      ? await this.readJson(zip, 'world-editor.json')
+      : undefined;
+    if (worldEditor !== undefined &&
+        (!worldEditor || typeof worldEditor !== 'object' || Array.isArray(worldEditor) ||
+          worldEditor.version !== 1)) {
+      throw new Error('Reality package world editor snapshot envelope is invalid.');
     }
 
     const chunksManifestFile = zip.file('chunks/manifest.json');
@@ -158,6 +170,7 @@ export class PackageSerializer {
       laws: lawEnvelope.laws,
       lawEngineState: lawEnvelope.lawEngineState,
       runtimeState,
+      worldEditor,
       processes,
       metadata,
     };
