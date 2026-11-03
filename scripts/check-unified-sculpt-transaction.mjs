@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import ts from "typescript";
 import { readFile } from "node:fs/promises";
 const source=await readFile(new URL("../src/sculpt/UnifiedSculptTransactionCoordinator.ts",import.meta.url),"utf8");
+const saveSource=await readFile(new URL("../src/world/save/WorldSaveSystem.ts",import.meta.url),"utf8");
+const mainSource=await readFile(new URL("../src/main.ts",import.meta.url),"utf8");
+assert.match(saveSource,/clearSculptHistory\?: \(\) => void/,"world save context must expose a sculpt-history invalidation hook");
+assert.match(saveSource,/this\.context\.clearSculptHistory\?\.\(\)/,"successful world restore must clear old mixed sculpt history");
+assert.match(mainSource,/clearSculptHistory: \(\) => unifiedSculptTransactions\.clear\(\)/,"main runtime must connect world restore to the live unified sculpt history");
 const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
 const {UnifiedSculptTransactionCoordinator}=await import("data:text/javascript;base64,"+Buffer.from(js).toString("base64"));
 function harness(){
