@@ -41,6 +41,8 @@ import { Explainer } from './ux/Explainer';
 import { SMART_BRUSHES } from './ux/SmartBrushes';
 import { createInfinityScaleRuntime } from './infinity/InfinityScaleRuntime';
 import type { WorldEditorSnapshot } from './infinity/WorldEditorSnapshot';
+import { createAssetImportManifest, validateAssetManifest } from './worldLibrary/AssetImportManifest';
+import type { WorldAssetImportManifest } from './worldLibrary/AssetImportManifest';
 
 // ── Chunk system imports ───────────────────────────────────────────────────────
 import { RealityMonitor, buildRealityMonitorHTML, updateMonitorPanels } from './ui/RealityMonitor';
@@ -1366,7 +1368,18 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
     const world = (window as unknown as {
       infiniteWorld?: { capturePortableWorldSnapshot: () => WorldEditorSnapshot }
     }).infiniteWorld;
-    return world?.capturePortableWorldSnapshot();
+    if (!world) return undefined;
+    const snapshot = world.capturePortableWorldSnapshot();
+    const manifest = (window as unknown as { worldAssetManifest?: WorldAssetImportManifest }).worldAssetManifest
+      ?? createAssetImportManifest();
+    if (!manifest || !Array.isArray(manifest.entries)) {
+      throw new Error('World asset provenance manifest is malformed');
+    }
+    const validation = validateAssetManifest(manifest);
+    if (!validation.valid) {
+      throw new Error(`World asset provenance manifest is invalid: ${validation.errors.join('; ')}`);
+    }
+    return { ...snapshot, assetManifest: structuredClone(manifest) };
   },
   restoreWorldEditorSnapshot: snapshot => {
     const world = (window as unknown as {
@@ -1375,7 +1388,19 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
     if (!world && snapshot) {
       throw new Error('Infinite World renderer is not initialized; cannot restore its portable snapshot');
     }
+    const manifest = snapshot?.assetManifest ?? createAssetImportManifest();
+    if (!manifest || !Array.isArray(manifest.entries)) {
+      throw new Error('Imported world asset provenance manifest is malformed');
+    }
+    const validation = validateAssetManifest(manifest);
+    if (!validation.valid) {
+      throw new Error(`Imported world asset provenance manifest is invalid: ${validation.errors.join('; ')}`);
+    }
     world?.restorePortableWorldSnapshot(snapshot);
+    // Preserve source/licensing metadata as inert references. Import never
+    // fetches URLs or executes a GLTF loader without a separate user action.
+    (window as unknown as { worldAssetManifest?: WorldAssetImportManifest }).worldAssetManifest =
+      structuredClone(manifest);
   },
   persistWorldEditorSnapshot: () => {
     const world = (window as unknown as {
