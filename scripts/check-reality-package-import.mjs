@@ -159,6 +159,7 @@ assert.throws(
 );
 
 const editorSource = await readFile(new URL('src/ui/LawProcessEditor.tsx', root), 'utf8');
+const mainSource = await readFile(new URL('src/main.ts', root), 'utf8');
 const worldSaveSource = await readFile(new URL('src/world/save/WorldSaveSystem.ts', root), 'utf8');
 const realityPackageSource = await readFile(new URL('src/creator/RealityPackage.ts', root), 'utf8');
 const packageSerializerSource = await readFile(new URL('src/creator/PackageSerializer.ts', root), 'utf8');
@@ -185,6 +186,12 @@ assert.ok(editorSource.includes("runAtStepBoundary: <T>(operation: () => T) => P
   'Creator Studio package capture must expose the engine step-boundary contract');
 assert.ok(editorSource.includes("await simulation.runAtStepBoundary(() => this.buildPackage())"),
   'Creator Studio export must capture state at a coherent simulation boundary');
+assert.ok(mainSource.includes("exportWorldPackage: name => saveSystem.exportRealityPackage(name)"),
+  'the primary Creator Studio export button must delegate to WorldSaveSystem full-world capture');
+assert.ok(editorSource.includes("await this.options.exportWorldPackage(packageName)"),
+  'Creator Studio must use the complete application export callback when available');
+assert.ok(editorSource.includes("await simulation.runAtStepBoundary(() => this.buildPackage())"),
+  'standalone Creator Studio usage must retain a coherent step-boundary fallback');
 assert.ok(editorSource.includes("simulationTicks: sim.tick"),
   'new Creator Studio packages must preserve their simulation clock');
 assert.ok(editorSource.includes("pkg.metadata.simulationTicks !== undefined") &&
