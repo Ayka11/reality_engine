@@ -142,8 +142,10 @@ export function bootstrapInfiniteWorld() {
     source: string,
     expected: { width: number; height: number; fieldsPerCell: number },
     bridge: {
-      capture: () => { buffer: Float32Array; tick: number }
+      capture: () => unknown
       apply: (buffer: Float32Array, tick: number) => void
+      restore: (snapshot: unknown) => void
+      beforeApply?: () => void
     },
   ) => {
     const decodedJson = JSON.parse(source) as unknown
@@ -159,13 +161,14 @@ export function bootstrapInfiniteWorld() {
     ;(window as any).validatePortableWorldEditorSnapshot(candidate.worldEditor)
 
     try {
+      bridge.beforeApply?.()
       bridge.apply(candidate.buffer, candidate.tick)
       ;(window as any).restorePortableWorldEditorSnapshot(candidate.worldEditor)
       ;(window as any).persistPortableWorldEditorSnapshot()
       return { legacy: candidate.legacy, tick: candidate.tick }
     } catch (error) {
       const rollbackErrors: unknown[] = []
-      try { bridge.apply(previousGrid.buffer, previousGrid.tick) } catch (rollbackError) {
+      try { bridge.restore(previousGrid) } catch (rollbackError) {
         rollbackErrors.push(new Error(`Finite simulation rollback failed: ${String(rollbackError)}`))
       }
       try {
