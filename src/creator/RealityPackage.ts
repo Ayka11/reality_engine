@@ -13,6 +13,7 @@ import type { EconomicSystemSnapshot } from '../simulation/EconomicSystem';
 import type { MetaLawEvolutionSnapshot } from '../simulation/MetaLawEvolution';
 import type { CosmologicalSimSnapshot } from '../simulation/CosmologicalSim';
 import type { SceneDirectorSnapshot } from '../ai/SceneDirector';
+import type { WorldEditorSnapshot } from '../infinity/WorldEditorSnapshot';
 
 export interface RealityPackageManifest {
   version: string;
@@ -107,6 +108,8 @@ export interface RealityPackage {
   lawEngineState?: LawEngineSnapshot;
   /** Complete optional portable runtime state; absent in legacy packages. */
   runtimeState?: RealityPackageRuntimeState;
+  /** Authoritative InfiniteWorldRenderer scene/terrain/surface state. */
+  worldEditor?: WorldEditorSnapshot;
   processes: ProcessSnapshot[];
   metadata: RealityPackageMetadata;
 }
