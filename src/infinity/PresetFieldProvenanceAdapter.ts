@@ -63,7 +63,25 @@ export class PresetFieldProvenanceAdapter {
       delta: input.delta,
       metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id, preset: input.preset, execution: input.execution, region: input.region },
     }
-    const committed = this.field.apply(mutation)
-    return { preset: input.preset, execution: input.execution, tick: input.tick, fieldMutationId: committed.id, provenanceEventId: event.id }
+    try {
+      const committed = this.field.apply(mutation)
+      return {
+        preset: input.preset,
+        execution: input.execution,
+        tick: input.tick,
+        fieldMutationId: committed.id,
+        provenanceEventId: event.id,
+      }
+    } catch (error) {
+      // A provider can reject data during its clone/commit step after the
+      // preset event is recorded. Keep provenance and field state atomic.
+      if (!this.provenance.rollbackLast(event.id)) {
+        throw new AggregateError(
+          [error],
+          'Preset field mutation failed and its provenance event could not be rolled back',
+        )
+      }
+      throw error
+    }
   }
 }

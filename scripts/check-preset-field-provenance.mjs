@@ -13,6 +13,8 @@ assert.ok(adapter.includes("kind: 'preset'"));
 assert.ok(adapter.includes('never invents physical field values'));
 assert.ok(adapter.includes('Preset field delta requires an explicit spatial region'));
 assert.ok(adapter.includes('Preset field region must have finite coordinates and a positive radius'));
+assert.ok(adapter.includes('this.provenance.rollbackLast(event.id)'),
+  'provider failures after provenance record must roll back the provisional preset event');
 
 const compiled=ts.transpileModule(adapter,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
 const module={exports:{}};
@@ -66,8 +68,27 @@ providerSource=providerSource
 const providerModule=await import('data:text/javascript;base64,'+Buffer.from(providerSource).toString('base64'));
 const realBase={sample:()=>({energy:1,density:.2,information:1,entropy:.1,temperature:1,biology:.2,material:0})};
 const realField=new providerModule.MutableWorldFieldProvider(realBase);
-const realProvenance={record(stage,payload){const event={id:'real-event-'+(events.length+1),stage,payload};events.push(event);return event;}};
+const realProvenance={
+  record(stage,payload){const event={id:'real-event-'+(events.length+1),stage,payload};events.push(event);return event;},
+  rollbackLast(eventId){
+    if(events.at(-1)?.id!==eventId)return false;
+    events.pop();
+    return true;
+  },
+};
 const realAdapter=new PresetFieldProvenanceAdapter(realField,realProvenance);
+const eventsBeforeProviderFailure=events.length;
+assert.throws(()=>realAdapter.commit({
+  preset:'forest',
+  execution:'voxel',
+  delta:{biology:.2},
+  region:{x:0,y:0,z:0,radius:10},
+  metadata:{uncloneableCallback:()=>true},
+}),/clone/i,'provider clone failure must reject the preset mutation');
+assert.equal(realField.getMutationCount(),0,
+  'provider clone failure must not create an authoritative field mutation');
+assert.equal(events.length,eventsBeforeProviderFailure,
+  'provider clone failure must roll back the provisional preset provenance event');
 realAdapter.commit({preset:'forest',execution:'voxel',delta:{biology:.2,energy:.2},region:{x:0,y:0,z:0,radius:10}});
 const centerSample=realField.sample(0,0,0);
 const edgeSample=realField.sample(0,0,10);
