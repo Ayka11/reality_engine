@@ -80,7 +80,8 @@
     "test:field-physics-crystallization": "npx --yes tsx scripts/check-field-physics-crystallization.ts",
     "test:field-physics-radiation": "npx --yes tsx scripts/check-field-physics-radiation.ts",
     "test:field-physics-rotation": "npx --yes tsx scripts/check-field-physics-rotation.ts",
-    "benchmark:world-object-index": "node scripts/benchmark-world-object-index.mjs"
+    "benchmark:world-object-index": "node scripts/benchmark-world-object-index.mjs",
+    "test:reality-graph-validation": "node scripts/check-reality-graph-validation.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
