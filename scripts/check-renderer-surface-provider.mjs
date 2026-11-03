@@ -29,10 +29,13 @@ assert.ok(
 );
 assert.match(rendererSource, /buildWaterSurfaceMeshData\(\{ cx: chunk\.cx, cz: chunk\.cz, water \}, waterLevel\)/)
 assert.match(rendererSource, /const deformedHeight = surface\.height \+ this\.terrainDeformations\.sampleDelta\(x, z\)/)
-const runtimeRendererSource = rendererSource.replace(
-  /capturePortableWorldSnapshot[\\s\\S]*?saveWorld\\(options: \\{ checkpoint\\?: boolean \\} = \\{\\}\\)/,
-  '',
-)
+const worldEditorSnapshotStart = rendererSource.indexOf('capturePortableWorldSnapshot(): WorldEditorSnapshot')
+const worldEditorSnapshotEnd = rendererSource.indexOf('  saveWorld(options:', worldEditorSnapshotStart)
+assert.ok(worldEditorSnapshotStart >= 0 && worldEditorSnapshotEnd > worldEditorSnapshotStart,
+  'portable-world capture/restore methods must have a bounded renderer source section')
+const runtimeRendererSource =
+  rendererSource.slice(0, worldEditorSnapshotStart) +
+  rendererSource.slice(worldEditorSnapshotEnd)
 assert.equal(runtimeRendererSource.includes('this.generator.seaLevel'), false,
   'hydrology, route placement and flood analysis must consume the selected surface water level; generator sea level is allowed only in portable generator-state serialization')
 assert.equal(rendererSource.includes('this.generator.sampleHeight(x, z)'), false, 'terrain vertices must not bypass the selected surface source')
