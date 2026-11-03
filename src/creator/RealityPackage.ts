@@ -44,6 +44,8 @@ export interface RealityPackageMetadata {
   entropy: number;
   complexityScore: number;
   dominantLaws: string[];
+  /** Simulation clock at export; optional for backward compatibility. */
+  simulationTicks?: number;
 }
 
 export interface RealityPackage {
