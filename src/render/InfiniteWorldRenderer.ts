@@ -734,9 +734,6 @@ export class InfiniteWorldRenderer {
     }
     this.saveWorld({ checkpoint: false })
     failures.push(...this.lastPersistenceFailures)
-    if (!this.persistence.saveProvenanceState(runtimeProvenance.getTrace())) {
-      failures.push('runtime provenance trace')
-    }
     if (failures.length > 0) {
       throw new AggregateError(
         failures.map(label => new Error(`Could not persist ${label}`)),
