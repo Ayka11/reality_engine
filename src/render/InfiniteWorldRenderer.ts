@@ -20,7 +20,7 @@ import { MutableWorldFieldProvider, type WorldFieldMutation } from '../infinity/
 import { LegacySculptRuntimeAdapter } from '../infinity/LegacySculptRuntimeAdapter'
 import { AuthoritativeSculptTransactionCoordinator } from '../infinity/AuthoritativeSculptTransactionCoordinator'
 import type { LegacyVoxelCoordinate } from '../infinity/LegacyScientificFieldBridge'
-import { runtimeProvenance } from '../infinity/RuntimeProvenance'
+import { RuntimeProvenance, runtimeProvenance } from '../infinity/RuntimeProvenance'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { WorldConstructionContract } from '../infinity/WorldConstructionContract'
 import { GeneratorWorldSurfaceProvider, isBelowWorldWaterSurface, resolveBridgeDeckHeight, resolveWorldWaterLevel, restoreWorldSurfaceProvider, serializeWorldSurfaceProvider, type WorldSurfaceProvider, type WorldSurfaceProviderSnapshot } from '../infinity/WorldSurfaceProvider'
