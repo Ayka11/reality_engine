@@ -1,6 +1,18 @@
 import type { RealityGraph } from './types';
 import type { EntityLayerSnapshot } from '../simulation/EntityLayer';
 import type { LawEngineSnapshot } from '../laws/LawEngine';
+import type { AgentSystemSnapshot } from '../simulation/AgentSystem';
+import type { CivilizationSystemSnapshot } from '../simulation/CivilizationSystem';
+import type { ChemLayerSnapshot } from '../chemistry/ChemLayer';
+import type { WorldEventsSnapshot } from '../world/WorldEvents';
+import type { CausalGraphSnapshot } from '../simulation/CausalGraph';
+import type { ClimateSystemSnapshot } from '../simulation/ClimateSystem';
+import type { MultiScaleSystemSnapshot } from '../simulation/MultiScaleSystem';
+import type { LanguageSystemSnapshot } from '../simulation/LanguageEmergence';
+import type { EconomicSystemSnapshot } from '../simulation/EconomicSystem';
+import type { MetaLawEvolutionSnapshot } from '../simulation/MetaLawEvolution';
+import type { CosmologicalSimSnapshot } from '../simulation/CosmologicalSim';
+import type { SceneDirectorSnapshot } from '../ai/SceneDirector';
 
 export interface RealityPackageManifest {
   version: string;
@@ -38,6 +50,25 @@ export interface ProcessSnapshot {
   parameters: Record<string, unknown>;
 }
 
+/** Portable runtime snapshots mirrored from WorldRuntimeStateSnapshot. */
+export interface RealityPackageRuntimeState {
+  entityLayer?: EntityLayerSnapshot;
+  agents?: AgentSystemSnapshot;
+  civilizations?: CivilizationSystemSnapshot;
+  laws?: LawEngineSnapshot;
+  chemistry?: ChemLayerSnapshot;
+  worldEvents?: WorldEventsSnapshot;
+  causal?: CausalGraphSnapshot;
+  previousEnergy?: Float32Array;
+  climate?: ClimateSystemSnapshot;
+  multiScale?: MultiScaleSystemSnapshot;
+  language?: LanguageSystemSnapshot;
+  economy?: EconomicSystemSnapshot;
+  metaLawEvolution?: MetaLawEvolutionSnapshot;
+  cosmologicalSim?: CosmologicalSimSnapshot;
+  director?: SceneDirectorSnapshot;
+}
+
 export interface RealityPackageMetadata {
   gridSize: { x: number; y: number; z: number };
   totalEnergy: number;
@@ -58,6 +89,8 @@ export interface RealityPackage {
   laws: LawSnapshot[];
   /** Includes manual overrides, graph bindings and deterministic law RNG state. */
   lawEngineState?: LawEngineSnapshot;
+  /** Complete optional portable runtime state; absent in legacy packages. */
+  runtimeState?: RealityPackageRuntimeState;
   processes: ProcessSnapshot[];
   metadata: RealityPackageMetadata;
 }
