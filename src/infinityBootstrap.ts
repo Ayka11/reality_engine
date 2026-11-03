@@ -5,8 +5,10 @@ import { settlementGrowthModel } from './worldLibrary/SettlementGrowthModel'
 import { civilizationRuntime } from './worldLibrary/CivilizationRuntime'
 import { productionInfrastructureRuntime } from './worldLibrary/ProductionInfrastructureRuntime'
 import { worldLibraryGenerationPlanner } from './worldLibrary/WorldLibraryGenerationPlanner'
-import { createAssetImportManifest } from './worldLibrary/AssetImportManifest'
+import { createAssetImportManifest, validateAssetManifest } from './worldLibrary/AssetImportManifest'
 import type { WorldAssetImportManifest } from './worldLibrary/AssetImportManifest'
+import type { WorldEditorSnapshot } from './infinity/WorldEditorSnapshot'
+import { encodeActiveWorldPackage, decodeActiveWorldPackage } from './infinity/ActiveWorldPackage'
 import type { DiscoveredAsset } from './worldLibrary/AssetDiscovery'
 import { importDiscoveredAsset } from './worldLibrary/AssetImportService'
 import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, visualKindToWorldObject, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
@@ -84,12 +86,112 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldLibrarySearch = (tags: string[] = [], category?: string) =>
     findWorldLibraryEntries(tags, category as any)
   ;(window as any).worldLibraryGet = (id: string) => resolveWorldLibraryEntry(id)
-  ;(window as any).worldAssetManifest = createAssetImportManifest()
+  const persistedAssetManifest = world.loadAssetManifestSnapshot()
+  const persistedAssetValidation = persistedAssetManifest
+    ? validateAssetManifest(persistedAssetManifest)
+    : { valid: false, errors: ['No saved asset provenance manifest'] }
+  const initialAssetManifest = persistedAssetValidation.valid
+    ? structuredClone(persistedAssetManifest!)
+    : createAssetImportManifest()
+  ;(window as any).worldAssetManifest = initialAssetManifest
+  if (!persistedAssetValidation.valid && persistedAssetManifest) {
+    world.persistAssetManifestSnapshot(initialAssetManifest)
+  }
+
+  const currentAssetManifest = (): WorldAssetImportManifest => {
+    const manifest = (window as any).worldAssetManifest as WorldAssetImportManifest
+    const validation = validateAssetManifest(manifest)
+    if (!validation.valid) {
+      throw new TypeError(`World asset provenance manifest is invalid: ${validation.errors.join('; ')}`)
+    }
+    return structuredClone(manifest)
+  }
+
+  ;(window as any).capturePortableWorldEditorSnapshot = (): WorldEditorSnapshot => ({
+    ...world.capturePortableWorldSnapshot(),
+    assetManifest: currentAssetManifest(),
+  })
+  ;(window as any).validatePortableWorldEditorSnapshot = (snapshot?: WorldEditorSnapshot): void => {
+    if (snapshot?.assetManifest) {
+      const validation = validateAssetManifest(snapshot.assetManifest)
+      if (!validation.valid) {
+        throw new TypeError(`Imported asset provenance manifest is invalid: ${validation.errors.join('; ')}`)
+      }
+    }
+    world.validatePortableWorldSnapshot(snapshot)
+  }
+  ;(window as any).restorePortableWorldEditorSnapshot = (snapshot?: WorldEditorSnapshot): void => {
+    const manifest = snapshot?.assetManifest ?? createAssetImportManifest()
+    const validation = validateAssetManifest(manifest)
+    if (!validation.valid) {
+      throw new TypeError(`Imported asset provenance manifest is invalid: ${validation.errors.join('; ')}`)
+    }
+    world.validatePortableWorldSnapshot(snapshot)
+    world.restorePortableWorldSnapshot(snapshot)
+    ;(window as any).worldAssetManifest = structuredClone(manifest)
+  }
+  ;(window as any).persistPortableWorldEditorSnapshot = (): void => {
+    world.persistPortableWorldSnapshot(currentAssetManifest())
+  }
+
+  ;(window as any).encodeActiveRealityPackage = (grid: {
+    width: number; height: number; fieldsPerCell: number; tick: number; buffer: Float32Array
+  }): string => encodeActiveWorldPackage(grid, (window as any).capturePortableWorldEditorSnapshot())
+
+  ;(window as any).importActiveRealityPackage = (
+    source: string,
+    expected: { width: number; height: number; fieldsPerCell: number },
+    bridge: {
+      capture: () => { buffer: Float32Array; tick: number }
+      apply: (buffer: Float32Array, tick: number) => void
+    },
+  ) => {
+    const decodedJson = JSON.parse(source) as unknown
+    const candidate = decodeActiveWorldPackage(decodedJson, expected)
+    const previousGrid = bridge.capture()
+    const previousWorld = (window as any).capturePortableWorldEditorSnapshot() as WorldEditorSnapshot
+    const previousManifest = currentAssetManifest()
+    let candidateManifest = candidate.worldEditor?.assetManifest ?? createAssetImportManifest()
+    const candidateValidation = validateAssetManifest(candidateManifest)
+    if (!candidateValidation.valid) {
+      throw new TypeError(`Imported asset provenance manifest is invalid: ${candidateValidation.errors.join('; ')}`)
+    }
+    ;(window as any).validatePortableWorldEditorSnapshot(candidate.worldEditor)
+
+    try {
+      bridge.apply(candidate.buffer, candidate.tick)
+      ;(window as any).restorePortableWorldEditorSnapshot(candidate.worldEditor)
+      ;(window as any).persistPortableWorldEditorSnapshot()
+      return { legacy: candidate.legacy, tick: candidate.tick }
+    } catch (error) {
+      const rollbackErrors: unknown[] = []
+      try { bridge.apply(previousGrid.buffer, previousGrid.tick) } catch (rollbackError) {
+        rollbackErrors.push(new Error(`Finite simulation rollback failed: ${String(rollbackError)}`))
+      }
+      try {
+        ;(window as any).restorePortableWorldEditorSnapshot({
+          ...previousWorld,
+          assetManifest: previousManifest,
+        })
+        ;(window as any).persistPortableWorldEditorSnapshot()
+      } catch (rollbackError) {
+        rollbackErrors.push(new Error(`Infinite World rollback failed: ${String(rollbackError)}`))
+      }
+      if (rollbackErrors.length > 0) {
+        throw new AggregateError([error, ...rollbackErrors],
+          'Reality package import failed and one or more rollback operations also failed')
+      }
+      throw error
+    }
+  }
+
   ;(window as any).worldAssetImport = (asset: DiscoveredAsset, semanticEntryId?: string) => {
     const manifest = (window as any).worldAssetManifest as WorldAssetImportManifest
     const result = importDiscoveredAsset(asset, manifest, semanticEntryId)
     if (result.accepted && result.manifestEntry) {
       manifest.entries = [...manifest.entries.filter((entry) => entry.id !== result.manifestEntry!.id), result.manifestEntry]
+      const persisted = world.persistAssetManifestSnapshot(manifest)
+      if (!persisted) console.warn('[persistence] Asset provenance manifest could not be saved')
     }
     return result
   }
