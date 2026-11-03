@@ -75,6 +75,11 @@ export class UnifiedSculptTransactionCoordinator {
     }
     this.redoStack.pop(); this.undoStack.push(record); return record.label;
   }
+  /** Invalidate mixed sculpt history when the active world is replaced. */
+  clear(): void {
+    this.undoStack = [];
+    this.redoStack = [];
+  }
   getState() {
     return { undo: this.undoStack.length, redo: this.redoStack.length,
       undoLabels: this.undoStack.map(record => record.label), redoLabels: this.redoStack.map(record => record.label) };
