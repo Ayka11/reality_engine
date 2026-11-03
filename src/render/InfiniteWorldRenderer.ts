@@ -22,6 +22,7 @@ import { LegacySculptRuntimeAdapter } from '../infinity/LegacySculptRuntimeAdapt
 import { AuthoritativeSculptTransactionCoordinator } from '../infinity/AuthoritativeSculptTransactionCoordinator'
 import type { LegacyVoxelCoordinate } from '../infinity/LegacyScientificFieldBridge'
 import { RuntimeProvenance, runtimeProvenance } from '../infinity/RuntimeProvenance'
+import type { RuntimeProvenanceTrace } from '../infinity/RuntimeProvenance'
 import { WorldDecisionLayer, DEFAULT_DECISION_WEIGHTS, type RouteProfile } from '../infinity/WorldDecisionLayer'
 import { WorldConstructionContract } from '../infinity/WorldConstructionContract'
 import { GeneratorWorldSurfaceProvider, isBelowWorldWaterSurface, resolveBridgeDeckHeight, resolveWorldWaterLevel, restoreWorldSurfaceProvider, serializeWorldSurfaceProvider, type WorldSurfaceProvider, type WorldSurfaceProviderSnapshot } from '../infinity/WorldSurfaceProvider'
@@ -361,6 +362,18 @@ export class InfiniteWorldRenderer {
       try { this.terrainDeformations.restore(persistedTerrain) } catch { this.persistence.deleteTerrainDeformationState() }
     }
     const persistedField = this.persistence.loadFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
+    const persistedProvenance = this.persistence.loadProvenanceState<RuntimeProvenanceTrace>()
+    if (persistedProvenance) {
+      try {
+        runtimeProvenance.restore(persistedProvenance)
+      } catch (error) {
+        console.warn('[persistence] Could not restore runtime provenance; the current trace was reset', error)
+        runtimeProvenance.reset()
+        this.persistence.deleteProvenanceState()
+      }
+    } else {
+      runtimeProvenance.reset()
+    }
     if (persistedField) {
       try {
         this.authoritativeField.restore(persistedField)
@@ -703,6 +716,10 @@ export class InfiniteWorldRenderer {
     return this.persistence.loadAssetManifestState<WorldAssetImportManifest>()
   }
 
+  loadProvenanceSnapshot(): RuntimeProvenanceTrace | null {
+    return this.persistence.loadProvenanceState<RuntimeProvenanceTrace>()
+  }
+
   persistAssetManifestSnapshot(assetManifest: WorldAssetImportManifest): boolean {
     return this.persistence.saveAssetManifestState(assetManifest)
   }
@@ -716,6 +733,9 @@ export class InfiniteWorldRenderer {
     }
     this.saveWorld({ checkpoint: false })
     failures.push(...this.lastPersistenceFailures)
+    if (!this.persistence.saveProvenanceState(runtimeProvenance.getTrace())) {
+      failures.push('runtime provenance trace')
+    }
     if (failures.length > 0) {
       throw new AggregateError(
         failures.map(label => new Error(`Could not persist ${label}`)),
@@ -730,6 +750,9 @@ export class InfiniteWorldRenderer {
     const failedPersistenceOperations: string[] = []
     if (!this.persistAuthoritativeFieldState()) failedPersistenceOperations.push('authoritative field state')
     if (!this.persistTerrainDeformationState()) failedPersistenceOperations.push('terrain deformation state')
+    if (!this.persistence.saveProvenanceState(runtimeProvenance.getTrace())) {
+      failedPersistenceOperations.push('runtime provenance trace')
+    }
     if (options.checkpoint !== false) {
       const fieldCheckpointSaved = this.persistence.saveFieldCheckpoint(fieldSnapshot)
       if (!fieldCheckpointSaved) {
@@ -829,6 +852,7 @@ export class InfiniteWorldRenderer {
       console.warn('[persistence] Could not remove every saved world record; some objects or edits may return after reload')
     }
     this.terrainDeformations.clear()
+    runtimeProvenance.reset()
     this.refreshTerrainPatches()
     this.objects.clear()
     this.syncObjects()
