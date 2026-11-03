@@ -35,6 +35,8 @@ interface LawProcessEditorOptions {
   };
   /** Route application exports through WorldSaveSystem for full runtime/chunk coverage. */
   exportWorldPackage?: (name: string) => Promise<Blob>;
+  /** Route application imports through the same complete, transactional restore path. */
+  importWorldPackage?: (file: File) => Promise<void>;
   thumbnailCanvas?: HTMLCanvasElement | null;
   processSystem?: { setActiveProcesses?: (processes: unknown[]) => void };
 }
@@ -103,6 +105,16 @@ export class LawProcessEditor {
 
   async importPackageFile(file: File): Promise<void> {
     try {
+      if (this.options.importWorldPackage) {
+        // The application World Save System restores the complete runtime,
+        // sparse chunks, graph, simulation clock and engine-owned field atomically.
+        await this.options.importWorldPackage(file);
+        this.status!.textContent = `Imported ${file.name}.`;
+        return;
+      }
+
+      // Keep standalone Creator Studio instances functional without the app's
+      // World Save System integration.
       const pkg = await this.serializer.unpack(file);
       this.applyPackage(pkg);
       this.status!.textContent = `Imported ${pkg.manifest.name}.`;
