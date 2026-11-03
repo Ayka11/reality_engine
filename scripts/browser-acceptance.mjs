@@ -1619,6 +1619,49 @@ try {
       JSON.stringify({ before: fieldHistoryBefore, after: fieldHistoryAfterCommit }));
   }
 
+  const provenanceBeforeRejectedMutation = await page.evaluate(() => {
+    const state = window.worldFieldState();
+    return {
+      mutationCount: state.field.mutationCount,
+      version: state.field.version,
+      eventIds: state.provenance.events.map(event => event.id),
+      latestWorldState: state.provenance.latestWorldState ?? null,
+    };
+  });
+  const rejectedFieldMutation = await page.evaluate((probe) => {
+    try {
+      window.worldFieldMutate?.({
+        kind: "brush",
+        x: probe.x,
+        y: probe.y,
+        z: probe.z,
+        radius: -1,
+        delta: { energy: 1 },
+        metadata: { acceptance: "rejected-field-mutation-must-not-enter-provenance" },
+      });
+      return { rejected: false };
+    } catch (error) {
+      return { rejected: true, message: String(error?.message ?? error) };
+    }
+  }, fieldProbe);
+  const provenanceAfterRejectedMutation = await page.evaluate(() => {
+    const state = window.worldFieldState();
+    return {
+      mutationCount: state.field.mutationCount,
+      version: state.field.version,
+      eventIds: state.provenance.events.map(event => event.id),
+      latestWorldState: state.provenance.latestWorldState ?? null,
+    };
+  });
+  if (!rejectedFieldMutation.rejected ||
+      provenanceAfterRejectedMutation.mutationCount !== provenanceBeforeRejectedMutation.mutationCount ||
+      provenanceAfterRejectedMutation.version !== provenanceBeforeRejectedMutation.version ||
+      JSON.stringify(provenanceAfterRejectedMutation.eventIds) !== JSON.stringify(provenanceBeforeRejectedMutation.eventIds) ||
+      JSON.stringify(provenanceAfterRejectedMutation.latestWorldState) !== JSON.stringify(provenanceBeforeRejectedMutation.latestWorldState)) {
+    throw new Error("Rejected authoritative field mutation must not leave field/provenance state behind: " +
+      JSON.stringify({ rejectedFieldMutation, before: provenanceBeforeRejectedMutation, after: provenanceAfterRejectedMutation }));
+  }
+
   const renderedFieldColorAfter = await readRenderedFieldColor();
   if (!renderedFieldColorAfter.nearest ||
       renderedFieldColorAfter.nearest.distance > 0.01 ||

@@ -153,20 +153,33 @@ export class InfiniteWorldRenderer {
   }
 
   applyAuthoritativeFieldMutation(input: Parameters<MutableWorldFieldProvider['apply']>[0]) {
-    const transaction = this.authoritativeSculptTransactions.commit(() => {
-      const event = runtimeProvenance.record(input.kind === 'composer' ? 'world-state' : input.kind, {
-        ...input.metadata,
-        mutationKind: input.kind,
-        x: input.x,
-        y: input.y,
-        z: input.z,
-        radius: input.radius,
+    let provenanceEventId: string | undefined
+    let transaction: ReturnType<AuthoritativeSculptTransactionCoordinator['commit']>
+    try {
+      transaction = this.authoritativeSculptTransactions.commit(() => {
+        const event = runtimeProvenance.record(input.kind === 'composer' ? 'world-state' : input.kind, {
+          ...input.metadata,
+          mutationKind: input.kind,
+          x: input.x,
+          y: input.y,
+          z: input.z,
+          radius: input.radius,
+        })
+        provenanceEventId = event.id
+        return this.authoritativeField.apply({
+          ...input,
+          metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id },
+        })
       })
-      return this.authoritativeField.apply({
-        ...input,
-        metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id },
-      })
-    })
+    } catch (error) {
+      if (provenanceEventId && !runtimeProvenance.rollbackLast(provenanceEventId)) {
+        throw new AggregateError(
+          [error],
+          'Authoritative field mutation failed and its provenance event could not be rolled back',
+        )
+      }
+      throw error
+    }
     this.notifyAuthoritativeSculptHistoryChanged()
     this.refreshTerrainPatches()
     this.persistAuthoritativeFieldState()

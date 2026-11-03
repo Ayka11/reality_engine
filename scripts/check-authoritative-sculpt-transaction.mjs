@@ -50,6 +50,32 @@ async function load(path) {
 
 const { MutableWorldFieldProvider } = await import(await load("src/infinity/MutableWorldFieldProvider.ts"));
 const { AuthoritativeSculptTransactionCoordinator } = await import(await load("src/infinity/AuthoritativeSculptTransactionCoordinator.ts"));
+const { RuntimeProvenance } = await import(await load("src/infinity/RuntimeProvenance.ts"));
+
+const provenance = new RuntimeProvenance()
+const provenanceRoot = provenance.record("preset", { name: "baseline" })
+const previousWorldState = provenance.record("world-state", { seed: "stable" })
+const rejectedWorldState = provenance.record("world-state", { seed: "rejected" })
+assert.equal(provenance.rollbackLast(rejectedWorldState.id), true,
+  "a failed last world-state event must be removable")
+assert.deepEqual(provenance.getTrace().events.map(event => event.id),
+  [provenanceRoot.id, previousWorldState.id])
+assert.deepEqual(provenance.getTrace().latestWorldState, { seed: "stable" },
+  "rolling back a world-state event must restore the previous latestWorldState")
+assert.equal(provenance.rollbackLast(provenanceRoot.id), false,
+  "provenance rollback must refuse to remove a non-latest event")
+const rejectedBrush = provenance.record("brush", { source: "invalid-input" })
+assert.equal(provenance.rollbackLast(rejectedBrush.id), true)
+assert.deepEqual(provenance.getTrace().latestWorldState, { seed: "stable" },
+  "rolling back a non-world-state event must preserve latestWorldState")
+const nextCommittedEvent = provenance.record("brush", { source: "valid-input" })
+assert.equal(nextCommittedEvent.parentId, previousWorldState.id,
+  "the next committed event must not inherit a parent reference to a rejected event")
+const isolatedProvenance = new RuntimeProvenance()
+const onlyWorldState = isolatedProvenance.record("world-state", { seed: "temporary" })
+assert.equal(isolatedProvenance.rollbackLast(onlyWorldState.id), true)
+assert.equal(isolatedProvenance.getTrace().latestWorldState, undefined,
+  "rolling back the only world-state event must clear latestWorldState")
 
 const base = {
   id: "test-base",

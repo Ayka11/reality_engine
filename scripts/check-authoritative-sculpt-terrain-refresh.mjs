@@ -62,6 +62,9 @@ assert.doesNotMatch(worldEnvironment, /this\.generator\.sampleField\(x, y, z\)/,
   "environment sampling must not bypass committed authoritative field mutations");
 
 const authoritativeMutation = methodBody("applyAuthoritativeFieldMutation");
+assert.match(authoritativeMutation, /let provenanceEventId: string \| undefined/)
+assert.match(authoritativeMutation, /catch \(error\)[\s\S]*?runtimeProvenance\.rollbackLast\(provenanceEventId\)/,
+  "failed authoritative mutations must remove their provisional provenance event")
 assert.match(authoritativeMutation, /this\.refreshTerrainPatches\(\)/,
   "the canonical authoritative mutation path must refresh the renderer");
 

@@ -56,6 +56,23 @@ export class RuntimeProvenance {
     return event
   }
 
+  rollbackLast(eventId: string): boolean {
+    const last = this.trace.events[this.trace.events.length - 1]
+    if (!last || last.id !== eventId) return false
+
+    this.trace.events.pop()
+    if (last.stage === 'world-state') {
+      const previousWorldState = [...this.trace.events].reverse()
+        .find(event => event.stage === 'world-state')
+      if (previousWorldState) {
+        this.trace.latestWorldState = { ...previousWorldState.payload }
+      } else {
+        delete this.trace.latestWorldState
+      }
+    }
+    return true
+  }
+
   getTrace(): RuntimeProvenanceTrace {
     return {
       schemaVersion: this.trace.schemaVersion,
