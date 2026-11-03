@@ -511,8 +511,10 @@ self.onmessage = (e: MessageEvent) => {
   if (cmd === 'restoreBegin') {
     const restoreId = data?.restoreId
     const expected = data?.expected
-    if (!Number.isInteger(restoreId) || restoreId < 1 ||
-        !Number.isInteger(expected) || expected < 0 || activeRestoreId !== null) {
+    const maximumChunkCount = (GRID_W / CX) * (GRID_H / CY) * (GRID_D / CZ)
+    if (!Number.isSafeInteger(restoreId) || restoreId < 1 ||
+        !Number.isSafeInteger(expected) || expected < 0 || expected > maximumChunkCount ||
+        activeRestoreId !== null) {
       ;(self as unknown as Worker).postMessage({
         cmd: 'restoreComplete',
         data: { restoreId, complete: false, reason: 'invalid-or-concurrent-restore', restoredChunkCount, expectedRestoreChunks },
