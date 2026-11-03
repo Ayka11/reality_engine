@@ -519,6 +519,7 @@ export class WorldSaveSystem {
       runtimeEntityLayer: snapshot.runtimeState?.entityLayer,
       laws: snapshot.activeLaws,
       lawEngineState: snapshot.runtimeState?.laws,
+      runtimeState: snapshot.runtimeState,
       processes: snapshot.activeProcesses,
       metadata: {
         gridSize: { x: snapshot.gridSize.width, y: snapshot.gridSize.height, z: snapshot.gridSize.depth },
@@ -543,10 +544,16 @@ export class WorldSaveSystem {
       activeProcesses: pkg.processes,
       entities: pkg.entities,
       civilizations: [],
-      runtimeState: {
-        entityLayer: pkg.runtimeEntityLayer,
-        laws: pkg.lawEngineState,
-      },
+      runtimeState: pkg.runtimeState
+        ? {
+            ...pkg.runtimeState,
+            entityLayer: pkg.runtimeState.entityLayer ?? pkg.runtimeEntityLayer,
+            laws: pkg.runtimeState.laws ?? pkg.lawEngineState,
+          }
+        : {
+            entityLayer: pkg.runtimeEntityLayer,
+            laws: pkg.lawEngineState,
+          },
       metadata: {
         totalEnergy: pkg.metadata.totalEnergy,
         entropy: pkg.metadata.entropy,
