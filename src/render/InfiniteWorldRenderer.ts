@@ -574,6 +574,9 @@ export class InfiniteWorldRenderer {
     if (persistedField) {
       try {
         this.authoritativeField.restore(persistedField)
+        // A checkpoint restore replaces the authoritative state; older undo/redo
+        // snapshots no longer describe a valid transaction chain.
+        this.authoritativeSculptTransactions.clear()
         this.persistAuthoritativeFieldState()
         this.refreshTerrainPatches()
       } catch (error) {

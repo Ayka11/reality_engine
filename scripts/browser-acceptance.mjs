@@ -1769,6 +1769,13 @@ try {
     );
   }
 
+  const fieldHistoryAfterLoad = await page.evaluate(() =>
+    window.infiniteWorld.getLegacySculptAuthoritativeHistory());
+  if (fieldHistoryAfterLoad.undo !== 0 || fieldHistoryAfterLoad.redo !== 0) {
+    throw new Error("Loading an authoritative field checkpoint must invalidate stale undo/redo history: " +
+      JSON.stringify(fieldHistoryAfterLoad));
+  }
+
 
   // Seed a real worker chunk and persist its snapshot before a full page reload.
   // The later restore assertion intentionally uses a fresh JS runtime/empty memory Map.
