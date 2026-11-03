@@ -865,7 +865,7 @@ assert.ok(Math.abs(workerHighTemperature - denseHighTemperatureReference) < 1e-4
 // entropy, information, Bio-Potential, metabolism and local time.
 const integratedFieldInitial = createIntegratedFieldParityInitialCells()
 const integratedFieldReference = runDenseIntegratedFieldParityReference()
-const integratedFieldOrigin = { x: 121, y: 121, z: 61 }
+const integratedFieldOrigin = { x: 121, y: 121, z: 57 }
 const sparseFieldByDenseField: Record<number, number> = {
   0: F.E, 1: F.D, 2: F.I, 3: F.S, 4: F.T, 5: F.P,
   6: F.FX, 7: F.FY, 8: F.FZ, 9: F.TAU, 11: F.BIO,
