@@ -52,6 +52,9 @@ export class PackageSerializer {
       laws: pkg.laws,
       lawEngineState: pkg.lawEngineState,
     }));
+    if (pkg.runtimeState) {
+      zip.file('runtime-state.json', serializePackageJson(pkg.runtimeState));
+    }
     zip.file('processes.json', serializePackageJson(pkg.processes));
     zip.file('metadata/stats.json', serializePackageJson(pkg.metadata));
 
@@ -74,6 +77,14 @@ export class PackageSerializer {
     const metadata = await this.readJson(zip, 'metadata/stats.json');
     const voxelBin = await zip.file('voxel-state.bin')?.async('uint8array');
     if (!voxelBin) throw new Error('Reality package is missing voxel-state.bin.');
+    const runtimeStateFile = zip.file('runtime-state.json');
+    const runtimeState = runtimeStateFile
+      ? await this.readJson(zip, 'runtime-state.json')
+      : undefined;
+    if (runtimeState !== undefined &&
+        (!runtimeState || typeof runtimeState !== 'object' || Array.isArray(runtimeState))) {
+      throw new Error('Reality package runtime state envelope is invalid.');
+    }
 
     // Accept legacy package files whose entities/laws roots were arrays.
     const entityEnvelope = Array.isArray(entityPayload)
@@ -91,6 +102,7 @@ export class PackageSerializer {
       runtimeEntityLayer: entityEnvelope.runtimeEntityLayer,
       laws: lawEnvelope.laws,
       lawEngineState: lawEnvelope.lawEngineState,
+      runtimeState,
       processes,
       metadata,
     };
