@@ -145,7 +145,7 @@ export function bootstrapInfiniteWorld() {
       capture: () => unknown
       apply: (buffer: Float32Array, tick: number, causal: Array<{ tick: number; x: number; y: number; delta: number }>) => void
       restore: (snapshot: unknown) => void
-      beforeApply?: () => void
+      afterCommit?: (previousSnapshot: unknown) => void
     },
   ) => {
     const decodedJson = JSON.parse(source) as unknown
@@ -161,10 +161,10 @@ export function bootstrapInfiniteWorld() {
     ;(window as any).validatePortableWorldEditorSnapshot(candidate.worldEditor)
 
     try {
-      bridge.beforeApply?.()
       bridge.apply(candidate.buffer, candidate.tick, candidate.causal)
       ;(window as any).restorePortableWorldEditorSnapshot(candidate.worldEditor)
       ;(window as any).persistPortableWorldEditorSnapshot()
+      bridge.afterCommit?.(previousGrid)
       return { legacy: candidate.legacy, tick: candidate.tick }
     } catch (error) {
       const rollbackErrors: unknown[] = []
