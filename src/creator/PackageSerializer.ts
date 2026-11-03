@@ -28,24 +28,32 @@ function packageJsonReviver(_key: string, value: unknown): unknown {
   return new Float32Array(candidate.values as number[]);
 }
 
+export function serializePackageJson(value: unknown): string {
+  return JSON.stringify(value, packageJsonReplacer, 2);
+}
+
+export function parsePackageJson(value: string): unknown {
+  return JSON.parse(value, packageJsonReviver);
+}
+
 export class PackageSerializer {
   constructor(private thumbnailCanvas?: HTMLCanvasElement | null) {}
 
   async pack(pkg: RealityPackage): Promise<Blob> {
     const zip = new JSZip();
 
-    zip.file('manifest.json', JSON.stringify(pkg.manifest, packageJsonReplacer, 2));
-    zip.file('graph.json', JSON.stringify(pkg.graph, packageJsonReplacer, 2));
-    zip.file('entities.json', JSON.stringify({
+    zip.file('manifest.json', serializePackageJson(pkg.manifest));
+    zip.file('graph.json', serializePackageJson(pkg.graph));
+    zip.file('entities.json', serializePackageJson({
       entities: pkg.entities,
       runtimeEntityLayer: pkg.runtimeEntityLayer,
-    }, packageJsonReplacer, 2));
-    zip.file('laws-override.json', JSON.stringify({
+    }));
+    zip.file('laws-override.json', serializePackageJson({
       laws: pkg.laws,
       lawEngineState: pkg.lawEngineState,
-    }, packageJsonReplacer, 2));
-    zip.file('processes.json', JSON.stringify(pkg.processes, packageJsonReplacer, 2));
-    zip.file('metadata/stats.json', JSON.stringify(pkg.metadata, packageJsonReplacer, 2));
+    }));
+    zip.file('processes.json', serializePackageJson(pkg.processes));
+    zip.file('metadata/stats.json', serializePackageJson(pkg.metadata));
 
     const compressed = deflate(new Uint8Array(pkg.voxelState));
     zip.file('voxel-state.bin', compressed);
@@ -91,7 +99,7 @@ export class PackageSerializer {
   private async readJson(zip: JSZip, path: string): Promise<any> {
     const file = zip.file(path);
     if (!file) throw new Error(`Reality package is missing ${path}.`);
-    return JSON.parse(await file.async('string'), packageJsonReviver);
+    return parsePackageJson(await file.async('string')) as any;
   }
 
   private async captureThumbnail(): Promise<Blob | null> {
