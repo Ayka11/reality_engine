@@ -2140,14 +2140,19 @@ function clearSculptTransactionHistory(){
   window.clearChunkSculptHistory?.();
 }
 window.clearSculptTransactionHistory=clearSculptTransactionHistory;
-function pushUndo(){
+function pushUndoSnapshot(snapshot){
+  if(!(snapshot instanceof Float32Array)||snapshot.length!==buf.length){
+    throw new Error('Undo snapshot must match the active finite grid');
+  }
   // Presets and non-sculpt bulk edits use the legacy snapshot ring. Clear sculpt
   // history at that boundary so Undo never crosses an untracked mutation.
   clearSculptTransactionHistory();
-  const snap=new Float32Array(buf);
-  _undoRing[_undoHead%UNDO_MAX]=snap;
+  _undoRing[_undoHead%UNDO_MAX]=new Float32Array(snapshot);
   _undoHead++;
   if(_undoCount<UNDO_MAX)_undoCount++;
+}
+function pushUndo(){
+  pushUndoSnapshot(buf);
 }
 function _unifiedSculptApply(label,applyLegacy,applyAuthoritative){
   if(_sculptHistoryBusy)throw new Error('Sculpt mutation rejected while history operation is in progress');
@@ -3104,7 +3109,6 @@ window.loadWorld=async function(input){
           tick,
           causal:structuredClone(causal)
         }),
-        beforeApply:()=>pushUndo(),
         apply:(nextBuffer,nextTick,nextCausal)=>{
           if(!(nextBuffer instanceof Float32Array)||nextBuffer.length!==buf.length){
             throw new Error('Imported finite grid buffer does not match the active application');
@@ -3130,7 +3134,8 @@ window.loadWorld=async function(input){
           window.buf=buf;
           window.tick=tick;
           _invalidateAtmosphereMoodCache();
-        }
+        },
+        afterCommit:previous=>pushUndoSnapshot(previous.buffer)
       }
     );
     drawGrid();
