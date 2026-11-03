@@ -52,6 +52,44 @@ const { MutableWorldFieldProvider } = await import(await load("src/infinity/Muta
 const { AuthoritativeSculptTransactionCoordinator } = await import(await load("src/infinity/AuthoritativeSculptTransactionCoordinator.ts"));
 const { RuntimeProvenance } = await import(await load("src/infinity/RuntimeProvenance.ts"));
 
+const aliasSafeProvenance = new RuntimeProvenance()
+const callerPayload = {
+  nested: { label: "original-input" },
+  records: [{ value: 1 }],
+}
+const returnedEvent = aliasSafeProvenance.record("brush", callerPayload)
+callerPayload.nested.label = "caller-mutated"
+callerPayload.records[0].value = 99
+returnedEvent.payload.nested.label = "returned-event-mutated"
+returnedEvent.payload.records[0].value = 98
+const returnedTrace = aliasSafeProvenance.getTrace()
+returnedTrace.events[0].payload.nested.label = "trace-snapshot-mutated"
+returnedTrace.events[0].payload.records[0].value = 97
+assert.deepEqual(aliasSafeProvenance.getTrace().events[0].payload, {
+  nested: { label: "original-input" },
+  records: [{ value: 1 }],
+}, "caller, returned-event and getTrace payload mutations must not alter stored provenance")
+
+const worldStatePayload = { nested: { seed: "committed-seed" } }
+const worldStateEvent = aliasSafeProvenance.record("world-state", worldStatePayload)
+worldStatePayload.nested.seed = "mutated-caller-seed"
+worldStateEvent.payload.nested.seed = "mutated-returned-seed"
+const worldStateSnapshot = aliasSafeProvenance.getTrace()
+worldStateSnapshot.latestWorldState.nested.seed = "mutated-snapshot-seed"
+worldStateSnapshot.events[1].payload.nested.seed = "mutated-event-snapshot-seed"
+assert.deepEqual(aliasSafeProvenance.getTrace().latestWorldState,
+  { nested: { seed: "committed-seed" } },
+  "latestWorldState and its source event must be isolated from caller references")
+
+const eventsBeforeUncloneablePayload = aliasSafeProvenance.getTrace().events.length
+assert.throws(
+  () => aliasSafeProvenance.record("brush", { callback: () => true }),
+  /clone/i,
+  "non-cloneable provenance payloads must be rejected",
+)
+assert.equal(aliasSafeProvenance.getTrace().events.length, eventsBeforeUncloneablePayload,
+  "a rejected provenance payload must not append a partial event")
+
 const provenance = new RuntimeProvenance()
 const provenanceRoot = provenance.record("preset", { name: "baseline" })
 const previousWorldState = provenance.record("world-state", { seed: "stable" })

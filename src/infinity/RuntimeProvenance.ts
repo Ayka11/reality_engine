@@ -44,16 +44,21 @@ export class RuntimeProvenance {
   }
 
   record(stage: RuntimeProvenanceStage, payload: Record<string, unknown>, parentId?: string) {
+    // Detach payload before allocating an ID or changing the trace. A
+    // non-cloneable payload is rejected without leaving a partial event.
+    const detachedPayload = structuredClone(payload)
     const event: RuntimeProvenanceEvent = {
       id: nextId(stage),
       stage,
       timestamp: Date.now(),
       parentId: parentId ?? this.trace.events.at(-1)?.id,
-      payload,
+      payload: detachedPayload,
     }
     this.trace.events.push(event)
-    if (stage === 'world-state') this.trace.latestWorldState = { ...payload }
-    return event
+    if (stage === 'world-state') {
+      this.trace.latestWorldState = structuredClone(detachedPayload)
+    }
+    return structuredClone(event)
   }
 
   rollbackLast(eventId: string): boolean {
@@ -65,7 +70,7 @@ export class RuntimeProvenance {
       const previousWorldState = [...this.trace.events].reverse()
         .find(event => event.stage === 'world-state')
       if (previousWorldState) {
-        this.trace.latestWorldState = { ...previousWorldState.payload }
+        this.trace.latestWorldState = structuredClone(previousWorldState.payload)
       } else {
         delete this.trace.latestWorldState
       }
@@ -74,12 +79,7 @@ export class RuntimeProvenance {
   }
 
   getTrace(): RuntimeProvenanceTrace {
-    return {
-      schemaVersion: this.trace.schemaVersion,
-      traceId: this.trace.traceId,
-      events: this.trace.events.map(event => ({ ...event, payload: { ...event.payload } })),
-      latestWorldState: this.trace.latestWorldState ? { ...this.trace.latestWorldState } : undefined,
-    }
+    return structuredClone(this.trace)
   }
 
   validate(): { valid: boolean; errors: string[] } {
