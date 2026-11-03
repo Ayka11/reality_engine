@@ -49,7 +49,9 @@ assert.match(editorSource, /sim\.mutateAuthoritativeState\(\(\) => \{/,
   'field, entity and law import must use the engine-owned atomic mutation boundary');
 assert.match(editorSource, /sim\.entityLayer\.restore\(candidate\.entityLayer, sim\.grid\.size\)/,
   'new packages must restore complete authoritative entity state');
-assert.match(editorSource, /fieldOwner !== entity\\.id[\\s\\S]*ownerByCell\\.get\(cellIndex\) !== fieldOwner/,\n  'voxel ENTITY_ID ownership must agree with the restored spatial entity model');\nassert.match(editorSource, /this\.options\.lawEngine\.restore\(candidate\.lawEngine\)/,
+assert.match(editorSource, /fieldOwner !== entity\\.id[\\s\\S]*ownerByCell\\.get\(cellIndex\) !== fieldOwner/,
+  'voxel ENTITY_ID ownership must agree with the restored spatial entity model');
+assert.match(editorSource, /this\.options\.lawEngine\.restore\(candidate\.lawEngine\)/,
   'law import must restore manual overrides and graph bindings, not replace only law definitions');
 assert.match(editorSource, /sim\.grid\.buffer\[offset\] = 0/,
   'legacy packages without spatial entity snapshots must clear orphan entity IDs');
