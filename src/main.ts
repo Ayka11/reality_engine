@@ -1204,6 +1204,7 @@ const creatorEditor = creatorRoot ? new LawProcessEditor(creatorRoot, {
   simulation: sim,
   thumbnailCanvas: canvas,
   exportWorldPackage: name => saveSystem.exportRealityPackage(name),
+  importWorldPackage: file => saveSystem.importRealityPackage(file),
 }) : null;
 void creatorEditor;
 
