@@ -518,6 +518,17 @@ assert.deepEqual(runtimeGrid.buffer, expectedRuntimeBuffer,
 assert.deepEqual(runtimeState, expectedRuntimeState,
   "dimension-mismatched snapshots must leave runtime domains unchanged");
 
+const invalidTickSnapshot = {
+  ...savedRuntimeWorld,
+  metadata: { ...savedRuntimeWorld.metadata, simulationTicks: 1.5 },
+};
+await assert.rejects(saveHarness.applySnapshot(invalidTickSnapshot),
+  /World snapshot has invalid simulation tick metadata/);
+assert.equal(authoritativeTransactionCalls, 0,
+  "invalid tick metadata must be rejected before opening a live-state transaction");
+assert.deepEqual(runtimeGrid.buffer, expectedRuntimeBuffer,
+  "invalid tick metadata must leave the authoritative field unchanged");
+
 runtimeGrid.buffer.fill(99);
 runtimeState.entityRuntime = { source: "wrong-world" };
 runtimeState.agentRuntime = { source: "wrong-world" };
