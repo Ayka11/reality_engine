@@ -103,6 +103,15 @@ const worldEditorFixture = {
     version: 1, kind: 'world-generator-surface', seed: 'world-seed-a',
     seaLevel: 16, maxElevation: 52,
   },
+  assetManifest: {
+    version: '1.0', generatedAt: '2026-11-03T00:00:00.000Z', project: 'test',
+    entries: [{
+      id: 'asset.provider-a.oak-01', providerId: 'provider-a',
+      sourceUrl: 'https://assets.example.test/oak.glb', sourceAssetId: 'oak-01',
+      name: 'Oak Tree', license: 'CC0', attribution: 'Example asset provider',
+      semanticEntryId: 'flora.tree', tags: ['tree', 'flora'],
+    }],
+  },
   objects: [{
     id: 'tree:1:0:2', kind: 'tree', x: 1, y: 0, z: 2,
     rotationY: 0.5, scale: 1.25, seed: 17, properties: { species: 'oak', planted: true },
@@ -150,6 +159,8 @@ assert.deepEqual(unpackedPackage.runtimeState, fullRuntimeState,
   'full runtime snapshots must survive the actual ZIP pack/unpack path');
 assert.deepEqual(unpackedPackage.worldEditor, worldEditorFixture,
   'infinite-world editor state must survive the actual ZIP pack/unpack path');
+assert.deepEqual(unpackedPackage.worldEditor.assetManifest, worldEditorFixture.assetManifest,
+  'external asset source, licensing and semantic provenance must survive package roundtrip');
 assert.deepEqual(Array.from(new Uint8Array(unpackedPackage.chunks.serialized[0].buffer)), [1, 2, 3, 4],
   'sparse chunk binary payloads must survive the actual ZIP pack/unpack path');
 assert.deepEqual(Array.from(new Uint8Array(unpackedPackage.voxelState)), [7, 8, 9, 10],
@@ -239,6 +250,13 @@ assert.ok(realityPackageSource.includes("worldEditor?: WorldEditorSnapshot"),
 assert.ok(worldEditorSnapshotSource.includes("export interface WorldEditorSnapshot") &&
   worldEditorSnapshotSource.includes("authoritativeField: ReturnType<MutableWorldFieldProvider['serialize']>"),
   'the portable world-editor contract must cover terrain, objects, surface and authoritative field state');
+assert.ok(worldEditorSnapshotSource.includes("assetManifest?: WorldAssetImportManifest"),
+  'portable world-editor snapshots must retain external asset provenance');
+assert.ok(mainSource.includes("validateAssetManifest(manifest)") &&
+  mainSource.includes("assetManifest: structuredClone(manifest)"),
+  'application capture and restore must validate and preserve asset provenance metadata');
+assert.ok(mainSource.includes("fetches URLs or executes a GLTF loader"),
+  'manifest restore must remain metadata-only and avoid automatic network fetches');
 assert.ok(packageSerializerSource.includes("zip.file('world-editor.json', serializePackageJson(pkg.worldEditor))"),
   'the ZIP serializer must write the portable world-editor snapshot');
 assert.ok(packageSerializerSource.includes("const worldEditorFile = zip.file('world-editor.json')"),
