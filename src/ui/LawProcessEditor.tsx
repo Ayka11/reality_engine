@@ -27,6 +27,7 @@ interface LawProcessEditorOptions {
       clear: () => void;
     };
     mutateAuthoritativeState: <T>(mutation: () => T) => T;
+    runAtStepBoundary: <T>(operation: () => T) => Promise<T>;
   };
   thumbnailCanvas?: HTMLCanvasElement | null;
   processSystem?: { setActiveProcesses?: (processes: unknown[]) => void };
@@ -67,12 +68,13 @@ export class LawProcessEditor {
   }
 
   async exportPackage(): Promise<void> {
-    if (!this.options.simulation) {
+    const simulation = this.options.simulation;
+    if (!simulation) {
       this.status!.textContent = 'Package export needs a simulation instance.';
       return;
     }
 
-    const pkg = this.buildPackage();
+    const pkg = await simulation.runAtStepBoundary(() => this.buildPackage());
     const blob = await this.serializer.pack(pkg);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -135,6 +137,7 @@ export class LawProcessEditor {
       })),
       metadata: {
         gridSize: { x: sim.grid.W, y: sim.grid.H, z: sim.grid.D },
+        simulationTicks: sim.tick,
         totalEnergy,
         entropy,
         complexityScore: sim.grid.totalField(4) / sim.grid.size + sim.grid.totalField(5) / sim.grid.size,
@@ -285,6 +288,10 @@ export class LawProcessEditor {
     if (!Array.isArray(pkg.metadata.dominantLaws) ||
         !pkg.metadata.dominantLaws.every(name => typeof name === 'string')) {
       throw new Error('Reality package dominant law metadata is invalid.');
+    }
+    if (pkg.metadata.simulationTicks !== undefined &&
+        (!Number.isSafeInteger(pkg.metadata.simulationTicks) || pkg.metadata.simulationTicks < 0)) {
+      throw new Error('Reality package simulation tick metadata is invalid.');
     }
 
     // Validate the graph on a detached instance; no active editor state changes
