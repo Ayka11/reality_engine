@@ -9,6 +9,7 @@ export class WorldPersistence {
   private readonly fieldStateKey: string
   private readonly fieldCheckpointKey: string
   private readonly surfaceProviderKey: string
+  private readonly assetManifestKey: string
   private readonly terrainDeformationKey: string
   private readonly terrainDeformationCheckpointKey: string
   private readonly loaded = new Set<string>()
@@ -20,6 +21,7 @@ export class WorldPersistence {
     this.fieldStateKey = `reality-engine-world:${seed}:field-state`
     this.fieldCheckpointKey = `reality-engine-world:${seed}:field-checkpoint`
     this.surfaceProviderKey = `reality-engine-world:${seed}:surface-provider`
+    this.assetManifestKey = `reality-engine-world:${seed}:asset-manifest`
     this.terrainDeformationKey = `reality-engine-world:${seed}:terrain-deformation`
     this.terrainDeformationCheckpointKey = `reality-engine-world:${seed}:terrain-deformation-checkpoint`
   }
@@ -134,6 +136,51 @@ export class WorldPersistence {
   deleteSurfaceProviderState(): boolean {
     try {
       localStorage.removeItem(this.surfaceProviderKey)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** Persist asset source/licensing metadata without downloading external resources. */
+  saveAssetManifestState(state: unknown): boolean {
+    try {
+      localStorage.setItem(this.assetManifestKey, JSON.stringify({
+        version: 1,
+        seed: this.seed,
+        state,
+      }))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  loadAssetManifestState<T = unknown>(): T | null {
+    let raw: string | null
+    try {
+      raw = localStorage.getItem(this.assetManifestKey)
+    } catch {
+      return null
+    }
+    if (!raw) return null
+    try {
+      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
+      if (payload.version !== 1 || payload.seed !== this.seed ||
+          !payload.state || typeof payload.state !== 'object' || Array.isArray(payload.state)) {
+        localStorage.removeItem(this.assetManifestKey)
+        return null
+      }
+      return payload.state
+    } catch {
+      try { localStorage.removeItem(this.assetManifestKey) } catch {}
+      return null
+    }
+  }
+
+  deleteAssetManifestState(): boolean {
+    try {
+      localStorage.removeItem(this.assetManifestKey)
       return true
     } catch {
       return false
@@ -297,6 +344,7 @@ export class WorldPersistence {
       this.fieldStateKey,
       this.fieldCheckpointKey,
       this.surfaceProviderKey,
+      this.assetManifestKey,
       this.terrainDeformationKey,
       this.terrainDeformationCheckpointKey,
     ]) {
