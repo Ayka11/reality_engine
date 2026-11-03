@@ -41,6 +41,12 @@ const transformed = ts.transpileModule(source
   }).outputText;
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(transformed).toString('base64')}`;
 const { serializePackageJson, parsePackageJson, PackageSerializer } = await import(moduleUrl);
+const assetManifestSource = await readFile(new URL('src/worldLibrary/AssetImportManifest.ts', root), 'utf8');
+const assetManifestJs = ts.transpileModule(assetManifestSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const assetManifestUrl = `data:text/javascript;base64,${Buffer.from(assetManifestJs).toString('base64')}`;
+const { validateAssetManifest } = await import(assetManifestUrl);
 
 const snapshot = {
   entities: [{
@@ -124,6 +130,41 @@ const worldEditorFixture = {
     version: 3, nextId: 1, mutations: [], globalOverlays: [],
   },
 };
+
+const validManifestResult = validateAssetManifest(worldEditorFixture.assetManifest);
+assert.deepEqual(validManifestResult, { valid: true, errors: [] },
+  'valid HTTP(S) asset provenance with known licensing must be accepted');
+assert.equal(validateAssetManifest({
+  ...worldEditorFixture.assetManifest,
+  entries: [{ ...worldEditorFixture.assetManifest.entries[0], sourceUrl: 'javascript:alert(1)' }],
+}).valid, false, 'non-HTTP(S) asset provenance URLs must be rejected');
+assert.equal(validateAssetManifest({
+  ...worldEditorFixture.assetManifest,
+  entries: [{ ...worldEditorFixture.assetManifest.entries[0], license: 'UNLICENSED' }],
+}).valid, false, 'unknown license enum values must be rejected');
+assert.equal(validateAssetManifest({
+  ...worldEditorFixture.assetManifest,
+  entries: [{ ...worldEditorFixture.assetManifest.entries[0], license: 'UNKNOWN' }],
+}).valid, false, 'explicitly unknown asset licensing must be rejected');
+assert.equal(validateAssetManifest({
+  ...worldEditorFixture.assetManifest,
+  entries: [
+    worldEditorFixture.assetManifest.entries[0],
+    { ...worldEditorFixture.assetManifest.entries[0], name: 'Duplicate asset' },
+  ],
+}).valid, false, 'duplicate asset manifest IDs must be rejected');
+assert.equal(validateAssetManifest({
+  ...worldEditorFixture.assetManifest,
+  generatedAt: 'not-a-date',
+}).valid, false, 'invalid manifest timestamps must be rejected');
+assert.equal(validateAssetManifest({
+  ...worldEditorFixture.assetManifest,
+  entries: [null],
+}).valid, false, 'malformed manifest entries must be rejected without throwing');
+assert.equal(validateAssetManifest({
+  ...worldEditorFixture.assetManifest,
+  entries: [{ ...worldEditorFixture.assetManifest.entries[0], tags: 'tree' }],
+}).valid, false, 'malformed asset tags must be rejected');
 
 const packageSerializer = new PackageSerializer();
 const packageFixture = {
@@ -255,6 +296,10 @@ assert.ok(worldEditorSnapshotSource.includes("assetManifest?: WorldAssetImportMa
 assert.ok(mainSource.includes("validateAssetManifest(manifest)") &&
   mainSource.includes("assetManifest: structuredClone(manifest)"),
   'application capture and restore must validate and preserve asset provenance metadata');
+assert.ok(assetManifestSource.includes("const ASSET_LICENSES = new Set<AssetLicense>") &&
+  assetManifestSource.includes("new URL(value)") &&
+  assetManifestSource.includes("new Set<string>()"),
+  'asset provenance validation must constrain license values, URLs and duplicate IDs');
 assert.ok(mainSource.includes("fetches URLs or executes a GLTF loader"),
   'manifest restore must remain metadata-only and avoid automatic network fetches');
 assert.ok(packageSerializerSource.includes("zip.file('world-editor.json', serializePackageJson(pkg.worldEditor))"),
