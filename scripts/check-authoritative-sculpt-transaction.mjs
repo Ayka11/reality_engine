@@ -116,7 +116,7 @@ assert.equal(isolatedProvenance.getTrace().latestWorldState, undefined,
   "rolling back the only world-state event must clear latestWorldState")
 
 const validParentTrace = new RuntimeProvenance()
-const validParent = validParentTrace.record("preset", { name: "parent" })
+const validParent = validParentTrace.record("law", { name: "parent" })
 validParentTrace.record("brush", { source: "child" }, validParent.id)
 assert.deepEqual(validParentTrace.validate(), { valid: true, errors: [] },
   "a parent reference to an earlier event must remain valid")
