@@ -115,6 +115,32 @@ assert.equal(isolatedProvenance.rollbackLast(onlyWorldState.id), true)
 assert.equal(isolatedProvenance.getTrace().latestWorldState, undefined,
   "rolling back the only world-state event must clear latestWorldState")
 
+const validParentTrace = new RuntimeProvenance()
+const validParent = validParentTrace.record("preset", { name: "parent" })
+validParentTrace.record("brush", { source: "child" }, validParent.id)
+assert.deepEqual(validParentTrace.validate(), { valid: true, errors: [] },
+  "a parent reference to an earlier event must remain valid")
+
+const selfParentTrace = new RuntimeProvenance()
+const selfParentEvent = selfParentTrace.record("preset", { name: "self-parent-candidate" })
+selfParentTrace.trace.events[0].parentId = selfParentEvent.id
+const selfParentValidation = selfParentTrace.validate()
+assert.equal(selfParentValidation.valid, false, "self-parent references must be rejected")
+assert.ok(selfParentValidation.errors.some(error => error.includes("parent")),
+  "self-parent rejection must report a parent validation error")
+
+const missingParentTrace = new RuntimeProvenance()
+missingParentTrace.record("preset", { name: "missing-parent" }, "event-that-does-not-exist")
+assert.equal(missingParentTrace.validate().valid, false,
+  "references to missing parent events must be rejected")
+
+const forwardParentTrace = new RuntimeProvenance()
+forwardParentTrace.record("preset", { name: "forward-child" }, "future-parent-id")
+const futureParent = forwardParentTrace.record("law", { name: "future-parent" })
+forwardParentTrace.trace.events[0].parentId = futureParent.id
+assert.equal(forwardParentTrace.validate().valid, false,
+  "references to future events must be rejected even when that ID exists later in the trace")
+
 const base = {
   id: "test-base",
   version: "test-base-v1",
