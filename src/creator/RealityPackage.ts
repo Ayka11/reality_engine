@@ -50,6 +50,20 @@ export interface ProcessSnapshot {
   parameters: Record<string, unknown>;
 }
 
+/** Sparse chunk payloads outside the dense voxel window. */
+export interface RealityPackageChunks {
+  chunkSize: number;
+  activeCount: number;
+  serialized: Array<{
+    key: string;
+    cx: number;
+    cy: number;
+    cz: number;
+    active: boolean;
+    buffer: ArrayBuffer;
+  }>;
+}
+
 /** Portable runtime snapshots mirrored from WorldRuntimeStateSnapshot. */
 export interface RealityPackageRuntimeState {
   entityLayer?: EntityLayerSnapshot;
@@ -83,6 +97,8 @@ export interface RealityPackage {
   manifest: RealityPackageManifest;
   graph: RealityGraph;
   voxelState: ArrayBuffer;
+  /** Optional sparse field chunks; absent only in legacy/partial packages. */
+  chunks?: RealityPackageChunks;
   entities: EntitySnapshot[];
   /** Complete authoritative entity state; absent only in legacy packages. */
   runtimeEntityLayer?: EntityLayerSnapshot;
