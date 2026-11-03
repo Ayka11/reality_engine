@@ -113,8 +113,9 @@ export class AuthoritativeSculptTransactionCoordinator {
     if (!transaction) return null
     // Do not restore a stale snapshot over mutations made outside this coordinator.
     if (JSON.stringify(this.field.serialize()) !== JSON.stringify(transaction.after)) return null
-    this.undoStack.pop()
+    // Restore first; keep history untouched if the provider rejects the snapshot.
     this.field.restore(transaction.before)
+    this.undoStack.pop()
     this.redoStack.push(transaction)
     return structuredClone(transaction)
   }
@@ -124,8 +125,9 @@ export class AuthoritativeSculptTransactionCoordinator {
     if (!transaction) return null
     // Redo is safe only while the field still matches the transaction's before-state.
     if (JSON.stringify(this.field.serialize()) !== JSON.stringify(transaction.before)) return null
-    this.redoStack.pop()
+    // Restore first; keep redo history untouched if the provider rejects the snapshot.
     this.field.restore(transaction.after)
+    this.redoStack.pop()
     this.undoStack.push(transaction)
     return structuredClone(transaction)
   }
