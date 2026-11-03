@@ -1,6 +1,8 @@
 import { GraphCompiler, NodeRegistry, PackageSerializer, RealityGraph } from '../creator';
 import type { EntitySnapshot, GraphExecutionPlan, LawSnapshot, ProcessSnapshot, RealityGraphData, RealityNode, RealityPackage } from '../creator';
-import type { LawEngine } from '../laws/LawEngine';
+import { LawEngine, type LawEngineSnapshot } from '../laws/LawEngine';
+import { EntityLayer, type EntityLayerSnapshot } from '../simulation/EntityLayer';
+import { CELL_FIELDS, F } from '../core/CellState';
 import type { MetaLaw } from '../laws/MetaLaw';
 import { PROCESS_LIBRARY } from '../process/ProcessDef';
 import { NodeEditorCanvas } from './NodeEditorCanvas';
@@ -18,7 +20,13 @@ interface LawProcessEditorOptions {
     };
     tick: number;
     syncToGPU: () => void;
-    entityLayer?: { getEntities: () => unknown[] };
+    entityLayer: {
+      getEntities: () => unknown[];
+      snapshot: () => EntityLayerSnapshot;
+      restore: (snapshot: EntityLayerSnapshot, cellCount?: number) => void;
+      clear: () => void;
+    };
+    mutateAuthoritativeState: <T>(mutation: () => T) => T;
   };
   thumbnailCanvas?: HTMLCanvasElement | null;
   processSystem?: { setActiveProcesses?: (processes: unknown[]) => void };
@@ -112,7 +120,9 @@ export class LawProcessEditor {
       graph: this.graph.toJSON(),
       voxelState: sim.grid.buffer.slice().buffer,
       entities: this.snapshotEntities(),
+      runtimeEntityLayer: sim.entityLayer.snapshot(),
       laws: this.options.lawEngine.laws.map(law => this.snapshotLaw(law)),
+      lawEngineState: this.options.lawEngine.snapshot(),
       processes: PROCESS_LIBRARY.map(process => ({
         id: process.id,
         name: process.name,
@@ -170,53 +180,199 @@ export class LawProcessEditor {
   }
 
   private applyPackage(pkg: RealityPackage): void {
-    this.loadGraph(pkg.graph);
-    this.applyVoxelState(pkg);
-    this.applyLawSnapshots(pkg.laws);
-    this.applyProcessSnapshots(pkg.processes);
-  }
+    const candidate = this.preflightPackage(pkg);
+    const sim = this.options.simulation!;
+    const graphBefore = this.graph.toJSON();
 
-  private applyVoxelState(pkg: RealityPackage): void {
-    const sim = this.options.simulation;
-    if (!sim) return;
-    const incoming = new Float32Array(pkg.voxelState);
-    if (incoming.length !== sim.grid.buffer.length) {
-      throw new Error(`Voxel state size mismatch: package has ${incoming.length}, grid expects ${sim.grid.buffer.length}.`);
+    try {
+      // The engine transaction owns field, entity and law rollback. The graph is
+      // an editor-side domain, so its prior value is restored explicitly below.
+      sim.mutateAuthoritativeState(() => {
+        sim.grid.buffer.set(candidate.voxelState);
+        if (candidate.entityLayer) {
+          sim.entityLayer.restore(candidate.entityLayer, sim.grid.size);
+        } else {
+          // Legacy packages only carried entity summaries, not cell membership,
+          // allocator or RNG state. Clear both the entity model and stale cell IDs.
+          sim.entityLayer.clear();
+          for (let offset = F.ENTITY_ID; offset < sim.grid.buffer.length; offset += CELL_FIELDS) {
+            sim.grid.buffer[offset] = 0;
+          }
+        }
+        this.options.lawEngine.restore(candidate.lawEngine);
+        this.graph.load(candidate.graph);
+      });
+    } catch (error) {
+      try {
+        this.graph.load(graphBefore);
+      } catch (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          'Reality package import failed and the Creator Graph rollback also failed',
+        );
+      }
+      throw error;
     }
-    sim.grid.buffer.set(incoming);
-    sim.syncToGPU();
+
+    this.canvasEditor?.setData(this.graph.nodes, this.graph.edges);
+    this.selectedNode = null;
+    this.renderInspector();
   }
 
-  private applyLawSnapshots(laws: LawSnapshot[]): void {
-    this.options.lawEngine.laws = laws.map(snapshot => {
-      const effects = (snapshot.effects ?? {}) as Record<string, any>;
-      return {
-        id: snapshot.id,
-        name: snapshot.name,
-        active: Boolean(effects.active),
-        conditions: Array.isArray(snapshot.conditions) ? snapshot.conditions : [],
-        enablesProcesses: Array.isArray(effects.enablesProcesses) ? effects.enablesProcesses : [],
-        disablesProcesses: Array.isArray(effects.disablesProcesses) ? effects.disablesProcesses : [],
-        paramOverrides: effects.paramOverrides ?? {},
-        fitness: snapshot.fitness,
-        age: Number(effects.age ?? 0),
-        mutationRate: snapshot.mutationRate,
-        generation: Number(effects.generation ?? 0),
-        parentId: snapshot.parentId,
-        color: String(effects.color ?? '#7c9fff'),
+  private preflightPackage(pkg: RealityPackage): {
+    graph: RealityGraphData;
+    voxelState: Float32Array;
+    entityLayer: EntityLayerSnapshot | null;
+    lawEngine: LawEngineSnapshot;
+  } {
+    const sim = this.options.simulation;
+    if (!sim) throw new Error('Package import needs a simulation instance.');
+    if (!pkg || typeof pkg !== 'object' ||
+        !pkg.manifest || typeof pkg.manifest !== 'object' ||
+        !pkg.metadata || typeof pkg.metadata !== 'object' ||
+        !Array.isArray(pkg.entities) || !Array.isArray(pkg.laws) || !Array.isArray(pkg.processes)) {
+      throw new Error('Reality package has an invalid envelope.');
+    }
+
+    for (const [field, value] of Object.entries({
+      version: pkg.manifest.version,
+      name: pkg.manifest.name,
+      author: pkg.manifest.author,
+      created: pkg.manifest.created,
+      description: pkg.manifest.description,
+      compatibility: pkg.manifest.compatibility,
+    })) {
+      if (typeof value !== 'string' || value.trim().length === 0) {
+        throw new Error(`Reality package manifest field "${field}" is invalid.`);
+      }
+    }
+    if (!Array.isArray(pkg.manifest.tags) ||
+        !pkg.manifest.tags.every(tag => typeof tag === 'string')) {
+      throw new Error('Reality package manifest tags are invalid.');
+    }
+
+    const dimensions = pkg.metadata.gridSize;
+    if (!dimensions ||
+        !Number.isSafeInteger(dimensions.x) || dimensions.x <= 0 ||
+        !Number.isSafeInteger(dimensions.y) || dimensions.y <= 0 ||
+        !Number.isSafeInteger(dimensions.z) || dimensions.z <= 0 ||
+        dimensions.x !== sim.grid.W ||
+        dimensions.y !== sim.grid.H ||
+        dimensions.z !== sim.grid.D) {
+      throw new Error(
+        `Reality package grid dimensions do not match the active simulation: ${dimensions?.x}x${dimensions?.y}x${dimensions?.z}.`,
+      );
+    }
+    if (!(pkg.voxelState instanceof ArrayBuffer) ||
+        pkg.voxelState.byteLength !== sim.grid.buffer.byteLength) {
+      throw new Error(
+        `Voxel state size mismatch: package has ${pkg.voxelState instanceof ArrayBuffer ? pkg.voxelState.byteLength : 'invalid'} bytes, grid expects ${sim.grid.buffer.byteLength}.`,
+      );
+    }
+    const voxelState = new Float32Array(pkg.voxelState.slice(0));
+    if (!voxelState.every(Number.isFinite)) {
+      throw new Error('Reality package voxel state contains non-finite field values.');
+    }
+    for (const [field, value] of Object.entries({
+      totalEnergy: pkg.metadata.totalEnergy,
+      entropy: pkg.metadata.entropy,
+      complexityScore: pkg.metadata.complexityScore,
+    })) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw new Error(`Reality package metadata field "${field}" is invalid.`);
+      }
+    }
+    if (!Array.isArray(pkg.metadata.dominantLaws) ||
+        !pkg.metadata.dominantLaws.every(name => typeof name === 'string')) {
+      throw new Error('Reality package dominant law metadata is invalid.');
+    }
+
+    // Validate the graph on a detached instance; no active editor state changes
+    // during preflight, even if a later package component is malformed.
+    const graphCandidate = new RealityGraph();
+    graphCandidate.load(pkg.graph);
+
+    const allowedProcessIds = new Set(PROCESS_LIBRARY.map(process => process.id));
+    const processIds = new Set<number>();
+    for (const process of pkg.processes) {
+      if (!process || !Number.isSafeInteger(process.id) ||
+          !allowedProcessIds.has(process.id as never) ||
+          typeof process.name !== 'string' || !process.name ||
+          typeof process.enabled !== 'boolean' ||
+          !process.parameters || typeof process.parameters !== 'object' || Array.isArray(process.parameters) ||
+          Object.values(process.parameters).some(value => typeof value !== 'number' && typeof value !== 'boolean')) {
+        throw new Error('Reality package contains an invalid process snapshot.');
+      }
+      if (processIds.has(process.id)) throw new Error(`Reality package contains duplicate process ID ${process.id}.`);
+      processIds.add(process.id);
+    }
+
+    let lawEngineState: LawEngineSnapshot;
+    if (pkg.lawEngineState) {
+      lawEngineState = structuredClone(pkg.lawEngineState);
+    } else {
+      const legacyLaws = pkg.laws.map(snapshot => {
+        if (!snapshot || typeof snapshot.id !== 'string' || !snapshot.id ||
+            typeof snapshot.name !== 'string' || !snapshot.name ||
+            typeof snapshot.fitness !== 'number' || !Number.isFinite(snapshot.fitness) ||
+            typeof snapshot.mutationRate !== 'number' || !Number.isFinite(snapshot.mutationRate)) {
+          throw new Error('Reality package contains an invalid legacy law snapshot.');
+        }
+        const effects = snapshot.effects && typeof snapshot.effects === 'object'
+          ? snapshot.effects as Record<string, unknown>
+          : {};
+        return {
+          id: snapshot.id,
+          name: snapshot.name,
+          active: effects.active === true,
+          conditions: Array.isArray(snapshot.conditions) ? snapshot.conditions : [],
+          enablesProcesses: Array.isArray(effects.enablesProcesses) ? effects.enablesProcesses : [],
+          disablesProcesses: Array.isArray(effects.disablesProcesses) ? effects.disablesProcesses : [],
+          paramOverrides: effects.paramOverrides && typeof effects.paramOverrides === 'object'
+            ? effects.paramOverrides
+            : {},
+          fitness: snapshot.fitness,
+          age: Number.isSafeInteger(effects.age) && (effects.age as number) >= 0 ? effects.age as number : 0,
+          mutationRate: snapshot.mutationRate,
+          generation: Number.isSafeInteger(effects.generation) && (effects.generation as number) >= 0
+            ? effects.generation as number
+            : 0,
+          parentId: snapshot.parentId,
+          color: typeof effects.color === 'string' ? effects.color : '#7c9fff',
+        };
+      });
+      lawEngineState = {
+        ...this.options.lawEngine.snapshot(),
+        laws: legacyLaws,
+        lawOverrides: [],
+        manualOn: [],
+        manualOff: [],
+        graphProcessIds: pkg.processes.filter(process => process.enabled).map(process => process.id),
       };
-    });
-  }
+    }
+    const lawValidator = new LawEngine();
+    lawValidator.restore(lawEngineState);
+    lawEngineState = lawValidator.snapshot();
 
-  private applyProcessSnapshots(processes: ProcessSnapshot[]): void {
-    const activeProcessIds = processes.filter(process => process.enabled).map(process => process.id);
-    this.options.lawEngine.applyGraphPlan({
-      executionOrder: [],
-      boundParameters: new Map(),
-      gpuPasses: [],
-      activeProcessIds,
-      issues: [],
-    });
+    let entityLayer: EntityLayerSnapshot | null = null;
+    if (pkg.runtimeEntityLayer !== undefined) {
+      const entityValidator = new EntityLayer();
+      entityValidator.restore(pkg.runtimeEntityLayer, sim.grid.size);
+      entityLayer = entityValidator.snapshot();
+    } else {
+      // Old packages cannot reconstruct full entities from position/genome summaries.
+      // Clear their orphaned ENTITY_ID field during apply rather than inventing IDs.
+      for (let offset = F.ENTITY_ID; offset < voxelState.length; offset += CELL_FIELDS) {
+        voxelState[offset] = 0;
+      }
+    }
+
+    return {
+      graph: graphCandidate.toJSON(),
+      voxelState,
+      entityLayer,
+      lawEngine: lawEngineState,
+    };
   }
 
   private seedExampleGraph(): void {
