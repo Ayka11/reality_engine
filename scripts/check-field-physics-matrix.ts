@@ -8,6 +8,11 @@ import { FieldPhysics } from "../src/simulation/FieldPhysics.ts";
 import { EntropyLayer } from "../src/simulation/EntropyLayer.ts";
 import { MAT, MATERIAL_LIBRARY } from "../src/materials/MaterialDef.ts";
 import { runDenseHighTemperatureDiffusionReference } from "./physics-parity-reference.ts";
+import {
+  INTEGRATED_FIELD_PARITY_FIELDS,
+  INTEGRATED_FIELD_PARITY_SIZE,
+  runDenseIntegratedFieldParityReference,
+} from "./physics-parity-reference.ts";
 
 type DiffusionParameter =
   | "energyDiffusion"
@@ -559,6 +564,20 @@ assert.ok(Math.abs(waveGrid.buffer[waveBase + F.WAVE_PHASE] - (Math.PI / 2 + 0.0
   "CPU wave phase must advance by waveSpeed * dt");
 assert.ok(Math.abs(waveGrid.buffer[waveBase + F.ENERGY] - 50) < 1e-5,
   "CPU wave propagation must not add unmodelled energy coupling");
+
+const integratedFieldReference = runDenseIntegratedFieldParityReference();
+const integratedFieldCenter = ((2 * INTEGRATED_FIELD_PARITY_SIZE + 2)
+  * INTEGRATED_FIELD_PARITY_SIZE + 2) * CELL_FIELDS;
+for (const [name, field] of INTEGRATED_FIELD_PARITY_FIELDS) {
+  const value = integratedFieldReference[integratedFieldCenter + field];
+  assert.ok(Number.isFinite(value),
+    `dense CPU integrated field reference produced non-finite ${name}: ${value}`);
+}
+assert.equal(
+  integratedFieldReference[integratedFieldCenter + F.MATERIAL_ID],
+  MAT.CRYSTAL,
+  "combined field reference must crystallize Stone before Bio-Potential",
+);
 
 const highTemperatureReference = runDenseHighTemperatureDiffusionReference();
 assert.ok(Math.abs(highTemperatureReference - 2079.84) < 1e-3,

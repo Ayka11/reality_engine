@@ -14,6 +14,14 @@ import {
   HIGH_TEMPERATURE_PARITY_PARAMS,
   HIGH_TEMPERATURE_PARITY_PROCESS_MASK,
   runDenseHighTemperatureDiffusionReference,
+  INTEGRATED_FIELD_PARITY_FIELDS,
+  INTEGRATED_FIELD_PARITY_SIZE,
+  INTEGRATED_FIELD_PARITY_OFFSET,
+  INTEGRATED_FIELD_PARITY_DT,
+  INTEGRATED_FIELD_PARITY_PARAMS,
+  INTEGRATED_FIELD_PARITY_PROCESS_MASK,
+  createIntegratedFieldParityInitialCells,
+  runDenseIntegratedFieldParityReference,
 } from './physics-parity-reference.ts'
 
 type WorkerMessage = { cmd: string; data?: any; ab?: ArrayBuffer; tick?: number }
@@ -850,6 +858,61 @@ assert.ok(denseHighTemperatureReference > 2000,
   "dense CPU high-temperature reference must remain above 2000")
 assert.ok(Math.abs(workerHighTemperature - denseHighTemperatureReference) < 1e-4,
   `CPU/Worker high-temperature diffusion mismatch: CPU ${denseHighTemperatureReference}, Worker ${workerHighTemperature}`)
+
+// Full field-process parity: density/thermal transport, gravity, pressure,
+// wave, signal, rotation, phase change, radiation, crystallization, erosion,
+// entropy, information, Bio-Potential, metabolism and local time.
+const integratedFieldInitial = createIntegratedFieldParityInitialCells()
+const integratedFieldReference = runDenseIntegratedFieldParityReference()
+const integratedFieldOrigin = { x: 121, y: 121, z: 61 }
+send('setPhysics', {
+  params: { ...INTEGRATED_FIELD_PARITY_PARAMS },
+  processMask: INTEGRATED_FIELD_PARITY_PROCESS_MASK,
+})
+for (let z = 1; z <= 3; z++) {
+  for (let y = 1; y <= 3; y++) {
+    for (let x = 1; x <= 3; x++) {
+      const sourceBase = ((z * INTEGRATED_FIELD_PARITY_SIZE + y)
+        * INTEGRATED_FIELD_PARITY_SIZE + x) * NF
+      const target = {
+        x: integratedFieldOrigin.x + x - INTEGRATED_FIELD_PARITY_OFFSET,
+        y: integratedFieldOrigin.y + y - INTEGRATED_FIELD_PARITY_OFFSET,
+        z: integratedFieldOrigin.z + z - INTEGRATED_FIELD_PARITY_OFFSET,
+      }
+      for (const [, field] of INTEGRATED_FIELD_PARITY_FIELDS) {
+        send('paint', {
+          ...target,
+          f: field,
+          v: integratedFieldInitial[sourceBase + field],
+          r: 0,
+          mode: 'set',
+        })
+      }
+    }
+  }
+}
+send('tick', { speed: INTEGRATED_FIELD_PARITY_DT / 0.016 })
+const integratedFieldWorkerFrame = latestFrame()
+for (let z = 1; z <= 3; z++) {
+  for (let y = 1; y <= 3; y++) {
+    for (let x = 1; x <= 3; x++) {
+      const target = {
+        x: integratedFieldOrigin.x + x - INTEGRATED_FIELD_PARITY_OFFSET,
+        y: integratedFieldOrigin.y + y - INTEGRATED_FIELD_PARITY_OFFSET,
+        z: integratedFieldOrigin.z + z - INTEGRATED_FIELD_PARITY_OFFSET,
+      }
+      const sourceBase = ((z * INTEGRATED_FIELD_PARITY_SIZE + y)
+        * INTEGRATED_FIELD_PARITY_SIZE + x) * NF
+      for (const [name, field] of INTEGRATED_FIELD_PARITY_FIELDS) {
+        const workerValue = readField(integratedFieldWorkerFrame, target.x, target.y, target.z, field)
+        const cpuValue = integratedFieldReference[sourceBase + field]
+        const delta = Math.abs(workerValue - cpuValue)
+        assert.ok(delta < 2e-3,
+          `CPU/Worker integrated field parity mismatch at ${x},${y},${z} for ${name}: CPU ${cpuValue}, Worker ${workerValue}, delta ${delta}`)
+      }
+    }
+  }
+}
 
 console.log(JSON.stringify({
   status: 'PASS',

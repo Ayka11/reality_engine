@@ -14,6 +14,7 @@ const gpu = await fs.readFile('src/gpu/GPUBackend.ts', 'utf8')
 const workerParityTest = await fs.readFile('scripts/check-chunk-worker-physics.ts', 'utf8')
 const gpuParityTest = await fs.readFile('scripts/check-gpu-density-advection-runtime.mjs', 'utf8')
 const parityReference = await fs.readFile('scripts/physics-parity-reference.ts', 'utf8')
+const cpuPhysicsTest = await fs.readFile('scripts/check-field-physics-matrix.ts', 'utf8')
 
 // The sparse worker must use the canonical bitmask, not its former string Set.
 assert.ok(worker.includes("import { PROC, defaultProcessMask } from '../process/ProcessDef'"))
@@ -202,6 +203,18 @@ assert.ok(gpu.includes('o.temperature = max(0.0, c.temperature + tDiff * dt * la
 assert.ok(parityReference.includes('HIGH_TEMPERATURE_PARITY_DT = 0.016'))
 assert.ok(workerParityTest.includes('CPU/Worker high-temperature diffusion mismatch'))
 assert.ok(gpuParityTest.includes('CPU/GPU high-temperature diffusion mismatch'))
+
+// Full field-process parity runs all enabled physics operators from the same 5³ stencil.
+assert.ok(parityReference.includes('INTEGRATED_FIELD_PARITY_SIZE = 5'))
+assert.ok(parityReference.includes('PROC.GRAVITY'))
+assert.ok(parityReference.includes('PROC.PRESSURE_DIFFUSION'))
+assert.ok(parityReference.includes('PROC.PHASE_TRANSITION'))
+assert.ok(parityReference.includes('PROC.RADIATION'))
+assert.ok(parityReference.includes('PROC.EROSION'))
+assert.ok(parityReference.includes('PROC.DENSITY_ADVECTION'))
+assert.ok(workerParityTest.includes('CPU/Worker integrated field parity mismatch'))
+assert.ok(gpuParityTest.includes('CPU/GPU integrated field parity mismatch'))
+assert.ok(cpuPhysicsTest.includes('runDenseIntegratedFieldParityReference'))
 
 // CPU, sparse Worker and GPU run the same integrated biology fixture at dt=0.016.
 assert.ok(parityReference.includes('new FieldPhysics().tick'))

@@ -22,6 +22,13 @@ const entry = `
     HIGH_TEMPERATURE_PARITY_PARAMS,
     HIGH_TEMPERATURE_PARITY_PROCESS_MASK,
     runDenseHighTemperatureDiffusionReference,
+    INTEGRATED_FIELD_PARITY_FIELDS,
+    INTEGRATED_FIELD_PARITY_SIZE,
+    INTEGRATED_FIELD_PARITY_DT,
+    INTEGRATED_FIELD_PARITY_PARAMS,
+    INTEGRATED_FIELD_PARITY_PROCESS_MASK,
+    createIntegratedFieldParityInitialCells,
+    runDenseIntegratedFieldParityReference,
   } from "./scripts/physics-parity-reference";
 `;
 const bundled = await build({
@@ -77,6 +84,10 @@ try {
       HIGH_TEMPERATURE_PARITY_DT, HIGH_TEMPERATURE_PARITY_INITIAL,
       HIGH_TEMPERATURE_PARITY_PARAMS, HIGH_TEMPERATURE_PARITY_PROCESS_MASK,
       runDenseHighTemperatureDiffusionReference,
+      INTEGRATED_FIELD_PARITY_FIELDS, INTEGRATED_FIELD_PARITY_SIZE,
+      INTEGRATED_FIELD_PARITY_DT, INTEGRATED_FIELD_PARITY_PARAMS,
+      INTEGRATED_FIELD_PARITY_PROCESS_MASK, createIntegratedFieldParityInitialCells,
+      runDenseIntegratedFieldParityReference,
     } = await import(url);
 
     async function run(width, density, velocity, dt, activeMask) {
@@ -308,6 +319,26 @@ try {
       }
     }
 
+    async function runIntegratedFieldParityStep() {
+      const size = INTEGRATED_FIELD_PARITY_SIZE;
+      const backend = new GPUBackend();
+      try {
+        const initialized = await backend.init(size, size, size);
+        if (!initialized) throw new Error("WebGPU adapter disappeared during integrated field parity initialization");
+        backend.uploadMaterials(buildMaterialBuffer());
+        backend.upload(createIntegratedFieldParityInitialCells());
+        backend.writeParams(
+          INTEGRATED_FIELD_PARITY_PARAMS,
+          INTEGRATED_FIELD_PARITY_PROCESS_MASK,
+          INTEGRATED_FIELD_PARITY_DT,
+        );
+        backend.submitCompute(1);
+        return new Float32Array(await backend.readback());
+      } finally {
+        backend.destroy();
+      }
+    }
+
     async function runHighTemperatureDiffusionStep() {
       const width = 3, height = 3, depth = 3;
       const backend = new GPUBackend();
@@ -527,6 +558,8 @@ try {
     const coupledMaterial = await runCoupledMaterialStep();
     const integratedBiologyReference = runIntegratedBiologyParityReference();
     const integratedBiologyGpu = await runIntegratedBiologyParityStep();
+    const integratedFieldReference = runDenseIntegratedFieldParityReference();
+    const integratedFieldGpu = await runIntegratedFieldParityStep();
     const highTemperatureCpuReference = runDenseHighTemperatureDiffusionReference();
     const highTemperatureGpu = await runHighTemperatureDiffusionStep();
     const entropyCoupled = await runEntropyCoupledStep();
@@ -585,7 +618,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, materialIds: { crystal: MAT.CRYSTAL }, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, wave, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure, integratedBiologyReference, integratedBiologyGpu, highTemperatureCpuReference, highTemperatureGpu };
+    return { status: "PASS", adapterInfo, materialIds: { crystal: MAT.CRYSTAL }, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, wave, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure, integratedBiologyReference, integratedBiologyGpu, highTemperatureCpuReference, highTemperatureGpu, integratedFieldReference: Array.from(integratedFieldReference), integratedFieldGpu: Array.from(integratedFieldGpu) };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -642,6 +675,21 @@ try {
       `GPU entropy growth must use post-diffusion energy and temperature (got ${result.entropyCoupled.entropy})`);
     assert.ok(Math.abs(result.entropyCoupled.energy - expectedEntropyEnergy) < 1e-4,
       `GPU entropy attenuation must use new entropy (got ${result.entropyCoupled.energy})`);
+    for (let z = 1; z <= 3; z++) {
+      for (let y = 1; y <= 3; y++) {
+        for (let x = 1; x <= 3; x++) {
+          const base = ((z * result.integratedFieldReference.length / (INTEGRATED_FIELD_PARITY_SIZE ** 3)
+            + y) * INTEGRATED_FIELD_PARITY_SIZE + x) * 24;
+          for (const [name, field] of INTEGRATED_FIELD_PARITY_FIELDS) {
+            const cpuValue = result.integratedFieldReference[base + field];
+            const gpuValue = result.integratedFieldGpu[base + field];
+            const delta = Math.abs(gpuValue - cpuValue);
+            assert.ok(Number.isFinite(gpuValue) && delta < 2e-3,
+              `CPU/GPU integrated field parity mismatch at ${x},${y},${z} for ${name}: CPU ${cpuValue}, GPU ${gpuValue}, delta ${delta}`);
+          }
+        }
+      }
+    }
     assert.ok(result.highTemperatureCpuReference > 2000,
       "dense CPU reference must preserve temperatures above 2000");
     assert.ok(Math.abs(result.highTemperatureCpuReference - 2079.84) < 1e-3,
