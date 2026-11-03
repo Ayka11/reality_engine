@@ -1,5 +1,5 @@
 import { GraphCompiler, NodeRegistry, PackageSerializer, RealityGraph } from '../creator';
-import type { EntitySnapshot, GraphExecutionPlan, LawSnapshot, ProcessSnapshot, RealityGraphData, RealityNode, RealityPackage } from '../creator';
+import type { EntitySnapshot, GraphExecutionPlan, LawSnapshot, RealityGraphData, RealityNode, RealityPackage } from '../creator';
 import { LawEngine, type LawEngineSnapshot } from '../laws/LawEngine';
 import { EntityLayer, type EntityLayerSnapshot } from '../simulation/EntityLayer';
 import { CELL_FIELDS, F } from '../core/CellState';
