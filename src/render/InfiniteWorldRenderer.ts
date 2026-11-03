@@ -703,6 +703,10 @@ export class InfiniteWorldRenderer {
     return this.persistence.loadAssetManifestState<WorldAssetImportManifest>()
   }
 
+  persistAssetManifestSnapshot(assetManifest: WorldAssetImportManifest): boolean {
+    return this.persistence.saveAssetManifestState(assetManifest)
+  }
+
   persistPortableWorldSnapshot(assetManifest?: WorldAssetImportManifest): void {
     const failures: string[] = []
     const surfaceStatus = this.persistActiveSurfaceProvider()
