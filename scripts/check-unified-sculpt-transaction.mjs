@@ -27,5 +27,6 @@ const failed=harness();await assert.rejects(failed.commit("brush:fail",5,true),/
 const partial=harness();partial.field.throwAfterCommit=true;await assert.rejects(partial.commit("smart:partial",8),/persist failed/);assert.deepEqual([partial.legacy.value,partial.field.value],[0,0]);assert.equal(partial.tx.getState().undo,0);
 const failedUndo=harness();await failedUndo.commit("smart:Ocean",7);failedUndo.field.failUndo=true;assert.throws(()=>failedUndo.tx.undo(),/rejected undo/);assert.deepEqual([failedUndo.legacy.value,failedUndo.field.value],[7,7]);assert.equal(failedUndo.tx.getState().undo,1);
 const failedRedo=harness();await failedRedo.commit("brush:erase",4);failedRedo.tx.undo();failedRedo.field.failRedo=true;assert.throws(()=>failedRedo.tx.redo(),/rejected redo/);assert.deepEqual([failedRedo.legacy.value,failedRedo.field.value],[0,0]);assert.equal(failedRedo.tx.getState().redo,1);
+const cleared=harness();await cleared.commit("brush:before-world-load",2);cleared.tx.clear();assert.deepEqual(cleared.tx.getState(),{undo:0,redo:0,undoLabels:[],redoLabels:[]},"world replacement must invalidate both legacy and authoritative mixed history");
 console.log("PASS: unified mixed SmartBrush/legacy transaction history");
 console.log("PASS: commit/undo/redo failure rollback preserves both models");
