@@ -91,6 +91,9 @@ jobs:
       - run: npm run test:field-profile
       - run: npm run test:mutable-field-profile
       - run: npm run test:mutable-field-validation
+      - name: Run authoritative world-field contract regression
+        run: npm run test:world-field
+        timeout-minutes: 3
       - run: npm run test:worker-restore-two-phase
       - run: npm run test:legacy-field-bridge
       - run: npm run test:legacy-sculpt-adapter
