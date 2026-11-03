@@ -65,6 +65,7 @@ jobs:
       - run: npm run test:construction
       - run: npm run test:world-object-identity
       - run: npm run test:reality-graph-validation
+      - run: npm run test:reality-package-import
       - run: npm run benchmark:world-object-index
       - run: npm run test:world-placement-api
       - run: npm run test:world-plan-runtime-adapter
