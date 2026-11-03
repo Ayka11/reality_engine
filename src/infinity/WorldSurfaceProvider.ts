@@ -1,4 +1,4 @@
-import { BIOME_ID, type Biome, type WorldGenerator } from './WorldGenerator'
+import { BIOME_ID, WorldGenerator, type Biome } from './WorldGenerator'
 
 /**
  * A source of world-surface/environment samples, independent of how that
