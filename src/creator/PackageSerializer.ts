@@ -55,6 +55,18 @@ export class PackageSerializer {
     if (pkg.runtimeState) {
       zip.file('runtime-state.json', serializePackageJson(pkg.runtimeState));
     }
+    if (pkg.chunks) {
+      zip.file('chunks/manifest.json', serializePackageJson({
+        chunkSize: pkg.chunks.chunkSize,
+        activeCount: pkg.chunks.activeCount,
+        serialized: pkg.chunks.serialized.map(({ key, cx, cy, cz, active }) => ({
+          key, cx, cy, cz, active,
+        })),
+      }));
+      pkg.chunks.serialized.forEach((chunk, index) => {
+        zip.file(`chunks/${index}.bin`, new Uint8Array(chunk.buffer));
+      });
+    }
     zip.file('processes.json', serializePackageJson(pkg.processes));
     zip.file('metadata/stats.json', serializePackageJson(pkg.metadata));
 
@@ -86,6 +98,48 @@ export class PackageSerializer {
       throw new Error('Reality package runtime state envelope is invalid.');
     }
 
+    const chunksManifestFile = zip.file('chunks/manifest.json');
+    let chunks: RealityPackage['chunks'];
+    if (chunksManifestFile) {
+      const chunkManifest = await this.readJson(zip, 'chunks/manifest.json');
+      if (!chunkManifest || typeof chunkManifest !== 'object' ||
+          !Number.isSafeInteger(chunkManifest.chunkSize) || chunkManifest.chunkSize <= 0 ||
+          !Number.isSafeInteger(chunkManifest.activeCount) || chunkManifest.activeCount < 0 ||
+          !Array.isArray(chunkManifest.serialized)) {
+        throw new Error('Reality package sparse chunk manifest is invalid.');
+      }
+      const serialized: NonNullable<RealityPackage['chunks']>['serialized'] = [];
+      for (let index = 0; index < chunkManifest.serialized.length; index++) {
+        const record = chunkManifest.serialized[index];
+        if (!record || typeof record !== 'object' ||
+            typeof record.key !== 'string' ||
+            !Number.isSafeInteger(record.cx) ||
+            !Number.isSafeInteger(record.cy) ||
+            !Number.isSafeInteger(record.cz) ||
+            record.key !== `${record.cx},${record.cy},${record.cz}` ||
+            typeof record.active !== 'boolean') {
+          throw new Error(`Reality package sparse chunk record ${index} is invalid.`);
+        }
+        const chunkBytes = await zip.file(`chunks/${index}.bin`)?.async('uint8array');
+        if (!chunkBytes) {
+          throw new Error(`Reality package is missing sparse chunk payload ${index}.`);
+        }
+        serialized.push({
+          key: record.key,
+          cx: record.cx,
+          cy: record.cy,
+          cz: record.cz,
+          active: record.active,
+          buffer: arrayBufferFromUint8(chunkBytes),
+        });
+      }
+      chunks = {
+        chunkSize: chunkManifest.chunkSize,
+        activeCount: chunkManifest.activeCount,
+        serialized,
+      };
+    }
+
     // Accept legacy package files whose entities/laws roots were arrays.
     const entityEnvelope = Array.isArray(entityPayload)
       ? { entities: entityPayload, runtimeEntityLayer: undefined }
@@ -98,6 +152,7 @@ export class PackageSerializer {
       manifest,
       graph,
       voxelState: arrayBufferFromUint8(inflate(voxelBin)),
+      chunks,
       entities: entityEnvelope.entities,
       runtimeEntityLayer: entityEnvelope.runtimeEntityLayer,
       laws: lawEnvelope.laws,
