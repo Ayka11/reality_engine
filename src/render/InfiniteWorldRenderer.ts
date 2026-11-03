@@ -550,6 +550,7 @@ export class InfiniteWorldRenderer {
       objects: this.objects.values(),
       terrainDeformations: this.terrainDeformations.serialize(),
       authoritativeField: this.authoritativeField.serialize(),
+      provenance: runtimeProvenance.getTrace(),
     })
   }
 
@@ -559,7 +560,7 @@ export class InfiniteWorldRenderer {
    * explicit legacy-package policy: clear authored scene overlays/objects while
    * retaining the currently configured procedural generator.
    */
-  restorePortableWorldSnapshot(snapshot?: WorldEditorSnapshot): void {
+  private preparePortableWorldSnapshot(snapshot?: WorldEditorSnapshot) {
     if (snapshot !== undefined &&
         (!snapshot || snapshot.version !== 1 ||
           !snapshot.generator || typeof snapshot.generator.seed !== 'string' ||
@@ -589,13 +590,40 @@ export class InfiniteWorldRenderer {
     }
 
     // Detached candidates validate every nested domain before any renderer,
-    // persistence key, object index, or authoritative field is replaced.
+    // persistence key, object index, provenance trace or authoritative field is replaced.
     const nextObjects = new WorldObjectManager()
     for (const object of snapshot?.objects ?? []) nextObjects.add(object)
     const nextTerrain = new TerrainDeformationField(nextGenerator.seed)
     if (snapshot) nextTerrain.restore(snapshot.terrainDeformations)
     const nextField = new MutableWorldFieldProvider(new GeneratorFieldProvider(nextGenerator))
     if (snapshot) nextField.restore(snapshot.authoritativeField)
+
+    const nextProvenance = new RuntimeProvenance()
+    if (snapshot?.provenance) nextProvenance.restore(snapshot.provenance)
+
+    return {
+      nextGenerator,
+      nextSurface,
+      nextObjects,
+      nextTerrain,
+      nextField,
+      nextProvenance,
+    }
+  }
+
+  /** Run the same detached validation used by restore without publishing state. */
+  validatePortableWorldSnapshot(snapshot?: WorldEditorSnapshot): void {
+    this.preparePortableWorldSnapshot(snapshot)
+  }
+
+  /**
+   * Validate the complete infinite-world snapshot off to the side, then replace
+   * the live editor state in one synchronous publication. Undefined is the
+   * explicit legacy-package policy: clear authored scene overlays/objects while
+   * retaining the currently configured procedural generator.
+   */
+  restorePortableWorldSnapshot(snapshot?: WorldEditorSnapshot): void {
+    const prepared = this.preparePortableWorldSnapshot(snapshot)
 
     if (this.saveTimer !== null) {
       window.clearTimeout(this.saveTimer)
@@ -628,26 +656,27 @@ export class InfiniteWorldRenderer {
     }
     this.objectMeshes.clear()
 
-    this.generator = nextGenerator
-    this.fieldSampler.setGenerator(nextGenerator)
-    this.authoritativeField.setBase(new GeneratorFieldProvider(nextGenerator))
-    this.authoritativeField.restore(nextField.serialize())
+    this.generator = prepared.nextGenerator
+    this.fieldSampler.setGenerator(prepared.nextGenerator)
+    this.authoritativeField.setBase(new GeneratorFieldProvider(prepared.nextGenerator))
+    this.authoritativeField.restore(prepared.nextField.serialize())
     this.fieldSampler.setProvider(this.authoritativeField)
-    this.terrainDeformations = nextTerrain
+    this.terrainDeformations = prepared.nextTerrain
 
     this.objects.clear()
-    for (const object of nextObjects.values()) this.objects.add(object)
+    for (const object of prepared.nextObjects.values()) this.objects.add(object)
 
     if (snapshot?.surfaceProvider.kind === 'world-generator-surface' || !snapshot) {
       this.fieldSampler.resetSurfaceProviderToGenerator()
     } else {
-      this.fieldSampler.setSurfaceProvider(nextSurface)
+      this.fieldSampler.setSurfaceProvider(prepared.nextSurface)
     }
     worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)
+    runtimeProvenance.restore(prepared.nextProvenance.getTrace())
 
-    this.persistence = new WorldPersistence(nextGenerator.seed)
-    this.storageKey = `reality-engine-world:${nextGenerator.seed}:objects`
-    this.chunks = new InfiniteChunkManager(nextGenerator, {
+    this.persistence = new WorldPersistence(prepared.nextGenerator.seed)
+    this.storageKey = `reality-engine-world:${prepared.nextGenerator.seed}:objects`
+    this.chunks = new InfiniteChunkManager(prepared.nextGenerator, {
       radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4,
     })
     this.lastCenter = null
