@@ -143,7 +143,7 @@ export function bootstrapInfiniteWorld() {
     expected: { width: number; height: number; fieldsPerCell: number },
     bridge: {
       capture: () => unknown
-      apply: (buffer: Float32Array, tick: number) => void
+      apply: (buffer: Float32Array, tick: number, causal: Array<{ tick: number; x: number; y: number; delta: number }>) => void
       restore: (snapshot: unknown) => void
       beforeApply?: () => void
     },
@@ -162,7 +162,7 @@ export function bootstrapInfiniteWorld() {
 
     try {
       bridge.beforeApply?.()
-      bridge.apply(candidate.buffer, candidate.tick)
+      bridge.apply(candidate.buffer, candidate.tick, candidate.causal)
       ;(window as any).restorePortableWorldEditorSnapshot(candidate.worldEditor)
       ;(window as any).persistPortableWorldEditorSnapshot()
       return { legacy: candidate.legacy, tick: candidate.tick }
