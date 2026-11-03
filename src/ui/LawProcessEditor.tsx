@@ -17,6 +17,10 @@ interface LawProcessEditorOptions {
       size: number;
       buffer: Float32Array;
       totalField: (fieldIdx: number) => number;
+      chunkSize?: number;
+      activeChunkCount?: number;
+      serializeChunks?: (includeEmpty?: boolean) => NonNullable<RealityPackage['chunks']>['serialized'];
+      loadChunks?: (chunks: NonNullable<RealityPackage['chunks']>['serialized']) => void;
     };
     tick: number;
     syncToGPU: () => void;
@@ -121,6 +125,11 @@ export class LawProcessEditor {
       },
       graph: this.graph.toJSON(),
       voxelState: sim.grid.buffer.slice().buffer,
+      chunks: sim.grid.serializeChunks ? {
+        chunkSize: sim.grid.chunkSize ?? 32,
+        activeCount: sim.grid.activeChunkCount ?? 0,
+        serialized: sim.grid.serializeChunks(false),
+      } : undefined,
       entities: this.snapshotEntities(),
       runtimeEntityLayer: sim.entityLayer.snapshot(),
       laws: this.options.lawEngine.laws.map(law => this.snapshotLaw(law)),
@@ -191,6 +200,10 @@ export class LawProcessEditor {
       // The engine transaction owns field, entity and law rollback. The graph is
       // an editor-side domain, so its prior value is restored explicitly below.
       sim.mutateAuthoritativeState(() => {
+        if (sim.grid.loadChunks) {
+          // Legacy packages without chunk payloads replace the sparse domain with an empty one.
+          sim.grid.loadChunks(candidate.chunks?.serialized ?? []);
+        }
         sim.grid.buffer.set(candidate.voxelState);
         if (candidate.entityLayer) {
           sim.entityLayer.restore(candidate.entityLayer, sim.grid.size);
@@ -225,6 +238,7 @@ export class LawProcessEditor {
   private preflightPackage(pkg: RealityPackage): {
     graph: RealityGraphData;
     voxelState: Float32Array;
+    chunks: NonNullable<RealityPackage['chunks']> | null;
     entityLayer: EntityLayerSnapshot | null;
     lawEngine: LawEngineSnapshot;
   } {
@@ -276,6 +290,41 @@ export class LawProcessEditor {
     if (!voxelState.every(Number.isFinite)) {
       throw new Error('Reality package voxel state contains non-finite field values.');
     }
+
+    let chunks: NonNullable<RealityPackage['chunks']> | null = null;
+    if (pkg.chunks !== undefined) {
+      const expectedChunkSize = sim.grid.chunkSize ?? 32;
+      if (!pkg.chunks || !Number.isSafeInteger(pkg.chunks.chunkSize) ||
+          pkg.chunks.chunkSize !== expectedChunkSize ||
+          !Number.isSafeInteger(pkg.chunks.activeCount) || pkg.chunks.activeCount < 0 ||
+          !Array.isArray(pkg.chunks.serialized) || !sim.grid.loadChunks) {
+        throw new Error('Reality package sparse chunk envelope is invalid or unsupported by the active grid.');
+      }
+      const expectedChunkBytes = expectedChunkSize ** 3 * CELL_FIELDS * Float32Array.BYTES_PER_ELEMENT;
+      const chunkKeys = new Set<string>();
+      const serialized = pkg.chunks.serialized.map((chunk, index) => {
+        if (!chunk || typeof chunk.key !== 'string' ||
+            !Number.isSafeInteger(chunk.cx) ||
+            !Number.isSafeInteger(chunk.cy) ||
+            !Number.isSafeInteger(chunk.cz) ||
+            chunk.key !== `${chunk.cx},${chunk.cy},${chunk.cz}` ||
+            chunkKeys.has(chunk.key) ||
+            typeof chunk.active !== 'boolean' ||
+            !(chunk.buffer instanceof ArrayBuffer) ||
+            chunk.buffer.byteLength !== expectedChunkBytes ||
+            !new Float32Array(chunk.buffer).every(Number.isFinite)) {
+          throw new Error(`Reality package sparse chunk record ${index} is invalid.`);
+        }
+        chunkKeys.add(chunk.key);
+        return { ...chunk, buffer: chunk.buffer.slice(0) };
+      });
+      chunks = {
+        chunkSize: expectedChunkSize,
+        activeCount: pkg.chunks.activeCount,
+        serialized,
+      };
+    }
+
     for (const [field, value] of Object.entries({
       totalEnergy: pkg.metadata.totalEnergy,
       entropy: pkg.metadata.entropy,
@@ -396,6 +445,7 @@ export class LawProcessEditor {
     return {
       graph: graphCandidate.toJSON(),
       voxelState,
+      chunks,
       entityLayer,
       lawEngine: lawEngineState,
     };
