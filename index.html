@@ -3077,7 +3077,7 @@ window.saveWorld=async function(){
     a.href=url;
     a.download=`re_world_t${tick}.reality`;
     a.click();
-    URL.revokeObjectURL(url);
+    window.setTimeout(()=>URL.revokeObjectURL(url),1000);
     log(`Saved unified .reality package (tick ${tick})`);
   }catch(e){
     const message=e instanceof Error?e.message:String(e);
