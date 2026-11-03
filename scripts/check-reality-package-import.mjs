@@ -244,6 +244,10 @@ const packageSerializerSource = await readFile(new URL('src/creator/PackageSeria
 const worldEditorSnapshotSource = await readFile(new URL('src/infinity/WorldEditorSnapshot.ts', root), 'utf8');
 const worldRendererSource = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8');
 const worldSurfaceProviderSource = await readFile(new URL('src/infinity/WorldSurfaceProvider.ts', root), 'utf8');
+const activeBootstrapSource = await readFile(new URL('src/infinityBootstrap.ts', root), 'utf8');
+const activePackageSource = await readFile(new URL('src/infinity/ActiveWorldPackage.ts', root), 'utf8');
+const activeHtmlSource = await readFile(new URL('index.html', root), 'utf8');
+const worldPersistenceSource = await readFile(new URL('src/infinity/WorldPersistence.ts', root), 'utf8');
 assert.match(editorSource, /const candidate = this\.preflightPackage\(pkg\);\s+const sim = this\.options\.simulation!;/,
   'package preflight must complete before opening the live mutation transaction');
 assert.match(editorSource, /dimensions\.x !== sim\.grid\.W[\s\S]*dimensions\.y !== sim\.grid\.H[\s\S]*dimensions\.z !== sim\.grid\.D/,
@@ -308,6 +312,33 @@ assert.ok(assetManifestSource.includes("const ASSET_LICENSES = new Set<AssetLice
   'asset provenance validation must constrain license values, URLs and duplicate IDs');
 assert.ok(mainSource.includes("fetches URLs or executes a GLTF loader"),
   'manifest restore must remain metadata-only and avoid automatic network fetches');
+assert.ok(activeBootstrapSource.includes("encodeActiveWorldPackage(grid") &&
+  activeBootstrapSource.includes("decodeActiveWorldPackage(decodedJson, expected)"),
+  'the actual boot entrypoint must expose the unified active finite-grid + Infinite World package codec');
+assert.ok(activeBootstrapSource.includes("capturePortableWorldEditorSnapshot") &&
+  activeBootstrapSource.includes("restorePortableWorldEditorSnapshot") &&
+  activeBootstrapSource.includes("persistPortableWorldEditorSnapshot"),
+  'the active application bootstrap must connect portable Infinite World capture, restore and persistence');
+assert.ok(activeBootstrapSource.includes("bridge.restore(previousGrid)") &&
+  activeBootstrapSource.includes("bridge.beforeApply?.()"),
+  'the active package importer must preserve finite runtime state and rollback failed package imports');
+assert.ok(activeHtmlSource.includes("window.encodeActiveRealityPackage") &&
+  activeHtmlSource.includes("window.importActiveRealityPackage") &&
+  activeHtmlSource.includes("window.saveWorld=async function()") &&
+  activeHtmlSource.includes("window.loadWorld=async function(input)"),
+  'the user-visible Save/Load controls must use the unified active package API instead of the legacy finite-only serializer');
+assert.doesNotMatch(activeHtmlSource, /format:'re_v5'/,
+  'the active Save button must no longer emit finite-only re_v5 packages');
+assert.ok(activePackageSource.includes("format: 're_v6'") &&
+  activePackageSource.includes("format === 're_v5'") &&
+  activePackageSource.includes("worldEditor") &&
+  activePackageSource.includes("causal: structuredClone(causal)"),
+  'the active package codec must emit v6 snapshots and retain legacy v5 import compatibility');
+assert.ok(worldPersistenceSource.includes("saveAssetManifestState") &&
+  worldPersistenceSource.includes("loadAssetManifestState") &&
+  worldPersistenceSource.includes("saveProvenanceState") &&
+  worldPersistenceSource.includes("loadProvenanceState"),
+  'asset provenance and RuntimeProvenance must persist with the Infinite World sidecar');
 assert.ok(packageSerializerSource.includes("zip.file('world-editor.json', serializePackageJson(pkg.worldEditor))"),
   'the ZIP serializer must write the portable world-editor snapshot');
 assert.ok(packageSerializerSource.includes("const worldEditorFile = zip.file('world-editor.json')"),
