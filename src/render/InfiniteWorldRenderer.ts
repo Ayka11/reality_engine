@@ -14,6 +14,7 @@ import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import type { WorldEditorSnapshot } from '../infinity/WorldEditorSnapshot'
+import type { WorldAssetImportManifest } from '../worldLibrary/AssetImportManifest'
 import { FieldSampler } from '../infinity/FieldSampler'
 import { GeneratorFieldProvider } from '../infinity/ScientificFieldProvider'
 import { MutableWorldFieldProvider, type WorldFieldMutation } from '../infinity/MutableWorldFieldProvider'
@@ -99,6 +100,7 @@ export class InfiniteWorldRenderer {
   private terrainBrushRadius = 8
   private terrainBrushStrength = 1
   private saveTimer: number | null = null
+  private lastPersistenceFailures: string[] = []
   private storageKey: string
   private readonly pointerHandler: (e: PointerEvent) => void
   private readonly pointerUpHandler: (e: PointerEvent) => void
@@ -697,16 +699,33 @@ export class InfiniteWorldRenderer {
    * seed-scoped sidecar. WorldSaveSystem calls this only after its transaction
    * (including GPU publication) has completed successfully.
    */
-  persistPortableWorldSnapshot(): void {
-    this.persistActiveSurfaceProvider()
+  loadAssetManifestSnapshot(): WorldAssetImportManifest | null {
+    return this.persistence.loadAssetManifestState<WorldAssetImportManifest>()
+  }
+
+  persistPortableWorldSnapshot(assetManifest?: WorldAssetImportManifest): void {
+    const failures: string[] = []
+    const surfaceStatus = this.persistActiveSurfaceProvider()
+    if (surfaceStatus === 'failed') failures.push('world surface')
+    if (assetManifest !== undefined && !this.persistence.saveAssetManifestState(assetManifest)) {
+      failures.push('asset provenance manifest')
+    }
     this.saveWorld({ checkpoint: false })
+    failures.push(...this.lastPersistenceFailures)
+    if (failures.length > 0) {
+      throw new AggregateError(
+        failures.map(label => new Error(`Could not persist ${label}`)),
+        `Infinite World persistence failed: ${failures.join(', ')}`,
+      )
+    }
   }
 
   saveWorld(options: { checkpoint?: boolean } = {}) {
     // Explicit Save creates a stable checkpoint; autosave must not move that checkpoint.
     const fieldSnapshot = this.authoritativeField.serialize()
-    this.persistAuthoritativeFieldState()
-    this.persistTerrainDeformationState()
+    const failedPersistenceOperations: string[] = []
+    if (!this.persistAuthoritativeFieldState()) failedPersistenceOperations.push('authoritative field state')
+    if (!this.persistTerrainDeformationState()) failedPersistenceOperations.push('terrain deformation state')
     if (options.checkpoint !== false) {
       const fieldCheckpointSaved = this.persistence.saveFieldCheckpoint(fieldSnapshot)
       if (!fieldCheckpointSaved) {
@@ -726,7 +745,6 @@ export class InfiniteWorldRenderer {
       list.push(object)
       groups.set(key, list)
     }
-    const failedPersistenceOperations: string[] = []
     for (const key of this.persistence.knownChunks()) {
       if (!groups.has(key)) {
         const [cx, cy, cz] = key.split(',').map(Number)
@@ -741,9 +759,10 @@ export class InfiniteWorldRenderer {
         failedPersistenceOperations.push(`save chunk ${key}`)
       }
     }
+    this.lastPersistenceFailures = failedPersistenceOperations
     if (failedPersistenceOperations.length > 0) {
       console.warn(
-        `[persistence] World object persistence incomplete (${failedPersistenceOperations.join(', ')}); object changes may not survive reload`,
+        `[persistence] World persistence incomplete (${failedPersistenceOperations.join(', ')}); world changes may not survive reload`,
       )
     }
     return objects.length
