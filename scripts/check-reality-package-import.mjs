@@ -96,6 +96,26 @@ assert.ok(decodedRuntimeState.previousEnergy instanceof Float32Array);
 assert.ok(decodedRuntimeState.climate.windY instanceof Float32Array);
 assert.ok(decodedRuntimeState.multiScale.macroTemp instanceof Float32Array);
 
+const worldEditorFixture = {
+  version: 1,
+  generator: { seed: 'world-seed-a', seaLevel: 16, maxElevation: 52 },
+  surfaceProvider: {
+    version: 1, kind: 'world-generator-surface', seed: 'world-seed-a',
+    seaLevel: 16, maxElevation: 52,
+  },
+  objects: [{
+    id: 'tree:1:0:2', kind: 'tree', x: 1, y: 0, z: 2,
+    rotationY: 0.5, scale: 1.25, seed: 17, properties: { species: 'oak', planted: true },
+  }],
+  terrainDeformations: { version: 1, seed: 'world-seed-a', deltas: [['0,0', 1.5]] },
+  authoritativeField: {
+    schemaVersion: 'world-field-state-v2',
+    providerId: 'authoritative-world-field',
+    providerVersion: 'world-field-mutation-v1',
+    version: 3, nextId: 1, mutations: [], globalOverlays: [],
+  },
+};
+
 const packageSerializer = new PackageSerializer();
 const packageFixture = {
   manifest: {
@@ -117,6 +137,7 @@ const packageFixture = {
   laws: [],
   lawEngineState: undefined,
   runtimeState: fullRuntimeState,
+  worldEditor: worldEditorFixture,
   processes: [],
   metadata: {
     gridSize: { x: 1, y: 1, z: 1 }, totalEnergy: 0, entropy: 0,
@@ -127,6 +148,8 @@ const packedPackage = await packageSerializer.pack(packageFixture);
 const unpackedPackage = await packageSerializer.unpack(packedPackage);
 assert.deepEqual(unpackedPackage.runtimeState, fullRuntimeState,
   'full runtime snapshots must survive the actual ZIP pack/unpack path');
+assert.deepEqual(unpackedPackage.worldEditor, worldEditorFixture,
+  'infinite-world editor state must survive the actual ZIP pack/unpack path');
 assert.deepEqual(Array.from(new Uint8Array(unpackedPackage.chunks.serialized[0].buffer)), [1, 2, 3, 4],
   'sparse chunk binary payloads must survive the actual ZIP pack/unpack path');
 assert.deepEqual(Array.from(new Uint8Array(unpackedPackage.voxelState)), [7, 8, 9, 10],
@@ -135,10 +158,13 @@ assert.deepEqual(Array.from(new Uint8Array(unpackedPackage.voxelState)), [7, 8, 
 const legacyPackage = await packageSerializer.unpack(await packageSerializer.pack({
   ...packageFixture,
   runtimeState: undefined,
+  worldEditor: undefined,
   chunks: undefined,
 }));
 assert.equal(legacyPackage.runtimeState, undefined,
   'legacy archives without runtime-state.json must remain readable');
+assert.equal(legacyPackage.worldEditor, undefined,
+  'legacy archives without world-editor.json must remain readable');
 assert.equal(legacyPackage.chunks, undefined,
   'legacy archives without sparse chunk manifests must remain readable');
 
@@ -163,6 +189,9 @@ const mainSource = await readFile(new URL('src/main.ts', root), 'utf8');
 const worldSaveSource = await readFile(new URL('src/world/save/WorldSaveSystem.ts', root), 'utf8');
 const realityPackageSource = await readFile(new URL('src/creator/RealityPackage.ts', root), 'utf8');
 const packageSerializerSource = await readFile(new URL('src/creator/PackageSerializer.ts', root), 'utf8');
+const worldEditorSnapshotSource = await readFile(new URL('src/infinity/WorldEditorSnapshot.ts', root), 'utf8');
+const worldRendererSource = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8');
+const worldSurfaceProviderSource = await readFile(new URL('src/infinity/WorldSurfaceProvider.ts', root), 'utf8');
 assert.match(editorSource, /const candidate = this\.preflightPackage\(pkg\);\s+const sim = this\.options\.simulation!;/,
   'package preflight must complete before opening the live mutation transaction');
 assert.match(editorSource, /dimensions\.x !== sim\.grid\.W[\s\S]*dimensions\.y !== sim\.grid\.H[\s\S]*dimensions\.z !== sim\.grid\.D/,
@@ -205,6 +234,39 @@ assert.ok(editorSource.includes("pkg.metadata.simulationTicks !== undefined") &&
   'provided package simulation ticks must be validated before import');
 assert.ok(realityPackageSource.includes("simulationTicks?: number"),
   'package metadata must retain a backward-compatible optional simulation clock');
+assert.ok(realityPackageSource.includes("worldEditor?: WorldEditorSnapshot"),
+  'RealityPackage must expose the separate InfiniteWorldRenderer snapshot');
+assert.ok(worldEditorSnapshotSource.includes("export interface WorldEditorSnapshot") &&
+  worldEditorSnapshotSource.includes("authoritativeField: ReturnType<MutableWorldFieldProvider['serialize']>"),
+  'the portable world-editor contract must cover terrain, objects, surface and authoritative field state');
+assert.ok(packageSerializerSource.includes("zip.file('world-editor.json', serializePackageJson(pkg.worldEditor))"),
+  'the ZIP serializer must write the portable world-editor snapshot');
+assert.ok(packageSerializerSource.includes("const worldEditorFile = zip.file('world-editor.json')"),
+  'the ZIP importer must read world-editor state as an optional legacy-compatible file');
+assert.ok(packageSerializerSource.includes("worldEditor,"),
+  'the ZIP importer must return the decoded world-editor snapshot');
+assert.ok(worldSaveSource.includes("worldEditor: this.context.getWorldEditorSnapshot?.()"),
+  'World Save capture must include the Infinite World editor state');
+assert.ok(worldSaveSource.includes("worldEditor: snapshot.worldEditor") &&
+  worldSaveSource.includes("worldEditor: pkg.worldEditor"),
+  'World Save export and import must map the world-editor snapshot in both directions');
+assert.ok(worldSaveSource.includes("this.context.restoreWorldEditorSnapshot?.(snapshot.worldEditor)"),
+  'world-editor restore must join the same full-world mutation transaction');
+assert.ok(worldSaveSource.includes("rollback(\"Infinite world editor\""),
+  'late world restore failures must roll back the separate Infinite World editor');
+assert.ok(worldSaveSource.includes("this.context.persistWorldEditorSnapshot?.()"),
+  'the imported editor state must persist only after the world transaction commits');
+assert.ok(mainSource.includes("capturePortableWorldSnapshot") &&
+  mainSource.includes("restorePortableWorldSnapshot") &&
+  mainSource.includes("persistPortableWorldSnapshot"),
+  'application World Save integration must connect InfiniteWorldRenderer snapshot, restore and persistence');
+assert.ok(worldRendererSource.includes("capturePortableWorldSnapshot(): WorldEditorSnapshot") &&
+  worldRendererSource.includes("restorePortableWorldSnapshot(snapshot?: WorldEditorSnapshot)") &&
+  worldRendererSource.includes("persistPortableWorldSnapshot(): void"),
+  'InfiniteWorldRenderer must expose portable capture, detached restore and post-commit persistence');
+assert.ok(worldSurfaceProviderSource.includes("kind: 'world-generator-surface'") &&
+  worldSurfaceProviderSource.includes("new WorldGenerator(value.seed, value.seaLevel, value.maxElevation)"),
+  'generator-backed world surfaces must retain deterministic seed and generator parameters');
 assert.ok(realityPackageSource.includes("runtimeState?: RealityPackageRuntimeState"),
   'the package contract must expose the complete typed runtime snapshot');
 assert.ok(realityPackageSource.includes("export interface RealityPackageChunks"),
