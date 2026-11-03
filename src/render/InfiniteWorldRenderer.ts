@@ -57,6 +57,8 @@ const BIOME_COLORS: Record<number, number> = {
   [BIOME_ID.alpine]: 0xd7d9d5,
 }
 
+export const AUTHORITATIVE_SCULPT_HISTORY_CHANGED_EVENT = 'reality-engine-authoritative-sculpt-history-changed'
+
 export class InfiniteWorldRenderer {
   readonly renderer: THREE.WebGLRenderer
   readonly scene = new THREE.Scene()
@@ -165,6 +167,7 @@ export class InfiniteWorldRenderer {
         metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id },
       })
     })
+    this.notifyAuthoritativeSculptHistoryChanged()
     this.refreshTerrainPatches()
     this.persistAuthoritativeFieldState()
     return transaction.mutation
@@ -217,6 +220,7 @@ export class InfiniteWorldRenderer {
         default: throw new Error(`Unsupported legacy sculpt tool: ${tool}`)
       }
     })
+    this.notifyAuthoritativeSculptHistoryChanged()
     this.refreshTerrainPatches()
     this.persistAuthoritativeFieldState()
     return transaction.mutation
@@ -236,6 +240,7 @@ export class InfiniteWorldRenderer {
         legacyCoordinate: { ...cell },
       }, options.strength ?? 1),
     )
+    this.notifyAuthoritativeSculptHistoryChanged()
     this.refreshTerrainPatches()
     this.persistAuthoritativeFieldState()
     return transaction.mutation
@@ -243,6 +248,7 @@ export class InfiniteWorldRenderer {
   undoLegacySculptAuthoritative() {
     const transaction = this.authoritativeSculptTransactions.undo()
     if (transaction) {
+      this.notifyAuthoritativeSculptHistoryChanged()
       this.refreshTerrainPatches()
       this.persistAuthoritativeFieldState()
     }
@@ -252,6 +258,7 @@ export class InfiniteWorldRenderer {
   redoLegacySculptAuthoritative() {
     const transaction = this.authoritativeSculptTransactions.redo()
     if (transaction) {
+      this.notifyAuthoritativeSculptHistoryChanged()
       this.refreshTerrainPatches()
       this.persistAuthoritativeFieldState()
     }
@@ -263,6 +270,10 @@ export class InfiniteWorldRenderer {
       undo: this.authoritativeSculptTransactions.historyLength,
       redo: this.authoritativeSculptTransactions.redoLength,
     }
+  }
+
+  private notifyAuthoritativeSculptHistoryChanged(): void {
+    window.dispatchEvent(new Event(AUTHORITATIVE_SCULPT_HISTORY_CHANGED_EVENT))
   }
 
   private worldAnchor = new THREE.Vector3(0, 0, 0)
@@ -577,6 +588,7 @@ export class InfiniteWorldRenderer {
         // A checkpoint restore replaces the authoritative state; older undo/redo
         // snapshots no longer describe a valid transaction chain.
         this.authoritativeSculptTransactions.clear()
+        this.notifyAuthoritativeSculptHistoryChanged()
         this.persistAuthoritativeFieldState()
         this.refreshTerrainPatches()
       } catch (error) {
@@ -640,6 +652,7 @@ export class InfiniteWorldRenderer {
     this.authoritativeField.clear()
     this.terrainDeformations = new TerrainDeformationField(newSeed)
     this.authoritativeSculptTransactions.clear()
+    this.notifyAuthoritativeSculptHistoryChanged()
     this.fieldSampler.setProvider(this.authoritativeField)
     this.rebuildDecisionLayer()
     this.persistence = new WorldPersistence(newSeed)

@@ -1,4 +1,4 @@
-import { InfiniteWorldRenderer } from './render/InfiniteWorldRenderer'
+import { InfiniteWorldRenderer, AUTHORITATIVE_SCULPT_HISTORY_CHANGED_EVENT } from './render/InfiniteWorldRenderer'
 import { WorldFieldVolumeRenderer } from './render/WorldFieldVolumeRenderer'
 import { worldResourceEconomy } from './worldLibrary/WorldResourceEconomy'
 import { settlementGrowthModel } from './worldLibrary/SettlementGrowthModel'
@@ -1224,6 +1224,16 @@ export function bootstrapInfiniteWorld() {
       { id: 'force_field', label: '🛡️ Shield' },
     ]
 
+    const updateAuthoritativeFieldHistoryUI = () => {
+      const history = world.getLegacySculptAuthoritativeHistory()
+      const undo = document.getElementById('vFieldUndo') as HTMLButtonElement | null
+      const redo = document.getElementById('vFieldRedo') as HTMLButtonElement | null
+      const status = document.getElementById('vFieldHistoryStatus')
+      if (undo) undo.disabled = history.undo === 0
+      if (redo) redo.disabled = history.redo === 0
+      if (status) status.textContent = `Authoritative field history · ${history.undo} undo · ${history.redo} redo`
+    }
+
     const render = () => {
       updateContainerStyle()
 
@@ -1779,15 +1789,6 @@ export function bootstrapInfiniteWorld() {
         updateAuthoritativeFieldHistoryUI()
         return mutation
       }
-      const updateAuthoritativeFieldHistoryUI = () => {
-        const history = world.getLegacySculptAuthoritativeHistory()
-        const undo = document.getElementById('vFieldUndo') as HTMLButtonElement | null
-        const redo = document.getElementById('vFieldRedo') as HTMLButtonElement | null
-        const status = document.getElementById('vFieldHistoryStatus')
-        if (undo) undo.disabled = history.undo === 0
-        if (redo) redo.disabled = history.redo === 0
-        if (status) status.textContent = `Authoritative field history · ${history.undo} undo · ${history.redo} redo`
-      }
       document.getElementById('vFieldUndo')?.addEventListener('click', () => {
         const transaction = world.undoLegacySculptAuthoritative()
         const status = document.getElementById('vFieldHistoryStatus')
@@ -2030,6 +2031,7 @@ export function bootstrapInfiniteWorld() {
     }
 
     render()
+    window.addEventListener(AUTHORITATIVE_SCULPT_HISTORY_CHANGED_EVENT, updateAuthoritativeFieldHistoryUI)
 
     // Re-render dock whenever tool/object state changes
     document.addEventListener('builderUpdated', () => render())

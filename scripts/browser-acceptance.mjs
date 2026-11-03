@@ -1727,6 +1727,23 @@ try {
     throw new Error("Field mutation did not receive runtime provenance");
   }
 
+  // Keep the vertical Scientific Field dock visible throughout Load so its
+  // Undo/Redo state must react to the history-change event, not a rerender.
+  await page.evaluate(() => {
+    window.setInfinityDockPosition?.("left");
+    window.toggleWorldToolbar?.(true);
+  });
+  await page.locator("#vTabField").click();
+  await page.waitForSelector("#vFieldUndo", { state: "visible" });
+  const fieldHistoryButtonsBeforeLoad = await page.evaluate(() => ({
+    undoDisabled: document.getElementById("vFieldUndo")?.disabled ?? null,
+    redoDisabled: document.getElementById("vFieldRedo")?.disabled ?? null,
+  }));
+  if (fieldHistoryButtonsBeforeLoad.undoDisabled !== false || fieldHistoryButtonsBeforeLoad.redoDisabled !== true) {
+    throw new Error("Scientific Field dock did not display the pre-load authoritative history: " +
+      JSON.stringify(fieldHistoryButtonsBeforeLoad));
+  }
+
   // Persistence regression: authoritative field edits must survive Save -> Load,
   // not only the object layer. Save a known mutation, perturb it, then restore.
   const fieldPersistenceBaseline = await page.evaluate((probe) => {
@@ -1780,6 +1797,14 @@ try {
   if (fieldHistoryAfterLoad.undo !== 0 || fieldHistoryAfterLoad.redo !== 0) {
     throw new Error("Loading an authoritative field checkpoint must invalidate stale undo/redo history: " +
       JSON.stringify(fieldHistoryAfterLoad));
+  }
+  const fieldHistoryButtonsAfterLoad = await page.evaluate(() => ({
+    undoDisabled: document.getElementById("vFieldUndo")?.disabled ?? null,
+    redoDisabled: document.getElementById("vFieldRedo")?.disabled ?? null,
+  }));
+  if (fieldHistoryButtonsAfterLoad.undoDisabled !== true || fieldHistoryButtonsAfterLoad.redoDisabled !== true) {
+    throw new Error("Loading the field checkpoint did not refresh visible Scientific Field Undo/Redo controls: " +
+      JSON.stringify(fieldHistoryButtonsAfterLoad));
   }
 
 
