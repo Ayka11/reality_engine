@@ -618,7 +618,7 @@ try {
       2, [0.1, 0.95], [100, 100], 1, 1 << PROC.DENSITY_ADVECTION,
     );
     const disabled = await run(3, [0.5, 0, 0], [1, 1, 1], 0.25, 0);
-    return { status: "PASS", adapterInfo, materialIds: { crystal: MAT.CRYSTAL }, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, wave, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure, integratedBiologyReference, integratedBiologyGpu, highTemperatureCpuReference, highTemperatureGpu, integratedFieldReference: Array.from(integratedFieldReference), integratedFieldGpu: Array.from(integratedFieldGpu) };
+    return { status: "PASS", adapterInfo, materialIds: { crystal: MAT.CRYSTAL }, enabled, limited, disabled, materialDiffusion, coupledMaterial, combinedPhase, combinedCrystallization, combinedErosion, crystallizationErosion, entropyCoupled, wave, bioMetabolism, crystallizationBio, localTime, signalPropagation, signalInformation, materialPressure, integratedBiologyReference, integratedBiologyGpu, highTemperatureCpuReference, highTemperatureGpu, integratedFieldParitySize: INTEGRATED_FIELD_PARITY_SIZE, integratedFieldCellFields: CELL_FIELDS, integratedFieldReference: Array.from(integratedFieldReference), integratedFieldGpu: Array.from(integratedFieldGpu) };
   }, moduleUrl);
 
   if (result.status === "SKIP") {
@@ -678,8 +678,8 @@ try {
     for (let z = 1; z <= 3; z++) {
       for (let y = 1; y <= 3; y++) {
         for (let x = 1; x <= 3; x++) {
-          const base = ((z * INTEGRATED_FIELD_PARITY_SIZE + y)
-            * INTEGRATED_FIELD_PARITY_SIZE + x) * 24;
+          const base = ((z * result.integratedFieldParitySize + y)
+            * result.integratedFieldParitySize + x) * result.integratedFieldCellFields;
           for (const [name, field] of INTEGRATED_FIELD_PARITY_FIELDS) {
             const cpuValue = result.integratedFieldReference[base + field];
             const gpuValue = result.integratedFieldGpu[base + field];
