@@ -141,6 +141,41 @@ forwardParentTrace.trace.events[0].parentId = futureParent.id
 assert.equal(forwardParentTrace.validate().valid, false,
   "references to future events must be rejected even when that ID exists later in the trace")
 
+// Portable provenance traces must validate and restore atomically, retaining
+// event identity, ordered parent references and the canonical latest world state.
+const portableProvenance = new RuntimeProvenance()
+portableProvenance.record("preset", { name: "portable-preset" })
+portableProvenance.record("law", { name: "portable-law" })
+portableProvenance.record("brush", { delta: { energy: 3 } })
+portableProvenance.record("world-state", { seed: "portable-seed", revision: 4 })
+const portableTrace = portableProvenance.getTrace()
+const restoredProvenance = new RuntimeProvenance()
+assert.deepEqual(restoredProvenance.restore(portableTrace), portableTrace,
+  "valid runtime provenance trace must survive detached restore")
+const portableTraceBeforeInvalidRestore = restoredProvenance.getTrace()
+const invalidTraceCases = [
+  { ...portableTrace, schemaVersion: "reality-runtime-provenance-v0" },
+  { ...portableTrace, traceId: "" },
+  { ...portableTrace, events: [{ ...portableTrace.events[0], timestamp: Number.MAX_SAFE_INTEGER + 1 }] },
+  { ...portableTrace, events: [{ ...portableTrace.events[0], payload: [] }] },
+  { ...portableTrace, events: [{ ...portableTrace.events[0], parentId: "missing-parent" }] },
+  { ...portableTrace, events: [portableTrace.events[0], portableTrace.events[0]] },
+  { ...portableTrace, latestWorldState: [] },
+]
+for (const invalidTrace of invalidTraceCases) {
+  assert.throws(() => restoredProvenance.restore(invalidTrace),
+    /Invalid runtime provenance trace/,
+    "malformed provenance traces must fail closed")
+  assert.deepEqual(restoredProvenance.getTrace(), portableTraceBeforeInvalidRestore,
+    "failed provenance restore must not replace the existing trace")
+}
+const expectedPortableParent = portableTrace.events.at(-1).id
+const appendedPortableEvent = restoredProvenance.record("brush", { delta: { energy: 1 } })
+assert.equal(appendedPortableEvent.parentId, expectedPortableParent,
+  "new events after restore must continue the imported parent chain")
+assert.ok(!portableTrace.events.some(event => event.id === appendedPortableEvent.id),
+  "new event IDs must not collide with IDs already present in the imported trace")
+
 const base = {
   id: "test-base",
   version: "test-base-v1",
