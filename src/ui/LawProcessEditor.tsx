@@ -359,6 +359,25 @@ export class LawProcessEditor {
       const entityValidator = new EntityLayer();
       entityValidator.restore(pkg.runtimeEntityLayer, sim.grid.size);
       entityLayer = entityValidator.snapshot();
+
+      // The spatial entity model and the voxel ENTITY_ID channel are one domain.
+      // Reject packages where either side points at a different owner/cell set.
+      const ownerByCell = new Map<number, number>();
+      for (const entity of entityLayer.entities) {
+        for (const cellIndex of entity.cells) {
+          ownerByCell.set(cellIndex, entity.id);
+          const fieldOwner = voxelState[cellIndex * CELL_FIELDS + F.ENTITY_ID];
+          if (fieldOwner !== entity.id) {
+            throw new Error(`Reality package entity ${entity.id} does not match voxel ownership at cell ${cellIndex}.`);
+          }
+        }
+      }
+      for (let cellIndex = 0; cellIndex < sim.grid.size; cellIndex++) {
+        const fieldOwner = voxelState[cellIndex * CELL_FIELDS + F.ENTITY_ID];
+        if (fieldOwner !== 0 && ownerByCell.get(cellIndex) !== fieldOwner) {
+          throw new Error(`Reality package voxel cell ${cellIndex} references missing entity ${fieldOwner}.`);
+        }
+      }
     } else {
       // Old packages cannot reconstruct full entities from position/genome summaries.
       // Clear their orphaned ENTITY_ID field during apply rather than inventing IDs.
