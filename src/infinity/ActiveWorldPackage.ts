@@ -93,7 +93,7 @@ export function encodeActiveWorldPackage(
     const offset = index * grid.fieldsPerCell
     let active = false
     for (let field = 0; field < grid.fieldsPerCell; field++) {
-      if (Math.abs(grid.buffer[offset + field]) > 0.01) {
+      if (grid.buffer[offset + field] !== 0) {
         active = true
         break
       }
