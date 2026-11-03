@@ -1194,16 +1194,18 @@ document.getElementById('assignPartitionBtn')?.addEventListener('click', () => {
   distributed.assignInitialPartition(keys);
   (document.getElementById('distChunks') as HTMLElement).textContent = `Owned chunks: ${distributed.getLocalOwnedChunks().length}`;
 });
+let civSystem: CivilizationSystem;
+let saveSystem: WorldSaveSystem;
+let saveManager: SaveManager;
+
 const creatorRoot = document.getElementById('creatorStudio');
 const creatorEditor = creatorRoot ? new LawProcessEditor(creatorRoot, {
   lawEngine: sim.laws,
   simulation: sim,
   thumbnailCanvas: canvas,
+  exportWorldPackage: name => saveSystem.exportRealityPackage(name),
 }) : null;
 void creatorEditor;
-let civSystem: CivilizationSystem;
-let saveSystem: WorldSaveSystem;
-let saveManager: SaveManager;
 
 canvas.addEventListener('dragover', event => {
   event.preventDefault();
