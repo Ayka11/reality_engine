@@ -10,6 +10,7 @@ export class WorldPersistence {
   private readonly fieldCheckpointKey: string
   private readonly surfaceProviderKey: string
   private readonly assetManifestKey: string
+  private readonly provenanceKey: string
   private readonly terrainDeformationKey: string
   private readonly terrainDeformationCheckpointKey: string
   private readonly loaded = new Set<string>()
@@ -22,6 +23,7 @@ export class WorldPersistence {
     this.fieldCheckpointKey = `reality-engine-world:${seed}:field-checkpoint`
     this.surfaceProviderKey = `reality-engine-world:${seed}:surface-provider`
     this.assetManifestKey = `reality-engine-world:${seed}:asset-manifest`
+    this.provenanceKey = `reality-engine-world:${seed}:provenance`
     this.terrainDeformationKey = `reality-engine-world:${seed}:terrain-deformation`
     this.terrainDeformationCheckpointKey = `reality-engine-world:${seed}:terrain-deformation-checkpoint`
   }
@@ -187,6 +189,51 @@ export class WorldPersistence {
     }
   }
 
+  /** Persist the causal provenance trace for this world seed. */
+  saveProvenanceState(state: unknown): boolean {
+    try {
+      localStorage.setItem(this.provenanceKey, JSON.stringify({
+        version: 1,
+        seed: this.seed,
+        state,
+      }))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  loadProvenanceState<T = unknown>(): T | null {
+    let raw: string | null
+    try {
+      raw = localStorage.getItem(this.provenanceKey)
+    } catch {
+      return null
+    }
+    if (!raw) return null
+    try {
+      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
+      if (payload.version !== 1 || payload.seed !== this.seed ||
+          !payload.state || typeof payload.state !== 'object' || Array.isArray(payload.state)) {
+        localStorage.removeItem(this.provenanceKey)
+        return null
+      }
+      return payload.state
+    } catch {
+      try { localStorage.removeItem(this.provenanceKey) } catch {}
+      return null
+    }
+  }
+
+  deleteProvenanceState(): boolean {
+    try {
+      localStorage.removeItem(this.provenanceKey)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   saveTerrainDeformationState(state: unknown): boolean {
     try {
       localStorage.setItem(this.terrainDeformationKey, JSON.stringify({ version: 1, seed: this.seed, state }))
@@ -345,6 +392,7 @@ export class WorldPersistence {
       this.fieldCheckpointKey,
       this.surfaceProviderKey,
       this.assetManifestKey,
+      this.provenanceKey,
       this.terrainDeformationKey,
       this.terrainDeformationCheckpointKey,
     ]) {
