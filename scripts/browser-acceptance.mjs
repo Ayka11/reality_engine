@@ -1610,56 +1610,13 @@ try {
       },
     });
   }, fieldProbe);
+
   const fieldHistoryAfterCommit = await page.evaluate(() =>
     window.infiniteWorld.getLegacySculptAuthoritativeHistory());
   if (fieldHistoryAfterCommit.undo !== fieldHistoryBefore.undo + 1 ||
       fieldHistoryAfterCommit.redo !== 0) {
     throw new Error("Authoritative field mutation did not create an undoable transaction: " +
       JSON.stringify({ before: fieldHistoryBefore, after: fieldHistoryAfterCommit }));
-  }
-  await page.evaluate(() => {
-    window.toggleWorldToolbar?.(true);
-    document.getElementById("vTabField")?.click();
-  });
-  await page.waitForSelector("#vFieldUndo");
-  const fieldHistoryButtons = await page.evaluate(() => ({
-    undoDisabled: document.getElementById("vFieldUndo")?.disabled ?? null,
-    redoDisabled: document.getElementById("vFieldRedo")?.disabled ?? null,
-  }));
-  if (fieldHistoryButtons.undoDisabled !== false || fieldHistoryButtons.redoDisabled !== true) {
-    throw new Error("Scientific Field Brush Undo/Redo controls do not reflect the committed history: " +
-      JSON.stringify(fieldHistoryButtons));
-  }
-  await page.locator("#vFieldUndo").click();
-  const fieldAfterUndo = await page.evaluate((probe) => ({
-    sample: window.infiniteWorld.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
-    history: window.infiniteWorld.getLegacySculptAuthoritativeHistory(),
-  }), fieldProbe);
-  const renderedFieldColorAfterUndo = await readRenderedFieldColor();
-  if (Math.abs(Number(fieldAfterUndo.sample.density) - Number(fieldPhysicsBaseline.sample.density)) > 1e-9 ||
-      Math.abs(Number(fieldAfterUndo.sample.energy) - Number(fieldPhysicsBaseline.sample.energy)) > 1e-9 ||
-      fieldAfterUndo.history.redo !== 1 ||
-      !renderedFieldColorAfterUndo.nearest ||
-      renderedFieldColorAfterUndo.nearest.color.some((value, index) =>
-        Math.abs(value - renderedFieldColorBefore.nearest.color[index]) > 1e-4)) {
-    throw new Error("Scientific Field Brush Undo did not restore authoritative samples and mesh colors: " +
-      JSON.stringify({ fieldAfterUndo, renderedFieldColorAfterUndo }));
-  }
-  await page.locator("#vFieldRedo").click();
-  const fieldAfterRedo = await page.evaluate((probe) => ({
-    sample: window.infiniteWorld.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
-    history: window.infiniteWorld.getLegacySculptAuthoritativeHistory(),
-  }), fieldProbe);
-  const renderedFieldColorAfterRedo = await readRenderedFieldColor();
-  if (Math.abs(Number(fieldAfterRedo.sample.density) - Number(fieldPhysicsAfter?.sample?.density ?? NaN)) > 1e-9 ||
-      Math.abs(Number(fieldAfterRedo.sample.energy) - Number(fieldPhysicsAfter?.sample?.energy ?? NaN)) > 1e-9 ||
-      fieldAfterRedo.history.undo !== fieldHistoryAfterCommit.undo ||
-      fieldAfterRedo.history.redo !== 0 ||
-      !renderedFieldColorAfterRedo.nearest ||
-      renderedFieldColorAfterRedo.nearest.color.some((value, index) =>
-        Math.abs(value - renderedFieldColorAfter.nearest.color[index]) > 1e-4)) {
-    throw new Error("Scientific Field Brush Redo did not restore the committed field and mesh colors: " +
-      JSON.stringify({ fieldAfterRedo, renderedFieldColorAfterRedo }));
   }
 
   const renderedFieldColorAfter = await readRenderedFieldColor();
@@ -1677,6 +1634,55 @@ try {
     const decision = world.buildZoneCost(probe.x, probe.z);
     return { sample, modulation, decision };
   }, fieldProbe);
+
+  await page.evaluate(() => {
+    window.setInfinityDockPosition?.("left");
+    window.toggleWorldToolbar?.(true);
+  });
+  await page.locator("#vTabField").click();
+  await page.waitForSelector("#vFieldUndo", { state: "visible" });
+  const fieldHistoryButtons = await page.evaluate(() => ({
+    undoDisabled: document.getElementById("vFieldUndo")?.disabled ?? null,
+    redoDisabled: document.getElementById("vFieldRedo")?.disabled ?? null,
+  }));
+  if (fieldHistoryButtons.undoDisabled !== false || fieldHistoryButtons.redoDisabled !== true) {
+    throw new Error("Scientific Field Brush Undo/Redo controls do not reflect the committed history: " +
+      JSON.stringify(fieldHistoryButtons));
+  }
+
+  await page.locator("#vFieldUndo").click();
+  const fieldAfterUndo = await page.evaluate((probe) => ({
+    sample: window.infiniteWorld.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
+    history: window.infiniteWorld.getLegacySculptAuthoritativeHistory(),
+  }), fieldProbe);
+  const renderedFieldColorAfterUndo = await readRenderedFieldColor();
+  if (Math.abs(Number(fieldAfterUndo.sample.density) - Number(fieldPhysicsBaseline.sample.density)) > 1e-9 ||
+      Math.abs(Number(fieldAfterUndo.sample.energy) - Number(fieldPhysicsBaseline.sample.energy)) > 1e-9 ||
+      fieldAfterUndo.history.redo !== 1 ||
+      !renderedFieldColorAfterUndo.nearest ||
+      renderedFieldColorAfterUndo.nearest.color.some((value, index) =>
+        Math.abs(value - renderedFieldColorBefore.nearest.color[index]) > 1e-4)) {
+    throw new Error("Scientific Field Brush Undo did not restore authoritative samples and mesh colors: " +
+      JSON.stringify({ fieldAfterUndo, renderedFieldColorAfterUndo }));
+  }
+
+  await page.locator("#vFieldRedo").click();
+  const fieldAfterRedo = await page.evaluate((probe) => ({
+    sample: window.infiniteWorld.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
+    history: window.infiniteWorld.getLegacySculptAuthoritativeHistory(),
+  }), fieldProbe);
+  const renderedFieldColorAfterRedo = await readRenderedFieldColor();
+  if (Math.abs(Number(fieldAfterRedo.sample.density) - Number(fieldPhysicsAfter.sample.density)) > 1e-9 ||
+      Math.abs(Number(fieldAfterRedo.sample.energy) - Number(fieldPhysicsAfter.sample.energy)) > 1e-9 ||
+      fieldAfterRedo.history.undo !== fieldHistoryAfterCommit.undo ||
+      fieldAfterRedo.history.redo !== 0 ||
+      !renderedFieldColorAfterRedo.nearest ||
+      renderedFieldColorAfterRedo.nearest.color.some((value, index) =>
+        Math.abs(value - renderedFieldColorAfter.nearest.color[index]) > 1e-4)) {
+    throw new Error("Scientific Field Brush Redo did not restore the committed field and mesh colors: " +
+      JSON.stringify({ fieldAfterRedo, renderedFieldColorAfterRedo }));
+  }
+  await page.evaluate(() => window.setInfinityDockPosition?.("top"));
 
   const beforeDensity = Number(fieldPhysicsBaseline?.sample?.density ?? NaN);
   const afterDensity = Number(fieldPhysicsAfter?.sample?.density ?? NaN);
