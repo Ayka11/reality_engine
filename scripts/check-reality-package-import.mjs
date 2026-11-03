@@ -293,6 +293,12 @@ assert.ok(worldEditorSnapshotSource.includes("export interface WorldEditorSnapsh
   'the portable world-editor contract must cover terrain, objects, surface and authoritative field state');
 assert.ok(worldEditorSnapshotSource.includes("assetManifest?: WorldAssetImportManifest"),
   'portable world-editor snapshots must retain external asset provenance');
+assert.ok(worldEditorSnapshotSource.includes("provenance?: RuntimeProvenanceTrace"),
+  'portable world-editor snapshots must retain the causal RuntimeProvenance trace');
+assert.ok(worldRendererSource.includes("provenance: runtimeProvenance.getTrace()") &&
+  worldRendererSource.includes("nextProvenance.restore(snapshot.provenance)") &&
+  worldRendererSource.includes("validatePortableWorldSnapshot(snapshot?: WorldEditorSnapshot)"),
+  'InfiniteWorldRenderer must capture, preflight and restore provenance without mutating live state during validation');
 assert.ok(mainSource.includes("validateAssetManifest(manifest)") &&
   mainSource.includes("assetManifest: structuredClone(manifest)"),
   'application capture and restore must validate and preserve asset provenance metadata');
