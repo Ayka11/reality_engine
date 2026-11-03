@@ -2,6 +2,7 @@ import type { WorldObject } from './WorldObject'
 import type { TerrainDeformationSnapshot } from './TerrainDeformationField'
 import type { MutableWorldFieldProvider } from './MutableWorldFieldProvider'
 import type { WorldSurfaceProviderSnapshot } from './WorldSurfaceProvider'
+import type { WorldAssetImportManifest } from '../worldLibrary/AssetImportManifest'
 
 /**
  * Portable state owned by InfiniteWorldRenderer, independently of the
@@ -15,6 +16,8 @@ export interface WorldEditorSnapshot {
     maxElevation: number
   }
   surfaceProvider: WorldSurfaceProviderSnapshot
+  /** Provenance/licensing references only; package import never auto-fetches URLs. */
+  assetManifest?: WorldAssetImportManifest
   objects: WorldObject[]
   terrainDeformations: TerrainDeformationSnapshot
   authoritativeField: ReturnType<MutableWorldFieldProvider['serialize']>
