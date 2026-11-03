@@ -168,8 +168,21 @@ assert.deepEqual(flatSnapshot, {
 const restoredFlatSurface = restoreWorldSurfaceProvider(flatSnapshot)
 assert.ok(restoredFlatSurface instanceof FlatWorldSurfaceProvider)
 assert.deepEqual(restoredFlatSurface.sampleSurface(100, -100), flatSurface.sampleSurface(100, -100))
-assert.equal(serializeWorldSurfaceProvider(sampler.surfaceProvider), null,
-  'arbitrary custom surface providers must not be serialized implicitly')
+const generatorSurfaceSnapshot = serializeWorldSurfaceProvider(sampler.surfaceProvider)
+assert.deepEqual(generatorSurfaceSnapshot, {
+  version: 1,
+  kind: 'world-generator-surface',
+  seed: generator.seed,
+  seaLevel: generator.seaLevel,
+  maxElevation: generator.maxElevation,
+}, 'built-in generator surfaces must preserve their deterministic seed and terrain parameters')
+const restoredGeneratorSurface = restoreWorldSurfaceProvider(generatorSurfaceSnapshot, generator)
+assert.ok(restoredGeneratorSurface instanceof GeneratorWorldSurfaceProvider)
+assert.deepEqual(
+  restoredGeneratorSurface.sampleSurface(x, z),
+  sampler.surfaceProvider.sampleSurface(x, z),
+  'restored generator surfaces must reproduce the same terrain and climate samples',
+)
 assert.equal(restoreWorldSurfaceProvider({ version: 99, kind: 'flat-workspace-surface' }), null,
   'unknown surface snapshot versions must fail closed')
 assert.equal(restoreWorldSurfaceProvider({ version: 1, kind: 'flat-workspace-surface', seed: 'bad', elevation: NaN }), null,
@@ -190,6 +203,8 @@ const editablePlane = {
   },
 }
 sampler.setSurfaceProvider(editablePlane)
+assert.equal(serializeWorldSurfaceProvider(sampler.surfaceProvider), null,
+  'arbitrary custom surface providers must not be serialized implicitly')
 const customTerrain = sampler.sampleTerrain(120, -80)
 assert.equal(customTerrain.height, 0, 'custom surface must not read height from the generator')
 assert.equal(customTerrain.moisture, 0.25)
