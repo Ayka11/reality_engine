@@ -1541,6 +1541,49 @@ try {
     const decision = world.buildZoneCost(probe.x, probe.z);
     return { sample, modulation, decision };
   }, fieldProbe);
+
+  const readRenderedFieldColor = async () => page.evaluate((probe) => {
+    const world = window.infiniteWorld;
+    let nearest = null;
+    let patchCount = 0;
+    for (const patch of world.patches.values()) {
+      patchCount++;
+      const mesh = patch.group.children.find(child => child.userData?.terrain);
+      const position = mesh?.geometry?.getAttribute?.("position");
+      const color = mesh?.geometry?.getAttribute?.("color");
+      if (!position || !color) continue;
+      for (let vertex = 0; vertex < position.count; vertex++) {
+        const dx = position.getX(vertex) - probe.x;
+        const dz = position.getZ(vertex) - probe.z;
+        const distanceSquared = dx * dx + dz * dz;
+        if (!nearest || distanceSquared < nearest.distanceSquared) {
+          nearest = {
+            distanceSquared,
+            position: [position.getX(vertex), position.getY(vertex), position.getZ(vertex)],
+            color: [color.getX(vertex), color.getY(vertex), color.getZ(vertex)],
+          };
+        }
+      }
+    }
+    return {
+      mode: world.getMaterialMode(),
+      patchCount,
+      nearest: nearest ? {
+        distance: Math.sqrt(nearest.distanceSquared),
+        position: nearest.position,
+        color: nearest.color,
+      } : null,
+    };
+  }, fieldProbe);
+
+  const renderedFieldColorBefore = await readRenderedFieldColor();
+  if (renderedFieldColorBefore.mode !== "field" ||
+      !renderedFieldColorBefore.nearest ||
+      renderedFieldColorBefore.nearest.distance > 0.01 ||
+      !renderedFieldColorBefore.nearest.color.every(Number.isFinite)) {
+    throw new Error("Field visualization did not expose the probe as a rendered terrain vertex: " +
+      JSON.stringify(renderedFieldColorBefore));
+  }
   const fieldMutation = await page.evaluate((probe) => {
     const world = window.infiniteWorld;
     return window.worldFieldMutate?.({
@@ -1556,6 +1599,15 @@ try {
       },
     });
   }, fieldProbe);
+
+  const renderedFieldColorAfter = await readRenderedFieldColor();
+  if (!renderedFieldColorAfter.nearest ||
+      renderedFieldColorAfter.nearest.distance > 0.01 ||
+      renderedFieldColorAfter.nearest.color.every((value, index) =>
+        Math.abs(value - renderedFieldColorBefore.nearest.color[index]) < 1e-4)) {
+    throw new Error("Authoritative field mutation did not refresh rendered terrain vertex colors: before=" +
+      JSON.stringify(renderedFieldColorBefore) + ", after=" + JSON.stringify(renderedFieldColorAfter));
+  }
   const fieldPhysicsAfter = await page.evaluate((probe) => {
     const world = window.infiniteWorld;
     const sample = world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
