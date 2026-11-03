@@ -82,6 +82,7 @@ const encoded = encodeActiveWorldPackage({
   ...dimensions,
   tick: 17,
   buffer,
+  causal: [{ tick: 12, x: 1, y: 0, delta: 2.5 }],
 }, worldEditor)
 const parsed = JSON.parse(encoded)
 assert.equal(parsed.format, 're_v6')
@@ -95,6 +96,8 @@ assert.equal(decoded.legacy, false)
 assert.equal(decoded.tick, 17)
 assert.deepEqual(decoded.buffer, buffer,
   'unified active package must restore every finite-grid value exactly')
+assert.deepEqual(decoded.causal, [{ tick: 12, x: 1, y: 0, delta: 2.5 }],
+  'unified active package must preserve finite-grid causal history')
 assert.deepEqual(decoded.worldEditor, worldEditor,
   'unified active package must preserve the separate Infinite World editor snapshot')
 
@@ -112,6 +115,8 @@ assert.deepEqual(Array.from(legacy.buffer.slice(3, 6)), [7, 8, 0],
   'legacy re_v5 partial cell fields must remain readable and pad new fields with zero')
 assert.equal(legacy.worldEditor, undefined,
   'legacy finite-only packages must be explicitly identified as lacking Infinite World editor state')
+assert.deepEqual(legacy.causal, [],
+  'legacy finite-only packages must start with an empty causal history rather than inherit another world')
 
 const invalidPackages = [
   [{ ...parsed, W: dimensions.width + 1 }, /dimensions/],
@@ -123,6 +128,8 @@ const invalidPackages = [
   [{ ...parsed, cells: [{ i: 0, d: [1, Number.NaN, 3] }] }, /invalid field vector/],
   [{ ...parsed, cells: [{ i: 0, d: [1, 2] }] }, /invalid field vector/],
   [{ ...parsed, worldEditor: undefined }, /missing its Infinite World editor snapshot/],
+  [{ ...parsed, causal: [{ tick: 1, x: 999, y: 0, delta: 1 }] }, /causal history contains an invalid event/],
+  [{ ...parsed, causal: [{ tick: 1, x: 1, y: 0, delta: Number.NaN }] }, /causal history contains an invalid event/],
   [{ ...parsed, worldEditor: { ...worldEditor, assetManifest: {
     ...manifest, entries: [{ ...manifest.entries[0], sourceUrl: 'javascript:alert(1)' }],
   } } }, /asset manifest is invalid/],
