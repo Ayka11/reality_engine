@@ -20,6 +20,7 @@ import type { EconomicSystemSnapshot } from '../../simulation/EconomicSystem';
 import type { MetaLawEvolutionSnapshot } from '../../simulation/MetaLawEvolution';
 import type { CosmologicalSimSnapshot } from '../../simulation/CosmologicalSim';
 import type { SceneDirectorSnapshot } from '../../ai/SceneDirector';
+import type { WorldEditorSnapshot } from '../../infinity/WorldEditorSnapshot';
 
 interface RealitySaveDb extends DBSchema {
   saves: {
@@ -110,6 +111,11 @@ interface SaveContext {
   getDirectorSnapshot?: () => SceneDirectorSnapshot;
   restoreDirectorSnapshot?: (snapshot: SceneDirectorSnapshot) => void;
   resetDirector?: () => void;
+  /** Snapshot/restore for the separate unbounded InfiniteWorldRenderer editor. */
+  getWorldEditorSnapshot?: () => WorldEditorSnapshot | undefined;
+  restoreWorldEditorSnapshot?: (snapshot?: WorldEditorSnapshot) => void;
+  /** Best-effort persistence after the enclosing world transaction commits. */
+  persistWorldEditorSnapshot?: () => void;
   getCausalLog?: () => unknown[];
   thumbnailCanvas?: HTMLCanvasElement | null;
 }
@@ -189,6 +195,7 @@ export class WorldSaveSystem {
       name,
       gridSize: { width: this.voxelGrid.W, height: this.voxelGrid.H, depth: this.voxelGrid.D },
       fields,
+      worldEditor: this.context.getWorldEditorSnapshot?.(),
       runtimeState: {
         entityLayer: this.context.getEntityLayerSnapshot?.(),
         agents: this.context.getAgentSystemSnapshot?.(),
@@ -265,6 +272,7 @@ export class WorldSaveSystem {
     const metaLawEvolutionBefore = this.context.getMetaLawEvolutionSnapshot?.();
     const cosmologicalBefore = this.context.getCosmologicalSnapshot?.();
     const directorBefore = this.context.getDirectorSnapshot?.();
+    const worldEditorBefore = this.context.getWorldEditorSnapshot?.();
 
     const apply = () => {
       if (snapshot.chunks && !this.voxelGrid.loadChunks) {
@@ -372,6 +380,9 @@ export class WorldSaveSystem {
       // Never leave history from the previous world attached to the restored field.
       this.context.clearRecorderSnapshots?.();
       this.context.setTick?.(snapshot.metadata.simulationTicks);
+      // The infinite 3D editor is a separate state domain; restore it only after
+      // the simulation candidate has been applied inside the same transaction.
+      this.context.restoreWorldEditorSnapshot?.(snapshot.worldEditor);
     };
 
     try {
@@ -436,6 +447,9 @@ export class WorldSaveSystem {
       if (directorBefore !== undefined && this.context.restoreDirectorSnapshot) {
         rollback("Scene director", () => this.context.restoreDirectorSnapshot!(directorBefore));
       }
+      if (worldEditorBefore !== undefined && this.context.restoreWorldEditorSnapshot) {
+        rollback("Infinite world editor", () => this.context.restoreWorldEditorSnapshot!(worldEditorBefore));
+      }
       if (rollbackErrors.length > 0) {
         throw new AggregateError(
           [error, ...rollbackErrors],
@@ -449,6 +463,7 @@ export class WorldSaveSystem {
     // Clear it only after the new world transaction commits successfully.
     this.context.clearTimeline?.();
     this.context.clearSculptHistory?.();
+    this.context.persistWorldEditorSnapshot?.();
     this.currentSnapshot = snapshot;
     console.info(`World "${snapshot.name}" fully restored.`);
   }
@@ -521,6 +536,7 @@ export class WorldSaveSystem {
       laws: snapshot.activeLaws,
       lawEngineState: snapshot.runtimeState?.laws,
       runtimeState: snapshot.runtimeState,
+      worldEditor: snapshot.worldEditor,
       processes: snapshot.activeProcesses,
       metadata: {
         gridSize: { x: snapshot.gridSize.width, y: snapshot.gridSize.height, z: snapshot.gridSize.depth },
@@ -541,6 +557,7 @@ export class WorldSaveSystem {
       gridSize: { width: pkg.metadata.gridSize.x, height: pkg.metadata.gridSize.y, depth: pkg.metadata.gridSize.z },
       fields: this.serializer.fieldsFromFlatBuffer(pkg.voxelState),
       chunks: pkg.chunks,
+      worldEditor: pkg.worldEditor,
       realityGraph: pkg.graph,
       activeLaws: pkg.laws,
       activeProcesses: pkg.processes,
