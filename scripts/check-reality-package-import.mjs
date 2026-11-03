@@ -25,6 +25,49 @@ const snapshot = {
   }],
   rngState: 123456,
 };
+const fullRuntimeState = {
+  entityLayer: {
+    entities: [{
+      id: 1, cells: [2], centroid: [0, 0, 0],
+      genome: { metabolismRate: 0.5, reproThreshold: 100, signalStrength: 0.2, bioAffinity: 0.3, mutationRate: 0.02, memoryDecay: 0.1 },
+      age: 3, energy: 4, stage: 'mature', memoryBuffer: new Float32Array([0.1, 0.2]),
+      memPtr: 1, symbol: '@', colorRgb: [0.1, 0.2, 0.3], children: 0, reproCounter: 0,
+    }],
+    bioThreshold: 0.2, mutationStrength: 0.1, nextId: 2, extinctCount: 0, rngState: 123,
+  },
+  agents: { agents: [], nextAgentId: 1, rngState: 124 },
+  civilizations: { civs: [], nextId: 0, tickCount: 0, historyLog: [], rngState: 125 },
+  laws: { laws: [], lawOverrides: [['law-a', 'on']], manualOn: [1], manualOff: [], graphProcessIds: null, rngState: 126 },
+  chemistry: { pendingDensityTransfers: [[3, 0.25]] },
+  worldEvents: { history: [], nextAuto: 0, rngState: 127 },
+  causal: { events: [], nextId: 1, lastEventByCell: [[3, 1]] },
+  previousEnergy: new Float32Array([0.25, 0.5]),
+  climate: { windX: new Float32Array([1]), windY: new Float32Array([2]), pressure: new Float32Array([3]), globalTemp: 4, tickCount: 5 },
+  multiScale: {
+    macroEnergy: new Float32Array([1]), macroEntropy: new Float32Array([2]),
+    macroBio: new Float32Array([3]), macroTemp: new Float32Array([4]),
+    count: new Float32Array([5]), tickCount: 6,
+  },
+  language: {
+    vocabulary: [['water', { id: 1, meaning: { type: 'resource', value: 'water' }, firstSeen: 7 }]],
+    signalLog: [], lexiconAge: [['water', 2]], nextWordId: 2, communicationEvents: 1, tickCount: 7,
+  },
+  economy: { markets: [], gdp: [[1, 12.5]], globalGDP: 12.5, gini: 0.25, tickCount: 8 },
+  metaLawEvolution: { lastCycle: 9, lastAction: 'stable', cycleCount: 1, topLaw: 'law-a' },
+  cosmologicalSim: {
+    tick: 10, galaxies: [], cells: [['0,0,0', [0, 1, 2, 3, 4, 5]]],
+    dirtyKeys: ['0,0,0'], rngState: 128,
+  },
+  director: { history: [{ role: 'user', content: 'build a world' }], worldLog: [] },
+};
+const decodedRuntimeState = parsePackageJson(serializePackageJson(fullRuntimeState));
+assert.deepEqual(decodedRuntimeState, fullRuntimeState,
+  'all supported runtime domains, pair-array maps and nested Float32Array buffers must roundtrip through package JSON');
+assert.ok(decodedRuntimeState.entityLayer.entities[0].memoryBuffer instanceof Float32Array);
+assert.ok(decodedRuntimeState.previousEnergy instanceof Float32Array);
+assert.ok(decodedRuntimeState.climate.windY instanceof Float32Array);
+assert.ok(decodedRuntimeState.multiScale.macroTemp instanceof Float32Array);
+
 const decoded = parsePackageJson(serializePackageJson(snapshot));
 assert.ok(decoded.entities[0].memoryBuffer instanceof Float32Array,
   'runtime entity memory buffers must survive JSON package serialization as Float32Array values');
@@ -43,6 +86,7 @@ assert.throws(
 const editorSource = await readFile(new URL('src/ui/LawProcessEditor.tsx', root), 'utf8');
 const worldSaveSource = await readFile(new URL('src/world/save/WorldSaveSystem.ts', root), 'utf8');
 const realityPackageSource = await readFile(new URL('src/creator/RealityPackage.ts', root), 'utf8');
+const packageSerializerSource = await readFile(new URL('src/creator/PackageSerializer.ts', root), 'utf8');
 assert.match(editorSource, /const candidate = this\.preflightPackage\(pkg\);\s+const sim = this\.options\.simulation!;/,
   'package preflight must complete before opening the live mutation transaction');
 assert.match(editorSource, /dimensions\.x !== sim\.grid\.W[\s\S]*dimensions\.y !== sim\.grid\.H[\s\S]*dimensions\.z !== sim\.grid\.D/,
@@ -73,6 +117,20 @@ assert.ok(editorSource.includes("pkg.metadata.simulationTicks !== undefined") &&
   'provided package simulation ticks must be validated before import');
 assert.ok(realityPackageSource.includes("simulationTicks?: number"),
   'package metadata must retain a backward-compatible optional simulation clock');
+assert.ok(realityPackageSource.includes("runtimeState?: RealityPackageRuntimeState"),
+  'the package contract must expose the complete typed runtime snapshot');
+assert.ok(packageSerializerSource.includes("zip.file('runtime-state.json', serializePackageJson(pkg.runtimeState))"),
+  'the ZIP serializer must write a dedicated portable runtime-state file');
+assert.ok(packageSerializerSource.includes("const runtimeStateFile = zip.file('runtime-state.json')"),
+  'the ZIP importer must read runtime state as an optional legacy-compatible file');
+assert.ok(packageSerializerSource.includes("runtimeState,"),
+  'the ZIP importer must return the decoded runtime snapshot');
+assert.ok(worldSaveSource.includes("runtimeState: snapshot.runtimeState"),
+  'World Save export must carry all captured runtime domains into the package');
+assert.ok(worldSaveSource.includes("...pkg.runtimeState") &&
+  worldSaveSource.includes("entityLayer: pkg.runtimeState.entityLayer ?? pkg.runtimeEntityLayer") &&
+  worldSaveSource.includes("laws: pkg.runtimeState.laws ?? pkg.lawEngineState"),
+  'World Save import must restore the complete runtime snapshot with legacy entity/law fallbacks');
 assert.ok(worldSaveSource.includes("runtimeEntityLayer: snapshot.runtimeState?.entityLayer"),
   'World Save export must carry the complete spatial entity snapshot into .reality');
 assert.ok(worldSaveSource.includes("lawEngineState: snapshot.runtimeState?.laws"),
