@@ -661,10 +661,16 @@ export class InfiniteWorldRenderer {
 
     this.rebuildDecisionLayer()
     this.syncObjects()
+  }
+
+  /**
+   * Persist an already committed portable-world restore into the renderer's
+   * seed-scoped sidecar. WorldSaveSystem calls this only after its transaction
+   * (including GPU publication) has completed successfully.
+   */
+  persistPortableWorldSnapshot(): void {
     this.persistActiveSurfaceProvider()
-    // Persist the imported portable state into the renderer's seed-scoped
-    // sidecar as well, so a normal page reload restores the same authored scene.
-    this.saveWorld()
+    this.saveWorld({ checkpoint: false })
   }
 
   saveWorld(options: { checkpoint?: boolean } = {}) {
