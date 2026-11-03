@@ -672,6 +672,7 @@ export class InfiniteWorldRenderer {
     this.objectMeshes.clear()
 
     this.generator = prepared.nextGenerator
+    ;(window as any).worldSeed = prepared.nextGenerator.seed
     this.fieldSampler.setGenerator(prepared.nextGenerator)
     this.authoritativeField.setBase(new GeneratorFieldProvider(prepared.nextGenerator))
     this.authoritativeField.restore(prepared.nextField.serialize())
@@ -879,6 +880,7 @@ export class InfiniteWorldRenderer {
     this.clearSavedWorld()
 
     this.generator = new WorldGenerator(newSeed)
+    ;(window as any).worldSeed = newSeed
     this.fieldSampler.setGenerator(this.generator)
     // The procedural generator may be reseeded independently; the current
     // authored surface continues to own the world/view identity until reset.
