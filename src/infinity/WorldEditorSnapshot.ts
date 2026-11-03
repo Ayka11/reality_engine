@@ -3,6 +3,7 @@ import type { TerrainDeformationSnapshot } from './TerrainDeformationField'
 import type { MutableWorldFieldProvider } from './MutableWorldFieldProvider'
 import type { WorldSurfaceProviderSnapshot } from './WorldSurfaceProvider'
 import type { WorldAssetImportManifest } from '../worldLibrary/AssetImportManifest'
+import type { RuntimeProvenanceTrace } from './RuntimeProvenance'
 
 /**
  * Portable state owned by InfiniteWorldRenderer, independently of the
@@ -21,4 +22,6 @@ export interface WorldEditorSnapshot {
   objects: WorldObject[]
   terrainDeformations: TerrainDeformationSnapshot
   authoritativeField: ReturnType<MutableWorldFieldProvider['serialize']>
+  /** Causal history for authored field/law/world-state changes. */
+  provenance?: RuntimeProvenanceTrace
 }
