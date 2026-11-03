@@ -362,7 +362,7 @@ assert.ok(mainSource.includes("capturePortableWorldSnapshot") &&
   'application World Save integration must connect InfiniteWorldRenderer snapshot, restore and persistence');
 assert.ok(worldRendererSource.includes("capturePortableWorldSnapshot(): WorldEditorSnapshot") &&
   worldRendererSource.includes("restorePortableWorldSnapshot(snapshot?: WorldEditorSnapshot)") &&
-  worldRendererSource.includes("persistPortableWorldSnapshot(): void"),
+  worldRendererSource.includes("persistPortableWorldSnapshot(assetManifest?: WorldAssetImportManifest): void"),
   'InfiniteWorldRenderer must expose portable capture, detached restore and post-commit persistence');
 assert.ok(worldSurfaceProviderSource.includes("kind: 'world-generator-surface'") &&
   worldSurfaceProviderSource.includes("new WorldGenerator(value.seed, value.seaLevel, value.maxElevation)"),
