@@ -1,4 +1,6 @@
 import type { RealityGraph } from './types';
+import type { EntityLayerSnapshot } from '../simulation/EntityLayer';
+import type { LawEngineSnapshot } from '../laws/LawEngine';
 
 export interface RealityPackageManifest {
   version: string;
@@ -49,7 +51,11 @@ export interface RealityPackage {
   graph: RealityGraph;
   voxelState: ArrayBuffer;
   entities: EntitySnapshot[];
+  /** Complete authoritative entity state; absent only in legacy packages. */
+  runtimeEntityLayer?: EntityLayerSnapshot;
   laws: LawSnapshot[];
+  /** Includes manual overrides, graph bindings and deterministic law RNG state. */
+  lawEngineState?: LawEngineSnapshot;
   processes: ProcessSnapshot[];
   metadata: RealityPackageMetadata;
 }
