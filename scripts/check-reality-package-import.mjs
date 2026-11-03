@@ -41,6 +41,8 @@ assert.throws(
 );
 
 const editorSource = await readFile(new URL('src/ui/LawProcessEditor.tsx', root), 'utf8');
+const worldSaveSource = await readFile(new URL('src/world/save/WorldSaveSystem.ts', root), 'utf8');
+const realityPackageSource = await readFile(new URL('src/creator/RealityPackage.ts', root), 'utf8');
 assert.match(editorSource, /const candidate = this\.preflightPackage\(pkg\);\s+const sim = this\.options\.simulation!;/,
   'package preflight must complete before opening the live mutation transaction');
 assert.match(editorSource, /dimensions\.x !== sim\.grid\.W[\s\S]*dimensions\.y !== sim\.grid\.H[\s\S]*dimensions\.z !== sim\.grid\.D/,
