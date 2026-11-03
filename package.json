@@ -82,7 +82,8 @@
     "test:field-physics-rotation": "npx --yes tsx scripts/check-field-physics-rotation.ts",
     "benchmark:world-object-index": "node scripts/benchmark-world-object-index.mjs",
     "test:reality-graph-validation": "node scripts/check-reality-graph-validation.mjs",
-    "test:reality-package-import": "node scripts/check-reality-package-import.mjs"
+    "test:reality-package-import": "node scripts/check-reality-package-import.mjs",
+    "test:active-world-package": "node scripts/check-active-world-package.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
