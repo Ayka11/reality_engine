@@ -3059,37 +3059,89 @@ window.runScript=function(){
   }catch(e){document.getElementById('scriptLog').textContent='Error: '+e.message;log('Script error: '+e.message);}
 };
 
-window.saveWorld=function(){
-  const cells=[];
-  for(let i=0;i<SZ;i++){const base=i*NF;let any=false;for(let f=0;f<NF;f++)if(Math.abs(buf[base+f])>0.01){any=true;break;}if(any)cells.push({i,d:Array.from(buf.subarray(base,base+NF))});}
-  const json=JSON.stringify({format:'re_v5',W,H,NF,tick,cells});
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));a.download=`re_world_t${tick}.reality`;a.click();
-  log('Saved .reality file');
+window.saveWorld=async function(){
+  try{
+    if(typeof window.encodeActiveRealityPackage!=='function'){
+      throw new Error('Unified Reality package service is not initialized');
+    }
+    const json=window.encodeActiveRealityPackage({
+      width:W,
+      height:H,
+      fieldsPerCell:NF,
+      tick,
+      buffer:buf,
+      causal:structuredClone(causal)
+    });
+    const url=URL.createObjectURL(new Blob([json],{type:'application/json'}));
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`re_world_t${tick}.reality`;
+    a.click();
+    URL.revokeObjectURL(url);
+    log(`Saved unified .reality package (tick ${tick})`);
+  }catch(e){
+    const message=e instanceof Error?e.message:String(e);
+    log('Save failed: '+message);
+    console.error('[RealityPackage] export failed',e);
+  }
 };
 
-window.loadWorld=function(input){
-  const file=input.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=function(ev){
-    try{
-      const data=JSON.parse(ev.target.result);
-      if(!data.cells||!data.W||!data.H){log('Invalid .reality file');return;}
-      pushUndo();
-      buf.fill(0);causal=[];tick=data.tick||0;
-      _invalidateAtmosphereMoodCache();
-      const nf=data.NF||NF;
-      for(const {i,d} of data.cells){
-        if(i>=SZ)continue;
-        const base=i*NF;
-        for(let f=0;f<Math.min(d.length,NF,nf);f++)buf[base+f]=d[f];
+window.loadWorld=async function(input){
+  const file=input?.files?.[0];
+  if(!file)return;
+  try{
+    if(typeof window.importActiveRealityPackage!=='function'){
+      throw new Error('Unified Reality package service is not initialized');
+    }
+    const source=await file.text();
+    const result=window.importActiveRealityPackage(
+      source,
+      {width:W,height:H,fieldsPerCell:NF},
+      {
+        capture:()=>({
+          buffer:buf.slice(),
+          backBuffer:bbuf.slice(),
+          tick,
+          causal:structuredClone(causal)
+        }),
+        beforeApply:()=>pushUndo(),
+        apply:(nextBuffer,nextTick,nextCausal)=>{
+          if(!(nextBuffer instanceof Float32Array)||nextBuffer.length!==buf.length){
+            throw new Error('Imported finite grid buffer does not match the active application');
+          }
+          buf.set(nextBuffer);
+          bbuf.set(nextBuffer);
+          causal=structuredClone(nextCausal);
+          tick=nextTick;
+          window.buf=buf;
+          window.tick=tick;
+          _invalidateAtmosphereMoodCache();
+        },
+        restore:state=>{
+          if(!state||!(state.buffer instanceof Float32Array)||state.buffer.length!==buf.length||
+              !(state.backBuffer instanceof Float32Array)||state.backBuffer.length!==bbuf.length||
+              !Number.isSafeInteger(state.tick)||!Array.isArray(state.causal)){
+            throw new Error('Captured finite simulation rollback state is invalid');
+          }
+          buf.set(state.buffer);
+          bbuf.set(state.backBuffer);
+          causal=structuredClone(state.causal);
+          tick=state.tick;
+          window.buf=buf;
+          window.tick=tick;
+          _invalidateAtmosphereMoodCache();
+        }
       }
-      window.buf=buf;
-      drawGrid();
-      log(`📂 Loaded ${file.name} (tick ${tick})`);
-    }catch(e){log('Load failed: '+e.message);}
+    );
+    drawGrid();
+    log(`Loaded ${result.legacy?'legacy re_v5':'unified re_v6'} package: ${file.name} (tick ${result.tick})`);
+  }catch(e){
+    const message=e instanceof Error?e.message:String(e);
+    log('Load failed: '+message);
+    console.error('[RealityPackage] import failed',e);
+  }finally{
     input.value='';
-  };
-  reader.readAsText(file);
+  }
 };
 
 function log(msg){document.getElementById('plog').textContent=msg;}
