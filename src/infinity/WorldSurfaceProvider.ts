@@ -180,49 +180,87 @@ export class FlatWorldSurfaceProvider implements WorldSurfaceProvider {
   }
 }
 
-export type WorldSurfaceProviderSnapshot = {
-  version: 1
-  kind: 'flat-workspace-surface'
-  seed: string
-  elevation: number
-  temperature: number
-  moisture: number
-  biome: Biome
-}
+export type WorldSurfaceProviderSnapshot =
+  | {
+      version: 1
+      kind: 'flat-workspace-surface'
+      seed: string
+      elevation: number
+      temperature: number
+      moisture: number
+      biome: Biome
+    }
+  | {
+      version: 1
+      kind: 'world-generator-surface'
+      seed: string
+      seaLevel: number
+      maxElevation: number
+    }
 
-/** Serialize only built-in providers with a known, versioned reconstruction path. */
+/** Serialize built-in providers with a known, versioned reconstruction path. */
 export function serializeWorldSurfaceProvider(provider: WorldSurfaceProvider): WorldSurfaceProviderSnapshot | null {
-  if (!(provider instanceof FlatWorldSurfaceProvider)) return null
-  return {
-    version: 1,
-    kind: 'flat-workspace-surface',
-    seed: provider.seed,
-    elevation: provider.elevation,
-    temperature: provider.temperature,
-    moisture: provider.moisture,
-    biome: provider.biome,
+  if (provider instanceof FlatWorldSurfaceProvider) {
+    return {
+      version: 1,
+      kind: 'flat-workspace-surface',
+      seed: provider.seed,
+      elevation: provider.elevation,
+      temperature: provider.temperature,
+      moisture: provider.moisture,
+      biome: provider.biome,
+    }
   }
+  if (provider instanceof GeneratorWorldSurfaceProvider) {
+    return {
+      version: 1,
+      kind: 'world-generator-surface',
+      seed: provider.seed,
+      seaLevel: provider.seaLevel,
+      maxElevation: provider.maximumElevation,
+    }
+  }
+  return null
 }
 
 /** Restore a trusted built-in surface snapshot; malformed or unknown versions fail closed. */
-export function restoreWorldSurfaceProvider(snapshot: unknown): WorldSurfaceProvider | null {
+export function restoreWorldSurfaceProvider(
+  snapshot: unknown,
+  generator?: WorldGenerator,
+): WorldSurfaceProvider | null {
   if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null
   const value = snapshot as Partial<WorldSurfaceProviderSnapshot>
-  if (value.version !== 1 || value.kind !== 'flat-workspace-surface' ||
-      typeof value.seed !== 'string' || typeof value.elevation !== 'number' ||
-      typeof value.temperature !== 'number' || typeof value.moisture !== 'number' ||
-      typeof value.biome !== 'string') return null
+  if (value.version !== 1 || typeof value.seed !== 'string' || !value.seed.trim()) return null
   try {
-    return new FlatWorldSurfaceProvider({
-      seed: value.seed,
-      elevation: value.elevation,
-      temperature: value.temperature,
-      moisture: value.moisture,
-      biome: value.biome as Biome,
-    })
+    if (value.kind === 'flat-workspace-surface' &&
+        typeof value.elevation === 'number' && Number.isFinite(value.elevation) &&
+        typeof value.temperature === 'number' && Number.isFinite(value.temperature) &&
+        typeof value.moisture === 'number' && Number.isFinite(value.moisture) &&
+        typeof value.biome === 'string') {
+      return new FlatWorldSurfaceProvider({
+        seed: value.seed,
+        elevation: value.elevation,
+        temperature: value.temperature,
+        moisture: value.moisture,
+        biome: value.biome as Biome,
+      })
+    }
+    if (value.kind === 'world-generator-surface' &&
+        typeof value.seaLevel === 'number' && Number.isFinite(value.seaLevel) &&
+        typeof value.maxElevation === 'number' && Number.isFinite(value.maxElevation) &&
+        value.maxElevation >= 0) {
+      const activeGenerator = generator &&
+        generator.seed === value.seed &&
+        generator.seaLevel === value.seaLevel &&
+        generator.maxElevation === value.maxElevation
+          ? generator
+          : new WorldGenerator(value.seed, value.seaLevel, value.maxElevation)
+      return new GeneratorWorldSurfaceProvider(activeGenerator)
+    }
   } catch {
     return null
   }
+  return null
 }
 
 /** Adapts the existing deterministic generator without changing its results. */
@@ -246,6 +284,10 @@ export class GeneratorWorldSurfaceProvider implements WorldSurfaceProvider {
 
   get maximumElevation(): number {
     return this.generator.maxElevation
+  }
+
+  get seaLevel(): number {
+    return this.generator.seaLevel
   }
 
   get waterLevel(): number {
