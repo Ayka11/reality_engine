@@ -33,6 +33,8 @@ interface LawProcessEditorOptions {
     mutateAuthoritativeState: <T>(mutation: () => T) => T;
     runAtStepBoundary: <T>(operation: () => T) => Promise<T>;
   };
+  /** Route application exports through WorldSaveSystem for full runtime/chunk coverage. */
+  exportWorldPackage?: (name: string) => Promise<Blob>;
   thumbnailCanvas?: HTMLCanvasElement | null;
   processSystem?: { setActiveProcesses?: (processes: unknown[]) => void };
 }
@@ -78,12 +80,22 @@ export class LawProcessEditor {
       return;
     }
 
-    const pkg = await simulation.runAtStepBoundary(() => this.buildPackage());
-    const blob = await this.serializer.pack(pkg);
+    const packageName = `Reality t${simulation.tick}`;
+    let blob: Blob;
+    if (this.options.exportWorldPackage) {
+      // The application's World Save System owns the complete runtime, chunk,
+      // graph and simulation-clock snapshot for every normal .reality export.
+      blob = await this.options.exportWorldPackage(packageName);
+    } else {
+      // Retain a coherent, self-contained fallback for editors used without the
+      // application's World Save System integration.
+      const pkg = await simulation.runAtStepBoundary(() => this.buildPackage());
+      blob = await this.serializer.pack(pkg);
+    }
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `${pkg.manifest.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.reality`;
+    anchor.download = `${packageName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.reality`;
     anchor.click();
     URL.revokeObjectURL(url);
     this.status!.textContent = `Exported ${anchor.download}`;
