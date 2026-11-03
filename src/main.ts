@@ -40,6 +40,7 @@ import { WorldHealth } from './ux/WorldHealth';
 import { Explainer } from './ux/Explainer';
 import { SMART_BRUSHES } from './ux/SmartBrushes';
 import { createInfinityScaleRuntime } from './infinity/InfinityScaleRuntime';
+import type { WorldEditorSnapshot } from './infinity/WorldEditorSnapshot';
 
 // ── Chunk system imports ───────────────────────────────────────────────────────
 import { RealityMonitor, buildRealityMonitorHTML, updateMonitorPanels } from './ui/RealityMonitor';
@@ -1360,6 +1361,27 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
   resetDirector: () => {
     director.reset();
     clearDirectorUiContext();
+  },
+  getWorldEditorSnapshot: () => {
+    const world = (window as unknown as {
+      infiniteWorld?: { capturePortableWorldSnapshot: () => WorldEditorSnapshot }
+    }).infiniteWorld;
+    return world?.capturePortableWorldSnapshot();
+  },
+  restoreWorldEditorSnapshot: snapshot => {
+    const world = (window as unknown as {
+      infiniteWorld?: { restorePortableWorldSnapshot: (value?: WorldEditorSnapshot) => void }
+    }).infiniteWorld;
+    if (!world && snapshot) {
+      throw new Error('Infinite World renderer is not initialized; cannot restore its portable snapshot');
+    }
+    world?.restorePortableWorldSnapshot(snapshot);
+  },
+  persistWorldEditorSnapshot: () => {
+    const world = (window as unknown as {
+      infiniteWorld?: { persistPortableWorldSnapshot: () => void }
+    }).infiniteWorld;
+    world?.persistPortableWorldSnapshot();
   },
   clearTimeline: () => timeline.reset(),
   getCausalLog: () => sim.causal.recent(24),
