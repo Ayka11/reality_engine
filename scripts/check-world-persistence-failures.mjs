@@ -36,6 +36,12 @@ assert.match(saveSystemSource, /const civBefore = this\.context\.getCivSnapshot\
   "world snapshot import must checkpoint the external civilization domain");
 assert.match(saveSystemSource, /rollback\("Civilization", \(\) => this\.context\.restoreCivSnapshot!\(civBefore\)\)/,
   "failed world snapshot import must restore civilization state through the rollback coordinator");
+assert.match(saveSystemSource, /const worldEditorBefore = this\.context\.getWorldEditorSnapshot\?\.\(\)/,
+  "world snapshot import must checkpoint the independent Infinite World editor domain");
+assert.match(saveSystemSource, /rollback\("Infinite world editor", \(\) => this\.context\.restoreWorldEditorSnapshot!\(worldEditorBefore\)\)/,
+  "failed world import must restore the Infinite World editor after its state was published");
+assert.match(saveSystemSource, /this\.context\.persistWorldEditorSnapshot\?\.\(\)/,
+  "Infinite World sidecar persistence must run only after the authoritative transaction succeeds");
 assert.match(saveSystemSource, /runtimeState:\s*\{[\s\S]*entityLayer:\s*this\.context\.getEntityLayerSnapshot\?\.\(\)[\s\S]*agents:\s*this\.context\.getAgentSystemSnapshot\?\.\(\)[\s\S]*civilizations:\s*this\.context\.getCivSnapshot\?\.\(\)[\s\S]*laws:\s*this\.context\.getLawEngineSnapshot\?\.\(\)/,
   "quick saves must carry full runtime snapshots for entity, agent, civilization and law systems");
 assert.match(saveSystemSource, /this\.context\.restoreEntityLayerSnapshot\(runtime\.entityLayer\)/,
@@ -423,6 +429,11 @@ const runtimeState = {
     history: [{ role: "user", content: "old world question" }, { role: "assistant", content: "old world answer" }],
     worldLog: [{ tick: 31, director: "old-world prompt", action: "old-world event" }],
   },
+  worldEditor: {
+    generator: { seed: "old-editor-seed", seaLevel: 16, maxElevation: 52 },
+    objects: [{ id: "old-world-tree", x: 1, z: 2 }],
+    assetManifest: { version: "1.0", entries: [{ id: "old-world-asset", license: "CC0" }] },
+  },
   tick: 44,
   recorderClears: 0,
   entityClearCount: 0,
@@ -438,6 +449,8 @@ const mockLawEngine = {
 };
 let authoritativeTransactionCalls = 0;
 let failNextDirectorRestore = false;
+let failNextWorldEditorRestore = false;
+let worldEditorPersistCalls = 0;
 const transactionContext = {
   mutateAuthoritativeState(mutation) {
     authoritativeTransactionCalls++;
@@ -512,6 +525,18 @@ const transactionContext = {
     runtimeState.director = cloneValue(snapshot);
   },
   resetDirector: () => { runtimeState.director = { history: [], worldLog: [] }; },
+  getWorldEditorSnapshot: () => cloneValue(runtimeState.worldEditor),
+  restoreWorldEditorSnapshot: snapshot => {
+    runtimeState.worldEditor = cloneValue(snapshot ?? {
+      generator: { seed: "legacy-editor-seed", seaLevel: 16, maxElevation: 52 },
+      objects: [], assetManifest: { version: "1.0", entries: [] },
+    });
+    if (failNextWorldEditorRestore) {
+      failNextWorldEditorRestore = false;
+      throw new Error("injected Infinite World editor restore failure");
+    }
+  },
+  persistWorldEditorSnapshot: () => { worldEditorPersistCalls++; },
   getCausalLog: () => cloneValue(runtimeState.causal.events),
 };
 const saveHarness = new RuntimeWorldSaveSystem(runtimeGrid, mockLawEngine, null, transactionContext);
@@ -580,6 +605,30 @@ assert.equal(mockLawEngine.activeProcessMask, beforeFailedRestoreMask,
   "failed world restore must preserve the pre-transaction process mask");
 assert.equal(runtimeState.recorderClears, beforeFailedRestoreState.recorderClears,
   "failed world restore must preserve recorder history through core recovery");
+assert.deepEqual(runtimeState.worldEditor, beforeFailedRestoreState.worldEditor,
+  "failed SceneDirector restore must also leave the independent Infinite World editor unchanged");
+assert.equal(worldEditorPersistCalls, 0,
+  "failed world restore must not persist a partial editor snapshot to the sidecar");
+
+const beforeFailedEditorRestoreBuffer = runtimeGrid.buffer.slice();
+const beforeFailedEditorRestoreState = cloneValue(runtimeState);
+const beforeFailedEditorRestoreLaws = cloneValue(mockLawEngine.laws);
+const beforeFailedEditorRestoreMask = mockLawEngine.activeProcessMask;
+failNextWorldEditorRestore = true;
+await assert.rejects(
+  saveHarness.applySnapshot(savedRuntimeWorld),
+  /injected Infinite World editor restore failure/,
+);
+assert.deepEqual(runtimeGrid.buffer, beforeFailedEditorRestoreBuffer,
+  "a late Infinite World editor failure must roll back the authoritative dense field");
+assert.deepEqual(runtimeState, beforeFailedEditorRestoreState,
+  "WorldSaveSystem must restore the prior Infinite World editor, asset manifest and runtime domains after editor publication fails");
+assert.deepEqual(mockLawEngine.laws, beforeFailedEditorRestoreLaws,
+  "a late Infinite World editor failure must roll back the law collection");
+assert.equal(mockLawEngine.activeProcessMask, beforeFailedEditorRestoreMask,
+  "a late Infinite World editor failure must roll back the process mask");
+assert.equal(worldEditorPersistCalls, 0,
+  "failed Infinite World editor restoration must not write a sidecar");
 
 await saveHarness.applySnapshot(savedRuntimeWorld);
 assert.deepEqual(runtimeGrid.buffer, expectedRuntimeBuffer, "quick-save restore must restore every field value");
@@ -592,11 +641,16 @@ assert.deepEqual(runtimeState.worldEvents, expectedRuntimeState.worldEvents, "qu
 assert.deepEqual(runtimeState.causal, expectedRuntimeState.causal, "quick-save restore must recover causal graph identity state");
 assert.deepEqual(runtimeState.previousEnergy, expectedRuntimeState.previousEnergy, "quick-save restore must recover previous-energy baseline");
 assert.deepEqual(runtimeState.director, expectedRuntimeState.director, "quick-save restore must recover SceneDirector history and world log");
+assert.deepEqual(runtimeState.worldEditor, expectedRuntimeState.worldEditor,
+  "quick-save restore must recover Infinite World objects, surface/generator metadata and asset provenance");
+assert.equal(worldEditorPersistCalls, 1,
+  "Infinite World sidecar persistence must run once, after a successful world transaction");
 assert.equal(runtimeState.tick, savedRuntimeWorld.metadata.simulationTicks, "quick-save restore must restore simulation tick");
 assert.equal(runtimeState.recorderClears, 1, "successful restore must clear field-only recorder history");
 
 const legacySnapshot = { ...savedRuntimeWorld, civilizations: [] };
 delete legacySnapshot.runtimeState;
+delete legacySnapshot.worldEditor;
 runtimeState.entityRuntime = { source: "stale-entity" };
 runtimeState.agentRuntime = { source: "stale-agent" };
 runtimeState.civilizationRuntime = { source: "stale-civilization" };
@@ -616,7 +670,13 @@ assert.deepEqual(runtimeState.worldEvents, { history: [], nextAuto: 600, rngStat
 assert.deepEqual(runtimeState.causal, { events: [], nextId: 1, lastEventByCell: [] }, "legacy restore must clear stale causal history");
 assert.deepEqual(runtimeState.previousEnergy, new Float32Array(runtimeGrid.size), "legacy restore must reset the previous-energy baseline");
 assert.deepEqual(runtimeState.director, { history: [], worldLog: [] }, "legacy restore must clear stale SceneDirector context");
-assert.equal(runtimeState.recorderClears, 2, "each world restore must clear stale recorder history");
+assert.deepEqual(runtimeState.worldEditor, {
+  generator: { seed: "legacy-editor-seed", seaLevel: 16, maxElevation: 52 },
+  objects: [], assetManifest: { version: "1.0", entries: [] },
+}, "legacy package restore must explicitly clear stale Infinite World objects and asset provenance");
+assert.equal(worldEditorPersistCalls, 2,
+  "legacy editor reset must persist only after its world transaction commits");
+assert.equal(runtimeState.recorderClears, 3, "each world restore must clear stale recorder history");
 assert.equal(runtimeGrid.buffer[20], 0, "legacy restore must clear stale entity ownership marker");
 assert.equal(runtimeGrid.buffer[19], 0, "legacy restore must clear stale agent marker");
 
