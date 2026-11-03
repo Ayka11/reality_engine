@@ -67,6 +67,26 @@ assert.deepEqual(persistence.loadAssetManifestState(), assetManifest,
   'asset provenance metadata must round-trip for the matching world seed')
 assert.equal(otherWorldPersistence.loadAssetManifestState(), null,
   'asset provenance manifests must be isolated by world seed')
+const provenanceTrace = {
+  schemaVersion: 'reality-runtime-provenance-v1',
+  traceId: 'trace-persistence-test',
+  events: [{ id: 'world-state-1', stage: 'world-state', timestamp: 1700000000000,
+    payload: { seed: 'surface-save-seed' } }],
+  latestWorldState: { seed: 'surface-save-seed' },
+}
+assert.equal(persistence.saveProvenanceState(provenanceTrace), true,
+  'runtime provenance must persist independently of finite simulation state')
+assert.deepEqual(persistence.loadProvenanceState(), provenanceTrace,
+  'runtime provenance must round-trip for the matching world seed')
+assert.equal(otherWorldPersistence.loadProvenanceState(), null,
+  'runtime provenance traces must be isolated by world seed')
+const provenanceKey = 'reality-engine-world:surface-save-seed:provenance'
+entries.set(provenanceKey, '{broken-provenance')
+assert.equal(persistence.loadProvenanceState(), null,
+  'malformed provenance sidecar data must be rejected')
+assert.equal(entries.has(provenanceKey), false,
+  'malformed provenance sidecar data must be removed')
+assert.equal(persistence.saveProvenanceState(provenanceTrace), true)
 const assetManifestKey = 'reality-engine-world:surface-save-seed:asset-manifest'
 entries.set(assetManifestKey, '{broken-asset-manifest')
 assert.equal(persistence.loadAssetManifestState(), null,
@@ -78,6 +98,8 @@ assert.equal(persistence.clear(), true,
   'clearing a world must remove asset provenance as well as terrain and field state')
 assert.equal(persistence.loadAssetManifestState(), null,
   'clearing a world must remove its asset provenance manifest')
+assert.equal(persistence.loadProvenanceState(), null,
+  'clearing a world must remove its runtime provenance trace')
 
 const surfaceKey = 'reality-engine-world:surface-save-seed:surface-provider'
 entries.set(surfaceKey, '{corrupt-surface-snapshot')
