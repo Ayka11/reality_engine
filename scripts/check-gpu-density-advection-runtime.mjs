@@ -678,8 +678,8 @@ try {
     for (let z = 1; z <= 3; z++) {
       for (let y = 1; y <= 3; y++) {
         for (let x = 1; x <= 3; x++) {
-          const base = ((z * result.integratedFieldReference.length / (INTEGRATED_FIELD_PARITY_SIZE ** 3)
-            + y) * INTEGRATED_FIELD_PARITY_SIZE + x) * 24;
+          const base = ((z * INTEGRATED_FIELD_PARITY_SIZE + y)
+            * INTEGRATED_FIELD_PARITY_SIZE + x) * 24;
           for (const [name, field] of INTEGRATED_FIELD_PARITY_FIELDS) {
             const cpuValue = result.integratedFieldReference[base + field];
             const gpuValue = result.integratedFieldGpu[base + field];

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { CELL_FIELDS } from '../src/core/CellState.ts'
 import { CHUNK_FLOATS, F, NF, chunkKey } from '../src/core/ChunkGrid.ts'
 import { DEFAULT_PARAMS } from '../src/laws/MetaLaw.ts'
 import { MAT } from '../src/materials/MaterialDef.ts'
@@ -865,6 +866,12 @@ assert.ok(Math.abs(workerHighTemperature - denseHighTemperatureReference) < 1e-4
 const integratedFieldInitial = createIntegratedFieldParityInitialCells()
 const integratedFieldReference = runDenseIntegratedFieldParityReference()
 const integratedFieldOrigin = { x: 121, y: 121, z: 61 }
+const sparseFieldByDenseField: Record<number, number> = {
+  0: F.E, 1: F.D, 2: F.I, 3: F.S, 4: F.T, 5: F.P,
+  6: F.FX, 7: F.FY, 8: F.FZ, 9: F.TAU, 11: F.BIO,
+  12: F.WAVE_PHASE, 13: F.WAVE, 15: F.MAT,
+  21: F.VX, 22: F.VY, 23: F.VZ,
+}
 send('setPhysics', {
   params: { ...INTEGRATED_FIELD_PARITY_PARAMS },
   processMask: INTEGRATED_FIELD_PARITY_PROCESS_MASK,
@@ -873,17 +880,19 @@ for (let z = 1; z <= 3; z++) {
   for (let y = 1; y <= 3; y++) {
     for (let x = 1; x <= 3; x++) {
       const sourceBase = ((z * INTEGRATED_FIELD_PARITY_SIZE + y)
-        * INTEGRATED_FIELD_PARITY_SIZE + x) * NF
+        * INTEGRATED_FIELD_PARITY_SIZE + x) * CELL_FIELDS
       const target = {
         x: integratedFieldOrigin.x + x - INTEGRATED_FIELD_PARITY_OFFSET,
         y: integratedFieldOrigin.y + y - INTEGRATED_FIELD_PARITY_OFFSET,
         z: integratedFieldOrigin.z + z - INTEGRATED_FIELD_PARITY_OFFSET,
       }
-      for (const [, field] of INTEGRATED_FIELD_PARITY_FIELDS) {
+      for (const [, denseField] of INTEGRATED_FIELD_PARITY_FIELDS) {
+        const field = sparseFieldByDenseField[denseField]
+        assert.notEqual(field, undefined, `missing sparse field mapping for dense field ${denseField}`)
         send('paint', {
           ...target,
           f: field,
-          v: integratedFieldInitial[sourceBase + field],
+          v: integratedFieldInitial[sourceBase + denseField],
           r: 0,
           mode: 'set',
         })
@@ -902,10 +911,11 @@ for (let z = 1; z <= 3; z++) {
         z: integratedFieldOrigin.z + z - INTEGRATED_FIELD_PARITY_OFFSET,
       }
       const sourceBase = ((z * INTEGRATED_FIELD_PARITY_SIZE + y)
-        * INTEGRATED_FIELD_PARITY_SIZE + x) * NF
-      for (const [name, field] of INTEGRATED_FIELD_PARITY_FIELDS) {
+        * INTEGRATED_FIELD_PARITY_SIZE + x) * CELL_FIELDS
+      for (const [name, denseField] of INTEGRATED_FIELD_PARITY_FIELDS) {
+        const field = sparseFieldByDenseField[denseField]
         const workerValue = readField(integratedFieldWorkerFrame, target.x, target.y, target.z, field)
-        const cpuValue = integratedFieldReference[sourceBase + field]
+        const cpuValue = integratedFieldReference[sourceBase + denseField]
         const delta = Math.abs(workerValue - cpuValue)
         assert.ok(delta < 2e-3,
           `CPU/Worker integrated field parity mismatch at ${x},${y},${z} for ${name}: CPU ${cpuValue}, Worker ${workerValue}, delta ${delta}`)
