@@ -48,6 +48,37 @@ assert.equal(otherWorldPersistence.loadSurfaceProviderState(), null,
 assert.equal(persistence.deleteSurfaceProviderState(), true)
 assert.equal(persistence.loadSurfaceProviderState(), null)
 
+const assetManifest = {
+  version: '1.0',
+  generatedAt: '2026-11-03T12:00:00.000Z',
+  project: 'surface-persistence-test',
+  entries: [{
+    id: 'asset.persisted.tree',
+    providerId: 'polyhaven',
+    sourceUrl: 'https://polyhaven.com/a/tree',
+    name: 'Tree',
+    license: 'CC0',
+    attribution: 'Poly Haven',
+  }],
+}
+assert.equal(persistence.saveAssetManifestState(assetManifest), true,
+  'asset provenance metadata must persist independently of external GLTF downloads')
+assert.deepEqual(persistence.loadAssetManifestState(), assetManifest,
+  'asset provenance metadata must round-trip for the matching world seed')
+assert.equal(otherWorldPersistence.loadAssetManifestState(), null,
+  'asset provenance manifests must be isolated by world seed')
+const assetManifestKey = 'reality-engine-world:surface-save-seed:asset-manifest'
+entries.set(assetManifestKey, '{broken-asset-manifest')
+assert.equal(persistence.loadAssetManifestState(), null,
+  'malformed asset manifest storage must be rejected')
+assert.equal(entries.has(assetManifestKey), false,
+  'malformed asset manifest storage must be removed')
+assert.equal(persistence.saveAssetManifestState(assetManifest), true)
+assert.equal(persistence.clear(), true,
+  'clearing a world must remove asset provenance as well as terrain and field state')
+assert.equal(persistence.loadAssetManifestState(), null,
+  'clearing a world must remove its asset provenance manifest')
+
 const surfaceKey = 'reality-engine-world:surface-save-seed:surface-provider'
 entries.set(surfaceKey, '{corrupt-surface-snapshot')
 assert.equal(persistence.loadSurfaceProviderState(), null,
@@ -59,6 +90,7 @@ assert.equal(persistence.saveSurfaceProviderState(snapshot), true)
 assert.equal(persistence.clear(), true,
   'clearing the world must remove the saved surface-provider selection as well as fields and chunks')
 assert.equal(persistence.loadSurfaceProviderState(), null)
+assert.equal(persistence.loadAssetManifestState(), null)
 console.log('World surface persistence regression: PASS')
 console.log('PASS: versioned surface snapshot round-trips and remains world-seed scoped')
 console.log('PASS: clearing world persistence removes surface selection')
