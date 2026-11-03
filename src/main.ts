@@ -1330,6 +1330,7 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
   restorePreviousEnergySnapshot: snapshot => sim.restorePrevEnergy(snapshot),
   resetPreviousEnergy: () => sim.resetPreviousEnergy(),
   clearRecorderSnapshots: () => sim.recorder.clearSnapshots(),
+  clearSculptHistory: () => unifiedSculptTransactions.clear(),
   getClimateSnapshot: () => climate.snapshot(),
   restoreClimateSnapshot: snapshot => climate.restore(snapshot),
   resetClimate: () => climate.reset(),
