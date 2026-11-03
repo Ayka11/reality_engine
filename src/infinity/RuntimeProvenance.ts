@@ -88,9 +88,15 @@ export class RuntimeProvenance {
     const ids = new Set<string>()
 
     for (const event of events) {
-      if (ids.has(event.id)) errors.push(`Duplicate provenance event id: ${event.id}`)
+      // A parent must already exist in the preceding history. Checking before
+      // registering the current ID rejects self-parent and forward references.
+      if (event.parentId && !ids.has(event.parentId)) {
+        errors.push(`Missing or invalid parent for event: ${event.id}`)
+      }
+      if (ids.has(event.id)) {
+        errors.push(`Duplicate provenance event id: ${event.id}`)
+      }
       ids.add(event.id)
-      if (event.parentId && !ids.has(event.parentId)) errors.push(`Missing parent for event: ${event.id}`)
     }
 
     const stages = new Set(events.map(event => event.stage))
