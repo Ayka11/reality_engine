@@ -1406,7 +1406,8 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
     const world = (window as unknown as {
       infiniteWorld?: { persistPortableWorldSnapshot: () => void }
     }).infiniteWorld;
-    world?.persistPortableWorldSnapshot();
+    const manifest = (window as unknown as { worldAssetManifest?: WorldAssetImportManifest }).worldAssetManifest;
+    world?.persistPortableWorldSnapshot(manifest);
   },
   clearTimeline: () => timeline.reset(),
   getCausalLog: () => sim.causal.recent(24),
