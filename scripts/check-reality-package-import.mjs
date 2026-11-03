@@ -4,7 +4,35 @@ import ts from 'typescript';
 
 const root = new URL('../', import.meta.url);
 const source = await readFile(new URL('src/creator/PackageSerializer.ts', root), 'utf8');
-const stubModule = `export default class JSZip {}\nexport function deflate(value) { return value; }\nexport function inflate(value) { return value; }\n`;
+const stubModule = `const archives = new Map();
+let nextArchiveId = 0;
+class JSZip {
+  constructor(files = new Map()) { this.files = new Map(files); }
+  file(path, value) {
+    if (arguments.length > 1) { this.files.set(path, value); return this; }
+    if (!this.files.has(path)) return null;
+    const content = this.files.get(path);
+    return { async: async type => {
+      if (type === 'string') return typeof content === 'string' ? content : new TextDecoder().decode(content);
+      if (type === 'uint8array') return content instanceof Uint8Array ? new Uint8Array(content) : new Uint8Array(content);
+      return content;
+    }};
+  }
+  async generateAsync() {
+    const id = ++nextArchiveId;
+    archives.set(id, new Map(this.files));
+    return { __realityArchiveId: id };
+  }
+  static async loadAsync(archive) {
+    const files = archives.get(archive?.__realityArchiveId);
+    if (!files) throw new Error('unknown in-memory ZIP archive');
+    return new JSZip(files);
+  }
+}
+export default JSZip;
+export function deflate(value) { return value; }
+export function inflate(value) { return value; }
+`;
 const stubUrl = `data:text/javascript;base64,${Buffer.from(stubModule).toString('base64')}`;
 const transformed = ts.transpileModule(source
   .replace("import JSZip from 'jszip';", `import JSZip from '${stubUrl}';`)
@@ -12,7 +40,7 @@ const transformed = ts.transpileModule(source
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
   }).outputText;
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(transformed).toString('base64')}`;
-const { serializePackageJson, parsePackageJson } = await import(moduleUrl);
+const { serializePackageJson, parsePackageJson, PackageSerializer } = await import(moduleUrl);
 
 const snapshot = {
   entities: [{
@@ -68,6 +96,53 @@ assert.ok(decodedRuntimeState.previousEnergy instanceof Float32Array);
 assert.ok(decodedRuntimeState.climate.windY instanceof Float32Array);
 assert.ok(decodedRuntimeState.multiScale.macroTemp instanceof Float32Array);
 
+const packageSerializer = new PackageSerializer();
+const packageFixture = {
+  manifest: {
+    version: '1.0', name: 'Archive roundtrip', author: 'test',
+    created: '2026-11-03T00:00:00.000Z', description: 'test', tags: [], compatibility: 'v5+',
+  },
+  graph: { nodes: [], edges: [], metadata: { name: 'test', version: '1.0', author: 'test', timestamp: 0 } },
+  voxelState: new Uint8Array([7, 8, 9, 10]).buffer,
+  chunks: {
+    chunkSize: 32,
+    activeCount: 1,
+    serialized: [{
+      key: '0,0,0', cx: 0, cy: 0, cz: 0, active: true,
+      buffer: new Uint8Array([1, 2, 3, 4]).buffer,
+    }],
+  },
+  entities: [],
+  runtimeEntityLayer: undefined,
+  laws: [],
+  lawEngineState: undefined,
+  runtimeState: fullRuntimeState,
+  processes: [],
+  metadata: {
+    gridSize: { x: 1, y: 1, z: 1 }, totalEnergy: 0, entropy: 0,
+    complexityScore: 0, dominantLaws: [], simulationTicks: 11,
+  },
+};
+const packedPackage = await packageSerializer.pack(packageFixture);
+const unpackedPackage = await packageSerializer.unpack(packedPackage);
+assert.deepEqual(unpackedPackage.runtimeState, fullRuntimeState,
+  'full runtime snapshots must survive the actual ZIP pack/unpack path');
+assert.deepEqual(Array.from(new Uint8Array(unpackedPackage.chunks.serialized[0].buffer)), [1, 2, 3, 4],
+  'sparse chunk binary payloads must survive the actual ZIP pack/unpack path');
+assert.deepEqual(Array.from(new Uint8Array(unpackedPackage.voxelState)), [7, 8, 9, 10],
+  'dense voxel payloads must remain intact alongside sparse chunks');
+
+const legacyPackage = await packageSerializer.unpack(await packageSerializer.pack({
+  ...packageFixture,
+  runtimeState: undefined,
+  chunks: undefined,
+}));
+assert.equal(legacyPackage.runtimeState, undefined,
+  'legacy archives without runtime-state.json must remain readable');
+assert.equal(legacyPackage.chunks, undefined,
+  'legacy archives without sparse chunk manifests must remain readable');
+
+
 const decoded = parsePackageJson(serializePackageJson(snapshot));
 assert.ok(decoded.entities[0].memoryBuffer instanceof Float32Array,
   'runtime entity memory buffers must survive JSON package serialization as Float32Array values');
@@ -119,6 +194,23 @@ assert.ok(realityPackageSource.includes("simulationTicks?: number"),
   'package metadata must retain a backward-compatible optional simulation clock');
 assert.ok(realityPackageSource.includes("runtimeState?: RealityPackageRuntimeState"),
   'the package contract must expose the complete typed runtime snapshot');
+assert.ok(realityPackageSource.includes("export interface RealityPackageChunks"),
+  'the package contract must describe sparse chunk payloads');
+assert.ok(packageSerializerSource.includes("zip.file('chunks/manifest.json'"),
+  'sparse chunk metadata must be written to an archive manifest');
+assert.ok(packageSerializerSource.includes("zip.file(`chunks/${index}.bin`, new Uint8Array(chunk.buffer))"),
+  'sparse chunk buffers must be written as binary archive entries');
+assert.ok(packageSerializerSource.includes("const chunksManifestFile = zip.file('chunks/manifest.json')"),
+  'sparse chunk manifests must be optional during legacy archive import');
+assert.ok(worldSaveSource.includes("chunks: snapshot.chunks") && worldSaveSource.includes("chunks: pkg.chunks"),
+  'World Save export and import must preserve sparse chunk state');
+assert.ok(editorSource.includes("serialized: sim.grid.serializeChunks(false)"),
+  'Creator Studio export must include non-empty sparse chunks');
+assert.ok(editorSource.includes("sim.grid.loadChunks(candidate.chunks?.serialized ?? [])"),
+  'Creator Studio import must replace the sparse chunk domain transactionally');
+assert.ok(editorSource.includes("chunk.buffer.byteLength !== expectedChunkBytes") &&
+  editorSource.includes("new Float32Array(chunk.buffer).every(Number.isFinite)"),
+  'Creator Studio must validate sparse chunk buffer size and finite fields before publication');
 assert.ok(packageSerializerSource.includes("zip.file('runtime-state.json', serializePackageJson(pkg.runtimeState))"),
   'the ZIP serializer must write a dedicated portable runtime-state file');
 assert.ok(packageSerializerSource.includes("const runtimeStateFile = zip.file('runtime-state.json')"),
