@@ -436,8 +436,10 @@ const mockLawEngine = {
     this.activeProcessMask = (plan.activeProcessIds ?? []).reduce((mask,id) => mask | (1 << id), 0);
   },
 };
+let authoritativeTransactionCalls = 0;
 const transactionContext = {
   mutateAuthoritativeState(mutation) {
+    authoritativeTransactionCalls++;
     const beforeBuffer = runtimeGrid.buffer.slice();
     const beforeState = cloneValue(runtimeState);
     const beforeLaws = cloneValue(mockLawEngine.laws);
@@ -498,6 +500,23 @@ const saveHarness = new RuntimeWorldSaveSystem(runtimeGrid, mockLawEngine, null,
 const savedRuntimeWorld = saveHarness.captureSnapshot("Runtime checkpoint");
 const expectedRuntimeBuffer = runtimeGrid.buffer.slice();
 const expectedRuntimeState = cloneValue(runtimeState);
+
+// Reject dimension mismatches before opening the authoritative mutation
+// transaction, even when the packed field buffer has the same cell count.
+const invalidDimensionsSnapshot = {
+  ...savedRuntimeWorld,
+  gridSize: { ...savedRuntimeWorld.gridSize, width: savedRuntimeWorld.gridSize.width + 1 },
+};
+await assert.rejects(
+  saveHarness.applySnapshot(invalidDimensionsSnapshot),
+  /World snapshot dimensions do not match the active grid/,
+);
+assert.equal(authoritativeTransactionCalls, 0,
+  "dimension-mismatched snapshots must be rejected before opening a live-state transaction");
+assert.deepEqual(runtimeGrid.buffer, expectedRuntimeBuffer,
+  "dimension-mismatched snapshots must leave the authoritative field unchanged");
+assert.deepEqual(runtimeState, expectedRuntimeState,
+  "dimension-mismatched snapshots must leave runtime domains unchanged");
 
 runtimeGrid.buffer.fill(99);
 runtimeState.entityRuntime = { source: "wrong-world" };
