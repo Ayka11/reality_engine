@@ -1,5 +1,6 @@
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 
 const port = 4173;
 const server = spawn("npm", ["run", "preview", "--", "--host", "127.0.0.1", "--port", String(port)], {
@@ -233,6 +234,122 @@ try {
     throw new Error("Reset after reload did not remove the persisted surface override: " + JSON.stringify(resetAfterReload));
   }
   console.log("[acceptance] flat surface restored after reload and generator surface reset cleanly");
+
+  console.log("[acceptance] unified re_v6 Save/Load round-trip through the actual UI");
+  const packageFixture = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (!world || typeof window.saveWorld !== "function" ||
+        typeof window.encodeActiveRealityPackage !== "function" ||
+        typeof window.importActiveRealityPackage !== "function" ||
+        typeof window.capturePortableWorldEditorSnapshot !== "function") {
+      return { error: "Unified active Reality package API is not connected to the running application" };
+    }
+    const objectId = "acceptance-package-object";
+    world.objects.add({
+      id: objectId, kind: "landmark", x: 19, y: 3, z: 23,
+      rotationY: 0.25, scale: 1, seed: 913,
+      properties: { source: "acceptance-package-roundtrip" },
+    });
+    world.applyAuthoritativeFieldMutation({
+      kind: "brush", x: 19, y: 3, z: 23, radius: 4,
+      delta: { energy: 2 },
+      metadata: { source: "acceptance-package-provenance" },
+    });
+    const manifest = window.worldAssetManifest;
+    manifest.entries = [...manifest.entries.filter(entry => entry.id !== "acceptance-package-asset"), {
+      id: "acceptance-package-asset",
+      providerId: "polyhaven",
+      sourceUrl: "https://polyhaven.com/a/acceptance-package-asset",
+      name: "Acceptance package asset",
+      license: "CC0",
+      attribution: "Reality Engine CI",
+      semanticEntryId: "flora.tree",
+      tags: ["acceptance", "tree"],
+    }];
+    return {
+      objectId,
+      generatorSeed: world.generator.seed,
+      surfaceSeed: world.worldSeed,
+      manifestCount: manifest.entries.length,
+    };
+  });
+  if (packageFixture.error) throw new Error(packageFixture.error);
+
+  const packageDownloadPromise = page.waitForEvent("download");
+  await page.evaluate(async () => await window.saveWorld());
+  const packageDownload = await packageDownloadPromise;
+  const packageDownloadPath = await packageDownload.path();
+  if (!packageDownloadPath) throw new Error("Unified .reality package download did not produce a readable file");
+  const packageBytes = await readFile(packageDownloadPath);
+  const savedPackage = JSON.parse(packageBytes.toString("utf8"));
+  if (savedPackage.format !== "re_v6" || savedPackage.version !== 6 ||
+      !savedPackage.worldEditor || !Array.isArray(savedPackage.worldEditor.objects) ||
+      !savedPackage.worldEditor.provenance || !savedPackage.worldEditor.assetManifest ||
+      !Array.isArray(savedPackage.causal)) {
+    throw new Error("Active Save did not emit a complete re_v6 package: " + JSON.stringify({
+      format: savedPackage.format,
+      version: savedPackage.version,
+      hasWorldEditor: !!savedPackage.worldEditor,
+      hasProvenance: !!savedPackage.worldEditor?.provenance,
+      hasAssetManifest: !!savedPackage.worldEditor?.assetManifest,
+      hasCausal: Array.isArray(savedPackage.causal),
+    }));
+  }
+  if (!savedPackage.worldEditor.objects.some(object => object.id === packageFixture.objectId) ||
+      !savedPackage.worldEditor.provenance.events.some(event =>
+        JSON.stringify(event).includes("acceptance-package-provenance")) ||
+      !savedPackage.worldEditor.assetManifest.entries.some(entry => entry.id === "acceptance-package-asset")) {
+    throw new Error("re_v6 export omitted the authored object, provenance event or asset manifest");
+  }
+
+  await page.evaluate((objectId) => {
+    const world = window.infiniteWorld;
+    world.objects.remove(objectId);
+    world.authoritativeField.clear();
+    window.worldAssetManifest.entries =
+      window.worldAssetManifest.entries.filter(entry => entry.id !== "acceptance-package-asset");
+  }, packageFixture.objectId);
+  const loadInput = page.locator("#loadFileInput");
+  await loadInput.setInputFiles({
+    name: packageDownload.suggestedFilename(),
+    mimeType: "application/json",
+    buffer: packageBytes,
+  });
+  await page.waitForFunction(objectId =>
+    !!window.infiniteWorld?.objects?.get(objectId) &&
+    window.worldAssetManifest?.entries?.some(entry => entry.id === "acceptance-package-asset") &&
+    window.infiniteWorld.getAuthoritativeFieldState().provenance.events.some(event =>
+      JSON.stringify(event).includes("acceptance-package-provenance")),
+  packageFixture.objectId);
+  const loadedPackageState = await page.evaluate(() => ({
+    objectCount: window.infiniteWorld.getObjectCount(),
+    seed: window.infiniteWorld.generator.seed,
+    assetCount: window.worldAssetManifest.entries.length,
+    provenanceEvents: window.infiniteWorld.getAuthoritativeFieldState().provenance.events.length,
+  }));
+  if (loadedPackageState.seed !== packageFixture.generatorSeed ||
+      !loadedPackageState.assetCount || !loadedPackageState.provenanceEvents) {
+    throw new Error("Active Load did not restore the package's full world state: " + JSON.stringify(loadedPackageState));
+  }
+
+  console.log("[acceptance] malformed re_v6 imports fail before any world mutation");
+  const invalidPackage = { ...savedPackage, W: savedPackage.W + 1 };
+  await loadInput.setInputFiles({
+    name: "invalid-dimensions.reality",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(invalidPackage)),
+  });
+  await page.waitForFunction(() => document.getElementById("plog")?.textContent.includes("Load failed:"));
+  const afterRejectedPackage = await page.evaluate(objectId => ({
+    exists: !!window.infiniteWorld?.objects?.get(objectId),
+    seed: window.infiniteWorld?.generator?.seed,
+    hasAsset: window.worldAssetManifest?.entries?.some(entry => entry.id === "acceptance-package-asset"),
+  }), packageFixture.objectId);
+  if (!afterRejectedPackage.exists ||
+      afterRejectedPackage.seed !== packageFixture.generatorSeed ||
+      !afterRejectedPackage.hasAsset) {
+    throw new Error("Rejected package changed the previously loaded world: " + JSON.stringify(afterRejectedPackage));
+  }
 
   const noGenerationCheck = await page.evaluate((before) => window.worldVerifyGeneration?.(before), initial);
   if (noGenerationCheck?.ok !== false || noGenerationCheck?.reason !== "generation-revision-did-not-advance") {
