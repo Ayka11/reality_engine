@@ -13,6 +13,7 @@ import { WorldPersistence } from '../infinity/WorldPersistence'
 import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
+import type { WorldEditorSnapshot } from '../infinity/WorldEditorSnapshot'
 import { FieldSampler } from '../infinity/FieldSampler'
 import { GeneratorFieldProvider } from '../infinity/ScientificFieldProvider'
 import { MutableWorldFieldProvider, type WorldFieldMutation } from '../infinity/MutableWorldFieldProvider'
@@ -98,7 +99,7 @@ export class InfiniteWorldRenderer {
   private terrainBrushRadius = 8
   private terrainBrushStrength = 1
   private saveTimer: number | null = null
-  private readonly storageKey: string
+  private storageKey: string
   private readonly pointerHandler: (e: PointerEvent) => void
   private readonly pointerUpHandler: (e: PointerEvent) => void
   private readonly pointerMoveHandler: (e: PointerEvent) => void
@@ -525,6 +526,145 @@ export class InfiniteWorldRenderer {
       this.saveTimer = null
       this.saveWorld({ checkpoint: false })
     }, 150)
+  }
+
+  /**
+   * Capture the separate infinite-world editor state that is not represented
+   * by SimulationEngine's finite voxel grid or its runtime-domain snapshots.
+   */
+  capturePortableWorldSnapshot(): WorldEditorSnapshot {
+    const surfaceProvider = serializeWorldSurfaceProvider(this.fieldSampler.surfaceProvider)
+    if (!surfaceProvider) {
+      throw new Error(
+        `The active world surface provider "${this.fieldSampler.surfaceProvider.id}" has no portable serializer; register a versioned serializer before exporting this world.`,
+      )
+    }
+    return structuredClone({
+      version: 1 as const,
+      generator: {
+        seed: this.generator.seed,
+        seaLevel: this.generator.seaLevel,
+        maxElevation: this.generator.maxElevation,
+      },
+      surfaceProvider,
+      objects: this.objects.values(),
+      terrainDeformations: this.terrainDeformations.serialize(),
+      authoritativeField: this.authoritativeField.serialize(),
+    })
+  }
+
+  /**
+   * Validate the complete infinite-world snapshot off to the side, then replace
+   * the live editor state in one synchronous publication. Undefined is the
+   * explicit legacy-package policy: clear authored scene overlays/objects while
+   * retaining the currently configured procedural generator.
+   */
+  restorePortableWorldSnapshot(snapshot?: WorldEditorSnapshot): void {
+    if (snapshot !== undefined &&
+        (!snapshot || snapshot.version !== 1 ||
+          !snapshot.generator || typeof snapshot.generator.seed !== 'string' ||
+          !snapshot.generator.seed.trim() ||
+          !Number.isFinite(snapshot.generator.seaLevel) ||
+          !Number.isFinite(snapshot.generator.maxElevation) ||
+          snapshot.generator.maxElevation < 0 ||
+          !Array.isArray(snapshot.objects))) {
+      throw new TypeError('Infinite-world editor snapshot has an invalid envelope')
+    }
+
+    const generatorState = snapshot?.generator ?? {
+      seed: this.generator.seed,
+      seaLevel: this.generator.seaLevel,
+      maxElevation: this.generator.maxElevation,
+    }
+    const nextGenerator = new WorldGenerator(
+      generatorState.seed,
+      generatorState.seaLevel,
+      generatorState.maxElevation,
+    )
+    const nextSurface = snapshot
+      ? restoreWorldSurfaceProvider(snapshot.surfaceProvider, nextGenerator)
+      : new GeneratorWorldSurfaceProvider(nextGenerator)
+    if (!nextSurface) {
+      throw new TypeError('Infinite-world editor snapshot contains an unsupported or invalid surface provider')
+    }
+
+    // Detached candidates validate every nested domain before any renderer,
+    // persistence key, object index, or authoritative field is replaced.
+    const nextObjects = new WorldObjectManager()
+    for (const object of snapshot?.objects ?? []) nextObjects.add(object)
+    const nextTerrain = new TerrainDeformationField(nextGenerator.seed)
+    if (snapshot) nextTerrain.restore(snapshot.terrainDeformations)
+    const nextField = new MutableWorldFieldProvider(new GeneratorFieldProvider(nextGenerator))
+    if (snapshot) nextField.restore(snapshot.authoritativeField)
+
+    if (this.saveTimer !== null) {
+      window.clearTimeout(this.saveTimer)
+      this.saveTimer = null
+    }
+
+    for (const [, patch] of this.patches) {
+      this.scene.remove(patch.group)
+      patch.group.traverse(obj => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        if (mesh.material) {
+          (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(material => material.dispose())
+        }
+      })
+    }
+    this.patches.clear()
+    this.waterMeshes.clear()
+    this.terrainMaterials.clear()
+
+    for (const [, entry] of this.objectMeshes) {
+      this.scene.remove(entry.group)
+      entry.group.traverse(obj => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        if (mesh.material) {
+          (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(material => material.dispose())
+        }
+      })
+    }
+    this.objectMeshes.clear()
+
+    this.generator = nextGenerator
+    this.fieldSampler.setGenerator(nextGenerator)
+    this.authoritativeField.setBase(new GeneratorFieldProvider(nextGenerator))
+    this.authoritativeField.restore(nextField.serialize())
+    this.fieldSampler.setProvider(this.authoritativeField)
+    this.terrainDeformations = nextTerrain
+
+    this.objects.clear()
+    for (const object of nextObjects.values()) this.objects.add(object)
+
+    if (snapshot?.surfaceProvider.kind === 'world-generator-surface' || !snapshot) {
+      this.fieldSampler.resetSurfaceProviderToGenerator()
+    } else {
+      this.fieldSampler.setSurfaceProvider(nextSurface)
+    }
+    worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)
+
+    this.persistence = new WorldPersistence(nextGenerator.seed)
+    this.storageKey = `reality-engine-world:${nextGenerator.seed}:objects`
+    this.chunks = new InfiniteChunkManager(nextGenerator, {
+      radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4,
+    })
+    this.lastCenter = null
+    this.history = new WorldEditHistory()
+    this.authoritativeSculptTransactions.clear()
+    this.notifyAuthoritativeSculptHistoryChanged()
+    this.selectedObjectId = null
+    this.transformControls.detach()
+    ;(this.transformControls as any).visible = false
+    this.selectionMarker.visible = false
+
+    this.rebuildDecisionLayer()
+    this.syncObjects()
+    this.persistActiveSurfaceProvider()
+    // Persist the imported portable state into the renderer's seed-scoped
+    // sidecar as well, so a normal page reload restores the same authored scene.
+    this.saveWorld()
   }
 
   saveWorld(options: { checkpoint?: boolean } = {}) {
