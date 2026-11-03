@@ -1,4 +1,4 @@
-import { F } from "../src/core/CellState";
+import { CELL_FIELDS, F } from "../src/core/CellState";
 import { VoxelGrid } from "../src/core/VoxelGrid";
 import { DEFAULT_PARAMS, type PhysicsParams } from "../src/laws/MetaLaw";
 import { MAT } from "../src/materials/MaterialDef";
