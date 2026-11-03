@@ -1534,6 +1534,15 @@ try {
   if (!fieldProbe) {
     throw new Error("No deterministic non-saturated World Field probe coordinate found");
   }
+  await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (typeof window.setMatMode3D === "function") {
+      window.setMatMode3D("field", document.getElementById("matField"));
+    } else {
+      world.setMaterialMode("field");
+    }
+  });
+  await page.waitForFunction(() => window.infiniteWorld?.getMaterialMode?.() === "field");
   const fieldPhysicsBaseline = await page.evaluate((probe) => {
     const world = window.infiniteWorld;
     const sample = world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
@@ -1601,6 +1610,13 @@ try {
       },
     });
   }, fieldProbe);
+  const fieldHistoryAfterCommit = await page.evaluate(() =>
+    window.infiniteWorld.getLegacySculptAuthoritativeHistory());
+  if (fieldHistoryAfterCommit.undo !== fieldHistoryBefore.undo + 1 ||
+      fieldHistoryAfterCommit.redo !== 0) {
+    throw new Error("Authoritative field mutation did not create an undoable transaction: " +
+      JSON.stringify({ before: fieldHistoryBefore, after: fieldHistoryAfterCommit }));
+  }
   await page.evaluate(() => {
     window.toggleWorldToolbar?.(true);
     document.getElementById("vTabField")?.click();
@@ -1644,14 +1660,6 @@ try {
         Math.abs(value - renderedFieldColorAfter.nearest.color[index]) > 1e-4)) {
     throw new Error("Scientific Field Brush Redo did not restore the committed field and mesh colors: " +
       JSON.stringify({ fieldAfterRedo, renderedFieldColorAfterRedo }));
-  }
-
-  const fieldHistoryAfterCommit = await page.evaluate(() =>
-    window.infiniteWorld.getLegacySculptAuthoritativeHistory());
-  if (fieldHistoryAfterCommit.undo !== fieldHistoryBefore.undo + 1 ||
-      fieldHistoryAfterCommit.redo !== 0) {
-    throw new Error("Authoritative field mutation did not create an undoable transaction: " +
-      JSON.stringify({ before: fieldHistoryBefore, after: fieldHistoryAfterCommit }));
   }
 
   const renderedFieldColorAfter = await readRenderedFieldColor();
