@@ -437,6 +437,7 @@ const mockLawEngine = {
   },
 };
 let authoritativeTransactionCalls = 0;
+let failNextDirectorRestore = false;
 const transactionContext = {
   mutateAuthoritativeState(mutation) {
     authoritativeTransactionCalls++;
@@ -447,8 +448,19 @@ const transactionContext = {
     try {
       return mutation();
     } catch (error) {
+      // Model the real SimulationEngine boundary: it owns the grid and core
+      // runtime domains, but civilization and SceneDirector state are external
+      // domains whose rollback belongs to WorldSaveSystem.
       runtimeGrid.buffer.set(beforeBuffer);
-      Object.assign(runtimeState, beforeState);
+      runtimeState.tick = beforeState.tick;
+      runtimeState.entityRuntime = cloneValue(beforeState.entityRuntime);
+      runtimeState.agentRuntime = cloneValue(beforeState.agentRuntime);
+      runtimeState.lawRuntime = cloneValue(beforeState.lawRuntime);
+      runtimeState.chemistry = cloneValue(beforeState.chemistry);
+      runtimeState.worldEvents = cloneValue(beforeState.worldEvents);
+      runtimeState.causal = cloneValue(beforeState.causal);
+      runtimeState.previousEnergy = new Float32Array(beforeState.previousEnergy);
+      runtimeState.recorderClears = beforeState.recorderClears;
       mockLawEngine.laws = beforeLaws;
       mockLawEngine.activeProcessMask = beforeMask;
       throw error;
@@ -492,7 +504,13 @@ const transactionContext = {
   resetPreviousEnergy: () => { runtimeState.previousEnergy = new Float32Array(runtimeGrid.size); },
   clearRecorderSnapshots: () => { runtimeState.recorderClears++; },
   getDirectorSnapshot: () => cloneValue(runtimeState.director),
-  restoreDirectorSnapshot: snapshot => { runtimeState.director = cloneValue(snapshot); },
+  restoreDirectorSnapshot: snapshot => {
+    if (failNextDirectorRestore) {
+      failNextDirectorRestore = false;
+      throw new Error("injected SceneDirector restore failure");
+    }
+    runtimeState.director = cloneValue(snapshot);
+  },
   resetDirector: () => { runtimeState.director = { history: [], worldLog: [] }; },
   getCausalLog: () => cloneValue(runtimeState.causal.events),
 };
@@ -539,6 +557,29 @@ runtimeState.worldEvents = { history: [], nextAuto: 1, rngState: 999 };
 runtimeState.causal = { events: [], nextId: 900, lastEventByCell: [] };
 runtimeState.previousEnergy.fill(999);
 runtimeState.tick = 900;
+
+// Inject a failure at the final runtime restore stage. The engine transaction
+// rolls back its core domains; WorldSaveSystem must independently restore the
+// external civilization and SceneDirector domains it captured before mutation.
+const beforeFailedRestoreBuffer = runtimeGrid.buffer.slice();
+const beforeFailedRestoreState = cloneValue(runtimeState);
+const beforeFailedRestoreLaws = cloneValue(mockLawEngine.laws);
+const beforeFailedRestoreMask = mockLawEngine.activeProcessMask;
+failNextDirectorRestore = true;
+await assert.rejects(
+  saveHarness.applySnapshot(savedRuntimeWorld),
+  /injected SceneDirector restore failure/,
+);
+assert.deepEqual(runtimeGrid.buffer, beforeFailedRestoreBuffer,
+  "failed world restore must roll back the authoritative field through the engine transaction");
+assert.deepEqual(runtimeState, beforeFailedRestoreState,
+  "WorldSaveSystem must roll back external and core runtime domains after a late restore failure");
+assert.deepEqual(mockLawEngine.laws, beforeFailedRestoreLaws,
+  "failed world restore must preserve the pre-transaction law collection");
+assert.equal(mockLawEngine.activeProcessMask, beforeFailedRestoreMask,
+  "failed world restore must preserve the pre-transaction process mask");
+assert.equal(runtimeState.recorderClears, beforeFailedRestoreState.recorderClears,
+  "failed world restore must preserve recorder history through core recovery");
 
 await saveHarness.applySnapshot(savedRuntimeWorld);
 assert.deepEqual(runtimeGrid.buffer, expectedRuntimeBuffer, "quick-save restore must restore every field value");
