@@ -81,7 +81,28 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
   private globalOverlays=new Map<'preset'|'law'|'composer',{scale:Partial<Record<keyof ScientificFieldSample,number>>;delta:Partial<ScientificFieldSample>;metadata?:Record<string,unknown>}>()
 
   constructor(private base:ScientificFieldProvider){}
-  setBase(base:ScientificFieldProvider){this.base=base;this.versionCounter++}
+
+  private assertVersionCounterAvailable(): void {
+    if (!Number.isSafeInteger(this.versionCounter) ||
+        this.versionCounter < 0 ||
+        this.versionCounter >= Number.MAX_SAFE_INTEGER) {
+      throw new RangeError('World field version counter is exhausted or unsafe')
+    }
+  }
+
+  private assertMutationIdAvailable(): void {
+    if (!Number.isSafeInteger(this.nextId) ||
+        this.nextId < 1 ||
+        this.nextId >= Number.MAX_SAFE_INTEGER) {
+      throw new RangeError('World field mutation ID counter is exhausted or unsafe')
+    }
+  }
+
+  setBase(base:ScientificFieldProvider){
+    this.assertVersionCounterAvailable()
+    this.base=base
+    this.versionCounter++
+  }
 
   sample(x:number,y:number,z:number):ScientificFieldSample {
     return this.sampleThrough(x,y,z,this.mutations.length)
@@ -143,6 +164,8 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
     // Detach all nested caller-owned payloads before retaining authoritative state.
     const detached=structuredClone(mutation)
     assertMutation(detached)
+    this.assertMutationIdAvailable()
+    this.assertVersionCounterAvailable()
     const committed={...detached,id:this.nextId}
     this.nextId++
     this.mutations.push(committed);this.versionCounter++
@@ -158,14 +181,27 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
     const detachedDelta=structuredClone(delta)
     const detachedMetadata=metadata===undefined?undefined:structuredClone(metadata)
     assertOverlay({kind,scale:detachedScale,delta:detachedDelta})
+    this.assertMutationIdAvailable()
+    this.assertVersionCounterAvailable()
     const committed=structuredClone({id:this.nextId,kind,metadata:{...detachedMetadata,globalScale:detachedScale,globalDelta:detachedDelta,replacesPrevious:true}})
     this.globalOverlays.set(kind,{scale:structuredClone(detachedScale),delta:structuredClone(detachedDelta),metadata:detachedMetadata===undefined?undefined:structuredClone(detachedMetadata)})
     this.versionCounter++
     this.nextId++
     this.mutations.push(committed);if(this.mutations.length>4096)this.mutations.splice(0,this.mutations.length-4096);return structuredClone(committed)
   }
-  clearGlobal(kind:'preset'|'law'|'composer'){if(!this.globalOverlays.delete(kind))return false;this.versionCounter++;return true}
-  clear(){this.mutations=[];this.globalOverlays.clear();this.versionCounter++}
+  clearGlobal(kind:'preset'|'law'|'composer'){
+    if(!this.globalOverlays.has(kind))return false
+    this.assertVersionCounterAvailable()
+    this.globalOverlays.delete(kind)
+    this.versionCounter++
+    return true
+  }
+  clear(){
+    this.assertVersionCounterAvailable()
+    this.mutations=[]
+    this.globalOverlays.clear()
+    this.versionCounter++
+  }
   getVersion(){return this.versionCounter}
   getMutationCount(){return this.mutations.length}
   serialize(){return structuredClone({schemaVersion:'world-field-state-v2',providerId:this.id,providerVersion:this.version,version:this.versionCounter,nextId:this.nextId,mutations:this.mutations.map(m=>({...m,metadata:m.metadata===undefined?undefined:m.metadata})),globalOverlays:Array.from(this.globalOverlays.entries()).map(([kind,value])=>({kind,scale:value.scale,delta:value.delta,metadata:value.metadata===undefined?undefined:value.metadata}))})}
@@ -173,18 +209,25 @@ export class MutableWorldFieldProvider implements ScientificFieldProvider {
     // Clone before validation/commit so the caller cannot mutate restored nested state.
     const detached=structuredClone(state)
     if(!detached||detached.schemaVersion!=='world-field-state-v2'||detached.providerId!==this.id||detached.providerVersion!==this.version) throw new Error('Unsupported world field state')
-    if(!Number.isInteger(detached.nextId)||detached.nextId<1||!Number.isInteger(detached.version)||detached.version<0) throw new Error('Invalid world field state counters')
+    if(!Number.isSafeInteger(detached.nextId)||detached.nextId<1||
+       !Number.isSafeInteger(detached.version)||detached.version<0) {
+      throw new Error('Invalid world field state counters')
+    }
     if(!Array.isArray(detached.mutations)||!Array.isArray(detached.globalOverlays)) throw new Error('Invalid world field state collections')
+    if(detached.mutations.length>4096 || detached.globalOverlays.length>3) throw new Error('Invalid world field state collection bounds')
     let previousId = 0
     for(const mutation of detached.mutations){
-      if(!Number.isInteger(mutation.id)||mutation.id<=previousId) throw new Error('Invalid world field mutation id sequence')
+      if(!Number.isSafeInteger(mutation.id)||mutation.id<=previousId) throw new Error('Invalid world field mutation id sequence')
       previousId = mutation.id
       const { id: _id, ...withoutId } = mutation
       assertMutation(withoutId)
     }
     if(detached.mutations.length>4096 || (detached.mutations.length>0 && detached.nextId<=detached.mutations[detached.mutations.length-1].id)) throw new Error('Invalid world field mutation counter')
+    const overlayKinds = new Set<string>()
     const overlays = detached.globalOverlays.map(entry => {
       assertOverlay(entry)
+      if (overlayKinds.has(entry.kind)) throw new Error('Duplicate world field global overlay kind')
+      overlayKinds.add(entry.kind)
       return {kind:entry.kind,scale:{...entry.scale},delta:{...entry.delta},metadata:entry.metadata?{...entry.metadata}:undefined}
     })
     // Commit only after every item has validated, so a corrupt snapshot cannot partially restore state.
