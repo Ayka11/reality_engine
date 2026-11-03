@@ -60,4 +60,27 @@ assert.match(editorSource, /this\.graph\.load\(graphBefore\)/,
 assert.doesNotMatch(editorSource, /private applyVoxelState\(/,
   'the old non-transactional voxel-only import path must not remain');
 
-console.log('Reality package typed-array codec and atomic-import contract regression: PASS');
+assert.ok(editorSource.includes("runAtStepBoundary: <T>(operation: () => T) => Promise<T>;"),
+  'Creator Studio package capture must expose the engine step-boundary contract');
+assert.ok(editorSource.includes("await simulation.runAtStepBoundary(() => this.buildPackage())"),
+  'Creator Studio export must capture state at a coherent simulation boundary');
+assert.ok(editorSource.includes("simulationTicks: sim.tick"),
+  'new Creator Studio packages must preserve their simulation clock');
+assert.ok(editorSource.includes("pkg.metadata.simulationTicks !== undefined") &&
+  editorSource.includes("Number.isSafeInteger(pkg.metadata.simulationTicks)"),
+  'provided package simulation ticks must be validated before import');
+assert.ok(realityPackageSource.includes("simulationTicks?: number"),
+  'package metadata must retain a backward-compatible optional simulation clock');
+assert.ok(worldSaveSource.includes("runtimeEntityLayer: snapshot.runtimeState?.entityLayer"),
+  'World Save export must carry the complete spatial entity snapshot into .reality');
+assert.ok(worldSaveSource.includes("lawEngineState: snapshot.runtimeState?.laws"),
+  'World Save export must carry law overrides and RNG state into .reality');
+assert.ok(worldSaveSource.includes("simulationTicks: snapshot.metadata.simulationTicks"),
+  'World Save export must preserve the captured simulation clock');
+assert.ok(worldSaveSource.includes("entityLayer: pkg.runtimeEntityLayer") &&
+  worldSaveSource.includes("laws: pkg.lawEngineState"),
+  '.reality import through World Save must restore both complete entity and law runtime snapshots');
+assert.ok(worldSaveSource.includes("simulationTicks: pkg.metadata.simulationTicks ?? this.context.getTick?.() ?? 0"),
+  'World Save import must restore package simulation ticks, retaining a legacy fallback');
+
+console.log('Reality package codec, atomic import and World Save bridge regression: PASS');
