@@ -1404,7 +1404,7 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
   },
   persistWorldEditorSnapshot: () => {
     const world = (window as unknown as {
-      infiniteWorld?: { persistPortableWorldSnapshot: () => void }
+      infiniteWorld?: { persistPortableWorldSnapshot: (manifest?: WorldAssetImportManifest) => void }
     }).infiniteWorld;
     const manifest = (window as unknown as { worldAssetManifest?: WorldAssetImportManifest }).worldAssetManifest;
     world?.persistPortableWorldSnapshot(manifest);
