@@ -222,6 +222,29 @@ export class WorldSaveSystem {
   }
 
   async applySnapshot(snapshot: WorldSnapshot): Promise<void> {
+    // Validate the spatial contract before capturing or mutating any live domain.
+    // Equal buffer lengths are not sufficient: swapped dimensions can reinterpret
+    // the same linear field array as a different world topology.
+    const dimensions = snapshot?.gridSize;
+    if (!dimensions ||
+        !Number.isSafeInteger(dimensions.width) || dimensions.width <= 0 ||
+        !Number.isSafeInteger(dimensions.height) || dimensions.height <= 0 ||
+        !Number.isSafeInteger(dimensions.depth) || dimensions.depth <= 0) {
+      throw new Error("World snapshot has invalid grid dimensions");
+    }
+    if (dimensions.width !== this.voxelGrid.W ||
+        dimensions.height !== this.voxelGrid.H ||
+        dimensions.depth !== this.voxelGrid.D) {
+      throw new Error(
+        `World snapshot dimensions do not match the active grid: ${dimensions.width}x${dimensions.height}x${dimensions.depth} != ${this.voxelGrid.W}x${this.voxelGrid.H}x${this.voxelGrid.D}`,
+      );
+    }
+    if (!snapshot.metadata ||
+        !Number.isSafeInteger(snapshot.metadata.simulationTicks) ||
+        snapshot.metadata.simulationTicks < 0) {
+      throw new Error("World snapshot has invalid simulation tick metadata");
+    }
+
     const mutate = this.context.mutateAuthoritativeState;
     if (!mutate) {
       throw new Error("World restore requires an engine-owned mutation transaction");
