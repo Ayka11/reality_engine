@@ -14,6 +14,7 @@ import type { EconomicSystemSnapshot } from '../../simulation/EconomicSystem';
 import type { MetaLawEvolutionSnapshot } from '../../simulation/MetaLawEvolution';
 import type { CosmologicalSimSnapshot } from '../../simulation/CosmologicalSim';
 import type { SceneDirectorSnapshot } from '../../ai/SceneDirector';
+import type { WorldEditorSnapshot } from '../../infinity/WorldEditorSnapshot';
 
 export type SaveFormat = 'reality' | 'quick' | 'scientific' | 'minimal';
 
@@ -60,6 +61,8 @@ export interface WorldSnapshot {
   fields: Record<string, ArrayBuffer>;
   /** Optional runtime detail retained by quick saves; portable packages may omit it. */
   runtimeState?: WorldRuntimeStateSnapshot;
+  /** Portable state owned by InfiniteWorldRenderer, outside SimulationEngine. */
+  worldEditor?: WorldEditorSnapshot;
   realityGraph?: RealityGraph;
   activeLaws: LawSnapshot[];
   activeProcesses: ProcessSnapshot[];
