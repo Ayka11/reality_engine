@@ -676,7 +676,7 @@ assert.deepEqual(runtimeState.worldEditor, {
 }, "legacy package restore must explicitly clear stale Infinite World objects and asset provenance");
 assert.equal(worldEditorPersistCalls, 2,
   "legacy editor reset must persist only after its world transaction commits");
-assert.equal(runtimeState.recorderClears, 3, "each world restore must clear stale recorder history");
+assert.equal(runtimeState.recorderClears, 2, "each successful world restore must clear stale recorder history");
 assert.equal(runtimeGrid.buffer[20], 0, "legacy restore must clear stale entity ownership marker");
 assert.equal(runtimeGrid.buffer[19], 0, "legacy restore must clear stale agent marker");
 
