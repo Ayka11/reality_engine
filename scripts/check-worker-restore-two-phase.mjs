@@ -31,7 +31,7 @@ const densityAdvectionJs = await compile("src/simulation/DensityAdvection.ts", [
   [/from ['"]\.\.\/core\/CellState['"]/, `from "${cellStateUrl}"`],
 ]);
 const densityAdvectionUrl = `data:text/javascript;base64,${Buffer.from(densityAdvectionJs).toString("base64")}`;
-const { CHUNK_FLOATS, LEGACY_NF_V2, LEGACY_CHUNK_FLOATS_V2, NF } = await import(gridUrl);
+const { CHUNK_FLOATS, LEGACY_NF_V2, LEGACY_CHUNK_FLOATS_V2, NF, GRID_W, GRID_H, GRID_D, CX, CY, CZ } = await import(gridUrl);
 const messages = [];
 globalThis.self = {
   onmessage: null,
@@ -72,6 +72,13 @@ function frameKeys(frame) {
   assert.equal(offset, frame.ab.byteLength, "frame payload must have exact declared length");
   return keys;
 }
+const maximumChunkCount = (GRID_W / CX) * (GRID_H / CY) * (GRID_D / CZ)
+const invalidRestoreId = send("restoreBegin", { restoreId: Number.MAX_SAFE_INTEGER + 1, expected: 0 })
+assert.equal(invalidRestoreId.find(message => message.cmd === "restoreComplete").data.complete, false,
+  "restore sessions must reject unsafe integer identifiers")
+const oversizedRestore = send("restoreBegin", { restoreId: 99, expected: maximumChunkCount + 1 })
+assert.equal(oversizedRestore.find(message => message.cmd === "restoreComplete").data.complete, false,
+  "restore sessions must reject chunk counts beyond the finite worker grid")
 const initial = send("snapshot").find(message => message.cmd === "snapshot").data.snap;
 const payload = new Float32Array(CHUNK_FLOATS);
 payload[0] = 321;
