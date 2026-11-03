@@ -1,12 +1,20 @@
 import type { WorldEditorSnapshot } from './WorldEditorSnapshot'
 import { validateAssetManifest } from '../worldLibrary/AssetImportManifest'
 
+export type ActiveWorldCausalEvent = {
+  tick: number
+  x: number
+  y: number
+  delta: number
+}
+
 export type ActiveWorldGridInput = {
   width: number
   height: number
   fieldsPerCell: number
   tick: number
   buffer: Float32Array
+  causal?: ActiveWorldCausalEvent[]
 }
 
 export type ActiveWorldPackageV6 = {
@@ -17,6 +25,7 @@ export type ActiveWorldPackageV6 = {
   NF: number
   tick: number
   cells: Array<{ i: number; d: number[] }>
+  causal: ActiveWorldCausalEvent[]
   worldEditor: WorldEditorSnapshot
 }
 
@@ -24,6 +33,7 @@ export type DecodedActiveWorldPackage = {
   buffer: Float32Array
   tick: number
   worldEditor?: WorldEditorSnapshot
+  causal: ActiveWorldCausalEvent[]
   legacy: boolean
 }
 
@@ -58,6 +68,16 @@ export function encodeActiveWorldPackage(
   }
   if (!Number.isSafeInteger(grid.tick) || grid.tick < 0) {
     throw new RangeError('Active world simulation tick is invalid')
+  }
+  const causal = grid.causal ?? []
+  if (!Array.isArray(causal) || causal.length > 1_000_000 ||
+      !causal.every(event => isRecord(event) &&
+        Number.isSafeInteger(event.tick) && (event.tick as number) >= 0 &&
+        Number.isSafeInteger(event.x) && Number.isSafeInteger(event.y) &&
+        (event.x as number) >= 0 && (event.x as number) < grid.width &&
+        (event.y as number) >= 0 && (event.y as number) < grid.height &&
+        typeof event.delta === 'number' && Number.isFinite(event.delta))) {
+    throw new TypeError('Active world causal history is invalid')
   }
   if (!isRecord(worldEditor) || worldEditor.version !== 1 ||
       !worldEditor.assetManifest) {
@@ -94,6 +114,7 @@ export function encodeActiveWorldPackage(
     NF: grid.fieldsPerCell,
     tick: grid.tick,
     cells,
+    causal: structuredClone(causal),
     worldEditor: structuredClone(worldEditor),
   }
   return JSON.stringify(payload)
@@ -150,6 +171,24 @@ export function decodeActiveWorldPackage(
     }
   }
 
+  let causal: ActiveWorldCausalEvent[] = []
+  if (current) {
+    if (value.causal !== undefined && !Array.isArray(value.causal)) {
+      throw new TypeError('Reality world package causal history is invalid')
+    }
+    const candidateCausal = value.causal ?? []
+    if (candidateCausal.length > 1_000_000 ||
+        !candidateCausal.every(event => isRecord(event) &&
+          Number.isSafeInteger(event.tick) && (event.tick as number) >= 0 &&
+          Number.isSafeInteger(event.x) && Number.isSafeInteger(event.y) &&
+          (event.x as number) >= 0 && (event.x as number) < expected.width &&
+          (event.y as number) >= 0 && (event.y as number) < expected.height &&
+          typeof event.delta === 'number' && Number.isFinite(event.delta))) {
+      throw new TypeError('Reality world package causal history contains an invalid event')
+    }
+    causal = structuredClone(candidateCausal) as ActiveWorldCausalEvent[]
+  }
+
   let worldEditor: WorldEditorSnapshot | undefined
   if (current) {
     if (!isRecord(value.worldEditor) || value.worldEditor.version !== 1) {
@@ -166,5 +205,5 @@ export function decodeActiveWorldPackage(
     worldEditor = structuredClone(candidate)
   }
 
-  return { buffer, tick: tick as number, worldEditor, legacy }
+  return { buffer, tick: tick as number, worldEditor, causal, legacy }
 }
