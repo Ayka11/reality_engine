@@ -657,13 +657,14 @@ assert.equal(worldEditorPersistCalls, 1,
 assert.equal(worldAssetClearCalls, 1,
   "external assets must be cleared exactly once after a successful world import");
 
+assert.equal(runtimeState.tick, savedRuntimeWorld.metadata.simulationTicks, "quick-save restore must restore simulation tick");
+assert.equal(runtimeState.recorderClears, 1, "successful restore must clear field-only recorder history");
+
 failWorldEditorPersist = true;
 await assert.rejects(saveHarness.applySnapshot(savedRuntimeWorld), /injected sidecar persistence failure/);
 assert.equal(worldAssetClearCalls, 1,
   "external assets must remain intact when post-commit sidecar persistence fails");
 failWorldEditorPersist = false;
-assert.equal(runtimeState.tick, savedRuntimeWorld.metadata.simulationTicks, "quick-save restore must restore simulation tick");
-assert.equal(runtimeState.recorderClears, 1, "successful restore must clear field-only recorder history");
 
 const legacySnapshot = { ...savedRuntimeWorld, civilizations: [] };
 delete legacySnapshot.runtimeState;
