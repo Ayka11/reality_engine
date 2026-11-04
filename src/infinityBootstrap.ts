@@ -207,6 +207,23 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldExternalAssetRemove = (assetId: string) => world.removeExternalAsset(assetId)
   ;(window as any).worldExternalAssetScatter = (semanticEntryId: string, count = 12, radius = 70, seed = 1, scale = 1) =>
     world.scatterExternalSemantic(semanticEntryId, count, radius, seed, scale)
+  ;(window as any).worldExternalAssetAnimationNames = (assetId: string) =>
+    world.worldAssetRuntime.get(assetId)?.animations.map(clip => clip.name) ?? []
+  ;(window as any).worldExternalAssetAnimationPlay = (
+    instanceId: string,
+    clipName?: string,
+    options: any = {},
+  ) => world.worldAssetRuntime.playInstanceAnimation(instanceId, clipName, options)
+  ;(window as any).worldExternalAssetAnimationStop = (instanceId: string) =>
+    world.worldAssetRuntime.stopInstanceAnimation(instanceId)
+  ;(window as any).worldExternalAssetAnimationState = (
+    semanticEntryId: string,
+    stateName: string,
+    options: any = {},
+  ) => world.worldAssetRuntime.setSemanticAnimationState(semanticEntryId, stateName, options)
+  ;(window as any).worldExternalAssetAnimationStopSemantic = (semanticEntryId: string) =>
+    world.worldAssetRuntime.stopSemanticAnimation(semanticEntryId)
+  ;(window as any).worldExternalAssetAnimationStats = () => world.worldAssetRuntime.stats()
   ;(window as any).worldExternalBiomePopulate = (environment: any, radius = 100, density = 1, seed = 1) =>
     world.populateExternalBiome(environment, radius, density, seed)
   ;(window as any).settlementGrowthEvaluate = (id: string, tier: any) => settlementGrowthModel.evaluate(id, tier)
