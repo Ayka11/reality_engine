@@ -124,8 +124,10 @@ const placementMaterializer = materializeExternalAssetPlacements({
 assert.equal(placementMaterializer.restoredCount, 1,
   'only exact source and semantic matches should be materialized')
 assert.deepEqual(placementMaterializer.restoredIds, ['oak:instance:1'])
-assert.deepEqual(materializedOptions, [{ x: 4, y: 0, z: 8, scale: 1, rotationY: 0 }],
-  'restoration must apply saved absolute coordinates, scale and rotation')
+assert.deepEqual(materializedOptions, [
+  { x: 4, y: 0, z: 8, scale: 1, rotationY: 0 },
+  { x: 123, y: 0, z: 8, scale: 1, rotationY: 0 },
+], 'restoration must pass saved absolute coordinates, scale and rotation to every matching placement')
 assert.deepEqual(placementMaterializer.remaining.map(placement => placement.instanceId), [
   'tree:other-source',
   'fauna.creature:pending',
