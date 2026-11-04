@@ -35,6 +35,7 @@ function nonEmpty(value: unknown): value is string {
 export function validateExternalAssetPlacements(
   value: unknown,
   manifest?: WorldAssetImportManifest,
+  requireManifest = false,
 ): ExternalAssetPlacementValidation {
   const errors: string[] = []
   if (!Array.isArray(value)) {
@@ -80,7 +81,7 @@ export function validateExternalAssetPlacements(
       if (!matchingEntry) {
         errors.push(`External asset placement ${label} has no matching asset manifest source/semantic entry`)
       }
-    } else if (!manifest && value.length > 0) {
+    } else if (requireManifest && !manifest && value.length > 0) {
       errors.push('External asset placements require an asset provenance manifest')
     }
 
