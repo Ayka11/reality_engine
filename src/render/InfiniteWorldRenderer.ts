@@ -14,6 +14,7 @@ import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import type { WorldEditorSnapshot } from '../infinity/WorldEditorSnapshot'
+import { mergeExternalAssetPlacements, validateExternalAssetPlacements, type ExternalAssetPlacementSnapshot } from '../infinity/ExternalAssetPlacement'
 import type { WorldAssetImportManifest } from '../worldLibrary/AssetImportManifest'
 import { FieldSampler } from '../infinity/FieldSampler'
 import { GeneratorFieldProvider } from '../infinity/ScientificFieldProvider'
@@ -88,6 +89,7 @@ export class InfiniteWorldRenderer {
   readonly experimentRunner = new ExperimentRunner()
   readonly experimentCatalog = new ExperimentCatalog()
   readonly worldAssetRuntime: WorldAssetRuntime
+  private pendingExternalAssetPlacements: ExternalAssetPlacementSnapshot[] = []
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -325,13 +327,23 @@ export class InfiniteWorldRenderer {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
 
     this.scene.add(this.terrainGroup)
-    this.worldAssetRuntime = new WorldAssetRuntime(this.scene)
+    this.worldAssetRuntime = new WorldAssetRuntime(this.scene, undefined, () => this.scheduleSave())
     this.generator = new WorldGenerator(seed)
     this.terrainDeformations = new TerrainDeformationField(seed)
     worldViewContract.setSeed(seed)
     this.authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
     this.fieldSampler = new FieldSampler(this.generator, this.authoritativeField)
     this.persistence = new WorldPersistence(seed)
+    const persistedAssetPlacements = this.persistence.loadAssetPlacementsState<unknown>()
+    if (persistedAssetPlacements !== null) {
+      const placementValidation = validateExternalAssetPlacements(persistedAssetPlacements)
+      if (placementValidation.valid) {
+        this.pendingExternalAssetPlacements = placementValidation.placements
+      } else {
+        this.persistence.deleteAssetPlacementsState()
+        console.warn('[persistence] Invalid external asset placements were rejected', placementValidation.errors)
+      }
+    }
     const persistedSurface = this.persistence.loadSurfaceProviderState<WorldSurfaceProviderSnapshot>()
     if (persistedSurface) {
       const restoredSurface = restoreWorldSurfaceProvider(persistedSurface)
@@ -554,6 +566,14 @@ export class InfiniteWorldRenderer {
         `The active world surface provider "${this.fieldSampler.surfaceProvider.id}" has no portable serializer; register a versioned serializer before exporting this world.`,
       )
     }
+    const assetPlacements = mergeExternalAssetPlacements(
+      this.pendingExternalAssetPlacements,
+      this.worldAssetRuntime.snapshotPlacements(),
+    )
+    const placementValidation = validateExternalAssetPlacements(assetPlacements)
+    if (!placementValidation.valid) {
+      throw new TypeError(`External asset placement snapshot is invalid: ${placementValidation.errors.join('; ')}`)
+    }
     return structuredClone({
       version: 1 as const,
       generator: {
@@ -566,6 +586,7 @@ export class InfiniteWorldRenderer {
       terrainDeformations: this.terrainDeformations.serialize(),
       authoritativeField: this.authoritativeField.serialize(),
       provenance: runtimeProvenance.getTrace(),
+      assetPlacements,
     })
   }
 
@@ -585,6 +606,15 @@ export class InfiniteWorldRenderer {
           snapshot.generator.maxElevation < 0 ||
           !Array.isArray(snapshot.objects))) {
       throw new TypeError('Infinite-world editor snapshot has an invalid envelope')
+    }
+
+    const assetPlacementValidation = validateExternalAssetPlacements(
+      snapshot?.assetPlacements ?? [],
+      snapshot?.assetManifest,
+      Boolean(snapshot?.assetPlacements?.length),
+    )
+    if (!assetPlacementValidation.valid) {
+      throw new TypeError(`Infinite-world asset placements are invalid: ${assetPlacementValidation.errors.join('; ')}`)
     }
 
     const generatorState = snapshot?.generator ?? {
@@ -623,6 +653,7 @@ export class InfiniteWorldRenderer {
       nextTerrain,
       nextField,
       nextProvenance,
+      nextAssetPlacements: assetPlacementValidation.placements,
     }
   }
 
@@ -644,6 +675,10 @@ export class InfiniteWorldRenderer {
       window.clearTimeout(this.saveTimer)
       this.saveTimer = null
     }
+
+    // Keep placement descriptors inert until their exact source asset is
+    // explicitly imported. WorldSaveSystem clears old runtime assets post-commit.
+    this.pendingExternalAssetPlacements = prepared.nextAssetPlacements.map(placement => ({ ...placement }))
 
     for (const [, patch] of this.patches) {
       this.scene.remove(patch.group)
@@ -751,6 +786,13 @@ export class InfiniteWorldRenderer {
     if (!this.persistence.saveProvenanceState(runtimeProvenance.getTrace())) {
       failedPersistenceOperations.push('runtime provenance trace')
     }
+    const assetPlacements = mergeExternalAssetPlacements(
+      this.pendingExternalAssetPlacements,
+      this.worldAssetRuntime.snapshotPlacements(),
+    )
+    if (!this.persistence.saveAssetPlacementsState(assetPlacements)) {
+      failedPersistenceOperations.push('external asset placements')
+    }
     if (options.checkpoint !== false) {
       const fieldCheckpointSaved = this.persistence.saveFieldCheckpoint(fieldSnapshot)
       if (!fieldCheckpointSaved) {
@@ -845,6 +887,8 @@ export class InfiniteWorldRenderer {
   }
 
   clearSavedWorld() {
+    this.pendingExternalAssetPlacements = []
+    this.worldAssetRuntime.clear()
     const cleared = this.persistence.clear()
     if (!cleared) {
       console.warn('[persistence] Could not remove every saved world record; some objects or edits may return after reload')
@@ -1981,13 +2025,40 @@ export class InfiniteWorldRenderer {
   ) {
     const x = this.worldPosition.x
     const z = this.worldPosition.z
-    return this.worldAssetRuntime.load(assetId, sourceUrl, {
+    const asset = await this.worldAssetRuntime.load(assetId, sourceUrl, {
       semanticEntryId,
       x,
       y: this.sampleTerrainHeight(x, z),
       z,
       scale,
     })
+
+    // Placement descriptors are data only. Materialize them only after this
+    // caller explicitly imports the matching source asset.
+    if (asset.semanticEntryId) {
+      const restoredIds = new Set<string>()
+      for (const placement of this.pendingExternalAssetPlacements) {
+        if (placement.sourceAssetId !== asset.id ||
+            placement.semanticEntryId !== asset.semanticEntryId) continue
+        const instance = this.worldAssetRuntime.placeInstance(
+          placement.instanceId,
+          placement.semanticEntryId,
+          {
+            x: placement.x,
+            y: placement.y,
+            z: placement.z,
+            scale: placement.scale,
+            rotationY: placement.rotationY,
+          },
+        )
+        if (instance) restoredIds.add(placement.instanceId)
+      }
+      if (restoredIds.size) {
+        this.pendingExternalAssetPlacements = this.pendingExternalAssetPlacements
+          .filter(placement => !restoredIds.has(placement.instanceId))
+      }
+    }
+    return asset
   }
 
   populateExternalBiome(
@@ -2036,6 +2107,7 @@ export class InfiniteWorldRenderer {
       })
     }
 
+    if (results.some(result => result.count > 0)) this.scheduleSave()
     return { biomeId: plan.biomeId, byLayer: plan.byLayer, results, reason: plan.reason }
   }
 
@@ -2302,6 +2374,7 @@ export class InfiniteWorldRenderer {
       results.push({ semanticEntryId: rule.semanticEntryId, layer: rule.layer, count, mode: 'procedural-fallback' })
     }
 
+    if (results.some(result => result.count > 0)) this.scheduleSave()
     return { biomeId: plan.biomeId, byLayer: plan.byLayer, results, reason: plan.reason }
   }
 
@@ -2328,11 +2401,18 @@ export class InfiniteWorldRenderer {
       instance.position.y = worldY
       instance.userData.worldPosition = { x: worldX, y: worldY, z: worldZ }
     })
+    if (instances.length) this.scheduleSave()
     return instances.length
   }
 
   removeExternalAsset(assetId: string) {
-    return this.worldAssetRuntime.remove(assetId)
+    const pendingBefore = this.pendingExternalAssetPlacements.length
+    this.pendingExternalAssetPlacements = this.pendingExternalAssetPlacements
+      .filter(placement => placement.sourceAssetId !== assetId)
+    const pendingRemoved = this.pendingExternalAssetPlacements.length !== pendingBefore
+    const runtimeRemoved = this.worldAssetRuntime.remove(assetId)
+    if (pendingRemoved && !runtimeRemoved) this.scheduleSave()
+    return pendingRemoved || runtimeRemoved
   }
 
   getExternalAssetStats() {
