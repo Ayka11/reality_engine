@@ -295,6 +295,7 @@ try {
       id: "acceptance-package-asset",
       providerId: "polyhaven",
       sourceUrl: "https://polyhaven.com/a/acceptance-package-asset",
+      sourceAssetId: "acceptance-package-asset",
       name: "Acceptance package asset",
       license: "CC0",
       attribution: "Reality Engine CI",
@@ -336,6 +337,24 @@ try {
       !savedPackage.worldEditor.assetManifest.entries.some(entry => entry.id === "acceptance-package-asset")) {
     throw new Error("re_v6 export omitted the authored object, provenance event or asset manifest");
   }
+  if (!Array.isArray(savedPackage.worldEditor.assetPlacements)) {
+    throw new Error("re_v6 export omitted the external asset placement collection");
+  }
+
+  // Inject a data-only placement to verify package restore without fetching
+  // the GLTF source. The user must explicitly import the matching asset later.
+  const placementFixture = {
+    instanceId: "flora.tree:instance:acceptance-package:0",
+    sourceAssetId: "acceptance-package-asset",
+    semanticEntryId: "flora.tree",
+    x: 145.5,
+    y: 12.25,
+    z: -32,
+    scale: 0.85,
+    rotationY: 1.2,
+  };
+  savedPackage.worldEditor.assetPlacements = [placementFixture];
+  const importPackageBytes = Buffer.from(JSON.stringify(savedPackage));
 
   await page.evaluate((objectId) => {
     const world = window.infiniteWorld;
@@ -348,7 +367,7 @@ try {
   await loadInput.setInputFiles({
     name: packageDownload.suggestedFilename(),
     mimeType: "application/json",
-    buffer: packageBytes,
+    buffer: importPackageBytes,
   });
   await page.waitForFunction(objectId =>
     !!window.infiniteWorld?.objects?.get(objectId) &&
@@ -361,10 +380,15 @@ try {
     seed: window.infiniteWorld.generator.seed,
     assetCount: window.worldAssetManifest.entries.length,
     provenanceEvents: window.infiniteWorld.getAuthoritativeFieldState().provenance.events.length,
+    assetPlacements: window.capturePortableWorldEditorSnapshot().assetPlacements,
+    runtimeAssetStats: window.worldExternalAssetStats(),
   }));
   if (loadedPackageState.seed !== packageFixture.generatorSeed ||
-      !loadedPackageState.assetCount || !loadedPackageState.provenanceEvents) {
-    throw new Error("Active Load did not restore the package's full world state: " + JSON.stringify(loadedPackageState));
+      !loadedPackageState.assetCount || !loadedPackageState.provenanceEvents ||
+      JSON.stringify(loadedPackageState.assetPlacements) !== JSON.stringify([placementFixture]) ||
+      loadedPackageState.runtimeAssetStats?.loaded !== 0 ||
+      loadedPackageState.runtimeAssetStats?.instances !== 0) {
+    throw new Error("Active Load did not restore world state and inert external placement intent: " + JSON.stringify(loadedPackageState));
   }
 
   console.log("[acceptance] malformed re_v6 imports fail before any world mutation");
