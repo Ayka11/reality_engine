@@ -180,7 +180,18 @@ assert.equal(runtime.updateAnimations(0.5), 1)
 assert.ok(firstSkinnedMesh.skeleton.bones[0].position.x > 0.25, 'Idle state must animate the selected instance')
 assert.equal(runtime.setInstanceAnimationState('creature:instance:1', 'Walk', { fadeDuration: 0.1 }), true)
 assert.equal(runtime.updateAnimations(0.5), 1)
-assert.ok(firstSkinnedMesh.skeleton.bones[0].position.y > 0.5, 'playing an instance clip must animate its cloned bone')
+const transitionedBoneY = firstSkinnedMesh.skeleton.bones[0].position.y
+const animationMixer = (runtime as unknown as { instanceMixers: Map<string, THREE.AnimationMixer> }).instanceMixers.get('creature:instance:1')
+console.log('Animation transition diagnostics', {
+  boneY: transitionedBoneY,
+  actions: (animationMixer as any)?._actions?.map((action: THREE.AnimationAction) => ({
+    clip: action.getClip().name,
+    time: action.time,
+    weight: action.getEffectiveWeight(),
+    running: action.isRunning(),
+  })),
+})
+assert.ok(transitionedBoneY > 0.5, `playing an instance clip must animate its cloned bone; got y=${transitionedBoneY}`)
 assert.equal(sourceSkeletonAtRest.bones[0].position.y, 0, 'instance animation must not mutate the source skeleton')
 assert.equal(secondSkinnedMesh.skeleton.bones[0].position.y, 0, 'instance animation must not mutate sibling skeletons')
 assert.equal(runtime.removeInstance('creature:instance:1'), true)
