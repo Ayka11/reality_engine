@@ -10,6 +10,7 @@ export class WorldPersistence {
   private readonly fieldCheckpointKey: string
   private readonly surfaceProviderKey: string
   private readonly assetManifestKey: string
+  private readonly assetPlacementsKey: string
   private readonly provenanceKey: string
   private readonly terrainDeformationKey: string
   private readonly terrainDeformationCheckpointKey: string
@@ -23,6 +24,7 @@ export class WorldPersistence {
     this.fieldCheckpointKey = `reality-engine-world:${seed}:field-checkpoint`
     this.surfaceProviderKey = `reality-engine-world:${seed}:surface-provider`
     this.assetManifestKey = `reality-engine-world:${seed}:asset-manifest`
+    this.assetPlacementsKey = `reality-engine-world:${seed}:asset-placements`
     this.provenanceKey = `reality-engine-world:${seed}:provenance`
     this.terrainDeformationKey = `reality-engine-world:${seed}:terrain-deformation`
     this.terrainDeformationCheckpointKey = `reality-engine-world:${seed}:terrain-deformation-checkpoint`
@@ -183,6 +185,51 @@ export class WorldPersistence {
   deleteAssetManifestState(): boolean {
     try {
       localStorage.removeItem(this.assetManifestKey)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** Persist external asset placement intent without storing or fetching GLTF binaries. */
+  saveAssetPlacementsState(state: unknown): boolean {
+    try {
+      localStorage.setItem(this.assetPlacementsKey, JSON.stringify({
+        version: 1,
+        seed: this.seed,
+        state,
+      }))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  loadAssetPlacementsState<T = unknown>(): T | null {
+    let raw: string | null
+    try {
+      raw = localStorage.getItem(this.assetPlacementsKey)
+    } catch {
+      return null
+    }
+    if (!raw) return null
+    try {
+      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
+      if (payload.version !== 1 || payload.seed !== this.seed ||
+          !Array.isArray(payload.state)) {
+        localStorage.removeItem(this.assetPlacementsKey)
+        return null
+      }
+      return payload.state
+    } catch {
+      try { localStorage.removeItem(this.assetPlacementsKey) } catch {}
+      return null
+    }
+  }
+
+  deleteAssetPlacementsState(): boolean {
+    try {
+      localStorage.removeItem(this.assetPlacementsKey)
       return true
     } catch {
       return false
@@ -392,6 +439,7 @@ export class WorldPersistence {
       this.fieldCheckpointKey,
       this.surfaceProviderKey,
       this.assetManifestKey,
+      this.assetPlacementsKey,
       this.provenanceKey,
       this.terrainDeformationKey,
       this.terrainDeformationCheckpointKey,
