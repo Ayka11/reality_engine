@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import * as THREE from 'three'
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { WorldAssetRuntime } from '../src/worldLibrary/WorldAssetRuntime.ts'
-import { mergeExternalAssetPlacements, validateExternalAssetPlacements } from '../src/infinity/ExternalAssetPlacement.ts'
+import {
+  materializeExternalAssetPlacements,
+  mergeExternalAssetPlacements,
+  validateExternalAssetPlacements,
+} from '../src/infinity/ExternalAssetPlacement.ts'
 
 type LoadRequest = {
   onLoad: (gltf: { scene: THREE.Group; animations?: THREE.AnimationClip[] }) => void
@@ -104,6 +108,29 @@ assert.equal(
   99,
   'live transform must override a stale pending descriptor with the same instance ID',
 )
+const pendingPlacements = [
+  runtime.snapshotPlacements()[0],
+  { ...runtime.snapshotPlacements()[0], instanceId: 'tree:other-source', sourceAssetId: 'other-tree' },
+  { ...runtime.snapshotPlacements()[0], instanceId: 'fauna.creature:pending', semanticEntryId: 'fauna.creature' },
+  { ...runtime.snapshotPlacements()[0], instanceId: 'oak:deferred', x: 123 },
+]
+const materializedOptions: Array<{ x: number; y: number; z: number; scale: number; rotationY: number }> = []
+const placementMaterializer = materializeExternalAssetPlacements({
+  placeInstance: (_instanceId, _semanticId, options) => {
+    materializedOptions.push(options)
+    return options.x === 123 ? null : { placed: true }
+  },
+}, pendingPlacements, 'oak', 'flora.oak')
+assert.equal(placementMaterializer.restoredCount, 1,
+  'only exact source and semantic matches should be materialized')
+assert.deepEqual(placementMaterializer.restoredIds, ['oak:instance:1'])
+assert.deepEqual(materializedOptions, [{ x: 4, y: 0, z: 8, scale: 1, rotationY: 0 }],
+  'restoration must apply saved absolute coordinates, scale and rotation')
+assert.deepEqual(placementMaterializer.remaining.map(placement => placement.instanceId), [
+  'tree:other-source',
+  'fauna.creature:pending',
+  'oak:deferred',
+], 'unmatched and failed placements must remain pending for retry')
 
 const alternateOakLoad = runtime.load('oak-alt', 'https://assets.example.test/alternate-oak.glb', {
   semanticEntryId: 'flora.oak',
