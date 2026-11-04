@@ -662,8 +662,8 @@ assert.equal(runtimeState.recorderClears, 1, "successful restore must clear fiel
 
 failWorldEditorPersist = true;
 await assert.rejects(saveHarness.applySnapshot(savedRuntimeWorld), /injected sidecar persistence failure/);
-assert.equal(worldAssetClearCalls, 1,
-  "external assets must remain intact when post-commit sidecar persistence fails");
+assert.equal(worldAssetClearCalls, 2,
+  "external assets must still be cleared because the world transaction committed before sidecar persistence failed");
 assert.equal(runtimeState.recorderClears, 2,
   "the committed restore with failed sidecar persistence still clears the old recorder history");
 assert.equal(worldEditorPersistCalls, 2,
@@ -692,7 +692,7 @@ assert.deepEqual(runtimeState.worldEvents, { history: [], nextAuto: 600, rngStat
 assert.deepEqual(runtimeState.causal, { events: [], nextId: 1, lastEventByCell: [] }, "legacy restore must clear stale causal history");
 assert.deepEqual(runtimeState.previousEnergy, new Float32Array(runtimeGrid.size), "legacy restore must reset the previous-energy baseline");
 assert.deepEqual(runtimeState.director, { history: [], worldLog: [] }, "legacy restore must clear stale SceneDirector context");
-assert.equal(worldAssetClearCalls, 2,
+assert.equal(worldAssetClearCalls, 3,
   "a successful legacy import must also clear the previous external asset runtime");
 assert.deepEqual(runtimeState.worldEditor, {
   generator: { seed: "legacy-editor-seed", seaLevel: 16, maxElevation: 52 },
@@ -1139,8 +1139,8 @@ assert.match(saveSystemSource, /clearWorldAssetRuntime\?: \(\) => void/,
   "world save context must expose an explicit post-commit external asset cleanup port");
 const persistEditorIndex = saveSystemSource.indexOf("this.context.persistWorldEditorSnapshot?.()");
 const clearAssetsIndex = saveSystemSource.indexOf("this.context.clearWorldAssetRuntime?.()");
-assert.ok(persistEditorIndex >= 0 && clearAssetsIndex > persistEditorIndex,
-  "external world assets must be cleared only after the committed editor snapshot has persisted");
+assert.ok(clearAssetsIndex >= 0 && persistEditorIndex > clearAssetsIndex,
+  "external world assets must be cleared immediately after commit and before fallible sidecar persistence");
 assert.match(mainSource, /clearWorldAssetRuntime: \(\) => \{[\s\S]*?world\?\.worldAssetRuntime\.clear\(\)/,
   "the application must wire post-commit cleanup to the active renderer asset runtime");
 assert.match(worldAssetRuntimeSource, /private generation = 0/);
