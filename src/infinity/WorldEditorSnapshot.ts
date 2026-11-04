@@ -4,6 +4,7 @@ import type { MutableWorldFieldProvider } from './MutableWorldFieldProvider'
 import type { WorldSurfaceProviderSnapshot } from './WorldSurfaceProvider'
 import type { WorldAssetImportManifest } from '../worldLibrary/AssetImportManifest'
 import type { RuntimeProvenanceTrace } from './RuntimeProvenance'
+import type { ExternalAssetPlacementSnapshot } from './ExternalAssetPlacement'
 
 /**
  * Portable state owned by InfiniteWorldRenderer, independently of the
@@ -19,6 +20,8 @@ export interface WorldEditorSnapshot {
   surfaceProvider: WorldSurfaceProviderSnapshot
   /** Provenance/licensing references only; package import never auto-fetches URLs. */
   assetManifest?: WorldAssetImportManifest
+  /** Placement intent only; external binaries are materialized after explicit asset import. */
+  assetPlacements?: ExternalAssetPlacementSnapshot[]
   objects: WorldObject[]
   terrainDeformations: TerrainDeformationSnapshot
   authoritativeField: ReturnType<MutableWorldFieldProvider['serialize']>
