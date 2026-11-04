@@ -3445,6 +3445,7 @@ export class InfiniteWorldRenderer {
       this.physicsFrameQueries,
     )
 
+    this.worldAssetRuntime.updateAnimations(dt)
     this.worldAssetRuntime.rebase(this.worldAnchor)
     this.worldAssetRuntime.updateVisibility(this.camera, 650, 500)
 
