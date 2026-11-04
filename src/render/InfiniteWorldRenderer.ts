@@ -14,7 +14,7 @@ import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import type { WorldEditorSnapshot } from '../infinity/WorldEditorSnapshot'
-import { mergeExternalAssetPlacements, validateExternalAssetPlacements, type ExternalAssetPlacementSnapshot } from '../infinity/ExternalAssetPlacement'
+import { materializeExternalAssetPlacements, mergeExternalAssetPlacements, validateExternalAssetPlacements, type ExternalAssetPlacementSnapshot } from '../infinity/ExternalAssetPlacement'
 import type { WorldAssetImportManifest } from '../worldLibrary/AssetImportManifest'
 import { FieldSampler } from '../infinity/FieldSampler'
 import { GeneratorFieldProvider } from '../infinity/ScientificFieldProvider'
@@ -2048,26 +2048,14 @@ export class InfiniteWorldRenderer {
     // Placement descriptors are data only. Materialize them only after this
     // caller explicitly imports the matching source asset.
     if (asset.semanticEntryId) {
-      const restoredIds = new Set<string>()
-      for (const placement of this.pendingExternalAssetPlacements) {
-        if (placement.sourceAssetId !== asset.id ||
-            placement.semanticEntryId !== asset.semanticEntryId) continue
-        const instance = this.worldAssetRuntime.placeInstance(
-          placement.instanceId,
-          placement.semanticEntryId,
-          {
-            x: placement.x,
-            y: placement.y,
-            z: placement.z,
-            scale: placement.scale,
-            rotationY: placement.rotationY,
-          },
-        )
-        if (instance) restoredIds.add(placement.instanceId)
-      }
-      if (restoredIds.size) {
-        this.pendingExternalAssetPlacements = this.pendingExternalAssetPlacements
-          .filter(placement => !restoredIds.has(placement.instanceId))
+      const materialized = materializeExternalAssetPlacements(
+        this.worldAssetRuntime,
+        this.pendingExternalAssetPlacements,
+        asset.id,
+        asset.semanticEntryId,
+      )
+      if (materialized.restoredCount) {
+        this.pendingExternalAssetPlacements = materialized.remaining
       }
     }
     return asset
