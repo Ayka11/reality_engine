@@ -90,6 +90,7 @@ export class InfiniteWorldRenderer {
   readonly experimentCatalog = new ExperimentCatalog()
   readonly worldAssetRuntime: WorldAssetRuntime
   private pendingExternalAssetPlacements: ExternalAssetPlacementSnapshot[] = []
+  private suppressAssetPlacementAutosave = false
 
   private patches = new Map<string, TerrainPatch>()
   private objectMeshes = new Map<string, ObjectMesh>()
@@ -327,7 +328,9 @@ export class InfiniteWorldRenderer {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
 
     this.scene.add(this.terrainGroup)
-    this.worldAssetRuntime = new WorldAssetRuntime(this.scene, undefined, () => this.scheduleSave())
+    this.worldAssetRuntime = new WorldAssetRuntime(this.scene, undefined, () => {
+      if (!this.suppressAssetPlacementAutosave) this.scheduleSave()
+    })
     this.generator = new WorldGenerator(seed)
     this.terrainDeformations = new TerrainDeformationField(seed)
     worldViewContract.setSeed(seed)
@@ -888,7 +891,12 @@ export class InfiniteWorldRenderer {
 
   clearSavedWorld() {
     this.pendingExternalAssetPlacements = []
-    this.worldAssetRuntime.clear()
+    this.suppressAssetPlacementAutosave = true
+    try {
+      this.worldAssetRuntime.clear()
+    } finally {
+      this.suppressAssetPlacementAutosave = false
+    }
     const cleared = this.persistence.clear()
     if (!cleared) {
       console.warn('[persistence] Could not remove every saved world record; some objects or edits may return after reload')
