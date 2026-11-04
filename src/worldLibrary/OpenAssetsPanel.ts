@@ -37,6 +37,7 @@ export function mountOpenAssetsPanel() {
   let importing = ''
   let importMessage = ''
   const importedSemantic = new Map<string, string>()
+  const importedAnimations = new Map<string, string[]>()
 
   const render = () => {
     host.innerHTML = open ? `
@@ -66,7 +67,18 @@ export function mountOpenAssetsPanel() {
               <div style="font-size:7px;color:var(--sub);margin-top:3px">${esc(a.category || 'asset')} · ${esc(a.license)}</div>
               <div style="display:flex;gap:4px;align-items:center;margin-top:5px">
                 <a href="${esc(a.sourceUrl)}" target="_blank" rel="noreferrer" style="font-size:7.5px;color:#a09af0">Source ↗</a>
-                ${a.providerId==='polyhaven' ? `<button data-import-asset="${esc(a.id)}" class="pill" style="font-size:7px;padding:2px 5px">${importing===a.id?'Loading…':'Import'}</button>${importedSemantic.has(a.id) ? `<button data-scatter-asset="${esc(a.id)}" class="pill" style="font-size:7px;padding:2px 5px">Scatter</button>` : ''}` : ''}
+                ${a.providerId==='polyhaven' ? `<button data-import-asset="${esc(a.id)}" class="pill" style="font-size:7px;padding:2px 5px">${importing===a.id?'Loading…':'Import'}</button>${importedSemantic.has(a.id) ? `
+                  <button data-scatter-asset="${esc(a.id)}" class="pill" style="font-size:7px;padding:2px 5px">Scatter</button>
+                  ${(importedAnimations.get(a.id) ?? []).length
+                    ? `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;width:100%;margin-top:5px">
+                        <select data-animation-clip="${esc(a.id)}" aria-label="Animation clip for ${esc(a.name)}" style="min-width:85px;max-width:135px;padding:3px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:7px">
+                          ${(importedAnimations.get(a.id) ?? []).map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join('')}
+                        </select>
+                        <button data-play-animation="${esc(a.id)}" class="pill" style="font-size:7px;padding:2px 5px">Play group</button>
+                        <button data-stop-animation="${esc(a.id)}" class="pill" style="font-size:7px;padding:2px 5px">Stop group</button>
+                      </div>`
+                    : `<span style="font-size:7px;color:var(--sub)">No animation clips in this model</span>`}
+                ` : ''}` : ''}
               </div>
             </div>`).join('') || '<div style="grid-column:1/-1;padding:18px;text-align:center;font-size:9px;color:var(--sub)">Choose Browse to discover provider assets.</div>'}
         </div>
@@ -78,6 +90,48 @@ export function mountOpenAssetsPanel() {
     document.getElementById('openAssetsBrowse')?.addEventListener('click',browse)
     host.querySelectorAll('[data-import-asset]').forEach(b=>b.addEventListener('click',()=>importAsset(b.getAttribute('data-import-asset')||'')))
     host.querySelectorAll('[data-scatter-asset]').forEach(b=>b.addEventListener('click',()=>scatterAsset(b.getAttribute('data-scatter-asset')||'')))
+    host.querySelectorAll('[data-play-animation]').forEach(button => button.addEventListener('click', () => {
+      const assetId = button.getAttribute('data-play-animation') || ''
+      const semanticEntryId = importedSemantic.get(assetId)
+      const select = [...host.querySelectorAll<HTMLSelectElement>('[data-animation-clip]')]
+        .find(element => element.getAttribute('data-animation-clip') === assetId)
+      const state = (window as any).worldExternalAssetAnimationState
+      if (!semanticEntryId || !select?.value || typeof state !== 'function') {
+        error = 'Animation controls are not available for this asset'
+        render()
+        return
+      }
+      try {
+        const result = state(semanticEntryId, select.value, { fadeDuration: 0.25 })
+        importMessage = result?.started
+          ? `Playing ${select.value} for ${result.started} of ${result.matched} placed instance(s)`
+          : `No placed instances found for ${semanticEntryId}. Use Scatter first.`
+        error = ''
+      } catch (e) {
+        error = e instanceof Error ? e.message : 'Unable to start group animation'
+      }
+      render()
+    }))
+    host.querySelectorAll('[data-stop-animation]').forEach(button => button.addEventListener('click', () => {
+      const assetId = button.getAttribute('data-stop-animation') || ''
+      const semanticEntryId = importedSemantic.get(assetId)
+      const stop = (window as any).worldExternalAssetAnimationStopSemantic
+      if (!semanticEntryId || typeof stop !== 'function') {
+        error = 'Animation stop control is not available for this asset'
+        render()
+        return
+      }
+      try {
+        const stopped = stop(semanticEntryId)
+        importMessage = stopped
+          ? `Stopped animation on ${stopped} instance(s) of ${semanticEntryId}`
+          : `No active group animation for ${semanticEntryId}`
+        error = ''
+      } catch (e) {
+        error = e instanceof Error ? e.message : 'Unable to stop group animation'
+      }
+      render()
+    }))
     host.querySelectorAll('[data-provider]').forEach(b=>b.addEventListener('click',()=>{providerId=b.getAttribute('data-provider')||providerId;results=[];error='';browse()}))
   }
 
@@ -109,8 +163,11 @@ export function mountOpenAssetsPanel() {
       await load(asset.id, runtime.url, manifestResult.manifestEntry?.semanticEntryId, 1)
       asset.runtimeUrl = runtime.url
       asset.format = runtime.format
+      const animationNames = (window as any).worldExternalAssetAnimationNames?.(asset.id)
+      importedAnimations.set(asset.id, Array.isArray(animationNames) ? animationNames.filter((name: unknown): name is string => typeof name === 'string') : [])
       if (manifestResult.manifestEntry?.semanticEntryId) importedSemantic.set(asset.id, manifestResult.manifestEntry.semanticEntryId)
       importMessage = 'Imported ' + asset.name + ' as ' + (manifestResult.manifestEntry?.semanticEntryId || 'unmapped asset')
+        + (importedAnimations.get(asset.id)?.length ? ' · ' + importedAnimations.get(asset.id)!.length + ' animation clip(s)' : ' · no animation clips')
     } catch (e) {
       error = e instanceof Error ? e.message : 'Asset import failed'
     } finally {
