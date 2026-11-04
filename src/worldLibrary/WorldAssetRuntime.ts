@@ -10,13 +10,16 @@ export type RuntimeAsset = {
 }
 
 export class WorldAssetRuntime {
-  private readonly loader = new GLTFLoader()
+  private readonly loader: Pick<GLTFLoader, 'load'>
+  private generation = 0
   private readonly assets = new Map<string, RuntimeAsset>()
   private readonly loading = new Map<string, Promise<RuntimeAsset>>()
   private readonly semanticSources = new Map<string, RuntimeAsset>()
   private readonly instances = new Map<string, THREE.Object3D>()
 
-  constructor(private readonly scene: THREE.Scene) {}
+  constructor(private readonly scene: THREE.Scene, loader: Pick<GLTFLoader, 'load'> = new GLTFLoader()) {
+    this.loader = loader
+  }
 
   has(id: string) {
     return this.assets.has(id)
@@ -47,11 +50,18 @@ export class WorldAssetRuntime {
     const pending = this.loading.get(id)
     if (pending) return pending
 
-    const task = new Promise<RuntimeAsset>((resolve, reject) => {
+    const generation = this.generation
+    let task: Promise<RuntimeAsset>
+    task = new Promise<RuntimeAsset>((resolve, reject) => {
       this.loader.load(
         sourceUrl,
         (gltf) => {
           const object = gltf.scene
+          if (generation !== this.generation) {
+            this.disposeObject(object)
+            reject(new Error(`Asset load invalidated by world replacement: ${id}`))
+            return
+          }
           object.position.set(options.x ?? 0, options.y ?? 0, options.z ?? 0)
           object.rotation.y = options.rotationY ?? 0
           object.scale.setScalar(Math.max(0.001, options.scale ?? 1))
@@ -79,7 +89,7 @@ export class WorldAssetRuntime {
         reject,
       )
     }).finally(() => {
-      this.loading.delete(id)
+      if (this.loading.get(id) === task) this.loading.delete(id)
     })
 
     this.loading.set(id, task)
@@ -117,17 +127,21 @@ export class WorldAssetRuntime {
     return instance
   }
 
-  removeInstance(instanceId: string) {
-    const instance = this.instances.get(instanceId)
-    if (!instance) return false
-    this.scene.remove(instance)
-    instance.traverse((node) => {
+  private disposeObject(object: THREE.Object3D) {
+    object.traverse((node) => {
       const mesh = node as THREE.Mesh
       if (!mesh.isMesh) return
       mesh.geometry.dispose()
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
       materials.forEach((material) => material.dispose())
     })
+  }
+
+  removeInstance(instanceId: string) {
+    const instance = this.instances.get(instanceId)
+    if (!instance) return false
+    this.scene.remove(instance)
+    this.disposeObject(instance)
     this.instances.delete(instanceId)
     return true
   }
@@ -165,18 +179,16 @@ export class WorldAssetRuntime {
     if (!asset) return false
     this.scene.remove(asset.object)
     if (asset.semanticEntryId) this.semanticSources.delete(asset.semanticEntryId)
-    asset.object.traverse((node) => {
-      const mesh = node as THREE.Mesh
-      if (!mesh.isMesh) return
-      mesh.geometry.dispose()
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-      materials.forEach((material) => material.dispose())
-    })
+    this.disposeObject(asset.object)
     this.assets.delete(id)
     return true
   }
 
   clear() {
+    // Invalidate outstanding GLTF callbacks before releasing the current world.
+    // Clear the map immediately so a new world can request the same asset ID.
+    this.generation += 1
+    this.loading.clear()
     for (const id of [...this.instances.keys()]) this.removeInstance(id)
     for (const id of [...this.assets.keys()]) this.remove(id)
   }
