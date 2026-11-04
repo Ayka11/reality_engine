@@ -116,6 +116,8 @@ interface SaveContext {
   restoreWorldEditorSnapshot?: (snapshot?: WorldEditorSnapshot) => void;
   /** Best-effort persistence after the enclosing world transaction commits. */
   persistWorldEditorSnapshot?: () => void;
+  /** Release non-portable external assets only after import persistence succeeds. */
+  clearWorldAssetRuntime?: () => void;
   getCausalLog?: () => unknown[];
   thumbnailCanvas?: HTMLCanvasElement | null;
 }
@@ -464,6 +466,9 @@ export class WorldSaveSystem {
     this.context.clearTimeline?.();
     this.context.clearSculptHistory?.();
     this.context.persistWorldEditorSnapshot?.();
+    // External GLTF assets are intentionally not part of portable snapshots.
+    // Release the previous world's runtime objects only after commit and sidecar persistence.
+    this.context.clearWorldAssetRuntime?.();
     this.currentSnapshot = snapshot;
     console.info(`World "${snapshot.name}" fully restored.`);
   }
