@@ -154,7 +154,15 @@ export function mountOpenAssetsPanel() {
     try {
       const runtime = await resolvePolyHavenRuntimeUrl(asset)
       if (!runtime) throw new Error('No GLB/GLTF runtime file is available for this asset')
-      const manifestResult = (window as any).worldAssetImport?.(asset)
+      // Preserve the semantic mapping used by saved placement descriptors.
+      // Re-discovery may return a different automatic match after a library update.
+      const savedManifestEntry = (window as any).worldAssetManifest?.entries?.find((entry: any) =>
+        entry.providerId === asset.providerId && entry.sourceAssetId === asset.id
+      )
+      const savedSemanticEntryId = typeof savedManifestEntry?.semanticEntryId === 'string'
+        ? savedManifestEntry.semanticEntryId
+        : undefined
+      const manifestResult = (window as any).worldAssetImport?.(asset, savedSemanticEntryId)
       if (!manifestResult?.accepted) {
         throw new Error(manifestResult?.errors?.join('; ') || 'Asset provenance validation failed')
       }
