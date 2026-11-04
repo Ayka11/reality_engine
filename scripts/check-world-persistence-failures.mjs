@@ -14,6 +14,7 @@ const metaLawSource = await readFile(new URL("src/simulation/MetaLawEvolution.ts
 const cosmologicalSource = await readFile(new URL("src/simulation/CosmologicalSim.ts", root), "utf8");
 const timelineSource = await readFile(new URL("src/world/Timeline.ts", root), "utf8");
 const directorSource = await readFile(new URL("src/ai/SceneDirector.ts", root), "utf8");
+const worldAssetRuntimeSource = await readFile(new URL("src/worldLibrary/WorldAssetRuntime.ts", root), "utf8");
 const multiplayerSource = await readFile(new URL("src/network/MultiplayerSync.ts", root), "utf8");
 const simulationEngineSource = await readFile(new URL("src/simulation/SimulationEngine.ts", root), "utf8");
 assert.match(saveSystemSource, /const mutate = this\.context\.mutateAuthoritativeState;/,
@@ -1110,5 +1111,26 @@ failAutosaveWrite = true;
 await assert.rejects(saveHarness.quickSave("Autosave_quota_failure"), /injected IndexedDB quota failure/);
 assert.equal(saveHarness.getCurrentSnapshot(), lastCommittedSnapshot,
   "failed autosave persistence must not replace the last committed current snapshot");
+
+assert.match(saveSystemSource, /clearWorldAssetRuntime\?: \(\) => void/,
+  "world save context must expose an explicit post-commit external asset cleanup port");
+const persistEditorIndex = saveSystemSource.indexOf("this.context.persistWorldEditorSnapshot?.()");
+const clearAssetsIndex = saveSystemSource.indexOf("this.context.clearWorldAssetRuntime?.()");
+assert.ok(persistEditorIndex >= 0 && clearAssetsIndex > persistEditorIndex,
+  "external world assets must be cleared only after the committed editor snapshot has persisted");
+assert.match(mainSource, /clearWorldAssetRuntime: \(\) => \{[\s\S]*?world\?\.worldAssetRuntime\.clear\(\)/,
+  "the application must wire post-commit cleanup to the active renderer asset runtime");
+assert.match(worldAssetRuntimeSource, /private generation = 0/);
+assert.match(worldAssetRuntimeSource, /const generation = this\.generation/);
+assert.match(worldAssetRuntimeSource, /generation !== this\.generation/,
+  "a GLTF callback from an earlier world generation must be rejected");
+assert.match(worldAssetRuntimeSource, /if \(this\.loading\.get\(id\) === task\) this\.loading\.delete\(id\)/,
+  "a stale load finalizer must not erase a newer same-ID pending load");
+assert.match(worldAssetRuntimeSource, /this\.generation \+= 1;\s*this\.loading\.clear\(\)/,
+  "clear must invalidate pending loads and release IDs for the new world");
+assert.match(worldAssetRuntimeSource, /this\.disposeObject\(object\)/,
+  "late invalidated GLTF payloads must release their GPU/CPU resources");
+assert.match(worldAssetRuntimeSource, /this\.disposeObject\(instance\)/);
+assert.match(worldAssetRuntimeSource, /this\.disposeObject\(asset\.object\)/);
 
 console.log("PASS: quota, read, delete, and corrupt-storage failures are contained");
