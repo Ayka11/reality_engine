@@ -69,12 +69,29 @@ const instance = runtime.placeInstance('oak:instance:1', 'flora.oak', { x: 4, y:
 assert.ok(instance)
 assert.equal(scene.children.length, 2)
 
+const alternateOakLoad = runtime.load('oak-alt', 'https://assets.example.test/alternate-oak.glb', {
+  semanticEntryId: 'flora.oak',
+})
+requests[2].onLoad({ scene: createGltfScene() })
+const alternateOakAsset = await alternateOakLoad
+assert.equal(runtime.getSemanticSource('flora.oak'), alternateOakAsset)
+const alternateOakInstance = runtime.placeInstance('oak-alt:instance:1', 'flora.oak', { x: 6, y: 0, z: 9 })
+assert.ok(alternateOakInstance)
+assert.equal(runtime.remove('oak-alt'), true)
+assert.equal(scene.children.includes(alternateOakInstance), false, 'removing a source asset must also remove its placements')
+assert.equal(runtime.getSemanticSource('flora.oak'), asset, 'removing the latest semantic source must restore another loaded source')
+const fallbackOakInstance = runtime.placeInstance('oak:fallback:1', 'flora.oak', { x: 7, y: 0, z: 10 })
+assert.ok(fallbackOakInstance)
+assert.equal(runtime.remove('oak'), true)
+assert.equal(scene.children.length, 0, 'removing the original source must remove all instances derived from it')
+assert.equal(runtime.getSemanticSource('flora.oak'), undefined)
+
 const sourceTexture = new THREE.Texture()
 const texturedSourceScene = createGltfScene(sourceTexture)
 const texturedAssetLoad = runtime.load('pine', 'https://assets.example.test/pine.glb', {
   semanticEntryId: 'flora.pine',
 })
-requests[2].onLoad({ scene: texturedSourceScene })
+requests[3].onLoad({ scene: texturedSourceScene })
 const texturedAsset = await texturedAssetLoad
 const sourceMesh = texturedAsset.object.children[0] as THREE.Mesh
 const sourceMaterial = sourceMesh.material as THREE.MeshStandardMaterial
@@ -88,12 +105,18 @@ assert.ok(instanceMaterial.map)
 assert.notEqual(instanceMaterial.map, sourceMaterial.map, 'placed instances must own cloned texture resources')
 let instanceTextureDisposed = false
 instanceMaterial.map!.addEventListener('dispose', () => { instanceTextureDisposed = true })
+const secondTexturedInstance = runtime.placeInstance('pine:instance:2', 'flora.pine', { x: 5, y: 0, z: 6 })
+assert.ok(secondTexturedInstance)
+const secondInstanceMaterial = ((secondTexturedInstance.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial)
+let secondInstanceTextureDisposed = false
+secondInstanceMaterial.map!.addEventListener('dispose', () => { secondInstanceTextureDisposed = true })
+assert.equal(runtime.removeInstance('pine:instance:1'), true)
+assert.equal(instanceTextureDisposed, true, 'removing one instance must dispose its private texture')
+assert.equal(sourceTextureDisposed, false, 'removing an instance must not dispose the source texture')
 assert.equal(runtime.remove('pine'), true)
 assert.equal(sourceTextureDisposed, true, 'removing a source asset must dispose its owned texture')
-assert.equal(instanceTextureDisposed, false, 'removing a source asset must not dispose an instance-owned texture')
-assert.equal(scene.children.includes(texturedInstance), true, 'placed instances remain usable after source removal')
-assert.equal(runtime.removeInstance('pine:instance:1'), true)
-assert.equal(instanceTextureDisposed, true, 'removing an instance must dispose its private texture')
+assert.equal(secondInstanceTextureDisposed, true, 'removing a source asset must dispose remaining instance-owned textures')
+assert.equal(scene.children.length, 0, 'removing an asset must remove all its remaining placements')
 
 runtime.clear()
 assert.equal(runtime.stats().loaded, 0)
