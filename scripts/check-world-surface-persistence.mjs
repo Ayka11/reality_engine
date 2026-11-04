@@ -67,6 +67,23 @@ assert.deepEqual(persistence.loadAssetManifestState(), assetManifest,
   'asset provenance metadata must round-trip for the matching world seed')
 assert.equal(otherWorldPersistence.loadAssetManifestState(), null,
   'asset provenance manifests must be isolated by world seed')
+const assetPlacements = [{
+  instanceId: 'flora.tree:instance:17:0',
+  sourceAssetId: 'oak',
+  semanticEntryId: 'flora.tree',
+  x: 145.5, y: 12.25, z: -32, scale: 0.85, rotationY: 1.2,
+}]
+assert.equal(persistence.saveAssetPlacementsState(assetPlacements), true,
+  'portable external placement descriptors must persist without downloading models')
+assert.deepEqual(persistence.loadAssetPlacementsState(), assetPlacements,
+  'external placement descriptors must round-trip under the matching world seed')
+assert.equal(otherWorldPersistence.loadAssetPlacementsState(), null,
+  'external placement descriptors must be isolated by world seed')
+const placementsKey = 'reality-engine-world:surface-save-seed:asset-placements'
+entries.set(placementsKey, '{malformed-placement-sidecar')
+assert.equal(persistence.loadAssetPlacementsState(), null, 'malformed placement sidecar must be rejected')
+assert.equal(entries.has(placementsKey), false, 'malformed placement sidecar must be removed')
+assert.equal(persistence.saveAssetPlacementsState(assetPlacements), true)
 const provenanceTrace = {
   schemaVersion: 'reality-runtime-provenance-v1',
   traceId: 'trace-persistence-test',
@@ -113,6 +130,8 @@ assert.equal(persistence.clear(), true,
   'clearing the world must remove the saved surface-provider selection as well as fields and chunks')
 assert.equal(persistence.loadSurfaceProviderState(), null)
 assert.equal(persistence.loadAssetManifestState(), null)
+assert.equal(persistence.loadAssetPlacementsState(), null,
+  'clearing a world must remove external placement sidecar descriptors')
 console.log('World surface persistence regression: PASS')
 console.log('PASS: versioned surface snapshot round-trips and remains world-seed scoped')
 console.log('PASS: clearing world persistence removes surface selection')
