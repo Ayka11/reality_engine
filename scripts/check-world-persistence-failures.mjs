@@ -1147,7 +1147,7 @@ assert.match(worldAssetRuntimeSource, /private generation = 0/);
 assert.match(worldAssetRuntimeSource, /const generation = this\.generation/);
 assert.match(worldAssetRuntimeSource, /generation !== this\.generation/,
   "a GLTF callback from an earlier world generation must be rejected");
-assert.match(worldAssetRuntimeSource, /if \(this\.loading\.get\(id\) === task\) this\.loading\.delete\(id\)/,
+assert.match(worldAssetRuntimeSource, /if \(this\.loading\.get\(id\) === task\) \{\s*this\.loading\.delete\(id\)/,
   "a stale load finalizer must not erase a newer same-ID pending load");
 assert.match(worldAssetRuntimeSource, /this\.generation \+= 1;\s*this\.loading\.clear\(\)/,
   "clear must invalidate pending loads and release IDs for the new world");
