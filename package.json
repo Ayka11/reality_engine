@@ -47,6 +47,7 @@
     "test:terrain-deformation": "npx --yes tsx scripts/check-terrain-deformation-field.ts",
     "test:authoritative-sculpt-transaction": "node scripts/check-authoritative-sculpt-transaction.mjs && node scripts/check-unified-sculpt-transaction.mjs && node scripts/check-chunk-grid-sculpt-modes.mjs && npm run test:brush-engine-transaction && node scripts/check-authoritative-sculpt-terrain-refresh.mjs",
     "test:world-persistence-failures": "node scripts/check-world-persistence-failures.mjs",
+    "test:world-asset-runtime": "npx --yes tsx scripts/check-world-asset-runtime.ts",
     "audit:report": "node scripts/report-npm-audit.mjs",
     "test:npm-audit-gate": "node scripts/check-npm-audit-gate.mjs",
     "test:solver-deployment": "node scripts/check-solver-client-deployment.mjs",
