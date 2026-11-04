@@ -10,6 +10,7 @@ import type { WorldAssetImportManifest } from './worldLibrary/AssetImportManifes
 import type { WorldEditorSnapshot } from './infinity/WorldEditorSnapshot'
 import { encodeActiveWorldPackage, decodeActiveWorldPackage } from './infinity/ActiveWorldPackage'
 import type { DiscoveredAsset } from './worldLibrary/AssetDiscovery'
+import './worldLibrary/OpenAssetsPanel'
 import { importDiscoveredAsset } from './worldLibrary/AssetImportService'
 import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEntries, resolveWorldLibraryEntry, visualKindToWorldObject, worldEnvironmentResolver, worldLibrary, worldRuleGraph } from './worldLibrary'
 import type { WorldObjectKind } from './infinity/WorldObject'
