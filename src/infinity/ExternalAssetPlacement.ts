@@ -108,3 +108,59 @@ export function mergeExternalAssetPlacements(
   for (const placement of live) merged.set(placement.instanceId, placement)
   return [...merged.values()].map(placement => ({ ...placement }))
 }
+
+export type ExternalAssetPlacementMaterializer = {
+  placeInstance: (
+    instanceId: string,
+    semanticEntryId: string,
+    options: { x: number; y: number; z: number; scale: number; rotationY: number },
+  ) => unknown | null | undefined
+}
+
+export type ExternalAssetPlacementMaterializationResult = {
+  remaining: ExternalAssetPlacementSnapshot[]
+  restoredIds: string[]
+  restoredCount: number
+}
+
+/**
+ * Materialize only descriptors belonging to the explicitly imported source.
+ * Failed materialization remains pending so a later retry cannot lose intent.
+ */
+export function materializeExternalAssetPlacements(
+  runtime: ExternalAssetPlacementMaterializer,
+  pending: ExternalAssetPlacementSnapshot[],
+  sourceAssetId: string,
+  semanticEntryId: string,
+): ExternalAssetPlacementMaterializationResult {
+  const remaining: ExternalAssetPlacementSnapshot[] = []
+  const restoredIds: string[] = []
+
+  for (const placement of pending) {
+    if (placement.sourceAssetId !== sourceAssetId ||
+        placement.semanticEntryId !== semanticEntryId) {
+      remaining.push({ ...placement })
+      continue
+    }
+
+    const instance = runtime.placeInstance(
+      placement.instanceId,
+      placement.semanticEntryId,
+      {
+        x: placement.x,
+        y: placement.y,
+        z: placement.z,
+        scale: placement.scale,
+        rotationY: placement.rotationY,
+      },
+    )
+    if (instance) restoredIds.push(placement.instanceId)
+    else remaining.push({ ...placement })
+  }
+
+  return {
+    remaining,
+    restoredIds,
+    restoredCount: restoredIds.length,
+  }
+}
