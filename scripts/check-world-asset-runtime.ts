@@ -40,13 +40,13 @@ const staleLoad = runtime.load('oak', 'https://assets.example.test/old-oak.glb',
 assert.equal(requests.length, 1)
 
 runtime.clear()
+await assert.rejects(staleLoad, /Asset load invalidated by world replacement/)
 const currentLoad = runtime.load('oak', 'https://assets.example.test/current-oak.glb', {
   semanticEntryId: 'flora.oak',
 })
 assert.equal(requests.length, 2, 'clear must release the old pending ID for a new world load')
 
 requests[0].onLoad({ scene: staleScene })
-await assert.rejects(staleLoad, /invalidated by world replacement/)
 assert.equal(staleGeometryDisposed, true, 'late stale GLTF payloads must be disposed')
 assert.equal(scene.children.length, 0, 'late stale GLTF payloads must never enter the new scene')
 
