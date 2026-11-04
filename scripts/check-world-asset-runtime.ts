@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import * as THREE from 'three'
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { WorldAssetRuntime } from '../src/worldLibrary/WorldAssetRuntime.ts'
+import { mergeExternalAssetPlacements, validateExternalAssetPlacements } from '../src/infinity/ExternalAssetPlacement.ts'
 
 type LoadRequest = {
   onLoad: (gltf: { scene: THREE.Group; animations?: THREE.AnimationClip[] }) => void
@@ -68,6 +69,41 @@ assert.equal(scene.children.length, 1)
 const instance = runtime.placeInstance('oak:instance:1', 'flora.oak', { x: 4, y: 0, z: 8 })
 assert.ok(instance)
 assert.equal(scene.children.length, 2)
+const placementManifest = {
+  version: '1.0' as const,
+  generatedAt: '2026-11-04T00:00:00.000Z',
+  project: 'WorldAssetRuntime regression',
+  entries: [{
+    id: 'oak-source',
+    providerId: 'test-provider',
+    sourceUrl: 'https://assets.example.test/oak.glb',
+    sourceAssetId: 'oak',
+    name: 'Oak',
+    license: 'CC0' as const,
+    semanticEntryId: 'flora.oak',
+  }],
+}
+assert.deepEqual(runtime.snapshotPlacements(), [{
+  instanceId: 'oak:instance:1',
+  sourceAssetId: 'oak',
+  semanticEntryId: 'flora.oak',
+  x: 4, y: 0, z: 8, scale: 1, rotationY: 0,
+}], 'runtime snapshot must capture absolute world coordinates and transforms')
+const placementValidation = validateExternalAssetPlacements(runtime.snapshotPlacements(), placementManifest, true)
+assert.equal(placementValidation.valid, true, 'placement intent must resolve to licensed manifest metadata')
+assert.equal(validateExternalAssetPlacements([
+  ...runtime.snapshotPlacements(), ...runtime.snapshotPlacements(),
+], placementManifest, true).valid, false, 'duplicate placement IDs must be rejected')
+assert.equal(validateExternalAssetPlacements(runtime.snapshotPlacements(), {
+  ...placementManifest,
+  entries: [{ ...placementManifest.entries[0], sourceAssetId: 'unregistered-source' }],
+}, true).valid, false, 'placement source IDs must match the asset provenance manifest')
+const movedPlacement = { ...runtime.snapshotPlacements()[0], x: 99 }
+assert.equal(
+  mergeExternalAssetPlacements([runtime.snapshotPlacements()[0]], [movedPlacement])[0].x,
+  99,
+  'live transform must override a stale pending descriptor with the same instance ID',
+)
 
 const alternateOakLoad = runtime.load('oak-alt', 'https://assets.example.test/alternate-oak.glb', {
   semanticEntryId: 'flora.oak',
