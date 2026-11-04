@@ -261,26 +261,38 @@ export class WorldAssetRuntime {
     const mixer = this.instanceMixers.get(instanceId) ?? new THREE.AnimationMixer(instance)
     const previousAction = this.instanceActions.get(instanceId)
     const action = mixer.clipAction(clip)
+    action.stopFading()
+    action.stopWarping()
     action.reset()
     action.enabled = true
-    action.setEffectiveTimeScale(options.timeScale ?? 1)
-    action.setEffectiveWeight(fadeDuration > 0 && previousAction && previousAction !== action ? 0 : 1)
+    action.setEffectiveTimeScale(Number.isFinite(options.timeScale) ? options.timeScale ?? 1 : 1)
+    action.setEffectiveWeight(1)
     action.setLoop(
       options.loopOnce ? THREE.LoopOnce : THREE.LoopRepeat,
-      options.loopOnce ? 1 : Math.max(1, options.repetitions ?? Infinity),
+      options.loopOnce
+        ? 1
+        : (Number.isFinite(options.repetitions) ? Math.max(1, Math.floor(options.repetitions ?? 1)) : Infinity),
     )
     action.clampWhenFinished = options.clampWhenFinished ?? Boolean(options.loopOnce)
     action.play()
 
     if (previousAction && previousAction !== action) {
+      previousAction.stopFading()
+      previousAction.stopWarping()
       if (fadeDuration > 0) {
-        action.crossFadeFrom(previousAction, fadeDuration, false)
-        const pending = this.pendingAnimationStops.get(instanceId) ?? []
+        previousAction.crossFadeTo(action, fadeDuration, false)
+        const pending = (this.pendingAnimationStops.get(instanceId) ?? [])
+          .filter(transition => transition.action !== action)
         pending.push({ action: previousAction, remainingSeconds: fadeDuration })
         this.pendingAnimationStops.set(instanceId, pending)
       } else {
         previousAction.stop()
       }
+    } else {
+      const pending = (this.pendingAnimationStops.get(instanceId) ?? [])
+        .filter(transition => transition.action !== action)
+      if (pending.length) this.pendingAnimationStops.set(instanceId, pending)
+      else this.pendingAnimationStops.delete(instanceId)
     }
     this.instanceMixers.set(instanceId, mixer)
     this.instanceActions.set(instanceId, action)
