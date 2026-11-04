@@ -23,9 +23,12 @@ const loader = {
 
 const scene = new THREE.Scene()
 const runtime = new WorldAssetRuntime(scene, loader)
-const createGltfScene = () => {
+const createGltfScene = (map = new THREE.Texture()) => {
   const group = new THREE.Group()
-  group.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()))
+  group.add(new THREE.Mesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshStandardMaterial({ map }),
+  ))
   return group
 }
 
@@ -65,6 +68,33 @@ assert.equal(scene.children.length, 1)
 const instance = runtime.placeInstance('oak:instance:1', 'flora.oak', { x: 4, y: 0, z: 8 })
 assert.ok(instance)
 assert.equal(scene.children.length, 2)
+
+const sourceTexture = new THREE.Texture()
+const texturedSourceScene = createGltfScene(sourceTexture)
+requests.push({ onLoad: () => {} })
+const texturedAssetLoad = runtime.load('pine', 'https://assets.example.test/pine.glb', {
+  semanticEntryId: 'flora.pine',
+})
+requests[2].onLoad({ scene: texturedSourceScene })
+const texturedAsset = await texturedAssetLoad
+const sourceMesh = texturedAsset.object.children[0] as THREE.Mesh
+const sourceMaterial = sourceMesh.material as THREE.MeshStandardMaterial
+let sourceTextureDisposed = false
+sourceTexture.addEventListener('dispose', () => { sourceTextureDisposed = true })
+const texturedInstance = runtime.placeInstance('pine:instance:1', 'flora.pine', { x: 2, y: 0, z: 3 })
+assert.ok(texturedInstance)
+const instanceMesh = texturedInstance.children[0] as THREE.Mesh
+const instanceMaterial = instanceMesh.material as THREE.MeshStandardMaterial
+assert.ok(instanceMaterial.map)
+assert.notEqual(instanceMaterial.map, sourceMaterial.map, 'placed instances must own cloned texture resources')
+let instanceTextureDisposed = false
+instanceMaterial.map!.addEventListener('dispose', () => { instanceTextureDisposed = true })
+assert.equal(runtime.remove('pine'), true)
+assert.equal(sourceTextureDisposed, true, 'removing a source asset must dispose its owned texture')
+assert.equal(instanceTextureDisposed, false, 'removing a source asset must not dispose an instance-owned texture')
+assert.equal(scene.children.includes(texturedInstance), true, 'placed instances remain usable after source removal')
+assert.equal(runtime.removeInstance('pine:instance:1'), true)
+assert.equal(instanceTextureDisposed, true, 'removing an instance must dispose its private texture')
 
 runtime.clear()
 assert.equal(runtime.stats().loaded, 0)
