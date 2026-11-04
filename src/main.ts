@@ -1366,7 +1366,10 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
   },
   getWorldEditorSnapshot: () => {
     const world = (window as unknown as {
-      infiniteWorld?: { capturePortableWorldSnapshot: () => WorldEditorSnapshot }
+      infiniteWorld?: {
+        capturePortableWorldSnapshot: () => WorldEditorSnapshot
+        validatePortableWorldSnapshot: (snapshot?: WorldEditorSnapshot) => void
+      }
     }).infiniteWorld;
     if (!world) return undefined;
     const snapshot = world.capturePortableWorldSnapshot();
