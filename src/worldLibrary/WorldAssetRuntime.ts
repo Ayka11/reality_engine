@@ -128,6 +128,7 @@ export class WorldAssetRuntime {
     instance.rotation.y = options.rotationY ?? 0
     instance.scale.setScalar(Math.max(0.001, options.scale ?? 1))
     instance.userData.runtimeAssetInstanceId = instanceId
+    instance.userData.runtimeAssetSourceId = source.id
     instance.userData.semanticEntryId = semanticEntryId
     this.scene.add(instance)
     this.instances.set(instanceId, instance)
@@ -231,13 +232,30 @@ export class WorldAssetRuntime {
     return placed
   }
 
+  private refreshSemanticSource(semanticEntryId: string) {
+    const replacement = [...this.assets.values()]
+      .reverse()
+      .find(asset => asset.semanticEntryId === semanticEntryId)
+    if (replacement) this.semanticSources.set(semanticEntryId, replacement)
+    else this.semanticSources.delete(semanticEntryId)
+  }
+
   remove(id: string) {
     const asset = this.assets.get(id)
     if (!asset) return false
+
+    // Instances own cloned GPU resources, but remain semantically dependent on
+    // their source asset. Remove those placements before releasing the source.
+    for (const [instanceId, instance] of this.instances) {
+      if (instance.userData.runtimeAssetSourceId === id) this.removeInstance(instanceId)
+    }
+
     this.scene.remove(asset.object)
-    if (asset.semanticEntryId) this.semanticSources.delete(asset.semanticEntryId)
-    this.disposeObject(asset.object)
     this.assets.delete(id)
+    if (asset.semanticEntryId && this.semanticSources.get(asset.semanticEntryId) === asset) {
+      this.refreshSemanticSource(asset.semanticEntryId)
+    }
+    this.disposeObject(asset.object)
     return true
   }
 
