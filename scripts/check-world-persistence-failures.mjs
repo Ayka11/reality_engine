@@ -664,6 +664,8 @@ failWorldEditorPersist = true;
 await assert.rejects(saveHarness.applySnapshot(savedRuntimeWorld), /injected sidecar persistence failure/);
 assert.equal(worldAssetClearCalls, 1,
   "external assets must remain intact when post-commit sidecar persistence fails");
+assert.equal(worldEditorPersistCalls, 2,
+  "the failed sidecar attempt must occur after the second world transaction commits");
 failWorldEditorPersist = false;
 
 const legacySnapshot = { ...savedRuntimeWorld, civilizations: [] };
@@ -694,7 +696,7 @@ assert.deepEqual(runtimeState.worldEditor, {
   generator: { seed: "legacy-editor-seed", seaLevel: 16, maxElevation: 52 },
   objects: [], assetManifest: { version: "1.0", entries: [] },
 }, "legacy package restore must explicitly clear stale Infinite World objects and asset provenance");
-assert.equal(worldEditorPersistCalls, 2,
+assert.equal(worldEditorPersistCalls, 3,
   "legacy editor reset must persist only after its world transaction commits");
 assert.equal(runtimeState.recorderClears, 2, "each successful world restore must clear stale recorder history");
 assert.equal(runtimeGrid.buffer[20], 0, "legacy restore must clear stale entity ownership marker");
