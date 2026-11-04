@@ -320,8 +320,10 @@ assert.ok(activeBootstrapSource.includes("capturePortableWorldEditorSnapshot") &
   activeBootstrapSource.includes("persistPortableWorldEditorSnapshot"),
   'the active application bootstrap must connect portable Infinite World capture, restore and persistence');
 assert.ok(activeBootstrapSource.includes("bridge.restore(previousGrid)") &&
-  activeBootstrapSource.includes("bridge.beforeApply?.()"),
-  'the active package importer must preserve finite runtime state and rollback failed package imports');
+  activeBootstrapSource.includes("bridge.afterCommit?.(previousGrid)") &&
+  activeBootstrapSource.indexOf("persistPortableWorldEditorSnapshot()") <
+    activeBootstrapSource.indexOf("bridge.afterCommit?.(previousGrid)"),
+  'the active package importer must roll back failed imports and record finite undo history only after world persistence commits');
 assert.ok(activeHtmlSource.includes("window.encodeActiveRealityPackage") &&
   activeHtmlSource.includes("window.importActiveRealityPackage") &&
   activeHtmlSource.includes("window.saveWorld=async function()") &&
