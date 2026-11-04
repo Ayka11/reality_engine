@@ -60,6 +60,16 @@ const worldEditor = {
     seaLevel: 16, maxElevation: 52,
   },
   assetManifest: manifest,
+  assetPlacements: [{
+    instanceId: 'flora.tree:instance:17:0',
+    sourceAssetId: 'oak',
+    semanticEntryId: 'flora.tree',
+    x: 145.5,
+    y: 12.25,
+    z: -32,
+    scale: 0.85,
+    rotationY: 1.2,
+  }],
   objects: [],
   terrainDeformations: { version: 1, seed: 'package-seed', deltas: [] },
   authoritativeField: {
@@ -90,6 +100,8 @@ assert.equal(parsed.version, 6)
 assert.equal(parsed.tick, 17)
 assert.equal(parsed.cells.length, 3, 'zero-only cells should be omitted from sparse package storage')
 assert.deepEqual(parsed.worldEditor.assetManifest, manifest)
+assert.deepEqual(parsed.worldEditor.assetPlacements, worldEditor.assetPlacements,
+  'active package must preserve external asset placement intent without embedding model binaries')
 
 const decoded = decodeActiveWorldPackage(parsed, dimensions)
 assert.equal(decoded.legacy, false)
@@ -100,6 +112,8 @@ assert.deepEqual(decoded.causal, [{ tick: 12, x: 1, y: 0, delta: 2.5 }],
   'unified active package must preserve finite-grid causal history')
 assert.deepEqual(decoded.worldEditor, worldEditor,
   'unified active package must preserve the separate Infinite World editor snapshot')
+assert.deepEqual(decoded.worldEditor?.assetPlacements, worldEditor.assetPlacements,
+  'external placement descriptors must round-trip as data-only restoration intent')
 
 const legacy = decodeActiveWorldPackage({
   format: 're_v5',
@@ -133,6 +147,12 @@ const invalidPackages = [
   [{ ...parsed, worldEditor: { ...worldEditor, assetManifest: {
     ...manifest, entries: [{ ...manifest.entries[0], sourceUrl: 'javascript:alert(1)' }],
   } } }, /asset manifest is invalid/],
+  [{ ...parsed, worldEditor: { ...worldEditor, assetPlacements: [{
+    ...worldEditor.assetPlacements[0], sourceAssetId: 'unregistered-source',
+  }] } }, /asset placements are invalid/],
+  [{ ...parsed, worldEditor: { ...worldEditor, assetPlacements: [
+    worldEditor.assetPlacements[0], worldEditor.assetPlacements[0],
+  ] } }, /asset placements are invalid/],
 ]
 for (const [candidate, pattern] of invalidPackages) {
   assert.throws(() => decodeActiveWorldPackage(candidate, dimensions), pattern,
