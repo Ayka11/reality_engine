@@ -120,8 +120,8 @@ export class WorldAssetRuntime {
       const mesh = node as THREE.Mesh
       if (!mesh.isMesh) return
       mesh.geometry = mesh.geometry.clone()
-      if (Array.isArray(mesh.material)) mesh.material = mesh.material.map((material) => material.clone())
-      else mesh.material = mesh.material.clone()
+      if (Array.isArray(mesh.material)) mesh.material = mesh.material.map((material) => this.cloneMaterialWithOwnedTextures(material))
+      else mesh.material = this.cloneMaterialWithOwnedTextures(mesh.material)
     })
     instance.position.set(options.x, options.y, options.z)
     instance.userData.worldPosition = { x: options.x, y: options.y, z: options.z }
@@ -134,14 +134,64 @@ export class WorldAssetRuntime {
     return instance
   }
 
+  private cloneMaterialWithOwnedTextures<T extends THREE.Material>(material: T): T {
+    const clone = material.clone() as T
+    const clonedTextures = new Map<THREE.Texture, THREE.Texture>()
+    const cloneValue = (value: unknown): unknown => {
+      if (value instanceof THREE.Texture) {
+        let texture = clonedTextures.get(value)
+        if (!texture) {
+          texture = value.clone()
+          clonedTextures.set(value, texture)
+        }
+        return texture
+      }
+      if (Array.isArray(value)) return value.map(cloneValue)
+      if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, cloneValue(entry)]))
+      }
+      return value
+    }
+    for (const key of Object.keys(clone) as Array<keyof T>) {
+      const value = clone[key]
+      if (value instanceof THREE.Texture || Array.isArray(value) ||
+        (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)) {
+        ;(clone as any)[key] = cloneValue(value)
+      }
+    }
+    return clone
+  }
+
   private disposeObject(object: THREE.Object3D) {
+    const geometries = new Set<THREE.BufferGeometry>()
+    const materials = new Set<THREE.Material>()
+    const textures = new Set<THREE.Texture>()
+    const collectTextures = (value: unknown, seen = new Set<object>()) => {
+      if (value instanceof THREE.Texture) {
+        textures.add(value)
+        return
+      }
+      if (!value || typeof value !== 'object' || seen.has(value as object)) return
+      seen.add(value as object)
+      if (Array.isArray(value)) {
+        value.forEach(entry => collectTextures(entry, seen))
+      } else if (Object.getPrototypeOf(value) === Object.prototype) {
+        Object.values(value).forEach(entry => collectTextures(entry, seen))
+      }
+    }
     object.traverse((node) => {
       const mesh = node as THREE.Mesh
       if (!mesh.isMesh) return
-      mesh.geometry.dispose()
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-      materials.forEach((material) => material.dispose())
+      geometries.add(mesh.geometry)
+      const meshMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+      meshMaterials.forEach(material => {
+        materials.add(material)
+        for (const value of Object.values(material)) collectTextures(value)
+      })
     })
+    geometries.forEach(geometry => geometry.dispose())
+    materials.forEach(material => material.dispose())
+    textures.forEach(texture => texture.dispose())
   }
 
   removeInstance(instanceId: string) {
