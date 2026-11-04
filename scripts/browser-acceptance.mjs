@@ -3441,10 +3441,16 @@ try {
   // before opening the independent Composer page so headless Chromium does not run
   // two Three.js render loops concurrently.
   await page.close();
+  // Allow the previous page's WebGL context to be released before opening another
+  // full world renderer in the same Chromium process.
+  await new Promise(resolve => setTimeout(resolve, 750));
 
-  // Test Compose World in a fresh browser page so this acceptance path is independent
-  // from Quick Generate and cannot fail merely because two large generations are stacked.
-  const composePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  // Test Compose World in a fresh, slightly smaller browser page. This keeps the
+  // independent generation contract while reducing transient GPU framebuffer pressure.
+  const composePage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  composePage.on("close", () => console.log("[composer:close] browser page closed"));
+  composePage.on("crash", () => console.log("[composer:crash] Chromium renderer process crashed"));
+  browser.on("disconnected", () => console.log("[acceptance:browser-disconnected] Chromium browser disconnected"));
   const composerPageErrors = [];
   composePage.on("console", (msg) => console.log(`[composer:${msg.type()}] ${msg.text()}`));
   composePage.on("pageerror", (error) => {
