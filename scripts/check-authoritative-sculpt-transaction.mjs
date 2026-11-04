@@ -130,12 +130,13 @@ assert.ok(selfParentValidation.errors.some(error => error.includes("parent")),
   "self-parent rejection must report a parent validation error")
 
 const missingParentTrace = new RuntimeProvenance()
-missingParentTrace.record("preset", { name: "missing-parent" }, "event-that-does-not-exist")
+missingParentTrace.record("preset", { name: "missing-parent" })
+missingParentTrace.trace.events[0].parentId = "event-that-does-not-exist"
 assert.equal(missingParentTrace.validate().valid, false,
-  "references to missing parent events must be rejected")
+  "references to missing parent events must be rejected by trace validation")
 
 const forwardParentTrace = new RuntimeProvenance()
-forwardParentTrace.record("preset", { name: "forward-child" }, "future-parent-id")
+forwardParentTrace.record("preset", { name: "forward-child" })
 const futureParent = forwardParentTrace.record("law", { name: "future-parent" })
 forwardParentTrace.trace.events[0].parentId = futureParent.id
 assert.equal(forwardParentTrace.validate().valid, false,
