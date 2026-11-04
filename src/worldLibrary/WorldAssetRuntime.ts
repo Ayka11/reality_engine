@@ -1,11 +1,13 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js'
 
 export type RuntimeAsset = {
   id: string
   semanticEntryId?: string
   sourceUrl: string
   object: THREE.Object3D
+  animations: THREE.AnimationClip[]
   loadedAt: number
 }
 
@@ -17,6 +19,7 @@ export class WorldAssetRuntime {
   private readonly pendingRejectors = new Map<string, (reason: Error) => void>()
   private readonly semanticSources = new Map<string, RuntimeAsset>()
   private readonly instances = new Map<string, THREE.Object3D>()
+  private readonly instanceMixers = new Map<string, THREE.AnimationMixer>()
 
   constructor(private readonly scene: THREE.Scene, loader: Pick<GLTFLoader, 'load'> = new GLTFLoader()) {
     this.loader = loader
@@ -81,6 +84,7 @@ export class WorldAssetRuntime {
             semanticEntryId: options.semanticEntryId,
             sourceUrl,
             object,
+            animations: [...(gltf.animations ?? [])],
             loadedAt: Date.now(),
           }
           object.userData.worldPosition = { x: options.x ?? 0, y: options.y ?? 0, z: options.z ?? 0 }
@@ -115,7 +119,9 @@ export class WorldAssetRuntime {
     if (this.instances.has(instanceId)) return this.instances.get(instanceId) || null
     const source = this.semanticSources.get(semanticEntryId)
     if (!source) return null
-    const instance = source.object.clone(true)
+    // SkeletonUtils rewires every SkinnedMesh to cloned bones/skeletons.
+    // Object3D.clone(true) alone would keep the source skeleton shared.
+    const instance = cloneSkeleton(source.object)
     instance.traverse((node) => {
       const mesh = node as THREE.Mesh
       if (!mesh.isMesh) return
@@ -167,6 +173,8 @@ export class WorldAssetRuntime {
     const geometries = new Set<THREE.BufferGeometry>()
     const materials = new Set<THREE.Material>()
     const textures = new Set<THREE.Texture>()
+    const skeletons = new Set<THREE.Skeleton>()
+    const instancedMeshes = new Set<THREE.InstancedMesh>()
     const collectTextures = (value: unknown, seen = new Set<object>()) => {
       if (value instanceof THREE.Texture) {
         textures.add(value)
@@ -184,6 +192,8 @@ export class WorldAssetRuntime {
       const mesh = node as THREE.Mesh
       if (!mesh.isMesh) return
       geometries.add(mesh.geometry)
+      if (mesh.isSkinnedMesh) skeletons.add(mesh.skeleton)
+      if (mesh.isInstancedMesh) instancedMeshes.add(mesh)
       const meshMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
       meshMaterials.forEach(material => {
         materials.add(material)
@@ -193,11 +203,48 @@ export class WorldAssetRuntime {
     geometries.forEach(geometry => geometry.dispose())
     materials.forEach(material => material.dispose())
     textures.forEach(texture => texture.dispose())
+    skeletons.forEach(skeleton => skeleton.dispose())
+    instancedMeshes.forEach(mesh => mesh.dispose())
+  }
+
+  playInstanceAnimation(instanceId: string, clipName?: string) {
+    const instance = this.instances.get(instanceId)
+    if (!instance) return false
+    const sourceId = instance.userData.runtimeAssetSourceId as string | undefined
+    const source = sourceId ? this.assets.get(sourceId) : undefined
+    if (!source?.animations.length) return false
+    const clip = clipName
+      ? source.animations.find(candidate => candidate.name === clipName)
+      : source.animations[0]
+    if (!clip) return false
+
+    this.stopInstanceAnimation(instanceId)
+    const mixer = new THREE.AnimationMixer(instance)
+    mixer.clipAction(clip).reset().play()
+    this.instanceMixers.set(instanceId, mixer)
+    return true
+  }
+
+  stopInstanceAnimation(instanceId: string) {
+    const mixer = this.instanceMixers.get(instanceId)
+    if (!mixer) return false
+    const instance = this.instances.get(instanceId)
+    mixer.stopAllAction()
+    if (instance) mixer.uncacheRoot(instance)
+    this.instanceMixers.delete(instanceId)
+    return true
+  }
+
+  updateAnimations(deltaSeconds: number) {
+    if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return 0
+    for (const mixer of this.instanceMixers.values()) mixer.update(deltaSeconds)
+    return this.instanceMixers.size
   }
 
   removeInstance(instanceId: string) {
     const instance = this.instances.get(instanceId)
     if (!instance) return false
+    this.stopInstanceAnimation(instanceId)
     this.scene.remove(instance)
     this.disposeObject(instance)
     this.instances.delete(instanceId)
