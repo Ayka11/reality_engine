@@ -2,6 +2,14 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js'
 
+export type InstanceAnimationOptions = {
+  fadeDuration?: number
+  loopOnce?: boolean
+  repetitions?: number
+  timeScale?: number
+  clampWhenFinished?: boolean
+}
+
 export type RuntimeAsset = {
   id: string
   semanticEntryId?: string
@@ -223,13 +231,7 @@ export class WorldAssetRuntime {
   setInstanceAnimationState(
     instanceId: string,
     stateName: string,
-    options: {
-      fadeDuration?: number
-      loopOnce?: boolean
-      repetitions?: number
-      timeScale?: number
-      clampWhenFinished?: boolean
-    } = {},
+    options: InstanceAnimationOptions = {},
   ) {
     return this.playInstanceAnimation(instanceId, stateName, options)
   }
@@ -237,13 +239,7 @@ export class WorldAssetRuntime {
   playInstanceAnimation(
     instanceId: string,
     clipName?: string,
-    options: {
-      fadeDuration?: number
-      loopOnce?: boolean
-      repetitions?: number
-      timeScale?: number
-      clampWhenFinished?: boolean
-    } = {},
+    options: InstanceAnimationOptions = {},
   ) {
     const instance = this.instances.get(instanceId)
     if (!instance) return false
@@ -297,6 +293,30 @@ export class WorldAssetRuntime {
     this.instanceMixers.set(instanceId, mixer)
     this.instanceActions.set(instanceId, action)
     return true
+  }
+
+  setSemanticAnimationState(
+    semanticEntryId: string,
+    stateName: string,
+    options: InstanceAnimationOptions = {},
+  ) {
+    let matched = 0
+    let started = 0
+    for (const [instanceId, instance] of this.instances) {
+      if (instance.userData.semanticEntryId !== semanticEntryId) continue
+      matched += 1
+      if (this.setInstanceAnimationState(instanceId, stateName, options)) started += 1
+    }
+    return { matched, started }
+  }
+
+  stopSemanticAnimation(semanticEntryId: string) {
+    let stopped = 0
+    for (const [instanceId, instance] of this.instances) {
+      if (instance.userData.semanticEntryId !== semanticEntryId) continue
+      if (this.stopInstanceAnimation(instanceId)) stopped += 1
+    }
+    return stopped
   }
 
   stopInstanceAnimation(instanceId: string) {
@@ -471,6 +491,9 @@ export class WorldAssetRuntime {
     return {
       loaded: this.assets.size,
       ids: [...this.assets.keys()],
+      instances: this.instances.size,
+      animatedInstances: this.instanceMixers.size,
+      visibleInstances: [...this.instances.values()].filter(instance => instance.visible).length,
     }
   }
 }
