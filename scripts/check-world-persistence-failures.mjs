@@ -1128,6 +1128,9 @@ assert.match(worldAssetRuntimeSource, /if \(this\.loading\.get\(id\) === task\) 
   "a stale load finalizer must not erase a newer same-ID pending load");
 assert.match(worldAssetRuntimeSource, /this\.generation \+= 1;\s*this\.loading\.clear\(\)/,
   "clear must invalidate pending loads and release IDs for the new world");
+assert.match(worldAssetRuntimeSource, /pendingRejectors/,
+  "clear must reject pending load promises immediately rather than leave callers waiting on stale network requests");
+assert.match(worldAssetRuntimeSource, /this\.pendingRejectors\.clear\(\)/);
 assert.match(worldAssetRuntimeSource, /this\.disposeObject\(object\)/,
   "late invalidated GLTF payloads must release their GPU/CPU resources");
 assert.match(worldAssetRuntimeSource, /this\.disposeObject\(instance\)/);
