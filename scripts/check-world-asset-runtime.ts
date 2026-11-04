@@ -123,22 +123,26 @@ assert.equal(runtime.stats().loaded, 0)
 assert.equal(scene.children.length, 0, 'clear must remove loaded source assets and placed instances')
 assert.equal(runtime.getSemanticSource('flora.oak'), undefined)
 
-const boneRoot = new THREE.Group()
-const rootBone = new THREE.Bone()
-rootBone.name = 'root'
-const childBone = new THREE.Bone()
-childBone.name = 'child'
-childBone.position.y = 1
-rootBone.add(childBone)
-boneRoot.add(rootBone)
-const skinnedMesh = new THREE.SkinnedMesh(
-  new THREE.BoxGeometry(1, 1, 1),
-  new THREE.MeshStandardMaterial(),
-)
-boneRoot.add(skinnedMesh)
-boneRoot.updateMatrixWorld(true)
-const sourceSkeleton = new THREE.Skeleton([rootBone, childBone])
-skinnedMesh.bind(sourceSkeleton)
+const createCreatureScene = () => {
+  const group = new THREE.Group()
+  const rootBone = new THREE.Bone()
+  rootBone.name = 'root'
+  const childBone = new THREE.Bone()
+  childBone.name = 'child'
+  childBone.position.y = 1
+  rootBone.add(childBone)
+  group.add(rootBone)
+  const skinnedMesh = new THREE.SkinnedMesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshStandardMaterial(),
+  )
+  group.add(skinnedMesh)
+  group.updateMatrixWorld(true)
+  const skeleton = new THREE.Skeleton([rootBone, childBone])
+  skinnedMesh.bind(skeleton)
+  return group
+}
+const boneRoot = createCreatureScene()
 const walkClip = new THREE.AnimationClip('Walk', 1, [
   new THREE.NumberKeyframeTrack('root.position[y]', [0, 1], [0, 2]),
 ])
@@ -186,7 +190,7 @@ assert.equal(runtime.stats().loaded, 0)
 assert.equal(scene.children.length, 0)
 
 const lodNear = runtime.load('lod-near', 'https://assets.example.test/lod-near.glb', { semanticEntryId: 'fauna.lod-near' })
-requests[5].onLoad({ scene: boneRoot.clone(true), animations: [walkClip] })
+requests[5].onLoad({ scene: createCreatureScene(), animations: [walkClip] })
 const nearAsset = await lodNear
 const nearMesh = findSkinnedMesh(nearAsset.object)
 const nearInstance = runtime.placeInstance('lod-near:instance', 'fauna.lod-near', { x: 10, y: 0, z: 0 })
