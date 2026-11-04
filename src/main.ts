@@ -1409,6 +1409,12 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
     const manifest = (window as unknown as { worldAssetManifest?: WorldAssetImportManifest }).worldAssetManifest;
     world?.persistPortableWorldSnapshot(manifest);
   },
+  clearWorldAssetRuntime: () => {
+    const world = (window as unknown as {
+      infiniteWorld?: { worldAssetRuntime: { clear: () => void } }
+    }).infiniteWorld;
+    world?.worldAssetRuntime.clear();
+  },
   clearTimeline: () => timeline.reset(),
   getCausalLog: () => sim.causal.recent(24),
   thumbnailCanvas: canvas,
