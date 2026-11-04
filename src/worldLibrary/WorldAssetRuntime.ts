@@ -192,8 +192,10 @@ export class WorldAssetRuntime {
       const mesh = node as THREE.Mesh
       if (!mesh.isMesh) return
       geometries.add(mesh.geometry)
-      if (mesh.isSkinnedMesh) skeletons.add(mesh.skeleton)
-      if (mesh.isInstancedMesh) instancedMeshes.add(mesh)
+      const skinnedMesh = node as THREE.SkinnedMesh
+      if (skinnedMesh.isSkinnedMesh) skeletons.add(skinnedMesh.skeleton)
+      const instancedMesh = node as THREE.InstancedMesh
+      if (instancedMesh.isInstancedMesh) instancedMeshes.add(instancedMesh)
       const meshMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
       meshMaterials.forEach(material => {
         materials.add(material)
