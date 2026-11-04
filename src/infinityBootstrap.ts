@@ -166,7 +166,6 @@ export function bootstrapInfiniteWorld() {
       ;(window as any).restorePortableWorldEditorSnapshot(candidate.worldEditor)
       ;(window as any).persistPortableWorldEditorSnapshot()
       bridge.afterCommit?.(previousGrid)
-      return { legacy: candidate.legacy, tick: candidate.tick }
     } catch (error) {
       const rollbackErrors: unknown[] = []
       try { bridge.restore(previousGrid) } catch (rollbackError) {
@@ -187,6 +186,12 @@ export function bootstrapInfiniteWorld() {
       }
       throw error
     }
+
+    // The package transaction is committed. Dispose the previous runtime only
+    // now, leaving the restored placement descriptors pending until users
+    // explicitly import their matching source models.
+    world.clearExternalAssetRuntime()
+    return { legacy: candidate.legacy, tick: candidate.tick }
   }
 
   ;(window as any).worldAssetImport = (asset: DiscoveredAsset, semanticEntryId?: string) => {
