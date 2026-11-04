@@ -1416,9 +1416,9 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
   },
   clearWorldAssetRuntime: () => {
     const world = (window as unknown as {
-      infiniteWorld?: { worldAssetRuntime: { clear: () => void } }
+      infiniteWorld?: { clearExternalAssetRuntime: () => void }
     }).infiniteWorld;
-    world?.worldAssetRuntime.clear();
+    world?.clearExternalAssetRuntime();
   },
   clearTimeline: () => timeline.reset(),
   getCausalLog: () => sim.causal.recent(24),
