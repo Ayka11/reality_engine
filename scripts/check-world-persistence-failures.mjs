@@ -452,6 +452,8 @@ let authoritativeTransactionCalls = 0;
 let failNextDirectorRestore = false;
 let failNextWorldEditorRestore = false;
 let worldEditorPersistCalls = 0;
+let worldAssetClearCalls = 0;
+let failWorldEditorPersist = false;
 const transactionContext = {
   mutateAuthoritativeState(mutation) {
     authoritativeTransactionCalls++;
@@ -537,7 +539,11 @@ const transactionContext = {
       throw new Error("injected Infinite World editor restore failure");
     }
   },
-  persistWorldEditorSnapshot: () => { worldEditorPersistCalls++; },
+  persistWorldEditorSnapshot: () => {
+    worldEditorPersistCalls++;
+    if (failWorldEditorPersist) throw new Error("injected sidecar persistence failure");
+  },
+  clearWorldAssetRuntime: () => { worldAssetClearCalls++; },
   getCausalLog: () => cloneValue(runtimeState.causal.events),
 };
 const saveHarness = new RuntimeWorldSaveSystem(runtimeGrid, mockLawEngine, null, transactionContext);
@@ -630,6 +636,8 @@ assert.equal(mockLawEngine.activeProcessMask, beforeFailedEditorRestoreMask,
   "a late Infinite World editor failure must roll back the process mask");
 assert.equal(worldEditorPersistCalls, 0,
   "failed Infinite World editor restoration must not write a sidecar");
+assert.equal(worldAssetClearCalls, 0,
+  "failed world transactions must preserve the previous external asset runtime");
 
 await saveHarness.applySnapshot(savedRuntimeWorld);
 assert.deepEqual(runtimeGrid.buffer, expectedRuntimeBuffer, "quick-save restore must restore every field value");
@@ -646,6 +654,14 @@ assert.deepEqual(runtimeState.worldEditor, expectedRuntimeState.worldEditor,
   "quick-save restore must recover Infinite World objects, surface/generator metadata and asset provenance");
 assert.equal(worldEditorPersistCalls, 1,
   "Infinite World sidecar persistence must run once, after a successful world transaction");
+assert.equal(worldAssetClearCalls, 1,
+  "external assets must be cleared exactly once after a successful world import");
+
+failWorldEditorPersist = true;
+await assert.rejects(saveHarness.applySnapshot(savedRuntimeWorld), /injected sidecar persistence failure/);
+assert.equal(worldAssetClearCalls, 1,
+  "external assets must remain intact when post-commit sidecar persistence fails");
+failWorldEditorPersist = false;
 assert.equal(runtimeState.tick, savedRuntimeWorld.metadata.simulationTicks, "quick-save restore must restore simulation tick");
 assert.equal(runtimeState.recorderClears, 1, "successful restore must clear field-only recorder history");
 
@@ -671,6 +687,8 @@ assert.deepEqual(runtimeState.worldEvents, { history: [], nextAuto: 600, rngStat
 assert.deepEqual(runtimeState.causal, { events: [], nextId: 1, lastEventByCell: [] }, "legacy restore must clear stale causal history");
 assert.deepEqual(runtimeState.previousEnergy, new Float32Array(runtimeGrid.size), "legacy restore must reset the previous-energy baseline");
 assert.deepEqual(runtimeState.director, { history: [], worldLog: [] }, "legacy restore must clear stale SceneDirector context");
+assert.equal(worldAssetClearCalls, 2,
+  "a successful legacy import must also clear the previous external asset runtime");
 assert.deepEqual(runtimeState.worldEditor, {
   generator: { seed: "legacy-editor-seed", seaLevel: 16, maxElevation: 52 },
   objects: [], assetManifest: { version: "1.0", entries: [] },
