@@ -148,13 +148,21 @@ const animatedLoad = runtime.load('creature', 'https://assets.example.test/creat
 requests[4].onLoad({ scene: boneRoot, animations: [walkClip] })
 const animatedAsset = await animatedLoad
 assert.equal(animatedAsset.animations.length, 1, 'loaded GLTF animation clips must be preserved')
-const animatedSourceMesh = animatedAsset.object.children[0] as THREE.SkinnedMesh
+const findSkinnedMesh = (object: THREE.Object3D) => {
+  let found: THREE.SkinnedMesh | undefined
+  object.traverse(node => {
+    if ((node as THREE.SkinnedMesh).isSkinnedMesh) found = node as THREE.SkinnedMesh
+  })
+  assert.ok(found, 'fixture must contain a skinned mesh')
+  return found
+}
+const animatedSourceMesh = findSkinnedMesh(animatedAsset.object)
 const sourceSkeletonAtRest = animatedSourceMesh.skeleton
 const firstCreature = runtime.placeInstance('creature:instance:1', 'fauna.creature', { x: 1, y: 0, z: 1 })
 const secondCreature = runtime.placeInstance('creature:instance:2', 'fauna.creature', { x: 2, y: 0, z: 2 })
 assert.ok(firstCreature && secondCreature)
-const firstSkinnedMesh = firstCreature.children[0] as THREE.SkinnedMesh
-const secondSkinnedMesh = secondCreature.children[0] as THREE.SkinnedMesh
+const firstSkinnedMesh = findSkinnedMesh(firstCreature)
+const secondSkinnedMesh = findSkinnedMesh(secondCreature)
 assert.notEqual(firstSkinnedMesh.skeleton, sourceSkeletonAtRest, 'first instance must own an independent skeleton')
 assert.notEqual(secondSkinnedMesh.skeleton, sourceSkeletonAtRest, 'second instance must own an independent skeleton')
 assert.notEqual(firstSkinnedMesh.skeleton, secondSkinnedMesh.skeleton, 'instances must not share skeleton state')
