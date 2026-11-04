@@ -889,14 +889,18 @@ export class InfiniteWorldRenderer {
     return count
   }
 
-  clearSavedWorld() {
-    this.pendingExternalAssetPlacements = []
+  clearExternalAssetRuntime() {
     this.suppressAssetPlacementAutosave = true
     try {
       this.worldAssetRuntime.clear()
     } finally {
       this.suppressAssetPlacementAutosave = false
     }
+  }
+
+  clearSavedWorld() {
+    this.pendingExternalAssetPlacements = []
+    this.clearExternalAssetRuntime()
     const cleared = this.persistence.clear()
     if (!cleared) {
       console.warn('[persistence] Could not remove every saved world record; some objects or edits may return after reload')
