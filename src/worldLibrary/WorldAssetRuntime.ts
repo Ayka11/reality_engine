@@ -20,6 +20,9 @@ export class WorldAssetRuntime {
   private readonly semanticSources = new Map<string, RuntimeAsset>()
   private readonly instances = new Map<string, THREE.Object3D>()
   private readonly instanceMixers = new Map<string, THREE.AnimationMixer>()
+  private readonly instanceActions = new Map<string, THREE.AnimationAction>()
+  private readonly pendingAnimationStops = new Map<string, Array<{ action: THREE.AnimationAction; remainingSeconds: number }>>()
+  private readonly animationAccumulators = new Map<string, number>()
 
   constructor(private readonly scene: THREE.Scene, loader: Pick<GLTFLoader, 'load'> = new GLTFLoader()) {
     this.loader = loader
@@ -209,7 +212,39 @@ export class WorldAssetRuntime {
     instancedMeshes.forEach(mesh => mesh.dispose())
   }
 
-  playInstanceAnimation(instanceId: string, clipName?: string) {
+  getInstanceAnimationNames(instanceId: string) {
+    const instance = this.instances.get(instanceId)
+    if (!instance) return []
+    const sourceId = instance.userData.runtimeAssetSourceId as string | undefined
+    const source = sourceId ? this.assets.get(sourceId) : undefined
+    return source?.animations.map(clip => clip.name) ?? []
+  }
+
+  setInstanceAnimationState(
+    instanceId: string,
+    stateName: string,
+    options: {
+      fadeDuration?: number
+      loopOnce?: boolean
+      repetitions?: number
+      timeScale?: number
+      clampWhenFinished?: boolean
+    } = {},
+  ) {
+    return this.playInstanceAnimation(instanceId, stateName, options)
+  }
+
+  playInstanceAnimation(
+    instanceId: string,
+    clipName?: string,
+    options: {
+      fadeDuration?: number
+      loopOnce?: boolean
+      repetitions?: number
+      timeScale?: number
+      clampWhenFinished?: boolean
+    } = {},
+  ) {
     const instance = this.instances.get(instanceId)
     if (!instance) return false
     const sourceId = instance.userData.runtimeAssetSourceId as string | undefined
@@ -220,10 +255,35 @@ export class WorldAssetRuntime {
       : source.animations[0]
     if (!clip) return false
 
-    this.stopInstanceAnimation(instanceId)
-    const mixer = new THREE.AnimationMixer(instance)
-    mixer.clipAction(clip).reset().play()
+    const fadeDuration = Number.isFinite(options.fadeDuration)
+      ? Math.max(0, options.fadeDuration ?? 0)
+      : 0
+    const mixer = this.instanceMixers.get(instanceId) ?? new THREE.AnimationMixer(instance)
+    const previousAction = this.instanceActions.get(instanceId)
+    const action = mixer.clipAction(clip)
+    action.reset()
+    action.enabled = true
+    action.setEffectiveTimeScale(options.timeScale ?? 1)
+    action.setEffectiveWeight(fadeDuration > 0 && previousAction && previousAction !== action ? 0 : 1)
+    action.setLoop(
+      options.loopOnce ? THREE.LoopOnce : THREE.LoopRepeat,
+      options.loopOnce ? 1 : Math.max(1, options.repetitions ?? Infinity),
+    )
+    action.clampWhenFinished = options.clampWhenFinished ?? Boolean(options.loopOnce)
+    action.play()
+
+    if (previousAction && previousAction !== action) {
+      if (fadeDuration > 0) {
+        action.crossFadeFrom(previousAction, fadeDuration, false)
+        const pending = this.pendingAnimationStops.get(instanceId) ?? []
+        pending.push({ action: previousAction, remainingSeconds: fadeDuration })
+        this.pendingAnimationStops.set(instanceId, pending)
+      } else {
+        previousAction.stop()
+      }
+    }
     this.instanceMixers.set(instanceId, mixer)
+    this.instanceActions.set(instanceId, action)
     return true
   }
 
@@ -234,13 +294,60 @@ export class WorldAssetRuntime {
     mixer.stopAllAction()
     if (instance) mixer.uncacheRoot(instance)
     this.instanceMixers.delete(instanceId)
+    this.instanceActions.delete(instanceId)
+    this.pendingAnimationStops.delete(instanceId)
+    this.animationAccumulators.delete(instanceId)
     return true
   }
 
-  updateAnimations(deltaSeconds: number) {
+  updateAnimations(deltaSeconds: number, camera?: THREE.Camera) {
     if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return 0
-    for (const mixer of this.instanceMixers.values()) mixer.update(deltaSeconds)
-    return this.instanceMixers.size
+    const cameraPosition = camera ? camera.getWorldPosition(new THREE.Vector3()) : null
+    let updated = 0
+
+    for (const [instanceId, mixer] of this.instanceMixers) {
+      const instance = this.instances.get(instanceId)
+      if (!instance) continue
+
+      let updateInterval = 0
+      if (cameraPosition) {
+        const instancePosition = instance.getWorldPosition(new THREE.Vector3())
+        const distance = instancePosition.distanceTo(cameraPosition)
+        if (distance > 650) {
+          // Outside the external-asset visibility range: freeze without accumulating catch-up time.
+          this.animationAccumulators.set(instanceId, 0)
+          continue
+        }
+        if (distance > 300) updateInterval = 1 / 15
+        else if (distance > 80) updateInterval = 1 / 30
+      }
+
+      const accumulated = (this.animationAccumulators.get(instanceId) ?? 0) + deltaSeconds
+      if (updateInterval > 0 && accumulated < updateInterval) {
+        this.animationAccumulators.set(instanceId, accumulated)
+        continue
+      }
+
+      const appliedDelta = accumulated
+      this.animationAccumulators.set(instanceId, 0)
+      mixer.update(appliedDelta)
+      updated += 1
+
+      const pending = this.pendingAnimationStops.get(instanceId)
+      if (pending?.length) {
+        const remaining = pending.filter(transition => {
+          transition.remainingSeconds -= appliedDelta
+          if (transition.remainingSeconds <= 0) {
+            transition.action.stop()
+            return false
+          }
+          return true
+        })
+        if (remaining.length) this.pendingAnimationStops.set(instanceId, remaining)
+        else this.pendingAnimationStops.delete(instanceId)
+      }
+    }
+    return updated
   }
 
   removeInstance(instanceId: string) {
