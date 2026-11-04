@@ -308,6 +308,10 @@ export class WorldAssetRuntime {
     for (const [instanceId, mixer] of this.instanceMixers) {
       const instance = this.instances.get(instanceId)
       if (!instance) continue
+      if (cameraPosition && !instance.visible) {
+        this.animationAccumulators.set(instanceId, 0)
+        continue
+      }
 
       let updateInterval = 0
       if (cameraPosition) {
@@ -442,7 +446,8 @@ export class WorldAssetRuntime {
   updateVisibility(camera: THREE.Camera, maxDistance = 650, maxVisible = 500) {
     const cameraPosition = new THREE.Vector3()
     camera.getWorldPosition(cameraPosition)
-    const candidates = [...this.instances.values(), ...[...this.assets.values()].map(asset => asset.object)]
+    // Loaded source assets are hidden templates; only placed instances are render candidates.
+    const candidates = [...this.instances.values()]
     const ranked = candidates.map(object => ({ object, distance: object.position.distanceTo(cameraPosition) }))
       .sort((a, b) => a.distance - b.distance)
     const visible = new Set(ranked.slice(0, maxVisible).filter(item => item.distance <= maxDistance).map(item => item.object))
