@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import type { ExternalAssetPlacementSnapshot } from '../infinity/ExternalAssetPlacement'
 
 export type InstanceAnimationOptions = {
   fadeDuration?: number
@@ -32,7 +33,11 @@ export class WorldAssetRuntime {
   private readonly pendingAnimationStops = new Map<string, Array<{ action: THREE.AnimationAction; remainingSeconds: number }>>()
   private readonly animationAccumulators = new Map<string, number>()
 
-  constructor(private readonly scene: THREE.Scene, loader: Pick<GLTFLoader, 'load'> = new GLTFLoader()) {
+  constructor(
+    private readonly scene: THREE.Scene,
+    loader: Pick<GLTFLoader, 'load'> = new GLTFLoader(),
+    private readonly onPlacementsChanged?: () => void,
+  ) {
     this.loader = loader
   }
 
@@ -149,7 +154,41 @@ export class WorldAssetRuntime {
     instance.userData.semanticEntryId = semanticEntryId
     this.scene.add(instance)
     this.instances.set(instanceId, instance)
+    this.onPlacementsChanged?.()
     return instance
+  }
+
+  snapshotPlacements(): ExternalAssetPlacementSnapshot[] {
+    return [...this.instances].map(([instanceId, instance]) => {
+      const worldPosition = instance.userData.worldPosition as
+        { x: number; y: number; z: number } | undefined
+      const sourceAssetId = instance.userData.runtimeAssetSourceId
+      const semanticEntryId = instance.userData.semanticEntryId
+      if (!worldPosition ||
+          typeof sourceAssetId !== 'string' || !sourceAssetId.trim() ||
+          typeof semanticEntryId !== 'string' || !semanticEntryId.trim()) {
+        throw new Error(`External asset instance ${instanceId} is missing portable placement metadata`)
+      }
+      const placement: ExternalAssetPlacementSnapshot = {
+        instanceId,
+        sourceAssetId,
+        semanticEntryId,
+        x: worldPosition.x,
+        y: worldPosition.y,
+        z: worldPosition.z,
+        scale: instance.scale.x,
+        rotationY: instance.rotation.y,
+      }
+      if (![placement.x, placement.y, placement.z, placement.scale, placement.rotationY].every(Number.isFinite) ||
+          placement.scale <= 0) {
+        throw new Error(`External asset instance ${instanceId} has an invalid portable transform`)
+      }
+      return placement
+    })
+  }
+
+  hasInstance(instanceId: string) {
+    return this.instances.has(instanceId)
   }
 
   private cloneMaterialWithOwnedTextures<T extends THREE.Material>(material: T): T {
@@ -393,6 +432,7 @@ export class WorldAssetRuntime {
     this.scene.remove(instance)
     this.disposeObject(instance)
     this.instances.delete(instanceId)
+    this.onPlacementsChanged?.()
     return true
   }
 
