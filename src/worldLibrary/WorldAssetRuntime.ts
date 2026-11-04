@@ -14,6 +14,7 @@ export class WorldAssetRuntime {
   private generation = 0
   private readonly assets = new Map<string, RuntimeAsset>()
   private readonly loading = new Map<string, Promise<RuntimeAsset>>()
+  private readonly pendingRejectors = new Map<string, (reason: Error) => void>()
   private readonly semanticSources = new Map<string, RuntimeAsset>()
   private readonly instances = new Map<string, THREE.Object3D>()
 
@@ -52,7 +53,9 @@ export class WorldAssetRuntime {
 
     const generation = this.generation
     let task: Promise<RuntimeAsset>
+    let cancelTask: ((reason: Error) => void) | undefined
     task = new Promise<RuntimeAsset>((resolve, reject) => {
+      cancelTask = reject
       this.loader.load(
         sourceUrl,
         (gltf) => {
@@ -89,10 +92,14 @@ export class WorldAssetRuntime {
         reject,
       )
     }).finally(() => {
-      if (this.loading.get(id) === task) this.loading.delete(id)
+      if (this.loading.get(id) === task) {
+        this.loading.delete(id)
+        if (this.pendingRejectors.get(id) === cancelTask) this.pendingRejectors.delete(id)
+      }
     })
 
     this.loading.set(id, task)
+    if (cancelTask) this.pendingRejectors.set(id, cancelTask)
     return task
   }
 
@@ -188,6 +195,10 @@ export class WorldAssetRuntime {
     // Invalidate outstanding GLTF callbacks before releasing the current world.
     // Clear the map immediately so a new world can request the same asset ID.
     this.generation += 1
+    for (const cancel of this.pendingRejectors.values()) {
+      cancel(new Error('Asset load invalidated by world replacement'))
+    }
+    this.pendingRejectors.clear()
     this.loading.clear()
     for (const id of [...this.instances.keys()]) this.removeInstance(id)
     for (const id of [...this.assets.keys()]) this.remove(id)
