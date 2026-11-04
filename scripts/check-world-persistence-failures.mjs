@@ -6,6 +6,7 @@ const root = new URL("../", import.meta.url);
 const saveSystemSource = await readFile(new URL("src/world/save/WorldSaveSystem.ts", root), "utf8");
 const saveManagerSource = await readFile(new URL("src/world/save/SaveManager.ts", root), "utf8");
 const mainSource = await readFile(new URL("src/main.ts", root), "utf8");
+const rendererSource = await readFile(new URL("src/render/InfiniteWorldRenderer.ts", root), "utf8");
 const climateSource = await readFile(new URL("src/simulation/ClimateSystem.ts", root), "utf8");
 const multiScaleSource = await readFile(new URL("src/simulation/MultiScaleSystem.ts", root), "utf8");
 const languageSource = await readFile(new URL("src/simulation/LanguageEmergence.ts", root), "utf8");
@@ -1141,8 +1142,12 @@ const persistEditorIndex = saveSystemSource.indexOf("this.context.persistWorldEd
 const clearAssetsIndex = saveSystemSource.indexOf("this.context.clearWorldAssetRuntime?.()");
 assert.ok(clearAssetsIndex >= 0 && persistEditorIndex > clearAssetsIndex,
   "external world assets must be cleared immediately after commit and before fallible sidecar persistence");
-assert.match(mainSource, /clearWorldAssetRuntime: \(\) => \{[\s\S]*?world\?\.worldAssetRuntime\.clear\(\)/,
+assert.match(mainSource, /clearWorldAssetRuntime: \(\) => \{[\s\S]*?world\?\.clearExternalAssetRuntime\(\)/,
   "the application must wire post-commit cleanup to the active renderer asset runtime");
+assert.match(rendererSource, /clearExternalAssetRuntime\(\)\s*\{\s*this\.suppressAssetPlacementAutosave = true\s*try\s*\{\s*this\.worldAssetRuntime\.clear\(\)\s*\} finally \{\s*this\.suppressAssetPlacementAutosave = false\s*\}/,
+  "post-commit cleanup must release old asset runtime resources without scheduling a stale placement autosave");
+assert.match(rendererSource, /clearSavedWorld\(\)\s*\{\s*this\.pendingExternalAssetPlacements = \[\]\s*this\.clearExternalAssetRuntime\(\)/,
+  "clearing or reseeding a world must also discard pending external placement descriptors");
 assert.match(worldAssetRuntimeSource, /private generation = 0/);
 assert.match(worldAssetRuntimeSource, /const generation = this\.generation/);
 assert.match(worldAssetRuntimeSource, /generation !== this\.generation/,
