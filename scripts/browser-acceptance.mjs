@@ -128,6 +128,41 @@ try {
 
   const initial = await page.evaluate(() => window.worldGenerationHealth());
   if (!initial?.ok) throw new Error("Infinite World diagnostics are not healthy on initial load");
+
+  console.log("[acceptance] Open Assets panel and external animation API wiring");
+  await page.waitForSelector("#openAssetsButton", { timeout: 10000 });
+  await page.waitForFunction(() =>
+    typeof window.worldExternalAssetAnimationNames === "function" &&
+    typeof window.worldExternalAssetAnimationPlay === "function" &&
+    typeof window.worldExternalAssetAnimationStop === "function" &&
+    typeof window.worldExternalAssetAnimationState === "function" &&
+    typeof window.worldExternalAssetAnimationStopSemantic === "function" &&
+    typeof window.worldExternalAssetAnimationStats === "function"
+  );
+  const animationPanelContract = await page.evaluate(() => ({
+    names: window.worldExternalAssetAnimationNames("acceptance-missing-asset"),
+    groupState: window.worldExternalAssetAnimationState("acceptance-missing-semantic", "Idle"),
+    groupStop: window.worldExternalAssetAnimationStopSemantic("acceptance-missing-semantic"),
+    stats: window.worldExternalAssetAnimationStats(),
+  }));
+  if (animationPanelContract.names.length !== 0 ||
+      animationPanelContract.groupState?.matched !== 0 ||
+      animationPanelContract.groupState?.started !== 0 ||
+      animationPanelContract.groupStop !== 0 ||
+      !Number.isInteger(animationPanelContract.stats?.instances) ||
+      !Number.isInteger(animationPanelContract.stats?.animatedInstances)) {
+    throw new Error("External animation API returned an invalid empty-world contract: " +
+      JSON.stringify(animationPanelContract));
+  }
+  await page.click("#openAssetsButton");
+  await page.waitForSelector("#openAssetsPanel > div");
+  const openAssetsText = await page.locator("#openAssetsPanel").innerText();
+  if (!openAssetsText.includes("Open World Assets") || !openAssetsText.includes("Browse")) {
+    throw new Error("Open Assets panel did not render its provider browser: " + openAssetsText);
+  }
+  await page.click("#openAssetsClose");
+  console.log("[acceptance] Open Assets panel mounted, opened and closed; animation API is wired");
+
   const initialViewSeed = await page.evaluate(() => ({
     worldSeed: window.infiniteWorld?.generator?.seed ?? null,
     viewSeed: window.getWorldViewContract?.()?.seed ?? null,
