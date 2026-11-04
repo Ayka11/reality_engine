@@ -4,7 +4,7 @@ import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { WorldAssetRuntime } from '../src/worldLibrary/WorldAssetRuntime.ts'
 
 type LoadRequest = {
-  onLoad: (gltf: { scene: THREE.Group }) => void
+  onLoad: (gltf: { scene: THREE.Group; animations?: THREE.AnimationClip[] }) => void
   onError?: (error: unknown) => void
 }
 
@@ -12,7 +12,7 @@ const requests: LoadRequest[] = []
 const loader = {
   load: (
     _url: string,
-    onLoad: (gltf: { scene: THREE.Group }) => void,
+    onLoad: (gltf: { scene: THREE.Group; animations?: THREE.AnimationClip[] }) => void,
     _onProgress?: (event: ProgressEvent<EventTarget>) => void,
     onError?: (error: unknown) => void,
   ) => {
@@ -123,4 +123,51 @@ assert.equal(runtime.stats().loaded, 0)
 assert.equal(scene.children.length, 0, 'clear must remove loaded source assets and placed instances')
 assert.equal(runtime.getSemanticSource('flora.oak'), undefined)
 
-console.log('WorldAssetRuntime generation invalidation, same-ID reload, instance texture ownership, and disposal: PASS')
+const boneRoot = new THREE.Group()
+const rootBone = new THREE.Bone()
+rootBone.name = 'root'
+const childBone = new THREE.Bone()
+childBone.name = 'child'
+childBone.position.y = 1
+rootBone.add(childBone)
+boneRoot.add(rootBone)
+const skinnedMesh = new THREE.SkinnedMesh(
+  new THREE.BoxGeometry(1, 1, 1),
+  new THREE.MeshStandardMaterial(),
+)
+boneRoot.add(skinnedMesh)
+boneRoot.updateMatrixWorld(true)
+const sourceSkeleton = new THREE.Skeleton([rootBone, childBone])
+skinnedMesh.bind(sourceSkeleton)
+const walkClip = new THREE.AnimationClip('Walk', 1, [
+  new THREE.NumberKeyframeTrack('root.position[y]', [0, 1], [0, 2]),
+])
+const animatedLoad = runtime.load('creature', 'https://assets.example.test/creature.glb', {
+  semanticEntryId: 'fauna.creature',
+})
+requests[4].onLoad({ scene: boneRoot, animations: [walkClip] })
+const animatedAsset = await animatedLoad
+assert.equal(animatedAsset.animations.length, 1, 'loaded GLTF animation clips must be preserved')
+const animatedSourceMesh = animatedAsset.object.children[0] as THREE.SkinnedMesh
+const sourceSkeletonAtRest = animatedSourceMesh.skeleton
+const firstCreature = runtime.placeInstance('creature:instance:1', 'fauna.creature', { x: 1, y: 0, z: 1 })
+const secondCreature = runtime.placeInstance('creature:instance:2', 'fauna.creature', { x: 2, y: 0, z: 2 })
+assert.ok(firstCreature && secondCreature)
+const firstSkinnedMesh = firstCreature.children[0] as THREE.SkinnedMesh
+const secondSkinnedMesh = secondCreature.children[0] as THREE.SkinnedMesh
+assert.notEqual(firstSkinnedMesh.skeleton, sourceSkeletonAtRest, 'first instance must own an independent skeleton')
+assert.notEqual(secondSkinnedMesh.skeleton, sourceSkeletonAtRest, 'second instance must own an independent skeleton')
+assert.notEqual(firstSkinnedMesh.skeleton, secondSkinnedMesh.skeleton, 'instances must not share skeleton state')
+assert.notEqual(firstSkinnedMesh.skeleton.bones[0], sourceSkeletonAtRest.bones[0], 'instance bones must be cloned')
+assert.equal(runtime.playInstanceAnimation('creature:instance:1', 'Walk'), true)
+assert.equal(runtime.updateAnimations(0.5), 1)
+assert.ok(firstSkinnedMesh.skeleton.bones[0].position.y > 0.5, 'playing an instance clip must animate its cloned bone')
+assert.equal(sourceSkeletonAtRest.bones[0].position.y, 0, 'instance animation must not mutate the source skeleton')
+assert.equal(secondSkinnedMesh.skeleton.bones[0].position.y, 0, 'instance animation must not mutate sibling skeletons')
+assert.equal(runtime.removeInstance('creature:instance:1'), true)
+assert.equal(runtime.updateAnimations(0.5), 0, 'removing an animated instance must uncache its mixer')
+assert.equal(runtime.remove('creature'), true)
+assert.equal(runtime.stats().loaded, 0)
+assert.equal(scene.children.length, 0)
+
+console.log('WorldAssetRuntime stale-load invalidation, texture ownership, semantic removal, skeletal isolation, animation and disposal: PASS')
