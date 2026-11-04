@@ -71,7 +71,6 @@ assert.equal(scene.children.length, 2)
 
 const sourceTexture = new THREE.Texture()
 const texturedSourceScene = createGltfScene(sourceTexture)
-requests.push({ onLoad: () => {} })
 const texturedAssetLoad = runtime.load('pine', 'https://assets.example.test/pine.glb', {
   semanticEntryId: 'flora.pine',
 })
@@ -101,4 +100,4 @@ assert.equal(runtime.stats().loaded, 0)
 assert.equal(scene.children.length, 0, 'clear must remove loaded source assets and placed instances')
 assert.equal(runtime.getSemanticSource('flora.oak'), undefined)
 
-console.log('WorldAssetRuntime generation invalidation, same-ID reload, stale-finalizer isolation, and disposal: PASS')
+console.log('WorldAssetRuntime generation invalidation, same-ID reload, instance texture ownership, and disposal: PASS')
