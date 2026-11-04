@@ -465,10 +465,11 @@ export class WorldSaveSystem {
     // Clear it only after the new world transaction commits successfully.
     this.context.clearTimeline?.();
     this.context.clearSculptHistory?.();
-    this.context.persistWorldEditorSnapshot?.();
     // External GLTF assets are intentionally not part of portable snapshots.
-    // Release the previous world's runtime objects only after commit and sidecar persistence.
+    // The world transaction has committed; release the previous world's runtime
+    // objects even if the subsequent sidecar persistence operation fails.
     this.context.clearWorldAssetRuntime?.();
+    this.context.persistWorldEditorSnapshot?.();
     this.currentSnapshot = snapshot;
     console.info(`World "${snapshot.name}" fully restored.`);
   }
