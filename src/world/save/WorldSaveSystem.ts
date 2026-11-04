@@ -116,7 +116,7 @@ interface SaveContext {
   restoreWorldEditorSnapshot?: (snapshot?: WorldEditorSnapshot) => void;
   /** Best-effort persistence after the enclosing world transaction commits. */
   persistWorldEditorSnapshot?: () => void;
-  /** Release non-portable external assets only after import persistence succeeds. */
+  /** Release non-portable external assets after the authoritative import transaction commits. */
   clearWorldAssetRuntime?: () => void;
   getCausalLog?: () => unknown[];
   thumbnailCanvas?: HTMLCanvasElement | null;
