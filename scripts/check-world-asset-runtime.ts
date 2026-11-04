@@ -180,20 +180,17 @@ assert.equal(runtime.updateAnimations(0.5), 1)
 assert.ok(firstSkinnedMesh.skeleton.bones[0].position.x > 0.25, 'Idle state must animate the selected instance')
 assert.equal(runtime.setInstanceAnimationState('creature:instance:1', 'Walk', { fadeDuration: 0.1 }), true)
 assert.equal(runtime.updateAnimations(0.5), 1)
-const transitionedBoneY = firstSkinnedMesh.skeleton.bones[0].position.y
-const animationMixer = (runtime as unknown as { instanceMixers: Map<string, THREE.AnimationMixer> }).instanceMixers.get('creature:instance:1')
-console.log('Animation transition diagnostics', {
-  boneY: transitionedBoneY,
-  actions: (animationMixer as any)?._actions?.map((action: THREE.AnimationAction) => ({
-    clip: action.getClip().name,
-    time: action.time,
-    weight: action.getEffectiveWeight(),
-    running: action.isRunning(),
-  })),
-})
-assert.ok(transitionedBoneY > 0.5, `playing an instance clip must animate its cloned bone; got y=${transitionedBoneY}`)
+assert.ok(firstSkinnedMesh.skeleton.bones[0].position.y > 0.5, 'playing an instance clip must animate its cloned bone')
 assert.equal(sourceSkeletonAtRest.bones[0].position.y, 0, 'instance animation must not mutate the source skeleton')
 assert.equal(secondSkinnedMesh.skeleton.bones[0].position.y, 0, 'instance animation must not mutate sibling skeletons')
+assert.deepEqual(
+  runtime.setSemanticAnimationState('fauna.creature', 'Walk', { fadeDuration: 0.05 }),
+  { matched: 2, started: 2 },
+  'semantic animation state must control every placed instance in the group',
+)
+assert.equal(runtime.updateAnimations(0.1), 2)
+assert.equal(runtime.stopSemanticAnimation('fauna.creature'), 2, 'semantic stop must release every group mixer')
+assert.equal(runtime.updateAnimations(0.1), 0)
 assert.equal(runtime.removeInstance('creature:instance:1'), true)
 assert.equal(runtime.updateAnimations(0.5), 0, 'removing an animated instance must uncache its mixer')
 assert.equal(runtime.remove('creature'), true)
@@ -244,7 +241,13 @@ assert.ok(culledMesh.skeleton.bones[0].position.y > 0, 'resumed instance animati
 assert.equal(runtime.remove('lod-near'), true)
 assert.equal(runtime.remove('lod-far'), true)
 assert.equal(runtime.remove('lod-culled'), true)
-assert.equal(runtime.stats().loaded, 0)
+assert.deepEqual(runtime.stats(), {
+  loaded: 0,
+  ids: [],
+  instances: 0,
+  animatedInstances: 0,
+  visibleInstances: 0,
+})
 assert.equal(scene.children.length, 0)
 
 console.log('WorldAssetRuntime asset lifecycle, independent skeletal animation states, crossfades, distance LOD and disposal: PASS')
