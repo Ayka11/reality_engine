@@ -1149,7 +1149,9 @@ assert.match(worldAssetRuntimeSource, /generation !== this\.generation/,
   "a GLTF callback from an earlier world generation must be rejected");
 assert.match(worldAssetRuntimeSource, /if \(this\.loading\.get\(id\) === task\) \{\s*this\.loading\.delete\(id\)/,
   "a stale load finalizer must not erase a newer same-ID pending load");
-assert.match(worldAssetRuntimeSource, /this\.generation \+= 1;[\s\S]*?this\.loading\.clear\(\)/,
+const generationInvalidationIndex = worldAssetRuntimeSource.indexOf("this.generation += 1");
+const pendingLoadClearIndex = worldAssetRuntimeSource.indexOf("this.loading.clear()");
+assert.ok(generationInvalidationIndex >= 0 && pendingLoadClearIndex > generationInvalidationIndex,
   "clear must invalidate pending loads and release IDs for the new world");
 assert.match(worldAssetRuntimeSource, /pendingRejectors/,
   "clear must reject pending load promises immediately rather than leave callers waiting on stale network requests");
