@@ -142,12 +142,15 @@ skinnedMesh.bind(sourceSkeleton)
 const walkClip = new THREE.AnimationClip('Walk', 1, [
   new THREE.NumberKeyframeTrack('root.position[y]', [0, 1], [0, 2]),
 ])
+const idleClip = new THREE.AnimationClip('Idle', 1, [
+  new THREE.NumberKeyframeTrack('root.position[x]', [0, 1], [0, 1]),
+])
 const animatedLoad = runtime.load('creature', 'https://assets.example.test/creature.glb', {
   semanticEntryId: 'fauna.creature',
 })
-requests[4].onLoad({ scene: boneRoot, animations: [walkClip] })
+requests[4].onLoad({ scene: boneRoot, animations: [walkClip, idleClip] })
 const animatedAsset = await animatedLoad
-assert.equal(animatedAsset.animations.length, 1, 'loaded GLTF animation clips must be preserved')
+assert.equal(animatedAsset.animations.length, 2, 'loaded GLTF animation clips must be preserved')
 const findSkinnedMesh = (object: THREE.Object3D) => {
   let found: THREE.SkinnedMesh | undefined
   object.traverse(node => {
@@ -167,7 +170,11 @@ assert.notEqual(firstSkinnedMesh.skeleton, sourceSkeletonAtRest, 'first instance
 assert.notEqual(secondSkinnedMesh.skeleton, sourceSkeletonAtRest, 'second instance must own an independent skeleton')
 assert.notEqual(firstSkinnedMesh.skeleton, secondSkinnedMesh.skeleton, 'instances must not share skeleton state')
 assert.notEqual(firstSkinnedMesh.skeleton.bones[0], sourceSkeletonAtRest.bones[0], 'instance bones must be cloned')
-assert.equal(runtime.playInstanceAnimation('creature:instance:1', 'Walk'), true)
+assert.deepEqual(runtime.getInstanceAnimationNames('creature:instance:1'), ['Walk', 'Idle'])
+assert.equal(runtime.setInstanceAnimationState('creature:instance:1', 'Idle'), true)
+assert.equal(runtime.updateAnimations(0.5), 1)
+assert.ok(firstSkinnedMesh.skeleton.bones[0].position.x > 0.25, 'Idle state must animate the selected instance')
+assert.equal(runtime.setInstanceAnimationState('creature:instance:1', 'Walk', { fadeDuration: 0.1 }), true)
 assert.equal(runtime.updateAnimations(0.5), 1)
 assert.ok(firstSkinnedMesh.skeleton.bones[0].position.y > 0.5, 'playing an instance clip must animate its cloned bone')
 assert.equal(sourceSkeletonAtRest.bones[0].position.y, 0, 'instance animation must not mutate the source skeleton')
@@ -178,4 +185,31 @@ assert.equal(runtime.remove('creature'), true)
 assert.equal(runtime.stats().loaded, 0)
 assert.equal(scene.children.length, 0)
 
-console.log('WorldAssetRuntime stale-load invalidation, texture ownership, semantic removal, skeletal isolation, animation and disposal: PASS')
+const lodNear = runtime.load('lod-near', 'https://assets.example.test/lod-near.glb', { semanticEntryId: 'fauna.lod-near' })
+requests[5].onLoad({ scene: boneRoot.clone(true), animations: [walkClip] })
+const nearAsset = await lodNear
+const nearMesh = findSkinnedMesh(nearAsset.object)
+const nearInstance = runtime.placeInstance('lod-near:instance', 'fauna.lod-near', { x: 10, y: 0, z: 0 })
+assert.ok(nearInstance)
+const lodFar = runtime.load('lod-far', 'https://assets.example.test/lod-far.glb', { semanticEntryId: 'fauna.lod-far' })
+requests[6].onLoad({ scene: boneRoot.clone(true), animations: [walkClip] })
+await lodFar
+const farInstance = runtime.placeInstance('lod-far:instance', 'fauna.lod-far', { x: 400, y: 0, z: 0 })
+assert.ok(farInstance)
+assert.equal(runtime.playInstanceAnimation('lod-near:instance', 'Walk'), true)
+assert.equal(runtime.playInstanceAnimation('lod-far:instance', 'Walk'), true)
+const lodCamera = new THREE.PerspectiveCamera()
+lodCamera.position.set(0, 0, 0)
+assert.equal(runtime.updateAnimations(1 / 60, lodCamera), 1, 'near instances update every frame while mid/far instances are throttled')
+const farMesh = findSkinnedMesh(farInstance)
+assert.equal(farMesh.skeleton.bones[0].position.y, 0, 'far instance must wait for its lower-frequency animation tick')
+assert.equal(runtime.updateAnimations(1 / 60, lodCamera), 1)
+assert.equal(runtime.updateAnimations(1 / 60, lodCamera), 1)
+assert.equal(runtime.updateAnimations(1 / 60, lodCamera), 2, 'far instance updates after accumulating one 15 Hz interval')
+assert.ok(farMesh.skeleton.bones[0].position.y > 0, 'far instance animation advances on its throttled tick')
+assert.equal(runtime.remove('lod-near'), true)
+assert.equal(runtime.remove('lod-far'), true)
+assert.equal(runtime.stats().loaded, 0)
+assert.equal(scene.children.length, 0)
+
+console.log('WorldAssetRuntime asset lifecycle, independent skeletal animation states, crossfades, distance LOD and disposal: PASS')
