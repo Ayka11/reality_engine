@@ -1,5 +1,6 @@
 import type { WorldEditorSnapshot } from './WorldEditorSnapshot'
 import { validateAssetManifest } from '../worldLibrary/AssetImportManifest'
+import { validateExternalAssetPlacements } from './ExternalAssetPlacement'
 
 export type ActiveWorldCausalEvent = {
   tick: number
@@ -86,6 +87,14 @@ export function encodeActiveWorldPackage(
   const manifestValidation = validateAssetManifest(worldEditor.assetManifest)
   if (!manifestValidation.valid) {
     throw new TypeError(`Active world asset manifest is invalid: ${manifestValidation.errors.join('; ')}`)
+  }
+  const placementValidation = validateExternalAssetPlacements(
+    worldEditor.assetPlacements ?? [],
+    worldEditor.assetManifest,
+    Boolean(worldEditor.assetPlacements?.length),
+  )
+  if (!placementValidation.valid) {
+    throw new TypeError(`Active world asset placements are invalid: ${placementValidation.errors.join('; ')}`)
   }
 
   const cells: ActiveWorldPackageV6['cells'] = []
@@ -201,6 +210,14 @@ export function decodeActiveWorldPackage(
     const manifestValidation = validateAssetManifest(candidate.assetManifest)
     if (!manifestValidation.valid) {
       throw new TypeError(`Reality world package asset manifest is invalid: ${manifestValidation.errors.join('; ')}`)
+    }
+    const placementValidation = validateExternalAssetPlacements(
+      candidate.assetPlacements ?? [],
+      candidate.assetManifest,
+      Boolean(candidate.assetPlacements?.length),
+    )
+    if (!placementValidation.valid) {
+      throw new TypeError(`Reality world package asset placements are invalid: ${placementValidation.errors.join('; ')}`)
     }
     worldEditor = structuredClone(candidate)
   }
