@@ -114,8 +114,10 @@ assert.match(saveWorldBody, /if \(!this\.persistence\.deleteChunk\(cx, cy, cz\)\
   "world save must detect failed chunk deletions");
 assert.match(saveWorldBody, /if \(!this\.persistence\.saveChunk\(cx, cy, cz, list\)\)/,
   "world save must detect failed chunk writes");
-assert.match(saveWorldBody, /World object persistence incomplete/,
-  "world save must diagnose incomplete object persistence");
+assert.match(saveWorldBody, /World persistence incomplete/,
+  "world save must diagnose incomplete persistence operations");
+assert.match(saveWorldBody, /failedPersistenceOperations\.join\(/,
+  "world save diagnostics must identify the failed persistence operations");
 assert.match(methodBody("loadWorld"), /loadTerrainDeformationCheckpoint/);
 assert.match(methodBody("loadWorld"), /knownChunks\(\{\s*recoverOrphans:\s*true\s*\}\)/,
   "world load must recover persisted chunk payloads omitted from a failed/corrupt manifest");
