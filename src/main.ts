@@ -1379,7 +1379,9 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
     if (!validation.valid) {
       throw new Error(`World asset provenance manifest is invalid: ${validation.errors.join('; ')}`);
     }
-    return { ...snapshot, assetManifest: structuredClone(manifest) };
+    const portableSnapshot = { ...snapshot, assetManifest: structuredClone(manifest) }
+    world.validatePortableWorldSnapshot(portableSnapshot)
+    return portableSnapshot;
   },
   restoreWorldEditorSnapshot: snapshot => {
     const world = (window as unknown as {
