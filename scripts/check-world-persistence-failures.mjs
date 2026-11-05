@@ -456,7 +456,7 @@ assert.equal(values.has(orphanChunkKey), false,
   "an orphaned chunk removed by the next save must not reappear after restart");
 assert.deepEqual(nextSavePersistence.knownChunks({ recoverOrphans: true }), [],
   "the clean post-save namespace must contain no orphan chunk payloads");
-const saveWorldStart = rendererSource.indexOf("  saveWorld(options: { checkpoint?: boolean } = {}) {");
+const saveWorldStart = rendererSource.indexOf("  saveWorld(options:")
 const loadWorldStart = rendererSource.indexOf("  loadWorld(options:", saveWorldStart);
 assert.ok(saveWorldStart >= 0 && loadWorldStart > saveWorldStart,
   "the renderer save/load method boundary must remain identifiable");
