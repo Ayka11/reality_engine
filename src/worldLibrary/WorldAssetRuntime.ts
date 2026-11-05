@@ -140,11 +140,19 @@ export class WorldAssetRuntime {
       x: number; y: number; z: number; scale?: number; rotationY?: number
       /** Transient instances are regenerated from simulation state and never enter world saves. */
       persistence?: 'persistent' | 'transient'
+      /** Select an exact loaded asset when multiple files share one semantic entry. */
+      sourceAssetId?: string
     },
   ) {
     if (this.instances.has(instanceId)) return this.instances.get(instanceId) || null
-    const source = this.semanticSources.get(semanticEntryId)
-    if (!source) return null
+    if (options.sourceAssetId !== undefined &&
+        (typeof options.sourceAssetId !== 'string' || !options.sourceAssetId.trim())) {
+      throw new TypeError('External asset sourceAssetId must be a non-empty string')
+    }
+    const source = options.sourceAssetId !== undefined
+      ? this.assets.get(options.sourceAssetId)
+      : this.semanticSources.get(semanticEntryId)
+    if (!source || source.semanticEntryId !== semanticEntryId) return null
     // SkeletonUtils rewires every SkinnedMesh to cloned bones/skeletons.
     // Object3D.clone(true) alone would keep the source skeleton shared.
     const instance = cloneSkeleton(source.object)
