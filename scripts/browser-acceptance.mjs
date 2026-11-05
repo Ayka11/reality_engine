@@ -177,7 +177,7 @@ try {
       modelScaleInput: document.getElementById("agentVisualScale")?.getAttribute("type"),
       stateNames: [...document.querySelectorAll("[data-agent-state-clip]")]
         .map(element => element.getAttribute("data-agent-state-clip")),
-      bindDisabled: (document.getElementById("agentVisualConfigure") as HTMLButtonElement | null)?.disabled,
+      bindDisabled: document.getElementById("agentVisualConfigure")?.disabled,
       apiReady: typeof window.configureAgentVisuals === "function" &&
         typeof window.clearAgentVisuals === "function" &&
         typeof window.getAgentVisualDiagnostics === "function",
