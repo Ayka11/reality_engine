@@ -69,7 +69,7 @@ export function mountOpenAssetsPanel() {
         </div>
         <details style="margin:8px 0;padding:7px;border:1px solid rgba(124,111,205,.25);border-radius:6px;background:rgba(8,9,17,.55)">
           <summary style="cursor:pointer;font-size:9px;font-weight:600;color:#c8c3ff">Agent Visual Binding · optional</summary>
-          <div style="font-size:7.5px;color:var(--sub);margin:5px 0">Create temporary GLTF representations for the active 2D agents. You choose the world origin, grid spacing and exact imported animation clips. The visual instances are regenerated from simulation state and are not included in world saves.</div>
+          <div style="font-size:7.5px;color:var(--sub);margin:5px 0">Create temporary GLTF representations for the active 2D agents. You choose the world X/Z origin, terrain height offset, grid spacing and exact imported animation clips. The visual instances are regenerated from simulation state and are not included in world saves.</div>
           <div style="display:grid;grid-template-columns:1.5fr repeat(3,minmax(55px,.6fr));gap:5px;margin:6px 0">
             <label style="font-size:7px;color:var(--sub)">Imported model
               <select id="agentVisualAsset" style="display:block;width:100%;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px">
@@ -77,7 +77,7 @@ export function mountOpenAssetsPanel() {
                 ${[...importedSemantic.entries()].map(([id, semantic]) => `<option value="${esc(id)}" ${selectedAgentAssetId===id?'selected':''}>${esc(id)} · ${esc(semantic)}</option>`).join('')}
               </select>
             </label>
-            ${[['agentVisualOriginX','Origin X','originX'],['agentVisualOriginY','Origin Y','originY'],['agentVisualOriginZ','Origin Z','originZ']].map(([id,label,key])=>`<label style="font-size:7px;color:var(--sub)">${label}<input id="${id}" type="number" step="any" value="${esc(agentTransformInputs[key as keyof typeof agentTransformInputs])}" style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px"></label>`).join('')}
+            ${[['agentVisualOriginX','Origin X','originX'],['agentVisualOriginY','Terrain Y offset','originY'],['agentVisualOriginZ','Origin Z','originZ']].map(([id,label,key])=>`<label style="font-size:7px;color:var(--sub)">${label}<input id="${id}" type="number" step="any" value="${esc(agentTransformInputs[key as keyof typeof agentTransformInputs])}" style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px"></label>`).join('')}
           </div>
           <div style="display:grid;grid-template-columns:repeat(2,minmax(90px,1fr));gap:5px;margin-bottom:6px">
             <label style="font-size:7px;color:var(--sub)">Grid cell size<input id="agentVisualCellSize" type="number" min="0.000001" step="any" value="${esc(agentTransformInputs.cellSize)}" style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px"></label>
