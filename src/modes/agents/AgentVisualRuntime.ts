@@ -1,5 +1,5 @@
 import type { WorldAssetRuntime } from '../../worldLibrary/WorldAssetRuntime'
-import type { Agent, AgentState } from './AgentSystem'
+import type { Agent } from './AgentSystem'
 import {
   agentGridToWorld,
   type AgentGridCoordinates,
@@ -101,13 +101,13 @@ export class AgentVisualRuntime {
 
     if (!source) {
       current.awaitingAsset = agents.length
-      // The source may have been explicitly removed. Do not retain stale bookkeeping
-      // for renderer instances that the asset runtime already disposed with it.
+      const liveIds = new Set(agents.map(agent => agent.id))
+      // The source may have been explicitly removed. Drop dead agents and stale
+      // runtime handles rather than reporting instances that no longer exist.
       for (const [agentId, tracked] of [...this.tracked]) {
-        if (!this.assets.hasInstance(tracked.instanceId)) {
-          this.tracked.delete(agentId)
-          current.removed += 1
-        }
+        if (liveIds.has(agentId) && this.assets.hasInstance(tracked.instanceId)) continue
+        if (this.assets.removeInstance(tracked.instanceId)) current.removed += 1
+        this.tracked.delete(agentId)
       }
       current.instances = this.tracked.size
       this.diagnostics = current
@@ -158,7 +158,7 @@ export class AgentVisualRuntime {
         current.updated += 1
       }
 
-      const resolved = resolveAgentVisualAnimation(profile, agent.state as AgentState, clipNames)
+      const resolved = resolveAgentVisualAnimation(profile, agent.state, clipNames)
       if (resolved.clipName) {
         if (tracked.clipName !== resolved.clipName) {
           if (this.assets.playInstanceAnimation(instanceId, resolved.clipName, { fadeDuration })) {
