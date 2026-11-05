@@ -56,6 +56,40 @@ assert.ok(persistent)
 assert.equal(persistentChangeNotifications, 1,
   'ordinary world placements must continue to trigger persistence notifications')
 
+// Register a second loaded model with the same semantic ID. The semantic source
+// pointer now refers to this new asset, but the user-selected source must remain exact.
+const alternateRoot = new THREE.Group()
+const alternateAnimatedRoot = new THREE.Group()
+alternateAnimatedRoot.name = 'root'
+alternateRoot.add(alternateAnimatedRoot)
+const alternateLoad = assets.load('creature-model-alt', 'https://assets.example.test/creature-alt.glb', {
+  semanticEntryId: 'fauna.creature',
+})
+assert.equal(requests.length, 2)
+requests[1].onLoad({ scene: alternateRoot, animations: [idleClip, walkClip, runClip] })
+await alternateLoad
+assert.equal(assets.getSemanticSource('fauna.creature')?.id, 'creature-model-alt',
+  'semantic lookup deliberately points to the most recently registered same-semantic source')
+
+const exactAlternativeRuntime = new AgentVisualRuntime(assets, createPlanarAgentGridWorldTransform(
+  10, 8, { x: 0, y: 0, z: 0 }, 1,
+), undefined, 'creature-model-alt')
+exactAlternativeRuntime.setProfile({
+  schemaVersion: 'agent-visual-profile-v1',
+  semanticEntryId: 'fauna.creature',
+  clips: { explore: 'Walk Cycle' },
+})
+const alternateDiagnostics = exactAlternativeRuntime.sync([{
+  id: 91, x: 1, y: 1, energy: 0.7, age: 1,
+  genome: { seekEnergyW: 0.8, seekInfoW: 0.6, fleeEntropyW: 0.7, bioW: 0.4, exploreW: 0.3, reprodThresh: 0.65, maxAge: 700 },
+  state: 'explore', civId: 1, memory: [], memHead: 0, score: 0, plan: '', planBias: {},
+}])
+assert.equal(alternateDiagnostics.created, 1,
+  'an explicitly selected secondary file must materialize even when another same-semantic file is the latest semantic source')
+const alternateVisual = scene.children.find(child => child.userData.runtimeAssetInstanceId === 'agent-visual:91')
+assert.equal(alternateVisual?.userData.runtimeAssetSourceId, 'creature-model-alt')
+exactAlternativeRuntime.dispose()
+
 const transform = createPlanarAgentGridWorldTransform(
   10,
   8,
