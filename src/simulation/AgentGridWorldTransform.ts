@@ -148,7 +148,8 @@ function assertValidTransform(value: AgentGridWorldTransform): void {
 /**
  * Create the explicit 2D-agent map used by the booted modes/agents system.
  * Grid X maps to world X, grid Y maps to world Z, and the singleton depth axis
- * maps upward. worldOrigin identifies the world-space center of cell (0, 0).
+ * maps upward. worldOrigin identifies the world-space center of cell (0, 0);
+ * in the terrain-projected 2D adapter, its Y component is a surface-height offset.
  */
 export function createPlanarAgentGridWorldTransform(
   width: number,
