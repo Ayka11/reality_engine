@@ -380,19 +380,19 @@ assert.match(worldSaveSource, /try \{\s*this\.context\.persistWorldEditorSnapsho
 assert.ok(mainSource.includes('reportWorldEditorPersistenceFailure: (snapshotName, error) =>') &&
   mainSource.includes('_exportStatus(message, false)'),
   'the application must surface a failed editor sidecar commit without claiming that the world import rolled back');
-assert.match(mainSource, /function reportWorldSaveFailure\\(operation: string, error: unknown\\): void[\\s\\S]*?_exportStatus\\([^\\n]*false\\)/,
+assert.match(mainSource, /function reportWorldSaveFailure\(operation: string, error: unknown\): void[\s\S]*?_exportStatus\([^\n]*false\)/,
   'user-triggered world save/load failures must be visible in the export status panel');
-assert.match(mainSource, /function importRealityPackageWithFeedback\\(file: File\\): Promise<void>[\\s\\S]*?saveSystem\\.importRealityPackage\\(file\\)\\.catch/,
+assert.match(mainSource, /function importRealityPackageWithFeedback\(file: File\): Promise<void>[\s\S]*?saveSystem\.importRealityPackage\(file\)\.catch/,
   'file-based package imports must report malformed packages and restore failures');
 assert.equal(mainSource.includes('void saveSystem.importRealityPackage(file)'), false,
   'file picker and drag/drop imports must not leave package import rejections unhandled');
 assert.equal(mainSource.split('void importRealityPackageWithFeedback(file)').length - 1, 2,
   'both the file picker and drag/drop import surfaces must use the feedback wrapper');
-assert.match(mainSource, /document\\.getElementById\\('loadBtn'\\)[\\s\\S]*?catch \\(error\\) \\{\\s*reportWorldSaveFailure\\('World load', error\\)/,
+assert.match(mainSource, /document\.getElementById\('loadBtn'\)[\s\S]*?catch \(error\) \{\s*reportWorldSaveFailure\('World load', error\)/,
   'quick-load lookup/restore failures must be surfaced instead of becoming unhandled rejections');
-assert.match(mainSource, /document\\.getElementById\\('saveBtn'\\)[\\s\\S]*?catch \\(error\\) \\{\\s*reportWorldSaveFailure\\('Quick save', error\\)/,
+assert.match(mainSource, /document\.getElementById\('saveBtn'\)[\s\S]*?catch \(error\) \{\s*reportWorldSaveFailure\('Quick save', error\)/,
   'the quick-save button must surface IndexedDB quota and persistence failures');
-assert.match(mainSource, /saveSystem\\.quickSave\\([\\s\\S]*?\\.catch\\(error => \\{\\s*reportWorldSaveFailure\\('Quick save', error\\)/,
+assert.match(mainSource, /saveSystem\.quickSave\([\s\S]*?\.catch\(error => \{\s*reportWorldSaveFailure\('Quick save', error\)/,
   'Ctrl+S must not leave quick-save rejections unhandled');
 assert.ok(mainSource.includes("capturePortableWorldSnapshot") &&
   mainSource.includes("restorePortableWorldSnapshot") &&
