@@ -169,6 +169,9 @@ assert.deepEqual(
   'sync must create one transient instance per live agent and start mapped/fallback clips',
 )
 assert.equal(initial.awaitingAsset, 0)
+assert.equal(assets.getInstanceSourceAssetId('agent-visual:1'), 'creature-model',
+  'agent projections must clone the exact selected source even when semantic lookup points elsewhere')
+assert.equal(assets.getInstanceSourceAssetId('agent-visual:2'), 'creature-model')
 assert.equal(assets.getInstanceAnimationNames('agent-visual:1').includes('Walk Cycle'), true)
 
 const firstWorld = assets.getInstanceWorldPosition('agent-visual:1')
@@ -239,9 +242,26 @@ assert.deepEqual(assets.snapshotPlacements().map(placement => placement.instance
 assert.equal(persistentChangeNotifications, 1,
   'transient movement, animation and removal must not notify world persistence')
 
+const replacementVisuals = new AgentVisualRuntime(assets, transform, undefined, 'creature-model-alt')
+replacementVisuals.setProfile({
+  schemaVersion: 'agent-visual-profile-v1',
+  semanticEntryId: 'fauna.creature',
+  clips: { rest: 'Idle' },
+})
+const replacementSync = replacementVisuals.sync([second])
+assert.equal(replacementSync.created, 1,
+  'switching to another same-semantic source must replace the old model for the stable agent instance ID')
+assert.equal(assets.getInstanceSourceAssetId('agent-visual:2'), 'creature-model-alt')
+assert.notEqual(assets.getInstanceRuntimeOwnerId('agent-visual:2'), null)
+
 visuals.dispose()
+assert.equal(assets.hasInstance('agent-visual:2'), true,
+  'disposing an old binding must not delete an instance claimed by its replacement runtime')
+assert.equal(assets.getInstanceSourceAssetId('agent-visual:2'), 'creature-model-alt')
+replacementVisuals.dispose()
 assert.equal(assets.hasInstance('agent-visual:2'), false)
 assert.equal(assets.hasInstance('persistent-tree:1'), true)
+assert.equal(assets.remove('creature-model-alt'), true)
 assert.equal(assets.remove('creature-model'), true)
 assert.equal(scene.children.length, 0)
 assert.equal(persistentChangeNotifications, 2,
