@@ -83,6 +83,15 @@ assert.ok(terrainHeight.includes('provider.sampleSurface(x, z)'),
   "terrain geometry must sample its selected surface provider baseline");
 assert.ok(terrainHeight.includes('surface.height + this.terrainDeformations.sampleDelta(x, z)'),
   "terrain geometry must add the authoritative deformation overlay to the selected surface baseline");
+const fieldPersistence = methodBody("persistAuthoritativeFieldState");
+assert.match(fieldPersistence, /beginSaveTransaction\(\)/,
+  "authoritative field mutations must open the journal before persistence");
+assert.match(fieldPersistence, /saveFieldState\(this\.authoritativeField\.serialize\(\)\)/,
+  "authoritative field state must be written in its persistence transaction");
+assert.match(fieldPersistence, /saveProvenanceState\(runtimeProvenance\.getTrace\(\)\)/,
+  "causal provenance must be saved in the same transaction as the authoritative field");
+assert.match(fieldPersistence, /finishSaveTransaction\(fieldSaved && provenanceSaved\)/,
+  "field and provenance persistence must commit or remain blocked as one logical unit");
 const terrainPersistence = methodBody("persistTerrainDeformationState");
 assert.match(terrainPersistence, /const saved = this\.persistence\.saveTerrainDeformationState/);
 assert.match(terrainPersistence, /if \(!saved\)/,

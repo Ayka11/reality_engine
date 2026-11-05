@@ -201,9 +201,16 @@ export class InfiniteWorldRenderer {
   }
 
   private persistAuthoritativeFieldState(): boolean {
-    const saved = this.persistence.saveFieldState(this.authoritativeField.serialize())
+    if (!this.persistence.beginSaveTransaction()) {
+      console.warn('[persistence] Authoritative field/provenance persistence was withheld because an earlier world save is incomplete')
+      return false
+    }
+    const fieldSaved = this.persistence.saveFieldState(this.authoritativeField.serialize())
+    const provenanceSaved = this.persistence.saveProvenanceState(runtimeProvenance.getTrace())
+    const committed = this.persistence.finishSaveTransaction(fieldSaved && provenanceSaved)
+    const saved = fieldSaved && provenanceSaved && committed
     if (!saved) {
-      console.warn('[persistence] Authoritative field changed in memory but could not be saved to localStorage')
+      console.warn('[persistence] Authoritative field and provenance changed in memory but could not be committed together')
     }
     return saved
   }
