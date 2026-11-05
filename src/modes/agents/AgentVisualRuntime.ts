@@ -1,7 +1,7 @@
 import type { WorldAssetRuntime } from '../../worldLibrary/WorldAssetRuntime'
 import type { Agent } from './AgentSystem'
 import {
-  agentGridToWorld,
+  validateAgentGridWorldTransform,
   type AgentGridCoordinates,
   type AgentGridWorldTransform,
 } from '../../simulation/AgentGridWorldTransform'
@@ -61,12 +61,37 @@ export class AgentVisualRuntime {
   private profile: AgentVisualProfile | null = null
   private readonly tracked = new Map<number, TrackedAgentVisual>()
   private diagnostics = emptyDiagnostics(false)
+  private readonly transform: AgentGridWorldTransform
 
   constructor(
     private readonly assets: WorldAssetRuntime,
-    private readonly transform: AgentGridWorldTransform,
+    transform: AgentGridWorldTransform,
     private readonly resolveWorldPosition: AgentVisualWorldPositionResolver = position => position,
-  ) {}
+  ) {
+    const validation = validateAgentGridWorldTransform(transform)
+    if (!validation.valid || !validation.transform) {
+      throw new TypeError(`Invalid agent visual grid/world transform: ${validation.errors.join('; ')}`)
+    }
+    // Store a validated detached copy so caller mutation cannot alter live projection.
+    this.transform = validation.transform
+  }
+
+  private mapGridPosition(grid: AgentGridCoordinates): AgentGridCoordinates {
+    const { width, height, depth } = this.transform.gridDimensions
+    if (![grid.x, grid.y, grid.z].every(Number.isFinite) ||
+        grid.x < 0 || grid.x > width - 1 ||
+        grid.y < 0 || grid.y > height - 1 ||
+        grid.z < 0 || grid.z > depth - 1) {
+      throw new RangeError('Agent grid position is outside the configured visualization grid')
+    }
+    const { x, y, z } = this.transform.gridBasis
+    const origin = this.transform.worldOrigin
+    return {
+      x: origin.x + x.x * grid.x + y.x * grid.y + z.x * grid.z,
+      y: origin.y + x.y * grid.x + y.y * grid.y + z.y * grid.z,
+      z: origin.z + x.z * grid.x + y.z * grid.y + z.z * grid.z,
+    }
+  }
 
   setProfile(value: unknown): AgentVisualProfile {
     const validation = validateAgentVisualProfile(value)
@@ -123,7 +148,7 @@ export class AgentVisualRuntime {
       aliveIds.add(agent.id)
       const instanceId = `agent-visual:${agent.id}`
       const gridPosition: AgentGridCoordinates = { x: agent.x, y: agent.y, z: 0 }
-      const mappedPosition = agentGridToWorld(this.transform, gridPosition)
+      const mappedPosition = this.mapGridPosition(gridPosition)
       const worldPosition = this.resolveWorldPosition(mappedPosition, agent)
       if (![worldPosition.x, worldPosition.y, worldPosition.z].every(Number.isFinite)) {
         throw new TypeError(`Agent ${agent.id} resolved to a non-finite world position`)
