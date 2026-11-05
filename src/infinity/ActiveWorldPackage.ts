@@ -216,10 +216,15 @@ export function decodeActiveWorldPackage(
     if (!manifestValidation.valid) {
       throw new TypeError(`Reality world package asset manifest is invalid: ${manifestValidation.errors.join('; ')}`)
     }
+    // As with encoding and renderer restore, only an omitted field is
+    // backward-compatible. Explicit null must fail package decoding.
+    const assetPlacements = candidate.assetPlacements === undefined
+      ? []
+      : candidate.assetPlacements
     const placementValidation = validateExternalAssetPlacements(
-      candidate.assetPlacements ?? [],
+      assetPlacements,
       candidate.assetManifest,
-      Boolean(candidate.assetPlacements?.length),
+      Array.isArray(assetPlacements) && assetPlacements.length > 0,
     )
     if (!placementValidation.valid) {
       throw new TypeError(`Reality world package asset placements are invalid: ${placementValidation.errors.join('; ')}`)
