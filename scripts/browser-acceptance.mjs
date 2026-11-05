@@ -180,7 +180,9 @@ try {
       bindDisabled: document.getElementById("agentVisualConfigure")?.disabled,
       apiReady: typeof window.configureAgentVisuals === "function" &&
         typeof window.clearAgentVisuals === "function" &&
-        typeof window.getAgentVisualDiagnostics === "function",
+        typeof window.getAgentVisualDiagnostics === "function" &&
+        typeof window.getSavedAgentVisualConfiguration === "function",
+      savedConfiguration: window.getSavedAgentVisualConfiguration?.() ?? null,
       transform,
     };
   });
@@ -192,6 +194,7 @@ try {
       agentVisualControls.modelScaleInput !== "number" ||
       JSON.stringify(agentVisualControls.stateNames) !== JSON.stringify(expectedAgentStates) ||
       agentVisualControls.bindDisabled !== true || !agentVisualControls.apiReady ||
+      agentVisualControls.savedConfiguration !== null ||
       agentVisualControls.transform?.gridDimensions?.depth !== 1 ||
       agentVisualControls.transform?.gridBasis?.x?.x !== 2 ||
       agentVisualControls.transform?.gridBasis?.y?.z !== 2) {
@@ -199,9 +202,13 @@ try {
       JSON.stringify(agentVisualControls));
   }
   await page.click("#agentVisualClear");
-  const clearedAgentVisuals = await page.evaluate(() => window.getAgentVisualDiagnostics?.());
-  if (clearedAgentVisuals?.configured !== false) {
-    throw new Error("Agent visual clear control did not leave the visual runtime unconfigured");
+  const clearedAgentVisualState = await page.evaluate(() => ({
+    diagnostics: window.getAgentVisualDiagnostics?.(),
+    savedConfiguration: window.getSavedAgentVisualConfiguration?.() ?? null,
+  }));
+  if (clearedAgentVisualState.diagnostics?.configured !== false ||
+      clearedAgentVisualState.savedConfiguration !== null) {
+    throw new Error("Agent visual clear control did not clear both runtime and browser-stored configuration");
   }
   await page.click("#openAssetsClose");
   console.log("[acceptance] Open Assets panel and opt-in agent visual binding controls mounted; planar transform and clear action passed");
