@@ -160,8 +160,51 @@ try {
   if (!openAssetsText.includes("Open World Assets") || !openAssetsText.includes("Browse")) {
     throw new Error("Open Assets panel did not render its provider browser: " + openAssetsText);
   }
+  const agentVisualControls = await page.evaluate(() => {
+    const details = [...document.querySelectorAll("#openAssetsPanel details")]
+      .find(element => element.textContent?.includes("Agent Visual Binding"));
+    if (details) details.open = true;
+    const transformFactory = window.createPlanarAgentGridWorldTransform;
+    const transform = typeof transformFactory === "function"
+      ? transformFactory({ x: 12, y: 4, z: -18 }, 2)
+      : null;
+    return {
+      details: Boolean(details),
+      assetSelector: Boolean(document.getElementById("agentVisualAsset")),
+      originInputs: ["agentVisualOriginX", "agentVisualOriginY", "agentVisualOriginZ"]
+        .every(id => document.getElementById(id)?.getAttribute("type") === "number"),
+      cellSizeInput: document.getElementById("agentVisualCellSize")?.getAttribute("type"),
+      modelScaleInput: document.getElementById("agentVisualScale")?.getAttribute("type"),
+      stateNames: [...document.querySelectorAll("[data-agent-state-clip]")]
+        .map(element => element.getAttribute("data-agent-state-clip")),
+      bindDisabled: (document.getElementById("agentVisualConfigure") as HTMLButtonElement | null)?.disabled,
+      apiReady: typeof window.configureAgentVisuals === "function" &&
+        typeof window.clearAgentVisuals === "function" &&
+        typeof window.getAgentVisualDiagnostics === "function",
+      transform,
+    };
+  });
+  const expectedAgentStates = [
+    "idle", "seek_energy", "seek_info", "flee_entropy", "reproduce", "explore", "rest",
+  ];
+  if (!agentVisualControls.details || !agentVisualControls.assetSelector ||
+      !agentVisualControls.originInputs || agentVisualControls.cellSizeInput !== "number" ||
+      agentVisualControls.modelScaleInput !== "number" ||
+      JSON.stringify(agentVisualControls.stateNames) !== JSON.stringify(expectedAgentStates) ||
+      agentVisualControls.bindDisabled !== true || !agentVisualControls.apiReady ||
+      agentVisualControls.transform?.gridDimensions?.depth !== 1 ||
+      agentVisualControls.transform?.gridBasis?.x?.x !== 2 ||
+      agentVisualControls.transform?.gridBasis?.y?.z !== 2) {
+    throw new Error("Agent visual binding controls are incomplete or expose an invalid planar transform: " +
+      JSON.stringify(agentVisualControls));
+  }
+  await page.click("#agentVisualClear");
+  const clearedAgentVisuals = await page.evaluate(() => window.getAgentVisualDiagnostics?.());
+  if (clearedAgentVisuals?.configured !== false) {
+    throw new Error("Agent visual clear control did not leave the visual runtime unconfigured");
+  }
   await page.click("#openAssetsClose");
-  console.log("[acceptance] Open Assets panel mounted, opened and closed; animation API is wired");
+  console.log("[acceptance] Open Assets panel and opt-in agent visual binding controls mounted; planar transform and clear action passed");
 
   const initialViewSeed = await page.evaluate(() => ({
     worldSeed: window.infiniteWorld?.generator?.seed ?? null,
