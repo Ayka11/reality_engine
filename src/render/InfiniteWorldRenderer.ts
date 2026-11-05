@@ -817,14 +817,14 @@ export class InfiniteWorldRenderer {
   }
 
   persistPortableWorldSnapshot(assetManifest?: WorldAssetImportManifest): void {
-    const failures: string[] = []
+    const preflightFailures: string[] = []
     const surfaceStatus = this.persistActiveSurfaceProvider()
-    if (surfaceStatus === 'failed') failures.push('world surface')
+    if (surfaceStatus === 'failed') preflightFailures.push('world surface')
     if (assetManifest !== undefined && !this.persistence.saveAssetManifestState(assetManifest)) {
-      failures.push('asset provenance manifest')
+      preflightFailures.push('asset provenance manifest')
     }
-    this.saveWorld({ checkpoint: false })
-    failures.push(...this.lastPersistenceFailures)
+    this.saveWorld({ checkpoint: false, preflightFailures })
+    const failures = this.lastPersistenceFailures
     if (failures.length > 0) {
       throw new AggregateError(
         failures.map(label => new Error(`Could not persist ${label}`)),
@@ -833,8 +833,8 @@ export class InfiniteWorldRenderer {
     }
   }
 
-  saveWorld(options: { checkpoint?: boolean } = {}) {
-    const failedPersistenceOperations: string[] = []
+  saveWorld(options: { checkpoint?: boolean; preflightFailures?: string[] } = {}) {
+    const failedPersistenceOperations: string[] = [...(options.preflightFailures ?? [])]
     // Explicit Save creates a stable checkpoint; autosave must not move that checkpoint.
     const fieldSnapshot = this.authoritativeField.serialize()
     if (!this.persistAuthoritativeFieldState()) failedPersistenceOperations.push('authoritative field state')
