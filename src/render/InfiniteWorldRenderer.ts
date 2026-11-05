@@ -2486,6 +2486,14 @@ export class InfiniteWorldRenderer {
   setSnapToGrid(size: number) { this.snapToGrid = Math.max(0.1, size) }
   getSnapToGrid() { return this.snapToGrid }
 
+  /** Sample the active world surface in absolute world coordinates. */
+  getSurfaceHeightAt(x: number, z: number): number {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) {
+      throw new RangeError('World surface sample coordinates must be finite')
+    }
+    return this.sampleTerrainHeight(x, z)
+  }
+
   private sampleTerrainHeight(x: number, z: number) {
     const provider = this.fieldSampler.surfaceProvider
     const surface = provider.sampleSurface(x, z)
