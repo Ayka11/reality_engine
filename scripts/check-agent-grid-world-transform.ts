@@ -92,7 +92,7 @@ const invalidTransforms: unknown[] = [
   { ...axisAligned, gridBasis: {
     x: { x: 1, y: 0, z: 0 },
     y: { x: 0, y: 1, z: 0 },
-    z: { x: 0, y: 1e-12, z: 1 },
+    z: { x: 1e-12, y: 1, z: 0 },
   } },
 ]
 for (const candidate of invalidTransforms) {
