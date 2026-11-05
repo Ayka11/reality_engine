@@ -153,6 +153,7 @@ const invalidPackages = [
   [{ ...parsed, worldEditor: { ...worldEditor, assetPlacements: [
     worldEditor.assetPlacements[0], worldEditor.assetPlacements[0],
   ] } }, /asset placements are invalid/],
+  [{ ...parsed, worldEditor: { ...worldEditor, assetPlacements: null } }, /asset placements are invalid/],
 ]
 for (const [candidate, pattern] of invalidPackages) {
   assert.throws(() => decodeActiveWorldPackage(candidate, dimensions), pattern,
@@ -160,6 +161,11 @@ for (const [candidate, pattern] of invalidPackages) {
 }
 
 assert.throws(() => decodeActiveWorldPackage({ ...parsed, H: 1 }, dimensions), /dimensions/)
+assert.throws(() => encodeActiveWorldPackage({
+  ...dimensions, tick: 1, buffer,
+}, { ...worldEditor, assetPlacements: null }), /asset placements are invalid/,
+'explicit null placement data must be rejected instead of encoded as an empty list')
+
 assert.throws(() => encodeActiveWorldPackage({
   ...dimensions, tick: Number.MAX_SAFE_INTEGER + 1, buffer,
 }, worldEditor), /tick/)
