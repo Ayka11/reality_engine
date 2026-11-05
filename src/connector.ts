@@ -1701,7 +1701,7 @@ win['configureAgentVisuals'] = (configuration: {
     transform,
     (position) => ({
       ...position,
-      y: world.getSurfaceHeightAt(position.x, position.z),
+      y: world.getSurfaceHeightAt(position.x, position.z) + position.y,
     }),
   )
   nextRuntime.setProfile(profileValidation.profile)
