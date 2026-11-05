@@ -97,6 +97,26 @@ function makeAgent(x: number, y: number, genome: AgentGenome, civId: number): Ag
 
 export class AgentSystem {
   agents: Agent[] = []
+  private readonly changeListeners = new Set<(agents: readonly Agent[]) => void>()
+
+  /** Subscribe to completed agent population/state updates. */
+  onAgentsChanged(listener: (agents: readonly Agent[]) => void): () => void {
+    this.changeListeners.add(listener)
+    return () => this.changeListeners.delete(listener)
+  }
+
+  private notifyAgentsChanged(): void {
+    if (this.changeListeners.size === 0) return
+    const snapshot = this.agents.map(agent => ({ ...agent, memory: [...agent.memory], planBias: { ...agent.planBias } }))
+    for (const listener of this.changeListeners) {
+      try {
+        listener(snapshot)
+      } catch (error) {
+        // Observer/visual failures must never interrupt authoritative agent ticks.
+        console.warn('[AgentSystem] Agent observer failed; simulation continues', error)
+      }
+    }
+  }
 
   // ── Spawn ───────────────────────────────────────────────────────────────
 
@@ -110,6 +130,7 @@ export class AgentSystem {
       const y = Math.max(1, Math.min(H - 2, cy + Math.round(rng(-4, 4))))
       this.agents.push(makeAgent(x, y, g, civId))
     }
+    this.notifyAgentsChanged()
   }
 
   // ── Main step (call once per animation frame) ───────────────────────────
@@ -213,6 +234,7 @@ export class AgentSystem {
     for (let i = dead.length - 1; i >= 0; i--) {
       this.agents.splice(dead[i], 1)
     }
+    this.notifyAgentsChanged()
   }
 
   // ── Plan application ────────────────────────────────────────────────────
