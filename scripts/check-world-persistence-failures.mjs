@@ -664,6 +664,7 @@ let failNextWorldEditorRestore = false;
 let worldEditorPersistCalls = 0;
 let worldAssetClearCalls = 0;
 let failWorldEditorPersist = false;
+const sidecarFailureReports = [];
 let worldEditorRuntimeState = {
   history: { undoStack: [{ type: "add", object: { id: "old-history-object" } }], redoStack: [] },
   authoritativeSculptHistory: { nextTransactionId: 2, undoStack: [{ transactionId: 1 }], redoStack: [] },
@@ -767,6 +768,9 @@ const transactionContext = {
   persistWorldEditorSnapshot: () => {
     worldEditorPersistCalls++;
     if (failWorldEditorPersist) throw new Error("injected sidecar persistence failure");
+  },
+  reportWorldEditorPersistenceFailure: (snapshotName, error) => {
+    sidecarFailureReports.push({ snapshotName, message: error.message });
   },
   clearWorldAssetRuntime: () => { worldAssetClearCalls++; },
   getCausalLog: () => cloneValue(runtimeState.causal.events),
@@ -899,7 +903,11 @@ const sidecarFailureSnapshot = {
   timestamp: savedRuntimeWorld.timestamp + 1,
 };
 failWorldEditorPersist = true;
-await assert.rejects(saveHarness.applySnapshot(sidecarFailureSnapshot), /injected sidecar persistence failure/);
+await saveHarness.applySnapshot(sidecarFailureSnapshot);
+assert.deepEqual(sidecarFailureReports, [{
+  snapshotName: sidecarFailureSnapshot.name,
+  message: "injected sidecar persistence failure",
+}], "post-commit sidecar errors must be reported without rejecting the committed restore");
 assert.equal(saveHarness.getCurrentSnapshot(), sidecarFailureSnapshot,
   "the current snapshot must follow the committed world even when sidecar persistence fails");
 assert.equal(worldAssetClearCalls, 2,
