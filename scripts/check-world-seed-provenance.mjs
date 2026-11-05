@@ -25,7 +25,7 @@ assert.ok(reseedBody.includes('this.fieldSampler.setGenerator(this.generator)'))
 assert.ok(reseedBody.includes('worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)'),
   'reseed must retain the selected authored surface identity')
 
-const saveWorldAt = renderer.indexOf('  saveWorld(options: { checkpoint?: boolean } = {})')
+const saveWorldAt = renderer.indexOf('  saveWorld(options:')
 const loadWorldAt = renderer.indexOf('  loadWorld(options:', saveWorldAt)
 assert.ok(saveWorldAt >= 0 && loadWorldAt > saveWorldAt, 'renderer saveWorld method must exist')
 const saveWorldBody = renderer.slice(saveWorldAt, loadWorldAt)
