@@ -67,10 +67,15 @@ export class AgentVisualRuntime {
     private readonly assets: WorldAssetRuntime,
     transform: AgentGridWorldTransform,
     private readonly resolveWorldPosition: AgentVisualWorldPositionResolver = position => position,
+    private readonly sourceAssetId?: string,
   ) {
     const validation = validateAgentGridWorldTransform(transform)
     if (!validation.valid || !validation.transform) {
       throw new TypeError(`Invalid agent visual grid/world transform: ${validation.errors.join('; ')}`)
+    }
+    if (sourceAssetId !== undefined &&
+        (typeof sourceAssetId !== 'string' || !sourceAssetId.trim() || sourceAssetId.length > 512)) {
+      throw new TypeError('Agent visual sourceAssetId must be a non-empty string')
     }
     // Store a validated detached copy so caller mutation cannot alter live projection.
     this.transform = validation.transform
@@ -122,19 +127,22 @@ export class AgentVisualRuntime {
     const current = emptyDiagnostics(true)
     current.agents = agents.length
     const aliveIds = new Set<number>()
-    const source = this.assets.getSemanticSource(profile.semanticEntryId)
+    const semanticSource = this.assets.getSemanticSource(profile.semanticEntryId)
+    const source = semanticSource &&
+      (this.sourceAssetId === undefined || semanticSource.id === this.sourceAssetId)
+      ? semanticSource
+      : undefined
 
     if (!source) {
       current.awaitingAsset = agents.length
-      const liveIds = new Set(agents.map(agent => agent.id))
-      // The source may have been explicitly removed. Drop dead agents and stale
-      // runtime handles rather than reporting instances that no longer exist.
-      for (const [agentId, tracked] of [...this.tracked]) {
-        if (liveIds.has(agentId) && this.assets.hasInstance(tracked.instanceId)) continue
+      // A missing or replaced source is not a valid substitute, even when it
+      // shares the same semantic entry. Remove old projections until the exact
+      // user-selected sourceAssetId is explicitly loaded again.
+      for (const tracked of this.tracked.values()) {
         if (this.assets.removeInstance(tracked.instanceId)) current.removed += 1
-        this.tracked.delete(agentId)
       }
-      current.instances = this.tracked.size
+      this.tracked.clear()
+      current.instances = 0
       this.diagnostics = current
       return { ...current }
     }
