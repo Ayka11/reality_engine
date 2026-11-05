@@ -114,7 +114,7 @@ const pendingPlacements = [
   { ...runtime.snapshotPlacements()[0], instanceId: 'fauna.creature:pending', semanticEntryId: 'fauna.creature' },
   { ...runtime.snapshotPlacements()[0], instanceId: 'oak:deferred', x: 123 },
 ]
-const materializedOptions: Array<{ x: number; y: number; z: number; scale: number; rotationY: number }> = []
+const materializedOptions: Array<{ x: number; y: number; z: number; scale: number; rotationY: number; sourceAssetId: string }> = []
 const placementMaterializer = materializeExternalAssetPlacements({
   placeInstance: (_instanceId, _semanticId, options) => {
     materializedOptions.push(options)
@@ -125,8 +125,8 @@ assert.equal(placementMaterializer.restoredCount, 1,
   'only exact source and semantic matches should be materialized')
 assert.deepEqual(placementMaterializer.restoredIds, ['oak:instance:1'])
 assert.deepEqual(materializedOptions, [
-  { x: 4, y: 0, z: 8, scale: 1, rotationY: 0 },
-  { x: 123, y: 0, z: 8, scale: 1, rotationY: 0 },
+  { x: 4, y: 0, z: 8, scale: 1, rotationY: 0, sourceAssetId: 'oak' },
+  { x: 123, y: 0, z: 8, scale: 1, rotationY: 0, sourceAssetId: 'oak' },
 ], 'restoration must pass saved absolute coordinates, scale and rotation to every matching placement')
 assert.deepEqual(placementMaterializer.remaining.map(placement => placement.instanceId), [
   'tree:other-source',
