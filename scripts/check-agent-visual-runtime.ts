@@ -207,4 +207,32 @@ assert.equal(waiting.awaitingAsset, 2,
 assert.equal(waiting.instances, 0)
 emptyRuntime.dispose()
 
-console.log('Agent visual runtime exact clip mapping, 2D-to-world placement, origin rebasing, transient persistence and lifecycle: PASS')
+const { AgentSystem } = await import('../src/modes/agents/AgentSystem.ts')
+const observedSystem = new AgentSystem()
+const observedSnapshots: readonly Agent[][] = []
+const mutableObservedSnapshots: Agent[][] = observedSnapshots as Agent[][]
+let observerCalls = 0
+const unsubscribe = observedSystem.onAgentsChanged(snapshot => {
+  observerCalls += 1
+  mutableObservedSnapshots.push(snapshot as Agent[])
+})
+observedSystem.spawn(18, 14, 3)
+assert.equal(observerCalls, 1, 'spawning must notify visual observers once after the population is added')
+const exposed = mutableObservedSnapshots[0][0]
+const authoritativeEnergyWeight = observedSystem.agents[0].genome.seekEnergyW
+exposed.genome.seekEnergyW = 999
+exposed.memory[0] = 999
+exposed.planBias.seekInfoW = 999
+assert.equal(observedSystem.agents[0].genome.seekEnergyW, authoritativeEnergyWeight,
+  'observer snapshots must not expose mutable genome objects')
+assert.notEqual(observedSystem.agents[0].memory[0], 999,
+  'observer snapshots must not expose the authoritative agent memory array')
+assert.equal(observedSystem.agents[0].planBias.seekInfoW, undefined,
+  'observer snapshots must detach nested plan-bias records')
+observedSystem.step(new Float32Array(36 * 28 * 12), 36, 28, 12, 10)
+assert.equal(observerCalls, 2, 'completed simulation steps must notify visual observers')
+unsubscribe()
+observedSystem.step(new Float32Array(36 * 28 * 12), 36, 28, 12, 10)
+assert.equal(observerCalls, 2, 'unsubscribed observers must no longer receive agent ticks')
+
+console.log('Agent visual runtime exact clip mapping, 2D-to-world placement, origin rebasing, transient persistence, lifecycle and safe agent notifications: PASS')
