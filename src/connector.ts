@@ -1720,8 +1720,8 @@ win['configureAgentVisuals'] = (configuration: {
     throw new TypeError('Agent visual sourceAssetId must be a non-empty string')
   }
 
-  const selectedSource = world.worldAssetRuntime.getSemanticSource(profileValidation.profile.semanticEntryId)
-  if (!selectedSource || selectedSource.id !== configuration.sourceAssetId) {
+  const selectedSource = world.worldAssetRuntime.get(configuration.sourceAssetId)
+  if (!selectedSource || selectedSource.semanticEntryId !== profileValidation.profile.semanticEntryId) {
     throw new Error('The exact selected GLTF source is not loaded for this semantic entry')
   }
 
@@ -1758,8 +1758,8 @@ win['syncAgentVisuals'] = () => {
         saved.transform.gridDimensions.depth !== 1) {
       return { configured: false, configurationError: 'Saved agent visual transform dimensions do not match the active grid' }
     }
-    const selectedSource = world.worldAssetRuntime.getSemanticSource(saved.profile.semanticEntryId)
-    if (!selectedSource || selectedSource.id !== saved.sourceAssetId) {
+    const selectedSource = world.worldAssetRuntime.get(saved.sourceAssetId)
+    if (!selectedSource || selectedSource.semanticEntryId !== saved.profile.semanticEntryId) {
       return {
         configured: false,
         awaitingAsset: true,
