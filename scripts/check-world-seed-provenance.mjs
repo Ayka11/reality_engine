@@ -24,6 +24,17 @@ const reseedBody = renderer.slice(reseedAt, renderer.indexOf('\n  dispose()', re
 assert.ok(reseedBody.includes('this.fieldSampler.setGenerator(this.generator)'))
 assert.ok(reseedBody.includes('worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)'),
   'reseed must retain the selected authored surface identity')
+
+const saveWorldAt = renderer.indexOf('  saveWorld(options: { checkpoint?: boolean } = {})')
+const loadWorldAt = renderer.indexOf('  loadWorld(options:', saveWorldAt)
+assert.ok(saveWorldAt >= 0 && loadWorldAt > saveWorldAt, 'renderer saveWorld method must exist')
+const saveWorldBody = renderer.slice(saveWorldAt, loadWorldAt)
+const chunkWriteAt = saveWorldBody.lastIndexOf('this.persistence.saveChunk(cx, cy, cz, list)')
+const activeSeedCommitAt = saveWorldBody.indexOf('saveActiveWorldSeed(this.generator.seed)')
+assert.ok(chunkWriteAt >= 0 && activeSeedCommitAt > chunkWriteAt,
+  'active seed must be published only after all seed-scoped chunk writes')
+assert.match(saveWorldBody, /failedPersistenceOperations\.length === 0 && !saveActiveWorldSeed\(this\.generator\.seed\)/,
+  'an incomplete sidecar/chunk save must not switch startup to the imported seed namespace')
 assert.equal(reseedBody.includes('worldViewContract.setSeed(newSeed)'), false,
   'procedural generator reseed must not overwrite an independently selected surface seed')
 
