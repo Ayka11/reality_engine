@@ -17,6 +17,7 @@ import { AgentSystem } from './modes/agents/AgentSystem'
 import { AgentPlanner } from './modes/agents/AgentPlanner'
 import { AgentVisualRuntime } from './modes/agents/AgentVisualRuntime'
 import { validateAgentVisualProfile } from './modes/agents/AgentVisualProfile'
+import { AgentVisualConfigurationStore } from './modes/agents/AgentVisualConfigurationStore'
 import {
   createPlanarAgentGridWorldTransform,
   validateAgentGridWorldTransform,
@@ -959,6 +960,7 @@ function getNF():  number { return (win['NF'] as number) || 12 }
 const agentSystem  = new AgentSystem()
 const agentPlanner = new AgentPlanner()
 let agentVisualRuntime: AgentVisualRuntime | null = null
+const agentVisualConfigurationStore = new AgentVisualConfigurationStore()
 
 // Agent visualization is deliberately opt-in: the user must load a model,
 // choose its semantic entry and provide the grid/world transform + clip profile.
@@ -1672,10 +1674,28 @@ win['createPlanarAgentGridWorldTransform'] = (
   getW(), getH(), worldOrigin, cellSize,
 )
 
+function createAgentVisualRuntime(
+  world: InfiniteWorldRenderer,
+  configuration: { profile: AgentVisualConfiguration['profile']; transform: AgentVisualConfiguration['transform']; sourceAssetId: string },
+): AgentVisualRuntime {
+  const runtime = new AgentVisualRuntime(
+    world.worldAssetRuntime,
+    configuration.transform,
+    (position) => ({
+      ...position,
+      y: world.getSurfaceHeightAt(position.x, position.z) + position.y,
+    }),
+    configuration.sourceAssetId,
+  )
+  runtime.setProfile(configuration.profile)
+  return runtime
+}
+
 /** Configure transient GLTF representations for the active modes/agents system. */
 win['configureAgentVisuals'] = (configuration: {
   profile: unknown
   transform: unknown
+  sourceAssetId: string
 }) => {
   const world = getInfiniteWorld()
   if (!world) throw new Error('Infinite World renderer is not initialized')
@@ -1695,34 +1715,70 @@ win['configureAgentVisuals'] = (configuration: {
   if (!profileValidation.valid || !profileValidation.profile) {
     throw new TypeError(`Invalid agent visual profile: ${profileValidation.errors.join('; ')}`)
   }
+  if (typeof configuration.sourceAssetId !== 'string' ||
+      !configuration.sourceAssetId.trim() || configuration.sourceAssetId.length > 512) {
+    throw new TypeError('Agent visual sourceAssetId must be a non-empty string')
+  }
 
-  const nextRuntime = new AgentVisualRuntime(
-    world.worldAssetRuntime,
+  const selectedSource = world.worldAssetRuntime.getSemanticSource(profileValidation.profile.semanticEntryId)
+  if (!selectedSource || selectedSource.id !== configuration.sourceAssetId) {
+    throw new Error('The exact selected GLTF source is not loaded for this semantic entry')
+  }
+
+  const savedConfiguration: AgentVisualConfiguration = {
+    schemaVersion: 'agent-visual-configuration-v1',
+    sourceAssetId: configuration.sourceAssetId,
+    profile: profileValidation.profile,
     transform,
-    (position) => ({
-      ...position,
-      y: world.getSurfaceHeightAt(position.x, position.z) + position.y,
-    }),
-  )
-  nextRuntime.setProfile(profileValidation.profile)
+  }
+  const nextRuntime = createAgentVisualRuntime(world, savedConfiguration)
+  const diagnostics = nextRuntime.sync(agentSystem.agents)
   agentVisualRuntime?.dispose()
   agentVisualRuntime = nextRuntime
-  const diagnostics = agentVisualRuntime.sync(agentSystem.agents)
+  const configurationSaved = agentVisualConfigurationStore.save(savedConfiguration)
   return {
     profile: agentVisualRuntime.getProfile(),
     diagnostics,
+    configurationSaved,
   }
 }
 
-/** Retry after a semantic GLTF source was explicitly imported/loaded. */
-win['syncAgentVisuals'] = () => agentVisualRuntime?.sync(agentSystem.agents)
-  ?? { configured: false }
+/**
+ * Restore saved mapping only after the user explicitly imports its exact source.
+ * No asset URL is stored and this code never initiates an external download.
+ */
+win['syncAgentVisuals'] = () => {
+  if (!agentVisualRuntime) {
+    const saved = agentVisualConfigurationStore.load()
+    if (!saved) return { configured: false }
+    const world = getInfiniteWorld()
+    if (!world) return { configured: false, awaitingWorld: true }
+    if (saved.transform.gridDimensions.width !== getW() ||
+        saved.transform.gridDimensions.height !== getH() ||
+        saved.transform.gridDimensions.depth !== 1) {
+      return { configured: false, configurationError: 'Saved agent visual transform dimensions do not match the active grid' }
+    }
+    const selectedSource = world.worldAssetRuntime.getSemanticSource(saved.profile.semanticEntryId)
+    if (!selectedSource || selectedSource.id !== saved.sourceAssetId) {
+      return {
+        configured: false,
+        awaitingAsset: true,
+        sourceAssetId: saved.sourceAssetId,
+        semanticEntryId: saved.profile.semanticEntryId,
+      }
+    }
+    agentVisualRuntime = createAgentVisualRuntime(world, saved)
+  }
+  return agentVisualRuntime.sync(agentSystem.agents)
+}
 win['getAgentVisualDiagnostics'] = () => agentVisualRuntime?.diagnosticsSnapshot()
   ?? { configured: false, agents: 0, instances: 0, created: 0, updated: 0, animated: 0, stopped: 0, removed: 0, awaitingAsset: 0, missingClip: 0 }
+win['getSavedAgentVisualConfiguration'] = () => agentVisualConfigurationStore.load()
 win['clearAgentVisuals'] = () => {
   agentVisualRuntime?.dispose()
   agentVisualRuntime = null
-  return { configured: false }
+  const configurationCleared = agentVisualConfigurationStore.clear()
+  return { configured: false, configurationCleared }
 }
 
 // Called from index.html spawn buttons and from Game Dev mode
