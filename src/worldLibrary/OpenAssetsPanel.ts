@@ -8,6 +8,7 @@
 
 import { worldAssetProviders, type WorldAssetProvider } from './AssetProviders'
 import { discoverPolyHavenAssets, resolvePolyHavenRuntimeUrl, type DiscoveredAsset } from './AssetDiscovery'
+import { AGENT_VISUAL_STATES, type AgentState } from '../modes/agents/AgentVisualProfile'
 
 const esc = (value: string) => value.replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -38,6 +39,11 @@ export function mountOpenAssetsPanel() {
   let importMessage = ''
   const importedSemantic = new Map<string, string>()
   const importedAnimations = new Map<string, string[]>()
+  let selectedAgentAssetId = ''
+  const agentClipSelections = new Map<AgentState, string>()
+  let agentFallbackClip = ''
+  let agentVisualMessage = ''
+  let agentVisualError = ''
 
   const render = () => {
     host.innerHTML = open ? `
@@ -59,6 +65,43 @@ export function mountOpenAssetsPanel() {
         <div style="font-size:8px;color:var(--sub);margin-bottom:5px">
           ${loading ? 'Loading provider catalogue…' : importing ? 'Resolving runtime asset…' : error ? esc(error) : importMessage || (providerId==='polyhaven' ? 'Poly Haven live catalogue' : 'Provider registry metadata')}
         </div>
+        <details style="margin:8px 0;padding:7px;border:1px solid rgba(124,111,205,.25);border-radius:6px;background:rgba(8,9,17,.55)">
+          <summary style="cursor:pointer;font-size:9px;font-weight:600;color:#c8c3ff">Agent Visual Binding · optional</summary>
+          <div style="font-size:7.5px;color:var(--sub);margin:5px 0">Create temporary GLTF representations for the active 2D agents. You choose the world origin, grid spacing and exact imported animation clips. The visual instances are regenerated from simulation state and are not included in world saves.</div>
+          <div style="display:grid;grid-template-columns:1.5fr repeat(3,minmax(55px,.6fr));gap:5px;margin:6px 0">
+            <label style="font-size:7px;color:var(--sub)">Imported model
+              <select id="agentVisualAsset" style="display:block;width:100%;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px">
+                <option value="">Select imported model…</option>
+                ${[...importedSemantic.entries()].map(([id, semantic]) => `<option value="${esc(id)}" ${selectedAgentAssetId===id?'selected':''}>${esc(id)} · ${esc(semantic)}</option>`).join('')}
+              </select>
+            </label>
+            ${[['agentVisualOriginX','Origin X'],['agentVisualOriginY','Origin Y'],['agentVisualOriginZ','Origin Z']].map(([id,label])=>`<label style="font-size:7px;color:var(--sub)">${label}<input id="${id}" type="number" step="any" value="0" style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px"></label>`).join('')}
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(90px,1fr));gap:5px;margin-bottom:6px">
+            <label style="font-size:7px;color:var(--sub)">Grid cell size<input id="agentVisualCellSize" type="number" min="0.000001" step="any" value="1" style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px"></label>
+            <label style="font-size:7px;color:var(--sub)">Model scale<input id="agentVisualScale" type="number" min="0.000001" step="any" value="1" style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px"></label>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-bottom:6px">
+            ${AGENT_VISUAL_STATES.map(state=>`
+              <label style="font-size:7px;color:var(--sub)">${esc(state)} animation
+                <select data-agent-state-clip="${state}" style="display:block;width:100%;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px">
+                  <option value="">No mapping</option>
+                  ${(importedAnimations.get(selectedAgentAssetId) ?? []).map(name=>`<option value="${esc(name)}" ${agentClipSelections.get(state)===name?'selected':''}>${esc(name)}</option>`).join('')}
+                </select>
+              </label>`).join('')}
+            <label style="font-size:7px;color:var(--sub)">Fallback animation
+              <select id="agentVisualFallback" style="display:block;width:100%;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px">
+                <option value="">No fallback</option>
+                ${(importedAnimations.get(selectedAgentAssetId) ?? []).map(name=>`<option value="${esc(name)}" ${agentFallbackClip===name?'selected':''}>${esc(name)}</option>`).join('')}
+              </select>
+            </label>
+          </div>
+          <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+            <button id="agentVisualConfigure" class="pill on" style="font-size:8px" ${selectedAgentAssetId?'':'disabled'}>Bind visuals</button>
+            <button id="agentVisualClear" class="pill" style="font-size:8px">Clear binding</button>
+            <span style="font-size:7px;color:var(--sub)">${esc(agentVisualError || agentVisualMessage || 'Set the world-space center of grid cell (0,0), then map the available clips.')}</span>
+          </div>
+        </details>
         <div style="max-height:270px;overflow:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
           ${results.filter(a => !query || (a.name+' '+a.id+' '+a.tags.join(' ')).toLowerCase().includes(query.toLowerCase())).slice(0,30).map(a=>`
             <div style="padding:6px;border:1px solid rgba(255,255,255,.07);border-radius:6px;background:rgba(8,9,17,.6)">
@@ -88,6 +131,67 @@ export function mountOpenAssetsPanel() {
     document.getElementById('openAssetsProvider')?.addEventListener('change',(e)=>{providerId=(e.target as HTMLSelectElement).value;results=[];error='';render()})
     document.getElementById('openAssetsQuery')?.addEventListener('input',(e)=>{query=(e.target as HTMLInputElement).value;render()})
     document.getElementById('openAssetsBrowse')?.addEventListener('click',browse)
+    document.getElementById('agentVisualAsset')?.addEventListener('change',(e)=>{
+      selectedAgentAssetId=(e.target as HTMLSelectElement).value
+      agentClipSelections.clear()
+      agentFallbackClip=''
+      agentVisualError=''
+      render()
+    })
+    host.querySelectorAll<HTMLSelectElement>('[data-agent-state-clip]').forEach(select=>select.addEventListener('change',()=>{
+      const state=select.getAttribute('data-agent-state-clip') as AgentState | null
+      if(!state)return
+      if(select.value)agentClipSelections.set(state,select.value)
+      else agentClipSelections.delete(state)
+    }))
+    document.getElementById('agentVisualFallback')?.addEventListener('change',(e)=>{agentFallbackClip=(e.target as HTMLSelectElement).value})
+    document.getElementById('agentVisualConfigure')?.addEventListener('click',()=>{
+      const semanticEntryId=importedSemantic.get(selectedAgentAssetId)
+      const transformFactory=(window as any).createPlanarAgentGridWorldTransform
+      const configure=(window as any).configureAgentVisuals
+      const readNumber=(id:string,label:string)=>{
+        const value=Number((document.getElementById(id) as HTMLInputElement | null)?.value)
+        if(!Number.isFinite(value))throw new TypeError(label+' must be a finite number')
+        return value
+      }
+      try{
+        if(!semanticEntryId)throw new Error('Choose a successfully imported model first')
+        if(typeof transformFactory!=='function'||typeof configure!=='function')throw new Error('Agent visual runtime is not initialized')
+        const cellSize=readNumber('agentVisualCellSize','Grid cell size')
+        const scale=readNumber('agentVisualScale','Model scale')
+        if(cellSize<=0)throw new RangeError('Grid cell size must be positive')
+        if(scale<=0)throw new RangeError('Model scale must be positive')
+        const origin={
+          x:readNumber('agentVisualOriginX','Origin X'),
+          y:readNumber('agentVisualOriginY','Origin Y'),
+          z:readNumber('agentVisualOriginZ','Origin Z'),
+        }
+        const clips:Partial<Record<AgentState,string>>={}
+        host.querySelectorAll<HTMLSelectElement>('[data-agent-state-clip]').forEach(select=>{
+          const state=select.getAttribute('data-agent-state-clip') as AgentState | null
+          if(state&&select.value)clips[state]=select.value
+        })
+        const fallback=(document.getElementById('agentVisualFallback') as HTMLSelectElement | null)?.value
+        const result=configure({
+          transform:transformFactory(origin,cellSize),
+          profile:{schemaVersion:'agent-visual-profile-v1',semanticEntryId,scale,fadeDuration:0.2,clips,...(fallback?{fallbackClip:fallback}:{})},
+        })
+        const d=result?.diagnostics ?? {}
+        agentVisualMessage='Bound '+(d.created??0)+' agent(s); '+(d.animated??0)+' animation(s) started; '+(d.awaitingAsset??0)+' waiting for asset; '+(d.missingClip??0)+' missing clip(s).'
+        agentVisualError=''
+      }catch(error){agentVisualError=error instanceof Error?error.message:'Could not configure agent visuals';agentVisualMessage=''}
+      render()
+    })
+    document.getElementById('agentVisualClear')?.addEventListener('click',()=>{
+      try{
+        const clear=(window as any).clearAgentVisuals
+        if(typeof clear!=='function')throw new Error('Agent visual runtime is not initialized')
+        clear()
+        agentVisualMessage='Agent visual binding cleared.'
+        agentVisualError=''
+      }catch(error){agentVisualError=error instanceof Error?error.message:'Could not clear agent visuals';agentVisualMessage=''}
+      render()
+    })
     host.querySelectorAll('[data-import-asset]').forEach(b=>b.addEventListener('click',()=>importAsset(b.getAttribute('data-import-asset')||'')))
     host.querySelectorAll('[data-scatter-asset]').forEach(b=>b.addEventListener('click',()=>scatterAsset(b.getAttribute('data-scatter-asset')||'')))
     host.querySelectorAll('[data-play-animation]').forEach(button => button.addEventListener('click', () => {
@@ -174,6 +278,7 @@ export function mountOpenAssetsPanel() {
       const animationNames = (window as any).worldExternalAssetAnimationNames?.(asset.id)
       importedAnimations.set(asset.id, Array.isArray(animationNames) ? animationNames.filter((name: unknown): name is string => typeof name === 'string') : [])
       if (manifestResult.manifestEntry?.semanticEntryId) importedSemantic.set(asset.id, manifestResult.manifestEntry.semanticEntryId)
+      if (!selectedAgentAssetId) selectedAgentAssetId = asset.id
       importMessage = 'Imported ' + asset.name + ' as ' + (manifestResult.manifestEntry?.semanticEntryId || 'unmapped asset')
         + (importedAnimations.get(asset.id)?.length ? ' · ' + importedAnimations.get(asset.id)!.length + ' animation clip(s)' : ' · no animation clips')
     } catch (e) {
