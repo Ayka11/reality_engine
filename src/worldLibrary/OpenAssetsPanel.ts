@@ -8,7 +8,8 @@
 
 import { worldAssetProviders, type WorldAssetProvider } from './AssetProviders'
 import { discoverPolyHavenAssets, resolvePolyHavenRuntimeUrl, type DiscoveredAsset } from './AssetDiscovery'
-import { AGENT_VISUAL_STATES, type AgentState } from '../modes/agents/AgentVisualProfile'
+import { AGENT_VISUAL_STATES } from '../modes/agents/AgentVisualProfile'
+import type { AgentState } from '../modes/agents/AgentSystem'
 
 const esc = (value: string) => value.replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
