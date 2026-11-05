@@ -113,7 +113,7 @@ export type ExternalAssetPlacementMaterializer = {
   placeInstance: (
     instanceId: string,
     semanticEntryId: string,
-    options: { x: number; y: number; z: number; scale: number; rotationY: number },
+    options: { x: number; y: number; z: number; scale: number; rotationY: number; sourceAssetId: string },
   ) => unknown | null | undefined
 }
 
@@ -152,6 +152,7 @@ export function materializeExternalAssetPlacements(
         z: placement.z,
         scale: placement.scale,
         rotationY: placement.rotationY,
+        sourceAssetId,
       },
     )
     if (instance) restoredIds.push(placement.instanceId)
