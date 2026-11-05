@@ -1433,6 +1433,11 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
     const manifest = (window as unknown as { worldAssetManifest?: WorldAssetImportManifest }).worldAssetManifest;
     world?.persistPortableWorldSnapshot(manifest);
   },
+  reportWorldEditorPersistenceFailure: (snapshotName, error) => {
+    const message = `World "${snapshotName}" was loaded in memory, but its editor data could not be saved. Export a backup before reloading.`;
+    _exportStatus(message, false);
+    console.warn(message, error);
+  },
   clearWorldAssetRuntime: () => {
     const world = (window as unknown as {
       infiniteWorld?: { clearExternalAssetRuntime: () => void }

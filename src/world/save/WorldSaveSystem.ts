@@ -119,6 +119,8 @@ interface SaveContext {
   restoreWorldEditorRuntimeCheckpoint?: (checkpoint: unknown) => void;
   /** Best-effort persistence after the enclosing world transaction commits. */
   persistWorldEditorSnapshot?: () => void;
+  /** Surface a sidecar persistence failure after the authoritative world import has already committed. */
+  reportWorldEditorPersistenceFailure?: (snapshotName: string, error: unknown) => void;
   /** Release non-portable external assets after the authoritative import transaction commits. */
   clearWorldAssetRuntime?: () => void;
   getCausalLog?: () => unknown[];
@@ -490,8 +492,30 @@ export class WorldSaveSystem {
     // The world transaction has committed; release the previous world's runtime
     // objects even if the subsequent sidecar persistence operation fails.
     this.context.clearWorldAssetRuntime?.();
-    this.context.persistWorldEditorSnapshot?.();
-    console.info(`World "${snapshot.name}" fully restored.`);
+
+    // The authoritative world transaction is already committed. A sidecar
+    // persistence failure must not turn a successful in-memory import into a
+    // rejected Load operation (or imply that the engine transaction rolled back).
+    let editorPersistenceCommitted = true;
+    try {
+      this.context.persistWorldEditorSnapshot?.();
+    } catch (error) {
+      editorPersistenceCommitted = false;
+      try {
+        this.context.reportWorldEditorPersistenceFailure?.(snapshot.name, error);
+      } catch (reportError) {
+        console.warn("[persistence] Could not report the editor sidecar persistence failure", reportError);
+      }
+      console.warn(
+        `[persistence] World "${snapshot.name}" is active in memory, but Infinite World editor persistence did not commit; reload may require recovery.`,
+        error,
+      );
+    }
+    if (editorPersistenceCommitted) {
+      console.info(`World "${snapshot.name}" fully restored.`);
+    } else {
+      console.warn(`World "${snapshot.name}" restored in memory with incomplete editor persistence.`);
+    }
   }
 
   private async saveToIndexedDB(snapshot: WorldSnapshot): Promise<void> {
