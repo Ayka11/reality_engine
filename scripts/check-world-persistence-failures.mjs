@@ -427,6 +427,10 @@ assert.ok(saveWorldStart >= 0 && loadWorldStart > saveWorldStart,
 const saveWorldSource = rendererSource.slice(saveWorldStart, loadWorldStart);
 assert.match(saveWorldSource, /knownChunks\(\{ recoverOrphans: true \}\)/,
   "saveWorld must delete orphaned durable chunks that would otherwise be resurrected at startup");
+assert.match(saveWorldSource, /if \(!fieldCheckpointSaved\) \{\s*failedPersistenceOperations\.push\('authoritative field checkpoint'\)/,
+  "a failed authoritative field checkpoint must be included in the durable-save failure report");
+assert.match(saveWorldSource, /if \(!checkpointSaved\) \{\s*failedPersistenceOperations\.push\('terrain deformation checkpoint'\)/,
+  "a failed terrain deformation checkpoint must be included in the durable-save failure report");
 
 const clearOrphanObjects = [{ id: 'clear-orphan-object', x: -35, y: 1, z: 33, kind: 'tower' }];
 const clearOrphanStorageKey = "reality-engine-world:seed-a:chunk:-2,0,1";
