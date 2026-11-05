@@ -611,10 +611,15 @@ export class InfiniteWorldRenderer {
       throw new TypeError('Infinite-world editor snapshot has an invalid envelope')
     }
 
+    // Preserve the backward-compatible "field omitted" case, but fail closed
+    // when imported JSON explicitly supplies null or another non-array value.
+    const assetPlacements = snapshot?.assetPlacements === undefined
+      ? []
+      : snapshot.assetPlacements
     const assetPlacementValidation = validateExternalAssetPlacements(
-      snapshot?.assetPlacements ?? [],
+      assetPlacements,
       snapshot?.assetManifest,
-      Boolean(snapshot?.assetPlacements?.length),
+      Array.isArray(assetPlacements) && assetPlacements.length > 0,
     )
     if (!assetPlacementValidation.valid) {
       throw new TypeError(`Infinite-world asset placements are invalid: ${assetPlacementValidation.errors.join('; ')}`)
