@@ -68,8 +68,8 @@ assert.match(reseedBody, /newSeed !== previousSeed && !this\.persistence\.clear\
 const targetClearAt = reseedBody.indexOf('newSeed !== previousSeed && !this.persistence.clear()')
 const surfacePersistAt = reseedBody.indexOf("this.persistActiveSurfaceProvider()")
 const seedPublishAt = reseedBody.indexOf('saveActiveWorldSeed(newSeed)')
-const journalFinishAt = reseedBody.indexOf('finishSaveTransaction(ready)')
-assert.ok(targetClearAt >= 0 && surfacePersistAt > targetClearAt && seedPublishAt > surfacePersistAt && journalFinishAt > seedPublishAt,
+const reseedJournalFinishAt = reseedBody.indexOf('finishSaveTransaction(ready)')
+assert.ok(targetClearAt >= 0 && surfacePersistAt > targetClearAt && seedPublishAt > surfacePersistAt && reseedJournalFinishAt > seedPublishAt,
   'target namespace cleanup, surface persistence, active-seed publication and journal close must be ordered')
 
 
