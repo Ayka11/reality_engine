@@ -1342,8 +1342,8 @@ assert.match(mainSource, /clearWorldAssetRuntime: \(\) => \{[\s\S]*?world\?\.cle
   "the application must wire post-commit cleanup to the active renderer asset runtime");
 assert.match(rendererSource, /clearExternalAssetRuntime\(\)\s*\{\s*this\.suppressAssetPlacementAutosave = true\s*try\s*\{\s*this\.worldAssetRuntime\.clear\(\)\s*\} finally \{\s*this\.suppressAssetPlacementAutosave = false\s*\}/,
   "post-commit cleanup must release old asset runtime resources without scheduling a stale placement autosave");
-assert.match(rendererSource, /clearSavedWorld\(\)\s*\{\s*this\.pendingExternalAssetPlacements = \[\]\s*this\.clearExternalAssetRuntime\(\)/,
-  "clearing or reseeding a world must also discard pending external placement descriptors");
+assert.match(rendererSource, /clearSavedWorld\(\): boolean\s*\{\s*if \(this\.saveTimer !== null\) \{\s*window\.clearTimeout\(this\.saveTimer\)[\s\S]*?this\.pendingExternalAssetPlacements = \[\]\s*this\.clearExternalAssetRuntime\(\)/,
+  "clearing or reseeding a world must cancel stale autosaves and discard pending external placement descriptors");
 assert.match(worldAssetRuntimeSource, /private generation = 0/);
 assert.match(worldAssetRuntimeSource, /const generation = this\.generation/);
 assert.match(worldAssetRuntimeSource, /generation !== this\.generation/,
