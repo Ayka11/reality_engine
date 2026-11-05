@@ -48,6 +48,9 @@ export class WorldPersistence {
   private readonly provenanceKey: string
   private readonly terrainDeformationKey: string
   private readonly terrainDeformationCheckpointKey: string
+  private readonly saveTransactionKey: string
+  private saveTransactionDepth = 0
+  private saveTransactionFailed = false
   private readonly loaded = new Set<string>()
   private readonly cache = new Map<string, WorldObject[]>()
 
@@ -62,10 +65,69 @@ export class WorldPersistence {
     this.provenanceKey = `reality-engine-world:${seed}:provenance`
     this.terrainDeformationKey = `reality-engine-world:${seed}:terrain-deformation`
     this.terrainDeformationCheckpointKey = `reality-engine-world:${seed}:terrain-deformation-checkpoint`
+    this.saveTransactionKey = `reality-engine-world:${seed}:save-transaction`
   }
 
   private key(cx: number, cy: number, cz: number) {
     return this.prefix + chunkKey(cx, cy, cz)
+  }
+
+  /** True when a prior multi-key world save did not reach its commit point. */
+  hasIncompleteSaveTransaction(): boolean {
+    if (this.saveTransactionDepth > 0) return false
+    try {
+      return localStorage.getItem(this.saveTransactionKey) !== null
+    } catch {
+      // If the marker cannot be inspected, restoration must fail closed.
+      return true
+    }
+  }
+
+  /**
+   * Open a crash-recovery barrier around a multi-key world mutation.
+   * An interrupted transaction blocks later restores until an explicit full
+   * import or clear operation repairs the namespace.
+   */
+  beginSaveTransaction(options: { recoverIncomplete?: boolean } = {}): boolean {
+    if (this.saveTransactionDepth > 0) {
+      this.saveTransactionDepth += 1
+      return true
+    }
+    try {
+      const existing = localStorage.getItem(this.saveTransactionKey)
+      if (existing !== null && !options.recoverIncomplete) return false
+      localStorage.setItem(this.saveTransactionKey, JSON.stringify({
+        version: 1,
+        seed: this.seed,
+        startedAt: Date.now(),
+      }))
+      this.saveTransactionDepth = 1
+      this.saveTransactionFailed = false
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** Finish one nesting level; only the outer successful commit clears the marker. */
+  finishSaveTransaction(success: boolean): boolean {
+    if (this.saveTransactionDepth <= 0) return false
+    if (!success) this.saveTransactionFailed = true
+    this.saveTransactionDepth -= 1
+    if (this.saveTransactionDepth > 0) {
+      return success && !this.saveTransactionFailed
+    }
+
+    const committed = !this.saveTransactionFailed
+    this.saveTransactionFailed = false
+    if (!committed) return false
+
+    try {
+      localStorage.removeItem(this.saveTransactionKey)
+      return localStorage.getItem(this.saveTransactionKey) === null
+    } catch {
+      return false
+    }
   }
 
   /**
@@ -84,6 +146,8 @@ export class WorldPersistence {
   }
 
   loadFieldState<T = unknown>(): T | null {
+    if (this.hasIncompleteSaveTransaction()) return null
+
     try {
       const raw = localStorage.getItem(this.fieldStateKey)
       if (!raw) return null
@@ -106,6 +170,8 @@ export class WorldPersistence {
   }
 
   loadFieldCheckpoint<T = unknown>(): T | null {
+    if (this.hasIncompleteSaveTransaction()) return null
+
     try {
       const raw = localStorage.getItem(this.fieldCheckpointKey)
       if (!raw) return null
@@ -150,6 +216,8 @@ export class WorldPersistence {
   }
 
   loadSurfaceProviderState<T = unknown>(): T | null {
+    if (this.hasIncompleteSaveTransaction()) return null
+
     let raw: string | null
     try {
       raw = localStorage.getItem(this.surfaceProviderKey)
@@ -195,6 +263,8 @@ export class WorldPersistence {
   }
 
   loadAssetManifestState<T = unknown>(): T | null {
+    if (this.hasIncompleteSaveTransaction()) return null
+
     let raw: string | null
     try {
       raw = localStorage.getItem(this.assetManifestKey)
@@ -240,6 +310,8 @@ export class WorldPersistence {
   }
 
   loadAssetPlacementsState<T = unknown>(): T | null {
+    if (this.hasIncompleteSaveTransaction()) return null
+
     let raw: string | null
     try {
       raw = localStorage.getItem(this.assetPlacementsKey)
@@ -285,6 +357,8 @@ export class WorldPersistence {
   }
 
   loadProvenanceState<T = unknown>(): T | null {
+    if (this.hasIncompleteSaveTransaction()) return null
+
     let raw: string | null
     try {
       raw = localStorage.getItem(this.provenanceKey)
@@ -325,6 +399,8 @@ export class WorldPersistence {
   }
 
   loadTerrainDeformationState<T = unknown>(): T | null {
+    if (this.hasIncompleteSaveTransaction()) return null
+
     try {
       const raw = localStorage.getItem(this.terrainDeformationKey)
       if (!raw) return null
@@ -346,6 +422,8 @@ export class WorldPersistence {
   }
 
   loadTerrainDeformationCheckpoint<T = unknown>(): T | null {
+    if (this.hasIncompleteSaveTransaction()) return null
+
     try {
       const raw = localStorage.getItem(this.terrainDeformationCheckpointKey)
       if (!raw) return null
@@ -387,6 +465,8 @@ export class WorldPersistence {
   }
 
   loadChunk(cx: number, cy: number, cz: number): WorldObject[] {
+    if (this.hasIncompleteSaveTransaction()) return []
+
     const key = chunkKey(cx, cy, cz)
     const cached = this.cache.get(key)
     if (cached) return cached
@@ -444,6 +524,7 @@ export class WorldPersistence {
       // deleting the manifest and sidecars while unindexed chunks survive.
       return false
     }
+    if (!this.beginSaveTransaction({ recoverIncomplete: true })) return false
     const chunkStorageKeys = new Set(scannedChunkKeys)
 
     let raw: string | null = null
@@ -491,7 +572,8 @@ export class WorldPersistence {
     }
     this.loaded.clear()
     this.cache.clear()
-    return cleared
+    const committed = this.finishSaveTransaction(cleared)
+    return cleared && committed
   }
 
   chunkForObject(object: WorldObject) {
@@ -503,6 +585,8 @@ export class WorldPersistence {
   loadedChunks(): string[] { return [...this.loaded] }
 
   knownChunks(options: { recoverOrphans?: boolean } = {}): string[] {
+    if (this.hasIncompleteSaveTransaction()) return []
+
     let raw: string | null
     try {
       raw = localStorage.getItem(this.manifestKey)

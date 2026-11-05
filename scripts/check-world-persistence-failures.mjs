@@ -261,6 +261,39 @@ globalThis.localStorage = {
 
 const { WorldPersistence } = await import(await load("src/infinity/WorldPersistence.ts"));
 const persistence = new WorldPersistence("seed-a");
+
+// An interrupted multi-key save must be withheld as a whole. A complete explicit
+// recovery may replace its sidecars/chunks and remove the journal marker.
+const transactionalPersistence = new WorldPersistence("seed-transaction");
+const interruptedChunk = [{ id: "interrupted-object", x: 3, y: 0, z: 3, kind: "tree" }];
+assert.equal(transactionalPersistence.beginSaveTransaction(), true);
+assert.equal(transactionalPersistence.saveFieldState({ epoch: 1 }), true);
+assert.equal(transactionalPersistence.saveChunk(0, 0, 0, interruptedChunk), true);
+assert.equal(transactionalPersistence.finishSaveTransaction(false), false,
+  "a failed outer world transaction must leave its recovery marker in storage");
+const interruptedRestart = new WorldPersistence("seed-transaction");
+assert.equal(interruptedRestart.hasIncompleteSaveTransaction(), true);
+assert.equal(interruptedRestart.loadFieldState(), null,
+  "field snapshots must not be restored from an interrupted multi-key save");
+assert.equal(interruptedRestart.loadChunk(0, 0, 0).length, 0,
+  "chunk payloads must not be restored beside incomplete sidecars");
+assert.deepEqual(interruptedRestart.knownChunks({ recoverOrphans: true }), [],
+  "orphan recovery must also be withheld while a world transaction is incomplete");
+assert.equal(interruptedRestart.beginSaveTransaction(), false,
+  "ordinary autosaves must not silently overwrite an interrupted namespace");
+assert.equal(interruptedRestart.beginSaveTransaction({ recoverIncomplete: true }), true,
+  "an explicit full-world recovery may reopen the journaled namespace");
+const recoveredChunk = [{ id: "recovered-object", x: 4, y: 0, z: 4, kind: "house" }];
+assert.equal(interruptedRestart.saveFieldState({ epoch: 2 }), true);
+assert.equal(interruptedRestart.saveChunk(0, 0, 0, recoveredChunk), true);
+assert.equal(interruptedRestart.finishSaveTransaction(true), true,
+  "a successful complete recovery must clear the transaction marker");
+const recoveredRestart = new WorldPersistence("seed-transaction");
+assert.equal(recoveredRestart.hasIncompleteSaveTransaction(), false);
+assert.deepEqual(recoveredRestart.loadFieldState(), { epoch: 2 });
+assert.deepEqual(recoveredRestart.loadChunk(0, 0, 0), recoveredChunk,
+  "a committed recovery must restore the new field/chunk generation together");
+
 const fieldState = { schemaVersion: "world-field-state-v2", mutations: [{ id: 1 }] };
 
 assert.equal(persistence.saveFieldState(fieldState), true);
@@ -448,6 +481,8 @@ assert.equal(values.has(clearOrphanStorageKey), false,
   "clear must remove actual stored chunk keys rather than trusting manifest alone");
 assert.deepEqual(persistence.knownChunks({ recoverOrphans: true }), [],
   "clear must not leave orphaned chunks that can reappear on the next world load");
+assert.equal(persistence.hasIncompleteSaveTransaction(), false,
+  "a successful full clear must also remove its crash-recovery marker");
 
 // If storage enumeration is unavailable, clear must stop before deleting the
 // manifest or sidecars. Otherwise valid but unindexed chunks can survive and

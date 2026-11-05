@@ -337,6 +337,9 @@ export class InfiniteWorldRenderer {
     this.authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
     this.fieldSampler = new FieldSampler(this.generator, this.authoritativeField)
     this.persistence = new WorldPersistence(seed)
+    if (this.persistence.hasIncompleteSaveTransaction()) {
+      console.warn('[persistence] An interrupted world save was detected; saved editor data is withheld until the world is explicitly imported or cleared')
+    }
     const persistedAssetPlacements = this.persistence.loadAssetPlacementsState<unknown>()
     if (persistedAssetPlacements !== null) {
       const placementValidation = validateExternalAssetPlacements(persistedAssetPlacements)
@@ -817,14 +820,24 @@ export class InfiniteWorldRenderer {
   }
 
   persistPortableWorldSnapshot(assetManifest?: WorldAssetImportManifest): void {
+    if (!this.persistence.beginSaveTransaction({ recoverIncomplete: true })) {
+      const message = 'Could not open the world save recovery marker'
+      this.lastPersistenceFailures = [message]
+      throw new AggregateError([new Error(message)], `Infinite World persistence failed: ${message}`)
+    }
+
     const preflightFailures: string[] = []
     const surfaceStatus = this.persistActiveSurfaceProvider()
     if (surfaceStatus === 'failed') preflightFailures.push('world surface')
     if (assetManifest !== undefined && !this.persistence.saveAssetManifestState(assetManifest)) {
       preflightFailures.push('asset provenance manifest')
     }
+
     this.saveWorld({ checkpoint: false, preflightFailures })
-    const failures = this.lastPersistenceFailures
+    const failures = [...this.lastPersistenceFailures]
+    const committed = this.persistence.finishSaveTransaction(failures.length === 0)
+    if (!committed && failures.length === 0) failures.push('world save transaction commit')
+    this.lastPersistenceFailures = failures
     if (failures.length > 0) {
       throw new AggregateError(
         failures.map(label => new Error(`Could not persist ${label}`)),
@@ -835,6 +848,14 @@ export class InfiniteWorldRenderer {
 
   saveWorld(options: { checkpoint?: boolean; preflightFailures?: string[] } = {}) {
     const failedPersistenceOperations: string[] = [...(options.preflightFailures ?? [])]
+    const objects = this.objects.values()
+    if (!this.persistence.beginSaveTransaction()) {
+      failedPersistenceOperations.push('world save transaction marker')
+      this.lastPersistenceFailures = failedPersistenceOperations
+      console.warn('[persistence] World save was withheld because an earlier save is incomplete; explicitly import or clear the world to recover')
+      return objects.length
+    }
+
     // Explicit Save creates a stable checkpoint; autosave must not move that checkpoint.
     const fieldSnapshot = this.authoritativeField.serialize()
     if (!this.persistAuthoritativeFieldState()) failedPersistenceOperations.push('authoritative field state')
@@ -861,7 +882,6 @@ export class InfiniteWorldRenderer {
         console.warn('[persistence] Terrain deformation checkpoint failed; saved terrain edits may not survive reload')
       }
     }
-    const objects = this.objects.values()
     const groups = new Map<string, WorldObject[]>()
     for (const object of objects) {
       const { cx, cy, cz } = this.persistence.chunkForObject(object)
@@ -887,11 +907,14 @@ export class InfiniteWorldRenderer {
         failedPersistenceOperations.push(`save chunk ${key}`)
       }
     }
-    // The active seed is the startup commit selector for the seed-scoped
-    // namespace. Publish it only after every sidecar and chunk write succeeds;
-    // a failed import of another seed must not redirect restart into a partial world.
+    // The active seed is the startup selector. Publish it while the journal
+    // marker is still present, then remove the marker only after all writes pass.
     if (failedPersistenceOperations.length === 0 && !saveActiveWorldSeed(this.generator.seed)) {
       failedPersistenceOperations.push('active world seed')
+    }
+    const committed = this.persistence.finishSaveTransaction(failedPersistenceOperations.length === 0)
+    if (!committed && failedPersistenceOperations.length === 0) {
+      failedPersistenceOperations.push('world save transaction commit')
     }
     this.lastPersistenceFailures = failedPersistenceOperations
     if (failedPersistenceOperations.length > 0) {
@@ -903,6 +926,11 @@ export class InfiniteWorldRenderer {
   }
 
   loadWorld(options: { restoreFieldCheckpoint?: boolean } = {}) {
+    if (this.persistence.hasIncompleteSaveTransaction()) {
+      this.lastPersistenceFailures = ['interrupted world save transaction']
+      console.warn('[persistence] World restore was blocked because the last multi-key save did not commit; import a complete world package or clear the saved world')
+      return 0
+    }
     // Explicit Load restores the last manual checkpoint; startup can opt into the latest autosave.
     const checkpoint = options.restoreFieldCheckpoint === false
       ? null

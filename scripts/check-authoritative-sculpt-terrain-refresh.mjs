@@ -110,6 +110,12 @@ assert.match(saveWorldBody, /saveTerrainDeformationCheckpoint/);
 assert.match(saveWorldBody, /if \(!checkpointSaved\)/,
   "manual terrain checkpoint failures must be diagnosed rather than silently ignored");
 assert.match(saveWorldBody, /const failedPersistenceOperations: string\[\] = \[\.\.\.\(options\.preflightFailures \?\? \[\]\)\]/);
+assert.match(saveWorldBody, /beginSaveTransaction\(\)/,
+  "world save must open the crash-recovery barrier before mutating sidecars and chunks");
+assert.match(saveWorldBody, /finishSaveTransaction\(/,
+  "world save must clear the journal only after every persistence operation succeeds");
+assert.match(methodBody("loadWorld"), /hasIncompleteSaveTransaction\(\)/,
+  "world restore must fail closed after an interrupted multi-key save");
 assert.match(saveWorldBody, /if \(!this\.persistence\.deleteChunk\(cx, cy, cz\)\)/,
   "world save must detect failed chunk deletions");
 assert.match(saveWorldBody, /if \(!this\.persistence\.saveChunk\(cx, cy, cz, list\)\)/,
