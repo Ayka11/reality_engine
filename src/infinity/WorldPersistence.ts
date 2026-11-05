@@ -438,8 +438,13 @@ export class WorldPersistence {
   clear(): boolean {
     let cleared = true
     const scannedChunkKeys = this.scanStoredChunkStorageKeys()
-    if (scannedChunkKeys === null) cleared = false
-    const chunkStorageKeys = new Set(scannedChunkKeys ?? [])
+    if (scannedChunkKeys === null) {
+      // Without a complete key scan, orphaned chunks cannot be distinguished
+      // from manifest entries. Leave the durable world untouched rather than
+      // deleting the manifest and sidecars while unindexed chunks survive.
+      return false
+    }
+    const chunkStorageKeys = new Set(scannedChunkKeys)
 
     let raw: string | null = null
     try {
