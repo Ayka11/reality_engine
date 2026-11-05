@@ -208,8 +208,23 @@ export function bootstrapInfiniteWorld() {
     const manifest = (window as any).worldAssetManifest as WorldAssetImportManifest
     return JSON.stringify(manifest, null, 2)
   }
-  ;(window as any).worldExternalAssetLoad = (assetId: string, sourceUrl: string, semanticEntryId?: string, scale = 1) =>
-    world.loadExternalAsset(assetId, sourceUrl, semanticEntryId, scale)
+  ;(window as any).worldExternalAssetLoad = async (
+    assetId: string,
+    sourceUrl: string,
+    semanticEntryId?: string,
+    scale = 1,
+  ) => {
+    const asset = await world.loadExternalAsset(assetId, sourceUrl, semanticEntryId, scale)
+    // A configured agent visual profile may have been waiting for this explicit
+    // semantic source import. Retry only after the GLTF runtime is ready.
+    const syncAgentVisuals = (window as any).syncAgentVisuals
+    if (typeof syncAgentVisuals === 'function') {
+      try { syncAgentVisuals() } catch (error) {
+        console.warn('[AgentVisual] Could not synchronize after explicit asset import', error)
+      }
+    }
+    return asset
+  }
   ;(window as any).worldExternalAssetRemove = (assetId: string) => world.removeExternalAsset(assetId)
   ;(window as any).worldExternalAssetScatter = (semanticEntryId: string, count = 12, radius = 70, seed = 1, scale = 1) =>
     world.scatterExternalSemantic(semanticEntryId, count, radius, seed, scale)
