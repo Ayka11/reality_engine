@@ -298,6 +298,18 @@ export function mountOpenAssetsPanel() {
       importedAnimations.set(asset.id, Array.isArray(animationNames) ? animationNames.filter((name: unknown): name is string => typeof name === 'string') : [])
       if (manifestResult.manifestEntry?.semanticEntryId) importedSemantic.set(asset.id, manifestResult.manifestEntry.semanticEntryId)
       if (!selectedAgentAssetId) selectedAgentAssetId = asset.id
+
+      // The explicit import API retries saved agent visuals after the exact
+      // source is available. Reflect the resulting runtime state instead of
+      // continuing to show the generic "import this asset" instruction.
+      const savedAgentConfiguration = (window as any).getSavedAgentVisualConfiguration?.()
+      const agentDiagnostics = (window as any).getAgentVisualDiagnostics?.()
+      if (savedAgentConfiguration?.sourceAssetId === asset.id && agentDiagnostics?.configured) {
+        agentVisualMessage = 'Restored saved agent binding: ' + (agentDiagnostics.instances ?? 0)
+          + ' visual(s), ' + (agentDiagnostics.animated ?? 0) + ' active animation(s).'
+        agentVisualError = ''
+      }
+
       importMessage = 'Imported ' + asset.name + ' as ' + (manifestResult.manifestEntry?.semanticEntryId || 'unmapped asset')
         + (importedAnimations.get(asset.id)?.length ? ' · ' + importedAnimations.get(asset.id)!.length + ' animation clip(s)' : ' · no animation clips')
     } catch (e) {
