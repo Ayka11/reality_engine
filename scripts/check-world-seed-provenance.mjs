@@ -58,6 +58,15 @@ assert.match(clearSavedWorldBody, /window\.clearTimeout\(this\.saveTimer\)/,
   'clearing the world must cancel a pending autosave before touching persistence')
 assert.match(clearSavedWorldBody, /return cleared/,
   'reseed must be able to distinguish a durable clear from a failed clear')
+assert.ok(clearSavedWorldBody.indexOf('const cleared = this.persistence.clear()') <
+  clearSavedWorldBody.indexOf('this.clearExternalAssetRuntime()'),
+  'a durable clear must succeed before the live external asset runtime is destroyed')
+assert.match(clearSavedWorldBody, /if \(!cleared\) \{[\s\S]*?return false[\s\S]*?\}\s*this\.pendingExternalAssetPlacements = \[\]/,
+  'a failed durable clear must preserve live placements and other in-memory world state')
+const reseedClearAt = reseedBody.indexOf('const previousNamespaceCleared = this.clearSavedWorld()')
+const reseedMeshDisposalAt = reseedBody.indexOf('this.patches.clear()')
+assert.ok(reseedClearAt >= 0 && reseedMeshDisposalAt > reseedClearAt,
+  'reseed must not dispose the visible world until its durable source namespace has cleared')
 assert.match(reseedBody, /const previousNamespaceCleared = this\.clearSavedWorld\(\)/)
 assert.match(reseedBody, /if \(!previousNamespaceCleared\)[\s\S]*?return/,
   'reseed must not switch away from a namespace that could not be safely cleared')

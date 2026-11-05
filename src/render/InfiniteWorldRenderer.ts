@@ -1002,12 +1002,16 @@ export class InfiniteWorldRenderer {
       window.clearTimeout(this.saveTimer)
       this.saveTimer = null
     }
-    this.pendingExternalAssetPlacements = []
-    this.clearExternalAssetRuntime()
     const cleared = this.persistence.clear()
     if (!cleared) {
-      console.warn('[persistence] Could not remove every saved world record; some objects or edits may return after reload')
+      // Keep the live editor state intact when durable cleanup is incomplete.
+      // The persistence journal blocks future saves until cleanup is retried,
+      // but the user can still inspect/export the current in-memory world.
+      console.warn('[persistence] Could not clear every saved world record; the live world was retained for recovery')
+      return false
     }
+    this.pendingExternalAssetPlacements = []
+    this.clearExternalAssetRuntime()
     this.terrainDeformations.clear()
     runtimeProvenance.reset()
     this.refreshTerrainPatches()
@@ -1017,11 +1021,19 @@ export class InfiniteWorldRenderer {
     this.transformControls.detach()
     ;(this.transformControls as any).visible = false
     this.selectionMarker.visible = false
-    return cleared
+    return true
   }
 
   reseed(newSeed: string) {
     const previousSeed = this.generator.seed
+    const previousNamespaceCleared = this.clearSavedWorld()
+    if (!previousNamespaceCleared) {
+      console.warn('[persistence] Reseed was cancelled because the previous world namespace could not be cleared safely')
+      return
+    }
+
+    // Do not dispose the current terrain until the durable source namespace has
+    // been cleared. A failed storage operation must leave the live world visible.
     for (const [, patch] of this.patches) {
       this.scene.remove(patch.group)
       patch.group.traverse(obj => {
@@ -1034,12 +1046,6 @@ export class InfiniteWorldRenderer {
     this.waterMeshes.clear()
     this.terrainMaterials.clear()
     this.lastCenter = null
-
-    const previousNamespaceCleared = this.clearSavedWorld()
-    if (!previousNamespaceCleared) {
-      console.warn('[persistence] Reseed was cancelled because the previous world namespace could not be cleared safely')
-      return
-    }
 
     this.generator = new WorldGenerator(newSeed)
     ;(window as any).worldSeed = newSeed
