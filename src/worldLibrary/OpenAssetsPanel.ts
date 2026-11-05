@@ -48,6 +48,10 @@ export function mountOpenAssetsPanel() {
   let agentVisualError = ''
 
   const render = () => {
+    const savedAgentVisualConfiguration = (window as any).getSavedAgentVisualConfiguration?.()
+    const defaultAgentVisualMessage = savedAgentVisualConfiguration
+      ? `Saved binding for ${savedAgentVisualConfiguration.sourceAssetId}; import that exact model to restore it.`
+      : 'Set the world-space center of grid cell (0,0), then map the available clips.'
     host.innerHTML = open ? `
       <div style="pointer-events:auto;background:rgba(13,15,26,.97);backdrop-filter:blur(16px);border:1px solid rgba(124,111,205,.4);border-radius:10px;box-shadow:0 12px 45px rgba(0,0,0,.65);padding:10px;color:var(--tx);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
@@ -101,7 +105,7 @@ export function mountOpenAssetsPanel() {
           <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
             <button id="agentVisualConfigure" class="pill on" style="font-size:8px" ${selectedAgentAssetId?'':'disabled'}>Bind visuals</button>
             <button id="agentVisualClear" class="pill" style="font-size:8px">Clear binding</button>
-            <span style="font-size:7px;color:var(--sub)">${esc(agentVisualError || agentVisualMessage || 'Set the world-space center of grid cell (0,0), then map the available clips.')}</span>
+            <span style="font-size:7px;color:var(--sub)">${esc(agentVisualError || agentVisualMessage || defaultAgentVisualMessage)}</span>
           </div>
         </details>
         <div style="max-height:270px;overflow:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
@@ -184,11 +188,13 @@ export function mountOpenAssetsPanel() {
         })
         const fallback=(document.getElementById('agentVisualFallback') as HTMLSelectElement | null)?.value
         const result=configure({
+          sourceAssetId:selectedAgentAssetId,
           transform:transformFactory(origin,cellSize),
           profile:{schemaVersion:'agent-visual-profile-v1',semanticEntryId,scale,fadeDuration:0.2,clips,...(fallback?{fallbackClip:fallback}:{})},
         })
         const d=result?.diagnostics ?? {}
         agentVisualMessage='Bound '+(d.created??0)+' agent(s); '+(d.animated??0)+' animation(s) started; '+(d.awaitingAsset??0)+' waiting for asset; '+(d.missingClip??0)+' missing clip(s).'
+          +(result?.configurationSaved?' · saved in this browser':' · active only for this session (browser storage unavailable)')
         agentVisualError=''
       }catch(error){agentVisualError=error instanceof Error?error.message:'Could not configure agent visuals';agentVisualMessage=''}
       render()
@@ -197,8 +203,10 @@ export function mountOpenAssetsPanel() {
       try{
         const clear=(window as any).clearAgentVisuals
         if(typeof clear!=='function')throw new Error('Agent visual runtime is not initialized')
-        clear()
-        agentVisualMessage='Agent visual binding cleared.'
+        const result=clear()
+        agentVisualMessage=result?.configurationCleared
+          ? 'Agent visual binding cleared, including the saved browser preference.'
+          : 'Agent visual binding cleared for this session; browser preference could not be cleared.'
         agentVisualError=''
       }catch(error){agentVisualError=error instanceof Error?error.message:'Could not clear agent visuals';agentVisualMessage=''}
       render()
