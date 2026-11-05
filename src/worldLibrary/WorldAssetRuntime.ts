@@ -32,6 +32,8 @@ export class WorldAssetRuntime {
   private readonly instanceActions = new Map<string, THREE.AnimationAction>()
   private readonly pendingAnimationStops = new Map<string, Array<{ action: THREE.AnimationAction; remainingSeconds: number }>>()
   private readonly animationAccumulators = new Map<string, number>()
+  /** Latest absolute-world anchor used to rebase renderer-local instance positions. */
+  private worldAnchor = { x: 0, y: 0, z: 0 }
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -84,7 +86,11 @@ export class WorldAssetRuntime {
             reject(new Error(`Asset load invalidated by world replacement: ${id}`))
             return
           }
-          object.position.set(options.x ?? 0, options.y ?? 0, options.z ?? 0)
+          object.position.set(
+            (options.x ?? 0) - this.worldAnchor.x,
+            (options.y ?? 0) - this.worldAnchor.y,
+            (options.z ?? 0) - this.worldAnchor.z,
+          )
           object.rotation.y = options.rotationY ?? 0
           object.scale.setScalar(Math.max(0.001, options.scale ?? 1))
           object.traverse((node) => {
@@ -130,7 +136,11 @@ export class WorldAssetRuntime {
   placeInstance(
     instanceId: string,
     semanticEntryId: string,
-    options: { x: number; y: number; z: number; scale?: number; rotationY?: number },
+    options: {
+      x: number; y: number; z: number; scale?: number; rotationY?: number
+      /** Transient instances are regenerated from simulation state and never enter world saves. */
+      persistence?: 'persistent' | 'transient'
+    },
   ) {
     if (this.instances.has(instanceId)) return this.instances.get(instanceId) || null
     const source = this.semanticSources.get(semanticEntryId)
@@ -145,8 +155,13 @@ export class WorldAssetRuntime {
       if (Array.isArray(mesh.material)) mesh.material = mesh.material.map((material) => this.cloneMaterialWithOwnedTextures(material))
       else mesh.material = this.cloneMaterialWithOwnedTextures(mesh.material)
     })
-    instance.position.set(options.x, options.y, options.z)
+    instance.position.set(
+      options.x - this.worldAnchor.x,
+      options.y - this.worldAnchor.y,
+      options.z - this.worldAnchor.z,
+    )
     instance.userData.worldPosition = { x: options.x, y: options.y, z: options.z }
+    instance.userData.persistentWorldAssetPlacement = options.persistence !== 'transient'
     instance.rotation.y = options.rotationY ?? 0
     instance.scale.setScalar(Math.max(0.001, options.scale ?? 1))
     instance.userData.runtimeAssetInstanceId = instanceId
@@ -154,12 +169,14 @@ export class WorldAssetRuntime {
     instance.userData.semanticEntryId = semanticEntryId
     this.scene.add(instance)
     this.instances.set(instanceId, instance)
-    this.onPlacementsChanged?.()
+    if (instance.userData.persistentWorldAssetPlacement !== false) this.onPlacementsChanged?.()
     return instance
   }
 
   snapshotPlacements(): ExternalAssetPlacementSnapshot[] {
-    return [...this.instances].map(([instanceId, instance]) => {
+    return [...this.instances]
+      .filter(([, instance]) => instance.userData.persistentWorldAssetPlacement !== false)
+      .map(([instanceId, instance]) => {
       const worldPosition = instance.userData.worldPosition as
         { x: number; y: number; z: number } | undefined
       const sourceAssetId = instance.userData.runtimeAssetSourceId
@@ -189,6 +206,38 @@ export class WorldAssetRuntime {
 
   hasInstance(instanceId: string) {
     return this.instances.has(instanceId)
+  }
+
+  getInstanceWorldPosition(instanceId: string) {
+    const position = this.instances.get(instanceId)?.userData.worldPosition as
+      { x: number; y: number; z: number } | undefined
+    return position ? { ...position } : null
+  }
+
+  /** Set an instance's absolute position while respecting the current origin rebase. */
+  setInstanceWorldTransform(
+    instanceId: string,
+    options: {
+      position: { x: number; y: number; z: number }
+      scale?: number
+      rotationY?: number
+    },
+  ) {
+    const instance = this.instances.get(instanceId)
+    if (!instance) return false
+    const { x, y, z } = options.position
+    if (![x, y, z].every(Number.isFinite) ||
+        (options.scale !== undefined && (!Number.isFinite(options.scale) || options.scale <= 0)) ||
+        (options.rotationY !== undefined && !Number.isFinite(options.rotationY))) {
+      throw new TypeError('External asset world transform must contain finite coordinates and valid scale/rotation')
+    }
+
+    instance.userData.worldPosition = { x, y, z }
+    instance.position.set(x - this.worldAnchor.x, y - this.worldAnchor.y, z - this.worldAnchor.z)
+    if (options.scale !== undefined) instance.scale.setScalar(options.scale)
+    if (options.rotationY !== undefined) instance.rotation.y = options.rotationY
+    if (instance.userData.persistentWorldAssetPlacement !== false) this.onPlacementsChanged?.()
+    return true
   }
 
   private cloneMaterialWithOwnedTextures<T extends THREE.Material>(material: T): T {
@@ -431,8 +480,9 @@ export class WorldAssetRuntime {
     this.stopInstanceAnimation(instanceId)
     this.scene.remove(instance)
     this.disposeObject(instance)
+    const isPersistent = instance.userData.persistentWorldAssetPlacement !== false
     this.instances.delete(instanceId)
-    this.onPlacementsChanged?.()
+    if (isPersistent) this.onPlacementsChanged?.()
     return true
   }
 
@@ -505,13 +555,14 @@ export class WorldAssetRuntime {
   }
 
   rebase(worldAnchor: { x: number; y?: number; z: number }) {
+    this.worldAnchor = { x: worldAnchor.x, y: worldAnchor.y ?? 0, z: worldAnchor.z }
     for (const asset of this.assets.values()) {
       const world = asset.object.userData.worldPosition as { x: number; y: number; z: number } | undefined
-      if (world) asset.object.position.set(world.x - worldAnchor.x, world.y - (worldAnchor.y ?? 0), world.z - worldAnchor.z)
+      if (world) asset.object.position.set(world.x - this.worldAnchor.x, world.y - this.worldAnchor.y, world.z - this.worldAnchor.z)
     }
     for (const instance of this.instances.values()) {
       const world = instance.userData.worldPosition as { x: number; y: number; z: number } | undefined
-      if (world) instance.position.set(world.x - worldAnchor.x, world.y - (worldAnchor.y ?? 0), world.z - worldAnchor.z)
+      if (world) instance.position.set(world.x - this.worldAnchor.x, world.y - this.worldAnchor.y, world.z - this.worldAnchor.z)
     }
   }
 
