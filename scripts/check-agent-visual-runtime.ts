@@ -69,6 +69,7 @@ const visuals = new AgentVisualRuntime(
     ...position,
     y: 7 + position.x * 0.1 - position.z * 0.05,
   }),
+  'creature-model',
 )
 visuals.setProfile({
   schemaVersion: 'agent-visual-profile-v1',
@@ -107,6 +108,23 @@ const agent = (id: number, x: number, y: number, state: Agent['state']): Agent =
   plan: '',
   planBias: {},
 })
+
+const wrongSourceRuntime = new AgentVisualRuntime(
+  assets,
+  transform,
+  undefined,
+  'different-model-with-the-same-semantic',
+)
+wrongSourceRuntime.setProfile({
+  schemaVersion: 'agent-visual-profile-v1',
+  semanticEntryId: 'fauna.creature',
+  clips: { explore: 'Walk Cycle' },
+})
+const wrongSource = wrongSourceRuntime.sync([agent(90, 1, 1, 'explore')])
+assert.equal(wrongSource.awaitingAsset, 1,
+  'a different loaded asset with the same semantic entry must not substitute for the exact selected source')
+assert.equal(wrongSource.instances, 0)
+wrongSourceRuntime.dispose()
 
 const first = agent(1, 2, 3, 'explore')
 const second = agent(2, 4, 1, 'rest')
