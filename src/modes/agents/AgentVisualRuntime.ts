@@ -127,10 +127,11 @@ export class AgentVisualRuntime {
     const current = emptyDiagnostics(true)
     current.agents = agents.length
     const aliveIds = new Set<number>()
-    const semanticSource = this.assets.getSemanticSource(profile.semanticEntryId)
-    const source = semanticSource &&
-      (this.sourceAssetId === undefined || semanticSource.id === this.sourceAssetId)
-      ? semanticSource
+    const candidateSource = this.sourceAssetId !== undefined
+      ? this.assets.get(this.sourceAssetId)
+      : this.assets.getSemanticSource(profile.semanticEntryId)
+    const source = candidateSource?.semanticEntryId === profile.semanticEntryId
+      ? candidateSource
       : undefined
 
     if (!source) {
@@ -170,6 +171,7 @@ export class AgentVisualRuntime {
           z: worldPosition.z,
           scale,
           persistence: 'transient',
+          ...(this.sourceAssetId !== undefined ? { sourceAssetId: this.sourceAssetId } : {}),
         })
         if (!placed) {
           current.awaitingAsset += 1
