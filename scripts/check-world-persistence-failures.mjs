@@ -294,6 +294,46 @@ assert.deepEqual(recoveredRestart.loadFieldState(), { epoch: 2 });
 assert.deepEqual(recoveredRestart.loadChunk(0, 0, 0), recoveredChunk,
   "a committed recovery must restore the new field/chunk generation together");
 
+// Portable package import reuses a seed that may contain a prior manual
+// checkpoint. Namespace replacement must erase those checkpoints before the
+// imported autosave state is written, so explicit Load cannot resurrect it.
+const importedNamespace = new WorldPersistence("seed-import-replacement");
+assert.equal(importedNamespace.saveFieldState({ epoch: "old-field" }), true);
+assert.equal(importedNamespace.saveFieldCheckpoint({ epoch: "old-manual-field" }), true);
+assert.equal(importedNamespace.saveTerrainDeformationState({ epoch: "old-terrain" }), true);
+assert.equal(importedNamespace.saveTerrainDeformationCheckpoint({ epoch: "old-manual-terrain" }), true);
+assert.equal(importedNamespace.saveProvenanceState({ epoch: "old-provenance" }), true);
+assert.equal(importedNamespace.saveAssetManifestState({ entries: [{ id: "old-asset" }] }), true);
+assert.equal(importedNamespace.saveAssetPlacementsState([{ id: "old-placement" }]), true);
+assert.equal(importedNamespace.saveSurfaceProviderState({ id: "old-surface" }), true);
+assert.equal(importedNamespace.saveChunk(0, 0, 0, [{ id: "old-object", x: 1, y: 0, z: 1, kind: "tree" }]), true);
+assert.equal(importedNamespace.beginSaveTransaction(), true);
+assert.equal(importedNamespace.clear(), true,
+  "portable import must clear the existing seed namespace inside its outer journal");
+assert.equal(importedNamespace.saveFieldState({ epoch: "imported-field" }), true);
+assert.equal(importedNamespace.saveTerrainDeformationState({ epoch: "imported-terrain" }), true);
+const importedObjects = [{ id: "imported-object", x: 2, y: 0, z: 2, kind: "house" }];
+assert.equal(importedNamespace.saveChunk(0, 0, 0, importedObjects), true);
+assert.equal(importedNamespace.finishSaveTransaction(true), true);
+const importedNamespaceRestart = new WorldPersistence("seed-import-replacement");
+assert.equal(importedNamespaceRestart.hasIncompleteSaveTransaction(), false);
+assert.deepEqual(importedNamespaceRestart.loadFieldState(), { epoch: "imported-field" });
+assert.equal(importedNamespaceRestart.loadFieldCheckpoint(), null,
+  "portable import must not leave a previous manual field checkpoint behind");
+assert.deepEqual(importedNamespaceRestart.loadTerrainDeformationState(), { epoch: "imported-terrain" });
+assert.equal(importedNamespaceRestart.loadTerrainDeformationCheckpoint(), null,
+  "portable import must not leave a previous manual terrain checkpoint behind");
+assert.equal(importedNamespaceRestart.loadProvenanceState(), null,
+  "old provenance must not survive a full namespace replacement");
+assert.equal(importedNamespaceRestart.loadAssetManifestState(), null,
+  "old asset provenance must not survive a full namespace replacement");
+assert.equal(importedNamespaceRestart.loadAssetPlacementsState(), null,
+  "old asset placements must not survive a full namespace replacement");
+assert.equal(importedNamespaceRestart.loadSurfaceProviderState(), null,
+  "old surface provider metadata must not survive a full namespace replacement");
+assert.deepEqual(importedNamespaceRestart.loadChunk(0, 0, 0), importedObjects,
+  "only imported objects may remain after the target namespace is replaced");
+
 const fieldState = { schemaVersion: "world-field-state-v2", mutations: [{ id: 1 }] };
 
 assert.equal(persistence.saveFieldState(fieldState), true);
@@ -461,6 +501,17 @@ const loadWorldStart = rendererSource.indexOf("  loadWorld(options:", saveWorldS
 assert.ok(saveWorldStart >= 0 && loadWorldStart > saveWorldStart,
   "the renderer save/load method boundary must remain identifiable");
 const saveWorldSource = rendererSource.slice(saveWorldStart, loadWorldStart);
+const portablePersistStart = rendererSource.indexOf("  persistPortableWorldSnapshot(");
+assert.ok(portablePersistStart >= 0 && portablePersistStart < saveWorldStart,
+  "portable restore persistence method must remain identifiable");
+const portablePersistSource = rendererSource.slice(portablePersistStart, saveWorldStart);
+const namespaceClearAt = portablePersistSource.indexOf("this.persistence.clear()");
+const surfaceWriteAt = portablePersistSource.indexOf("this.persistActiveSurfaceProvider()");
+const chunkAndSidecarSaveAt = portablePersistSource.indexOf("this.saveWorld({ checkpoint: false, preflightFailures })");
+assert.ok(namespaceClearAt >= 0 && surfaceWriteAt > namespaceClearAt && chunkAndSidecarSaveAt > surfaceWriteAt,
+  "portable restore must clear prior checkpoints/sidecars/chunks before writing the imported generation");
+assert.match(portablePersistSource, /if \(!this\.persistence\.clear\(\)\)/,
+  "a failed namespace replacement must leave the journal incomplete and fail the import persistence step");
 assert.match(saveWorldSource, /knownChunks\(\{ recoverOrphans: true \}\)/,
   "saveWorld must delete orphaned durable chunks that would otherwise be resurrected at startup");
 assert.match(saveWorldSource, /if \(!fieldCheckpointSaved\) \{\s*failedPersistenceOperations\.push\('authoritative field checkpoint'\)/,

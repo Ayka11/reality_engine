@@ -833,6 +833,16 @@ export class InfiniteWorldRenderer {
       throw new AggregateError([new Error(message)], `Infinite World persistence failed: ${message}`)
     }
 
+    // A portable import replaces the complete seed-scoped world namespace,
+    // not just the keys represented by the incoming snapshot. In particular,
+    // stale manual checkpoints must not override the imported state on Load.
+    if (!this.persistence.clear()) {
+      const message = 'Could not clear the previous seed namespace before portable restore persistence'
+      this.persistence.finishSaveTransaction(false)
+      this.lastPersistenceFailures = [message]
+      throw new AggregateError([new Error(message)], `Infinite World persistence failed: ${message}`)
+    }
+
     const preflightFailures: string[] = []
     const surfaceStatus = this.persistActiveSurfaceProvider()
     if (surfaceStatus === 'failed') preflightFailures.push('world surface')
