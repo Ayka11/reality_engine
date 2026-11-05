@@ -940,7 +940,11 @@ document.getElementById('saveBtn')!.addEventListener('click', async () => {
     const savedName = await saveSystem.quickSave(name.trim() || `World_${sim.tick}`);
     _exportStatus(`Quick saved: ${savedName}`);
   } catch (error) {
-    reportWordocument.getElementById('loadBtn')?.addEventListener('click', async () => {
+    reportWorldSaveFailure('Quick save', error);
+  }
+});
+
+document.getElementById('loadBtn')?.addEventListener('click', async () => {
   try {
     const saves = await saveSystem.listQuickSaves();
     if (!saves.length) {
@@ -948,7 +952,7 @@ document.getElementById('saveBtn')!.addEventListener('click', async () => {
       return;
     }
     const latest = saves[0];
-    const ok = confirm(`Load latest quick save \"${latest.name}\" from ${new Date(latest.timestamp).toLocaleString()}?\\n\\nCancel opens a .reality file picker.`);
+    const ok = confirm(`Load latest quick save "${latest.name}" from ${new Date(latest.timestamp).toLocaleString()}?\n\nCancel opens a .reality file picker.`);
     if (ok) {
       await saveSystem.loadQuickSave(latest.id);
       _exportStatus(`Loaded quick save: ${latest.name}`);
