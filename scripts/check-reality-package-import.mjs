@@ -248,6 +248,8 @@ const activeBootstrapSource = await readFile(new URL('src/infinityBootstrap.ts',
 const activePackageSource = await readFile(new URL('src/infinity/ActiveWorldPackage.ts', root), 'utf8');
 const activeHtmlSource = await readFile(new URL('index.html', root), 'utf8');
 const worldPersistenceSource = await readFile(new URL('src/infinity/WorldPersistence.ts', root), 'utf8');
+assert.match(editorSource, /async exportPackage\(\): Promise<void> \{\s*try \{[\s\S]*?catch \(error\) \{[\s\S]*?this\.status!\.textContent = error instanceof Error[\s\S]*?console\.error\('\[RealityCreator\] package export failed', error\)/,
+  'Creator Studio exports must surface snapshot/serializer failures rather than leave unhandled async rejections');
 assert.match(editorSource, /const candidate = this\.preflightPackage\(pkg\);\s+const sim = this\.options\.simulation!;/,
   'package preflight must complete before opening the live mutation transaction');
 assert.match(editorSource, /dimensions\.x !== sim\.grid\.W[\s\S]*dimensions\.y !== sim\.grid\.H[\s\S]*dimensions\.z !== sim\.grid\.D/,

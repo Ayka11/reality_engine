@@ -76,31 +76,38 @@ export class LawProcessEditor {
   }
 
   async exportPackage(): Promise<void> {
-    const simulation = this.options.simulation;
-    if (!simulation) {
-      this.status!.textContent = 'Package export needs a simulation instance.';
-      return;
-    }
+    try {
+      const simulation = this.options.simulation;
+      if (!simulation) {
+        this.status!.textContent = 'Package export needs a simulation instance.';
+        return;
+      }
 
-    const packageName = `Reality t${simulation.tick}`;
-    let blob: Blob;
-    if (this.options.exportWorldPackage) {
-      // The application's World Save System owns the complete runtime, chunk,
-      // graph and simulation-clock snapshot for every normal .reality export.
-      blob = await this.options.exportWorldPackage(packageName);
-    } else {
-      // Retain a coherent, self-contained fallback for editors used without the
-      // application's World Save System integration.
-      const pkg = await simulation.runAtStepBoundary(() => this.buildPackage());
-      blob = await this.serializer.pack(pkg);
+      const packageName = `Reality t${simulation.tick}`;
+      let blob: Blob;
+      if (this.options.exportWorldPackage) {
+        // The application's World Save System owns the complete runtime, chunk,
+        // graph and simulation-clock snapshot for every normal .reality export.
+        blob = await this.options.exportWorldPackage(packageName);
+      } else {
+        // Retain a coherent, self-contained fallback for editors used without the
+        // application's World Save System integration.
+        const pkg = await simulation.runAtStepBoundary(() => this.buildPackage());
+        blob = await this.serializer.pack(pkg);
+      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${packageName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.reality`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      this.status!.textContent = `Exported ${anchor.download}`;
+    } catch (error) {
+      this.status!.textContent = error instanceof Error
+        ? `Export failed: ${error.message}`
+        : 'Export failed.';
+      console.error('[RealityCreator] package export failed', error);
     }
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${packageName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.reality`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    this.status!.textContent = `Exported ${anchor.download}`;
   }
 
   async importPackageFile(file: File): Promise<void> {
