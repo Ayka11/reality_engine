@@ -161,6 +161,13 @@ assert.ok(rebasedInstance, 'loaded source animation root remains present')
 const fallback = visuals.sync([agent(1, 5, 6, 'reproduce'), second])
 assert.equal(fallback.animated, 1,
   'a missing per-state clip must use the explicitly configured exact fallback clip')
+visuals.setProfile({
+  schemaVersion: 'agent-visual-profile-v1',
+  semanticEntryId: 'fauna.creature',
+  scale: 0.75,
+  fadeDuration: 0.15,
+  clips: { explore: 'Walk Cycle', seek_energy: 'Run', rest: 'Idle' },
+})
 const noClip = visuals.sync([agent(1, 5, 6, 'flee_entropy'), second])
 assert.equal(noClip.missingClip, 1,
   'a state without an exact clip or fallback must remain unanimated rather than guessing a clip name')
