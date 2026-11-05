@@ -35,6 +35,12 @@ assert.ok(chunkWriteAt >= 0 && activeSeedCommitAt > chunkWriteAt,
   'active seed must be published only after all seed-scoped chunk writes')
 assert.match(saveWorldBody, /failedPersistenceOperations\.length === 0 && !saveActiveWorldSeed\(this\.generator\.seed\)/,
   'an incomplete sidecar/chunk save must not switch startup to the imported seed namespace')
+const portablePersistAt = renderer.indexOf('  persistPortableWorldSnapshot(')
+const saveWorldCallAt = renderer.indexOf('this.saveWorld({ checkpoint: false, preflightFailures })', portablePersistAt)
+assert.ok(portablePersistAt >= 0 && saveWorldCallAt > portablePersistAt,
+  'imported surface/asset sidecar failures must be passed into the seed-scoped save commit')
+assert.match(saveWorldBody, /const failedPersistenceOperations: string\[\] = \[\.\.\.\(options\.preflightFailures \?\? \[\]\)\]/,
+  'preflight sidecar failures must prevent active-seed publication')
 assert.equal(reseedBody.includes('worldViewContract.setSeed(newSeed)'), false,
   'procedural generator reseed must not overwrite an independently selected surface seed')
 
