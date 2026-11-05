@@ -72,6 +72,10 @@ assert.equal(scene.children.length, 1)
 
 const instance = runtime.placeInstance('oak:instance:1', 'flora.oak', { x: 4, y: 0, z: 8 })
 assert.ok(instance)
+assert.equal(runtime.getInstanceSourceAssetId('oak:instance:1'), 'oak')
+assert.equal(runtime.getInstanceRuntimeOwnerId('oak:instance:1'), null)
+assert.equal(runtime.setInstanceRuntimeOwnerId('oak:instance:1', 'asset-runtime-test'), true)
+assert.equal(runtime.getInstanceRuntimeOwnerId('oak:instance:1'), 'asset-runtime-test')
 assert.equal(scene.children.length, 2)
 const placementManifest = {
   version: '1.0' as const,
