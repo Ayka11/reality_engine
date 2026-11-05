@@ -40,6 +40,7 @@ jobs:
       - run: npm run test:causal-graph-recovery
       - run: npm run test:recorder-recovery
       - run: npm run test:agent-system-recovery
+      - run: npm run test:agent-grid-world-transform
       - run: npm run test:worldevents-recovery
       - run: npm run test:entity-layer-recovery
       - run: npm run test:simulation-engine-core-recovery
