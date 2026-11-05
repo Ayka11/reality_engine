@@ -86,7 +86,8 @@
     "test:reality-package-import": "node scripts/check-reality-package-import.mjs",
     "test:active-world-package": "node scripts/check-active-world-package.mjs",
     "test:agent-grid-world-transform": "npx --yes tsx scripts/check-agent-grid-world-transform.ts",
-    "test:agent-visual-runtime": "npx --yes tsx scripts/check-agent-visual-runtime.ts"
+    "test:agent-visual-runtime": "npx --yes tsx scripts/check-agent-visual-runtime.ts",
+    "test:agent-visual-configuration-store": "npx --yes tsx scripts/check-agent-visual-configuration-store.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
