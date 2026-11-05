@@ -42,6 +42,7 @@ export function mountOpenAssetsPanel() {
   let selectedAgentAssetId = ''
   const agentClipSelections = new Map<AgentState, string>()
   let agentFallbackClip = ''
+  const agentTransformInputs = { originX: '0', originY: '0', originZ: '0', cellSize: '1', scale: '1' }
   let agentVisualMessage = ''
   let agentVisualError = ''
 
@@ -75,11 +76,11 @@ export function mountOpenAssetsPanel() {
                 ${[...importedSemantic.entries()].map(([id, semantic]) => `<option value="${esc(id)}" ${selectedAgentAssetId===id?'selected':''}>${esc(id)} · ${esc(semantic)}</option>`).join('')}
               </select>
             </label>
-            ${[['agentVisualOriginX','Origin X'],['agentVisualOriginY','Origin Y'],['agentVisualOriginZ','Origin Z']].map(([id,label])=>`<label style="font-size:7px;color:var(--sub)">${label}<input id="${id}" type="number" step="any" value="0" style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px"></label>`).join('')}
+            ${[['agentVisualOriginX','Origin X'],['agentVisualOriginY','Origin Y'],['agentVisualOriginZ','Origin Z']].map(([id,label])=>`<label style="font-size:7px;color:var(--sub)">${label}<input id="${id}" type="number" step="any" value="${esc(agentTransformInputs[${id.replace('agentVisualOrigin','origin') as keyof typeof agentTransformInputs] ?? '0')}" style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px"></label>`).join('')}
           </div>
           <div style="display:grid;grid-template-columns:repeat(2,minmax(90px,1fr));gap:5px;margin-bottom:6px">
-            <label style="font-size:7px;color:var(--sub)">Grid cell size<input id="agentVisualCellSize" type="number" min="0.000001" step="any" value="1" style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px"></label>
-            <label style="font-size:7px;color:var(--sub)">Model scale<input id="agentVisualScale" type="number" min="0.000001" step="any" value="1" style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px"></label>
+            <label style="font-size:7px;color:var(--sub)">Grid cell size<input id="agentVisualCellSize" type="number" min="0.000001" step="any" value="${esc(agentTransformInputs.cellSize)}" style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px"></label>
+            <label style="font-size:7px;color:var(--sub)">Model scale<input id="agentVisualScale" type="number" min="0.000001" step="any" value="${esc(agentTransformInputs.scale)}" style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:4px;background:#0b0c16;color:var(--tx);border:1px solid rgba(255,255,255,.1);border-radius:4px;font-size:8px"></label>
           </div>
           <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-bottom:6px">
             ${AGENT_VISUAL_STATES.map(state=>`
@@ -145,6 +146,10 @@ export function mountOpenAssetsPanel() {
       else agentClipSelections.delete(state)
     }))
     document.getElementById('agentVisualFallback')?.addEventListener('change',(e)=>{agentFallbackClip=(e.target as HTMLSelectElement).value})
+    ;(['originX','originY','originZ','cellSize','scale'] as const).forEach(key=>{
+      const id=key==='originX'?'agentVisualOriginX':key==='originY'?'agentVisualOriginY':key==='originZ'?'agentVisualOriginZ':key==='cellSize'?'agentVisualCellSize':'agentVisualScale'
+      document.getElementById(id)?.addEventListener('input',(e)=>{agentTransformInputs[key]=(e.target as HTMLInputElement).value})
+    })
     document.getElementById('agentVisualConfigure')?.addEventListener('click',()=>{
       const semanticEntryId=importedSemantic.get(selectedAgentAssetId)
       const transformFactory=(window as any).createPlanarAgentGridWorldTransform
@@ -154,6 +159,11 @@ export function mountOpenAssetsPanel() {
         if(!Number.isFinite(value))throw new TypeError(label+' must be a finite number')
         return value
       }
+      agentTransformInputs.originX=(document.getElementById('agentVisualOriginX') as HTMLInputElement | null)?.value ?? agentTransformInputs.originX
+      agentTransformInputs.originY=(document.getElementById('agentVisualOriginY') as HTMLInputElement | null)?.value ?? agentTransformInputs.originY
+      agentTransformInputs.originZ=(document.getElementById('agentVisualOriginZ') as HTMLInputElement | null)?.value ?? agentTransformInputs.originZ
+      agentTransformInputs.cellSize=(document.getElementById('agentVisualCellSize') as HTMLInputElement | null)?.value ?? agentTransformInputs.cellSize
+      agentTransformInputs.scale=(document.getElementById('agentVisualScale') as HTMLInputElement | null)?.value ?? agentTransformInputs.scale
       try{
         if(!semanticEntryId)throw new Error('Choose a successfully imported model first')
         if(typeof transformFactory!=='function'||typeof configure!=='function')throw new Error('Agent visual runtime is not initialized')
