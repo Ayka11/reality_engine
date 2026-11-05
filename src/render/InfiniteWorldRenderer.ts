@@ -559,10 +559,6 @@ export class InfiniteWorldRenderer {
   }
 
   /**
-   * Capture the separate infinite-world editor state that is not represented
-   * by SimulationEngine's finite voxel grid or its runtime-domain snapshots.
-   */
-  /**
    * Capture editor-only transient state that must survive a failed cross-domain
    * world restore. It is deliberately separate from portable save data.
    */
@@ -610,6 +606,10 @@ export class InfiniteWorldRenderer {
     this.notifyAuthoritativeSculptHistoryChanged()
   }
 
+  /**
+   * Capture the separate infinite-world editor state that is not represented
+   * by SimulationEngine's finite voxel grid or its runtime-domain snapshots.
+   */
   capturePortableWorldSnapshot(): WorldEditorSnapshot {
     const surfaceProvider = serializeWorldSurfaceProvider(this.fieldSampler.surfaceProvider)
     if (!surfaceProvider) {

@@ -478,6 +478,10 @@ export class WorldSaveSystem {
       throw error;
     }
 
+    // The authoritative transaction has committed. Keep the in-memory pointer
+    // aligned with the live world even if later cleanup or sidecar persistence fails.
+    this.currentSnapshot = snapshot;
+
     // Timeline is a history of grid-only frames, not a full world checkpoint.
     // Clear it only after the new world transaction commits successfully.
     this.context.clearTimeline?.();
@@ -487,7 +491,6 @@ export class WorldSaveSystem {
     // objects even if the subsequent sidecar persistence operation fails.
     this.context.clearWorldAssetRuntime?.();
     this.context.persistWorldEditorSnapshot?.();
-    this.currentSnapshot = snapshot;
     console.info(`World "${snapshot.name}" fully restored.`);
   }
 

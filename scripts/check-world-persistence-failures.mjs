@@ -46,6 +46,12 @@ assert.match(saveSystemSource, /getWorldEditorRuntimeCheckpoint\?\.\(\)/,
   "world restore must checkpoint editor undo/redo and selection state separately from portable data");
 assert.match(saveSystemSource, /rollback\("Infinite world editor runtime", \(\) => this\.context\.restoreWorldEditorRuntimeCheckpoint!\(worldEditorRuntimeBefore\)\)/,
   "failed world import must reinstate editor-only runtime state after portable editor rollback");
+const worldApplyMutationIndex = saveSystemSource.indexOf("mutate(apply);");
+const committedSnapshotPointerIndex = saveSystemSource.indexOf("this.currentSnapshot = snapshot;", worldApplyMutationIndex);
+const postCommitCleanupIndex = saveSystemSource.indexOf("this.context.clearTimeline?.()", worldApplyMutationIndex);
+assert.ok(worldApplyMutationIndex >= 0 && committedSnapshotPointerIndex > worldApplyMutationIndex &&
+  postCommitCleanupIndex > committedSnapshotPointerIndex,
+  "the current in-memory snapshot pointer must be committed before any fallible post-commit cleanup or sidecar persistence");
 assert.match(mainSource, /getWorldEditorRuntimeCheckpoint: \(\) =>[\s\S]*?captureRuntimeRollbackCheckpoint\(\)/,
   "the application must capture Infinite World editor runtime rollback state");
 assert.match(mainSource, /restoreWorldEditorRuntimeCheckpoint: checkpoint =>[\s\S]*?restoreRuntimeRollbackCheckpoint\(checkpoint\)/,
@@ -738,8 +744,15 @@ assert.equal(worldAssetClearCalls, 1,
 assert.equal(runtimeState.tick, savedRuntimeWorld.metadata.simulationTicks, "quick-save restore must restore simulation tick");
 assert.equal(runtimeState.recorderClears, 1, "successful restore must clear field-only recorder history");
 
+const sidecarFailureSnapshot = {
+  ...savedRuntimeWorld,
+  name: "Committed despite sidecar failure",
+  timestamp: savedRuntimeWorld.timestamp + 1,
+};
 failWorldEditorPersist = true;
-await assert.rejects(saveHarness.applySnapshot(savedRuntimeWorld), /injected sidecar persistence failure/);
+await assert.rejects(saveHarness.applySnapshot(sidecarFailureSnapshot), /injected sidecar persistence failure/);
+assert.equal(saveHarness.getCurrentSnapshot(), sidecarFailureSnapshot,
+  "the current snapshot must follow the committed world even when sidecar persistence fails");
 assert.equal(worldAssetClearCalls, 2,
   "external assets must still be cleared because the world transaction committed before sidecar persistence failed");
 assert.equal(runtimeState.recorderClears, 2,
