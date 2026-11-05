@@ -107,7 +107,12 @@ export class AgentSystem {
 
   private notifyAgentsChanged(): void {
     if (this.changeListeners.size === 0) return
-    const snapshot = this.agents.map(agent => ({ ...agent, memory: [...agent.memory], planBias: { ...agent.planBias } }))
+    const snapshot = this.agents.map(agent => ({
+      ...agent,
+      genome: { ...agent.genome },
+      memory: [...agent.memory],
+      planBias: { ...agent.planBias },
+    }))
     for (const listener of this.changeListeners) {
       try {
         listener(snapshot)
