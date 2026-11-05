@@ -834,13 +834,7 @@ export class InfiniteWorldRenderer {
   }
 
   saveWorld(options: { checkpoint?: boolean } = {}) {
-    // The active seed selects the namespace that startup must reopen. Persist it
-    // alongside every world save so a different imported/reseeded world is not
-    // silently replaced by the bootstrap default after a page restart.
     const failedPersistenceOperations: string[] = []
-    if (!saveActiveWorldSeed(this.generator.seed)) {
-      failedPersistenceOperations.push('active world seed')
-    }
     // Explicit Save creates a stable checkpoint; autosave must not move that checkpoint.
     const fieldSnapshot = this.authoritativeField.serialize()
     if (!this.persistAuthoritativeFieldState()) failedPersistenceOperations.push('authoritative field state')
@@ -892,6 +886,12 @@ export class InfiniteWorldRenderer {
       if (!this.persistence.saveChunk(cx, cy, cz, list)) {
         failedPersistenceOperations.push(`save chunk ${key}`)
       }
+    }
+    // The active seed is the startup commit selector for the seed-scoped
+    // namespace. Publish it only after every sidecar and chunk write succeeds;
+    // a failed import of another seed must not redirect restart into a partial world.
+    if (failedPersistenceOperations.length === 0 && !saveActiveWorldSeed(this.generator.seed)) {
+      failedPersistenceOperations.push('active world seed')
     }
     this.lastPersistenceFailures = failedPersistenceOperations
     if (failedPersistenceOperations.length > 0) {
