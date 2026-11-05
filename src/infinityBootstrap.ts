@@ -225,7 +225,18 @@ export function bootstrapInfiniteWorld() {
     }
     return asset
   }
-  ;(window as any).worldExternalAssetRemove = (assetId: string) => world.removeExternalAsset(assetId)
+  ;(window as any).worldExternalAssetRemove = (assetId: string) => {
+    const removed = world.removeExternalAsset(assetId)
+    // Removing the exact selected source must release its transient agent
+    // projections; a different asset with the same semantic tag is not a substitute.
+    const syncAgentVisuals = (window as any).syncAgentVisuals
+    if (typeof syncAgentVisuals === 'function') {
+      try { syncAgentVisuals() } catch (error) {
+        console.warn('[AgentVisual] Could not synchronize after explicit asset removal', error)
+      }
+    }
+    return removed
+  }
   ;(window as any).worldExternalAssetScatter = (semanticEntryId: string, count = 12, radius = 70, seed = 1, scale = 1) =>
     world.scatterExternalSemantic(semanticEntryId, count, radius, seed, scale)
   ;(window as any).worldExternalAssetAnimationNames = (assetId: string) =>
