@@ -113,7 +113,7 @@ interface SaveContext {
   resetDirector?: () => void;
   /** Snapshot/restore for the separate unbounded InfiniteWorldRenderer editor. */
   getWorldEditorSnapshot?: () => WorldEditorSnapshot | undefined;
-  restoreWorldEditorSnapshot?: (snapshot?: WorldEditorSnapshot) => void;
+  restoreWorldEditorSnapshot?: (snapshot?: WorldEditorSnapshot, validateOnly?: boolean) => void;
   /** Best-effort persistence after the enclosing world transaction commits. */
   persistWorldEditorSnapshot?: () => void;
   /** Release non-portable external assets after the authoritative import transaction commits. */
@@ -252,6 +252,16 @@ export class WorldSaveSystem {
         !Number.isSafeInteger(snapshot.metadata.simulationTicks) ||
         snapshot.metadata.simulationTicks < 0) {
       throw new Error("World snapshot has invalid simulation tick metadata");
+    }
+
+    // Preflight the complete portable Infinite World payload before reading
+    // rollback snapshots or entering the authoritative mutation transaction.
+    // Legacy packages may omit worldEditor; a present payload must be validated.
+    if (snapshot.worldEditor !== undefined) {
+      if (!this.context.restoreWorldEditorSnapshot) {
+        throw new Error("World restore cannot preflight the imported Infinite World snapshot");
+      }
+      this.context.restoreWorldEditorSnapshot(snapshot.worldEditor, true);
     }
 
     const mutate = this.context.mutateAuthoritativeState;
