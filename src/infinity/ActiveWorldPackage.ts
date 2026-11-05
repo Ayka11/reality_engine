@@ -88,10 +88,15 @@ export function encodeActiveWorldPackage(
   if (!manifestValidation.valid) {
     throw new TypeError(`Active world asset manifest is invalid: ${manifestValidation.errors.join('; ')}`)
   }
+  // Missing is valid for legacy snapshots; explicit null or any other non-array
+  // value is malformed and must not be silently normalized to an empty list.
+  const assetPlacements = worldEditor.assetPlacements === undefined
+    ? []
+    : worldEditor.assetPlacements
   const placementValidation = validateExternalAssetPlacements(
-    worldEditor.assetPlacements ?? [],
+    assetPlacements,
     worldEditor.assetManifest,
-    Boolean(worldEditor.assetPlacements?.length),
+    Array.isArray(assetPlacements) && assetPlacements.length > 0,
   )
   if (!placementValidation.valid) {
     throw new TypeError(`Active world asset placements are invalid: ${placementValidation.errors.join('; ')}`)
