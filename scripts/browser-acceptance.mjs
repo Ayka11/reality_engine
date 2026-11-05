@@ -320,6 +320,68 @@ try {
   }
   console.log("[acceptance] flat surface restored after reload and generator surface reset cleanly");
 
+  console.log("[acceptance] reseed clears stale data from a previously used target seed");
+  const reusedSeedContract = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const targetSeed = "acceptance-reused-target-seed";
+    const Persistence = world?.persistence?.constructor;
+    if (!world || typeof Persistence !== "function") {
+      return { error: "WorldPersistence constructor is not reachable from the active renderer" };
+    }
+
+    // Seed a namespace while it is not active, as if it were left behind by an
+    // earlier session. Reseeding into it must remove stale field and chunk data.
+    const staleNamespace = new Persistence(targetSeed);
+    const staleObjects = [{
+      id: "acceptance-stale-target-object",
+      kind: "landmark",
+      x: 225,
+      y: 1,
+      z: 225,
+      rotationY: 0,
+      scale: 1,
+      seed: 17,
+      properties: { source: "acceptance-reused-seed-stale-data" },
+    }];
+    const staleChunkSaved = staleNamespace.saveChunk(7, 0, 7, staleObjects);
+    const staleFieldSaved = staleNamespace.saveFieldState({
+      schemaVersion: "acceptance-stale-target-field",
+      marker: "must-be-cleared-by-reseed",
+    });
+    const staleChunksBefore = staleNamespace.knownChunks({ recoverOrphans: true });
+    world.reseed(targetSeed);
+
+    return {
+      targetSeed,
+      staleChunkSaved,
+      staleFieldSaved,
+      staleChunksBefore,
+      generatorSeed: world.generator.seed,
+      activeSeed: localStorage.getItem("reality-engine-active-world-seed"),
+      chunksAfter: world.persistence.knownChunks({ recoverOrphans: true }),
+      staleChunkAfter: world.persistence.loadChunk(7, 0, 7),
+      staleFieldAfter: world.persistence.loadFieldState(),
+      transactionIncomplete: world.persistence.hasIncompleteSaveTransaction(),
+    };
+  });
+  if (reusedSeedContract.error ||
+      reusedSeedContract.staleChunkSaved !== true ||
+      reusedSeedContract.staleFieldSaved !== true ||
+      !reusedSeedContract.staleChunksBefore.includes("7,0,7") ||
+      reusedSeedContract.generatorSeed !== reusedSeedContract.targetSeed ||
+      reusedSeedContract.activeSeed !== reusedSeedContract.targetSeed ||
+      reusedSeedContract.chunksAfter.length !== 0 ||
+      reusedSeedContract.staleChunkAfter.length !== 0 ||
+      reusedSeedContract.staleFieldAfter !== null ||
+      reusedSeedContract.transactionIncomplete !== false) {
+    throw new Error("Reseeding into a previously used seed did not clear its stale namespace: " + JSON.stringify(reusedSeedContract));
+  }
+  console.log("[acceptance] reused seed stale chunks/field cleared and new seed committed: " + JSON.stringify({
+    seed: reusedSeedContract.generatorSeed,
+    staleChunksBefore: reusedSeedContract.staleChunksBefore,
+    chunksAfter: reusedSeedContract.chunksAfter,
+  }));
+
   console.log("[acceptance] unified re_v6 Save/Load round-trip through the actual UI");
   const packageFixture = await page.evaluate(() => {
     const world = window.infiniteWorld;
