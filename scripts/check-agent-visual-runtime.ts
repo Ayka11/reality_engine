@@ -209,16 +209,15 @@ emptyRuntime.dispose()
 
 const { AgentSystem } = await import('../src/modes/agents/AgentSystem.ts')
 const observedSystem = new AgentSystem()
-const observedSnapshots: readonly Agent[][] = []
-const mutableObservedSnapshots: Agent[][] = observedSnapshots as Agent[][]
+const observedSnapshots: Agent[][] = []
 let observerCalls = 0
 const unsubscribe = observedSystem.onAgentsChanged(snapshot => {
   observerCalls += 1
-  mutableObservedSnapshots.push(snapshot as Agent[])
+  observedSnapshots.push(snapshot as Agent[])
 })
 observedSystem.spawn(18, 14, 3)
 assert.equal(observerCalls, 1, 'spawning must notify visual observers once after the population is added')
-const exposed = mutableObservedSnapshots[0][0]
+const exposed = observedSnapshots[0][0]
 const authoritativeEnergyWeight = observedSystem.agents[0].genome.seekEnergyW
 exposed.genome.seekEnergyW = 999
 exposed.memory[0] = 999
