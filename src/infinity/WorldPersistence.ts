@@ -520,8 +520,10 @@ export class WorldPersistence {
     const scannedChunkKeys = this.scanStoredChunkStorageKeys()
     if (scannedChunkKeys === null) {
       // Without a complete key scan, orphaned chunks cannot be distinguished
-      // from manifest entries. Leave the durable world untouched rather than
-      // deleting the manifest and sidecars while unindexed chunks survive.
+      // from manifest entries. Leave durable records untouched, but detach the
+      // renderer from cached chunks so stale objects cannot reappear in memory.
+      this.loaded.clear()
+      this.cache.clear()
       return false
     }
     if (!this.beginSaveTransaction({ recoverIncomplete: true })) {

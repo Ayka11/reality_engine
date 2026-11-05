@@ -505,8 +505,10 @@ assert.equal(values.get(manifestKey), manifestBeforeScanFailure,
   "an unavailable storage scan must preserve the manifest for the retained chunk payloads");
 assert.equal(values.get(fieldStateStorageKey), fieldStateBeforeScanFailure,
   "an unavailable storage scan must preserve the remaining world sidecars");
+assert.deepEqual(persistence.loadedChunks(), [],
+  "a failed preflight scan must still detach the in-memory loaded chunk set");
 assert.deepEqual(persistence.loadChunk(4, 0, -2), scanFailureObjects,
-  "a failed preflight scan must leave the existing world cache and data usable");
+  "a failed preflight scan must preserve durable data and allow a later read from storage");
 
 failGet = true;
 failRemove = true;
