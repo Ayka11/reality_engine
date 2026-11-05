@@ -874,7 +874,10 @@ export class InfiniteWorldRenderer {
       list.push(object)
       groups.set(key, list)
     }
-    for (const key of this.persistence.knownChunks()) {
+    // Include durable chunks whose payload was written but whose manifest update
+    // previously failed. Otherwise a deleted object can be resurrected on the next
+    // startup when loadWorld() scans and recovers orphaned chunk payloads.
+    for (const key of this.persistence.knownChunks({ recoverOrphans: true })) {
       if (!groups.has(key)) {
         const [cx, cy, cz] = key.split(',').map(Number)
         if (!this.persistence.deleteChunk(cx, cy, cz)) {

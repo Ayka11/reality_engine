@@ -398,6 +398,36 @@ assert.equal(persistence.deleteChunk(2, 0, -3), true);
 assert.deepEqual(persistence.knownChunks(), [],
   "deleting the recovered orphan should leave a clean manifest");
 
+// Reproduce a previous save where the chunk payload committed but manifest
+// publication failed. A subsequent save of a world without that chunk must
+// discover and delete the orphan, rather than allowing it to return on restart.
+failSetForKey = manifestKey;
+assert.equal(persistence.saveChunk(2, 0, -3, orphanObjects), false,
+  "orphan fixture must simulate a durable chunk with a failed manifest commit");
+failSetForKey = null;
+const nextSavePersistence = new WorldPersistence("seed-a");
+assert.deepEqual(nextSavePersistence.knownChunks(), [],
+  "manifest-only enumeration must not see the intentionally orphaned chunk");
+const orphanKeysForNextSave = nextSavePersistence.knownChunks({ recoverOrphans: true });
+assert.deepEqual(orphanKeysForNextSave, ["2,0,-3"],
+  "a subsequent save must enumerate recoverable orphan chunks for deletion");
+for (const key of orphanKeysForNextSave) {
+  const [cx, cy, cz] = key.split(",").map(Number);
+  assert.equal(nextSavePersistence.deleteChunk(cx, cy, cz), true,
+    "the next save must durably delete the orphan chunk absent from the live world");
+}
+assert.equal(values.has(orphanChunkKey), false,
+  "an orphaned chunk removed by the next save must not reappear after restart");
+assert.deepEqual(nextSavePersistence.knownChunks({ recoverOrphans: true }), [],
+  "the clean post-save namespace must contain no orphan chunk payloads");
+const saveWorldStart = rendererSource.indexOf("  saveWorld(options: { checkpoint?: boolean } = {}) {");
+const loadWorldStart = rendererSource.indexOf("  loadWorld(options:", saveWorldStart);
+assert.ok(saveWorldStart >= 0 && loadWorldStart > saveWorldStart,
+  "the renderer save/load method boundary must remain identifiable");
+const saveWorldSource = rendererSource.slice(saveWorldStart, loadWorldStart);
+assert.match(saveWorldSource, /knownChunks\(\{ recoverOrphans: true \}\)/,
+  "saveWorld must delete orphaned durable chunks that would otherwise be resurrected at startup");
+
 const clearOrphanObjects = [{ id: 'clear-orphan-object', x: -35, y: 1, z: 33, kind: 'tower' }];
 const clearOrphanStorageKey = "reality-engine-world:seed-a:chunk:-2,0,1";
 failSetForKey = manifestKey;
