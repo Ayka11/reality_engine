@@ -936,26 +936,29 @@ document.getElementById('addLawBtn')!.addEventListener('click', () => {
 // ── Save world ────────────────────────────────────────────────────────────────
 document.getElementById('saveBtn')!.addEventListener('click', async () => {
   const name = prompt('Quick save name', `World_${sim.tick}`) ?? `World_${sim.tick}`;
-  const savedName = await saveSystem.quickSave(name.trim() || `World_${sim.tick}`);
-  document.getElementById('exportStatus')!.textContent = `Quick saved: ${savedName}`;
-});
-
-document.getElementById('loadBtn')?.addEventListener('click', async () => {
-  const saves = await saveSystem.listQuickSaves();
-  if (!saves.length) {
-    (document.getElementById('worldLoadInput') as HTMLInputElement | null)?.click();
-    return;
+  try {
+    const savedName = await saveSystem.quickSave(name.trim() || `World_${sim.tick}`);
+    _exportStatus(`Quick saved: ${savedName}`);
+  } catch (error) {
+    reportWordocument.getElementById('loadBtn')?.addEventListener('click', async () => {
+  try {
+    const saves = await saveSystem.listQuickSaves();
+    if (!saves.length) {
+      (document.getElementById('worldLoadInput') as HTMLInputElement | null)?.click();
+      return;
+    }
+    const latest = saves[0];
+    const ok = confirm(`Load latest quick save \"${latest.name}\" from ${new Date(latest.timestamp).toLocaleString()}?\\n\\nCancel opens a .reality file picker.`);
+    if (ok) {
+      await saveSystem.loadQuickSave(latest.id);
+      _exportStatus(`Loaded quick save: ${latest.name}`);
+    } else {
+      (document.getElementById('worldLoadInput') as HTMLInputElement | null)?.click();
+    }
+  } catch (error) {
+    reportWorldSaveFailure('World load', error);
   }
-  const latest = saves[0];
-  const ok = confirm(`Load latest quick save "${latest.name}" from ${new Date(latest.timestamp).toLocaleString()}?\n\nCancel opens a .reality file picker.`);
-  if (ok) {
-    await saveSystem.loadQuickSave(latest.id);
-    document.getElementById('exportStatus')!.textContent = `Loaded quick save: ${latest.name}`;
-  } else {
-    (document.getElementById('worldLoadInput') as HTMLInputElement | null)?.click();
-  }
 });
-
 document.getElementById('autoSaveBtn')?.addEventListener('click', () => {
   if (saveManager.enabled) saveManager.stopAutoSave();
   else saveManager.startAutoSave(120000);
@@ -966,7 +969,7 @@ document.getElementById('autoSaveBtn')?.addEventListener('click', () => {
 document.getElementById('worldLoadInput')?.addEventListener('change', () => {
   const input = document.getElementById('worldLoadInput') as HTMLInputElement;
   const file = input.files?.[0];
-  if (file) void saveSystem.importRealityPackage(file);
+  if (file) void importRealityPackageWithFeedback(file);
   input.value = '';
 });
 
@@ -975,7 +978,9 @@ document.addEventListener('keydown', event => {
   if (event.key.toLowerCase() === 's') {
     event.preventDefault();
     void saveSystem.quickSave(`World_${sim.tick}`).then(name => {
-      document.getElementById('exportStatus')!.textContent = `Quick saved: ${name}`;
+      _exportStatus(`Quick saved: ${name}`);
+    }).catch(error => {
+      reportWorldSaveFailure('Quick save', error);
     });
   }
   if (event.key.toLowerCase() === 'o') {
@@ -1223,7 +1228,7 @@ canvas.addEventListener('drop', event => {
   canvas.style.outline = '';
   const file = event.dataTransfer?.files?.[0];
   if (file && file.name.endsWith('.reality')) {
-    void saveSystem.importRealityPackage(file);
+    void importRealityPackageWithFeedback(file);
   }
 });
 
@@ -1236,6 +1241,17 @@ function _exportStatus(msg: string, ok = true) {
   if (el) { el.textContent = msg; el.style.color = ok ? '#4caf7d' : '#f47b7b'; }
 }
 
+function reportWorldSaveFailure(operation: string, error: unknown): void {
+  const detail = error instanceof Error ? error.message : String(error);
+  _exportStatus(`${operation} failed: ${detail}`, false);
+  console.error(`[world-save] ${operation} failed`, error);
+}
+
+function importRealityPackageWithFeedback(file: File): Promise<void> {
+  return saveSystem.importRealityPackage(file).catch(error => {
+    reportWorldSaveFailure(`Import ${file.name}`, error);
+  });
+}
 document.getElementById('exportUsdBtn')?.addEventListener('click', () => {
   unrealBridge.downloadUSD();
   _exportStatus('USD exported');
