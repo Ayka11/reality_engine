@@ -562,6 +562,54 @@ export class InfiniteWorldRenderer {
    * Capture the separate infinite-world editor state that is not represented
    * by SimulationEngine's finite voxel grid or its runtime-domain snapshots.
    */
+  /**
+   * Capture editor-only transient state that must survive a failed cross-domain
+   * world restore. It is deliberately separate from portable save data.
+   */
+  captureRuntimeRollbackCheckpoint() {
+    return {
+      history: this.history.snapshotState(),
+      authoritativeSculptHistory: this.authoritativeSculptTransactions.snapshotState(),
+      selectedObjectId: this.selectedObjectId,
+    }
+  }
+
+  /**
+   * Reapply transient editor state after the portable world has been rolled back.
+   * The previous world's objects/meshes must already have been reconstructed.
+   */
+  restoreRuntimeRollbackCheckpoint(checkpoint: {
+    history: ReturnType<WorldEditHistory['snapshotState']>
+    authoritativeSculptHistory: ReturnType<AuthoritativeSculptTransactionCoordinator['snapshotState']>
+    selectedObjectId: string | null
+  }): void {
+    if (!checkpoint || (checkpoint.selectedObjectId !== null && typeof checkpoint.selectedObjectId !== 'string')) {
+      throw new TypeError('Invalid Infinite World runtime rollback checkpoint')
+    }
+    this.history.restoreState(checkpoint.history)
+    this.authoritativeSculptTransactions.restoreState(checkpoint.authoritativeSculptHistory)
+
+    const selected = checkpoint.selectedObjectId
+    const entry = selected ? this.objectMeshes.get(selected) : undefined
+    this.selectedObjectId = entry ? selected : null
+    if (!entry) {
+      this.transformControls.detach()
+      ;(this.transformControls as any).visible = false
+      this.selectionMarker.visible = false
+    } else {
+      this.transformControls.attach(entry.group)
+      ;(this.transformControls as any).visible = true
+      this.selectionMarker.position.set(
+        entry.object.x - this.worldAnchor.x,
+        entry.object.y - this.worldAnchor.y + 1.5,
+        entry.object.z - this.worldAnchor.z,
+      )
+      this.selectionMarker.scale.setScalar(Math.max(1, entry.object.scale * 2))
+      this.selectionMarker.visible = true
+    }
+    this.notifyAuthoritativeSculptHistoryChanged()
+  }
+
   capturePortableWorldSnapshot(): WorldEditorSnapshot {
     const surfaceProvider = serializeWorldSurfaceProvider(this.fieldSampler.surfaceProvider)
     if (!surfaceProvider) {

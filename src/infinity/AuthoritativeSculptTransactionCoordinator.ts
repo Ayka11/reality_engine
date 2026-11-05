@@ -32,6 +32,12 @@ export type AuthoritativeSculptTransaction = {
   after: FieldState
 }
 
+export type AuthoritativeSculptTransactionCoordinatorSnapshot = {
+  nextTransactionId: number
+  undoStack: AuthoritativeSculptTransaction[]
+  redoStack: AuthoritativeSculptTransaction[]
+}
+
 export class AuthoritativeSculptTransactionCoordinator {
   private nextTransactionId = 1
   private undoStack: AuthoritativeSculptTransaction[] = []
@@ -130,6 +136,45 @@ export class AuthoritativeSculptTransactionCoordinator {
     this.redoStack.pop()
     this.undoStack.push(transaction)
     return structuredClone(transaction)
+  }
+
+  snapshotState(): AuthoritativeSculptTransactionCoordinatorSnapshot {
+    return structuredClone({
+      nextTransactionId: this.nextTransactionId,
+      undoStack: this.undoStack,
+      redoStack: this.redoStack,
+    })
+  }
+
+  restoreState(snapshot: AuthoritativeSculptTransactionCoordinatorSnapshot): void {
+    if (!snapshot || !Number.isSafeInteger(snapshot.nextTransactionId) || snapshot.nextTransactionId < 1 ||
+        !Array.isArray(snapshot.undoStack) || !Array.isArray(snapshot.redoStack) ||
+        snapshot.undoStack.length > this.maxHistory || snapshot.redoStack.length > this.maxHistory) {
+      throw new TypeError('Invalid authoritative sculpt history checkpoint')
+    }
+    const entries = [...snapshot.undoStack, ...snapshot.redoStack]
+    const transactionIds = new Set<number>()
+    let highestTransactionId = 0
+    for (const entry of entries) {
+      if (!entry || !Number.isSafeInteger(entry.transactionId) || entry.transactionId < 1 ||
+          !Number.isSafeInteger(entry.mutationId) || entry.mutationId < 1 ||
+          !entry.mutation || entry.mutation.id !== entry.mutationId ||
+          !entry.before || typeof entry.before !== 'object' ||
+          !entry.after || typeof entry.after !== 'object' ||
+          transactionIds.has(entry.transactionId)) {
+        throw new TypeError('Invalid authoritative sculpt history checkpoint')
+      }
+      transactionIds.add(entry.transactionId)
+      highestTransactionId = Math.max(highestTransactionId, entry.transactionId)
+    }
+    if (snapshot.nextTransactionId <= highestTransactionId) {
+      throw new TypeError('Invalid authoritative sculpt history transaction sequence')
+    }
+    const undoStack = structuredClone(snapshot.undoStack)
+    const redoStack = structuredClone(snapshot.redoStack)
+    this.undoStack = undoStack
+    this.redoStack = redoStack
+    this.nextTransactionId = snapshot.nextTransactionId
   }
 
   clear(): void {

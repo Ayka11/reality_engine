@@ -114,6 +114,9 @@ interface SaveContext {
   /** Snapshot/restore for the separate unbounded InfiniteWorldRenderer editor. */
   getWorldEditorSnapshot?: () => WorldEditorSnapshot | undefined;
   restoreWorldEditorSnapshot?: (snapshot?: WorldEditorSnapshot, validateOnly?: boolean) => void;
+  /** Transient undo/redo and selection state that is not part of portable saves. */
+  getWorldEditorRuntimeCheckpoint?: () => unknown;
+  restoreWorldEditorRuntimeCheckpoint?: (checkpoint: unknown) => void;
   /** Best-effort persistence after the enclosing world transaction commits. */
   persistWorldEditorSnapshot?: () => void;
   /** Release non-portable external assets after the authoritative import transaction commits. */
@@ -285,6 +288,7 @@ export class WorldSaveSystem {
     const cosmologicalBefore = this.context.getCosmologicalSnapshot?.();
     const directorBefore = this.context.getDirectorSnapshot?.();
     const worldEditorBefore = this.context.getWorldEditorSnapshot?.();
+    const worldEditorRuntimeBefore = this.context.getWorldEditorRuntimeCheckpoint?.();
 
     const apply = () => {
       if (snapshot.chunks && !this.voxelGrid.loadChunks) {
@@ -461,6 +465,9 @@ export class WorldSaveSystem {
       }
       if (worldEditorBefore !== undefined && this.context.restoreWorldEditorSnapshot) {
         rollback("Infinite world editor", () => this.context.restoreWorldEditorSnapshot!(worldEditorBefore));
+      }
+      if (worldEditorRuntimeBefore !== undefined && this.context.restoreWorldEditorRuntimeCheckpoint) {
+        rollback("Infinite world editor runtime", () => this.context.restoreWorldEditorRuntimeCheckpoint!(worldEditorRuntimeBefore));
       }
       if (rollbackErrors.length > 0) {
         throw new AggregateError(

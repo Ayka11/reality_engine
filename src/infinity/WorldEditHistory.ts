@@ -5,6 +5,11 @@ export type WorldEdit =
   | { type: 'remove'; object: WorldObject }
   | { type: 'transform'; before: WorldObject; after: WorldObject }
 
+export type WorldEditHistorySnapshot = {
+  undoStack: WorldEdit[]
+  redoStack: WorldEdit[]
+}
+
 export class WorldEditHistory {
   private undoStack: WorldEdit[] = []
   private redoStack: WorldEdit[] = []
@@ -37,6 +42,24 @@ export class WorldEditHistory {
   clear() {
     this.undoStack = []
     this.redoStack = []
+  }
+
+  snapshotState(): WorldEditHistorySnapshot {
+    return structuredClone({
+      undoStack: this.undoStack,
+      redoStack: this.redoStack,
+    })
+  }
+
+  restoreState(snapshot: WorldEditHistorySnapshot): void {
+    if (!snapshot || !Array.isArray(snapshot.undoStack) || !Array.isArray(snapshot.redoStack) ||
+        snapshot.undoStack.length > this.limit || snapshot.redoStack.length > this.limit) {
+      throw new TypeError('Invalid world edit history checkpoint')
+    }
+    const undoStack = structuredClone(snapshot.undoStack)
+    const redoStack = structuredClone(snapshot.redoStack)
+    this.undoStack = undoStack
+    this.redoStack = redoStack
   }
 
   get canUndo() { return this.undoStack.length > 0 }

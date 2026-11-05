@@ -1386,6 +1386,18 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
     world.validatePortableWorldSnapshot(portableSnapshot)
     return portableSnapshot;
   },
+  getWorldEditorRuntimeCheckpoint: () => {
+    const world = (window as unknown as {
+      infiniteWorld?: { captureRuntimeRollbackCheckpoint: () => unknown }
+    }).infiniteWorld;
+    return world?.captureRuntimeRollbackCheckpoint();
+  },
+  restoreWorldEditorRuntimeCheckpoint: checkpoint => {
+    const world = (window as unknown as {
+      infiniteWorld?: { restoreRuntimeRollbackCheckpoint: (value: unknown) => void }
+    }).infiniteWorld;
+    world?.restoreRuntimeRollbackCheckpoint(checkpoint);
+  },
   restoreWorldEditorSnapshot: (snapshot, validateOnly = false) => {
     const world = (window as unknown as {
       infiniteWorld?: {

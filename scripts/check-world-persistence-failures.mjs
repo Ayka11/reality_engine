@@ -42,6 +42,16 @@ assert.match(saveSystemSource, /const worldEditorBefore = this\.context\.getWorl
   "world snapshot import must checkpoint the independent Infinite World editor domain");
 assert.match(saveSystemSource, /rollback\("Infinite world editor", \(\) => this\.context\.restoreWorldEditorSnapshot!\(worldEditorBefore\)\)/,
   "failed world import must restore the Infinite World editor after its state was published");
+assert.match(saveSystemSource, /getWorldEditorRuntimeCheckpoint\?\.\(\)/,
+  "world restore must checkpoint editor undo/redo and selection state separately from portable data");
+assert.match(saveSystemSource, /rollback\("Infinite world editor runtime", \(\) => this\.context\.restoreWorldEditorRuntimeCheckpoint!\(worldEditorRuntimeBefore\)\)/,
+  "failed world import must reinstate editor-only runtime state after portable editor rollback");
+assert.match(mainSource, /getWorldEditorRuntimeCheckpoint: \(\) =>[\s\S]*?captureRuntimeRollbackCheckpoint\(\)/,
+  "the application must capture Infinite World editor runtime rollback state");
+assert.match(mainSource, /restoreWorldEditorRuntimeCheckpoint: checkpoint =>[\s\S]*?restoreRuntimeRollbackCheckpoint\(checkpoint\)/,
+  "the application must restore Infinite World editor runtime rollback state");
+assert.match(rendererSource, /captureRuntimeRollbackCheckpoint\(\)[\s\S]*?this\.history\.snapshotState\(\)[\s\S]*?this\.authoritativeSculptTransactions\.snapshotState\(\)/,
+  "editor rollback checkpoint must preserve both object-edit and authoritative sculpt histories");
 assert.match(saveSystemSource, /this\.context\.persistWorldEditorSnapshot\?\.\(\)/,
   "Infinite World sidecar persistence must run only after the authoritative transaction succeeds");
 assert.match(saveSystemSource, /runtimeState:\s*\{[\s\S]*entityLayer:\s*this\.context\.getEntityLayerSnapshot\?\.\(\)[\s\S]*agents:\s*this\.context\.getAgentSystemSnapshot\?\.\(\)[\s\S]*civilizations:\s*this\.context\.getCivSnapshot\?\.\(\)[\s\S]*laws:\s*this\.context\.getLawEngineSnapshot\?\.\(\)/,
@@ -140,6 +150,50 @@ async function load(path) {
 
 const { WorldSerializer, FIELD_ORDER } = await import(await load("src/world/save/WorldSerializer.ts"));
 const serializer = new WorldSerializer();
+
+const { WorldEditHistory } = await import(await load("src/infinity/WorldEditHistory.ts"));
+const objectHistory = new WorldEditHistory(4);
+const objectEdit = { type: "add", object: { id: "history-object" } };
+objectHistory.push(objectEdit);
+objectHistory.undo();
+const objectHistoryCheckpoint = objectHistory.snapshotState();
+objectHistory.clear();
+objectHistory.restoreState(objectHistoryCheckpoint);
+assert.equal(objectHistory.canUndo, false, "world object edit checkpoint must preserve the undo stack");
+assert.equal(objectHistory.canRedo, true, "world object edit checkpoint must preserve the redo stack");
+assert.deepEqual(objectHistory.redo(), objectEdit, "restored world object redo must replay the preserved edit");
+assert.throws(() => objectHistory.restoreState({ undoStack: Array(5).fill(objectEdit), redoStack: [] }),
+  /Invalid world edit history checkpoint/, "world object edit checkpoint must enforce its configured history bound");
+
+const { AuthoritativeSculptTransactionCoordinator } =
+  await import(await load("src/infinity/AuthoritativeSculptTransactionCoordinator.ts"));
+const fakeAuthoritativeField = {
+  state: { version: 0, mutations: [] },
+  serialize() { return structuredClone(this.state); },
+  restore(snapshot) { this.state = structuredClone(snapshot); },
+};
+const sculptHistory = new AuthoritativeSculptTransactionCoordinator(fakeAuthoritativeField, 4);
+for (let id = 1; id <= 2; id++) {
+  sculptHistory.commit(() => {
+    fakeAuthoritativeField.state.version = id;
+    const mutation = { id };
+    fakeAuthoritativeField.state.mutations.push(mutation);
+    return mutation;
+  });
+}
+assert.ok(sculptHistory.undo(), "sculpt history fixture must create a redo entry");
+const sculptHistoryCheckpoint = sculptHistory.snapshotState();
+sculptHistory.clear();
+sculptHistory.restoreState(sculptHistoryCheckpoint);
+assert.equal(sculptHistory.historyLength, 1, "sculpt checkpoint must restore the undo stack");
+assert.equal(sculptHistory.redoLength, 1, "sculpt checkpoint must restore the redo stack");
+assert.ok(sculptHistory.redo(), "restored sculpt redo entry must remain executable");
+assert.equal(fakeAuthoritativeField.state.version, 2, "restored sculpt redo must replay the previous field snapshot");
+assert.throws(() => sculptHistory.restoreState({
+  nextTransactionId: 1, undoStack: sculptHistoryCheckpoint.undoStack, redoStack: sculptHistoryCheckpoint.redoStack,
+}), /Invalid authoritative sculpt history transaction sequence/,
+  "sculpt checkpoint must reject a reused transaction identifier");
+
 const targetBuffer = new Float32Array(4 * 24);
 targetBuffer.fill(17);
 const validFields = serializer.captureAllFields(targetBuffer);
@@ -455,6 +509,11 @@ let failNextWorldEditorRestore = false;
 let worldEditorPersistCalls = 0;
 let worldAssetClearCalls = 0;
 let failWorldEditorPersist = false;
+let worldEditorRuntimeState = {
+  history: { undoStack: [{ type: "add", object: { id: "old-history-object" } }], redoStack: [] },
+  authoritativeSculptHistory: { nextTransactionId: 2, undoStack: [{ transactionId: 1 }], redoStack: [] },
+  selectedObjectId: "old-world-tree",
+};
 const transactionContext = {
   mutateAuthoritativeState(mutation) {
     authoritativeTransactionCalls++;
@@ -530,11 +589,21 @@ const transactionContext = {
   },
   resetDirector: () => { runtimeState.director = { history: [], worldLog: [] }; },
   getWorldEditorSnapshot: () => cloneValue(runtimeState.worldEditor),
-  restoreWorldEditorSnapshot: snapshot => {
+  getWorldEditorRuntimeCheckpoint: () => cloneValue(worldEditorRuntimeState),
+  restoreWorldEditorRuntimeCheckpoint: checkpoint => {
+    worldEditorRuntimeState = cloneValue(checkpoint);
+  },
+  restoreWorldEditorSnapshot: (snapshot, validateOnly = false) => {
+    if (validateOnly) return;
     runtimeState.worldEditor = cloneValue(snapshot ?? {
       generator: { seed: "legacy-editor-seed", seaLevel: 16, maxElevation: 52 },
       objects: [], assetManifest: { version: "1.0", entries: [] },
     });
+    worldEditorRuntimeState = {
+      history: { undoStack: [], redoStack: [] },
+      authoritativeSculptHistory: { nextTransactionId: 1, undoStack: [], redoStack: [] },
+      selectedObjectId: null,
+    };
     if (failNextWorldEditorRestore) {
       failNextWorldEditorRestore = false;
       throw new Error("injected Infinite World editor restore failure");
@@ -615,11 +684,17 @@ assert.equal(runtimeState.recorderClears, beforeFailedRestoreState.recorderClear
   "failed world restore must preserve recorder history through core recovery");
 assert.deepEqual(runtimeState.worldEditor, beforeFailedRestoreState.worldEditor,
   "failed SceneDirector restore must also leave the independent Infinite World editor unchanged");
+assert.deepEqual(worldEditorRuntimeState, {
+  history: { undoStack: [{ type: "add", object: { id: "old-history-object" } }], redoStack: [] },
+  authoritativeSculptHistory: { nextTransactionId: 2, undoStack: [{ transactionId: 1 }], redoStack: [] },
+  selectedObjectId: "old-world-tree",
+}, "failed world restore must retain object undo/redo, sculpt undo/redo, and selection state");
 assert.equal(worldEditorPersistCalls, 0,
   "failed world restore must not persist a partial editor snapshot to the sidecar");
 
 const beforeFailedEditorRestoreBuffer = runtimeGrid.buffer.slice();
 const beforeFailedEditorRestoreState = cloneValue(runtimeState);
+const beforeFailedEditorRuntime = cloneValue(worldEditorRuntimeState);
 const beforeFailedEditorRestoreLaws = cloneValue(mockLawEngine.laws);
 const beforeFailedEditorRestoreMask = mockLawEngine.activeProcessMask;
 failNextWorldEditorRestore = true;
@@ -631,6 +706,8 @@ assert.deepEqual(runtimeGrid.buffer, beforeFailedEditorRestoreBuffer,
   "a late Infinite World editor failure must roll back the authoritative dense field");
 assert.deepEqual(runtimeState, beforeFailedEditorRestoreState,
   "WorldSaveSystem must restore the prior Infinite World editor, asset manifest and runtime domains after editor publication fails");
+assert.deepEqual(worldEditorRuntimeState, beforeFailedEditorRuntime,
+  "failed Infinite World publication must restore editor object/sculpt history and selected object");
 assert.deepEqual(mockLawEngine.laws, beforeFailedEditorRestoreLaws,
   "a late Infinite World editor failure must roll back the law collection");
 assert.equal(mockLawEngine.activeProcessMask, beforeFailedEditorRestoreMask,
@@ -709,7 +786,15 @@ const noTransactionSaver = new RuntimeWorldSaveSystem(runtimeGrid, mockLawEngine
 const beforeRejectedRestore = runtimeGrid.buffer.slice();
 await assert.rejects(
   noTransactionSaver.applySnapshot(savedRuntimeWorld),
+  /World restore cannot preflight the imported Infinite World snapshot/,
+  "a portable editor payload must fail closed when its renderer preflight is unavailable",
+);
+const noEditorTransactionSnapshot = { ...savedRuntimeWorld };
+delete noEditorTransactionSnapshot.worldEditor;
+await assert.rejects(
+  noTransactionSaver.applySnapshot(noEditorTransactionSnapshot),
   /World restore requires an engine-owned mutation transaction/,
+  "legacy finite-grid payloads must still enforce the authoritative transaction port",
 );
 assert.deepEqual(runtimeGrid.buffer, beforeRejectedRestore, "restore without a transaction port must fail before mutation");
 
