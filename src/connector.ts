@@ -16,7 +16,7 @@ import { SolverClient, SIMULATION_CATALOG, buildSolverPanel } from './scientific
 import { AgentSystem } from './modes/agents/AgentSystem'
 import { AgentPlanner } from './modes/agents/AgentPlanner'
 import { AgentVisualRuntime } from './modes/agents/AgentVisualRuntime'
-import { validateAgentVisualProfile, type AgentVisualProfile } from './modes/agents/AgentVisualProfile'
+import { validateAgentVisualProfile } from './modes/agents/AgentVisualProfile'
 import {
   createPlanarAgentGridWorldTransform,
   validateAgentGridWorldTransform,
