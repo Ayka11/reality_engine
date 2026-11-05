@@ -49,6 +49,29 @@ assert.match(saveWorldBody, /const failedPersistenceOperations: string\[\] = \[\
   'preflight sidecar failures must prevent active-seed publication')
 assert.equal(reseedBody.includes('worldViewContract.setSeed(newSeed)'), false,
   'procedural generator reseed must not overwrite an independently selected surface seed')
+const clearSavedWorldAt = renderer.indexOf('  clearSavedWorld(): boolean')
+const clearSavedWorldEnd = renderer.indexOf('  reseed(newSeed: string)', clearSavedWorldAt)
+assert.ok(clearSavedWorldAt >= 0 && clearSavedWorldEnd > clearSavedWorldAt,
+  'clearSavedWorld must expose its durable completion result')
+const clearSavedWorldBody = renderer.slice(clearSavedWorldAt, clearSavedWorldEnd)
+assert.match(clearSavedWorldBody, /window\.clearTimeout\(this\.saveTimer\)/,
+  'clearing the world must cancel a pending autosave before touching persistence')
+assert.match(clearSavedWorldBody, /return cleared/,
+  'reseed must be able to distinguish a durable clear from a failed clear')
+assert.match(reseedBody, /const previousNamespaceCleared = this\.clearSavedWorld\(\)/)
+assert.match(reseedBody, /if \(!previousNamespaceCleared\)[\s\S]*?return/,
+  'reseed must not switch away from a namespace that could not be safely cleared')
+assert.match(reseedBody, /this\.persistence\.beginSaveTransaction\(\{ recoverIncomplete: true \}\)/,
+  'reseed must open a journal on the target seed before publishing it')
+assert.match(reseedBody, /newSeed !== previousSeed && !this\.persistence\.clear\(\)/,
+  'reseed must clear a previously used target seed to prevent stale chunks from returning')
+const targetClearAt = reseedBody.indexOf('newSeed !== previousSeed && !this.persistence.clear()')
+const surfacePersistAt = reseedBody.indexOf("this.persistActiveSurfaceProvider()")
+const seedPublishAt = reseedBody.indexOf('saveActiveWorldSeed(newSeed)')
+const journalFinishAt = reseedBody.indexOf('finishSaveTransaction(ready)')
+assert.ok(targetClearAt >= 0 && surfacePersistAt > targetClearAt && seedPublishAt > surfacePersistAt && journalFinishAt > seedPublishAt,
+  'target namespace cleanup, surface persistence, active-seed publication and journal close must be ordered')
+
 
 const startAt = renderer.indexOf('  startExperiment(metadata:')
 assert.ok(startAt >= 0, 'startExperiment method must exist')

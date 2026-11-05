@@ -997,7 +997,11 @@ export class InfiniteWorldRenderer {
     }
   }
 
-  clearSavedWorld() {
+  clearSavedWorld(): boolean {
+    if (this.saveTimer !== null) {
+      window.clearTimeout(this.saveTimer)
+      this.saveTimer = null
+    }
     this.pendingExternalAssetPlacements = []
     this.clearExternalAssetRuntime()
     const cleared = this.persistence.clear()
@@ -1013,9 +1017,11 @@ export class InfiniteWorldRenderer {
     this.transformControls.detach()
     ;(this.transformControls as any).visible = false
     this.selectionMarker.visible = false
+    return cleared
   }
 
   reseed(newSeed: string) {
+    const previousSeed = this.generator.seed
     for (const [, patch] of this.patches) {
       this.scene.remove(patch.group)
       patch.group.traverse(obj => {
@@ -1029,13 +1035,14 @@ export class InfiniteWorldRenderer {
     this.terrainMaterials.clear()
     this.lastCenter = null
 
-    this.clearSavedWorld()
+    const previousNamespaceCleared = this.clearSavedWorld()
+    if (!previousNamespaceCleared) {
+      console.warn('[persistence] Reseed was cancelled because the previous world namespace could not be cleared safely')
+      return
+    }
 
     this.generator = new WorldGenerator(newSeed)
     ;(window as any).worldSeed = newSeed
-    if (!saveActiveWorldSeed(newSeed)) {
-      console.warn('[persistence] Active world seed could not be saved; a later reload may reopen a different world')
-    }
     this.fieldSampler.setGenerator(this.generator)
     // The procedural generator may be reseeded independently; the current
     // authored surface continues to own the world/view identity until reset.
@@ -1048,7 +1055,22 @@ export class InfiniteWorldRenderer {
     this.fieldSampler.setProvider(this.authoritativeField)
     this.rebuildDecisionLayer()
     this.persistence = new WorldPersistence(newSeed)
-    this.persistActiveSurfaceProvider()
+
+    // A seed can be reused after it was active in another session. Clear that
+    // target namespace under a journal before publishing it as the startup seed,
+    // otherwise its old chunks/sidecars can reappear after this reseed.
+    let reseedCommitted = false
+    if (this.persistence.beginSaveTransaction({ recoverIncomplete: true })) {
+      let ready = true
+      if (newSeed !== previousSeed && !this.persistence.clear()) ready = false
+      if (ready && this.persistActiveSurfaceProvider() === 'failed') ready = false
+      if (ready && !saveActiveWorldSeed(newSeed)) ready = false
+      reseedCommitted = this.persistence.finishSaveTransaction(ready)
+    }
+    if (!reseedCommitted) {
+      console.warn('[persistence] Reseed is active in memory but was not committed to storage; reload will not be redirected to the incomplete seed')
+    }
+
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
     this.history = new WorldEditHistory()
 
