@@ -145,6 +145,34 @@ function assertValidTransform(value: AgentGridWorldTransform): void {
   }
 }
 
+/**
+ * Create the explicit 2D-agent map used by the booted modes/agents system.
+ * Grid X maps to world X, grid Y maps to world Z, and the singleton depth axis
+ * maps upward. worldOrigin identifies the world-space center of cell (0, 0).
+ */
+export function createPlanarAgentGridWorldTransform(
+  width: number,
+  height: number,
+  worldOrigin: AgentGridCoordinates,
+  cellSize = 1,
+): AgentGridWorldTransform {
+  const candidate = {
+    schemaVersion: 'agent-grid-world-transform-v1' as const,
+    gridDimensions: { width, height, depth: 1 },
+    worldOrigin: { ...worldOrigin },
+    gridBasis: {
+      x: { x: cellSize, y: 0, z: 0 },
+      y: { x: 0, y: 0, z: cellSize },
+      z: { x: 0, y: cellSize, z: 0 },
+    },
+  }
+  const validation = validateAgentGridWorldTransform(candidate)
+  if (!validation.valid || !validation.transform) {
+    throw new TypeError(`Cannot create planar agent grid/world transform: ${validation.errors.join('; ')}`)
+  }
+  return validation.transform
+}
+
 /** Map continuous grid coordinates to world coordinates using the configured basis. */
 export function agentGridToWorld(
   transform: AgentGridWorldTransform,
