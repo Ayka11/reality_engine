@@ -29,8 +29,11 @@ export type AgentVisualSyncDiagnostics = {
   missingClip: number
 }
 
+let nextAgentVisualRuntimeId = 1
+
 type TrackedAgentVisual = {
   instanceId: string
+  sourceAssetId: string
   clipName: string | null
 }
 
@@ -62,6 +65,7 @@ export class AgentVisualRuntime {
   private readonly tracked = new Map<number, TrackedAgentVisual>()
   private diagnostics = emptyDiagnostics(false)
   private readonly transform: AgentGridWorldTransform
+  private readonly ownerId: string
 
   constructor(
     private readonly assets: WorldAssetRuntime,
@@ -79,6 +83,7 @@ export class AgentVisualRuntime {
     }
     // Store a validated detached copy so caller mutation cannot alter live projection.
     this.transform = validation.transform
+    this.ownerId = `agent-visual-runtime:${nextAgentVisualRuntimeId++}`
   }
 
   private mapGridPosition(grid: AgentGridCoordinates): AgentGridCoordinates {
@@ -140,6 +145,7 @@ export class AgentVisualRuntime {
       // shares the same semantic entry. Remove old projections until the exact
       // user-selected sourceAssetId is explicitly loaded again.
       for (const tracked of this.tracked.values()) {
+        if (this.assets.getInstanceRuntimeOwnerId(tracked.instanceId) !== this.ownerId) continue
         if (this.assets.removeInstance(tracked.instanceId)) current.removed += 1
       }
       this.tracked.clear()
@@ -164,26 +170,33 @@ export class AgentVisualRuntime {
       }
 
       let tracked = this.tracked.get(agent.id)
-      if (!this.assets.hasInstance(instanceId)) {
+      const existing = this.assets.hasInstance(instanceId)
+      const existingSourceAssetId = this.assets.getInstanceSourceAssetId(instanceId)
+      if (!existing || existingSourceAssetId !== source.id) {
+        if (existing && this.assets.removeInstance(instanceId)) current.removed += 1
         const placed = this.assets.placeInstance(instanceId, profile.semanticEntryId, {
           x: worldPosition.x,
           y: worldPosition.y,
           z: worldPosition.z,
           scale,
           persistence: 'transient',
-          ...(this.sourceAssetId !== undefined ? { sourceAssetId: this.sourceAssetId } : {}),
+          sourceAssetId: source.id,
         })
         if (!placed) {
           current.awaitingAsset += 1
           this.tracked.delete(agent.id)
           continue
         }
-        tracked = { instanceId, clipName: null }
+        this.assets.setInstanceRuntimeOwnerId(instanceId, this.ownerId)
+        tracked = { instanceId, sourceAssetId: source.id, clipName: null }
         this.tracked.set(agent.id, tracked)
         current.created += 1
       } else {
-        if (!tracked || tracked.instanceId !== instanceId) {
-          tracked = { instanceId, clipName: null }
+        // Reconfiguration may reuse a same-source instance. Transfer ownership
+        // so the previous runtime cannot dispose the replacement's live object.
+        this.assets.setInstanceRuntimeOwnerId(instanceId, this.ownerId)
+        if (!tracked || tracked.instanceId !== instanceId || tracked.sourceAssetId !== source.id) {
+          tracked = { instanceId, sourceAssetId: source.id, clipName: null }
           this.tracked.set(agent.id, tracked)
         }
         this.assets.setInstanceWorldTransform(instanceId, {
@@ -215,7 +228,8 @@ export class AgentVisualRuntime {
 
     for (const [agentId, tracked] of [...this.tracked]) {
       if (aliveIds.has(agentId)) continue
-      if (this.assets.removeInstance(tracked.instanceId)) current.removed += 1
+      if (this.assets.getInstanceRuntimeOwnerId(tracked.instanceId) === this.ownerId &&
+          this.assets.removeInstance(tracked.instanceId)) current.removed += 1
       this.tracked.delete(agentId)
     }
 
@@ -236,7 +250,9 @@ export class AgentVisualRuntime {
 
   private disposeInstances(): void {
     for (const tracked of this.tracked.values()) {
-      this.assets.removeInstance(tracked.instanceId)
+      if (this.assets.getInstanceRuntimeOwnerId(tracked.instanceId) === this.ownerId) {
+        this.assets.removeInstance(tracked.instanceId)
+      }
     }
     this.tracked.clear()
   }
