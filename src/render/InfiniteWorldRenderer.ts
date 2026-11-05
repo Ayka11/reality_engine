@@ -1021,7 +1021,7 @@ export class InfiniteWorldRenderer {
     this.transformControls.detach()
     ;(this.transformControls as any).visible = false
     this.selectionMarker.visible = false
-    return true
+    return cleared
   }
 
   reseed(newSeed: string) {
