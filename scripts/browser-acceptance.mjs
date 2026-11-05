@@ -368,6 +368,24 @@ try {
   if (!packageDownloadPath) throw new Error("Unified .reality package download did not produce a readable file");
   const packageBytes = await readFile(packageDownloadPath);
   const savedPackage = JSON.parse(packageBytes.toString("utf8"));
+  const restartSeed = "acceptance-restart-seed";
+  if (savedPackage.worldEditor?.surfaceProvider?.kind !== "world-generator-surface") {
+    throw new Error("Restart acceptance requires the built-in generator surface after the earlier reset");
+  }
+  savedPackage.worldEditor.generator.seed = restartSeed;
+  savedPackage.worldEditor.surfaceProvider.seed = restartSeed;
+  savedPackage.worldEditor.terrainDeformations.seed = restartSeed;
+  // Give the finite simulation a non-default state so the package import after
+  // reload can prove that its dense field and logical tick are restored too.
+  savedPackage.tick = 37;
+  let finiteProbeCell = savedPackage.cells.find(cell => cell.i === 0);
+  if (!finiteProbeCell) {
+    finiteProbeCell = { i: 0, d: Array(savedPackage.NF).fill(0) };
+    savedPackage.cells.push(finiteProbeCell);
+  }
+  finiteProbeCell.d[0] = 123.25;
+  packageFixture.generatorSeed = restartSeed;
+  packageFixture.surfaceSeed = restartSeed;
   if (savedPackage.format !== "re_v6" || savedPackage.version !== 6 ||
       !savedPackage.worldEditor || !Array.isArray(savedPackage.worldEditor.objects) ||
       !savedPackage.worldEditor.provenance || !savedPackage.worldEditor.assetManifest ||
@@ -428,18 +446,78 @@ try {
   const loadedPackageState = await page.evaluate(() => ({
     objectCount: window.infiniteWorld.getObjectCount(),
     seed: window.infiniteWorld.generator.seed,
+    surfaceSeed: window.infiniteWorld.worldSeed,
     assetCount: window.worldAssetManifest.entries.length,
     provenanceEvents: window.infiniteWorld.getAuthoritativeFieldState().provenance.events.length,
     assetPlacements: window.capturePortableWorldEditorSnapshot().assetPlacements,
     runtimeAssetStats: window.worldExternalAssetStats(),
   }));
   if (loadedPackageState.seed !== packageFixture.generatorSeed ||
+      loadedPackageState.surfaceSeed !== packageFixture.surfaceSeed ||
       !loadedPackageState.assetCount || !loadedPackageState.provenanceEvents ||
       JSON.stringify(loadedPackageState.assetPlacements) !== JSON.stringify([placementFixture]) ||
       loadedPackageState.runtimeAssetStats?.loaded !== 0 ||
       loadedPackageState.runtimeAssetStats?.instances !== 0) {
     throw new Error("Active Load did not restore world state and inert external placement intent: " + JSON.stringify(loadedPackageState));
   }
+
+  console.log("[acceptance] imported non-default world seed and editor sidecars survive a browser restart");
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForSelector("#c3d");
+  await page.waitForFunction(() =>
+    typeof window.worldGetSurfaceProviderState === "function" &&
+    !!window.infiniteWorld &&
+    !!window.worldAssetManifest
+  );
+  await page.waitForFunction(objectId =>
+    !!window.infiniteWorld?.objects?.get(objectId) &&
+    window.worldAssetManifest?.entries?.some(entry => entry.id === "acceptance-package-asset") &&
+    window.infiniteWorld.getAuthoritativeFieldState().provenance.events.some(event =>
+      JSON.stringify(event).includes("acceptance-package-provenance")) &&
+    localStorage.getItem("reality-engine-active-world-seed") === "acceptance-restart-seed",
+  packageFixture.objectId, { timeout: acceptanceTimeout });
+  const restartedEditorState = await page.evaluate(objectId => ({
+    seed: window.infiniteWorld.generator.seed,
+    surfaceSeed: window.infiniteWorld.worldSeed,
+    selectedSurface: window.worldGetSurfaceProviderState()?.id,
+    object: window.infiniteWorld.objects.get(objectId),
+    assetManifestEntry: window.worldAssetManifest.entries.some(entry => entry.id === "acceptance-package-asset"),
+    assetPlacements: window.capturePortableWorldEditorSnapshot().assetPlacements,
+    runtimeAssets: window.worldExternalAssetStats(),
+    provenance: window.infiniteWorld.getAuthoritativeFieldState().provenance.events,
+  }), packageFixture.objectId);
+  if (restartedEditorState.seed !== packageFixture.generatorSeed ||
+      restartedEditorState.surfaceSeed !== packageFixture.surfaceSeed ||
+      restartedEditorState.selectedSurface !== "world-generator-surface" ||
+      !restartedEditorState.object ||
+      !restartedEditorState.assetManifestEntry ||
+      JSON.stringify(restartedEditorState.assetPlacements) !== JSON.stringify([placementFixture]) ||
+      restartedEditorState.runtimeAssets?.loaded !== 0 ||
+      restartedEditorState.runtimeAssets?.instances !== 0 ||
+      !restartedEditorState.provenance.some(event => JSON.stringify(event).includes("acceptance-package-provenance"))) {
+    throw new Error("Infinite World sidecar did not recover under the imported active seed after restart: " +
+      JSON.stringify(restartedEditorState));
+  }
+
+  // Portable files remain the authority for the finite 2D simulation. Re-import
+  // the package after restart, then prove that its saved tick/field can advance.
+  await page.locator("#loadFileInput").setInputFiles({
+    name: packageDownload.suggestedFilename(),
+    mimeType: "application/json",
+    buffer: importPackageBytes,
+  });
+  await page.waitForFunction(({ tick, fieldValue, objectId }) =>
+    Number(window.tick) === tick &&
+    window.buf?.[0] === fieldValue &&
+    !!window.infiniteWorld?.objects?.get(objectId),
+  { tick: savedPackage.tick, fieldValue: 123.25, objectId: packageFixture.objectId }, { timeout: acceptanceTimeout });
+  await page.locator("#pb").click();
+  await page.waitForFunction((beforeTick) =>
+    Number(window.tick) > beforeTick && window.getInfiniteWorldSimulationRunning?.() === true,
+  savedPackage.tick, { timeout: 8000 });
+  await page.locator("#pb").click();
+  await page.waitForFunction(() => window.getInfiniteWorldSimulationRunning?.() === false);
+  console.log("[acceptance] Save -> restart -> Load -> Continue Simulation PASS");
 
   console.log("[acceptance] malformed re_v6 imports fail before any world mutation");
   const invalidPackage = { ...savedPackage, W: savedPackage.W + 1 };

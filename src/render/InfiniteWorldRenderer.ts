@@ -9,7 +9,7 @@ import { buildWaterDepthMaskFromHeightField, buildWaterSurfaceMeshData } from '.
 import { worldToChunk, WORLD_CHUNK_SIZE, type ChunkCoord } from '../infinity/WorldCoordinate'
 import { WorldObjectManager } from '../infinity/ObjectManager'
 import { lodForDistance, lodResolution, type LODLevel } from '../infinity/LODManager'
-import { WorldPersistence } from '../infinity/WorldPersistence'
+import { WorldPersistence, saveActiveWorldSeed } from '../infinity/WorldPersistence'
 import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
@@ -834,9 +834,15 @@ export class InfiniteWorldRenderer {
   }
 
   saveWorld(options: { checkpoint?: boolean } = {}) {
+    // The active seed selects the namespace that startup must reopen. Persist it
+    // alongside every world save so a different imported/reseeded world is not
+    // silently replaced by the bootstrap default after a page restart.
+    const failedPersistenceOperations: string[] = []
+    if (!saveActiveWorldSeed(this.generator.seed)) {
+      failedPersistenceOperations.push('active world seed')
+    }
     // Explicit Save creates a stable checkpoint; autosave must not move that checkpoint.
     const fieldSnapshot = this.authoritativeField.serialize()
-    const failedPersistenceOperations: string[] = []
     if (!this.persistAuthoritativeFieldState()) failedPersistenceOperations.push('authoritative field state')
     if (!this.persistTerrainDeformationState()) failedPersistenceOperations.push('terrain deformation state')
     if (!this.persistence.saveProvenanceState(runtimeProvenance.getTrace())) {
@@ -987,6 +993,9 @@ export class InfiniteWorldRenderer {
 
     this.generator = new WorldGenerator(newSeed)
     ;(window as any).worldSeed = newSeed
+    if (!saveActiveWorldSeed(newSeed)) {
+      console.warn('[persistence] Active world seed could not be saved; a later reload may reopen a different world')
+    }
     this.fieldSampler.setGenerator(this.generator)
     // The procedural generator may be reseeded independently; the current
     // authored surface continues to own the world/view identity until reset.

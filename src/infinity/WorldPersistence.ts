@@ -3,6 +3,40 @@ import type { WorldObject } from './WorldObject'
 
 type StoredChunk = { version: 1; seed: string; objects: WorldObject[] }
 
+export const ACTIVE_WORLD_SEED_STORAGE_KEY = 'reality-engine-active-world-seed'
+const MAX_ACTIVE_WORLD_SEED_LENGTH = 512
+
+function isValidActiveWorldSeed(value: unknown): value is string {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_ACTIVE_WORLD_SEED_LENGTH &&
+    value.trim() === value
+}
+
+/** Read the seed that selects the world-specific localStorage namespace at startup. */
+export function loadActiveWorldSeed(fallback: string): string {
+  const safeFallback = isValidActiveWorldSeed(fallback) ? fallback : 'reality-seed-1'
+  try {
+    const saved = localStorage.getItem(ACTIVE_WORLD_SEED_STORAGE_KEY)
+    if (isValidActiveWorldSeed(saved)) return saved
+    if (saved !== null) localStorage.removeItem(ACTIVE_WORLD_SEED_STORAGE_KEY)
+  } catch {
+    // Startup remains available when browser storage is disabled or inaccessible.
+  }
+  return safeFallback
+}
+
+/** Persist the namespace selector independently from the seed-scoped world payloads. */
+export function saveActiveWorldSeed(seed: string): boolean {
+  if (!isValidActiveWorldSeed(seed)) return false
+  try {
+    localStorage.setItem(ACTIVE_WORLD_SEED_STORAGE_KEY, seed)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export class WorldPersistence {
   private readonly prefix: string
   private readonly manifestKey: string

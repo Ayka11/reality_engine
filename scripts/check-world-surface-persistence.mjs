@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises'
 const root = new URL('../', import.meta.url)
 const coordinateSource = await readFile(new URL('src/infinity/WorldCoordinate.ts', root), 'utf8')
 const persistenceSource = await readFile(new URL('src/infinity/WorldPersistence.ts', root), 'utf8')
+const bootstrapSource = await readFile(new URL('src/infinityBootstrap.ts', root), 'utf8')
+const rendererSource = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8')
 
 function asDataModule(source, replacements = []) {
   let js = ts.transpileModule(source, {
@@ -18,7 +20,12 @@ const coordinateUrl = asDataModule(coordinateSource)
 const persistenceUrl = asDataModule(persistenceSource, [
   [/from ['"]\.\/WorldCoordinate['"]/g, 'from "' + coordinateUrl + '"'],
 ])
-const { WorldPersistence } = await import(persistenceUrl)
+const {
+  WorldPersistence,
+  ACTIVE_WORLD_SEED_STORAGE_KEY,
+  loadActiveWorldSeed,
+  saveActiveWorldSeed,
+} = await import(persistenceUrl)
 
 const entries = new Map()
 globalThis.localStorage = {
@@ -28,6 +35,35 @@ globalThis.localStorage = {
   setItem(key, value) { entries.set(String(key), String(value)) },
   removeItem(key) { entries.delete(String(key)) },
 }
+
+assert.equal(loadActiveWorldSeed('fallback-seed'), 'fallback-seed',
+  'startup must use its fallback when no active-world seed has been saved')
+assert.equal(saveActiveWorldSeed('restart-world-seed'), true,
+  'the active world seed must be durably persisted')
+assert.equal(loadActiveWorldSeed('fallback-seed'), 'restart-world-seed',
+  'startup must select the saved seed-scoped world namespace after restart')
+entries.set(ACTIVE_WORLD_SEED_STORAGE_KEY, '   ')
+assert.equal(loadActiveWorldSeed('fallback-seed'), 'fallback-seed',
+  'malformed active seed data must fail closed to the configured fallback')
+assert.equal(entries.has(ACTIVE_WORLD_SEED_STORAGE_KEY), false,
+  'malformed active seed data must be removed rather than retried on every restart')
+assert.equal(saveActiveWorldSeed(''), false, 'empty active seeds must not be persisted')
+assert.equal(saveActiveWorldSeed('x'.repeat(513)), false,
+  'oversized active seeds must not be persisted')
+const originalSetItem = globalThis.localStorage.setItem
+globalThis.localStorage.setItem = (key, value) => {
+  if (key === ACTIVE_WORLD_SEED_STORAGE_KEY) throw new Error('injected active seed storage failure')
+  originalSetItem(key, value)
+}
+assert.equal(saveActiveWorldSeed('storage-blocked-seed'), false,
+  'active seed persistence must report browser storage failures')
+globalThis.localStorage.setItem = originalSetItem
+assert.match(bootstrapSource, /loadActiveWorldSeed\('reality-seed-1'\)/,
+  'bootstrap must restore the saved world seed before constructing InfiniteWorldRenderer')
+assert.match(rendererSource, /saveActiveWorldSeed\(this\.generator\.seed\)/,
+  'every world save must persist the active seed namespace')
+assert.match(rendererSource, /saveActiveWorldSeed\(newSeed\)/,
+  'explicit world reseeding must immediately persist its new active seed')
 
 const persistence = new WorldPersistence('surface-save-seed')
 const snapshot = {
@@ -135,3 +171,5 @@ assert.equal(persistence.loadAssetPlacementsState(), null,
 console.log('World surface persistence regression: PASS')
 console.log('PASS: versioned surface snapshot round-trips and remains world-seed scoped')
 console.log('PASS: clearing world persistence removes surface selection')
+console.log('PASS: active world seed survives restart and selects the matching sidecar namespace')
+console.log('PASS: malformed and unavailable active-seed storage fail closed without blocking startup')
