@@ -858,10 +858,12 @@ export class InfiniteWorldRenderer {
     if (options.checkpoint !== false) {
       const fieldCheckpointSaved = this.persistence.saveFieldCheckpoint(fieldSnapshot)
       if (!fieldCheckpointSaved) {
+        failedPersistenceOperations.push('authoritative field checkpoint')
         console.warn('[persistence] Authoritative field checkpoint failed; saved field edits may not survive reload')
       }
       const checkpointSaved = this.persistence.saveTerrainDeformationCheckpoint(this.terrainDeformations.serialize())
       if (!checkpointSaved) {
+        failedPersistenceOperations.push('terrain deformation checkpoint')
         console.warn('[persistence] Terrain deformation checkpoint failed; saved terrain edits may not survive reload')
       }
     }
