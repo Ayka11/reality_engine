@@ -119,8 +119,8 @@ interface SaveContext {
   restoreWorldEditorRuntimeCheckpoint?: (checkpoint: unknown) => void;
   /** Best-effort persistence after the enclosing world transaction commits. */
   persistWorldEditorSnapshot?: () => void;
-  /** Surface a sidecar persistence failure after the authoritative world import has already committed. */
-  reportWorldEditorPersistenceFailure?: (snapshotName: string, error: unknown) => void;
+  /** Surface failures in best-effort actions that run after the authoritative world import commits. */
+  reportWorldEditorPostCommitFailure?: (snapshotName: string, operation: string, error: unknown) => void;
   /** Release non-portable external assets after the authoritative import transaction commits. */
   clearWorldAssetRuntime?: () => void;
   getCausalLog?: () => unknown[];
@@ -481,43 +481,45 @@ export class WorldSaveSystem {
     }
 
     // The authoritative transaction has committed. Keep the in-memory pointer
-    // aligned with the live world even if later cleanup or sidecar persistence fails.
-    this.currentSnapshot = snapshot;
+// aligned with the live world even if later best-effort cleanup or sidecar
+// persistence fails.
+this.currentSnapshot = snapshot;
 
-    // Timeline is a history of grid-only frames, not a full world checkpoint.
-    // Clear it only after the new world transaction commits successfully.
-    this.context.clearTimeline?.();
-    this.context.clearSculptHistory?.();
-    // External GLTF assets are intentionally not part of portable snapshots.
-    // The world transaction has committed; release the previous world's runtime
-    // objects even if the subsequent sidecar persistence operation fails.
-    this.context.clearWorldAssetRuntime?.();
-
-    // The authoritative world transaction is already committed. A sidecar
-    // persistence failure must not turn a successful in-memory import into a
-    // rejected Load operation (or imply that the engine transaction rolled back).
-    let editorPersistenceCommitted = true;
-    try {
-      this.context.persistWorldEditorSnapshot?.();
-    } catch (error) {
-      editorPersistenceCommitted = false;
-      try {
-        this.context.reportWorldEditorPersistenceFailure?.(snapshot.name, error);
-      } catch (reportError) {
-        console.warn("[persistence] Could not report the editor sidecar persistence failure", reportError);
-      }
-      console.warn(
-        `[persistence] World "${snapshot.name}" is active in memory, but Infinite World editor persistence did not commit; reload may require recovery.`,
-        error,
-      );
-    }
-    if (editorPersistenceCommitted) {
-      console.info(`World "${snapshot.name}" fully restored.`);
-    } else {
-      console.warn(`World "${snapshot.name}" restored in memory with incomplete editor persistence.`);
-    }
+let postCommitFailureCount = 0;
+const reportPostCommitFailure = (operation: string, error: unknown) => {
+  postCommitFailureCount += 1;
+  try {
+    this.context.reportWorldEditorPostCommitFailure?.(snapshot.name, operation, error);
+  } catch (reportError) {
+    console.warn(`[persistence] Could not report post-commit ${operation} failure`, reportError);
   }
+  console.warn(
+    `[persistence] World "${snapshot.name}" is active in memory, but post-commit ${operation} failed; reload may require recovery.`,
+    error,
+  );
+};
+const runPostCommitAction = (operation: string, action: () => void) => {
+  try {
+    action();
+  } catch (error) {
+    reportPostCommitFailure(operation, error);
+  }
+};
 
+// The following operations run after the engine mutation transaction has
+// committed. None may reject Load and imply that the authoritative restore
+// was rolled back; each failure is surfaced as an incomplete post-commit step.
+runPostCommitAction('timeline cleanup', () => this.context.clearTimeline?.());
+runPostCommitAction('sculpt history cleanup', () => this.context.clearSculptHistory?.());
+runPostCommitAction('external asset cleanup', () => this.context.clearWorldAssetRuntime?.());
+runPostCommitAction('editor sidecar persistence', () => this.context.persistWorldEditorSnapshot?.());
+
+if (postCommitFailureCount === 0) {
+  console.info(`World "${snapshot.name}" fully restored.`);
+} else {
+  console.warn(`World "${snapshot.name}" restored in memory with ${postCommitFailureCount} incomplete post-commit action(s).`);
+}
+  }
   private async saveToIndexedDB(snapshot: WorldSnapshot): Promise<void> {
     const db = await this.db();
     const id = `${snapshot.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${snapshot.timestamp}`;

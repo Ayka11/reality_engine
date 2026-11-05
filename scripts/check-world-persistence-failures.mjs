@@ -664,7 +664,8 @@ let failNextWorldEditorRestore = false;
 let worldEditorPersistCalls = 0;
 let worldAssetClearCalls = 0;
 let failWorldEditorPersist = false;
-const sidecarFailureReports = [];
+let failWorldAssetClear = false;
+const postCommitFailureReports = [];
 let worldEditorRuntimeState = {
   history: { undoStack: [{ type: "add", object: { id: "old-history-object" } }], redoStack: [] },
   authoritativeSculptHistory: { nextTransactionId: 2, undoStack: [{ transactionId: 1 }], redoStack: [] },
@@ -769,10 +770,13 @@ const transactionContext = {
     worldEditorPersistCalls++;
     if (failWorldEditorPersist) throw new Error("injected sidecar persistence failure");
   },
-  reportWorldEditorPersistenceFailure: (snapshotName, error) => {
-    sidecarFailureReports.push({ snapshotName, message: error.message });
+  reportWorldEditorPostCommitFailure: (snapshotName, operation, error) => {
+    postCommitFailureReports.push({ snapshotName, operation, message: error.message });
   },
-  clearWorldAssetRuntime: () => { worldAssetClearCalls++; },
+  clearWorldAssetRuntime: () => {
+    worldAssetClearCalls++;
+    if (failWorldAssetClear) throw new Error("injected asset cleanup failure");
+  },
   getCausalLog: () => cloneValue(runtimeState.causal.events),
 };
 const saveHarness = new RuntimeWorldSaveSystem(runtimeGrid, mockLawEngine, null, transactionContext);
@@ -904,8 +908,9 @@ const sidecarFailureSnapshot = {
 };
 failWorldEditorPersist = true;
 await saveHarness.applySnapshot(sidecarFailureSnapshot);
-assert.deepEqual(sidecarFailureReports, [{
+assert.deepEqual(postCommitFailureReports, [{
   snapshotName: sidecarFailureSnapshot.name,
+  operation: "editor sidecar persistence",
   message: "injected sidecar persistence failure",
 }], "post-commit sidecar errors must be reported without rejecting the committed restore");
 assert.equal(saveHarness.getCurrentSnapshot(), sidecarFailureSnapshot,
@@ -948,6 +953,24 @@ assert.deepEqual(runtimeState.worldEditor, {
 }, "legacy package restore must explicitly clear stale Infinite World objects and asset provenance");
 assert.equal(worldEditorPersistCalls, 3,
   "legacy editor reset must persist only after its world transaction commits");
+
+const cleanupFailureSnapshot = {
+  ...savedRuntimeWorld,
+  name: "Committed despite external asset cleanup failure",
+  timestamp: savedRuntimeWorld.timestamp + 2,
+};
+failWorldAssetClear = true;
+await saveHarness.applySnapshot(cleanupFailureSnapshot);
+assert.deepEqual(postCommitFailureReports.at(-1), {
+  snapshotName: cleanupFailureSnapshot.name,
+  operation: "external asset cleanup",
+  message: "injected asset cleanup failure",
+}, "a post-commit external asset cleanup failure must be reported without rejecting Load");
+assert.equal(saveHarness.getCurrentSnapshot(), cleanupFailureSnapshot,
+  "post-commit asset cleanup failure must not roll back the committed current snapshot");
+assert.equal(worldEditorPersistCalls, 4,
+  "editor sidecar persistence must still run after a best-effort asset cleanup failure");
+failWorldAssetClear = false;
 assert.equal(runtimeState.recorderClears, 3, "each committed world restore must clear stale recorder history, including a post-commit sidecar failure");
 assert.equal(runtimeGrid.buffer[20], 0, "legacy restore must clear stale entity ownership marker");
 assert.equal(runtimeGrid.buffer[19], 0, "legacy restore must clear stale agent marker");

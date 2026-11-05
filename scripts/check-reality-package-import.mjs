@@ -377,11 +377,13 @@ assert.ok(worldSaveSource.includes("rollback(\"Infinite world editor\""),
   'late world restore failures must roll back the separate Infinite World editor');
 assert.ok(worldSaveSource.includes("this.context.persistWorldEditorSnapshot?.()"),
   'the imported editor state must persist only after the world transaction commits');
-assert.match(worldSaveSource, /try \{\s*this\.context\.persistWorldEditorSnapshot\?\.\(\);?\s*\} catch \(error\) \{[\s\S]*?reportWorldEditorPersistenceFailure/,
-  'post-commit editor sidecar failures must be reported without rejecting an already committed world restore');
-assert.ok(mainSource.includes('reportWorldEditorPersistenceFailure: (snapshotName, error) =>') &&
+assert.match(worldSaveSource, /const runPostCommitAction = \(operation: string, action: \(\) => void\)[\s\S]*?runPostCommitAction\('external asset cleanup'[\s\S]*?runPostCommitAction\('editor sidecar persistence'/,
+  'all best-effort cleanup and sidecar operations must be isolated after the authoritative restore commits');
+assert.ok(worldSaveSource.includes('reportWorldEditorPostCommitFailure?.(snapshot.name, operation, error)'),
+  'post-commit failures must carry an operation label into the UI error reporter');
+assert.ok(mainSource.includes('reportWorldEditorPostCommitFailure: (snapshotName, operation, error) =>') &&
   mainSource.includes('_exportStatus(message, false)'),
-  'the application must surface a failed editor sidecar commit without claiming that the world import rolled back');
+  'the application must surface post-commit cleanup/sidecar failures without claiming that the world import rolled back');
 assert.match(mainSource, /function reportWorldSaveFailure\(operation: string, error: unknown\): void[\s\S]*?_exportStatus\([^\n]*false\)/,
   'user-triggered world save/load failures must be visible in the export status panel');
 assert.match(mainSource, /function importRealityPackageWithFeedback\(file: File\): Promise<void>[\s\S]*?saveSystem\.importRealityPackage\(file\)\.catch/,
