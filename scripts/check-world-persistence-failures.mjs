@@ -233,6 +233,7 @@ let failSet = false;
 let failSetForKey = null;
 let failGet = false;
 let failRemove = false;
+let failEnumeration = false;
 globalThis.localStorage = {
   setItem(key, value) {
     if (failSet || (failSetForKey !== null && String(key) === failSetForKey)) {
@@ -249,9 +250,11 @@ globalThis.localStorage = {
     values.delete(String(key));
   },
   key(index) {
+    if (failEnumeration) throw new Error("SecurityError");
     return [...values.keys()][index] ?? null;
   },
   get length() {
+    if (failEnumeration) throw new Error("SecurityError");
     return values.size;
   },
 };
@@ -445,6 +448,30 @@ assert.equal(values.has(clearOrphanStorageKey), false,
   "clear must remove actual stored chunk keys rather than trusting manifest alone");
 assert.deepEqual(persistence.knownChunks({ recoverOrphans: true }), [],
   "clear must not leave orphaned chunks that can reappear on the next world load");
+
+// If storage enumeration is unavailable, clear must stop before deleting the
+// manifest or sidecars. Otherwise valid but unindexed chunks can survive and
+// be recovered beside a world whose other state was already erased.
+const scanFailureObjects = [{ id: 'scan-failure-object', x: 140, y: 1, z: -70, kind: 'tower' }];
+const scanFailureChunkKey = "reality-engine-world:seed-a:chunk:4,0,-2";
+assert.equal(persistence.saveChunk(4, 0, -2, scanFailureObjects), true);
+const manifestBeforeScanFailure = values.get(manifestKey);
+const fieldStateStorageKey = "reality-engine-world:seed-a:field-state";
+values.set(fieldStateStorageKey, JSON.stringify({ version: 1, seed: "seed-a", state: { retained: true } }));
+const fieldStateBeforeScanFailure = values.get(fieldStateStorageKey);
+const chunkBeforeScanFailure = values.get(scanFailureChunkKey);
+failEnumeration = true;
+assert.equal(persistence.clear(), false,
+  "clear must report failure when it cannot enumerate the complete chunk namespace");
+failEnumeration = false;
+assert.equal(values.get(scanFailureChunkKey), chunkBeforeScanFailure,
+  "an unavailable storage scan must not partially delete durable chunk payloads");
+assert.equal(values.get(manifestKey), manifestBeforeScanFailure,
+  "an unavailable storage scan must preserve the manifest for the retained chunk payloads");
+assert.equal(values.get(fieldStateStorageKey), fieldStateBeforeScanFailure,
+  "an unavailable storage scan must preserve the remaining world sidecars");
+assert.deepEqual(persistence.loadChunk(4, 0, -2), scanFailureObjects,
+  "a failed preflight scan must leave the existing world cache and data usable");
 
 failGet = true;
 failRemove = true;
