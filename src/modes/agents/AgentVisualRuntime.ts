@@ -101,6 +101,14 @@ export class AgentVisualRuntime {
 
     if (!source) {
       current.awaitingAsset = agents.length
+      // The source may have been explicitly removed. Do not retain stale bookkeeping
+      // for renderer instances that the asset runtime already disposed with it.
+      for (const [agentId, tracked] of [...this.tracked]) {
+        if (!this.assets.hasInstance(tracked.instanceId)) {
+          this.tracked.delete(agentId)
+          current.removed += 1
+        }
+      }
       current.instances = this.tracked.size
       this.diagnostics = current
       return { ...current }
