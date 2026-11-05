@@ -17,7 +17,7 @@ import { AgentSystem } from './modes/agents/AgentSystem'
 import { AgentPlanner } from './modes/agents/AgentPlanner'
 import { AgentVisualRuntime } from './modes/agents/AgentVisualRuntime'
 import { validateAgentVisualProfile } from './modes/agents/AgentVisualProfile'
-import { AgentVisualConfigurationStore } from './modes/agents/AgentVisualConfigurationStore'
+import { AgentVisualConfigurationStore, type AgentVisualConfiguration } from './modes/agents/AgentVisualConfigurationStore'
 import {
   createPlanarAgentGridWorldTransform,
   validateAgentGridWorldTransform,
