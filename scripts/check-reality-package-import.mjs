@@ -354,6 +354,23 @@ assert.ok(worldSaveSource.includes("worldEditor: snapshot.worldEditor") &&
   'World Save export and import must map the world-editor snapshot in both directions');
 assert.ok(worldSaveSource.includes("this.context.restoreWorldEditorSnapshot?.(snapshot.worldEditor)"),
   'world-editor restore must join the same full-world mutation transaction');
+const worldEditorPreflightIndex = worldSaveSource.indexOf(
+  "this.context.restoreWorldEditorSnapshot(snapshot.worldEditor, true)",
+);
+const mutationBoundaryIndex = worldSaveSource.indexOf(
+  "const mutate = this.context.mutateAuthoritativeState",
+);
+const rollbackCaptureIndex = worldSaveSource.indexOf("const graphBefore = this.context.graphProvider?.()");
+assert.ok(worldEditorPreflightIndex >= 0 &&
+  mutationBoundaryIndex > worldEditorPreflightIndex &&
+  rollbackCaptureIndex > worldEditorPreflightIndex,
+  'portable Infinite World payloads must be preflighted before rollback capture and the authoritative mutation transaction');
+assert.ok(worldSaveSource.includes("cannot preflight the imported Infinite World snapshot"),
+  'imports with a world-editor payload must fail closed when no preflight callback is available');
+assert.ok(mainSource.includes("restoreWorldEditorSnapshot: (snapshot, validateOnly = false) =>") &&
+  mainSource.includes("world?.validatePortableWorldSnapshot(snapshot)") &&
+  mainSource.includes("if (validateOnly) return;"),
+  'the application must validate the detached world-editor candidate without publishing it during preflight');
 assert.ok(worldSaveSource.includes("rollback(\"Infinite world editor\""),
   'late world restore failures must roll back the separate Infinite World editor');
 assert.ok(worldSaveSource.includes("this.context.persistWorldEditorSnapshot?.()"),
