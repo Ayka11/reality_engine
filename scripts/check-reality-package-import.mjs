@@ -375,7 +375,7 @@ assert.ok(worldSaveSource.includes("rollback(\"Infinite world editor\""),
   'late world restore failures must roll back the separate Infinite World editor');
 assert.ok(worldSaveSource.includes("this.context.persistWorldEditorSnapshot?.()"),
   'the imported editor state must persist only after the world transaction commits');
-assert.match(worldSaveSource, /try \{\s*this\.context\.persistWorldEditorSnapshot\?\.\(\)\s*\} catch \(error\) \{[\s\S]*?reportWorldEditorPersistenceFailure/,
+assert.match(worldSaveSource, /try \{\s*this\.context\.persistWorldEditorSnapshot\?\.\(\);?\s*\} catch \(error\) \{[\s\S]*?reportWorldEditorPersistenceFailure/,
   'post-commit editor sidecar failures must be reported without rejecting an already committed world restore');
 assert.ok(mainSource.includes('reportWorldEditorPersistenceFailure: (snapshotName, error) =>') &&
   mainSource.includes('_exportStatus(message, false)'),
