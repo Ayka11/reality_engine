@@ -216,6 +216,27 @@ export class WorldAssetRuntime {
     return this.instances.has(instanceId)
   }
 
+  getInstanceSourceAssetId(instanceId: string): string | null {
+    const sourceAssetId = this.instances.get(instanceId)?.userData.runtimeAssetSourceId
+    return typeof sourceAssetId === 'string' ? sourceAssetId : null
+  }
+
+  /** Assign a transient runtime owner without changing persistent world state. */
+  setInstanceRuntimeOwnerId(instanceId: string, ownerId: string): boolean {
+    if (typeof ownerId !== 'string' || !ownerId.trim() || ownerId.length > 512) {
+      throw new TypeError('External asset runtime owner ID must be a non-empty string')
+    }
+    const instance = this.instances.get(instanceId)
+    if (!instance) return false
+    instance.userData.runtimeOwnerId = ownerId
+    return true
+  }
+
+  getInstanceRuntimeOwnerId(instanceId: string): string | null {
+    const ownerId = this.instances.get(instanceId)?.userData.runtimeOwnerId
+    return typeof ownerId === 'string' ? ownerId : null
+  }
+
   getInstanceWorldPosition(instanceId: string) {
     const position = this.instances.get(instanceId)?.userData.worldPosition as
       { x: number; y: number; z: number } | undefined
