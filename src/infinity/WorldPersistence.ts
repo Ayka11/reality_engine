@@ -524,7 +524,13 @@ export class WorldPersistence {
       // deleting the manifest and sidecars while unindexed chunks survive.
       return false
     }
-    if (!this.beginSaveTransaction({ recoverIncomplete: true })) return false
+    if (!this.beginSaveTransaction({ recoverIncomplete: true })) {
+      // A failed durable clear must still detach the renderer from its in-memory
+      // chunk cache; persisted records remain untouched and the caller gets false.
+      this.loaded.clear()
+      this.cache.clear()
+      return false
+    }
     const chunkStorageKeys = new Set(scannedChunkKeys)
 
     let raw: string | null = null
