@@ -155,8 +155,14 @@ assert.deepEqual(rebasedWorldPosition, {
   y: 7 + 110 * 0.1 - (-38) * 0.05,
   z: -38,
 }, 'origin rebasing must preserve the absolute world transform')
-const rebasedInstance = scene.getObjectByName('root')
-assert.ok(rebasedInstance, 'loaded source animation root remains present')
+const rebasedInstance = scene.children.find(
+  child => child.userData.runtimeAssetInstanceId === 'agent-visual:1',
+)
+assert.ok(rebasedInstance, 'agent visual instance must remain present after origin rebase')
+assert.equal(rebasedInstance.position.x, 20)
+assert.ok(Math.abs(rebasedInstance.position.y - (rebasedWorldPosition!.y - 5)) < 1e-10)
+assert.equal(rebasedInstance.position.z, 2,
+  'renderer-local position must be re-derived from preserved absolute world coordinates')
 
 const fallback = visuals.sync([agent(1, 5, 6, 'reproduce'), second])
 assert.equal(fallback.animated, 1,
