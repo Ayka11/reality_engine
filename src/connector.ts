@@ -15,6 +15,14 @@ import { CausalInspector, renderExplanation } from './scientific/CausalInspector
 import { SolverClient, SIMULATION_CATALOG, buildSolverPanel } from './scientific/SolverClient'
 import { AgentSystem } from './modes/agents/AgentSystem'
 import { AgentPlanner } from './modes/agents/AgentPlanner'
+import { AgentVisualRuntime } from './modes/agents/AgentVisualRuntime'
+import { validateAgentVisualProfile, type AgentVisualProfile } from './modes/agents/AgentVisualProfile'
+import {
+  createPlanarAgentGridWorldTransform,
+  validateAgentGridWorldTransform,
+  type AgentGridCoordinates,
+  type AgentGridWorldTransform,
+} from './simulation/AgentGridWorldTransform'
 import { DeterministicEngine } from './simulation/DeterministicEngine'
 import { KeyframeTimeline }    from './modes/cinema/KeyframeTimeline'
 import { CameraPathEditor }    from './modes/cinema/CameraPathEditor'
@@ -950,6 +958,18 @@ function getNF():  number { return (win['NF'] as number) || 12 }
 // ── Agent System ─────────────────────────────────────────────────────────
 const agentSystem  = new AgentSystem()
 const agentPlanner = new AgentPlanner()
+let agentVisualRuntime: AgentVisualRuntime | null = null
+
+// Agent visualization is deliberately opt-in: the user must load a model,
+// choose its semantic entry and provide the grid/world transform + clip profile.
+agentSystem.onAgentsChanged((agents) => {
+  if (!agentVisualRuntime) return
+  try {
+    agentVisualRuntime.sync(agents)
+  } catch (error) {
+    console.warn('[AgentVisual] Synchronization failed; agent simulation continues', error)
+  }
+})
 
 // ── Science Mode ──────────────────────────────────────────────────────────
 const metrics    = new MetricsAPI()
@@ -1643,6 +1663,67 @@ document.addEventListener('panelRendered', (e: Event) => {
 // ── Agent window API ─────────────────────────────────────────────────────
 
 win['agentSystem'] = agentSystem
+
+/** Create an explicit planar mapping for the booted 2D agent grid. */
+win['createPlanarAgentGridWorldTransform'] = (
+  worldOrigin: AgentGridCoordinates,
+  cellSize = 1,
+): AgentGridWorldTransform => createPlanarAgentGridWorldTransform(
+  getW(), getH(), worldOrigin, cellSize,
+)
+
+/** Configure transient GLTF representations for the active modes/agents system. */
+win['configureAgentVisuals'] = (configuration: {
+  profile: unknown
+  transform: unknown
+}) => {
+  const world = getInfiniteWorld()
+  if (!world) throw new Error('Infinite World renderer is not initialized')
+
+  const transformValidation = validateAgentGridWorldTransform(configuration?.transform)
+  if (!transformValidation.valid || !transformValidation.transform) {
+    throw new TypeError(`Invalid agent grid/world transform: ${transformValidation.errors.join('; ')}`)
+  }
+  const transform = transformValidation.transform
+  if (transform.gridDimensions.width !== getW() ||
+      transform.gridDimensions.height !== getH() ||
+      transform.gridDimensions.depth !== 1) {
+    throw new RangeError(`Agent transform dimensions must match the active 2D grid ${getW()}×${getH()}×1`)
+  }
+
+  const profileValidation = validateAgentVisualProfile(configuration.profile)
+  if (!profileValidation.valid || !profileValidation.profile) {
+    throw new TypeError(`Invalid agent visual profile: ${profileValidation.errors.join('; ')}`)
+  }
+
+  const nextRuntime = new AgentVisualRuntime(
+    world.worldAssetRuntime,
+    transform,
+    (position) => ({
+      ...position,
+      y: world.getSurfaceHeightAt(position.x, position.z),
+    }),
+  )
+  nextRuntime.setProfile(profileValidation.profile)
+  agentVisualRuntime?.dispose()
+  agentVisualRuntime = nextRuntime
+  const diagnostics = agentVisualRuntime.sync(agentSystem.agents)
+  return {
+    profile: agentVisualRuntime.getProfile(),
+    diagnostics,
+  }
+}
+
+/** Retry after a semantic GLTF source was explicitly imported/loaded. */
+win['syncAgentVisuals'] = () => agentVisualRuntime?.sync(agentSystem.agents)
+  ?? { configured: false }
+win['getAgentVisualDiagnostics'] = () => agentVisualRuntime?.diagnosticsSnapshot()
+  ?? { configured: false, agents: 0, instances: 0, created: 0, updated: 0, animated: 0, stopped: 0, removed: 0, awaitingAsset: 0, missingClip: 0 }
+win['clearAgentVisuals'] = () => {
+  agentVisualRuntime?.dispose()
+  agentVisualRuntime = null
+  return { configured: false }
+}
 
 // Called from index.html spawn buttons and from Game Dev mode
 win['spawnAgents'] = (n: number) => {
