@@ -143,4 +143,6 @@ jobs:
         env:
           REALITY_ENGINE_REQUIRE_WEBGPU: '1'
         timeout-minutes: 3
-      - run: timeout 240s npm run hf:browser:acceptance
+      - name: Run browser acceptance with restart and recovery coverage
+        run: timeout 360s npm run hf:browser:acceptance
+        timeout-minutes: 7
