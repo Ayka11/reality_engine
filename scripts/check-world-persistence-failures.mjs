@@ -267,12 +267,16 @@ globalThis.localStorage = {
 };
 
 const { WorldPersistence } = await import(await load("src/infinity/WorldPersistence.ts"));
+
+const makeWorldObject = (id, x, y, z, kind = "tree") => ({
+  id, kind, x, y, z, rotationY: 0, scale: 1, seed: 1, properties: {},
+});
 const persistence = new WorldPersistence("seed-a");
 
 // An interrupted multi-key save must be withheld as a whole. A complete explicit
 // recovery may replace its sidecars/chunks and remove the journal marker.
 const transactionalPersistence = new WorldPersistence("seed-transaction");
-const interruptedChunk = [{ id: "interrupted-object", x: 3, y: 0, z: 3, kind: "tree" }];
+const interruptedChunk = [makeWorldObject("interrupted-object", 3, 0, 3, "tree")];
 assert.equal(transactionalPersistence.beginSaveTransaction(), true);
 assert.equal(transactionalPersistence.saveFieldState({ epoch: 1 }), true);
 assert.equal(transactionalPersistence.saveChunk(0, 0, 0, interruptedChunk), true);
@@ -290,7 +294,7 @@ assert.equal(interruptedRestart.beginSaveTransaction(), false,
   "ordinary autosaves must not silently overwrite an interrupted namespace");
 assert.equal(interruptedRestart.beginSaveTransaction({ recoverIncomplete: true }), true,
   "an explicit full-world recovery may reopen the journaled namespace");
-const recoveredChunk = [{ id: "recovered-object", x: 4, y: 0, z: 4, kind: "house" }];
+const recoveredChunk = [makeWorldObject("recovered-object", 4, 0, 4, "building")];
 assert.equal(interruptedRestart.saveFieldState({ epoch: 2 }), true);
 assert.equal(interruptedRestart.saveChunk(0, 0, 0, recoveredChunk), true);
 assert.equal(interruptedRestart.finishSaveTransaction(true), true,
@@ -313,13 +317,13 @@ assert.equal(importedNamespace.saveProvenanceState({ epoch: "old-provenance" }),
 assert.equal(importedNamespace.saveAssetManifestState({ entries: [{ id: "old-asset" }] }), true);
 assert.equal(importedNamespace.saveAssetPlacementsState([{ id: "old-placement" }]), true);
 assert.equal(importedNamespace.saveSurfaceProviderState({ id: "old-surface" }), true);
-assert.equal(importedNamespace.saveChunk(0, 0, 0, [{ id: "old-object", x: 1, y: 0, z: 1, kind: "tree" }]), true);
+assert.equal(importedNamespace.saveChunk(0, 0, 0, [makeWorldObject("old-object", 1, 0, 1, "tree")]), true);
 assert.equal(importedNamespace.beginSaveTransaction(), true);
 assert.equal(importedNamespace.clear(), true,
   "portable import must clear the existing seed namespace inside its outer journal");
 assert.equal(importedNamespace.saveFieldState({ epoch: "imported-field" }), true);
 assert.equal(importedNamespace.saveTerrainDeformationState({ epoch: "imported-terrain" }), true);
-const importedObjects = [{ id: "imported-object", x: 2, y: 0, z: 2, kind: "house" }];
+const importedObjects = [makeWorldObject("imported-object", 2, 0, 2, "building")];
 assert.equal(importedNamespace.saveChunk(0, 0, 0, importedObjects), true);
 assert.equal(importedNamespace.finishSaveTransaction(true), true);
 const importedNamespaceRestart = new WorldPersistence("seed-import-replacement");
@@ -406,7 +410,7 @@ failRemove = false;
 assert.equal(persistence.deleteTerrainDeformationState(), true);
 assert.equal(persistence.loadTerrainDeformationState(), null);
 
-const chunkObjects = [{ id: 'in-memory-chunk-object', x: 1, y: 2, z: 3, kind: 'tree' }];
+const chunkObjects = [makeWorldObject("in-memory-chunk-object", 1, 2, 3, "tree")];
 failSet = true;
 assert.equal(persistence.saveChunk(0, 0, 0, chunkObjects), false,
   "chunk save must report browser storage write failures");
@@ -429,14 +433,21 @@ assert.equal(persistence.deleteChunk(0, 0, 0), true,
 assert.equal(persistence.isLoaded(0, 0, 0), false);
 assert.deepEqual(persistence.knownChunks(), []);
 
-const durableChunkObjects = [{ id: 'durable-chunk-object', x: 3, y: 1, z: -5, kind: 'house' }];
+const durableChunkObjects = [makeWorldObject("durable-chunk-object", 3, 1, -5, "building")];
 assert.equal(persistence.saveChunk(0, 0, -1, durableChunkObjects), true,
   "a successful chunk write and manifest update must report success");
 assert.deepEqual(persistence.knownChunks(), ["0,0,-1"]);
 assert.deepEqual(persistence.loadChunk(0, 0, -1), durableChunkObjects);
 const durableChunkKey = "reality-engine-world:seed-a:chunk:0,0,-1";
 const durableChunkPayload = values.get(durableChunkKey);
-const updatedChunkObjects = [{ id: 'updated-chunk-object', x: 3, y: 1, z: -5, kind: 'house' }];
+assert.equal(persistence.saveChunk(0, 0, -1, [
+  { ...makeWorldObject("invalid-scale-object", 3, 1, -5, "building"), scale: 0 },
+]), false, "chunk save must reject a world object that strict restore validation would reject");
+assert.equal(values.get(durableChunkKey), durableChunkPayload,
+  "rejecting an invalid chunk must preserve the last durable payload");
+assert.deepEqual(persistence.loadChunk(0, 0, -1), durableChunkObjects,
+  "rejecting an invalid chunk must preserve the valid in-memory chunk");
+const updatedChunkObjects = [makeWorldObject("updated-chunk-object", 3, 1, -5, "building")];
 failSet = true;
 assert.equal(persistence.saveChunk(0, 0, -1, updatedChunkObjects), false,
   "a failed update must not be reported as a durable chunk save");
@@ -454,7 +465,7 @@ assert.equal(persistence.deleteChunk(0, 0, -1), true);
 assert.deepEqual(persistence.knownChunks(), []);
 
 const manifestKey = "reality-engine-world:seed-a:manifest";
-const orphanObjects = [{ id: 'orphaned-index-object', x: 70, y: 0, z: -65, kind: 'rock' }];
+const orphanObjects = [makeWorldObject("orphaned-index-object", 70, 0, -65, "rock")];
 const orphanChunkKey = "reality-engine-world:seed-a:chunk:2,0,-3";
 failSetForKey = manifestKey;
 assert.equal(persistence.saveChunk(2, 0, -3, orphanObjects), false,
@@ -555,7 +566,7 @@ assert.match(saveWorldSource, /if \(!fieldCheckpointSaved\) \{\s*failedPersisten
 assert.match(saveWorldSource, /if \(!checkpointSaved\) \{\s*failedPersistenceOperations\.push\('terrain deformation checkpoint'\)/,
   "a failed terrain deformation checkpoint must be included in the durable-save failure report");
 
-const clearOrphanObjects = [{ id: 'clear-orphan-object', x: -35, y: 1, z: 33, kind: 'tower' }];
+const clearOrphanObjects = [makeWorldObject("clear-orphan-object", -35, 1, 33, "building")];
 const clearOrphanStorageKey = "reality-engine-world:seed-a:chunk:-2,0,1";
 failSetForKey = manifestKey;
 assert.equal(persistence.saveChunk(-2, 0, 1, clearOrphanObjects), false,
@@ -574,7 +585,7 @@ assert.equal(persistence.hasIncompleteSaveTransaction(), false,
 // If storage enumeration is unavailable, clear must stop before deleting the
 // manifest or sidecars. Otherwise valid but unindexed chunks can survive and
 // be recovered beside a world whose other state was already erased.
-const scanFailureObjects = [{ id: 'scan-failure-object', x: 140, y: 1, z: -70, kind: 'tower' }];
+const scanFailureObjects = [makeWorldObject("scan-failure-object", 140, 1, -70, "building")];
 const scanFailureChunkKey = "reality-engine-world:seed-a:chunk:4,0,-2";
 assert.equal(persistence.saveChunk(4, 0, -2, scanFailureObjects), true);
 const manifestBeforeScanFailure = values.get(manifestKey);
@@ -617,7 +628,7 @@ assert.equal(persistence.isLoaded(0, 0, 0), false,
 failGet = false;
 failRemove = false;
 
-const readFailureObjects = [{ id: 'read-failure-object', x: 17, y: 0, z: -19, kind: 'house' }];
+const readFailureObjects = [makeWorldObject("read-failure-object", 17, 0, -19, "building")];
 const readFailureWriter = new WorldPersistence("seed-read-failure");
 assert.equal(readFailureWriter.saveChunk(1, 0, -2, readFailureObjects), true);
 const readFailureReader = new WorldPersistence("seed-read-failure");
