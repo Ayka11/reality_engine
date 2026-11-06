@@ -348,6 +348,7 @@ assert.deepEqual(importedNamespaceRestart.loadChunk(0, 0, 0), importedObjects,
 const fieldState = { schemaVersion: "world-field-state-v2", mutations: [{ id: 1 }] };
 
 assert.equal(persistence.saveFieldState(fieldState), true);
+assert.deepEqual(persistence.readFieldState(), { status: "ok", state: fieldState });
 assert.deepEqual(persistence.loadFieldState(), fieldState);
 assert.equal(new WorldPersistence("seed-b").loadFieldState(), null);
 
@@ -361,11 +362,17 @@ assert.equal(values.get(key), previousDurableValue,
 failSet = false;
 
 failGet = true;
+assert.equal(persistence.readFieldState().status, "unavailable",
+  "typed reads must distinguish inaccessible storage from a missing field state");
 assert.equal(persistence.loadFieldState(), null,
   "unavailable storage should be treated as an unavailable saved state");
 failGet = false;
 
 values.set(key, "{broken-json");
+assert.equal(persistence.readFieldState().status, "corrupt",
+  "typed reads must distinguish malformed field JSON from a missing state");
+assert.equal(values.get(key), "{broken-json",
+  "reading a corrupt field sidecar must not delete the only recoverable copy");
 assert.equal(persistence.loadFieldState(), null, "corrupt persisted JSON should be rejected");
 assert.equal(persistence.saveFieldState(fieldState), true);
 
@@ -378,6 +385,7 @@ assert.equal(persistence.loadFieldState(), null);
 
 const terrainSnapshot = { schemaVersion: 1, seed: "seed-a", deltas: [["0,0", 1.25]] };
 assert.equal(persistence.saveTerrainDeformationState(terrainSnapshot), true);
+assert.deepEqual(persistence.readTerrainDeformationState(), { status: "ok", state: terrainSnapshot });
 assert.deepEqual(persistence.loadTerrainDeformationState(), terrainSnapshot,
   "terrain deformation autosave must round-trip independently of field state");
 const terrainStateKey = "reality-engine-world:seed-a:terrain-deformation";
@@ -391,12 +399,18 @@ assert.equal(persistence.saveTerrainDeformationCheckpoint(terrainSnapshot), fals
   "terrain checkpoint writes must report browser storage failures");
 failSet = false;
 failGet = true;
+assert.equal(persistence.readTerrainDeformationState().status, "unavailable",
+  "terrain autosave read must expose inaccessible storage as unavailable");
 assert.equal(persistence.loadTerrainDeformationState(), null,
   "terrain autosave reads must contain browser storage access failures");
 assert.equal(persistence.loadTerrainDeformationCheckpoint(), null,
   "terrain checkpoint reads must contain browser storage access failures");
 failGet = false;
 values.set(terrainStateKey, "{broken-terrain-json");
+assert.equal(persistence.readTerrainDeformationState().status, "corrupt",
+  "malformed terrain autosave JSON must be reported as corrupt");
+assert.equal(values.get(terrainStateKey), "{broken-terrain-json",
+  "reading corrupt terrain data must not erase the source payload");
 assert.equal(persistence.loadTerrainDeformationState(), null,
   "malformed terrain autosave JSON must be rejected");
 values.set(terrainStateKey, durableTerrainState);
