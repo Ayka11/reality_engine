@@ -63,23 +63,24 @@ assert.ok(clearSavedWorldBody.indexOf('const cleared = this.persistence.clear()'
   'a durable clear must succeed before the live external asset runtime is destroyed')
 assert.match(clearSavedWorldBody, /if \(!cleared\) \{[\s\S]*?return false[\s\S]*?\}\s*this\.pendingExternalAssetPlacements = \[\]/,
   'a failed durable clear must preserve live placements and other in-memory world state')
-const reseedClearAt = reseedBody.indexOf('const previousNamespaceCleared = this.clearSavedWorld()')
+const targetJournalAt = reseedBody.indexOf('targetPersistence.beginSaveTransaction({ recoverIncomplete: true })')
+const targetClearAt = reseedBody.indexOf('targetPersistence.clear()')
+const surfacePersistAt = reseedBody.indexOf('targetPersistence.saveSurfaceProviderState(surfaceSnapshot)')
+const seedPublishAt = reseedBody.indexOf('saveActiveWorldSeed(normalizedSeed)')
+const reseedJournalFinishAt = reseedBody.indexOf('targetPersistence.finishSaveTransaction(ready)')
+const previousNamespaceCleanupAt = reseedBody.indexOf('this.clearSavedWorld()')
 const reseedMeshDisposalAt = reseedBody.indexOf('this.patches.clear()')
-assert.ok(reseedClearAt >= 0 && reseedMeshDisposalAt > reseedClearAt,
-  'reseed must not dispose the visible world until its durable source namespace has cleared')
-assert.match(reseedBody, /const previousNamespaceCleared = this\.clearSavedWorld\(\)/)
-assert.match(reseedBody, /if \(!previousNamespaceCleared\)[\s\S]*?return/,
-  'reseed must not switch away from a namespace that could not be safely cleared')
-assert.match(reseedBody, /this\.persistence\.beginSaveTransaction\(\{ recoverIncomplete: true \}\)/,
-  'reseed must open a journal on the target seed before publishing it')
-assert.match(reseedBody, /newSeed !== previousSeed && !this\.persistence\.clear\(\)/,
-  'reseed must clear a previously used target seed to prevent stale chunks from returning')
-const targetClearAt = reseedBody.indexOf('newSeed !== previousSeed && !this.persistence.clear()')
-const surfacePersistAt = reseedBody.indexOf("this.persistActiveSurfaceProvider()")
-const seedPublishAt = reseedBody.indexOf('saveActiveWorldSeed(newSeed)')
-const reseedJournalFinishAt = reseedBody.indexOf('finishSaveTransaction(ready)')
-assert.ok(targetClearAt >= 0 && surfacePersistAt > targetClearAt && seedPublishAt > surfacePersistAt && reseedJournalFinishAt > seedPublishAt,
-  'target namespace cleanup, surface persistence, active-seed publication and journal close must be ordered')
+assert.ok(targetJournalAt >= 0 && targetClearAt > targetJournalAt &&
+  surfacePersistAt > targetClearAt && seedPublishAt > surfacePersistAt &&
+  reseedJournalFinishAt > seedPublishAt && previousNamespaceCleanupAt > reseedJournalFinishAt &&
+  reseedMeshDisposalAt > reseedJournalFinishAt,
+  'target namespace, surface and active-seed selector must commit before old namespace cleanup or live renderer mutation')
+assert.match(reseedBody, /if \(!reseedCommitted\)[\s\S]*?saveActiveWorldSeed\(previousSeed\)[\s\S]*?return/,
+  'a failed target commit must restore the previous startup selector and retain the current live world')
+assert.match(reseedBody, /normalizedSeed !== previousSeed && !this\.clearSavedWorld\(\)/,
+  'old namespace cleanup must happen only after the target seed is committed')
+assert.match(reseedBody, /this\.storageKey = `reality-engine-world:\$\{normalizedSeed\}:objects`/,
+  'the legacy storage key must follow the newly committed seed')
 
 
 const startAt = renderer.indexOf('  startExperiment(metadata:')

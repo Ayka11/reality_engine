@@ -1035,21 +1035,58 @@ export class InfiniteWorldRenderer {
   }
 
   reseed(newSeed: string) {
-    const previousSeed = this.generator.seed
-    const previousNamespaceCleared = this.clearSavedWorld()
-    if (!previousNamespaceCleared) {
-      console.warn('[persistence] Reseed was cancelled because the previous world namespace could not be cleared safely')
+    const normalizedSeed = typeof newSeed === 'string' ? newSeed.trim() : ''
+    if (!normalizedSeed || normalizedSeed.length > 512) {
+      console.warn('[persistence] Reseed was cancelled because the requested seed is invalid')
       return
     }
 
-    // Do not dispose the current terrain until the durable source namespace has
-    // been cleared. A failed storage operation must leave the live world visible.
+    const previousSeed = this.generator.seed
+    const targetPersistence = new WorldPersistence(normalizedSeed)
+    if (!targetPersistence.beginSaveTransaction({ recoverIncomplete: true })) {
+      console.warn('[persistence] Reseed was cancelled because the target seed journal could not be opened')
+      return
+    }
+
+    // Prepare and commit the target namespace before touching the active world.
+    // If target cleanup or surface persistence fails, the current world and its
+    // startup selector remain intact and can continue to be used.
+    let ready = targetPersistence.clear()
+    if (ready) {
+      const surfaceSnapshot = serializeWorldSurfaceProvider(this.fieldSampler.surfaceProvider)
+      if (surfaceSnapshot) {
+        ready = targetPersistence.saveSurfaceProviderState(surfaceSnapshot)
+      } else {
+        ready = targetPersistence.deleteSurfaceProviderState()
+      }
+    }
+    if (ready && !saveActiveWorldSeed(normalizedSeed)) ready = false
+    const reseedCommitted = targetPersistence.finishSaveTransaction(ready)
+    if (!reseedCommitted) {
+      if (!saveActiveWorldSeed(previousSeed)) {
+        console.warn('[persistence] Could not restore the previous active seed selector after a failed reseed commit')
+      }
+      console.warn('[persistence] Reseed was cancelled because the target namespace could not be committed; the previous live world was retained')
+      return
+    }
+
+    // The new namespace is now the durable startup target. Cleanup of the old
+    // namespace is best-effort: a failure must not leave startup pointing at a
+    // namespace that was only partially prepared.
+    if (normalizedSeed !== previousSeed && !this.clearSavedWorld()) {
+      console.warn('[persistence] Previous seed cleanup was incomplete; the committed target seed remains active')
+    } else if (normalizedSeed === previousSeed && this.saveTimer !== null) {
+      window.clearTimeout(this.saveTimer)
+      this.saveTimer = null
+    }
+
+    // Do not dispose the current terrain until the target namespace is durable.
     for (const [, patch] of this.patches) {
       this.scene.remove(patch.group)
       patch.group.traverse(obj => {
         const mesh = obj as THREE.Mesh
         if (mesh.geometry) mesh.geometry.dispose()
-        if (mesh.material) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(m => m.dispose())
+        if (mesh.material) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(material => material.dispose())
       })
     }
     this.patches.clear()
@@ -1057,35 +1094,31 @@ export class InfiniteWorldRenderer {
     this.terrainMaterials.clear()
     this.lastCenter = null
 
-    this.generator = new WorldGenerator(newSeed)
-    ;(window as any).worldSeed = newSeed
+    this.pendingExternalAssetPlacements = []
+    this.clearExternalAssetRuntime()
+    this.objects.clear()
+    this.syncObjects()
+    this.selectedObjectId = null
+    this.transformControls.detach()
+    ;(this.transformControls as any).visible = false
+    this.selectionMarker.visible = false
+    runtimeProvenance.reset()
+
+    this.generator = new WorldGenerator(normalizedSeed)
+    ;(window as any).worldSeed = normalizedSeed
     this.fieldSampler.setGenerator(this.generator)
     // The procedural generator may be reseeded independently; the current
     // authored surface continues to own the world/view identity until reset.
     worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)
     this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
     this.authoritativeField.clear()
-    this.terrainDeformations = new TerrainDeformationField(newSeed)
+    this.terrainDeformations = new TerrainDeformationField(normalizedSeed)
     this.authoritativeSculptTransactions.clear()
     this.notifyAuthoritativeSculptHistoryChanged()
     this.fieldSampler.setProvider(this.authoritativeField)
     this.rebuildDecisionLayer()
-    this.persistence = new WorldPersistence(newSeed)
-
-    // A seed can be reused after it was active in another session. Clear that
-    // target namespace under a journal before publishing it as the startup seed,
-    // otherwise its old chunks/sidecars can reappear after this reseed.
-    let reseedCommitted = false
-    if (this.persistence.beginSaveTransaction({ recoverIncomplete: true })) {
-      let ready = true
-      if (newSeed !== previousSeed && !this.persistence.clear()) ready = false
-      if (ready && this.persistActiveSurfaceProvider() === 'failed') ready = false
-      if (ready && !saveActiveWorldSeed(newSeed)) ready = false
-      reseedCommitted = this.persistence.finishSaveTransaction(ready)
-    }
-    if (!reseedCommitted) {
-      console.warn('[persistence] Reseed is active in memory but was not committed to storage; reload will not be redirected to the incomplete seed')
-    }
+    this.persistence = targetPersistence
+    this.storageKey = `reality-engine-world:${normalizedSeed}:objects`
 
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
     this.history = new WorldEditHistory()

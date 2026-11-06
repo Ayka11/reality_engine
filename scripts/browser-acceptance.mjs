@@ -320,6 +320,69 @@ try {
   }
   console.log("[acceptance] flat surface restored after reload and generator surface reset cleanly");
 
+  console.log("[acceptance] failed target-seed cleanup preserves the currently active world");
+  const failedReseedContract = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const targetSeed = "acceptance-reseed-storage-failure-target";
+    const Persistence = world?.persistence?.constructor;
+    if (!world || typeof Persistence !== "function") {
+      return { error: "WorldPersistence constructor is not reachable from the active renderer" };
+    }
+    const staleTarget = new Persistence(targetSeed);
+    const staleSaved = staleTarget.saveChunk(9, 0, 9, [{
+      id: "acceptance-failed-reseed-target-object",
+      kind: "landmark",
+      x: 289,
+      y: 1,
+      z: 289,
+      rotationY: 0,
+      scale: 1,
+      seed: 23,
+      properties: { source: "acceptance-reseed-failure" },
+    }]);
+    const before = {
+      generatorSeed: world.generator.seed,
+      activeSeed: localStorage.getItem("reality-engine-active-world-seed"),
+      objectCount: world.getObjectCount(),
+      persistence: world.persistence,
+      worldSeed: window.worldSeed,
+    };
+    const prefix = `reality-engine-world:${targetSeed}:`;
+    const originalRemoveItem = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function(key) {
+      if (String(key).startsWith(prefix)) throw new Error("injected target namespace remove failure");
+      return originalRemoveItem.call(this, key);
+    };
+    try {
+      world.reseed(targetSeed);
+    } finally {
+      Storage.prototype.removeItem = originalRemoveItem;
+    }
+    return {
+      staleSaved,
+      before,
+      after: {
+        generatorSeed: world.generator.seed,
+        activeSeed: localStorage.getItem("reality-engine-active-world-seed"),
+        objectCount: world.getObjectCount(),
+        persistence: world.persistence,
+        worldSeed: window.worldSeed,
+      },
+      targetJournalIncomplete: new Persistence(targetSeed).hasIncompleteSaveTransaction(),
+    };
+  });
+  if (failedReseedContract.error ||
+      failedReseedContract.staleSaved !== true ||
+      failedReseedContract.after.generatorSeed !== failedReseedContract.before.generatorSeed ||
+      failedReseedContract.after.activeSeed !== failedReseedContract.before.activeSeed ||
+      failedReseedContract.after.objectCount !== failedReseedContract.before.objectCount ||
+      failedReseedContract.after.persistence !== failedReseedContract.before.persistence ||
+      failedReseedContract.after.worldSeed !== failedReseedContract.before.worldSeed ||
+      failedReseedContract.targetJournalIncomplete !== true) {
+    throw new Error("A failed target namespace clear changed the active world: " + JSON.stringify(failedReseedContract));
+  }
+  console.log("[acceptance] failed target-seed cleanup retained live world and active seed");
+
   console.log("[acceptance] reseed clears stale data from a previously used target seed");
   const reusedSeedContract = await page.evaluate(() => {
     const world = window.infiniteWorld;
