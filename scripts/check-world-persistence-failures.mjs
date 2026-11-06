@@ -1400,6 +1400,10 @@ const fakeSaveStore = {
   },
 };
 const fakeSaveDb = {
+  getAll: async storeName => {
+    assert.equal(storeName, "saves");
+    return storedWorldRows.slice();
+  },
   put: async (_storeName, row) => fakeSaveStore.put(row),
   transaction(storeName, mode) {
     assert.equal(storeName, "saves");
