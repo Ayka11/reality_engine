@@ -592,7 +592,7 @@ export class WorldPersistence {
 
   loadedChunks(): string[] { return [...this.loaded] }
 
-  knownChunks(options: { recoverOrphans?: boolean } = {}): string[] {
+  knownChunks(options: { recoverOrphans?: boolean } = {}): string[] | null {
     if (this.hasIncompleteSaveTransaction()) return []
 
     let raw: string | null
@@ -617,9 +617,11 @@ export class WorldPersistence {
     }
 
     if (!options.recoverOrphans) return [...new Set(keys)]
-    // The manifest is an index, not the chunk data itself. Recover valid chunk
-    // payloads that were written successfully just before a manifest write failed.
-    return [...new Set([...keys, ...this.scanStoredChunkKeys()])]
+    // The manifest is only an index. Distinguish an empty namespace from a
+    // failed storage scan so callers never treat an unknown world as empty.
+    const scannedChunkKeys = this.scanStoredChunkKeys()
+    if (scannedChunkKeys === null) return null
+    return [...new Set([...keys, ...scannedChunkKeys])]
   }
 
   private isValidChunkKey(value: unknown): value is string {
@@ -642,9 +644,9 @@ export class WorldPersistence {
     return [...new Set(keys)]
   }
 
-  private scanStoredChunkKeys(): string[] {
+  private scanStoredChunkKeys(): string[] | null {
     const storageKeys = this.scanStoredChunkStorageKeys()
-    if (storageKeys === null) return []
+    if (storageKeys === null) return null
     return [...new Set(storageKeys
       .map(storageKey => storageKey.slice(this.prefix.length))
       .filter((key): key is string => this.isValidChunkKey(key)))]
