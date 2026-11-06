@@ -530,8 +530,8 @@ assert.match(loadWorldSource, /const restoredObjects: WorldObject\[\] = \[\][\s\
   "loadWorld must preflight every stored chunk payload before changing terrain or objects");
 assert.match(loadWorldSource, /newlyLoadedChunkKeys[\s\S]*?this\.persistence\.unloadChunk\(/,
   "a failed chunk preflight must roll back newly populated persistence cache entries");
-assert.match(loadWorldSource, /this\.persistence\.readChunk\([\s\S]*?result\.status !== 'ok'[\s\S]*?return 0/,
-  "loadWorld must explicitly reject missing, unavailable and corrupt stored chunk payloads");
+assert.match(loadWorldSource, /this\.persistence\.readChunk\([\s\S]*?result\.status !== 'ok'[\s\S]*?rollbackKeys = new Set\(\[\.\.\.newlyLoadedChunkKeys, key\]\)[\s\S]*?this\.persistence\.unloadChunk\(/,
+  "failed chunk preflight must evict its failed/missing/corrupt status so a repaired payload can be retried");
 assert.match(persistenceSource, /export type WorldChunkReadResult =/,
   "chunk reads must expose a discriminated result instead of collapsing all failures to an empty array");
 assert.match(persistenceSource, /invalid-world-object-record/,
