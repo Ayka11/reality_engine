@@ -1021,12 +1021,27 @@ export class InfiniteWorldRenderer {
       return false
     }
     this.pendingExternalAssetPlacements = []
-    this.clearExternalAssetRuntime()
+    try {
+      this.clearExternalAssetRuntime()
+    } catch (error) {
+      // WorldAssetRuntime.clear() has already invalidated and detached every
+      // indexed object before reporting aggregate GPU-disposal failures.
+      // Do not let those failures skip the remaining editor reset.
+      console.warn('[world-assets] External asset cleanup completed with disposal failures during world clear', error)
+    }
     this.terrainDeformations.clear()
     runtimeProvenance.reset()
-    this.refreshTerrainPatches()
+    try {
+      this.refreshTerrainPatches()
+    } catch (error) {
+      console.warn('[terrain] Terrain patch refresh failed after durable world clear', error)
+    }
     this.objects.clear()
-    this.syncObjects()
+    try {
+      this.syncObjects()
+    } catch (error) {
+      console.warn('[world-objects] Object mesh cleanup completed with disposal failures during world clear', error)
+    }
     this.selectedObjectId = null
     this.transformControls.detach()
     ;(this.transformControls as any).visible = false
@@ -1087,23 +1102,56 @@ export class InfiniteWorldRenderer {
     ;(window as any).worldAssetManifest = nextAssetManifest
 
     // Do not dispose the current terrain until the target namespace is durable.
-    for (const [, patch] of this.patches) {
-      this.scene.remove(patch.group)
-      patch.group.traverse(obj => {
-        const mesh = obj as THREE.Mesh
-        if (mesh.geometry) mesh.geometry.dispose()
-        if (mesh.material) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(material => material.dispose())
+    // A custom GPU disposer may throw; attempt every scene/resource release and
+    // continue the already-committed reseed instead of leaving the old seed live.
+    const terrainCleanupFailures: unknown[] = []
+    const attemptTerrainCleanup = (label: string, cleanup: () => void) => {
+      try {
+        cleanup()
+      } catch (error) {
+        terrainCleanupFailures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
+      }
+    }
+    for (const [, patch] of [...this.patches]) {
+      attemptTerrainCleanup('Terrain patch scene removal', () => this.scene.remove(patch.group))
+      attemptTerrainCleanup('Terrain patch resource traversal', () => {
+        patch.group.traverse(obj => {
+          const mesh = obj as THREE.Mesh
+          if (mesh.geometry) {
+            attemptTerrainCleanup('Terrain geometry disposal', () => mesh.geometry.dispose())
+          }
+          if (mesh.material) {
+            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+            materials.forEach(material => attemptTerrainCleanup('Terrain material disposal', () => material.dispose()))
+          }
+        })
       })
     }
     this.patches.clear()
     this.waterMeshes.clear()
     this.terrainMaterials.clear()
     this.lastCenter = null
+    if (terrainCleanupFailures.length > 0) {
+      console.warn('[terrain] Reseed continued after terrain resource cleanup failures', new AggregateError(
+        terrainCleanupFailures,
+        'Terrain resources were detached with one or more disposal failures',
+      ))
+    }
 
     this.pendingExternalAssetPlacements = []
-    this.clearExternalAssetRuntime()
+    try {
+      this.clearExternalAssetRuntime()
+    } catch (error) {
+      // The asset runtime invalidates outstanding loads and clears its indexes
+      // before surfacing resource-disposal failures.
+      console.warn('[world-assets] Reseed continued after external asset cleanup failures', error)
+    }
     this.objects.clear()
-    this.syncObjects()
+    try {
+      this.syncObjects()
+    } catch (error) {
+      console.warn('[world-objects] Reseed continued after object mesh disposal failures', error)
+    }
     this.selectedObjectId = null
     this.transformControls.detach()
     ;(this.transformControls as any).visible = false

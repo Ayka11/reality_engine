@@ -63,6 +63,10 @@ assert.ok(clearSavedWorldBody.indexOf('const cleared = this.persistence.clear()'
   'a durable clear must succeed before the live external asset runtime is destroyed')
 assert.match(clearSavedWorldBody, /if \(!cleared\) \{[\s\S]*?return false[\s\S]*?\}\s*this\.pendingExternalAssetPlacements = \[\]/,
   'a failed durable clear must preserve live placements and other in-memory world state')
+assert.match(clearSavedWorldBody, /try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{[\s\S]*?this\.terrainDeformations\.clear\(\)/,
+  'external asset disposal failures must not skip the remaining durable world reset')
+assert.match(clearSavedWorldBody, /try \{\s*this\.refreshTerrainPatches\(\)\s*\} catch \(error\) \{[\s\S]*?this\.objects\.clear\(\)/,
+  'terrain refresh failures must not prevent clearing editor object state')
 const targetJournalAt = reseedBody.indexOf('targetPersistence.beginSaveTransaction({ recoverIncomplete: true })')
 const targetClearAt = reseedBody.indexOf('targetPersistence.clear()')
 const manifestPersistAt = reseedBody.indexOf('targetPersistence.saveAssetManifestState(nextAssetManifest)')
@@ -79,6 +83,10 @@ assert.ok(targetJournalAt >= 0 && targetClearAt > targetJournalAt &&
   'target namespace, surface and active-seed selector must commit before old namespace cleanup or live renderer mutation')
 assert.match(reseedBody, /if \(!reseedCommitted\)[\s\S]*?saveActiveWorldSeed\(previousSeed\)[\s\S]*?return/,
   'a failed target commit must restore the previous startup selector and retain the current live world')
+assert.match(reseedBody, /const terrainCleanupFailures: unknown\[\] = \[\][\s\S]*?this\.patches\.clear\(\)[\s\S]*?this\.clearExternalAssetRuntime\(\)/,
+  'terrain disposal failures must not interrupt a reseed after the target seed journal commits')
+assert.match(reseedBody, /try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{[\s\S]*?this\.objects\.clear\(\)/,
+  'external asset cleanup failures must not prevent the renderer from switching to the committed target seed')
 assert.match(reseedBody, /normalizedSeed !== previousSeed && !this\.clearSavedWorld\(\)/,
   'old namespace cleanup must happen only after the target seed is committed')
 assert.match(reseedBody, /this\.storageKey = `reality-engine-world:\$\{normalizedSeed\}:objects`/,
