@@ -1086,38 +1086,84 @@ export class InfiniteWorldRenderer {
       }
     }
 
-    // Explicit Load restores the last manual checkpoint; startup can opt into the latest autosave.
-    const checkpoint = options.restoreFieldCheckpoint === false
-      ? null
-      : this.persistence.loadFieldCheckpoint<ReturnType<MutableWorldFieldProvider['serialize']>>()
-    const persistedField = checkpoint ?? this.persistence.loadFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
-    const terrainSnapshot = options.restoreFieldCheckpoint === false
-      ? this.persistence.loadTerrainDeformationState<TerrainDeformationSnapshot>()
-      : this.persistence.loadTerrainDeformationCheckpoint<TerrainDeformationSnapshot>()
-        ?? this.persistence.loadTerrainDeformationState<TerrainDeformationSnapshot>()
-    if (terrainSnapshot) {
-      try {
-        this.terrainDeformations.restore(terrainSnapshot)
-        this.refreshTerrainPatches()
-      } catch (error) {
-        console.warn('[persistence] Could not restore terrain deformation state', error)
+    // Resolve all field/terrain sidecars before mutating the active world.
+    // A missing checkpoint may fall back to autosave; unreadable/corrupt data may not.
+    const rollbackStagedChunks = () => {
+      for (const key of newlyLoadedChunkKeys) {
+        const [cx, cy, cz] = key.split(',').map(Number)
+        this.persistence.unloadChunk(cx, cy, cz)
       }
-    } else if (options.restoreFieldCheckpoint !== false) {
-      this.terrainDeformations.clear()
-      this.refreshTerrainPatches()
+    }
+    const rejectSidecar = (label: string, reason: string) => {
+      rollbackStagedChunks()
+      this.persistenceRecoveryBlocked = true
+      this.lastPersistenceFailures = [`${label}: ${reason}`]
+      console.warn(`[persistence] World restore was withheld because ${label} is unavailable or corrupt (${reason}); the live world was retained`)
+      return 0
+    }
+
+    const fieldRead = options.restoreFieldCheckpoint === false
+      ? this.persistence.readFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
+      : (() => {
+          const checkpoint = this.persistence.readFieldCheckpoint<ReturnType<MutableWorldFieldProvider['serialize']>>()
+          return checkpoint.status === 'missing'
+            ? this.persistence.readFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
+            : checkpoint
+        })()
+    if (fieldRead.status === 'unavailable' || fieldRead.status === 'corrupt') {
+      return rejectSidecar('authoritative field snapshot', fieldRead.reason)
+    }
+
+    const terrainRead = options.restoreFieldCheckpoint === false
+      ? this.persistence.readTerrainDeformationState<TerrainDeformationSnapshot>()
+      : (() => {
+          const checkpoint = this.persistence.readTerrainDeformationCheckpoint<TerrainDeformationSnapshot>()
+          return checkpoint.status === 'missing'
+            ? this.persistence.readTerrainDeformationState<TerrainDeformationSnapshot>()
+            : checkpoint
+        })()
+    if (terrainRead.status === 'unavailable' || terrainRead.status === 'corrupt') {
+      return rejectSidecar('terrain deformation snapshot', terrainRead.reason)
+    }
+
+    const persistedField = fieldRead.status === 'ok' ? fieldRead.state : null
+    const terrainSnapshot = terrainRead.status === 'ok' ? terrainRead.state : null
+    const previousTerrain = this.terrainDeformations.serialize()
+    const previousField = this.authoritativeField.serialize()
+    try {
+      if (terrainSnapshot) {
+        this.terrainDeformations.restore(terrainSnapshot)
+      } else if (options.restoreFieldCheckpoint !== false) {
+        this.terrainDeformations.clear()
+      }
+      if (persistedField) {
+        this.authoritativeField.restore(persistedField)
+        this.refreshTerrainPatches()
+        if (!this.persistAuthoritativeFieldState()) {
+          throw new Error('restored authoritative field could not be committed to autosave')
+        }
+      } else {
+        this.refreshTerrainPatches()
+      }
+    } catch (error) {
+      const rollbackFailures: unknown[] = []
+      try { this.terrainDeformations.restore(previousTerrain) } catch (rollbackError) { rollbackFailures.push(rollbackError) }
+      try { this.authoritativeField.restore(previousField) } catch (rollbackError) { rollbackFailures.push(rollbackError) }
+      try { this.refreshTerrainPatches() } catch (rollbackError) { rollbackFailures.push(rollbackError) }
+      rollbackStagedChunks()
+      this.persistenceRecoveryBlocked = true
+      this.lastPersistenceFailures = ['field/terrain restore validation or commit']
+      console.warn('[persistence] Field/terrain restore failed; the previous live snapshots were restored where possible', new AggregateError(
+        [error, ...rollbackFailures],
+        'World sidecar restore failed',
+      ))
+      return 0
     }
     if (persistedField) {
-      try {
-        this.authoritativeField.restore(persistedField)
-        // A checkpoint restore replaces the authoritative state; older undo/redo
-        // snapshots no longer describe a valid transaction chain.
-        this.authoritativeSculptTransactions.clear()
-        this.notifyAuthoritativeSculptHistoryChanged()
-        this.persistAuthoritativeFieldState()
-        this.refreshTerrainPatches()
-      } catch (error) {
-        console.warn('[persistence] Could not restore authoritative field state', error)
-      }
+      // A checkpoint restore replaces the authoritative state; older undo/redo
+      // snapshots no longer describe a valid transaction chain.
+      this.authoritativeSculptTransactions.clear()
+      this.notifyAuthoritativeSculptHistoryChanged()
     }
     this.objects.clear()
     for (const object of restoredObjects) this.objects.add(object)
@@ -1128,6 +1174,7 @@ export class InfiniteWorldRenderer {
     ;(this.transformControls as any).visible = false
     this.selectionMarker.visible = false
     this.persistenceRecoveryBlocked = false
+    this.startupPersistenceFailures = []
     this.lastPersistenceFailures = []
     return count
   }
