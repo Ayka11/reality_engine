@@ -3,6 +3,27 @@ import type { WorldObject } from './WorldObject'
 
 type StoredChunk = { version: 1; seed: string; objects: WorldObject[] }
 
+export type WorldChunkReadResult =
+  | { status: 'ok'; objects: WorldObject[] }
+  | { status: 'missing'; objects: []; reason: string }
+  | { status: 'unavailable'; objects: []; reason: string }
+  | { status: 'corrupt'; objects: []; reason: string }
+
+function isStoredWorldObject(value: unknown): value is WorldObject {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const object = value as Partial<WorldObject>
+  if (typeof object.id !== 'string' || !object.id.trim() ||
+      typeof object.kind !== 'string' ||
+      ![object.x, object.y, object.z, object.rotationY, object.scale, object.seed].every(Number.isFinite) ||
+      (object.scale as number) <= 0 ||
+      !object.properties || typeof object.properties !== 'object' || Array.isArray(object.properties)) {
+    return false
+  }
+  return Object.values(object.properties).every(entry =>
+    typeof entry === 'string' || typeof entry === 'boolean' ||
+    (typeof entry === 'number' && Number.isFinite(entry)))
+}
+
 export const ACTIVE_WORLD_SEED_STORAGE_KEY = 'reality-engine-active-world-seed'
 const MAX_ACTIVE_WORLD_SEED_LENGTH = 512
 
@@ -53,6 +74,8 @@ export class WorldPersistence {
   private saveTransactionFailed = false
   private readonly loaded = new Set<string>()
   private readonly cache = new Map<string, WorldObject[]>()
+  private readonly missingChunks = new Set<string>()
+  private readonly corruptChunks = new Map<string, string>()
 
   constructor(private readonly seed: string) {
     this.prefix = `reality-engine-world:${seed}:chunk:`
@@ -464,36 +487,87 @@ export class WorldPersistence {
     return this.updateManifest()
   }
 
-  loadChunk(cx: number, cy: number, cz: number): WorldObject[] {
-    if (this.hasIncompleteSaveTransaction()) return []
+  /**
+   * Read a persisted chunk without collapsing missing, unavailable and corrupt
+   * storage into the same empty-array result.
+   */
+  readChunk(cx: number, cy: number, cz: number): WorldChunkReadResult {
+    if (this.hasIncompleteSaveTransaction()) {
+      return { status: 'unavailable', objects: [], reason: 'incomplete-save-transaction' }
+    }
 
     const key = chunkKey(cx, cy, cz)
-    const cached = this.cache.get(key)
-    if (cached) return cached
+    if (this.cache.has(key)) {
+      return { status: 'ok', objects: this.cache.get(key)! }
+    }
+    if (this.missingChunks.has(key)) {
+      return { status: 'missing', objects: [], reason: 'chunk-payload-not-found' }
+    }
+    const corruptReason = this.corruptChunks.get(key)
+    if (corruptReason) {
+      return { status: 'corrupt', objects: [], reason: corruptReason }
+    }
+
     let raw: string | null
     try {
       raw = localStorage.getItem(this.key(cx, cy, cz))
     } catch {
-      // An unavailable read is not an empty chunk. Leave it unloaded so the
-      // streaming path can retry and explicit world restore can fail closed.
-      return []
+      // Do not mark inaccessible data as loaded; the next streaming pass may retry.
+      return { status: 'unavailable', objects: [], reason: 'storage-read-failed' }
     }
-    this.loaded.add(key)
-    if (!raw) return []
+    if (raw === null) {
+      this.loaded.add(key)
+      this.missingChunks.add(key)
+      return { status: 'missing', objects: [], reason: 'chunk-payload-not-found' }
+    }
+
+    let parsed: unknown
     try {
-      const payload = JSON.parse(raw) as StoredChunk
-      if (payload.version !== 1 || payload.seed !== this.seed || !Array.isArray(payload.objects)) return []
-      this.cache.set(key, payload.objects)
-      return payload.objects
+      parsed = JSON.parse(raw)
     } catch {
-      return []
+      const reason = 'invalid-json'
+      this.loaded.add(key)
+      this.corruptChunks.set(key, reason)
+      return { status: 'corrupt', objects: [], reason }
     }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      const reason = 'invalid-payload-envelope'
+      this.loaded.add(key)
+      this.corruptChunks.set(key, reason)
+      return { status: 'corrupt', objects: [], reason }
+    }
+    const payload = parsed as Partial<StoredChunk>
+    if (payload.version !== 1 || payload.seed !== this.seed || !Array.isArray(payload.objects)) {
+      const reason = 'unsupported-version-seed-or-object-list'
+      this.loaded.add(key)
+      this.corruptChunks.set(key, reason)
+      return { status: 'corrupt', objects: [], reason }
+    }
+    if (!payload.objects.every(isStoredWorldObject)) {
+      const reason = 'invalid-world-object-record'
+      this.loaded.add(key)
+      this.corruptChunks.set(key, reason)
+      return { status: 'corrupt', objects: [], reason }
+    }
+
+    this.loaded.add(key)
+    this.cache.set(key, payload.objects)
+    return { status: 'ok', objects: payload.objects }
+  }
+
+  /** Legacy array API for streaming callers; use readChunk when status matters. */
+  loadChunk(cx: number, cy: number, cz: number): WorldObject[] {
+    const result = this.readChunk(cx, cy, cz)
+    return result.status === 'ok' ? result.objects : []
   }
 
   unloadChunk(cx: number, cy: number, cz: number) {
     const key = chunkKey(cx, cy, cz)
     this.loaded.delete(key)
     this.cache.delete(key)
+    this.missingChunks.delete(key)
+    this.corruptChunks.delete(key)
   }
 
   /**
@@ -509,6 +583,8 @@ export class WorldPersistence {
     }
     this.loaded.delete(key)
     this.cache.delete(key)
+    this.missingChunks.delete(key)
+    this.corruptChunks.delete(key)
     return this.updateManifest(key)
   }
 
@@ -525,6 +601,8 @@ export class WorldPersistence {
       // renderer from cached chunks so stale objects cannot reappear in memory.
       this.loaded.clear()
       this.cache.clear()
+      this.missingChunks.clear()
+      this.corruptChunks.clear()
       return false
     }
     if (!this.beginSaveTransaction({ recoverIncomplete: true })) {
@@ -532,6 +610,8 @@ export class WorldPersistence {
       // chunk cache; persisted records remain untouched and the caller gets false.
       this.loaded.clear()
       this.cache.clear()
+      this.missingChunks.clear()
+      this.corruptChunks.clear()
       return false
     }
     const chunkStorageKeys = new Set(scannedChunkKeys)
@@ -581,6 +661,8 @@ export class WorldPersistence {
     }
     this.loaded.clear()
     this.cache.clear()
+    this.missingChunks.clear()
+    this.corruptChunks.clear()
     const committed = this.finishSaveTransaction(cleared)
     return cleared && committed
   }
