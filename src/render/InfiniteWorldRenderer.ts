@@ -1889,8 +1889,12 @@ export class InfiniteWorldRenderer {
               this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
             })
           } else if (mesh.material) {
-            attempt(`Terrain patch ${key} material disposal`, () => mesh.material.dispose())
-            this.terrainMaterials.delete(mesh.material as THREE.MeshStandardMaterial)
+            // Capture the narrowed material before entering the cleanup callback;
+            // TypeScript widens mesh.material back to the array-or-single union
+            // when it is referenced from a closure.
+            const material = mesh.material
+            attempt(`Terrain patch ${key} material disposal`, () => material.dispose())
+            this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
           }
         })
       })
