@@ -519,12 +519,39 @@ export class WorldAssetRuntime {
   removeInstance(instanceId: string) {
     const instance = this.instances.get(instanceId)
     if (!instance) return false
-    this.stopInstanceAnimation(instanceId)
-    this.scene.remove(instance)
-    this.disposeObject(instance)
+
+    const failures: unknown[] = []
+    const attempt = (label: string, cleanup: () => void) => {
+      try {
+        cleanup()
+      } catch (error) {
+        failures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
+      }
+    }
+
+    const mixer = this.instanceMixers.get(instanceId)
+    if (mixer) {
+      attempt(`Instance ${instanceId} animation stop`, () => mixer.stopAllAction())
+      attempt(`Instance ${instanceId} animation uncache`, () => mixer.uncacheRoot(instance))
+    }
+
+    // Release every animation index even when the mixer or disposer throws.
+    this.instanceMixers.delete(instanceId)
+    this.instanceActions.delete(instanceId)
+    this.pendingAnimationStops.delete(instanceId)
+    this.animationAccumulators.delete(instanceId)
+
+    attempt(`Instance ${instanceId} scene removal`, () => this.scene.remove(instance))
+    attempt(`Instance ${instanceId} resource disposal`, () => this.disposeObject(instance))
     const isPersistent = instance.userData.persistentWorldAssetPlacement !== false
     this.instances.delete(instanceId)
-    if (isPersistent) this.onPlacementsChanged?.()
+    if (isPersistent && this.onPlacementsChanged) {
+      attempt(`Instance ${instanceId} placement notification`, () => this.onPlacementsChanged?.())
+    }
+
+    if (failures.length > 0) {
+      throw new AggregateError(failures, `Instance ${instanceId} was removed with one or more cleanup failures`)
+    }
     return true
   }
 
@@ -568,18 +595,34 @@ export class WorldAssetRuntime {
     const asset = this.assets.get(id)
     if (!asset) return false
 
-    // Instances own cloned GPU resources, but remain semantically dependent on
-    // their source asset. Remove those placements before releasing the source.
-    for (const [instanceId, instance] of this.instances) {
-      if (instance.userData.runtimeAssetSourceId === id) this.removeInstance(instanceId)
+    const failures: unknown[] = []
+    const attempt = (label: string, cleanup: () => void) => {
+      try {
+        cleanup()
+      } catch (error) {
+        failures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
+      }
     }
 
-    this.scene.remove(asset.object)
+    // Instances own cloned GPU resources, but remain semantically dependent on
+    // their source asset. A broken instance disposer must not prevent remaining
+    // placements or the source asset from being released.
+    for (const [instanceId, instance] of [...this.instances]) {
+      if (instance.userData.runtimeAssetSourceId === id) {
+        attempt(`Asset ${id} dependent instance ${instanceId} removal`, () => this.removeInstance(instanceId))
+      }
+    }
+
+    attempt(`Asset ${id} scene removal`, () => this.scene.remove(asset.object))
     this.assets.delete(id)
     if (asset.semanticEntryId && this.semanticSources.get(asset.semanticEntryId) === asset) {
-      this.refreshSemanticSource(asset.semanticEntryId)
+      attempt(`Asset ${id} semantic source refresh`, () => this.refreshSemanticSource(asset.semanticEntryId!))
     }
-    this.disposeObject(asset.object)
+    attempt(`Asset ${id} resource disposal`, () => this.disposeObject(asset.object))
+
+    if (failures.length > 0) {
+      throw new AggregateError(failures, `Asset ${id} was removed with one or more cleanup failures`)
+    }
     return true
   }
 

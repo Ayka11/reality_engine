@@ -419,4 +419,160 @@ assert.deepEqual(cleanupFlags, {
   pendingCancelContinued: true,
 }, 'cleanup must continue through failures in cancellation, animation, geometry and material disposal')
 
+// Direct instance removal must release scene/maps even when animation, GPU
+// disposal and placement-notification callbacks fail independently.
+const directRemoveScene = new THREE.Scene()
+let directRemoveNotifications = 0
+const directRemoveRuntime = new WorldAssetRuntime(directRemoveScene, loader, () => {
+  directRemoveNotifications += 1
+  throw new Error('injected direct placement notification failure')
+})
+const directRemoveInternal = directRemoveRuntime as unknown as {
+  instances: Map<string, THREE.Object3D>
+  instanceMixers: Map<string, THREE.AnimationMixer>
+  instanceActions: Map<string, THREE.AnimationAction>
+  pendingAnimationStops: Map<string, unknown>
+  animationAccumulators: Map<string, number>
+}
+const directRemoveFlags = { geometry: false, material: false, mixerStop: false, mixerUncache: false }
+const directRemoveMaterial = new THREE.MeshBasicMaterial()
+directRemoveMaterial.addEventListener('dispose', () => {
+  directRemoveFlags.material = true
+  throw new Error('injected direct instance material disposal failure')
+})
+const directRemoveGeometry = new THREE.BoxGeometry(1, 1, 1)
+directRemoveGeometry.addEventListener('dispose', () => {
+  directRemoveFlags.geometry = true
+  throw new Error('injected direct instance geometry disposal failure')
+})
+const directRemoveInstance = new THREE.Group()
+directRemoveInstance.add(new THREE.Mesh(directRemoveGeometry, directRemoveMaterial))
+directRemoveInstance.userData.persistentWorldAssetPlacement = true
+directRemoveScene.add(directRemoveInstance)
+directRemoveInternal.instances.set('direct-remove', directRemoveInstance)
+const directRemoveMixer = new THREE.AnimationMixer(directRemoveInstance)
+directRemoveMixer.stopAllAction = () => {
+  directRemoveFlags.mixerStop = true
+  throw new Error('injected direct instance animation-stop failure')
+}
+directRemoveMixer.uncacheRoot = () => { directRemoveFlags.mixerUncache = true }
+directRemoveInternal.instanceMixers.set('direct-remove', directRemoveMixer)
+directRemoveInternal.instanceActions.set('direct-remove', {} as THREE.AnimationAction)
+directRemoveInternal.pendingAnimationStops.set('direct-remove', [])
+directRemoveInternal.animationAccumulators.set('direct-remove', 1)
+assert.throws(() => directRemoveRuntime.removeInstance('direct-remove'), AggregateError,
+  'direct instance removal must report failures only after removing the instance')
+assert.equal(directRemoveScene.children.length, 0)
+assert.equal(directRemoveInternal.instances.size, 0)
+assert.equal(directRemoveInternal.instanceMixers.size, 0)
+assert.equal(directRemoveInternal.instanceActions.size, 0)
+assert.equal(directRemoveInternal.pendingAnimationStops.size, 0)
+assert.equal(directRemoveInternal.animationAccumulators.size, 0)
+assert.deepEqual(directRemoveFlags, {
+  geometry: true, material: true, mixerStop: true, mixerUncache: true,
+})
+assert.equal(directRemoveNotifications, 1,
+  'a failing placement callback must be reported without skipping instance bookkeeping')
+
+// Removing a source asset must continue through every dependent placement and
+// dispose the source object even when one child instance fails cleanup.
+const sourceRemoveScene = new THREE.Scene()
+let sourceRemoveNotifications = 0
+const sourceRemoveRuntime = new WorldAssetRuntime(sourceRemoveScene, loader, () => {
+  sourceRemoveNotifications += 1
+  if (sourceRemoveNotifications === 1) throw new Error('injected first placement notification failure')
+})
+const sourceRemoveInternal = sourceRemoveRuntime as unknown as {
+  assets: Map<string, { id: string; semanticEntryId?: string; sourceUrl: string; object: THREE.Object3D; animations: THREE.AnimationClip[]; loadedAt: number }>
+  instances: Map<string, THREE.Object3D>
+  semanticSources: Map<string, unknown>
+  instanceMixers: Map<string, THREE.AnimationMixer>
+  instanceActions: Map<string, THREE.AnimationAction>
+  pendingAnimationStops: Map<string, unknown>
+  animationAccumulators: Map<string, number>
+}
+const sourceRemoveFlags = {
+  failingGeometry: false,
+  failingMaterial: false,
+  healthyGeometry: false,
+  healthyMaterial: false,
+  sourceGeometry: false,
+  sourceMaterial: false,
+  mixerStop: false,
+  mixerUncache: false,
+}
+const trackedRemoveMesh = (material: THREE.Material, onDispose: () => void) => {
+  const geometry = new THREE.BoxGeometry(1, 1, 1)
+  geometry.addEventListener('dispose', onDispose)
+  return new THREE.Mesh(geometry, material)
+}
+const failingRemoveMaterial = new THREE.MeshBasicMaterial()
+failingRemoveMaterial.addEventListener('dispose', () => {
+  sourceRemoveFlags.failingMaterial = true
+  throw new Error('injected dependent instance material disposal failure')
+})
+const failingRemoveInstance = new THREE.Group()
+failingRemoveInstance.add(trackedRemoveMesh(failingRemoveMaterial, () => {
+  sourceRemoveFlags.failingGeometry = true
+  throw new Error('injected dependent instance geometry disposal failure')
+}))
+failingRemoveInstance.userData.runtimeAssetSourceId = 'remove-source'
+failingRemoveInstance.userData.persistentWorldAssetPlacement = true
+const healthyRemoveMaterial = new THREE.MeshBasicMaterial()
+healthyRemoveMaterial.addEventListener('dispose', () => { sourceRemoveFlags.healthyMaterial = true })
+const healthyRemoveInstance = new THREE.Group()
+healthyRemoveInstance.add(trackedRemoveMesh(healthyRemoveMaterial, () => { sourceRemoveFlags.healthyGeometry = true }))
+healthyRemoveInstance.userData.runtimeAssetSourceId = 'remove-source'
+healthyRemoveInstance.userData.persistentWorldAssetPlacement = true
+const sourceRemoveMaterial = new THREE.MeshBasicMaterial()
+sourceRemoveMaterial.addEventListener('dispose', () => { sourceRemoveFlags.sourceMaterial = true })
+const sourceRemoveObject = new THREE.Group()
+sourceRemoveObject.add(trackedRemoveMesh(sourceRemoveMaterial, () => { sourceRemoveFlags.sourceGeometry = true }))
+sourceRemoveScene.add(failingRemoveInstance, healthyRemoveInstance, sourceRemoveObject)
+const sourceRemoveAsset = {
+  id: 'remove-source',
+  semanticEntryId: 'flora.remove',
+  sourceUrl: 'https://assets.example.test/remove-source.glb',
+  object: sourceRemoveObject,
+  animations: [],
+  loadedAt: Date.now(),
+}
+sourceRemoveInternal.assets.set('remove-source', sourceRemoveAsset)
+sourceRemoveInternal.semanticSources.set('flora.remove', sourceRemoveAsset)
+sourceRemoveInternal.instances.set('failing-dependent', failingRemoveInstance)
+sourceRemoveInternal.instances.set('healthy-dependent', healthyRemoveInstance)
+const sourceRemoveMixer = new THREE.AnimationMixer(failingRemoveInstance)
+sourceRemoveMixer.stopAllAction = () => {
+  sourceRemoveFlags.mixerStop = true
+  throw new Error('injected dependent mixer-stop failure')
+}
+sourceRemoveMixer.uncacheRoot = () => { sourceRemoveFlags.mixerUncache = true }
+sourceRemoveInternal.instanceMixers.set('failing-dependent', sourceRemoveMixer)
+sourceRemoveInternal.instanceActions.set('failing-dependent', {} as THREE.AnimationAction)
+sourceRemoveInternal.pendingAnimationStops.set('failing-dependent', [])
+sourceRemoveInternal.animationAccumulators.set('failing-dependent', 1)
+assert.throws(() => sourceRemoveRuntime.remove('remove-source'), AggregateError,
+  'source removal must aggregate dependent cleanup failures after completing the whole source removal')
+assert.equal(sourceRemoveScene.children.length, 0,
+  'a failed dependent cleanup must not leave any source or placement roots attached')
+assert.equal(sourceRemoveInternal.instances.size, 0)
+assert.equal(sourceRemoveInternal.assets.size, 0)
+assert.equal(sourceRemoveInternal.semanticSources.size, 0)
+assert.equal(sourceRemoveInternal.instanceMixers.size, 0)
+assert.equal(sourceRemoveInternal.instanceActions.size, 0)
+assert.equal(sourceRemoveInternal.pendingAnimationStops.size, 0)
+assert.equal(sourceRemoveInternal.animationAccumulators.size, 0)
+assert.equal(sourceRemoveNotifications, 2,
+  'source removal must continue to notify for every persistent dependent after a callback failure')
+assert.deepEqual(sourceRemoveFlags, {
+  failingGeometry: true,
+  failingMaterial: true,
+  healthyGeometry: true,
+  healthyMaterial: true,
+  sourceGeometry: true,
+  sourceMaterial: true,
+  mixerStop: true,
+  mixerUncache: true,
+}, 'source removal must dispose failing and healthy dependent resources plus its own source resources')
+
 console.log('WorldAssetRuntime asset lifecycle, independent skeletal animation states, crossfades, distance LOD and disposal: PASS')
