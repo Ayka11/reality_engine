@@ -181,7 +181,14 @@ assert.throws(() => encodeActiveWorldPackage({
   ...manifest, entries: [{ ...manifest.entries[0], license: 'UNKNOWN' }],
 } }), /asset manifest is invalid/)
 
-console.log('Active world package regression: PASS')
+
+const bootstrapSource = await readFile(new URL('src/infinityBootstrap.ts', root), 'utf8')
+assert.match(bootstrapSource,
+  /The package transaction is committed[\\s\\S]*?try \\{\\s*world\\.clearExternalAssetRuntime\\(\\)\\s*\\} catch \\(error\\) \\{[\\s\\S]*?The package was loaded, but some previous external assets could not be released[\\s\\S]*?report\\(message\\)/,
+  'post-commit external asset cleanup failures must be reported without rejecting or rolling back a committed active-package import')
+
 console.log('PASS: unified re_v6 grid + Infinite World snapshot round-trip')
 console.log('PASS: legacy re_v5 finite-grid compatibility')
 console.log('PASS: malformed dimensions, cells, ticks and asset provenance fail closed')
+
+console.log('Active world package regression: PASS')

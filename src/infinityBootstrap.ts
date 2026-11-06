@@ -197,8 +197,20 @@ export function bootstrapInfiniteWorld() {
 
     // The package transaction is committed. Dispose the previous runtime only
     // now, leaving the restored placement descriptors pending until users
-    // explicitly import their matching source models.
-    world.clearExternalAssetRuntime()
+    // explicitly import their matching source models. Cleanup is best-effort:
+    // it must not make a committed import appear to have failed or trigger rollback.
+    try {
+      world.clearExternalAssetRuntime()
+    } catch (error) {
+      const message = 'The package was loaded, but some previous external assets could not be released. The new world remains active.'
+      console.warn('[persistence] ' + message, error)
+      try {
+        const report = (window as any).log
+        if (typeof report === 'function') report(message)
+      } catch (reportError) {
+        console.warn('[persistence] Could not report external asset cleanup failure', reportError)
+      }
+    }
     return { legacy: candidate.legacy, tick: candidate.tick }
   }
 
