@@ -419,6 +419,31 @@ assert.equal(restoreMethodSource.includes("mesh.geometry.dispose()"), false,
   'portable restore must not use unguarded direct geometry disposal');
 assert.equal(restoreMethodSource.includes("material.dispose()"), false,
   'portable restore must not use unguarded direct material disposal');
+const rendererDisposeStart = worldRendererSource.indexOf("  dispose() {");
+const rendererDisposeEnd = worldRendererSource.indexOf("  private rebuildDecisionLayer()", rendererDisposeStart);
+const rendererDisposeSource = worldRendererSource.slice(rendererDisposeStart, rendererDisposeEnd);
+assert.ok(rendererDisposeSource.includes("detachAndDisposeObjectGroups(") &&
+  rendererDisposeSource.includes("this.renderer.dispose()") &&
+  rendererDisposeSource.includes("if (this.disposed) return"),
+  'renderer disposal must be idempotent, release scene resources defensively and always dispose WebGLRenderer');
+assert.equal(rendererDisposeSource.includes("this.scene.traverse("), false,
+  'renderer disposal must not use unguarded scene traversal/disposal');
+const deleteSelectedStart = worldRendererSource.indexOf("  deleteSelected()");
+const deleteSelectedEnd = worldRendererSource.indexOf("  handlePointer(", deleteSelectedStart);
+const deleteSelectedSource = worldRendererSource.slice(deleteSelectedStart, deleteSelectedEnd);
+assert.ok(deleteSelectedSource.includes("detachAndDisposeObjectGroups(") &&
+  deleteSelectedSource.includes("this.objectMeshes.delete(id)"),
+  'deleting an object must evict its render cache even when a GPU disposer fails');
+assert.equal(deleteSelectedSource.includes("mesh.geometry.dispose()"), false,
+  'object deletion must not directly invoke unguarded geometry disposal');
+const overlayStart = worldRendererSource.indexOf("  setAnalyticalOverlay(");
+const overlayEnd = worldRendererSource.indexOf("  buildAnalyticalOverlay(", overlayStart);
+const overlaySource = worldRendererSource.slice(overlayStart, overlayEnd);
+assert.ok(overlaySource.includes("detachAndDisposeObjectGroups(") &&
+  overlaySource.includes("this.analyticalOverlayMesh = undefined"),
+  'analytical overlay replacement must detach and forget the previous overlay before cleanup can fail');
+assert.equal(overlaySource.includes("geometry.dispose()"), false,
+  'analytical overlay replacement must not directly dispose GPU resources');
 
 assert.ok(worldSurfaceProviderSource.includes("kind: 'world-generator-surface'") &&
   worldSurfaceProviderSource.includes("new WorldGenerator(value.seed, value.seaLevel, value.maxElevation)"),

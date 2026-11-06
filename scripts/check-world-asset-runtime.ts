@@ -595,6 +595,8 @@ const restoreCleanupFlags = {
   sharedMaterial: false,
   sharedTexture: false,
   laterGroupGeometry: false,
+  pointsGeometry: false,
+  pointsMaterial: false,
 }
 const restoreSharedTexture = new THREE.Texture()
 restoreSharedTexture.addEventListener('dispose', () => { restoreCleanupFlags.sharedTexture = true })
@@ -624,7 +626,13 @@ const restoreLaterGeometry = new THREE.BoxGeometry(1, 1, 1)
 restoreLaterGeometry.addEventListener('dispose', () => { restoreCleanupFlags.laterGroupGeometry = true })
 const restoreLaterRoot = new THREE.Group()
 restoreLaterRoot.add(new THREE.Mesh(restoreLaterGeometry, new THREE.MeshBasicMaterial()))
-restoreCleanupScene.add(restoreFailingRoot, restoreHealthyRoot, restoreLaterRoot)
+const restorePointsGeometry = new THREE.BufferGeometry()
+restorePointsGeometry.addEventListener('dispose', () => { restoreCleanupFlags.pointsGeometry = true })
+const restorePointsMaterial = new THREE.PointsMaterial()
+restorePointsMaterial.addEventListener('dispose', () => { restoreCleanupFlags.pointsMaterial = true })
+const restorePointsRoot = new THREE.Group()
+restorePointsRoot.add(new THREE.Points(restorePointsGeometry, restorePointsMaterial))
+restoreCleanupScene.add(restoreFailingRoot, restoreHealthyRoot, restoreLaterRoot, restorePointsRoot)
 
 let sharedMaterialDisposals = 0
 let sharedTextureDisposals = 0
@@ -633,7 +641,7 @@ restoreSharedTexture.addEventListener('dispose', () => { sharedTextureDisposals 
 
 const restoreCleanupFailures = detachAndDisposeObjectGroups(
   restoreCleanupScene,
-  [restoreFailingRoot, restoreHealthyRoot, restoreLaterRoot],
+  [restoreFailingRoot, restoreHealthyRoot, restoreLaterRoot, restorePointsRoot],
   'Portable restore fixture',
 )
 assert.equal(restoreCleanupScene.children.length, 0,
@@ -648,7 +656,9 @@ assert.deepEqual(restoreCleanupFlags, {
   sharedMaterial: true,
   sharedTexture: true,
   laterGroupGeometry: true,
-}, 'portable restore cleanup must continue through every root and release shared resources')
+  pointsGeometry: true,
+  pointsMaterial: true,
+}, 'portable restore cleanup must continue through every root and release shared resources, including Points')
 assert.equal(sharedMaterialDisposals, 1,
   'shared materials must be disposed exactly once across the whole replacement scene')
 assert.equal(sharedTextureDisposals, 1,

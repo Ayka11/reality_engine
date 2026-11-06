@@ -47,16 +47,23 @@ export function detachAndDisposeObjectGroups(
     attempt(`${current} resource traversal`, () => {
       group.traverse(node => {
         try {
-          const mesh = node as THREE.Mesh
-          if (!mesh.isMesh) return
-          if (mesh.geometry) geometries.add(mesh.geometry)
+          // Meshes, lines, points and sprites all own disposable render resources.
+          const renderable = node as THREE.Object3D & {
+            geometry?: THREE.BufferGeometry
+            material?: THREE.Material | THREE.Material[]
+          }
+          if (renderable.geometry instanceof THREE.BufferGeometry) {
+            geometries.add(renderable.geometry)
+          }
           const skinnedMesh = node as THREE.SkinnedMesh
           if (skinnedMesh.isSkinnedMesh && skinnedMesh.skeleton) skeletons.add(skinnedMesh.skeleton)
           const instancedMesh = node as THREE.InstancedMesh
           if (instancedMesh.isInstancedMesh) instancedMeshes.add(instancedMesh)
-          const meshMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-          meshMaterials.forEach(material => {
-            if (!material) return
+          const nodeMaterials = Array.isArray(renderable.material)
+            ? renderable.material
+            : renderable.material ? [renderable.material] : []
+          nodeMaterials.forEach(material => {
+            if (!(material instanceof THREE.Material)) return
             materials.add(material)
             Object.values(material).forEach(collectTextures)
           })

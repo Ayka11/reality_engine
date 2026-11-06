@@ -131,6 +131,7 @@ export class InfiniteWorldRenderer {
   private analyticalOverlayMode: 'suitability' | 'flood' | 'slope' | null = null
   private analyticalOverlayMesh?: THREE.Points
   private enabled = true
+  private disposed = false
   private currentPixelRatio = 1
   private readonly maxPixelRatio = Math.max(1, Math.min(window.devicePixelRatio || 1, 2))
   private adaptiveFrameCount = 0
@@ -1189,27 +1190,59 @@ export class InfiniteWorldRenderer {
   }
 
   dispose() {
+    if (this.disposed) return
+    this.disposed = true
+
     // A disposed renderer may still be referenced by the app's frame loop; disable its work first.
     this.enabled = false
     this.controls.enabled = false
+    const failures: unknown[] = []
+    const attempt = (label: string, cleanup: () => void) => {
+      try {
+        cleanup()
+      } catch (error) {
+        failures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
+      }
+    }
+
     if (this.saveTimer !== null) {
-      window.clearTimeout(this.saveTimer)
+      attempt('Save timer cancellation', () => window.clearTimeout(this.saveTimer!))
       this.saveTimer = null
     }
-    this.renderer.domElement.removeEventListener('contextmenu', this.contextMenuHandler)
-    this.renderer.domElement.removeEventListener('pointerdown', this.pointerHandler)
-    this.renderer.domElement.removeEventListener('pointerup', this.pointerUpHandler)
-    this.renderer.domElement.removeEventListener('pointermove', this.pointerMoveHandler)
-    window.removeEventListener('keydown', this.keyDownHandler)
-    window.removeEventListener('keyup', this.keyUpHandler)
-    this.controls.dispose()
-    this.transformControls.dispose()
-    this.scene.traverse(obj => {
-      const mesh = obj as THREE.Mesh
-      if (mesh.geometry) mesh.geometry.dispose()
-      if (mesh.material) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(m => m.dispose())
-    })
-    this.renderer.dispose()
+    attempt('Context-menu listener removal', () => this.renderer.domElement.removeEventListener('contextmenu', this.contextMenuHandler))
+    attempt('Pointer-down listener removal', () => this.renderer.domElement.removeEventListener('pointerdown', this.pointerHandler))
+    attempt('Pointer-up listener removal', () => this.renderer.domElement.removeEventListener('pointerup', this.pointerUpHandler))
+    attempt('Pointer-move listener removal', () => this.renderer.domElement.removeEventListener('pointermove', this.pointerMoveHandler))
+    attempt('Key-down listener removal', () => window.removeEventListener('keydown', this.keyDownHandler))
+    attempt('Key-up listener removal', () => window.removeEventListener('keyup', this.keyUpHandler))
+    attempt('Orbit controls disposal', () => this.controls.dispose())
+    attempt('Transform controls disposal', () => this.transformControls.dispose())
+    attempt('External asset runtime cleanup', () => this.clearExternalAssetRuntime())
+
+    try {
+      failures.push(...detachAndDisposeObjectGroups(
+        this.scene,
+        [...this.scene.children],
+        'Infinite World renderer',
+      ))
+    } catch (error) {
+      failures.push(new Error('Infinite World scene resource cleanup failed', { cause: error }))
+    }
+    this.patches.clear()
+    this.objectMeshes.clear()
+    this.waterMeshes.clear()
+    this.terrainMaterials.clear()
+    this.analyticalOverlayMesh = undefined
+    this.physicsParticlePoints = null
+
+    // WebGLRenderer.dispose must run even when a scene resource has a faulty disposer.
+    attempt('WebGL renderer disposal', () => this.renderer.dispose())
+    if (failures.length > 0) {
+      console.warn(
+        '[world-renderer] Renderer disposal completed with resource cleanup failures',
+        new AggregateError(failures, 'Infinite World renderer cleanup was incomplete'),
+      )
+    }
   }
 
   private rebuildDecisionLayer() {
@@ -2917,13 +2950,20 @@ export class InfiniteWorldRenderer {
     }
     const entry = this.objectMeshes.get(id)
     if (entry) {
-      this.scene.remove(entry.group)
-      entry.group.traverse(obj => {
-        const mesh = obj as THREE.Mesh
-        if (mesh.geometry) mesh.geometry.dispose()
-        if (mesh.material) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(m => m.dispose())
-      })
+      const cleanupFailures = detachAndDisposeObjectGroups(
+        this.scene,
+        [entry.group],
+        `Deleted world object ${id}`,
+      )
+      // The object is already removed from the authoritative object store. Always
+      // evict its render cache so a failed GPU disposer cannot leave a ghost mesh.
       this.objectMeshes.delete(id)
+      if (cleanupFailures.length > 0) {
+        console.warn(
+          `[world-objects] Deleted object ${id} with GPU resource cleanup failures`,
+          new AggregateError(cleanupFailures, `World object ${id} cleanup was incomplete`),
+        )
+      }
     }
     this.selectedObjectId = null
     this.transformControls.detach()
@@ -3210,12 +3250,19 @@ export class InfiniteWorldRenderer {
   setAnalyticalOverlay(mode: 'suitability' | 'flood' | 'slope' | null) {
     this.analyticalOverlayMode = mode
     if (this.analyticalOverlayMesh) {
-      this.terrainGroup.remove(this.analyticalOverlayMesh)
-      this.analyticalOverlayMesh.geometry.dispose()
-      const material = this.analyticalOverlayMesh.material
-      if (Array.isArray(material)) material.forEach((m) => m.dispose())
-      else material.dispose()
+      const previousOverlay = this.analyticalOverlayMesh
       this.analyticalOverlayMesh = undefined
+      const cleanupFailures = detachAndDisposeObjectGroups(
+        this.terrainGroup,
+        [previousOverlay],
+        'Analytical overlay',
+      )
+      if (cleanupFailures.length > 0) {
+        console.warn(
+          '[terrain] Analytical overlay was detached with GPU resource cleanup failures',
+          new AggregateError(cleanupFailures, 'Analytical overlay cleanup was incomplete'),
+        )
+      }
     }
     if (!mode) return
     const data = this.buildAnalyticalOverlay(this.worldCoordinates.x, this.worldCoordinates.z, 160, 33, mode)
