@@ -1444,12 +1444,22 @@ signalSaveWriteStarted = saveWriteStartedResolve;
 holdNextSaveWrite = true;
 const pendingQuickSave = saveHarness.quickSave("Pending manual save");
 await saveWriteStarted;
+let queuedListSettled = false;
+const pendingSaveList = saveHarness.listQuickSaves().then(list => {
+  queuedListSettled = true;
+  return list;
+});
 const pendingLoad = saveHarness.applySnapshot(queuedLoadSnapshot);
 await Promise.resolve();
+assert.equal(queuedListSettled, false,
+  "quick-save listing must wait for an earlier in-flight IndexedDB write");
 assert.deepEqual(runtimeGrid.buffer, preRaceBuffer,
   "a Load must wait until an earlier quick-save IndexedDB commit finishes");
 saveWriteRelease();
 await pendingQuickSave;
+const committedList = await pendingSaveList;
+assert.equal(committedList.some(save => save.name === "Pending manual save"), true,
+  "a queued save listing must observe the save that committed before it");
 await pendingLoad;
 assert.deepEqual(saveHarness.captureSnapshot("after queued load").fields, queuedLoadSnapshot.fields,
   "the serialized Load must become the final live field state after the pending save");
@@ -1466,6 +1476,8 @@ assert.match(saveSystemSource, /applySnapshot\(snapshot: WorldSnapshot\): Promis
   "direct world restores must be ordered against pending saves");
 assert.match(saveSystemSource, /return this\.runExclusive\(async \(\) => \{[\s\S]*?const saves = await db\.getAll\('saves'\)[\s\S]*?applySnapshotExclusive\(found\.snapshot\)/,
   "quick-load selection and restore must run as one serialized operation");
+assert.match(saveSystemSource, /async listQuickSaves\(\): Promise<WorldSaveSummary\[\]>\s*\{\s*return this\.runExclusive\(async \(\) => \{[\s\S]*?db\.getAll\('saves'\)/,
+  "quick-save listings must wait for earlier queued saves and expose committed entries");
 
 assert.match(saveSystemSource, /clearWorldAssetRuntime\?: \(\) => void/,
   "world save context must expose an explicit post-commit external asset cleanup port");

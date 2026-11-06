@@ -182,17 +182,19 @@ export class WorldSaveSystem {
   }
 
   async listQuickSaves(): Promise<WorldSaveSummary[]> {
-    const db = await this.db();
-    const saves = await db.getAll('saves');
-    return saves
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .map(save => ({
-        id: save.id,
-        name: save.name,
-        timestamp: save.timestamp,
-        format: save.format,
-        metadata: save.snapshot.metadata,
-      }));
+    return this.runExclusive(async () => {
+      const db = await this.db();
+      const saves = await db.getAll('saves');
+      return saves
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .map(save => ({
+          id: save.id,
+          name: save.name,
+          timestamp: save.timestamp,
+          format: save.format,
+          metadata: save.snapshot.metadata,
+        }));
+    });
   }
 
   async exportRealityPackage(name: string): Promise<Blob> {
