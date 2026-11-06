@@ -7,6 +7,7 @@ const saveSystemSource = await readFile(new URL("src/world/save/WorldSaveSystem.
 const saveManagerSource = await readFile(new URL("src/world/save/SaveManager.ts", root), "utf8");
 const mainSource = await readFile(new URL("src/main.ts", root), "utf8");
 const rendererSource = await readFile(new URL("src/render/InfiniteWorldRenderer.ts", root), "utf8");
+const persistenceSource = await readFile(new URL("src/infinity/WorldPersistence.ts", root), "utf8");
 const climateSource = await readFile(new URL("src/simulation/ClimateSystem.ts", root), "utf8");
 const multiScaleSource = await readFile(new URL("src/simulation/MultiScaleSystem.ts", root), "utf8");
 const languageSource = await readFile(new URL("src/simulation/LanguageEmergence.ts", root), "utf8");
@@ -529,6 +530,12 @@ assert.match(loadWorldSource, /const restoredObjects: WorldObject\[\] = \[\][\s\
   "loadWorld must preflight every stored chunk payload before changing terrain or objects");
 assert.match(loadWorldSource, /newlyLoadedChunkKeys[\s\S]*?this\.persistence\.unloadChunk\(/,
   "a failed chunk preflight must roll back newly populated persistence cache entries");
+assert.match(loadWorldSource, /this\.persistence\.readChunk\([\s\S]*?result\.status !== 'ok'[\s\S]*?return 0/,
+  "loadWorld must explicitly reject missing, unavailable and corrupt stored chunk payloads");
+assert.match(persistenceSource, /export type WorldChunkReadResult =/,
+  "chunk reads must expose a discriminated result instead of collapsing all failures to an empty array");
+assert.match(persistenceSource, /invalid-world-object-record/,
+  "chunk persistence must validate object records before caching or publishing them");
 assert.match(saveWorldSource, /if \(!fieldCheckpointSaved\) \{\s*failedPersistenceOperations\.push\('authoritative field checkpoint'\)/,
   "a failed authoritative field checkpoint must be included in the durable-save failure report");
 assert.match(saveWorldSource, /if \(!checkpointSaved\) \{\s*failedPersistenceOperations\.push\('terrain deformation checkpoint'\)/,
@@ -609,6 +616,30 @@ failGet = false;
 assert.deepEqual(readFailureReader.loadChunk(1, 0, -2), readFailureObjects,
   "a previously inaccessible chunk must load normally after storage recovers");
 assert.equal(readFailureReader.isLoaded(1, 0, -2), true);
+
+const corruptReader = new WorldPersistence("seed-corrupt-payload");
+const corruptKey = "reality-engine-world:seed-corrupt-payload:chunk:0,0,0";
+values.set(corruptKey, "{not-json");
+const corruptResult = corruptReader.readChunk(0, 0, 0);
+assert.equal(corruptResult.status, "corrupt",
+  "malformed JSON must be reported as corrupt rather than treated as an empty chunk");
+assert.equal(corruptResult.reason, "invalid-json");
+assert.equal(corruptReader.isLoaded(0, 0, 0), true,
+  "corrupt chunks must be memoized so streaming does not repeatedly parse the same bad payload");
+corruptReader.unloadChunk(0, 0, 0);
+values.set(corruptKey, JSON.stringify({
+  version: 1, seed: "seed-corrupt-payload", objects: [{ id: "bad-object", kind: "tree", x: NaN }],
+}));
+const invalidObjectResult = corruptReader.readChunk(0, 0, 0);
+assert.equal(invalidObjectResult.status, "corrupt",
+  "non-finite world-object records must be rejected before they enter the runtime");
+assert.equal(invalidObjectResult.reason, "invalid-world-object-record");
+corruptReader.unloadChunk(0, 0, 0);
+values.set(corruptKey, JSON.stringify({ version: 1, seed: "seed-corrupt-payload", objects: [] }));
+const validEmptyResult = corruptReader.readChunk(0, 0, 0);
+assert.equal(validEmptyResult.status, "ok",
+  "a valid empty chunk must remain distinct from a missing or corrupt payload");
+assert.deepEqual(validEmptyResult.objects, []);
 
 function toModuleUrl(source) {
   return "data:text/javascript;base64," + Buffer.from(source).toString("base64");
