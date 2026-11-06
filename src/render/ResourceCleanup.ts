@@ -6,7 +6,7 @@ import * as THREE from 'three'
  * finish publishing the replacement state before reporting degraded cleanup.
  */
 export function detachAndDisposeObjectGroups(
-  scene: THREE.Scene,
+  scene: THREE.Object3D,
   groups: Iterable<THREE.Object3D>,
   label = 'Scene object',
 ): unknown[] {
