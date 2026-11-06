@@ -971,7 +971,7 @@ assert.equal(saveHarness.getCurrentSnapshot(), cleanupFailureSnapshot,
 assert.equal(worldEditorPersistCalls, 4,
   "editor sidecar persistence must still run after a best-effort asset cleanup failure");
 failWorldAssetClear = false;
-assert.equal(runtimeState.recorderClears, 3, "each committed world restore must clear stale recorder history, including a post-commit sidecar failure");
+assert.equal(runtimeState.recorderClears, 4, "each committed world restore must clear stale recorder history, including post-commit sidecar and asset-cleanup failures");
 assert.equal(runtimeGrid.buffer[20], 0, "legacy restore must clear stale entity ownership marker");
 assert.equal(runtimeGrid.buffer[19], 0, "legacy restore must clear stale agent marker");
 
