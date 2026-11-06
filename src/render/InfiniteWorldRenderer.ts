@@ -106,6 +106,8 @@ export class InfiniteWorldRenderer {
   private terrainBrushStrength = 1
   private saveTimer: number | null = null
   private lastPersistenceFailures: string[] = []
+  /** Fail closed after startup/restore cannot prove the durable world is complete. */
+  private persistenceRecoveryBlocked = false
   private storageKey: string
   private readonly pointerHandler: (e: PointerEvent) => void
   private readonly pointerUpHandler: (e: PointerEvent) => void
@@ -849,7 +851,7 @@ export class InfiniteWorldRenderer {
       preflightFailures.push('asset provenance manifest')
     }
 
-    this.saveWorld({ checkpoint: false, preflightFailures })
+    this.saveWorld({ checkpoint: false, preflightFailures, allowRecovery: true })
     const failures = [...this.lastPersistenceFailures]
     const committed = this.persistence.finishSaveTransaction(failures.length === 0)
     if (!committed && failures.length === 0) failures.push('world save transaction commit')
@@ -860,16 +862,70 @@ export class InfiniteWorldRenderer {
         `Infinite World persistence failed: ${failures.join(', ')}`,
       )
     }
+    this.persistenceRecoveryBlocked = false
+    this.lastPersistenceFailures = []
   }
 
-  saveWorld(options: { checkpoint?: boolean; preflightFailures?: string[] } = {}) {
+  saveWorld(options: { checkpoint?: boolean; preflightFailures?: string[]; allowRecovery?: boolean } = {}) {
     const failedPersistenceOperations: string[] = [...(options.preflightFailures ?? [])]
     const objects = this.objects.values()
+    if (this.persistenceRecoveryBlocked && !options.allowRecovery) {
+      failedPersistenceOperations.push('world persistence recovery required')
+      this.lastPersistenceFailures = failedPersistenceOperations
+      console.warn('[persistence] World save was withheld because the last restore could not prove the stored world was complete; clear or import a complete world to recover')
+      return objects.length
+    }
     if (!this.persistence.beginSaveTransaction()) {
       failedPersistenceOperations.push('world save transaction marker')
       this.lastPersistenceFailures = failedPersistenceOperations
       console.warn('[persistence] World save was withheld because an earlier save is incomplete; explicitly import or clear the world to recover')
       return objects.length
+    }
+
+    // Build the authoritative in-memory chunk map before touching durable sidecars.
+    const groups = new Map<string, WorldObject[]>()
+    for (const object of objects) {
+      const { cx, cy, cz } = this.persistence.chunkForObject(object)
+      const key = chunkKey(cx, cy, cz)
+      const list = groups.get(key) ?? []
+      list.push(object)
+      groups.set(key, list)
+    }
+
+    const knownChunkKeys = this.persistence.knownChunks({ recoverOrphans: true })
+    if (knownChunkKeys === null) {
+      failedPersistenceOperations.push('stored chunk enumeration')
+      const closed = this.persistence.finishSaveTransaction(true)
+      if (!closed) failedPersistenceOperations.push('world save transaction commit')
+      this.persistenceRecoveryBlocked = true
+      this.lastPersistenceFailures = failedPersistenceOperations
+      console.warn('[persistence] World save was withheld because stored chunks could not be enumerated; durable state was left untouched')
+      return objects.length
+    }
+
+    // Verify every durable chunk that would otherwise be deleted as an orphan.
+    // A missing/corrupt/unavailable payload is not proof that the world had no data.
+    const loadedBeforeSave = new Set(this.persistence.loadedChunks())
+    const newlyLoadedChunkKeys: string[] = []
+    for (const key of knownChunkKeys) {
+      if (groups.has(key)) continue
+      const [cx, cy, cz] = key.split(',').map(Number)
+      const result = this.persistence.readChunk(cx, cy, cz)
+      if (result.status !== 'ok') {
+        const rollbackKeys = new Set([...newlyLoadedChunkKeys, key])
+        for (const rollbackKey of rollbackKeys) {
+          const [rollbackCx, rollbackCy, rollbackCz] = rollbackKey.split(',').map(Number)
+          this.persistence.unloadChunk(rollbackCx, rollbackCy, rollbackCz)
+        }
+        failedPersistenceOperations.push(`${result.status} chunk ${key}: ${result.reason}`)
+        const closed = this.persistence.finishSaveTransaction(true)
+        if (!closed) failedPersistenceOperations.push('world save transaction commit')
+        this.persistenceRecoveryBlocked = true
+        this.lastPersistenceFailures = failedPersistenceOperations
+        console.warn(`[persistence] World save was withheld because chunk ${key} is ${result.status} (${result.reason}); durable state was left untouched`)
+        return objects.length
+      }
+      if (!loadedBeforeSave.has(key)) newlyLoadedChunkKeys.push(key)
     }
 
     // Explicit Save creates a stable checkpoint; autosave must not move that checkpoint.
@@ -898,27 +954,12 @@ export class InfiniteWorldRenderer {
         console.warn('[persistence] Terrain deformation checkpoint failed; saved terrain edits may not survive reload')
       }
     }
-    const groups = new Map<string, WorldObject[]>()
-    for (const object of objects) {
-      const { cx, cy, cz } = this.persistence.chunkForObject(object)
-      const key = chunkKey(cx, cy, cz)
-      const list = groups.get(key) ?? []
-      list.push(object)
-      groups.set(key, list)
-    }
-    // Include durable chunks whose payload was written but whose manifest update
-    // previously failed. Otherwise a deleted object can be resurrected on the next
-    // startup when loadWorld() scans and recovers orphaned chunk payloads.
-    const knownChunkKeys = this.persistence.knownChunks({ recoverOrphans: true })
-    if (knownChunkKeys === null) {
-      failedPersistenceOperations.push('stored chunk enumeration')
-    } else {
-      for (const key of knownChunkKeys) {
-        if (!groups.has(key)) {
-          const [cx, cy, cz] = key.split(',').map(Number)
-          if (!this.persistence.deleteChunk(cx, cy, cz)) {
-            failedPersistenceOperations.push(`delete chunk ${key}`)
-          }
+    // Delete only verified durable chunks that are absent from the current world.
+    for (const key of knownChunkKeys) {
+      if (!groups.has(key)) {
+        const [cx, cy, cz] = key.split(',').map(Number)
+        if (!this.persistence.deleteChunk(cx, cy, cz)) {
+          failedPersistenceOperations.push(`delete chunk ${key}`)
         }
       }
     }
@@ -939,6 +980,7 @@ export class InfiniteWorldRenderer {
     }
     this.lastPersistenceFailures = failedPersistenceOperations
     if (failedPersistenceOperations.length > 0) {
+      this.persistenceRecoveryBlocked = true
       console.warn(
         `[persistence] World persistence incomplete (${failedPersistenceOperations.join(', ')}); world changes may not survive reload`,
       )
@@ -948,6 +990,7 @@ export class InfiniteWorldRenderer {
 
   loadWorld(options: { restoreFieldCheckpoint?: boolean } = {}) {
     if (this.persistence.hasIncompleteSaveTransaction()) {
+      this.persistenceRecoveryBlocked = true
       this.lastPersistenceFailures = ['interrupted world save transaction']
       console.warn('[persistence] World restore was blocked because the last multi-key save did not commit; import a complete world package or clear the saved world')
       return 0
@@ -956,6 +999,7 @@ export class InfiniteWorldRenderer {
     // renderer state. A failed key scan is not an empty world.
     const knownChunkKeys = this.persistence.knownChunks({ recoverOrphans: true })
     if (knownChunkKeys === null) {
+      this.persistenceRecoveryBlocked = true
       this.lastPersistenceFailures = ['stored chunk enumeration']
       console.warn('[persistence] World restore was withheld because stored chunks could not be enumerated; the live world was retained')
       return 0
@@ -977,6 +1021,7 @@ export class InfiniteWorldRenderer {
           const [loadedCx, loadedCy, loadedCz] = rollbackKey.split(',').map(Number)
           this.persistence.unloadChunk(loadedCx, loadedCy, loadedCz)
         }
+        this.persistenceRecoveryBlocked = true
         this.lastPersistenceFailures = [`${result.status} chunk ${key}: ${result.reason}`]
         console.warn(`[persistence] World restore was withheld because chunk ${key} is ${result.status} (${result.reason}); the live world was retained`)
         return 0
@@ -988,6 +1033,7 @@ export class InfiniteWorldRenderer {
             const [loadedCx, loadedCy, loadedCz] = loadedKey.split(',').map(Number)
             this.persistence.unloadChunk(loadedCx, loadedCy, loadedCz)
           }
+          this.persistenceRecoveryBlocked = true
           this.lastPersistenceFailures = [`duplicate world object ID: ${object.id}`]
           console.warn(`[persistence] World restore was withheld because object ID ${object.id} occurs in multiple stored chunks`)
           return 0
@@ -1038,6 +1084,8 @@ export class InfiniteWorldRenderer {
     this.transformControls.detach()
     ;(this.transformControls as any).visible = false
     this.selectionMarker.visible = false
+    this.persistenceRecoveryBlocked = false
+    this.lastPersistenceFailures = []
     return count
   }
 
@@ -1063,6 +1111,8 @@ export class InfiniteWorldRenderer {
       console.warn('[persistence] Could not clear every saved world record; the live world was retained for recovery')
       return false
     }
+    this.persistenceRecoveryBlocked = false
+    this.lastPersistenceFailures = []
     this.pendingExternalAssetPlacements = []
     try {
       this.clearExternalAssetRuntime()
@@ -1215,6 +1265,8 @@ export class InfiniteWorldRenderer {
     this.fieldSampler.setProvider(this.authoritativeField)
     this.rebuildDecisionLayer()
     this.persistence = targetPersistence
+    this.persistenceRecoveryBlocked = false
+    this.lastPersistenceFailures = []
     this.storageKey = `reality-engine-world:${normalizedSeed}:objects`
 
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
