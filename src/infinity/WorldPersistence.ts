@@ -216,7 +216,7 @@ export class WorldPersistence {
   }
 
   readFieldState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.fieldStateKey)
+    return this.readWrappedState<T>(this.fieldStateKey, state => this.isRecordState(state))
   }
 
   loadFieldState<T = unknown>(): T | null {
@@ -235,7 +235,7 @@ export class WorldPersistence {
   }
 
   readFieldCheckpoint<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.fieldCheckpointKey)
+    return this.readWrappedState<T>(this.fieldCheckpointKey, state => this.isRecordState(state))
   }
 
   loadFieldCheckpoint<T = unknown>(): T | null {
@@ -399,7 +399,7 @@ export class WorldPersistence {
   }
 
   readTerrainDeformationState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.terrainDeformationKey)
+    return this.readWrappedState<T>(this.terrainDeformationKey, state => this.isRecordState(state))
   }
 
   loadTerrainDeformationState<T = unknown>(): T | null {
@@ -417,7 +417,7 @@ export class WorldPersistence {
   }
 
   readTerrainDeformationCheckpoint<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.terrainDeformationCheckpointKey)
+    return this.readWrappedState<T>(this.terrainDeformationCheckpointKey, state => this.isRecordState(state))
   }
 
   loadTerrainDeformationCheckpoint<T = unknown>(): T | null {
