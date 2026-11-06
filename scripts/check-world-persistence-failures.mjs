@@ -1377,10 +1377,19 @@ let storedWorldRows = [
   },
 ];
 let failAutosaveWrite = false;
+let holdNextSaveWrite = false;
+let signalSaveWriteStarted;
+let releaseSaveWrite;
+let saveWriteGate = Promise.resolve();
 const fakeSaveStore = {
   async getAll() { return storedWorldRows.slice(); },
   async delete(id) { storedWorldRows = storedWorldRows.filter(row => row.id !== id); },
   async put(row) {
+    if (holdNextSaveWrite) {
+      holdNextSaveWrite = false;
+      signalSaveWriteStarted?.();
+      await saveWriteGate;
+    }
     if (failAutosaveWrite) {
       failAutosaveWrite = false;
       throw new Error("injected IndexedDB quota failure");
@@ -1419,6 +1428,44 @@ failAutosaveWrite = true;
 await assert.rejects(saveHarness.quickSave("Autosave_quota_failure"), /injected IndexedDB quota failure/);
 assert.equal(saveHarness.getCurrentSnapshot(), lastCommittedSnapshot,
   "failed autosave persistence must not replace the last committed current snapshot");
+
+// A quick save may finish its expensive IndexedDB write after a Load request.
+// The operation queue must keep the load behind the write, otherwise the old
+// quick-save completion can overwrite currentSnapshot after the new world is live.
+const preRaceBuffer = runtimeGrid.buffer.slice();
+runtimeGrid.buffer[0] = 7;
+const queuedLoadSnapshot = saveHarness.captureSnapshot("Queued load target");
+runtimeGrid.buffer.set(preRaceBuffer);
+let saveWriteStartedResolve;
+const saveWriteStarted = new Promise(resolve => { saveWriteStartedResolve = resolve; });
+let saveWriteRelease;
+saveWriteGate = new Promise(resolve => { saveWriteRelease = resolve; });
+signalSaveWriteStarted = saveWriteStartedResolve;
+holdNextSaveWrite = true;
+const pendingQuickSave = saveHarness.quickSave("Pending manual save");
+await saveWriteStarted;
+const pendingLoad = saveHarness.applySnapshot(queuedLoadSnapshot);
+await Promise.resolve();
+assert.deepEqual(runtimeGrid.buffer, preRaceBuffer,
+  "a Load must wait until an earlier quick-save IndexedDB commit finishes");
+saveWriteRelease();
+await pendingQuickSave;
+await pendingLoad;
+assert.deepEqual(saveHarness.captureSnapshot("after queued load").fields, queuedLoadSnapshot.fields,
+  "the serialized Load must become the final live field state after the pending save");
+assert.equal(saveHarness.getCurrentSnapshot()?.name, "Queued load target",
+  "a late quick-save completion must not replace currentSnapshot after a newer Load");
+signalSaveWriteStarted = undefined;
+saveWriteGate = Promise.resolve();
+
+assert.match(saveSystemSource, /private operationQueue: Promise<void> = Promise\.resolve\(\)/,
+  "world save/load operations must share one FIFO serialization queue");
+assert.match(saveSystemSource, /return this\.runExclusive\(async \(\) => \{[\s\S]*?captureSnapshotAtBoundary\(name\)[\s\S]*?saveToIndexedDB\(snapshot\)/,
+  "quick-save capture and persistence must remain inside the same serialized operation");
+assert.match(saveSystemSource, /applySnapshot\(snapshot: WorldSnapshot\): Promise<void>\s*\{\s*return this\.runExclusive\(\(\) => this\.applySnapshotExclusive\(snapshot\)\)/,
+  "direct world restores must be ordered against pending saves");
+assert.match(saveSystemSource, /return this\.runExclusive\(async \(\) => \{[\s\S]*?const saves = await db\.getAll\('saves'\)[\s\S]*?applySnapshotExclusive\(found\.snapshot\)/,
+  "quick-load selection and restore must run as one serialized operation");
 
 assert.match(saveSystemSource, /clearWorldAssetRuntime\?: \(\) => void/,
   "world save context must expose an explicit post-commit external asset cleanup port");

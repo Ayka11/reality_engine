@@ -132,6 +132,15 @@ export class WorldSaveSystem {
   private serializer = new WorldSerializer();
   private packageSerializer: PackageSerializer;
   private dbPromise: Promise<IDBPDatabase<RealitySaveDb>> | null = null;
+  // Serialize snapshots and restores so a slow IndexedDB write cannot publish
+  // an older currentSnapshot after a newer world has already been loaded.
+  private operationQueue: Promise<void> = Promise.resolve();
+
+  private runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.operationQueue.then(operation);
+    this.operationQueue = result.then(() => undefined, () => undefined);
+    return result;
+  }
 
   constructor(private voxelGrid: GridLike, private lawEngine: LawEngineLike, private processSystem: unknown, private context: SaveContext = {}) {
     void this.processSystem;
@@ -139,11 +148,13 @@ export class WorldSaveSystem {
   }
 
   async quickSave(name = `World_${Date.now()}`): Promise<string> {
-    const snapshot = await this.captureSnapshotAtBoundary(name);
-    await this.saveToIndexedDB(snapshot);
-    // Do not advertise a snapshot as persisted when the IndexedDB commit failed.
-    this.currentSnapshot = snapshot;
-    return snapshot.name;
+    return this.runExclusive(async () => {
+      const snapshot = await this.captureSnapshotAtBoundary(name);
+      await this.saveToIndexedDB(snapshot);
+      // Do not advertise a snapshot as persisted when the IndexedDB commit failed.
+      this.currentSnapshot = snapshot;
+      return snapshot.name;
+    });
   }
 
   private async captureSnapshotAtBoundary(name: string): Promise<WorldSnapshot> {
@@ -157,15 +168,17 @@ export class WorldSaveSystem {
   }
 
   async loadQuickSave(idOrName?: string): Promise<WorldSnapshot | null> {
-    const db = await this.db();
-    const saves = await db.getAll('saves');
-    const sorted = saves.sort((a, b) => b.timestamp - a.timestamp);
-    const found = idOrName
-      ? sorted.find(save => save.id === idOrName || save.name === idOrName)
-      : sorted[0];
-    if (!found) return null;
-    await this.applySnapshot(found.snapshot);
-    return found.snapshot;
+    return this.runExclusive(async () => {
+      const db = await this.db();
+      const saves = await db.getAll('saves');
+      const sorted = saves.sort((a, b) => b.timestamp - a.timestamp);
+      const found = idOrName
+        ? sorted.find(save => save.id === idOrName || save.name === idOrName)
+        : sorted[0];
+      if (!found) return null;
+      await this.applySnapshotExclusive(found.snapshot);
+      return found.snapshot;
+    });
   }
 
   async listQuickSaves(): Promise<WorldSaveSummary[]> {
@@ -183,8 +196,10 @@ export class WorldSaveSystem {
   }
 
   async exportRealityPackage(name: string): Promise<Blob> {
-    const snapshot = await this.captureSnapshotAtBoundary(name);
-    return this.packageSerializer.pack(this.snapshotToPackage(snapshot));
+    return this.runExclusive(async () => {
+      const snapshot = await this.captureSnapshotAtBoundary(name);
+      return this.packageSerializer.pack(this.snapshotToPackage(snapshot));
+    });
   }
 
   async importRealityPackage(file: File): Promise<void> {
@@ -235,7 +250,11 @@ export class WorldSaveSystem {
     };
   }
 
-  async applySnapshot(snapshot: WorldSnapshot): Promise<void> {
+  applySnapshot(snapshot: WorldSnapshot): Promise<void> {
+    return this.runExclusive(() => this.applySnapshotExclusive(snapshot));
+  }
+
+  private async applySnapshotExclusive(snapshot: WorldSnapshot): Promise<void> {
     // Validate the spatial contract before capturing or mutating any live domain.
     // Equal buffer lengths are not sufficient: swapped dimensions can reinterpret
     // the same linear field array as a different world topology.
