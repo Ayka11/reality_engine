@@ -10,7 +10,7 @@ import { buildWaterDepthMaskFromHeightField, buildWaterSurfaceMeshData } from '.
 import { worldToChunk, WORLD_CHUNK_SIZE, type ChunkCoord } from '../infinity/WorldCoordinate'
 import { WorldObjectManager } from '../infinity/ObjectManager'
 import { lodForDistance, lodResolution, type LODLevel } from '../infinity/LODManager'
-import { WorldPersistence, saveActiveWorldSeed } from '../infinity/WorldPersistence'
+import { WorldPersistence, saveActiveWorldSeed, type WorldStateReadResult } from '../infinity/WorldPersistence'
 import { chunkKey } from '../infinity/WorldCoordinate'
 import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
@@ -108,6 +108,7 @@ export class InfiniteWorldRenderer {
   private lastPersistenceFailures: string[] = []
   /** Fail closed after startup/restore cannot prove the durable world is complete. */
   private persistenceRecoveryBlocked = false
+  private startupPersistenceFailures: string[] = []
   private storageKey: string
   private readonly pointerHandler: (e: PointerEvent) => void
   private readonly pointerUpHandler: (e: PointerEvent) => void
@@ -351,25 +352,42 @@ export class InfiniteWorldRenderer {
     if (this.persistence.hasIncompleteSaveTransaction()) {
       console.warn('[persistence] An interrupted world save was detected; saved editor data is withheld until the world is explicitly imported or cleared')
     }
-    const persistedAssetPlacements = this.persistence.loadAssetPlacementsState<unknown>()
+    const unwrapPersistedState = <T,>(label: string, result: WorldStateReadResult<T>): T | null => {
+      if (result.status === 'ok') return result.state
+      if (result.status === 'unavailable' || result.status === 'corrupt') {
+        this.startupPersistenceFailures.push(`${label}: ${result.reason}`)
+        this.persistenceRecoveryBlocked = true
+        console.warn(`[persistence] ${label} could not be read safely (${result.status}: ${result.reason}); autosave is blocked until the world is repaired`)
+      }
+      return null
+    }
+    const persistedAssetPlacements = unwrapPersistedState(
+      'external asset placements',
+      this.persistence.readAssetPlacementsState<unknown>(),
+    )
     if (persistedAssetPlacements !== null) {
       const placementValidation = validateExternalAssetPlacements(persistedAssetPlacements)
       if (placementValidation.valid) {
         this.pendingExternalAssetPlacements = placementValidation.placements
       } else {
-        this.persistence.deleteAssetPlacementsState()
-        console.warn('[persistence] Invalid external asset placements were rejected', placementValidation.errors)
+        this.startupPersistenceFailures.push('external asset placements: invalid placement records')
+        this.persistenceRecoveryBlocked = true
+        console.warn('[persistence] Invalid external asset placements were rejected without deleting the stored payload', placementValidation.errors)
       }
     }
-    const persistedSurface = this.persistence.loadSurfaceProviderState<WorldSurfaceProviderSnapshot>()
+    const persistedSurface = unwrapPersistedState(
+      'world surface snapshot',
+      this.persistence.readSurfaceProviderState<WorldSurfaceProviderSnapshot>(),
+    )
     if (persistedSurface) {
       const restoredSurface = restoreWorldSurfaceProvider(persistedSurface)
       if (restoredSurface) {
         this.fieldSampler.setSurfaceProvider(restoredSurface)
         worldViewContract.setSeed(restoredSurface.seed)
       } else {
-        this.persistence.deleteSurfaceProviderState()
-        console.warn('[persistence] Invalid world surface snapshot was rejected; generator-backed surface restored')
+        this.startupPersistenceFailures.push('world surface snapshot: domain validation failed')
+        this.persistenceRecoveryBlocked = true
+        console.warn('[persistence] Invalid world surface snapshot was retained for recovery; generator-backed surface remains active')
       }
     }
     this.legacySculptRuntimeAdapter = new LegacySculptRuntimeAdapter((mutation) => {
@@ -386,19 +404,35 @@ export class InfiniteWorldRenderer {
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
     this.storageKey = `reality-engine-world:${seed}:objects`
-    const persistedTerrain = this.persistence.loadTerrainDeformationState<TerrainDeformationSnapshot>()
+    const persistedTerrain = unwrapPersistedState(
+      'terrain deformation state',
+      this.persistence.readTerrainDeformationState<TerrainDeformationSnapshot>(),
+    )
     if (persistedTerrain) {
-      try { this.terrainDeformations.restore(persistedTerrain) } catch { this.persistence.deleteTerrainDeformationState() }
+      try {
+        this.terrainDeformations.restore(persistedTerrain)
+      } catch (error) {
+        this.startupPersistenceFailures.push('terrain deformation state: domain validation failed')
+        this.persistenceRecoveryBlocked = true
+        console.warn('[persistence] Terrain deformation state was rejected without deleting the stored payload', error)
+      }
     }
-    const persistedField = this.persistence.loadFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
-    const persistedProvenance = this.persistence.loadProvenanceState<RuntimeProvenanceTrace>()
+    const persistedField = unwrapPersistedState(
+      'authoritative field state',
+      this.persistence.readFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>(),
+    )
+    const persistedProvenance = unwrapPersistedState(
+      'runtime provenance trace',
+      this.persistence.readProvenanceState<RuntimeProvenanceTrace>(),
+    )
     if (persistedProvenance) {
       try {
         runtimeProvenance.restore(persistedProvenance)
       } catch (error) {
-        console.warn('[persistence] Could not restore runtime provenance; the current trace was reset', error)
+        this.startupPersistenceFailures.push('runtime provenance trace: domain validation failed')
+        this.persistenceRecoveryBlocked = true
+        console.warn('[persistence] Runtime provenance was rejected without deleting the stored payload; the in-memory trace was reset', error)
         runtimeProvenance.reset()
-        this.persistence.deleteProvenanceState()
       }
     } else {
       runtimeProvenance.reset()
@@ -406,8 +440,10 @@ export class InfiniteWorldRenderer {
     if (persistedField) {
       try {
         this.authoritativeField.restore(persistedField)
-      } catch {
-        this.persistence.deleteFieldState()
+      } catch (error) {
+        this.startupPersistenceFailures.push('authoritative field state: domain validation failed')
+        this.persistenceRecoveryBlocked = true
+        console.warn('[persistence] Authoritative field state was rejected without deleting the stored payload', error)
       }
     }
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
@@ -863,6 +899,7 @@ export class InfiniteWorldRenderer {
       )
     }
     this.persistenceRecoveryBlocked = false
+    this.startupPersistenceFailures = []
     this.lastPersistenceFailures = []
   }
 
@@ -993,6 +1030,12 @@ export class InfiniteWorldRenderer {
       this.persistenceRecoveryBlocked = true
       this.lastPersistenceFailures = ['interrupted world save transaction']
       console.warn('[persistence] World restore was blocked because the last multi-key save did not commit; import a complete world package or clear the saved world')
+      return 0
+    }
+    if (this.startupPersistenceFailures.length > 0) {
+      this.persistenceRecoveryBlocked = true
+      this.lastPersistenceFailures = [...this.startupPersistenceFailures]
+      console.warn(`[persistence] World restore was blocked because one or more sidecars could not be verified: ${this.lastPersistenceFailures.join(', ')}`)
       return 0
     }
     // Resolve the complete chunk set before changing field, terrain, objects or
