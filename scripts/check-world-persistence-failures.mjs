@@ -514,7 +514,7 @@ assert.ok(portablePersistStart >= 0 && portablePersistStart < saveWorldStart,
 const portablePersistSource = rendererSource.slice(portablePersistStart, saveWorldStart);
 const namespaceClearAt = portablePersistSource.indexOf("this.persistence.clear()");
 const surfaceWriteAt = portablePersistSource.indexOf("this.persistActiveSurfaceProvider()");
-const chunkAndSidecarSaveAt = portablePersistSource.indexOf("this.saveWorld({ checkpoint: false, preflightFailures })");
+const chunkAndSidecarSaveAt = portablePersistSource.indexOf("this.saveWorld({ checkpoint: false, preflightFailures, allowRecovery: true })");
 assert.ok(namespaceClearAt >= 0 && surfaceWriteAt > namespaceClearAt && chunkAndSidecarSaveAt > surfaceWriteAt,
   "portable restore must clear prior checkpoints/sidecars/chunks before writing the imported generation");
 assert.match(portablePersistSource, /if \(!this\.persistence\.clear\(\)\)/,
@@ -534,7 +534,7 @@ assert.match(saveWorldSource, /if \(knownChunkKeys === null\)[\s\S]*?stored chun
 const loadWorldSource = rendererSource.slice(loadWorldStart);
 assert.match(loadWorldSource, /const knownChunkKeys = this\.persistence\.knownChunks\(\{ recoverOrphans: true \}\)[\s\S]*?if \(knownChunkKeys === null\)[\s\S]*?return 0[\s\S]*?this\.objects\.clear\(\)/,
   "loadWorld must verify complete chunk enumeration before mutating the live world");
-assert.match(loadWorldSource, /const restoredObjects: WorldObject\[\] = \[\][\s\S]*?this\.persistence\.loadChunk\([\s\S]*?if \(!this\.persistence\.isLoaded\([\s\S]*?return 0[\s\S]*?this\.terrainDeformations\.restore/,
+assert.match(loadWorldSource, /const restoredObjects: WorldObject\[\] = \[\][\s\S]*?this\.persistence\.readChunk\([\s\S]*?result\.status !== 'ok'[\s\S]*?return 0[\s\S]*?this\.terrainDeformations\.restore/,
   "loadWorld must preflight every stored chunk payload before changing terrain or objects");
 assert.match(loadWorldSource, /newlyLoadedChunkKeys[\s\S]*?this\.persistence\.unloadChunk\(/,
   "a failed chunk preflight must roll back newly populated persistence cache entries");
