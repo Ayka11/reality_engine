@@ -972,9 +972,9 @@ export class InfiniteWorldRenderer {
       const [cx, cy, cz] = key.split(',').map(Number)
       const result = this.persistence.readChunk(cx, cy, cz)
       if (result.status !== 'ok') {
-        for (const loadedKey of [...newlyLoadedChunkKeys, key]) {
-          if (loadedBeforeRestore.has(loadedKey)) continue
-          const [loadedCx, loadedCy, loadedCz] = loadedKey.split(',').map(Number)
+        const rollbackKeys = new Set([...newlyLoadedChunkKeys, key])
+        for (const rollbackKey of rollbackKeys) {
+          const [loadedCx, loadedCy, loadedCz] = rollbackKey.split(',').map(Number)
           this.persistence.unloadChunk(loadedCx, loadedCy, loadedCz)
         }
         this.lastPersistenceFailures = [`${result.status} chunk ${key}: ${result.reason}`]
