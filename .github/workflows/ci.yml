@@ -106,6 +106,7 @@ jobs:
       - run: npm run test:authoritative-sculpt-transaction
       - run: npm run test:terrain-deformation
       - run: npm run test:world-persistence-failures
+      - run: npm run test:save-manager
       - run: npm run test:world-asset-runtime
       - run: npm run test:script-engine-rng-recovery
       - run: npm run test:agent-worldevents-rng-recovery

@@ -1468,7 +1468,7 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
   getCausalLog: () => sim.causal.recent(24),
   thumbnailCanvas: canvas,
 });
-saveManager = new SaveManager(saveSystem);
+saveManager = new SaveManager(saveSystem, error => reportWorldSaveFailure('Autosave', error));
 (window as unknown as { realitySave?: WorldSaveSystem }).realitySave = saveSystem;
 
 // Phase 5 init (needs civSystem to be set)
