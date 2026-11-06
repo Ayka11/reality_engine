@@ -303,6 +303,14 @@ export class WorldAssetRuntime {
     const textures = new Set<THREE.Texture>()
     const skeletons = new Set<THREE.Skeleton>()
     const instancedMeshes = new Set<THREE.InstancedMesh>()
+    const failures: unknown[] = []
+    const attempt = (label: string, dispose: () => void) => {
+      try {
+        dispose()
+      } catch (error) {
+        failures.push(new Error(`${label} disposal failed: ${String(error)}`, { cause: error }))
+      }
+    }
     const collectTextures = (value: unknown, seen = new Set<object>()) => {
       if (value instanceof THREE.Texture) {
         textures.add(value)
@@ -330,11 +338,16 @@ export class WorldAssetRuntime {
         for (const value of Object.values(material)) collectTextures(value)
       })
     })
-    geometries.forEach(geometry => geometry.dispose())
-    materials.forEach(material => material.dispose())
-    textures.forEach(texture => texture.dispose())
-    skeletons.forEach(skeleton => skeleton.dispose())
-    instancedMeshes.forEach(mesh => mesh.dispose())
+
+    geometries.forEach((geometry) => attempt('Geometry', () => geometry.dispose()))
+    materials.forEach((material) => attempt('Material', () => material.dispose()))
+    textures.forEach((texture) => attempt('Texture', () => texture.dispose()))
+    skeletons.forEach((skeleton) => attempt('Skeleton', () => skeleton.dispose()))
+    instancedMeshes.forEach((mesh) => attempt('Instanced mesh', () => mesh.dispose()))
+
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'One or more GLTF object resources failed to dispose')
+    }
   }
 
   getInstanceAnimationNames(instanceId: string) {
@@ -572,15 +585,55 @@ export class WorldAssetRuntime {
 
   clear() {
     // Invalidate outstanding GLTF callbacks before releasing the current world.
-    // Clear the map immediately so a new world can request the same asset ID.
+    // Cleanup is best-effort: a broken disposer or callback for one object must
+    // not prevent the remaining scene objects and GPU resources from release.
     this.generation += 1
-    for (const cancel of this.pendingRejectors.values()) {
-      cancel(new Error('Asset load invalidated by world replacement'))
+    const failures: unknown[] = []
+    const attempt = (label: string, cleanup: () => void) => {
+      try {
+        cleanup()
+      } catch (error) {
+        failures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
+      }
+    }
+
+    for (const [id, cancel] of [...this.pendingRejectors]) {
+      attempt(`Pending asset load ${id} cancellation`, () => cancel(new Error('Asset load invalidated by world replacement')))
     }
     this.pendingRejectors.clear()
     this.loading.clear()
-    for (const id of [...this.instances.keys()]) this.removeInstance(id)
-    for (const id of [...this.assets.keys()]) this.remove(id)
+
+    for (const [instanceId, instance] of [...this.instances]) {
+      const mixer = this.instanceMixers.get(instanceId)
+      if (mixer) {
+        attempt(`Instance ${instanceId} animation stop`, () => mixer.stopAllAction())
+        attempt(`Instance ${instanceId} animation uncache`, () => mixer.uncacheRoot(instance))
+      }
+      attempt(`Instance ${instanceId} scene removal`, () => this.scene.remove(instance))
+      attempt(`Instance ${instanceId} resource disposal`, () => this.disposeObject(instance))
+      const isPersistent = instance.userData.persistentWorldAssetPlacement !== false
+      this.instances.delete(instanceId)
+      if (isPersistent && this.onPlacementsChanged) {
+        attempt(`Instance ${instanceId} placement notification`, () => this.onPlacementsChanged?.())
+      }
+    }
+
+    // Clear every animation index even when a mixer operation failed above.
+    this.instanceMixers.clear()
+    this.instanceActions.clear()
+    this.pendingAnimationStops.clear()
+    this.animationAccumulators.clear()
+
+    for (const [id, asset] of [...this.assets]) {
+      attempt(`Asset ${id} scene removal`, () => this.scene.remove(asset.object))
+      this.assets.delete(id)
+      attempt(`Asset ${id} resource disposal`, () => this.disposeObject(asset.object))
+    }
+    this.semanticSources.clear()
+
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'World asset runtime was cleared with one or more resource cleanup failures')
+    }
   }
 
   rebase(worldAnchor: { x: number; y?: number; z: number }) {

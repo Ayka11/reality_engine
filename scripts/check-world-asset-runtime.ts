@@ -319,4 +319,104 @@ assert.deepEqual(runtime.stats(), {
 })
 assert.equal(scene.children.length, 0)
 
+
+const cleanupScene = new THREE.Scene()
+const cleanupRuntime = new WorldAssetRuntime(cleanupScene, loader)
+const cleanupInternal = cleanupRuntime as unknown as {
+  assets: Map<string, { id: string; semanticEntryId?: string; sourceUrl: string; object: THREE.Object3D; animations: THREE.AnimationClip[]; loadedAt: number }>
+  instances: Map<string, THREE.Object3D>
+  semanticSources: Map<string, unknown>
+  instanceMixers: Map<string, THREE.AnimationMixer>
+  instanceActions: Map<string, THREE.AnimationAction>
+  pendingAnimationStops: Map<string, unknown>
+  animationAccumulators: Map<string, number>
+  loading: Map<string, Promise<unknown>>
+  pendingRejectors: Map<string, (reason: Error) => void>
+}
+const cleanupFlags = {
+  failingInstanceGeometry: false,
+  goodInstanceGeometry: false,
+  failingInstanceMaterial: false,
+  goodInstanceMaterial: false,
+  sourceGeometry: false,
+  sourceMaterial: false,
+  mixerUncached: false,
+  pendingCancelContinued: false,
+}
+const trackedMesh = (material: THREE.Material, onGeometryDispose: () => void) => {
+  const geometry = new THREE.BoxGeometry(1, 1, 1)
+  geometry.addEventListener('dispose', onGeometryDispose)
+  return new THREE.Mesh(geometry, material)
+}
+const failingInstanceMaterial = new THREE.MeshBasicMaterial()
+failingInstanceMaterial.addEventListener('dispose', () => {
+  cleanupFlags.failingInstanceMaterial = true
+  throw new Error('injected instance material dispose failure')
+})
+const failingInstance = new THREE.Group()
+failingInstance.add(trackedMesh(failingInstanceMaterial, () => {
+  cleanupFlags.failingInstanceGeometry = true
+  throw new Error('injected instance geometry dispose failure')
+}))
+const goodInstanceMaterial = new THREE.MeshBasicMaterial()
+goodInstanceMaterial.addEventListener('dispose', () => { cleanupFlags.goodInstanceMaterial = true })
+const goodInstance = new THREE.Group()
+goodInstance.add(trackedMesh(goodInstanceMaterial, () => { cleanupFlags.goodInstanceGeometry = true }))
+
+const sourceMaterial = new THREE.MeshBasicMaterial()
+sourceMaterial.addEventListener('dispose', () => { cleanupFlags.sourceMaterial = true })
+const sourceObject = new THREE.Group()
+sourceObject.add(trackedMesh(sourceMaterial, () => { cleanupFlags.sourceGeometry = true }))
+
+cleanupScene.add(failingInstance, goodInstance, sourceObject)
+cleanupInternal.instances.set('failing-instance', failingInstance)
+cleanupInternal.instances.set('good-instance', goodInstance)
+cleanupInternal.assets.set('source-asset', {
+  id: 'source-asset',
+  semanticEntryId: 'flora.cleanup',
+  sourceUrl: 'https://assets.example.test/cleanup-source.glb',
+  object: sourceObject,
+  animations: [],
+  loadedAt: Date.now(),
+})
+cleanupInternal.semanticSources.set('flora.cleanup', { id: 'source-asset' })
+const cleanupMixer = new THREE.AnimationMixer(failingInstance)
+cleanupMixer.stopAllAction = () => { throw new Error('injected animation stop failure') }
+cleanupMixer.uncacheRoot = () => { cleanupFlags.mixerUncached = true }
+cleanupInternal.instanceMixers.set('failing-instance', cleanupMixer)
+cleanupInternal.instanceActions.set('failing-instance', {} as THREE.AnimationAction)
+cleanupInternal.pendingAnimationStops.set('failing-instance', [])
+cleanupInternal.animationAccumulators.set('failing-instance', 1)
+cleanupInternal.loading.set('pending-load', Promise.resolve({}))
+cleanupInternal.pendingRejectors.set('failing-cancel', () => {
+  throw new Error('injected pending cancellation failure')
+})
+cleanupInternal.pendingRejectors.set('good-cancel', () => {
+  cleanupFlags.pendingCancelContinued = true
+})
+
+assert.throws(() => cleanupRuntime.clear(), AggregateError,
+  'clear must report resource failures after attempting every remaining cleanup action')
+assert.equal(cleanupScene.children.length, 0,
+  'a failing disposer must not leave old asset or instance roots attached to the scene')
+assert.equal(cleanupInternal.instances.size, 0)
+assert.equal(cleanupInternal.assets.size, 0)
+assert.equal(cleanupInternal.semanticSources.size, 0)
+assert.equal(cleanupInternal.instanceMixers.size, 0)
+assert.equal(cleanupInternal.instanceActions.size, 0)
+assert.equal(cleanupInternal.pendingAnimationStops.size, 0)
+assert.equal(cleanupInternal.animationAccumulators.size, 0)
+assert.equal(cleanupInternal.loading.size, 0)
+assert.equal(cleanupInternal.pendingRejectors.size, 0)
+assert.deepEqual(cleanupFlags, {
+  failingInstanceGeometry: true,
+  goodInstanceGeometry: true,
+  failingInstanceMaterial: true,
+  goodInstanceMaterial: true,
+  sourceGeometry: true,
+  sourceMaterial: true,
+  mixerUncached: true,
+  pendingCancelContinued: true,
+}, 'cleanup must continue through failures in cancellation, animation, geometry and material disposal')
+
 console.log('WorldAssetRuntime asset lifecycle, independent skeletal animation states, crossfades, distance LOD and disposal: PASS')
