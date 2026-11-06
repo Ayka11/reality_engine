@@ -953,6 +953,8 @@ assert.deepEqual(runtimeState.worldEditor, {
 }, "legacy package restore must explicitly clear stale Infinite World objects and asset provenance");
 assert.equal(worldEditorPersistCalls, 3,
   "legacy editor reset must persist only after its world transaction commits");
+assert.equal(runtimeGrid.buffer[20], 0, "legacy restore must clear stale entity ownership marker");
+assert.equal(runtimeGrid.buffer[19], 0, "legacy restore must clear stale agent marker");
 
 const cleanupFailureSnapshot = {
   ...savedRuntimeWorld,
@@ -972,8 +974,6 @@ assert.equal(worldEditorPersistCalls, 4,
   "editor sidecar persistence must still run after a best-effort asset cleanup failure");
 failWorldAssetClear = false;
 assert.equal(runtimeState.recorderClears, 4, "each committed world restore must clear stale recorder history, including post-commit sidecar and asset-cleanup failures");
-assert.equal(runtimeGrid.buffer[20], 0, "legacy restore must clear stale entity ownership marker");
-assert.equal(runtimeGrid.buffer[19], 0, "legacy restore must clear stale agent marker");
 
 const noTransactionSaver = new RuntimeWorldSaveSystem(runtimeGrid, mockLawEngine, null, {});
 const beforeRejectedRestore = runtimeGrid.buffer.slice();
