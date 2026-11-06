@@ -9,6 +9,12 @@ export type WorldChunkReadResult =
   | { status: 'unavailable'; objects: []; reason: string }
   | { status: 'corrupt'; objects: []; reason: string }
 
+export type WorldStateReadResult<T> =
+  | { status: 'ok'; state: T }
+  | { status: 'missing'; reason: string }
+  | { status: 'unavailable'; reason: string }
+  | { status: 'corrupt'; reason: string }
+
 function isStoredWorldObject(value: unknown): value is WorldObject {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const object = value as Partial<WorldObject>
@@ -91,6 +97,47 @@ export class WorldPersistence {
     this.saveTransactionKey = `reality-engine-world:${seed}:save-transaction`
   }
 
+  private readWrappedState<T>(
+    key: string,
+    validateState?: (state: unknown) => boolean,
+  ): WorldStateReadResult<T> {
+    if (this.hasIncompleteSaveTransaction()) {
+      return { status: 'unavailable', reason: 'incomplete-save-transaction' }
+    }
+
+    let raw: string | null
+    try {
+      raw = localStorage.getItem(key)
+    } catch {
+      return { status: 'unavailable', reason: 'storage-read-failed' }
+    }
+    if (raw === null) return { status: 'missing', reason: 'state-not-found' }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return { status: 'corrupt', reason: 'invalid-json' }
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { status: 'corrupt', reason: 'invalid-state-envelope' }
+    }
+
+    const payload = parsed as Record<string, unknown>
+    if (payload.version !== 1 || payload.seed !== this.seed ||
+        !Object.prototype.hasOwnProperty.call(payload, 'state')) {
+      return { status: 'corrupt', reason: 'invalid-version-seed-or-state-envelope' }
+    }
+    if (validateState && !validateState(payload.state)) {
+      return { status: 'corrupt', reason: 'invalid-state-payload' }
+    }
+    return { status: 'ok', state: payload.state as T }
+  }
+
+  private isRecordState(state: unknown): boolean {
+    return Boolean(state && typeof state === 'object' && !Array.isArray(state))
+  }
+
   private key(cx: number, cy: number, cz: number) {
     return this.prefix + chunkKey(cx, cy, cz)
   }
@@ -168,18 +215,13 @@ export class WorldPersistence {
     }
   }
 
-  loadFieldState<T = unknown>(): T | null {
-    if (this.hasIncompleteSaveTransaction()) return null
+  readFieldState<T = unknown>(): WorldStateReadResult<T> {
+    return this.readWrappedState<T>(this.fieldStateKey)
+  }
 
-    try {
-      const raw = localStorage.getItem(this.fieldStateKey)
-      if (!raw) return null
-      const payload = JSON.parse(raw) as {version:number;seed:string;state:T}
-      if (payload.version !== 1 || payload.seed !== this.seed) return null
-      return payload.state
-    } catch {
-      return null
-    }
+  loadFieldState<T = unknown>(): T | null {
+    const result = this.readFieldState<T>()
+    return result.status === 'ok' ? result.state : null
   }
 
   saveFieldCheckpoint(state: unknown): boolean {
@@ -192,18 +234,13 @@ export class WorldPersistence {
     }
   }
 
-  loadFieldCheckpoint<T = unknown>(): T | null {
-    if (this.hasIncompleteSaveTransaction()) return null
+  readFieldCheckpoint<T = unknown>(): WorldStateReadResult<T> {
+    return this.readWrappedState<T>(this.fieldCheckpointKey)
+  }
 
-    try {
-      const raw = localStorage.getItem(this.fieldCheckpointKey)
-      if (!raw) return null
-      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
-      if (payload.version !== 1 || payload.seed !== this.seed) return null
-      return payload.state
-    } catch {
-      return null
-    }
+  loadFieldCheckpoint<T = unknown>(): T | null {
+    const result = this.readFieldCheckpoint<T>()
+    return result.status === 'ok' ? result.state : null
   }
 
   deleteFieldCheckpoint(): boolean {
@@ -238,28 +275,13 @@ export class WorldPersistence {
     }
   }
 
-  loadSurfaceProviderState<T = unknown>(): T | null {
-    if (this.hasIncompleteSaveTransaction()) return null
+  readSurfaceProviderState<T = unknown>(): WorldStateReadResult<T> {
+    return this.readWrappedState<T>(this.surfaceProviderKey, state => this.isRecordState(state))
+  }
 
-    let raw: string | null
-    try {
-      raw = localStorage.getItem(this.surfaceProviderKey)
-    } catch {
-      return null
-    }
-    if (!raw) return null
-    try {
-      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
-      if (payload.version !== 1 || payload.seed !== this.seed ||
-          !payload.state || typeof payload.state !== 'object' || Array.isArray(payload.state)) {
-        localStorage.removeItem(this.surfaceProviderKey)
-        return null
-      }
-      return payload.state
-    } catch {
-      try { localStorage.removeItem(this.surfaceProviderKey) } catch {}
-      return null
-    }
+  loadSurfaceProviderState<T = unknown>(): T | null {
+    const result = this.readSurfaceProviderState<T>()
+    return result.status === 'ok' ? result.state : null
   }
 
   deleteSurfaceProviderState(): boolean {
@@ -285,28 +307,13 @@ export class WorldPersistence {
     }
   }
 
-  loadAssetManifestState<T = unknown>(): T | null {
-    if (this.hasIncompleteSaveTransaction()) return null
+  readAssetManifestState<T = unknown>(): WorldStateReadResult<T> {
+    return this.readWrappedState<T>(this.assetManifestKey, state => this.isRecordState(state))
+  }
 
-    let raw: string | null
-    try {
-      raw = localStorage.getItem(this.assetManifestKey)
-    } catch {
-      return null
-    }
-    if (!raw) return null
-    try {
-      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
-      if (payload.version !== 1 || payload.seed !== this.seed ||
-          !payload.state || typeof payload.state !== 'object' || Array.isArray(payload.state)) {
-        localStorage.removeItem(this.assetManifestKey)
-        return null
-      }
-      return payload.state
-    } catch {
-      try { localStorage.removeItem(this.assetManifestKey) } catch {}
-      return null
-    }
+  loadAssetManifestState<T = unknown>(): T | null {
+    const result = this.readAssetManifestState<T>()
+    return result.status === 'ok' ? result.state : null
   }
 
   deleteAssetManifestState(): boolean {
@@ -332,28 +339,13 @@ export class WorldPersistence {
     }
   }
 
-  loadAssetPlacementsState<T = unknown>(): T | null {
-    if (this.hasIncompleteSaveTransaction()) return null
+  readAssetPlacementsState<T = unknown>(): WorldStateReadResult<T> {
+    return this.readWrappedState<T>(this.assetPlacementsKey, state => Array.isArray(state))
+  }
 
-    let raw: string | null
-    try {
-      raw = localStorage.getItem(this.assetPlacementsKey)
-    } catch {
-      return null
-    }
-    if (!raw) return null
-    try {
-      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
-      if (payload.version !== 1 || payload.seed !== this.seed ||
-          !Array.isArray(payload.state)) {
-        localStorage.removeItem(this.assetPlacementsKey)
-        return null
-      }
-      return payload.state
-    } catch {
-      try { localStorage.removeItem(this.assetPlacementsKey) } catch {}
-      return null
-    }
+  loadAssetPlacementsState<T = unknown>(): T | null {
+    const result = this.readAssetPlacementsState<T>()
+    return result.status === 'ok' ? result.state : null
   }
 
   deleteAssetPlacementsState(): boolean {
@@ -379,28 +371,13 @@ export class WorldPersistence {
     }
   }
 
-  loadProvenanceState<T = unknown>(): T | null {
-    if (this.hasIncompleteSaveTransaction()) return null
+  readProvenanceState<T = unknown>(): WorldStateReadResult<T> {
+    return this.readWrappedState<T>(this.provenanceKey, state => this.isRecordState(state))
+  }
 
-    let raw: string | null
-    try {
-      raw = localStorage.getItem(this.provenanceKey)
-    } catch {
-      return null
-    }
-    if (!raw) return null
-    try {
-      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
-      if (payload.version !== 1 || payload.seed !== this.seed ||
-          !payload.state || typeof payload.state !== 'object' || Array.isArray(payload.state)) {
-        localStorage.removeItem(this.provenanceKey)
-        return null
-      }
-      return payload.state
-    } catch {
-      try { localStorage.removeItem(this.provenanceKey) } catch {}
-      return null
-    }
+  loadProvenanceState<T = unknown>(): T | null {
+    const result = this.readProvenanceState<T>()
+    return result.status === 'ok' ? result.state : null
   }
 
   deleteProvenanceState(): boolean {
@@ -421,18 +398,13 @@ export class WorldPersistence {
     }
   }
 
-  loadTerrainDeformationState<T = unknown>(): T | null {
-    if (this.hasIncompleteSaveTransaction()) return null
+  readTerrainDeformationState<T = unknown>(): WorldStateReadResult<T> {
+    return this.readWrappedState<T>(this.terrainDeformationKey)
+  }
 
-    try {
-      const raw = localStorage.getItem(this.terrainDeformationKey)
-      if (!raw) return null
-      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
-      if (payload.version !== 1 || payload.seed !== this.seed) return null
-      return payload.state
-    } catch {
-      return null
-    }
+  loadTerrainDeformationState<T = unknown>(): T | null {
+    const result = this.readTerrainDeformationState<T>()
+    return result.status === 'ok' ? result.state : null
   }
 
   saveTerrainDeformationCheckpoint(state: unknown): boolean {
@@ -444,18 +416,13 @@ export class WorldPersistence {
     }
   }
 
-  loadTerrainDeformationCheckpoint<T = unknown>(): T | null {
-    if (this.hasIncompleteSaveTransaction()) return null
+  readTerrainDeformationCheckpoint<T = unknown>(): WorldStateReadResult<T> {
+    return this.readWrappedState<T>(this.terrainDeformationCheckpointKey)
+  }
 
-    try {
-      const raw = localStorage.getItem(this.terrainDeformationCheckpointKey)
-      if (!raw) return null
-      const payload = JSON.parse(raw) as { version: number; seed: string; state: T }
-      if (payload.version !== 1 || payload.seed !== this.seed) return null
-      return payload.state
-    } catch {
-      return null
-    }
+  loadTerrainDeformationCheckpoint<T = unknown>(): T | null {
+    const result = this.readTerrainDeformationCheckpoint<T>()
+    return result.status === 'ok' ? result.state : null
   }
 
   deleteTerrainDeformationState(): boolean {
