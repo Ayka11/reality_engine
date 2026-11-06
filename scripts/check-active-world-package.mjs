@@ -183,12 +183,19 @@ assert.throws(() => encodeActiveWorldPackage({
 
 
 const bootstrapSource = await readFile(new URL('src/infinityBootstrap.ts', root), 'utf8')
-assert.match(bootstrapSource,
-  /The package transaction is committed[\\s\\S]*?try \\{\\s*world\\.clearExternalAssetRuntime\\(\\)\\s*\\} catch \\(error\\) \\{[\\s\\S]*?The package was loaded, but some previous external assets could not be released[\\s\\S]*?report\\(message\\)/,
-  'post-commit external asset cleanup failures must be reported without rejecting or rolling back a committed active-package import')
-
-console.log('PASS: unified re_v6 grid + Infinite World snapshot round-trip')
-console.log('PASS: legacy re_v5 finite-grid compatibility')
-console.log('PASS: malformed dimensions, cells, ticks and asset provenance fail closed')
+const activeImportStart = bootstrapSource.indexOf(';(window as any).importActiveRealityPackage =')
+const activeImportEnd = bootstrapSource.indexOf(';(window as any).worldAssetImport =', activeImportStart)
+assert.ok(activeImportStart >= 0 && activeImportEnd > activeImportStart,
+  'the active package import entry point must remain identifiable')
+const activeImportSource = bootstrapSource.slice(activeImportStart, activeImportEnd)
+const committedCleanupAnchor = 'The package transaction is committed.'
+const safeCleanupAnchor = 'try {\n      world.clearExternalAssetRuntime()\n    } catch (error) {'
+assert.ok(activeImportSource.indexOf(committedCleanupAnchor) >= 0 &&
+  activeImportSource.indexOf(safeCleanupAnchor) > activeImportSource.indexOf(committedCleanupAnchor),
+  'external asset release must be isolated after the active package transaction commits')
+assert.ok(activeImportSource.includes('The package was loaded, but some previous external assets could not be released.'),
+  'post-commit cleanup failure must state that the new package remains active')
+assert.ok(activeImportSource.includes("if (typeof report === 'function') report(message)"),
+  'post-commit cleanup failures must be sent to the user-visible world log when available')
 
 console.log('Active world package regression: PASS')
