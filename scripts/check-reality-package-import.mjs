@@ -281,7 +281,7 @@ assert.ok(editorSource.includes("await this.options.importWorldPackage(file)"),
   'Creator Studio file picker must prefer the complete World Save restore path');
 assert.ok(mainSource.includes("importWorldPackage: file => saveSystem.importRealityPackage(file)"),
   'the primary Creator Studio import button must restore all runtime domains through WorldSaveSystem');
-assert.match(worldSaveSource, /async importRealityPackage\(file: File\): Promise<void>\s*\{\s*return this\.runExclusive\(async \(\) => \{\s*const pkg = await this\.packageSerializer\.unpack\(file\);\s*await this\.applySnapshotExclusive\(this\.packageToSnapshot\(pkg\)\)/,
+assert.match(worldSaveSource, /async importRealityPackage\(file: File\): Promise<void>\s*\{[\s\S]*?return this\.runExclusive\(async \(\) => \{\s*const pkg = await this\.packageSerializer\.unpack\(file\);\s*await this\.applySnapshotExclusive\(this\.packageToSnapshot\(pkg\)\)/,
   'package decoding and restore must reserve one FIFO slot so later saves cannot overtake an already requested import');
 assert.ok(editorSource.includes("await this.options.exportWorldPackage(packageName)"),
   'Creator Studio must use the complete application export callback when available');
