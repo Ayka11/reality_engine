@@ -117,8 +117,10 @@ assert.equal(otherWorldPersistence.loadAssetPlacementsState(), null,
   'external placement descriptors must be isolated by world seed')
 const placementsKey = 'reality-engine-world:surface-save-seed:asset-placements'
 entries.set(placementsKey, '{malformed-placement-sidecar')
+assert.equal(persistence.readAssetPlacementsState().status, 'corrupt',
+  'malformed placement sidecar must be reported as corrupt')
 assert.equal(persistence.loadAssetPlacementsState(), null, 'malformed placement sidecar must be rejected')
-assert.equal(entries.has(placementsKey), false, 'malformed placement sidecar must be removed')
+assert.equal(entries.has(placementsKey), true, 'malformed placement sidecar must be retained for recovery')
 assert.equal(persistence.saveAssetPlacementsState(assetPlacements), true)
 const provenanceTrace = {
   schemaVersion: 'reality-runtime-provenance-v1',
@@ -135,17 +137,21 @@ assert.equal(otherWorldPersistence.loadProvenanceState(), null,
   'runtime provenance traces must be isolated by world seed')
 const provenanceKey = 'reality-engine-world:surface-save-seed:provenance'
 entries.set(provenanceKey, '{broken-provenance')
+assert.equal(persistence.readProvenanceState().status, 'corrupt',
+  'malformed provenance sidecar data must be reported as corrupt')
 assert.equal(persistence.loadProvenanceState(), null,
   'malformed provenance sidecar data must be rejected')
-assert.equal(entries.has(provenanceKey), false,
-  'malformed provenance sidecar data must be removed')
+assert.equal(entries.has(provenanceKey), true,
+  'malformed provenance sidecar data must be retained for recovery')
 assert.equal(persistence.saveProvenanceState(provenanceTrace), true)
 const assetManifestKey = 'reality-engine-world:surface-save-seed:asset-manifest'
 entries.set(assetManifestKey, '{broken-asset-manifest')
+assert.equal(persistence.readAssetManifestState().status, 'corrupt',
+  'malformed asset manifest storage must be reported as corrupt')
 assert.equal(persistence.loadAssetManifestState(), null,
   'malformed asset manifest storage must be rejected')
-assert.equal(entries.has(assetManifestKey), false,
-  'malformed asset manifest storage must be removed')
+assert.equal(entries.has(assetManifestKey), true,
+  'malformed asset manifest storage must be retained for recovery')
 assert.equal(persistence.saveAssetManifestState(assetManifest), true)
 assert.equal(persistence.clear(), true,
   'clearing a world must remove asset provenance as well as terrain and field state')
@@ -156,10 +162,12 @@ assert.equal(persistence.loadProvenanceState(), null,
 
 const surfaceKey = 'reality-engine-world:surface-save-seed:surface-provider'
 entries.set(surfaceKey, '{corrupt-surface-snapshot')
+assert.equal(persistence.readSurfaceProviderState().status, 'corrupt',
+  'malformed surface snapshot must be reported as corrupt')
 assert.equal(persistence.loadSurfaceProviderState(), null,
   'malformed surface snapshot must be rejected')
-assert.equal(entries.has(surfaceKey), false,
-  'malformed surface snapshot must be removed rather than retried on every reload')
+assert.equal(entries.has(surfaceKey), true,
+  'malformed surface snapshot must be retained for recovery rather than deleted')
 
 assert.equal(persistence.saveSurfaceProviderState(snapshot), true)
 assert.equal(persistence.clear(), true,
