@@ -909,11 +909,16 @@ export class InfiniteWorldRenderer {
     // Include durable chunks whose payload was written but whose manifest update
     // previously failed. Otherwise a deleted object can be resurrected on the next
     // startup when loadWorld() scans and recovers orphaned chunk payloads.
-    for (const key of this.persistence.knownChunks({ recoverOrphans: true })) {
-      if (!groups.has(key)) {
-        const [cx, cy, cz] = key.split(',').map(Number)
-        if (!this.persistence.deleteChunk(cx, cy, cz)) {
-          failedPersistenceOperations.push(`delete chunk ${key}`)
+    const knownChunkKeys = this.persistence.knownChunks({ recoverOrphans: true })
+    if (knownChunkKeys === null) {
+      failedPersistenceOperations.push('stored chunk enumeration')
+    } else {
+      for (const key of knownChunkKeys) {
+        if (!groups.has(key)) {
+          const [cx, cy, cz] = key.split(',').map(Number)
+          if (!this.persistence.deleteChunk(cx, cy, cz)) {
+            failedPersistenceOperations.push(`delete chunk ${key}`)
+          }
         }
       }
     }
@@ -945,6 +950,14 @@ export class InfiniteWorldRenderer {
     if (this.persistence.hasIncompleteSaveTransaction()) {
       this.lastPersistenceFailures = ['interrupted world save transaction']
       console.warn('[persistence] World restore was blocked because the last multi-key save did not commit; import a complete world package or clear the saved world')
+      return 0
+    }
+    // Resolve the complete chunk set before changing field, terrain, objects or
+    // renderer state. A failed key scan is not an empty world.
+    const knownChunkKeys = this.persistence.knownChunks({ recoverOrphans: true })
+    if (knownChunkKeys === null) {
+      this.lastPersistenceFailures = ['stored chunk enumeration']
+      console.warn('[persistence] World restore was withheld because stored chunks could not be enumerated; the live world was retained')
       return 0
     }
     // Explicit Load restores the last manual checkpoint; startup can opt into the latest autosave.
@@ -982,7 +995,7 @@ export class InfiniteWorldRenderer {
     }
     this.objects.clear()
     let count = 0
-    for (const key of this.persistence.knownChunks({ recoverOrphans: true })) {
+    for (const key of knownChunkKeys) {
       const [cx, cy, cz] = key.split(',').map(Number)
       for (const object of this.persistence.loadChunk(cx, cy, cz)) {
         this.objects.add(object)
