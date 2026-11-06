@@ -170,11 +170,18 @@ export class WorldAssetRuntime {
     // Object3D.clone(true) alone would keep the source skeleton shared.
     const instance = cloneSkeleton(source.object)
     instance.traverse((node) => {
-      const mesh = node as THREE.Mesh
-      if (!mesh.isMesh) return
-      mesh.geometry = mesh.geometry.clone()
-      if (Array.isArray(mesh.material)) mesh.material = mesh.material.map((material) => this.cloneMaterialWithOwnedTextures(material))
-      else mesh.material = this.cloneMaterialWithOwnedTextures(mesh.material)
+      const renderable = node as THREE.Object3D & {
+        geometry?: THREE.BufferGeometry
+        material?: THREE.Material | THREE.Material[]
+      }
+      if (renderable.geometry instanceof THREE.BufferGeometry) {
+        renderable.geometry = renderable.geometry.clone()
+      }
+      if (Array.isArray(renderable.material)) {
+        renderable.material = renderable.material.map(material => this.cloneMaterialWithOwnedTextures(material))
+      } else if (renderable.material instanceof THREE.Material) {
+        renderable.material = this.cloneMaterialWithOwnedTextures(renderable.material)
+      }
     })
     instance.position.set(
       options.x - this.worldAnchor.x,
@@ -337,26 +344,45 @@ export class WorldAssetRuntime {
         Object.values(value).forEach(entry => collectTextures(entry, seen))
       }
     }
-    object.traverse((node) => {
-      const mesh = node as THREE.Mesh
-      if (!mesh.isMesh) return
-      geometries.add(mesh.geometry)
-      const skinnedMesh = node as THREE.SkinnedMesh
-      if (skinnedMesh.isSkinnedMesh) skeletons.add(skinnedMesh.skeleton)
-      const instancedMesh = node as THREE.InstancedMesh
-      if (instancedMesh.isInstancedMesh) instancedMeshes.add(instancedMesh)
-      const meshMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-      meshMaterials.forEach(material => {
-        materials.add(material)
-        for (const value of Object.values(material)) collectTextures(value)
-      })
-    })
 
-    geometries.forEach((geometry) => attempt('Geometry', () => geometry.dispose()))
-    materials.forEach((material) => attempt('Material', () => material.dispose()))
-    textures.forEach((texture) => attempt('Texture', () => texture.dispose()))
-    skeletons.forEach((skeleton) => attempt('Skeleton', () => skeleton.dispose()))
-    instancedMeshes.forEach((mesh) => attempt('Instanced mesh', () => mesh.dispose()))
+    try {
+      object.traverse(node => {
+        try {
+          // GLTF renderables include Mesh, Points and Line; all may own geometry
+          // and materials that must be released when an asset or placement leaves.
+          const renderable = node as THREE.Object3D & {
+            geometry?: THREE.BufferGeometry
+            material?: THREE.Material | THREE.Material[]
+          }
+          if (renderable.geometry instanceof THREE.BufferGeometry) {
+            geometries.add(renderable.geometry)
+          }
+          const skinnedMesh = node as THREE.SkinnedMesh
+          if (skinnedMesh.isSkinnedMesh && skinnedMesh.skeleton) {
+            skeletons.add(skinnedMesh.skeleton)
+          }
+          const instancedMesh = node as THREE.InstancedMesh
+          if (instancedMesh.isInstancedMesh) instancedMeshes.add(instancedMesh)
+          const nodeMaterials = Array.isArray(renderable.material)
+            ? renderable.material
+            : renderable.material instanceof THREE.Material ? [renderable.material] : []
+          nodeMaterials.forEach(material => {
+            materials.add(material)
+            Object.values(material).forEach(value => collectTextures(value))
+          })
+        } catch (error) {
+          failures.push(new Error(`Object resource collection failed: ${String(error)}`, { cause: error }))
+        }
+      })
+    } catch (error) {
+      failures.push(new Error(`Object resource traversal failed: ${String(error)}`, { cause: error }))
+    }
+
+    geometries.forEach(geometry => attempt('Geometry', () => geometry.dispose()))
+    materials.forEach(material => attempt('Material', () => material.dispose()))
+    textures.forEach(texture => attempt('Texture', () => texture.dispose()))
+    skeletons.forEach(skeleton => attempt('Skeleton', () => skeleton.dispose()))
+    instancedMeshes.forEach(mesh => attempt('Instanced mesh', () => mesh.dispose()))
 
     if (failures.length > 0) {
       throw new AggregateError(failures, 'One or more GLTF object resources failed to dispose')
