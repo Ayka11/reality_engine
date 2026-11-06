@@ -83,7 +83,7 @@ assert.match(reseedBody, /normalizedSeed !== previousSeed && !this\.clearSavedWo
   'old namespace cleanup must happen only after the target seed is committed')
 assert.match(reseedBody, /this\.storageKey = `reality-engine-world:\$\{normalizedSeed\}:objects`/,
   'the legacy storage key must follow the newly committed seed')
-assert.match(reseedBody, /this\.persistence\.saveAssetManifestState\(nextAssetManifest\)/,
+assert.match(reseedBody, /targetPersistence\.saveAssetManifestState\(nextAssetManifest\)/,
   'a reseed must persist an empty asset manifest inside the target seed transaction')
 assert.match(reseedBody, /window as any\)\.worldAssetManifest = nextAssetManifest/,
   'the global asset manifest must be replaced only after the target seed commits')
