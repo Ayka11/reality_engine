@@ -225,7 +225,7 @@ assert.equal(sampler.surfaceProvider.id, 'editable-plane', 'changing the field g
 assert.equal(sampler.sampleTerrain(120, -80).height, 0)
 
 const renderer = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8')
-const resetAt = renderer.indexOf('this.generator = new WorldGenerator(newSeed)')
+const resetAt = renderer.indexOf('this.generator = new WorldGenerator(normalizedSeed)')
 assert.ok(resetAt >= 0, 'world-seed reset code must exist')
 const setGeneratorAt = renderer.indexOf('this.fieldSampler.setGenerator(this.generator)', resetAt)
 const setAuthoritativeBaseAt = renderer.indexOf('this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))', resetAt)
