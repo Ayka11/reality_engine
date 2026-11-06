@@ -87,6 +87,22 @@ assert.match(reseedBody, /const terrainCleanupFailures: unknown\[\] = \[\][\s\S]
   'terrain disposal failures must not interrupt a reseed after the target seed journal commits')
 assert.match(reseedBody, /try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{[\s\S]*?this\.objects\.clear\(\)/,
   'external asset cleanup failures must not prevent the renderer from switching to the committed target seed')
+const removeChunkAt = renderer.indexOf('  private removeChunk(')
+const removeChunkEnd = renderer.indexOf('  private desiredLod(', removeChunkAt)
+const removeChunkBody = renderer.slice(removeChunkAt, removeChunkEnd)
+assert.match(removeChunkBody, /const failures: unknown\[\] = \[\][\s\S]*?patch\.group\.traverse[\s\S]*?this\.patches\.delete\(key\)[\s\S]*?throw new AggregateError/,
+  'chunk unload must detach and evict terrain records even when individual GPU disposers fail')
+assert.match(removeChunkBody, /this\.terrainMaterials\.delete\(/,
+  'chunk unload must release disposed terrain materials from the renderer material index')
+
+const updateLodAt = renderer.indexOf('  private updateTerrainLod()')
+const updateLodEnd = renderer.indexOf('  private syncChunks()', updateLodAt)
+const updateLodBody = renderer.slice(updateLodAt, updateLodEnd)
+assert.match(updateLodBody, /for \(const \[key, patch\] of \[\.\.\.this\.patches\]\)[\s\S]*?patch\.group\.traverse[\s\S]*?this\.patches\.set\(key,[\s\S]*?throw new AggregateError/,
+  'LOD replacement must continue rebuilding patches after individual resource disposal failures')
+assert.match(updateLodBody, /this\.terrainMaterials\.delete\(/,
+  'LOD replacement must evict disposed materials from the renderer material index')
+
 const terrainRefreshAt = renderer.indexOf('  private refreshTerrainPatches()')
 const terrainRefreshEnd = renderer.indexOf('  private removeChunk(', terrainRefreshAt)
 const terrainRefreshBody = renderer.slice(terrainRefreshAt, terrainRefreshEnd)

@@ -142,7 +142,7 @@ assert.match(clearSavedWorldBody, /if\s*\(!cleared\)[\s\S]*?console\.warn/,
   "the renderer must warn if persisted world cleanup was incomplete");
 
 const refresh = methodBody("refreshTerrainPatches");
-assert.match(refresh, /for\s*\(const\s*\[key,\s*patch\]\s*of\s*this\.patches\)/, "refresh must visit every loaded patch");
+assert.match(refresh, /for\s*\(const\s*\[key,\s*patch\]\s*of\s*\[\.\.\.this\.patches\]\)/, "refresh must snapshot and visit every loaded patch");
 assert.match(refresh, /patch\.group\.traverse/, "refresh must dispose old patch resources");
 assert.match(refresh, /this\.buildTerrainPatch\(patch\.chunk,\s*patch\.lod\)/, "refresh must rebuild geometry from the current field");
 assert.match(refresh, /this\.terrainEdgeLodSignature\(patch\.chunk\)/, "refresh must recompute edge LOD metadata");

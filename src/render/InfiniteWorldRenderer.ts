@@ -1918,15 +1918,40 @@ export class InfiniteWorldRenderer {
   private removeChunk(key: string) {
     const patch = this.patches.get(key)
     if (!patch) return
-    patch.group.traverse(obj => {
-      const mesh = obj as THREE.Mesh
-      if (mesh.geometry) mesh.geometry.dispose()
-      if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose())
-      else if (mesh.material) mesh.material.dispose()
+
+    const failures: unknown[] = []
+    const attempt = (label: string, cleanup: () => void) => {
+      try {
+        cleanup()
+      } catch (error) {
+        failures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
+      }
+    }
+
+    attempt(`Terrain chunk ${key} scene removal`, () => this.scene.remove(patch.group))
+    attempt(`Terrain chunk ${key} resource traversal`, () => {
+      patch.group.traverse(obj => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.geometry) attempt(`Terrain chunk ${key} geometry disposal`, () => mesh.geometry.dispose())
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach(material => {
+            attempt(`Terrain chunk ${key} material disposal`, () => material.dispose())
+            this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
+          })
+        } else if (mesh.material) {
+          const material = mesh.material
+          attempt(`Terrain chunk ${key} material disposal`, () => material.dispose())
+          this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
+        }
+      })
     })
-    this.scene.remove(patch.group)
+
+    // Evict stale render records even when a custom GPU disposer throws.
     this.patches.delete(key)
     this.waterMeshes.delete(key)
+    if (failures.length > 0) {
+      throw new AggregateError(failures, `Terrain chunk ${key} was removed with one or more resource cleanup failures`)
+    }
   }
 
   private desiredLod(chunk: WorldChunk): number {
@@ -1938,20 +1963,56 @@ export class InfiniteWorldRenderer {
   }
 
   private updateTerrainLod() {
-    for (const [key, patch] of this.patches) {
+    const failures: unknown[] = []
+    const attempt = (label: string, cleanup: () => void) => {
+      try {
+        cleanup()
+      } catch (error) {
+        failures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
+      }
+    }
+
+    for (const [key, patch] of [...this.patches]) {
       const lod = this.desiredLod(patch.chunk)
       const edgeLodSignature = this.terrainEdgeLodSignature(patch.chunk)
       if (lod === patch.lod && edgeLodSignature === patch.edgeLodSignature) continue
-      this.scene.remove(patch.group)
-      patch.group.traverse(obj => {
-        const mesh = obj as THREE.Mesh
-        if (mesh.geometry) mesh.geometry.dispose()
-        if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose())
-        else if (mesh.material) mesh.material.dispose()
+
+      attempt(`Terrain patch ${key} scene removal`, () => this.scene.remove(patch.group))
+      attempt(`Terrain patch ${key} resource traversal`, () => {
+        patch.group.traverse(obj => {
+          const mesh = obj as THREE.Mesh
+          if (mesh.geometry) attempt(`Terrain patch ${key} geometry disposal`, () => mesh.geometry.dispose())
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach(material => {
+              attempt(`Terrain patch ${key} material disposal`, () => material.dispose())
+              this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
+            })
+          } else if (mesh.material) {
+            const material = mesh.material
+            attempt(`Terrain patch ${key} material disposal`, () => material.dispose())
+            this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
+          }
+        })
       })
-      const group = this.buildTerrainPatch(patch.chunk, lod)
-      this.patches.set(key, { group, chunk: patch.chunk, lod, edgeLodSignature: this.terrainEdgeLodSignature(patch.chunk) })
-      this.scene.add(group)
+
+      try {
+        const group = this.buildTerrainPatch(patch.chunk, lod)
+        this.patches.set(key, {
+          group,
+          chunk: patch.chunk,
+          lod,
+          edgeLodSignature: this.terrainEdgeLodSignature(patch.chunk),
+        })
+        this.scene.add(group)
+      } catch (error) {
+        this.patches.delete(key)
+        this.waterMeshes.delete(key)
+        failures.push(new Error(`Terrain patch ${key} rebuild failed: ${String(error)}`, { cause: error }))
+      }
+    }
+
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'Terrain LOD update completed with one or more resource cleanup failures')
     }
   }
 
