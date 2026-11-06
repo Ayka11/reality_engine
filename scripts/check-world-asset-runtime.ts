@@ -363,10 +363,10 @@ goodInstanceMaterial.addEventListener('dispose', () => { cleanupFlags.goodInstan
 const goodInstance = new THREE.Group()
 goodInstance.add(trackedMesh(goodInstanceMaterial, () => { cleanupFlags.goodInstanceGeometry = true }))
 
-const sourceMaterial = new THREE.MeshBasicMaterial()
-sourceMaterial.addEventListener('dispose', () => { cleanupFlags.sourceMaterial = true })
+const cleanupSourceMaterial = new THREE.MeshBasicMaterial()
+cleanupSourceMaterial.addEventListener('dispose', () => { cleanupFlags.sourceMaterial = true })
 const sourceObject = new THREE.Group()
-sourceObject.add(trackedMesh(sourceMaterial, () => { cleanupFlags.sourceGeometry = true }))
+sourceObject.add(trackedMesh(cleanupSourceMaterial, () => { cleanupFlags.sourceGeometry = true }))
 
 cleanupScene.add(failingInstance, goodInstance, sourceObject)
 cleanupInternal.instances.set('failing-instance', failingInstance)
