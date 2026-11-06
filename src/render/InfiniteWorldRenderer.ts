@@ -1868,17 +1868,46 @@ export class InfiniteWorldRenderer {
   }
 
   private refreshTerrainPatches() {
-    for (const [key, patch] of this.patches) {
-      this.scene.remove(patch.group)
-      patch.group.traverse(obj => {
-        const mesh = obj as THREE.Mesh
-        if (mesh.geometry) mesh.geometry.dispose()
-        if (Array.isArray(mesh.material)) mesh.material.forEach(m => { m.dispose(); this.terrainMaterials.delete(m as THREE.MeshStandardMaterial) })
-        else if (mesh.material) { mesh.material.dispose(); this.terrainMaterials.delete(mesh.material as THREE.MeshStandardMaterial) }
+    const failures: unknown[] = []
+    const attempt = (label: string, cleanup: () => void) => {
+      try {
+        cleanup()
+      } catch (error) {
+        failures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
+      }
+    }
+
+    for (const [key, patch] of [...this.patches]) {
+      attempt(`Terrain patch ${key} scene removal`, () => this.scene.remove(patch.group))
+      attempt(`Terrain patch ${key} resource traversal`, () => {
+        patch.group.traverse(obj => {
+          const mesh = obj as THREE.Mesh
+          if (mesh.geometry) attempt(`Terrain patch ${key} geometry disposal`, () => mesh.geometry.dispose())
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach(material => {
+              attempt(`Terrain patch ${key} material disposal`, () => material.dispose())
+              this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
+            })
+          } else if (mesh.material) {
+            attempt(`Terrain patch ${key} material disposal`, () => mesh.material.dispose())
+            this.terrainMaterials.delete(mesh.material as THREE.MeshStandardMaterial)
+          }
+        })
       })
-      const group = this.buildTerrainPatch(patch.chunk, patch.lod)
-      this.patches.set(key, { group, chunk: patch.chunk, lod: patch.lod, edgeLodSignature: this.terrainEdgeLodSignature(patch.chunk) })
-      this.scene.add(group)
+
+      try {
+        const group = this.buildTerrainPatch(patch.chunk, patch.lod)
+        this.patches.set(key, { group, chunk: patch.chunk, lod: patch.lod, edgeLodSignature: this.terrainEdgeLodSignature(patch.chunk) })
+        this.scene.add(group)
+      } catch (error) {
+        this.patches.delete(key)
+        this.waterMeshes.delete(key)
+        failures.push(new Error(`Terrain patch ${key} rebuild failed: ${String(error)}`, { cause: error }))
+      }
+    }
+
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'Terrain patches were refreshed with one or more resource cleanup failures')
     }
   }
 
@@ -2187,16 +2216,34 @@ export class InfiniteWorldRenderer {
         this.scene.add(group)
       }
     }
-    for (const [id, entry] of this.objectMeshes) {
-      if (!keep.has(id)) {
-        this.scene.remove(entry.group)
+
+    const cleanupFailures: unknown[] = []
+    const attempt = (label: string, cleanup: () => void) => {
+      try {
+        cleanup()
+      } catch (error) {
+        cleanupFailures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
+      }
+    }
+    for (const [id, entry] of [...this.objectMeshes]) {
+      if (keep.has(id)) continue
+      attempt(`World object ${id} scene removal`, () => this.scene.remove(entry.group))
+      attempt(`World object ${id} resource traversal`, () => {
         entry.group.traverse(obj => {
           const mesh = obj as THREE.Mesh
-          if (mesh.geometry) mesh.geometry.dispose()
-          if (mesh.material) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(m => m.dispose())
+          if (mesh.geometry) attempt(`World object ${id} geometry disposal`, () => mesh.geometry.dispose())
+          if (mesh.material) {
+            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+            materials.forEach(material => attempt(`World object ${id} material disposal`, () => material.dispose()))
+          }
         })
-        this.objectMeshes.delete(id)
-      }
+      })
+      // Forget detached meshes even when a custom GPU disposer fails; leaving
+      // an old ID cached could suppress creation of the next world's object.
+      this.objectMeshes.delete(id)
+    }
+    if (cleanupFailures.length > 0) {
+      throw new AggregateError(cleanupFailures, 'World object meshes were removed with one or more resource cleanup failures')
     }
   }
 
