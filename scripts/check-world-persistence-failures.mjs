@@ -520,6 +520,11 @@ assert.match(portablePersistSource, /if \(!this\.persistence\.clear\(\)\)/,
   "a failed namespace replacement must leave the journal incomplete and fail the import persistence step");
 assert.match(saveWorldSource, /knownChunks\(\{ recoverOrphans: true \}\)/,
   "saveWorld must delete orphaned durable chunks that would otherwise be resurrected at startup");
+assert.match(saveWorldSource, /if \(knownChunkKeys === null\)[\s\S]*?stored chunk enumeration/,
+  "saveWorld must fail its journaled commit when durable chunk enumeration is unavailable");
+const loadWorldSource = rendererSource.slice(loadWorldStart);
+assert.match(loadWorldSource, /const knownChunkKeys = this\.persistence\.knownChunks\(\{ recoverOrphans: true \}\)[\s\S]*?if \(knownChunkKeys === null\)[\s\S]*?return 0[\s\S]*?this\.objects\.clear\(\)/,
+  "loadWorld must verify complete chunk enumeration before mutating the live world");
 assert.match(saveWorldSource, /if \(!fieldCheckpointSaved\) \{\s*failedPersistenceOperations\.push\('authoritative field checkpoint'\)/,
   "a failed authoritative field checkpoint must be included in the durable-save failure report");
 assert.match(saveWorldSource, /if \(!checkpointSaved\) \{\s*failedPersistenceOperations\.push\('terrain deformation checkpoint'\)/,
@@ -566,6 +571,13 @@ assert.deepEqual(persistence.loadedChunks(), [],
   "a failed preflight scan must still detach the in-memory loaded chunk set");
 assert.deepEqual(persistence.loadChunk(4, 0, -2), scanFailureObjects,
   "a failed preflight scan must preserve durable data and allow a later read from storage");
+
+failEnumeration = true;
+assert.equal(persistence.knownChunks({ recoverOrphans: true }), null,
+  "orphan recovery must distinguish an unavailable storage scan from an empty namespace");
+failEnumeration = false;
+assert.deepEqual(persistence.knownChunks({ recoverOrphans: true }), ["4,0,-2"],
+  "orphan recovery must resume once storage enumeration becomes available");
 
 failGet = true;
 failRemove = true;
