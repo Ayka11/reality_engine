@@ -960,6 +960,29 @@ export class InfiniteWorldRenderer {
       console.warn('[persistence] World restore was withheld because stored chunks could not be enumerated; the live world was retained')
       return 0
     }
+
+    // Read every indexed/recoverable chunk before publishing any part of the
+    // restored world. A failed payload read must not turn the active world into
+    // a partial restore or leave a half-populated persistence cache.
+    const loadedBeforeRestore = new Set(this.persistence.loadedChunks())
+    const newlyLoadedChunkKeys: string[] = []
+    const restoredObjects: WorldObject[] = []
+    for (const key of knownChunkKeys) {
+      const [cx, cy, cz] = key.split(',').map(Number)
+      const chunkObjects = this.persistence.loadChunk(cx, cy, cz)
+      if (!this.persistence.isLoaded(cx, cy, cz)) {
+        for (const loadedKey of newlyLoadedChunkKeys) {
+          const [loadedCx, loadedCy, loadedCz] = loadedKey.split(',').map(Number)
+          this.persistence.unloadChunk(loadedCx, loadedCy, loadedCz)
+        }
+        this.lastPersistenceFailures = [`read chunk ${key}`]
+        console.warn(`[persistence] World restore was withheld because chunk ${key} could not be read; the live world was retained`)
+        return 0
+      }
+      if (!loadedBeforeRestore.has(key)) newlyLoadedChunkKeys.push(key)
+      restoredObjects.push(...chunkObjects)
+    }
+
     // Explicit Load restores the last manual checkpoint; startup can opt into the latest autosave.
     const checkpoint = options.restoreFieldCheckpoint === false
       ? null
@@ -994,14 +1017,8 @@ export class InfiniteWorldRenderer {
       }
     }
     this.objects.clear()
-    let count = 0
-    for (const key of knownChunkKeys) {
-      const [cx, cy, cz] = key.split(',').map(Number)
-      for (const object of this.persistence.loadChunk(cx, cy, cz)) {
-        this.objects.add(object)
-        count++
-      }
-    }
+    for (const object of restoredObjects) this.objects.add(object)
+    const count = restoredObjects.length
     this.syncObjects()
     this.selectedObjectId = null
     this.transformControls.detach()
