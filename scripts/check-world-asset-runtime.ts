@@ -39,8 +39,15 @@ const createGltfScene = (map = new THREE.Texture()) => {
 
 const staleScene = createGltfScene()
 let staleGeometryDisposed = false
+let staleMaterialDisposed = false
 ;(staleScene.children[0] as THREE.Mesh).geometry.addEventListener('dispose', () => {
   staleGeometryDisposed = true
+  throw new Error('injected stale geometry disposal failure')
+})
+const staleMaterial = (staleScene.children[0] as THREE.Mesh).material as THREE.Material
+staleMaterial.addEventListener('dispose', () => {
+  staleMaterialDisposed = true
+  throw new Error('injected stale material disposal failure')
 })
 const staleLoad = runtime.load('oak', 'https://assets.example.test/old-oak.glb', {
   semanticEntryId: 'flora.oak',
@@ -54,8 +61,10 @@ const currentLoad = runtime.load('oak', 'https://assets.example.test/current-oak
 })
 assert.equal(requests.length, 2, 'clear must release the old pending ID for a new world load')
 
-requests[0].onLoad({ scene: staleScene })
-assert.equal(staleGeometryDisposed, true, 'late stale GLTF payloads must be disposed')
+assert.doesNotThrow(() => requests[0].onLoad({ scene: staleScene }),
+  'late GLTF callbacks must not throw into the loader event loop when stale resource disposal fails')
+assert.equal(staleGeometryDisposed, true, 'late stale GLTF geometry disposal must be attempted')
+assert.equal(staleMaterialDisposed, true, 'late stale GLTF material disposal must continue after geometry failure')
 assert.equal(scene.children.length, 0, 'late stale GLTF payloads must never enter the new scene')
 
 const duplicateCurrentLoad = runtime.load('oak', 'https://assets.example.test/duplicate-oak.glb', {
