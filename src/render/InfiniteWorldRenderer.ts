@@ -15,7 +15,7 @@ import { WorldEditHistory, type WorldEdit } from '../infinity/WorldEditHistory'
 import type { WorldObject, WorldObjectKind } from '../infinity/WorldObject'
 import type { WorldEditorSnapshot } from '../infinity/WorldEditorSnapshot'
 import { materializeExternalAssetPlacements, mergeExternalAssetPlacements, validateExternalAssetPlacements, type ExternalAssetPlacementSnapshot } from '../infinity/ExternalAssetPlacement'
-import type { WorldAssetImportManifest } from '../worldLibrary/AssetImportManifest'
+import { createAssetImportManifest, type WorldAssetImportManifest } from '../worldLibrary/AssetImportManifest'
 import { FieldSampler } from '../infinity/FieldSampler'
 import { GeneratorFieldProvider } from '../infinity/ScientificFieldProvider'
 import { MutableWorldFieldProvider, type WorldFieldMutation } from '../infinity/MutableWorldFieldProvider'
@@ -1052,6 +1052,8 @@ export class InfiniteWorldRenderer {
     // If target cleanup or surface persistence fails, the current world and its
     // startup selector remain intact and can continue to be used.
     let ready = targetPersistence.clear()
+    const nextAssetManifest = createAssetImportManifest()
+    if (ready && !targetPersistence.saveAssetManifestState(nextAssetManifest)) ready = false
     if (ready) {
       const surfaceSnapshot = serializeWorldSurfaceProvider(this.fieldSampler.surfaceProvider)
       if (surfaceSnapshot) {
@@ -1079,6 +1081,10 @@ export class InfiniteWorldRenderer {
       window.clearTimeout(this.saveTimer)
       this.saveTimer = null
     }
+
+    // The in-memory manifest must move with the committed target namespace;
+    // otherwise a later export could carry asset provenance from the old world.
+    ;(window as any).worldAssetManifest = nextAssetManifest
 
     // Do not dispose the current terrain until the target namespace is durable.
     for (const [, patch] of this.patches) {

@@ -65,13 +65,15 @@ assert.match(clearSavedWorldBody, /if \(!cleared\) \{[\s\S]*?return false[\s\S]*
   'a failed durable clear must preserve live placements and other in-memory world state')
 const targetJournalAt = reseedBody.indexOf('targetPersistence.beginSaveTransaction({ recoverIncomplete: true })')
 const targetClearAt = reseedBody.indexOf('targetPersistence.clear()')
+const manifestPersistAt = reseedBody.indexOf('targetPersistence.saveAssetManifestState(nextAssetManifest)')
 const surfacePersistAt = reseedBody.indexOf('targetPersistence.saveSurfaceProviderState(surfaceSnapshot)')
 const seedPublishAt = reseedBody.indexOf('saveActiveWorldSeed(normalizedSeed)')
 const reseedJournalFinishAt = reseedBody.indexOf('targetPersistence.finishSaveTransaction(ready)')
 const previousNamespaceCleanupAt = reseedBody.indexOf('this.clearSavedWorld()')
 const reseedMeshDisposalAt = reseedBody.indexOf('this.patches.clear()')
 assert.ok(targetJournalAt >= 0 && targetClearAt > targetJournalAt &&
-  surfacePersistAt > targetClearAt && seedPublishAt > surfacePersistAt &&
+  manifestPersistAt > targetClearAt && surfacePersistAt > manifestPersistAt &&
+  seedPublishAt > surfacePersistAt &&
   reseedJournalFinishAt > seedPublishAt && previousNamespaceCleanupAt > reseedJournalFinishAt &&
   reseedMeshDisposalAt > reseedJournalFinishAt,
   'target namespace, surface and active-seed selector must commit before old namespace cleanup or live renderer mutation')
@@ -81,6 +83,10 @@ assert.match(reseedBody, /normalizedSeed !== previousSeed && !this\.clearSavedWo
   'old namespace cleanup must happen only after the target seed is committed')
 assert.match(reseedBody, /this\.storageKey = `reality-engine-world:\$\{normalizedSeed\}:objects`/,
   'the legacy storage key must follow the newly committed seed')
+assert.match(reseedBody, /this\.persistence\.saveAssetManifestState\(nextAssetManifest\)/,
+  'a reseed must persist an empty asset manifest inside the target seed transaction')
+assert.match(reseedBody, /window as any\)\.worldAssetManifest = nextAssetManifest/,
+  'the global asset manifest must be replaced only after the target seed commits')
 
 
 const startAt = renderer.indexOf('  startExperiment(metadata:')

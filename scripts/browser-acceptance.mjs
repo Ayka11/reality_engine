@@ -411,6 +411,18 @@ try {
       schemaVersion: "acceptance-stale-target-field",
       marker: "must-be-cleared-by-reseed",
     });
+    const staleManifestSaved = staleNamespace.saveAssetManifestState({
+      version: "1.0",
+      generatedAt: new Date().toISOString(),
+      project: "stale-target-world",
+      entries: [{
+        id: "stale-target-asset",
+        providerId: "acceptance",
+        sourceUrl: "https://example.com/stale-target.glb",
+        name: "Stale target asset",
+        license: "CC0",
+      }],
+    });
     const staleChunksBefore = staleNamespace.knownChunks({ recoverOrphans: true });
     world.reseed(targetSeed);
 
@@ -418,7 +430,10 @@ try {
       targetSeed,
       staleChunkSaved,
       staleFieldSaved,
+      staleManifestSaved,
       staleChunksBefore,
+      activeManifest: window.worldAssetManifest,
+      persistedManifest: world.persistence.loadAssetManifestState(),
       generatorSeed: world.generator.seed,
       activeSeed: localStorage.getItem("reality-engine-active-world-seed"),
       chunksAfter: world.persistence.knownChunks({ recoverOrphans: true }),
@@ -430,6 +445,9 @@ try {
   if (reusedSeedContract.error ||
       reusedSeedContract.staleChunkSaved !== true ||
       reusedSeedContract.staleFieldSaved !== true ||
+      reusedSeedContract.staleManifestSaved !== true ||
+      reusedSeedContract.activeManifest?.entries?.length !== 0 ||
+      reusedSeedContract.persistedManifest?.entries?.length !== 0 ||
       !reusedSeedContract.staleChunksBefore.includes("7,0,7") ||
       reusedSeedContract.generatorSeed !== reusedSeedContract.targetSeed ||
       reusedSeedContract.activeSeed !== reusedSeedContract.targetSeed ||
