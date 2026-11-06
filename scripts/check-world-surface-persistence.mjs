@@ -62,7 +62,7 @@ assert.match(bootstrapSource, /loadActiveWorldSeed\('reality-seed-1'\)/,
   'bootstrap must restore the saved world seed before constructing InfiniteWorldRenderer')
 assert.match(rendererSource, /saveActiveWorldSeed\(this\.generator\.seed\)/,
   'every world save must persist the active seed namespace')
-assert.match(rendererSource, /saveActiveWorldSeed\(newSeed\)/,
+assert.match(rendererSource, /saveActiveWorldSeed\(normalizedSeed\)/,
   'explicit world reseeding must immediately persist its new active seed')
 
 const persistence = new WorldPersistence('surface-save-seed')
