@@ -519,8 +519,16 @@ assert.ok(namespaceClearAt >= 0 && surfaceWriteAt > namespaceClearAt && chunkAnd
   "portable restore must clear prior checkpoints/sidecars/chunks before writing the imported generation");
 assert.match(portablePersistSource, /if \(!this\.persistence\.clear\(\)\)/,
   "a failed namespace replacement must leave the journal incomplete and fail the import persistence step");
+assert.match(saveWorldSource, /if \(this\.persistenceRecoveryBlocked && !options\.allowRecovery\)/,
+  "autosave must remain blocked after startup/restore could not prove that the durable world is complete");
+const savePreflightIndex = saveWorldSource.indexOf("const knownChunkKeys = this.persistence.knownChunks({ recoverOrphans: true })");
+const sidecarWriteIndex = saveWorldSource.indexOf("this.persistAuthoritativeFieldState()");
+assert.ok(savePreflightIndex >= 0 && sidecarWriteIndex > savePreflightIndex,
+  "saveWorld must preflight the stored chunk set before writing any world sidecars");
+assert.match(saveWorldSource, /this\.persistence\.readChunk\([\s\S]*?result\.status !== 'ok'[\s\S]*?durable state was left untouched/,
+  "saveWorld must not delete a missing, unavailable or corrupt orphan chunk");
 assert.match(saveWorldSource, /knownChunks\(\{ recoverOrphans: true \}\)/,
-  "saveWorld must delete orphaned durable chunks that would otherwise be resurrected at startup");
+  "saveWorld must enumerate orphaned durable chunks before writing the replacement world");
 assert.match(saveWorldSource, /if \(knownChunkKeys === null\)[\s\S]*?stored chunk enumeration/,
   "saveWorld must fail its journaled commit when durable chunk enumeration is unavailable");
 const loadWorldSource = rendererSource.slice(loadWorldStart);
@@ -532,6 +540,12 @@ assert.match(loadWorldSource, /newlyLoadedChunkKeys[\s\S]*?this\.persistence\.un
   "a failed chunk preflight must roll back newly populated persistence cache entries");
 assert.match(loadWorldSource, /this\.persistence\.readChunk\([\s\S]*?result\.status !== 'ok'[\s\S]*?rollbackKeys = new Set\(\[\.\.\.newlyLoadedChunkKeys, key\]\)[\s\S]*?this\.persistence\.unloadChunk\(/,
   "failed chunk preflight must evict its failed/missing/corrupt status so a repaired payload can be retried");
+assert.match(loadWorldSource, /this\.persistenceRecoveryBlocked = true/,
+  "a failed startup/explicit restore must place the renderer in persistence recovery mode");
+assert.match(loadWorldSource, /this\.persistenceRecoveryBlocked = false/,
+  "a fully verified world restore must release persistence recovery mode");
+assert.match(rendererSource, /if \(this\.persistenceRecoveryBlocked && !options\.allowRecovery\)/,
+  "the renderer must prevent autosaves from overwriting the world after a failed restore");
 assert.match(persistenceSource, /export type WorldChunkReadResult =/,
   "chunk reads must expose a discriminated result instead of collapsing all failures to an empty array");
 assert.match(persistenceSource, /invalid-world-object-record/,
