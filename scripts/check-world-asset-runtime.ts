@@ -35,6 +35,8 @@ const createGltfScene = (map = new THREE.Texture()) => {
     new THREE.BoxGeometry(1, 1, 1),
     new THREE.MeshStandardMaterial({ map }),
   ))
+  group.add(new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial()))
+  group.add(new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial()))
   return group
 }
 
@@ -86,6 +88,18 @@ assert.equal(runtime.getInstanceSourceAssetId('oak:instance:1'), 'oak')
 assert.equal(runtime.getInstanceRuntimeOwnerId('oak:instance:1'), null)
 assert.equal(runtime.setInstanceRuntimeOwnerId('oak:instance:1', 'asset-runtime-test'), true)
 assert.equal(runtime.getInstanceRuntimeOwnerId('oak:instance:1'), 'asset-runtime-test')
+const sourcePoints = currentScene.children.find(node => (node as THREE.Points).isPoints) as THREE.Points
+const instancePoints = instance!.children.find(node => (node as THREE.Points).isPoints) as THREE.Points
+const sourceLine = currentScene.children.find(node => (node as THREE.Line).isLine) as THREE.Line
+const instanceLine = instance!.children.find(node => (node as THREE.Line).isLine) as THREE.Line
+assert.notEqual(instancePoints.geometry, sourcePoints.geometry,
+  'placed Points instances must own cloned geometry rather than sharing the source asset')
+assert.notEqual(instancePoints.material, sourcePoints.material,
+  'placed Points instances must own cloned materials rather than sharing the source asset')
+assert.notEqual(instanceLine.geometry, sourceLine.geometry,
+  'placed Line instances must own cloned geometry rather than sharing the source asset')
+assert.notEqual(instanceLine.material, sourceLine.material,
+  'placed Line instances must own cloned materials rather than sharing the source asset')
 assert.equal(scene.children.length, 2)
 const placementManifest = {
   version: '1.0' as const,
@@ -350,6 +364,10 @@ const cleanupFlags = {
   goodInstanceMaterial: false,
   sourceGeometry: false,
   sourceMaterial: false,
+  sourcePointsGeometry: false,
+  sourcePointsMaterial: false,
+  sourceLineGeometry: false,
+  sourceLineMaterial: false,
   mixerUncached: false,
   pendingCancelContinued: false,
 }
@@ -377,6 +395,16 @@ const cleanupSourceMaterial = new THREE.MeshBasicMaterial()
 cleanupSourceMaterial.addEventListener('dispose', () => { cleanupFlags.sourceMaterial = true })
 const sourceObject = new THREE.Group()
 sourceObject.add(trackedMesh(cleanupSourceMaterial, () => { cleanupFlags.sourceGeometry = true }))
+const sourcePointsGeometry = new THREE.BufferGeometry()
+sourcePointsGeometry.addEventListener('dispose', () => { cleanupFlags.sourcePointsGeometry = true })
+const sourcePointsMaterial = new THREE.PointsMaterial()
+sourcePointsMaterial.addEventListener('dispose', () => { cleanupFlags.sourcePointsMaterial = true })
+sourceObject.add(new THREE.Points(sourcePointsGeometry, sourcePointsMaterial))
+const sourceLineGeometry = new THREE.BufferGeometry()
+sourceLineGeometry.addEventListener('dispose', () => { cleanupFlags.sourceLineGeometry = true })
+const sourceLineMaterial = new THREE.LineBasicMaterial()
+sourceLineMaterial.addEventListener('dispose', () => { cleanupFlags.sourceLineMaterial = true })
+sourceObject.add(new THREE.Line(sourceLineGeometry, sourceLineMaterial))
 
 cleanupScene.add(failingInstance, goodInstance, sourceObject)
 cleanupInternal.instances.set('failing-instance', failingInstance)
@@ -425,6 +453,10 @@ assert.deepEqual(cleanupFlags, {
   goodInstanceMaterial: true,
   sourceGeometry: true,
   sourceMaterial: true,
+  sourcePointsGeometry: true,
+  sourcePointsMaterial: true,
+  sourceLineGeometry: true,
+  sourceLineMaterial: true,
   mixerUncached: true,
   pendingCancelContinued: true,
 }, 'cleanup must continue through failures in cancellation, animation, geometry and material disposal')
