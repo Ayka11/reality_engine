@@ -408,6 +408,18 @@ assert.ok(worldRendererSource.includes("capturePortableWorldSnapshot(): WorldEdi
   worldRendererSource.includes("restorePortableWorldSnapshot(snapshot?: WorldEditorSnapshot)") &&
   worldRendererSource.includes("persistPortableWorldSnapshot(assetManifest?: WorldAssetImportManifest): void"),
   'InfiniteWorldRenderer must expose portable capture, detached restore and post-commit persistence');
+const restoreMethodStart = worldRendererSource.indexOf("restorePortableWorldSnapshot(snapshot?: WorldEditorSnapshot): void");
+const restoreMethodEnd = worldRendererSource.indexOf("Persist an already committed portable-world restore", restoreMethodStart);
+const restoreMethodSource = worldRendererSource.slice(restoreMethodStart, restoreMethodEnd);
+assert.ok(restoreMethodSource.includes("detachAndDisposeObjectGroups(") &&
+  restoreMethodSource.includes("cleanupFailures.length > 0") &&
+  restoreMethodSource.includes("this.syncObjects()"),
+  'portable restore must complete replacement publication after collecting old GPU resource cleanup failures');
+assert.equal(restoreMethodSource.includes("mesh.geometry.dispose()"), false,
+  'portable restore must not use unguarded direct geometry disposal');
+assert.equal(restoreMethodSource.includes("material.dispose()"), false,
+  'portable restore must not use unguarded direct material disposal');
+
 assert.ok(worldSurfaceProviderSource.includes("kind: 'world-generator-surface'") &&
   worldSurfaceProviderSource.includes("new WorldGenerator(value.seed, value.seaLevel, value.maxElevation)"),
   'generator-backed world surfaces must retain deterministic seed and generator parameters');

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import * as THREE from 'three'
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { WorldAssetRuntime } from '../src/worldLibrary/WorldAssetRuntime.ts'
+import { detachAndDisposeObjectGroups } from '../src/render/ResourceCleanup.ts'
 import {
   materializeExternalAssetPlacements,
   mergeExternalAssetPlacements,
@@ -583,5 +584,93 @@ assert.deepEqual(sourceRemoveFlags, {
   mixerStop: true,
   mixerUncache: true,
 }, 'source removal must dispose failing and healthy dependent resources plus its own source resources')
+
+
+const restoreCleanupScene = new THREE.Scene()
+const restoreCleanupFlags = {
+  failingGeometry: false,
+  healthyGeometry: false,
+  failingMaterial: false,
+  healthyMaterial: false,
+  sharedMaterial: false,
+  sharedTexture: false,
+  laterGroupGeometry: false,
+}
+const restoreSharedTexture = new THREE.Texture()
+restoreSharedTexture.addEventListener('dispose', () => { restoreCleanupFlags.sharedTexture = true })
+const restoreSharedMaterial = new THREE.MeshStandardMaterial({ map: restoreSharedTexture })
+restoreSharedMaterial.addEventListener('dispose', () => { restoreCleanupFlags.sharedMaterial = true })
+const restoreFailingMaterial = new THREE.MeshBasicMaterial()
+restoreFailingMaterial.addEventListener('dispose', () => {
+  restoreCleanupFlags.failingMaterial = true
+  throw new Error('injected portable restore material disposal failure')
+})
+const restoreFailingGeometry = new THREE.BoxGeometry(1, 1, 1)
+restoreFailingGeometry.addEventListener('dispose', () => {
+  restoreCleanupFlags.failingGeometry = true
+  throw new Error('injected portable restore geometry disposal failure')
+})
+const restoreFailingRoot = new THREE.Group()
+restoreFailingRoot.add(new THREE.Mesh(restoreFailingGeometry, restoreFailingMaterial))
+restoreFailingRoot.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), restoreSharedMaterial))
+const restoreHealthyMaterial = new THREE.MeshBasicMaterial()
+restoreHealthyMaterial.addEventListener('dispose', () => { restoreCleanupFlags.healthyMaterial = true })
+const restoreHealthyGeometry = new THREE.BoxGeometry(1, 1, 1)
+restoreHealthyGeometry.addEventListener('dispose', () => { restoreCleanupFlags.healthyGeometry = true })
+const restoreHealthyRoot = new THREE.Group()
+restoreHealthyRoot.add(new THREE.Mesh(restoreHealthyGeometry, restoreHealthyMaterial))
+restoreHealthyRoot.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), restoreSharedMaterial))
+const restoreLaterGeometry = new THREE.BoxGeometry(1, 1, 1)
+restoreLaterGeometry.addEventListener('dispose', () => { restoreCleanupFlags.laterGroupGeometry = true })
+const restoreLaterRoot = new THREE.Group()
+restoreLaterRoot.add(new THREE.Mesh(restoreLaterGeometry, new THREE.MeshBasicMaterial()))
+restoreCleanupScene.add(restoreFailingRoot, restoreHealthyRoot, restoreLaterRoot)
+
+let sharedMaterialDisposals = 0
+let sharedTextureDisposals = 0
+restoreSharedMaterial.addEventListener('dispose', () => { sharedMaterialDisposals += 1 })
+restoreSharedTexture.addEventListener('dispose', () => { sharedTextureDisposals += 1 })
+
+const restoreCleanupFailures = detachAndDisposeObjectGroups(
+  restoreCleanupScene,
+  [restoreFailingRoot, restoreHealthyRoot, restoreLaterRoot],
+  'Portable restore fixture',
+)
+assert.equal(restoreCleanupScene.children.length, 0,
+  'portable restore cleanup must detach every old scene root despite disposal errors')
+assert.equal(restoreCleanupFailures.length, 2,
+  'portable restore cleanup must report both independent geometry and material failures')
+assert.deepEqual(restoreCleanupFlags, {
+  failingGeometry: true,
+  healthyGeometry: true,
+  failingMaterial: true,
+  healthyMaterial: true,
+  sharedMaterial: true,
+  sharedTexture: true,
+  laterGroupGeometry: true,
+}, 'portable restore cleanup must continue through every root and release shared resources')
+assert.equal(sharedMaterialDisposals, 1,
+  'shared materials must be disposed exactly once across the whole replacement scene')
+assert.equal(sharedTextureDisposals, 1,
+  'shared textures must be disposed exactly once across the whole replacement scene')
+
+const restoreTraversalFailureRoot = new THREE.Group()
+const restoreTraversalHealthyRoot = new THREE.Group()
+const traversalHealthyGeometry = new THREE.BoxGeometry(1, 1, 1)
+let traversalHealthyDisposed = false
+traversalHealthyGeometry.addEventListener('dispose', () => { traversalHealthyDisposed = true })
+restoreTraversalHealthyRoot.add(new THREE.Mesh(traversalHealthyGeometry, new THREE.MeshBasicMaterial()))
+restoreCleanupScene.add(restoreTraversalFailureRoot, restoreTraversalHealthyRoot)
+restoreTraversalFailureRoot.traverse = () => { throw new Error('injected traversal failure') }
+const traversalFailures = detachAndDisposeObjectGroups(
+  restoreCleanupScene,
+  [restoreTraversalFailureRoot, restoreTraversalHealthyRoot],
+  'Portable restore traversal fixture',
+)
+assert.equal(restoreCleanupScene.children.length, 0,
+  'a traversal failure must not leave later roots attached to the old scene')
+assert.equal(traversalHealthyDisposed, true,
+  'a traversal failure for one root must not skip resource disposal for later roots')
+assert.equal(traversalFailures.length, 1)
 
 console.log('WorldAssetRuntime asset lifecycle, independent skeletal animation states, crossfades, distance LOD and disposal: PASS')

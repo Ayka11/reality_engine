@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { detachAndDisposeObjectGroups } from './ResourceCleanup'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { InfiniteChunkManager } from '../infinity/ChunkManager'
@@ -746,30 +747,20 @@ export class InfiniteWorldRenderer {
     // explicitly imported. WorldSaveSystem clears old runtime assets post-commit.
     this.pendingExternalAssetPlacements = prepared.nextAssetPlacements.map(placement => ({ ...placement }))
 
-    for (const [, patch] of this.patches) {
-      this.scene.remove(patch.group)
-      patch.group.traverse(obj => {
-        const mesh = obj as THREE.Mesh
-        if (mesh.geometry) mesh.geometry.dispose()
-        if (mesh.material) {
-          (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(material => material.dispose())
-        }
-      })
-    }
+    // A custom GPU disposer must not abort the import halfway through scene
+    // teardown. Detach every old root, deduplicate shared resources, and collect
+    // failures while continuing to publish the validated replacement world.
+    const cleanupFailures = detachAndDisposeObjectGroups(
+      this.scene,
+      [
+        ...[...this.patches.values()].map(patch => patch.group),
+        ...[...this.objectMeshes.values()].map(entry => entry.group),
+      ],
+      'Portable world restore',
+    )
     this.patches.clear()
     this.waterMeshes.clear()
     this.terrainMaterials.clear()
-
-    for (const [, entry] of this.objectMeshes) {
-      this.scene.remove(entry.group)
-      entry.group.traverse(obj => {
-        const mesh = obj as THREE.Mesh
-        if (mesh.geometry) mesh.geometry.dispose()
-        if (mesh.material) {
-          (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(material => material.dispose())
-        }
-      })
-    }
     this.objectMeshes.clear()
 
     this.generator = prepared.nextGenerator
@@ -807,6 +798,13 @@ export class InfiniteWorldRenderer {
 
     this.rebuildDecisionLayer()
     this.syncObjects()
+
+    if (cleanupFailures.length > 0) {
+      console.warn(
+        '[world-restore] Replacement world was published after old scene resources reported cleanup failures',
+        new AggregateError(cleanupFailures, 'Portable world restore completed with old resource cleanup failures'),
+      )
+    }
   }
 
   /**
