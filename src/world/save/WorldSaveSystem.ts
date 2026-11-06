@@ -205,8 +205,12 @@ export class WorldSaveSystem {
   }
 
   async importRealityPackage(file: File): Promise<void> {
-    const pkg = await this.packageSerializer.unpack(file);
-    await this.applySnapshot(this.packageToSnapshot(pkg));
+    // Reserve the operation queue before asynchronous archive decoding so a
+    // later save/load cannot overtake an import that the user already started.
+    return this.runExclusive(async () => {
+      const pkg = await this.packageSerializer.unpack(file);
+      await this.applySnapshotExclusive(this.packageToSnapshot(pkg));
+    });
   }
 
   captureSnapshot(name: string): WorldSnapshot {
