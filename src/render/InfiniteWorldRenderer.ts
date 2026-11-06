@@ -1202,6 +1202,7 @@ export class InfiniteWorldRenderer {
       return false
     }
     this.persistenceRecoveryBlocked = false
+    this.startupPersistenceFailures = []
     this.lastPersistenceFailures = []
     this.pendingExternalAssetPlacements = []
     try {
@@ -1356,6 +1357,7 @@ export class InfiniteWorldRenderer {
     this.rebuildDecisionLayer()
     this.persistence = targetPersistence
     this.persistenceRecoveryBlocked = false
+    this.startupPersistenceFailures = []
     this.lastPersistenceFailures = []
     this.storageKey = `reality-engine-world:${normalizedSeed}:objects`
 
