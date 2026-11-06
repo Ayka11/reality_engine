@@ -453,7 +453,7 @@ export class WorldPersistence {
     this.cache.set(key, objects)
     this.loaded.add(key)
     if (!chunkSaved) return false
-    return this.updateManifest()
+    return this.updateManifest(key)
   }
 
   /**
@@ -554,7 +554,7 @@ export class WorldPersistence {
     this.cache.delete(key)
     this.missingChunks.delete(key)
     this.corruptChunks.delete(key)
-    return this.updateManifest(key)
+    return this.updateManifest(undefined, key)
   }
 
   /**
@@ -669,11 +669,21 @@ export class WorldPersistence {
     }
 
     if (!options.recoverOrphans) return [...new Set(keys)]
-    // The manifest is only an index. Distinguish an empty namespace from a
-    // failed storage scan so callers never treat an unknown world as empty.
+    // A complete payload scan is authoritative. The manifest can contain
+    // stale entries from older runtimes that indexed a negative-cache read.
     const scannedChunkKeys = this.scanStoredChunkKeys()
     if (scannedChunkKeys === null) return null
-    return [...new Set([...keys, ...scannedChunkKeys])]
+    const durableKeys = [...new Set(scannedChunkKeys)]
+    // Best-effort manifest repair: callers still receive the authoritative
+    // scanned set when the index itself cannot be rewritten.
+    if (JSON.stringify([...new Set(keys)]) !== JSON.stringify(durableKeys)) {
+      try {
+        localStorage.setItem(this.manifestKey, JSON.stringify(durableKeys))
+      } catch {
+        // Read recovery remains valid; a later save can retry index repair.
+      }
+    }
+    return durableKeys
   }
 
   private isValidChunkKey(value: unknown): value is string {
@@ -704,7 +714,7 @@ export class WorldPersistence {
       .filter((key): key is string => this.isValidChunkKey(key)))]
   }
 
-  private updateManifest(removeKey?: string): boolean {
+  private updateManifest(addKey?: string, removeKey?: string): boolean {
     let raw: string | null
     try {
       raw = localStorage.getItem(this.manifestKey)
@@ -721,7 +731,7 @@ export class WorldPersistence {
       return false
     }
     const present = new Set(keys)
-    for (const key of this.loaded) present.add(key)
+    if (addKey) present.add(addKey)
     if (removeKey) present.delete(removeKey)
     try {
       localStorage.setItem(this.manifestKey, JSON.stringify([...present]))
