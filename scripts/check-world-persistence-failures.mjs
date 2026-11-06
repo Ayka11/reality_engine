@@ -525,6 +525,10 @@ assert.match(saveWorldSource, /if \(knownChunkKeys === null\)[\s\S]*?stored chun
 const loadWorldSource = rendererSource.slice(loadWorldStart);
 assert.match(loadWorldSource, /const knownChunkKeys = this\.persistence\.knownChunks\(\{ recoverOrphans: true \}\)[\s\S]*?if \(knownChunkKeys === null\)[\s\S]*?return 0[\s\S]*?this\.objects\.clear\(\)/,
   "loadWorld must verify complete chunk enumeration before mutating the live world");
+assert.match(loadWorldSource, /const restoredObjects: WorldObject\[\] = \[\][\s\S]*?this\.persistence\.loadChunk\([\s\S]*?if \(!this\.persistence\.isLoaded\([\s\S]*?return 0[\s\S]*?this\.terrainDeformations\.restore/,
+  "loadWorld must preflight every stored chunk payload before changing terrain or objects");
+assert.match(loadWorldSource, /newlyLoadedChunkKeys[\s\S]*?this\.persistence\.unloadChunk\(/,
+  "a failed chunk preflight must roll back newly populated persistence cache entries");
 assert.match(saveWorldSource, /if \(!fieldCheckpointSaved\) \{\s*failedPersistenceOperations\.push\('authoritative field checkpoint'\)/,
   "a failed authoritative field checkpoint must be included in the durable-save failure report");
 assert.match(saveWorldSource, /if \(!checkpointSaved\) \{\s*failedPersistenceOperations\.push\('terrain deformation checkpoint'\)/,
@@ -587,8 +591,24 @@ assert.deepEqual(persistence.loadedChunks(), [],
   "clear must reset in-memory loaded chunk state despite storage failures");
 assert.deepEqual(persistence.loadChunk(0, 0, 0), [],
   "clear must discard the in-memory chunk cache");
+assert.equal(persistence.isLoaded(0, 0, 0), false,
+  "a storage read failure must not mark an unreadable chunk as loaded");
 failGet = false;
 failRemove = false;
+
+const readFailureObjects = [{ id: 'read-failure-object', x: 17, y: 0, z: -19, kind: 'house' }];
+const readFailureWriter = new WorldPersistence("seed-read-failure");
+assert.equal(readFailureWriter.saveChunk(1, 0, -2, readFailureObjects), true);
+const readFailureReader = new WorldPersistence("seed-read-failure");
+failGet = true;
+assert.deepEqual(readFailureReader.loadChunk(1, 0, -2), [],
+  "an inaccessible durable chunk must not be presented as an empty chunk");
+assert.equal(readFailureReader.isLoaded(1, 0, -2), false,
+  "an inaccessible durable chunk must remain retryable");
+failGet = false;
+assert.deepEqual(readFailureReader.loadChunk(1, 0, -2), readFailureObjects,
+  "a previously inaccessible chunk must load normally after storage recovers");
+assert.equal(readFailureReader.isLoaded(1, 0, -2), true);
 
 function toModuleUrl(source) {
   return "data:text/javascript;base64," + Buffer.from(source).toString("base64");
