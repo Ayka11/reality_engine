@@ -967,20 +967,34 @@ export class InfiniteWorldRenderer {
     const loadedBeforeRestore = new Set(this.persistence.loadedChunks())
     const newlyLoadedChunkKeys: string[] = []
     const restoredObjects: WorldObject[] = []
+    const restoredObjectIds = new Set<string>()
     for (const key of knownChunkKeys) {
       const [cx, cy, cz] = key.split(',').map(Number)
-      const chunkObjects = this.persistence.loadChunk(cx, cy, cz)
-      if (!this.persistence.isLoaded(cx, cy, cz)) {
-        for (const loadedKey of newlyLoadedChunkKeys) {
+      const result = this.persistence.readChunk(cx, cy, cz)
+      if (result.status !== 'ok') {
+        for (const loadedKey of [...newlyLoadedChunkKeys, key]) {
+          if (loadedBeforeRestore.has(loadedKey)) continue
           const [loadedCx, loadedCy, loadedCz] = loadedKey.split(',').map(Number)
           this.persistence.unloadChunk(loadedCx, loadedCy, loadedCz)
         }
-        this.lastPersistenceFailures = [`read chunk ${key}`]
-        console.warn(`[persistence] World restore was withheld because chunk ${key} could not be read; the live world was retained`)
+        this.lastPersistenceFailures = [`${result.status} chunk ${key}: ${result.reason}`]
+        console.warn(`[persistence] World restore was withheld because chunk ${key} is ${result.status} (${result.reason}); the live world was retained`)
         return 0
       }
       if (!loadedBeforeRestore.has(key)) newlyLoadedChunkKeys.push(key)
-      restoredObjects.push(...chunkObjects)
+      for (const object of result.objects) {
+        if (restoredObjectIds.has(object.id)) {
+          for (const loadedKey of newlyLoadedChunkKeys) {
+            const [loadedCx, loadedCy, loadedCz] = loadedKey.split(',').map(Number)
+            this.persistence.unloadChunk(loadedCx, loadedCy, loadedCz)
+          }
+          this.lastPersistenceFailures = [`duplicate world object ID: ${object.id}`]
+          console.warn(`[persistence] World restore was withheld because object ID ${object.id} occurs in multiple stored chunks`)
+          return 0
+        }
+        restoredObjectIds.add(object.id)
+        restoredObjects.push(object)
+      }
     }
 
     // Explicit Load restores the last manual checkpoint; startup can opt into the latest autosave.
