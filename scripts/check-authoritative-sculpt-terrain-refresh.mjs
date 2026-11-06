@@ -133,7 +133,12 @@ assert.match(saveWorldBody, /World persistence incomplete/,
   "world save must diagnose incomplete persistence operations");
 assert.match(saveWorldBody, /failedPersistenceOperations\.join\(/,
   "world save diagnostics must identify the failed persistence operations");
-assert.match(methodBody("loadWorld"), /loadTerrainDeformationCheckpoint/);
+assert.match(methodBody("loadWorld"), /readTerrainDeformationCheckpoint/);
+assert.match(methodBody("loadWorld"), /readFieldCheckpoint/);
+assert.match(methodBody("loadWorld"), /readTerrainDeformationState/);
+assert.match(methodBody("loadWorld"), /readFieldState/);
+assert.match(methodBody("loadWorld"), /rollbackStagedChunks/,
+  "failed sidecar preflight must evict newly staged chunk cache entries before returning");
 assert.match(methodBody("loadWorld"), /knownChunks\(\{\s*recoverOrphans:\s*true\s*\}\)/,
   "world load must recover persisted chunk payloads omitted from a failed/corrupt manifest");
 const clearSavedWorldBody = methodBody("clearSavedWorld");
