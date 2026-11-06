@@ -34,7 +34,7 @@ const activeSeedCommitAt = saveWorldBody.indexOf('saveActiveWorldSeed(this.gener
 assert.ok(chunkWriteAt >= 0 && activeSeedCommitAt > chunkWriteAt,
   'active seed must be published only after all seed-scoped chunk writes')
 const journalBeginAt = saveWorldBody.indexOf('beginSaveTransaction')
-const journalFinishAt = saveWorldBody.indexOf('finishSaveTransaction')
+const journalFinishAt = saveWorldBody.lastIndexOf('finishSaveTransaction')
 assert.ok(journalBeginAt >= 0 && journalBeginAt < saveWorldBody.indexOf('persistAuthoritativeFieldState'),
   'the world journal must open before the first sidecar write')
 assert.ok(journalFinishAt > activeSeedCommitAt,
@@ -42,7 +42,7 @@ assert.ok(journalFinishAt > activeSeedCommitAt,
 assert.match(saveWorldBody, /failedPersistenceOperations\.length === 0 && !saveActiveWorldSeed\(this\.generator\.seed\)/,
   'an incomplete sidecar/chunk save must not switch startup to the imported seed namespace')
 const portablePersistAt = renderer.indexOf('  persistPortableWorldSnapshot(')
-const saveWorldCallAt = renderer.indexOf('this.saveWorld({ checkpoint: false, preflightFailures })', portablePersistAt)
+const saveWorldCallAt = renderer.indexOf('this.saveWorld({ checkpoint: false, preflightFailures, allowRecovery: true })', portablePersistAt)
 assert.ok(portablePersistAt >= 0 && saveWorldCallAt > portablePersistAt,
   'imported surface/asset sidecar failures must be passed into the seed-scoped save commit')
 assert.match(saveWorldBody, /const failedPersistenceOperations: string\[\] = \[\.\.\.\(options\.preflightFailures \?\? \[\]\)\]/,
