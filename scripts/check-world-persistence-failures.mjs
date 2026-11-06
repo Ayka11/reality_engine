@@ -478,6 +478,24 @@ failRemove = false;
 assert.equal(persistence.deleteChunk(0, 0, -1), true);
 assert.deepEqual(persistence.knownChunks(), []);
 
+// Streaming probes read nearby empty chunks through the negative cache.
+// Those visited coordinates must never be published as durable manifest entries.
+const negativeCachePersistence = new WorldPersistence("seed-negative-cache");
+assert.deepEqual(negativeCachePersistence.loadChunk(-3, 0, -3), []);
+assert.equal(negativeCachePersistence.isLoaded(-3, 0, -3), true,
+  "empty chunk reads should remain memoized for streaming");
+const negativeCacheDurableObjects = [makeWorldObject("negative-cache-survivor", 1, 0, 1, "tree")];
+assert.equal(negativeCachePersistence.saveChunk(0, 0, 0, negativeCacheDurableObjects), true);
+assert.deepEqual(values.has("reality-engine-world:seed-negative-cache:manifest")
+  ? JSON.parse(values.get("reality-engine-world:seed-negative-cache:manifest"))
+  : [], ["0,0,0"],
+  "negative-cache coordinates must not be inserted into the durable chunk manifest");
+values.set("reality-engine-world:seed-negative-cache:manifest", JSON.stringify(["-3,0,-3", "0,0,0"]));
+assert.deepEqual(negativeCachePersistence.knownChunks({ recoverOrphans: true }), ["0,0,0"],
+  "a successful payload scan must ignore stale manifest entries without stored chunk payloads");
+assert.deepEqual(JSON.parse(values.get("reality-engine-world:seed-negative-cache:manifest")), ["0,0,0"],
+  "recovery enumeration must best-effort repair stale manifest-only chunk keys");
+
 const manifestKey = "reality-engine-world:seed-a:manifest";
 const orphanObjects = [makeWorldObject("orphaned-index-object", 70, 0, -65, "rock")];
 const orphanChunkKey = "reality-engine-world:seed-a:chunk:2,0,-3";
