@@ -472,6 +472,8 @@ export class WorldPersistence {
    * whether both the chunk payload and its manifest entry became durable.
    */
   saveChunk(cx: number, cy: number, cz: number, objects: WorldObject[]): boolean {
+    // Never persist a payload that the strict restore path would reject later.
+    if (!Array.isArray(objects) || !objects.every(isStoredWorldObject)) return false
     const payload: StoredChunk = { version: 1, seed: this.seed, objects }
     const key = chunkKey(cx, cy, cz)
     let chunkSaved = false
