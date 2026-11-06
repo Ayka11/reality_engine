@@ -474,7 +474,8 @@ export class WorldPersistence {
     try {
       raw = localStorage.getItem(this.key(cx, cy, cz))
     } catch {
-      this.loaded.add(key)
+      // An unavailable read is not an empty chunk. Leave it unloaded so the
+      // streaming path can retry and explicit world restore can fail closed.
       return []
     }
     this.loaded.add(key)
