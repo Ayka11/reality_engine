@@ -517,8 +517,10 @@ failSetForKey = null;
 values.set(manifestKey, "{corrupt-manifest");
 assert.deepEqual(persistence.knownChunks({ recoverOrphans: true }), ["2,0,-3"],
   "recovery enumeration should also discover chunks when the manifest JSON is corrupt");
-assert.equal(persistence.saveChunk(2, 0, -3, orphanObjects), false,
-  "manifest updates must fail visibly instead of overwriting a corrupt manifest with a partial index");
+assert.deepEqual(JSON.parse(values.get(manifestKey)), ["2,0,-3"],
+  "a complete storage scan must repair a corrupt manifest from the authoritative payload set");
+assert.equal(persistence.saveChunk(2, 0, -3, orphanObjects), true,
+  "a subsequent durable write must work after the corrupt manifest was repaired");
 values.set(manifestKey, "[]");
 assert.equal(persistence.deleteChunk(2, 0, -3), true);
 assert.deepEqual(persistence.knownChunks(), [],
