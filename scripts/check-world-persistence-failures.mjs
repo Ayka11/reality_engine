@@ -114,8 +114,14 @@ assert.match(saveSystemSource, /db\.transaction\('saves', 'readwrite'\)/,
   "autosave pruning and insert must occur inside one IndexedDB transaction");
 assert.match(saveSystemSource, /autosaves\.slice\(MAX_AUTOSAVE_SNAPSHOTS - 1\)/,
   "autosaves must prune only the oldest rows beyond the rolling limit");
-assert.match(saveManagerSource, /quickSave.*Autosave_.*\.catch/s,
-  "autosave quota/storage errors must be handled rather than becoming unhandled rejections");
+assert.match(saveManagerSource, /if \(this\.autoSaveInFlight\) return/,
+  "a slow autosave must block overlapping timer-triggered snapshots");
+assert.match(saveManagerSource, /Promise\.resolve\(\)[\s\S]*?this\.saveSystem\.quickSave\(name\)[\s\S]*?\.catch\(error => \{[\s\S]*?\.finally\(\(\) => \s*\{\s*this\.autoSaveInFlight = false/,
+  "autosave must catch synchronous/asynchronous failures and release its single-flight guard");
+assert.match(saveManagerSource, /this\.onAutoSaveError\?\.\(error\)/,
+  "autosave quota/storage errors must be forwarded to the configured UI reporter");
+assert.match(mainSource, /new SaveManager\(saveSystem, error => reportWorldSaveFailure\('Autosave', error\)\)/,
+  "the application must surface autosave failures in the world status panel");
 assert.match(mainSource, /getDirectorSnapshot: \(\) => director\.snapshot\(\)/,
   "the application must wire SceneDirector snapshots into world saves");
 assert.match(directorSource, /snapshot\(\): SceneDirectorSnapshot/);
