@@ -2523,8 +2523,9 @@ export class InfiniteWorldRenderer {
     })
     const keep = new Set<string>()
     const cleanupFailures: unknown[] = []
+    const synchronizationFailures: unknown[] = []
     for (const object of visible) {
-      keep.add(object.id)
+      try {
       const entry = this.objectMeshes.get(object.id)
       if (!entry) {
         const group = this.makeObject(object)
@@ -2569,6 +2570,13 @@ export class InfiniteWorldRenderer {
           ;(this.transformControls as any).visible = true
         }
       }
+      keep.add(object.id)
+      } catch (error) {
+        // One malformed object or failed GPU allocation must not prevent the
+        // remaining visible objects from synchronizing or stale meshes cleaning up.
+        keep.delete(object.id)
+        synchronizationFailures.push(new Error(`World object ${object.id} synchronization failed: ${String(error)}`, { cause: error }))
+      }
     }
 
     const attempt = (label: string, cleanup: () => void) => {
@@ -2603,8 +2611,11 @@ export class InfiniteWorldRenderer {
       // an old ID cached could suppress creation of the next world's object.
       this.objectMeshes.delete(id)
     }
-    if (cleanupFailures.length > 0) {
-      throw new AggregateError(cleanupFailures, 'World object meshes were removed with one or more resource cleanup failures')
+    if (synchronizationFailures.length > 0 || cleanupFailures.length > 0) {
+      throw new AggregateError(
+        [...synchronizationFailures, ...cleanupFailures],
+        'World object synchronization completed with one or more creation or resource cleanup failures',
+      )
     }
   }
 
