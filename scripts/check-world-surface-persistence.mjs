@@ -24,6 +24,7 @@ const {
   WorldPersistence,
   ACTIVE_WORLD_SEED_STORAGE_KEY,
   loadActiveWorldSeed,
+  readActiveWorldSeed,
   saveActiveWorldSeed,
 } = await import(persistenceUrl)
 
@@ -38,6 +39,8 @@ globalThis.localStorage = {
 
 assert.equal(loadActiveWorldSeed('fallback-seed'), 'fallback-seed',
   'startup must use its fallback when no active-world seed has been saved')
+assert.deepEqual(readActiveWorldSeed('fallback-seed'), { status: 'missing', seed: 'fallback-seed' },
+  'a genuinely absent active selector must be distinguishable from a storage failure')
 assert.equal(saveActiveWorldSeed('restart-world-seed'), true,
   'the active world seed must be durably persisted')
 assert.equal(loadActiveWorldSeed('fallback-seed'), 'restart-world-seed',
@@ -50,6 +53,15 @@ assert.equal(entries.has(ACTIVE_WORLD_SEED_STORAGE_KEY), false,
 assert.equal(saveActiveWorldSeed(''), false, 'empty active seeds must not be persisted')
 assert.equal(saveActiveWorldSeed('x'.repeat(513)), false,
   'oversized active seeds must not be persisted')
+const originalGetItem = globalThis.localStorage.getItem
+globalThis.localStorage.getItem = (key) => {
+  if (key === ACTIVE_WORLD_SEED_STORAGE_KEY) throw new Error('injected active seed read failure')
+  return originalGetItem(key)
+}
+assert.deepEqual(readActiveWorldSeed('fallback-seed'), {
+  status: 'unavailable', seed: 'fallback-seed', reason: 'storage-read-failed',
+}, 'transient selector read failures must not be treated as a missing selector')
+globalThis.localStorage.getItem = originalGetItem
 const originalSetItem = globalThis.localStorage.setItem
 globalThis.localStorage.setItem = (key, value) => {
   if (key === ACTIVE_WORLD_SEED_STORAGE_KEY) throw new Error('injected active seed storage failure')
@@ -58,12 +70,22 @@ globalThis.localStorage.setItem = (key, value) => {
 assert.equal(saveActiveWorldSeed('storage-blocked-seed'), false,
   'active seed persistence must report browser storage failures')
 globalThis.localStorage.setItem = originalSetItem
-assert.match(bootstrapSource, /loadActiveWorldSeed\('reality-seed-1'\)/,
-  'bootstrap must restore the saved world seed before constructing InfiniteWorldRenderer')
+assert.match(bootstrapSource, /readActiveWorldSeed\('reality-seed-1'\)/,
+  'bootstrap must distinguish a missing selector from an unavailable selector')
+assert.match(bootstrapSource, /blockPersistenceReads: seedRead\?\.status === 'unavailable'/,
+  'bootstrap must withhold seed-scoped sidecars when the active selector cannot be read')
+assert.match(bootstrapSource, /seedRead\?\.status !== 'unavailable'/,
+  'bootstrap must not overwrite the selector with a fallback after a transient read failure')
 assert.match(rendererSource, /saveActiveWorldSeed\(this\.generator\.seed\)/,
   'every world save must persist the active seed namespace')
 assert.match(rendererSource, /saveActiveWorldSeed\(normalizedSeed\)/,
   'explicit world reseeding must immediately persist its new active seed')
+
+const blockedPersistence = new WorldPersistence('fallback-seed', true)
+assert.equal(blockedPersistence.readFieldState().status, 'unavailable',
+  'a renderer started without a trustworthy active seed must not read fallback sidecars')
+assert.equal(blockedPersistence.readChunk(0, 0, 0).status, 'unavailable',
+  'a renderer started without a trustworthy active seed must not load fallback chunks')
 
 const persistence = new WorldPersistence('surface-save-seed')
 const snapshot = {
