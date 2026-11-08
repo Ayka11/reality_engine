@@ -1174,14 +1174,16 @@ export class InfiniteWorldRenderer {
       ))
       return 0
     }
-    if (persistedField) {
-      // A checkpoint restore replaces the authoritative state; older undo/redo
-      // snapshots no longer describe a valid transaction chain.
+    if (options.restoreFieldCheckpoint !== false || persistedField) {
+      // A manual Load replaces the field even when no saved snapshot exists;
+      // startup without an autosave preserves the constructor-initialized field.
       this.authoritativeSculptTransactions.clear()
       this.notifyAuthoritativeSculptHistoryChanged()
     }
     this.objects.clear()
     for (const object of restoredObjects) this.objects.add(object)
+    // Object edit transactions belong to the world that was just replaced.
+    this.history = new WorldEditHistory()
     const count = restoredObjects.length
     this.syncObjects()
     this.selectedObjectId = null
