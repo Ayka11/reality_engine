@@ -2528,6 +2528,22 @@ export class InfiniteWorldRenderer {
         entry.group.rotation.y = object.rotationY
         entry.group.scale.setScalar(Math.max(0.1, object.scale))
       }
+      if (this.selectedObjectId === object.id) {
+        // Keep editor overlays aligned with the authoritative snapshot after
+        // Undo/Redo or a programmatic transform.
+        this.selectionMarker.position.set(
+          object.x - this.worldAnchor.x,
+          object.y - this.worldAnchor.y + 1.5,
+          object.z - this.worldAnchor.z,
+        )
+        this.selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
+        this.selectionMarker.visible = true
+        const selectedEntry = this.objectMeshes.get(object.id)
+        if (selectedEntry) {
+          this.transformControls.attach(selectedEntry.group)
+          ;(this.transformControls as any).visible = true
+        }
+      }
     }
 
     const cleanupFailures: unknown[] = []
@@ -2540,6 +2556,14 @@ export class InfiniteWorldRenderer {
     }
     for (const [id, entry] of [...this.objectMeshes]) {
       if (keep.has(id)) continue
+      if (this.selectedObjectId === id) {
+        // Never leave TransformControls attached to a group being evicted
+        // from the streamed scene.
+        this.selectedObjectId = null
+        this.transformControls.detach()
+        ;(this.transformControls as any).visible = false
+        this.selectionMarker.visible = false
+      }
       attempt(`World object ${id} scene removal`, () => this.scene.remove(entry.group))
       attempt(`World object ${id} resource traversal`, () => {
         entry.group.traverse(obj => {
