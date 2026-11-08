@@ -221,4 +221,9 @@ assert.match(rendererSource, /const entry = this\.objectMeshes\.get\(object\.id\
 assert.doesNotMatch(rendererSource, /object\.x\s*=\s*entry\.group\.position/,
   'gizmo updates must not mutate detached manager read snapshots')
 
+assert.match(rendererSource, /if \\(this\\.selectedObjectId === object\\.id\\)[\\s\\S]*?this\\.selectionMarker\\.position\\.set\\([\\s\\S]*?this\\.selectionMarker\\.scale\\.setScalar\\(Math\\.max\\(1, object\\.scale \\* 2\\)\\)/,
+  'selected-object marker must follow authoritative object snapshots after synchronization')
+assert.match(rendererSource, /if \\(this\\.selectedObjectId === id\\)[\\s\\S]*?this\\.selectedObjectId = null[\\s\\S]*?this\\.transformControls\\.detach\\(\\)[\\s\\S]*?this\\.selectionMarker\\.visible = false/,
+  'evicting a selected mesh must clear selection and detach transform controls')
+
 console.log('World object identity, detached reads, and spatial-index ownership regression: PASS')
