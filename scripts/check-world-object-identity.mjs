@@ -216,6 +216,8 @@ assert.match(rendererSource, /const object = this\.objects\.updateTransform\(thi
   'programmatic object transforms must commit through the object manager')
 assert.match(rendererSource, /const updated = this\.objects\.update\(object\.id,\s*\{/,
   'scattered object elevation/metadata must commit through the object manager');
+assert.match(rendererSource, /const entry = this\.objectMeshes\.get\(object\.id\)[\s\S]*?entry\.object = object[\s\S]*?entry\.group\.position\.set\([\s\S]*?entry\.group\.rotation\.y = object\.rotationY[\s\S]*?entry\.group\.scale\.setScalar\(Math\.max\(0\.1, object\.scale\)\)/,
+  'world sync must refresh cached mesh transform and object snapshot when an existing ID is replaced or moved');
 assert.doesNotMatch(rendererSource, /object\.x\s*=\s*entry\.group\.position/,
   'gizmo updates must not mutate detached manager read snapshots')
 
