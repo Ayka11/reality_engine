@@ -1306,13 +1306,6 @@ export class InfiniteWorldRenderer {
     // A custom GPU disposer may throw; attempt every scene/resource release and
     // continue the already-committed reseed instead of leaving the old seed live.
     const terrainCleanupFailures: unknown[] = []
-    const attemptTerrainCleanup = (label: string, cleanup: () => void) => {
-      try {
-        cleanup()
-      } catch (error) {
-        terrainCleanupFailures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
-      }
-    }
     terrainCleanupFailures.push(...this.disposeTerrainPatchGroups(
       [...this.patches].map(([key, patch]) => ({ key, group: patch.group })),
       'Reseed terrain patch',
@@ -2129,14 +2122,6 @@ export class InfiniteWorldRenderer {
 
   private refreshTerrainPatches() {
     const failures: unknown[] = []
-    const attempt = (label: string, cleanup: () => void) => {
-      try {
-        cleanup()
-      } catch (error) {
-        failures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
-      }
-    }
-
     for (const [key, patch] of [...this.patches]) {
       failures.push(...this.disposeTerrainPatchGroups(
         [{ key, group: patch.group }],
@@ -2186,14 +2171,6 @@ export class InfiniteWorldRenderer {
 
   private updateTerrainLod() {
     const failures: unknown[] = []
-    const attempt = (label: string, cleanup: () => void) => {
-      try {
-        cleanup()
-      } catch (error) {
-        failures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
-      }
-    }
-
     for (const [key, patch] of [...this.patches]) {
       const lod = this.desiredLod(patch.chunk)
       const edgeLodSignature = this.terrainEdgeLodSignature(patch.chunk)
