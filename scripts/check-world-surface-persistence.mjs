@@ -86,6 +86,12 @@ assert.equal(blockedPersistence.readFieldState().status, 'unavailable',
   'a renderer started without a trustworthy active seed must not read fallback sidecars')
 assert.equal(blockedPersistence.readChunk(0, 0, 0).status, 'unavailable',
   'a renderer started without a trustworthy active seed must not load fallback chunks')
+assert.equal(blockedPersistence.beginSaveTransaction(), false,
+  'a renderer started without a trustworthy active seed must not open a fallback save transaction')
+assert.equal(blockedPersistence.saveFieldState({ edits: [] }), false,
+  'a renderer started without a trustworthy active seed must not overwrite fallback sidecars')
+assert.equal(blockedPersistence.clear(), false,
+  'a renderer started without a trustworthy active seed must not clear a fallback namespace')
 
 const persistence = new WorldPersistence('surface-save-seed')
 const snapshot = {
