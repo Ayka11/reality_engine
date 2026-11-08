@@ -1615,6 +1615,14 @@ assert.match(mainSource, /clearWorldAssetRuntime: \(\) => \{[\s\S]*?world\?\.cle
   "the application must wire post-commit cleanup to the active renderer asset runtime");
 assert.match(rendererSource, /clearExternalAssetRuntime\(\)\s*\{\s*this\.suppressAssetPlacementAutosave = true\s*try\s*\{\s*this\.worldAssetRuntime\.clear\(\)\s*\} finally \{\s*this\.suppressAssetPlacementAutosave = false\s*\}/,
   "post-commit cleanup must release old asset runtime resources without scheduling a stale placement autosave");
+assert.match(rendererSource, /const chunkRead = this\.persistence\.readChunk\(cx, 0, cz\)/,
+  "streamed world chunks must preserve read status instead of treating failures as empty chunks");
+assert.match(rendererSource, /chunkRead\.status === 'unavailable' \|\| chunkRead\.status === 'corrupt'[\s\S]*?this\.persistenceRecoveryBlocked = true[\s\S]*?continue/,
+  "unavailable/corrupt streamed chunks must block autosave and remain absent from the live object manager");
+assert.match(rendererSource, /if \(chunkRead\.status === 'ok'\) \{[\s\S]*?for \(const object of chunkRead\.objects\)/,
+  "only successfully read chunks may publish restored objects");
+assert.match(rendererSource, /A missing chunk is a valid empty region/,
+  "a genuinely missing chunk must remain distinct from a corrupt/unavailable payload");
 assert.match(rendererSource, /clearSavedWorld\(\): boolean\s*\{\s*if \(this\.saveTimer !== null\) \{\s*window\.clearTimeout\(this\.saveTimer\)[\s\S]*?const cleared = this\.persistence\.clear\(\)[\s\S]*?if \(!cleared\) \{[\s\S]*?return false[\s\S]*?this\.pendingExternalAssetPlacements = \[\][\s\S]*?try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{/,
   "world clear must cancel stale autosaves, preserve live placements if durable cleanup fails, and continue cleanup after disposal errors");
 assert.match(worldAssetRuntimeSource, /private generation = 0/);
