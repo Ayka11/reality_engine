@@ -2103,6 +2103,41 @@ export class InfiniteWorldRenderer {
     return group
   }
 
+  private disposeTerrainPatchGroups(
+    patches: Array<{ key: string; group: THREE.Group }>,
+    label = 'Terrain patch',
+  ): unknown[] {
+    const failures: unknown[] = []
+    // Keep the renderer's material registry in sync while the shared disposer
+    // traverses the groups. GPU resources themselves are released exactly once
+    // across the whole batch by detachAndDisposeObjectGroups.
+    for (const { key, group } of patches) {
+      try {
+        group.traverse(node => {
+          const renderable = node as THREE.Object3D & {
+            material?: THREE.Material | THREE.Material[]
+          }
+          const materials = Array.isArray(renderable.material)
+            ? renderable.material
+            : renderable.material ? [renderable.material] : []
+          materials.forEach(material => {
+            if (material instanceof THREE.Material) {
+              this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
+            }
+          })
+        })
+      } catch (error) {
+        failures.push(new Error(`Terrain patch ${key} material registry cleanup failed: ${String(error)}`, { cause: error }))
+      }
+    }
+    failures.push(...detachAndDisposeObjectGroups(
+      this.scene,
+      patches.map(patch => patch.group),
+      label,
+    ))
+    return failures
+  }
+
   private refreshTerrainPatches() {
     const failures: unknown[] = []
     const attempt = (label: string, cleanup: () => void) => {
