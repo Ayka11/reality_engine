@@ -233,4 +233,20 @@ assert.match(rendererSource, /const synchronizationFailures: unknown\[\] = \[\][
   "one object mesh creation/update failure must not abort synchronization of later visible objects");
 assert.match(rendererSource, /synchronizationFailures\.length > 0 \|\| cleanupFailures\.length > 0[\s\S]*?\[\.\.\.synchronizationFailures, \.\.\.cleanupFailures\]/,
   "mesh synchronization and disposal failures must be reported together after stale-resource cleanup");
+const makeObjectStart = rendererSource.indexOf('private makeObject(object: WorldObject): THREE.Group {')
+const makeObjectEnd = rendererSource.indexOf('private syncPersistentObjects()', makeObjectStart)
+assert.ok(makeObjectStart >= 0 && makeObjectEnd > makeObjectStart,
+  'renderer must expose a bounded makeObject construction method for resource ownership checks')
+const makeObjectSource = rendererSource.slice(makeObjectStart, makeObjectEnd)
+assert.match(makeObjectSource, /const ownedGeometries = new Set<THREE\.BufferGeometry>\(\)[\s\S]*?const ownedMaterials = new Set<THREE\.Material>\(\)/,
+  'mesh construction must track every allocated geometry and material before attaching it to the scene')
+assert.match(makeObjectSource, /trackGeometryOrMaterial\(new THREE\.[A-Za-z0-9_]*Geometry\(/,
+  'geometries must be registered at allocation time, not only after mesh assembly')
+assert.match(makeObjectSource, /trackGeometryOrMaterial\(new THREE\.[A-Za-z0-9_]*Material\(/,
+  'materials must be registered at allocation time, including inline specialized materials')
+assert.match(makeObjectSource, /catch \(error\)[\s\S]*?for \(const geometry of ownedGeometries\)[\s\S]*?geometry\.dispose\(\)[\s\S]*?for \(const material of ownedMaterials\)[\s\S]*?material\.dispose\(\)[\s\S]*?throw error/,
+  'a failed partial mesh build must dispose every resource already allocated before rethrowing')
+assert.match(makeObjectSource, /new AggregateError\(\[error, \.\.\.cleanupFailures\]/,
+  'partial construction cleanup failures must remain observable alongside the original construction error')
+
 console.log('World object identity, detached reads, and spatial-index ownership regression: PASS')
