@@ -2603,13 +2603,7 @@ export class InfiniteWorldRenderer {
       }
     }
 
-    const attempt = (label: string, cleanup: () => void) => {
-      try {
-        cleanup()
-      } catch (error) {
-        cleanupFailures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
-      }
-    }
+    const staleGroups: THREE.Object3D[] = []
     for (const [id, entry] of [...this.objectMeshes]) {
       if (keep.has(id)) continue
       if (this.selectedObjectId === id) {
@@ -2620,21 +2614,20 @@ export class InfiniteWorldRenderer {
         ;(this.transformControls as any).visible = false
         this.selectionMarker.visible = false
       }
-      attempt(`World object ${id} scene removal`, () => this.scene.remove(entry.group))
-      attempt(`World object ${id} resource traversal`, () => {
-        entry.group.traverse(obj => {
-          const mesh = obj as THREE.Mesh
-          if (mesh.geometry) attempt(`World object ${id} geometry disposal`, () => mesh.geometry.dispose())
-          if (mesh.material) {
-            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-            materials.forEach(material => attempt(`World object ${id} material disposal`, () => material.dispose()))
-          }
-        })
-      })
+      staleGroups.push(entry.group)
       // Forget detached meshes even when a custom GPU disposer fails; leaving
       // an old ID cached could suppress creation of the next world's object.
       this.objectMeshes.delete(id)
     }
+    // Dispose the complete eviction batch through the shared resource walker.
+    // It deduplicates shared geometry/material/texture references and also
+    // handles renderables beyond THREE.Mesh (Points, Lines, sprites, etc.).
+    cleanupFailures.push(...detachAndDisposeObjectGroups(
+      this.scene,
+      staleGroups,
+      'Evicted world object',
+    ))
+
     if (synchronizationFailures.length > 0 || cleanupFailures.length > 0) {
       throw new AggregateError(
         [...synchronizationFailures, ...cleanupFailures],
