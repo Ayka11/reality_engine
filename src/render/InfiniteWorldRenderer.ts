@@ -2280,41 +2280,41 @@ export class InfiniteWorldRenderer {
     const s = Math.max(0.1, object.scale)
     let mesh: THREE.Object3D
 
-    const mat = (color: number) => new THREE.MeshStandardMaterial({ color, roughness: 0.8 })
+    const mat = (color: number) => trackGeometryOrMaterial(new THREE.MeshStandardMaterial({ color, roughness: 0.8 }))
     switch (object.kind) {
       case 'tree': {
-        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 2.4, 7), mat(0x6b4728))
+        const trunk = new THREE.Mesh(trackGeometryOrMaterial(new THREE.CylinderGeometry(0.18, 0.28, 2.4, 7)), mat(0x6b4728))
         trunk.position.y = 1.2
-        const crown = new THREE.Mesh(new THREE.ConeGeometry(1.25, 3.4, 8), mat(0x2d713b))
+        const crown = new THREE.Mesh(trackGeometryOrMaterial(new THREE.ConeGeometry(1.25, 3.4, 8)), mat(0x2d713b))
         crown.position.y = 3.25
         g.add(trunk, crown)
         mesh = g
         break
       }
       case 'rock':
-        mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(1.1, 0), mat(0x777b7b))
+        mesh = new THREE.Mesh(trackGeometryOrMaterial(new THREE.DodecahedronGeometry(1.1, 0)), mat(0x777b7b))
         break
       case 'crystal':
-        mesh = new THREE.Mesh(new THREE.OctahedronGeometry(1.25, 0), mat(0x8a6de0))
+        mesh = new THREE.Mesh(trackGeometryOrMaterial(new THREE.OctahedronGeometry(1.25, 0)), mat(0x8a6de0))
         break
       case 'building': {
         // Procedural building silhouette: a low-rise body plus a smaller roof volume.
         // Scale remains controlled by WorldObject.scale, while local proportions
         // make generated districts visually distinguishable from rocks/landmarks.
         const body = new THREE.Mesh(
-          new THREE.BoxGeometry(4.5, 6, 4.5),
+          trackGeometryOrMaterial(new THREE.BoxGeometry(4.5, 6, 4.5)),
           mat(0x8b9099)
         )
         body.position.y = 3
 
         const roof = new THREE.Mesh(
-          new THREE.BoxGeometry(3.8, 1.1, 3.8),
+          trackGeometryOrMaterial(new THREE.BoxGeometry(3.8, 1.1, 3.8)),
           mat(0x565b66)
         )
         roof.position.y = 6.45
 
         const crown = new THREE.Mesh(
-          new THREE.BoxGeometry(1.4, 1.4, 1.4),
+          trackGeometryOrMaterial(new THREE.BoxGeometry(1.4, 1.4, 1.4)),
           mat(0xa9afb8)
         )
         crown.position.y = 7.65
@@ -2325,12 +2325,12 @@ export class InfiniteWorldRenderer {
       }
       case 'road': {
         const pavement = new THREE.Mesh(
-          new THREE.BoxGeometry(6, 0.12, 24),
+          trackGeometryOrMaterial(new THREE.BoxGeometry(6, 0.12, 24)),
           mat(0x3e4145)
         )
         pavement.position.y = 0.08
         const centerLine = new THREE.Mesh(
-          new THREE.BoxGeometry(0.18, 0.035, 20),
+          trackGeometryOrMaterial(new THREE.BoxGeometry(0.18, 0.035, 20)),
           mat(0xb7b28a)
         )
         centerLine.position.y = 0.17
@@ -2340,11 +2340,11 @@ export class InfiniteWorldRenderer {
       }
       case 'bridge': {
         const deck = new THREE.Mesh(
-          new THREE.BoxGeometry(8, 0.6, 22),
+          trackGeometryOrMaterial(new THREE.BoxGeometry(8, 0.6, 22)),
           mat(0x6a5540)
         )
         deck.position.y = 0.35
-        const railL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.1, 22), mat(0x383838))
+        const railL = new THREE.Mesh(trackGeometryOrMaterial(new THREE.BoxGeometry(0.22, 1.1, 22)), mat(0x383838))
         const railR = railL.clone()
         railL.position.set(-3.6, 1.0, 0)
         railR.position.set(3.6, 1.0, 0)
@@ -2356,35 +2356,35 @@ export class InfiniteWorldRenderer {
         // River/water segments are elongated along their local Z axis.
         // The object rotationY supplied by hydrology aligns each segment to the flow.
         mesh = new THREE.Mesh(
-          new THREE.BoxGeometry(3.2, 0.3, 8),
-          new THREE.MeshBasicMaterial({ color: 0x2b78b5, transparent: true, opacity: 0.65 })
+          trackGeometryOrMaterial(new THREE.BoxGeometry(3.2, 0.3, 8)),
+          trackGeometryOrMaterial(new THREE.MeshBasicMaterial({ color: 0x2b78b5, transparent: true, opacity: 0.65 }))
         )
         ;(mesh as THREE.Mesh).position.y = 0.15
         break
       case 'spawn':
-        mesh = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.12, 8, 32), mat(0xf0d45c))
+        mesh = new THREE.Mesh(trackGeometryOrMaterial(new THREE.TorusGeometry(1.5, 0.12, 8, 32)), mat(0xf0d45c))
         ;(mesh as THREE.Mesh).rotation.x = Math.PI / 2
         break
       case 'landmark':
-        mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.1, 5, 8), mat(0xb8b1a1))
+        mesh = new THREE.Mesh(trackGeometryOrMaterial(new THREE.CylinderGeometry(0.7, 1.1, 5, 8)), mat(0xb8b1a1))
         ;(mesh as THREE.Mesh).position.y = 2.5
         break
       case 'metalaw': {
         // Simulated Physics Object: MetaLaw Core with gyroscopic rule rings
         const core = new THREE.Mesh(
-          new THREE.DodecahedronGeometry(1.2, 0),
-          new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.2, metalness: 0.8, emissive: 0x553300 })
+          trackGeometryOrMaterial(new THREE.DodecahedronGeometry(1.2, 0)),
+          trackGeometryOrMaterial(new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.2, metalness: 0.8, emissive: 0x553300 }))
         )
         core.position.y = 2.2
         const ring1 = new THREE.Mesh(
-          new THREE.TorusGeometry(1.8, 0.08, 8, 32),
-          new THREE.MeshStandardMaterial({ color: 0x90caf9, emissive: 0x1565c0, roughness: 0.3 })
+          trackGeometryOrMaterial(new THREE.TorusGeometry(1.8, 0.08, 8, 32)),
+          trackGeometryOrMaterial(new THREE.MeshStandardMaterial({ color: 0x90caf9, emissive: 0x1565c0, roughness: 0.3 }))
         )
         ring1.position.y = 2.2
         ring1.rotation.x = Math.PI / 3
         const ring2 = new THREE.Mesh(
-          new THREE.TorusGeometry(2.3, 0.06, 8, 32),
-          new THREE.MeshStandardMaterial({ color: 0xffb74d, emissive: 0xe65100, roughness: 0.3 })
+          trackGeometryOrMaterial(new THREE.TorusGeometry(2.3, 0.06, 8, 32)),
+          trackGeometryOrMaterial(new THREE.MeshStandardMaterial({ color: 0xffb74d, emissive: 0xe65100, roughness: 0.3 }))
         )
         ring2.position.y = 2.2
         ring2.rotation.y = Math.PI / 4
@@ -2395,13 +2395,13 @@ export class InfiniteWorldRenderer {
       case 'gravity_well': {
         // Simulated Physics Object: Gravitational Singularity with accretion disk
         const core = new THREE.Mesh(
-          new THREE.SphereGeometry(1.0, 16, 16),
-          new THREE.MeshStandardMaterial({ color: 0x050010, roughness: 0.1, emissive: 0x220044 })
+          trackGeometryOrMaterial(new THREE.SphereGeometry(1.0, 16, 16)),
+          trackGeometryOrMaterial(new THREE.MeshStandardMaterial({ color: 0x050010, roughness: 0.1, emissive: 0x220044 }))
         )
         core.position.y = 2.4
         const disk = new THREE.Mesh(
-          new THREE.RingGeometry(1.2, 2.8, 32),
-          new THREE.MeshBasicMaterial({ color: 0x9c27b0, side: THREE.DoubleSide, transparent: true, opacity: 0.75 })
+          trackGeometryOrMaterial(new THREE.RingGeometry(1.2, 2.8, 32)),
+          trackGeometryOrMaterial(new THREE.MeshBasicMaterial({ color: 0x9c27b0, side: THREE.DoubleSide, transparent: true, opacity: 0.75 }))
         )
         disk.position.y = 2.4
         disk.rotation.x = -Math.PI / 2.2
@@ -2412,13 +2412,13 @@ export class InfiniteWorldRenderer {
       case 'entropy_sink': {
         // Simulated Physics Object: Cryogenic Thermodynamic Damper
         const pillar = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.5, 0.8, 4.2, 6),
-          new THREE.MeshStandardMaterial({ color: 0x4dd0e1, roughness: 0.15, metalness: 0.6, emissive: 0x004d40 })
+          trackGeometryOrMaterial(new THREE.CylinderGeometry(0.5, 0.8, 4.2, 6)),
+          trackGeometryOrMaterial(new THREE.MeshStandardMaterial({ color: 0x4dd0e1, roughness: 0.15, metalness: 0.6, emissive: 0x004d40 }))
         )
         pillar.position.y = 2.1
         const cap = new THREE.Mesh(
-          new THREE.OctahedronGeometry(1.0, 0),
-          new THREE.MeshStandardMaterial({ color: 0xe0f7fa, roughness: 0.1, emissive: 0x00838f })
+          trackGeometryOrMaterial(new THREE.OctahedronGeometry(1.0, 0)),
+          trackGeometryOrMaterial(new THREE.MeshStandardMaterial({ color: 0xe0f7fa, roughness: 0.1, emissive: 0x00838f }))
         )
         cap.position.y = 4.4
         g.add(pillar, cap)
@@ -2428,13 +2428,13 @@ export class InfiniteWorldRenderer {
       case 'quantum_emitter': {
         // Simulated Physics Object: Quantum Coherence Emitter
         const emitter = new THREE.Mesh(
-          new THREE.IcosahedronGeometry(1.3, 0),
-          new THREE.MeshStandardMaterial({ color: 0x69f0ae, roughness: 0.2, emissive: 0x00c853, metalness: 0.5 })
+          trackGeometryOrMaterial(new THREE.IcosahedronGeometry(1.3, 0)),
+          trackGeometryOrMaterial(new THREE.MeshStandardMaterial({ color: 0x69f0ae, roughness: 0.2, emissive: 0x00c853, metalness: 0.5 }))
         )
         emitter.position.y = 2.2
         const beacon = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.1, 0.6, 12, 16),
-          new THREE.MeshBasicMaterial({ color: 0xb9f6ca, transparent: true, opacity: 0.35 })
+          trackGeometryOrMaterial(new THREE.CylinderGeometry(0.1, 0.6, 12, 16)),
+          trackGeometryOrMaterial(new THREE.MeshBasicMaterial({ color: 0xb9f6ca, transparent: true, opacity: 0.35 }))
         )
         beacon.position.y = 6.0
         g.add(emitter, beacon)
@@ -2444,8 +2444,8 @@ export class InfiniteWorldRenderer {
       case 'force_field': {
         // Simulated Physics Object: Kinetic & Wave Shield Barrier
         const dome = new THREE.Mesh(
-          new THREE.SphereGeometry(3.6, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-          new THREE.MeshStandardMaterial({
+          trackGeometryOrMaterial(new THREE.SphereGeometry(3.6, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2)),
+          trackGeometryOrMaterial(new THREE.MeshStandardMaterial({
             color: 0x00e5ff,
             transparent: true,
             opacity: 0.42,
@@ -2453,23 +2453,37 @@ export class InfiniteWorldRenderer {
             metalness: 0.1,
             side: THREE.DoubleSide,
             emissive: 0x006064
-          })
+          }))
         )
         dome.position.y = 0.05
         mesh = dome
         break
       }
       default:
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), mat(0xc0c0c0))
+        mesh = new THREE.Mesh(trackGeometryOrMaterial(new THREE.BoxGeometry(2, 2, 2)), mat(0xc0c0c0))
         ;(mesh as THREE.Mesh).position.y = 1
     }
 
-    if (mesh !== g) g.add(mesh)
-    g.userData.objectId = object.id
-    g.position.set(object.x - this.worldAnchor.x, object.y - this.worldAnchor.y, object.z - this.worldAnchor.z)
-    g.rotation.y = object.rotationY
-    g.scale.setScalar(s)
-    return g
+      if (mesh !== g) g.add(mesh)
+      g.userData.objectId = object.id
+      g.position.set(object.x - this.worldAnchor.x, object.y - this.worldAnchor.y, object.z - this.worldAnchor.z)
+      g.rotation.y = object.rotationY
+      g.scale.setScalar(s)
+      return g
+    } catch (error) {
+      const cleanupFailures: unknown[] = []
+      for (const geometry of ownedGeometries) {
+        try { geometry.dispose() } catch (cleanupError) { cleanupFailures.push(cleanupError) }
+      }
+      for (const material of ownedMaterials) {
+        try { material.dispose() } catch (cleanupError) { cleanupFailures.push(cleanupError) }
+      }
+      if (cleanupFailures.length > 0) {
+        throw new AggregateError([error, ...cleanupFailures],
+          `World object ${object.id} construction and partial resource cleanup failed`)
+      }
+      throw error
+    }
   }
 
   private syncPersistentObjects() {
