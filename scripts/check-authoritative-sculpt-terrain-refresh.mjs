@@ -139,6 +139,10 @@ assert.match(methodBody("loadWorld"), /readTerrainDeformationState/);
 assert.match(methodBody("loadWorld"), /readFieldState/);
 assert.match(methodBody("loadWorld"), /rollbackStagedChunks/,
   "failed sidecar preflight must evict newly staged chunk cache entries before returning");
+assert.match(methodBody("loadWorld"), /if \(options\.restoreFieldCheckpoint !== false\) \{\s*this\.authoritativeField\.clear\(\)\s*\}/,
+  "manual Load without a saved field snapshot must clear stale live edits instead of leaking them into the restored world");
+assert.match(methodBody("loadWorld"), /else \{\s*\/\/ A manual Load with no checkpoint or autosave[\s\S]*?if \(options\.restoreFieldCheckpoint !== false\)/,
+  "startup restore must preserve constructor-initialized field state when no autosave exists");
 assert.match(methodBody("loadWorld"), /knownChunks\(\{\s*recoverOrphans:\s*true\s*\}\)/,
   "world load must recover persisted chunk payloads omitted from a failed/corrupt manifest");
 const clearSavedWorldBody = methodBody("clearSavedWorld");
