@@ -249,4 +249,14 @@ assert.match(makeObjectSource, /catch \(error\)[\s\S]*?for \(const geometry of o
 assert.match(makeObjectSource, /new AggregateError\(\[error, \.\.\.cleanupFailures\]/,
   'partial construction cleanup failures must remain observable alongside the original construction error')
 
+const syncObjectsStart = rendererSource.indexOf('private syncObjects()')
+const syncObjectsEnd = rendererSource.indexOf('selectAtScreen(', syncObjectsStart)
+assert.ok(syncObjectsStart >= 0 && syncObjectsEnd > syncObjectsStart,
+  'renderer syncObjects method must be available for streamed cleanup contract checks')
+const syncObjectsSource = rendererSource.slice(syncObjectsStart, syncObjectsEnd)
+assert.match(syncObjectsSource, /const staleGroups: THREE\.Object3D\[\] = \[\][\s\S]*?staleGroups\.push\(entry\.group\)[\s\S]*?this\.objectMeshes\.delete\(id\)[\s\S]*?detachAndDisposeObjectGroups\(\s*this\.scene,\s*staleGroups/,
+  'stream eviction must batch stale groups through the shared deduplicating resource disposer')
+assert.doesNotMatch(syncObjectsSource, /(?:mesh|obj)\.geometry\.dispose\(\)|material\.dispose\(\)/,
+  'stream eviction must not bypass shared disposal and double-dispose cloned/shared resources')
+
 console.log('World object identity, detached reads, and spatial-index ownership regression: PASS')
