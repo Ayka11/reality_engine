@@ -1889,7 +1889,6 @@ export class InfiniteWorldRenderer {
 
   private buildTerrainPatch(chunk: WorldChunk, lod = 1): THREE.Group {
     const group = new THREE.Group()
-    const geometry = trackTerrainResource(new THREE.BufferGeometry())
     const ownedGeometries = new Set<THREE.BufferGeometry>()
     const ownedMaterials = new Set<THREE.Material>()
     const trackTerrainResource = <T extends THREE.BufferGeometry | THREE.Material>(resource: T): T => {
@@ -1899,7 +1898,8 @@ export class InfiniteWorldRenderer {
     }
     const waterKey = `${chunk.cx},${chunk.cy},${chunk.cz}`
     try {
-    const resolution = lodResolution(lod as LODLevel)
+      const geometry = trackTerrainResource(new THREE.BufferGeometry())
+      const resolution = lodResolution(lod as LODLevel)
     const scale = WORLD_CHUNK_SIZE / resolution
     const n = resolution + 1
     const positions = new Float32Array(n * n * 3)
