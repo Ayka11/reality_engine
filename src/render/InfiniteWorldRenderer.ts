@@ -1313,21 +1313,10 @@ export class InfiniteWorldRenderer {
         terrainCleanupFailures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
       }
     }
-    for (const [, patch] of [...this.patches]) {
-      attemptTerrainCleanup('Terrain patch scene removal', () => this.scene.remove(patch.group))
-      attemptTerrainCleanup('Terrain patch resource traversal', () => {
-        patch.group.traverse(obj => {
-          const mesh = obj as THREE.Mesh
-          if (mesh.geometry) {
-            attemptTerrainCleanup('Terrain geometry disposal', () => mesh.geometry.dispose())
-          }
-          if (mesh.material) {
-            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-            materials.forEach(material => attemptTerrainCleanup('Terrain material disposal', () => material.dispose()))
-          }
-        })
-      })
-    }
+    terrainCleanupFailures.push(...this.disposeTerrainPatchGroups(
+      [...this.patches].map(([key, patch]) => ({ key, group: patch.group })),
+      'Reseed terrain patch',
+    ))
     this.patches.clear()
     this.waterMeshes.clear()
     this.terrainMaterials.clear()
@@ -2149,26 +2138,10 @@ export class InfiniteWorldRenderer {
     }
 
     for (const [key, patch] of [...this.patches]) {
-      attempt(`Terrain patch ${key} scene removal`, () => this.scene.remove(patch.group))
-      attempt(`Terrain patch ${key} resource traversal`, () => {
-        patch.group.traverse(obj => {
-          const mesh = obj as THREE.Mesh
-          if (mesh.geometry) attempt(`Terrain patch ${key} geometry disposal`, () => mesh.geometry.dispose())
-          if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(material => {
-              attempt(`Terrain patch ${key} material disposal`, () => material.dispose())
-              this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
-            })
-          } else if (mesh.material) {
-            // Capture the narrowed material before entering the cleanup callback;
-            // TypeScript widens mesh.material back to the array-or-single union
-            // when it is referenced from a closure.
-            const material = mesh.material
-            attempt(`Terrain patch ${key} material disposal`, () => material.dispose())
-            this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
-          }
-        })
-      })
+      failures.push(...this.disposeTerrainPatchGroups(
+        [{ key, group: patch.group }],
+        `Terrain patch ${key}`,
+      ))
 
       try {
         const group = this.buildTerrainPatch(patch.chunk, patch.lod)
@@ -2190,32 +2163,10 @@ export class InfiniteWorldRenderer {
     const patch = this.patches.get(key)
     if (!patch) return
 
-    const failures: unknown[] = []
-    const attempt = (label: string, cleanup: () => void) => {
-      try {
-        cleanup()
-      } catch (error) {
-        failures.push(new Error(`${label} failed: ${String(error)}`, { cause: error }))
-      }
-    }
-
-    attempt(`Terrain chunk ${key} scene removal`, () => this.scene.remove(patch.group))
-    attempt(`Terrain chunk ${key} resource traversal`, () => {
-      patch.group.traverse(obj => {
-        const mesh = obj as THREE.Mesh
-        if (mesh.geometry) attempt(`Terrain chunk ${key} geometry disposal`, () => mesh.geometry.dispose())
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach(material => {
-            attempt(`Terrain chunk ${key} material disposal`, () => material.dispose())
-            this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
-          })
-        } else if (mesh.material) {
-          const material = mesh.material
-          attempt(`Terrain chunk ${key} material disposal`, () => material.dispose())
-          this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
-        }
-      })
-    })
+    const failures = this.disposeTerrainPatchGroups(
+      [{ key, group: patch.group }],
+      `Terrain chunk ${key}`,
+    )
 
     // Evict stale render records even when a custom GPU disposer throws.
     this.patches.delete(key)
@@ -2248,23 +2199,10 @@ export class InfiniteWorldRenderer {
       const edgeLodSignature = this.terrainEdgeLodSignature(patch.chunk)
       if (lod === patch.lod && edgeLodSignature === patch.edgeLodSignature) continue
 
-      attempt(`Terrain patch ${key} scene removal`, () => this.scene.remove(patch.group))
-      attempt(`Terrain patch ${key} resource traversal`, () => {
-        patch.group.traverse(obj => {
-          const mesh = obj as THREE.Mesh
-          if (mesh.geometry) attempt(`Terrain patch ${key} geometry disposal`, () => mesh.geometry.dispose())
-          if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(material => {
-              attempt(`Terrain patch ${key} material disposal`, () => material.dispose())
-              this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
-            })
-          } else if (mesh.material) {
-            const material = mesh.material
-            attempt(`Terrain patch ${key} material disposal`, () => material.dispose())
-            this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
-          }
-        })
-      })
+      failures.push(...this.disposeTerrainPatchGroups(
+        [{ key, group: patch.group }],
+        `Terrain patch ${key}`,
+      ))
 
       try {
         const group = this.buildTerrainPatch(patch.chunk, lod)
