@@ -2509,6 +2509,7 @@ export class InfiniteWorldRenderer {
       minZ: center.z - range, maxZ: center.z + range,
     })
     const keep = new Set<string>()
+    const cleanupFailures: unknown[] = []
     for (const object of visible) {
       keep.add(object.id)
       const entry = this.objectMeshes.get(object.id)
@@ -2516,6 +2517,17 @@ export class InfiniteWorldRenderer {
         const group = this.makeObject(object)
         this.objectMeshes.set(object.id, { object, group })
         this.scene.add(group)
+      } else if (entry.object.kind !== object.kind) {
+        // A world restore may reuse a stable ID for a different visual kind.
+        // Rebuild geometry/materials rather than retaining the previous model.
+        const replacement = this.makeObject(object)
+        this.scene.add(replacement)
+        this.objectMeshes.set(object.id, { object, group: replacement })
+        cleanupFailures.push(...detachAndDisposeObjectGroups(
+          this.scene,
+          [entry.group],
+          `Replaced world object ${object.id}`,
+        ))
       } else {
         // The authoritative manager may have replaced this ID's snapshot
         // during Load, Undo/Redo, or a transform. Refresh the cached mesh too.
@@ -2546,7 +2558,6 @@ export class InfiniteWorldRenderer {
       }
     }
 
-    const cleanupFailures: unknown[] = []
     const attempt = (label: string, cleanup: () => void) => {
       try {
         cleanup()
