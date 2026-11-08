@@ -1889,7 +1889,16 @@ export class InfiniteWorldRenderer {
 
   private buildTerrainPatch(chunk: WorldChunk, lod = 1): THREE.Group {
     const group = new THREE.Group()
-    const geometry = new THREE.BufferGeometry()
+    const geometry = trackTerrainResource(new THREE.BufferGeometry())
+    const ownedGeometries = new Set<THREE.BufferGeometry>()
+    const ownedMaterials = new Set<THREE.Material>()
+    const trackTerrainResource = <T extends THREE.BufferGeometry | THREE.Material>(resource: T): T => {
+      if (resource instanceof THREE.BufferGeometry) ownedGeometries.add(resource)
+      else ownedMaterials.add(resource)
+      return resource
+    }
+    const waterKey = `${chunk.cx},${chunk.cy},${chunk.cz}`
+    try {
     const resolution = lodResolution(lod as LODLevel)
     const scale = WORLD_CHUNK_SIZE / resolution
     const n = resolution + 1
@@ -1993,7 +2002,7 @@ export class InfiniteWorldRenderer {
     geometry.computeVertexNormals()
     geometry.computeBoundingSphere()
 
-    const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 })
+    const material = trackTerrainResource(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }))
     this.terrainMaterials.add(material)
     if (this.materialMode === 'material') {
       material.vertexColors = false
@@ -2008,30 +2017,29 @@ export class InfiniteWorldRenderer {
     group.add(mesh)
 
     if (this.terrainStyle === 'vertex') {
-      const vertexMaterial = new THREE.PointsMaterial({
+      const vertexMaterial = trackTerrainResource(new THREE.PointsMaterial({
         color: 0xd8e6ff,
         size: 1.8,
         sizeAttenuation: true,
         transparent: true,
         opacity: 0.72,
-      })
+      }))
       const vertices = new THREE.Points(geometry, vertexMaterial)
       vertices.name = 'terrain-vertices'
       vertices.userData.terrainOverlay = true
       group.add(vertices)
 
-      const wireMaterial = new THREE.LineBasicMaterial({
+      const wireMaterial = trackTerrainResource(new THREE.LineBasicMaterial({
         color: 0x90a9d8,
         transparent: true,
         opacity: 0.22,
-      })
-      const wire = new THREE.LineSegments(new THREE.WireframeGeometry(geometry), wireMaterial)
+      }))
+      const wire = new THREE.LineSegments(trackTerrainResource(new THREE.WireframeGeometry(geometry)), wireMaterial)
       wire.name = 'terrain-wireframe'
       wire.userData.terrainOverlay = true
       group.add(wire)
     }
 
-    const waterKey = `${chunk.cx},${chunk.cy},${chunk.cz}`
     const surfaceProvider = this.fieldSampler.surfaceProvider
     const waterLevel = this.getWorldWaterLevel()
     let waterData: ReturnType<typeof buildWaterSurfaceMeshData> | null = null
@@ -2065,13 +2073,13 @@ export class InfiniteWorldRenderer {
     }
 
     if (waterData && waterData.wetCellCount > 0) {
-      const waterGeometry = new THREE.BufferGeometry()
+      const waterGeometry = trackTerrainResource(new THREE.BufferGeometry())
       waterGeometry.setAttribute('position', new THREE.BufferAttribute(waterData.positions, 3))
       waterGeometry.setIndex(waterData.indices)
       waterGeometry.computeBoundingSphere()
-      const waterMaterial = new THREE.MeshBasicMaterial({
+      const waterMaterial = trackTerrainResource(new THREE.MeshBasicMaterial({
         color: 0x2b78b5, transparent: true, opacity: 0.42, depthWrite: false,
-      })
+      }))
       const water = new THREE.Mesh(waterGeometry, waterMaterial)
       group.add(water)
       this.waterMeshes.set(waterKey, water)
@@ -2081,8 +2089,26 @@ export class InfiniteWorldRenderer {
     }
     group.position.set(-this.worldAnchor.x, -this.worldAnchor.y, -this.worldAnchor.z)
 
-    void sample
-    return group
+      void sample
+      return group
+    } catch (error) {
+      this.waterMeshes.delete(waterKey)
+      for (const material of ownedMaterials) {
+        this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
+      }
+      const cleanupFailures: unknown[] = []
+      for (const geometry of ownedGeometries) {
+        try { geometry.dispose() } catch (cleanupError) { cleanupFailures.push(cleanupError) }
+      }
+      for (const material of ownedMaterials) {
+        try { material.dispose() } catch (cleanupError) { cleanupFailures.push(cleanupError) }
+      }
+      if (cleanupFailures.length > 0) {
+        throw new AggregateError([error, ...cleanupFailures],
+          `Terrain patch ${waterKey} construction and partial resource cleanup failed`)
+      }
+      throw error
+    }
   }
 
   private disposeTerrainPatchGroups(
