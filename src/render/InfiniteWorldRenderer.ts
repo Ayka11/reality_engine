@@ -2511,10 +2511,22 @@ export class InfiniteWorldRenderer {
     const keep = new Set<string>()
     for (const object of visible) {
       keep.add(object.id)
-      if (!this.objectMeshes.has(object.id)) {
+      const entry = this.objectMeshes.get(object.id)
+      if (!entry) {
         const group = this.makeObject(object)
         this.objectMeshes.set(object.id, { object, group })
         this.scene.add(group)
+      } else {
+        // The authoritative manager may have replaced this ID's snapshot
+        // during Load, Undo/Redo, or a transform. Refresh the cached mesh too.
+        entry.object = object
+        entry.group.position.set(
+          object.x - this.worldAnchor.x,
+          object.y - this.worldAnchor.y,
+          object.z - this.worldAnchor.z,
+        )
+        entry.group.rotation.y = object.rotationY
+        entry.group.scale.setScalar(Math.max(0.1, object.scale))
       }
     }
 
