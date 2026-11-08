@@ -229,4 +229,8 @@ assert.match(rendererSource, /if \(this\.selectedObjectId === id\)[\s\S]*?this\.
 assert.match(rendererSource, /entry\.object\.kind !== object\.kind[\s\S]*?const replacement = this\.makeObject\(object\)[\s\S]*?this\.objectMeshes\.set\(object\.id, \{ object, group: replacement \}\)[\s\S]*?detachAndDisposeObjectGroups/,
   'restoring a different visual kind under an existing object ID must rebuild and dispose the previous mesh group')
 
+assert.match(rendererSource, /const synchronizationFailures: unknown\[\] = \[\][\s\S]*?for \(const object of visible\) \{\s*try \{[\s\S]*?keep\.add\(object\.id\)[\s\S]*?catch \(error\) \{[\s\S]*?keep\.delete\(object\.id\)[\s\S]*?synchronizationFailures\.push/,
+  "one object mesh creation/update failure must not abort synchronization of later visible objects");
+assert.match(rendererSource, /synchronizationFailures\.length > 0 \|\| cleanupFailures\.length > 0[\s\S]*?\[\.\.\.synchronizationFailures, \.\.\.cleanupFailures\]/,
+  "mesh synchronization and disposal failures must be reported together after stale-resource cleanup");
 console.log('World object identity, detached reads, and spatial-index ownership regression: PASS')
