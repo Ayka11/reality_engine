@@ -2280,8 +2280,18 @@ export class InfiniteWorldRenderer {
     const s = Math.max(0.1, object.scale)
     let mesh: THREE.Object3D
 
-    const mat = (color: number) => trackGeometryOrMaterial(new THREE.MeshStandardMaterial({ color, roughness: 0.8 }))
-    switch (object.kind) {
+    const ownedGeometries = new Set<THREE.BufferGeometry>()
+    const ownedMaterials = new Set<THREE.Material>()
+    const trackGeometryOrMaterial = <T extends THREE.BufferGeometry | THREE.Material>(resource: T): T => {
+      if (resource instanceof THREE.BufferGeometry) ownedGeometries.add(resource)
+      else ownedMaterials.add(resource)
+      return resource
+    }
+    const mat = (color: number) => trackGeometryOrMaterial(
+      new THREE.MeshStandardMaterial({ color, roughness: 0.8 })
+    )
+    try {
+      switch (object.kind) {
       case 'tree': {
         const trunk = new THREE.Mesh(trackGeometryOrMaterial(new THREE.CylinderGeometry(0.18, 0.28, 2.4, 7)), mat(0x6b4728))
         trunk.position.y = 1.2
