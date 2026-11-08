@@ -279,4 +279,18 @@ for (const methodName of ['refreshTerrainPatches()', 'removeChunk(key: string)',
 assert.match(rendererSource, /terrainCleanupFailures\.push\(\.\.\.this\.disposeTerrainPatchGroups\(/,
   'world reseed must dispose all old terrain patch groups through one deduplicated batch')
 
+const terrainBuildStart = rendererSource.indexOf('private buildTerrainPatch(chunk: WorldChunk, lod = 1): THREE.Group {')
+const terrainBuildEnd = rendererSource.indexOf('private disposeTerrainPatchGroups(', terrainBuildStart)
+assert.ok(terrainBuildStart >= 0 && terrainBuildEnd > terrainBuildStart,
+  'terrain patch construction must have a bounded resource ownership scope')
+const terrainBuildSource = rendererSource.slice(terrainBuildStart, terrainBuildEnd)
+const terrainResourceAllocations = terrainBuildSource.match(/new THREE\.[A-Za-z0-9_]*(?:Geometry|Material)\s*\(/g) ?? []
+const trackedTerrainAllocations = terrainBuildSource.match(/trackTerrainResource\(new THREE\.[A-Za-z0-9_]*(?:Geometry|Material)\s*\(/g) ?? []
+assert.equal(trackedTerrainAllocations.length, terrainResourceAllocations.length,
+  'every terrain geometry/material allocation must be registered immediately')
+assert.match(terrainBuildSource, /const ownedGeometries = new Set<THREE\.BufferGeometry>\(\)[\s\S]*?const ownedMaterials = new Set<THREE\.Material>\(\)[\s\S]*?try \{\s*const geometry = trackTerrainResource/,
+  'terrain resource ownership trackers must exist before the first GPU allocation')
+assert.match(terrainBuildSource, /catch \(error\)[\s\S]*?this\.waterMeshes\.delete\(waterKey\)[\s\S]*?geometry\.dispose\(\)[\s\S]*?material\.dispose\(\)[\s\S]*?new AggregateError\(\[error, \.\.\.cleanupFailures\]/,
+  'a failed terrain build must release partial geometry/material allocations and remove stale water references')
+
 console.log('World object identity, detached reads, and spatial-index ownership regression: PASS')
