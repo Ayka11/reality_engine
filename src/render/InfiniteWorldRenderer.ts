@@ -1143,6 +1143,12 @@ export class InfiniteWorldRenderer {
           throw new Error('restored authoritative field could not be committed to autosave')
         }
       } else {
+        // A manual Load with no checkpoint or autosave represents a world
+        // without authored field edits; do not leak the previous live field
+        // into the restored object/terrain generation.
+        if (options.restoreFieldCheckpoint !== false) {
+          this.authoritativeField.clear()
+        }
         this.refreshTerrainPatches()
       }
     } catch (error) {
