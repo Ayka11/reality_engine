@@ -16,7 +16,7 @@ import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEnt
 import type { WorldObjectKind } from './infinity/WorldObject'
 import { installScientificWorkspace } from './infinity/ScientificWorkspace'
 import { worldViewContract } from './infinity/WorldViewContract'
-import { loadActiveWorldSeed, saveActiveWorldSeed } from './infinity/WorldPersistence'
+import { readActiveWorldSeed, saveActiveWorldSeed } from './infinity/WorldPersistence'
 import { FlatWorldSurfaceProvider, type FlatWorldSurfaceOptions } from './infinity/WorldSurfaceProvider'
 import { buildCivilizationExperimentMatrix, runCivilizationInfinityBatch, runCivilizationInfinityReplication, analyzeCrossDimensionGeneralization, summarizeReplicationSnapshots, createInfinityScientificReport, serializeInfinityScientificReport, createScientificProvenance, attachScientificProvenance, validateScientificProvenance, assessInfinityClaim, type CivilizationExperimentMatrix } from './infinity'
 
@@ -28,14 +28,16 @@ export function bootstrapInfiniteWorld() {
   const canvas = document.getElementById('c3d') as HTMLCanvasElement | null
   if (!canvas) return null
   const requestedSeed = (window as any).worldSeed
-  const seed = typeof requestedSeed === 'string' && requestedSeed.trim()
-    ? requestedSeed.trim()
-    : loadActiveWorldSeed('reality-seed-1')
+  const hasExplicitSeed = typeof requestedSeed === 'string' && Boolean(requestedSeed.trim())
+  const seedRead = hasExplicitSeed ? null : readActiveWorldSeed('reality-seed-1')
+  const seed = hasExplicitSeed ? requestedSeed.trim() : seedRead!.seed
   ;(window as any).worldSeed = seed
-  if (!saveActiveWorldSeed(seed)) {
+  if (seedRead?.status !== 'unavailable' && !saveActiveWorldSeed(seed)) {
     console.warn('[persistence] Active world seed could not be saved; restart recovery may be unavailable')
   }
-  const world = new InfiniteWorldRenderer(canvas, seed)
+  const world = new InfiniteWorldRenderer(canvas, seed, {
+    blockPersistenceReads: seedRead?.status === 'unavailable',
+  })
   // Monotonic proof that the Infinite World generation transaction completed.
   let worldGenerationRevision = 0
   // The scientific field canvas has its own WebGL scene. It consumes the same
