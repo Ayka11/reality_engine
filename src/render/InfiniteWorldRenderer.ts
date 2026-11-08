@@ -330,7 +330,11 @@ export class InfiniteWorldRenderer {
   private showParticles = false
   private readonly materializedConsequenceEvents = new Set<string>()
 
-  constructor(canvas: HTMLCanvasElement, seed = 'reality-engine-infinity-v1') {
+  constructor(
+    canvas: HTMLCanvasElement,
+    seed = 'reality-engine-infinity-v1',
+    options: { blockPersistenceReads?: boolean } = {},
+  ) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
     this.currentPixelRatio = this.maxPixelRatio
     this.renderer.setPixelRatio(this.currentPixelRatio)
@@ -348,7 +352,12 @@ export class InfiniteWorldRenderer {
     worldViewContract.setSeed(seed)
     this.authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
     this.fieldSampler = new FieldSampler(this.generator, this.authoritativeField)
-    this.persistence = new WorldPersistence(seed)
+    this.persistence = new WorldPersistence(seed, options.blockPersistenceReads === true)
+    if (options.blockPersistenceReads) {
+      this.startupPersistenceFailures.push('active world seed selector: storage read unavailable')
+      this.persistenceRecoveryBlocked = true
+      console.warn('[persistence] Active world seed could not be verified; fallback namespace is isolated and cannot be restored or autosaved')
+    }
     if (this.persistence.hasIncompleteSaveTransaction()) {
       console.warn('[persistence] An interrupted world save was detected; saved editor data is withheld until the world is explicitly imported or cleared')
     }
