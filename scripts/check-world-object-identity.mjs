@@ -259,4 +259,24 @@ assert.match(syncObjectsSource, /const staleGroups: THREE\.Object3D\[\] = \[\][\
 assert.doesNotMatch(syncObjectsSource, /(?:mesh|obj)\.geometry\.dispose\(\)|material\.dispose\(\)/,
   'stream eviction must not bypass shared disposal and double-dispose cloned/shared resources')
 
+const terrainDisposalStart = rendererSource.indexOf('private disposeTerrainPatchGroups(')
+const terrainDisposalEnd = rendererSource.indexOf('private refreshTerrainPatches()', terrainDisposalStart)
+assert.ok(terrainDisposalStart >= 0 && terrainDisposalEnd > terrainDisposalStart,
+  'terrain lifecycle must centralize patch disposal')
+const terrainDisposalSource = rendererSource.slice(terrainDisposalStart, terrainDisposalEnd)
+assert.match(terrainDisposalSource, /this\.terrainMaterials\.delete\(material as THREE\.MeshStandardMaterial\)[\s\S]*?detachAndDisposeObjectGroups\(\s*this\.scene,[\s\S]*?patches\.map\(patch => patch\.group\)/,
+  'terrain material registry must be pruned while the shared disposer releases a deduplicated patch batch')
+for (const methodName of ['refreshTerrainPatches()', 'removeChunk(key: string)', 'updateTerrainLod()']) {
+  const methodStart = rendererSource.indexOf(`private ${methodName}`)
+  const methodEnd = rendererSource.indexOf('\n  private ', methodStart + 1)
+  assert.ok(methodStart >= 0 && methodEnd > methodStart, `${methodName} must exist`)
+  const methodSource = rendererSource.slice(methodStart, methodEnd)
+  assert.match(methodSource, /disposeTerrainPatchGroups\(/,
+    `${methodName} must use the shared deduplicating terrain disposer`)
+  assert.doesNotMatch(methodSource, /(?:mesh|obj)\.geometry\.dispose\(\)|material\.dispose\(\)/,
+    `${methodName} must not directly dispose shared terrain resources`)
+}
+assert.match(rendererSource, /terrainCleanupFailures\.push\(\.\.\.this\.disposeTerrainPatchGroups\(/,
+  'world reseed must dispose all old terrain patch groups through one deduplicated batch')
+
 console.log('World object identity, detached reads, and spatial-index ownership regression: PASS')
