@@ -177,6 +177,7 @@ export class WorldPersistence {
    * import or clear operation repairs the namespace.
    */
   beginSaveTransaction(options: { recoverIncomplete?: boolean } = {}): boolean {
+    if (this.readsBlocked) return false
     if (this.saveTransactionDepth > 0) {
       this.saveTransactionDepth += 1
       return true
@@ -224,6 +225,7 @@ export class WorldPersistence {
    * false means the in-memory field changed but durable persistence failed.
    */
   saveFieldState(state: unknown): boolean {
+    if (this.readsBlocked) return false
     try {
       const payload = { version: 1, seed: this.seed, state }
       localStorage.setItem(this.fieldStateKey, JSON.stringify(payload))
@@ -243,6 +245,7 @@ export class WorldPersistence {
   }
 
   saveFieldCheckpoint(state: unknown): boolean {
+    if (this.readsBlocked) return false
     try {
       const payload = { version: 1, seed: this.seed, state }
       localStorage.setItem(this.fieldCheckpointKey, JSON.stringify(payload))
@@ -262,6 +265,7 @@ export class WorldPersistence {
   }
 
   deleteFieldCheckpoint(): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.removeItem(this.fieldCheckpointKey)
       return true
@@ -271,6 +275,7 @@ export class WorldPersistence {
   }
 
   deleteFieldState(): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.removeItem(this.fieldStateKey)
       return true
@@ -281,6 +286,7 @@ export class WorldPersistence {
 
   /** Persist a versioned, serializable world-surface provider snapshot. */
   saveSurfaceProviderState(state: unknown): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.setItem(this.surfaceProviderKey, JSON.stringify({
         version: 1,
@@ -303,6 +309,7 @@ export class WorldPersistence {
   }
 
   deleteSurfaceProviderState(): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.removeItem(this.surfaceProviderKey)
       return true
@@ -313,6 +320,7 @@ export class WorldPersistence {
 
   /** Persist asset source/licensing metadata without downloading external resources. */
   saveAssetManifestState(state: unknown): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.setItem(this.assetManifestKey, JSON.stringify({
         version: 1,
@@ -335,6 +343,7 @@ export class WorldPersistence {
   }
 
   deleteAssetManifestState(): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.removeItem(this.assetManifestKey)
       return true
@@ -345,6 +354,7 @@ export class WorldPersistence {
 
   /** Persist external asset placement intent without storing or fetching GLTF binaries. */
   saveAssetPlacementsState(state: unknown): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.setItem(this.assetPlacementsKey, JSON.stringify({
         version: 1,
@@ -367,6 +377,7 @@ export class WorldPersistence {
   }
 
   deleteAssetPlacementsState(): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.removeItem(this.assetPlacementsKey)
       return true
@@ -377,6 +388,7 @@ export class WorldPersistence {
 
   /** Persist the causal provenance trace for this world seed. */
   saveProvenanceState(state: unknown): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.setItem(this.provenanceKey, JSON.stringify({
         version: 1,
@@ -399,6 +411,7 @@ export class WorldPersistence {
   }
 
   deleteProvenanceState(): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.removeItem(this.provenanceKey)
       return true
@@ -408,6 +421,7 @@ export class WorldPersistence {
   }
 
   saveTerrainDeformationState(state: unknown): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.setItem(this.terrainDeformationKey, JSON.stringify({ version: 1, seed: this.seed, state }))
       return true
@@ -426,6 +440,7 @@ export class WorldPersistence {
   }
 
   saveTerrainDeformationCheckpoint(state: unknown): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.setItem(this.terrainDeformationCheckpointKey, JSON.stringify({ version: 1, seed: this.seed, state }))
       return true
@@ -444,6 +459,7 @@ export class WorldPersistence {
   }
 
   deleteTerrainDeformationState(): boolean {
+    if (this.readsBlocked) return false
     try {
       localStorage.removeItem(this.terrainDeformationKey)
       return true
@@ -457,6 +473,8 @@ export class WorldPersistence {
    * whether both the chunk payload and its manifest entry became durable.
    */
   saveChunk(cx: number, cy: number, cz: number, objects: WorldObject[]): boolean {
+    if (this.readsBlocked) return false
+    if (this.readsBlocked) return false
     // Never persist a payload that the strict restore path would reject later.
     if (!Array.isArray(objects) || !objects.every(isStoredWorldObject)) return false
     const payload: StoredChunk = { version: 1, seed: this.seed, objects }
@@ -565,6 +583,8 @@ export class WorldPersistence {
    * removed. A failed remove must remain visible to callers and retain cache.
    */
   deleteChunk(cx: number, cy: number, cz: number): boolean {
+    if (this.readsBlocked) return false
+    if (this.readsBlocked) return false
     const key = chunkKey(cx, cy, cz)
     try {
       localStorage.removeItem(this.key(cx, cy, cz))
@@ -583,6 +603,7 @@ export class WorldPersistence {
    * or corrupt manifest. Returns false when storage prevented a complete clear.
    */
   clear(): boolean {
+    if (this.readsBlocked) return false
     let cleared = true
     const scannedChunkKeys = this.scanStoredChunkStorageKeys()
     if (scannedChunkKeys === null) {
