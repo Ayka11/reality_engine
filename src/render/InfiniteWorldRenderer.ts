@@ -2483,10 +2483,23 @@ export class InfiniteWorldRenderer {
         const key = chunkKey(cx, 0, cz)
         desired.add(key)
         if (this.persistence.isLoaded(cx, 0, cz)) continue
-        const objects = this.persistence.loadChunk(cx, 0, cz)
-        for (const object of objects) {
-          if (!this.objects.get(object.id)) {
-            this.objects.add(object)
+        const chunkRead = this.persistence.readChunk(cx, 0, cz)
+        if (chunkRead.status === 'unavailable' || chunkRead.status === 'corrupt') {
+          const failure = `world chunk ${key}: ${chunkRead.status} (${chunkRead.reason})`
+          if (!this.startupPersistenceFailures.includes(failure)) {
+            this.startupPersistenceFailures.push(failure)
+            console.warn(`[persistence] ${failure}; autosave is blocked until the world is repaired`)
+          }
+          this.persistenceRecoveryBlocked = true
+          continue
+        }
+        // A missing chunk is a valid empty region. A corrupt or unavailable
+        // payload is not: never turn a failed read into an empty world region.
+        if (chunkRead.status === 'ok') {
+          for (const object of chunkRead.objects) {
+            if (!this.objects.get(object.id)) {
+              this.objects.add(object)
+            }
           }
         }
       }
