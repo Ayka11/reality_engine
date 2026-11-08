@@ -40,17 +40,34 @@ function isValidActiveWorldSeed(value: unknown): value is string {
     value.trim() === value
 }
 
-/** Read the seed that selects the world-specific localStorage namespace at startup. */
-export function loadActiveWorldSeed(fallback: string): string {
+export type ActiveWorldSeedReadResult =
+  | { status: 'ok'; seed: string }
+  | { status: 'missing'; seed: string }
+  | { status: 'corrupt'; seed: string; reason: string }
+  | { status: 'unavailable'; seed: string; reason: string }
+
+/** Read the namespace selector without confusing storage failure with an absent selector. */
+export function readActiveWorldSeed(fallback: string): ActiveWorldSeedReadResult {
   const safeFallback = isValidActiveWorldSeed(fallback) ? fallback : 'reality-seed-1'
+  let saved: string | null
   try {
-    const saved = localStorage.getItem(ACTIVE_WORLD_SEED_STORAGE_KEY)
-    if (isValidActiveWorldSeed(saved)) return saved
-    if (saved !== null) localStorage.removeItem(ACTIVE_WORLD_SEED_STORAGE_KEY)
+    saved = localStorage.getItem(ACTIVE_WORLD_SEED_STORAGE_KEY)
   } catch {
-    // Startup remains available when browser storage is disabled or inaccessible.
+    return { status: 'unavailable', seed: safeFallback, reason: 'storage-read-failed' }
   }
-  return safeFallback
+  if (saved === null) return { status: 'missing', seed: safeFallback }
+  if (isValidActiveWorldSeed(saved)) return { status: 'ok', seed: saved }
+  try {
+    localStorage.removeItem(ACTIVE_WORLD_SEED_STORAGE_KEY)
+  } catch {
+    return { status: 'unavailable', seed: safeFallback, reason: 'invalid-selector-could-not-be-cleared' }
+  }
+  return { status: 'corrupt', seed: safeFallback, reason: 'invalid-active-world-seed' }
+}
+
+/** Compatibility wrapper for callers that only need a usable seed string. */
+export function loadActiveWorldSeed(fallback: string): string {
+  return readActiveWorldSeed(fallback).seed
 }
 
 /** Persist the namespace selector independently from the seed-scoped world payloads. */
@@ -83,7 +100,7 @@ export class WorldPersistence {
   private readonly missingChunks = new Set<string>()
   private readonly corruptChunks = new Map<string, string>()
 
-  constructor(private readonly seed: string) {
+  constructor(private readonly seed: string, private readonly readsBlocked = false) {
     this.prefix = `reality-engine-world:${seed}:chunk:`
     this.manifestKey = `reality-engine-world:${seed}:manifest`
     this.fieldStateKey = `reality-engine-world:${seed}:field-state`
@@ -101,6 +118,7 @@ export class WorldPersistence {
     key: string,
     validateState?: (state: unknown) => boolean,
   ): WorldStateReadResult<T> {
+    if (this.readsBlocked) return { status: 'unavailable', reason: 'active-world-seed-unavailable' }
     if (this.hasIncompleteSaveTransaction()) {
       return { status: 'unavailable', reason: 'incomplete-save-transaction' }
     }
@@ -461,6 +479,9 @@ export class WorldPersistence {
    * storage into the same empty-array result.
    */
   readChunk(cx: number, cy: number, cz: number): WorldChunkReadResult {
+    if (this.readsBlocked) {
+      return { status: 'unavailable', objects: [], reason: 'active-world-seed-unavailable' }
+    }
     if (this.hasIncompleteSaveTransaction()) {
       return { status: 'unavailable', objects: [], reason: 'incomplete-save-transaction' }
     }
