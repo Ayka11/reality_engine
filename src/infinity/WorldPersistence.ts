@@ -474,7 +474,6 @@ export class WorldPersistence {
    */
   saveChunk(cx: number, cy: number, cz: number, objects: WorldObject[]): boolean {
     if (this.readsBlocked) return false
-    if (this.readsBlocked) return false
     // Never persist a payload that the strict restore path would reject later.
     if (!Array.isArray(objects) || !objects.every(isStoredWorldObject)) return false
     const payload: StoredChunk = { version: 1, seed: this.seed, objects }
@@ -583,7 +582,6 @@ export class WorldPersistence {
    * removed. A failed remove must remain visible to callers and retain cache.
    */
   deleteChunk(cx: number, cy: number, cz: number): boolean {
-    if (this.readsBlocked) return false
     if (this.readsBlocked) return false
     const key = chunkKey(cx, cy, cz)
     try {
