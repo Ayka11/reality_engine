@@ -90,24 +90,20 @@ assert.match(reseedBody, /try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catc
 const removeChunkAt = renderer.indexOf('  private removeChunk(')
 const removeChunkEnd = renderer.indexOf('  private desiredLod(', removeChunkAt)
 const removeChunkBody = renderer.slice(removeChunkAt, removeChunkEnd)
-assert.match(removeChunkBody, /const failures: unknown\[\] = \[\][\s\S]*?patch\.group\.traverse[\s\S]*?this\.patches\.delete\(key\)[\s\S]*?throw new AggregateError/,
-  'chunk unload must detach and evict terrain records even when individual GPU disposers fail')
-assert.match(removeChunkBody, /this\.terrainMaterials\.delete\(/,
-  'chunk unload must release disposed terrain materials from the renderer material index')
+assert.match(removeChunkBody, /this\.disposeTerrainPatchGroups\(\[[\s\S]*?this\.patches\.delete\(key\)[\s\S]*?this\.waterMeshes\.delete\(key\)[\s\S]*?throw new AggregateError/,
+  'chunk unload must use shared disposal and evict terrain records even when GPU disposers fail')
 
 const updateLodAt = renderer.indexOf('  private updateTerrainLod()')
 const updateLodEnd = renderer.indexOf('  private syncChunks()', updateLodAt)
 const updateLodBody = renderer.slice(updateLodAt, updateLodEnd)
-assert.match(updateLodBody, /for \(const \[key, patch\] of \[\.\.\.this\.patches\]\)[\s\S]*?patch\.group\.traverse[\s\S]*?this\.patches\.set\(key,[\s\S]*?throw new AggregateError/,
-  'LOD replacement must continue rebuilding patches after individual resource disposal failures')
-assert.match(updateLodBody, /this\.terrainMaterials\.delete\(/,
-  'LOD replacement must evict disposed materials from the renderer material index')
+assert.match(updateLodBody, /for \(const \[key, patch\] of \[\.\.\.this\.patches\]\)[\s\S]*?this\.disposeTerrainPatchGroups\([\s\S]*?this\.patches\.set\(key,[\s\S]*?throw new AggregateError/,
+  'LOD replacement must use shared disposal and continue rebuilding patches after cleanup failures')
 
 const terrainRefreshAt = renderer.indexOf('  private refreshTerrainPatches()')
 const terrainRefreshEnd = renderer.indexOf('  private removeChunk(', terrainRefreshAt)
 const terrainRefreshBody = renderer.slice(terrainRefreshAt, terrainRefreshEnd)
-assert.match(terrainRefreshBody, /const failures: unknown\[\] = \[\][\s\S]*?this\.patches\.delete\(key\)[\s\S]*?throw new AggregateError/,
-  'terrain patch refresh must continue after disposal failures and remove stale patch records')
+assert.match(terrainRefreshBody, /this\.disposeTerrainPatchGroups\([\s\S]*?this\.buildTerrainPatch\([\s\S]*?throw new AggregateError/,
+  'terrain patch refresh must use shared disposal and continue rebuilding after cleanup failures')
 const syncObjectsAt = renderer.indexOf('  private syncObjects()')
 const syncObjectsEnd = renderer.indexOf('  selectAtScreen(', syncObjectsAt)
 const syncObjectsBody = renderer.slice(syncObjectsAt, syncObjectsEnd)
