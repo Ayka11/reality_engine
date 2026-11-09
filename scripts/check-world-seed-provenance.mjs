@@ -90,7 +90,7 @@ assert.match(reseedBody, /try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catc
 const removeChunkAt = renderer.indexOf('  private removeChunk(')
 const removeChunkEnd = renderer.indexOf('  private desiredLod(', removeChunkAt)
 const removeChunkBody = renderer.slice(removeChunkAt, removeChunkEnd)
-assert.match(removeChunkBody, /this\.disposeTerrainPatchGroups\(\[[\s\S]*?this\.patches\.delete\(key\)[\s\S]*?this\.waterMeshes\.delete\(key\)[\s\S]*?throw new AggregateError/,
+assert.match(removeChunkBody, /this\.disposeTerrainPatchGroups\(\s*\[[\s\S]*?this\.patches\.delete\(key\)[\s\S]*?this\.waterMeshes\.delete\(key\)[\s\S]*?throw new AggregateError/,
   'chunk unload must use shared disposal and evict terrain records even when GPU disposers fail')
 
 const updateLodAt = renderer.indexOf('  private updateTerrainLod()')
