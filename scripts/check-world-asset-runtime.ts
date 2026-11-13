@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import * as THREE from 'three'
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { WorldAssetRuntime } from '../src/worldLibrary/WorldAssetRuntime.ts'
+import { WorldAssetRuntime, groundWorldAssetInstances } from '../src/worldLibrary/WorldAssetRuntime.ts'
 import { detachAndDisposeObjectGroups } from '../src/render/ResourceCleanup.ts'
 import {
   materializeExternalAssetPlacements,
@@ -1247,6 +1247,102 @@ assert.equal(scatterNotificationScene.children.length, 1,
 assert.equal(scatterNotificationAttempts, 2,
   'rollback must invoke placement bookkeeping for the removal of the published instance')
 assert.equal(scatterNotificationRuntime.remove('scatter-notification-source'), true)
+
+// Deterministic scatter calls are idempotent, but grounding must distinguish
+// previously published IDs from the subset created by this invocation.
+const groundingScene = new THREE.Scene()
+const groundingRuntime = new WorldAssetRuntime(groundingScene, loader)
+const groundingLoad = groundingRuntime.load(
+  'grounding-source',
+  'https://assets.example.test/grounding-source.glb',
+  { semanticEntryId: 'flora.grounding' },
+)
+requests[requests.length - 1].onLoad({ scene: createGltfScene() })
+await groundingLoad
+const groundingBounds = { minX: 0, maxX: 20, minZ: 0, maxZ: 20 }
+const firstGroundingScatter = groundingRuntime.scatterSemanticWithResult(
+  'flora.grounding', groundingBounds, 2, 701, 1,
+)
+assert.equal(firstGroundingScatter.instances.length, 2)
+assert.equal(firstGroundingScatter.createdInstanceIds.length, 2,
+  'the first deterministic scatter call must report every instance it published')
+groundWorldAssetInstances(
+  groundingRuntime,
+  firstGroundingScatter.instances,
+  firstGroundingScatter.createdInstanceIds,
+  { x: 0, y: 0, z: 0 },
+  () => 10,
+)
+const originalGroundingPositions = firstGroundingScatter.instances.map(instance =>
+  groundingRuntime.getInstanceWorldPosition(instance.userData.runtimeAssetInstanceId),
+)
+assert.ok(originalGroundingPositions.every(position => position?.y === 10))
+
+const repeatedGroundingScatter = groundingRuntime.scatterSemanticWithResult(
+  'flora.grounding', groundingBounds, 2, 701, 1,
+)
+assert.deepEqual(repeatedGroundingScatter.instances, firstGroundingScatter.instances,
+  'a repeated seed must return the same deterministic instance objects')
+assert.deepEqual(repeatedGroundingScatter.createdInstanceIds, [],
+  'a repeated seed must not claim ownership of instances published by an earlier scatter call')
+
+let repeatedGroundingSamples = 0
+assert.throws(
+  () => groundWorldAssetInstances(
+    groundingRuntime,
+    repeatedGroundingScatter.instances,
+    repeatedGroundingScatter.createdInstanceIds,
+    { x: 0, y: 0, z: 0 },
+    () => {
+      repeatedGroundingSamples += 1
+      if (repeatedGroundingSamples === 2) throw new Error('injected repeated-grounding terrain sample failure')
+      return 25
+    },
+  ),
+  /injected repeated-grounding terrain sample failure/,
+  'a failed re-grounding pass must surface the original terrain error',
+)
+assert.equal(groundingRuntime.stats().instances, 2,
+  'a failed repeat scatter/grounding pass must retain every previously published placement')
+assert.deepEqual(firstGroundingScatter.instances.map(instance =>
+  groundingRuntime.getInstanceWorldPosition(instance.userData.runtimeAssetInstanceId),
+), originalGroundingPositions,
+  'a failed repeat grounding pass must restore every pre-existing placement transform')
+
+const additionalGroundingScatter = groundingRuntime.scatterSemanticWithResult(
+  'flora.grounding', groundingBounds, 1, 702, 1,
+)
+assert.equal(additionalGroundingScatter.instances.length, 1)
+assert.equal(additionalGroundingScatter.createdInstanceIds.length, 1)
+const mixedGroundingBatch = [
+  ...firstGroundingScatter.instances,
+  ...additionalGroundingScatter.instances,
+]
+let mixedGroundingSamples = 0
+assert.throws(
+  () => groundWorldAssetInstances(
+    groundingRuntime,
+    mixedGroundingBatch,
+    additionalGroundingScatter.createdInstanceIds,
+    { x: 100, y: 10, z: -50 },
+    () => {
+      mixedGroundingSamples += 1
+      if (mixedGroundingSamples === 3) throw new Error('injected mixed-grounding terrain sample failure')
+      return 40
+    },
+  ),
+  /injected mixed-grounding terrain sample failure/,
+  'a mixed old/new grounding failure must surface its original terrain error',
+)
+assert.equal(groundingRuntime.stats().instances, 2,
+  'a mixed batch rollback must remove only the new scatter placements')
+assert.deepEqual(firstGroundingScatter.instances.map(instance =>
+  groundingRuntime.getInstanceWorldPosition(instance.userData.runtimeAssetInstanceId),
+), originalGroundingPositions,
+  'a mixed batch rollback must restore pre-existing instance coordinates after partial grounding')
+assert.deepEqual(groundingRuntime.remove('grounding-source'), true)
+assert.equal(groundingRuntime.stats().instances, 0)
+assert.equal(groundingScene.children.length, 0)
 
 const rendererSource = await readFile(new URL('../src/render/InfiniteWorldRenderer.ts', import.meta.url), 'utf8')
 
