@@ -1825,7 +1825,7 @@ export function bootstrapInfiniteWorld() {
                   <button class="brush-btn" id="vSave" style="color:#40c080">💾 Save World</button>
                   <button class="brush-btn" id="vLoad">📂 Load World</button>
                 </div>
-                <button class="brush-btn" style="width:100%; color:#e06060; border-color:#502020; margin-top: 6px;" id="vClearAll">🗑️ Clear All Placed Objects</button>
+                <button class="brush-btn" style="width:100%; color:#e06060; border-color:#502020; margin-top: 6px;" id="vClearAll">🗑️ Clear World</button>
               </div>
             ` : `
               <div>
