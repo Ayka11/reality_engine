@@ -67,6 +67,11 @@ export class WorldAssetRuntime {
       rotationY?: number
     } = {},
   ): Promise<RuntimeAsset> {
+    const transformValues = [options.x ?? 0, options.y ?? 0, options.z ?? 0, options.scale ?? 1, options.rotationY ?? 0]
+    if (!transformValues.every(Number.isFinite)) {
+      throw new TypeError('Asset load transform must contain finite coordinates, scale and rotation')
+    }
+
     const existing = this.assets.get(id)
     if (existing) return existing
     const pending = this.loading.get(id)
@@ -199,6 +204,11 @@ export class WorldAssetRuntime {
       ? this.assets.get(options.sourceAssetId)
       : this.semanticSources.get(semanticEntryId)
     if (!source || source.semanticEntryId !== semanticEntryId) return null
+    if (![options.x, options.y, options.z].every(Number.isFinite) ||
+        (options.scale !== undefined && !Number.isFinite(options.scale)) ||
+        (options.rotationY !== undefined && !Number.isFinite(options.rotationY))) {
+      throw new TypeError('External asset instance transform must contain finite coordinates, scale and rotation')
+    }
     // SkeletonUtils rewires every SkinnedMesh to cloned bones/skeletons.
     // Object3D.clone(true) alone would keep the source skeleton shared.
     const instance = cloneSkeleton(source.object)
@@ -206,6 +216,7 @@ export class WorldAssetRuntime {
     const ownedMaterials = new Set<THREE.Material>()
     const ownedTextures = new Set<THREE.Texture>()
     const ownedSkeletons = new Set<THREE.Skeleton>()
+    let sceneAttachmentAttempted = false
 
     try {
       // Collect every cloned skeleton before resource cloning can fail partway
@@ -248,8 +259,15 @@ export class WorldAssetRuntime {
       instance.userData.runtimeAssetInstanceId = instanceId
       instance.userData.runtimeAssetSourceId = source.id
       instance.userData.semanticEntryId = semanticEntryId
+      sceneAttachmentAttempted = true
+      this.scene.add(instance)
+      this.instances.set(instanceId, instance)
     } catch (error) {
       const cleanupFailures: unknown[] = []
+      if (this.instances.get(instanceId) === instance) this.instances.delete(instanceId)
+      if (sceneAttachmentAttempted) {
+        try { this.scene.remove(instance) } catch (cleanupError) { cleanupFailures.push(cleanupError) }
+      }
       for (const geometry of ownedGeometries) {
         try { geometry.dispose() } catch (cleanupError) { cleanupFailures.push(cleanupError) }
       }
@@ -269,8 +287,6 @@ export class WorldAssetRuntime {
       throw error
     }
 
-    this.scene.add(instance)
-    this.instances.set(instanceId, instance)
     if (instance.userData.persistentWorldAssetPlacement !== false) this.onPlacementsChanged?.()
     return instance
   }
