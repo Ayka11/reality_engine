@@ -93,21 +93,14 @@ export class WorldAssetRuntime {
         (gltf) => {
           const object = gltf.scene
           if (generation !== this.generation) {
-            const invalidatedError = new Error('Asset load invalidated by world replacement: ' + id)
+            // clear() already rejected this request before invalidating the
+            // generation. The late callback owns only its detached GLTF payload:
+            // attempt cleanup, report failures, and never settle the promise twice.
             try {
               this.disposeObject(object)
             } catch (disposeError) {
-              // clear() has already rejected the pending request. A late GLTF
-              // callback must not throw out of the loader event loop just because
-              // one stale resource has a failing disposal listener.
               console.warn('[WorldAssetRuntime] Stale asset ' + id + ' resource cleanup failed', disposeError)
-              reject(new AggregateError(
-                [invalidatedError, disposeError],
-                'Stale asset ' + id + ' was rejected after incomplete resource disposal',
-              ))
-              return
             }
-            reject(invalidatedError)
             return
           }
 
