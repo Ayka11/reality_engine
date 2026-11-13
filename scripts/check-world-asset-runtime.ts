@@ -60,6 +60,7 @@ assert.equal(requests.length, 1)
 
 runtime.clear()
 await assert.rejects(staleLoad, /Asset load invalidated by world replacement/)
+console.log('[debug:asset-runtime] stale load rejection observed')
 const currentLoad = runtime.load('oak', 'https://assets.example.test/current-oak.glb', {
   semanticEntryId: 'flora.oak',
 })
@@ -67,6 +68,7 @@ assert.equal(requests.length, 2, 'clear must release the old pending ID for a ne
 
 assert.doesNotThrow(() => requests[0].onLoad({ scene: staleScene }),
   'late GLTF callbacks must not throw into the loader event loop when stale resource disposal fails')
+console.log('[debug:asset-runtime] stale callback returned')
 assert.equal(staleGeometryDisposed, true, 'late stale GLTF geometry disposal must be attempted')
 assert.equal(staleMaterialDisposed, true, 'late stale GLTF material disposal must continue after geometry failure')
 assert.equal(scene.children.length, 0, 'late stale GLTF payloads must never enter the new scene')
@@ -78,7 +80,9 @@ assert.equal(requests.length, 2, 'a stale task finalizer must not erase a newer 
 
 const currentScene = createGltfScene()
 requests[1].onLoad({ scene: currentScene })
+console.log('[debug:asset-runtime] current callback invoked')
 const [asset, duplicateAsset] = await Promise.all([currentLoad, duplicateCurrentLoad])
+console.log('[debug:asset-runtime] current load resolved')
 assert.equal(asset, duplicateAsset, 'concurrent requests for the current asset must share one loaded asset')
 assert.equal(runtime.getSemanticSource('flora.oak'), asset)
 assert.equal(scene.children.length, 1)
