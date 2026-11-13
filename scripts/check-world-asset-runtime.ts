@@ -1005,6 +1005,8 @@ assert.deepEqual(rebasedRuntime.getInstanceWorldPosition('rebased-source:instanc
 }, 'grounding must update absolute placement metadata without losing world X/Z')
 assert.equal(rebasedRuntime.remove('rebased-source'), true)
 
+const rendererSource = await readFile(new URL('../src/render/InfiniteWorldRenderer.ts', import.meta.url), 'utf8')
+
 const removalWithoutInstancesScene = new THREE.Scene()
 let removalWithoutInstancesNotifications = 0
 const removalWithoutInstancesRuntime = new WorldAssetRuntime(
@@ -1031,7 +1033,6 @@ assert.match(rendererRemovalSource, /if \(pendingRemoved\) this\.scheduleSave\(\
 assert.doesNotMatch(rendererRemovalSource, /pendingRemoved && !runtimeRemoved/,
   'pending-placement autosave must not depend on whether the source asset was also removed')
 
-const rendererSource = await readFile(new URL('../src/render/InfiniteWorldRenderer.ts', import.meta.url), 'utf8')
 assert.match(rendererSource, /private groundExternalAssetInstances\(instances: THREE\.Object3D\[\]\)/,
   'renderer must centralize external asset terrain grounding')
 assert.equal((rendererSource.match(/this\.groundExternalAssetInstances\((?:placed|instances)\)/g) ?? []).length, 3,
