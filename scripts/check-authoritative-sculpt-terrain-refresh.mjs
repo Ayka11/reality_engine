@@ -154,9 +154,14 @@ assert.match(clearSavedWorldBody, /const cleared = this\.persistence\.clear\(\)/
 assert.match(clearSavedWorldBody, /if\s*\(!cleared\)[\s\S]*?console\.warn/,
   "the renderer must warn if persisted world cleanup was incomplete");
 
+const terrainPatchDisposer = methodBody("disposeTerrainPatchGroups");
+assert.match(terrainPatchDisposer, /group\.traverse/, "terrain patch disposer must inspect renderable materials before release");
+assert.match(terrainPatchDisposer, /this\.terrainMaterials\.delete\(material as THREE\.MeshStandardMaterial\)/, "terrain patch disposer must evict released materials from the terrain registry");
+assert.match(terrainPatchDisposer, /detachAndDisposeObjectGroups\(\s*this\.scene,[\s\S]*?patches\.map\(patch => patch\.group\)/, "terrain patch disposer must detach and release patch groups through the shared resource disposer");
+
 const refresh = methodBody("refreshTerrainPatches");
 assert.match(refresh, /for\s*\(const\s*\[key,\s*patch\]\s*of\s*\[\.\.\.this\.patches\]\)/, "refresh must snapshot and visit every loaded patch");
-assert.match(refresh, /patch\.group\.traverse/, "refresh must dispose old patch resources");
+assert.match(refresh, /this\.disposeTerrainPatchGroups\(\s*\[\s*\{\s*key,\s*group:\s*patch\.group/, "refresh must dispose old patch resources through the shared terrain disposer");
 assert.match(refresh, /this\.buildTerrainPatch\(patch\.chunk,\s*patch\.lod\)/, "refresh must rebuild geometry from the current field");
 assert.match(refresh, /this\.terrainEdgeLodSignature\(patch\.chunk\)/, "refresh must recompute edge LOD metadata");
 assert.match(refresh, /this\.scene\.add\(group\)/, "rebuilt patches must be attached to the scene");
