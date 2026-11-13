@@ -231,7 +231,7 @@ export class WorldAssetRuntime {
       }
       if (cleanupFailures.length > 0) {
         throw new AggregateError([error, ...cleanupFailures],
-          \`External asset instance \${instanceId} construction and partial resource cleanup failed\`)
+          `External asset instance ${instanceId} construction and partial resource cleanup failed`)
       }
       throw error
     }
