@@ -3054,7 +3054,7 @@ export class InfiniteWorldRenderer {
       .filter(placement => placement.sourceAssetId !== assetId)
     const pendingRemoved = this.pendingExternalAssetPlacements.length !== pendingBefore
     const runtimeRemoved = this.worldAssetRuntime.remove(assetId)
-    if (pendingRemoved && !runtimeRemoved) this.scheduleSave()
+    if (pendingRemoved) this.scheduleSave()
     return pendingRemoved || runtimeRemoved
   }
 

@@ -1005,6 +1005,32 @@ assert.deepEqual(rebasedRuntime.getInstanceWorldPosition('rebased-source:instanc
 }, 'grounding must update absolute placement metadata without losing world X/Z')
 assert.equal(rebasedRuntime.remove('rebased-source'), true)
 
+const removalWithoutInstancesScene = new THREE.Scene()
+let removalWithoutInstancesNotifications = 0
+const removalWithoutInstancesRuntime = new WorldAssetRuntime(
+  removalWithoutInstancesScene,
+  loader,
+  () => { removalWithoutInstancesNotifications += 1 },
+)
+const removalWithoutInstancesLoad = removalWithoutInstancesRuntime.load(
+  'source-with-pending-only',
+  'https://assets.example.test/source-with-pending-only.glb',
+  { semanticEntryId: 'flora.pending-only' },
+)
+requests[requests.length - 1].onLoad({ scene: new THREE.Group() })
+await removalWithoutInstancesLoad
+assert.equal(removalWithoutInstancesRuntime.stats().instances, 0)
+assert.equal(removalWithoutInstancesRuntime.remove('source-with-pending-only'), true)
+assert.equal(removalWithoutInstancesNotifications, 0,
+  'removing a source asset without materialized placements does not emit placement-change notifications')
+
+const rendererRemovalSource = rendererSource.match(/removeExternalAsset\(assetId: string\) \{([\s\S]*?)\n  \}/)?.[1]
+assert.ok(rendererRemovalSource, 'renderer must expose external asset removal bookkeeping')
+assert.match(rendererRemovalSource, /if \(pendingRemoved\) this\.scheduleSave\(\)/,
+  'removing pending placements must schedule autosave even when the source asset has no runtime instances')
+assert.doesNotMatch(rendererRemovalSource, /pendingRemoved && !runtimeRemoved/,
+  'pending-placement autosave must not depend on whether the source asset was also removed')
+
 const rendererSource = await readFile(new URL('../src/render/InfiniteWorldRenderer.ts', import.meta.url), 'utf8')
 assert.match(rendererSource, /private groundExternalAssetInstances\(instances: THREE\.Object3D\[\]\)/,
   'renderer must centralize external asset terrain grounding')
