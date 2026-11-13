@@ -2766,7 +2766,7 @@ export class InfiniteWorldRenderer {
         semanticEntryId: rule.semanticEntryId,
         layer: rule.layer,
         count: scatter.instances.length,
-        status: placed.length ? 'materialized' : 'no-runtime-asset',
+        status: scatter.instances.length ? 'materialized' : 'no-runtime-asset',
       })
     }
 
