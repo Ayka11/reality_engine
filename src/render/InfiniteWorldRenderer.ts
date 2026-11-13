@@ -2668,6 +2668,28 @@ export class InfiniteWorldRenderer {
     this.selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
   }
 
+  private groundExternalAssetInstances(instances: THREE.Object3D[]) {
+    // Keep the runtime's renderer-local coordinates aligned with the renderer
+    // before deriving terrain height from each instance's absolute world position.
+    this.worldAssetRuntime.rebase(this.worldAnchor)
+    for (const instance of instances) {
+      const instanceId = instance.userData.runtimeAssetInstanceId
+      if (typeof instanceId !== 'string' || !instanceId.trim()) {
+        throw new Error('External asset instance is missing runtime identity during terrain placement')
+      }
+      const worldPosition = this.worldAssetRuntime.getInstanceWorldPosition(instanceId)
+      if (!worldPosition) {
+        throw new Error(`External asset instance ${instanceId} is missing its absolute world position`)
+      }
+      const worldY = this.sampleTerrainHeight(worldPosition.x, worldPosition.z)
+      const updated = this.worldAssetRuntime.setInstanceWorldTransform(instanceId, {
+        position: { x: worldPosition.x, y: worldY, z: worldPosition.z },
+      })
+      if (!updated) {
+        throw new Error(`External asset instance ${instanceId} disappeared during terrain placement`)
+      }
+    }
+  }
   async loadExternalAsset(
     assetId: string,
     sourceUrl: string,
@@ -2731,13 +2753,7 @@ export class InfiniteWorldRenderer {
         rule.scale,
       )
 
-      placed.forEach((instance) => {
-        const worldX = instance.position.x
-        const worldZ = instance.position.z
-        const worldY = this.sampleTerrainHeight(worldX, worldZ)
-        instance.position.y = worldY
-        instance.userData.worldPosition = { x: worldX, y: worldY, z: worldZ }
-      })
+      this.groundExternalAssetInstances(placed)
       results.push({
         semanticEntryId: rule.semanticEntryId,
         layer: rule.layer,
@@ -2932,13 +2948,7 @@ export class InfiniteWorldRenderer {
           seed + results.length,
           rule.scale,
         )
-        placed.forEach((instance) => {
-          const x = instance.position.x
-          const z = instance.position.z
-          const y = this.sampleTerrainHeight(x, z)
-          instance.position.y = y
-          instance.userData.worldPosition = { x, y, z }
-        })
+        this.groundExternalAssetInstances(placed)
         results.push({ semanticEntryId: rule.semanticEntryId, layer: rule.layer, count: placed.length, mode: 'external-asset' })
         continue
       }
@@ -3033,13 +3043,7 @@ export class InfiniteWorldRenderer {
       seed,
       scale,
     )
-    instances.forEach((instance) => {
-      const worldX = instance.position.x
-      const worldZ = instance.position.z
-      const worldY = this.sampleTerrainHeight(worldX, worldZ)
-      instance.position.y = worldY
-      instance.userData.worldPosition = { x: worldX, y: worldY, z: worldZ }
-    })
+    this.groundExternalAssetInstances(instances)
     if (instances.length) this.scheduleSave()
     return instances.length
   }

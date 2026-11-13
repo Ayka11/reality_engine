@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import * as THREE from 'three'
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { WorldAssetRuntime } from '../src/worldLibrary/WorldAssetRuntime.ts'
@@ -971,5 +972,45 @@ assert.deepEqual({
   texture: attachFailureFlags.sourceTexture,
 }, { geometry: true, material: true, texture: true },
 'the preserved source asset must release its own resources when subsequently removed')
+
+const rebasedScene = new THREE.Scene()
+const rebasedRuntime = new WorldAssetRuntime(rebasedScene, loader)
+const rebasedLoad = rebasedRuntime.load(
+  'rebased-source',
+  'https://assets.example.test/rebased-source.glb',
+  { semanticEntryId: 'flora.rebased' },
+)
+requests[requests.length - 1].onLoad({ scene: new THREE.Group() })
+await rebasedLoad
+rebasedRuntime.rebase({ x: 1000, y: 64, z: -2000 })
+const rebasedInstance = rebasedRuntime.placeInstance(
+  'rebased-source:instance:1',
+  'flora.rebased',
+  { x: 1012, y: 68, z: -1990 },
+)
+assert.ok(rebasedInstance)
+assert.deepEqual(rebasedInstance.position.toArray(), [12, 4, 10],
+  'instance render coordinates must be local to a non-zero world anchor')
+const rebasedWorldPosition = rebasedRuntime.getInstanceWorldPosition('rebased-source:instance:1')
+assert.deepEqual(rebasedWorldPosition, { x: 1012, y: 68, z: -1990 },
+  'world position metadata must remain absolute after origin rebasing')
+const sampledRebasedHeight = rebasedWorldPosition!.x * 0.001 + rebasedWorldPosition!.z * 0.002
+assert.equal(rebasedRuntime.setInstanceWorldTransform('rebased-source:instance:1', {
+  position: { x: rebasedWorldPosition!.x, y: sampledRebasedHeight, z: rebasedWorldPosition!.z },
+}), true)
+assert.ok(Math.abs(rebasedInstance.position.y - (sampledRebasedHeight - 64)) < 1e-10,
+  'terrain height must be converted back to renderer-local Y after a vertical origin rebase')
+assert.deepEqual(rebasedRuntime.getInstanceWorldPosition('rebased-source:instance:1'), {
+  x: 1012, y: sampledRebasedHeight, z: -1990,
+}, 'grounding must update absolute placement metadata without losing world X/Z')
+assert.equal(rebasedRuntime.remove('rebased-source'), true)
+
+const rendererSource = await readFile(new URL('../src/render/InfiniteWorldRenderer.ts', import.meta.url), 'utf8')
+assert.match(rendererSource, /private groundExternalAssetInstances\(instances: THREE\.Object3D\[\]\)/,
+  'renderer must centralize external asset terrain grounding')
+assert.equal((rendererSource.match(/this\.groundExternalAssetInstances\((?:placed|instances)\)/g) ?? []).length, 3,
+  'biome population, world composition and direct scatter must all use world-coordinate-safe grounding')
+assert.doesNotMatch(rendererSource, /const (?:worldX|x) = instance\.position\.x/,
+  'renderer must not treat rebased local instance X as an absolute world coordinate')
 
 console.log('WorldAssetRuntime asset lifecycle, independent skeletal animation states, crossfades, distance LOD and disposal: PASS')
