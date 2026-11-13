@@ -1381,20 +1381,30 @@ assert.ok(externalLoadSource, 'renderer must expose external asset load and plac
 assert.match(externalLoadSource, /materialized\.errors\.length/,
   'renderer must report per-descriptor restoration failures without dropping pending descriptors')
 
-assert.match(rendererSource, /private groundExternalAssetInstances\(instances: THREE\.Object3D\[\]\)/,
-  'renderer must centralize external asset terrain grounding')
-assert.equal((rendererSource.match(/this\.groundExternalAssetInstances\((?:placed|instances)\)/g) ?? []).length, 3,
-  'biome population, world composition and direct scatter must all use world-coordinate-safe grounding')
+assert.match(rendererSource, /private groundExternalAssetInstances\(\s*instances: THREE\.Object3D\[\],\s*createdInstanceIds: readonly string\[\]/,
+  'renderer grounding must receive the exact IDs created by the current scatter call')
+assert.equal((rendererSource.match(/this\.groundExternalAssetInstances\(scatter\.instances, scatter\.createdInstanceIds\)/g) ?? []).length, 3,
+  'biome population, world composition and direct scatter must pass transaction-owned IDs to grounding')
 assert.doesNotMatch(rendererSource, /const (?:worldX|x) = instance\.position\.x/,
   'renderer must not treat rebased local instance X as an absolute world coordinate')
-const groundingHelperStart = rendererSource.indexOf('  private groundExternalAssetInstances(instances: THREE.Object3D[]) {')
+const groundingHelperStart = rendererSource.indexOf('  private groundExternalAssetInstances(')
 const groundingHelperEnd = rendererSource.indexOf('  async loadExternalAsset(', groundingHelperStart)
 const groundingHelper = rendererSource.slice(groundingHelperStart, groundingHelperEnd)
-assert.match(groundingHelper, /try\s*\{[\s\S]*setInstanceWorldTransform/,
-  'external asset grounding must guard the complete batch')
-assert.match(groundingHelper, /catch \(error\)[\s\S]*createdInstanceIds\.reverse\(\)[\s\S]*removeInstance/,
-  'failed external asset grounding must remove every newly created placement')
-assert.match(groundingHelper, /AggregateError/,
+assert.match(groundingHelper, /groundWorldAssetInstances\([\s\S]*createdInstanceIds[\s\S]*this\.sampleTerrainHeight/,
+  'renderer must delegate transactional grounding with the current scatter ownership set')
+assert.match(groundingHelper, /AggregateError|groundWorldAssetInstances/,
   'grounding rollback failures must be preserved alongside the original error')
+const worldAssetRuntimeSource = await readFile(
+  new URL('../src/worldLibrary/WorldAssetRuntime.ts', import.meta.url), 'utf8',
+)
+const transactionalGroundingStart = worldAssetRuntimeSource.indexOf('export function groundWorldAssetInstances(')
+assert.ok(transactionalGroundingStart >= 0, 'runtime must expose the transactional grounding helper')
+const transactionalGrounding = worldAssetRuntimeSource.slice(transactionalGroundingStart)
+assert.match(transactionalGrounding, /createdSet\.has\(snapshot\.instanceId\)/,
+  'grounding rollback must distinguish newly created instances from pre-existing instances')
+assert.match(transactionalGrounding, /updatedExistingIds/,
+  'grounding rollback must restore transforms of pre-existing instances modified before a later failure')
+assert.match(transactionalGrounding, /for \(const instanceId of \[\.\.\.createdIds\]\.reverse\(\)\)/,
+  'grounding rollback must remove only IDs created by the current scatter transaction')
 
 console.log('WorldAssetRuntime asset lifecycle, independent skeletal animation states, crossfades, distance LOD and disposal: PASS')
