@@ -1236,6 +1236,19 @@ export class InfiniteWorldRenderer {
       console.warn('[world-assets] External asset cleanup completed with disposal failures during world clear', error)
     }
     this.terrainDeformations.clear()
+    // A successful durable clear removes these sidecars too. Reset the live
+    // providers and their edit histories to the same generator-backed baseline
+    // so the current session cannot keep state that a reload would discard.
+    this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
+    this.authoritativeField.clear()
+    this.fieldSampler.setProvider(this.authoritativeField)
+    this.fieldSampler.resetSurfaceProviderToGenerator()
+    worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)
+    this.rebuildDecisionLayer()
+    this.authoritativeSculptTransactions.clear()
+    this.notifyAuthoritativeSculptHistoryChanged()
+    this.history.clear()
+    ;(window as any).worldAssetManifest = createAssetImportManifest()
     runtimeProvenance.reset()
     try {
       this.refreshTerrainPatches()
