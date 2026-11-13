@@ -3053,8 +3053,10 @@ export class InfiniteWorldRenderer {
     this.pendingExternalAssetPlacements = this.pendingExternalAssetPlacements
       .filter(placement => placement.sourceAssetId !== assetId)
     const pendingRemoved = this.pendingExternalAssetPlacements.length !== pendingBefore
-    const runtimeRemoved = this.worldAssetRuntime.remove(assetId)
+    // Queue persistence before resource disposal: remove() may throw an AggregateError
+    // after releasing GPU resources, and must not skip saving the pending-descriptor change.
     if (pendingRemoved) this.scheduleSave()
+    const runtimeRemoved = this.worldAssetRuntime.remove(assetId)
     return pendingRemoved || runtimeRemoved
   }
 

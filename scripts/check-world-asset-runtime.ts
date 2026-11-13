@@ -1030,6 +1030,10 @@ const rendererRemovalSource = rendererSource.match(/removeExternalAsset\(assetId
 assert.ok(rendererRemovalSource, 'renderer must expose external asset removal bookkeeping')
 assert.match(rendererRemovalSource, /if \(pendingRemoved\) this\.scheduleSave\(\)/,
   'removing pending placements must schedule autosave even when the source asset has no runtime instances')
+const pendingAutosaveIndex = rendererRemovalSource.indexOf('if (pendingRemoved) this.scheduleSave()')
+const runtimeRemovalIndex = rendererRemovalSource.indexOf('this.worldAssetRuntime.remove(assetId)')
+assert.ok(pendingAutosaveIndex >= 0 && runtimeRemovalIndex >= 0 && pendingAutosaveIndex < runtimeRemovalIndex,
+  'pending placement autosave must be queued before runtime disposal can throw and abort the removal call')
 assert.doesNotMatch(rendererRemovalSource, /pendingRemoved && !runtimeRemoved/,
   'pending-placement autosave must not depend on whether the source asset was also removed')
 
