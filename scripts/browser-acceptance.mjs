@@ -3869,6 +3869,16 @@ try {
       viewSeed: window.getWorldViewContract?.()?.seed ?? null,
       manifestEntries: window.worldAssetManifest.entries.length,
       runtimeAssets: world.worldAssetRuntime.stats(),
+      durableSidecars: {
+        field: world.persistence.readFieldState().status,
+        fieldCheckpoint: world.persistence.readFieldCheckpoint().status,
+        surface: world.persistence.readSurfaceProviderState().status,
+        assetManifest: world.persistence.readAssetManifestState().status,
+        assetPlacements: world.persistence.readAssetPlacementsState().status,
+        provenance: world.persistence.readProvenanceState().status,
+        terrain: world.persistence.readTerrainDeformationState().status,
+        terrainCheckpoint: world.persistence.readTerrainDeformationCheckpoint().status,
+      },
     };
     return { before, state };
   });
@@ -3891,7 +3901,8 @@ try {
       clearedWorld.viewSeed !== clearedWorld.generatorSeed ||
       clearedWorld.manifestEntries !== 0 ||
       clearedWorld.runtimeAssets.loaded !== 0 ||
-      clearedWorld.runtimeAssets.instances !== 0) {
+      clearedWorld.runtimeAssets.instances !== 0 ||
+      Object.values(clearedWorld.durableSidecars).some(status => status !== "missing")) {
     throw new Error("Clear All Objects did not reset every live and durable world sidecar to the generator baseline: " +
       JSON.stringify(clearWorldContract));
   }
