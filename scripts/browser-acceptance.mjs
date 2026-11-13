@@ -3770,13 +3770,39 @@ try {
     const world = window.infiniteWorld;
     if (!world || typeof world.reseed !== "function") return { error: "Public reseed API unavailable" };
     const probeSeed = "reality-engine-direct-reseed-contract-probe";
-    world.reseed(probeSeed);
-    return { worldSeed: world.generator?.seed ?? null, viewSeed: window.getWorldViewContract?.()?.seed ?? null };
+    const originalAssetCleanup = world.clearExternalAssetRuntime;
+    const originalTerrainRefresh = world.refreshTerrainPatches;
+    let assetCleanupCalls = 0;
+    let terrainRefreshCalls = 0;
+    world.clearExternalAssetRuntime = function (...args) {
+      assetCleanupCalls++;
+      return originalAssetCleanup.apply(this, args);
+    };
+    world.refreshTerrainPatches = function (...args) {
+      terrainRefreshCalls++;
+      return originalTerrainRefresh.apply(this, args);
+    };
+    try {
+      world.reseed(probeSeed);
+      return {
+        worldSeed: world.generator?.seed ?? null,
+        viewSeed: window.getWorldViewContract?.()?.seed ?? null,
+        assetCleanupCalls,
+        terrainRefreshCalls,
+      };
+    } finally {
+      world.clearExternalAssetRuntime = originalAssetCleanup;
+      world.refreshTerrainPatches = originalTerrainRefresh;
+    }
   });
   if (directReseed.error || directReseed.worldSeed !== directReseed.viewSeed ||
       directReseed.worldSeed !== "reality-engine-direct-reseed-contract-probe") {
     throw new Error("Direct WorldGenerator reseed did not synchronize WorldViewContract: " + JSON.stringify(directReseed));
   }
+  if (directReseed.assetCleanupCalls !== 1 || directReseed.terrainRefreshCalls !== 0) {
+    throw new Error("Reseed repeated old-world teardown before the new world was installed: " + JSON.stringify(directReseed));
+  }
+  console.log("[acceptance] reseed clears the previous namespace and performs one live cleanup without rebuilding old terrain");
   await composePage.close();
 
   if (uncaughtPageErrors.length > 0 || composerPageErrors.length > 0) {
