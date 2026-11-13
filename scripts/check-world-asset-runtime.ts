@@ -715,4 +715,114 @@ assert.equal(traversalHealthyDisposed, true,
   'a traversal failure for one root must not skip resource disposal for later roots')
 assert.equal(traversalFailures.length, 1)
 
+
+const partialCloneScene = new THREE.Scene()
+let partialCloneNotifications = 0
+const partialCloneRuntime = new WorldAssetRuntime(partialCloneScene, loader, () => {
+  partialCloneNotifications += 1
+})
+const partialCloneFlags = {
+  firstGeometry: false,
+  secondGeometry: false,
+  firstMaterial: false,
+  secondMaterial: false,
+  firstTexture: false,
+  sourceFirstGeometry: false,
+  sourceSecondGeometry: false,
+  sourceFirstMaterial: false,
+  sourceSecondMaterial: false,
+  sourceFirstTexture: false,
+  sourceFailingTexture: false,
+}
+const partialFirstTexture = new THREE.Texture()
+const partialFailingTexture = new THREE.Texture()
+partialFirstTexture.addEventListener('dispose', () => { partialCloneFlags.sourceFirstTexture = true })
+partialFailingTexture.addEventListener('dispose', () => { partialCloneFlags.sourceFailingTexture = true })
+const partialFirstMaterial = new THREE.MeshStandardMaterial({ map: partialFirstTexture })
+const partialSecondMaterial = new THREE.MeshStandardMaterial({ map: partialFailingTexture })
+partialFirstMaterial.addEventListener('dispose', () => { partialCloneFlags.sourceFirstMaterial = true })
+partialSecondMaterial.addEventListener('dispose', () => { partialCloneFlags.sourceSecondMaterial = true })
+const partialFirstGeometry = new THREE.BoxGeometry(1, 1, 1)
+const partialSecondGeometry = new THREE.BoxGeometry(2, 2, 2)
+partialFirstGeometry.addEventListener('dispose', () => { partialCloneFlags.sourceFirstGeometry = true })
+partialSecondGeometry.addEventListener('dispose', () => { partialCloneFlags.sourceSecondGeometry = true })
+const partialCloneSource = new THREE.Group()
+partialCloneSource.add(
+  new THREE.Mesh(partialFirstGeometry, partialFirstMaterial),
+  new THREE.Mesh(partialSecondGeometry, partialSecondMaterial),
+)
+const partialCloneLoad = partialCloneRuntime.load(
+  'partial-clone-source',
+  'https://assets.example.test/partial-clone.glb',
+  { semanticEntryId: 'flora.partial-clone' },
+)
+requests[requests.length - 1].onLoad({ scene: partialCloneSource })
+await partialCloneLoad
+
+const originalFirstGeometryClone = partialFirstGeometry.clone.bind(partialFirstGeometry)
+partialFirstGeometry.clone = function () {
+  const cloned = originalFirstGeometryClone()
+  cloned.addEventListener('dispose', () => { partialCloneFlags.firstGeometry = true })
+  return cloned
+}
+const originalSecondGeometryClone = partialSecondGeometry.clone.bind(partialSecondGeometry)
+partialSecondGeometry.clone = function () {
+  const cloned = originalSecondGeometryClone()
+  cloned.addEventListener('dispose', () => { partialCloneFlags.secondGeometry = true })
+  return cloned
+}
+const originalFirstMaterialClone = partialFirstMaterial.clone.bind(partialFirstMaterial)
+partialFirstMaterial.clone = function () {
+  const cloned = originalFirstMaterialClone()
+  cloned.addEventListener('dispose', () => { partialCloneFlags.firstMaterial = true })
+  return cloned
+}
+const originalSecondMaterialClone = partialSecondMaterial.clone.bind(partialSecondMaterial)
+partialSecondMaterial.clone = function () {
+  const cloned = originalSecondMaterialClone()
+  cloned.addEventListener('dispose', () => { partialCloneFlags.secondMaterial = true })
+  return cloned
+}
+const originalFirstTextureClone = partialFirstTexture.clone.bind(partialFirstTexture)
+partialFirstTexture.clone = function () {
+  const cloned = originalFirstTextureClone()
+  cloned.addEventListener('dispose', () => { partialCloneFlags.firstTexture = true })
+  return cloned
+}
+partialFailingTexture.clone = function () {
+  throw new Error('injected second texture clone failure')
+}
+
+assert.throws(
+  () => partialCloneRuntime.placeInstance(
+    'partial-clone-instance',
+    'flora.partial-clone',
+    { x: 1, y: 0, z: 1 },
+  ),
+  /injected second texture clone failure/,
+  'a partial placement clone must preserve the original cloning failure',
+)
+assert.deepEqual(partialCloneFlags, {
+  firstGeometry: true,
+  secondGeometry: true,
+  firstMaterial: true,
+  secondMaterial: true,
+  firstTexture: true,
+  sourceFirstGeometry: false,
+  sourceSecondGeometry: false,
+  sourceFirstMaterial: false,
+  sourceSecondMaterial: false,
+  sourceFirstTexture: false,
+  sourceFailingTexture: false,
+}, 'partial placement cloning must release only the cloned resources and preserve source asset resources')
+assert.equal(partialCloneScene.children.length, 1,
+  'a failed partial placement must never attach a half-cloned object to the live scene')
+assert.equal(partialCloneRuntime.hasInstance('partial-clone-instance'), false,
+  'a failed partial placement must not publish an instance ID')
+assert.equal(partialCloneNotifications, 0,
+  'a failed partial placement must not notify persistence of a nonexistent instance')
+assert.equal(partialCloneRuntime.remove('partial-clone-source'), true,
+  'the source asset must remain valid and removable after a failed instance clone')
+assert.equal(partialCloneScene.children.length, 0)
+
 console.log('WorldAssetRuntime asset lifecycle, independent skeletal animation states, crossfades, distance LOD and disposal: PASS')
