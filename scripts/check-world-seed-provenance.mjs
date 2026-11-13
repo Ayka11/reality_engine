@@ -71,6 +71,16 @@ assert.match(clearSavedWorldBody, /try \{\s*this\.clearExternalAssetRuntime\(\)\
   'external asset disposal failures must not skip the remaining durable world reset')
 assert.match(clearSavedWorldBody, /try \{\s*this\.refreshTerrainPatches\(\)\s*\} catch \(error\) \{[\s\S]*?this\.objects\.clear\(\)/,
   'terrain refresh failures must not prevent clearing editor object state')
+assert.match(clearSavedWorldBody, /this\.history\.clear\(\)/,
+  'world clear must invalidate undo/redo entries from the previous object world');
+assert.match(clearSavedWorldBody, /this\.authoritativeField\.setBase\(new GeneratorFieldProvider\(this\.generator\)\)[\s\S]*?this\.authoritativeField\.clear\(\)[\s\S]*?this\.fieldSampler\.setProvider\(this\.authoritativeField\)/,
+  'world clear must reset the live authoritative field to the active generator-backed baseline after deleting its sidecars');
+assert.match(clearSavedWorldBody, /this\.fieldSampler\.resetSurfaceProviderToGenerator\(\)[\s\S]*?worldViewContract\.setSeed\(this\.fieldSampler\.surfaceProvider\.seed\)/,
+  'world clear must reset the in-memory surface provider to match the deleted surface sidecar');
+assert.match(clearSavedWorldBody, /this\.authoritativeSculptTransactions\.clear\(\)[\s\S]*?this\.notifyAuthoritativeSculptHistoryChanged\(\)/,
+  'world clear must invalidate old authoritative sculpt undo/redo transactions');
+assert.match(clearSavedWorldBody, /worldAssetManifest = createAssetImportManifest\(\)/,
+  'world clear must replace the in-memory asset provenance manifest after deleting its durable record');
 const targetJournalAt = reseedBody.indexOf('targetPersistence.beginSaveTransaction({ recoverIncomplete: true })')
 const targetClearAt = reseedBody.indexOf('targetPersistence.clear()')
 const manifestPersistAt = reseedBody.indexOf('targetPersistence.saveAssetManifestState(nextAssetManifest)')
