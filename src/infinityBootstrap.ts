@@ -2152,7 +2152,7 @@ export function bootstrapInfiniteWorld() {
       document.getElementById('topSave')?.addEventListener('click', () => (window as any).builderSave())
       document.getElementById('topLoad')?.addEventListener('click', () => world.loadWorld())
       document.getElementById('topClearAll')?.addEventListener('click', () => {
-        if (confirm('Clear all placed objects in this reality?')) (window as any).builderClear()
+        if (confirm('Clear all authored world data in this reality? This removes objects, field and terrain edits, external assets, and custom surface settings.')) (window as any).builderClear()
       })
 
       document.getElementById('vUndo')?.addEventListener('click', () => (window as any).builderUndo())
@@ -2160,7 +2160,7 @@ export function bootstrapInfiniteWorld() {
       document.getElementById('vSave')?.addEventListener('click', () => (window as any).builderSave())
       document.getElementById('vLoad')?.addEventListener('click', () => world.loadWorld())
       document.getElementById('vClearAll')?.addEventListener('click', () => {
-        if (confirm('Clear all placed objects in this reality?')) (window as any).builderClear()
+        if (confirm('Clear all authored world data in this reality? This removes objects, field and terrain edits, external assets, and custom surface settings.')) (window as any).builderClear()
       })
 
       // Camera
