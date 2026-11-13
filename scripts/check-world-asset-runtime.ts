@@ -857,4 +857,119 @@ assert.equal(failedPublishRuntime.stats().loaded, 0,
 assert.equal(failedPublishRuntime.getSemanticSource('flora.failed-publish'), undefined,
   'failed asset publication must not leave a semantic source entry')
 
+
+const invalidTransformRuntime = new WorldAssetRuntime(new THREE.Scene(), loader)
+const requestsBeforeInvalidLoad = requests.length
+await assert.rejects(
+  invalidTransformRuntime.load('invalid-transform-load', 'https://assets.example.test/invalid.glb', { x: Number.NaN }),
+  /finite coordinates, scale and rotation/,
+  'asset loading must reject non-finite transforms before starting a network request',
+)
+assert.equal(requests.length, requestsBeforeInvalidLoad,
+  'invalid asset transforms must not create a loader request')
+
+const attachFailureScene = new THREE.Scene()
+const attachFailureSceneAdd = attachFailureScene.add.bind(attachFailureScene)
+attachFailureScene.add = (...objects: THREE.Object3D[]) => {
+  attachFailureSceneAdd(...objects)
+  throw new Error('injected instance scene attachment failure')
+}
+let attachFailureNotifications = 0
+const attachFailureRuntime = new WorldAssetRuntime(attachFailureScene, loader, () => {
+  attachFailureNotifications += 1
+})
+const attachFailureInternal = attachFailureRuntime as unknown as {
+  assets: Map<string, { id: string; semanticEntryId: string; sourceUrl: string; object: THREE.Object3D; animations: THREE.AnimationClip[]; loadedAt: number }>
+  semanticSources: Map<string, unknown>
+  instances: Map<string, THREE.Object3D>
+}
+const attachFailureFlags = {
+  clonedGeometry: false,
+  clonedMaterial: false,
+  clonedTexture: false,
+  sourceGeometry: false,
+  sourceMaterial: false,
+  sourceTexture: false,
+}
+const attachSourceTexture = new THREE.Texture()
+attachSourceTexture.addEventListener('dispose', () => { attachFailureFlags.sourceTexture = true })
+const attachSourceMaterial = new THREE.MeshStandardMaterial({ map: attachSourceTexture })
+attachSourceMaterial.addEventListener('dispose', () => { attachFailureFlags.sourceMaterial = true })
+const attachSourceGeometry = new THREE.BoxGeometry(1, 1, 1)
+attachSourceGeometry.addEventListener('dispose', () => { attachFailureFlags.sourceGeometry = true })
+const attachSourceMesh = new THREE.Mesh(attachSourceGeometry, attachSourceMaterial)
+const attachSourceObject = new THREE.Group()
+attachSourceObject.add(attachSourceMesh)
+const attachSourceAsset = {
+  id: 'attach-failure-source',
+  semanticEntryId: 'flora.attach-failure',
+  sourceUrl: 'https://assets.example.test/attach-failure.glb',
+  object: attachSourceObject,
+  animations: [],
+  loadedAt: Date.now(),
+}
+attachFailureInternal.assets.set(attachSourceAsset.id, attachSourceAsset)
+attachFailureInternal.semanticSources.set(attachSourceAsset.semanticEntryId, attachSourceAsset)
+
+const originalAttachGeometryClone = attachSourceGeometry.clone.bind(attachSourceGeometry)
+attachSourceGeometry.clone = function () {
+  const cloned = originalAttachGeometryClone()
+  cloned.addEventListener('dispose', () => { attachFailureFlags.clonedGeometry = true })
+  return cloned
+}
+const originalAttachMaterialClone = attachSourceMaterial.clone.bind(attachSourceMaterial)
+attachSourceMaterial.clone = function () {
+  const cloned = originalAttachMaterialClone()
+  cloned.addEventListener('dispose', () => { attachFailureFlags.clonedMaterial = true })
+  return cloned
+}
+const originalAttachTextureClone = attachSourceTexture.clone.bind(attachSourceTexture)
+attachSourceTexture.clone = function () {
+  const cloned = originalAttachTextureClone()
+  cloned.addEventListener('dispose', () => { attachFailureFlags.clonedTexture = true })
+  return cloned
+}
+
+assert.throws(
+  () => attachFailureRuntime.placeInstance(
+    'invalid-instance-transform',
+    'flora.attach-failure',
+    { x: Number.NaN, y: 0, z: 0 },
+  ),
+  /finite coordinates, scale and rotation/,
+  'instance placement must reject non-finite coordinates before cloning resources',
+)
+assert.throws(
+  () => attachFailureRuntime.placeInstance(
+    'failed-attach-instance',
+    'flora.attach-failure',
+    { x: 1, y: 0, z: 1 },
+  ),
+  /injected instance scene attachment failure/,
+  'an exception after partial scene attachment must propagate to the caller',
+)
+assert.deepEqual(attachFailureFlags, {
+  clonedGeometry: true,
+  clonedMaterial: true,
+  clonedTexture: true,
+  sourceGeometry: false,
+  sourceMaterial: false,
+  sourceTexture: false,
+}, 'failed instance publication must release only cloned resources and preserve the source asset')
+assert.equal(attachFailureScene.children.length, 0,
+  'failed instance publication must detach a root even when scene.add throws after attachment')
+assert.equal(attachFailureInternal.instances.size, 0,
+  'failed instance publication must not leave an instance registry entry')
+assert.equal(attachFailureRuntime.hasInstance('failed-attach-instance'), false)
+assert.equal(attachFailureNotifications, 0,
+  'failed instance publication must not notify persistence of a missing instance')
+assert.equal(attachFailureRuntime.remove('attach-failure-source'), true,
+  'the source asset must remain usable and removable after failed instance publication')
+assert.deepEqual({
+  geometry: attachFailureFlags.sourceGeometry,
+  material: attachFailureFlags.sourceMaterial,
+  texture: attachFailureFlags.sourceTexture,
+}, { geometry: true, material: true, texture: true },
+'the preserved source asset must release its own resources when subsequently removed')
+
 console.log('WorldAssetRuntime asset lifecycle, independent skeletal animation states, crossfades, distance LOD and disposal: PASS')

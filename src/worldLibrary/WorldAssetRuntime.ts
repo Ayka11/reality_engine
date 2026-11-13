@@ -67,7 +67,13 @@ export class WorldAssetRuntime {
       rotationY?: number
     } = {},
   ): Promise<RuntimeAsset> {
-    const transformValues = [options.x ?? 0, options.y ?? 0, options.z ?? 0, options.scale ?? 1, options.rotationY ?? 0]
+    const transformValues = [
+      options.x ?? 0,
+      options.y ?? 0,
+      options.z ?? 0,
+      options.scale ?? 1,
+      options.rotationY ?? 0,
+    ]
     if (!transformValues.every(Number.isFinite)) {
       throw new TypeError('Asset load transform must contain finite coordinates, scale and rotation')
     }
