@@ -2672,22 +2672,45 @@ export class InfiniteWorldRenderer {
     // Keep the runtime's renderer-local coordinates aligned with the renderer
     // before deriving terrain height from each instance's absolute world position.
     this.worldAssetRuntime.rebase(this.worldAnchor)
-    for (const instance of instances) {
-      const instanceId = instance.userData.runtimeAssetInstanceId
-      if (typeof instanceId !== 'string' || !instanceId.trim()) {
-        throw new Error('External asset instance is missing runtime identity during terrain placement')
+    const createdInstanceIds: string[] = []
+    try {
+      for (const instance of instances) {
+        const instanceId = instance.userData.runtimeAssetInstanceId
+        if (typeof instanceId !== 'string' || !instanceId.trim()) {
+          throw new Error('External asset instance is missing runtime identity during terrain placement')
+        }
+        createdInstanceIds.push(instanceId)
+        const worldPosition = this.worldAssetRuntime.getInstanceWorldPosition(instanceId)
+        if (!worldPosition) {
+          throw new Error('External asset instance ' + instanceId + ' is missing its absolute world position')
+        }
+        const worldY = this.sampleTerrainHeight(worldPosition.x, worldPosition.z)
+        const updated = this.worldAssetRuntime.setInstanceWorldTransform(instanceId, {
+          position: { x: worldPosition.x, y: worldY, z: worldPosition.z },
+        })
+        if (!updated) {
+          throw new Error('External asset instance ' + instanceId + ' disappeared during terrain placement')
+        }
       }
-      const worldPosition = this.worldAssetRuntime.getInstanceWorldPosition(instanceId)
-      if (!worldPosition) {
-        throw new Error(`External asset instance ${instanceId} is missing its absolute world position`)
+    } catch (error) {
+      const cleanupFailures: unknown[] = []
+      for (const instanceId of createdInstanceIds.reverse()) {
+        try {
+          this.worldAssetRuntime.removeInstance(instanceId)
+        } catch (cleanupError) {
+          cleanupFailures.push(new Error(
+            'Terrain placement rollback failed for external asset instance ' + instanceId,
+            { cause: cleanupError },
+          ))
+        }
       }
-      const worldY = this.sampleTerrainHeight(worldPosition.x, worldPosition.z)
-      const updated = this.worldAssetRuntime.setInstanceWorldTransform(instanceId, {
-        position: { x: worldPosition.x, y: worldY, z: worldPosition.z },
-      })
-      if (!updated) {
-        throw new Error(`External asset instance ${instanceId} disappeared during terrain placement`)
+      if (cleanupFailures.length > 0) {
+        throw new AggregateError(
+          [error, ...cleanupFailures],
+          'External asset terrain placement failed and one or more created instances could not be rolled back',
+        )
       }
+      throw error
     }
   }
   async loadExternalAsset(

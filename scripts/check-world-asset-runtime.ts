@@ -1291,5 +1291,14 @@ assert.equal((rendererSource.match(/this\.groundExternalAssetInstances\((?:place
   'biome population, world composition and direct scatter must all use world-coordinate-safe grounding')
 assert.doesNotMatch(rendererSource, /const (?:worldX|x) = instance\.position\.x/,
   'renderer must not treat rebased local instance X as an absolute world coordinate')
+const groundingHelperStart = rendererSource.indexOf('  private groundExternalAssetInstances(instances: THREE.Object3D[]) {')
+const groundingHelperEnd = rendererSource.indexOf('  async loadExternalAsset(', groundingHelperStart)
+const groundingHelper = rendererSource.slice(groundingHelperStart, groundingHelperEnd)
+assert.match(groundingHelper, /try\s*\{[\s\S]*setInstanceWorldTransform/,
+  'external asset grounding must guard the complete batch')
+assert.match(groundingHelper, /catch \(error\)[\s\S]*createdInstanceIds\.reverse\(\)[\s\S]*removeInstance/,
+  'failed external asset grounding must remove every newly created placement')
+assert.match(groundingHelper, /AggregateError/,
+  'grounding rollback failures must be preserved alongside the original error')
 
 console.log('WorldAssetRuntime asset lifecycle, independent skeletal animation states, crossfades, distance LOD and disposal: PASS')
