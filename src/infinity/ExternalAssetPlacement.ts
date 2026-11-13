@@ -115,12 +115,19 @@ export type ExternalAssetPlacementMaterializer = {
     semanticEntryId: string,
     options: { x: number; y: number; z: number; scale: number; rotationY: number; sourceAssetId: string },
   ) => unknown | null | undefined
+  hasInstance?: (instanceId: string) => boolean
+}
+
+export type ExternalAssetPlacementMaterializationError = {
+  instanceId: string
+  message: string
 }
 
 export type ExternalAssetPlacementMaterializationResult = {
   remaining: ExternalAssetPlacementSnapshot[]
   restoredIds: string[]
   restoredCount: number
+  errors: ExternalAssetPlacementMaterializationError[]
 }
 
 /**
@@ -135,6 +142,7 @@ export function materializeExternalAssetPlacements(
 ): ExternalAssetPlacementMaterializationResult {
   const remaining: ExternalAssetPlacementSnapshot[] = []
   const restoredIds: string[] = []
+  const errors: ExternalAssetPlacementMaterializationError[] = []
 
   for (const placement of pending) {
     if (placement.sourceAssetId !== sourceAssetId ||
@@ -143,25 +151,42 @@ export function materializeExternalAssetPlacements(
       continue
     }
 
-    const instance = runtime.placeInstance(
-      placement.instanceId,
-      placement.semanticEntryId,
-      {
-        x: placement.x,
-        y: placement.y,
-        z: placement.z,
-        scale: placement.scale,
-        rotationY: placement.rotationY,
-        sourceAssetId,
-      },
-    )
-    if (instance) restoredIds.push(placement.instanceId)
-    else remaining.push({ ...placement })
+    try {
+      const instance = runtime.placeInstance(
+        placement.instanceId,
+        placement.semanticEntryId,
+        {
+          x: placement.x,
+          y: placement.y,
+          z: placement.z,
+          scale: placement.scale,
+          rotationY: placement.rotationY,
+          sourceAssetId,
+        },
+      )
+      if (instance || runtime.hasInstance?.(placement.instanceId)) {
+        restoredIds.push(placement.instanceId)
+      } else {
+        remaining.push({ ...placement })
+      }
+    } catch (error) {
+      // A persistence callback may fail after placeInstance has already
+      // committed the object. Do not keep a duplicate pending descriptor
+      // when the runtime confirms that the instance is present.
+      const alreadyPublished = runtime.hasInstance?.(placement.instanceId) ?? false
+      if (alreadyPublished) restoredIds.push(placement.instanceId)
+      else remaining.push({ ...placement })
+      errors.push({
+        instanceId: placement.instanceId,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   return {
     remaining,
     restoredIds,
     restoredCount: restoredIds.length,
+    errors,
   }
 }

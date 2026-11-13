@@ -2715,8 +2715,24 @@ export class InfiniteWorldRenderer {
         asset.id,
         asset.semanticEntryId,
       )
-      if (materialized.restoredCount) {
+      if (materialized.restoredCount || materialized.errors.length > 0) {
         this.pendingExternalAssetPlacements = materialized.remaining
+      }
+      if (materialized.errors.length > 0) {
+        console.warn(
+          '[world-assets] One or more saved external placements could not be restored in this pass; failed descriptors remain pending',
+          materialized.errors,
+        )
+        // A placement callback can fail after the runtime has published the
+        // instance. Requeue persistence so the live snapshot, not the stale
+        // descriptor, becomes the durable source of truth.
+        if (materialized.restoredCount > 0) {
+          try {
+            this.scheduleSave()
+          } catch (error) {
+            console.warn('[world-assets] Could not schedule autosave after partial placement restoration', error)
+          }
+        }
       }
     }
     return asset

@@ -163,6 +163,118 @@ assert.deepEqual(placementMaterializer.remaining.map(placement => placement.inst
   'oak:deferred',
 ], 'unmatched and failed placements must remain pending for retry')
 
+
+assert.deepEqual(placementMaterializer.errors, [],
+  'a null materialization result is pending but is not an exception')
+
+const materializerFailureScene = new THREE.Scene()
+const materializerFailureRuntime = new WorldAssetRuntime(materializerFailureScene, loader)
+const materializerFailureTexture = new THREE.Texture()
+const materializerFailureMaterial = new THREE.MeshStandardMaterial({ map: materializerFailureTexture })
+const materializerFailureGeometry = new THREE.BoxGeometry(1, 1, 1)
+const materializerFailureSource = new THREE.Group()
+materializerFailureSource.add(new THREE.Mesh(materializerFailureGeometry, materializerFailureMaterial))
+const materializerFailureLoad = materializerFailureRuntime.load(
+  'materializer-failure-source',
+  'https://assets.example.test/materializer-failure.glb',
+  { semanticEntryId: 'flora.materializer-failure' },
+)
+requests[requests.length - 1].onLoad({ scene: materializerFailureSource })
+await materializerFailureLoad
+const originalMaterializerTextureClone = materializerFailureTexture.clone.bind(materializerFailureTexture)
+let materializerTextureCloneAttempts = 0
+materializerFailureTexture.clone = function () {
+  materializerTextureCloneAttempts += 1
+  if (materializerTextureCloneAttempts === 1) {
+    throw new Error('injected first descriptor texture clone failure')
+  }
+  return originalMaterializerTextureClone()
+}
+const materializerFailureDescriptors: ExternalAssetPlacementSnapshot[] = [
+  {
+    instanceId: 'materializer:failed-first',
+    sourceAssetId: 'materializer-failure-source',
+    semanticEntryId: 'flora.materializer-failure',
+    x: 1, y: 0, z: 1, scale: 1, rotationY: 0,
+  },
+  {
+    instanceId: 'materializer:successful-second',
+    sourceAssetId: 'materializer-failure-source',
+    semanticEntryId: 'flora.materializer-failure',
+    x: 2, y: 0, z: 2, scale: 1, rotationY: 0,
+  },
+]
+const materializerFailureResult = materializeExternalAssetPlacements(
+  materializerFailureRuntime,
+  materializerFailureDescriptors,
+  'materializer-failure-source',
+  'flora.materializer-failure',
+)
+assert.deepEqual(materializerFailureResult.restoredIds, ['materializer:successful-second'],
+  'one failed descriptor must not prevent later descriptors from being restored')
+assert.deepEqual(materializerFailureResult.remaining.map(item => item.instanceId), ['materializer:failed-first'],
+  'a descriptor whose clone failed before publication must remain pending')
+assert.deepEqual(materializerFailureResult.errors, [{
+  instanceId: 'materializer:failed-first',
+  message: 'injected first descriptor texture clone failure',
+}], 'per-descriptor materialization errors must be returned with the retained descriptor')
+assert.equal(materializerFailureRuntime.hasInstance('materializer:failed-first'), false)
+assert.equal(materializerFailureRuntime.hasInstance('materializer:successful-second'), true)
+assert.equal(materializerFailureRuntime.remove('materializer-failure-source'), true)
+
+const materializerNotificationScene = new THREE.Scene()
+let materializerNotificationAttempts = 0
+const materializerNotificationRuntime = new WorldAssetRuntime(
+  materializerNotificationScene,
+  loader,
+  () => {
+    materializerNotificationAttempts += 1
+    if (materializerNotificationAttempts === 1) {
+      throw new Error('injected post-publication placement notification failure')
+    }
+  },
+)
+const materializerNotificationLoad = materializerNotificationRuntime.load(
+  'materializer-notification-source',
+  'https://assets.example.test/materializer-notification.glb',
+  { semanticEntryId: 'flora.materializer-notification' },
+)
+requests[requests.length - 1].onLoad({ scene: new THREE.Group() })
+await materializerNotificationLoad
+const materializerNotificationDescriptors: ExternalAssetPlacementSnapshot[] = [
+  {
+    instanceId: 'materializer:committed-first',
+    sourceAssetId: 'materializer-notification-source',
+    semanticEntryId: 'flora.materializer-notification',
+    x: 3, y: 0, z: 3, scale: 1, rotationY: 0,
+  },
+  {
+    instanceId: 'materializer:committed-second',
+    sourceAssetId: 'materializer-notification-source',
+    semanticEntryId: 'flora.materializer-notification',
+    x: 4, y: 0, z: 4, scale: 1, rotationY: 0,
+  },
+]
+const materializerNotificationResult = materializeExternalAssetPlacements(
+  materializerNotificationRuntime,
+  materializerNotificationDescriptors,
+  'materializer-notification-source',
+  'flora.materializer-notification',
+)
+assert.deepEqual(materializerNotificationResult.restoredIds, [
+  'materializer:committed-first',
+  'materializer:committed-second',
+], 'a callback error after publication must not retain a duplicate pending descriptor')
+assert.deepEqual(materializerNotificationResult.remaining, [],
+  'materialization must complete later descriptors after a post-publication callback error')
+assert.deepEqual(materializerNotificationResult.errors, [{
+  instanceId: 'materializer:committed-first',
+  message: 'injected post-publication placement notification failure',
+}], 'post-publication callback errors must still be reported to the caller')
+assert.equal(materializerNotificationRuntime.stats().instances, 2)
+assert.equal(materializerNotificationAttempts, 2)
+assert.equal(materializerNotificationRuntime.remove('materializer-notification-source'), true)
+
 const alternateOakLoad = runtime.load('oak-alt', 'https://assets.example.test/alternate-oak.glb', {
   semanticEntryId: 'flora.oak',
 })
@@ -1167,6 +1279,11 @@ assert.ok(pendingAutosaveIndex >= 0 && runtimeRemovalIndex >= 0 && pendingAutosa
   'pending placement autosave must be queued before runtime disposal can throw and abort the removal call')
 assert.doesNotMatch(rendererRemovalSource, /pendingRemoved && !runtimeRemoved/,
   'pending-placement autosave must not depend on whether the source asset was also removed')
+
+const externalLoadSource = rendererSource.match(/async loadExternalAsset\([\s\S]*?\n  \}/)?.[0]
+assert.ok(externalLoadSource, 'renderer must expose external asset load and placement restoration')
+assert.match(externalLoadSource, /materialized\.errors\.length/,
+  'renderer must report per-descriptor restoration failures without dropping pending descriptors')
 
 assert.match(rendererSource, /private groundExternalAssetInstances\(instances: THREE\.Object3D\[\]\)/,
   'renderer must centralize external asset terrain grounding')
