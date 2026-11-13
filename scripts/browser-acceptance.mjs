@@ -3803,6 +3803,100 @@ try {
     throw new Error("Reseed repeated old-world teardown before the new world was installed: " + JSON.stringify(directReseed));
   }
   console.log("[acceptance] reseed clears the previous namespace and performs one live cleanup without rebuilding old terrain");
+
+  // A full world clear must reset live edit state to exactly the durable
+  // generator-backed baseline that a restart will reconstruct.
+  const clearWorldContract = await composePage.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (!world || typeof world.clearSavedWorld !== "function") {
+      return { error: "World clear API is unavailable" };
+    }
+    const flat = window.worldCreateFlatSurfaceProvider?.({
+      seed: "acceptance-clear-surface",
+      elevation: 5,
+    });
+    if (!flat || !window.worldSetSurfaceProvider?.(flat)) {
+      return { error: "Could not establish the non-default surface clear fixture" };
+    }
+    world.applyAuthoritativeFieldMutation({
+      kind: "brush",
+      x: 16, y: 5, z: 16, radius: 8,
+      delta: { density: 0.2 },
+      metadata: { source: "acceptance-clear-world" },
+    });
+    const deformation = world.sculptTerrainAt(16, 16, 4, 1, "raise");
+    const placed = world.place("tree", 16, 16);
+    if (!placed || deformation.changed <= 0) {
+      return { error: "Could not establish object/field/terrain clear fixtures",
+        placed: !!placed, deformation };
+    }
+    window.worldAssetManifest = {
+      version: "1.0",
+      generatedAt: new Date().toISOString(),
+      project: "Acceptance clear-world fixture",
+      entries: [{
+        id: "acceptance-clear-asset",
+        providerId: "acceptance",
+        sourceUrl: "https://assets.example.test/clear-world.glb",
+        name: "Clear World Fixture",
+        license: "CC0",
+      }],
+    };
+    const before = {
+      objects: world.getObjectCount(),
+      fieldMutations: world.authoritativeField.getMutationCount(),
+      fieldUndo: world.authoritativeSculptTransactions.historyLength,
+      objectUndo: world.getEditHistoryState().canUndo,
+      surfaceId: world.fieldSampler.surfaceProvider.id,
+      manifestEntries: window.worldAssetManifest.entries.length,
+    };
+    const cleared = world.clearSavedWorld();
+    const undo = world.undo();
+    const redo = world.redo();
+    const state = {
+      cleared,
+      objects: world.getObjectCount(),
+      fieldMutations: world.authoritativeField.getMutationCount(),
+      fieldUndo: world.authoritativeSculptTransactions.historyLength,
+      fieldRedo: world.authoritativeSculptTransactions.redoLength,
+      objectHistory: world.getEditHistoryState(),
+      undo,
+      redo,
+      terrainDelta: world.terrainDeformations.sampleDelta(16, 16),
+      surfaceId: world.fieldSampler.surfaceProvider.id,
+      surfaceSeed: world.fieldSampler.surfaceProvider.seed,
+      generatorSeed: world.generator.seed,
+      viewSeed: window.getWorldViewContract?.()?.seed ?? null,
+      manifestEntries: window.worldAssetManifest.entries.length,
+      runtimeAssets: world.worldAssetRuntime.stats(),
+    };
+    return { before, state };
+  });
+  if (clearWorldContract.error) {
+    throw new Error("World clear acceptance fixture failed: " + JSON.stringify(clearWorldContract));
+  }
+  const clearedWorld = clearWorldContract.state;
+  if (!clearedWorld.cleared ||
+      clearedWorld.objects !== 0 ||
+      clearedWorld.fieldMutations !== 0 ||
+      clearedWorld.fieldUndo !== 0 ||
+      clearedWorld.fieldRedo !== 0 ||
+      clearedWorld.objectHistory.canUndo !== false ||
+      clearedWorld.objectHistory.canRedo !== false ||
+      clearedWorld.undo !== null ||
+      clearedWorld.redo !== null ||
+      clearedWorld.terrainDelta !== 0 ||
+      clearedWorld.surfaceId !== "world-generator-surface" ||
+      clearedWorld.surfaceSeed !== clearedWorld.generatorSeed ||
+      clearedWorld.viewSeed !== clearedWorld.generatorSeed ||
+      clearedWorld.manifestEntries !== 0 ||
+      clearedWorld.runtimeAssets.loaded !== 0 ||
+      clearedWorld.runtimeAssets.instances !== 0) {
+    throw new Error("Clear All Objects did not reset every live and durable world sidecar to the generator baseline: " +
+      JSON.stringify(clearWorldContract));
+  }
+  console.log("[acceptance] full world clear resets object/field/terrain histories, surface provider and asset provenance");
+
   await composePage.close();
 
   if (uncaughtPageErrors.length > 0 || composerPageErrors.length > 0) {
