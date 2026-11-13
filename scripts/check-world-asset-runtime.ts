@@ -1073,10 +1073,10 @@ assert.throws(
   'a failed later clone in a scatter batch must surface the original construction failure',
 )
 assert.deepEqual(scatterRollbackFlags, {
-  geometries: [1, 2],
-  materials: [1, 2],
+  geometries: [2, 1],
+  materials: [2, 1],
   textures: [1],
-}, 'scatter failure must dispose the earlier committed clone and the later partial clone')
+}, 'scatter failure must dispose the later partial clone before rolling back the earlier committed clone')
 assert.equal(scatterRollbackScene.children.length, 1,
   'scatter rollback must leave only the registered source asset in the scene')
 assert.equal(scatterRollbackRuntime.stats().instances, 0,
