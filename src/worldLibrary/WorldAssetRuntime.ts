@@ -82,50 +82,83 @@ export class WorldAssetRuntime {
         (gltf) => {
           const object = gltf.scene
           if (generation !== this.generation) {
-            const invalidatedError = new Error(`Asset load invalidated by world replacement: ${id}`)
+            const invalidatedError = new Error('Asset load invalidated by world replacement: ' + id)
             try {
               this.disposeObject(object)
             } catch (disposeError) {
               // clear() has already rejected the pending request. A late GLTF
               // callback must not throw out of the loader event loop just because
               // one stale resource has a failing disposal listener.
-              console.warn(`[WorldAssetRuntime] Stale asset ${id} resource cleanup failed`, disposeError)
+              console.warn('[WorldAssetRuntime] Stale asset ' + id + ' resource cleanup failed', disposeError)
               reject(new AggregateError(
                 [invalidatedError, disposeError],
-                `Stale asset ${id} was rejected after incomplete resource disposal`,
+                'Stale asset ' + id + ' was rejected after incomplete resource disposal',
               ))
               return
             }
             reject(invalidatedError)
             return
           }
-          object.position.set(
-            (options.x ?? 0) - this.worldAnchor.x,
-            (options.y ?? 0) - this.worldAnchor.y,
-            (options.z ?? 0) - this.worldAnchor.z,
-          )
-          object.rotation.y = options.rotationY ?? 0
-          object.scale.setScalar(Math.max(0.001, options.scale ?? 1))
-          object.traverse((node) => {
-            const mesh = node as THREE.Mesh
-            if (!mesh.isMesh) return
-            mesh.castShadow = false
-            mesh.receiveShadow = false
-          })
-          object.visible = false
-          this.scene.add(object)
-          const asset: RuntimeAsset = {
-            id,
-            semanticEntryId: options.semanticEntryId,
-            sourceUrl,
-            object,
-            animations: [...(gltf.animations ?? [])],
-            loadedAt: Date.now(),
+
+          const previousSemanticSource = options.semanticEntryId
+            ? this.semanticSources.get(options.semanticEntryId)
+            : undefined
+          let asset: RuntimeAsset | undefined
+          try {
+            object.position.set(
+              (options.x ?? 0) - this.worldAnchor.x,
+              (options.y ?? 0) - this.worldAnchor.y,
+              (options.z ?? 0) - this.worldAnchor.z,
+            )
+            object.rotation.y = options.rotationY ?? 0
+            object.scale.setScalar(Math.max(0.001, options.scale ?? 1))
+            object.traverse((node) => {
+              const mesh = node as THREE.Mesh
+              if (!mesh.isMesh) return
+              mesh.castShadow = false
+              mesh.receiveShadow = false
+            })
+            object.visible = false
+            object.userData.worldPosition = { x: options.x ?? 0, y: options.y ?? 0, z: options.z ?? 0 }
+            asset = {
+              id,
+              semanticEntryId: options.semanticEntryId,
+              sourceUrl,
+              object,
+              animations: [...(gltf.animations ?? [])],
+              loadedAt: Date.now(),
+            }
+
+            this.scene.add(object)
+            this.assets.set(id, asset)
+            if (asset.semanticEntryId) this.semanticSources.set(asset.semanticEntryId, asset)
+            resolve(asset)
+          } catch (error) {
+            const cleanupFailures: unknown[] = []
+            // Undo any partially published indexes before releasing the object.
+            if (this.assets.get(id)?.object === object) this.assets.delete(id)
+            if (asset?.semanticEntryId && this.semanticSources.get(asset.semanticEntryId) === asset) {
+              if (previousSemanticSource) {
+                this.semanticSources.set(asset.semanticEntryId, previousSemanticSource)
+              } else {
+                this.semanticSources.delete(asset.semanticEntryId)
+              }
+            }
+            try {
+              this.scene.remove(object)
+            } catch (cleanupError) {
+              cleanupFailures.push(new Error('Failed to detach partially loaded asset ' + id, { cause: cleanupError }))
+            }
+            try {
+              this.disposeObject(object)
+            } catch (cleanupError) {
+              cleanupFailures.push(new Error('Failed to dispose partially loaded asset ' + id, { cause: cleanupError }))
+            }
+            reject(cleanupFailures.length > 0
+              ? new AggregateError([error, ...cleanupFailures],
+                'Asset ' + id + ' load publication and rollback failed')
+              : error)
           }
-          object.userData.worldPosition = { x: options.x ?? 0, y: options.y ?? 0, z: options.z ?? 0 }
-          this.assets.set(id, asset)
-          if (asset.semanticEntryId) this.semanticSources.set(asset.semanticEntryId, asset)
-          resolve(asset)
         },
         undefined,
         reject,
