@@ -278,7 +278,7 @@ assert.equal(materializerNotificationRuntime.remove('materializer-notification-s
 const alternateOakLoad = runtime.load('oak-alt', 'https://assets.example.test/alternate-oak.glb', {
   semanticEntryId: 'flora.oak',
 })
-requests[2].onLoad({ scene: createGltfScene() })
+requests[requests.length - 1].onLoad({ scene: createGltfScene() })
 const alternateOakAsset = await alternateOakLoad
 assert.equal(runtime.getSemanticSource('flora.oak'), alternateOakAsset)
 const alternateOakInstance = runtime.placeInstance('oak-alt:instance:1', 'flora.oak', { x: 6, y: 0, z: 9 })
@@ -297,7 +297,7 @@ const texturedSourceScene = createGltfScene(sourceTexture)
 const texturedAssetLoad = runtime.load('pine', 'https://assets.example.test/pine.glb', {
   semanticEntryId: 'flora.pine',
 })
-requests[3].onLoad({ scene: texturedSourceScene })
+requests[requests.length - 1].onLoad({ scene: texturedSourceScene })
 const texturedAsset = await texturedAssetLoad
 const sourceMesh = texturedAsset.object.children[0] as THREE.Mesh
 const sourceMaterial = sourceMesh.material as THREE.MeshStandardMaterial
@@ -358,7 +358,7 @@ const idleClip = new THREE.AnimationClip('Idle', 1, [
 const animatedLoad = runtime.load('creature', 'https://assets.example.test/creature.glb', {
   semanticEntryId: 'fauna.creature',
 })
-requests[4].onLoad({ scene: boneRoot, animations: [walkClip, idleClip] })
+requests[requests.length - 1].onLoad({ scene: boneRoot, animations: [walkClip, idleClip] })
 const animatedAsset = await animatedLoad
 assert.equal(animatedAsset.animations.length, 2, 'loaded GLTF animation clips must be preserved')
 const findSkinnedMesh = (object: THREE.Object3D) => {
@@ -404,12 +404,12 @@ assert.equal(runtime.stats().loaded, 0)
 assert.equal(scene.children.length, 0)
 
 const lodNear = runtime.load('lod-near', 'https://assets.example.test/lod-near.glb', { semanticEntryId: 'fauna.lod-near' })
-requests[5].onLoad({ scene: createCreatureScene(), animations: [walkClip] })
+requests[requests.length - 1].onLoad({ scene: createCreatureScene(), animations: [walkClip] })
 const nearAsset = await lodNear
 const nearInstance = runtime.placeInstance('lod-near:instance', 'fauna.lod-near', { x: 10, y: 0, z: 0 })
 assert.ok(nearInstance)
 const lodFar = runtime.load('lod-far', 'https://assets.example.test/lod-far.glb', { semanticEntryId: 'fauna.lod-far' })
-requests[6].onLoad({ scene: createCreatureScene(), animations: [walkClip] })
+requests[requests.length - 1].onLoad({ scene: createCreatureScene(), animations: [walkClip] })
 await lodFar
 const farInstance = runtime.placeInstance('lod-far:instance', 'fauna.lod-far', { x: 400, y: 0, z: 0 })
 assert.ok(farInstance)
@@ -431,7 +431,7 @@ runtime.updateVisibility(lodCamera)
 assert.equal(runtime.updateAnimations(1 / 60, lodCamera), 2, 'far instance updates after accumulating one 15 Hz interval')
 assert.ok(farMesh.skeleton.bones[0].position.y > 0, 'far instance animation advances on its throttled tick')
 const lodCulled = runtime.load('lod-culled', 'https://assets.example.test/lod-culled.glb', { semanticEntryId: 'fauna.lod-culled' })
-requests[7].onLoad({ scene: createCreatureScene(), animations: [walkClip] })
+requests[requests.length - 1].onLoad({ scene: createCreatureScene(), animations: [walkClip] })
 await lodCulled
 const culledInstance = runtime.placeInstance('lod-culled:instance', 'fauna.lod-culled', { x: 800, y: 0, z: 0 })
 assert.ok(culledInstance)
