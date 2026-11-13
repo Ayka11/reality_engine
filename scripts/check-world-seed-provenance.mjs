@@ -54,13 +54,17 @@ const clearSavedWorldEnd = renderer.indexOf('  reseed(newSeed: string)', clearSa
 assert.ok(clearSavedWorldAt >= 0 && clearSavedWorldEnd > clearSavedWorldAt,
   'clearSavedWorld must expose its durable completion result')
 const clearSavedWorldBody = renderer.slice(clearSavedWorldAt, clearSavedWorldEnd)
-assert.match(clearSavedWorldBody, /window\.clearTimeout\(this\.saveTimer\)/,
-  'clearing the world must cancel a pending autosave before touching persistence')
+assert.match(renderer, /private clearPersistedWorldNamespace\(\): boolean\s*\{\s*if \(this\.saveTimer !== null\) \{\s*window\.clearTimeout\(this\.saveTimer\)[\s\S]*?return this\.persistence\.clear\(\)/,
+  'the shared namespace clear must cancel a pending autosave before touching persistence')
+assert.match(clearSavedWorldBody, /const cleared = this\.clearPersistedWorldNamespace\(\)/,
+  'clearSavedWorld must use the shared durable namespace operation before resetting live state')
 assert.match(clearSavedWorldBody, /return cleared/,
   'reseed must be able to distinguish a durable clear from a failed clear')
-assert.ok(clearSavedWorldBody.indexOf('const cleared = this.persistence.clear()') <
+assert.ok(clearSavedWorldBody.indexOf('const cleared = this.clearPersistedWorldNamespace()') <
   clearSavedWorldBody.indexOf('this.clearExternalAssetRuntime()'),
   'a durable clear must succeed before the live external asset runtime is destroyed')
+assert.doesNotMatch(reseedBody, /this\.clearSavedWorld\(\)/,
+  'reseed must not repeat the full live-world cleanup after clearing the old namespace')
 assert.match(clearSavedWorldBody, /if \(!cleared\) \{[\s\S]*?return false[\s\S]*?this\.pendingExternalAssetPlacements = \[\]/,
   'a failed durable clear must preserve live placements and other in-memory world state')
 assert.match(clearSavedWorldBody, /try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{[\s\S]*?this\.terrainDeformations\.clear\(\)/,
