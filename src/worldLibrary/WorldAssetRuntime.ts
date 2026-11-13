@@ -909,3 +909,113 @@ export class WorldAssetRuntime {
     }
   }
 }
+
+
+/**
+ * Ground a scatter batch against the active world surface as one transaction.
+ *
+ * `createdInstanceIds` is scoped to this scatter invocation. If terrain sampling
+ * or transform publication fails, only those new instances are removed; older
+ * deterministic placements are restored to their pre-grounding world transforms.
+ */
+export function groundWorldAssetInstances(
+  runtime: Pick<WorldAssetRuntime,
+    'rebase' | 'getInstanceWorldPosition' | 'setInstanceWorldTransform' | 'removeInstance'>,
+  instances: THREE.Object3D[],
+  createdInstanceIds: readonly string[],
+  worldAnchor: { x: number; y?: number; z: number },
+  sampleTerrainHeight: (x: number, z: number) => number,
+): void {
+  const createdIds = [...new Set(createdInstanceIds)]
+  const createdSet = new Set(createdIds)
+  const snapshots: Array<{
+    instanceId: string
+    position: { x: number; y: number; z: number }
+    scale: number
+    rotationY: number
+  }> = []
+  const updatedExistingIds = new Set<string>()
+
+  try {
+    runtime.rebase(worldAnchor)
+
+    // Validate and snapshot the entire batch before changing any placement.
+    const seenIds = new Set<string>()
+    for (const instance of instances) {
+      const instanceId = instance.userData.runtimeAssetInstanceId
+      if (typeof instanceId !== 'string' || !instanceId.trim()) {
+        throw new Error('External asset instance is missing runtime identity during terrain placement')
+      }
+      if (seenIds.has(instanceId)) {
+        throw new Error('External asset grounding batch contains duplicate instance ID ' + instanceId)
+      }
+      seenIds.add(instanceId)
+      const position = runtime.getInstanceWorldPosition(instanceId)
+      if (!position) {
+        throw new Error('External asset instance ' + instanceId + ' is missing its absolute world position')
+      }
+      snapshots.push({
+        instanceId,
+        position,
+        scale: instance.scale.x,
+        rotationY: instance.rotation.y,
+      })
+    }
+
+    for (const snapshot of snapshots) {
+      const worldY = sampleTerrainHeight(snapshot.position.x, snapshot.position.z)
+      if (!Number.isFinite(worldY)) {
+        throw new RangeError('Terrain returned a non-finite elevation for external asset instance ' + snapshot.instanceId)
+      }
+      // setInstanceWorldTransform can throw from its persistence callback after
+      // committing the transform, so record existing IDs before invoking it.
+      if (!createdSet.has(snapshot.instanceId)) updatedExistingIds.add(snapshot.instanceId)
+      const updated = runtime.setInstanceWorldTransform(snapshot.instanceId, {
+        position: { x: snapshot.position.x, y: worldY, z: snapshot.position.z },
+      })
+      if (!updated) {
+        throw new Error('External asset instance ' + snapshot.instanceId + ' disappeared during terrain placement')
+      }
+    }
+  } catch (error) {
+    const cleanupFailures: unknown[] = []
+
+    // Restore older placements first; never delete them just because a later
+    // terrain sample failed while processing the current scatter operation.
+    for (const snapshot of [...snapshots].reverse()) {
+      if (createdSet.has(snapshot.instanceId) || !updatedExistingIds.has(snapshot.instanceId)) continue
+      try {
+        runtime.setInstanceWorldTransform(snapshot.instanceId, {
+          position: snapshot.position,
+          scale: snapshot.scale,
+          rotationY: snapshot.rotationY,
+        })
+      } catch (cleanupError) {
+        cleanupFailures.push(new Error(
+          'Terrain grounding restore failed for pre-existing external asset instance ' + snapshot.instanceId,
+          { cause: cleanupError },
+        ))
+      }
+    }
+
+    // Roll back only the instances created by this exact scatter invocation.
+    for (const instanceId of [...createdIds].reverse()) {
+      try {
+        runtime.removeInstance(instanceId)
+      } catch (cleanupError) {
+        cleanupFailures.push(new Error(
+          'Terrain grounding rollback failed for new external asset instance ' + instanceId,
+          { cause: cleanupError },
+        ))
+      }
+    }
+
+    if (cleanupFailures.length > 0) {
+      throw new AggregateError(
+        [error, ...cleanupFailures],
+        'External asset terrain grounding failed and one or more placements could not be restored',
+      )
+    }
+    throw error
+  }
+}
