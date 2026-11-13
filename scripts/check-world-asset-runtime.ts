@@ -825,4 +825,36 @@ assert.equal(partialCloneRuntime.remove('partial-clone-source'), true,
   'the source asset must remain valid and removable after a failed instance clone')
 assert.equal(partialCloneScene.children.length, 0)
 
+
+const failedPublishScene = new THREE.Scene()
+failedPublishScene.add = (..._objects: THREE.Object3D[]) => {
+  throw new Error('injected scene attachment failure')
+}
+const failedPublishRuntime = new WorldAssetRuntime(failedPublishScene, loader)
+const failedPublishFlags = { geometry: false, material: false, texture: false }
+const failedPublishTexture = new THREE.Texture()
+failedPublishTexture.addEventListener('dispose', () => { failedPublishFlags.texture = true })
+const failedPublishMaterial = new THREE.MeshStandardMaterial({ map: failedPublishTexture })
+failedPublishMaterial.addEventListener('dispose', () => { failedPublishFlags.material = true })
+const failedPublishGeometry = new THREE.BoxGeometry(1, 1, 1)
+failedPublishGeometry.addEventListener('dispose', () => { failedPublishFlags.geometry = true })
+const failedPublishObject = new THREE.Group()
+failedPublishObject.add(new THREE.Mesh(failedPublishGeometry, failedPublishMaterial))
+const failedPublishPromise = failedPublishRuntime.load(
+  'failed-publish',
+  'https://assets.example.test/failed-publish.glb',
+  { semanticEntryId: 'flora.failed-publish' },
+)
+requests[requests.length - 1].onLoad({ scene: failedPublishObject })
+await assert.rejects(failedPublishPromise, /injected scene attachment failure/,
+  'an exception during asynchronous scene publication must reject the load promise')
+assert.deepEqual(failedPublishFlags, { geometry: true, material: true, texture: true },
+  'failed asset publication must release the loaded geometry, material and texture')
+assert.equal(failedPublishScene.children.length, 0,
+  'failed asset publication must not leave an attached scene root')
+assert.equal(failedPublishRuntime.stats().loaded, 0,
+  'failed asset publication must not leave an asset registry entry')
+assert.equal(failedPublishRuntime.getSemanticSource('flora.failed-publish'), undefined,
+  'failed asset publication must not leave a semantic source entry')
+
 console.log('WorldAssetRuntime asset lifecycle, independent skeletal animation states, crossfades, distance LOD and disposal: PASS')
