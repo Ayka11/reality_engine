@@ -77,7 +77,7 @@ const manifestPersistAt = reseedBody.indexOf('targetPersistence.saveAssetManifes
 const surfacePersistAt = reseedBody.indexOf('targetPersistence.saveSurfaceProviderState(surfaceSnapshot)')
 const seedPublishAt = reseedBody.indexOf('saveActiveWorldSeed(normalizedSeed)')
 const reseedJournalFinishAt = reseedBody.indexOf('targetPersistence.finishSaveTransaction(ready)')
-const previousNamespaceCleanupAt = reseedBody.indexOf('this.clearSavedWorld()')
+const previousNamespaceCleanupAt = reseedBody.indexOf('this.clearPersistedWorldNamespace()')
 const reseedMeshDisposalAt = reseedBody.indexOf('this.patches.clear()')
 assert.ok(targetJournalAt >= 0 && targetClearAt > targetJournalAt &&
   manifestPersistAt > targetClearAt && surfacePersistAt > manifestPersistAt &&
@@ -113,7 +113,7 @@ const syncObjectsEnd = renderer.indexOf('  selectAtScreen(', syncObjectsAt)
 const syncObjectsBody = renderer.slice(syncObjectsAt, syncObjectsEnd)
 assert.match(syncObjectsBody, /const cleanupFailures: unknown\[\] = \[\][\s\S]*?this\.objectMeshes\.delete\(id\)[\s\S]*?throw new AggregateError/,
   'world object mesh cleanup must evict stale cache entries despite disposal failures')
-assert.match(reseedBody, /normalizedSeed !== previousSeed && !this\.clearSavedWorld\(\)/,
+assert.match(reseedBody, /normalizedSeed !== previousSeed && !this\.clearPersistedWorldNamespace\(\)/,
   'old namespace cleanup must happen only after the target seed is committed')
 assert.match(reseedBody, /this\.storageKey = `reality-engine-world:\$\{normalizedSeed\}:objects`/,
   'the legacy storage key must follow the newly committed seed')
