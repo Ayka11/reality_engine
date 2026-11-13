@@ -703,8 +703,16 @@ export class WorldAssetRuntime {
     seed = 1,
     scale = 1,
   ) {
+    if (![bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ, count, seed, scale].every(Number.isFinite)) {
+      throw new TypeError('External asset scatter bounds, count, seed and scale must be finite')
+    }
+    if (bounds.minX > bounds.maxX || bounds.minZ > bounds.maxZ) {
+      throw new RangeError('External asset scatter bounds must be ordered from minimum to maximum')
+    }
     if (!this.semanticSources.has(semanticEntryId)) return []
+
     const placed: THREE.Object3D[] = []
+    const createdInstanceIds: string[] = []
     let state = seed >>> 0
     const random = () => {
       state = (Math.imul(1664525, state) + 1013904223) >>> 0
@@ -714,12 +722,48 @@ export class WorldAssetRuntime {
     for (let i = 0; i < total; i++) {
       const x = bounds.minX + random() * (bounds.maxX - bounds.minX)
       const z = bounds.minZ + random() * (bounds.maxZ - bounds.minZ)
-      const instance = this.placeInstance(
-        `${semanticEntryId}:instance:${seed}:${i}`,
-        semanticEntryId,
-        { x, y: 0, z, scale: scale * (0.85 + random() * 0.3), rotationY: random() * Math.PI * 2 },
-      )
-      if (instance) placed.push(instance)
+      const instanceId = semanticEntryId + ':instance:' + seed + ':' + i
+      const existedBefore = this.instances.has(instanceId)
+      try {
+        const instance = this.placeInstance(
+          instanceId,
+          semanticEntryId,
+          { x, y: 0, z, scale: scale * (0.85 + random() * 0.3), rotationY: random() * Math.PI * 2 },
+        )
+        if (instance) {
+          placed.push(instance)
+          if (!existedBefore && this.instances.get(instanceId) === instance) {
+            createdInstanceIds.push(instanceId)
+          }
+        }
+      } catch (error) {
+        // placeInstance can fail after publishing an instance if its persistence
+        // notification throws. Include that committed object in the rollback.
+        const partiallyPublished = this.instances.get(instanceId)
+        if (!existedBefore && partiallyPublished && !createdInstanceIds.includes(instanceId)) {
+          createdInstanceIds.push(instanceId)
+        }
+
+        const cleanupFailures: unknown[] = []
+        for (const createdId of createdInstanceIds.reverse()) {
+          if (!this.instances.has(createdId)) continue
+          try {
+            this.removeInstance(createdId)
+          } catch (cleanupError) {
+            cleanupFailures.push(new Error(
+              'Scatter rollback failed for instance ' + createdId,
+              { cause: cleanupError },
+            ))
+          }
+        }
+        if (cleanupFailures.length > 0) {
+          throw new AggregateError(
+            [error, ...cleanupFailures],
+            'External asset scatter failed and one or more created instances could not be rolled back',
+          )
+        }
+        throw error
+      }
     }
     return placed
   }

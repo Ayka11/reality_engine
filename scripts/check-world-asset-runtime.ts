@@ -1005,6 +1005,137 @@ assert.deepEqual(rebasedRuntime.getInstanceWorldPosition('rebased-source:instanc
 }, 'grounding must update absolute placement metadata without losing world X/Z')
 assert.equal(rebasedRuntime.remove('rebased-source'), true)
 
+
+const scatterRollbackScene = new THREE.Scene()
+let scatterRollbackNotifications = 0
+const scatterRollbackRuntime = new WorldAssetRuntime(scatterRollbackScene, loader, () => {
+  scatterRollbackNotifications += 1
+})
+const scatterSourceTexture = new THREE.Texture()
+let scatterSourceTextureDisposed = false
+scatterSourceTexture.addEventListener('dispose', () => { scatterSourceTextureDisposed = true })
+const scatterSourceMaterial = new THREE.MeshStandardMaterial({ map: scatterSourceTexture })
+let scatterSourceMaterialDisposed = false
+scatterSourceMaterial.addEventListener('dispose', () => { scatterSourceMaterialDisposed = true })
+const scatterSourceGeometry = new THREE.BoxGeometry(1, 1, 1)
+let scatterSourceGeometryDisposed = false
+scatterSourceGeometry.addEventListener('dispose', () => { scatterSourceGeometryDisposed = true })
+const scatterSourceObject = new THREE.Group()
+scatterSourceObject.add(new THREE.Mesh(scatterSourceGeometry, scatterSourceMaterial))
+const scatterSourceLoad = scatterRollbackRuntime.load(
+  'scatter-rollback-source',
+  'https://assets.example.test/scatter-rollback.glb',
+  { semanticEntryId: 'flora.scatter-rollback' },
+)
+requests[requests.length - 1].onLoad({ scene: scatterSourceObject })
+await scatterSourceLoad
+
+const scatterRollbackFlags = {
+  geometries: [] as number[],
+  materials: [] as number[],
+  textures: [] as number[],
+}
+let scatterGeometryCloneCount = 0
+const originalScatterGeometryClone = scatterSourceGeometry.clone.bind(scatterSourceGeometry)
+scatterSourceGeometry.clone = function () {
+  const index = ++scatterGeometryCloneCount
+  const cloned = originalScatterGeometryClone()
+  cloned.addEventListener('dispose', () => { scatterRollbackFlags.geometries.push(index) })
+  return cloned
+}
+let scatterMaterialCloneCount = 0
+const originalScatterMaterialClone = scatterSourceMaterial.clone.bind(scatterSourceMaterial)
+scatterSourceMaterial.clone = function () {
+  const index = ++scatterMaterialCloneCount
+  const cloned = originalScatterMaterialClone()
+  cloned.addEventListener('dispose', () => { scatterRollbackFlags.materials.push(index) })
+  return cloned
+}
+let scatterTextureCloneCount = 0
+const originalScatterTextureClone = scatterSourceTexture.clone.bind(scatterSourceTexture)
+scatterSourceTexture.clone = function () {
+  const index = ++scatterTextureCloneCount
+  if (index === 2) throw new Error('injected second scatter texture clone failure')
+  const cloned = originalScatterTextureClone()
+  cloned.addEventListener('dispose', () => { scatterRollbackFlags.textures.push(index) })
+  return cloned
+}
+
+assert.throws(
+  () => scatterRollbackRuntime.scatterSemantic(
+    'flora.scatter-rollback',
+    { minX: 0, maxX: 10, minZ: 0, maxZ: 10 },
+    3,
+    29,
+    1,
+  ),
+  /injected second scatter texture clone failure/,
+  'a failed later clone in a scatter batch must surface the original construction failure',
+)
+assert.deepEqual(scatterRollbackFlags, {
+  geometries: [1, 2],
+  materials: [1, 2],
+  textures: [1],
+}, 'scatter failure must dispose the earlier committed clone and the later partial clone')
+assert.equal(scatterRollbackScene.children.length, 1,
+  'scatter rollback must leave only the registered source asset in the scene')
+assert.equal(scatterRollbackRuntime.stats().instances, 0,
+  'scatter rollback must remove every instance created by the failed batch')
+assert.equal(scatterRollbackNotifications, 2,
+  'scatter rollback must notify for the committed placement and its removal')
+assert.equal(scatterSourceGeometryDisposed, false)
+assert.equal(scatterSourceMaterialDisposed, false)
+assert.equal(scatterSourceTextureDisposed, false,
+  'scatter rollback must never dispose resources owned by the source asset')
+assert.throws(
+  () => scatterRollbackRuntime.scatterSemantic(
+    'flora.scatter-rollback',
+    { minX: 0, maxX: 10, minZ: 0, maxZ: 10 },
+    Number.POSITIVE_INFINITY,
+  ),
+  /bounds, count, seed and scale must be finite/,
+  'non-finite scatter count must be rejected before entering the placement loop',
+)
+assert.equal(scatterRollbackRuntime.stats().instances, 0)
+assert.equal(scatterRollbackRuntime.remove('scatter-rollback-source'), true)
+assert.deepEqual({
+  geometry: scatterSourceGeometryDisposed,
+  material: scatterSourceMaterialDisposed,
+  texture: scatterSourceTextureDisposed,
+}, { geometry: true, material: true, texture: true })
+
+const scatterNotificationScene = new THREE.Scene()
+let scatterNotificationAttempts = 0
+const scatterNotificationRuntime = new WorldAssetRuntime(scatterNotificationScene, loader, () => {
+  scatterNotificationAttempts += 1
+  if (scatterNotificationAttempts === 1) throw new Error('injected first scatter placement notification failure')
+})
+const scatterNotificationLoad = scatterNotificationRuntime.load(
+  'scatter-notification-source',
+  'https://assets.example.test/scatter-notification.glb',
+  { semanticEntryId: 'flora.scatter-notification' },
+)
+requests[requests.length - 1].onLoad({ scene: createGltfScene() })
+await scatterNotificationLoad
+assert.throws(
+  () => scatterNotificationRuntime.scatterSemantic(
+    'flora.scatter-notification',
+    { minX: 0, maxX: 1, minZ: 0, maxZ: 1 },
+    2,
+    41,
+    1,
+  ),
+  /injected first scatter placement notification failure/,
+  'a persistence callback failure after publishing a placement must abort the batch'
+)
+assert.equal(scatterNotificationRuntime.stats().instances, 0,
+  'scatter rollback must include the current instance even when placeInstance throws after publication')
+assert.equal(scatterNotificationScene.children.length, 1,
+  'notification failure rollback must leave only the source asset attached')
+assert.equal(scatterNotificationAttempts, 2,
+  'rollback must invoke placement bookkeeping for the removal of the published instance')
+assert.equal(scatterNotificationRuntime.remove('scatter-notification-source'), true)
+
 const rendererSource = await readFile(new URL('../src/render/InfiniteWorldRenderer.ts', import.meta.url), 'utf8')
 
 const removalWithoutInstancesScene = new THREE.Scene()
