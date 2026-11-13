@@ -169,32 +169,73 @@ export class WorldAssetRuntime {
     // SkeletonUtils rewires every SkinnedMesh to cloned bones/skeletons.
     // Object3D.clone(true) alone would keep the source skeleton shared.
     const instance = cloneSkeleton(source.object)
-    instance.traverse((node) => {
-      const renderable = node as THREE.Object3D & {
-        geometry?: THREE.BufferGeometry
-        material?: THREE.Material | THREE.Material[]
+    const ownedGeometries = new Set<THREE.BufferGeometry>()
+    const ownedMaterials = new Set<THREE.Material>()
+    const ownedTextures = new Set<THREE.Texture>()
+    const ownedSkeletons = new Set<THREE.Skeleton>()
+
+    try {
+      // Collect every cloned skeleton before resource cloning can fail partway
+      // through the object graph.
+      instance.traverse(node => {
+        const skinnedMesh = node as THREE.SkinnedMesh
+        if (skinnedMesh.isSkinnedMesh && skinnedMesh.skeleton) {
+          ownedSkeletons.add(skinnedMesh.skeleton)
+        }
+      })
+
+      instance.traverse((node) => {
+        const renderable = node as THREE.Object3D & {
+          geometry?: THREE.BufferGeometry
+          material?: THREE.Material | THREE.Material[]
+        }
+        if (renderable.geometry instanceof THREE.BufferGeometry) {
+          const geometry = renderable.geometry.clone()
+          ownedGeometries.add(geometry)
+          renderable.geometry = geometry
+        }
+        if (Array.isArray(renderable.material)) {
+          renderable.material = renderable.material.map(material =>
+            this.cloneMaterialWithOwnedTextures(material, ownedMaterials, ownedTextures))
+        } else if (renderable.material instanceof THREE.Material) {
+          renderable.material = this.cloneMaterialWithOwnedTextures(
+            renderable.material, ownedMaterials, ownedTextures)
+        }
+      })
+
+      instance.position.set(
+        options.x - this.worldAnchor.x,
+        options.y - this.worldAnchor.y,
+        options.z - this.worldAnchor.z,
+      )
+      instance.userData.worldPosition = { x: options.x, y: options.y, z: options.z }
+      instance.userData.persistentWorldAssetPlacement = options.persistence !== 'transient'
+      instance.rotation.y = options.rotationY ?? 0
+      instance.scale.setScalar(Math.max(0.001, options.scale ?? 1))
+      instance.userData.runtimeAssetInstanceId = instanceId
+      instance.userData.runtimeAssetSourceId = source.id
+      instance.userData.semanticEntryId = semanticEntryId
+    } catch (error) {
+      const cleanupFailures: unknown[] = []
+      for (const geometry of ownedGeometries) {
+        try { geometry.dispose() } catch (cleanupError) { cleanupFailures.push(cleanupError) }
       }
-      if (renderable.geometry instanceof THREE.BufferGeometry) {
-        renderable.geometry = renderable.geometry.clone()
+      for (const material of ownedMaterials) {
+        try { material.dispose() } catch (cleanupError) { cleanupFailures.push(cleanupError) }
       }
-      if (Array.isArray(renderable.material)) {
-        renderable.material = renderable.material.map(material => this.cloneMaterialWithOwnedTextures(material))
-      } else if (renderable.material instanceof THREE.Material) {
-        renderable.material = this.cloneMaterialWithOwnedTextures(renderable.material)
+      for (const texture of ownedTextures) {
+        try { texture.dispose() } catch (cleanupError) { cleanupFailures.push(cleanupError) }
       }
-    })
-    instance.position.set(
-      options.x - this.worldAnchor.x,
-      options.y - this.worldAnchor.y,
-      options.z - this.worldAnchor.z,
-    )
-    instance.userData.worldPosition = { x: options.x, y: options.y, z: options.z }
-    instance.userData.persistentWorldAssetPlacement = options.persistence !== 'transient'
-    instance.rotation.y = options.rotationY ?? 0
-    instance.scale.setScalar(Math.max(0.001, options.scale ?? 1))
-    instance.userData.runtimeAssetInstanceId = instanceId
-    instance.userData.runtimeAssetSourceId = source.id
-    instance.userData.semanticEntryId = semanticEntryId
+      for (const skeleton of ownedSkeletons) {
+        try { skeleton.dispose() } catch (cleanupError) { cleanupFailures.push(cleanupError) }
+      }
+      if (cleanupFailures.length > 0) {
+        throw new AggregateError([error, ...cleanupFailures],
+          \`External asset instance \${instanceId} construction and partial resource cleanup failed\`)
+      }
+      throw error
+    }
+
     this.scene.add(instance)
     this.instances.set(instanceId, instance)
     if (instance.userData.persistentWorldAssetPlacement !== false) this.onPlacementsChanged?.()
@@ -289,8 +330,13 @@ export class WorldAssetRuntime {
     return true
   }
 
-  private cloneMaterialWithOwnedTextures<T extends THREE.Material>(material: T): T {
+  private cloneMaterialWithOwnedTextures<T extends THREE.Material>(
+    material: T,
+    ownedMaterials: Set<THREE.Material>,
+    ownedTextures: Set<THREE.Texture>,
+  ): T {
     const clone = material.clone() as T
+    ownedMaterials.add(clone)
     const clonedTextures = new Map<THREE.Texture, THREE.Texture>()
     const cloneValue = (value: unknown): unknown => {
       if (value instanceof THREE.Texture) {
@@ -298,6 +344,7 @@ export class WorldAssetRuntime {
         if (!texture) {
           texture = value.clone()
           clonedTextures.set(value, texture)
+          ownedTextures.add(texture)
         }
         return texture
       }
