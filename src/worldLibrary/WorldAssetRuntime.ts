@@ -689,20 +689,27 @@ export class WorldAssetRuntime {
     return true
   }
 
-  scatterSemantic(
+  /**
+   * Scatter an idempotent semantic batch and report which placements were
+   * published by this invocation. Existing deterministic IDs are returned in
+   * `instances`, but are never reported as newly created.
+   */
+  scatterSemanticWithResult(
     semanticEntryId: string,
     bounds: { minX: number; maxX: number; minZ: number; maxZ: number },
     count: number,
     seed = 1,
     scale = 1,
-  ) {
+  ): { instances: THREE.Object3D[]; createdInstanceIds: string[] } {
     if (![bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ, count, seed, scale].every(Number.isFinite)) {
       throw new TypeError('External asset scatter bounds, count, seed and scale must be finite')
     }
     if (bounds.minX > bounds.maxX || bounds.minZ > bounds.maxZ) {
       throw new RangeError('External asset scatter bounds must be ordered from minimum to maximum')
     }
-    if (!this.semanticSources.has(semanticEntryId)) return []
+    if (!this.semanticSources.has(semanticEntryId)) {
+      return { instances: [], createdInstanceIds: [] }
+    }
 
     const placed: THREE.Object3D[] = []
     const createdInstanceIds: string[] = []
@@ -758,7 +765,18 @@ export class WorldAssetRuntime {
         throw error
       }
     }
-    return placed
+    return { instances: placed, createdInstanceIds }
+  }
+
+  /** Backwards-compatible object-only API for callers that do not ground a batch. */
+  scatterSemantic(
+    semanticEntryId: string,
+    bounds: { minX: number; maxX: number; minZ: number; maxZ: number },
+    count: number,
+    seed = 1,
+    scale = 1,
+  ): THREE.Object3D[] {
+    return this.scatterSemanticWithResult(semanticEntryId, bounds, count, seed, scale).instances
   }
 
   private refreshSemanticSource(semanticEntryId: string) {
