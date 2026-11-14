@@ -260,9 +260,17 @@ export function mountOpenAssetsPanel() {
 
   const scatterAsset = (assetId: string) => {
     const semanticEntryId = importedSemantic.get(assetId)
+    const scatterSource = (window as any).worldExternalAssetScatterSource
     const scatter = (window as any).worldExternalAssetScatter
-    if (!semanticEntryId || typeof scatter !== 'function') return
-    const count = scatter(semanticEntryId, 12, 70, Date.now() >>> 0, 1)
+    if (!semanticEntryId) return
+    const seed = Date.now() >>> 0
+    // Prefer exact source ownership so same-semantic GLTF files can coexist.
+    // Keep the old semantic-only endpoint as a compatibility fallback.
+    const count = typeof scatterSource === 'function'
+      ? scatterSource(assetId, semanticEntryId, 12, 70, seed, 1)
+      : typeof scatter === 'function'
+        ? scatter(semanticEntryId, 12, 70, seed, 1)
+        : 0
     importMessage = 'Scattered ' + count + ' instances of ' + semanticEntryId
     render()
   }
