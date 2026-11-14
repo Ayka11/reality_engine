@@ -96,7 +96,10 @@ export class Chunk {
 
   /** Compare escaped raw aliases without routing reads through tracked proxies. */
   rawBuffersMatchSnapshot(snapshot: ChunkRawBufferSnapshot): boolean {
-    if (!snapshot || snapshot.exposureMask !== this.rawBufferExposureMask) return false;
+    const frontExposed = this.rawExposedBuffers.has(this._buffer);
+    const backExposed = this.rawExposedBuffers.has(this._backBuffer);
+    const currentExposureMask = (frontExposed ? 1 : 0) | (backExposed ? 2 : 0);
+    if (!snapshot || snapshot.exposureMask !== currentExposureMask) return false;
     const matches = (current: Float32Array, previous: Float32Array): boolean => {
       if (current.length !== previous.length) return false;
       for (let i = 0; i < current.length; i++) {
