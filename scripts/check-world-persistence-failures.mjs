@@ -48,7 +48,7 @@ assert.match(saveSystemSource, /getWorldEditorRuntimeCheckpoint\?\.\(\)/,
 assert.match(saveSystemSource, /rollback\("Infinite world editor runtime", \(\) => this\.context\.restoreWorldEditorRuntimeCheckpoint!\(worldEditorRuntimeBefore\)\)/,
   "failed world import must reinstate editor-only runtime state after portable editor rollback");
 const worldApplyMutationIndex = saveSystemSource.indexOf("mutate(apply);");
-const committedSnapshotPointerIndex = saveSystemSource.indexOf("this.currentSnapshot = snapshot;", worldApplyMutationIndex);
+const committedSnapshotPointerIndex = saveSystemSource.indexOf("this.currentSnapshot = structuredClone(snapshot);", worldApplyMutationIndex);
 const postCommitCleanupIndex = saveSystemSource.indexOf("this.context.clearTimeline?.()", worldApplyMutationIndex);
 assert.ok(worldApplyMutationIndex >= 0 && committedSnapshotPointerIndex > worldApplyMutationIndex &&
   postCommitCleanupIndex > committedSnapshotPointerIndex,
