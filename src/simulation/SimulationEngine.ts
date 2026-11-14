@@ -687,12 +687,19 @@ export class SimulationEngine {
     }));
   }
 
+  /**
+   * Reset transient simulation state as one authoritative transaction.
+   * User-configured physical laws and process overrides are intentionally kept;
+   * deferred chemistry work and automatic-event history/RNG belong to the old world.
+   */
   reset(): void {
     this.mutateAuthoritativeState(() => {
       this.grid.clear();
       this.causal.clear();
       this.entityLayer.clear();
       this.agents.clear();
+      this.chemLayer.restore({ pendingDensityTransfers: [] }, this.grid.size);
+      this.worldEvents.reset();
       this.recorder.clearSnapshots();
       this.prevEnergy.fill(0);
       this._tick = 0;
