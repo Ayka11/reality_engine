@@ -1205,12 +1205,17 @@ export class InfiniteWorldRenderer {
     }
   }
 
-  clearSavedWorld(): boolean {
+  /** Clear only the durable namespace; callers decide when to reset live renderer state. */
+  private clearPersistedWorldNamespace(): boolean {
     if (this.saveTimer !== null) {
       window.clearTimeout(this.saveTimer)
       this.saveTimer = null
     }
-    const cleared = this.persistence.clear()
+    return this.persistence.clear()
+  }
+
+  clearSavedWorld(): boolean {
+    const cleared = this.clearPersistedWorldNamespace()
     if (!cleared) {
       // Keep the live editor state intact when durable cleanup is incomplete.
       // The persistence journal blocks future saves until cleanup is retried,
@@ -1231,6 +1236,19 @@ export class InfiniteWorldRenderer {
       console.warn('[world-assets] External asset cleanup completed with disposal failures during world clear', error)
     }
     this.terrainDeformations.clear()
+    // A successful durable clear removes these sidecars too. Reset the live
+    // providers and their edit histories to the same generator-backed baseline
+    // so the current session cannot keep state that a reload would discard.
+    this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
+    this.authoritativeField.clear()
+    this.fieldSampler.setProvider(this.authoritativeField)
+    this.fieldSampler.resetSurfaceProviderToGenerator()
+    worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)
+    this.rebuildDecisionLayer()
+    this.authoritativeSculptTransactions.clear()
+    this.notifyAuthoritativeSculptHistoryChanged()
+    this.history.clear()
+    ;(window as any).worldAssetManifest = createAssetImportManifest()
     runtimeProvenance.reset()
     try {
       this.refreshTerrainPatches()
@@ -1291,7 +1309,10 @@ export class InfiniteWorldRenderer {
     // The new namespace is now the durable startup target. Cleanup of the old
     // namespace is best-effort: a failure must not leave startup pointing at a
     // namespace that was only partially prepared.
-    if (normalizedSeed !== previousSeed && !this.clearSavedWorld()) {
+    if (normalizedSeed !== previousSeed && !this.clearPersistedWorldNamespace()) {
+      // Reseed performs the live renderer/runtime teardown below. Clearing only
+      // the old namespace here avoids rebuilding old terrain and disposing the
+      // same asset runtime twice during one world replacement.
       console.warn('[persistence] Previous seed cleanup was incomplete; the committed target seed remains active')
     } else if (normalizedSeed === previousSeed && this.saveTimer !== null) {
       window.clearTimeout(this.saveTimer)

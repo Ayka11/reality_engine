@@ -1623,8 +1623,17 @@ assert.match(rendererSource, /if \(chunkRead\.status === 'ok'\) \{[\s\S]*?for \(
   "only successfully read chunks may publish restored objects");
 assert.match(rendererSource, /A missing chunk is a valid empty region/,
   "a genuinely missing chunk must remain distinct from a corrupt/unavailable payload");
-assert.match(rendererSource, /clearSavedWorld\(\): boolean\s*\{\s*if \(this\.saveTimer !== null\) \{\s*window\.clearTimeout\(this\.saveTimer\)[\s\S]*?const cleared = this\.persistence\.clear\(\)[\s\S]*?if \(!cleared\) \{[\s\S]*?return false[\s\S]*?this\.pendingExternalAssetPlacements = \[\][\s\S]*?try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{/,
-  "world clear must cancel stale autosaves, preserve live placements if durable cleanup fails, and continue cleanup after disposal errors");
+assert.match(rendererSource, /private clearPersistedWorldNamespace\(\): boolean\s*\{\s*if \(this\.saveTimer !== null\) \{\s*window\.clearTimeout\(this\.saveTimer\)[\s\S]*?return this\.persistence\.clear\(\)\s*\}/,
+  "durable namespace cleanup must cancel stale autosaves without mutating the live renderer");
+assert.match(rendererSource, /clearSavedWorld\(\): boolean\s*\{\s*const cleared = this\.clearPersistedWorldNamespace\(\)[\s\S]*?if \(!cleared\) \{[\s\S]*?return false[\s\S]*?this\.pendingExternalAssetPlacements = \[\][\s\S]*?try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{/,
+  "full world clear must preserve live placements if durable cleanup fails and continue cleanup after disposal errors");
+const reseedStart = rendererSource.indexOf("  reseed(newSeed: string)");
+const reseedEnd = rendererSource.indexOf("\n  dispose()", reseedStart);
+const reseedSource = rendererSource.slice(reseedStart, reseedEnd);
+assert.match(reseedSource, /this\.clearPersistedWorldNamespace\(\)/,
+  "reseed must clear the old persisted namespace without invoking the full live-world reset");
+assert.doesNotMatch(reseedSource, /this\.clearSavedWorld\(\)/,
+  "reseed must not rebuild old terrain or clear the external asset runtime twice");
 assert.match(worldAssetRuntimeSource, /private generation = 0/);
 assert.match(worldAssetRuntimeSource, /const generation = this\.generation/);
 assert.match(worldAssetRuntimeSource, /generation !== this\.generation/,
