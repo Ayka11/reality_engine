@@ -116,6 +116,8 @@ export type ExternalAssetPlacementMaterializer = {
     options: { x: number; y: number; z: number; scale: number; rotationY: number; sourceAssetId: string },
   ) => unknown | null | undefined
   hasInstance?: (instanceId: string) => boolean
+  getInstanceSourceAssetId?: (instanceId: string) => string | null
+  getInstanceSemanticEntryId?: (instanceId: string) => string | null
 }
 
 export type ExternalAssetPlacementMaterializationError = {
@@ -152,6 +154,19 @@ export function materializeExternalAssetPlacements(
     }
 
     try {
+      const alreadyExists = runtime.hasInstance?.(placement.instanceId) ?? false
+      if (alreadyExists) {
+        const existingSourceId = runtime.getInstanceSourceAssetId?.(placement.instanceId)
+        const existingSemanticId = runtime.getInstanceSemanticEntryId?.(placement.instanceId)
+        if (existingSourceId !== sourceAssetId || existingSemanticId !== semanticEntryId) {
+          throw new Error(
+            'Existing instance ID is owned by a different asset source or semantic entry',
+          )
+        }
+        restoredIds.push(placement.instanceId)
+        continue
+      }
+
       const instance = runtime.placeInstance(
         placement.instanceId,
         placement.semanticEntryId,
@@ -174,7 +189,10 @@ export function materializeExternalAssetPlacements(
       // committed the object. Do not keep a duplicate pending descriptor
       // when the runtime confirms that the instance is present.
       const alreadyPublished = runtime.hasInstance?.(placement.instanceId) ?? false
-      if (alreadyPublished) restoredIds.push(placement.instanceId)
+      const publishedMatchesExpectedSource = alreadyPublished &&
+        runtime.getInstanceSourceAssetId?.(placement.instanceId) === sourceAssetId &&
+        runtime.getInstanceSemanticEntryId?.(placement.instanceId) === semanticEntryId
+      if (publishedMatchesExpectedSource) restoredIds.push(placement.instanceId)
       else remaining.push({ ...placement })
       errors.push({
         instanceId: placement.instanceId,
