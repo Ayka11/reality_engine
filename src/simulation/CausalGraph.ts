@@ -102,18 +102,18 @@ export class CausalGraph {
     this.events.push(ev);
     this.lastEventByCell.set(cellIdx, ev.id);
     if (this.events.length > 500) this.events.shift();
-    return ev;
+    return { ...ev };
   }
 
   recent(n: number): CausalEvent[] {
-    return this.events.slice(-n).reverse();
+    return this.events.slice(-n).map(event => ({ ...event })).reverse();
   }
 
   chainFrom(eventId: number): CausalEvent[] {
     const chain: CausalEvent[] = [];
     let current = this.events.find(e => e.id === eventId);
     while (current) {
-      chain.push(current);
+      chain.push({ ...current });
       const parent = current.parentId;
       current = parent ? this.events.find(e => e.id === parent) : undefined;
     }
