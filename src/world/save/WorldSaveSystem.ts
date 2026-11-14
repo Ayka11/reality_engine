@@ -152,7 +152,7 @@ export class WorldSaveSystem {
       const snapshot = await this.captureSnapshotAtBoundary(name);
       await this.saveToIndexedDB(snapshot);
       // Do not advertise a snapshot as persisted when the IndexedDB commit failed.
-      this.currentSnapshot = structuredClone(snapshot);
+      this.currentSnapshot = snapshot;
       return snapshot.name;
     });
   }
