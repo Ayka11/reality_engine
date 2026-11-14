@@ -218,20 +218,34 @@ export class WorldAssetRuntime {
       sourceAssetId?: string
     },
   ) {
-    if (this.instances.has(instanceId)) return this.instances.get(instanceId) || null
     if (options.sourceAssetId !== undefined &&
         (typeof options.sourceAssetId !== 'string' || !options.sourceAssetId.trim())) {
       throw new TypeError('External asset sourceAssetId must be a non-empty string')
     }
-    const source = options.sourceAssetId !== undefined
-      ? this.assets.get(options.sourceAssetId)
-      : this.semanticSources.get(semanticEntryId)
-    if (!source || source.semanticEntryId !== semanticEntryId) return null
     if (![options.x, options.y, options.z].every(Number.isFinite) ||
         (options.scale !== undefined && !Number.isFinite(options.scale)) ||
         (options.rotationY !== undefined && !Number.isFinite(options.rotationY))) {
       throw new TypeError('External asset instance transform must contain finite coordinates, scale and rotation')
     }
+
+    const existing = this.instances.get(instanceId)
+    if (existing) {
+      const existingSourceAssetId = existing.userData.runtimeAssetSourceId
+      const existingSemanticEntryId = existing.userData.semanticEntryId
+      if (existingSemanticEntryId !== semanticEntryId ||
+          (options.sourceAssetId !== undefined && existingSourceAssetId !== options.sourceAssetId)) {
+        throw new Error(
+          'External asset instance ID ' + instanceId +
+          ' is already owned by a different asset source or semantic entry',
+        )
+      }
+      return existing
+    }
+
+    const source = options.sourceAssetId !== undefined
+      ? this.assets.get(options.sourceAssetId)
+      : this.semanticSources.get(semanticEntryId)
+    if (!source || source.semanticEntryId !== semanticEntryId) return null
     // SkeletonUtils rewires every SkinnedMesh to cloned bones/skeletons.
     // Object3D.clone(true) alone would keep the source skeleton shared.
     const instance = cloneSkeleton(source.object)
