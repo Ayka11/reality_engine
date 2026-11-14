@@ -104,8 +104,26 @@ export function mergeExternalAssetPlacements(
   live: ExternalAssetPlacementSnapshot[],
 ): ExternalAssetPlacementSnapshot[] {
   const merged = new Map<string, ExternalAssetPlacementSnapshot>()
-  for (const placement of pending) merged.set(placement.instanceId, placement)
-  for (const placement of live) merged.set(placement.instanceId, placement)
+  const add = (placement: ExternalAssetPlacementSnapshot, source: 'pending' | 'live') => {
+    const previous = merged.get(placement.instanceId)
+    if (previous) {
+      if (previous.sourceAssetId !== placement.sourceAssetId ||
+          previous.semanticEntryId !== placement.semanticEntryId) {
+        throw new TypeError(
+          'External asset placement ID ' + placement.instanceId +
+          ' is claimed by different asset sources or semantic entries',
+        )
+      }
+      if (source === 'pending') {
+        throw new TypeError('External asset placement ID ' + placement.instanceId + ' is duplicated in pending descriptors')
+      }
+    }
+    // A live transform may supersede the matching pending snapshot, but never
+    // a descriptor owned by a different asset or semantic entry.
+    merged.set(placement.instanceId, placement)
+  }
+  for (const placement of pending) add(placement, 'pending')
+  for (const placement of live) add(placement, 'live')
   return [...merged.values()].map(placement => ({ ...placement }))
 }
 
