@@ -27,6 +27,8 @@ export class WorldAssetRuntime {
   private readonly loading = new Map<string, Promise<RuntimeAsset>>()
   private readonly loadingRequests = new Map<string, { sourceUrl: string; semanticEntryId?: string }>()
   private readonly pendingRejectors = new Map<string, (reason: Error) => void>()
+  /** Per-request identity prevents a removed asset's late loader callback from publishing. */
+  private readonly pendingLoadTokens = new Map<string, object>()
   private readonly semanticSources = new Map<string, RuntimeAsset>()
   private readonly instances = new Map<string, THREE.Object3D>()
   private readonly instanceMixers = new Map<string, THREE.AnimationMixer>()
@@ -103,6 +105,8 @@ export class WorldAssetRuntime {
     }
 
     const generation = this.generation
+    const requestToken = {}
+    this.pendingLoadTokens.set(id, requestToken)
     let task: Promise<RuntimeAsset>
     let cancelTask: ((reason: Error) => void) | undefined
     task = new Promise<RuntimeAsset>((resolve, reject) => {
@@ -111,10 +115,10 @@ export class WorldAssetRuntime {
         sourceUrl,
         (gltf) => {
           const object = gltf.scene
-          if (generation !== this.generation) {
-            // clear() already rejected this request before invalidating the
-            // generation. The late callback owns only its detached GLTF payload:
-            // attempt cleanup, report failures, and never settle the promise twice.
+          if (generation !== this.generation || this.pendingLoadTokens.get(id) !== requestToken) {
+            // clear() invalidates the entire generation; remove(id) invalidates
+            // only this request token. In both cases the detached late payload
+            // must be disposed and must never publish into the active scene.
             try {
               this.disposeObject(object)
             } catch (disposeError) {
@@ -192,6 +196,7 @@ export class WorldAssetRuntime {
         this.loadingRequests.delete(id)
         if (this.pendingRejectors.get(id) === cancelTask) this.pendingRejectors.delete(id)
       }
+      if (this.pendingLoadTokens.get(id) === requestToken) this.pendingLoadTokens.delete(id)
     })
 
     this.loading.set(id, task)
@@ -857,7 +862,22 @@ export class WorldAssetRuntime {
 
   remove(id: string) {
     const asset = this.assets.get(id)
-    if (!asset) return false
+    if (!asset) {
+      const pending = this.loading.get(id)
+      const requestToken = this.pendingLoadTokens.get(id)
+      if (!pending && !requestToken) return false
+
+      // Cancel only this asset's pending request. The request token is removed
+      // before rejection so a late loader callback cannot publish, even when a
+      // new request with the same ID starts before that callback arrives.
+      const cancel = this.pendingRejectors.get(id)
+      this.loading.delete(id)
+      this.loadingRequests.delete(id)
+      this.pendingLoadTokens.delete(id)
+      this.pendingRejectors.delete(id)
+      cancel?.(new Error('Asset load ' + id + ' cancelled by removal'))
+      return true
+    }
 
     const failures: unknown[] = []
     const attempt = (label: string, cleanup: () => void) => {
@@ -910,6 +930,7 @@ export class WorldAssetRuntime {
     this.pendingRejectors.clear()
     this.loading.clear()
     this.loadingRequests.clear()
+    this.pendingLoadTokens.clear()
 
     for (const [instanceId, instance] of [...this.instances]) {
       const mixer = this.instanceMixers.get(instanceId)
