@@ -642,6 +642,114 @@ try {
       JSON.stringify(restartedEditorState));
   }
 
+  console.log("[acceptance] explicit GLTF import materializes a saved placement after restart");
+  const mockAssetUrl = "https://assets.example.test/acceptance-package-asset.glb";
+  const gltfJson = Buffer.from(JSON.stringify({
+    asset: { version: "2.0" },
+    scene: 0,
+    scenes: [{ nodes: [0] }],
+    nodes: [{}],
+  }), "utf8");
+  const gltfJsonPadding = (4 - (gltfJson.length % 4)) % 4;
+  const paddedGltfJson = Buffer.concat([gltfJson, Buffer.alloc(gltfJsonPadding, 0x20)]);
+  const gltfChunkHeader = Buffer.alloc(8);
+  gltfChunkHeader.writeUInt32LE(paddedGltfJson.length, 0);
+  gltfChunkHeader.writeUInt32LE(0x4e4f534a, 4);
+  const glbHeader = Buffer.alloc(12);
+  const glbLength = 12 + gltfChunkHeader.length + paddedGltfJson.length;
+  glbHeader.writeUInt32LE(0x46546c67, 0);
+  glbHeader.writeUInt32LE(2, 4);
+  glbHeader.writeUInt32LE(glbLength, 8);
+  const minimalGlb = Buffer.concat([glbHeader, gltfChunkHeader, paddedGltfJson]);
+  await page.route(mockAssetUrl, route => route.fulfill({
+    status: 200,
+    headers: {
+      "access-control-allow-origin": "*",
+      "content-type": "model/gltf-binary",
+    },
+    body: minimalGlb,
+  }));
+
+  const restoredAssetPlacement = await page.evaluate(async ({ url, instanceId }) => {
+    const asset = await window.worldExternalAssetLoad(
+      "acceptance-package-asset", url, "flora.tree", 1,
+    );
+    const runtime = window.infiniteWorld.worldAssetRuntime;
+    return {
+      assetId: asset?.id ?? null,
+      stats: window.worldExternalAssetStats(),
+      hasInstance: runtime.hasInstance(instanceId),
+      sourceAssetId: runtime.getInstanceSourceAssetId(instanceId),
+      semanticEntryId: runtime.getInstanceSemanticEntryId(instanceId),
+      placements: window.capturePortableWorldEditorSnapshot().assetPlacements,
+    };
+  }, { url: mockAssetUrl, instanceId: placementFixture.instanceId });
+  const restoredLivePlacement = restoredAssetPlacement.placements.find(
+    placement => placement.instanceId === placementFixture.instanceId,
+  );
+  if (restoredAssetPlacement.assetId !== "acceptance-package-asset" ||
+      restoredAssetPlacement.stats?.loaded !== 1 ||
+      restoredAssetPlacement.stats?.instances !== 1 ||
+      !restoredAssetPlacement.hasInstance ||
+      restoredAssetPlacement.sourceAssetId !== "acceptance-package-asset" ||
+      restoredAssetPlacement.semanticEntryId !== "flora.tree" ||
+      !restoredLivePlacement ||
+      restoredLivePlacement.sourceAssetId !== placementFixture.sourceAssetId ||
+      restoredLivePlacement.semanticEntryId !== placementFixture.semanticEntryId ||
+      Math.abs(restoredLivePlacement.x - placementFixture.x) > 1e-6 ||
+      Math.abs(restoredLivePlacement.y - placementFixture.y) > 1e-6 ||
+      Math.abs(restoredLivePlacement.z - placementFixture.z) > 1e-6 ||
+      Math.abs(restoredLivePlacement.scale - placementFixture.scale) > 1e-6 ||
+      Math.abs(restoredLivePlacement.rotationY - placementFixture.rotationY) > 1e-6) {
+    throw new Error("Explicit GLTF import did not materialize the exact saved source-owned placement: " +
+      JSON.stringify(restoredAssetPlacement));
+  }
+  await page.evaluate(() => window.infiniteWorld.saveWorld());
+
+  // A live placement must become durable placement intent again on restart.
+  // External GLTF binaries are never fetched automatically by world recovery.
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForSelector("#c3d");
+  await page.waitForFunction(instanceId =>
+    typeof window.worldExternalAssetStats === "function" &&
+    typeof window.capturePortableWorldEditorSnapshot === "function" &&
+    window.capturePortableWorldEditorSnapshot().assetPlacements?.some(
+      placement => placement.instanceId === instanceId,
+    ), placementFixture.instanceId, { timeout: acceptanceTimeout });
+  const dematerializedAfterRestart = await page.evaluate(instanceId => ({
+    stats: window.worldExternalAssetStats(),
+    placements: window.capturePortableWorldEditorSnapshot().assetPlacements,
+  }), placementFixture.instanceId);
+  if (dematerializedAfterRestart.stats?.loaded !== 0 ||
+      dematerializedAfterRestart.stats?.instances !== 0 ||
+      JSON.stringify(dematerializedAfterRestart.placements) !== JSON.stringify([placementFixture])) {
+    throw new Error("Restart must retain the source-owned placement descriptor without auto-loading its GLTF: " +
+      JSON.stringify(dematerializedAfterRestart));
+  }
+
+  // The same explicit import after restart must materialize the preserved descriptor.
+  const rematerializedAfterRestart = await page.evaluate(async ({ url, instanceId }) => {
+    await window.worldExternalAssetLoad("acceptance-package-asset", url, "flora.tree", 1);
+    const runtime = window.infiniteWorld.worldAssetRuntime;
+    return {
+      stats: window.worldExternalAssetStats(),
+      hasInstance: runtime.hasInstance(instanceId),
+      sourceAssetId: runtime.getInstanceSourceAssetId(instanceId),
+      semanticEntryId: runtime.getInstanceSemanticEntryId(instanceId),
+      placements: window.capturePortableWorldEditorSnapshot().assetPlacements,
+    };
+  }, { url: mockAssetUrl, instanceId: placementFixture.instanceId });
+  if (rematerializedAfterRestart.stats?.loaded !== 1 ||
+      rematerializedAfterRestart.stats?.instances !== 1 ||
+      !rematerializedAfterRestart.hasInstance ||
+      rematerializedAfterRestart.sourceAssetId !== "acceptance-package-asset" ||
+      rematerializedAfterRestart.semanticEntryId !== "flora.tree" ||
+      rematerializedAfterRestart.placements.length !== 1 ||
+      rematerializedAfterRestart.placements[0]?.instanceId !== placementFixture.instanceId) {
+    throw new Error("Explicit GLTF re-import after restart did not restore the saved placement: " +
+      JSON.stringify(rematerializedAfterRestart));
+  }
+
   // Portable files remain the authority for the finite 2D simulation. Re-import
   // the package after restart, then prove that its saved tick/field can advance.
   await page.locator("#loadFileInput").setInputFiles({
