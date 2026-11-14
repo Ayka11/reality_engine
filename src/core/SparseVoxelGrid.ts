@@ -1,6 +1,6 @@
 import { CellState, CELL_FIELDS, F, validateGridDimensions } from "./CellState";
-import { Chunk, CHUNK_SIZE, CHUNK_VOLUME } from "./Chunk";
-import { createTrackedFloat32Array, getMutableBuffer, INTERNAL_MUTABLE_BUFFER, type MutableBufferSide } from "./TrackedFloat32Array";
+import { Chunk, CHUNK_SIZE, CHUNK_VOLUME, type ChunkRawBufferSnapshot } from "./Chunk";
+import { createTrackedFloat32Array, INTERNAL_MUTABLE_BUFFER, type MutableBufferSide } from "./TrackedFloat32Array";
 
 export interface SerializedChunk {
   key: string;
@@ -9,6 +9,12 @@ export interface SerializedChunk {
   cz: number;
   active: boolean;
   buffer: ArrayBuffer;
+}
+
+export interface DenseWindowRawChunkSnapshot {
+  key: string;
+  chunk: Chunk;
+  snapshot: ChunkRawBufferSnapshot;
 }
 
 export interface SparseVoxelGridSnapshot {
@@ -156,6 +162,41 @@ export class SparseVoxelGrid {
     }
     for (let i = 0; i < front.length; i++) {
       if (!Object.is(front[i], frontSnapshot[i]) || !Object.is(back[i], backSnapshot[i])) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Raw typed-array aliases are an internal escape hatch. Only chunks intersecting
+   * the active dense window can be overwritten by a dense GPU readback commit, so
+   * snapshot escaped aliases only in that bounded region rather than copying every
+   * sparse chunk on every frame.
+   */
+  captureDenseWindowRawChunkSnapshots(): DenseWindowRawChunkSnapshot[] {
+    const minCX = Math.floor(this.denseOrigin.x / CHUNK_SIZE);
+    const maxCX = Math.floor((this.denseOrigin.x + this.W - 1) / CHUNK_SIZE);
+    const minCY = Math.floor(this.denseOrigin.y / CHUNK_SIZE);
+    const maxCY = Math.floor((this.denseOrigin.y + this.H - 1) / CHUNK_SIZE);
+    const minCZ = Math.floor(this.denseOrigin.z / CHUNK_SIZE);
+    const maxCZ = Math.floor((this.denseOrigin.z + this.D - 1) / CHUNK_SIZE);
+    const snapshots: DenseWindowRawChunkSnapshot[] = [];
+    for (let cz = minCZ; cz <= maxCZ; cz++)
+    for (let cy = minCY; cy <= maxCY; cy++)
+    for (let cx = minCX; cx <= maxCX; cx++) {
+      const key = this.getChunkKey(cx, cy, cz);
+      const chunk = this.chunks.get(key);
+      if (!chunk) continue;
+      const snapshot = chunk.captureRawBufferSnapshot();
+      if (snapshot) snapshots.push({ key, chunk, snapshot });
+    }
+    return snapshots;
+  }
+
+  denseWindowRawChunksMatchSnapshots(snapshots: DenseWindowRawChunkSnapshot[]): boolean {
+    if (!Array.isArray(snapshots)) return false;
+    for (const entry of snapshots) {
+      if (!entry || this.chunks.get(entry.key) !== entry.chunk ||
+          !entry.chunk.rawBuffersMatchSnapshot(entry.snapshot)) return false;
     }
     return true;
   }
@@ -430,10 +471,10 @@ export class SparseVoxelGrid {
     const endMutation = this.beginMutation();
     try {
       this.seedDenseWindowChunks();
-      const rawBuffers = new Map<Chunk, Float32Array>();
       for (let z = 0; z < this.D; z++) {
         for (let y = 0; y < this.H; y++) {
-          for (let x = 0; x < this.W; x++) {
+          let x = 0;
+          while (x < this.W) {
             const gx = x + this.denseOrigin.x;
             const gy = y + this.denseOrigin.y;
             const gz = z + this.denseOrigin.z;
@@ -441,13 +482,15 @@ export class SparseVoxelGrid {
             const [, lx] = this.globalToChunk(gx);
             const [, ly] = this.globalToChunk(gy);
             const [, lz] = this.globalToChunk(gz);
-            let chunkBuffer = rawBuffers.get(chunk);
-            if (!chunkBuffer) {
-              chunkBuffer = getMutableBuffer(chunk);
-              rawBuffers.set(chunk, chunkBuffer);
-            }
-            chunkBuffer[chunk.localIdx(lx, ly, lz) + F.ENTITY_ID] =
-              this._sparseDenseBuffer[this.idx(x, y, z) + F.ENTITY_ID];
+            const cellCount = Math.min(this.W - x, CHUNK_SIZE - lx);
+            chunk.writeFrontFieldRangeFrom(
+              this._sparseDenseBuffer,
+              this.idx(x, y, z),
+              chunk.localIdx(lx, ly, lz),
+              cellCount,
+              F.ENTITY_ID,
+            );
+            x += cellCount;
           }
         }
       }
@@ -636,25 +679,25 @@ export class SparseVoxelGrid {
         }
       }
 
-      const rawBuffers = new Map<Chunk, Float32Array>();
-      for (const chunk of chunks) {
-        const buf = getMutableBuffer(chunk);
-        if (buf.length !== CHUNK_VOLUME * CELL_FIELDS) {
-          throw new Error("Dense-to-chunk synchronization found an invalid chunk buffer");
+      // Validate every source and destination span before publishing the first
+      // chunk write. Chunk performs the copy internally and never returns an alias.
+      if (chunks.length !== seenChunks.size) {
+        throw new Error("Dense-to-chunk synchronization lost a planned chunk");
+      }
+      for (const segment of segments) {
+        if (!seenChunks.has(segment.chunk) ||
+            segment.sourceOffset + segment.fieldCount > this._sparseDenseBuffer.length ||
+            segment.targetOffset + segment.fieldCount > CHUNK_VOLUME * CELL_FIELDS) {
+          throw new Error("Dense-to-chunk synchronization lost a preflighted chunk");
         }
-        rawBuffers.set(chunk, buf);
       }
 
-      // All destination/source spans are validated before the first write.
       for (const segment of segments) {
-        const buf = rawBuffers.get(segment.chunk);
-        if (!buf) throw new Error("Dense-to-chunk synchronization lost a preflighted chunk");
-        buf.set(
-          this._sparseDenseBuffer.subarray(
-            segment.sourceOffset,
-            segment.sourceOffset + segment.fieldCount,
-          ),
+        segment.chunk.writeFrontRangeFrom(
+          this._sparseDenseBuffer,
+          segment.sourceOffset,
           segment.targetOffset,
+          segment.fieldCount,
         );
       }
       this.markMutation();

@@ -7,12 +7,9 @@ import ts from "typescript";
 // inventory exact: newly added call sites must have an explicit ownership and
 // async-boundary review rather than silently expanding the escape hatch.
 const expectedCalls = new Map([
-  ["src/core/SparseVoxelGrid.ts#syncDenseEntityOwnershipToChunks", 1],
-  ["src/core/SparseVoxelGrid.ts#syncDenseToChunks", 1],
   ["src/simulation/EntityLayer.ts#tick", 2],
 ]);
 const expectedImports = new Set([
-  "src/core/SparseVoxelGrid.ts",
   "src/simulation/EntityLayer.ts",
 ]);
 const expectedScopedCalls = new Map([
