@@ -3730,7 +3730,10 @@ try {
   });
   composePage.on("requestfailed", (request) => console.log(`[composer:requestfailed] ${request.method()} ${request.url()} :: ${request.failure()?.errorText || "unknown"}`));
   await composePage.addInitScript(() => {
-    localStorage.clear();
+    if (sessionStorage.getItem("reality-engine-composer-acceptance-cleaned") !== "1") {
+      localStorage.clear();
+      sessionStorage.setItem("reality-engine-composer-acceptance-cleaned", "1");
+    }
   });
   console.log("[acceptance] opening composer page");
   await composePage.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -3907,6 +3910,53 @@ try {
       JSON.stringify(clearWorldContract));
   }
   console.log("[acceptance] full world clear resets object/field/terrain histories, surface provider and asset provenance");
+
+  // Verify that Clear World survives a real page restart, not only the live
+  // renderer state and immediate persistence reads.
+  await composePage.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+  await composePage.waitForSelector("#c3d", { state: "attached" });
+  await composePage.waitForFunction(() =>
+    typeof window.worldGenerationHealth === "function" &&
+    !!window.infiniteWorld?.fieldSampler?.surfaceProvider
+  );
+  const clearedWorldAfterRestart = await composePage.evaluate(() => {
+    const world = window.infiniteWorld;
+    return {
+      generatorSeed: world.generator.seed,
+      viewSeed: window.getWorldViewContract?.()?.seed ?? null,
+      objects: world.getObjectCount(),
+      fieldMutations: world.authoritativeField.getMutationCount(),
+      terrainDelta: world.terrainDeformations.sampleDelta(16, 16),
+      surfaceId: world.fieldSampler.surfaceProvider.id,
+      surfaceSeed: world.fieldSampler.surfaceProvider.seed,
+      manifestEntries: window.worldAssetManifest?.entries?.length ?? -1,
+      runtimeAssets: world.worldAssetRuntime.stats(),
+      durableSidecars: {
+        field: world.persistence.readFieldState().status,
+        fieldCheckpoint: world.persistence.readFieldCheckpoint().status,
+        surface: world.persistence.readSurfaceProviderState().status,
+        assetManifest: world.persistence.readAssetManifestState().status,
+        assetPlacements: world.persistence.readAssetPlacementsState().status,
+        provenance: world.persistence.readProvenanceState().status,
+        terrain: world.persistence.readTerrainDeformationState().status,
+        terrainCheckpoint: world.persistence.readTerrainDeformationCheckpoint().status,
+      },
+    };
+  });
+  if (clearedWorldAfterRestart.generatorSeed !== clearedWorldAfterRestart.viewSeed ||
+      clearedWorldAfterRestart.objects !== 0 ||
+      clearedWorldAfterRestart.fieldMutations !== 0 ||
+      clearedWorldAfterRestart.terrainDelta !== 0 ||
+      clearedWorldAfterRestart.surfaceId !== "world-generator-surface" ||
+      clearedWorldAfterRestart.surfaceSeed !== clearedWorldAfterRestart.generatorSeed ||
+      clearedWorldAfterRestart.manifestEntries !== 0 ||
+      clearedWorldAfterRestart.runtimeAssets.loaded !== 0 ||
+      clearedWorldAfterRestart.runtimeAssets.instances !== 0 ||
+      Object.values(clearedWorldAfterRestart.durableSidecars).some(status => status !== "missing")) {
+    throw new Error("Clear World did not survive a full browser restart with a clean generator baseline: " +
+      JSON.stringify(clearedWorldAfterRestart));
+  }
+  console.log("[acceptance] Clear World clean baseline restored after full browser restart");
 
   await composePage.close();
 
