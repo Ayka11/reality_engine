@@ -93,6 +93,51 @@ await assert.rejects(
   'a loaded asset ID must not silently resolve to a different semantic entry',
 )
 
+const pendingRemovalScene = new THREE.Scene()
+const pendingRemovalRuntime = new WorldAssetRuntime(pendingRemovalScene, loader)
+const pendingRemovalLoad = pendingRemovalRuntime.load(
+  'reusable-after-removal',
+  'https://assets.example.test/removed-before-load.glb',
+  { semanticEntryId: 'flora.removal-race' },
+)
+const removedRequest = requests.at(-1)!
+const removedPayload = createGltfScene()
+let removedPayloadGeometryDisposed = false
+;(removedPayload.children[0] as THREE.Mesh).geometry.addEventListener('dispose', () => {
+  removedPayloadGeometryDisposed = true
+})
+assert.equal(pendingRemovalRuntime.remove('reusable-after-removal'), true,
+  'removing an asset while its GLTF request is pending must cancel that exact request')
+
+const replacementAfterRemovalLoad = pendingRemovalRuntime.load(
+  'reusable-after-removal',
+  'https://assets.example.test/replacement-after-removal.glb',
+  { semanticEntryId: 'flora.removal-race' },
+)
+const replacementAfterRemovalRequest = requests.at(-1)!
+assert.notEqual(replacementAfterRemovalRequest, removedRequest,
+  'the removed pending ID must be reusable immediately for a replacement source')
+await assert.rejects(pendingRemovalLoad, /cancelled by removal/)
+
+assert.doesNotThrow(() => removedRequest.onLoad({ scene: removedPayload }),
+  'a late callback from a removed pending source must be contained')
+assert.equal(removedPayloadGeometryDisposed, true,
+  'a late callback from a removed pending source must dispose its detached geometry')
+assert.equal(pendingRemovalScene.children.length, 0,
+  'a removed pending source must never attach its late GLTF payload to the scene')
+
+const replacementAfterRemovalScene = createGltfScene()
+replacementAfterRemovalRequest.onLoad({ scene: replacementAfterRemovalScene })
+const replacementAfterRemovalAsset = await replacementAfterRemovalLoad
+assert.equal(replacementAfterRemovalAsset.id, 'reusable-after-removal')
+assert.equal(replacementAfterRemovalAsset.sourceUrl,
+  'https://assets.example.test/replacement-after-removal.glb')
+assert.equal(pendingRemovalRuntime.get('reusable-after-removal'), replacementAfterRemovalAsset,
+  'the old request finalizer must not erase the replacement request or its loaded asset')
+assert.equal(pendingRemovalScene.children.length, 1)
+assert.equal(pendingRemovalRuntime.remove('reusable-after-removal'), true)
+assert.equal(pendingRemovalScene.children.length, 0)
+
 const identityScene = new THREE.Scene()
 const identityRuntime = new WorldAssetRuntime(identityScene, loader)
 const identityUrl = 'https://assets.example.test/identity-source.glb'
