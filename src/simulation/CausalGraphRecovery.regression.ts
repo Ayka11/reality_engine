@@ -41,6 +41,32 @@ export function runCausalGraphRecoveryRegression(): void {
     throw new Error("CausalGraph snapshot aliases live event or cell-index state");
   }
 
+  // Public event-returning APIs must never expose retained event objects.
+  const loggedView = graph.log(5, 4, 3, 2, 9, "phase_transition", 7);
+  const afterLoggedView = graph.snapshot();
+  loggedView.delta = -777;
+  loggedView.tick = -777;
+  if (JSON.stringify(graph.snapshot()) !== JSON.stringify(afterLoggedView)) {
+    throw new Error("CausalGraph.log returned a live stored event");
+  }
+
+  const recentViews = graph.recent(4);
+  recentViews[0].delta = -778;
+  recentViews[0].parentId = 999999;
+  recentViews.splice(0, 1);
+  if (JSON.stringify(graph.snapshot()) !== JSON.stringify(afterLoggedView)) {
+    throw new Error("CausalGraph.recent exposed live events or its retained history array");
+  }
+
+  const chainViews = graph.chainFrom(second.id);
+  if (chainViews.length === 0) throw new Error("CausalGraph chain fixture is unexpectedly empty");
+  chainViews[0].delta = -779;
+  chainViews[0].tick = -779;
+  chainViews.reverse();
+  if (JSON.stringify(graph.snapshot()) !== JSON.stringify(afterLoggedView)) {
+    throw new Error("CausalGraph.chainFrom returned live stored events");
+  }
+
   runCausalGraphInvalidSnapshotRegression(graph);
 
   // CausalGraph retains a bounded event history but keeps last-event indexes for
