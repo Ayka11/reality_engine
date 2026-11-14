@@ -870,6 +870,7 @@ export class WorldAssetRuntime {
     }
     this.pendingRejectors.clear()
     this.loading.clear()
+    this.loadingRequests.clear()
 
     for (const [instanceId, instance] of [...this.instances]) {
       const mixer = this.instanceMixers.get(instanceId)
