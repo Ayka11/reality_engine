@@ -68,6 +68,7 @@ jobs:
       - run: npm run test:construction
       - run: npm run test:world-object-identity
       - run: npm run test:world-edit-history-ownership
+      - run: npm run test:world-field-chunk-store-ownership
       - run: npm run test:reality-graph-validation
       - run: npm run test:reality-package-import
       - name: Run active application world package regression
