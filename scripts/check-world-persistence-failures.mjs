@@ -1041,8 +1041,10 @@ assert.deepEqual(postCommitFailureReports, [{
   operation: "editor sidecar persistence",
   message: "injected sidecar persistence failure",
 }], "post-commit sidecar errors must be reported without rejecting the committed restore");
-assert.equal(saveHarness.getCurrentSnapshot(), sidecarFailureSnapshot,
+assert.deepEqual(saveHarness.getCurrentSnapshot(), sidecarFailureSnapshot,
   "the current snapshot must follow the committed world even when sidecar persistence fails");
+assert.notEqual(saveHarness.getCurrentSnapshot(), sidecarFailureSnapshot,
+  "the current snapshot getter must return a detached view rather than the caller's object");
 assert.equal(worldAssetClearCalls, 2,
   "external assets must still be cleared because the world transaction committed before sidecar persistence failed");
 assert.equal(runtimeState.recorderClears, 2,
@@ -1096,8 +1098,10 @@ assert.deepEqual(postCommitFailureReports.at(-1), {
   operation: "external asset cleanup",
   message: "injected asset cleanup failure",
 }, "a post-commit external asset cleanup failure must be reported without rejecting Load");
-assert.equal(saveHarness.getCurrentSnapshot(), cleanupFailureSnapshot,
+assert.deepEqual(saveHarness.getCurrentSnapshot(), cleanupFailureSnapshot,
   "post-commit asset cleanup failure must not roll back the committed current snapshot");
+assert.notEqual(saveHarness.getCurrentSnapshot(), cleanupFailureSnapshot,
+  "post-commit snapshot publication must not retain the caller's mutable object");
 assert.equal(worldEditorPersistCalls, 4,
   "editor sidecar persistence must still run after a best-effort asset cleanup failure");
 failWorldAssetClear = false;
@@ -1552,8 +1556,30 @@ assert.equal(saveHarness.getCurrentSnapshot()?.name, "Autosave_latest",
 const lastCommittedSnapshot = saveHarness.getCurrentSnapshot();
 failAutosaveWrite = true;
 await assert.rejects(saveHarness.quickSave("Autosave_quota_failure"), /injected IndexedDB quota failure/);
-assert.equal(saveHarness.getCurrentSnapshot(), lastCommittedSnapshot,
+assert.deepEqual(saveHarness.getCurrentSnapshot(), lastCommittedSnapshot,
   "failed autosave persistence must not replace the last committed current snapshot");
+
+// Direct restore inputs are caller-owned until detached at API entry. The queue
+// defers execution to a microtask, so mutate immediately after calling applySnapshot.
+const callerOwnedRestoreInput = structuredClone(savedRuntimeWorld);
+const expectedRestoreName = callerOwnedRestoreInput.name;
+const expectedRestoreTick = callerOwnedRestoreInput.metadata.simulationTicks;
+const callerOwnedRestore = saveHarness.applySnapshot(callerOwnedRestoreInput);
+callerOwnedRestoreInput.name = "Mutated before queued restore";
+callerOwnedRestoreInput.metadata.simulationTicks = expectedRestoreTick + 12345;
+await callerOwnedRestore;
+assert.equal(runtimeState.tick, expectedRestoreTick,
+  "queued restore must use the detached input captured when applySnapshot was called");
+assert.equal(saveHarness.getCurrentSnapshot()?.name, expectedRestoreName,
+  "current snapshot must preserve the original caller-owned snapshot name");
+const exposedCurrentSnapshot = saveHarness.getCurrentSnapshot();
+assert.ok(exposedCurrentSnapshot);
+exposedCurrentSnapshot.name = "Mutated getter result";
+exposedCurrentSnapshot.metadata.simulationTicks = expectedRestoreTick + 999;
+assert.equal(saveHarness.getCurrentSnapshot()?.name, expectedRestoreName,
+  "mutating a getCurrentSnapshot result must not mutate the retained current snapshot");
+assert.equal(saveHarness.getCurrentSnapshot()?.metadata.simulationTicks, expectedRestoreTick,
+  "nested metadata returned by getCurrentSnapshot must be detached");
 
 // A quick save may finish its expensive IndexedDB write after a Load request.
 // The operation queue must keep the load behind the write, otherwise the old
@@ -1598,8 +1624,10 @@ assert.match(saveSystemSource, /private operationQueue: Promise<void> = Promise\
   "world save/load operations must share one FIFO serialization queue");
 assert.match(saveSystemSource, /return this\.runExclusive\(async \(\) => \{[\s\S]*?captureSnapshotAtBoundary\(name\)[\s\S]*?saveToIndexedDB\(snapshot\)/,
   "quick-save capture and persistence must remain inside the same serialized operation");
-assert.match(saveSystemSource, /applySnapshot\(snapshot: WorldSnapshot\): Promise<void>\s*\{\s*return this\.runExclusive\(\(\) => this\.applySnapshotExclusive\(snapshot\)\)/,
-  "direct world restores must be ordered against pending saves");
+assert.match(saveSystemSource, /applySnapshot\(snapshot: WorldSnapshot\): Promise<void>\s*\{[\s\S]*?detached = structuredClone\(snapshot\)[\s\S]*?return this\.runExclusive\(\(\) => this\.applySnapshotExclusive\(detached\)\)/,
+  "direct world restores must detach caller-owned input before entering the serialized queue");
+assert.match(saveSystemSource, /getCurrentSnapshot\(\): WorldSnapshot \| null\s*\{\s*return this\.currentSnapshot \? structuredClone\(this\.currentSnapshot\) : null/,
+  "current snapshot reads must not expose the retained mutable snapshot object");
 assert.match(saveSystemSource, /return this\.runExclusive\(async \(\) => \{[\s\S]*?const saves = await db\.getAll\('saves'\)[\s\S]*?applySnapshotExclusive\(found\.snapshot\)/,
   "quick-load selection and restore must run as one serialized operation");
 assert.match(saveSystemSource, /async listQuickSaves\(\): Promise<WorldSaveSummary\[\]>\s*\{\s*return this\.runExclusive\(async \(\) => \{[\s\S]*?db\.getAll\('saves'\)/,

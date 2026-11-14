@@ -152,7 +152,7 @@ export class WorldSaveSystem {
       const snapshot = await this.captureSnapshotAtBoundary(name);
       await this.saveToIndexedDB(snapshot);
       // Do not advertise a snapshot as persisted when the IndexedDB commit failed.
-      this.currentSnapshot = snapshot;
+      this.currentSnapshot = structuredClone(snapshot);
       return snapshot.name;
     });
   }
@@ -164,7 +164,7 @@ export class WorldSaveSystem {
   }
 
   getCurrentSnapshot(): WorldSnapshot | null {
-    return this.currentSnapshot;
+    return this.currentSnapshot ? structuredClone(this.currentSnapshot) : null;
   }
 
   async loadQuickSave(idOrName?: string): Promise<WorldSnapshot | null> {
@@ -177,7 +177,7 @@ export class WorldSaveSystem {
         : sorted[0];
       if (!found) return null;
       await this.applySnapshotExclusive(found.snapshot);
-      return found.snapshot;
+      return structuredClone(found.snapshot);
     });
   }
 
@@ -257,7 +257,15 @@ export class WorldSaveSystem {
   }
 
   applySnapshot(snapshot: WorldSnapshot): Promise<void> {
-    return this.runExclusive(() => this.applySnapshotExclusive(snapshot));
+    // Detach before queueing: callers may mutate their input immediately after
+    // this method returns, while the serialized restore is still waiting.
+    let detached: WorldSnapshot;
+    try {
+      detached = structuredClone(snapshot);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    return this.runExclusive(() => this.applySnapshotExclusive(detached));
   }
 
   private async applySnapshotExclusive(snapshot: WorldSnapshot): Promise<void> {
@@ -508,7 +516,7 @@ export class WorldSaveSystem {
     // The authoritative transaction has committed. Keep the in-memory pointer
 // aligned with the live world even if later best-effort cleanup or sidecar
 // persistence fails.
-this.currentSnapshot = snapshot;
+this.currentSnapshot = structuredClone(snapshot);
 
 let postCommitFailureCount = 0;
 const reportPostCommitFailure = (operation: string, error: unknown) => {
