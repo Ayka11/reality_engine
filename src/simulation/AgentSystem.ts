@@ -346,7 +346,8 @@ export class AgentSystem {
     }
   }
 
-  getAgents(): Agent[] { return [...this.agents.values()]; }
+  /** Detached read view; callers cannot mutate the authoritative agent population. */
+  getAgents(): Agent[] { return [...this.agents.values()].map(agent => ({ ...agent })); }
 
   agentMarkers(): AgentMarker[] {
     return this.getAgents().map(a => ({
