@@ -745,6 +745,7 @@ export class WorldAssetRuntime {
     count: number,
     seed = 1,
     scale = 1,
+    sourceAssetId?: string,
   ): { instances: THREE.Object3D[]; createdInstanceIds: string[] } {
     if (![bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ, count, seed, scale].every(Number.isFinite)) {
       throw new TypeError('External asset scatter bounds, count, seed and scale must be finite')
@@ -752,7 +753,17 @@ export class WorldAssetRuntime {
     if (bounds.minX > bounds.maxX || bounds.minZ > bounds.maxZ) {
       throw new RangeError('External asset scatter bounds must be ordered from minimum to maximum')
     }
-    if (!this.semanticSources.has(semanticEntryId)) {
+    if (sourceAssetId !== undefined &&
+        (typeof sourceAssetId !== 'string' || !sourceAssetId.trim())) {
+      throw new TypeError('External asset scatter sourceAssetId must be a non-empty string')
+    }
+
+    // Explicit source selection allows multiple GLTF files to share one semantic
+    // entry without sharing deterministic instance IDs or runtime ownership.
+    const source = sourceAssetId === undefined
+      ? this.semanticSources.get(semanticEntryId)
+      : this.assets.get(sourceAssetId)
+    if (!source || source.semanticEntryId !== semanticEntryId) {
       return { instances: [], createdInstanceIds: [] }
     }
 
@@ -767,13 +778,24 @@ export class WorldAssetRuntime {
     for (let i = 0; i < total; i++) {
       const x = bounds.minX + random() * (bounds.maxX - bounds.minX)
       const z = bounds.minZ + random() * (bounds.maxZ - bounds.minZ)
-      const instanceId = semanticEntryId + ':instance:' + seed + ':' + i
+      // Preserve legacy semantic-only IDs for saved worlds. Source-scoped IDs
+      // are deterministic per GLTF source and cannot collide across same-semantic assets.
+      const instanceId = sourceAssetId === undefined
+        ? semanticEntryId + ':instance:' + seed + ':' + i
+        : semanticEntryId + ':source:' + encodeURIComponent(sourceAssetId) + ':instance:' + seed + ':' + i
       const existedBefore = this.instances.has(instanceId)
       try {
         const instance = this.placeInstance(
           instanceId,
           semanticEntryId,
-          { x, y: 0, z, scale: scale * (0.85 + random() * 0.3), rotationY: random() * Math.PI * 2 },
+          {
+            x,
+            y: 0,
+            z,
+            scale: scale * (0.85 + random() * 0.3),
+            rotationY: random() * Math.PI * 2,
+            ...(sourceAssetId !== undefined ? { sourceAssetId } : {}),
+          },
         )
         if (instance) {
           placed.push(instance)
@@ -820,8 +842,9 @@ export class WorldAssetRuntime {
     count: number,
     seed = 1,
     scale = 1,
+    sourceAssetId?: string,
   ): THREE.Object3D[] {
-    return this.scatterSemanticWithResult(semanticEntryId, bounds, count, seed, scale).instances
+    return this.scatterSemanticWithResult(semanticEntryId, bounds, count, seed, scale, sourceAssetId).instances
   }
 
   private refreshSemanticSource(semanticEntryId: string) {
