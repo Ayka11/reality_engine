@@ -44,13 +44,41 @@ export function runRecorderRecoveryRegression(): void {
   }
   const expected = JSON.stringify(source);
 
-  // Public snapshots are detached from live recorder buffers and metrics.
-  const detached = recorder.snapshotState();
-  detached.snapshots[0].buffer[0] = -999;
-  detached.snapshots[0].metrics.totalEnergy = -999;
-  if (recorder.snapList[0].buffer[0] !== source.snapshots[0].buffer[0] ||
+  // Public history metadata is detached and contains no field-buffer handle.
+  // UI consumers need tick/metrics only; history buffers stay private to Recorder.
+  const publicHistory = recorder.snapList;
+  if (publicHistory.length !== source.snapshots.length ||
+      "buffer" in publicHistory[0] ||
+      publicHistory[0].tick !== source.snapshots[0].tick ||
+      publicHistory[0].metrics.totalEnergy !== source.snapshots[0].metrics.totalEnergy) {
+    throw new Error("Recorder did not expose the expected detached metadata view");
+  }
+  let frozenListRejected = false;
+  try { (publicHistory as unknown as Array<unknown>).splice(0, 1); }
+  catch { frozenListRejected = true; }
+  let frozenMetricsRejected = false;
+  try {
+    (publicHistory[0].metrics as unknown as { totalEnergy: number }).totalEnergy = -999;
+  } catch {
+    frozenMetricsRejected = true;
+  }
+  let frozenTickRejected = false;
+  try { (publicHistory[0] as unknown as { tick: number }).tick = -999; }
+  catch { frozenTickRejected = true; }
+  if (!frozenListRejected || !frozenMetricsRejected || !frozenTickRejected) {
+    throw new Error("Recorder history metadata view must be immutable");
+  }
+  if (recorder.count !== source.snapshots.length ||
+      recorder.snapList[0].tick !== source.snapshots[0].tick ||
       recorder.snapList[0].metrics.totalEnergy !== source.snapshots[0].metrics.totalEnergy) {
-    throw new Error("Recorder snapshot aliases live history buffers or metrics");
+    throw new Error("Mutating public Recorder metadata altered retained history");
+  }
+
+  // The restoration route must continue reading the private historical buffer,
+  // not any public metadata object that UI/diagnostics can retain.
+  const historicalEnergy = source.snapshots[0].buffer[0];
+  if (!recorder.restoreSnapshot(grid, 0) || grid.buffer[0] !== historicalEnergy) {
+    throw new Error("Recorder restore did not use its private authoritative history buffer");
   }
 
   recorder.stopRecording();
