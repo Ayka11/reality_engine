@@ -261,6 +261,14 @@ export function bootstrapInfiniteWorld() {
   }
   ;(window as any).worldExternalAssetScatter = (semanticEntryId: string, count = 12, radius = 70, seed = 1, scale = 1) =>
     world.scatterExternalSemantic(semanticEntryId, count, radius, seed, scale)
+  ;(window as any).worldExternalAssetScatterSource = (
+    assetId: string,
+    semanticEntryId: string,
+    count = 12,
+    radius = 70,
+    seed = 1,
+    scale = 1,
+  ) => world.scatterExternalSemantic(semanticEntryId, count, radius, seed, scale, assetId)
   ;(window as any).worldExternalAssetAnimationNames = (assetId: string) =>
     world.worldAssetRuntime.get(assetId)?.animations.map(clip => clip.name) ?? []
   ;(window as any).worldExternalAssetAnimationPlay = (
