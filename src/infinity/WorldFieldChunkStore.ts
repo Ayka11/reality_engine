@@ -29,6 +29,11 @@ export type WorldFieldChunkStoreStats = {
  */
 export type WorldFieldChunkEvictionHandler = (chunk: WorldFieldChunk) => void
 
+/** Return a detached record; providers are shared service objects by design. */
+function copyWorldFieldChunk(chunk: WorldFieldChunk): WorldFieldChunk {
+  return { ...chunk, coord: { ...chunk.coord } }
+}
+
 export class WorldFieldChunkStore {
   private readonly chunks = new Map<string, WorldFieldChunk>()
   private tick = 0
@@ -66,7 +71,7 @@ export class WorldFieldChunkStore {
     const chunk = this.chunks.get(key)
     if (!chunk) return null
     chunk.lastAccess = ++this.tick
-    return chunk
+    return copyWorldFieldChunk(chunk)
   }
 
   set(coord: WorldFieldChunkCoord, seed: string, provider: ScientificFieldProvider, version = 1): WorldFieldChunk {
@@ -74,7 +79,7 @@ export class WorldFieldChunkStore {
     const chunk: WorldFieldChunk = { key, coord: { ...coord }, seed, version, provider, lastAccess: ++this.tick }
     this.chunks.set(key, chunk)
     this.evictIfNeeded(key)
-    return chunk
+    return copyWorldFieldChunk(chunk)
   }
 
   delete(coord: WorldFieldChunkCoord): boolean {
@@ -107,7 +112,7 @@ export class WorldFieldChunkStore {
       }
       if (!candidate) break
       this.chunks.delete(candidate.key)
-      this.onEvict?.(candidate)
+      this.onEvict?.(copyWorldFieldChunk(candidate))
       this.evictions++
     }
   }

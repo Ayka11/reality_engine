@@ -234,6 +234,7 @@ export class SimulationEngine {
         // changed, keeping this fallback specific to otherwise-invisible writes.
         const readbackBufferSnapshot = this.grid.buffer.slice();
         const readbackBackBufferSnapshot = this.grid.backBuffer.slice();
+        const readbackChunkBufferSnapshots = this.grid.captureDenseWindowRawChunkSnapshots();
         let data: Float32Array;
         try {
           this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
@@ -256,13 +257,14 @@ export class SimulationEngine {
           untrackedBufferWrite = !this.grid.buffersMatchSnapshots(
             readbackBufferSnapshot,
             readbackBackBufferSnapshot,
-          );
+          ) || !this.grid.denseWindowRawChunksMatchSnapshots(readbackChunkBufferSnapshots);
         }
         if (generationChanged || revisionChanged || lawRevisionChanged || untrackedBufferWrite) {
           // Tracked writes are rejected through revision/generation. Compare the
           // front and back snapshots as a final guard for writes through a
-          // retained raw Float32Array alias, whose indexed stores cannot trigger
-          // revision tracking. Do not publish stale output over newer state.
+          // retained raw Float32Array aliases on the dense grid or any exposed
+          // chunk buffer overlapping the dense window. Do not publish stale output
+          // over newer authoritative CPU state.
           this.resynchronizeGPUAndThrow(
             new Error('Discarded stale GPU readback: simulation state changed while awaiting GPU results'),
             "Stale GPU readback rejected",

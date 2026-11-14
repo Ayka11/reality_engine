@@ -164,7 +164,7 @@ export class WorldSaveSystem {
   }
 
   getCurrentSnapshot(): WorldSnapshot | null {
-    return this.currentSnapshot;
+    return this.currentSnapshot ? structuredClone(this.currentSnapshot) : null;
   }
 
   async loadQuickSave(idOrName?: string): Promise<WorldSnapshot | null> {
@@ -177,7 +177,7 @@ export class WorldSaveSystem {
         : sorted[0];
       if (!found) return null;
       await this.applySnapshotExclusive(found.snapshot);
-      return found.snapshot;
+      return structuredClone(found.snapshot);
     });
   }
 
@@ -257,7 +257,15 @@ export class WorldSaveSystem {
   }
 
   applySnapshot(snapshot: WorldSnapshot): Promise<void> {
-    return this.runExclusive(() => this.applySnapshotExclusive(snapshot));
+    // Detach before queueing: callers may mutate their input immediately after
+    // this method returns, while the serialized restore is still waiting.
+    let detached: WorldSnapshot;
+    try {
+      detached = structuredClone(snapshot);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    return this.runExclusive(() => this.applySnapshotExclusive(detached));
   }
 
   private async applySnapshotExclusive(snapshot: WorldSnapshot): Promise<void> {
@@ -697,12 +705,14 @@ if (postCommitFailureCount === 0) {
     return {
       id: law.id,
       name: law.name,
-      conditions: law.conditions,
+      // LawEngine exposes nested state through mutation-tracking proxies.
+      // Snapshot payloads must contain detached plain values, not those proxies.
+      conditions: law.conditions.map(condition => ({ ...condition })),
       effects: {
         active: law.active,
-        enablesProcesses: law.enablesProcesses,
-        disablesProcesses: law.disablesProcesses,
-        paramOverrides: law.paramOverrides,
+        enablesProcesses: [...law.enablesProcesses],
+        disablesProcesses: [...law.disablesProcesses],
+        paramOverrides: { ...law.paramOverrides },
         color: law.color,
         age: law.age,
         generation: law.generation,

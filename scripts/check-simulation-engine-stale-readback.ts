@@ -193,6 +193,74 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(aliasDuringBackReadbackEngine.grid.backBuffer[aliasDuringBackIndex], 808,
     "an untracked back-buffer alias write must be preserved when stale readback is rejected");
 
+  // A retained raw alias to a chunk overlapping the dense window must also be
+  // detected. Otherwise the accepted dense readback is copied back into the
+  // chunk and silently erases the newer sparse representation.
+  const chunkFrontAliasEngine = new SimulationEngine(4, 4, 4);
+  (chunkFrontAliasEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const chunkFrontAlias = chunkFrontAliasEngine.grid.chunks.get("0,0,0");
+  assert.ok(chunkFrontAlias, "expected the dense-window chunk to exist");
+  const chunkFrontDenseIndex = chunkFrontAliasEngine.grid.idx(1, 1, 1) + F.ENERGY;
+  const chunkFrontRawIndex = chunkFrontAlias.localIdx(1, 1, 1) + F.ENERGY;
+  const retainedChunkFrontAlias = getMutableBuffer(chunkFrontAlias);
+  const staleChunkFrontReadback = chunkFrontAliasEngine.grid.buffer.slice();
+  staleChunkFrontReadback[chunkFrontDenseIndex] = 9001;
+  const pendingChunkFrontReadback = await beginPendingReadback(
+    chunkFrontAliasEngine,
+    staleChunkFrontReadback,
+  );
+  const chunkFrontRevision = chunkFrontAliasEngine.grid.mutationRevision;
+  retainedChunkFrontAlias[chunkFrontRawIndex] = 707;
+  assert.equal(chunkFrontAliasEngine.grid.mutationRevision, chunkFrontRevision,
+    "retained chunk-front alias writes must be covered by content snapshots");
+  pendingChunkFrontReadback.release(staleChunkFrontReadback);
+  await assert.rejects(pendingChunkFrontReadback.step, /Discarded stale GPU readback/);
+  assert.equal(chunkFrontAlias.buffer[chunkFrontRawIndex], 707,
+    "stale dense GPU output must not overwrite a retained chunk-front alias write");
+
+  const chunkBackAliasEngine = new SimulationEngine(4, 4, 4);
+  (chunkBackAliasEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const chunkBackAlias = chunkBackAliasEngine.grid.chunks.get("0,0,0");
+  assert.ok(chunkBackAlias, "expected the dense-window chunk to exist");
+  const chunkBackRawIndex = chunkBackAlias.localIdx(1, 1, 1) + F.ENTROPY;
+  const retainedChunkBackAlias = getMutableBuffer(chunkBackAlias, "back");
+  const staleChunkBackReadback = chunkBackAliasEngine.grid.buffer.slice();
+  const pendingChunkBackReadback = await beginPendingReadback(
+    chunkBackAliasEngine,
+    staleChunkBackReadback,
+  );
+  const chunkBackRevision = chunkBackAliasEngine.grid.mutationRevision;
+  retainedChunkBackAlias[chunkBackRawIndex] = 808;
+  assert.equal(chunkBackAliasEngine.grid.mutationRevision, chunkBackRevision,
+    "retained chunk-back alias writes must be covered by content snapshots");
+  pendingChunkBackReadback.release(staleChunkBackReadback);
+  await assert.rejects(pendingChunkBackReadback.step, /Discarded stale GPU readback/);
+  assert.equal(chunkBackAlias.backBuffer[chunkBackRawIndex], 808,
+    "stale GPU output rejection must preserve retained chunk-back alias writes");
+
+  // Raw aliases follow backing-array identity when front/back buffers are swapped.
+  // A front alias acquired before the swap now references the chunk back buffer.
+  const chunkSwapAliasEngine = new SimulationEngine(4, 4, 4);
+  (chunkSwapAliasEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const chunkSwapAlias = chunkSwapAliasEngine.grid.chunks.get("0,0,0");
+  assert.ok(chunkSwapAlias, "expected the dense-window chunk to exist");
+  const retainedPreSwapAlias = getMutableBuffer(chunkSwapAlias, "front");
+  chunkSwapAlias.swapBuffers();
+  const chunkSwapRawIndex = chunkSwapAlias.localIdx(1, 1, 1) + F.TEMPERATURE;
+  const staleChunkSwapReadback = chunkSwapAliasEngine.grid.buffer.slice();
+  const pendingChunkSwapReadback = await beginPendingReadback(
+    chunkSwapAliasEngine,
+    staleChunkSwapReadback,
+  );
+  const chunkSwapRevision = chunkSwapAliasEngine.grid.mutationRevision;
+  retainedPreSwapAlias[chunkSwapRawIndex] = 909;
+  assert.equal(chunkSwapAliasEngine.grid.mutationRevision, chunkSwapRevision,
+    "a retained pre-swap array alias must remain untracked after buffer exchange");
+  pendingChunkSwapReadback.release(staleChunkSwapReadback);
+  await assert.rejects(pendingChunkSwapReadback.step, /Discarded stale GPU readback/);
+  assert.equal(chunkSwapAlias.backBuffer[chunkSwapRawIndex], 909,
+    "chunk alias snapshot must follow backing-array identity across front/back swap");
+
   // Any dense-grid write while a GPU readback is pending must invalidate that result.
   const staleDense = engine.grid.buffer.slice();
   const pendingDense = await beginPendingReadback(engine, staleDense);
@@ -698,7 +766,30 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
     restoreLawEngineSnapshot: snapshot => restoreEngine.laws.restore(snapshot),
   });
 
+  const radiationLaw = restoreEngine.laws.laws.find(law => law.id === "law_radiation");
+  assert.ok(radiationLaw, "expected default radiation law for snapshot ownership regression");
+  radiationLaw.active = true;
   const worldSnapshot = worldSave.captureSnapshot("pending-readback-world-restore");
+  const radiationSnapshot = worldSnapshot.activeLaws.find(law => law.id === "law_radiation");
+  assert.ok(radiationSnapshot, "active-law save snapshot must include radiation law");
+  assert.notEqual(radiationSnapshot.conditions, radiationLaw.conditions,
+    "active-law snapshot conditions must be detached from tracked LawEngine proxies");
+  assert.notEqual(radiationSnapshot.effects.enablesProcesses, radiationLaw.enablesProcesses,
+    "active-law process arrays must be detached from tracked LawEngine proxies");
+  assert.notEqual(radiationSnapshot.effects.paramOverrides, radiationLaw.paramOverrides,
+    "active-law parameter overrides must be detached from tracked LawEngine proxies");
+  const originalConditionValue = radiationLaw.conditions[0]!.value;
+  const originalProcessId = radiationLaw.enablesProcesses[0]!;
+  const originalEnergyDiffusion = radiationLaw.paramOverrides.energyDiffusion;
+  radiationSnapshot.conditions[0]!.value = originalConditionValue + 1;
+  radiationSnapshot.effects.enablesProcesses[0] = originalProcessId + 1;
+  radiationSnapshot.effects.paramOverrides.energyDiffusion = 0.999;
+  assert.equal(radiationLaw.conditions[0]!.value, originalConditionValue,
+    "mutating active-law snapshot conditions must not mutate the live LawEngine");
+  assert.equal(radiationLaw.enablesProcesses[0], originalProcessId,
+    "mutating active-law snapshot process lists must not mutate the live LawEngine");
+  assert.equal(radiationLaw.paramOverrides.energyDiffusion, originalEnergyDiffusion,
+    "mutating active-law snapshot parameter overrides must not mutate the live LawEngine");
   const restoredEnergyField = new Float32Array(worldSnapshot.fields.energy);
   restoredEnergyField[restoreCell / CELL_FIELDS] = 123;
   worldSnapshot.fields.energy = restoredEnergyField.buffer;
