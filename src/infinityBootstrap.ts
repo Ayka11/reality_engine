@@ -1604,7 +1604,7 @@ export function bootstrapInfiniteWorld() {
                     <button class="pill ${eraseRadius === r ? 'on' : ''}" data-radius="${r}" style="font-size: 9.5px; padding: 2px 6px;">${r}m</button>
                   `).join('')}
                   <span style="color: var(--sub);">·</span>
-                  <button class="brush-btn" id="topClearAll" style="font-size: 9.5px; padding: 2px 7px; color: #e06060;">🗑️ Clear All</button>
+                  <button class="brush-btn" id="topClearAll" style="font-size: 9.5px; padding: 2px 7px; color: #e06060;">🗑️ Clear World</button>
                 </div>
                 <span style="font-size: 9px; color: var(--sub); font-style: italic;">Click or drag to demolish objects</span>
               ` : `
