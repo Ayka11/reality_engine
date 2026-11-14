@@ -126,6 +126,32 @@ assert.equal(identityAsset, identityDuplicateAsset,
 assert.equal(identityRuntime.getSemanticSource('flora.identity'), identityAsset)
 assert.equal(identityRuntime.remove('identity-source'), true)
 
+const semanticOwnershipRuntime = new WorldAssetRuntime(new THREE.Scene(), loader)
+const firstSemanticLoad = semanticOwnershipRuntime.load(
+  'semantic-source-a',
+  'https://assets.example.test/semantic-a.glb',
+  { semanticEntryId: 'flora.shared' },
+)
+requests.at(-1)!.onLoad({ scene: createGltfScene() })
+await firstSemanticLoad
+assert.ok(semanticOwnershipRuntime.placeInstance('shared:one', 'flora.shared', {
+  x: 0, y: 0, z: 0, sourceAssetId: 'semantic-source-a',
+}))
+const secondSemanticLoad = semanticOwnershipRuntime.load(
+  'semantic-source-b',
+  'https://assets.example.test/semantic-b.glb',
+  { semanticEntryId: 'flora.shared' },
+)
+requests.at(-1)!.onLoad({ scene: createGltfScene() })
+await secondSemanticLoad
+assert.throws(
+  () => semanticOwnershipRuntime.placeInstance('shared:one', 'flora.shared', {
+    x: 0, y: 0, z: 0,
+  }),
+  /already owned by a different asset source or semantic entry/,
+  'semantic-only idempotent placement must not reuse an instance after the active semantic source changes',
+)
+semanticOwnershipRuntime.clear()
 
 const instance = runtime.placeInstance('oak:instance:1', 'flora.oak', { x: 4, y: 0, z: 8 })
 assert.ok(instance)
