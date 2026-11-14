@@ -150,7 +150,7 @@ export class WorldEvents {
     };
     this.history.unshift(ev);
     if (this.history.length > 20) this.history.pop();
-    return ev;
+    return { ...ev };
   }
 
   // Fires random events at intervals — call from SimulationEngine.step()
@@ -167,7 +167,7 @@ export class WorldEvents {
     return this.trigger(grid, type, tick);
   }
 
-  recent(n: number): WorldEvent[] { return this.history.slice(0, n); }
+  recent(n: number): WorldEvent[] { return this.history.slice(0, n).map(event => ({ ...event })); }
 
   // ── Event implementations ─────────────────────────────────────────────────
 
