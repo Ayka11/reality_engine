@@ -52,6 +52,25 @@ export function runWorldEventsRecoveryRegression(): void {
   world.restoreRandomState(legacyCheckpoint);
   equal(world.snapshot(), legacyCheckpoint, "Legacy WorldEvents restore did not delegate to canonical restore");
 
+  // trigger()/recent() return detached event values, not references into the
+  // authoritative history that can later be saved or replayed.
+  const returnedEvent = world.trigger(grid, "radiation_storm", 12);
+  const afterReturnedEvent = world.snapshot();
+  returnedEvent.label = "externally rewritten trigger result";
+  returnedEvent.description = "externally rewritten description";
+  if (JSON.stringify(world.snapshot()) !== JSON.stringify(afterReturnedEvent)) {
+    throw new Error("WorldEvents.trigger returned a live stored history record");
+  }
+
+  const recentEvents = world.recent(1);
+  if (recentEvents.length !== 1) throw new Error("WorldEvents recent-event fixture is unexpectedly empty");
+  recentEvents[0].label = "externally rewritten recent record";
+  recentEvents[0].tick = -999;
+  recentEvents.splice(0, 1);
+  if (JSON.stringify(world.snapshot()) !== JSON.stringify(afterReturnedEvent)) {
+    throw new Error("WorldEvents.recent exposed live event objects");
+  }
+
   // Exercise the automatic-event countdown path including a selected random event.
   const autoCheckpoint = { ...cloneSnapshot(world.snapshot()), nextAuto: 1 };
   world.restore(autoCheckpoint);
