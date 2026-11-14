@@ -15,6 +15,14 @@ export type WorldFieldBoundarySnapshot = {
   version: number
 }
 
+function cloneBoundarySnapshot(snapshot: WorldFieldBoundarySnapshot): WorldFieldBoundarySnapshot {
+  return {
+    ...snapshot,
+    coord: { ...snapshot.coord },
+    samples: snapshot.samples.map(sample => ({ ...sample })),
+  }
+}
+
 /**
  * Explicit seam exchange between adjacent streamed chunks.
  *
@@ -66,11 +74,12 @@ export class WorldFieldBoundaryExchange {
       version: ++this.version,
     }
     this.faces.set(key, snapshot)
-    return snapshot
+    return cloneBoundarySnapshot(snapshot)
   }
 
   get(coord: WorldFieldChunkCoord, axis: BoundaryAxis, side: BoundarySide): WorldFieldBoundarySnapshot | null {
-    return this.faces.get(WorldFieldBoundaryExchange.key(coord, axis, side)) ?? null
+    const snapshot = this.faces.get(WorldFieldBoundaryExchange.key(coord, axis, side))
+    return snapshot ? cloneBoundarySnapshot(snapshot) : null
   }
 
   clearForChunk(coord: WorldFieldChunkCoord): number {
