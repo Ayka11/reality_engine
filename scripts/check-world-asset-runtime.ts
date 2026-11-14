@@ -275,6 +275,33 @@ assert.equal(materializerNotificationRuntime.stats().instances, 2)
 assert.equal(materializerNotificationAttempts, 2)
 assert.equal(materializerNotificationRuntime.remove('materializer-notification-source'), true)
 
+const conflictingMaterializerCalls: string[] = []
+const conflictingDescriptor: ExternalAssetPlacementSnapshot = {
+  instanceId: 'collision:occupied',
+  sourceAssetId: 'expected-source',
+  semanticEntryId: 'flora.expected',
+  x: 5, y: 0, z: 5, scale: 1, rotationY: 0,
+}
+const conflictingMaterializerResult = materializeExternalAssetPlacements({
+  placeInstance: (instanceId) => {
+    conflictingMaterializerCalls.push(instanceId)
+    return { unexpected: true }
+  },
+  hasInstance: () => true,
+  getInstanceSourceAssetId: () => 'different-source',
+  getInstanceSemanticEntryId: () => 'flora.different',
+}, [conflictingDescriptor], 'expected-source', 'flora.expected')
+assert.deepEqual(conflictingMaterializerCalls, [],
+  'a colliding instance ID must be checked before attempting to publish or reuse it')
+assert.deepEqual(conflictingMaterializerResult.remaining, [conflictingDescriptor],
+  'a descriptor whose ID is owned by another source must remain pending')
+assert.deepEqual(conflictingMaterializerResult.restoredIds, [],
+  'a colliding instance from another source must never be reported as restored')
+assert.deepEqual(conflictingMaterializerResult.errors, [{
+  instanceId: 'collision:occupied',
+  message: 'Existing instance ID is owned by a different asset source or semantic entry',
+}], 'source/semantic ownership collisions must be reported explicitly')
+
 const alternateOakLoad = runtime.load('oak-alt', 'https://assets.example.test/alternate-oak.glb', {
   semanticEntryId: 'flora.oak',
 })
