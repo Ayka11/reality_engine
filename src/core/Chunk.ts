@@ -4,6 +4,12 @@ import { createTrackedFloat32Array, INTERNAL_MUTABLE_BUFFER, type MutableBufferS
 export const CHUNK_SIZE = 32;
 export const CHUNK_VOLUME = CHUNK_SIZE ** 3;
 
+export interface ChunkRawBufferSnapshot {
+  exposureMask: number;
+  front: Float32Array | null;
+  back: Float32Array | null;
+}
+
 export class Chunk {
   readonly cx!: number;
   readonly cy!: number;
@@ -13,6 +19,10 @@ export class Chunk {
   private _bufferView: Float32Array;
   private _backBufferView: Float32Array;
   private mutationListeners = new Set<() => void>();
+  // Once a raw alias escapes, later writes through that typed array cannot be
+  // observed by the proxy/listener. Keep a per-side taint so GPU readback can
+  // snapshot only affected chunks and only the buffers whose aliases escaped.
+  private rawBufferExposureMask = 0;
   private _active = true;
   private _lastAccessed = Date.now();
 
@@ -66,8 +76,94 @@ export class Chunk {
   private markMutation(): void { for (const listener of this.mutationListeners) listener(); }
 
   [INTERNAL_MUTABLE_BUFFER](side: MutableBufferSide = "front"): Float32Array {
+    this.rawBufferExposureMask |= side === "back" ? 2 : 1;
     this.markMutation();
     return side === "back" ? this._backBuffer : this._buffer;
+  }
+
+  /** Capture only raw buffers whose live aliases have previously escaped. */
+  captureRawBufferSnapshot(): ChunkRawBufferSnapshot | null {
+    const exposureMask = this.rawBufferExposureMask;
+    if (exposureMask === 0) return null;
+    return {
+      exposureMask,
+      front: (exposureMask & 1) !== 0 ? this._buffer.slice() : null,
+      back: (exposureMask & 2) !== 0 ? this._backBuffer.slice() : null,
+    };
+  }
+
+  /** Compare escaped raw aliases without routing reads through tracked proxies. */
+  rawBuffersMatchSnapshot(snapshot: ChunkRawBufferSnapshot): boolean {
+    if (!snapshot || snapshot.exposureMask !== this.rawBufferExposureMask) return false;
+    const matches = (current: Float32Array, previous: Float32Array): boolean => {
+      if (current.length !== previous.length) return false;
+      for (let i = 0; i < current.length; i++) {
+        if (!Object.is(current[i], previous[i])) return false;
+      }
+      return true;
+    };
+    if ((snapshot.exposureMask & 1) !== 0) {
+      if (!(snapshot.front instanceof Float32Array) || !matches(this._buffer, snapshot.front)) return false;
+    } else if (snapshot.front !== null) {
+      return false;
+    }
+    if ((snapshot.exposureMask & 2) !== 0) {
+      if (!(snapshot.back instanceof Float32Array) || !matches(this._backBuffer, snapshot.back)) return false;
+    } else if (snapshot.back !== null) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Copy a contiguous dense-front range into this chunk without exposing the
+   * chunk's backing array. The caller preflights all segments before publishing.
+   */
+  writeFrontRangeFrom(
+    source: Float32Array,
+    sourceOffset: number,
+    targetOffset: number,
+    length: number,
+  ): void {
+    if (!(source instanceof Float32Array) ||
+        !Number.isSafeInteger(sourceOffset) || sourceOffset < 0 ||
+        !Number.isSafeInteger(targetOffset) || targetOffset < 0 ||
+        !Number.isSafeInteger(length) || length <= 0 ||
+        sourceOffset + length > source.length ||
+        targetOffset + length > this._buffer.length) {
+      throw new RangeError("Chunk front-buffer write range is invalid");
+    }
+    this._buffer.set(source.subarray(sourceOffset, sourceOffset + length), targetOffset);
+    this.markMutation();
+  }
+
+  /**
+   * Copy one strided cell field from the dense window. One listener notification
+   * is emitted per contiguous x-run, not per cell.
+   */
+  writeFrontFieldRangeFrom(
+    source: Float32Array,
+    sourceOffset: number,
+    targetOffset: number,
+    cellCount: number,
+    fieldOffset: number,
+  ): void {
+    if (!(source instanceof Float32Array) ||
+        !Number.isSafeInteger(sourceOffset) || sourceOffset < 0 ||
+        !Number.isSafeInteger(targetOffset) || targetOffset < 0 ||
+        !Number.isSafeInteger(cellCount) || cellCount <= 0 ||
+        !Number.isSafeInteger(fieldOffset) || fieldOffset < 0 || fieldOffset >= CELL_FIELDS ||
+        sourceOffset % CELL_FIELDS !== 0 ||
+        targetOffset % CELL_FIELDS !== 0 ||
+        sourceOffset + (cellCount - 1) * CELL_FIELDS + fieldOffset >= source.length ||
+        targetOffset + (cellCount - 1) * CELL_FIELDS + fieldOffset >= this._buffer.length) {
+      throw new RangeError("Chunk strided field write range is invalid");
+    }
+    for (let i = 0; i < cellCount; i++) {
+      this._buffer[targetOffset + i * CELL_FIELDS + fieldOffset] =
+        source[sourceOffset + i * CELL_FIELDS + fieldOffset];
+    }
+    this.markMutation();
   }
 
   localIdx(lx: number, ly: number, lz: number): number {
