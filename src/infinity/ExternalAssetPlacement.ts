@@ -104,7 +104,14 @@ export function mergeExternalAssetPlacements(
   live: ExternalAssetPlacementSnapshot[],
 ): ExternalAssetPlacementSnapshot[] {
   const merged = new Map<string, ExternalAssetPlacementSnapshot>()
+  const pendingIds = new Set<string>()
+  const liveIds = new Set<string>()
   const add = (placement: ExternalAssetPlacementSnapshot, source: 'pending' | 'live') => {
+    const sourceIds = source === 'pending' ? pendingIds : liveIds
+    if (sourceIds.has(placement.instanceId)) {
+      throw new TypeError('External asset placement ID ' + placement.instanceId + ' is duplicated in ' + source + ' records')
+    }
+    sourceIds.add(placement.instanceId)
     const previous = merged.get(placement.instanceId)
     if (previous) {
       if (previous.sourceAssetId !== placement.sourceAssetId ||
@@ -113,9 +120,6 @@ export function mergeExternalAssetPlacements(
           'External asset placement ID ' + placement.instanceId +
           ' is claimed by different asset sources or semantic entries',
         )
-      }
-      if (source === 'pending') {
-        throw new TypeError('External asset placement ID ' + placement.instanceId + ' is duplicated in pending descriptors')
       }
     }
     // A live transform may supersede the matching pending snapshot, but never
