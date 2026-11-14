@@ -840,4 +840,46 @@ function assertRollbackAggregate(
     "simulation must continue on the CPU after syncToGPU disables an untrusted device");
 }
 
+// A full engine reset must not carry deferred chemistry work or automatic-event
+// state from the previous world into the next generated world. User law settings
+// remain configured; only transient world/run state is reset.
+{
+  const engine = new SimulationEngine(4, 4, 2);
+  const energyIndex = engine.grid.idx(1, 1, 1) + F.ENERGY;
+  engine.grid.buffer[energyIndex] = 73;
+  engine.restoreChemistryState({ pendingDensityTransfers: [[1, 0.25], [7, -0.125]] });
+  engine.worldEvents.restore({
+    history: [{
+      type: 'meteor_strike',
+      tick: 14,
+      label: 'Old-world meteor',
+      description: 'Must not survive reset',
+    }],
+    nextAuto: 1,
+    rngState: 0x12345678,
+  });
+  engine.restoreTick(14);
+  engine.laws.setLawOverride('law_radiation', 'on');
+  const configuredLawState = engine.laws.snapshot();
+
+  const generationBeforeReset = (engine as unknown as { _stateGeneration: number })._stateGeneration;
+  engine.reset();
+
+  assert.ok((engine as unknown as { _stateGeneration: number })._stateGeneration > generationBeforeReset,
+    'reset must invalidate any GPU readback that began before the reset');
+  assert.equal(engine.tick, 0, 'reset must return the logical tick to zero');
+  assert.equal(engine.grid.buffer[energyIndex], 0, 'reset must clear dense authoritative fields');
+  assert.equal(engine.grid.backBuffer[energyIndex], 0, 'reset must align the back buffer with the cleared front buffer');
+  assert.equal(engine.grid.getCell(1, 1, 1)?.energy, 0, 'reset must publish cleared fields to sparse chunks');
+  assert.deepEqual(engine.snapshotChemistryState(), { pendingDensityTransfers: [] },
+    'reset must discard deferred chemistry transfers from the previous world');
+  assert.deepEqual(engine.worldEvents.snapshot(), {
+    history: [],
+    nextAuto: 600,
+    rngState: 0x6d2b79f5,
+  }, 'reset must restore the event scheduler and PRNG to their initial state');
+  assert.deepEqual(engine.laws.snapshot(), configuredLawState,
+    'reset must preserve user-configured laws and process overrides');
+}
+
 console.log('SimulationEngine core recovery and deterministic LawEngine replay: PASS');
