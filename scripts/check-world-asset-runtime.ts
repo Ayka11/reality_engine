@@ -71,7 +71,7 @@ assert.equal(staleGeometryDisposed, true, 'late stale GLTF geometry disposal mus
 assert.equal(staleMaterialDisposed, true, 'late stale GLTF material disposal must continue after geometry failure')
 assert.equal(scene.children.length, 0, 'late stale GLTF payloads must never enter the new scene')
 
-const duplicateCurrentLoad = runtime.load('oak', 'https://assets.example.test/duplicate-oak.glb', {
+const duplicateCurrentLoad = runtime.load('oak', 'https://assets.example.test/current-oak.glb', {
   semanticEntryId: 'flora.oak',
 })
 assert.equal(requests.length, 2, 'a stale task finalizer must not erase a newer pending task with the same ID')
@@ -82,6 +82,50 @@ const [asset, duplicateAsset] = await Promise.all([currentLoad, duplicateCurrent
 assert.equal(asset, duplicateAsset, 'concurrent requests for the current asset must share one loaded asset')
 assert.equal(runtime.getSemanticSource('flora.oak'), asset)
 assert.equal(scene.children.length, 1)
+await assert.rejects(
+  runtime.load('oak', 'https://assets.example.test/other-oak.glb', { semanticEntryId: 'flora.oak' }),
+  /already owned by a different source URL or semantic entry/,
+  'a loaded asset ID must not silently resolve to a different source URL',
+)
+await assert.rejects(
+  runtime.load('oak', 'https://assets.example.test/current-oak.glb', { semanticEntryId: 'flora.other' }),
+  /already owned by a different source URL or semantic entry/,
+  'a loaded asset ID must not silently resolve to a different semantic entry',
+)
+
+const identityScene = new THREE.Scene()
+const identityRuntime = new WorldAssetRuntime(identityScene, loader)
+const identityUrl = 'https://assets.example.test/identity-source.glb'
+const identityLoad = identityRuntime.load('identity-source', identityUrl, {
+  semanticEntryId: 'flora.identity',
+})
+const identityRequest = requests.at(-1)!
+await assert.rejects(
+  identityRuntime.load('identity-source', 'https://assets.example.test/conflicting-source.glb', {
+    semanticEntryId: 'flora.identity',
+  }),
+  /in-flight load for a different source URL or semantic entry/,
+  'a concurrent conflicting URL must be rejected without coalescing onto the first request',
+)
+await assert.rejects(
+  identityRuntime.load('identity-source', identityUrl, {
+    semanticEntryId: 'flora.conflicting',
+  }),
+  /in-flight load for a different source URL or semantic entry/,
+  'a concurrent conflicting semantic entry must be rejected',
+)
+const identityDuplicateLoad = identityRuntime.load('identity-source', identityUrl, {
+  semanticEntryId: 'flora.identity',
+})
+assert.equal(requests.at(-1), identityRequest,
+  'identical concurrent source and semantic requests must reuse the original loader request')
+identityRequest.onLoad({ scene: createGltfScene() })
+const [identityAsset, identityDuplicateAsset] = await Promise.all([identityLoad, identityDuplicateLoad])
+assert.equal(identityAsset, identityDuplicateAsset,
+  'identical concurrent load requests must resolve to the same runtime asset')
+assert.equal(identityRuntime.getSemanticSource('flora.identity'), identityAsset)
+assert.equal(identityRuntime.remove('identity-source'), true)
+
 
 const instance = runtime.placeInstance('oak:instance:1', 'flora.oak', { x: 4, y: 0, z: 8 })
 assert.ok(instance)
