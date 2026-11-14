@@ -151,6 +151,59 @@ assert.throws(
   /already owned by a different asset source or semantic entry/,
   'semantic-only idempotent placement must not reuse an instance after the active semantic source changes',
 )
+
+const sharedBounds = { minX: -10, maxX: 10, minZ: -10, maxZ: 10 }
+const sourceAScatter = semanticOwnershipRuntime.scatterSemanticWithResult(
+  'flora.shared', sharedBounds, 3, 73, 1, 'semantic-source-a',
+)
+const sourceBScatter = semanticOwnershipRuntime.scatterSemanticWithResult(
+  'flora.shared', sharedBounds, 3, 73, 1, 'semantic-source-b',
+)
+assert.equal(sourceAScatter.instances.length, 3,
+  'an explicit source must scatter even when it is not the currently active semantic source')
+assert.equal(sourceBScatter.instances.length, 3,
+  'a second GLTF source with the same semantic entry must receive an independent scatter batch')
+assert.equal(sourceAScatter.createdInstanceIds.length, 3)
+assert.equal(sourceBScatter.createdInstanceIds.length, 3)
+assert.equal(new Set([...sourceAScatter.createdInstanceIds, ...sourceBScatter.createdInstanceIds]).size, 6,
+  'same-semantic source-specific scatter batches must never share deterministic instance IDs')
+assert.ok(sourceAScatter.createdInstanceIds.every(id => id.includes(':source:semantic-source-a:instance:73:')))
+assert.ok(sourceBScatter.createdInstanceIds.every(id => id.includes(':source:semantic-source-b:instance:73:')))
+assert.ok(sourceAScatter.instances.every(instance =>
+  semanticOwnershipRuntime.getInstanceSourceAssetId(instance.userData.runtimeAssetInstanceId) === 'semantic-source-a'))
+assert.ok(sourceBScatter.instances.every(instance =>
+  semanticOwnershipRuntime.getInstanceSourceAssetId(instance.userData.runtimeAssetInstanceId) === 'semantic-source-b'))
+
+const repeatedSourceAScatter = semanticOwnershipRuntime.scatterSemanticWithResult(
+  'flora.shared', sharedBounds, 3, 73, 1, 'semantic-source-a',
+)
+assert.deepEqual(repeatedSourceAScatter.instances, sourceAScatter.instances,
+  'repeating a source-specific seed must return the same source-owned instance objects')
+assert.deepEqual(repeatedSourceAScatter.createdInstanceIds, [],
+  'repeating a source-specific seed must not claim previously published instances')
+
+const legacySemanticScatter = semanticOwnershipRuntime.scatterSemanticWithResult(
+  'flora.shared', sharedBounds, 1, 73, 1,
+)
+assert.equal(legacySemanticScatter.instances.length, 1,
+  'the legacy semantic-only API must remain available for existing callers')
+assert.equal(legacySemanticScatter.instances[0].userData.runtimeAssetInstanceId,
+  'flora.shared:instance:73:0',
+  'the legacy semantic-only API must preserve its historical deterministic ID format')
+assert.equal(
+  semanticOwnershipRuntime.getInstanceSourceAssetId(legacySemanticScatter.instances[0].userData.runtimeAssetInstanceId),
+  'semantic-source-b',
+  'the legacy semantic-only API must continue to use the current semantic source')
+
+assert.equal(semanticOwnershipRuntime.remove('semantic-source-a'), true)
+assert.ok(sourceAScatter.createdInstanceIds.every(id => !semanticOwnershipRuntime.hasInstance(id)),
+  'removing one GLTF source must remove only its dependent scatter placements')
+assert.ok(sourceBScatter.createdInstanceIds.every(id => semanticOwnershipRuntime.hasInstance(id)),
+  'removing one GLTF source must preserve placements owned by another source in the same semantic category')
+assert.equal(semanticOwnershipRuntime.stats().instances, 4,
+  'the other source batch and its legacy semantic placement must remain after source-specific removal')
+assert.equal(semanticOwnershipRuntime.remove('semantic-source-b'), true)
+assert.equal(semanticOwnershipRuntime.stats().instances, 0)
 semanticOwnershipRuntime.clear()
 
 const instance = runtime.placeInstance('oak:instance:1', 'flora.oak', { x: 4, y: 0, z: 8 })
