@@ -25,6 +25,7 @@ export class WorldAssetRuntime {
   private generation = 0
   private readonly assets = new Map<string, RuntimeAsset>()
   private readonly loading = new Map<string, Promise<RuntimeAsset>>()
+  private readonly loadingRequests = new Map<string, { sourceUrl: string; semanticEntryId?: string }>()
   private readonly pendingRejectors = new Map<string, (reason: Error) => void>()
   private readonly semanticSources = new Map<string, RuntimeAsset>()
   private readonly instances = new Map<string, THREE.Object3D>()
@@ -79,9 +80,27 @@ export class WorldAssetRuntime {
     }
 
     const existing = this.assets.get(id)
-    if (existing) return existing
+    if (existing) {
+      if (existing.sourceUrl !== sourceUrl ||
+          (options.semanticEntryId !== undefined && existing.semanticEntryId !== options.semanticEntryId)) {
+        throw new Error(
+          'Asset ID ' + id + ' is already owned by a different source URL or semantic entry',
+        )
+      }
+      return existing
+    }
     const pending = this.loading.get(id)
-    if (pending) return pending
+    if (pending) {
+      const pendingRequest = this.loadingRequests.get(id)
+      if (!pendingRequest ||
+          pendingRequest.sourceUrl !== sourceUrl ||
+          pendingRequest.semanticEntryId !== options.semanticEntryId) {
+        throw new Error(
+          'Asset ID ' + id + ' already has an in-flight load for a different source URL or semantic entry',
+        )
+      }
+      return pending
+    }
 
     const generation = this.generation
     let task: Promise<RuntimeAsset>
@@ -170,11 +189,16 @@ export class WorldAssetRuntime {
     }).finally(() => {
       if (this.loading.get(id) === task) {
         this.loading.delete(id)
+        this.loadingRequests.delete(id)
         if (this.pendingRejectors.get(id) === cancelTask) this.pendingRejectors.delete(id)
       }
     })
 
     this.loading.set(id, task)
+    this.loadingRequests.set(id, {
+      sourceUrl,
+      semanticEntryId: options.semanticEntryId,
+    })
     if (cancelTask) this.pendingRejectors.set(id, cancelTask)
     return task
   }
