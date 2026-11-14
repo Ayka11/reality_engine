@@ -330,6 +330,11 @@ export class WorldAssetRuntime {
     return typeof sourceAssetId === 'string' ? sourceAssetId : null
   }
 
+  getInstanceSemanticEntryId(instanceId: string): string | null {
+    const semanticEntryId = this.instances.get(instanceId)?.userData.semanticEntryId
+    return typeof semanticEntryId === 'string' ? semanticEntryId : null
+  }
+
   /** Assign a transient runtime owner without changing persistent world state. */
   setInstanceRuntimeOwnerId(instanceId: string, ownerId: string): boolean {
     if (typeof ownerId !== 'string' || !ownerId.trim() || ownerId.length > 512) {
