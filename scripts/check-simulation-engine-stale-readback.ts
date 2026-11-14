@@ -238,6 +238,29 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(chunkBackAlias.backBuffer[chunkBackRawIndex], 808,
     "stale GPU output rejection must preserve retained chunk-back alias writes");
 
+  // Raw aliases follow backing-array identity when front/back buffers are swapped.
+  // A front alias acquired before the swap now references the chunk back buffer.
+  const chunkSwapAliasEngine = new SimulationEngine(4, 4, 4);
+  (chunkSwapAliasEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const chunkSwapAlias = chunkSwapAliasEngine.grid.chunks.get("0,0,0");
+  assert.ok(chunkSwapAlias, "expected the dense-window chunk to exist");
+  const retainedPreSwapAlias = getMutableBuffer(chunkSwapAlias, "front");
+  chunkSwapAlias.swapBuffers();
+  const chunkSwapRawIndex = chunkSwapAlias.localIdx(1, 1, 1) + F.TEMPERATURE;
+  const staleChunkSwapReadback = chunkSwapAliasEngine.grid.buffer.slice();
+  const pendingChunkSwapReadback = await beginPendingReadback(
+    chunkSwapAliasEngine,
+    staleChunkSwapReadback,
+  );
+  const chunkSwapRevision = chunkSwapAliasEngine.grid.mutationRevision;
+  retainedPreSwapAlias[chunkSwapRawIndex] = 909;
+  assert.equal(chunkSwapAliasEngine.grid.mutationRevision, chunkSwapRevision,
+    "a retained pre-swap array alias must remain untracked after buffer exchange");
+  pendingChunkSwapReadback.release(staleChunkSwapReadback);
+  await assert.rejects(pendingChunkSwapReadback.step, /Discarded stale GPU readback/);
+  assert.equal(chunkSwapAlias.backBuffer[chunkSwapRawIndex], 909,
+    "chunk alias snapshot must follow backing-array identity across front/back swap");
+
   // Any dense-grid write while a GPU readback is pending must invalidate that result.
   const staleDense = engine.grid.buffer.slice();
   const pendingDense = await beginPendingReadback(engine, staleDense);

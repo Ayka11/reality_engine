@@ -19,10 +19,9 @@ export class Chunk {
   private _bufferView: Float32Array;
   private _backBufferView: Float32Array;
   private mutationListeners = new Set<() => void>();
-  // Once a raw alias escapes, later writes through that typed array cannot be
-  // observed by the proxy/listener. Keep a per-side taint so GPU readback can
-  // snapshot only affected chunks and only the buffers whose aliases escaped.
-  private rawBufferExposureMask = 0;
+  // Track escaped backing-array identities, not front/back roles: swapBuffers()
+  // can move an already-issued front alias to the back slot and vice versa.
+  private rawExposedBuffers = new WeakSet<Float32Array>();
   private _active = true;
   private _lastAccessed = Date.now();
 
@@ -76,19 +75,22 @@ export class Chunk {
   private markMutation(): void { for (const listener of this.mutationListeners) listener(); }
 
   [INTERNAL_MUTABLE_BUFFER](side: MutableBufferSide = "front"): Float32Array {
-    this.rawBufferExposureMask |= side === "back" ? 2 : 1;
+    const buffer = side === "back" ? this._backBuffer : this._buffer;
+    this.rawExposedBuffers.add(buffer);
     this.markMutation();
-    return side === "back" ? this._backBuffer : this._buffer;
+    return buffer;
   }
 
-  /** Capture only raw buffers whose live aliases have previously escaped. */
+  /** Capture only backing arrays whose live aliases have previously escaped. */
   captureRawBufferSnapshot(): ChunkRawBufferSnapshot | null {
-    const exposureMask = this.rawBufferExposureMask;
+    const frontExposed = this.rawExposedBuffers.has(this._buffer);
+    const backExposed = this.rawExposedBuffers.has(this._backBuffer);
+    const exposureMask = (frontExposed ? 1 : 0) | (backExposed ? 2 : 0);
     if (exposureMask === 0) return null;
     return {
       exposureMask,
-      front: (exposureMask & 1) !== 0 ? this._buffer.slice() : null,
-      back: (exposureMask & 2) !== 0 ? this._backBuffer.slice() : null,
+      front: frontExposed ? this._buffer.slice() : null,
+      back: backExposed ? this._backBuffer.slice() : null,
     };
   }
 
