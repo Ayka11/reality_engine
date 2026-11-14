@@ -750,6 +750,83 @@ try {
       JSON.stringify(rematerializedAfterRestart));
   }
 
+  console.log("[acceptance] same-semantic GLTF sources scatter and remove independently");
+  const secondMockAssetUrl = "https://assets.example.test/acceptance-second-asset.glb";
+  await page.route(secondMockAssetUrl, route => route.fulfill({
+    status: 200,
+    headers: {
+      "access-control-allow-origin": "*",
+      "content-type": "model/gltf-binary",
+    },
+    body: minimalGlb,
+  }));
+  await page.evaluate(async url => {
+    await window.worldExternalAssetLoad("acceptance-second-asset", url, "flora.tree", 1);
+  }, secondMockAssetUrl);
+
+  const sourceAScatterCount = await page.evaluate(() =>
+    window.worldExternalAssetScatterSource(
+      "acceptance-package-asset", "flora.tree", 2, 20, 1729, 1,
+    ));
+  const sourceBScatterCount = await page.evaluate(() =>
+    window.worldExternalAssetScatterSource(
+      "acceptance-second-asset", "flora.tree", 2, 20, 1729, 1,
+    ));
+  const multiSourceScatterState = await page.evaluate(() => {
+    const runtime = window.infiniteWorld.worldAssetRuntime;
+    const placements = runtime.snapshotPlacements();
+    return {
+      stats: window.worldExternalAssetStats(),
+      sourceAIds: placements.filter(item => item.sourceAssetId === "acceptance-package-asset")
+        .map(item => item.instanceId),
+      sourceBIds: placements.filter(item => item.sourceAssetId === "acceptance-second-asset")
+        .map(item => item.instanceId),
+    };
+  });
+  if (sourceAScatterCount !== 2 || sourceBScatterCount !== 2 ||
+      multiSourceScatterState.stats?.loaded !== 2 ||
+      multiSourceScatterState.stats?.instances !== 5 ||
+      multiSourceScatterState.sourceAIds.length !== 3 ||
+      multiSourceScatterState.sourceBIds.length !== 2 ||
+      new Set([...multiSourceScatterState.sourceAIds, ...multiSourceScatterState.sourceBIds]).size !== 5 ||
+      !multiSourceScatterState.sourceAIds.some(id => id.includes(":source:acceptance-package-asset:instance:1729:")) ||
+      !multiSourceScatterState.sourceBIds.every(id => id.includes(":source:acceptance-second-asset:instance:1729:"))) {
+    throw new Error("Same-semantic GLTF sources did not receive independent deterministic scatter IDs: " +
+      JSON.stringify({ sourceAScatterCount, sourceBScatterCount, multiSourceScatterState }));
+  }
+
+  const repeatedSourceAScatterCount = await page.evaluate(() =>
+    window.worldExternalAssetScatterSource(
+      "acceptance-package-asset", "flora.tree", 2, 20, 1729, 1,
+    ));
+  const repeatedSourceAStats = await page.evaluate(() => window.worldExternalAssetStats());
+  if (repeatedSourceAScatterCount !== 2 || repeatedSourceAStats?.instances !== 5) {
+    throw new Error("Repeating a source-specific scatter seed must be idempotent: " +
+      JSON.stringify({ repeatedSourceAScatterCount, repeatedSourceAStats }));
+  }
+
+  await page.evaluate(() => window.worldExternalAssetRemove("acceptance-package-asset"));
+  const afterRemovingFirstSource = await page.evaluate(() => {
+    const runtime = window.infiniteWorld.worldAssetRuntime;
+    return {
+      stats: window.worldExternalAssetStats(),
+      placements: runtime.snapshotPlacements(),
+    };
+  });
+  if (afterRemovingFirstSource.stats?.loaded !== 1 ||
+      afterRemovingFirstSource.stats?.instances !== 2 ||
+      afterRemovingFirstSource.placements.length !== 2 ||
+      !afterRemovingFirstSource.placements.every(item => item.sourceAssetId === "acceptance-second-asset")) {
+    throw new Error("Removing one GLTF source must preserve the other source's placements: " +
+      JSON.stringify(afterRemovingFirstSource));
+  }
+  await page.evaluate(() => window.worldExternalAssetRemove("acceptance-second-asset"));
+  const afterRemovingBothSources = await page.evaluate(() => window.worldExternalAssetStats());
+  if (afterRemovingBothSources?.loaded !== 0 || afterRemovingBothSources?.instances !== 0) {
+    throw new Error("Removing both GLTF sources must release every runtime asset and instance: " +
+      JSON.stringify(afterRemovingBothSources));
+  }
+
   // Portable files remain the authority for the finite 2D simulation. Re-import
   // the package after restart, then prove that its saved tick/field can advance.
   await page.locator("#loadFileInput").setInputFiles({
