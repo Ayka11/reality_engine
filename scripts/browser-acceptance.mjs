@@ -3906,7 +3906,7 @@ try {
       clearedWorld.runtimeAssets.loaded !== 0 ||
       clearedWorld.runtimeAssets.instances !== 0 ||
       Object.values(clearedWorld.durableSidecars).some(status => status !== "missing")) {
-    throw new Error("Clear All Objects did not reset every live and durable world sidecar to the generator baseline: " +
+    throw new Error("Clear World did not reset every live and durable world sidecar to the generator baseline: " +
       JSON.stringify(clearWorldContract));
   }
   console.log("[acceptance] full world clear resets object/field/terrain histories, surface provider and asset provenance");
