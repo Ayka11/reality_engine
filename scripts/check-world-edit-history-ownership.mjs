@@ -52,6 +52,9 @@ redone.object.properties.level = 777
 const undoneAgain = history.undo()
 assert.ok(undoneAgain)
 assert.equal(undoneAgain.object.properties.level, 1)
+const redoneAgain = history.redo()
+assert.ok(redoneAgain)
+assert.equal(redoneAgain.object.properties.level, 1)
 
 // Transform edits detach both before/after snapshots and both returned branches.
 const before = { ...object, properties: { nested: 'before' } }
