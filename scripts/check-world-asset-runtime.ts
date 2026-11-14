@@ -181,6 +181,30 @@ assert.equal(
   99,
   'live transform must override a stale pending descriptor with the same instance ID',
 )
+assert.throws(
+  () => mergeExternalAssetPlacements(
+    [runtime.snapshotPlacements()[0]],
+    [{ ...movedPlacement, sourceAssetId: 'different-source', semanticEntryId: 'flora.other' }],
+  ),
+  /claimed by different asset sources or semantic entries/,
+  'a live placement must not silently erase a pending descriptor owned by another asset',
+)
+assert.throws(
+  () => mergeExternalAssetPlacements([
+    runtime.snapshotPlacements()[0],
+    { ...runtime.snapshotPlacements()[0], x: 101 },
+  ], []),
+  /duplicated in pending records/,
+  'duplicate pending IDs must be rejected instead of silently overwriting earlier restore intent',
+)
+assert.throws(
+  () => mergeExternalAssetPlacements([], [
+    runtime.snapshotPlacements()[0],
+    { ...runtime.snapshotPlacements()[0], x: 102 },
+  ]),
+  /duplicated in live records/,
+  'duplicate live IDs must be rejected rather than collapsed during persistence snapshots',
+)
 const pendingPlacements = [
   runtime.snapshotPlacements()[0],
   { ...runtime.snapshotPlacements()[0], instanceId: 'tree:other-source', sourceAssetId: 'other-tree' },
