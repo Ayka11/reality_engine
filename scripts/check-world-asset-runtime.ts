@@ -166,6 +166,27 @@ assert.deepEqual(runtime.snapshotPlacements(), [{
   semanticEntryId: 'flora.oak',
   x: 4, y: 0, z: 8, scale: 1, rotationY: 0,
 }], 'runtime snapshot must capture absolute world coordinates and transforms')
+assert.throws(
+  () => runtime.placeInstance('oak:instance:1', 'flora.other', {
+    x: 4, y: 0, z: 8, sourceAssetId: 'oak',
+  }),
+  /already owned by a different asset source or semantic entry/,
+  'the runtime placement API must reject reuse of an instance ID under another semantic entry',
+)
+assert.throws(
+  () => runtime.placeInstance('oak:instance:1', 'flora.oak', {
+    x: 4, y: 0, z: 8, sourceAssetId: 'different-source',
+  }),
+  /already owned by a different asset source or semantic entry/,
+  'the runtime placement API must reject reuse of an instance ID under another source asset',
+)
+assert.throws(
+  () => runtime.placeInstance('oak:instance:1', 'flora.oak', {
+    x: Number.NaN, y: 0, z: 8, sourceAssetId: 'oak',
+  }),
+  /transform must contain finite coordinates/,
+  'an idempotent placement call must not bypass transform validation',
+)
 const placementValidation = validateExternalAssetPlacements(runtime.snapshotPlacements(), placementManifest, true)
 assert.equal(placementValidation.valid, true, 'placement intent must resolve to licensed manifest metadata')
 assert.equal(validateExternalAssetPlacements([
