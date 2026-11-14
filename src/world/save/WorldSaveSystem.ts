@@ -705,12 +705,14 @@ if (postCommitFailureCount === 0) {
     return {
       id: law.id,
       name: law.name,
-      conditions: law.conditions,
+      // LawEngine exposes nested state through mutation-tracking proxies.
+      // Snapshot payloads must contain detached plain values, not those proxies.
+      conditions: law.conditions.map(condition => ({ ...condition })),
       effects: {
         active: law.active,
-        enablesProcesses: law.enablesProcesses,
-        disablesProcesses: law.disablesProcesses,
-        paramOverrides: law.paramOverrides,
+        enablesProcesses: [...law.enablesProcesses],
+        disablesProcesses: [...law.disablesProcesses],
+        paramOverrides: { ...law.paramOverrides },
         color: law.color,
         age: law.age,
         generation: law.generation,

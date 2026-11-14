@@ -766,7 +766,30 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
     restoreLawEngineSnapshot: snapshot => restoreEngine.laws.restore(snapshot),
   });
 
+  const radiationLaw = restoreEngine.laws.laws.find(law => law.id === "law_radiation");
+  assert.ok(radiationLaw, "expected default radiation law for snapshot ownership regression");
+  radiationLaw.active = true;
   const worldSnapshot = worldSave.captureSnapshot("pending-readback-world-restore");
+  const radiationSnapshot = worldSnapshot.activeLaws.find(law => law.id === "law_radiation");
+  assert.ok(radiationSnapshot, "active-law save snapshot must include radiation law");
+  assert.notEqual(radiationSnapshot.conditions, radiationLaw.conditions,
+    "active-law snapshot conditions must be detached from tracked LawEngine proxies");
+  assert.notEqual(radiationSnapshot.effects.enablesProcesses, radiationLaw.enablesProcesses,
+    "active-law process arrays must be detached from tracked LawEngine proxies");
+  assert.notEqual(radiationSnapshot.effects.paramOverrides, radiationLaw.paramOverrides,
+    "active-law parameter overrides must be detached from tracked LawEngine proxies");
+  const originalConditionValue = radiationLaw.conditions[0]!.value;
+  const originalProcessId = radiationLaw.enablesProcesses[0]!;
+  const originalEnergyDiffusion = radiationLaw.paramOverrides.energyDiffusion;
+  radiationSnapshot.conditions[0]!.value = originalConditionValue + 1;
+  radiationSnapshot.effects.enablesProcesses[0] = originalProcessId + 1;
+  radiationSnapshot.effects.paramOverrides.energyDiffusion = 0.999;
+  assert.equal(radiationLaw.conditions[0]!.value, originalConditionValue,
+    "mutating active-law snapshot conditions must not mutate the live LawEngine");
+  assert.equal(radiationLaw.enablesProcesses[0], originalProcessId,
+    "mutating active-law snapshot process lists must not mutate the live LawEngine");
+  assert.equal(radiationLaw.paramOverrides.energyDiffusion, originalEnergyDiffusion,
+    "mutating active-law snapshot parameter overrides must not mutate the live LawEngine");
   const restoredEnergyField = new Float32Array(worldSnapshot.fields.energy);
   restoredEnergyField[restoreCell / CELL_FIELDS] = 123;
   worldSnapshot.fields.energy = restoredEnergyField.buffer;
