@@ -516,7 +516,7 @@ export class WorldSaveSystem {
     // The authoritative transaction has committed. Keep the in-memory pointer
 // aligned with the live world even if later best-effort cleanup or sidecar
 // persistence fails.
-this.currentSnapshot = structuredClone(snapshot);
+this.currentSnapshot = snapshot;
 
 let postCommitFailureCount = 0;
 const reportPostCommitFailure = (operation: string, error: unknown) => {
