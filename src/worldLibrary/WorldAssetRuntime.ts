@@ -228,12 +228,16 @@ export class WorldAssetRuntime {
       throw new TypeError('External asset instance transform must contain finite coordinates, scale and rotation')
     }
 
+    const expectedSource = options.sourceAssetId !== undefined
+      ? this.assets.get(options.sourceAssetId)
+      : this.semanticSources.get(semanticEntryId)
+    const expectedSourceAssetId = expectedSource?.id
     const existing = this.instances.get(instanceId)
     if (existing) {
       const existingSourceAssetId = existing.userData.runtimeAssetSourceId
       const existingSemanticEntryId = existing.userData.semanticEntryId
       if (existingSemanticEntryId !== semanticEntryId ||
-          (options.sourceAssetId !== undefined && existingSourceAssetId !== options.sourceAssetId)) {
+          existingSourceAssetId !== expectedSourceAssetId) {
         throw new Error(
           'External asset instance ID ' + instanceId +
           ' is already owned by a different asset source or semantic entry',
@@ -242,9 +246,7 @@ export class WorldAssetRuntime {
       return existing
     }
 
-    const source = options.sourceAssetId !== undefined
-      ? this.assets.get(options.sourceAssetId)
-      : this.semanticSources.get(semanticEntryId)
+    const source = expectedSource
     if (!source || source.semanticEntryId !== semanticEntryId) return null
     // SkeletonUtils rewires every SkinnedMesh to cloned bones/skeletons.
     // Object3D.clone(true) alone would keep the source skeleton shared.
