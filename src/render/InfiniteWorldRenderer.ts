@@ -3062,6 +3062,7 @@ export class InfiniteWorldRenderer {
     radius = 70,
     seed = 1,
     scale = 1,
+    sourceAssetId?: string,
   ) {
     const x = this.worldPosition.x
     const z = this.worldPosition.z
@@ -3071,6 +3072,7 @@ export class InfiniteWorldRenderer {
       count,
       seed,
       scale,
+      sourceAssetId,
     )
     this.groundExternalAssetInstances(scatter.instances, scatter.createdInstanceIds)
     if (scatter.instances.length) this.scheduleSave()
