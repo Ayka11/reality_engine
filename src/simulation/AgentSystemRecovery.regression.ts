@@ -108,10 +108,21 @@ export function runAgentSystemRecoveryRegression(): void {
   equal(agents.snapshot(), expected, "AgentSystem recovery did not reproduce seeded agent generation");
   equal(Array.from(grid.buffer), Array.from(expectedGrid), "AgentSystem recovery did not replay grid energy injection");
 
-  // Restore all individual agent properties, population membership and allocator.
-  agents.getAgents()[0].energy = 1;
-  agents.getAgents()[0].age = 999;
-  agents.getAgents()[0].behavior = "destroyer";
+  // getAgents() is a public read API. Mutating returned records or the
+  // returned array must not change the authoritative population.
+  const publicAgents = agents.getAgents();
+  const beforePublicAgentMutation = JSON.stringify(agents.snapshot());
+  publicAgents[0].energy = 1;
+  publicAgents[0].age = 999;
+  publicAgents[0].behavior = "destroyer";
+  publicAgents[0].x = 999;
+  publicAgents.splice(0, 1);
+  if (JSON.stringify(agents.snapshot()) !== beforePublicAgentMutation) {
+    throw new Error("AgentSystem.getAgents exposed live agent records or population storage");
+  }
+
+  // Change the real population through an owned mutator, then restore every
+  // individual agent property, membership and allocator from the checkpoint.
   agents.seed(grid, 3);
   agents.restore(checkpoint);
   equal(agents.snapshot(), checkpoint, "AgentSystem restore did not recover all agent/control state");
