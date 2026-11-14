@@ -149,8 +149,12 @@ assert.match(methodBody("loadWorld"), /else \{\s*\/\/ A manual Load with no chec
   "startup restore must preserve constructor-initialized field state when no autosave exists");
 assert.match(methodBody("loadWorld"), /knownChunks\(\{\s*recoverOrphans:\s*true\s*\}\)/,
   "world load must recover persisted chunk payloads omitted from a failed/corrupt manifest");
+const clearNamespaceBody = methodBody("clearPersistedWorldNamespace");
+assert.match(clearNamespaceBody, /return this\.persistence\.clear\(\)/,
+  "the shared namespace helper must own the durable persistence clear");
 const clearSavedWorldBody = methodBody("clearSavedWorld");
-assert.match(clearSavedWorldBody, /const cleared = this\.persistence\.clear\(\)/);
+assert.match(clearSavedWorldBody, /const cleared = this\.clearPersistedWorldNamespace\(\)/,
+  "full world clear must use the shared durable namespace helper before mutating live renderer state");
 assert.match(clearSavedWorldBody, /if\s*\(!cleared\)[\s\S]*?console\.warn/,
   "the renderer must warn if persisted world cleanup was incomplete");
 

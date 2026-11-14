@@ -3730,7 +3730,10 @@ try {
   });
   composePage.on("requestfailed", (request) => console.log(`[composer:requestfailed] ${request.method()} ${request.url()} :: ${request.failure()?.errorText || "unknown"}`));
   await composePage.addInitScript(() => {
-    localStorage.clear();
+    if (sessionStorage.getItem("reality-engine-composer-acceptance-cleaned") !== "1") {
+      localStorage.clear();
+      sessionStorage.setItem("reality-engine-composer-acceptance-cleaned", "1");
+    }
   });
   console.log("[acceptance] opening composer page");
   await composePage.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -3770,13 +3773,191 @@ try {
     const world = window.infiniteWorld;
     if (!world || typeof world.reseed !== "function") return { error: "Public reseed API unavailable" };
     const probeSeed = "reality-engine-direct-reseed-contract-probe";
-    world.reseed(probeSeed);
-    return { worldSeed: world.generator?.seed ?? null, viewSeed: window.getWorldViewContract?.()?.seed ?? null };
+    const originalAssetCleanup = world.clearExternalAssetRuntime;
+    const originalTerrainRefresh = world.refreshTerrainPatches;
+    let assetCleanupCalls = 0;
+    let terrainRefreshCalls = 0;
+    world.clearExternalAssetRuntime = function (...args) {
+      assetCleanupCalls++;
+      return originalAssetCleanup.apply(this, args);
+    };
+    world.refreshTerrainPatches = function (...args) {
+      terrainRefreshCalls++;
+      return originalTerrainRefresh.apply(this, args);
+    };
+    try {
+      world.reseed(probeSeed);
+      return {
+        worldSeed: world.generator?.seed ?? null,
+        viewSeed: window.getWorldViewContract?.()?.seed ?? null,
+        assetCleanupCalls,
+        terrainRefreshCalls,
+      };
+    } finally {
+      world.clearExternalAssetRuntime = originalAssetCleanup;
+      world.refreshTerrainPatches = originalTerrainRefresh;
+    }
   });
   if (directReseed.error || directReseed.worldSeed !== directReseed.viewSeed ||
       directReseed.worldSeed !== "reality-engine-direct-reseed-contract-probe") {
     throw new Error("Direct WorldGenerator reseed did not synchronize WorldViewContract: " + JSON.stringify(directReseed));
   }
+  if (directReseed.assetCleanupCalls !== 1 || directReseed.terrainRefreshCalls !== 0) {
+    throw new Error("Reseed repeated old-world teardown before the new world was installed: " + JSON.stringify(directReseed));
+  }
+  console.log("[acceptance] reseed clears the previous namespace and performs one live cleanup without rebuilding old terrain");
+
+  // A full world clear must reset live edit state to exactly the durable
+  // generator-backed baseline that a restart will reconstruct.
+  const clearWorldContract = await composePage.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (!world || typeof world.clearSavedWorld !== "function") {
+      return { error: "World clear API is unavailable" };
+    }
+    const flat = window.worldCreateFlatSurfaceProvider?.({
+      seed: "acceptance-clear-surface",
+      elevation: 5,
+    });
+    if (!flat || !window.worldSetSurfaceProvider?.(flat)) {
+      return { error: "Could not establish the non-default surface clear fixture" };
+    }
+    world.applyAuthoritativeFieldMutation({
+      kind: "brush",
+      x: 16, y: 5, z: 16, radius: 8,
+      delta: { density: 0.2 },
+      metadata: { source: "acceptance-clear-world" },
+    });
+    const deformation = world.sculptTerrainAt(16, 16, 4, 1, "raise");
+    const placed = world.place("tree", 16, 16);
+    if (!placed || deformation.changed <= 0) {
+      return { error: "Could not establish object/field/terrain clear fixtures",
+        placed: !!placed, deformation };
+    }
+    window.worldAssetManifest = {
+      version: "1.0",
+      generatedAt: new Date().toISOString(),
+      project: "Acceptance clear-world fixture",
+      entries: [{
+        id: "acceptance-clear-asset",
+        providerId: "acceptance",
+        sourceUrl: "https://assets.example.test/clear-world.glb",
+        name: "Clear World Fixture",
+        license: "CC0",
+      }],
+    };
+    const before = {
+      objects: world.getObjectCount(),
+      fieldMutations: world.authoritativeField.getMutationCount(),
+      fieldUndo: world.authoritativeSculptTransactions.historyLength,
+      objectUndo: world.getEditHistoryState().canUndo,
+      surfaceId: world.fieldSampler.surfaceProvider.id,
+      manifestEntries: window.worldAssetManifest.entries.length,
+    };
+    const cleared = world.clearSavedWorld();
+    const undo = world.undo();
+    const redo = world.redo();
+    const state = {
+      cleared,
+      objects: world.getObjectCount(),
+      fieldMutations: world.authoritativeField.getMutationCount(),
+      fieldUndo: world.authoritativeSculptTransactions.historyLength,
+      fieldRedo: world.authoritativeSculptTransactions.redoLength,
+      objectHistory: world.getEditHistoryState(),
+      undo,
+      redo,
+      terrainDelta: world.terrainDeformations.sampleDelta(16, 16),
+      surfaceId: world.fieldSampler.surfaceProvider.id,
+      surfaceSeed: world.fieldSampler.surfaceProvider.seed,
+      generatorSeed: world.generator.seed,
+      viewSeed: window.getWorldViewContract?.()?.seed ?? null,
+      manifestEntries: window.worldAssetManifest.entries.length,
+      runtimeAssets: world.worldAssetRuntime.stats(),
+      durableSidecars: {
+        field: world.persistence.readFieldState().status,
+        fieldCheckpoint: world.persistence.readFieldCheckpoint().status,
+        surface: world.persistence.readSurfaceProviderState().status,
+        assetManifest: world.persistence.readAssetManifestState().status,
+        assetPlacements: world.persistence.readAssetPlacementsState().status,
+        provenance: world.persistence.readProvenanceState().status,
+        terrain: world.persistence.readTerrainDeformationState().status,
+        terrainCheckpoint: world.persistence.readTerrainDeformationCheckpoint().status,
+      },
+    };
+    return { before, state };
+  });
+  if (clearWorldContract.error) {
+    throw new Error("World clear acceptance fixture failed: " + JSON.stringify(clearWorldContract));
+  }
+  const clearedWorld = clearWorldContract.state;
+  if (!clearedWorld.cleared ||
+      clearedWorld.objects !== 0 ||
+      clearedWorld.fieldMutations !== 0 ||
+      clearedWorld.fieldUndo !== 0 ||
+      clearedWorld.fieldRedo !== 0 ||
+      clearedWorld.objectHistory.canUndo !== false ||
+      clearedWorld.objectHistory.canRedo !== false ||
+      clearedWorld.undo !== null ||
+      clearedWorld.redo !== null ||
+      clearedWorld.terrainDelta !== 0 ||
+      clearedWorld.surfaceId !== "world-generator-surface" ||
+      clearedWorld.surfaceSeed !== clearedWorld.generatorSeed ||
+      clearedWorld.viewSeed !== clearedWorld.generatorSeed ||
+      clearedWorld.manifestEntries !== 0 ||
+      clearedWorld.runtimeAssets.loaded !== 0 ||
+      clearedWorld.runtimeAssets.instances !== 0 ||
+      Object.values(clearedWorld.durableSidecars).some(status => status !== "missing")) {
+    throw new Error("Clear World did not reset every live and durable world sidecar to the generator baseline: " +
+      JSON.stringify(clearWorldContract));
+  }
+  console.log("[acceptance] full world clear resets object/field/terrain histories, surface provider and asset provenance");
+
+  // Verify that Clear World survives a full page reload in this browser context,
+  // not only the live renderer state and immediate persistence reads.
+  await composePage.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+  await composePage.waitForSelector("#c3d", { state: "attached" });
+  await composePage.waitForFunction(() =>
+    typeof window.worldGenerationHealth === "function" &&
+    !!window.infiniteWorld?.fieldSampler?.surfaceProvider
+  );
+  const clearedWorldAfterRestart = await composePage.evaluate(() => {
+    const world = window.infiniteWorld;
+    return {
+      generatorSeed: world.generator.seed,
+      viewSeed: window.getWorldViewContract?.()?.seed ?? null,
+      objects: world.getObjectCount(),
+      fieldMutations: world.authoritativeField.getMutationCount(),
+      terrainDelta: world.terrainDeformations.sampleDelta(16, 16),
+      surfaceId: world.fieldSampler.surfaceProvider.id,
+      surfaceSeed: world.fieldSampler.surfaceProvider.seed,
+      manifestEntries: window.worldAssetManifest?.entries?.length ?? -1,
+      runtimeAssets: world.worldAssetRuntime.stats(),
+      durableSidecars: {
+        field: world.persistence.readFieldState().status,
+        fieldCheckpoint: world.persistence.readFieldCheckpoint().status,
+        surface: world.persistence.readSurfaceProviderState().status,
+        assetManifest: world.persistence.readAssetManifestState().status,
+        assetPlacements: world.persistence.readAssetPlacementsState().status,
+        provenance: world.persistence.readProvenanceState().status,
+        terrain: world.persistence.readTerrainDeformationState().status,
+        terrainCheckpoint: world.persistence.readTerrainDeformationCheckpoint().status,
+      },
+    };
+  });
+  if (clearedWorldAfterRestart.generatorSeed !== clearedWorldAfterRestart.viewSeed ||
+      clearedWorldAfterRestart.objects !== 0 ||
+      clearedWorldAfterRestart.fieldMutations !== 0 ||
+      clearedWorldAfterRestart.terrainDelta !== 0 ||
+      clearedWorldAfterRestart.surfaceId !== "world-generator-surface" ||
+      clearedWorldAfterRestart.surfaceSeed !== clearedWorldAfterRestart.generatorSeed ||
+      clearedWorldAfterRestart.manifestEntries !== 0 ||
+      clearedWorldAfterRestart.runtimeAssets.loaded !== 0 ||
+      clearedWorldAfterRestart.runtimeAssets.instances !== 0 ||
+      Object.values(clearedWorldAfterRestart.durableSidecars).some(status => status !== "missing")) {
+    throw new Error("Clear World did not survive a full page reload with a clean generator baseline: " +
+      JSON.stringify(clearedWorldAfterRestart));
+  }
+  console.log("[acceptance] Clear World clean baseline restored after full page reload");
+
   await composePage.close();
 
   if (uncaughtPageErrors.length > 0 || composerPageErrors.length > 0) {

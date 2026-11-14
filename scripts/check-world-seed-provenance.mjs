@@ -54,26 +54,40 @@ const clearSavedWorldEnd = renderer.indexOf('  reseed(newSeed: string)', clearSa
 assert.ok(clearSavedWorldAt >= 0 && clearSavedWorldEnd > clearSavedWorldAt,
   'clearSavedWorld must expose its durable completion result')
 const clearSavedWorldBody = renderer.slice(clearSavedWorldAt, clearSavedWorldEnd)
-assert.match(clearSavedWorldBody, /window\.clearTimeout\(this\.saveTimer\)/,
-  'clearing the world must cancel a pending autosave before touching persistence')
+assert.match(renderer, /private clearPersistedWorldNamespace\(\): boolean\s*\{\s*if \(this\.saveTimer !== null\) \{\s*window\.clearTimeout\(this\.saveTimer\)[\s\S]*?return this\.persistence\.clear\(\)/,
+  'the shared namespace clear must cancel a pending autosave before touching persistence')
+assert.match(clearSavedWorldBody, /const cleared = this\.clearPersistedWorldNamespace\(\)/,
+  'clearSavedWorld must use the shared durable namespace operation before resetting live state')
 assert.match(clearSavedWorldBody, /return cleared/,
   'reseed must be able to distinguish a durable clear from a failed clear')
-assert.ok(clearSavedWorldBody.indexOf('const cleared = this.persistence.clear()') <
+assert.ok(clearSavedWorldBody.indexOf('const cleared = this.clearPersistedWorldNamespace()') <
   clearSavedWorldBody.indexOf('this.clearExternalAssetRuntime()'),
   'a durable clear must succeed before the live external asset runtime is destroyed')
+assert.doesNotMatch(reseedBody, /this\.clearSavedWorld\(\)/,
+  'reseed must not repeat the full live-world cleanup after clearing the old namespace')
 assert.match(clearSavedWorldBody, /if \(!cleared\) \{[\s\S]*?return false[\s\S]*?this\.pendingExternalAssetPlacements = \[\]/,
   'a failed durable clear must preserve live placements and other in-memory world state')
 assert.match(clearSavedWorldBody, /try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{[\s\S]*?this\.terrainDeformations\.clear\(\)/,
   'external asset disposal failures must not skip the remaining durable world reset')
 assert.match(clearSavedWorldBody, /try \{\s*this\.refreshTerrainPatches\(\)\s*\} catch \(error\) \{[\s\S]*?this\.objects\.clear\(\)/,
   'terrain refresh failures must not prevent clearing editor object state')
+assert.match(clearSavedWorldBody, /this\.history\.clear\(\)/,
+  'world clear must invalidate undo/redo entries from the previous object world');
+assert.match(clearSavedWorldBody, /this\.authoritativeField\.setBase\(new GeneratorFieldProvider\(this\.generator\)\)[\s\S]*?this\.authoritativeField\.clear\(\)[\s\S]*?this\.fieldSampler\.setProvider\(this\.authoritativeField\)/,
+  'world clear must reset the live authoritative field to the active generator-backed baseline after deleting its sidecars');
+assert.match(clearSavedWorldBody, /this\.fieldSampler\.resetSurfaceProviderToGenerator\(\)[\s\S]*?worldViewContract\.setSeed\(this\.fieldSampler\.surfaceProvider\.seed\)/,
+  'world clear must reset the in-memory surface provider to match the deleted surface sidecar');
+assert.match(clearSavedWorldBody, /this\.authoritativeSculptTransactions\.clear\(\)[\s\S]*?this\.notifyAuthoritativeSculptHistoryChanged\(\)/,
+  'world clear must invalidate old authoritative sculpt undo/redo transactions');
+assert.match(clearSavedWorldBody, /worldAssetManifest = createAssetImportManifest\(\)/,
+  'world clear must replace the in-memory asset provenance manifest after deleting its durable record');
 const targetJournalAt = reseedBody.indexOf('targetPersistence.beginSaveTransaction({ recoverIncomplete: true })')
 const targetClearAt = reseedBody.indexOf('targetPersistence.clear()')
 const manifestPersistAt = reseedBody.indexOf('targetPersistence.saveAssetManifestState(nextAssetManifest)')
 const surfacePersistAt = reseedBody.indexOf('targetPersistence.saveSurfaceProviderState(surfaceSnapshot)')
 const seedPublishAt = reseedBody.indexOf('saveActiveWorldSeed(normalizedSeed)')
 const reseedJournalFinishAt = reseedBody.indexOf('targetPersistence.finishSaveTransaction(ready)')
-const previousNamespaceCleanupAt = reseedBody.indexOf('this.clearSavedWorld()')
+const previousNamespaceCleanupAt = reseedBody.indexOf('this.clearPersistedWorldNamespace()')
 const reseedMeshDisposalAt = reseedBody.indexOf('this.patches.clear()')
 assert.ok(targetJournalAt >= 0 && targetClearAt > targetJournalAt &&
   manifestPersistAt > targetClearAt && surfacePersistAt > manifestPersistAt &&
@@ -109,7 +123,7 @@ const syncObjectsEnd = renderer.indexOf('  selectAtScreen(', syncObjectsAt)
 const syncObjectsBody = renderer.slice(syncObjectsAt, syncObjectsEnd)
 assert.match(syncObjectsBody, /const cleanupFailures: unknown\[\] = \[\][\s\S]*?this\.objectMeshes\.delete\(id\)[\s\S]*?throw new AggregateError/,
   'world object mesh cleanup must evict stale cache entries despite disposal failures')
-assert.match(reseedBody, /normalizedSeed !== previousSeed && !this\.clearSavedWorld\(\)/,
+assert.match(reseedBody, /normalizedSeed !== previousSeed && !this\.clearPersistedWorldNamespace\(\)/,
   'old namespace cleanup must happen only after the target seed is committed')
 assert.match(reseedBody, /this\.storageKey = `reality-engine-world:\$\{normalizedSeed\}:objects`/,
   'the legacy storage key must follow the newly committed seed')

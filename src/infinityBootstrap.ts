@@ -1604,7 +1604,7 @@ export function bootstrapInfiniteWorld() {
                     <button class="pill ${eraseRadius === r ? 'on' : ''}" data-radius="${r}" style="font-size: 9.5px; padding: 2px 6px;">${r}m</button>
                   `).join('')}
                   <span style="color: var(--sub);">·</span>
-                  <button class="brush-btn" id="topClearAll" style="font-size: 9.5px; padding: 2px 7px; color: #e06060;">🗑️ Clear All</button>
+                  <button class="brush-btn" id="topClearAll" style="font-size: 9.5px; padding: 2px 7px; color: #e06060;">🗑️ Clear World</button>
                 </div>
                 <span style="font-size: 9px; color: var(--sub); font-style: italic;">Click or drag to demolish objects</span>
               ` : `
@@ -1825,7 +1825,7 @@ export function bootstrapInfiniteWorld() {
                   <button class="brush-btn" id="vSave" style="color:#40c080">💾 Save World</button>
                   <button class="brush-btn" id="vLoad">📂 Load World</button>
                 </div>
-                <button class="brush-btn" style="width:100%; color:#e06060; border-color:#502020; margin-top: 6px;" id="vClearAll">🗑️ Clear All Placed Objects</button>
+                <button class="brush-btn" style="width:100%; color:#e06060; border-color:#502020; margin-top: 6px;" id="vClearAll">🗑️ Clear World</button>
               </div>
             ` : `
               <div>
@@ -2152,7 +2152,7 @@ export function bootstrapInfiniteWorld() {
       document.getElementById('topSave')?.addEventListener('click', () => (window as any).builderSave())
       document.getElementById('topLoad')?.addEventListener('click', () => world.loadWorld())
       document.getElementById('topClearAll')?.addEventListener('click', () => {
-        if (confirm('Clear all placed objects in this reality?')) (window as any).builderClear()
+        if (confirm('Clear all authored world data in this reality? This removes objects, field and terrain edits, external assets, and custom surface settings.')) (window as any).builderClear()
       })
 
       document.getElementById('vUndo')?.addEventListener('click', () => (window as any).builderUndo())
@@ -2160,7 +2160,7 @@ export function bootstrapInfiniteWorld() {
       document.getElementById('vSave')?.addEventListener('click', () => (window as any).builderSave())
       document.getElementById('vLoad')?.addEventListener('click', () => world.loadWorld())
       document.getElementById('vClearAll')?.addEventListener('click', () => {
-        if (confirm('Clear all placed objects in this reality?')) (window as any).builderClear()
+        if (confirm('Clear all authored world data in this reality? This removes objects, field and terrain edits, external assets, and custom surface settings.')) (window as any).builderClear()
       })
 
       // Camera
