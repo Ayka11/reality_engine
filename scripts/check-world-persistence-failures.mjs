@@ -166,7 +166,7 @@ const serializer = new WorldSerializer();
 
 const { WorldEditHistory } = await import(await load("src/infinity/WorldEditHistory.ts"));
 const objectHistory = new WorldEditHistory(4);
-const objectEdit = { type: "add", object: { id: "history-object" } };
+const objectEdit = { type: "add", object: { id: "history-object", properties: {} } };
 objectHistory.push(objectEdit);
 objectHistory.undo();
 const objectHistoryCheckpoint = objectHistory.snapshotState();
