@@ -642,6 +642,191 @@ try {
       JSON.stringify(restartedEditorState));
   }
 
+  console.log("[acceptance] explicit GLTF import materializes a saved placement after restart");
+  const mockAssetUrl = "https://assets.example.test/acceptance-package-asset.glb";
+  const gltfJson = Buffer.from(JSON.stringify({
+    asset: { version: "2.0" },
+    scene: 0,
+    scenes: [{ nodes: [0] }],
+    nodes: [{}],
+  }), "utf8");
+  const gltfJsonPadding = (4 - (gltfJson.length % 4)) % 4;
+  const paddedGltfJson = Buffer.concat([gltfJson, Buffer.alloc(gltfJsonPadding, 0x20)]);
+  const gltfChunkHeader = Buffer.alloc(8);
+  gltfChunkHeader.writeUInt32LE(paddedGltfJson.length, 0);
+  gltfChunkHeader.writeUInt32LE(0x4e4f534a, 4);
+  const glbHeader = Buffer.alloc(12);
+  const glbLength = 12 + gltfChunkHeader.length + paddedGltfJson.length;
+  glbHeader.writeUInt32LE(0x46546c67, 0);
+  glbHeader.writeUInt32LE(2, 4);
+  glbHeader.writeUInt32LE(glbLength, 8);
+  const minimalGlb = Buffer.concat([glbHeader, gltfChunkHeader, paddedGltfJson]);
+  await page.route(mockAssetUrl, route => route.fulfill({
+    status: 200,
+    headers: {
+      "access-control-allow-origin": "*",
+      "content-type": "model/gltf-binary",
+    },
+    body: minimalGlb,
+  }));
+
+  const restoredAssetPlacement = await page.evaluate(async ({ url, instanceId }) => {
+    const asset = await window.worldExternalAssetLoad(
+      "acceptance-package-asset", url, "flora.tree", 1,
+    );
+    const runtime = window.infiniteWorld.worldAssetRuntime;
+    return {
+      assetId: asset?.id ?? null,
+      stats: window.worldExternalAssetStats(),
+      hasInstance: runtime.hasInstance(instanceId),
+      sourceAssetId: runtime.getInstanceSourceAssetId(instanceId),
+      semanticEntryId: runtime.getInstanceSemanticEntryId(instanceId),
+      placements: window.capturePortableWorldEditorSnapshot().assetPlacements,
+    };
+  }, { url: mockAssetUrl, instanceId: placementFixture.instanceId });
+  const restoredLivePlacement = restoredAssetPlacement.placements.find(
+    placement => placement.instanceId === placementFixture.instanceId,
+  );
+  if (restoredAssetPlacement.assetId !== "acceptance-package-asset" ||
+      restoredAssetPlacement.stats?.loaded !== 1 ||
+      restoredAssetPlacement.stats?.instances !== 1 ||
+      !restoredAssetPlacement.hasInstance ||
+      restoredAssetPlacement.sourceAssetId !== "acceptance-package-asset" ||
+      restoredAssetPlacement.semanticEntryId !== "flora.tree" ||
+      !restoredLivePlacement ||
+      restoredLivePlacement.sourceAssetId !== placementFixture.sourceAssetId ||
+      restoredLivePlacement.semanticEntryId !== placementFixture.semanticEntryId ||
+      Math.abs(restoredLivePlacement.x - placementFixture.x) > 1e-6 ||
+      Math.abs(restoredLivePlacement.y - placementFixture.y) > 1e-6 ||
+      Math.abs(restoredLivePlacement.z - placementFixture.z) > 1e-6 ||
+      Math.abs(restoredLivePlacement.scale - placementFixture.scale) > 1e-6 ||
+      Math.abs(restoredLivePlacement.rotationY - placementFixture.rotationY) > 1e-6) {
+    throw new Error("Explicit GLTF import did not materialize the exact saved source-owned placement: " +
+      JSON.stringify(restoredAssetPlacement));
+  }
+  await page.evaluate(() => window.infiniteWorld.saveWorld());
+
+  // A live placement must become durable placement intent again on restart.
+  // External GLTF binaries are never fetched automatically by world recovery.
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForSelector("#c3d");
+  await page.waitForFunction(instanceId =>
+    typeof window.worldExternalAssetStats === "function" &&
+    typeof window.capturePortableWorldEditorSnapshot === "function" &&
+    window.capturePortableWorldEditorSnapshot().assetPlacements?.some(
+      placement => placement.instanceId === instanceId,
+    ), placementFixture.instanceId, { timeout: acceptanceTimeout });
+  const dematerializedAfterRestart = await page.evaluate(instanceId => ({
+    stats: window.worldExternalAssetStats(),
+    placements: window.capturePortableWorldEditorSnapshot().assetPlacements,
+  }), placementFixture.instanceId);
+  if (dematerializedAfterRestart.stats?.loaded !== 0 ||
+      dematerializedAfterRestart.stats?.instances !== 0 ||
+      JSON.stringify(dematerializedAfterRestart.placements) !== JSON.stringify([placementFixture])) {
+    throw new Error("Restart must retain the source-owned placement descriptor without auto-loading its GLTF: " +
+      JSON.stringify(dematerializedAfterRestart));
+  }
+
+  // The same explicit import after restart must materialize the preserved descriptor.
+  const rematerializedAfterRestart = await page.evaluate(async ({ url, instanceId }) => {
+    await window.worldExternalAssetLoad("acceptance-package-asset", url, "flora.tree", 1);
+    const runtime = window.infiniteWorld.worldAssetRuntime;
+    return {
+      stats: window.worldExternalAssetStats(),
+      hasInstance: runtime.hasInstance(instanceId),
+      sourceAssetId: runtime.getInstanceSourceAssetId(instanceId),
+      semanticEntryId: runtime.getInstanceSemanticEntryId(instanceId),
+      placements: window.capturePortableWorldEditorSnapshot().assetPlacements,
+    };
+  }, { url: mockAssetUrl, instanceId: placementFixture.instanceId });
+  if (rematerializedAfterRestart.stats?.loaded !== 1 ||
+      rematerializedAfterRestart.stats?.instances !== 1 ||
+      !rematerializedAfterRestart.hasInstance ||
+      rematerializedAfterRestart.sourceAssetId !== "acceptance-package-asset" ||
+      rematerializedAfterRestart.semanticEntryId !== "flora.tree" ||
+      rematerializedAfterRestart.placements.length !== 1 ||
+      rematerializedAfterRestart.placements[0]?.instanceId !== placementFixture.instanceId) {
+    throw new Error("Explicit GLTF re-import after restart did not restore the saved placement: " +
+      JSON.stringify(rematerializedAfterRestart));
+  }
+
+  console.log("[acceptance] same-semantic GLTF sources scatter and remove independently");
+  const secondMockAssetUrl = "https://assets.example.test/acceptance-second-asset.glb";
+  await page.route(secondMockAssetUrl, route => route.fulfill({
+    status: 200,
+    headers: {
+      "access-control-allow-origin": "*",
+      "content-type": "model/gltf-binary",
+    },
+    body: minimalGlb,
+  }));
+  await page.evaluate(async url => {
+    await window.worldExternalAssetLoad("acceptance-second-asset", url, "flora.tree", 1);
+  }, secondMockAssetUrl);
+
+  const sourceAScatterCount = await page.evaluate(() =>
+    window.worldExternalAssetScatterSource(
+      "acceptance-package-asset", "flora.tree", 2, 20, 1729, 1,
+    ));
+  const sourceBScatterCount = await page.evaluate(() =>
+    window.worldExternalAssetScatterSource(
+      "acceptance-second-asset", "flora.tree", 2, 20, 1729, 1,
+    ));
+  const multiSourceScatterState = await page.evaluate(() => {
+    const runtime = window.infiniteWorld.worldAssetRuntime;
+    const placements = runtime.snapshotPlacements();
+    return {
+      stats: window.worldExternalAssetStats(),
+      sourceAIds: placements.filter(item => item.sourceAssetId === "acceptance-package-asset")
+        .map(item => item.instanceId),
+      sourceBIds: placements.filter(item => item.sourceAssetId === "acceptance-second-asset")
+        .map(item => item.instanceId),
+    };
+  });
+  if (sourceAScatterCount !== 2 || sourceBScatterCount !== 2 ||
+      multiSourceScatterState.stats?.loaded !== 2 ||
+      multiSourceScatterState.stats?.instances !== 5 ||
+      multiSourceScatterState.sourceAIds.length !== 3 ||
+      multiSourceScatterState.sourceBIds.length !== 2 ||
+      new Set([...multiSourceScatterState.sourceAIds, ...multiSourceScatterState.sourceBIds]).size !== 5 ||
+      !multiSourceScatterState.sourceAIds.some(id => id.includes(":source:acceptance-package-asset:instance:1729:")) ||
+      !multiSourceScatterState.sourceBIds.every(id => id.includes(":source:acceptance-second-asset:instance:1729:"))) {
+    throw new Error("Same-semantic GLTF sources did not receive independent deterministic scatter IDs: " +
+      JSON.stringify({ sourceAScatterCount, sourceBScatterCount, multiSourceScatterState }));
+  }
+
+  const repeatedSourceAScatterCount = await page.evaluate(() =>
+    window.worldExternalAssetScatterSource(
+      "acceptance-package-asset", "flora.tree", 2, 20, 1729, 1,
+    ));
+  const repeatedSourceAStats = await page.evaluate(() => window.worldExternalAssetStats());
+  if (repeatedSourceAScatterCount !== 2 || repeatedSourceAStats?.instances !== 5) {
+    throw new Error("Repeating a source-specific scatter seed must be idempotent: " +
+      JSON.stringify({ repeatedSourceAScatterCount, repeatedSourceAStats }));
+  }
+
+  await page.evaluate(() => window.worldExternalAssetRemove("acceptance-package-asset"));
+  const afterRemovingFirstSource = await page.evaluate(() => {
+    const runtime = window.infiniteWorld.worldAssetRuntime;
+    return {
+      stats: window.worldExternalAssetStats(),
+      placements: runtime.snapshotPlacements(),
+    };
+  });
+  if (afterRemovingFirstSource.stats?.loaded !== 1 ||
+      afterRemovingFirstSource.stats?.instances !== 2 ||
+      afterRemovingFirstSource.placements.length !== 2 ||
+      !afterRemovingFirstSource.placements.every(item => item.sourceAssetId === "acceptance-second-asset")) {
+    throw new Error("Removing one GLTF source must preserve the other source's placements: " +
+      JSON.stringify(afterRemovingFirstSource));
+  }
+  await page.evaluate(() => window.worldExternalAssetRemove("acceptance-second-asset"));
+  const afterRemovingBothSources = await page.evaluate(() => window.worldExternalAssetStats());
+  if (afterRemovingBothSources?.loaded !== 0 || afterRemovingBothSources?.instances !== 0) {
+    throw new Error("Removing both GLTF sources must release every runtime asset and instance: " +
+      JSON.stringify(afterRemovingBothSources));
+  }
+
   // Portable files remain the authority for the finite 2D simulation. Re-import
   // the package after restart, then prove that its saved tick/field can advance.
   await page.locator("#loadFileInput").setInputFiles({

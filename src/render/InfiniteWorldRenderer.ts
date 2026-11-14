@@ -41,7 +41,7 @@ import { compareExperiments, type ExperimentComparison } from '../infinity/Exper
 import { ExperimentCatalog } from '../infinity/ExperimentCatalog'
 import { analyzeExperiments, type ExperimentAnalysis } from '../infinity/ExperimentAnalysis'
 import { calculateStatisticalAnalysis, type StatisticalExperimentAnalysis } from '../infinity/ExperimentStatistics'
-import { WorldAssetRuntime } from '../worldLibrary/WorldAssetRuntime'
+import { WorldAssetRuntime, groundWorldAssetInstances } from '../worldLibrary/WorldAssetRuntime'
 import { biomePopulationEngine } from '../worldLibrary/BiomePopulationEngine'
 import { worldResourceEconomy } from '../worldLibrary/WorldResourceEconomy'
 import { civilizationRuntime, type CivilizationType } from '../worldLibrary/CivilizationRuntime'
@@ -2689,50 +2689,19 @@ export class InfiniteWorldRenderer {
     this.selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
   }
 
-  private groundExternalAssetInstances(instances: THREE.Object3D[]) {
-    // Keep the runtime's renderer-local coordinates aligned with the renderer
-    // before deriving terrain height from each instance's absolute world position.
-    this.worldAssetRuntime.rebase(this.worldAnchor)
-    const createdInstanceIds: string[] = []
-    try {
-      for (const instance of instances) {
-        const instanceId = instance.userData.runtimeAssetInstanceId
-        if (typeof instanceId !== 'string' || !instanceId.trim()) {
-          throw new Error('External asset instance is missing runtime identity during terrain placement')
-        }
-        createdInstanceIds.push(instanceId)
-        const worldPosition = this.worldAssetRuntime.getInstanceWorldPosition(instanceId)
-        if (!worldPosition) {
-          throw new Error('External asset instance ' + instanceId + ' is missing its absolute world position')
-        }
-        const worldY = this.sampleTerrainHeight(worldPosition.x, worldPosition.z)
-        const updated = this.worldAssetRuntime.setInstanceWorldTransform(instanceId, {
-          position: { x: worldPosition.x, y: worldY, z: worldPosition.z },
-        })
-        if (!updated) {
-          throw new Error('External asset instance ' + instanceId + ' disappeared during terrain placement')
-        }
-      }
-    } catch (error) {
-      const cleanupFailures: unknown[] = []
-      for (const instanceId of createdInstanceIds.reverse()) {
-        try {
-          this.worldAssetRuntime.removeInstance(instanceId)
-        } catch (cleanupError) {
-          cleanupFailures.push(new Error(
-            'Terrain placement rollback failed for external asset instance ' + instanceId,
-            { cause: cleanupError },
-          ))
-        }
-      }
-      if (cleanupFailures.length > 0) {
-        throw new AggregateError(
-          [error, ...cleanupFailures],
-          'External asset terrain placement failed and one or more created instances could not be rolled back',
-        )
-      }
-      throw error
-    }
+  private groundExternalAssetInstances(
+    instances: THREE.Object3D[],
+    createdInstanceIds: readonly string[],
+  ) {
+    // The runtime snapshots existing placements and rolls back only assets
+    // created by this scatter call if terrain sampling or grounding fails.
+    groundWorldAssetInstances(
+      this.worldAssetRuntime,
+      instances,
+      createdInstanceIds,
+      this.worldAnchor,
+      (x, z) => this.sampleTerrainHeight(x, z),
+    )
   }
   async loadExternalAsset(
     assetId: string,
@@ -2800,7 +2769,7 @@ export class InfiniteWorldRenderer {
 
       const count = Math.max(1, Math.min(rule.maxCount,
         Math.round((rule.minCount + rule.maxCount) * 0.5 * density * rule.weight)))
-      const placed = this.worldAssetRuntime.scatterSemantic(
+      const scatter = this.worldAssetRuntime.scatterSemanticWithResult(
         rule.semanticEntryId,
         {
           minX: this.worldPosition.x - radius,
@@ -2813,12 +2782,12 @@ export class InfiniteWorldRenderer {
         rule.scale,
       )
 
-      this.groundExternalAssetInstances(placed)
+      this.groundExternalAssetInstances(scatter.instances, scatter.createdInstanceIds)
       results.push({
         semanticEntryId: rule.semanticEntryId,
         layer: rule.layer,
-        count: placed.length,
-        status: placed.length ? 'materialized' : 'no-runtime-asset',
+        count: scatter.instances.length,
+        status: scatter.instances.length ? 'materialized' : 'no-runtime-asset',
       })
     }
 
@@ -2996,7 +2965,7 @@ export class InfiniteWorldRenderer {
       if (source && (rule.layer === 'visual' || rule.layer === 'biological')) {
         const count = Math.max(1, Math.min(rule.maxCount,
           Math.round((rule.minCount + rule.maxCount) * 0.5 * density * rule.weight)))
-        const placed = this.worldAssetRuntime.scatterSemantic(
+        const scatter = this.worldAssetRuntime.scatterSemanticWithResult(
           rule.semanticEntryId,
           {
             minX: this.worldPosition.x - radius,
@@ -3008,8 +2977,8 @@ export class InfiniteWorldRenderer {
           seed + results.length,
           rule.scale,
         )
-        this.groundExternalAssetInstances(placed)
-        results.push({ semanticEntryId: rule.semanticEntryId, layer: rule.layer, count: placed.length, mode: 'external-asset' })
+        this.groundExternalAssetInstances(scatter.instances, scatter.createdInstanceIds)
+        results.push({ semanticEntryId: rule.semanticEntryId, layer: rule.layer, count: scatter.instances.length, mode: 'external-asset' })
         continue
       }
 
@@ -3093,19 +3062,21 @@ export class InfiniteWorldRenderer {
     radius = 70,
     seed = 1,
     scale = 1,
+    sourceAssetId?: string,
   ) {
     const x = this.worldPosition.x
     const z = this.worldPosition.z
-    const instances = this.worldAssetRuntime.scatterSemantic(
+    const scatter = this.worldAssetRuntime.scatterSemanticWithResult(
       semanticEntryId,
       { minX: x - radius, maxX: x + radius, minZ: z - radius, maxZ: z + radius },
       count,
       seed,
       scale,
+      sourceAssetId,
     )
-    this.groundExternalAssetInstances(instances)
-    if (instances.length) this.scheduleSave()
-    return instances.length
+    this.groundExternalAssetInstances(scatter.instances, scatter.createdInstanceIds)
+    if (scatter.instances.length) this.scheduleSave()
+    return scatter.instances.length
   }
 
   removeExternalAsset(assetId: string) {

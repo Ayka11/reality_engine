@@ -25,7 +25,10 @@ export class WorldAssetRuntime {
   private generation = 0
   private readonly assets = new Map<string, RuntimeAsset>()
   private readonly loading = new Map<string, Promise<RuntimeAsset>>()
+  private readonly loadingRequests = new Map<string, { sourceUrl: string; semanticEntryId?: string }>()
   private readonly pendingRejectors = new Map<string, (reason: Error) => void>()
+  /** Per-request identity prevents a removed asset's late loader callback from publishing. */
+  private readonly pendingLoadTokens = new Map<string, object>()
   private readonly semanticSources = new Map<string, RuntimeAsset>()
   private readonly instances = new Map<string, THREE.Object3D>()
   private readonly instanceMixers = new Map<string, THREE.AnimationMixer>()
@@ -79,11 +82,31 @@ export class WorldAssetRuntime {
     }
 
     const existing = this.assets.get(id)
-    if (existing) return existing
+    if (existing) {
+      if (existing.sourceUrl !== sourceUrl ||
+          (options.semanticEntryId !== undefined && existing.semanticEntryId !== options.semanticEntryId)) {
+        throw new Error(
+          'Asset ID ' + id + ' is already owned by a different source URL or semantic entry',
+        )
+      }
+      return existing
+    }
     const pending = this.loading.get(id)
-    if (pending) return pending
+    if (pending) {
+      const pendingRequest = this.loadingRequests.get(id)
+      if (!pendingRequest ||
+          pendingRequest.sourceUrl !== sourceUrl ||
+          pendingRequest.semanticEntryId !== options.semanticEntryId) {
+        throw new Error(
+          'Asset ID ' + id + ' already has an in-flight load for a different source URL or semantic entry',
+        )
+      }
+      return pending
+    }
 
     const generation = this.generation
+    const requestToken = {}
+    this.pendingLoadTokens.set(id, requestToken)
     let task: Promise<RuntimeAsset>
     let cancelTask: ((reason: Error) => void) | undefined
     task = new Promise<RuntimeAsset>((resolve, reject) => {
@@ -92,10 +115,10 @@ export class WorldAssetRuntime {
         sourceUrl,
         (gltf) => {
           const object = gltf.scene
-          if (generation !== this.generation) {
-            // clear() already rejected this request before invalidating the
-            // generation. The late callback owns only its detached GLTF payload:
-            // attempt cleanup, report failures, and never settle the promise twice.
+          if (generation !== this.generation || this.pendingLoadTokens.get(id) !== requestToken) {
+            // clear() invalidates the entire generation; remove(id) invalidates
+            // only this request token. In both cases the detached late payload
+            // must be disposed and must never publish into the active scene.
             try {
               this.disposeObject(object)
             } catch (disposeError) {
@@ -170,11 +193,17 @@ export class WorldAssetRuntime {
     }).finally(() => {
       if (this.loading.get(id) === task) {
         this.loading.delete(id)
+        this.loadingRequests.delete(id)
         if (this.pendingRejectors.get(id) === cancelTask) this.pendingRejectors.delete(id)
       }
+      if (this.pendingLoadTokens.get(id) === requestToken) this.pendingLoadTokens.delete(id)
     })
 
     this.loading.set(id, task)
+    this.loadingRequests.set(id, {
+      sourceUrl,
+      semanticEntryId: options.semanticEntryId,
+    })
     if (cancelTask) this.pendingRejectors.set(id, cancelTask)
     return task
   }
@@ -194,20 +223,36 @@ export class WorldAssetRuntime {
       sourceAssetId?: string
     },
   ) {
-    if (this.instances.has(instanceId)) return this.instances.get(instanceId) || null
     if (options.sourceAssetId !== undefined &&
         (typeof options.sourceAssetId !== 'string' || !options.sourceAssetId.trim())) {
       throw new TypeError('External asset sourceAssetId must be a non-empty string')
     }
-    const source = options.sourceAssetId !== undefined
-      ? this.assets.get(options.sourceAssetId)
-      : this.semanticSources.get(semanticEntryId)
-    if (!source || source.semanticEntryId !== semanticEntryId) return null
     if (![options.x, options.y, options.z].every(Number.isFinite) ||
         (options.scale !== undefined && !Number.isFinite(options.scale)) ||
         (options.rotationY !== undefined && !Number.isFinite(options.rotationY))) {
       throw new TypeError('External asset instance transform must contain finite coordinates, scale and rotation')
     }
+
+    const expectedSource = options.sourceAssetId !== undefined
+      ? this.assets.get(options.sourceAssetId)
+      : this.semanticSources.get(semanticEntryId)
+    const expectedSourceAssetId = expectedSource?.id
+    const existing = this.instances.get(instanceId)
+    if (existing) {
+      const existingSourceAssetId = existing.userData.runtimeAssetSourceId
+      const existingSemanticEntryId = existing.userData.semanticEntryId
+      if (existingSemanticEntryId !== semanticEntryId ||
+          existingSourceAssetId !== expectedSourceAssetId) {
+        throw new Error(
+          'External asset instance ID ' + instanceId +
+          ' is already owned by a different asset source or semantic entry',
+        )
+      }
+      return existing
+    }
+
+    const source = expectedSource
+    if (!source || source.semanticEntryId !== semanticEntryId) return null
     // SkeletonUtils rewires every SkinnedMesh to cloned bones/skeletons.
     // Object3D.clone(true) alone would keep the source skeleton shared.
     const instance = cloneSkeleton(source.object)
@@ -330,6 +375,11 @@ export class WorldAssetRuntime {
     return typeof sourceAssetId === 'string' ? sourceAssetId : null
   }
 
+  getInstanceSemanticEntryId(instanceId: string): string | null {
+    const semanticEntryId = this.instances.get(instanceId)?.userData.semanticEntryId
+    return typeof semanticEntryId === 'string' ? semanticEntryId : null
+  }
+
   /** Assign a transient runtime owner without changing persistent world state. */
   setInstanceRuntimeOwnerId(instanceId: string, ownerId: string): boolean {
     if (typeof ownerId !== 'string' || !ownerId.trim() || ownerId.length > 512) {
@@ -386,8 +436,15 @@ export class WorldAssetRuntime {
     const clone = material.clone() as T
     ownedMaterials.add(clone)
     const clonedTextures = new Map<THREE.Texture, THREE.Texture>()
-    const cloneValue = (value: unknown): unknown => {
+    const cloneValue = (value: unknown, sourceValue: unknown): unknown => {
       if (value instanceof THREE.Texture) {
+        // Some materials (notably ShaderMaterial) already deep-clone texture
+        // values during material.clone(). Keep and own those copies rather
+        // than cloning them again and orphaning the intermediate texture.
+        if (sourceValue instanceof THREE.Texture && value !== sourceValue) {
+          ownedTextures.add(value)
+          return value
+        }
         let texture = clonedTextures.get(value)
         if (!texture) {
           texture = value.clone()
@@ -396,9 +453,19 @@ export class WorldAssetRuntime {
         }
         return texture
       }
-      if (Array.isArray(value)) return value.map(cloneValue)
+      if (Array.isArray(value)) {
+        const sourceArray = Array.isArray(sourceValue) ? sourceValue : []
+        return value.map((entry, index) => cloneValue(entry, sourceArray[index]))
+      }
       if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
-        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, cloneValue(entry)]))
+        const sourceObject = sourceValue && typeof sourceValue === 'object' &&
+          Object.getPrototypeOf(sourceValue) === Object.prototype
+          ? sourceValue as Record<string, unknown>
+          : {}
+        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
+          key,
+          cloneValue(entry, sourceObject[key]),
+        ]))
       }
       return value
     }
@@ -406,7 +473,7 @@ export class WorldAssetRuntime {
       const value = clone[key]
       if (value instanceof THREE.Texture || Array.isArray(value) ||
         (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)) {
-        ;(clone as any)[key] = cloneValue(value)
+        ;(clone as any)[key] = cloneValue(value, material[key])
       }
     }
     return clone
@@ -689,20 +756,38 @@ export class WorldAssetRuntime {
     return true
   }
 
-  scatterSemantic(
+  /**
+   * Scatter an idempotent semantic batch and report which placements were
+   * published by this invocation. Existing deterministic IDs are returned in
+   * `instances`, but are never reported as newly created.
+   */
+  scatterSemanticWithResult(
     semanticEntryId: string,
     bounds: { minX: number; maxX: number; minZ: number; maxZ: number },
     count: number,
     seed = 1,
     scale = 1,
-  ) {
+    sourceAssetId?: string,
+  ): { instances: THREE.Object3D[]; createdInstanceIds: string[] } {
     if (![bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ, count, seed, scale].every(Number.isFinite)) {
       throw new TypeError('External asset scatter bounds, count, seed and scale must be finite')
     }
     if (bounds.minX > bounds.maxX || bounds.minZ > bounds.maxZ) {
       throw new RangeError('External asset scatter bounds must be ordered from minimum to maximum')
     }
-    if (!this.semanticSources.has(semanticEntryId)) return []
+    if (sourceAssetId !== undefined &&
+        (typeof sourceAssetId !== 'string' || !sourceAssetId.trim())) {
+      throw new TypeError('External asset scatter sourceAssetId must be a non-empty string')
+    }
+
+    // Explicit source selection allows multiple GLTF files to share one semantic
+    // entry without sharing deterministic instance IDs or runtime ownership.
+    const source = sourceAssetId === undefined
+      ? this.semanticSources.get(semanticEntryId)
+      : this.assets.get(sourceAssetId)
+    if (!source || source.semanticEntryId !== semanticEntryId) {
+      return { instances: [], createdInstanceIds: [] }
+    }
 
     const placed: THREE.Object3D[] = []
     const createdInstanceIds: string[] = []
@@ -715,13 +800,24 @@ export class WorldAssetRuntime {
     for (let i = 0; i < total; i++) {
       const x = bounds.minX + random() * (bounds.maxX - bounds.minX)
       const z = bounds.minZ + random() * (bounds.maxZ - bounds.minZ)
-      const instanceId = semanticEntryId + ':instance:' + seed + ':' + i
+      // Preserve legacy semantic-only IDs for saved worlds. Source-scoped IDs
+      // are deterministic per GLTF source and cannot collide across same-semantic assets.
+      const instanceId = sourceAssetId === undefined
+        ? semanticEntryId + ':instance:' + seed + ':' + i
+        : semanticEntryId + ':source:' + encodeURIComponent(sourceAssetId) + ':instance:' + seed + ':' + i
       const existedBefore = this.instances.has(instanceId)
       try {
         const instance = this.placeInstance(
           instanceId,
           semanticEntryId,
-          { x, y: 0, z, scale: scale * (0.85 + random() * 0.3), rotationY: random() * Math.PI * 2 },
+          {
+            x,
+            y: 0,
+            z,
+            scale: scale * (0.85 + random() * 0.3),
+            rotationY: random() * Math.PI * 2,
+            ...(sourceAssetId !== undefined ? { sourceAssetId } : {}),
+          },
         )
         if (instance) {
           placed.push(instance)
@@ -758,7 +854,19 @@ export class WorldAssetRuntime {
         throw error
       }
     }
-    return placed
+    return { instances: placed, createdInstanceIds }
+  }
+
+  /** Backwards-compatible object-only API for callers that do not ground a batch. */
+  scatterSemantic(
+    semanticEntryId: string,
+    bounds: { minX: number; maxX: number; minZ: number; maxZ: number },
+    count: number,
+    seed = 1,
+    scale = 1,
+    sourceAssetId?: string,
+  ): THREE.Object3D[] {
+    return this.scatterSemanticWithResult(semanticEntryId, bounds, count, seed, scale, sourceAssetId).instances
   }
 
   private refreshSemanticSource(semanticEntryId: string) {
@@ -771,7 +879,22 @@ export class WorldAssetRuntime {
 
   remove(id: string) {
     const asset = this.assets.get(id)
-    if (!asset) return false
+    if (!asset) {
+      const pending = this.loading.get(id)
+      const requestToken = this.pendingLoadTokens.get(id)
+      if (!pending && !requestToken) return false
+
+      // Cancel only this asset's pending request. The request token is removed
+      // before rejection so a late loader callback cannot publish, even when a
+      // new request with the same ID starts before that callback arrives.
+      const cancel = this.pendingRejectors.get(id)
+      this.loading.delete(id)
+      this.loadingRequests.delete(id)
+      this.pendingLoadTokens.delete(id)
+      this.pendingRejectors.delete(id)
+      cancel?.(new Error('Asset load ' + id + ' cancelled by removal'))
+      return true
+    }
 
     const failures: unknown[] = []
     const attempt = (label: string, cleanup: () => void) => {
@@ -823,6 +946,8 @@ export class WorldAssetRuntime {
     }
     this.pendingRejectors.clear()
     this.loading.clear()
+    this.loadingRequests.clear()
+    this.pendingLoadTokens.clear()
 
     for (const [instanceId, instance] of [...this.instances]) {
       const mixer = this.instanceMixers.get(instanceId)
@@ -889,5 +1014,115 @@ export class WorldAssetRuntime {
       animatedInstances: this.instanceMixers.size,
       visibleInstances: [...this.instances.values()].filter(instance => instance.visible).length,
     }
+  }
+}
+
+
+/**
+ * Ground a scatter batch against the active world surface as one transaction.
+ *
+ * `createdInstanceIds` is scoped to this scatter invocation. If terrain sampling
+ * or transform publication fails, only those new instances are removed; older
+ * deterministic placements are restored to their pre-grounding world transforms.
+ */
+export function groundWorldAssetInstances(
+  runtime: Pick<WorldAssetRuntime,
+    'rebase' | 'getInstanceWorldPosition' | 'setInstanceWorldTransform' | 'removeInstance'>,
+  instances: THREE.Object3D[],
+  createdInstanceIds: readonly string[],
+  worldAnchor: { x: number; y?: number; z: number },
+  sampleTerrainHeight: (x: number, z: number) => number,
+): void {
+  const createdIds = [...new Set(createdInstanceIds)]
+  const createdSet = new Set(createdIds)
+  const snapshots: Array<{
+    instanceId: string
+    position: { x: number; y: number; z: number }
+    scale: number
+    rotationY: number
+  }> = []
+  const updatedExistingIds = new Set<string>()
+
+  try {
+    runtime.rebase(worldAnchor)
+
+    // Validate and snapshot the entire batch before changing any placement.
+    const seenIds = new Set<string>()
+    for (const instance of instances) {
+      const instanceId = instance.userData.runtimeAssetInstanceId
+      if (typeof instanceId !== 'string' || !instanceId.trim()) {
+        throw new Error('External asset instance is missing runtime identity during terrain placement')
+      }
+      if (seenIds.has(instanceId)) {
+        throw new Error('External asset grounding batch contains duplicate instance ID ' + instanceId)
+      }
+      seenIds.add(instanceId)
+      const position = runtime.getInstanceWorldPosition(instanceId)
+      if (!position) {
+        throw new Error('External asset instance ' + instanceId + ' is missing its absolute world position')
+      }
+      snapshots.push({
+        instanceId,
+        position,
+        scale: instance.scale.x,
+        rotationY: instance.rotation.y,
+      })
+    }
+
+    for (const snapshot of snapshots) {
+      const worldY = sampleTerrainHeight(snapshot.position.x, snapshot.position.z)
+      if (!Number.isFinite(worldY)) {
+        throw new RangeError('Terrain returned a non-finite elevation for external asset instance ' + snapshot.instanceId)
+      }
+      // setInstanceWorldTransform can throw from its persistence callback after
+      // committing the transform, so record existing IDs before invoking it.
+      if (!createdSet.has(snapshot.instanceId)) updatedExistingIds.add(snapshot.instanceId)
+      const updated = runtime.setInstanceWorldTransform(snapshot.instanceId, {
+        position: { x: snapshot.position.x, y: worldY, z: snapshot.position.z },
+      })
+      if (!updated) {
+        throw new Error('External asset instance ' + snapshot.instanceId + ' disappeared during terrain placement')
+      }
+    }
+  } catch (error) {
+    const cleanupFailures: unknown[] = []
+
+    // Restore older placements first; never delete them just because a later
+    // terrain sample failed while processing the current scatter operation.
+    for (const snapshot of [...snapshots].reverse()) {
+      if (createdSet.has(snapshot.instanceId) || !updatedExistingIds.has(snapshot.instanceId)) continue
+      try {
+        runtime.setInstanceWorldTransform(snapshot.instanceId, {
+          position: snapshot.position,
+          scale: snapshot.scale,
+          rotationY: snapshot.rotationY,
+        })
+      } catch (cleanupError) {
+        cleanupFailures.push(new Error(
+          'Terrain grounding restore failed for pre-existing external asset instance ' + snapshot.instanceId,
+          { cause: cleanupError },
+        ))
+      }
+    }
+
+    // Roll back only the instances created by this exact scatter invocation.
+    for (const instanceId of [...createdIds].reverse()) {
+      try {
+        runtime.removeInstance(instanceId)
+      } catch (cleanupError) {
+        cleanupFailures.push(new Error(
+          'Terrain grounding rollback failed for new external asset instance ' + instanceId,
+          { cause: cleanupError },
+        ))
+      }
+    }
+
+    if (cleanupFailures.length > 0) {
+      throw new AggregateError(
+        [error, ...cleanupFailures],
+        'External asset terrain grounding failed and one or more placements could not be restored',
+      )
+    }
+    throw error
   }
 }

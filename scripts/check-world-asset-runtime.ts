@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import * as THREE from 'three'
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { WorldAssetRuntime } from '../src/worldLibrary/WorldAssetRuntime.ts'
+import { WorldAssetRuntime, groundWorldAssetInstances } from '../src/worldLibrary/WorldAssetRuntime.ts'
 import { detachAndDisposeObjectGroups } from '../src/render/ResourceCleanup.ts'
 import {
   materializeExternalAssetPlacements,
@@ -71,7 +71,7 @@ assert.equal(staleGeometryDisposed, true, 'late stale GLTF geometry disposal mus
 assert.equal(staleMaterialDisposed, true, 'late stale GLTF material disposal must continue after geometry failure')
 assert.equal(scene.children.length, 0, 'late stale GLTF payloads must never enter the new scene')
 
-const duplicateCurrentLoad = runtime.load('oak', 'https://assets.example.test/duplicate-oak.glb', {
+const duplicateCurrentLoad = runtime.load('oak', 'https://assets.example.test/current-oak.glb', {
   semanticEntryId: 'flora.oak',
 })
 assert.equal(requests.length, 2, 'a stale task finalizer must not erase a newer pending task with the same ID')
@@ -82,6 +82,174 @@ const [asset, duplicateAsset] = await Promise.all([currentLoad, duplicateCurrent
 assert.equal(asset, duplicateAsset, 'concurrent requests for the current asset must share one loaded asset')
 assert.equal(runtime.getSemanticSource('flora.oak'), asset)
 assert.equal(scene.children.length, 1)
+await assert.rejects(
+  runtime.load('oak', 'https://assets.example.test/other-oak.glb', { semanticEntryId: 'flora.oak' }),
+  /already owned by a different source URL or semantic entry/,
+  'a loaded asset ID must not silently resolve to a different source URL',
+)
+await assert.rejects(
+  runtime.load('oak', 'https://assets.example.test/current-oak.glb', { semanticEntryId: 'flora.other' }),
+  /already owned by a different source URL or semantic entry/,
+  'a loaded asset ID must not silently resolve to a different semantic entry',
+)
+
+const pendingRemovalScene = new THREE.Scene()
+const pendingRemovalRuntime = new WorldAssetRuntime(pendingRemovalScene, loader)
+const pendingRemovalLoad = pendingRemovalRuntime.load(
+  'reusable-after-removal',
+  'https://assets.example.test/removed-before-load.glb',
+  { semanticEntryId: 'flora.removal-race' },
+)
+const removedRequest = requests.at(-1)!
+const removedPayload = createGltfScene()
+let removedPayloadGeometryDisposed = false
+;(removedPayload.children[0] as THREE.Mesh).geometry.addEventListener('dispose', () => {
+  removedPayloadGeometryDisposed = true
+})
+assert.equal(pendingRemovalRuntime.remove('reusable-after-removal'), true,
+  'removing an asset while its GLTF request is pending must cancel that exact request')
+
+const replacementAfterRemovalLoad = pendingRemovalRuntime.load(
+  'reusable-after-removal',
+  'https://assets.example.test/replacement-after-removal.glb',
+  { semanticEntryId: 'flora.removal-race' },
+)
+const replacementAfterRemovalRequest = requests.at(-1)!
+assert.notEqual(replacementAfterRemovalRequest, removedRequest,
+  'the removed pending ID must be reusable immediately for a replacement source')
+await assert.rejects(pendingRemovalLoad, /cancelled by removal/)
+
+assert.doesNotThrow(() => removedRequest.onLoad({ scene: removedPayload }),
+  'a late callback from a removed pending source must be contained')
+assert.equal(removedPayloadGeometryDisposed, true,
+  'a late callback from a removed pending source must dispose its detached geometry')
+assert.equal(pendingRemovalScene.children.length, 0,
+  'a removed pending source must never attach its late GLTF payload to the scene')
+
+const replacementAfterRemovalScene = createGltfScene()
+replacementAfterRemovalRequest.onLoad({ scene: replacementAfterRemovalScene })
+const replacementAfterRemovalAsset = await replacementAfterRemovalLoad
+assert.equal(replacementAfterRemovalAsset.id, 'reusable-after-removal')
+assert.equal(replacementAfterRemovalAsset.sourceUrl,
+  'https://assets.example.test/replacement-after-removal.glb')
+assert.equal(pendingRemovalRuntime.get('reusable-after-removal'), replacementAfterRemovalAsset,
+  'the old request finalizer must not erase the replacement request or its loaded asset')
+assert.equal(pendingRemovalScene.children.length, 1)
+assert.equal(pendingRemovalRuntime.remove('reusable-after-removal'), true)
+assert.equal(pendingRemovalScene.children.length, 0)
+
+const identityScene = new THREE.Scene()
+const identityRuntime = new WorldAssetRuntime(identityScene, loader)
+const identityUrl = 'https://assets.example.test/identity-source.glb'
+const identityLoad = identityRuntime.load('identity-source', identityUrl, {
+  semanticEntryId: 'flora.identity',
+})
+const identityRequest = requests.at(-1)!
+await assert.rejects(
+  identityRuntime.load('identity-source', 'https://assets.example.test/conflicting-source.glb', {
+    semanticEntryId: 'flora.identity',
+  }),
+  /in-flight load for a different source URL or semantic entry/,
+  'a concurrent conflicting URL must be rejected without coalescing onto the first request',
+)
+await assert.rejects(
+  identityRuntime.load('identity-source', identityUrl, {
+    semanticEntryId: 'flora.conflicting',
+  }),
+  /in-flight load for a different source URL or semantic entry/,
+  'a concurrent conflicting semantic entry must be rejected',
+)
+const identityDuplicateLoad = identityRuntime.load('identity-source', identityUrl, {
+  semanticEntryId: 'flora.identity',
+})
+assert.equal(requests.at(-1), identityRequest,
+  'identical concurrent source and semantic requests must reuse the original loader request')
+identityRequest.onLoad({ scene: createGltfScene() })
+const [identityAsset, identityDuplicateAsset] = await Promise.all([identityLoad, identityDuplicateLoad])
+assert.equal(identityAsset, identityDuplicateAsset,
+  'identical concurrent load requests must resolve to the same runtime asset')
+assert.equal(identityRuntime.getSemanticSource('flora.identity'), identityAsset)
+assert.equal(identityRuntime.remove('identity-source'), true)
+
+const semanticOwnershipRuntime = new WorldAssetRuntime(new THREE.Scene(), loader)
+const firstSemanticLoad = semanticOwnershipRuntime.load(
+  'semantic-source-a',
+  'https://assets.example.test/semantic-a.glb',
+  { semanticEntryId: 'flora.shared' },
+)
+requests.at(-1)!.onLoad({ scene: createGltfScene() })
+await firstSemanticLoad
+assert.ok(semanticOwnershipRuntime.placeInstance('shared:one', 'flora.shared', {
+  x: 0, y: 0, z: 0, sourceAssetId: 'semantic-source-a',
+}))
+const secondSemanticLoad = semanticOwnershipRuntime.load(
+  'semantic-source-b',
+  'https://assets.example.test/semantic-b.glb',
+  { semanticEntryId: 'flora.shared' },
+)
+requests.at(-1)!.onLoad({ scene: createGltfScene() })
+await secondSemanticLoad
+assert.throws(
+  () => semanticOwnershipRuntime.placeInstance('shared:one', 'flora.shared', {
+    x: 0, y: 0, z: 0,
+  }),
+  /already owned by a different asset source or semantic entry/,
+  'semantic-only idempotent placement must not reuse an instance after the active semantic source changes',
+)
+
+const sharedBounds = { minX: -10, maxX: 10, minZ: -10, maxZ: 10 }
+const sourceAScatter = semanticOwnershipRuntime.scatterSemanticWithResult(
+  'flora.shared', sharedBounds, 3, 73, 1, 'semantic-source-a',
+)
+const sourceBScatter = semanticOwnershipRuntime.scatterSemanticWithResult(
+  'flora.shared', sharedBounds, 3, 73, 1, 'semantic-source-b',
+)
+assert.equal(sourceAScatter.instances.length, 3,
+  'an explicit source must scatter even when it is not the currently active semantic source')
+assert.equal(sourceBScatter.instances.length, 3,
+  'a second GLTF source with the same semantic entry must receive an independent scatter batch')
+assert.equal(sourceAScatter.createdInstanceIds.length, 3)
+assert.equal(sourceBScatter.createdInstanceIds.length, 3)
+assert.equal(new Set([...sourceAScatter.createdInstanceIds, ...sourceBScatter.createdInstanceIds]).size, 6,
+  'same-semantic source-specific scatter batches must never share deterministic instance IDs')
+assert.ok(sourceAScatter.createdInstanceIds.every(id => id.includes(':source:semantic-source-a:instance:73:')))
+assert.ok(sourceBScatter.createdInstanceIds.every(id => id.includes(':source:semantic-source-b:instance:73:')))
+assert.ok(sourceAScatter.instances.every(instance =>
+  semanticOwnershipRuntime.getInstanceSourceAssetId(instance.userData.runtimeAssetInstanceId) === 'semantic-source-a'))
+assert.ok(sourceBScatter.instances.every(instance =>
+  semanticOwnershipRuntime.getInstanceSourceAssetId(instance.userData.runtimeAssetInstanceId) === 'semantic-source-b'))
+
+const repeatedSourceAScatter = semanticOwnershipRuntime.scatterSemanticWithResult(
+  'flora.shared', sharedBounds, 3, 73, 1, 'semantic-source-a',
+)
+assert.deepEqual(repeatedSourceAScatter.instances, sourceAScatter.instances,
+  'repeating a source-specific seed must return the same source-owned instance objects')
+assert.deepEqual(repeatedSourceAScatter.createdInstanceIds, [],
+  'repeating a source-specific seed must not claim previously published instances')
+
+const legacySemanticScatter = semanticOwnershipRuntime.scatterSemanticWithResult(
+  'flora.shared', sharedBounds, 1, 73, 1,
+)
+assert.equal(legacySemanticScatter.instances.length, 1,
+  'the legacy semantic-only API must remain available for existing callers')
+assert.equal(legacySemanticScatter.instances[0].userData.runtimeAssetInstanceId,
+  'flora.shared:instance:73:0',
+  'the legacy semantic-only API must preserve its historical deterministic ID format')
+assert.equal(
+  semanticOwnershipRuntime.getInstanceSourceAssetId(legacySemanticScatter.instances[0].userData.runtimeAssetInstanceId),
+  'semantic-source-b',
+  'the legacy semantic-only API must continue to use the current semantic source')
+
+assert.equal(semanticOwnershipRuntime.remove('semantic-source-a'), true)
+assert.ok(sourceAScatter.createdInstanceIds.every(id => !semanticOwnershipRuntime.hasInstance(id)),
+  'removing one GLTF source must remove only its dependent scatter placements')
+assert.ok(sourceBScatter.createdInstanceIds.every(id => semanticOwnershipRuntime.hasInstance(id)),
+  'removing one GLTF source must preserve placements owned by another source in the same semantic category')
+assert.equal(semanticOwnershipRuntime.stats().instances, 4,
+  'the other source batch and its legacy semantic placement must remain after source-specific removal')
+assert.equal(semanticOwnershipRuntime.remove('semantic-source-b'), true)
+assert.equal(semanticOwnershipRuntime.stats().instances, 0)
+semanticOwnershipRuntime.clear()
 
 const instance = runtime.placeInstance('oak:instance:1', 'flora.oak', { x: 4, y: 0, z: 8 })
 assert.ok(instance)
@@ -122,6 +290,27 @@ assert.deepEqual(runtime.snapshotPlacements(), [{
   semanticEntryId: 'flora.oak',
   x: 4, y: 0, z: 8, scale: 1, rotationY: 0,
 }], 'runtime snapshot must capture absolute world coordinates and transforms')
+assert.throws(
+  () => runtime.placeInstance('oak:instance:1', 'flora.other', {
+    x: 4, y: 0, z: 8, sourceAssetId: 'oak',
+  }),
+  /already owned by a different asset source or semantic entry/,
+  'the runtime placement API must reject reuse of an instance ID under another semantic entry',
+)
+assert.throws(
+  () => runtime.placeInstance('oak:instance:1', 'flora.oak', {
+    x: 4, y: 0, z: 8, sourceAssetId: 'different-source',
+  }),
+  /already owned by a different asset source or semantic entry/,
+  'the runtime placement API must reject reuse of an instance ID under another source asset',
+)
+assert.throws(
+  () => runtime.placeInstance('oak:instance:1', 'flora.oak', {
+    x: Number.NaN, y: 0, z: 8, sourceAssetId: 'oak',
+  }),
+  /transform must contain finite coordinates/,
+  'an idempotent placement call must not bypass transform validation',
+)
 const placementValidation = validateExternalAssetPlacements(runtime.snapshotPlacements(), placementManifest, true)
 assert.equal(placementValidation.valid, true, 'placement intent must resolve to licensed manifest metadata')
 assert.equal(validateExternalAssetPlacements([
@@ -136,6 +325,30 @@ assert.equal(
   mergeExternalAssetPlacements([runtime.snapshotPlacements()[0]], [movedPlacement])[0].x,
   99,
   'live transform must override a stale pending descriptor with the same instance ID',
+)
+assert.throws(
+  () => mergeExternalAssetPlacements(
+    [runtime.snapshotPlacements()[0]],
+    [{ ...movedPlacement, sourceAssetId: 'different-source', semanticEntryId: 'flora.other' }],
+  ),
+  /claimed by different asset sources or semantic entries/,
+  'a live placement must not silently erase a pending descriptor owned by another asset',
+)
+assert.throws(
+  () => mergeExternalAssetPlacements([
+    runtime.snapshotPlacements()[0],
+    { ...runtime.snapshotPlacements()[0], x: 101 },
+  ], []),
+  /duplicated in pending records/,
+  'duplicate pending IDs must be rejected instead of silently overwriting earlier restore intent',
+)
+assert.throws(
+  () => mergeExternalAssetPlacements([], [
+    runtime.snapshotPlacements()[0],
+    { ...runtime.snapshotPlacements()[0], x: 102 },
+  ]),
+  /duplicated in live records/,
+  'duplicate live IDs must be rejected rather than collapsed during persistence snapshots',
 )
 const pendingPlacements = [
   runtime.snapshotPlacements()[0],
@@ -274,6 +487,33 @@ assert.deepEqual(materializerNotificationResult.errors, [{
 assert.equal(materializerNotificationRuntime.stats().instances, 2)
 assert.equal(materializerNotificationAttempts, 2)
 assert.equal(materializerNotificationRuntime.remove('materializer-notification-source'), true)
+
+const conflictingMaterializerCalls: string[] = []
+const conflictingDescriptor: ExternalAssetPlacementSnapshot = {
+  instanceId: 'collision:occupied',
+  sourceAssetId: 'expected-source',
+  semanticEntryId: 'flora.expected',
+  x: 5, y: 0, z: 5, scale: 1, rotationY: 0,
+}
+const conflictingMaterializerResult = materializeExternalAssetPlacements({
+  placeInstance: (instanceId) => {
+    conflictingMaterializerCalls.push(instanceId)
+    return { unexpected: true }
+  },
+  hasInstance: () => true,
+  getInstanceSourceAssetId: () => 'different-source',
+  getInstanceSemanticEntryId: () => 'flora.different',
+}, [conflictingDescriptor], 'expected-source', 'flora.expected')
+assert.deepEqual(conflictingMaterializerCalls, [],
+  'a colliding instance ID must be checked before attempting to publish or reuse it')
+assert.deepEqual(conflictingMaterializerResult.remaining, [conflictingDescriptor],
+  'a descriptor whose ID is owned by another source must remain pending')
+assert.deepEqual(conflictingMaterializerResult.restoredIds, [],
+  'a colliding instance from another source must never be reported as restored')
+assert.deepEqual(conflictingMaterializerResult.errors, [{
+  instanceId: 'collision:occupied',
+  message: 'Existing instance ID is owned by a different asset source or semantic entry',
+}], 'source/semantic ownership collisions must be reported explicitly')
 
 const alternateOakLoad = runtime.load('oak-alt', 'https://assets.example.test/alternate-oak.glb', {
   semanticEntryId: 'flora.oak',
@@ -939,6 +1179,55 @@ assert.equal(partialCloneRuntime.remove('partial-clone-source'), true,
 assert.equal(partialCloneScene.children.length, 0)
 
 
+const shaderCloneScene = new THREE.Scene()
+const shaderCloneRuntime = new WorldAssetRuntime(shaderCloneScene, loader)
+const shaderCloneFlags = { cloneCalls: 0, clonedTexturesDisposed: 0, sourceTextureDisposed: false }
+const shaderUniformTexture = new THREE.Texture()
+shaderUniformTexture.addEventListener('dispose', () => { shaderCloneFlags.sourceTextureDisposed = true })
+const shaderUniformMaterial = new THREE.ShaderMaterial({
+  uniforms: { uMap: { value: shaderUniformTexture } },
+})
+const shaderSourceObject = new THREE.Group()
+shaderSourceObject.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), shaderUniformMaterial))
+const shaderSourceLoad = shaderCloneRuntime.load(
+  'shader-uniform-source',
+  'https://assets.example.test/shader-uniform-source.glb',
+  { semanticEntryId: 'flora.shader-uniform' },
+)
+requests[requests.length - 1].onLoad({ scene: shaderSourceObject })
+await shaderSourceLoad
+
+const trackTextureCloneChain = (texture: THREE.Texture) => {
+  const originalClone = texture.clone.bind(texture)
+  texture.clone = function () {
+    const cloned = originalClone()
+    shaderCloneFlags.cloneCalls += 1
+    cloned.addEventListener('dispose', () => { shaderCloneFlags.clonedTexturesDisposed += 1 })
+    trackTextureCloneChain(cloned)
+    return cloned
+  }
+}
+trackTextureCloneChain(shaderUniformTexture)
+const shaderInstance = shaderCloneRuntime.placeInstance(
+  'shader-uniform-instance',
+  'flora.shader-uniform',
+  { x: 1, y: 0, z: 1 },
+)
+assert.ok(shaderInstance)
+assert.equal(shaderCloneFlags.cloneCalls, 1,
+  'ShaderMaterial.uniforms textures already cloned by material.clone must not be cloned a second time')
+const shaderInstanceMaterial = (shaderInstance.children[0] as THREE.Mesh).material as THREE.ShaderMaterial
+assert.notEqual(shaderInstanceMaterial.uniforms.uMap.value, shaderUniformTexture,
+  'a ShaderMaterial instance must own a texture independent from its source asset')
+assert.equal(shaderCloneRuntime.removeInstance('shader-uniform-instance'), true)
+assert.equal(shaderCloneFlags.clonedTexturesDisposed, 1,
+  'the one ShaderMaterial uniform texture clone must be disposed with its placement')
+assert.equal(shaderCloneFlags.sourceTextureDisposed, false,
+  'disposing a ShaderMaterial placement must not dispose the source texture')
+assert.equal(shaderCloneRuntime.remove('shader-uniform-source'), true)
+assert.equal(shaderCloneFlags.sourceTextureDisposed, true,
+  'the source ShaderMaterial texture must remain owned by and be disposed with the source asset')
+
 const failedPublishScene = new THREE.Scene()
 failedPublishScene.add = (..._objects: THREE.Object3D[]) => {
   throw new Error('injected scene attachment failure')
@@ -1248,6 +1537,102 @@ assert.equal(scatterNotificationAttempts, 2,
   'rollback must invoke placement bookkeeping for the removal of the published instance')
 assert.equal(scatterNotificationRuntime.remove('scatter-notification-source'), true)
 
+// Deterministic scatter calls are idempotent, but grounding must distinguish
+// previously published IDs from the subset created by this invocation.
+const groundingScene = new THREE.Scene()
+const groundingRuntime = new WorldAssetRuntime(groundingScene, loader)
+const groundingLoad = groundingRuntime.load(
+  'grounding-source',
+  'https://assets.example.test/grounding-source.glb',
+  { semanticEntryId: 'flora.grounding' },
+)
+requests[requests.length - 1].onLoad({ scene: createGltfScene() })
+await groundingLoad
+const groundingBounds = { minX: 0, maxX: 20, minZ: 0, maxZ: 20 }
+const firstGroundingScatter = groundingRuntime.scatterSemanticWithResult(
+  'flora.grounding', groundingBounds, 2, 701, 1,
+)
+assert.equal(firstGroundingScatter.instances.length, 2)
+assert.equal(firstGroundingScatter.createdInstanceIds.length, 2,
+  'the first deterministic scatter call must report every instance it published')
+groundWorldAssetInstances(
+  groundingRuntime,
+  firstGroundingScatter.instances,
+  firstGroundingScatter.createdInstanceIds,
+  { x: 0, y: 0, z: 0 },
+  () => 10,
+)
+const originalGroundingPositions = firstGroundingScatter.instances.map(instance =>
+  groundingRuntime.getInstanceWorldPosition(instance.userData.runtimeAssetInstanceId),
+)
+assert.ok(originalGroundingPositions.every(position => position?.y === 10))
+
+const repeatedGroundingScatter = groundingRuntime.scatterSemanticWithResult(
+  'flora.grounding', groundingBounds, 2, 701, 1,
+)
+assert.deepEqual(repeatedGroundingScatter.instances, firstGroundingScatter.instances,
+  'a repeated seed must return the same deterministic instance objects')
+assert.deepEqual(repeatedGroundingScatter.createdInstanceIds, [],
+  'a repeated seed must not claim ownership of instances published by an earlier scatter call')
+
+let repeatedGroundingSamples = 0
+assert.throws(
+  () => groundWorldAssetInstances(
+    groundingRuntime,
+    repeatedGroundingScatter.instances,
+    repeatedGroundingScatter.createdInstanceIds,
+    { x: 0, y: 0, z: 0 },
+    () => {
+      repeatedGroundingSamples += 1
+      if (repeatedGroundingSamples === 2) throw new Error('injected repeated-grounding terrain sample failure')
+      return 25
+    },
+  ),
+  /injected repeated-grounding terrain sample failure/,
+  'a failed re-grounding pass must surface the original terrain error',
+)
+assert.equal(groundingRuntime.stats().instances, 2,
+  'a failed repeat scatter/grounding pass must retain every previously published placement')
+assert.deepEqual(firstGroundingScatter.instances.map(instance =>
+  groundingRuntime.getInstanceWorldPosition(instance.userData.runtimeAssetInstanceId),
+), originalGroundingPositions,
+  'a failed repeat grounding pass must restore every pre-existing placement transform')
+
+const additionalGroundingScatter = groundingRuntime.scatterSemanticWithResult(
+  'flora.grounding', groundingBounds, 1, 702, 1,
+)
+assert.equal(additionalGroundingScatter.instances.length, 1)
+assert.equal(additionalGroundingScatter.createdInstanceIds.length, 1)
+const mixedGroundingBatch = [
+  ...firstGroundingScatter.instances,
+  ...additionalGroundingScatter.instances,
+]
+let mixedGroundingSamples = 0
+assert.throws(
+  () => groundWorldAssetInstances(
+    groundingRuntime,
+    mixedGroundingBatch,
+    additionalGroundingScatter.createdInstanceIds,
+    { x: 100, y: 10, z: -50 },
+    () => {
+      mixedGroundingSamples += 1
+      if (mixedGroundingSamples === 3) throw new Error('injected mixed-grounding terrain sample failure')
+      return 40
+    },
+  ),
+  /injected mixed-grounding terrain sample failure/,
+  'a mixed old/new grounding failure must surface its original terrain error',
+)
+assert.equal(groundingRuntime.stats().instances, 2,
+  'a mixed batch rollback must remove only the new scatter placements')
+assert.deepEqual(firstGroundingScatter.instances.map(instance =>
+  groundingRuntime.getInstanceWorldPosition(instance.userData.runtimeAssetInstanceId),
+), originalGroundingPositions,
+  'a mixed batch rollback must restore pre-existing instance coordinates after partial grounding')
+assert.deepEqual(groundingRuntime.remove('grounding-source'), true)
+assert.equal(groundingRuntime.stats().instances, 0)
+assert.equal(groundingScene.children.length, 0)
+
 const rendererSource = await readFile(new URL('../src/render/InfiniteWorldRenderer.ts', import.meta.url), 'utf8')
 
 const removalWithoutInstancesScene = new THREE.Scene()
@@ -1285,20 +1670,30 @@ assert.ok(externalLoadSource, 'renderer must expose external asset load and plac
 assert.match(externalLoadSource, /materialized\.errors\.length/,
   'renderer must report per-descriptor restoration failures without dropping pending descriptors')
 
-assert.match(rendererSource, /private groundExternalAssetInstances\(instances: THREE\.Object3D\[\]\)/,
-  'renderer must centralize external asset terrain grounding')
-assert.equal((rendererSource.match(/this\.groundExternalAssetInstances\((?:placed|instances)\)/g) ?? []).length, 3,
-  'biome population, world composition and direct scatter must all use world-coordinate-safe grounding')
+assert.match(rendererSource, /private groundExternalAssetInstances\(\s*instances: THREE\.Object3D\[\],\s*createdInstanceIds: readonly string\[\]/,
+  'renderer grounding must receive the exact IDs created by the current scatter call')
+assert.equal((rendererSource.match(/this\.groundExternalAssetInstances\(scatter\.instances, scatter\.createdInstanceIds\)/g) ?? []).length, 3,
+  'biome population, world composition and direct scatter must pass transaction-owned IDs to grounding')
 assert.doesNotMatch(rendererSource, /const (?:worldX|x) = instance\.position\.x/,
   'renderer must not treat rebased local instance X as an absolute world coordinate')
-const groundingHelperStart = rendererSource.indexOf('  private groundExternalAssetInstances(instances: THREE.Object3D[]) {')
+const groundingHelperStart = rendererSource.indexOf('  private groundExternalAssetInstances(')
 const groundingHelperEnd = rendererSource.indexOf('  async loadExternalAsset(', groundingHelperStart)
 const groundingHelper = rendererSource.slice(groundingHelperStart, groundingHelperEnd)
-assert.match(groundingHelper, /try\s*\{[\s\S]*setInstanceWorldTransform/,
-  'external asset grounding must guard the complete batch')
-assert.match(groundingHelper, /catch \(error\)[\s\S]*createdInstanceIds\.reverse\(\)[\s\S]*removeInstance/,
-  'failed external asset grounding must remove every newly created placement')
-assert.match(groundingHelper, /AggregateError/,
+assert.match(groundingHelper, /groundWorldAssetInstances\([\s\S]*createdInstanceIds[\s\S]*this\.sampleTerrainHeight/,
+  'renderer must delegate transactional grounding with the current scatter ownership set')
+assert.match(groundingHelper, /AggregateError|groundWorldAssetInstances/,
   'grounding rollback failures must be preserved alongside the original error')
+const worldAssetRuntimeSource = await readFile(
+  new URL('../src/worldLibrary/WorldAssetRuntime.ts', import.meta.url), 'utf8',
+)
+const transactionalGroundingStart = worldAssetRuntimeSource.indexOf('export function groundWorldAssetInstances(')
+assert.ok(transactionalGroundingStart >= 0, 'runtime must expose the transactional grounding helper')
+const transactionalGrounding = worldAssetRuntimeSource.slice(transactionalGroundingStart)
+assert.match(transactionalGrounding, /createdSet\.has\(snapshot\.instanceId\)/,
+  'grounding rollback must distinguish newly created instances from pre-existing instances')
+assert.match(transactionalGrounding, /updatedExistingIds/,
+  'grounding rollback must restore transforms of pre-existing instances modified before a later failure')
+assert.match(transactionalGrounding, /for \(const instanceId of \[\.\.\.createdIds\]\.reverse\(\)\)/,
+  'grounding rollback must remove only IDs created by the current scatter transaction')
 
 console.log('WorldAssetRuntime asset lifecycle, independent skeletal animation states, crossfades, distance LOD and disposal: PASS')

@@ -104,8 +104,30 @@ export function mergeExternalAssetPlacements(
   live: ExternalAssetPlacementSnapshot[],
 ): ExternalAssetPlacementSnapshot[] {
   const merged = new Map<string, ExternalAssetPlacementSnapshot>()
-  for (const placement of pending) merged.set(placement.instanceId, placement)
-  for (const placement of live) merged.set(placement.instanceId, placement)
+  const pendingIds = new Set<string>()
+  const liveIds = new Set<string>()
+  const add = (placement: ExternalAssetPlacementSnapshot, source: 'pending' | 'live') => {
+    const sourceIds = source === 'pending' ? pendingIds : liveIds
+    if (sourceIds.has(placement.instanceId)) {
+      throw new TypeError('External asset placement ID ' + placement.instanceId + ' is duplicated in ' + source + ' records')
+    }
+    sourceIds.add(placement.instanceId)
+    const previous = merged.get(placement.instanceId)
+    if (previous) {
+      if (previous.sourceAssetId !== placement.sourceAssetId ||
+          previous.semanticEntryId !== placement.semanticEntryId) {
+        throw new TypeError(
+          'External asset placement ID ' + placement.instanceId +
+          ' is claimed by different asset sources or semantic entries',
+        )
+      }
+    }
+    // A live transform may supersede the matching pending snapshot, but never
+    // a descriptor owned by a different asset or semantic entry.
+    merged.set(placement.instanceId, placement)
+  }
+  for (const placement of pending) add(placement, 'pending')
+  for (const placement of live) add(placement, 'live')
   return [...merged.values()].map(placement => ({ ...placement }))
 }
 
@@ -116,6 +138,8 @@ export type ExternalAssetPlacementMaterializer = {
     options: { x: number; y: number; z: number; scale: number; rotationY: number; sourceAssetId: string },
   ) => unknown | null | undefined
   hasInstance?: (instanceId: string) => boolean
+  getInstanceSourceAssetId?: (instanceId: string) => string | null
+  getInstanceSemanticEntryId?: (instanceId: string) => string | null
 }
 
 export type ExternalAssetPlacementMaterializationError = {
@@ -152,6 +176,19 @@ export function materializeExternalAssetPlacements(
     }
 
     try {
+      const alreadyExists = runtime.hasInstance?.(placement.instanceId) ?? false
+      if (alreadyExists) {
+        const existingSourceId = runtime.getInstanceSourceAssetId?.(placement.instanceId)
+        const existingSemanticId = runtime.getInstanceSemanticEntryId?.(placement.instanceId)
+        if (existingSourceId !== sourceAssetId || existingSemanticId !== semanticEntryId) {
+          throw new Error(
+            'Existing instance ID is owned by a different asset source or semantic entry',
+          )
+        }
+        restoredIds.push(placement.instanceId)
+        continue
+      }
+
       const instance = runtime.placeInstance(
         placement.instanceId,
         placement.semanticEntryId,
@@ -174,7 +211,10 @@ export function materializeExternalAssetPlacements(
       // committed the object. Do not keep a duplicate pending descriptor
       // when the runtime confirms that the instance is present.
       const alreadyPublished = runtime.hasInstance?.(placement.instanceId) ?? false
-      if (alreadyPublished) restoredIds.push(placement.instanceId)
+      const publishedMatchesExpectedSource = alreadyPublished &&
+        runtime.getInstanceSourceAssetId?.(placement.instanceId) === sourceAssetId &&
+        runtime.getInstanceSemanticEntryId?.(placement.instanceId) === semanticEntryId
+      if (publishedMatchesExpectedSource) restoredIds.push(placement.instanceId)
       else remaining.push({ ...placement })
       errors.push({
         instanceId: placement.instanceId,
