@@ -1179,6 +1179,55 @@ assert.equal(partialCloneRuntime.remove('partial-clone-source'), true,
 assert.equal(partialCloneScene.children.length, 0)
 
 
+const shaderCloneScene = new THREE.Scene()
+const shaderCloneRuntime = new WorldAssetRuntime(shaderCloneScene, loader)
+const shaderCloneFlags = { cloneCalls: 0, clonedTexturesDisposed: 0, sourceTextureDisposed: false }
+const shaderUniformTexture = new THREE.Texture()
+shaderUniformTexture.addEventListener('dispose', () => { shaderCloneFlags.sourceTextureDisposed = true })
+const shaderUniformMaterial = new THREE.ShaderMaterial({
+  uniforms: { uMap: { value: shaderUniformTexture } },
+})
+const shaderSourceObject = new THREE.Group()
+shaderSourceObject.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), shaderUniformMaterial))
+const shaderSourceLoad = shaderCloneRuntime.load(
+  'shader-uniform-source',
+  'https://assets.example.test/shader-uniform-source.glb',
+  { semanticEntryId: 'flora.shader-uniform' },
+)
+requests[requests.length - 1].onLoad({ scene: shaderSourceObject })
+await shaderSourceLoad
+
+const trackTextureCloneChain = (texture: THREE.Texture) => {
+  const originalClone = texture.clone.bind(texture)
+  texture.clone = function () {
+    const cloned = originalClone()
+    shaderCloneFlags.cloneCalls += 1
+    cloned.addEventListener('dispose', () => { shaderCloneFlags.clonedTexturesDisposed += 1 })
+    trackTextureCloneChain(cloned)
+    return cloned
+  }
+}
+trackTextureCloneChain(shaderUniformTexture)
+const shaderInstance = shaderCloneRuntime.placeInstance(
+  'shader-uniform-instance',
+  'flora.shader-uniform',
+  { x: 1, y: 0, z: 1 },
+)
+assert.ok(shaderInstance)
+assert.equal(shaderCloneFlags.cloneCalls, 1,
+  'ShaderMaterial.uniforms textures already cloned by material.clone must not be cloned a second time')
+const shaderInstanceMaterial = (shaderInstance.children[0] as THREE.Mesh).material as THREE.ShaderMaterial
+assert.notEqual(shaderInstanceMaterial.uniforms.uMap.value, shaderUniformTexture,
+  'a ShaderMaterial instance must own a texture independent from its source asset')
+assert.equal(shaderCloneRuntime.removeInstance('shader-uniform-instance'), true)
+assert.equal(shaderCloneFlags.clonedTexturesDisposed, 1,
+  'the one ShaderMaterial uniform texture clone must be disposed with its placement')
+assert.equal(shaderCloneFlags.sourceTextureDisposed, false,
+  'disposing a ShaderMaterial placement must not dispose the source texture')
+assert.equal(shaderCloneRuntime.remove('shader-uniform-source'), true)
+assert.equal(shaderCloneFlags.sourceTextureDisposed, true,
+  'the source ShaderMaterial texture must remain owned by and be disposed with the source asset')
+
 const failedPublishScene = new THREE.Scene()
 failedPublishScene.add = (..._objects: THREE.Object3D[]) => {
   throw new Error('injected scene attachment failure')

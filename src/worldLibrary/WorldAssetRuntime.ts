@@ -436,8 +436,15 @@ export class WorldAssetRuntime {
     const clone = material.clone() as T
     ownedMaterials.add(clone)
     const clonedTextures = new Map<THREE.Texture, THREE.Texture>()
-    const cloneValue = (value: unknown): unknown => {
+    const cloneValue = (value: unknown, sourceValue: unknown): unknown => {
       if (value instanceof THREE.Texture) {
+        // Some materials (notably ShaderMaterial) already deep-clone texture
+        // values during material.clone(). Keep and own those copies rather
+        // than cloning them again and orphaning the intermediate texture.
+        if (sourceValue instanceof THREE.Texture && value !== sourceValue) {
+          ownedTextures.add(value)
+          return value
+        }
         let texture = clonedTextures.get(value)
         if (!texture) {
           texture = value.clone()
@@ -446,9 +453,19 @@ export class WorldAssetRuntime {
         }
         return texture
       }
-      if (Array.isArray(value)) return value.map(cloneValue)
+      if (Array.isArray(value)) {
+        const sourceArray = Array.isArray(sourceValue) ? sourceValue : []
+        return value.map((entry, index) => cloneValue(entry, sourceArray[index]))
+      }
       if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
-        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, cloneValue(entry)]))
+        const sourceObject = sourceValue && typeof sourceValue === 'object' &&
+          Object.getPrototypeOf(sourceValue) === Object.prototype
+          ? sourceValue as Record<string, unknown>
+          : {}
+        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
+          key,
+          cloneValue(entry, sourceObject[key]),
+        ]))
       }
       return value
     }
@@ -456,7 +473,7 @@ export class WorldAssetRuntime {
       const value = clone[key]
       if (value instanceof THREE.Texture || Array.isArray(value) ||
         (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)) {
-        ;(clone as any)[key] = cloneValue(value)
+        ;(clone as any)[key] = cloneValue(value, material[key])
       }
     }
     return clone
