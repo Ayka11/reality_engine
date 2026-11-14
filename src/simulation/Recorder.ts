@@ -29,7 +29,21 @@ export class Recorder {
 
   get recording() { return this._recording; }
   get count() { return this.snapshots.length; }
-  get snapList(): Snapshot[] { return this.snapshots; }
+
+  /**
+   * Detached metadata for UI/replay controls. Historical field buffers remain
+   * private to Recorder so external consumers cannot alter a later restore.
+   * Copy only the small metrics records; never clone the full grid history here.
+   */
+  get snapList(): ReadonlyArray<{
+    readonly tick: number;
+    readonly metrics: Readonly<Snapshot["metrics"]>;
+  }> {
+    return Object.freeze(this.snapshots.map(snapshot => Object.freeze({
+      tick: snapshot.tick,
+      metrics: Object.freeze({ ...snapshot.metrics }),
+    })));
+  }
 
   snapshotState(): RecorderStateSnapshot {
     return {
