@@ -94,10 +94,13 @@ export function runRecorderRecoveryRegression(): void {
   }
 
   const restoredCopy = recorder.snapshotState();
+  const retainedRestoredValue = recorder.snapshotState().snapshots[1].buffer[0];
+  const retainedRestoredMetric = recorder.snapshotState().snapshots[1].metrics.avgBio;
   restoredCopy.snapshots[1].buffer[0] = -123;
   restoredCopy.snapshots[1].metrics.avgBio = -456;
-  if (recorder.snapList[1].buffer[0] === -123 ||
-      recorder.snapList[1].metrics.avgBio === -456) {
+  const afterExternalSnapshotMutation = recorder.snapshotState();
+  if (afterExternalSnapshotMutation.snapshots[1].buffer[0] !== retainedRestoredValue ||
+      afterExternalSnapshotMutation.snapshots[1].metrics.avgBio !== retainedRestoredMetric) {
     throw new Error("Restored Recorder history aliases the supplied snapshot");
   }
 
