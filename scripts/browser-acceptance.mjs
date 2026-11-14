@@ -3911,8 +3911,8 @@ try {
   }
   console.log("[acceptance] full world clear resets object/field/terrain histories, surface provider and asset provenance");
 
-  // Verify that Clear World survives a real page restart, not only the live
-  // renderer state and immediate persistence reads.
+  // Verify that Clear World survives a full page reload in this browser context,
+  // not only the live renderer state and immediate persistence reads.
   await composePage.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
   await composePage.waitForSelector("#c3d", { state: "attached" });
   await composePage.waitForFunction(() =>
@@ -3953,10 +3953,10 @@ try {
       clearedWorldAfterRestart.runtimeAssets.loaded !== 0 ||
       clearedWorldAfterRestart.runtimeAssets.instances !== 0 ||
       Object.values(clearedWorldAfterRestart.durableSidecars).some(status => status !== "missing")) {
-    throw new Error("Clear World did not survive a full browser restart with a clean generator baseline: " +
+    throw new Error("Clear World did not survive a full page reload with a clean generator baseline: " +
       JSON.stringify(clearedWorldAfterRestart));
   }
-  console.log("[acceptance] Clear World clean baseline restored after full browser restart");
+  console.log("[acceptance] Clear World clean baseline restored after full page reload");
 
   await composePage.close();
 
