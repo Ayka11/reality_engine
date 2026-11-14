@@ -66,16 +66,19 @@ const checkpoint = history.snapshotState()
 checkpoint.undoStack[0].object.properties.owner = 'mutated-checkpoint'
 const current = history.undo()
 assert.ok(current)
-assert.equal(current.object.properties.owner, 'original')
-current.object.properties.owner = 'mutated-undo-again'
+assert.equal(current.type, 'transform')
+current.before.properties.nested = 'mutated-undo-again'
 history.redo()
 
 const restored = new WorldEditHistory()
 restored.restoreState(checkpoint)
 checkpoint.undoStack[0].object.properties.owner = 'mutated-after-restore'
-const restoredUndo = restored.undo()
-assert.ok(restoredUndo)
-assert.equal(restoredUndo.object.properties.owner, 'mutated-checkpoint')
+const restoredTransformUndo = restored.undo()
+assert.ok(restoredTransformUndo)
+assert.equal(restoredTransformUndo.type, 'transform')
+const restoredAddUndo = restored.undo()
+assert.ok(restoredAddUndo)
+assert.equal(restoredAddUndo.object.properties.owner, 'mutated-checkpoint')
 
 // Invalid entries are rejected without replacing the previously installed history.
 const stable = restored.snapshotState()
