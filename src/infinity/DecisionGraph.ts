@@ -1,5 +1,13 @@
 import type { DecisionRecord } from './DecisionRecord'
 
+function cloneNode(node: DecisionGraphNode): DecisionGraphNode {
+  return structuredClone(node)
+}
+
+function cloneEdge(edge: DecisionGraphEdge): DecisionGraphEdge {
+  return { ...edge }
+}
+
 export type DecisionEdgeType =
   | 'supports'
   | 'derived-from'
@@ -25,8 +33,9 @@ export class DecisionGraph {
   private edges: DecisionGraphEdge[] = []
 
   addNode(node: DecisionGraphNode) {
-    this.nodes.set(node.id, node)
-    return node
+    const committed = cloneNode(node)
+    this.nodes.set(committed.id, committed)
+    return cloneNode(committed)
   }
 
   addDecision<TInput extends Record<string, unknown>, TOutput extends Record<string, unknown>>(
@@ -44,19 +53,20 @@ export class DecisionGraph {
   addEdge(from: string, to: string, type: DecisionEdgeType) {
     const edge = { from, to, type }
     this.edges.push(edge)
-    return edge
+    return cloneEdge(edge)
   }
 
   getNode(id: string) {
-    return this.nodes.get(id)
+    const node = this.nodes.get(id)
+    return node ? cloneNode(node) : undefined
   }
 
   getNodes() {
-    return [...this.nodes.values()]
+    return [...this.nodes.values()].map(cloneNode)
   }
 
   getEdges() {
-    return [...this.edges]
+    return this.edges.map(cloneEdge)
   }
 
   relatedTo(id: string) {
@@ -65,7 +75,10 @@ export class DecisionGraph {
       if (edge.from === id) linked.add(edge.to)
       if (edge.to === id) linked.add(edge.from)
     }
-    return [...linked].map((nodeId) => this.nodes.get(nodeId)).filter(Boolean) as DecisionGraphNode[]
+    return [...linked]
+      .map((nodeId) => this.nodes.get(nodeId))
+      .filter((node): node is DecisionGraphNode => Boolean(node))
+      .map(cloneNode)
   }
 
   clear() {
