@@ -61,13 +61,22 @@ export type ZoneCostResult = {
 
 export class WorldDecisionLayer {
   readonly version = 'world-decision-v1'
+  readonly #sampler: FieldSampler
+  readonly weights: Readonly<DecisionWeights>
+  readonly lawProvider?: () => { processes?: string[] } | null
+  private readonly terrainHeight?: (x: number, z: number) => number
 
   constructor(
-    readonly sampler: FieldSampler,
-    readonly weights: DecisionWeights = DEFAULT_DECISION_WEIGHTS,
-    readonly lawProvider?: () => { processes?: string[] } | null,
-    private readonly terrainHeight?: (x: number, z: number) => number,
-  ) {}
+    sampler: FieldSampler,
+    weights: DecisionWeights = DEFAULT_DECISION_WEIGHTS,
+    lawProvider?: () => { processes?: string[] } | null,
+    terrainHeight?: (x: number, z: number) => number,
+  ) {
+    this.#sampler = sampler
+    this.weights = Object.freeze({ ...weights })
+    this.lawProvider = lawProvider
+    this.terrainHeight = terrainHeight
+  }
 
   private clamp01(value: number) {
     return Math.max(0, Math.min(1, value))
@@ -76,7 +85,7 @@ export class WorldDecisionLayer {
   private heightAt(x: number, z: number): number {
     const height = this.terrainHeight
       ? this.terrainHeight(x, z)
-      : this.sampler.surfaceProvider.sampleSurface(x, z).height
+      : this.#sampler.surfaceProvider.sampleSurface(x, z).height
     if (!Number.isFinite(height)) {
       throw new RangeError(`World decision terrain sampler returned a non-finite height at (${x}, ${z})`)
     }
@@ -89,12 +98,12 @@ export class WorldDecisionLayer {
    * behavior for non-renderer consumers and existing analytical tests.
    */
   private sampleWorld(x: number, z: number): WorldContextSample {
-    if (!this.terrainHeight) return this.sampler.sampleWorld(x, undefined, z)
+    if (!this.terrainHeight) return this.#sampler.sampleWorld(x, undefined, z)
 
     const height = this.heightAt(x, z)
-    const surfaceProvider = this.sampler.surfaceProvider
+    const surfaceProvider = this.#sampler.surfaceProvider
     const surface = surfaceProvider.sampleSurface(x, z, height)
-    const field = this.sampler.sample(x, height, z)
+    const field = this.#sampler.sample(x, height, z)
     const waterLevel = surfaceProvider.waterLevel
     let waterDepth = surface.waterDepth
     if (waterLevel !== undefined && waterLevel !== null) {
@@ -129,7 +138,7 @@ export class WorldDecisionLayer {
 
     const slopeScore = 1 - this.clamp01(slope / 0.45)
     const waterScore = 1 - this.clamp01(field.waterDepth / 8)
-    const elevationScore = 1 - this.clamp01(Math.abs(field.height - this.sampler.surfaceProvider.referenceBuildElevation) / 30)
+    const elevationScore = 1 - this.clamp01(Math.abs(field.height - this.#sampler.surfaceProvider.referenceBuildElevation) / 30)
     const entropyScore = 1 - this.clamp01(field.entropy / 0.12)
     const densityScore = 1 - this.clamp01(field.density)
     const biologyScore = this.clamp01(field.biology)
@@ -232,7 +241,7 @@ export class WorldDecisionLayer {
     const result = this.buildZoneCost(x, z, distanceFromHub)
     return createDecisionRecord(
       'zone-cost',
-      this.sampler.surfaceProvider.seed,
+      this.#sampler.surfaceProvider.seed,
       { x, z, distanceFromHub },
       this.weights,
       {
