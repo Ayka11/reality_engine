@@ -78,7 +78,7 @@ export class InfiniteWorldRenderer {
   readonly #fieldSampler: FieldSampler
   readonly #authoritativeField: MutableWorldFieldProvider
   readonly legacySculptRuntimeAdapter: LegacySculptRuntimeAdapter
-  readonly authoritativeSculptTransactions: AuthoritativeSculptTransactionCoordinator
+  readonly #authoritativeSculptTransactions: AuthoritativeSculptTransactionCoordinator
   terrainDeformations: TerrainDeformationField
   decisionLayer: WorldDecisionLayer
   constructionContract: WorldConstructionContract
@@ -168,7 +168,7 @@ export class InfiniteWorldRenderer {
     let provenanceEventId: string | undefined
     let transaction: ReturnType<AuthoritativeSculptTransactionCoordinator['commit']>
     try {
-      transaction = this.authoritativeSculptTransactions.commit(() => {
+      transaction = this.#authoritativeSculptTransactions.commit(() => {
         const event = runtimeProvenance.record(input.kind === 'composer' ? 'world-state' : input.kind, {
           ...input.metadata,
           mutationKind: input.kind,
@@ -207,6 +207,30 @@ export class InfiniteWorldRenderer {
 
   getAuthoritativeFieldSnapshot() {
     return this.#authoritativeField.getState()
+  }
+
+  /** Detached diagnostic snapshot; callers receive data, never provider mutators. */
+  getAuthoritativeFieldDiagnostics() {
+    return this.#authoritativeField.serialize()
+  }
+
+  sampleAuthoritativeField(x: number, y: number, z: number) {
+    return this.#authoritativeField.sample(x, y, z)
+  }
+
+  getAuthoritativeFieldMutationCount() {
+    return this.#authoritativeField.getMutationCount()
+  }
+
+  getActiveFieldProviderId() {
+    return this.#fieldSampler.registry.activeProviderId
+  }
+
+  getAuthoritativeSculptHistoryState() {
+    return {
+      undo: this.#authoritativeSculptTransactions.historyLength,
+      redo: this.#authoritativeSculptTransactions.redoLength,
+    }
   }
 
   sampleWorldField(x: number, y?: number, z?: number) {
@@ -264,7 +288,7 @@ export class InfiniteWorldRenderer {
       legacyTool: tool,
       legacyCoordinate: { ...cell },
     }
-    const transaction = this.authoritativeSculptTransactions.commit(() => {
+    const transaction = this.#authoritativeSculptTransactions.commit(() => {
       switch (tool) {
         case 'inject': return this.legacySculptRuntimeAdapter.inject(cell, radius, strength, options.fields ?? {}, metadata)
         case 'paint': return this.legacySculptRuntimeAdapter.paint(cell, radius, strength, options.fields ?? {}, metadata)
@@ -290,7 +314,7 @@ export class InfiniteWorldRenderer {
     selectedLegacyZ?: number,
     options: { strength?: number } = {},
   ): WorldFieldMutation {
-    const transaction = this.authoritativeSculptTransactions.commit(() =>
+    const transaction = this.#authoritativeSculptTransactions.commit(() =>
       this.legacySculptRuntimeAdapter.smartBrush(name, cell, radius, selectedLegacyZ, {
         source: 'legacy-sculpt-runtime',
         legacyTool: 'smart-brush',
@@ -303,7 +327,7 @@ export class InfiniteWorldRenderer {
     return transaction.mutation
   }
   undoLegacySculptAuthoritative() {
-    const transaction = this.authoritativeSculptTransactions.undo()
+    const transaction = this.#authoritativeSculptTransactions.undo()
     if (transaction) {
       this.notifyAuthoritativeSculptHistoryChanged()
       this.refreshTerrainPatches()
@@ -313,7 +337,7 @@ export class InfiniteWorldRenderer {
   }
 
   redoLegacySculptAuthoritative() {
-    const transaction = this.authoritativeSculptTransactions.redo()
+    const transaction = this.#authoritativeSculptTransactions.redo()
     if (transaction) {
       this.notifyAuthoritativeSculptHistoryChanged()
       this.refreshTerrainPatches()
@@ -324,8 +348,8 @@ export class InfiniteWorldRenderer {
 
   getLegacySculptAuthoritativeHistory() {
     return {
-      undo: this.authoritativeSculptTransactions.historyLength,
-      redo: this.authoritativeSculptTransactions.redoLength,
+      undo: this.#authoritativeSculptTransactions.historyLength,
+      redo: this.#authoritativeSculptTransactions.redoLength,
     }
   }
 
@@ -433,7 +457,7 @@ export class InfiniteWorldRenderer {
       })
       return committed
     })
-    this.authoritativeSculptTransactions = new AuthoritativeSculptTransactionCoordinator(this.#authoritativeField)
+    this.#authoritativeSculptTransactions = new AuthoritativeSculptTransactionCoordinator(this.#authoritativeField)
     this.decisionLayer = new WorldDecisionLayer(this.#fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null, (x, z) => this.sampleTerrainHeight(x, z))
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
@@ -649,7 +673,7 @@ export class InfiniteWorldRenderer {
   captureRuntimeRollbackCheckpoint() {
     return {
       history: this.history.snapshotState(),
-      authoritativeSculptHistory: this.authoritativeSculptTransactions.snapshotState(),
+      authoritativeSculptHistory: this.#authoritativeSculptTransactions.snapshotState(),
       selectedObjectId: this.selectedObjectId,
     }
   }
@@ -667,7 +691,7 @@ export class InfiniteWorldRenderer {
       throw new TypeError('Invalid Infinite World runtime rollback checkpoint')
     }
     this.history.restoreState(checkpoint.history)
-    this.authoritativeSculptTransactions.restoreState(checkpoint.authoritativeSculptHistory)
+    this.#authoritativeSculptTransactions.restoreState(checkpoint.authoritativeSculptHistory)
 
     const selected = checkpoint.selectedObjectId
     const entry = selected ? this.objectMeshes.get(selected) : undefined
@@ -862,7 +886,7 @@ export class InfiniteWorldRenderer {
     })
     this.lastCenter = null
     this.history = new WorldEditHistory()
-    this.authoritativeSculptTransactions.clear()
+    this.#authoritativeSculptTransactions.clear()
     this.notifyAuthoritativeSculptHistoryChanged()
     this.selectedObjectId = null
     this.transformControls.detach()
@@ -1202,7 +1226,7 @@ export class InfiniteWorldRenderer {
     if (options.restoreFieldCheckpoint !== false || persistedField) {
       // A manual Load replaces the field even when no saved snapshot exists;
       // startup without an autosave preserves the constructor-initialized field.
-      this.authoritativeSculptTransactions.clear()
+      this.#authoritativeSculptTransactions.clear()
       this.notifyAuthoritativeSculptHistoryChanged()
     }
     this.objects.clear()
@@ -1270,7 +1294,7 @@ export class InfiniteWorldRenderer {
     this.#fieldSampler.resetSurfaceProviderToGenerator()
     worldViewContract.setSeed(this.#fieldSampler.surfaceProvider.seed)
     this.rebuildDecisionLayer()
-    this.authoritativeSculptTransactions.clear()
+    this.#authoritativeSculptTransactions.clear()
     this.notifyAuthoritativeSculptHistoryChanged()
     this.history.clear()
     ;(window as any).worldAssetManifest = createAssetImportManifest()
@@ -1396,7 +1420,7 @@ export class InfiniteWorldRenderer {
     this.#authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
     this.#authoritativeField.clear()
     this.terrainDeformations = new TerrainDeformationField(normalizedSeed)
-    this.authoritativeSculptTransactions.clear()
+    this.#authoritativeSculptTransactions.clear()
     this.notifyAuthoritativeSculptHistoryChanged()
     this.#fieldSampler.setProvider(this.#authoritativeField)
     this.rebuildDecisionLayer()
