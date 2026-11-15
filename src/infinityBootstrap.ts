@@ -64,6 +64,7 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).getGlobalEntityIdentitySnapshot = () => {
     const entries = world.objects.values()
     const externalAssetPlacements = world.getExternalAssetPlacementIdentityRecords()
+    const civilizationBranches = civilizationRuntime.branchesList()
     globalEntityIdentityRegistry.replaceDomains([
       {
         domain: 'infinite-world-object',
@@ -73,6 +74,13 @@ export function bootstrapInfiniteWorld() {
         domain: 'external-asset-placement',
         entries: externalAssetPlacements,
       },
+      {
+        domain: 'world-library-civilization-branch',
+        entries: civilizationBranches.map(branch => ({
+          id: branch.branchId,
+          kind: 'counterfactual-civilization-branch',
+        })),
+      },
     ])
     return Object.freeze({
       ...globalEntityIdentityRegistry.snapshot(),
@@ -81,6 +89,7 @@ export function bootstrapInfiniteWorld() {
         capturedDomains: Object.freeze([
           'infinite-world-object',
           'external-asset-placement',
+          'world-library-civilization-branch',
         ]),
         excludedDomains: Object.freeze([
           Object.freeze({
@@ -109,11 +118,6 @@ export function bootstrapInfiniteWorld() {
             reason: 'Standalone ECS World has no provider connected to the active runtime.',
           }),
           Object.freeze({
-            domain: 'world-library-civilization-branches',
-            source: 'src/worldLibrary/CivilizationRuntime.ts',
-            reason: 'Counterfactual civilization branches have independent branch IDs and need an explicit persistence and lifecycle adapter.',
-          }),
-          Object.freeze({
             domain: 'world-resource-inventory',
             source: 'src/worldLibrary/WorldResourceEconomy.ts',
             reason: 'Resource records are inventory state keyed by semantic resource IDs, not scene entities; their ownership and identity semantics need separate classification.',
@@ -124,7 +128,7 @@ export function bootstrapInfiniteWorld() {
             reason: 'Production infrastructure is keyed by civilization identity and is a state projection, not an independently-owned scene entity.',
           }),
         ]),
-        ownership: 'This directory indexes stable namespaced IDs; WorldObjectManager and WorldAssetRuntime remain authoritative for state and lifecycle.',
+        ownership: 'This directory indexes stable namespaced IDs; WorldObjectManager, WorldAssetRuntime, and CivilizationRuntime remain authoritative for object, placement, and branch state/lifecycle respectively.',
       }),
     })
   }
