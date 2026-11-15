@@ -36,6 +36,27 @@ function equal(a: unknown, b: unknown, message: string): void {
 }
 
 export function runEntityLayerRecoveryRegression(): void {
+  const configurationLayer = new EntityLayer(7);
+  let configurationMutations = 0;
+  configurationLayer.setMutationObserver(() => { configurationMutations++; });
+  configurationLayer.mutationStrength = 0.5;
+  if (configurationLayer.mutationStrength !== 0.5 || configurationMutations !== 1) {
+    throw new Error("EntityLayer mutationStrength change did not publish exactly one state mutation");
+  }
+  configurationLayer.mutationStrength = 0.5;
+  if (configurationMutations !== 1) {
+    throw new Error("EntityLayer mutationStrength no-op unexpectedly invalidated state");
+  }
+  for (const invalidStrength of [Number.NaN, Number.POSITIVE_INFINITY, -1]) {
+    let rejected = false;
+    try { configurationLayer.mutationStrength = invalidStrength; } catch (error) {
+      rejected = error instanceof RangeError;
+    }
+    if (!rejected || configurationLayer.mutationStrength !== 0.5 || configurationMutations !== 1) {
+      throw new Error("EntityLayer accepted invalid mutationStrength or partially changed configuration");
+    }
+  }
+
   const grid = new VoxelGrid(12, 12, 6);
   const layer = new EntityLayer(0x13579bdf);
   writeBlob(grid, [[2, 2, 1], [3, 2, 1], [2, 3, 1], [3, 3, 1]]);
