@@ -24,6 +24,7 @@
     "test:worldevents-recovery": "npx --yes tsx scripts/check-worldevents-recovery.ts",
     "test:entity-layer-recovery": "npx --yes tsx scripts/check-entity-layer-recovery.ts",
     "test:entity-grid-ownership": "npx --yes tsx scripts/check-entity-grid-ownership.ts",
+    "test:kernel-entity-ownership": "npx --yes tsx scripts/check-kernel-entity-ownership.ts",
     "test:presets": "node scripts/check-preset-contract.mjs",
     "test:preset-field": "node scripts/check-preset-field-provenance.mjs",
     "test:construction": "node scripts/check-world-construction-contract.mjs",
