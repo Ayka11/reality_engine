@@ -25,6 +25,14 @@ export class CausalGraph {
   private events: CausalEvent[] = [];
   private nextId = 1;
   private lastEventByCell = new Map<number, number>();
+  private mutationObserver: (() => void) | null = null;
+
+  /** Register the owning engine's stale-readback invalidation hook. */
+  setMutationObserver(observer: (() => void) | null): void {
+    this.mutationObserver = observer;
+  }
+
+  private notifyMutation(): void { this.mutationObserver?.(); }
 
   snapshot(): CausalGraphSnapshot {
     return {
@@ -88,6 +96,7 @@ export class CausalGraph {
     this.events = events;
     this.nextId = snapshot.nextId;
     this.lastEventByCell = lastEventByCell;
+    this.notifyMutation();
   }
 
   log(
@@ -102,6 +111,7 @@ export class CausalGraph {
     this.events.push(ev);
     this.lastEventByCell.set(cellIdx, ev.id);
     if (this.events.length > 500) this.events.shift();
+    this.notifyMutation();
     return { ...ev };
   }
 
@@ -120,5 +130,10 @@ export class CausalGraph {
     return chain;
   }
 
-  clear(): void { this.events = []; this.lastEventByCell.clear(); this.nextId = 1; }
+  clear(): void {
+    this.events = [];
+    this.lastEventByCell.clear();
+    this.nextId = 1;
+    this.notifyMutation();
+  }
 }
