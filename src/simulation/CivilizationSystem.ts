@@ -103,30 +103,56 @@ export class CivilizationSystem {
   }
 
   restore(snapshot: CivilizationSystemSnapshot): void {
-    if (!snapshot || !Array.isArray(snapshot.civs) || !Array.isArray(snapshot.historyLog) ||
+    if (!snapshot || !Array.isArray(snapshot.civs) || snapshot.civs.length > MAX_CIVS ||
+        !Array.isArray(snapshot.historyLog) || snapshot.historyLog.length > 60 ||
+        !snapshot.historyLog.every(entry => typeof entry === "string") ||
         !Number.isSafeInteger(snapshot.nextId) || snapshot.nextId < 0 ||
         !Number.isSafeInteger(snapshot.tickCount) || snapshot.tickCount < 0 ||
         !Number.isSafeInteger(snapshot.rngState) || snapshot.rngState <= 0 || snapshot.rngState > 0xffffffff) {
       throw new Error("Invalid CivilizationSystem snapshot");
     }
     const ids = new Set<number>();
+    const occupiedCells = new Set<number>();
     const civs = snapshot.civs.map(civ => {
       if (!civ || !Number.isSafeInteger(civ.id) || civ.id < 0 || ids.has(civ.id) ||
-          typeof civ.name !== "string" || !Array.isArray(civ.color) || civ.color.length !== 3 ||
-          !civ.color.every(Number.isFinite) || !Array.isArray(civ.origin) || civ.origin.length !== 3 ||
-          !civ.origin.every(Number.isFinite) || !Array.isArray(civ.territory) ||
-          !civ.territory.every(value => Number.isSafeInteger(value) && value >= 0) ||
-          !Number.isFinite(civ.techLevel) || !Number.isFinite(civ.population) ||
-          !Number.isFinite(civ.energy) || !Number.isFinite(civ.age) ||
-          !civ.diplomacy || typeof civ.diplomacy !== "object" || !Array.isArray(civ.history)) {
+          typeof civ.name !== "string" || civ.name.trim().length === 0 || civ.name.length > 64 ||
+          !Array.isArray(civ.color) || civ.color.length !== 3 ||
+          !civ.color.every(value => Number.isFinite(value) && value >= 0 && value <= 1) ||
+          !Array.isArray(civ.origin) || civ.origin.length !== 3 ||
+          !Number.isSafeInteger(civ.origin[0]) || civ.origin[0] < 0 || civ.origin[0] >= this.grid.W ||
+          !Number.isSafeInteger(civ.origin[1]) || civ.origin[1] < 0 || civ.origin[1] >= this.grid.H ||
+          !Number.isSafeInteger(civ.origin[2]) || civ.origin[2] < 0 || civ.origin[2] >= this.grid.D ||
+          !Array.isArray(civ.territory) || civ.territory.length === 0 ||
+          !Number.isSafeInteger(civ.techLevel) || civ.techLevel < 0 || civ.techLevel > 10 ||
+          !Number.isFinite(civ.population) || civ.population < 1 || civ.population > 10000 ||
+          !Number.isFinite(civ.energy) || civ.energy < 0 ||
+          !Number.isSafeInteger(civ.age) || civ.age < 0 ||
+          !civ.diplomacy || typeof civ.diplomacy !== "object" || Array.isArray(civ.diplomacy) ||
+          !Array.isArray(civ.history) || !civ.history.every(entry => typeof entry === "string")) {
         throw new Error("Invalid CivilizationSystem civilization snapshot");
+      }
+      const localTerritory = new Set<number>();
+      for (const cell of civ.territory) {
+        if (!Number.isSafeInteger(cell) || cell < 0 || cell >= this.grid.size ||
+            localTerritory.has(cell) || occupiedCells.has(cell)) {
+          throw new Error("Invalid CivilizationSystem territory ownership");
+        }
+        localTerritory.add(cell);
+        occupiedCells.add(cell);
+      }
+      for (const [rawId, relation] of Object.entries(civ.diplomacy)) {
+        const targetId = Number(rawId);
+        if (!/^(0|[1-9]\\d*)$/.test(rawId) || !Number.isSafeInteger(targetId) ||
+            targetId === civ.id || (relation !== "neutral" && relation !== "ally" && relation !== "war")) {
+          throw new Error("Invalid CivilizationSystem diplomatic relation");
+        }
       }
       ids.add(civ.id);
       return { ...civ, color: [...civ.color] as [number, number, number],
         origin: [...civ.origin] as [number, number, number], territory: [...civ.territory],
         diplomacy: { ...civ.diplomacy }, history: [...civ.history] };
     });
-    if (civs.length > MAX_CIVS || (civs.length > 0 && snapshot.nextId <= Math.max(...ids))) {
+    if (civs.length > 0 && snapshot.nextId <= Math.max(...ids)) {
       throw new Error("Invalid CivilizationSystem ID allocator state");
     }
     this._civs = civs;
