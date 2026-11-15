@@ -43,7 +43,12 @@ engine.agents.seed(engine.grid, 1);
 const initialAgent = engine.agents.getAgents()[0];
 assert.ok(initialAgent, 'seeded recovery fixture must create an agent');
 const agentId = initialAgent.id;
-initialAgent.energy = 210;
+// Seed the recovery fixture through the owned restore API. Public getAgents()
+// results are intentionally detached and must not be used as mutation handles.
+const seededAgentState = engine.agents.snapshot();
+seededAgentState.agents[0]!.energy = 210;
+engine.agents.restore(seededAgentState);
+assert.equal(engine.agents.getAgents()[0]?.energy, 210);
 engine.grid.syncDenseToChunks();
 engine.restoreTick(12);
 engine.laws.setLawOverride('law_radiation', 'on');
@@ -91,7 +96,9 @@ const before = engine.captureCoreRecoveryState();
 const expectedLawMask = engine.laws.activeProcessMask;
 engine.grid.buffer[fieldIndex] = -10;
 engine.grid.backBuffer[fieldIndex] = -20;
-engine.agents.getAgents()[0]!.energy = 1;
+const changedAgentState = engine.agents.snapshot();
+changedAgentState.agents[0]!.energy = 1;
+engine.agents.restore(changedAgentState);
 engine.agents.seed(engine.grid, 1);
 engine.restoreTick(99);
 engine.laws.setLawOverride('law_radiation', 'off');
