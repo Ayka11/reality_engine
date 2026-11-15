@@ -45,19 +45,9 @@ try {
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
 
-  await page.waitForFunction(() => {
-    try {
-      return typeof window.getGlobalEntityIdentitySnapshot === "function" &&
-        window.getGlobalEntityIdentitySnapshot()?.coverage?.status === "partial";
-    } catch {
-      return false;
-    }
-  });
+  await page.waitForFunction(() => typeof window.getGlobalEntityIdentitySnapshot === "function");
   const globalEntityIdentity = await page.evaluate(() => window.getGlobalEntityIdentitySnapshot());
   const expectedIdentityDomains = [
-    "simulation-entity",
-    "simulation-agent",
-    "civilization",
     "infinite-world-object",
     "external-asset-placement",
   ];
@@ -68,7 +58,7 @@ try {
       new Set(globalEntityIdentity.entries?.map(entry => entry.identityKey)).size !==
         globalEntityIdentity.entries?.length ||
       !Array.isArray(globalEntityIdentity.coverage?.excludedDomains) ||
-      globalEntityIdentity.coverage.excludedDomains.length < 3) {
+      globalEntityIdentity.coverage.excludedDomains.length < 6) {
     throw new Error("Global entity identity directory is incomplete or contains colliding keys: " +
       JSON.stringify(globalEntityIdentity));
   }
