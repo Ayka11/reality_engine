@@ -6,7 +6,7 @@ const graph = {
   nodes: [{
     id: "node-1",
     type: "process",
-    category: "physics",
+    category: "Process",
     label: "Source node",
     position: { x: 1, y: 2 },
     parameters: { nested: { coefficient: 0.75 } },
@@ -23,6 +23,8 @@ const graph = {
     timestamp: 1,
   },
 };
+
+const graphNestedParameters = graph.nodes[0].parameters.nested as { coefficient: number };
 
 const grid = {
   W: 1,
@@ -50,12 +52,13 @@ assert.ok(snapshot.realityGraph);
 assert.notEqual(snapshot.realityGraph, graph);
 assert.notEqual(snapshot.realityGraph.nodes, graph.nodes);
 assert.notEqual(snapshot.realityGraph.nodes[0].parameters, graph.nodes[0].parameters);
+const snapshotNestedParameters = snapshot.realityGraph.nodes[0].parameters.nested as { coefficient: number };
 
-graph.nodes[0].parameters.nested.coefficient = 9;
-graph.nodes.push({ id: "later-node" });
+graphNestedParameters.coefficient = 9;
+graph.nodes.push({ ...graph.nodes[0], id: "later-node" });
 graph.metadata.name = "Mutated live graph";
 
-assert.equal(snapshot.realityGraph.nodes[0].parameters.nested.coefficient, 0.75,
+assert.equal(snapshotNestedParameters.coefficient, 0.75,
   "later nested Creator parameter edits must not mutate an already captured world snapshot");
 assert.equal(snapshot.realityGraph.nodes.length, 1,
   "later Creator node insertions must not mutate an already captured world snapshot");
