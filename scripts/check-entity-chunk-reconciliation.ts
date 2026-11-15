@@ -264,6 +264,39 @@ function makeEntityTickScenario() {
   return { grid, layer, entity };
 }
 
+// Dense-grid ENTITY_ID markers are owned by EntityLayer. Reconciliation must
+// reject an externally corrupted marker instead of silently clearing and
+// rebuilding it from the in-memory entity map.
+const denseMarkerCorruption = makeEntityTickScenario();
+const denseOwnedCell = denseMarkerCorruption.entity.cells[0]!;
+const denseOwnedBase = denseOwnedCell * CELL_FIELDS + F.ENTITY_ID;
+const expectedDenseOwner = denseMarkerCorruption.entity.id;
+assert.equal(denseMarkerCorruption.grid.buffer[denseOwnedBase], expectedDenseOwner);
+const denseEntitySnapshotBeforeReject = denseMarkerCorruption.layer.snapshot();
+denseMarkerCorruption.grid.buffer[denseOwnedBase] = expectedDenseOwner + 1000;
+assert.throws(
+  () => denseMarkerCorruption.layer.tick(denseMarkerCorruption.grid, 1 / 60),
+  /Grid ENTITY_ID ownership mismatch/,
+  "dense-grid entity marker corruption must be rejected before identity reconciliation",
+);
+assert.deepEqual(
+  denseMarkerCorruption.layer.snapshot(),
+  denseEntitySnapshotBeforeReject,
+  "rejected dense marker corruption must not mutate entity identity, lifecycle, or RNG state",
+);
+assert.equal(
+  denseMarkerCorruption.grid.buffer[denseOwnedBase],
+  expectedDenseOwner + 1000,
+  "rollback must preserve the exact pre-tick grid state, including the external corruption",
+);
+denseMarkerCorruption.grid.buffer[denseOwnedBase] = expectedDenseOwner;
+assert.doesNotThrow(
+  () => denseMarkerCorruption.layer.tick(denseMarkerCorruption.grid, 1 / 60),
+  "restoring the authoritative marker must allow a clean reconciliation retry",
+);
+denseMarkerCorruption.layer.assertGridEntityOwnershipSynchronized(denseMarkerCorruption.grid);
+console.log("Dense EntityLayer marker ownership corruption fails closed: PASS");
+
 // Extinction must remove stale ownership markers from cells that no longer
 // belong to any live entity.
 const extinctionCase = makeEntityTickScenario();
