@@ -70,6 +70,7 @@ jobs:
       - run: npm run test:world-edit-history-ownership
       - run: npm run test:world-observability-ownership
       - run: npm run test:world-field-sample-ownership
+      - run: npm run test:scientific-field-registry-ownership
       - run: npm run test:world-field-chunk-store-ownership
       - run: npm run test:world-field-boundary-exchange-ownership
       - run: npm run test:reality-graph-validation
