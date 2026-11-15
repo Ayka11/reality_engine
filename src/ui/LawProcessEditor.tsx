@@ -237,7 +237,7 @@ export class LawProcessEditor {
         }
         sim.grid.buffer.set(candidate.voxelState);
         if (candidate.entityLayer) {
-          sim.entityLayer.restore(candidate.entityLayer, sim.grid.size);
+          sim.restoreEntityLayerSnapshot(candidate.entityLayer);
         } else {
           // Legacy packages only carried entity summaries, not cell membership,
           // allocator or RNG state. Clear both the entity model and stale cell IDs.

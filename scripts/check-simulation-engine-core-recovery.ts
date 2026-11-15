@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { AgentSystem } from '../src/simulation/AgentSystem.ts';
-import { F } from '../src/core/CellState.ts';
+import { CELL_FIELDS, F } from '../src/core/CellState.ts';
 import { PROC } from '../src/process/ProcessDef.ts';
 import { SimulationEngine } from '../src/simulation/SimulationEngine.ts';
 import { createSimulationEngineDebugView } from '../src/simulation/SimulationEngineDebugView.ts';
@@ -23,6 +23,43 @@ assert.equal(Reflect.defineProperty(debugView, "gpu", { value: debugViewEngine.g
   "GPU backend replacement through defineProperty must be rejected");
 assert.equal(Reflect.deleteProperty(debugView, "gpu"), false,
   "GPU diagnostics cannot be removed to bypass the exposure contract");
+
+// The browser-facing view must not expose live EntityLayer mutators. Read
+// methods remain available, but every returned entity/snapshot is detached.
+for (const cell of [5, 6]) {
+  debugViewEngine.grid.buffer[cell * CELL_FIELDS + F.BIO_POTENTIAL] = 1;
+  debugViewEngine.grid.buffer[cell * CELL_FIELDS + F.ENERGY] = 200;
+}
+debugViewEngine.grid.syncDenseToChunks();
+debugViewEngine.entityLayer.tick(debugViewEngine.grid, 1 / 60);
+const entityDiagnostics = debugView.entityLayer as unknown as Record<string, unknown>;
+for (const method of ["tick", "restore", "clear", "setRandomSeed", "setMutationObserver"]) {
+  assert.equal(typeof entityDiagnostics[method], "undefined",
+    `browser diagnostics must not expose EntityLayer mutator ${method}`);
+}
+assert.equal(typeof entityDiagnostics.snapshot, "function");
+assert.equal(typeof entityDiagnostics.getEntities, "function");
+assert.equal(typeof (debugView as unknown as Record<string, unknown>).restoreEntityLayerSnapshot, "undefined",
+  "browser diagnostics must not expose the internal cross-domain restore boundary");
+assert.equal(Object.getOwnPropertyDescriptor(debugView, "entityLayer")?.value, debugView.entityLayer,
+  "entity diagnostics facade must remain protected through own-property descriptor inspection");
+assert.equal(Reflect.set(debugView, "entityLayer", debugViewEngine.entityLayer), false,
+  "browser diagnostics must reject replacing the authoritative EntityLayer");
+assert.equal(Reflect.defineProperty(debugView, "entityLayer", { value: debugViewEngine.entityLayer }), false,
+  "browser diagnostics must reject redefining the EntityLayer property");
+assert.equal(Reflect.deleteProperty(debugView, "entityLayer"), false,
+  "browser diagnostics must not allow deletion of the EntityLayer facade");
+assert.equal(Reflect.set(debugView.entityLayer, "mutationStrength", 0.25), false,
+  "read-only entity diagnostics must reject scalar mutation");
+
+const entitySnapshotBaseline = debugView.entityLayer.snapshot();
+const detachedEntityRead = debugView.entityLayer.getEntities();
+assert.ok(detachedEntityRead.length > 0, "entity diagnostics fixture must create a live entity");
+detachedEntityRead[0]!.cells.push(999999);
+detachedEntityRead[0]!.genome.metabolismRate = 99;
+entitySnapshotBaseline.entities[0]!.cells.push(999998);
+assert.deepEqual(debugView.entityLayer.snapshot(), debugViewEngine.entityLayer.snapshot(),
+  "entity diagnostics reads and returned snapshots must remain detached from authoritative state");
 debugView.restoreTick(3);
 assert.equal(debugViewEngine.tick, 3, "safe engine methods must remain forwarded by the debug view");
 

@@ -256,8 +256,10 @@ assert.match(editorSource, /dimensions\.x !== sim\.grid\.W[\s\S]*dimensions\.y !
   'package dimensions must match all active grid axes');
 assert.match(editorSource, /sim\.mutateAuthoritativeState\(\(\) => \{/,
   'field, entity and law import must use the engine-owned atomic mutation boundary');
-assert.match(editorSource, /sim\.entityLayer\.restore\(candidate\.entityLayer, sim\.grid\.size\)/,
-  'new packages must restore complete authoritative entity state');
+assert.match(editorSource, /sim\.restoreEntityLayerSnapshot\(candidate\.entityLayer\)/,
+  'new packages must restore complete authoritative entity state through the engine ownership boundary');
+assert.match(mainSource, /restoreEntityLayerSnapshot:\s*snapshot\s*=>\s*sim\.restoreEntityLayerSnapshot\(snapshot\)/,
+  'WorldSaveSystem entity restore must use the same engine ownership boundary');
 assert.match(editorSource, /fieldOwner !== entity\.id[\s\S]*ownerByCell\.get\(cellIndex\) !== fieldOwner/,
   'voxel ENTITY_ID ownership must agree with the restored spatial entity model');
 assert.match(editorSource, /this\.options\.lawEngine\.restore\(candidate\.lawEngine\)/,
