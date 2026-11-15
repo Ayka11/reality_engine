@@ -150,7 +150,7 @@ export class GlobalEntityIdentityRegistry {
         break;
       }
     }
-    if (!changed && prepared.length === this.domains.size) return;
+    if (!changed) return;
 
     const next = new Map(this.domains);
     for (const source of prepared) next.set(source.domain, source.entries);
