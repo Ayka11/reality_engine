@@ -258,6 +258,10 @@ export class InfiniteWorldRenderer {
     return this.#terrainDeformations.sampleDelta(x, z)
   }
 
+  getTerrainDeformationCount() {
+    return this.#terrainDeformations.size
+  }
+
   private persistAuthoritativeFieldState(): boolean {
     if (!this.persistence.beginSaveTransaction()) {
       console.warn('[persistence] Authoritative field/provenance persistence was withheld because an earlier world save is incomplete')
