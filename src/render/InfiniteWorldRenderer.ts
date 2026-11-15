@@ -75,8 +75,8 @@ export class InfiniteWorldRenderer {
   readonly objects = new WorldObjectManager(this.objectSpatialIndex)
   persistence: WorldPersistence
   history = new WorldEditHistory()
-  readonly fieldSampler: FieldSampler
-  readonly authoritativeField: MutableWorldFieldProvider
+  readonly #fieldSampler: FieldSampler
+  readonly #authoritativeField: MutableWorldFieldProvider
   readonly legacySculptRuntimeAdapter: LegacySculptRuntimeAdapter
   readonly authoritativeSculptTransactions: AuthoritativeSculptTransactionCoordinator
   terrainDeformations: TerrainDeformationField
@@ -178,7 +178,7 @@ export class InfiniteWorldRenderer {
           radius: input.radius,
         })
         provenanceEventId = event.id
-        return this.authoritativeField.apply({
+        return this.#authoritativeField.apply({
           ...input,
           metadata: { ...(input.metadata ?? {}), provenanceEventId: event.id },
         })
@@ -200,8 +200,33 @@ export class InfiniteWorldRenderer {
 
   getAuthoritativeFieldState() {
     return {
-      field: this.authoritativeField.getState(),
+      field: this.#authoritativeField.getState(),
       provenance: runtimeProvenance.getTrace(),
+    }
+  }
+
+  getAuthoritativeFieldSnapshot() {
+    return this.#authoritativeField.getState()
+  }
+
+  sampleWorldField(x: number, y?: number, z?: number) {
+    return this.#fieldSampler.sampleWorld(x, y, z)
+  }
+
+  sampleWorldFieldViewWindow(width: number, height: number, sliceY?: number) {
+    return this.#fieldSampler.sampleViewWindow(width, height, sliceY)
+  }
+
+  getWorldSurfaceProviderInfo() {
+    const provider = this.#fieldSampler.surfaceProvider
+    return {
+      id: provider.id,
+      version: provider.version,
+      seed: provider.seed,
+      referenceBuildElevation: provider.referenceBuildElevation,
+      minimumElevation: provider.minimumElevation ?? null,
+      maximumElevation: provider.maximumElevation ?? null,
+      waterLevel: provider.waterLevel ?? null,
     }
   }
 
@@ -210,7 +235,7 @@ export class InfiniteWorldRenderer {
       console.warn('[persistence] Authoritative field/provenance persistence was withheld because an earlier world save is incomplete')
       return false
     }
-    const fieldSaved = this.persistence.saveFieldState(this.authoritativeField.serialize())
+    const fieldSaved = this.persistence.saveFieldState(this.#authoritativeField.serialize())
     const provenanceSaved = this.persistence.saveProvenanceState(runtimeProvenance.getTrace())
     const committed = this.persistence.finishSaveTransaction(fieldSaved && provenanceSaved)
     const saved = fieldSaved && provenanceSaved && committed
@@ -350,8 +375,8 @@ export class InfiniteWorldRenderer {
     this.generator = new WorldGenerator(seed)
     this.terrainDeformations = new TerrainDeformationField(seed)
     worldViewContract.setSeed(seed)
-    this.authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
-    this.fieldSampler = new FieldSampler(this.generator, this.authoritativeField)
+    this.#authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
+    this.#fieldSampler = new FieldSampler(this.generator, this.#authoritativeField)
     this.persistence = new WorldPersistence(seed, options.blockPersistenceReads === true)
     if (options.blockPersistenceReads) {
       this.startupPersistenceFailures.push('active world seed selector: storage read unavailable')
@@ -391,7 +416,7 @@ export class InfiniteWorldRenderer {
     if (persistedSurface) {
       const restoredSurface = restoreWorldSurfaceProvider(persistedSurface)
       if (restoredSurface) {
-        this.fieldSampler.setSurfaceProvider(restoredSurface)
+        this.#fieldSampler.setSurfaceProvider(restoredSurface)
         worldViewContract.setSeed(restoredSurface.seed)
       } else {
         this.startupPersistenceFailures.push('world surface snapshot: domain validation failed')
@@ -400,7 +425,7 @@ export class InfiniteWorldRenderer {
       }
     }
     this.legacySculptRuntimeAdapter = new LegacySculptRuntimeAdapter((mutation) => {
-      const committed = this.authoritativeField.apply(mutation)
+      const committed = this.#authoritativeField.apply(mutation)
       runtimeProvenance.record('brush', {
         mutationId: committed.id,
         mutation: committed,
@@ -408,8 +433,8 @@ export class InfiniteWorldRenderer {
       })
       return committed
     })
-    this.authoritativeSculptTransactions = new AuthoritativeSculptTransactionCoordinator(this.authoritativeField)
-    this.decisionLayer = new WorldDecisionLayer(this.fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null, (x, z) => this.sampleTerrainHeight(x, z))
+    this.authoritativeSculptTransactions = new AuthoritativeSculptTransactionCoordinator(this.#authoritativeField)
+    this.decisionLayer = new WorldDecisionLayer(this.#fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null, (x, z) => this.sampleTerrainHeight(x, z))
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
     this.storageKey = `reality-engine-world:${seed}:objects`
@@ -448,7 +473,7 @@ export class InfiniteWorldRenderer {
     }
     if (persistedField) {
       try {
-        this.authoritativeField.restore(persistedField)
+        this.#authoritativeField.restore(persistedField)
       } catch (error) {
         this.startupPersistenceFailures.push('authoritative field state: domain validation failed')
         this.persistenceRecoveryBlocked = true
@@ -670,10 +695,10 @@ export class InfiniteWorldRenderer {
    * by SimulationEngine's finite voxel grid or its runtime-domain snapshots.
    */
   capturePortableWorldSnapshot(): WorldEditorSnapshot {
-    const surfaceProvider = serializeWorldSurfaceProvider(this.fieldSampler.surfaceProvider)
+    const surfaceProvider = serializeWorldSurfaceProvider(this.#fieldSampler.surfaceProvider)
     if (!surfaceProvider) {
       throw new Error(
-        `The active world surface provider "${this.fieldSampler.surfaceProvider.id}" has no portable serializer; register a versioned serializer before exporting this world.`,
+        `The active world surface provider "${this.#fieldSampler.surfaceProvider.id}" has no portable serializer; register a versioned serializer before exporting this world.`,
       )
     }
     const assetPlacements = mergeExternalAssetPlacements(
@@ -694,7 +719,7 @@ export class InfiniteWorldRenderer {
       surfaceProvider,
       objects: this.objects.values(),
       terrainDeformations: this.terrainDeformations.serialize(),
-      authoritativeField: this.authoritativeField.serialize(),
+      authoritativeField: this.#authoritativeField.serialize(),
       provenance: runtimeProvenance.getTrace(),
       assetPlacements,
     })
@@ -813,21 +838,21 @@ export class InfiniteWorldRenderer {
 
     this.generator = prepared.nextGenerator
     ;(window as any).worldSeed = prepared.nextGenerator.seed
-    this.fieldSampler.setGenerator(prepared.nextGenerator)
-    this.authoritativeField.setBase(new GeneratorFieldProvider(prepared.nextGenerator))
-    this.authoritativeField.restore(prepared.nextField.serialize())
-    this.fieldSampler.setProvider(this.authoritativeField)
+    this.#fieldSampler.setGenerator(prepared.nextGenerator)
+    this.#authoritativeField.setBase(new GeneratorFieldProvider(prepared.nextGenerator))
+    this.#authoritativeField.restore(prepared.nextField.serialize())
+    this.#fieldSampler.setProvider(this.#authoritativeField)
     this.terrainDeformations = prepared.nextTerrain
 
     this.objects.clear()
     for (const object of prepared.nextObjects.values()) this.objects.add(object)
 
     if (snapshot?.surfaceProvider.kind === 'world-generator-surface' || !snapshot) {
-      this.fieldSampler.resetSurfaceProviderToGenerator()
+      this.#fieldSampler.resetSurfaceProviderToGenerator()
     } else {
-      this.fieldSampler.setSurfaceProvider(prepared.nextSurface)
+      this.#fieldSampler.setSurfaceProvider(prepared.nextSurface)
     }
-    worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)
+    worldViewContract.setSeed(this.#fieldSampler.surfaceProvider.seed)
     runtimeProvenance.restore(prepared.nextProvenance.getTrace())
 
     this.persistence = new WorldPersistence(prepared.nextGenerator.seed)
@@ -975,7 +1000,7 @@ export class InfiniteWorldRenderer {
     }
 
     // Explicit Save creates a stable checkpoint; autosave must not move that checkpoint.
-    const fieldSnapshot = this.authoritativeField.serialize()
+    const fieldSnapshot = this.#authoritativeField.serialize()
     if (!this.persistAuthoritativeFieldState()) failedPersistenceOperations.push('authoritative field state')
     if (!this.persistTerrainDeformationState()) failedPersistenceOperations.push('terrain deformation state')
     if (!this.persistence.saveProvenanceState(runtimeProvenance.getTrace())) {
@@ -1138,7 +1163,7 @@ export class InfiniteWorldRenderer {
     const persistedField = fieldRead.status === 'ok' ? fieldRead.state : null
     const terrainSnapshot = terrainRead.status === 'ok' ? terrainRead.state : null
     const previousTerrain = this.terrainDeformations.serialize()
-    const previousField = this.authoritativeField.serialize()
+    const previousField = this.#authoritativeField.serialize()
     try {
       if (terrainSnapshot) {
         this.terrainDeformations.restore(terrainSnapshot)
@@ -1146,7 +1171,7 @@ export class InfiniteWorldRenderer {
         this.terrainDeformations.clear()
       }
       if (persistedField) {
-        this.authoritativeField.restore(persistedField)
+        this.#authoritativeField.restore(persistedField)
         this.refreshTerrainPatches()
         if (!this.persistAuthoritativeFieldState()) {
           throw new Error('restored authoritative field could not be committed to autosave')
@@ -1156,14 +1181,14 @@ export class InfiniteWorldRenderer {
         // without authored field edits; do not leak the previous live field
         // into the restored object/terrain generation.
         if (options.restoreFieldCheckpoint !== false) {
-          this.authoritativeField.clear()
+          this.#authoritativeField.clear()
         }
         this.refreshTerrainPatches()
       }
     } catch (error) {
       const rollbackFailures: unknown[] = []
       try { this.terrainDeformations.restore(previousTerrain) } catch (rollbackError) { rollbackFailures.push(rollbackError) }
-      try { this.authoritativeField.restore(previousField) } catch (rollbackError) { rollbackFailures.push(rollbackError) }
+      try { this.#authoritativeField.restore(previousField) } catch (rollbackError) { rollbackFailures.push(rollbackError) }
       try { this.refreshTerrainPatches() } catch (rollbackError) { rollbackFailures.push(rollbackError) }
       rollbackStagedChunks()
       this.persistenceRecoveryBlocked = true
@@ -1239,11 +1264,11 @@ export class InfiniteWorldRenderer {
     // A successful durable clear removes these sidecars too. Reset the live
     // providers and their edit histories to the same generator-backed baseline
     // so the current session cannot keep state that a reload would discard.
-    this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
-    this.authoritativeField.clear()
-    this.fieldSampler.setProvider(this.authoritativeField)
-    this.fieldSampler.resetSurfaceProviderToGenerator()
-    worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)
+    this.#authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
+    this.#authoritativeField.clear()
+    this.#fieldSampler.setProvider(this.#authoritativeField)
+    this.#fieldSampler.resetSurfaceProviderToGenerator()
+    worldViewContract.setSeed(this.#fieldSampler.surfaceProvider.seed)
     this.rebuildDecisionLayer()
     this.authoritativeSculptTransactions.clear()
     this.notifyAuthoritativeSculptHistoryChanged()
@@ -1289,7 +1314,7 @@ export class InfiniteWorldRenderer {
     const nextAssetManifest = createAssetImportManifest()
     if (ready && !targetPersistence.saveAssetManifestState(nextAssetManifest)) ready = false
     if (ready) {
-      const surfaceSnapshot = serializeWorldSurfaceProvider(this.fieldSampler.surfaceProvider)
+      const surfaceSnapshot = serializeWorldSurfaceProvider(this.#fieldSampler.surfaceProvider)
       if (surfaceSnapshot) {
         ready = targetPersistence.saveSurfaceProviderState(surfaceSnapshot)
       } else {
@@ -1364,16 +1389,16 @@ export class InfiniteWorldRenderer {
 
     this.generator = new WorldGenerator(normalizedSeed)
     ;(window as any).worldSeed = normalizedSeed
-    this.fieldSampler.setGenerator(this.generator)
+    this.#fieldSampler.setGenerator(this.generator)
     // The procedural generator may be reseeded independently; the current
     // authored surface continues to own the world/view identity until reset.
-    worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)
-    this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
-    this.authoritativeField.clear()
+    worldViewContract.setSeed(this.#fieldSampler.surfaceProvider.seed)
+    this.#authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
+    this.#authoritativeField.clear()
     this.terrainDeformations = new TerrainDeformationField(normalizedSeed)
     this.authoritativeSculptTransactions.clear()
     this.notifyAuthoritativeSculptHistoryChanged()
-    this.fieldSampler.setProvider(this.authoritativeField)
+    this.#fieldSampler.setProvider(this.#authoritativeField)
     this.rebuildDecisionLayer()
     this.persistence = targetPersistence
     this.persistenceRecoveryBlocked = false
@@ -1456,7 +1481,7 @@ export class InfiniteWorldRenderer {
   private rebuildDecisionLayer() {
     const weights = this.decisionLayer?.weights ?? DEFAULT_DECISION_WEIGHTS
     this.decisionLayer = new WorldDecisionLayer(
-      this.fieldSampler,
+      this.#fieldSampler,
       weights,
       () => (window as any).getRealityLawState?.() ?? null,
       (x, z) => this.sampleTerrainHeight(x, z),
@@ -1469,7 +1494,7 @@ export class InfiniteWorldRenderer {
    * the authoritative scientific-field provider or moving existing objects.
    */
   setWorldSurfaceProvider(provider: WorldSurfaceProvider) {
-    this.fieldSampler.setSurfaceProvider(provider)
+    this.#fieldSampler.setSurfaceProvider(provider)
     worldViewContract.setSeed(provider.seed)
     this.rebuildDecisionLayer()
     this.refreshTerrainPatches()
@@ -1478,8 +1503,8 @@ export class InfiniteWorldRenderer {
   }
 
   resetWorldSurfaceProviderToGenerator() {
-    this.fieldSampler.resetSurfaceProviderToGenerator()
-    const provider = this.fieldSampler.surfaceProvider
+    this.#fieldSampler.resetSurfaceProviderToGenerator()
+    const provider = this.#fieldSampler.surfaceProvider
     worldViewContract.setSeed(provider.seed)
     this.rebuildDecisionLayer()
     this.refreshTerrainPatches()
@@ -1494,13 +1519,13 @@ export class InfiniteWorldRenderer {
   }
 
   get isEnabled() { return this.enabled }
-  get worldSeed(): string { return this.fieldSampler.surfaceProvider.seed }
+  get worldSeed(): string { return this.#fieldSampler.surfaceProvider.seed }
 
   getWorldEnvironment() {
     const x = this.worldPosition.x
     const z = this.worldPosition.z
     const y = this.sampleTerrainHeight(x, z)
-    const surface = this.fieldSampler.surfaceProvider.sampleSurface(x, z, y)
+    const surface = this.#fieldSampler.surfaceProvider.sampleSurface(x, z, y)
     const step = 2
     const hL = this.sampleTerrainHeight(x - step, z)
     const hR = this.sampleTerrainHeight(x + step, z)
@@ -1510,10 +1535,10 @@ export class InfiniteWorldRenderer {
     const dz = (hU - hD) / (step * 2)
     const slope = Math.min(1, Math.sqrt(dx * dx + dz * dz) / 3)
     // Use the authoritative field provider so committed brush/composer mutations affect environment-driven systems.
-    const field = this.fieldSampler.sample(x, y, z)
+    const field = this.#fieldSampler.sample(x, y, z)
     const radiation = Math.max(0, Math.min(1, field.entropy * 8))
     const stability = Math.max(0, Math.min(1, 1 - field.entropy * 8))
-    const maximumElevation = this.fieldSampler.surfaceProvider.maximumElevation
+    const maximumElevation = this.#fieldSampler.surfaceProvider.maximumElevation
     return {
       temperature: surface.temperature,
       moisture: surface.moisture,
@@ -1981,14 +2006,14 @@ export class InfiniteWorldRenderer {
         normals[i * 3 + 1] = normal.y
         normals[i * 3 + 2] = normal.z
 
-        const biome = this.fieldSampler.surfaceProvider.sampleSurface(originX + gx, originZ + gz, h).biome
+        const biome = this.#fieldSampler.surfaceProvider.sampleSurface(originX + gx, originZ + gz, h).biome
         const color = new THREE.Color(BIOME_COLORS[BIOME_ID[biome]])
         const slope = Math.max(0, 1 - normal.y)
         color.offsetHSL(0, 0, -slope * 0.18)
 
         if (this.materialMode === 'field') {
           // Field mode visualizes the same authoritative scientific field used by physics and construction.
-          const field = this.fieldSampler.sample(originX + gx, h, originZ + gz)
+          const field = this.#fieldSampler.sample(originX + gx, h, originZ + gz)
           const density = Math.max(0, Math.min(1, field.density))
           const information = Math.max(0, Math.min(1, field.information / 70))
           color.setHSL(0.68 - density * 0.68, 0.84, 0.3 + information * 0.28)
@@ -2061,7 +2086,7 @@ export class InfiniteWorldRenderer {
       group.add(wire)
     }
 
-    const surfaceProvider = this.fieldSampler.surfaceProvider
+    const surfaceProvider = this.#fieldSampler.surfaceProvider
     const waterLevel = this.getWorldWaterLevel()
     let waterData: ReturnType<typeof buildWaterSurfaceMeshData> | null = null
     if (waterLevel !== null) {
@@ -3166,7 +3191,7 @@ export class InfiniteWorldRenderer {
   }
 
   private sampleTerrainHeight(x: number, z: number) {
-    const provider = this.fieldSampler.surfaceProvider
+    const provider = this.#fieldSampler.surfaceProvider
     const surface = provider.sampleSurface(x, z)
     if (!Number.isFinite(surface.height)) throw new RangeError('World surface height must be finite')
     const deformedHeight = surface.height + this.terrainDeformations.sampleDelta(x, z)
@@ -3181,7 +3206,7 @@ export class InfiniteWorldRenderer {
   }
 
   private persistActiveSurfaceProvider(): 'stored' | 'unsupported' | 'failed' {
-    const snapshot = serializeWorldSurfaceProvider(this.fieldSampler.surfaceProvider)
+    const snapshot = serializeWorldSurfaceProvider(this.#fieldSampler.surfaceProvider)
     if (!snapshot) {
       if (!this.persistence.deleteSurfaceProviderState()) {
         console.warn('[persistence] Could not clear stale world-surface override; a previous built-in surface may return after reload')
@@ -3197,15 +3222,15 @@ export class InfiniteWorldRenderer {
   }
 
   private getWorldWaterLevel(): number | null {
-    return resolveWorldWaterLevel(this.fieldSampler.surfaceProvider)
+    return resolveWorldWaterLevel(this.#fieldSampler.surfaceProvider)
   }
 
   private isBelowWaterSurface(height: number, clearance = 0.25): boolean {
-    return isBelowWorldWaterSurface(this.fieldSampler.surfaceProvider, height, clearance)
+    return isBelowWorldWaterSurface(this.#fieldSampler.surfaceProvider, height, clearance)
   }
 
   private bridgeDeckHeight(startHeight: number, endHeight: number, clearance = 0.45): number {
-    return resolveBridgeDeckHeight(this.fieldSampler.surfaceProvider, startHeight, endHeight, clearance)
+    return resolveBridgeDeckHeight(this.#fieldSampler.surfaceProvider, startHeight, endHeight, clearance)
   }
 
   /** Apply a real heightfield deformation, independent of scientific density/entropy fields. */
@@ -3239,7 +3264,7 @@ export class InfiniteWorldRenderer {
     const sx = Math.round(x / s) * s
     const sz = Math.round(z / s) * s
     const ground = this.terrainY(sx, sz)
-    const waterLevel = this.fieldSampler.surfaceProvider.waterLevel
+    const waterLevel = this.#fieldSampler.surfaceProvider.waterLevel
     const sy = kind === 'water'
       ? (typeof waterLevel === 'number' && Number.isFinite(waterLevel) ? waterLevel : y)
       : (Math.abs(y - ground) < 8 ? ground : y)
@@ -3810,7 +3835,7 @@ export class InfiniteWorldRenderer {
         const gz = this.sampleTerrainHeight(x, z + e) - this.sampleTerrainHeight(x, z - e)
         const slope = Math.hypot(gx, gz) / (2 * e)
         const water = this.isBelowWaterSurface(y)
-        const elevationPenalty = Math.abs(y - this.fieldSampler.surfaceProvider.referenceBuildElevation) / 30
+        const elevationPenalty = Math.abs(y - this.#fieldSampler.surfaceProvider.referenceBuildElevation) / 30
         const slopePenalty = Math.min(1, slope / 0.45)
         const score = water ? 0 : Math.max(0, 1 - slopePenalty) * Math.max(0, 1 - elevationPenalty)
         result.push({ x, z, y, slope, water, score })
@@ -4027,7 +4052,7 @@ export class InfiniteWorldRenderer {
     const created: WorldObject[] = []
     const seed = this.worldSeed
     for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2 + this.fieldSampler.sample(cx + i, 0, cz).entropy * 4
+      const angle = (i / count) * Math.PI * 2 + this.#fieldSampler.sample(cx + i, 0, cz).entropy * 4
       const radial = radius * (0.35 + (i % 5) / 8)
       const x = cx + Math.cos(angle) * radial
       const z = cz + Math.sin(angle) * radial
@@ -4339,7 +4364,7 @@ export class InfiniteWorldRenderer {
           const dist = Math.sqrt(distSq) || 0.1
           const factor = (1 - dist / rad)
 
-          const field = this.fieldSampler.sample(worldX, py, worldZ)
+          const field = this.#fieldSampler.sample(worldX, py, worldZ)
           const modulation = this.lawPhysicsContract.apply(this.fieldPhysics.modulation(field))
 
           const interactionType: PhysicsInteractionType =
@@ -4451,8 +4476,8 @@ export class InfiniteWorldRenderer {
   }
 
   startExperiment(metadata: Record<string, string | number | boolean> = {}) {
-    const provider = this.fieldSampler.registry.getActive()
-    const surfaceProvider = this.fieldSampler.surfaceProvider
+    const provider = this.#fieldSampler.registry.getActive()
+    const surfaceProvider = this.#fieldSampler.surfaceProvider
     const protocol = createExperimentProtocol({
       experimentId: `exp-${Date.now().toString(36)}`,
       world: {
