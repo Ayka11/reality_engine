@@ -3,6 +3,7 @@ import { DecisionGraph } from '../src/infinity/DecisionGraph'
 import { PhysicsInteractionLog } from '../src/infinity/PhysicsInteractionLog'
 import { ExperimentCatalog } from '../src/infinity/ExperimentCatalog'
 import { ExperimentRunner } from '../src/infinity/ExperimentRunner'
+import { DEFAULT_PHYSICS_PARAMETERS, FieldModulatedPhysics } from '../src/infinity/FieldModulatedPhysics'
 import type { ExperimentProtocol } from '../src/infinity/ExperimentProtocol'
 import type { PhysicsInteractionRecord } from '../src/infinity/PhysicsInteractionRecord'
 
@@ -152,8 +153,27 @@ function makeProtocol(): ExperimentProtocol {
   assert.equal(catalog.size, 1)
 }
 
+// FieldModulatedPhysics: configuration is detached at construction and immutable at runtime.
+{
+  const callerParameters = {
+    gravity: 48, entropyDamping: 0.82, quantumLift: 35, forcePush: 40, metaLawOrbit: 22,
+  }
+  const physics = new FieldModulatedPhysics(callerParameters)
+  callerParameters.gravity = 999
+  callerParameters.entropyDamping = 999
+  assert.equal(physics.parameters.gravity, 48)
+  assert.equal(physics.parameters.entropyDamping, 0.82)
+  assert.equal(Object.isFrozen(physics.parameters), true)
+  assert.equal(Object.isFrozen(DEFAULT_PHYSICS_PARAMETERS), true)
+  assert.throws(() => {
+    ;(physics.parameters as { gravity: number }).gravity = 1000
+  }, TypeError)
+  assert.equal(physics.parameters.gravity, 48)
+}
+
 console.log('World observability ownership regressions: PASS')
 console.log('PASS: DecisionGraph ingress, query, relationship and snapshot APIs return detached data')
 console.log('PASS: PhysicsInteractionLog insertion and read APIs preserve private history')
 console.log('PASS: ExperimentRunner detaches protocols, recorded values and returned snapshots')
 console.log('PASS: ExperimentCatalog isolates stored snapshots from all lookup/filter results')
+console.log('PASS: FieldModulatedPhysics parameters are detached and immutable')
