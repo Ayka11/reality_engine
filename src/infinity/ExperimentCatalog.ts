@@ -1,12 +1,17 @@
 import type { ExperimentSnapshot } from './ExperimentRunner'
 
+function cloneExperiment(snapshot: ExperimentSnapshot): ExperimentSnapshot {
+  return structuredClone(snapshot)
+}
+
 export class ExperimentCatalog {
   private snapshots = new Map<string, ExperimentSnapshot>()
 
   add(snapshot: ExperimentSnapshot) {
     const id = snapshot.protocol.experimentId
-    this.snapshots.set(id, snapshot)
-    return snapshot
+    const committed = cloneExperiment(snapshot)
+    this.snapshots.set(id, committed)
+    return cloneExperiment(committed)
   }
 
   addMany(snapshots: Iterable<ExperimentSnapshot>) {
@@ -15,17 +20,19 @@ export class ExperimentCatalog {
   }
 
   get(experimentId: string) {
-    return this.snapshots.get(experimentId)
+    const snapshot = this.snapshots.get(experimentId)
+    return snapshot ? cloneExperiment(snapshot) : undefined
   }
 
   getByFingerprint(fingerprint: string) {
-    return [...this.snapshots.values()].find(snapshot => snapshot.fingerprint === fingerprint)
+    const snapshot = [...this.snapshots.values()].find(snapshot => snapshot.fingerprint === fingerprint)
+    return snapshot ? cloneExperiment(snapshot) : undefined
   }
 
   list() {
-    return [...this.snapshots.values()].sort(
-      (a, b) => a.startedAt - b.startedAt,
-    )
+    return [...this.snapshots.values()]
+      .sort((a, b) => a.startedAt - b.startedAt)
+      .map(cloneExperiment)
   }
 
   recent(limit = 20) {
@@ -33,7 +40,7 @@ export class ExperimentCatalog {
   }
 
   filter(predicate: (snapshot: ExperimentSnapshot) => boolean) {
-    return this.list().filter(predicate)
+    return this.list().filter(predicate).map(cloneExperiment)
   }
 
   remove(experimentId: string) {
