@@ -723,6 +723,26 @@ export class InfiniteWorldRenderer {
   }
 
   /**
+   * Return the authoritative identity projection for both loaded and pending
+   * persistent external-asset placements. Asset models remain owned by the
+   * WorldAssetRuntime; this view only exposes stable placement IDs.
+   */
+  getExternalAssetPlacementIdentityRecords(): Array<{ id: string; kind: string }> {
+    const placements = mergeExternalAssetPlacements(
+      this.pendingExternalAssetPlacements,
+      this.worldAssetRuntime.snapshotPlacements(),
+    )
+    const validation = validateExternalAssetPlacements(placements)
+    if (!validation.valid) {
+      throw new TypeError(`External asset placement identities are invalid: ${validation.errors.join('; ')}`)
+    }
+    return placements.map(placement => ({
+      id: placement.instanceId,
+      kind: placement.semanticEntryId,
+    }))
+  }
+
+  /**
    * Capture the separate infinite-world editor state that is not represented
    * by SimulationEngine's finite voxel grid or its runtime-domain snapshots.
    */
