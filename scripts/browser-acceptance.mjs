@@ -43,6 +43,7 @@ try {
   console.log("[acceptance] opening primary page");
   await page.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForSelector("#c3d");
+  await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
   const engineDebugSurface = await page.evaluate(() => {
     const engine = window.realityEngine;
     const gpu = engine?.gpu;
@@ -72,7 +73,6 @@ try {
     throw new Error("Browser SimulationEngine debug surface exposed unsafe GPU methods or lost safe engine APIs: " +
       JSON.stringify(engineDebugSurface));
   }
-  await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
 
   await page.waitForFunction(() =>
     typeof window.getRealityLawState === "function" &&
