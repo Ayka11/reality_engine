@@ -79,7 +79,7 @@ export class InfiniteWorldRenderer {
   readonly #authoritativeField: MutableWorldFieldProvider
   readonly legacySculptRuntimeAdapter: LegacySculptRuntimeAdapter
   readonly #authoritativeSculptTransactions: AuthoritativeSculptTransactionCoordinator
-  readonly #terrainDeformations: TerrainDeformationField
+  #terrainDeformations: TerrainDeformationField
   decisionLayer: WorldDecisionLayer
   constructionContract: WorldConstructionContract
   readonly decisionGraph = new DecisionGraph()
