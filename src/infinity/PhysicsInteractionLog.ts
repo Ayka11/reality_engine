@@ -1,26 +1,30 @@
 import type { PhysicsInteractionRecord } from './PhysicsInteractionRecord'
 
+function cloneRecord(record: PhysicsInteractionRecord): PhysicsInteractionRecord {
+  return structuredClone(record)
+}
+
 export class PhysicsInteractionLog {
   private records: PhysicsInteractionRecord[] = []
   constructor(private readonly maxRecords = 5000) {}
 
   add(record: PhysicsInteractionRecord) {
-    this.records.push(record)
+    this.records.push(cloneRecord(record))
     if (this.records.length > this.maxRecords) {
       this.records.splice(0, this.records.length - this.maxRecords)
     }
   }
 
   recent(limit = 100) {
-    return this.records.slice(Math.max(0, this.records.length - limit))
+    return this.records.slice(Math.max(0, this.records.length - limit)).map(cloneRecord)
   }
 
   byParticle(index: number) {
-    return this.records.filter(record => record.particleIndex === index)
+    return this.records.filter(record => record.particleIndex === index).map(cloneRecord)
   }
 
   byObject(objectId: string) {
-    return this.records.filter(record => record.objectId === objectId)
+    return this.records.filter(record => record.objectId === objectId).map(cloneRecord)
   }
 
   clear() {
@@ -32,6 +36,6 @@ export class PhysicsInteractionLog {
   }
 
   snapshot() {
-    return [...this.records]
+    return this.records.map(cloneRecord)
   }
 }
