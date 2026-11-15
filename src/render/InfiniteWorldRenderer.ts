@@ -79,7 +79,7 @@ export class InfiniteWorldRenderer {
   readonly #authoritativeField: MutableWorldFieldProvider
   readonly legacySculptRuntimeAdapter: LegacySculptRuntimeAdapter
   readonly #authoritativeSculptTransactions: AuthoritativeSculptTransactionCoordinator
-  terrainDeformations: TerrainDeformationField
+  readonly #terrainDeformations: TerrainDeformationField
   decisionLayer: WorldDecisionLayer
   constructionContract: WorldConstructionContract
   readonly decisionGraph = new DecisionGraph()
@@ -254,6 +254,10 @@ export class InfiniteWorldRenderer {
     }
   }
 
+  sampleTerrainDeformationDelta(x: number, z: number) {
+    return this.#terrainDeformations.sampleDelta(x, z)
+  }
+
   private persistAuthoritativeFieldState(): boolean {
     if (!this.persistence.beginSaveTransaction()) {
       console.warn('[persistence] Authoritative field/provenance persistence was withheld because an earlier world save is incomplete')
@@ -397,7 +401,7 @@ export class InfiniteWorldRenderer {
       if (!this.suppressAssetPlacementAutosave) this.scheduleSave()
     })
     this.generator = new WorldGenerator(seed)
-    this.terrainDeformations = new TerrainDeformationField(seed)
+    this.#terrainDeformations = new TerrainDeformationField(seed)
     worldViewContract.setSeed(seed)
     this.#authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
     this.#fieldSampler = new FieldSampler(this.generator, this.#authoritativeField)
@@ -468,7 +472,7 @@ export class InfiniteWorldRenderer {
     )
     if (persistedTerrain) {
       try {
-        this.terrainDeformations.restore(persistedTerrain)
+        this.#terrainDeformations.restore(persistedTerrain)
       } catch (error) {
         this.startupPersistenceFailures.push('terrain deformation state: domain validation failed')
         this.persistenceRecoveryBlocked = true
@@ -651,7 +655,7 @@ export class InfiniteWorldRenderer {
   }
 
   private persistTerrainDeformationState() {
-    const saved = this.persistence.saveTerrainDeformationState(this.terrainDeformations.serialize())
+    const saved = this.persistence.saveTerrainDeformationState(this.#terrainDeformations.serialize())
     if (!saved) {
       console.warn('[persistence] Terrain deformation autosave failed; edits remain in memory but may not survive reload')
     }
@@ -742,7 +746,7 @@ export class InfiniteWorldRenderer {
       },
       surfaceProvider,
       objects: this.objects.values(),
-      terrainDeformations: this.terrainDeformations.serialize(),
+      terrainDeformations: this.#terrainDeformations.serialize(),
       authoritativeField: this.#authoritativeField.serialize(),
       provenance: runtimeProvenance.getTrace(),
       assetPlacements,
@@ -866,7 +870,7 @@ export class InfiniteWorldRenderer {
     this.#authoritativeField.setBase(new GeneratorFieldProvider(prepared.nextGenerator))
     this.#authoritativeField.restore(prepared.nextField.serialize())
     this.#fieldSampler.setProvider(this.#authoritativeField)
-    this.terrainDeformations = prepared.nextTerrain
+    this.#terrainDeformations = prepared.nextTerrain
 
     this.objects.clear()
     for (const object of prepared.nextObjects.values()) this.objects.add(object)
@@ -1043,7 +1047,7 @@ export class InfiniteWorldRenderer {
         failedPersistenceOperations.push('authoritative field checkpoint')
         console.warn('[persistence] Authoritative field checkpoint failed; saved field edits may not survive reload')
       }
-      const checkpointSaved = this.persistence.saveTerrainDeformationCheckpoint(this.terrainDeformations.serialize())
+      const checkpointSaved = this.persistence.saveTerrainDeformationCheckpoint(this.#terrainDeformations.serialize())
       if (!checkpointSaved) {
         failedPersistenceOperations.push('terrain deformation checkpoint')
         console.warn('[persistence] Terrain deformation checkpoint failed; saved terrain edits may not survive reload')
@@ -1186,13 +1190,13 @@ export class InfiniteWorldRenderer {
 
     const persistedField = fieldRead.status === 'ok' ? fieldRead.state : null
     const terrainSnapshot = terrainRead.status === 'ok' ? terrainRead.state : null
-    const previousTerrain = this.terrainDeformations.serialize()
+    const previousTerrain = this.#terrainDeformations.serialize()
     const previousField = this.#authoritativeField.serialize()
     try {
       if (terrainSnapshot) {
-        this.terrainDeformations.restore(terrainSnapshot)
+        this.#terrainDeformations.restore(terrainSnapshot)
       } else if (options.restoreFieldCheckpoint !== false) {
-        this.terrainDeformations.clear()
+        this.#terrainDeformations.clear()
       }
       if (persistedField) {
         this.#authoritativeField.restore(persistedField)
@@ -1211,7 +1215,7 @@ export class InfiniteWorldRenderer {
       }
     } catch (error) {
       const rollbackFailures: unknown[] = []
-      try { this.terrainDeformations.restore(previousTerrain) } catch (rollbackError) { rollbackFailures.push(rollbackError) }
+      try { this.#terrainDeformations.restore(previousTerrain) } catch (rollbackError) { rollbackFailures.push(rollbackError) }
       try { this.#authoritativeField.restore(previousField) } catch (rollbackError) { rollbackFailures.push(rollbackError) }
       try { this.refreshTerrainPatches() } catch (rollbackError) { rollbackFailures.push(rollbackError) }
       rollbackStagedChunks()
@@ -1284,7 +1288,7 @@ export class InfiniteWorldRenderer {
       // Do not let those failures skip the remaining editor reset.
       console.warn('[world-assets] External asset cleanup completed with disposal failures during world clear', error)
     }
-    this.terrainDeformations.clear()
+    this.#terrainDeformations.clear()
     // A successful durable clear removes these sidecars too. Reset the live
     // providers and their edit histories to the same generator-backed baseline
     // so the current session cannot keep state that a reload would discard.
@@ -1419,7 +1423,7 @@ export class InfiniteWorldRenderer {
     worldViewContract.setSeed(this.#fieldSampler.surfaceProvider.seed)
     this.#authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
     this.#authoritativeField.clear()
-    this.terrainDeformations = new TerrainDeformationField(normalizedSeed)
+    this.#terrainDeformations = new TerrainDeformationField(normalizedSeed)
     this.#authoritativeSculptTransactions.clear()
     this.notifyAuthoritativeSculptHistoryChanged()
     this.#fieldSampler.setProvider(this.#authoritativeField)
@@ -2115,7 +2119,7 @@ export class InfiniteWorldRenderer {
     let waterData: ReturnType<typeof buildWaterSurfaceMeshData> | null = null
     if (waterLevel !== null) {
       let water: Float32Array | null = null
-      if (this.terrainDeformations.hasDeformationsInChunk(chunk.cx, chunk.cz, WORLD_CHUNK_SIZE)) {
+      if (this.#terrainDeformations.hasDeformationsInChunk(chunk.cx, chunk.cz, WORLD_CHUNK_SIZE)) {
         // Provider masks are cached for the immutable baseline. Once terrain is
         // sculpted, derive current wet cells from the exact height sampler used
         // by terrain geometry so raised land dries and lowered land floods.
@@ -3218,7 +3222,7 @@ export class InfiniteWorldRenderer {
     const provider = this.#fieldSampler.surfaceProvider
     const surface = provider.sampleSurface(x, z)
     if (!Number.isFinite(surface.height)) throw new RangeError('World surface height must be finite')
-    const deformedHeight = surface.height + this.terrainDeformations.sampleDelta(x, z)
+    const deformedHeight = surface.height + this.#terrainDeformations.sampleDelta(x, z)
     const minimum = typeof provider.minimumElevation === 'number' && Number.isFinite(provider.minimumElevation)
       ? provider.minimumElevation
       : Number.NEGATIVE_INFINITY
@@ -3259,23 +3263,23 @@ export class InfiniteWorldRenderer {
 
   /** Apply a real heightfield deformation, independent of scientific density/entropy fields. */
   sculptTerrainAt(x: number, z: number, radius: number, strength: number, mode: TerrainBrushMode) {
-    const changed = this.terrainDeformations.applyBrush(x, z, radius, strength, mode)
+    const changed = this.#terrainDeformations.applyBrush(x, z, radius, strength, mode)
     if (changed > 0) {
       this.refreshTerrainPatches()
       this.persistTerrainDeformationState()
     }
-    return { changed, canUndo: this.terrainDeformations.canUndo, canRedo: this.terrainDeformations.canRedo }
+    return { changed, canUndo: this.#terrainDeformations.canUndo, canRedo: this.#terrainDeformations.canRedo }
   }
 
   undoTerrainSculpt() {
-    if (!this.terrainDeformations.undo()) return false
+    if (!this.#terrainDeformations.undo()) return false
     this.refreshTerrainPatches()
     this.persistTerrainDeformationState()
     return true
   }
 
   redoTerrainSculpt() {
-    if (!this.terrainDeformations.redo()) return false
+    if (!this.#terrainDeformations.redo()) return false
     this.refreshTerrainPatches()
     this.persistTerrainDeformationState()
     return true
