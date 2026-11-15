@@ -57,7 +57,7 @@ assert.match(mainSource, /getWorldEditorRuntimeCheckpoint: \(\) =>[\s\S]*?captur
   "the application must capture Infinite World editor runtime rollback state");
 assert.match(mainSource, /restoreWorldEditorRuntimeCheckpoint: checkpoint =>[\s\S]*?restoreRuntimeRollbackCheckpoint\(checkpoint\)/,
   "the application must restore Infinite World editor runtime rollback state");
-assert.match(rendererSource, /captureRuntimeRollbackCheckpoint\(\)[\s\S]*?this\.history\.snapshotState\(\)[\s\S]*?this\.authoritativeSculptTransactions\.snapshotState\(\)/,
+assert.match(rendererSource, /captureRuntimeRollbackCheckpoint\(\)[\s\S]*?this\.#history\.snapshotState\(\)[\s\S]*?this\.#authoritativeSculptTransactions\.snapshotState\(\)/,
   "editor rollback checkpoint must preserve both object-edit and authoritative sculpt histories");
 assert.match(saveSystemSource, /this\.context\.persistWorldEditorSnapshot\?\.\(\)/,
   "Infinite World sidecar persistence must run only after the authoritative transaction succeeds");
@@ -579,7 +579,7 @@ assert.match(saveWorldSource, /if \(knownChunkKeys === null\)[\s\S]*?stored chun
 const loadWorldSource = rendererSource.slice(loadWorldStart);
 assert.match(loadWorldSource, /const knownChunkKeys = this\.persistence\.knownChunks\(\{ recoverOrphans: true \}\)[\s\S]*?if \(knownChunkKeys === null\)[\s\S]*?return 0[\s\S]*?this\.objects\.clear\(\)/,
   "loadWorld must verify complete chunk enumeration before mutating the live world");
-assert.match(loadWorldSource, /const restoredObjects: WorldObject\[\] = \[\][\s\S]*?this\.persistence\.readChunk\([\s\S]*?result\.status !== 'ok'[\s\S]*?return 0[\s\S]*?this\.terrainDeformations\.restore/,
+assert.match(loadWorldSource, /const restoredObjects: WorldObject\[\] = \[\][\s\S]*?this\.persistence\.readChunk\([\s\S]*?result\.status !== 'ok'[\s\S]*?return 0[\s\S]*?this\.#terrainDeformations\.restore/,
   "loadWorld must preflight every stored chunk payload before changing terrain or objects");
 assert.match(loadWorldSource, /newlyLoadedChunkKeys[\s\S]*?this\.persistence\.unloadChunk\(/,
   "a failed chunk preflight must roll back newly populated persistence cache entries");
