@@ -44,6 +44,37 @@ try {
   await page.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
+  const worldFieldBoundary = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    if (!world) return { error: "InfiniteWorld runtime was not initialized" };
+    const diagnostics = world.getAuthoritativeFieldDiagnostics?.();
+    const sample = world.sampleAuthoritativeField?.(0, 0, 0);
+    const surface = world.getWorldSurfaceProviderInfo?.();
+    const history = world.getAuthoritativeSculptHistoryState?.();
+    return {
+      directMutableReferences: ["fieldSampler", "authoritativeField", "authoritativeSculptTransactions"]
+        .filter(key => key in world),
+      diagnosticsAvailable: !!diagnostics && Array.isArray(diagnostics.mutations),
+      diagnosticMutators: ["apply", "restore", "clear", "setBase"]
+        .filter(key => typeof diagnostics?.[key] === "function"),
+      sampleAvailable: !!sample && ["energy", "density", "information", "entropy", "temperature", "biology", "material"]
+        .every(key => Number.isFinite(sample[key])),
+      surfaceInfoAvailable: !!surface && typeof surface.id === "string" && typeof surface.seed === "string",
+      surfaceMethodsExposed: ["sample", "sampleSurface", "setProvider"]
+        .filter(key => typeof surface?.[key] === "function"),
+      transactionHistoryAvailable: Number.isInteger(history?.undo) && Number.isInteger(history?.redo),
+    };
+  });
+  if (worldFieldBoundary.error ||
+      worldFieldBoundary.directMutableReferences.length !== 0 ||
+      !worldFieldBoundary.diagnosticsAvailable ||
+      worldFieldBoundary.diagnosticMutators.length !== 0 ||
+      !worldFieldBoundary.sampleAvailable ||
+      !worldFieldBoundary.surfaceInfoAvailable ||
+      worldFieldBoundary.surfaceMethodsExposed.length !== 0 ||
+      !worldFieldBoundary.transactionHistoryAvailable) {
+    throw new Error("Active world field ownership boundary is not sealed: " + JSON.stringify(worldFieldBoundary));
+  }
   await page.waitForFunction(() =>
     typeof window.getRealityLawState === "function" &&
     typeof window.setRealityLaw === "function" &&
