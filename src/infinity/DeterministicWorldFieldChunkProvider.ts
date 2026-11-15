@@ -38,7 +38,7 @@ export class DeterministicWorldFieldChunkProvider implements ScientificFieldProv
     const lx = Math.floor(x - this.origin.x)
     const ly = Math.floor(y - this.origin.y)
     const lz = Math.floor(z - this.origin.z)
-    if (lx < 0 || lx > WORLD_FIELD_CHUNK_SIZE || ly < 0 || ly > WORLD_FIELD_CHUNK_SIZE || lz < 0 || lz > WORLD_FIELD_CHUNK_SIZE) return ZERO
+    if (lx < 0 || lx > WORLD_FIELD_CHUNK_SIZE || ly < 0 || ly > WORLD_FIELD_CHUNK_SIZE || lz < 0 || lz > WORLD_FIELD_CHUNK_SIZE) return { ...ZERO }
 
     // Field identity is derived from global coordinates, not local chunk coordinates.
     // This guarantees identical values on shared faces of adjacent chunks.
