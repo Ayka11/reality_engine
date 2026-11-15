@@ -142,7 +142,7 @@ export class CivilizationSystem {
       }
       for (const [rawId, relation] of Object.entries(civ.diplomacy)) {
         const targetId = Number(rawId);
-        if (!/^(0|[1-9]\\d*)$/.test(rawId) || !Number.isSafeInteger(targetId) ||
+        if (!/^(0|[1-9]\d*)$/.test(rawId) || !Number.isSafeInteger(targetId) ||
             targetId === civ.id || (relation !== "neutral" && relation !== "ally" && relation !== "war")) {
           throw new Error("Invalid CivilizationSystem diplomatic relation");
         }
