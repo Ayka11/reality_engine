@@ -755,6 +755,26 @@ try {
       JSON.stringify(restartedEditorState));
   }
 
+  const restartedGlobalIdentity = await page.evaluate(({ objectId, instanceId }) => {
+    const snapshot = window.getGlobalEntityIdentitySnapshot?.();
+    return {
+      snapshot,
+      objectPresent: snapshot?.entries?.some(entry =>
+        entry.domain === "infinite-world-object" && entry.localId === objectId),
+      placementPresent: snapshot?.entries?.some(entry =>
+        entry.domain === "external-asset-placement" && entry.localId === instanceId),
+    };
+  }, { objectId: packageFixture.objectId, instanceId: placementFixture.instanceId });
+  if (!restartedGlobalIdentity.objectPresent ||
+      !restartedGlobalIdentity.placementPresent ||
+      restartedGlobalIdentity.snapshot?.coverage?.status !== "partial" ||
+      new Set(restartedGlobalIdentity.snapshot.entries.map(entry => entry.identityKey)).size !==
+        restartedGlobalIdentity.snapshot.entries.length) {
+    throw new Error("Global identity directory did not reconstruct persisted object and pending asset placement after restart: " +
+      JSON.stringify(restartedGlobalIdentity));
+  }
+  console.log("[acceptance] global entity identities reconstruct saved objects and inert external placements after restart");
+
   console.log("[acceptance] explicit GLTF import materializes a saved placement after restart");
   const mockAssetUrl = "https://assets.example.test/acceptance-package-asset.glb";
   const gltfJson = Buffer.from(JSON.stringify({
