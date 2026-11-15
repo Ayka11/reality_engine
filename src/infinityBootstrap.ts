@@ -109,9 +109,19 @@ export function bootstrapInfiniteWorld() {
             reason: 'Standalone ECS World has no provider connected to the active runtime.',
           }),
           Object.freeze({
-            domain: 'world-library-runtime',
-            source: 'src/worldLibrary',
-            reason: 'World Library civilization, resource economy and infrastructure records require explicit lifecycle and identity adapters.',
+            domain: 'world-library-civilization-branches',
+            source: 'src/worldLibrary/CivilizationRuntime.ts',
+            reason: 'Counterfactual civilization branches have independent branch IDs and need an explicit persistence and lifecycle adapter.',
+          }),
+          Object.freeze({
+            domain: 'world-resource-inventory',
+            source: 'src/worldLibrary/WorldResourceEconomy.ts',
+            reason: 'Resource records are inventory state keyed by semantic resource IDs, not scene entities; their ownership and identity semantics need separate classification.',
+          }),
+          Object.freeze({
+            domain: 'world-production-infrastructure',
+            source: 'src/worldLibrary/ProductionInfrastructureRuntime.ts',
+            reason: 'Production infrastructure is keyed by civilization identity and is a state projection, not an independently-owned scene entity.',
           }),
         ]),
         ownership: 'This directory indexes stable namespaced IDs; WorldObjectManager and WorldAssetRuntime remain authoritative for state and lifecycle.',
