@@ -155,7 +155,7 @@ export class EntityLayer {
   private nextId = 1;
   private extinctCountValue = 0;
   private bioThreshold = 0.05;
-  mutationStrength = 1.0;
+  private _mutationStrength = 1.0;
   private readonly initialRngState: number;
   private _rngState: number;
   private mutationObserver: (() => void) | null = null;
@@ -182,6 +182,17 @@ export class EntityLayer {
   }
 
   private notifyMutation(): void { this.mutationObserver?.(); }
+
+  /** Public tuning value with the same validation and invalidation contract as restore(). */
+  get mutationStrength(): number { return this._mutationStrength; }
+  set mutationStrength(value: number) {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new RangeError("EntityLayer mutationStrength must be finite and non-negative");
+    }
+    if (value === this._mutationStrength) return;
+    this._mutationStrength = value;
+    this.notifyMutation();
+  }
 
   get extinctCount(): number { return this.extinctCountValue; }
   get totalSpawned(): number { return this.nextId - 1; }
@@ -353,7 +364,7 @@ export class EntityLayer {
     // Install the fully validated, detached candidate as one state transition.
     this.entities = restored;
     this.bioThreshold = snapshot.bioThreshold;
-    this.mutationStrength = snapshot.mutationStrength;
+    this._mutationStrength = snapshot.mutationStrength;
     this.nextId = snapshot.nextId;
     this.extinctCountValue = snapshot.extinctCount;
     this._rngState = snapshot.rngState >>> 0;
