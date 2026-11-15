@@ -580,6 +580,7 @@ export class SimulationEngine {
     const apply = (state: SimulationEngineCoreRecoverySnapshot): void => {
       this.grid.restoreState(state.grid);
       this.entityLayer.restore(state.entities, this.grid.size);
+      this.entityLayer.assertGridEntityOwnershipSynchronized(this.grid);
       this.agents.restore(state.agents);
       this.chemLayer.restore(state.chemistry, this.grid.size);
       this.worldEvents.restore(state.worldEvents);
@@ -614,6 +615,31 @@ export class SimulationEngine {
         throw new AggregateError(
           [error, rollbackError],
           `Core recovery failed while applying candidate (${recoveryMessage}) and restoring prior state (${rollbackMessage})`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Restore the entity identity map only when its cell ownership exactly
+   * matches the already-published grid ENTITY_ID mirror. Call within the
+   * engine's authoritative mutation transaction when restoring a whole world.
+   */
+  restoreEntityLayerSnapshot(snapshot: EntityLayerSnapshot): void {
+    const previous = this.entityLayer.snapshot();
+    try {
+      this.entityLayer.restore(snapshot, this.grid.size);
+      this.entityLayer.assertGridEntityOwnershipSynchronized(this.grid);
+    } catch (error) {
+      try {
+        this.entityLayer.restore(previous, this.grid.size);
+      } catch (rollbackError) {
+        const applyMessage = error instanceof Error ? error.message : String(error);
+        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        throw new AggregateError(
+          [error, rollbackError],
+          `EntityLayer snapshot restore failed (${applyMessage}) and local rollback failed (${rollbackMessage})`,
         );
       }
       throw error;

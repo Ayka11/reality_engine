@@ -1325,7 +1325,7 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
     civSystem.loadPortableCivs(civs.map(civ => structuredClone(civ)));
   },
   getEntityLayerSnapshot: () => sim.entityLayer.snapshot(),
-  restoreEntityLayerSnapshot: snapshot => sim.entityLayer.restore(snapshot, sim.grid.size),
+  restoreEntityLayerSnapshot: snapshot => sim.restoreEntityLayerSnapshot(snapshot),
   clearEntityLayerRuntime: () => {
     sim.entityLayer.clear();
     for (let cell = 0; cell < sim.grid.size; cell++) {

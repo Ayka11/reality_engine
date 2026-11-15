@@ -725,6 +725,50 @@ export class EntityLayer {
   }
 
   /**
+   * Verify that the grid's ENTITY_ID field is an exact mirror of this layer's
+   * authoritative entity-to-cell ownership map. This is required at recovery
+   * boundaries where grid fields and EntityLayer snapshots are restored together.
+   */
+  assertGridEntityOwnershipSynchronized(grid: VoxelGrid): void {
+    if (!grid || !Number.isSafeInteger(grid.size) || grid.size < 0 ||
+        grid.buffer.length !== grid.size * CELL_FIELDS) {
+      throw new Error("EntityLayer ownership validation received an invalid grid layout");
+    }
+
+    const expectedOwners = new Map<number, number>();
+    for (const [mapId, entity] of this.entities) {
+      if (!entity ||
+          !Number.isSafeInteger(entity.id) || entity.id < 1 ||
+          mapId !== entity.id ||
+          !Array.isArray(entity.cells) || entity.cells.length === 0) {
+        throw new Error("EntityLayer ownership map contains an invalid entity identity record");
+      }
+      for (const cellIndex of entity.cells) {
+        if (!Number.isSafeInteger(cellIndex) || cellIndex < 0 || cellIndex >= grid.size) {
+          throw new Error(`EntityLayer entity ${entity.id} owns an invalid cell index`);
+        }
+        if (expectedOwners.has(cellIndex)) {
+          throw new Error(`EntityLayer entities overlap at cell ${cellIndex}`);
+        }
+        expectedOwners.set(cellIndex, entity.id);
+      }
+    }
+
+    for (let cellIndex = 0; cellIndex < grid.size; cellIndex++) {
+      const marker = grid.buffer[cellIndex * CELL_FIELDS + F.ENTITY_ID];
+      if (!Number.isSafeInteger(marker) || marker < 0) {
+        throw new Error(`Grid ENTITY_ID marker is invalid at cell ${cellIndex}`);
+      }
+      const expectedId = expectedOwners.get(cellIndex) ?? 0;
+      if (marker !== expectedId) {
+        throw new Error(
+          `Grid ENTITY_ID ownership mismatch at cell ${cellIndex}: expected ${expectedId}, received ${marker}`,
+        );
+      }
+    }
+  }
+
+  /**
    * Detached read view for UI/export consumers. Returning live entity records
    * would let external code mutate cells, genome, memory and identity state
    * without passing through EntityLayer's tick/restore ownership boundary.
