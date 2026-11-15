@@ -423,34 +423,121 @@ export class CivilizationRuntime {
   }
 
   serializeState() {
-    return {
+    // A save snapshot must not share nested arrays/objects with the live
+    // counterfactual branch maps or with other callers holding an older save.
+    return structuredClone({
       branches: Array.from(this.branches.entries()).map(([branchId, history]) => ({ branchId, history })),
       branchStates: Array.from(this.branchStates.entries()).map(([branchId, state]) => ({ branchId, state })),
       experiments: Array.from(this.experiments.values()),
       branchResources: Array.from(this.branchResources.entries()).map(([branchId, resources]) => ({ branchId, resources })),
       branchEnvironments: Array.from(this.branchEnvironments.entries()).map(([branchId, environment]) => ({ branchId, environment })),
       branchCausalEvents: Array.from(this.branchCausalEventStore.entries()).map(([branchId, events]) => ({ branchId, events }))
-    }
+    })
   }
 
   restoreState(snapshot: ReturnType<CivilizationRuntime['serializeState']>) {
+    if (!snapshot || typeof snapshot !== 'object') {
+      throw new TypeError('Civilization runtime restore requires a snapshot object')
+    }
+
+    // Clone and validate the complete candidate before changing any live map.
+    // This both detaches caller-owned input and makes malformed restore atomic.
+    const detached = structuredClone(snapshot)
+    const branches = detached.branches ?? []
+    const branchStates = detached.branchStates ?? []
+    const experiments = detached.experiments ?? []
+    const branchResources = detached.branchResources ?? []
+    const branchEnvironments = detached.branchEnvironments ?? []
+    const branchCausalEvents = detached.branchCausalEvents ?? []
+
+    if (![branches, branchStates, experiments, branchResources, branchEnvironments, branchCausalEvents]
+      .every(Array.isArray)) {
+      throw new TypeError('Civilization runtime restore contains invalid collection data')
+    }
+
+    const nextBranches = new Map<string, CivilizationBranchSnapshot[]>()
+    for (const entry of branches) {
+      if (!entry || typeof entry.branchId !== 'string' || !entry.branchId.trim() ||
+          !Array.isArray(entry.history) || entry.history.length === 0 ||
+          nextBranches.has(entry.branchId)) {
+        throw new Error('Civilization runtime restore contains an invalid or duplicate branch ID')
+      }
+      for (const historyEntry of entry.history) {
+        if (!historyEntry || historyEntry.branchId !== entry.branchId ||
+            !Number.isFinite(historyEntry.tick) || historyEntry.tick < 0) {
+          throw new Error('Civilization runtime restore contains invalid branch history ownership')
+        }
+      }
+      nextBranches.set(entry.branchId, entry.history)
+    }
+
+    const nextBranchStates = new Map<string, CivilizationState>()
+    for (const entry of branchStates) {
+      if (!entry || typeof entry.branchId !== 'string' || !entry.branchId.trim() ||
+          !nextBranches.has(entry.branchId) ||
+          !entry.state || typeof entry.state !== 'object' ||
+          entry.state.memory?.branchId !== entry.branchId ||
+          nextBranchStates.has(entry.branchId)) {
+        throw new Error('Civilization runtime restore contains an invalid or duplicate branch state')
+      }
+      nextBranchStates.set(entry.branchId, entry.state)
+    }
+
+    const nextExperiments = new Map<string, CivilizationExperimentResult>()
+    for (const experiment of experiments) {
+      if (!experiment || typeof experiment.experimentId !== 'string' ||
+          !experiment.experimentId.trim() || nextExperiments.has(experiment.experimentId)) {
+        throw new Error('Civilization runtime restore contains an invalid or duplicate experiment ID')
+      }
+      nextExperiments.set(experiment.experimentId, experiment)
+    }
+
+    const nextBranchResources = new Map<string, ResourceState[]>()
+    for (const entry of branchResources) {
+      if (!entry || typeof entry.branchId !== 'string' || !nextBranches.has(entry.branchId) ||
+          !Array.isArray(entry.resources) || nextBranchResources.has(entry.branchId)) {
+        throw new Error('Civilization runtime restore contains invalid or duplicate branch resources')
+      }
+      nextBranchResources.set(entry.branchId, entry.resources)
+    }
+
+    const nextBranchEnvironments = new Map<string, CivilizationBranchEnvironment>()
+    for (const entry of branchEnvironments) {
+      if (!entry || typeof entry.branchId !== 'string' || !nextBranches.has(entry.branchId) ||
+          !entry.environment || typeof entry.environment !== 'object' ||
+          nextBranchEnvironments.has(entry.branchId)) {
+        throw new Error('Civilization runtime restore contains invalid or duplicate branch environments')
+      }
+      nextBranchEnvironments.set(entry.branchId, entry.environment)
+    }
+
+    const nextBranchCausalEvents = new Map<string, CausalEvent[]>()
+    for (const entry of branchCausalEvents) {
+      if (!entry || typeof entry.branchId !== 'string' || !nextBranches.has(entry.branchId) ||
+          !Array.isArray(entry.events) || nextBranchCausalEvents.has(entry.branchId)) {
+        throw new Error('Civilization runtime restore contains invalid or duplicate branch causal events')
+      }
+      nextBranchCausalEvents.set(entry.branchId, entry.events)
+    }
+
     this.branches.clear()
     this.branchStates.clear()
     this.experiments.clear()
     this.branchResources.clear()
     this.branchEnvironments.clear()
     this.branchCausalEventStore.clear()
-    for (const entry of snapshot.branches ?? []) this.branches.set(entry.branchId, entry.history)
-    for (const entry of snapshot.branchStates ?? []) this.branchStates.set(entry.branchId, entry.state)
-    for (const experiment of snapshot.experiments ?? []) this.experiments.set(experiment.experimentId, experiment)
-    for (const entry of snapshot.branchResources ?? []) this.branchResources.set(entry.branchId, entry.resources.map((resource) => ({ ...resource })))
-    for (const entry of snapshot.branchEnvironments ?? []) this.branchEnvironments.set(entry.branchId, { ...entry.environment })
-    for (const entry of snapshot.branchCausalEvents ?? []) this.branchCausalEventStore.set(entry.branchId, entry.events.map((event) => ({ ...event })))
+    for (const [branchId, history] of nextBranches) this.branches.set(branchId, history)
+    for (const [branchId, state] of nextBranchStates) this.branchStates.set(branchId, state)
+    for (const [experimentId, experiment] of nextExperiments) this.experiments.set(experimentId, experiment)
+    for (const [branchId, resources] of nextBranchResources) this.branchResources.set(branchId, resources)
+    for (const [branchId, environment] of nextBranchEnvironments) this.branchEnvironments.set(branchId, environment)
+    for (const [branchId, events] of nextBranchCausalEvents) this.branchCausalEventStore.set(branchId, events)
+
     return {
       branchCount: this.branches.size,
       stateCount: this.branchStates.size,
       experimentCount: this.experiments.size,
-      restored: this.branches.size === this.branchStates.size
+      restored: [...this.branchStates.keys()].every(branchId => this.branches.has(branchId))
     }
   }
 
@@ -568,7 +655,18 @@ export class CivilizationRuntime {
     if (sourceResources) worldResourceEconomy.restore(sourceResources)
     else this.branchResources.set(sourceBranch, worldResourceEconomy.snapshot())
     const sourceEnvironment = this.branchEnvironments.get(sourceBranch) ?? { temperature: 0.5, moisture: 0.5, radiation: 0.2, stability: 0.8, tick: source.tick }
-    const branchId = `${sourceBranch}-cf-${this.branches.size + 1}`
+    let suffix = this.branches.size + 1
+    let branchId = `${sourceBranch}-cf-${suffix}`
+    while (
+      this.branches.has(branchId) ||
+      this.branchStates.has(branchId) ||
+      this.branchResources.has(branchId) ||
+      this.branchEnvironments.has(branchId) ||
+      this.branchCausalEventStore.has(branchId)
+    ) {
+      suffix += 1
+      branchId = `${sourceBranch}-cf-${suffix}`
+    }
     const snapshot: CivilizationBranchSnapshot = {
       ...source,
       branchId,
