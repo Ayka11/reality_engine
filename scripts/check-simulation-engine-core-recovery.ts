@@ -33,6 +33,9 @@ assertGenerationAdvances("EntityLayer.restore", () =>
 assertGenerationAdvances("EntityLayer.clear", () => mutatorGuardEngine.entityLayer.clear());
 assertGenerationAdvances("EntityLayer.setRandomSeed", () =>
   mutatorGuardEngine.entityLayer.setRandomSeed(0x12345678));
+assertGenerationAdvances("EntityLayer.mutationStrength", () => {
+  mutatorGuardEngine.entityLayer.mutationStrength = 0.75;
+});
 assertGenerationAdvances("CausalGraph.restore", () =>
   mutatorGuardEngine.causal.restore(mutatorGuardEngine.causal.snapshot()));
 assertGenerationAdvances("CausalGraph.log", () =>
