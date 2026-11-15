@@ -1,6 +1,7 @@
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import { CHUNK_FLOATS } from './core/ChunkGrid';
 import { SimulationEngine } from './simulation/SimulationEngine';
+import { createSimulationEngineDebugView, type SimulationEngineDebugView } from './simulation/SimulationEngineDebugView';
 import { VoxelRenderer, LayerName } from './render/VoxelRenderer';
 import { Entity } from './simulation/EntityLayer';
 import { Presets, PresetName } from './world/Presets';
@@ -80,7 +81,7 @@ const canvas   = document.getElementById('gc') as HTMLCanvasElement;
 const renderer = new VoxelRenderer(canvas, sim.grid.W, sim.grid.H, sim.grid.D);
 const realityCreatorGraph = new RealityGraph();
 const realityCreatorCompiler = new GraphCompiler();
-(window as unknown as { realityEngine?: SimulationEngine; realityCreator?: { graph: RealityGraph; compiler: GraphCompiler } }).realityEngine = sim;
+(window as unknown as { realityEngine?: SimulationEngineDebugView; realityCreator?: { graph: RealityGraph; compiler: GraphCompiler } }).realityEngine = createSimulationEngineDebugView(sim);
 (window as unknown as { realityCreator?: { graph: RealityGraph; compiler: GraphCompiler } }).realityCreator = {
   graph: realityCreatorGraph,
   compiler: realityCreatorCompiler,
