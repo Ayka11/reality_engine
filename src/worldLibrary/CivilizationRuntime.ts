@@ -300,8 +300,15 @@ export class CivilizationRuntime {
     }
   }
 
-  branchSnapshot(branchId: string) { return this.branches.get(branchId)?.at(-1) ?? null }
-  branchHistory(branchId: string) { return this.branches.get(branchId) ?? [] }
+  branchSnapshot(branchId: string) {
+    const snapshot = this.branches.get(branchId)?.at(-1)
+    return snapshot ? structuredClone(snapshot) : null
+  }
+
+  branchHistory(branchId: string) {
+    const history = this.branches.get(branchId)
+    return history ? structuredClone(history) : []
+  }
 
   tickBranch(branchId: string, delta = 1) {
     let state = this.branchStates.get(branchId)
@@ -325,12 +332,23 @@ export class CivilizationRuntime {
       tick: previousEnvironment.tick + delta,
     })
     this.branchStates.set(branchId, result.state)
-    return result
+    return structuredClone(result)
   }
 
-  branchState(branchId: string) { return this.branchStates.get(branchId) ?? null }
-  branchEnvironment(branchId: string) { return this.branchEnvironments.get(branchId) ?? null }
-  branchCausalEvents(branchId: string) { return this.branchCausalEventStore.get(branchId) ?? [] }
+  branchState(branchId: string) {
+    const state = this.branchStates.get(branchId)
+    return state ? structuredClone(state) : null
+  }
+
+  branchEnvironment(branchId: string) {
+    const environment = this.branchEnvironments.get(branchId)
+    return environment ? structuredClone(environment) : null
+  }
+
+  branchCausalEvents(branchId: string) {
+    const events = this.branchCausalEventStore.get(branchId)
+    return events ? structuredClone(events) : []
+  }
 
   buildClaimGraph(outcomes: CivilizationExperimentOutcome[]): CivilizationClaimGraph {
     const claims: CivilizationClaimNode[] = []
@@ -640,13 +658,22 @@ export class CivilizationRuntime {
       }
     })
     const result = { experimentId, ticks, branches, outcomes }
-    this.experiments.set(experimentId, result)
-    return result
+    this.experiments.set(experimentId, structuredClone(result))
+    return structuredClone(result)
   }
 
-  experiment(experimentId: string) { return this.experiments.get(experimentId) ?? null }
+  experiment(experimentId: string) {
+    const experiment = this.experiments.get(experimentId)
+    return experiment ? structuredClone(experiment) : null
+  }
   experimentsList() { return [...this.experiments.values()].map((item) => ({ experimentId: item.experimentId, ticks: item.ticks, branchCount: item.branches.length, outcomeCount: item.outcomes.length })) }
-  branchesList() { return [...this.branches.entries()].map(([branchId, history]) => ({ branchId, latest: history.at(-1) ?? null, length: history.length })) }
+  branchesList() {
+    return [...this.branches.entries()].map(([branchId, history]) => ({
+      branchId,
+      latest: history.length ? structuredClone(history[history.length - 1]) : null,
+      length: history.length,
+    }))
+  }
 
   forkBranch(sourceBranch: string, override: CounterfactualOverride): CivilizationBranchSnapshot | null {
     const source = this.branchSnapshot(sourceBranch)
@@ -686,7 +713,7 @@ export class CivilizationRuntime {
     this.branchResources.set(branchId, worldResourceEconomy.snapshot())
     this.branchEnvironments.set(branchId, { ...sourceEnvironment, tick: source.tick })
     this.branches.set(branchId, [snapshot])
-    return snapshot
+    return structuredClone(snapshot)
   }
 
   compareBranches(branchA: string, branchB: string): CivilizationDivergenceMetrics | null {
