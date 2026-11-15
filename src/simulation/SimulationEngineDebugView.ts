@@ -14,8 +14,8 @@ export type EntityLayerDiagnosticsView = Readonly<Pick<
 
 export type AgentSystemDiagnosticsView = Readonly<Pick<
   AgentSystem,
-  "snapshot" | "getAgents" | "agentMarkers" | "maxAgents" | "snapshotRandomState"
->>;
+  "snapshot" | "getAgents" | "agentMarkers" | "snapshotRandomState"
+>> & Readonly<{ maxAgents: number }>;
 
 export type SimulationEngineDebugView = Omit<
   SimulationEngine,
