@@ -69,6 +69,58 @@ try {
       entries: globalEntityIdentity.entries.length,
       excludedDomains: globalEntityIdentity.coverage.excludedDomains.map(entry => entry.domain),
     }));
+
+  const identityLifecycle = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const identityApi = window.getGlobalEntityIdentitySnapshot;
+    const id = "__acceptance_global_identity_lifecycle__";
+    if (!world?.objects || typeof world.objects.add !== "function" ||
+        typeof world.objects.remove !== "function" || typeof identityApi !== "function") {
+      throw new Error("Global identity lifecycle acceptance prerequisites are unavailable");
+    }
+    if (world.objects.get(id)) {
+      throw new Error("Global identity lifecycle fixture ID is already in use");
+    }
+    const before = identityApi();
+    let afterAdd;
+    let afterRemove;
+    try {
+      world.objects.add({
+        id,
+        kind: "custom",
+        x: 100000,
+        y: 0,
+        z: 100000,
+        rotationY: 0,
+        scale: 1,
+        seed: 1,
+        properties: { acceptanceFixture: true },
+      });
+      afterAdd = identityApi();
+    } finally {
+      world.objects.remove(id);
+      afterRemove = identityApi();
+    }
+    return {
+      beforeRevision: before.revision,
+      afterAddRevision: afterAdd?.revision,
+      afterRemoveRevision: afterRemove?.revision,
+      addVisible: afterAdd?.entries?.some(entry =>
+        entry.domain === "infinite-world-object" && entry.localId === id),
+      removeVisible: afterRemove?.entries?.some(entry =>
+        entry.domain === "infinite-world-object" && entry.localId === id),
+      objectRemoved: !world.objects.get(id),
+    };
+  });
+  if (!identityLifecycle.addVisible || identityLifecycle.removeVisible ||
+      !identityLifecycle.objectRemoved ||
+      identityLifecycle.afterAddRevision <= identityLifecycle.beforeRevision ||
+      identityLifecycle.afterRemoveRevision <= identityLifecycle.afterAddRevision) {
+    throw new Error("Global entity identity directory did not track object add/remove lifecycle: " +
+      JSON.stringify(identityLifecycle));
+  }
+  console.log("[acceptance] global entity identity object add/remove lifecycle PASS: " +
+    JSON.stringify(identityLifecycle));
   const worldFieldBoundary = await page.evaluate(() => {
     const world = window.infiniteWorld;
     if (!world) return { error: "InfiniteWorld runtime was not initialized" };
