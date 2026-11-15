@@ -11,7 +11,7 @@ const rendererJs = ts.transpileModule(renderer, {
 })
 assert.equal(rendererJs.diagnostics?.some(d => d.category === ts.DiagnosticCategory.Error), false)
 
-assert.ok(renderer.includes('get worldSeed(): string { return this.fieldSampler.surfaceProvider.seed }'))
+assert.ok(renderer.includes('get worldSeed(): string { return this.#fieldSampler.surfaceProvider.seed }'))
 assert.equal(renderer.split('const seed = this.worldSeed').length - 1, 2,
   'settlement generators must derive their deterministic layouts from the active surface seed')
 assert.ok(renderer.includes('this.objects.scatter(this.worldSeed, kind'),
