@@ -52,7 +52,7 @@ try {
     const surface = world.getWorldSurfaceProviderInfo?.();
     const history = world.getAuthoritativeSculptHistoryState?.();
     return {
-      directMutableReferences: ["fieldSampler", "authoritativeField", "authoritativeSculptTransactions"]
+      directMutableReferences: ["fieldSampler", "authoritativeField", "authoritativeSculptTransactions", "terrainDeformations"]
         .filter(key => key in world),
       diagnosticsAvailable: !!diagnostics && Array.isArray(diagnostics.mutations),
       diagnosticMutators: ["apply", "restore", "clear", "setBase"]
@@ -1968,7 +1968,7 @@ try {
     const strength = document.getElementById("vTerrainStrength");
     return {
       controlsPresent: !!raise && !!lower && !!radius && !!strength,
-      baseline: world.terrainDeformations.sampleDelta(12, 12),
+      baseline: world.sampleTerrainDeformationDelta(12, 12),
     };
   });
   if (!terrainBrushUi.controlsPresent) throw new Error("Terrain sculpt controls are missing from the active World Tools dock");
@@ -2022,9 +2022,9 @@ try {
   await page.locator("#vTerrainRaise").click();
   const terrainEdit = await page.evaluate(() => {
     const world = window.infiniteWorld;
-    const before = world.terrainDeformations.sampleDelta(12, 12);
+    const before = world.sampleTerrainDeformationDelta(12, 12);
     const result = world.sculptTerrainAt(12, 12, 3, 1, "raise");
-    return { before, after: world.terrainDeformations.sampleDelta(12, 12), changed: result.changed };
+    return { before, after: world.sampleTerrainDeformationDelta(12, 12), changed: result.changed };
   });
   if (!terrainEdit.changed || !(terrainEdit.after > terrainEdit.before)) {
     throw new Error("Raise terrain brush did not change geometric elevation: " + JSON.stringify(terrainEdit));
@@ -2053,7 +2053,7 @@ try {
             screenY: y,
             worldX: point.x,
             worldZ: point.z,
-            before: world.terrainDeformations.sampleDelta(point.x, point.z),
+            before: world.sampleTerrainDeformationDelta(point.x, point.z),
           };
         }
       }
@@ -2085,7 +2085,7 @@ try {
   const terrainCheckpoint = await page.evaluate((target) => {
     const world = window.infiniteWorld;
     world.saveWorld();
-    return world.terrainDeformations.sampleDelta(target.worldX, target.worldZ);
+    return world.sampleTerrainDeformationDelta(target.worldX, target.worldZ);
   }, terrainPointerTarget);
   await page.evaluate((target) => {
     const world = window.infiniteWorld;
@@ -3615,7 +3615,7 @@ try {
       seed,
       key,
       raw: localStorage.getItem(key),
-      delta: world.terrainDeformations.sampleDelta(target.worldX, target.worldZ),
+      delta: world.sampleTerrainDeformationDelta(target.worldX, target.worldZ),
     };
   }, terrainPointerTarget);
   if (!savedTerrainOnDisk.raw || Math.abs(savedTerrainOnDisk.delta - terrainCheckpoint) > 1e-6) {
@@ -4084,7 +4084,7 @@ try {
       objectHistory: world.getEditHistoryState(),
       undo,
       redo,
-      terrainDelta: world.terrainDeformations.sampleDelta(16, 16),
+      terrainDelta: world.sampleTerrainDeformationDelta(16, 16),
       surfaceId: world.getWorldSurfaceProviderInfo().id,
       surfaceSeed: world.getWorldSurfaceProviderInfo().seed,
       generatorSeed: world.generator.seed,
@@ -4145,7 +4145,7 @@ try {
       viewSeed: window.getWorldViewContract?.()?.seed ?? null,
       objects: world.getObjectCount(),
       fieldMutations: world.getAuthoritativeFieldMutationCount(),
-      terrainDelta: world.terrainDeformations.sampleDelta(16, 16),
+      terrainDelta: world.sampleTerrainDeformationDelta(16, 16),
       surfaceId: world.getWorldSurfaceProviderInfo().id,
       surfaceSeed: world.getWorldSurfaceProviderInfo().seed,
       manifestEntries: window.worldAssetManifest?.entries?.length ?? -1,
