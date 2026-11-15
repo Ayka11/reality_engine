@@ -17,7 +17,7 @@ const liveComponent = createComponent<AgentState>("agent-state", {
     traits: ["adaptive"],
   },
 }, 3);
-entity.add(liveComponent);
+world.setComponent(entity.id, liveComponent);
 
 const entitySnapshot = entity.snapshot();
 assert.equal(entitySnapshot.id, "agent:stable-1");
