@@ -33,7 +33,7 @@ assert.match(saveSystemSource, /if \(!mutate\)\s*\{\s*throw new Error\("World re
   "world snapshot import must fail closed if the authoritative transaction port is missing");
 assert.doesNotMatch(saveSystemSource, /this\.context\.syncToGPU\?\.\(\)/,
   "world snapshot import must not use an untransactional compatibility fallback");
-assert.match(saveSystemSource, /const graphBefore = this\.context\.graphProvider\?\.\(\)/,
+assert.match(saveSystemSource, /realityGraph: structuredClone\(this\.context\.graphProvider\?\.\(\)\)/,\n  "captured reality graph snapshots must detach nodes, edges and metadata from the live Creator graph");\nassert.match(saveSystemSource, /const graphBefore = this\.context\.graphProvider\?\.\(\)/,
   "world snapshot import must checkpoint the external graph domain");
 assert.match(saveSystemSource, /const civBefore = this\.context\.getCivSnapshot\?\.\(\)/,
   "world snapshot import must checkpoint the external civilization domain");
