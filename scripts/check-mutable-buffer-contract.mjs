@@ -7,7 +7,7 @@ import ts from "typescript";
 // inventory exact: newly added call sites must have an explicit ownership and
 // async-boundary review rather than silently expanding the escape hatch.
 const expectedCalls = new Map([
-  ["src/simulation/EntityLayer.ts#tick", 2],
+  ["src/simulation/EntityLayer.ts#tick", 1],
 ]);
 const expectedImports = new Set([
   "src/simulation/EntityLayer.ts",
@@ -321,38 +321,6 @@ for (const filePath of sourcePaths) {
       visit(fn);
       return found;
     }
-    function isApprovedSynchronousRollbackClosure(fn, aliasName) {
-      // Explicit exception: the rollback closure belongs to the synchronous EntityLayer reconciliation transaction.
-      if (path !== "src/simulation/EntityLayer.ts" || key !== "tick" || aliasName !== "buf") return false;
-      const declaration = fn.parent;
-      if (!ts.isVariableDeclaration(declaration) || declaration.initializer !== fn ||
-          !ts.isIdentifier(declaration.name) || declaration.name.text !== "rollbackTick" ||
-          containsAwaitOrYield(fn)) return false;
-      let passedToReconcile = false;
-      let invalidReference = false;
-      function visitOwner(current) {
-        if (ts.isIdentifier(current) && current.text === "rollbackTick") {
-          const parent = current.parent;
-          if (ts.isVariableDeclaration(parent) && parent.name === current) {
-            // Declaration name.
-          } else {
-            const expectedArgument = ts.isCallExpression(parent) &&
-              ts.isPropertyAccessExpression(parent.expression) &&
-              parent.expression.name.text === "_reconcileFullDomain" &&
-              parent.arguments.some(argument => argument === current);
-            const synchronousRollbackCall = ts.isCallExpression(parent) &&
-              parent.expression === current && parent.arguments.length === 0 &&
-              functionOwnerFor(current) === methodNode;
-            if (expectedArgument) passedToReconcile = true;
-            else if (!synchronousRollbackCall) invalidReference = true;
-          }
-        }
-        ts.forEachChild(current, visitOwner);
-      }
-      visitOwner(methodNode);
-      return passedToReconcile && !invalidReference;
-    }
-
     const reportedClosureAliases = new Set();
     function inspectAliasUse(node) {
       if (ts.isIdentifier(node) && aliases.has(node.text)) {
@@ -367,13 +335,12 @@ for (const filePath of sourcePaths) {
           if (!binding || isFunctionAncestor(binding.owner, candidate.owner)) binding = candidate;
         }
 
-        if (!isDeclarationName && binding && binding.owner !== occurrenceOwner &&
-            !isApprovedSynchronousRollbackClosure(occurrenceOwner, node.text)) {
+        if (!isDeclarationName && binding && binding.owner !== occurrenceOwner) {
           const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
           const reportKey = `${line}:${node.text}`;
           if (!reportedClosureAliases.has(reportKey)) {
             reportedClosureAliases.add(reportKey);
-            errors.push(`${path}:${line}: raw buffer alias "${node.text}" is captured by a nested callback; prove synchronous transaction-local lifetime or remove the capture`);
+            errors.push(`${path}:${line}: raw buffer alias "${node.text}" is captured by a nested callback; pass a detached snapshot instead`);
           }
         }
 
