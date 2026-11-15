@@ -22,6 +22,30 @@ assertGenerationAdvances("resetPreviousEnergy", () => mutatorGuardEngine.resetPr
 assertGenerationAdvances("restoreChemistryState", () =>
   mutatorGuardEngine.restoreChemistryState(mutatorGuardEngine.snapshotChemistryState()));
 assertGenerationAdvances("resetChemistryState", () => mutatorGuardEngine.resetChemistryState());
+
+// Public subsystem state-only mutations must invalidate an in-flight GPU
+// readback even when they do not write a tracked grid buffer.
+assertGenerationAdvances("AgentSystem.restore", () =>
+  mutatorGuardEngine.agents.restore(mutatorGuardEngine.agents.snapshot()));
+assertGenerationAdvances("AgentSystem.clear", () => mutatorGuardEngine.agents.clear());
+assertGenerationAdvances("EntityLayer.restore", () =>
+  mutatorGuardEngine.entityLayer.restore(mutatorGuardEngine.entityLayer.snapshot(), mutatorGuardEngine.grid.size));
+assertGenerationAdvances("EntityLayer.clear", () => mutatorGuardEngine.entityLayer.clear());
+assertGenerationAdvances("EntityLayer.setRandomSeed", () =>
+  mutatorGuardEngine.entityLayer.setRandomSeed(0x12345678));
+assertGenerationAdvances("CausalGraph.restore", () =>
+  mutatorGuardEngine.causal.restore(mutatorGuardEngine.causal.snapshot()));
+assertGenerationAdvances("CausalGraph.log", () =>
+  mutatorGuardEngine.causal.log(1, 0, 0, 0, 0, "energy_spike", 1));
+assertGenerationAdvances("CausalGraph.clear", () => mutatorGuardEngine.causal.clear());
+assertGenerationAdvances("WorldEvents.restore", () =>
+  mutatorGuardEngine.worldEvents.restore(mutatorGuardEngine.worldEvents.snapshot()));
+assertGenerationAdvances("WorldEvents.trigger", () =>
+  mutatorGuardEngine.worldEvents.trigger(mutatorGuardEngine.grid, "meteor_strike", 1));
+assertGenerationAdvances("WorldEvents.reset", () => mutatorGuardEngine.worldEvents.reset());
+assertGenerationAdvances("WorldEvents.autoTick scheduler", () => {
+  mutatorGuardEngine.worldEvents.autoTick(mutatorGuardEngine.grid, 1);
+});
 const beforeInvalidTickRestore = mutatorGuardEngine.captureCoreRecoveryState();
 const generationBeforeInvalidTickRestore = engineInternals._stateGeneration;
 for (const invalidTick of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.MAX_VALUE]) {
