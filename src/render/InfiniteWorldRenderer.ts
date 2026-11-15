@@ -74,7 +74,7 @@ export class InfiniteWorldRenderer {
   private readonly objectSpatialIndex = new WorldObjectSpatialIndex()
   readonly objects = new WorldObjectManager(this.objectSpatialIndex)
   persistence: WorldPersistence
-  history = new WorldEditHistory()
+  #history = new WorldEditHistory()
   readonly #fieldSampler: FieldSampler
   readonly #authoritativeField: MutableWorldFieldProvider
   readonly legacySculptRuntimeAdapter: LegacySculptRuntimeAdapter
@@ -589,7 +589,7 @@ export class InfiniteWorldRenderer {
         this.gizmoBefore = object ? { ...object } : null
       } else if (this.gizmoBefore) {
         const object = this.getSelectedObject()
-        if (object) this.history.push({ type: 'transform', before: this.gizmoBefore, after: { ...object } })
+        if (object) this.#history.push({ type: 'transform', before: this.gizmoBefore, after: { ...object } })
         this.gizmoBefore = null
         this.scheduleSave()
       }
@@ -676,7 +676,7 @@ export class InfiniteWorldRenderer {
    */
   captureRuntimeRollbackCheckpoint() {
     return {
-      history: this.history.snapshotState(),
+      history: this.#history.snapshotState(),
       authoritativeSculptHistory: this.#authoritativeSculptTransactions.snapshotState(),
       selectedObjectId: this.selectedObjectId,
     }
@@ -694,7 +694,7 @@ export class InfiniteWorldRenderer {
     if (!checkpoint || (checkpoint.selectedObjectId !== null && typeof checkpoint.selectedObjectId !== 'string')) {
       throw new TypeError('Invalid Infinite World runtime rollback checkpoint')
     }
-    this.history.restoreState(checkpoint.history)
+    this.#history.restoreState(checkpoint.history)
     this.#authoritativeSculptTransactions.restoreState(checkpoint.authoritativeSculptHistory)
 
     const selected = checkpoint.selectedObjectId
@@ -889,7 +889,7 @@ export class InfiniteWorldRenderer {
       radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4,
     })
     this.lastCenter = null
-    this.history = new WorldEditHistory()
+    this.#history = new WorldEditHistory()
     this.#authoritativeSculptTransactions.clear()
     this.notifyAuthoritativeSculptHistoryChanged()
     this.selectedObjectId = null
@@ -1236,7 +1236,7 @@ export class InfiniteWorldRenderer {
     this.objects.clear()
     for (const object of restoredObjects) this.objects.add(object)
     // Object edit transactions belong to the world that was just replaced.
-    this.history = new WorldEditHistory()
+    this.#history = new WorldEditHistory()
     const count = restoredObjects.length
     this.syncObjects()
     this.selectedObjectId = null
@@ -1300,7 +1300,7 @@ export class InfiniteWorldRenderer {
     this.rebuildDecisionLayer()
     this.#authoritativeSculptTransactions.clear()
     this.notifyAuthoritativeSculptHistoryChanged()
-    this.history.clear()
+    this.#history.clear()
     ;(window as any).worldAssetManifest = createAssetImportManifest()
     runtimeProvenance.reset()
     try {
@@ -1435,7 +1435,7 @@ export class InfiniteWorldRenderer {
     this.storageKey = `reality-engine-world:${normalizedSeed}:objects`
 
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
-    this.history = new WorldEditHistory()
+    this.#history = new WorldEditHistory()
 
     const targetWorld = new THREE.Vector3(16, this.sampleTerrainHeight(16, 16), 16)
     const targetLocal = this.worldToLocal(targetWorld)
@@ -3158,7 +3158,7 @@ export class InfiniteWorldRenderer {
     if (!before) return null
     const object = this.objects.updateTransform(this.selectedObjectId, patch)
     if (!object) return null
-    this.history.push({ type: 'transform', before, after: object })
+    this.#history.push({ type: 'transform', before, after: object })
     this.scheduleSave()
     const entry = this.objectMeshes.get(object.id)
     if (entry) {
@@ -3189,21 +3189,21 @@ export class InfiniteWorldRenderer {
   }
 
   undo() {
-    const edit = this.history.undo()
+    const edit = this.#history.undo()
     if (!edit) return null
     this.applyHistoryEdit(edit, true)
     return edit
   }
 
   redo() {
-    const edit = this.history.redo()
+    const edit = this.#history.redo()
     if (!edit) return null
     this.applyHistoryEdit(edit, false)
     return edit
   }
 
   getEditHistoryState() {
-    return { canUndo: this.history.canUndo, canRedo: this.history.canRedo }
+    return { canUndo: this.#history.canUndo, canRedo: this.#history.canRedo }
   }
 
   getTransformMode() { return this.transformControls.mode }
@@ -3305,7 +3305,7 @@ export class InfiniteWorldRenderer {
     const object = this.objects.get(id)
     if (object) {
       this.objects.remove(id)
-      this.history.push({ type: 'remove', object: { ...object } })
+      this.#history.push({ type: 'remove', object: { ...object } })
     }
     const entry = this.objectMeshes.get(id)
     if (entry) {
@@ -3405,7 +3405,7 @@ export class InfiniteWorldRenderer {
         activeLawProcesses: lawGate.decision?.laws.activeProcesses.join(',') ?? '',
       },
     })
-    this.history.push({ type: 'add', object: { ...object } })
+    this.#history.push({ type: 'add', object: { ...object } })
     this.syncObjects()
     this.scheduleSave()
     return object
@@ -3419,7 +3419,7 @@ export class InfiniteWorldRenderer {
     })
     for (const object of removed) {
       this.objects.remove(object.id)
-      this.history.push({ type: 'remove', object: { ...object } })
+      this.#history.push({ type: 'remove', object: { ...object } })
     }
     this.syncObjects()
     this.scheduleSave()
@@ -3537,7 +3537,7 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(object)
-      this.history.push({ type: 'add', object: { ...object } })
+      this.#history.push({ type: 'add', object: { ...object } })
     }
     this.syncObjects()
     this.scheduleSave()
@@ -3572,7 +3572,7 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(object)
-      this.history.push({ type: 'add', object: { ...object } })
+      this.#history.push({ type: 'add', object: { ...object } })
     }
     this.syncObjects()
     this.scheduleSave()
@@ -3841,7 +3841,7 @@ export class InfiniteWorldRenderer {
         }))
         if (!water) continue
         created.push(water)
-        this.history.push({ type: 'add', object: { ...water } })
+        this.#history.push({ type: 'add', object: { ...water } })
       }
     }
     this.syncObjects()
@@ -3924,7 +3924,7 @@ export class InfiniteWorldRenderer {
       properties: { city: 'hub', role: 'civic' },
     })
     created.push(hubObject)
-    this.history.push({ type: 'add', object: { ...hubObject } })
+    this.#history.push({ type: 'add', object: { ...hubObject } })
     for (let i = 0; i < plan.districts.length; i++) {
       const d = plan.districts[i]
       const route = this.optimizeRoute(plan.hub.x, plan.hub.z, d.x, d.z, 12, 'balanced')
@@ -3953,7 +3953,7 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(object)
-        this.history.push({ type: 'add', object: { ...object } })
+        this.#history.push({ type: 'add', object: { ...object } })
       }
       const count = d.role === 'civic' ? 3 : 5
       for (let k = 0; k < count; k++) {
@@ -3982,7 +3982,7 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(building)
-        this.history.push({ type: 'add', object: { ...building } })
+        this.#history.push({ type: 'add', object: { ...building } })
       }
     }
     this.syncObjects()
@@ -4003,7 +4003,7 @@ export class InfiniteWorldRenderer {
       properties: { settlement: 'hub', seed },
     })
     created.push(hub)
-    this.history.push({ type: 'add', object: { ...hub } })
+    this.#history.push({ type: 'add', object: { ...hub } })
 
     for (let i = 0; i < blockCount; i++) {
       const angle = (i / blockCount) * Math.PI * 2
@@ -4036,7 +4036,7 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(object)
-        this.history.push({ type: 'add', object: { ...object } })
+        this.#history.push({ type: 'add', object: { ...object } })
       }
 
       const inner = ringRadius * 0.52
@@ -4067,7 +4067,7 @@ export class InfiniteWorldRenderer {
           },
         })
         created.push(building)
-        this.history.push({ type: 'add', object: { ...building } })
+        this.#history.push({ type: 'add', object: { ...building } })
       }
     }
 
@@ -4103,7 +4103,7 @@ export class InfiniteWorldRenderer {
         },
       })
       created.push(building)
-      this.history.push({ type: 'add', object: { ...building } })
+      this.#history.push({ type: 'add', object: { ...building } })
     }
     if (created.length > 1) {
       const hub = created[0]
@@ -4136,7 +4136,7 @@ export class InfiniteWorldRenderer {
         },
       })
       if (!updated) continue
-      this.history.push({ type: 'add', object: updated })
+      this.#history.push({ type: 'add', object: updated })
       created.push(updated)
     }
     this.syncObjects()
