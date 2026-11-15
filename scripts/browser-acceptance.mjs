@@ -63,6 +63,9 @@ try {
       surfaceMethodsExposed: ["sample", "sampleSurface", "setProvider"]
         .filter(key => typeof surface?.[key] === "function"),
       transactionHistoryAvailable: Number.isInteger(history?.undo) && Number.isInteger(history?.redo),
+      decisionSamplerHidden: !("sampler" in (world.decisionLayer ?? {})),
+      constructionDecisionLayerHidden: !("decisions" in (world.constructionContract ?? {})),
+      decisionWeightsFrozen: Object.isFrozen(world.decisionLayer?.weights),
     };
   });
   if (worldFieldBoundary.error ||
@@ -72,7 +75,10 @@ try {
       !worldFieldBoundary.sampleAvailable ||
       !worldFieldBoundary.surfaceInfoAvailable ||
       worldFieldBoundary.surfaceMethodsExposed.length !== 0 ||
-      !worldFieldBoundary.transactionHistoryAvailable) {
+      !worldFieldBoundary.transactionHistoryAvailable ||
+      !worldFieldBoundary.decisionSamplerHidden ||
+      !worldFieldBoundary.constructionDecisionLayerHidden ||
+      !worldFieldBoundary.decisionWeightsFrozen) {
     throw new Error("Active world field ownership boundary is not sealed: " + JSON.stringify(worldFieldBoundary));
   }
   await page.waitForFunction(() =>
