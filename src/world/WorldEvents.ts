@@ -56,6 +56,14 @@ export class WorldEvents {
   private _nextAuto = 600; // ticks until next random event
   private readonly initialRngState: number;
   private _rngState = 0x6d2b79f5;
+  private mutationObserver: (() => void) | null = null;
+
+  /** Register the owning engine's stale-readback invalidation hook. */
+  setMutationObserver(observer: (() => void) | null): void {
+    this.mutationObserver = observer;
+  }
+
+  private notifyMutation(): void { this.mutationObserver?.(); }
 
   constructor(seed = 0x6d2b79f5) {
     this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6d2b79f5 : 0x6d2b79f5;
@@ -66,6 +74,7 @@ export class WorldEvents {
     this.history = [];
     this._nextAuto = 600;
     this._rngState = this.initialRngState;
+    this.notifyMutation();
   }
 
   private _random(): number {
@@ -123,6 +132,7 @@ export class WorldEvents {
     this.history = history;
     this._nextAuto = snapshot.nextAuto;
     this._rngState = snapshot.rngState >>> 0;
+    this.notifyMutation();
   }
 
   // Backward-compatible names retained for existing random-state callers.
@@ -150,13 +160,17 @@ export class WorldEvents {
     };
     this.history.unshift(ev);
     if (this.history.length > 20) this.history.pop();
+    this.notifyMutation();
     return { ...ev };
   }
 
   // Fires random events at intervals — call from SimulationEngine.step()
   autoTick(grid: VoxelGrid, tick: number): WorldEvent | null {
     this._nextAuto--;
-    if (this._nextAuto > 0) return null;
+    if (this._nextAuto > 0) {
+      this.notifyMutation();
+      return null;
+    }
     // Randomize next interval: 400..1200 ticks
     this._nextAuto = 400 + Math.floor(this._random() * 800);
     const types: EventType[] = [
