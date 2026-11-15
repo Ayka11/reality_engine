@@ -1,4 +1,5 @@
 import { InfiniteWorldRenderer, AUTHORITATIVE_SCULPT_HISTORY_CHANGED_EVENT } from './render/InfiniteWorldRenderer'
+import { GlobalEntityIdentityRegistry } from './entity/GlobalEntityIdentityRegistry'
 import { WorldFieldVolumeRenderer } from './render/WorldFieldVolumeRenderer'
 import { worldResourceEconomy } from './worldLibrary/WorldResourceEconomy'
 import { settlementGrowthModel } from './worldLibrary/SettlementGrowthModel'
@@ -56,6 +57,67 @@ export function bootstrapInfiniteWorld() {
   world.setSimulationRunning(Boolean((window as any).realityEnginePlaying))
   ;(window as any).infiniteWorld = world
   ;(window as any).infiniteWorldControls = world
+
+  // Derived namespaced identity directory for the runtime actually booted by index.html.
+  // WorldObjectManager and WorldAssetRuntime remain authoritative for their own records.
+  const globalEntityIdentityRegistry = new GlobalEntityIdentityRegistry()
+  ;(window as any).getGlobalEntityIdentitySnapshot = () => {
+    const entries = world.objects.values()
+    const externalAssetPlacements = world.getExternalAssetPlacementIdentityRecords()
+    globalEntityIdentityRegistry.replaceDomains([
+      {
+        domain: 'infinite-world-object',
+        entries: entries.map(object => ({ id: object.id, kind: object.kind })),
+      },
+      {
+        domain: 'external-asset-placement',
+        entries: externalAssetPlacements,
+      },
+    ])
+    return Object.freeze({
+      ...globalEntityIdentityRegistry.snapshot(),
+      coverage: Object.freeze({
+        status: 'partial' as const,
+        capturedDomains: Object.freeze([
+          'infinite-world-object',
+          'external-asset-placement',
+        ]),
+        excludedDomains: Object.freeze([
+          Object.freeze({
+            domain: 'finite-simulation-entity',
+            source: 'src/simulation/SimulationEngine.ts',
+            reason: 'The finite SimulationEngine is not part of the index.html boot.js runtime entrypoint.',
+          }),
+          Object.freeze({
+            domain: 'simulation-agent',
+            source: 'src/simulation/AgentSystem.ts',
+            reason: 'The finite simulation agent system is not part of the active boot.js runtime.',
+          }),
+          Object.freeze({
+            domain: 'simulation-civilization',
+            source: 'src/simulation/CivilizationSystem.ts',
+            reason: 'The finite simulation civilization system is not part of the active boot.js runtime.',
+          }),
+          Object.freeze({
+            domain: 'legacy-cluster',
+            source: 'src/entity/EntityLayer.ts',
+            reason: 'Legacy cluster detector is not wired into the active boot.js runtime.',
+          }),
+          Object.freeze({
+            domain: 'kernel-ecs',
+            source: 'src/kernel/World.ts',
+            reason: 'Standalone ECS World has no provider connected to the active runtime.',
+          }),
+          Object.freeze({
+            domain: 'world-library-runtime',
+            source: 'src/worldLibrary',
+            reason: 'World Library civilization, resource economy and infrastructure records require explicit lifecycle and identity adapters.',
+          }),
+        ]),
+        ownership: 'This directory indexes stable namespaced IDs; WorldObjectManager and WorldAssetRuntime remain authoritative for state and lifecycle.',
+      }),
+    })
+  }
   ;(window as any).setInfiniteWorldSimulationRunning = (running: boolean) => world.setSimulationRunning(running)
   ;(window as any).getInfiniteWorldSimulationRunning = () => world.isSimulationRunning()
   ;(window as any).worldFieldMutate = (mutation: any) => world.applyAuthoritativeFieldMutation(mutation)
