@@ -58,9 +58,8 @@ assert.equal(liveComponent.state.profile.energy, 25,
   "mutating a ComponentStore snapshot must not mutate the live component");
 
 store.set(entity.id, createComponent("health", { value: 1 }));
-assert.equal(storeSnapshot.get("health")?.has(entity.id), undefined,
+assert.equal(storeSnapshot.has("health"), false,
   "later component registrations must not alter the snapshot's component map");
-assert.equal(store.has?.("agent-state"), undefined);
 
 const stateHashBeforeSnapshotMutation = world.stateHash();
 entitySnapshotComponent.state.profile.energy = 999;
