@@ -52,7 +52,7 @@ try {
     const surface = world.getWorldSurfaceProviderInfo?.();
     const history = world.getAuthoritativeSculptHistoryState?.();
     return {
-      directMutableReferences: ["fieldSampler", "authoritativeField", "authoritativeSculptTransactions", "terrainDeformations"]
+      directMutableReferences: ["fieldSampler", "authoritativeField", "authoritativeSculptTransactions", "terrainDeformations", "history"]
         .filter(key => key in world),
       diagnosticsAvailable: !!diagnostics && Array.isArray(diagnostics.mutations),
       diagnosticMutators: ["apply", "restore", "clear", "setBase"]
