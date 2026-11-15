@@ -48,6 +48,7 @@ jobs:
       - run: npm run test:entity-grid-ownership
       - run: npm run test:kernel-entity-ownership
       - run: npm run test:global-entity-identity-registry
+      - run: npm run test:world-library-civilization-runtime-ownership
       - run: npm run test:simulation-engine-core-recovery
       - run: npm run test:chem-layer-recovery
       - run: npm run test:civilization-system-recovery
