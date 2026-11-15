@@ -581,7 +581,7 @@ export class SimulationEngine {
       this.grid.restoreState(state.grid);
       this.entityLayer.restore(state.entities, this.grid.size);
       this.entityLayer.assertGridEntityOwnershipSynchronized(this.grid);
-      this.agents.restore(state.agents);
+      this.restoreAgentSystemSnapshot(state.agents);
       this.chemLayer.restore(state.chemistry, this.grid.size);
       this.worldEvents.restore(state.worldEvents);
       this.causal.restore(state.causal);
@@ -644,6 +644,15 @@ export class SimulationEngine {
       }
       throw error;
     }
+  }
+
+  /**
+   * Restore AgentSystem state only after confirming every agent remains inside
+   * the active grid. AgentSystem validates the complete detached candidate
+   * before publishing any map or allocator changes.
+   */
+  restoreAgentSystemSnapshot(snapshot: AgentSystemSnapshot): void {
+    this.agents.restore(snapshot, this.grid);
   }
 
   private _worldMetrics(): WorldMetrics {

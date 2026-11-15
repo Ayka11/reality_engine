@@ -60,6 +60,47 @@ detachedEntityRead[0]!.genome.metabolismRate = 99;
 entitySnapshotBaseline.entities[0]!.cells.push(999998);
 assert.deepEqual(debugView.entityLayer.snapshot(), debugViewEngine.entityLayer.snapshot(),
   "entity diagnostics reads and returned snapshots must remain detached from authoritative state");
+
+// AgentSystem is also exposed only as a frozen read-only diagnostics facade.
+debugViewEngine.agents.seed(debugViewEngine.grid, 1);
+const agentDiagnostics = debugView.agents as unknown as Record<string, unknown>;
+for (const method of ["seed", "tick", "restore", "clear", "setMutationObserver", "restoreRandomState"]) {
+  assert.equal(typeof agentDiagnostics[method], "undefined",
+    `browser diagnostics must not expose AgentSystem mutator ${method}`);
+}
+for (const method of ["snapshot", "getAgents", "agentMarkers", "snapshotRandomState"]) {
+  assert.equal(typeof agentDiagnostics[method], "function",
+    `browser diagnostics must retain AgentSystem read method ${method}`);
+}
+assert.equal(typeof (debugView as unknown as Record<string, unknown>).restoreAgentSystemSnapshot, "undefined",
+  "browser diagnostics must not expose the internal AgentSystem restore boundary");
+assert.equal(Object.getOwnPropertyDescriptor(debugView, "agents")?.value, debugView.agents,
+  "agent diagnostics facade must remain protected through own-property descriptor inspection");
+assert.equal(Reflect.set(debugView, "agents", debugViewEngine.agents), false,
+  "browser diagnostics must reject replacing the authoritative AgentSystem");
+assert.equal(Reflect.defineProperty(debugView, "agents", { value: debugViewEngine.agents }), false,
+  "browser diagnostics must reject redefining the AgentSystem property");
+assert.equal(Reflect.deleteProperty(debugView, "agents"), false,
+  "browser diagnostics must not allow deletion of the AgentSystem facade");
+
+const agentSnapshotBaseline = debugView.agents.snapshot();
+const agentReadBaseline = debugView.agents.getAgents();
+const agentMarkersBaseline = debugView.agents.agentMarkers();
+assert.ok(agentReadBaseline.length > 0, "agent diagnostics fixture must create a live agent");
+assert.ok(agentMarkersBaseline.length > 0, "agent diagnostics fixture must expose marker data");
+const detachedAgentSnapshot = debugView.agents.snapshot();
+detachedAgentSnapshot.agents[0]!.energy = -1;
+const detachedAgentRead = debugView.agents.getAgents();
+detachedAgentRead[0]!.x = 999;
+const detachedAgentMarkers = debugView.agents.agentMarkers();
+detachedAgentMarkers[0]!.position[0] = 999;
+assert.deepEqual(debugView.agents.snapshot(), agentSnapshotBaseline,
+  "agent diagnostics snapshots and public list/marker reads must remain detached from authoritative state");
+assert.deepEqual(debugView.agents.getAgents(), agentReadBaseline,
+  "agent diagnostics getAgents must not return live agent records");
+assert.deepEqual(debugView.agents.agentMarkers(), agentMarkersBaseline,
+  "agent diagnostics marker reads must not return live position arrays");
+
 debugView.restoreTick(3);
 assert.equal(debugViewEngine.tick, 3, "safe engine methods must remain forwarded by the debug view");
 
@@ -107,6 +148,32 @@ assertGenerationAdvances("WorldEvents.reset", () => mutatorGuardEngine.worldEven
 assertGenerationAdvances("WorldEvents.autoTick scheduler", () => {
   mutatorGuardEngine.worldEvents.autoTick(mutatorGuardEngine.grid, 1);
 });
+
+// Agent snapshots must be grid-aware at the engine boundary. A malformed
+// coordinate must fail before publishing candidate state and core recovery
+// must return every previously authoritative domain to its pre-call value.
+const agentBoundsEngine = new SimulationEngine(4, 4, 2);
+agentBoundsEngine.agents.seed(agentBoundsEngine.grid, 1);
+const agentBoundsBaseline = agentBoundsEngine.captureCoreRecoveryState();
+const outOfGridAgentSnapshot = agentBoundsEngine.agents.snapshot();
+outOfGridAgentSnapshot.agents[0]!.x = agentBoundsEngine.grid.W;
+assert.throws(
+  () => agentBoundsEngine.restoreAgentSystemSnapshot(outOfGridAgentSnapshot),
+  /out-of-grid coordinates/,
+  "engine-owned AgentSystem restore must reject coordinates outside the active grid",
+);
+assert.deepEqual(agentBoundsEngine.agents.snapshot(), agentBoundsBaseline.agents,
+  "rejected out-of-grid AgentSystem restore must leave the live agent population untouched");
+
+const invalidAgentCoreSnapshot = agentBoundsEngine.captureCoreRecoveryState();
+invalidAgentCoreSnapshot.agents.agents[0]!.z = agentBoundsEngine.grid.D;
+assert.throws(
+  () => agentBoundsEngine.restoreCoreRecoveryState(invalidAgentCoreSnapshot),
+  /out-of-grid coordinates/,
+  "core recovery must reject out-of-grid agent coordinates",
+);
+assert.deepEqual(agentBoundsEngine.captureCoreRecoveryState(), agentBoundsBaseline,
+  "rejected out-of-grid core recovery must roll back the complete engine state");
 const beforeInvalidTickRestore = mutatorGuardEngine.captureCoreRecoveryState();
 const generationBeforeInvalidTickRestore = engineInternals._stateGeneration;
 for (const invalidTick of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.MAX_VALUE]) {

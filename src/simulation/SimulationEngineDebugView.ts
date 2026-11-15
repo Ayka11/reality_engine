@@ -1,5 +1,6 @@
 import type { SimulationEngine } from "./SimulationEngine";
 import type { EntityLayer } from "./EntityLayer";
+import type { AgentSystem } from "./AgentSystem";
 
 /**
  * Browser-facing diagnostics view. The simulation engine remains the owner of
@@ -11,12 +12,19 @@ export type EntityLayerDiagnosticsView = Readonly<Pick<
   "snapshot" | "getEntities" | "extinctCount" | "totalSpawned" | "mutationStrength"
 >>;
 
+export type AgentSystemDiagnosticsView = Readonly<Pick<
+  AgentSystem,
+  "snapshot" | "getAgents" | "agentMarkers" | "maxAgents" | "snapshotRandomState"
+>>;
+
 export type SimulationEngineDebugView = Omit<
   SimulationEngine,
-  "gpu" | "entityLayer" | "restoreEntityLayerSnapshot"
+  "gpu" | "entityLayer" | "agents" |
+  "restoreEntityLayerSnapshot" | "restoreAgentSystemSnapshot"
 > & {
   readonly gpu: Readonly<{ isAvailable: boolean }>;
   readonly entityLayer: EntityLayerDiagnosticsView;
+  readonly agents: AgentSystemDiagnosticsView;
 };
 
 export function createSimulationEngineDebugView(
@@ -40,17 +48,27 @@ export function createSimulationEngineDebugView(
     snapshot: () => engine.entityLayer.snapshot(),
     getEntities: () => engine.entityLayer.getEntities(),
   });
+  const agentSystemDiagnostics: AgentSystemDiagnosticsView = Object.freeze({
+    get maxAgents(): number {
+      return engine.agents.maxAgents;
+    },
+    snapshot: () => engine.agents.snapshot(),
+    getAgents: () => engine.agents.getAgents(),
+    agentMarkers: () => engine.agents.agentMarkers(),
+    snapshotRandomState: () => engine.agents.snapshotRandomState(),
+  });
 
   return new Proxy(engine, {
     get(target, property) {
       if (property === "gpu") return gpuDiagnostics;
       if (property === "entityLayer") return entityLayerDiagnostics;
-      if (property === "restoreEntityLayerSnapshot") return undefined;
+      if (property === "agents") return agentSystemDiagnostics;
+      if (property === "restoreEntityLayerSnapshot" || property === "restoreAgentSystemSnapshot") return undefined;
       const value = Reflect.get(target, property, target);
       return typeof value === "function" ? value.bind(target) : value;
     },
     set(target, property, value) {
-      if (property === "gpu" || property === "entityLayer") return false;
+      if (property === "gpu" || property === "entityLayer" || property === "agents") return false;
       return Reflect.set(target, property, value, target);
     },
     defineProperty(target, property, descriptor) {
@@ -68,6 +86,9 @@ export function createSimulationEngineDebugView(
       }
       if (property === "entityLayer" && descriptor && "value" in descriptor) {
         return { ...descriptor, value: entityLayerDiagnostics };
+      }
+      if (property === "agents" && descriptor && "value" in descriptor) {
+        return { ...descriptor, value: agentSystemDiagnostics };
       }
       return descriptor;
     },

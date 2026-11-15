@@ -260,6 +260,8 @@ assert.match(editorSource, /sim\.restoreEntityLayerSnapshot\(candidate\.entityLa
   'new packages must restore complete authoritative entity state through the engine ownership boundary');
 assert.match(mainSource, /restoreEntityLayerSnapshot:\s*snapshot\s*=>\s*sim\.restoreEntityLayerSnapshot\(snapshot\)/,
   'WorldSaveSystem entity restore must use the same engine ownership boundary');
+assert.match(mainSource, /restoreAgentSystemSnapshot:\s*snapshot\s*=>\s*sim\.restoreAgentSystemSnapshot\(snapshot\)/,
+  'WorldSaveSystem agent restore must validate coordinates against the active grid');
 assert.match(editorSource, /fieldOwner !== entity\.id[\s\S]*ownerByCell\.get\(cellIndex\) !== fieldOwner/,
   'voxel ENTITY_ID ownership must agree with the restored spatial entity model');
 assert.match(editorSource, /this\.options\.lawEngine\.restore\(candidate\.lawEngine\)/,

@@ -89,7 +89,7 @@ export class AgentSystem {
     };
   }
 
-  restore(snapshot: AgentSystemSnapshot): void {
+  restore(snapshot: AgentSystemSnapshot, grid?: VoxelGrid): void {
     if (!snapshot ||
         typeof snapshot !== "object" ||
         !Array.isArray(snapshot.agents) ||
@@ -115,6 +115,10 @@ export class AgentSystem {
           !Number.isSafeInteger(agent.x) || (agent.x as number) < 0 ||
           !Number.isSafeInteger(agent.y) || (agent.y as number) < 0 ||
           !Number.isSafeInteger(agent.z) || (agent.z as number) < 0 ||
+          (grid !== undefined &&
+            ((agent.x as number) >= grid.W ||
+             (agent.y as number) >= grid.H ||
+             (agent.z as number) >= grid.D)) ||
           typeof agent.energy !== "number" ||
           !Number.isFinite(agent.energy) || agent.energy < 0 ||
           !Number.isSafeInteger(agent.age) || (agent.age as number) < 0 ||
@@ -123,7 +127,9 @@ export class AgentSystem {
           typeof agent.memory !== "number" || !Number.isFinite(agent.memory) ||
           typeof agent.signal !== "number" || !Number.isFinite(agent.signal) ||
           !Number.isSafeInteger(agent.children) || (agent.children as number) < 0) {
-        throw new Error("Invalid AgentSystem snapshot agent state");
+        throw new Error(grid
+          ? "Invalid AgentSystem snapshot agent state or out-of-grid coordinates"
+          : "Invalid AgentSystem snapshot agent state");
       }
 
       const restoredAgent: Agent = {

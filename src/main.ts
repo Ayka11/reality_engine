@@ -1333,7 +1333,7 @@ saveSystem = new WorldSaveSystem(sim.grid, sim.laws, null, {
     }
   },
   getAgentSystemSnapshot: () => sim.agents.snapshot(),
-  restoreAgentSystemSnapshot: snapshot => sim.agents.restore(snapshot),
+  restoreAgentSystemSnapshot: snapshot => sim.restoreAgentSystemSnapshot(snapshot),
   clearAgentRuntime: () => {
     sim.agents.clear();
     for (let cell = 0; cell < sim.grid.size; cell++) {
