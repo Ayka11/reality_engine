@@ -561,6 +561,13 @@ export class EntityLayer {
         );
       }
     }
+    // ENTITY_ID is authoritative EntityLayer-owned state for both dense and
+    // sparse grids. Sparse grids additionally verify their dense/chunk mirror
+    // above; this check verifies that the marker field itself exactly matches
+    // the layer's entity-to-cell ownership map before reconciliation can clear
+    // and rebuild those markers.
+    this.assertGridEntityOwnershipSynchronized(grid);
+
     const context = createFullDomainExecutionContext(grid);
     const connectivity = new EntityChunkConnectivity(this.bioThreshold).analyze(grid, context);
     if (connectivity.domainCoverageComplete !== true) {
