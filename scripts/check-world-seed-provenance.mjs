@@ -21,8 +21,8 @@ assert.equal(renderer.includes('const seed = this.generator.seed'), false)
 const reseedAt = renderer.indexOf('  reseed(newSeed: string)')
 assert.ok(reseedAt >= 0, 'renderer reseed must exist')
 const reseedBody = renderer.slice(reseedAt, renderer.indexOf('\n  dispose()', reseedAt))
-assert.ok(reseedBody.includes('this.fieldSampler.setGenerator(this.generator)'))
-assert.ok(reseedBody.includes('worldViewContract.setSeed(this.fieldSampler.surfaceProvider.seed)'),
+assert.ok(reseedBody.includes('this.#fieldSampler.setGenerator(this.generator)'))
+assert.ok(reseedBody.includes('worldViewContract.setSeed(this.#fieldSampler.surfaceProvider.seed)'),
   'reseed must retain the selected authored surface identity')
 
 const saveWorldAt = renderer.indexOf('  saveWorld(options:')
@@ -136,7 +136,7 @@ assert.match(reseedBody, /window as any\)\.worldAssetManifest = nextAssetManifes
 const startAt = renderer.indexOf('  startExperiment(metadata:')
 assert.ok(startAt >= 0, 'startExperiment method must exist')
 const experimentBody = renderer.slice(startAt, renderer.indexOf('\n  recordExperimentResult(', startAt))
-assert.ok(experimentBody.includes('const surfaceProvider = this.fieldSampler.surfaceProvider'))
+assert.ok(experimentBody.includes('const surfaceProvider = this.#fieldSampler.surfaceProvider'))
 assert.ok(experimentBody.includes('seed: surfaceProvider.seed'))
 assert.ok(experimentBody.includes('providerId: surfaceProvider.id'))
 assert.ok(experimentBody.includes('providerVersion: surfaceProvider.version'))
