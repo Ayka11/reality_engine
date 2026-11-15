@@ -102,7 +102,8 @@ export class FieldSampler {
     const activeProvider = this.registry.getActive()
     if (!activeProvider) throw new Error('No active scientific field provider')
     this.provider = activeProvider
-    return activeProvider.sample(x, y, z)
+    // Provider implementations may reuse a mutable sample object; callers must receive a detached value.
+    return { ...activeProvider.sample(x, y, z) }
   }
 
   sampleWorld(x: number, y?: number, z?: number): WorldContextSample {
