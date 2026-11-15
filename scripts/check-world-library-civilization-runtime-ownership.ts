@@ -23,6 +23,99 @@ try {
     "fork allocation must skip a stable ID that is already owned by another branch");
   assert.equal(runtime.branchesList().filter(branch => branch.branchId === fork.branchId).length, 1);
 
+  // Public branch readers must not expose authoritative Map values or nested
+  // history/state objects. Mutating any returned value must be a local edit.
+  const forkPopulation = runtime.branchSnapshot(fork.branchId)!.population;
+  fork.population = -1;
+  assert.equal(runtime.branchSnapshot(fork.branchId)?.population, forkPopulation,
+    "forkBranch must return a detached branch snapshot");
+
+  const exposedSnapshot = runtime.branchSnapshot(fork.branchId)!;
+  exposedSnapshot.population = -2;
+  assert.equal(runtime.branchSnapshot(fork.branchId)?.population, forkPopulation,
+    "branchSnapshot must not expose the stored history record");
+
+  const exposedHistory = runtime.branchHistory(fork.branchId);
+  exposedHistory[0]!.branchId = "tampered-history-owner";
+  exposedHistory.push({ ...exposedHistory[0]!, branchId: "tampered-history-owner" });
+  assert.equal(runtime.branchHistory(fork.branchId).length, 1,
+    "branchHistory must return a detached array");
+  assert.equal(runtime.branchHistory(fork.branchId)[0]!.branchId, fork.branchId,
+    "branchHistory records must be detached from stored ownership keys");
+
+  const exposedBranchList = runtime.branchesList();
+  const listedBranch = exposedBranchList.find(branch => branch.branchId === fork.branchId)!;
+  listedBranch.latest!.population = -3;
+  assert.equal(runtime.branchSnapshot(fork.branchId)?.population, forkPopulation,
+    "branchesList latest records must be detached");
+
+  const exposedBranchState = runtime.branchState(fork.branchId)!;
+  const storedForkPopulation = runtime.branchState(fork.branchId)!.settlement.population;
+  exposedBranchState.settlement.population = -4;
+  exposedBranchState.memory.trajectory.push({
+    tick: 999,
+    type: "agricultural",
+    score: -1,
+    stability: -1,
+    evolutionPressure: -1,
+  });
+  assert.equal(runtime.branchState(fork.branchId)?.settlement.population, storedForkPopulation,
+    "branchState must deep-clone nested state");
+  assert.notEqual(runtime.branchState(fork.branchId)?.memory.trajectory.some(item => item.tick === 999), true,
+    "branchState trajectory arrays must be detached");
+
+  const exposedEnvironment = runtime.branchEnvironment(fork.branchId)!;
+  exposedEnvironment.moisture = -5;
+  assert.notEqual(runtime.branchEnvironment(fork.branchId)?.moisture, -5,
+    "branchEnvironment must be detached");
+
+  const exposedCausalEvents = runtime.branchCausalEvents(fork.branchId);
+  const originalCausalEventCount = runtime.branchCausalEvents(fork.branchId).length;
+  exposedCausalEvents.push({ id: "external-mutation", year: 0 } as never);
+  assert.equal(runtime.branchCausalEvents(fork.branchId).length, originalCausalEventCount,
+    "branchCausalEvents must return a detached array");
+
+  const tickResult = runtime.tickBranch(fork.branchId, 1);
+  assert.ok(tickResult);
+  const postTickPopulation = runtime.branchState(fork.branchId)!.settlement.population;
+  tickResult.state.settlement.population = -6;
+  tickResult.state.memory.trajectory.push({
+    tick: 1000,
+    type: "agricultural",
+    score: -1,
+    stability: -1,
+    evolutionPressure: -1,
+  });
+  assert.equal(runtime.branchState(fork.branchId)?.settlement.population, postTickPopulation,
+    "tickBranch must return a detached result rather than its committed branch state");
+  assert.notEqual(runtime.branchState(fork.branchId)?.memory.trajectory.some(item => item.tick === 1000), true,
+    "tickBranch result must not share nested trajectory arrays with branch state");
+
+  const experimentResult = runtime.runExperiment("civilization-read-ownership", [
+    {
+      id: "baseline",
+      sourceBranch: "origin",
+      baseline: true,
+      override: { reason: "Verify detached experiment results" },
+    },
+  ], 1);
+  const experimentBranch = experimentResult.branches[0]!;
+  const storedExperimentBranch = runtime.experiment("civilization-read-ownership")!.branches[0]!;
+  experimentBranch.history[0]!.population = -7;
+  experimentBranch.final!.population = -8;
+  assert.equal(
+    runtime.experiment("civilization-read-ownership")!.branches[0]!.history[0]!.population,
+    storedExperimentBranch.history[0]!.population,
+    "runExperiment must not return the internally stored experiment object",
+  );
+  const exposedExperiment = runtime.experiment("civilization-read-ownership")!;
+  exposedExperiment.branches[0]!.history[0]!.population = -9;
+  assert.equal(
+    runtime.experiment("civilization-read-ownership")!.branches[0]!.history[0]!.population,
+    storedExperimentBranch.history[0]!.population,
+    "experiment getter must return a detached result",
+  );
+
   const save = runtime.serializeState();
   const originSave = save.branches.find(branch => branch.branchId === "origin");
   const forkStateSave = save.branchStates.find(entry => entry.branchId === fork.branchId);
