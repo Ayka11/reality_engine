@@ -42,7 +42,6 @@ import { sceneComposer }                          from './modes/cinema/SceneComp
 import { RealityLawBridge }                       from './laws/RealityLawBridge'
 import { ChunkWorldFieldProvider } from './infinity/ChunkWorldFieldProvider'
 import { GeneratorFieldProvider } from './infinity/ScientificFieldProvider'
-import { MutableWorldFieldProvider } from './infinity/MutableWorldFieldProvider'
 import { WorldFieldChunkStore, worldFieldChunkCoord } from './infinity/WorldFieldChunkStore'
 import { DeterministicWorldFieldChunkProvider } from './infinity/DeterministicWorldFieldChunkProvider'
 import { WorkerWorldFieldChunkProvider } from './infinity/WorkerWorldFieldChunkProvider'
@@ -199,7 +198,6 @@ function applyWorkerFrameBatch(frames: Iterable<ArrayBuffer>, preserveZeroKeys?:
 }
 
 let chunkWorldFieldProvider: ChunkWorldFieldProvider | null = null
-let authoritativeWorldFieldProvider: MutableWorldFieldProvider | null = null
 const worldFieldChunkStore = new WorldFieldChunkStore(128, (chunk) => {
   // Do not persist a partial worker view over the source snapshot being restored.
   if (worldFieldRestoreActive && worldFieldRestoreCoord &&
@@ -236,9 +234,9 @@ function installChunkWorldFieldProvider() {
   const world = getInfiniteWorld()
   if (!world) return false
   const fallback = new GeneratorFieldProvider(world.generator)
-  if (!authoritativeWorldFieldProvider) authoritativeWorldFieldProvider = new MutableWorldFieldProvider(fallback)
-  else authoritativeWorldFieldProvider.setBase(fallback)
-  world.fieldSampler.setProvider(authoritativeWorldFieldProvider)
+  // The renderer's private authoritative provider remains the sole field source.
+  // Chunk streaming owns its separate ChunkWorldFieldProvider and must not replace
+  // the field used by committed brush/law transactions.
   if (!chunkWorldFieldProvider) {
     chunkWorldFieldProvider = new ChunkWorldFieldProvider(localChunks, () => worldViewContract.snapshot(), fallback)
   }
@@ -265,12 +263,12 @@ win['worldFieldChunkCoord'] = worldFieldChunkCoord
 win['worldFieldViewWindow'] = (width: number, height: number, sliceY?: number) => {
   const world = getInfiniteWorld()
   if (!world) return null
-  return world.fieldSampler.sampleViewWindow(width, height, sliceY)
+  return world.sampleWorldFieldViewWindow(width, height, sliceY)
 }
 win['worldFieldSample'] = (x: number, y: number, z: number) => {
   const world = getInfiniteWorld()
   if (!world || ![x, y, z].every(Number.isFinite)) return null
-  return world.fieldSampler.sample(x, y, z)
+  return world.sampleAuthoritativeField(x, y, z)
 }
 win['setWorldViewCenter'] = (x: number, y: number, z: number) => worldViewContract.setCenter(x, y, z)
 win['setWorldViewSliceY'] = (y: number) => worldViewContract.setSliceY(y)
