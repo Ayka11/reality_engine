@@ -53,10 +53,10 @@ for (const name of ["undoLegacySculptAuthoritative", "redoLegacySculptAuthoritat
 
 const worldEnvironment = methodBody("getWorldEnvironment");
 const settlementGeneration = methodBody("generateSettlement");
-assert.match(settlementGeneration, /this\.fieldSampler\.sample\(cx \+ i, 0, cz\)\.entropy/,
+assert.match(settlementGeneration, /this\.#fieldSampler\.sample\(cx \+ i, 0, cz\)\.entropy/,
   "settlement placement must use the authoritative entropy field");
 
-assert.match(worldEnvironment, /this\.fieldSampler\.sample\(x, y, z\)/,
+assert.match(worldEnvironment, /this\.#fieldSampler\.sample\(x, y, z\)/,
   "environment-driven civilization/production systems must consume the authoritative field");
 assert.doesNotMatch(worldEnvironment, /this\.generator\.sampleField\(x, y, z\)/,
   "environment sampling must not bypass committed authoritative field mutations");
@@ -69,7 +69,7 @@ assert.match(authoritativeMutation, /this\.refreshTerrainPatches\(\)/,
   "the canonical authoritative mutation path must refresh the renderer");
 
 const terrainBuilder = methodBody("buildTerrainPatch");
-assert.match(terrainBuilder, /if\s*\(this\.materialMode\s*===\s*'field'\)[\s\S]*?this\.fieldSampler\.sample\(/,
+assert.match(terrainBuilder, /if\s*\(this\.materialMode\s*===\s*'field'\)[\s\S]*?this\.#fieldSampler\.sample\(/,
   "field visualization must sample the authoritative scientific field");
 assert.match(terrainBuilder, /const\s+density\s*=\s*Math\.max\(0,\s*Math\.min\(1,\s*field\.density\)\)/,
   "field visualization must derive vertex color from the sampled field");
@@ -81,12 +81,12 @@ assert.match(terrainGeometryFinalization, /geometry\.computeVertexNormals\(\)/,
 const terrainHeight = methodBody("sampleTerrainHeight");
 assert.ok(terrainHeight.includes('provider.sampleSurface(x, z)'),
   "terrain geometry must sample its selected surface provider baseline");
-assert.ok(terrainHeight.includes('surface.height + this.terrainDeformations.sampleDelta(x, z)'),
+assert.ok(terrainHeight.includes('surface.height + this.#terrainDeformations.sampleDelta(x, z)'),
   "terrain geometry must add the authoritative deformation overlay to the selected surface baseline");
 const fieldPersistence = methodBody("persistAuthoritativeFieldState");
 assert.match(fieldPersistence, /beginSaveTransaction\(\)/,
   "authoritative field mutations must open the journal before persistence");
-assert.match(fieldPersistence, /saveFieldState\(this\.authoritativeField\.serialize\(\)\)/,
+assert.match(fieldPersistence, /saveFieldState\(this\.#authoritativeField\.serialize\(\)\)/,
   "authoritative field state must be written in its persistence transaction");
 assert.match(fieldPersistence, /saveProvenanceState\(runtimeProvenance\.getTrace\(\)\)/,
   "causal provenance must be saved in the same transaction as the authoritative field");
@@ -99,12 +99,12 @@ assert.match(terrainPersistence, /if \(!saved\)/,
 assert.match(terrainPersistence, /console\.warn/,
   "failed terrain autosaves must surface a diagnostic while keeping in-memory edits usable");
 const terrainSculpt = methodBody("sculptTerrainAt");
-assert.match(terrainSculpt, /this\.terrainDeformations\.applyBrush/);
+assert.match(terrainSculpt, /this\.#terrainDeformations\.applyBrush/);
 assert.match(terrainSculpt, /this\.refreshTerrainPatches\(\)/);
 assert.match(terrainSculpt, /this\.persistTerrainDeformationState\(\)/);
 for (const name of ["undoTerrainSculpt", "redoTerrainSculpt"]) {
   const body = methodBody(name);
-  assert.match(body, /this\.terrainDeformations\.(?:undo|redo)\(\)/);
+  assert.match(body, /this\.#terrainDeformations\.(?:undo|redo)\(\)/);
   assert.match(body, /this\.refreshTerrainPatches\(\)/);
   assert.match(body, /this\.persistTerrainDeformationState\(\)/);
 }
@@ -139,11 +139,11 @@ assert.match(methodBody("loadWorld"), /readTerrainDeformationState/);
 assert.match(methodBody("loadWorld"), /readFieldState/);
 assert.match(methodBody("loadWorld"), /rollbackStagedChunks/,
   "failed sidecar preflight must evict newly staged chunk cache entries before returning");
-assert.match(methodBody("loadWorld"), /if \(options\.restoreFieldCheckpoint !== false\) \{\s*this\.authoritativeField\.clear\(\)\s*\}/,
+assert.match(methodBody("loadWorld"), /if \(options\.restoreFieldCheckpoint !== false\) \{\s*this\.#authoritativeField\.clear\(\)\s*\}/,
   "manual Load without a saved field snapshot must clear stale live edits instead of leaking them into the restored world");
-assert.match(methodBody("loadWorld"), /if \(options\.restoreFieldCheckpoint !== false \|\| persistedField\) \{[\s\S]*?this\.authoritativeSculptTransactions\.clear\(\)/,
+assert.match(methodBody("loadWorld"), /if \(options\.restoreFieldCheckpoint !== false \|\| persistedField\) \{[\s\S]*?this\.#authoritativeSculptTransactions\.clear\(\)/,
   "manual Load must clear stale authoritative sculpt Undo/Redo transactions even when no field snapshot exists");
-assert.match(methodBody("loadWorld"), /this\.objects\.clear\(\)[\s\S]*?for \(const object of restoredObjects\) this\.objects\.add\(object\)[\s\S]*?this\.history = new WorldEditHistory\(\)/,
+assert.match(methodBody("loadWorld"), /this\.objects\.clear\(\)[\s\S]*?for \(const object of restoredObjects\) this\.objects\.add\(object\)[\s\S]*?this\.#history = new WorldEditHistory\(\)/,
   "successful world load must reset object Undo/Redo history so transactions from the previous world cannot be replayed");
 assert.match(methodBody("loadWorld"), /else \{\s*\/\/ A manual Load with no checkpoint or autosave[\s\S]*?if \(options\.restoreFieldCheckpoint !== false\)/,
   "startup restore must preserve constructor-initialized field state when no autosave exists");
