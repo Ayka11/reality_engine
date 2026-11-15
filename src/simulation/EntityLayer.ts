@@ -46,6 +46,18 @@ export interface EntityLayerSnapshot {
   rngState: number;
 }
 
+interface EntityLayerTickRollbackState {
+  originalEntities: Map<number, Entity>;
+  entitySnapshots: Map<number, Entity>;
+  entityMutableRefs: Map<number, Pick<Entity, "cells" | "centroid" | "genome" | "memoryBuffer" | "colorRgb">>;
+  bufferSnapshot: Float32Array;
+  sparseBackBufferSnapshot: Float32Array | null;
+  bioThreshold: number;
+  nextId: number;
+  extinctCount: number;
+  rngState: number;
+}
+
 const LIFE_STAGES: readonly LifeStage[] = ['juvenile', 'mature', 'elder'];
 
 function defaultGenome(random: () => number): EntityGenome {
@@ -402,44 +414,17 @@ export class EntityLayer {
 
     // Capture one transaction snapshot for the whole EntityLayer tick. The
     // reconciliation commit reuses this state rather than copying the large
-    // grid a second time.
-    const rollbackTick = (): void => {
-      buf.set(bufferSnapshot);
-      if (grid instanceof SparseVoxelGrid) {
-        if (sparseBackBufferSnapshot) getMutableBuffer(grid, "back").set(sparseBackBufferSnapshot);
-        grid.syncDenseToChunks();
-      }
-      for (const [id, original] of originalEntities) {
-        const snapshot = entitySnapshots.get(id)!;
-        const refs = entityMutableRefs.get(id)!;
-        original.cells = refs.cells;
-        original.centroid = refs.centroid;
-        original.genome = refs.genome;
-        original.memoryBuffer = refs.memoryBuffer;
-        original.colorRgb = refs.colorRgb;
-        original.cells.length = 0;
-        for (const index of snapshot.cells) original.cells.push(index);
-        original.centroid[0] = snapshot.centroid[0];
-        original.centroid[1] = snapshot.centroid[1];
-        original.centroid[2] = snapshot.centroid[2];
-        Object.assign(original.genome, snapshot.genome);
-        original.age = snapshot.age;
-        original.energy = snapshot.energy;
-        original.stage = snapshot.stage;
-        original.memoryBuffer.set(snapshot.memoryBuffer);
-        original.memPtr = snapshot.memPtr;
-        original.symbol = snapshot.symbol;
-        original.colorRgb[0] = snapshot.colorRgb[0];
-        original.colorRgb[1] = snapshot.colorRgb[1];
-        original.colorRgb[2] = snapshot.colorRgb[2];
-        original.children = snapshot.children;
-        original.reproCounter = snapshot.reproCounter;
-      }
-      this.entities = originalEntities;
-      this.bioThreshold = thresholdSnapshot;
-      this.nextId = nextIdSnapshot;
-      this.extinctCountValue = extinctSnapshot;
-      this._rngState = rngSnapshot;
+    // grid a second time. The snapshot contains copies, never raw grid aliases.
+    const rollbackState: EntityLayerTickRollbackState = {
+      originalEntities,
+      entitySnapshots,
+      entityMutableRefs,
+      bufferSnapshot,
+      sparseBackBufferSnapshot,
+      bioThreshold: thresholdSnapshot,
+      nextId: nextIdSnapshot,
+      extinctCount: extinctSnapshot,
+      rngState: rngSnapshot,
     };
 
     try {
@@ -449,7 +434,7 @@ export class EntityLayer {
     // Entity identity reconciliation now runs through a full-domain,
     // revision-bound chunk plan. The adapter remains advisory for selective LOD;
     // this path proves complete coverage of the current authoritative grid.
-    this._reconcileFullDomain(grid, rollbackTick);
+    this._reconcileFullDomain(grid, rollbackState);
 
     // ── Per-entity behaviour ─────────────────────────────────────────────────
     for (const [, ent] of this.entities) {
@@ -533,7 +518,7 @@ export class EntityLayer {
     }
     } catch (error) {
       try {
-        rollbackTick();
+        this._rollbackTick(grid, rollbackState);
       } catch (rollbackError) {
         const originalMessage = error instanceof Error ? error.message : String(error);
         const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
@@ -546,7 +531,55 @@ export class EntityLayer {
     }
   }
 
-  private _reconcileFullDomain(grid: VoxelGrid, rollbackTick: () => void): void {
+  private _rollbackTick(grid: VoxelGrid, rollback: EntityLayerTickRollbackState): void {
+    // Restore through tracked public views. This does not retain or reacquire a
+    // raw typed-array alias after the original tick's synchronous hot path.
+    grid.buffer.set(rollback.bufferSnapshot);
+    if (grid instanceof SparseVoxelGrid) {
+      if (rollback.sparseBackBufferSnapshot) {
+        grid.backBuffer.set(rollback.sparseBackBufferSnapshot);
+      }
+      grid.syncDenseToChunks();
+    }
+
+    for (const [id, original] of rollback.originalEntities) {
+      const snapshot = rollback.entitySnapshots.get(id)!;
+      const refs = rollback.entityMutableRefs.get(id)!;
+      original.cells = refs.cells;
+      original.centroid = refs.centroid;
+      original.genome = refs.genome;
+      original.memoryBuffer = refs.memoryBuffer;
+      original.colorRgb = refs.colorRgb;
+      original.cells.length = 0;
+      for (const index of snapshot.cells) original.cells.push(index);
+      original.centroid[0] = snapshot.centroid[0];
+      original.centroid[1] = snapshot.centroid[1];
+      original.centroid[2] = snapshot.centroid[2];
+      Object.assign(original.genome, snapshot.genome);
+      original.age = snapshot.age;
+      original.energy = snapshot.energy;
+      original.stage = snapshot.stage;
+      original.memoryBuffer.set(snapshot.memoryBuffer);
+      original.memPtr = snapshot.memPtr;
+      original.symbol = snapshot.symbol;
+      original.colorRgb[0] = snapshot.colorRgb[0];
+      original.colorRgb[1] = snapshot.colorRgb[1];
+      original.colorRgb[2] = snapshot.colorRgb[2];
+      original.children = snapshot.children;
+      original.reproCounter = snapshot.reproCounter;
+    }
+
+    this.entities = rollback.originalEntities;
+    this.bioThreshold = rollback.bioThreshold;
+    this.nextId = rollback.nextId;
+    this.extinctCountValue = rollback.extinctCount;
+    this._rngState = rollback.rngState;
+  }
+
+  private _reconcileFullDomain(
+    grid: VoxelGrid,
+    rollbackState: EntityLayerTickRollbackState,
+  ): void {
     // SparseVoxelGrid may store cells beyond its dense simulation window. Those
     // cells are outside this tick's connectivity scan and therefore cannot be
     // ignored when authorizing global entity extinction or merge.
@@ -667,7 +700,7 @@ export class EntityLayer {
           this.entities = nextEntities;
         });
       },
-      () => rollbackTick(),
+      () => this._rollbackTick(grid, rollbackState),
     );
     if (commitResult === null) {
       throw new Error("EntityLayer rejected a reconciliation plan before commit");
