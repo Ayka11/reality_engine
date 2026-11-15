@@ -26,6 +26,7 @@
     "test:entity-grid-ownership": "npx --yes tsx scripts/check-entity-grid-ownership.ts",
     "test:kernel-entity-ownership": "npx --yes tsx scripts/check-kernel-entity-ownership.ts",
     "test:global-entity-identity-registry": "npx --yes tsx scripts/check-global-entity-identity-registry.ts",
+    "test:world-library-civilization-runtime-ownership": "npx --yes tsx scripts/check-world-library-civilization-runtime-ownership.ts",
     "test:presets": "node scripts/check-preset-contract.mjs",
     "test:preset-field": "node scripts/check-preset-field-provenance.mjs",
     "test:construction": "node scripts/check-world-construction-contract.mjs",
