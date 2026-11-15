@@ -230,7 +230,7 @@ try {
       return { error: "Public world surface provider API is unavailable" };
     }
     const generator = world.generator;
-    const fieldProviderId = world.fieldSampler.registry.activeProviderId;
+    const fieldProviderId = world.getActiveFieldProviderId();
     const flat = window.worldCreateFlatSurfaceProvider({
       seed: "acceptance-flat-workspace",
       elevation: 3,
@@ -244,7 +244,7 @@ try {
     let routeHasWater;
     try {
       selected = window.worldSetSurfaceProvider(flat);
-      sampled = world.fieldSampler.sampleWorld(16, undefined, 16);
+      sampled = world.sampleWorldField(16, undefined, 16);
       environment = world.getWorldEnvironment();
       terrainHeight = world.sampleTerrainHeight(16, 16);
       routeHasWater = world.analyzeRoute(0, 0, 12, 12, 2).some(point => point.water);
@@ -257,7 +257,7 @@ try {
         routeHasWater,
         worldSeed: world.worldSeed,
         generatorPreserved: world.generator === generator,
-        fieldProviderPreserved: world.fieldSampler.registry.activeProviderId === fieldProviderId,
+        fieldProviderPreserved: world.getActiveFieldProviderId() === fieldProviderId,
       };
     } catch (error) {
       window.worldResetSurfaceProvider();
@@ -298,7 +298,7 @@ try {
   await page.waitForSelector("#c3d", { state: "attached" });
   await page.waitForFunction(() =>
     typeof window.worldGetSurfaceProviderState === "function" &&
-    !!window.infiniteWorld?.fieldSampler?.surfaceProvider
+    !!window.infiniteWorld?.getWorldSurfaceProviderInfo?.()
   );
   const persistedFlatState = await page.evaluate(() => ({
     state: window.worldGetSurfaceProviderState(),
@@ -569,7 +569,7 @@ try {
   await page.evaluate((objectId) => {
     const world = window.infiniteWorld;
     world.objects.remove(objectId);
-    world.authoritativeField.clear();
+    if (!world.clearSavedWorld()) throw new Error("Acceptance setup could not clear the saved world before package import");
     window.worldAssetManifest.entries =
       window.worldAssetManifest.entries.filter(entry => entry.id !== "acceptance-package-asset");
   }, packageFixture.objectId);
@@ -2154,7 +2154,7 @@ try {
       [512, 0], [-512, 0], [0, 512], [0, -512],
     ];
     for (const [x, z] of candidates) {
-      const sample = world.fieldSampler.sampleWorld(x, undefined, z);
+      const sample = world.sampleWorldField(x, undefined, z);
       const density = Number(sample.density);
       if (Number.isFinite(density) && density > 0.05 && density < 1) {
         return { x, y: Number(sample.y), z, sample };
@@ -2176,7 +2176,7 @@ try {
   await page.waitForFunction(() => window.infiniteWorld?.getMaterialMode?.() === "field");
   const fieldPhysicsBaseline = await page.evaluate((probe) => {
     const world = window.infiniteWorld;
-    const sample = world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
+    const sample = world.sampleWorldField(probe.x, undefined, probe.z);
     const modulation = world.fieldPhysics.modulation(sample);
     const decision = world.buildZoneCost(probe.x, probe.z);
     return { sample, modulation, decision };
@@ -2303,7 +2303,7 @@ try {
   }
   const fieldPhysicsAfter = await page.evaluate((probe) => {
     const world = window.infiniteWorld;
-    const sample = world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
+    const sample = world.sampleWorldField(probe.x, undefined, probe.z);
     const modulation = world.fieldPhysics.modulation(sample);
     const decision = world.buildZoneCost(probe.x, probe.z);
     return { sample, modulation, decision };
@@ -2424,7 +2424,7 @@ try {
     const world = window.infiniteWorld;
     world.saveWorld();
     return {
-      sample: world.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
+      sample: world.sampleWorldField(probe.x, undefined, probe.z),
       state: world.getAuthoritativeFieldState().field,
     };
   }, fieldProbe);
@@ -2439,7 +2439,7 @@ try {
   }), fieldProbe);
   const fieldPersistencePerturbed = await page.evaluate((probe) => {
     const world = window.infiniteWorld;
-    return world.fieldSampler.sampleWorld(probe.x, undefined, probe.z);
+    return world.sampleWorldField(probe.x, undefined, probe.z);
   }, fieldProbe);
   if (!(Number(fieldPersistencePerturbed?.energy ?? NaN) > Number(fieldPersistenceBaseline?.sample?.energy ?? NaN))) {
     throw new Error("Field persistence perturbation did not change the authoritative sample");
@@ -2448,7 +2448,7 @@ try {
     const world = window.infiniteWorld;
     world.loadWorld();
     return {
-      sample: world.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
+      sample: world.sampleWorldField(probe.x, undefined, probe.z),
       state: world.getAuthoritativeFieldState().field,
     };
   }, fieldProbe);
@@ -2534,7 +2534,7 @@ try {
     const y = world.getWorldEnvironment().worldPosition.y;
     return {
       position: { x: p.x, y, z: p.z },
-      sample: world.fieldSampler.sample(p.x, y, p.z),
+      sample: world.sampleAuthoritativeField(p.x, y, p.z),
       state: world.getAuthoritativeFieldState().field,
     };
   });
@@ -2544,7 +2544,7 @@ try {
     const p = world.getWorldPosition();
     const y = world.getWorldEnvironment().worldPosition.y;
     return {
-      sample: world.fieldSampler.sample(p.x, y, p.z),
+      sample: world.sampleAuthoritativeField(p.x, y, p.z),
       state: world.getAuthoritativeFieldState().field,
     };
   });
@@ -2563,7 +2563,7 @@ try {
   const lawDisabled = await page.evaluate(() => window.getRealityLawState?.());
   const lawPhysicsDisabled = await page.evaluate(() => {
     const world = window.infiniteWorld;
-    const sample = world.fieldSampler.sampleWorld(0, undefined, 0);
+    const sample = world.sampleWorldField(0, undefined, 0);
     return world.lawPhysicsContract.apply(world.fieldPhysics.modulation(sample));
   });
   if (Number(lawPhysicsDisabled?.forcePush ?? -1) !== 0) {
@@ -2737,7 +2737,7 @@ try {
   // Exercise the active inline UI's actual Float32Array grid and the authoritative world field.
   // The active page uses index.html's legacy grid (window.buf), not the dormant src/main.ts canvas.
   await page.waitForFunction(() =>
-    !!window.infiniteWorld?.authoritativeField &&
+    typeof window.infiniteWorld?.getAuthoritativeFieldDiagnostics === "function" &&
     typeof window.realitySculptTransactionRuntime?.applySmartBrush === "function" &&
     typeof window.realitySculptTransactionRuntime?.applyStroke === "function" &&
     typeof window.realitySculptTransactionRuntime?.undo === "function" &&
@@ -2747,9 +2747,13 @@ try {
   );
   const sculptContract = await page.evaluate(async () => {
     const world = window.infiniteWorld, runtime = window.realitySculptTransactionRuntime;
-    if (!world || !world.authoritativeField || !runtime || !window.buf) {
+    if (!world || typeof world.getAuthoritativeFieldDiagnostics !== "function" ||
+        typeof world.sampleAuthoritativeField !== "function" ||
+        typeof world.getAuthoritativeFieldMutationCount !== "function" ||
+        !runtime || !window.buf) {
       return { error: "Active legacy-grid sculpt runtime is not exposed", hasWorld: !!world,
-        hasField: !!world?.authoritativeField, hasRuntime: !!runtime, hasLegacyGrid: !!window.buf };
+        hasFieldDiagnostics: typeof world?.getAuthoritativeFieldDiagnostics === "function",
+        hasRuntime: !!runtime, hasLegacyGrid: !!window.buf };
     }
     const fingerprint = (buffer) => {
       const bits = new Uint32Array(buffer.buffer, buffer.byteOffset, buffer.length);
@@ -2763,27 +2767,27 @@ try {
     const legacyBuffer = () => window.buf;
     const samplePoint = { x: 14, y: 0, z: 23 }; // legacy (4,5,0) mapped to world (x,z,y)
     const baselineLegacy = fingerprint(legacyBuffer());
-    const baselineState = world.authoritativeField.serialize();
-    const baselineSample = world.authoritativeField.sample(samplePoint.x, samplePoint.y, samplePoint.z);
-    const baselineCount = world.authoritativeField.getMutationCount();
+    const baselineState = world.getAuthoritativeFieldDiagnostics();
+    const baselineSample = world.sampleAuthoritativeField(samplePoint.x, samplePoint.y, samplePoint.z);
+    const baselineCount = world.getAuthoritativeFieldMutationCount();
     await runtime.applySmartBrush("Forest", 4, 5, 3, 0, 0.5);
     const afterSmartLegacy = fingerprint(legacyBuffer());
-    const afterSmartState = world.authoritativeField.serialize();
+    const afterSmartState = world.getAuthoritativeFieldDiagnostics();
     const smartMutation = afterSmartState.mutations[afterSmartState.mutations.length - 1];
-    const afterSmartSample = world.authoritativeField.sample(samplePoint.x, samplePoint.y, samplePoint.z);
-    const afterSmartCount = world.authoritativeField.getMutationCount();
+    const afterSmartSample = world.sampleAuthoritativeField(samplePoint.x, samplePoint.y, samplePoint.z);
+    const afterSmartCount = world.getAuthoritativeFieldMutationCount();
     await runtime.applyStroke("inject", { x: 4, y: 5, z: 0 }, 2, 1, { energy: 1 });
     const afterOrdinaryLegacy = fingerprint(legacyBuffer());
-    const afterOrdinaryState = world.authoritativeField.serialize();
-    const afterOrdinarySample = world.authoritativeField.sample(samplePoint.x, samplePoint.y, samplePoint.z);
-    const afterOrdinaryCount = world.authoritativeField.getMutationCount();
+    const afterOrdinaryState = world.getAuthoritativeFieldDiagnostics();
+    const afterOrdinarySample = world.sampleAuthoritativeField(samplePoint.x, samplePoint.y, samplePoint.z);
+    const afterOrdinaryCount = world.getAuthoritativeFieldMutationCount();
     const mixedWorkerAckStart = window.lastChunkSculptHistory?.seq ?? 0;
     await runtime.undo();
-    const undoOneLegacy = fingerprint(legacyBuffer()), undoOneState = world.authoritativeField.serialize();
+    const undoOneLegacy = fingerprint(legacyBuffer()), undoOneState = world.getAuthoritativeFieldDiagnostics();
     await runtime.undo();
-    const undoTwoLegacy = fingerprint(legacyBuffer()), undoTwoState = world.authoritativeField.serialize();
+    const undoTwoLegacy = fingerprint(legacyBuffer()), undoTwoState = world.getAuthoritativeFieldDiagnostics();
     await runtime.redo();
-    const redoOneLegacy = fingerprint(legacyBuffer()), redoOneState = world.authoritativeField.serialize();
+    const redoOneLegacy = fingerprint(legacyBuffer()), redoOneState = world.getAuthoritativeFieldDiagnostics();
     await runtime.redo();
     await new Promise((resolve, reject) => {
       const deadline = Date.now() + 5000;
@@ -2794,13 +2798,13 @@ try {
       };
       check();
     });
-    const redoTwoLegacy = fingerprint(legacyBuffer()), redoTwoState = world.authoritativeField.serialize();
+    const redoTwoLegacy = fingerprint(legacyBuffer()), redoTwoState = world.getAuthoritativeFieldDiagnostics();
     const mixedHistoryAfterRedo = runtime.history();
 
     // A drag with multiple paint samples is one user-visible undo transaction,
     // while the worker records each sample so the grouped undo can replay them all.
     const gestureBaselineLegacy = fingerprint(legacyBuffer());
-    const gestureBaselineState = world.authoritativeField.serialize();
+    const gestureBaselineState = world.getAuthoritativeFieldDiagnostics();
     const gestureHistoryBefore = runtime.history().undo;
     const workerAckStart = window.lastChunkSculptHistory?.seq ?? 0;
     runtime.beginGesture();
@@ -2808,14 +2812,14 @@ try {
     await runtime.applyStroke("inject", { x: 11, y: 8, z: 0 }, 1, 0.5, { energy: 1 });
     runtime.endGesture();
     const gestureAfterLegacy = fingerprint(legacyBuffer());
-    const gestureAfterState = world.authoritativeField.serialize();
+    const gestureAfterState = world.getAuthoritativeFieldDiagnostics();
     const gestureHistoryAfterCommit = runtime.history();
     await runtime.undo();
     const gestureUndoLegacy = fingerprint(legacyBuffer());
-    const gestureUndoState = world.authoritativeField.serialize();
+    const gestureUndoState = world.getAuthoritativeFieldDiagnostics();
     await runtime.redo();
     const gestureRedoLegacy = fingerprint(legacyBuffer());
-    const gestureRedoState = world.authoritativeField.serialize();
+    const gestureRedoState = world.getAuthoritativeFieldDiagnostics();
 
     // Hold the first worker ACK to simulate a rapid double-click. A second history
     // operation and a concurrent sculpt mutation must not race the pending transaction.
@@ -4031,10 +4035,10 @@ try {
     };
     const before = {
       objects: world.getObjectCount(),
-      fieldMutations: world.authoritativeField.getMutationCount(),
-      fieldUndo: world.authoritativeSculptTransactions.historyLength,
+      fieldMutations: world.getAuthoritativeFieldMutationCount(),
+      fieldUndo: world.getAuthoritativeSculptHistoryState().undo,
       objectUndo: world.getEditHistoryState().canUndo,
-      surfaceId: world.fieldSampler.surfaceProvider.id,
+      surfaceId: world.getWorldSurfaceProviderInfo().id,
       manifestEntries: window.worldAssetManifest.entries.length,
     };
     const cleared = world.clearSavedWorld();
@@ -4043,15 +4047,15 @@ try {
     const state = {
       cleared,
       objects: world.getObjectCount(),
-      fieldMutations: world.authoritativeField.getMutationCount(),
-      fieldUndo: world.authoritativeSculptTransactions.historyLength,
-      fieldRedo: world.authoritativeSculptTransactions.redoLength,
+      fieldMutations: world.getAuthoritativeFieldMutationCount(),
+      fieldUndo: world.getAuthoritativeSculptHistoryState().undo,
+      fieldRedo: world.getAuthoritativeSculptHistoryState().redo,
       objectHistory: world.getEditHistoryState(),
       undo,
       redo,
       terrainDelta: world.terrainDeformations.sampleDelta(16, 16),
-      surfaceId: world.fieldSampler.surfaceProvider.id,
-      surfaceSeed: world.fieldSampler.surfaceProvider.seed,
+      surfaceId: world.getWorldSurfaceProviderInfo().id,
+      surfaceSeed: world.getWorldSurfaceProviderInfo().seed,
       generatorSeed: world.generator.seed,
       viewSeed: window.getWorldViewContract?.()?.seed ?? null,
       manifestEntries: window.worldAssetManifest.entries.length,
@@ -4101,7 +4105,7 @@ try {
   await composePage.waitForSelector("#c3d", { state: "attached" });
   await composePage.waitForFunction(() =>
     typeof window.worldGenerationHealth === "function" &&
-    !!window.infiniteWorld?.fieldSampler?.surfaceProvider
+    !!window.infiniteWorld?.getWorldSurfaceProviderInfo?.()
   );
   const clearedWorldAfterRestart = await composePage.evaluate(() => {
     const world = window.infiniteWorld;
@@ -4109,10 +4113,10 @@ try {
       generatorSeed: world.generator.seed,
       viewSeed: window.getWorldViewContract?.()?.seed ?? null,
       objects: world.getObjectCount(),
-      fieldMutations: world.authoritativeField.getMutationCount(),
+      fieldMutations: world.getAuthoritativeFieldMutationCount(),
       terrainDelta: world.terrainDeformations.sampleDelta(16, 16),
-      surfaceId: world.fieldSampler.surfaceProvider.id,
-      surfaceSeed: world.fieldSampler.surfaceProvider.seed,
+      surfaceId: world.getWorldSurfaceProviderInfo().id,
+      surfaceSeed: world.getWorldSurfaceProviderInfo().seed,
       manifestEntries: window.worldAssetManifest?.entries?.length ?? -1,
       runtimeAssets: world.worldAssetRuntime.stats(),
       durableSidecars: {
