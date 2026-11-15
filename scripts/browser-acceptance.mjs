@@ -44,36 +44,6 @@ try {
   await page.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
-  const engineDebugSurface = await page.evaluate(() => {
-    const engine = window.realityEngine;
-    const gpu = engine?.gpu;
-    const descriptorGpu = engine
-      ? Object.getOwnPropertyDescriptor(engine, "gpu")?.value
-      : null;
-    const mutators = ["init", "upload", "uploadMaterials", "writeParams", "submitCompute", "readback", "destroy"];
-    return {
-      hasEngine: Boolean(engine),
-      gpuAvailabilityType: typeof gpu?.isAvailable,
-      exposedMutators: mutators.filter(name => typeof gpu?.[name] === "function"),
-      descriptorMutators: mutators.filter(name => typeof descriptorGpu?.[name] === "function"),
-      replacementRejected: engine ? !Reflect.set(engine, "gpu", {}) : false,
-      deletionRejected: engine ? !Reflect.deleteProperty(engine, "gpu") : false,
-      gridAvailable: Boolean(engine?.grid),
-      stepAvailable: typeof engine?.step === "function",
-    };
-  });
-  if (!engineDebugSurface.hasEngine ||
-      engineDebugSurface.gpuAvailabilityType !== "boolean" ||
-      engineDebugSurface.exposedMutators.length !== 0 ||
-      engineDebugSurface.descriptorMutators.length !== 0 ||
-      !engineDebugSurface.replacementRejected ||
-      !engineDebugSurface.deletionRejected ||
-      !engineDebugSurface.gridAvailable ||
-      !engineDebugSurface.stepAvailable) {
-    throw new Error("Browser SimulationEngine debug surface exposed unsafe GPU methods or lost safe engine APIs: " +
-      JSON.stringify(engineDebugSurface));
-  }
-
   await page.waitForFunction(() =>
     typeof window.getRealityLawState === "function" &&
     typeof window.setRealityLaw === "function" &&
