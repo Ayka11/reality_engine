@@ -65,8 +65,8 @@ assert.equal(snapshot.realityGraph.nodes.length, 1,
 assert.equal(snapshot.realityGraph.metadata.name, "Creator graph",
   "later Creator metadata edits must not mutate an already captured world snapshot");
 
-snapshot.realityGraph.nodes[0].parameters.nested.coefficient = 0.25;
-assert.equal(graph.nodes[0].parameters.nested.coefficient, 9,
+snapshotNestedParameters.coefficient = 0.25;
+assert.equal(graphNestedParameters.coefficient, 9,
   "editing a detached snapshot must not mutate the live Creator graph");
 
 console.log("World snapshot Creator graph ownership and detachment: PASS");
