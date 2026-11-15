@@ -3,7 +3,28 @@ import { AgentSystem } from '../src/simulation/AgentSystem.ts';
 import { F } from '../src/core/CellState.ts';
 import { PROC } from '../src/process/ProcessDef.ts';
 import { SimulationEngine } from '../src/simulation/SimulationEngine.ts';
+import { createSimulationEngineDebugView } from '../src/simulation/SimulationEngineDebugView.ts';
 import type { ChemLayerSnapshot } from '../src/chemistry/ChemLayer.ts';
+
+// The browser-facing engine API may expose GPU status, never the mutable backend.
+const debugViewEngine = new SimulationEngine(4, 4, 2);
+const debugView = createSimulationEngineDebugView(debugViewEngine);
+const exposedGpu = debugView.gpu as unknown as Record<string, unknown>;
+assert.equal(exposedGpu.isAvailable, debugViewEngine.gpu.isAvailable);
+for (const method of ["init", "upload", "uploadMaterials", "writeParams", "submitCompute", "readback", "destroy"]) {
+  assert.equal(typeof exposedGpu[method], "undefined",
+    `browser debug view must not expose GPU backend method ${method}`);
+}
+assert.equal(Object.getOwnPropertyDescriptor(debugView, "gpu")?.value, debugView.gpu,
+  "GPU backend must remain hidden through own-property descriptor inspection");
+assert.equal(Reflect.set(debugView, "gpu", debugViewEngine.gpu), false,
+  "GPU backend replacement through the browser debug view must be rejected");
+assert.equal(Reflect.defineProperty(debugView, "gpu", { value: debugViewEngine.gpu }), false,
+  "GPU backend replacement through defineProperty must be rejected");
+assert.equal(Reflect.deleteProperty(debugView, "gpu"), false,
+  "GPU diagnostics cannot be removed to bypass the exposure contract");
+debugView.restoreTick(3);
+assert.equal(debugViewEngine.tick, 3, "safe engine methods must remain forwarded by the debug view");
 
 // Recovery entry points must invalidate outstanding GPU readbacks whenever
 // they mutate core state. Invalid tick restores must fail before changing either
