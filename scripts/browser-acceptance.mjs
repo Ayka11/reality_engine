@@ -44,6 +44,41 @@ try {
   await page.goto(`http://127.0.0.1:${port}`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
+
+  await page.waitForFunction(() => {
+    try {
+      return typeof window.getGlobalEntityIdentitySnapshot === "function" &&
+        window.getGlobalEntityIdentitySnapshot()?.coverage?.status === "partial";
+    } catch {
+      return false;
+    }
+  });
+  const globalEntityIdentity = await page.evaluate(() => window.getGlobalEntityIdentitySnapshot());
+  const expectedIdentityDomains = [
+    "simulation-entity",
+    "simulation-agent",
+    "civilization",
+    "infinite-world-object",
+    "external-asset-placement",
+  ];
+  if (!Number.isSafeInteger(globalEntityIdentity?.revision) ||
+      globalEntityIdentity.coverage?.status !== "partial" ||
+      !expectedIdentityDomains.every(domain =>
+        globalEntityIdentity.domains?.some(record => record.domain === domain)) ||
+      new Set(globalEntityIdentity.entries?.map(entry => entry.identityKey)).size !==
+        globalEntityIdentity.entries?.length ||
+      !Array.isArray(globalEntityIdentity.coverage?.excludedDomains) ||
+      globalEntityIdentity.coverage.excludedDomains.length < 3) {
+    throw new Error("Global entity identity directory is incomplete or contains colliding keys: " +
+      JSON.stringify(globalEntityIdentity));
+  }
+  console.log("[acceptance] global entity identity directory domains and collision-free namespaced IDs PASS: " +
+    JSON.stringify({
+      revision: globalEntityIdentity.revision,
+      domains: globalEntityIdentity.domains,
+      entries: globalEntityIdentity.entries.length,
+      excludedDomains: globalEntityIdentity.coverage.excludedDomains.map(entry => entry.domain),
+    }));
   const worldFieldBoundary = await page.evaluate(() => {
     const world = window.infiniteWorld;
     if (!world) return { error: "InfiniteWorld runtime was not initialized" };
