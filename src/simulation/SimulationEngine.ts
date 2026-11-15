@@ -80,6 +80,15 @@ export class SimulationEngine {
     this.temporalLayer = new TemporalLayer();
     this.infoPhysics = new InfoPhysics();
     this.prevEnergy = new Float32Array(this.grid.size);
+
+    // Subsystems are exposed for diagnostics/compatibility. Their state-only
+    // restore/reset/log operations must still invalidate any GPU result that
+    // began before the mutation, even when no grid buffer was touched.
+    const invalidate = () => this.invalidatePendingGPUReadback();
+    this.agents.setMutationObserver(invalidate);
+    this.entityLayer.setMutationObserver(invalidate);
+    this.causal.setMutationObserver(invalidate);
+    this.worldEvents.setMutationObserver(invalidate);
   }
 
   async initGPU(): Promise<boolean> {
