@@ -54,7 +54,7 @@ export class ComponentStore {
   snapshot(): ReadonlyMap<ComponentType, ReadonlyMap<EntityId, Component>> {
     const copy = new Map<ComponentType, ReadonlyMap<EntityId, Component>>();
     for (const [type, bucket] of this.components) {
-      copy.set(type, new Map(bucket));
+      copy.set(type, new Map([...bucket].map(([entityId, component]) => [entityId, cloneComponent(component)])));
     }
     return copy;
   }
