@@ -32,12 +32,27 @@ const BIO_THRESH = 0.35;
 
 export class CivilizationSystem {
   private grid: VoxelGrid;
-  civs: Civilization[] = [];
+  private _civs: Civilization[] = [];
   private nextId = 0;
   private tickCount = 0;
-  historyLog: string[] = [];
+  private _historyLog: string[] = [];
   private readonly initialRngState: number;
   private _rngState: number;
+
+  /** Detached read view: callers cannot mutate authoritative civilization state. */
+  get civs(): Civilization[] {
+    return this._civs.map(civ => ({
+      ...civ,
+      color: [...civ.color] as [number, number, number],
+      origin: [...civ.origin] as [number, number, number],
+      territory: [...civ.territory],
+      diplomacy: { ...civ.diplomacy },
+      history: [...civ.history],
+    }));
+  }
+
+  /** Detached history view for UI and export consumers. */
+  get historyLog(): string[] { return [...this._historyLog]; }
 
   constructor(grid: VoxelGrid, seed = 0x6c8e9cf5) {
     this.grid = grid;
@@ -77,12 +92,12 @@ export class CivilizationSystem {
 
   snapshot(): CivilizationSystemSnapshot {
     return {
-      civs: this.civs.map(civ => ({ ...civ, color: [...civ.color] as [number, number, number],
+      civs: this._civs.map(civ => ({ ...civ, color: [...civ.color] as [number, number, number],
         origin: [...civ.origin] as [number, number, number], territory: [...civ.territory],
         diplomacy: { ...civ.diplomacy }, history: [...civ.history] })),
       nextId: this.nextId,
       tickCount: this.tickCount,
-      historyLog: [...this.historyLog],
+      historyLog: [...this._historyLog],
       rngState: this._rngState,
     };
   }
@@ -114,17 +129,17 @@ export class CivilizationSystem {
     if (civs.length > MAX_CIVS || (civs.length > 0 && snapshot.nextId <= Math.max(...ids))) {
       throw new Error("Invalid CivilizationSystem ID allocator state");
     }
-    this.civs = civs;
+    this._civs = civs;
     this.nextId = snapshot.nextId;
     this.tickCount = snapshot.tickCount;
-    this.historyLog = [...snapshot.historyLog];
+    this._historyLog = [...snapshot.historyLog];
     this._rngState = snapshot.rngState >>> 0;
   }
 
   tick(): void {
     if (++this.tickCount % 20 !== 0) return;
     this._trySpawn();
-    for (const civ of this.civs) {
+    for (const civ of this._civs) {
       this._grow(civ);
       this._expand(civ);
       this._techResearch(civ);
@@ -146,12 +161,12 @@ export class CivilizationSystem {
   }
 
   private _trySpawn(): void {
-    if (this.civs.length >= MAX_CIVS) return;
+    if (this._civs.length >= MAX_CIVS) return;
     const { grid } = this;
     const { W, H, D } = grid;
     const buf = grid.buffer;
     const occupied = new Set<number>();
-    for (const c of this.civs) c.territory.forEach(t => occupied.add(t));
+    for (const c of this._civs) c.territory.forEach(t => occupied.add(t));
 
     let bestVal = BIO_THRESH, bx = -1, by = -1, bz = -1;
     for (let _ = 0; _ < 300; _++) {
@@ -176,7 +191,7 @@ export class CivilizationSystem {
       diplomacy: {},
       history: [`t:${this.tickCount} Founded at (${bx},${by},${bz})`],
     };
-    this.civs.push(civ);
+    this._civs.push(civ);
     this._log(`${civ.name} founded`);
   }
 
@@ -202,7 +217,7 @@ export class CivilizationSystem {
     const { grid } = this;
     const { W, H, D } = grid;
     const occupied = new Set<number>();
-    for (const c of this.civs) c.territory.forEach(t => occupied.add(t));
+    for (const c of this._civs) c.territory.forEach(t => occupied.add(t));
 
     const src = civ.territory[Math.floor(this._random() * civ.territory.length)];
     const [x, y, z] = this._dec(src);
@@ -227,9 +242,9 @@ export class CivilizationSystem {
   }
 
   private _diplomacy(): void {
-    if (this.civs.length < 2) return;
-    const a = this.civs[Math.floor(this._random() * this.civs.length)];
-    const b = this.civs[Math.floor(this._random() * this.civs.length)];
+    if (this._civs.length < 2) return;
+    const a = this._civs[Math.floor(this._random() * this._civs.length)];
+    const b = this._civs[Math.floor(this._random() * this._civs.length)];
     if (a.id === b.id) return;
     const cur = a.diplomacy[b.id] ?? 'neutral';
     const aSet = new Set(a.territory);
@@ -247,18 +262,18 @@ export class CivilizationSystem {
   }
 
   private _prune(): void {
-    const before = this.civs.length;
-    this.civs = this.civs.filter(c => c.population >= 1 && (c.energy > 0 || c.age < 10));
-    if (this.civs.length < before) this._log(`${before - this.civs.length} civ(s) collapsed`);
+    const before = this._civs.length;
+    this._civs = this._civs.filter(c => c.population >= 1 && (c.energy > 0 || c.age < 10));
+    if (this._civs.length < before) this._log(`${before - this._civs.length} civ(s) collapsed`);
   }
 
   private _log(msg: string): void {
-    this.historyLog.unshift(`t:${this.tickCount} ${msg}`);
-    if (this.historyLog.length > 60) this.historyLog.pop();
+    this._historyLog.unshift(`t:${this.tickCount} ${msg}`);
+    if (this._historyLog.length > 60) this._historyLog.pop();
   }
 
   seedFromGrid(): void {
-    this.civs = [];
+    this._civs = [];
     this.nextId = 0;
     for (let _ = 0; _ < 40; _++) this._trySpawn();
   }
