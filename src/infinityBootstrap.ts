@@ -62,14 +62,14 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).worldFieldState = () => world.getAuthoritativeFieldState()
   // Read-only scientific field inspection and deterministic 2D view-window sampling.
   ;(window as any).worldViewContract = worldViewContract
-  ;(window as any).worldFieldSample = (x: number, y?: number, z?: number) => world.fieldSampler.sampleWorld(x, y, z)
-  ;(window as any).worldFieldViewWindow = (width: number, height: number, sliceY?: number) => world.fieldSampler.sampleViewWindow(width, height, sliceY)
+  ;(window as any).worldFieldSample = (x: number, y?: number, z?: number) => world.sampleWorldField(x, y, z)
+  ;(window as any).worldFieldViewWindow = (width: number, height: number, sliceY?: number) => world.sampleWorldFieldViewWindow(width, height, sliceY)
   ;(window as any).getWorldViewContract = () => worldViewContract.snapshot()
   ;(window as any).setWorldViewRenderMode = (mode: any) => worldViewContract.setRenderMode(mode)
   ;(window as any).worldSetSurfaceProvider = (provider: any) => world.setWorldSurfaceProvider(provider)
   ;(window as any).worldResetSurfaceProvider = () => world.resetWorldSurfaceProviderToGenerator()
   ;(window as any).worldGetSurfaceProviderState = () => {
-    const provider = world.fieldSampler.surfaceProvider
+    const provider = world.getWorldSurfaceProviderInfo()
     return {
       id: provider.id,
       version: provider.version,
@@ -88,7 +88,7 @@ export function bootstrapInfiniteWorld() {
     world.applyLegacySculptStroke(tool, cell, radius, strength, options)
   ;(window as any).infinityApplyLegacySmartBrush = (name: any, cell: any, radius: number, selectedLegacyZ?: number, options?: { strength?: number }) =>
     world.applyLegacySmartBrush(name, cell, radius, selectedLegacyZ, options)
-  ;(window as any).infinityAuthoritativeFieldState = () => world.authoritativeField.getState()
+  ;(window as any).infinityAuthoritativeFieldState = () => world.getAuthoritativeFieldSnapshot()
   ;(window as any).infinityUndoLegacySculptAuthoritative = () => world.undoLegacySculptAuthoritative()
   ;(window as any).infinityRedoLegacySculptAuthoritative = () => world.redoLegacySculptAuthoritative()
   ;(window as any).infinityLegacySculptAuthoritativeHistory = () => world.getLegacySculptAuthoritativeHistory()
@@ -1672,10 +1672,10 @@ export function bootstrapInfiniteWorld() {
                   <div style="font-size:9.5px;color:var(--sub);margin-bottom:4px;text-transform:uppercase;">World Surface Workspace</div>
                   <div style="font-size:8px;color:#8f88d8;margin-bottom:6px;">Choose a neutral surface to build from scratch, or restore the procedural terrain. Existing objects keep their absolute world positions.</div>
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
-                    <button class="brush-btn ${world.fieldSampler.surfaceProvider.id === 'flat-workspace-surface' ? 'active' : ''}" id="vSurfaceEmpty">＋ Empty workspace</button>
-                    <button class="brush-btn ${world.fieldSampler.surfaceProvider.id === 'world-generator-surface' ? 'active' : ''}" id="vSurfaceProcedural">◇ Procedural surface</button>
+                    <button class="brush-btn ${world.getWorldSurfaceProviderInfo().id === 'flat-workspace-surface' ? 'active' : ''}" id="vSurfaceEmpty">＋ Empty workspace</button>
+                    <button class="brush-btn ${world.getWorldSurfaceProviderInfo().id === 'world-generator-surface' ? 'active' : ''}" id="vSurfaceProcedural">◇ Procedural surface</button>
                   </div>
-                  <div id="vSurfaceStatus" style="font-size:7.5px;color:var(--sub);margin-top:5px;">Active: ${escLibrary(world.fieldSampler.surfaceProvider.id)} · seed ${escLibrary(world.fieldSampler.surfaceProvider.seed)}</div>
+                  <div id="vSurfaceStatus" style="font-size:7.5px;color:var(--sub);margin-top:5px;">Active: ${escLibrary(world.getWorldSurfaceProviderInfo().id)} · seed ${escLibrary(world.getWorldSurfaceProviderInfo().seed)}</div>
                 </div>
                 <div style="border-top:1px solid rgba(255,255,255,.08);margin-top:9px;padding-top:8px;">
                   <div style="font-size:9.5px;color:var(--sub);margin-bottom:4px;text-transform:uppercase;">Geometric Terrain Sculpt</div>
