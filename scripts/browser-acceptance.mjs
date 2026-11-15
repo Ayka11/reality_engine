@@ -50,6 +50,7 @@ try {
   const expectedIdentityDomains = [
     "infinite-world-object",
     "external-asset-placement",
+    "world-library-civilization-branch",
   ];
   if (!Number.isSafeInteger(globalEntityIdentity?.revision) ||
       globalEntityIdentity.coverage?.status !== "partial" ||
@@ -58,7 +59,7 @@ try {
       new Set(globalEntityIdentity.entries?.map(entry => entry.identityKey)).size !==
         globalEntityIdentity.entries?.length ||
       !Array.isArray(globalEntityIdentity.coverage?.excludedDomains) ||
-      globalEntityIdentity.coverage.excludedDomains.length < 8) {
+      globalEntityIdentity.coverage.excludedDomains.length < 7) {
     throw new Error("Global entity identity directory is incomplete or contains colliding keys: " +
       JSON.stringify(globalEntityIdentity));
   }
@@ -69,6 +70,78 @@ try {
       entries: globalEntityIdentity.entries.length,
       excludedDomains: globalEntityIdentity.coverage.excludedDomains.map(entry => entry.domain),
     }));
+
+  const civilizationBranchIdentityLifecycle = await page.evaluate(() => {
+    const identityApi = window.getGlobalEntityIdentitySnapshot;
+    const snapshotApi = window.worldCivilizationRuntimeSnapshot;
+    const restoreApi = window.worldRestoreCivilizationRuntime;
+    const evaluateApi = window.civilizationEvaluate;
+    const tickApi = window.civilizationTick;
+    const forkApi = window.worldForkCivilizationBranch;
+    const resourceEconomy = window.worldResourceEconomy;
+    if (typeof identityApi !== "function" ||
+        typeof snapshotApi !== "function" ||
+        typeof restoreApi !== "function" ||
+        typeof evaluateApi !== "function" ||
+        typeof tickApi !== "function" ||
+        typeof forkApi !== "function" ||
+        !resourceEconomy || typeof resourceEconomy.snapshot !== "function" ||
+        typeof resourceEconomy.restore !== "function") {
+      throw new Error("Civilization branch identity lifecycle prerequisites are unavailable");
+    }
+
+    const beforeRuntime = snapshotApi();
+    const beforeResources = resourceEconomy.snapshot();
+    const beforeDirectory = identityApi();
+    const sourceBranchId = "__acceptance_civilization_identity_origin__";
+    let branchId;
+    let afterCreate;
+    let afterRestore;
+    try {
+      const state = evaluateApi(sourceBranchId, "village");
+      state.memory.branchId = sourceBranchId;
+      const ticked = tickApi(state, 1);
+      if (!ticked?.state) {
+        throw new Error("Could not create the civilization identity source branch");
+      }
+      const forked = forkApi(sourceBranchId, {
+        reason: "Browser acceptance: verify namespaced civilization branch identity",
+      });
+      if (!forked?.branchId) {
+        throw new Error("Could not fork the civilization identity source branch");
+      }
+      branchId = forked.branchId;
+      afterCreate = identityApi();
+    } finally {
+      restoreApi(beforeRuntime);
+      resourceEconomy.restore(beforeResources);
+      afterRestore = identityApi();
+    }
+
+    return {
+      sourceBranchId,
+      branchId,
+      beforeRevision: beforeDirectory.revision,
+      afterCreateRevision: afterCreate?.revision,
+      afterRestoreRevision: afterRestore?.revision,
+      branchVisible: afterCreate?.entries?.some(entry =>
+        entry.domain === "world-library-civilization-branch" && entry.localId === branchId),
+      branchRemoved: !afterRestore?.entries?.some(entry =>
+        entry.domain === "world-library-civilization-branch" && entry.localId === branchId),
+      runtimeRestored: !window.worldCivilizationBranches?.().some(branch =>
+        branch.branchId === branchId),
+    };
+  });
+  if (!civilizationBranchIdentityLifecycle.branchVisible ||
+      !civilizationBranchIdentityLifecycle.branchRemoved ||
+      !civilizationBranchIdentityLifecycle.runtimeRestored ||
+      civilizationBranchIdentityLifecycle.afterCreateRevision <= civilizationBranchIdentityLifecycle.beforeRevision ||
+      civilizationBranchIdentityLifecycle.afterRestoreRevision <= civilizationBranchIdentityLifecycle.afterCreateRevision) {
+    throw new Error("Global identity directory did not track civilization branch create/restore lifecycle: " +
+      JSON.stringify(civilizationBranchIdentityLifecycle));
+  }
+  console.log("[acceptance] global identity directory civilization branch create/restore lifecycle PASS: " +
+    JSON.stringify(civilizationBranchIdentityLifecycle));
 
   const identityLifecycle = await page.evaluate(() => {
     const world = window.infiniteWorld;
