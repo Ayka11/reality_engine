@@ -1,7 +1,6 @@
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import { CHUNK_FLOATS } from './core/ChunkGrid';
 import { SimulationEngine } from './simulation/SimulationEngine';
-import { GlobalEntityIdentityRegistry } from './entity/GlobalEntityIdentityRegistry';
 import { createSimulationEngineDebugView, type SimulationEngineDebugView } from './simulation/SimulationEngineDebugView';
 import { VoxelRenderer, LayerName } from './render/VoxelRenderer';
 import { Entity } from './simulation/EntityLayer';
@@ -1211,94 +1210,6 @@ document.getElementById('assignPartitionBtn')?.addEventListener('click', () => {
 let civSystem: CivilizationSystem;
 let saveSystem: WorldSaveSystem;
 
-/**
- * Derived, namespaced identity directory for the active application domains.
- * Source subsystems remain authoritative for entity state and lifecycle.
- */
-const globalEntityIdentityRegistry = new GlobalEntityIdentityRegistry();
-const getGlobalEntityIdentitySnapshot = () => {
-  if (typeof civSystem === 'undefined') {
-    throw new Error('Global entity identity inventory is unavailable before CivilizationSystem initialization');
-  }
-  const infiniteWorld = (window as unknown as {
-    infiniteWorld?: {
-      objects: { values: () => Array<{ id: string; kind: string }> };
-      getExternalAssetPlacementIdentityRecords: () => Array<{ id: string; kind: string }>;
-    };
-  }).infiniteWorld;
-  if (!infiniteWorld) {
-    throw new Error('Global entity identity inventory requires the Infinite World runtime');
-  }
-
-  globalEntityIdentityRegistry.replaceDomains([
-    {
-      domain: 'simulation-entity',
-      entries: sim.entityLayer.getEntities().map(entity => ({
-        id: entity.id,
-        kind: entity.stage,
-      })),
-    },
-    {
-      domain: 'simulation-agent',
-      entries: sim.agents.getAgents().map(agent => ({
-        id: agent.id,
-        kind: agent.behavior,
-      })),
-    },
-    {
-      domain: 'civilization',
-      entries: civSystem.civs.map(civ => ({
-        id: civ.id,
-        kind: 'civilization',
-      })),
-    },
-    {
-      domain: 'infinite-world-object',
-      entries: infiniteWorld.objects.values().map(object => ({
-        id: object.id,
-        kind: object.kind,
-      })),
-    },
-    {
-      domain: 'external-asset-placement',
-      entries: infiniteWorld.getExternalAssetPlacementIdentityRecords(),
-    },
-  ]);
-
-  return Object.freeze({
-    ...globalEntityIdentityRegistry.snapshot(),
-    coverage: Object.freeze({
-      status: 'partial' as const,
-      capturedDomains: Object.freeze([
-        'simulation-entity',
-        'simulation-agent',
-        'civilization',
-        'infinite-world-object',
-        'external-asset-placement',
-      ]),
-      excludedDomains: Object.freeze([
-        Object.freeze({
-          domain: 'legacy-cluster',
-          source: 'src/entity/EntityLayer.ts',
-          reason: 'Legacy cluster detector is not wired into the active application runtime.',
-        }),
-        Object.freeze({
-          domain: 'kernel-ecs',
-          source: 'src/kernel/World.ts',
-          reason: 'Standalone ECS World has no provider connected to the active application runtime.',
-        }),
-        Object.freeze({
-          domain: 'world-library-runtime',
-          source: 'src/worldLibrary',
-          reason: 'World-library civilization and infrastructure state still requires an explicit identity-domain audit.',
-        }),
-      ]),
-      ownership: 'The directory indexes stable namespaced IDs; each source subsystem remains authoritative for entity state and lifecycle.',
-    }),
-  });
-};
-(window as unknown as { getGlobalEntityIdentitySnapshot?: typeof getGlobalEntityIdentitySnapshot })
-  .getGlobalEntityIdentitySnapshot = getGlobalEntityIdentitySnapshot;
 let saveManager: SaveManager;
 
 const creatorRoot = document.getElementById('creatorStudio');
