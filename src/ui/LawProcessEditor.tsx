@@ -30,6 +30,7 @@ interface LawProcessEditorOptions {
       restore: (snapshot: EntityLayerSnapshot, cellCount?: number) => void;
       clear: () => void;
     };
+    restoreEntityLayerSnapshot: (snapshot: EntityLayerSnapshot) => void;
     mutateAuthoritativeState: <T>(mutation: () => T) => T;
     runAtStepBoundary: <T>(operation: () => T) => Promise<T>;
   };
