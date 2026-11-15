@@ -20,6 +20,26 @@ export function runCivilizationSystemRecoveryRegression(): void {
     throw new Error("CivilizationSystem restore did not replay seeded civilization generation");
   }
 
+  // Public read APIs must not expose authoritative arrays or nested civilization state.
+  const beforeReadViewMutation = JSON.stringify(system.snapshot());
+  const exposedCivs = system.civs;
+  const exposedHistory = system.historyLog;
+  if (exposedCivs.length === 0) {
+    throw new Error("CivilizationSystem regression fixture failed to seed a civilization");
+  }
+  const exposedCiv = exposedCivs[0];
+  exposedCiv.name = "tampered";
+  exposedCiv.color[0] = -999;
+  exposedCiv.origin[0] = -999;
+  exposedCiv.territory.push(grid.size + 999);
+  exposedCiv.diplomacy[999] = "war";
+  exposedCiv.history.push("tampered");
+  exposedCivs.splice(0, 1);
+  exposedHistory.push("tampered");
+  if (JSON.stringify(system.snapshot()) !== beforeReadViewMutation) {
+    throw new Error("CivilizationSystem public read views leaked mutable authoritative state");
+  }
+
   const invalid = system.snapshot();
   invalid.rngState = 0;
   let rejected = false;
