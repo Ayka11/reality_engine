@@ -33,15 +33,16 @@ export class ExperimentRunner {
   private results: Record<string, unknown> = {}
 
   start(protocol: ExperimentProtocol) {
+    const detachedProtocol = structuredClone(protocol)
     this.startedAt = Date.now()
-    this.protocol = protocol
+    this.protocol = detachedProtocol
     this.results = {}
     return this.snapshot('running')
   }
 
   record(name: string, value: unknown) {
     if (!this.protocol) throw new Error('Experiment has not started')
-    this.results[name] = value
+    this.results[name] = structuredClone(value)
   }
 
   finish(status: 'completed' | 'aborted' = 'completed') {
@@ -57,15 +58,15 @@ export class ExperimentRunner {
       results: this.results,
     }
     const fingerprint = hashString(stableSerialize(payload))
-    return {
+    return structuredClone({
       protocol: this.protocol,
       startedAt: this.startedAt,
       finishedAt,
       durationMs: Math.max(0, finishedAt - this.startedAt),
       status,
       fingerprint,
-      results: { ...this.results },
-    }
+      results: this.results,
+    })
   }
 
   get active() {
