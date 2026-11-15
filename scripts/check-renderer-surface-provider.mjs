@@ -17,18 +17,18 @@ for (const [name, source] of [['renderer', rendererSource], ['surface provider',
 assert.match(rendererSource, /setWorldSurfaceProvider\(provider: WorldSurfaceProvider\)/)
 assert.match(rendererSource, /resetWorldSurfaceProviderToGenerator\(\)/)
 assert.match(rendererSource, /const surface = provider\.sampleSurface\(x, z\)/)
-assert.match(rendererSource, /const biome = this\.fieldSampler\.surfaceProvider\.sampleSurface\(originX \+ gx, originZ \+ gz, h\)\.biome/)
+assert.match(rendererSource, /const biome = this\.#fieldSampler\.surfaceProvider\.sampleSurface\(originX \+ gx, originZ \+ gz, h\)\.biome/)
 assert.match(rendererSource, /const waterLevel = this\.getWorldWaterLevel\(\)/)
 assert.match(rendererSource, /surfaceProvider\.getWaterMaskForChunk\(chunk\)/)
 assert.match(rendererSource, /buildWaterDepthMaskFromHeightField/);
-assert.match(rendererSource, /if\s*\(this\.terrainDeformations\.hasDeformationsInChunk\(chunk\.cx,\s*chunk\.cz,\s*WORLD_CHUNK_SIZE\)\)[\s\S]*?sampleHeight:\s*\(x,\s*z\)\s*=>\s*this\.sampleTerrainHeight\(x,\s*z\)/,
+assert.match(rendererSource, /if\s*\(this\.#terrainDeformations\.hasDeformationsInChunk\(chunk\.cx,\s*chunk\.cz,\s*WORLD_CHUNK_SIZE\)\)[\s\S]*?sampleHeight:\s*\(x,\s*z\)\s*=>\s*this\.sampleTerrainHeight\(x,\s*z\)/,
   'sculpted terrain must rebuild water depth from the same height sampler used by terrain geometry');
 assert.ok(
   rendererSource.indexOf('if (this.terrainDeformations.hasDeformationsInChunk(chunk.cx, chunk.cz, WORLD_CHUNK_SIZE))') < rendererSource.indexOf('surfaceProvider.getWaterMaskForChunk(chunk)'),
   'deformation-aware hydrology must take precedence over the immutable cached provider mask',
 );
 assert.match(rendererSource, /buildWaterSurfaceMeshData\(\{ cx: chunk\.cx, cz: chunk\.cz, water \}, waterLevel\)/)
-assert.match(rendererSource, /const deformedHeight = surface\.height \+ this\.terrainDeformations\.sampleDelta\(x, z\)/)
+assert.match(rendererSource, /const deformedHeight = surface\.height \+ this\.#terrainDeformations\.sampleDelta\(x, z\)/)
 const worldEditorSnapshotStart = rendererSource.indexOf('capturePortableWorldSnapshot(): WorldEditorSnapshot')
 const worldEditorSnapshotEnd = rendererSource.indexOf('  saveWorld(options:', worldEditorSnapshotStart)
 assert.ok(worldEditorSnapshotStart >= 0 && worldEditorSnapshotEnd > worldEditorSnapshotStart,
