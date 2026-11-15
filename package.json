@@ -93,7 +93,8 @@
     "test:agent-visual-configuration-store": "npx --yes tsx scripts/check-agent-visual-configuration-store.ts",
     "test:save-manager": "node scripts/check-save-manager.mjs",
     "test:world-observability-ownership": "npx --yes tsx scripts/check-world-observability-ownership.ts",
-    "test:world-field-sample-ownership": "npx --yes tsx scripts/check-world-field-sample-ownership.ts"
+    "test:world-field-sample-ownership": "npx --yes tsx scripts/check-world-field-sample-ownership.ts",
+    "test:scientific-field-registry-ownership": "npx --yes tsx scripts/check-scientific-field-registry-ownership.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
