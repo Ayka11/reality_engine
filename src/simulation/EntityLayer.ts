@@ -158,6 +158,7 @@ export class EntityLayer {
   mutationStrength = 1.0;
   private readonly initialRngState: number;
   private _rngState: number;
+  private mutationObserver: (() => void) | null = null;
   private readonly domainInventoryAuthority = new EntityDomainInventoryAuthority("entity-layer");
   private readonly chunkReconciliation = new EntityChunkReconciliation();
 
@@ -175,6 +176,13 @@ export class EntityLayer {
     return this._rngState / 0x100000000;
   }
 
+  /** Register the owning engine's stale-readback invalidation hook. */
+  setMutationObserver(observer: (() => void) | null): void {
+    this.mutationObserver = observer;
+  }
+
+  private notifyMutation(): void { this.mutationObserver?.(); }
+
   get extinctCount(): number { return this.extinctCountValue; }
   get totalSpawned(): number { return this.nextId - 1; }
 
@@ -184,6 +192,7 @@ export class EntityLayer {
       throw new Error('EntityLayer seed must be a non-zero uint32');
     }
     this._rngState = seed >>> 0;
+    this.notifyMutation();
   }
 
   private _captureCurrentDomainInventory(cellCount: number) {
@@ -348,6 +357,7 @@ export class EntityLayer {
     this.nextId = snapshot.nextId;
     this.extinctCountValue = snapshot.extinctCount;
     this._rngState = snapshot.rngState >>> 0;
+    this.notifyMutation();
   }
 
   tick(grid: VoxelGrid, dt: number): void {
@@ -717,5 +727,6 @@ export class EntityLayer {
     this.nextId = 1;
     this.extinctCountValue = 0;
     this._rngState = this.initialRngState;
+    this.notifyMutation();
   }
 }
