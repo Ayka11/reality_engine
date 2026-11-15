@@ -91,7 +91,8 @@ export class WorldFieldChunkStore {
   }
 
   sample(coord: WorldFieldChunkCoord, x: number, y: number, z: number): ScientificFieldSample | null {
-    return this.get(coord)?.provider.sample(x, y, z) ?? null
+    const sample = this.get(coord)?.provider.sample(x, y, z)
+    return sample ? { ...sample } : null
   }
 
   stats(): WorldFieldChunkStoreStats {
