@@ -72,11 +72,11 @@ export function createSimulationEngineDebugView(
       return Reflect.set(target, property, value, target);
     },
     defineProperty(target, property, descriptor) {
-      if (property === "gpu" || property === "entityLayer") return false;
+      if (property === "gpu" || property === "entityLayer" || property === "agents") return false;
       return Reflect.defineProperty(target, property, descriptor);
     },
     deleteProperty(target, property) {
-      if (property === "gpu" || property === "entityLayer") return false;
+      if (property === "gpu" || property === "entityLayer" || property === "agents") return false;
       return Reflect.deleteProperty(target, property);
     },
     getOwnPropertyDescriptor(target, property) {
