@@ -1,4 +1,4 @@
-import type { Component } from './Component';
+import { cloneComponent, type Component } from './Component';
 import type { ComponentType, EntityId } from './types';
 
 export interface EntitySnapshot {
@@ -35,7 +35,9 @@ export class Entity {
   snapshot(): EntitySnapshot {
     return {
       id: this.id,
-      components: [...this.components.values()].sort((a, b) => a.type.localeCompare(b.type)),
+      components: [...this.components.values()]
+        .sort((a, b) => a.type.localeCompare(b.type))
+        .map(cloneComponent),
     };
   }
 }
