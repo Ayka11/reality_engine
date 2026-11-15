@@ -1980,7 +1980,7 @@ try {
   if (!surfaceUiPresent) throw new Error("World surface selection controls are missing from the active World Tools dock");
   const surfaceBeforeUiSwitch = await page.evaluate(() => {
     window.__surfaceAcceptanceGenerator = window.infiniteWorld.generator;
-    window.__surfaceAcceptanceFieldProviderId = window.infiniteWorld.fieldSampler.registry.activeProviderId;
+    window.__surfaceAcceptanceFieldProviderId = window.infiniteWorld.getActiveFieldProviderId();
     return { generatorSeed: window.infiniteWorld.generator.seed };
   });
   await page.locator("#vSurfaceEmpty").click();
@@ -1992,7 +1992,7 @@ try {
       state,
       storedKind: saved?.state?.kind ?? null,
       generatorPreserved: window.infiniteWorld.generator === window.__surfaceAcceptanceGenerator,
-      fieldProviderPreserved: window.infiniteWorld.fieldSampler.registry.activeProviderId === window.__surfaceAcceptanceFieldProviderId,
+      fieldProviderPreserved: window.infiniteWorld.getActiveFieldProviderId() === window.__surfaceAcceptanceFieldProviderId,
     };
   }, surfaceBeforeUiSwitch);
   if (emptySurfaceUiState.state?.seed !== `empty-workspace:${surfaceBeforeUiSwitch.generatorSeed}` ||
@@ -2030,12 +2030,12 @@ try {
     throw new Error("Raise terrain brush did not change geometric elevation: " + JSON.stringify(terrainEdit));
   }
   await page.locator("#vTerrainUndo").click();
-  const terrainUndoDelta = await page.evaluate(() => window.infiniteWorld.terrainDeformations.sampleDelta(12, 12));
+  const terrainUndoDelta = await page.evaluate(() => window.infiniteWorld.sampleTerrainDeformationDelta(12, 12));
   if (Math.abs(terrainUndoDelta - terrainEdit.before) > 1e-6) {
     throw new Error("Terrain Undo did not restore the previous deformation: " + terrainUndoDelta);
   }
   await page.locator("#vTerrainRedo").click();
-  const terrainRedoDelta = await page.evaluate(() => window.infiniteWorld.terrainDeformations.sampleDelta(12, 12));
+  const terrainRedoDelta = await page.evaluate(() => window.infiniteWorld.sampleTerrainDeformationDelta(12, 12));
   if (Math.abs(terrainRedoDelta - terrainEdit.after) > 1e-6) {
     throw new Error("Terrain Redo did not restore the raised deformation: " + terrainRedoDelta);
   }
@@ -2064,19 +2064,19 @@ try {
   await page.locator("#vTerrainRaise").click();
   await page.mouse.click(terrainPointerTarget.screenX, terrainPointerTarget.screenY);
   const terrainPointerAfter = await page.evaluate((target) => ({
-    delta: window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ),
+    delta: window.infiniteWorld.sampleTerrainDeformationDelta(target.worldX, target.worldZ),
     status: document.getElementById("vTerrainStatus")?.textContent ?? "",
   }), terrainPointerTarget);
   if (!(terrainPointerAfter.delta > terrainPointerTarget.before)) {
     throw new Error("Canvas pointer click did not apply geometric terrain sculpt: " + JSON.stringify({ target: terrainPointerTarget, after: terrainPointerAfter }));
   }
   await page.locator("#vTerrainUndo").click();
-  const pointerUndoDelta = await page.evaluate((target) => window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ), terrainPointerTarget);
+  const pointerUndoDelta = await page.evaluate((target) => window.infiniteWorld.sampleTerrainDeformationDelta(target.worldX, target.worldZ), terrainPointerTarget);
   if (Math.abs(pointerUndoDelta - terrainPointerTarget.before) > 1e-6) {
     throw new Error("Undo after real canvas pointer sculpt did not restore terrain: " + pointerUndoDelta);
   }
   await page.locator("#vTerrainRedo").click();
-  const pointerRedoDelta = await page.evaluate((target) => window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ), terrainPointerTarget);
+  const pointerRedoDelta = await page.evaluate((target) => window.infiniteWorld.sampleTerrainDeformationDelta(target.worldX, target.worldZ), terrainPointerTarget);
   if (!(pointerRedoDelta > terrainPointerTarget.before)) {
     throw new Error("Redo after real canvas pointer sculpt did not restore terrain: " + pointerRedoDelta);
   }
@@ -2092,13 +2092,13 @@ try {
     world.sculptTerrainAt(target.worldX, target.worldZ, 3, 1, "lower");
   }, terrainPointerTarget);
   const terrainPerturbedDelta = await page.evaluate((target) =>
-    window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ), terrainPointerTarget);
+    window.infiniteWorld.sampleTerrainDeformationDelta(target.worldX, target.worldZ), terrainPointerTarget);
   if (!(terrainPerturbedDelta < terrainCheckpoint)) {
     throw new Error("Terrain persistence perturbation did not lower the saved terrain sample");
   }
   await page.evaluate(() => window.infiniteWorld.loadWorld());
   const terrainRestoredDelta = await page.evaluate((target) =>
-    window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ), terrainPointerTarget);
+    window.infiniteWorld.sampleTerrainDeformationDelta(target.worldX, target.worldZ), terrainPointerTarget);
   if (Math.abs(terrainRestoredDelta - terrainCheckpoint) > 1e-6) {
     throw new Error(`Terrain deformation did not restore from Save -> Load: saved=${terrainCheckpoint}, restored=${terrainRestoredDelta}`);
   }
@@ -2357,7 +2357,7 @@ try {
 
   await page.locator("#vFieldUndo").click();
   const fieldAfterUndo = await page.evaluate((probe) => ({
-    sample: window.infiniteWorld.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
+    sample: window.infiniteWorld.sampleWorldField(probe.x, undefined, probe.z),
     history: window.infiniteWorld.getLegacySculptAuthoritativeHistory(),
   }), fieldProbe);
   const renderedFieldColorAfterUndo = await readRenderedFieldColor();
@@ -2373,7 +2373,7 @@ try {
 
   await page.locator("#vFieldRedo").click();
   const fieldAfterRedo = await page.evaluate((probe) => ({
-    sample: window.infiniteWorld.fieldSampler.sampleWorld(probe.x, undefined, probe.z),
+    sample: window.infiniteWorld.sampleWorldField(probe.x, undefined, probe.z),
     history: window.infiniteWorld.getLegacySculptAuthoritativeHistory(),
   }), fieldProbe);
   const renderedFieldColorAfterRedo = await readRenderedFieldColor();
@@ -2960,7 +2960,7 @@ try {
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("#c3d");
   await page.waitForFunction(() => typeof window.worldGenerationHealth === "function");
-  const reloadedSculptState = await page.evaluate(() => window.infiniteWorld?.authoritativeField?.serialize());
+  const reloadedSculptState = await page.evaluate(() => window.infiniteWorld?.getAuthoritativeFieldDiagnostics?.());
   if (JSON.stringify(reloadedSculptState) !== JSON.stringify(persistedSculptState)) {
     throw new Error("Mixed authoritative sculpt persistence did not survive a page reload");
   }
@@ -3352,8 +3352,8 @@ try {
     const point = (x, y) => ({ x: rect.left + ox + (x + 0.5) * cellSize, y: rect.top + oy + (y + 0.5) * cellSize });
     return { start: point(8, 8), end: point(13, 8),
       beforeLegacy: window.realitySculptTransactionRuntime.fingerprint(),
-      beforeField: window.infiniteWorld.authoritativeField.serialize(),
-      beforeMutationCount: window.infiniteWorld.authoritativeField.getMutationCount() };
+      beforeField: window.infiniteWorld.getAuthoritativeFieldDiagnostics(),
+      beforeMutationCount: window.infiniteWorld.getAuthoritativeFieldMutationCount() };
   });
   if (dragSetup.error) throw new Error(dragSetup.error);
   await page.mouse.move(dragSetup.start.x, dragSetup.start.y);
@@ -3362,8 +3362,8 @@ try {
   await page.mouse.up();
   const dragAfter = await page.evaluate(() => ({
     legacy: window.realitySculptTransactionRuntime.fingerprint(),
-    field: window.infiniteWorld.authoritativeField.serialize(),
-    mutationCount: window.infiniteWorld.authoritativeField.getMutationCount(),
+    field: window.infiniteWorld.getAuthoritativeFieldDiagnostics(),
+    mutationCount: window.infiniteWorld.getAuthoritativeFieldMutationCount(),
     history: window.realitySculptTransactionRuntime.history(),
   }));
   const dragOperations = dragAfter.mutationCount - dragSetup.beforeMutationCount;
@@ -3379,7 +3379,7 @@ try {
     { start: dragUndoAckStart, count: dragOperations }, { timeout: acceptanceTimeout });
   const dragUndone = await page.evaluate(() => ({
     legacy: window.realitySculptTransactionRuntime.fingerprint(),
-    field: window.infiniteWorld.authoritativeField.serialize(),
+    field: window.infiniteWorld.getAuthoritativeFieldDiagnostics(),
     history: window.realitySculptTransactionRuntime.history(),
     workerApplied: window.lastChunkSculptHistory?.applied,
   }));
@@ -3395,7 +3395,7 @@ try {
     { start: dragRedoAckStart, count: dragOperations }, { timeout: acceptanceTimeout });
   const dragRedone = await page.evaluate(() => ({
     legacy: window.realitySculptTransactionRuntime.fingerprint(),
-    field: window.infiniteWorld.authoritativeField.serialize(),
+    field: window.infiniteWorld.getAuthoritativeFieldDiagnostics(),
     history: window.realitySculptTransactionRuntime.history(),
     workerApplied: window.lastChunkSculptHistory?.applied,
   }));
@@ -3410,7 +3410,7 @@ try {
   // operation, roll that operation forward and retain the original history.
   const partialUndoBaseline = await page.evaluate(() => ({
     legacy: window.realitySculptTransactionRuntime.fingerprint(),
-    field: window.infiniteWorld.authoritativeField.serialize(),
+    field: window.infiniteWorld.getAuthoritativeFieldDiagnostics(),
     history: window.realitySculptTransactionRuntime.history(),
   }));
   await page.evaluate(async () => {
@@ -3422,7 +3422,7 @@ try {
   });
   const partialUndoBeforeFailure = await page.evaluate(() => ({
     legacy: window.realitySculptTransactionRuntime.fingerprint(),
-    field: window.infiniteWorld.authoritativeField.serialize(),
+    field: window.infiniteWorld.getAuthoritativeFieldDiagnostics(),
     history: window.realitySculptTransactionRuntime.history(),
   }));
   const workerUndoFailure = await page.evaluate(async () => {
@@ -3438,7 +3438,7 @@ try {
     return {
       message,
       legacy: window.realitySculptTransactionRuntime.fingerprint(),
-      field: window.infiniteWorld.authoritativeField.serialize(),
+      field: window.infiniteWorld.getAuthoritativeFieldDiagnostics(),
       history: window.realitySculptTransactionRuntime.history(),
     };
   });
@@ -3465,7 +3465,7 @@ try {
   });
   const partialUndoAfterFailure = await page.evaluate(() => ({
     legacy: window.realitySculptTransactionRuntime.fingerprint(),
-    field: window.infiniteWorld.authoritativeField.serialize(),
+    field: window.infiniteWorld.getAuthoritativeFieldDiagnostics(),
     history: window.realitySculptTransactionRuntime.history(),
   }));
   if (injectedUndo.calls !== 2 || !injectedUndo.message.includes("undo rejected")) {
@@ -3489,7 +3489,7 @@ try {
   await page.evaluate(() => window.undo());
   const partialUndoRecovered = await page.evaluate(() => ({
     legacy: window.realitySculptTransactionRuntime.fingerprint(),
-    field: window.infiniteWorld.authoritativeField.serialize(),
+    field: window.infiniteWorld.getAuthoritativeFieldDiagnostics(),
     history: window.realitySculptTransactionRuntime.history(),
   }));
   if (partialUndoRecovered.legacy !== partialUndoBaseline.legacy ||
@@ -3500,7 +3500,7 @@ try {
   }
   const workerRedoBaseline = await page.evaluate(() => ({
     legacy: window.realitySculptTransactionRuntime.fingerprint(),
-    field: window.infiniteWorld.authoritativeField.serialize(),
+    field: window.infiniteWorld.getAuthoritativeFieldDiagnostics(),
     history: window.realitySculptTransactionRuntime.history(),
   }));
   const workerRedoFailure = await page.evaluate(async () => {
@@ -3516,7 +3516,7 @@ try {
     return {
       message,
       legacy: window.realitySculptTransactionRuntime.fingerprint(),
-      field: window.infiniteWorld.authoritativeField.serialize(),
+      field: window.infiniteWorld.getAuthoritativeFieldDiagnostics(),
       history: window.realitySculptTransactionRuntime.history(),
     };
   });
@@ -3625,11 +3625,11 @@ try {
   await page.waitForSelector("#c3d", { state: "attached" });
   await page.waitForFunction(() =>
     typeof window.worldGenerationHealth === "function" &&
-    !!window.infiniteWorld?.terrainDeformations,
+    typeof window.infiniteWorld?.sampleTerrainDeformationDelta === "function",
   );
   const terrainAfterReload = await page.evaluate((target) => ({
     seed: window.infiniteWorld.generator.seed,
-    delta: window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ),
+    delta: window.infiniteWorld.sampleTerrainDeformationDelta(target.worldX, target.worldZ),
   }), terrainPointerTarget);
   if (terrainAfterReload.seed !== savedTerrainOnDisk.seed ||
       Math.abs(terrainAfterReload.delta - terrainCheckpoint) > 1e-6) {
@@ -3649,12 +3649,12 @@ try {
   await page.waitForSelector("#c3d", { state: "attached" });
   await page.waitForFunction(() =>
     typeof window.worldGenerationHealth === "function" &&
-    !!window.infiniteWorld?.terrainDeformations,
+    typeof window.infiniteWorld?.sampleTerrainDeformationDelta === "function",
   );
   const corruptTerrainResult = await page.evaluate((target) => ({
     seed: window.infiniteWorld.generator.seed,
-    size: window.infiniteWorld.terrainDeformations.size,
-    delta: window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ),
+    size: window.infiniteWorld.getTerrainDeformationCount(),
+    delta: window.infiniteWorld.sampleTerrainDeformationDelta(target.worldX, target.worldZ),
   }), terrainPointerTarget);
   if (corruptTerrainResult.seed !== savedTerrainOnDisk.seed || corruptTerrainResult.size !== 0) {
     throw new Error("Malformed terrain storage was not rejected cleanly: " + JSON.stringify(corruptTerrainResult));
@@ -3667,11 +3667,11 @@ try {
   await page.waitForSelector("#c3d", { state: "attached" });
   await page.waitForFunction(() =>
     typeof window.worldGenerationHealth === "function" &&
-    !!window.infiniteWorld?.terrainDeformations,
+    typeof window.infiniteWorld?.sampleTerrainDeformationDelta === "function",
   );
   const terrainAfterRecovery = await page.evaluate((target) => ({
     seed: window.infiniteWorld.generator.seed,
-    delta: window.infiniteWorld.terrainDeformations.sampleDelta(target.worldX, target.worldZ),
+    delta: window.infiniteWorld.sampleTerrainDeformationDelta(target.worldX, target.worldZ),
   }), terrainPointerTarget);
   if (terrainAfterRecovery.seed !== savedTerrainOnDisk.seed ||
       Math.abs(terrainAfterRecovery.delta - terrainCheckpoint) > 1e-6) {
