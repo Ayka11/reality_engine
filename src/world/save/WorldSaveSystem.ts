@@ -241,7 +241,7 @@ export class WorldSaveSystem {
         cosmologicalSim: this.context.getCosmologicalSnapshot?.(),
         director: this.context.getDirectorSnapshot?.(),
       },
-      realityGraph: this.context.graphProvider?.(),
+      realityGraph: structuredClone(this.context.graphProvider?.()),
       activeLaws: activeLaws.map(law => this.snapshotLaw(law)),
       activeProcesses: this.captureProcesses(),
       entities: this.captureEntities(),
