@@ -52,14 +52,28 @@ try {
     "external-asset-placement",
     "world-library-civilization-branch",
   ];
+  const expectedExcludedIdentityDomains = [
+    "finite-simulation-entity",
+    "simulation-agent",
+    "simulation-civilization",
+    "legacy-cluster",
+    "kernel-ecs",
+    "world-resource-inventory",
+    "world-production-infrastructure",
+  ];
   if (!Number.isSafeInteger(globalEntityIdentity?.revision) ||
       globalEntityIdentity.coverage?.status !== "partial" ||
       !expectedIdentityDomains.every(domain =>
         globalEntityIdentity.domains?.some(record => record.domain === domain)) ||
       new Set(globalEntityIdentity.entries?.map(entry => entry.identityKey)).size !==
         globalEntityIdentity.entries?.length ||
+      !Array.isArray(globalEntityIdentity.coverage?.capturedDomains) ||
+      expectedIdentityDomains.length !== globalEntityIdentity.coverage.capturedDomains.length ||
+      !expectedIdentityDomains.every(domain => globalEntityIdentity.coverage.capturedDomains.includes(domain)) ||
       !Array.isArray(globalEntityIdentity.coverage?.excludedDomains) ||
-      globalEntityIdentity.coverage.excludedDomains.length < 7) {
+      expectedExcludedIdentityDomains.length !== globalEntityIdentity.coverage.excludedDomains.length ||
+      !expectedExcludedIdentityDomains.every(domain =>
+        globalEntityIdentity.coverage.excludedDomains.some(entry => entry.domain === domain))) {
     throw new Error("Global entity identity directory is incomplete or contains colliding keys: " +
       JSON.stringify(globalEntityIdentity));
   }
