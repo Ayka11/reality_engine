@@ -48,7 +48,15 @@ export class AgentSystem {
   private readonly initialRngState: number;
   private _rngState = 0x0a63c9d1;
   private _nextAgentId = 1;
+  private mutationObserver: (() => void) | null = null;
   readonly maxAgents = 64;
+
+  /** Register the owning engine's stale-readback invalidation hook. */
+  setMutationObserver(observer: (() => void) | null): void {
+    this.mutationObserver = observer;
+  }
+
+  private notifyMutation(): void { this.mutationObserver?.(); }
 
   constructor(seed = 0x0a63c9d1) {
     this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x0a63c9d1 : 0x0a63c9d1;
@@ -143,6 +151,7 @@ export class AgentSystem {
     this.agents = restored;
     this._nextAgentId = snapshot.nextAgentId;
     this._rngState = snapshot.rngState >>> 0;
+    this.notifyMutation();
   }
 
   // Seed agents + inject local energy so they survive from a cold start
@@ -363,5 +372,6 @@ export class AgentSystem {
     this.agents.clear();
     this._nextAgentId = 1;
     this._rngState = this.initialRngState;
+    this.notifyMutation();
   }
 }
