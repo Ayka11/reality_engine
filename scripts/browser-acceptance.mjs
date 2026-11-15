@@ -58,7 +58,7 @@ try {
       new Set(globalEntityIdentity.entries?.map(entry => entry.identityKey)).size !==
         globalEntityIdentity.entries?.length ||
       !Array.isArray(globalEntityIdentity.coverage?.excludedDomains) ||
-      globalEntityIdentity.coverage.excludedDomains.length < 6) {
+      globalEntityIdentity.coverage.excludedDomains.length < 8) {
     throw new Error("Global entity identity directory is incomplete or contains colliding keys: " +
       JSON.stringify(globalEntityIdentity));
   }
