@@ -61,6 +61,13 @@ registry.replaceDomains([
 assert.equal(registry.revision, unchangedRevision,
   "publishing unchanged complete inventories must not advance the directory revision");
 
+registry.replaceDomain("simulation-entity", [
+  { id: 1, kind: "mature" },
+  { id: "1", kind: "imported-legacy-id" },
+]);
+assert.equal(registry.revision, unchangedRevision,
+  "publishing an unchanged subset of source domains must not advance the directory revision");
+
 const beforeRejectedUpdate = registry.snapshot();
 assert.throws(() => registry.replaceDomains([
   {
