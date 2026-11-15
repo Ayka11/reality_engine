@@ -227,11 +227,17 @@ assert.equal(sampler.sampleTerrain(120, -80).height, 0)
 const renderer = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8')
 const resetAt = renderer.indexOf('this.generator = new WorldGenerator(normalizedSeed)')
 assert.ok(resetAt >= 0, 'world-seed reset code must exist')
-const setGeneratorAt = renderer.indexOf('this.fieldSampler.setGenerator(this.generator)', resetAt)
-const setAuthoritativeBaseAt = renderer.indexOf('this.authoritativeField.setBase(new GeneratorFieldProvider(this.generator))', resetAt)
-const setAuthoritativeProviderAt = renderer.indexOf('this.fieldSampler.setProvider(this.authoritativeField)', resetAt)
+const setGeneratorAt = renderer.indexOf('this.#fieldSampler.setGenerator(this.generator)', resetAt)
+const setAuthoritativeBaseAt = renderer.indexOf('this.#authoritativeField.setBase(new GeneratorFieldProvider(this.generator))', resetAt)
+const setAuthoritativeProviderAt = renderer.indexOf('this.#fieldSampler.setProvider(this.#authoritativeField)', resetAt)
 assert.ok(setGeneratorAt > resetAt && setAuthoritativeBaseAt > setGeneratorAt && setAuthoritativeProviderAt > setAuthoritativeBaseAt,
   'seed reset must update the sampler surface and then restore the authoritative scientific-field provider')
+assert.match(renderer, /readonly #fieldSampler: FieldSampler/)
+assert.match(renderer, /readonly #authoritativeField: MutableWorldFieldProvider/)
+assert.equal(renderer.includes('readonly fieldSampler: FieldSampler'), false,
+  'the active renderer must not expose its mutable FieldSampler')
+assert.equal(renderer.includes('readonly authoritativeField: MutableWorldFieldProvider'), false,
+  'the active renderer must not expose its mutable authoritative provider')
 
 const surfaceContractSource = await readFile(new URL('src/infinity/WorldSurfaceProvider.ts', root), 'utf8')
 assert.match(surfaceContractSource, /minimumElevation\?: number/)
