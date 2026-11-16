@@ -540,6 +540,7 @@ try {
       seed: 23,
       properties: { source: "acceptance-reseed-failure" },
     }]);
+    const identityBefore = window.getGlobalEntityIdentitySnapshot?.();
     const before = {
       generatorSeed: world.generator.seed,
       activeSeed: localStorage.getItem("reality-engine-active-world-seed"),
@@ -558,9 +559,12 @@ try {
     } finally {
       Storage.prototype.removeItem = originalRemoveItem;
     }
+    const identityAfter = window.getGlobalEntityIdentitySnapshot?.();
     return {
       staleSaved,
       before,
+      identityBefore,
+      identityAfter,
       after: {
         generatorSeed: world.generator.seed,
         activeSeed: localStorage.getItem("reality-engine-active-world-seed"),
@@ -572,6 +576,9 @@ try {
     };
   });
   if (failedReseedContract.error ||
+      !failedReseedContract.identityBefore ||
+      !failedReseedContract.identityAfter ||
+      JSON.stringify(failedReseedContract.identityBefore) !== JSON.stringify(failedReseedContract.identityAfter) ||
       failedReseedContract.staleSaved !== true ||
       failedReseedContract.after.generatorSeed !== failedReseedContract.before.generatorSeed ||
       failedReseedContract.after.activeSeed !== failedReseedContract.before.activeSeed ||
@@ -984,6 +991,7 @@ try {
     await window.worldExternalAssetLoad("acceptance-second-asset", url, "flora.tree", 1);
   }, secondMockAssetUrl);
 
+  const identityBeforeScatter = await page.evaluate(() => window.getGlobalEntityIdentitySnapshot?.());
   const sourceAScatterCount = await page.evaluate(() =>
     window.worldExternalAssetScatterSource(
       "acceptance-package-asset", "flora.tree", 2, 20, 1729, 1,
@@ -997,6 +1005,7 @@ try {
     const placements = runtime.snapshotPlacements();
     return {
       stats: window.worldExternalAssetStats(),
+      identitySnapshot: window.getGlobalEntityIdentitySnapshot?.(),
       sourceAIds: placements.filter(item => item.sourceAssetId === "acceptance-package-asset")
         .map(item => item.instanceId),
       sourceBIds: placements.filter(item => item.sourceAssetId === "acceptance-second-asset")
@@ -1004,6 +1013,10 @@ try {
     };
   });
   if (sourceAScatterCount !== 2 || sourceBScatterCount !== 2 ||
+      !identityBeforeScatter ||
+      !multiSourceScatterState.identitySnapshot ||
+      multiSourceScatterState.identitySnapshot.revision <= identityBeforeScatter.revision ||
+      multiSourceScatterState.identitySnapshot.domains.find(domain => domain.domain === "external-asset-placement")?.count !== 5 ||
       multiSourceScatterState.stats?.loaded !== 2 ||
       multiSourceScatterState.stats?.instances !== 5 ||
       multiSourceScatterState.sourceAIds.length !== 3 ||
@@ -1031,8 +1044,22 @@ try {
     return {
       stats: window.worldExternalAssetStats(),
       placements: runtime.snapshotPlacements(),
+      identitySnapshot: window.getGlobalEntityIdentitySnapshot?.(),
     };
   });
+  const placementIdentityEntries = snapshot => snapshot?.entries
+    ?.filter(entry => entry.domain === "external-asset-placement") ?? [];
+  const beforeRemovalIdentityEntries = placementIdentityEntries(multiSourceScatterState.identitySnapshot);
+  const afterFirstRemovalIdentityEntries = placementIdentityEntries(afterRemovingFirstSource.identitySnapshot);
+  if (beforeRemovalIdentityEntries.length !== 5 ||
+      afterFirstRemovalIdentityEntries.length !== 2 ||
+      afterRemovingFirstSource.identitySnapshot.revision <= multiSourceScatterState.identitySnapshot.revision ||
+      JSON.stringify(afterFirstRemovalIdentityEntries.map(entry => entry.localId).sort()) !==
+        JSON.stringify(multiSourceScatterState.sourceBIds.slice().sort())) {
+    throw new Error("Removing one GLTF source did not publish only the surviving source placement identities: " +
+      JSON.stringify({ before: multiSourceScatterState.identitySnapshot, after: afterRemovingFirstSource.identitySnapshot,
+        sourceBIds: multiSourceScatterState.sourceBIds }));
+  }
   if (afterRemovingFirstSource.stats?.loaded !== 1 ||
       afterRemovingFirstSource.stats?.instances !== 2 ||
       afterRemovingFirstSource.placements.length !== 2 ||
@@ -1041,9 +1068,15 @@ try {
       JSON.stringify(afterRemovingFirstSource));
   }
   await page.evaluate(() => window.worldExternalAssetRemove("acceptance-second-asset"));
-  const afterRemovingBothSources = await page.evaluate(() => window.worldExternalAssetStats());
-  if (afterRemovingBothSources?.loaded !== 0 || afterRemovingBothSources?.instances !== 0) {
-    throw new Error("Removing both GLTF sources must release every runtime asset and instance: " +
+  const afterRemovingBothSources = await page.evaluate(() => ({
+    stats: window.worldExternalAssetStats(),
+    identitySnapshot: window.getGlobalEntityIdentitySnapshot?.(),
+  }));
+  if (afterRemovingBothSources.stats?.loaded !== 0 ||
+      afterRemovingBothSources.stats?.instances !== 0 ||
+      placementIdentityEntries(afterRemovingBothSources.identitySnapshot).length !== 0 ||
+      afterRemovingBothSources.identitySnapshot.revision <= afterRemovingFirstSource.identitySnapshot.revision) {
+    throw new Error("Removing both GLTF sources must release every runtime asset and publish an empty placement domain: " +
       JSON.stringify(afterRemovingBothSources));
   }
 
@@ -1068,6 +1101,7 @@ try {
   console.log("[acceptance] Save -> restart -> Load -> Continue Simulation PASS");
 
   console.log("[acceptance] malformed re_v6 imports fail before any world mutation");
+  const identityBeforeRejectedPackage = await page.evaluate(() => window.getGlobalEntityIdentitySnapshot?.());
   const invalidPackage = { ...savedPackage, W: savedPackage.W + 1 };
   await loadInput.setInputFiles({
     name: "invalid-dimensions.reality",
@@ -1076,11 +1110,14 @@ try {
   });
   await page.waitForFunction(() => document.getElementById("plog")?.textContent.includes("Load failed:"));
   const afterRejectedPackage = await page.evaluate(objectId => ({
+    identitySnapshot: window.getGlobalEntityIdentitySnapshot?.(),
     exists: !!window.infiniteWorld?.objects?.get(objectId),
     seed: window.infiniteWorld?.generator?.seed,
     hasAsset: window.worldAssetManifest?.entries?.some(entry => entry.id === "acceptance-package-asset"),
   }), packageFixture.objectId);
-  if (!afterRejectedPackage.exists ||
+  if (!identityBeforeRejectedPackage ||
+      JSON.stringify(identityBeforeRejectedPackage) !== JSON.stringify(afterRejectedPackage.identitySnapshot) ||
+      !afterRejectedPackage.exists ||
       afterRejectedPackage.seed !== packageFixture.generatorSeed ||
       !afterRejectedPackage.hasAsset) {
     throw new Error("Rejected package changed the previously loaded world: " + JSON.stringify(afterRejectedPackage));
@@ -4300,6 +4337,21 @@ try {
       surfaceId: world.getWorldSurfaceProviderInfo().id,
       manifestEntries: window.worldAssetManifest.entries.length,
     };
+    const originalPersistenceClear = world.persistence.clear;
+    let failedClearResult;
+    world.persistence.clear = function () { return false; };
+    try {
+      failedClearResult = world.clearSavedWorld();
+    } finally {
+      world.persistence.clear = originalPersistenceClear;
+    }
+    const identityAfterFailedClear = window.getGlobalEntityIdentitySnapshot?.();
+    const afterFailedClearState = {
+      objects: world.getObjectCount(),
+      fieldMutations: world.getAuthoritativeFieldMutationCount(),
+      surfaceId: world.getWorldSurfaceProviderInfo().id,
+      manifestEntries: window.worldAssetManifest.entries.length,
+    };
     const cleared = world.clearSavedWorld();
     const identityAfterClear = window.getGlobalEntityIdentitySnapshot?.();
     const undo = world.undo();
@@ -4336,6 +4388,9 @@ try {
       before,
       state,
       identityBeforeClear,
+      identityAfterFailedClear,
+      failedClearResult,
+      afterFailedClearState,
       identityAfterClear,
       priorObjectIds,
       priorPlacementIds,
@@ -4345,6 +4400,16 @@ try {
     throw new Error("World clear acceptance fixture failed: " + JSON.stringify(clearWorldContract));
   }
   const clearedWorld = clearWorldContract.state;
+  if (clearWorldContract.failedClearResult !== false ||
+      !clearWorldContract.identityBeforeClear ||
+      JSON.stringify(clearWorldContract.identityBeforeClear) !== JSON.stringify(clearWorldContract.identityAfterFailedClear) ||
+      clearWorldContract.afterFailedClearState?.objects !== clearWorldContract.before?.objects ||
+      clearWorldContract.afterFailedClearState?.fieldMutations !== clearWorldContract.before?.fieldMutations ||
+      clearWorldContract.afterFailedClearState?.surfaceId !== clearWorldContract.before?.surfaceId ||
+      clearWorldContract.afterFailedClearState?.manifestEntries !== clearWorldContract.before?.manifestEntries) {
+    throw new Error("A failed Clear World transaction changed live editor state or published a partial identity snapshot: " +
+      JSON.stringify(clearWorldContract));
+  }
   const clearIdentityBefore = clearWorldContract.identityBeforeClear;
   const clearIdentityAfter = clearWorldContract.identityAfterClear;
   if (!clearIdentityBefore ||
