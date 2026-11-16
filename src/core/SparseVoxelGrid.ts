@@ -94,7 +94,7 @@ export class SparseVoxelGrid {
     return this.#_denseOrigin;
   }
 
-  set #denseOrigin(origin: { x: number; y: number; z: number }) {
+  #setDenseOrigin(origin: { x: number; y: number; z: number }): void {
     if (!origin ||
         ![origin.x, origin.y, origin.z].every(Number.isSafeInteger)) {
       throw new Error("Invalid dense origin");
@@ -112,7 +112,7 @@ export class SparseVoxelGrid {
 
   /** Validated public origin update; authoritative coordinates remain runtime-private. */
   set denseOrigin(origin: { x: number; y: number; z: number }) {
-    this.#denseOrigin = origin;
+    this.#setDenseOrigin(origin);
   }
 
   constructor(W = 64, H = 64, D = 32) {
@@ -441,7 +441,7 @@ export class SparseVoxelGrid {
 
     this.#_sparseDenseBuffer.set(snapshot.buffer);
     this.#_sparseDenseBackBuffer.set(snapshot.backBuffer);
-    this.#denseOrigin = { ...snapshot.denseOrigin };
+    this.#setDenseOrigin(snapshot.denseOrigin);
     this.chunks.clear();
     for (const [key, chunk] of restoredChunks) this.chunks.set(key, chunk);
     // The range is derived from the fully restored chunk topology, so install it
