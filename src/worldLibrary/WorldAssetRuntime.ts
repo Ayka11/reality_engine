@@ -38,7 +38,7 @@ export class WorldAssetRuntime {
   /** Latest absolute-world anchor used to rebase renderer-local instance positions. */
   #worldAnchor = { x: 0, y: 0, z: 0 }
   readonly #scene: THREE.Scene
-  private readonly onPlacementsChanged?: () => void
+  readonly #onPlacementsChanged?: () => void
 
   constructor(
     scene: THREE.Scene,
@@ -50,15 +50,6 @@ export class WorldAssetRuntime {
     this.#onPlacementsChanged = onPlacementsChanged
     // Runtime ownership is held exclusively in private fields; prevent shadow properties.
     Object.freeze(this)
-    for (const key of [
-      'loader', 'scene', 'onPlacementsChanged', 'assets', 'loading', 'loadingRequests',
-      'pendingRejectors', 'pendingLoadTokens', 'semanticSources', 'instances',
-      'instanceMixers', 'instanceActions', 'pendingAnimationStops', 'animationAccumulators',
-    ]) {
-      const descriptor = Object.getOwnPropertyDescriptor(this, key)
-      if (!descriptor) throw new Error('WorldAssetRuntime ownership descriptor missing: ' + key)
-      Object.defineProperty(this, key, { ...descriptor, writable: false, configurable: false })
-    }
   }
 
   has(id: string) {
