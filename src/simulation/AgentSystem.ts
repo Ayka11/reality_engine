@@ -206,7 +206,8 @@ export class AgentSystem {
       throw new RangeError("AgentSystem tick dt must be a finite non-negative number");
     }
 
-    withMutableBuffers(grid, (front, _back) => {
+    try {
+      withMutableBuffers(grid, (front, _back) => {
       const dead: number[] = [];
 
       for (const [id, agent] of this.agents) {
