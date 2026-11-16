@@ -391,7 +391,8 @@ export class EntityLayer {
       throw new RangeError("EntityLayer tick dt must be a finite non-negative number");
     }
 
-    withMutableBuffers(grid, (front, _back) => {
+    try {
+      withMutableBuffers(grid, (front, _back) => {
       const originalEntities = new Map(this.entities);
       const entitySnapshots = new Map<number, Entity>();
       const entityMutableRefs = new Map<number, Pick<Entity, "cells" | "centroid" | "genome" | "memoryBuffer" | "colorRgb">>();
@@ -529,7 +530,12 @@ export class EntityLayer {
         }
         throw error;
       }
-    });
+      });
+    } finally {
+      // Entity identity/lifecycle is owned by this layer, not by the supplied grid.
+      // A foreign-grid tick must still invalidate readbacks owned by its engine.
+      this.notifyMutation();
+    }
   }
 
   private _rollbackTick(grid: VoxelGrid, rollback: EntityLayerTickRollbackState): void {
