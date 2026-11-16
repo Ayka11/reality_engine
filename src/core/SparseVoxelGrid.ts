@@ -105,6 +105,16 @@ export class SparseVoxelGrid {
     this.#markMutation();
   }
 
+  /** Detached, immutable origin view for spatial callers and diagnostics. */
+  get denseOrigin(): Readonly<{ x: number; y: number; z: number }> {
+    return Object.freeze({ ...this.#denseOrigin });
+  }
+
+  /** Validated public origin update; authoritative coordinates remain runtime-private. */
+  set denseOrigin(origin: { x: number; y: number; z: number }) {
+    this.#denseOrigin = origin;
+  }
+
   constructor(W = 64, H = 64, D = 32) {
     const size = validateGridDimensions(W, H, D, "SparseVoxelGrid");
     this.W = W;

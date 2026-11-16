@@ -76,13 +76,22 @@ function runGridDimensionImmutabilityRegression(): void {
   }
 }
 
+function assertInvalidDenseOrigin(grid: SparseVoxelGrid): void {
+  const revision = grid.mutationRevision;
+  let rejected = false;
+  try { grid.denseOrigin = { x: 0.5, y: 0, z: 0 }; } catch { rejected = true; }
+  if (!rejected || grid.denseOrigin.x !== 0 || grid.mutationRevision !== revision) {
+    throw new Error("Invalid public dense-origin replacement must fail atomically");
+  }
+}
+
 function runDenseOriginMutationContractRegression(): void {
   const grid = new SparseVoxelGrid(2, 2, 2);
   const initialState = grid.captureState();
   const hiddenNames = [
     "_activeChunkRange", "_sparseDenseBuffer", "_sparseDenseBackBuffer",
     "_sparseDenseBufferView", "_sparseDenseBackBufferView", "sparseMutationDepth",
-    "sparseMutationPending", "_sparseMutationRevision", "_denseOrigin", "denseOrigin",
+    "sparseMutationPending", "_sparseMutationRevision", "_denseOrigin",
     "assertSparseBuffer", "isValidChunkKey", "assertFieldOffset", "seedDenseWindowChunks",
     "assertDenseCoordinates", "getOrCreateChunkForGlobal", "globalToChunk",
     "onChunkMapMutation", "chunkRangeFor", "updateActiveRange",
@@ -92,6 +101,23 @@ function runDenseOriginMutationContractRegression(): void {
     if (!Reflect.set(grid, name, null)) throw new Error(`SparseVoxelGrid JS shadow failed for ${name}`);
   }
   if (!Reflect.set(grid, "markMutation", null)) throw new Error("Public compatibility method shadow fixture failed");
+
+  const initialRevision = grid.mutationRevision;
+  const detachedOrigin = grid.denseOrigin as { x: number; y: number; z: number };
+  let nestedWriteRejected = false;
+  try { detachedOrigin.x = 7; } catch { nestedWriteRejected = true; }
+  if (!nestedWriteRejected || grid.denseOrigin.x !== 0 ||
+      grid.mutationRevision !== initialRevision) {
+    throw new Error("Public dense-origin reads must be detached and immutable");
+  }
+  assertInvalidDenseOrigin(grid);
+  grid.denseOrigin = { x: -3, y: 4, z: 5 };
+  if (grid.mutationRevision <= initialRevision ||
+      grid.denseOrigin.x !== -3 || grid.denseOrigin.y !== 4 || grid.denseOrigin.z !== 5) {
+    throw new Error("Valid public dense-origin replacement must be revision-tracked");
+  }
+  grid.denseOrigin = { ...initialState.denseOrigin };
+
   for (const name of ["chunks", "dirtyChunks", "chunkOwners"]) {
     if (Reflect.set(grid, name, new Map())) throw new Error(`SparseVoxelGrid owner collection ${name} must be immutable`);
   }
