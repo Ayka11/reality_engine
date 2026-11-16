@@ -363,6 +363,54 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   entityTickEngine.grid.assertDenseEntityOwnershipSynchronized();
   console.log("EntityLayer scoped dense/sparse tick invalidates pending GPU readback and preserves entity ownership: PASS");
 
+  // Public subsystem methods may receive a grid other than the engine-owned grid.
+  // Their own entity/agent/RNG state still belongs to this SimulationEngine and
+  // must invalidate a pending readback even when the foreign grid revision changes.
+  const foreignAgentSeedEngine = new SimulationEngine(4, 4, 4);
+  (foreignAgentSeedEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const foreignAgentSeedGrid = new SparseVoxelGrid(4, 4, 4);
+  const staleForeignAgentSeedReadback = foreignAgentSeedEngine.grid.buffer.slice();
+  const pendingForeignAgentSeed = await beginPendingReadback(foreignAgentSeedEngine, staleForeignAgentSeedReadback);
+  foreignAgentSeedEngine.agents.seed(foreignAgentSeedGrid, 1);
+  assert.equal(foreignAgentSeedEngine.agents.getAgents().length, 1,
+    "seeding against a foreign grid must still mutate the owning AgentSystem");
+  pendingForeignAgentSeed.release(staleForeignAgentSeedReadback);
+  await assert.rejects(pendingForeignAgentSeed.step, /Discarded stale GPU readback/);
+  console.log("AgentSystem foreign-grid seed invalidates pending GPU readback: PASS");
+
+  const foreignAgentTickEngine = new SimulationEngine(4, 4, 4);
+  (foreignAgentTickEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const foreignAgentTickGrid = new SparseVoxelGrid(4, 4, 4);
+  foreignAgentTickEngine.agents.seed(foreignAgentTickGrid, 1);
+  const agentAgeBeforeForeignTick = foreignAgentTickEngine.agents.getAgents()[0].age;
+  const staleForeignAgentTickReadback = foreignAgentTickEngine.grid.buffer.slice();
+  const pendingForeignAgentTick = await beginPendingReadback(foreignAgentTickEngine, staleForeignAgentTickReadback);
+  foreignAgentTickEngine.agents.tick(foreignAgentTickGrid, 1 / 60);
+  assert.ok(foreignAgentTickEngine.agents.getAgents()[0].age > agentAgeBeforeForeignTick,
+    "AgentSystem foreign-grid tick must advance the owning agent state");
+  pendingForeignAgentTick.release(staleForeignAgentTickReadback);
+  await assert.rejects(pendingForeignAgentTick.step, /Discarded stale GPU readback/);
+  console.log("AgentSystem foreign-grid tick invalidates pending GPU readback: PASS");
+
+  const foreignEntityTickEngine = new SimulationEngine(8, 8, 8);
+  (foreignEntityTickEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const foreignEntityGrid = new SparseVoxelGrid(8, 8, 8);
+  const foreignEntityCellA = foreignEntityGrid.idx(2, 2, 2);
+  const foreignEntityCellB = foreignEntityGrid.idx(3, 2, 2);
+  for (const base of [foreignEntityCellA, foreignEntityCellB]) {
+    foreignEntityGrid.buffer[base + F.BIO_POTENTIAL] = 0.8;
+    foreignEntityGrid.buffer[base + F.ENERGY] = 200;
+  }
+  foreignEntityGrid.syncDenseToChunks();
+  const staleForeignEntityReadback = foreignEntityTickEngine.grid.buffer.slice();
+  const pendingForeignEntityTick = await beginPendingReadback(foreignEntityTickEngine, staleForeignEntityReadback);
+  foreignEntityTickEngine.entityLayer.tick(foreignEntityGrid, 1 / 60);
+  assert.ok(foreignEntityTickEngine.entityLayer.getEntities().length > 0,
+    "EntityLayer foreign-grid tick must publish its entity lifecycle mutation");
+  pendingForeignEntityTick.release(staleForeignEntityReadback);
+  await assert.rejects(pendingForeignEntityTick.step, /Discarded stale GPU readback/);
+  console.log("EntityLayer foreign-grid tick invalidates pending GPU readback: PASS");
+
   // AgentSystem's public PRNG restore changes future simulation behavior even
   // when it does not touch the grid. Its observer must invalidate a pending GPU
   // readback just like a complete agent snapshot restore.
