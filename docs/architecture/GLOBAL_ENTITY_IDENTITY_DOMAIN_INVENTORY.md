@@ -70,6 +70,7 @@ The World Library contains several kinds of ID-bearing data. They must not all b
 - Browser Acceptance verifies failed reseed, failed Clear World, malformed package preflight, and a late package-publication failure leave the previous identity snapshot unchanged; the late-failure case also checks restoration of object IDs, placement descriptors, seed and manifest state.
 - Browser Acceptance exercises real world-object `place → undo → redo → undo` history; the global revision advances at every membership change and Redo restores the exact same `identityKey` and `localId`.
 - Browser Acceptance also exercises `transformSelected → undo transform → redo transform`: object coordinates/scale/rotation restore correctly while identity key/local ID and global revision remain unchanged; undoing object creation then removes the identity.
+- Browser Acceptance exercises `CivilizationRuntime.forkBranch → tickBranch → restoreState`: the branch snapshot clock advances from the source tick, while the same branch identity key and global revision are retained during tick; restoring the previous runtime removes the branch identity and advances the revision.
 
 Exact-head CI evidence on 2026-11-16:
 - [CI #2657](https://github.com/Ayka11/reality_engine/actions/runs/43835431361), commit `66b504c5e3a565359e6690266c639b3b86ba0daa`, 104/104 steps: failed transitions are identity no-ops; asset removal publishes exact surviving placement IDs; successful reset/reseed and restart do not resurrect removed IDs.
@@ -94,3 +95,6 @@ Exact-head history verification: [CI #2663](https://github.com/Ayka11/reality_en
 
 
 Exact-head transform/history evidence: [CI #2665](https://github.com/Ayka11/reality_engine/actions/runs/43857275814) passed 104/104 on `5f2d688fef42b4702bb601fd45ea97ef38b2f08c`. For the transform-only sequence the directory revision remained 8; final Undo of the created object removed the identity and advanced it to 9.
+
+
+Exact-head Civilization branch identity/clock evidence: [CI #2669](https://github.com/Ayka11/reality_engine/actions/runs/43863096671) passed 104/104 on `038bef088d6f9a66db8c378f2d48234cf4038b0e`. Browser Acceptance recorded branch tick 1 → 2 with identity revision unchanged at 2 and identical identity key; restore removed the branch and advanced revision to 3. The associated unit regression verifies `branchState.memory.ticks` and `branchSnapshot.tick` are aligned on fork and after tick.
