@@ -169,7 +169,8 @@ export class AgentSystem {
     // A no-op seed must not acquire a mutable grid buffer (which advances the
     // tracked mutation revision) when no agents can be added.
     if (count === 0 || this.agents.size >= this.maxAgents) return;
-    withMutableBuffers(grid, (front, _back) => {
+    try {
+      withMutableBuffers(grid, (front, _back) => {
       for (let i = 0; i < count && this.agents.size < this.maxAgents; i++) {
         // Keep seeded agents in-bounds for small test worlds as well as the
         // default world. The previous fixed margins could create coordinates
@@ -189,7 +190,13 @@ export class AgentSystem {
 
         this._spawn(x, y, z, randomBehavior(() => this._random()), 200);
       }
-    });
+      });
+    } finally {
+      // AgentSystem owns population and PRNG state independently of the supplied grid.
+      // Invalidate an owning SimulationEngine even when a caller ticks/seeds against
+      // a different grid, or when the scoped grid transaction throws after mutation.
+      this.notifyMutation();
+    }
   }
 
   tick(grid: VoxelGrid, dt: number): void {
@@ -251,7 +258,12 @@ export class AgentSystem {
         front[base + F.AGENT_MARK] = 0;
         this.agents.delete(id);
       }
-    });
+      });
+    } finally {
+      // Agent age, energy, position, population and RNG are engine-relevant state;
+      // grid revision alone cannot observe mutations made through a foreign grid.
+      this.notifyMutation();
+    }
   }
 
   private _base(grid: VoxelGrid, x: number, y: number, z: number): number {
