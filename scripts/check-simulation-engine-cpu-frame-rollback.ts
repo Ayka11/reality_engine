@@ -40,12 +40,12 @@ export async function runSimulationEngineCPUFrameRollbackRegression(): Promise<v
       if (agent) agent.energy = 1;
       engine.agents.seed(engine.grid, 1);
 
-      // Consume private PRNGs explicitly so deterministic state recovery is
-      // tested even if later runtime changes stop drawing from one of them.
-      (engine.agents as unknown as { _random: () => number })._random();
-      (engine.entityLayer as unknown as { _random: () => number })._random();
-      (engine.laws as unknown as { _random: () => number })._random();
-      (engine.worldEvents as unknown as { _random: () => number })._random();
+      // Advance each authoritative PRNG through supported public operations.
+      // Tests must not depend on implementation-private random helpers.
+      engine.entityLayer.setRandomSeed(0x12345678);
+      assert.ok(engine.laws.spawnMutation("law_thermo"));
+      // AgentSystem.seed() above and WorldEvents.trigger() below both consume
+      // their owning subsystem PRNGs inside their supported mutation paths.
 
       engine.laws.toggleProcess(27, true);
       engine.worldEvents.trigger(engine.grid, "meteor_strike", engine.tick);

@@ -54,7 +54,7 @@ const EVENT_DESC: Record<EventType, string> = {
 export class WorldEvents {
   #history: WorldEvent[] = [];
   #_nextAuto = 600; // ticks until next random event
-  #initialRngState: number;
+  readonly #initialRngState: number;
   #_rngState = 0x6d2b79f5;
   #mutationObserver: (() => void) | null = null;
 
