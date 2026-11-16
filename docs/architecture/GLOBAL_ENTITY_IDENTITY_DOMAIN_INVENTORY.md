@@ -68,6 +68,7 @@ The World Library contains several kinds of ID-bearing data. They must not all b
 - Browser Acceptance verifies placement transform changes retain the same `identityKey`/`localId` and do not advance the identity revision, while updated coordinates, scale and rotation are written to the durable placement sidecar.
 - Browser Acceptance verifies source-scoped GLTF removal publishes the exact remaining source IDs and then an empty placement domain after the final source is removed.
 - Browser Acceptance verifies failed reseed, failed Clear World, malformed package preflight, and a late package-publication failure leave the previous identity snapshot unchanged; the late-failure case also checks restoration of object IDs, placement descriptors, seed and manifest state.
+- Browser Acceptance exercises real world-object `place → undo → redo → undo` history; the global revision advances at every membership change and Redo restores the exact same `identityKey` and `localId`.
 
 Exact-head CI evidence on 2026-11-16:
 - [CI #2657](https://github.com/Ayka11/reality_engine/actions/runs/43835431361), commit `66b504c5e3a565359e6690266c639b3b86ba0daa`, 104/104 steps: failed transitions are identity no-ops; asset removal publishes exact surviving placement IDs; successful reset/reseed and restart do not resurrect removed IDs.
@@ -86,3 +87,6 @@ These checks validate the covered paths. They do not establish that every exclud
 6. Only after every relevant domain is enumerated and verified may `coverage.status` change from `partial`.
 
 The current status is intentionally `partial`. A green CI run proves the configured, covered contracts pass; it does not prove that excluded domains are integrated.
+
+
+Exact-head history verification: [CI #2663](https://github.com/Ayka11/reality_engine/actions/runs/43855338822) passed 104/104 on `931a075f4d5791410fcddcf92d6b8a842d8fb0fa`. The observed identity revision sequence for Place/Undo/Redo/Undo was 5 → 6 → 7 → 8 → 9; Redo preserved the same key and local ID.
