@@ -5,7 +5,7 @@ Last reconciled: 2026-11-16
 
 ## Current verified state — reconciled against mainline 2026-11-16
 
-The live implementation and release boundaries below refer to the current `main` branch, not the historical October integration candidate. CI #2657, #2658 and #2659 each passed 104/104 steps on their exact commits. Those runs strengthen identity lifecycle, world-editor package recovery, placement persistence and rollback evidence; they do not change the architectural limits below or certify the application as production-ready.
+The live implementation and release boundaries below refer to the current `main` branch, not the historical October integration candidate. CI #2657, #2658, #2659, #2665, #2666 and #2669 passed 104/104 steps on their respective exact commits. These runs strengthen global identity lifecycle (world-object add/remove, transforms, undo/redo, asset placement import/update/removal/restart and civilization branch fork/tick/restore), world-editor package recovery, mutable-buffer ownership guards and fail-closed adaptive LOD validation. They do not change the architectural limits below or certify the application as production-ready. Latest validated code head: `038bef088d6f9a66db8c378f2d48234cf4038b0e` ([CI #2669](https://github.com/Ayka11/reality_engine/actions/runs/43863096671)).
 
 
 ### 1. 3D Infinite World
@@ -49,7 +49,7 @@ Production 2D rendering should be a world-space projection of the selected field
 Required acceptance: selecting a structure or field anomaly in one mode must identify the same world coordinate in the other modes. A legacy compatibility view must never be mistaken for the authoritative world projection.
 
 ### 5. Unified laws and causal provenance
-The integration branch contains the law bridge, authoritative field mutation/provenance path, and construction decision contracts. Browser acceptance checks field mutation → physics modulation → construction decision, alongside Save → Load state recovery.
+The maintained `main` line contains the law bridge, authoritative field mutation/provenance path, and construction decision contracts. Browser Acceptance checks field mutation → physics modulation → construction decision, alongside Save → Load state recovery. These integration contracts are present in the active booted application; the remaining items below are scientific validation requirements, not missing UI labels or claims of completed physical calibration.
 
 Remaining scientific validation:
 - Conservation-tested coupled field equations.
