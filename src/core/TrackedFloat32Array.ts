@@ -5,6 +5,19 @@ export interface InternalMutableBufferOwner {
   [INTERNAL_MUTABLE_BUFFER](side?: MutableBufferSide): Float32Array;
 }
 
+/** Pin the internal buffer hook to its owning instance so callers cannot shadow it. */
+export function lockInternalMutableBufferOwner(owner: InternalMutableBufferOwner): void {
+  const method = owner[INTERNAL_MUTABLE_BUFFER];
+  if (typeof method !== "function") {
+    throw new TypeError("Internal mutable-buffer owner must implement its symbol hook");
+  }
+  Object.defineProperty(owner, INTERNAL_MUTABLE_BUFFER, {
+    value: method.bind(owner),
+    writable: false,
+    configurable: false,
+  });
+}
+
 /**
  * Return the live internal array for a synchronous, transaction-local hot path.
  *

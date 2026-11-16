@@ -1,5 +1,5 @@
 import { CellState, CELL_FIELDS } from "./CellState";
-import { createTrackedFloat32Array, INTERNAL_MUTABLE_BUFFER, type MutableBufferSide } from "./TrackedFloat32Array";
+import { createTrackedFloat32Array, INTERNAL_MUTABLE_BUFFER, lockInternalMutableBufferOwner, type MutableBufferSide } from "./TrackedFloat32Array";
 
 export const CHUNK_SIZE = 32;
 export const CHUNK_VOLUME = CHUNK_SIZE ** 3;
@@ -52,6 +52,7 @@ export class Chunk {
       addMutationListener: { value: this.addMutationListener.bind(this), writable: false, configurable: false },
       removeMutationListener: { value: this.removeMutationListener.bind(this), writable: false, configurable: false },
     });
+    lockInternalMutableBufferOwner(this);
   }
 
   get buffer(): Float32Array { return this.#_bufferView; }

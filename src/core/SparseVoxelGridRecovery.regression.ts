@@ -130,6 +130,9 @@ export function runSparseVoxelGridRecoveryRegression(): void {
       Reflect.set(sparse, "removeMutationListener", () => undefined)) {
     throw new Error("Chunk mutation-listener registration methods must be immutable");
   }
+  if (Reflect.set(sparse, INTERNAL_MUTABLE_BUFFER, () => new Float32Array())) {
+    throw new Error("Chunk internal mutable-buffer hook must be immutable");
+  }
   const chunkRevision = grid.mutationRevision;
   sparse.buffer[7] = 73;
   if (grid.mutationRevision <= chunkRevision) throw new Error("Chunk listener was detached by JS shadow properties");

@@ -1,6 +1,6 @@
 import { CellState, CELL_FIELDS, F, validateGridDimensions } from "./CellState";
 import { Chunk, CHUNK_SIZE, CHUNK_VOLUME, type ChunkRawBufferSnapshot } from "./Chunk";
-import { createTrackedFloat32Array, INTERNAL_MUTABLE_BUFFER, type MutableBufferSide } from "./TrackedFloat32Array";
+import { createTrackedFloat32Array, INTERNAL_MUTABLE_BUFFER, lockInternalMutableBufferOwner, type MutableBufferSide } from "./TrackedFloat32Array";
 
 export interface SerializedChunk {
   key: string;
@@ -143,8 +143,8 @@ export class SparseVoxelGrid {
       dirtyChunks: { writable: false, configurable: false },
       chunkOwners: { writable: false, configurable: false },
       beginMutation: { value: this.beginMutation.bind(this), writable: false, configurable: false },
-      [INTERNAL_MUTABLE_BUFFER]: { value: this[INTERNAL_MUTABLE_BUFFER].bind(this), writable: false, configurable: false },
     });
+    lockInternalMutableBufferOwner(this);
     this.#seedDenseWindowChunks();
   }
 
