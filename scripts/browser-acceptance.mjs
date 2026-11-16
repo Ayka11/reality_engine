@@ -782,6 +782,8 @@ try {
       window.worldAssetManifest.entries.filter(entry => entry.id !== "acceptance-package-asset");
   }, packageFixture.objectId);
   const loadInput = page.locator("#loadFileInput");
+  const identityBeforePackageImport = await page.evaluate(() =>
+    window.getGlobalEntityIdentitySnapshot?.());
   await loadInput.setInputFiles({
     name: packageDownload.suggestedFilename(),
     mimeType: "application/json",
@@ -801,8 +803,21 @@ try {
     provenanceEvents: window.infiniteWorld.getAuthoritativeFieldState().provenance.events.length,
     assetPlacements: window.capturePortableWorldEditorSnapshot().assetPlacements,
     runtimeAssetStats: window.worldExternalAssetStats(),
+    identitySnapshot: window.getGlobalEntityIdentitySnapshot?.(),
   }));
-  if (loadedPackageState.seed !== packageFixture.generatorSeed ||
+  const importedObjectIdentity = loadedPackageState.identitySnapshot?.entries?.find(entry =>
+    entry.domain === "infinite-world-object" && entry.localId === packageFixture.objectId);
+  const importedPlacementIdentity = loadedPackageState.identitySnapshot?.entries?.find(entry =>
+    entry.domain === "external-asset-placement" && entry.localId === placementFixture.instanceId);
+  if (!identityBeforePackageImport ||
+      !loadedPackageState.identitySnapshot ||
+      loadedPackageState.identitySnapshot.revision <= identityBeforePackageImport.revision ||
+      !importedObjectIdentity ||
+      !importedPlacementIdentity ||
+      loadedPackageState.identitySnapshot.coverage?.status !== "partial" ||
+      loadedPackageState.identitySnapshot.entries.filter(entry =>
+        entry.domain === "external-asset-placement").length !== 1 ||
+      loadedPackageState.seed !== packageFixture.generatorSeed ||
       loadedPackageState.surfaceSeed !== packageFixture.surfaceSeed ||
       !loadedPackageState.assetCount || !loadedPackageState.provenanceEvents ||
       JSON.stringify(loadedPackageState.assetPlacements) !== JSON.stringify([placementFixture]) ||
@@ -976,6 +991,54 @@ try {
     throw new Error("Explicit GLTF re-import after restart did not restore the saved placement: " +
       JSON.stringify(rematerializedAfterRestart));
   }
+
+  const placementTransformLifecycle = await page.evaluate(instanceId => {
+    const world = window.infiniteWorld;
+    const runtime = world?.worldAssetRuntime;
+    const beforeSnapshot = window.getGlobalEntityIdentitySnapshot?.();
+    const beforeRecord = beforeSnapshot?.entries?.find(entry =>
+      entry.domain === "external-asset-placement" && entry.localId === instanceId);
+    const updated = runtime?.setInstanceWorldTransform(instanceId, {
+      position: { x: 161.25, y: 18.5, z: -40.75 },
+      scale: 1.1,
+      rotationY: 0.65,
+    }) ?? false;
+    const afterSnapshot = window.getGlobalEntityIdentitySnapshot?.();
+    const afterRecord = afterSnapshot?.entries?.find(entry =>
+      entry.domain === "external-asset-placement" && entry.localId === instanceId);
+    const placement = window.capturePortableWorldEditorSnapshot()?.assetPlacements
+      ?.find(item => item.instanceId === instanceId) ?? null;
+    return {
+      updated,
+      beforeRevision: beforeSnapshot?.revision,
+      afterRevision: afterSnapshot?.revision,
+      beforeRecord,
+      afterRecord,
+      placement,
+    };
+  }, placementFixture.instanceId);
+  if (!placementTransformLifecycle.updated ||
+      !placementTransformLifecycle.beforeRecord ||
+      !placementTransformLifecycle.afterRecord ||
+      placementTransformLifecycle.beforeRecord.identityKey !== placementTransformLifecycle.afterRecord.identityKey ||
+      placementTransformLifecycle.beforeRecord.localId !== placementTransformLifecycle.afterRecord.localId ||
+      placementTransformLifecycle.afterRevision !== placementTransformLifecycle.beforeRevision ||
+      placementTransformLifecycle.placement?.x !== 161.25 ||
+      placementTransformLifecycle.placement?.y !== 18.5 ||
+      placementTransformLifecycle.placement?.z !== -40.75 ||
+      placementTransformLifecycle.placement?.scale !== 1.1 ||
+      placementTransformLifecycle.placement?.rotationY !== 0.65) {
+    throw new Error("Updating an external asset placement transform changed identity or failed to publish the current transform snapshot: " +
+      JSON.stringify(placementTransformLifecycle));
+  }
+  await page.waitForFunction(instanceId => {
+    const result = window.infiniteWorld?.persistence?.readAssetPlacementsState?.();
+    return result?.status === "ok" && result.state?.some(placement =>
+      placement.instanceId === instanceId &&
+      placement.x === 161.25 && placement.y === 18.5 && placement.z === -40.75 &&
+      placement.scale === 1.1 && placement.rotationY === 0.65);
+  }, placementFixture.instanceId, { timeout: acceptanceTimeout });
+  console.log("[acceptance] external placement transform preserves stable identity and persists updated transform");
 
   console.log("[acceptance] same-semantic GLTF sources scatter and remove independently");
   const secondMockAssetUrl = "https://assets.example.test/acceptance-second-asset.glb";
