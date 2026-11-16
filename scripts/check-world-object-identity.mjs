@@ -71,7 +71,6 @@ assert.throws(
 
 const first = manager.add(placement)
 const second = manager.add(placement)
-const second = manager.add(placement)
 assert.notEqual(first.id, second.id, 'two new objects at identical coordinates must not overwrite each other')
 assert.equal(manager.size, 2)
 assert.equal(manager.get(first.id)?.id, first.id)
@@ -321,9 +320,9 @@ assert.match(terrainBuildSource, /catch \(error\)[\s\S]*?this\.waterMeshes\.dele
 
 assert.match(managerSource, /#objects = new Map<string, WorldObject>\(\)/,
   "world-object manager must own its records through a JavaScript private Map")
-assert.match(indexSource, /#buckets = new Map<string, Set<string>>\(\)/,
+assert.match(spatialIndexSource, /#buckets = new Map<string, Set<string>>\(\)/,
   "spatial buckets must be runtime-private")
-assert.match(indexSource, /#columns = new Map<string, Set<string>>\(\)/,
+assert.match(spatialIndexSource, /#columns = new Map<string, Set<string>>\(\)/,
   "spatial column membership must be runtime-private")
 assert.match(rendererSource, /Object\.defineProperty\(this, "objects", \{[\s\S]*?configurable: false,[\s\S]*?writable: false/,
   "InfiniteWorldRenderer must pin the live object manager reference")
