@@ -284,3 +284,20 @@ The exact-head CI #2653 passed on `55bc8ad46ad587b2d11b9d065198e1acd993668e`, 10
 This is a meaningful reduction of the raw-alias escape surface, not a language-level revocation mechanism. The remaining single raw call site is deliberately confined to the synchronous `EntityLayer.tick()` hot path; the 12 `withMutableBuffers` call sites are subject to synchronous callback, direct-index-only, no-return and no-nested-capture checks. The guard is a source-level contract and must remain a mandatory CI gate.
 
 Issue #62 remains open. The complete external-writer inventory, direct mutable public API contract, all worker transfer/import/undo-redo/reset boundaries, and full rollback parity across non-grid subsystem state have not been proven end-to-end. A passing static guard does not establish that every state transition in the application is captured by the authoritative mutation boundary.
+
+
+### EntityLayer tick moved fully into scoped buffer ownership — 2026-11-16
+
+Commit `835a2005c13b691bd806c5ef636a280b275766c6` removes the last production `getMutableBuffer()` acquisition from `src/`. `EntityLayer.tick()` now enters one synchronous `withMutableBuffers(grid, (front, _back) => ...)` transaction around reconciliation, entity behavior, reproduction, sparse ownership mirroring and failure rollback. The transaction reads/writes through its direct indexed `front` alias only; it does not return or retain either alias. The rollback snapshot is detached (`grid.buffer.slice()` plus a detached sparse back-buffer snapshot), and rollback runs before the outer scope ends, so tracked setters and nested scopes coalesce to a single revision.
+
+The existing nested `_reconcileFullDomain()` and `_spawnChild()` operations already use `withMutableBuffers`; their re-entrant mutation scopes now sit inside the encompassing tick scope. The static inventory was updated to expect:
+- zero raw `getMutableBuffer()` call sites/imports in production source;
+- 13 exact reviewed `withMutableBuffers` call sites, including `EntityLayer.tick`.
+
+Regression evidence:
+- [CI #2672](https://github.com/Ayka11/reality_engine/actions/runs/43865238012), exact head `835a2005c13b691bd806c5ef636a280b275766c6`, 104/104 steps: mutable-buffer gate reported `PASS (0 raw call sites, 13 scoped mutation call site; no unreviewed buffer escapes)`; EntityLayer rollback/RNG recovery, stale GPU readback, Docker/HF, WebGPU and Browser Acceptance passed.
+- [CI #2673](https://github.com/Ayka11/reality_engine/actions/runs/43866291298), exact head `4e7f78d6e744a2327719d5a0f306686882e25eba`, 104/104 steps: preserves the zero-raw/13-scoped gate and adds a `SparseVoxelGrid` EntityLayer tick regression requiring one coalesced revision and identical dense/chunk `ENTITY_ID` ownership after the tick.
+
+The generic `getMutableBuffer()` helper remains defined because the stale-readback regression intentionally uses it to simulate retained raw aliases. The production inventory has no call site, but this does not make a typed-array alias revocable if a future caller acquires it; the static source gate must remain mandatory.
+
+**Issue #62 remains open.** The end-to-end inventory of every external writer and worker/import/undo/redo/reset/rollback boundary is not yet complete. The completed source migration and tests materially reduce the alias surface but do not by themselves constitute complete mutation ownership proof.
