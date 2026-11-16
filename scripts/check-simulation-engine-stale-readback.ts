@@ -317,6 +317,51 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(directRestoreEngine.grid.buffer[directRestoreIndex], Math.fround(124),
     "stale GPU output must not overwrite state restored directly through SparseVoxelGrid");
 
+  // A direct EntityLayer tick is also an authoritative mutation boundary.
+  // While GPU readback is pending, the scoped dense/sparse transaction must
+  // advance the grid revision once, preserve the newly-created entity and reject
+  // the older GPU result instead of overwriting the entity's field state.
+  const entityTickEngine = new SimulationEngine(8, 8, 8);
+  (entityTickEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const entityCellA = entityTickEngine.grid.idx(2, 2, 2);
+  const entityCellB = entityTickEngine.grid.idx(3, 2, 2);
+  for (const base of [entityCellA, entityCellB]) {
+    entityTickEngine.grid.buffer[base + F.BIO_POTENTIAL] = 0.8;
+    entityTickEngine.grid.buffer[base + F.ENERGY] = 200;
+  }
+  entityTickEngine.grid.syncDenseToChunks();
+  const entityEnergyIndex = entityCellA + F.ENERGY;
+  const staleEntityTickReadback = entityTickEngine.grid.buffer.slice();
+  staleEntityTickReadback[entityEnergyIndex] = 9011;
+  const pendingEntityTick = await beginPendingReadback(entityTickEngine, staleEntityTickReadback);
+  const beforeEntityTickRevision = entityTickEngine.grid.mutationRevision;
+  const entityLayer = (entityTickEngine as unknown as {
+    entityLayer: {
+      tick(grid: SparseVoxelGrid, dt: number): void;
+      getEntities(): Array<{ id: number }>;
+    };
+  }).entityLayer;
+  entityLayer.tick(entityTickEngine.grid, 1 / 60);
+  const afterEntityTickRevision = entityTickEngine.grid.mutationRevision;
+  const createdEntity = entityLayer.getEntities()[0];
+  const entityEnergyAfterTick = entityTickEngine.grid.buffer[entityEnergyIndex];
+  const denseEntityId = entityTickEngine.grid.buffer[entityCellA + F.ENTITY_ID];
+  const chunkEntityId = entityTickEngine.grid.getCell(2, 2, 2)?.entityId ?? 0;
+  assert.equal(afterEntityTickRevision, beforeEntityTickRevision + 1,
+    "EntityLayer.tick on SparseVoxelGrid must publish exactly one scoped mutation revision");
+  assert.ok(createdEntity, "EntityLayer tick must create an entity from the seeded connected bio-cells");
+  assert.equal(denseEntityId, createdEntity.id,
+    "EntityLayer tick must publish the new entity ID to dense storage");
+  assert.equal(chunkEntityId, createdEntity.id,
+    "EntityLayer tick must mirror the new entity ID into sparse chunk storage");
+  assert.ok(entityEnergyAfterTick < 200,
+    "EntityLayer behavior must commit its metabolism update before the stale readback resolves");
+  pendingEntityTick.release(staleEntityTickReadback);
+  await assert.rejects(pendingEntityTick.step, /Discarded stale GPU readback/);
+  assert.equal(entityTickEngine.grid.buffer[entityEnergyIndex], entityEnergyAfterTick,
+    "stale GPU output must not overwrite the field state committed by EntityLayer.tick");
+  entityTickEngine.grid.assertDenseEntityOwnershipSynchronized();
+  console.log("EntityLayer scoped dense/sparse tick invalidates pending GPU readback and preserves entity ownership: PASS");
 
   // Chunk storage is a separate physical representation. Its writes must invalidate
   // the same grid revision so a dense GPU readback cannot commit over newer chunk state.
