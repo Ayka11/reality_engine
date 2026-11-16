@@ -208,6 +208,80 @@ try {
   }
   console.log("[acceptance] global entity identity object add/remove lifecycle PASS: " +
     JSON.stringify(identityLifecycle));
+
+  const objectHistoryIdentityLifecycle = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const identityApi = window.getGlobalEntityIdentitySnapshot;
+    if (!world || typeof world.place !== "function" ||
+        typeof world.undo !== "function" || typeof world.redo !== "function" ||
+        typeof identityApi !== "function") {
+      return { error: "World-object history identity prerequisites are unavailable" };
+    }
+
+    const before = identityApi();
+    const placed = world.place("tree", 16, 16);
+    if (!placed?.id) return { error: "World-object history fixture could not be placed" };
+    const objectId = placed.id;
+    const afterPlace = identityApi();
+    const afterPlaceRecord = afterPlace.entries.find(entry =>
+      entry.domain === "infinite-world-object" && entry.localId === objectId);
+
+    const undone = world.undo();
+    const afterUndo = identityApi();
+    const presentAfterUndo = afterUndo.entries.some(entry =>
+      entry.domain === "infinite-world-object" && entry.localId === objectId);
+
+    const redone = world.redo();
+    const afterRedo = identityApi();
+    const afterRedoRecord = afterRedo.entries.find(entry =>
+      entry.domain === "infinite-world-object" && entry.localId === objectId);
+
+    const cleanupUndo = world.undo();
+    const afterCleanup = identityApi();
+    const presentAfterCleanup = afterCleanup.entries.some(entry =>
+      entry.domain === "infinite-world-object" && entry.localId === objectId);
+
+    return {
+      objectId,
+      beforeRevision: before.revision,
+      afterPlaceRevision: afterPlace.revision,
+      afterUndoRevision: afterUndo.revision,
+      afterRedoRevision: afterRedo.revision,
+      afterCleanupRevision: afterCleanup.revision,
+      afterPlaceRecord,
+      afterRedoRecord,
+      undoneType: undone?.type,
+      redoneType: redone?.type,
+      cleanupUndoType: cleanupUndo?.type,
+      presentAfterUndo,
+      presentAfterRedo: !!afterRedoRecord,
+      presentAfterCleanup,
+      worldObjectAfterCleanup: !!world.objects.get(objectId),
+      sameIdentityKey: !!afterPlaceRecord &&
+        afterPlaceRecord.identityKey === afterRedoRecord?.identityKey &&
+        afterPlaceRecord.localId === afterRedoRecord?.localId,
+    };
+  });
+  if (objectHistoryIdentityLifecycle.error ||
+      !objectHistoryIdentityLifecycle.afterPlaceRecord ||
+      objectHistoryIdentityLifecycle.undoneType !== "add" ||
+      objectHistoryIdentityLifecycle.redoneType !== "add" ||
+      objectHistoryIdentityLifecycle.cleanupUndoType !== "add" ||
+      objectHistoryIdentityLifecycle.presentAfterUndo ||
+      !objectHistoryIdentityLifecycle.presentAfterRedo ||
+      objectHistoryIdentityLifecycle.presentAfterCleanup ||
+      objectHistoryIdentityLifecycle.worldObjectAfterCleanup ||
+      !objectHistoryIdentityLifecycle.sameIdentityKey ||
+      objectHistoryIdentityLifecycle.afterPlaceRevision <= objectHistoryIdentityLifecycle.beforeRevision ||
+      objectHistoryIdentityLifecycle.afterUndoRevision <= objectHistoryIdentityLifecycle.afterPlaceRevision ||
+      objectHistoryIdentityLifecycle.afterRedoRevision <= objectHistoryIdentityLifecycle.afterUndoRevision ||
+      objectHistoryIdentityLifecycle.afterCleanupRevision <= objectHistoryIdentityLifecycle.afterRedoRevision) {
+    throw new Error("World-object undo/redo did not publish the correct global identity lifecycle: " +
+      JSON.stringify(objectHistoryIdentityLifecycle));
+  }
+  console.log("[acceptance] global identity tracks world-object undo/redo with stable local ID and monotonic revisions PASS: " +
+    JSON.stringify(objectHistoryIdentityLifecycle));
+
   const worldFieldBoundary = await page.evaluate(() => {
     const world = window.infiniteWorld;
     if (!world) return { error: "InfiniteWorld runtime was not initialized" };
