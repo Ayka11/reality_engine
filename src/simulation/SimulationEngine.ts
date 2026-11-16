@@ -91,24 +91,31 @@ export class SimulationEngine {
     this.worldEvents.setMutationObserver(invalidate);
   }
 
-  async initGPU(): Promise<boolean> {
-    // Reinitialization can overlap a pending readback. Invalidate that GPU
-    // generation before awaiting device creation or changing readiness.
+  initGPU(): Promise<boolean> {
+    // Invalidate an in-flight readback immediately, then serialize device
+    // teardown/reinitialization behind the active submit/readback pair. This
+    // prevents init() from replacing staging buffers while readback() is mapped.
     this._stateGeneration++;
-    // Do not advertise GPU execution until device creation and both initial
-    // uploads have completed. A partially initialized device is not trusted.
-    this._gpuReady = false;
-    try {
-      const initialized = await this.gpu.init(this.grid.W, this.grid.H, this.grid.D);
-      if (!initialized) return false;
-      this.gpu.upload(this.grid.buffer.slice());
-      this.gpu.uploadMaterials(buildMaterialBuffer());
-      this._gpuReady = true;
-      return true;
-    } catch (error) {
+    const run = this._stepQueue.then(async () => {
+      // Do not advertise GPU execution until device creation and both initial
+      // uploads have completed. A partially initialized device is not trusted.
       this._gpuReady = false;
-      throw error;
-    }
+      try {
+        this.gpu.destroy();
+        const initialized = await this.gpu.init(this.grid.W, this.grid.H, this.grid.D);
+        if (!initialized) return false;
+        this.gpu.upload(this.grid.buffer.slice());
+        this.gpu.uploadMaterials(buildMaterialBuffer());
+        this._gpuReady = true;
+        return true;
+      } catch (error) {
+        this._gpuReady = false;
+        throw error;
+      }
+    });
+    // A failed initialization must not poison the shared step queue.
+    this._stepQueue = run.then(() => undefined, () => undefined);
+    return run;
   }
 
   get tick() { return this._tick; }

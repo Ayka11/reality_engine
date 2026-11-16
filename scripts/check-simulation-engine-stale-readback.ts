@@ -386,13 +386,26 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   const staleReinitReadback = reinitEngine.grid.buffer.slice();
   const pendingReinit = await beginPendingReadback(reinitEngine, staleReinitReadback);
   let finishGPUInit!: (initialized: boolean) => void;
-  reinitEngine.gpu.init = () => new Promise<boolean>(resolve => { finishGPUInit = resolve; });
+  let signalGPUInitStarted!: () => void;
+  let gpuInitStarted = false;
+  const gpuInitEntered = new Promise<void>(resolve => { signalGPUInitStarted = resolve; });
+  reinitEngine.gpu.destroy = () => undefined;
+  reinitEngine.gpu.init = () => {
+    gpuInitStarted = true;
+    signalGPUInitStarted();
+    return new Promise<boolean>(resolve => { finishGPUInit = resolve; });
+  };
   reinitEngine.gpu.upload = () => undefined;
   const reinit = reinitEngine.initGPU();
+  assert.equal(gpuInitStarted, false,
+    "GPU reinitialization must wait until the pending submit/readback pair has settled");
   pendingReinit.release(staleReinitReadback);
   await assert.rejects(pendingReinit.step, /Discarded stale GPU readback/);
+  await gpuInitEntered;
+  assert.equal(gpuInitStarted, true,
+    "queued GPU reinitialization must begin after the stale readback is rejected");
   finishGPUInit(true);
-  assert.equal(await reinit, true, "GPU reinitialization must complete after invalidating the earlier readback");
+  assert.equal(await reinit, true, "GPU reinitialization must complete after the earlier readback settles");
   assert.equal(reinitEngine.gpuActive, true, "GPU readiness must only be restored after initialization uploads");
   console.log("GPU reinitialization invalidates pending GPU readback: PASS");
 
