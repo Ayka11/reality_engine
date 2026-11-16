@@ -4182,6 +4182,13 @@ try {
     const world = window.infiniteWorld;
     if (!world || typeof world.reseed !== "function") return { error: "Public reseed API unavailable" };
     const probeSeed = "reality-engine-direct-reseed-contract-probe";
+    const identityBefore = window.getGlobalEntityIdentitySnapshot?.();
+    const priorObjectIds = identityBefore?.entries
+      ?.filter(entry => entry.domain === "infinite-world-object")
+      .map(entry => entry.localId) ?? [];
+    const priorPlacementIds = identityBefore?.entries
+      ?.filter(entry => entry.domain === "external-asset-placement")
+      .map(entry => entry.localId) ?? [];
     const originalAssetCleanup = world.clearExternalAssetRuntime;
     const originalTerrainRefresh = world.refreshTerrainPatches;
     let assetCleanupCalls = 0;
@@ -4196,11 +4203,16 @@ try {
     };
     try {
       world.reseed(probeSeed);
+      const identityAfter = window.getGlobalEntityIdentitySnapshot?.();
       return {
         worldSeed: world.generator?.seed ?? null,
         viewSeed: window.getWorldViewContract?.()?.seed ?? null,
         assetCleanupCalls,
         terrainRefreshCalls,
+        identityBefore,
+        identityAfter,
+        priorObjectIds,
+        priorPlacementIds,
       };
     } finally {
       world.clearExternalAssetRuntime = originalAssetCleanup;
@@ -4214,7 +4226,26 @@ try {
   if (directReseed.assetCleanupCalls !== 1 || directReseed.terrainRefreshCalls !== 0) {
     throw new Error("Reseed repeated old-world teardown before the new world was installed: " + JSON.stringify(directReseed));
   }
-  console.log("[acceptance] reseed clears the previous namespace and performs one live cleanup without rebuilding old terrain");
+  const identityDomainCount = (snapshot, domain) =>
+    snapshot?.domains?.find(record => record.domain === domain)?.count ?? -1;
+  if (!directReseed.identityBefore ||
+      !directReseed.identityAfter ||
+      directReseed.identityAfter.revision <= directReseed.identityBefore.revision ||
+      identityDomainCount(directReseed.identityAfter, "infinite-world-object") !== 0 ||
+      identityDomainCount(directReseed.identityAfter, "external-asset-placement") !== 0 ||
+      directReseed.priorObjectIds.some(id => directReseed.identityAfter.entries.some(entry =>
+        entry.domain === "infinite-world-object" && entry.localId === id)) ||
+      directReseed.priorPlacementIds.some(id => directReseed.identityAfter.entries.some(entry =>
+        entry.domain === "external-asset-placement" && entry.localId === id))) {
+    throw new Error("Reseed did not publish an empty, newer global identity snapshot for old-world objects and asset placements: " +
+      JSON.stringify({
+        before: directReseed.identityBefore,
+        after: directReseed.identityAfter,
+        priorObjectIds: directReseed.priorObjectIds,
+        priorPlacementIds: directReseed.priorPlacementIds,
+      }));
+  }
+  console.log("[acceptance] reseed clears old-world global object and asset-placement identities with a newer directory revision");
 
   // A full world clear must reset live edit state to exactly the durable
   // generator-backed baseline that a restart will reconstruct.
@@ -4254,6 +4285,13 @@ try {
         license: "CC0",
       }],
     };
+    const identityBeforeClear = window.getGlobalEntityIdentitySnapshot?.();
+    const priorObjectIds = identityBeforeClear?.entries
+      ?.filter(entry => entry.domain === "infinite-world-object")
+      .map(entry => entry.localId) ?? [];
+    const priorPlacementIds = identityBeforeClear?.entries
+      ?.filter(entry => entry.domain === "external-asset-placement")
+      .map(entry => entry.localId) ?? [];
     const before = {
       objects: world.getObjectCount(),
       fieldMutations: world.getAuthoritativeFieldMutationCount(),
@@ -4263,6 +4301,7 @@ try {
       manifestEntries: window.worldAssetManifest.entries.length,
     };
     const cleared = world.clearSavedWorld();
+    const identityAfterClear = window.getGlobalEntityIdentitySnapshot?.();
     const undo = world.undo();
     const redo = world.redo();
     const state = {
@@ -4281,6 +4320,7 @@ try {
       viewSeed: window.getWorldViewContract?.()?.seed ?? null,
       manifestEntries: window.worldAssetManifest.entries.length,
       runtimeAssets: world.worldAssetRuntime.stats(),
+      identitySnapshot: window.getGlobalEntityIdentitySnapshot?.(),
       durableSidecars: {
         field: world.persistence.readFieldState().status,
         fieldCheckpoint: world.persistence.readFieldCheckpoint().status,
@@ -4292,12 +4332,38 @@ try {
         terrainCheckpoint: world.persistence.readTerrainDeformationCheckpoint().status,
       },
     };
-    return { before, state };
+    return {
+      before,
+      state,
+      identityBeforeClear,
+      identityAfterClear,
+      priorObjectIds,
+      priorPlacementIds,
+    };
   });
   if (clearWorldContract.error) {
     throw new Error("World clear acceptance fixture failed: " + JSON.stringify(clearWorldContract));
   }
   const clearedWorld = clearWorldContract.state;
+  const clearIdentityBefore = clearWorldContract.identityBeforeClear;
+  const clearIdentityAfter = clearWorldContract.identityAfterClear;
+  if (!clearIdentityBefore ||
+      !clearIdentityAfter ||
+      clearIdentityAfter.revision <= clearIdentityBefore.revision ||
+      identityDomainCount(clearIdentityAfter, "infinite-world-object") !== 0 ||
+      identityDomainCount(clearIdentityAfter, "external-asset-placement") !== 0 ||
+      clearWorldContract.priorObjectIds.some(id => clearIdentityAfter.entries.some(entry =>
+        entry.domain === "infinite-world-object" && entry.localId === id)) ||
+      clearWorldContract.priorPlacementIds.some(id => clearIdentityAfter.entries.some(entry =>
+        entry.domain === "external-asset-placement" && entry.localId === id))) {
+    throw new Error("Clear World did not publish an empty, newer global identity snapshot: " +
+      JSON.stringify({
+        before: clearIdentityBefore,
+        after: clearIdentityAfter,
+        priorObjectIds: clearWorldContract.priorObjectIds,
+        priorPlacementIds: clearWorldContract.priorPlacementIds,
+      }));
+  }
   if (!clearedWorld.cleared ||
       clearedWorld.objects !== 0 ||
       clearedWorld.fieldMutations !== 0 ||
@@ -4352,7 +4418,10 @@ try {
       },
     };
   });
-  if (clearedWorldAfterRestart.generatorSeed !== clearedWorldAfterRestart.viewSeed ||
+  if (identityDomainCount(clearedWorldAfterRestart.identitySnapshot, "infinite-world-object") !== 0 ||
+      identityDomainCount(clearedWorldAfterRestart.identitySnapshot, "external-asset-placement") !== 0 ||
+      clearedWorldAfterRestart.identitySnapshot?.coverage?.status !== "partial" ||
+      clearedWorldAfterRestart.generatorSeed !== clearedWorldAfterRestart.viewSeed ||
       clearedWorldAfterRestart.objects !== 0 ||
       clearedWorldAfterRestart.fieldMutations !== 0 ||
       clearedWorldAfterRestart.terrainDelta !== 0 ||
