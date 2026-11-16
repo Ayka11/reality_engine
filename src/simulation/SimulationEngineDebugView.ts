@@ -2,6 +2,42 @@ import type { SimulationEngine } from "./SimulationEngine";
 import type { EntityLayer } from "./EntityLayer";
 import type { AgentSystem } from "./AgentSystem";
 
+const HIDDEN_ENGINE_MEMBERS = new Set<PropertyKey>([
+  "fieldPhysics",
+  "entropyLayer",
+  "chemLayer",
+  "temporalLayer",
+  "infoPhysics",
+  "prevEnergy",
+  "_tick",
+  "_gpuReady",
+  "_stateGeneration",
+  "_stepQueue",
+  "_stepInternal",
+  "resynchronizeGPUAndThrow",
+  "_worldMetrics",
+  "_detectCausality",
+  "restoreEntityLayerSnapshot",
+  "restoreAgentSystemSnapshot",
+]);
+
+const ENGINE_OWNED_PROPERTIES = new Set<PropertyKey>([
+  "grid",
+  "causal",
+  "laws",
+  "gpu",
+  "worldEvents",
+  "recorder",
+  "entityLayer",
+  "agents",
+]);
+
+const isHiddenEngineMember = (property: PropertyKey): boolean =>
+  HIDDEN_ENGINE_MEMBERS.has(property);
+
+const isProtectedEngineProperty = (property: PropertyKey): boolean =>
+  isHiddenEngineMember(property) || ENGINE_OWNED_PROPERTIES.has(property);
+
 /**
  * Browser-facing diagnostics view. The simulation engine remains the owner of
  * its GPU backend; exposing that backend would let page code upload or dispatch
@@ -63,23 +99,31 @@ export function createSimulationEngineDebugView(
       if (property === "gpu") return gpuDiagnostics;
       if (property === "entityLayer") return entityLayerDiagnostics;
       if (property === "agents") return agentSystemDiagnostics;
-      if (property === "restoreEntityLayerSnapshot" || property === "restoreAgentSystemSnapshot") return undefined;
+      if (isHiddenEngineMember(property)) return undefined;
       const value = Reflect.get(target, property, target);
       return typeof value === "function" ? value.bind(target) : value;
     },
     set(target, property, value) {
-      if (property === "gpu" || property === "entityLayer" || property === "agents") return false;
+      if (isProtectedEngineProperty(property)) return false;
       return Reflect.set(target, property, value, target);
     },
     defineProperty(target, property, descriptor) {
-      if (property === "gpu" || property === "entityLayer" || property === "agents") return false;
+      if (isProtectedEngineProperty(property)) return false;
       return Reflect.defineProperty(target, property, descriptor);
     },
     deleteProperty(target, property) {
-      if (property === "gpu" || property === "entityLayer" || property === "agents") return false;
+      if (isProtectedEngineProperty(property)) return false;
       return Reflect.deleteProperty(target, property);
     },
+    has(target, property) {
+      if (isHiddenEngineMember(property)) return false;
+      return Reflect.has(target, property);
+    },
+    ownKeys(target) {
+      return Reflect.ownKeys(target).filter(property => !isHiddenEngineMember(property));
+    },
     getOwnPropertyDescriptor(target, property) {
+      if (isHiddenEngineMember(property)) return undefined;
       const descriptor = Reflect.getOwnPropertyDescriptor(target, property);
       if (property === "gpu" && descriptor && "value" in descriptor) {
         return { ...descriptor, value: gpuDiagnostics };

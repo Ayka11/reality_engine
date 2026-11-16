@@ -24,6 +24,43 @@ assert.equal(Reflect.defineProperty(debugView, "gpu", { value: debugViewEngine.g
 assert.equal(Reflect.deleteProperty(debugView, "gpu"), false,
   "GPU diagnostics cannot be removed to bypass the exposure contract");
 
+const debugViewHiddenMembers = [
+  "fieldPhysics", "entropyLayer", "chemLayer", "temporalLayer", "infoPhysics",
+  "prevEnergy", "_tick", "_gpuReady", "_stateGeneration", "_stepQueue",
+  "_stepInternal", "resynchronizeGPUAndThrow", "_worldMetrics", "_detectCausality",
+  "restoreEntityLayerSnapshot", "restoreAgentSystemSnapshot",
+] as const;
+const debugViewRecord = debugView as unknown as Record<string, unknown>;
+for (const property of debugViewHiddenMembers) {
+  assert.equal(property in debugView, false,
+    `browser diagnostics must not expose internal engine member ${property} via the in operator`);
+  assert.equal(debugViewRecord[property], undefined,
+    `browser diagnostics must not expose internal engine member ${property} via property access`);
+  assert.equal(Object.getOwnPropertyDescriptor(debugView, property), undefined,
+    `browser diagnostics must not expose internal engine member ${property} via descriptors`);
+  assert.equal(Reflect.ownKeys(debugView).includes(property), false,
+    `browser diagnostics must not enumerate internal engine member ${property}`);
+  assert.equal(Reflect.set(debugView, property, null), false,
+    `browser diagnostics must reject writes to internal engine member ${property}`);
+  assert.equal(Reflect.defineProperty(debugView, property, { value: null }), false,
+    `browser diagnostics must reject defineProperty for internal engine member ${property}`);
+  assert.equal(Reflect.deleteProperty(debugView, property), false,
+    `browser diagnostics must reject deletion of internal engine member ${property}`);
+}
+
+for (const property of ["grid", "causal", "laws", "worldEvents", "recorder"] as const) {
+  const original = debugViewRecord[property];
+  assert.notEqual(original, undefined, `debug view must retain owned public surface ${property}`);
+  assert.equal(Object.getOwnPropertyDescriptor(debugView, property)?.value, original,
+    `debug view must preserve the original ${property} owner through descriptor inspection`);
+  assert.equal(Reflect.set(debugView, property, Object.freeze({})), false,
+    `browser diagnostics must reject replacement of engine-owned ${property}`);
+  assert.equal(Reflect.defineProperty(debugView, property, { value: Object.freeze({}) }), false,
+    `browser diagnostics must reject redefining engine-owned ${property}`);
+  assert.equal(Reflect.deleteProperty(debugView, property), false,
+    `browser diagnostics must reject deletion of engine-owned ${property}`);
+}
+
 // The browser-facing view must not expose live EntityLayer mutators. Read
 // methods remain available, but every returned entity/snapshot is detached.
 for (const cell of [5, 6]) {
