@@ -37,9 +37,8 @@ export class SimulationEngine {
   readonly grid: SparseVoxelGrid;
   readonly causal: CausalGraph;
   readonly laws: LawEngine;
-  /** Read-only GPU availability facade; backend mutation stays engine-owned. */
-  readonly gpu: Readonly<{ isAvailable: boolean }>;
-  readonly #gpu: GPUBackend;
+  /** Low-level backend for trusted engine integrations; browser code must use SimulationEngineDebugView. */
+  readonly gpu: GPUBackend;
   readonly worldEvents: WorldEvents;
   readonly recorder: Recorder;
   readonly agents: AgentSystem;
@@ -71,11 +70,7 @@ export class SimulationEngine {
     this.grid = new SparseVoxelGrid(width, height, depth);
     this.causal = new CausalGraph();
     this.laws = new LawEngine();
-    this.#gpu = new GPUBackend();
-    const gpuBackend = this.#gpu;
-    this.gpu = Object.freeze({
-      get isAvailable(): boolean { return gpuBackend.isAvailable; },
-    });
+    this.gpu = new GPUBackend();
     this.worldEvents = new WorldEvents();
     this.recorder = new Recorder();
     this.agents = new AgentSystem();
@@ -107,11 +102,11 @@ export class SimulationEngine {
       // uploads have completed. A partially initialized device is not trusted.
       this._gpuReady = false;
       try {
-        this.#gpu.destroy();
-        const initialized = await this.#gpu.init(this.grid.W, this.grid.H, this.grid.D);
+        this.gpu.destroy();
+        const initialized = await this.gpu.init(this.grid.W, this.grid.H, this.grid.D);
         if (!initialized) return false;
-        this.#gpu.upload(this.grid.buffer.slice());
-        this.#gpu.uploadMaterials(buildMaterialBuffer());
+        this.gpu.upload(this.grid.buffer.slice());
+        this.gpu.uploadMaterials(buildMaterialBuffer());
         this._gpuReady = true;
         return true;
       } catch (error) {
@@ -262,9 +257,9 @@ export class SimulationEngine {
         const readbackChunkBufferSnapshots = this.grid.captureDenseWindowRawChunkSnapshots();
         let data: Float32Array;
         try {
-          this.#gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
-          this.#gpu.submitCompute(nSteps);
-          data = await this.#gpu.readback();
+          this.gpu.writeParams(this.laws.params, this.laws.activeProcessMask, clampedDt);
+          this.gpu.submitCompute(nSteps);
+          data = await this.gpu.readback();
         } catch (error) {
           // submitCompute may already have advanced the device-side source buffer.
           // If readback then fails, restore the device from the authoritative CPU grid
@@ -353,7 +348,7 @@ export class SimulationEngine {
       this.laws.tick(this._worldMetrics());
 
       // Keep GPU in sync after CPU changes (presets, painting)
-      if (this._gpuReady) this.#gpu.upload(this.grid.buffer.slice());
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer.slice());
       if (this._tick % 500 === 0) {
         this.grid.markEmptyChunksInactive();
         this.grid.cullInactive();
@@ -385,7 +380,7 @@ export class SimulationEngine {
    */
   private resynchronizeGPUAndThrow(primaryError: unknown, context: string): never {
     try {
-      this.#gpu.upload(this.grid.buffer.slice());
+      this.gpu.upload(this.grid.buffer.slice());
     } catch (syncError) {
       // The device state is no longer trustworthy. Fail closed to CPU execution
       // so a later step cannot consume or overwrite from a stale GPU buffer.
@@ -449,7 +444,7 @@ export class SimulationEngine {
       }
       this.grid.syncDenseToChunks();
       this.grid.syncBackBuffersFromFront();
-      if (this._gpuReady) this.#gpu.upload(this.grid.buffer.slice());
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer.slice());
       this._stateGeneration++;
       return result;
     } catch (error) {
@@ -492,7 +487,7 @@ export class SimulationEngine {
 
     if (this._gpuReady) {
       try {
-        this.#gpu.upload(this.grid.buffer.slice());
+        this.gpu.upload(this.grid.buffer.slice());
       } catch (error) {
         // GPU upload is optional once the CPU state is coherent. Disable the
         // uncertain device path and keep the UI/runtime alive on CPU execution.
@@ -534,7 +529,7 @@ export class SimulationEngine {
       // syncTick is a CPU-authoritative physical step. Publish its committed
       // front buffer to the device so a subsequent GPU step cannot start from
       // stale pre-script state and overwrite the synchronous result.
-      if (this._gpuReady) this.#gpu.upload(this.grid.buffer.slice());
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer.slice());
       this._stateGeneration++;
     } catch (error) {
       if (recoveryBefore) {
@@ -612,11 +607,11 @@ export class SimulationEngine {
     this._stateGeneration++;
     try {
       apply(snapshot);
-      if (this._gpuReady) this.#gpu.upload(this.grid.buffer.slice());
+      if (this._gpuReady) this.gpu.upload(this.grid.buffer.slice());
     } catch (error) {
       try {
         apply(previous);
-        if (this._gpuReady) this.#gpu.upload(this.grid.buffer.slice());
+        if (this._gpuReady) this.gpu.upload(this.grid.buffer.slice());
       } catch (rollbackError) {
         // A failed rollback may leave device buffers inconsistent with CPU state.
         // Disable GPU execution rather than allowing a later step to trust them.
