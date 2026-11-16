@@ -21,23 +21,23 @@ export type RuntimeAsset = {
 }
 
 export class WorldAssetRuntime {
-  private readonly loader: Pick<GLTFLoader, 'load'>
+  readonly #loader: Pick<GLTFLoader, 'load'>
   #generation = 0
-  private readonly assets = new Map<string, RuntimeAsset>()
-  private readonly loading = new Map<string, Promise<RuntimeAsset>>()
-  private readonly loadingRequests = new Map<string, { sourceUrl: string; semanticEntryId?: string }>()
-  private readonly pendingRejectors = new Map<string, (reason: Error) => void>()
+  readonly #assets = new Map<string, RuntimeAsset>()
+  readonly #loading = new Map<string, Promise<RuntimeAsset>>()
+  readonly #loadingRequests = new Map<string, { sourceUrl: string; semanticEntryId?: string }>()
+  readonly #pendingRejectors = new Map<string, (reason: Error) => void>()
   /** Per-request identity prevents a removed asset's late loader callback from publishing. */
-  private readonly pendingLoadTokens = new Map<string, object>()
-  private readonly semanticSources = new Map<string, RuntimeAsset>()
-  private readonly instances = new Map<string, THREE.Object3D>()
-  private readonly instanceMixers = new Map<string, THREE.AnimationMixer>()
-  private readonly instanceActions = new Map<string, THREE.AnimationAction>()
-  private readonly pendingAnimationStops = new Map<string, Array<{ action: THREE.AnimationAction; remainingSeconds: number }>>()
-  private readonly animationAccumulators = new Map<string, number>()
+  readonly #pendingLoadTokens = new Map<string, object>()
+  readonly #semanticSources = new Map<string, RuntimeAsset>()
+  readonly #instances = new Map<string, THREE.Object3D>()
+  readonly #instanceMixers = new Map<string, THREE.AnimationMixer>()
+  readonly #instanceActions = new Map<string, THREE.AnimationAction>()
+  readonly #pendingAnimationStops = new Map<string, Array<{ action: THREE.AnimationAction; remainingSeconds: number }>>()
+  readonly #animationAccumulators = new Map<string, number>()
   /** Latest absolute-world anchor used to rebase renderer-local instance positions. */
   #worldAnchor = { x: 0, y: 0, z: 0 }
-  private readonly scene: THREE.Scene
+  readonly #scene: THREE.Scene
   private readonly onPlacementsChanged?: () => void
 
   constructor(
@@ -45,9 +45,11 @@ export class WorldAssetRuntime {
     loader: Pick<GLTFLoader, 'load'> = new GLTFLoader(),
     onPlacementsChanged?: () => void,
   ) {
-    this.scene = scene
-    this.loader = loader
-    this.onPlacementsChanged = onPlacementsChanged
+    this.#scene = scene
+    this.#loader = loader
+    this.#onPlacementsChanged = onPlacementsChanged
+    // Runtime ownership is held exclusively in private fields; prevent shadow properties.
+    Object.freeze(this)
     for (const key of [
       'loader', 'scene', 'onPlacementsChanged', 'assets', 'loading', 'loadingRequests',
       'pendingRejectors', 'pendingLoadTokens', 'semanticSources', 'instances',
@@ -60,15 +62,15 @@ export class WorldAssetRuntime {
   }
 
   has(id: string) {
-    return this.assets.has(id)
+    return this.#assets.has(id)
   }
 
   get(id: string) {
-    return this.assets.get(id)
+    return this.#assets.get(id)
   }
 
   all() {
-    return [...this.assets.values()]
+    return [...this.#assets.values()]
   }
 
   async load(
@@ -94,7 +96,7 @@ export class WorldAssetRuntime {
       throw new TypeError('Asset load transform must contain finite coordinates, scale and rotation')
     }
 
-    const existing = this.assets.get(id)
+    const existing = this.#assets.get(id)
     if (existing) {
       if (existing.sourceUrl !== sourceUrl ||
           (options.semanticEntryId !== undefined && existing.semanticEntryId !== options.semanticEntryId)) {
@@ -104,9 +106,9 @@ export class WorldAssetRuntime {
       }
       return existing
     }
-    const pending = this.loading.get(id)
+    const pending = this.#loading.get(id)
     if (pending) {
-      const pendingRequest = this.loadingRequests.get(id)
+      const pendingRequest = this.#loadingRequests.get(id)
       if (!pendingRequest ||
           pendingRequest.sourceUrl !== sourceUrl ||
           pendingRequest.semanticEntryId !== options.semanticEntryId) {
@@ -119,16 +121,16 @@ export class WorldAssetRuntime {
 
     const generation = this.#generation
     const requestToken = {}
-    this.pendingLoadTokens.set(id, requestToken)
+    this.#pendingLoadTokens.set(id, requestToken)
     let task: Promise<RuntimeAsset>
     let cancelTask: ((reason: Error) => void) | undefined
     task = new Promise<RuntimeAsset>((resolve, reject) => {
       cancelTask = reject
-      this.loader.load(
+      this.#loader.load(
         sourceUrl,
         (gltf) => {
           const object = gltf.scene
-          if (generation !== this.#generation || this.pendingLoadTokens.get(id) !== requestToken) {
+          if (generation !== this.#generation || this.#pendingLoadTokens.get(id) !== requestToken) {
             // clear() invalidates the entire generation; remove(id) invalidates
             // only this request token. In both cases the detached late payload
             // must be disposed and must never publish into the active scene.
@@ -141,7 +143,7 @@ export class WorldAssetRuntime {
           }
 
           const previousSemanticSource = options.semanticEntryId
-            ? this.semanticSources.get(options.semanticEntryId)
+            ? this.#semanticSources.get(options.semanticEntryId)
             : undefined
           let asset: RuntimeAsset | undefined
           try {
@@ -169,23 +171,23 @@ export class WorldAssetRuntime {
               loadedAt: Date.now(),
             }
 
-            this.scene.add(object)
-            this.assets.set(id, asset)
-            if (asset.semanticEntryId) this.semanticSources.set(asset.semanticEntryId, asset)
+            this.#scene.add(object)
+            this.#assets.set(id, asset)
+            if (asset.semanticEntryId) this.#semanticSources.set(asset.semanticEntryId, asset)
             resolve(asset)
           } catch (error) {
             const cleanupFailures: unknown[] = []
             // Undo any partially published indexes before releasing the object.
-            if (this.assets.get(id)?.object === object) this.assets.delete(id)
-            if (asset?.semanticEntryId && this.semanticSources.get(asset.semanticEntryId) === asset) {
+            if (this.#assets.get(id)?.object === object) this.#assets.delete(id)
+            if (asset?.semanticEntryId && this.#semanticSources.get(asset.semanticEntryId) === asset) {
               if (previousSemanticSource) {
-                this.semanticSources.set(asset.semanticEntryId, previousSemanticSource)
+                this.#semanticSources.set(asset.semanticEntryId, previousSemanticSource)
               } else {
-                this.semanticSources.delete(asset.semanticEntryId)
+                this.#semanticSources.delete(asset.semanticEntryId)
               }
             }
             try {
-              this.scene.remove(object)
+              this.#scene.remove(object)
             } catch (cleanupError) {
               cleanupFailures.push(new Error('Failed to detach partially loaded asset ' + id, { cause: cleanupError }))
             }
@@ -204,25 +206,25 @@ export class WorldAssetRuntime {
         reject,
       )
     }).finally(() => {
-      if (this.loading.get(id) === task) {
-        this.loading.delete(id)
-        this.loadingRequests.delete(id)
-        if (this.pendingRejectors.get(id) === cancelTask) this.pendingRejectors.delete(id)
+      if (this.#loading.get(id) === task) {
+        this.#loading.delete(id)
+        this.#loadingRequests.delete(id)
+        if (this.#pendingRejectors.get(id) === cancelTask) this.#pendingRejectors.delete(id)
       }
-      if (this.pendingLoadTokens.get(id) === requestToken) this.pendingLoadTokens.delete(id)
+      if (this.#pendingLoadTokens.get(id) === requestToken) this.#pendingLoadTokens.delete(id)
     })
 
-    this.loading.set(id, task)
-    this.loadingRequests.set(id, {
+    this.#loading.set(id, task)
+    this.#loadingRequests.set(id, {
       sourceUrl,
       semanticEntryId: options.semanticEntryId,
     })
-    if (cancelTask) this.pendingRejectors.set(id, cancelTask)
+    if (cancelTask) this.#pendingRejectors.set(id, cancelTask)
     return task
   }
 
   getSemanticSource(semanticEntryId: string) {
-    return this.semanticSources.get(semanticEntryId)
+    return this.#semanticSources.get(semanticEntryId)
   }
 
   placeInstance(
@@ -247,10 +249,10 @@ export class WorldAssetRuntime {
     }
 
     const expectedSource = options.sourceAssetId !== undefined
-      ? this.assets.get(options.sourceAssetId)
-      : this.semanticSources.get(semanticEntryId)
+      ? this.#assets.get(options.sourceAssetId)
+      : this.#semanticSources.get(semanticEntryId)
     const expectedSourceAssetId = expectedSource?.id
-    const existing = this.instances.get(instanceId)
+    const existing = this.#instances.get(instanceId)
     if (existing) {
       const existingSourceAssetId = existing.userData.runtimeAssetSourceId
       const existingSemanticEntryId = existing.userData.semanticEntryId
@@ -317,13 +319,13 @@ export class WorldAssetRuntime {
       instance.userData.runtimeAssetSourceId = source.id
       instance.userData.semanticEntryId = semanticEntryId
       sceneAttachmentAttempted = true
-      this.scene.add(instance)
-      this.instances.set(instanceId, instance)
+      this.#scene.add(instance)
+      this.#instances.set(instanceId, instance)
     } catch (error) {
       const cleanupFailures: unknown[] = []
-      if (this.instances.get(instanceId) === instance) this.instances.delete(instanceId)
+      if (this.#instances.get(instanceId) === instance) this.#instances.delete(instanceId)
       if (sceneAttachmentAttempted) {
-        try { this.scene.remove(instance) } catch (cleanupError) { cleanupFailures.push(cleanupError) }
+        try { this.#scene.remove(instance) } catch (cleanupError) { cleanupFailures.push(cleanupError) }
       }
       for (const geometry of ownedGeometries) {
         try { geometry.dispose() } catch (cleanupError) { cleanupFailures.push(cleanupError) }
@@ -344,12 +346,12 @@ export class WorldAssetRuntime {
       throw error
     }
 
-    if (instance.userData.persistentWorldAssetPlacement !== false) this.onPlacementsChanged?.()
+    if (instance.userData.persistentWorldAssetPlacement !== false) this.#onPlacementsChanged?.()
     return instance
   }
 
   snapshotPlacements(): ExternalAssetPlacementSnapshot[] {
-    return [...this.instances]
+    return [...this.#instances]
       .filter(([, instance]) => instance.userData.persistentWorldAssetPlacement !== false)
       .map(([instanceId, instance]) => {
       const worldPosition = instance.userData.worldPosition as
@@ -380,16 +382,16 @@ export class WorldAssetRuntime {
   }
 
   hasInstance(instanceId: string) {
-    return this.instances.has(instanceId)
+    return this.#instances.has(instanceId)
   }
 
   getInstanceSourceAssetId(instanceId: string): string | null {
-    const sourceAssetId = this.instances.get(instanceId)?.userData.runtimeAssetSourceId
+    const sourceAssetId = this.#instances.get(instanceId)?.userData.runtimeAssetSourceId
     return typeof sourceAssetId === 'string' ? sourceAssetId : null
   }
 
   getInstanceSemanticEntryId(instanceId: string): string | null {
-    const semanticEntryId = this.instances.get(instanceId)?.userData.semanticEntryId
+    const semanticEntryId = this.#instances.get(instanceId)?.userData.semanticEntryId
     return typeof semanticEntryId === 'string' ? semanticEntryId : null
   }
 
@@ -398,19 +400,19 @@ export class WorldAssetRuntime {
     if (typeof ownerId !== 'string' || !ownerId.trim() || ownerId.length > 512) {
       throw new TypeError('External asset runtime owner ID must be a non-empty string')
     }
-    const instance = this.instances.get(instanceId)
+    const instance = this.#instances.get(instanceId)
     if (!instance) return false
     instance.userData.runtimeOwnerId = ownerId
     return true
   }
 
   getInstanceRuntimeOwnerId(instanceId: string): string | null {
-    const ownerId = this.instances.get(instanceId)?.userData.runtimeOwnerId
+    const ownerId = this.#instances.get(instanceId)?.userData.runtimeOwnerId
     return typeof ownerId === 'string' ? ownerId : null
   }
 
   getInstanceWorldPosition(instanceId: string) {
-    const position = this.instances.get(instanceId)?.userData.worldPosition as
+    const position = this.#instances.get(instanceId)?.userData.worldPosition as
       { x: number; y: number; z: number } | undefined
     return position ? { ...position } : null
   }
@@ -424,7 +426,7 @@ export class WorldAssetRuntime {
       rotationY?: number
     },
   ) {
-    const instance = this.instances.get(instanceId)
+    const instance = this.#instances.get(instanceId)
     if (!instance) return false
     const { x, y, z } = options.position
     if (![x, y, z].every(Number.isFinite) ||
@@ -437,7 +439,7 @@ export class WorldAssetRuntime {
     instance.position.set(x - this.#worldAnchor.x, y - this.#worldAnchor.y, z - this.#worldAnchor.z)
     if (options.scale !== undefined) instance.scale.setScalar(options.scale)
     if (options.rotationY !== undefined) instance.rotation.y = options.rotationY
-    if (instance.userData.persistentWorldAssetPlacement !== false) this.onPlacementsChanged?.()
+    if (instance.userData.persistentWorldAssetPlacement !== false) this.#onPlacementsChanged?.()
     return true
   }
 
@@ -565,10 +567,10 @@ export class WorldAssetRuntime {
   }
 
   getInstanceAnimationNames(instanceId: string) {
-    const instance = this.instances.get(instanceId)
+    const instance = this.#instances.get(instanceId)
     if (!instance) return []
     const sourceId = instance.userData.runtimeAssetSourceId as string | undefined
-    const source = sourceId ? this.assets.get(sourceId) : undefined
+    const source = sourceId ? this.#assets.get(sourceId) : undefined
     return source?.animations.map(clip => clip.name) ?? []
   }
 
@@ -585,10 +587,10 @@ export class WorldAssetRuntime {
     clipName?: string,
     options: InstanceAnimationOptions = {},
   ) {
-    const instance = this.instances.get(instanceId)
+    const instance = this.#instances.get(instanceId)
     if (!instance) return false
     const sourceId = instance.userData.runtimeAssetSourceId as string | undefined
-    const source = sourceId ? this.assets.get(sourceId) : undefined
+    const source = sourceId ? this.#assets.get(sourceId) : undefined
     if (!source?.animations.length) return false
     const clip = clipName
       ? source.animations.find(candidate => candidate.name === clipName)
@@ -598,8 +600,8 @@ export class WorldAssetRuntime {
     const fadeDuration = Number.isFinite(options.fadeDuration)
       ? Math.max(0, options.fadeDuration ?? 0)
       : 0
-    const mixer = this.instanceMixers.get(instanceId) ?? new THREE.AnimationMixer(instance)
-    const previousAction = this.instanceActions.get(instanceId)
+    const mixer = this.#instanceMixers.get(instanceId) ?? new THREE.AnimationMixer(instance)
+    const previousAction = this.#instanceActions.get(instanceId)
     const action = mixer.clipAction(clip)
     action.stopFading()
     action.stopWarping()
@@ -621,21 +623,21 @@ export class WorldAssetRuntime {
       previousAction.stopWarping()
       if (fadeDuration > 0) {
         previousAction.crossFadeTo(action, fadeDuration, false)
-        const pending = (this.pendingAnimationStops.get(instanceId) ?? [])
+        const pending = (this.#pendingAnimationStops.get(instanceId) ?? [])
           .filter(transition => transition.action !== action)
         pending.push({ action: previousAction, remainingSeconds: fadeDuration })
-        this.pendingAnimationStops.set(instanceId, pending)
+        this.#pendingAnimationStops.set(instanceId, pending)
       } else {
         previousAction.stop()
       }
     } else {
-      const pending = (this.pendingAnimationStops.get(instanceId) ?? [])
+      const pending = (this.#pendingAnimationStops.get(instanceId) ?? [])
         .filter(transition => transition.action !== action)
-      if (pending.length) this.pendingAnimationStops.set(instanceId, pending)
-      else this.pendingAnimationStops.delete(instanceId)
+      if (pending.length) this.#pendingAnimationStops.set(instanceId, pending)
+      else this.#pendingAnimationStops.delete(instanceId)
     }
-    this.instanceMixers.set(instanceId, mixer)
-    this.instanceActions.set(instanceId, action)
+    this.#instanceMixers.set(instanceId, mixer)
+    this.#instanceActions.set(instanceId, action)
     return true
   }
 
@@ -646,7 +648,7 @@ export class WorldAssetRuntime {
   ) {
     let matched = 0
     let started = 0
-    for (const [instanceId, instance] of this.instances) {
+    for (const [instanceId, instance] of this.#instances) {
       if (instance.userData.semanticEntryId !== semanticEntryId) continue
       matched += 1
       if (this.setInstanceAnimationState(instanceId, stateName, options)) started += 1
@@ -656,7 +658,7 @@ export class WorldAssetRuntime {
 
   stopSemanticAnimation(semanticEntryId: string) {
     let stopped = 0
-    for (const [instanceId, instance] of this.instances) {
+    for (const [instanceId, instance] of this.#instances) {
       if (instance.userData.semanticEntryId !== semanticEntryId) continue
       if (this.stopInstanceAnimation(instanceId)) stopped += 1
     }
@@ -664,15 +666,15 @@ export class WorldAssetRuntime {
   }
 
   stopInstanceAnimation(instanceId: string) {
-    const mixer = this.instanceMixers.get(instanceId)
+    const mixer = this.#instanceMixers.get(instanceId)
     if (!mixer) return false
-    const instance = this.instances.get(instanceId)
+    const instance = this.#instances.get(instanceId)
     mixer.stopAllAction()
     if (instance) mixer.uncacheRoot(instance)
-    this.instanceMixers.delete(instanceId)
-    this.instanceActions.delete(instanceId)
-    this.pendingAnimationStops.delete(instanceId)
-    this.animationAccumulators.delete(instanceId)
+    this.#instanceMixers.delete(instanceId)
+    this.#instanceActions.delete(instanceId)
+    this.#pendingAnimationStops.delete(instanceId)
+    this.#animationAccumulators.delete(instanceId)
     return true
   }
 
@@ -681,11 +683,11 @@ export class WorldAssetRuntime {
     const cameraPosition = camera ? camera.getWorldPosition(new THREE.Vector3()) : null
     let updated = 0
 
-    for (const [instanceId, mixer] of this.instanceMixers) {
-      const instance = this.instances.get(instanceId)
+    for (const [instanceId, mixer] of this.#instanceMixers) {
+      const instance = this.#instances.get(instanceId)
       if (!instance) continue
       if (cameraPosition && !instance.visible) {
-        this.animationAccumulators.set(instanceId, 0)
+        this.#animationAccumulators.set(instanceId, 0)
         continue
       }
 
@@ -695,25 +697,25 @@ export class WorldAssetRuntime {
         const distance = instancePosition.distanceTo(cameraPosition)
         if (distance > 650) {
           // Outside the external-asset visibility range: freeze without accumulating catch-up time.
-          this.animationAccumulators.set(instanceId, 0)
+          this.#animationAccumulators.set(instanceId, 0)
           continue
         }
         if (distance > 300) updateInterval = 1 / 15
         else if (distance > 80) updateInterval = 1 / 30
       }
 
-      const accumulated = (this.animationAccumulators.get(instanceId) ?? 0) + deltaSeconds
+      const accumulated = (this.#animationAccumulators.get(instanceId) ?? 0) + deltaSeconds
       if (updateInterval > 0 && accumulated < updateInterval) {
-        this.animationAccumulators.set(instanceId, accumulated)
+        this.#animationAccumulators.set(instanceId, accumulated)
         continue
       }
 
       const appliedDelta = accumulated
-      this.animationAccumulators.set(instanceId, 0)
+      this.#animationAccumulators.set(instanceId, 0)
       mixer.update(appliedDelta)
       updated += 1
 
-      const pending = this.pendingAnimationStops.get(instanceId)
+      const pending = this.#pendingAnimationStops.get(instanceId)
       if (pending?.length) {
         const remaining = pending.filter(transition => {
           transition.remainingSeconds -= appliedDelta
@@ -723,15 +725,15 @@ export class WorldAssetRuntime {
           }
           return true
         })
-        if (remaining.length) this.pendingAnimationStops.set(instanceId, remaining)
-        else this.pendingAnimationStops.delete(instanceId)
+        if (remaining.length) this.#pendingAnimationStops.set(instanceId, remaining)
+        else this.#pendingAnimationStops.delete(instanceId)
       }
     }
     return updated
   }
 
   removeInstance(instanceId: string) {
-    const instance = this.instances.get(instanceId)
+    const instance = this.#instances.get(instanceId)
     if (!instance) return false
 
     const failures: unknown[] = []
@@ -743,24 +745,24 @@ export class WorldAssetRuntime {
       }
     }
 
-    const mixer = this.instanceMixers.get(instanceId)
+    const mixer = this.#instanceMixers.get(instanceId)
     if (mixer) {
       attempt(`Instance ${instanceId} animation stop`, () => mixer.stopAllAction())
       attempt(`Instance ${instanceId} animation uncache`, () => mixer.uncacheRoot(instance))
     }
 
     // Release every animation index even when the mixer or disposer throws.
-    this.instanceMixers.delete(instanceId)
-    this.instanceActions.delete(instanceId)
-    this.pendingAnimationStops.delete(instanceId)
-    this.animationAccumulators.delete(instanceId)
+    this.#instanceMixers.delete(instanceId)
+    this.#instanceActions.delete(instanceId)
+    this.#pendingAnimationStops.delete(instanceId)
+    this.#animationAccumulators.delete(instanceId)
 
-    attempt(`Instance ${instanceId} scene removal`, () => this.scene.remove(instance))
+    attempt(`Instance ${instanceId} scene removal`, () => this.#scene.remove(instance))
     attempt(`Instance ${instanceId} resource disposal`, () => this.disposeObject(instance))
     const isPersistent = instance.userData.persistentWorldAssetPlacement !== false
-    this.instances.delete(instanceId)
-    if (isPersistent && this.onPlacementsChanged) {
-      attempt(`Instance ${instanceId} placement notification`, () => this.onPlacementsChanged?.())
+    this.#instances.delete(instanceId)
+    if (isPersistent && this.#onPlacementsChanged) {
+      attempt(`Instance ${instanceId} placement notification`, () => this.#onPlacementsChanged?.())
     }
 
     if (failures.length > 0) {
@@ -796,8 +798,8 @@ export class WorldAssetRuntime {
     // Explicit source selection allows multiple GLTF files to share one semantic
     // entry without sharing deterministic instance IDs or runtime ownership.
     const source = sourceAssetId === undefined
-      ? this.semanticSources.get(semanticEntryId)
-      : this.assets.get(sourceAssetId)
+      ? this.#semanticSources.get(semanticEntryId)
+      : this.#assets.get(sourceAssetId)
     if (!source || source.semanticEntryId !== semanticEntryId) {
       return { instances: [], createdInstanceIds: [] }
     }
@@ -818,7 +820,7 @@ export class WorldAssetRuntime {
       const instanceId = sourceAssetId === undefined
         ? semanticEntryId + ':instance:' + seed + ':' + i
         : semanticEntryId + ':source:' + encodeURIComponent(sourceAssetId) + ':instance:' + seed + ':' + i
-      const existedBefore = this.instances.has(instanceId)
+      const existedBefore = this.#instances.has(instanceId)
       try {
         const instance = this.placeInstance(
           instanceId,
@@ -834,21 +836,21 @@ export class WorldAssetRuntime {
         )
         if (instance) {
           placed.push(instance)
-          if (!existedBefore && this.instances.get(instanceId) === instance) {
+          if (!existedBefore && this.#instances.get(instanceId) === instance) {
             createdInstanceIds.push(instanceId)
           }
         }
       } catch (error) {
         // placeInstance can fail after publishing an instance if its persistence
         // notification throws. Include that committed object in the rollback.
-        const partiallyPublished = this.instances.get(instanceId)
+        const partiallyPublished = this.#instances.get(instanceId)
         if (!existedBefore && partiallyPublished && !createdInstanceIds.includes(instanceId)) {
           createdInstanceIds.push(instanceId)
         }
 
         const cleanupFailures: unknown[] = []
         for (const createdId of createdInstanceIds.reverse()) {
-          if (!this.instances.has(createdId)) continue
+          if (!this.#instances.has(createdId)) continue
           try {
             this.removeInstance(createdId)
           } catch (cleanupError) {
@@ -883,28 +885,28 @@ export class WorldAssetRuntime {
   }
 
   private refreshSemanticSource(semanticEntryId: string) {
-    const replacement = [...this.assets.values()]
+    const replacement = [...this.#assets.values()]
       .reverse()
       .find(asset => asset.semanticEntryId === semanticEntryId)
-    if (replacement) this.semanticSources.set(semanticEntryId, replacement)
-    else this.semanticSources.delete(semanticEntryId)
+    if (replacement) this.#semanticSources.set(semanticEntryId, replacement)
+    else this.#semanticSources.delete(semanticEntryId)
   }
 
   remove(id: string) {
-    const asset = this.assets.get(id)
+    const asset = this.#assets.get(id)
     if (!asset) {
-      const pending = this.loading.get(id)
-      const requestToken = this.pendingLoadTokens.get(id)
+      const pending = this.#loading.get(id)
+      const requestToken = this.#pendingLoadTokens.get(id)
       if (!pending && !requestToken) return false
 
       // Cancel only this asset's pending request. The request token is removed
       // before rejection so a late loader callback cannot publish, even when a
       // new request with the same ID starts before that callback arrives.
-      const cancel = this.pendingRejectors.get(id)
-      this.loading.delete(id)
-      this.loadingRequests.delete(id)
-      this.pendingLoadTokens.delete(id)
-      this.pendingRejectors.delete(id)
+      const cancel = this.#pendingRejectors.get(id)
+      this.#loading.delete(id)
+      this.#loadingRequests.delete(id)
+      this.#pendingLoadTokens.delete(id)
+      this.#pendingRejectors.delete(id)
       cancel?.(new Error('Asset load ' + id + ' cancelled by removal'))
       return true
     }
@@ -921,15 +923,15 @@ export class WorldAssetRuntime {
     // Instances own cloned GPU resources, but remain semantically dependent on
     // their source asset. A broken instance disposer must not prevent remaining
     // placements or the source asset from being released.
-    for (const [instanceId, instance] of [...this.instances]) {
+    for (const [instanceId, instance] of [...this.#instances]) {
       if (instance.userData.runtimeAssetSourceId === id) {
         attempt(`Asset ${id} dependent instance ${instanceId} removal`, () => this.removeInstance(instanceId))
       }
     }
 
-    attempt(`Asset ${id} scene removal`, () => this.scene.remove(asset.object))
-    this.assets.delete(id)
-    if (asset.semanticEntryId && this.semanticSources.get(asset.semanticEntryId) === asset) {
+    attempt(`Asset ${id} scene removal`, () => this.#scene.remove(asset.object))
+    this.#assets.delete(id)
+    if (asset.semanticEntryId && this.#semanticSources.get(asset.semanticEntryId) === asset) {
       attempt(`Asset ${id} semantic source refresh`, () => this.refreshSemanticSource(asset.semanticEntryId!))
     }
     attempt(`Asset ${id} resource disposal`, () => this.disposeObject(asset.object))
@@ -954,41 +956,41 @@ export class WorldAssetRuntime {
       }
     }
 
-    for (const [id, cancel] of [...this.pendingRejectors]) {
+    for (const [id, cancel] of [...this.#pendingRejectors]) {
       attempt(`Pending asset load ${id} cancellation`, () => cancel(new Error('Asset load invalidated by world replacement')))
     }
-    this.pendingRejectors.clear()
-    this.loading.clear()
-    this.loadingRequests.clear()
-    this.pendingLoadTokens.clear()
+    this.#pendingRejectors.clear()
+    this.#loading.clear()
+    this.#loadingRequests.clear()
+    this.#pendingLoadTokens.clear()
 
-    for (const [instanceId, instance] of [...this.instances]) {
-      const mixer = this.instanceMixers.get(instanceId)
+    for (const [instanceId, instance] of [...this.#instances]) {
+      const mixer = this.#instanceMixers.get(instanceId)
       if (mixer) {
         attempt(`Instance ${instanceId} animation stop`, () => mixer.stopAllAction())
         attempt(`Instance ${instanceId} animation uncache`, () => mixer.uncacheRoot(instance))
       }
-      attempt(`Instance ${instanceId} scene removal`, () => this.scene.remove(instance))
+      attempt(`Instance ${instanceId} scene removal`, () => this.#scene.remove(instance))
       attempt(`Instance ${instanceId} resource disposal`, () => this.disposeObject(instance))
       const isPersistent = instance.userData.persistentWorldAssetPlacement !== false
-      this.instances.delete(instanceId)
-      if (isPersistent && this.onPlacementsChanged) {
-        attempt(`Instance ${instanceId} placement notification`, () => this.onPlacementsChanged?.())
+      this.#instances.delete(instanceId)
+      if (isPersistent && this.#onPlacementsChanged) {
+        attempt(`Instance ${instanceId} placement notification`, () => this.#onPlacementsChanged?.())
       }
     }
 
     // Clear every animation index even when a mixer operation failed above.
-    this.instanceMixers.clear()
-    this.instanceActions.clear()
-    this.pendingAnimationStops.clear()
-    this.animationAccumulators.clear()
+    this.#instanceMixers.clear()
+    this.#instanceActions.clear()
+    this.#pendingAnimationStops.clear()
+    this.#animationAccumulators.clear()
 
-    for (const [id, asset] of [...this.assets]) {
-      attempt(`Asset ${id} scene removal`, () => this.scene.remove(asset.object))
-      this.assets.delete(id)
+    for (const [id, asset] of [...this.#assets]) {
+      attempt(`Asset ${id} scene removal`, () => this.#scene.remove(asset.object))
+      this.#assets.delete(id)
       attempt(`Asset ${id} resource disposal`, () => this.disposeObject(asset.object))
     }
-    this.semanticSources.clear()
+    this.#semanticSources.clear()
 
     if (failures.length > 0) {
       throw new AggregateError(failures, 'World asset runtime was cleared with one or more resource cleanup failures')
@@ -997,11 +999,11 @@ export class WorldAssetRuntime {
 
   rebase(worldAnchor: { x: number; y?: number; z: number }) {
     this.#worldAnchor = { x: worldAnchor.x, y: worldAnchor.y ?? 0, z: worldAnchor.z }
-    for (const asset of this.assets.values()) {
+    for (const asset of this.#assets.values()) {
       const world = asset.object.userData.worldPosition as { x: number; y: number; z: number } | undefined
       if (world) asset.object.position.set(world.x - this.#worldAnchor.x, world.y - this.#worldAnchor.y, world.z - this.#worldAnchor.z)
     }
-    for (const instance of this.instances.values()) {
+    for (const instance of this.#instances.values()) {
       const world = instance.userData.worldPosition as { x: number; y: number; z: number } | undefined
       if (world) instance.position.set(world.x - this.#worldAnchor.x, world.y - this.#worldAnchor.y, world.z - this.#worldAnchor.z)
     }
@@ -1011,7 +1013,7 @@ export class WorldAssetRuntime {
     const cameraPosition = new THREE.Vector3()
     camera.getWorldPosition(cameraPosition)
     // Loaded source assets are hidden templates; only placed instances are render candidates.
-    const candidates = [...this.instances.values()]
+    const candidates = [...this.#instances.values()]
     const ranked = candidates.map(object => ({ object, distance: object.position.distanceTo(cameraPosition) }))
       .sort((a, b) => a.distance - b.distance)
     const visible = new Set(ranked.slice(0, maxVisible).filter(item => item.distance <= maxDistance).map(item => item.object))
@@ -1021,11 +1023,11 @@ export class WorldAssetRuntime {
 
   stats() {
     return {
-      loaded: this.assets.size,
-      ids: [...this.assets.keys()],
-      instances: this.instances.size,
-      animatedInstances: this.instanceMixers.size,
-      visibleInstances: [...this.instances.values()].filter(instance => instance.visible).length,
+      loaded: this.#assets.size,
+      ids: [...this.#assets.keys()],
+      instances: this.#instances.size,
+      animatedInstances: this.#instanceMixers.size,
+      visibleInstances: [...this.#instances.values()].filter(instance => instance.visible).length,
     }
   }
 }
