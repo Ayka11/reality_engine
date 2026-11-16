@@ -92,6 +92,9 @@ export class SimulationEngine {
   }
 
   async initGPU(): Promise<boolean> {
+    // Reinitialization can overlap a pending readback. Invalidate that GPU
+    // generation before awaiting device creation or changing readiness.
+    this._stateGeneration++;
     // Do not advertise GPU execution until device creation and both initial
     // uploads have completed. A partially initialized device is not trusted.
     this._gpuReady = false;

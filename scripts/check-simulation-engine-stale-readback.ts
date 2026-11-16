@@ -363,6 +363,39 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   entityTickEngine.grid.assertDenseEntityOwnershipSynchronized();
   console.log("EntityLayer scoped dense/sparse tick invalidates pending GPU readback and preserves entity ownership: PASS");
 
+  // AgentSystem's public PRNG restore changes future simulation behavior even
+  // when it does not touch the grid. Its observer must invalidate a pending GPU
+  // readback just like a complete agent snapshot restore.
+  const agentRandomEngine = new SimulationEngine(4, 4, 4);
+  (agentRandomEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const staleAgentRandomReadback = agentRandomEngine.grid.buffer.slice();
+  const pendingAgentRandom = await beginPendingReadback(agentRandomEngine, staleAgentRandomReadback);
+  const restoredAgentRandomState = (agentRandomEngine.agents.snapshotRandomState() ^ 0x01010101) >>> 0 || 1;
+  agentRandomEngine.agents.restoreRandomState(restoredAgentRandomState);
+  pendingAgentRandom.release(staleAgentRandomReadback);
+  await assert.rejects(pendingAgentRandom.step, /Discarded stale GPU readback/);
+  assert.equal(agentRandomEngine.agents.snapshotRandomState(), restoredAgentRandomState,
+    "stale GPU rejection must preserve the externally restored AgentSystem PRNG state");
+  console.log("AgentSystem direct PRNG restore invalidates pending GPU readback: PASS");
+
+  // GPU initialization is asynchronous and may reinitialize device state while
+  // an earlier readback is pending. Its generation change must reject that
+  // earlier result before the new device is advertised as ready.
+  const reinitEngine = new SimulationEngine(4, 4, 4);
+  (reinitEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const staleReinitReadback = reinitEngine.grid.buffer.slice();
+  const pendingReinit = await beginPendingReadback(reinitEngine, staleReinitReadback);
+  let finishGPUInit!: (initialized: boolean) => void;
+  reinitEngine.gpu.init = () => new Promise<boolean>(resolve => { finishGPUInit = resolve; });
+  reinitEngine.gpu.upload = () => undefined;
+  const reinit = reinitEngine.initGPU();
+  pendingReinit.release(staleReinitReadback);
+  await assert.rejects(pendingReinit.step, /Discarded stale GPU readback/);
+  finishGPUInit(true);
+  assert.equal(await reinit, true, "GPU reinitialization must complete after invalidating the earlier readback");
+  assert.equal(reinitEngine.gpuActive, true, "GPU readiness must only be restored after initialization uploads");
+  console.log("GPU reinitialization invalidates pending GPU readback: PASS");
+
   // Chunk storage is a separate physical representation. Its writes must invalidate
   // the same grid revision so a dense GPU readback cannot commit over newer chunk state.
   const chunk = engine.grid.chunks.get("0,0,0");

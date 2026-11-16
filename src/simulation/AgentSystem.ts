@@ -79,6 +79,7 @@ export class AgentSystem {
       throw new Error("Invalid AgentSystem PRNG state");
     }
     this._rngState = state >>> 0;
+    this.notifyMutation();
   }
 
   snapshot(): AgentSystemSnapshot {
