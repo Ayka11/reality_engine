@@ -708,7 +708,17 @@ export class CivilizationRuntime {
     state.settlement.stability = snapshot.stability
     state.type = snapshot.type
     state.score = snapshot.score
-    state.memory = { ...state.memory, branchId, divergence: snapshot.divergence, resilience: snapshot.resilience, lastType: snapshot.type }
+    // The branch snapshot starts at the source branch's current clock. Keep
+    // the mutable branch-state clock aligned so its first tick advances the
+    // branch history instead of restarting at tick 1.
+    state.memory = {
+      ...state.memory,
+      ticks: source.tick,
+      branchId,
+      divergence: snapshot.divergence,
+      resilience: snapshot.resilience,
+      lastType: snapshot.type,
+    }
     this.branchStates.set(branchId, state)
     this.branchResources.set(branchId, worldResourceEconomy.snapshot())
     this.branchEnvironments.set(branchId, { ...sourceEnvironment, tick: source.tick })
