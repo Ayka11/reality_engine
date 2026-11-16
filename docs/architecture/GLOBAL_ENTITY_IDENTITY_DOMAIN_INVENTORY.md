@@ -69,6 +69,7 @@ The World Library contains several kinds of ID-bearing data. They must not all b
 - Browser Acceptance verifies source-scoped GLTF removal publishes the exact remaining source IDs and then an empty placement domain after the final source is removed.
 - Browser Acceptance verifies failed reseed, failed Clear World, malformed package preflight, and a late package-publication failure leave the previous identity snapshot unchanged; the late-failure case also checks restoration of object IDs, placement descriptors, seed and manifest state.
 - Browser Acceptance exercises real world-object `place → undo → redo → undo` history; the global revision advances at every membership change and Redo restores the exact same `identityKey` and `localId`.
+- Browser Acceptance also exercises `transformSelected → undo transform → redo transform`: object coordinates/scale/rotation restore correctly while identity key/local ID and global revision remain unchanged; undoing object creation then removes the identity.
 
 Exact-head CI evidence on 2026-11-16:
 - [CI #2657](https://github.com/Ayka11/reality_engine/actions/runs/43835431361), commit `66b504c5e3a565359e6690266c639b3b86ba0daa`, 104/104 steps: failed transitions are identity no-ops; asset removal publishes exact surviving placement IDs; successful reset/reseed and restart do not resurrect removed IDs.
@@ -90,3 +91,6 @@ The current status is intentionally `partial`. A green CI run proves the configu
 
 
 Exact-head history verification: [CI #2663](https://github.com/Ayka11/reality_engine/actions/runs/43855338822) passed 104/104 on `931a075f4d5791410fcddcf92d6b8a842d8fb0fa`. The observed identity revision sequence for Place/Undo/Redo/Undo was 5 → 6 → 7 → 8 → 9; Redo preserved the same key and local ID.
+
+
+Exact-head transform/history evidence: [CI #2665](https://github.com/Ayka11/reality_engine/actions/runs/43857275814) passed 104/104 on `5f2d688fef42b4702bb601fd45ea97ef38b2f08c`. For the transform-only sequence the directory revision remained 8; final Undo of the created object removed the identity and advanced it to 9.
