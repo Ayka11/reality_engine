@@ -64,8 +64,17 @@ The World Library contains several kinds of ID-bearing data. They must not all b
 - `CivilizationRuntime.serializeState()` now returns a detached structured clone. `restoreState()` clones and validates the complete candidate before replacing live maps, rejects duplicate branch IDs, and does not partially clear live state on invalid input. `forkBranch()` skips branch IDs already used by any branch-related map.
 - The browser acceptance suite exercises world-object add/remove visibility, object and pending-asset placement recovery after restart, and civilization branch create/restore visibility in the global directory.
 - Unit tests exercise registry namespace collisions and atomic publication, plus CivilizationRuntime snapshot detachment, restore isolation, duplicate-ID rejection and fork-ID collision handling.
+- Browser Acceptance verifies successful package import publishes the imported world-object and pending-placement IDs with a newer directory revision, and verifies the imported inventory survives a full page restart.
+- Browser Acceptance verifies placement transform changes retain the same `identityKey`/`localId` and do not advance the identity revision, while updated coordinates, scale and rotation are written to the durable placement sidecar.
+- Browser Acceptance verifies source-scoped GLTF removal publishes the exact remaining source IDs and then an empty placement domain after the final source is removed.
+- Browser Acceptance verifies failed reseed, failed Clear World, malformed package preflight, and a late package-publication failure leave the previous identity snapshot unchanged; the late-failure case also checks restoration of object IDs, placement descriptors, seed and manifest state.
 
-These checks validate the covered paths. They do not establish that every excluded subsystem is globally enumerable or fully restored by the active world-package workflow.
+Exact-head CI evidence on 2026-11-16:
+- [CI #2657](https://github.com/Ayka11/reality_engine/actions/runs/43835431361), commit `66b504c5e3a565359e6690266c639b3b86ba0daa`, 104/104 steps: failed transitions are identity no-ops; asset removal publishes exact surviving placement IDs; successful reset/reseed and restart do not resurrect removed IDs.
+- [CI #2658](https://github.com/Ayka11/reality_engine/actions/runs/43837316350), commit `d71de96f9c1814bc624ee9a0cfdd851b18ec38cd`, 104/104 steps: successful package import and placement-transform persistence/stable identity.
+- [CI #2659](https://github.com/Ayka11/reality_engine/actions/runs/43838485785), commit `c8937a06ec6aaf7f42459151ffdf30af2d8c3ab1`, 104/104 steps: valid package fails after editor publication is deliberately injected; Browser Acceptance verifies the prior global identity snapshot and editor state are restored.
+
+These checks validate the covered paths. They do not establish that every excluded subsystem is globally enumerable or fully restored by the active world-package workflow. Coverage remains intentionally `partial`.
 
 ## Criteria before coverage can become complete
 
