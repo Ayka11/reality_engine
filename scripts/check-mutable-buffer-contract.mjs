@@ -156,8 +156,8 @@ for (const filePath of sourcePaths) {
                 parent.arguments[parent.arguments.length - 1] === current &&
                 ts.isPropertyAccessExpression(parent.expression) &&
                 parent.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
-              const targetName = parent.expression.name.text;
-              const allowedTargets = new Set(["_explore", "_harvest", "_signal", "_build", "_destroy"]);
+              const targetName = parent.expression.name.getText(source);
+              const allowedTargets = new Set(["#_explore", "#_harvest", "#_signal", "#_build", "#_destroy"]);
               const target = methodNodes.get(targetName);
               if (allowedTargets.has(targetName) && target &&
                   !target.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) &&
@@ -421,9 +421,9 @@ for (const filePath of sourcePaths) {
             ts.isPropertyAccessExpression(valueParent.expression) &&
             valueParent.expression.name.text === "set" &&
             ts.isIdentifier(receiver) && receiver.text === "rawBuffers";
-          const agentHandoffNames = new Set(["_explore", "_harvest", "_signal", "_build", "_destroy"]);
+          const agentHandoffNames = new Set(["#_explore", "#_harvest", "#_signal", "#_build", "#_destroy"]);
           const agentHandoffName = ts.isPropertyAccessExpression(valueParent.expression)
-            ? valueParent.expression.name.text
+            ? valueParent.expression.name.getText(source)
             : "";
           const agentHandoffTarget = methodNodes.get(agentHandoffName);
           const isAuditedSynchronousAgentHandoff = path === "src/simulation/AgentSystem.ts" &&

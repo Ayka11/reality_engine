@@ -178,6 +178,45 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(privateLaws.activeProcessMask, lawMaskBeforeShadow,
     "LawEngine effective process mask must not be replaceable through a JS decoy property");
   console.log("CausalGraph, WorldEvents and LawEngine runtime-private authoritative state: PASS");
+
+  // AgentSystem's authoritative population, allocator, and PRNG must not be
+  // reachable through TypeScript-private names at runtime. Ordinary JS shadow
+  // properties are inert decoys and cannot detach its mutation observer.
+  const privateAgentEngine = new SimulationEngine(4, 4, 4);
+  privateAgentEngine.agents.seed(privateAgentEngine.grid, 1);
+  const privateAgentSystem = privateAgentEngine.agents;
+  const privateAgentBaseline = privateAgentSystem.snapshot();
+  for (const key of ["agents", "initialRngState", "_rngState", "_nextAgentId",
+    "_random", "_base", "_spawn", "_explore", "_harvest", "_signal", "_build", "_destroy"]) {
+    assert.equal(key in privateAgentSystem, false,
+      `AgentSystem internal member ${key} must be runtime-private`);
+  }
+  const inertAgentMap = new Map();
+  Reflect.set(privateAgentSystem, "agents", inertAgentMap);
+  Reflect.set(privateAgentSystem, "initialRngState", 1);
+  Reflect.set(privateAgentSystem, "_rngState", 1);
+  Reflect.set(privateAgentSystem, "_nextAgentId", 9000);
+  Reflect.set(privateAgentSystem, "_random", () => 0);
+  inertAgentMap.clear();
+  assert.deepEqual(privateAgentSystem.snapshot(), privateAgentBaseline,
+    "JS shadow properties must not replace AgentSystem population, allocator, or PRNG state");
+  assert.equal(Reflect.set(privateAgentSystem, "maxAgents", 128), false,
+    "AgentSystem maximum population must be runtime immutable");
+  assert.throws(() => Object.defineProperty(privateAgentSystem, "maxAgents", { value: 128 }),
+    TypeError, "AgentSystem maximum population must not be redefinable");
+  privateAgentSystem.seed(privateAgentEngine.grid, 1);
+  assert.ok(privateAgentSystem.getAgents().some(agent => agent.id === 2),
+    "AgentSystem allocator must continue from its private ID counter after JS shadowing");
+  (privateAgentEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const stalePrivateAgentReadback = privateAgentEngine.grid.buffer.slice();
+  const pendingPrivateAgentReadback = await beginPendingReadback(privateAgentEngine, stalePrivateAgentReadback);
+  privateAgentSystem.clear();
+  pendingPrivateAgentReadback.release(stalePrivateAgentReadback);
+  await assert.rejects(pendingPrivateAgentReadback.step, /Discarded stale GPU readback/,
+    "public AgentSystem clear must still notify its bound engine after private-state hardening");
+  assert.equal(privateAgentSystem.getAgents().length, 0,
+    "the public clear operation must commit against the private authoritative population");
+  console.log("AgentSystem runtime-private population, allocator, PRNG and helpers: PASS");
   // Exercise the async GPU control path deterministically without a GPU device.
   (engine as unknown as { _gpuReady: boolean })._gpuReady = true;
 

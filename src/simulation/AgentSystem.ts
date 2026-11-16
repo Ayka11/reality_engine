@@ -44,10 +44,10 @@ export const AGENT_COLORS: Record<AgentBehavior, [number, number, number]> = {
 };
 
 export class AgentSystem {
-  private agents: Map<number, Agent> = new Map();
-  private readonly initialRngState: number;
-  private _rngState = 0x0a63c9d1;
-  private _nextAgentId = 1;
+  #agents: Map<number, Agent> = new Map();
+  #initialRngState: number;
+  #_rngState = 0x0a63c9d1;
+  #_nextAgentId = 1;
   #mutationObserver: (() => void) | null = null;
   readonly maxAgents = 64;
 
@@ -65,34 +65,40 @@ export class AgentSystem {
   #notifyMutation(): void { this.#mutationObserver?.(); }
 
   constructor(seed = 0x0a63c9d1) {
-    this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x0a63c9d1 : 0x0a63c9d1;
-    this._rngState = this.initialRngState;
+    this.#initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x0a63c9d1 : 0x0a63c9d1;
+    this.#_rngState = this.#initialRngState;
+    Object.defineProperty(this, "maxAgents", {
+      configurable: false,
+      enumerable: true,
+      writable: false,
+      value: this.maxAgents,
+    });
   }
 
-  private _random(): number {
-    let x = this._rngState >>> 0;
+  #_random(): number {
+    let x = this.#_rngState >>> 0;
     x ^= x << 13;
     x ^= x >>> 17;
     x ^= x << 5;
-    this._rngState = x >>> 0;
-    return this._rngState / 0x100000000;
+    this.#_rngState = x >>> 0;
+    return this.#_rngState / 0x100000000;
   }
 
-  snapshotRandomState(): number { return this._rngState; }
+  snapshotRandomState(): number { return this.#_rngState; }
 
   restoreRandomState(state: number): void {
     if (!Number.isSafeInteger(state) || state <= 0 || state > 0xffffffff) {
       throw new Error("Invalid AgentSystem PRNG state");
     }
-    this._rngState = state >>> 0;
+    this.#_rngState = state >>> 0;
     this.#notifyMutation();
   }
 
   snapshot(): AgentSystemSnapshot {
     return {
-      agents: [...this.agents.values()].map(agent => ({ ...agent })),
-      nextAgentId: this._nextAgentId,
-      rngState: this._rngState,
+      agents: [...this.#agents.values()].map(agent => ({ ...agent })),
+      nextAgentId: this.#_nextAgentId,
+      rngState: this.#_rngState,
     };
   }
 
@@ -161,9 +167,9 @@ export class AgentSystem {
 
     // Replace live state only after the whole candidate has been validated
     // and detached from its caller-owned objects.
-    this.agents = restored;
-    this._nextAgentId = snapshot.nextAgentId;
-    this._rngState = snapshot.rngState >>> 0;
+    this.#agents = restored;
+    this.#_nextAgentId = snapshot.nextAgentId;
+    this.#_rngState = snapshot.rngState >>> 0;
     this.#notifyMutation();
   }
 
@@ -174,16 +180,16 @@ export class AgentSystem {
     }
     // A no-op seed must not acquire a mutable grid buffer (which advances the
     // tracked mutation revision) when no agents can be added.
-    if (count === 0 || this.agents.size >= this.maxAgents) return;
+    if (count === 0 || this.#agents.size >= this.maxAgents) return;
     try {
       withMutableBuffers(grid, (front, _back) => {
-      for (let i = 0; i < count && this.agents.size < this.maxAgents; i++) {
+      for (let i = 0; i < count && this.#agents.size < this.maxAgents; i++) {
         // Keep seeded agents in-bounds for small test worlds as well as the
         // default world. The previous fixed margins could create coordinates
         // outside grids narrower than eight cells or shallower than three.
-        const x = Math.min(grid.W - 1, Math.max(0, Math.floor(4 + this._random() * Math.max(1, grid.W - 8))));
-        const y = Math.min(grid.H - 1, Math.max(0, Math.floor(4 + this._random() * Math.max(1, grid.H - 8))));
-        const z = Math.min(grid.D - 1, Math.max(0, Math.floor(2 + this._random() * Math.max(1, grid.D * 0.6))));
+        const x = Math.min(grid.W - 1, Math.max(0, Math.floor(4 + this.#_random() * Math.max(1, grid.W - 8))));
+        const y = Math.min(grid.H - 1, Math.max(0, Math.floor(4 + this.#_random() * Math.max(1, grid.H - 8))));
+        const z = Math.min(grid.D - 1, Math.max(0, Math.floor(2 + this.#_random() * Math.max(1, grid.D * 0.6))));
 
         // Inject a small energy patch so agents have something to harvest
         for (let dz = -1; dz <= 1; dz++)
@@ -194,7 +200,7 @@ export class AgentSystem {
           front[base + F.ENERGY] = Math.max(front[base + F.ENERGY], 150);
         }
 
-        this._spawn(x, y, z, randomBehavior(() => this._random()), 200);
+        this.#_spawn(x, y, z, randomBehavior(() => this.#_random()), 200);
       }
       });
     } finally {
@@ -216,10 +222,10 @@ export class AgentSystem {
       withMutableBuffers(grid, (front, _back) => {
       const dead: number[] = [];
 
-      for (const [id, agent] of this.agents) {
+      for (const [id, agent] of this.#agents) {
         agent.age++;
 
-        const base = this._base(grid, agent.x, agent.y, agent.z);
+        const base = this.#_base(grid, agent.x, agent.y, agent.z);
         const localEnergy = front[base + F.ENERGY];
 
         agent.memory = agent.memory * 0.95 + (localEnergy / 1000) * 0.05;
@@ -232,24 +238,24 @@ export class AgentSystem {
         if (agent.energy <= 0) { dead.push(id); continue; }
 
         switch (agent.behavior) {
-          case 'explorer':  this._explore(grid, agent, dt, front);  break;
-          case 'harvester': this._harvest(grid, agent, dt, front);  break;
-          case 'signaler':  this._signal(grid, agent, dt, front);   break;
-          case 'builder':   this._build(grid, agent, dt, front);    break;
-          case 'destroyer': this._destroy(grid, agent, dt, front);  break;
+          case 'explorer':  this.#_explore(grid, agent, dt, front);  break;
+          case 'harvester': this.#_harvest(grid, agent, dt, front);  break;
+          case 'signaler':  this.#_signal(grid, agent, dt, front);   break;
+          case 'builder':   this.#_build(grid, agent, dt, front);    break;
+          case 'destroyer': this.#_destroy(grid, agent, dt, front);  break;
         }
 
         // Stamp presence
         front[base + F.AGENT_MARK] = agent.id;
 
         // Replicate when well-fed
-        if (agent.energy > 300 && this.agents.size < this.maxAgents) {
+        if (agent.energy > 300 && this.#agents.size < this.maxAgents) {
           agent.energy *= 0.55;
-          const childBehavior = this._random() < 0.15 ? randomBehavior(() => this._random()) : agent.behavior;
-          this._spawn(
-            Math.max(0, Math.min(grid.W-1, agent.x + Math.round(this._random()*4-2))),
-            Math.max(0, Math.min(grid.H-1, agent.y + Math.round(this._random()*4-2))),
-            Math.max(0, Math.min(grid.D-1, agent.z + Math.round(this._random()*2-1))),
+          const childBehavior = this.#_random() < 0.15 ? randomBehavior(() => this.#_random()) : agent.behavior;
+          this.#_spawn(
+            Math.max(0, Math.min(grid.W-1, agent.x + Math.round(this.#_random()*4-2))),
+            Math.max(0, Math.min(grid.H-1, agent.y + Math.round(this.#_random()*4-2))),
+            Math.max(0, Math.min(grid.D-1, agent.z + Math.round(this.#_random()*2-1))),
             childBehavior, agent.energy * 0.6,
           );
           agent.children++;
@@ -257,13 +263,13 @@ export class AgentSystem {
       }
 
       for (const id of dead) {
-        const agent = this.agents.get(id)!;
-        const base = this._base(grid, agent.x, agent.y, agent.z);
+        const agent = this.#agents.get(id)!;
+        const base = this.#_base(grid, agent.x, agent.y, agent.z);
         // Leave energy ghost on death
         front[base + F.ENERGY] = Math.min(9999,
           front[base + F.ENERGY] + agent.energy);
         front[base + F.AGENT_MARK] = 0;
-        this.agents.delete(id);
+        this.#agents.delete(id);
       }
       });
     } finally {
@@ -273,16 +279,16 @@ export class AgentSystem {
     }
   }
 
-  private _base(grid: VoxelGrid, x: number, y: number, z: number): number {
+  #_base(grid: VoxelGrid, x: number, y: number, z: number): number {
     return (z * grid.H * grid.W + y * grid.W + x) * CELL_FIELDS;
   }
 
-  private _spawn(x: number, y: number, z: number, behavior: AgentBehavior, energy = 200): void {
-    const id = this._nextAgentId++;
-    this.agents.set(id, { id, x, y, z, energy, age: 0, behavior, memory: 0, signal: 0, children: 0 });
+  #_spawn(x: number, y: number, z: number, behavior: AgentBehavior, energy = 200): void {
+    const id = this.#_nextAgentId++;
+    this.#agents.set(id, { id, x, y, z, energy, age: 0, behavior, memory: 0, signal: 0, children: 0 });
   }
 
-  private _explore(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
+  #_explore(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
     const { W, H, D } = grid;
     let bestE = -1, bx = agent.x, by = agent.y, bz = agent.z;
     const dirs = [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]] as const;
@@ -295,19 +301,19 @@ export class AgentSystem {
     // Always move (not probability-gated) — makes explorers visibly traverse the world
     if (bx !== agent.x || by !== agent.y || bz !== agent.z) {
       // Clear old mark
-      buf[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
+      buf[this.#_base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
       agent.x=bx; agent.y=by; agent.z=bz;
     }
     // Explorers passively harvest a tiny amount while moving
-    const base = this._base(grid, agent.x, agent.y, agent.z);
+    const base = this.#_base(grid, agent.x, agent.y, agent.z);
     const take = Math.min(3 * dt * 60, buf[base + F.ENERGY]);
     buf[base + F.ENERGY] -= take;
     agent.energy = Math.min(500, agent.energy + take);
   }
 
-  private _harvest(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
+  #_harvest(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
     // Harvest locally, then move to richest neighbor
-    const base = this._base(grid, agent.x, agent.y, agent.z);
+    const base = this.#_base(grid, agent.x, agent.y, agent.z);
     const take = Math.min(20 * dt * 60, buf[base + F.ENERGY]);
     buf[base + F.ENERGY] -= take;
     agent.energy = Math.min(600, agent.energy + take);
@@ -324,14 +330,14 @@ export class AgentSystem {
         if (e > bestE) { bestE=e; bx=nx; by=ny; bz=nz; }
       }
       if (bx !== agent.x || by !== agent.y || bz !== agent.z) {
-        buf[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
+        buf[this.#_base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
         agent.x=bx; agent.y=by; agent.z=bz;
       }
     }
   }
 
-  private _signal(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
-    const base = this._base(grid, agent.x, agent.y, agent.z);
+  #_signal(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
+    const base = this.#_base(grid, agent.x, agent.y, agent.z);
     agent.signal = Math.min(100, agent.signal + 8 * dt * 60);
     buf[base + F.SIGNAL] = Math.min(100,
       buf[base + F.SIGNAL] + agent.signal * 0.5 * dt);
@@ -347,23 +353,23 @@ export class AgentSystem {
         if (s > bestS) { bestS = s; bx = nx; by = ny; }
       }
       if (bx !== agent.x || by !== agent.y) {
-        buf[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
+        buf[this.#_base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
         agent.x = bx; agent.y = by;
       }
     }
     agent.energy -= agent.signal * 0.005 * dt * 60;
   }
 
-  private _build(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
-    const base = this._base(grid, agent.x, agent.y, agent.z);
+  #_build(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
+    const base = this.#_base(grid, agent.x, agent.y, agent.z);
     buf[base + F.INFORMATION]   = Math.min(999, buf[base + F.INFORMATION]   + 5  * dt * 60);
     buf[base + F.BIO_POTENTIAL] = Math.min(1,   buf[base + F.BIO_POTENTIAL] + 0.015 * dt * 60);
     buf[base + F.ENTROPY]       = Math.max(0,   buf[base + F.ENTROPY]       - 0.005 * dt * 60);
     agent.energy -= 0.8 * dt * 60;
   }
 
-  private _destroy(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
-    const base = this._base(grid, agent.x, agent.y, agent.z);
+  #_destroy(grid: VoxelGrid, agent: Agent, dt: number, buf: Float32Array): void {
+    const base = this.#_base(grid, agent.x, agent.y, agent.z);
     const stolenE = Math.min(15 * dt * 60, buf[base + F.ENERGY]);
     buf[base + F.ENERGY]  = Math.max(0, buf[base + F.ENERGY] - stolenE);
     buf[base + F.ENTROPY] = Math.min(1, buf[base + F.ENTROPY] + 0.03 * dt * 60);
@@ -371,18 +377,18 @@ export class AgentSystem {
     // Destroyers roam randomly
     if (agent.age % 3 === 0) {
       const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
-      const [dx,dy] = dirs[Math.floor(this._random()*4)];
+      const [dx,dy] = dirs[Math.floor(this.#_random()*4)];
       const nx = Math.max(0, Math.min(grid.W-1, agent.x+dx));
       const ny = Math.max(0, Math.min(grid.H-1, agent.y+dy));
       if (nx !== agent.x || ny !== agent.y) {
-        buf[this._base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
+        buf[this.#_base(grid, agent.x, agent.y, agent.z) + F.AGENT_MARK] = 0;
         agent.x=nx; agent.y=ny;
       }
     }
   }
 
   /** Detached read view; callers cannot mutate the authoritative agent population. */
-  getAgents(): Agent[] { return [...this.agents.values()].map(agent => ({ ...agent })); }
+  getAgents(): Agent[] { return [...this.#agents.values()].map(agent => ({ ...agent })); }
 
   agentMarkers(): AgentMarker[] {
     return this.getAgents().map(a => ({
@@ -395,9 +401,9 @@ export class AgentSystem {
   }
 
   clear(): void {
-    this.agents.clear();
-    this._nextAgentId = 1;
-    this._rngState = this.initialRngState;
+    this.#agents.clear();
+    this.#_nextAgentId = 1;
+    this.#_rngState = this.#initialRngState;
     this.#notifyMutation();
   }
 }
