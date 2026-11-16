@@ -163,35 +163,35 @@ function isMetaLaw(value: unknown): value is MetaLaw {
 }
 
 export class LawEngine {
-  private _laws!: MetaLaw[];
-  private _mutationRevision = 0;
-  private _internalLawMutationDepth = 0;
-  private _mask = 0;
-  private _params: PhysicsParams = { ...DEFAULT_PARAMS };
-  private _rngState: number;
+  #_laws!: MetaLaw[];
+  #_mutationRevision = 0;
+  #_internalLawMutationDepth = 0;
+  #_mask = 0;
+  #_params: PhysicsParams = { ...DEFAULT_PARAMS };
+  #_rngState: number;
 
   /** Monotonic revision for law definitions, overrides, and effective process configuration. */
-  get mutationRevision(): number { return this._mutationRevision; }
+  get mutationRevision(): number { return this.#_mutationRevision; }
 
   /** Expose tracked law objects; replacements are detached so escaped caller objects cannot bypass tracking. */
-  get laws(): MetaLaw[] { return this._laws; }
+  get laws(): MetaLaw[] { return this.#_laws; }
   set laws(value: MetaLaw[]) {
     if (!Array.isArray(value)) throw new TypeError("LawEngine laws must be an array");
     const detached = value.map(cloneLaw);
-    this._laws = trackLawState(detached, () => {
-      this._mutationRevision++;
-      if (this._internalLawMutationDepth === 0) this._recompute();
+    this.#_laws = trackLawState(detached, () => {
+      this.#_mutationRevision++;
+      if (this.#_internalLawMutationDepth === 0) this.#_recompute();
     });
-    this._mutationRevision++;
-    if (this._internalLawMutationDepth === 0) this._recompute();
+    this.#_mutationRevision++;
+    if (this.#_internalLawMutationDepth === 0) this.#_recompute();
   }
 
   constructor(seed = 0x6d2b79f5) {
-    this._rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6d2b79f5 : 0x6d2b79f5;
-    this.laws = this._defaultLaws();
+    this.#_rngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6d2b79f5 : 0x6d2b79f5;
+    this.laws = this.#_defaultLaws();
   }
 
-  private _defaultLaws(): MetaLaw[] {
+  #_defaultLaws(): MetaLaw[] {
     return [
       {
         id: 'law_thermo', name: 'Thermodynamics', active: true,
@@ -255,28 +255,28 @@ export class LawEngine {
     ];
   }
 
-  private _random(): number {
-    let x = this._rngState >>> 0;
+  #_random(): number {
+    let x = this.#_rngState >>> 0;
     x ^= x << 13;
     x ^= x >>> 17;
     x ^= x << 5;
-    this._rngState = x >>> 0;
-    return this._rngState / 0x100000000;
+    this.#_rngState = x >>> 0;
+    return this.#_rngState / 0x100000000;
   }
 
   /** Capture laws, manual/graph overrides, and local RNG for deterministic recovery. */
   snapshot(): LawEngineSnapshot {
     return {
       laws: this.laws.map(cloneLaw),
-      lawOverrides: [...this._lawOverride.entries()]
+      lawOverrides: [...this.#_lawOverride.entries()]
         .filter((entry): entry is [string, 'on' | 'off'] => entry[1] !== 'auto')
         .map(([id, state]) => [id, state] as [string, 'on' | 'off']),
-      manualOn: [...this._manualOn].sort((a, b) => a - b),
-      manualOff: [...this._manualOff].sort((a, b) => a - b),
-      graphProcessIds: this._graphProcessIds === null
+      manualOn: [...this.#_manualOn].sort((a, b) => a - b),
+      manualOff: [...this.#_manualOff].sort((a, b) => a - b),
+      graphProcessIds: this.#_graphProcessIds === null
         ? null
-        : [...this._graphProcessIds].sort((a, b) => a - b),
-      rngState: this._rngState,
+        : [...this.#_graphProcessIds].sort((a, b) => a - b),
+      rngState: this.#_rngState,
     };
   }
 
@@ -310,27 +310,27 @@ export class LawEngine {
     const restoredGraphIds = snapshot.graphProcessIds === null
       ? null
       : new Set(snapshot.graphProcessIds);
-    this._internalLawMutationDepth++;
+    this.#_internalLawMutationDepth++;
     try {
       this.laws = restoredLaws;
-      this._lawOverride = restoredOverrides;
-      this._manualOn = new Set(snapshot.manualOn);
-      this._manualOff = new Set(snapshot.manualOff);
-      this._graphProcessIds = restoredGraphIds;
-      this._rngState = snapshot.rngState >>> 0;
+      this.#_lawOverride = restoredOverrides;
+      this.#_manualOn = new Set(snapshot.manualOn);
+      this.#_manualOff = new Set(snapshot.manualOff);
+      this.#_graphProcessIds = restoredGraphIds;
+      this.#_rngState = snapshot.rngState >>> 0;
     } finally {
-      this._internalLawMutationDepth--;
+      this.#_internalLawMutationDepth--;
     }
-    this._recompute();
-    this._mutationRevision++;
+    this.#_recompute();
+    this.#_mutationRevision++;
   }
 
   tick(metrics: WorldMetrics): void {
     let dirty = false;
-    this._internalLawMutationDepth++;
+    this.#_internalLawMutationDepth++;
     try {
       for (const law of this.laws) {
-        const _override = this._lawOverride.get(law.id);
+        const _override = this.#_lawOverride.get(law.id);
         const shouldBeActive = _override === 'on' ? true
           : _override === 'off' ? false
           : (law.conditions.length === 0 || law.conditions.every(c => evalCond(c, metrics)));
@@ -347,86 +347,86 @@ export class LawEngine {
         law.fitness = law.fitness * 0.999 + (law.active ? complexity * 0.001 : 0);
 
         // Mutation: slowly drift law thresholds and param overrides
-        if (law.mutationRate > 0 && this._random() < law.mutationRate) {
-          this._mutate(law);
+        if (law.mutationRate > 0 && this.#_random() < law.mutationRate) {
+          this.#_mutate(law);
           dirty = true;
         }
       }
     } finally {
-      this._internalLawMutationDepth--;
+      this.#_internalLawMutationDepth--;
     }
-    if (dirty) this._recompute();
-    this._mutationRevision++;
+    if (dirty) this.#_recompute();
+    this.#_mutationRevision++;
   }
 
-  private _mutate(law: MetaLaw): void {
+  #_mutate(law: MetaLaw): void {
     // Drift a random condition threshold ±8%
     if (law.conditions.length > 0) {
-      const c = law.conditions[Math.floor(this._random() * law.conditions.length)];
-      c.value *= 0.92 + this._random() * 0.16;
+      const c = law.conditions[Math.floor(this.#_random() * law.conditions.length)];
+      c.value *= 0.92 + this.#_random() * 0.16;
     }
 
     // Drift a random param override ±15%
     const keys = Object.keys(law.paramOverrides) as (keyof PhysicsParams)[];
     if (keys.length > 0) {
-      const k = keys[Math.floor(this._random() * keys.length)];
-      (law.paramOverrides as Record<string, number>)[k] *= 0.85 + this._random() * 0.3;
+      const k = keys[Math.floor(this.#_random() * keys.length)];
+      (law.paramOverrides as Record<string, number>)[k] *= 0.85 + this.#_random() * 0.3;
     }
     law.generation++;
   }
 
-  private _recompute(): void {
-    this._mask = defaultProcessMask();
-    this._params = { ...DEFAULT_PARAMS };
+  #_recompute(): void {
+    this.#_mask = defaultProcessMask();
+    this.#_params = { ...DEFAULT_PARAMS };
 
     for (const law of this.laws) {
       if (!law.active) continue;
-      for (const pid of law.enablesProcesses)  this._mask |= (1 << pid);
-      for (const pid of law.disablesProcesses) this._mask &= ~(1 << pid);
+      for (const pid of law.enablesProcesses)  this.#_mask |= (1 << pid);
+      for (const pid of law.disablesProcesses) this.#_mask &= ~(1 << pid);
       for (const [k, v] of Object.entries(law.paramOverrides)) {
-        (this._params as unknown as Record<string, number>)[k] = v as number;
+        (this.#_params as unknown as Record<string, number>)[k] = v as number;
       }
     }
 
     // Manual overrides always win — applied last so laws can't undo them
-    if (this._graphProcessIds) {
-      this._mask = 0;
-      for (const pid of this._graphProcessIds) this._mask |= (1 << pid);
+    if (this.#_graphProcessIds) {
+      this.#_mask = 0;
+      for (const pid of this.#_graphProcessIds) this.#_mask |= (1 << pid);
     }
 
-    for (const pid of this._manualOn)  this._mask |= (1 << pid);
-    for (const pid of this._manualOff) this._mask &= ~(1 << pid);
+    for (const pid of this.#_manualOn)  this.#_mask |= (1 << pid);
+    for (const pid of this.#_manualOff) this.#_mask &= ~(1 << pid);
     // Consumers receive the live params object for hot paths; freeze it so a
     // caller cannot change solver inputs without advancing the law revision.
-    Object.freeze(this._params);
+    Object.freeze(this.#_params);
   }
 
-  get activeProcessMask(): number { return this._mask; }
-  get params(): Readonly<PhysicsParams> { return this._params; }
+  get activeProcessMask(): number { return this.#_mask; }
+  get params(): Readonly<PhysicsParams> { return this.#_params; }
 
   spawnMutation(parentId: string): MetaLaw | null {
     const parent = this.laws.find(l => l.id === parentId);
     if (!parent) return null;
 
     const child: MetaLaw = JSON.parse(JSON.stringify(parent));
-    child.id = uid(() => this._random());
+    child.id = uid(() => this.#_random());
     child.parentId = parent.id;
     child.generation = parent.generation + 1;
     child.fitness = 0.2;
     child.age = 0;
-    child.mutationRate = Math.min(0.01, parent.mutationRate * (0.6 + this._random() * 0.8));
+    child.mutationRate = Math.min(0.01, parent.mutationRate * (0.6 + this.#_random() * 0.8));
     child.name = parent.name + '+';
 
     // Mutate a condition value aggressively
     if (child.conditions.length > 0) {
-      const c = child.conditions[Math.floor(this._random() * child.conditions.length)];
-      c.value *= 0.5 + this._random() * 1.0;
+      const c = child.conditions[Math.floor(this.#_random() * child.conditions.length)];
+      c.value *= 0.5 + this.#_random() * 1.0;
     }
 
     // Possibly add/remove a process
     const mutableProcs = PROCESS_LIBRARY.filter(p => p.mutable);
-    const rp = mutableProcs[Math.floor(this._random() * mutableProcs.length)];
-    if (this._random() < 0.5) {
+    const rp = mutableProcs[Math.floor(this.#_random() * mutableProcs.length)];
+    if (this.#_random() < 0.5) {
       if (!child.enablesProcesses.includes(rp.id)) child.enablesProcesses.push(rp.id);
     } else {
       child.enablesProcesses = child.enablesProcesses.filter(p => p !== rp.id);
@@ -446,46 +446,46 @@ export class LawEngine {
   }
 
   // Per-law activation overrides (independent of conditions)
-  private _lawOverride: Map<string, 'auto' | 'on' | 'off'> = new Map();
+  #_lawOverride: Map<string, 'auto' | 'on' | 'off'> = new Map();
 
   setLawOverride(id: string, state: 'auto' | 'on' | 'off'): void {
-    if (state === 'auto') this._lawOverride.delete(id);
-    else this._lawOverride.set(id, state);
-    this._mutationRevision++;
+    if (state === 'auto') this.#_lawOverride.delete(id);
+    else this.#_lawOverride.set(id, state);
+    this.#_mutationRevision++;
   }
 
   getLawOverride(id: string): 'auto' | 'on' | 'off' {
-    return this._lawOverride.get(id) ?? 'auto';
+    return this.#_lawOverride.get(id) ?? 'auto';
   }
 
   // Manual overrides survive MetaLaw recomputes
-  private _manualOn  = new Set<number>();
-  private _manualOff = new Set<number>();
-  private _graphProcessIds: Set<number> | null = null;
+  #_manualOn  = new Set<number>();
+  #_manualOff = new Set<number>();
+  #_graphProcessIds: Set<number> | null = null;
 
   toggleProcess(procId: number, on: boolean): void {
-    if (on) { this._manualOn.add(procId);  this._manualOff.delete(procId); }
-    else    { this._manualOff.add(procId); this._manualOn.delete(procId);  }
-    if (on) this._mask |= (1 << procId);
-    else    this._mask &= ~(1 << procId);
-    this._mutationRevision++;
+    if (on) { this.#_manualOn.add(procId);  this.#_manualOff.delete(procId); }
+    else    { this.#_manualOff.add(procId); this.#_manualOn.delete(procId);  }
+    if (on) this.#_mask |= (1 << procId);
+    else    this.#_mask &= ~(1 << procId);
+    this.#_mutationRevision++;
   }
 
   clearManualOverrides(): void {
-    this._manualOn.clear(); this._manualOff.clear();
-    this._recompute();
-    this._mutationRevision++;
+    this.#_manualOn.clear(); this.#_manualOff.clear();
+    this.#_recompute();
+    this.#_mutationRevision++;
   }
 
   applyGraphPlan(plan: GraphExecutionPlan): void {
-    this._graphProcessIds = new Set(plan.activeProcessIds);
-    this._recompute();
-    this._mutationRevision++;
+    this.#_graphProcessIds = new Set(plan.activeProcessIds);
+    this.#_recompute();
+    this.#_mutationRevision++;
   }
 
   clearGraphPlan(): void {
-    this._graphProcessIds = null;
-    this._recompute();
-    this._mutationRevision++;
+    this.#_graphProcessIds = null;
+    this.#_recompute();
+    this.#_mutationRevision++;
   }
 }

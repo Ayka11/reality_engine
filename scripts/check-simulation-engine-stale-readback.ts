@@ -116,6 +116,68 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
       `${boundary.label} must invalidate readback even when JS shadows legacy observer names`);
     console.log(`${boundary.label} runtime-private observer prevents JS detachment: PASS`);
   }
+
+  // The raw browser-visible CausalGraph, WorldEvents and LawEngine objects
+  // retain safe public mutation APIs, but their authoritative storage must not
+  // be reachable through TypeScript-private property names at runtime.
+  const privateStateEngine = new SimulationEngine(4, 4, 4);
+
+  const firstCausalEvent = privateStateEngine.causal.log(
+    1, 0, 0, 0, 0, "energy_spike", 3,
+  );
+  for (const key of ["events", "nextId", "lastEventByCell"]) {
+    assert.equal(key in privateStateEngine.causal, false,
+      `CausalGraph internal member ${key} must be runtime-private`);
+  }
+  Reflect.set(privateStateEngine.causal, "events", []);
+  Reflect.set(privateStateEngine.causal, "nextId", 900);
+  Reflect.set(privateStateEngine.causal, "lastEventByCell", new Map());
+  assert.equal(privateStateEngine.causal.recent(1)[0]?.id, firstCausalEvent.id,
+    "CausalGraph internal event storage must not be replaceable by a JS decoy property");
+  const secondCausalEvent = privateStateEngine.causal.log(
+    2, 0, 0, 0, 1, "energy_spike", 4,
+  );
+  assert.equal(secondCausalEvent.id, firstCausalEvent.id + 1,
+    "CausalGraph internal ID sequence must remain authoritative after JS property shadowing");
+
+  const firstWorldEvent = privateStateEngine.worldEvents.trigger(
+    privateStateEngine.grid, "radiation_storm", 1,
+  );
+  for (const key of ["history", "_nextAuto", "initialRngState", "_rngState",
+    "_random", "_radiationStorm"]) {
+    assert.equal(key in privateStateEngine.worldEvents, false,
+      `WorldEvents internal member ${key} must be runtime-private`);
+  }
+  Reflect.set(privateStateEngine.worldEvents, "history", []);
+  Reflect.set(privateStateEngine.worldEvents, "_nextAuto", 1);
+  Reflect.set(privateStateEngine.worldEvents, "_rngState", 1);
+  assert.equal(privateStateEngine.worldEvents.recent(1)[0]?.type, firstWorldEvent.type,
+    "WorldEvents authoritative history must survive JS property shadowing");
+  assert.equal(privateStateEngine.worldEvents.autoTick(privateStateEngine.grid, 2), null,
+    "WorldEvents interval counter must not be replaceable through a JS decoy property");
+
+  const privateLaws = privateStateEngine.laws;
+  const lawIdsBeforeShadow = privateLaws.laws.map(law => law.id);
+  const lawRevisionBeforeShadow = privateLaws.mutationRevision;
+  const lawMaskBeforeShadow = privateLaws.activeProcessMask;
+  for (const key of ["_laws", "_mutationRevision", "_internalLawMutationDepth",
+    "_mask", "_params", "_rngState", "_defaultLaws", "_random", "_mutate",
+    "_recompute", "_lawOverride", "_manualOn", "_manualOff", "_graphProcessIds"]) {
+    assert.equal(key in privateLaws, false,
+      `LawEngine internal member ${key} must be runtime-private`);
+  }
+  Reflect.set(privateLaws, "_laws", []);
+  Reflect.set(privateLaws, "_mutationRevision", -1);
+  Reflect.set(privateLaws, "_mask", 0);
+  Reflect.set(privateLaws, "_params", {});
+  Reflect.set(privateLaws, "_rngState", 1);
+  assert.deepEqual(privateLaws.laws.map(law => law.id), lawIdsBeforeShadow,
+    "LawEngine live tracked law array must not be replaceable through a JS decoy property");
+  assert.equal(privateLaws.mutationRevision, lawRevisionBeforeShadow,
+    "LawEngine revision must not be replaceable through a JS decoy property");
+  assert.equal(privateLaws.activeProcessMask, lawMaskBeforeShadow,
+    "LawEngine effective process mask must not be replaceable through a JS decoy property");
+  console.log("CausalGraph, WorldEvents and LawEngine runtime-private authoritative state: PASS");
   // Exercise the async GPU control path deterministically without a GPU device.
   (engine as unknown as { _gpuReady: boolean })._gpuReady = true;
 

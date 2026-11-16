@@ -22,9 +22,9 @@ const CAUSAL_EVENT_TYPES: readonly CausalEvent["type"][] = [
 ];
 
 export class CausalGraph {
-  private events: CausalEvent[] = [];
-  private nextId = 1;
-  private lastEventByCell = new Map<number, number>();
+  #events: CausalEvent[] = [];
+  #nextId = 1;
+  #lastEventByCell = new Map<number, number>();
   #mutationObserver: (() => void) | null = null;
 
   /** Bind the owning engine's stale-readback invalidation hook exactly once. */
@@ -42,9 +42,9 @@ export class CausalGraph {
 
   snapshot(): CausalGraphSnapshot {
     return {
-      events: this.events.map(event => ({ ...event })),
-      nextId: this.nextId,
-      lastEventByCell: [...this.lastEventByCell.entries()].map(([cellIndex, eventId]) => [cellIndex, eventId] as [number, number]),
+      events: this.#events.map(event => ({ ...event })),
+      nextId: this.#nextId,
+      lastEventByCell: [...this.#lastEventByCell.entries()].map(([cellIndex, eventId]) => [cellIndex, eventId] as [number, number]),
     };
   }
 
@@ -99,9 +99,9 @@ export class CausalGraph {
     }
 
     // All validation and deep copies finish before any live field is replaced.
-    this.events = events;
-    this.nextId = snapshot.nextId;
-    this.lastEventByCell = lastEventByCell;
+    this.#events = events;
+    this.#nextId = snapshot.nextId;
+    this.#lastEventByCell = lastEventByCell;
     this.#notifyMutation();
   }
 
@@ -112,34 +112,34 @@ export class CausalGraph {
     type: CausalEvent['type'],
     delta: number
   ): CausalEvent {
-    const parentId = this.lastEventByCell.get(cellIdx);
-    const ev: CausalEvent = { id: this.nextId++, tick, x, y, z, type, delta, parentId };
-    this.events.push(ev);
-    this.lastEventByCell.set(cellIdx, ev.id);
-    if (this.events.length > 500) this.events.shift();
+    const parentId = this.#lastEventByCell.get(cellIdx);
+    const ev: CausalEvent = { id: this.#nextId++, tick, x, y, z, type, delta, parentId };
+    this.#events.push(ev);
+    this.#lastEventByCell.set(cellIdx, ev.id);
+    if (this.#events.length > 500) this.#events.shift();
     this.#notifyMutation();
     return { ...ev };
   }
 
   recent(n: number): CausalEvent[] {
-    return this.events.slice(-n).map(event => ({ ...event })).reverse();
+    return this.#events.slice(-n).map(event => ({ ...event })).reverse();
   }
 
   chainFrom(eventId: number): CausalEvent[] {
     const chain: CausalEvent[] = [];
-    let current = this.events.find(e => e.id === eventId);
+    let current = this.#events.find(e => e.id === eventId);
     while (current) {
       chain.push({ ...current });
       const parent = current.parentId;
-      current = parent ? this.events.find(e => e.id === parent) : undefined;
+      current = parent ? this.#events.find(e => e.id === parent) : undefined;
     }
     return chain;
   }
 
   clear(): void {
-    this.events = [];
-    this.lastEventByCell.clear();
-    this.nextId = 1;
+    this.#events = [];
+    this.#lastEventByCell.clear();
+    this.#nextId = 1;
     this.#notifyMutation();
   }
 }
