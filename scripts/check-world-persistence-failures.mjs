@@ -1655,7 +1655,7 @@ assert.match(rendererSource, /A missing chunk is a valid empty region/,
   "a genuinely missing chunk must remain distinct from a corrupt/unavailable payload");
 assert.match(rendererSource, /private clearPersistedWorldNamespace\(\): boolean\s*\{\s*if \(this\.saveTimer !== null\) \{\s*window\.clearTimeout\(this\.saveTimer\)[\s\S]*?return this\.persistence\.clear\(\)\s*\}/,
   "durable namespace cleanup must cancel stale autosaves without mutating the live renderer");
-assert.match(rendererSource, /clearSavedWorld\(\): boolean\s*\{\s*const cleared = this\.clearPersistedWorldNamespace\(\)[\s\S]*?if \(!cleared\) \{[\s\S]*?return false[\s\S]*?this\.pendingExternalAssetPlacements = \[\][\s\S]*?try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{/,
+assert.match(rendererSource, /clearSavedWorld\(\): boolean\s*\{\s*const cleared = this\.clearPersistedWorldNamespace\(\)[\s\S]*?if \(!cleared\) \{[\s\S]*?return false[\s\S]*?this\.#pendingExternalAssetPlacements = \[\][\s\S]*?try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{/,
   "full world clear must preserve live placements if durable cleanup fails and continue cleanup after disposal errors");
 const reseedStart = rendererSource.indexOf("  reseed(newSeed: string)");
 const reseedEnd = rendererSource.indexOf("\n  dispose()", reseedStart);
