@@ -1186,6 +1186,86 @@ try {
     throw new Error("Rejected package changed the previously loaded world: " + JSON.stringify(afterRejectedPackage));
   }
 
+  console.log("[acceptance] late world-editor publication failure rolls back the full imported identity inventory");
+  const rollbackObjectId = "acceptance-late-import-rollback-object";
+  const rollbackPlacementId = "flora.tree:instance:late-rollback:0";
+  const lateRollbackPackage = structuredClone(savedPackage);
+  const rollbackObjectSource = lateRollbackPackage.worldEditor.objects.find(object =>
+    object.id === packageFixture.objectId);
+  if (!rollbackObjectSource) {
+    throw new Error("Late rollback package fixture cannot find the saved source world object");
+  }
+  lateRollbackPackage.worldEditor.objects.push({
+    ...rollbackObjectSource,
+    id: rollbackObjectId,
+    x: rollbackObjectSource.x + 19,
+    z: rollbackObjectSource.z - 13,
+    properties: { ...rollbackObjectSource.properties, acceptanceFixture: "late-rollback" },
+  });
+  lateRollbackPackage.worldEditor.assetPlacements = [
+    ...lateRollbackPackage.worldEditor.assetPlacements,
+    {
+      ...placementFixture,
+      instanceId: rollbackPlacementId,
+      x: placementFixture.x + 23,
+      z: placementFixture.z - 17,
+    },
+  ];
+  const identityBeforeLateRollback = await page.evaluate(() =>
+    window.getGlobalEntityIdentitySnapshot?.());
+  const editorBeforeLateRollback = await page.evaluate(() => ({
+    seed: window.infiniteWorld.generator.seed,
+    objectIds: window.infiniteWorld.objects.values().map(object => object.id).sort(),
+    assetPlacements: window.capturePortableWorldEditorSnapshot().assetPlacements,
+    manifestIds: window.worldAssetManifest.entries.map(entry => entry.id).sort(),
+  }));
+  if (!identityBeforeLateRollback) {
+    throw new Error("Late rollback test could not capture the pre-import global identity snapshot");
+  }
+  await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const originalRestore = world.restorePortableWorldSnapshot;
+    let injectOnce = true;
+    world.restorePortableWorldSnapshot = function(snapshot) {
+      const result = originalRestore.call(this, snapshot);
+      if (injectOnce) {
+        injectOnce = false;
+        world.restorePortableWorldSnapshot = originalRestore;
+        throw new Error("injected late editor publication failure");
+      }
+      return result;
+    };
+  });
+  await loadInput.setInputFiles({
+    name: "late-editor-publication-failure.reality",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(lateRollbackPackage)),
+  });
+  await page.waitForFunction(() =>
+    document.getElementById("plog")?.textContent.includes("injected late editor publication failure"),
+  null, { timeout: acceptanceTimeout });
+  const editorAfterLateRollback = await page.evaluate(() => ({
+    identitySnapshot: window.getGlobalEntityIdentitySnapshot?.(),
+    seed: window.infiniteWorld.generator.seed,
+    objectIds: window.infiniteWorld.objects.values().map(object => object.id).sort(),
+    assetPlacements: window.capturePortableWorldEditorSnapshot().assetPlacements,
+    manifestIds: window.worldAssetManifest.entries.map(entry => entry.id).sort(),
+    restoredMethod: typeof window.infiniteWorld.restorePortableWorldSnapshot === "function",
+  }));
+  if (!editorAfterLateRollback.identitySnapshot ||
+      JSON.stringify(editorAfterLateRollback.identitySnapshot) !== JSON.stringify(identityBeforeLateRollback) ||
+      editorAfterLateRollback.seed !== editorBeforeLateRollback.seed ||
+      JSON.stringify(editorAfterLateRollback.objectIds) !== JSON.stringify(editorBeforeLateRollback.objectIds) ||
+      JSON.stringify(editorAfterLateRollback.assetPlacements) !== JSON.stringify(editorBeforeLateRollback.assetPlacements) ||
+      JSON.stringify(editorAfterLateRollback.manifestIds) !== JSON.stringify(editorBeforeLateRollback.manifestIds) ||
+      !editorAfterLateRollback.restoredMethod ||
+      editorAfterLateRollback.objectIds.includes(rollbackObjectId) ||
+      editorAfterLateRollback.assetPlacements.some(placement => placement.instanceId === rollbackPlacementId)) {
+    throw new Error("A late failed package restore exposed partial world-editor or global identity state: " +
+      JSON.stringify({ beforeIdentity: identityBeforeLateRollback, beforeEditor: editorBeforeLateRollback,
+        afterEditor: editorAfterLateRollback }));
+  }
+
   const noGenerationCheck = await page.evaluate((before) => window.worldVerifyGeneration?.(before), initial);
   if (noGenerationCheck?.ok !== false || noGenerationCheck?.reason !== "generation-revision-did-not-advance") {
     throw new Error("World generation verifier must reject unchanged state even when the stats object exists: " + JSON.stringify(noGenerationCheck));
