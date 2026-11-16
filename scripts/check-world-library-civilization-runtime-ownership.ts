@@ -75,8 +75,19 @@ try {
   assert.equal(runtime.branchCausalEvents(fork.branchId).length, originalCausalEventCount,
     "branchCausalEvents must return a detached array");
 
+  const branchSnapshotTickBefore = runtime.branchSnapshot(fork.branchId)!.tick;
+  const branchMemoryTickBefore = runtime.branchState(fork.branchId)!.memory.ticks;
+  assert.equal(branchMemoryTickBefore, branchSnapshotTickBefore,
+    "a forked branch's state clock must start at the tick represented by its initial branch snapshot");
+
   const tickResult = runtime.tickBranch(fork.branchId, 1);
   assert.ok(tickResult);
+  const branchSnapshotTickAfter = runtime.branchSnapshot(fork.branchId)!.tick;
+  const branchMemoryTickAfter = runtime.branchState(fork.branchId)!.memory.ticks;
+  assert.equal(branchSnapshotTickAfter, branchSnapshotTickBefore + 1,
+    "tickBranch must advance the branch-history snapshot beyond the fork's source tick");
+  assert.equal(branchMemoryTickAfter, branchSnapshotTickAfter,
+    "branch-state memory clock and branch-history snapshot clock must remain aligned after tick");
   const postTickPopulation = runtime.branchState(fork.branchId)!.settlement.population;
   tickResult.state.settlement.population = -6;
   tickResult.state.memory.trajectory.push({
