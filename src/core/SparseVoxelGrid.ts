@@ -48,11 +48,11 @@ export class SparseVoxelGrid {
   readonly chunks: Map<string, Chunk>;
   readonly dirtyChunks: Set<string>;
   readonly chunkOwners: Map<string, string>;
-  private _activeChunkRange = { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 };
+  #_activeChunkRange = { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 };
 
   /** Return a detached range so nested writes cannot bypass revision tracking. */
   get activeChunkRange() {
-    return { ...this._activeChunkRange };
+    return { ...this.#_activeChunkRange };
   }
 
   /** Replace the range atomically; invalid ranges are rejected and valid changes tracked. */
@@ -65,44 +65,44 @@ export class SparseVoxelGrid {
       throw new Error("Invalid active chunk range");
     }
     const next = { ...range };
-    const topologyRange = this.chunkRangeFor(this.chunks.values());
+    const topologyRange = this.#chunkRangeFor(this.chunks.values());
     if (topologyRange.minX !== next.minX || topologyRange.maxX !== next.maxX ||
         topologyRange.minY !== next.minY || topologyRange.maxY !== next.maxY ||
         topologyRange.minZ !== next.minZ || topologyRange.maxZ !== next.maxZ) {
       throw new Error("Active chunk range must match current chunk topology");
     }
-    const previous = this._activeChunkRange;
+    const previous = this.#_activeChunkRange;
     if (previous.minX === next.minX && previous.maxX === next.maxX &&
         previous.minY === next.minY && previous.maxY === next.maxY &&
         previous.minZ === next.minZ && previous.maxZ === next.maxZ) return;
-    this._activeChunkRange = next;
-    this.markMutation();
+    this.#_activeChunkRange = next;
+    this.#markMutation();
   }
 
-  private _sparseDenseBuffer: Float32Array;
-  private _sparseDenseBackBuffer: Float32Array;
-  private _sparseDenseBufferView: Float32Array;
-  private _sparseDenseBackBufferView: Float32Array;
-  private sparseMutationDepth = 0;
-  private sparseMutationPending = false;
-  private _sparseMutationRevision = 0;
-  private _denseOrigin: Readonly<{ x: number; y: number; z: number }> =
+  #_sparseDenseBuffer: Float32Array;
+  #_sparseDenseBackBuffer: Float32Array;
+  #_sparseDenseBufferView: Float32Array;
+  #_sparseDenseBackBufferView: Float32Array;
+  #sparseMutationDepth = 0;
+  #sparseMutationPending = false;
+  #_sparseMutationRevision = 0;
+  #_denseOrigin: Readonly<{ x: number; y: number; z: number }> =
     Object.freeze({ x: 0, y: 0, z: 0 });
 
   /** Internal origin coordinates are immutable when read and revisioned when replaced. */
-  private get denseOrigin(): Readonly<{ x: number; y: number; z: number }> {
-    return this._denseOrigin;
+  get #denseOrigin(): Readonly<{ x: number; y: number; z: number }> {
+    return this.#_denseOrigin;
   }
 
-  private set denseOrigin(origin: { x: number; y: number; z: number }) {
+  set #denseOrigin(origin: { x: number; y: number; z: number }) {
     if (!origin ||
         ![origin.x, origin.y, origin.z].every(Number.isSafeInteger)) {
       throw new Error("Invalid dense origin");
     }
-    const previous = this._denseOrigin;
+    const previous = this.#_denseOrigin;
     if (previous.x === origin.x && previous.y === origin.y && previous.z === origin.z) return;
-    this._denseOrigin = Object.freeze({ x: origin.x, y: origin.y, z: origin.z });
-    this.markMutation();
+    this.#_denseOrigin = Object.freeze({ x: origin.x, y: origin.y, z: origin.z });
+    this.#markMutation();
   }
 
   constructor(W = 64, H = 64, D = 32) {
@@ -121,31 +121,38 @@ export class SparseVoxelGrid {
       size: { writable: false, configurable: false },
     });
     this.dirtyChunks = new MutationTrackedSet(
-      () => this.markMutation(),
+      () => this.#markMutation(),
       key => {
-        if (!this.isValidChunkKey(key)) throw new Error(`Invalid dirty chunk key: ${String(key)}`);
+        if (!this.#isValidChunkKey(key)) throw new Error(`Invalid dirty chunk key: ${String(key)}`);
       },
     );
     this.chunkOwners = new MutationTrackedMap(
-      () => this.markMutation(),
+      () => this.#markMutation(),
       (key, ownerId) => {
-        if (!this.isValidChunkKey(key)) throw new Error(`Invalid chunk owner key: ${String(key)}`);
+        if (!this.#isValidChunkKey(key)) throw new Error(`Invalid chunk owner key: ${String(key)}`);
         if (typeof ownerId !== "string") throw new Error("Chunk owner ID must be a string");
       },
     );
-    this._sparseDenseBuffer = new Float32Array(this.size * CELL_FIELDS);
-    this._sparseDenseBackBuffer = new Float32Array(this.size * CELL_FIELDS);
-    this._sparseDenseBufferView = createTrackedFloat32Array(this._sparseDenseBuffer, () => this.markMutation());
-    this._sparseDenseBackBufferView = createTrackedFloat32Array(this._sparseDenseBackBuffer, () => this.markMutation());
-    this.chunks = new MutationTrackedChunkMap(() => this.onChunkMapMutation());
-    this.seedDenseWindowChunks();
+    this.#_sparseDenseBuffer = new Float32Array(this.size * CELL_FIELDS);
+    this.#_sparseDenseBackBuffer = new Float32Array(this.size * CELL_FIELDS);
+    this.#_sparseDenseBufferView = createTrackedFloat32Array(this.#_sparseDenseBuffer, () => this.#markMutation());
+    this.#_sparseDenseBackBufferView = createTrackedFloat32Array(this.#_sparseDenseBackBuffer, () => this.#markMutation());
+    this.chunks = new MutationTrackedChunkMap(() => this.#onChunkMapMutation());
+    Object.defineProperties(this, {
+      chunks: { writable: false, configurable: false },
+      dirtyChunks: { writable: false, configurable: false },
+      chunkOwners: { writable: false, configurable: false },
+      beginMutation: { value: this.beginMutation.bind(this), writable: false, configurable: false },
+      [INTERNAL_MUTABLE_BUFFER]: { value: this[INTERNAL_MUTABLE_BUFFER].bind(this), writable: false, configurable: false },
+    });
+    this.#seedDenseWindowChunks();
   }
 
-  get buffer(): Float32Array { return this._sparseDenseBufferView; }
-  set buffer(value: Float32Array) { this.assertSparseBuffer(value); this._sparseDenseBuffer.set(value); this.markMutation(); }
-  get backBuffer(): Float32Array { return this._sparseDenseBackBufferView; }
-  set backBuffer(value: Float32Array) { this.assertSparseBuffer(value); this._sparseDenseBackBuffer.set(value); this.markMutation(); }
-  get mutationRevision(): number { return this._sparseMutationRevision; }
+  get buffer(): Float32Array { return this.#_sparseDenseBufferView; }
+  set buffer(value: Float32Array) { this.#assertSparseBuffer(value); this.#_sparseDenseBuffer.set(value); this.#markMutation(); }
+  get backBuffer(): Float32Array { return this.#_sparseDenseBackBufferView; }
+  set backBuffer(value: Float32Array) { this.#assertSparseBuffer(value); this.#_sparseDenseBackBuffer.set(value); this.#markMutation(); }
+  get mutationRevision(): number { return this.#_sparseMutationRevision; }
 
   /**
    * Detect writes made through a previously acquired raw internal alias while
@@ -154,8 +161,8 @@ export class SparseVoxelGrid {
    * Proxy overhead on the public revision-tracked views.
    */
   buffersMatchSnapshots(frontSnapshot: Float32Array, backSnapshot: Float32Array): boolean {
-    const front = this._sparseDenseBuffer;
-    const back = this._sparseDenseBackBuffer;
+    const front = this.#_sparseDenseBuffer;
+    const back = this.#_sparseDenseBackBuffer;
     if (!(frontSnapshot instanceof Float32Array) || !(backSnapshot instanceof Float32Array) ||
         frontSnapshot.length !== front.length || backSnapshot.length !== back.length) {
       return false;
@@ -173,12 +180,12 @@ export class SparseVoxelGrid {
    * sparse chunk on every frame.
    */
   captureDenseWindowRawChunkSnapshots(): DenseWindowRawChunkSnapshot[] {
-    const minCX = Math.floor(this.denseOrigin.x / CHUNK_SIZE);
-    const maxCX = Math.floor((this.denseOrigin.x + this.W - 1) / CHUNK_SIZE);
-    const minCY = Math.floor(this.denseOrigin.y / CHUNK_SIZE);
-    const maxCY = Math.floor((this.denseOrigin.y + this.H - 1) / CHUNK_SIZE);
-    const minCZ = Math.floor(this.denseOrigin.z / CHUNK_SIZE);
-    const maxCZ = Math.floor((this.denseOrigin.z + this.D - 1) / CHUNK_SIZE);
+    const minCX = Math.floor(this.#denseOrigin.x / CHUNK_SIZE);
+    const maxCX = Math.floor((this.#denseOrigin.x + this.W - 1) / CHUNK_SIZE);
+    const minCY = Math.floor(this.#denseOrigin.y / CHUNK_SIZE);
+    const maxCY = Math.floor((this.#denseOrigin.y + this.H - 1) / CHUNK_SIZE);
+    const minCZ = Math.floor(this.#denseOrigin.z / CHUNK_SIZE);
+    const maxCZ = Math.floor((this.#denseOrigin.z + this.D - 1) / CHUNK_SIZE);
     const snapshots: DenseWindowRawChunkSnapshot[] = [];
     for (let cz = minCZ; cz <= maxCZ; cz++)
     for (let cy = minCY; cy <= maxCY; cy++)
@@ -202,27 +209,29 @@ export class SparseVoxelGrid {
   }
 
   beginMutation(): () => void {
-    this.sparseMutationDepth++;
+    this.#sparseMutationDepth++;
     let ended = false;
     return () => {
       if (ended) return;
       ended = true;
-      this.sparseMutationDepth--;
-      if (this.sparseMutationDepth === 0 && this.sparseMutationPending) {
-        this.sparseMutationPending = false;
-        this._sparseMutationRevision++;
+      this.#sparseMutationDepth--;
+      if (this.#sparseMutationDepth === 0 && this.#sparseMutationPending) {
+        this.#sparseMutationPending = false;
+        this.#_sparseMutationRevision++;
       }
     };
   }
-  markMutation(): void {
-    if (this.sparseMutationDepth > 0) { this.sparseMutationPending = true; return; }
-    this._sparseMutationRevision++;
+  markMutation(): void { this.#markMutation(); }
+
+  #markMutation(): void {
+    if (this.#sparseMutationDepth > 0) { this.#sparseMutationPending = true; return; }
+    this.#_sparseMutationRevision++;
   }
   [INTERNAL_MUTABLE_BUFFER](side: MutableBufferSide = "front"): Float32Array {
-    this.markMutation();
-    return side === "back" ? this._sparseDenseBackBuffer : this._sparseDenseBuffer;
+    this.#markMutation();
+    return side === "back" ? this.#_sparseDenseBackBuffer : this.#_sparseDenseBuffer;
   }
-  private assertSparseBuffer(value: Float32Array): void {
+  #assertSparseBuffer(value: Float32Array): void {
     if (!(value instanceof Float32Array) || value.length !== this.size * CELL_FIELDS) {
       throw new Error("SparseVoxelGrid buffer length does not match the grid dimensions");
     }
@@ -238,7 +247,7 @@ export class SparseVoxelGrid {
   }
 
   getChunkBoundary(chunkKey: string): { neighbors: string[] } {
-    if (!this.isValidChunkKey(chunkKey)) return { neighbors: [] };
+    if (!this.#isValidChunkKey(chunkKey)) return { neighbors: [] };
     const parts = chunkKey.split(',').map(n => Number(n));
     const [cx, cy, cz] = parts;
     const neigh: string[] = [];
@@ -253,7 +262,7 @@ export class SparseVoxelGrid {
     return `${cx},${cy},${cz}`;
   }
 
-  private isValidChunkKey(key: unknown): key is string {
+  #isValidChunkKey(key: unknown): key is string {
     if (typeof key !== "string") return false;
     const parts = key.split(",");
     if (parts.length !== 3) return false;
@@ -291,30 +300,30 @@ export class SparseVoxelGrid {
   }
 
   getCell(gx: number, gy: number, gz: number): CellState | null {
-    const [cx, lx] = this.globalToChunk(gx);
-    const [cy, ly] = this.globalToChunk(gy);
-    const [cz, lz] = this.globalToChunk(gz);
+    const [cx, lx] = this.#globalToChunk(gx);
+    const [cy, ly] = this.#globalToChunk(gy);
+    const [cz, lz] = this.#globalToChunk(gz);
     const chunk = this.chunks.get(this.getChunkKey(cx, cy, cz));
     if (!chunk) return null;
     return chunk.getCell(lx, ly, lz);
   }
 
   cell(x: number, y: number, z: number): CellState {
-    this.assertDenseCoordinates(x, y, z, "cell");
-    this.getOrCreateChunkForGlobal(x, y, z);
-    return new CellState(this._sparseDenseBuffer, this.idx(x, y, z), () => this.markMutation());
+    this.#assertDenseCoordinates(x, y, z, "cell");
+    this.#getOrCreateChunkForGlobal(x, y, z);
+    return new CellState(this.#_sparseDenseBuffer, this.idx(x, y, z), () => this.#markMutation());
   }
 
   cellAt(linearIdx: number): CellState {
     if (!Number.isSafeInteger(linearIdx) || linearIdx < 0 || linearIdx >= this.size) {
       throw new RangeError(`cellAt index out of bounds: ${linearIdx}`);
     }
-    return new CellState(this._sparseDenseBuffer, linearIdx * CELL_FIELDS, () => this.markMutation());
+    return new CellState(this.#_sparseDenseBuffer, linearIdx * CELL_FIELDS, () => this.#markMutation());
   }
 
   cellBack(x: number, y: number, z: number): CellState {
-    this.assertDenseCoordinates(x, y, z, "cellBack");
-    return new CellState(this._sparseDenseBackBuffer, this.idx(x, y, z), () => this.markMutation());
+    this.#assertDenseCoordinates(x, y, z, "cellBack");
+    return new CellState(this.#_sparseDenseBackBuffer, this.idx(x, y, z), () => this.#markMutation());
   }
 
   idx(x: number, y: number, z: number): number {
@@ -330,9 +339,9 @@ export class SparseVoxelGrid {
       width: this.W,
       height: this.H,
       depth: this.D,
-      buffer: new Float32Array(this._sparseDenseBuffer),
-      backBuffer: new Float32Array(this._sparseDenseBackBuffer),
-      denseOrigin: { ...this.denseOrigin },
+      buffer: new Float32Array(this.#_sparseDenseBuffer),
+      backBuffer: new Float32Array(this.#_sparseDenseBackBuffer),
+      denseOrigin: { ...this.#denseOrigin },
       activeChunkRange: { ...this.activeChunkRange },
       chunks: [...this.chunks.entries()].map(([key, chunk]) => ({
         key,
@@ -396,7 +405,7 @@ export class SparseVoxelGrid {
       restoredChunks.set(data.key, chunk);
     }
 
-    const restoredRange = this.chunkRangeFor(restoredChunks.values());
+    const restoredRange = this.#chunkRangeFor(restoredChunks.values());
     if (restoredRange.minX !== snapshot.activeChunkRange.minX ||
         restoredRange.maxX !== snapshot.activeChunkRange.maxX ||
         restoredRange.minY !== snapshot.activeChunkRange.minY ||
@@ -406,7 +415,7 @@ export class SparseVoxelGrid {
       throw new Error("Invalid SparseVoxelGrid snapshot active chunk range");
     }
 
-    const isValidChunkKey = (key: unknown): key is string => this.isValidChunkKey(key);
+    const isValidChunkKey = (key: unknown): key is string => this.#isValidChunkKey(key);
     const owners = new Map<string, string>();
     for (const entry of snapshot.chunkOwners) {
       if (!Array.isArray(entry) || entry.length !== 2 ||
@@ -420,9 +429,9 @@ export class SparseVoxelGrid {
       throw new Error("Invalid SparseVoxelGrid snapshot dirty-chunk list");
     }
 
-    this._sparseDenseBuffer.set(snapshot.buffer);
-    this._sparseDenseBackBuffer.set(snapshot.backBuffer);
-    this.denseOrigin = { ...snapshot.denseOrigin };
+    this.#_sparseDenseBuffer.set(snapshot.buffer);
+    this.#_sparseDenseBackBuffer.set(snapshot.backBuffer);
+    this.#denseOrigin = { ...snapshot.denseOrigin };
     this.chunks.clear();
     for (const [key, chunk] of restoredChunks) this.chunks.set(key, chunk);
     // The range is derived from the fully restored chunk topology, so install it
@@ -432,7 +441,7 @@ export class SparseVoxelGrid {
     for (const key of snapshot.dirtyChunks) this.dirtyChunks.add(key);
     this.chunkOwners.clear();
     for (const [key, owner] of owners) this.chunkOwners.set(key, owner);
-    this.markMutation();
+    this.#markMutation();
     } finally {
       endMutation();
     }
@@ -446,10 +455,10 @@ export class SparseVoxelGrid {
     for (let z = 0; z < this.D; z++) {
       for (let y = 0; y < this.H; y++) {
         for (let x = 0; x < this.W; x++) {
-          const gx = x + this.denseOrigin.x;
-          const gy = y + this.denseOrigin.y;
-          const gz = z + this.denseOrigin.z;
-          const denseId = this._sparseDenseBuffer[this.idx(x, y, z) + F.ENTITY_ID];
+          const gx = x + this.#denseOrigin.x;
+          const gy = y + this.#denseOrigin.y;
+          const gz = z + this.#denseOrigin.z;
+          const denseId = this.#_sparseDenseBuffer[this.idx(x, y, z) + F.ENTITY_ID];
           const chunkId = this.getCell(gx, gy, gz)?.entityId ?? 0;
           if (denseId !== chunkId) {
             throw new Error(
@@ -470,21 +479,21 @@ export class SparseVoxelGrid {
   syncDenseEntityOwnershipToChunks(): void {
     const endMutation = this.beginMutation();
     try {
-      this.seedDenseWindowChunks();
+      this.#seedDenseWindowChunks();
       for (let z = 0; z < this.D; z++) {
         for (let y = 0; y < this.H; y++) {
           let x = 0;
           while (x < this.W) {
-            const gx = x + this.denseOrigin.x;
-            const gy = y + this.denseOrigin.y;
-            const gz = z + this.denseOrigin.z;
-            const chunk = this.getOrCreateChunkForGlobal(gx, gy, gz);
-            const [, lx] = this.globalToChunk(gx);
-            const [, ly] = this.globalToChunk(gy);
-            const [, lz] = this.globalToChunk(gz);
+            const gx = x + this.#denseOrigin.x;
+            const gy = y + this.#denseOrigin.y;
+            const gz = z + this.#denseOrigin.z;
+            const chunk = this.#getOrCreateChunkForGlobal(gx, gy, gz);
+            const [, lx] = this.#globalToChunk(gx);
+            const [, ly] = this.#globalToChunk(gy);
+            const [, lz] = this.#globalToChunk(gz);
             const cellCount = Math.min(this.W - x, CHUNK_SIZE - lx);
             chunk.writeFrontFieldRangeFrom(
-              this._sparseDenseBuffer,
+              this.#_sparseDenseBuffer,
               this.idx(x, y, z),
               chunk.localIdx(lx, ly, lz),
               cellCount,
@@ -494,7 +503,7 @@ export class SparseVoxelGrid {
           }
         }
       }
-      this.markMutation();
+      this.#markMutation();
     } finally {
       endMutation();
     }
@@ -510,9 +519,9 @@ export class SparseVoxelGrid {
       throw new RangeError("Entity-domain visibility threshold must be finite and non-negative");
     }
 
-    const denseMaxX = this.denseOrigin.x + this.W;
-    const denseMaxY = this.denseOrigin.y + this.H;
-    const denseMaxZ = this.denseOrigin.z + this.D;
+    const denseMaxX = this.#denseOrigin.x + this.W;
+    const denseMaxY = this.#denseOrigin.y + this.H;
+    const denseMaxZ = this.#denseOrigin.z + this.D;
 
     for (const chunk of this.chunks.values()) {
       const chunkMinX = chunk.cx * CHUNK_SIZE;
@@ -522,15 +531,15 @@ export class SparseVoxelGrid {
       const chunkMaxY = chunkMinY + CHUNK_SIZE;
       const chunkMaxZ = chunkMinZ + CHUNK_SIZE;
       const fullyInsideDenseWindow =
-        chunkMinX >= this.denseOrigin.x && chunkMaxX <= denseMaxX &&
-        chunkMinY >= this.denseOrigin.y && chunkMaxY <= denseMaxY &&
-        chunkMinZ >= this.denseOrigin.z && chunkMaxZ <= denseMaxZ;
+        chunkMinX >= this.#denseOrigin.x && chunkMaxX <= denseMaxX &&
+        chunkMinY >= this.#denseOrigin.y && chunkMaxY <= denseMaxY &&
+        chunkMinZ >= this.#denseOrigin.z && chunkMaxZ <= denseMaxZ;
       if (fullyInsideDenseWindow) continue;
 
       const overlapsDenseWindow =
-        chunkMinX < denseMaxX && chunkMaxX > this.denseOrigin.x &&
-        chunkMinY < denseMaxY && chunkMaxY > this.denseOrigin.y &&
-        chunkMinZ < denseMaxZ && chunkMaxZ > this.denseOrigin.z;
+        chunkMinX < denseMaxX && chunkMaxX > this.#denseOrigin.x &&
+        chunkMinY < denseMaxY && chunkMaxY > this.#denseOrigin.y &&
+        chunkMinZ < denseMaxZ && chunkMaxZ > this.#denseOrigin.z;
       // A wholly external sparse chunk is outside the authority of this
       // dense-window scan. Treat its domain as unverified without scanning every
       // off-window cell on every simulation tick.
@@ -543,9 +552,9 @@ export class SparseVoxelGrid {
           for (let lx = 0; lx < CHUNK_SIZE; lx++) {
             const gx = chunkMinX + lx;
             if (
-              gx >= this.denseOrigin.x && gx < denseMaxX &&
-              gy >= this.denseOrigin.y && gy < denseMaxY &&
-              gz >= this.denseOrigin.z && gz < denseMaxZ
+              gx >= this.#denseOrigin.x && gx < denseMaxX &&
+              gy >= this.#denseOrigin.y && gy < denseMaxY &&
+              gz >= this.#denseOrigin.z && gz < denseMaxZ
             ) continue;
 
             const base = chunk.localIdx(lx, ly, lz);
@@ -563,19 +572,19 @@ export class SparseVoxelGrid {
   snapshot(): void {
     const endMutation = this.beginMutation();
     try {
-      this._sparseDenseBackBuffer.set(this._sparseDenseBuffer);
+      this.#_sparseDenseBackBuffer.set(this.#_sparseDenseBuffer);
       for (const chunk of this.chunks.values()) chunk.snapshot();
-      this.markMutation();
+      this.#markMutation();
     } finally { endMutation(); }
   }
 
   swapBuffers(): void {
     const endMutation = this.beginMutation();
     try {
-      const raw = this._sparseDenseBuffer; this._sparseDenseBuffer = this._sparseDenseBackBuffer; this._sparseDenseBackBuffer = raw;
-      const view = this._sparseDenseBufferView; this._sparseDenseBufferView = this._sparseDenseBackBufferView; this._sparseDenseBackBufferView = view;
+      const raw = this.#_sparseDenseBuffer; this.#_sparseDenseBuffer = this.#_sparseDenseBackBuffer; this.#_sparseDenseBackBuffer = raw;
+      const view = this.#_sparseDenseBufferView; this.#_sparseDenseBufferView = this.#_sparseDenseBackBufferView; this.#_sparseDenseBackBufferView = view;
       for (const chunk of this.chunks.values()) chunk.swapBuffers();
-      this.markMutation();
+      this.#markMutation();
     } finally { endMutation(); }
   }
 
@@ -592,19 +601,19 @@ export class SparseVoxelGrid {
   clear(): void {
     const endMutation = this.beginMutation();
     try {
-      this._sparseDenseBuffer.fill(0);
-      this._sparseDenseBackBuffer.fill(0);
+      this.#_sparseDenseBuffer.fill(0);
+      this.#_sparseDenseBackBuffer.fill(0);
       this.chunks.clear();
       this.dirtyChunks.clear();
-      this.seedDenseWindowChunks();
-      this.markMutation();
+      this.#seedDenseWindowChunks();
+      this.#markMutation();
     } finally { endMutation(); }
   }
 
   totalField(fieldOffset: number): number {
-    this.assertFieldOffset(fieldOffset);
+    this.#assertFieldOffset(fieldOffset);
     let sum = 0;
-    for (let i = fieldOffset; i < this._sparseDenseBuffer.length; i += CELL_FIELDS) sum += this._sparseDenseBuffer[i];
+    for (let i = fieldOffset; i < this.#_sparseDenseBuffer.length; i += CELL_FIELDS) sum += this.#_sparseDenseBuffer[i];
     return sum;
   }
 
@@ -618,7 +627,7 @@ export class SparseVoxelGrid {
       throw new RangeError("SparseVoxelGrid field offsets must be valid cell-field indices");
     }
     const sums = fieldOffsets.map(() => 0);
-    const buffer = this._sparseDenseBuffer;
+    const buffer = this.#_sparseDenseBuffer;
     for (let base = 0; base < buffer.length; base += CELL_FIELDS) {
       for (let index = 0; index < fieldOffsets.length; index++) {
         sums[index] += buffer[base + fieldOffsets[index]];
@@ -627,7 +636,7 @@ export class SparseVoxelGrid {
     return sums;
   }
 
-  private assertFieldOffset(fieldOffset: number): void {
+  #assertFieldOffset(fieldOffset: number): void {
     if (!Number.isSafeInteger(fieldOffset) || fieldOffset < 0 || fieldOffset >= CELL_FIELDS) {
       throw new RangeError("SparseVoxelGrid field offset must be a valid cell-field index");
     }
@@ -636,7 +645,7 @@ export class SparseVoxelGrid {
   syncDenseToChunks(): void {
     const endMutation = this.beginMutation();
     try {
-      this.seedDenseWindowChunks();
+      this.#seedDenseWindowChunks();
 
       // A segment is one contiguous x-run within a physical chunk. Planning at
       // segment granularity avoids per-cell index arrays and a second coordinate
@@ -653,13 +662,13 @@ export class SparseVoxelGrid {
       for (let y = 0; y < this.H; y++) {
         let x = 0;
         while (x < this.W) {
-          const gx = x + this.denseOrigin.x;
-          const gy = y + this.denseOrigin.y;
-          const gz = z + this.denseOrigin.z;
-          const chunk = this.getOrCreateChunkForGlobal(gx, gy, gz);
-          const [, lx] = this.globalToChunk(gx);
-          const [, ly] = this.globalToChunk(gy);
-          const [, lz] = this.globalToChunk(gz);
+          const gx = x + this.#denseOrigin.x;
+          const gy = y + this.#denseOrigin.y;
+          const gz = z + this.#denseOrigin.z;
+          const chunk = this.#getOrCreateChunkForGlobal(gx, gy, gz);
+          const [, lx] = this.#globalToChunk(gx);
+          const [, ly] = this.#globalToChunk(gy);
+          const [, lz] = this.#globalToChunk(gz);
           const cellCount = Math.min(this.W - x, CHUNK_SIZE - lx);
           const fieldCount = cellCount * CELL_FIELDS;
           const sourceOffset = this.idx(x, y, z);
@@ -667,7 +676,7 @@ export class SparseVoxelGrid {
           if (!Number.isSafeInteger(targetOffset) || targetOffset < 0 ||
               !Number.isSafeInteger(fieldCount) || fieldCount <= 0 ||
               targetOffset + fieldCount > CHUNK_VOLUME * CELL_FIELDS ||
-              sourceOffset < 0 || sourceOffset + fieldCount > this._sparseDenseBuffer.length) {
+              sourceOffset < 0 || sourceOffset + fieldCount > this.#_sparseDenseBuffer.length) {
             throw new Error("Dense-to-chunk synchronization produced an invalid segment");
           }
           segments.push({ chunk, sourceOffset, targetOffset, fieldCount });
@@ -686,7 +695,7 @@ export class SparseVoxelGrid {
       }
       for (const segment of segments) {
         if (!seenChunks.has(segment.chunk) ||
-            segment.sourceOffset + segment.fieldCount > this._sparseDenseBuffer.length ||
+            segment.sourceOffset + segment.fieldCount > this.#_sparseDenseBuffer.length ||
             segment.targetOffset + segment.fieldCount > CHUNK_VOLUME * CELL_FIELDS) {
           throw new Error("Dense-to-chunk synchronization lost a preflighted chunk");
         }
@@ -694,13 +703,13 @@ export class SparseVoxelGrid {
 
       for (const segment of segments) {
         segment.chunk.writeFrontRangeFrom(
-          this._sparseDenseBuffer,
+          this.#_sparseDenseBuffer,
           segment.sourceOffset,
           segment.targetOffset,
           segment.fieldCount,
         );
       }
-      this.markMutation();
+      this.#markMutation();
     } finally {
       endMutation();
     }
@@ -709,30 +718,30 @@ export class SparseVoxelGrid {
   syncChunksToDense(): void {
     const endMutation = this.beginMutation();
     try {
-      this._sparseDenseBuffer.fill(0);
+      this.#_sparseDenseBuffer.fill(0);
       for (let z = 0; z < this.D; z++)
       for (let y = 0; y < this.H; y++)
       for (let x = 0; x < this.W; x++) {
-        const gx = x + this.denseOrigin.x;
-        const gy = y + this.denseOrigin.y;
-        const gz = z + this.denseOrigin.z;
+        const gx = x + this.#denseOrigin.x;
+        const gy = y + this.#denseOrigin.y;
+        const gz = z + this.#denseOrigin.z;
         // Resolve the physical chunk directly from coordinates. Copy out the
         // needed fields through a non-aliasing API; this is a read, not mutation.
-        const [cx, lx] = this.globalToChunk(gx);
-        const [cy, ly] = this.globalToChunk(gy);
-        const [cz, lz] = this.globalToChunk(gz);
+        const [cx, lx] = this.#globalToChunk(gx);
+        const [cy, ly] = this.#globalToChunk(gy);
+        const [cz, lz] = this.#globalToChunk(gz);
         const sourceChunk = this.chunks.get(this.getChunkKey(cx, cy, cz));
         if (!sourceChunk) continue;
         sourceChunk.lastAccessed = Date.now();
         const sourceStart = sourceChunk.localIdx(lx, ly, lz);
         sourceChunk.copyFrontRangeTo(
-          this._sparseDenseBuffer,
+          this.#_sparseDenseBuffer,
           sourceStart,
           this.idx(x, y, z),
           CELL_FIELDS,
         );
       }
-      this.markMutation();
+      this.#markMutation();
     } finally {
       endMutation();
     }
@@ -746,7 +755,7 @@ export class SparseVoxelGrid {
           this.chunks.delete(key);
         }
       }
-      this.updateActiveRange();
+      this.#updateActiveRange();
     } finally {
       endMutation();
     }
@@ -765,7 +774,7 @@ export class SparseVoxelGrid {
   }
 
   get memoryBytes(): number {
-    let total = this._sparseDenseBuffer.byteLength + this._sparseDenseBackBuffer.byteLength;
+    let total = this.#_sparseDenseBuffer.byteLength + this.#_sparseDenseBackBuffer.byteLength;
     for (const chunk of this.chunks.values()) total += chunk.memoryBytes();
     return total;
   }
@@ -818,10 +827,10 @@ export class SparseVoxelGrid {
       for (const [key, chunk] of restored) this.chunks.set(key, chunk);
       this.dirtyChunks.clear();
       this.chunkOwners.clear();
-      this.updateActiveRange();
+      this.#updateActiveRange();
       this.syncChunksToDense();
       this.syncBackBuffersFromFront();
-      this.markMutation();
+      this.#markMutation();
     } catch (error) {
       try {
         this.restoreState(previous);
@@ -842,34 +851,34 @@ export class SparseVoxelGrid {
   syncBackBuffersFromFront(): void {
     const endMutation = this.beginMutation();
     try {
-      this._sparseDenseBackBuffer.set(this._sparseDenseBuffer);
+      this.#_sparseDenseBackBuffer.set(this.#_sparseDenseBuffer);
       for (const chunk of this.chunks.values()) {
         chunk.copyFrontToBackBuffer();
       }
-      this.markMutation();
+      this.#markMutation();
     } finally { endMutation(); }
   }
 
-  private seedDenseWindowChunks(): void {
+  #seedDenseWindowChunks(): void {
     // Batch topology changes and recompute the derived range once after seeding.
     const endMutation = this.beginMutation();
     try {
-      const maxCx = Math.ceil((this.denseOrigin.x + this.W) / CHUNK_SIZE) - 1;
-      const maxCy = Math.ceil((this.denseOrigin.y + this.H) / CHUNK_SIZE) - 1;
-      const maxCz = Math.ceil((this.denseOrigin.z + this.D) / CHUNK_SIZE) - 1;
-      const [minCx] = this.globalToChunk(this.denseOrigin.x);
-      const [minCy] = this.globalToChunk(this.denseOrigin.y);
-      const [minCz] = this.globalToChunk(this.denseOrigin.z);
+      const maxCx = Math.ceil((this.#denseOrigin.x + this.W) / CHUNK_SIZE) - 1;
+      const maxCy = Math.ceil((this.#denseOrigin.y + this.H) / CHUNK_SIZE) - 1;
+      const maxCz = Math.ceil((this.#denseOrigin.z + this.D) / CHUNK_SIZE) - 1;
+      const [minCx] = this.#globalToChunk(this.#denseOrigin.x);
+      const [minCy] = this.#globalToChunk(this.#denseOrigin.y);
+      const [minCz] = this.#globalToChunk(this.#denseOrigin.z);
       for (let cz = minCz; cz <= maxCz; cz++)
       for (let cy = minCy; cy <= maxCy; cy++)
       for (let cx = minCx; cx <= maxCx; cx++) this.getOrCreateChunk(cx, cy, cz);
-      this.updateActiveRange();
+      this.#updateActiveRange();
     } finally {
       endMutation();
     }
   }
 
-  private assertDenseCoordinates(x: number, y: number, z: number, method: string): void {
+  #assertDenseCoordinates(x: number, y: number, z: number, method: string): void {
     if (
       !Number.isSafeInteger(x) || !Number.isSafeInteger(y) || !Number.isSafeInteger(z) ||
       !this.inBounds(x, y, z)
@@ -878,39 +887,39 @@ export class SparseVoxelGrid {
     }
   }
 
-  private getOrCreateChunkForGlobal(gx: number, gy: number, gz: number): Chunk {
-    const [cx] = this.globalToChunk(gx);
-    const [cy] = this.globalToChunk(gy);
-    const [cz] = this.globalToChunk(gz);
+  #getOrCreateChunkForGlobal(gx: number, gy: number, gz: number): Chunk {
+    const [cx] = this.#globalToChunk(gx);
+    const [cy] = this.#globalToChunk(gy);
+    const [cz] = this.#globalToChunk(gz);
     return this.getOrCreateChunk(cx, cy, cz);
   }
 
-  private globalToChunk(g: number): [number, number] {
+  #globalToChunk(g: number): [number, number] {
     const c = Math.floor(g / CHUNK_SIZE);
     const l = ((g % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     return [c, l];
   }
 
-  private onChunkMapMutation(): void {
+  #onChunkMapMutation(): void {
     // Internal bulk operations call beginMutation() and update the derived range
     // once after their batch; direct public Map writes must keep it synchronized.
-    if (this.sparseMutationDepth > 0) {
-      this.markMutation();
+    if (this.#sparseMutationDepth > 0) {
+      this.#markMutation();
       return;
     }
-    const previous = this._activeChunkRange;
-    this.updateActiveRange();
-    const current = this._activeChunkRange;
+    const previous = this.#_activeChunkRange;
+    this.#updateActiveRange();
+    const current = this.#_activeChunkRange;
     if (previous.minX === current.minX && previous.maxX === current.maxX &&
         previous.minY === current.minY && previous.maxY === current.maxY &&
         previous.minZ === current.minZ && previous.maxZ === current.maxZ) {
       // Topology changed within the existing bounds, so the range setter did not
       // register the mutation; advance the revision for the map change itself.
-      this.markMutation();
+      this.#markMutation();
     }
   }
 
-  private chunkRangeFor(chunks: Iterable<Chunk>): {
+  #chunkRangeFor(chunks: Iterable<Chunk>): {
     minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number;
   } {
     let hasChunks = false;
@@ -933,8 +942,8 @@ export class SparseVoxelGrid {
     return { minX, maxX, minY, maxY, minZ, maxZ };
   }
 
-  private updateActiveRange(): void {
-    this.activeChunkRange = this.chunkRangeFor(this.chunks.values());
+  #updateActiveRange(): void {
+    this.activeChunkRange = this.#chunkRangeFor(this.chunks.values());
   }
 }
 
@@ -942,83 +951,102 @@ export { CHUNK_SIZE, CHUNK_VOLUME };
 
 
 class MutationTrackedSet<T> extends Set<T> {
-  constructor(
-    private readonly onMutation: () => void,
-    private readonly validateValue?: (value: T) => void,
-  ) { super(); }
+  #onMutation: () => void;
+  #validateValue?: (value: T) => void;
+  constructor(onMutation: () => void, validateValue?: (value: T) => void) {
+    super(); this.#onMutation = onMutation; this.#validateValue = validateValue;
+    Object.defineProperties(this, {
+      add: { value: this.add.bind(this), writable: false, configurable: false },
+      delete: { value: this.delete.bind(this), writable: false, configurable: false },
+      clear: { value: this.clear.bind(this), writable: false, configurable: false },
+    });
+  }
 
   override add(value: T): this {
-    this.validateValue?.(value);
+    this.#validateValue?.(value);
     const existed = this.has(value);
     super.add(value);
-    if (!existed) this.onMutation();
+    if (!existed) this.#onMutation();
     return this;
   }
 
   override delete(value: T): boolean {
     const deleted = super.delete(value);
-    if (deleted) this.onMutation();
+    if (deleted) this.#onMutation();
     return deleted;
   }
 
   override clear(): void {
     if (this.size === 0) return;
     super.clear();
-    this.onMutation();
+    this.#onMutation();
   }
 }
 
 class MutationTrackedMap<K, V> extends Map<K, V> {
-  constructor(
-    private readonly onMutation: () => void,
-    private readonly validateEntry?: (key: K, value: V) => void,
-  ) { super(); }
+  #onMutation: () => void;
+  #validateEntry?: (key: K, value: V) => void;
+  constructor(onMutation: () => void, validateEntry?: (key: K, value: V) => void) {
+    super(); this.#onMutation = onMutation; this.#validateEntry = validateEntry;
+    Object.defineProperties(this, {
+      set: { value: this.set.bind(this), writable: false, configurable: false },
+      delete: { value: this.delete.bind(this), writable: false, configurable: false },
+      clear: { value: this.clear.bind(this), writable: false, configurable: false },
+    });
+  }
 
   override set(key: K, value: V): this {
-    this.validateEntry?.(key, value);
+    this.#validateEntry?.(key, value);
     const existed = this.has(key);
     const previous = this.get(key);
     super.set(key, value);
-    if (!existed || previous !== value) this.onMutation();
+    if (!existed || previous !== value) this.#onMutation();
     return this;
   }
 
   override delete(key: K): boolean {
     const deleted = super.delete(key);
-    if (deleted) this.onMutation();
+    if (deleted) this.#onMutation();
     return deleted;
   }
 
   override clear(): void {
     if (this.size === 0) return;
     super.clear();
-    this.onMutation();
+    this.#onMutation();
   }
 }
 
 class MutationTrackedChunkMap extends Map<string, Chunk> {
-  private readonly registrations = new Map<Chunk, { listener: () => void; references: number }>();
+  readonly #registrations = new Map<Chunk, { listener: () => void; references: number }>();
+  #onMutation: () => void;
+  constructor(onMutation: () => void) {
+    super(); this.#onMutation = onMutation;
+    Object.defineProperties(this, {
+      set: { value: this.set.bind(this), writable: false, configurable: false },
+      delete: { value: this.delete.bind(this), writable: false, configurable: false },
+      clear: { value: this.clear.bind(this), writable: false, configurable: false },
+    });
+  }
 
-  constructor(private readonly onMutation: () => void) { super(); }
-
-  private attach(chunk: Chunk): void {
-    const existing = this.registrations.get(chunk);
+  #attach(chunk: Chunk): void {
+    const existing = this.#registrations.get(chunk);
     if (existing) {
       existing.references++;
       return;
     }
-    const listener = () => this.onMutation();
-    this.registrations.set(chunk, { listener, references: 1 });
+    const listener = () => this.#onMutation();
+    this.#registrations.set(chunk, { listener, references: 1 });
     chunk.addMutationListener(listener);
   }
 
-  private detach(chunk: Chunk): void {
-    const registration = this.registrations.get(chunk);
+  #detach(chunk: Chunk): void {
+    const registration = this.#registrations.get(chunk);
     if (!registration) return;
     registration.references--;
     if (registration.references > 0) return;
     chunk.removeMutationListener(registration.listener);
-    this.registrations.delete(chunk);
+    this.#registrations.delete(chunk);
   }
 
   override set(key: string, chunk: Chunk): this {
@@ -1036,9 +1064,9 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
     if (existed && previous === chunk) return this;
 
     super.set(key, chunk);
-    if (existed && previous) this.detach(previous);
-    this.attach(chunk);
-    this.onMutation();
+    if (existed && previous) this.#detach(previous);
+    this.#attach(chunk);
+    this.#onMutation();
     return this;
   }
 
@@ -1047,8 +1075,8 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
     const previous = this.get(key);
     const deleted = super.delete(key);
     if (deleted && previous) {
-      this.detach(previous);
-      this.onMutation();
+      this.#detach(previous);
+      this.#onMutation();
     }
     return deleted;
   }
@@ -1057,7 +1085,7 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
     if (this.size === 0) return;
     const chunks = [...this.values()];
     super.clear();
-    for (const chunk of chunks) this.detach(chunk);
-    this.onMutation();
+    for (const chunk of chunks) this.#detach(chunk);
+    this.#onMutation();
   }
 }

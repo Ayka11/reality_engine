@@ -14,25 +14,25 @@ export class Chunk {
   readonly cx!: number;
   readonly cy!: number;
   readonly cz!: number;
-  private _buffer: Float32Array;
-  private _backBuffer: Float32Array;
-  private _bufferView: Float32Array;
-  private _backBufferView: Float32Array;
-  private mutationListeners = new Set<() => void>();
+  #_buffer: Float32Array;
+  #_backBuffer: Float32Array;
+  #_bufferView: Float32Array;
+  #_backBufferView: Float32Array;
+  #mutationListeners = new Set<() => void>();
   // Track escaped backing-array identities, not front/back roles: swapBuffers()
   // can move an already-issued front alias to the back slot and vice versa.
-  private rawExposedBuffers = new WeakSet<Float32Array>();
-  private _active = true;
-  private _lastAccessed = Date.now();
+  #rawExposedBuffers = new WeakSet<Float32Array>();
+  #_active = true;
+  #_lastAccessed = Date.now();
 
-  get lastAccessed(): number { return this._lastAccessed; }
+  get lastAccessed(): number { return this.#_lastAccessed; }
   set lastAccessed(value: number) {
     if (!Number.isFinite(value) || value < 0) {
       throw new RangeError("Chunk.lastAccessed must be a finite non-negative timestamp");
     }
-    if (value !== this._lastAccessed) {
-      this._lastAccessed = value;
-      this.markMutation();
+    if (value !== this.#_lastAccessed) {
+      this.#_lastAccessed = value;
+      this.#markMutation();
     }
   }
 
@@ -44,60 +44,64 @@ export class Chunk {
       cy: { value: cy, enumerable: true, writable: false, configurable: false },
       cz: { value: cz, enumerable: true, writable: false, configurable: false },
     });
-    this._buffer = new Float32Array(CHUNK_VOLUME * CELL_FIELDS);
-    this._backBuffer = new Float32Array(CHUNK_VOLUME * CELL_FIELDS);
-    this._bufferView = createTrackedFloat32Array(this._buffer, () => this.markMutation());
-    this._backBufferView = createTrackedFloat32Array(this._backBuffer, () => this.markMutation());
+    this.#_buffer = new Float32Array(CHUNK_VOLUME * CELL_FIELDS);
+    this.#_backBuffer = new Float32Array(CHUNK_VOLUME * CELL_FIELDS);
+    this.#_bufferView = createTrackedFloat32Array(this.#_buffer, () => this.#markMutation());
+    this.#_backBufferView = createTrackedFloat32Array(this.#_backBuffer, () => this.#markMutation());
+    Object.defineProperties(this, {
+      addMutationListener: { value: this.addMutationListener.bind(this), writable: false, configurable: false },
+      removeMutationListener: { value: this.removeMutationListener.bind(this), writable: false, configurable: false },
+    });
   }
 
-  get buffer(): Float32Array { return this._bufferView; }
-  set buffer(value: Float32Array) { this.assertBuffer(value); this._buffer.set(value); this.markMutation(); }
-  get backBuffer(): Float32Array { return this._backBufferView; }
-  set backBuffer(value: Float32Array) { this.assertBuffer(value); this._backBuffer.set(value); this.markMutation(); }
-  get active(): boolean { return this._active; }
+  get buffer(): Float32Array { return this.#_bufferView; }
+  set buffer(value: Float32Array) { this.#assertBuffer(value); this.#_buffer.set(value); this.#markMutation(); }
+  get backBuffer(): Float32Array { return this.#_backBufferView; }
+  set backBuffer(value: Float32Array) { this.#assertBuffer(value); this.#_backBuffer.set(value); this.#markMutation(); }
+  get active(): boolean { return this.#_active; }
   set active(value: boolean) {
     if (typeof value !== "boolean") {
       throw new TypeError("Chunk.active must be a boolean");
     }
-    if (this._active !== value) {
-      this._active = value;
-      this.markMutation();
+    if (this.#_active !== value) {
+      this.#_active = value;
+      this.#markMutation();
     }
   }
 
-  addMutationListener(listener: () => void): void { this.mutationListeners.add(listener); }
-  removeMutationListener(listener: () => void): void { this.mutationListeners.delete(listener); }
-  private assertBuffer(value: Float32Array): void {
+  addMutationListener(listener: () => void): void { this.#mutationListeners.add(listener); }
+  removeMutationListener(listener: () => void): void { this.#mutationListeners.delete(listener); }
+  #assertBuffer(value: Float32Array): void {
     if (!(value instanceof Float32Array) || value.length !== CHUNK_VOLUME * CELL_FIELDS) {
       throw new Error("Chunk buffer must be a Float32Array with the canonical chunk size");
     }
   }
-  private markMutation(): void { for (const listener of this.mutationListeners) listener(); }
+  #markMutation(): void { for (const listener of this.#mutationListeners) listener(); }
 
   [INTERNAL_MUTABLE_BUFFER](side: MutableBufferSide = "front"): Float32Array {
-    const buffer = side === "back" ? this._backBuffer : this._buffer;
-    this.rawExposedBuffers.add(buffer);
-    this.markMutation();
+    const buffer = side === "back" ? this.#_backBuffer : this.#_buffer;
+    this.#rawExposedBuffers.add(buffer);
+    this.#markMutation();
     return buffer;
   }
 
   /** Capture only backing arrays whose live aliases have previously escaped. */
   captureRawBufferSnapshot(): ChunkRawBufferSnapshot | null {
-    const frontExposed = this.rawExposedBuffers.has(this._buffer);
-    const backExposed = this.rawExposedBuffers.has(this._backBuffer);
+    const frontExposed = this.#rawExposedBuffers.has(this.#_buffer);
+    const backExposed = this.#rawExposedBuffers.has(this.#_backBuffer);
     const exposureMask = (frontExposed ? 1 : 0) | (backExposed ? 2 : 0);
     if (exposureMask === 0) return null;
     return {
       exposureMask,
-      front: frontExposed ? this._buffer.slice() : null,
-      back: backExposed ? this._backBuffer.slice() : null,
+      front: frontExposed ? this.#_buffer.slice() : null,
+      back: backExposed ? this.#_backBuffer.slice() : null,
     };
   }
 
   /** Compare escaped raw aliases without routing reads through tracked proxies. */
   rawBuffersMatchSnapshot(snapshot: ChunkRawBufferSnapshot): boolean {
-    const frontExposed = this.rawExposedBuffers.has(this._buffer);
-    const backExposed = this.rawExposedBuffers.has(this._backBuffer);
+    const frontExposed = this.#rawExposedBuffers.has(this.#_buffer);
+    const backExposed = this.#rawExposedBuffers.has(this.#_backBuffer);
     const currentExposureMask = (frontExposed ? 1 : 0) | (backExposed ? 2 : 0);
     if (!snapshot || snapshot.exposureMask !== currentExposureMask) return false;
     const matches = (current: Float32Array, previous: Float32Array): boolean => {
@@ -108,12 +112,12 @@ export class Chunk {
       return true;
     };
     if ((snapshot.exposureMask & 1) !== 0) {
-      if (!(snapshot.front instanceof Float32Array) || !matches(this._buffer, snapshot.front)) return false;
+      if (!(snapshot.front instanceof Float32Array) || !matches(this.#_buffer, snapshot.front)) return false;
     } else if (snapshot.front !== null) {
       return false;
     }
     if ((snapshot.exposureMask & 2) !== 0) {
-      if (!(snapshot.back instanceof Float32Array) || !matches(this._backBuffer, snapshot.back)) return false;
+      if (!(snapshot.back instanceof Float32Array) || !matches(this.#_backBuffer, snapshot.back)) return false;
     } else if (snapshot.back !== null) {
       return false;
     }
@@ -135,11 +139,11 @@ export class Chunk {
         !Number.isSafeInteger(targetOffset) || targetOffset < 0 ||
         !Number.isSafeInteger(length) || length <= 0 ||
         sourceOffset + length > source.length ||
-        targetOffset + length > this._buffer.length) {
+        targetOffset + length > this.#_buffer.length) {
       throw new RangeError("Chunk front-buffer write range is invalid");
     }
-    this._buffer.set(source.subarray(sourceOffset, sourceOffset + length), targetOffset);
-    this.markMutation();
+    this.#_buffer.set(source.subarray(sourceOffset, sourceOffset + length), targetOffset);
+    this.#markMutation();
   }
 
   /**
@@ -161,14 +165,14 @@ export class Chunk {
         sourceOffset % CELL_FIELDS !== 0 ||
         targetOffset % CELL_FIELDS !== 0 ||
         sourceOffset + (cellCount - 1) * CELL_FIELDS + fieldOffset >= source.length ||
-        targetOffset + (cellCount - 1) * CELL_FIELDS + fieldOffset >= this._buffer.length) {
+        targetOffset + (cellCount - 1) * CELL_FIELDS + fieldOffset >= this.#_buffer.length) {
       throw new RangeError("Chunk strided field write range is invalid");
     }
     for (let i = 0; i < cellCount; i++) {
-      this._buffer[targetOffset + i * CELL_FIELDS + fieldOffset] =
+      this.#_buffer[targetOffset + i * CELL_FIELDS + fieldOffset] =
         source[sourceOffset + i * CELL_FIELDS + fieldOffset];
     }
-    this.markMutation();
+    this.#markMutation();
   }
 
   localIdx(lx: number, ly: number, lz: number): number {
@@ -178,8 +182,8 @@ export class Chunk {
     // Treat LRU refresh as internal access bookkeeping, not a field/topology mutation.
     // Explicit external writes still go through the revision-tracked setter above.
     const accessTime = Date.now();
-    if (accessTime > this._lastAccessed) this._lastAccessed = accessTime;
-    return new CellState(this._buffer, this.localIdx(lx, ly, lz), () => this.markMutation());
+    if (accessTime > this.#_lastAccessed) this.#_lastAccessed = accessTime;
+    return new CellState(this.#_buffer, this.localIdx(lx, ly, lz), () => this.#markMutation());
   }
   /**
    * Copy a range from the authoritative front buffer into a caller-owned target.
@@ -196,31 +200,31 @@ export class Chunk {
         !Number.isSafeInteger(sourceOffset) || sourceOffset < 0 ||
         !Number.isSafeInteger(targetOffset) || targetOffset < 0 ||
         !Number.isSafeInteger(length) || length < 0 ||
-        sourceOffset + length > this._buffer.length ||
+        sourceOffset + length > this.#_buffer.length ||
         targetOffset + length > target.length) {
       throw new RangeError("Chunk front-buffer copy range is invalid");
     }
-    target.set(this._buffer.subarray(sourceOffset, sourceOffset + length), targetOffset);
+    target.set(this.#_buffer.subarray(sourceOffset, sourceOffset + length), targetOffset);
   }
 
   /** Copy the current front buffer to back without exposing internal typed arrays. */
   copyFrontToBackBuffer(): void {
-    this._backBuffer.set(this._buffer);
-    this.markMutation();
+    this.#_backBuffer.set(this.#_buffer);
+    this.#markMutation();
   }
-  snapshot(): void { this._backBuffer.set(this._buffer); this.markMutation(); }
+  snapshot(): void { this.#_backBuffer.set(this.#_buffer); this.#markMutation(); }
   swapBuffers(): void {
-    const raw = this._buffer; this._buffer = this._backBuffer; this._backBuffer = raw;
-    const view = this._bufferView; this._bufferView = this._backBufferView; this._backBufferView = view;
-    this.markMutation();
+    const raw = this.#_buffer; this.#_buffer = this.#_backBuffer; this.#_backBuffer = raw;
+    const view = this.#_bufferView; this.#_bufferView = this.#_backBufferView; this.#_backBufferView = view;
+    this.#markMutation();
   }
   isEmpty(threshold = 0.0001): boolean {
-    for (let i = 0; i < this._buffer.length; i += CELL_FIELDS) {
+    for (let i = 0; i < this.#_buffer.length; i += CELL_FIELDS) {
       for (let field = 0; field < CELL_FIELDS; field++) {
-        if (Math.abs(this._buffer[i + field]) > threshold) return false;
+        if (Math.abs(this.#_buffer[i + field]) > threshold) return false;
       }
     }
     return true;
   }
-  memoryBytes(): number { return this._buffer.byteLength + this._backBuffer.byteLength; }
+  memoryBytes(): number { return this.#_buffer.byteLength + this.#_backBuffer.byteLength; }
 }

@@ -16,19 +16,19 @@ export interface RecorderStateSnapshot {
 }
 
 export class Recorder {
-  private snapshots: Snapshot[] = [];
-  private maxSnapshots: number;
-  private _recording = false;
-  private _intervalTicks: number;
-  private _lastSnapTick = 0;
+  #snapshots: Snapshot[] = [];
+  #maxSnapshots: number;
+  #_recording = false;
+  #_intervalTicks: number;
+  #_lastSnapTick = 0;
 
   constructor(maxSnapshots = 60, intervalTicks = 30) {
-    this.maxSnapshots = maxSnapshots;
-    this._intervalTicks = intervalTicks;
+    this.#maxSnapshots = maxSnapshots;
+    this.#_intervalTicks = intervalTicks;
   }
 
-  get recording() { return this._recording; }
-  get count() { return this.snapshots.length; }
+  get recording() { return this.#_recording; }
+  get count() { return this.#snapshots.length; }
 
   /**
    * Detached metadata for UI/replay controls. Historical field buffers remain
@@ -39,7 +39,7 @@ export class Recorder {
     readonly tick: number;
     readonly metrics: Readonly<Snapshot["metrics"]>;
   }> {
-    return Object.freeze(this.snapshots.map(snapshot => Object.freeze({
+    return Object.freeze(this.#snapshots.map(snapshot => Object.freeze({
       tick: snapshot.tick,
       metrics: Object.freeze({ ...snapshot.metrics }),
     })));
@@ -47,11 +47,11 @@ export class Recorder {
 
   snapshotState(): RecorderStateSnapshot {
     return {
-      recording: this._recording,
-      maxSnapshots: this.maxSnapshots,
-      intervalTicks: this._intervalTicks,
-      lastSnapTick: this._lastSnapTick,
-      snapshots: this.snapshots.map(snapshot => ({
+      recording: this.#_recording,
+      maxSnapshots: this.#maxSnapshots,
+      intervalTicks: this.#_intervalTicks,
+      lastSnapTick: this.#_lastSnapTick,
+      snapshots: this.#snapshots.map(snapshot => ({
         tick: snapshot.tick,
         buffer: new Float32Array(snapshot.buffer),
         metrics: { ...snapshot.metrics },
@@ -116,25 +116,25 @@ export class Recorder {
       throw new Error("Recorder last-snapshot tick precedes its history");
     }
 
-    this._recording = snapshot.recording;
-    this.maxSnapshots = snapshot.maxSnapshots;
-    this._intervalTicks = snapshot.intervalTicks;
-    this._lastSnapTick = snapshot.lastSnapTick;
-    this.snapshots = restored;
+    this.#_recording = snapshot.recording;
+    this.#maxSnapshots = snapshot.maxSnapshots;
+    this.#_intervalTicks = snapshot.intervalTicks;
+    this.#_lastSnapTick = snapshot.lastSnapTick;
+    this.#snapshots = restored;
   }
 
-  startRecording(): void { this._recording = true; }
-  stopRecording(): void  { this._recording = false; }
-  clearSnapshots(): void { this.snapshots = []; this._lastSnapTick = 0; }
+  startRecording(): void { this.#_recording = true; }
+  stopRecording(): void  { this.#_recording = false; }
+  clearSnapshots(): void { this.#snapshots = []; this.#_lastSnapTick = 0; }
 
   tick(grid: VoxelGrid, currentTick: number): void {
-    if (!this._recording) return;
-    if (currentTick - this._lastSnapTick < this._intervalTicks) return;
-    this._lastSnapTick = currentTick;
-    this._capture(grid, currentTick);
+    if (!this.#_recording) return;
+    if (currentTick - this.#_lastSnapTick < this.#_intervalTicks) return;
+    this.#_lastSnapTick = currentTick;
+    this.#_capture(grid, currentTick);
   }
 
-  private _capture(grid: VoxelGrid, tick: number): void {
+  #_capture(grid: VoxelGrid, tick: number): void {
     const buf = new Float32Array(grid.buffer); // copy
     let totalEnergy = 0, sumEntropy = 0, sumInfo = 0, sumBio = 0;
     const n = grid.size;
@@ -155,13 +155,13 @@ export class Recorder {
         avgBio:     sumBio / n,
       },
     };
-    this.snapshots.push(snap);
-    if (this.snapshots.length > this.maxSnapshots) this.snapshots.shift();
+    this.#snapshots.push(snap);
+    if (this.#snapshots.length > this.#maxSnapshots) this.#snapshots.shift();
   }
 
   diffAt(idxA: number, idxB: number): Float32Array | null {
-    const a = this.snapshots[idxA];
-    const b = this.snapshots[idxB];
+    const a = this.#snapshots[idxA];
+    const b = this.#snapshots[idxB];
     if (!a || !b || a.buffer.length !== b.buffer.length) return null;
     const diff = new Float32Array(a.buffer.length);
     for (let i = 0; i < diff.length; i++) diff[i] = b.buffer[i] - a.buffer[i];
@@ -170,21 +170,21 @@ export class Recorder {
 
   exportCSV(): string {
     const header = 'tick,totalEnergy,avgEntropy,avgInfo,avgBio\n';
-    const rows = this.snapshots.map(s =>
+    const rows = this.#snapshots.map(s =>
       `${s.tick},${s.metrics.totalEnergy.toFixed(2)},${s.metrics.avgEntropy.toFixed(6)},${s.metrics.avgInfo.toFixed(4)},${s.metrics.avgBio.toFixed(6)}`
     ).join('\n');
     return header + rows;
   }
 
   restoreSnapshot(grid: VoxelGrid, idx: number): boolean {
-    const snap = this.snapshots[idx];
+    const snap = this.#snapshots[idx];
     if (!snap || snap.buffer.length !== grid.buffer.length) return false;
     grid.buffer.set(snap.buffer);
     return true;
   }
 
   exportRecording(): string {
-    if (!this.snapshots.length) return JSON.stringify({ error: 'No snapshots recorded' });
+    if (!this.#snapshots.length) return JSON.stringify({ error: 'No snapshots recorded' });
     const sparse = (buf: Float32Array) => {
       const cells: Array<[number, number[]]> = [];
       const count = buf.length / CELL_FIELDS;
@@ -198,7 +198,7 @@ export class Recorder {
     return JSON.stringify({
       version: 3,
       exported: new Date().toISOString(),
-      snapshots: this.snapshots.map(s => ({
+      snapshots: this.#snapshots.map(s => ({
         tick:    s.tick,
         metrics: s.metrics,
         cells:   sparse(s.buffer),

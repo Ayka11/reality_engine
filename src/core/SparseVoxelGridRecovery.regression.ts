@@ -1,6 +1,7 @@
 import { CELL_FIELDS, F } from "./CellState";
 import { SparseVoxelGrid, type SparseVoxelGridSnapshot } from "./SparseVoxelGrid";
 import { VoxelGrid } from "./VoxelGrid";
+import { INTERNAL_MUTABLE_BUFFER } from "./TrackedFloat32Array";
 
 function cloneSnapshot(snapshot: SparseVoxelGridSnapshot): SparseVoxelGridSnapshot {
   return {
@@ -77,51 +78,35 @@ function runGridDimensionImmutabilityRegression(): void {
 
 function runDenseOriginMutationContractRegression(): void {
   const grid = new SparseVoxelGrid(2, 2, 2);
-  const internalView = grid as unknown as {
-    denseOrigin: { x: number; y: number; z: number };
-  };
-  const origin = internalView.denseOrigin;
-  const initialRevision = grid.mutationRevision;
-
-  let nestedWriteRejected = false;
-  try {
-    origin.x = 7;
-  } catch {
-    nestedWriteRejected = true;
+  const initialState = grid.captureState();
+  const hiddenNames = [
+    "_activeChunkRange", "_sparseDenseBuffer", "_sparseDenseBackBuffer",
+    "_sparseDenseBufferView", "_sparseDenseBackBufferView", "sparseMutationDepth",
+    "sparseMutationPending", "_sparseMutationRevision", "_denseOrigin", "denseOrigin",
+    "assertSparseBuffer", "isValidChunkKey", "assertFieldOffset", "seedDenseWindowChunks",
+    "assertDenseCoordinates", "getOrCreateChunkForGlobal", "globalToChunk",
+    "onChunkMapMutation", "chunkRangeFor", "updateActiveRange",
+  ];
+  for (const name of hiddenNames) {
+    if (name in grid) throw new Error(`SparseVoxelGrid internal member ${name} is not runtime-private`);
+    if (!Reflect.set(grid, name, null)) throw new Error(`SparseVoxelGrid JS shadow failed for ${name}`);
   }
-  if (!nestedWriteRejected || internalView.denseOrigin.x !== 0) {
-    throw new Error("Dense origin nested writes must not mutate the internal coordinate object");
+  if (!Reflect.set(grid, "markMutation", null)) throw new Error("Public compatibility method shadow fixture failed");
+  for (const name of ["chunks", "dirtyChunks", "chunkOwners"]) {
+    if (Reflect.set(grid, name, new Map())) throw new Error(`SparseVoxelGrid owner collection ${name} must be immutable`);
   }
-  if (grid.mutationRevision !== initialRevision) {
-    throw new Error("Rejected nested dense origin write must not advance the mutation revision");
+  if (Reflect.set(grid, "beginMutation", () => () => undefined)) {
+    throw new Error("SparseVoxelGrid beginMutation hook must be immutable");
   }
-
-  let invalidReplacementRejected = false;
-  try {
-    internalView.denseOrigin = { x: 0.5, y: 0, z: 0 };
-  } catch {
-    invalidReplacementRejected = true;
+  if (Reflect.set(grid, INTERNAL_MUTABLE_BUFFER, () => new Float32Array())) {
+    throw new Error("SparseVoxelGrid internal mutable-buffer hook must be immutable");
   }
-  if (!invalidReplacementRejected || internalView.denseOrigin.x !== 0 ||
-      grid.mutationRevision !== initialRevision) {
-    throw new Error("Invalid dense origin replacement must be rejected atomically");
-  }
-
-  internalView.denseOrigin = { x: -3, y: 4, z: 5 };
-  if (grid.mutationRevision <= initialRevision ||
-      internalView.denseOrigin.x !== -3 ||
-      internalView.denseOrigin.y !== 4 ||
-      internalView.denseOrigin.z !== 5) {
-    throw new Error("Valid dense origin replacement must be tracked and installed atomically");
-  }
-  let replacementNestedWriteRejected = false;
-  try {
-    internalView.denseOrigin.z = 99;
-  } catch {
-    replacementNestedWriteRejected = true;
-  }
-  if (!replacementNestedWriteRejected || internalView.denseOrigin.z !== 5) {
-    throw new Error("Replaced dense origin must remain immutable to nested writes");
+  const revisionBeforeTrackedWrite = grid.mutationRevision;
+  grid.buffer[0] = 42;
+  const afterTrackedWrite = grid.captureState();
+  if (grid.mutationRevision <= revisionBeforeTrackedWrite || afterTrackedWrite.buffer[0] !== 42 ||
+      JSON.stringify(afterTrackedWrite.denseOrigin) !== JSON.stringify(initialState.denseOrigin)) {
+    throw new Error("SparseVoxelGrid runtime-private state did not preserve tracked buffer/origin authority");
   }
 }
 
@@ -135,6 +120,49 @@ export function runSparseVoxelGridRecoveryRegression(): void {
   grid.backBuffer[denseIndex] = 27;
 
   const sparse = grid.getOrCreateChunk(-2, 1, 0);
+  const chunkPrivateNames = ["_buffer", "_backBuffer", "_bufferView", "_backBufferView",
+    "mutationListeners", "rawExposedBuffers", "_active", "_lastAccessed", "assertBuffer", "markMutation"];
+  for (const name of chunkPrivateNames) {
+    if (name in sparse) throw new Error(`Chunk internal member ${name} is not runtime-private`);
+    if (!Reflect.set(sparse, name, null)) throw new Error(`Chunk JS shadow failed for ${name}`);
+  }
+  if (Reflect.set(sparse, "addMutationListener", () => undefined) ||
+      Reflect.set(sparse, "removeMutationListener", () => undefined)) {
+    throw new Error("Chunk mutation-listener registration methods must be immutable");
+  }
+  const chunkRevision = grid.mutationRevision;
+  sparse.buffer[7] = 73;
+  if (grid.mutationRevision <= chunkRevision) throw new Error("Chunk listener was detached by JS shadow properties");
+
+  const dirtySet = grid.dirtyChunks as unknown as object;
+  for (const name of ["onMutation", "validateValue"]) {
+    if (name in dirtySet) throw new Error(`Tracked dirty set member ${name} is not runtime-private`);
+    Reflect.set(dirtySet, name, null);
+  }
+  if (Reflect.set(dirtySet, "add", () => dirtySet)) throw new Error("Tracked dirty set mutator can be replaced");
+  const dirtyRevision = grid.mutationRevision;
+  grid.dirtyChunks.add("123,0,0");
+  if (grid.mutationRevision <= dirtyRevision) throw new Error("Dirty-set callback shadow bypassed grid revision");
+
+  const ownerMap = grid.chunkOwners as unknown as object;
+  for (const name of ["onMutation", "validateEntry"]) {
+    if (name in ownerMap) throw new Error(`Tracked owner map member ${name} is not runtime-private`);
+    Reflect.set(ownerMap, name, null);
+  }
+  if (Reflect.set(ownerMap, "set", () => ownerMap)) throw new Error("Tracked owner map mutator can be replaced");
+  const ownerRevision = grid.mutationRevision;
+  grid.chunkOwners.set("123,0,0", "worker-shadow-test");
+  if (grid.mutationRevision <= ownerRevision) throw new Error("Owner-map callback shadow bypassed grid revision");
+
+  const chunkMap = grid.chunks as unknown as object;
+  for (const name of ["registrations", "onMutation", "attach", "detach"]) {
+    if (name in chunkMap) throw new Error(`Tracked chunk map member ${name} is not runtime-private`);
+    Reflect.set(chunkMap, name, null);
+  }
+  if (Reflect.set(chunkMap, "set", () => chunkMap)) throw new Error("Tracked chunk map mutator can be replaced");
+  const mapRevision = grid.mutationRevision;
+  grid.getOrCreateChunk(11, 0, 0);
+  if (grid.mutationRevision <= mapRevision) throw new Error("Chunk-map callback shadow bypassed grid revision");
   const revisionBeforeCoordinateTamper = grid.mutationRevision;
   const cxWriteAccepted = Reflect.set(sparse, "cx", 99);
   const cyWriteAccepted = Reflect.set(sparse, "cy", -99);

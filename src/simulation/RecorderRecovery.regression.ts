@@ -35,6 +35,15 @@ export function runRecorderRecoveryRegression(): void {
   recorder.tick(grid, 6);
 
   const source = recorder.snapshotState();
+  const recorderPrivateNames = ["snapshots", "maxSnapshots", "_recording", "_intervalTicks", "_lastSnapTick", "_capture"];
+  for (const name of recorderPrivateNames) {
+    if (name in recorder) throw new Error(`Recorder internal member ${name} is not runtime-private`);
+    if (!Reflect.set(recorder, name, null)) throw new Error(`Recorder JS shadow failed for ${name}`);
+  }
+  if (recorder.count !== source.snapshots.length || recorder.recording !== source.recording ||
+      recorder.snapList[0]?.tick !== source.snapshots[0]?.tick) {
+    throw new Error("Recorder internal state was replaced by JS shadow properties");
+  }
   if (source.snapshots.length !== 2 ||
       source.snapshots[0].tick !== 4 ||
       source.snapshots[1].tick !== 6 ||
