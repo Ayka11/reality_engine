@@ -2,6 +2,16 @@ import assert from "node:assert/strict";
 import { GlobalEntityIdentityRegistry } from "../src/entity/GlobalEntityIdentityRegistry";
 
 const registry = new GlobalEntityIdentityRegistry();
+assert.equal("domains" in registry, false,
+  "registry domain storage must not be reachable through a TypeScript-private property");
+assert.equal("_revision" in registry, false,
+  "registry revision storage must not be reachable through a TypeScript-private property");
+assert.equal(Reflect.set(registry, "domains", new Map()), false,
+  "registry domain storage must reject ordinary JavaScript shadow properties");
+assert.equal(Reflect.set(registry, "_revision", -1), false,
+  "registry revision must reject ordinary JavaScript shadow properties");
+assert.throws(() => Object.defineProperty(registry, "domains", { value: new Map() }), TypeError);
+assert.throws(() => Object.defineProperty(registry, "_revision", { value: -1 }), TypeError);
 registry.replaceDomains([
   {
     domain: "simulation-entity",

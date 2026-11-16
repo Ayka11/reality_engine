@@ -97,11 +97,17 @@ function compareLocalIds(a: EntityIdentityLocalId, b: EntityIdentityLocalId): nu
  * publish complete domain inventories atomically through replaceDomains().
  */
 export class GlobalEntityIdentityRegistry {
-  private domains = new Map<string, ReadonlyMap<string, EntityIdentityRecord>>();
-  private _revision = 0;
+  #domains = new Map<string, ReadonlyMap<string, EntityIdentityRecord>>();
+  #revision = 0;
+
+  constructor() {
+    // The registry owns its domain map; callers can only publish through the
+    // validated methods and read detached immutable snapshots.
+    Object.freeze(this);
+  }
 
   get revision(): number {
-    return this._revision;
+    return this.#revision;
   }
 
   replaceDomain(domain: string, inputs: readonly EntityIdentityInput[]): void {
@@ -145,45 +151,45 @@ export class GlobalEntityIdentityRegistry {
 
     let changed = false;
     for (const source of prepared) {
-      if (!sameDomainEntries(this.domains.get(source.domain), source.entries)) {
+      if (!sameDomainEntries(this.#domains.get(source.domain), source.entries)) {
         changed = true;
         break;
       }
     }
     if (!changed) return;
 
-    const next = new Map(this.domains);
+    const next = new Map(this.#domains);
     for (const source of prepared) next.set(source.domain, source.entries);
-    this.domains = next;
-    this._revision += 1;
+    this.#domains = next;
+    this.#revision += 1;
   }
 
   clearDomain(domain: string): boolean {
-    if (!this.domains.has(domain)) return false;
-    const next = new Map(this.domains);
+    if (!this.#domains.has(domain)) return false;
+    const next = new Map(this.#domains);
     next.delete(domain);
-    this.domains = next;
-    this._revision += 1;
+    this.#domains = next;
+    this.#revision += 1;
     return true;
   }
 
   get(domain: string, id: EntityIdentityLocalId): EntityIdentityRecord | undefined {
-    return this.domains.get(domain)?.get(localIdToken(id));
+    return this.#domains.get(domain)?.get(localIdToken(id));
   }
 
   snapshot(): GlobalEntityIdentitySnapshot {
-    const entries = [...this.domains.values()]
+    const entries = [...this.#domains.values()]
       .flatMap(domainEntries => [...domainEntries.values()])
       .sort((a, b) =>
         a.domain.localeCompare(b.domain) ||
         compareLocalIds(a.localId, b.localId));
 
-    const domains = [...this.domains.entries()]
+    const domains = [...this.#domains.entries()]
       .map(([domain, domainEntries]) => Object.freeze({ domain, count: domainEntries.size }))
       .sort((a, b) => a.domain.localeCompare(b.domain));
 
     return Object.freeze({
-      revision: this._revision,
+      revision: this.#revision,
       domains: Object.freeze(domains),
       entries: Object.freeze(entries),
     });
