@@ -51,6 +51,17 @@ async function beginPendingReadback(engine: SimulationEngine, stale: Float32Arra
 export async function runSimulationEngineStaleReadbackRegression(): Promise<void> {
   checkLawSnapshotValidationIsAtomic();
   const engine = new SimulationEngine(8, 8, 8);
+  // The public GPU surface is intentionally read-only. Device queue operations
+  // must pass through SimulationEngine's serialized lifecycle/step boundary.
+  assert.equal(Object.isFrozen(engine.gpu), true);
+  assert.equal(engine.gpu.isAvailable, false);
+  for (const operation of ["init", "destroy", "upload", "uploadMaterials",
+    "writeParams", "submitCompute", "readback"]) {
+    assert.equal(operation in engine.gpu, false,
+      `raw GPU operation ${operation} must not escape the SimulationEngine owner`);
+  }
+  assert.equal(Object.prototype.hasOwnProperty.call(engine, "#gpu"), false,
+    "the internal GPU backend must use a runtime-private field");
   // Subsystem invalidation hooks are engine-owned. Public callers must not be
   // able to detach or replace them after the engine binds its observers.
   assert.throws(() => engine.agents.bindMutationObserver(() => undefined), /already bound/);
