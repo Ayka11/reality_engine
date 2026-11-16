@@ -252,7 +252,7 @@ function makeEntityTickScenario() {
   const entity = snapshot.entities[0];
   assert.ok(entity, "fixture must create a real EntityLayer entity");
   entity.age = 59;
-  entity.genome.reproThreshold = 1;
+  entity.genome.reproThreshold = 50; // minimum valid restored genome threshold; fixture energy still guarantees reproduction
   entity.energy = 321;
   layer.restore(snapshot, grid.size);
   for (const index of entity.cells) grid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
@@ -418,7 +418,7 @@ const sparseRollbackEntitySnapshot = sparseRollbackLayer.snapshot();
 const sparseRollbackEntity = sparseRollbackEntitySnapshot.entities[0];
 assert.ok(sparseRollbackEntity, "sparse rollback fixture must create a live entity");
 sparseRollbackEntity.age = 59;
-sparseRollbackEntity.genome.reproThreshold = 1;
+sparseRollbackEntity.genome.reproThreshold = 50; // minimum valid restored genome threshold; fixture energy still guarantees reproduction
 sparseRollbackEntity.energy = 321;
 sparseRollbackLayer.restore(sparseRollbackEntitySnapshot, sparseRollbackGrid.size);
 for (const index of sparseRollbackEntity.cells) {
