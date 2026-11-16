@@ -51,6 +51,12 @@ async function beginPendingReadback(engine: SimulationEngine, stale: Float32Arra
 export async function runSimulationEngineStaleReadbackRegression(): Promise<void> {
   checkLawSnapshotValidationIsAtomic();
   const engine = new SimulationEngine(8, 8, 8);
+  // Subsystem invalidation hooks are engine-owned. Public callers must not be
+  // able to detach or replace them after the engine binds its observers.
+  assert.throws(() => engine.agents.bindMutationObserver(() => undefined), /already bound/);
+  assert.throws(() => engine.entityLayer.bindMutationObserver(() => undefined), /already bound/);
+  assert.throws(() => engine.causal.bindMutationObserver(() => undefined), /already bound/);
+  assert.throws(() => engine.worldEvents.bindMutationObserver(() => undefined), /already bound/);
   // Exercise the async GPU control path deterministically without a GPU device.
   (engine as unknown as { _gpuReady: boolean })._gpuReady = true;
 
