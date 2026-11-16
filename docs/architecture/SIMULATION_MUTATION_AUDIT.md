@@ -267,3 +267,20 @@ approved synchronous hot paths and the end-to-end writer inventory across all
 worker transfer, import, undo/redo, subsystem snapshots, restore and rollback
 boundaries is not yet complete. The new tests close only the specific paths
 listed above.
+
+
+
+### EntityLayer rollback and nested raw-buffer alias closure — 2026-11-16
+
+Two changes on the current mainline tighten the raw-buffer ownership boundary:
+
+- Commit `58d49f6d0d81e5c69a42f132aed0bec331f97507` replaces the EntityLayer rollback closure that captured the raw dense buffer with an explicit `EntityLayerTickRollbackState`. The state retains detached dense/back-buffer snapshots, entity snapshots and mutable entity references needed for restoration. Rollback restores through tracked `grid.buffer.set(...)` and `grid.backBuffer.set(...)`, then republishes dense-to-chunk state. The raw alias used by `EntityLayer.tick()` remains local to the synchronous tick and is not retained by the rollback object or closure.
+- Commit `55bc8ad46ad587b2d11b9d065198e1acd993668e` extends `scripts/check-mutable-buffer-contract.mjs` so aliases are rejected when captured by nested callbacks at any function depth, including closures nested inside an already nested callback. The guard also checks alias escape through variables, object/property writes, object/array containers, backing `ArrayBuffer`, retained `subarray()`, conditional/logical value propagation and unreviewed function arguments.
+
+The exact-head CI #2653 passed on `55bc8ad46ad587b2d11b9d065198e1acd993668e`, 104/104 steps, including the static mutable-buffer ownership gate, production build, both Docker images, Hugging Face smoke/CPU checks, WebGPU numerical probe and Browser Acceptance: https://github.com/Ayka11/reality_engine/actions/runs/43761999443. The guard reported:
+
+`Mutable-buffer contract inventory: PASS (1 raw call sites, 12 scoped mutation call site; no unreviewed buffer escapes)`
+
+This is a meaningful reduction of the raw-alias escape surface, not a language-level revocation mechanism. The remaining single raw call site is deliberately confined to the synchronous `EntityLayer.tick()` hot path; the 12 `withMutableBuffers` call sites are subject to synchronous callback, direct-index-only, no-return and no-nested-capture checks. The guard is a source-level contract and must remain a mandatory CI gate.
+
+Issue #62 remains open. The complete external-writer inventory, direct mutable public API contract, all worker transfer/import/undo-redo/reset boundaries, and full rollback parity across non-grid subsystem state have not been proven end-to-end. A passing static guard does not establish that every state transition in the application is captured by the authoritative mutation boundary.
