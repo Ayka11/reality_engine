@@ -65,7 +65,7 @@ assert.ok(clearSavedWorldBody.indexOf('const cleared = this.clearPersistedWorldN
   'a durable clear must succeed before the live external asset runtime is destroyed')
 assert.doesNotMatch(reseedBody, /this\.clearSavedWorld\(\)/,
   'reseed must not repeat the full live-world cleanup after clearing the old namespace')
-assert.match(clearSavedWorldBody, /if \(!cleared\) \{[\s\S]*?return false[\s\S]*?this\.pendingExternalAssetPlacements = \[\]/,
+assert.match(clearSavedWorldBody, /if \(!cleared\) \{[\s\S]*?return false[\s\S]*?this\.#pendingExternalAssetPlacements = \[\]/,
   'a failed durable clear must preserve live placements and other in-memory world state')
 assert.match(clearSavedWorldBody, /try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{[\s\S]*?this\.#terrainDeformations\.clear\(\)/,
   'external asset disposal failures must not skip the remaining durable world reset')
