@@ -35,11 +35,11 @@ for (const key of [
   'pendingRejectors', 'pendingLoadTokens', 'semanticSources', 'instances',
   'instanceMixers', 'instanceActions', 'pendingAnimationStops', 'animationAccumulators',
 ]) {
-  const descriptor = Object.getOwnPropertyDescriptor(runtime, key)
-  assert.equal(descriptor?.writable, false, key + ' must not permit runtime shadow replacement')
-  assert.equal(descriptor?.configurable, false, key + ' must not permit descriptor replacement')
+  assert.equal(key in runtime, false, key + ' must not be exposed as an ordinary runtime property')
   assert.equal(Reflect.set(runtime, key, new Map()), false,
-    key + ' must reject a shadow replacement of its authoritative owner')
+    key + ' must reject a shadow property on the frozen runtime instance')
+  assert.throws(() => Object.defineProperty(runtime, key, { value: new Map() }), TypeError,
+    key + ' must reject descriptor-based shadow injection')
 }
 assert.equal(runtime.has('decoy'), false, 'shadow replacement attempts must not alter authoritative asset lookup')
 assert.equal('generation' in runtime, false, 'generation must not be exposed as a replaceable runtime property')
