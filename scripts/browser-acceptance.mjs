@@ -4397,6 +4397,7 @@ try {
   const clearedWorldAfterRestart = await composePage.evaluate(() => {
     const world = window.infiniteWorld;
     return {
+      identitySnapshot: window.getGlobalEntityIdentitySnapshot?.(),
       generatorSeed: world.generator.seed,
       viewSeed: window.getWorldViewContract?.()?.seed ?? null,
       objects: world.getObjectCount(),
@@ -4421,6 +4422,10 @@ try {
   if (identityDomainCount(clearedWorldAfterRestart.identitySnapshot, "infinite-world-object") !== 0 ||
       identityDomainCount(clearedWorldAfterRestart.identitySnapshot, "external-asset-placement") !== 0 ||
       clearedWorldAfterRestart.identitySnapshot?.coverage?.status !== "partial" ||
+      clearWorldContract.priorObjectIds.some(id => clearedWorldAfterRestart.identitySnapshot.entries.some(entry =>
+        entry.domain === "infinite-world-object" && entry.localId === id)) ||
+      clearWorldContract.priorPlacementIds.some(id => clearedWorldAfterRestart.identitySnapshot.entries.some(entry =>
+        entry.domain === "external-asset-placement" && entry.localId === id)) ||
       clearedWorldAfterRestart.generatorSeed !== clearedWorldAfterRestart.viewSeed ||
       clearedWorldAfterRestart.objects !== 0 ||
       clearedWorldAfterRestart.fieldMutations !== 0 ||
