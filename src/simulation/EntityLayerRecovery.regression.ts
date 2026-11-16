@@ -1,10 +1,11 @@
 import { CELL_FIELDS, F } from "../core/CellState";
+import { SparseVoxelGrid } from "../core/SparseVoxelGrid";
 import { VoxelGrid } from "../core/VoxelGrid";
 import { EntityLayer, type EntityLayerSnapshot } from "./EntityLayer";
 
 type Coordinate = [number, number, number];
 
-function writeBlob(grid: VoxelGrid, cells: Coordinate[], energy = 500): void {
+function writeBlob(grid: { W: number; H: number; buffer: Float32Array }, cells: Coordinate[], energy = 500): void {
   for (const [x, y, z] of cells) {
     const index = z * grid.H * grid.W + y * grid.W + x;
     const base = index * CELL_FIELDS;
@@ -67,6 +68,29 @@ export function runEntityLayerRecoveryRegression(): void {
   }
 
   const checkpoint = layer.snapshot();
+
+  // SparseVoxelGrid maintains its own nested mutation depth and mirrors the
+  // dense entity-ID field into physical chunks. The whole EntityLayer tick must
+  // still publish exactly one coalesced revision and keep both representations
+  // in sync after the scoped-buffer refactor.
+  const sparseGrid = new SparseVoxelGrid(12, 12, 6);
+  const sparseLayer = new EntityLayer(0x2468ace1);
+  writeBlob(sparseGrid, [[2, 2, 1], [3, 2, 1], [2, 3, 1], [3, 3, 1]]);
+  sparseGrid.syncDenseToChunks();
+  const beforeSparseTickRevision = sparseGrid.mutationRevision;
+  sparseLayer.tick(sparseGrid, 1 / 60);
+  const afterSparseTickRevision = sparseGrid.mutationRevision;
+  const sparseEntity = sparseLayer.getEntities()[0];
+  const sparseCellIndex = 1 * sparseGrid.W * sparseGrid.H + 2 * sparseGrid.W + 2;
+  const sparseDenseEntityId = sparseGrid.buffer[sparseCellIndex * CELL_FIELDS + F.ENTITY_ID];
+  const sparseChunkEntityId = sparseGrid.getCell(2, 2, 1)?.entityId ?? 0;
+  if (afterSparseTickRevision !== beforeSparseTickRevision + 1 ||
+      !sparseEntity ||
+      sparseDenseEntityId !== sparseEntity.id ||
+      sparseChunkEntityId !== sparseEntity.id) {
+    throw new Error("Sparse EntityLayer tick must coalesce nested buffer scopes into one revision and synchronize dense/chunk entity ownership");
+  }
+  sparseGrid.assertDenseEntityOwnershipSynchronized();
 
   // Public direct calls must reject malformed time steps atomically, even
   // when bypassing SimulationEngine's own dt validation.

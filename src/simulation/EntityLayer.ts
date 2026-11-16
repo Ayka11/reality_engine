@@ -384,14 +384,14 @@ export class EntityLayer {
   }
 
   tick(grid: VoxelGrid, dt: number): void {
-      // EntityLayer is a public runtime component and can be invoked outside
-      // SimulationEngine. Reject invalid time steps before taking snapshots or
-      // touching grid/entity state.
-      if (!Number.isFinite(dt) || dt < 0) {
-        throw new RangeError("EntityLayer tick dt must be a finite non-negative number");
-      }
-  
-      withMutableBuffers(grid, (front, _back) => {
+    // EntityLayer is a public runtime component and can be invoked outside
+    // SimulationEngine. Reject invalid time steps before taking snapshots or
+    // touching grid/entity state.
+    if (!Number.isFinite(dt) || dt < 0) {
+      throw new RangeError("EntityLayer tick dt must be a finite non-negative number");
+    }
+
+    withMutableBuffers(grid, (front, _back) => {
       const originalEntities = new Map(this.entities);
       const entitySnapshots = new Map<number, Entity>();
       const entityMutableRefs = new Map<number, Pick<Entity, "cells" | "centroid" | "genome" | "memoryBuffer" | "colorRgb">>();
