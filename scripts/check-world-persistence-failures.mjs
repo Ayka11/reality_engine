@@ -1664,7 +1664,7 @@ assert.match(reseedSource, /this\.clearPersistedWorldNamespace\(\)/,
   "reseed must clear the old persisted namespace without invoking the full live-world reset");
 assert.doesNotMatch(reseedSource, /this\.clearSavedWorld\(\)/,
   "reseed must not rebuild old terrain or clear the external asset runtime twice");
-assert.match(worldAssetRuntimeSource, /private generation = 0/);
+assert.match(worldAssetRuntimeSource, /#generation = 0/);
 assert.match(worldAssetRuntimeSource, /const generation = this\.generation/);
 assert.match(worldAssetRuntimeSource, /generation !== this\.generation/,
   "a GLTF callback from an earlier world generation must be rejected");
