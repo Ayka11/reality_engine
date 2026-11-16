@@ -71,8 +71,8 @@ export class InfiniteWorldRenderer {
   readonly controls: OrbitControls
   generator: WorldGenerator
   chunks: InfiniteChunkManager
-  private readonly objectSpatialIndex = new WorldObjectSpatialIndex()
-  readonly objects = new WorldObjectManager(this.objectSpatialIndex)
+  readonly #objectSpatialIndex = new WorldObjectSpatialIndex()
+  readonly objects = new WorldObjectManager(this.#objectSpatialIndex)
   persistence: WorldPersistence
   #history = new WorldEditHistory()
   readonly #fieldSampler: FieldSampler
@@ -399,6 +399,15 @@ export class InfiniteWorldRenderer {
     this.renderer.shadowMap.enabled = false
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+
+    // The public object manager is the sole authority for live world-object IDs.
+    // Pin the reference so page scripts cannot replace it with a decoy registry source.
+    Object.defineProperty(this, "objects", {
+      configurable: false,
+      enumerable: true,
+      writable: false,
+      value: this.objects,
+    })
 
     this.scene.add(this.terrainGroup)
     this.worldAssetRuntime = new WorldAssetRuntime(this.scene, undefined, () => {
@@ -4405,7 +4414,7 @@ export class InfiniteWorldRenderer {
       const worldX = px + this.worldAnchor.x
       const worldZ = pz + this.worldAnchor.z
       this.physicsFrameQueries++
-      const nearbyObjects = this.objectSpatialIndex.queryRadius(worldX, py, worldZ, 160, physicsKinds)
+      const nearbyObjects = this.#objectSpatialIndex.queryRadius(worldX, py, worldZ, 160, physicsKinds)
       for (const obj of nearbyObjects) {
         const dx = obj.x - worldX
         const dz = obj.z - worldZ

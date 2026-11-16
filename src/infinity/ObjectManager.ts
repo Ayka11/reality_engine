@@ -15,10 +15,15 @@ export type WorldObjectUpdate = Partial<Pick<WorldObject, 'x' | 'y' | 'z' | 'rot
  * detached snapshots; spatial membership is updated only through this manager.
  */
 export class WorldObjectManager {
-  private objects = new Map<string, WorldObject>()
-  get size(): number { return this.objects.size }
+  #objects = new Map<string, WorldObject>()
+  readonly #spatialIndex?: WorldObjectSpatialIndex
 
-  constructor(private readonly spatialIndex?: WorldObjectSpatialIndex) {}
+  get size(): number { return this.#objects.size }
+
+  constructor(spatialIndex?: WorldObjectSpatialIndex) {
+    this.#spatialIndex = spatialIndex
+    Object.freeze(this)
+  }
 
   /**
    * New placements get collision-safe IDs. Re-inserting an object after delete
@@ -29,41 +34,41 @@ export class WorldObjectManager {
     let id: string
     if ('id' in placement && typeof placement.id === 'string' && placement.id.length > 0) {
       id = placement.id
-      if (this.objects.has(id)) {
+      if (this.#objects.has(id)) {
         throw new Error(`World object ID collision: ${id}`)
       }
     } else {
       const baseId = objectId(placement.kind, placement.x, placement.y, placement.z)
       id = baseId
       let suffix = 1
-      while (this.objects.has(id)) {
+      while (this.#objects.has(id)) {
         id = `${baseId}#${suffix}`
         suffix++
       }
     }
 
     const object = cloneWorldObject({ ...placement, id } as WorldObject)
-    this.assertValidObject(object)
-    this.objects.set(id, object)
-    this.spatialIndex?.upsertManagedSnapshot(object)
+    this.#assertValidObject(object)
+    this.#objects.set(id, object)
+    this.#spatialIndex?.upsertManagedSnapshot(object)
     return cloneWorldObject(object)
   }
 
   remove(id: string): boolean {
-    const removed = this.objects.delete(id)
-    if (removed) this.spatialIndex?.remove(id)
+    const removed = this.#objects.delete(id)
+    if (removed) this.#spatialIndex?.remove(id)
     return removed
   }
 
   /** Read a detached value; modifying it cannot bypass spatial-index updates. */
   get(id: string): WorldObject | undefined {
-    const object = this.objects.get(id)
+    const object = this.#objects.get(id)
     return object ? cloneWorldObject(object) : undefined
   }
 
   /** Update object state atomically with spatial-index membership. */
   update(id: string, patch: WorldObjectUpdate): WorldObject | undefined {
-    const current = this.objects.get(id)
+    const current = this.#objects.get(id)
     if (!current) return undefined
     if (patch.properties !== undefined &&
         (!patch.properties || typeof patch.properties !== 'object' || Array.isArray(patch.properties))) {
@@ -74,9 +79,9 @@ export class WorldObjectManager {
       ...patch,
       properties: { ...(patch.properties ?? current.properties) },
     }
-    this.assertValidObject(next)
-    this.objects.set(id, next)
-    this.spatialIndex?.upsertManagedSnapshot(next)
+    this.#assertValidObject(next)
+    this.#objects.set(id, next)
+    this.#spatialIndex?.upsertManagedSnapshot(next)
     return cloneWorldObject(next)
   }
 
@@ -86,18 +91,18 @@ export class WorldObjectManager {
   }
 
   clear(): void {
-    this.objects.clear()
-    this.spatialIndex?.clear()
+    this.#objects.clear()
+    this.#spatialIndex?.clear()
   }
 
   query(query: ObjectQuery = {}): WorldObject[] {
     const bounds = [query.minX, query.maxX, query.minY, query.maxY, query.minZ, query.maxZ]
     // Preserve the legacy comparison semantics for NaN/Infinity bounds; the
     // spatial grid is used whenever all supplied numeric bounds are finite.
-    if (this.spatialIndex && bounds.every(value => value === undefined || Number.isFinite(value))) {
-      return this.spatialIndex.queryBounds(query)
+    if (this.#spatialIndex && bounds.every(value => value === undefined || Number.isFinite(value))) {
+      return this.#spatialIndex.queryBounds(query)
     }
-    return [...this.objects.values()]
+    return [...this.#objects.values()]
       .filter(o =>
         (query.kind === undefined || o.kind === query.kind) &&
         (query.minX === undefined || o.x >= query.minX) &&
@@ -131,10 +136,10 @@ export class WorldObjectManager {
 
   /** Return detached snapshots, never the manager's authoritative records. */
   values(): WorldObject[] {
-    return [...this.objects.values()].map(cloneWorldObject)
+    return [...this.#objects.values()].map(cloneWorldObject)
   }
 
-  private assertValidObject(object: WorldObject): void {
+  #assertValidObject(object: WorldObject): void {
     if (typeof object.id !== 'string' || !object.id.trim() ||
         typeof object.kind !== 'string' ||
         ![object.x, object.y, object.z, object.rotationY, object.scale, object.seed].every(Number.isFinite) ||

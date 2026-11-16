@@ -44,7 +44,33 @@ const placement = {
   rotationY: 0, scale: 1, seed: 0, properties: {},
 }
 
+// The browser-facing manager and its index must not expose authoritative Maps
+// through TypeScript-private property names or permit decoy shadow properties.
+for (const key of ["objects", "spatialIndex", "assertValidObject"]) {
+  assert.equal(key in manager, false, `WorldObjectManager internal member ${key} must be runtime-private`)
+}
+for (const key of ["buckets", "columns", "objects", "objectChunks", "upsertSnapshot"]) {
+  assert.equal(key in spatialIndex, false, `WorldObjectSpatialIndex internal member ${key} must be runtime-private`)
+}
+assert.equal(Object.isFrozen(manager), true, "WorldObjectManager instance must reject shadow properties")
+assert.equal(Object.isFrozen(spatialIndex), true, "WorldObjectSpatialIndex instance must reject shadow properties")
+assert.equal(Reflect.set(manager, "objects", new Map()), false)
+assert.equal(Reflect.set(manager, "spatialIndex", {}), false)
+assert.equal(Reflect.set(manager, "assertValidObject", () => undefined), false)
+assert.equal(Reflect.set(spatialIndex, "buckets", new Map()), false)
+assert.equal(Reflect.set(spatialIndex, "columns", new Map()), false)
+assert.equal(Reflect.set(spatialIndex, "objects", new Map()), false)
+assert.equal(Reflect.set(spatialIndex, "objectChunks", new Map()), false)
+assert.throws(() => Object.defineProperty(manager, "objects", { value: new Map() }), TypeError)
+assert.throws(() => Object.defineProperty(spatialIndex, "buckets", { value: new Map() }), TypeError)
+assert.throws(
+  () => manager.add({ ...placement, scale: -1 }),
+  /positive scale/,
+  "a shadow validator must not bypass the manager's runtime-private validation path",
+)
+
 const first = manager.add(placement)
+const second = manager.add(placement)
 const second = manager.add(placement)
 assert.notEqual(first.id, second.id, 'two new objects at identical coordinates must not overwrite each other')
 assert.equal(manager.size, 2)
@@ -199,13 +225,13 @@ assert.equal(spatialIndex.size, 0, 'manager clear must clear spatial-index membe
 assert.equal(manager.query({ minX: 96, maxX: 96, minZ: -96, maxZ: -96 }).length, 0,
   'manager clear must also clear horizontal-column lookup state')
 const rendererSource = await readFile(new URL('src/render/InfiniteWorldRenderer.ts', root), 'utf8')
-assert.match(rendererSource, /readonly objects = new WorldObjectManager\(this\.objectSpatialIndex\)/,
+assert.match(rendererSource, /readonly objects = new WorldObjectManager\(this\.#objectSpatialIndex\)/,
   'renderer-owned object manager must update its spatial index as one transaction')
-assert.match(managerSource, /this\.spatialIndex\.queryBounds\(query\)/,
+assert.match(managerSource, /this\.#spatialIndex\.queryBounds\(query\)/,
   'manager AABB queries must use the shared spatial index instead of scanning all objects')
-assert.match(managerSource, /this\.spatialIndex\?\.upsertManagedSnapshot\(object\)/,
+assert.match(managerSource, /this\.#spatialIndex\?\.upsertManagedSnapshot\(object\)/,
   'manager add must share its private authoritative snapshot with the index without cloning it again')
-assert.match(managerSource, /this\.spatialIndex\?\.upsertManagedSnapshot\(next\)/,
+assert.match(managerSource, /this\.#spatialIndex\?\.upsertManagedSnapshot\(next\)/,
   'manager update must share its private authoritative snapshot with the index without cloning it again')
 
 assert.doesNotMatch(rendererSource, /this\.objectSpatialIndex\.(?:upsert|remove|clear)\s*\(/,
@@ -293,4 +319,12 @@ assert.match(terrainBuildSource, /const ownedGeometries = new Set<THREE\.BufferG
 assert.match(terrainBuildSource, /catch \(error\)[\s\S]*?this\.waterMeshes\.delete\(waterKey\)[\s\S]*?geometry\.dispose\(\)[\s\S]*?material\.dispose\(\)[\s\S]*?new AggregateError\(\[error, \.\.\.cleanupFailures\]/,
   'a failed terrain build must release partial geometry/material allocations and remove stale water references')
 
+assert.match(managerSource, /#objects = new Map<string, WorldObject>\(\)/,
+  "world-object manager must own its records through a JavaScript private Map")
+assert.match(indexSource, /#buckets = new Map<string, Set<string>>\(\)/,
+  "spatial buckets must be runtime-private")
+assert.match(indexSource, /#columns = new Map<string, Set<string>>\(\)/,
+  "spatial column membership must be runtime-private")
+assert.match(rendererSource, /Object\.defineProperty\(this, "objects", \{[\s\S]*?configurable: false,[\s\S]*?writable: false/,
+  "InfiniteWorldRenderer must pin the live object manager reference")
 console.log('World object identity, detached reads, and spatial-index ownership regression: PASS')

@@ -189,6 +189,20 @@ try {
     const world = window.infiniteWorld;
     const identityApi = window.getGlobalEntityIdentitySnapshot;
     const id = "__acceptance_global_identity_lifecycle__";
+    const managerReference = world?.objects;
+    const managerDescriptor = world
+      ? Object.getOwnPropertyDescriptor(world, "objects")
+      : undefined;
+    const managerReferencePinned = Boolean(
+      managerDescriptor &&
+      managerDescriptor.configurable === false &&
+      managerDescriptor.writable === false &&
+      Reflect.set(world, "objects", {}) === false &&
+      world.objects === managerReference
+    );
+    if (!managerReferencePinned) {
+      throw new Error("InfiniteWorldRenderer object-manager authority was replaceable at runtime");
+    }
     if (!world?.objects || typeof world.objects.add !== "function" ||
         typeof world.objects.remove !== "function" || typeof identityApi !== "function") {
       throw new Error("Global identity lifecycle acceptance prerequisites are unavailable");
@@ -225,9 +239,16 @@ try {
       removeVisible: afterRemove?.entries?.some(entry =>
         entry.domain === "infinite-world-object" && entry.localId === id),
       objectRemoved: !world.objects.get(id),
+      managerReferencePinned,
+      managerInstanceFrozen: Object.isFrozen(world.objects),
+      managerInternalsHidden: ["objects", "spatialIndex", "assertValidObject"]
+        .every(key => !(key in world.objects)),
     };
   });
-  if (!identityLifecycle.addVisible || identityLifecycle.removeVisible ||
+  if (!identityLifecycle.managerReferencePinned ||
+      !identityLifecycle.managerInstanceFrozen ||
+      !identityLifecycle.managerInternalsHidden ||
+      !identityLifecycle.addVisible || identityLifecycle.removeVisible ||
       !identityLifecycle.objectRemoved ||
       identityLifecycle.afterAddRevision <= identityLifecycle.beforeRevision ||
       identityLifecycle.afterRemoveRevision <= identityLifecycle.afterAddRevision) {

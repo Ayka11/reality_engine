@@ -13,21 +13,25 @@ type ObjectChunkMembership = { chunkKey: string; columnKey: string }
  * Queries only chunks intersecting the requested radius.
  */
 export class WorldObjectSpatialIndex {
-  private buckets = new Map<string, Set<string>>()
-  private columns = new Map<string, Set<string>>()
-  private objects = new Map<string, WorldObject>()
-  private objectChunks = new Map<string, ObjectChunkMembership>()
+  #buckets = new Map<string, Set<string>>()
+  #columns = new Map<string, Set<string>>()
+  #objects = new Map<string, WorldObject>()
+  #objectChunks = new Map<string, ObjectChunkMembership>()
+
+  constructor() {
+    Object.freeze(this)
+  }
 
   clear() {
-    this.buckets.clear()
-    this.columns.clear()
-    this.objects.clear()
-    this.objectChunks.clear()
+    this.#buckets.clear()
+    this.#columns.clear()
+    this.#objects.clear()
+    this.#objectChunks.clear()
   }
 
   /** Public insertion detaches caller-owned inputs before retaining them. */
   upsert(object: WorldObject) {
-    this.upsertSnapshot(cloneWorldObject(object))
+    this.#upsertSnapshot(cloneWorldObject(object))
   }
 
   /**
@@ -35,60 +39,60 @@ export class WorldObjectSpatialIndex {
    * mutates authoritative snapshots in place and never exposes them to callers.
    */
   upsertManagedSnapshot(object: WorldObject) {
-    this.upsertSnapshot(object)
+    this.#upsertSnapshot(object)
   }
 
-  private upsertSnapshot(object: WorldObject) {
+  #upsertSnapshot(object: WorldObject) {
     // Avoid allocating worldToChunk's chunk/local objects on this hot write path.
     const cx = Math.floor(object.x / WORLD_CHUNK_SIZE)
     const cy = Math.floor(object.y / WORLD_CHUNK_HEIGHT)
     const cz = Math.floor(object.z / WORLD_CHUNK_SIZE)
     const nextChunkKey = chunkKey(cx, cy, cz)
-    const previousMembership = this.objectChunks.get(object.id)
+    const previousMembership = this.#objectChunks.get(object.id)
     if (!previousMembership || previousMembership.chunkKey !== nextChunkKey) {
       if (previousMembership) {
-        const previousBucket = this.buckets.get(previousMembership.chunkKey)
+        const previousBucket = this.#buckets.get(previousMembership.chunkKey)
         previousBucket?.delete(object.id)
         if (previousBucket?.size === 0) {
-          this.buckets.delete(previousMembership.chunkKey)
-          const previousColumn = this.columns.get(previousMembership.columnKey)
+          this.#buckets.delete(previousMembership.chunkKey)
+          const previousColumn = this.#columns.get(previousMembership.columnKey)
           previousColumn?.delete(previousMembership.chunkKey)
-          if (previousColumn?.size === 0) this.columns.delete(previousMembership.columnKey)
+          if (previousColumn?.size === 0) this.#columns.delete(previousMembership.columnKey)
         }
       }
 
       const nextColumnKey = `${cx},${cz}`
-      let bucket = this.buckets.get(nextChunkKey)
+      let bucket = this.#buckets.get(nextChunkKey)
       if (!bucket) {
         bucket = new Set<string>()
-        this.buckets.set(nextChunkKey, bucket)
-        let column = this.columns.get(nextColumnKey)
+        this.#buckets.set(nextChunkKey, bucket)
+        let column = this.#columns.get(nextColumnKey)
         if (!column) {
           column = new Set<string>()
-          this.columns.set(nextColumnKey, column)
+          this.#columns.set(nextColumnKey, column)
         }
         column.add(nextChunkKey)
       }
       bucket.add(object.id)
-      this.objectChunks.set(object.id, { chunkKey: nextChunkKey, columnKey: nextColumnKey })
+      this.#objectChunks.set(object.id, { chunkKey: nextChunkKey, columnKey: nextColumnKey })
     }
-    this.objects.set(object.id, object)
+    this.#objects.set(object.id, object)
   }
 
   remove(id: string) {
-    const membership = this.objectChunks.get(id)
+    const membership = this.#objectChunks.get(id)
     if (membership) {
-      const bucket = this.buckets.get(membership.chunkKey)
+      const bucket = this.#buckets.get(membership.chunkKey)
       bucket?.delete(id)
       if (bucket?.size === 0) {
-        this.buckets.delete(membership.chunkKey)
-        const column = this.columns.get(membership.columnKey)
+        this.#buckets.delete(membership.chunkKey)
+        const column = this.#columns.get(membership.columnKey)
         column?.delete(membership.chunkKey)
-        if (column?.size === 0) this.columns.delete(membership.columnKey)
+        if (column?.size === 0) this.#columns.delete(membership.columnKey)
       }
     }
-    this.objectChunks.delete(id)
-    this.objects.delete(id)
+    this.#objectChunks.delete(id)
+    this.#objects.delete(id)
   }
 
   /** Query only occupied spatial buckets intersecting an axis-aligned world-space box. */
@@ -113,7 +117,7 @@ export class WorldObjectSpatialIndex {
     const maxCz = query.maxZ === undefined ? undefined : Math.floor(query.maxZ / WORLD_CHUNK_SIZE)
     const result: WorldObject[] = []
 
-    let candidateChunkKeys: Iterable<string> = this.buckets.keys()
+    let candidateChunkKeys: Iterable<string> = this.#buckets.keys()
     const hasHorizontalBounds = minCx !== undefined && maxCx !== undefined &&
       minCz !== undefined && maxCz !== undefined && minCy === undefined && maxCy === undefined
     if (hasHorizontalBounds) {
@@ -123,20 +127,20 @@ export class WorldObjectSpatialIndex {
       const relevantColumns: string[] = []
       const safeChunkCoordinates = [minCx, maxCx, minCz, maxCz].every(Number.isSafeInteger)
       if (safeChunkCoordinates && Number.isSafeInteger(columnArea) &&
-          columnArea <= Math.max(256, this.columns.size * 2)) {
+          columnArea <= Math.max(256, this.#columns.size * 2)) {
         for (let cx = minCx; cx <= maxCx; cx++) {
           for (let cz = minCz; cz <= maxCz; cz++) relevantColumns.push(`${cx},${cz}`)
         }
       } else {
         // Very broad queries avoid iterating a huge empty coordinate range.
-        for (const columnKey of this.columns.keys()) {
+        for (const columnKey of this.#columns.keys()) {
           const [cx, cz] = columnKey.split(',').map(Number)
           if (cx >= minCx && cx <= maxCx && cz >= minCz && cz <= maxCz) relevantColumns.push(columnKey)
         }
       }
       const selectedChunks: string[] = []
       for (const columnKey of relevantColumns) {
-        const chunks = this.columns.get(columnKey)
+        const chunks = this.#columns.get(columnKey)
         if (chunks) {
           for (const chunkKey of chunks) selectedChunks.push(chunkKey)
         }
@@ -145,7 +149,7 @@ export class WorldObjectSpatialIndex {
     }
 
     for (const key of candidateChunkKeys) {
-      const bucket = this.buckets.get(key)
+      const bucket = this.#buckets.get(key)
       if (!bucket) continue
       const [cx, cy, cz] = key.split(',').map(Number)
       if ((minCx !== undefined && cx < minCx) || (maxCx !== undefined && cx > maxCx) ||
@@ -153,7 +157,7 @@ export class WorldObjectSpatialIndex {
           (minCz !== undefined && cz < minCz) || (maxCz !== undefined && cz > maxCz)) continue
 
       for (const id of bucket) {
-        const object = this.objects.get(id)
+        const object = this.#objects.get(id)
         if (!object || (query.kind !== undefined && object.kind !== query.kind) ||
             (query.minX !== undefined && object.x < query.minX) ||
             (query.maxX !== undefined && object.x > query.maxX) ||
@@ -177,10 +181,10 @@ export class WorldObjectSpatialIndex {
     for (let cx = min.cx; cx <= max.cx; cx++) {
       for (let cy = min.cy; cy <= max.cy; cy++) {
         for (let cz = min.cz; cz <= max.cz; cz++) {
-          const bucket = this.buckets.get(chunkKey(cx, cy, cz))
+          const bucket = this.#buckets.get(chunkKey(cx, cy, cz))
           if (!bucket) continue
           for (const id of bucket) {
-            const object = this.objects.get(id)
+            const object = this.#objects.get(id)
             if (!object || (kinds && !kinds.has(object.kind))) continue
             const dx = object.x - x
             const dy = object.y - y
@@ -199,6 +203,6 @@ export class WorldObjectSpatialIndex {
   }
 
   get size() {
-    return this.objects.size
+    return this.#objects.size
   }
 }
