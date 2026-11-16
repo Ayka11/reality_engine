@@ -508,9 +508,13 @@ for (const index of [9, 10, 17, 18]) {
 rollbackFailureGrid.syncDenseToChunks();
 rollbackFailureLayer.tick(rollbackFailureGrid, 1 / 60);
 rollbackFailureGrid.syncDenseToChunks();
-const rollbackFailureEntity = firstLiveEntityForRollbackFixture(rollbackFailureLayer);
+const rollbackFailureSnapshot = rollbackFailureLayer.snapshot();
+const rollbackFailureEntity = rollbackFailureSnapshot.entities[0];
+assert.ok(rollbackFailureEntity, "rollback-failure fixture must create a live entity");
 rollbackFailureEntity.age = 59;
-rollbackFailureEntity.genome.reproThreshold = 1;
+rollbackFailureEntity.energy = 321;
+rollbackFailureEntity.genome.reproThreshold = 50; // minimum valid restored genome threshold
+rollbackFailureLayer.restore(rollbackFailureSnapshot, rollbackFailureGrid.size);
 for (const index of rollbackFailureEntity.cells) {
   rollbackFailureGrid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
 }
