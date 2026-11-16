@@ -1044,16 +1044,28 @@ try {
   }
 
   const restartedGlobalIdentity = await page.evaluate(({ objectId, instanceId }) => {
+    const world = window.infiniteWorld;
+    const pendingDescriptorKey = "pendingExternalAssetPlacements";
+    const pendingDescriptorWasExposed = pendingDescriptorKey in world;
+    const decoyPendingDescriptors = [];
+    const decoyAccepted = Reflect.set(world, pendingDescriptorKey, decoyPendingDescriptors);
     const snapshot = window.getGlobalEntityIdentitySnapshot?.();
     return {
       snapshot,
+      pendingDescriptorWasExposed,
+      decoyAccepted,
+      decoyDidNotReplaceAuthority: world.getExternalAssetPlacementIdentityRecords()
+        .some(entry => entry.id === instanceId),
       objectPresent: snapshot?.entries?.some(entry =>
         entry.domain === "infinite-world-object" && entry.localId === objectId),
       placementPresent: snapshot?.entries?.some(entry =>
         entry.domain === "external-asset-placement" && entry.localId === instanceId),
     };
   }, { objectId: packageFixture.objectId, instanceId: placementFixture.instanceId });
-  if (!restartedGlobalIdentity.objectPresent ||
+  if (restartedGlobalIdentity.pendingDescriptorWasExposed ||
+      !restartedGlobalIdentity.decoyAccepted ||
+      !restartedGlobalIdentity.decoyDidNotReplaceAuthority ||
+      !restartedGlobalIdentity.objectPresent ||
       !restartedGlobalIdentity.placementPresent ||
       restartedGlobalIdentity.snapshot?.coverage?.status !== "partial" ||
       new Set(restartedGlobalIdentity.snapshot.entries.map(entry => entry.identityKey)).size !==

@@ -90,7 +90,7 @@ export class InfiniteWorldRenderer {
   readonly experimentRunner = new ExperimentRunner()
   readonly experimentCatalog = new ExperimentCatalog()
   readonly worldAssetRuntime: WorldAssetRuntime
-  private pendingExternalAssetPlacements: ExternalAssetPlacementSnapshot[] = []
+  #pendingExternalAssetPlacements: ExternalAssetPlacementSnapshot[] = []
   private suppressAssetPlacementAutosave = false
 
   private patches = new Map<string, TerrainPatch>()
@@ -443,7 +443,7 @@ export class InfiniteWorldRenderer {
     if (persistedAssetPlacements !== null) {
       const placementValidation = validateExternalAssetPlacements(persistedAssetPlacements)
       if (placementValidation.valid) {
-        this.pendingExternalAssetPlacements = placementValidation.placements
+        this.#pendingExternalAssetPlacements = placementValidation.placements
       } else {
         this.startupPersistenceFailures.push('external asset placements: invalid placement records')
         this.persistenceRecoveryBlocked = true
@@ -738,7 +738,7 @@ export class InfiniteWorldRenderer {
    */
   getExternalAssetPlacementIdentityRecords(): Array<{ id: string; kind: string }> {
     const placements = mergeExternalAssetPlacements(
-      this.pendingExternalAssetPlacements,
+      this.#pendingExternalAssetPlacements,
       this.worldAssetRuntime.snapshotPlacements(),
     )
     const validation = validateExternalAssetPlacements(placements)
@@ -763,7 +763,7 @@ export class InfiniteWorldRenderer {
       )
     }
     const assetPlacements = mergeExternalAssetPlacements(
-      this.pendingExternalAssetPlacements,
+      this.#pendingExternalAssetPlacements,
       this.worldAssetRuntime.snapshotPlacements(),
     )
     const placementValidation = validateExternalAssetPlacements(assetPlacements)
@@ -879,7 +879,7 @@ export class InfiniteWorldRenderer {
 
     // Keep placement descriptors inert until their exact source asset is
     // explicitly imported. WorldSaveSystem clears old runtime assets post-commit.
-    this.pendingExternalAssetPlacements = prepared.nextAssetPlacements.map(placement => ({ ...placement }))
+    this.#pendingExternalAssetPlacements = prepared.nextAssetPlacements.map(placement => ({ ...placement }))
 
     // A custom GPU disposer must not abort the import halfway through scene
     // teardown. Detach every old root, deduplicate shared resources, and collect
@@ -1068,7 +1068,7 @@ export class InfiniteWorldRenderer {
       failedPersistenceOperations.push('runtime provenance trace')
     }
     const assetPlacements = mergeExternalAssetPlacements(
-      this.pendingExternalAssetPlacements,
+      this.#pendingExternalAssetPlacements,
       this.worldAssetRuntime.snapshotPlacements(),
     )
     if (!this.persistence.saveAssetPlacementsState(assetPlacements)) {
@@ -1312,7 +1312,7 @@ export class InfiniteWorldRenderer {
     this.persistenceRecoveryBlocked = false
     this.startupPersistenceFailures = []
     this.lastPersistenceFailures = []
-    this.pendingExternalAssetPlacements = []
+    this.#pendingExternalAssetPlacements = []
     try {
       this.clearExternalAssetRuntime()
     } catch (error) {
@@ -1428,7 +1428,7 @@ export class InfiniteWorldRenderer {
       ))
     }
 
-    this.pendingExternalAssetPlacements = []
+    this.#pendingExternalAssetPlacements = []
     try {
       this.clearExternalAssetRuntime()
     } catch (error) {
@@ -2810,12 +2810,12 @@ export class InfiniteWorldRenderer {
     if (asset.semanticEntryId) {
       const materialized = materializeExternalAssetPlacements(
         this.worldAssetRuntime,
-        this.pendingExternalAssetPlacements,
+        this.#pendingExternalAssetPlacements,
         asset.id,
         asset.semanticEntryId,
       )
       if (materialized.restoredCount || materialized.errors.length > 0) {
-        this.pendingExternalAssetPlacements = materialized.remaining
+        this.#pendingExternalAssetPlacements = materialized.remaining
       }
       if (materialized.errors.length > 0) {
         console.warn(
@@ -3166,10 +3166,10 @@ export class InfiniteWorldRenderer {
   }
 
   removeExternalAsset(assetId: string) {
-    const pendingBefore = this.pendingExternalAssetPlacements.length
-    this.pendingExternalAssetPlacements = this.pendingExternalAssetPlacements
+    const pendingBefore = this.#pendingExternalAssetPlacements.length
+    this.#pendingExternalAssetPlacements = this.#pendingExternalAssetPlacements
       .filter(placement => placement.sourceAssetId !== assetId)
-    const pendingRemoved = this.pendingExternalAssetPlacements.length !== pendingBefore
+    const pendingRemoved = this.#pendingExternalAssetPlacements.length !== pendingBefore
     // Queue persistence before resource disposal: remove() may throw an AggregateError
     // after releasing GPU resources, and must not skip saving the pending-descriptor change.
     if (pendingRemoved) this.scheduleSave()
