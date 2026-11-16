@@ -92,6 +92,8 @@ try {
     const evaluateApi = window.civilizationEvaluate;
     const tickApi = window.civilizationTick;
     const forkApi = window.worldForkCivilizationBranch;
+    const tickBranchApi = window.worldTickCivilizationBranch;
+    const branchSnapshotApi = window.worldCivilizationBranchSnapshot;
     const resourceEconomy = window.worldResourceEconomy;
     if (typeof identityApi !== "function" ||
         typeof snapshotApi !== "function" ||
@@ -99,6 +101,8 @@ try {
         typeof evaluateApi !== "function" ||
         typeof tickApi !== "function" ||
         typeof forkApi !== "function" ||
+        typeof tickBranchApi !== "function" ||
+        typeof branchSnapshotApi !== "function" ||
         !resourceEconomy || typeof resourceEconomy.snapshot !== "function" ||
         typeof resourceEconomy.restore !== "function") {
       throw new Error("Civilization branch identity lifecycle prerequisites are unavailable");
@@ -126,6 +130,23 @@ try {
       }
       branchId = forked.branchId;
       afterCreate = identityApi();
+      const branchBeforeTick = branchSnapshotApi(branchId);
+      const tickResult = tickBranchApi(branchId, 1);
+      const branchAfterTick = branchSnapshotApi(branchId);
+      const afterTick = identityApi();
+      const beforeTickRecord = afterCreate.entries.find(entry =>
+        entry.domain === "world-library-civilization-branch" && entry.localId === branchId);
+      const afterTickRecord = afterTick.entries.find(entry =>
+        entry.domain === "world-library-civilization-branch" && entry.localId === branchId);
+      var branchTickEvidence = {
+        tickSucceeded: !!tickResult?.state,
+        beforeTick: branchBeforeTick,
+        afterTick: branchAfterTick,
+        beforeRevision: afterCreate.revision,
+        afterRevision: afterTick.revision,
+        beforeIdentityKey: beforeTickRecord?.identityKey,
+        afterIdentityKey: afterTickRecord?.identityKey,
+      };
     } finally {
       restoreApi(beforeRuntime);
       resourceEconomy.restore(beforeResources);
@@ -138,6 +159,7 @@ try {
       beforeRevision: beforeDirectory.revision,
       afterCreateRevision: afterCreate?.revision,
       afterRestoreRevision: afterRestore?.revision,
+      branchTickEvidence,
       branchVisible: afterCreate?.entries?.some(entry =>
         entry.domain === "world-library-civilization-branch" && entry.localId === branchId),
       branchRemoved: !afterRestore?.entries?.some(entry =>
@@ -149,8 +171,14 @@ try {
   if (!civilizationBranchIdentityLifecycle.branchVisible ||
       !civilizationBranchIdentityLifecycle.branchRemoved ||
       !civilizationBranchIdentityLifecycle.runtimeRestored ||
+      !civilizationBranchIdentityLifecycle.branchTickEvidence?.tickSucceeded ||
+      civilizationBranchIdentityLifecycle.branchTickEvidence.beforeTick?.branchId !== civilizationBranchIdentityLifecycle.branchId ||
+      civilizationBranchIdentityLifecycle.branchTickEvidence.afterTick?.branchId !== civilizationBranchIdentityLifecycle.branchId ||
+      civilizationBranchIdentityLifecycle.branchTickEvidence.afterTick?.tick <= civilizationBranchIdentityLifecycle.branchTickEvidence.beforeTick?.tick ||
+      civilizationBranchIdentityLifecycle.branchTickEvidence.afterRevision !== civilizationBranchIdentityLifecycle.branchTickEvidence.beforeRevision ||
+      civilizationBranchIdentityLifecycle.branchTickEvidence.afterIdentityKey !== civilizationBranchIdentityLifecycle.branchTickEvidence.beforeIdentityKey ||
       civilizationBranchIdentityLifecycle.afterCreateRevision <= civilizationBranchIdentityLifecycle.beforeRevision ||
-      civilizationBranchIdentityLifecycle.afterRestoreRevision <= civilizationBranchIdentityLifecycle.afterCreateRevision) {
+      civilizationBranchIdentityLifecycle.afterRestoreRevision <= civilizationBranchIdentityLifecycle.branchTickEvidence.afterRevision) {
     throw new Error("Global identity directory did not track civilization branch create/restore lifecycle: " +
       JSON.stringify(civilizationBranchIdentityLifecycle));
   }
