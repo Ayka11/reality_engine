@@ -236,7 +236,31 @@ try {
     const afterRedoRecord = afterRedo.entries.find(entry =>
       entry.domain === "infinite-world-object" && entry.localId === objectId);
 
-    const cleanupUndo = world.undo();
+    world.selectedObjectId = objectId;
+    const beforeTransformObject = world.objects.get(objectId);
+    const transformed = world.transformSelected({
+      x: beforeTransformObject.x + 9.25,
+      z: beforeTransformObject.z - 6.5,
+      rotationY: 0.75,
+      scale: 1.25,
+    });
+    const afterTransform = identityApi();
+    const afterTransformObject = world.objects.get(objectId);
+    const afterTransformRecord = afterTransform.entries.find(entry =>
+      entry.domain === "infinite-world-object" && entry.localId === objectId);
+
+    const undoTransform = world.undo();
+    const afterUndoTransform = identityApi();
+    const undoTransformObject = world.objects.get(objectId);
+    const redoTransform = world.redo();
+    const afterRedoTransform = identityApi();
+    const redoTransformObject = world.objects.get(objectId);
+    const afterRedoTransformRecord = afterRedoTransform.entries.find(entry =>
+      entry.domain === "infinite-world-object" && entry.localId === objectId);
+
+    const cleanupUndoTransform = world.undo();
+    const afterCleanupTransform = identityApi();
+    const cleanupUndoAdd = world.undo();
     const afterCleanup = identityApi();
     const presentAfterCleanup = afterCleanup.entries.some(entry =>
       entry.domain === "infinite-world-object" && entry.localId === objectId);
@@ -247,35 +271,67 @@ try {
       afterPlaceRevision: afterPlace.revision,
       afterUndoRevision: afterUndo.revision,
       afterRedoRevision: afterRedo.revision,
+      afterTransformRevision: afterTransform.revision,
+      afterUndoTransformRevision: afterUndoTransform.revision,
+      afterRedoTransformRevision: afterRedoTransform.revision,
+      afterCleanupTransformRevision: afterCleanupTransform.revision,
       afterCleanupRevision: afterCleanup.revision,
       afterPlaceRecord,
       afterRedoRecord,
+      afterTransformRecord,
+      afterRedoTransformRecord,
+      beforeTransformObject,
+      afterTransformObject,
+      undoTransformObject,
+      redoTransformObject,
+      transformed: !!transformed,
       undoneType: undone?.type,
       redoneType: redone?.type,
-      cleanupUndoType: cleanupUndo?.type,
+      undoTransformType: undoTransform?.type,
+      redoTransformType: redoTransform?.type,
+      cleanupUndoTransformType: cleanupUndoTransform?.type,
+      cleanupUndoAddType: cleanupUndoAdd?.type,
       presentAfterUndo,
       presentAfterRedo: !!afterRedoRecord,
       presentAfterCleanup,
       worldObjectAfterCleanup: !!world.objects.get(objectId),
       sameIdentityKey: !!afterPlaceRecord &&
         afterPlaceRecord.identityKey === afterRedoRecord?.identityKey &&
-        afterPlaceRecord.localId === afterRedoRecord?.localId,
+        afterPlaceRecord.identityKey === afterTransformRecord?.identityKey &&
+        afterPlaceRecord.identityKey === afterRedoTransformRecord?.identityKey &&
+        afterPlaceRecord.localId === afterRedoTransformRecord?.localId,
     };
   });
   if (objectHistoryIdentityLifecycle.error ||
       !objectHistoryIdentityLifecycle.afterPlaceRecord ||
       objectHistoryIdentityLifecycle.undoneType !== "add" ||
       objectHistoryIdentityLifecycle.redoneType !== "add" ||
-      objectHistoryIdentityLifecycle.cleanupUndoType !== "add" ||
+      !objectHistoryIdentityLifecycle.transformed ||
+      objectHistoryIdentityLifecycle.undoTransformType !== "transform" ||
+      objectHistoryIdentityLifecycle.redoTransformType !== "transform" ||
+      objectHistoryIdentityLifecycle.cleanupUndoTransformType !== "transform" ||
+      objectHistoryIdentityLifecycle.cleanupUndoAddType !== "add" ||
       objectHistoryIdentityLifecycle.presentAfterUndo ||
       !objectHistoryIdentityLifecycle.presentAfterRedo ||
       objectHistoryIdentityLifecycle.presentAfterCleanup ||
       objectHistoryIdentityLifecycle.worldObjectAfterCleanup ||
       !objectHistoryIdentityLifecycle.sameIdentityKey ||
+      objectHistoryIdentityLifecycle.afterTransformObject?.x !== objectHistoryIdentityLifecycle.beforeTransformObject?.x + 9.25 ||
+      objectHistoryIdentityLifecycle.afterTransformObject?.z !== objectHistoryIdentityLifecycle.beforeTransformObject?.z - 6.5 ||
+      objectHistoryIdentityLifecycle.afterTransformObject?.scale !== 1.25 ||
+      objectHistoryIdentityLifecycle.afterTransformObject?.rotationY !== 0.75 ||
+      objectHistoryIdentityLifecycle.undoTransformObject?.x !== objectHistoryIdentityLifecycle.beforeTransformObject?.x ||
+      objectHistoryIdentityLifecycle.undoTransformObject?.z !== objectHistoryIdentityLifecycle.beforeTransformObject?.z ||
+      objectHistoryIdentityLifecycle.redoTransformObject?.x !== objectHistoryIdentityLifecycle.afterTransformObject?.x ||
+      objectHistoryIdentityLifecycle.redoTransformObject?.z !== objectHistoryIdentityLifecycle.afterTransformObject?.z ||
+      objectHistoryIdentityLifecycle.afterTransformRevision !== objectHistoryIdentityLifecycle.afterRedoRevision ||
+      objectHistoryIdentityLifecycle.afterUndoTransformRevision !== objectHistoryIdentityLifecycle.afterTransformRevision ||
+      objectHistoryIdentityLifecycle.afterRedoTransformRevision !== objectHistoryIdentityLifecycle.afterUndoTransformRevision ||
+      objectHistoryIdentityLifecycle.afterCleanupTransformRevision !== objectHistoryIdentityLifecycle.afterRedoTransformRevision ||
       objectHistoryIdentityLifecycle.afterPlaceRevision <= objectHistoryIdentityLifecycle.beforeRevision ||
       objectHistoryIdentityLifecycle.afterUndoRevision <= objectHistoryIdentityLifecycle.afterPlaceRevision ||
       objectHistoryIdentityLifecycle.afterRedoRevision <= objectHistoryIdentityLifecycle.afterUndoRevision ||
-      objectHistoryIdentityLifecycle.afterCleanupRevision <= objectHistoryIdentityLifecycle.afterRedoRevision) {
+      objectHistoryIdentityLifecycle.afterCleanupRevision <= objectHistoryIdentityLifecycle.afterCleanupTransformRevision) {
     throw new Error("World-object undo/redo did not publish the correct global identity lifecycle: " +
       JSON.stringify(objectHistoryIdentityLifecycle));
   }
