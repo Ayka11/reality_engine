@@ -39,7 +39,7 @@ function equal(a: unknown, b: unknown, message: string): void {
 export function runEntityLayerRecoveryRegression(): void {
   const configurationLayer = new EntityLayer(7);
   let configurationMutations = 0;
-  configurationLayer.setMutationObserver(() => { configurationMutations++; });
+  configurationLayer.bindMutationObserver(() => { configurationMutations++; });
   configurationLayer.mutationStrength = 0.5;
   if (configurationLayer.mutationStrength !== 0.5 || configurationMutations !== 1) {
     throw new Error("EntityLayer mutationStrength change did not publish exactly one state mutation");
