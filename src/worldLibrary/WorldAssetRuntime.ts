@@ -22,7 +22,7 @@ export type RuntimeAsset = {
 
 export class WorldAssetRuntime {
   private readonly loader: Pick<GLTFLoader, 'load'>
-  private generation = 0
+  #generation = 0
   private readonly assets = new Map<string, RuntimeAsset>()
   private readonly loading = new Map<string, Promise<RuntimeAsset>>()
   private readonly loadingRequests = new Map<string, { sourceUrl: string; semanticEntryId?: string }>()
@@ -36,14 +36,27 @@ export class WorldAssetRuntime {
   private readonly pendingAnimationStops = new Map<string, Array<{ action: THREE.AnimationAction; remainingSeconds: number }>>()
   private readonly animationAccumulators = new Map<string, number>()
   /** Latest absolute-world anchor used to rebase renderer-local instance positions. */
-  private worldAnchor = { x: 0, y: 0, z: 0 }
+  #worldAnchor = { x: 0, y: 0, z: 0 }
+  private readonly scene: THREE.Scene
+  private readonly onPlacementsChanged?: () => void
 
   constructor(
-    private readonly scene: THREE.Scene,
+    scene: THREE.Scene,
     loader: Pick<GLTFLoader, 'load'> = new GLTFLoader(),
-    private readonly onPlacementsChanged?: () => void,
+    onPlacementsChanged?: () => void,
   ) {
+    this.scene = scene
     this.loader = loader
+    this.onPlacementsChanged = onPlacementsChanged
+    for (const key of [
+      'loader', 'scene', 'onPlacementsChanged', 'assets', 'loading', 'loadingRequests',
+      'pendingRejectors', 'pendingLoadTokens', 'semanticSources', 'instances',
+      'instanceMixers', 'instanceActions', 'pendingAnimationStops', 'animationAccumulators',
+    ]) {
+      const descriptor = Object.getOwnPropertyDescriptor(this, key)
+      if (!descriptor) throw new Error('WorldAssetRuntime ownership descriptor missing: ' + key)
+      Object.defineProperty(this, key, { ...descriptor, writable: false, configurable: false })
+    }
   }
 
   has(id: string) {
@@ -104,7 +117,7 @@ export class WorldAssetRuntime {
       return pending
     }
 
-    const generation = this.generation
+    const generation = this.#generation
     const requestToken = {}
     this.pendingLoadTokens.set(id, requestToken)
     let task: Promise<RuntimeAsset>
@@ -115,7 +128,7 @@ export class WorldAssetRuntime {
         sourceUrl,
         (gltf) => {
           const object = gltf.scene
-          if (generation !== this.generation || this.pendingLoadTokens.get(id) !== requestToken) {
+          if (generation !== this.#generation || this.pendingLoadTokens.get(id) !== requestToken) {
             // clear() invalidates the entire generation; remove(id) invalidates
             // only this request token. In both cases the detached late payload
             // must be disposed and must never publish into the active scene.
@@ -133,9 +146,9 @@ export class WorldAssetRuntime {
           let asset: RuntimeAsset | undefined
           try {
             object.position.set(
-              (options.x ?? 0) - this.worldAnchor.x,
-              (options.y ?? 0) - this.worldAnchor.y,
-              (options.z ?? 0) - this.worldAnchor.z,
+              (options.x ?? 0) - this.#worldAnchor.x,
+              (options.y ?? 0) - this.#worldAnchor.y,
+              (options.z ?? 0) - this.#worldAnchor.z,
             )
             object.rotation.y = options.rotationY ?? 0
             object.scale.setScalar(Math.max(0.001, options.scale ?? 1))
@@ -292,9 +305,9 @@ export class WorldAssetRuntime {
       })
 
       instance.position.set(
-        options.x - this.worldAnchor.x,
-        options.y - this.worldAnchor.y,
-        options.z - this.worldAnchor.z,
+        options.x - this.#worldAnchor.x,
+        options.y - this.#worldAnchor.y,
+        options.z - this.#worldAnchor.z,
       )
       instance.userData.worldPosition = { x: options.x, y: options.y, z: options.z }
       instance.userData.persistentWorldAssetPlacement = options.persistence !== 'transient'
@@ -421,7 +434,7 @@ export class WorldAssetRuntime {
     }
 
     instance.userData.worldPosition = { x, y, z }
-    instance.position.set(x - this.worldAnchor.x, y - this.worldAnchor.y, z - this.worldAnchor.z)
+    instance.position.set(x - this.#worldAnchor.x, y - this.#worldAnchor.y, z - this.#worldAnchor.z)
     if (options.scale !== undefined) instance.scale.setScalar(options.scale)
     if (options.rotationY !== undefined) instance.rotation.y = options.rotationY
     if (instance.userData.persistentWorldAssetPlacement !== false) this.onPlacementsChanged?.()
@@ -931,7 +944,7 @@ export class WorldAssetRuntime {
     // Invalidate outstanding GLTF callbacks before releasing the current world.
     // Cleanup is best-effort: a broken disposer or callback for one object must
     // not prevent the remaining scene objects and GPU resources from release.
-    this.generation += 1
+    this.#generation += 1
     const failures: unknown[] = []
     const attempt = (label: string, cleanup: () => void) => {
       try {
@@ -983,14 +996,14 @@ export class WorldAssetRuntime {
   }
 
   rebase(worldAnchor: { x: number; y?: number; z: number }) {
-    this.worldAnchor = { x: worldAnchor.x, y: worldAnchor.y ?? 0, z: worldAnchor.z }
+    this.#worldAnchor = { x: worldAnchor.x, y: worldAnchor.y ?? 0, z: worldAnchor.z }
     for (const asset of this.assets.values()) {
       const world = asset.object.userData.worldPosition as { x: number; y: number; z: number } | undefined
-      if (world) asset.object.position.set(world.x - this.worldAnchor.x, world.y - this.worldAnchor.y, world.z - this.worldAnchor.z)
+      if (world) asset.object.position.set(world.x - this.#worldAnchor.x, world.y - this.#worldAnchor.y, world.z - this.#worldAnchor.z)
     }
     for (const instance of this.instances.values()) {
       const world = instance.userData.worldPosition as { x: number; y: number; z: number } | undefined
-      if (world) instance.position.set(world.x - this.worldAnchor.x, world.y - this.worldAnchor.y, world.z - this.worldAnchor.z)
+      if (world) instance.position.set(world.x - this.#worldAnchor.x, world.y - this.#worldAnchor.y, world.z - this.#worldAnchor.z)
     }
   }
 

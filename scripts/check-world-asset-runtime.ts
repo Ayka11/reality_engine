@@ -30,6 +30,20 @@ const loader = {
 
 const scene = new THREE.Scene()
 const runtime = new WorldAssetRuntime(scene, loader)
+for (const key of [
+  'loader', 'scene', 'onPlacementsChanged', 'assets', 'loading', 'loadingRequests',
+  'pendingRejectors', 'pendingLoadTokens', 'semanticSources', 'instances',
+  'instanceMixers', 'instanceActions', 'pendingAnimationStops', 'animationAccumulators',
+]) {
+  const descriptor = Object.getOwnPropertyDescriptor(runtime, key)
+  assert.equal(descriptor?.writable, false, key + ' must not permit runtime shadow replacement')
+  assert.equal(descriptor?.configurable, false, key + ' must not permit descriptor replacement')
+  assert.equal(Reflect.set(runtime, key, new Map()), false,
+    key + ' must reject a shadow replacement of its authoritative owner')
+}
+assert.equal(runtime.has('decoy'), false, 'shadow replacement attempts must not alter authoritative asset lookup')
+assert.equal('generation' in runtime, false, 'generation must not be exposed as a replaceable runtime property')
+assert.equal('worldAnchor' in runtime, false, 'world anchor must not be exposed as a replaceable runtime property')
 const createGltfScene = (map = new THREE.Texture()) => {
   const group = new THREE.Group()
   group.add(new THREE.Mesh(
