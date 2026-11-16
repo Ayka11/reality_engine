@@ -60,7 +60,11 @@ export function runEntityLayerRecoveryRegression(): void {
   const grid = new VoxelGrid(12, 12, 6);
   const layer = new EntityLayer(0x13579bdf);
   writeBlob(grid, [[2, 2, 1], [3, 2, 1], [2, 3, 1], [3, 3, 1]]);
+  const beforeInitialTickRevision = grid.mutationRevision;
   layer.tick(grid, 1 / 60);
+  if (grid.mutationRevision !== beforeInitialTickRevision + 1) {
+    throw new Error("EntityLayer.tick must publish one coalesced scoped buffer revision");
+  }
 
   const checkpoint = layer.snapshot();
 
@@ -69,6 +73,7 @@ export function runEntityLayerRecoveryRegression(): void {
   for (const invalidDt of [Number.NaN, Number.POSITIVE_INFINITY, -1]) {
     const beforeState = JSON.stringify(layer.snapshot());
     const beforeGrid = grid.buffer.slice();
+    const beforeGridRevision = grid.mutationRevision;
     let rejected = false;
     try {
       layer.tick(grid, invalidDt);
@@ -77,7 +82,8 @@ export function runEntityLayerRecoveryRegression(): void {
     }
     if (!rejected ||
         JSON.stringify(layer.snapshot()) !== beforeState ||
-        grid.buffer.some((value, index) => value !== beforeGrid[index])) {
+        grid.buffer.some((value, index) => value !== beforeGrid[index]) ||
+        grid.mutationRevision !== beforeGridRevision) {
       throw new Error("EntityLayer accepted invalid dt or mutated state before rejecting it");
     }
   }

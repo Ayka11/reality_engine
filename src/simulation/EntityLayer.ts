@@ -1,5 +1,5 @@
 import { VoxelGrid } from '../core/VoxelGrid';
-import { getMutableBuffer, withMutableBuffers } from '../core/TrackedFloat32Array';
+import { withMutableBuffers } from '../core/TrackedFloat32Array';
 import { SparseVoxelGrid } from '../core/SparseVoxelGrid';
 import { CELL_FIELDS, F } from '../core/CellState';
 import { InfinityScaleChunkExecutionContext } from '../infinity/InfinityScaleChunkExecutionContext';
@@ -384,151 +384,152 @@ export class EntityLayer {
   }
 
   tick(grid: VoxelGrid, dt: number): void {
-    // EntityLayer is a public runtime component and can be invoked outside
-    // SimulationEngine. Reject invalid time steps before taking snapshots or
-    // touching grid/entity state.
-    if (!Number.isFinite(dt) || dt < 0) {
-      throw new RangeError("EntityLayer tick dt must be a finite non-negative number");
-    }
-
-    const buf = getMutableBuffer(grid);
-    const originalEntities = new Map(this.entities);
-    const entitySnapshots = new Map<number, Entity>();
-    const entityMutableRefs = new Map<number, Pick<Entity, "cells" | "centroid" | "genome" | "memoryBuffer" | "colorRgb">>();
-    for (const [id, currentEntity] of originalEntities) {
-      entitySnapshots.set(id, cloneEntity(currentEntity));
-      entityMutableRefs.set(id, {
-        cells: currentEntity.cells,
-        centroid: currentEntity.centroid,
-        genome: currentEntity.genome,
-        memoryBuffer: currentEntity.memoryBuffer,
-        colorRgb: currentEntity.colorRgb,
-      });
-    }
-    const bufferSnapshot = buf.slice();
-    const sparseBackBufferSnapshot = grid instanceof SparseVoxelGrid ? grid.backBuffer.slice() : null;
-    const thresholdSnapshot = this.bioThreshold;
-    const nextIdSnapshot = this.nextId;
-    const extinctSnapshot = this.extinctCountValue;
-    const rngSnapshot = this._rngState;
-
-    // Capture one transaction snapshot for the whole EntityLayer tick. The
-    // reconciliation commit reuses this state rather than copying the large
-    // grid a second time. The snapshot contains copies, never raw grid aliases.
-    const rollbackState: EntityLayerTickRollbackState = {
-      originalEntities,
-      entitySnapshots,
-      entityMutableRefs,
-      bufferSnapshot,
-      sparseBackBufferSnapshot,
-      bioThreshold: thresholdSnapshot,
-      nextId: nextIdSnapshot,
-      extinctCount: extinctSnapshot,
-      rngState: rngSnapshot,
-    };
-
-    try {
-    const { W, H, D } = grid;
-    const n = grid.size;
-
-    // Entity identity reconciliation now runs through a full-domain,
-    // revision-bound chunk plan. The adapter remains advisory for selective LOD;
-    // this path proves complete coverage of the current authoritative grid.
-    this._reconcileFullDomain(grid, rollbackState);
-
-    // ── Per-entity behaviour ─────────────────────────────────────────────────
-    for (const [, ent] of this.entities) {
-      const { genome, cells } = ent;
-
-      // Pool energy from member cells
-      let poolEnergy = 0;
-      for (const i of cells) {
-        poolEnergy += buf[i * CELL_FIELDS + F.ENERGY];
+      // EntityLayer is a public runtime component and can be invoked outside
+      // SimulationEngine. Reject invalid time steps before taking snapshots or
+      // touching grid/entity state.
+      if (!Number.isFinite(dt) || dt < 0) {
+        throw new RangeError("EntityLayer tick dt must be a finite non-negative number");
       }
-      ent.energy = poolEnergy;
-      ent.reproCounter = Math.min(1, ent.energy / Math.max(1, genome.reproThreshold));
-
-      // Lifecycle stage
-      ent.age += 1;
-      ent.stage = ent.age < 60 ? 'juvenile' : ent.age < 400 ? 'mature' : 'elder';
-
-      // Metabolism drain — consume energy proportional to size × rate
-      const drain = genome.metabolismRate * cells.length * dt * 60;
-      const drainPer = drain / cells.length;
-      for (const i of cells) {
-        buf[i * CELL_FIELDS + F.ENERGY] = Math.max(0, buf[i * CELL_FIELDS + F.ENERGY] - drainPer);
-        // Bio-affinity: boost bioPotential by absorbing local energy
-        const bio = buf[i * CELL_FIELDS + F.BIO_POTENTIAL];
-        buf[i * CELL_FIELDS + F.BIO_POTENTIAL] = Math.min(1,
-          bio + genome.bioAffinity * 0.001 * dt * 60);
+  
+      withMutableBuffers(grid, (front, _back) => {
+      const originalEntities = new Map(this.entities);
+      const entitySnapshots = new Map<number, Entity>();
+      const entityMutableRefs = new Map<number, Pick<Entity, "cells" | "centroid" | "genome" | "memoryBuffer" | "colorRgb">>();
+      for (const [id, currentEntity] of originalEntities) {
+        entitySnapshots.set(id, cloneEntity(currentEntity));
+        entityMutableRefs.set(id, {
+          cells: currentEntity.cells,
+          centroid: currentEntity.centroid,
+          genome: currentEntity.genome,
+          memoryBuffer: currentEntity.memoryBuffer,
+          colorRgb: currentEntity.colorRgb,
+        });
       }
-
-      // Memory — rolling average of energy
-      ent.memoryBuffer[ent.memPtr % 8] = ent.energy / Math.max(1, cells.length);
-      ent.memPtr++;
-      const memAvg = ent.memoryBuffer.reduce((a, b) => a + b, 0) / 8;
-      // Write memory field to cells (fades toward average)
-      for (const i of cells) {
-        const cur = buf[i * CELL_FIELDS + F.MEM_FIELD];
-        buf[i * CELL_FIELDS + F.MEM_FIELD] = cur * (1 - genome.memoryDecay * dt)
-          + (memAvg / 1000) * genome.memoryDecay * dt;
-      }
-
-      // Communication — broadcast SIGNAL to immediate cell faces
-      if (ent.stage !== 'juvenile') {
-        const sig = genome.signalStrength * (ent.energy / Math.max(1, cells.length)) / 200;
-        for (const i of cells) {
-          buf[i * CELL_FIELDS + F.SIGNAL] = Math.min(100, buf[i * CELL_FIELDS + F.SIGNAL] + sig * dt * 60);
-        }
-      }
-
-      // Mark entity ID into cells
-      for (const i of cells) {
-        buf[i * CELL_FIELDS + F.ENTITY_ID] = ent.id;
-      }
-
-      // Adaptation — if energy consistently low, lower bioThresh drift
-      if (memAvg < 50 && ent.stage === 'mature') {
-        this.bioThreshold = Math.max(0.01, this.bioThreshold - 0.0001 * dt * 60);
-      }
-
-      // Reproduction — if energy above threshold and mature, spawn child blob nearby
-      if (ent.stage === 'mature' && ent.energy > genome.reproThreshold && cells.length >= 4) {
-        this._spawnChild(grid, ent, W, H, D);
-      }
-
-      // Elder decay — slowly reduce bioPotential
-      if (ent.stage === 'elder') {
-        for (const i of cells) {
-          buf[i * CELL_FIELDS + F.BIO_POTENTIAL] = Math.max(0,
-            buf[i * CELL_FIELDS + F.BIO_POTENTIAL] - 0.001 * dt * 60);
-        }
-      }
-    }
-
-    // Signal decay across whole grid
-    for (let i = 0; i < n; i++) {
-      const base = i * CELL_FIELDS;
-      buf[base + F.SIGNAL] = Math.max(0, buf[base + F.SIGNAL] - 0.5 * dt * 60);
-    }
-    // The full chunk sync happens at frame end, but the next logical substep
-    // may enter EntityLayer immediately and requires authoritative ID mirrors.
-    if (grid instanceof SparseVoxelGrid) {
-      grid.syncDenseEntityOwnershipToChunks();
-    }
-    } catch (error) {
+      const bufferSnapshot = grid.buffer.slice();
+      const sparseBackBufferSnapshot = grid instanceof SparseVoxelGrid ? grid.backBuffer.slice() : null;
+      const thresholdSnapshot = this.bioThreshold;
+      const nextIdSnapshot = this.nextId;
+      const extinctSnapshot = this.extinctCountValue;
+      const rngSnapshot = this._rngState;
+  
+      // Capture one transaction snapshot for the whole EntityLayer tick. The
+      // reconciliation commit reuses this state rather than copying the large
+      // grid a second time. The snapshot contains copies, never raw grid aliases.
+      const rollbackState: EntityLayerTickRollbackState = {
+        originalEntities,
+        entitySnapshots,
+        entityMutableRefs,
+        bufferSnapshot,
+        sparseBackBufferSnapshot,
+        bioThreshold: thresholdSnapshot,
+        nextId: nextIdSnapshot,
+        extinctCount: extinctSnapshot,
+        rngState: rngSnapshot,
+      };
+  
       try {
-        this._rollbackTick(grid, rollbackState);
-      } catch (rollbackError) {
-        const originalMessage = error instanceof Error ? error.message : String(error);
-        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-        throw new AggregateError(
-          [error, rollbackError],
-          `EntityLayer tick failed (${originalMessage}) and rollback failed (${rollbackMessage})`,
-        );
+        const { W, H, D } = grid;
+        const n = grid.size;
+    
+        // Entity identity reconciliation now runs through a full-domain,
+        // revision-bound chunk plan. The adapter remains advisory for selective LOD;
+        // this path proves complete coverage of the current authoritative grid.
+        this._reconcileFullDomain(grid, rollbackState);
+    
+        // ── Per-entity behaviour ─────────────────────────────────────────────────
+        for (const [, ent] of this.entities) {
+          const { genome, cells } = ent;
+    
+          // Pool energy from member cells
+          let poolEnergy = 0;
+          for (const i of cells) {
+            poolEnergy += front[i * CELL_FIELDS + F.ENERGY];
+          }
+          ent.energy = poolEnergy;
+          ent.reproCounter = Math.min(1, ent.energy / Math.max(1, genome.reproThreshold));
+    
+          // Lifecycle stage
+          ent.age += 1;
+          ent.stage = ent.age < 60 ? 'juvenile' : ent.age < 400 ? 'mature' : 'elder';
+    
+          // Metabolism drain — consume energy proportional to size × rate
+          const drain = genome.metabolismRate * cells.length * dt * 60;
+          const drainPer = drain / cells.length;
+          for (const i of cells) {
+            front[i * CELL_FIELDS + F.ENERGY] = Math.max(0, front[i * CELL_FIELDS + F.ENERGY] - drainPer);
+            // Bio-affinity: boost bioPotential by absorbing local energy
+            const bio = front[i * CELL_FIELDS + F.BIO_POTENTIAL];
+            front[i * CELL_FIELDS + F.BIO_POTENTIAL] = Math.min(1,
+              bio + genome.bioAffinity * 0.001 * dt * 60);
+          }
+    
+          // Memory — rolling average of energy
+          ent.memoryBuffer[ent.memPtr % 8] = ent.energy / Math.max(1, cells.length);
+          ent.memPtr++;
+          const memAvg = ent.memoryBuffer.reduce((a, b) => a + b, 0) / 8;
+          // Write memory field to cells (fades toward average)
+          for (const i of cells) {
+            const cur = front[i * CELL_FIELDS + F.MEM_FIELD];
+            front[i * CELL_FIELDS + F.MEM_FIELD] = cur * (1 - genome.memoryDecay * dt)
+              + (memAvg / 1000) * genome.memoryDecay * dt;
+          }
+    
+          // Communication — broadcast SIGNAL to immediate cell faces
+          if (ent.stage !== 'juvenile') {
+            const sig = genome.signalStrength * (ent.energy / Math.max(1, cells.length)) / 200;
+            for (const i of cells) {
+              front[i * CELL_FIELDS + F.SIGNAL] = Math.min(100, front[i * CELL_FIELDS + F.SIGNAL] + sig * dt * 60);
+            }
+          }
+    
+          // Mark entity ID into cells
+          for (const i of cells) {
+            front[i * CELL_FIELDS + F.ENTITY_ID] = ent.id;
+          }
+    
+          // Adaptation — if energy consistently low, lower bioThresh drift
+          if (memAvg < 50 && ent.stage === 'mature') {
+            this.bioThreshold = Math.max(0.01, this.bioThreshold - 0.0001 * dt * 60);
+          }
+    
+          // Reproduction — if energy above threshold and mature, spawn child blob nearby
+          if (ent.stage === 'mature' && ent.energy > genome.reproThreshold && cells.length >= 4) {
+            this._spawnChild(grid, ent, W, H, D);
+          }
+    
+          // Elder decay — slowly reduce bioPotential
+          if (ent.stage === 'elder') {
+            for (const i of cells) {
+              front[i * CELL_FIELDS + F.BIO_POTENTIAL] = Math.max(0,
+                front[i * CELL_FIELDS + F.BIO_POTENTIAL] - 0.001 * dt * 60);
+            }
+          }
+        }
+    
+        // Signal decay across whole grid
+        for (let i = 0; i < n; i++) {
+          const base = i * CELL_FIELDS;
+          front[base + F.SIGNAL] = Math.max(0, front[base + F.SIGNAL] - 0.5 * dt * 60);
+        }
+        // The full chunk sync happens at frame end, but the next logical substep
+        // may enter EntityLayer immediately and requires authoritative ID mirrors.
+        if (grid instanceof SparseVoxelGrid) {
+          grid.syncDenseEntityOwnershipToChunks();
+        }
+      } catch (error) {
+        try {
+          this._rollbackTick(grid, rollbackState);
+        } catch (rollbackError) {
+          const originalMessage = error instanceof Error ? error.message : String(error);
+          const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          throw new AggregateError(
+            [error, rollbackError],
+            `EntityLayer tick failed (${originalMessage}) and rollback failed (${rollbackMessage})`,
+          );
+        }
+        throw error;
       }
-      throw error;
-    }
+    });
   }
 
   private _rollbackTick(grid: VoxelGrid, rollback: EntityLayerTickRollbackState): void {

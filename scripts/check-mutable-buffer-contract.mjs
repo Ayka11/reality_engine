@@ -6,13 +6,10 @@ import ts from "typescript";
 // getMutableBuffer() exposes raw typed-array memory for hot paths. Keep this
 // inventory exact: newly added call sites must have an explicit ownership and
 // async-boundary review rather than silently expanding the escape hatch.
-const expectedCalls = new Map([
-  ["src/simulation/EntityLayer.ts#tick", 1],
-]);
-const expectedImports = new Set([
-  "src/simulation/EntityLayer.ts",
-]);
+const expectedCalls = new Map();
+const expectedImports = new Set();
 const expectedScopedCalls = new Map([
+  ["src/simulation/EntityLayer.ts#tick", 1],
   ["src/simulation/FieldPhysics.ts#tick", 1],
   ["src/simulation/EntropyLayer.ts#tick", 1],
   ["src/simulation/InfoPhysics.ts#tick", 1],
