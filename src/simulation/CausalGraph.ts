@@ -27,8 +27,14 @@ export class CausalGraph {
   private lastEventByCell = new Map<number, number>();
   private mutationObserver: (() => void) | null = null;
 
-  /** Register the owning engine's stale-readback invalidation hook. */
-  setMutationObserver(observer: (() => void) | null): void {
+  /** Bind the owning engine's stale-readback invalidation hook exactly once. */
+  bindMutationObserver(observer: () => void): void {
+    if (typeof observer !== "function") {
+      throw new TypeError("Mutation observer must be a function");
+    }
+    if (this.mutationObserver !== null) {
+      throw new Error("Mutation observer is already bound");
+    }
     this.mutationObserver = observer;
   }
 
