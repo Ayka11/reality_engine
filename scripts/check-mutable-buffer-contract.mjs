@@ -20,7 +20,7 @@ const expectedScopedCalls = new Map([
   ["src/simulation/AgentSystem.ts#seed", 1],
   ["src/simulation/AgentSystem.ts#tick", 1],
   ["src/simulation/SimulationEngine.ts#_detectCausality", 1],
-  ["src/simulation/EntityLayer.ts#_reconcileFullDomain", 1],
+  ["src/simulation/EntityLayer.ts##_reconcileFullDomain", 1],
   ["src/simulation/EntityLayer.ts#_spawnChild", 1],
 ]);
 const actualScopedCalls = new Map();

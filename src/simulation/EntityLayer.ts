@@ -163,29 +163,37 @@ function cloneEntity(entity: Entity): Entity {
 }
 
 export class EntityLayer {
-  private entities: Map<number, Entity> = new Map();
-  private nextId = 1;
-  private extinctCountValue = 0;
-  private bioThreshold = 0.05;
-  private _mutationStrength = 1.0;
-  private readonly initialRngState: number;
-  private _rngState: number;
+  #entities: Map<number, Entity> = new Map();
+  #nextId = 1;
+  #extinctCountValue = 0;
+  #bioThreshold = 0.05;
+  #_mutationStrength = 1.0;
+  #initialRngState: number;
+  #_rngState: number;
   #mutationObserver: (() => void) | null = null;
-  private readonly domainInventoryAuthority = new EntityDomainInventoryAuthority("entity-layer");
-  private readonly chunkReconciliation = new EntityChunkReconciliation();
+  #domainInventoryAuthority = new EntityDomainInventoryAuthority("entity-layer");
+  #chunkReconciliation = new EntityChunkReconciliation();
 
   constructor(seed = 0x4f1bbcdc) {
-    this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x4f1bbcdc : 0x4f1bbcdc;
-    this._rngState = this.initialRngState;
+    this.#initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x4f1bbcdc : 0x4f1bbcdc;
+    this.#_rngState = this.#initialRngState;
+    // Preserve the validated accessor as a non-configurable own boundary so
+    // JavaScript callers cannot shadow it with a plain data property.
+    Object.defineProperty(this, "mutationStrength", {
+      configurable: false,
+      enumerable: true,
+      get: () => this.#_mutationStrength,
+      set: (value: number) => this.#setMutationStrength(value),
+    });
   }
 
-  private _random(): number {
-    let x = this._rngState >>> 0;
+  #_random(): number {
+    let x = this.#_rngState >>> 0;
     x ^= x << 13;
     x ^= x >>> 17;
     x ^= x << 5;
-    this._rngState = x >>> 0;
-    return this._rngState / 0x100000000;
+    this.#_rngState = x >>> 0;
+    return this.#_rngState / 0x100000000;
   }
 
   /** Bind the owning engine's stale-readback invalidation hook exactly once. */
@@ -202,30 +210,34 @@ export class EntityLayer {
   #notifyMutation(): void { this.#mutationObserver?.(); }
 
   /** Public tuning value with the same validation and invalidation contract as restore(). */
-  get mutationStrength(): number { return this._mutationStrength; }
+  get mutationStrength(): number { return this.#_mutationStrength; }
   set mutationStrength(value: number) {
+    this.#setMutationStrength(value);
+  }
+
+  #setMutationStrength(value: number): void {
     if (!Number.isFinite(value) || value < 0) {
       throw new RangeError("EntityLayer mutationStrength must be finite and non-negative");
     }
-    if (value === this._mutationStrength) return;
-    this._mutationStrength = value;
+    if (value === this.#_mutationStrength) return;
+    this.#_mutationStrength = value;
     this.#notifyMutation();
   }
 
-  get extinctCount(): number { return this.extinctCountValue; }
-  get totalSpawned(): number { return this.nextId - 1; }
+  get extinctCount(): number { return this.#extinctCountValue; }
+  get totalSpawned(): number { return this.#nextId - 1; }
 
   /** Set a reproducible non-zero xorshift32 seed. */
   setRandomSeed(seed: number): void {
     if (!Number.isSafeInteger(seed) || seed <= 0 || seed > 0xffffffff) {
       throw new Error('EntityLayer seed must be a non-zero uint32');
     }
-    this._rngState = seed >>> 0;
+    this.#_rngState = seed >>> 0;
     this.#notifyMutation();
   }
 
-  private _captureCurrentDomainInventory(cellCount: number) {
-    const entities = [...this.entities.values()];
+  #_captureCurrentDomainInventory(cellCount: number) {
+    const entities = [...this.#entities.values()];
     const ownership = entities.map(entity => {
       if (
         !Number.isSafeInteger(entity.id) || entity.id < 1 ||
@@ -235,7 +247,7 @@ export class EntityLayer {
       }
       return { entityId: entity.id, cells: [...entity.cells] };
     });
-    return this.domainInventoryAuthority.update({
+    return this.#domainInventoryAuthority.update({
       completeness: "complete",
       entityIds: entities.map(entity => entity.id),
       occupiedCells: ownership.flatMap(entry => entry.cells),
@@ -245,7 +257,7 @@ export class EntityLayer {
 
   snapshot(): EntityLayerSnapshot {
     return {
-      entities: [...this.entities.values()].map(entity => ({
+      entities: [...this.#entities.values()].map(entity => ({
         ...entity,
         cells: [...entity.cells],
         centroid: [...entity.centroid] as [number, number, number],
@@ -253,11 +265,11 @@ export class EntityLayer {
         memoryBuffer: new Float32Array(entity.memoryBuffer),
         colorRgb: [...entity.colorRgb] as [number, number, number],
       })),
-      bioThreshold: this.bioThreshold,
+      bioThreshold: this.#bioThreshold,
       mutationStrength: this.mutationStrength,
-      nextId: this.nextId,
-      extinctCount: this.extinctCountValue,
-      rngState: this._rngState,
+      nextId: this.#nextId,
+      extinctCount: this.#extinctCountValue,
+      rngState: this.#_rngState,
     };
   }
 
@@ -380,12 +392,12 @@ export class EntityLayer {
     }
 
     // Install the fully validated, detached candidate as one state transition.
-    this.entities = restored;
-    this.bioThreshold = snapshot.bioThreshold;
-    this._mutationStrength = snapshot.mutationStrength;
-    this.nextId = snapshot.nextId;
-    this.extinctCountValue = snapshot.extinctCount;
-    this._rngState = snapshot.rngState >>> 0;
+    this.#entities = restored;
+    this.#bioThreshold = snapshot.bioThreshold;
+    this.#_mutationStrength = snapshot.mutationStrength;
+    this.#nextId = snapshot.nextId;
+    this.#extinctCountValue = snapshot.extinctCount;
+    this.#_rngState = snapshot.rngState >>> 0;
     this.#notifyMutation();
   }
 
@@ -399,7 +411,7 @@ export class EntityLayer {
 
     try {
       withMutableBuffers(grid, (front, _back) => {
-      const originalEntities = new Map(this.entities);
+      const originalEntities = new Map(this.#entities);
       const entitySnapshots = new Map<number, Entity>();
       const entityMutableRefs = new Map<number, Pick<Entity, "cells" | "centroid" | "genome" | "memoryBuffer" | "colorRgb">>();
       for (const [id, currentEntity] of originalEntities) {
@@ -414,10 +426,10 @@ export class EntityLayer {
       }
       const bufferSnapshot = grid.buffer.slice();
       const sparseBackBufferSnapshot = grid instanceof SparseVoxelGrid ? grid.backBuffer.slice() : null;
-      const thresholdSnapshot = this.bioThreshold;
-      const nextIdSnapshot = this.nextId;
-      const extinctSnapshot = this.extinctCountValue;
-      const rngSnapshot = this._rngState;
+      const thresholdSnapshot = this.#bioThreshold;
+      const nextIdSnapshot = this.#nextId;
+      const extinctSnapshot = this.#extinctCountValue;
+      const rngSnapshot = this.#_rngState;
   
       // Capture one transaction snapshot for the whole EntityLayer tick. The
       // reconciliation commit reuses this state rather than copying the large
@@ -441,10 +453,10 @@ export class EntityLayer {
         // Entity identity reconciliation now runs through a full-domain,
         // revision-bound chunk plan. The adapter remains advisory for selective LOD;
         // this path proves complete coverage of the current authoritative grid.
-        this._reconcileFullDomain(grid, rollbackState);
+        this.#_reconcileFullDomain(grid, rollbackState);
     
         // ── Per-entity behaviour ─────────────────────────────────────────────────
-        for (const [, ent] of this.entities) {
+        for (const [, ent] of this.#entities) {
           const { genome, cells } = ent;
     
           // Pool energy from member cells
@@ -496,7 +508,7 @@ export class EntityLayer {
     
           // Adaptation — if energy consistently low, lower bioThresh drift
           if (memAvg < 50 && ent.stage === 'mature') {
-            this.bioThreshold = Math.max(0.01, this.bioThreshold - 0.0001 * dt * 60);
+            this.#bioThreshold = Math.max(0.01, this.#bioThreshold - 0.0001 * dt * 60);
           }
     
           // Reproduction — if energy above threshold and mature, spawn child blob nearby
@@ -525,7 +537,7 @@ export class EntityLayer {
         }
       } catch (error) {
         try {
-          this._rollbackTick(grid, rollbackState);
+          this.#_rollbackTick(grid, rollbackState);
         } catch (rollbackError) {
           const originalMessage = error instanceof Error ? error.message : String(error);
           const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
@@ -544,7 +556,7 @@ export class EntityLayer {
     }
   }
 
-  private _rollbackTick(grid: VoxelGrid, rollback: EntityLayerTickRollbackState): void {
+  #_rollbackTick(grid: VoxelGrid, rollback: EntityLayerTickRollbackState): void {
     // Restore through tracked public views. This does not retain or reacquire a
     // raw typed-array alias after the original tick's synchronous hot path.
     grid.buffer.set(rollback.bufferSnapshot);
@@ -582,14 +594,14 @@ export class EntityLayer {
       original.reproCounter = snapshot.reproCounter;
     }
 
-    this.entities = rollback.originalEntities;
-    this.bioThreshold = rollback.bioThreshold;
-    this.nextId = rollback.nextId;
-    this.extinctCountValue = rollback.extinctCount;
-    this._rngState = rollback.rngState;
+    this.#entities = rollback.originalEntities;
+    this.#bioThreshold = rollback.bioThreshold;
+    this.#nextId = rollback.nextId;
+    this.#extinctCountValue = rollback.extinctCount;
+    this.#_rngState = rollback.rngState;
   }
 
-  private _reconcileFullDomain(
+  #_reconcileFullDomain(
     grid: VoxelGrid,
     rollbackState: EntityLayerTickRollbackState,
   ): void {
@@ -601,7 +613,7 @@ export class EntityLayer {
       // entity-ownership markers it reads agree with authoritative chunk
       // storage. Fail closed on chunk-only or dense-only ENTITY_ID mutations.
       grid.assertDenseEntityOwnershipSynchronized();
-      if (grid.hasUnverifiedEntityDomainOutsideDenseWindow(this.bioThreshold)) {
+      if (grid.hasUnverifiedEntityDomainOutsideDenseWindow(this.#bioThreshold)) {
         throw new Error(
           "EntityLayer refuses global reconciliation while sparse entity activity exists outside the dense simulation window",
         );
@@ -615,7 +627,7 @@ export class EntityLayer {
     this.assertGridEntityOwnershipSynchronized(grid);
 
     const context = createFullDomainExecutionContext(grid);
-    const connectivity = new EntityChunkConnectivity(this.bioThreshold).analyze(grid, context);
+    const connectivity = new EntityChunkConnectivity(this.#bioThreshold).analyze(grid, context);
     if (connectivity.domainCoverageComplete !== true) {
       throw new Error("EntityLayer refuses identity changes without verified whole-grid connectivity");
     }
@@ -624,9 +636,9 @@ export class EntityLayer {
     // become entities. They are nevertheless scanned, so the resulting domain
     // proof remains complete for the registered entity lifecycle semantics.
     const components = connectivity.components.filter(component => component.cells.length >= 2);
-    const entitiesBeforeCommit = new Map(this.entities);
-    const sourceInventory = this._captureCurrentDomainInventory(grid.size);
-    const plan = this.chunkReconciliation.planAtInventory(
+    const entitiesBeforeCommit = new Map(this.#entities);
+    const sourceInventory = this.#_captureCurrentDomainInventory(grid.size);
+    const plan = this.#chunkReconciliation.planAtInventory(
       components,
       [...entitiesBeforeCommit.values()],
       sourceInventory,
@@ -639,10 +651,10 @@ export class EntityLayer {
     }
 
     const componentById = new Map(components.map(component => [component.id, component]));
-    const commitResult = this.chunkReconciliation.commitAtomically(
+    const commitResult = this.#chunkReconciliation.commitAtomically(
       plan,
       components,
-      () => this._captureCurrentDomainInventory(grid.size),
+      () => this.#_captureCurrentDomainInventory(grid.size),
       // The outer tick already captured an authoritative grid/entity snapshot.
       // Reuse that snapshot, so a transaction does not allocate a second copy of
       // the large front/back buffers.
@@ -663,7 +675,7 @@ export class EntityLayer {
               const base = cellIndex * CELL_FIELDS;
               front[base + F.ENERGY] = Math.min(9999, front[base + F.ENERGY] + energyShare);
             }
-            this.extinctCountValue++;
+            this.#extinctCountValue++;
           }
 
           const nextEntities = new Map<number, Entity>();
@@ -681,22 +693,22 @@ export class EntityLayer {
               }
               entity = existing;
             } else {
-              const id = this.nextId++;
+              const id = this.#nextId++;
               entity = {
                 id,
                 cells: [...record.cells],
                 centroid: [...record.centroid] as [number, number, number],
-                genome: defaultGenome(() => this._random()),
+                genome: defaultGenome(() => this.#_random()),
                 age: 0,
                 energy: 0,
                 stage: "juvenile",
                 memoryBuffer: new Float32Array(8),
                 memPtr: 0,
-                symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
+                symbol: SYMBOLS[Math.floor(this.#_random() * SYMBOLS.length)],
                 colorRgb: [
-                  0.3 + this._random() * 0.7,
-                  0.3 + this._random() * 0.7,
-                  0.3 + this._random() * 0.7,
+                  0.3 + this.#_random() * 0.7,
+                  0.3 + this.#_random() * 0.7,
+                  0.3 + this.#_random() * 0.7,
                 ],
                 children: 0,
                 reproCounter: 0,
@@ -710,10 +722,10 @@ export class EntityLayer {
             }
             nextEntities.set(entity.id, entity);
           }
-          this.entities = nextEntities;
+          this.#entities = nextEntities;
         });
       },
-      () => this._rollbackTick(grid, rollbackState),
+      () => this.#_rollbackTick(grid, rollbackState),
     );
     if (commitResult === null) {
       throw new Error("EntityLayer rejected a reconciliation plan before commit");
@@ -722,7 +734,7 @@ export class EntityLayer {
 
   private _spawnChild(grid: VoxelGrid, parent: Entity, W: number, H: number, D: number): void {
     // Pick a random parent cell and try to seed child in a random adjacent empty location
-    const srcIdx = parent.cells[Math.floor(this._random() * parent.cells.length)];
+    const srcIdx = parent.cells[Math.floor(this.#_random() * parent.cells.length)];
     const WH = W * H;
     const pz = Math.floor(srcIdx / WH);
     const rem = srcIdx - pz * WH;
@@ -731,8 +743,8 @@ export class EntityLayer {
 
     // Random offset 2..4 cells away
     const offsets = [-3, -2, 2, 3];
-    const ox = offsets[Math.floor(this._random() * 4)];
-    const oy = offsets[Math.floor(this._random() * 4)];
+    const ox = offsets[Math.floor(this.#_random() * 4)];
+    const oy = offsets[Math.floor(this.#_random() * 4)];
     const nx = Math.max(0, Math.min(W - 1, px + ox));
     const ny = Math.max(0, Math.min(H - 1, py + oy));
     const nz = Math.max(0, Math.min(D - 1, pz));
@@ -742,7 +754,7 @@ export class EntityLayer {
 
       // Only spawn if target is low-bio
       if (front[childBase + F.BIO_POTENTIAL] < 0.02) {
-        const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate * this.mutationStrength, () => this._random());
+        const childGenome = mutateGenome(parent.genome, parent.genome.mutationRate * this.mutationStrength, () => this.#_random());
         front[childBase + F.BIO_POTENTIAL] = 0.15;
         front[childBase + F.ENERGY]        = parent.genome.reproThreshold * 0.3;
         front[childBase + F.INFORMATION]   = 5;
@@ -750,19 +762,19 @@ export class EntityLayer {
         parent.children++;
 
         // Register new entity immediately
-        const id = this.nextId++;
+        const id = this.#nextId++;
         const c = centroid([nz * WH + ny * W + nx], W, H);
-        this.entities.set(id, {
+        this.#entities.set(id, {
           id, cells: [nz * WH + ny * W + nx], centroid: c,
           genome: childGenome,
           age: 0, energy: front[childBase + F.ENERGY], stage: 'juvenile',
           memoryBuffer: new Float32Array(8),
           memPtr: 0,
-          symbol: SYMBOLS[Math.floor(this._random() * SYMBOLS.length)],
+          symbol: SYMBOLS[Math.floor(this.#_random() * SYMBOLS.length)],
           colorRgb: [
-            Math.max(0.2, parent.colorRgb[0] + (this._random() - 0.5) * 0.3),
-            Math.max(0.2, parent.colorRgb[1] + (this._random() - 0.5) * 0.3),
-            Math.max(0.2, parent.colorRgb[2] + (this._random() - 0.5) * 0.3),
+            Math.max(0.2, parent.colorRgb[0] + (this.#_random() - 0.5) * 0.3),
+            Math.max(0.2, parent.colorRgb[1] + (this.#_random() - 0.5) * 0.3),
+            Math.max(0.2, parent.colorRgb[2] + (this.#_random() - 0.5) * 0.3),
           ],
           children: 0,
           reproCounter: 0,
@@ -789,7 +801,7 @@ export class EntityLayer {
     }
 
     const expectedOwners = new Map<number, number>();
-    for (const [mapId, entity] of this.entities) {
+    for (const [mapId, entity] of this.#entities) {
       if (!entity ||
           !Number.isSafeInteger(entity.id) || entity.id < 1 ||
           mapId !== entity.id ||
@@ -827,14 +839,14 @@ export class EntityLayer {
    * without passing through EntityLayer's tick/restore ownership boundary.
    */
   getEntities(): Entity[] {
-    return [...this.entities.values()].map(cloneEntity);
+    return [...this.#entities.values()].map(cloneEntity);
   }
 
   clear(): void {
-    this.entities.clear();
-    this.nextId = 1;
-    this.extinctCountValue = 0;
-    this._rngState = this.initialRngState;
+    this.#entities.clear();
+    this.#nextId = 1;
+    this.#extinctCountValue = 0;
+    this.#_rngState = this.#initialRngState;
     this.#notifyMutation();
   }
 }

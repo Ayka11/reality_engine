@@ -239,14 +239,6 @@ console.log("Entity chunk reconciliation boundary safety: PASS");
 
 
 // Exercise the production EntityLayer tick transaction, not just the pure planner.
-function firstLiveEntityForRollbackFixture(layer: EntityLayer): Entity {
-  // Private state access is deliberately confined to failure-injection tests.
-  // Public getEntities() returns detached values and must never mutate engine state.
-  const liveEntity = (layer as unknown as { entities: Map<number, Entity> }).entities.values().next().value;
-  assert.ok(liveEntity, "fixture must create a real EntityLayer entity");
-  return liveEntity;
-}
-
 function makeEntityTickScenario() {
   const grid = new VoxelGrid(8, 8, 1);
   const layer = new EntityLayer();
@@ -256,10 +248,13 @@ function makeEntityTickScenario() {
     grid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
   }
   layer.tick(grid, 1 / 60);
-  const entity = firstLiveEntityForRollbackFixture(layer);
+  const snapshot = layer.snapshot();
+  const entity = snapshot.entities[0];
+  assert.ok(entity, "fixture must create a real EntityLayer entity");
   entity.age = 59;
   entity.genome.reproThreshold = 1;
   entity.energy = 321;
+  layer.restore(snapshot, grid.size);
   for (const index of entity.cells) grid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
   return { grid, layer, entity };
 }
@@ -348,11 +343,6 @@ console.log("Surviving entity footprint shift clears stale ownership: PASS");
 const rollbackCase = makeEntityTickScenario();
 const controlCase = makeEntityTickScenario();
 const originalEntity = rollbackCase.entity;
-const originalCellsRef = originalEntity.cells;
-const originalCentroidRef = originalEntity.centroid;
-const originalGenomeRef = originalEntity.genome;
-const originalMemoryBufferRef = originalEntity.memoryBuffer;
-const originalColorRef = originalEntity.colorRgb;
 const beforeBuffer = Array.from(rollbackCase.grid.buffer);
 const beforeEntity = {
   cells: originalEntity.cells.slice(),
@@ -378,26 +368,18 @@ rollbackInternals._spawnChild = function (...args: unknown[]) {
 };
 assert.throws(() => rollbackCase.layer.tick(rollbackCase.grid, 1 / 60), /injected failure/);
 assert.deepEqual(Array.from(rollbackCase.grid.buffer), beforeBuffer, "failed tick must restore every grid field");
-assert.equal(
-  (rollbackCase.layer as unknown as { entities: Map<number, Entity> }).entities.get(originalEntity.id),
-  originalEntity,
-  "rollback must preserve pre-existing entity object identity",
-);
-assert.equal(originalEntity.cells, originalCellsRef, "rollback must preserve cell-array identity");
-assert.equal(originalEntity.centroid, originalCentroidRef, "rollback must preserve centroid-array identity");
-assert.equal(originalEntity.genome, originalGenomeRef, "rollback must preserve genome-object identity");
-assert.equal(originalEntity.memoryBuffer, originalMemoryBufferRef, "rollback must preserve memory-buffer identity");
-assert.equal(originalEntity.colorRgb, originalColorRef, "rollback must preserve color-array identity");
-assert.deepEqual(originalEntity.cells, beforeEntity.cells);
-assert.deepEqual(originalEntity.centroid, beforeEntity.centroid);
-assert.deepEqual(originalEntity.genome, beforeEntity.genome);
-assert.equal(originalEntity.age, beforeEntity.age);
-assert.equal(originalEntity.energy, beforeEntity.energy);
-assert.equal(originalEntity.stage, beforeEntity.stage);
-assert.deepEqual(Array.from(originalEntity.memoryBuffer), beforeEntity.memoryBuffer);
-assert.equal(originalEntity.memPtr, beforeEntity.memPtr);
-assert.equal(originalEntity.children, beforeEntity.children);
-assert.equal(originalEntity.reproCounter, beforeEntity.reproCounter);
+const restoredEntity = rollbackCase.layer.getEntities().find(entity => entity.id === originalEntity.id);
+assert.ok(restoredEntity, "rollback must restore the pre-existing entity through the detached read API");
+assert.deepEqual(restoredEntity.cells, beforeEntity.cells);
+assert.deepEqual(restoredEntity.centroid, beforeEntity.centroid);
+assert.deepEqual(restoredEntity.genome, beforeEntity.genome);
+assert.equal(restoredEntity.age, beforeEntity.age);
+assert.equal(restoredEntity.energy, beforeEntity.energy);
+assert.equal(restoredEntity.stage, beforeEntity.stage);
+assert.deepEqual(Array.from(restoredEntity.memoryBuffer), beforeEntity.memoryBuffer);
+assert.equal(restoredEntity.memPtr, beforeEntity.memPtr);
+assert.equal(restoredEntity.children, beforeEntity.children);
+assert.equal(restoredEntity.reproCounter, beforeEntity.reproCounter);
 assert.equal(rollbackCase.layer.totalSpawned, beforeSpawned, "failed tick must restore identity counter");
 assert.equal(rollbackCase.layer.extinctCount, beforeExtinct, "failed tick must restore extinction counter");
 
@@ -432,10 +414,13 @@ for (const index of [9, 10, 17, 18]) {
 sparseRollbackGrid.syncDenseToChunks();
 sparseRollbackLayer.tick(sparseRollbackGrid, 1 / 60);
 sparseRollbackGrid.syncDenseToChunks();
-const sparseRollbackEntity = firstLiveEntityForRollbackFixture(sparseRollbackLayer);
+const sparseRollbackEntitySnapshot = sparseRollbackLayer.snapshot();
+const sparseRollbackEntity = sparseRollbackEntitySnapshot.entities[0];
+assert.ok(sparseRollbackEntity, "sparse rollback fixture must create a live entity");
 sparseRollbackEntity.age = 59;
 sparseRollbackEntity.genome.reproThreshold = 1;
 sparseRollbackEntity.energy = 321;
+sparseRollbackLayer.restore(sparseRollbackEntitySnapshot, sparseRollbackGrid.size);
 for (const index of sparseRollbackEntity.cells) {
   sparseRollbackGrid.buffer[index * CELL_FIELDS + F.ENERGY] = 200;
 }

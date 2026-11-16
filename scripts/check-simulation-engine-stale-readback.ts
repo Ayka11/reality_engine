@@ -217,6 +217,66 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.equal(privateAgentSystem.getAgents().length, 0,
     "the public clear operation must commit against the private authoritative population");
   console.log("AgentSystem runtime-private population, allocator, PRNG and helpers: PASS");
+
+  // EntityLayer's population, identity allocator, RNG and reconciliation stores
+  // are also authoritative state. Runtime-private fields prevent JS decoy
+  // properties from replacing them or bypassing the engine invalidation hook.
+  const privateEntityEngine = new SimulationEngine(8, 8, 8);
+  const privateEntityCells = [
+    privateEntityEngine.grid.idx(2, 2, 2),
+    privateEntityEngine.grid.idx(3, 2, 2),
+  ];
+  for (const base of privateEntityCells) {
+    privateEntityEngine.grid.buffer[base + F.BIO_POTENTIAL] = 0.8;
+    privateEntityEngine.grid.buffer[base + F.ENERGY] = 200;
+  }
+  privateEntityEngine.grid.syncDenseToChunks();
+  privateEntityEngine.entityLayer.tick(privateEntityEngine.grid, 1 / 60);
+  const privateEntityLayer = privateEntityEngine.entityLayer;
+  const privateEntityBaseline = privateEntityLayer.snapshot();
+  assert.ok(privateEntityBaseline.entities.length > 0,
+    "EntityLayer runtime-private fixture must create an entity");
+  for (const key of ["entities", "nextId", "extinctCountValue", "bioThreshold",
+    "_mutationStrength", "initialRngState", "_rngState", "domainInventoryAuthority",
+    "chunkReconciliation", "_random", "_captureCurrentDomainInventory",
+    "_rollbackTick", "_reconcileFullDomain"]) {
+    assert.equal(key in privateEntityLayer, false,
+      `EntityLayer internal member ${key} must be runtime-private`);
+  }
+  const inertEntityMap = new Map();
+  Reflect.set(privateEntityLayer, "entities", inertEntityMap);
+  Reflect.set(privateEntityLayer, "nextId", 9000);
+  Reflect.set(privateEntityLayer, "extinctCountValue", 9000);
+  Reflect.set(privateEntityLayer, "bioThreshold", -1);
+  Reflect.set(privateEntityLayer, "_mutationStrength", 999);
+  Reflect.set(privateEntityLayer, "initialRngState", 1);
+  Reflect.set(privateEntityLayer, "_rngState", 1);
+  Reflect.set(privateEntityLayer, "domainInventoryAuthority", {});
+  Reflect.set(privateEntityLayer, "chunkReconciliation", {});
+  Reflect.set(privateEntityLayer, "_random", () => 0);
+  Reflect.set(privateEntityLayer, "_captureCurrentDomainInventory", () => null);
+  Reflect.set(privateEntityLayer, "_rollbackTick", () => undefined);
+  Reflect.set(privateEntityLayer, "_reconcileFullDomain", () => undefined);
+  inertEntityMap.clear();
+  assert.deepEqual(privateEntityLayer.snapshot(), privateEntityBaseline,
+    "JS shadow properties must not replace EntityLayer population, allocator, RNG or reconciliation state");
+  const generationBeforeStrengthChange = (privateEntityEngine as unknown as { _stateGeneration: number })._stateGeneration;
+  Reflect.set(privateEntityLayer, "mutationStrength", privateEntityBaseline.mutationStrength + 0.25);
+  assert.ok((privateEntityEngine as unknown as { _stateGeneration: number })._stateGeneration >
+    generationBeforeStrengthChange,
+    "the runtime-pinned mutationStrength accessor must preserve engine invalidation");
+  assert.throws(() => Object.defineProperty(privateEntityLayer, "mutationStrength", { value: 1 }),
+    TypeError, "EntityLayer mutationStrength accessor must not be shadowed or redefined");
+  (privateEntityEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+  const stalePrivateEntityReadback = privateEntityEngine.grid.buffer.slice();
+  const pendingPrivateEntityReadback = await beginPendingReadback(privateEntityEngine, stalePrivateEntityReadback);
+  privateEntityLayer.clear();
+  pendingPrivateEntityReadback.release(stalePrivateEntityReadback);
+  await assert.rejects(pendingPrivateEntityReadback.step, /Discarded stale GPU readback/,
+    "EntityLayer clear must still notify the owning engine after runtime-private hardening");
+  assert.equal(privateEntityLayer.getEntities().length, 0,
+    "EntityLayer public clear must operate on the private authoritative population");
+  console.log("EntityLayer runtime-private population, RNG, reconciliation and tuning boundary: PASS");
   // Exercise the async GPU control path deterministically without a GPU device.
   (engine as unknown as { _gpuReady: boolean })._gpuReady = true;
 
