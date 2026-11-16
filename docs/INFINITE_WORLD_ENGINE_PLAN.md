@@ -1,9 +1,12 @@
 # Reality Engine — Infinite World / Unified Reality View Plan
 
-Last reconciled: 2026-10-12  
-Canonical integration branch: `integration/reality-engine-unified-2026-10`
+Last reconciled: 2026-11-16  
+**Maintained release line:** `main` (all current work is committed and validated directly on the existing mainline; no new integration branch is required for the active audit).
 
-## Current verified state
+## Current verified state — reconciled against mainline 2026-11-16
+
+The live implementation and release boundaries below refer to the current `main` branch, not the historical October integration candidate. CI #2657, #2658 and #2659 each passed 104/104 steps on their exact commits. Those runs strengthen identity lifecycle, world-editor package recovery, placement persistence and rollback evidence; they do not change the architectural limits below or certify the application as production-ready.
+
 
 ### 1. 3D Infinite World
 The current `InfiniteWorldRenderer` is a deterministic, streamed procedural terrain engine.
@@ -84,8 +87,9 @@ Render modes are projections of this state:
 | Hybrid | Shared view-contract foundation | End-to-end synchronization during camera and seed changes |
 | Laws and construction | Field → physics → construction browser checks | Quantitative calibration and conservation evidence |
 
-## Branch integration policy
-- Do not merge divergent branches wholesale into `main`.
-- Port unique changes onto `integration/reality-engine-unified-2026-10` in small, testable increments.
-- Keep `main` unchanged until the integration PR has completed its full audit and is explicitly approved.
-- Keep Infinity Scale RC-1 separate until its TypeScript validation and deterministic regression suite pass on a current commit; its last recorded RC workflow failed and is not evidence of a valid release.
+## Mainline and release policy
+- Continue the active audit and narrowly scoped fixes directly on the existing `main` branch; do not create additional branches for this work.
+- Do not merge the divergent `infinity-scale-real-diagnostics` branch wholesale. Port only dependency-complete slices with current-main regressions.
+- Treat exact-head CI as evidence only for the configured checks and commit tested. A green run is not release certification.
+- Keep production adaptive refine/coarsen disabled until physical sparse-chunk remapping, complete field transfer, conservation, and atomic rollback pass end-to-end (issue #50).
+- Keep the public release designation experimental / pre-release while the mutable-state ownership audit, global-identity domain coverage, unbounded volumetric continuity, long-distance streaming/performance, scientific validation and release packaging remain incomplete.
