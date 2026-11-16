@@ -48,7 +48,7 @@ export class AgentSystem {
   private readonly initialRngState: number;
   private _rngState = 0x0a63c9d1;
   private _nextAgentId = 1;
-  private mutationObserver: (() => void) | null = null;
+  #mutationObserver: (() => void) | null = null;
   readonly maxAgents = 64;
 
   /** Bind the owning engine's stale-readback invalidation hook exactly once. */
@@ -56,13 +56,13 @@ export class AgentSystem {
     if (typeof observer !== "function") {
       throw new TypeError("Mutation observer must be a function");
     }
-    if (this.mutationObserver !== null) {
+    if (this.#mutationObserver !== null) {
       throw new Error("Mutation observer is already bound");
     }
-    this.mutationObserver = observer;
+    this.#mutationObserver = observer;
   }
 
-  private notifyMutation(): void { this.mutationObserver?.(); }
+  #notifyMutation(): void { this.#mutationObserver?.(); }
 
   constructor(seed = 0x0a63c9d1) {
     this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x0a63c9d1 : 0x0a63c9d1;
@@ -85,7 +85,7 @@ export class AgentSystem {
       throw new Error("Invalid AgentSystem PRNG state");
     }
     this._rngState = state >>> 0;
-    this.notifyMutation();
+    this.#notifyMutation();
   }
 
   snapshot(): AgentSystemSnapshot {
@@ -164,7 +164,7 @@ export class AgentSystem {
     this.agents = restored;
     this._nextAgentId = snapshot.nextAgentId;
     this._rngState = snapshot.rngState >>> 0;
-    this.notifyMutation();
+    this.#notifyMutation();
   }
 
   // Seed agents + inject local energy so they survive from a cold start
@@ -201,7 +201,7 @@ export class AgentSystem {
       // AgentSystem owns population and PRNG state independently of the supplied grid.
       // Invalidate an owning SimulationEngine even when a caller ticks/seeds against
       // a different grid, or when the scoped grid transaction throws after mutation.
-      this.notifyMutation();
+      this.#notifyMutation();
     }
   }
 
@@ -269,7 +269,7 @@ export class AgentSystem {
     } finally {
       // Agent age, energy, position, population and RNG are engine-relevant state;
       // grid revision alone cannot observe mutations made through a foreign grid.
-      this.notifyMutation();
+      this.#notifyMutation();
     }
   }
 
@@ -398,6 +398,6 @@ export class AgentSystem {
     this.agents.clear();
     this._nextAgentId = 1;
     this._rngState = this.initialRngState;
-    this.notifyMutation();
+    this.#notifyMutation();
   }
 }

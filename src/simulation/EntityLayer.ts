@@ -170,7 +170,7 @@ export class EntityLayer {
   private _mutationStrength = 1.0;
   private readonly initialRngState: number;
   private _rngState: number;
-  private mutationObserver: (() => void) | null = null;
+  #mutationObserver: (() => void) | null = null;
   private readonly domainInventoryAuthority = new EntityDomainInventoryAuthority("entity-layer");
   private readonly chunkReconciliation = new EntityChunkReconciliation();
 
@@ -193,13 +193,13 @@ export class EntityLayer {
     if (typeof observer !== "function") {
       throw new TypeError("Mutation observer must be a function");
     }
-    if (this.mutationObserver !== null) {
+    if (this.#mutationObserver !== null) {
       throw new Error("Mutation observer is already bound");
     }
-    this.mutationObserver = observer;
+    this.#mutationObserver = observer;
   }
 
-  private notifyMutation(): void { this.mutationObserver?.(); }
+  #notifyMutation(): void { this.#mutationObserver?.(); }
 
   /** Public tuning value with the same validation and invalidation contract as restore(). */
   get mutationStrength(): number { return this._mutationStrength; }
@@ -209,7 +209,7 @@ export class EntityLayer {
     }
     if (value === this._mutationStrength) return;
     this._mutationStrength = value;
-    this.notifyMutation();
+    this.#notifyMutation();
   }
 
   get extinctCount(): number { return this.extinctCountValue; }
@@ -221,7 +221,7 @@ export class EntityLayer {
       throw new Error('EntityLayer seed must be a non-zero uint32');
     }
     this._rngState = seed >>> 0;
-    this.notifyMutation();
+    this.#notifyMutation();
   }
 
   private _captureCurrentDomainInventory(cellCount: number) {
@@ -386,7 +386,7 @@ export class EntityLayer {
     this.nextId = snapshot.nextId;
     this.extinctCountValue = snapshot.extinctCount;
     this._rngState = snapshot.rngState >>> 0;
-    this.notifyMutation();
+    this.#notifyMutation();
   }
 
   tick(grid: VoxelGrid, dt: number): void {
@@ -540,7 +540,7 @@ export class EntityLayer {
     } finally {
       // Entity identity/lifecycle is owned by this layer, not by the supplied grid.
       // A foreign-grid tick must still invalidate readbacks owned by its engine.
-      this.notifyMutation();
+      this.#notifyMutation();
     }
   }
 
@@ -835,6 +835,6 @@ export class EntityLayer {
     this.nextId = 1;
     this.extinctCountValue = 0;
     this._rngState = this.initialRngState;
-    this.notifyMutation();
+    this.#notifyMutation();
   }
 }

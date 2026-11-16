@@ -57,6 +57,65 @@ export async function runSimulationEngineStaleReadbackRegression(): Promise<void
   assert.throws(() => engine.entityLayer.bindMutationObserver(() => undefined), /already bound/);
   assert.throws(() => engine.causal.bindMutationObserver(() => undefined), /already bound/);
   assert.throws(() => engine.worldEvents.bindMutationObserver(() => undefined), /already bound/);
+
+  // TypeScript's `private` is erased at runtime. Ensure JavaScript callers
+  // cannot shadow the invalidation hook storage or notifier with ordinary
+  // properties and thereby let a stale GPU readback commit.
+  const observerBoundaryCases = [
+    {
+      label: "AgentSystem",
+      system: engine.agents,
+      mutate: () => engine.agents.clear(),
+    },
+    {
+      label: "EntityLayer",
+      system: engine.entityLayer,
+      mutate: () => engine.entityLayer.clear(),
+    },
+    {
+      label: "CausalGraph",
+      system: engine.causal,
+      mutate: () => engine.causal.clear(),
+    },
+    {
+      label: "WorldEvents",
+      system: engine.worldEvents,
+      mutate: () => engine.worldEvents.reset(),
+    },
+  ] as const;
+  for (const boundary of observerBoundaryCases) {
+    assert.equal("mutationObserver" in boundary.system, false,
+      `${boundary.label} observer storage must be runtime-private`);
+    assert.equal("notifyMutation" in boundary.system, false,
+      `${boundary.label} notifier must be runtime-private`);
+    assert.equal(Reflect.set(boundary.system, "mutationObserver", null), true,
+      `${boundary.label} should permit an inert decoy JS property`);
+    assert.equal(Reflect.set(boundary.system, "notifyMutation", () => undefined), true,
+      `${boundary.label} should permit an inert decoy notifier property`);
+    assert.throws(() => boundary.system.bindMutationObserver(() => undefined), /already bound/,
+      `${boundary.label} private observer binding must remain intact`);
+
+    const boundaryEngine = new SimulationEngine(4, 4, 4);
+    (boundaryEngine as unknown as { _gpuReady: boolean })._gpuReady = true;
+    const target = boundary.label === "AgentSystem" ? boundaryEngine.agents
+      : boundary.label === "EntityLayer" ? boundaryEngine.entityLayer
+      : boundary.label === "CausalGraph" ? boundaryEngine.causal
+      : boundaryEngine.worldEvents;
+    assert.equal("mutationObserver" in target, false);
+    assert.equal("notifyMutation" in target, false);
+    Reflect.set(target, "mutationObserver", null);
+    Reflect.set(target, "notifyMutation", () => undefined);
+    const staleBoundaryReadback = boundaryEngine.grid.buffer.slice();
+    const pendingBoundary = await beginPendingReadback(boundaryEngine, staleBoundaryReadback);
+    if (boundary.label === "AgentSystem") boundaryEngine.agents.clear();
+    else if (boundary.label === "EntityLayer") boundaryEngine.entityLayer.clear();
+    else if (boundary.label === "CausalGraph") boundaryEngine.causal.clear();
+    else boundaryEngine.worldEvents.reset();
+    pendingBoundary.release(staleBoundaryReadback);
+    await assert.rejects(pendingBoundary.step, /Discarded stale GPU readback/,
+      `${boundary.label} must invalidate readback even when JS shadows legacy observer names`);
+    console.log(`${boundary.label} runtime-private observer prevents JS detachment: PASS`);
+  }
   // Exercise the async GPU control path deterministically without a GPU device.
   (engine as unknown as { _gpuReady: boolean })._gpuReady = true;
 

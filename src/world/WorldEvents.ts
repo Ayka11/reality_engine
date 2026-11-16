@@ -56,20 +56,20 @@ export class WorldEvents {
   private _nextAuto = 600; // ticks until next random event
   private readonly initialRngState: number;
   private _rngState = 0x6d2b79f5;
-  private mutationObserver: (() => void) | null = null;
+  #mutationObserver: (() => void) | null = null;
 
   /** Bind the owning engine's stale-readback invalidation hook exactly once. */
   bindMutationObserver(observer: () => void): void {
     if (typeof observer !== "function") {
       throw new TypeError("Mutation observer must be a function");
     }
-    if (this.mutationObserver !== null) {
+    if (this.#mutationObserver !== null) {
       throw new Error("Mutation observer is already bound");
     }
-    this.mutationObserver = observer;
+    this.#mutationObserver = observer;
   }
 
-  private notifyMutation(): void { this.mutationObserver?.(); }
+  #notifyMutation(): void { this.#mutationObserver?.(); }
 
   constructor(seed = 0x6d2b79f5) {
     this.initialRngState = Number.isSafeInteger(seed) ? (seed >>> 0) || 0x6d2b79f5 : 0x6d2b79f5;
@@ -80,7 +80,7 @@ export class WorldEvents {
     this.history = [];
     this._nextAuto = 600;
     this._rngState = this.initialRngState;
-    this.notifyMutation();
+    this.#notifyMutation();
   }
 
   private _random(): number {
@@ -138,7 +138,7 @@ export class WorldEvents {
     this.history = history;
     this._nextAuto = snapshot.nextAuto;
     this._rngState = snapshot.rngState >>> 0;
-    this.notifyMutation();
+    this.#notifyMutation();
   }
 
   // Backward-compatible names retained for existing random-state callers.
@@ -166,7 +166,7 @@ export class WorldEvents {
     };
     this.history.unshift(ev);
     if (this.history.length > 20) this.history.pop();
-    this.notifyMutation();
+    this.#notifyMutation();
     return { ...ev };
   }
 
@@ -174,7 +174,7 @@ export class WorldEvents {
   autoTick(grid: VoxelGrid, tick: number): WorldEvent | null {
     this._nextAuto--;
     if (this._nextAuto > 0) {
-      this.notifyMutation();
+      this.#notifyMutation();
       return null;
     }
     // Randomize next interval: 400..1200 ticks
