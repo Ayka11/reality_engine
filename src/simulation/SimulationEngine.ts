@@ -85,10 +85,10 @@ export class SimulationEngine {
     // restore/reset/log operations must still invalidate any GPU result that
     // began before the mutation, even when no grid buffer was touched.
     const invalidate = () => this.invalidatePendingGPUReadback();
-    this.agents.setMutationObserver(invalidate);
-    this.entityLayer.setMutationObserver(invalidate);
-    this.causal.setMutationObserver(invalidate);
-    this.worldEvents.setMutationObserver(invalidate);
+    this.agents.bindMutationObserver(invalidate);
+    this.entityLayer.bindMutationObserver(invalidate);
+    this.causal.bindMutationObserver(invalidate);
+    this.worldEvents.bindMutationObserver(invalidate);
   }
 
   initGPU(): Promise<boolean> {
