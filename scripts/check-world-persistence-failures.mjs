@@ -1665,12 +1665,12 @@ assert.match(reseedSource, /this\.clearPersistedWorldNamespace\(\)/,
 assert.doesNotMatch(reseedSource, /this\.clearSavedWorld\(\)/,
   "reseed must not rebuild old terrain or clear the external asset runtime twice");
 assert.match(worldAssetRuntimeSource, /#generation = 0/);
-assert.match(worldAssetRuntimeSource, /const generation = this\.generation/);
-assert.match(worldAssetRuntimeSource, /generation !== this\.generation/,
+assert.match(worldAssetRuntimeSource, /const generation = this\.#generation/);
+assert.match(worldAssetRuntimeSource, /generation !== this\.#generation/,
   "a GLTF callback from an earlier world generation must be rejected");
 assert.match(worldAssetRuntimeSource, /if \(this\.loading\.get\(id\) === task\) \{\s*this\.loading\.delete\(id\)/,
   "a stale load finalizer must not erase a newer same-ID pending load");
-const generationInvalidationIndex = worldAssetRuntimeSource.indexOf("this.generation += 1");
+const generationInvalidationIndex = worldAssetRuntimeSource.indexOf("this.#generation += 1");
 const pendingLoadClearIndex = worldAssetRuntimeSource.indexOf("this.loading.clear()");
 assert.ok(generationInvalidationIndex >= 0 && pendingLoadClearIndex > generationInvalidationIndex,
   "clear must invalidate pending loads and release IDs for the new world");
