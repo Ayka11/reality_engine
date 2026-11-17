@@ -34,19 +34,49 @@ export class WorldRuleGraph {
     Object.freeze(this)
   }
 
-  add(rule: WorldRule): WorldRule {
+  #prepareRule(rule: WorldRule): WorldRule {
+    const relations = new Set<WorldRuleRelation>([
+      'requires', 'enables', 'supports', 'produces', 'conflicts', 'compatible', 'transforms',
+    ]);
     if (!rule || typeof rule.id !== 'string' || !rule.id.trim() ||
         typeof rule.from !== 'string' || !rule.from.trim() ||
         typeof rule.to !== 'string' || !rule.to.trim()) {
       throw new Error('World rule requires id, from and to');
     }
-    const stored = structuredClone(rule);
+    if (!relations.has(rule.relation)) {
+      throw new TypeError('World rule relation is not supported');
+    }
+    if (rule.weight !== undefined && !Number.isFinite(rule.weight)) {
+      throw new TypeError('World rule weight must be finite');
+    }
+    if (rule.conditions !== undefined &&
+        (!rule.conditions || typeof rule.conditions !== 'object' || Array.isArray(rule.conditions) ||
+         Object.values(rule.conditions).some(value =>
+           typeof value === 'number' ? !Number.isFinite(value)
+             : typeof value !== 'string' && typeof value !== 'boolean'))) {
+      throw new TypeError('World rule conditions must contain primitive finite values');
+    }
+    if (rule.description !== undefined && typeof rule.description !== 'string') {
+      throw new TypeError('World rule description must be a string');
+    }
+    return structuredClone(rule);
+  }
+
+  add(rule: WorldRule): WorldRule {
+    const stored = this.#prepareRule(rule);
     this.#rules.set(stored.id, stored);
     return structuredClone(stored);
   }
 
   addMany(rules: WorldRule[]): number {
-    rules.forEach((rule) => this.add(rule));
+    if (!Array.isArray(rules)) throw new TypeError('World rule batch registration requires an array');
+    const next = new Map(this.#rules);
+    for (const rule of rules) {
+      const stored = this.#prepareRule(rule);
+      next.set(stored.id, stored);
+    }
+    // Publish the candidate graph only after every rule has cloned and validated.
+    this.#rules = next;
     return rules.length;
   }
 
