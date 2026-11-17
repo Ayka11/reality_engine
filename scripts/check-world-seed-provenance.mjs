@@ -54,7 +54,7 @@ const clearSavedWorldEnd = renderer.indexOf('  reseed(newSeed: string)', clearSa
 assert.ok(clearSavedWorldAt >= 0 && clearSavedWorldEnd > clearSavedWorldAt,
   'clearSavedWorld must expose its durable completion result')
 const clearSavedWorldBody = renderer.slice(clearSavedWorldAt, clearSavedWorldEnd)
-assert.match(renderer, / #clearPersistedWorldNamespace\(\): boolean\s*\{\s*if \(this\.#saveTimer !== null\) \{\s*window\.clearTimeout\(this\.#saveTimer\)[\s\S]*?return this\.persistence\.clear\(\)/,
+assert.match(renderer, /#clearPersistedWorldNamespace\(\): boolean\s*\{\s*if \(this\.#saveTimer !== null\) \{\s*window\.clearTimeout\(this\.#saveTimer\)[\s\S]*?return this\.persistence\.clear\(\)/,
   'the shared namespace clear must cancel a pending autosave before touching persistence')
 assert.match(clearSavedWorldBody, /const cleared = this\.#clearPersistedWorldNamespace\(\)/,
   'clearSavedWorld must use the shared durable namespace operation before resetting live state')
@@ -88,7 +88,7 @@ const surfacePersistAt = reseedBody.indexOf('targetPersistence.saveSurfaceProvid
 const seedPublishAt = reseedBody.indexOf('saveActiveWorldSeed(normalizedSeed)')
 const reseedJournalFinishAt = reseedBody.indexOf('targetPersistence.finishSaveTransaction(ready)')
 const previousNamespaceCleanupAt = reseedBody.indexOf('this.#clearPersistedWorldNamespace()')
-const reseedMeshDisposalAt = reseedBody.indexOf('this.patches.clear()')
+const reseedMeshDisposalAt = reseedBody.indexOf('this.#patches.clear()')
 assert.ok(targetJournalAt >= 0 && targetClearAt > targetJournalAt &&
   manifestPersistAt > targetClearAt && surfacePersistAt > manifestPersistAt &&
   seedPublishAt > surfacePersistAt &&
