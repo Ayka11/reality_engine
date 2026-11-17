@@ -93,7 +93,7 @@ export class InfiniteWorldRenderer {
   readonly worldAssetRuntime!: WorldAssetRuntimeFacade
   readonly #worldAssetRuntime: WorldAssetRuntime
   #pendingExternalAssetPlacements: ExternalAssetPlacementSnapshot[] = []
-  private suppressAssetPlacementAutosave = false
+  #suppressAssetPlacementAutosave = false
 
   #patches = new Map<string, TerrainPatch>()
   #objectMeshes = new Map<string, ObjectMesh>()
@@ -101,29 +101,29 @@ export class InfiniteWorldRenderer {
   readonly #raycaster = new THREE.Raycaster()
   readonly #pointer = new THREE.Vector2()
   #selectedObjectId: string | null = null
-  private selectedKind: WorldObjectKind = 'tree'
-  private objectTool: 'navigate' | 'select' | 'place' | 'erase' = 'navigate'
-  private terrainBrushMode: 'raise' | 'lower' | null = null
-  private terrainBrushRadius = 8
-  private terrainBrushStrength = 1
-  private saveTimer: number | null = null
-  private lastPersistenceFailures: string[] = []
+  #selectedKind: WorldObjectKind = 'tree'
+  #objectTool: 'navigate' | 'select' | 'place' | 'erase' = 'navigate'
+  #terrainBrushMode: 'raise' | 'lower' | null = null
+  #terrainBrushRadius = 8
+  #terrainBrushStrength = 1
+  #saveTimer: number | null = null
+  #lastPersistenceFailures: string[] = []
   /** Fail closed after startup/restore cannot prove the durable world is complete. */
-  private persistenceRecoveryBlocked = false
-  private startupPersistenceFailures: string[] = []
-  private storageKey: string
+  #persistenceRecoveryBlocked = false
+  #startupPersistenceFailures: string[] = []
+  #storageKey: string
   readonly #pointerHandler!: (e: PointerEvent) => void
   readonly #pointerUpHandler!: (e: PointerEvent) => void
   readonly #pointerMoveHandler!: (e: PointerEvent) => void
-  private readonly contextMenuHandler: (e: MouseEvent) => void
-  private readonly keyDownHandler: (e: KeyboardEvent) => void
-  private readonly keyUpHandler: (e: KeyboardEvent) => void
+  readonly #contextMenuHandler: (e: MouseEvent) => void
+  readonly #keyDownHandler: (e: KeyboardEvent) => void
+  readonly #keyUpHandler: (e: KeyboardEvent) => void
   #pointerDownX = 0
   #pointerDownY = 0
   #pointerDownTime = 0
   readonly #transformControls: TransformControls
-  private gizmoBefore: WorldObject | null = null
-  private transformDragging = false
+  #gizmoBefore: WorldObject | null = null
+  #transformDragging = false
   readonly #selectionMarker = new THREE.Mesh(
     new THREE.BoxGeometry(1.2, 1.2, 1.2),
     new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true, transparent: true, opacity: 0.9 })
@@ -133,28 +133,28 @@ export class InfiniteWorldRenderer {
     new THREE.MeshBasicMaterial({ color: 0xffff66, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
   )
   readonly #terrainGroup = new THREE.Group()
-  private analyticalOverlayMode: 'suitability' | 'flood' | 'slope' | null = null
+  #analyticalOverlayMode: 'suitability' | 'flood' | 'slope' | null = null
   #analyticalOverlayMesh: THREE.Points | undefined = undefined
-  private enabled = true
-  private disposed = false
-  private currentPixelRatio = 1
-  private readonly maxPixelRatio = Math.max(1, Math.min(window.devicePixelRatio || 1, 2))
-  private adaptiveFrameCount = 0
-  private adaptiveFrameTimeMs = 0
-  private lastAdaptiveFrameMs = 0
-  private simulationRunning = false
-  private lastCenter: ChunkCoord | null = null
-  private worldY = 45
+  #enabled = true
+  #disposed = false
+  #currentPixelRatio = 1
+  readonly #maxPixelRatio = Math.max(1, Math.min(window.devicePixelRatio || 1, 2))
+  #adaptiveFrameCount = 0
+  #adaptiveFrameTimeMs = 0
+  #lastAdaptiveFrameMs = 0
+  #simulationRunning = false
+  #lastCenter: ChunkCoord | null = null
+  #worldY = 45
   #worldPosition = new THREE.Vector3(28, 45, 52)
 
   getWorldPosition() { return this.#worldPosition.clone() }
 
   setSimulationRunning(running: boolean) {
-    this.simulationRunning = Boolean(running)
+    this.#simulationRunning = Boolean(running)
   }
 
   isSimulationRunning() {
-    return this.simulationRunning
+    return this.#simulationRunning
   }
 
   private worldToLocal(position: THREE.Vector3): THREE.Vector3 {
@@ -368,26 +368,26 @@ export class InfiniteWorldRenderer {
   }
 
   #worldAnchor = new THREE.Vector3(0, 0, 0)
-  private flyMode = true
+  #flyMode = true
   readonly #keys = new Set<string>()
-  private readonly flySpeed = 90
-  private readonly recenterDistance = 512
-  private readonly patchResolution = 16
-  private snapToGrid = 1
-  private readonly lodDistance = 96
+  readonly #flySpeed = 90
+  readonly #recenterDistance = 512
+  readonly #patchResolution = 16
+  #snapToGrid = 1
+  readonly #lodDistance = 96
   readonly #sun: THREE.DirectionalLight
   readonly #hemi: THREE.HemisphereLight
-  private materialMode: 'field' | 'material' | 'height' = 'height'
+  #materialMode: 'field' | 'material' | 'height' = 'height'
   // Functional vertex presentation: the underlying terrain mesh remains raycastable,
   // while points + restrained wireframe expose elevation and chunk topology.
-  private terrainStyle: 'vertex' | 'surface' = 'surface'
+  #terrainStyle: 'vertex' | 'surface' = 'surface'
   readonly #terrainMaterials = new Set<THREE.MeshStandardMaterial>()
   #physicsParticlePoints: THREE.Points | null = null
   #physicsParticlePositions = new Float32Array(0)
   #physicsParticleVelocities = new Float32Array(0)
   #physicsParticleColors = new Float32Array(0)
-  private showParticles = false
-  private readonly materializedConsequenceEvents = new Set<string>()
+  #showParticles = false
+  readonly #materializedConsequenceEvents = new Set<string>()
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -395,8 +395,8 @@ export class InfiniteWorldRenderer {
     options: { blockPersistenceReads?: boolean } = {},
   ) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
-    this.currentPixelRatio = this.maxPixelRatio
-    this.renderer.setPixelRatio(this.currentPixelRatio)
+    this.#currentPixelRatio = this.#maxPixelRatio
+    this.renderer.setPixelRatio(this.#currentPixelRatio)
     this.renderer.setSize(Math.max(1, canvas.clientWidth), Math.max(1, canvas.clientHeight), false)
     this.renderer.shadowMap.enabled = false
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -413,7 +413,7 @@ export class InfiniteWorldRenderer {
 
     this.#scene.add(this.#terrainGroup)
     this.#worldAssetRuntime = new WorldAssetRuntime(this.#scene, undefined, () => {
-      if (!this.suppressAssetPlacementAutosave) this.scheduleSave()
+      if (!this.#suppressAssetPlacementAutosave) this.scheduleSave()
     })
     // Publish only ID-based operations and detached snapshots to browser code.
     // The backing runtime is held in a JavaScript private field, so Object3D
@@ -453,8 +453,8 @@ export class InfiniteWorldRenderer {
     this.#fieldSampler = new FieldSampler(this.generator, this.#authoritativeField)
     this.persistence = new WorldPersistence(seed, options.blockPersistenceReads === true)
     if (options.blockPersistenceReads) {
-      this.startupPersistenceFailures.push('active world seed selector: storage read unavailable')
-      this.persistenceRecoveryBlocked = true
+      this.#startupPersistenceFailures.push('active world seed selector: storage read unavailable')
+      this.#persistenceRecoveryBlocked = true
       console.warn('[persistence] Active world seed could not be verified; fallback namespace is isolated and cannot be restored or autosaved')
     }
     if (this.persistence.hasIncompleteSaveTransaction()) {
@@ -463,8 +463,8 @@ export class InfiniteWorldRenderer {
     const unwrapPersistedState = <T,>(label: string, result: WorldStateReadResult<T>): T | null => {
       if (result.status === 'ok') return result.state
       if (result.status === 'unavailable' || result.status === 'corrupt') {
-        this.startupPersistenceFailures.push(`${label}: ${result.reason}`)
-        this.persistenceRecoveryBlocked = true
+        this.#startupPersistenceFailures.push(`${label}: ${result.reason}`)
+        this.#persistenceRecoveryBlocked = true
         console.warn(`[persistence] ${label} could not be read safely (${result.status}: ${result.reason}); autosave is blocked until the world is repaired`)
       }
       return null
@@ -478,8 +478,8 @@ export class InfiniteWorldRenderer {
       if (placementValidation.valid) {
         this.#pendingExternalAssetPlacements = placementValidation.placements
       } else {
-        this.startupPersistenceFailures.push('external asset placements: invalid placement records')
-        this.persistenceRecoveryBlocked = true
+        this.#startupPersistenceFailures.push('external asset placements: invalid placement records')
+        this.#persistenceRecoveryBlocked = true
         console.warn('[persistence] Invalid external asset placements were rejected without deleting the stored payload', placementValidation.errors)
       }
     }
@@ -493,8 +493,8 @@ export class InfiniteWorldRenderer {
         this.#fieldSampler.setSurfaceProvider(restoredSurface)
         worldViewContract.setSeed(restoredSurface.seed)
       } else {
-        this.startupPersistenceFailures.push('world surface snapshot: domain validation failed')
-        this.persistenceRecoveryBlocked = true
+        this.#startupPersistenceFailures.push('world surface snapshot: domain validation failed')
+        this.#persistenceRecoveryBlocked = true
         console.warn('[persistence] Invalid world surface snapshot was retained for recovery; generator-backed surface remains active')
       }
     }
@@ -511,7 +511,7 @@ export class InfiniteWorldRenderer {
     this.decisionLayer = new WorldDecisionLayer(this.#fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null, (x, z) => this.sampleTerrainHeight(x, z))
     this.constructionContract = new WorldConstructionContract(this.decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
-    this.storageKey = `reality-engine-world:${seed}:objects`
+    this.#storageKey = `reality-engine-world:${seed}:objects`
     const persistedTerrain = unwrapPersistedState(
       'terrain deformation state',
       this.persistence.readTerrainDeformationState<TerrainDeformationSnapshot>(),
@@ -520,8 +520,8 @@ export class InfiniteWorldRenderer {
       try {
         this.#terrainDeformations.restore(persistedTerrain)
       } catch (error) {
-        this.startupPersistenceFailures.push('terrain deformation state: domain validation failed')
-        this.persistenceRecoveryBlocked = true
+        this.#startupPersistenceFailures.push('terrain deformation state: domain validation failed')
+        this.#persistenceRecoveryBlocked = true
         console.warn('[persistence] Terrain deformation state was rejected without deleting the stored payload', error)
       }
     }
@@ -537,8 +537,8 @@ export class InfiniteWorldRenderer {
       try {
         runtimeProvenance.restore(persistedProvenance)
       } catch (error) {
-        this.startupPersistenceFailures.push('runtime provenance trace: domain validation failed')
-        this.persistenceRecoveryBlocked = true
+        this.#startupPersistenceFailures.push('runtime provenance trace: domain validation failed')
+        this.#persistenceRecoveryBlocked = true
         console.warn('[persistence] Runtime provenance was rejected without deleting the stored payload; the in-memory trace was reset', error)
         runtimeProvenance.reset()
       }
@@ -549,14 +549,14 @@ export class InfiniteWorldRenderer {
       try {
         this.#authoritativeField.restore(persistedField)
       } catch (error) {
-        this.startupPersistenceFailures.push('authoritative field state: domain validation failed')
-        this.persistenceRecoveryBlocked = true
+        this.#startupPersistenceFailures.push('authoritative field state: domain validation failed')
+        this.#persistenceRecoveryBlocked = true
         console.warn('[persistence] Authoritative field state was rejected without deleting the stored payload', error)
       }
     }
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
 
-    this.camera.position.set(38, this.worldY, 62)
+    this.camera.position.set(38, this.#worldY, 62)
     this.controls = new OrbitControls(this.camera, canvas)
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.08
@@ -570,29 +570,29 @@ export class InfiniteWorldRenderer {
     this.controls.zoomSpeed = 1.3
     this.controls.addEventListener('change', () => this.syncWorldPositionFromControls())
     this.updateControlButtons()
-    this.flyMode = false
+    this.#flyMode = false
 
     this.#pointerHandler = (e: PointerEvent) => {
       this.#pointerDownX = e.clientX
       this.#pointerDownY = e.clientY
       this.#pointerDownTime = performance.now()
-      if (this.objectTool === 'navigate' && e.button === 0) {
+      if (this.#objectTool === 'navigate' && e.button === 0) {
         canvas.style.cursor = 'grabbing'
       }
     }
     this.#pointerUpHandler = (e: PointerEvent) => {
-      if (this.terrainBrushMode) {
+      if (this.#terrainBrushMode) {
         canvas.style.cursor = 'crosshair'
-      } else if (this.objectTool === 'navigate') {
+      } else if (this.#objectTool === 'navigate') {
         canvas.style.cursor = 'grab'
-      } else if (this.objectTool === 'place') {
+      } else if (this.#objectTool === 'place') {
         canvas.style.cursor = 'crosshair'
-      } else if (this.objectTool === 'erase') {
+      } else if (this.#objectTool === 'erase') {
         canvas.style.cursor = 'not-allowed'
       } else {
         canvas.style.cursor = 'default'
       }
-      if (e.button !== 0 || this.flyMode || !this.controls.enabled) return
+      if (e.button !== 0 || this.#flyMode || !this.controls.enabled) return
       if (e.shiftKey || this.#keys.has('Space')) return
       const distance = Math.hypot(e.clientX - this.#pointerDownX, e.clientY - this.#pointerDownY)
       const elapsed = performance.now() - this.#pointerDownTime
@@ -601,7 +601,7 @@ export class InfiniteWorldRenderer {
     this.#pointerMoveHandler = (e: PointerEvent) => {
       // In Fly mode, drag the left mouse button to look around. OrbitControls
       // are intentionally disabled in first-person mode, so this is the direct look path.
-      if (this.flyMode && (e.buttons & 1) !== 0) {
+      if (this.#flyMode && (e.buttons & 1) !== 0) {
         const deltaX = e.clientX - this.#pointerDownX
         const deltaY = e.clientY - this.#pointerDownY
         this.#pointerDownX = e.clientX
@@ -609,15 +609,15 @@ export class InfiniteWorldRenderer {
         if (deltaX !== 0 || deltaY !== 0) this.rotateFlyCamera(deltaX, deltaY)
         return
       }
-      if (this.objectTool === 'place' || this.terrainBrushMode) {
+      if (this.#objectTool === 'place' || this.#terrainBrushMode) {
         this.pickAtScreen(e.clientX, e.clientY)
       } else if (this.#hoverMarker.visible) {
         this.#hoverMarker.visible = false
       }
     }
 
-    this.contextMenuHandler = (e: MouseEvent) => e.preventDefault()
-    canvas.addEventListener('contextmenu', this.contextMenuHandler)
+    this.#contextMenuHandler = (e: MouseEvent) => e.preventDefault()
+    canvas.addEventListener('contextmenu', this.#contextMenuHandler)
     canvas.addEventListener('pointerdown', this.#pointerHandler)
     canvas.addEventListener('pointerup', this.#pointerUpHandler)
     canvas.addEventListener('pointermove', this.#pointerMoveHandler)
@@ -628,29 +628,29 @@ export class InfiniteWorldRenderer {
     ;(this.#transformControls as any).visible = false
     this.#scene.add(this.#transformControls as unknown as THREE.Object3D)
     this.#transformControls.addEventListener('dragging-changed', (event) => {
-      this.transformDragging = Boolean((event as { value: boolean }).value)
-      this.controls.enabled = this.enabled && !this.transformDragging && !this.flyMode
-      if (this.transformDragging) {
+      this.#transformDragging = Boolean((event as { value: boolean }).value)
+      this.controls.enabled = this.#enabled && !this.#transformDragging && !this.#flyMode
+      if (this.#transformDragging) {
         const object = this.getSelectedObject()
-        this.gizmoBefore = object ? { ...object } : null
-      } else if (this.gizmoBefore) {
+        this.#gizmoBefore = object ? { ...object } : null
+      } else if (this.#gizmoBefore) {
         const object = this.getSelectedObject()
-        if (object) this.#history.push({ type: 'transform', before: this.gizmoBefore, after: { ...object } })
-        this.gizmoBefore = null
+        if (object) this.#history.push({ type: 'transform', before: this.#gizmoBefore, after: { ...object } })
+        this.#gizmoBefore = null
         this.scheduleSave()
       }
     })
     this.#transformControls.addEventListener('objectChange', () => this.syncSelectedFromGizmo())
 
-    this.keyDownHandler = (e: KeyboardEvent) => {
-      if (!this.enabled) return
+    this.#keyDownHandler = (e: KeyboardEvent) => {
+      if (!this.#enabled) return
       const tgt = e.target
       if (tgt instanceof HTMLInputElement || tgt instanceof HTMLTextAreaElement || (tgt instanceof HTMLElement && tgt.isContentEditable)) return
       if (['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','ShiftRight','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyQ','KeyE'].includes(e.code)) {
         this.#keys.add(e.code)
       }
       if (e.code === 'Space' || e.key === 'Shift') {
-        if (this.objectTool !== 'navigate') {
+        if (this.#objectTool !== 'navigate') {
           this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN
           this.controls.mouseButtons.RIGHT = THREE.MOUSE.PAN
         }
@@ -665,14 +665,14 @@ export class InfiniteWorldRenderer {
         this.zoom(-1)
       }
     }
-    this.keyUpHandler = (e: KeyboardEvent) => {
+    this.#keyUpHandler = (e: KeyboardEvent) => {
       this.#keys.delete(e.code)
       if (e.code === 'Space' || e.key === 'Shift') {
         this.updateControlButtons()
       }
     }
-    window.addEventListener('keydown', this.keyDownHandler)
-    window.addEventListener('keyup', this.keyUpHandler)
+    window.addEventListener('keydown', this.#keyDownHandler)
+    window.addEventListener('keyup', this.#keyUpHandler)
 
     this.controls.target.set(16, 10, 16)
     this.controls.update()
@@ -709,9 +709,9 @@ export class InfiniteWorldRenderer {
   }
 
   private scheduleSave() {
-    if (this.saveTimer !== null) window.clearTimeout(this.saveTimer)
-    this.saveTimer = window.setTimeout(() => {
-      this.saveTimer = null
+    if (this.#saveTimer !== null) window.clearTimeout(this.#saveTimer)
+    this.#saveTimer = window.setTimeout(() => {
+      this.#saveTimer = null
       this.saveWorld({ checkpoint: false })
     }, 150)
   }
@@ -905,9 +905,9 @@ export class InfiniteWorldRenderer {
   restorePortableWorldSnapshot(snapshot?: WorldEditorSnapshot): void {
     const prepared = this.preparePortableWorldSnapshot(snapshot)
 
-    if (this.saveTimer !== null) {
-      window.clearTimeout(this.saveTimer)
-      this.saveTimer = null
+    if (this.#saveTimer !== null) {
+      window.clearTimeout(this.#saveTimer)
+      this.#saveTimer = null
     }
 
     // Keep placement descriptors inert until their exact source asset is
@@ -950,11 +950,11 @@ export class InfiniteWorldRenderer {
     runtimeProvenance.restore(prepared.nextProvenance.getTrace())
 
     this.persistence = new WorldPersistence(prepared.nextGenerator.seed)
-    this.storageKey = `reality-engine-world:${prepared.nextGenerator.seed}:objects`
+    this.#storageKey = `reality-engine-world:${prepared.nextGenerator.seed}:objects`
     this.chunks = new InfiniteChunkManager(prepared.nextGenerator, {
       radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4,
     })
-    this.lastCenter = null
+    this.#lastCenter = null
     this.#history = new WorldEditHistory()
     this.#authoritativeSculptTransactions.clear()
     this.notifyAuthoritativeSculptHistoryChanged()
@@ -994,7 +994,7 @@ export class InfiniteWorldRenderer {
   persistPortableWorldSnapshot(assetManifest?: WorldAssetImportManifest): void {
     if (!this.persistence.beginSaveTransaction({ recoverIncomplete: true })) {
       const message = 'Could not open the world save recovery marker'
-      this.lastPersistenceFailures = [message]
+      this.#lastPersistenceFailures = [message]
       throw new AggregateError([new Error(message)], `Infinite World persistence failed: ${message}`)
     }
 
@@ -1004,7 +1004,7 @@ export class InfiniteWorldRenderer {
     if (!this.persistence.clear()) {
       const message = 'Could not clear the previous seed namespace before portable restore persistence'
       this.persistence.finishSaveTransaction(false)
-      this.lastPersistenceFailures = [message]
+      this.#lastPersistenceFailures = [message]
       throw new AggregateError([new Error(message)], `Infinite World persistence failed: ${message}`)
     }
 
@@ -1016,33 +1016,33 @@ export class InfiniteWorldRenderer {
     }
 
     this.saveWorld({ checkpoint: false, preflightFailures, allowRecovery: true })
-    const failures = [...this.lastPersistenceFailures]
+    const failures = [...this.#lastPersistenceFailures]
     const committed = this.persistence.finishSaveTransaction(failures.length === 0)
     if (!committed && failures.length === 0) failures.push('world save transaction commit')
-    this.lastPersistenceFailures = failures
+    this.#lastPersistenceFailures = failures
     if (failures.length > 0) {
       throw new AggregateError(
         failures.map(label => new Error(`Could not persist ${label}`)),
         `Infinite World persistence failed: ${failures.join(', ')}`,
       )
     }
-    this.persistenceRecoveryBlocked = false
-    this.startupPersistenceFailures = []
-    this.lastPersistenceFailures = []
+    this.#persistenceRecoveryBlocked = false
+    this.#startupPersistenceFailures = []
+    this.#lastPersistenceFailures = []
   }
 
   saveWorld(options: { checkpoint?: boolean; preflightFailures?: string[]; allowRecovery?: boolean } = {}) {
     const failedPersistenceOperations: string[] = [...(options.preflightFailures ?? [])]
     const objects = this.objects.values()
-    if (this.persistenceRecoveryBlocked && !options.allowRecovery) {
+    if (this.#persistenceRecoveryBlocked && !options.allowRecovery) {
       failedPersistenceOperations.push('world persistence recovery required')
-      this.lastPersistenceFailures = failedPersistenceOperations
+      this.#lastPersistenceFailures = failedPersistenceOperations
       console.warn('[persistence] World save was withheld because the last restore could not prove the stored world was complete; clear or import a complete world to recover')
       return objects.length
     }
     if (!this.persistence.beginSaveTransaction()) {
       failedPersistenceOperations.push('world save transaction marker')
-      this.lastPersistenceFailures = failedPersistenceOperations
+      this.#lastPersistenceFailures = failedPersistenceOperations
       console.warn('[persistence] World save was withheld because an earlier save is incomplete; explicitly import or clear the world to recover')
       return objects.length
     }
@@ -1062,8 +1062,8 @@ export class InfiniteWorldRenderer {
       failedPersistenceOperations.push('stored chunk enumeration')
       const closed = this.persistence.finishSaveTransaction(true)
       if (!closed) failedPersistenceOperations.push('world save transaction commit')
-      this.persistenceRecoveryBlocked = true
-      this.lastPersistenceFailures = failedPersistenceOperations
+      this.#persistenceRecoveryBlocked = true
+      this.#lastPersistenceFailures = failedPersistenceOperations
       console.warn('[persistence] World save was withheld because stored chunks could not be enumerated; durable state was left untouched')
       return objects.length
     }
@@ -1085,8 +1085,8 @@ export class InfiniteWorldRenderer {
         failedPersistenceOperations.push(`${result.status} chunk ${key}: ${result.reason}`)
         const closed = this.persistence.finishSaveTransaction(true)
         if (!closed) failedPersistenceOperations.push('world save transaction commit')
-        this.persistenceRecoveryBlocked = true
-        this.lastPersistenceFailures = failedPersistenceOperations
+        this.#persistenceRecoveryBlocked = true
+        this.#lastPersistenceFailures = failedPersistenceOperations
         console.warn(`[persistence] World save was withheld because chunk ${key} is ${result.status} (${result.reason}); durable state was left untouched`)
         return objects.length
       }
@@ -1143,9 +1143,9 @@ export class InfiniteWorldRenderer {
     if (!committed && failedPersistenceOperations.length === 0) {
       failedPersistenceOperations.push('world save transaction commit')
     }
-    this.lastPersistenceFailures = failedPersistenceOperations
+    this.#lastPersistenceFailures = failedPersistenceOperations
     if (failedPersistenceOperations.length > 0) {
-      this.persistenceRecoveryBlocked = true
+      this.#persistenceRecoveryBlocked = true
       console.warn(
         `[persistence] World persistence incomplete (${failedPersistenceOperations.join(', ')}); world changes may not survive reload`,
       )
@@ -1155,23 +1155,23 @@ export class InfiniteWorldRenderer {
 
   loadWorld(options: { restoreFieldCheckpoint?: boolean } = {}) {
     if (this.persistence.hasIncompleteSaveTransaction()) {
-      this.persistenceRecoveryBlocked = true
-      this.lastPersistenceFailures = ['interrupted world save transaction']
+      this.#persistenceRecoveryBlocked = true
+      this.#lastPersistenceFailures = ['interrupted world save transaction']
       console.warn('[persistence] World restore was blocked because the last multi-key save did not commit; import a complete world package or clear the saved world')
       return 0
     }
-    if (this.startupPersistenceFailures.length > 0) {
-      this.persistenceRecoveryBlocked = true
-      this.lastPersistenceFailures = [...this.startupPersistenceFailures]
-      console.warn(`[persistence] World restore was blocked because one or more sidecars could not be verified: ${this.lastPersistenceFailures.join(', ')}`)
+    if (this.#startupPersistenceFailures.length > 0) {
+      this.#persistenceRecoveryBlocked = true
+      this.#lastPersistenceFailures = [...this.#startupPersistenceFailures]
+      console.warn(`[persistence] World restore was blocked because one or more sidecars could not be verified: ${this.#lastPersistenceFailures.join(', ')}`)
       return 0
     }
     // Resolve the complete chunk set before changing field, terrain, objects or
     // renderer state. A failed key scan is not an empty world.
     const knownChunkKeys = this.persistence.knownChunks({ recoverOrphans: true })
     if (knownChunkKeys === null) {
-      this.persistenceRecoveryBlocked = true
-      this.lastPersistenceFailures = ['stored chunk enumeration']
+      this.#persistenceRecoveryBlocked = true
+      this.#lastPersistenceFailures = ['stored chunk enumeration']
       console.warn('[persistence] World restore was withheld because stored chunks could not be enumerated; the live world was retained')
       return 0
     }
@@ -1192,8 +1192,8 @@ export class InfiniteWorldRenderer {
           const [loadedCx, loadedCy, loadedCz] = rollbackKey.split(',').map(Number)
           this.persistence.unloadChunk(loadedCx, loadedCy, loadedCz)
         }
-        this.persistenceRecoveryBlocked = true
-        this.lastPersistenceFailures = [`${result.status} chunk ${key}: ${result.reason}`]
+        this.#persistenceRecoveryBlocked = true
+        this.#lastPersistenceFailures = [`${result.status} chunk ${key}: ${result.reason}`]
         console.warn(`[persistence] World restore was withheld because chunk ${key} is ${result.status} (${result.reason}); the live world was retained`)
         return 0
       }
@@ -1204,8 +1204,8 @@ export class InfiniteWorldRenderer {
             const [loadedCx, loadedCy, loadedCz] = loadedKey.split(',').map(Number)
             this.persistence.unloadChunk(loadedCx, loadedCy, loadedCz)
           }
-          this.persistenceRecoveryBlocked = true
-          this.lastPersistenceFailures = [`duplicate world object ID: ${object.id}`]
+          this.#persistenceRecoveryBlocked = true
+          this.#lastPersistenceFailures = [`duplicate world object ID: ${object.id}`]
           console.warn(`[persistence] World restore was withheld because object ID ${object.id} occurs in multiple stored chunks`)
           return 0
         }
@@ -1224,8 +1224,8 @@ export class InfiniteWorldRenderer {
     }
     const rejectSidecar = (label: string, reason: string) => {
       rollbackStagedChunks()
-      this.persistenceRecoveryBlocked = true
-      this.lastPersistenceFailures = [`${label}: ${reason}`]
+      this.#persistenceRecoveryBlocked = true
+      this.#lastPersistenceFailures = [`${label}: ${reason}`]
       console.warn(`[persistence] World restore was withheld because ${label} is unavailable or corrupt (${reason}); the live world was retained`)
       return 0
     }
@@ -1285,8 +1285,8 @@ export class InfiniteWorldRenderer {
       try { this.#authoritativeField.restore(previousField) } catch (rollbackError) { rollbackFailures.push(rollbackError) }
       try { this.refreshTerrainPatches() } catch (rollbackError) { rollbackFailures.push(rollbackError) }
       rollbackStagedChunks()
-      this.persistenceRecoveryBlocked = true
-      this.lastPersistenceFailures = ['field/terrain restore validation or commit']
+      this.#persistenceRecoveryBlocked = true
+      this.#lastPersistenceFailures = ['field/terrain restore validation or commit']
       console.warn('[persistence] Field/terrain restore failed; the previous live snapshots were restored where possible', new AggregateError(
         [error, ...rollbackFailures],
         'World sidecar restore failed',
@@ -1309,26 +1309,26 @@ export class InfiniteWorldRenderer {
     this.#transformControls.detach()
     ;(this.#transformControls as any).visible = false
     this.#selectionMarker.visible = false
-    this.persistenceRecoveryBlocked = false
-    this.startupPersistenceFailures = []
-    this.lastPersistenceFailures = []
+    this.#persistenceRecoveryBlocked = false
+    this.#startupPersistenceFailures = []
+    this.#lastPersistenceFailures = []
     return count
   }
 
   clearExternalAssetRuntime() {
-    this.suppressAssetPlacementAutosave = true
+    this.#suppressAssetPlacementAutosave = true
     try {
       this.#worldAssetRuntime.clear()
     } finally {
-      this.suppressAssetPlacementAutosave = false
+      this.#suppressAssetPlacementAutosave = false
     }
   }
 
   /** Clear only the durable namespace; callers decide when to reset live renderer state. */
   private clearPersistedWorldNamespace(): boolean {
-    if (this.saveTimer !== null) {
-      window.clearTimeout(this.saveTimer)
-      this.saveTimer = null
+    if (this.#saveTimer !== null) {
+      window.clearTimeout(this.#saveTimer)
+      this.#saveTimer = null
     }
     return this.persistence.clear()
   }
@@ -1342,9 +1342,9 @@ export class InfiniteWorldRenderer {
       console.warn('[persistence] Could not clear every saved world record; the live world was retained for recovery')
       return false
     }
-    this.persistenceRecoveryBlocked = false
-    this.startupPersistenceFailures = []
-    this.lastPersistenceFailures = []
+    this.#persistenceRecoveryBlocked = false
+    this.#startupPersistenceFailures = []
+    this.#lastPersistenceFailures = []
     this.#pendingExternalAssetPlacements = []
     try {
       this.clearExternalAssetRuntime()
@@ -1433,9 +1433,9 @@ export class InfiniteWorldRenderer {
       // the old namespace here avoids rebuilding old terrain and disposing the
       // same asset runtime twice during one world replacement.
       console.warn('[persistence] Previous seed cleanup was incomplete; the committed target seed remains active')
-    } else if (normalizedSeed === previousSeed && this.saveTimer !== null) {
-      window.clearTimeout(this.saveTimer)
-      this.saveTimer = null
+    } else if (normalizedSeed === previousSeed && this.#saveTimer !== null) {
+      window.clearTimeout(this.#saveTimer)
+      this.#saveTimer = null
     }
 
     // The in-memory manifest must move with the committed target namespace;
@@ -1453,7 +1453,7 @@ export class InfiniteWorldRenderer {
     this.#patches.clear()
     this.#waterMeshes.clear()
     this.#terrainMaterials.clear()
-    this.lastCenter = null
+    this.#lastCenter = null
     if (terrainCleanupFailures.length > 0) {
       console.warn('[terrain] Reseed continued after terrain resource cleanup failures', new AggregateError(
         terrainCleanupFailures,
@@ -1495,10 +1495,10 @@ export class InfiniteWorldRenderer {
     this.#fieldSampler.setProvider(this.#authoritativeField)
     this.rebuildDecisionLayer()
     this.persistence = targetPersistence
-    this.persistenceRecoveryBlocked = false
-    this.startupPersistenceFailures = []
-    this.lastPersistenceFailures = []
-    this.storageKey = `reality-engine-world:${normalizedSeed}:objects`
+    this.#persistenceRecoveryBlocked = false
+    this.#startupPersistenceFailures = []
+    this.#lastPersistenceFailures = []
+    this.#storageKey = `reality-engine-world:${normalizedSeed}:objects`
 
     this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
     this.#history = new WorldEditHistory()
@@ -1517,11 +1517,11 @@ export class InfiniteWorldRenderer {
   }
 
   dispose() {
-    if (this.disposed) return
-    this.disposed = true
+    if (this.#disposed) return
+    this.#disposed = true
 
     // A disposed renderer may still be referenced by the app's frame loop; disable its work first.
-    this.enabled = false
+    this.#enabled = false
     this.controls.enabled = false
     const failures: unknown[] = []
     const attempt = (label: string, cleanup: () => void) => {
@@ -1532,16 +1532,16 @@ export class InfiniteWorldRenderer {
       }
     }
 
-    if (this.saveTimer !== null) {
-      attempt('Save timer cancellation', () => window.clearTimeout(this.saveTimer!))
-      this.saveTimer = null
+    if (this.#saveTimer !== null) {
+      attempt('Save timer cancellation', () => window.clearTimeout(this.#saveTimer!))
+      this.#saveTimer = null
     }
-    attempt('Context-menu listener removal', () => this.renderer.domElement.removeEventListener('contextmenu', this.contextMenuHandler))
+    attempt('Context-menu listener removal', () => this.renderer.domElement.removeEventListener('contextmenu', this.#contextMenuHandler))
     attempt('Pointer-down listener removal', () => this.renderer.domElement.removeEventListener('pointerdown', this.#pointerHandler))
     attempt('Pointer-up listener removal', () => this.renderer.domElement.removeEventListener('pointerup', this.#pointerUpHandler))
     attempt('Pointer-move listener removal', () => this.renderer.domElement.removeEventListener('pointermove', this.#pointerMoveHandler))
-    attempt('Key-down listener removal', () => window.removeEventListener('keydown', this.keyDownHandler))
-    attempt('Key-up listener removal', () => window.removeEventListener('keyup', this.keyUpHandler))
+    attempt('Key-down listener removal', () => window.removeEventListener('keydown', this.#keyDownHandler))
+    attempt('Key-up listener removal', () => window.removeEventListener('keyup', this.#keyUpHandler))
     attempt('Orbit controls disposal', () => this.controls.dispose())
     attempt('Transform controls disposal', () => this.#transformControls.dispose())
     attempt('External asset runtime cleanup', () => this.clearExternalAssetRuntime())
@@ -1608,11 +1608,11 @@ export class InfiniteWorldRenderer {
   }
 
   setEnabled(value: boolean) {
-    this.enabled = value
-    this.controls.enabled = value && !this.flyMode && !this.transformDragging
+    this.#enabled = value
+    this.controls.enabled = value && !this.#flyMode && !this.#transformDragging
   }
 
-  get isEnabled() { return this.enabled }
+  get isEnabled() { return this.#enabled }
   get worldSeed(): string { return this.#fieldSampler.surfaceProvider.seed }
 
   getWorldEnvironment() {
@@ -1949,14 +1949,14 @@ export class InfiniteWorldRenderer {
   }
   updateControlButtons() {
     const canvas = this.renderer.domElement
-    if (this.terrainBrushMode) {
+    if (this.#terrainBrushMode) {
       this.controls.mouseButtons = {
         LEFT: -1 as any,
         MIDDLE: THREE.MOUSE.PAN,
         RIGHT: THREE.MOUSE.ROTATE,
       }
       canvas.style.cursor = 'crosshair'
-    } else if (this.objectTool === 'navigate') {
+    } else if (this.#objectTool === 'navigate') {
       this.controls.mouseButtons = {
         LEFT: THREE.MOUSE.ROTATE,
         MIDDLE: THREE.MOUSE.DOLLY,
@@ -1969,29 +1969,29 @@ export class InfiniteWorldRenderer {
         MIDDLE: THREE.MOUSE.PAN,
         RIGHT: THREE.MOUSE.ROTATE,
       }
-      canvas.style.cursor = this.objectTool === 'place' ? 'crosshair' : (this.objectTool === 'erase' ? 'not-allowed' : 'default')
+      canvas.style.cursor = this.#objectTool === 'place' ? 'crosshair' : (this.#objectTool === 'erase' ? 'not-allowed' : 'default')
     }
   }
 
   setTerrainBrushSettings(radius: number, strength: number) {
     if (!Number.isFinite(radius) || radius < 1 || radius > 64) throw new RangeError('Terrain brush radius must be between 1 and 64')
     if (!Number.isFinite(strength) || strength <= 0 || strength > 8) throw new RangeError('Terrain brush strength must be between 0 and 8')
-    this.terrainBrushRadius = radius
-    this.terrainBrushStrength = strength
+    this.#terrainBrushRadius = radius
+    this.#terrainBrushStrength = strength
   }
 
   setTerrainBrushMode(mode: 'raise' | 'lower' | null) {
-    this.terrainBrushMode = mode
+    this.#terrainBrushMode = mode
     if (mode) {
-      this.flyMode = false
-      this.controls.enabled = this.enabled && !this.transformDragging
+      this.#flyMode = false
+      this.controls.enabled = this.#enabled && !this.#transformDragging
     }
     this.updateControlButtons()
   }
 
   setObjectTool(tool: 'navigate' | 'select' | 'place' | 'erase') {
-    this.terrainBrushMode = null
-    this.objectTool = tool
+    this.#terrainBrushMode = null
+    this.#objectTool = tool
     this.updateControlButtons()
     if (tool !== 'select') {
       this.#transformControls.detach()
@@ -1999,15 +1999,15 @@ export class InfiniteWorldRenderer {
       this.#selectionMarker.visible = false
     }
   }
-  setObjectKind(kind: WorldObjectKind) { this.selectedKind = kind }
-  getObjectTool() { return this.objectTool }
-  getObjectKind() { return this.selectedKind }
+  setObjectKind(kind: WorldObjectKind) { this.#selectedKind = kind }
+  getObjectTool() { return this.#objectTool }
+  getObjectKind() { return this.#selectedKind }
   get worldCoordinates() {
     return { x: this.#worldPosition.x, y: this.#worldPosition.y, z: this.#worldPosition.z }
   }
   setFlyMode(enabled: boolean) {
-    this.flyMode = enabled
-    this.controls.enabled = this.enabled && !enabled && !this.transformDragging
+    this.#flyMode = enabled
+    this.controls.enabled = this.#enabled && !enabled && !this.#transformDragging
   }
 
   zoom(delta: number) {
@@ -2032,8 +2032,8 @@ export class InfiniteWorldRenderer {
     this.controls.update()
   }
 
-  getAnalyticalOverlayMode() { return this.analyticalOverlayMode }
-  getPatchResolution() { return this.patchResolution }
+  getAnalyticalOverlayMode() { return this.#analyticalOverlayMode }
+  getPatchResolution() { return this.#patchResolution }
 
   /** Diagnostics for verifying that rendered water coverage matches generator data. */
   getTerrainWaterDiagnostics() {
@@ -2053,7 +2053,7 @@ export class InfiniteWorldRenderer {
       maxWaterQuads: this.#patches.size * WORLD_CHUNK_SIZE * WORLD_CHUNK_SIZE,
     }
   }
-  getLodDistance() { return this.lodDistance }
+  getLodDistance() { return this.#lodDistance }
 
   pan(deltaX: number, deltaZ: number) {
     const forward = new THREE.Vector3()
@@ -2080,8 +2080,8 @@ export class InfiniteWorldRenderer {
   }
 
   resetCameraView() {
-    this.flyMode = false
-    this.controls.enabled = this.enabled && !this.transformDragging
+    this.#flyMode = false
+    this.controls.enabled = this.#enabled && !this.#transformDragging
     const targetWorld = new THREE.Vector3(16, this.sampleTerrainHeight(16, 16), 16)
     const targetLocal = this.worldToLocal(targetWorld)
     this.controls.target.copy(targetLocal)
@@ -2103,7 +2103,7 @@ export class InfiniteWorldRenderer {
     if (preset === 'fly') {
       // Fly uses first-person movement rather than OrbitControls. Keep the
       // camera/world position in the same absolute coordinate frame.
-      this.flyMode = true
+      this.#flyMode = true
       this.controls.enabled = false
       this.#worldPosition.copy(targetWorld).add(new THREE.Vector3(0, 8, 0))
       this.camera.position.copy(this.worldToLocal(this.#worldPosition))
@@ -2112,8 +2112,8 @@ export class InfiniteWorldRenderer {
       return
     }
 
-    this.flyMode = false
-    this.controls.enabled = this.enabled && !this.transformDragging
+    this.#flyMode = false
+    this.controls.enabled = this.#enabled && !this.#transformDragging
     if (preset === 'top') {
       this.camera.position.copy(targetLocal).add(new THREE.Vector3(0, 220, 0.01))
     } else if (preset === 'front') {
@@ -2132,7 +2132,7 @@ export class InfiniteWorldRenderer {
 
 
   setMaterialMode(mode: 'field' | 'material' | 'height') {
-    this.materialMode = mode
+    this.#materialMode = mode
     this.refreshTerrainPatches()
   }
 
@@ -2172,7 +2172,7 @@ export class InfiniteWorldRenderer {
     }
   }
 
-  getMaterialMode() { return this.materialMode }
+  getMaterialMode() { return this.#materialMode }
 
   resize(width: number, height: number) {
     if (width <= 0 || height <= 0) return
@@ -2301,13 +2301,13 @@ export class InfiniteWorldRenderer {
         const slope = Math.max(0, 1 - normal.y)
         color.offsetHSL(0, 0, -slope * 0.18)
 
-        if (this.materialMode === 'field') {
+        if (this.#materialMode === 'field') {
           // Field mode visualizes the same authoritative scientific field used by physics and construction.
           const field = this.#fieldSampler.sample(originX + gx, h, originZ + gz)
           const density = Math.max(0, Math.min(1, field.density))
           const information = Math.max(0, Math.min(1, field.information / 70))
           color.setHSL(0.68 - density * 0.68, 0.84, 0.3 + information * 0.28)
-        } else if (this.materialMode === 'height') {
+        } else if (this.#materialMode === 'height') {
           const t = Math.max(0, Math.min(1, (h + 20) / 120))
           color.setHSL(0.68 - t * 0.68, 0.82, 0.28 + t * 0.34)
         }
@@ -2340,19 +2340,19 @@ export class InfiniteWorldRenderer {
 
     const material = trackTerrainResource(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }))
     this.#terrainMaterials.add(material)
-    if (this.materialMode === 'material') {
+    if (this.#materialMode === 'material') {
       material.vertexColors = false
       material.color.set(0x8a8f98)
       material.roughness = 0.72
       material.metalness = 0.08
-    } else if (this.materialMode === 'height') {
+    } else if (this.#materialMode === 'height') {
       material.roughness = 0.88
     }
     const mesh = new THREE.Mesh(geometry, material)
     mesh.userData.terrain = true
     group.add(mesh)
 
-    if (this.terrainStyle === 'vertex') {
+    if (this.#terrainStyle === 'vertex') {
       const vertexMaterial = trackTerrainResource(new THREE.PointsMaterial({
         color: 0xd8e6ff,
         size: 1.8,
@@ -2566,8 +2566,8 @@ export class InfiniteWorldRenderer {
 
   private syncChunks() {
     const center = this.chunkCenter()
-    const centerChanged = !this.lastCenter || center.cx !== this.lastCenter.cx || center.cz !== this.lastCenter.cz
-    this.lastCenter = center
+    const centerChanged = !this.#lastCenter || center.cx !== this.#lastCenter.cx || center.cz !== this.#lastCenter.cz
+    this.#lastCenter = center
     // ChunkManager is deliberately budgeted: keep asking for the current target
     // every frame so remaining terrain chunks can materialize incrementally.
     // This prevents one Composer/Quick Generate transaction from monopolizing
@@ -2822,11 +2822,11 @@ export class InfiniteWorldRenderer {
         const chunkRead = this.persistence.readChunk(cx, 0, cz)
         if (chunkRead.status === 'unavailable' || chunkRead.status === 'corrupt') {
           const failure = `world chunk ${key}: ${chunkRead.status} (${chunkRead.reason})`
-          if (!this.startupPersistenceFailures.includes(failure)) {
-            this.startupPersistenceFailures.push(failure)
+          if (!this.#startupPersistenceFailures.includes(failure)) {
+            this.#startupPersistenceFailures.push(failure)
             console.warn(`[persistence] ${failure}; autosave is blocked until the world is repaired`)
           }
-          this.persistenceRecoveryBlocked = true
+          this.#persistenceRecoveryBlocked = true
           continue
         }
         // A missing chunk is a valid empty region. A corrupt or unavailable
@@ -3174,7 +3174,7 @@ export class InfiniteWorldRenderer {
     const x = this.#worldPosition.x
     const z = this.#worldPosition.z
     for (const consequence of consequences) {
-      if (this.materializedConsequenceEvents.has(consequence.eventId)) continue
+      if (this.#materializedConsequenceEvents.has(consequence.eventId)) continue
       let didMaterialize = false
       for (const action of consequence.actions) {
         if (action.type !== 'visual-transition') continue
@@ -3199,7 +3199,7 @@ export class InfiniteWorldRenderer {
           materialized.push({ eventId: consequence.eventId, action: action.type, result: { civilization: action.civilization, form: 'agricultural-settlement' } })
         }
       }
-      if (didMaterialize) this.materializedConsequenceEvents.add(consequence.eventId)
+      if (didMaterialize) this.#materializedConsequenceEvents.add(consequence.eventId)
     }
     return materialized
   }
@@ -3475,8 +3475,8 @@ export class InfiniteWorldRenderer {
   }
 
   getTransformMode() { return this.#transformControls.mode }
-  setSnapToGrid(size: number) { this.snapToGrid = Math.max(0.1, size) }
-  getSnapToGrid() { return this.snapToGrid }
+  setSnapToGrid(size: number) { this.#snapToGrid = Math.max(0.1, size) }
+  getSnapToGrid() { return this.#snapToGrid }
 
   /** Sample the active world surface in absolute world coordinates. */
   getSurfaceHeightAt(x: number, z: number): number {
@@ -3556,7 +3556,7 @@ export class InfiniteWorldRenderer {
   private terrainY(x: number, z: number) { return this.sampleTerrainHeight(x, z) }
 
   snapWorld(x: number, y: number, z: number, kind: WorldObjectKind) {
-    const s = this.snapToGrid
+    const s = this.#snapToGrid
     const sx = Math.round(x / s) * s
     const sz = Math.round(z / s) * s
     const ground = this.terrainY(sx, sz)
@@ -3601,12 +3601,12 @@ export class InfiniteWorldRenderer {
   }
 
   handlePointer(clientX: number, clientY: number) {
-    if (this.terrainBrushMode) {
+    if (this.#terrainBrushMode) {
       const point = this.pickAtScreen(clientX, clientY)
-      return point ? this.sculptTerrainAt(point.x, point.z, this.terrainBrushRadius, this.terrainBrushStrength, this.terrainBrushMode) : null
+      return point ? this.sculptTerrainAt(point.x, point.z, this.#terrainBrushRadius, this.#terrainBrushStrength, this.#terrainBrushMode) : null
     }
-    if (this.objectTool === 'place') return this.placeAtScreen(this.selectedKind, clientX, clientY)
-    if (this.objectTool === 'erase') return this.eraseAtScreen(clientX, clientY)
+    if (this.#objectTool === 'place') return this.placeAtScreen(this.#selectedKind, clientX, clientY)
+    if (this.#objectTool === 'erase') return this.eraseAtScreen(clientX, clientY)
     return this.selectAtScreen(clientX, clientY)
   }
 
@@ -3875,7 +3875,7 @@ export class InfiniteWorldRenderer {
   }
 
   setAnalyticalOverlay(mode: 'suitability' | 'flood' | 'slope' | null) {
-    this.analyticalOverlayMode = mode
+    this.#analyticalOverlayMode = mode
     if (this.#analyticalOverlayMesh) {
       const previousOverlay = this.#analyticalOverlayMesh
       this.#analyticalOverlayMesh = undefined
@@ -4430,7 +4430,7 @@ export class InfiniteWorldRenderer {
   }
 
   private updateFly(dt: number) {
-    if (!this.flyMode) return
+    if (!this.#flyMode) return
     const direction = new THREE.Vector3()
     if (this.#keys.has('KeyW')) direction.z -= 1
     if (this.#keys.has('KeyS')) direction.z += 1
@@ -4439,7 +4439,7 @@ export class InfiniteWorldRenderer {
     if (this.#keys.has('Space')) direction.y += 1
     if (this.#keys.has('ShiftLeft') || this.#keys.has('ShiftRight')) direction.y -= 1
     if (direction.lengthSq() === 0) return
-    direction.normalize().multiplyScalar(this.flySpeed * dt)
+    direction.normalize().multiplyScalar(this.#flySpeed * dt)
     const forward = new THREE.Vector3()
     this.camera.getWorldDirection(forward)
     const right = new THREE.Vector3().crossVectors(forward, this.camera.up).normalize()
@@ -4461,7 +4461,7 @@ export class InfiniteWorldRenderer {
       this.#worldPosition.y - this.#worldAnchor.y,
       this.#worldPosition.z - this.#worldAnchor.z,
     )
-    if (distance < this.recenterDistance) return
+    if (distance < this.#recenterDistance) return
     const old = this.#worldAnchor.clone()
     this.#worldAnchor.copy(this.#worldPosition)
     this.#worldAnchor.y = 0
@@ -4479,7 +4479,7 @@ export class InfiniteWorldRenderer {
   }
 
   private updateOrbitKeyboard(dt: number) {
-    if (this.flyMode || !this.controls.enabled || this.#keys.size === 0) return
+    if (this.#flyMode || !this.controls.enabled || this.#keys.size === 0) return
     const speed = (this.#keys.has('ShiftLeft') || this.#keys.has('ShiftRight') ? 160 : 75) * dt
     const forward = new THREE.Vector3()
     this.camera.getWorldDirection(forward)
@@ -4508,7 +4508,7 @@ export class InfiniteWorldRenderer {
   }
 
   render(dt = 0.016) {
-    if (!this.enabled) return
+    if (!this.#enabled) return
     const frameStart = this.runtimeDiagnostics.beginFrame()
 
     // Cinema Mode camera track interpolation if defined
@@ -4519,7 +4519,7 @@ export class InfiniteWorldRenderer {
         this.camera.fov = cc.fov
         this.camera.updateProjectionMatrix()
       }
-    } else if (this.flyMode) {
+    } else if (this.#flyMode) {
       this.updateFly(dt)
     } else {
       this.updateOrbitKeyboard(dt)
@@ -4534,14 +4534,14 @@ export class InfiniteWorldRenderer {
     this.syncObjects()
     this.runtimeDiagnostics.recordChunkSync(performance.now() - chunkStart)
 
-    if (this.simulationRunning) this.animatePhysicsObjects(dt)
+    if (this.#simulationRunning) this.animatePhysicsObjects(dt)
 
     const physicsStart = performance.now()
     this.updatePhysicsParticles(dt)
     this.runtimeDiagnostics.recordPhysics(
       performance.now() - physicsStart,
-      this.physicsFrameInteractions,
-      this.physicsFrameQueries,
+      this.#physicsFrameInteractions,
+      this.#physicsFrameQueries,
     )
 
     this.#worldAssetRuntime.rebase(this.#worldAnchor)
@@ -4557,20 +4557,20 @@ export class InfiniteWorldRenderer {
 
     // Adapt backing-buffer resolution slowly to sustained load, not single-frame spikes.
     const frameTimeMs = performance.now() - frameStart
-    this.adaptiveFrameCount += 1
-    this.adaptiveFrameTimeMs += frameTimeMs
-    if (this.adaptiveFrameCount >= 45) {
-      const averageFrameMs = this.adaptiveFrameTimeMs / this.adaptiveFrameCount
-      let nextRatio = this.currentPixelRatio
-      if (averageFrameMs > 28) nextRatio = Math.max(1, this.currentPixelRatio - 0.25)
-      else if (averageFrameMs < 15) nextRatio = Math.min(this.maxPixelRatio, this.currentPixelRatio + 0.25)
-      if (nextRatio !== this.currentPixelRatio) {
-        this.currentPixelRatio = nextRatio
+    this.#adaptiveFrameCount += 1
+    this.#adaptiveFrameTimeMs += frameTimeMs
+    if (this.#adaptiveFrameCount >= 45) {
+      const averageFrameMs = this.#adaptiveFrameTimeMs / this.#adaptiveFrameCount
+      let nextRatio = this.#currentPixelRatio
+      if (averageFrameMs > 28) nextRatio = Math.max(1, this.#currentPixelRatio - 0.25)
+      else if (averageFrameMs < 15) nextRatio = Math.min(this.#maxPixelRatio, this.#currentPixelRatio + 0.25)
+      if (nextRatio !== this.#currentPixelRatio) {
+        this.#currentPixelRatio = nextRatio
         this.renderer.setPixelRatio(nextRatio)
       }
-      this.lastAdaptiveFrameMs = averageFrameMs
-      this.adaptiveFrameCount = 0
-      this.adaptiveFrameTimeMs = 0
+      this.#lastAdaptiveFrameMs = averageFrameMs
+      this.#adaptiveFrameCount = 0
+      this.#adaptiveFrameTimeMs = 0
     }
   }
 
@@ -4614,13 +4614,13 @@ export class InfiniteWorldRenderer {
     this.#scene.add(this.#physicsParticlePoints)
   }
 
-  private physicsFrameQueries = 0
-  private physicsFrameInteractions = 0
+  #physicsFrameQueries = 0
+  #physicsFrameInteractions = 0
 
   private updatePhysicsParticles(dt: number) {
-    this.physicsFrameQueries = 0
-    this.physicsFrameInteractions = 0
-    if (!this.simulationRunning || !this.#physicsParticlePoints || !this.showParticles) return
+    this.#physicsFrameQueries = 0
+    this.#physicsFrameInteractions = 0
+    if (!this.#simulationRunning || !this.#physicsParticlePoints || !this.#showParticles) return
     const pos = this.#physicsParticlePositions
     const vel = this.#physicsParticleVelocities
     const col = this.#physicsParticleColors
@@ -4648,7 +4648,7 @@ export class InfiniteWorldRenderer {
       // Query only nearby physics objects through the chunk-local spatial index.
       const worldX = px + this.#worldAnchor.x
       const worldZ = pz + this.#worldAnchor.z
-      this.physicsFrameQueries++
+      this.#physicsFrameQueries++
       const nearbyObjects = this.#objectSpatialIndex.queryRadius(worldX, py, worldZ, 160, physicsKinds)
       for (const obj of nearbyObjects) {
         const dx = obj.x - worldX
@@ -4670,7 +4670,7 @@ export class InfiniteWorldRenderer {
             obj.kind === 'force_field' ? 'force-field' : 'metalaw'
           const magnitude = factor
           if (magnitude > 0.15) {
-            this.physicsFrameInteractions++
+            this.#physicsFrameInteractions++
             this.physicsInteractionLog.add(createPhysicsInteractionRecord(
               interactionType,
               obj.kind,
@@ -4739,14 +4739,14 @@ export class InfiniteWorldRenderer {
   }
 
   setShowParticles(visible: boolean) {
-    this.showParticles = visible
+    this.#showParticles = visible
     if (this.#physicsParticlePoints) {
       this.#physicsParticlePoints.visible = visible
     }
   }
 
   getShowParticles(): boolean {
-    return this.showParticles
+    return this.#showParticles
   }
 
   private animatePhysicsObjects(dt: number) {
@@ -4840,10 +4840,10 @@ export class InfiniteWorldRenderer {
         this.#objectMeshes.size,
         this.#physicsParticlePositions.length / 3,
       ),
-      pixelRatio: this.currentPixelRatio,
-      maxPixelRatio: this.maxPixelRatio,
-      adaptiveFrameMs: this.lastAdaptiveFrameMs,
-      enabled: this.enabled,
+      pixelRatio: this.#currentPixelRatio,
+      maxPixelRatio: this.#maxPixelRatio,
+      adaptiveFrameMs: this.#lastAdaptiveFrameMs,
+      enabled: this.#enabled,
     }
   }
 
@@ -4865,5 +4865,5 @@ export class InfiniteWorldRenderer {
 
   getLoadedChunkCount() { return this.#patches.size }
   getObjectCount() { return this.objects.size }
-  getStorageKey() { return this.storageKey }
+  getStorageKey() { return this.#storageKey }
 }
