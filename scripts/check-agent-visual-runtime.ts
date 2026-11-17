@@ -1,10 +1,76 @@
 import assert from 'node:assert/strict'
 import * as THREE from 'three'
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import type { Agent } from '../src/modes/agents/AgentSystem.ts'
+import { AgentSystem, type Agent } from '../src/modes/agents/AgentSystem.ts'
+import { AgentPlanner } from '../src/modes/agents/AgentPlanner.ts'
 import { AgentVisualRuntime } from '../src/modes/agents/AgentVisualRuntime.ts'
 import { createPlanarAgentGridWorldTransform } from '../src/simulation/AgentGridWorldTransform.ts'
 import { WorldAssetRuntime } from '../src/worldLibrary/WorldAssetRuntime.ts'
+
+const invalidAgentSystem = new AgentSystem()
+assert.equal(Object.isFrozen(invalidAgentSystem), true)
+assert.throws(() => invalidAgentSystem.spawn(Number.NaN, 14, 1), /coordinates must be finite/)
+assert.throws(() => invalidAgentSystem.spawn(18, 14, 201), /Agent spawn count must be an integer/)
+assert.throws(() => invalidAgentSystem.spawn(18, 14, 1, { seekEnergyW: Number.NaN }), /must be finite/)
+assert.throws(() => invalidAgentSystem.spawn(18, 14, 1, { unknownWeight: 0.5 } as never), /Unsupported agent genome field/)
+assert.equal(invalidAgentSystem.count, 0,
+  'invalid agent spawn requests must not partially mutate the authoritative population')
+
+const observedSystem = new AgentSystem()
+assert.equal(Object.hasOwn(observedSystem, 'agents'), false)
+assert.equal(Reflect.set(observedSystem, 'agents', []), false)
+let observerCalls = 0
+let secondObserverId: number | undefined
+observedSystem.onAgentsChanged((agents) => {
+  observerCalls += 1
+  if (agents[0]) {
+    agents[0].id = 999999
+    agents[0].genome.seekEnergyW = 999
+  }
+})
+observedSystem.onAgentsChanged((agents) => {
+  secondObserverId = agents[0]?.id
+})
+observedSystem.spawn(18, 14, 3)
+assert.equal(observerCalls, 1)
+const publicAgentSnapshot = observedSystem.agents
+const originalPublicAgentId = publicAgentSnapshot[0]!.id
+publicAgentSnapshot[0]!.id = 999999
+publicAgentSnapshot[0]!.genome.seekEnergyW = 999
+publicAgentSnapshot[0]!.memory[0] = 999
+publicAgentSnapshot.pop()
+assert.equal(observedSystem.count, 3)
+assert.equal(observedSystem.agents[0]!.id, originalPublicAgentId)
+assert.notEqual(observedSystem.agents[0]!.genome.seekEnergyW, 999)
+assert.notEqual(observedSystem.agents[0]!.memory[0], 999)
+assert.equal(secondObserverId, originalPublicAgentId,
+  'agent observers must receive independent detached snapshots')
+
+const publicSurvivors = observedSystem.getSurvivors()
+publicSurvivors[0]!.genome.seekInfoW = 999
+assert.notEqual(observedSystem.getSurvivors()[0]!.genome.seekInfoW, 999)
+const planner = new AgentPlanner()
+const roleAssignments = planner.assignRoles(observedSystem.agents)
+observedSystem.applyRolePlans(roleAssignments)
+const firstRolePlan = observedSystem.agents[0]!.plan
+roleAssignments[0]!.plan = 'mutated after application'
+assert.notEqual(observedSystem.agents[0]!.plan, 'mutated after application')
+assert.match(firstRolePlan, /^\[(Scout|Harvester|Architect|Guardian|Breeder)\]/)
+assert.throws(() => observedSystem.applyRolePlans([
+  { id: observedSystem.agents[0]!.id, plan: 'valid' },
+  { id: 999999, plan: 'unknown' },
+]), /Unknown agent role assignment/)
+assert.notEqual(observedSystem.agents[0]!.plan, 'valid',
+  'role assignment batches must validate all IDs before mutating any agent')
+
+assert.throws(() => observedSystem.step(new Float32Array(10), 36, 28, 12, 10), /valid dimensions/)
+assert.throws(() => observedSystem.step(new Float32Array(36 * 28 * 12), 36, 28, 12, Number.NaN), /mutation rate/)
+assert.equal(observedSystem.count, 3,
+  'invalid agent tick inputs must be rejected before mutating the population')
+const firstAgentId = observedSystem.agents[0]!.id
+assert.equal(observedSystem.remove(firstAgentId), true)
+assert.equal(observedSystem.remove(firstAgentId), false)
+assert.equal(observedSystem.count, 2)
 
 type LoadRequest = {
   onLoad: (gltf: { scene: THREE.Group; animations?: THREE.AnimationClip[] }) => void
