@@ -72,17 +72,28 @@ export class WorldLibrary {
     Object.freeze(this);
   }
 
-  register(entry: WorldLibraryEntry): WorldLibraryEntry {
+  #prepareEntry(entry: WorldLibraryEntry): WorldLibraryEntry {
     if (!entry || typeof entry.id !== 'string' || !entry.id.trim()) {
       throw new Error('World Library entry requires an id');
     }
-    const stored = structuredClone(entry);
+    return structuredClone(entry);
+  }
+
+  register(entry: WorldLibraryEntry): WorldLibraryEntry {
+    const stored = this.#prepareEntry(entry);
     this.#entries.set(stored.id, stored);
     return structuredClone(stored);
   }
 
   registerMany(entries: WorldLibraryEntry[]): number {
-    entries.forEach((entry) => this.register(entry));
+    if (!Array.isArray(entries)) throw new TypeError('World Library batch registration requires an array');
+    const next = new Map(this.#entries);
+    for (const entry of entries) {
+      const stored = this.#prepareEntry(entry);
+      next.set(stored.id, stored);
+    }
+    // Publish the candidate catalogue only after every entry has cloned and validated.
+    this.#entries = next;
     return entries.length;
   }
 
