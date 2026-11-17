@@ -48,6 +48,7 @@ try {
   await page.waitForFunction(() => typeof window.getGlobalEntityIdentitySnapshot === "function");
   const globalEntityIdentity = await page.evaluate(() => window.getGlobalEntityIdentitySnapshot());
   const expectedIdentityDomains = [
+    "active-agent",
     "infinite-world-object",
     "external-asset-placement",
     "world-library-civilization-branch",
@@ -84,6 +85,57 @@ try {
       entries: globalEntityIdentity.entries.length,
       excludedDomains: globalEntityIdentity.coverage.excludedDomains.map(entry => entry.domain),
     }));
+
+  const activeAgentIdentityLifecycle = await page.evaluate(() => {
+    const system = window.agentSystem;
+    const identityApi = window.getGlobalEntityIdentitySnapshot;
+    if (!system || typeof system.spawn !== "function" || typeof system.remove !== "function" ||
+        typeof identityApi !== "function") {
+      return { available: false };
+    }
+    system.spawn(18, 14, 2);
+    const exposed = system.agents;
+    const ids = exposed.map(agent => agent.id);
+    const originalId = ids[0];
+    exposed[0].id = 999999;
+    exposed[0].genome.seekEnergyW = 999;
+    exposed.pop();
+    const afterSpawn = identityApi();
+    const spawnedEntries = afterSpawn.entries.filter(entry => entry.domain === "active-agent");
+    const publicSnapshotIsDetached = system.agents.length === 2 &&
+      system.agents[0].id === originalId &&
+      system.agents[0].genome.seekEnergyW !== 999;
+    const firstRemoved = system.remove(ids[0]);
+    const afterFirstRemoval = identityApi();
+    const secondRemoved = system.remove(ids[1]);
+    const afterSecondRemoval = identityApi();
+    return {
+      available: true,
+      spawnedCount: spawnedEntries.length,
+      originalIdPublished: spawnedEntries.some(entry => entry.localId === originalId),
+      publicSnapshotIsDetached,
+      firstRemoved,
+      secondRemoved,
+      firstRemovalCount: afterFirstRemoval.domains.find(domain => domain.domain === "active-agent")?.count,
+      secondRemovalCount: afterSecondRemoval.domains.find(domain => domain.domain === "active-agent")?.count,
+      spawnRevision: afterSpawn.revision,
+      firstRemovalRevision: afterFirstRemoval.revision,
+      secondRemovalRevision: afterSecondRemoval.revision,
+    };
+  });
+  if (!activeAgentIdentityLifecycle.available ||
+      activeAgentIdentityLifecycle.spawnedCount !== 2 ||
+      !activeAgentIdentityLifecycle.originalIdPublished ||
+      !activeAgentIdentityLifecycle.publicSnapshotIsDetached ||
+      !activeAgentIdentityLifecycle.firstRemoved ||
+      !activeAgentIdentityLifecycle.secondRemoved ||
+      activeAgentIdentityLifecycle.firstRemovalCount !== 1 ||
+      activeAgentIdentityLifecycle.secondRemovalCount !== 0 ||
+      activeAgentIdentityLifecycle.firstRemovalRevision <= activeAgentIdentityLifecycle.spawnRevision ||
+      activeAgentIdentityLifecycle.secondRemovalRevision <= activeAgentIdentityLifecycle.firstRemovalRevision) {
+    throw new Error("Active transient agent identities must publish and retire through their authoritative owner: " +
+      JSON.stringify(activeAgentIdentityLifecycle));
+  }
 
   const civilizationBranchIdentityLifecycle = await page.evaluate(() => {
     const identityApi = window.getGlobalEntityIdentitySnapshot;
