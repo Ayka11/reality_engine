@@ -1662,7 +1662,12 @@ document.addEventListener('panelRendered', (e: Event) => {
 
 // ── Agent window API ─────────────────────────────────────────────────────
 
-win['agentSystem'] = agentSystem
+Object.defineProperty(win, 'agentSystem', {
+  configurable: false,
+  enumerable: true,
+  writable: false,
+  value: agentSystem,
+})
 
 /** Create an explicit planar mapping for the booted 2D agent grid. */
 win['createPlanarAgentGridWorldTransform'] = (
