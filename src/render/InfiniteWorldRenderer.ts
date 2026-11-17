@@ -66,7 +66,7 @@ export const AUTHORITATIVE_SCULPT_HISTORY_CHANGED_EVENT = 'reality-engine-author
 
 export class InfiniteWorldRenderer {
   readonly renderer: THREE.WebGLRenderer
-  readonly scene = new THREE.Scene()
+  readonly #scene = new THREE.Scene()
   readonly camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100000)
   readonly controls: OrbitControls
   generator: WorldGenerator
@@ -411,8 +411,8 @@ export class InfiniteWorldRenderer {
       value: this.objects,
     })
 
-    this.scene.add(this.terrainGroup)
-    this.#worldAssetRuntime = new WorldAssetRuntime(this.scene, undefined, () => {
+    this.#scene.add(this.terrainGroup)
+    this.#worldAssetRuntime = new WorldAssetRuntime(this.#scene, undefined, () => {
       if (!this.suppressAssetPlacementAutosave) this.scheduleSave()
     })
     // Publish only ID-based operations and detached snapshots to browser code.
@@ -626,7 +626,7 @@ export class InfiniteWorldRenderer {
     this.transformControls.setMode('translate')
     this.transformControls.setSpace('world')
     ;(this.transformControls as any).visible = false
-    this.scene.add(this.transformControls as unknown as THREE.Object3D)
+    this.#scene.add(this.transformControls as unknown as THREE.Object3D)
     this.transformControls.addEventListener('dragging-changed', (event) => {
       this.transformDragging = Boolean((event as { value: boolean }).value)
       this.controls.enabled = this.enabled && !this.transformDragging && !this.flyMode
@@ -681,22 +681,22 @@ export class InfiniteWorldRenderer {
     this.loadWorld({ restoreFieldCheckpoint: false })
 
     this.hemi = new THREE.HemisphereLight(0xb9d8ff, 0x35402f, 1.6)
-    this.scene.add(this.hemi)
+    this.#scene.add(this.hemi)
     this.sun = new THREE.DirectionalLight(0xffffff, 2.2)
     this.sun.position.set(300, 500, 180)
-    this.scene.add(this.sun)
+    this.#scene.add(this.sun)
 
     const water = new THREE.MeshBasicMaterial({ color: 0x2b78b5, transparent: true, opacity: 0.48 })
     void water
 
     this.selectionMarker.visible = false
-    this.scene.add(this.selectionMarker)
+    this.#scene.add(this.selectionMarker)
     this.hoverMarker.rotation.x = -Math.PI / 2
     this.hoverMarker.visible = false
-    this.scene.add(this.hoverMarker)
+    this.#scene.add(this.hoverMarker)
 
-    this.scene.background = new THREE.Color(0x9bb8d6)
-    this.scene.fog = new THREE.Fog(0x9bb8d6, 180, 900)
+    this.#scene.background = new THREE.Color(0x9bb8d6)
+    this.#scene.fog = new THREE.Fog(0x9bb8d6, 180, 900)
     this.initPhysicsParticleSystem(700)
   }
 
@@ -918,7 +918,7 @@ export class InfiniteWorldRenderer {
     // teardown. Detach every old root, deduplicate shared resources, and collect
     // failures while continuing to publish the validated replacement world.
     const cleanupFailures = detachAndDisposeObjectGroups(
-      this.scene,
+      this.#scene,
       [
         ...[...this.patches.values()].map(patch => patch.group),
         ...[...this.objectMeshes.values()].map(entry => entry.group),
@@ -1548,8 +1548,8 @@ export class InfiniteWorldRenderer {
 
     try {
       failures.push(...detachAndDisposeObjectGroups(
-        this.scene,
-        [...this.scene.children],
+        this.#scene,
+        [...this.#scene.children],
         'Infinite World renderer',
       ))
     } catch (error) {
@@ -1959,17 +1959,17 @@ export class InfiniteWorldRenderer {
       skyCol = 0x8eb4db
       this.sun.color.setHex(0xffffff)
     }
-    if (this.scene.background instanceof THREE.Color) {
-      this.scene.background.setHex(skyCol)
+    if (this.#scene.background instanceof THREE.Color) {
+      this.#scene.background.setHex(skyCol)
     }
-    if (this.scene.fog instanceof THREE.Fog) {
-      this.scene.fog.color.setHex(skyCol)
+    if (this.#scene.fog instanceof THREE.Fog) {
+      this.#scene.fog.color.setHex(skyCol)
     }
   }
 
   setFogDensity(value: number) {
     const density = Math.max(0, Math.min(0.06, value))
-    const fog = this.scene.fog
+    const fog = this.#scene.fog
     if (fog instanceof THREE.Fog) {
       fog.near = 90 + (0.06 - density) * 900
       fog.far = 260 + (0.06 - density) * 11000
@@ -2279,7 +2279,7 @@ export class InfiniteWorldRenderer {
       }
     }
     failures.push(...detachAndDisposeObjectGroups(
-      this.scene,
+      this.#scene,
       patches.map(patch => patch.group),
       label,
     ))
@@ -2297,7 +2297,7 @@ export class InfiniteWorldRenderer {
       try {
         const group = this.buildTerrainPatch(patch.chunk, patch.lod)
         this.patches.set(key, { group, chunk: patch.chunk, lod: patch.lod, edgeLodSignature: this.terrainEdgeLodSignature(patch.chunk) })
-        this.scene.add(group)
+        this.#scene.add(group)
       } catch (error) {
         this.patches.delete(key)
         this.waterMeshes.delete(key)
@@ -2355,7 +2355,7 @@ export class InfiniteWorldRenderer {
           lod,
           edgeLodSignature: this.terrainEdgeLodSignature(patch.chunk),
         })
-        this.scene.add(group)
+        this.#scene.add(group)
       } catch (error) {
         this.patches.delete(key)
         this.waterMeshes.delete(key)
@@ -2384,7 +2384,7 @@ export class InfiniteWorldRenderer {
         const lod = this.desiredLod(chunk)
         const group = this.buildTerrainPatch(chunk, lod)
         this.patches.set(key, { group, chunk, lod, edgeLodSignature: this.terrainEdgeLodSignature(chunk) })
-        this.scene.add(group)
+        this.#scene.add(group)
       }
     }
     for (const key of delta.unloaded) this.removeChunk(key)
@@ -2670,15 +2670,15 @@ export class InfiniteWorldRenderer {
       if (!entry) {
         const group = this.makeObject(object)
         this.objectMeshes.set(object.id, { object, group })
-        this.scene.add(group)
+        this.#scene.add(group)
       } else if (entry.object.kind !== object.kind) {
         // A world restore may reuse a stable ID for a different visual kind.
         // Rebuild geometry/materials rather than retaining the previous model.
         const replacement = this.makeObject(object)
-        this.scene.add(replacement)
+        this.#scene.add(replacement)
         this.objectMeshes.set(object.id, { object, group: replacement })
         cleanupFailures.push(...detachAndDisposeObjectGroups(
-          this.scene,
+          this.#scene,
           [entry.group],
           `Replaced world object ${object.id}`,
         ))
@@ -2739,7 +2739,7 @@ export class InfiniteWorldRenderer {
     // It deduplicates shared geometry/material/texture references and also
     // handles renderables beyond THREE.Mesh (Points, Lines, sprites, etc.).
     cleanupFailures.push(...detachAndDisposeObjectGroups(
-      this.scene,
+      this.#scene,
       staleGroups,
       'Evicted world object',
     ))
@@ -3376,7 +3376,7 @@ export class InfiniteWorldRenderer {
     const entry = this.objectMeshes.get(id)
     if (entry) {
       const cleanupFailures = detachAndDisposeObjectGroups(
-        this.scene,
+        this.#scene,
         [entry.group],
         `Deleted world object ${id}`,
       )
@@ -4350,7 +4350,7 @@ export class InfiniteWorldRenderer {
     this.updateTerrainLod()
     this.runtimeDiagnostics.recordTerrainLod(performance.now() - lodStart)
 
-    this.renderer.render(this.scene, this.camera)
+    this.renderer.render(this.#scene, this.camera)
     this.runtimeDiagnostics.recordFrame(frameStart)
 
     // Adapt backing-buffer resolution slowly to sustained load, not single-frame spikes.
@@ -4409,7 +4409,7 @@ export class InfiniteWorldRenderer {
     this.physicsParticlePositions = pos
     this.physicsParticleVelocities = vel
     this.physicsParticleColors = col
-    this.scene.add(this.physicsParticlePoints)
+    this.#scene.add(this.physicsParticlePoints)
   }
 
   private physicsFrameQueries = 0
