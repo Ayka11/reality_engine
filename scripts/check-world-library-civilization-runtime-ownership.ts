@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { CivilizationRuntime } from "../src/worldLibrary/CivilizationRuntime";
 import { ProductionInfrastructureRuntime } from "../src/worldLibrary/ProductionInfrastructureRuntime";
 import { WorldResourceEconomy, worldResourceEconomy } from "../src/worldLibrary/WorldResourceEconomy";
+import { WorldLibrary, type WorldLibraryEntry } from "../src/worldLibrary/WorldLibrary";
+import { WorldRuleGraph, type WorldRule } from "../src/worldLibrary/WorldRuleGraph";
 
 const resourcesBefore = worldResourceEconomy.snapshot();
 try {
@@ -149,6 +151,53 @@ try {
   const productionAllTimelines = productionRuntime.allTimelines();
   productionAllTimelines[0]!.details = "tampered-all-timelines";
   assert.notEqual(productionRuntime.allTimelines()[0]!.details, "tampered-all-timelines");
+
+  const library = new WorldLibrary();
+  assert.equal("entries" in library, false,
+    "WorldLibrary must not expose its authoritative Map through a TypeScript-private property");
+  const libraryInput: WorldLibraryEntry = {
+    id: "ownership-test-entry",
+    name: "Ownership Test",
+    category: "resource",
+    description: "Detached catalogue test",
+    tags: ["initial"],
+    scale: "small",
+    rarity: "common",
+    conditions: { biome: ["temperate"] },
+    produces: ["resource.water"],
+  };
+  const registeredEntry = library.register(libraryInput);
+  libraryInput.tags.push("caller-mutation");
+  registeredEntry.conditions!.biome!.push("return-mutation");
+  const libraryRead = library.get("ownership-test-entry")!;
+  libraryRead.tags.push("read-mutation");
+  libraryRead.conditions!.biome!.push("nested-read-mutation");
+  const libraryAll = library.all();
+  libraryAll[0]!.produces!.push("resource.exploit");
+  assert.deepEqual(library.get("ownership-test-entry")?.tags, ["initial"],
+    "WorldLibrary register/get/all must detach nested catalogue records");
+  assert.deepEqual(library.get("ownership-test-entry")?.conditions?.biome, ["temperate"]);
+  assert.deepEqual(library.get("ownership-test-entry")?.produces, ["resource.water"]);
+
+  const ruleGraph = new WorldRuleGraph();
+  assert.equal("rules" in ruleGraph, false,
+    "WorldRuleGraph must not expose its authoritative Map through a TypeScript-private property");
+  const ruleInput: WorldRule = {
+    id: "ownership-test-rule",
+    from: "biome.test",
+    relation: "produces",
+    to: "resource.water",
+    conditions: { season: "summer" },
+  };
+  const addedRule = ruleGraph.add(ruleInput);
+  ruleInput.conditions!.season = "caller-mutation";
+  addedRule.conditions!.season = "return-mutation";
+  const ruleRead = ruleGraph.get("ownership-test-rule")!;
+  ruleRead.conditions!.season = "read-mutation";
+  const ruleAll = ruleGraph.all();
+  ruleAll[0]!.conditions!.season = "all-mutation";
+  assert.equal(ruleGraph.get("ownership-test-rule")?.conditions?.season, "summer",
+    "WorldRuleGraph add/get/all must detach nested rule records");
 
   const runtime = new CivilizationRuntime();
 
