@@ -235,23 +235,23 @@ assert.match(managerSource, /this\.#spatialIndex\?\.upsertManagedSnapshot\(next\
 
 assert.doesNotMatch(rendererSource, /this\.objectSpatialIndex\.(?:upsert|remove|clear)\s*\(/,
   'renderer must not mutate spatial-index membership outside the manager-owned transaction path')
-assert.match(rendererSource, /this\.objects\.updateTransform\(this\.selectedObjectId,\s*\{/,
+assert.match(rendererSource, /this\.objects\.updateTransform\(this.#selectedObjectId,\s*\{/,
   'gizmo transforms must commit through the object manager')
-assert.match(rendererSource, /const object = this\.objects\.updateTransform\(this\.selectedObjectId, patch\)/,
+assert.match(rendererSource, /const object = this\.objects\.updateTransform\(this.#selectedObjectId, patch\)/,
   'programmatic object transforms must commit through the object manager')
 assert.match(rendererSource, /const updated = this\.objects\.update\(object\.id,\s*\{/,
   'scattered object elevation/metadata must commit through the object manager');
-assert.match(rendererSource, /const entry = this\.objectMeshes\.get\(object\.id\)[\s\S]*?entry\.object = object[\s\S]*?entry\.group\.position\.set\([\s\S]*?entry\.group\.rotation\.y = object\.rotationY[\s\S]*?entry\.group\.scale\.setScalar\(Math\.max\(0\.1, object\.scale\)\)/,
+assert.match(rendererSource, /const entry = this.#objectMeshes\.get\(object\.id\)[\s\S]*?entry\.object = object[\s\S]*?entry\.group\.position\.set\([\s\S]*?entry\.group\.rotation\.y = object\.rotationY[\s\S]*?entry\.group\.scale\.setScalar\(Math\.max\(0\.1, object\.scale\)\)/,
   'world sync must refresh cached mesh transform and object snapshot when an existing ID is replaced or moved');
 assert.doesNotMatch(rendererSource, /object\.x\s*=\s*entry\.group\.position/,
   'gizmo updates must not mutate detached manager read snapshots')
 
-assert.match(rendererSource, /if \(this\.selectedObjectId === object\.id\)[\s\S]*?this\.selectionMarker\.position\.set\([\s\S]*?this\.selectionMarker\.scale\.setScalar\(Math\.max\(1, object\.scale \* 2\)\)/,
+assert.match(rendererSource, /if \(this.#selectedObjectId === object\.id\)[\s\S]*?this.#selectionMarker\.position\.set\([\s\S]*?this.#selectionMarker\.scale\.setScalar\(Math\.max\(1, object\.scale \* 2\)\)/,
   'selected-object marker must follow authoritative object snapshots after synchronization')
-assert.match(rendererSource, /if \(this\.selectedObjectId === id\)[\s\S]*?this\.selectedObjectId = null[\s\S]*?this\.transformControls\.detach\(\)[\s\S]*?this\.selectionMarker\.visible = false/,
+assert.match(rendererSource, /if \(this.#selectedObjectId === id\)[\s\S]*?this.#selectedObjectId = null[\s\S]*?this.#transformControls\.detach\(\)[\s\S]*?this.#selectionMarker\.visible = false/,
   'evicting a selected mesh must clear selection and detach transform controls')
 
-assert.match(rendererSource, /entry\.object\.kind !== object\.kind[\s\S]*?const replacement = this\.makeObject\(object\)[\s\S]*?this\.objectMeshes\.set\(object\.id, \{ object, group: replacement \}\)[\s\S]*?detachAndDisposeObjectGroups/,
+assert.match(rendererSource, /entry\.object\.kind !== object\.kind[\s\S]*?const replacement = this\.makeObject\(object\)[\s\S]*?this.#objectMeshes\.set\(object\.id, \{ object, group: replacement \}\)[\s\S]*?detachAndDisposeObjectGroups/,
   'restoring a different visual kind under an existing object ID must rebuild and dispose the previous mesh group')
 
 assert.match(rendererSource, /const synchronizationFailures: unknown\[\] = \[\][\s\S]*?for \(const object of visible\) \{\s*try \{[\s\S]*?keep\.add\(object\.id\)[\s\S]*?catch \(error\) \{[\s\S]*?keep\.delete\(object\.id\)[\s\S]*?synchronizationFailures\.push/,
@@ -279,7 +279,7 @@ const syncObjectsEnd = rendererSource.indexOf('selectAtScreen(', syncObjectsStar
 assert.ok(syncObjectsStart >= 0 && syncObjectsEnd > syncObjectsStart,
   'renderer syncObjects method must be available for streamed cleanup contract checks')
 const syncObjectsSource = rendererSource.slice(syncObjectsStart, syncObjectsEnd)
-assert.match(syncObjectsSource, /const staleGroups: THREE\.Object3D\[\] = \[\][\s\S]*?staleGroups\.push\(entry\.group\)[\s\S]*?this\.objectMeshes\.delete\(id\)[\s\S]*?detachAndDisposeObjectGroups\(\s*this\.#scene,\s*staleGroups/,
+assert.match(syncObjectsSource, /const staleGroups: THREE\.Object3D\[\] = \[\][\s\S]*?staleGroups\.push\(entry\.group\)[\s\S]*?this.#objectMeshes\.delete\(id\)[\s\S]*?detachAndDisposeObjectGroups\(\s*this\.#scene,\s*staleGroups/,
   'stream eviction must batch stale groups through the shared deduplicating resource disposer')
 assert.doesNotMatch(syncObjectsSource, /(?:mesh|obj)\.geometry\.dispose\(\)|material\.dispose\(\)/,
   'stream eviction must not bypass shared disposal and double-dispose cloned/shared resources')
@@ -315,7 +315,7 @@ assert.equal(trackedTerrainAllocations.length, terrainResourceAllocations.length
   'every terrain geometry/material allocation must be registered immediately')
 assert.match(terrainBuildSource, /const ownedGeometries = new Set<THREE\.BufferGeometry>\(\)[\s\S]*?const ownedMaterials = new Set<THREE\.Material>\(\)[\s\S]*?try \{\s*const geometry = trackTerrainResource/,
   'terrain resource ownership trackers must exist before the first GPU allocation')
-assert.match(terrainBuildSource, /catch \(error\)[\s\S]*?this\.waterMeshes\.delete\(waterKey\)[\s\S]*?geometry\.dispose\(\)[\s\S]*?material\.dispose\(\)[\s\S]*?new AggregateError\(\[error, \.\.\.cleanupFailures\]/,
+assert.match(terrainBuildSource, /catch \(error\)[\s\S]*?this.#waterMeshes\.delete\(waterKey\)[\s\S]*?geometry\.dispose\(\)[\s\S]*?material\.dispose\(\)[\s\S]*?new AggregateError\(\[error, \.\.\.cleanupFailures\]/,
   'a failed terrain build must release partial geometry/material allocations and remove stale water references')
 
 assert.match(managerSource, /#objects = new Map<string, WorldObject>\(\)/,
