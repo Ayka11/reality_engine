@@ -20,6 +20,14 @@ export type RuntimeAsset = {
   loadedAt: number
 }
 
+/** Detached metadata only; never exposes scene objects or mutable animation clips. */
+export type RuntimeAssetInfo = Readonly<{
+  id: string
+  semanticEntryId?: string
+  sourceUrl: string
+  loadedAt: number
+}>
+
 export class WorldAssetRuntime {
   readonly #loader: Pick<GLTFLoader, 'load'>
   #generation = 0
@@ -56,12 +64,30 @@ export class WorldAssetRuntime {
     return this.#assets.has(id)
   }
 
-  get(id: string) {
-    return this.#assets.get(id)
+  private describeAsset(asset: RuntimeAsset): RuntimeAssetInfo {
+    return Object.freeze({
+      id: asset.id,
+      semanticEntryId: asset.semanticEntryId,
+      sourceUrl: asset.sourceUrl,
+      loadedAt: asset.loadedAt,
+    })
   }
 
-  all() {
-    return [...this.#assets.values()]
+  get(id: string): RuntimeAssetInfo | undefined {
+    const asset = this.#assets.get(id)
+    return asset ? this.describeAsset(asset) : undefined
+  }
+
+  all(): RuntimeAssetInfo[] {
+    return [...this.#assets.values()].map(asset => this.describeAsset(asset))
+  }
+
+  hasSemanticSource(semanticEntryId: string): boolean {
+    return this.#semanticSources.has(semanticEntryId)
+  }
+
+  getAnimationNames(id: string): string[] {
+    return this.#assets.get(id)?.animations.map(clip => clip.name) ?? []
   }
 
   async load(
@@ -75,7 +101,7 @@ export class WorldAssetRuntime {
       scale?: number
       rotationY?: number
     } = {},
-  ): Promise<RuntimeAsset> {
+  ): Promise<RuntimeAssetInfo> {
     const transformValues = [
       options.x ?? 0,
       options.y ?? 0,
@@ -95,7 +121,7 @@ export class WorldAssetRuntime {
           'Asset ID ' + id + ' is already owned by a different source URL or semantic entry',
         )
       }
-      return existing
+      return this.describeAsset(existing)
     }
     const pending = this.#loading.get(id)
     if (pending) {
@@ -165,7 +191,7 @@ export class WorldAssetRuntime {
             this.#scene.add(object)
             this.#assets.set(id, asset)
             if (asset.semanticEntryId) this.#semanticSources.set(asset.semanticEntryId, asset)
-            resolve(asset)
+            resolve(this.describeAsset(asset))
           } catch (error) {
             const cleanupFailures: unknown[] = []
             // Undo any partially published indexes before releasing the object.
@@ -214,8 +240,9 @@ export class WorldAssetRuntime {
     return task
   }
 
-  getSemanticSource(semanticEntryId: string) {
-    return this.#semanticSources.get(semanticEntryId)
+  getSemanticSource(semanticEntryId: string): RuntimeAssetInfo | undefined {
+    const asset = this.#semanticSources.get(semanticEntryId)
+    return asset ? this.describeAsset(asset) : undefined
   }
 
   placeInstance(
