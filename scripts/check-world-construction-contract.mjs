@@ -101,7 +101,7 @@ const decisionLayerConstructors = renderer.split('new WorldDecisionLayer(').slic
 assert.equal(decisionLayerConstructors.length, 2,
   'renderer must own exactly one initial and one rebuildable WorldDecisionLayer instance');
 for (const constructorSource of decisionLayerConstructors) {
-  assert.match(constructorSource.slice(0, 500), /\(x, z\) => this\.sampleTerrainHeight\(x, z\)/,
+  assert.match(constructorSource.slice(0, 500), /\(x, z\) => this\.#sampleTerrainHeight\(x, z\)/,
     'both initial and rebuilt WorldDecisionLayer instances must receive the renderer terrain sampler');
 }
 
