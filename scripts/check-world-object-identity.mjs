@@ -251,7 +251,7 @@ assert.match(rendererSource, /if \(this.#selectedObjectId === object\.id\)[\s\S]
 assert.match(rendererSource, /if \(this.#selectedObjectId === id\)[\s\S]*?this.#selectedObjectId = null[\s\S]*?this.#transformControls\.detach\(\)[\s\S]*?this.#selectionMarker\.visible = false/,
   'evicting a selected mesh must clear selection and detach transform controls')
 
-assert.match(rendererSource, /entry\.object\.kind !== object\.kind[\s\S]*?const replacement = this\.makeObject\(object\)[\s\S]*?this.#objectMeshes\.set\(object\.id, \{ object, group: replacement \}\)[\s\S]*?detachAndDisposeObjectGroups/,
+assert.match(rendererSource, /entry\.object\.kind !== object\.kind[\s\S]*?const replacement = this.#makeObject\(object\)[\s\S]*?this.#objectMeshes\.set\(object\.id, \{ object, group: replacement \}\)[\s\S]*?detachAndDisposeObjectGroups/,
   'restoring a different visual kind under an existing object ID must rebuild and dispose the previous mesh group')
 
 assert.match(rendererSource, /const synchronizationFailures: unknown\[\] = \[\][\s\S]*?for \(const object of visible\) \{\s*try \{[\s\S]*?keep\.add\(object\.id\)[\s\S]*?catch \(error\) \{[\s\S]*?keep\.delete\(object\.id\)[\s\S]*?synchronizationFailures\.push/,
