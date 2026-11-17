@@ -7,7 +7,7 @@ const source = await readFile(new URL("src/render/InfiniteWorldRenderer.ts", roo
 function methodBody(name) {
   // Anchor to a class method declaration, not a call site or an object-shaped
   // parameter type. The parameter list can itself contain nested braces.
-  const signature = new RegExp("^\\s{2}(?:private\\s+)?" + name + "\\s*\\(", "m");
+  const signature = new RegExp("^\\s{2}(?:#|private\\s+)?" + name + "\\s*\\(", "m");
   const match = signature.exec(source);
   assert.ok(match, `Expected method ${name} to exist`);
   const openParen = source.indexOf("(", match.index);
@@ -39,15 +39,15 @@ function methodBody(name) {
 
 for (const name of ["applyLegacySculptStroke", "applyLegacySmartBrush"]) {
   const body = methodBody(name);
-  assert.match(body, /this\.refreshTerrainPatches\(\)/, `${name} must refresh rendered terrain after committing a field mutation`);
-  assert.match(body, /this\.persistAuthoritativeFieldState\(\)/, `${name} must persist the committed authoritative field`);
-  assert.ok(body.indexOf("this.refreshTerrainPatches()") < body.indexOf("this.persistAuthoritativeFieldState()"),
+  assert.match(body, /this\.#refreshTerrainPatches\(\)/, `${name} must refresh rendered terrain after committing a field mutation`);
+  assert.match(body, /this\.#persistAuthoritativeFieldState\(\)/, `${name} must persist the committed authoritative field`);
+  assert.ok(body.indexOf("this.#refreshTerrainPatches()") < body.indexOf("this.#persistAuthoritativeFieldState()"),
     `${name} must refresh terrain before completing its persisted mutation path`);
 }
 
 for (const name of ["undoLegacySculptAuthoritative", "redoLegacySculptAuthoritative"]) {
   const body = methodBody(name);
-  assert.match(body, /if\s*\(transaction\)\s*\{[\s\S]*?this\.refreshTerrainPatches\(\)[\s\S]*?this\.persistAuthoritativeFieldState\(\)[\s\S]*?\}/,
+  assert.match(body, /if\s*\(transaction\)\s*\{[\s\S]*?this\.#refreshTerrainPatches\(\)[\s\S]*?this\.#persistAuthoritativeFieldState\(\)[\s\S]*?\}/,
     `${name} must refresh and persist only when the coordinator changes field state`);
 }
 
@@ -65,7 +65,7 @@ const authoritativeMutation = methodBody("applyAuthoritativeFieldMutation");
 assert.match(authoritativeMutation, /let provenanceEventId: string \| undefined/)
 assert.match(authoritativeMutation, /catch \(error\)[\s\S]*?runtimeProvenance\.rollbackLast\(provenanceEventId\)/,
   "failed authoritative mutations must remove their provisional provenance event")
-assert.match(authoritativeMutation, /this\.refreshTerrainPatches\(\)/,
+assert.match(authoritativeMutation, /this\.#refreshTerrainPatches\(\)/,
   "the canonical authoritative mutation path must refresh the renderer");
 
 const terrainBuilder = methodBody("buildTerrainPatch");
@@ -100,16 +100,16 @@ assert.match(terrainPersistence, /console\.warn/,
   "failed terrain autosaves must surface a diagnostic while keeping in-memory edits usable");
 const terrainSculpt = methodBody("sculptTerrainAt");
 assert.match(terrainSculpt, /this\.#terrainDeformations\.applyBrush/);
-assert.match(terrainSculpt, /this\.refreshTerrainPatches\(\)/);
-assert.match(terrainSculpt, /this\.persistTerrainDeformationState\(\)/);
+assert.match(terrainSculpt, /this\.#refreshTerrainPatches\(\)/);
+assert.match(terrainSculpt, /this\.#persistTerrainDeformationState\(\)/);
 for (const name of ["undoTerrainSculpt", "redoTerrainSculpt"]) {
   const body = methodBody(name);
   assert.match(body, /this\.#terrainDeformations\.(?:undo|redo)\(\)/);
-  assert.match(body, /this\.refreshTerrainPatches\(\)/);
-  assert.match(body, /this\.persistTerrainDeformationState\(\)/);
+  assert.match(body, /this\.#refreshTerrainPatches\(\)/);
+  assert.match(body, /this\.#persistTerrainDeformationState\(\)/);
 }
 const terrainBuilderSource = methodBody("buildTerrainPatch");
-assert.match(terrainBuilderSource, /this\.sampleTerrainHeight\(originX \+ gx, originZ \+ gz\)/,
+assert.match(terrainBuilderSource, /this\.#sampleTerrainHeight\(originX \+ gx, originZ \+ gz\)/,
   "terrain mesh vertices must sample deformation-aware heights");
 const saveWorldBody = methodBody("saveWorld");
 assert.match(saveWorldBody, /saveFieldCheckpoint/);
@@ -153,7 +153,7 @@ const clearNamespaceBody = methodBody("clearPersistedWorldNamespace");
 assert.match(clearNamespaceBody, /return this\.persistence\.clear\(\)/,
   "the shared namespace helper must own the durable persistence clear");
 const clearSavedWorldBody = methodBody("clearSavedWorld");
-assert.match(clearSavedWorldBody, /const cleared = this\.clearPersistedWorldNamespace\(\)/,
+assert.match(clearSavedWorldBody, /const cleared = this\.#clearPersistedWorldNamespace\(\)/,
   "full world clear must use the shared durable namespace helper before mutating live renderer state");
 assert.match(clearSavedWorldBody, /if\s*\(!cleared\)[\s\S]*?console\.warn/,
   "the renderer must warn if persisted world cleanup was incomplete");
@@ -165,9 +165,9 @@ assert.match(terrainPatchDisposer, /detachAndDisposeObjectGroups\(\s*this\.#scen
 
 const refresh = methodBody("refreshTerrainPatches");
 assert.match(refresh, /for\s*\(const\s*\[key,\s*patch\]\s*of\s*\[\.\.\.this.#patches\]\)/, "refresh must snapshot and visit every loaded patch");
-assert.match(refresh, /this\.disposeTerrainPatchGroups\(\s*\[\s*\{\s*key,\s*group:\s*patch\.group/, "refresh must dispose old patch resources through the shared terrain disposer");
+assert.match(refresh, /this\.#disposeTerrainPatchGroups\(\s*\[\s*\{\s*key,\s*group:\s*patch\.group/, "refresh must dispose old patch resources through the shared terrain disposer");
 assert.match(refresh, /this\.#buildTerrainPatch\(patch\.chunk,\s*patch\.lod\)/, "refresh must rebuild geometry from the current field");
-assert.match(refresh, /this\.terrainEdgeLodSignature\(patch\.chunk\)/, "refresh must recompute edge LOD metadata");
+assert.match(refresh, /this\.#terrainEdgeLodSignature\(patch\.chunk\)/, "refresh must recompute edge LOD metadata");
 assert.match(refresh, /this\.#scene\.add\(group\)/, "rebuilt patches must be attached to the scene");
 
 console.log("PASS: legacy sculpt and Smart Brush refresh rendered terrain");
