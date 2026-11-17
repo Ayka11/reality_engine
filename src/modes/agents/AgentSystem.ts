@@ -125,10 +125,9 @@ export class AgentSystem {
 
   #notifyAgentsChanged(): void {
     if (this.#changeListeners.size === 0) return
-    const snapshot = this.#agents.map(cloneAgent)
     for (const listener of this.#changeListeners) {
       try {
-        listener(snapshot)
+        listener(this.#agents.map(cloneAgent))
       } catch (error) {
         // Observer/visual failures must never interrupt authoritative agent ticks.
         console.warn('[AgentSystem] Agent observer failed; simulation continues', error)
@@ -253,6 +252,15 @@ export class AgentSystem {
       this.#agents.splice(dead[i], 1)
     }
     this.#notifyAgentsChanged()
+  }
+
+  remove(id: number): boolean {
+    if (!Number.isSafeInteger(id) || id < 0) return false
+    const index = this.#agents.findIndex(agent => agent.id === id)
+    if (index < 0) return false
+    this.#agents.splice(index, 1)
+    this.#notifyAgentsChanged()
+    return true
   }
 
   // ── Plan application ────────────────────────────────────────────────────
