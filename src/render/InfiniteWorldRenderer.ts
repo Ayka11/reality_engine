@@ -80,8 +80,8 @@ export class InfiniteWorldRenderer {
   readonly legacySculptRuntimeAdapter: LegacySculptRuntimeAdapter
   readonly #authoritativeSculptTransactions: AuthoritativeSculptTransactionCoordinator
   #terrainDeformations: TerrainDeformationField
-  decisionLayer: WorldDecisionLayer
-  constructionContract: WorldConstructionContract
+  #decisionLayer: WorldDecisionLayer
+  #constructionContract: WorldConstructionContract
   readonly decisionGraph = new DecisionGraph()
   readonly fieldPhysics = new FieldModulatedPhysics()
   readonly lawPhysicsContract: LawPhysicsContract
@@ -508,8 +508,8 @@ export class InfiniteWorldRenderer {
       return committed
     })
     this.#authoritativeSculptTransactions = new AuthoritativeSculptTransactionCoordinator(this.#authoritativeField)
-    this.decisionLayer = new WorldDecisionLayer(this.#fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null, (x, z) => this.#sampleTerrainHeight(x, z))
-    this.constructionContract = new WorldConstructionContract(this.decisionLayer)
+    this.#decisionLayer = new WorldDecisionLayer(this.#fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null, (x, z) => this.#sampleTerrainHeight(x, z))
+    this.#constructionContract = new WorldConstructionContract(this.#decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
     this.#storageKey = `reality-engine-world:${seed}:objects`
     const persistedTerrain = unwrapPersistedState(
@@ -561,6 +561,8 @@ export class InfiniteWorldRenderer {
       generator: { configurable: false, enumerable: true, get: () => this.#generator },
       chunks: { configurable: false, enumerable: true, get: () => this.#chunks },
       persistence: { configurable: false, enumerable: true, get: () => this.#persistence },
+      decisionLayer: { configurable: false, enumerable: true, get: () => this.#decisionLayer },
+      constructionContract: { configurable: false, enumerable: true, get: () => this.#constructionContract },
     })
 
     this.camera.position.set(38, this.#worldY, 62)
@@ -714,8 +716,8 @@ export class InfiniteWorldRenderer {
       camera: { configurable: false, enumerable: true, writable: false, value: this.camera },
       controls: { configurable: false, enumerable: true, writable: false, value: this.controls },
       legacySculptRuntimeAdapter: { configurable: false, enumerable: true, writable: false, value: this.legacySculptRuntimeAdapter },
-      decisionLayer: { configurable: false, enumerable: true, writable: false, value: this.decisionLayer },
-      constructionContract: { configurable: false, enumerable: true, writable: false, value: this.constructionContract },
+      decisionLayer: { configurable: false, enumerable: true, writable: false, value: this.#decisionLayer },
+      constructionContract: { configurable: false, enumerable: true, writable: false, value: this.#constructionContract },
       decisionGraph: { configurable: false, enumerable: true, writable: false, value: this.decisionGraph },
       fieldPhysics: { configurable: false, enumerable: true, writable: false, value: this.fieldPhysics },
       lawPhysicsContract: { configurable: false, enumerable: true, writable: false, value: this.lawPhysicsContract },
@@ -1599,14 +1601,14 @@ export class InfiniteWorldRenderer {
   }
 
   #rebuildDecisionLayer() {
-    const weights = this.decisionLayer?.weights ?? DEFAULT_DECISION_WEIGHTS
-    this.decisionLayer = new WorldDecisionLayer(
+    const weights = this.#decisionLayer?.weights ?? DEFAULT_DECISION_WEIGHTS
+    this.#decisionLayer = new WorldDecisionLayer(
       this.#fieldSampler,
       weights,
       () => (window as any).getRealityLawState?.() ?? null,
       (x, z) => this.#sampleTerrainHeight(x, z),
     )
-    this.constructionContract = new WorldConstructionContract(this.decisionLayer)
+    this.#constructionContract = new WorldConstructionContract(this.#decisionLayer)
   }
 
   /**
@@ -1642,6 +1644,8 @@ export class InfiniteWorldRenderer {
   get generator(): WorldGenerator { return this.#generator }
   get chunks(): InfiniteChunkManager { return this.#chunks }
   get persistence(): WorldPersistence { return this.#persistence }
+  get decisionLayer(): WorldDecisionLayer { return this.#decisionLayer }
+  get constructionContract(): WorldConstructionContract { return this.#constructionContract }
 
   get worldSeed(): string { return this.#fieldSampler.surfaceProvider.seed }
 
@@ -3676,7 +3680,7 @@ export class InfiniteWorldRenderer {
   }
 
   #lawGateForBuild(kind: WorldObjectKind, x: number, z: number) {
-    return this.constructionContract.authorize(kind, x, z)
+    return this.#constructionContract.authorize(kind, x, z)
   }
 
   /**
@@ -3789,7 +3793,7 @@ export class InfiniteWorldRenderer {
         const nz = cz + dz
         const wx = nx * step
         const wz = nz * step
-        const decision = this.decisionLayer.routeCost(
+        const decision = this.#decisionLayer.routeCost(
           wx, wz, cx * step, cz * step, profile,
         )
         const terrainCost = decision.cost
@@ -3880,7 +3884,7 @@ export class InfiniteWorldRenderer {
   explainBuildDecision(x: number, z: number) {
     const zone = this.buildZoneCost(x, z)
     const hydro = this.analyzeHydrology(x, z, 24, 9)
-    const scientificDecision = this.decisionLayer.explainBuildDecision(x, z)
+    const scientificDecision = this.#decisionLayer.explainBuildDecision(x, z)
     this.decisionGraph.addDecision(scientificDecision)
     const reasons: string[] = []
     if (zone.floodRisk > 0.6) reasons.push('high flood risk')
@@ -3990,7 +3994,7 @@ export class InfiniteWorldRenderer {
     const hydro = this.analyzeHydrology(x, z, 16, 7)
     const river = hydro.rivers.length > 0
     const floodRisk = waterLevel !== null && y <= waterLevel + 4 ? 0.7 : river ? 0.45 : 0
-    const decision = this.decisionLayer.buildZoneCost(x, z)
+    const decision = this.#decisionLayer.buildZoneCost(x, z)
     const slopeRisk = Math.min(1, decision.buildability.slope / 0.5)
     const legacyTerrainCost = slopeRisk * 0.5 + floodRisk * 0.5
     return {
@@ -4123,7 +4127,7 @@ export class InfiniteWorldRenderer {
         const dx = b.x - a.x
         const dz = b.z - a.z
         const length = Math.max(3, Math.hypot(dx, dz))
-        const water = this.constructionContract.materialize('water', (a.x + b.x) * 0.5, (a.z + b.z) * 0.5, (gate) => this.objects.add({
+        const water = this.#constructionContract.materialize('water', (a.x + b.x) * 0.5, (a.z + b.z) * 0.5, (gate) => this.objects.add({
           kind: 'water',
           x: (a.x + b.x) * 0.5,
           y: waterLevel === null ? (a.y + b.y) * 0.5 - 0.15 : Math.max(waterLevel, (a.y + b.y) * 0.5 - 0.15),
@@ -4196,7 +4200,7 @@ export class InfiniteWorldRenderer {
         const angleDiff = Math.abs(Math.atan2(Math.sin(angle - targetAngle), Math.cos(angle - targetAngle)))
         const separation = Math.min(1, distance / radius)
         const zone = this.buildZoneCost(cell.x, cell.z)
-        const decision = this.decisionLayer.analyzeBuildability(cell.x, cell.z)
+        const decision = this.#decisionLayer.analyzeBuildability(cell.x, cell.z)
         const value =
           decision.score +
           separation * 0.25 -
@@ -4259,10 +4263,10 @@ export class InfiniteWorldRenderer {
         const distance = d.role === 'civic' ? 12 : 18
         const x = d.x + Math.cos(angle) * distance
         const z = d.z + Math.sin(angle) * distance
-        const construction = this.constructionContract.authorize('building', x, z)
+        const construction = this.#constructionContract.authorize('building', x, z)
         // The authoritative construction contract must gate generated structures too.
         if (!construction.allowed || !construction.decision) continue
-        const siteDecision = this.decisionLayer.buildZoneCost(x, z, Math.hypot(x - plan.hub.x, z - plan.hub.z))
+        const siteDecision = this.#decisionLayer.buildZoneCost(x, z, Math.hypot(x - plan.hub.x, z - plan.hub.z))
         // Keep the distance-aware city-planning score after applying the shared construction gate.
         if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
         const y = siteDecision.buildability.elevation
@@ -4293,7 +4297,7 @@ export class InfiniteWorldRenderer {
     const seed = this.worldSeed
     const blockCount = Math.max(2, Math.floor(blocks))
     const ringRadius = radius * 0.62
-    const centerDecision = this.decisionLayer.analyzeBuildability(cx, cz)
+    const centerDecision = this.#decisionLayer.analyzeBuildability(cx, cz)
     const centerY = centerDecision.elevation
     const hub = this.objects.add({
       kind: 'landmark', x: cx, y: centerY, z: cz,
@@ -4344,10 +4348,10 @@ export class InfiniteWorldRenderer {
         const tangentZ = Math.sin(angle + Math.PI / 2) * lateral
         const px = bx + tangentX
         const pz = bz + tangentZ
-        const construction = this.constructionContract.authorize('building', px, pz)
+        const construction = this.#constructionContract.authorize('building', px, pz)
         // Settlement growth must pass the authoritative construction contract.
         if (!construction.allowed || !construction.decision) continue
-        const siteDecision = this.decisionLayer.buildZoneCost(px, pz, Math.hypot(px - cx, pz - cz))
+        const siteDecision = this.#decisionLayer.buildZoneCost(px, pz, Math.hypot(px - cx, pz - cz))
         // Preserve the settlement's distance-aware placement constraints as well.
         if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
         const py = siteDecision.buildability.elevation
@@ -4382,9 +4386,9 @@ export class InfiniteWorldRenderer {
       const radial = radius * (0.35 + (i % 5) / 8)
       const x = cx + Math.cos(angle) * radial
       const z = cz + Math.sin(angle) * radial
-      const construction = this.constructionContract.authorize('building', x, z)
+      const construction = this.#constructionContract.authorize('building', x, z)
       if (!construction.allowed || !construction.decision) continue
-      const siteDecision = this.decisionLayer.buildZoneCost(x, z, Math.hypot(x - cx, z - cz))
+      const siteDecision = this.#decisionLayer.buildZoneCost(x, z, Math.hypot(x - cx, z - cz))
       if (siteDecision.buildability.score < 0.2 || siteDecision.laws.penalty >= 0.25) continue
       const y = siteDecision.buildability.elevation
       const building = this.objects.add({
@@ -4819,7 +4823,7 @@ export class InfiniteWorldRenderer {
         providerId: provider?.id ?? 'unknown',
         providerVersion: provider?.version ?? 'unknown',
       },
-      decision: { version: this.decisionLayer.version, weights: this.decisionLayer.weights },
+      decision: { version: this.#decisionLayer.version, weights: this.#decisionLayer.weights },
       physics: { version: this.fieldPhysics.version, parameters: this.fieldPhysics.parameters },
       metadata,
     })
