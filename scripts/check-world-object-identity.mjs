@@ -288,7 +288,7 @@ assert.match(rendererSource, /const synchronizationFailures: unknown\[\] = \[\][
 assert.match(rendererSource, /synchronizationFailures\.length > 0 \|\| cleanupFailures\.length > 0[\s\S]*?\[\.\.\.synchronizationFailures, \.\.\.cleanupFailures\]/,
   "mesh synchronization and disposal failures must be reported together after stale-resource cleanup");
 const makeObjectStart = rendererSource.indexOf('#makeObject(object: WorldObject): THREE.Group {')
-const makeObjectEnd = rendererSource.indexOf('private syncPersistentObjects()', makeObjectStart)
+const makeObjectEnd = rendererSource.indexOf('#syncPersistentObjects()', makeObjectStart)
 assert.ok(makeObjectStart >= 0 && makeObjectEnd > makeObjectStart,
   'renderer must expose a bounded makeObject construction method for resource ownership checks')
 const makeObjectSource = rendererSource.slice(makeObjectStart, makeObjectEnd)
@@ -303,7 +303,7 @@ assert.match(makeObjectSource, /catch \(error\)[\s\S]*?for \(const geometry of o
 assert.match(makeObjectSource, /new AggregateError\(\[error, \.\.\.cleanupFailures\]/,
   'partial construction cleanup failures must remain observable alongside the original construction error')
 
-const syncObjectsStart = rendererSource.indexOf('private syncObjects()')
+const syncObjectsStart = rendererSource.indexOf('#syncObjects()')
 const syncObjectsEnd = rendererSource.indexOf('selectAtScreen(', syncObjectsStart)
 assert.ok(syncObjectsStart >= 0 && syncObjectsEnd > syncObjectsStart,
   'renderer syncObjects method must be available for streamed cleanup contract checks')
@@ -313,8 +313,8 @@ assert.match(syncObjectsSource, /const staleGroups: THREE\.Object3D\[\] = \[\][\
 assert.doesNotMatch(syncObjectsSource, /(?:mesh|obj)\.geometry\.dispose\(\)|material\.dispose\(\)/,
   'stream eviction must not bypass shared disposal and double-dispose cloned/shared resources')
 
-const terrainDisposalStart = rendererSource.indexOf('private disposeTerrainPatchGroups(')
-const terrainDisposalEnd = rendererSource.indexOf('private refreshTerrainPatches()', terrainDisposalStart)
+const terrainDisposalStart = rendererSource.indexOf('#disposeTerrainPatchGroups(')
+const terrainDisposalEnd = rendererSource.indexOf('#refreshTerrainPatches()', terrainDisposalStart)
 assert.ok(terrainDisposalStart >= 0 && terrainDisposalEnd > terrainDisposalStart,
   'terrain lifecycle must centralize patch disposal')
 const terrainDisposalSource = rendererSource.slice(terrainDisposalStart, terrainDisposalEnd)
@@ -330,11 +330,11 @@ for (const methodName of ['refreshTerrainPatches()', 'removeChunk(key: string)',
   assert.doesNotMatch(methodSource, /(?:mesh|obj)\.geometry\.dispose\(\)|material\.dispose\(\)/,
     `${methodName} must not directly dispose shared terrain resources`)
 }
-assert.match(rendererSource, /terrainCleanupFailures\.push\(\.\.\.this\.disposeTerrainPatchGroups\(/,
+assert.match(rendererSource, /terrainCleanupFailures\.push\(\.\.\.this\.#disposeTerrainPatchGroups\(/,
   'world reseed must dispose all old terrain patch groups through one deduplicated batch')
 
 const terrainBuildStart = rendererSource.indexOf('#buildTerrainPatch(chunk: WorldChunk, lod = 1): THREE.Group {')
-const terrainBuildEnd = rendererSource.indexOf('private disposeTerrainPatchGroups(', terrainBuildStart)
+const terrainBuildEnd = rendererSource.indexOf('#disposeTerrainPatchGroups(', terrainBuildStart)
 assert.ok(terrainBuildStart >= 0 && terrainBuildEnd > terrainBuildStart,
   'terrain patch construction must have a bounded resource ownership scope')
 const terrainBuildSource = rendererSource.slice(terrainBuildStart, terrainBuildEnd)
