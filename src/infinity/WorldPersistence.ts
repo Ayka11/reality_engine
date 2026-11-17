@@ -241,7 +241,7 @@ export class WorldPersistence {
   }
 
   readFieldState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.#fieldStateKey, state => this.#isRecordState(state))
+    return this.#readWrappedState<T>(this.#fieldStateKey, state => this.#isRecordState(state))
   }
 
   loadFieldState<T = unknown>(): T | null {
@@ -261,7 +261,7 @@ export class WorldPersistence {
   }
 
   readFieldCheckpoint<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.#fieldCheckpointKey, state => this.#isRecordState(state))
+    return this.#readWrappedState<T>(this.#fieldCheckpointKey, state => this.#isRecordState(state))
   }
 
   loadFieldCheckpoint<T = unknown>(): T | null {
@@ -305,7 +305,7 @@ export class WorldPersistence {
   }
 
   readSurfaceProviderState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.#surfaceProviderKey, state => this.#isRecordState(state))
+    return this.#readWrappedState<T>(this.#surfaceProviderKey, state => this.#isRecordState(state))
   }
 
   loadSurfaceProviderState<T = unknown>(): T | null {
@@ -339,7 +339,7 @@ export class WorldPersistence {
   }
 
   readAssetManifestState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.#assetManifestKey, state => this.#isRecordState(state))
+    return this.#readWrappedState<T>(this.#assetManifestKey, state => this.#isRecordState(state))
   }
 
   loadAssetManifestState<T = unknown>(): T | null {
@@ -373,7 +373,7 @@ export class WorldPersistence {
   }
 
   readAssetPlacementsState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.#assetPlacementsKey, state => Array.isArray(state))
+    return this.#readWrappedState<T>(this.#assetPlacementsKey, state => Array.isArray(state))
   }
 
   loadAssetPlacementsState<T = unknown>(): T | null {
@@ -407,7 +407,7 @@ export class WorldPersistence {
   }
 
   readProvenanceState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.#provenanceKey, state => this.#isRecordState(state))
+    return this.#readWrappedState<T>(this.#provenanceKey, state => this.#isRecordState(state))
   }
 
   loadProvenanceState<T = unknown>(): T | null {
@@ -436,7 +436,7 @@ export class WorldPersistence {
   }
 
   readTerrainDeformationState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.#terrainDeformationKey, state => this.#isRecordState(state))
+    return this.#readWrappedState<T>(this.#terrainDeformationKey, state => this.#isRecordState(state))
   }
 
   loadTerrainDeformationState<T = unknown>(): T | null {
@@ -455,7 +455,7 @@ export class WorldPersistence {
   }
 
   readTerrainDeformationCheckpoint<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.#terrainDeformationCheckpointKey, state => this.#isRecordState(state))
+    return this.#readWrappedState<T>(this.#terrainDeformationCheckpointKey, state => this.#isRecordState(state))
   }
 
   loadTerrainDeformationCheckpoint<T = unknown>(): T | null {
