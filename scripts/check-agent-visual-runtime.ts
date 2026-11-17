@@ -306,4 +306,36 @@ unsubscribe()
 observedSystem.step(new Float32Array(36 * 28 * 12), 36, 28, 12, 10)
 assert.equal(observerCalls, 2, 'unsubscribed observers must no longer receive agent ticks')
 
+assert.equal(Object.hasOwn(observedSystem, 'agents'), false,
+  'AgentSystem must expose its population through a getter, not a writable array property')
+assert.equal(Reflect.set(observedSystem, 'agents', []), false,
+  'browser callers must not replace the authoritative agent population')
+const publicAgentSnapshot = observedSystem.agents
+const originalPublicAgentId = publicAgentSnapshot[0].id
+publicAgentSnapshot[0].id = 999999
+publicAgentSnapshot[0].genome.seekEnergyW = 999
+publicAgentSnapshot[0].memory[0] = 999
+publicAgentSnapshot.pop()
+assert.equal(observedSystem.count, 3,
+  'mutating the public agent snapshot must not change the authoritative population')
+assert.equal(observedSystem.agents[0].id, originalPublicAgentId)
+assert.notEqual(observedSystem.agents[0].genome.seekEnergyW, 999)
+assert.notEqual(observedSystem.agents[0].memory[0], 999)
+
+const publicSurvivors = observedSystem.getSurvivors()
+publicSurvivors[0].genome.seekInfoW = 999
+assert.notEqual(observedSystem.getSurvivors()[0].genome.seekInfoW, 999,
+  'getSurvivors must return detached agent and genome snapshots')
+
+const { AgentPlanner } = await import('../src/modes/agents/AgentPlanner.ts')
+const planner = new AgentPlanner()
+const roleAssignments = planner.assignRoles(observedSystem.agents)
+assert.equal(roleAssignments.length, 3)
+observedSystem.applyRolePlans(roleAssignments)
+const firstRolePlan = observedSystem.agents[0].plan
+roleAssignments[0].plan = 'mutated after application'
+assert.notEqual(observedSystem.agents[0].plan, 'mutated after application')
+assert.match(firstRolePlan, /^\[(Scout|Harvester|Architect|Guardian|Breeder)\]/,
+  'agent roles must be applied through the authoritative owner without retaining caller references')
+
 console.log('Agent visual runtime exact clip mapping, 2D-to-world placement, origin rebasing, transient persistence, lifecycle and safe agent notifications: PASS')
