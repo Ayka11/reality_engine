@@ -274,6 +274,27 @@ const makeWorldObject = (id, x, y, z, kind = "tree") => ({
   id, kind, x, y, z, rotationY: 0, scale: 1, seed: 1, properties: {},
 });
 const persistence = new WorldPersistence("seed-a");
+assert.equal("cache" in persistence, false,
+  "WorldPersistence must not expose its mutable chunk cache through TypeScript-private fields");
+assert.equal("loaded" in persistence, false);
+assert.equal("missingChunks" in persistence, false);
+assert.equal("corruptChunks" in persistence, false);
+assert.equal(typeof persistence.updateManifest, "undefined",
+  "internal manifest mutation helper must not be a public JavaScript method");
+
+const persistenceOwnership = new WorldPersistence("seed-cache-ownership");
+const persistenceInput = [makeWorldObject("cache-ownership", 7, 0, 7, "tree")];
+assert.equal(persistenceOwnership.saveChunk(0, 0, 0, persistenceInput), true);
+persistenceInput[0]!.properties.source = "mutated-after-save";
+assert.equal(persistenceOwnership.readChunk(0, 0, 0).status, "ok");
+const cachedRead = persistenceOwnership.readChunk(0, 0, 0);
+assert.equal(cachedRead.status, "ok");
+if (cachedRead.status === "ok") {
+  cachedRead.objects[0]!.properties.source = "mutated-read-result";
+}
+assert.deepEqual(persistenceOwnership.loadChunk(0, 0, 0), [
+  makeWorldObject("cache-ownership", 7, 0, 7, "tree"),
+], "persistence save/read/load APIs must detach nested cached world objects");
 
 // An interrupted multi-key save must be withheld as a whole. A complete explicit
 // recovery may replace its sidecars/chunks and remove the journal marker.
