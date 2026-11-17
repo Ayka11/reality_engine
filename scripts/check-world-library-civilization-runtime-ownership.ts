@@ -201,7 +201,7 @@ try {
     label: "Decision",
     data: { nested: { value: 1 } },
   });
-  graphNode.data!.nested.value = 99;
+  (graphNode.data!.nested as any).value = 99;
   assert.equal((decisionGraph.getNode("decision-node")!.data!.nested as any).value, 1,
     "decision graph nodes must be detached on write and read");
   assert.ok(Object.isFrozen(decisionGraph));
@@ -248,8 +248,8 @@ try {
   experimentRunner.record("result", { nested: { value: 1 } });
   const completedExperiment = experimentRunner.finish();
   assert.equal(completedExperiment.protocol.world.seed, "ownership-seed");
-  completedExperiment.results.result.nested.value = 999;
-  assert.equal(experimentRunner.finish().results.result.nested.value, 1,
+  (completedExperiment.results.result as any).nested.value = 999;
+  assert.equal((experimentRunner.finish().results.result as any).nested.value, 1,
     "experiment runner snapshots must not expose internal protocol or results");
   assert.ok(Object.isFrozen(experimentRunner));
 
