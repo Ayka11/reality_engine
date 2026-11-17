@@ -69,6 +69,22 @@ assert.throws(
   "a shadow validator must not bypass the manager's runtime-private validation path",
 )
 
+const injectedPlacement = manager.add({
+  ...placement,
+  object3D: { visible: true },
+  rendererPayload: { mesh: "untrusted" },
+})
+assert.equal("object3D" in manager.get(injectedPlacement.id), false,
+  "world object insertion must strip undeclared live-object fields")
+assert.equal("rendererPayload" in manager.get(injectedPlacement.id), false,
+  "world object insertion must retain only the declared identity and metadata schema")
+assert.throws(
+  () => manager.add({ ...placement, kind: "unregistered-kind" }),
+  /World object requires a stable ID/,
+  "runtime insertion must reject world-object kinds outside the supported domain",
+)
+assert.equal(manager.remove(injectedPlacement.id), true)
+
 const first = manager.add(placement)
 const second = manager.add(placement)
 assert.notEqual(first.id, second.id, 'two new objects at identical coordinates must not overwrite each other')
@@ -121,6 +137,19 @@ assert.deepEqual(manager.get(second.id), beforeDetachedReads,
 const secondOriginal = manager.get(second.id)
 assert.ok(secondOriginal)
 assert.equal(spatialIndex.queryRadius(secondOriginal.x, secondOriginal.y, secondOriginal.z, 0).some(o => o.id === second.id), true)
+assert.throws(
+  () => manager.update(second.id, { id: "identity-takeover" }),
+  /Unsupported world object update field: id/,
+  "runtime object updates must not allow ID reassignment through untyped JavaScript calls",
+)
+assert.throws(
+  () => manager.update(second.id, { kind: "unregistered-kind" }),
+  /Unsupported world object update field: kind/,
+  "runtime object updates must reject undeclared identity-domain fields",
+)
+assert.equal(manager.get(second.id)?.id, second.id,
+  "rejected identity-field updates must preserve the original stable object ID")
+
 const movedSecond = manager.updateTransform(second.id, { x: 96, y: 70, z: -96, rotationY: 1.25, scale: 2 })
 assert.ok(movedSecond)
 assert.equal(movedSecond.x, 96)
@@ -258,7 +287,7 @@ assert.match(rendererSource, /const synchronizationFailures: unknown\[\] = \[\][
   "one object mesh creation/update failure must not abort synchronization of later visible objects");
 assert.match(rendererSource, /synchronizationFailures\.length > 0 \|\| cleanupFailures\.length > 0[\s\S]*?\[\.\.\.synchronizationFailures, \.\.\.cleanupFailures\]/,
   "mesh synchronization and disposal failures must be reported together after stale-resource cleanup");
-const makeObjectStart = rendererSource.indexOf('private makeObject(object: WorldObject): THREE.Group {')
+const makeObjectStart = rendererSource.indexOf('#makeObject(object: WorldObject): THREE.Group {')
 const makeObjectEnd = rendererSource.indexOf('private syncPersistentObjects()', makeObjectStart)
 assert.ok(makeObjectStart >= 0 && makeObjectEnd > makeObjectStart,
   'renderer must expose a bounded makeObject construction method for resource ownership checks')
@@ -304,7 +333,7 @@ for (const methodName of ['refreshTerrainPatches()', 'removeChunk(key: string)',
 assert.match(rendererSource, /terrainCleanupFailures\.push\(\.\.\.this\.disposeTerrainPatchGroups\(/,
   'world reseed must dispose all old terrain patch groups through one deduplicated batch')
 
-const terrainBuildStart = rendererSource.indexOf('private buildTerrainPatch(chunk: WorldChunk, lod = 1): THREE.Group {')
+const terrainBuildStart = rendererSource.indexOf('#buildTerrainPatch(chunk: WorldChunk, lod = 1): THREE.Group {')
 const terrainBuildEnd = rendererSource.indexOf('private disposeTerrainPatchGroups(', terrainBuildStart)
 assert.ok(terrainBuildStart >= 0 && terrainBuildEnd > terrainBuildStart,
   'terrain patch construction must have a bounded resource ownership scope')
