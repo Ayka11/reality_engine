@@ -567,7 +567,8 @@ const texturedAssetLoad = runtime.load('pine', 'https://assets.example.test/pine
 })
 requests[requests.length - 1].onLoad({ scene: texturedSourceScene })
 const texturedAsset = await texturedAssetLoad
-const sourceMesh = texturedAsset.object.children[0] as THREE.Mesh
+const texturedSourceObject = scene.children.find(object => object.userData.worldPosition !== undefined)!
+const sourceMesh = texturedSourceObject.children[0] as THREE.Mesh
 const sourceMaterial = sourceMesh.material as THREE.MeshStandardMaterial
 let sourceTextureDisposed = false
 sourceTexture.addEventListener('dispose', () => { sourceTextureDisposed = true })
@@ -628,7 +629,7 @@ const animatedLoad = runtime.load('creature', 'https://assets.example.test/creat
 })
 requests[requests.length - 1].onLoad({ scene: boneRoot, animations: [walkClip, idleClip] })
 const animatedAsset = await animatedLoad
-assert.equal(animatedAsset.animations.length, 2, 'loaded GLTF animation clips must be preserved')
+assert.equal(runtime.getAnimationNames('creature').length, 2, 'loaded GLTF animation clips must be preserved')
 const findSkinnedMesh = (object: THREE.Object3D) => {
   let found: THREE.SkinnedMesh | undefined
   object.traverse(node => {
@@ -637,7 +638,8 @@ const findSkinnedMesh = (object: THREE.Object3D) => {
   assert.ok(found, 'fixture must contain a skinned mesh')
   return found
 }
-const animatedSourceMesh = findSkinnedMesh(animatedAsset.object)
+const animatedSourceObject = scene.children.find(object => object.userData.worldPosition !== undefined)!
+const animatedSourceMesh = findSkinnedMesh(animatedSourceObject)
 const sourceSkeletonAtRest = animatedSourceMesh.skeleton
 const firstCreature = runtime.placeInstance('creature:instance:1', 'fauna.creature', { x: 1, y: 0, z: 1 })
 const secondCreature = runtime.placeInstance('creature:instance:2', 'fauna.creature', { x: 2, y: 0, z: 2 })
@@ -687,8 +689,8 @@ const lodCamera = new THREE.PerspectiveCamera()
 lodCamera.position.set(0, 0, 0)
 const farMesh = findSkinnedMesh(farInstance)
 assert.deepEqual(runtime.updateVisibility(lodCamera), { total: 2, visible: 2 })
-assert.equal(nearAsset.object.visible, false, 'loaded source assets remain hidden templates')
-assert.equal(runtime.get('lod-far')?.object.visible, false, 'far source assets remain hidden templates')
+assert.equal(runtime.isAssetVisible('lod-near'), false, 'loaded source assets remain hidden templates')
+assert.equal(runtime.isAssetVisible('lod-far'), false, 'far source assets remain hidden templates')
 assert.equal(runtime.updateAnimations(1 / 60, lodCamera), 1, 'near instances update every frame while mid/far instances are throttled')
 assert.equal(farMesh.skeleton.bones[0].position.y, 0, 'far instance must wait for its lower-frequency animation tick')
 runtime.updateVisibility(lodCamera)
