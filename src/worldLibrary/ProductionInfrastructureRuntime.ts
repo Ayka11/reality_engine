@@ -122,6 +122,9 @@ export class ProductionInfrastructureRuntime {
   }
 
   tick(id: string, delta = 1): CivilizationProductionState | null {
+    if (!Number.isFinite(delta) || delta < 0) {
+      throw new TypeError('Production infrastructure tick delta must be finite and non-negative')
+    }
     const current = this.#states.get(id)
     if (!current) return null
     const produced: Record<string, number> = {}
@@ -255,6 +258,13 @@ export class ProductionInfrastructureRuntime {
   }
 
   applyEnvironmentalState(id: string, environment: { temperature: number; moisture: number; radiation?: number; stability?: number }) {
+    if (!environment ||
+        !Number.isFinite(environment.temperature) ||
+        !Number.isFinite(environment.moisture) ||
+        (environment.radiation !== undefined && !Number.isFinite(environment.radiation)) ||
+        (environment.stability !== undefined && !Number.isFinite(environment.stability))) {
+      throw new TypeError('Environmental state requires finite numeric inputs')
+    }
     const state = this.#states.get(id)
     if (!state) return null
     const nextEnv = {
