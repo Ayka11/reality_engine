@@ -120,6 +120,15 @@ export class WorldResourceEconomy {
     return true
   }
 
+  /** Add produced stock without exposing or replacing the authoritative record. */
+  produce(id: string, amount: number): boolean {
+    if (typeof id !== 'string' || !id.trim() || !Number.isFinite(amount) || amount <= 0) return false
+    const resource = this.#resources.get(this.canonicalId(id))
+    if (!resource) return false
+    resource.amount = Math.min(resource.capacity, resource.amount + amount)
+    return true
+  }
+
   tick(delta = 1): void {
     if (!Number.isFinite(delta) || delta < 0) {
       throw new TypeError('World resource tick delta must be finite and non-negative')
