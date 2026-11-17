@@ -1643,7 +1643,7 @@ assert.ok(clearAssetsIndex >= 0 && persistEditorIndex > clearAssetsIndex,
   "external world assets must be cleared immediately after commit and before fallible sidecar persistence");
 assert.match(mainSource, /clearWorldAssetRuntime: \(\) => \{[\s\S]*?world\?\.clearExternalAssetRuntime\(\)/,
   "the application must wire post-commit cleanup to the active renderer asset runtime");
-assert.match(rendererSource, /clearExternalAssetRuntime\(\)\s*\{\s*this\.suppressAssetPlacementAutosave = true\s*try\s*\{\s*this\.worldAssetRuntime\.clear\(\)\s*\} finally \{\s*this\.suppressAssetPlacementAutosave = false\s*\}/,
+assert.match(rendererSource, /clearExternalAssetRuntime\(\)\s*\{\s*this\.suppressAssetPlacementAutosave = true\s*try\s*\{\s*this\.#worldAssetRuntime\.clear\(\)\s*\} finally \{\s*this\.suppressAssetPlacementAutosave = false\s*\}/,
   "post-commit cleanup must release old asset runtime resources without scheduling a stale placement autosave");
 assert.match(rendererSource, /const chunkRead = this\.persistence\.readChunk\(cx, 0, cz\)/,
   "streamed world chunks must preserve read status instead of treating failures as empty chunks");
