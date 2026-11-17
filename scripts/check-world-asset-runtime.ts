@@ -1697,11 +1697,20 @@ assert.ok(rendererRemovalSource, 'renderer must expose external asset removal bo
 assert.match(rendererRemovalSource, /if \(pendingRemoved\) this\.scheduleSave\(\)/,
   'removing pending placements must schedule autosave even when the source asset has no runtime instances')
 const pendingAutosaveIndex = rendererRemovalSource.indexOf('if (pendingRemoved) this.scheduleSave()')
-const runtimeRemovalIndex = rendererRemovalSource.indexOf('this.worldAssetRuntime.remove(assetId)')
+const runtimeRemovalIndex = rendererRemovalSource.indexOf('this.#worldAssetRuntime.remove(assetId)')
 assert.ok(pendingAutosaveIndex >= 0 && runtimeRemovalIndex >= 0 && pendingAutosaveIndex < runtimeRemovalIndex,
   'pending placement autosave must be queued before runtime disposal can throw and abort the removal call')
 assert.doesNotMatch(rendererRemovalSource, /pendingRemoved && !runtimeRemoved/,
   'pending-placement autosave must not depend on whether the source asset was also removed')
+
+assert.match(rendererSource, /readonly #worldAssetRuntime: WorldAssetRuntime/,
+  'the mutable Three.js runtime must remain in a JavaScript private field')
+assert.match(rendererSource, /Object\.defineProperty\(this, 'worldAssetRuntime'/,
+  'the browser-facing runtime API must be published as a separate facade')
+assert.match(rendererSource, /value: Object\.freeze\(\{[\s\S]*?snapshotPlacements:[\s\S]*?setInstanceWorldTransform:[\s\S]*?stats:/,
+  'the public runtime facade must expose only detached snapshots and ID-based operations')
+assert.doesNotMatch(rendererSource, /readonly worldAssetRuntime: WorldAssetRuntime/,
+  'the renderer must not expose the backing runtime instance as a public property')
 
 const externalLoadSource = rendererSource.match(/async loadExternalAsset\([\s\S]*?\n  \}/)?.[0]
 assert.ok(externalLoadSource, 'renderer must expose external asset load and placement restoration')
