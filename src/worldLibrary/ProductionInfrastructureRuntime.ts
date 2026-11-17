@@ -276,7 +276,7 @@ export class ProductionInfrastructureRuntime {
       events.push({ id: id + ':environmental-instability:' + state.worldTime.year, year: state.worldTime.year, type: 'growth', settlementId: id, details: 'Environmental instability reduced settlement growth' })
     }
     state.timeline.push(...events)
-    return { id, previous, current: nextEnv, events }
+    return structuredClone({ id, previous, current: nextEnv, events })
   }
 
   setTimeScale(id: string, scale: WorldTimeScale): boolean {
