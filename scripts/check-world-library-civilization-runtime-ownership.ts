@@ -1,9 +1,83 @@
 import assert from "node:assert/strict";
 import { CivilizationRuntime } from "../src/worldLibrary/CivilizationRuntime";
-import { worldResourceEconomy } from "../src/worldLibrary/WorldResourceEconomy";
+import { WorldResourceEconomy, worldResourceEconomy } from "../src/worldLibrary/WorldResourceEconomy";
 
 const resourcesBefore = worldResourceEconomy.snapshot();
 try {
+  // The browser bootstrap publishes this economy object as a supported API.
+  // Its backing Map and every read/write result must remain detached.
+  const economy = new WorldResourceEconomy();
+  assert.equal("resources" in economy, false,
+    "resource records must not be reachable through a TypeScript-private Map property");
+  assert.equal(Reflect.set(economy, "resources", new Map()), false,
+    "resource economy must reject ordinary JavaScript shadow properties");
+  assert.throws(() => Object.defineProperty(economy, "resources", { value: new Map() }), TypeError);
+
+  const resourceInput = {
+    semanticEntryId: "resource.ownership-test",
+    amount: 60,
+    capacity: 100,
+    regeneration: 1,
+    quality: 0.8,
+    accessibility: 0.9,
+  };
+  const setResult = economy.set(resourceInput);
+  resourceInput.amount = -10;
+  setResult.amount = -20;
+  assert.equal(economy.get("resource.ownership-test")?.amount, 60,
+    "set must detach caller input and its returned state");
+
+  const getResult = economy.get("resource.ownership-test")!;
+  getResult.amount = -30;
+  assert.equal(economy.get("resource.ownership-test")?.amount, 60,
+    "get must return a detached resource record");
+
+  const allResult = economy.all();
+  allResult[0]!.amount = -40;
+  allResult.pop();
+  assert.equal(economy.all().length, 1);
+  assert.equal(economy.all()[0]!.amount, 60,
+    "all must return detached records and collection storage");
+
+  const statsResult = economy.stats();
+  statsResult.resources[0]!.amount = -50;
+  assert.equal(economy.get("resource.ownership-test")?.amount, 60,
+    "stats must not leak internal resource records");
+
+  const restoreResult = economy.restore([{
+    semanticEntryId: "resource.restored-test",
+    amount: 25,
+    capacity: 50,
+    regeneration: 0.5,
+    quality: 0.7,
+    accessibility: 0.6,
+  }]);
+  restoreResult[0]!.amount = -60;
+  assert.equal(economy.get("resource.restored-test")?.amount, 25,
+    "restore must return detached resource records");
+
+  const beforeInvalidResourceRestore = economy.snapshot();
+  assert.throws(() => economy.restore([
+    {
+      semanticEntryId: "resource.valid-candidate",
+      amount: 1,
+      capacity: 2,
+      regeneration: 0.1,
+      quality: 1,
+      accessibility: 1,
+    },
+    {
+      semanticEntryId: "",
+      amount: Number.NaN,
+      capacity: 2,
+      regeneration: 0.1,
+      quality: 1,
+      accessibility: 1,
+    },
+  ]), /stable ID and finite numeric fields/);
+  assert.deepEqual(economy.snapshot(), beforeInvalidResourceRestore,
+    "invalid resource restore must leave the previous inventory unchanged");
+
   const runtime = new CivilizationRuntime();
 
   // Produce two source branches, including an arbitrary branch ID that
