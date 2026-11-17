@@ -5,6 +5,7 @@ import { WorldResourceEconomy, worldResourceEconomy } from "../src/worldLibrary/
 import { WorldLibrary, type WorldLibraryEntry } from "../src/worldLibrary/WorldLibrary";
 import { WorldRuleGraph, type WorldRule } from "../src/worldLibrary/WorldRuleGraph";
 import { worldRuleGraph } from "../src/worldLibrary/registry";
+import { WorldViewContract } from "../src/infinity/WorldViewContract";
 
 const resourcesBefore = worldResourceEconomy.snapshot();
 try {
@@ -179,6 +180,18 @@ try {
   const productionAllTimelines = productionRuntime.allTimelines();
   productionAllTimelines[0]!.details = "tampered-all-timelines";
   assert.notEqual(productionRuntime.allTimelines()[0]!.details, "tampered-all-timelines");
+
+  const viewContract = new WorldViewContract();
+  assert.equal("state" in viewContract, false,
+    "WorldViewContract must not expose its TypeScript-private authoritative snapshot");
+  assert.equal(Reflect.set(viewContract, "state", {}), false);
+  const viewSnapshot = viewContract.snapshot();
+  viewSnapshot.center.x = 999;
+  assert.equal(viewContract.snapshot().center.x, 0,
+    "WorldViewContract snapshots must detach nested view coordinates");
+  viewContract.setRenderMode("invalid-mode" as never);
+  assert.equal(viewContract.snapshot().renderMode, "3d",
+    "WorldViewContract must reject unsupported runtime render modes");
 
   const library = new WorldLibrary();
   assert.equal("entries" in library, false,
