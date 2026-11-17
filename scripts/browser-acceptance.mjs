@@ -2035,7 +2035,7 @@ try {
   await page.locator("#pb").click();
   await page.waitForFunction((before) => {
     const world = window.infiniteWorld;
-    const current = Array.from(world.physicsParticlePositions.slice(0, before.positions.length));
+    const current = Array.from(world.getPhysicsParticlePositionSnapshot(before.positions.length));
     return window.getInfiniteWorldSimulationRunning?.() === true &&
       Number(window.tick) > before.tick &&
       current.some((value, index) => Math.abs(value - before.positions[index]) > 1e-6);
@@ -2046,12 +2046,12 @@ try {
     document.getElementById("pb")?.textContent?.includes("Play"));
   const pausedSnapshot = await page.evaluate(() => ({
     tick: Number(window.tick) || 0,
-    positions: Array.from(window.infiniteWorld.physicsParticlePositions.slice(0, 60)),
+    positions: Array.from(window.infiniteWorld.getPhysicsParticlePositionSnapshot(60)),
   }));
   await page.waitForTimeout(250);
   const pausedAfter = await page.evaluate(() => ({
     tick: Number(window.tick) || 0,
-    positions: Array.from(window.infiniteWorld.physicsParticlePositions.slice(0, 60)),
+    positions: Array.from(window.infiniteWorld.getPhysicsParticlePositionSnapshot(60)),
   }));
   if (pausedAfter.tick !== pausedSnapshot.tick ||
       pausedAfter.positions.some((value, index) => Math.abs(value - pausedSnapshot.positions[index]) > 1e-6)) {
