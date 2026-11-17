@@ -1164,6 +1164,18 @@ try {
         return descriptor?.configurable === false && typeof descriptor.get === "function" &&
           descriptor.set === undefined && Reflect.set(world, "persistence", null) === false;
       })(),
+      coreSubsystemReferencesPinned: [
+        "renderer", "camera", "controls", "legacySculptRuntimeAdapter",
+        "decisionLayer", "constructionContract", "decisionGraph", "fieldPhysics",
+        "lawPhysicsContract", "physicsInteractionLog", "runtimeDiagnostics",
+        "experimentRunner", "experimentCatalog", "objects", "worldAssetRuntime",
+      ].every(key => {
+        const descriptor = Object.getOwnPropertyDescriptor(world, key);
+        return descriptor?.configurable === false &&
+          (typeof descriptor.get === "function"
+            ? descriptor.set === undefined
+            : descriptor.writable === false);
+      }),
       patchesHidden: world?.patches === undefined,
       objectMeshesHidden: world?.objectMeshes === undefined,
       waterMeshesHidden: world?.waterMeshes === undefined,
