@@ -131,13 +131,17 @@ try {
     radiation: 0.9,
     stability: 0.1,
   })!;
-  const storedEnvironmentalEvent = productionRuntime.timeline("production-ownership")[0]!;
   environmentalResult.events[0]!.details = "tampered";
   environmentalResult.current.moisture = -1;
   assert.notEqual(productionRuntime.timeline("production-ownership").some(event => event.details === "tampered"), true,
     "environmental state results must not share event references with the stored timeline");
   assert.equal(productionRuntime.get("production-ownership")?.environmentalState.moisture, 0.1,
     "environmental state results must not expose stored environmental records");
+  assert.throws(() => productionRuntime.applyEnvironmentalState("production-ownership", {
+    temperature: Number.NaN,
+    moisture: 0.5,
+  }), /finite numeric inputs/);
+  assert.throws(() => productionRuntime.tick("production-ownership", -1), /finite and non-negative/);
 
   const productionTimeline = productionRuntime.timeline("production-ownership");
   productionTimeline[0]!.details = "tampered-timeline";
