@@ -17,23 +17,24 @@ The browser entry point is `index.html`, which loads `src/boot.js`. That module 
 | Domain | Authoritative owner | Identity source | Lifecycle boundary |
 |---|---|---|---|
 | `infinite-world-object` | `InfiniteWorldRenderer.objects` / `WorldObjectManager` | Stable `WorldObject.id` from `world.objects.values()` | Add, update, transform, remove, clear, world snapshot import/restore |
+| `active-agent` | `src/modes/agents/AgentSystem.ts` | Session-local numeric `Agent.id` values from the booted connector's `agentSystem` | Spawn, reproduction, death/removal; current live IDs are indexed, while agent state and visual projections remain transient |
 | `external-asset-placement` | `WorldAssetRuntime` plus `InfiniteWorldRenderer` pending placement descriptors | `instanceId` from validated, merged loaded and pending persistent placements | Explicit asset import/materialization, placement update/removal, save/restart recovery; binaries are not fetched automatically during recovery |
 | `world-library-civilization-branch` | `CivilizationRuntime` | `branchId` from `civilizationRuntime.branchesList()` | Branch fork, branch tick/history publication, runtime snapshot restore |
 
 ### Refresh and revision semantics
 
-The directory is refreshed when `getGlobalEntityIdentitySnapshot()` is called. Each call reads the current authoritative inventories for all three captured domains and atomically publishes them to the registry before returning the detached snapshot. It is not a second entity store and does not subscribe to every source mutation. Consequently, the exposed revision describes the most recently requested directory snapshot; clients must request a fresh snapshot after a source operation before relying on its revision or membership.
+The directory is refreshed when `getGlobalEntityIdentitySnapshot()` is called. Each call reads the current authoritative inventories for all four captured domains and atomically publishes them to the registry before returning the detached snapshot. It is not a second entity store and does not subscribe to every source mutation. Consequently, the exposed revision describes the most recently requested directory snapshot; clients must request a fresh snapshot after a source operation before relying on its revision or membership.
 
 The global directory is derived runtime metadata. It is not serialized as a second owner in a world package. World objects and external placement intent are restored by their respective owners; civilization branches use the explicit `worldCivilizationRuntimeSnapshot()` / `worldRestoreCivilizationRuntime()` APIs.
 
 ## Explicit exclusions
 
-The following stores are deliberately not reported as active entries in this directory. A source is not excluded because it is unimportant; it is excluded because its runtime scope, identity meaning, ownership, or persistence adapter is different from the three active domains above.
+The following stores are deliberately not reported as active entries in this directory. A source is not excluded because it is unimportant; it is excluded because its runtime scope, identity meaning, ownership, or persistence adapter is different from the four active domains above.
 
 | Excluded domain | Source | Classification and reason |
 |---|---|---|
 | `finite-simulation-entity` | `src/simulation/EntityLayer.ts` / `src/simulation/SimulationEngine.ts` | Numeric IDs and cell ownership in the finite simulation. This runtime is not wired as a provider by the active `boot.js` entry point. Its dense/sparse reconciliation and rollback contract must remain separate until an explicit adapter is designed. |
-| `simulation-agent` | `src/simulation/AgentSystem.ts` | Finite-simulation agents have their own ID allocator, state and migration/restore semantics; no provider is attached to the active booted runtime. |
+| `simulation-agent` | `src/simulation/AgentSystem.ts` | Separate finite-simulation agent subsystem; not wired into the active booted runtime. Do not confuse it with the active transient `src/modes/agents/AgentSystem.ts` domain. |
 | `simulation-civilization` | `src/simulation/CivilizationSystem.ts` | Finite simulation subsystem, distinct from the World Library's counterfactual branch runtime. It is not an active boot-domain provider. |
 | `legacy-cluster` | `src/entity/EntityLayer.ts` | Legacy cluster detector; no active production provider is wired into the booted application. |
 | `kernel-ecs` | `src/kernel/World.ts` and `src/kernel/Entity.ts` | Standalone ECS world with its own entity map and component store. It has no adapter connected to the active application runtime. |
@@ -47,6 +48,7 @@ The World Library contains several kinds of ID-bearing data. They must not all b
 | Store or subsystem | Classification | Directory treatment |
 |---|---|---|
 | `CivilizationRuntime.branches` | Persistent analytical/counterfactual branches with stable `branchId` and history | Included as `world-library-civilization-branch` |
+| `AgentSystem.agents` | Session-local simulation actors with numeric IDs; visual projections use `persistence: 'transient'` | Included as `active-agent` while live; not restored from world packages |
 | `CivilizationRuntime.branchStates`, branch resources, environments and causal events | Sidecar state owned by a branch | Not separate identities; each is subordinate to the branch ID |
 | `CivilizationRuntime.experiments` | Experiment results referencing branch IDs and outcomes | Result records, not live world entities |
 | `WorldResourceEconomy.resources` | Semantic resource inventory | Explicitly excluded |
