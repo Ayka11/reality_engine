@@ -185,8 +185,8 @@ try {
 
   const immutableGenerator = new WorldGenerator("immutable-generator-seed");
   const generatorSampleBefore = immutableGenerator.sampleHeight(137, -91);
-  assert.equal("seed" in immutableGenerator, false,
-    "WorldGenerator must not expose its authoritative seed as a writable data property");
+  assert.equal(Object.hasOwn(immutableGenerator, "seed"), false,
+    "WorldGenerator must expose its seed only through a read-only prototype getter");
   assert.equal(Reflect.set(immutableGenerator, "seed", "tampered-seed"), false);
   assert.equal(immutableGenerator.sampleHeight(137, -91), generatorSampleBefore,
     "public generator metadata must not be mutable through browser JavaScript");
