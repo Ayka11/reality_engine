@@ -90,6 +90,10 @@ export class WorldAssetRuntime {
     return this.#assets.get(id)?.animations.map(clip => clip.name) ?? []
   }
 
+  isAssetVisible(id: string): boolean | undefined {
+    return this.#assets.get(id)?.object.visible
+  }
+
   async load(
     id: string,
     sourceUrl: string,
