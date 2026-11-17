@@ -17,11 +17,15 @@ export type ResourceCapability = {
 }
 
 export class WorldResourceEconomy {
-  private readonly resources = new Map<string, ResourceState>()
+  #resources = new Map<string, ResourceState>()
+
+  constructor() {
+    Object.freeze(this)
+  }
 
   private canonicalId(id: string) {
-    if (id === 'resource.iron' && this.resources.has('resource.metal')) return 'resource.metal'
-    if (id === 'resource.metal' && this.resources.has('resource.iron')) return 'resource.iron'
+    if (id === 'resource.iron' && this.#resources.has('resource.metal')) return 'resource.metal'
+    if (id === 'resource.metal' && this.#resources.has('resource.iron')) return 'resource.iron'
     return id
   }
 
@@ -37,29 +41,55 @@ export class WorldResourceEconomy {
         quality: Math.max(0.25, Math.min(1, 0.55 + (rule.weight ?? 1) * 0.12)),
         accessibility: Math.max(0.2, Math.min(1, 0.5 + (rule.weight ?? 1) * 0.1)),
       }
-      this.resources.set(state.semanticEntryId, state)
-      states.push(state)
+      this.#resources.set(state.semanticEntryId, { ...state })
+      states.push({ ...state })
     }
     return states
   }
 
-  set(state: ResourceState) { this.resources.set(state.semanticEntryId, state); return state }
-  get(id: string) { return this.resources.get(this.canonicalId(id)) }
-  all() { return [...this.resources.values()] }
+  /** Store a detached resource record and return a detached write result. */
+  set(state: ResourceState): ResourceState {
+    this.assertValidState(state)
+    const stored = { ...state }
+    this.#resources.set(stored.semanticEntryId, stored)
+    return { ...stored }
+  }
+
+  /** Read a detached resource record; callers cannot mutate live economy state. */
+  get(id: string): ResourceState | undefined {
+    const resource = this.#resources.get(this.canonicalId(id))
+    return resource ? { ...resource } : undefined
+  }
+
+  /** Return detached records rather than references into the authoritative map. */
+  all(): ResourceState[] {
+    return [...this.#resources.values()].map(resource => ({ ...resource }))
+  }
 
   snapshot(): ResourceState[] {
     return this.all().map((resource) => ({ ...resource }))
   }
 
   restore(snapshot: ResourceState[]) {
-    this.resources.clear()
-    for (const resource of snapshot) this.resources.set(resource.semanticEntryId, { ...resource })
+    if (!Array.isArray(snapshot)) {
+      throw new TypeError('World resource restore requires an array snapshot')
+    }
+    const next = new Map<string, ResourceState>()
+    for (const resource of snapshot) {
+      this.assertValidState(resource)
+      if (next.has(resource.semanticEntryId)) {
+        throw new Error(`Duplicate world resource ID: ${resource.semanticEntryId}`)
+      }
+      next.set(resource.semanticEntryId, { ...resource })
+    }
+    // Publish only after the entire candidate inventory has been validated.
+    this.#resources = next
     return this.snapshot()
   }
 
 
   capability(id: string, requiredAmount: number): ResourceCapability {
-    const resource = this.resources.get(this.canonicalId(id))
+    const resource = this.#resources.get(this.canonicalId(id))
     const effective = resource ? resource.amount * resource.quality * resource.accessibility : 0
     const score = requiredAmount <= 0 ? 1 : Math.max(0, Math.min(1, effective / requiredAmount))
     return { semanticEntryId: id, requiredAmount, available: score >= 1, score }
@@ -80,23 +110,37 @@ export class WorldResourceEconomy {
   }
 
   consume(id: string, amount: number) {
-    const resource = this.resources.get(id)
+    const resource = this.#resources.get(id)
     if (!resource || resource.amount < amount) return false
     resource.amount -= amount
     return true
   }
 
   tick(delta = 1) {
-    for (const resource of this.resources.values()) {
+    for (const resource of this.#resources.values()) {
       resource.amount = Math.min(resource.capacity, resource.amount + resource.regeneration * delta)
     }
   }
 
   stats() {
     return {
-      total: this.resources.size,
+      total: this.#resources.size,
       totalAmount: this.all().reduce((sum, resource) => sum + resource.amount, 0),
       resources: this.all(),
+    }
+  }
+
+  private assertValidState(state: ResourceState): void {
+    if (!state || typeof state !== 'object' ||
+        typeof state.semanticEntryId !== 'string' || !state.semanticEntryId.trim() ||
+        ![
+          state.amount,
+          state.capacity,
+          state.regeneration,
+          state.quality,
+          state.accessibility,
+        ].every(Number.isFinite)) {
+      throw new TypeError('World resource state requires a stable ID and finite numeric fields')
     }
   }
 }
