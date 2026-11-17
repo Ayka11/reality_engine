@@ -346,7 +346,7 @@ export function bootstrapInfiniteWorld() {
     scale = 1,
   ) => world.scatterExternalSemantic(semanticEntryId, count, radius, seed, scale, assetId)
   ;(window as any).worldExternalAssetAnimationNames = (assetId: string) =>
-    world.worldAssetRuntime.get(assetId)?.animations.map(clip => clip.name) ?? []
+    world.worldAssetRuntime.getAnimationNames(assetId)
   ;(window as any).worldExternalAssetAnimationPlay = (
     instanceId: string,
     clipName?: string,
