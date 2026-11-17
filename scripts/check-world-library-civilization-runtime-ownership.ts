@@ -44,7 +44,7 @@ try {
   assert.equal(economy.get("resource.ownership-test")?.amount, 60,
     "stats must not leak internal resource records");
 
-  const restoreResult = economy.restore([{
+  const resourceRestoreResult = economy.restore([{
     semanticEntryId: "resource.restored-test",
     amount: 25,
     capacity: 50,
@@ -52,7 +52,7 @@ try {
     quality: 0.7,
     accessibility: 0.6,
   }]);
-  restoreResult[0]!.amount = -60;
+  resourceRestoreResult[0]!.amount = -60;
   assert.equal(economy.get("resource.restored-test")?.amount, 25,
     "restore must return detached resource records");
 
