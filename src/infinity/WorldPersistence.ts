@@ -1,5 +1,5 @@
 import { chunkKey, worldToChunk } from './WorldCoordinate'
-import { cloneWorldObject, type WorldObject } from './WorldObject'
+import type { WorldObject } from './WorldObject'
 
 type StoredChunk = { version: 1; seed: string; objects: WorldObject[] }
 
@@ -14,6 +14,10 @@ export type WorldStateReadResult<T> =
   | { status: 'missing'; reason: string }
   | { status: 'unavailable'; reason: string }
   | { status: 'corrupt'; reason: string }
+
+function cloneStoredWorldObject(object: WorldObject): WorldObject {
+  return { ...object, properties: { ...object.properties } }
+}
 
 function isStoredWorldObject(value: unknown): value is WorldObject {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
@@ -490,7 +494,7 @@ export class WorldPersistence {
     } catch {
       // The cache remains usable, but callers must be told persistence failed.
     }
-    const detachedObjects = objects.map(cloneWorldObject)
+    const detachedObjects = objects.map(cloneStoredWorldObject)
     this.#cache.set(key, detachedObjects)
     this.#loaded.add(key)
     if (!chunkSaved) return false
@@ -511,7 +515,7 @@ export class WorldPersistence {
 
     const key = chunkKey(cx, cy, cz)
     if (this.#cache.has(key)) {
-      return { status: 'ok', objects: this.#cache.get(key)!.map(cloneWorldObject) }
+      return { status: 'ok', objects: this.#cache.get(key)!.map(cloneStoredWorldObject) }
     }
     if (this.#missingChunks.has(key)) {
       return { status: 'missing', objects: [], reason: 'chunk-payload-not-found' }
@@ -565,9 +569,9 @@ export class WorldPersistence {
     }
 
     this.#loaded.add(key)
-    const detachedObjects = payload.objects.map(cloneWorldObject)
+    const detachedObjects = payload.objects.map(cloneStoredWorldObject)
     this.#cache.set(key, detachedObjects)
-    return { status: 'ok', objects: detachedObjects.map(cloneWorldObject) }
+    return { status: 'ok', objects: detachedObjects.map(cloneStoredWorldObject) }
   }
 
   /** Legacy array API for streaming callers; use readChunk when status matters. */
