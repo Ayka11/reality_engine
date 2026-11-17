@@ -28,48 +28,50 @@ function hashString(input: string): string {
 }
 
 export class ExperimentRunner {
-  private startedAt = 0
-  private protocol: ExperimentProtocol | null = null
-  private results: Record<string, unknown> = {}
+  #startedAt = 0
+  #protocol: ExperimentProtocol | null = null
+  #results: Record<string, unknown> = {}
+
+  constructor() { Object.freeze(this) }
 
   start(protocol: ExperimentProtocol) {
     const detachedProtocol = structuredClone(protocol)
-    this.startedAt = Date.now()
-    this.protocol = detachedProtocol
-    this.results = {}
+    this.#startedAt = Date.now()
+    this.#protocol = detachedProtocol
+    this.#results = {}
     return this.snapshot('running')
   }
 
   record(name: string, value: unknown) {
-    if (!this.protocol) throw new Error('Experiment has not started')
-    this.results[name] = structuredClone(value)
+    if (!this.#protocol) throw new Error('Experiment has not started')
+    this.#results[name] = structuredClone(value)
   }
 
   finish(status: 'completed' | 'aborted' = 'completed') {
-    if (!this.protocol) throw new Error('Experiment has not started')
+    if (!this.#protocol) throw new Error('Experiment has not started')
     return this.snapshot(status)
   }
 
   private snapshot(status: ExperimentSnapshot['status']): ExperimentSnapshot {
-    if (!this.protocol) throw new Error('Experiment has not started')
-    const finishedAt = status === 'running' ? this.startedAt : Date.now()
+    if (!this.#protocol) throw new Error('Experiment has not started')
+    const finishedAt = status === 'running' ? this.#startedAt : Date.now()
     const payload = {
-      protocol: this.protocol,
-      results: this.results,
+      protocol: this.#protocol,
+      results: this.#results,
     }
     const fingerprint = hashString(stableSerialize(payload))
     return structuredClone({
-      protocol: this.protocol,
-      startedAt: this.startedAt,
+      protocol: this.#protocol,
+      startedAt: this.#startedAt,
       finishedAt,
-      durationMs: Math.max(0, finishedAt - this.startedAt),
+      durationMs: Math.max(0, finishedAt - this.#startedAt),
       status,
       fingerprint,
-      results: this.results,
+      results: this.#results,
     })
   }
 
   get active() {
-    return this.protocol !== null
+    return this.#protocol !== null
   }
 }
