@@ -6,6 +6,8 @@ import { WorldLibrary, type WorldLibraryEntry } from "../src/worldLibrary/WorldL
 import { WorldRuleGraph, type WorldRule } from "../src/worldLibrary/WorldRuleGraph";
 import { worldRuleGraph } from "../src/worldLibrary/registry";
 import { WorldViewContract } from "../src/infinity/WorldViewContract";
+import { InfiniteChunkManager } from "../src/infinity/ChunkManager";
+import { WorldGenerator } from "../src/infinity/WorldGenerator";
 
 const resourcesBefore = worldResourceEconomy.snapshot();
 try {
@@ -180,6 +182,28 @@ try {
   const productionAllTimelines = productionRuntime.allTimelines();
   productionAllTimelines[0]!.details = "tampered-all-timelines";
   assert.notEqual(productionRuntime.allTimelines()[0]!.details, "tampered-all-timelines");
+
+  const chunkManager = new InfiniteChunkManager(new WorldGenerator("chunk-ownership"), {
+    radius: 0,
+    verticalRadius: 0,
+    maxLoaded: 1,
+    maxNewPerUpdate: 1,
+  });
+  assert.equal("loaded" in chunkManager, false,
+    "chunk manager must not expose its authoritative loaded-chunk Map");
+  assert.equal(Reflect.set(chunkManager, "loaded", new Map()), false);
+  const chunkDelta = chunkManager.update({ cx: 0, cy: 0, cz: 0 });
+  assert.equal(chunkDelta.loaded.length, 1);
+  const emittedChunk = chunkDelta.loaded[0]!;
+  const storedHeight = chunkManager.get(0, 0, 0)!.heights[0]!;
+  emittedChunk.heights[0] = storedHeight + 1000;
+  emittedChunk.biome[0] = 255;
+  assert.equal(chunkManager.get(0, 0, 0)!.heights[0], storedHeight,
+    "chunk update results must not expose authoritative typed arrays");
+  const chunkRead = chunkManager.get(0, 0, 0)!;
+  chunkRead.moisture[0] = 999;
+  assert.notEqual(chunkManager.get(0, 0, 0)!.moisture[0], 999,
+    "chunk get must return copied typed-array buffers");
 
   const viewContract = new WorldViewContract();
   assert.equal("state" in viewContract, false,
