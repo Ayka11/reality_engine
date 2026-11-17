@@ -395,9 +395,9 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).productionInfrastructureState = (id: string) => productionInfrastructureRuntime.get(id)
   ;(window as any).worldSimulationTick = (id: string, tier = 'village', delta = 1) => world.tickWorldSimulation(id, tier as any, delta)
   ;(window as any).worldEvolutionClock = (id: string, scale?: 'minute' | 'year' | 'decade' | 'century') => {
+    if (scale) productionInfrastructureRuntime.setTimeScale(id, scale)
     const state = productionInfrastructureRuntime.get(id)
     if (!state) return null
-    if (scale) state.worldTime.scale = scale
     return { ...state.worldTime, history: state.history }
   }
   ;(window as any).worldTimeline = (id: string) => productionInfrastructureRuntime.timeline(id)
