@@ -1054,6 +1054,36 @@ export class WorldAssetRuntime {
   }
 }
 
+/**
+ * Restricted interface for browser-facing and subsystem consumers.
+ * No method in this contract returns a live Three.js scene object.
+ */
+export type WorldAssetRuntimeFacade = Pick<
+  WorldAssetRuntime,
+  | 'has'
+  | 'get'
+  | 'getSemanticSource'
+  | 'hasSemanticSource'
+  | 'getAnimationNames'
+  | 'hasInstance'
+  | 'getInstanceSourceAssetId'
+  | 'getInstanceSemanticEntryId'
+  | 'getInstanceRuntimeOwnerId'
+  | 'setInstanceRuntimeOwnerId'
+  | 'setInstanceWorldTransform'
+  | 'removeInstance'
+  | 'playInstanceAnimation'
+  | 'stopInstanceAnimation'
+  | 'setInstanceAnimationState'
+  | 'setSemanticAnimationState'
+  | 'stopSemanticAnimation'
+  | 'snapshotPlacements'
+  | 'stats'
+> & {
+  /** Publishes only whether the requested instance exists; never returns Object3D. */
+  placeInstance: (...args: Parameters<WorldAssetRuntime['placeInstance']>) => boolean
+}
+
 
 /**
  * Ground a scatter batch against the active world surface as one transaction.
