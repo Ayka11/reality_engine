@@ -1209,6 +1209,15 @@ try {
         world?.constructionContract,
         world?.legacySculptRuntimeAdapter,
       ].every(value => value && Object.isFrozen(value)),
+      subsystemReferencesPinned: [
+        "renderer", "camera", "controls", "legacySculptRuntimeAdapter",
+        "decisionLayer", "constructionContract", "decisionGraph", "fieldPhysics",
+        "lawPhysicsContract", "physicsInteractionLog", "runtimeDiagnostics",
+        "experimentRunner", "experimentCatalog",
+      ].every(key => {
+        const descriptor = Object.getOwnPropertyDescriptor(world, key);
+        return descriptor?.writable === false && descriptor?.configurable === false;
+      }),
       hasParticleSnapshot: typeof world?.getPhysicsParticlePositionSnapshot === "function",
       hasPatchSnapshots: typeof world?.getTerrainPatchSnapshots === "function",
       hasSeamDiagnostics: typeof world?.getTerrainSeamDiagnostics === "function",
