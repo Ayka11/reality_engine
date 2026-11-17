@@ -16,7 +16,17 @@ export type WorldStateReadResult<T> =
   | { status: 'corrupt'; reason: string }
 
 function cloneStoredWorldObject(object: WorldObject): WorldObject {
-  return { ...object, properties: { ...object.properties } }
+  return {
+    id: object.id,
+    kind: object.kind,
+    x: object.x,
+    y: object.y,
+    z: object.z,
+    rotationY: object.rotationY,
+    scale: object.scale,
+    seed: object.seed,
+    properties: { ...object.properties },
+  }
 }
 
 function isStoredWorldObject(value: unknown): value is WorldObject {
