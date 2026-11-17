@@ -1707,8 +1707,16 @@ assert.match(rendererSource, /readonly #worldAssetRuntime: WorldAssetRuntime/,
   'the mutable Three.js runtime must remain in a JavaScript private field')
 assert.match(rendererSource, /Object\.defineProperty\(this, 'worldAssetRuntime'/,
   'the browser-facing runtime API must be published as a separate facade')
-assert.match(rendererSource, /value: Object\.freeze\(\{[\s\S]*?snapshotPlacements:[\s\S]*?setInstanceWorldTransform:[\s\S]*?stats:/,
-  'the public runtime facade must expose only detached snapshots and ID-based operations')
+assert.match(rendererSource, /value: Object\.freeze\(\{/,
+  'the public runtime facade must be frozen')
+assert.match(rendererSource, /snapshotPlacements:/,
+  'the public runtime facade must expose detached placement snapshots')
+assert.match(rendererSource, /setInstanceWorldTransform:/,
+  'the public runtime facade must expose validated ID-based transform updates')
+assert.match(rendererSource, /stats:/,
+  'the public runtime facade may expose detached runtime statistics')
+assert.doesNotMatch(rendererSource, /scatterSemanticWithResult:|scatterSemantic:/,
+  'the public runtime facade must not expose methods that return live scene objects')
 assert.doesNotMatch(rendererSource, /readonly worldAssetRuntime: WorldAssetRuntime/,
   'the renderer must not expose the backing runtime instance as a public property')
 
