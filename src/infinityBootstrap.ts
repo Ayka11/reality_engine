@@ -72,7 +72,17 @@ export function bootstrapInfiniteWorld() {
     const entries = world.objects.values()
     const externalAssetPlacements = world.getExternalAssetPlacementIdentityRecords()
     const civilizationBranches = civilizationRuntime.branchesList()
+    const activeAgents = (window as any).agentSystem?.agents
+    const activeAgentIdentities = Array.isArray(activeAgents)
+      ? activeAgents
+        .filter((agent: any) => Number.isSafeInteger(agent?.id) && agent.id >= 0)
+        .map((agent: any) => ({ id: agent.id, kind: typeof agent.state === 'string' ? agent.state : 'agent' }))
+      : []
     globalEntityIdentityRegistry.replaceDomains([
+      {
+        domain: 'active-agent',
+        entries: activeAgentIdentities,
+      },
       {
         domain: 'infinite-world-object',
         entries: entries.map(object => ({ id: object.id, kind: object.kind })),
@@ -94,6 +104,7 @@ export function bootstrapInfiniteWorld() {
       coverage: Object.freeze({
         status: 'partial' as const,
         capturedDomains: Object.freeze([
+          'active-agent',
           'infinite-world-object',
           'external-asset-placement',
           'world-library-civilization-branch',
