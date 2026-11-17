@@ -420,6 +420,17 @@ try {
   ]), /requires an id/);
   assert.deepEqual(library.all(), libraryBeforeInvalidBatch,
     "WorldLibrary registerMany must not partially publish a batch when one entry is invalid");
+  assert.throws(() => library.register({
+    ...libraryInput,
+    id: "invalid-library-tags",
+    tags: "not-an-array" as never,
+  }), /tags must be an array of strings/);
+  assert.throws(() => library.registerMany([
+    { ...libraryInput, id: "valid-before-invalid-tags" },
+    { ...libraryInput, id: "invalid-tags-in-batch", tags: [1] as never },
+  ]), /tags must be an array of strings/);
+  assert.deepEqual(library.all(), libraryBeforeInvalidBatch,
+    "WorldLibrary must reject malformed tag metadata without publishing a partial batch");
 
   const ruleGraph = new WorldRuleGraph();
   assert.equal("rules" in ruleGraph, false,
