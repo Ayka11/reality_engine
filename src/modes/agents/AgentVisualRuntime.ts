@@ -1,4 +1,4 @@
-import type { WorldAssetRuntime } from '../../worldLibrary/WorldAssetRuntime'
+import type { WorldAssetRuntimeFacade } from '../../worldLibrary/WorldAssetRuntime'
 import type { Agent } from './AgentSystem'
 import {
   validateAgentGridWorldTransform,
@@ -68,7 +68,7 @@ export class AgentVisualRuntime {
   private readonly ownerId: string
 
   constructor(
-    private readonly assets: WorldAssetRuntime,
+    private readonly assets: WorldAssetRuntimeFacade,
     transform: AgentGridWorldTransform,
     private readonly resolveWorldPosition: AgentVisualWorldPositionResolver = position => position,
     private readonly sourceAssetId?: string,
@@ -154,7 +154,7 @@ export class AgentVisualRuntime {
       return { ...current }
     }
 
-    const clipNames = source.animations.map(clip => clip.name)
+    const clipNames = this.assets.getAnimationNames(source.id)
     const fadeDuration = profile.fadeDuration ?? 0.2
     const scale = profile.scale ?? 1
 
