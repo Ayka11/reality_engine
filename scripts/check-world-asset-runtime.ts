@@ -1705,6 +1705,10 @@ assert.doesNotMatch(rendererRemovalSource, /pendingRemoved && !runtimeRemoved/,
 
 assert.match(rendererSource, /readonly #worldAssetRuntime: WorldAssetRuntime/,
   'the mutable Three.js runtime must remain in a JavaScript private field')
+assert.match(rendererSource, /readonly #scene = new THREE\.Scene\(\)/,
+  'the live Three.js scene must remain in a JavaScript private field')
+assert.doesNotMatch(rendererSource, /readonly scene = new THREE\.Scene\(\)/,
+  'the live Three.js scene must not be exposed as a public renderer property')
 assert.match(rendererSource, /Object\.defineProperty\(this, 'worldAssetRuntime'/,
   'the browser-facing runtime API must be published as a separate facade')
 assert.match(rendererSource, /value: Object\.freeze\(\{/,
