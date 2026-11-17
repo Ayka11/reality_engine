@@ -8,6 +8,14 @@ import { worldRuleGraph } from "../src/worldLibrary/registry";
 import { WorldViewContract } from "../src/infinity/WorldViewContract";
 import { InfiniteChunkManager } from "../src/infinity/ChunkManager";
 import { WorldGenerator } from "../src/infinity/WorldGenerator";
+import { DecisionGraph } from "../src/infinity/DecisionGraph";
+import { PhysicsInteractionLog } from "../src/infinity/PhysicsInteractionLog";
+import { RuntimeDiagnostics } from "../src/infinity/RuntimeDiagnostics";
+import { ExperimentRunner } from "../src/infinity/ExperimentRunner";
+import { ExperimentCatalog } from "../src/infinity/ExperimentCatalog";
+import { WorldConstructionContract } from "../src/infinity/WorldConstructionContract";
+import { LawPhysicsContract } from "../src/infinity/LawPhysicsContract";
+import { LegacySculptRuntimeAdapter } from "../src/infinity/LegacySculptRuntimeAdapter";
 
 const resourcesBefore = worldResourceEconomy.snapshot();
 try {
@@ -182,6 +190,103 @@ try {
   const productionAllTimelines = productionRuntime.allTimelines();
   productionAllTimelines[0]!.details = "tampered-all-timelines";
   assert.notEqual(productionRuntime.allTimelines()[0]!.details, "tampered-all-timelines");
+
+  const decisionGraph = new DecisionGraph();
+  assert.equal("nodes" in decisionGraph, false);
+  assert.equal("edges" in decisionGraph, false);
+  assert.equal(Reflect.set(decisionGraph, "nodes", new Map()), false);
+  const graphNode = decisionGraph.addNode({
+    id: "decision-node",
+    kind: "decision",
+    label: "Decision",
+    data: { nested: { value: 1 } },
+  });
+  graphNode.data!.nested.value = 99;
+  assert.equal((decisionGraph.getNode("decision-node")!.data!.nested as any).value, 1,
+    "decision graph nodes must be detached on write and read");
+  assert.ok(Object.isFrozen(decisionGraph));
+
+  const interactionLog = new PhysicsInteractionLog(2);
+  assert.equal("records" in interactionLog, false);
+  assert.equal("maxRecords" in interactionLog, false);
+  assert.equal(Reflect.set(interactionLog, "records", []), false);
+  interactionLog.add({
+    id: "interaction-1",
+    timestamp: 1,
+    type: "gravity",
+    objectKind: "tree",
+    objectId: "tree-1",
+    particleIndex: 0,
+    position: { x: 0, y: 0, z: 0 },
+    field: { energy: 1, density: 1, information: 1, entropy: 0, temperature: 0, biology: 0, material: 0 } as any,
+    modulation: { gravity: 1 },
+    magnitude: 1,
+  });
+  const exposedInteraction = interactionLog.snapshot()[0]!;
+  exposedInteraction.position.x = 999;
+  assert.equal(interactionLog.snapshot()[0]!.position.x, 0,
+    "physics interaction history must return detached nested records");
+  assert.ok(Object.isFrozen(interactionLog));
+
+  const diagnostics = new RuntimeDiagnostics();
+  assert.equal("frames" in diagnostics, false);
+  assert.equal(Reflect.set(diagnostics, "frames", 1000), false);
+  assert.equal(diagnostics.snapshot(0, 0, 0).renderedFrames, 0);
+  assert.ok(Object.isFrozen(diagnostics));
+
+  const experimentRunner = new ExperimentRunner();
+  assert.equal("protocol" in experimentRunner, false);
+  assert.equal("results" in experimentRunner, false);
+  assert.equal(Reflect.set(experimentRunner, "protocol", {}), false);
+  const experimentProtocol = {
+    experimentId: "ownership-test",
+    field: { providerId: "test-provider", providerVersion: 1 },
+    world: { seed: "ownership-seed" },
+  } as any;
+  const runningExperiment = experimentRunner.start(experimentProtocol);
+  runningExperiment.protocol.world.seed = "tampered";
+  experimentRunner.record("result", { nested: { value: 1 } });
+  const completedExperiment = experimentRunner.finish();
+  assert.equal(completedExperiment.protocol.world.seed, "ownership-seed");
+  completedExperiment.results.result.nested.value = 999;
+  assert.equal(experimentRunner.finish().results.result.nested.value, 1,
+    "experiment runner snapshots must not expose internal protocol or results");
+  assert.ok(Object.isFrozen(experimentRunner));
+
+  const experimentCatalog = new ExperimentCatalog();
+  assert.equal("snapshots" in experimentCatalog, false);
+  assert.equal(Reflect.set(experimentCatalog, "snapshots", new Map()), false);
+  experimentCatalog.add(completedExperiment);
+  const catalogSnapshot = experimentCatalog.get("ownership-test")!;
+  catalogSnapshot.protocol.world.seed = "tampered-catalog";
+  assert.equal(experimentCatalog.get("ownership-test")!.protocol.world.seed, "ownership-seed",
+    "experiment catalogue reads must remain detached");
+  assert.ok(Object.isFrozen(experimentCatalog));
+
+  const constructionContract = new WorldConstructionContract({
+    buildZoneCost: () => ({
+      cost: 1,
+      components: {},
+      buildability: { score: 0, slope: 0, waterDepth: 0, elevation: 0, field: {} as any, components: {} },
+      laws: { activeProcesses: [], penalty: 1 },
+    }),
+  } as any);
+  assert.equal("structural" in constructionContract, false);
+  assert.equal(Reflect.set(constructionContract, "structural", new Set()), false);
+  assert.equal(constructionContract.authorize("tree", 0, 0).allowed, true);
+  assert.equal(constructionContract.authorize("building", 0, 0).allowed, false);
+  assert.ok(Object.isFrozen(constructionContract));
+
+  const lawContract = new LawPhysicsContract(() => ({ processes: ["gravity"] }));
+  assert.equal("lawProvider" in lawContract, false);
+  assert.equal(Reflect.set(lawContract, "lawProvider", () => ({ processes: [] })), false);
+  assert.equal(lawContract.apply({ gravity: 1, entropyDamping: 1, quantumLift: 1, forcePush: 1, metaLawOrbit: 1 }).gravity, 1);
+  assert.ok(Object.isFrozen(lawContract));
+
+  const legacyAdapter = new LegacySculptRuntimeAdapter(mutation => ({ ...mutation, id: 1 } as any));
+  assert.equal("applyMutation" in legacyAdapter, false);
+  assert.equal(Reflect.set(legacyAdapter, "applyMutation", () => null), false);
+  assert.ok(Object.isFrozen(legacyAdapter));
 
   const immutableGenerator = new WorldGenerator("immutable-generator-seed");
   const generatorSampleBefore = immutableGenerator.sampleHeight(137, -91);
