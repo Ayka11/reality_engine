@@ -56,6 +56,22 @@ try {
   assert.equal(economy.get("resource.restored-test")?.amount, 25,
     "restore must return detached resource records");
 
+  economy.set({
+    semanticEntryId: "resource.metal",
+    amount: 10,
+    capacity: 20,
+    regeneration: 1,
+    quality: 0.9,
+    accessibility: 0.8,
+  });
+  assert.equal(economy.consume("resource.iron", 3), true,
+    "consume must resolve canonical aliases consistently with reads and capability checks");
+  assert.equal(economy.get("resource.metal")?.amount, 7);
+  assert.equal(economy.consume("resource.metal", Number.NaN), false);
+  assert.equal(economy.consume("resource.metal", -2), false);
+  assert.throws(() => economy.tick(-1), /finite and non-negative/);
+  assert.throws(() => economy.seedFromBiome("temperate-forest", Number.NaN), /finite non-negative multiplier/);
+
   const beforeInvalidResourceRestore = economy.snapshot();
   assert.throws(() => economy.restore([
     {
@@ -74,7 +90,7 @@ try {
       quality: 1,
       accessibility: 1,
     },
-  ]), /stable ID and finite numeric fields/);
+  ]), /stable ID and valid finite resource bounds/);
   assert.deepEqual(economy.snapshot(), beforeInvalidResourceRestore,
     "invalid resource restore must leave the previous inventory unchanged");
 
