@@ -94,8 +94,22 @@ const currentScene = createGltfScene()
 requests[1].onLoad({ scene: currentScene })
 const [asset, duplicateAsset] = await Promise.all([currentLoad, duplicateCurrentLoad])
 assert.equal(asset, duplicateAsset, 'concurrent requests for the current asset must share one loaded asset')
-assert.equal(runtime.getSemanticSource('flora.oak'), asset)
+assert.deepEqual(runtime.getSemanticSource('flora.oak'), asset)
 assert.equal(scene.children.length, 1)
+const publicAssetInfo = runtime.get('oak')!
+assert.deepEqual(publicAssetInfo, asset, 'get must return detached source metadata')
+assert.equal(Object.isFrozen(publicAssetInfo), true, 'get metadata must be immutable')
+assert.equal('object' in publicAssetInfo, false, 'get must not expose the authoritative Three.js object')
+assert.equal('animations' in publicAssetInfo, false, 'get must not expose mutable animation clips')
+assert.equal(Reflect.set(publicAssetInfo, 'id', 'decoy'), false,
+  'get metadata must reject identity replacement')
+assert.throws(() => Object.defineProperty(publicAssetInfo, 'sourceUrl', { value: 'decoy' }), TypeError)
+const publicAssets = runtime.all()
+assert.equal(publicAssets.length, 1)
+assert.equal(Object.isFrozen(publicAssets[0]), true, 'all must return immutable detached metadata')
+assert.equal('object' in publicAssets[0], false, 'all must not expose scene object references')
+assert.equal(runtime.hasSemanticSource('flora.oak'), true)
+assert.deepEqual(runtime.getAnimationNames('oak'), [], 'animation names must be exposed as copied strings')
 await assert.rejects(
   runtime.load('oak', 'https://assets.example.test/other-oak.glb', { semanticEntryId: 'flora.oak' }),
   /already owned by a different source URL or semantic entry/,
@@ -146,7 +160,7 @@ const replacementAfterRemovalAsset = await replacementAfterRemovalLoad
 assert.equal(replacementAfterRemovalAsset.id, 'reusable-after-removal')
 assert.equal(replacementAfterRemovalAsset.sourceUrl,
   'https://assets.example.test/replacement-after-removal.glb')
-assert.equal(pendingRemovalRuntime.get('reusable-after-removal'), replacementAfterRemovalAsset,
+assert.deepEqual(pendingRemovalRuntime.get('reusable-after-removal'), replacementAfterRemovalAsset,
   'the old request finalizer must not erase the replacement request or its loaded asset')
 assert.equal(pendingRemovalScene.children.length, 1)
 assert.equal(pendingRemovalRuntime.remove('reusable-after-removal'), true)
@@ -182,7 +196,7 @@ identityRequest.onLoad({ scene: createGltfScene() })
 const [identityAsset, identityDuplicateAsset] = await Promise.all([identityLoad, identityDuplicateLoad])
 assert.equal(identityAsset, identityDuplicateAsset,
   'identical concurrent load requests must resolve to the same runtime asset')
-assert.equal(identityRuntime.getSemanticSource('flora.identity'), identityAsset)
+assert.deepEqual(identityRuntime.getSemanticSource('flora.identity'), identityAsset)
 assert.equal(identityRuntime.remove('identity-source'), true)
 
 const semanticOwnershipRuntime = new WorldAssetRuntime(new THREE.Scene(), loader)
@@ -539,7 +553,7 @@ const alternateOakInstance = runtime.placeInstance('oak-alt:instance:1', 'flora.
 assert.ok(alternateOakInstance)
 assert.equal(runtime.remove('oak-alt'), true)
 assert.equal(scene.children.includes(alternateOakInstance), false, 'removing a source asset must also remove its placements')
-assert.equal(runtime.getSemanticSource('flora.oak'), asset, 'removing the latest semantic source must restore another loaded source')
+assert.deepEqual(runtime.getSemanticSource('flora.oak'), asset, 'removing the latest semantic source must restore another loaded source')
 const fallbackOakInstance = runtime.placeInstance('oak:fallback:1', 'flora.oak', { x: 7, y: 0, z: 10 })
 assert.ok(fallbackOakInstance)
 assert.equal(runtime.remove('oak'), true)
