@@ -89,6 +89,9 @@ try {
   const activeAgentIdentityLifecycle = await page.evaluate(() => {
     const system = window.agentSystem;
     const identityApi = window.getGlobalEntityIdentitySnapshot;
+    const systemDescriptor = Object.getOwnPropertyDescriptor(window, "agentSystem");
+    const agentSystemPinned = systemDescriptor?.writable === false &&
+      systemDescriptor?.configurable === false;
     if (!system || typeof system.spawn !== "function" || typeof system.remove !== "function" ||
         typeof identityApi !== "function") {
       return { available: false };
@@ -118,6 +121,7 @@ try {
     const afterSecondRemoval = identityApi();
     return {
       available: true,
+      agentSystemPinned,
       spawnedCount: spawnedEntries.length,
       originalIdPublished: spawnedEntries.some(entry => entry.localId === originalId),
       publicSnapshotIsDetached,
@@ -133,6 +137,7 @@ try {
     };
   });
   if (!activeAgentIdentityLifecycle.available ||
+      !activeAgentIdentityLifecycle.agentSystemPinned ||
       activeAgentIdentityLifecycle.spawnedCount !== 2 ||
       !activeAgentIdentityLifecycle.originalIdPublished ||
       !activeAgentIdentityLifecycle.publicSnapshotIsDetached ||
