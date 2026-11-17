@@ -157,26 +157,27 @@ export function assertCompleteEntityDomain(
  * merge/extinction even when its revision is current.
  */
 export class EntityDomainInventoryAuthority {
-  private current: EntityDomainInventory;
+  #current: EntityDomainInventory;
 
   constructor(scopeId: string) {
-    this.current = captureEntityDomainInventory({
+    this.#current = captureEntityDomainInventory({
       scopeId,
       revision: 0,
       completeness: "partial",
       entityIds: [],
       occupiedCells: [],
     });
+    Object.freeze(this);
   }
 
   snapshot(): EntityDomainInventory {
-    return this.current;
+    return this.#current;
   }
 
   update(input: Omit<EntityDomainInventoryInput, "scopeId" | "revision">): EntityDomainInventory {
     const candidate = captureEntityDomainInventory({
-      scopeId: this.current.scopeId,
-      revision: this.current.revision,
+      scopeId: this.#current.scopeId,
+      revision: this.#current.revision,
       completeness: input.completeness,
       entityIds: input.entityIds,
       occupiedCells: input.occupiedCells,
@@ -184,25 +185,25 @@ export class EntityDomainInventoryAuthority {
     });
 
     const unchanged =
-      candidate.completeness === this.current.completeness &&
-      sameNumbers(candidate.entityIds, this.current.entityIds) &&
-      sameNumbers(candidate.occupiedCells, this.current.occupiedCells) &&
-      sameOwnership(candidate.entityCellOwnership, this.current.entityCellOwnership);
-    if (unchanged) return this.current;
+      candidate.completeness === this.#current.completeness &&
+      sameNumbers(candidate.entityIds, this.#current.entityIds) &&
+      sameNumbers(candidate.occupiedCells, this.#current.occupiedCells) &&
+      sameOwnership(candidate.entityCellOwnership, this.#current.entityCellOwnership);
+    if (unchanged) return this.#current;
 
-    if (this.current.revision >= Number.MAX_SAFE_INTEGER) {
+    if (this.#current.revision >= Number.MAX_SAFE_INTEGER) {
       throw new Error("Entity domain inventory revision exhausted safe integer range");
     }
 
-    this.current = captureEntityDomainInventory({
-      scopeId: this.current.scopeId,
-      revision: this.current.revision + 1,
+    this.#current = captureEntityDomainInventory({
+      scopeId: this.#current.scopeId,
+      revision: this.#current.revision + 1,
       completeness: input.completeness,
       entityIds: input.entityIds,
       occupiedCells: input.occupiedCells,
       entityCellOwnership: input.entityCellOwnership,
     });
-    return this.current;
+    return this.#current;
   }
 }
 
