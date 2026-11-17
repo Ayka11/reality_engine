@@ -108,18 +108,25 @@ try {
 
   const beforeInvalidSeed = economy.snapshot();
   worldRuleGraph.add({
-    id: "ownership-test-invalid-resource-seed",
+    id: "ownership-test-duplicate-iron",
     from: "biome.ownership-test-invalid-seed",
     relation: "produces",
-    to: "resource.invalid-seed",
-    weight: Number.NaN,
+    to: "resource.iron",
+    weight: 0.5,
+  });
+  worldRuleGraph.add({
+    id: "ownership-test-duplicate-metal",
+    from: "biome.ownership-test-invalid-seed",
+    relation: "produces",
+    to: "resource.metal",
+    weight: 0.6,
   });
   assert.throws(
     () => economy.seedFromBiome("biome.ownership-test-invalid-seed"),
-    /stable ID and valid finite resource bounds/,
+    /Duplicate produced resource ID/,
   );
   assert.deepEqual(economy.snapshot(), beforeInvalidSeed,
-    "a malformed biome resource seed must not partially publish inventory changes");
+    "a duplicate canonical resource seed must not partially publish inventory changes");
 
   const beforeInvalidResourceRestore = economy.snapshot();
   assert.throws(() => economy.restore([
