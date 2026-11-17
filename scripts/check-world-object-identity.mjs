@@ -279,7 +279,7 @@ const syncObjectsEnd = rendererSource.indexOf('selectAtScreen(', syncObjectsStar
 assert.ok(syncObjectsStart >= 0 && syncObjectsEnd > syncObjectsStart,
   'renderer syncObjects method must be available for streamed cleanup contract checks')
 const syncObjectsSource = rendererSource.slice(syncObjectsStart, syncObjectsEnd)
-assert.match(syncObjectsSource, /const staleGroups: THREE\.Object3D\[\] = \[\][\s\S]*?staleGroups\.push\(entry\.group\)[\s\S]*?this\.objectMeshes\.delete\(id\)[\s\S]*?detachAndDisposeObjectGroups\(\s*this\.scene,\s*staleGroups/,
+assert.match(syncObjectsSource, /const staleGroups: THREE\.Object3D\[\] = \[\][\s\S]*?staleGroups\.push\(entry\.group\)[\s\S]*?this\.objectMeshes\.delete\(id\)[\s\S]*?detachAndDisposeObjectGroups\(\s*this\.#scene,\s*staleGroups/,
   'stream eviction must batch stale groups through the shared deduplicating resource disposer')
 assert.doesNotMatch(syncObjectsSource, /(?:mesh|obj)\.geometry\.dispose\(\)|material\.dispose\(\)/,
   'stream eviction must not bypass shared disposal and double-dispose cloned/shared resources')
