@@ -347,7 +347,7 @@ try {
 
   assert.throws(() => new WorldGenerator("   "), /non-empty string/);
   assert.throws(() => new WorldGenerator("invalid-bounds", Number.NaN, 52), /elevation bounds must be finite/);
-  assert.throws(() => new WorldGenerator("invalid-order", 52, 16), /maxElevation above seaLevel/);
+  assert.throws(() => new WorldGenerator("invalid-elevation", 16, Number.POSITIVE_INFINITY), /elevation bounds must be finite/);
   const immutableGenerator = new WorldGenerator("immutable-generator-seed");
   const generatorSampleBefore = immutableGenerator.sampleHeight(137, -91);
   assert.equal(Object.hasOwn(immutableGenerator, "seed"), false,
