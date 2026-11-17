@@ -63,8 +63,8 @@ export class WorldDecisionLayer {
   readonly version = 'world-decision-v1'
   readonly #sampler: FieldSampler
   readonly weights: Readonly<DecisionWeights>
-  readonly lawProvider?: () => { processes?: string[] } | null
-  private readonly terrainHeight?: (x: number, z: number) => number
+  readonly #lawProvider?: () => { processes?: string[] } | null
+  readonly #terrainHeight?: (x: number, z: number) => number
 
   constructor(
     sampler: FieldSampler,
@@ -74,8 +74,9 @@ export class WorldDecisionLayer {
   ) {
     this.#sampler = sampler
     this.weights = Object.freeze({ ...weights })
-    this.lawProvider = lawProvider
-    this.terrainHeight = terrainHeight
+    this.#lawProvider = lawProvider
+    this.#terrainHeight = terrainHeight
+    Object.freeze(this)
   }
 
   private clamp01(value: number) {
@@ -83,8 +84,8 @@ export class WorldDecisionLayer {
   }
 
   private heightAt(x: number, z: number): number {
-    const height = this.terrainHeight
-      ? this.terrainHeight(x, z)
+    const height = this.#terrainHeight
+      ? this.#terrainHeight(x, z)
       : this.#sampler.surfaceProvider.sampleSurface(x, z).height
     if (!Number.isFinite(height)) {
       throw new RangeError(`World decision terrain sampler returned a non-finite height at (${x}, ${z})`)
@@ -98,7 +99,7 @@ export class WorldDecisionLayer {
    * behavior for non-renderer consumers and existing analytical tests.
    */
   private sampleWorld(x: number, z: number): WorldContextSample {
-    if (!this.terrainHeight) return this.#sampler.sampleWorld(x, undefined, z)
+    if (!this.#terrainHeight) return this.#sampler.sampleWorld(x, undefined, z)
 
     const height = this.heightAt(x, z)
     const surfaceProvider = this.#sampler.surfaceProvider
@@ -175,7 +176,7 @@ export class WorldDecisionLayer {
   buildZoneCost(x: number, z: number, distanceFromHub = 0): ZoneCostResult {
     const buildability = this.analyzeBuildability(x, z)
     const w = this.weights
-    const activeProcesses = this.lawProvider?.()?.processes ?? []
+    const activeProcesses = this.#lawProvider?.()?.processes ?? []
     const missing = (name: string) => activeProcesses.includes(name) ? 0 : 1
     const lawPenalty = Math.min(0.55,
       missing('gravity') * 0.20 +
@@ -212,7 +213,7 @@ export class WorldDecisionLayer {
     const water = current.waterDepth > 0.25 ? 1 : 0
     const flood = current.waterDepth > 0 ? Math.min(1, current.waterDepth / 8) : 0
     const scientific = 1 - current.score
-    const activeProcesses = this.lawProvider?.()?.processes ?? []
+    const activeProcesses = this.#lawProvider?.()?.processes ?? []
     const lawPenalty = (activeProcesses.includes('gravity') ? 0 : 0.8) + (activeProcesses.includes('density') ? 0 : 0.5)
 
     const profiles: Record<RouteProfile, { distance:number; slope:number; water:number; flood:number; scientific:number }> = {
