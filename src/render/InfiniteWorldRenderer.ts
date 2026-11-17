@@ -89,7 +89,22 @@ export class InfiniteWorldRenderer {
   readonly runtimeDiagnostics = new RuntimeDiagnostics()
   readonly experimentRunner = new ExperimentRunner()
   readonly experimentCatalog = new ExperimentCatalog()
-  readonly worldAssetRuntime: WorldAssetRuntime
+  /** Safe browser-facing API; the mutable Three.js runtime remains private. */
+  readonly worldAssetRuntime!: Pick<
+    WorldAssetRuntime,
+    | 'hasInstance'
+    | 'getInstanceSourceAssetId'
+    | 'getInstanceSemanticEntryId'
+    | 'snapshotPlacements'
+    | 'setInstanceWorldTransform'
+    | 'stats'
+    | 'getAnimationNames'
+    | 'playInstanceAnimation'
+    | 'stopInstanceAnimation'
+    | 'setSemanticAnimationState'
+    | 'stopSemanticAnimation'
+  >
+  readonly #worldAssetRuntime: WorldAssetRuntime
   #pendingExternalAssetPlacements: ExternalAssetPlacementSnapshot[] = []
   private suppressAssetPlacementAutosave = false
 
@@ -410,8 +425,29 @@ export class InfiniteWorldRenderer {
     })
 
     this.scene.add(this.terrainGroup)
-    this.worldAssetRuntime = new WorldAssetRuntime(this.scene, undefined, () => {
+    this.#worldAssetRuntime = new WorldAssetRuntime(this.scene, undefined, () => {
       if (!this.suppressAssetPlacementAutosave) this.scheduleSave()
+    })
+    // Publish only ID-based operations and detached snapshots to browser code.
+    // The backing runtime is held in a JavaScript private field, so Object3D
+    // references from placement/scatter APIs cannot escape through window.infiniteWorld.
+    Object.defineProperty(this, 'worldAssetRuntime', {
+      configurable: false,
+      enumerable: true,
+      writable: false,
+      value: Object.freeze({
+        hasInstance: this.#worldAssetRuntime.hasInstance.bind(this.#worldAssetRuntime),
+        getInstanceSourceAssetId: this.#worldAssetRuntime.getInstanceSourceAssetId.bind(this.#worldAssetRuntime),
+        getInstanceSemanticEntryId: this.#worldAssetRuntime.getInstanceSemanticEntryId.bind(this.#worldAssetRuntime),
+        snapshotPlacements: this.#worldAssetRuntime.snapshotPlacements.bind(this.#worldAssetRuntime),
+        setInstanceWorldTransform: this.#worldAssetRuntime.setInstanceWorldTransform.bind(this.#worldAssetRuntime),
+        stats: this.#worldAssetRuntime.stats.bind(this.#worldAssetRuntime),
+        getAnimationNames: this.#worldAssetRuntime.getAnimationNames.bind(this.#worldAssetRuntime),
+        playInstanceAnimation: this.#worldAssetRuntime.playInstanceAnimation.bind(this.#worldAssetRuntime),
+        stopInstanceAnimation: this.#worldAssetRuntime.stopInstanceAnimation.bind(this.#worldAssetRuntime),
+        setSemanticAnimationState: this.#worldAssetRuntime.setSemanticAnimationState.bind(this.#worldAssetRuntime),
+        stopSemanticAnimation: this.#worldAssetRuntime.stopSemanticAnimation.bind(this.#worldAssetRuntime),
+      }),
     })
     this.generator = new WorldGenerator(seed)
     this.#terrainDeformations = new TerrainDeformationField(seed)
@@ -739,7 +775,7 @@ export class InfiniteWorldRenderer {
   getExternalAssetPlacementIdentityRecords(): Array<{ id: string; kind: string }> {
     const placements = mergeExternalAssetPlacements(
       this.#pendingExternalAssetPlacements,
-      this.worldAssetRuntime.snapshotPlacements(),
+      this.#worldAssetRuntime.snapshotPlacements(),
     )
     const validation = validateExternalAssetPlacements(placements)
     if (!validation.valid) {
@@ -764,7 +800,7 @@ export class InfiniteWorldRenderer {
     }
     const assetPlacements = mergeExternalAssetPlacements(
       this.#pendingExternalAssetPlacements,
-      this.worldAssetRuntime.snapshotPlacements(),
+      this.#worldAssetRuntime.snapshotPlacements(),
     )
     const placementValidation = validateExternalAssetPlacements(assetPlacements)
     if (!placementValidation.valid) {
@@ -1069,7 +1105,7 @@ export class InfiniteWorldRenderer {
     }
     const assetPlacements = mergeExternalAssetPlacements(
       this.#pendingExternalAssetPlacements,
-      this.worldAssetRuntime.snapshotPlacements(),
+      this.#worldAssetRuntime.snapshotPlacements(),
     )
     if (!this.persistence.saveAssetPlacementsState(assetPlacements)) {
       failedPersistenceOperations.push('external asset placements')
@@ -1285,7 +1321,7 @@ export class InfiniteWorldRenderer {
   clearExternalAssetRuntime() {
     this.suppressAssetPlacementAutosave = true
     try {
-      this.worldAssetRuntime.clear()
+      this.#worldAssetRuntime.clear()
     } finally {
       this.suppressAssetPlacementAutosave = false
     }
@@ -2782,7 +2818,7 @@ export class InfiniteWorldRenderer {
     // The runtime snapshots existing placements and rolls back only assets
     // created by this scatter call if terrain sampling or grounding fails.
     groundWorldAssetInstances(
-      this.worldAssetRuntime,
+      this.#worldAssetRuntime,
       instances,
       createdInstanceIds,
       this.worldAnchor,
@@ -2797,7 +2833,7 @@ export class InfiniteWorldRenderer {
   ) {
     const x = this.worldPosition.x
     const z = this.worldPosition.z
-    const asset = await this.worldAssetRuntime.load(assetId, sourceUrl, {
+    const asset = await this.#worldAssetRuntime.load(assetId, sourceUrl, {
       semanticEntryId,
       x,
       y: this.sampleTerrainHeight(x, z),
@@ -2809,7 +2845,7 @@ export class InfiniteWorldRenderer {
     // caller explicitly imports the matching source asset.
     if (asset.semanticEntryId) {
       const materialized = materializeExternalAssetPlacements(
-        this.worldAssetRuntime,
+        this.#worldAssetRuntime,
         this.#pendingExternalAssetPlacements,
         asset.id,
         asset.semanticEntryId,
@@ -2855,7 +2891,7 @@ export class InfiniteWorldRenderer {
 
       const count = Math.max(1, Math.min(rule.maxCount,
         Math.round((rule.minCount + rule.maxCount) * 0.5 * density * rule.weight)))
-      const scatter = this.worldAssetRuntime.scatterSemanticWithResult(
+      const scatter = this.#worldAssetRuntime.scatterSemanticWithResult(
         rule.semanticEntryId,
         {
           minX: this.worldPosition.x - radius,
@@ -3047,11 +3083,11 @@ export class InfiniteWorldRenderer {
     const results: Array<{ semanticEntryId: string; layer: string; count: number; mode: string }> = []
 
     for (const rule of plan.rules) {
-      const hasSource = this.worldAssetRuntime.hasSemanticSource(rule.semanticEntryId)
+      const hasSource = this.#worldAssetRuntime.hasSemanticSource(rule.semanticEntryId)
       if (hasSource && (rule.layer === 'visual' || rule.layer === 'biological')) {
         const count = Math.max(1, Math.min(rule.maxCount,
           Math.round((rule.minCount + rule.maxCount) * 0.5 * density * rule.weight)))
-        const scatter = this.worldAssetRuntime.scatterSemanticWithResult(
+        const scatter = this.#worldAssetRuntime.scatterSemanticWithResult(
           rule.semanticEntryId,
           {
             minX: this.worldPosition.x - radius,
@@ -3152,7 +3188,7 @@ export class InfiniteWorldRenderer {
   ) {
     const x = this.worldPosition.x
     const z = this.worldPosition.z
-    const scatter = this.worldAssetRuntime.scatterSemanticWithResult(
+    const scatter = this.#worldAssetRuntime.scatterSemanticWithResult(
       semanticEntryId,
       { minX: x - radius, maxX: x + radius, minZ: z - radius, maxZ: z + radius },
       count,
@@ -3173,12 +3209,12 @@ export class InfiniteWorldRenderer {
     // Queue persistence before resource disposal: remove() may throw an AggregateError
     // after releasing GPU resources, and must not skip saving the pending-descriptor change.
     if (pendingRemoved) this.scheduleSave()
-    const runtimeRemoved = this.worldAssetRuntime.remove(assetId)
+    const runtimeRemoved = this.#worldAssetRuntime.remove(assetId)
     return pendingRemoved || runtimeRemoved
   }
 
   getExternalAssetStats() {
-    return this.worldAssetRuntime.stats()
+    return this.#worldAssetRuntime.stats()
   }
 
   getSelectedObject() {
@@ -4309,9 +4345,9 @@ export class InfiniteWorldRenderer {
       this.physicsFrameQueries,
     )
 
-    this.worldAssetRuntime.rebase(this.worldAnchor)
-    this.worldAssetRuntime.updateVisibility(this.camera, 650, 500)
-    this.worldAssetRuntime.updateAnimations(dt, this.camera)
+    this.#worldAssetRuntime.rebase(this.worldAnchor)
+    this.#worldAssetRuntime.updateVisibility(this.camera, 650, 500)
+    this.#worldAssetRuntime.updateAnimations(dt, this.camera)
 
     const lodStart = performance.now()
     this.updateTerrainLod()
