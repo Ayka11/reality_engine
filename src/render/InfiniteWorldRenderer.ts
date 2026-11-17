@@ -69,11 +69,11 @@ export class InfiniteWorldRenderer {
   readonly #scene = new THREE.Scene()
   readonly camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100000)
   readonly controls: OrbitControls
-  generator: WorldGenerator
-  chunks: InfiniteChunkManager
+  #generator: WorldGenerator
+  #chunks: InfiniteChunkManager
   readonly #objectSpatialIndex = new WorldObjectSpatialIndex()
   readonly objects = new WorldObjectManager(this.#objectSpatialIndex)
-  persistence: WorldPersistence
+  #persistence: WorldPersistence
   #history = new WorldEditHistory()
   readonly #fieldSampler: FieldSampler
   readonly #authoritativeField: MutableWorldFieldProvider
@@ -265,13 +265,13 @@ export class InfiniteWorldRenderer {
   }
 
   private persistAuthoritativeFieldState(): boolean {
-    if (!this.persistence.beginSaveTransaction()) {
+    if (!this.#persistence.beginSaveTransaction()) {
       console.warn('[persistence] Authoritative field/provenance persistence was withheld because an earlier world save is incomplete')
       return false
     }
-    const fieldSaved = this.persistence.saveFieldState(this.#authoritativeField.serialize())
-    const provenanceSaved = this.persistence.saveProvenanceState(runtimeProvenance.getTrace())
-    const committed = this.persistence.finishSaveTransaction(fieldSaved && provenanceSaved)
+    const fieldSaved = this.#persistence.saveFieldState(this.#authoritativeField.serialize())
+    const provenanceSaved = this.#persistence.saveProvenanceState(runtimeProvenance.getTrace())
+    const committed = this.#persistence.finishSaveTransaction(fieldSaved && provenanceSaved)
     const saved = fieldSaved && provenanceSaved && committed
     if (!saved) {
       console.warn('[persistence] Authoritative field and provenance changed in memory but could not be committed together')
@@ -446,18 +446,18 @@ export class InfiniteWorldRenderer {
         stopSemanticAnimation: this.#worldAssetRuntime.stopSemanticAnimation.bind(this.#worldAssetRuntime),
       }),
     })
-    this.generator = new WorldGenerator(seed)
+    this.#generator = new WorldGenerator(seed)
     this.#terrainDeformations = new TerrainDeformationField(seed)
     worldViewContract.setSeed(seed)
-    this.#authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.generator))
-    this.#fieldSampler = new FieldSampler(this.generator, this.#authoritativeField)
-    this.persistence = new WorldPersistence(seed, options.blockPersistenceReads === true)
+    this.#authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.#generator))
+    this.#fieldSampler = new FieldSampler(this.#generator, this.#authoritativeField)
+    this.#persistence = new WorldPersistence(seed, options.blockPersistenceReads === true)
     if (options.blockPersistenceReads) {
       this.#startupPersistenceFailures.push('active world seed selector: storage read unavailable')
       this.#persistenceRecoveryBlocked = true
       console.warn('[persistence] Active world seed could not be verified; fallback namespace is isolated and cannot be restored or autosaved')
     }
-    if (this.persistence.hasIncompleteSaveTransaction()) {
+    if (this.#persistence.hasIncompleteSaveTransaction()) {
       console.warn('[persistence] An interrupted world save was detected; saved editor data is withheld until the world is explicitly imported or cleared')
     }
     const unwrapPersistedState = <T,>(label: string, result: WorldStateReadResult<T>): T | null => {
@@ -471,7 +471,7 @@ export class InfiniteWorldRenderer {
     }
     const persistedAssetPlacements = unwrapPersistedState(
       'external asset placements',
-      this.persistence.readAssetPlacementsState<unknown>(),
+      this.#persistence.readAssetPlacementsState<unknown>(),
     )
     if (persistedAssetPlacements !== null) {
       const placementValidation = validateExternalAssetPlacements(persistedAssetPlacements)
@@ -485,7 +485,7 @@ export class InfiniteWorldRenderer {
     }
     const persistedSurface = unwrapPersistedState(
       'world surface snapshot',
-      this.persistence.readSurfaceProviderState<WorldSurfaceProviderSnapshot>(),
+      this.#persistence.readSurfaceProviderState<WorldSurfaceProviderSnapshot>(),
     )
     if (persistedSurface) {
       const restoredSurface = restoreWorldSurfaceProvider(persistedSurface)
@@ -514,7 +514,7 @@ export class InfiniteWorldRenderer {
     this.#storageKey = `reality-engine-world:${seed}:objects`
     const persistedTerrain = unwrapPersistedState(
       'terrain deformation state',
-      this.persistence.readTerrainDeformationState<TerrainDeformationSnapshot>(),
+      this.#persistence.readTerrainDeformationState<TerrainDeformationSnapshot>(),
     )
     if (persistedTerrain) {
       try {
@@ -527,11 +527,11 @@ export class InfiniteWorldRenderer {
     }
     const persistedField = unwrapPersistedState(
       'authoritative field state',
-      this.persistence.readFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>(),
+      this.#persistence.readFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>(),
     )
     const persistedProvenance = unwrapPersistedState(
       'runtime provenance trace',
-      this.persistence.readProvenanceState<RuntimeProvenanceTrace>(),
+      this.#persistence.readProvenanceState<RuntimeProvenanceTrace>(),
     )
     if (persistedProvenance) {
       try {
@@ -554,7 +554,14 @@ export class InfiniteWorldRenderer {
         console.warn('[persistence] Authoritative field state was rejected without deleting the stored payload', error)
       }
     }
-    this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
+    this.#chunks = new InfiniteChunkManager(this.#generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
+
+    // Expose read-only references while keeping replacement authority in private fields.
+    Object.defineProperties(this, {
+      generator: { configurable: false, enumerable: true, get: () => this.#generator },
+      chunks: { configurable: false, enumerable: true, get: () => this.#chunks },
+      persistence: { configurable: false, enumerable: true, get: () => this.#persistence },
+    })
 
     this.camera.position.set(38, this.#worldY, 62)
     this.controls = new OrbitControls(this.camera, canvas)
@@ -701,7 +708,7 @@ export class InfiniteWorldRenderer {
   }
 
   private persistTerrainDeformationState() {
-    const saved = this.persistence.saveTerrainDeformationState(this.#terrainDeformations.serialize())
+    const saved = this.#persistence.saveTerrainDeformationState(this.#terrainDeformations.serialize())
     if (!saved) {
       console.warn('[persistence] Terrain deformation autosave failed; edits remain in memory but may not survive reload')
     }
@@ -806,9 +813,9 @@ export class InfiniteWorldRenderer {
     return structuredClone({
       version: 1 as const,
       generator: {
-        seed: this.generator.seed,
-        seaLevel: this.generator.seaLevel,
-        maxElevation: this.generator.maxElevation,
+        seed: this.#generator.seed,
+        seaLevel: this.#generator.seaLevel,
+        maxElevation: this.#generator.maxElevation,
       },
       surfaceProvider,
       objects: this.objects.values(),
@@ -852,9 +859,9 @@ export class InfiniteWorldRenderer {
     }
 
     const generatorState = snapshot?.generator ?? {
-      seed: this.generator.seed,
-      seaLevel: this.generator.seaLevel,
-      maxElevation: this.generator.maxElevation,
+      seed: this.#generator.seed,
+      seaLevel: this.#generator.seaLevel,
+      maxElevation: this.#generator.maxElevation,
     }
     const nextGenerator = new WorldGenerator(
       generatorState.seed,
@@ -930,7 +937,7 @@ export class InfiniteWorldRenderer {
     this.#terrainMaterials.clear()
     this.#objectMeshes.clear()
 
-    this.generator = prepared.nextGenerator
+    this.#generator = prepared.nextGenerator
     ;(window as any).worldSeed = prepared.nextGenerator.seed
     this.#fieldSampler.setGenerator(prepared.nextGenerator)
     this.#authoritativeField.setBase(new GeneratorFieldProvider(prepared.nextGenerator))
@@ -949,9 +956,9 @@ export class InfiniteWorldRenderer {
     worldViewContract.setSeed(this.#fieldSampler.surfaceProvider.seed)
     runtimeProvenance.restore(prepared.nextProvenance.getTrace())
 
-    this.persistence = new WorldPersistence(prepared.nextGenerator.seed)
+    this.#persistence = new WorldPersistence(prepared.nextGenerator.seed)
     this.#storageKey = `reality-engine-world:${prepared.nextGenerator.seed}:objects`
-    this.chunks = new InfiniteChunkManager(prepared.nextGenerator, {
+    this.#chunks = new InfiniteChunkManager(prepared.nextGenerator, {
       radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4,
     })
     this.#lastCenter = null
@@ -980,19 +987,19 @@ export class InfiniteWorldRenderer {
    * (including GPU publication) has completed successfully.
    */
   loadAssetManifestSnapshot(): WorldAssetImportManifest | null {
-    return this.persistence.loadAssetManifestState<WorldAssetImportManifest>()
+    return this.#persistence.loadAssetManifestState<WorldAssetImportManifest>()
   }
 
   loadProvenanceSnapshot(): RuntimeProvenanceTrace | null {
-    return this.persistence.loadProvenanceState<RuntimeProvenanceTrace>()
+    return this.#persistence.loadProvenanceState<RuntimeProvenanceTrace>()
   }
 
   persistAssetManifestSnapshot(assetManifest: WorldAssetImportManifest): boolean {
-    return this.persistence.saveAssetManifestState(assetManifest)
+    return this.#persistence.saveAssetManifestState(assetManifest)
   }
 
   persistPortableWorldSnapshot(assetManifest?: WorldAssetImportManifest): void {
-    if (!this.persistence.beginSaveTransaction({ recoverIncomplete: true })) {
+    if (!this.#persistence.beginSaveTransaction({ recoverIncomplete: true })) {
       const message = 'Could not open the world save recovery marker'
       this.#lastPersistenceFailures = [message]
       throw new AggregateError([new Error(message)], `Infinite World persistence failed: ${message}`)
@@ -1001,9 +1008,9 @@ export class InfiniteWorldRenderer {
     // A portable import replaces the complete seed-scoped world namespace,
     // not just the keys represented by the incoming snapshot. In particular,
     // stale manual checkpoints must not override the imported state on Load.
-    if (!this.persistence.clear()) {
+    if (!this.#persistence.clear()) {
       const message = 'Could not clear the previous seed namespace before portable restore persistence'
-      this.persistence.finishSaveTransaction(false)
+      this.#persistence.finishSaveTransaction(false)
       this.#lastPersistenceFailures = [message]
       throw new AggregateError([new Error(message)], `Infinite World persistence failed: ${message}`)
     }
@@ -1011,13 +1018,13 @@ export class InfiniteWorldRenderer {
     const preflightFailures: string[] = []
     const surfaceStatus = this.persistActiveSurfaceProvider()
     if (surfaceStatus === 'failed') preflightFailures.push('world surface')
-    if (assetManifest !== undefined && !this.persistence.saveAssetManifestState(assetManifest)) {
+    if (assetManifest !== undefined && !this.#persistence.saveAssetManifestState(assetManifest)) {
       preflightFailures.push('asset provenance manifest')
     }
 
     this.saveWorld({ checkpoint: false, preflightFailures, allowRecovery: true })
     const failures = [...this.#lastPersistenceFailures]
-    const committed = this.persistence.finishSaveTransaction(failures.length === 0)
+    const committed = this.#persistence.finishSaveTransaction(failures.length === 0)
     if (!committed && failures.length === 0) failures.push('world save transaction commit')
     this.#lastPersistenceFailures = failures
     if (failures.length > 0) {
@@ -1040,7 +1047,7 @@ export class InfiniteWorldRenderer {
       console.warn('[persistence] World save was withheld because the last restore could not prove the stored world was complete; clear or import a complete world to recover')
       return objects.length
     }
-    if (!this.persistence.beginSaveTransaction()) {
+    if (!this.#persistence.beginSaveTransaction()) {
       failedPersistenceOperations.push('world save transaction marker')
       this.#lastPersistenceFailures = failedPersistenceOperations
       console.warn('[persistence] World save was withheld because an earlier save is incomplete; explicitly import or clear the world to recover')
@@ -1050,17 +1057,17 @@ export class InfiniteWorldRenderer {
     // Build the authoritative in-memory chunk map before touching durable sidecars.
     const groups = new Map<string, WorldObject[]>()
     for (const object of objects) {
-      const { cx, cy, cz } = this.persistence.chunkForObject(object)
+      const { cx, cy, cz } = this.#persistence.chunkForObject(object)
       const key = chunkKey(cx, cy, cz)
       const list = groups.get(key) ?? []
       list.push(object)
       groups.set(key, list)
     }
 
-    const knownChunkKeys = this.persistence.knownChunks({ recoverOrphans: true })
+    const knownChunkKeys = this.#persistence.knownChunks({ recoverOrphans: true })
     if (knownChunkKeys === null) {
       failedPersistenceOperations.push('stored chunk enumeration')
-      const closed = this.persistence.finishSaveTransaction(true)
+      const closed = this.#persistence.finishSaveTransaction(true)
       if (!closed) failedPersistenceOperations.push('world save transaction commit')
       this.#persistenceRecoveryBlocked = true
       this.#lastPersistenceFailures = failedPersistenceOperations
@@ -1070,20 +1077,20 @@ export class InfiniteWorldRenderer {
 
     // Verify every durable chunk that would otherwise be deleted as an orphan.
     // A missing/corrupt/unavailable payload is not proof that the world had no data.
-    const loadedBeforeSave = new Set(this.persistence.loadedChunks())
+    const loadedBeforeSave = new Set(this.#persistence.loadedChunks())
     const newlyLoadedChunkKeys: string[] = []
     for (const key of knownChunkKeys) {
       if (groups.has(key)) continue
       const [cx, cy, cz] = key.split(',').map(Number)
-      const result = this.persistence.readChunk(cx, cy, cz)
+      const result = this.#persistence.readChunk(cx, cy, cz)
       if (result.status !== 'ok') {
         const rollbackKeys = new Set([...newlyLoadedChunkKeys, key])
         for (const rollbackKey of rollbackKeys) {
           const [rollbackCx, rollbackCy, rollbackCz] = rollbackKey.split(',').map(Number)
-          this.persistence.unloadChunk(rollbackCx, rollbackCy, rollbackCz)
+          this.#persistence.unloadChunk(rollbackCx, rollbackCy, rollbackCz)
         }
         failedPersistenceOperations.push(`${result.status} chunk ${key}: ${result.reason}`)
-        const closed = this.persistence.finishSaveTransaction(true)
+        const closed = this.#persistence.finishSaveTransaction(true)
         if (!closed) failedPersistenceOperations.push('world save transaction commit')
         this.#persistenceRecoveryBlocked = true
         this.#lastPersistenceFailures = failedPersistenceOperations
@@ -1097,23 +1104,23 @@ export class InfiniteWorldRenderer {
     const fieldSnapshot = this.#authoritativeField.serialize()
     if (!this.persistAuthoritativeFieldState()) failedPersistenceOperations.push('authoritative field state')
     if (!this.persistTerrainDeformationState()) failedPersistenceOperations.push('terrain deformation state')
-    if (!this.persistence.saveProvenanceState(runtimeProvenance.getTrace())) {
+    if (!this.#persistence.saveProvenanceState(runtimeProvenance.getTrace())) {
       failedPersistenceOperations.push('runtime provenance trace')
     }
     const assetPlacements = mergeExternalAssetPlacements(
       this.#pendingExternalAssetPlacements,
       this.#worldAssetRuntime.snapshotPlacements(),
     )
-    if (!this.persistence.saveAssetPlacementsState(assetPlacements)) {
+    if (!this.#persistence.saveAssetPlacementsState(assetPlacements)) {
       failedPersistenceOperations.push('external asset placements')
     }
     if (options.checkpoint !== false) {
-      const fieldCheckpointSaved = this.persistence.saveFieldCheckpoint(fieldSnapshot)
+      const fieldCheckpointSaved = this.#persistence.saveFieldCheckpoint(fieldSnapshot)
       if (!fieldCheckpointSaved) {
         failedPersistenceOperations.push('authoritative field checkpoint')
         console.warn('[persistence] Authoritative field checkpoint failed; saved field edits may not survive reload')
       }
-      const checkpointSaved = this.persistence.saveTerrainDeformationCheckpoint(this.#terrainDeformations.serialize())
+      const checkpointSaved = this.#persistence.saveTerrainDeformationCheckpoint(this.#terrainDeformations.serialize())
       if (!checkpointSaved) {
         failedPersistenceOperations.push('terrain deformation checkpoint')
         console.warn('[persistence] Terrain deformation checkpoint failed; saved terrain edits may not survive reload')
@@ -1123,23 +1130,23 @@ export class InfiniteWorldRenderer {
     for (const key of knownChunkKeys) {
       if (!groups.has(key)) {
         const [cx, cy, cz] = key.split(',').map(Number)
-        if (!this.persistence.deleteChunk(cx, cy, cz)) {
+        if (!this.#persistence.deleteChunk(cx, cy, cz)) {
           failedPersistenceOperations.push(`delete chunk ${key}`)
         }
       }
     }
     for (const [key, list] of groups) {
       const [cx, cy, cz] = key.split(',').map(Number)
-      if (!this.persistence.saveChunk(cx, cy, cz, list)) {
+      if (!this.#persistence.saveChunk(cx, cy, cz, list)) {
         failedPersistenceOperations.push(`save chunk ${key}`)
       }
     }
     // The active seed is the startup selector. Publish it while the journal
     // marker is still present, then remove the marker only after all writes pass.
-    if (failedPersistenceOperations.length === 0 && !saveActiveWorldSeed(this.generator.seed)) {
+    if (failedPersistenceOperations.length === 0 && !saveActiveWorldSeed(this.#generator.seed)) {
       failedPersistenceOperations.push('active world seed')
     }
-    const committed = this.persistence.finishSaveTransaction(failedPersistenceOperations.length === 0)
+    const committed = this.#persistence.finishSaveTransaction(failedPersistenceOperations.length === 0)
     if (!committed && failedPersistenceOperations.length === 0) {
       failedPersistenceOperations.push('world save transaction commit')
     }
@@ -1154,7 +1161,7 @@ export class InfiniteWorldRenderer {
   }
 
   loadWorld(options: { restoreFieldCheckpoint?: boolean } = {}) {
-    if (this.persistence.hasIncompleteSaveTransaction()) {
+    if (this.#persistence.hasIncompleteSaveTransaction()) {
       this.#persistenceRecoveryBlocked = true
       this.#lastPersistenceFailures = ['interrupted world save transaction']
       console.warn('[persistence] World restore was blocked because the last multi-key save did not commit; import a complete world package or clear the saved world')
@@ -1168,7 +1175,7 @@ export class InfiniteWorldRenderer {
     }
     // Resolve the complete chunk set before changing field, terrain, objects or
     // renderer state. A failed key scan is not an empty world.
-    const knownChunkKeys = this.persistence.knownChunks({ recoverOrphans: true })
+    const knownChunkKeys = this.#persistence.knownChunks({ recoverOrphans: true })
     if (knownChunkKeys === null) {
       this.#persistenceRecoveryBlocked = true
       this.#lastPersistenceFailures = ['stored chunk enumeration']
@@ -1179,18 +1186,18 @@ export class InfiniteWorldRenderer {
     // Read every indexed/recoverable chunk before publishing any part of the
     // restored world. A failed payload read must not turn the active world into
     // a partial restore or leave a half-populated persistence cache.
-    const loadedBeforeRestore = new Set(this.persistence.loadedChunks())
+    const loadedBeforeRestore = new Set(this.#persistence.loadedChunks())
     const newlyLoadedChunkKeys: string[] = []
     const restoredObjects: WorldObject[] = []
     const restoredObjectIds = new Set<string>()
     for (const key of knownChunkKeys) {
       const [cx, cy, cz] = key.split(',').map(Number)
-      const result = this.persistence.readChunk(cx, cy, cz)
+      const result = this.#persistence.readChunk(cx, cy, cz)
       if (result.status !== 'ok') {
         const rollbackKeys = new Set([...newlyLoadedChunkKeys, key])
         for (const rollbackKey of rollbackKeys) {
           const [loadedCx, loadedCy, loadedCz] = rollbackKey.split(',').map(Number)
-          this.persistence.unloadChunk(loadedCx, loadedCy, loadedCz)
+          this.#persistence.unloadChunk(loadedCx, loadedCy, loadedCz)
         }
         this.#persistenceRecoveryBlocked = true
         this.#lastPersistenceFailures = [`${result.status} chunk ${key}: ${result.reason}`]
@@ -1202,7 +1209,7 @@ export class InfiniteWorldRenderer {
         if (restoredObjectIds.has(object.id)) {
           for (const loadedKey of newlyLoadedChunkKeys) {
             const [loadedCx, loadedCy, loadedCz] = loadedKey.split(',').map(Number)
-            this.persistence.unloadChunk(loadedCx, loadedCy, loadedCz)
+            this.#persistence.unloadChunk(loadedCx, loadedCy, loadedCz)
           }
           this.#persistenceRecoveryBlocked = true
           this.#lastPersistenceFailures = [`duplicate world object ID: ${object.id}`]
@@ -1219,7 +1226,7 @@ export class InfiniteWorldRenderer {
     const rollbackStagedChunks = () => {
       for (const key of newlyLoadedChunkKeys) {
         const [cx, cy, cz] = key.split(',').map(Number)
-        this.persistence.unloadChunk(cx, cy, cz)
+        this.#persistence.unloadChunk(cx, cy, cz)
       }
     }
     const rejectSidecar = (label: string, reason: string) => {
@@ -1231,11 +1238,11 @@ export class InfiniteWorldRenderer {
     }
 
     const fieldRead = options.restoreFieldCheckpoint === false
-      ? this.persistence.readFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
+      ? this.#persistence.readFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
       : (() => {
-          const checkpoint = this.persistence.readFieldCheckpoint<ReturnType<MutableWorldFieldProvider['serialize']>>()
+          const checkpoint = this.#persistence.readFieldCheckpoint<ReturnType<MutableWorldFieldProvider['serialize']>>()
           return checkpoint.status === 'missing'
-            ? this.persistence.readFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
+            ? this.#persistence.readFieldState<ReturnType<MutableWorldFieldProvider['serialize']>>()
             : checkpoint
         })()
     if (fieldRead.status === 'unavailable' || fieldRead.status === 'corrupt') {
@@ -1243,11 +1250,11 @@ export class InfiniteWorldRenderer {
     }
 
     const terrainRead = options.restoreFieldCheckpoint === false
-      ? this.persistence.readTerrainDeformationState<TerrainDeformationSnapshot>()
+      ? this.#persistence.readTerrainDeformationState<TerrainDeformationSnapshot>()
       : (() => {
-          const checkpoint = this.persistence.readTerrainDeformationCheckpoint<TerrainDeformationSnapshot>()
+          const checkpoint = this.#persistence.readTerrainDeformationCheckpoint<TerrainDeformationSnapshot>()
           return checkpoint.status === 'missing'
-            ? this.persistence.readTerrainDeformationState<TerrainDeformationSnapshot>()
+            ? this.#persistence.readTerrainDeformationState<TerrainDeformationSnapshot>()
             : checkpoint
         })()
     if (terrainRead.status === 'unavailable' || terrainRead.status === 'corrupt') {
@@ -1330,7 +1337,7 @@ export class InfiniteWorldRenderer {
       window.clearTimeout(this.#saveTimer)
       this.#saveTimer = null
     }
-    return this.persistence.clear()
+    return this.#persistence.clear()
   }
 
   clearSavedWorld(): boolean {
@@ -1358,7 +1365,7 @@ export class InfiniteWorldRenderer {
     // A successful durable clear removes these sidecars too. Reset the live
     // providers and their edit histories to the same generator-backed baseline
     // so the current session cannot keep state that a reload would discard.
-    this.#authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
+    this.#authoritativeField.setBase(new GeneratorFieldProvider(this.#generator))
     this.#authoritativeField.clear()
     this.#fieldSampler.setProvider(this.#authoritativeField)
     this.#fieldSampler.resetSurfaceProviderToGenerator()
@@ -1394,7 +1401,7 @@ export class InfiniteWorldRenderer {
       return
     }
 
-    const previousSeed = this.generator.seed
+    const previousSeed = this.#generator.seed
     const targetPersistence = new WorldPersistence(normalizedSeed)
     if (!targetPersistence.beginSaveTransaction({ recoverIncomplete: true })) {
       console.warn('[persistence] Reseed was cancelled because the target seed journal could not be opened')
@@ -1481,26 +1488,26 @@ export class InfiniteWorldRenderer {
     this.#selectionMarker.visible = false
     runtimeProvenance.reset()
 
-    this.generator = new WorldGenerator(normalizedSeed)
+    this.#generator = new WorldGenerator(normalizedSeed)
     ;(window as any).worldSeed = normalizedSeed
-    this.#fieldSampler.setGenerator(this.generator)
+    this.#fieldSampler.setGenerator(this.#generator)
     // The procedural generator may be reseeded independently; the current
     // authored surface continues to own the world/view identity until reset.
     worldViewContract.setSeed(this.#fieldSampler.surfaceProvider.seed)
-    this.#authoritativeField.setBase(new GeneratorFieldProvider(this.generator))
+    this.#authoritativeField.setBase(new GeneratorFieldProvider(this.#generator))
     this.#authoritativeField.clear()
     this.#terrainDeformations = new TerrainDeformationField(normalizedSeed)
     this.#authoritativeSculptTransactions.clear()
     this.notifyAuthoritativeSculptHistoryChanged()
     this.#fieldSampler.setProvider(this.#authoritativeField)
     this.rebuildDecisionLayer()
-    this.persistence = targetPersistence
+    this.#persistence = targetPersistence
     this.#persistenceRecoveryBlocked = false
     this.#startupPersistenceFailures = []
     this.#lastPersistenceFailures = []
     this.#storageKey = `reality-engine-world:${normalizedSeed}:objects`
 
-    this.chunks = new InfiniteChunkManager(this.generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
+    this.#chunks = new InfiniteChunkManager(this.#generator, { radius: 2, verticalRadius: 0, maxLoaded: 25, maxNewPerUpdate: 4 })
     this.#history = new WorldEditHistory()
 
     const targetWorld = new THREE.Vector3(16, this.sampleTerrainHeight(16, 16), 16)
@@ -1602,7 +1609,7 @@ export class InfiniteWorldRenderer {
     worldViewContract.setSeed(provider.seed)
     this.rebuildDecisionLayer()
     this.refreshTerrainPatches()
-    const cleared = this.persistence.deleteSurfaceProviderState()
+    const cleared = this.#persistence.deleteSurfaceProviderState()
     if (!cleared) console.warn('[persistence] Could not remove the saved world-surface override; it may return after reload')
     return { id: provider.id, version: provider.version, seed: provider.seed, persistence: cleared ? 'cleared' : 'failed' }
   }
@@ -1613,6 +1620,10 @@ export class InfiniteWorldRenderer {
   }
 
   get isEnabled() { return this.#enabled }
+  get generator(): WorldGenerator { return this.#generator }
+  get chunks(): InfiniteChunkManager { return this.#chunks }
+  get persistence(): WorldPersistence { return this.#persistence }
+
   get worldSeed(): string { return this.#fieldSampler.surfaceProvider.seed }
 
   getWorldEnvironment() {
@@ -1673,7 +1684,7 @@ export class InfiniteWorldRenderer {
     return {
       objects: this.objects.size,
       loadedChunks: this.#patches.size,
-      targetChunks: this.chunks.size,
+      targetChunks: this.#chunks.size,
       world: { ...this.worldCoordinates },
       camera: {
         worldX: this.#worldPosition.x,
@@ -2572,7 +2583,7 @@ export class InfiniteWorldRenderer {
     // every frame so remaining terrain chunks can materialize incrementally.
     // This prevents one Composer/Quick Generate transaction from monopolizing
     // the browser thread while preserving the same visible target set.
-    const delta = this.chunks.update(center)
+    const delta = this.#chunks.update(center)
 
     for (const chunk of delta.loaded) {
       const key = `${chunk.cx},${chunk.cy},${chunk.cz}`
@@ -2810,7 +2821,7 @@ export class InfiniteWorldRenderer {
 
   private syncPersistentObjects() {
     const center = this.chunkCenter()
-    const radius = this.chunks.radius + 1
+    const radius = this.#chunks.radius + 1
     const desired = new Set<string>()
     for (let dz = -radius; dz <= radius; dz++) {
       for (let dx = -radius; dx <= radius; dx++) {
@@ -2818,8 +2829,8 @@ export class InfiniteWorldRenderer {
         const cz = center.cz + dz
         const key = chunkKey(cx, 0, cz)
         desired.add(key)
-        if (this.persistence.isLoaded(cx, 0, cz)) continue
-        const chunkRead = this.persistence.readChunk(cx, 0, cz)
+        if (this.#persistence.isLoaded(cx, 0, cz)) continue
+        const chunkRead = this.#persistence.readChunk(cx, 0, cz)
         if (chunkRead.status === 'unavailable' || chunkRead.status === 'corrupt') {
           const failure = `world chunk ${key}: ${chunkRead.status} (${chunkRead.reason})`
           if (!this.#startupPersistenceFailures.includes(failure)) {
@@ -2840,10 +2851,10 @@ export class InfiniteWorldRenderer {
         }
       }
     }
-    for (const key of this.persistence.loadedChunks()) {
+    for (const key of this.#persistence.loadedChunks()) {
       if (!desired.has(key)) {
         const [cx, cy, cz] = key.split(',').map(Number)
-        this.persistence.unloadChunk(cx, cy, cz)
+        this.#persistence.unloadChunk(cx, cy, cz)
       }
     }
   }
@@ -2852,7 +2863,7 @@ export class InfiniteWorldRenderer {
     // Camera coordinates are rebased around worldAnchor after Infinite World recentering.
     // Visibility queries must therefore use the stable world-space position.
     const center = this.#worldPosition
-    const range = (this.chunks.radius + 1) * WORLD_CHUNK_SIZE
+    const range = (this.#chunks.radius + 1) * WORLD_CHUNK_SIZE
     const visible = this.objects.query({
       minX: center.x - range, maxX: center.x + range,
       minZ: center.z - range, maxZ: center.z + range,
@@ -3504,13 +3515,13 @@ export class InfiniteWorldRenderer {
   private persistActiveSurfaceProvider(): 'stored' | 'unsupported' | 'failed' {
     const snapshot = serializeWorldSurfaceProvider(this.#fieldSampler.surfaceProvider)
     if (!snapshot) {
-      if (!this.persistence.deleteSurfaceProviderState()) {
+      if (!this.#persistence.deleteSurfaceProviderState()) {
         console.warn('[persistence] Could not clear stale world-surface override; a previous built-in surface may return after reload')
         return 'failed'
       }
       return 'unsupported'
     }
-    if (!this.persistence.saveSurfaceProviderState(snapshot)) {
+    if (!this.#persistence.saveSurfaceProviderState(snapshot)) {
       console.warn('[persistence] World-surface snapshot could not be saved; the selected surface may not survive reload')
       return 'failed'
     }
@@ -4777,7 +4788,7 @@ export class InfiniteWorldRenderer {
     const protocol = createExperimentProtocol({
       experimentId: `exp-${Date.now().toString(36)}`,
       world: {
-        seed: this.generator.seed,
+        seed: this.#generator.seed,
         generatorVersion: 'world-generator-v1',
         surface: {
           seed: surfaceProvider.seed,
