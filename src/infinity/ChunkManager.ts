@@ -14,7 +14,7 @@ export class InfiniteChunkManager {
   readonly verticalRadius: number
   readonly maxLoaded: number
   readonly maxNewPerUpdate: number
-  private loaded = new Map<string, WorldChunk>()
+  #loaded = new Map<string, WorldChunk>()
 
   constructor(generator = new WorldGenerator(), options: ChunkManagerOptions = {}) {
     this.generator = generator
@@ -22,12 +22,27 @@ export class InfiniteChunkManager {
     this.verticalRadius = options.verticalRadius ?? 0
     this.maxLoaded = options.maxLoaded ?? 96
     this.maxNewPerUpdate = Math.max(1, Math.floor(options.maxNewPerUpdate ?? 2))
+    Object.freeze(this)
   }
 
-  get size(): number { return this.loaded.size }
+  private cloneChunk(chunk: WorldChunk): WorldChunk {
+    return {
+      cx: chunk.cx,
+      cy: chunk.cy,
+      cz: chunk.cz,
+      heights: chunk.heights.slice(),
+      moisture: chunk.moisture.slice(),
+      temperature: chunk.temperature.slice(),
+      water: chunk.water.slice(),
+      biome: chunk.biome.slice(),
+    }
+  }
+
+  get size(): number { return this.#loaded.size }
 
   get(cx: number, cy: number, cz: number): WorldChunk | undefined {
-    return this.loaded.get(chunkKey(cx, cy, cz))
+    const chunk = this.#loaded.get(chunkKey(cx, cy, cz))
+    return chunk ? this.cloneChunk(chunk) : undefined
   }
 
   update(center: ChunkCoord): { loaded: WorldChunk[]; unloaded: string[] } {
@@ -50,22 +65,22 @@ export class InfiniteChunkManager {
     let generated = 0
     for (const item of target) {
       if (generated >= this.maxNewPerUpdate) break
-      if (!this.loaded.has(item.key)) {
+      if (!this.#loaded.has(item.key)) {
         const chunk = this.generator.generateChunk(item.cx, item.cy, item.cz)
-        this.loaded.set(item.key, chunk)
+        this.#loaded.set(item.key, chunk)
         newlyLoaded.push(chunk)
         generated++
       }
     }
 
     const unloaded: string[] = []
-    for (const [key] of this.loaded) {
+    for (const [key] of this.#loaded) {
       if (!targetKeys.has(key)) {
-        this.loaded.delete(key)
+        this.#loaded.delete(key)
         unloaded.push(key)
       }
     }
 
-    return { loaded: newlyLoaded, unloaded }
+    return { loaded: newlyLoaded.map(chunk => this.cloneChunk(chunk)), unloaded }
   }
 }
