@@ -285,7 +285,7 @@ try {
     const afterRedoRecord = afterRedo.entries.find(entry =>
       entry.domain === "infinite-world-object" && entry.localId === objectId);
 
-    world.selectedObjectId = objectId;
+    if (!world.selectObjectById(objectId)) throw new Error('Could not select the target world object by stable ID');
     const beforeTransformObject = world.objects.get(objectId);
     const transformed = world.transformSelected({
       x: beforeTransformObject.x + 9.25,
@@ -1142,6 +1142,34 @@ try {
       JSON.stringify(fieldVolumeApiContract));
   }
 
+  const rendererSurfaceContract = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const snapshots = world?.getTerrainPatchSnapshots?.() ?? [];
+    const first = snapshots[0];
+    const originalChunkX = first?.chunk?.cx;
+    if (first?.chunk) first.chunk.cx = 999999;
+    return {
+      patchesHidden: world?.patches === undefined,
+      objectMeshesHidden: world?.objectMeshes === undefined,
+      waterMeshesHidden: world?.waterMeshes === undefined,
+      transformControlsHidden: world?.transformControls === undefined,
+      terrainGroupHidden: world?.terrainGroup === undefined,
+      selectionMarkerHidden: world?.selectionMarker === undefined,
+      worldPositionHidden: world?.worldPosition === undefined,
+      hasPatchSnapshots: typeof world?.getTerrainPatchSnapshots === "function",
+      hasSeamDiagnostics: typeof world?.getTerrainSeamDiagnostics === "function",
+      hasGeometryDiagnostics: typeof world?.getTerrainGeometryDiagnostics === "function",
+      hasVertexColorQuery: typeof world?.getNearestTerrainVertexColor === "function",
+      hasSafeSelection: typeof world?.selectObjectById === "function",
+      snapshotsDetached: !first || world.getTerrainPatchSnapshots()[0]?.chunk?.cx === originalChunkX,
+      snapshotHasNoGroup: !first || !("group" in first),
+    };
+  });
+  if (Object.values(rendererSurfaceContract).some(value => value !== true)) {
+    throw new Error("Renderer must hide live terrain/mesh objects and expose detached diagnostics: " +
+      JSON.stringify(rendererSurfaceContract));
+  }
+
   const publicRuntimeContract = await page.evaluate(fixture => {
     const world = window.infiniteWorld;
     const runtime = world?.worldAssetRuntime;
@@ -1950,7 +1978,7 @@ try {
   // boundary heights; otherwise finer edges can leave T-junction cracks.
   await page.waitForFunction(() => {
     const world = window.infiniteWorld;
-    const patches = [...(world?.patches?.values?.() ?? [])];
+    const patches = (world?.getTerrainPatchSnapshots?.() ?? []);
     if (patches.length < 13) return false;
     const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
     return patches.some(p => {
@@ -1959,73 +1987,7 @@ try {
       return (!!east && east.lod !== p.lod) || (!!south && south.lod !== p.lod);
     });
   }, null, { timeout: 15000 });
-  const terrainSeam = await page.evaluate(() => {
-    const world = window.infiniteWorld;
-    const patches = [...(world?.patches?.values?.() ?? [])];
-    const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
-    const edge = (patch, side) => {
-      const mesh = patch.group.children.find(child => child.userData?.terrain);
-      const position = mesh?.geometry?.getAttribute?.("position");
-      if (!position) return null;
-      const n = Math.round(Math.sqrt(position.count));
-      const resolution = n - 1;
-      const heights = [];
-      for (let i = 0; i < n; i++) {
-        const index = side === "west" ? i * n : side === "east" ? i * n + resolution
-          : side === "north" ? i : resolution * n + i;
-        heights.push(position.getY(index));
-      }
-      return { resolution, heights };
-    };
-    let checkedPairs = 0;
-    let maxBoundaryHeightError = 0;
-    const failures = [];
-    for (const patch of patches) {
-      const east = byKey.get(`${patch.chunk.cx + 1},${patch.chunk.cy},${patch.chunk.cz}`);
-      const south = byKey.get(`${patch.chunk.cx},${patch.chunk.cy},${patch.chunk.cz + 1}`);
-      for (const [neighbor, sideA, sideB, direction] of [
-        [east, "east", "west", "east-west"],
-        [south, "south", "north", "north-south"],
-      ]) {
-        if (!neighbor || neighbor.lod === patch.lod) continue;
-        const a = edge(patch, sideA), b = edge(neighbor, sideB);
-        if (!a || !b) {
-          failures.push({ direction, reason: "missing terrain edge geometry",
-            a: [patch.chunk.cx, patch.chunk.cy, patch.chunk.cz],
-            b: [neighbor.chunk.cx, neighbor.chunk.cy, neighbor.chunk.cz] });
-          continue;
-        }
-        if (a.resolution === b.resolution) continue;
-        const coarse = a.resolution < b.resolution ? a : b;
-        const fine = a.resolution < b.resolution ? b : a;
-        const ratio = fine.resolution / coarse.resolution;
-        if (!Number.isInteger(ratio)) {
-          failures.push({ direction, reason: "LOD grid resolutions are not nested", ratio,
-            a: [patch.chunk.cx, patch.chunk.cy, patch.chunk.cz],
-            b: [neighbor.chunk.cx, neighbor.chunk.cy, neighbor.chunk.cz] });
-          continue;
-        }
-        checkedPairs++;
-        let pairMaxError = 0;
-        for (let i = 0; i <= fine.resolution; i++) {
-          const lo = Math.floor(i / ratio);
-          const hi = Math.min(coarse.resolution, lo + 1);
-          const t = hi === lo ? 0 : (i / ratio - lo);
-          const expected = coarse.heights[lo] + (coarse.heights[hi] - coarse.heights[lo]) * t;
-          pairMaxError = Math.max(pairMaxError, Math.abs(fine.heights[i] - expected));
-        }
-        maxBoundaryHeightError = Math.max(maxBoundaryHeightError, pairMaxError);
-        if (pairMaxError > 0.002) {
-          failures.push({ direction, lodA: patch.lod, lodB: neighbor.lod,
-            coarseResolution: coarse.resolution, fineResolution: fine.resolution,
-            maxBoundaryHeightError: pairMaxError,
-            a: [patch.chunk.cx, patch.chunk.cy, patch.chunk.cz],
-            b: [neighbor.chunk.cx, neighbor.chunk.cy, neighbor.chunk.cz] });
-        }
-      }
-    }
-    return { checkedPairs, maxBoundaryHeightError, failures };
-  });
+  const terrainSeam = await page.evaluate(() => window.infiniteWorld.getTerrainSeamDiagnostics());
   if (!terrainSeam || terrainSeam.checkedPairs < 1 || terrainSeam.failures.length > 0) {
     throw new Error(`Mixed-LOD terrain seam validation failed: ${JSON.stringify(terrainSeam)}`);
   }
@@ -2033,88 +1995,7 @@ try {
   // Validate the actual rendered terrain geometry, not only generator arrays or
   // renderer counters. Catch collapsed heightfields, non-finite vertices, invalid
   // indices, and degenerate triangles before visual defects reach release.
-  const terrainGeometry = await page.evaluate(() => {
-    const world = window.infiniteWorld;
-    const patches = [...(world?.patches?.values?.() ?? [])];
-    let minY = Infinity;
-    let maxY = -Infinity;
-    let vertexCount = 0;
-    let triangleCount = 0;
-    let degenerateTriangles = 0;
-    let invalidIndices = 0;
-    let nonFiniteVertices = 0;
-    let invalidGeometryPatches = 0;
-    let malformedIndexBuffers = 0;
-    let missingNormalAttributes = 0;
-    let nonFiniteNormals = 0;
-    let nonUnitNormals = 0;
-    const distinctHeights = new Set();
-
-    for (const patch of patches) {
-      const mesh = patch.group.children.find(child => child.userData?.terrain);
-      const geometry = mesh?.geometry;
-      const position = geometry?.getAttribute?.("position");
-      const normal = geometry?.getAttribute?.("normal");
-      const index = geometry?.index;
-      if (!normal || normal.count !== position?.count) missingNormalAttributes++;
-      if (!position || !index || position.count < 3 || index.count < 3) {
-        invalidGeometryPatches++;
-        continue;
-      }
-      if (index.count % 3 !== 0) malformedIndexBuffers++;
-
-      vertexCount += position.count;
-      for (let i = 0; i < position.count; i++) {
-        const x = position.getX(i);
-        const y = position.getY(i);
-        const z = position.getZ(i);
-        if (![x, y, z].every(Number.isFinite)) {
-          nonFiniteVertices++;
-          continue;
-        }
-        if (normal && normal.count === position.count) {
-          const nx = normal.getX(i), ny = normal.getY(i), nz = normal.getZ(i);
-          if (![nx, ny, nz].every(Number.isFinite)) {
-            nonFiniteNormals++;
-          } else if (Math.abs(Math.hypot(nx, ny, nz) - 1) > 0.02) {
-            nonUnitNormals++;
-          }
-        }
-        minY = Math.min(minY, y);
-        maxY = Math.max(maxY, y);
-        distinctHeights.add(Math.round(y * 1000) / 1000);
-      }
-
-      const ax = new Float64Array(3);
-      const bx = new Float64Array(3);
-      const cx = new Float64Array(3);
-      for (let i = 0; i + 2 < index.count; i += 3) {
-        const ia = index.getX(i), ib = index.getX(i + 1), ic = index.getX(i + 2);
-        triangleCount++;
-        if ([ia, ib, ic].some(v => !Number.isInteger(v) || v < 0 || v >= position.count)) {
-          invalidIndices++;
-          continue;
-        }
-        ax[0] = position.getX(ib) - position.getX(ia);
-        ax[1] = position.getY(ib) - position.getY(ia);
-        ax[2] = position.getZ(ib) - position.getZ(ia);
-        bx[0] = position.getX(ic) - position.getX(ia);
-        bx[1] = position.getY(ic) - position.getY(ia);
-        bx[2] = position.getZ(ic) - position.getZ(ia);
-        cx[0] = ax[1] * bx[2] - ax[2] * bx[1];
-        cx[1] = ax[2] * bx[0] - ax[0] * bx[2];
-        cx[2] = ax[0] * bx[1] - ax[1] * bx[0];
-        if (Math.hypot(cx[0], cx[1], cx[2]) < 1e-6) degenerateTriangles++;
-      }
-    }
-    return {
-      loadedPatches: patches.length, vertexCount, triangleCount,
-      minY, maxY, relief: maxY - minY, distinctHeightSamples: distinctHeights.size,
-      degenerateTriangles, invalidIndices, nonFiniteVertices,
-      invalidGeometryPatches, malformedIndexBuffers,
-      missingNormalAttributes, nonFiniteNormals, nonUnitNormals,
-    };
-  });
+  const terrainGeometry = await page.evaluate(() => window.infiniteWorld.getTerrainGeometryDiagnostics());
   if (terrainGeometry.loadedPatches < 13 || terrainGeometry.vertexCount <= 0 ||
       terrainGeometry.triangleCount <= 0 || !Number.isFinite(terrainGeometry.relief) ||
       terrainGeometry.relief < 1 || terrainGeometry.distinctHeightSamples < 8 ||
@@ -2740,7 +2621,7 @@ try {
     throw new Error(`Terrain deformation did not restore from Save -> Load: saved=${terrainCheckpoint}, restored=${terrainRestoredDelta}`);
   }
   await page.waitForFunction(() => {
-    const patches = [...(window.infiniteWorld?.patches?.values?.() ?? [])];
+    const patches = (window.infiniteWorld?.getTerrainPatchSnapshots?.() ?? []);
     const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
     return patches.length >= 13 && patches.some(p => {
       const east = byKey.get(`${p.chunk.cx + 1},${p.chunk.cy},${p.chunk.cz}`);
@@ -2748,60 +2629,7 @@ try {
       return (!!east && east.lod !== p.lod) || (!!south && south.lod !== p.lod);
     });
   }, null, { timeout: 15000 });
-  const restoredTerrainSeams = await page.evaluate(() => {
-    const world = window.infiniteWorld;
-    const patches = [...(world?.patches?.values?.() ?? [])];
-    const byKey = new Map(patches.map(p => [`${p.chunk.cx},${p.chunk.cy},${p.chunk.cz}`, p]));
-    const edge = (patch, side) => {
-      const mesh = patch.group.children.find(child => child.userData?.terrain);
-      const position = mesh?.geometry?.getAttribute?.("position");
-      if (!position) return null;
-      const n = Math.round(Math.sqrt(position.count));
-      const resolution = n - 1;
-      const heights = [];
-      for (let i = 0; i < n; i++) {
-        const index = side === "west" ? i * n : side === "east" ? i * n + resolution
-          : side === "north" ? i : resolution * n + i;
-        heights.push(position.getY(index));
-      }
-      return { resolution, heights };
-    };
-    let checkedPairs = 0;
-    let maxBoundaryHeightError = 0;
-    const failures = [];
-    for (const patch of patches) {
-      const east = byKey.get(`${patch.chunk.cx + 1},${patch.chunk.cy},${patch.chunk.cz}`);
-      const south = byKey.get(`${patch.chunk.cx},${patch.chunk.cy},${patch.chunk.cz + 1}`);
-      for (const [neighbor, sideA, sideB] of [
-        [east, "east", "west"],
-        [south, "south", "north"],
-      ]) {
-        if (!neighbor || neighbor.lod === patch.lod) continue;
-        const a = edge(patch, sideA), b = edge(neighbor, sideB);
-        if (!a || !b) {
-          failures.push("missing mixed-LOD edge geometry");
-          continue;
-        }
-        if (a.resolution === b.resolution) continue;
-        const coarse = a.resolution < b.resolution ? a : b;
-        const fine = a.resolution < b.resolution ? b : a;
-        const ratio = fine.resolution / coarse.resolution;
-        if (!Number.isInteger(ratio)) {
-          failures.push("non-nested mixed-LOD edge grids");
-          continue;
-        }
-        checkedPairs++;
-        for (let i = 0; i <= fine.resolution; i++) {
-          const lo = Math.floor(i / ratio);
-          const hi = Math.min(coarse.resolution, lo + 1);
-          const t = hi === lo ? 0 : i / ratio - lo;
-          const expected = coarse.heights[lo] + (coarse.heights[hi] - coarse.heights[lo]) * t;
-          maxBoundaryHeightError = Math.max(maxBoundaryHeightError, Math.abs(fine.heights[i] - expected));
-        }
-      }
-    }
-    return { checkedPairs, maxBoundaryHeightError, failures };
-  });
+  const restoredTerrainSeams = await page.evaluate(() => window.infiniteWorld.getTerrainSeamDiagnostics());
   if (restoredTerrainSeams.checkedPairs < 1 || restoredTerrainSeams.failures.length > 0 ||
       restoredTerrainSeams.maxBoundaryHeightError > 0.002) {
     throw new Error("Mixed-LOD terrain seams failed after same-page Save -> Load: " + JSON.stringify(restoredTerrainSeams));
@@ -2852,35 +2680,10 @@ try {
 
   const readRenderedFieldColor = async () => page.evaluate((probe) => {
     const world = window.infiniteWorld;
-    let nearest = null;
-    let patchCount = 0;
-    for (const patch of world.patches.values()) {
-      patchCount++;
-      const mesh = patch.group.children.find(child => child.userData?.terrain);
-      const position = mesh?.geometry?.getAttribute?.("position");
-      const color = mesh?.geometry?.getAttribute?.("color");
-      if (!position || !color) continue;
-      for (let vertex = 0; vertex < position.count; vertex++) {
-        const dx = position.getX(vertex) - probe.x;
-        const dz = position.getZ(vertex) - probe.z;
-        const distanceSquared = dx * dx + dz * dz;
-        if (!nearest || distanceSquared < nearest.distanceSquared) {
-          nearest = {
-            distanceSquared,
-            position: [position.getX(vertex), position.getY(vertex), position.getZ(vertex)],
-            color: [color.getX(vertex), color.getY(vertex), color.getZ(vertex)],
-          };
-        }
-      }
-    }
     return {
       mode: world.getMaterialMode(),
-      patchCount,
-      nearest: nearest ? {
-        distance: Math.sqrt(nearest.distanceSquared),
-        position: nearest.position,
-        color: nearest.color,
-      } : null,
+      patchCount: world.getTerrainPatchSnapshots().length,
+      nearest: world.getNearestTerrainVertexColor(probe.x, probe.z),
     };
   }, fieldProbe);
 
@@ -4344,74 +4147,11 @@ try {
       // the browser event loop it is meant to observe.
       if (generationRevision > baselineRevision && sampleGeometryNow) {
         const stats = world.getRuntimeStats();
-        const patches = [...(world.patches?.values?.() ?? [])];
-        const terrainMeshes = [];
-        let invalidGeometryPatches = 0;
-        let vertexCount = 0;
-        let triangleCount = 0;
-        for (const patch of patches) {
-          const mesh = patch.group?.children?.find(child => child.userData?.terrain);
-          const geometry = mesh?.geometry;
-          const position = geometry?.getAttribute?.("position");
-          const index = geometry?.index;
-          if (!position || !index || position.count < 3 || index.count < 3 || index.count % 3 !== 0) {
-            invalidGeometryPatches++;
-            continue;
-          }
-          terrainMeshes.push({ position, index });
-          vertexCount += position.count;
-          triangleCount += index.count / 3;
-        }
-
-        // Do not let a large collection of good meshes hide a single missing or
-        // malformed patch. Every active patch must contribute valid geometry.
-        const geometryReviewed = patches.length >= 13 &&
-          terrainMeshes.length === patches.length &&
-          invalidGeometryPatches === 0;
-        let minY = Infinity;
-        let maxY = -Infinity;
-        let distinctHeights = 0;
-        let degenerateTriangles = 0;
-        let invalidIndices = 0;
-        let nonFiniteVertices = 0;
-        let malformedIndexBuffers = 0;
-        if (geometryReviewed) {
-          const heights = new Set();
-          for (const { position, index } of terrainMeshes) {
-            for (let i = 0; i < position.count; i++) {
-              const x = position.getX(i);
-              const y = position.getY(i);
-              const z = position.getZ(i);
-              if (![x, y, z].every(Number.isFinite)) {
-                nonFiniteVertices++;
-                continue;
-              }
-              minY = Math.min(minY, y);
-              maxY = Math.max(maxY, y);
-              heights.add(Math.round(y * 1000) / 1000);
-            }
-            if (index.count % 3 !== 0) malformedIndexBuffers++;
-            for (let i = 0; i + 2 < index.count; i += 3) {
-              const ia = index.getX(i), ib = index.getX(i + 1), ic = index.getX(i + 2);
-              if ([ia, ib, ic].some(v => !Number.isInteger(v) || v < 0 || v >= position.count)) {
-                invalidIndices++;
-                continue;
-              }
-              const ax = position.getX(ib) - position.getX(ia);
-              const ay = position.getY(ib) - position.getY(ia);
-              const az = position.getZ(ib) - position.getZ(ia);
-              const bx = position.getX(ic) - position.getX(ia);
-              const by = position.getY(ic) - position.getY(ia);
-              const bz = position.getZ(ic) - position.getZ(ia);
-              const cx = ay * bz - az * by;
-              const cy = az * bx - ax * bz;
-              const cz = ax * by - ay * bx;
-              if (Math.hypot(cx, cy, cz) < 1e-6) degenerateTriangles++;
-            }
-          }
-          distinctHeights = heights.size;
-        }
-
+        const geometry = world.getTerrainGeometryDiagnostics();
+        const meshDiagnostics = world.getTerrainMeshDiagnostics();
+        const geometryReviewed = meshDiagnostics.loadedChunks >= 13 &&
+          meshDiagnostics.terrainMeshPatches === meshDiagnostics.loadedChunks &&
+          meshDiagnostics.invalidGeometryPatches === 0;
         const canvas = renderer.domElement;
         probe.last = {
           calls: probe.calls,
@@ -4419,20 +4159,20 @@ try {
           objects: Number(stats?.objects ?? 0),
           loadedChunks: Number(stats?.loadedChunks ?? 0),
           targetChunks: Number(stats?.targetChunks ?? 0),
-          terrainMeshPatches: terrainMeshes.length,
-          vertexCount,
-          triangleCount,
+          terrainMeshPatches: Number(meshDiagnostics.terrainMeshPatches ?? 0),
+          vertexCount: Number(meshDiagnostics.vertexCount ?? 0),
+          triangleCount: Number(meshDiagnostics.triangleCount ?? 0),
           geometryReviewed,
-          invalidGeometryPatches,
-          activePatches: patches.length,
-          minY,
-          maxY,
-          relief: maxY - minY,
-          distinctHeightSamples: distinctHeights,
-          degenerateTriangles,
-          invalidIndices,
-          nonFiniteVertices,
-          malformedIndexBuffers,
+          invalidGeometryPatches: Number(geometry.invalidGeometryPatches ?? 0),
+          activePatches: Number(geometry.loadedPatches ?? 0),
+          minY: geometry.minY,
+          maxY: geometry.maxY,
+          relief: geometry.relief,
+          distinctHeightSamples: geometry.distinctHeightSamples,
+          degenerateTriangles: geometry.degenerateTriangles,
+          invalidIndices: geometry.invalidIndices,
+          nonFiniteVertices: geometry.nonFiniteVertices,
+          malformedIndexBuffers: geometry.malformedIndexBuffers,
           rendererEnabled: Boolean(world.isEnabled),
           renderMode: window.currentRenderMode,
           canvasConnected: Boolean(canvas?.isConnected),
