@@ -714,6 +714,7 @@ export class InfiniteWorldRenderer {
     Object.defineProperties(this, {
       renderer: { configurable: false, enumerable: true, writable: false, value: this.renderer },
       camera: { configurable: false, enumerable: true, writable: false, value: this.camera },
+      objects: { configurable: false, enumerable: true, writable: false, value: this.objects },
       controls: { configurable: false, enumerable: true, writable: false, value: this.controls },
       legacySculptRuntimeAdapter: { configurable: false, enumerable: true, writable: false, value: this.legacySculptRuntimeAdapter },
       decisionLayer: { configurable: false, enumerable: true, writable: false, value: this.#decisionLayer },
