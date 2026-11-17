@@ -1,5 +1,5 @@
 import { chunkKey, worldToChunk } from './WorldCoordinate'
-import type { WorldObject } from './WorldObject'
+import { cloneWorldObject, type WorldObject } from './WorldObject'
 
 type StoredChunk = { version: 1; seed: string; objects: WorldObject[] }
 
@@ -82,43 +82,48 @@ export function saveActiveWorldSeed(seed: string): boolean {
 }
 
 export class WorldPersistence {
-  private readonly prefix: string
-  private readonly manifestKey: string
-  private readonly fieldStateKey: string
-  private readonly fieldCheckpointKey: string
-  private readonly surfaceProviderKey: string
-  private readonly assetManifestKey: string
-  private readonly assetPlacementsKey: string
-  private readonly provenanceKey: string
-  private readonly terrainDeformationKey: string
-  private readonly terrainDeformationCheckpointKey: string
-  private readonly saveTransactionKey: string
-  private saveTransactionDepth = 0
-  private saveTransactionFailed = false
-  private readonly loaded = new Set<string>()
-  private readonly cache = new Map<string, WorldObject[]>()
-  private readonly missingChunks = new Set<string>()
-  private readonly corruptChunks = new Map<string, string>()
+  readonly #prefix: string
+  readonly #manifestKey: string
+  readonly #fieldStateKey: string
+  readonly #fieldCheckpointKey: string
+  readonly #surfaceProviderKey: string
+  readonly #assetManifestKey: string
+  readonly #assetPlacementsKey: string
+  readonly #provenanceKey: string
+  readonly #terrainDeformationKey: string
+  readonly #terrainDeformationCheckpointKey: string
+  readonly #saveTransactionKey: string
+  #saveTransactionDepth = 0
+  #saveTransactionFailed = false
+  readonly #loaded = new Set<string>()
+  readonly #cache = new Map<string, WorldObject[]>()
+  readonly #missingChunks = new Set<string>()
+  readonly #corruptChunks = new Map<string, string>()
 
-  constructor(private readonly seed: string, private readonly readsBlocked = false) {
-    this.prefix = `reality-engine-world:${seed}:chunk:`
-    this.manifestKey = `reality-engine-world:${seed}:manifest`
-    this.fieldStateKey = `reality-engine-world:${seed}:field-state`
-    this.fieldCheckpointKey = `reality-engine-world:${seed}:field-checkpoint`
-    this.surfaceProviderKey = `reality-engine-world:${seed}:surface-provider`
-    this.assetManifestKey = `reality-engine-world:${seed}:asset-manifest`
-    this.assetPlacementsKey = `reality-engine-world:${seed}:asset-placements`
-    this.provenanceKey = `reality-engine-world:${seed}:provenance`
-    this.terrainDeformationKey = `reality-engine-world:${seed}:terrain-deformation`
-    this.terrainDeformationCheckpointKey = `reality-engine-world:${seed}:terrain-deformation-checkpoint`
-    this.saveTransactionKey = `reality-engine-world:${seed}:save-transaction`
+  readonly #seed: string
+  readonly #readsBlocked: boolean
+
+  constructor(seed: string, readsBlocked = false) {
+    this.#seed = seed
+    this.#readsBlocked = readsBlocked
+    this.#prefix = `reality-engine-world:${seed}:chunk:`
+    this.#manifestKey = `reality-engine-world:${seed}:manifest`
+    this.#fieldStateKey = `reality-engine-world:${seed}:field-state`
+    this.#fieldCheckpointKey = `reality-engine-world:${seed}:field-checkpoint`
+    this.#surfaceProviderKey = `reality-engine-world:${seed}:surface-provider`
+    this.#assetManifestKey = `reality-engine-world:${seed}:asset-manifest`
+    this.#assetPlacementsKey = `reality-engine-world:${seed}:asset-placements`
+    this.#provenanceKey = `reality-engine-world:${seed}:provenance`
+    this.#terrainDeformationKey = `reality-engine-world:${seed}:terrain-deformation`
+    this.#terrainDeformationCheckpointKey = `reality-engine-world:${seed}:terrain-deformation-checkpoint`
+    this.#saveTransactionKey = `reality-engine-world:${seed}:save-transaction`
   }
 
-  private readWrappedState<T>(
+  #readWrappedState<T>(
     key: string,
     validateState?: (state: unknown) => boolean,
   ): WorldStateReadResult<T> {
-    if (this.readsBlocked) return { status: 'unavailable', reason: 'active-world-seed-unavailable' }
+    if (this.#readsBlocked) return { status: 'unavailable', reason: 'active-world-seed-unavailable' }
     if (this.hasIncompleteSaveTransaction()) {
       return { status: 'unavailable', reason: 'incomplete-save-transaction' }
     }
@@ -142,7 +147,7 @@ export class WorldPersistence {
     }
 
     const payload = parsed as Record<string, unknown>
-    if (payload.version !== 1 || payload.seed !== this.seed ||
+    if (payload.version !== 1 || payload.seed !== this.#seed ||
         !Object.prototype.hasOwnProperty.call(payload, 'state')) {
       return { status: 'corrupt', reason: 'invalid-version-seed-or-state-envelope' }
     }
@@ -152,19 +157,19 @@ export class WorldPersistence {
     return { status: 'ok', state: payload.state as T }
   }
 
-  private isRecordState(state: unknown): boolean {
+  #isRecordState(state: unknown): boolean {
     return Boolean(state && typeof state === 'object' && !Array.isArray(state))
   }
 
-  private key(cx: number, cy: number, cz: number) {
-    return this.prefix + chunkKey(cx, cy, cz)
+  #key(cx: number, cy: number, cz: number) {
+    return this.#prefix + chunkKey(cx, cy, cz)
   }
 
   /** True when a prior multi-key world save did not reach its commit point. */
   hasIncompleteSaveTransaction(): boolean {
-    if (this.saveTransactionDepth > 0) return false
+    if (this.#saveTransactionDepth > 0) return false
     try {
-      return localStorage.getItem(this.saveTransactionKey) !== null
+      return localStorage.getItem(this.#saveTransactionKey) !== null
     } catch {
       // If the marker cannot be inspected, restoration must fail closed.
       return true
@@ -177,21 +182,21 @@ export class WorldPersistence {
    * import or clear operation repairs the namespace.
    */
   beginSaveTransaction(options: { recoverIncomplete?: boolean } = {}): boolean {
-    if (this.readsBlocked) return false
-    if (this.saveTransactionDepth > 0) {
-      this.saveTransactionDepth += 1
+    if (this.#readsBlocked) return false
+    if (this.#saveTransactionDepth > 0) {
+      this.#saveTransactionDepth += 1
       return true
     }
     try {
-      const existing = localStorage.getItem(this.saveTransactionKey)
+      const existing = localStorage.getItem(this.#saveTransactionKey)
       if (existing !== null && !options.recoverIncomplete) return false
-      localStorage.setItem(this.saveTransactionKey, JSON.stringify({
+      localStorage.setItem(this.#saveTransactionKey, JSON.stringify({
         version: 1,
-        seed: this.seed,
+        seed: this.#seed,
         startedAt: Date.now(),
       }))
-      this.saveTransactionDepth = 1
-      this.saveTransactionFailed = false
+      this.#saveTransactionDepth = 1
+      this.#saveTransactionFailed = false
       return true
     } catch {
       return false
@@ -200,20 +205,20 @@ export class WorldPersistence {
 
   /** Finish one nesting level; only the outer successful commit clears the marker. */
   finishSaveTransaction(success: boolean): boolean {
-    if (this.saveTransactionDepth <= 0) return false
-    if (!success) this.saveTransactionFailed = true
-    this.saveTransactionDepth -= 1
-    if (this.saveTransactionDepth > 0) {
-      return success && !this.saveTransactionFailed
+    if (this.#saveTransactionDepth <= 0) return false
+    if (!success) this.#saveTransactionFailed = true
+    this.#saveTransactionDepth -= 1
+    if (this.#saveTransactionDepth > 0) {
+      return success && !this.#saveTransactionFailed
     }
 
-    const committed = !this.saveTransactionFailed
-    this.saveTransactionFailed = false
+    const committed = !this.#saveTransactionFailed
+    this.#saveTransactionFailed = false
     if (!committed) return false
 
     try {
-      localStorage.removeItem(this.saveTransactionKey)
-      return localStorage.getItem(this.saveTransactionKey) === null
+      localStorage.removeItem(this.#saveTransactionKey)
+      return localStorage.getItem(this.#saveTransactionKey) === null
     } catch {
       return false
     }
@@ -225,10 +230,10 @@ export class WorldPersistence {
    * false means the in-memory field changed but durable persistence failed.
    */
   saveFieldState(state: unknown): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      const payload = { version: 1, seed: this.seed, state }
-      localStorage.setItem(this.fieldStateKey, JSON.stringify(payload))
+      const payload = { version: 1, seed: this.#seed, state }
+      localStorage.setItem(this.#fieldStateKey, JSON.stringify(payload))
       return true
     } catch {
       return false
@@ -236,7 +241,7 @@ export class WorldPersistence {
   }
 
   readFieldState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.fieldStateKey, state => this.isRecordState(state))
+    return this.readWrappedState<T>(this.#fieldStateKey, state => this.#isRecordState(state))
   }
 
   loadFieldState<T = unknown>(): T | null {
@@ -245,10 +250,10 @@ export class WorldPersistence {
   }
 
   saveFieldCheckpoint(state: unknown): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      const payload = { version: 1, seed: this.seed, state }
-      localStorage.setItem(this.fieldCheckpointKey, JSON.stringify(payload))
+      const payload = { version: 1, seed: this.#seed, state }
+      localStorage.setItem(this.#fieldCheckpointKey, JSON.stringify(payload))
       return true
     } catch {
       return false
@@ -256,7 +261,7 @@ export class WorldPersistence {
   }
 
   readFieldCheckpoint<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.fieldCheckpointKey, state => this.isRecordState(state))
+    return this.readWrappedState<T>(this.#fieldCheckpointKey, state => this.#isRecordState(state))
   }
 
   loadFieldCheckpoint<T = unknown>(): T | null {
@@ -265,9 +270,9 @@ export class WorldPersistence {
   }
 
   deleteFieldCheckpoint(): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.removeItem(this.fieldCheckpointKey)
+      localStorage.removeItem(this.#fieldCheckpointKey)
       return true
     } catch {
       return false
@@ -275,9 +280,9 @@ export class WorldPersistence {
   }
 
   deleteFieldState(): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.removeItem(this.fieldStateKey)
+      localStorage.removeItem(this.#fieldStateKey)
       return true
     } catch {
       return false
@@ -286,11 +291,11 @@ export class WorldPersistence {
 
   /** Persist a versioned, serializable world-surface provider snapshot. */
   saveSurfaceProviderState(state: unknown): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.setItem(this.surfaceProviderKey, JSON.stringify({
+      localStorage.setItem(this.#surfaceProviderKey, JSON.stringify({
         version: 1,
-        seed: this.seed,
+        seed: this.#seed,
         state,
       }))
       return true
@@ -300,7 +305,7 @@ export class WorldPersistence {
   }
 
   readSurfaceProviderState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.surfaceProviderKey, state => this.isRecordState(state))
+    return this.readWrappedState<T>(this.#surfaceProviderKey, state => this.#isRecordState(state))
   }
 
   loadSurfaceProviderState<T = unknown>(): T | null {
@@ -309,9 +314,9 @@ export class WorldPersistence {
   }
 
   deleteSurfaceProviderState(): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.removeItem(this.surfaceProviderKey)
+      localStorage.removeItem(this.#surfaceProviderKey)
       return true
     } catch {
       return false
@@ -320,11 +325,11 @@ export class WorldPersistence {
 
   /** Persist asset source/licensing metadata without downloading external resources. */
   saveAssetManifestState(state: unknown): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.setItem(this.assetManifestKey, JSON.stringify({
+      localStorage.setItem(this.#assetManifestKey, JSON.stringify({
         version: 1,
-        seed: this.seed,
+        seed: this.#seed,
         state,
       }))
       return true
@@ -334,7 +339,7 @@ export class WorldPersistence {
   }
 
   readAssetManifestState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.assetManifestKey, state => this.isRecordState(state))
+    return this.readWrappedState<T>(this.#assetManifestKey, state => this.#isRecordState(state))
   }
 
   loadAssetManifestState<T = unknown>(): T | null {
@@ -343,9 +348,9 @@ export class WorldPersistence {
   }
 
   deleteAssetManifestState(): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.removeItem(this.assetManifestKey)
+      localStorage.removeItem(this.#assetManifestKey)
       return true
     } catch {
       return false
@@ -354,11 +359,11 @@ export class WorldPersistence {
 
   /** Persist external asset placement intent without storing or fetching GLTF binaries. */
   saveAssetPlacementsState(state: unknown): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.setItem(this.assetPlacementsKey, JSON.stringify({
+      localStorage.setItem(this.#assetPlacementsKey, JSON.stringify({
         version: 1,
-        seed: this.seed,
+        seed: this.#seed,
         state,
       }))
       return true
@@ -368,7 +373,7 @@ export class WorldPersistence {
   }
 
   readAssetPlacementsState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.assetPlacementsKey, state => Array.isArray(state))
+    return this.readWrappedState<T>(this.#assetPlacementsKey, state => Array.isArray(state))
   }
 
   loadAssetPlacementsState<T = unknown>(): T | null {
@@ -377,9 +382,9 @@ export class WorldPersistence {
   }
 
   deleteAssetPlacementsState(): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.removeItem(this.assetPlacementsKey)
+      localStorage.removeItem(this.#assetPlacementsKey)
       return true
     } catch {
       return false
@@ -388,11 +393,11 @@ export class WorldPersistence {
 
   /** Persist the causal provenance trace for this world seed. */
   saveProvenanceState(state: unknown): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.setItem(this.provenanceKey, JSON.stringify({
+      localStorage.setItem(this.#provenanceKey, JSON.stringify({
         version: 1,
-        seed: this.seed,
+        seed: this.#seed,
         state,
       }))
       return true
@@ -402,7 +407,7 @@ export class WorldPersistence {
   }
 
   readProvenanceState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.provenanceKey, state => this.isRecordState(state))
+    return this.readWrappedState<T>(this.#provenanceKey, state => this.#isRecordState(state))
   }
 
   loadProvenanceState<T = unknown>(): T | null {
@@ -411,9 +416,9 @@ export class WorldPersistence {
   }
 
   deleteProvenanceState(): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.removeItem(this.provenanceKey)
+      localStorage.removeItem(this.#provenanceKey)
       return true
     } catch {
       return false
@@ -421,9 +426,9 @@ export class WorldPersistence {
   }
 
   saveTerrainDeformationState(state: unknown): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.setItem(this.terrainDeformationKey, JSON.stringify({ version: 1, seed: this.seed, state }))
+      localStorage.setItem(this.#terrainDeformationKey, JSON.stringify({ version: 1, seed: this.#seed, state }))
       return true
     } catch {
       return false
@@ -431,7 +436,7 @@ export class WorldPersistence {
   }
 
   readTerrainDeformationState<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.terrainDeformationKey, state => this.isRecordState(state))
+    return this.readWrappedState<T>(this.#terrainDeformationKey, state => this.#isRecordState(state))
   }
 
   loadTerrainDeformationState<T = unknown>(): T | null {
@@ -440,9 +445,9 @@ export class WorldPersistence {
   }
 
   saveTerrainDeformationCheckpoint(state: unknown): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.setItem(this.terrainDeformationCheckpointKey, JSON.stringify({ version: 1, seed: this.seed, state }))
+      localStorage.setItem(this.#terrainDeformationCheckpointKey, JSON.stringify({ version: 1, seed: this.#seed, state }))
       return true
     } catch {
       return false
@@ -450,7 +455,7 @@ export class WorldPersistence {
   }
 
   readTerrainDeformationCheckpoint<T = unknown>(): WorldStateReadResult<T> {
-    return this.readWrappedState<T>(this.terrainDeformationCheckpointKey, state => this.isRecordState(state))
+    return this.readWrappedState<T>(this.#terrainDeformationCheckpointKey, state => this.#isRecordState(state))
   }
 
   loadTerrainDeformationCheckpoint<T = unknown>(): T | null {
@@ -459,9 +464,9 @@ export class WorldPersistence {
   }
 
   deleteTerrainDeformationState(): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     try {
-      localStorage.removeItem(this.terrainDeformationKey)
+      localStorage.removeItem(this.#terrainDeformationKey)
       return true
     } catch {
       return false
@@ -473,22 +478,23 @@ export class WorldPersistence {
    * whether both the chunk payload and its manifest entry became durable.
    */
   saveChunk(cx: number, cy: number, cz: number, objects: WorldObject[]): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     // Never persist a payload that the strict restore path would reject later.
     if (!Array.isArray(objects) || !objects.every(isStoredWorldObject)) return false
-    const payload: StoredChunk = { version: 1, seed: this.seed, objects }
+    const payload: StoredChunk = { version: 1, seed: this.#seed, objects }
     const key = chunkKey(cx, cy, cz)
     let chunkSaved = false
     try {
-      localStorage.setItem(this.key(cx, cy, cz), JSON.stringify(payload))
+      localStorage.setItem(this.#key(cx, cy, cz), JSON.stringify(payload))
       chunkSaved = true
     } catch {
       // The cache remains usable, but callers must be told persistence failed.
     }
-    this.cache.set(key, objects)
-    this.loaded.add(key)
+    const detachedObjects = objects.map(cloneWorldObject)
+    this.#cache.set(key, detachedObjects)
+    this.#loaded.add(key)
     if (!chunkSaved) return false
-    return this.updateManifest(key)
+    return this.#updateManifest(key)
   }
 
   /**
@@ -496,7 +502,7 @@ export class WorldPersistence {
    * storage into the same empty-array result.
    */
   readChunk(cx: number, cy: number, cz: number): WorldChunkReadResult {
-    if (this.readsBlocked) {
+    if (this.#readsBlocked) {
       return { status: 'unavailable', objects: [], reason: 'active-world-seed-unavailable' }
     }
     if (this.hasIncompleteSaveTransaction()) {
@@ -504,27 +510,27 @@ export class WorldPersistence {
     }
 
     const key = chunkKey(cx, cy, cz)
-    if (this.cache.has(key)) {
-      return { status: 'ok', objects: this.cache.get(key)! }
+    if (this.#cache.has(key)) {
+      return { status: 'ok', objects: this.#cache.get(key)!.map(cloneWorldObject) }
     }
-    if (this.missingChunks.has(key)) {
+    if (this.#missingChunks.has(key)) {
       return { status: 'missing', objects: [], reason: 'chunk-payload-not-found' }
     }
-    const corruptReason = this.corruptChunks.get(key)
+    const corruptReason = this.#corruptChunks.get(key)
     if (corruptReason) {
       return { status: 'corrupt', objects: [], reason: corruptReason }
     }
 
     let raw: string | null
     try {
-      raw = localStorage.getItem(this.key(cx, cy, cz))
+      raw = localStorage.getItem(this.#key(cx, cy, cz))
     } catch {
       // Do not mark inaccessible data as loaded; the next streaming pass may retry.
       return { status: 'unavailable', objects: [], reason: 'storage-read-failed' }
     }
     if (raw === null) {
-      this.loaded.add(key)
-      this.missingChunks.add(key)
+      this.#loaded.add(key)
+      this.#missingChunks.add(key)
       return { status: 'missing', objects: [], reason: 'chunk-payload-not-found' }
     }
 
@@ -533,34 +539,35 @@ export class WorldPersistence {
       parsed = JSON.parse(raw)
     } catch {
       const reason = 'invalid-json'
-      this.loaded.add(key)
-      this.corruptChunks.set(key, reason)
+      this.#loaded.add(key)
+      this.#corruptChunks.set(key, reason)
       return { status: 'corrupt', objects: [], reason }
     }
 
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       const reason = 'invalid-payload-envelope'
-      this.loaded.add(key)
-      this.corruptChunks.set(key, reason)
+      this.#loaded.add(key)
+      this.#corruptChunks.set(key, reason)
       return { status: 'corrupt', objects: [], reason }
     }
     const payload = parsed as Partial<StoredChunk>
-    if (payload.version !== 1 || payload.seed !== this.seed || !Array.isArray(payload.objects)) {
+    if (payload.version !== 1 || payload.seed !== this.#seed || !Array.isArray(payload.objects)) {
       const reason = 'unsupported-version-seed-or-object-list'
-      this.loaded.add(key)
-      this.corruptChunks.set(key, reason)
+      this.#loaded.add(key)
+      this.#corruptChunks.set(key, reason)
       return { status: 'corrupt', objects: [], reason }
     }
     if (!payload.objects.every(isStoredWorldObject)) {
       const reason = 'invalid-world-object-record'
-      this.loaded.add(key)
-      this.corruptChunks.set(key, reason)
+      this.#loaded.add(key)
+      this.#corruptChunks.set(key, reason)
       return { status: 'corrupt', objects: [], reason }
     }
 
-    this.loaded.add(key)
-    this.cache.set(key, payload.objects)
-    return { status: 'ok', objects: payload.objects }
+    this.#loaded.add(key)
+    const detachedObjects = payload.objects.map(cloneWorldObject)
+    this.#cache.set(key, detachedObjects)
+    return { status: 'ok', objects: detachedObjects.map(cloneWorldObject) }
   }
 
   /** Legacy array API for streaming callers; use readChunk when status matters. */
@@ -571,10 +578,10 @@ export class WorldPersistence {
 
   unloadChunk(cx: number, cy: number, cz: number) {
     const key = chunkKey(cx, cy, cz)
-    this.loaded.delete(key)
-    this.cache.delete(key)
-    this.missingChunks.delete(key)
-    this.corruptChunks.delete(key)
+    this.#loaded.delete(key)
+    this.#cache.delete(key)
+    this.#missingChunks.delete(key)
+    this.#corruptChunks.delete(key)
   }
 
   /**
@@ -582,18 +589,18 @@ export class WorldPersistence {
    * removed. A failed remove must remain visible to callers and retain cache.
    */
   deleteChunk(cx: number, cy: number, cz: number): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     const key = chunkKey(cx, cy, cz)
     try {
-      localStorage.removeItem(this.key(cx, cy, cz))
+      localStorage.removeItem(this.#key(cx, cy, cz))
     } catch {
       return false
     }
-    this.loaded.delete(key)
-    this.cache.delete(key)
-    this.missingChunks.delete(key)
-    this.corruptChunks.delete(key)
-    return this.updateManifest(undefined, key)
+    this.#loaded.delete(key)
+    this.#cache.delete(key)
+    this.#missingChunks.delete(key)
+    this.#corruptChunks.delete(key)
+    return this.#updateManifest(undefined, key)
   }
 
   /**
@@ -601,33 +608,33 @@ export class WorldPersistence {
    * or corrupt manifest. Returns false when storage prevented a complete clear.
    */
   clear(): boolean {
-    if (this.readsBlocked) return false
+    if (this.#readsBlocked) return false
     let cleared = true
-    const scannedChunkKeys = this.scanStoredChunkStorageKeys()
+    const scannedChunkKeys = this.#scanStoredChunkStorageKeys()
     if (scannedChunkKeys === null) {
       // Without a complete key scan, orphaned chunks cannot be distinguished
       // from manifest entries. Leave durable records untouched, but detach the
       // renderer from cached chunks so stale objects cannot reappear in memory.
-      this.loaded.clear()
-      this.cache.clear()
-      this.missingChunks.clear()
-      this.corruptChunks.clear()
+      this.#loaded.clear()
+      this.#cache.clear()
+      this.#missingChunks.clear()
+      this.#corruptChunks.clear()
       return false
     }
     if (!this.beginSaveTransaction({ recoverIncomplete: true })) {
       // A failed durable clear must still detach the renderer from its in-memory
       // chunk cache; persisted records remain untouched and the caller gets false.
-      this.loaded.clear()
-      this.cache.clear()
-      this.missingChunks.clear()
-      this.corruptChunks.clear()
+      this.#loaded.clear()
+      this.#cache.clear()
+      this.#missingChunks.clear()
+      this.#corruptChunks.clear()
       return false
     }
     const chunkStorageKeys = new Set(scannedChunkKeys)
 
     let raw: string | null = null
     try {
-      raw = localStorage.getItem(this.manifestKey)
+      raw = localStorage.getItem(this.#manifestKey)
     } catch {
       cleared = false
     }
@@ -636,7 +643,7 @@ export class WorldPersistence {
         const keys: unknown = JSON.parse(raw)
         if (Array.isArray(keys)) {
           for (const key of keys) {
-            if (this.isValidChunkKey(key)) chunkStorageKeys.add(this.prefix + key)
+            if (this.#isValidChunkKey(key)) chunkStorageKeys.add(this.#prefix + key)
           }
         }
       } catch {
@@ -652,15 +659,15 @@ export class WorldPersistence {
       }
     }
     for (const key of [
-      this.manifestKey,
-      this.fieldStateKey,
-      this.fieldCheckpointKey,
-      this.surfaceProviderKey,
-      this.assetManifestKey,
-      this.assetPlacementsKey,
-      this.provenanceKey,
-      this.terrainDeformationKey,
-      this.terrainDeformationCheckpointKey,
+      this.#manifestKey,
+      this.#fieldStateKey,
+      this.#fieldCheckpointKey,
+      this.#surfaceProviderKey,
+      this.#assetManifestKey,
+      this.#assetPlacementsKey,
+      this.#provenanceKey,
+      this.#terrainDeformationKey,
+      this.#terrainDeformationCheckpointKey,
     ]) {
       try {
         localStorage.removeItem(key)
@@ -668,10 +675,10 @@ export class WorldPersistence {
         cleared = false
       }
     }
-    this.loaded.clear()
-    this.cache.clear()
-    this.missingChunks.clear()
-    this.corruptChunks.clear()
+    this.#loaded.clear()
+    this.#cache.clear()
+    this.#missingChunks.clear()
+    this.#corruptChunks.clear()
     const committed = this.finishSaveTransaction(cleared)
     return cleared && committed
   }
@@ -680,18 +687,18 @@ export class WorldPersistence {
     return worldToChunk(object.x, object.y, object.z).chunk
   }
 
-  isLoaded(cx: number, cy: number, cz: number) { return this.loaded.has(chunkKey(cx, cy, cz)) }
+  isLoaded(cx: number, cy: number, cz: number) { return this.#loaded.has(chunkKey(cx, cy, cz)) }
 
-  loadedChunks(): string[] { return [...this.loaded] }
+  loadedChunks(): string[] { return [...this.#loaded] }
 
   knownChunks(options: { recoverOrphans?: boolean } = {}): string[] | null {
     if (this.hasIncompleteSaveTransaction()) return []
 
     let raw: string | null
     try {
-      raw = localStorage.getItem(this.manifestKey)
+      raw = localStorage.getItem(this.#manifestKey)
     } catch {
-      return options.recoverOrphans ? this.scanStoredChunkKeys() : []
+      return options.recoverOrphans ? this.#scanStoredChunkKeys() : []
     }
 
     let keys: string[] = []
@@ -699,7 +706,7 @@ export class WorldPersistence {
       try {
         const parsed: unknown = JSON.parse(raw)
         if (Array.isArray(parsed)) {
-          keys = parsed.filter((key): key is string => this.isValidChunkKey(key))
+          keys = parsed.filter((key): key is string => this.#isValidChunkKey(key))
         } else if (!options.recoverOrphans) {
           return []
         }
@@ -711,14 +718,14 @@ export class WorldPersistence {
     if (!options.recoverOrphans) return [...new Set(keys)]
     // A complete payload scan is authoritative. The manifest can contain
     // stale entries from older runtimes that indexed a negative-cache read.
-    const scannedChunkKeys = this.scanStoredChunkKeys()
+    const scannedChunkKeys = this.#scanStoredChunkKeys()
     if (scannedChunkKeys === null) return null
     const durableKeys = [...new Set(scannedChunkKeys)]
     // Best-effort manifest repair: callers still receive the authoritative
     // scanned set when the index itself cannot be rewritten.
     if (JSON.stringify([...new Set(keys)]) !== JSON.stringify(durableKeys)) {
       try {
-        localStorage.setItem(this.manifestKey, JSON.stringify(durableKeys))
+        localStorage.setItem(this.#manifestKey, JSON.stringify(durableKeys))
       } catch {
         // Read recovery remains valid; a later save can retry index repair.
       }
@@ -726,18 +733,18 @@ export class WorldPersistence {
     return durableKeys
   }
 
-  private isValidChunkKey(value: unknown): value is string {
+  #isValidChunkKey(value: unknown): value is string {
     if (typeof value !== 'string' || value.split(',').length !== 3) return false
     const [cx, cy, cz] = value.split(',').map(Number)
     return [cx, cy, cz].every(Number.isSafeInteger) && chunkKey(cx, cy, cz) === value
   }
 
-  private scanStoredChunkStorageKeys(): string[] | null {
+  #scanStoredChunkStorageKeys(): string[] | null {
     const keys: string[] = []
     try {
       for (let index = 0; index < localStorage.length; index++) {
         const storageKey = localStorage.key(index)
-        if (storageKey?.startsWith(this.prefix)) keys.push(storageKey)
+        if (storageKey?.startsWith(this.#prefix)) keys.push(storageKey)
       }
     } catch {
       // Storage enumeration can be blocked just like reads and writes.
@@ -746,18 +753,18 @@ export class WorldPersistence {
     return [...new Set(keys)]
   }
 
-  private scanStoredChunkKeys(): string[] | null {
-    const storageKeys = this.scanStoredChunkStorageKeys()
+  #scanStoredChunkKeys(): string[] | null {
+    const storageKeys = this.#scanStoredChunkStorageKeys()
     if (storageKeys === null) return null
     return [...new Set(storageKeys
-      .map(storageKey => storageKey.slice(this.prefix.length))
-      .filter((key): key is string => this.isValidChunkKey(key)))]
+      .map(storageKey => storageKey.slice(this.#prefix.length))
+      .filter((key): key is string => this.#isValidChunkKey(key)))]
   }
 
-  private updateManifest(addKey?: string, removeKey?: string): boolean {
+  #updateManifest(addKey?: string, removeKey?: string): boolean {
     let raw: string | null
     try {
-      raw = localStorage.getItem(this.manifestKey)
+      raw = localStorage.getItem(this.#manifestKey)
     } catch {
       return false
     }
@@ -765,7 +772,7 @@ export class WorldPersistence {
     try {
       const parsed: unknown = raw ? JSON.parse(raw) : []
       if (!Array.isArray(parsed)) return false
-      keys = parsed.filter((key): key is string => this.isValidChunkKey(key))
+      keys = parsed.filter((key): key is string => this.#isValidChunkKey(key))
     } catch {
       // Do not overwrite a corrupt manifest with a partial index.
       return false
@@ -774,7 +781,7 @@ export class WorldPersistence {
     if (addKey) present.add(addKey)
     if (removeKey) present.delete(removeKey)
     try {
-      localStorage.setItem(this.manifestKey, JSON.stringify([...present]))
+      localStorage.setItem(this.#manifestKey, JSON.stringify([...present]))
       return true
     } catch {
       return false
