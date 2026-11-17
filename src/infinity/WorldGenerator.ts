@@ -33,15 +33,20 @@ export type WorldChunk = {
  * Terrain is defined in world coordinates, so adjacent chunks share the same samples.
  */
 export class WorldGenerator {
-  readonly seed: string
-  readonly seaLevel: number
-  readonly maxElevation: number
+  readonly #seed: string
+  readonly #seaLevel: number
+  readonly #maxElevation: number
 
   constructor(seed = 'reality-engine-infinity-v1', seaLevel = 16, maxElevation = 52) {
-    this.seed = seed
-    this.seaLevel = seaLevel
-    this.maxElevation = maxElevation
+    this.#seed = seed
+    this.#seaLevel = seaLevel
+    this.#maxElevation = maxElevation
+    Object.freeze(this)
   }
+
+  get seed(): string { return this.#seed }
+  get seaLevel(): number { return this.#seaLevel }
+  get maxElevation(): number { return this.#maxElevation }
 
   sampleHeight(x: number, z: number): number {
     // Continental scale establishes landmasses; ridges shape mountains;
