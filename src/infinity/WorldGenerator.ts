@@ -38,7 +38,13 @@ export class WorldGenerator {
   readonly #maxElevation: number
 
   constructor(seed = 'reality-engine-infinity-v1', seaLevel = 16, maxElevation = 52) {
-    this.#seed = seed
+    if (typeof seed !== 'string' || !seed.trim() || seed.length > 512) {
+      throw new TypeError('World generator seed must be a non-empty string of at most 512 characters')
+    }
+    if (!Number.isFinite(seaLevel) || !Number.isFinite(maxElevation) || maxElevation <= seaLevel) {
+      throw new RangeError('World generator elevation bounds must be finite with maxElevation above seaLevel')
+    }
+    this.#seed = seed.trim()
     this.#seaLevel = seaLevel
     this.#maxElevation = maxElevation
     Object.freeze(this)
