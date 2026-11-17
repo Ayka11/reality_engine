@@ -581,7 +581,7 @@ assert.ok(portablePersistStart >= 0 && portablePersistStart < saveWorldStart,
   "portable restore persistence method must remain identifiable");
 const portablePersistSource = rendererSource.slice(portablePersistStart, saveWorldStart);
 const namespaceClearAt = portablePersistSource.indexOf("this.persistence.clear()");
-const surfaceWriteAt = portablePersistSource.indexOf("this.persistActiveSurfaceProvider()");
+const surfaceWriteAt = portablePersistSource.indexOf("this.#persistActiveSurfaceProvider()");
 const chunkAndSidecarSaveAt = portablePersistSource.indexOf("this.saveWorld({ checkpoint: false, preflightFailures, allowRecovery: true })");
 assert.ok(namespaceClearAt >= 0 && surfaceWriteAt > namespaceClearAt && chunkAndSidecarSaveAt > surfaceWriteAt,
   "portable restore must clear prior checkpoints/sidecars/chunks before writing the imported generation");
@@ -590,7 +590,7 @@ assert.match(portablePersistSource, /if \(!this\.persistence\.clear\(\)\)/,
 assert.match(saveWorldSource, /if \(this\.#persistenceRecoveryBlocked && !options\.allowRecovery\)/,
   "autosave must remain blocked after startup/restore could not prove that the durable world is complete");
 const savePreflightIndex = saveWorldSource.indexOf("const knownChunkKeys = this.persistence.knownChunks({ recoverOrphans: true })");
-const sidecarWriteIndex = saveWorldSource.indexOf("this.persistAuthoritativeFieldState()");
+const sidecarWriteIndex = saveWorldSource.indexOf("this.#persistAuthoritativeFieldState()");
 assert.ok(savePreflightIndex >= 0 && sidecarWriteIndex > savePreflightIndex,
   "saveWorld must preflight the stored chunk set before writing any world sidecars");
 assert.match(saveWorldSource, /this\.persistence\.readChunk\([\s\S]*?result\.status !== 'ok'[\s\S]*?durable state was left untouched/,
@@ -1674,14 +1674,14 @@ assert.match(rendererSource, /if \(chunkRead\.status === 'ok'\) \{[\s\S]*?for \(
   "only successfully read chunks may publish restored objects");
 assert.match(rendererSource, /A missing chunk is a valid empty region/,
   "a genuinely missing chunk must remain distinct from a corrupt/unavailable payload");
-assert.match(rendererSource, /private clearPersistedWorldNamespace\(\): boolean\s*\{\s*if \(this\.#saveTimer !== null\) \{\s*window\.clearTimeout\(this\.#saveTimer\)[\s\S]*?return this\.persistence\.clear\(\)\s*\}/,
+assert.match(rendererSource, / #clearPersistedWorldNamespace\(\): boolean\s*\{\s*if \(this\.#saveTimer !== null\) \{\s*window\.clearTimeout\(this\.#saveTimer\)[\s\S]*?return this\.persistence\.clear\(\)\s*\}/,
   "durable namespace cleanup must cancel stale autosaves without mutating the live renderer");
-assert.match(rendererSource, /clearSavedWorld\(\): boolean\s*\{\s*const cleared = this\.clearPersistedWorldNamespace\(\)[\s\S]*?if \(!cleared\) \{[\s\S]*?return false[\s\S]*?this\.#pendingExternalAssetPlacements = \[\][\s\S]*?try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{/,
+assert.match(rendererSource, /clearSavedWorld\(\): boolean\s*\{\s*const cleared = this\.#clearPersistedWorldNamespace\(\)[\s\S]*?if \(!cleared\) \{[\s\S]*?return false[\s\S]*?this\.#pendingExternalAssetPlacements = \[\][\s\S]*?try \{\s*this\.clearExternalAssetRuntime\(\)\s*\} catch \(error\) \{/,
   "full world clear must preserve live placements if durable cleanup fails and continue cleanup after disposal errors");
 const reseedStart = rendererSource.indexOf("  reseed(newSeed: string)");
 const reseedEnd = rendererSource.indexOf("\n  dispose()", reseedStart);
 const reseedSource = rendererSource.slice(reseedStart, reseedEnd);
-assert.match(reseedSource, /this\.clearPersistedWorldNamespace\(\)/,
+assert.match(reseedSource, /this\.#clearPersistedWorldNamespace\(\)/,
   "reseed must clear the old persisted namespace without invoking the full live-world reset");
 assert.doesNotMatch(reseedSource, /this\.clearSavedWorld\(\)/,
   "reseed must not rebuild old terrain or clear the external asset runtime twice");
