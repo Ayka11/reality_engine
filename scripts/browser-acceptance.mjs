@@ -1117,6 +1117,43 @@ try {
       placements: window.capturePortableWorldEditorSnapshot().assetPlacements,
     };
   }, { url: mockAssetUrl, instanceId: placementFixture.instanceId });
+  const publicRuntimeContract = await page.evaluate(() => {
+    const world = window.infiniteWorld;
+    const runtime = world?.worldAssetRuntime;
+    const descriptor = world
+      ? Object.getOwnPropertyDescriptor(world, "worldAssetRuntime")
+      : undefined;
+    return {
+      exists: Boolean(runtime),
+      frozen: Boolean(runtime && Object.isFrozen(runtime)),
+      nonWritable: descriptor?.writable === false,
+      nonConfigurable: descriptor?.configurable === false,
+      hasSafeSnapshot: typeof runtime?.snapshotPlacements === "function",
+      hasSafeTransform: typeof runtime?.setInstanceWorldTransform === "function",
+      exposesPlaceInstance: typeof runtime?.placeInstance === "function",
+      exposesScatterSemantic: typeof runtime?.scatterSemantic === "function",
+      exposesScatterSemanticWithResult: typeof runtime?.scatterSemanticWithResult === "function",
+      exposesLoad: typeof runtime?.load === "function",
+      exposesRemoveInstance: typeof runtime?.removeInstance === "function",
+      exposesClear: typeof runtime?.clear === "function",
+    };
+  });
+  if (!publicRuntimeContract.exists ||
+      !publicRuntimeContract.frozen ||
+      !publicRuntimeContract.nonWritable ||
+      !publicRuntimeContract.nonConfigurable ||
+      !publicRuntimeContract.hasSafeSnapshot ||
+      !publicRuntimeContract.hasSafeTransform ||
+      publicRuntimeContract.exposesPlaceInstance ||
+      publicRuntimeContract.exposesScatterSemantic ||
+      publicRuntimeContract.exposesScatterSemanticWithResult ||
+      publicRuntimeContract.exposesLoad ||
+      publicRuntimeContract.exposesRemoveInstance ||
+      publicRuntimeContract.exposesClear) {
+    throw new Error("Browser-facing world asset runtime must be a frozen, restricted facade: " +
+      JSON.stringify(publicRuntimeContract));
+  }
+
   const restoredLivePlacement = restoredAssetPlacement.placements.find(
     placement => placement.instanceId === placementFixture.instanceId,
   );
