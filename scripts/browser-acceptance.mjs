@@ -1117,6 +1117,31 @@ try {
       placements: window.capturePortableWorldEditorSnapshot().assetPlacements,
     };
   }, { url: mockAssetUrl, instanceId: placementFixture.instanceId });
+  const fieldVolumeApiContract = await page.evaluate(() => {
+    const api = window.worldFieldVolumeRenderer;
+    return {
+      available: Boolean(api),
+      frozen: Boolean(api && Object.isFrozen(api)),
+      hasRender: typeof api?.render === "function",
+      hasDiagnostics: typeof api?.diagnostics === "function",
+      exposesScene: Boolean(api && "scene" in api),
+      exposesCamera: Boolean(api && "camera" in api),
+      exposesControls: Boolean(api && "controls" in api),
+      exposesRenderer: Boolean(api && "renderer" in api),
+    };
+  });
+  if (fieldVolumeApiContract.available &&
+      (!fieldVolumeApiContract.frozen ||
+       !fieldVolumeApiContract.hasRender ||
+       !fieldVolumeApiContract.hasDiagnostics ||
+       fieldVolumeApiContract.exposesScene ||
+       fieldVolumeApiContract.exposesCamera ||
+       fieldVolumeApiContract.exposesControls ||
+       fieldVolumeApiContract.exposesRenderer)) {
+    throw new Error("Browser-facing field volume renderer must expose only a frozen render facade: " +
+      JSON.stringify(fieldVolumeApiContract));
+  }
+
   const publicRuntimeContract = await page.evaluate(fixture => {
     const world = window.infiniteWorld;
     const runtime = world?.worldAssetRuntime;
