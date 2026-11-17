@@ -2026,7 +2026,7 @@ try {
     return {
       running: window.getInfiniteWorldSimulationRunning(),
       tick: Number(window.tick) || 0,
-      positions: Array.from(world.physicsParticlePositions.slice(0, 60)),
+      positions: Array.from(world.getPhysicsParticlePositionSnapshot(60)),
     };
   });
   if (playPauseBaseline.error || playPauseBaseline.running !== false) {
