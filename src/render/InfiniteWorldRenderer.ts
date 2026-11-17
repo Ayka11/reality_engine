@@ -41,7 +41,7 @@ import { compareExperiments, type ExperimentComparison } from '../infinity/Exper
 import { ExperimentCatalog } from '../infinity/ExperimentCatalog'
 import { analyzeExperiments, type ExperimentAnalysis } from '../infinity/ExperimentAnalysis'
 import { calculateStatisticalAnalysis, type StatisticalExperimentAnalysis } from '../infinity/ExperimentStatistics'
-import { WorldAssetRuntime, groundWorldAssetInstances } from '../worldLibrary/WorldAssetRuntime'
+import { WorldAssetRuntime, groundWorldAssetInstances, type WorldAssetRuntimeFacade } from '../worldLibrary/WorldAssetRuntime'
 import { biomePopulationEngine } from '../worldLibrary/BiomePopulationEngine'
 import { worldResourceEconomy } from '../worldLibrary/WorldResourceEconomy'
 import { civilizationRuntime, type CivilizationType } from '../worldLibrary/CivilizationRuntime'
@@ -90,20 +90,7 @@ export class InfiniteWorldRenderer {
   readonly experimentRunner = new ExperimentRunner()
   readonly experimentCatalog = new ExperimentCatalog()
   /** Safe browser-facing API; the mutable Three.js runtime remains private. */
-  readonly worldAssetRuntime!: Pick<
-    WorldAssetRuntime,
-    | 'hasInstance'
-    | 'getInstanceSourceAssetId'
-    | 'getInstanceSemanticEntryId'
-    | 'snapshotPlacements'
-    | 'setInstanceWorldTransform'
-    | 'stats'
-    | 'getAnimationNames'
-    | 'playInstanceAnimation'
-    | 'stopInstanceAnimation'
-    | 'setSemanticAnimationState'
-    | 'stopSemanticAnimation'
-  >
+  readonly worldAssetRuntime!: WorldAssetRuntimeFacade
   readonly #worldAssetRuntime: WorldAssetRuntime
   #pendingExternalAssetPlacements: ExternalAssetPlacementSnapshot[] = []
   private suppressAssetPlacementAutosave = false
@@ -436,15 +423,25 @@ export class InfiniteWorldRenderer {
       enumerable: true,
       writable: false,
       value: Object.freeze({
+        has: this.#worldAssetRuntime.has.bind(this.#worldAssetRuntime),
+        get: this.#worldAssetRuntime.get.bind(this.#worldAssetRuntime),
+        getSemanticSource: this.#worldAssetRuntime.getSemanticSource.bind(this.#worldAssetRuntime),
+        hasSemanticSource: this.#worldAssetRuntime.hasSemanticSource.bind(this.#worldAssetRuntime),
+        getAnimationNames: this.#worldAssetRuntime.getAnimationNames.bind(this.#worldAssetRuntime),
         hasInstance: this.#worldAssetRuntime.hasInstance.bind(this.#worldAssetRuntime),
         getInstanceSourceAssetId: this.#worldAssetRuntime.getInstanceSourceAssetId.bind(this.#worldAssetRuntime),
         getInstanceSemanticEntryId: this.#worldAssetRuntime.getInstanceSemanticEntryId.bind(this.#worldAssetRuntime),
-        snapshotPlacements: this.#worldAssetRuntime.snapshotPlacements.bind(this.#worldAssetRuntime),
+        getInstanceRuntimeOwnerId: this.#worldAssetRuntime.getInstanceRuntimeOwnerId.bind(this.#worldAssetRuntime),
+        setInstanceRuntimeOwnerId: this.#worldAssetRuntime.setInstanceRuntimeOwnerId.bind(this.#worldAssetRuntime),
         setInstanceWorldTransform: this.#worldAssetRuntime.setInstanceWorldTransform.bind(this.#worldAssetRuntime),
+        placeInstance: (...args: Parameters<WorldAssetRuntime['placeInstance']>) =>
+          this.#worldAssetRuntime.placeInstance(...args) !== null,
+        removeInstance: this.#worldAssetRuntime.removeInstance.bind(this.#worldAssetRuntime),
+        snapshotPlacements: this.#worldAssetRuntime.snapshotPlacements.bind(this.#worldAssetRuntime),
         stats: this.#worldAssetRuntime.stats.bind(this.#worldAssetRuntime),
-        getAnimationNames: this.#worldAssetRuntime.getAnimationNames.bind(this.#worldAssetRuntime),
         playInstanceAnimation: this.#worldAssetRuntime.playInstanceAnimation.bind(this.#worldAssetRuntime),
         stopInstanceAnimation: this.#worldAssetRuntime.stopInstanceAnimation.bind(this.#worldAssetRuntime),
+        setInstanceAnimationState: this.#worldAssetRuntime.setInstanceAnimationState.bind(this.#worldAssetRuntime),
         setSemanticAnimationState: this.#worldAssetRuntime.setSemanticAnimationState.bind(this.#worldAssetRuntime),
         stopSemanticAnimation: this.#worldAssetRuntime.stopSemanticAnimation.bind(this.#worldAssetRuntime),
       }),
