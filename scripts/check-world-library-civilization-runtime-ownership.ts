@@ -386,6 +386,14 @@ try {
   viewContract.setRenderMode("invalid-mode" as never);
   assert.equal(viewContract.snapshot().renderMode, "3d",
     "WorldViewContract must reject unsupported runtime render modes");
+  const validViewState = viewContract.snapshot();
+  assert.throws(() => viewContract.setSeed("   "), /non-empty string/);
+  assert.throws(() => viewContract.setCenter(Number.NaN, 0, 0), /coordinates must be finite/);
+  assert.throws(() => viewContract.setSliceY(Number.POSITIVE_INFINITY), /must be finite/);
+  assert.throws(() => viewContract.setVisibleRadius(Number.NaN), /must be finite/);
+  assert.throws(() => viewContract.setSimulationTime(Number.NaN), /must be finite/);
+  assert.deepEqual(viewContract.snapshot(), validViewState,
+    "invalid world view inputs must not partially mutate the authoritative view contract");
 
   const library = new WorldLibrary();
   assert.equal("entries" in library, false,
