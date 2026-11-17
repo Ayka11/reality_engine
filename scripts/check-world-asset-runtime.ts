@@ -112,10 +112,10 @@ assert.equal(Reflect.set(publicAssetInfo, 'id', 'decoy'), false,
 assert.throws(() => Object.defineProperty(publicAssetInfo, 'sourceUrl', { value: 'decoy' }), TypeError)
 const publicAssets = runtime.all()
 assert.equal(publicAssets.length, 1)
-publicAssets.pop()
-assert.equal(runtime.all().length, 1, 'mutating the returned all() array must not mutate runtime ownership')
 assert.equal(Object.isFrozen(publicAssets[0]), true, 'all must return immutable detached metadata')
 assert.equal('object' in publicAssets[0], false, 'all must not expose scene object references')
+publicAssets.pop()
+assert.equal(runtime.all().length, 1, 'mutating the returned all() array must not mutate runtime ownership')
 assert.equal(runtime.hasSemanticSource('flora.oak'), true)
 assert.deepEqual(runtime.getAnimationNames('oak'), [], 'animation names must be exposed as copied strings')
 await assert.rejects(
