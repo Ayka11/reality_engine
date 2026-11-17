@@ -310,6 +310,7 @@ export class AgentSystem {
       a.plan     = plan
       a.planBias = { ...bias }
     }
+    this.#notifyAgentsChanged()
   }
 
   // ── Accessors ───────────────────────────────────────────────────────────
