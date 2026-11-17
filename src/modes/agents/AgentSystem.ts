@@ -95,25 +95,38 @@ function makeAgent(x: number, y: number, genome: AgentGenome, civId: number): Ag
   }
 }
 
+function cloneAgent(agent: Agent): Agent {
+  return {
+    ...agent,
+    genome: { ...agent.genome },
+    memory: [...agent.memory],
+    planBias: { ...agent.planBias },
+  }
+}
+
 export class AgentSystem {
-  agents: Agent[] = []
-  private readonly changeListeners = new Set<(agents: readonly Agent[]) => void>()
+  #agents: Agent[] = []
+  #changeListeners = new Set<(agents: readonly Agent[]) => void>()
+
+  constructor() {
+    Object.freeze(this)
+  }
+
+  /** Public reads are detached; all mutations must pass through AgentSystem methods. */
+  get agents(): Agent[] {
+    return this.#agents.map(cloneAgent)
+  }
 
   /** Subscribe to completed agent population/state updates. */
   onAgentsChanged(listener: (agents: readonly Agent[]) => void): () => void {
-    this.changeListeners.add(listener)
-    return () => this.changeListeners.delete(listener)
+    this.#changeListeners.add(listener)
+    return () => this.#changeListeners.delete(listener)
   }
 
-  private notifyAgentsChanged(): void {
-    if (this.changeListeners.size === 0) return
-    const snapshot = this.agents.map(agent => ({
-      ...agent,
-      genome: { ...agent.genome },
-      memory: [...agent.memory],
-      planBias: { ...agent.planBias },
-    }))
-    for (const listener of this.changeListeners) {
+  #notifyAgentsChanged(): void {
+    if (this.#changeListeners.size === 0) return
+    const snapshot = this.#agents.map(cloneAgent)
+    for (const listener of this.#changeListeners) {
       try {
         listener(snapshot)
       } catch (error) {
@@ -133,9 +146,9 @@ export class AgentSystem {
       const g = mutateGenome(base, 15)
       const x = Math.max(1, Math.min(W - 2, cx + Math.round(rng(-4, 4))))
       const y = Math.max(1, Math.min(H - 2, cy + Math.round(rng(-4, 4))))
-      this.agents.push(makeAgent(x, y, g, civId))
+      this.#agents.push(makeAgent(x, y, g, civId))
     }
-    this.notifyAgentsChanged()
+    this.#notifyAgentsChanged()
   }
 
   // ── Main step (call once per animation frame) ───────────────────────────
@@ -144,8 +157,8 @@ export class AgentSystem {
     const dead: number[] = []
     const DIRS = [[0,0],[1,0],[-1,0],[0,1],[0,-1]] as const
 
-    for (let ai = 0; ai < this.agents.length; ai++) {
-      const a = this.agents[ai]
+    for (let ai = 0; ai < this.#agents.length; ai++) {
+      const a = this.#agents[ai]
       a.age++
 
       // Starvation / old age
@@ -222,14 +235,14 @@ export class AgentSystem {
       else                                       a.state = 'rest'
 
       // Reproduce
-      if (a.state === 'reproduce' && this.agents.length < 200) {
+      if (a.state === 'reproduce' && this.#agents.length < 200) {
         const childGenome = mutateGenome(a.genome, mutRate)
         const nx = Math.max(0, Math.min(W - 1, a.x + (Math.random() > 0.5 ? 1 : -1)))
         const ny = Math.max(0, Math.min(H - 1, a.y + (Math.random() > 0.5 ? 1 : -1)))
         const child = makeAgent(nx, ny, childGenome, a.civId)
         child.energy = a.energy * 0.45
         child.plan   = a.plan
-        this.agents.push(child)
+        this.#agents.push(child)
         a.energy *= 0.55
         a.state   = 'rest'
       }
@@ -237,14 +250,40 @@ export class AgentSystem {
 
     // Remove dead (reverse to preserve indices)
     for (let i = dead.length - 1; i >= 0; i--) {
-      this.agents.splice(dead[i], 1)
+      this.#agents.splice(dead[i], 1)
     }
-    this.notifyAgentsChanged()
+    this.#notifyAgentsChanged()
   }
 
   // ── Plan application ────────────────────────────────────────────────────
 
+  applyRolePlans(assignments: readonly { id: number; plan: string }[]): void {
+    if (!Array.isArray(assignments)) throw new TypeError('Agent role assignments must be an array')
+    const seen = new Set<number>()
+    const prepared = assignments.map((assignment) => {
+      if (!assignment || !Number.isSafeInteger(assignment.id) || assignment.id < 0 ||
+          typeof assignment.plan !== 'string' || assignment.plan.length > 1024) {
+        throw new TypeError('Agent role assignment requires a valid ID and bounded plan string')
+      }
+      if (seen.has(assignment.id)) throw new Error(`Duplicate agent role assignment: ${assignment.id}`)
+      seen.add(assignment.id)
+      return { id: assignment.id, plan: assignment.plan }
+    })
+    const agentsById = new Map(this.#agents.map(agent => [agent.id, agent]))
+    for (const assignment of prepared) {
+      const agent = agentsById.get(assignment.id)
+      if (!agent) throw new Error(`Unknown agent role assignment: ${assignment.id}`)
+    }
+    for (const assignment of prepared) {
+      agentsById.get(assignment.id)!.plan = assignment.plan
+    }
+    this.#notifyAgentsChanged()
+  }
+
   applyPlan(plan: string): void {
+    if (typeof plan !== 'string' || plan.length > 1024) {
+      throw new TypeError('Agent plan must be a string of at most 1024 characters')
+    }
     const lo = plan.toLowerCase()
     const bias: Partial<AgentGenome> = {}
 
@@ -259,36 +298,40 @@ export class AgentSystem {
     else if (lo.includes('bio') || lo.includes('life') || lo.includes('grow'))
       bias.bioW = 0.35
 
-    for (const a of this.agents) {
+    for (const a of this.#agents) {
       a.plan     = plan
-      a.planBias = bias
+      a.planBias = { ...bias }
     }
   }
 
   // ── Accessors ───────────────────────────────────────────────────────────
 
-  get count(): number { return this.agents.length }
+  get count(): number { return this.#agents.length }
 
   getSurvivors(): Agent[] {
-    return [...this.agents].sort((a, b) => b.score - a.score).slice(0, 5)
+    return this.#agents
+      .slice()
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map(cloneAgent)
   }
 
   stats(): string {
-    if (this.agents.length === 0) return 'No agents — click Spawn to add'
+    if (this.#agents.length === 0) return 'No agents — click Spawn to add'
     const stateCount: Record<string, number> = {}
     let sumE = 0, sumAge = 0
-    for (const a of this.agents) {
+    for (const a of this.#agents) {
       stateCount[a.state] = (stateCount[a.state] ?? 0) + 1
       sumE   += a.energy
       sumAge += a.age
     }
-    const n = this.agents.length
+    const n = this.#agents.length
     const topStates = Object.entries(stateCount)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
       .map(([s, c]) => `${s}:${c}`)
       .join(' · ')
-    const civs = new Set(this.agents.map(a => a.civId)).size
+    const civs = new Set(this.#agents.map(a => a.civId)).size
     return `${n} agents · ${topStates}\navgE:${(sumE/n).toFixed(2)} avgAge:${(sumAge/n).toFixed(0)} civs:${civs}`
   }
 
