@@ -30,6 +30,9 @@ export class WorldResourceEconomy {
   }
 
   seedFromBiome(biomeId: string, multiplier = 1): ResourceState[] {
+    if (typeof biomeId !== 'string' || !biomeId.trim() || !Number.isFinite(multiplier) || multiplier < 0) {
+      throw new TypeError('Biome seeding requires a stable biome ID and a finite non-negative multiplier')
+    }
     const produced = worldRuleGraph.query({ from: biomeId, relation: 'produces' })
     const states: ResourceState[] = []
     for (const rule of produced) {
@@ -109,14 +112,18 @@ export class WorldResourceEconomy {
     }
   }
 
-  consume(id: string, amount: number) {
-    const resource = this.#resources.get(id)
+  consume(id: string, amount: number): boolean {
+    if (typeof id !== 'string' || !id.trim() || !Number.isFinite(amount) || amount <= 0) return false
+    const resource = this.#resources.get(this.canonicalId(id))
     if (!resource || resource.amount < amount) return false
     resource.amount -= amount
     return true
   }
 
-  tick(delta = 1) {
+  tick(delta = 1): void {
+    if (!Number.isFinite(delta) || delta < 0) {
+      throw new TypeError('World resource tick delta must be finite and non-negative')
+    }
     for (const resource of this.#resources.values()) {
       resource.amount = Math.min(resource.capacity, resource.amount + resource.regeneration * delta)
     }
@@ -139,8 +146,14 @@ export class WorldResourceEconomy {
           state.regeneration,
           state.quality,
           state.accessibility,
-        ].every(Number.isFinite)) {
-      throw new TypeError('World resource state requires a stable ID and finite numeric fields')
+        ].every(Number.isFinite) ||
+        state.amount < 0 ||
+        state.capacity < 0 ||
+        state.amount > state.capacity ||
+        state.regeneration < 0 ||
+        state.quality < 0 || state.quality > 1 ||
+        state.accessibility < 0 || state.accessibility > 1) {
+      throw new TypeError('World resource state requires a stable ID and valid finite resource bounds')
     }
   }
 }
