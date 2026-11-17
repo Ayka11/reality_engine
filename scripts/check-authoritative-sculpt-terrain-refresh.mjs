@@ -164,7 +164,7 @@ assert.match(terrainPatchDisposer, /this\.terrainMaterials\.delete\(material as 
 assert.match(terrainPatchDisposer, /detachAndDisposeObjectGroups\(\s*this\.#scene,[\s\S]*?patches\.map\(patch => patch\.group\)/, "terrain patch disposer must detach and release patch groups through the shared resource disposer");
 
 const refresh = methodBody("refreshTerrainPatches");
-assert.match(refresh, /for\s*\(const\s*\[key,\s*patch\]\s*of\s*\[\.\.\.this\.patches\]\)/, "refresh must snapshot and visit every loaded patch");
+assert.match(refresh, /for\s*\(const\s*\[key,\s*patch\]\s*of\s*\[\.\.\.this.#patches\]\)/, "refresh must snapshot and visit every loaded patch");
 assert.match(refresh, /this\.disposeTerrainPatchGroups\(\s*\[\s*\{\s*key,\s*group:\s*patch\.group/, "refresh must dispose old patch resources through the shared terrain disposer");
 assert.match(refresh, /this\.buildTerrainPatch\(patch\.chunk,\s*patch\.lod\)/, "refresh must rebuild geometry from the current field");
 assert.match(refresh, /this\.terrainEdgeLodSignature\(patch\.chunk\)/, "refresh must recompute edge LOD metadata");
