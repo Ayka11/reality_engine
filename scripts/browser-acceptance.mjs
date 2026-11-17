@@ -1117,12 +1117,24 @@ try {
       placements: window.capturePortableWorldEditorSnapshot().assetPlacements,
     };
   }, { url: mockAssetUrl, instanceId: placementFixture.instanceId });
-  const publicRuntimeContract = await page.evaluate(() => {
+  const publicRuntimeContract = await page.evaluate(fixture => {
     const world = window.infiniteWorld;
     const runtime = world?.worldAssetRuntime;
     const descriptor = world
       ? Object.getOwnPropertyDescriptor(world, "worldAssetRuntime")
       : undefined;
+    const repeatedPlacementResult = runtime?.placeInstance(
+      fixture.instanceId,
+      fixture.semanticEntryId,
+      {
+        x: fixture.x,
+        y: fixture.y,
+        z: fixture.z,
+        scale: fixture.scale,
+        rotationY: fixture.rotationY,
+        sourceAssetId: fixture.sourceAssetId,
+      },
+    );
     return {
       exists: Boolean(runtime),
       frozen: Boolean(runtime && Object.isFrozen(runtime)),
@@ -1130,14 +1142,14 @@ try {
       nonConfigurable: descriptor?.configurable === false,
       hasSafeSnapshot: typeof runtime?.snapshotPlacements === "function",
       hasSafeTransform: typeof runtime?.setInstanceWorldTransform === "function",
-      hasBooleanPlace: typeof runtime?.placeInstance === "function",
+      hasBooleanPlace: repeatedPlacementResult === true,
       exposesScatterSemantic: typeof runtime?.scatterSemantic === "function",
       exposesScatterSemanticWithResult: typeof runtime?.scatterSemanticWithResult === "function",
       exposesLoad: typeof runtime?.load === "function",
       hasSafeRemove: typeof runtime?.removeInstance === "function",
       exposesClear: typeof runtime?.clear === "function",
     };
-  });
+  }, placementFixture);
   if (!publicRuntimeContract.exists ||
       !publicRuntimeContract.frozen ||
       !publicRuntimeContract.nonWritable ||
