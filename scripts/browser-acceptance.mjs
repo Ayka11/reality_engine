@@ -93,18 +93,25 @@ try {
         typeof identityApi !== "function") {
       return { available: false };
     }
+    const baselineAgents = system.agents;
+    const baselineIds = new Set(baselineAgents.map(agent => agent.id));
     system.spawn(18, 14, 2);
     const exposed = system.agents;
-    const ids = exposed.map(agent => agent.id);
+    const spawnedAgents = exposed.filter(agent => !baselineIds.has(agent.id));
+    const ids = spawnedAgents.map(agent => agent.id);
     const originalId = ids[0];
-    exposed[0].id = 999999;
-    exposed[0].genome.seekEnergyW = 999;
+    const exposedTarget = exposed.find(agent => agent.id === originalId);
+    if (exposedTarget) {
+      exposedTarget.id = 999999;
+      exposedTarget.genome.seekEnergyW = 999;
+    }
     exposed.pop();
     const afterSpawn = identityApi();
-    const spawnedEntries = afterSpawn.entries.filter(entry => entry.domain === "active-agent");
-    const publicSnapshotIsDetached = system.agents.length === 2 &&
-      system.agents[0].id === originalId &&
-      system.agents[0].genome.seekEnergyW !== 999;
+    const spawnedEntries = afterSpawn.entries.filter(entry =>
+      entry.domain === "active-agent" && ids.includes(entry.localId));
+    const publicSnapshotIsDetached = ids.length === 2 &&
+      system.agents.length === baselineAgents.length + 2 &&
+      system.agents.some(agent => agent.id === originalId && agent.genome.seekEnergyW !== 999);
     const firstRemoved = system.remove(ids[0]);
     const afterFirstRemoval = identityApi();
     const secondRemoved = system.remove(ids[1]);
@@ -118,6 +125,8 @@ try {
       secondRemoved,
       firstRemovalCount: afterFirstRemoval.domains.find(domain => domain.domain === "active-agent")?.count,
       secondRemovalCount: afterSecondRemoval.domains.find(domain => domain.domain === "active-agent")?.count,
+      expectedFirstRemovalCount: baselineAgents.length + 1,
+      expectedSecondRemovalCount: baselineAgents.length,
       spawnRevision: afterSpawn.revision,
       firstRemovalRevision: afterFirstRemoval.revision,
       secondRemovalRevision: afterSecondRemoval.revision,
@@ -129,8 +138,8 @@ try {
       !activeAgentIdentityLifecycle.publicSnapshotIsDetached ||
       !activeAgentIdentityLifecycle.firstRemoved ||
       !activeAgentIdentityLifecycle.secondRemoved ||
-      activeAgentIdentityLifecycle.firstRemovalCount !== 1 ||
-      activeAgentIdentityLifecycle.secondRemovalCount !== 0 ||
+      activeAgentIdentityLifecycle.firstRemovalCount !== activeAgentIdentityLifecycle.expectedFirstRemovalCount ||
+      activeAgentIdentityLifecycle.secondRemovalCount !== activeAgentIdentityLifecycle.expectedSecondRemovalCount ||
       activeAgentIdentityLifecycle.firstRemovalRevision <= activeAgentIdentityLifecycle.spawnRevision ||
       activeAgentIdentityLifecycle.secondRemovalRevision <= activeAgentIdentityLifecycle.firstRemovalRevision) {
     throw new Error("Active transient agent identities must publish and retire through their authoritative owner: " +
