@@ -394,6 +394,10 @@ export class InfiniteWorldRenderer {
     seed = 'reality-engine-infinity-v1',
     options: { blockPersistenceReads?: boolean } = {},
   ) {
+    if (typeof seed !== 'string' || !seed.trim() || seed.length > 512) {
+      throw new TypeError('Infinite World seed must be a non-empty string of at most 512 characters')
+    }
+    const normalizedSeed = seed.trim()
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
     this.#currentPixelRatio = this.#maxPixelRatio
     this.renderer.setPixelRatio(this.#currentPixelRatio)
@@ -446,12 +450,12 @@ export class InfiniteWorldRenderer {
         stopSemanticAnimation: this.#worldAssetRuntime.stopSemanticAnimation.bind(this.#worldAssetRuntime),
       }),
     })
-    this.#generator = new WorldGenerator(seed)
-    this.#terrainDeformations = new TerrainDeformationField(seed)
-    worldViewContract.setSeed(seed)
+    this.#generator = new WorldGenerator(normalizedSeed)
+    this.#terrainDeformations = new TerrainDeformationField(normalizedSeed)
+    worldViewContract.setSeed(normalizedSeed)
     this.#authoritativeField = new MutableWorldFieldProvider(new GeneratorFieldProvider(this.#generator))
     this.#fieldSampler = new FieldSampler(this.#generator, this.#authoritativeField)
-    this.#persistence = new WorldPersistence(seed, options.blockPersistenceReads === true)
+    this.#persistence = new WorldPersistence(normalizedSeed, options.blockPersistenceReads === true)
     if (options.blockPersistenceReads) {
       this.#startupPersistenceFailures.push('active world seed selector: storage read unavailable')
       this.#persistenceRecoveryBlocked = true
@@ -511,7 +515,7 @@ export class InfiniteWorldRenderer {
     this.#decisionLayer = new WorldDecisionLayer(this.#fieldSampler, DEFAULT_DECISION_WEIGHTS, () => (window as any).getRealityLawState?.() ?? null, (x, z) => this.#sampleTerrainHeight(x, z))
     this.#constructionContract = new WorldConstructionContract(this.#decisionLayer)
     this.lawPhysicsContract = new LawPhysicsContract(() => (window as any).getRealityLawState?.() ?? null)
-    this.#storageKey = `reality-engine-world:${seed}:objects`
+    this.#storageKey = `reality-engine-world:${normalizedSeed}:objects`
     const persistedTerrain = unwrapPersistedState(
       'terrain deformation state',
       this.#persistence.readTerrainDeformationState<TerrainDeformationSnapshot>(),
