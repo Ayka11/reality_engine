@@ -14,6 +14,12 @@ export type WorldObjectUpdate = Partial<Pick<WorldObject, 'x' | 'y' | 'z' | 'rot
  * Owns authoritative world-object values. Public reads and write results are
  * detached snapshots; spatial membership is updated only through this manager.
  */
+const VALID_WORLD_OBJECT_KINDS = new Set<WorldObjectKind>([
+  'tree', 'rock', 'crystal', 'water', 'building', 'road', 'bridge', 'spawn',
+  'landmark', 'custom', 'metalaw', 'gravity_well', 'entropy_sink',
+  'quantum_emitter', 'force_field',
+])
+
 export class WorldObjectManager {
   #objects = new Map<string, WorldObject>()
   readonly #spatialIndex?: WorldObjectSpatialIndex
@@ -70,6 +76,14 @@ export class WorldObjectManager {
   update(id: string, patch: WorldObjectUpdate): WorldObject | undefined {
     const current = this.#objects.get(id)
     if (!current) return undefined
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new TypeError('World object update requires a patch record')
+    }
+    const allowedFields = new Set(['x', 'y', 'z', 'rotationY', 'scale', 'seed', 'properties'])
+    const unsupportedField = Object.keys(patch).find(field => !allowedFields.has(field))
+    if (unsupportedField) {
+      throw new TypeError(`Unsupported world object update field: ${unsupportedField}`)
+    }
     if (patch.properties !== undefined &&
         (!patch.properties || typeof patch.properties !== 'object' || Array.isArray(patch.properties))) {
       throw new TypeError('World object properties must be a record')
@@ -141,7 +155,7 @@ export class WorldObjectManager {
 
   #assertValidObject(object: WorldObject): void {
     if (typeof object.id !== 'string' || !object.id.trim() ||
-        typeof object.kind !== 'string' ||
+        !VALID_WORLD_OBJECT_KINDS.has(object.kind) ||
         ![object.x, object.y, object.z, object.rotationY, object.scale, object.seed].every(Number.isFinite) ||
         object.scale <= 0 ||
         !object.properties || typeof object.properties !== 'object' || Array.isArray(object.properties)) {
