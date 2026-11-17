@@ -31,6 +31,15 @@ export type AgentVisualSyncDiagnostics = {
 
 let nextAgentVisualRuntimeId = 1
 
+/**
+ * Agent visuals need only ID-based placement and animation operations.
+ * The broader return type is intentional for direct unit-test runtimes; this
+ * consumer never stores or exposes the value returned by placeInstance.
+ */
+type AgentVisualAssetRuntime = Omit<WorldAssetRuntimeFacade, 'placeInstance'> & {
+  placeInstance: (...args: Parameters<WorldAssetRuntimeFacade['placeInstance']>) => unknown | null
+}
+
 type TrackedAgentVisual = {
   instanceId: string
   sourceAssetId: string
@@ -68,7 +77,7 @@ export class AgentVisualRuntime {
   private readonly ownerId: string
 
   constructor(
-    private readonly assets: WorldAssetRuntimeFacade,
+    private readonly assets: AgentVisualAssetRuntime,
     transform: AgentGridWorldTransform,
     private readonly resolveWorldPosition: AgentVisualWorldPositionResolver = position => position,
     private readonly sourceAssetId?: string,
