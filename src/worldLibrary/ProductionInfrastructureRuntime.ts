@@ -73,9 +73,18 @@ export class ProductionInfrastructureRuntime {
     return { addedRoads, addedCapacity }
   }
 
-  private readonly states = new Map<string, CivilizationProductionState>()
+  #states = new Map<string, CivilizationProductionState>()
+
+  constructor() {
+    Object.freeze(this)
+  }
 
   evaluate(civilization: CivilizationState): CivilizationProductionState {
+    return structuredClone(this.#evaluateInternal(civilization))
+  }
+
+  #evaluateInternal(civilization: CivilizationState): CivilizationProductionState {
+    civilization = structuredClone(civilization)
     const type = civilization.type
     const kinds: ProductionKind[] =
       type === 'agricultural' ? ['agriculture']
@@ -94,7 +103,7 @@ export class ProductionInfrastructureRuntime {
       : civilization.settlement.tier === 'city' ? 40
       : 120
     const baselineCapacity = baselineRoads * 25 + civilization.settlement.population * 0.02
-    const previous = this.states.get(civilization.id)
+    const previous = this.#states.get(civilization.id)
     const roads = Math.max(baselineRoads, previous?.infrastructure.roads ?? 0)
     const capacity = Math.max(baselineCapacity, previous?.infrastructure.capacity ?? 0)
     const utilization = Math.min(1, civilization.settlement.population / Math.max(1, capacity))
@@ -108,12 +117,12 @@ export class ProductionInfrastructureRuntime {
     }
 
     const state: CivilizationProductionState = { civilization, nodes, infrastructure, produced: {}, consumed: {}, shortages: [], worldTime: { year: 0, scale: 'year' as WorldTimeScale, elapsed: 0 }, history: [], timeline: [{ id: civilization.id + ':founding', year: 0, type: 'founding', settlementId: civilization.id, to: civilization.settlement.tier, details: 'Civilization runtime initialized' }], consequences: [], causalChain: [], causalQueue: [], productionModifier: 1, productionModifierTicks: 0, causalCooldowns: {}, environmentalState: { temperature: 0.5, moisture: 0.5, radiation: 0, stability: 1 }, adaptation: { strategy: 'conservation', effectiveness: 0, ticks: 0 }, environmentalImpact: { temperatureDelta: 0, moistureDelta: 0, radiationDelta: 0, stabilityDelta: 0 }, environmentalImpactHistory: [] }
-    this.states.set(civilization.id, state)
+    this.#states.set(civilization.id, state)
     return state
   }
 
   tick(id: string, delta = 1): CivilizationProductionState | null {
-    const current = this.states.get(id)
+    const current = this.#states.get(id)
     if (!current) return null
     const produced: Record<string, number> = {}
     const consumed: Record<string, number> = {}
@@ -142,7 +151,7 @@ export class ProductionInfrastructureRuntime {
 
     worldResourceEconomy.tick(delta)
     const civTick = civilizationRuntime.tick(current.civilization, delta)
-    const next = this.evaluate(civTick.state)
+    const next = this.#evaluateInternal(civTick.state)
     next.civilization.memory = { ...civTick.state.memory, crises: civTick.settlementTick.shortages.length > 0 ? civTick.state.memory.crises + 1 : civTick.state.memory.crises }
     next.worldTime = { ...current.worldTime }
     next.history = [...current.history]
@@ -229,8 +238,8 @@ export class ProductionInfrastructureRuntime {
     const yearsPerTick = worldTime.scale === 'minute' ? 1 / (365 * 24 * 60) : worldTime.scale === 'decade' ? 10 : worldTime.scale === 'century' ? 100 : 1
     worldTime.year += delta * yearsPerTick
     next.history = [...next.history, { year: worldTime.year, population: next.civilization.settlement.population, pressure: next.infrastructure.pressure, roads: next.infrastructure.roads, capacity: next.infrastructure.capacity, shortages: next.shortages }].slice(-120)
-    this.states.set(id, next)
-    return next
+    this.#states.set(id, next)
+    return structuredClone(next)
   }
 
 
@@ -246,7 +255,7 @@ export class ProductionInfrastructureRuntime {
   }
 
   applyEnvironmentalState(id: string, environment: { temperature: number; moisture: number; radiation?: number; stability?: number }) {
-    const state = this.states.get(id)
+    const state = this.#states.get(id)
     if (!state) return null
     const nextEnv = {
       temperature: Math.max(0, Math.min(1, environment.temperature)),
@@ -270,11 +279,34 @@ export class ProductionInfrastructureRuntime {
     return { id, previous, current: nextEnv, events }
   }
 
-  get(id: string) { return this.states.get(id) }
-  timeline(id: string) { return this.states.get(id)?.timeline ?? [] }
-  causalChain(id: string) { return this.states.get(id)?.causalChain ?? [] }
-  allTimelines() { return [...this.states.values()].flatMap((state) => state.timeline) }
-  all() { return [...this.states.values()] }
+  setTimeScale(id: string, scale: WorldTimeScale): boolean {
+    if (!['minute', 'year', 'decade', 'century'].includes(scale)) return false
+    const state = this.#states.get(id)
+    if (!state) return false
+    state.worldTime.scale = scale
+    return true
+  }
+
+  get(id: string): CivilizationProductionState | undefined {
+    const state = this.#states.get(id)
+    return state ? structuredClone(state) : undefined
+  }
+
+  timeline(id: string): WorldTimelineEvent[] {
+    return structuredClone(this.#states.get(id)?.timeline ?? [])
+  }
+
+  causalChain(id: string): WorldTimelineEvent[] {
+    return structuredClone(this.#states.get(id)?.causalChain ?? [])
+  }
+
+  allTimelines(): WorldTimelineEvent[] {
+    return structuredClone([...this.#states.values()].flatMap((state) => state.timeline))
+  }
+
+  all(): CivilizationProductionState[] {
+    return structuredClone([...this.#states.values()])
+  }
 }
 
 export const productionInfrastructureRuntime = new ProductionInfrastructureRuntime()
