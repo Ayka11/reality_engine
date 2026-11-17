@@ -27,18 +27,22 @@ export type WorldRuleQuery = {
 };
 
 export class WorldRuleGraph {
-  private readonly rules = new Map<string, WorldRule>();
+  #rules = new Map<string, WorldRule>();
 
   constructor(rules: WorldRule[] = []) {
     this.addMany(rules)
+    Object.freeze(this)
   }
 
   add(rule: WorldRule): WorldRule {
-    if (!rule.id || !rule.from || !rule.to) {
+    if (!rule || typeof rule.id !== 'string' || !rule.id.trim() ||
+        typeof rule.from !== 'string' || !rule.from.trim() ||
+        typeof rule.to !== 'string' || !rule.to.trim()) {
       throw new Error('World rule requires id, from and to');
     }
-    this.rules.set(rule.id, rule);
-    return rule;
+    const stored = structuredClone(rule);
+    this.#rules.set(stored.id, stored);
+    return structuredClone(stored);
   }
 
   addMany(rules: WorldRule[]): number {
@@ -47,11 +51,12 @@ export class WorldRuleGraph {
   }
 
   get(id: string): WorldRule | undefined {
-    return this.rules.get(id);
+    const rule = this.#rules.get(id);
+    return rule ? structuredClone(rule) : undefined;
   }
 
   all(): WorldRule[] {
-    return [...this.rules.values()];
+    return structuredClone([...this.#rules.values()]);
   }
 
   query(query: WorldRuleQuery = {}): WorldRule[] {
@@ -87,7 +92,7 @@ export class WorldRuleGraph {
     );
 
     return {
-      total: this.rules.size,
+      total: this.#rules.size,
       relations: byRelation,
     };
   }
