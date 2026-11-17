@@ -289,7 +289,7 @@ const terrainDisposalEnd = rendererSource.indexOf('private refreshTerrainPatches
 assert.ok(terrainDisposalStart >= 0 && terrainDisposalEnd > terrainDisposalStart,
   'terrain lifecycle must centralize patch disposal')
 const terrainDisposalSource = rendererSource.slice(terrainDisposalStart, terrainDisposalEnd)
-assert.match(terrainDisposalSource, /this\.terrainMaterials\.delete\(material as THREE\.MeshStandardMaterial\)[\s\S]*?detachAndDisposeObjectGroups\(\s*this\.scene,[\s\S]*?patches\.map\(patch => patch\.group\)/,
+assert.match(terrainDisposalSource, /this\.terrainMaterials\.delete\(material as THREE\.MeshStandardMaterial\)[\s\S]*?detachAndDisposeObjectGroups\(\s*this\.#scene,[\s\S]*?patches\.map\(patch => patch\.group\)/,
   'terrain material registry must be pruned while the shared disposer releases a deduplicated patch batch')
 for (const methodName of ['refreshTerrainPatches()', 'removeChunk(key: string)', 'updateTerrainLod()']) {
   const methodStart = rendererSource.indexOf(`private ${methodName}`)
