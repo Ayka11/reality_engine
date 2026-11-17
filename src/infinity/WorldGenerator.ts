@@ -41,8 +41,8 @@ export class WorldGenerator {
     if (typeof seed !== 'string' || !seed.trim() || seed.length > 512) {
       throw new TypeError('World generator seed must be a non-empty string of at most 512 characters')
     }
-    if (!Number.isFinite(seaLevel) || !Number.isFinite(maxElevation) || maxElevation <= seaLevel) {
-      throw new RangeError('World generator elevation bounds must be finite with maxElevation above seaLevel')
+    if (!Number.isFinite(seaLevel) || !Number.isFinite(maxElevation)) {
+      throw new RangeError('World generator elevation bounds must be finite')
     }
     this.#seed = seed.trim()
     this.#seaLevel = seaLevel
