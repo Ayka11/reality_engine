@@ -1683,6 +1683,12 @@ export class InfiniteWorldRenderer {
     }
   }
 
+  /** Detached sample of particle positions for diagnostics; never exposes the backing Float32Array. */
+  getPhysicsParticlePositionSnapshot(count = 60): number[] {
+    const safeCount = Number.isFinite(count) ? Math.max(0, Math.min(this.#physicsParticlePositions.length, Math.floor(count))) : 0
+    return Array.from(this.#physicsParticlePositions.slice(0, safeCount))
+  }
+
   /** Detached terrain patch topology; never returns chunks, groups, or Three.js objects. */
   getTerrainPatchSnapshots() {
     return [...this.#patches.values()].map(patch => ({
