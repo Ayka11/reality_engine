@@ -3047,8 +3047,8 @@ export class InfiniteWorldRenderer {
     const results: Array<{ semanticEntryId: string; layer: string; count: number; mode: string }> = []
 
     for (const rule of plan.rules) {
-      const source = this.worldAssetRuntime.getSemanticSource(rule.semanticEntryId)
-      if (source && (rule.layer === 'visual' || rule.layer === 'biological')) {
+      const hasSource = this.worldAssetRuntime.hasSemanticSource(rule.semanticEntryId)
+      if (hasSource && (rule.layer === 'visual' || rule.layer === 'biological')) {
         const count = Math.max(1, Math.min(rule.maxCount,
           Math.round((rule.minCount + rule.maxCount) * 0.5 * density * rule.weight)))
         const scatter = this.worldAssetRuntime.scatterSemanticWithResult(
