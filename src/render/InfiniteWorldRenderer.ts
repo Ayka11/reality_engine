@@ -95,12 +95,12 @@ export class InfiniteWorldRenderer {
   #pendingExternalAssetPlacements: ExternalAssetPlacementSnapshot[] = []
   private suppressAssetPlacementAutosave = false
 
-  private patches = new Map<string, TerrainPatch>()
-  private objectMeshes = new Map<string, ObjectMesh>()
-  private waterMeshes = new Map<string, THREE.Mesh>()
-  private readonly raycaster = new THREE.Raycaster()
-  private readonly pointer = new THREE.Vector2()
-  private selectedObjectId: string | null = null
+  #patches = new Map<string, TerrainPatch>()
+  #objectMeshes = new Map<string, ObjectMesh>()
+  #waterMeshes = new Map<string, THREE.Mesh>()
+  readonly #raycaster = new THREE.Raycaster()
+  readonly #pointer = new THREE.Vector2()
+  #selectedObjectId: string | null = null
   private selectedKind: WorldObjectKind = 'tree'
   private objectTool: 'navigate' | 'select' | 'place' | 'erase' = 'navigate'
   private terrainBrushMode: 'raise' | 'lower' | null = null
@@ -121,20 +121,20 @@ export class InfiniteWorldRenderer {
   private pointerDownX = 0
   private pointerDownY = 0
   private pointerDownTime = 0
-  private readonly transformControls: TransformControls
+  readonly #transformControls: TransformControls
   private gizmoBefore: WorldObject | null = null
   private transformDragging = false
-  private readonly selectionMarker = new THREE.Mesh(
+  readonly #selectionMarker = new THREE.Mesh(
     new THREE.BoxGeometry(1.2, 1.2, 1.2),
     new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true, transparent: true, opacity: 0.9 })
   )
-  private readonly hoverMarker = new THREE.Mesh(
+  readonly #hoverMarker = new THREE.Mesh(
     new THREE.RingGeometry(0.6, 0.85, 32),
     new THREE.MeshBasicMaterial({ color: 0xffff66, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
   )
-  private readonly terrainGroup = new THREE.Group()
+  readonly #terrainGroup = new THREE.Group()
   private analyticalOverlayMode: 'suitability' | 'flood' | 'slope' | null = null
-  private analyticalOverlayMesh?: THREE.Points
+  #analyticalOverlayMesh: THREE.Points
   private enabled = true
   private disposed = false
   private currentPixelRatio = 1
@@ -145,9 +145,9 @@ export class InfiniteWorldRenderer {
   private simulationRunning = false
   private lastCenter: ChunkCoord | null = null
   private worldY = 45
-  private worldPosition = new THREE.Vector3(28, 45, 52)
+  #worldPosition = new THREE.Vector3(28, 45, 52)
 
-  getWorldPosition() { return this.worldPosition.clone() }
+  getWorldPosition() { return this.#worldPosition.clone() }
 
   setSimulationRunning(running: boolean) {
     this.simulationRunning = Boolean(running)
@@ -158,12 +158,12 @@ export class InfiniteWorldRenderer {
   }
 
   private worldToLocal(position: THREE.Vector3): THREE.Vector3 {
-    return position.clone().sub(this.worldAnchor)
+    return position.clone().sub(this.#worldAnchor)
   }
 
   private syncWorldPositionFromControls(): void {
     // OrbitControls works in rebased render coordinates; simulation/LOD use absolute world coordinates.
-    this.worldPosition.copy(this.controls.target).add(this.worldAnchor)
+    this.#worldPosition.copy(this.controls.target).add(this.#worldAnchor)
   }
 
   applyAuthoritativeFieldMutation(input: Parameters<MutableWorldFieldProvider['apply']>[0]) {
@@ -367,25 +367,25 @@ export class InfiniteWorldRenderer {
     window.dispatchEvent(new Event(AUTHORITATIVE_SCULPT_HISTORY_CHANGED_EVENT))
   }
 
-  private worldAnchor = new THREE.Vector3(0, 0, 0)
+  #worldAnchor = new THREE.Vector3(0, 0, 0)
   private flyMode = true
-  private readonly keys = new Set<string>()
+  readonly #keys = new Set<string>()
   private readonly flySpeed = 90
   private readonly recenterDistance = 512
   private readonly patchResolution = 16
   private snapToGrid = 1
   private readonly lodDistance = 96
-  private readonly sun: THREE.DirectionalLight
-  private readonly hemi: THREE.HemisphereLight
+  readonly #sun: THREE.DirectionalLight
+  readonly #hemi: THREE.HemisphereLight
   private materialMode: 'field' | 'material' | 'height' = 'height'
   // Functional vertex presentation: the underlying terrain mesh remains raycastable,
   // while points + restrained wireframe expose elevation and chunk topology.
   private terrainStyle: 'vertex' | 'surface' = 'surface'
-  private readonly terrainMaterials = new Set<THREE.MeshStandardMaterial>()
-  private physicsParticlePoints: THREE.Points | null = null
-  private physicsParticlePositions = new Float32Array(0)
-  private physicsParticleVelocities = new Float32Array(0)
-  private physicsParticleColors = new Float32Array(0)
+  readonly #terrainMaterials = new Set<THREE.MeshStandardMaterial>()
+  #physicsParticlePoints: THREE.Points | null = null
+  #physicsParticlePositions = new Float32Array(0)
+  #physicsParticleVelocities = new Float32Array(0)
+  #physicsParticleColors = new Float32Array(0)
   private showParticles = false
   private readonly materializedConsequenceEvents = new Set<string>()
 
@@ -411,7 +411,7 @@ export class InfiniteWorldRenderer {
       value: this.objects,
     })
 
-    this.#scene.add(this.terrainGroup)
+    this.#scene.add(this.#terrainGroup)
     this.#worldAssetRuntime = new WorldAssetRuntime(this.#scene, undefined, () => {
       if (!this.suppressAssetPlacementAutosave) this.scheduleSave()
     })
@@ -572,15 +572,15 @@ export class InfiniteWorldRenderer {
     this.updateControlButtons()
     this.flyMode = false
 
-    this.pointerHandler = (e: PointerEvent) => {
-      this.pointerDownX = e.clientX
-      this.pointerDownY = e.clientY
-      this.pointerDownTime = performance.now()
+    this.#pointerHandler = (e: PointerEvent) => {
+      this.#pointerDownX = e.clientX
+      this.#pointerDownY = e.clientY
+      this.#pointerDownTime = performance.now()
       if (this.objectTool === 'navigate' && e.button === 0) {
         canvas.style.cursor = 'grabbing'
       }
     }
-    this.pointerUpHandler = (e: PointerEvent) => {
+    this.#pointerUpHandler = (e: PointerEvent) => {
       if (this.terrainBrushMode) {
         canvas.style.cursor = 'crosshair'
       } else if (this.objectTool === 'navigate') {
@@ -593,41 +593,41 @@ export class InfiniteWorldRenderer {
         canvas.style.cursor = 'default'
       }
       if (e.button !== 0 || this.flyMode || !this.controls.enabled) return
-      if (e.shiftKey || this.keys.has('Space')) return
-      const distance = Math.hypot(e.clientX - this.pointerDownX, e.clientY - this.pointerDownY)
-      const elapsed = performance.now() - this.pointerDownTime
+      if (e.shiftKey || this.#keys.has('Space')) return
+      const distance = Math.hypot(e.clientX - this.#pointerDownX, e.clientY - this.#pointerDownY)
+      const elapsed = performance.now() - this.#pointerDownTime
       if (distance <= 5 && elapsed <= 450) this.handlePointer(e.clientX, e.clientY)
     }
-    this.pointerMoveHandler = (e: PointerEvent) => {
+    this.#pointerMoveHandler = (e: PointerEvent) => {
       // In Fly mode, drag the left mouse button to look around. OrbitControls
       // are intentionally disabled in first-person mode, so this is the direct look path.
       if (this.flyMode && (e.buttons & 1) !== 0) {
-        const deltaX = e.clientX - this.pointerDownX
-        const deltaY = e.clientY - this.pointerDownY
-        this.pointerDownX = e.clientX
-        this.pointerDownY = e.clientY
+        const deltaX = e.clientX - this.#pointerDownX
+        const deltaY = e.clientY - this.#pointerDownY
+        this.#pointerDownX = e.clientX
+        this.#pointerDownY = e.clientY
         if (deltaX !== 0 || deltaY !== 0) this.rotateFlyCamera(deltaX, deltaY)
         return
       }
       if (this.objectTool === 'place' || this.terrainBrushMode) {
         this.pickAtScreen(e.clientX, e.clientY)
-      } else if (this.hoverMarker.visible) {
-        this.hoverMarker.visible = false
+      } else if (this.#hoverMarker.visible) {
+        this.#hoverMarker.visible = false
       }
     }
 
     this.contextMenuHandler = (e: MouseEvent) => e.preventDefault()
     canvas.addEventListener('contextmenu', this.contextMenuHandler)
-    canvas.addEventListener('pointerdown', this.pointerHandler)
-    canvas.addEventListener('pointerup', this.pointerUpHandler)
-    canvas.addEventListener('pointermove', this.pointerMoveHandler)
+    canvas.addEventListener('pointerdown', this.#pointerHandler)
+    canvas.addEventListener('pointerup', this.#pointerUpHandler)
+    canvas.addEventListener('pointermove', this.#pointerMoveHandler)
 
-    this.transformControls = new TransformControls(this.camera, canvas)
-    this.transformControls.setMode('translate')
-    this.transformControls.setSpace('world')
-    ;(this.transformControls as any).visible = false
-    this.#scene.add(this.transformControls as unknown as THREE.Object3D)
-    this.transformControls.addEventListener('dragging-changed', (event) => {
+    this.#transformControls = new TransformControls(this.camera, canvas)
+    this.#transformControls.setMode('translate')
+    this.#transformControls.setSpace('world')
+    ;(this.#transformControls as any).visible = false
+    this.#scene.add(this.#transformControls as unknown as THREE.Object3D)
+    this.#transformControls.addEventListener('dragging-changed', (event) => {
       this.transformDragging = Boolean((event as { value: boolean }).value)
       this.controls.enabled = this.enabled && !this.transformDragging && !this.flyMode
       if (this.transformDragging) {
@@ -640,14 +640,14 @@ export class InfiniteWorldRenderer {
         this.scheduleSave()
       }
     })
-    this.transformControls.addEventListener('objectChange', () => this.syncSelectedFromGizmo())
+    this.#transformControls.addEventListener('objectChange', () => this.syncSelectedFromGizmo())
 
     this.keyDownHandler = (e: KeyboardEvent) => {
       if (!this.enabled) return
       const tgt = e.target
       if (tgt instanceof HTMLInputElement || tgt instanceof HTMLTextAreaElement || (tgt instanceof HTMLElement && tgt.isContentEditable)) return
       if (['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','ShiftRight','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyQ','KeyE'].includes(e.code)) {
-        this.keys.add(e.code)
+        this.#keys.add(e.code)
       }
       if (e.code === 'Space' || e.key === 'Shift') {
         if (this.objectTool !== 'navigate') {
@@ -666,7 +666,7 @@ export class InfiniteWorldRenderer {
       }
     }
     this.keyUpHandler = (e: KeyboardEvent) => {
-      this.keys.delete(e.code)
+      this.#keys.delete(e.code)
       if (e.code === 'Space' || e.key === 'Shift') {
         this.updateControlButtons()
       }
@@ -676,24 +676,24 @@ export class InfiniteWorldRenderer {
 
     this.controls.target.set(16, 10, 16)
     this.controls.update()
-    this.worldPosition.copy(this.controls.target).add(this.worldAnchor)
+    this.#worldPosition.copy(this.controls.target).add(this.#worldAnchor)
     // Startup restores the latest autosaved field; the explicit Load action uses the saved checkpoint.
     this.loadWorld({ restoreFieldCheckpoint: false })
 
-    this.hemi = new THREE.HemisphereLight(0xb9d8ff, 0x35402f, 1.6)
-    this.#scene.add(this.hemi)
-    this.sun = new THREE.DirectionalLight(0xffffff, 2.2)
-    this.sun.position.set(300, 500, 180)
-    this.#scene.add(this.sun)
+    this.#hemi = new THREE.HemisphereLight(0xb9d8ff, 0x35402f, 1.6)
+    this.#scene.add(this.#hemi)
+    this.#sun = new THREE.DirectionalLight(0xffffff, 2.2)
+    this.#sun.position.set(300, 500, 180)
+    this.#scene.add(this.#sun)
 
     const water = new THREE.MeshBasicMaterial({ color: 0x2b78b5, transparent: true, opacity: 0.48 })
     void water
 
-    this.selectionMarker.visible = false
-    this.#scene.add(this.selectionMarker)
-    this.hoverMarker.rotation.x = -Math.PI / 2
-    this.hoverMarker.visible = false
-    this.#scene.add(this.hoverMarker)
+    this.#selectionMarker.visible = false
+    this.#scene.add(this.#selectionMarker)
+    this.#hoverMarker.rotation.x = -Math.PI / 2
+    this.#hoverMarker.visible = false
+    this.#scene.add(this.#hoverMarker)
 
     this.#scene.background = new THREE.Color(0x9bb8d6)
     this.#scene.fog = new THREE.Fog(0x9bb8d6, 180, 900)
@@ -724,7 +724,7 @@ export class InfiniteWorldRenderer {
     return {
       history: this.#history.snapshotState(),
       authoritativeSculptHistory: this.#authoritativeSculptTransactions.snapshotState(),
-      selectedObjectId: this.selectedObjectId,
+      selectedObjectId: this.#selectedObjectId,
     }
   }
 
@@ -744,22 +744,22 @@ export class InfiniteWorldRenderer {
     this.#authoritativeSculptTransactions.restoreState(checkpoint.authoritativeSculptHistory)
 
     const selected = checkpoint.selectedObjectId
-    const entry = selected ? this.objectMeshes.get(selected) : undefined
-    this.selectedObjectId = entry ? selected : null
+    const entry = selected ? this.#objectMeshes.get(selected) : undefined
+    this.#selectedObjectId = entry ? selected : null
     if (!entry) {
-      this.transformControls.detach()
-      ;(this.transformControls as any).visible = false
-      this.selectionMarker.visible = false
+      this.#transformControls.detach()
+      ;(this.#transformControls as any).visible = false
+      this.#selectionMarker.visible = false
     } else {
-      this.transformControls.attach(entry.group)
-      ;(this.transformControls as any).visible = true
-      this.selectionMarker.position.set(
-        entry.object.x - this.worldAnchor.x,
-        entry.object.y - this.worldAnchor.y + 1.5,
-        entry.object.z - this.worldAnchor.z,
+      this.#transformControls.attach(entry.group)
+      ;(this.#transformControls as any).visible = true
+      this.#selectionMarker.position.set(
+        entry.object.x - this.#worldAnchor.x,
+        entry.object.y - this.#worldAnchor.y + 1.5,
+        entry.object.z - this.#worldAnchor.z,
       )
-      this.selectionMarker.scale.setScalar(Math.max(1, entry.object.scale * 2))
-      this.selectionMarker.visible = true
+      this.#selectionMarker.scale.setScalar(Math.max(1, entry.object.scale * 2))
+      this.#selectionMarker.visible = true
     }
     this.notifyAuthoritativeSculptHistoryChanged()
   }
@@ -920,15 +920,15 @@ export class InfiniteWorldRenderer {
     const cleanupFailures = detachAndDisposeObjectGroups(
       this.#scene,
       [
-        ...[...this.patches.values()].map(patch => patch.group),
-        ...[...this.objectMeshes.values()].map(entry => entry.group),
+        ...[...this.#patches.values()].map(patch => patch.group),
+        ...[...this.#objectMeshes.values()].map(entry => entry.group),
       ],
       'Portable world restore',
     )
-    this.patches.clear()
-    this.waterMeshes.clear()
-    this.terrainMaterials.clear()
-    this.objectMeshes.clear()
+    this.#patches.clear()
+    this.#waterMeshes.clear()
+    this.#terrainMaterials.clear()
+    this.#objectMeshes.clear()
 
     this.generator = prepared.nextGenerator
     ;(window as any).worldSeed = prepared.nextGenerator.seed
@@ -958,10 +958,10 @@ export class InfiniteWorldRenderer {
     this.#history = new WorldEditHistory()
     this.#authoritativeSculptTransactions.clear()
     this.notifyAuthoritativeSculptHistoryChanged()
-    this.selectedObjectId = null
-    this.transformControls.detach()
-    ;(this.transformControls as any).visible = false
-    this.selectionMarker.visible = false
+    this.#selectedObjectId = null
+    this.#transformControls.detach()
+    ;(this.#transformControls as any).visible = false
+    this.#selectionMarker.visible = false
 
     this.rebuildDecisionLayer()
     this.syncObjects()
@@ -1305,10 +1305,10 @@ export class InfiniteWorldRenderer {
     this.#history = new WorldEditHistory()
     const count = restoredObjects.length
     this.syncObjects()
-    this.selectedObjectId = null
-    this.transformControls.detach()
-    ;(this.transformControls as any).visible = false
-    this.selectionMarker.visible = false
+    this.#selectedObjectId = null
+    this.#transformControls.detach()
+    ;(this.#transformControls as any).visible = false
+    this.#selectionMarker.visible = false
     this.persistenceRecoveryBlocked = false
     this.startupPersistenceFailures = []
     this.lastPersistenceFailures = []
@@ -1380,10 +1380,10 @@ export class InfiniteWorldRenderer {
     } catch (error) {
       console.warn('[world-objects] Object mesh cleanup completed with disposal failures during world clear', error)
     }
-    this.selectedObjectId = null
-    this.transformControls.detach()
-    ;(this.transformControls as any).visible = false
-    this.selectionMarker.visible = false
+    this.#selectedObjectId = null
+    this.#transformControls.detach()
+    ;(this.#transformControls as any).visible = false
+    this.#selectionMarker.visible = false
     return cleared
   }
 
@@ -1447,12 +1447,12 @@ export class InfiniteWorldRenderer {
     // continue the already-committed reseed instead of leaving the old seed live.
     const terrainCleanupFailures: unknown[] = []
     terrainCleanupFailures.push(...this.disposeTerrainPatchGroups(
-      [...this.patches].map(([key, patch]) => ({ key, group: patch.group })),
+      [...this.#patches].map(([key, patch]) => ({ key, group: patch.group })),
       'Reseed terrain patch',
     ))
-    this.patches.clear()
-    this.waterMeshes.clear()
-    this.terrainMaterials.clear()
+    this.#patches.clear()
+    this.#waterMeshes.clear()
+    this.#terrainMaterials.clear()
     this.lastCenter = null
     if (terrainCleanupFailures.length > 0) {
       console.warn('[terrain] Reseed continued after terrain resource cleanup failures', new AggregateError(
@@ -1475,10 +1475,10 @@ export class InfiniteWorldRenderer {
     } catch (error) {
       console.warn('[world-objects] Reseed continued after object mesh disposal failures', error)
     }
-    this.selectedObjectId = null
-    this.transformControls.detach()
-    ;(this.transformControls as any).visible = false
-    this.selectionMarker.visible = false
+    this.#selectedObjectId = null
+    this.#transformControls.detach()
+    ;(this.#transformControls as any).visible = false
+    this.#selectionMarker.visible = false
     runtimeProvenance.reset()
 
     this.generator = new WorldGenerator(normalizedSeed)
@@ -1509,7 +1509,7 @@ export class InfiniteWorldRenderer {
     this.camera.position.copy(targetLocal).add(new THREE.Vector3(48, 36, 48))
     this.camera.lookAt(targetLocal)
     this.controls.update()
-    this.worldPosition.copy(targetWorld)
+    this.#worldPosition.copy(targetWorld)
 
     // Terrain streaming is intentionally deferred to the render loop. Reseeding
     // is a UI transaction and must not synchronously build the entire visible
@@ -1537,13 +1537,13 @@ export class InfiniteWorldRenderer {
       this.saveTimer = null
     }
     attempt('Context-menu listener removal', () => this.renderer.domElement.removeEventListener('contextmenu', this.contextMenuHandler))
-    attempt('Pointer-down listener removal', () => this.renderer.domElement.removeEventListener('pointerdown', this.pointerHandler))
-    attempt('Pointer-up listener removal', () => this.renderer.domElement.removeEventListener('pointerup', this.pointerUpHandler))
-    attempt('Pointer-move listener removal', () => this.renderer.domElement.removeEventListener('pointermove', this.pointerMoveHandler))
+    attempt('Pointer-down listener removal', () => this.renderer.domElement.removeEventListener('pointerdown', this.#pointerHandler))
+    attempt('Pointer-up listener removal', () => this.renderer.domElement.removeEventListener('pointerup', this.#pointerUpHandler))
+    attempt('Pointer-move listener removal', () => this.renderer.domElement.removeEventListener('pointermove', this.#pointerMoveHandler))
     attempt('Key-down listener removal', () => window.removeEventListener('keydown', this.keyDownHandler))
     attempt('Key-up listener removal', () => window.removeEventListener('keyup', this.keyUpHandler))
     attempt('Orbit controls disposal', () => this.controls.dispose())
-    attempt('Transform controls disposal', () => this.transformControls.dispose())
+    attempt('Transform controls disposal', () => this.#transformControls.dispose())
     attempt('External asset runtime cleanup', () => this.clearExternalAssetRuntime())
 
     try {
@@ -1555,12 +1555,12 @@ export class InfiniteWorldRenderer {
     } catch (error) {
       failures.push(new Error('Infinite World scene resource cleanup failed', { cause: error }))
     }
-    this.patches.clear()
-    this.objectMeshes.clear()
-    this.waterMeshes.clear()
-    this.terrainMaterials.clear()
-    this.analyticalOverlayMesh = undefined
-    this.physicsParticlePoints = null
+    this.#patches.clear()
+    this.#objectMeshes.clear()
+    this.#waterMeshes.clear()
+    this.#terrainMaterials.clear()
+    this.#analyticalOverlayMesh = undefined
+    this.#physicsParticlePoints = null
 
     // WebGLRenderer.dispose must run even when a scene resource has a faulty disposer.
     attempt('WebGL renderer disposal', () => this.renderer.dispose())
@@ -1616,8 +1616,8 @@ export class InfiniteWorldRenderer {
   get worldSeed(): string { return this.#fieldSampler.surfaceProvider.seed }
 
   getWorldEnvironment() {
-    const x = this.worldPosition.x
-    const z = this.worldPosition.z
+    const x = this.#worldPosition.x
+    const z = this.#worldPosition.z
     const y = this.sampleTerrainHeight(x, z)
     const surface = this.#fieldSampler.surfaceProvider.sampleSurface(x, z, y)
     const step = 2
@@ -1672,20 +1672,210 @@ export class InfiniteWorldRenderer {
   getRuntimeStats() {
     return {
       objects: this.objects.size,
-      loadedChunks: this.patches.size,
+      loadedChunks: this.#patches.size,
       targetChunks: this.chunks.size,
       world: { ...this.worldCoordinates },
       camera: {
-        worldX: this.worldPosition.x,
-        worldY: this.worldPosition.y,
-        worldZ: this.worldPosition.z,
+        worldX: this.#worldPosition.x,
+        worldY: this.#worldPosition.y,
+        worldZ: this.#worldPosition.z,
       },
     }
   }
 
+  /** Detached terrain patch topology; never returns chunks, groups, or Three.js objects. */
+  getTerrainPatchSnapshots() {
+    return [...this.#patches.values()].map(patch => ({
+      chunk: { cx: patch.chunk.cx, cy: patch.chunk.cy, cz: patch.chunk.cz },
+      lod: patch.lod,
+      edgeLodSignature: patch.edgeLodSignature,
+    }))
+  }
+
+  /** Validate mixed-LOD shared edges using internal geometry and return numeric diagnostics only. */
+  getTerrainSeamDiagnostics() {
+    const patches = [...this.#patches.values()]
+    const byKey = new Map(patches.map(patch => [
+      `${patch.chunk.cx},${patch.chunk.cy},${patch.chunk.cz}`, patch,
+    ]))
+    const edge = (patch: TerrainPatch, side: 'west' | 'east' | 'north' | 'south') => {
+      const mesh = patch.group.children.find(child => child.userData?.terrain) as THREE.Mesh | undefined
+      const position = mesh?.geometry?.getAttribute('position')
+      if (!position) return null
+      const n = Math.round(Math.sqrt(position.count))
+      if (n < 2 || n * n !== position.count) return null
+      const resolution = n - 1
+      const heights: number[] = []
+      for (let i = 0; i < n; i++) {
+        const index = side === 'west' ? i * n : side === 'east' ? i * n + resolution
+          : side === 'north' ? i : resolution * n + i
+        heights.push(position.getY(index))
+      }
+      return { resolution, heights }
+    }
+    let checkedPairs = 0
+    let maxBoundaryHeightError = 0
+    const failures: Array<Record<string, unknown>> = []
+    for (const patch of patches) {
+      const east = byKey.get(`${patch.chunk.cx + 1},${patch.chunk.cy},${patch.chunk.cz}`)
+      const south = byKey.get(`${patch.chunk.cx},${patch.chunk.cy},${patch.chunk.cz + 1}`)
+      for (const [neighbor, sideA, sideB, direction] of [
+        [east, 'east', 'west', 'east-west'],
+        [south, 'south', 'north', 'north-south'],
+      ] as const) {
+        if (!neighbor || neighbor.lod === patch.lod) continue
+        const a = edge(patch, sideA)
+        const b = edge(neighbor, sideB)
+        const locationA = [patch.chunk.cx, patch.chunk.cy, patch.chunk.cz]
+        const locationB = [neighbor.chunk.cx, neighbor.chunk.cy, neighbor.chunk.cz]
+        if (!a || !b) {
+          failures.push({ direction, reason: 'missing terrain edge geometry', a: locationA, b: locationB })
+          continue
+        }
+        if (a.resolution === b.resolution) continue
+        const coarse = a.resolution < b.resolution ? a : b
+        const fine = a.resolution < b.resolution ? b : a
+        const ratio = fine.resolution / coarse.resolution
+        if (!Number.isInteger(ratio)) {
+          failures.push({ direction, reason: 'LOD grid resolutions are not nested', ratio, a: locationA, b: locationB })
+          continue
+        }
+        checkedPairs++
+        let pairMaxError = 0
+        for (let i = 0; i <= fine.resolution; i++) {
+          const lo = Math.floor(i / ratio)
+          const hi = Math.min(coarse.resolution, lo + 1)
+          const t = hi === lo ? 0 : i / ratio - lo
+          const expected = coarse.heights[lo] + (coarse.heights[hi] - coarse.heights[lo]) * t
+          pairMaxError = Math.max(pairMaxError, Math.abs(fine.heights[i] - expected))
+        }
+        maxBoundaryHeightError = Math.max(maxBoundaryHeightError, pairMaxError)
+        if (pairMaxError > 0.002) {
+          failures.push({
+            direction, lodA: patch.lod, lodB: neighbor.lod,
+            coarseResolution: coarse.resolution, fineResolution: fine.resolution,
+            maxBoundaryHeightError: pairMaxError, a: locationA, b: locationB,
+          })
+        }
+      }
+    }
+    return { loadedPatches: patches.length, checkedPairs, maxBoundaryHeightError, failures }
+  }
+
+  /** Deep geometry acceptance metrics without exposing mutable BufferGeometry attributes. */
+  getTerrainGeometryDiagnostics() {
+    const patches = [...this.#patches.values()]
+    let minY = Infinity
+    let maxY = -Infinity
+    let vertexCount = 0
+    let triangleCount = 0
+    let degenerateTriangles = 0
+    let invalidIndices = 0
+    let nonFiniteVertices = 0
+    let invalidGeometryPatches = 0
+    let malformedIndexBuffers = 0
+    let missingNormalAttributes = 0
+    let nonFiniteNormals = 0
+    let nonUnitNormals = 0
+    const distinctHeights = new Set<number>()
+    for (const patch of patches) {
+      const mesh = patch.group.children.find(child => child.userData?.terrain) as THREE.Mesh | undefined
+      const geometry = mesh?.geometry
+      const position = geometry?.getAttribute('position')
+      const normal = geometry?.getAttribute('normal')
+      const index = geometry?.index
+      if (!normal || normal.count !== position?.count) missingNormalAttributes++
+      if (!position || !index || position.count < 3 || index.count < 3) {
+        invalidGeometryPatches++
+        continue
+      }
+      if (index.count % 3 !== 0) malformedIndexBuffers++
+      vertexCount += position.count
+      for (let i = 0; i < position.count; i++) {
+        const x = position.getX(i), y = position.getY(i), z = position.getZ(i)
+        if (![x, y, z].every(Number.isFinite)) {
+          nonFiniteVertices++
+          continue
+        }
+        if (normal && normal.count === position.count) {
+          const nx = normal.getX(i), ny = normal.getY(i), nz = normal.getZ(i)
+          if (![nx, ny, nz].every(Number.isFinite)) nonFiniteNormals++
+          else if (Math.abs(Math.hypot(nx, ny, nz) - 1) > 0.02) nonUnitNormals++
+        }
+        minY = Math.min(minY, y)
+        maxY = Math.max(maxY, y)
+        distinctHeights.add(Math.round(y * 1000) / 1000)
+      }
+      for (let i = 0; i + 2 < index.count; i += 3) {
+        const ia = index.getX(i), ib = index.getX(i + 1), ic = index.getX(i + 2)
+        triangleCount++
+        if ([ia, ib, ic].some(value => !Number.isInteger(value) || value < 0 || value >= position.count)) {
+          invalidIndices++
+          continue
+        }
+        const ax = position.getX(ib) - position.getX(ia)
+        const ay = position.getY(ib) - position.getY(ia)
+        const az = position.getZ(ib) - position.getZ(ia)
+        const bx = position.getX(ic) - position.getX(ia)
+        const by = position.getY(ic) - position.getY(ia)
+        const bz = position.getZ(ic) - position.getZ(ia)
+        const cx = ay * bz - az * by
+        const cy = az * bx - ax * bz
+        const cz = ax * by - ay * bx
+        if (Math.hypot(cx, cy, cz) < 1e-6) degenerateTriangles++
+      }
+    }
+    return {
+      loadedPatches: patches.length,
+      vertexCount,
+      triangleCount,
+      minY,
+      maxY,
+      relief: maxY - minY,
+      distinctHeightSamples: distinctHeights.size,
+      degenerateTriangles,
+      invalidIndices,
+      nonFiniteVertices,
+      invalidGeometryPatches,
+      malformedIndexBuffers,
+      missingNormalAttributes,
+      nonFiniteNormals,
+      nonUnitNormals,
+    }
+  }
+
+  /** Find the closest rendered terrain vertex and return only detached scalar samples. */
+  getNearestTerrainVertexColor(x: number, z: number) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return null
+    let nearest: { distanceSquared: number; position: [number, number, number]; color: [number, number, number] } | null = null
+    for (const patch of this.#patches.values()) {
+      const mesh = patch.group.children.find(child => child.userData?.terrain) as THREE.Mesh | undefined
+      const position = mesh?.geometry?.getAttribute('position')
+      const color = mesh?.geometry?.getAttribute('color')
+      if (!position || !color) continue
+      for (let vertex = 0; vertex < position.count; vertex++) {
+        const dx = position.getX(vertex) - x
+        const dz = position.getZ(vertex) - z
+        const distanceSquared = dx * dx + dz * dz
+        if (!nearest || distanceSquared < nearest.distanceSquared) {
+          nearest = {
+            distanceSquared,
+            position: [position.getX(vertex), position.getY(vertex), position.getZ(vertex)],
+            color: [color.getX(vertex), color.getY(vertex), color.getZ(vertex)],
+          }
+        }
+      }
+    }
+    return nearest ? {
+      distance: Math.sqrt(nearest.distanceSquared),
+      position: [...nearest.position] as [number, number, number],
+      color: [...nearest.color] as [number, number, number],
+    } : null
+  }
+
   /** Coarse, allocation-light health check of the actual materialized terrain meshes. */
   getTerrainMeshDiagnostics() {
-    const patches = [...this.patches.values()]
+    const patches = [...this.#patches.values()]
     let terrainMeshPatches = 0
     let vertexCount = 0
     let triangleCount = 0
@@ -1745,7 +1935,7 @@ export class InfiniteWorldRenderer {
     this.camera.position.copy(targetLocal).add(new THREE.Vector3(distance, distance * 0.62, distance))
     this.camera.lookAt(targetLocal)
     this.controls.update()
-    this.worldPosition.copy(targetWorld)
+    this.#worldPosition.copy(targetWorld)
     // Terrain/object synchronization is handled by the render loop. Keeping
     // focusGeneratedRegion non-blocking prevents Composer from freezing the UI.
 
@@ -1798,16 +1988,16 @@ export class InfiniteWorldRenderer {
     this.objectTool = tool
     this.updateControlButtons()
     if (tool !== 'select') {
-      this.transformControls.detach()
-      ;(this.transformControls as any).visible = false
-      this.selectionMarker.visible = false
+      this.#transformControls.detach()
+      ;(this.#transformControls as any).visible = false
+      this.#selectionMarker.visible = false
     }
   }
   setObjectKind(kind: WorldObjectKind) { this.selectedKind = kind }
   getObjectTool() { return this.objectTool }
   getObjectKind() { return this.selectedKind }
   get worldCoordinates() {
-    return { x: this.worldPosition.x, y: this.worldPosition.y, z: this.worldPosition.z }
+    return { x: this.#worldPosition.x, y: this.#worldPosition.y, z: this.#worldPosition.z }
   }
   setFlyMode(enabled: boolean) {
     this.flyMode = enabled
@@ -1842,19 +2032,19 @@ export class InfiniteWorldRenderer {
   /** Diagnostics for verifying that rendered water coverage matches generator data. */
   getTerrainWaterDiagnostics() {
     let expectedWaterQuads = 0
-    for (const patch of this.patches.values()) {
+    for (const patch of this.#patches.values()) {
       for (const depth of patch.chunk.water) if (depth > 0) expectedWaterQuads++
     }
     let actualWaterQuads = 0
-    for (const mesh of this.waterMeshes.values()) {
+    for (const mesh of this.#waterMeshes.values()) {
       actualWaterQuads += (mesh.geometry.index?.count ?? 0) / 6
     }
     return {
-      loadedChunks: this.patches.size,
-      chunksWithWater: this.waterMeshes.size,
+      loadedChunks: this.#patches.size,
+      chunksWithWater: this.#waterMeshes.size,
       expectedWaterQuads,
       actualWaterQuads,
-      maxWaterQuads: this.patches.size * WORLD_CHUNK_SIZE * WORLD_CHUNK_SIZE,
+      maxWaterQuads: this.#patches.size * WORLD_CHUNK_SIZE * WORLD_CHUNK_SIZE,
     }
   }
   getLodDistance() { return this.lodDistance }
@@ -1880,7 +2070,7 @@ export class InfiniteWorldRenderer {
     this.camera.position.copy(targetLocal).add(new THREE.Vector3(38, 28, 38))
     this.camera.lookAt(targetLocal)
     this.controls.update()
-    this.worldPosition.copy(targetWorld)
+    this.#worldPosition.copy(targetWorld)
   }
 
   resetCameraView() {
@@ -1892,14 +2082,14 @@ export class InfiniteWorldRenderer {
     this.camera.position.copy(targetLocal).add(new THREE.Vector3(48, 36, 48))
     this.camera.lookAt(targetLocal)
     this.controls.update()
-    this.worldPosition.copy(targetWorld)
+    this.#worldPosition.copy(targetWorld)
   }
 
   setCameraPreset(preset: 'top' | 'front' | 'orbit' | 'iso' | 'street' | 'fly') {
     const targetWorld = new THREE.Vector3(
-      this.worldPosition.x,
-      this.sampleTerrainHeight(this.worldPosition.x, this.worldPosition.z),
-      this.worldPosition.z,
+      this.#worldPosition.x,
+      this.sampleTerrainHeight(this.#worldPosition.x, this.#worldPosition.z),
+      this.#worldPosition.z,
     )
     const targetLocal = this.worldToLocal(targetWorld)
     this.controls.target.copy(targetLocal)
@@ -1909,8 +2099,8 @@ export class InfiniteWorldRenderer {
       // camera/world position in the same absolute coordinate frame.
       this.flyMode = true
       this.controls.enabled = false
-      this.worldPosition.copy(targetWorld).add(new THREE.Vector3(0, 8, 0))
-      this.camera.position.copy(this.worldToLocal(this.worldPosition))
+      this.#worldPosition.copy(targetWorld).add(new THREE.Vector3(0, 8, 0))
+      this.camera.position.copy(this.worldToLocal(this.#worldPosition))
       this.camera.lookAt(this.camera.position.clone().add(new THREE.Vector3(0, 0, -30)))
       this.controls.target.copy(this.camera.position).add(new THREE.Vector3(0, 0, -30))
       return
@@ -1931,7 +2121,7 @@ export class InfiniteWorldRenderer {
     }
     this.camera.lookAt(targetLocal)
     this.controls.update()
-    this.worldPosition.copy(targetWorld)
+    this.#worldPosition.copy(targetWorld)
   }
 
 
@@ -1944,20 +2134,20 @@ export class InfiniteWorldRenderer {
     const h = ((hours % 24) + 24) % 24
     const daylight = Math.max(0, Math.sin(((h - 6) / 12) * Math.PI))
     const azimuth = ((h - 6) / 24) * Math.PI * 2
-    this.sun.position.set(Math.cos(azimuth) * 420, 80 + daylight * 520, Math.sin(azimuth) * 420)
-    this.sun.intensity = 0.15 + daylight * 2.1
-    this.hemi.intensity = 0.35 + daylight * 1.25
+    this.#sun.position.set(Math.cos(azimuth) * 420, 80 + daylight * 520, Math.sin(azimuth) * 420)
+    this.#sun.intensity = 0.15 + daylight * 2.1
+    this.#hemi.intensity = 0.35 + daylight * 1.25
 
     let skyCol: number
     if (daylight < 0.05) {
       skyCol = 0x070918
-      this.sun.color.setHex(0x5070a0)
+      this.#sun.color.setHex(0x5070a0)
     } else if (daylight < 0.35) {
       skyCol = h < 12 ? 0xcc7755 : 0xc05544
-      this.sun.color.setHex(0xffaa77)
+      this.#sun.color.setHex(0xffaa77)
     } else {
       skyCol = 0x8eb4db
-      this.sun.color.setHex(0xffffff)
+      this.#sun.color.setHex(0xffffff)
     }
     if (this.#scene.background instanceof THREE.Color) {
       this.#scene.background.setHex(skyCol)
@@ -1986,16 +2176,16 @@ export class InfiniteWorldRenderer {
   }
 
   private chunkCenter(): ChunkCoord {
-    const w = worldToChunk(this.worldPosition.x, 0, this.worldPosition.z)
+    const w = worldToChunk(this.#worldPosition.x, 0, this.#worldPosition.z)
     return w.chunk
   }
 
   private terrainEdgeLodSignature(chunk: WorldChunk): string {
     return [
-      this.patches.get(`${chunk.cx - 1},${chunk.cy},${chunk.cz}`)?.lod ?? 'x',
-      this.patches.get(`${chunk.cx + 1},${chunk.cy},${chunk.cz}`)?.lod ?? 'x',
-      this.patches.get(`${chunk.cx},${chunk.cy},${chunk.cz - 1}`)?.lod ?? 'x',
-      this.patches.get(`${chunk.cx},${chunk.cy},${chunk.cz + 1}`)?.lod ?? 'x',
+      this.#patches.get(`${chunk.cx - 1},${chunk.cy},${chunk.cz}`)?.lod ?? 'x',
+      this.#patches.get(`${chunk.cx + 1},${chunk.cy},${chunk.cz}`)?.lod ?? 'x',
+      this.#patches.get(`${chunk.cx},${chunk.cy},${chunk.cz - 1}`)?.lod ?? 'x',
+      this.#patches.get(`${chunk.cx},${chunk.cy},${chunk.cz + 1}`)?.lod ?? 'x',
     ].join(':')
   }
 
@@ -2027,7 +2217,7 @@ export class InfiniteWorldRenderer {
     return lowerHeight + (upperHeight - lowerHeight) * t
   }
 
-  private buildTerrainPatch(chunk: WorldChunk, lod = 1): THREE.Group {
+  #buildTerrainPatch(chunk: WorldChunk, lod = 1): THREE.Group {
     const group = new THREE.Group()
     const ownedGeometries = new Set<THREE.BufferGeometry>()
     const ownedMaterials = new Set<THREE.Material>()
@@ -2050,7 +2240,7 @@ export class InfiniteWorldRenderer {
     const originX = chunk.cx * WORLD_CHUNK_SIZE
     const originZ = chunk.cz * WORLD_CHUNK_SIZE
     const neighborResolution = (dx: number, dz: number) => {
-      const neighbor = this.patches.get(`${chunk.cx + dx},${chunk.cy},${chunk.cz + dz}`)
+      const neighbor = this.#patches.get(`${chunk.cx + dx},${chunk.cy},${chunk.cz + dz}`)
       if (!neighbor) return null
       const neighborResolution = lodResolution(neighbor.lod as LODLevel)
       return neighborResolution < resolution && resolution % neighborResolution === 0
@@ -2143,7 +2333,7 @@ export class InfiniteWorldRenderer {
     geometry.computeBoundingSphere()
 
     const material = trackTerrainResource(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }))
-    this.terrainMaterials.add(material)
+    this.#terrainMaterials.add(material)
     if (this.materialMode === 'material') {
       material.vertexColors = false
       material.color.set(0x8a8f98)
@@ -2222,19 +2412,19 @@ export class InfiniteWorldRenderer {
       }))
       const water = new THREE.Mesh(waterGeometry, waterMaterial)
       group.add(water)
-      this.waterMeshes.set(waterKey, water)
+      this.#waterMeshes.set(waterKey, water)
     } else {
       // Do not leave a prior mesh reference when this patch is rebuilt for a dry chunk or non-sea surface.
-      this.waterMeshes.delete(waterKey)
+      this.#waterMeshes.delete(waterKey)
     }
-    group.position.set(-this.worldAnchor.x, -this.worldAnchor.y, -this.worldAnchor.z)
+    group.position.set(-this.#worldAnchor.x, -this.#worldAnchor.y, -this.#worldAnchor.z)
 
       void sample
       return group
     } catch (error) {
-      this.waterMeshes.delete(waterKey)
+      this.#waterMeshes.delete(waterKey)
       for (const material of ownedMaterials) {
-        this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
+        this.#terrainMaterials.delete(material as THREE.MeshStandardMaterial)
       }
       const cleanupFailures: unknown[] = []
       for (const geometry of ownedGeometries) {
@@ -2270,7 +2460,7 @@ export class InfiniteWorldRenderer {
             : renderable.material ? [renderable.material] : []
           materials.forEach(material => {
             if (material instanceof THREE.Material) {
-              this.terrainMaterials.delete(material as THREE.MeshStandardMaterial)
+              this.#terrainMaterials.delete(material as THREE.MeshStandardMaterial)
             }
           })
         })
@@ -2288,19 +2478,19 @@ export class InfiniteWorldRenderer {
 
   private refreshTerrainPatches() {
     const failures: unknown[] = []
-    for (const [key, patch] of [...this.patches]) {
+    for (const [key, patch] of [...this.#patches]) {
       failures.push(...this.disposeTerrainPatchGroups(
         [{ key, group: patch.group }],
         `Terrain patch ${key}`,
       ))
 
       try {
-        const group = this.buildTerrainPatch(patch.chunk, patch.lod)
-        this.patches.set(key, { group, chunk: patch.chunk, lod: patch.lod, edgeLodSignature: this.terrainEdgeLodSignature(patch.chunk) })
+        const group = this.#buildTerrainPatch(patch.chunk, patch.lod)
+        this.#patches.set(key, { group, chunk: patch.chunk, lod: patch.lod, edgeLodSignature: this.terrainEdgeLodSignature(patch.chunk) })
         this.#scene.add(group)
       } catch (error) {
-        this.patches.delete(key)
-        this.waterMeshes.delete(key)
+        this.#patches.delete(key)
+        this.#waterMeshes.delete(key)
         failures.push(new Error(`Terrain patch ${key} rebuild failed: ${String(error)}`, { cause: error }))
       }
     }
@@ -2311,7 +2501,7 @@ export class InfiniteWorldRenderer {
   }
 
   private removeChunk(key: string) {
-    const patch = this.patches.get(key)
+    const patch = this.#patches.get(key)
     if (!patch) return
 
     const failures = this.disposeTerrainPatchGroups(
@@ -2320,8 +2510,8 @@ export class InfiniteWorldRenderer {
     )
 
     // Evict stale render records even when a custom GPU disposer throws.
-    this.patches.delete(key)
-    this.waterMeshes.delete(key)
+    this.#patches.delete(key)
+    this.#waterMeshes.delete(key)
     if (failures.length > 0) {
       throw new AggregateError(failures, `Terrain chunk ${key} was removed with one or more resource cleanup failures`)
     }
@@ -2330,14 +2520,14 @@ export class InfiniteWorldRenderer {
   private desiredLod(chunk: WorldChunk): number {
     const cx = chunk.cx * WORLD_CHUNK_SIZE + WORLD_CHUNK_SIZE * 0.5
     const cz = chunk.cz * WORLD_CHUNK_SIZE + WORLD_CHUNK_SIZE * 0.5
-    const dx = cx - this.worldPosition.x
-    const dz = cz - this.worldPosition.z
+    const dx = cx - this.#worldPosition.x
+    const dz = cz - this.#worldPosition.z
     return lodForDistance(Math.hypot(dx, dz) / WORLD_CHUNK_SIZE)
   }
 
   private updateTerrainLod() {
     const failures: unknown[] = []
-    for (const [key, patch] of [...this.patches]) {
+    for (const [key, patch] of [...this.#patches]) {
       const lod = this.desiredLod(patch.chunk)
       const edgeLodSignature = this.terrainEdgeLodSignature(patch.chunk)
       if (lod === patch.lod && edgeLodSignature === patch.edgeLodSignature) continue
@@ -2348,8 +2538,8 @@ export class InfiniteWorldRenderer {
       ))
 
       try {
-        const group = this.buildTerrainPatch(patch.chunk, lod)
-        this.patches.set(key, {
+        const group = this.#buildTerrainPatch(patch.chunk, lod)
+        this.#patches.set(key, {
           group,
           chunk: patch.chunk,
           lod,
@@ -2357,8 +2547,8 @@ export class InfiniteWorldRenderer {
         })
         this.#scene.add(group)
       } catch (error) {
-        this.patches.delete(key)
-        this.waterMeshes.delete(key)
+        this.#patches.delete(key)
+        this.#waterMeshes.delete(key)
         failures.push(new Error(`Terrain patch ${key} rebuild failed: ${String(error)}`, { cause: error }))
       }
     }
@@ -2380,10 +2570,10 @@ export class InfiniteWorldRenderer {
 
     for (const chunk of delta.loaded) {
       const key = `${chunk.cx},${chunk.cy},${chunk.cz}`
-      if (!this.patches.has(key)) {
+      if (!this.#patches.has(key)) {
         const lod = this.desiredLod(chunk)
-        const group = this.buildTerrainPatch(chunk, lod)
-        this.patches.set(key, { group, chunk, lod, edgeLodSignature: this.terrainEdgeLodSignature(chunk) })
+        const group = this.#buildTerrainPatch(chunk, lod)
+        this.#patches.set(key, { group, chunk, lod, edgeLodSignature: this.terrainEdgeLodSignature(chunk) })
         this.#scene.add(group)
       }
     }
@@ -2391,7 +2581,7 @@ export class InfiniteWorldRenderer {
     if (centerChanged || delta.loaded.length > 0 || delta.unloaded.length > 0) this.syncObjects()
   }
 
-  private makeObject(object: WorldObject): THREE.Group {
+  #makeObject(object: WorldObject): THREE.Group {
     const g = new THREE.Group()
     const s = Math.max(0.1, object.scale)
     let mesh: THREE.Object3D
@@ -2592,7 +2782,7 @@ export class InfiniteWorldRenderer {
 
       if (mesh !== g) g.add(mesh)
       g.userData.objectId = object.id
-      g.position.set(object.x - this.worldAnchor.x, object.y - this.worldAnchor.y, object.z - this.worldAnchor.z)
+      g.position.set(object.x - this.#worldAnchor.x, object.y - this.#worldAnchor.y, object.z - this.#worldAnchor.z)
       g.rotation.y = object.rotationY
       g.scale.setScalar(s)
       return g
@@ -2655,7 +2845,7 @@ export class InfiniteWorldRenderer {
   private syncObjects() {
     // Camera coordinates are rebased around worldAnchor after Infinite World recentering.
     // Visibility queries must therefore use the stable world-space position.
-    const center = this.worldPosition
+    const center = this.#worldPosition
     const range = (this.chunks.radius + 1) * WORLD_CHUNK_SIZE
     const visible = this.objects.query({
       minX: center.x - range, maxX: center.x + range,
@@ -2666,17 +2856,17 @@ export class InfiniteWorldRenderer {
     const synchronizationFailures: unknown[] = []
     for (const object of visible) {
       try {
-      const entry = this.objectMeshes.get(object.id)
+      const entry = this.#objectMeshes.get(object.id)
       if (!entry) {
-        const group = this.makeObject(object)
-        this.objectMeshes.set(object.id, { object, group })
+        const group = this.#makeObject(object)
+        this.#objectMeshes.set(object.id, { object, group })
         this.#scene.add(group)
       } else if (entry.object.kind !== object.kind) {
         // A world restore may reuse a stable ID for a different visual kind.
         // Rebuild geometry/materials rather than retaining the previous model.
-        const replacement = this.makeObject(object)
+        const replacement = this.#makeObject(object)
         this.#scene.add(replacement)
-        this.objectMeshes.set(object.id, { object, group: replacement })
+        this.#objectMeshes.set(object.id, { object, group: replacement })
         cleanupFailures.push(...detachAndDisposeObjectGroups(
           this.#scene,
           [entry.group],
@@ -2687,27 +2877,27 @@ export class InfiniteWorldRenderer {
         // during Load, Undo/Redo, or a transform. Refresh the cached mesh too.
         entry.object = object
         entry.group.position.set(
-          object.x - this.worldAnchor.x,
-          object.y - this.worldAnchor.y,
-          object.z - this.worldAnchor.z,
+          object.x - this.#worldAnchor.x,
+          object.y - this.#worldAnchor.y,
+          object.z - this.#worldAnchor.z,
         )
         entry.group.rotation.y = object.rotationY
         entry.group.scale.setScalar(Math.max(0.1, object.scale))
       }
-      if (this.selectedObjectId === object.id) {
+      if (this.#selectedObjectId === object.id) {
         // Keep editor overlays aligned with the authoritative snapshot after
         // Undo/Redo or a programmatic transform.
-        this.selectionMarker.position.set(
-          object.x - this.worldAnchor.x,
-          object.y - this.worldAnchor.y + 1.5,
-          object.z - this.worldAnchor.z,
+        this.#selectionMarker.position.set(
+          object.x - this.#worldAnchor.x,
+          object.y - this.#worldAnchor.y + 1.5,
+          object.z - this.#worldAnchor.z,
         )
-        this.selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
-        this.selectionMarker.visible = true
-        const selectedEntry = this.objectMeshes.get(object.id)
+        this.#selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
+        this.#selectionMarker.visible = true
+        const selectedEntry = this.#objectMeshes.get(object.id)
         if (selectedEntry) {
-          this.transformControls.attach(selectedEntry.group)
-          ;(this.transformControls as any).visible = true
+          this.#transformControls.attach(selectedEntry.group)
+          ;(this.#transformControls as any).visible = true
         }
       }
       keep.add(object.id)
@@ -2720,20 +2910,20 @@ export class InfiniteWorldRenderer {
     }
 
     const staleGroups: THREE.Object3D[] = []
-    for (const [id, entry] of [...this.objectMeshes]) {
+    for (const [id, entry] of [...this.#objectMeshes]) {
       if (keep.has(id)) continue
-      if (this.selectedObjectId === id) {
+      if (this.#selectedObjectId === id) {
         // Never leave TransformControls attached to a group being evicted
         // from the streamed scene.
-        this.selectedObjectId = null
-        this.transformControls.detach()
-        ;(this.transformControls as any).visible = false
-        this.selectionMarker.visible = false
+        this.#selectedObjectId = null
+        this.#transformControls.detach()
+        ;(this.#transformControls as any).visible = false
+        this.#selectionMarker.visible = false
       }
       staleGroups.push(entry.group)
       // Forget detached meshes even when a custom GPU disposer fails; leaving
       // an old ID cached could suppress creation of the next world's object.
-      this.objectMeshes.delete(id)
+      this.#objectMeshes.delete(id)
     }
     // Dispose the complete eviction batch through the shared resource walker.
     // It deduplicates shared geometry/material/texture references and also
@@ -2755,57 +2945,57 @@ export class InfiniteWorldRenderer {
   selectAtScreen(clientX: number, clientY: number) {
     const rect = this.renderer.domElement.getBoundingClientRect()
     if (!rect.width || !rect.height) return null
-    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1
-    this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1
-    this.raycaster.setFromCamera(this.pointer, this.camera)
-    const meshes = [...this.objectMeshes.values()].map(e => e.group)
-    const hit = this.raycaster.intersectObjects(meshes, true)[0]
+    this.#pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1
+    this.#pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1
+    this.#raycaster.setFromCamera(this.#pointer, this.camera)
+    const meshes = [...this.#objectMeshes.values()].map(e => e.group)
+    const hit = this.#raycaster.intersectObjects(meshes, true)[0]
     if (!hit) {
-      this.selectedObjectId = null
-      this.transformControls.detach()
-      ;(this.transformControls as any).visible = false
-      this.selectionMarker.visible = false
+      this.#selectedObjectId = null
+      this.#transformControls.detach()
+      ;(this.#transformControls as any).visible = false
+      this.#selectionMarker.visible = false
       return null
     }
     let node: THREE.Object3D | null = hit.object
-    while (node && !this.objectMeshes.has(node.userData.objectId)) node = node.parent
+    while (node && !this.#objectMeshes.has(node.userData.objectId)) node = node.parent
     const id = node?.userData.objectId as string | undefined
     if (!id) return null
-    const entry = this.objectMeshes.get(id)
+    const entry = this.#objectMeshes.get(id)
     if (!entry) return null
-    this.selectedObjectId = id
+    this.#selectedObjectId = id
     const selectedGroup = entry.group
-    this.transformControls.attach(selectedGroup)
-    ;(this.transformControls as any).visible = true
-    this.selectionMarker.position.set(
-      entry.object.x - this.worldAnchor.x,
-      entry.object.y - this.worldAnchor.y + 1.5,
-      entry.object.z - this.worldAnchor.z,
+    this.#transformControls.attach(selectedGroup)
+    ;(this.#transformControls as any).visible = true
+    this.#selectionMarker.position.set(
+      entry.object.x - this.#worldAnchor.x,
+      entry.object.y - this.#worldAnchor.y + 1.5,
+      entry.object.z - this.#worldAnchor.z,
     )
-    this.selectionMarker.scale.setScalar(Math.max(1, entry.object.scale * 2))
-    this.selectionMarker.visible = true
+    this.#selectionMarker.scale.setScalar(Math.max(1, entry.object.scale * 2))
+    this.#selectionMarker.visible = true
     return entry.object
   }
 
   setTransformMode(mode: 'translate' | 'rotate' | 'scale') {
-    this.transformControls.setMode(mode)
+    this.#transformControls.setMode(mode)
   }
 
   private syncSelectedFromGizmo() {
-    if (!this.selectedObjectId) return
-    const entry = this.objectMeshes.get(this.selectedObjectId)
+    if (!this.#selectedObjectId) return
+    const entry = this.#objectMeshes.get(this.#selectedObjectId)
     if (!entry) return
-    const object = this.objects.updateTransform(this.selectedObjectId, {
-      x: entry.group.position.x + this.worldAnchor.x,
-      y: entry.group.position.y + this.worldAnchor.y,
-      z: entry.group.position.z + this.worldAnchor.z,
+    const object = this.objects.updateTransform(this.#selectedObjectId, {
+      x: entry.group.position.x + this.#worldAnchor.x,
+      y: entry.group.position.y + this.#worldAnchor.y,
+      z: entry.group.position.z + this.#worldAnchor.z,
       rotationY: entry.group.rotation.y,
       scale: entry.group.scale.x,
     })
     if (!object) return
     entry.object = object
-    this.selectionMarker.position.set(entry.group.position.x, entry.group.position.y + 1.5, entry.group.position.z)
-    this.selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
+    this.#selectionMarker.position.set(entry.group.position.x, entry.group.position.y + 1.5, entry.group.position.z)
+    this.#selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
   }
 
   private groundExternalAssetInstances(
@@ -2818,7 +3008,7 @@ export class InfiniteWorldRenderer {
       this.#worldAssetRuntime,
       instances,
       createdInstanceIds,
-      this.worldAnchor,
+      this.#worldAnchor,
       (x, z) => this.sampleTerrainHeight(x, z),
     )
   }
@@ -2828,8 +3018,8 @@ export class InfiniteWorldRenderer {
     semanticEntryId?: string,
     scale = 1,
   ) {
-    const x = this.worldPosition.x
-    const z = this.worldPosition.z
+    const x = this.#worldPosition.x
+    const z = this.#worldPosition.z
     const asset = await this.#worldAssetRuntime.load(assetId, sourceUrl, {
       semanticEntryId,
       x,
@@ -2891,10 +3081,10 @@ export class InfiniteWorldRenderer {
       const scatter = this.#worldAssetRuntime.scatterSemanticWithResult(
         rule.semanticEntryId,
         {
-          minX: this.worldPosition.x - radius,
-          maxX: this.worldPosition.x + radius,
-          minZ: this.worldPosition.z - radius,
-          maxZ: this.worldPosition.z + radius,
+          minX: this.#worldPosition.x - radius,
+          maxX: this.#worldPosition.x + radius,
+          minZ: this.#worldPosition.z - radius,
+          maxZ: this.#worldPosition.z + radius,
         },
         count,
         seed + results.length,
@@ -2914,7 +3104,7 @@ export class InfiniteWorldRenderer {
     return { biomeId: plan.biomeId, byLayer: plan.byLayer, results, reason: plan.reason }
   }
 
-  materializeSettlementTier(tier: 'village' | 'town' | 'city' | 'megacity', x = this.worldPosition.x, z = this.worldPosition.z) {
+  materializeSettlementTier(tier: 'village' | 'town' | 'city' | 'megacity', x = this.#worldPosition.x, z = this.#worldPosition.z) {
     const radius = tier === 'village' ? 90 : tier === 'town' ? 125 : tier === 'city' ? 180 : 240
     const buildings = tier === 'village' ? 5 : tier === 'town' ? 12 : tier === 'city' ? 28 : 55
     const roadSpacing = tier === 'village' ? 22 : tier === 'town' ? 18 : tier === 'city' ? 14 : 11
@@ -2975,8 +3165,8 @@ export class InfiniteWorldRenderer {
 
   materializeEventConsequences(_id: string, consequences: Array<{ eventId: string; actions: Array<{ type: string; civilization?: string; tier?: string; visualKinds?: string[] }> }>) {
     const materialized: Array<{ eventId: string; action: string; result?: unknown }> = []
-    const x = this.worldPosition.x
-    const z = this.worldPosition.z
+    const x = this.#worldPosition.x
+    const z = this.#worldPosition.z
     for (const consequence of consequences) {
       if (this.materializedConsequenceEvents.has(consequence.eventId)) continue
       let didMaterialize = false
@@ -3011,8 +3201,8 @@ export class InfiniteWorldRenderer {
   materializeInfrastructureExpansion(id: string, addedRoads: number, addedCapacity: number) {
     if (addedRoads <= 0 && addedCapacity <= 0) return { id, addedRoads: 0, addedBuildings: 0 }
 
-    const x = this.worldPosition.x
-    const z = this.worldPosition.z
+    const x = this.#worldPosition.x
+    const z = this.#worldPosition.z
     const radius = Math.max(40, Math.min(260, 55 + Math.sqrt(Math.max(0, addedCapacity)) * 1.8))
     const roads = Math.min(12, Math.max(1, addedRoads))
     for (let i = 0; i < roads; i++) {
@@ -3038,8 +3228,8 @@ export class InfiniteWorldRenderer {
 
   populateCivilization(id: string, tier: Parameters<typeof civilizationRuntime.evaluate>[1] = 'village', radius = 120) {
     const state = civilizationRuntime.evaluate(id, tier)
-    const x = this.worldPosition.x
-    const z = this.worldPosition.z
+    const x = this.#worldPosition.x
+    const z = this.#worldPosition.z
     const result: { id: string; type: CivilizationType; blockedBy: string[]; generated: string[] } = {
       id,
       type: state.type,
@@ -3087,10 +3277,10 @@ export class InfiniteWorldRenderer {
         const scatter = this.#worldAssetRuntime.scatterSemanticWithResult(
           rule.semanticEntryId,
           {
-            minX: this.worldPosition.x - radius,
-            maxX: this.worldPosition.x + radius,
-            minZ: this.worldPosition.z - radius,
-            maxZ: this.worldPosition.z + radius,
+            minX: this.#worldPosition.x - radius,
+            maxX: this.#worldPosition.x + radius,
+            minZ: this.#worldPosition.z - radius,
+            maxZ: this.#worldPosition.z + radius,
           },
           count,
           seed + results.length,
@@ -3102,8 +3292,8 @@ export class InfiniteWorldRenderer {
       }
 
       const angle = (results.length * 2.399963) % (Math.PI * 2)
-      const x = this.worldPosition.x + Math.cos(angle) * radius * 0.55
-      const z = this.worldPosition.z + Math.sin(angle) * radius * 0.55
+      const x = this.#worldPosition.x + Math.cos(angle) * radius * 0.55
+      const z = this.#worldPosition.z + Math.sin(angle) * radius * 0.55
       let count = 0
       const entry = resolveWorldLibraryEntry(rule.semanticEntryId)
 
@@ -3183,8 +3373,8 @@ export class InfiniteWorldRenderer {
     scale = 1,
     sourceAssetId?: string,
   ) {
-    const x = this.worldPosition.x
-    const z = this.worldPosition.z
+    const x = this.#worldPosition.x
+    const z = this.#worldPosition.z
     const scatter = this.#worldAssetRuntime.scatterSemanticWithResult(
       semanticEntryId,
       { minX: x - radius, maxX: x + radius, minZ: z - radius, maxZ: z + radius },
@@ -3215,26 +3405,32 @@ export class InfiniteWorldRenderer {
   }
 
   getSelectedObject() {
-    return this.selectedObjectId ? this.objects.get(this.selectedObjectId) ?? null : null
+    return this.#selectedObjectId ? this.objects.get(this.#selectedObjectId) ?? null : null
+  }
+
+  selectObjectById(id: string): boolean {
+    if (!this.objects.get(id)) return false
+    this.#selectedObjectId = id
+    return true
   }
 
   transformSelected(patch: Partial<Pick<WorldObject, 'x'|'y'|'z'|'rotationY'|'scale'>>) {
-    if (!this.selectedObjectId) return null
-    const before = this.objects.get(this.selectedObjectId)
+    if (!this.#selectedObjectId) return null
+    const before = this.objects.get(this.#selectedObjectId)
     if (!before) return null
-    const object = this.objects.updateTransform(this.selectedObjectId, patch)
+    const object = this.objects.updateTransform(this.#selectedObjectId, patch)
     if (!object) return null
     this.#history.push({ type: 'transform', before, after: object })
     this.scheduleSave()
-    const entry = this.objectMeshes.get(object.id)
+    const entry = this.#objectMeshes.get(object.id)
     if (entry) {
       entry.object = object
-      entry.group.position.set(object.x - this.worldAnchor.x, object.y - this.worldAnchor.y, object.z - this.worldAnchor.z)
+      entry.group.position.set(object.x - this.#worldAnchor.x, object.y - this.#worldAnchor.y, object.z - this.#worldAnchor.z)
       entry.group.rotation.y = object.rotationY
       entry.group.scale.setScalar(Math.max(0.1, object.scale))
     }
-    this.selectionMarker.position.set(object.x - this.worldAnchor.x, object.y - this.worldAnchor.y + 1.5, object.z - this.worldAnchor.z)
-    this.selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
+    this.#selectionMarker.position.set(object.x - this.#worldAnchor.x, object.y - this.#worldAnchor.y + 1.5, object.z - this.#worldAnchor.z)
+    this.#selectionMarker.scale.setScalar(Math.max(1, object.scale * 2))
     return object
   }
 
@@ -3272,7 +3468,7 @@ export class InfiniteWorldRenderer {
     return { canUndo: this.#history.canUndo, canRedo: this.#history.canRedo }
   }
 
-  getTransformMode() { return this.transformControls.mode }
+  getTransformMode() { return this.#transformControls.mode }
   setSnapToGrid(size: number) { this.snapToGrid = Math.max(0.1, size) }
   getSnapToGrid() { return this.snapToGrid }
 
@@ -3366,14 +3562,14 @@ export class InfiniteWorldRenderer {
   }
 
   deleteSelected() {
-    if (!this.selectedObjectId) return null
-    const id = this.selectedObjectId
+    if (!this.#selectedObjectId) return null
+    const id = this.#selectedObjectId
     const object = this.objects.get(id)
     if (object) {
       this.objects.remove(id)
       this.#history.push({ type: 'remove', object: { ...object } })
     }
-    const entry = this.objectMeshes.get(id)
+    const entry = this.#objectMeshes.get(id)
     if (entry) {
       const cleanupFailures = detachAndDisposeObjectGroups(
         this.#scene,
@@ -3382,7 +3578,7 @@ export class InfiniteWorldRenderer {
       )
       // The object is already removed from the authoritative object store. Always
       // evict its render cache so a failed GPU disposer cannot leave a ghost mesh.
-      this.objectMeshes.delete(id)
+      this.#objectMeshes.delete(id)
       if (cleanupFailures.length > 0) {
         console.warn(
           `[world-objects] Deleted object ${id} with GPU resource cleanup failures`,
@@ -3390,10 +3586,10 @@ export class InfiniteWorldRenderer {
         )
       }
     }
-    this.selectedObjectId = null
-    this.transformControls.detach()
-    ;(this.transformControls as any).visible = false
-    this.selectionMarker.visible = false
+    this.#selectedObjectId = null
+    this.#transformControls.detach()
+    ;(this.#transformControls as any).visible = false
+    this.#selectionMarker.visible = false
     this.scheduleSave()
     return object ?? null
   }
@@ -3411,25 +3607,25 @@ export class InfiniteWorldRenderer {
   pickAtScreen(clientX: number, clientY: number) {
     const rect = this.renderer.domElement.getBoundingClientRect()
     if (!rect.width || !rect.height) return null
-    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1
-    this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1
-    this.raycaster.setFromCamera(this.pointer, this.camera)
+    this.#pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1
+    this.#pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1
+    this.#raycaster.setFromCamera(this.#pointer, this.camera)
     const terrainMeshes: THREE.Object3D[] = []
-    for (const patch of this.patches.values()) {
+    for (const patch of this.#patches.values()) {
       patch.group.traverse(obj => {
         if (obj instanceof THREE.Mesh && obj.userData.terrain) terrainMeshes.push(obj)
       })
     }
-    const hit = this.raycaster.intersectObjects(terrainMeshes, false)[0]
+    const hit = this.#raycaster.intersectObjects(terrainMeshes, false)[0]
     if (!hit) {
-      this.hoverMarker.visible = false
+      this.#hoverMarker.visible = false
       return null
     }
-    const worldX = hit.point.x + this.worldAnchor.x
-    const worldY = hit.point.y + this.worldAnchor.y
-    const worldZ = hit.point.z + this.worldAnchor.z
-    this.hoverMarker.position.set(hit.point.x, hit.point.y + 0.08, hit.point.z)
-    this.hoverMarker.visible = true
+    const worldX = hit.point.x + this.#worldAnchor.x
+    const worldY = hit.point.y + this.#worldAnchor.y
+    const worldZ = hit.point.z + this.#worldAnchor.z
+    this.#hoverMarker.position.set(hit.point.x, hit.point.y + 0.08, hit.point.z)
+    this.#hoverMarker.visible = true
     return { x: worldX, y: worldY, z: worldZ }
   }
 
@@ -3674,11 +3870,11 @@ export class InfiniteWorldRenderer {
 
   setAnalyticalOverlay(mode: 'suitability' | 'flood' | 'slope' | null) {
     this.analyticalOverlayMode = mode
-    if (this.analyticalOverlayMesh) {
-      const previousOverlay = this.analyticalOverlayMesh
-      this.analyticalOverlayMesh = undefined
+    if (this.#analyticalOverlayMesh) {
+      const previousOverlay = this.#analyticalOverlayMesh
+      this.#analyticalOverlayMesh = undefined
       const cleanupFailures = detachAndDisposeObjectGroups(
-        this.terrainGroup,
+        this.#terrainGroup,
         [previousOverlay],
         'Analytical overlay',
       )
@@ -3702,8 +3898,8 @@ export class InfiniteWorldRenderer {
     const material = new THREE.PointsMaterial({ size: 2.4, vertexColors: true, transparent: true, opacity: 0.58, depthWrite: false })
     const points = new THREE.Points(geometry, material)
     points.userData.kind = 'analytical-overlay'
-    this.terrainGroup.add(points)
-    this.analyticalOverlayMesh = points
+    this.#terrainGroup.add(points)
+    this.#analyticalOverlayMesh = points
   }
 
   buildAnalyticalOverlay(cx: number, cz: number, radius = 160, samples = 33, mode: 'suitability' | 'flood' | 'slope' = 'suitability') {
@@ -3829,7 +4025,7 @@ export class InfiniteWorldRenderer {
         new THREE.MeshStandardMaterial({ transparent: true, opacity: 0.72, roughness: 0.15, metalness: 0.05 })
       )
       mesh.userData.kind = 'river'
-      this.terrainGroup.add(mesh)
+      this.#terrainGroup.add(mesh)
       meshes.push(mesh)
     }
     return { traces, meshes }
@@ -4230,46 +4426,46 @@ export class InfiniteWorldRenderer {
   private updateFly(dt: number) {
     if (!this.flyMode) return
     const direction = new THREE.Vector3()
-    if (this.keys.has('KeyW')) direction.z -= 1
-    if (this.keys.has('KeyS')) direction.z += 1
-    if (this.keys.has('KeyA')) direction.x -= 1
-    if (this.keys.has('KeyD')) direction.x += 1
-    if (this.keys.has('Space')) direction.y += 1
-    if (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) direction.y -= 1
+    if (this.#keys.has('KeyW')) direction.z -= 1
+    if (this.#keys.has('KeyS')) direction.z += 1
+    if (this.#keys.has('KeyA')) direction.x -= 1
+    if (this.#keys.has('KeyD')) direction.x += 1
+    if (this.#keys.has('Space')) direction.y += 1
+    if (this.#keys.has('ShiftLeft') || this.#keys.has('ShiftRight')) direction.y -= 1
     if (direction.lengthSq() === 0) return
     direction.normalize().multiplyScalar(this.flySpeed * dt)
     const forward = new THREE.Vector3()
     this.camera.getWorldDirection(forward)
     const right = new THREE.Vector3().crossVectors(forward, this.camera.up).normalize()
     const up = this.camera.up.clone()
-    this.worldPosition.addScaledVector(right, direction.x)
-    this.worldPosition.addScaledVector(forward, -direction.z)
-    this.worldPosition.addScaledVector(up, direction.y)
+    this.#worldPosition.addScaledVector(right, direction.x)
+    this.#worldPosition.addScaledVector(forward, -direction.z)
+    this.#worldPosition.addScaledVector(up, direction.y)
     this.camera.position.set(
-      this.worldPosition.x - this.worldAnchor.x,
-      this.worldPosition.y - this.worldAnchor.y,
-      this.worldPosition.z - this.worldAnchor.z,
+      this.#worldPosition.x - this.#worldAnchor.x,
+      this.#worldPosition.y - this.#worldAnchor.y,
+      this.#worldPosition.z - this.#worldAnchor.z,
     )
     this.controls.target.copy(this.camera.position).add(forward.multiplyScalar(30))
   }
 
   private maybeRecenter() {
     const distance = Math.hypot(
-      this.worldPosition.x - this.worldAnchor.x,
-      this.worldPosition.y - this.worldAnchor.y,
-      this.worldPosition.z - this.worldAnchor.z,
+      this.#worldPosition.x - this.#worldAnchor.x,
+      this.#worldPosition.y - this.#worldAnchor.y,
+      this.#worldPosition.z - this.#worldAnchor.z,
     )
     if (distance < this.recenterDistance) return
-    const old = this.worldAnchor.clone()
-    this.worldAnchor.copy(this.worldPosition)
-    this.worldAnchor.y = 0
-    const shift = this.worldAnchor.clone().sub(old)
-    for (const patch of this.patches.values()) patch.group.position.sub(shift)
-    for (const entry of this.objectMeshes.values()) {
+    const old = this.#worldAnchor.clone()
+    this.#worldAnchor.copy(this.#worldPosition)
+    this.#worldAnchor.y = 0
+    const shift = this.#worldAnchor.clone().sub(old)
+    for (const patch of this.#patches.values()) patch.group.position.sub(shift)
+    for (const entry of this.#objectMeshes.values()) {
       entry.group.position.set(
-        entry.object.x - this.worldAnchor.x,
-        entry.object.y - this.worldAnchor.y,
-        entry.object.z - this.worldAnchor.z,
+        entry.object.x - this.#worldAnchor.x,
+        entry.object.y - this.#worldAnchor.y,
+        entry.object.z - this.#worldAnchor.z,
       )
     }
     this.camera.position.sub(shift)
@@ -4277,8 +4473,8 @@ export class InfiniteWorldRenderer {
   }
 
   private updateOrbitKeyboard(dt: number) {
-    if (this.flyMode || !this.controls.enabled || this.keys.size === 0) return
-    const speed = (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 160 : 75) * dt
+    if (this.flyMode || !this.controls.enabled || this.#keys.size === 0) return
+    const speed = (this.#keys.has('ShiftLeft') || this.#keys.has('ShiftRight') ? 160 : 75) * dt
     const forward = new THREE.Vector3()
     this.camera.getWorldDirection(forward)
     forward.y = 0
@@ -4286,10 +4482,10 @@ export class InfiniteWorldRenderer {
     const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize()
 
     const move = new THREE.Vector3()
-    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) move.addScaledVector(forward, speed)
-    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) move.addScaledVector(forward, -speed)
-    if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) move.addScaledVector(right, -speed)
-    if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) move.addScaledVector(right, speed)
+    if (this.#keys.has('KeyW') || this.#keys.has('ArrowUp')) move.addScaledVector(forward, speed)
+    if (this.#keys.has('KeyS') || this.#keys.has('ArrowDown')) move.addScaledVector(forward, -speed)
+    if (this.#keys.has('KeyA') || this.#keys.has('ArrowLeft')) move.addScaledVector(right, -speed)
+    if (this.#keys.has('KeyD') || this.#keys.has('ArrowRight')) move.addScaledVector(right, speed)
 
     if (move.lengthSq() > 0) {
       this.camera.position.add(move)
@@ -4297,10 +4493,10 @@ export class InfiniteWorldRenderer {
       this.syncWorldPositionFromControls()
     }
 
-    if (this.keys.has('KeyQ')) {
+    if (this.#keys.has('KeyQ')) {
       this.turnAround(1.8 * dt, 0)
     }
-    if (this.keys.has('KeyE')) {
+    if (this.#keys.has('KeyE')) {
       this.turnAround(-1.8 * dt, 0)
     }
   }
@@ -4342,7 +4538,7 @@ export class InfiniteWorldRenderer {
       this.physicsFrameQueries,
     )
 
-    this.#worldAssetRuntime.rebase(this.worldAnchor)
+    this.#worldAssetRuntime.rebase(this.#worldAnchor)
     this.#worldAssetRuntime.updateVisibility(this.camera, 650, 500)
     this.#worldAssetRuntime.updateAnimations(dt, this.camera)
 
@@ -4405,11 +4601,11 @@ export class InfiniteWorldRenderer {
       depthWrite: false,
     })
 
-    this.physicsParticlePoints = new THREE.Points(geo, mat)
-    this.physicsParticlePositions = pos
-    this.physicsParticleVelocities = vel
-    this.physicsParticleColors = col
-    this.#scene.add(this.physicsParticlePoints)
+    this.#physicsParticlePoints = new THREE.Points(geo, mat)
+    this.#physicsParticlePositions = pos
+    this.#physicsParticleVelocities = vel
+    this.#physicsParticleColors = col
+    this.#scene.add(this.#physicsParticlePoints)
   }
 
   private physicsFrameQueries = 0
@@ -4418,13 +4614,13 @@ export class InfiniteWorldRenderer {
   private updatePhysicsParticles(dt: number) {
     this.physicsFrameQueries = 0
     this.physicsFrameInteractions = 0
-    if (!this.simulationRunning || !this.physicsParticlePoints || !this.showParticles) return
-    const pos = this.physicsParticlePositions
-    const vel = this.physicsParticleVelocities
-    const col = this.physicsParticleColors
+    if (!this.simulationRunning || !this.#physicsParticlePoints || !this.showParticles) return
+    const pos = this.#physicsParticlePositions
+    const vel = this.#physicsParticleVelocities
+    const col = this.#physicsParticleColors
     const count = pos.length / 3
-    const camX = this.worldPosition.x
-    const camZ = this.worldPosition.z
+    const camX = this.#worldPosition.x
+    const camZ = this.#worldPosition.z
     const physicsKinds = new Set<WorldObjectKind>(['metalaw', 'gravity_well', 'entropy_sink', 'quantum_emitter', 'force_field'])
 
     for (let i = 0; i < count; i++) {
@@ -4444,8 +4640,8 @@ export class InfiniteWorldRenderer {
       vy += 0.25 * dt
 
       // Query only nearby physics objects through the chunk-local spatial index.
-      const worldX = px + this.worldAnchor.x
-      const worldZ = pz + this.worldAnchor.z
+      const worldX = px + this.#worldAnchor.x
+      const worldZ = pz + this.#worldAnchor.z
       this.physicsFrameQueries++
       const nearbyObjects = this.#objectSpatialIndex.queryRadius(worldX, py, worldZ, 160, physicsKinds)
       for (const obj of nearbyObjects) {
@@ -4531,15 +4727,15 @@ export class InfiniteWorldRenderer {
       vel[idx + 2] = vz
     }
 
-    const geo = this.physicsParticlePoints.geometry
+    const geo = this.#physicsParticlePoints.geometry
     geo.attributes.position.needsUpdate = true
     geo.attributes.color.needsUpdate = true
   }
 
   setShowParticles(visible: boolean) {
     this.showParticles = visible
-    if (this.physicsParticlePoints) {
-      this.physicsParticlePoints.visible = visible
+    if (this.#physicsParticlePoints) {
+      this.#physicsParticlePoints.visible = visible
     }
   }
 
@@ -4548,8 +4744,8 @@ export class InfiniteWorldRenderer {
   }
 
   private animatePhysicsObjects(dt: number) {
-    if (this.objectMeshes.size === 0) return
-    for (const entry of this.objectMeshes.values()) {
+    if (this.#objectMeshes.size === 0) return
+    for (const entry of this.#objectMeshes.values()) {
       const kind = entry.object.kind
       const group = entry.group
       if (kind === 'metalaw' && group.children.length >= 3) {
@@ -4635,8 +4831,8 @@ export class InfiniteWorldRenderer {
     return {
       ...this.runtimeDiagnostics.snapshot(
         this.getLoadedChunkCount(),
-        this.objectMeshes.size,
-        this.physicsParticlePositions.length / 3,
+        this.#objectMeshes.size,
+        this.#physicsParticlePositions.length / 3,
       ),
       pixelRatio: this.currentPixelRatio,
       maxPixelRatio: this.maxPixelRatio,
@@ -4661,7 +4857,7 @@ export class InfiniteWorldRenderer {
     this.decisionGraph.clear()
   }
 
-  getLoadedChunkCount() { return this.patches.size }
+  getLoadedChunkCount() { return this.#patches.size }
   getObjectCount() { return this.objects.size }
   getStorageKey() { return this.storageKey }
 }
