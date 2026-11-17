@@ -181,7 +181,7 @@ assert.deepEqual(firstWorld, {
   y: 7 + 104 * 0.1 - (-44) * 0.05,
   z: -44,
 }, '2D grid X/Y must map to absolute world X/Z before terrain height resolution')
-assert.equal(assets.get('creature-model')?.object.visible, false,
+assert.equal(assets.isAssetVisible('creature-model'), false,
   'the loaded source stays a hidden template')
 
 const snapshotBeforeMove = assets.snapshotPlacements()
