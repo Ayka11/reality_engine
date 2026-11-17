@@ -69,7 +69,7 @@ assert.match(authoritativeMutation, /this\.refreshTerrainPatches\(\)/,
   "the canonical authoritative mutation path must refresh the renderer");
 
 const terrainBuilder = methodBody("buildTerrainPatch");
-assert.match(terrainBuilder, /if\s*\(this\.materialMode\s*===\s*'field'\)[\s\S]*?this\.#fieldSampler\.sample\(/,
+assert.match(terrainBuilder, /if\s*\(this\.#materialMode\s*===\s*'field'\)[\s\S]*?this\.#fieldSampler\.sample\(/,
   "field visualization must sample the authoritative scientific field");
 assert.match(terrainBuilder, /const\s+density\s*=\s*Math\.max\(0,\s*Math\.min\(1,\s*field\.density\)\)/,
   "field visualization must derive vertex color from the sampled field");
@@ -160,13 +160,13 @@ assert.match(clearSavedWorldBody, /if\s*\(!cleared\)[\s\S]*?console\.warn/,
 
 const terrainPatchDisposer = methodBody("disposeTerrainPatchGroups");
 assert.match(terrainPatchDisposer, /group\.traverse/, "terrain patch disposer must inspect renderable materials before release");
-assert.match(terrainPatchDisposer, /this\.terrainMaterials\.delete\(material as THREE\.MeshStandardMaterial\)/, "terrain patch disposer must evict released materials from the terrain registry");
+assert.match(terrainPatchDisposer, /this\.#terrainMaterials\.delete\(material as THREE\.MeshStandardMaterial\)/, "terrain patch disposer must evict released materials from the terrain registry");
 assert.match(terrainPatchDisposer, /detachAndDisposeObjectGroups\(\s*this\.#scene,[\s\S]*?patches\.map\(patch => patch\.group\)/, "terrain patch disposer must detach and release patch groups through the shared resource disposer");
 
 const refresh = methodBody("refreshTerrainPatches");
 assert.match(refresh, /for\s*\(const\s*\[key,\s*patch\]\s*of\s*\[\.\.\.this.#patches\]\)/, "refresh must snapshot and visit every loaded patch");
 assert.match(refresh, /this\.disposeTerrainPatchGroups\(\s*\[\s*\{\s*key,\s*group:\s*patch\.group/, "refresh must dispose old patch resources through the shared terrain disposer");
-assert.match(refresh, /this\.buildTerrainPatch\(patch\.chunk,\s*patch\.lod\)/, "refresh must rebuild geometry from the current field");
+assert.match(refresh, /this\.#buildTerrainPatch\(patch\.chunk,\s*patch\.lod\)/, "refresh must rebuild geometry from the current field");
 assert.match(refresh, /this\.terrainEdgeLodSignature\(patch\.chunk\)/, "refresh must recompute edge LOD metadata");
 assert.match(refresh, /this\.#scene\.add\(group\)/, "rebuilt patches must be attached to the scene");
 
@@ -183,7 +183,7 @@ assert.match(bootstrap, /world\.setTerrainBrushSettings\(terrainBrushRadius, ter
   "terrain UI radius/strength must configure the renderer brush");
 assert.match(bootstrap, /world\.undoTerrainSculpt\(\)/, "terrain UI must expose geometric undo");
 assert.match(bootstrap, /world\.redoTerrainSculpt\(\)/, "terrain UI must expose geometric redo");
-assert.match(source, /if\s*\(this\.terrainBrushMode\)\s*\{[\s\S]*?this\.sculptTerrainAt\(point\.x, point\.z, this\.terrainBrushRadius, this\.terrainBrushStrength, this\.terrainBrushMode\)/,
+assert.match(source, /if\s*\(this\.#terrainBrushMode\)\s*\{[\s\S]*?this\.sculptTerrainAt\(point\.x, point\.z, this\.#terrainBrushRadius, this\.#terrainBrushStrength, this\.#terrainBrushMode\)/,
   "terrain pointer hits must commit geometry edits using configured brush settings");
 
 console.log("PASS: terrain geometry uses persisted deformation overlay with Undo/Redo and save checkpoints");
