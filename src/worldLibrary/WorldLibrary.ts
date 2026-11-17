@@ -65,16 +65,20 @@ export type WorldLibraryQuery = {
 };
 
 export class WorldLibrary {
-  private readonly entries = new Map<string, WorldLibraryEntry>();
+  #entries = new Map<string, WorldLibraryEntry>();
 
   constructor(entries: WorldLibraryEntry[] = []) {
     entries.forEach((entry) => this.register(entry));
+    Object.freeze(this);
   }
 
   register(entry: WorldLibraryEntry): WorldLibraryEntry {
-    if (!entry.id.trim()) throw new Error('World Library entry requires an id');
-    this.entries.set(entry.id, entry);
-    return entry;
+    if (!entry || typeof entry.id !== 'string' || !entry.id.trim()) {
+      throw new Error('World Library entry requires an id');
+    }
+    const stored = structuredClone(entry);
+    this.#entries.set(stored.id, stored);
+    return structuredClone(stored);
   }
 
   registerMany(entries: WorldLibraryEntry[]): number {
@@ -83,15 +87,16 @@ export class WorldLibrary {
   }
 
   get(id: string): WorldLibraryEntry | undefined {
-    return this.entries.get(id);
+    const entry = this.#entries.get(id);
+    return entry ? structuredClone(entry) : undefined;
   }
 
   has(id: string): boolean {
-    return this.entries.has(id);
+    return this.#entries.has(id);
   }
 
   all(): WorldLibraryEntry[] {
-    return [...this.entries.values()];
+    return structuredClone([...this.#entries.values()]);
   }
 
   query(query: WorldLibraryQuery = {}): WorldLibraryEntry[] {
@@ -126,7 +131,7 @@ export class WorldLibrary {
     ) as Record<WorldLibraryCategory, number>;
 
     return {
-      total: this.entries.size,
+      total: this.#entries.size,
       categories: byCategory,
     };
   }
