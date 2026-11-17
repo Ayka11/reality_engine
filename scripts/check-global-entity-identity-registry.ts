@@ -1,5 +1,24 @@
 import assert from "node:assert/strict";
 import { GlobalEntityIdentityRegistry } from "../src/entity/GlobalEntityIdentityRegistry";
+import { EntityDomainInventoryAuthority } from "../src/infinity/EntityDomainInventory";
+
+const inventoryAuthority = new EntityDomainInventoryAuthority("active-world");
+assert.equal("current" in inventoryAuthority, false,
+  "entity domain inventory authority must not expose its revision snapshot through a TypeScript-private field");
+assert.equal(Reflect.set(inventoryAuthority, "current", {}), false,
+  "entity domain inventory authority must reject ordinary JavaScript shadow properties");
+assert.throws(() => Object.defineProperty(inventoryAuthority, "current", { value: {} }), TypeError);
+const initialInventory = inventoryAuthority.snapshot();
+const updatedInventory = inventoryAuthority.update({
+  completeness: "complete",
+  entityIds: [1],
+  occupiedCells: [4, 5],
+  entityCellOwnership: [{ entityId: 1, cells: [4, 5] }],
+});
+assert.equal(initialInventory.revision, 0);
+assert.equal(updatedInventory.revision, 1,
+  "inventory authority must continue to update its true private slot after its instance is frozen");
+assert.ok(Object.isFrozen(inventoryAuthority.snapshot()));
 
 const registry = new GlobalEntityIdentityRegistry();
 assert.equal("domains" in registry, false,
