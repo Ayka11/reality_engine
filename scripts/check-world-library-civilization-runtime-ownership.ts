@@ -391,6 +391,13 @@ try {
     "WorldLibrary register/get/all must detach nested catalogue records");
   assert.deepEqual(library.get("ownership-test-entry")?.conditions?.biome, ["temperate"]);
   assert.deepEqual(library.get("ownership-test-entry")?.produces, ["resource.water"]);
+  const libraryBeforeInvalidBatch = library.all();
+  assert.throws(() => library.registerMany([
+    { ...libraryInput, id: "valid-before-invalid" },
+    { ...libraryInput, id: " " },
+  ]), /requires an id/);
+  assert.deepEqual(library.all(), libraryBeforeInvalidBatch,
+    "WorldLibrary registerMany must not partially publish a batch when one entry is invalid");
 
   const ruleGraph = new WorldRuleGraph();
   assert.equal("rules" in ruleGraph, false,
@@ -411,6 +418,14 @@ try {
   ruleAll[0]!.conditions!.season = "all-mutation";
   assert.equal(ruleGraph.get("ownership-test-rule")?.conditions?.season, "summer",
     "WorldRuleGraph add/get/all must detach nested rule records");
+  const rulesBeforeInvalidBatch = ruleGraph.all();
+  assert.throws(() => ruleGraph.addMany([
+    { ...ruleInput, id: "valid-before-invalid" },
+    { ...ruleInput, id: "invalid-relation", relation: "invalid" as never },
+  ]), /relation is not supported/);
+  assert.deepEqual(ruleGraph.all(), rulesBeforeInvalidBatch,
+    "WorldRuleGraph addMany must not partially publish a batch when one rule is invalid");
+  assert.throws(() => ruleGraph.add({ ...ruleInput, weight: Number.NaN }), /weight must be finite/);
 
   const runtime = new CivilizationRuntime();
 
