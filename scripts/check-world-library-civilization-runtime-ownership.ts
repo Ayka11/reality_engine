@@ -8,6 +8,7 @@ import { worldRuleGraph } from "../src/worldLibrary/registry";
 import { WorldViewContract } from "../src/infinity/WorldViewContract";
 import { InfiniteChunkManager } from "../src/infinity/ChunkManager";
 import { WorldGenerator } from "../src/infinity/WorldGenerator";
+import { FieldModulatedPhysics } from "../src/infinity/FieldModulatedPhysics";
 import { DecisionGraph } from "../src/infinity/DecisionGraph";
 import { PhysicsInteractionLog } from "../src/infinity/PhysicsInteractionLog";
 import { RuntimeDiagnostics } from "../src/infinity/RuntimeDiagnostics";
@@ -287,6 +288,21 @@ try {
   assert.equal("applyMutation" in legacyAdapter, false);
   assert.equal(Reflect.set(legacyAdapter, "applyMutation", () => null), false);
   assert.ok(Object.isFrozen(legacyAdapter));
+
+  const suppliedPhysicsParameters = {
+    gravity: 48,
+    entropyDamping: 0.82,
+    quantumLift: 35,
+    forcePush: 40,
+    metaLawOrbit: 22,
+  };
+  const fieldPhysics = new FieldModulatedPhysics(suppliedPhysicsParameters);
+  suppliedPhysicsParameters.gravity = 999;
+  assert.equal(fieldPhysics.parameters.gravity, 48,
+    "field physics must detach caller-owned configuration");
+  assert.equal(Object.isFrozen(fieldPhysics), true);
+  assert.equal(Reflect.set(fieldPhysics, "parameters", suppliedPhysicsParameters), false,
+    "browser code must not replace the active field physics parameter snapshot");
 
   const immutableGenerator = new WorldGenerator("immutable-generator-seed");
   const generatorSampleBefore = immutableGenerator.sampleHeight(137, -91);
