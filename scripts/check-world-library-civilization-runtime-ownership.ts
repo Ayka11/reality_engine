@@ -183,6 +183,14 @@ try {
   productionAllTimelines[0]!.details = "tampered-all-timelines";
   assert.notEqual(productionRuntime.allTimelines()[0]!.details, "tampered-all-timelines");
 
+  const immutableGenerator = new WorldGenerator("immutable-generator-seed");
+  const generatorSampleBefore = immutableGenerator.sampleHeight(137, -91);
+  assert.equal("seed" in immutableGenerator, false,
+    "WorldGenerator must not expose its authoritative seed as a writable data property");
+  assert.equal(Reflect.set(immutableGenerator, "seed", "tampered-seed"), false);
+  assert.equal(immutableGenerator.sampleHeight(137, -91), generatorSampleBefore,
+    "public generator metadata must not be mutable through browser JavaScript");
+
   const chunkManager = new InfiniteChunkManager(new WorldGenerator("chunk-ownership"), {
     radius: 0,
     verticalRadius: 0,
