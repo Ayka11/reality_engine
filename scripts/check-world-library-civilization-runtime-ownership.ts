@@ -146,6 +146,7 @@ try {
   const productionRuntime = new ProductionInfrastructureRuntime();
   const productionSourceRuntime = new CivilizationRuntime();
   const productionInput = productionSourceRuntime.evaluate("production-ownership", "village");
+  productionInput.type = "agricultural";
   const productionInitialPopulation = productionInput.settlement.population;
   const productionSnapshot = productionRuntime.evaluate(productionInput);
   productionInput.settlement.population = -1;
@@ -185,6 +186,20 @@ try {
     moisture: 0.5,
   }), /finite numeric inputs/);
   assert.throws(() => productionRuntime.tick("production-ownership", -1), /finite and non-negative/);
+
+  worldResourceEconomy.restore([
+    { semanticEntryId: "resource.wood", amount: 100, capacity: 200, regeneration: 0, quality: 1, accessibility: 1 },
+    { semanticEntryId: "resource.water", amount: 10, capacity: 200, regeneration: 0, quality: 1, accessibility: 1 },
+  ]);
+  const productionTick = productionRuntime.tick("production-ownership", 1)!;
+  assert.ok((productionTick.produced["resource.water"] ?? 0) > 0,
+    "production infrastructure must route outputs through the controlled resource produce API");
+  assert.ok((worldResourceEconomy.get("resource.water")?.amount ?? 0) > 10,
+    "production tick must increase the authoritative resource stock after a detached read API is used");
+  const productionPopulationAfterTick = productionRuntime.get("production-ownership")!.civilization.settlement.population;
+  productionTick.civilization.settlement.population = -100;
+  assert.equal(productionRuntime.get("production-ownership")!.civilization.settlement.population, productionPopulationAfterTick,
+    "production tick results must remain detached from authoritative state");
 
   const productionTimeline = productionRuntime.timeline("production-ownership");
   productionTimeline[0]!.details = "tampered-timeline";
