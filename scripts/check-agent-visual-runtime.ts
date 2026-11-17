@@ -46,7 +46,7 @@ const load = assets.load('creature-model', 'https://assets.example.test/creature
 assert.equal(requests.length, 1)
 requests[0].onLoad({ scene: root, animations: [idleClip, walkClip, runClip] })
 await load
-assert.deepEqual(assets.get('creature-model')?.animations.map(clip => clip.name),
+assert.deepEqual(assets.getAnimationNames('creature-model'),
   ['Idle', 'Walk Cycle', 'Run'])
 
 const persistent = assets.placeInstance('persistent-tree:1', 'fauna.creature', {
