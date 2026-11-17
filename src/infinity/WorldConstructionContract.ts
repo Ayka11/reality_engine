@@ -7,15 +7,16 @@ export type ConstructionDecision = {
 }
 
 export class WorldConstructionContract {
-  private readonly structural = new Set<WorldObjectKind>(['building', 'road', 'bridge', 'water'])
+  readonly #structural = new Set<WorldObjectKind>(['building', 'road', 'bridge', 'water'])
   readonly #decisions: WorldDecisionLayer
 
   constructor(decisions: WorldDecisionLayer) {
     this.#decisions = decisions
+    Object.freeze(this)
   }
 
   authorize(kind: WorldObjectKind, x: number, z: number): ConstructionDecision {
-    if (!this.structural.has(kind)) return { allowed: true, decision: null }
+    if (!this.#structural.has(kind)) return { allowed: true, decision: null }
     const decision = this.#decisions.buildZoneCost(x, z)
     return { allowed: decision.buildability.score >= 0.2 && decision.laws.penalty < 0.25, decision }
   }
