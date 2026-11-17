@@ -15,6 +15,7 @@ import { RuntimeDiagnostics } from "../src/infinity/RuntimeDiagnostics";
 import { ExperimentRunner } from "../src/infinity/ExperimentRunner";
 import { ExperimentCatalog } from "../src/infinity/ExperimentCatalog";
 import { WorldConstructionContract } from "../src/infinity/WorldConstructionContract";
+import { WorldDecisionLayer } from "../src/infinity/WorldDecisionLayer";
 import { LawPhysicsContract } from "../src/infinity/LawPhysicsContract";
 import { LegacySculptRuntimeAdapter } from "../src/infinity/LegacySculptRuntimeAdapter";
 
@@ -263,6 +264,24 @@ try {
   assert.equal(experimentCatalog.get("ownership-test")!.protocol.world.seed, "ownership-seed",
     "experiment catalogue reads must remain detached");
   assert.ok(Object.isFrozen(experimentCatalog));
+
+  const decisionSampler = {
+    surfaceProvider: {
+      waterLevel: null,
+      referenceBuildElevation: 0,
+      seed: "decision-ownership-seed",
+      sampleSurface: () => ({ height: 0, temperature: 0, moisture: 0.5, biome: "grassland", waterDepth: 0 }),
+    },
+    sample: () => ({ energy: 1, density: 0.1, information: 1, entropy: 0.01, temperature: 0, biology: 0.5, material: 0 }),
+    sampleWorld: () => ({ x: 0, y: 0, z: 0, energy: 1, density: 0.1, information: 1, entropy: 0.01, temperature: 0, biology: 0.5, material: 0, height: 0, moisture: 0.5, biome: "grassland", waterDepth: 0 }),
+  };
+  const decisionLayer = new WorldDecisionLayer(decisionSampler as any, undefined, () => ({ processes: ["gravity", "density"] }), () => 0);
+  assert.equal("terrainHeight" in decisionLayer, false);
+  assert.equal("lawProvider" in decisionLayer, false);
+  assert.equal(Reflect.set(decisionLayer, "terrainHeight", () => 999), false);
+  assert.ok(Number.isFinite(decisionLayer.buildZoneCost(0, 0).cost),
+    "decision layer must remain operational after its callback state is hidden and instance frozen");
+  assert.ok(Object.isFrozen(decisionLayer));
 
   const constructionContract = new WorldConstructionContract({
     buildZoneCost: () => ({
