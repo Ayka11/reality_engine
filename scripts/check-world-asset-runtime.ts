@@ -1694,7 +1694,7 @@ assert.equal(removalWithoutInstancesNotifications, 0,
 
 const rendererRemovalSource = rendererSource.match(/removeExternalAsset\(assetId: string\) \{([\s\S]*?)\n  \}/)?.[1]
 assert.ok(rendererRemovalSource, 'renderer must expose external asset removal bookkeeping')
-assert.match(rendererRemovalSource, /if \(pendingRemoved\) this\.scheduleSave\(\)/,
+assert.match(rendererRemovalSource, /if \(pendingRemoved\) this\.#scheduleSave\(\)/,
   'removing pending placements must schedule autosave even when the source asset has no runtime instances')
 const pendingAutosaveIndex = rendererRemovalSource.indexOf('if (pendingRemoved) this.scheduleSave()')
 const runtimeRemovalIndex = rendererRemovalSource.indexOf('this.#worldAssetRuntime.remove(assetId)')
@@ -1729,16 +1729,16 @@ assert.ok(externalLoadSource, 'renderer must expose external asset load and plac
 assert.match(externalLoadSource, /materialized\.errors\.length/,
   'renderer must report per-descriptor restoration failures without dropping pending descriptors')
 
-assert.match(rendererSource, /private groundExternalAssetInstances\(\s*instances: THREE\.Object3D\[\],\s*createdInstanceIds: readonly string\[\]/,
+assert.match(rendererSource, / #groundExternalAssetInstances\(\s*instances: THREE\.Object3D\[\],\s*createdInstanceIds: readonly string\[\]/,
   'renderer grounding must receive the exact IDs created by the current scatter call')
-assert.equal((rendererSource.match(/this\.groundExternalAssetInstances\(scatter\.instances, scatter\.createdInstanceIds\)/g) ?? []).length, 3,
+assert.equal((rendererSource.match(/this\.#groundExternalAssetInstances\(scatter\.instances, scatter\.createdInstanceIds\)/g) ?? []).length, 3,
   'biome population, world composition and direct scatter must pass transaction-owned IDs to grounding')
 assert.doesNotMatch(rendererSource, /const (?:worldX|x) = instance\.position\.x/,
   'renderer must not treat rebased local instance X as an absolute world coordinate')
-const groundingHelperStart = rendererSource.indexOf('  private groundExternalAssetInstances(')
+const groundingHelperStart = rendererSource.indexOf('   #groundExternalAssetInstances(')
 const groundingHelperEnd = rendererSource.indexOf('  async loadExternalAsset(', groundingHelperStart)
 const groundingHelper = rendererSource.slice(groundingHelperStart, groundingHelperEnd)
-assert.match(groundingHelper, /groundWorldAssetInstances\([\s\S]*createdInstanceIds[\s\S]*this\.sampleTerrainHeight/,
+assert.match(groundingHelper, /groundWorldAssetInstances\([\s\S]*createdInstanceIds[\s\S]*this\.#sampleTerrainHeight/,
   'renderer must delegate transactional grounding with the current scatter ownership set')
 assert.match(groundingHelper, /AggregateError|groundWorldAssetInstances/,
   'grounding rollback failures must be preserved alongside the original error')
