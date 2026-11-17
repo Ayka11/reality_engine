@@ -345,6 +345,9 @@ try {
   assert.equal(Reflect.set(fieldPhysics, "parameters", suppliedPhysicsParameters), false,
     "browser code must not replace the active field physics parameter snapshot");
 
+  assert.throws(() => new WorldGenerator("   "), /non-empty string/);
+  assert.throws(() => new WorldGenerator("invalid-bounds", Number.NaN, 52), /elevation bounds must be finite/);
+  assert.throws(() => new WorldGenerator("invalid-order", 52, 16), /maxElevation above seaLevel/);
   const immutableGenerator = new WorldGenerator("immutable-generator-seed");
   const generatorSampleBefore = immutableGenerator.sampleHeight(137, -91);
   assert.equal(Object.hasOwn(immutableGenerator, "seed"), false,
