@@ -112,15 +112,15 @@ export class InfiniteWorldRenderer {
   private persistenceRecoveryBlocked = false
   private startupPersistenceFailures: string[] = []
   private storageKey: string
-  private readonly pointerHandler: (e: PointerEvent) => void
-  private readonly pointerUpHandler: (e: PointerEvent) => void
-  private readonly pointerMoveHandler: (e: PointerEvent) => void
+  readonly #pointerHandler!: (e: PointerEvent) => void
+  readonly #pointerUpHandler!: (e: PointerEvent) => void
+  readonly #pointerMoveHandler!: (e: PointerEvent) => void
   private readonly contextMenuHandler: (e: MouseEvent) => void
   private readonly keyDownHandler: (e: KeyboardEvent) => void
   private readonly keyUpHandler: (e: KeyboardEvent) => void
-  private pointerDownX = 0
-  private pointerDownY = 0
-  private pointerDownTime = 0
+  #pointerDownX = 0
+  #pointerDownY = 0
+  #pointerDownTime = 0
   readonly #transformControls: TransformControls
   private gizmoBefore: WorldObject | null = null
   private transformDragging = false
@@ -134,7 +134,7 @@ export class InfiniteWorldRenderer {
   )
   readonly #terrainGroup = new THREE.Group()
   private analyticalOverlayMode: 'suitability' | 'flood' | 'slope' | null = null
-  #analyticalOverlayMesh: THREE.Points
+  #analyticalOverlayMesh: THREE.Points | undefined = undefined
   private enabled = true
   private disposed = false
   private currentPixelRatio = 1
