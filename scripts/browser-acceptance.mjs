@@ -1149,6 +1149,21 @@ try {
     const originalChunkX = first?.chunk?.cx;
     if (first?.chunk) first.chunk.cx = 999999;
     return {
+      generatorReadOnly: (() => {
+        const descriptor = Object.getOwnPropertyDescriptor(world, "generator");
+        return descriptor?.configurable === false && typeof descriptor.get === "function" &&
+          descriptor.set === undefined && Reflect.set(world, "generator", null) === false;
+      })(),
+      chunksReadOnly: (() => {
+        const descriptor = Object.getOwnPropertyDescriptor(world, "chunks");
+        return descriptor?.configurable === false && typeof descriptor.get === "function" &&
+          descriptor.set === undefined && Reflect.set(world, "chunks", null) === false;
+      })(),
+      persistenceReadOnly: (() => {
+        const descriptor = Object.getOwnPropertyDescriptor(world, "persistence");
+        return descriptor?.configurable === false && typeof descriptor.get === "function" &&
+          descriptor.set === undefined && Reflect.set(world, "persistence", null) === false;
+      })(),
       patchesHidden: world?.patches === undefined,
       objectMeshesHidden: world?.objectMeshes === undefined,
       waterMeshesHidden: world?.waterMeshes === undefined,
