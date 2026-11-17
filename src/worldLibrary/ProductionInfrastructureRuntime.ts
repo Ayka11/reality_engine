@@ -135,9 +135,7 @@ export class ProductionInfrastructureRuntime {
       if (node.input) consumed[node.input] = (consumed[node.input] ?? 0) + inputAmount
       const adaptationMultiplier = current.adaptation.strategy === 'technology' ? 1 + current.adaptation.effectiveness * 0.2 : current.adaptation.strategy === 'conservation' ? 1 - current.adaptation.effectiveness * 0.15 : 1
       const amount = node.rate * efficiency * current.productionModifier * adaptationMultiplier * delta
-      const resource = worldResourceEconomy.get(node.output)
-      if (resource) {
-        resource.amount = Math.min(resource.capacity, resource.amount + amount)
+      if (worldResourceEconomy.produce(node.output, amount)) {
         produced[node.output] = (produced[node.output] ?? 0) + amount
       }
     }
