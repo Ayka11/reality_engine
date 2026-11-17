@@ -705,6 +705,25 @@ export class InfiniteWorldRenderer {
     this.#scene.background = new THREE.Color(0x9bb8d6)
     this.#scene.fog = new THREE.Fog(0x9bb8d6, 180, 900)
     this.initPhysicsParticleSystem(700)
+
+    // Pin subsystem references while leaving their supported methods usable.
+    // In particular, browser scripts may instrument renderer.render or camera
+    // controls, but cannot replace the authoritative subsystem instances.
+    Object.defineProperties(this, {
+      renderer: { configurable: false, enumerable: true, writable: false, value: this.renderer },
+      camera: { configurable: false, enumerable: true, writable: false, value: this.camera },
+      controls: { configurable: false, enumerable: true, writable: false, value: this.controls },
+      legacySculptRuntimeAdapter: { configurable: false, enumerable: true, writable: false, value: this.legacySculptRuntimeAdapter },
+      decisionLayer: { configurable: false, enumerable: true, writable: false, value: this.decisionLayer },
+      constructionContract: { configurable: false, enumerable: true, writable: false, value: this.constructionContract },
+      decisionGraph: { configurable: false, enumerable: true, writable: false, value: this.decisionGraph },
+      fieldPhysics: { configurable: false, enumerable: true, writable: false, value: this.fieldPhysics },
+      lawPhysicsContract: { configurable: false, enumerable: true, writable: false, value: this.lawPhysicsContract },
+      physicsInteractionLog: { configurable: false, enumerable: true, writable: false, value: this.physicsInteractionLog },
+      runtimeDiagnostics: { configurable: false, enumerable: true, writable: false, value: this.runtimeDiagnostics },
+      experimentRunner: { configurable: false, enumerable: true, writable: false, value: this.experimentRunner },
+      experimentCatalog: { configurable: false, enumerable: true, writable: false, value: this.experimentCatalog },
+    })
   }
 
   private persistTerrainDeformationState() {
