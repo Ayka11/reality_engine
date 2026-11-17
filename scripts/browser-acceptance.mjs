@@ -1165,7 +1165,7 @@ try {
           descriptor.set === undefined && Reflect.set(world, "persistence", null) === false;
       })(),
       coreSubsystemReferencesPinned: [
-        "renderer", "camera", "controls", "legacySculptRuntimeAdapter",
+        "renderer", "camera", "controls", "objects", "legacySculptRuntimeAdapter",
         "decisionLayer", "constructionContract", "decisionGraph", "fieldPhysics",
         "lawPhysicsContract", "physicsInteractionLog", "runtimeDiagnostics",
         "experimentRunner", "experimentCatalog", "objects", "worldAssetRuntime",
@@ -1220,6 +1220,10 @@ try {
           (typeof descriptor.get === "function"
             ? descriptor.set === undefined
             : descriptor.writable === false);
+      }),
+      coreServiceGettersPinned: ["generator", "chunks", "persistence"].every(key => {
+        const descriptor = Object.getOwnPropertyDescriptor(world, key);
+        return descriptor?.configurable === false && typeof descriptor?.get === "function" && descriptor?.set === undefined;
       }),
       hasParticleSnapshot: typeof world?.getPhysicsParticlePositionSnapshot === "function",
       hasPatchSnapshots: typeof world?.getTerrainPatchSnapshots === "function",
