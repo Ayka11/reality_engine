@@ -1834,7 +1834,7 @@ win['debateAgentPlan'] = async () => {
 
 // Assign CrewAI-style roles — each agent gets its own role plan
 win['assignAgentRoles'] = () => {
-  agentPlanner.assignRoles(agentSystem.agents)
+  agentSystem.applyRolePlans(agentPlanner.assignRoles(agentSystem.agents))
   const planEl = document.getElementById('agentPlanText')
   const roles  = agentPlanner.getRoleNames().join(' · ')
   if (planEl) planEl.textContent = `Roles: ${roles}`
