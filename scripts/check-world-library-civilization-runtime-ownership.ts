@@ -4,6 +4,7 @@ import { ProductionInfrastructureRuntime } from "../src/worldLibrary/ProductionI
 import { WorldResourceEconomy, worldResourceEconomy } from "../src/worldLibrary/WorldResourceEconomy";
 import { WorldLibrary, type WorldLibraryEntry } from "../src/worldLibrary/WorldLibrary";
 import { WorldRuleGraph, type WorldRule } from "../src/worldLibrary/WorldRuleGraph";
+import { worldRuleGraph } from "../src/worldLibrary/registry";
 
 const resourcesBefore = worldResourceEconomy.snapshot();
 try {
@@ -79,6 +80,33 @@ try {
   assert.equal(economy.produce("resource.metal", -1), false);
   assert.throws(() => economy.tick(-1), /finite and non-negative/);
   assert.throws(() => economy.seedFromBiome("temperate-forest", Number.NaN), /finite non-negative multiplier/);
+  assert.throws(() => economy.capability("resource.water", Number.NaN), /finite non-negative amount/);
+
+  economy.set({
+    semanticEntryId: "resource.iron",
+    amount: 12,
+    capacity: 24,
+    regeneration: 0,
+    quality: 1,
+    accessibility: 1,
+  });
+  assert.equal(economy.get("resource.metal")?.amount, 12,
+    "setting an alias must update the canonical resource rather than create an unreachable duplicate");
+
+  const beforeInvalidSeed = economy.snapshot();
+  worldRuleGraph.add({
+    id: "ownership-test-invalid-resource-seed",
+    from: "biome.ownership-test-invalid-seed",
+    relation: "produces",
+    to: "resource.invalid-seed",
+    weight: Number.NaN,
+  });
+  assert.throws(
+    () => economy.seedFromBiome("biome.ownership-test-invalid-seed"),
+    /stable ID and valid finite resource bounds/,
+  );
+  assert.deepEqual(economy.snapshot(), beforeInvalidSeed,
+    "a malformed biome resource seed must not partially publish inventory changes");
 
   const beforeInvalidResourceRestore = economy.snapshot();
   assert.throws(() => economy.restore([
