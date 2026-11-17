@@ -69,6 +69,11 @@ try {
   assert.equal(economy.get("resource.metal")?.amount, 7);
   assert.equal(economy.consume("resource.metal", Number.NaN), false);
   assert.equal(economy.consume("resource.metal", -2), false);
+  assert.equal(economy.produce("resource.iron", 4), true,
+    "produce must resolve canonical aliases and mutate only through the economy API");
+  assert.equal(economy.get("resource.metal")?.amount, 11);
+  assert.equal(economy.produce("resource.metal", Number.NaN), false);
+  assert.equal(economy.produce("resource.metal", -1), false);
   assert.throws(() => economy.tick(-1), /finite and non-negative/);
   assert.throws(() => economy.seedFromBiome("temperate-forest", Number.NaN), /finite non-negative multiplier/);
 
