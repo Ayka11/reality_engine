@@ -23,9 +23,12 @@ export class WorldResourceEconomy {
     Object.freeze(this)
   }
 
-  private canonicalId(id: string) {
-    if (id === 'resource.iron' && this.#resources.has('resource.metal')) return 'resource.metal'
-    if (id === 'resource.metal' && this.#resources.has('resource.iron')) return 'resource.iron'
+  private canonicalId(
+    id: string,
+    resources: ReadonlyMap<string, ResourceState> = this.#resources,
+  ): string {
+    if (id === 'resource.iron' && resources.has('resource.metal')) return 'resource.metal'
+    if (id === 'resource.metal' && resources.has('resource.iron')) return 'resource.iron'
     return id
   }
 
@@ -34,7 +37,9 @@ export class WorldResourceEconomy {
       throw new TypeError('Biome seeding requires a stable biome ID and a finite non-negative multiplier')
     }
     const produced = worldRuleGraph.query({ from: biomeId, relation: 'produces' })
+    const next = new Map(this.#resources)
     const states: ResourceState[] = []
+    const seededIds = new Set<string>()
     for (const rule of produced) {
       const state: ResourceState = {
         semanticEntryId: rule.to,
@@ -44,17 +49,27 @@ export class WorldResourceEconomy {
         quality: Math.max(0.25, Math.min(1, 0.55 + (rule.weight ?? 1) * 0.12)),
         accessibility: Math.max(0.2, Math.min(1, 0.5 + (rule.weight ?? 1) * 0.1)),
       }
-      this.#resources.set(state.semanticEntryId, { ...state })
-      states.push({ ...state })
+      this.assertValidState(state)
+      const canonicalId = this.canonicalId(state.semanticEntryId, next)
+      if (seededIds.has(canonicalId)) {
+        throw new Error(`Duplicate produced resource ID for biome ${biomeId}: ${canonicalId}`)
+      }
+      seededIds.add(canonicalId)
+      const stored = { ...state, semanticEntryId: canonicalId }
+      next.set(canonicalId, stored)
+      states.push({ ...stored })
     }
+    // Publish the complete candidate inventory only after every rule passed.
+    this.#resources = next
     return states
   }
 
   /** Store a detached resource record and return a detached write result. */
   set(state: ResourceState): ResourceState {
     this.assertValidState(state)
-    const stored = { ...state }
-    this.#resources.set(stored.semanticEntryId, stored)
+    const canonicalId = this.canonicalId(state.semanticEntryId)
+    const stored = { ...state, semanticEntryId: canonicalId }
+    this.#resources.set(canonicalId, stored)
     return { ...stored }
   }
 
@@ -80,10 +95,11 @@ export class WorldResourceEconomy {
     const next = new Map<string, ResourceState>()
     for (const resource of snapshot) {
       this.assertValidState(resource)
-      if (next.has(resource.semanticEntryId)) {
+      const canonicalId = this.canonicalId(resource.semanticEntryId, next)
+      if (next.has(canonicalId)) {
         throw new Error(`Duplicate world resource ID: ${resource.semanticEntryId}`)
       }
-      next.set(resource.semanticEntryId, { ...resource })
+      next.set(canonicalId, { ...resource, semanticEntryId: canonicalId })
     }
     // Publish only after the entire candidate inventory has been validated.
     this.#resources = next
@@ -92,9 +108,13 @@ export class WorldResourceEconomy {
 
 
   capability(id: string, requiredAmount: number): ResourceCapability {
+    if (typeof id !== 'string' || !id.trim() ||
+        !Number.isFinite(requiredAmount) || requiredAmount < 0) {
+      throw new TypeError('Resource capability requires a stable ID and a finite non-negative amount')
+    }
     const resource = this.#resources.get(this.canonicalId(id))
     const effective = resource ? resource.amount * resource.quality * resource.accessibility : 0
-    const score = requiredAmount <= 0 ? 1 : Math.max(0, Math.min(1, effective / requiredAmount))
+    const score = requiredAmount === 0 ? 1 : Math.max(0, Math.min(1, effective / requiredAmount))
     return { semanticEntryId: id, requiredAmount, available: score >= 1, score }
   }
 
