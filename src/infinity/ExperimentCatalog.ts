@@ -5,12 +5,14 @@ function cloneExperiment(snapshot: ExperimentSnapshot): ExperimentSnapshot {
 }
 
 export class ExperimentCatalog {
-  private snapshots = new Map<string, ExperimentSnapshot>()
+  #snapshots = new Map<string, ExperimentSnapshot>()
+
+  constructor() { Object.freeze(this) }
 
   add(snapshot: ExperimentSnapshot) {
     const id = snapshot.protocol.experimentId
     const committed = cloneExperiment(snapshot)
-    this.snapshots.set(id, committed)
+    this.#snapshots.set(id, committed)
     return cloneExperiment(committed)
   }
 
@@ -20,17 +22,17 @@ export class ExperimentCatalog {
   }
 
   get(experimentId: string) {
-    const snapshot = this.snapshots.get(experimentId)
+    const snapshot = this.#snapshots.get(experimentId)
     return snapshot ? cloneExperiment(snapshot) : undefined
   }
 
   getByFingerprint(fingerprint: string) {
-    const snapshot = [...this.snapshots.values()].find(snapshot => snapshot.fingerprint === fingerprint)
+    const snapshot = [...this.#snapshots.values()].find(snapshot => snapshot.fingerprint === fingerprint)
     return snapshot ? cloneExperiment(snapshot) : undefined
   }
 
   list() {
-    return [...this.snapshots.values()]
+    return [...this.#snapshots.values()]
       .sort((a, b) => a.startedAt - b.startedAt)
       .map(cloneExperiment)
   }
@@ -44,15 +46,15 @@ export class ExperimentCatalog {
   }
 
   remove(experimentId: string) {
-    return this.snapshots.delete(experimentId)
+    return this.#snapshots.delete(experimentId)
   }
 
   clear() {
-    this.snapshots.clear()
+    this.#snapshots.clear()
   }
 
   get size() {
-    return this.snapshots.size
+    return this.#snapshots.size
   }
 
   snapshot() {
