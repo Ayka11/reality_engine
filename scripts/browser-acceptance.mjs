@@ -1130,11 +1130,11 @@ try {
       nonConfigurable: descriptor?.configurable === false,
       hasSafeSnapshot: typeof runtime?.snapshotPlacements === "function",
       hasSafeTransform: typeof runtime?.setInstanceWorldTransform === "function",
-      exposesPlaceInstance: typeof runtime?.placeInstance === "function",
+      hasBooleanPlace: typeof runtime?.placeInstance === "function",
       exposesScatterSemantic: typeof runtime?.scatterSemantic === "function",
       exposesScatterSemanticWithResult: typeof runtime?.scatterSemanticWithResult === "function",
       exposesLoad: typeof runtime?.load === "function",
-      exposesRemoveInstance: typeof runtime?.removeInstance === "function",
+      hasSafeRemove: typeof runtime?.removeInstance === "function",
       exposesClear: typeof runtime?.clear === "function",
     };
   });
@@ -1144,11 +1144,11 @@ try {
       !publicRuntimeContract.nonConfigurable ||
       !publicRuntimeContract.hasSafeSnapshot ||
       !publicRuntimeContract.hasSafeTransform ||
-      publicRuntimeContract.exposesPlaceInstance ||
+      !publicRuntimeContract.hasBooleanPlace ||
       publicRuntimeContract.exposesScatterSemantic ||
       publicRuntimeContract.exposesScatterSemanticWithResult ||
       publicRuntimeContract.exposesLoad ||
-      publicRuntimeContract.exposesRemoveInstance ||
+      !publicRuntimeContract.hasSafeRemove ||
       publicRuntimeContract.exposesClear) {
     throw new Error("Browser-facing world asset runtime must be a frozen, restricted facade: " +
       JSON.stringify(publicRuntimeContract));
