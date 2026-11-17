@@ -58,6 +58,10 @@ const DEFAULTS: AgentGenome = {
 }
 
 const MEM_SIZE = 48
+const MAX_AGENTS = 200
+const AGENT_GENOME_FIELDS = new Set<keyof AgentGenome>([
+  'seekEnergyW', 'seekInfoW', 'fleeEntropyW', 'bioW', 'exploreW', 'reprodThresh', 'maxAge',
+])
 let _nextId  = 0
 let _nextCiv = 1
 
@@ -138,8 +142,37 @@ export class AgentSystem {
   // ── Spawn ───────────────────────────────────────────────────────────────
 
   spawn(cx: number, cy: number, n: number, baseGenome?: Partial<AgentGenome>): void {
+    if (!Number.isFinite(cx) || !Number.isFinite(cy)) {
+      throw new RangeError('Agent spawn coordinates must be finite')
+    }
+    if (!Number.isSafeInteger(n) || n < 0 || n > MAX_AGENTS - this.#agents.length) {
+      throw new RangeError(`Agent spawn count must be an integer between 0 and ${MAX_AGENTS - this.#agents.length}`)
+    }
+    if (n === 0) return
+    if (baseGenome !== undefined && (!baseGenome || typeof baseGenome !== 'object' || Array.isArray(baseGenome))) {
+      throw new TypeError('Agent base genome must be a record')
+    }
+    const base: AgentGenome = { ...DEFAULTS }
+    for (const [rawKey, value] of Object.entries(baseGenome ?? {})) {
+      if (!AGENT_GENOME_FIELDS.has(rawKey as keyof AgentGenome)) {
+        throw new TypeError(`Unsupported agent genome field: ${rawKey}`)
+      }
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw new TypeError(`Agent genome field ${rawKey} must be finite`)
+      }
+      const key = rawKey as keyof AgentGenome
+      if (key === 'reprodThresh' && (value < 0.3 || value > 0.95)) {
+        throw new RangeError('Agent reproduction threshold must be between 0.3 and 0.95')
+      }
+      if (key === 'maxAge' && (value < 150 || value > 1_000_000)) {
+        throw new RangeError('Agent maxAge must be between 150 and 1000000')
+      }
+      if (key !== 'reprodThresh' && key !== 'maxAge' && (value < 0 || value > 1)) {
+        throw new RangeError(`Agent genome weight ${rawKey} must be between 0 and 1`)
+      }
+      base[key] = value
+    }
     const W = 36, H = 28  // fallback; overridden by step() args
-    const base: AgentGenome = { ...DEFAULTS, ...baseGenome }
     const civId = _nextCiv++
     for (let i = 0; i < n; i++) {
       const g = mutateGenome(base, 15)
@@ -153,6 +186,17 @@ export class AgentSystem {
   // ── Main step (call once per animation frame) ───────────────────────────
 
   step(buf: Float32Array, W: number, H: number, NF: number, mutRate: number): void {
+    const cellCount = W * H * NF
+    if (!(buf instanceof Float32Array) ||
+        !Number.isSafeInteger(W) || W < 1 ||
+        !Number.isSafeInteger(H) || H < 1 ||
+        !Number.isSafeInteger(NF) || NF < 11 ||
+        !Number.isSafeInteger(cellCount) || cellCount > buf.length) {
+      throw new TypeError('Agent step requires a Float32Array buffer with valid dimensions and at least 11 fields per cell')
+    }
+    if (!Number.isFinite(mutRate) || mutRate < 0 || mutRate > 100) {
+      throw new RangeError('Agent mutation rate must be between 0 and 100')
+    }
     const dead: number[] = []
     const DIRS = [[0,0],[1,0],[-1,0],[0,1],[0,-1]] as const
 
