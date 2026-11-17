@@ -32,7 +32,7 @@ export class WorldAssetRuntime {
   readonly #loader: Pick<GLTFLoader, 'load'>
   #generation = 0
   readonly #assets = new Map<string, RuntimeAsset>()
-  readonly #loading = new Map<string, Promise<RuntimeAsset>>()
+  readonly #loading = new Map<string, Promise<RuntimeAssetInfo>>()
   readonly #loadingRequests = new Map<string, { sourceUrl: string; semanticEntryId?: string }>()
   readonly #pendingRejectors = new Map<string, (reason: Error) => void>()
   /** Per-request identity prevents a removed asset's late loader callback from publishing. */
@@ -139,9 +139,9 @@ export class WorldAssetRuntime {
     const generation = this.#generation
     const requestToken = {}
     this.#pendingLoadTokens.set(id, requestToken)
-    let task: Promise<RuntimeAsset>
+    let task: Promise<RuntimeAssetInfo>
     let cancelTask: ((reason: Error) => void) | undefined
-    task = new Promise<RuntimeAsset>((resolve, reject) => {
+    task = new Promise<RuntimeAssetInfo>((resolve, reject) => {
       cancelTask = reject
       this.#loader.load(
         sourceUrl,
