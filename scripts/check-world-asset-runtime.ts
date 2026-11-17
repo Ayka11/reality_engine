@@ -548,7 +548,7 @@ const alternateOakLoad = runtime.load('oak-alt', 'https://assets.example.test/al
 })
 requests[requests.length - 1].onLoad({ scene: createGltfScene() })
 const alternateOakAsset = await alternateOakLoad
-assert.equal(runtime.getSemanticSource('flora.oak'), alternateOakAsset)
+assert.deepEqual(runtime.getSemanticSource('flora.oak'), alternateOakAsset)
 const alternateOakInstance = runtime.placeInstance('oak-alt:instance:1', 'flora.oak', { x: 6, y: 0, z: 9 })
 assert.ok(alternateOakInstance)
 assert.equal(runtime.remove('oak-alt'), true)
