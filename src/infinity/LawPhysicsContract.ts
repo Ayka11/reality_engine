@@ -7,12 +7,15 @@ export type LawPhysicsState = {
 export class LawPhysicsContract {
   readonly version = 'law-physics-v1'
 
-  constructor(
-    private readonly lawProvider: () => LawPhysicsState | null | undefined,
-  ) {}
+  readonly #lawProvider: () => LawPhysicsState | null | undefined
+
+  constructor(lawProvider: () => LawPhysicsState | null | undefined) {
+    this.#lawProvider = lawProvider
+    Object.freeze(this)
+  }
 
   apply(base: PhysicsFieldParameters): PhysicsFieldParameters {
-    const state = this.lawProvider() ?? {}
+    const state = this.#lawProvider() ?? {}
     const processes = new Set(state.processes ?? [])
 
     return {
