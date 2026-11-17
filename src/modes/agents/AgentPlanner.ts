@@ -131,11 +131,10 @@ Reply with ONLY the goal sentence, no extra text.`
 
   // ── Assign CrewAI-style roles to agents ─────────────────────────────────
 
-  assignRoles(agents: Agent[]): void {
-    agents.forEach((a, i) => {
-      const role = CREW_ROLES[i % CREW_ROLES.length]
-      a.plan = `[${role.name}] ${role.goal}`
-      // planBias is set by AgentSystem.applyPlan() after the plan string is set
+  assignRoles(agents: readonly Agent[]): Array<{ id: number; plan: string }> {
+    return agents.map((agent, index) => {
+      const role = CREW_ROLES[index % CREW_ROLES.length]
+      return { id: agent.id, plan: `[${role.name}] ${role.goal}` }
     })
   }
 
