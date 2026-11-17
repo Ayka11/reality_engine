@@ -1140,6 +1140,7 @@ try {
       frozen: Boolean(runtime && Object.isFrozen(runtime)),
       nonWritable: descriptor?.writable === false,
       nonConfigurable: descriptor?.configurable === false,
+      hasPrivateRendererScene: world?.scene === undefined,
       hasSafeSnapshot: typeof runtime?.snapshotPlacements === "function",
       hasSafeTransform: typeof runtime?.setInstanceWorldTransform === "function",
       hasBooleanPlace: repeatedPlacementResult === true,
@@ -1154,6 +1155,7 @@ try {
       !publicRuntimeContract.frozen ||
       !publicRuntimeContract.nonWritable ||
       !publicRuntimeContract.nonConfigurable ||
+      !publicRuntimeContract.hasPrivateRendererScene ||
       !publicRuntimeContract.hasSafeSnapshot ||
       !publicRuntimeContract.hasSafeTransform ||
       !publicRuntimeContract.hasBooleanPlace ||
