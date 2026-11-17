@@ -47,9 +47,16 @@ export function bootstrapInfiniteWorld() {
   if (fieldCanvas) {
     try {
       const fieldVolumeRenderer = new WorldFieldVolumeRenderer(fieldCanvas)
-      ;(window as any).worldFieldVolumeRenderer = fieldVolumeRenderer
-      ;(window as any).renderWorldFieldVolume = (frame: any) => fieldVolumeRenderer.render(frame)
-      ;(window as any).getWorldFieldVolumeRendererDiagnostics = () => fieldVolumeRenderer.diagnostics()
+      // Keep the Three.js scene, camera, controls and WebGLRenderer inside this
+      // closure. Browser integrations receive only the supported render API.
+      const fieldVolumeRendererApi = Object.freeze({
+        resize: fieldVolumeRenderer.resize.bind(fieldVolumeRenderer),
+        render: fieldVolumeRenderer.render.bind(fieldVolumeRenderer),
+        diagnostics: fieldVolumeRenderer.diagnostics.bind(fieldVolumeRenderer),
+      })
+      ;(window as any).worldFieldVolumeRenderer = fieldVolumeRendererApi
+      ;(window as any).renderWorldFieldVolume = fieldVolumeRendererApi.render
+      ;(window as any).getWorldFieldVolumeRendererDiagnostics = fieldVolumeRendererApi.diagnostics
     } catch (error) {
       console.warn('[Field3D] WebGL volume renderer unavailable; isometric fallback retained.', error)
     }
