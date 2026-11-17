@@ -29,6 +29,7 @@ export class FieldModulatedPhysics {
     // Detach and freeze configuration so caller-held references cannot change
     // the physics model during an active simulation frame.
     this.parameters = Object.freeze({ ...parameters })
+    Object.freeze(this)
   }
 
   modulation(field: ScientificFieldSample) {
