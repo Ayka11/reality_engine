@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { CivilizationRuntime } from "../src/worldLibrary/CivilizationRuntime";
+import { ProductionInfrastructureRuntime } from "../src/worldLibrary/ProductionInfrastructureRuntime";
 import { WorldResourceEconomy, worldResourceEconomy } from "../src/worldLibrary/WorldResourceEconomy";
 
 const resourcesBefore = worldResourceEconomy.snapshot();
@@ -98,6 +99,52 @@ try {
   ]), /stable ID and valid finite resource bounds/);
   assert.deepEqual(economy.snapshot(), beforeInvalidResourceRestore,
     "invalid resource restore must leave the previous inventory unchanged");
+
+  const productionRuntime = new ProductionInfrastructureRuntime();
+  const productionSourceRuntime = new CivilizationRuntime();
+  const productionInput = productionSourceRuntime.evaluate("production-ownership", "village");
+  const productionInitialPopulation = productionInput.settlement.population;
+  const productionSnapshot = productionRuntime.evaluate(productionInput);
+  productionInput.settlement.population = -1;
+  productionSnapshot.civilization.settlement.population = -2;
+  productionSnapshot.nodes[0]!.rate = -3;
+  assert.equal(productionRuntime.get("production-ownership")?.civilization.settlement.population, productionInitialPopulation,
+    "production evaluate must clone caller input and return a detached snapshot");
+
+  const productionGet = productionRuntime.get("production-ownership")!;
+  productionGet.timeline[0]!.details = "tampered";
+  productionGet.civilization.settlement.population = -4;
+  assert.notEqual(productionRuntime.get("production-ownership")?.timeline[0]?.details, "tampered");
+  assert.equal(productionRuntime.get("production-ownership")?.civilization.settlement.population, productionInitialPopulation,
+    "production get must not expose the stored state");
+
+  const productionAll = productionRuntime.all();
+  productionAll[0]!.nodes.pop();
+  assert.equal(productionRuntime.all()[0]!.nodes.length, productionSnapshot.nodes.length,
+    "production all must return detached nested records");
+
+  assert.equal(productionRuntime.setTimeScale("production-ownership", "decade"), true);
+  assert.equal(productionRuntime.get("production-ownership")?.worldTime.scale, "decade");
+  const environmentalResult = productionRuntime.applyEnvironmentalState("production-ownership", {
+    temperature: 0.5,
+    moisture: 0.1,
+    radiation: 0.9,
+    stability: 0.1,
+  })!;
+  const storedEnvironmentalEvent = productionRuntime.timeline("production-ownership")[0]!;
+  environmentalResult.events[0]!.details = "tampered";
+  environmentalResult.current.moisture = -1;
+  assert.notEqual(productionRuntime.timeline("production-ownership").some(event => event.details === "tampered"), true,
+    "environmental state results must not share event references with the stored timeline");
+  assert.equal(productionRuntime.get("production-ownership")?.environmentalState.moisture, 0.1,
+    "environmental state results must not expose stored environmental records");
+
+  const productionTimeline = productionRuntime.timeline("production-ownership");
+  productionTimeline[0]!.details = "tampered-timeline";
+  assert.notEqual(productionRuntime.timeline("production-ownership")[0]!.details, "tampered-timeline");
+  const productionAllTimelines = productionRuntime.allTimelines();
+  productionAllTimelines[0]!.details = "tampered-all-timelines";
+  assert.notEqual(productionRuntime.allTimelines()[0]!.details, "tampered-all-timelines");
 
   const runtime = new CivilizationRuntime();
 
