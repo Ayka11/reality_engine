@@ -24,7 +24,14 @@ export function objectId(kind: WorldObjectKind, x: number, y: number, z: number)
 /** Return a detached world-object value, including nested metadata. */
 export function cloneWorldObject(object: WorldObject): WorldObject {
   return {
-    ...object,
+    id: object.id,
+    kind: object.kind,
+    x: object.x,
+    y: object.y,
+    z: object.z,
+    rotationY: object.rotationY,
+    scale: object.scale,
+    seed: object.seed,
     properties: { ...object.properties },
   }
 }
