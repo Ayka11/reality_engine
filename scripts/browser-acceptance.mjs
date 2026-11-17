@@ -1216,7 +1216,10 @@ try {
         "experimentRunner", "experimentCatalog",
       ].every(key => {
         const descriptor = Object.getOwnPropertyDescriptor(world, key);
-        return descriptor?.writable === false && descriptor?.configurable === false;
+        return descriptor?.configurable === false &&
+          (typeof descriptor.get === "function"
+            ? descriptor.set === undefined
+            : descriptor.writable === false);
       }),
       hasParticleSnapshot: typeof world?.getPhysicsParticlePositionSnapshot === "function",
       hasPatchSnapshots: typeof world?.getTerrainPatchSnapshots === "function",
