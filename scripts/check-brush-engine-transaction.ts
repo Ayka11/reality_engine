@@ -255,6 +255,48 @@ assertBufferEqual(dirtyRollbackChunk.buffer, customDirtyChunkBefore,
   "failed custom dirty publication must restore the chunk mirror");
 assert.equal(customDirtyRollbackEngine.historyLength, 0);
 
+// Custom callbacks can touch chunks that are outside the current dense window.
+// Their rollback and history must preserve topology and both front/back buffers.
+const remoteChunkKey = "4,0,0";
+const remoteFailureEngine = new BrushEngine(dirtyRollbackGrid);
+assert.equal(dirtyRollbackGrid.chunks.has(remoteChunkKey), false);
+await assert.rejects(() => remoteFailureEngine.applyCustomStroke(makeStroke(), () => {
+  const remote = dirtyRollbackGrid.getOrCreateChunk(4, 0, 0);
+  remote.buffer[F.ENERGY] = 4567;
+  remote.backBuffer[F.ENERGY] = 7654;
+  throw new Error("injected remote chunk callback failure");
+}), /injected remote chunk callback failure/);
+assert.equal(dirtyRollbackGrid.chunks.has(remoteChunkKey), false,
+  "failed custom callback must remove chunks created outside the dense window");
+assert.equal(remoteFailureEngine.historyLength, 0);
+assert.equal(remoteFailureEngine.redoLength, 0);
+
+const remoteHistoryEngine = new BrushEngine(dirtyRollbackGrid);
+await remoteHistoryEngine.applyCustomStroke(makeStroke(), () => {
+  const remote = dirtyRollbackGrid.getOrCreateChunk(4, 0, 0);
+  remote.buffer[F.ENERGY] = 4567;
+  remote.backBuffer[F.ENERGY] = 7654;
+});
+const remoteAfterCommit = dirtyRollbackGrid.chunks.get(remoteChunkKey)!;
+assert.equal(remoteAfterCommit.buffer[F.ENERGY], 4567);
+assert.equal(remoteAfterCommit.backBuffer[F.ENERGY], 7654);
+assert.equal(remoteHistoryEngine.historyLength, 1);
+
+assert.ok(remoteHistoryEngine.undo());
+assert.equal(dirtyRollbackGrid.chunks.has(remoteChunkKey), false,
+  "custom stroke undo must restore sparse topology outside the dense window");
+assert.equal(remoteHistoryEngine.historyLength, 0);
+assert.equal(remoteHistoryEngine.redoLength, 1);
+
+assert.ok(remoteHistoryEngine.redo());
+const remoteAfterRedo = dirtyRollbackGrid.chunks.get(remoteChunkKey);
+assert.ok(remoteAfterRedo, "custom stroke redo must restore the remote sparse chunk");
+assert.equal(remoteAfterRedo.buffer[F.ENERGY], 4567);
+assert.equal(remoteAfterRedo.backBuffer[F.ENERGY], 7654);
+assert.equal(remoteHistoryEngine.historyLength, 1);
+assert.equal(remoteHistoryEngine.redoLength, 0);
+
 console.log("PASS: BrushEngine commit/undo/redo rollback on chunk synchronization failure");
+console.log("PASS: Custom sculpt rollback and history preserve sparse chunks outside the dense window");
 console.log("PASS: BrushEngine dense and sparse mirrors roll back after dirty-publication failures");
 console.log("PASS: BrushEngine custom callbacks reject async, bound, generator and thenable mutation paths");
