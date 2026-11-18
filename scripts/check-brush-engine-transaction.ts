@@ -309,6 +309,18 @@ assert.ok(addedRemoteDelta?.afterFull,
 assert.ok(remoteDelta.buffer.indices.length > 0,
   "custom stroke delta must include dense-window changes");
 
+// A malformed history delta must fail closed without changing the committed
+// world or consuming the undo record.
+const validRemoteDenseDeltaIndex = remoteDelta.buffer.indices[0]!;
+remoteDelta.buffer.indices[0] = dirtyRollbackGrid.buffer.length + 1;
+const committedRemoteDense = dirtyRollbackGrid.buffer.slice();
+assert.throws(() => remoteHistoryEngine.undo(), /Sparse-grid delta buffer index or value is invalid/);
+assertBufferEqual(dirtyRollbackGrid.buffer, committedRemoteDense,
+  "rejected custom undo delta must preserve the committed dense field");
+assert.equal(remoteHistoryEngine.historyLength, 1,
+  "rejected custom undo delta must preserve its history record");
+remoteDelta.buffer.indices[0] = validRemoteDenseDeltaIndex;
+
 assert.ok(remoteHistoryEngine.undo());
 assert.equal(dirtyRollbackGrid.chunks.has(remoteChunkKey), false,
   "custom stroke undo must restore sparse topology outside the dense window");
@@ -380,6 +392,32 @@ assert.ok(existingRemoteEngine.redo());
 const replayedRemote = dirtyRollbackGrid.chunks.get(existingRemoteKey)!;
 assert.equal(replayedRemote.buffer[F.ENERGY], 333);
 assert.equal(replayedRemote.backBuffer[F.ENERGY], 444);
+
+// Deleting a sparse chunk is represented as a removal delta and is reversible.
+const removedRemoteKey = "6,0,0";
+const removedRemoteChunk = dirtyRollbackGrid.getOrCreateChunk(6, 0, 0);
+removedRemoteChunk.buffer[F.ENERGY] = 606;
+removedRemoteChunk.backBuffer[F.ENERGY] = 707;
+const removeChunkEngine = new BrushEngine(dirtyRollbackGrid);
+await removeChunkEngine.applyCustomStroke(makeStroke(), () => {
+  dirtyRollbackGrid.chunks.delete(removedRemoteKey);
+});
+assert.equal(dirtyRollbackGrid.chunks.has(removedRemoteKey), false);
+const removeRecord = (removeChunkEngine as unknown as {
+  history: Array<{ gridDelta?: { chunks: Array<{ key: string; beforeFull?: unknown; afterExists: boolean }> } }>;
+}).history[0];
+const removedDelta = removeRecord?.gridDelta?.chunks.find(chunk => chunk.key === removedRemoteKey);
+assert.ok(removedDelta?.beforeFull,
+  "removed sparse chunks must retain their pre-stroke chunk payload");
+assert.equal(removedDelta.afterExists, false);
+assert.ok(removeChunkEngine.undo());
+const restoredRemovedChunk = dirtyRollbackGrid.chunks.get(removedRemoteKey);
+assert.ok(restoredRemovedChunk, "undo must restore a removed sparse chunk");
+assert.equal(restoredRemovedChunk.buffer[F.ENERGY], 606);
+assert.equal(restoredRemovedChunk.backBuffer[F.ENERGY], 707);
+assert.ok(removeChunkEngine.redo());
+assert.equal(dirtyRollbackGrid.chunks.has(removedRemoteKey), false,
+  "redo must remove the sparse chunk again");
 
 console.log("PASS: BrushEngine commit/undo/redo rollback on chunk synchronization failure");
 console.log("PASS: Custom sculpt rollback and history preserve sparse chunks outside the dense window");
