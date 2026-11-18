@@ -55,6 +55,8 @@ export interface StrokeRecord {
   edits: CellEdit[];
   fullBefore?: Float32Array;
   fullAfter?: Float32Array;
+  // Custom strokes retain one full-grid snapshot at a time. Undo/redo swaps
+  // this pointer between before/after so history does not double grid memory.
   fullGridBefore?: SparseVoxelGridSnapshot;
   fullGridAfter?: SparseVoxelGridSnapshot;
 }
