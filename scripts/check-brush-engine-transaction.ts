@@ -130,7 +130,10 @@ await assert.rejects(() => customEngine.applyCustomStroke(makeStroke(), () => {
   throw new Error("injected custom callback failure");
 }), /injected custom callback failure/);
 assertBufferEqual(grid.buffer, beforeCallbackFailure, "failed custom callback must restore dense state");
-assertBufferEqual(affectedChunk.buffer, chunkBeforeCallbackFailure, "failed custom callback must restore direct chunk writes");
+const restoredAffectedChunk = grid.chunks.get(grid.getChunkKey(affectedChunk.cx, affectedChunk.cy, affectedChunk.cz));
+assert.ok(restoredAffectedChunk, "failed custom callback must retain the authoritative affected chunk");
+assertBufferEqual(restoredAffectedChunk.buffer, chunkBeforeCallbackFailure,
+  "failed custom callback must restore direct chunk writes in the authoritative chunk map");
 assert.equal(customEngine.historyLength, 0, "failed custom callback must not create history");
 
 // Async callbacks must be rejected before invocation; otherwise delayed writes
