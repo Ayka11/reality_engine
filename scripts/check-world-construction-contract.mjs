@@ -15,8 +15,10 @@ for (const kind of ['building', 'road', 'bridge', 'water']) {
 }
 assert.ok(contract.includes('buildability.score >= 0.2'));
 assert.ok(contract.includes('laws.penalty < 0.25'));
-assert.ok(renderer.includes('this.constructionContract.materialize(\'water\''));
-assert.ok(renderer.includes('return this.constructionContract.authorize(kind, x, z)'));
+assert.ok(renderer.includes("this.#constructionContract.materialize('water'"),
+  'water structures must be materialized through the renderer-owned private construction contract');
+assert.ok(renderer.includes('return this.#constructionContract.authorize(kind, x, z)'),
+  'construction authorization must use the same renderer-owned private contract');
 console.log('World Construction Contract regression: PASS');
 
 const decisionSource = await fs.readFile('src/infinity/WorldDecisionLayer.ts', 'utf8');
