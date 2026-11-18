@@ -907,9 +907,10 @@ assert.deepEqual(cleanupFlags, {
 // resource disposal and placement-notification callbacks fail independently.
 const directRemoveScene = new THREE.Scene()
 let directRemoveNotifications = 0
+let failDirectRemoveNotification = false
 const directRemoveRuntime = new WorldAssetRuntime(directRemoveScene, loader, () => {
   directRemoveNotifications += 1
-  throw new Error('injected direct placement notification failure')
+  if (failDirectRemoveNotification) throw new Error('injected direct placement notification failure')
 })
 const directRemoveSource = new THREE.Group()
 directRemoveSource.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()))
@@ -927,6 +928,7 @@ watchObjectDisposal(directRemoveInstance, () => {
   throw new Error('injected direct instance material disposal failure')
 })
 assert.equal(directRemoveRuntime.playInstanceAnimation('direct-remove', 'CleanupWalk'), true)
+failDirectRemoveNotification = true
 const originalDirectStop = THREE.AnimationMixer.prototype.stopAllAction
 const originalDirectUncache = THREE.AnimationMixer.prototype.uncacheRoot
 THREE.AnimationMixer.prototype.stopAllAction = function () {
@@ -968,7 +970,9 @@ assert.equal(directRemoveScene.children.length, 0)
 // dispose the source object even when one child instance fails cleanup.
 const sourceRemoveScene = new THREE.Scene()
 let sourceRemoveNotifications = 0
+let failSourceRemoveNotifications = false
 const sourceRemoveRuntime = new WorldAssetRuntime(sourceRemoveScene, loader, () => {
+  if (!failSourceRemoveNotifications) return
   sourceRemoveNotifications += 1
   if (sourceRemoveNotifications === 1) throw new Error('injected first placement notification failure')
 })
@@ -1004,6 +1008,7 @@ watchObjectDisposal(failingRemoveInstance, () => {
 watchObjectDisposal(healthyRemoveInstance, () => { sourceRemoveFlags.healthyGeometry = true },
   () => { sourceRemoveFlags.healthyMaterial = true })
 assert.equal(sourceRemoveRuntime.playInstanceAnimation('failing-dependent', 'CleanupWalk'), true)
+failSourceRemoveNotifications = true
 const originalSourceStop = THREE.AnimationMixer.prototype.stopAllAction
 const originalSourceUncache = THREE.AnimationMixer.prototype.uncacheRoot
 THREE.AnimationMixer.prototype.stopAllAction = function () {
