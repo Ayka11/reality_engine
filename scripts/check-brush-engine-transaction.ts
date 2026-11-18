@@ -285,7 +285,6 @@ await remoteHistoryEngine.applyCustomStroke(makeStroke(), () => {
   dirtyRollbackGrid.buffer[remoteDenseIndex] = 9876;
   dirtyRollbackGrid.backBuffer[remoteDenseIndex] = 8765;
   dirtyRollbackGrid.chunkOwners.set(remoteChunkKey, "custom-stroke-owner");
-  dirtyRollbackGrid.dirtyChunks.add(remoteChunkKey);
 });
 const remoteAfterCommit = dirtyRollbackGrid.chunks.get(remoteChunkKey)!;
 assert.equal(remoteAfterCommit.buffer[F.ENERGY], 4567);
@@ -294,6 +293,8 @@ assert.equal(remoteHistoryEngine.historyLength, 1);
 assert.equal(dirtyRollbackGrid.buffer[remoteDenseIndex], 9876);
 assert.equal(dirtyRollbackGrid.backBuffer[remoteDenseIndex], 8765);
 assert.equal(dirtyRollbackGrid.chunkOwners.get(remoteChunkKey), "custom-stroke-owner");
+assert.ok(dirtyRollbackGrid.dirtyChunks.has(remoteChunkKey),
+  "custom stroke must mark callback-mutated remote chunks dirty for persistence");
 const remoteHistoryInternals = remoteHistoryEngine as unknown as {
   history: Array<{ gridDelta?: {
     chunks: Array<{ key: string; afterFull?: unknown; front?: { indices: Uint32Array }; back?: { indices: Uint32Array } }>;
@@ -410,6 +411,8 @@ const removedDelta = removeRecord?.gridDelta?.chunks.find(chunk => chunk.key ===
 assert.ok(removedDelta?.beforeFull,
   "removed sparse chunks must retain their pre-stroke chunk payload");
 assert.equal(removedDelta.afterExists, false);
+assert.ok(dirtyRollbackGrid.dirtyChunks.has(removedRemoteKey),
+  "custom stroke must mark removed sparse chunks dirty as persistence tombstones");
 assert.ok(removeChunkEngine.undo());
 const restoredRemovedChunk = dirtyRollbackGrid.chunks.get(removedRemoteKey);
 assert.ok(restoredRemovedChunk, "undo must restore a removed sparse chunk");
