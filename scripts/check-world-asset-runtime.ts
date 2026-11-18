@@ -735,19 +735,45 @@ assert.deepEqual(runtime.stats(), {
 assert.equal(scene.children.length, 0)
 
 
+async function loadPublicAsset(
+  target: WorldAssetRuntime,
+  id: string,
+  semanticEntryId: string,
+  object: THREE.Group,
+  animations: THREE.AnimationClip[] = [],
+): Promise<void> {
+  const requestIndex = requests.length
+  const pending = target.load(id, `https://assets.example.test/${id}.glb`, { semanticEntryId })
+  assert.equal(requests.length, requestIndex + 1, 'public load must create exactly one loader request')
+  requests[requestIndex]!.onLoad({ scene: object, animations })
+  await pending
+}
+
+function watchObjectDisposal(
+  root: THREE.Object3D,
+  onGeometry: () => void,
+  onMaterial: () => void,
+): void {
+  root.traverse(node => {
+    const renderable = node as THREE.Object3D & {
+      geometry?: THREE.BufferGeometry
+      material?: THREE.Material | THREE.Material[]
+    }
+    if (renderable.geometry instanceof THREE.BufferGeometry) {
+      renderable.geometry.addEventListener('dispose', onGeometry)
+    }
+    const materials = Array.isArray(renderable.material)
+      ? renderable.material
+      : renderable.material instanceof THREE.Material ? [renderable.material] : []
+    for (const material of materials) material.addEventListener('dispose', onMaterial)
+  })
+}
+
+const cleanupAnimation = () => new THREE.AnimationClip('CleanupWalk', 1, [
+  new THREE.VectorKeyframeTrack('.position', [0, 1], [0, 0, 0, 0, 1, 0]),
+])
 const cleanupScene = new THREE.Scene()
 const cleanupRuntime = new WorldAssetRuntime(cleanupScene, loader)
-const cleanupInternal = cleanupRuntime as unknown as {
-  assets: Map<string, { id: string; semanticEntryId?: string; sourceUrl: string; object: THREE.Object3D; animations: THREE.AnimationClip[]; loadedAt: number }>
-  instances: Map<string, THREE.Object3D>
-  semanticSources: Map<string, unknown>
-  instanceMixers: Map<string, THREE.AnimationMixer>
-  instanceActions: Map<string, THREE.AnimationAction>
-  pendingAnimationStops: Map<string, unknown>
-  animationAccumulators: Map<string, number>
-  loading: Map<string, Promise<unknown>>
-  pendingRejectors: Map<string, (reason: Error) => void>
-}
 const cleanupFlags = {
   failingInstanceGeometry: false,
   goodInstanceGeometry: false,
@@ -759,84 +785,101 @@ const cleanupFlags = {
   sourcePointsMaterial: false,
   sourceLineGeometry: false,
   sourceLineMaterial: false,
+  mixerStop: false,
   mixerUncached: false,
-  pendingCancelContinued: false,
+  pendingLoadCancelled: false,
+  stalePendingGeometry: false,
 }
-const trackedMesh = (material: THREE.Material, onGeometryDispose: () => void) => {
-  const geometry = new THREE.BoxGeometry(1, 1, 1)
-  geometry.addEventListener('dispose', onGeometryDispose)
-  return new THREE.Mesh(geometry, material)
-}
-const failingInstanceMaterial = new THREE.MeshBasicMaterial()
-failingInstanceMaterial.addEventListener('dispose', () => {
-  cleanupFlags.failingInstanceMaterial = true
-  throw new Error('injected instance material dispose failure')
-})
-const failingInstance = new THREE.Group()
-failingInstance.add(trackedMesh(failingInstanceMaterial, () => {
-  cleanupFlags.failingInstanceGeometry = true
-  throw new Error('injected instance geometry dispose failure')
-}))
-const goodInstanceMaterial = new THREE.MeshBasicMaterial()
-goodInstanceMaterial.addEventListener('dispose', () => { cleanupFlags.goodInstanceMaterial = true })
-const goodInstance = new THREE.Group()
-goodInstance.add(trackedMesh(goodInstanceMaterial, () => { cleanupFlags.goodInstanceGeometry = true }))
-
 const cleanupSourceMaterial = new THREE.MeshBasicMaterial()
 cleanupSourceMaterial.addEventListener('dispose', () => { cleanupFlags.sourceMaterial = true })
-const sourceObject = new THREE.Group()
-sourceObject.add(trackedMesh(cleanupSourceMaterial, () => { cleanupFlags.sourceGeometry = true }))
+const cleanupSource = new THREE.Group()
+cleanupSource.add(trackedMesh(cleanupSourceMaterial, () => { cleanupFlags.sourceGeometry = true }))
 const sourcePointsGeometry = new THREE.BufferGeometry()
 sourcePointsGeometry.addEventListener('dispose', () => { cleanupFlags.sourcePointsGeometry = true })
 const sourcePointsMaterial = new THREE.PointsMaterial()
 sourcePointsMaterial.addEventListener('dispose', () => { cleanupFlags.sourcePointsMaterial = true })
-sourceObject.add(new THREE.Points(sourcePointsGeometry, sourcePointsMaterial))
+cleanupSource.add(new THREE.Points(sourcePointsGeometry, sourcePointsMaterial))
 const sourceLineGeometry = new THREE.BufferGeometry()
 sourceLineGeometry.addEventListener('dispose', () => { cleanupFlags.sourceLineGeometry = true })
 const sourceLineMaterial = new THREE.LineBasicMaterial()
 sourceLineMaterial.addEventListener('dispose', () => { cleanupFlags.sourceLineMaterial = true })
-sourceObject.add(new THREE.Line(sourceLineGeometry, sourceLineMaterial))
+cleanupSource.add(new THREE.Line(sourceLineGeometry, sourceLineMaterial))
+await loadPublicAsset(cleanupRuntime, 'source-asset', 'flora.cleanup', cleanupSource, [cleanupAnimation()])
 
-cleanupScene.add(failingInstance, goodInstance, sourceObject)
-cleanupInternal.instances.set('failing-instance', failingInstance)
-cleanupInternal.instances.set('good-instance', goodInstance)
-cleanupInternal.assets.set('source-asset', {
-  id: 'source-asset',
-  semanticEntryId: 'flora.cleanup',
-  sourceUrl: 'https://assets.example.test/cleanup-source.glb',
-  object: sourceObject,
-  animations: [],
-  loadedAt: Date.now(),
+const failingInstance = cleanupRuntime.placeInstance('failing-instance', 'flora.cleanup', {
+  x: 1, y: 0, z: 1, sourceAssetId: 'source-asset',
 })
-cleanupInternal.semanticSources.set('flora.cleanup', { id: 'source-asset' })
-const cleanupMixer = new THREE.AnimationMixer(failingInstance)
-cleanupMixer.stopAllAction = () => { throw new Error('injected animation stop failure') }
-cleanupMixer.uncacheRoot = () => { cleanupFlags.mixerUncached = true }
-cleanupInternal.instanceMixers.set('failing-instance', cleanupMixer)
-cleanupInternal.instanceActions.set('failing-instance', {} as THREE.AnimationAction)
-cleanupInternal.pendingAnimationStops.set('failing-instance', [])
-cleanupInternal.animationAccumulators.set('failing-instance', 1)
-cleanupInternal.loading.set('pending-load', Promise.resolve({}))
-cleanupInternal.pendingRejectors.set('failing-cancel', () => {
-  throw new Error('injected pending cancellation failure')
+const goodInstance = cleanupRuntime.placeInstance('good-instance', 'flora.cleanup', {
+  x: 3, y: 0, z: 1, sourceAssetId: 'source-asset',
 })
-cleanupInternal.pendingRejectors.set('good-cancel', () => {
-  cleanupFlags.pendingCancelContinued = true
+assert.ok(failingInstance && goodInstance, 'cleanup fixtures must be created through the placement API')
+watchObjectDisposal(failingInstance, () => {
+  cleanupFlags.failingInstanceGeometry = true
+  throw new Error('injected instance geometry dispose failure')
+}, () => {
+  cleanupFlags.failingInstanceMaterial = true
+  throw new Error('injected instance material dispose failure')
 })
+watchObjectDisposal(goodInstance, () => { cleanupFlags.goodInstanceGeometry = true },
+  () => { cleanupFlags.goodInstanceMaterial = true })
+assert.equal(cleanupRuntime.playInstanceAnimation('failing-instance', 'CleanupWalk'), true,
+  'cleanup fixture must register an animation through the public animation API')
 
-assert.throws(() => cleanupRuntime.clear(), AggregateError,
-  'clear must report resource failures after attempting every remaining cleanup action')
+const originalCleanupStop = THREE.AnimationMixer.prototype.stopAllAction
+const originalCleanupUncache = THREE.AnimationMixer.prototype.uncacheRoot
+THREE.AnimationMixer.prototype.stopAllAction = function () {
+  if (this.getRoot() === failingInstance) {
+    cleanupFlags.mixerStop = true
+    throw new Error('injected animation stop failure')
+  }
+  return originalCleanupStop.call(this)
+}
+THREE.AnimationMixer.prototype.uncacheRoot = function (root: THREE.Object3D) {
+  if (root === failingInstance) {
+    cleanupFlags.mixerUncached = true
+    throw new Error('injected animation uncache failure')
+  }
+  return originalCleanupUncache.call(this, root)
+}
+
+const pendingLoad = cleanupRuntime.load('pending-load', 'https://assets.example.test/pending-load.glb', {
+  semanticEntryId: 'flora.pending',
+})
+const pendingLoadRequest = requests.at(-1)!
+const pendingLoadOutcome = pendingLoad.then(
+  () => null,
+  error => error,
+)
+try {
+  assert.throws(() => cleanupRuntime.clear(), AggregateError,
+    'clear must aggregate resource failures after attempting every remaining cleanup action')
+} finally {
+  THREE.AnimationMixer.prototype.stopAllAction = originalCleanupStop
+  THREE.AnimationMixer.prototype.uncacheRoot = originalCleanupUncache
+}
+const pendingLoadError = await pendingLoadOutcome
+assert.ok(pendingLoadError instanceof Error)
+assert.match(pendingLoadError.message, /invalidated by world replacement/)
+cleanupFlags.pendingLoadCancelled = true
 assert.equal(cleanupScene.children.length, 0,
   'a failing disposer must not leave old asset or instance roots attached to the scene')
-assert.equal(cleanupInternal.instances.size, 0)
-assert.equal(cleanupInternal.assets.size, 0)
-assert.equal(cleanupInternal.semanticSources.size, 0)
-assert.equal(cleanupInternal.instanceMixers.size, 0)
-assert.equal(cleanupInternal.instanceActions.size, 0)
-assert.equal(cleanupInternal.pendingAnimationStops.size, 0)
-assert.equal(cleanupInternal.animationAccumulators.size, 0)
-assert.equal(cleanupInternal.loading.size, 0)
-assert.equal(cleanupInternal.pendingRejectors.size, 0)
+assert.deepEqual(cleanupRuntime.stats(), {
+  loaded: 0, ids: [], instances: 0, animatedInstances: 0, visibleInstances: 0,
+}, 'clear must release loaded assets, placements and animation registrations')
+assert.equal(cleanupRuntime.has('source-asset'), false)
+assert.equal(cleanupRuntime.hasSemanticSource('flora.cleanup'), false)
+assert.equal(cleanupRuntime.hasInstance('failing-instance'), false)
+const stalePendingPayload = new THREE.Group()
+const stalePendingGeometry = new THREE.BoxGeometry(1, 1, 1)
+stalePendingGeometry.addEventListener('dispose', () => {
+  cleanupFlags.stalePendingGeometry = true
+  throw new Error('injected late pending geometry disposal failure')
+})
+stalePendingPayload.add(new THREE.Mesh(stalePendingGeometry, new THREE.MeshBasicMaterial()))
+assert.doesNotThrow(() => pendingLoadRequest.onLoad({ scene: stalePendingPayload }),
+  'a late loader callback after clear must contain detached-payload cleanup failures')
+assert.equal(cleanupFlags.stalePendingGeometry, true,
+  'a stale pending payload must attempt resource disposal')
 assert.deepEqual(cleanupFlags, {
   failingInstanceGeometry: true,
   goodInstanceGeometry: true,
@@ -848,64 +891,72 @@ assert.deepEqual(cleanupFlags, {
   sourcePointsMaterial: true,
   sourceLineGeometry: true,
   sourceLineMaterial: true,
+  mixerStop: true,
   mixerUncached: true,
-  pendingCancelContinued: true,
-}, 'cleanup must continue through failures in cancellation, animation, geometry and material disposal')
+  pendingLoadCancelled: true,
+  stalePendingGeometry: true,
+}, 'clear must continue through instance, asset, animation and pending-load cleanup failures')
 
-// Direct instance removal must release scene/maps even when animation, GPU
-// disposal and placement-notification callbacks fail independently.
+// Direct instance removal must release scene ownership even when animation,
+// resource disposal and placement-notification callbacks fail independently.
 const directRemoveScene = new THREE.Scene()
 let directRemoveNotifications = 0
 const directRemoveRuntime = new WorldAssetRuntime(directRemoveScene, loader, () => {
   directRemoveNotifications += 1
   throw new Error('injected direct placement notification failure')
 })
-const directRemoveInternal = directRemoveRuntime as unknown as {
-  instances: Map<string, THREE.Object3D>
-  instanceMixers: Map<string, THREE.AnimationMixer>
-  instanceActions: Map<string, THREE.AnimationAction>
-  pendingAnimationStops: Map<string, unknown>
-  animationAccumulators: Map<string, number>
-}
+const directRemoveSource = new THREE.Group()
+directRemoveSource.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()))
+await loadPublicAsset(directRemoveRuntime, 'direct-remove-source', 'flora.direct-remove', directRemoveSource, [cleanupAnimation()])
+const directRemoveInstance = directRemoveRuntime.placeInstance('direct-remove', 'flora.direct-remove', {
+  x: 1, y: 0, z: 1, sourceAssetId: 'direct-remove-source',
+})
+assert.ok(directRemoveInstance)
 const directRemoveFlags = { geometry: false, material: false, mixerStop: false, mixerUncache: false }
-const directRemoveMaterial = new THREE.MeshBasicMaterial()
-directRemoveMaterial.addEventListener('dispose', () => {
+watchObjectDisposal(directRemoveInstance, () => {
+  directRemoveFlags.geometry = true
+  throw new Error('injected direct instance geometry disposal failure')
+}, () => {
   directRemoveFlags.material = true
   throw new Error('injected direct instance material disposal failure')
 })
-const directRemoveGeometry = new THREE.BoxGeometry(1, 1, 1)
-directRemoveGeometry.addEventListener('dispose', () => {
-  directRemoveFlags.geometry = true
-  throw new Error('injected direct instance geometry disposal failure')
-})
-const directRemoveInstance = new THREE.Group()
-directRemoveInstance.add(new THREE.Mesh(directRemoveGeometry, directRemoveMaterial))
-directRemoveInstance.userData.persistentWorldAssetPlacement = true
-directRemoveScene.add(directRemoveInstance)
-directRemoveInternal.instances.set('direct-remove', directRemoveInstance)
-const directRemoveMixer = new THREE.AnimationMixer(directRemoveInstance)
-directRemoveMixer.stopAllAction = () => {
-  directRemoveFlags.mixerStop = true
-  throw new Error('injected direct instance animation-stop failure')
+assert.equal(directRemoveRuntime.playInstanceAnimation('direct-remove', 'CleanupWalk'), true)
+const originalDirectStop = THREE.AnimationMixer.prototype.stopAllAction
+const originalDirectUncache = THREE.AnimationMixer.prototype.uncacheRoot
+THREE.AnimationMixer.prototype.stopAllAction = function () {
+  if (this.getRoot() === directRemoveInstance) {
+    directRemoveFlags.mixerStop = true
+    throw new Error('injected direct instance animation-stop failure')
+  }
+  return originalDirectStop.call(this)
 }
-directRemoveMixer.uncacheRoot = () => { directRemoveFlags.mixerUncache = true }
-directRemoveInternal.instanceMixers.set('direct-remove', directRemoveMixer)
-directRemoveInternal.instanceActions.set('direct-remove', {} as THREE.AnimationAction)
-directRemoveInternal.pendingAnimationStops.set('direct-remove', [])
-directRemoveInternal.animationAccumulators.set('direct-remove', 1)
-assert.throws(() => directRemoveRuntime.removeInstance('direct-remove'), AggregateError,
-  'direct instance removal must report failures only after removing the instance')
-assert.equal(directRemoveScene.children.length, 0)
-assert.equal(directRemoveInternal.instances.size, 0)
-assert.equal(directRemoveInternal.instanceMixers.size, 0)
-assert.equal(directRemoveInternal.instanceActions.size, 0)
-assert.equal(directRemoveInternal.pendingAnimationStops.size, 0)
-assert.equal(directRemoveInternal.animationAccumulators.size, 0)
+THREE.AnimationMixer.prototype.uncacheRoot = function (root: THREE.Object3D) {
+  if (root === directRemoveInstance) {
+    directRemoveFlags.mixerUncache = true
+    throw new Error('injected direct instance animation-uncache failure')
+  }
+  return originalDirectUncache.call(this, root)
+}
+try {
+  assert.throws(() => directRemoveRuntime.removeInstance('direct-remove'), AggregateError,
+    'direct instance removal must report failures only after releasing the instance')
+} finally {
+  THREE.AnimationMixer.prototype.stopAllAction = originalDirectStop
+  THREE.AnimationMixer.prototype.uncacheRoot = originalDirectUncache
+}
+assert.equal(directRemoveScene.children.length, 1,
+  'direct instance removal must leave the independently-owned source template intact')
+assert.equal(directRemoveRuntime.hasInstance('direct-remove'), false)
+assert.deepEqual(directRemoveRuntime.stats(), {
+  loaded: 1, ids: ['direct-remove-source'], instances: 0, animatedInstances: 0, visibleInstances: 0,
+})
 assert.deepEqual(directRemoveFlags, {
   geometry: true, material: true, mixerStop: true, mixerUncache: true,
 })
 assert.equal(directRemoveNotifications, 1,
   'a failing placement callback must be reported without skipping instance bookkeeping')
+assert.equal(directRemoveRuntime.remove('direct-remove-source'), true)
+assert.equal(directRemoveScene.children.length, 0)
 
 // Removing a source asset must continue through every dependent placement and
 // dispose the source object even when one child instance fails cleanup.
@@ -915,15 +966,6 @@ const sourceRemoveRuntime = new WorldAssetRuntime(sourceRemoveScene, loader, () 
   sourceRemoveNotifications += 1
   if (sourceRemoveNotifications === 1) throw new Error('injected first placement notification failure')
 })
-const sourceRemoveInternal = sourceRemoveRuntime as unknown as {
-  assets: Map<string, { id: string; semanticEntryId?: string; sourceUrl: string; object: THREE.Object3D; animations: THREE.AnimationClip[]; loadedAt: number }>
-  instances: Map<string, THREE.Object3D>
-  semanticSources: Map<string, unknown>
-  instanceMixers: Map<string, THREE.AnimationMixer>
-  instanceActions: Map<string, THREE.AnimationAction>
-  pendingAnimationStops: Map<string, unknown>
-  animationAccumulators: Map<string, number>
-}
 const sourceRemoveFlags = {
   failingGeometry: false,
   failingMaterial: false,
@@ -934,67 +976,60 @@ const sourceRemoveFlags = {
   mixerStop: false,
   mixerUncache: false,
 }
-const trackedRemoveMesh = (material: THREE.Material, onDispose: () => void) => {
-  const geometry = new THREE.BoxGeometry(1, 1, 1)
-  geometry.addEventListener('dispose', onDispose)
-  return new THREE.Mesh(geometry, material)
-}
-const failingRemoveMaterial = new THREE.MeshBasicMaterial()
-failingRemoveMaterial.addEventListener('dispose', () => {
-  sourceRemoveFlags.failingMaterial = true
-  throw new Error('injected dependent instance material disposal failure')
-})
-const failingRemoveInstance = new THREE.Group()
-failingRemoveInstance.add(trackedRemoveMesh(failingRemoveMaterial, () => {
-  sourceRemoveFlags.failingGeometry = true
-  throw new Error('injected dependent instance geometry disposal failure')
-}))
-failingRemoveInstance.userData.runtimeAssetSourceId = 'remove-source'
-failingRemoveInstance.userData.persistentWorldAssetPlacement = true
-const healthyRemoveMaterial = new THREE.MeshBasicMaterial()
-healthyRemoveMaterial.addEventListener('dispose', () => { sourceRemoveFlags.healthyMaterial = true })
-const healthyRemoveInstance = new THREE.Group()
-healthyRemoveInstance.add(trackedRemoveMesh(healthyRemoveMaterial, () => { sourceRemoveFlags.healthyGeometry = true }))
-healthyRemoveInstance.userData.runtimeAssetSourceId = 'remove-source'
-healthyRemoveInstance.userData.persistentWorldAssetPlacement = true
 const sourceRemoveMaterial = new THREE.MeshBasicMaterial()
 sourceRemoveMaterial.addEventListener('dispose', () => { sourceRemoveFlags.sourceMaterial = true })
 const sourceRemoveObject = new THREE.Group()
-sourceRemoveObject.add(trackedRemoveMesh(sourceRemoveMaterial, () => { sourceRemoveFlags.sourceGeometry = true }))
-sourceRemoveScene.add(failingRemoveInstance, healthyRemoveInstance, sourceRemoveObject)
-const sourceRemoveAsset = {
-  id: 'remove-source',
-  semanticEntryId: 'flora.remove',
-  sourceUrl: 'https://assets.example.test/remove-source.glb',
-  object: sourceRemoveObject,
-  animations: [],
-  loadedAt: Date.now(),
+sourceRemoveObject.add(trackedMesh(sourceRemoveMaterial, () => { sourceRemoveFlags.sourceGeometry = true }))
+await loadPublicAsset(sourceRemoveRuntime, 'remove-source', 'flora.remove', sourceRemoveObject, [cleanupAnimation()])
+const failingRemoveInstance = sourceRemoveRuntime.placeInstance('failing-dependent', 'flora.remove', {
+  x: 1, y: 0, z: 1, sourceAssetId: 'remove-source',
+})
+const healthyRemoveInstance = sourceRemoveRuntime.placeInstance('healthy-dependent', 'flora.remove', {
+  x: 2, y: 0, z: 1, sourceAssetId: 'remove-source',
+})
+assert.ok(failingRemoveInstance && healthyRemoveInstance)
+watchObjectDisposal(failingRemoveInstance, () => {
+  sourceRemoveFlags.failingGeometry = true
+  throw new Error('injected dependent instance geometry disposal failure')
+}, () => {
+  sourceRemoveFlags.failingMaterial = true
+  throw new Error('injected dependent instance material disposal failure')
+})
+watchObjectDisposal(healthyRemoveInstance, () => { sourceRemoveFlags.healthyGeometry = true },
+  () => { sourceRemoveFlags.healthyMaterial = true })
+assert.equal(sourceRemoveRuntime.playInstanceAnimation('failing-dependent', 'CleanupWalk'), true)
+const originalSourceStop = THREE.AnimationMixer.prototype.stopAllAction
+const originalSourceUncache = THREE.AnimationMixer.prototype.uncacheRoot
+THREE.AnimationMixer.prototype.stopAllAction = function () {
+  if (this.getRoot() === failingRemoveInstance) {
+    sourceRemoveFlags.mixerStop = true
+    throw new Error('injected dependent mixer-stop failure')
+  }
+  return originalSourceStop.call(this)
 }
-sourceRemoveInternal.assets.set('remove-source', sourceRemoveAsset)
-sourceRemoveInternal.semanticSources.set('flora.remove', sourceRemoveAsset)
-sourceRemoveInternal.instances.set('failing-dependent', failingRemoveInstance)
-sourceRemoveInternal.instances.set('healthy-dependent', healthyRemoveInstance)
-const sourceRemoveMixer = new THREE.AnimationMixer(failingRemoveInstance)
-sourceRemoveMixer.stopAllAction = () => {
-  sourceRemoveFlags.mixerStop = true
-  throw new Error('injected dependent mixer-stop failure')
+THREE.AnimationMixer.prototype.uncacheRoot = function (root: THREE.Object3D) {
+  if (root === failingRemoveInstance) {
+    sourceRemoveFlags.mixerUncache = true
+    throw new Error('injected dependent mixer-uncache failure')
+  }
+  return originalSourceUncache.call(this, root)
 }
-sourceRemoveMixer.uncacheRoot = () => { sourceRemoveFlags.mixerUncache = true }
-sourceRemoveInternal.instanceMixers.set('failing-dependent', sourceRemoveMixer)
-sourceRemoveInternal.instanceActions.set('failing-dependent', {} as THREE.AnimationAction)
-sourceRemoveInternal.pendingAnimationStops.set('failing-dependent', [])
-sourceRemoveInternal.animationAccumulators.set('failing-dependent', 1)
-assert.throws(() => sourceRemoveRuntime.remove('remove-source'), AggregateError,
-  'source removal must aggregate dependent cleanup failures after completing the whole source removal')
+try {
+  assert.throws(() => sourceRemoveRuntime.remove('remove-source'), AggregateError,
+    'source removal must aggregate dependent cleanup failures after completing the whole source removal')
+} finally {
+  THREE.AnimationMixer.prototype.stopAllAction = originalSourceStop
+  THREE.AnimationMixer.prototype.uncacheRoot = originalSourceUncache
+}
 assert.equal(sourceRemoveScene.children.length, 0,
   'a failed dependent cleanup must not leave any source or placement roots attached')
-assert.equal(sourceRemoveInternal.instances.size, 0)
-assert.equal(sourceRemoveInternal.assets.size, 0)
-assert.equal(sourceRemoveInternal.semanticSources.size, 0)
-assert.equal(sourceRemoveInternal.instanceMixers.size, 0)
-assert.equal(sourceRemoveInternal.instanceActions.size, 0)
-assert.equal(sourceRemoveInternal.pendingAnimationStops.size, 0)
-assert.equal(sourceRemoveInternal.animationAccumulators.size, 0)
+assert.equal(sourceRemoveRuntime.hasInstance('failing-dependent'), false)
+assert.equal(sourceRemoveRuntime.hasInstance('healthy-dependent'), false)
+assert.equal(sourceRemoveRuntime.has('remove-source'), false)
+assert.equal(sourceRemoveRuntime.hasSemanticSource('flora.remove'), false)
+assert.deepEqual(sourceRemoveRuntime.stats(), {
+  loaded: 0, ids: [], instances: 0, animatedInstances: 0, visibleInstances: 0,
+})
 assert.equal(sourceRemoveNotifications, 2,
   'source removal must continue to notify for every persistent dependent after a callback failure')
 assert.deepEqual(sourceRemoveFlags, {
@@ -1007,7 +1042,6 @@ assert.deepEqual(sourceRemoveFlags, {
   mixerStop: true,
   mixerUncache: true,
 }, 'source removal must dispose failing and healthy dependent resources plus its own source resources')
-
 
 const restoreCleanupScene = new THREE.Scene()
 const restoreCleanupFlags = {
@@ -1309,20 +1343,10 @@ assert.equal(requests.length, requestsBeforeInvalidLoad,
   'invalid asset transforms must not create a loader request')
 
 const attachFailureScene = new THREE.Scene()
-const attachFailureSceneAdd = attachFailureScene.add.bind(attachFailureScene)
-attachFailureScene.add = (...objects: THREE.Object3D[]) => {
-  attachFailureSceneAdd(...objects)
-  throw new Error('injected instance scene attachment failure')
-}
 let attachFailureNotifications = 0
 const attachFailureRuntime = new WorldAssetRuntime(attachFailureScene, loader, () => {
   attachFailureNotifications += 1
 })
-const attachFailureInternal = attachFailureRuntime as unknown as {
-  assets: Map<string, { id: string; semanticEntryId: string; sourceUrl: string; object: THREE.Object3D; animations: THREE.AnimationClip[]; loadedAt: number }>
-  semanticSources: Map<string, unknown>
-  instances: Map<string, THREE.Object3D>
-}
 const attachFailureFlags = {
   clonedGeometry: false,
   clonedMaterial: false,
@@ -1340,16 +1364,7 @@ attachSourceGeometry.addEventListener('dispose', () => { attachFailureFlags.sour
 const attachSourceMesh = new THREE.Mesh(attachSourceGeometry, attachSourceMaterial)
 const attachSourceObject = new THREE.Group()
 attachSourceObject.add(attachSourceMesh)
-const attachSourceAsset = {
-  id: 'attach-failure-source',
-  semanticEntryId: 'flora.attach-failure',
-  sourceUrl: 'https://assets.example.test/attach-failure.glb',
-  object: attachSourceObject,
-  animations: [],
-  loadedAt: Date.now(),
-}
-attachFailureInternal.assets.set(attachSourceAsset.id, attachSourceAsset)
-attachFailureInternal.semanticSources.set(attachSourceAsset.semanticEntryId, attachSourceAsset)
+await loadPublicAsset(attachFailureRuntime, 'attach-failure-source', 'flora.attach-failure', attachSourceObject)
 
 const originalAttachGeometryClone = attachSourceGeometry.clone.bind(attachSourceGeometry)
 attachSourceGeometry.clone = function () {
@@ -1370,24 +1385,35 @@ attachSourceTexture.clone = function () {
   return cloned
 }
 
-assert.throws(
-  () => attachFailureRuntime.placeInstance(
-    'invalid-instance-transform',
-    'flora.attach-failure',
-    { x: Number.NaN, y: 0, z: 0 },
-  ),
-  /finite coordinates, scale and rotation/,
-  'instance placement must reject non-finite coordinates before cloning resources',
-)
-assert.throws(
-  () => attachFailureRuntime.placeInstance(
-    'failed-attach-instance',
-    'flora.attach-failure',
-    { x: 1, y: 0, z: 1 },
-  ),
-  /injected instance scene attachment failure/,
-  'an exception after partial scene attachment must propagate to the caller',
-)
+const originalAttachSceneAdd = attachFailureScene.add.bind(attachFailureScene)
+attachFailureScene.add = (...objects: THREE.Object3D[]) => {
+  originalAttachSceneAdd(...objects)
+  if (objects.some(object => object !== attachSourceObject)) {
+    throw new Error('injected instance scene attachment failure')
+  }
+}
+try {
+  assert.throws(
+    () => attachFailureRuntime.placeInstance(
+      'invalid-instance-transform',
+      'flora.attach-failure',
+      { x: Number.NaN, y: 0, z: 0, sourceAssetId: 'attach-failure-source' },
+    ),
+    /finite coordinates, scale and rotation/,
+    'instance placement must reject non-finite coordinates before cloning resources',
+  )
+  assert.throws(
+    () => attachFailureRuntime.placeInstance(
+      'failed-attach-instance',
+      'flora.attach-failure',
+      { x: 1, y: 0, z: 1, sourceAssetId: 'attach-failure-source' },
+    ),
+    /injected instance scene attachment failure/,
+    'an exception after partial scene attachment must propagate to the caller',
+  )
+} finally {
+  attachFailureScene.add = originalAttachSceneAdd
+}
 assert.deepEqual(attachFailureFlags, {
   clonedGeometry: true,
   clonedMaterial: true,
@@ -1396,9 +1422,9 @@ assert.deepEqual(attachFailureFlags, {
   sourceMaterial: false,
   sourceTexture: false,
 }, 'failed instance publication must release only cloned resources and preserve the source asset')
-assert.equal(attachFailureScene.children.length, 0,
-  'failed instance publication must detach a root even when scene.add throws after attachment')
-assert.equal(attachFailureInternal.instances.size, 0,
+assert.equal(attachFailureScene.children.length, 1,
+  'failed instance publication must detach the clone while retaining the registered source asset')
+assert.equal(attachFailureRuntime.stats().instances, 0,
   'failed instance publication must not leave an instance registry entry')
 assert.equal(attachFailureRuntime.hasInstance('failed-attach-instance'), false)
 assert.equal(attachFailureNotifications, 0,
