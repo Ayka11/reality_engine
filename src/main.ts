@@ -2022,6 +2022,7 @@ async function loop(ts: number) {
       (climateActive && climate.willWriteGridOnNextTick()) ||
       multiScale.willWriteGridOnNextTick() ||
       langSys.willWriteGridOnNextTick();
+    const externalGridRevisionBefore = sim.grid.mutationRevision;
     if (externalGridWriteExpected) sim.invalidatePendingGPUReadback();
 
     let externalGridChanged = false;
@@ -2038,7 +2039,13 @@ async function loop(ts: number) {
       // These systems write the public CPU grid outside SimulationEngine.step().
       // Publish once after the batch so chunks and the GPU see the same authority,
       // including when an expected field-writing pass throws partway through.
-      if (externalGridWriteExpected || externalGridChanged) sim.syncToGPU();
+      // The revision fallback also catches a writer that changed the tracked grid
+      // despite its preflight prediction or returned-change flag being false.
+      const trackedExternalGridMutation =
+        sim.grid.mutationRevision !== externalGridRevisionBefore;
+      if (externalGridWriteExpected || externalGridChanged || trackedExternalGridMutation) {
+        sim.syncToGPU();
+      }
     }
 
     // Tick chunk worker (non-blocking — skip if previous frame not yet returned)
