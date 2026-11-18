@@ -274,6 +274,7 @@ assert.equal(remoteFailureEngine.redoLength, 0);
 
 const remoteHistoryEngine = new BrushEngine(dirtyRollbackGrid);
 const remoteDenseBefore = dirtyRollbackGrid.buffer.slice();
+const remoteBackBefore = dirtyRollbackGrid.backBuffer.slice();
 const remoteOwnersBefore = [...dirtyRollbackGrid.chunkOwners.entries()];
 const remoteDirtyBefore = [...dirtyRollbackGrid.dirtyChunks];
 const remoteDenseIndex = dirtyRollbackGrid.idx(3, 3, 3) + F.ENERGY;
@@ -282,6 +283,7 @@ await remoteHistoryEngine.applyCustomStroke(makeStroke(), () => {
   remote.buffer[F.ENERGY] = 4567;
   remote.backBuffer[F.ENERGY] = 7654;
   dirtyRollbackGrid.buffer[remoteDenseIndex] = 9876;
+  dirtyRollbackGrid.backBuffer[remoteDenseIndex] = 8765;
   dirtyRollbackGrid.chunkOwners.set(remoteChunkKey, "custom-stroke-owner");
   dirtyRollbackGrid.dirtyChunks.add(remoteChunkKey);
 });
@@ -290,6 +292,7 @@ assert.equal(remoteAfterCommit.buffer[F.ENERGY], 4567);
 assert.equal(remoteAfterCommit.backBuffer[F.ENERGY], 7654);
 assert.equal(remoteHistoryEngine.historyLength, 1);
 assert.equal(dirtyRollbackGrid.buffer[remoteDenseIndex], 9876);
+assert.equal(dirtyRollbackGrid.backBuffer[remoteDenseIndex], 8765);
 assert.equal(dirtyRollbackGrid.chunkOwners.get(remoteChunkKey), "custom-stroke-owner");
 const remoteHistoryInternals = remoteHistoryEngine as unknown as {
   history: Array<{ gridDelta?: {
@@ -313,6 +316,8 @@ assert.equal(remoteHistoryEngine.historyLength, 0);
 assert.equal(remoteHistoryEngine.redoLength, 1);
 assertBufferEqual(dirtyRollbackGrid.buffer, remoteDenseBefore,
   "custom stroke undo must restore dense values");
+assertBufferEqual(dirtyRollbackGrid.backBuffer, remoteBackBefore,
+  "custom stroke undo must restore dense back-buffer values");
 assert.deepEqual([...dirtyRollbackGrid.chunkOwners.entries()], remoteOwnersBefore,
   "custom stroke undo must restore chunk ownership metadata");
 assert.deepEqual([...dirtyRollbackGrid.dirtyChunks], remoteDirtyBefore,
@@ -329,6 +334,8 @@ assert.equal(remoteHistoryEngine.historyLength, 1);
 assert.equal(remoteHistoryEngine.redoLength, 0);
 assert.equal(dirtyRollbackGrid.buffer[remoteDenseIndex], 9876,
   "custom stroke redo must restore dense values");
+assert.equal(dirtyRollbackGrid.backBuffer[remoteDenseIndex], 8765,
+  "custom stroke redo must restore dense back-buffer values");
 assert.equal(dirtyRollbackGrid.chunkOwners.get(remoteChunkKey), "custom-stroke-owner",
   "custom stroke redo must restore chunk ownership metadata");
 assert.ok(remoteHistoryInternals.history[0]?.gridDelta,
