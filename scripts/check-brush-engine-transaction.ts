@@ -297,6 +297,32 @@ assert.equal(remoteAfterRedo.backBuffer[F.ENERGY], 7654);
 assert.equal(remoteHistoryEngine.historyLength, 1);
 assert.equal(remoteHistoryEngine.redoLength, 0);
 
+// Existing sparse chunks outside the dense window must retain their original
+// contents through a custom stroke's undo/redo cycle as well.
+const existingRemoteKey = "5,0,0";
+const existingRemoteChunk = dirtyRollbackGrid.getOrCreateChunk(5, 0, 0);
+existingRemoteChunk.buffer[F.ENERGY] = 111;
+existingRemoteChunk.backBuffer[F.ENERGY] = 222;
+const existingRemoteEngine = new BrushEngine(dirtyRollbackGrid);
+await existingRemoteEngine.applyCustomStroke(makeStroke(), () => {
+  const remote = dirtyRollbackGrid.chunks.get(existingRemoteKey)!;
+  remote.buffer[F.ENERGY] = 333;
+  remote.backBuffer[F.ENERGY] = 444;
+});
+const changedRemote = dirtyRollbackGrid.chunks.get(existingRemoteKey)!;
+assert.equal(changedRemote.buffer[F.ENERGY], 333);
+assert.equal(changedRemote.backBuffer[F.ENERGY], 444);
+assert.ok(existingRemoteEngine.undo());
+const restoredRemote = dirtyRollbackGrid.chunks.get(existingRemoteKey)!;
+assert.equal(restoredRemote.buffer[F.ENERGY], 111,
+  "custom undo must restore the previous front-buffer contents of existing remote chunks");
+assert.equal(restoredRemote.backBuffer[F.ENERGY], 222,
+  "custom undo must restore the previous back-buffer contents of existing remote chunks");
+assert.ok(existingRemoteEngine.redo());
+const replayedRemote = dirtyRollbackGrid.chunks.get(existingRemoteKey)!;
+assert.equal(replayedRemote.buffer[F.ENERGY], 333);
+assert.equal(replayedRemote.backBuffer[F.ENERGY], 444);
+
 console.log("PASS: BrushEngine commit/undo/redo rollback on chunk synchronization failure");
 console.log("PASS: Custom sculpt rollback and history preserve sparse chunks outside the dense window");
 console.log("PASS: BrushEngine dense and sparse mirrors roll back after dirty-publication failures");
