@@ -273,33 +273,52 @@ assert.equal(remoteFailureEngine.historyLength, 0);
 assert.equal(remoteFailureEngine.redoLength, 0);
 
 const remoteHistoryEngine = new BrushEngine(dirtyRollbackGrid);
+const remoteDenseBefore = dirtyRollbackGrid.buffer.slice();
+const remoteOwnersBefore = [...dirtyRollbackGrid.chunkOwners.entries()];
+const remoteDirtyBefore = [...dirtyRollbackGrid.dirtyChunks];
+const remoteDenseIndex = dirtyRollbackGrid.idx(3, 3, 3) + F.ENERGY;
 await remoteHistoryEngine.applyCustomStroke(makeStroke(), () => {
   const remote = dirtyRollbackGrid.getOrCreateChunk(4, 0, 0);
   remote.buffer[F.ENERGY] = 4567;
   remote.backBuffer[F.ENERGY] = 7654;
+  dirtyRollbackGrid.buffer[remoteDenseIndex] = 9876;
+  dirtyRollbackGrid.chunkOwners.set(remoteChunkKey, "custom-stroke-owner");
+  dirtyRollbackGrid.dirtyChunks.add(remoteChunkKey);
 });
 const remoteAfterCommit = dirtyRollbackGrid.chunks.get(remoteChunkKey)!;
 assert.equal(remoteAfterCommit.buffer[F.ENERGY], 4567);
 assert.equal(remoteAfterCommit.backBuffer[F.ENERGY], 7654);
 assert.equal(remoteHistoryEngine.historyLength, 1);
+assert.equal(dirtyRollbackGrid.buffer[remoteDenseIndex], 9876);
+assert.equal(dirtyRollbackGrid.chunkOwners.get(remoteChunkKey), "custom-stroke-owner");
 const remoteHistoryInternals = remoteHistoryEngine as unknown as {
-  history: Array<{ fullGridBefore?: unknown; fullGridAfter?: unknown }>;
-  redoStack: Array<{ fullGridBefore?: unknown; fullGridAfter?: unknown }>;
+  history: Array<{ gridDelta?: {
+    chunks: Array<{ key: string; afterFull?: unknown; front?: { indices: Uint32Array }; back?: { indices: Uint32Array } }>;
+    buffer: { indices: Uint32Array };
+  } }>;
+  redoStack: Array<{ gridDelta?: unknown }>;
 };
-assert.ok(remoteHistoryInternals.history[0]?.fullGridBefore,
-  "applied custom stroke must retain its pre-stroke snapshot");
-assert.equal(remoteHistoryInternals.history[0]?.fullGridAfter, undefined,
-  "applied custom stroke must not eagerly retain a second full-grid snapshot");
+const remoteDelta = remoteHistoryInternals.history[0]?.gridDelta;
+assert.ok(remoteDelta, "custom stroke history must store a sparse-grid delta");
+const addedRemoteDelta = remoteDelta.chunks.find(chunk => chunk.key === remoteChunkKey);
+assert.ok(addedRemoteDelta?.afterFull,
+  "a newly created remote chunk must be retained as an addition delta");
+assert.ok(remoteDelta.buffer.indices.length > 0,
+  "custom stroke delta must include dense-window changes");
 
 assert.ok(remoteHistoryEngine.undo());
 assert.equal(dirtyRollbackGrid.chunks.has(remoteChunkKey), false,
   "custom stroke undo must restore sparse topology outside the dense window");
 assert.equal(remoteHistoryEngine.historyLength, 0);
 assert.equal(remoteHistoryEngine.redoLength, 1);
-assert.equal(remoteHistoryInternals.redoStack[0]?.fullGridBefore, undefined,
-  "undone custom stroke must release the old pre-stroke snapshot");
-assert.ok(remoteHistoryInternals.redoStack[0]?.fullGridAfter,
-  "undone custom stroke must retain only the state needed for redo");
+assertBufferEqual(dirtyRollbackGrid.buffer, remoteDenseBefore,
+  "custom stroke undo must restore dense values");
+assert.deepEqual([...dirtyRollbackGrid.chunkOwners.entries()], remoteOwnersBefore,
+  "custom stroke undo must restore chunk ownership metadata");
+assert.deepEqual([...dirtyRollbackGrid.dirtyChunks], remoteDirtyBefore,
+  "custom stroke undo must restore dirty-chunk metadata");
+assert.ok(remoteHistoryInternals.redoStack[0]?.gridDelta,
+  "undo must retain the sparse delta required for redo");
 
 assert.ok(remoteHistoryEngine.redo());
 const remoteAfterRedo = dirtyRollbackGrid.chunks.get(remoteChunkKey);
@@ -308,10 +327,12 @@ assert.equal(remoteAfterRedo.buffer[F.ENERGY], 4567);
 assert.equal(remoteAfterRedo.backBuffer[F.ENERGY], 7654);
 assert.equal(remoteHistoryEngine.historyLength, 1);
 assert.equal(remoteHistoryEngine.redoLength, 0);
-assert.ok(remoteHistoryInternals.history[0]?.fullGridBefore,
-  "redone custom stroke must retain the pre-stroke snapshot again");
-assert.equal(remoteHistoryInternals.history[0]?.fullGridAfter, undefined,
-  "redone custom stroke must release its redo snapshot after publication");
+assert.equal(dirtyRollbackGrid.buffer[remoteDenseIndex], 9876,
+  "custom stroke redo must restore dense values");
+assert.equal(dirtyRollbackGrid.chunkOwners.get(remoteChunkKey), "custom-stroke-owner",
+  "custom stroke redo must restore chunk ownership metadata");
+assert.ok(remoteHistoryInternals.history[0]?.gridDelta,
+  "redo must keep the compact sparse delta for subsequent undo");
 
 // Existing sparse chunks outside the dense window must retain their original
 // contents through a custom stroke's undo/redo cycle as well.
@@ -328,6 +349,20 @@ await existingRemoteEngine.applyCustomStroke(makeStroke(), () => {
 const changedRemote = dirtyRollbackGrid.chunks.get(existingRemoteKey)!;
 assert.equal(changedRemote.buffer[F.ENERGY], 333);
 assert.equal(changedRemote.backBuffer[F.ENERGY], 444);
+const existingRemoteRecord = (existingRemoteEngine as unknown as {
+  history: Array<{ gridDelta?: { chunks: Array<{
+    key: string; beforeFull?: unknown; afterFull?: unknown;
+    front?: { indices: Uint32Array }; back?: { indices: Uint32Array };
+  }> } }>;
+}).history[0];
+const existingRemoteDelta = existingRemoteRecord?.gridDelta?.chunks.find(chunk => chunk.key === existingRemoteKey);
+assert.ok(existingRemoteDelta, "existing remote chunk changes must be represented in the sparse delta");
+assert.equal(existingRemoteDelta.beforeFull, undefined);
+assert.equal(existingRemoteDelta.afterFull, undefined);
+assert.equal(existingRemoteDelta.front?.indices.length, 1,
+  "existing remote front-buffer delta must store only changed field positions");
+assert.equal(existingRemoteDelta.back?.indices.length, 1,
+  "existing remote back-buffer delta must store only changed field positions");
 assert.ok(existingRemoteEngine.undo());
 const restoredRemote = dirtyRollbackGrid.chunks.get(existingRemoteKey)!;
 assert.equal(restoredRemote.buffer[F.ENERGY], 111,
