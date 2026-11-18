@@ -1,4 +1,4 @@
-import type { SparseVoxelGrid } from '../core/SparseVoxelGrid';
+import type { SparseVoxelGrid, SparseVoxelGridSnapshot } from '../core/SparseVoxelGrid';
 
 export type SculptToolId = 'inject' | 'erase' | 'noise' | 'stamp' | 'erode' | 'smooth' | 'pattern';
 export type BrushFalloff = 'linear' | 'smooth' | 'sphere' | 'sharp';
@@ -55,4 +55,6 @@ export interface StrokeRecord {
   edits: CellEdit[];
   fullBefore?: Float32Array;
   fullAfter?: Float32Array;
+  fullGridBefore?: SparseVoxelGridSnapshot;
+  fullGridAfter?: SparseVoxelGridSnapshot;
 }
