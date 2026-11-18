@@ -118,10 +118,8 @@ export class BrushEngine {
     // the dense window. Capture the complete authoritative grid before chunk
     // discovery itself creates or activates any affected chunks.
     const beforeGrid = this.grid.captureState();
-    const before = beforeGrid.buffer.slice();
     const chunks = this.getAffectedChunks(stroke);
     stroke.affectedChunks = chunks.map(chunk => this.grid.getChunkKey(chunk.cx, chunk.cy, chunk.cz));
-    let after: Float32Array;
     try {
       const result = (apply as unknown as () => unknown)();
       if (result !== null &&
@@ -129,27 +127,25 @@ export class BrushEngine {
           typeof (result as { then?: unknown }).then === "function") {
         throw new TypeError("Custom sculpt callback must remain synchronous");
       }
-      after = this.grid.buffer.slice();
     } catch (error) {
       rollbackGridSnapshot(this.grid, beforeGrid, error, "Custom sculpt callback");
     }
 
-    let afterGrid: ReturnType<SparseVoxelGrid["captureState"]>;
     try {
       this.grid.syncDenseToChunks();
       this.grid.markChunksDirty(stroke.affectedChunks);
-      afterGrid = this.grid.captureState();
     } catch (error) {
       rollbackGridSnapshot(this.grid, beforeGrid, error, "Custom sculpt commit");
     }
 
+    // Keep only the pre-stroke grid snapshot while the edit is applied. Undo
+    // captures the post-stroke state on demand and swaps the retained snapshot
+    // to the opposite side. This avoids retaining two complete sparse-grid
+    // snapshots (plus duplicate dense buffers) for every custom history entry.
     this.history.push({
       stroke: { ...stroke, affectedChunks: [...stroke.affectedChunks] },
       edits: [],
-      fullBefore: before,
-      fullAfter: after,
       fullGridBefore: beforeGrid,
-      fullGridAfter: afterGrid,
     });
     if (this.history.length > this.maxHistory) this.history.shift();
     this.redoStack = [];
@@ -224,13 +220,17 @@ export class BrushEngine {
     const record = this.history[this.history.length - 1];
     if (!record) return null;
     const currentGrid = record.fullGridBefore ? this.grid.captureState() : null;
-    const current = record.fullBefore
-      ? this.grid.buffer.slice()
-      : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
+    const current = record.fullGridBefore || record.fullGridAfter
+      ? null
+      : record.fullBefore
+        ? this.grid.buffer.slice()
+        : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
 
     try {
       if (record.fullGridBefore) {
         this.grid.restoreState(record.fullGridBefore);
+        record.fullGridBefore = undefined;
+        record.fullGridAfter = currentGrid!;
       } else {
         if (record.fullBefore) this.grid.buffer.set(record.fullBefore);
         else for (const edit of record.edits) this.grid.buffer.set(edit.before, edit.offset);
@@ -245,7 +245,7 @@ export class BrushEngine {
         this.grid,
         () => {
           if (record.fullBefore) this.grid.buffer.set(current as Float32Array);
-          else for (const item of current as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
+          else for (const item of (current ?? []) as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
         },
         error,
         "Sculpt undo",
@@ -261,13 +261,17 @@ export class BrushEngine {
     const record = this.redoStack[this.redoStack.length - 1];
     if (!record) return null;
     const currentGrid = record.fullGridAfter ? this.grid.captureState() : null;
-    const current = record.fullAfter
-      ? this.grid.buffer.slice()
-      : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
+    const current = record.fullGridAfter || record.fullGridBefore
+      ? null
+      : record.fullAfter
+        ? this.grid.buffer.slice()
+        : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
 
     try {
       if (record.fullGridAfter) {
         this.grid.restoreState(record.fullGridAfter);
+        record.fullGridAfter = undefined;
+        record.fullGridBefore = currentGrid!;
       } else {
         if (record.fullAfter) this.grid.buffer.set(record.fullAfter);
         else for (const edit of record.edits) this.grid.buffer.set(edit.after, edit.offset);
@@ -282,7 +286,7 @@ export class BrushEngine {
         this.grid,
         () => {
           if (record.fullAfter) this.grid.buffer.set(current as Float32Array);
-          else for (const item of current as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
+          else for (const item of (current ?? []) as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
         },
         error,
         "Sculpt redo",
