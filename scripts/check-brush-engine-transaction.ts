@@ -167,6 +167,17 @@ await assert.rejects(
 assert.equal(asyncCallbackInvoked, false,
   "bound async custom sculpt callback must be rejected before invocation");
 
+let generatorCallbackInvoked = false;
+const generatorCustomCallback = (function* () {
+  generatorCallbackInvoked = true;
+}) as unknown as () => void;
+await assert.rejects(
+  () => customEngine.applyCustomStroke(makeStroke(), generatorCustomCallback),
+  /must remain synchronous/,
+);
+assert.equal(generatorCallbackInvoked, false,
+  "generator custom sculpt callback must be rejected before invocation");
+
 const beforeThenableCallback = grid.buffer.slice();
 const thenableCustomCallback = (() => Promise.resolve()) as unknown as () => void;
 await assert.rejects(
@@ -179,4 +190,4 @@ assert.equal(customEngine.historyLength, 0,
   "thenable-returning custom callback must not create history");
 
 console.log("PASS: BrushEngine commit/undo/redo rollback on chunk synchronization failure");
-console.log("PASS: BrushEngine custom callbacks reject async, generator and thenable mutation paths");
+console.log("PASS: BrushEngine custom callbacks reject async, bound, generator and thenable mutation paths");
