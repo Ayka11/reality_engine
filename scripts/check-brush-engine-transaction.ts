@@ -282,12 +282,24 @@ const remoteAfterCommit = dirtyRollbackGrid.chunks.get(remoteChunkKey)!;
 assert.equal(remoteAfterCommit.buffer[F.ENERGY], 4567);
 assert.equal(remoteAfterCommit.backBuffer[F.ENERGY], 7654);
 assert.equal(remoteHistoryEngine.historyLength, 1);
+const remoteHistoryInternals = remoteHistoryEngine as unknown as {
+  history: Array<{ fullGridBefore?: unknown; fullGridAfter?: unknown }>;
+  redoStack: Array<{ fullGridBefore?: unknown; fullGridAfter?: unknown }>;
+};
+assert.ok(remoteHistoryInternals.history[0]?.fullGridBefore,
+  "applied custom stroke must retain its pre-stroke snapshot");
+assert.equal(remoteHistoryInternals.history[0]?.fullGridAfter, undefined,
+  "applied custom stroke must not eagerly retain a second full-grid snapshot");
 
 assert.ok(remoteHistoryEngine.undo());
 assert.equal(dirtyRollbackGrid.chunks.has(remoteChunkKey), false,
   "custom stroke undo must restore sparse topology outside the dense window");
 assert.equal(remoteHistoryEngine.historyLength, 0);
 assert.equal(remoteHistoryEngine.redoLength, 1);
+assert.equal(remoteHistoryInternals.redoStack[0]?.fullGridBefore, undefined,
+  "undone custom stroke must release the old pre-stroke snapshot");
+assert.ok(remoteHistoryInternals.redoStack[0]?.fullGridAfter,
+  "undone custom stroke must retain only the state needed for redo");
 
 assert.ok(remoteHistoryEngine.redo());
 const remoteAfterRedo = dirtyRollbackGrid.chunks.get(remoteChunkKey);
@@ -296,6 +308,10 @@ assert.equal(remoteAfterRedo.buffer[F.ENERGY], 4567);
 assert.equal(remoteAfterRedo.backBuffer[F.ENERGY], 7654);
 assert.equal(remoteHistoryEngine.historyLength, 1);
 assert.equal(remoteHistoryEngine.redoLength, 0);
+assert.ok(remoteHistoryInternals.history[0]?.fullGridBefore,
+  "redone custom stroke must retain the pre-stroke snapshot again");
+assert.equal(remoteHistoryInternals.history[0]?.fullGridAfter, undefined,
+  "redone custom stroke must release its redo snapshot after publication");
 
 // Existing sparse chunks outside the dense window must retain their original
 // contents through a custom stroke's undo/redo cycle as well.
