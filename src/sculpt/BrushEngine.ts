@@ -134,7 +134,15 @@ export class BrushEngine {
         throw new TypeError("Custom sculpt callback must remain synchronous");
       }
       this.grid.syncDenseToChunks();
-      this.grid.markChunksDirty(stroke.affectedChunks);
+      // Custom callbacks may mutate chunks beyond the brush-radius estimate.
+      // Discover those changed chunk keys first, then mark both explicit and
+      // callback-touched chunks dirty so persistence cannot miss remote edits.
+      const provisionalDelta = createSparseVoxelGridDelta(beforeGrid, this.grid.captureState());
+      const dirtyKeys = new Set([
+        ...stroke.affectedChunks,
+        ...provisionalDelta.chunks.map(chunk => chunk.key),
+      ]);
+      this.grid.markChunksDirty([...dirtyKeys]);
       const afterGrid = this.grid.captureState();
       delta = createSparseVoxelGridDelta(beforeGrid, afterGrid);
     } catch (error) {
