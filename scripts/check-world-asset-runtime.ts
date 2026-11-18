@@ -749,6 +749,12 @@ async function loadPublicAsset(
   await pending
 }
 
+function trackedMesh(material: THREE.Material, onGeometryDispose: () => void): THREE.Mesh {
+  const geometry = new THREE.BoxGeometry(1, 1, 1)
+  geometry.addEventListener('dispose', onGeometryDispose)
+  return new THREE.Mesh(geometry, material)
+}
+
 function watchObjectDisposal(
   root: THREE.Object3D,
   onGeometry: () => void,
