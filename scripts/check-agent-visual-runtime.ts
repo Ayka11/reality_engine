@@ -321,7 +321,7 @@ const unsubscribe = observedSystem.onAgentsChanged(snapshot => {
   observerCalls += 1
   observedSnapshots.push(snapshot as Agent[])
 })
-observedSystem.spawn(18, 14, 3)
+observedSystem.spawn(18, 14, 3, { reprodThresh: 0.95 })
 assert.equal(observerCalls, 1, 'spawning must notify visual observers once after the population is added')
 const exposed = observedSnapshots[0][0]
 const authoritativeEnergyWeight = observedSystem.agents[0].genome.seekEnergyW
@@ -346,11 +346,6 @@ assert.throws(() => observedSystem.step(
 ), /mutation rate/)
 assert.equal(observedSystem.count, 3,
   'invalid tick requests must not partially mutate the authoritative population')
-const removedAgentId = observedSystem.agents[0]!.id
-assert.equal(observedSystem.remove(removedAgentId), true)
-assert.equal(observedSystem.remove(removedAgentId), false)
-assert.equal(observedSystem.count, 2)
-
 assert.equal(Object.hasOwn(observedSystem, 'agents'), false,
   'AgentSystem must expose its population through a getter, not a writable array property')
 assert.equal(Reflect.set(observedSystem, 'agents', []), false,
@@ -381,5 +376,10 @@ roleAssignments[0].plan = 'mutated after application'
 assert.notEqual(observedSystem.agents[0].plan, 'mutated after application')
 assert.match(firstRolePlan, /^\[(Scout|Harvester|Architect|Guardian|Breeder)\]/,
   'agent roles must be applied through the authoritative owner without retaining caller references')
+
+const removedAgentId = observedSystem.agents[0]!.id
+assert.equal(observedSystem.remove(removedAgentId), true)
+assert.equal(observedSystem.remove(removedAgentId), false)
+assert.equal(observedSystem.count, 2)
 
 console.log('Agent visual runtime exact clip mapping, 2D-to-world placement, origin rebasing, transient persistence, lifecycle and safe agent notifications: PASS')
