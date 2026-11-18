@@ -16,7 +16,7 @@ function chunkCoord(g: number): number {
 }
 
 function assertSynchronousCustomStrokeCallback(callback: () => void): void {
-  const callbackFunction = callback as unknown as Function;
+  const callbackFunction = callback;
   const callbackKind = Object.prototype.toString.call(callbackFunction);
   const callbackPrototype = Object.getPrototypeOf(callbackFunction) as {
     constructor?: { name?: string };
