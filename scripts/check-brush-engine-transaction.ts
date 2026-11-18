@@ -189,5 +189,72 @@ assertBufferEqual(grid.buffer, beforeThenableCallback,
 assert.equal(customEngine.historyLength, 0,
   "thenable-returning custom callback must not create history");
 
+// A failure after dense-to-chunk synchronization must roll back both mirrors.
+// markChunksDirty runs after the chunk copy, so dense-only rollback is insufficient.
+const dirtyRollbackGrid = new SparseVoxelGrid(8, 8, 8);
+const dirtyRollbackEngine = new BrushEngine(dirtyRollbackGrid);
+dirtyRollbackGrid.buffer[dirtyRollbackGrid.idx(3, 3, 3) + F.ENERGY] = 17;
+dirtyRollbackGrid.syncDenseToChunks();
+const dirtyRollbackChunk = dirtyRollbackGrid.chunks.get("0,0,0")!;
+const dirtyRollbackDenseBefore = dirtyRollbackGrid.buffer.slice();
+const dirtyRollbackChunkBefore = dirtyRollbackChunk.buffer.slice();
+const markChunksDirty = dirtyRollbackGrid.markChunksDirty.bind(dirtyRollbackGrid);
+dirtyRollbackGrid.markChunksDirty = () => { throw new Error("injected dirty publication failure"); };
+await assert.rejects(() => dirtyRollbackEngine.applyStroke(makeStroke()), /injected dirty publication failure/);
+assertBufferEqual(dirtyRollbackGrid.buffer, dirtyRollbackDenseBefore,
+  "failed dirty publication must restore the dense field");
+assertBufferEqual(dirtyRollbackChunk.buffer, dirtyRollbackChunkBefore,
+  "failed dirty publication must restore the already-synchronized chunk mirror");
+assert.equal(dirtyRollbackEngine.historyLength, 0,
+  "failed dirty publication must not create stroke history");
+
+dirtyRollbackGrid.markChunksDirty = markChunksDirty;
+await dirtyRollbackEngine.applyStroke(makeStroke());
+const committedDirtyDense = dirtyRollbackGrid.buffer.slice();
+const committedDirtyChunk = dirtyRollbackChunk.buffer.slice();
+const historyBeforeDirtyUndo = dirtyRollbackEngine.historyLength;
+dirtyRollbackGrid.markChunksDirty = () => { throw new Error("injected undo dirty publication failure"); };
+assert.throws(() => dirtyRollbackEngine.undo(), /injected undo dirty publication failure/);
+assertBufferEqual(dirtyRollbackGrid.buffer, committedDirtyDense,
+  "failed undo dirty publication must restore the current dense field");
+assertBufferEqual(dirtyRollbackChunk.buffer, committedDirtyChunk,
+  "failed undo dirty publication must restore the current chunk mirror");
+assert.equal(dirtyRollbackEngine.historyLength, historyBeforeDirtyUndo,
+  "failed undo dirty publication must preserve its history record");
+assert.equal(dirtyRollbackEngine.redoLength, 0);
+
+dirtyRollbackGrid.markChunksDirty = markChunksDirty;
+assert.ok(dirtyRollbackEngine.undo());
+const undoneDirtyDense = dirtyRollbackGrid.buffer.slice();
+const undoneDirtyChunk = dirtyRollbackChunk.buffer.slice();
+dirtyRollbackGrid.markChunksDirty = () => { throw new Error("injected redo dirty publication failure"); };
+assert.throws(() => dirtyRollbackEngine.redo(), /injected redo dirty publication failure/);
+assertBufferEqual(dirtyRollbackGrid.buffer, undoneDirtyDense,
+  "failed redo dirty publication must restore the pre-redo dense field");
+assertBufferEqual(dirtyRollbackChunk.buffer, undoneDirtyChunk,
+  "failed redo dirty publication must restore the pre-redo chunk mirror");
+assert.equal(dirtyRollbackEngine.historyLength, 0);
+assert.equal(dirtyRollbackEngine.redoLength, 1,
+  "failed redo dirty publication must preserve its redo record");
+
+dirtyRollbackGrid.markChunksDirty = markChunksDirty;
+assert.ok(dirtyRollbackEngine.redo());
+assertBufferEqual(dirtyRollbackGrid.buffer, committedDirtyDense);
+assertBufferEqual(dirtyRollbackChunk.buffer, committedDirtyChunk);
+
+const customDirtyRollbackEngine = new BrushEngine(dirtyRollbackGrid);
+const customDirtyDenseBefore = dirtyRollbackGrid.buffer.slice();
+const customDirtyChunkBefore = dirtyRollbackChunk.buffer.slice();
+dirtyRollbackGrid.markChunksDirty = () => { throw new Error("injected custom dirty publication failure"); };
+await assert.rejects(() => customDirtyRollbackEngine.applyCustomStroke(makeStroke(), () => {
+  dirtyRollbackGrid.buffer[dirtyRollbackGrid.idx(3, 3, 3) + F.ENERGY] = 999;
+}), /injected custom dirty publication failure/);
+assertBufferEqual(dirtyRollbackGrid.buffer, customDirtyDenseBefore,
+  "failed custom dirty publication must restore the dense field");
+assertBufferEqual(dirtyRollbackChunk.buffer, customDirtyChunkBefore,
+  "failed custom dirty publication must restore the chunk mirror");
+assert.equal(customDirtyRollbackEngine.historyLength, 0);
+
 console.log("PASS: BrushEngine commit/undo/redo rollback on chunk synchronization failure");
+console.log("PASS: BrushEngine dense and sparse mirrors roll back after dirty-publication failures");
 console.log("PASS: BrushEngine custom callbacks reject async, bound, generator and thenable mutation paths");
