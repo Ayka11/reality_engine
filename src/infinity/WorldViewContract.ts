@@ -33,25 +33,33 @@ export class WorldViewContract {
   }
 
   setCenter(x: number, y: number, z: number) {
-    if (![x, y, z].every(Number.isFinite)) return this.snapshot()
+    if (![x, y, z].every(Number.isFinite)) {
+      throw new TypeError('World view coordinates must be finite')
+    }
     this.#state.center = { x, y, z }
     return this.snapshot()
   }
 
   setVisibleRadius(radius: number) {
-    if (!Number.isFinite(radius)) return this.snapshot()
+    if (!Number.isFinite(radius)) {
+      throw new TypeError('World view visible radius must be finite')
+    }
     this.#state.visibleRadius = Math.max(1, radius)
     return this.snapshot()
   }
 
   setSliceY(y: number) {
-    if (!Number.isFinite(y)) return this.snapshot()
+    if (!Number.isFinite(y)) {
+      throw new TypeError('World view slice Y must be finite')
+    }
     this.#state.sliceY = Math.round(y)
     return this.snapshot()
   }
 
   setSimulationTime(time: number) {
-    if (!Number.isFinite(time)) return this.snapshot()
+    if (!Number.isFinite(time)) {
+      throw new TypeError('World view simulation time must be finite')
+    }
     this.#state.simulationTime = Math.max(0, time)
     return this.snapshot()
   }
