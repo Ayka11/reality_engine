@@ -303,7 +303,7 @@ assert.match(makeObjectSource, /catch \(error\)[\s\S]*?for \(const geometry of o
 assert.match(makeObjectSource, /new AggregateError\(\[error, \.\.\.cleanupFailures\]/,
   'partial construction cleanup failures must remain observable alongside the original construction error')
 
-const syncObjectsStart = rendererSource.indexOf('#syncObjects()')
+const syncObjectsStart = rendererSource.indexOf('  #syncObjects() {')
 const syncObjectsEnd = rendererSource.indexOf('selectAtScreen(', syncObjectsStart)
 assert.ok(syncObjectsStart >= 0 && syncObjectsEnd > syncObjectsStart,
   'renderer syncObjects method must be available for streamed cleanup contract checks')
