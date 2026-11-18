@@ -57,7 +57,9 @@ export class WorldViewContract {
   }
 
   setSeed(seed: string) {
-    if (!seed.trim()) return this.snapshot()
+    if (typeof seed !== 'string' || !seed.trim()) {
+      throw new TypeError('World view seed must be a non-empty string')
+    }
     this.#state.seed = seed
     return this.snapshot()
   }
