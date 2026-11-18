@@ -94,8 +94,10 @@ assert.match(multiScaleSource, /willWriteGridOnNextTick\(\): boolean/);
 assert.match(languageSource, /willWriteGridOnNextTick\(\): boolean/);
 assert.match(mainSource, /if \(externalGridWriteExpected\) sim\.invalidatePendingGPUReadback\(\)/,
   "post-step CPU writers must invalidate outstanding GPU readback before a grid-writing pass");
-assert.match(mainSource, /if \(externalGridWriteExpected \|\| externalGridChanged\) sim\.syncToGPU\(\)/,
-  "post-step CPU writers must publish dense/chunk/GPU state after a grid-writing pass");
+assert.match(mainSource, /const trackedExternalGridMutation =\s*sim\.grid\.mutationRevision !== externalGridRevisionBefore/,
+  "post-step publication must detect tracked CPU writes even when a writer misses its change flag");
+assert.match(mainSource, /if \(externalGridWriteExpected \|\| externalGridChanged \|\| trackedExternalGridMutation\) \{\s*sim\.syncToGPU\(\)/,
+  "post-step CPU writers must publish dense/chunk/GPU state after every predicted, reported or observed grid-writing pass");
 for (const field of ["climate", "multiScale", "language", "economy", "metaLawEvolution", "cosmologicalSim"]) {
   assert.match(saveSystemSource, new RegExp(field + ": this\\.context\\.get[^\\n]+\\?\\.\\(\\)"),
     "quick saves must capture auxiliary runtime domain: " + field);
