@@ -48,6 +48,78 @@ async function beginPendingReadback(engine: SimulationEngine, stale: Float32Arra
   return { step, release: (data = stale) => release(data) };
 }
 
+async function checkEngineStateOnlyMutationsInvalidatePendingReadback(): Promise<void> {
+  const cases: Array<{
+    label: string;
+    mutate: (engine: SimulationEngine) => void;
+    expectedEnergy: number;
+  }> = [
+    {
+      label: "restoreTick",
+      mutate: engine => engine.restoreTick(engine.tick + 1),
+      expectedEnergy: 15,
+    },
+    {
+      label: "restorePrevEnergy",
+      mutate: engine => engine.restorePrevEnergy(engine.snapshotPrevEnergy()),
+      expectedEnergy: 15,
+    },
+    {
+      label: "resetPreviousEnergy",
+      mutate: engine => engine.resetPreviousEnergy(),
+      expectedEnergy: 15,
+    },
+    {
+      label: "restoreChemistryState",
+      mutate: engine => engine.restoreChemistryState(engine.captureCoreRecoveryState().chemistry),
+      expectedEnergy: 15,
+    },
+    {
+      label: "resetChemistryState",
+      mutate: engine => engine.resetChemistryState(),
+      expectedEnergy: 15,
+    },
+    {
+      label: "restoreEntityLayerSnapshot",
+      mutate: engine => engine.restoreEntityLayerSnapshot(engine.entityLayer.snapshot()),
+      expectedEnergy: 15,
+    },
+    {
+      label: "restoreAgentSystemSnapshot",
+      mutate: engine => engine.restoreAgentSystemSnapshot(engine.agents.snapshot()),
+      expectedEnergy: 15,
+    },
+    {
+      label: "setEntityMutationStrength",
+      mutate: engine => engine.setEntityMutationStrength(engine.entityLayer.mutationStrength + 0.25),
+      expectedEnergy: 15,
+    },
+    {
+      label: "reset",
+      mutate: engine => engine.reset(),
+      expectedEnergy: 0,
+    },
+  ];
+
+  for (const boundary of cases) {
+    const engine = new SimulationEngine(4, 4, 4);
+    (engine as unknown as { _gpuReady: boolean })._gpuReady = true;
+    const targetIndex = engine.grid.idx(1, 1, 1) + F.ENERGY;
+    engine.grid.buffer[targetIndex] = 15;
+    const staleReadback = engine.grid.buffer.slice();
+    staleReadback[targetIndex] = 8000;
+    const pending = await beginPendingReadback(engine, staleReadback);
+
+    boundary.mutate(engine);
+    pending.release(staleReadback);
+    await assert.rejects(pending.step, /Discarded stale GPU readback/,
+      `${boundary.label} must invalidate a pending GPU readback even when it changes subsystem state without a field write`);
+    assert.equal(engine.grid.buffer[targetIndex], boundary.expectedEnergy,
+      `stale GPU output must not overwrite CPU state after ${boundary.label}`);
+  }
+  console.log("SimulationEngine state-only restore, reset and subsystem mutation APIs invalidate pending GPU readback: PASS");
+}
+
 async function checkLawMutationsInvalidatePendingReadback(): Promise<void> {
   const cases: Array<{ label: string; mutate: (laws: LawEngine) => void }> = [
     {
@@ -96,6 +168,7 @@ async function checkLawMutationsInvalidatePendingReadback(): Promise<void> {
 
 export async function runSimulationEngineStaleReadbackRegression(): Promise<void> {
   checkLawSnapshotValidationIsAtomic();
+  await checkEngineStateOnlyMutationsInvalidatePendingReadback();
   await checkLawMutationsInvalidatePendingReadback();
   const engine = new SimulationEngine(8, 8, 8);
   // Subsystem invalidation hooks are engine-owned. Public callers must not be
