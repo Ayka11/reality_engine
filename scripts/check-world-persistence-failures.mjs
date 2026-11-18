@@ -285,12 +285,12 @@ assert.equal(typeof persistence.updateManifest, "undefined",
 const persistenceOwnership = new WorldPersistence("seed-cache-ownership");
 const persistenceInput = [makeWorldObject("cache-ownership", 7, 0, 7, "tree")];
 assert.equal(persistenceOwnership.saveChunk(0, 0, 0, persistenceInput), true);
-persistenceInput[0]!.properties.source = "mutated-after-save";
+persistenceInput[0].properties.source = "mutated-after-save";
 assert.equal(persistenceOwnership.readChunk(0, 0, 0).status, "ok");
 const cachedRead = persistenceOwnership.readChunk(0, 0, 0);
 assert.equal(cachedRead.status, "ok");
 if (cachedRead.status === "ok") {
-  cachedRead.objects[0]!.properties.source = "mutated-read-result";
+  cachedRead.objects[0].properties.source = "mutated-read-result";
 }
 assert.deepEqual(persistenceOwnership.loadChunk(0, 0, 0), [
   makeWorldObject("cache-ownership", 7, 0, 7, "tree"),
