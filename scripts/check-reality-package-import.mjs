@@ -436,7 +436,7 @@ const deleteSelectedStart = worldRendererSource.indexOf("  deleteSelected()");
 const deleteSelectedEnd = worldRendererSource.indexOf("  handlePointer(", deleteSelectedStart);
 const deleteSelectedSource = worldRendererSource.slice(deleteSelectedStart, deleteSelectedEnd);
 assert.ok(deleteSelectedSource.includes("detachAndDisposeObjectGroups(") &&
-  deleteSelectedSource.includes("this.objectMeshes.delete(id)"),
+  deleteSelectedSource.includes("this.#objectMeshes.delete(id)"),
   'deleting an object must evict its render cache even when a GPU disposer fails');
 assert.equal(deleteSelectedSource.includes("mesh.geometry.dispose()"), false,
   'object deletion must not directly invoke unguarded geometry disposal');
@@ -444,7 +444,7 @@ const overlayStart = worldRendererSource.indexOf("  setAnalyticalOverlay(");
 const overlayEnd = worldRendererSource.indexOf("  buildAnalyticalOverlay(", overlayStart);
 const overlaySource = worldRendererSource.slice(overlayStart, overlayEnd);
 assert.ok(overlaySource.includes("detachAndDisposeObjectGroups(") &&
-  overlaySource.includes("this.analyticalOverlayMesh = undefined"),
+  overlaySource.includes("this.#analyticalOverlayMesh = undefined"),
   'analytical overlay replacement must detach and forget the previous overlay before cleanup can fail');
 assert.equal(overlaySource.includes("geometry.dispose()"), false,
   'analytical overlay replacement must not directly dispose GPU resources');
