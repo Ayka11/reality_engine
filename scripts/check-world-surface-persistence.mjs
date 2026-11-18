@@ -76,7 +76,7 @@ assert.match(bootstrapSource, /blockPersistenceReads: seedRead\?\.status === 'un
   'bootstrap must withhold seed-scoped sidecars when the active selector cannot be read')
 assert.match(bootstrapSource, /seedRead\?\.status !== 'unavailable'/,
   'bootstrap must not overwrite the selector with a fallback after a transient read failure')
-assert.match(rendererSource, /saveActiveWorldSeed\(this\.generator\.seed\)/,
+assert.match(rendererSource, /saveActiveWorldSeed\(this\.#generator\.seed\)/,
   'every world save must persist the active seed namespace')
 assert.match(rendererSource, /saveActiveWorldSeed\(normalizedSeed\)/,
   'explicit world reseeding must immediately persist its new active seed')
