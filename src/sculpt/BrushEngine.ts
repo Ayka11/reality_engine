@@ -49,6 +49,29 @@ function falloffWeight(kind: BrushFalloff, t: number): number {
   return clamped * clamped * (3 - 2 * clamped);
 }
 
+function rollbackDenseAndChunks(
+  grid: SparseVoxelGrid,
+  restoreDense: () => void,
+  originalError: unknown,
+  context: string,
+): never {
+  try {
+    restoreDense();
+    // syncDenseToChunks is itself preflight-before-publish. Re-run it after
+    // restoring dense state so a later commit-stage failure cannot leave the
+    // sparse chunk mirror containing the rejected stroke.
+    grid.syncDenseToChunks();
+  } catch (rollbackError) {
+    const originalMessage = originalError instanceof Error ? originalError.message : String(originalError);
+    const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+    throw new AggregateError(
+      [originalError, rollbackError],
+      `${context} failed (${originalMessage}) and dense/chunk rollback failed (${rollbackMessage})`,
+    );
+  }
+  throw originalError;
+}
+
 export class BrushEngine {
   private tools = new Map<SculptToolId, SculptTool>();
   private history: StrokeRecord[] = [];
@@ -85,29 +108,24 @@ export class BrushEngine {
       }
       after = this.grid.buffer.slice();
     } catch (error) {
-      this.grid.buffer.set(before);
-      try {
-        // Custom callbacks may touch chunk storage directly as well as dense
-        // fields; republish the restored dense state before surfacing failure.
-        this.grid.syncDenseToChunks();
-        this.grid.markChunksDirty(stroke.affectedChunks);
-      } catch (rollbackError) {
-        const originalMessage = error instanceof Error ? error.message : String(error);
-        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-        throw new AggregateError(
-          [error, rollbackError],
-          `Custom sculpt callback failed (${originalMessage}) and dense/chunk rollback failed (${rollbackMessage})`,
-        );
-      }
-      throw error;
+      rollbackDenseAndChunks(
+        this.grid,
+        () => this.grid.buffer.set(before),
+        error,
+        "Custom sculpt callback",
+      );
     }
 
     try {
       this.grid.syncDenseToChunks();
       this.grid.markChunksDirty(stroke.affectedChunks);
     } catch (error) {
-      this.grid.buffer.set(before);
-      throw error;
+      rollbackDenseAndChunks(
+        this.grid,
+        () => this.grid.buffer.set(before),
+        error,
+        "Custom sculpt commit",
+      );
     }
 
     this.history.push({
@@ -152,16 +170,28 @@ export class BrushEngine {
         edits.get(offset)!.after = this.grid.buffer.slice(offset, offset + CELL_FIELDS);
       }
     } catch (error) {
-      for (const [offset, edit] of edits) this.grid.buffer.set(edit.before, offset);
-      throw error;
+      rollbackDenseAndChunks(
+        this.grid,
+        () => {
+          for (const [offset, edit] of edits) this.grid.buffer.set(edit.before, offset);
+        },
+        error,
+        "Sculpt tool apply",
+      );
     }
 
     try {
       this.grid.syncDenseToChunks();
       this.grid.markChunksDirty(stroke.affectedChunks);
     } catch (error) {
-      for (const [offset, edit] of edits) this.grid.buffer.set(edit.before, offset);
-      throw error;
+      rollbackDenseAndChunks(
+        this.grid,
+        () => {
+          for (const [offset, edit] of edits) this.grid.buffer.set(edit.before, offset);
+        },
+        error,
+        "Sculpt stroke commit",
+      );
     }
 
     this.history.push({
@@ -187,9 +217,15 @@ export class BrushEngine {
       this.grid.syncDenseToChunks();
       this.grid.markChunksDirty(record.stroke.affectedChunks);
     } catch (error) {
-      if (record.fullBefore) this.grid.buffer.set(current as Float32Array);
-      else for (const item of current as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
-      throw error;
+      rollbackDenseAndChunks(
+        this.grid,
+        () => {
+          if (record.fullBefore) this.grid.buffer.set(current as Float32Array);
+          else for (const item of current as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
+        },
+        error,
+        "Sculpt undo",
+      );
     }
 
     this.history.pop();
@@ -211,9 +247,15 @@ export class BrushEngine {
       this.grid.syncDenseToChunks();
       this.grid.markChunksDirty(record.stroke.affectedChunks);
     } catch (error) {
-      if (record.fullAfter) this.grid.buffer.set(current as Float32Array);
-      else for (const item of current as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
-      throw error;
+      rollbackDenseAndChunks(
+        this.grid,
+        () => {
+          if (record.fullAfter) this.grid.buffer.set(current as Float32Array);
+          else for (const item of current as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
+        },
+        error,
+        "Sculpt redo",
+      );
     }
 
     this.redoStack.pop();
