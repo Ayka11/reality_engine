@@ -48,8 +48,55 @@ async function beginPendingReadback(engine: SimulationEngine, stale: Float32Arra
   return { step, release: (data = stale) => release(data) };
 }
 
+async function checkLawMutationsInvalidatePendingReadback(): Promise<void> {
+  const cases: Array<{ label: string; mutate: (laws: LawEngine) => void }> = [
+    {
+      label: "tracked law definition",
+      mutate: laws => { laws.laws[0].active = !laws.laws[0].active; },
+    },
+    {
+      label: "manual process override",
+      mutate: laws => { laws.toggleProcess(PROC.ENERGY_DIFFUSION, false); },
+    },
+    {
+      label: "per-law activation override",
+      mutate: laws => { laws.setLawOverride("law_radiation", "on"); },
+    },
+    {
+      label: "law snapshot restore",
+      mutate: laws => {
+        const snapshot = laws.snapshot();
+        snapshot.rngState = (snapshot.rngState ^ 0x01010101) >>> 0 || 1;
+        laws.restore(snapshot);
+      },
+    },
+  ];
+
+  for (const boundary of cases) {
+    const engine = new SimulationEngine(4, 4, 4);
+    (engine as unknown as { _gpuReady: boolean })._gpuReady = true;
+    const targetIndex = engine.grid.idx(1, 1, 1) + F.ENERGY;
+    const staleReadback = engine.grid.buffer.slice();
+    staleReadback[targetIndex] = 7000;
+    const pending = await beginPendingReadback(engine, staleReadback);
+    const revisionBefore = engine.laws.mutationRevision;
+
+    boundary.mutate(engine.laws);
+    assert.ok(engine.laws.mutationRevision > revisionBefore,
+      `${boundary.label} must advance the authoritative law revision`);
+
+    pending.release(staleReadback);
+    await assert.rejects(pending.step, /Discarded stale GPU readback/,
+      `${boundary.label} must invalidate a GPU result computed against the previous law state`);
+    assert.equal(engine.grid.buffer[targetIndex], 0,
+      `stale GPU output must not overwrite CPU state after ${boundary.label}`);
+  }
+  console.log("LawEngine tracked definitions, process overrides, activation overrides and snapshot restore invalidate pending GPU readback: PASS");
+}
+
 export async function runSimulationEngineStaleReadbackRegression(): Promise<void> {
   checkLawSnapshotValidationIsAtomic();
+  await checkLawMutationsInvalidatePendingReadback();
   const engine = new SimulationEngine(8, 8, 8);
   // Subsystem invalidation hooks are engine-owned. Public callers must not be
   // able to detach or replace them after the engine binds its observers.
