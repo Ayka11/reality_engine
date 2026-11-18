@@ -28,7 +28,6 @@ jobs:
             exit 1
           }
       - run: npm run test:npm-audit-gate
-      - run: npm run audit:report
       - run: npm run lint
       - run: npm run test:brushes
       - run: npm run test:greedy-mesher
@@ -157,3 +156,7 @@ jobs:
       - name: Run browser acceptance with restart and recovery coverage
         run: timeout 360s npm run hf:browser:acceptance
         timeout-minutes: 7
+      # Run the security gate after functional validation so an upstream
+      # advisory does not suppress the rest of the CI signal.
+      - name: Enforce dependency security audit
+        run: npm run audit:report
