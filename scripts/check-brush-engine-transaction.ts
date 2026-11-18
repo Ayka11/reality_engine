@@ -133,4 +133,50 @@ assertBufferEqual(grid.buffer, beforeCallbackFailure, "failed custom callback mu
 assertBufferEqual(affectedChunk.buffer, chunkBeforeCallbackFailure, "failed custom callback must restore direct chunk writes");
 assert.equal(customEngine.historyLength, 0, "failed custom callback must not create history");
 
+// Async callbacks must be rejected before invocation; otherwise delayed writes
+// could occur after the custom stroke has captured history and published chunks.
+const beforeAsyncCallback = grid.buffer.slice();
+let asyncCallbackInvoked = false;
+const spoofedAsyncCustomCallback = async () => {
+  asyncCallbackInvoked = true;
+  grid.buffer[grid.idx(3, 3, 3) + F.ENERGY] = 12345;
+  await Promise.resolve();
+};
+Object.defineProperty(spoofedAsyncCustomCallback, Symbol.toStringTag, { value: "Function" });
+await assert.rejects(
+  () => customEngine.applyCustomStroke(makeStroke(), spoofedAsyncCustomCallback),
+  /must remain synchronous/,
+);
+await Promise.resolve();
+assert.equal(asyncCallbackInvoked, false,
+  "async custom sculpt callback must be rejected before its first instruction");
+assertBufferEqual(grid.buffer, beforeAsyncCallback,
+  "rejected async custom callback must not mutate dense state");
+assert.equal(customEngine.historyLength, 0,
+  "rejected async custom callback must not create history");
+
+// Opaque bound callbacks fail closed, and ordinary callbacks returning thenables
+// are rejected with the same rollback semantics.
+const boundAsyncCustomCallback = (async () => {
+  asyncCallbackInvoked = true;
+}).bind(null);
+await assert.rejects(
+  () => customEngine.applyCustomStroke(makeStroke(), boundAsyncCustomCallback),
+  /must remain synchronous/,
+);
+assert.equal(asyncCallbackInvoked, false,
+  "bound async custom sculpt callback must be rejected before invocation");
+
+const beforeThenableCallback = grid.buffer.slice();
+const thenableCustomCallback = (() => Promise.resolve()) as unknown as () => void;
+await assert.rejects(
+  () => customEngine.applyCustomStroke(makeStroke(), thenableCustomCallback),
+  /must remain synchronous/,
+);
+assertBufferEqual(grid.buffer, beforeThenableCallback,
+  "thenable-returning custom callback must not commit a partial stroke");
+assert.equal(customEngine.historyLength, 0,
+  "thenable-returning custom callback must not create history");
+
 console.log("PASS: BrushEngine commit/undo/redo rollback on chunk synchronization failure");
+console.log("PASS: BrushEngine custom callbacks reject async, generator and thenable mutation paths");
