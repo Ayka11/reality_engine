@@ -15,6 +15,32 @@ function chunkCoord(g: number): number {
   return Math.floor(g / CHUNK_SIZE);
 }
 
+function assertSynchronousCustomStrokeCallback(callback: () => void): void {
+  const callbackFunction = callback as unknown as Function;
+  const callbackKind = Object.prototype.toString.call(callbackFunction);
+  const callbackPrototype = Object.getPrototypeOf(callbackFunction) as {
+    constructor?: { name?: string };
+  } | null;
+  const callbackConstructorName = callbackPrototype?.constructor?.name ?? "";
+  const callbackSource = Function.prototype.toString.call(callbackFunction);
+  const asyncSource = /^\\s*async\\b/.test(callbackSource);
+  const generatorSource = /^\\s*(?:async\\s+)?function\\s*\\*/.test(callbackSource) ||
+    /^\\s*\\*\\s*[\\w$]*\\s*\\(/.test(callbackSource);
+  const nativeSource = /\\{\\s*\\[native code\\]\\s*\\}/.test(callbackSource);
+
+  // Reject async/generator callbacks before invoking them. Bound functions
+  // stringify as native code, so fail closed rather than trust an opaque wrapper.
+  if (callbackKind === "[object AsyncFunction]" ||
+      callbackKind === "[object AsyncGeneratorFunction]" ||
+      callbackKind === "[object GeneratorFunction]" ||
+      callbackConstructorName === "AsyncFunction" ||
+      callbackConstructorName === "AsyncGeneratorFunction" ||
+      callbackConstructorName === "GeneratorFunction" ||
+      asyncSource || generatorSource || nativeSource) {
+    throw new TypeError("Custom sculpt callback must remain synchronous");
+  }
+}
+
 function falloffWeight(kind: BrushFalloff, t: number): number {
   const clamped = Math.max(0, Math.min(1, t));
   if (kind === 'sharp') return clamped > 0 ? 1 : 0;
@@ -42,12 +68,21 @@ export class BrushEngine {
   }
 
   async applyCustomStroke(stroke: BrushStroke, apply: () => void): Promise<BrushStroke> {
+    if (typeof apply !== "function") {
+      throw new TypeError("Custom sculpt callback must be a function");
+    }
+    assertSynchronousCustomStrokeCallback(apply);
     const before = this.grid.buffer.slice();
     const chunks = this.getAffectedChunks(stroke);
     stroke.affectedChunks = chunks.map(chunk => this.grid.getChunkKey(chunk.cx, chunk.cy, chunk.cz));
     let after: Float32Array;
     try {
-      apply();
+      const result = (apply as unknown as () => unknown)();
+      if (result !== null &&
+          (typeof result === "object" || typeof result === "function") &&
+          typeof (result as { then?: unknown }).then === "function") {
+        throw new TypeError("Custom sculpt callback must remain synchronous");
+      }
       after = this.grid.buffer.slice();
     } catch (error) {
       this.grid.buffer.set(before);
