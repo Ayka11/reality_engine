@@ -1,7 +1,12 @@
 import { CELL_FIELDS } from '../core/CellState';
 import type { Chunk } from '../core/Chunk';
 import { CHUNK_SIZE } from '../core/Chunk';
-import type { SparseVoxelGrid } from '../core/SparseVoxelGrid';
+import {
+  applySparseVoxelGridDelta,
+  createSparseVoxelGridDelta,
+  type SparseVoxelGrid,
+  type SparseVoxelGridDelta,
+} from '../core/SparseVoxelGrid';
 import type { BrushFalloff, BrushStroke, SculptTool, SculptToolId, StrokeRecord } from './SculptTool';
 import { ErodeTool } from './tools/Erode';
 import { EraseTool } from './tools/Erase';
@@ -120,6 +125,7 @@ export class BrushEngine {
     const beforeGrid = this.grid.captureState();
     const chunks = this.getAffectedChunks(stroke);
     stroke.affectedChunks = chunks.map(chunk => this.grid.getChunkKey(chunk.cx, chunk.cy, chunk.cz));
+    let delta: SparseVoxelGridDelta;
     try {
       const result = (apply as unknown as () => unknown)();
       if (result !== null &&
@@ -127,25 +133,20 @@ export class BrushEngine {
           typeof (result as { then?: unknown }).then === "function") {
         throw new TypeError("Custom sculpt callback must remain synchronous");
       }
-    } catch (error) {
-      rollbackGridSnapshot(this.grid, beforeGrid, error, "Custom sculpt callback");
-    }
-
-    try {
       this.grid.syncDenseToChunks();
       this.grid.markChunksDirty(stroke.affectedChunks);
+      const afterGrid = this.grid.captureState();
+      delta = createSparseVoxelGridDelta(beforeGrid, afterGrid);
     } catch (error) {
-      rollbackGridSnapshot(this.grid, beforeGrid, error, "Custom sculpt commit");
+      rollbackGridSnapshot(this.grid, beforeGrid, error, "Custom sculpt transaction");
     }
 
-    // Keep only the pre-stroke grid snapshot while the edit is applied. Undo
-    // captures the post-stroke state on demand and swaps the retained snapshot
-    // to the opposite side. This avoids retaining two complete sparse-grid
-    // snapshots (plus duplicate dense buffers) for every custom history entry.
+    // Retain only values/topology that actually changed, not full copies of
+    // every dense buffer and sparse chunk in the world.
     this.history.push({
       stroke: { ...stroke, affectedChunks: [...stroke.affectedChunks] },
       edits: [],
-      fullGridBefore: beforeGrid,
+      gridDelta: delta!,
     });
     if (this.history.length > this.maxHistory) this.history.shift();
     this.redoStack = [];
@@ -219,21 +220,20 @@ export class BrushEngine {
   undo(): BrushStroke | null {
     const record = this.history[this.history.length - 1];
     if (!record) return null;
-    const currentGrid = record.fullGridBefore ? this.grid.captureState() : null;
-    const current = record.fullGridBefore || record.fullGridAfter
+    const currentGrid = record.gridDelta || record.fullGridBefore ? this.grid.captureState() : null;
+    const current = currentGrid
       ? null
-      : record.fullBefore
-        ? this.grid.buffer.slice()
-        : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
+      : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
 
     try {
-      if (record.fullGridBefore) {
+      if (record.gridDelta) {
+        this.grid.restoreState(applySparseVoxelGridDelta(currentGrid!, record.gridDelta, "before"));
+      } else if (record.fullGridBefore) {
         this.grid.restoreState(record.fullGridBefore);
         record.fullGridBefore = undefined;
         record.fullGridAfter = currentGrid!;
       } else {
-        if (record.fullBefore) this.grid.buffer.set(record.fullBefore);
-        else for (const edit of record.edits) this.grid.buffer.set(edit.before, edit.offset);
+        for (const edit of record.edits) this.grid.buffer.set(edit.before, edit.offset);
         this.grid.syncDenseToChunks();
         this.grid.markChunksDirty(record.stroke.affectedChunks);
       }
@@ -244,8 +244,7 @@ export class BrushEngine {
       rollbackDenseAndChunks(
         this.grid,
         () => {
-          if (record.fullBefore) this.grid.buffer.set(current as Float32Array);
-          else for (const item of (current ?? []) as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
+          for (const item of (current ?? []) as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
         },
         error,
         "Sculpt undo",
@@ -260,21 +259,20 @@ export class BrushEngine {
   redo(): BrushStroke | null {
     const record = this.redoStack[this.redoStack.length - 1];
     if (!record) return null;
-    const currentGrid = record.fullGridAfter ? this.grid.captureState() : null;
-    const current = record.fullGridAfter || record.fullGridBefore
+    const currentGrid = record.gridDelta || record.fullGridAfter ? this.grid.captureState() : null;
+    const current = currentGrid
       ? null
-      : record.fullAfter
-        ? this.grid.buffer.slice()
-        : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
+      : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
 
     try {
-      if (record.fullGridAfter) {
+      if (record.gridDelta) {
+        this.grid.restoreState(applySparseVoxelGridDelta(currentGrid!, record.gridDelta, "after"));
+      } else if (record.fullGridAfter) {
         this.grid.restoreState(record.fullGridAfter);
         record.fullGridAfter = undefined;
         record.fullGridBefore = currentGrid!;
       } else {
-        if (record.fullAfter) this.grid.buffer.set(record.fullAfter);
-        else for (const edit of record.edits) this.grid.buffer.set(edit.after, edit.offset);
+        for (const edit of record.edits) this.grid.buffer.set(edit.after, edit.offset);
         this.grid.syncDenseToChunks();
         this.grid.markChunksDirty(record.stroke.affectedChunks);
       }
@@ -285,8 +283,7 @@ export class BrushEngine {
       rollbackDenseAndChunks(
         this.grid,
         () => {
-          if (record.fullAfter) this.grid.buffer.set(current as Float32Array);
-          else for (const item of (current ?? []) as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
+          for (const item of (current ?? []) as Array<{ offset: number; value: Float32Array }>) this.grid.buffer.set(item.value, item.offset);
         },
         error,
         "Sculpt redo",
