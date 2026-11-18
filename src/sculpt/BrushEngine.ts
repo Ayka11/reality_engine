@@ -220,7 +220,7 @@ export class BrushEngine {
   undo(): BrushStroke | null {
     const record = this.history[this.history.length - 1];
     if (!record) return null;
-    const currentGrid = record.gridDelta || record.fullGridBefore ? this.grid.captureState() : null;
+    const currentGrid = record.gridDelta ? this.grid.captureState() : null;
     const current = currentGrid
       ? null
       : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
@@ -228,10 +228,6 @@ export class BrushEngine {
     try {
       if (record.gridDelta) {
         this.grid.restoreState(applySparseVoxelGridDelta(currentGrid!, record.gridDelta, "before"));
-      } else if (record.fullGridBefore) {
-        this.grid.restoreState(record.fullGridBefore);
-        record.fullGridBefore = undefined;
-        record.fullGridAfter = currentGrid!;
       } else {
         for (const edit of record.edits) this.grid.buffer.set(edit.before, edit.offset);
         this.grid.syncDenseToChunks();
@@ -259,7 +255,7 @@ export class BrushEngine {
   redo(): BrushStroke | null {
     const record = this.redoStack[this.redoStack.length - 1];
     if (!record) return null;
-    const currentGrid = record.gridDelta || record.fullGridAfter ? this.grid.captureState() : null;
+    const currentGrid = record.gridDelta ? this.grid.captureState() : null;
     const current = currentGrid
       ? null
       : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
@@ -267,10 +263,6 @@ export class BrushEngine {
     try {
       if (record.gridDelta) {
         this.grid.restoreState(applySparseVoxelGridDelta(currentGrid!, record.gridDelta, "after"));
-      } else if (record.fullGridAfter) {
-        this.grid.restoreState(record.fullGridAfter);
-        record.fullGridAfter = undefined;
-        record.fullGridBefore = currentGrid!;
       } else {
         for (const edit of record.edits) this.grid.buffer.set(edit.after, edit.offset);
         this.grid.syncDenseToChunks();
