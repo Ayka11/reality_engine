@@ -93,7 +93,7 @@ try {
     const agentSystemPinned = systemDescriptor?.writable === false &&
       systemDescriptor?.configurable === false;
     if (!system || typeof system.spawn !== "function" || typeof system.remove !== "function" ||
-        typeof identityApi !== "function") {
+        typeof system.step !== "function" || typeof identityApi !== "function") {
       return { available: false };
     }
     const baselineAgents = system.agents;
@@ -119,6 +119,41 @@ try {
     const afterFirstRemoval = identityApi();
     const secondRemoved = system.remove(ids[1]);
     const afterSecondRemoval = identityApi();
+
+    const reproductionBaselineIds = new Set(system.agents.map(agent => agent.id));
+    system.spawn(18, 14, 1, { reprodThresh: 0.3 });
+    const reproductionParent = system.agents.find(agent => !reproductionBaselineIds.has(agent.id));
+    const reproductionParentId = reproductionParent?.id;
+    const afterReproductionSpawn = identityApi();
+    system.step(new Float32Array(36 * 28 * 12), 36, 28, 12, 0);
+    const afterReproductionTick = identityApi();
+    const reproducedAgents = system.agents.filter(agent => !reproductionBaselineIds.has(agent.id));
+    const reproducedIds = reproducedAgents.map(agent => agent.id);
+    const reproductionEntries = afterReproductionTick.entries.filter(entry =>
+      entry.domain === "active-agent" && reproducedIds.includes(entry.localId));
+    const offspringId = reproducedIds.find(id => id !== reproductionParentId);
+    const reproductionAddedOneIdentity = reproducedIds.length === 2 &&
+      reproductionEntries.length === 2 &&
+      reproductionEntries.some(entry => entry.localId === reproductionParentId) &&
+      reproductionEntries.some(entry => entry.localId === offspringId);
+    const reproductionParentRemoved = reproductionParentId !== undefined &&
+      system.remove(reproductionParentId);
+    const afterParentRemoval = identityApi();
+    const reproductionChildRemoved = offspringId !== undefined && system.remove(offspringId);
+    const afterReproductionCleanup = identityApi();
+
+    system.spawn(18, 14, 1, { reprodThresh: 0.95, maxAge: 150 });
+    const mortalAgent = system.agents.find(agent => !reproductionBaselineIds.has(agent.id));
+    const mortalAgentId = mortalAgent?.id;
+    const mortalityBuffer = new Float32Array(36 * 28 * 12);
+    for (let tick = 0; tick < 211; tick++) {
+      system.step(mortalityBuffer, 36, 28, 12, 0);
+    }
+    const afterNaturalDeath = identityApi();
+    const naturalDeathRemovedIdentity = mortalAgentId !== undefined &&
+      !afterNaturalDeath.entries.some(entry =>
+        entry.domain === "active-agent" && entry.localId === mortalAgentId);
+
     return {
       available: true,
       agentSystemPinned,
@@ -134,6 +169,18 @@ try {
       spawnRevision: afterSpawn.revision,
       firstRemovalRevision: afterFirstRemoval.revision,
       secondRemovalRevision: afterSecondRemoval.revision,
+      reproductionAddedOneIdentity,
+      reproductionParentRemoved,
+      reproductionChildRemoved,
+      reproductionCleanupCount: afterReproductionCleanup.domains.find(domain => domain.domain === "active-agent")?.count,
+      expectedReproductionCleanupCount: baselineAgents.length,
+      reproductionSpawnRevision: afterReproductionSpawn.revision,
+      reproductionTickRevision: afterReproductionTick.revision,
+      reproductionCleanupRevision: afterReproductionCleanup.revision,
+      naturalDeathRemovedIdentity,
+      naturalDeathCount: afterNaturalDeath.domains.find(domain => domain.domain === "active-agent")?.count,
+      expectedNaturalDeathCount: baselineAgents.length,
+      naturalDeathRevision: afterNaturalDeath.revision,
     };
   });
   if (!activeAgentIdentityLifecycle.available ||
@@ -146,8 +193,17 @@ try {
       activeAgentIdentityLifecycle.firstRemovalCount !== activeAgentIdentityLifecycle.expectedFirstRemovalCount ||
       activeAgentIdentityLifecycle.secondRemovalCount !== activeAgentIdentityLifecycle.expectedSecondRemovalCount ||
       activeAgentIdentityLifecycle.firstRemovalRevision <= activeAgentIdentityLifecycle.spawnRevision ||
-      activeAgentIdentityLifecycle.secondRemovalRevision <= activeAgentIdentityLifecycle.firstRemovalRevision) {
-    throw new Error("Active transient agent identities must publish and retire through their authoritative owner: " +
+      activeAgentIdentityLifecycle.secondRemovalRevision <= activeAgentIdentityLifecycle.firstRemovalRevision ||
+      !activeAgentIdentityLifecycle.reproductionAddedOneIdentity ||
+      !activeAgentIdentityLifecycle.reproductionParentRemoved ||
+      !activeAgentIdentityLifecycle.reproductionChildRemoved ||
+      activeAgentIdentityLifecycle.reproductionCleanupCount !== activeAgentIdentityLifecycle.expectedReproductionCleanupCount ||
+      activeAgentIdentityLifecycle.reproductionTickRevision <= activeAgentIdentityLifecycle.reproductionSpawnRevision ||
+      activeAgentIdentityLifecycle.reproductionCleanupRevision <= activeAgentIdentityLifecycle.reproductionTickRevision ||
+      !activeAgentIdentityLifecycle.naturalDeathRemovedIdentity ||
+      activeAgentIdentityLifecycle.naturalDeathCount !== activeAgentIdentityLifecycle.expectedNaturalDeathCount ||
+      activeAgentIdentityLifecycle.naturalDeathRevision <= activeAgentIdentityLifecycle.reproductionCleanupRevision) {
+    throw new Error("Active transient agent identity lifecycle did not publish spawn, reproduction, removal and natural death correctly: " +
       JSON.stringify(activeAgentIdentityLifecycle));
   }
 
