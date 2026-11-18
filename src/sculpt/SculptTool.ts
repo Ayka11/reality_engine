@@ -1,4 +1,4 @@
-import type { SparseVoxelGrid, SparseVoxelGridSnapshot } from '../core/SparseVoxelGrid';
+import type { SparseVoxelGrid, SparseVoxelGridDelta } from '../core/SparseVoxelGrid';
 
 export type SculptToolId = 'inject' | 'erase' | 'noise' | 'stamp' | 'erode' | 'smooth' | 'pattern';
 export type BrushFalloff = 'linear' | 'smooth' | 'sphere' | 'sharp';
@@ -53,10 +53,6 @@ export interface CellEdit {
 export interface StrokeRecord {
   stroke: BrushStroke;
   edits: CellEdit[];
-  fullBefore?: Float32Array;
-  fullAfter?: Float32Array;
-  // Custom strokes retain one full-grid snapshot at a time. Undo/redo swaps
-  // this pointer between before/after so history does not double grid memory.
-  fullGridBefore?: SparseVoxelGridSnapshot;
-  fullGridAfter?: SparseVoxelGridSnapshot;
+  // Custom strokes retain only changed dense values and sparse chunks.
+  gridDelta?: SparseVoxelGridDelta;
 }
