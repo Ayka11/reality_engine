@@ -417,7 +417,7 @@ const restoreMethodEnd = worldRendererSource.indexOf("Persist an already committ
 const restoreMethodSource = worldRendererSource.slice(restoreMethodStart, restoreMethodEnd);
 assert.ok(restoreMethodSource.includes("detachAndDisposeObjectGroups(") &&
   restoreMethodSource.includes("cleanupFailures.length > 0") &&
-  restoreMethodSource.includes("this.syncObjects()"),
+  restoreMethodSource.includes("this.#syncObjects()"),
   'portable restore must complete replacement publication after collecting old GPU resource cleanup failures');
 assert.equal(restoreMethodSource.includes("mesh.geometry.dispose()"), false,
   'portable restore must not use unguarded direct geometry disposal');
