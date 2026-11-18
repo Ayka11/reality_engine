@@ -135,16 +135,42 @@ export class BrushEngine {
       }
       this.grid.syncDenseToChunks();
       // Custom callbacks may mutate chunks beyond the brush-radius estimate.
-      // Discover those changed chunk keys first, then mark both explicit and
-      // callback-touched chunks dirty so persistence cannot miss remote edits.
-      const provisionalDelta = createSparseVoxelGridDelta(beforeGrid, this.grid.captureState());
+      // Diff once, then add persistence dirtiness to that same delta: marking a
+      // chunk changes only its dirty membership and active/access metadata.
+      delta = createSparseVoxelGridDelta(beforeGrid, this.grid.captureState());
       const dirtyKeys = new Set([
         ...stroke.affectedChunks,
-        ...provisionalDelta.chunks.map(chunk => chunk.key),
+        ...delta.chunks.map(chunk => chunk.key),
       ]);
       this.grid.markChunksDirty([...dirtyKeys]);
-      const afterGrid = this.grid.captureState();
-      delta = createSparseVoxelGridDelta(beforeGrid, afterGrid);
+      delta.afterDirtyChunks = [...this.grid.dirtyChunks];
+      const beforeChunks = new Map(beforeGrid.chunks.map(chunk => [chunk.key, chunk] as const));
+      for (const key of dirtyKeys) {
+        const current = this.grid.chunks.get(key);
+        if (!current) continue;
+        const previous = beforeChunks.get(key);
+        const change = delta.chunks.find(chunk => chunk.key === key);
+        if (!previous) {
+          if (!change?.afterFull) {
+            throw new Error(`Custom sculpt dirty chunk ${key} is missing its addition delta`);
+          }
+          change.afterFull.active = current.active;
+          change.afterFull.lastAccessed = current.lastAccessed;
+        } else if (change?.beforeExists && change.afterExists) {
+          change.afterActive = current.active;
+          change.afterLastAccessed = current.lastAccessed;
+        } else if (!change &&
+            (previous.active !== current.active || previous.lastAccessed !== current.lastAccessed)) {
+          delta.chunks.push({
+            key, cx: current.cx, cy: current.cy, cz: current.cz,
+            beforeExists: true, afterExists: true,
+            beforeActive: previous.active,
+            afterActive: current.active,
+            beforeLastAccessed: previous.lastAccessed,
+            afterLastAccessed: current.lastAccessed,
+          });
+        }
+      }
     } catch (error) {
       rollbackGridSnapshot(this.grid, beforeGrid, error, "Custom sculpt transaction");
     }
