@@ -21,7 +21,7 @@ assert.equal(renderer.includes('const seed = this.generator.seed'), false)
 const reseedAt = renderer.indexOf('  reseed(newSeed: string)')
 assert.ok(reseedAt >= 0, 'renderer reseed must exist')
 const reseedBody = renderer.slice(reseedAt, renderer.indexOf('\n  dispose()', reseedAt))
-assert.ok(reseedBody.includes('this.#fieldSampler.setGenerator(this.generator)'))
+assert.ok(reseedBody.includes('this.#fieldSampler.setGenerator(this.#generator)'))
 assert.ok(reseedBody.includes('worldViewContract.setSeed(this.#fieldSampler.surfaceProvider.seed)'),
   'reseed must retain the selected authored surface identity')
 
@@ -73,7 +73,7 @@ assert.match(clearSavedWorldBody, /try \{\s*this\.#refreshTerrainPatches\(\)\s*\
   'terrain refresh failures must not prevent clearing editor object state')
 assert.match(clearSavedWorldBody, /this\.#history\.clear\(\)/,
   'world clear must invalidate undo/redo entries from the previous object world');
-assert.match(clearSavedWorldBody, /this\.#authoritativeField\.setBase\(new GeneratorFieldProvider\(this\.generator\)\)[\s\S]*?this\.#authoritativeField\.clear\(\)[\s\S]*?this\.#fieldSampler\.setProvider\(this\.#authoritativeField\)/,
+assert.match(clearSavedWorldBody, /this\.#authoritativeField\.setBase\(new GeneratorFieldProvider\(this\.#generator\)\)[\s\S]*?this\.#authoritativeField\.clear\(\)[\s\S]*?this\.#fieldSampler\.setProvider\(this\.#authoritativeField\)/,
   'world clear must reset the live authoritative field to the active generator-backed baseline after deleting its sidecars');
 assert.match(clearSavedWorldBody, /this\.#fieldSampler\.resetSurfaceProviderToGenerator\(\)[\s\S]*?worldViewContract\.setSeed\(this\.#fieldSampler\.surfaceProvider\.seed\)/,
   'world clear must reset the in-memory surface provider to match the deleted surface sidecar');
