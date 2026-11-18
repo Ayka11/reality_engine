@@ -95,7 +95,10 @@ export class ProductionInfrastructureRuntime {
       id: civilization.id + ':production:' + kind,
       kind,
       ...OUTPUTS[kind],
-      efficiency: Math.max(0.1, civilization.score * (1 - index * 0.08)),
+      // Resource capability controls specialization, but must not collapse a
+      // supplied production chain below its subsistence yield. Required input
+      // resources still gate every production step in tick().
+      efficiency: Math.max(0.8, civilization.score * (1 - index * 0.08)),
     }))
 
     const baselineRoads = civilization.settlement.tier === 'village' ? 4
