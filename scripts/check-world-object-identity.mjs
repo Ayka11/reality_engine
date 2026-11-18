@@ -321,7 +321,7 @@ const terrainDisposalSource = rendererSource.slice(terrainDisposalStart, terrain
 assert.match(terrainDisposalSource, /this\.#terrainMaterials\.delete\(material as THREE\.MeshStandardMaterial\)[\s\S]*?detachAndDisposeObjectGroups\(\s*this\.#scene,[\s\S]*?patches\.map\(patch => patch\.group\)/,
   'terrain material registry must be pruned while the shared disposer releases a deduplicated patch batch')
 for (const methodName of ['refreshTerrainPatches()', 'removeChunk(key: string)', 'updateTerrainLod()']) {
-  const methodStart = rendererSource.indexOf(`#${methodName}`)
+  const methodStart = rendererSource.indexOf(`  #${methodName}`)
   const methodEnd = rendererSource.indexOf('\n  #', methodStart + 1)
   assert.ok(methodStart >= 0 && methodEnd > methodStart, `${methodName} must exist`)
   const methodSource = rendererSource.slice(methodStart, methodEnd)
