@@ -128,8 +128,8 @@ export function createSparseVoxelGridDelta(
     throw new Error("Cannot create sparse-grid delta across incompatible dimensions");
   }
 
-  const beforeChunks = new Map(before.chunks.map(chunk => [chunk.key, chunk]));
-  const afterChunks = new Map(after.chunks.map(chunk => [chunk.key, chunk]));
+  const beforeChunks = new Map(before.chunks.map(chunk => [chunk.key, chunk] as const));
+  const afterChunks = new Map(after.chunks.map(chunk => [chunk.key, chunk] as const));
   const keys = new Set([...beforeChunks.keys(), ...afterChunks.keys()]);
   const chunks: SparseVoxelGridChunkDelta[] = [];
 
@@ -235,7 +235,7 @@ export function applySparseVoxelGridDelta(
   applyArray(result.buffer, delta.buffer);
   applyArray(result.backBuffer, delta.backBuffer);
 
-  const chunks = new Map(result.chunks.map(chunk => [chunk.key, chunk]));
+  const chunks = new Map(result.chunks.map(chunk => [chunk.key, chunk] as const));
   for (const change of delta.chunks) {
     const exists = direction === "before" ? change.beforeExists : change.afterExists;
     const full = direction === "before" ? change.beforeFull : change.afterFull;
