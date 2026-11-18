@@ -428,7 +428,7 @@ const rendererDisposeEnd = worldRendererSource.indexOf("  private rebuildDecisio
 const rendererDisposeSource = worldRendererSource.slice(rendererDisposeStart, rendererDisposeEnd);
 assert.ok(rendererDisposeSource.includes("detachAndDisposeObjectGroups(") &&
   rendererDisposeSource.includes("this.renderer.dispose()") &&
-  rendererDisposeSource.includes("if (this.disposed) return"),
+  rendererDisposeSource.includes("if (this.#disposed) return"),
   'renderer disposal must be idempotent, release scene resources defensively and always dispose WebGLRenderer');
 assert.equal(rendererDisposeSource.includes("this.scene.traverse("), false,
   'renderer disposal must not use unguarded scene traversal/disposal');
