@@ -30,7 +30,7 @@ const loadWorldAt = renderer.indexOf('  loadWorld(options:', saveWorldAt)
 assert.ok(saveWorldAt >= 0 && loadWorldAt > saveWorldAt, 'renderer saveWorld method must exist')
 const saveWorldBody = renderer.slice(saveWorldAt, loadWorldAt)
 const chunkWriteAt = saveWorldBody.lastIndexOf('this.persistence.saveChunk(cx, cy, cz, list)')
-const activeSeedCommitAt = saveWorldBody.indexOf('saveActiveWorldSeed(this.generator.seed)')
+const activeSeedCommitAt = saveWorldBody.indexOf('saveActiveWorldSeed(this.#generator.seed)')
 assert.ok(chunkWriteAt >= 0 && activeSeedCommitAt > chunkWriteAt,
   'active seed must be published only after all seed-scoped chunk writes')
 const journalBeginAt = saveWorldBody.indexOf('beginSaveTransaction')
@@ -39,7 +39,7 @@ assert.ok(journalBeginAt >= 0 && journalBeginAt < saveWorldBody.indexOf('persist
   'the world journal must open before the first sidecar write')
 assert.ok(journalFinishAt > activeSeedCommitAt,
   'the journal marker must be removed only after the active seed selector is published')
-assert.match(saveWorldBody, /failedPersistenceOperations\.length === 0 && !saveActiveWorldSeed\(this\.generator\.seed\)/,
+assert.match(saveWorldBody, /failedPersistenceOperations\.length === 0 && !saveActiveWorldSeed\(this\.#generator\.seed\)/,
   'an incomplete sidecar/chunk save must not switch startup to the imported seed namespace')
 const portablePersistAt = renderer.indexOf('  persistPortableWorldSnapshot(')
 const saveWorldCallAt = renderer.indexOf('this.saveWorld({ checkpoint: false, preflightFailures, allowRecovery: true })', portablePersistAt)
