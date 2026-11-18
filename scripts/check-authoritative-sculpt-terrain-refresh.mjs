@@ -93,7 +93,7 @@ assert.match(fieldPersistence, /saveProvenanceState\(runtimeProvenance\.getTrace
 assert.match(fieldPersistence, /finishSaveTransaction\(fieldSaved && provenanceSaved\)/,
   "field and provenance persistence must commit or remain blocked as one logical unit");
 const terrainPersistence = methodBody("persistTerrainDeformationState");
-assert.match(terrainPersistence, /const saved = this\.persistence\.saveTerrainDeformationState/);
+assert.match(terrainPersistence, /const saved = this\.#persistence\.saveTerrainDeformationState/);
 assert.match(terrainPersistence, /if \(!saved\)/,
   "renderer must detect failed terrain autosaves instead of silently ignoring storage errors");
 assert.match(terrainPersistence, /console\.warn/,
@@ -125,9 +125,9 @@ assert.match(saveWorldBody, /finishSaveTransaction\(/,
   "world save must clear the journal only after every persistence operation succeeds");
 assert.match(methodBody("loadWorld"), /hasIncompleteSaveTransaction\(\)/,
   "world restore must fail closed after an interrupted multi-key save");
-assert.match(saveWorldBody, /if \(!this\.persistence\.deleteChunk\(cx, cy, cz\)\)/,
+assert.match(saveWorldBody, /if \(!this\.#persistence\.deleteChunk\(cx, cy, cz\)\)/,
   "world save must detect failed chunk deletions");
-assert.match(saveWorldBody, /if \(!this\.persistence\.saveChunk\(cx, cy, cz, list\)\)/,
+assert.match(saveWorldBody, /if \(!this\.#persistence\.saveChunk\(cx, cy, cz, list\)\)/,
   "world save must detect failed chunk writes");
 assert.match(saveWorldBody, /World persistence incomplete/,
   "world save must diagnose incomplete persistence operations");
@@ -150,7 +150,7 @@ assert.match(methodBody("loadWorld"), /else \{\s*\/\/ A manual Load with no chec
 assert.match(methodBody("loadWorld"), /knownChunks\(\{\s*recoverOrphans:\s*true\s*\}\)/,
   "world load must recover persisted chunk payloads omitted from a failed/corrupt manifest");
 const clearNamespaceBody = methodBody("clearPersistedWorldNamespace");
-assert.match(clearNamespaceBody, /return this\.persistence\.clear\(\)/,
+assert.match(clearNamespaceBody, /return this\.#persistence\.clear\(\)/,
   "the shared namespace helper must own the durable persistence clear");
 const clearSavedWorldBody = methodBody("clearSavedWorld");
 assert.match(clearSavedWorldBody, /const cleared = this\.#clearPersistedWorldNamespace\(\)/,
