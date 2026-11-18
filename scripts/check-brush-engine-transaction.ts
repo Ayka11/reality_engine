@@ -254,6 +254,7 @@ assertBufferEqual(dirtyRollbackGrid.buffer, customDirtyDenseBefore,
 assertBufferEqual(dirtyRollbackChunk.buffer, customDirtyChunkBefore,
   "failed custom dirty publication must restore the chunk mirror");
 assert.equal(customDirtyRollbackEngine.historyLength, 0);
+dirtyRollbackGrid.markChunksDirty = markChunksDirty;
 
 // Custom callbacks can touch chunks that are outside the current dense window.
 // Their rollback and history must preserve topology and both front/back buffers.
