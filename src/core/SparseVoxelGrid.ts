@@ -39,6 +39,234 @@ export interface SparseVoxelGridSnapshot {
   chunkOwners: Array<[string, string]>;
 }
 
+export interface SparseVoxelGridArrayDelta {
+  indices: Uint32Array;
+  before: Float32Array;
+  after: Float32Array;
+}
+
+export interface SparseVoxelGridChunkDelta {
+  key: string;
+  cx: number;
+  cy: number;
+  cz: number;
+  beforeExists: boolean;
+  afterExists: boolean;
+  beforeFull?: SparseVoxelGridSnapshot["chunks"][number];
+  afterFull?: SparseVoxelGridSnapshot["chunks"][number];
+  beforeActive?: boolean;
+  afterActive?: boolean;
+  beforeLastAccessed?: number;
+  afterLastAccessed?: number;
+  front?: SparseVoxelGridArrayDelta;
+  back?: SparseVoxelGridArrayDelta;
+}
+
+export interface SparseVoxelGridDelta {
+  width: number;
+  height: number;
+  depth: number;
+  buffer: SparseVoxelGridArrayDelta;
+  backBuffer: SparseVoxelGridArrayDelta;
+  beforeDenseOrigin: { x: number; y: number; z: number };
+  afterDenseOrigin: { x: number; y: number; z: number };
+  beforeActiveChunkRange: SparseVoxelGridSnapshot["activeChunkRange"];
+  afterActiveChunkRange: SparseVoxelGridSnapshot["activeChunkRange"];
+  beforeDirtyChunks: string[];
+  afterDirtyChunks: string[];
+  beforeChunkOwners: Array<[string, string]>;
+  afterChunkOwners: Array<[string, string]>;
+  chunks: SparseVoxelGridChunkDelta[];
+}
+
+function cloneGridChunkSnapshot(
+  chunk: SparseVoxelGridSnapshot["chunks"][number],
+): SparseVoxelGridSnapshot["chunks"][number] {
+  return {
+    ...chunk,
+    buffer: chunk.buffer.slice(),
+    backBuffer: chunk.backBuffer.slice(),
+  };
+}
+
+function diffGridFloatBuffers(before: Float32Array, after: Float32Array): SparseVoxelGridArrayDelta {
+  if (!(before instanceof Float32Array) || !(after instanceof Float32Array) ||
+      before.length !== after.length) {
+    throw new Error("Cannot diff sparse-grid buffers with incompatible shapes");
+  }
+  let changed = 0;
+  for (let i = 0; i < before.length; i++) {
+    if (!Object.is(before[i], after[i])) changed++;
+  }
+  const indices = new Uint32Array(changed);
+  const beforeValues = new Float32Array(changed);
+  const afterValues = new Float32Array(changed);
+  let cursor = 0;
+  for (let i = 0; i < before.length; i++) {
+    if (!Object.is(before[i], after[i])) {
+      indices[cursor] = i;
+      beforeValues[cursor] = before[i];
+      afterValues[cursor] = after[i];
+      cursor++;
+    }
+  }
+  return { indices, before: beforeValues, after: afterValues };
+}
+
+function hasGridArrayChanges(delta: SparseVoxelGridArrayDelta): boolean {
+  return delta.indices.length > 0;
+}
+
+export function createSparseVoxelGridDelta(
+  before: SparseVoxelGridSnapshot,
+  after: SparseVoxelGridSnapshot,
+): SparseVoxelGridDelta {
+  if (!before || !after ||
+      before.width !== after.width ||
+      before.height !== after.height ||
+      before.depth !== after.depth) {
+    throw new Error("Cannot create sparse-grid delta across incompatible dimensions");
+  }
+
+  const beforeChunks = new Map(before.chunks.map(chunk => [chunk.key, chunk]));
+  const afterChunks = new Map(after.chunks.map(chunk => [chunk.key, chunk]));
+  const keys = new Set([...beforeChunks.keys(), ...afterChunks.keys()]);
+  const chunks: SparseVoxelGridChunkDelta[] = [];
+
+  for (const key of keys) {
+    const previous = beforeChunks.get(key);
+    const next = afterChunks.get(key);
+    if (!previous && next) {
+      chunks.push({
+        key, cx: next.cx, cy: next.cy, cz: next.cz,
+        beforeExists: false, afterExists: true,
+        afterFull: cloneGridChunkSnapshot(next),
+      });
+      continue;
+    }
+    if (previous && !next) {
+      chunks.push({
+        key, cx: previous.cx, cy: previous.cy, cz: previous.cz,
+        beforeExists: true, afterExists: false,
+        beforeFull: cloneGridChunkSnapshot(previous),
+      });
+      continue;
+    }
+    if (!previous || !next) continue;
+
+    const front = diffGridFloatBuffers(previous.buffer, next.buffer);
+    const back = diffGridFloatBuffers(previous.backBuffer, next.backBuffer);
+    const metadataChanged = previous.active !== next.active ||
+      previous.lastAccessed !== next.lastAccessed;
+    if (!hasGridArrayChanges(front) && !hasGridArrayChanges(back) && !metadataChanged) continue;
+
+    chunks.push({
+      key, cx: previous.cx, cy: previous.cy, cz: previous.cz,
+      beforeExists: true, afterExists: true,
+      beforeActive: previous.active,
+      afterActive: next.active,
+      beforeLastAccessed: previous.lastAccessed,
+      afterLastAccessed: next.lastAccessed,
+      front: hasGridArrayChanges(front) ? front : undefined,
+      back: hasGridArrayChanges(back) ? back : undefined,
+    });
+  }
+
+  return {
+    width: before.width,
+    height: before.height,
+    depth: before.depth,
+    buffer: diffGridFloatBuffers(before.buffer, after.buffer),
+    backBuffer: diffGridFloatBuffers(before.backBuffer, after.backBuffer),
+    beforeDenseOrigin: { ...before.denseOrigin },
+    afterDenseOrigin: { ...after.denseOrigin },
+    beforeActiveChunkRange: { ...before.activeChunkRange },
+    afterActiveChunkRange: { ...after.activeChunkRange },
+    beforeDirtyChunks: [...before.dirtyChunks],
+    afterDirtyChunks: [...after.dirtyChunks],
+    beforeChunkOwners: before.chunkOwners.map(entry => [...entry] as [string, string]),
+    afterChunkOwners: after.chunkOwners.map(entry => [...entry] as [string, string]),
+    chunks,
+  };
+}
+
+export function applySparseVoxelGridDelta(
+  current: SparseVoxelGridSnapshot,
+  delta: SparseVoxelGridDelta,
+  direction: "before" | "after",
+): SparseVoxelGridSnapshot {
+  if (!current || !delta ||
+      current.width !== delta.width ||
+      current.height !== delta.height ||
+      current.depth !== delta.depth) {
+    throw new Error("Sparse-grid delta does not match the current grid dimensions");
+  }
+
+  const result: SparseVoxelGridSnapshot = {
+    ...current,
+    buffer: current.buffer.slice(),
+    backBuffer: current.backBuffer.slice(),
+    denseOrigin: { ...current.denseOrigin },
+    activeChunkRange: { ...current.activeChunkRange },
+    chunks: current.chunks.map(cloneGridChunkSnapshot),
+    dirtyChunks: [...current.dirtyChunks],
+    chunkOwners: current.chunkOwners.map(entry => [...entry] as [string, string]),
+  };
+
+  const applyArray = (target: Float32Array, change: SparseVoxelGridArrayDelta | undefined) => {
+    if (!change) return;
+    if (!(change.indices instanceof Uint32Array) ||
+        !(change.before instanceof Float32Array) ||
+        !(change.after instanceof Float32Array) ||
+        change.indices.length !== change.before.length ||
+        change.indices.length !== change.after.length) {
+      throw new Error("Invalid sparse-grid delta buffer");
+    }
+    const values = direction === "before" ? change.before : change.after;
+    for (let i = 0; i < change.indices.length; i++) {
+      const index = change.indices[i];
+      if (index >= target.length || !Number.isFinite(values[i])) {
+        throw new Error("Sparse-grid delta buffer index or value is invalid");
+      }
+      target[index] = values[i];
+    }
+  };
+
+  applyArray(result.buffer, delta.buffer);
+  applyArray(result.backBuffer, delta.backBuffer);
+
+  const chunks = new Map(result.chunks.map(chunk => [chunk.key, chunk]));
+  for (const change of delta.chunks) {
+    const exists = direction === "before" ? change.beforeExists : change.afterExists;
+    const full = direction === "before" ? change.beforeFull : change.afterFull;
+    if (!exists) {
+      chunks.delete(change.key);
+      continue;
+    }
+    if (full) {
+      chunks.set(change.key, cloneGridChunkSnapshot(full));
+      continue;
+    }
+
+    const chunk = chunks.get(change.key);
+    if (!chunk) throw new Error(`Sparse-grid delta is missing chunk ${change.key}`);
+    applyArray(chunk.buffer, change.front);
+    applyArray(chunk.backBuffer, change.back);
+    chunk.active = direction === "before" ? !!change.beforeActive : !!change.afterActive;
+    chunk.lastAccessed = direction === "before"
+      ? change.beforeLastAccessed!
+      : change.afterLastAccessed!;
+  }
+
+  result.chunks = [...chunks.values()];
+  result.denseOrigin = { ...(direction === "before" ? delta.beforeDenseOrigin : delta.afterDenseOrigin) };
+  result.activeChunkRange = { ...(direction === "before" ? delta.beforeActiveChunkRange : delta.afterActiveChunkRange) };
+  result.dirtyChunks = [...(direction === "before" ? delta.beforeDirtyChunks : delta.afterDirtyChunks)];
+  result.chunkOwners = (direction === "before" ? delta.beforeChunkOwners : delta.afterChunkOwners)
+    .map(entry => [...entry] as [string, string]);
+  return result;
+}
+
 export class SparseVoxelGrid {
   readonly chunkSize = CHUNK_SIZE;
   readonly W: number;
