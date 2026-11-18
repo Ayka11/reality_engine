@@ -72,6 +72,25 @@ function rollbackDenseAndChunks(
   throw originalError;
 }
 
+function rollbackGridSnapshot(
+  grid: SparseVoxelGrid,
+  snapshot: ReturnType<SparseVoxelGrid["captureState"]>,
+  originalError: unknown,
+  context: string,
+): never {
+  try {
+    grid.restoreState(snapshot);
+  } catch (rollbackError) {
+    const originalMessage = originalError instanceof Error ? originalError.message : String(originalError);
+    const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+    throw new AggregateError(
+      [originalError, rollbackError],
+      `${context} failed (${originalMessage}) and full sparse-grid rollback failed (${rollbackMessage})`,
+    );
+  }
+  throw originalError;
+}
+
 export class BrushEngine {
   private tools = new Map<SculptToolId, SculptTool>();
   private history: StrokeRecord[] = [];
@@ -95,7 +114,11 @@ export class BrushEngine {
       throw new TypeError("Custom sculpt callback must be a function");
     }
     assertSynchronousCustomStrokeCallback(apply);
-    const before = this.grid.buffer.slice();
+    // Custom callbacks are allowed to interact with sparse chunks as well as
+    // the dense window. Capture the complete authoritative grid before chunk
+    // discovery itself creates or activates any affected chunks.
+    const beforeGrid = this.grid.captureState();
+    const before = beforeGrid.buffer.slice();
     const chunks = this.getAffectedChunks(stroke);
     stroke.affectedChunks = chunks.map(chunk => this.grid.getChunkKey(chunk.cx, chunk.cy, chunk.cz));
     let after: Float32Array;
@@ -108,24 +131,16 @@ export class BrushEngine {
       }
       after = this.grid.buffer.slice();
     } catch (error) {
-      rollbackDenseAndChunks(
-        this.grid,
-        () => this.grid.buffer.set(before),
-        error,
-        "Custom sculpt callback",
-      );
+      rollbackGridSnapshot(this.grid, beforeGrid, error, "Custom sculpt callback");
     }
 
+    let afterGrid: ReturnType<SparseVoxelGrid["captureState"]>;
     try {
       this.grid.syncDenseToChunks();
       this.grid.markChunksDirty(stroke.affectedChunks);
+      afterGrid = this.grid.captureState();
     } catch (error) {
-      rollbackDenseAndChunks(
-        this.grid,
-        () => this.grid.buffer.set(before),
-        error,
-        "Custom sculpt commit",
-      );
+      rollbackGridSnapshot(this.grid, beforeGrid, error, "Custom sculpt commit");
     }
 
     this.history.push({
@@ -133,6 +148,8 @@ export class BrushEngine {
       edits: [],
       fullBefore: before,
       fullAfter: after,
+      fullGridBefore: beforeGrid,
+      fullGridAfter: afterGrid,
     });
     if (this.history.length > this.maxHistory) this.history.shift();
     this.redoStack = [];
@@ -206,17 +223,24 @@ export class BrushEngine {
   undo(): BrushStroke | null {
     const record = this.history[this.history.length - 1];
     if (!record) return null;
+    const currentGrid = record.fullGridBefore ? this.grid.captureState() : null;
     const current = record.fullBefore
       ? this.grid.buffer.slice()
       : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
 
-    if (record.fullBefore) this.grid.buffer.set(record.fullBefore);
-    else for (const edit of record.edits) this.grid.buffer.set(edit.before, edit.offset);
-
     try {
-      this.grid.syncDenseToChunks();
-      this.grid.markChunksDirty(record.stroke.affectedChunks);
+      if (record.fullGridBefore) {
+        this.grid.restoreState(record.fullGridBefore);
+      } else {
+        if (record.fullBefore) this.grid.buffer.set(record.fullBefore);
+        else for (const edit of record.edits) this.grid.buffer.set(edit.before, edit.offset);
+        this.grid.syncDenseToChunks();
+        this.grid.markChunksDirty(record.stroke.affectedChunks);
+      }
     } catch (error) {
+      if (currentGrid) {
+        rollbackGridSnapshot(this.grid, currentGrid, error, "Sculpt undo");
+      }
       rollbackDenseAndChunks(
         this.grid,
         () => {
@@ -236,17 +260,24 @@ export class BrushEngine {
   redo(): BrushStroke | null {
     const record = this.redoStack[this.redoStack.length - 1];
     if (!record) return null;
+    const currentGrid = record.fullGridAfter ? this.grid.captureState() : null;
     const current = record.fullAfter
       ? this.grid.buffer.slice()
       : record.edits.map(edit => ({ offset: edit.offset, value: this.grid.buffer.slice(edit.offset, edit.offset + CELL_FIELDS) }));
 
-    if (record.fullAfter) this.grid.buffer.set(record.fullAfter);
-    else for (const edit of record.edits) this.grid.buffer.set(edit.after, edit.offset);
-
     try {
-      this.grid.syncDenseToChunks();
-      this.grid.markChunksDirty(record.stroke.affectedChunks);
+      if (record.fullGridAfter) {
+        this.grid.restoreState(record.fullGridAfter);
+      } else {
+        if (record.fullAfter) this.grid.buffer.set(record.fullAfter);
+        else for (const edit of record.edits) this.grid.buffer.set(edit.after, edit.offset);
+        this.grid.syncDenseToChunks();
+        this.grid.markChunksDirty(record.stroke.affectedChunks);
+      }
     } catch (error) {
+      if (currentGrid) {
+        rollbackGridSnapshot(this.grid, currentGrid, error, "Sculpt redo");
+      }
       rollbackDenseAndChunks(
         this.grid,
         () => {
