@@ -85,6 +85,20 @@ function rollbackGridSnapshot(
 ): never {
   try {
     grid.restoreState(snapshot);
+    // RestoreState rebuilds the chunk map and its ownership listeners. Reassert
+    // the captured bytes on the published authoritative chunks as a fail-closed
+    // postcondition: a rejected custom callback may have written directly to a
+    // retained Chunk buffer, outside the dense-window mirror.
+    for (const chunkSnapshot of snapshot.chunks) {
+      const restoredChunk = grid.chunks.get(chunkSnapshot.key);
+      if (!restoredChunk) {
+        throw new Error(`Sparse-grid rollback did not restore chunk ${chunkSnapshot.key}`);
+      }
+      restoredChunk.buffer.set(chunkSnapshot.buffer);
+      restoredChunk.backBuffer.set(chunkSnapshot.backBuffer);
+      restoredChunk.active = chunkSnapshot.active;
+      restoredChunk.lastAccessed = chunkSnapshot.lastAccessed;
+    }
   } catch (rollbackError) {
     const originalMessage = originalError instanceof Error ? originalError.message : String(originalError);
     const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
