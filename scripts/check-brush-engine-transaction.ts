@@ -254,8 +254,11 @@ await assert.rejects(() => customDirtyRollbackEngine.applyCustomStroke(makeStrok
 }), /injected custom dirty publication failure/);
 assertBufferEqual(dirtyRollbackGrid.buffer, customDirtyDenseBefore,
   "failed custom dirty publication must restore the dense field");
-assertBufferEqual(dirtyRollbackChunk.buffer, customDirtyChunkBefore,
-  "failed custom dirty publication must restore the chunk mirror");
+const restoredDirtyRollbackChunk = dirtyRollbackGrid.chunks.get("0,0,0");
+assert.ok(restoredDirtyRollbackChunk,
+  "failed custom dirty publication must retain the authoritative chunk");
+assertBufferEqual(restoredDirtyRollbackChunk.buffer, customDirtyChunkBefore,
+  "failed custom dirty publication must restore the chunk mirror in the authoritative map");
 assert.equal(customDirtyRollbackEngine.historyLength, 0);
 dirtyRollbackGrid.markChunksDirty = markChunksDirty;
 
