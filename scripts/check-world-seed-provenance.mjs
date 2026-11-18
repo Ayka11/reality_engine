@@ -29,7 +29,7 @@ const saveWorldAt = renderer.indexOf('  saveWorld(options:')
 const loadWorldAt = renderer.indexOf('  loadWorld(options:', saveWorldAt)
 assert.ok(saveWorldAt >= 0 && loadWorldAt > saveWorldAt, 'renderer saveWorld method must exist')
 const saveWorldBody = renderer.slice(saveWorldAt, loadWorldAt)
-const chunkWriteAt = saveWorldBody.lastIndexOf('this.persistence.saveChunk(cx, cy, cz, list)')
+const chunkWriteAt = saveWorldBody.lastIndexOf('this.#persistence.saveChunk(cx, cy, cz, list)')
 const activeSeedCommitAt = saveWorldBody.indexOf('saveActiveWorldSeed(this.#generator.seed)')
 assert.ok(chunkWriteAt >= 0 && activeSeedCommitAt > chunkWriteAt,
   'active seed must be published only after all seed-scoped chunk writes')
