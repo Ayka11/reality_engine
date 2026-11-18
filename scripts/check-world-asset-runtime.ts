@@ -961,8 +961,8 @@ assert.deepEqual(directRemoveRuntime.stats(), {
 assert.deepEqual(directRemoveFlags, {
   geometry: true, material: true, mixerStop: true, mixerUncache: true,
 })
-assert.equal(directRemoveNotifications, 1,
-  'a failing placement callback must be reported without skipping instance bookkeeping')
+assert.equal(directRemoveNotifications, 2,
+  'placement creation and failed removal notification must both be attempted')
 assert.equal(directRemoveRuntime.remove('direct-remove-source'), true)
 assert.equal(directRemoveScene.children.length, 0)
 
