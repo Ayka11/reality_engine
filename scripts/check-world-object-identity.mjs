@@ -313,7 +313,7 @@ assert.match(syncObjectsSource, /const staleGroups: THREE\.Object3D\[\] = \[\][\
 assert.doesNotMatch(syncObjectsSource, /(?:mesh|obj)\.geometry\.dispose\(\)|material\.dispose\(\)/,
   'stream eviction must not bypass shared disposal and double-dispose cloned/shared resources')
 
-const terrainDisposalStart = rendererSource.indexOf('#disposeTerrainPatchGroups(')
+const terrainDisposalStart = rendererSource.indexOf('  #disposeTerrainPatchGroups(')
 const terrainDisposalEnd = rendererSource.indexOf('#refreshTerrainPatches()', terrainDisposalStart)
 assert.ok(terrainDisposalStart >= 0 && terrainDisposalEnd > terrainDisposalStart,
   'terrain lifecycle must centralize patch disposal')
