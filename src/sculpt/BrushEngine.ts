@@ -23,10 +23,10 @@ function assertSynchronousCustomStrokeCallback(callback: () => void): void {
   } | null;
   const callbackConstructorName = callbackPrototype?.constructor?.name ?? "";
   const callbackSource = Function.prototype.toString.call(callbackFunction);
-  const asyncSource = /^\\s*async\\b/.test(callbackSource);
-  const generatorSource = /^\\s*(?:async\\s+)?function\\s*\\*/.test(callbackSource) ||
-    /^\\s*\\*\\s*[\\w$]*\\s*\\(/.test(callbackSource);
-  const nativeSource = /\\{\\s*\\[native code\\]\\s*\\}/.test(callbackSource);
+  const asyncSource = /^\s*async\b/.test(callbackSource);
+  const generatorSource = /^\s*(?:async\s+)?function\s*\*/.test(callbackSource) ||
+    /^\s*\*\s*[\w$]*\s*\(/.test(callbackSource);
+  const nativeSource = /\{\s*\[native code\]\s*\}/.test(callbackSource);
 
   // Reject async/generator callbacks before invoking them. Bound functions
   // stringify as native code, so fail closed rather than trust an opaque wrapper.
