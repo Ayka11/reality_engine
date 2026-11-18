@@ -16,61 +16,30 @@ assert.throws(() => invalidAgentSystem.spawn(18, 14, 1, { unknownWeight: 0.5 } a
 assert.equal(invalidAgentSystem.count, 0,
   'invalid agent spawn requests must not partially mutate the authoritative population')
 
-const observedSystem = new AgentSystem()
-assert.equal(Object.hasOwn(observedSystem, 'agents'), false)
-assert.equal(Reflect.set(observedSystem, 'agents', []), false)
-let observerCalls = 0
-let secondObserverId: number | undefined
-observedSystem.onAgentsChanged((agents) => {
-  observerCalls += 1
-  if (agents[0]) {
-    agents[0].id = 999999
-    agents[0].genome.seekEnergyW = 999
-  }
-})
-observedSystem.onAgentsChanged((agents) => {
-  secondObserverId = agents[0]?.id
-})
-observedSystem.spawn(18, 14, 3)
-assert.equal(observerCalls, 1)
-const publicAgentSnapshot = observedSystem.agents
-const originalPublicAgentId = publicAgentSnapshot[0]!.id
-publicAgentSnapshot[0]!.id = 999999
-publicAgentSnapshot[0]!.genome.seekEnergyW = 999
-publicAgentSnapshot[0]!.memory[0] = 999
-publicAgentSnapshot.pop()
-assert.equal(observedSystem.count, 3)
-assert.equal(observedSystem.agents[0]!.id, originalPublicAgentId)
-assert.notEqual(observedSystem.agents[0]!.genome.seekEnergyW, 999)
-assert.notEqual(observedSystem.agents[0]!.memory[0], 999)
-assert.equal(secondObserverId, originalPublicAgentId,
-  'agent observers must receive independent detached snapshots')
 
-const publicSurvivors = observedSystem.getSurvivors()
-publicSurvivors[0]!.genome.seekInfoW = 999
-assert.notEqual(observedSystem.getSurvivors()[0]!.genome.seekInfoW, 999)
-const planner = new AgentPlanner()
-const roleAssignments = planner.assignRoles(observedSystem.agents)
-observedSystem.applyRolePlans(roleAssignments)
-const firstRolePlan = observedSystem.agents[0]!.plan
-roleAssignments[0]!.plan = 'mutated after application'
-assert.notEqual(observedSystem.agents[0]!.plan, 'mutated after application')
-assert.match(firstRolePlan, /^\[(Scout|Harvester|Architect|Guardian|Breeder)\]/)
-assert.throws(() => observedSystem.applyRolePlans([
-  { id: observedSystem.agents[0]!.id, plan: 'valid' },
-  { id: 999999, plan: 'unknown' },
-]), /Unknown agent role assignment/)
-assert.notEqual(observedSystem.agents[0]!.plan, 'valid',
-  'role assignment batches must validate all IDs before mutating any agent')
+const reproductionSystem = new AgentSystem()
+reproductionSystem.spawn(18, 14, 1, { reprodThresh: 0.3 })
+const parentId = reproductionSystem.agents[0]!.id
+reproductionSystem.step(new Float32Array(36 * 28 * 12), 36, 28, 12, 0)
+const reproducedAgents = reproductionSystem.agents
+assert.equal(reproductionSystem.count, 2,
+  'a successful reproduction must add exactly one live child without recursively reproducing in the same tick')
+assert.equal(new Set(reproducedAgents.map(agent => agent.id)).size, 2,
+  'parent and offspring must retain distinct source-local identities')
+assert.ok(reproducedAgents.some(agent => agent.id === parentId),
+  'reproduction must preserve the parent identity')
 
-assert.throws(() => observedSystem.step(new Float32Array(10), 36, 28, 12, 10), /valid dimensions/)
-assert.throws(() => observedSystem.step(new Float32Array(36 * 28 * 12), 36, 28, 12, Number.NaN), /mutation rate/)
-assert.equal(observedSystem.count, 3,
-  'invalid agent tick inputs must be rejected before mutating the population')
-const firstAgentId = observedSystem.agents[0]!.id
-assert.equal(observedSystem.remove(firstAgentId), true)
-assert.equal(observedSystem.remove(firstAgentId), false)
-assert.equal(observedSystem.count, 2)
+const mortalitySystem = new AgentSystem()
+mortalitySystem.spawn(18, 14, 1, { reprodThresh: 0.95, maxAge: 150 })
+const mortalAgentId = mortalitySystem.agents[0]!.id
+const mortalityBuffer = new Float32Array(36 * 28 * 12)
+for (let tick = 0; tick < 211; tick++) {
+  mortalitySystem.step(mortalityBuffer, 36, 28, 12, 0)
+}
+assert.equal(mortalitySystem.count, 0,
+  'agents must leave the authoritative population after exceeding their mutated maximum age')
+assert.equal(mortalitySystem.remove(mortalAgentId), false,
+  'naturally deceased agents must no longer be removable as live population members')
 
 type LoadRequest = {
   onLoad: (gltf: { scene: THREE.Group; animations?: THREE.AnimationClip[] }) => void
@@ -345,7 +314,6 @@ assert.equal(waiting.awaitingAsset, 2,
 assert.equal(waiting.instances, 0)
 emptyRuntime.dispose()
 
-const { AgentSystem } = await import('../src/modes/agents/AgentSystem.ts')
 const observedSystem = new AgentSystem()
 const observedSnapshots: Agent[][] = []
 let observerCalls = 0
@@ -372,6 +340,17 @@ unsubscribe()
 observedSystem.step(new Float32Array(36 * 28 * 12), 36, 28, 12, 10)
 assert.equal(observerCalls, 2, 'unsubscribed observers must no longer receive agent ticks')
 
+assert.throws(() => observedSystem.step(new Float32Array(10), 36, 28, 12, 10), /valid dimensions/)
+assert.throws(() => observedSystem.step(
+  new Float32Array(36 * 28 * 12), 36, 28, 12, Number.NaN,
+), /mutation rate/)
+assert.equal(observedSystem.count, 3,
+  'invalid tick requests must not partially mutate the authoritative population')
+const removedAgentId = observedSystem.agents[0]!.id
+assert.equal(observedSystem.remove(removedAgentId), true)
+assert.equal(observedSystem.remove(removedAgentId), false)
+assert.equal(observedSystem.count, 2)
+
 assert.equal(Object.hasOwn(observedSystem, 'agents'), false,
   'AgentSystem must expose its population through a getter, not a writable array property')
 assert.equal(Reflect.set(observedSystem, 'agents', []), false,
@@ -393,7 +372,6 @@ publicSurvivors[0].genome.seekInfoW = 999
 assert.notEqual(observedSystem.getSurvivors()[0].genome.seekInfoW, 999,
   'getSurvivors must return detached agent and genome snapshots')
 
-const { AgentPlanner } = await import('../src/modes/agents/AgentPlanner.ts')
 const planner = new AgentPlanner()
 const roleAssignments = planner.assignRoles(observedSystem.agents)
 assert.equal(roleAssignments.length, 3)
