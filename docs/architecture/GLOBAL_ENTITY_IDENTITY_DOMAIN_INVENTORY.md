@@ -56,10 +56,19 @@ The World Library contains several kinds of ID-bearing data. They must not all b
 | `WorldResourceEconomy.resources` | Semantic resource inventory | Explicitly excluded |
 | `ProductionInfrastructureRuntime.states` | Civilization-keyed state projection | Explicitly excluded |
 | `SettlementGrowthModel` | Evaluation and transition model whose state is embedded in civilization state | Model, not an independent entity store |
-| `WorldLibrary`, `WorldRuleGraph`, catalog and rules | Semantic definitions and dependency/relationship data | Definition stores, not live entities |
+| `WorldLibrary`, `WorldRuleGraph`, `PrefabSystem.library`, `SceneComposer.COMPONENTS`, catalog and rules | Semantic world definitions, reusable voxel-prefab templates, built-in scene-composition paint presets, and dependency/relationship data | Definition/preset stores, not materialized scene entities; prefab stamping and composer application write field data, while placed world-object IDs remain owned by `WorldObjectManager` |
 | Asset provider registry, discovery and import manifest | Service/provider definitions, discovered assets and provenance/licensing records | Not live world-object identities |
 | Biome population, environment resolution, generation plans and event-consequence processing | Planning, resolution or transient derived results | Not persistent entity owners |
 | `WorldAssetRuntime` | Runtime asset instances | Their persistent placement identities are included through the placement domain; asset source/catalog IDs are not substituted for placement IDs |
+
+### Reusable definitions and authoring presets
+
+Two additional ID-bearing collections were checked and classified rather than treated as omitted entity domains:
+
+- `PrefabSystem.library` stores reusable voxel-cell templates. A prefab ID identifies a definition that can be captured, imported, exported, or stamped into the field buffer; it does not identify a live placed object. Stamping writes field values and does not allocate a `WorldObject.id` or an external asset placement `instanceId`.
+- `SceneComposer.COMPONENTS` is the built-in catalogue of scene-composition paint operations. Its IDs identify reusable authoring presets, not independently-owned scene instances. Applying a component mutates field data through its paint operation; materialized world objects are separately registered by `WorldObjectManager`.
+
+These collections are part of the authoring/definition surface, not active live-entity identity domains. This distinction prevents reusable templates and paint operations from being conflated with placed objects.
 
 ## Ownership and recovery safeguards
 
