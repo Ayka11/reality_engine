@@ -77,7 +77,7 @@ export function bootstrapInfiniteWorld() {
     const activeAgentIdentities = Array.isArray(activeAgents)
       ? activeAgents
         .filter((agent: any) => Number.isSafeInteger(agent?.id) && agent.id >= 0)
-        .map((agent: any) => ({ id: agent.id, kind: typeof agent.state === 'string' ? agent.state : 'agent' }))
+        .map((agent: any) => ({ id: agent.id, kind: 'agent' }))
       : []
     globalEntityIdentityRegistry.replaceDomains([
       {
