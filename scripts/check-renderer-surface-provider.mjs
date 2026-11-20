@@ -16,6 +16,14 @@ for (const [name, source] of [['renderer', rendererSource], ['surface provider',
 
 assert.match(rendererSource, /setWorldSurfaceProvider\(provider: WorldSurfaceProvider\)/)
 assert.match(rendererSource, /resetWorldSurfaceProviderToGenerator\(\)/)
+assert.equal((rendererSource.match(/^\s*decisionLayer:\s*\{/gm) ?? []).length, 1,
+  'the renderer decisionLayer descriptor must be defined only once across constructor pinning blocks')
+assert.equal((rendererSource.match(/^\s*constructionContract:\s*\{/gm) ?? []).length, 1,
+  'the renderer constructionContract descriptor must be defined only once across constructor pinning blocks')
+assert.match(rendererSource, /decisionLayer:\s*\{\s*configurable:\s*false,[\s\S]*?get:\s*\(\)\s*=>\s*this\.#decisionLayer/,
+  'the public decisionLayer reference must remain a non-configurable getter to expose provider-driven rebuilds')
+assert.match(rendererSource, /constructionContract:\s*\{\s*configurable:\s*false,[\s\S]*?get:\s*\(\)\s*=>\s*this\.#constructionContract/,
+  'the public construction contract reference must remain a non-configurable getter to expose provider-driven rebuilds')
 assert.match(rendererSource, /const surface = provider\.sampleSurface\(x, z\)/)
 assert.match(rendererSource, /const biome = this\.#fieldSampler\.surfaceProvider\.sampleSurface\(originX \+ gx, originZ \+ gz, h\)\.biome/)
 assert.match(rendererSource, /const waterLevel = this\.#getWorldWaterLevel\(\)/)
