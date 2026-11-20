@@ -2088,7 +2088,7 @@ try {
     const world = window.infiniteWorld;
     const position = world?.getWorldPosition?.();
     const target = world?.controls?.target;
-    const anchor = world?.worldAnchor;
+    const anchor = world?.getWorldAnchor?.();
     return position && target && anchor ? {
       x: position.x, z: position.z,
       targetX: target.x, targetZ: target.z,
