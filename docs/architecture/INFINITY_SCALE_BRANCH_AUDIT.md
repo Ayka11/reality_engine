@@ -86,6 +86,20 @@ Therefore:
 - Treat `InfinityScaleUnifiedTransaction` as a research prototype until it is adapted to the sparse authoritative grid and proves full chunk membership/geometry remapping as well as cell data transfer.
 - Require physical chunk remapping, complete cell transfer/conservation, atomic rollback, stale-revision rejection, and regression coverage before a production topology commit can be enabled.
 
+## Current-main physical chunk mapping foundation — 2026-11-20
+
+The maintained `main` now has a geometry-only mapping layer in `src/infinity/InfinityScaleSpatialChunkMapping.ts`:
+
+- `getInfinityScaleChildChunkKeys(parentKey)` derives the exact eight level-(L-1) child keys for a physical level-L chunk.
+- `getInfinityScaleParentChunkKey(childKeys)` accepts only a complete set of eight unique canonical siblings and resolves the parent independent of input order.
+- `mapInfinityScaleChunkToSparseChunks(key)` resolves the LOD chunk's inclusive base-cell bounds into the complete physical level-zero `SparseVoxelGrid` chunk-key set using the authoritative `CHUNK_SIZE`. It refuses partial chunk alignment, unsafe geometry, and expansions beyond a bounded count.
+
+The regression is part of the mandatory `test:infinity-scale-adaptive-lod-bridge` CI gate and covers negative coordinates, parent/child round trips, incomplete/duplicate/mixed sibling groups, integer overflow, exact 8/64 base-chunk coverage, alignment rejection, immutable results, and expansion limits.
+
+Exact-head [CI #2955](https://github.com/Ayka11/reality_engine/actions/runs/44737495052) passed **104/104** steps on `0e7aa75948009b4fe582c13913b26ef856c47ef3`, including the adaptive-LOD gate, build, both Docker images, Hugging Face smoke/CPU checks, WebGPU SwiftShader numerical probe, Browser Acceptance, and dependency audit.
+
+**This is not a production topology transaction.** The mapper is pure and does not create/remove SparseVoxelGrid chunks, move authoritative cell buffers, invoke prolongation/restriction, verify field-specific conservation, or bind opaque adaptive `regionId` values to a durable spatial owner. The production `InfinityScaleAdaptiveLODTransactionBridge.commit()` continues to reject every mutation with `fromLOD !== toLOD`. Keep that fail-closed behavior until logical-region ownership, full physical remapping, complete cell transfer/conservation, dependency barriers, and atomic refine→coarsen rollback are implemented and tested end-to-end.
+
 ## Branch deletion gate
 
 **Status: NOT READY FOR DELETION.** Deletion should wait until:
