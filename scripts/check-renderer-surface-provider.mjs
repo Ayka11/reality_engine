@@ -20,6 +20,8 @@ assert.match(rendererSource, /getWorldAnchor\(\)\s*\{\s*return this\.#worldAncho
   'render-origin diagnostics must return a detached clone, never the authoritative anchor vector')
 assert.match(rendererSource, /getWorldPosition\(\)\s*\{\s*return this\.#worldPosition\.clone\(\)\s*\}/,
   'world camera coordinates must remain detached from the authoritative position vector')
+assert.match(rendererSource, /get isFlyMode\(\): boolean \{ return this\.#flyMode \}/,
+  'the first-person camera mode must have a read-only public state accessor')
 assert.equal((rendererSource.match(/^\s*decisionLayer:\s*\{/gm) ?? []).length, 1,
   'the renderer decisionLayer descriptor must be defined only once across constructor pinning blocks')
 assert.equal((rendererSource.match(/^\s*constructionContract:\s*\{/gm) ?? []).length, 1,
