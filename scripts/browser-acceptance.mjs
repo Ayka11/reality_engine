@@ -758,7 +758,7 @@ try {
       selected = window.worldSetSurfaceProvider(flat);
       sampled = world.sampleWorldField(16, undefined, 16);
       environment = world.getWorldEnvironment();
-      terrainHeight = world.sampleTerrainHeight(16, 16);
+      terrainHeight = world.getSurfaceHeightAt(16, 16);
       routeHasWater = world.analyzeRoute(0, 0, 12, 12, 2).some(point => point.water);
       return {
         selected,
@@ -814,7 +814,7 @@ try {
   );
   const persistedFlatState = await page.evaluate(() => ({
     state: window.worldGetSurfaceProviderState(),
-    height: window.infiniteWorld.sampleTerrainHeight(16, 16),
+    height: window.infiniteWorld.getSurfaceHeightAt(16, 16),
     worldSeed: window.infiniteWorld.worldSeed,
     generatorSeed: window.infiniteWorld.generator.seed,
   }));
