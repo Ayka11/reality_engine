@@ -721,8 +721,8 @@ export class InfiniteWorldRenderer {
       objects: { configurable: false, enumerable: true, writable: false, value: this.objects },
       controls: { configurable: false, enumerable: true, writable: false, value: this.controls },
       legacySculptRuntimeAdapter: { configurable: false, enumerable: true, writable: false, value: this.legacySculptRuntimeAdapter },
-      decisionLayer: { configurable: false, enumerable: true, writable: false, value: this.#decisionLayer },
-      constructionContract: { configurable: false, enumerable: true, writable: false, value: this.#constructionContract },
+      // decisionLayer and constructionContract were defined above as stable
+      // getters. Keep those descriptors so surface-provider rebuilds remain visible.
       decisionGraph: { configurable: false, enumerable: true, writable: false, value: this.decisionGraph },
       fieldPhysics: { configurable: false, enumerable: true, writable: false, value: this.fieldPhysics },
       lawPhysicsContract: { configurable: false, enumerable: true, writable: false, value: this.lawPhysicsContract },
