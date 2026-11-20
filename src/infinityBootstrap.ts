@@ -53,6 +53,7 @@ export function bootstrapInfiniteWorld() {
         resize: fieldVolumeRenderer.resize.bind(fieldVolumeRenderer),
         render: fieldVolumeRenderer.render.bind(fieldVolumeRenderer),
         diagnostics: fieldVolumeRenderer.diagnostics.bind(fieldVolumeRenderer),
+        interactionDiagnostics: fieldVolumeRenderer.interactionDiagnostics.bind(fieldVolumeRenderer),
       })
       ;(window as any).worldFieldVolumeRenderer = fieldVolumeRendererApi
       ;(window as any).renderWorldFieldVolume = fieldVolumeRendererApi.render
