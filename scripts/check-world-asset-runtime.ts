@@ -1775,7 +1775,7 @@ assert.doesNotMatch(rendererSource, /const (?:worldX|x) = instance\.position\.x/
 const groundingHelperStart = rendererSource.indexOf('#groundExternalAssetInstances(')
 const groundingHelperEnd = rendererSource.indexOf('  async loadExternalAsset(', groundingHelperStart)
 const groundingHelper = rendererSource.slice(groundingHelperStart, groundingHelperEnd)
-assert.match(groundingHelper, /groundWorldAssetInstances\([\s\S]*createdInstanceIds[\s\S]*this\.#sampleTerrainHeight/,
+assert.match(groundingHelper, /createdInstanceIds[\s\S]*groundWorldAssetInstances\([\s\S]*this\.#sampleTerrainHeight/,
   'renderer must delegate transactional grounding with the current scatter ownership set')
 assert.match(groundingHelper, /AggregateError|groundWorldAssetInstances/,
   'grounding rollback failures must be preserved alongside the original error')
