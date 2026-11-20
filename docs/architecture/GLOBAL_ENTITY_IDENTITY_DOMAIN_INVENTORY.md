@@ -17,11 +17,13 @@ The browser entry point is `index.html`, which loads `src/boot.js`. That module 
 | Domain | Authoritative owner | Identity source | Lifecycle boundary |
 |---|---|---|---|
 | `infinite-world-object` | `InfiniteWorldRenderer.objects` / `WorldObjectManager` | Stable `WorldObject.id` from `world.objects.values()` | Add, update, transform, remove, clear, world snapshot import/restore |
-| `active-agent` | `src/modes/agents/AgentSystem.ts` | Session-local numeric `Agent.id` values from the booted connector's `agentSystem` | Spawn, reproduction, death/removal; current live IDs are indexed, while agent state and visual projections remain transient |
+| `active-agent` | `src/modes/agents/AgentSystem.ts` | Session-local numeric `Agent.id` values from the booted connector's `agentSystem`; identity `kind` is the stable value `agent`, never the mutable FSM `state` | Spawn, reproduction, death/removal; current live IDs are indexed, while agent state and visual projections remain transient |
 | `external-asset-placement` | `WorldAssetRuntime` plus `InfiniteWorldRenderer` pending placement descriptors | `instanceId` from validated, merged loaded and pending persistent placements | Explicit asset import/materialization, placement update/removal, save/restart recovery; binaries are not fetched automatically during recovery |
 | `world-library-civilization-branch` | `CivilizationRuntime` | `branchId` from `civilizationRuntime.branchesList()` | Branch fork, branch tick/history publication, runtime snapshot restore |
 
 ### Refresh and revision semantics
+
+The `active-agent` record's `kind` is a stable classification (`agent`); runtime FSM state (`idle`, `flee_entropy`, `reproduce`, and other states) is mutable behavior metadata and must not advance identity revision. The browser acceptance suite verifies an FSM transition with unchanged membership preserves the record key and directory revision.
 
 The directory is refreshed when `getGlobalEntityIdentitySnapshot()` is called. Each call reads the current authoritative inventories for all four captured domains and atomically publishes them to the registry before returning the detached snapshot. It is not a second entity store and does not subscribe to every source mutation. Consequently, the exposed revision describes the most recently requested directory snapshot; clients must request a fresh snapshot after a source operation before relying on its revision or membership.
 
