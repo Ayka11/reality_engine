@@ -269,6 +269,25 @@ export class WorldFieldVolumeRenderer {
     }
   }
 
+  /**
+   * Return detached input/camera state for browser acceptance and support
+   * diagnostics. Never expose OrbitControls, Camera, Vector3 or live Three.js
+   * objects through the browser-facing renderer facade.
+   */
+  interactionDiagnostics() {
+    const position = this.camera.position
+    const target = this.controls.target
+    return {
+      enabled: this.controls.enabled,
+      rotating: this.controls.enableRotate,
+      zooming: this.controls.enableZoom,
+      panning: this.controls.enablePan,
+      cameraPosition: [position.x, position.y, position.z] as [number, number, number],
+      target: [target.x, target.y, target.z] as [number, number, number],
+      distance: position.distanceTo(target),
+    }
+  }
+
   private draw() {
     if (this.width < 1 || this.height < 1) return
     this.renderer.render(this.scene, this.camera)
