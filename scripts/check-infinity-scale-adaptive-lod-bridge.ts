@@ -6,6 +6,7 @@ import { runInfinityScaleCausalAdaptiveAttributionRegression } from "../src/infi
 import { runInfinityScaleResolutionUtilityRegression } from "../src/infinity/InfinityScaleResolutionUtility.regression";
 import { runInfinityScaleAdaptiveTransactionPreflightRegression } from "../src/infinity/InfinityScaleAdaptiveTransactionPreflight.regression";
 import { runInfinityScaleLODStateRecoveryRegression } from "../src/infinity/InfinityScaleLODStateRecovery.regression";
+import { runInfinityScaleSpatialChunkMappingRegression } from "../src/infinity/InfinityScaleSpatialChunkMapping.regression";
 
 runInfinityScaleAdaptiveLODTransactionBridgeRegression();
 runInfinityScaleAdaptiveTransferCompilerRegression();
@@ -15,4 +16,5 @@ runInfinityScaleCausalAdaptiveAttributionRegression();
 runInfinityScaleResolutionUtilityRegression();
 runInfinityScaleAdaptiveTransactionPreflightRegression();
 runInfinityScaleLODStateRecoveryRegression();
-console.log("Infinity Scale adaptive LOD bridge, execution graph, GPU boundary contract, causal attribution, resolution utility, transaction preflight, and hierarchical state recovery/key validation regressions: PASS");
+runInfinityScaleSpatialChunkMappingRegression();
+console.log("Infinity Scale adaptive LOD bridge, execution graph, GPU boundary contract, causal attribution, resolution utility, transaction preflight, hierarchical recovery, and physical sparse-chunk mapping regressions: PASS");
