@@ -1649,6 +1649,7 @@ export class InfiniteWorldRenderer {
   }
 
   get isEnabled() { return this.#enabled }
+  get isFlyMode(): boolean { return this.#flyMode }
   get generator(): WorldGenerator { return this.#generator }
   get chunks(): InfiniteChunkManager { return this.#chunks }
   get persistence(): WorldPersistence { return this.#persistence }
