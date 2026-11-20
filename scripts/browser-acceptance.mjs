@@ -145,12 +145,18 @@ try {
     system.spawn(18, 14, 1, { reprodThresh: 0.95, maxAge: 150 });
     const mortalAgent = system.agents.find(agent => !reproductionBaselineIds.has(agent.id));
     const mortalAgentId = mortalAgent?.id;
+    // The directory is a pull-based snapshot: publish the agent while alive
+    // before testing that natural death removes its identity and advances revision.
+    const afterNaturalSpawn = identityApi();
+    const naturalDeathPublishedBeforeDeath = mortalAgentId !== undefined &&
+      afterNaturalSpawn.entries.some(entry =>
+        entry.domain === "active-agent" && entry.localId === mortalAgentId);
     const mortalityBuffer = new Float32Array(36 * 28 * 12);
     for (let tick = 0; tick < 211; tick++) {
       system.step(mortalityBuffer, 36, 28, 12, 0);
     }
     const afterNaturalDeath = identityApi();
-    const naturalDeathRemovedIdentity = mortalAgentId !== undefined &&
+    const naturalDeathRemovedIdentity = naturalDeathPublishedBeforeDeath &&
       !afterNaturalDeath.entries.some(entry =>
         entry.domain === "active-agent" && entry.localId === mortalAgentId);
 
@@ -177,9 +183,11 @@ try {
       reproductionSpawnRevision: afterReproductionSpawn.revision,
       reproductionTickRevision: afterReproductionTick.revision,
       reproductionCleanupRevision: afterReproductionCleanup.revision,
+      naturalDeathPublishedBeforeDeath,
       naturalDeathRemovedIdentity,
       naturalDeathCount: afterNaturalDeath.domains.find(domain => domain.domain === "active-agent")?.count,
       expectedNaturalDeathCount: baselineAgents.length,
+      naturalDeathSpawnRevision: afterNaturalSpawn.revision,
       naturalDeathRevision: afterNaturalDeath.revision,
     };
   });
@@ -200,9 +208,11 @@ try {
       activeAgentIdentityLifecycle.reproductionCleanupCount !== activeAgentIdentityLifecycle.expectedReproductionCleanupCount ||
       activeAgentIdentityLifecycle.reproductionTickRevision <= activeAgentIdentityLifecycle.reproductionSpawnRevision ||
       activeAgentIdentityLifecycle.reproductionCleanupRevision <= activeAgentIdentityLifecycle.reproductionTickRevision ||
+      !activeAgentIdentityLifecycle.naturalDeathPublishedBeforeDeath ||
       !activeAgentIdentityLifecycle.naturalDeathRemovedIdentity ||
       activeAgentIdentityLifecycle.naturalDeathCount !== activeAgentIdentityLifecycle.expectedNaturalDeathCount ||
-      activeAgentIdentityLifecycle.naturalDeathRevision <= activeAgentIdentityLifecycle.reproductionCleanupRevision) {
+      activeAgentIdentityLifecycle.naturalDeathSpawnRevision <= activeAgentIdentityLifecycle.reproductionCleanupRevision ||
+      activeAgentIdentityLifecycle.naturalDeathRevision <= activeAgentIdentityLifecycle.naturalDeathSpawnRevision) {
     throw new Error("Active transient agent identity lifecycle did not publish spawn, reproduction, removal and natural death correctly: " +
       JSON.stringify(activeAgentIdentityLifecycle));
   }
