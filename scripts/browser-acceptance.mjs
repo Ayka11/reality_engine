@@ -2473,8 +2473,7 @@ try {
     throw new Error("3D volume camera test cannot access a visible canvas");
   }
   const volumeControlState = await page.evaluate(() => ({
-    enabled: window.worldFieldVolumeRenderer?.controls?.enabled,
-    rotating: window.worldFieldVolumeRenderer?.controls?.enableRotate,
+    ...(window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? {}),
     canvasPointerEvents: getComputedStyle(document.querySelector("#c3dField")).pointerEvents,
     canvasDisplay: getComputedStyle(document.querySelector("#c3dField")).display,
     canvasZ: getComputedStyle(document.querySelector("#c3dField")).zIndex,
@@ -2483,10 +2482,9 @@ try {
       volumeControlState.canvasPointerEvents === "none" || volumeControlState.canvasDisplay === "none") {
     throw new Error("3D volume input is disabled or canvas is not interactive: " + JSON.stringify(volumeControlState));
   }
-  const volumeCameraBefore = await page.evaluate(() => {
-    const p = window.worldFieldVolumeRenderer?.camera?.position;
-    return p ? [p.x, p.y, p.z] : null;
-  });
+  const volumeCameraBefore = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.()?.cameraPosition ?? null
+  );
   const volumeLookStart = {
     x: volumeCanvasBounds.x + volumeCanvasBounds.width * 0.6,
     y: volumeCanvasBounds.y + volumeCanvasBounds.height * 0.55,
@@ -2496,22 +2494,15 @@ try {
   await page.mouse.move(volumeLookStart.x + 140, volumeLookStart.y + 70, { steps: 12 });
   await page.mouse.up({ button: "left" });
   await page.waitForTimeout(100);
-  const volumeCameraAfter = await page.evaluate(() => {
-    const p = window.worldFieldVolumeRenderer?.camera?.position;
-    return p ? [p.x, p.y, p.z] : null;
-  });
+  const volumeCameraAfter = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.()?.cameraPosition ?? null
+  );
   if (!volumeCameraBefore || !volumeCameraAfter ||
       Math.hypot(volumeCameraAfter[0] - volumeCameraBefore[0],
         volumeCameraAfter[1] - volumeCameraBefore[1],
         volumeCameraAfter[2] - volumeCameraBefore[2]) < 0.1) {
     const inputDiagnostics = await page.evaluate(() => ({
-      before: window.worldFieldVolumeRenderer?.camera?.position?.toArray?.(),
-      after: window.worldFieldVolumeRenderer?.camera?.position?.toArray?.(),
-      controls: {
-        enabled: window.worldFieldVolumeRenderer?.controls?.enabled,
-        rotating: window.worldFieldVolumeRenderer?.controls?.enableRotate,
-        dragging: window.worldFieldVolumeRenderer?.controls?.state,
-      },
+      interaction: window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null,
       activeElement: document.activeElement?.id,
     }));
     throw new Error("3D volume camera did not respond to pointer rotation: before=" +
@@ -2521,24 +2512,18 @@ try {
 
   // Rotation alone is not enough: verify OrbitControls zoom and pan affect
   // the actual camera/target, rather than only exposing enabled control flags.
-  const cameraDistanceBeforeZoom = await page.evaluate(() => {
-    const renderer = window.worldFieldVolumeRenderer;
-    return renderer?.camera && renderer?.controls?.target
-      ? renderer.camera.position.distanceTo(renderer.controls.target)
-      : null;
-  });
+  const cameraDistanceBeforeZoom = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.()?.distance ?? null
+  );
   await page.mouse.move(
     volumeCanvasBounds.x + volumeCanvasBounds.width * 0.55,
     volumeCanvasBounds.y + volumeCanvasBounds.height * 0.55,
   );
   await page.mouse.wheel(0, -420);
   await page.waitForTimeout(100);
-  const cameraDistanceAfterZoom = await page.evaluate(() => {
-    const renderer = window.worldFieldVolumeRenderer;
-    return renderer?.camera && renderer?.controls?.target
-      ? renderer.camera.position.distanceTo(renderer.controls.target)
-      : null;
-  });
+  const cameraDistanceAfterZoom = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.()?.distance ?? null
+  );
   if (cameraDistanceBeforeZoom == null || cameraDistanceAfterZoom == null ||
       cameraDistanceBeforeZoom - cameraDistanceAfterZoom < 0.1) {
     throw new Error("3D volume camera did not zoom in on wheel input: before=" +
@@ -2546,7 +2531,7 @@ try {
   }
 
   const volumeTargetBeforePan = await page.evaluate(() =>
-    window.worldFieldVolumeRenderer?.controls?.target?.toArray?.() ?? null
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.()?.target ?? null
   );
   const panStart = {
     x: volumeCanvasBounds.x + volumeCanvasBounds.width * 0.52,
@@ -2558,7 +2543,7 @@ try {
   await page.mouse.up({ button: "right" });
   await page.waitForTimeout(100);
   const volumeTargetAfterPan = await page.evaluate(() =>
-    window.worldFieldVolumeRenderer?.controls?.target?.toArray?.() ?? null
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.()?.target ?? null
   );
   if (!volumeTargetBeforePan || !volumeTargetAfterPan ||
       Math.hypot(volumeTargetAfterPan[0] - volumeTargetBeforePan[0],
