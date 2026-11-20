@@ -112,6 +112,28 @@ try {
     const afterSpawn = identityApi();
     const spawnedEntries = afterSpawn.entries.filter(entry =>
       entry.domain === "active-agent" && ids.includes(entry.localId));
+    const agentsBeforeStateOnlyTick = system.agents;
+    const stateBeforeTick = agentsBeforeStateOnlyTick.find(agent => agent.id === originalId)?.state;
+    const stateOnlyTickBuffer = new Float32Array(36 * 28 * 12);
+    for (let cell = 0; cell < 36 * 28; cell++) stateOnlyTickBuffer[cell * 12 + 3] = 1;
+    system.step(stateOnlyTickBuffer, 36, 28, 12, 0);
+    const afterStateOnlyTick = identityApi();
+    const agentsAfterStateOnlyTick = system.agents;
+    const stateAfterTick = agentsAfterStateOnlyTick.find(agent => agent.id === originalId)?.state;
+    const idsBeforeStateOnlyTick = agentsBeforeStateOnlyTick.map(agent => agent.id).sort((a, b) => a - b);
+    const idsAfterStateOnlyTick = agentsAfterStateOnlyTick.map(agent => agent.id).sort((a, b) => a - b);
+    const identityBeforeStateOnlyTick = afterSpawn.entries.find(entry =>
+      entry.domain === "active-agent" && entry.localId === originalId);
+    const identityAfterStateOnlyTick = afterStateOnlyTick.entries.find(entry =>
+      entry.domain === "active-agent" && entry.localId === originalId);
+    const fsmStateTransitionPreservedIdentity =
+      stateBeforeTick === "idle" &&
+      stateAfterTick === "flee_entropy" &&
+      idsBeforeStateOnlyTick.length === idsAfterStateOnlyTick.length &&
+      idsBeforeStateOnlyTick.every((id, index) => id === idsAfterStateOnlyTick[index]) &&
+      identityBeforeStateOnlyTick?.kind === "agent" &&
+      identityAfterStateOnlyTick?.kind === identityBeforeStateOnlyTick.kind &&
+      afterStateOnlyTick.revision === afterSpawn.revision;
     const publicSnapshotIsDetached = ids.length === 2 &&
       system.agents.length === baselineAgents.length + 2 &&
       system.agents.some(agent => agent.id === originalId && agent.genome.seekEnergyW !== 999);
@@ -165,6 +187,11 @@ try {
       agentSystemPinned,
       spawnedCount: spawnedEntries.length,
       originalIdPublished: spawnedEntries.some(entry => entry.localId === originalId),
+      fsmStateBefore: stateBeforeTick,
+      fsmStateAfter: stateAfterTick,
+      fsmStateTransitionPreservedIdentity,
+      fsmIdentityRevisionBefore: afterSpawn.revision,
+      fsmIdentityRevisionAfter: afterStateOnlyTick.revision,
       publicSnapshotIsDetached,
       firstRemoved,
       secondRemoved,
@@ -195,6 +222,7 @@ try {
       !activeAgentIdentityLifecycle.agentSystemPinned ||
       activeAgentIdentityLifecycle.spawnedCount !== 2 ||
       !activeAgentIdentityLifecycle.originalIdPublished ||
+      !activeAgentIdentityLifecycle.fsmStateTransitionPreservedIdentity ||
       !activeAgentIdentityLifecycle.publicSnapshotIsDetached ||
       !activeAgentIdentityLifecycle.firstRemoved ||
       !activeAgentIdentityLifecycle.secondRemoved ||
