@@ -70,6 +70,17 @@ Two additional ID-bearing collections were checked and classified rather than tr
 
 These collections are part of the authoring/definition surface, not active live-entity identity domains. This distinction prevents reusable templates and paint operations from being conflated with placed objects.
 
+### Other ID-bearing records that are not entity owners
+
+The repository also contains IDs on records that participate in reasoning, undo/redo, provenance, or asset intake. They are intentionally not promoted to independent live-entity domains:
+
+- `WorldEditHistory` stores detached add/remove/transform commands containing `WorldObject` snapshots. The snapshots preserve the source object's stable ID for undo/redo; authoritative membership and lifecycle remain with `WorldObjectManager`.
+- `DecisionRecord.id` and `DecisionGraph` node/edge IDs identify decision or analysis records and their relationships. A graph node may describe or reference a world object, but the graph is not the owner of that object's live placement.
+- `RuntimeProvenance` event IDs and `parentId` values identify ordered audit events inside a trace. They describe causal/provenance history, not live scene entities.
+- `AssetDiscovery.id`, provider identifiers, and `WorldAssetImportManifest.entries[].id` identify discovered/imported source metadata and licensing/provenance records. They are not interchangeable with the persistent external placement `instanceId`; the placement domain remains authoritative for placed instances.
+
+These are records or references with their own local schemas, not additional active entity domains. Their references must remain traceable to the relevant source owner without duplicating ownership or inflating the global entity inventory.
+
 ## Ownership and recovery safeguards
 
 - `WorldObjectManager` is authoritative for placed world-object records and returns detached snapshots to callers.
