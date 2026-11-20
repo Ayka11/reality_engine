@@ -149,6 +149,9 @@ export class InfiniteWorldRenderer {
 
   getWorldPosition() { return this.#worldPosition.clone() }
 
+  /** Detached render-origin snapshot for diagnostics and world/local coordinate checks. */
+  getWorldAnchor() { return this.#worldAnchor.clone() }
+
   setSimulationRunning(running: boolean) {
     this.#simulationRunning = Boolean(running)
   }
