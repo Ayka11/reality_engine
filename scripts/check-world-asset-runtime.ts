@@ -1772,7 +1772,7 @@ assert.equal((rendererSource.match(/this\.#groundExternalAssetInstances\(scatter
   'biome population, world composition and direct scatter must pass transaction-owned IDs to grounding')
 assert.doesNotMatch(rendererSource, /const (?:worldX|x) = instance\.position\.x/,
   'renderer must not treat rebased local instance X as an absolute world coordinate')
-const groundingHelperStart = rendererSource.indexOf('#groundExternalAssetInstances(')
+const groundingHelperStart = rendererSource.indexOf('  #groundExternalAssetInstances(')
 const groundingHelperEnd = rendererSource.indexOf('  async loadExternalAsset(', groundingHelperStart)
 const groundingHelper = rendererSource.slice(groundingHelperStart, groundingHelperEnd)
 assert.match(groundingHelper, /createdInstanceIds[\s\S]*groundWorldAssetInstances\([\s\S]*this\.#sampleTerrainHeight/,
