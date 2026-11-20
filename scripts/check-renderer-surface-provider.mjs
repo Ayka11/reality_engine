@@ -16,6 +16,10 @@ for (const [name, source] of [['renderer', rendererSource], ['surface provider',
 
 assert.match(rendererSource, /setWorldSurfaceProvider\(provider: WorldSurfaceProvider\)/)
 assert.match(rendererSource, /resetWorldSurfaceProviderToGenerator\(\)/)
+assert.match(rendererSource, /getWorldAnchor\(\)\s*\{\s*return this\.#worldAnchor\.clone\(\)\s*\}/,
+  'render-origin diagnostics must return a detached clone, never the authoritative anchor vector')
+assert.match(rendererSource, /getWorldPosition\(\)\s*\{\s*return this\.#worldPosition\.clone\(\)\s*\}/,
+  'world camera coordinates must remain detached from the authoritative position vector')
 assert.equal((rendererSource.match(/^\s*decisionLayer:\s*\{/gm) ?? []).length, 1,
   'the renderer decisionLayer descriptor must be defined only once across constructor pinning blocks')
 assert.equal((rendererSource.match(/^\s*constructionContract:\s*\{/gm) ?? []).length, 1,
