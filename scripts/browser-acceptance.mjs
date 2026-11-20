@@ -2116,7 +2116,7 @@ try {
       const world = window.infiniteWorld;
       const p = world?.camera?.position;
       return {
-        flyMode: world?.flyMode,
+        flyMode: world?.isFlyMode,
         controlsEnabled: world?.controls?.enabled,
         position: p ? [p.x, p.y, p.z] : null,
       };
