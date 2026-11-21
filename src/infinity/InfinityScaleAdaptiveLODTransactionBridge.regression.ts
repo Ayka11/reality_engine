@@ -50,9 +50,11 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   // enable topology changes: full-cell transfer and field conservation remain
   // an explicit release gate. The bridge must validate the mapping, then fail
   // closed without changing the authoritative LOD state.
-  const mappedState = new InfinityScaleLODState(2);
-  const mappedBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, mappedState);
+  const mappedState = new InfinityScaleLODState();
+  mappedState.ensureChunk("1:-1,0,-1", 1);
+  mappedState.bindRegionOwnership("forest-west", ["1:-1,0,-1"]);
   const mappedRevision = mappedState.getRevision();
+  const mappedBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, mappedState);
   mappedBridge.begin(frame);
   let mappedTopologyStillBlocked = false;
   try {
@@ -70,8 +72,55 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   if (!mappedTopologyStillBlocked) {
     throw new Error("A physically mapped LOD region bypassed the full-cell/conservation fail-closed gate");
   }
-  if (mappedState.getRevision() !== mappedRevision || mappedState.keys().length !== 0) {
-    throw new Error("A mapped but disabled topology commit mutated authoritative LOD state");
+  if (mappedState.getRevision() !== mappedRevision ||
+      mappedState.keys().join("|") !== "1:-1,0,-1" ||
+      mappedState.getRegionChunkKeys("forest-west")?.join("|") !== "1:-1,0,-1") {
+    throw new Error("A mapped but disabled topology commit mutated authoritative LOD state or region ownership");
+  }
+
+  const forgedState = new InfinityScaleLODState();
+  forgedState.ensureChunk("1:-1,0,-1", 1);
+  forgedState.bindRegionOwnership("forest-west", ["1:-1,0,-1"]);
+  const forgedBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, forgedState);
+  forgedBridge.begin(frame);
+  let forgedMappingRejected = false;
+  try {
+    forgedBridge.commit(frame, [{
+      regionId: "forest-west",
+      fromLOD: 1,
+      toLOD: 0,
+      spatialChunkKeys: ["1:99,99,99"],
+    }]);
+  } catch (error) {
+    forgedMappingRejected = error instanceof Error &&
+      error.message.includes("do not match authoritative region ownership");
+  }
+  if (!forgedMappingRejected) {
+    throw new Error("Adaptive LOD bridge accepted caller-forged region chunk ownership");
+  }
+  if (forgedState.getRegionChunkKeys("forest-west")?.join("|") !== "1:-1,0,-1") {
+    throw new Error("Rejected caller-forged ownership changed the authoritative region registry");
+  }
+
+  const occupiedTargetState = new InfinityScaleLODState();
+  occupiedTargetState.ensureChunk("1:-1,0,-1", 1);
+  occupiedTargetState.bindRegionOwnership("forest-west", ["1:-1,0,-1"]);
+  occupiedTargetState.ensureChunk("0:-2,0,-2", 0);
+  const occupiedTargetBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, occupiedTargetState);
+  occupiedTargetBridge.begin(frame);
+  let occupiedTargetRejected = false;
+  try {
+    occupiedTargetBridge.commit(frame, [{
+      regionId: "forest-west",
+      fromLOD: 1,
+      toLOD: 0,
+    }]);
+  } catch (error) {
+    occupiedTargetRejected = error instanceof Error &&
+      error.message.includes("target chunk is already occupied");
+  }
+  if (!occupiedTargetRejected) {
+    throw new Error("Adaptive LOD bridge accepted a topology target that already exists in state");
   }
 
   const blocked = new InfinityScaleAdaptiveLODTransactionBridge(plan, state);
