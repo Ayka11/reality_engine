@@ -134,6 +134,12 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
           .slice()
           .sort((a, b) => a.regionId.localeCompare(b.regionId));
 
+        const authoritativeExecutionGraph =
+          new InfinityScaleAdaptiveExecutionGraphCompiler().compile(compiledPlan);
+        if (!authoritativeExecutionGraph.valid) {
+          throw new Error("Adaptive LOD transaction rejected: authoritative execution dependency graph is invalid");
+        }
+
         const spatialMappings = compileInfinityScaleSpatialRegionMappings(changed);
         const sourceKeys = new Set(changed.flatMap(m => [...(m.spatialChunkKeys ?? [])]));
         for (const mapping of spatialMappings) {
