@@ -31,7 +31,7 @@ export interface InfinityScaleLODTransferResult {
 }
 
 
-export const INFINITY_SCALE_INFINITY_SCALE_MAX_TRANSFER_CELL_COUNT = 4096;
+export const INFINITY_SCALE_MAX_TRANSFER_CELL_COUNT = 4096;
 
 type TransferSourceMode = "copy" | "prolongation" | "restriction";
 
