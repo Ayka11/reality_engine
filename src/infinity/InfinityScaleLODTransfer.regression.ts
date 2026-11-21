@@ -9,7 +9,7 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
   const source = cell();
   source[F.ENERGY] = 64; source[F.DENSITY] = 8; source[F.INFORMATION] = 32;
   source[F.TEMPERATURE] = 300; source[F.WAVE_PHASE] = Math.PI - 0.1;
-  source[F.MATERIAL_ID] = 7; source[F.AGENT_MARK] = 11;
+  source[F.MATERIAL_ID] = 7; // Entity occupancy is intentionally absent from this prolongation fixture.
 
   const targets = Array.from({ length: 8 }, () => cell());
   InfinityScaleLODTransfer.prolongate(source, targets, 1, 0);
@@ -21,7 +21,7 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
   const sources = Array.from({ length: 8 }, (_, index) => {
     const value = cell();
     value[F.ENERGY] = index + 1; value[F.DENSITY] = 10 + index; value[F.TEMPERATURE] = 280 + index;
-    value[F.MATERIAL_ID] = index < 4 ? 3 : 5; value[F.AGENT_MARK] = index < 4 ? 9 : 12;
+    value[F.MATERIAL_ID] = index < 4 ? 3 : 5; value[F.AGENT_MARK] = 9;
     return value;
   });
   const target = cell();
@@ -82,4 +82,109 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
     }
     if (!rejected) throw new Error(`LOD transfer accepted inconsistent/non-canonical spec ${index}`);
   }
+
+  // Transfer preflight must reject unsafe data before mutating any target.
+  const unchanged = (actual: number[], expected: number[], label: string): void => {
+    if (actual.some((value, index) => !Object.is(value, expected[index]))) {
+      throw new Error(label + " partially modified its target before rejecting");
+    }
+  };
+  const rejectedWithoutMutation = (
+    label: string,
+    target: number[],
+    operation: () => unknown,
+    expectedMessage: string,
+  ): void => {
+    const before = [...target];
+    let failure: unknown;
+    try { operation(); } catch (error) { failure = error; }
+    if (!(failure instanceof Error) || !failure.message.includes(expectedMessage)) {
+      throw new Error(label + " was not rejected at the intended preflight boundary: " + String(failure));
+    }
+    unchanged(target, before, label);
+  };
+
+  const spareSource = cell();
+  spareSource[F.SPARE_1] = 1;
+  const copyTarget = new Array<number>(CELL_FIELDS).fill(17);
+  rejectedWithoutMutation("copy with a non-zero unsupported field", copyTarget,
+    () => InfinityScaleLODTransfer.copy(spareSource, copyTarget), "unsupported field");
+
+  const prolongTargets = Array.from({ length: 8 }, () => new Array<number>(CELL_FIELDS).fill(19));
+  const prolongBefore = prolongTargets.map(value => [...value]);
+  let unsupportedProlongationRejected = false;
+  try { InfinityScaleLODTransfer.prolongate(spareSource, prolongTargets, 1, 0); }
+  catch (error) {
+    unsupportedProlongationRejected = error instanceof Error && error.message.includes("unsupported field");
+  }
+  if (!unsupportedProlongationRejected ||
+      prolongTargets.some((value, index) => value.some((field, offset) => !Object.is(field, prolongBefore[index][offset])))) {
+    throw new Error("Prolongation did not reject unsupported payloads atomically");
+  }
+
+  const invalidNumeric = cell();
+  invalidNumeric[F.ENERGY] = Number.NaN;
+  const invalidNumericTarget = new Array<number>(CELL_FIELDS).fill(23);
+  rejectedWithoutMutation("copy with NaN", invalidNumericTarget,
+    () => InfinityScaleLODTransfer.copy(invalidNumeric, invalidNumericTarget), "finite and Float32-representable");
+
+  const overflowNumeric = cell();
+  overflowNumeric[F.ENERGY] = 3.5e38;
+  const overflowTargets = Array.from({ length: 8 }, () => new Array<number>(CELL_FIELDS).fill(29));
+  const overflowBefore = overflowTargets.map(value => [...value]);
+  let overflowRejected = false;
+  try { InfinityScaleLODTransfer.prolongate(overflowNumeric, overflowTargets, 1, 0); }
+  catch (error) {
+    overflowRejected = error instanceof Error && error.message.includes("Float32-representable");
+  }
+  if (!overflowRejected ||
+      overflowTargets.some((value, index) => value.some((field, offset) => !Object.is(field, overflowBefore[index][offset])))) {
+    throw new Error("Prolongation accepted Float32 overflow or partially modified targets");
+  }
+
+  const identitySources = Array.from({ length: 8 }, (_, index) => {
+    const value = cell();
+    value[F.ENERGY] = index + 1;
+    value[F.ENTITY_ID] = index < 7 ? 41 : 99;
+    return value;
+  });
+  const identityTarget = new Array<number>(CELL_FIELDS).fill(31);
+  rejectedWithoutMutation("restriction with mixed entity IDs", identityTarget,
+    () => InfinityScaleLODTransfer.restrict(identitySources, identityTarget, 0, 1),
+    "mixed identity/occupancy");
+
+  const mixedAgentSources = Array.from({ length: 8 }, (_, index) => {
+    const value = cell();
+    value[F.AGENT_MARK] = index < 7 ? 5 : 6;
+    return value;
+  });
+  const mixedAgentTarget = new Array<number>(CELL_FIELDS).fill(33);
+  rejectedWithoutMutation("restriction with mixed agent occupancy", mixedAgentTarget,
+    () => InfinityScaleLODTransfer.restrict(mixedAgentSources, mixedAgentTarget, 0, 1),
+    "mixed identity/occupancy");
+
+  const occupiedCoarse = cell();
+  occupiedCoarse[F.ENTITY_ID] = 41;
+  const occupiedTargets = Array.from({ length: 8 }, () => new Array<number>(CELL_FIELDS).fill(37));
+  const occupiedBefore = occupiedTargets.map(value => [...value]);
+  let identityProlongationRejected = false;
+  try { InfinityScaleLODTransfer.prolongate(occupiedCoarse, occupiedTargets, 1, 0); }
+  catch (error) {
+    identityProlongationRejected = error instanceof Error && error.message.includes("explicit identity remap");
+  }
+  if (!identityProlongationRejected ||
+      occupiedTargets.some((value, index) => value.some((field, offset) => !Object.is(field, occupiedBefore[index][offset])))) {
+    throw new Error("Prolongation duplicated an entity identity or partially changed target cells");
+  }
+
+  // Unsupported fields are explicitly cleared only when their source payload
+  // is already zero; stale target contents must never survive as apparent data.
+  const zeroUnsupportedTarget = new Array<number>(CELL_FIELDS).fill(55);
+  InfinityScaleLODTransfer.copy(cell(), zeroUnsupportedTarget);
+  for (const field of [F.SPARE_1, F.SPARE_2, F.SPARE_3]) {
+    if (zeroUnsupportedTarget[field] !== 0) {
+      throw new Error("Successful transfer retained stale unsupported target field " + field);
+    }
+  }
+
 }
