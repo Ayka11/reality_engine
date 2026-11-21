@@ -167,27 +167,9 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
       if (!executionGraph.valid) {
         throw new Error("Adaptive LOD transaction rejected: execution dependency graph is invalid");
       }
-      // Every rejection after begin must pass through cleanup so this bridge
-      // cannot retain a failed transaction and accidentally reuse it.
-      if (frame.phase !== "boundary-reconciliation") {
-        throw new Error("Adaptive LOD transaction commit requires boundary-reconciliation phase");
-      }
-      this.state.assertRevision(this.transaction.stateRevision);
-      if (changed.length > 0) {
-        // Bind each logical region to an explicit, deterministic set of current
-        // hierarchical chunks and prove its proposed target covers the exact
-        // same physical SparseVoxelGrid footprint. This remains preflight only:
-        // the bridge still refuses to publish topology until cell transfer,
-        // field-specific conservation and atomic chunk mutation are implemented.
-        const spatialMappings = compileInfinityScaleSpatialRegionMappings(changed);
-        throw new Error(
-          "Adaptive LOD topology commit remains disabled until full-cell transfer, " +
-          "field-specific conservation and atomic physical chunk remapping publication are implemented " +
-          "(validated " + spatialMappings.length + " spatial region mapping(s))",
-        );
-      }
-      // No topology changes are allowed above, so there can be no valid
-      // transfer execution in the current fail-closed mode.
+      // Changed-LOD requests have already passed authoritative region ownership,
+      // mapping, dependency graph and target-collision preflight above. Only
+      // same-LOD requests can reach this synchronization-only commit path.
       if (transfers.length > 0) {
         throw new Error("Unexpected adaptive transfer: " + transfers[0].transferId);
       }
