@@ -59,12 +59,13 @@ export class InfinityScaleAdaptiveTransferCompiler {
         throw new Error("Adaptive mutation LOD values must be integers in the range 0..30");
       }
       let spatialChunkKeys: readonly string[] | undefined;
-      if (candidate.spatialChunkKeys !== undefined) {
-        if (!Array.isArray(candidate.spatialChunkKeys) || candidate.spatialChunkKeys.length === 0) {
+      const suppliedSpatialChunkKeys = candidate.spatialChunkKeys;
+      if (suppliedSpatialChunkKeys !== undefined) {
+        if (!Array.isArray(suppliedSpatialChunkKeys) || suppliedSpatialChunkKeys.length === 0) {
           throw new Error("Adaptive LOD spatial chunk keys must be a non-empty array when supplied");
         }
         const keys = new Set<string>();
-        for (const key of candidate.spatialChunkKeys) {
+        for (const key of suppliedSpatialChunkKeys) {
           const parsed = parseInfinityScaleChunkKey(key);
           if (parsed.level !== fromLOD) {
             throw new Error("Adaptive LOD spatial chunk key level must match fromLOD for region " + regionId);
