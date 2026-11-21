@@ -66,12 +66,8 @@ function coarsenOneLevel(chunkKeys: readonly string[], regionId: string): string
     if (parsed.level >= 30) {
       throw new RangeError("Adaptive LOD region " + regionId + " cannot coarsen beyond level 30");
     }
-    const parentKey = [
-      parsed.level + 1,
-      Math.floor(parsed.x / 2),
-      Math.floor(parsed.y / 2),
-      Math.floor(parsed.z / 2),
-    ].join(":").replace(/:(-?\d+),(-?\d+),(-?\d+)$/, ":$1,$2,$3");
+    const parentKey =
+      `${parsed.level + 1}:${Math.floor(parsed.x / 2)},${Math.floor(parsed.y / 2)},${Math.floor(parsed.z / 2)}`;
     const group = siblingsByParent.get(parentKey) ?? [];
     group.push(key);
     siblingsByParent.set(parentKey, group);
