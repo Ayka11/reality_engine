@@ -1,3 +1,5 @@
+import { parseInfinityScaleChunkKey } from "./InfinityScaleChunkKey";
+
 export type InfinityScaleAdaptiveTransferOperation =
   | "TOPOLOGY_PROLONGATION"
   | "TOPOLOGY_RESTRICTION"
@@ -9,6 +11,8 @@ export interface InfinityScaleAdaptiveMutation {
   regionId: string;
   fromLOD: number;
   toLOD: number;
+  /** Explicit physical hierarchical chunks currently owned by this logical region. */
+  spatialChunkKeys?: readonly string[];
 }
 
 export interface InfinityScaleCompiledTransfer {
@@ -54,7 +58,30 @@ export class InfinityScaleAdaptiveTransferCompiler {
           fromLOD < 0 || fromLOD > 30 || toLOD < 0 || toLOD > 30) {
         throw new Error("Adaptive mutation LOD values must be integers in the range 0..30");
       }
-      return { regionId, fromLOD, toLOD };
+      let spatialChunkKeys: readonly string[] | undefined;
+      if (candidate.spatialChunkKeys !== undefined) {
+        if (!Array.isArray(candidate.spatialChunkKeys) || candidate.spatialChunkKeys.length === 0) {
+          throw new Error("Adaptive LOD spatial chunk keys must be a non-empty array when supplied");
+        }
+        const keys = new Set<string>();
+        for (const key of candidate.spatialChunkKeys) {
+          const parsed = parseInfinityScaleChunkKey(key);
+          if (parsed.level !== fromLOD) {
+            throw new Error("Adaptive LOD spatial chunk key level must match fromLOD for region " + regionId);
+          }
+          if (keys.has(parsed.key)) {
+            throw new Error("Adaptive LOD spatial chunk keys contain a duplicate for region " + regionId);
+          }
+          keys.add(parsed.key);
+        }
+        spatialChunkKeys = Object.freeze([...keys].sort());
+      }
+      return {
+        regionId,
+        fromLOD,
+        toLOD,
+        ...(spatialChunkKeys !== undefined ? { spatialChunkKeys } : {}),
+      };
     }).sort((a, b) => a.regionId.localeCompare(b.regionId));
 
     const transfers: InfinityScaleCompiledTransfer[] = [];
@@ -86,7 +113,10 @@ export class InfinityScaleAdaptiveTransferCompiler {
       if (i > 0) transfers[i].dependencyIds.push(transfers[i - 1].transferId);
     }
 
-    const transferPlanHash = stableHash(JSON.stringify(transfers));
+    // Provenance must bind the logical-to-physical mapping as well as
+    // transfer operations: equal region IDs with different chunk ownership
+    // are different spatial plans.
+    const transferPlanHash = stableHash(JSON.stringify({ mutations: ordered, transfers }));
     return {
       mutations: ordered,
       transfers,
