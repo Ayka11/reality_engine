@@ -32,10 +32,20 @@ function assertLimit(value: unknown, label: string): asserts value is number {
   }
 }
 
-function sortedUniqueChunkKeys(keys: readonly string[], regionId: string, level: number): string[] {
+function sortedUniqueChunkKeys(
+  keys: readonly string[],
+  regionId: string,
+  level: number,
+  maxHierarchicalChunkCount: number,
+): string[] {
   if (!Array.isArray(keys) || keys.length === 0) {
     throw new Error(
       "Adaptive LOD transaction requires physical chunk remapping metadata for region " + regionId,
+    );
+  }
+  if (keys.length > maxHierarchicalChunkCount) {
+    throw new RangeError(
+      "Adaptive LOD region " + regionId + " source chunk count exceeds the configured limit",
     );
   }
   const unique = new Set<string>();
@@ -136,6 +146,9 @@ export function compileInfinityScaleSpatialRegionMappings(
   if (!Array.isArray(mutations)) {
     throw new TypeError("Infinity Scale spatial region mapping requires a mutation array");
   }
+  if (mutations.length > DEFAULT_MAX_HIERARCHICAL_CHUNKS) {
+    throw new RangeError("Infinity Scale spatial region mapping exceeds the logical region transaction limit");
+  }
   if (!options || typeof options !== "object" || Array.isArray(options)) {
     throw new TypeError("Infinity Scale spatial region mapping options must be an object");
   }
@@ -175,6 +188,7 @@ export function compileInfinityScaleSpatialRegionMappings(
       mutation.spatialChunkKeys ?? [],
       regionId,
       fromLOD,
+      maxHierarchicalChunkCount,
     );
     if (sourceChunkKeys.length > maxHierarchicalChunkCount) {
       throw new RangeError(
