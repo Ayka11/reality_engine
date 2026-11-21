@@ -12,6 +12,7 @@ import type { InfinityScaleAdaptiveMutation } from "./InfinityScaleAdaptiveTrans
 import { InfinityScaleAdaptiveTransferCompiler } from "./InfinityScaleAdaptiveTransferCompiler";
 import { InfinityScaleAdaptiveExecutionGraphCompiler } from "./InfinityScaleAdaptiveExecutionGraphCompiler";
 import type { InfinityScaleBoundaryTransferSpec } from "./InfinityScaleChunkExecutionContext";
+import { compileInfinityScaleSpatialRegionMappings } from "./InfinityScaleSpatialRegionMapping";
 
 export interface InfinityScaleAdaptiveTransferExecution {
   transferId: string;
@@ -88,7 +89,17 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
       }
       this.state.assertRevision(this.transaction.stateRevision);
       if (changed.length > 0) {
-        throw new Error("Adaptive LOD topology commit is disabled until physical chunk remapping and full-cell transfer are implemented");
+        // Bind each logical region to an explicit, deterministic set of current
+        // hierarchical chunks and prove its proposed target covers the exact
+        // same physical SparseVoxelGrid footprint. This remains preflight only:
+        // the bridge still refuses to publish topology until cell transfer,
+        // field-specific conservation and atomic chunk mutation are implemented.
+        const spatialMappings = compileInfinityScaleSpatialRegionMappings(changed);
+        throw new Error(
+          "Adaptive LOD topology commit remains disabled until full-cell transfer, " +
+          "field-specific conservation and atomic physical chunk remapping publication are implemented " +
+          "(validated " + spatialMappings.length + " spatial region mapping(s))",
+        );
       }
       // No topology changes are allowed above, so there can be no valid
       // transfer execution in the current fail-closed mode.
