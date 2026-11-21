@@ -33,6 +33,16 @@ export interface InfinityScaleLODTransferResult {
 
 type TransferSourceMode = "copy" | "prolongation" | "restriction";
 
+function assertTransferOutput(value: number, field: number, operation: string): number {
+  if (!Number.isFinite(value) || !Number.isFinite(Math.fround(value))) {
+    throw new Error(
+      `Infinity Scale ${operation} result for field ${field} is not finite and Float32-representable`,
+    );
+  }
+  return value;
+}
+
+
 /** Snapshot and validate all source cells before a transfer writes its first target field. */
 function snapshotTransferSources(
   sources: ReadonlyArray<ArrayLike<number>>,
@@ -133,19 +143,22 @@ export class InfinityScaleLODTransfer {
     }
 
     const [safeSource] = snapshotTransferSources([source], "copy");
+    const output = new Array<number>(CELL_FIELDS).fill(0);
     const transferredFields: number[] = [];
     const skippedFields: number[] = [];
 
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
       if (policy === "intensive" || policy === "extensive" || policy === "circular" || policy === "discrete") {
-        target[field] = safeSource[field];
+        output[field] = assertTransferOutput(safeSource[field], field, "copy");
         transferredFields.push(field);
       } else {
-        target[field] = 0;
+        output[field] = 0;
         skippedFields.push(field);
       }
     }
+
+    for (let field = 0; field < CELL_FIELDS; field++) target[field] = output[field];
 
     return {
       operation: "copy",
@@ -194,19 +207,20 @@ export class InfinityScaleLODTransfer {
     }
 
     const [safeSource] = snapshotTransferSources([source], "prolongation");
+    const outputCells = targets.map(() => new Array<number>(CELL_FIELDS).fill(0));
     const transferredFields: number[] = [];
     const skippedFields: number[] = [];
 
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
       if (policy === "circular") {
-        for (const target of targets) target[field] = safeSource[field];
+        for (const output of outputCells) output[field] = assertTransferOutput(safeSource[field], field, "prolongation");
         transferredFields.push(field);
         continue;
       }
 
       if (policy !== "intensive" && policy !== "extensive" && policy !== "discrete") {
-        for (const target of targets) target[field] = 0;
+        for (const output of outputCells) output[field] = 0;
         skippedFields.push(field);
         continue;
       }
@@ -214,8 +228,12 @@ export class InfinityScaleLODTransfer {
       const childValue = policy === "extensive"
         ? (safeSource[field] ?? 0) / expected
         : (safeSource[field] ?? 0);
-      for (const target of targets) target[field] = childValue;
+      for (const output of outputCells) output[field] = assertTransferOutput(childValue, field, "prolongation");
       transferredFields.push(field);
+    }
+
+    for (let index = 0; index < targets.length; index++) {
+      for (let field = 0; field < CELL_FIELDS; field++) targets[index][field] = outputCells[index][field];
     }
 
     return {
@@ -249,24 +267,27 @@ export class InfinityScaleLODTransfer {
 
     const [safeSource] = snapshotTransferSources([source], "prolongation");
     const childCount = refinementRatio ** 3;
+    const output = new Array<number>(CELL_FIELDS).fill(0);
     const transferredFields: number[] = [];
     const skippedFields: number[] = [];
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
       if (policy === "circular") {
-        target[field] = safeSource[field] ?? 0;
+        output[field] = assertTransferOutput(safeSource[field] ?? 0, field, "boundary prolongation");
         transferredFields.push(field);
       } else if (policy === "intensive" || policy === "discrete") {
         target[field] = safeSource[field] ?? 0;
         transferredFields.push(field);
       } else if (policy === "extensive") {
-        target[field] = (safeSource[field] ?? 0) / childCount;
+        output[field] = assertTransferOutput((safeSource[field] ?? 0) / childCount, field, "boundary prolongation");
         transferredFields.push(field);
       } else {
-        target[field] = 0;
+        output[field] = 0;
         skippedFields.push(field);
       }
     }
+
+    for (let field = 0; field < CELL_FIELDS; field++) target[field] = output[field];
 
     return {
       operation: "prolongation",
@@ -314,6 +335,7 @@ export class InfinityScaleLODTransfer {
     }
 
     const safeSources = snapshotTransferSources(sources, "restriction");
+    const output = new Array<number>(CELL_FIELDS).fill(0);
     const transferredFields: number[] = [];
     const skippedFields: number[] = [];
 
@@ -328,7 +350,7 @@ export class InfinityScaleLODTransfer {
           sumSin += Math.sin(phase);
           sumCos += Math.cos(phase);
         }
-        target[field] = Math.atan2(sumSin, sumCos);
+        output[field] = assertTransferOutput(Math.atan2(sumSin, sumCos), field, "restriction");
         transferredFields.push(field);
         continue;
       }
@@ -336,7 +358,7 @@ export class InfinityScaleLODTransfer {
       if (policy === "intensive") {
         let sum = 0;
         for (const source of safeSources) sum += source[field] ?? 0;
-        target[field] = sum / sources.length;
+        output[field] = assertTransferOutput(sum / sources.length, field, "restriction");
         transferredFields.push(field);
         continue;
       }
@@ -344,7 +366,7 @@ export class InfinityScaleLODTransfer {
       if (policy === "extensive") {
         let sum = 0;
         for (const source of safeSources) sum += source[field] ?? 0;
-        target[field] = sum;
+        output[field] = assertTransferOutput(sum, field, "restriction");
         transferredFields.push(field);
         continue;
       }
@@ -365,14 +387,16 @@ export class InfinityScaleLODTransfer {
           }
         }
 
-        target[field] = selected;
+        output[field] = assertTransferOutput(selected, field, "restriction");
         transferredFields.push(field);
         continue;
       }
 
-      target[field] = 0;
+      output[field] = 0;
       skippedFields.push(field);
     }
+
+    for (let field = 0; field < CELL_FIELDS; field++) target[field] = output[field];
 
     return {
       operation: "restriction",
@@ -414,6 +438,7 @@ export class InfinityScaleLODTransfer {
     }
 
     const safeSources = snapshotTransferSources(sources, "restriction");
+    const output = new Array<number>(CELL_FIELDS).fill(0);
     const transferredFields: number[] = [];
     const skippedFields: number[] = [];
     for (let field = 0; field < CELL_FIELDS; field++) {
@@ -426,7 +451,7 @@ export class InfinityScaleLODTransfer {
           sumSin += Math.sin(phase);
           sumCos += Math.cos(phase);
         }
-        target[field] = Math.atan2(sumSin, sumCos);
+        output[field] = assertTransferOutput(Math.atan2(sumSin, sumCos), field, "face restriction");
         transferredFields.push(field);
       } else if (
         policy === "intensive" ||
@@ -447,21 +472,23 @@ export class InfinityScaleLODTransfer {
               selectedCount = count;
             }
           }
-          target[field] = selected;
+          output[field] = assertTransferOutput(selected, field, "face restriction");
         } else {
           let sum = 0;
           for (const source of safeSources) sum += source[field] ?? 0;
           // Extensive fields represent additive quantities (energy, information,
           // memory): restriction must preserve their total. Intensive fields
           // represent local state and are averaged over the boundary footprint.
-          target[field] = policy === "extensive" ? sum : sum / sources.length;
+          output[field] = assertTransferOutput(policy === "extensive" ? sum : sum / sources.length, field, "face restriction");
         }
         transferredFields.push(field);
       } else {
-        target[field] = 0;
+        output[field] = 0;
         skippedFields.push(field);
       }
     }
+
+    for (let field = 0; field < CELL_FIELDS; field++) target[field] = output[field];
 
     return {
       operation: "restriction",
