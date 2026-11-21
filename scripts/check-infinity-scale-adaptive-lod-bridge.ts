@@ -7,6 +7,7 @@ import { runInfinityScaleResolutionUtilityRegression } from "../src/infinity/Inf
 import { runInfinityScaleAdaptiveTransactionPreflightRegression } from "../src/infinity/InfinityScaleAdaptiveTransactionPreflight.regression";
 import { runInfinityScaleLODStateRecoveryRegression } from "../src/infinity/InfinityScaleLODStateRecovery.regression";
 import { runInfinityScaleSpatialChunkMappingRegression } from "../src/infinity/InfinityScaleSpatialChunkMapping.regression";
+import { runInfinityScaleSpatialRegionMappingRegression } from "../src/infinity/InfinityScaleSpatialRegionMapping.regression";
 
 runInfinityScaleAdaptiveLODTransactionBridgeRegression();
 runInfinityScaleAdaptiveTransferCompilerRegression();
@@ -17,4 +18,5 @@ runInfinityScaleResolutionUtilityRegression();
 runInfinityScaleAdaptiveTransactionPreflightRegression();
 runInfinityScaleLODStateRecoveryRegression();
 runInfinityScaleSpatialChunkMappingRegression();
-console.log("Infinity Scale adaptive LOD bridge, execution graph, GPU boundary contract, causal attribution, resolution utility, transaction preflight, hierarchical recovery, and physical sparse-chunk mapping regressions: PASS");
+runInfinityScaleSpatialRegionMappingRegression();
+console.log("Infinity Scale adaptive LOD bridge, execution graph, GPU boundary contract, causal attribution, resolution utility, transaction preflight, hierarchical recovery, physical sparse-chunk mapping and logical-region ownership regressions: PASS");
