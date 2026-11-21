@@ -3,6 +3,7 @@ import { InfinityScaleLODState } from "./InfinityScaleLODState";
 import { validateInfinityScaleBoundaryGeometry } from "./InfinityScaleLODBoundaryGeometry";
 import { getInfinityScaleFieldSemantics } from "./InfinityScaleFieldSemantics";
 import {
+  INFINITY_SCALE_MAX_TRANSFER_CELL_COUNT,
   InfinityScaleLODTransfer,
 } from "./InfinityScaleLODTransfer";
 import type {
@@ -67,10 +68,13 @@ export class InfinityScaleLODSynchronization {
     if (!Array.isArray(sourceCells) || sourceCells.length === 0) {
       throw new Error("Infinity Scale boundary transfer requires finite source cells with the expected field count");
     }
-    for (const source of Array.from(sourceCells)) {
-      if (!source || source.length !== CELL_FIELDS ||
-          Array.from(source).length !== CELL_FIELDS ||
-          Array.from(source).some(value => !Number.isFinite(value))) {
+    if (sourceCells.length > INFINITY_SCALE_MAX_TRANSFER_CELL_COUNT) {
+      throw new RangeError(
+        `Infinity Scale boundary source cell count exceeds ${INFINITY_SCALE_MAX_TRANSFER_CELL_COUNT}`,
+      );
+    }
+    for (const source of sourceCells) {
+      if (!source || source.length !== CELL_FIELDS) {
         throw new Error("Infinity Scale boundary transfer requires finite source cells with the expected field count");
       }
     }
