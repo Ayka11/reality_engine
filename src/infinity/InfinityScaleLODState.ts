@@ -1,6 +1,8 @@
+import { CHUNK_SIZE } from "../core/Chunk";
 import { CELL_FIELDS } from "../core/CellState";
 import { InfinityScaleLODTransfer } from "./InfinityScaleLODTransfer";
-import { getInfinityScaleChunkBounds } from "./InfinityScaleChunkKey";
+import { getInfinityScaleChunkBounds, parseInfinityScaleChunkKey } from "./InfinityScaleChunkKey";
+import { mapInfinityScaleChunkToSparseChunks } from "./InfinityScaleSpatialChunkMapping";
 
 export interface InfinityScaleLODChunkState {
   key: string;
@@ -9,9 +11,94 @@ export interface InfinityScaleLODChunkState {
   cells: Float32Array;
 }
 
-/** Deep snapshot of hierarchical cells for a failed-frame recovery boundary. */
+export interface InfinityScaleLODRegionOwnershipSnapshot {
+  regionId: string;
+  chunkKeys: string[];
+}
+
+/** Deep snapshot of hierarchical cells and region ownership for failed-frame recovery. */
 export interface InfinityScaleLODStateSnapshot {
   chunks: InfinityScaleLODChunkState[];
+  /** Optional for backward compatibility with snapshots created before region ownership was added. */
+  regionOwnership?: InfinityScaleLODRegionOwnershipSnapshot[];
+}
+
+function validateRegionOwnershipSnapshot(
+  candidate: unknown,
+  chunks: ReadonlyMap<string, InfinityScaleLODChunkState>,
+  chunkSize: number,
+): Map<string, readonly string[]> {
+  if (candidate === undefined) return new Map();
+  if (!Array.isArray(candidate) || candidate.length > 4096) {
+    throw new Error("Cannot restore invalid Infinity Scale LOD region ownership collection");
+  }
+  if (candidate.length > 0 && chunkSize !== CHUNK_SIZE) {
+    throw new Error("Infinity Scale LOD region ownership requires SparseVoxelGrid-aligned chunk size");
+  }
+
+  const restored = new Map<string, readonly string[]>();
+  const physicalOwners = new Map<string, string>();
+  let totalSparseChunkCount = 0;
+
+  for (const entry of candidate as unknown[]) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error("Cannot restore invalid Infinity Scale LOD region ownership entry");
+    }
+    const record = entry as Partial<InfinityScaleLODRegionOwnershipSnapshot>;
+    const regionId = record.regionId;
+    const suppliedKeys = record.chunkKeys;
+    if (typeof regionId !== "string" || regionId.length === 0 || regionId.trim() !== regionId) {
+      throw new Error("Cannot restore an Infinity Scale LOD region with an invalid identity");
+    }
+    if (restored.has(regionId)) {
+      throw new Error("Cannot restore duplicate Infinity Scale LOD region ID " + regionId);
+    }
+    if (!Array.isArray(suppliedKeys) || suppliedKeys.length === 0 || suppliedKeys.length > 4096) {
+      throw new Error("Cannot restore invalid chunk ownership for region " + regionId);
+    }
+
+    const keys = new Set<string>();
+    let regionLevel: number | undefined;
+    for (const suppliedKey of suppliedKeys) {
+      const parsed = parseInfinityScaleChunkKey(suppliedKey);
+      if (regionLevel === undefined) regionLevel = parsed.level;
+      if (parsed.level !== regionLevel) {
+        throw new Error("Cannot restore mixed-LOD chunk ownership for region " + regionId);
+      }
+      if (keys.has(parsed.key)) {
+        throw new Error("Cannot restore duplicate chunk ownership in region " + regionId);
+      }
+      const chunk = chunks.get(parsed.key);
+      if (!chunk || chunk.level !== parsed.level) {
+        throw new Error("Cannot restore region " + regionId + " with a missing or mismatched source chunk " + parsed.key);
+      }
+      keys.add(parsed.key);
+
+      const coverage = mapInfinityScaleChunkToSparseChunks(parsed.key, {
+        lodChunkSize: chunkSize,
+        sparseChunkSize: CHUNK_SIZE,
+        maxSparseChunkCount: 4096,
+      });
+      for (const sparseChunk of coverage.sparseChunks) {
+        const previousOwner = physicalOwners.get(sparseChunk.key);
+        if (previousOwner !== undefined && previousOwner !== regionId) {
+          throw new Error(
+            "Cannot restore overlapping LOD region ownership at SparseVoxelGrid chunk " +
+            sparseChunk.key + " between " + previousOwner + " and " + regionId,
+          );
+        }
+        physicalOwners.set(sparseChunk.key, regionId);
+      }
+    }
+
+    totalSparseChunkCount = physicalOwners.size;
+    if (totalSparseChunkCount > 4096) {
+      throw new Error("Cannot restore LOD region ownership beyond the SparseVoxelGrid chunk limit");
+    }
+    restored.set(regionId, Object.freeze([...keys].sort()));
+  }
+
+  return restored;
 }
 
 /**
@@ -25,6 +112,8 @@ export interface InfinityScaleLODStateSnapshot {
  */
 export class InfinityScaleLODState {
   private readonly states = new Map<string, InfinityScaleLODChunkState>();
+  /** Authoritative logical region to physical hierarchical chunk ownership. */
+  private readonly regionOwnership = new Map<string, readonly string[]>();
   private revision = 0;
 
   constructor(readonly chunkSize = 32) {
@@ -54,6 +143,12 @@ export class InfinityScaleLODState {
         scale: state.scale,
         cells: new Float32Array(state.cells),
       })),
+      regionOwnership: [...this.regionOwnership]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([regionId, chunkKeys]) => ({
+          regionId,
+          chunkKeys: [...chunkKeys],
+        })),
     };
   }
 
@@ -113,10 +208,20 @@ export class InfinityScaleLODState {
       });
     }
 
-    // No validation remains after this point. Commit the complete, detached map
-    // in one synchronous section and invalidate every outstanding transaction.
+    const restoredRegionOwnership = validateRegionOwnershipSnapshot(
+      snapshot.regionOwnership,
+      restored,
+      this.chunkSize,
+    );
+
+    // No validation remains after this point. Commit chunks and region ownership
+    // together, then invalidate every outstanding transaction.
     this.states.clear();
     for (const [key, chunk] of restored) this.states.set(key, chunk);
+    this.regionOwnership.clear();
+    for (const [regionId, chunkKeys] of restoredRegionOwnership) {
+      this.regionOwnership.set(regionId, chunkKeys);
+    }
     this.revision += 1;
   }
 
@@ -281,7 +386,47 @@ export class InfinityScaleLODState {
     return this.states.has(key);
   }
 
+  /** Bind one logical region to its complete, non-overlapping physical LOD chunk set. */
+  bindRegionOwnership(regionId: string, chunkKeys: readonly string[]): void {
+    if (typeof regionId !== "string" || regionId.length === 0 || regionId.trim() !== regionId) {
+      throw new TypeError("Infinity Scale LOD region ID must be a non-empty canonical string");
+    }
+    if (!Array.isArray(chunkKeys) || chunkKeys.length === 0) {
+      throw new TypeError("Infinity Scale LOD region ownership requires a non-empty chunk key array");
+    }
+
+    const candidate = [...this.regionOwnership]
+      .filter(([existingRegionId]) => existingRegionId !== regionId)
+      .map(([existingRegionId, existingKeys]) => ({
+        regionId: existingRegionId,
+        chunkKeys: [...existingKeys],
+      }));
+    candidate.push({ regionId, chunkKeys: [...chunkKeys] });
+    const validated = validateRegionOwnershipSnapshot(candidate, this.states, this.chunkSize);
+
+    this.regionOwnership.clear();
+    for (const [id, keys] of validated) this.regionOwnership.set(id, keys);
+    this.revision += 1;
+  }
+
+  getRegionChunkKeys(regionId: string): readonly string[] | undefined {
+    return this.regionOwnership.get(regionId);
+  }
+
+  removeRegionOwnership(regionId: string): boolean {
+    const removed = this.regionOwnership.delete(regionId);
+    if (removed) this.revision += 1;
+    return removed;
+  }
+
   deleteChunk(key: string): boolean {
+    for (const [regionId, chunkKeys] of this.regionOwnership) {
+      if (chunkKeys.includes(key)) {
+        throw new Error(
+          "Cannot delete LOD chunk " + key + " while it is owned by region " + regionId,
+        );
+      }
+    }
     const deleted = this.states.delete(key);
     if (deleted) {
       // Removing a chunk changes the topology captured by open transactions.
@@ -292,8 +437,9 @@ export class InfinityScaleLODState {
 
   clear(): void {
     this.states.clear();
-    // Clearing hierarchical state invalidates every outstanding transaction
-    // that captured the previous state revision.
+    this.regionOwnership.clear();
+    // Clearing hierarchical state and region ownership invalidates every
+    // outstanding transaction that captured the previous state revision.
     this.revision += 1;
   }
 
