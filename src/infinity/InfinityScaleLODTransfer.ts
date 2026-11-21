@@ -276,7 +276,7 @@ export class InfinityScaleLODTransfer {
         output[field] = assertTransferOutput(safeSource[field] ?? 0, field, "boundary prolongation");
         transferredFields.push(field);
       } else if (policy === "intensive" || policy === "discrete") {
-        target[field] = safeSource[field] ?? 0;
+        output[field] = assertTransferOutput(safeSource[field] ?? 0, field, "boundary prolongation");
         transferredFields.push(field);
       } else if (policy === "extensive") {
         output[field] = assertTransferOutput((safeSource[field] ?? 0) / childCount, field, "boundary prolongation");
