@@ -6,14 +6,25 @@ import {
 } from "./InfinityScaleSpatialRegionMapping";
 import { InfinityScaleLODState } from "./InfinityScaleLODState";
 
-function expectRejected(label: string, operation: () => unknown): void {
-  let rejected = false;
+function expectRejected(
+  label: string,
+  operation: () => unknown,
+  expectedMessage?: string,
+): void {
+  let failure: unknown;
   try {
     operation();
-  } catch {
-    rejected = true;
+  } catch (error) {
+    failure = error;
   }
-  if (!rejected) throw new Error("Spatial region mapping accepted " + label);
+  if (failure === undefined) throw new Error("Spatial region mapping accepted " + label);
+  if (expectedMessage !== undefined &&
+      (!(failure instanceof Error) || !failure.message.includes(expectedMessage))) {
+    throw new Error(
+      "Spatial region mapping rejected " + label + " after the intended preflight boundary: " +
+      String(failure),
+    );
+  }
 }
 
 export function runInfinityScaleSpatialRegionMappingRegression(): void {
@@ -139,6 +150,27 @@ export function runInfinityScaleSpatialRegionMappingRegression(): void {
       { maxSparseChunkCount: 63 },
     ),
   );
+  expectRejected(
+    "a source chunk list beyond the configured limit before deduplication",
+    () => compileInfinityScaleSpatialRegionMappings([{
+      regionId: "too-many-source",
+      fromLOD: 1,
+      toLOD: 0,
+      spatialChunkKeys: [parentKey, parentKey],
+    }], { maxHierarchicalChunkCount: 1 }),
+    "source chunk count exceeds the configured limit",
+  );
+  expectRejected(
+    "a mutation list beyond the logical region transaction limit",
+    () => compileInfinityScaleSpatialRegionMappings(
+      Array.from({ length: 4097 }, (_, index) => ({
+        regionId: "no-op-" + index,
+        fromLOD: 0,
+        toLOD: 0,
+      })),
+    ),
+    "logical region transaction limit",
+  );
 
   // Physical region ownership is durable authoritative state, not a mapping
   // supplied by the planner at commit time.
@@ -150,6 +182,11 @@ export function runInfinityScaleSpatialRegionMappingRegression(): void {
     throw new Error("LOD state did not publish frozen authoritative region chunk ownership");
   }
   const ownershipRevision = ownershipState.getRevision();
+  expectRejected(
+    "an oversized region ownership array before copying",
+    () => ownershipState.bindRegionOwnership("oversized-region", Array(4097).fill(parentKey)),
+    "configured chunk limit",
+  );
   expectRejected("overlapping physical chunks bound to another logical region", () =>
     ownershipState.bindRegionOwnership("forest-east", [parentKey]),
   );
