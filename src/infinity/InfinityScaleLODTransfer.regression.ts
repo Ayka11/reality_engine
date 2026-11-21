@@ -210,4 +210,26 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
     () => InfinityScaleLODTransfer.restrictFace(largeFaceSources, largeFaceTarget, 0, 1),
     "result for field");
 
+
+  const boundarySource = cell();
+  boundarySource[F.ENERGY] = 64;
+  boundarySource[F.DENSITY] = 8;
+  const boundaryTarget = new Array<number>(CELL_FIELDS).fill(61);
+  const boundaryResult = InfinityScaleLODTransfer.prolongateBoundaryCell(boundarySource, boundaryTarget, 1, 0);
+  if (boundaryResult.operation !== "prolongation" ||
+      boundaryTarget[F.ENERGY] !== 8 ||
+      boundaryTarget[F.DENSITY] !== 8 ||
+      boundaryTarget[F.SPARE_1] !== 0 ||
+      boundaryTarget[F.SPARE_2] !== 0 ||
+      boundaryTarget[F.SPARE_3] !== 0) {
+    throw new Error("Boundary prolongation did not publish the complete staged cell result");
+  }
+
+  const occupiedBoundarySource = cell();
+  occupiedBoundarySource[F.ENTITY_ID] = 72;
+  const occupiedBoundaryTarget = new Array<number>(CELL_FIELDS).fill(67);
+  rejectedWithoutMutation("boundary prolongation with an unmapped entity identity", occupiedBoundaryTarget,
+    () => InfinityScaleLODTransfer.prolongateBoundaryCell(occupiedBoundarySource, occupiedBoundaryTarget, 1, 0),
+    "explicit identity remap");
+
 }
