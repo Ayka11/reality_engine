@@ -123,6 +123,28 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
     throw new Error("Adaptive LOD bridge accepted a topology target that already exists in state");
   }
 
+  const staleOwnershipState = new InfinityScaleLODState();
+  staleOwnershipState.ensureChunk("1:-1,0,-1", 1);
+  staleOwnershipState.bindRegionOwnership("forest-west", ["1:-1,0,-1"]);
+  const staleOwnershipBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, staleOwnershipState);
+  staleOwnershipBridge.begin(frame);
+  staleOwnershipState.removeRegionOwnership("forest-west");
+  let staleOwnershipRejected = false;
+  try {
+    staleOwnershipBridge.commit(frame, [{
+      regionId: "forest-west",
+      fromLOD: 1,
+      toLOD: 0,
+    }]);
+  } catch (error) {
+    staleOwnershipRejected = error instanceof Error && error.message.includes("revision mismatch");
+  }
+  if (!staleOwnershipRejected ||
+      staleOwnershipState.getRegionChunkKeys("forest-west") !== undefined ||
+      !staleOwnershipState.hasChunk("1:-1,0,-1")) {
+    throw new Error("An ownership mutation did not invalidate an open adaptive LOD transaction safely");
+  }
+
   const blocked = new InfinityScaleAdaptiveLODTransactionBridge(plan, state);
   blocked.begin(frame);
   let staleRejected = false;
