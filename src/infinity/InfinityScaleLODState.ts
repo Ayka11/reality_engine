@@ -394,6 +394,12 @@ export class InfinityScaleLODState {
     if (!Array.isArray(chunkKeys) || chunkKeys.length === 0) {
       throw new TypeError("Infinity Scale LOD region ownership requires a non-empty chunk key array");
     }
+    if (chunkKeys.length > 4096) {
+      throw new RangeError("Infinity Scale LOD region chunk ownership exceeds the configured chunk limit");
+    }
+    if (!this.regionOwnership.has(regionId) && this.regionOwnership.size >= 4096) {
+      throw new RangeError("Infinity Scale LOD state exceeds the logical region ownership limit");
+    }
 
     const candidate = [...this.regionOwnership]
       .filter(([existingRegionId]) => existingRegionId !== regionId)
