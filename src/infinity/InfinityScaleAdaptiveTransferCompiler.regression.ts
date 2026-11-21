@@ -58,4 +58,49 @@ export function runInfinityScaleAdaptiveTransferCompilerRegression(): void {
   if (detachedPlan.mutations[0]?.toLOD !== 1 || detachedPlan.transfers.length !== 0) {
     throw new Error("Compiled plan retained a caller-owned mutable mutation record");
   }
+
+  const callerOwnedSpatialKeys = ["1:-1,0,-1", "1:0,0,0"];
+  const spatialPlan = compiler.compile([{
+    regionId: "spatial-snapshot",
+    fromLOD: 1,
+    toLOD: 0,
+    spatialChunkKeys: callerOwnedSpatialKeys,
+  }]);
+  callerOwnedSpatialKeys.reverse();
+  callerOwnedSpatialKeys[0] = "1:50,50,50";
+  const capturedKeys = spatialPlan.mutations[0]?.spatialChunkKeys ?? [];
+  if (capturedKeys.join("|") !== "1:-1,0,-1|1:0,0,0" || !Object.isFrozen(capturedKeys)) {
+    throw new Error("Compiled adaptive plan did not detach and freeze physical region ownership keys");
+  }
+  const alternateSpatialPlan = compiler.compile([{
+    regionId: "spatial-snapshot",
+    fromLOD: 1,
+    toLOD: 0,
+    spatialChunkKeys: ["1:0,0,0", "1:1,0,0"],
+  }]);
+  if (alternateSpatialPlan.transferPlanHash === spatialPlan.transferPlanHash) {
+    throw new Error("Transfer-plan hash ignored a changed physical region ownership mapping");
+  }
+
+  const invalidSpatialInputs: Array<{ label: string; keys: unknown }> = [
+    { label: "empty physical key set", keys: [] },
+    { label: "non-canonical physical key", keys: ["01:0,0,0"] },
+    { label: "physical key from another LOD", keys: ["0:0,0,0"] },
+    { label: "duplicate physical key", keys: ["1:0,0,0", "1:0,0,0"] },
+    { label: "non-array physical key set", keys: "1:0,0,0" },
+  ];
+  for (const invalid of invalidSpatialInputs) {
+    let rejected = false;
+    try {
+      compiler.compile([{
+        regionId: "invalid-spatial",
+        fromLOD: 1,
+        toLOD: 0,
+        spatialChunkKeys: invalid.keys as readonly string[],
+      }]);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) throw new Error("Adaptive compiler accepted " + invalid.label);
+  }
 }
