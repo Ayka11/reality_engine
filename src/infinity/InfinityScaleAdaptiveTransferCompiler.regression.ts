@@ -103,4 +103,35 @@ export function runInfinityScaleAdaptiveTransferCompilerRegression(): void {
     }
     if (!rejected) throw new Error("Adaptive compiler accepted " + invalid.label);
   }
+
+  let mutationLimitRejected = false;
+  try {
+    compiler.compile(Array.from({ length: 4097 }, (_, index) => ({
+      regionId: "bounded-region-" + index,
+      fromLOD: 0,
+      toLOD: 0,
+    })));
+  } catch (error) {
+    mutationLimitRejected = error instanceof Error &&
+      error.message.includes("logical region transaction limit");
+  }
+  if (!mutationLimitRejected) {
+    throw new Error("Adaptive compiler did not enforce the region count limit before snapshotting");
+  }
+
+  let spatialKeyLimitRejected = false;
+  try {
+    compiler.compile([{
+      regionId: "bounded-spatial-region",
+      fromLOD: 1,
+      toLOD: 0,
+      spatialChunkKeys: Array(4097).fill("not-a-canonical-key"),
+    }]);
+  } catch (error) {
+    spatialKeyLimitRejected = error instanceof Error &&
+      error.message.includes("spatial chunk key set exceeds");
+  }
+  if (!spatialKeyLimitRejected) {
+    throw new Error("Adaptive compiler parsed/copied an oversized spatial key list before enforcing its limit");
+  }
 }
