@@ -39,6 +39,9 @@ export class InfinityScaleAdaptiveTransferCompiler {
     if (!Array.isArray(mutations)) {
       throw new Error("Adaptive LOD compiler requires a mutation array");
     }
+    if (mutations.length > 4096) {
+      throw new RangeError("Adaptive LOD compiler exceeds the logical region transaction limit");
+    }
 
     // Snapshot caller-owned records before sorting or compiling. This keeps
     // the compiled metadata independent from later caller mutations. Duplicate
@@ -63,6 +66,9 @@ export class InfinityScaleAdaptiveTransferCompiler {
       if (suppliedSpatialChunkKeys !== undefined) {
         if (!Array.isArray(suppliedSpatialChunkKeys) || suppliedSpatialChunkKeys.length === 0) {
           throw new Error("Adaptive LOD spatial chunk keys must be a non-empty array when supplied");
+        }
+        if (suppliedSpatialChunkKeys.length > 4096) {
+          throw new RangeError("Adaptive LOD spatial chunk key set exceeds the configured chunk limit");
         }
         const keys = new Set<string>();
         for (const key of suppliedSpatialChunkKeys) {
