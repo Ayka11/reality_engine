@@ -54,8 +54,24 @@ function sortedUniqueChunkKeys(keys: readonly string[], regionId: string, level:
   return [...unique].sort();
 }
 
-function refineOneLevel(chunkKeys: readonly string[]): string[] {
+function refineOneLevel(
+  chunkKeys: readonly string[],
+  maxHierarchicalChunkCount: number,
+  regionId: string,
+): string[] {
+  // Refuse before allocating 8x child records. Checking only after flatMap
+  // would let an over-limit request allocate a large intermediate array first.
+  if (chunkKeys.length > Math.floor(maxHierarchicalChunkCount / 8)) {
+    throw new RangeError(
+      "Adaptive LOD region " + regionId + " refinement exceeds the hierarchical chunk limit",
+    );
+  }
   const children = chunkKeys.flatMap(key => [...getInfinityScaleChildChunkKeys(key)]);
+  if (children.length > maxHierarchicalChunkCount) {
+    throw new RangeError(
+      "Adaptive LOD region " + regionId + " refinement exceeds the hierarchical chunk limit",
+    );
+  }
   return children.sort();
 }
 
@@ -177,7 +193,7 @@ export function compileInfinityScaleSpatialRegionMappings(
     while (targetChunkKeys.some(key => parseInfinityScaleChunkKey(key).level !== toLOD)) {
       const currentLevel = parseInfinityScaleChunkKey(targetChunkKeys[0]).level;
       if (currentLevel > toLOD) {
-        targetChunkKeys = refineOneLevel(targetChunkKeys);
+        targetChunkKeys = refineOneLevel(targetChunkKeys, maxHierarchicalChunkCount, regionId);
       } else {
         targetChunkKeys = coarsenOneLevel(targetChunkKeys, regionId);
       }
