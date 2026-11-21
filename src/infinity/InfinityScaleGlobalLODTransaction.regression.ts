@@ -86,6 +86,34 @@ export function runInfinityScaleGlobalLODTransactionRegression(): void {
     sources,
   );
 
+  // Reject oversized boundary source lists before copying or iterating them.
+  let oversizedBoundaryRejected = false;
+  try {
+    transaction.synchronization.stageTransfer(
+      {
+        sourceChunk: "0:2,0,0",
+        targetChunk: "1:0,0,0",
+        relation: "fine-to-coarse",
+        sourceLevel: 0,
+        targetLevel: 1,
+        refinementRatio: 2,
+        operation: "restriction",
+        readOperation: "prolongation",
+      },
+      [3, 0, 0],
+      new Array<ArrayLike<number>>(4097).fill(sources[0]),
+    );
+  } catch (error) {
+    oversizedBoundaryRejected = error instanceof RangeError &&
+      error.message.includes("source cell count exceeds");
+  }
+  const stagedAfterOversized = transaction.synchronization.getStagedUpdates();
+  if (!oversizedBoundaryRejected || stagedAfterOversized.length !== 1 ||
+      stagedAfterOversized[0].value[F.ENERGY] !== 8 ||
+      stagedAfterOversized[0].value[F.DENSITY] !== 10) {
+    throw new Error("Oversized boundary source validation allocated or changed staged synchronization state");
+  }
+
   // Duplicate target writes must be rejected rather than silently replacing
   // the first staged boundary value in the synchronization map.
   const conflictingSources = Array.from({ length: 4 }, () => {
