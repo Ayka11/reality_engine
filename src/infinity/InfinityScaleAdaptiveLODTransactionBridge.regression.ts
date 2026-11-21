@@ -46,6 +46,34 @@ export function runInfinityScaleAdaptiveLODTransactionBridgeRegression(): void {
   if (state.getRevision() !== initialStateRevision) throw new Error("Rejected topology mutation changed state revision");
   if (state.hasChunk("0:0,0,0")) throw new Error("Rejected topology mutation created a placeholder chunk");
 
+  // A valid logical-to-physical mapping is necessary but not sufficient to
+  // enable topology changes: full-cell transfer and field conservation remain
+  // an explicit release gate. The bridge must validate the mapping, then fail
+  // closed without changing the authoritative LOD state.
+  const mappedState = new InfinityScaleLODState(2);
+  const mappedBridge = new InfinityScaleAdaptiveLODTransactionBridge(plan, mappedState);
+  const mappedRevision = mappedState.getRevision();
+  mappedBridge.begin(frame);
+  let mappedTopologyStillBlocked = false;
+  try {
+    mappedBridge.commit(frame, [{
+      regionId: "forest-west",
+      fromLOD: 1,
+      toLOD: 0,
+      spatialChunkKeys: ["1:-1,0,-1"],
+    }]);
+  } catch (error) {
+    mappedTopologyStillBlocked = error instanceof Error &&
+      error.message.includes("full-cell transfer") &&
+      error.message.includes("conservation");
+  }
+  if (!mappedTopologyStillBlocked) {
+    throw new Error("A physically mapped LOD region bypassed the full-cell/conservation fail-closed gate");
+  }
+  if (mappedState.getRevision() !== mappedRevision || mappedState.keys().length !== 0) {
+    throw new Error("A mapped but disabled topology commit mutated authoritative LOD state");
+  }
+
   const blocked = new InfinityScaleAdaptiveLODTransactionBridge(plan, state);
   blocked.begin(frame);
   let staleRejected = false;
