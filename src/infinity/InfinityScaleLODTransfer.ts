@@ -30,6 +30,49 @@ export interface InfinityScaleLODTransferResult {
   skippedFields: number[];
 }
 
+
+type TransferSourceMode = "copy" | "prolongation" | "restriction";
+
+/** Snapshot and validate all source cells before a transfer writes its first target field. */
+function snapshotTransferSources(
+  sources: ReadonlyArray<ArrayLike<number>>,
+  mode: TransferSourceMode,
+): Float32Array[] {
+  const snapshots: Float32Array[] = [];
+  for (let cellIndex = 0; cellIndex < sources.length; cellIndex++) {
+    const source = sources[cellIndex];
+    const length = source?.length;
+    if (!source || length !== CELL_FIELDS) {
+      throw new Error(`Infinity Scale ${mode} source cell ${cellIndex} requires exactly ${CELL_FIELDS} fields`);
+    }
+    const snapshot = new Float32Array(CELL_FIELDS);
+    for (let field = 0; field < CELL_FIELDS; field++) {
+      const value = source[field];
+      if (typeof value !== "number" || !Number.isFinite(value) || !Number.isFinite(Math.fround(value))) {
+        throw new Error(`Infinity Scale ${mode} source cell ${cellIndex} field ${field} must be finite and Float32-representable`);
+      }
+      snapshot[field] = value;
+    }
+    snapshots.push(snapshot);
+  }
+  for (let field = 0; field < CELL_FIELDS; field++) {
+    if (getInfinityScaleFieldSemantics(field).policy !== "unsupported") continue;
+    if (snapshots.some(source => source[field] !== 0)) {
+      throw new Error(`Infinity Scale ${mode} cannot transfer non-zero unsupported field ${field}`);
+    }
+  }
+  // Entity identity and occupancy cannot be reduced by majority voting.
+  for (const field of [F.ENTITY_ID, F.AGENT_MARK]) {
+    if (mode === "prolongation" && snapshots[0]?.[field] !== 0) {
+      throw new Error(`Infinity Scale prolongation requires an explicit identity remap for field ${field}`);
+    }
+    if (mode === "restriction" && snapshots.some(source => source[field] !== snapshots[0]?.[field])) {
+      throw new Error(`Infinity Scale restriction cannot collapse mixed identity/occupancy field ${field}`);
+    }
+  }
+  return snapshots;
+}
+
 /**
  * Pure field-transfer kernel for the Infinity Scale AMR boundary contract.
  *
@@ -89,15 +132,17 @@ export class InfinityScaleLODTransfer {
       );
     }
 
+    const [safeSource] = snapshotTransferSources([source], "copy");
     const transferredFields: number[] = [];
     const skippedFields: number[] = [];
 
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
       if (policy === "intensive" || policy === "extensive" || policy === "circular" || policy === "discrete") {
-        target[field] = source[field];
+        target[field] = safeSource[field];
         transferredFields.push(field);
       } else {
+        target[field] = 0;
         skippedFields.push(field);
       }
     }
@@ -148,25 +193,27 @@ export class InfinityScaleLODTransfer {
       }
     }
 
+    const [safeSource] = snapshotTransferSources([source], "prolongation");
     const transferredFields: number[] = [];
     const skippedFields: number[] = [];
 
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
       if (policy === "circular") {
-        for (const target of targets) target[field] = source[field];
+        for (const target of targets) target[field] = safeSource[field];
         transferredFields.push(field);
         continue;
       }
 
       if (policy !== "intensive" && policy !== "extensive" && policy !== "discrete") {
+        for (const target of targets) target[field] = 0;
         skippedFields.push(field);
         continue;
       }
 
       const childValue = policy === "extensive"
-        ? (source[field] ?? 0) / expected
-        : (source[field] ?? 0);
+        ? (safeSource[field] ?? 0) / expected
+        : (safeSource[field] ?? 0);
       for (const target of targets) target[field] = childValue;
       transferredFields.push(field);
     }
@@ -200,21 +247,23 @@ export class InfinityScaleLODTransfer {
       );
     }
 
+    const [safeSource] = snapshotTransferSources([source], "prolongation");
     const childCount = refinementRatio ** 3;
     const transferredFields: number[] = [];
     const skippedFields: number[] = [];
     for (let field = 0; field < CELL_FIELDS; field++) {
       const policy = this.policy(field);
       if (policy === "circular") {
-        target[field] = source[field] ?? 0;
+        target[field] = safeSource[field] ?? 0;
         transferredFields.push(field);
       } else if (policy === "intensive" || policy === "discrete") {
-        target[field] = source[field] ?? 0;
+        target[field] = safeSource[field] ?? 0;
         transferredFields.push(field);
       } else if (policy === "extensive") {
-        target[field] = (source[field] ?? 0) / childCount;
+        target[field] = (safeSource[field] ?? 0) / childCount;
         transferredFields.push(field);
       } else {
+        target[field] = 0;
         skippedFields.push(field);
       }
     }
@@ -264,6 +313,7 @@ export class InfinityScaleLODTransfer {
       );
     }
 
+    const safeSources = snapshotTransferSources(sources, "restriction");
     const transferredFields: number[] = [];
     const skippedFields: number[] = [];
 
@@ -273,7 +323,7 @@ export class InfinityScaleLODTransfer {
       if (policy === "circular") {
         let sumSin = 0;
         let sumCos = 0;
-        for (const source of sources) {
+        for (const source of safeSources) {
           const phase = source[field] ?? 0;
           sumSin += Math.sin(phase);
           sumCos += Math.cos(phase);
@@ -285,7 +335,7 @@ export class InfinityScaleLODTransfer {
 
       if (policy === "intensive") {
         let sum = 0;
-        for (const source of sources) sum += source[field] ?? 0;
+        for (const source of safeSources) sum += source[field] ?? 0;
         target[field] = sum / sources.length;
         transferredFields.push(field);
         continue;
@@ -293,7 +343,7 @@ export class InfinityScaleLODTransfer {
 
       if (policy === "extensive") {
         let sum = 0;
-        for (const source of sources) sum += source[field] ?? 0;
+        for (const source of safeSources) sum += source[field] ?? 0;
         target[field] = sum;
         transferredFields.push(field);
         continue;
@@ -301,7 +351,7 @@ export class InfinityScaleLODTransfer {
 
       if (policy === "discrete") {
         const counts = new Map<number, number>();
-        for (const source of sources) {
+        for (const source of safeSources) {
           const value = source[field] ?? 0;
           counts.set(value, (counts.get(value) ?? 0) + 1);
         }
@@ -320,6 +370,7 @@ export class InfinityScaleLODTransfer {
         continue;
       }
 
+      target[field] = 0;
       skippedFields.push(field);
     }
 
@@ -362,6 +413,7 @@ export class InfinityScaleLODTransfer {
       }
     }
 
+    const safeSources = snapshotTransferSources(sources, "restriction");
     const transferredFields: number[] = [];
     const skippedFields: number[] = [];
     for (let field = 0; field < CELL_FIELDS; field++) {
@@ -369,7 +421,7 @@ export class InfinityScaleLODTransfer {
       if (policy === "circular") {
         let sumSin = 0;
         let sumCos = 0;
-        for (const source of sources) {
+        for (const source of safeSources) {
           const phase = source[field] ?? 0;
           sumSin += Math.sin(phase);
           sumCos += Math.cos(phase);
@@ -383,7 +435,7 @@ export class InfinityScaleLODTransfer {
       ) {
         if (policy === "discrete") {
           const counts = new Map<number, number>();
-          for (const source of sources) {
+          for (const source of safeSources) {
             const value = source[field] ?? 0;
             counts.set(value, (counts.get(value) ?? 0) + 1);
           }
@@ -398,7 +450,7 @@ export class InfinityScaleLODTransfer {
           target[field] = selected;
         } else {
           let sum = 0;
-          for (const source of sources) sum += source[field] ?? 0;
+          for (const source of safeSources) sum += source[field] ?? 0;
           // Extensive fields represent additive quantities (energy, information,
           // memory): restriction must preserve their total. Intensive fields
           // represent local state and are averaged over the boundary footprint.
@@ -406,6 +458,7 @@ export class InfinityScaleLODTransfer {
         }
         transferredFields.push(field);
       } else {
+        target[field] = 0;
         skippedFields.push(field);
       }
     }
