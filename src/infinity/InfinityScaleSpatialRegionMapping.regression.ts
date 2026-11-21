@@ -4,6 +4,7 @@ import {
 import {
   compileInfinityScaleSpatialRegionMappings,
 } from "./InfinityScaleSpatialRegionMapping";
+import { InfinityScaleLODState } from "./InfinityScaleLODState";
 
 function expectRejected(label: string, operation: () => unknown): void {
   let rejected = false;
@@ -139,5 +140,65 @@ export function runInfinityScaleSpatialRegionMappingRegression(): void {
     ),
   );
 
-  console.log("Infinity Scale logical region-to-physical chunk ownership and footprint-preserving LOD mapping: PASS");
+  // Physical region ownership is durable authoritative state, not a mapping
+  // supplied by the planner at commit time.
+  const ownershipState = new InfinityScaleLODState();
+  ownershipState.ensureChunk(parentKey, 1);
+  ownershipState.bindRegionOwnership("forest-west", [parentKey]);
+  const ownerKeys = ownershipState.getRegionChunkKeys("forest-west");
+  if (!ownerKeys || ownerKeys.join("|") !== parentKey || !Object.isFrozen(ownerKeys)) {
+    throw new Error("LOD state did not publish frozen authoritative region chunk ownership");
+  }
+  const ownershipRevision = ownershipState.getRevision();
+  expectRejected("overlapping physical chunks bound to another logical region", () =>
+    ownershipState.bindRegionOwnership("forest-east", [parentKey]),
+  );
+  if (ownershipState.getRevision() !== ownershipRevision ||
+      ownershipState.getRegionChunkKeys("forest-west")?.join("|") !== parentKey ||
+      ownershipState.getRegionChunkKeys("forest-east") !== undefined) {
+    throw new Error("Rejected overlapping region bind partially changed authoritative ownership");
+  }
+  expectRejected("deleting a chunk while its logical region still owns it", () =>
+    ownershipState.deleteChunk(parentKey),
+  );
+  if (!ownershipState.hasChunk(parentKey) ||
+      ownershipState.getRegionChunkKeys("forest-west")?.join("|") !== parentKey) {
+    throw new Error("Rejected owned-chunk deletion mutated chunk or region membership");
+  }
+
+  const ownershipSnapshot = ownershipState.snapshot();
+  if (ownershipSnapshot.regionOwnership?.length !== 1 ||
+      ownershipSnapshot.regionOwnership[0].regionId !== "forest-west" ||
+      ownershipSnapshot.regionOwnership[0].chunkKeys.join("|") !== parentKey) {
+    throw new Error("LOD state snapshot omitted authoritative logical region ownership");
+  }
+  const restoredOwnershipState = new InfinityScaleLODState();
+  restoredOwnershipState.restore(ownershipSnapshot);
+  if (restoredOwnershipState.getRegionChunkKeys("forest-west")?.join("|") !== parentKey ||
+      !restoredOwnershipState.hasChunk(parentKey)) {
+    throw new Error("LOD recovery did not restore region ownership with its hierarchical chunks");
+  }
+
+  const malformedOwnershipSnapshot = restoredOwnershipState.snapshot();
+  malformedOwnershipSnapshot.regionOwnership![0].chunkKeys[0] = "1:88,88,88";
+  const beforeMalformedRestoreRevision = restoredOwnershipState.getRevision();
+  const beforeMalformedRestoreKeys = restoredOwnershipState.keys().join("|");
+  expectRejected("a region snapshot pointing at a missing physical chunk", () =>
+    restoredOwnershipState.restore(malformedOwnershipSnapshot),
+  );
+  if (restoredOwnershipState.getRevision() !== beforeMalformedRestoreRevision ||
+      restoredOwnershipState.keys().join("|") !== beforeMalformedRestoreKeys ||
+      restoredOwnershipState.getRegionChunkKeys("forest-west")?.join("|") !== parentKey) {
+    throw new Error("Rejected region ownership restore partially changed chunks, membership or revision");
+  }
+
+  if (!restoredOwnershipState.removeRegionOwnership("forest-west") ||
+      !restoredOwnershipState.deleteChunk(parentKey)) {
+    throw new Error("Explicit region release did not permit subsequent physical chunk deletion");
+  }
+  if (restoredOwnershipState.getRegionChunkKeys("forest-west") !== undefined) {
+    throw new Error("Region identity remained published after explicit ownership release");
+  }
+
+  console.log("Infinity Scale logical region ownership, recovery, and footprint-preserving LOD mapping: PASS");
 }
