@@ -63,7 +63,7 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
       // The plan object may have changed after begin(); never commit under stale
       // revision or ownership geometry, even for an otherwise empty mutation set.
       validateInfinityScaleGlobalFrameCommit(frame, this.plan);
-      const compiledPlan = new InfinityScaleAdaptiveTransferCompiler().compile(mutations);
+      let compiledPlan = new InfinityScaleAdaptiveTransferCompiler().compile(mutations);
       const seenRegionIds = new Set<string>();
       for (const mutation of compiledPlan.mutations) {
         if (seenRegionIds.has(mutation.regionId)) {
@@ -71,17 +71,96 @@ export class InfinityScaleAdaptiveLODTransactionBridge {
         }
         seenRegionIds.add(mutation.regionId);
       }
+
+      // Decide whether the request changes topology from the compiler's
+      // detached snapshot, not caller-owned objects that may contain accessors
+      // or be mutated after compilation.
+      let changed = compiledPlan.mutations.filter(m => m.fromLOD !== m.toLOD)
+        .slice()
+        .sort((a, b) => a.regionId.localeCompare(b.regionId));
+
+      // Frame/phase/revision checks precede any authoritative ownership lookup.
+      // The state registry, not a caller-supplied array, is the source of truth
+      // for which physical chunks currently belong to a logical region.
+      if (frame.phase !== "boundary-reconciliation") {
+        throw new Error("Adaptive LOD transaction commit requires boundary-reconciliation phase");
+      }
+      this.state.assertRevision(this.transaction.stateRevision);
+
+      if (changed.length > 0) {
+        const normalizedMutations = compiledPlan.mutations.map(mutation => {
+          if (mutation.fromLOD === mutation.toLOD) return mutation;
+          const authoritativeKeys = this.state.getRegionChunkKeys(mutation.regionId);
+          if (!authoritativeKeys) {
+            throw new Error(
+              "Adaptive LOD transaction requires authoritative physical chunk remapping metadata for region " +
+              mutation.regionId,
+            );
+          }
+
+          const normalizedKeys = [...authoritativeKeys].sort();
+          const declaredKeys = mutation.spatialChunkKeys;
+          if (declaredKeys !== undefined &&
+              (declaredKeys.length !== normalizedKeys.length ||
+               declaredKeys.some((key, index) => key !== normalizedKeys[index]))) {
+            throw new Error(
+              "Adaptive LOD caller-supplied spatial chunk keys do not match authoritative region ownership for " +
+              mutation.regionId,
+            );
+          }
+
+          for (const sourceKey of normalizedKeys) {
+            const sourceChunk = this.state.cloneChunk(sourceKey);
+            if (!sourceChunk ||
+                sourceChunk.level !== mutation.fromLOD ||
+                sourceChunk.scale !== 2 ** mutation.fromLOD) {
+              throw new Error(
+                "Adaptive LOD authoritative source chunk is missing or inconsistent for region " +
+                mutation.regionId + ": " + sourceKey,
+              );
+            }
+          }
+
+          return {
+            ...mutation,
+            spatialChunkKeys: Object.freeze(normalizedKeys),
+          };
+        });
+
+        // Recompile after injecting state-owned ownership so the transfer-plan
+        // hash and execution graph are bound to authoritative physical keys.
+        compiledPlan = new InfinityScaleAdaptiveTransferCompiler().compile(normalizedMutations);
+        changed = compiledPlan.mutations.filter(m => m.fromLOD !== m.toLOD)
+          .slice()
+          .sort((a, b) => a.regionId.localeCompare(b.regionId));
+
+        const spatialMappings = compileInfinityScaleSpatialRegionMappings(changed);
+        const sourceKeys = new Set(changed.flatMap(m => [...(m.spatialChunkKeys ?? [])]));
+        for (const mapping of spatialMappings) {
+          for (const targetKey of mapping.targetChunkKeys) {
+            if (!sourceKeys.has(targetKey) && this.state.hasChunk(targetKey)) {
+              throw new Error(
+                "Adaptive LOD target chunk is already occupied and cannot be replaced safely: " + targetKey,
+              );
+            }
+          }
+        }
+
+        // This mapping is now backed by the authoritative region registry and
+        // live hierarchical source chunks, but it is still only a preflight.
+        // We do not publish it until full cell transfer, field-specific
+        // conservation, dependency barriers and atomic topology rollback exist.
+        throw new Error(
+          "Adaptive LOD topology commit remains disabled until full-cell transfer, " +
+          "field-specific conservation and atomic physical chunk remapping publication are implemented " +
+          "(validated " + spatialMappings.length + " authoritative spatial region mapping(s))",
+        );
+      }
+
       const executionGraph = new InfinityScaleAdaptiveExecutionGraphCompiler().compile(compiledPlan);
       if (!executionGraph.valid) {
         throw new Error("Adaptive LOD transaction rejected: execution dependency graph is invalid");
       }
-      // Decide whether the request changes topology from the compiler's
-      // detached snapshot, not caller-owned objects that may contain accessors
-      // or be mutated after compilation.
-      const changed = compiledPlan.mutations.filter(m => m.fromLOD !== m.toLOD)
-        .slice()
-        .sort((a, b) => a.regionId.localeCompare(b.regionId));
-
       // Every rejection after begin must pass through cleanup so this bridge
       // cannot retain a failed transaction and accidentally reuse it.
       if (frame.phase !== "boundary-reconciliation") {
