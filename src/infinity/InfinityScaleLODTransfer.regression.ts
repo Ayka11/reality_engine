@@ -187,4 +187,27 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
     }
   }
 
+
+  // Individually valid Float32 inputs can still overflow during an extensive
+  // reduction. Results are staged separately, so the target remains untouched.
+  const largeSources = Array.from({ length: 8 }, () => {
+    const value = cell();
+    value[F.ENERGY] = 3e38;
+    return value;
+  });
+  const largeTarget = new Array<number>(CELL_FIELDS).fill(43);
+  rejectedWithoutMutation("restriction whose extensive sum overflows Float32", largeTarget,
+    () => InfinityScaleLODTransfer.restrict(largeSources, largeTarget, 0, 1),
+    "result for field");
+
+  const largeFaceSources = Array.from({ length: 4 }, () => {
+    const value = cell();
+    value[F.ENERGY] = 3e38;
+    return value;
+  });
+  const largeFaceTarget = new Array<number>(CELL_FIELDS).fill(47);
+  rejectedWithoutMutation("face restriction whose extensive sum overflows Float32", largeFaceTarget,
+    () => InfinityScaleLODTransfer.restrictFace(largeFaceSources, largeFaceTarget, 0, 1),
+    "result for field");
+
 }
