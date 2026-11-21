@@ -232,4 +232,39 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
     () => InfinityScaleLODTransfer.prolongateBoundaryCell(occupiedBoundarySource, occupiedBoundaryTarget, 1, 0),
     "explicit identity remap");
 
+
+  const oversizedTargetCell = new Array<number>(CELL_FIELDS).fill(0);
+  let oversizedProlongationRejected = false;
+  try {
+    InfinityScaleLODTransfer.prolongate(
+      cell(),
+      new Array<number[]>(32768).fill(oversizedTargetCell),
+      5,
+      0,
+    );
+  } catch (error) {
+    oversizedProlongationRejected = error instanceof RangeError &&
+      error.message.includes("cell transfer limit");
+  }
+  if (!oversizedProlongationRejected ||
+      oversizedTargetCell.some(value => value !== 0)) {
+    throw new Error("Prolongation did not reject an oversized transfer before target publication");
+  }
+
+  let oversizedRestrictionRejected = false;
+  try {
+    InfinityScaleLODTransfer.restrict(
+      new Array<ArrayLike<number>>(32768).fill(cell()),
+      new Array<number>(CELL_FIELDS).fill(53),
+      5,
+      0,
+    );
+  } catch (error) {
+    oversizedRestrictionRejected = error instanceof RangeError &&
+      error.message.includes("cell transfer limit");
+  }
+  if (!oversizedRestrictionRejected) {
+    throw new Error("Restriction did not enforce its cell-count allocation limit");
+  }
+
 }
