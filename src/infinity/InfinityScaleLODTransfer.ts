@@ -31,6 +31,8 @@ export interface InfinityScaleLODTransferResult {
 }
 
 
+const MAX_TRANSFER_CELL_COUNT = 4096;
+
 type TransferSourceMode = "copy" | "prolongation" | "restriction";
 
 function assertTransferOutput(value: number, field: number, operation: string): number {
@@ -48,6 +50,9 @@ function snapshotTransferSources(
   sources: ReadonlyArray<ArrayLike<number>>,
   mode: TransferSourceMode,
 ): Float32Array[] {
+  if (sources.length > MAX_TRANSFER_CELL_COUNT) {
+    throw new RangeError(`Infinity Scale ${mode} source cell count exceeds ${MAX_TRANSFER_CELL_COUNT}`);
+  }
   const snapshots: Float32Array[] = [];
   for (let cellIndex = 0; cellIndex < sources.length; cellIndex++) {
     const source = sources[cellIndex];
@@ -185,6 +190,9 @@ export class InfinityScaleLODTransfer {
   ): InfinityScaleLODTransferResult {
     const refinementRatio = this.validateLevels(sourceLevel, targetLevel, "prolongation");
     const expected = refinementRatio ** 3;
+    if (expected > MAX_TRANSFER_CELL_COUNT) {
+      throw new RangeError(`Infinity Scale prolongation exceeds the ${MAX_TRANSFER_CELL_COUNT} cell transfer limit`);
+    }
 
     if (targets.length !== expected) {
       throw new Error(
@@ -313,6 +321,9 @@ export class InfinityScaleLODTransfer {
   ): InfinityScaleLODTransferResult {
     const refinementRatio = this.validateLevels(sourceLevel, targetLevel, "restriction");
     const expected = refinementRatio ** 3;
+    if (expected > MAX_TRANSFER_CELL_COUNT) {
+      throw new RangeError(`Infinity Scale restriction exceeds the ${MAX_TRANSFER_CELL_COUNT} cell transfer limit`);
+    }
 
     if (sources.length !== expected) {
       throw new Error(
@@ -426,6 +437,9 @@ export class InfinityScaleLODTransfer {
   ): InfinityScaleLODTransferResult {
     const refinementRatio = this.validateLevels(sourceLevel, targetLevel, "restriction");
     const expected = refinementRatio ** 2;
+    if (expected > MAX_TRANSFER_CELL_COUNT) {
+      throw new RangeError(`Infinity Scale face restriction exceeds the ${MAX_TRANSFER_CELL_COUNT} cell transfer limit`);
+    }
     if (sources.length !== expected || target.length !== CELL_FIELDS) {
       throw new Error(
         `Infinity Scale face restriction requires ${expected} source cells; received ${sources.length}`,
