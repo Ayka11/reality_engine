@@ -25,4 +25,4 @@ runInfinityScaleSpatialRegionMappingRegression();
 runSparseVoxelGridPhysicalTopologyRegression();
 runSparseVoxelGridPhysicalChunkRegression();
 runSparseVoxelGridPersistenceSchemaRegression();
-console.log("Infinity Scale adaptive LOD bridge, execution graph, GPU boundary contract, causal attribution, resolution utility, transaction preflight, hierarchical recovery, physical sparse-chunk mapping, logical-region ownership and mixed-LOD SparseVoxelGrid topology preflight and versioned persistence schema regressions: PASS");
+console.log("Infinity Scale adaptive LOD bridge, execution graph, GPU boundary contract, causal attribution, resolution utility, transaction preflight, hierarchical recovery, physical sparse-chunk mapping, logical-region ownership and mixed-LOD SparseVoxelGrid topology preflight, level-aware physical chunk runtime and versioned persistence schema regressions: PASS");
