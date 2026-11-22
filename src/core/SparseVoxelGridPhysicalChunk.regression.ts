@@ -1,5 +1,6 @@
 import { CELL_FIELDS, F } from "./CellState";
 import { CHUNK_SIZE } from "./Chunk";
+import { SparseVoxelGrid } from "./SparseVoxelGrid";
 import { SparseVoxelGridPhysicalChunk } from "./SparseVoxelGridPhysicalChunk";
 
 function expectRejected(label: string, operation: () => unknown): void {
@@ -81,5 +82,18 @@ export function runSparseVoxelGridPhysicalChunkRegression(): void {
   expectRejected("a non-canonical physical key", () => new SparseVoxelGridPhysicalChunk("02:-1,0,0"));
   expectRejected("unsafe physical bounds", () => new SparseVoxelGridPhysicalChunk("30:9007199254740991,0,0"));
 
-  console.log("SparseVoxelGrid level-aware physical chunk identity, addressing, buffers and mutation tracking: PASS");
+  // The runtime record must remain fail-closed until SparseVoxelGrid's
+  // authoritative map, dense-window and persistence paths are LOD-aware.
+  const legacyGrid = new SparseVoxelGrid(1, 1, 1);
+  expectRejected("a non-zero-LOD chunk in the level-zero production map", () => {
+    legacyGrid.chunks.set(coarse.key, coarse);
+  });
+  expectRejected("a non-zero-LOD dirty key in the level-zero production metadata", () => {
+    legacyGrid.dirtyChunks.add(coarse.key);
+  });
+  expectRejected("a non-zero-LOD owner key in the level-zero production metadata", () => {
+    legacyGrid.chunkOwners.set(coarse.key, "coarse-owner");
+  });
+
+  console.log("SparseVoxelGrid level-aware physical chunk identity, addressing, buffers, mutation tracking and level-zero production fail-closed guards: PASS");
 }
