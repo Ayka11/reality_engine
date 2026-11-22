@@ -1,6 +1,10 @@
 import { CellState, CELL_FIELDS, F, validateGridDimensions } from "./CellState";
 import { Chunk, CHUNK_SIZE, CHUNK_VOLUME, type ChunkRawBufferSnapshot } from "./Chunk";
 import { createTrackedFloat32Array, INTERNAL_MUTABLE_BUFFER, lockInternalMutableBufferOwner, type MutableBufferSide } from "./TrackedFloat32Array";
+import {
+  upgradeSparseVoxelGridDeltaIdentity,
+  upgradeSparseVoxelGridSnapshotIdentity,
+} from "./SparseVoxelGridPersistenceSchema";
 
 export interface SerializedChunk {
   key: string;
@@ -18,6 +22,8 @@ export interface DenseWindowRawChunkSnapshot {
 }
 
 export interface SparseVoxelGridSnapshot {
+  /** Version 2 identifies every physical chunk with an explicit level and scale. */
+  schemaVersion?: 2;
   width: number;
   height: number;
   depth: number;
@@ -30,6 +36,9 @@ export interface SparseVoxelGridSnapshot {
     cx: number;
     cy: number;
     cz: number;
+    /** Optional only for legacy in-memory snapshots; v2 snapshots always include both fields. */
+    level?: number;
+    scale?: number;
     active: boolean;
     lastAccessed: number;
     buffer: Float32Array;
@@ -50,6 +59,9 @@ export interface SparseVoxelGridChunkDelta {
   cx: number;
   cy: number;
   cz: number;
+  /** Physical identity; absent only in legacy v1 deltas. */
+  level?: number;
+  scale?: number;
   beforeExists: boolean;
   afterExists: boolean;
   beforeFull?: SparseVoxelGridSnapshot["chunks"][number];
@@ -63,6 +75,8 @@ export interface SparseVoxelGridChunkDelta {
 }
 
 export interface SparseVoxelGridDelta {
+  /** Version 2 identifies all delta entries and full chunk payloads. */
+  schemaVersion?: 2;
   width: number;
   height: number;
   depth: number;
@@ -128,8 +142,12 @@ export function createSparseVoxelGridDelta(
     throw new Error("Cannot create sparse-grid delta across incompatible dimensions");
   }
 
-  const beforeChunks = new Map(before.chunks.map(chunk => [chunk.key, chunk] as const));
-  const afterChunks = new Map(after.chunks.map(chunk => [chunk.key, chunk] as const));
+  // Normalize legacy snapshots before diffing. New deltas are always emitted
+  // as v2, even when their source snapshots came from the historical v1 shape.
+  const beforeState = upgradeSparseVoxelGridSnapshotIdentity(before) as unknown as SparseVoxelGridSnapshot;
+  const afterState = upgradeSparseVoxelGridSnapshotIdentity(after) as unknown as SparseVoxelGridSnapshot;
+  const beforeChunks = new Map(beforeState.chunks.map(chunk => [chunk.key, chunk] as const));
+  const afterChunks = new Map(afterState.chunks.map(chunk => [chunk.key, chunk] as const));
   const keys = new Set([...beforeChunks.keys(), ...afterChunks.keys()]);
   const chunks: SparseVoxelGridChunkDelta[] = [];
 
@@ -139,6 +157,7 @@ export function createSparseVoxelGridDelta(
     if (!previous && next) {
       chunks.push({
         key, cx: next.cx, cy: next.cy, cz: next.cz,
+        level: next.level, scale: next.scale,
         beforeExists: false, afterExists: true,
         afterFull: cloneGridChunkSnapshot(next),
       });
@@ -147,6 +166,7 @@ export function createSparseVoxelGridDelta(
     if (previous && !next) {
       chunks.push({
         key, cx: previous.cx, cy: previous.cy, cz: previous.cz,
+        level: previous.level, scale: previous.scale,
         beforeExists: true, afterExists: false,
         beforeFull: cloneGridChunkSnapshot(previous),
       });
@@ -162,6 +182,7 @@ export function createSparseVoxelGridDelta(
 
     chunks.push({
       key, cx: previous.cx, cy: previous.cy, cz: previous.cz,
+      level: previous.level, scale: previous.scale,
       beforeExists: true, afterExists: true,
       beforeActive: previous.active,
       afterActive: next.active,
@@ -173,19 +194,20 @@ export function createSparseVoxelGridDelta(
   }
 
   return {
-    width: before.width,
-    height: before.height,
-    depth: before.depth,
-    buffer: diffGridFloatBuffers(before.buffer, after.buffer),
-    backBuffer: diffGridFloatBuffers(before.backBuffer, after.backBuffer),
-    beforeDenseOrigin: { ...before.denseOrigin },
-    afterDenseOrigin: { ...after.denseOrigin },
-    beforeActiveChunkRange: { ...before.activeChunkRange },
-    afterActiveChunkRange: { ...after.activeChunkRange },
-    beforeDirtyChunks: [...before.dirtyChunks],
-    afterDirtyChunks: [...after.dirtyChunks],
-    beforeChunkOwners: before.chunkOwners.map(entry => [...entry] as [string, string]),
-    afterChunkOwners: after.chunkOwners.map(entry => [...entry] as [string, string]),
+    schemaVersion: 2,
+    width: beforeState.width,
+    height: beforeState.height,
+    depth: beforeState.depth,
+    buffer: diffGridFloatBuffers(beforeState.buffer, afterState.buffer),
+    backBuffer: diffGridFloatBuffers(beforeState.backBuffer, afterState.backBuffer),
+    beforeDenseOrigin: { ...beforeState.denseOrigin },
+    afterDenseOrigin: { ...afterState.denseOrigin },
+    beforeActiveChunkRange: { ...beforeState.activeChunkRange },
+    afterActiveChunkRange: { ...afterState.activeChunkRange },
+    beforeDirtyChunks: [...beforeState.dirtyChunks],
+    afterDirtyChunks: [...afterState.dirtyChunks],
+    beforeChunkOwners: beforeState.chunkOwners.map(entry => [...entry] as [string, string]),
+    afterChunkOwners: afterState.chunkOwners.map(entry => [...entry] as [string, string]),
     chunks,
   };
 }
@@ -195,22 +217,54 @@ export function applySparseVoxelGridDelta(
   delta: SparseVoxelGridDelta,
   direction: "before" | "after",
 ): SparseVoxelGridSnapshot {
-  if (!current || !delta ||
-      current.width !== delta.width ||
-      current.height !== delta.height ||
-      current.depth !== delta.depth) {
+  if (direction !== "before" && direction !== "after") {
+    throw new Error("Sparse-grid delta direction must be before or after");
+  }
+  if (!current || !delta) {
+    throw new Error("Sparse-grid delta requires a current snapshot and delta");
+  }
+
+  // The schema helpers validate identities before this function clones or
+  // changes any state. Legacy inputs are upgraded in detached objects.
+  const currentState = upgradeSparseVoxelGridSnapshotIdentity(current) as unknown as SparseVoxelGridSnapshot;
+  const versionedDelta = upgradeSparseVoxelGridDeltaIdentity(delta) as unknown as SparseVoxelGridDelta;
+  if (currentState.width !== versionedDelta.width ||
+      currentState.height !== versionedDelta.height ||
+      currentState.depth !== versionedDelta.depth) {
     throw new Error("Sparse-grid delta does not match the current grid dimensions");
+  }
+  if (!(currentState.buffer instanceof Float32Array) ||
+      currentState.buffer.length !== currentState.width * currentState.height * currentState.depth * CELL_FIELDS ||
+      !(currentState.backBuffer instanceof Float32Array) ||
+      currentState.backBuffer.length !== currentState.buffer.length ||
+      !Array.isArray(currentState.chunks) ||
+      !Array.isArray(versionedDelta.chunks)) {
+    throw new Error("Sparse-grid delta current snapshot is malformed");
+  }
+
+  const sourceChunks = new Map(currentState.chunks.map(chunk => [chunk.key, chunk] as const));
+  for (const change of versionedDelta.chunks) {
+    const shouldExist = direction === "after" ? change.beforeExists : change.afterExists;
+    const source = sourceChunks.get(change.key);
+    if (shouldExist !== !!source) {
+      throw new Error(`Sparse-grid delta topology precondition failed for chunk ${change.key}`);
+    }
+    if (source && (source.cx !== change.cx || source.cy !== change.cy ||
+        source.cz !== change.cz || source.level !== change.level || source.scale !== change.scale)) {
+      throw new Error(`Sparse-grid delta physical identity precondition failed for chunk ${change.key}`);
+    }
   }
 
   const result: SparseVoxelGridSnapshot = {
-    ...current,
-    buffer: current.buffer.slice(),
-    backBuffer: current.backBuffer.slice(),
-    denseOrigin: { ...current.denseOrigin },
-    activeChunkRange: { ...current.activeChunkRange },
-    chunks: current.chunks.map(cloneGridChunkSnapshot),
-    dirtyChunks: [...current.dirtyChunks],
-    chunkOwners: current.chunkOwners.map(entry => [...entry] as [string, string]),
+    ...currentState,
+    schemaVersion: 2,
+    buffer: currentState.buffer.slice(),
+    backBuffer: currentState.backBuffer.slice(),
+    denseOrigin: { ...currentState.denseOrigin },
+    activeChunkRange: { ...currentState.activeChunkRange },
+    chunks: currentState.chunks.map(cloneGridChunkSnapshot),
+    dirtyChunks: [...currentState.dirtyChunks],
+    chunkOwners: currentState.chunkOwners.map(entry => [...entry] as [string, string]),
   };
 
   const applyArray = (target: Float32Array, change: SparseVoxelGridArrayDelta | undefined) => {
@@ -223,20 +277,22 @@ export function applySparseVoxelGridDelta(
       throw new Error("Invalid sparse-grid delta buffer");
     }
     const values = direction === "before" ? change.before : change.after;
+    let previousIndex = -1;
     for (let i = 0; i < change.indices.length; i++) {
       const index = change.indices[i];
-      if (index >= target.length || !Number.isFinite(values[i])) {
-        throw new Error("Sparse-grid delta buffer index or value is invalid");
+      if (index >= target.length || index <= previousIndex || !Number.isFinite(values[i])) {
+        throw new Error("Sparse-grid delta buffer index, order, or value is invalid");
       }
       target[index] = values[i];
+      previousIndex = index;
     }
   };
 
-  applyArray(result.buffer, delta.buffer);
-  applyArray(result.backBuffer, delta.backBuffer);
+  applyArray(result.buffer, versionedDelta.buffer);
+  applyArray(result.backBuffer, versionedDelta.backBuffer);
 
   const chunks = new Map(result.chunks.map(chunk => [chunk.key, chunk] as const));
-  for (const change of delta.chunks) {
+  for (const change of versionedDelta.chunks) {
     const exists = direction === "before" ? change.beforeExists : change.afterExists;
     const full = direction === "before" ? change.beforeFull : change.afterFull;
     if (!exists) {
@@ -244,7 +300,7 @@ export function applySparseVoxelGridDelta(
       continue;
     }
     if (full) {
-      chunks.set(change.key, cloneGridChunkSnapshot(full));
+      chunks.set(change.key, cloneGridChunkSnapshot(full as SparseVoxelGridSnapshot["chunks"][number]));
       continue;
     }
 
@@ -259,10 +315,10 @@ export function applySparseVoxelGridDelta(
   }
 
   result.chunks = [...chunks.values()];
-  result.denseOrigin = { ...(direction === "before" ? delta.beforeDenseOrigin : delta.afterDenseOrigin) };
-  result.activeChunkRange = { ...(direction === "before" ? delta.beforeActiveChunkRange : delta.afterActiveChunkRange) };
-  result.dirtyChunks = [...(direction === "before" ? delta.beforeDirtyChunks : delta.afterDirtyChunks)];
-  result.chunkOwners = (direction === "before" ? delta.beforeChunkOwners : delta.afterChunkOwners)
+  result.denseOrigin = { ...(direction === "before" ? versionedDelta.beforeDenseOrigin : versionedDelta.afterDenseOrigin) };
+  result.activeChunkRange = { ...(direction === "before" ? versionedDelta.beforeActiveChunkRange : versionedDelta.afterActiveChunkRange) };
+  result.dirtyChunks = [...(direction === "before" ? versionedDelta.beforeDirtyChunks : versionedDelta.afterDirtyChunks)];
+  result.chunkOwners = (direction === "before" ? versionedDelta.beforeChunkOwners : versionedDelta.afterChunkOwners)
     .map(entry => [...entry] as [string, string]);
   return result;
 }
@@ -574,6 +630,7 @@ export class SparseVoxelGrid {
 
   captureState(): SparseVoxelGridSnapshot {
     return {
+      schemaVersion: 2,
       width: this.W,
       height: this.H,
       depth: this.D,
@@ -586,6 +643,8 @@ export class SparseVoxelGrid {
         cx: chunk.cx,
         cy: chunk.cy,
         cz: chunk.cz,
+        level: 0,
+        scale: 1,
         active: chunk.active,
         lastAccessed: chunk.lastAccessed,
         buffer: new Float32Array(chunk.buffer),
@@ -597,6 +656,9 @@ export class SparseVoxelGrid {
   }
 
   restoreState(snapshot: SparseVoxelGridSnapshot): void {
+    // Normalize legacy v1 snapshots before opening the mutation boundary.
+    // The live SparseVoxelGrid implementation remains strictly level zero.
+    snapshot = upgradeSparseVoxelGridSnapshotIdentity(snapshot) as unknown as SparseVoxelGridSnapshot;
     const endMutation = this.beginMutation();
     try {
     const validRange = (range: SparseVoxelGridSnapshot["activeChunkRange"]) =>
@@ -622,6 +684,7 @@ export class SparseVoxelGrid {
     for (const data of snapshot.chunks) {
       if (!data || typeof data.key !== "string" || !Number.isSafeInteger(data.cx) ||
           !Number.isSafeInteger(data.cy) || !Number.isSafeInteger(data.cz) ||
+          data.level !== 0 || data.scale !== 1 ||
           typeof data.active !== "boolean" || !Number.isFinite(data.lastAccessed) ||
           !(data.buffer instanceof Float32Array) ||
           data.buffer.length !== CHUNK_VOLUME * CELL_FIELDS ||
