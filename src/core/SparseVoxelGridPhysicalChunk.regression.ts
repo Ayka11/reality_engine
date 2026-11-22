@@ -88,6 +88,14 @@ export function runSparseVoxelGridPhysicalChunkRegression(): void {
   expectRejected("a non-zero-LOD chunk in the level-zero production map", () => {
     legacyGrid.chunks.set(coarse.key, coarse);
   });
+  // Coarse chunks share integer chunk coordinates with the legacy map key.
+  // The map must inspect physical identity, not just the coordinate string.
+  expectRejected("a coarse chunk smuggled through its legacy coordinate key", () => {
+    legacyGrid.chunks.set("-1,0,0", coarse);
+  });
+  if (legacyGrid.chunks.has("-1,0,0")) {
+    throw new Error("Rejected coarse chunk leaked into the authoritative level-zero map");
+  }
   expectRejected("a non-zero-LOD dirty key in the level-zero production metadata", () => {
     legacyGrid.dirtyChunks.add(coarse.key);
   });
