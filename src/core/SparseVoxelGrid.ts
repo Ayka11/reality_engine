@@ -1409,6 +1409,23 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
       throw new Error(`Chunk map key must match chunk coordinates: expected ${expectedKey}, received ${key}`);
     }
 
+    // A physical-identity chunk must never be smuggled into the legacy
+    // level-zero map under its coordinate-only key. The old map key check
+    // alone is insufficient because a coarse chunk still carries integer
+    // cx/cy/cz coordinates. Keep ordinary Chunk instances compatible while
+    // requiring every LOD-aware record to prove the exact level-zero identity.
+    const physical = chunk as Chunk & {
+      key?: unknown;
+      level?: unknown;
+      scale?: unknown;
+    };
+    if (("key" in chunk || "level" in chunk || "scale" in chunk) &&
+        (physical.key !== expectedKey || physical.level !== 0 || physical.scale !== 1)) {
+      throw new Error(
+        `SparseVoxelGrid level-zero map rejects non-level-zero physical chunk identity: ${String(physical.key)}`,
+      );
+    }
+
     const existed = this.has(key);
     const previous = this.get(key);
     if (existed && previous === chunk) return this;
