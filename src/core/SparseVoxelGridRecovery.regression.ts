@@ -378,11 +378,29 @@ function runSparseChunkSerializationAndLoadRegression(): void {
   remote.backBuffer[remoteCell + F.DENSITY] = 0.25;
 
   const serialized = source.serializeChunks(false);
+  if (serialized.some(chunk => chunk.level !== 0 || chunk.scale !== 1)) {
+    throw new Error("Sparse chunk serializer omitted complete v2 physical identity");
+  }
   if (!serialized.some(chunk => chunk.key === "0,0,0")) {
     throw new Error("Sparse chunk serializer dropped non-energy fields when energy was zero");
   }
   if (!serialized.some(chunk => chunk.key === "1,0,0")) {
     throw new Error("Sparse chunk serializer dropped non-energy fields outside the dense window");
+  }
+
+  // The direct array API infers v2 only when every record carries the
+  // complete level/scale pair; historical bare arrays remain v1.
+  const legacySerialized = serialized.map(({ level: _level, scale: _scale, ...chunk }) => chunk);
+  const legacyTarget = new SparseVoxelGrid(4, 4, 4);
+  legacyTarget.loadChunks(legacySerialized);
+  if (legacyTarget.getCell(32, 0, 0)?.density !== 0.875) {
+    throw new Error("Sparse chunk load did not migrate and restore the historical v1 bare-array format");
+  }
+
+  const explicitV2Target = new SparseVoxelGrid(4, 4, 4);
+  explicitV2Target.loadChunks(serialized, 2);
+  if (explicitV2Target.getCell(32, 0, 0)?.density !== 0.875) {
+    throw new Error("Sparse chunk load did not accept an explicitly versioned v2 document");
   }
 
   const target = new SparseVoxelGrid(4, 4, 4);
@@ -409,6 +427,29 @@ function runSparseChunkSerializationAndLoadRegression(): void {
   }
   if (target.backBuffer.some((value, i) => value !== target.buffer[i])) {
     throw new Error("Sparse chunk load left dense front/back buffers inconsistent");
+  }
+
+  const beforeUnsupportedLod = JSON.stringify(target.captureState());
+  const unsupportedLod = [{
+    key: "1:10,0,0",
+    cx: 10,
+    cy: 0,
+    cz: 0,
+    level: 1,
+    scale: 2,
+    active: true,
+    buffer: serialized[0].buffer.slice(0),
+  }];
+  let unsupportedLodRejected = false;
+  try {
+    target.loadChunks(unsupportedLod, 2);
+  } catch (error) {
+    unsupportedLodRejected = error instanceof Error &&
+      error.message.includes("unsupported physical LOD");
+  }
+  if (!unsupportedLodRejected ||
+      JSON.stringify(target.captureState()) !== beforeUnsupportedLod) {
+    throw new Error("Sparse chunk load did not reject a coarse physical chunk before publishing any state");
   }
 
   const beforeMalformedLoad = JSON.stringify(target.captureState());
