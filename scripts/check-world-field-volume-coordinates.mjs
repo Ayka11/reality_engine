@@ -3,11 +3,17 @@ import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
 
 const rendererSource = await readFile(new URL('../src/render/WorldFieldVolumeRenderer.ts', import.meta.url), 'utf8')
+const appSource = await readFile(new URL('../index.html', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(rendererSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 })
 assert.equal(compiled.diagnostics?.some(d => d.category === ts.DiagnosticCategory.Error), false,
   'volume renderer must remain valid TypeScript')
+
+// The production field-volume builder must provide enough independent Y planes
+// to avoid rendering the volume as only a handful of isolated sheets.
+assert.match(appSource, /const depth=11,spacing=/,
+  'volumetric field must sample eleven vertical slices')
 
 // FieldSampler.sampleWorld(x, y, z) stores the sampled plane in sample.y.
 // Therefore sample.y is constant within each horizontal slice and cannot be
