@@ -1,10 +1,17 @@
 import { CELL_FIELDS, F } from "./CellState";
-import { SparseVoxelGrid, type SparseVoxelGridSnapshot } from "./SparseVoxelGrid";
+import {
+  applySparseVoxelGridDelta,
+  createSparseVoxelGridDelta,
+  SparseVoxelGrid,
+  type SparseVoxelGridSnapshot,
+} from "./SparseVoxelGrid";
+import { runSparseVoxelGridPersistenceSchemaRegression } from "./SparseVoxelGridPersistenceSchema.regression";
 import { VoxelGrid } from "./VoxelGrid";
 import { INTERNAL_MUTABLE_BUFFER } from "./TrackedFloat32Array";
 
 function cloneSnapshot(snapshot: SparseVoxelGridSnapshot): SparseVoxelGridSnapshot {
   return {
+    schemaVersion: snapshot.schemaVersion,
     width: snapshot.width,
     height: snapshot.height,
     depth: snapshot.depth,
@@ -20,6 +27,78 @@ function cloneSnapshot(snapshot: SparseVoxelGridSnapshot): SparseVoxelGridSnapsh
     dirtyChunks: [...snapshot.dirtyChunks],
     chunkOwners: snapshot.chunkOwners.map(([key, owner]) => [key, owner] as [string, string]),
   };
+}
+
+function runSparseVoxelGridSnapshotDeltaV2Regression(): void {
+  const source = new SparseVoxelGrid(2, 2, 2);
+  const before = source.captureState();
+  if (before.schemaVersion !== 2 ||
+      before.chunks.some(chunk => chunk.level !== 0 || chunk.scale !== 1)) {
+    throw new Error("SparseVoxelGrid captureState did not emit complete v2 physical identities");
+  }
+
+  source.buffer[source.idx(0, 0, 0) + F.ENERGY] = 0.625;
+  source.syncDenseToChunks();
+  const resident = source.chunks.get("0,0,0");
+  if (!resident) throw new Error("SparseVoxelGrid v2 delta fixture omitted its resident chunk");
+  resident.active = false;
+  resident.lastAccessed = 77;
+  resident.buffer[resident.localIdx(0, 0, 0) + F.DENSITY] = 0.875;
+  resident.backBuffer[resident.localIdx(0, 0, 0) + F.DENSITY] = 0.25;
+  source.assignChunkOwner("0,0,0", "delta-owner");
+  source.markChunksDirty(["0,0,0"]);
+
+  // Exercise a topology addition as well as ordinary field/metadata deltas.
+  const added = source.getOrCreateChunk(3, 0, 0);
+  added.buffer[added.localIdx(0, 0, 0) + F.INFORMATION] = 0.5;
+  added.backBuffer[added.localIdx(0, 0, 0) + F.INFORMATION] = 0.25;
+  const after = source.captureState();
+  const delta = createSparseVoxelGridDelta(before, after);
+  if (delta.schemaVersion !== 2 ||
+      delta.chunks.some(chunk => chunk.level !== 0 || chunk.scale !== 1)) {
+    throw new Error("SparseVoxelGrid delta creation did not emit v2 physical identities");
+  }
+
+  const appliedAfter = applySparseVoxelGridDelta(before, delta, "after");
+  if (JSON.stringify(appliedAfter) !== JSON.stringify(after)) {
+    throw new Error("SparseVoxelGrid v2 delta forward application did not reproduce its target snapshot");
+  }
+  const appliedBefore = applySparseVoxelGridDelta(appliedAfter, delta, "before");
+  if (JSON.stringify(appliedBefore) !== JSON.stringify(before)) {
+    throw new Error("SparseVoxelGrid v2 delta reverse application did not reproduce its source snapshot");
+  }
+
+  // Existing historical snapshots have no schemaVersion or LOD fields.
+  const legacySnapshot = {
+    ...before,
+    schemaVersion: undefined,
+    chunks: before.chunks.map(({ level: _level, scale: _scale, ...chunk }) => chunk),
+  };
+  const restored = new SparseVoxelGrid(2, 2, 2);
+  restored.restoreState(legacySnapshot as unknown as SparseVoxelGridSnapshot);
+  const migrated = restored.captureState();
+  if (migrated.schemaVersion !== 2 ||
+      migrated.chunks.length !== before.chunks.length ||
+      migrated.chunks.some(chunk => chunk.level !== 0 || chunk.scale !== 1)) {
+    throw new Error("SparseVoxelGrid restoreState did not migrate legacy snapshots into v2 identity");
+  }
+
+  const beforeRejectedRestore = JSON.stringify(restored.captureState());
+  const contradictory = cloneSnapshot(migrated);
+  contradictory.chunks[0].level = 1;
+  contradictory.chunks[0].scale = 2;
+  let contradictoryRejected = false;
+  try { restored.restoreState(contradictory); } catch { contradictoryRejected = true; }
+  if (!contradictoryRejected ||
+      JSON.stringify(restored.captureState()) !== beforeRejectedRestore) {
+    throw new Error("SparseVoxelGrid accepted a contradictory v2 identity or mutated state before rejecting it");
+  }
+
+  let staleDeltaRejected = false;
+  try { applySparseVoxelGridDelta(after, delta, "after"); } catch { staleDeltaRejected = true; }
+  if (!staleDeltaRejected) {
+    throw new Error("SparseVoxelGrid applied a delta without satisfying its source-topology preconditions");
+  }
 }
 
 function runGridDimensionValidationRegression(): void {
@@ -137,6 +216,8 @@ function runDenseOriginMutationContractRegression(): void {
 }
 
 export function runSparseVoxelGridRecoveryRegression(): void {
+  runSparseVoxelGridPersistenceSchemaRegression();
+  runSparseVoxelGridSnapshotDeltaV2Regression();
   runGridDimensionValidationRegression();
   runGridDimensionImmutabilityRegression();
   runDenseOriginMutationContractRegression();
