@@ -4,6 +4,7 @@ import { parseInfinityScaleChunkKey } from "../infinity/InfinityScaleChunkKey";
 export interface SparseVoxelGridPhysicalChunkIdentity {
   readonly key: string;
   readonly level: number;
+  readonly scale: number;
   readonly cx: number;
   readonly cy: number;
   readonly cz: number;
@@ -28,7 +29,7 @@ const MAX_PHYSICAL_CHUNK_COUNT = 4096;
 const MAX_LOD_LEVEL = 30;
 const TOPOLOGY_INDEX = new WeakMap<SparseVoxelGridPhysicalTopology, ReadonlyMap<string, SparseVoxelGridPhysicalChunkBounds>>();
 
-function formatPhysicalChunkKey(level: number, cx: number, cy: number, cz: number): string {
+export function formatSparseVoxelGridPhysicalChunkKey(level: number, cx: number, cy: number, cz: number): string {
   if (![level, cx, cy, cz].every(Number.isSafeInteger) ||
       level < 0 || level > MAX_LOD_LEVEL) {
     throw new RangeError("SparseVoxelGrid physical chunk identity is outside the supported integer range");
@@ -36,7 +37,7 @@ function formatPhysicalChunkKey(level: number, cx: number, cy: number, cz: numbe
   return level === 0 ? `${cx},${cy},${cz}` : `${level}:${cx},${cy},${cz}`;
 }
 
-function parsePhysicalChunkKey(value: unknown): SparseVoxelGridPhysicalChunkIdentity {
+export function parseSparseVoxelGridPhysicalChunkKey(value: unknown): SparseVoxelGridPhysicalChunkIdentity {
   if (typeof value !== "string") {
     throw new TypeError("SparseVoxelGrid physical chunk key must be a string");
   }
@@ -47,16 +48,17 @@ function parsePhysicalChunkKey(value: unknown): SparseVoxelGridPhysicalChunkIden
         parts.some((part, index) => String(part) !== value.split(",")[index])) {
       throw new Error("SparseVoxelGrid level-zero chunk key is not canonical: " + value);
     }
-    return Object.freeze({ key: value, level: 0, cx: parts[0], cy: parts[1], cz: parts[2] });
+    return Object.freeze({ key: value, level: 0, scale: 1, cx: parts[0], cy: parts[1], cz: parts[2] });
   }
 
   const parsed = parseInfinityScaleChunkKey(value);
-  if (parsed.level === 0 || formatPhysicalChunkKey(parsed.level, parsed.x, parsed.y, parsed.z) !== value) {
+  if (parsed.level === 0 || formatSparseVoxelGridPhysicalChunkKey(parsed.level, parsed.x, parsed.y, parsed.z) !== value) {
     throw new Error("SparseVoxelGrid physical chunk key is not canonical: " + value);
   }
   return Object.freeze({
     key: value,
     level: parsed.level,
+    scale: 2 ** parsed.level,
     cx: parsed.x,
     cy: parsed.y,
     cz: parsed.z,
@@ -64,7 +66,7 @@ function parsePhysicalChunkKey(value: unknown): SparseVoxelGridPhysicalChunkIden
 }
 
 function getPhysicalChunkBounds(identity: SparseVoxelGridPhysicalChunkIdentity): SparseVoxelGridPhysicalChunkBounds {
-  const extent = CHUNK_SIZE * (2 ** identity.level);
+  const extent = CHUNK_SIZE * identity.scale;
   const minX = identity.cx * extent;
   const minY = identity.cy * extent;
   const minZ = identity.cz * extent;
@@ -116,7 +118,7 @@ export function compileSparseVoxelGridPhysicalTopology(
 
   const byKey = new Map<string, SparseVoxelGridPhysicalChunkBounds>();
   for (const candidate of keys) {
-    const identity = parsePhysicalChunkKey(candidate);
+    const identity = parseSparseVoxelGridPhysicalChunkKey(candidate);
     if (byKey.has(identity.key)) {
       throw new Error("SparseVoxelGrid physical topology contains a duplicate chunk: " + identity.key);
     }
@@ -131,7 +133,7 @@ export function compileSparseVoxelGridPhysicalTopology(
       cx = Math.floor(cx / 2);
       cy = Math.floor(cy / 2);
       cz = Math.floor(cz / 2);
-      const ancestorKey = formatPhysicalChunkKey(level, cx, cy, cz);
+      const ancestorKey = formatSparseVoxelGridPhysicalChunkKey(level, cx, cy, cz);
       if (byKey.has(ancestorKey)) {
         throw new Error(
           "SparseVoxelGrid physical topology overlaps: " + chunk.key + " is covered by " + ancestorKey,
@@ -169,7 +171,7 @@ export function resolveSparseVoxelGridPhysicalChunk(
     const cx = Math.floor(x / extent);
     const cy = Math.floor(y / extent);
     const cz = Math.floor(z / extent);
-    const key = formatPhysicalChunkKey(level, cx, cy, cz);
+    const key = formatSparseVoxelGridPhysicalChunkKey(level, cx, cy, cz);
     const chunk = index.get(key);
     if (chunk) return chunk;
   }
