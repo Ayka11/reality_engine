@@ -3,7 +3,9 @@ import { Chunk, CHUNK_SIZE, CHUNK_VOLUME, type ChunkRawBufferSnapshot } from "./
 import { createTrackedFloat32Array, INTERNAL_MUTABLE_BUFFER, lockInternalMutableBufferOwner, type MutableBufferSide } from "./TrackedFloat32Array";
 import {
   upgradeSparseVoxelGridDeltaIdentity,
+  upgradeSparseVoxelGridPersistenceDocument,
   upgradeSparseVoxelGridSnapshotIdentity,
+  type SparseVoxelGridPersistenceSchemaVersion,
 } from "./SparseVoxelGridPersistenceSchema";
 
 export interface SerializedChunk {
@@ -11,6 +13,9 @@ export interface SerializedChunk {
   cx: number;
   cy: number;
   cz: number;
+  /** Present in v2 saves. Missing fields identify the historical level-zero format. */
+  level?: number;
+  scale?: number;
   active: boolean;
   buffer: ArrayBuffer;
 }
@@ -1088,23 +1093,58 @@ export class SparseVoxelGrid {
       if (!includeEmpty && chunk.isEmpty(0)) continue;
       const copy = new Float32Array(chunk.buffer.length);
       copy.set(chunk.buffer);
-      chunks.push({ key, cx: chunk.cx, cy: chunk.cy, cz: chunk.cz, active: chunk.active, buffer: copy.buffer });
+      chunks.push({
+        key,
+        cx: chunk.cx,
+        cy: chunk.cy,
+        cz: chunk.cz,
+        level: 0,
+        scale: 1,
+        active: chunk.active,
+        buffer: copy.buffer,
+      });
     }
     return chunks;
   }
 
-  loadChunks(chunks: SerializedChunk[]): void {
-    const endMutation = this.beginMutation();
-    try {
+  /**
+   * Restore serialized physical chunks. The optional version is supplied by
+   * WorldSnapshot.chunks; callers using the historical bare-array API remain
+   * compatible. Complete level/scale fields on every record also identify a
+   * v2 array for direct serializeChunks() -> loadChunks() round-trips.
+   */
+  loadChunks(
+    chunks: SerializedChunk[],
+    schemaVersion?: SparseVoxelGridPersistenceSchemaVersion,
+  ): void {
     if (!Array.isArray(chunks)) throw new Error("Invalid serialized chunk list");
+
+    const carriesCompleteV2Identity = chunks.length > 0 && chunks.every(data =>
+      !!data && typeof data === "object" &&
+      Number.isSafeInteger(data.level) &&
+      Number.isSafeInteger(data.scale),
+    );
+    const persistedDocument: unknown = schemaVersion !== undefined
+      ? { schemaVersion, chunks }
+      : carriesCompleteV2Identity
+        ? { schemaVersion: 2, chunks }
+        : chunks;
+    const upgraded = upgradeSparseVoxelGridPersistenceDocument(persistedDocument);
+
+    // Validate and construct all replacement chunks while detached from live
+    // state. This is intentionally level-zero-only until the physical grid,
+    // dense addressing, ownership and GPU paths support mixed-level chunks.
     const restored = new Map<string, Chunk>();
     const expectedBytes = CHUNK_VOLUME * CELL_FIELDS * Float32Array.BYTES_PER_ELEMENT;
-    for (const data of chunks) {
+    for (const candidate of upgraded.chunks) {
+      const data = candidate as unknown as SerializedChunk;
       if (!data ||
+          typeof data.key !== "string" ||
           !Number.isSafeInteger(data.cx) || !Number.isSafeInteger(data.cy) || !Number.isSafeInteger(data.cz) ||
+          data.level !== 0 || data.scale !== 1 ||
           typeof data.active !== "boolean" ||
           !(data.buffer instanceof ArrayBuffer) || data.buffer.byteLength !== expectedBytes) {
-        throw new Error("Invalid serialized chunk record");
+        throw new Error("Invalid serialized chunk record or unsupported physical LOD");
       }
       const expectedKey = this.getChunkKey(data.cx, data.cy, data.cz);
       if (data.key !== expectedKey || restored.has(data.key)) {
@@ -1119,33 +1159,37 @@ export class SparseVoxelGrid {
       restored.set(expectedKey, chunk);
     }
 
-    // Validate all records and construct detached chunks before touching live
-    // state. Keep a detached rollback snapshot for failures during publication
-    // or dense/back-buffer synchronization.
-    const previous = this.captureState();
+    // Publish only after every record has passed identity, topology, LOD and
+    // payload validation. Retain a detached rollback snapshot for failures
+    // during live publication or dense/back-buffer synchronization.
+    const endMutation = this.beginMutation();
     try {
-      this.chunks.clear();
-      for (const [key, chunk] of restored) this.chunks.set(key, chunk);
-      this.dirtyChunks.clear();
-      this.chunkOwners.clear();
-      this.#updateActiveRange();
-      this.syncChunksToDense();
-      this.syncBackBuffersFromFront();
-      this.#markMutation();
-    } catch (error) {
+      const previous = this.captureState();
       try {
-        this.restoreState(previous);
-      } catch (rollbackError) {
-        const originalMessage = error instanceof Error ? error.message : String(error);
-        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-        throw new AggregateError(
-          [error, rollbackError],
-          `SparseVoxelGrid chunk load failed (${originalMessage}) and rollback failed (${rollbackMessage})`,
-        );
+        this.chunks.clear();
+        for (const [key, chunk] of restored) this.chunks.set(key, chunk);
+        this.dirtyChunks.clear();
+        this.chunkOwners.clear();
+        this.#updateActiveRange();
+        this.syncChunksToDense();
+        this.syncBackBuffersFromFront();
+        this.#markMutation();
+      } catch (error) {
+        try {
+          this.restoreState(previous);
+        } catch (rollbackError) {
+          const originalMessage = error instanceof Error ? error.message : String(error);
+          const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          throw new AggregateError(
+            [error, rollbackError],
+            `SparseVoxelGrid chunk load failed (${originalMessage}) and rollback failed (${rollbackMessage})`,
+          );
+        }
+        throw error;
       }
-      throw error;
+    } finally {
+      endMutation();
     }
-    } finally { endMutation(); }
   }
 
   /** Keep front/back buffers consistent after replacing a world's authoritative state. */
