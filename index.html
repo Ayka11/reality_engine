@@ -2031,6 +2031,7 @@ window.getRealityRuntimeDiagnostics = function () {
       meshInstances: Number(field3D?.meshInstances ?? volumeRenderer?.meshInstances ?? 0),
       drawCalls: Number(field3D?.drawCalls ?? volumeRenderer?.drawCalls ?? 0),
       triangles: Number(field3D?.triangles ?? volumeRenderer?.triangles ?? 0),
+      volume: field3D?.volume ?? volumeRenderer?.volume ?? null,
       reason: field3D?.reason ?? volumeRenderer?.reason ?? null,
     },
   };
@@ -2574,6 +2575,7 @@ function renderField3DImpl(){
         meshInstances:Number(rendered?.meshInstances??0),
         drawCalls:Number(rendered?.drawCalls??0),
         triangles:Number(rendered?.triangles??0),
+        volume:rendered?.volume??null,
         field:names[fieldIndex],
         view,
         reason:rendered?.reason
