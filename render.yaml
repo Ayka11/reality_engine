@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: reality-engine-signalling
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm run start:render-signalling
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.16.0
