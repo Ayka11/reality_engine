@@ -58,3 +58,21 @@ The physical store must understand level-aware chunk identity and scale before a
 - Do not port the legacy dense `VoxelGrid` transaction as a shortcut.
 - Do not treat boundary-cell synchronization or synthetic telemetry as physical topology evidence.
 - Do not enable production refine/coarsen merely because a planner or isolated transfer regression passes.
+
+## Physical topology preflight (implemented; not physical AMR)
+
+`SparseVoxelGridPhysicalTopology` is now implemented as a pure candidate-topology compiler and base-cell resolver. Its regression suite covers canonical mixed-level keys, positive and negative coordinates, dyadic bounds, overlap and duplicate rejection, immutable compiler-owned topology, and deterministic base-cell lookup.
+
+This preflight establishes that a proposed set of level-aware chunk footprints is structurally valid before a future physical transaction is designed. It does **not** allocate or replace `Chunk` instances, move any of the 24 fields, mutate `SparseVoxelGrid`, publish ownership/dirty metadata, or make dense/GPU execution LOD-aware. It must therefore remain a validation primitive only.
+
+The physical storage audit also confirms that migration scope extends beyond the chunk map:
+
+- Existing dense-window indexing and front/back synchronization are level-zero assumptions.
+- Chunk serialization and load paths do not yet persist a physical LOD level or scale.
+- Snapshot/restore and mutation tracking must preserve level-aware identities and exact topology.
+- Worker, GPU readback, renderer, entity ownership, deltas, and boundary paths must either support coarse chunks explicitly or reject affected work before execution.
+- `InfinityScaleLODState` remains a separate hierarchical store; it is not the authoritative physical chunk map.
+- `InfinityScaleSpatialChunkMapping` proves geometric coverage only; it does not transfer data or publish physical topology.
+- Region ownership and current execution planning still rely on the existing level-zero physical coverage and single-level region constraints.
+
+The adaptive transaction bridge remains fail-closed for changed-LOD physical topology. Passing the topology preflight, LOD transfer regressions, or boundary coverage checks is not sufficient to remove that gate.
