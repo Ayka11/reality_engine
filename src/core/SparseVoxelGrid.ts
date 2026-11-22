@@ -2,6 +2,12 @@ import { CellState, CELL_FIELDS, F, validateGridDimensions } from "./CellState";
 import { Chunk, CHUNK_SIZE, CHUNK_VOLUME, type ChunkRawBufferSnapshot } from "./Chunk";
 import { createTrackedFloat32Array, INTERNAL_MUTABLE_BUFFER, lockInternalMutableBufferOwner, type MutableBufferSide } from "./TrackedFloat32Array";
 import {
+  compileSparseVoxelGridPhysicalTopology,
+  resolveSparseVoxelGridPhysicalCell,
+  type SparseVoxelGridPhysicalCellAddress,
+  type SparseVoxelGridPhysicalTopology,
+} from "./SparseVoxelGridPhysicalTopology";
+import {
   upgradeSparseVoxelGridDeltaIdentity,
   upgradeSparseVoxelGridPersistenceDocument,
   upgradeSparseVoxelGridSnapshotIdentity,
@@ -342,7 +348,25 @@ export class SparseVoxelGrid {
   readonly chunks: Map<string, Chunk>;
   readonly dirtyChunks: Set<string>;
   readonly chunkOwners: Map<string, string>;
+  #physicalTopologyCache: SparseVoxelGridPhysicalTopology | undefined;
   #_activeChunkRange = { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 };
+
+  /**
+   * Immutable physical-addressing snapshot of the current authoritative map.
+   * The current production map remains level-zero-only; this index is rebuilt
+   * after every map mutation and does not enable mixed-LOD storage or execution.
+   */
+  get physicalTopology(): SparseVoxelGridPhysicalTopology {
+    if (!this.#physicalTopologyCache) {
+      this.#physicalTopologyCache = compileSparseVoxelGridPhysicalTopology([...this.chunks.keys()]);
+    }
+    return this.#physicalTopologyCache;
+  }
+
+  /** Resolve a base-space cell to its physical chunk and local stored-cell address. */
+  resolvePhysicalCellAddress(x: number, y: number, z: number): SparseVoxelGridPhysicalCellAddress | null {
+    return resolveSparseVoxelGridPhysicalCell(this.physicalTopology, x, y, z);
+  }
 
   /** Return a detached range so nested writes cannot bypass revision tracking. */
   get activeChunkRange() {
@@ -1251,6 +1275,10 @@ export class SparseVoxelGrid {
   }
 
   #onChunkMapMutation(): void {
+    // Invalidate before either the batched or direct-mutation path. A caller
+    // holding an older topology snapshot keeps a valid immutable snapshot,
+    // while the next grid lookup compiles the current authoritative key set.
+    this.#physicalTopologyCache = undefined;
     // Internal bulk operations call beginMutation() and update the derived range
     // once after their batch; direct public Map writes must keep it synchronized.
     if (this.#sparseMutationDepth > 0) {
