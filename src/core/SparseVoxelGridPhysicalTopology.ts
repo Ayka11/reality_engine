@@ -1,5 +1,5 @@
 import { CHUNK_SIZE } from "../core/Chunk";
-import { parseInfinityScaleChunkKey } from "./InfinityScaleChunkKey";
+import { parseInfinityScaleChunkKey } from "../infinity/InfinityScaleChunkKey";
 
 export interface SparseVoxelGridPhysicalChunkIdentity {
   readonly key: string;
