@@ -1201,6 +1201,11 @@ const realSaveSystem = new RuntimeWorldSaveSystem(runtimeGridReal, mockLawEngine
   clearRecorderSnapshots() {},
 });
 const realSnapshot = realSaveSystem.captureSnapshot("Sparse field authority");
+assert.equal(realSnapshot.chunks?.schemaVersion, 2,
+  "new world saves must stamp sparse chunk schema version 2");
+assert.ok(realSnapshot.chunks?.serialized.length &&
+  realSnapshot.chunks.serialized.every(chunk => chunk.level === 0 && chunk.scale === 1),
+  "new world saves must serialize a complete physical identity for every chunk");
 assert.ok(realSnapshot.chunks?.serialized.some(chunk => chunk.key === "0,0,0"),
   "sparse save must serialize a chunk with non-energy fields and zero energy");
 assert.ok(realSnapshot.chunks?.serialized.some(chunk => chunk.key === "1,0,0"),
@@ -1226,6 +1231,48 @@ assert.deepEqual(runtimeGridReal.backBuffer, runtimeGridReal.buffer,
 for (const chunk of runtimeGridReal.chunks.values()) {
   assert.deepEqual(chunk.backBuffer, chunk.buffer, "world restore must reset sparse double-buffer baseline");
 }
+
+// Historical world saves omitted both the chunk collection version and the
+// per-record level/scale identity. They must still migrate as level-zero data.
+const legacyWorldSnapshot = structuredClone(realSnapshot);
+if (legacyWorldSnapshot.chunks) {
+  delete legacyWorldSnapshot.chunks.schemaVersion;
+  legacyWorldSnapshot.chunks.serialized = legacyWorldSnapshot.chunks.serialized.map(
+    ({ level: _level, scale: _scale, ...chunk }) => chunk,
+  );
+}
+runtimeGridReal.buffer.fill(17);
+runtimeGridReal.backBuffer.fill(19);
+await realSaveSystem.applySnapshot(legacyWorldSnapshot);
+assert.equal(runtimeGridReal.getCell(32, 0, 0)?.density, 0.875,
+  "WorldSaveSystem must migrate historical unversioned sparse-chunk arrays");
+
+// A geometrically valid coarse chunk is not yet supported by the physical
+// grid. Reject it before publishing any portion of the imported world.
+const unsupportedPhysicalLodSnapshot = structuredClone(realSnapshot);
+const coarseTemplate = unsupportedPhysicalLodSnapshot.chunks?.serialized[0];
+assert.ok(coarseTemplate, "coarse LOD rejection fixture requires a serialized chunk");
+unsupportedPhysicalLodSnapshot.chunks = {
+  ...unsupportedPhysicalLodSnapshot.chunks,
+  schemaVersion: 2,
+  serialized: [{
+    ...coarseTemplate,
+    key: "1:0,0,0",
+    cx: 0,
+    cy: 0,
+    cz: 0,
+    level: 1,
+    scale: 2,
+  }],
+};
+const beforeUnsupportedWorldRestore = JSON.stringify(runtimeGridReal.captureState());
+await assert.rejects(
+  realSaveSystem.applySnapshot(unsupportedPhysicalLodSnapshot),
+  /unsupported physical LOD/,
+  "WorldSaveSystem must fail closed on unsupported coarse physical chunks",
+);
+assert.equal(JSON.stringify(runtimeGridReal.captureState()), beforeUnsupportedWorldRestore,
+  "rejecting an unsupported coarse world-save chunk must preserve the live grid exactly");
 
 
 
