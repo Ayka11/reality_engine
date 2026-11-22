@@ -85,6 +85,12 @@ export function runSparseVoxelGridPhysicalChunkRegression(): void {
   // The runtime record must remain fail-closed until SparseVoxelGrid's
   // authoritative map, dense-window and persistence paths are LOD-aware.
   const legacyGrid = new SparseVoxelGrid(1, 1, 1);
+  // The stricter identity guard must still accept an explicitly identified
+  // level-zero physical record with the canonical legacy key.
+  legacyGrid.chunks.set(legacy.key, legacy);
+  if (legacyGrid.chunks.get(legacy.key) !== legacy) {
+    throw new Error("Level-zero physical chunk was rejected by the legacy production map");
+  }
   expectRejected("a non-zero-LOD chunk in the level-zero production map", () => {
     legacyGrid.chunks.set(coarse.key, coarse);
   });
