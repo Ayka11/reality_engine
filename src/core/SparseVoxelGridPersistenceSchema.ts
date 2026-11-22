@@ -8,11 +8,6 @@ import {
 export const SPARSE_VOXEL_GRID_PERSISTENCE_SCHEMA_VERSION = 2 as const;
 export type SparseVoxelGridPersistenceSchemaVersion = 1 | 2;
 
-export interface SparseVoxelGridVersionedPersistenceDocument {
-  readonly schemaVersion: SparseVoxelGridPersistenceSchemaVersion;
-  readonly chunks: readonly unknown[];
-}
-
 export interface SparseVoxelGridVersionedChunkIdentity extends SparseVoxelGridPhysicalChunkIdentity {
   readonly schemaVersion: typeof SPARSE_VOXEL_GRID_PERSISTENCE_SCHEMA_VERSION;
 }
@@ -46,9 +41,9 @@ export function parseSparseVoxelGridPersistedChunkIdentity(
   const record = value as Record<string, unknown>;
   const { key, cx, cy, cz } = record;
   if (typeof key !== "string" ||
-      !Number.isSafeInteger(cx) ||
-      !Number.isSafeInteger(cy) ||
-      !Number.isSafeInteger(cz)) {
+      typeof cx !== "number" || !Number.isSafeInteger(cx) ||
+      typeof cy !== "number" || !Number.isSafeInteger(cy) ||
+      typeof cz !== "number" || !Number.isSafeInteger(cz)) {
     throw new Error("SparseVoxelGrid persisted chunk has an invalid key or coordinate");
   }
 
@@ -70,13 +65,13 @@ export function parseSparseVoxelGridPersistedChunkIdentity(
     throw new Error("Unsupported SparseVoxelGrid persistence schema version");
   }
   const { level, scale } = record;
-  if (!Number.isSafeInteger(level) || !Number.isSafeInteger(scale) ||
-      (level as number) < 0 || (level as number) > 30 ||
-      scale !== 2 ** (level as number)) {
+  if (typeof level !== "number" || !Number.isSafeInteger(level) ||
+      typeof scale !== "number" || !Number.isSafeInteger(scale) ||
+      level < 0 || level > 30 || scale !== 2 ** level) {
     throw new Error("Version-2 SparseVoxelGrid record has an invalid level/scale pair");
   }
   const expectedKey = formatSparseVoxelGridPhysicalChunkKey(
-    level as number, cx as number, cy as number, cz as number,
+    level, cx, cy, cz,
   );
   if (key !== expectedKey) {
     throw new Error("Version-2 SparseVoxelGrid key does not match its complete physical identity");
