@@ -194,6 +194,7 @@ export class WorldFieldVolumeRenderer {
       ?? FIELD_PALETTES[0]
     let renderedCells = 0
     let activeCells = 0
+    let sampleCount = 0
     let invalidSamples = 0
     let duplicateCoordinates = 0
     const coordinateKeys = new Set<string>()
@@ -219,6 +220,7 @@ export class WorldFieldVolumeRenderer {
         for (let px = 0; px < data.width; px++) {
           const sample = data.samples[py * data.width + px]
           if (!sample) continue
+          sampleCount++
 
           // Do not reconstruct positions from array indices: the sample's
           // world-space coordinates are authoritative and remain aligned with
@@ -270,7 +272,7 @@ export class WorldFieldVolumeRenderer {
     const meanLayerGap = layerGaps.length ? layerGaps.reduce((sum, value) => sum + value, 0) / layerGaps.length : 0
     const finiteBounds = renderedCells > 0
     this.volumeDiagnostics = {
-      sampleCount: capacity,
+      sampleCount,
       renderedCells,
       invalidSamples,
       duplicateCoordinates,
