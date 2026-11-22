@@ -102,7 +102,7 @@ export function upgradeSparseVoxelGridPersistenceDocument(
     throw new Error("Unsupported or malformed SparseVoxelGrid persistence document");
   }
 
-  const chunks = document.chunks.map((candidate, index) => {
+  const chunks = document.chunks.map(candidate => {
     const identity = parseSparseVoxelGridPersistedChunkIdentity(
       candidate, schemaVersion as SparseVoxelGridPersistenceSchemaVersion,
     );
