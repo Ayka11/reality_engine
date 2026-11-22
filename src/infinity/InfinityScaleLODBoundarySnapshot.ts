@@ -147,8 +147,15 @@ export class InfinityScaleLODBoundarySnapshot {
           .filter(spec => spec.sourceLevel !== spec.targetLevel);
 
         for (const spec of specs) {
-          const read = this.read(spec, [x, y, z]);
-          if (!this.hasSourceChunk(spec.sourceChunk) || !read) {
+          // Coverage is a geometric/source-availability contract, not a field
+          // reduction. In particular, mixed ENTITY_ID / AGENT_MARK values on
+          // a fine face are valid topology and must not be collapsed merely
+          // to prove that every source cell can be read.
+          const mapping = mapInfinityScaleBoundaryCell(spec, [x, y, z], this.chunkSize);
+          const sourceCellsAvailable = mapping.sourceCells.length > 0 &&
+            mapping.sourceCells.every(sourceCell =>
+              this.readSourceCell(spec, sourceCell) !== null);
+          if (!this.hasSourceChunk(spec.sourceChunk) || !sourceCellsAvailable) {
             invalidBoundaryReads++;
             if (!firstInvalidRead) {
               firstInvalidRead = {
