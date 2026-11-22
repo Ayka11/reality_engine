@@ -86,6 +86,19 @@ export class WorldFieldVolumeRenderer {
   private readonly quaternion = new THREE.Quaternion()
   private readonly color = new THREE.Color()
   private readonly highColor = new THREE.Color()
+  private volumeDiagnostics = {
+    sampleCount: 0,
+    renderedCells: 0,
+    invalidSamples: 0,
+    duplicateCoordinates: 0,
+    activeCells: 0,
+    activeRatio: 0,
+    uniqueLayers: 0,
+    min: { x: 0, y: 0, z: 0 },
+    max: { x: 0, y: 0, z: 0 },
+    layerSpacing: { min: 0, max: 0, mean: 0, irregular: false },
+    bounds: { width: 0, height: 0, depth: 0 },
+  }
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -181,6 +194,15 @@ export class WorldFieldVolumeRenderer {
       ?? FIELD_PALETTES[0]
     let renderedCells = 0
     let activeCells = 0
+    let invalidSamples = 0
+    let duplicateCoordinates = 0
+    const coordinateKeys = new Set<string>()
+    const layerCoordinates = new Set<number>()
+    const bounds = {
+      minX: Number.POSITIVE_INFINITY, maxX: Number.NEGATIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY, maxY: Number.NEGATIVE_INFINITY,
+      minZ: Number.POSITIVE_INFINITY, maxZ: Number.NEGATIVE_INFINITY,
+    }
     // The samples are taken in world coordinates by FieldSampler. Render them
     // in a normalized local volume so X/Z cell spacing and Y slice spacing use
     // the same coordinate contract instead of an arbitrary visual layer offset.
@@ -206,7 +228,20 @@ export class WorldFieldVolumeRenderer {
           // FieldSampler.sampleWorld() records the sampled Y plane in sample.y.
           // The independent volumetric coordinate belongs to the slice descriptor.
           const sliceY = Number(slice.y)
-          if (![sampleX, sampleZ, sliceY].every(Number.isFinite)) continue
+          if (![sampleX, sampleZ, sliceY].every(Number.isFinite)) {
+            invalidSamples++
+            continue
+          }
+          const coordinateKey = `${sampleX}|${sliceY}|${sampleZ}`
+          if (coordinateKeys.has(coordinateKey)) duplicateCoordinates++
+          else coordinateKeys.add(coordinateKey)
+          layerCoordinates.add(sliceY)
+          bounds.minX = Math.min(bounds.minX, sampleX)
+          bounds.maxX = Math.max(bounds.maxX, sampleX)
+          bounds.minY = Math.min(bounds.minY, sliceY)
+          bounds.maxY = Math.max(bounds.maxY, sliceY)
+          bounds.minZ = Math.min(bounds.minZ, sampleZ)
+          bounds.maxZ = Math.max(bounds.maxZ, sampleZ)
 
           const value = Number(sample[frame.property]) || 0
           const normalized = THREE.MathUtils.clamp(value / maximum, 0, 1)
@@ -228,6 +263,34 @@ export class WorldFieldVolumeRenderer {
     }
 
     this.mesh.count = renderedCells
+    const sortedLayers = [...layerCoordinates].sort((a, b) => a - b)
+    const layerGaps = sortedLayers.slice(1).map((value, index) => value - sortedLayers[index])
+    const minLayerGap = layerGaps.length ? Math.min(...layerGaps) : 0
+    const maxLayerGap = layerGaps.length ? Math.max(...layerGaps) : 0
+    const meanLayerGap = layerGaps.length ? layerGaps.reduce((sum, value) => sum + value, 0) / layerGaps.length : 0
+    const finiteBounds = renderedCells > 0
+    this.volumeDiagnostics = {
+      sampleCount: capacity,
+      renderedCells,
+      invalidSamples,
+      duplicateCoordinates,
+      activeCells,
+      activeRatio: renderedCells ? activeCells / renderedCells : 0,
+      uniqueLayers: sortedLayers.length,
+      min: finiteBounds ? { x: bounds.minX, y: bounds.minY, z: bounds.minZ } : { x: 0, y: 0, z: 0 },
+      max: finiteBounds ? { x: bounds.maxX, y: bounds.maxY, z: bounds.maxZ } : { x: 0, y: 0, z: 0 },
+      layerSpacing: {
+        min: minLayerGap,
+        max: maxLayerGap,
+        mean: meanLayerGap,
+        irregular: layerGaps.length > 1 && maxLayerGap - minLayerGap > 1e-6,
+      },
+      bounds: finiteBounds ? {
+        width: bounds.maxX - bounds.minX,
+        height: bounds.maxY - bounds.minY,
+        depth: bounds.maxZ - bounds.minZ,
+      } : { width: 0, height: 0, depth: 0 },
+    }
     this.mesh.instanceMatrix.needsUpdate = true
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
 
@@ -281,6 +344,13 @@ export class WorldFieldVolumeRenderer {
       meshInstances: this.mesh?.count ?? 0,
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,
+      volume: {
+        ...this.volumeDiagnostics,
+        min: { ...this.volumeDiagnostics.min },
+        max: { ...this.volumeDiagnostics.max },
+        bounds: { ...this.volumeDiagnostics.bounds },
+        layerSpacing: { ...this.volumeDiagnostics.layerSpacing },
+      },
     }
   }
 
