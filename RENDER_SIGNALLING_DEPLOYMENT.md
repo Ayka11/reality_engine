@@ -22,13 +22,15 @@ The Render service is a signalling relay only. It does not host the Vite fronten
 
 ## Hugging Face Static Space
 
-Set the Space variable `VITE_SIGNAL_URL` to the full public WebSocket URL, including the path:
+In the Space Settings, add a runtime variable named `VITE_SIGNAL_URL` with the full public WebSocket URL, including the path:
 
 ```text
 wss://<render-service>.onrender.com/signal
 ```
 
-Then rebuild/restart the Static Space so Vite embeds the variable into the browser bundle. This URL is public configuration, not a secret.
+Static Spaces expose custom variables in the browser through `window.huggingface.variables`. The frontend reads this runtime value directly, so changing the Space variable does not require rebuilding the Vite bundle. Restart/reload the Space after changing its settings. The value is public configuration, not a secret.
+
+For non-Hugging-Face builds, `VITE_SIGNAL_URL` may also be supplied as a Vite build-time environment variable. When both are present, the Hugging Face runtime value takes precedence.
 
 Do not set `VITE_SIGNAL_URL` to an `https://` URL. It must use `wss://` in production (or `ws://` for local development).
 
