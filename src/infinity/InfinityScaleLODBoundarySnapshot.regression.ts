@@ -552,7 +552,7 @@ export function runInfinityScaleLODBoundaryRegression(): void {
       );
     }
     assertEqual(targets[0][F.DENSITY], 12.5, "ratio-2 prolongation density");
-    assertEqual(targets[7][F.TEMPERATURE], 287.4, "ratio-2 prolongation temperature");
+    assertEqual(targets[7][F.TEMPERATURE], Math.fround(287.4), "ratio-2 prolongation temperature (Float32 source precision)");
   }
 
   // Prolongation/restriction round trip for a uniform state. The state must
