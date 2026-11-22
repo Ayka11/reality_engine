@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildSignallingUrl } from '../src/network/signallingEndpoint.ts';
+import { buildSignallingUrl, getConfiguredSignallingUrl } from '../src/network/signallingEndpoint.ts';
 
 assert.equal(
   buildSignallingUrl('wss://example.onrender.com/signal', 'room-token-1234', 'https://example.hf.space/', false),
@@ -32,3 +32,19 @@ assert.equal(
   'invalid room IDs must not create a remote socket',
 );
 console.log('External signalling endpoint contract: PASS');
+
+assert.equal(
+  getConfiguredSignallingUrl(undefined, 'wss://runtime.onrender.com/signal'),
+  'wss://runtime.onrender.com/signal',
+  'Hugging Face runtime variable must configure the endpoint without a rebuild-time Vite variable',
+);
+assert.equal(
+  getConfiguredSignallingUrl('wss://build.onrender.com/signal', 'wss://runtime.onrender.com/signal'),
+  'wss://runtime.onrender.com/signal',
+  'Hugging Face runtime configuration must take precedence over the baked Vite fallback',
+);
+assert.equal(
+  getConfiguredSignallingUrl('wss://build.onrender.com/signal', undefined),
+  'wss://build.onrender.com/signal',
+  'Vite build configuration must remain supported outside Hugging Face Static',
+);
