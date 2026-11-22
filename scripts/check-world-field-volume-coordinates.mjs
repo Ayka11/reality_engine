@@ -14,6 +14,10 @@ assert.equal(compiled.diagnostics?.some(d => d.category === ts.DiagnosticCategor
 // to avoid rendering the volume as only a handful of isolated sheets.
 assert.match(appSource, /const depth=11,spacing=/,
   'volumetric field must sample eleven vertical slices')
+assert.match(appSource, /volume:rendered\?\.volume\?\?null/,
+  'field-volume diagnostics must be copied into the render state')
+assert.match(appSource, /volume: field3D\?\.volume \?\? volumeRenderer\?\.volume \?\? null/,
+  'runtime diagnostics must expose the volume geometry report')
 
 // FieldSampler.sampleWorld(x, y, z) stores the sampled plane in sample.y.
 // Therefore sample.y is constant within each horizontal slice and cannot be
