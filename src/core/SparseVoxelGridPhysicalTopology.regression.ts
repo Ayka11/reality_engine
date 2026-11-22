@@ -152,7 +152,8 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   const negativeAddress = grid.resolvePhysicalCellAddress(-1, 0, 0);
   if (expandedTopology === initialTopology ||
       expandedTopology.chunks.length !== grid.chunks.size ||
-      negativeAddress?.chunk.key !== "-1,0,0" ||
+      !negativeAddress ||
+      negativeAddress.chunk.key !== "-1,0,0" ||
       negativeAddress.localX !== 31) {
     throw new Error("SparseVoxelGrid physical topology did not reflect a newly inserted negative-coordinate chunk");
   }
