@@ -2,14 +2,17 @@
 
 ## Status
 
-Design checkpoint for Issue #50. This document does not enable adaptive topology changes. The current production gate in `InfinityScaleAdaptiveLODTransactionBridge` must remain fail-closed.
+Design checkpoint for Issue #50. Persistence identity schema v2 is implemented for snapshots, deltas, serialized chunks, and WorldSnapshot chunk payloads. This is an identity and migration contract only: the production `Chunk`/ `SparseVoxelGrid` runtime remains level-zero-only, coarse chunks are rejected before live publication, and the current production gate in `InfinityScaleAdaptiveLODTransactionBridge` must remain fail-closed.
 
 ## Verified current storage contracts
 
 - `SparseVoxelGrid` is the production grid and owns `Map<string, Chunk>`, dense front/back buffers, sparse chunk front/back buffers, dirty-chunk metadata, chunk-owner metadata, and a monotonic `mutationRevision`.
 - `Chunk` is fixed at `CHUNK_SIZE = 32`, stores exactly `32^3 * CELL_FIELDS` values in each of its front/back buffers, and has immutable integer `cx/cy/cz` coordinates. It has no LOD level or scale.
 - Sparse chunk keys are currently `cx,cy,cz`; global base-cell coordinates are resolved by floor division by 32.
-- `SparseVoxelGrid.captureState()/restoreState()` snapshot and restore both dense buffers, every sparse chunk's front/back buffers, active/access metadata, dense origin, active chunk range, dirty keys, and chunk-owner map. Restore validates the complete candidate before publishing and batches mutation revision changes.
+- `SparseVoxelGrid.captureState()` emits schema v2 snapshots with `level` and `scale` on every chunk entry. `restoreState()` upgrades schema-less/v1 legacy snapshots as level zero, validates the candidate topology and payloads, rejects coarse physical chunks in the current runtime, and only then publishes state.
+- `SparseVoxelGrid.serializeChunks()` emits level-zero records with explicit `level: 0` and `scale: 1`. `loadChunks()` accepts historical bare arrays, explicit v1/v2 versions, and directly serialized v2 arrays; it validates identities and buffers and rejects non-zero LOD before live publication.
+- `createSparseVoxelGridDelta()` emits schema v2 with complete chunk identities. `applySparseVoxelGridDelta()` checks source-topology preconditions and compiles the complete resulting snapshot topology so a new chunk cannot overlap an unchanged chunk.
+- `WorldSaveSystem` writes `chunks.schemaVersion: 2`, preserves the level/scale fields in the serialized records, and forwards the persisted version to `loadChunks()`. Reality-package conversion retains the nested chunk payload.
 - `InfinityScaleLODState` is a separate hierarchical store. Its `level:x,y,z` chunks each hold `32^3 * 24` Float32 values. Level N represents a chunk extent of `32 * 2^N` base cells per axis.
 - `InfinityScaleSpatialChunkMapping` proves geometric coverage between one hierarchical chunk and the complete set of level-zero SparseVoxelGrid chunk keys. It is a pure mapping operation; it does not move cell data or mutate topology.
 - The current adaptive transaction bridge validates source ownership, target geometry, dependency graph, and target collisions, then intentionally rejects every changed-LOD topology request before publication.
@@ -65,12 +68,12 @@ The physical store must understand level-aware chunk identity and scale before a
 
 This preflight establishes that a proposed set of level-aware chunk footprints is structurally valid before a future physical transaction is designed. It does **not** allocate or replace `Chunk` instances, move any of the 24 fields, mutate `SparseVoxelGrid`, publish ownership/dirty metadata, or make dense/GPU execution LOD-aware. It must therefore remain a validation primitive only.
 
-The physical storage audit also confirms that migration scope extends beyond the chunk map:
+The physical storage audit also confirms that persistence identity v2 is not equivalent to physical AMR support:
 
-- Existing dense-window indexing and front/back synchronization are level-zero assumptions.
-- Chunk serialization and load paths do not yet persist a physical LOD level or scale.
-- Snapshot/restore and mutation tracking must preserve level-aware identities and exact topology.
-- Worker, GPU readback, renderer, entity ownership, deltas, and boundary paths must either support coarse chunks explicitly or reject affected work before execution.
+- Existing dense-window indexing and front/back synchronization remain level-zero assumptions.
+- The current `Chunk` runtime object still stores only immutable `cx/cy/cz`; it has no LOD level or scale.
+- Snapshot, delta, and serialized-chunk payloads now retain v2 identity metadata, but this does not create level-aware `Chunk` instances or move any field data.
+- `restoreState()` and `loadChunks()` deliberately reject coarse chunks before publication; worker, GPU readback, renderer, entity ownership, and boundary paths remain level-zero-only or fail-closed.
 - `InfinityScaleLODState` remains a separate hierarchical store; it is not the authoritative physical chunk map.
 - `InfinityScaleSpatialChunkMapping` proves geometric coverage only; it does not transfer data or publish physical topology.
 - Region ownership and current execution planning still rely on the existing level-zero physical coverage and single-level region constraints.
@@ -89,11 +92,15 @@ A future mixed-level store must expose a separate, unambiguous base-space bounds
 
 ### Complete physical identity must travel through snapshots and deltas
 
-The current Chunk runtime identity consists only of immutable cx/cy/cz. SparseVoxelGrid snapshots, serialized chunks, chunk deltas, dirty keys, and owner keys also use the legacy cx,cy,cz key and do not carry a physical level or scale. Delta application currently matches chunks by key and applies buffer changes after that key match.
+The current `Chunk` runtime identity still consists only of immutable `cx/cy/cz`; the live map, dirty-key set, and owner map therefore remain level-zero runtime structures. Persistence records now carry the separate, complete v2 physical identity tuple `(level, cx, cy, cz)` with the invariant `scale = 2^level`:
 
-This is insufficient for AMR. The future physical identity must be the tuple (level, cx, cy, cz) with the invariant scale = 2^level. Every serialized chunk, snapshot entry, delta before/after entry, dirty key, and owner key must agree on that full identity. Validate key, coordinates, level, and scale together before applying a delta or publishing a restored snapshot. A delta must not be allowed to reinterpret a same-string key as a different physical chunk.
+- Snapshot chunk entries and chunk-delta entries include `level` and `scale`; newly captured snapshots and generated deltas declare schema v2.
+- Serialized chunk records include `level` and `scale`; the containing `WorldSnapshot.chunks` object declares `schemaVersion: 2`.
+- Historical snapshots without a version and historical bare chunk arrays are interpreted as v1 level-zero records only when the canonical legacy key agrees with all three coordinates. Mixed or contradictory version/LOD declarations are rejected.
+- Delta application validates the physical identity of each entry and its full before/after chunk snapshots, checks source-topology preconditions, and validates the complete resulting topology after applying changes. This catches overlap between a new delta chunk and unchanged resident chunks.
+- The current live `SparseVoxelGrid.restoreState()` and `loadChunks()` paths accept level zero only. They reject coarse records before publishing state. Dirty and owner metadata remain level-zero string keys until their owning runtime structures are migrated.
 
-Persistence migration must be versioned. A legacy record without level/scale may be interpreted as level zero only when its legacy key is canonical and agrees with all three coordinates. New records must include the schema version and explicit level/scale. Reject mixed or contradictory legacy/new declarations rather than guessing. Snapshot restore and delta application must validate the complete candidate topology (including duplicate identities and overlapping base-space footprints) before publishing any state.
+This is a persistence and validation migration, not an AMR storage implementation. No level-N chunk buffers are instantiated, no fine/coarse data transfer occurs, and no production changed-LOD transaction is authorized.
 
 ### Do not conflate the separate grid implementations
 
@@ -108,4 +115,8 @@ The latter three must not be mechanically migrated as if they were alternate vie
 
 ### Safe next implementation boundary
 
-The next code increment should be an isolated physical identity/bounds utility and regression suite. It may define canonical level-aware identity, scale derivation, safe half-open base-space bounds, and conversion of validated legacy level-zero keys. It must not yet change Chunk, SparseVoxelGrid, snapshots, deltas, dense synchronization, or the production adaptive transaction gate. That isolates arithmetic and identity validation before introducing a storage migration with a much larger rollback surface.
+The identity and topology-preflight utilities, v2 persistence migration, and snapshot/delta overlap checks are now implemented. The next implementation boundary is the physical runtime model, not another key-format helper.
+
+Before enabling mixed-level chunks, define and test a level-aware physical chunk record/runtime with safe half-open base-space bounds, deterministic base-cell lookup, and explicit mutation/revision ownership. Then audit and migrate the current level-zero assumptions in `activeChunkRange`, dense-window synchronization, entity ownership, dirty/owner metadata, worker/GPU readback, renderer, and boundary exchange. Preserve the existing `Chunk` and level-zero APIs until every affected consumer has an explicit compatibility path.
+
+Only after that runtime contract exists should the 24-field restriction/prolongation transfer rules and atomic refine/coarsen transaction be implemented. The current persistence v2 metadata must not be treated as evidence that those operations are available, and the production changed-LOD rejection gate must remain in place until the real-grid conservation, failure-injection rollback, and exact-head CI acceptance suite passes.
