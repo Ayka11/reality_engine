@@ -3,6 +3,7 @@ import {
   applySparseVoxelGridDelta,
   createSparseVoxelGridDelta,
   SparseVoxelGrid,
+  type SparseVoxelGridDelta,
   type SparseVoxelGridSnapshot,
 } from "./SparseVoxelGrid";
 import { runSparseVoxelGridPersistenceSchemaRegression } from "./SparseVoxelGridPersistenceSchema.regression";
@@ -92,6 +93,46 @@ function runSparseVoxelGridSnapshotDeltaV2Regression(): void {
   if (!contradictoryRejected ||
       JSON.stringify(restored.captureState()) !== beforeRejectedRestore) {
     throw new Error("SparseVoxelGrid accepted a contradictory v2 identity or mutated state before rejecting it");
+  }
+
+  // A delta entry can have a valid v2 identity yet overlap an unchanged
+  // resident chunk. Applying the candidate must compile the complete resulting
+  // topology and reject that collision before returning a snapshot.
+  const baseChunk = after.chunks.find(chunk => chunk.key === "0,0,0");
+  if (!baseChunk) throw new Error("SparseVoxelGrid overlap fixture omitted the base chunk");
+  const overlappingFull = {
+    ...baseChunk,
+    key: "1:0,0,0",
+    level: 1,
+    scale: 2,
+    buffer: new Float32Array(baseChunk.buffer),
+    backBuffer: new Float32Array(baseChunk.backBuffer),
+  };
+  const overlappingDelta: SparseVoxelGridDelta = {
+    ...delta,
+    chunks: [
+      ...delta.chunks,
+      {
+        key: "1:0,0,0",
+        cx: 0,
+        cy: 0,
+        cz: 0,
+        level: 1,
+        scale: 2,
+        beforeExists: false,
+        afterExists: true,
+        afterFull: overlappingFull,
+      },
+    ],
+  };
+  let overlappingTopologyRejected = false;
+  try {
+    applySparseVoxelGridDelta(before, overlappingDelta, "after");
+  } catch {
+    overlappingTopologyRejected = true;
+  }
+  if (!overlappingTopologyRejected) {
+    throw new Error("SparseVoxelGrid delta application accepted an overlapping resulting physical topology");
   }
 
   let staleDeltaRejected = false;

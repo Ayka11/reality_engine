@@ -325,6 +325,11 @@ export function applySparseVoxelGridDelta(
   result.dirtyChunks = [...(direction === "before" ? versionedDelta.beforeDirtyChunks : versionedDelta.afterDirtyChunks)];
   result.chunkOwners = (direction === "before" ? versionedDelta.beforeChunkOwners : versionedDelta.afterChunkOwners)
     .map(entry => [...entry] as [string, string]);
+
+  // Validate the complete resulting topology, not only each delta entry.
+  // Individually valid level-aware keys can still overlap unchanged chunks
+  // when combined into the destination snapshot.
+  upgradeSparseVoxelGridSnapshotIdentity(result);
   return result;
 }
 
