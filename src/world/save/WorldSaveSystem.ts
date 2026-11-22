@@ -42,7 +42,10 @@ interface GridLike {
   chunkSize?: number;
   activeChunkCount?: number;
   serializeChunks?: (includeEmpty?: boolean) => NonNullable<WorldSnapshot['chunks']>['serialized'];
-  loadChunks?: (chunks: NonNullable<WorldSnapshot['chunks']>['serialized']) => void;
+  loadChunks?: (
+    chunks: NonNullable<WorldSnapshot['chunks']>['serialized'],
+    schemaVersion?: NonNullable<WorldSnapshot['chunks']>['schemaVersion'],
+  ) => void;
   syncDenseToChunks?: () => void;
   syncBackBuffersFromFront?: () => void;
 }
@@ -249,6 +252,7 @@ export class WorldSaveSystem {
       metadata: this.calculateMetadata(activeLaws.length),
       causalLog: this.context.getCausalLog?.() ?? [],
       chunks: this.voxelGrid.serializeChunks ? {
+        schemaVersion: 2,
         chunkSize: this.voxelGrid.chunkSize ?? 32,
         activeCount: this.voxelGrid.activeChunkCount ?? 0,
         serialized: this.voxelGrid.serializeChunks(false),
@@ -333,7 +337,10 @@ export class WorldSaveSystem {
       // Load chunks first because loadChunks synchronizes their state into the dense
       // window; the packed field snapshot is authoritative for that dense window.
       if (this.voxelGrid.loadChunks) {
-        this.voxelGrid.loadChunks(snapshot.chunks?.serialized ?? []);
+        this.voxelGrid.loadChunks(
+          snapshot.chunks?.serialized ?? [],
+          snapshot.chunks?.schemaVersion,
+        );
       }
       this.serializer.applyFields(snapshot.fields, this.voxelGrid.buffer);
       // Publish packed dense fields into overlapping chunks and align front/back
