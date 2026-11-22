@@ -76,3 +76,36 @@ The physical storage audit also confirms that migration scope extends beyond the
 - Region ownership and current execution planning still rely on the existing level-zero physical coverage and single-level region constraints.
 
 The adaptive transaction bridge remains fail-closed for changed-LOD physical topology. Passing the topology preflight, LOD transfer regressions, or boundary coverage checks is not sufficient to remove that gate.
+
+## Additional storage-boundary audit: range, identity, and persistence
+
+The remaining source audit confirms three important boundaries that must be explicit in the physical AMR design.
+
+### activeChunkRange is not a mixed-level physical bounds descriptor
+
+SparseVoxelGrid.activeChunkRange is the min/max envelope of the current chunk-coordinate topology. Its current semantics are valid only while all physical chunks share the level-zero coordinate system. It is not a base-space AABB for a mixed-level topology: comparing a level-2 chunk coordinate with a level-0 chunk coordinate does not compare their physical extents.
+
+A future mixed-level store must expose a separate, unambiguous base-space bounds contract (preferably half-open bounds: minimum inclusive, maximum exclusive), derived from each chunk's origin = coord * CHUNK_SIZE * 2^level and extent = CHUNK_SIZE * 2^level. Keep activeChunkRange legacy-compatible for level-zero callers until every consumer has been migrated; do not silently reinterpret its existing values.
+
+### Complete physical identity must travel through snapshots and deltas
+
+The current Chunk runtime identity consists only of immutable cx/cy/cz. SparseVoxelGrid snapshots, serialized chunks, chunk deltas, dirty keys, and owner keys also use the legacy cx,cy,cz key and do not carry a physical level or scale. Delta application currently matches chunks by key and applies buffer changes after that key match.
+
+This is insufficient for AMR. The future physical identity must be the tuple (level, cx, cy, cz) with the invariant scale = 2^level. Every serialized chunk, snapshot entry, delta before/after entry, dirty key, and owner key must agree on that full identity. Validate key, coordinates, level, and scale together before applying a delta or publishing a restored snapshot. A delta must not be allowed to reinterpret a same-string key as a different physical chunk.
+
+Persistence migration must be versioned. A legacy record without level/scale may be interpreted as level zero only when its legacy key is canonical and agrees with all three coordinates. New records must include the schema version and explicit level/scale. Reject mixed or contradictory legacy/new declarations rather than guessing. Snapshot restore and delta application must validate the complete candidate topology (including duplicate identities and overlapping base-space footprints) before publishing any state.
+
+### Do not conflate the separate grid implementations
+
+The repository contains distinct storage/execution contracts that are not interchangeable:
+
+- SparseVoxelGrid is the physical sparse chunk store discussed by Issue #50; it uses 32³ chunks and string spatial keys.
+- ChunkGrid is a separate worker simulation grid with 8³ chunks and numeric chunk keys, its own snapshot/restore contract, and a separate field layout.
+- SparseGrid is a separate cell-level sparse structure.
+- VoxelGrid is a dense grid implementation.
+
+The latter three must not be mechanically migrated as if they were alternate views of SparseVoxelGrid. Any future cross-grid adapter needs its own explicit data, ownership, snapshot, and execution contract.
+
+### Safe next implementation boundary
+
+The next code increment should be an isolated physical identity/bounds utility and regression suite. It may define canonical level-aware identity, scale derivation, safe half-open base-space bounds, and conversion of validated legacy level-zero keys. It must not yet change Chunk, SparseVoxelGrid, snapshots, deltas, dense synchronization, or the production adaptive transaction gate. That isolates arithmetic and identity validation before introducing a storage migration with a much larger rollback surface.
