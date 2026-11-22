@@ -80,6 +80,12 @@ The physical storage audit also confirms that persistence identity v2 is not equ
 
 The adaptive transaction bridge remains fail-closed for changed-LOD physical topology. Passing the topology preflight, LOD transfer regressions, or boundary coverage checks is not sufficient to remove that gate.
 
+## Base-cell to stored-cell addressing (implemented; pure utility)
+
+`resolveSparseVoxelGridPhysicalCell(topology, x, y, z)` now resolves an integer base-resolution coordinate to a complete physical cell address: canonical chunk descriptor, local `x/y/z`, cell index, and Float32 field-buffer offset. For a level-`N` chunk, each stored cell covers `2^N` base cells on every axis, so local coordinates are computed as `floor((baseCoordinate - minBound) / scale)`. This uses the chunk's half-open base-space bounds and preserves correct behavior for negative coordinates and adjacent mixed-level chunks.
+
+The helper is tested at positive and negative coordinates, across a level-2/level-0 boundary, and for the final local cell and field-buffer stride. It remains a pure addressing function: it does not read or mutate chunk buffers, does not change `SparseVoxelGrid.getCell()`, and does not enable physical refine/coarsen or mixed-LOD execution. The next step is a level-aware physical chunk runtime record with independent front/back storage and mutation/recovery ownership.
+
 ## Additional storage-boundary audit: range, identity, and persistence
 
 The remaining source audit confirms three important boundaries that must be explicit in the physical AMR design.

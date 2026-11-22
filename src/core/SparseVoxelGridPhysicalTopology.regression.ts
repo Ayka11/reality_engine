@@ -1,7 +1,10 @@
+import { CELL_FIELDS } from "./CellState";
+import { CHUNK_SIZE } from "./Chunk";
 import {
   compileSparseVoxelGridPhysicalTopology,
   formatSparseVoxelGridPhysicalChunkKey,
   parseSparseVoxelGridPhysicalChunkKey,
+  resolveSparseVoxelGridPhysicalCell,
   resolveSparseVoxelGridPhysicalChunk,
 } from "./SparseVoxelGridPhysicalTopology";
 
@@ -46,6 +49,53 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
       );
     }
   }
+
+  // Resolve base-cell coordinates to the stored cell at that chunk's LOD.
+  // The same base-space footprint maps to different local cell indices by scale.
+  const cellAddressCases = [
+    { point: [127, 127, 127] as const, key: "2:0,0,0", local: [31, 31, 31] as const },
+    { point: [128, 1, 1] as const, key: "4,0,0", local: [0, 1, 1] as const },
+    { point: [-1, 63, 63] as const, key: "1:-1,0,0", local: [31, 31, 31] as const },
+    { point: [-65, 1, 1] as const, key: "-3,0,0", local: [31, 1, 1] as const },
+  ] as const;
+  for (const candidate of cellAddressCases) {
+    const address = resolveSparseVoxelGridPhysicalCell(
+      topology,
+      candidate.point[0],
+      candidate.point[1],
+      candidate.point[2],
+    );
+    const [localX, localY, localZ] = candidate.local;
+    const expectedCellIndex = (localZ * CHUNK_SIZE + localY) * CHUNK_SIZE + localX;
+    if (!address ||
+        address.chunk.key !== candidate.key ||
+        address.localX !== localX ||
+        address.localY !== localY ||
+        address.localZ !== localZ ||
+        address.cellIndex !== expectedCellIndex ||
+        address.bufferOffset !== expectedCellIndex * CELL_FIELDS ||
+        address.bufferOffset + CELL_FIELDS > CHUNK_SIZE ** 3 * CELL_FIELDS ||
+        !Object.isFrozen(address) ||
+        !Object.isFrozen(address.chunk)) {
+      throw new Error(
+        "Sparse physical cell addressing returned an inconsistent local cell for " +
+        candidate.point.join(","),
+      );
+    }
+  }
+
+  // Half-open upper bounds must place adjacent cells into the next chunk.
+  const leftOfBoundary = resolveSparseVoxelGridPhysicalCell(topology, 127, 0, 0);
+  const atBoundary = resolveSparseVoxelGridPhysicalCell(topology, 128, 0, 0);
+  if (leftOfBoundary?.chunk.key !== "2:0,0,0" ||
+      atBoundary?.chunk.key !== "4,0,0") {
+    throw new Error("Sparse physical cell addressing violated half-open adjacent-LOD chunk bounds");
+  }
+  if (resolveSparseVoxelGridPhysicalCell(topology, 160, 0, 0) !== null) {
+    throw new Error("Sparse physical cell addressing resolved a base cell outside the topology");
+  }
+  expectRejected("non-integer physical cell coordinates", () =>
+    resolveSparseVoxelGridPhysicalCell(topology, 0.5, 0, 0));
 
   if (resolveSparseVoxelGridPhysicalChunk(topology, 160, 0, 0) !== null) {
     throw new Error("Sparse physical topology resolved a base cell outside all registered chunks");
