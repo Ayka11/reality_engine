@@ -181,26 +181,39 @@ export class WorldFieldVolumeRenderer {
       ?? FIELD_PALETTES[0]
     let renderedCells = 0
     let activeCells = 0
-    const layerSeparation = 2.2
+    // The samples are taken in world coordinates by FieldSampler. Render them
+    // in a normalized local volume so X/Z cell spacing and Y slice spacing use
+    // the same coordinate contract instead of an arbitrary visual layer offset.
     const spacing = Math.max(1, Number(frame.spacing) || 1)
+    const cellWidth = (Math.max(1, Number(frame.view.visibleRadius) * 2)) / Math.max(1, frame.cols)
+    const cellDepth = (Math.max(1, Number(frame.view.visibleRadius) * 2)) / Math.max(1, frame.rows)
+    const cellSize = 0.96
+    const centerY = Number.isFinite(frame.view.sliceY) ? frame.view.sliceY : 0
 
     for (let sliceIndex = 0; sliceIndex < frame.slices.length; sliceIndex++) {
       const slice = frame.slices[sliceIndex]
       const data = slice.data
-      const layerY = ((slice.y - frame.view.sliceY) / spacing) * layerSeparation
       for (let py = 0; py < data.height; py++) {
         for (let px = 0; px < data.width; px++) {
           const sample = data.samples[py * data.width + px]
           if (!sample) continue
 
+          // Do not reconstruct positions from array indices: the sample's
+          // world-space coordinates are authoritative and remain aligned with
+          // the shared WorldViewContract even when the view is panned.
+          const sampleX = Number(sample.x)
+          const sampleY = Number(sample.y)
+          const sampleZ = Number(sample.z)
+          if (![sampleX, sampleY, sampleZ].every(Number.isFinite)) continue
+
           const value = Number(sample[frame.property]) || 0
           const normalized = THREE.MathUtils.clamp(value / maximum, 0, 1)
-          const cellHeight = 0.12 + normalized * 1.28
-          const x = px - (data.width - 1) / 2
-          const z = py - (data.height - 1) / 2
+          const x = (sampleX - frame.view.center.x) / cellWidth
+          const y = (sampleY - centerY) / spacing
+          const z = (sampleZ - frame.view.center.z) / cellDepth
 
-          this.position.set(x, layerY + cellHeight / 2, z)
-          this.scale.set(0.82, cellHeight, 0.82)
+          this.position.set(x, y, z)
+          this.scale.set(cellWidth > 0 ? cellSize : 0, cellSize, cellDepth > 0 ? cellSize : 0)
           this.matrix.compose(this.position, this.quaternion, this.scale)
           this.mesh.setMatrixAt(renderedCells, this.matrix)
 
@@ -230,15 +243,15 @@ export class WorldFieldVolumeRenderer {
       this.scene.add(this.gridHelper)
     }
     const layerOffsets = frame.slices.map(
-      slice => ((slice.y - frame.view.sliceY) / spacing) * layerSeparation,
+      slice => (slice.y - centerY) / spacing,
     )
     const lowestLayer = layerOffsets.length ? Math.min(...layerOffsets) : 0
     this.gridHelper.position.y = lowestLayer - 0.14
 
     if (!this.cameraFramed) {
-      const span = Math.max(frame.cols, frame.rows, frame.slices.length * 2.2, 6)
-      this.camera.position.set(span * 1.15, span * 0.95 + 2, span * 1.25)
-      this.controls.target.set(0, 0.15, 0)
+      const span = Math.max(frame.cols, frame.rows, frame.slices.length, 6)
+      this.camera.position.set(span * 1.45, span * 1.2, span * 1.55)
+      this.controls.target.set(0, 0, 0)
       this.controls.update()
       this.cameraFramed = true
     }
