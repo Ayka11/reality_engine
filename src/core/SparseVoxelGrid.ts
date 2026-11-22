@@ -465,7 +465,10 @@ export class SparseVoxelGrid {
     this.#_sparseDenseBackBuffer = new Float32Array(this.size * CELL_FIELDS);
     this.#_sparseDenseBufferView = createTrackedFloat32Array(this.#_sparseDenseBuffer, () => this.#markMutation());
     this.#_sparseDenseBackBufferView = createTrackedFloat32Array(this.#_sparseDenseBackBuffer, () => this.#markMutation());
-    this.chunks = new MutationTrackedChunkMap(() => this.#onChunkMapMutation());
+    this.chunks = new MutationTrackedChunkMap(
+      () => this.#onChunkMapMutation(),
+      () => this.#markMutation(),
+    );
     Object.defineProperties(this, {
       chunks: { writable: false, configurable: false },
       dirtyChunks: { writable: false, configurable: false },
@@ -1398,8 +1401,11 @@ class MutationTrackedMap<K, V> extends Map<K, V> {
 class MutationTrackedChunkMap extends Map<string, Chunk> {
   readonly #registrations = new Map<Chunk, { listener: () => void; references: number }>();
   #onMutation: () => void;
-  constructor(onMutation: () => void) {
-    super(); this.#onMutation = onMutation;
+  #onChunkContentMutation: () => void;
+  constructor(onMutation: () => void, onChunkContentMutation: () => void) {
+    super();
+    this.#onMutation = onMutation;
+    this.#onChunkContentMutation = onChunkContentMutation;
     Object.defineProperties(this, {
       set: { value: this.set.bind(this), writable: false, configurable: false },
       delete: { value: this.delete.bind(this), writable: false, configurable: false },
@@ -1413,7 +1419,10 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
       existing.references++;
       return;
     }
-    const listener = () => this.#onMutation();
+    // Cell-buffer changes advance the grid revision but do not change the
+    // physical topology or active chunk range. Keep them off the map-change
+    // path so cached physical addressing is not rebuilt for every cell write.
+    const listener = () => this.#onChunkContentMutation();
     this.#registrations.set(chunk, { listener, references: 1 });
     chunk.addMutationListener(listener);
   }
