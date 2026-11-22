@@ -24,6 +24,17 @@ assert.match(rendererSource, /const y = \(sliceY - centerY\) \/ spacing/,
   'slice planes must map to distinct normalized vertical coordinates')
 assert.doesNotMatch(rendererSource, /const y = \(sampleY - centerY\) \/ spacing/,
   'sample.y must not collapse every voxel in a slice onto the same height')
+for (const diagnostic of [
+  'invalidSamples',
+  'duplicateCoordinates',
+  'activeRatio',
+  'uniqueLayers',
+  'layerSpacing',
+  'bounds',
+]) {
+  assert.ok(rendererSource.includes(diagnostic),
+    `volume diagnostics must expose ${diagnostic}`)
+}
 
 // Regression fixture: all samples in each plane carry the plane Y, while the
 // slice descriptor supplies the independent layer coordinate.
