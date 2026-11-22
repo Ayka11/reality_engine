@@ -4,6 +4,8 @@ import ts from "typescript";
 
 const root = new URL("../", import.meta.url);
 const saveSystemSource = await readFile(new URL("src/world/save/WorldSaveSystem.ts", root), "utf8");
+const saveFormatsSource = await readFile(new URL("src/world/save/SaveFormats.ts", root), "utf8");
+const sparseGridSource = await readFile(new URL("src/core/SparseVoxelGrid.ts", root), "utf8");
 const saveManagerSource = await readFile(new URL("src/world/save/SaveManager.ts", root), "utf8");
 const mainSource = await readFile(new URL("src/main.ts", root), "utf8");
 const rendererSource = await readFile(new URL("src/render/InfiniteWorldRenderer.ts", root), "utf8");
@@ -21,6 +23,19 @@ const multiplayerSource = await readFile(new URL("src/network/MultiplayerSync.ts
 const simulationEngineSource = await readFile(new URL("src/simulation/SimulationEngine.ts", root), "utf8");
 assert.match(saveSystemSource, /const mutate = this\.context\.mutateAuthoritativeState;/,
   "world snapshot import must use the authoritative simulation transaction");
+assert.match(saveSystemSource,
+  /chunks: this\.voxelGrid\.serializeChunks \? \{\s*schemaVersion: 2,[\s\S]*?serialized: this\.voxelGrid\.serializeChunks\(false\)/,
+  "new WorldSnapshot saves must declare sparse-chunk persistence schema v2");
+assert.match(saveSystemSource,
+  /this\.voxelGrid\.loadChunks\(\s*snapshot\.chunks\?\.serialized \?\? \[\],\s*snapshot\.chunks\?\.schemaVersion,\s*\)/,
+  "world restore must forward the persisted sparse-chunk schema version");
+assert.match(saveFormatsSource, /schemaVersion\?: 1 \| 2/,
+  "WorldSnapshot must accept legacy unversioned/v1 and current v2 chunk collections");
+assert.match(saveFormatsSource, /level\?: number;\s*scale\?: number;/,
+  "WorldSnapshot chunk records must retain optional legacy and v2 LOD identity fields");
+assert.match(sparseGridSource,
+  /upgradeSparseVoxelGridPersistenceDocument\(persistedDocument\)[\s\S]*?data\.level !== 0 \|\| data\.scale !== 1/,
+  "SparseVoxelGrid must migrate and validate physical chunk identities before publication");
 assert.match(saveSystemSource, /await this\.captureSnapshotAtBoundary\(name\)/,
   "quick save and package export must capture at a frame boundary");
 assert.match(saveSystemSource, /this\.context\.runAtStepBoundary/,
