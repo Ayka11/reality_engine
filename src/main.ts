@@ -1671,21 +1671,43 @@ function updateEconPanel(): void {
 }
 
 // Multiplayer
-document.getElementById('btnMultiplayer')?.addEventListener('click', () => {
-  const btn = document.getElementById('btnMultiplayer')!;
+const multiplayerButton = document.getElementById('btnMultiplayer') as HTMLButtonElement | null;
+const copyRoomLinkButton = document.getElementById('btnCopyRoomLink') as HTMLButtonElement | null;
+const getSharedRoomToken = (): string => {
+  const token = new URLSearchParams(window.location.search).get('room') || '';
+  return /^[A-Za-z0-9_-]{12,64}$/.test(token) ? token : '';
+};
+if (copyRoomLinkButton) {
+  copyRoomLinkButton.style.display = getSharedRoomToken() ? 'inline-flex' : 'none';
+  copyRoomLinkButton.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      document.getElementById('scriptLog')!.textContent = 'Shared room link copied. Open it on the other device to join this room.';
+    } catch {
+      window.prompt('Copy this shared room link:', window.location.href);
+    }
+  });
+}
+multiplayerButton?.addEventListener('click', () => {
   if (!multiplay.connected) {
+    let room = getSharedRoomToken();
+    if (!room) {
+      room = crypto.randomUUID().replace(/-/g, '');
+      const url = new URL(window.location.href);
+      url.searchParams.set('room', room);
+      document.getElementById('scriptLog')!.textContent = 'Creating a shared room. The page will reload; then click Multiplayer again and share the room link.';
+      window.location.assign(url.toString());
+      return;
+    }
     const uid = multiplay.connect();
-    btn.textContent = `Disconnect (${uid})`;
-    btn.style.color = '#4caf7d';
-    const room = new URLSearchParams(window.location.search).get('room') || '';
-    const sharedRoom = /^[A-Za-z0-9_-]{12,64}$/.test(room);
-    document.getElementById('scriptLog')!.textContent = sharedRoom
-      ? `Connected as ${uid} — cross-device room: ${room}`
-      : `Connected as ${uid} — same-browser tabs only. For cross-device collaboration, open this URL with ?room=YOUR_SHARED_TOKEN on each device.`;
+    multiplayerButton.textContent = `Disconnect (${uid})`;
+    multiplayerButton.style.color = '#4caf7d';
+    if (copyRoomLinkButton) copyRoomLinkButton.style.display = 'inline-flex';
+    document.getElementById('scriptLog')!.textContent = `Connected as ${uid} — cross-device room: ${room}`;
   } else {
     multiplay.disconnect();
-    btn.textContent = '🔗 Multiplayer';
-    btn.style.color = '';
+    multiplayerButton.textContent = '🔗 Multiplayer';
+    multiplayerButton.style.color = '';
     document.getElementById('scriptLog')!.textContent = 'Disconnected from multiplayer';
   }
 });
