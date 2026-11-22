@@ -1,6 +1,6 @@
 import { SimulationEngine } from '../simulation/SimulationEngine';
 import { CELL_FIELDS } from '../core/CellState';
-import { buildSignallingUrl } from './signallingEndpoint';
+import { buildSignallingUrl, getConfiguredSignallingUrl } from './signallingEndpoint';
 
 interface PeerInfo { color: string; lastSeen: number; }
 interface CursorInfo { x: number; y: number; tool: string; color: string; ts: number; }
@@ -43,8 +43,12 @@ export class MultiplayerSync {
       this.roomId ? `reality_engine_v4:${this.roomId}` : 'reality_engine_v4'
     );
     this._listen();
+    const runtimeSignalUrl = (window as Window & {
+      huggingface?: { variables?: Record<string, string | undefined> };
+    }).huggingface?.variables?.VITE_SIGNAL_URL;
+    const configuredSignalUrl = getConfiguredSignallingUrl(import.meta.env.VITE_SIGNAL_URL, runtimeSignalUrl);
     const signallingUrl = this.roomId
-      ? buildSignallingUrl(import.meta.env.VITE_SIGNAL_URL, this.roomId, window.location.href, import.meta.env.DEV)
+      ? buildSignallingUrl(configuredSignalUrl, this.roomId, window.location.href, import.meta.env.DEV)
       : null;
     if (signallingUrl && typeof WebSocket !== 'undefined') {
       this.socket = new WebSocket(signallingUrl);
