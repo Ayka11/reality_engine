@@ -29,3 +29,13 @@ export function buildSignallingUrl(
   endpoint.searchParams.set('room', roomId);
   return endpoint.toString();
 }
+
+export function getConfiguredSignallingUrl(
+  viteConfiguredUrl: string | undefined,
+  runtimeConfiguredUrl: string | undefined,
+): string | undefined {
+  const runtime = runtimeConfiguredUrl?.trim();
+  if (runtime) return runtime;
+  const vite = viteConfiguredUrl?.trim();
+  return vite || undefined;
+}
