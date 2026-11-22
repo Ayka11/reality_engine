@@ -36,7 +36,7 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
       candidate.point[1],
       candidate.point[2],
     );
-    if (resolved?.key !== candidate.key || resolved.level !== candidate.level) {
+    if (!resolved || resolved.key !== candidate.key || resolved.level !== candidate.level) {
       throw new Error(
         "Sparse physical topology resolved " + candidate.point.join(",") +
         " to " + String(resolved?.key) + " instead of " + candidate.key,
