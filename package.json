@@ -98,7 +98,9 @@
     "test:save-manager": "node scripts/check-save-manager.mjs",
     "test:world-observability-ownership": "npx --yes tsx scripts/check-world-observability-ownership.ts",
     "test:world-field-sample-ownership": "npx --yes tsx scripts/check-world-field-sample-ownership.ts",
-    "test:scientific-field-registry-ownership": "npx --yes tsx scripts/check-scientific-field-registry-ownership.ts"
+    "test:scientific-field-registry-ownership": "npx --yes tsx scripts/check-scientific-field-registry-ownership.ts",
+    "test:signalling-endpoint": "node --experimental-strip-types scripts/check-signalling-endpoint.mjs",
+    "start:render-signalling": "node server/render-signalling-server.js"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
