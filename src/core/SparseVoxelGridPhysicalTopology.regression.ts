@@ -1,5 +1,6 @@
 import { CELL_FIELDS } from "./CellState";
-import { CHUNK_SIZE } from "./Chunk";
+import { Chunk, CHUNK_SIZE } from "./Chunk";
+import { SparseVoxelGrid } from "./SparseVoxelGrid";
 import {
   compileSparseVoxelGridPhysicalTopology,
   formatSparseVoxelGridPhysicalChunkKey,
@@ -128,5 +129,42 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   expectRejected("a caller-created topology object", () =>
     resolveSparseVoxelGridPhysicalChunk({ chunks: [] }, 0, 0, 0));
 
-  console.log("SparseVoxelGrid mixed-LOD physical topology preflight and coordinate lookup: PASS");
+  // SparseVoxelGrid exposes one canonical immutable index derived from its
+  // authoritative map. Repeated reads reuse the snapshot; cell writes do not
+  // invalidate topology, while structural map changes do.
+  const grid = new SparseVoxelGrid(1, 1, 1);
+  const initialTopology = grid.physicalTopology;
+  if (initialTopology !== grid.physicalTopology ||
+      initialTopology.chunks.length !== grid.chunks.size ||
+      initialTopology.chunks[0]?.key !== "0,0,0") {
+    throw new Error("SparseVoxelGrid did not cache its canonical physical topology snapshot");
+  }
+  const initialRevision = grid.mutationRevision;
+  const originChunk = grid.chunks.get("0,0,0");
+  if (!originChunk) throw new Error("SparseVoxelGrid did not seed its origin chunk");
+  originChunk.buffer[0] = 3.5;
+  if (grid.mutationRevision <= initialRevision || grid.physicalTopology !== initialTopology) {
+    throw new Error("Chunk content mutation incorrectly invalidated physical topology or skipped revision tracking");
+  }
+  const negativeChunk = new Chunk(-1, 0, 0);
+  grid.chunks.set("-1,0,0", negativeChunk);
+  const expandedTopology = grid.physicalTopology;
+  const negativeAddress = grid.resolvePhysicalCellAddress(-1, 0, 0);
+  if (expandedTopology === initialTopology ||
+      expandedTopology.chunks.length !== grid.chunks.size ||
+      negativeAddress?.chunk.key !== "-1,0,0" ||
+      negativeAddress.localX !== 31) {
+    throw new Error("SparseVoxelGrid physical topology did not reflect a newly inserted negative-coordinate chunk");
+  }
+  if (!grid.chunks.delete("-1,0,0")) {
+    throw new Error("SparseVoxelGrid failed to remove a topology test chunk");
+  }
+  const restoredTopology = grid.physicalTopology;
+  if (restoredTopology === expandedTopology ||
+      restoredTopology.chunks.some(chunk => chunk.key === "-1,0,0") ||
+      grid.resolvePhysicalCellAddress(-1, 0, 0) !== null) {
+    throw new Error("SparseVoxelGrid physical topology cache remained stale after chunk deletion");
+  }
+
+  console.log("SparseVoxelGrid mixed-LOD physical topology preflight, grid index lifecycle and coordinate lookup: PASS");
 }
