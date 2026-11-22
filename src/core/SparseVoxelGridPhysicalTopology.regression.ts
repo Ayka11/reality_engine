@@ -1,5 +1,7 @@
 import {
   compileSparseVoxelGridPhysicalTopology,
+  formatSparseVoxelGridPhysicalChunkKey,
+  parseSparseVoxelGridPhysicalChunkKey,
   resolveSparseVoxelGridPhysicalChunk,
 } from "./SparseVoxelGridPhysicalTopology";
 
@@ -36,7 +38,8 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
       candidate.point[1],
       candidate.point[2],
     );
-    if (!resolved || resolved.key !== candidate.key || resolved.level !== candidate.level) {
+    if (!resolved || resolved.key !== candidate.key || resolved.level !== candidate.level ||
+        resolved.scale !== 2 ** candidate.level) {
       throw new Error(
         "Sparse physical topology resolved " + candidate.point.join(",") +
         " to " + String(resolved?.key) + " instead of " + candidate.key,
@@ -47,6 +50,16 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   if (resolveSparseVoxelGridPhysicalChunk(topology, 160, 0, 0) !== null) {
     throw new Error("Sparse physical topology resolved a base cell outside all registered chunks");
   }
+
+  const parsedLegacy = parseSparseVoxelGridPhysicalChunkKey("-3,2,1");
+  const parsedCoarse = parseSparseVoxelGridPhysicalChunkKey("3:-2,1,0");
+  if (parsedLegacy.level !== 0 || parsedLegacy.scale !== 1 ||
+      parsedCoarse.level !== 3 || parsedCoarse.scale !== 8 ||
+      formatSparseVoxelGridPhysicalChunkKey(parsedCoarse.level, parsedCoarse.cx, parsedCoarse.cy, parsedCoarse.cz) !== parsedCoarse.key) {
+    throw new Error("Sparse physical chunk identity did not preserve canonical level/scale/key invariants");
+  }
+  expectRejected("level/scale identity outside the supported range", () =>
+    formatSparseVoxelGridPhysicalChunkKey(31, 0, 0, 0));
 
   expectRejected("duplicate level-zero keys", () =>
     compileSparseVoxelGridPhysicalTopology(["-1,0,0", "-1,0,0"]));
