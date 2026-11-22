@@ -256,8 +256,8 @@ export function runInfinityScaleLODTransferInvariantRegression(): void {
     InfinityScaleLODTransfer.restrict(
       new Array<ArrayLike<number>>(32768).fill(cell()),
       new Array<number>(CELL_FIELDS).fill(53),
-      5,
       0,
+      5,
     );
   } catch (error) {
     oversizedRestrictionRejected = error instanceof RangeError &&
