@@ -81,6 +81,8 @@ export interface WorldSnapshot {
   causalLog?: unknown[];
   directorNotes?: string;
   chunks?: {
+    /** Missing in historical saves, which are interpreted as schema v1. */
+    schemaVersion?: 1 | 2;
     chunkSize: number;
     activeCount: number;
     serialized: Array<{
@@ -88,6 +90,9 @@ export interface WorldSnapshot {
       cx: number;
       cy: number;
       cz: number;
+      /** Present in v2; legacy saves omit both fields. */
+      level?: number;
+      scale?: number;
       active: boolean;
       buffer: ArrayBuffer;
     }>;
