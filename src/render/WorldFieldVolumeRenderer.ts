@@ -202,14 +202,16 @@ export class WorldFieldVolumeRenderer {
           // world-space coordinates are authoritative and remain aligned with
           // the shared WorldViewContract even when the view is panned.
           const sampleX = Number(sample.x)
-          const sampleY = Number(sample.y)
           const sampleZ = Number(sample.z)
-          if (![sampleX, sampleY, sampleZ].every(Number.isFinite)) continue
+          // FieldSampler.sampleWorld() records the sampled Y plane in sample.y.
+          // The independent volumetric coordinate belongs to the slice descriptor.
+          const sliceY = Number(slice.y)
+          if (![sampleX, sampleZ, sliceY].every(Number.isFinite)) continue
 
           const value = Number(sample[frame.property]) || 0
           const normalized = THREE.MathUtils.clamp(value / maximum, 0, 1)
           const x = (sampleX - frame.view.center.x) / cellWidth
-          const y = (sampleY - centerY) / spacing
+          const y = (sliceY - centerY) / spacing
           const z = (sampleZ - frame.view.center.z) / cellDepth
 
           this.position.set(x, y, z)
