@@ -281,7 +281,7 @@ export function applySparseVoxelGridDelta(
     for (let i = 0; i < change.indices.length; i++) {
       const index = change.indices[i];
       if (index >= target.length || index <= previousIndex || !Number.isFinite(values[i])) {
-        throw new Error("Sparse-grid delta buffer index, order, or value is invalid");
+        throw new Error("Sparse-grid delta buffer index or value is invalid");
       }
       target[index] = values[i];
       previousIndex = index;
