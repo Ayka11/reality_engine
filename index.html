@@ -987,12 +987,12 @@ function _drawWorldFieldMultiSlice(){
   if(!renderCtx)return false
   const value=(s,f)=>[s.energy,s.density,s.information,s.entropy,s.temperature,s.biology][f]??s.energy
   const meta=[
-    {mx:1000,l:0,label:'⚡ Energy',info:'World-space energy field'},
-    {mx:1,l:1,label:'🌫️ Density',info:'World-space density field'},
-    {mx:500,l:2,label:'🧠 Info',info:'World-space information field'},
-    {mx:1,l:3,label:'🔥 Entropy',info:'World-space entropy field'},
-    {mx:800,l:4,label:'🌡️ Temp',info:'World-space temperature field'},
-    {mx:1,l:5,label:'🧬 Bio',info:'World-space biology field'}
+    {l:0,label:'⚡ Energy',info:'World-space energy field'},
+    {l:1,label:'🌫️ Density',info:'World-space density field'},
+    {l:2,label:'🧠 Information',info:'World-space information field'},
+    {l:3,label:'🔥 Entropy',info:'World-space entropy field'},
+    {l:4,label:'🌡️ Temperature',info:'World-space temperature field'},
+    {l:5,label:'🧬 Biology',info:'World-space biology field'}
   ]
   const drawField=(ox,oy,w,h,f,showStats=true)=>{
     const m=meta[f],cw2=w/data.width,ch2=h/data.height
@@ -1000,9 +1000,14 @@ function _drawWorldFieldMultiSlice(){
     for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
       const v=value(data.samples[py*data.width+px],f)
       total+=v
-      if(v>0.5){min=Math.min(min,v);max=Math.max(max,v)}
-      if(v<=(m.mx>1?0.5:0.001))continue
-      const [r,g,b]=colorOf(m.l,Math.min(Math.max(v/m.mx,0),1))
+      if(Number.isFinite(v)){min=Math.min(min,v);max=Math.max(max,v)}
+    }
+    const range=Math.max(1e-9,max-min)
+    for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
+      const v=value(data.samples[py*data.width+px],f)
+      if(!Number.isFinite(v))continue
+      const normalized=Math.max(0,Math.min(1,(v-min)/range))
+      const [r,g,b]=colorOf(m.l,normalized)
       renderCtx.fillStyle=`rgb(${r},${g},${b})`
       renderCtx.fillRect(Math.floor(ox+px*cw2),Math.floor(oy+py*ch2),Math.max(1,Math.ceil(cw2)),Math.max(1,Math.ceil(ch2)))
     }
@@ -1020,21 +1025,14 @@ function _drawWorldFieldMultiSlice(){
     renderCtx.font='10px monospace';renderCtx.fillStyle='rgba(160,240,190,.82)'
     renderCtx.fillText(`WORLD center=(${data.view.center.x.toFixed(1)},${data.view.center.y.toFixed(1)},${data.view.center.z.toFixed(1)}) Y=${data.view.sliceY} R=${data.view.visibleRadius}`,10,ch-12)
   }else{
-    const hw=Math.floor(cw/2),hh=Math.floor(ch/2)
-    const qs=[
-      {f:0,ox:0,oy:0,w:hw,h:hh},
-      {f:5,ox:hw,oy:0,w:hw,h:hh},
-      {f:2,ox:0,oy:hh,w:hw,h:hh},
-      {f:3,ox:hw,oy:hh,w:hw,h:hh}
-    ]
-    for(const q of qs){
-      drawField(q.ox,q.oy,q.w,q.h,q.f,true)
-      renderCtx.strokeStyle='#2a2a3a'
-      renderCtx.strokeRect(q.ox+.5,q.oy+.5,q.w-1,q.h-1)
+    const cellW=Math.floor(cw/3),cellH=Math.floor(ch/2)
+    for(let f=0;f<6;f++){
+      const ox=(f%3)*cellW,oy=Math.floor(f/3)*cellH
+      const w=f%3===2?cw-ox:cellW,h=Math.floor(f/3)===1?ch-oy:cellH
+      drawField(ox,oy,w,h,f,true)
+      renderCtx.strokeStyle='#3b4964'
+      renderCtx.strokeRect(ox+.5,oy+.5,w-1,h-1)
     }
-    renderCtx.strokeStyle='#3b4964'
-    renderCtx.beginPath();renderCtx.moveTo(hw,0);renderCtx.lineTo(hw,ch);renderCtx.stroke()
-    renderCtx.beginPath();renderCtx.moveTo(0,hh);renderCtx.lineTo(cw,hh);renderCtx.stroke()
     renderCtx.font='8px monospace';renderCtx.fillStyle='rgba(160,190,230,.72)'
     renderCtx.fillText(`WORLD SPACE · center=(${data.view.center.x.toFixed(1)},${data.view.center.z.toFixed(1)}) · Y=${data.view.sliceY} · seed=${data.view.seed}`,8,ch-4)
   }
@@ -2926,7 +2924,7 @@ function setLayer(l){
   const names=['Energy','Density','Info','Entropy','Temp','Bio'];
   const HINTS={
     '3d':'height = energy · color = field',
-    '2d':layer>=0?'focused full-screen view · click same field to restore 4-slice':'4-slice overview — click a field to focus',
+    '2d':layer>=0?'focused full-screen view · click same field to restore 6-field':'6-field overview — click a field to focus',
     'hybrid':'left 2D · right 3D colored by field',
   };
   const hint=HINTS[currentRenderMode]||'';
