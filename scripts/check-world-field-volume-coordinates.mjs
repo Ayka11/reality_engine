@@ -50,6 +50,8 @@ for (const diagnostic of [
   'invalidFieldValues',
   'fieldValues',
   'standardDeviation',
+  'fieldProfiles',
+  'SCIENTIFIC_FIELD_KEYS',
 ]) {
   assert.ok(rendererSource.includes(diagnostic),
     `volume diagnostics must expose ${diagnostic}`)
