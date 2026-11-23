@@ -22,7 +22,7 @@ assert.match(appSource, /volume: field3D\?\.volume \?\? volumeRenderer\?\.volume
 // FieldSampler.sampleWorld(x, y, z) stores the sampled plane in sample.y.
 // Therefore sample.y is constant within each horizontal slice and cannot be
 // used as the independent vertical coordinate of a volume voxel.
-assert.match(rendererSource, /const sliceY = Number\(slice\.y\)/,
+assert.match(rendererSource, /const sliceY = finiteNumericValue\(slice\.y\)/,
   'voxel height must come from the volume slice descriptor')
 assert.match(rendererSource, /const y = \(sliceY - centerY\) \/ spacing/,
   'slice planes must map to distinct normalized vertical coordinates')
@@ -72,5 +72,5 @@ assert.equal(new Set(renderedY).size, slices.length,
 assert.ok(slices.every(slice => slice.samples.every(sample => sample.y === centerY + (slice.y - centerY))),
   'fixture must model FieldSampler plane samples faithfully')
 
-console.log('PASS: volumetric voxel height follows slice coordinates, not per-sample plane Y')
+assert.match(rendererSource, /typeof value === 'number' && Number\.isFinite\(value\)/,\n  'scientific field and coordinate inputs must reject coercible strings, null, and booleans')\nassert.match(rendererSource, /const rawFieldValue = finiteNumericValue\(sample\[key\]\)/,\n  'field distribution metrics must count non-numeric source values as invalid')\nassert.match(rendererSource, /const sampleX = finiteNumericValue\(sample\.x\)/,\n  'world coordinates must not coerce missing or string values into valid positions')\nassert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\.map\(key => finiteNumericValue\(sample\[key\]\)\)/,\n  'composite rendering must exclude invalid source values rather than coercing them to zero')\n\nconsole.log('PASS: invalid non-numeric samples are rejected without coercion')
 console.log('PASS: distinct source slices remain distinct in normalized 3D space')
