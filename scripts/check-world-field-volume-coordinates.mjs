@@ -28,6 +28,10 @@ assert.match(rendererSource, /const y = \(sliceY - centerY\) \/ spacing/,
   'slice planes must map to distinct normalized vertical coordinates')
 assert.doesNotMatch(rendererSource, /const y = \(sampleY - centerY\) \/ spacing/,
   'sample.y must not collapse every voxel in a slice onto the same height')
+assert.match(rendererSource, /sampleCount,\s*activeCells,\s*volume:/,
+  'render result must return the actual sample count and geometry diagnostics')
+assert.doesNotMatch(rendererSource, /sampleCount:\s*renderedCells/,
+  'sampleCount must not be substituted with the valid rendered-cell count')
 for (const diagnostic of [
   'invalidSamples',
   'duplicateCoordinates',
