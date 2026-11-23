@@ -50,4 +50,65 @@ assert.throws(() => metrics.getSeries('energy', -1), /limit/)
 metrics.clear()
 assert.equal(metrics.getSeries('energy').length, 0)
 assert.equal(metrics.getStats('energy').count, 0)
+
+let profileCalls = 0
+const profileSampler = {
+  sample(x: number, y: number, z: number) {
+    profileCalls++
+    return {
+      energy: x + y + z,
+      density: x,
+      information: y,
+      entropy: z,
+      temperature: x * 2,
+      biology: Number.isFinite(x) ? 1 : Number.NaN,
+      material: profileCalls === 2 ? Number.NaN : z - 1,
+    }
+  },
+} as unknown as FieldSampler
+const profileMetrics = new WorldFieldMetrics(profileSampler, 2, 5)
+const profileBounds = {
+  min: { x: -4, y: 2, z: -8 },
+  max: { x: 4, y: 6, z: 0 },
+}
+const xProfile = profileMetrics.sampleProfile('x', profileBounds, 3)
+assert.equal(xProfile.axis, 'x')
+assert.equal(xProfile.count, 3)
+assert.equal(profileCalls, 3)
+assert.deepEqual(xProfile.points.map(point => point.coordinate), [-4, 0, 4])
+assert.deepEqual(xProfile.points.map(point => point.position.y), [4, 4, 4])
+assert.deepEqual(xProfile.points.map(point => point.position.z), [-4, -4, -4])
+assert.equal(xProfile.points[0].position.x, -4)
+assert.equal(xProfile.points[1].values.material, null)
+assert.equal(xProfile.points[1].validity.material, false)
+assert.equal(xProfile.stats.material.count, 2)
+assert.equal(xProfile.stats.material.invalid, 1)
+assert.equal(xProfile.stats.energy.count, 3)
+assert.equal(xProfile.stats.energy.mean, 0)
+
+// A one-point profile samples the selected interval midpoint and keeps the
+// other coordinates at their respective bounds midpoints.
+const single = profileMetrics.sampleProfile('y', profileBounds, 1)
+assert.equal(single.count, 1)
+assert.equal(single.points[0].coordinate, 4)
+assert.deepEqual(single.points[0].position, { x: 0, y: 4, z: -4 })
+
+// Zero-width selected bounds and negative world coordinates are both valid.
+const zeroWidth = profileMetrics.sampleProfile('z', {
+  min: { x: -3, y: -2, z: -7 },
+  max: { x: -3, y: -2, z: -7 },
+}, 2)
+assert.deepEqual(zeroWidth.points.map(point => point.coordinate), [-7, -7])
+assert.deepEqual(zeroWidth.points.map(point => point.position.x), [-3, -3])
+assert.deepEqual(zeroWidth.points.map(point => point.position.y), [-2, -2])
+assert.throws(() => profileMetrics.sampleProfile('q' as any, profileBounds, 2), /axis/)
+assert.throws(() => profileMetrics.sampleProfile('x', profileBounds, 0), /resolution/)
+assert.throws(() => profileMetrics.sampleProfile('x', profileBounds, 6), /sample limit/)
+assert.throws(() => profileMetrics.sampleProfile('x', {
+  min: { x: 1, y: 0, z: 0 },
+  max: { x: -1, y: 1, z: 1 },
+}, 2), /bounds/)
+assert.equal(profileMetrics.getSeries('energy').length, 0, 'profiles must not mutate time-series history')
+
 console.log('WORLD FIELD METRICS: PASS')
+
