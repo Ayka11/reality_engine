@@ -2571,6 +2571,33 @@ try {
   await page.evaluate(() => window.setLayer?.(0));
   await page.waitForFunction(() => window.__worldField3DCanvasState?.field === "Energy", { timeout: 10000 });
 
+  // The Metrics view must read the authoritative Infinity World sampler and
+  // expose every scalar field independently from the legacy finite-grid panel.
+  const authoritativeMetrics = await page.evaluate(() => {
+    if (typeof window.sampleWorldFieldMetrics !== "function" ||
+        typeof window.getWorldFieldMetricsSnapshot !== "function" ||
+        typeof window.exportWorldFieldMetricsCSV !== "function") return { available: false };
+    window.sampleWorldFieldMetrics();
+    const snapshot = window.getWorldFieldMetricsSnapshot();
+    const csv = window.exportWorldFieldMetricsCSV();
+    window.setView?.("metrics", document.getElementById("tabMetrics"));
+    return { available: true, snapshot, csv, text: document.getElementById("metricsContent")?.innerText ?? "" };
+  });
+  const metricsFields = ["energy", "density", "information", "entropy", "temperature", "biology", "material"];
+  if (!authoritativeMetrics.available ||
+      !metricsFields.every(field => authoritativeMetrics.snapshot?.[field]?.count === 567 &&
+        authoritativeMetrics.snapshot?.[field]?.invalid === 0 &&
+        Number.isFinite(authoritativeMetrics.snapshot?.[field]?.mean)) ||
+      !metricsFields.every(field => authoritativeMetrics.csv.includes(field)) ||
+      !["Energy", "Density", "Information", "Entropy", "Temperature", "Biology", "Material"]
+        .every(label => authoritativeMetrics.text.includes(label)) ||
+      !authoritativeMetrics.text.includes("Legacy finite simulation")) {
+    throw new Error("Metrics view did not expose all seven authoritative fields alongside a separate legacy data source: " +
+      JSON.stringify(authoritativeMetrics));
+  }
+  await page.evaluate(() => window.setView?.("field3d", document.getElementById("tabField3d")));
+  await page.waitForFunction(() => window.currentRenderMode === "field3d");
+
   // Verify that the WebGL volume canvas receives pointer input and OrbitControls
   // changes its camera. Move to a clear center point and use Playwright's pointer API.
   const volumeCanvas = page.locator("#c3dField");
