@@ -2636,7 +2636,7 @@ try {
       };
     });
     const csv = window.exportWorldFieldProfileCSV("x", { resolution: 5 });
-    const csvRows = csv.split("\\n");
+    const csvRows = csv.split("\n");
     const csvHeader = csvRows[0]?.split(",") ?? [];
     window.renderWorldFieldProfile("y");
     const panel = document.getElementById("worldFieldProfileResults");
