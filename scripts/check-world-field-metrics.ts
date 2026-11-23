@@ -110,5 +110,30 @@ assert.throws(() => profileMetrics.sampleProfile('x', {
 }, 2), /bounds/)
 assert.equal(profileMetrics.getSeries('energy').length, 0, 'profiles must not mutate time-series history')
 
+const profileSeriesBeforeExport = profileMetrics.getSeries('energy')
+const profileCsv = profileMetrics.exportProfileCSV(xProfile)
+const profileCsvRows = profileCsv.split('\\n')
+const profileCsvHeader = profileCsvRows[0].split(',')
+assert.deepEqual(profileCsvHeader.slice(0, 5), ['axis', 'coordinate', 'x', 'y', 'z'])
+assert.deepEqual(profileCsvHeader.slice(5, 12), [
+  'energy', 'density', 'information', 'entropy', 'temperature', 'biology', 'material',
+])
+assert.deepEqual(profileCsvHeader.slice(12), [
+  'energy_valid', 'density_valid', 'information_valid', 'entropy_valid',
+  'temperature_valid', 'biology_valid', 'material_valid',
+])
+assert.equal(profileCsvRows.length, 4)
+assert.equal(profileCsvRows[1].split(',')[0], 'x')
+assert.equal(profileCsvRows[1].split(',')[1], '-4.000000')
+assert.equal(profileCsvRows[2].split(',')[11], '', 'invalid values must export as empty CSV cells')
+assert.equal(profileCsvRows[2].split(',')[18], 'false', 'invalid values must retain explicit validity flags')
+assert.deepEqual(profileMetrics.getSeries('energy'), profileSeriesBeforeExport, 'CSV export must not mutate metric history')
+assert.throws(() => profileMetrics.exportProfileCSV({ ...xProfile, count: 99 }), /valid world field profile/)
+assert.throws(() => profileMetrics.exportProfileCSV({
+  ...xProfile,
+  points: [{ ...xProfile.points[0], position: { x: Number.NaN, y: 0, z: 0 } }],
+  count: 1,
+}), /non-finite coordinate/)
+
 console.log('WORLD FIELD METRICS: PASS')
 
