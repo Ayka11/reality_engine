@@ -189,6 +189,20 @@ export function bootstrapInfiniteWorld() {
       max: { x: view.center.x + radius, y: view.center.y + verticalRadius, z: view.center.z + radius },
     }, resolution)
   }
+  ;(window as any).exportWorldFieldProfileCSV = (axis: string = 'x', options: any = {}) => {
+    const profile = (window as any).sampleWorldFieldProfile(axis, options)
+    return worldFieldMetrics.exportProfileCSV(profile)
+  }
+  ;(window as any).downloadWorldFieldProfileCSV = (axis: string = 'x', options: any = {}) => {
+    const csv = (window as any).exportWorldFieldProfileCSV(axis, options)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `reality-engine-world-field-profile-${axis}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
   ;(window as any).getWorldFieldMetricsSnapshot = () => worldFieldMetrics.snapshot()
   ;(window as any).getWorldFieldMetricsSeries = (field: string, limit = 120) => worldFieldMetrics.getSeries(field as any, limit)
   ;(window as any).exportWorldFieldMetricsCSV = () => worldFieldMetrics.exportCSV()
