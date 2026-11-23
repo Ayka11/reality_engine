@@ -2509,11 +2509,14 @@ try {
     }
   }
   for (const [index, field] of expectedFieldProfiles.entries()) {
-    await page.evaluate((fieldIndex) => window.setLayer?.(fieldIndex), index);
-    await page.waitForFunction((expectedName) => {
+    const expectedName = ["Energy", "Density", "Info", "Entropy", "Temp", "Bio"][index];
+    await page.evaluate(({ fieldIndex, name }) => {
+      if (window.getWorldField3DState?.()?.field !== name) window.setLayer?.(fieldIndex);
+    }, { fieldIndex: index, name: expectedName });
+    await page.waitForFunction((name) => {
       const state = window.getWorldField3DState?.();
-      return state?.ready === true && state.field === expectedName;
-    }, ["Energy", "Density", "Info", "Entropy", "Temp", "Bio"][index], { timeout: 10000 });
+      return state?.ready === true && state.field === name;
+    }, expectedName, { timeout: 10000 });
     const selected = await page.evaluate(() => window.getWorldField3DState?.());
     const selectedProfiles = selected?.volume?.fieldProfiles;
     if (!expectedFieldProfiles.every(key =>
@@ -2522,7 +2525,9 @@ try {
       throw new Error("Changing the displayed scientific field changed or lost the shared sample profiles");
     }
   }
-  await page.evaluate(() => window.setLayer?.(0));
+  await page.evaluate(() => {
+    if (window.getWorldField3DState?.()?.field !== "Energy") window.setLayer?.(0);
+  });
 
   // Verify that the WebGL volume canvas receives pointer input and OrbitControls
   // changes its camera. Move to a clear center point and use Playwright's pointer API.
