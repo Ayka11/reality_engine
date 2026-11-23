@@ -381,6 +381,7 @@ export class InfiniteWorldRenderer {
   readonly #sun: THREE.DirectionalLight
   readonly #hemi: THREE.HemisphereLight
   #materialMode: 'field' | 'material' | 'height' = 'height'
+  #scientificField: 'all' | 'energy' | 'density' | 'information' | 'entropy' | 'temperature' | 'biology' = 'all'
   // Functional vertex presentation: the underlying terrain mesh remains raycastable,
   // while points + restrained wireframe expose elevation and chunk topology.
   #terrainStyle: 'vertex' | 'surface' = 'surface'
