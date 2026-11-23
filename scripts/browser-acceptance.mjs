@@ -2677,6 +2677,70 @@ try {
       JSON.stringify(spatialProfileAcceptance));
   }
 
+  const scientificOverlayAcceptance = await page.evaluate(() => {
+    const fields = ["energy", "density", "information", "entropy", "temperature", "biology", "material"];
+    if (typeof window.setWorldFieldMetricsOverlayEnabled !== "function" ||
+        typeof window.refreshWorldFieldMetricsOverlay !== "function" ||
+        typeof window.getWorldFieldMetricsSeries !== "function") return { available: false };
+    window.setRenderMode("3d", document.getElementById("tab3d"));
+    window.setWorldFieldMetricsOverlayEnabled(true);
+    window.refreshWorldFieldMetricsOverlay();
+    const panel = document.getElementById("worldFieldMetricsOverlay");
+    const selector = document.getElementById("worldMetricsOverlayField");
+    const stats = document.getElementById("worldMetricsOverlayStats");
+    const snapshot = window.getWorldFieldMetricsSnapshot?.();
+    const historyAfterRefresh = window.getWorldFieldMetricsSeries("energy", 120).length;
+    const allFieldsAccounted = fields.every(field => {
+      const value = snapshot?.[field];
+      return value && value.count + value.invalid === 75 &&
+        Number.isFinite(value.mean) && Number.isFinite(value.min) && Number.isFinite(value.max);
+    });
+    selector.value = "material";
+    selector.dispatchEvent(new Event("change", { bubbles: true }));
+    const selectedFieldRendered = stats?.innerText.includes("Mean") &&
+      selector.value === "material" && stats.innerText.includes("Valid");
+    const modeChecks = [];
+    for (const [mode, tab] of [
+      ["field3d", "tabField3d"], ["hybrid", "tabHybrid"], ["3d", "tab3d"],
+    ]) {
+      window.setRenderMode(mode, document.getElementById(tab));
+      modeChecks.push({
+        mode,
+        visible: panel?.style.display === "block",
+        currentMode: window.currentRenderMode,
+      });
+    }
+    const historyAfterModeSwitches = window.getWorldFieldMetricsSeries("energy", 120).length;
+    window.setRenderMode("2d", document.getElementById("tab2d"));
+    const hiddenIn2D = panel?.style.display === "none";
+    window.setRenderMode("field3d", document.getElementById("tabField3d"));
+    return {
+      available: true,
+      visibleIn3D: modeChecks[2].visible,
+      modeChecks,
+      hiddenIn2D,
+      allFieldsAccounted,
+      selectedFieldRendered,
+      hasRangeAndValidity: Boolean(stats?.innerText.includes("Range") && stats.innerText.includes("Invalid")),
+      hasExplicitSamplingStatus: document.getElementById("worldMetricsOverlayStatus")?.innerText.includes("75 on-demand world samples") ?? false,
+      samplingDidNotRunOnModeSwitch: historyAfterRefresh === historyAfterModeSwitches,
+      finalMode: window.currentRenderMode,
+    };
+  });
+  if (!scientificOverlayAcceptance.available ||
+      !scientificOverlayAcceptance.visibleIn3D ||
+      !scientificOverlayAcceptance.modeChecks.every(check => check.visible && check.currentMode === check.mode) ||
+      !scientificOverlayAcceptance.hiddenIn2D ||
+      !scientificOverlayAcceptance.allFieldsAccounted ||
+      !scientificOverlayAcceptance.selectedFieldRendered ||
+      !scientificOverlayAcceptance.hasRangeAndValidity ||
+      !scientificOverlayAcceptance.hasExplicitSamplingStatus ||
+      !scientificOverlayAcceptance.samplingDidNotRunOnModeSwitch ||
+      scientificOverlayAcceptance.finalMode !== "field3d") {
+    throw new Error("Scientific Metrics Overlay browser acceptance failed: " +
+      JSON.stringify(scientificOverlayAcceptance));
+  }
+
   await page.evaluate(() => window.setView?.("field3d", document.getElementById("tabField3d")));
   await page.waitForFunction(() => window.currentRenderMode === "field3d");
 
