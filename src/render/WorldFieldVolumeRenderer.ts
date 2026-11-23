@@ -90,6 +90,9 @@ const createEmptyFieldDistributions = (): Record<string, FieldDistribution> =>
     standardDeviation: 0,
   }]))
 
+const finiteNumericValue = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null
+
 const FIELD_PALETTES: ReadonlyArray<readonly [number, number]> = [
   [0x183d9b, 0xffad42],
   [0x082d31, 0x75f4c1],
@@ -270,8 +273,8 @@ export class WorldFieldVolumeRenderer {
       let observed = 0
       for (const slice of frame.slices) {
         for (const sample of slice.data.samples ?? []) {
-          const value = Number(sample?.[key])
-          if (Number.isFinite(value)) observed = Math.max(observed, Math.abs(value))
+          const value = finiteNumericValue(sample?.[key])
+          if (value !== null) observed = Math.max(observed, Math.abs(value))
         }
       }
       return Math.max(observed, 1e-9)
@@ -326,12 +329,12 @@ export class WorldFieldVolumeRenderer {
           // Do not reconstruct positions from array indices: the sample's
           // world-space coordinates are authoritative and remain aligned with
           // the shared WorldViewContract even when the view is panned.
-          const sampleX = Number(sample.x)
-          const sampleZ = Number(sample.z)
+          const sampleX = finiteNumericValue(sample.x)
+          const sampleZ = finiteNumericValue(sample.z)
           // FieldSampler.sampleWorld() records the sampled Y plane in sample.y.
           // The independent volumetric coordinate belongs to the slice descriptor.
-          const sliceY = Number(slice.y)
-          if (![sampleX, sampleZ, sliceY].every(Number.isFinite)) {
+          const sliceY = finiteNumericValue(slice.y)
+          if (sampleX === null || sampleZ === null || sliceY === null) {
             invalidSamples++
             continue
           }
@@ -348,8 +351,8 @@ export class WorldFieldVolumeRenderer {
 
           for (const key of SCIENTIFIC_FIELD_KEYS) {
             const profile = fieldProfileAccumulators[key]
-            const rawFieldValue = Number(sample[key])
-            if (!Number.isFinite(rawFieldValue)) {
+            const rawFieldValue = finiteNumericValue(sample[key])
+            if (rawFieldValue === null) {
               profile.invalidValues++
               continue
             }
@@ -361,15 +364,15 @@ export class WorldFieldVolumeRenderer {
             profile.m2 += delta * (rawFieldValue - profile.mean)
             if (Math.abs(rawFieldValue) > 0.001) profile.activeCells++
           }
-          const selectedRawValue = selectedFieldIndex >= 0 ? Number(sample[SCIENTIFIC_FIELD_KEYS[selectedFieldIndex]]) : 0
-          const finiteValues = SCIENTIFIC_FIELD_KEYS.map(key => Number(sample[key]))
-          const validValues = finiteValues.filter(Number.isFinite)
+          const selectedRawValue = selectedFieldIndex >= 0 ? finiteNumericValue(sample[SCIENTIFIC_FIELD_KEYS[selectedFieldIndex]]) : 0
+          const finiteValues = SCIENTIFIC_FIELD_KEYS.map(key => finiteNumericValue(sample[key]))
+          const validValues = finiteValues.filter((value): value is number => value !== null)
           const compositeStrength = validValues.length
-            ? finiteValues.reduce((sum, value, index) => sum + (Number.isFinite(value) ? Math.abs(value) / fieldMaxima[index] : 0), 0) / validValues.length
+            ? finiteValues.reduce((sum, value, index) => sum + (value !== null ? Math.abs(value) / fieldMaxima[index] : 0), 0) / validValues.length
             : 0
           const rawValue = selectedFieldIndex >= 0 ? selectedRawValue : compositeStrength
-          const value = Number.isFinite(rawValue) ? rawValue : 0
-          if (selectedFieldIndex >= 0 && !Number.isFinite(rawValue)) invalidFieldValues++
+          const value = rawValue !== null ? rawValue : 0
+          if (selectedFieldIndex >= 0 && rawValue === null) invalidFieldValues++
           fieldValueMin = Math.min(fieldValueMin, value)
           fieldValueMax = Math.max(fieldValueMax, value)
           const valueCount = renderedCells + 1
@@ -399,8 +402,8 @@ export class WorldFieldVolumeRenderer {
           } else {
             let red = 0, green = 0, blue = 0, weight = 0
             for (let field = 0; field < SCIENTIFIC_FIELD_KEYS.length; field++) {
-              const fieldValue = Number(sample[SCIENTIFIC_FIELD_KEYS[field]])
-              if (!Number.isFinite(fieldValue)) continue
+              const fieldValue = finiteNumericValue(sample[SCIENTIFIC_FIELD_KEYS[field]])
+              if (fieldValue === null) continue
               const contribution = THREE.MathUtils.clamp(Math.abs(fieldValue) / fieldMaxima[field], 0, 1)
               if (contribution <= 0) continue
               const colors = FIELD_PALETTES[field]
