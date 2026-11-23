@@ -167,6 +167,19 @@ export class WorldFieldVolumeRenderer {
   }
 
   render(frame: WorldFieldVolumeFrame): WorldFieldVolumeResult {
+    this.volumeDiagnostics = {
+      sampleCount: 0,
+      renderedCells: 0,
+      invalidSamples: 0,
+      duplicateCoordinates: 0,
+      activeCells: 0,
+      activeRatio: 0,
+      uniqueLayers: 0,
+      min: { x: 0, y: 0, z: 0 },
+      max: { x: 0, y: 0, z: 0 },
+      layerSpacing: { min: 0, max: 0, mean: 0, irregular: false },
+      bounds: { width: 0, height: 0, depth: 0 },
+    }
     const base = {
       renderer: 'three-webgl-instanced-volume' as const,
       true3D: true as const,
@@ -187,19 +200,6 @@ export class WorldFieldVolumeRenderer {
       },
     }
 
-    this.volumeDiagnostics = {
-      sampleCount: 0,
-      renderedCells: 0,
-      invalidSamples: 0,
-      duplicateCoordinates: 0,
-      activeCells: 0,
-      activeRatio: 0,
-      uniqueLayers: 0,
-      min: { x: 0, y: 0, z: 0 },
-      max: { x: 0, y: 0, z: 0 },
-      layerSpacing: { min: 0, max: 0, mean: 0, irregular: false },
-      bounds: { width: 0, height: 0, depth: 0 },
-    }
     if (!this.resize()) return { ...base, ready: false, reason: 'zero-layout' }
 
     const capacity = frame.slices.reduce(
