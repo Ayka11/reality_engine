@@ -33,6 +33,9 @@ jobs:
       - run: npm run test:greedy-mesher
       - run: npm run test:surface-nets-mesher
       - run: npm run test:world-field
+      - name: Run authoritative World Field metrics regression
+        run: npm run test:world-field-metrics
+        timeout-minutes: 3
       - run: npm run test:water-surface
       - run: npm run test:infinity-scale-core
       - run: npm run test:sparse-voxel-grid-recovery
