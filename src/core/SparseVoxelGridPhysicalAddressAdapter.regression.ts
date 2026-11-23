@@ -13,6 +13,8 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
   const fine = new SparseVoxelGridPhysicalChunk("2,0,0");
   coarse.getCell(1, 2, 3).set(F.ENERGY, 31);
   fine.getCell(0, 0, 0).set(F.ENERGY, 9);
+  // Every chunk participates in publication, so prepare its complete next state.
+  fine.getBackCell(0, 0, 0).set(F.ENERGY, 9);
 
   const adapter = new SparseVoxelGridPhysicalAddressAdapter([coarse, fine]);
   if (adapter.size !== 2 || adapter.topology.chunks.length !== 2) {
@@ -45,7 +47,7 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
       adapter.getBackCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 72) {
     throw new Error("Physical back-buffer write leaked into or failed to update the front buffer");
   }
-  if (adapter.getBackCell(fine.key, 0, 0, 0)?.get(F.ENERGY) !== 0) {
+  if (adapter.getBackCell(fine.key, 0, 0, 0)?.get(F.ENERGY) !== 9) {
     throw new Error("Physical chunk-key back-buffer access returned the wrong cell");
   }
   const preparedRevision = adapter.revision;
