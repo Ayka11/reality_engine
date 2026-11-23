@@ -10,7 +10,7 @@ function expectRejected(label: string, operation: () => unknown): void {
 
 export function runSparseVoxelGridPhysicalChunkStoreRegression(): void {
   const store = new SparseVoxelGridPhysicalChunkStore();
-  if (store.revision !== 0 || store.size !== 0 || store.topology.chunks.length !== 0) {
+  if (store.revision !== 0 || Number(store.size) !== 0 || store.topology.chunks.length !== 0) {
     throw new Error("Physical chunk store did not initialize as an empty revision-zero owner");
   }
 
@@ -21,7 +21,7 @@ export function runSparseVoxelGridPhysicalChunkStoreRegression(): void {
   coarse.backBuffer[0] = 7.25;
   coarse.active = false;
   const publishedRevision = store.replaceAll(0, [coarse, fine, separate]);
-  if (publishedRevision !== 1 || store.revision !== 1 || store.size !== 3 ||
+  if (publishedRevision !== 1 || Number(store.revision) !== 1 || Number(store.size) !== 3 ||
       store.topology.chunks.length !== 3 ||
       store.topology.chunks.find(item => item.key === coarse.key)?.scale !== 2) {
     throw new Error("Physical chunk store failed to publish a valid mixed-LOD topology atomically");
@@ -37,7 +37,7 @@ export function runSparseVoxelGridPhysicalChunkStoreRegression(): void {
   storedCoarse.backBuffer[0] = 88;
   if (store.get(coarse.key)?.buffer[0] !== 11.5 ||
       store.get(coarse.key)?.backBuffer[0] !== 7.25 ||
-      store.revision !== 1) {
+      Number(store.revision) !== 1) {
     throw new Error("A detached read mutated authoritative store data or revision");
   }
 
@@ -47,7 +47,7 @@ export function runSparseVoxelGridPhysicalChunkStoreRegression(): void {
     throw new Error("Physical chunk store snapshot is not a frozen canonical detached list");
   }
   snapshot[0].getCell(0, 0, 0).set(F.ENERGY, 123);
-  if (store.revision !== 1 || store.get(coarse.key)?.buffer[0] !== 11.5) {
+  if (Number(store.revision) !== 1 || store.get(coarse.key)?.buffer[0] !== 11.5) {
     throw new Error("Mutating a snapshot leaked into the physical chunk store");
   }
 
@@ -58,7 +58,7 @@ export function runSparseVoxelGridPhysicalChunkStoreRegression(): void {
     store.replaceAll(1, [coarse, new SparseVoxelGridPhysicalChunk("0,0,0")]));
   expectRejected("a non-physical chunk object", () => store.replaceAll(1, [{} as SparseVoxelGridPhysicalChunk]));
   expectRejected("a non-array candidate", () => store.replaceAll(1, null as unknown as SparseVoxelGridPhysicalChunk[]));
-  if (store.revision !== 1 || store.size !== 3 ||
+  if (Number(store.revision) !== 1 || Number(store.size) !== 3 ||
       store.snapshot().some((chunk, index) =>
         chunk.key !== beforeFailedPublication[index].key ||
         chunk.buffer[0] !== beforeFailedPublication[index].buffer[0] ||
@@ -69,12 +69,12 @@ export function runSparseVoxelGridPhysicalChunkStoreRegression(): void {
   const replacement = new SparseVoxelGridPhysicalChunk("3:2,0,0");
   replacement.buffer[4] = 42;
   if (store.replaceAll(1, [replacement]) !== 2 ||
-      store.revision !== 2 || store.size !== 1 ||
+      Number(store.revision) !== 2 || Number(store.size) !== 1 ||
       store.keys[0] !== replacement.key ||
       store.get(replacement.key)?.buffer[4] !== 42) {
     throw new Error("Physical chunk store failed to atomically replace its complete topology");
   }
-  if (store.replaceAll(2, []) !== 3 || store.size !== 0) {
+  if (store.replaceAll(2, []) !== 3 || Number(store.size) !== 0) {
     throw new Error("Physical chunk store could not atomically publish an empty topology");
   }
 
