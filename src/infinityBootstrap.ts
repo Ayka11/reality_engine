@@ -17,6 +17,7 @@ import { applyWorldGenerationPlan, buildWorldGenerationPlan, findWorldLibraryEnt
 import type { WorldObjectKind } from './infinity/WorldObject'
 import { installScientificWorkspace } from './infinity/ScientificWorkspace'
 import { worldViewContract } from './infinity/WorldViewContract'
+import { WorldFieldMetrics } from './infinity/WorldFieldMetrics'
 import { readActiveWorldSeed, saveActiveWorldSeed } from './infinity/WorldPersistence'
 import { FlatWorldSurfaceProvider, type FlatWorldSurfaceOptions } from './infinity/WorldSurfaceProvider'
 import { buildCivilizationExperimentMatrix, runCivilizationInfinityBatch, runCivilizationInfinityReplication, analyzeCrossDimensionGeneralization, summarizeReplicationSnapshots, createInfinityScientificReport, serializeInfinityScientificReport, createScientificProvenance, attachScientificProvenance, validateScientificProvenance, assessInfinityClaim, type CivilizationExperimentMatrix } from './infinity'
@@ -155,6 +156,31 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).getInfiniteWorldSimulationRunning = () => world.isSimulationRunning()
   ;(window as any).worldFieldMutate = (mutation: any) => world.applyAuthoritativeFieldMutation(mutation)
   ;(window as any).worldFieldState = () => world.getAuthoritativeFieldState()
+  // Metrics sample the same authoritative world-space provider used by renderers.
+  // Sampling is explicit/on-demand to avoid adding hidden work to the render loop.
+  const worldFieldMetrics = new WorldFieldMetrics({
+    sample: (x: number, y: number, z: number) => world.sampleWorldField(x, y, z),
+  })
+  let worldFieldMetricsTick = 0
+  ;(window as any).sampleWorldFieldMetrics = (options: any = {}) => {
+    const view = worldViewContract.snapshot()
+    const radius = Number.isFinite(options.radius) ? Math.max(1, Math.min(64, options.radius)) : 8
+    const verticalRadius = Number.isFinite(options.verticalRadius) ? Math.max(1, Math.min(32, options.verticalRadius)) : 6
+    const resolution = {
+      x: Number.isSafeInteger(options.resolution?.x) ? Math.max(1, Math.min(41, options.resolution.x)) : 9,
+      y: Number.isSafeInteger(options.resolution?.y) ? Math.max(1, Math.min(33, options.resolution.y)) : 7,
+      z: Number.isSafeInteger(options.resolution?.z) ? Math.max(1, Math.min(41, options.resolution.z)) : 9,
+    }
+    const tick = Number.isSafeInteger(options.tick) && options.tick >= 0 ? options.tick : ++worldFieldMetricsTick
+    return worldFieldMetrics.sample(tick, {
+      min: { x: view.center.x - radius, y: view.center.y - verticalRadius, z: view.center.z - radius },
+      max: { x: view.center.x + radius, y: view.center.y + verticalRadius, z: view.center.z + radius },
+    }, resolution)
+  }
+  ;(window as any).getWorldFieldMetricsSnapshot = () => worldFieldMetrics.snapshot()
+  ;(window as any).getWorldFieldMetricsSeries = (field: string, limit = 120) => worldFieldMetrics.getSeries(field as any, limit)
+  ;(window as any).exportWorldFieldMetricsCSV = () => worldFieldMetrics.exportCSV()
+  ;(window as any).clearWorldFieldMetrics = () => worldFieldMetrics.clear()
   // Read-only scientific field inspection and deterministic 2D view-window sampling.
   ;(window as any).worldViewContract = worldViewContract
   ;(window as any).worldFieldSample = (x: number, y?: number, z?: number) => world.sampleWorldField(x, y, z)
