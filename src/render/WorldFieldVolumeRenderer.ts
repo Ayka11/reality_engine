@@ -45,6 +45,19 @@ export type WorldFieldVolumeResult = {
   drawCalls: number
   triangles: number
   field: string
+  volume: {
+    sampleCount: number
+    renderedCells: number
+    invalidSamples: number
+    duplicateCoordinates: number
+    activeCells: number
+    activeRatio: number
+    uniqueLayers: number
+    min: { x: number; y: number; z: number }
+    max: { x: number; y: number; z: number }
+    layerSpacing: { min: number; max: number; mean: number; irregular: boolean }
+    bounds: { width: number; height: number; depth: number }
+  }
 }
 
 const FIELD_PALETTES: ReadonlyArray<readonly [number, number]> = [
@@ -165,8 +178,28 @@ export class WorldFieldVolumeRenderer {
       drawCalls: 0,
       triangles: 0,
       field: frame.fieldName,
+      volume: {
+        ...this.volumeDiagnostics,
+        min: { ...this.volumeDiagnostics.min },
+        max: { ...this.volumeDiagnostics.max },
+        layerSpacing: { ...this.volumeDiagnostics.layerSpacing },
+        bounds: { ...this.volumeDiagnostics.bounds },
+      },
     }
 
+    this.volumeDiagnostics = {
+      sampleCount: 0,
+      renderedCells: 0,
+      invalidSamples: 0,
+      duplicateCoordinates: 0,
+      activeCells: 0,
+      activeRatio: 0,
+      uniqueLayers: 0,
+      min: { x: 0, y: 0, z: 0 },
+      max: { x: 0, y: 0, z: 0 },
+      layerSpacing: { min: 0, max: 0, mean: 0, irregular: false },
+      bounds: { width: 0, height: 0, depth: 0 },
+    }
     if (!this.resize()) return { ...base, ready: false, reason: 'zero-layout' }
 
     const capacity = frame.slices.reduce(
@@ -328,8 +361,15 @@ export class WorldFieldVolumeRenderer {
       ...base,
       ready: renderedCells > 0,
       renderedCells,
-      sampleCount: renderedCells,
+      sampleCount,
       activeCells,
+      volume: {
+        ...this.volumeDiagnostics,
+        min: { ...this.volumeDiagnostics.min },
+        max: { ...this.volumeDiagnostics.max },
+        layerSpacing: { ...this.volumeDiagnostics.layerSpacing },
+        bounds: { ...this.volumeDiagnostics.bounds },
+      },
       meshInstances: this.mesh.count,
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,
