@@ -2414,6 +2414,32 @@ try {
   if (!renderedWorldField.view || renderedWorldField.sampleCount <= 0) {
     throw new Error("2D world-field renderer did not consume sampled world-space data");
   }
+  const expectedScientificFields = ["energy", "density", "information", "entropy", "temperature", "biology"];
+  if (renderedWorldField.overviewLayout !== "3x2" ||
+      !expectedScientificFields.every(field => renderedWorldField.overviewFields?.includes(field)) ||
+      renderedWorldField.normalization !== "visible-window-min-max") {
+    throw new Error("2D overview does not declare all six adaptive-range scientific panels: " +
+      JSON.stringify(renderedWorldField));
+  }
+  // The 3D Infinite World must consume the same toolbar field selection, including
+  // an explicit composite All Fields mode rather than silently remaining on density.
+  await page.evaluate(() => window.setRenderMode?.("3d", document.getElementById("tab3d")));
+  await page.waitForFunction(() => typeof window.setInfiniteWorldScientificField === "function");
+  for (const [index, field] of expectedScientificFields.entries()) {
+    await page.evaluate(({ index }) => window.setLayer?.(index), { index });
+    const selectedField = await page.evaluate(() => window.getInfiniteWorldScientificField?.());
+    if (selectedField !== field) {
+      throw new Error("Infinity World did not receive selected scientific field " + field +
+        ": " + JSON.stringify(selectedField));
+    }
+  }
+  await page.evaluate(() => window.setLayer?.(-1));
+  const allFieldsSelection = await page.evaluate(() => window.getInfiniteWorldScientificField?.());
+  if (allFieldsSelection !== "all") {
+    throw new Error("Infinity World All Fields selection did not activate composite mode: " +
+      JSON.stringify(allFieldsSelection));
+  }
+  await page.evaluate(() => window.setRenderMode?.("2d", document.getElementById("tab2d")));
   // 3D volumetric field must render actual authoritative world-field samples, not a blank tab.
   // Exercise the same click path as a user; this also verifies the tab is wired to setRenderMode.
   await page.evaluate(() => {
