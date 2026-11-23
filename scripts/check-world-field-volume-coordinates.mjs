@@ -47,6 +47,9 @@ for (const diagnostic of [
   'uniqueLayers',
   'layerSpacing',
   'bounds',
+  'invalidFieldValues',
+  'fieldValues',
+  'standardDeviation',
 ]) {
   assert.ok(rendererSource.includes(diagnostic),
     `volume diagnostics must expose ${diagnostic}`)
