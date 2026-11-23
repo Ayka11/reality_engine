@@ -325,6 +325,7 @@ input[type=range]{accent-color:#a397ff}
     <button class="mode-btn" id="layerS" onclick="setLayer(3)" style="padding:3px 9px;font-size:10px">🔥 Entropy</button>
     <button class="mode-btn" id="layerT" onclick="setLayer(4)" style="padding:3px 9px;font-size:10px">🌡️ Temp</button>
     <button class="mode-btn" id="layerB" onclick="setLayer(5)" style="padding:3px 9px;font-size:10px">🧬 Bio</button>
+    <button class="mode-btn" id="worldMetricsOverlayToggle" type="button" aria-pressed="false" onclick="toggleWorldFieldMetricsOverlay()" style="padding:3px 9px;font-size:10px">Scientific Overlay</button>
     <span id="layerHint" style="font-size:10px;color:var(--sub);margin-left:6px;font-style:italic"></span>
     <div style="height:16px;width:1px;background:var(--bd);margin:0 6px;flex-shrink:0"></div>
     <span style="font-size:10px;color:var(--sub);letter-spacing:.04em;text-transform:uppercase;margin-right:4px;flex-shrink:0;font-weight:600">3D</span>
@@ -341,6 +342,24 @@ input[type=range]{accent-color:#a397ff}
     <div style="font-size:12px;color:var(--text);margin-bottom:10px;font-family:system-ui">📈 World Metrics</div>
     <div id="metricsContent"></div>
   </div>
+  <section id="worldFieldMetricsOverlay" aria-label="Scientific field metrics overlay" aria-live="polite" style="display:none;position:absolute;z-index:8;top:10px;right:10px;width:min(330px,calc(100% - 20px));max-height:calc(100% - 20px);overflow:auto;box-sizing:border-box;padding:11px;border:1px solid #3a4c70;border-radius:9px;background:rgba(7,13,27,.94);color:#dce7ff;box-shadow:0 8px 28px rgba(0,0,0,.38);font:11px system-ui;pointer-events:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px">
+      <strong style="font-size:12px">Scientific Metrics</strong>
+      <button type="button" onclick="toggleWorldFieldMetricsOverlay(false)" aria-label="Close scientific metrics overlay" style="border:0;background:transparent;color:#aebbd4;cursor:pointer;font-size:16px">×</button>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+      <label for="worldMetricsOverlayField" style="color:#9daecc">Field</label>
+      <select id="worldMetricsOverlayField" onchange="renderWorldFieldMetricsOverlay()" style="flex:1;min-width:0;padding:5px;background:#111d33;color:#e6efff;border:1px solid #39496b;border-radius:5px">
+        <option value="energy">Energy</option><option value="density">Density</option>
+        <option value="information">Information</option><option value="entropy">Entropy</option>
+        <option value="temperature">Temperature</option><option value="biology">Biology</option>
+        <option value="material">Material</option>
+      </select>
+      <button type="button" onclick="refreshWorldFieldMetricsOverlay()" style="padding:5px 8px;background:#1b2b47;color:#e6efff;border:1px solid #435a82;border-radius:5px;cursor:pointer">Refresh</button>
+    </div>
+    <div id="worldMetricsOverlayStats" style="color:#aebbd4">Metrics have not been sampled yet.</div>
+    <div id="worldMetricsOverlayStatus" style="margin-top:8px;color:#8296bb;font-size:10px">On-demand sampling · no render-loop polling</div>
+  </section>
   <div id="plog">ready</div>
 
   <!-- COMPOSER MODAL -->
@@ -2763,12 +2782,80 @@ function updateBottomBarContext(){
   }
 }
 
+let worldFieldMetricsOverlayEnabled=false;
+let worldFieldMetricsOverlaySnapshot=null;
+function renderWorldFieldMetricsOverlay(){
+  const panel=document.getElementById('worldMetricsOverlayStats');
+  const selector=document.getElementById('worldMetricsOverlayField');
+  if(!panel||!selector)return;
+  const field=selector.value;
+  const stats=worldFieldMetricsOverlaySnapshot?.[field];
+  if(!stats){
+    panel.textContent='No authoritative sample available. Press Refresh to sample the current world.';
+    return;
+  }
+  const format=value=>Number.isFinite(value)?Number(value).toFixed(4):'—';
+  const valid=Number.isFinite(stats.count)?stats.count:0;
+  const invalid=Number.isFinite(stats.invalid)?stats.invalid:0;
+  const total=valid+invalid;
+  const ratio=total>0?Math.max(0,Math.min(100,valid/total*100)):0;
+  const span=stats.max-stats.min;
+  const marker=span>0?Math.max(0,Math.min(100,(stats.mean-stats.min)/span*100)):50;
+  panel.innerHTML=
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+      '<div><div style="color:#8296bb;font-size:10px">Mean</div><strong>'+format(stats.mean)+'</strong></div>'+
+      '<div><div style="color:#8296bb;font-size:10px">Range · Min / Max</div><strong>'+format(stats.min)+' / '+format(stats.max)+'</strong></div>'+
+    '</div>'+
+    '<div style="margin:10px 0 5px;position:relative;height:7px;border-radius:6px;background:#24334e">'+
+      '<div style="height:100%;width:'+ratio.toFixed(1)+'%;border-radius:6px;background:#6da9e8"></div>'+
+      '<span title="Mean position within sampled range" style="position:absolute;left:'+marker.toFixed(1)+'%;top:-3px;width:2px;height:13px;background:#fff"></span>'+
+    '</div>'+
+    '<div style="display:flex;justify-content:space-between;color:#9daecc;font-size:10px"><span>Valid '+valid+'</span><span>Invalid '+invalid+'</span><span>'+ratio.toFixed(1)+'% valid</span></div>';
+}
+window.renderWorldFieldMetricsOverlay=renderWorldFieldMetricsOverlay;
+function refreshWorldFieldMetricsOverlay(){
+  const status=document.getElementById('worldMetricsOverlayStatus');
+  try{
+    if(typeof window.sampleWorldFieldMetrics!=='function'||typeof window.getWorldFieldMetricsSnapshot!=='function'){
+      throw new Error('Authoritative World Field metrics API unavailable');
+    }
+    window.sampleWorldFieldMetrics({resolution:{x:5,y:3,z:5}});
+    worldFieldMetricsOverlaySnapshot=window.getWorldFieldMetricsSnapshot();
+    renderWorldFieldMetricsOverlay();
+    if(status)status.textContent='75 on-demand world samples · no render-loop polling';
+  }catch(error){
+    if(status)status.textContent=error instanceof Error?error.message:String(error);
+  }
+}
+window.refreshWorldFieldMetricsOverlay=refreshWorldFieldMetricsOverlay;
+function updateWorldFieldMetricsOverlayVisibility(){
+  const panel=document.getElementById('worldFieldMetricsOverlay');
+  const button=document.getElementById('worldMetricsOverlayToggle');
+  const supported=['3d','field3d','hybrid'].includes(currentRenderMode);
+  const visible=worldFieldMetricsOverlayEnabled&&supported;
+  if(panel)panel.style.display=visible?'block':'none';
+  if(button){
+    button.setAttribute('aria-pressed',String(worldFieldMetricsOverlayEnabled));
+    button.classList.toggle('active',worldFieldMetricsOverlayEnabled);
+    button.title=supported?'Show authoritative sampled field statistics':'Overlay is available in 3D, Volumetric and Hybrid modes';
+  }
+}
+function toggleWorldFieldMetricsOverlay(force){
+  worldFieldMetricsOverlayEnabled=typeof force==='boolean'?force:!worldFieldMetricsOverlayEnabled;
+  updateWorldFieldMetricsOverlayVisibility();
+  if(worldFieldMetricsOverlayEnabled&&!worldFieldMetricsOverlaySnapshot)refreshWorldFieldMetricsOverlay();
+  return worldFieldMetricsOverlayEnabled;
+}
+window.toggleWorldFieldMetricsOverlay=toggleWorldFieldMetricsOverlay;
+window.setWorldFieldMetricsOverlayEnabled=toggleWorldFieldMetricsOverlay;
+
 function setRenderMode(mode,btn){
   // A deliberate render-mode change leaves the optional chunk-surface preview first.
   if(greedySurfacePreviewActive)teardownGreedySurfacePreview(false);
   window.__worldField3DTrace={phase:'mode-switch-enter',mode,at:Date.now()};
   currentRenderMode=mode;
   window.currentRenderMode=mode;
+  updateWorldFieldMetricsOverlayVisibility();
   updateBottomBarContext();
   window.setWorldViewRenderMode?.(mode);
   document.querySelectorAll('#tabs .ctab').forEach(t=>t.classList.remove('on'));
