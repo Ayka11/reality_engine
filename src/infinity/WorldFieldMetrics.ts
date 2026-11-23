@@ -20,6 +20,19 @@ export type WorldFieldMetricBounds = {
   max: { x: number; y: number; z: number }
 }
 export type WorldFieldMetricResolution = { x: number; y: number; z: number }
+export type WorldFieldProfileAxis = 'x' | 'y' | 'z'
+export type WorldFieldProfilePoint = {
+  coordinate: number
+  position: { x: number; y: number; z: number }
+  values: Record<WorldFieldMetricName, number | null>
+  validity: Record<WorldFieldMetricName, boolean>
+}
+export type WorldFieldProfile = {
+  axis: WorldFieldProfileAxis
+  count: number
+  points: WorldFieldProfilePoint[]
+  stats: Record<WorldFieldMetricName, WorldFieldMetricStats>
+}
 
 /**
  * Samples the active FieldSampler provider into bounded, tick-indexed metrics.
@@ -108,6 +121,74 @@ export class WorldFieldMetrics {
       }
     }
     return result
+  }
+
+  /**
+   * Samples one spatial line through the center of the supplied bounds.
+   * The two non-selected coordinates remain fixed at their bounds midpoint.
+   * This is an explicit inspection operation and never runs in the render loop.
+   */
+  sampleProfile(axis: WorldFieldProfileAxis, bounds: WorldFieldMetricBounds, resolution: number): WorldFieldProfile {
+    if (axis !== 'x' && axis !== 'y' && axis !== 'z') throw new RangeError('Profile axis must be x, y, or z')
+    const coordinates = [bounds?.min?.x, bounds?.min?.y, bounds?.min?.z, bounds?.max?.x, bounds?.max?.y, bounds?.max?.z]
+    if (!coordinates.every(Number.isFinite) ||
+        bounds.min.x > bounds.max.x || bounds.min.y > bounds.max.y || bounds.min.z > bounds.max.z) {
+      throw new RangeError('Profile bounds must be finite and ordered')
+    }
+    if (!Number.isSafeInteger(resolution) || resolution < 1 || resolution > this.maxSamples) {
+      throw new RangeError(`Profile resolution must be between 1 and configured sample limit (${this.maxSamples})`)
+    }
+
+    const center = {
+      x: bounds.min.x + (bounds.max.x - bounds.min.x) / 2,
+      y: bounds.min.y + (bounds.max.y - bounds.min.y) / 2,
+      z: bounds.min.z + (bounds.max.z - bounds.min.z) / 2,
+    }
+    const min = bounds.min[axis]
+    const max = bounds.max[axis]
+    const accumulators = new Map<WorldFieldMetricName, { count: number; invalid: number; min: number; max: number; mean: number; m2: number }>()
+    for (const field of WORLD_FIELD_METRIC_FIELDS) accumulators.set(field, { count: 0, invalid: 0, min: Infinity, max: -Infinity, mean: 0, m2: 0 })
+    const points: WorldFieldProfilePoint[] = []
+
+    for (let index = 0; index < resolution; index++) {
+      const coordinate = resolution === 1 ? min + (max - min) / 2 : min + (max - min) * index / (resolution - 1)
+      const position = { ...center, [axis]: coordinate }
+      const sample = this.sampler.sample(position.x, position.y, position.z) as ScientificFieldSample
+      const values = {} as Record<WorldFieldMetricName, number | null>
+      const validity = {} as Record<WorldFieldMetricName, boolean>
+      for (const field of WORLD_FIELD_METRIC_FIELDS) {
+        const raw = sample[field]
+        const valid = typeof raw === 'number' && Number.isFinite(raw)
+        validity[field] = valid
+        values[field] = valid ? raw : null
+        const accumulator = accumulators.get(field)!
+        if (!valid) {
+          accumulator.invalid++
+          continue
+        }
+        accumulator.count++
+        accumulator.min = Math.min(accumulator.min, raw)
+        accumulator.max = Math.max(accumulator.max, raw)
+        const delta = raw - accumulator.mean
+        accumulator.mean += delta / accumulator.count
+        accumulator.m2 += delta * (raw - accumulator.mean)
+      }
+      points.push({ coordinate, position, values, validity })
+    }
+
+    const stats = {} as Record<WorldFieldMetricName, WorldFieldMetricStats>
+    for (const field of WORLD_FIELD_METRIC_FIELDS) {
+      const accumulator = accumulators.get(field)!
+      stats[field] = {
+        count: accumulator.count,
+        invalid: accumulator.invalid,
+        min: accumulator.count ? accumulator.min : 0,
+        max: accumulator.count ? accumulator.max : 0,
+        mean: accumulator.count ? accumulator.mean : 0,
+        standardDeviation: accumulator.count ? Math.sqrt(accumulator.m2 / accumulator.count) : 0,
+      }
+    }
+    return { axis, count: points.length, points, stats }
   }
 
   getStats(field: WorldFieldMetricName): WorldFieldMetricStats {
