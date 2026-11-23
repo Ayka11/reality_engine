@@ -72,5 +72,14 @@ assert.equal(new Set(renderedY).size, slices.length,
 assert.ok(slices.every(slice => slice.samples.every(sample => sample.y === centerY + (slice.y - centerY))),
   'fixture must model FieldSampler plane samples faithfully')
 
-assert.match(rendererSource, /typeof value === 'number' && Number\.isFinite\(value\)/,\n  'scientific field and coordinate inputs must reject coercible strings, null, and booleans')\nassert.match(rendererSource, /const rawFieldValue = finiteNumericValue\(sample\[key\]\)/,\n  'field distribution metrics must count non-numeric source values as invalid')\nassert.match(rendererSource, /const sampleX = finiteNumericValue\(sample\.x\)/,\n  'world coordinates must not coerce missing or string values into valid positions')\nassert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\.map\(key => finiteNumericValue\(sample\[key\]\)\)/,\n  'composite rendering must exclude invalid source values rather than coercing them to zero')\n\nconsole.log('PASS: invalid non-numeric samples are rejected without coercion')
+assert.match(rendererSource, /typeof value === 'number' && Number\.isFinite\(value\)/,
+  'scientific field and coordinate inputs must reject coercible strings, null, and booleans')
+assert.match(rendererSource, /const rawFieldValue = finiteNumericValue\(sample\[key\]\)/,
+  'field distribution metrics must count non-numeric source values as invalid')
+assert.match(rendererSource, /const sampleX = finiteNumericValue\(sample\.x\)/,
+  'world coordinates must not coerce missing or string values into valid positions')
+assert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\.map\(key => finiteNumericValue\(sample\[key\]\)\)/,
+  'composite rendering must exclude invalid source values rather than coercing them to zero')
+
+console.log('PASS: invalid non-numeric samples are rejected without coercion')
 console.log('PASS: distinct source slices remain distinct in normalized 3D space')
