@@ -32,6 +32,14 @@ assert.match(rendererSource, /sampleCount,\s*activeCells,\s*volume:/,
   'render result must return the actual sample count and geometry diagnostics')
 assert.doesNotMatch(rendererSource, /sampleCount:\s*renderedCells/,
   'sampleCount must not be substituted with the valid rendered-cell count')
+assert.match(rendererSource, /localBounds\.minX[\s\S]*localBounds\.maxZ/,
+  'camera fitting must use the rendered volume bounds')
+assert.match(rendererSource, /radius > this\.lastFramedRadius \* 1\.25/,
+  'camera must refit when the volume grows materially')
+assert.match(rendererSource, /this\.controls\.addEventListener\('start'[\s\S]*this\.cameraInteracted = true/,
+  'manual camera interaction must disable automatic reframing')
+assert.match(rendererSource, /const limitingHalfFov = Math\.max/,
+  'camera fitting must account for viewport aspect ratio')
 for (const diagnostic of [
   'invalidSamples',
   'duplicateCoordinates',
