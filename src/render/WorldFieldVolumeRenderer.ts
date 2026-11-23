@@ -54,6 +54,7 @@ export type WorldFieldVolumeResult = {
     activeRatio: number
     invalidFieldValues: number
     fieldValues: { min: number; max: number; mean: number; standardDeviation: number }
+    fieldProfiles: Record<string, FieldDistribution>
     uniqueLayers: number
     min: { x: number; y: number; z: number }
     max: { x: number; y: number; z: number }
@@ -61,6 +62,33 @@ export type WorldFieldVolumeResult = {
     bounds: { width: number; height: number; depth: number }
   }
 }
+
+type FieldDistribution = {
+  sampleCount: number
+  invalidValues: number
+  activeCells: number
+  activeRatio: number
+  min: number
+  max: number
+  mean: number
+  standardDeviation: number
+}
+
+const SCIENTIFIC_FIELD_KEYS = [
+  'energy', 'density', 'information', 'entropy', 'temperature', 'biology',
+] as const
+
+const createEmptyFieldDistributions = (): Record<string, FieldDistribution> =>
+  Object.fromEntries(SCIENTIFIC_FIELD_KEYS.map(key => [key, {
+    sampleCount: 0,
+    invalidValues: 0,
+    activeCells: 0,
+    activeRatio: 0,
+    min: 0,
+    max: 0,
+    mean: 0,
+    standardDeviation: 0,
+  }]))
 
 const FIELD_PALETTES: ReadonlyArray<readonly [number, number]> = [
   [0x183d9b, 0xffad42],
@@ -112,6 +140,7 @@ export class WorldFieldVolumeRenderer {
     activeRatio: 0,
     invalidFieldValues: 0,
     fieldValues: { min: 0, max: 0, mean: 0, standardDeviation: 0 },
+    fieldProfiles: createEmptyFieldDistributions(),
     uniqueLayers: 0,
     min: { x: 0, y: 0, z: 0 },
     max: { x: 0, y: 0, z: 0 },
@@ -185,6 +214,7 @@ export class WorldFieldVolumeRenderer {
       activeRatio: 0,
       invalidFieldValues: 0,
       fieldValues: { min: 0, max: 0, mean: 0, standardDeviation: 0 },
+      fieldProfiles: createEmptyFieldDistributions(),
       uniqueLayers: 0,
       min: { x: 0, y: 0, z: 0 },
       max: { x: 0, y: 0, z: 0 },
@@ -245,6 +275,11 @@ export class WorldFieldVolumeRenderer {
     let fieldValueMax = Number.NEGATIVE_INFINITY
     let fieldValueMean = 0
     let fieldValueM2 = 0
+    const fieldProfileAccumulators = Object.fromEntries(SCIENTIFIC_FIELD_KEYS.map(key => [key, {
+      sampleCount: 0, invalidValues: 0, activeCells: 0,
+      min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY,
+      mean: 0, m2: 0,
+    }]))
     let duplicateCoordinates = 0
     const coordinateKeys = new Set<string>()
     const layerCoordinates = new Set<number>()
@@ -299,6 +334,21 @@ export class WorldFieldVolumeRenderer {
           bounds.minZ = Math.min(bounds.minZ, sampleZ)
           bounds.maxZ = Math.max(bounds.maxZ, sampleZ)
 
+          for (const key of SCIENTIFIC_FIELD_KEYS) {
+            const profile = fieldProfileAccumulators[key]
+            const rawFieldValue = Number(sample[key])
+            if (!Number.isFinite(rawFieldValue)) {
+              profile.invalidValues++
+              continue
+            }
+            profile.sampleCount++
+            profile.min = Math.min(profile.min, rawFieldValue)
+            profile.max = Math.max(profile.max, rawFieldValue)
+            const delta = rawFieldValue - profile.mean
+            profile.mean += delta / profile.sampleCount
+            profile.m2 += delta * (rawFieldValue - profile.mean)
+            if (Math.abs(rawFieldValue) > 0.001) profile.activeCells++
+          }
           const rawValue = Number(sample[frame.property])
           const value = Number.isFinite(rawValue) ? rawValue : 0
           if (!Number.isFinite(rawValue)) invalidFieldValues++
@@ -353,6 +403,19 @@ export class WorldFieldVolumeRenderer {
         mean: renderedCells ? fieldValueMean : 0,
         standardDeviation: renderedCells ? Math.sqrt(fieldValueM2 / renderedCells) : 0,
       },
+      fieldProfiles: Object.fromEntries(SCIENTIFIC_FIELD_KEYS.map(key => {
+        const profile = fieldProfileAccumulators[key]
+        return [key, {
+          sampleCount: profile.sampleCount,
+          invalidValues: profile.invalidValues,
+          activeCells: profile.activeCells,
+          activeRatio: profile.sampleCount ? profile.activeCells / profile.sampleCount : 0,
+          min: profile.sampleCount ? profile.min : 0,
+          max: profile.sampleCount ? profile.max : 0,
+          mean: profile.sampleCount ? profile.mean : 0,
+          standardDeviation: profile.sampleCount ? Math.sqrt(profile.m2 / profile.sampleCount) : 0,
+        }]
+      })),
       uniqueLayers: sortedLayers.length,
       min: finiteBounds ? { x: bounds.minX, y: bounds.minY, z: bounds.minZ } : { x: 0, y: 0, z: 0 },
       max: finiteBounds ? { x: bounds.maxX, y: bounds.maxY, z: bounds.maxZ } : { x: 0, y: 0, z: 0 },
