@@ -361,7 +361,7 @@ export class WorldFieldVolumeRenderer {
             profile.m2 += delta * (rawFieldValue - profile.mean)
             if (Math.abs(rawFieldValue) > 0.001) profile.activeCells++
           }
-          const selectedRawValue = selectedFieldIndex >= 0 ? Number(sample[SCIENTIFIC_FIELD_KEYS[selectedFieldIndex]]) : null
+          const selectedRawValue = selectedFieldIndex >= 0 ? Number(sample[SCIENTIFIC_FIELD_KEYS[selectedFieldIndex]]) : 0
           const finiteValues = SCIENTIFIC_FIELD_KEYS.map(key => Number(sample[key]))
           const validValues = finiteValues.filter(Number.isFinite)
           const compositeStrength = validValues.length
