@@ -1048,7 +1048,7 @@ function _drawMultiSlice(){
 }
 window.setWorldField2DLinked=(enabled)=>{worldField2DLinked=Boolean(enabled);worldField2DCache=null;worldField2DRenderCache=null;drawGrid()}
 window.getWorldField2DLinked=()=>worldField2DLinked
-window.getWorldField2DState=()=>({linked:worldField2DLinked,view:worldField2DCache?.view??null,sampleCount:worldField2DCache?.samples?.length??0})
+window.getWorldField2DState=()=>({linked:worldField2DLinked,view:worldField2DCache?.view??null,sampleCount:worldField2DCache?.samples?.length??0,overviewFields:['energy','density','information','entropy','temperature','biology'],overviewLayout:'3x2',normalization:'visible-window-min-max'})
 
 function draw2D(){_drawFlat();}
 
