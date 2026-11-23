@@ -31,7 +31,7 @@ export class WorldFieldMetrics {
   private readonly history = new Map<WorldFieldMetricName, WorldFieldMetricPoint[]>()
   private latestStats = new Map<WorldFieldMetricName, WorldFieldMetricStats>()
 
-  constructor(private readonly sampler: FieldSampler, capacity = 2000, private readonly maxSamples = 250_000) {
+  constructor(private readonly sampler: Pick<FieldSampler, 'sample'>, capacity = 2000, private readonly maxSamples = 250_000) {
     if (!Number.isSafeInteger(capacity) || capacity < 1) throw new RangeError('Metric history capacity must be a positive safe integer')
     if (!Number.isSafeInteger(maxSamples) || maxSamples < 1) throw new RangeError('Metric sample limit must be a positive safe integer')
     this.capacity = capacity
