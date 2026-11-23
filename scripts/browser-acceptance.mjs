@@ -2493,6 +2493,37 @@ try {
     throw new Error("3D volume has insufficient vertical sampling depth: " + JSON.stringify(field3dDiagnostic));
   }
 
+  // All six scientific profiles must be measured from the same spatial sample
+  // set, and remain available regardless of which field is currently colored.
+  const expectedFieldProfiles = ["energy", "density", "information", "entropy", "temperature", "biology"];
+  const initialProfiles = field3dDiagnostic.volume?.fieldProfiles;
+  for (const field of expectedFieldProfiles) {
+    const profile = initialProfiles?.[field];
+    if (!profile || profile.sampleCount <= 0 || profile.invalidValues !== 0 ||
+        !Number.isFinite(profile.min) || !Number.isFinite(profile.max) ||
+        !Number.isFinite(profile.mean) || !Number.isFinite(profile.standardDeviation) ||
+        !Number.isFinite(profile.activeRatio) || profile.min > profile.max ||
+        profile.activeRatio < 0 || profile.activeRatio > 1) {
+      throw new Error("3D volume scientific field profile is missing or invalid for " + field +
+        ": " + JSON.stringify(profile));
+    }
+  }
+  for (const [index, field] of expectedFieldProfiles.entries()) {
+    await page.evaluate((fieldIndex) => window.setLayer?.(fieldIndex), index);
+    await page.waitForFunction((expectedName) => {
+      const state = window.getWorldField3DState?.();
+      return state?.ready === true && state.field === expectedName;
+    }, ["Energy", "Density", "Info", "Entropy", "Temp", "Bio"][index], { timeout: 10000 });
+    const selected = await page.evaluate(() => window.getWorldField3DState?.());
+    const selectedProfiles = selected?.volume?.fieldProfiles;
+    if (!expectedFieldProfiles.every(key =>
+      selectedProfiles?.[key]?.sampleCount === initialProfiles[key].sampleCount &&
+      selectedProfiles?.[key]?.invalidValues === 0)) {
+      throw new Error("Changing the displayed scientific field changed or lost the shared sample profiles");
+    }
+  }
+  await page.evaluate(() => window.setLayer?.(0));
+
   // Verify that the WebGL volume canvas receives pointer input and OrbitControls
   // changes its camera. Move to a clear center point and use Playwright's pointer API.
   const volumeCanvas = page.locator("#c3dField");
