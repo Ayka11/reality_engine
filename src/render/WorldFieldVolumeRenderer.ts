@@ -368,7 +368,7 @@ export class WorldFieldVolumeRenderer {
           const finiteValues = SCIENTIFIC_FIELD_KEYS.map(key => finiteNumericValue(sample[key]))
           const validValues = finiteValues.filter((value): value is number => value !== null)
           const compositeStrength = validValues.length
-            ? finiteValues.reduce((sum, value, index) => sum + (value !== null ? Math.abs(value) / fieldMaxima[index] : 0), 0) / validValues.length
+            ? finiteValues.reduce<number>((sum, value, index) => sum + (value !== null ? Math.abs(value) / fieldMaxima[index] : 0), 0) / validValues.length
             : 0
           const rawValue = selectedFieldIndex >= 0 ? selectedRawValue : compositeStrength
           const value = rawValue !== null ? rawValue : 0
