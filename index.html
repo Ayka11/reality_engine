@@ -2549,9 +2549,11 @@ function renderField3DImpl(){
     window.__worldField3DCache={key:cacheKey,slices};
   }
   const slices=window.__worldField3DCache.slices;
-  const fieldIndex=Number.isInteger(layer)&&layer>=0&&layer<=5?layer:0;
+  const fieldIndex=Number.isInteger(layer)&&layer>=0&&layer<=5?layer:-1;
   const names=['Energy','Density','Information','Entropy','Temperature','Biology'];
   const props=['energy','density','information','entropy','temperature','biology'];
+  const fieldName=fieldIndex<0?'All Fields':names[fieldIndex];
+  const property=fieldIndex<0?'composite':props[fieldIndex];
   // Normalize each field against the actual visible sample window. Fixed global
   // maxima washed out low-range fields (especially information and entropy).
   const maxima=props.map(property=>{
@@ -2568,8 +2570,8 @@ function renderField3DImpl(){
   if(typeof window.renderWorldFieldVolume==='function'){
     try{
       const rendered=window.renderWorldFieldVolume({
-        slices,view,fieldIndex,fieldName:names[fieldIndex],property:props[fieldIndex],
-        maximum:maxima[fieldIndex],cols,rows,spacing
+        slices,view,fieldIndex,fieldName,property,
+        maximum:fieldIndex<0?Math.max(...maxima):maxima[fieldIndex],cols,rows,spacing
       });
       const diagnosticState={
         ready:rendered?.ready===true&&Number(rendered?.renderedCells)>0,
@@ -2583,7 +2585,7 @@ function renderField3DImpl(){
         drawCalls:Number(rendered?.drawCalls??0),
         triangles:Number(rendered?.triangles??0),
         volume:rendered?.volume??null,
-        field:names[fieldIndex],
+        field:fieldName,
         view,
         reason:rendered?.reason
       };
@@ -2629,9 +2631,16 @@ function renderField3DImpl(){
     for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
       const sample=data.samples[py*data.width+px];
       if(!sample)continue;
-      const value=Number(sample[props[fieldIndexSafe]])||0;
-      const normalized=Math.max(0,Math.min(1,value/maxima[fieldIndexSafe]));
-      const color=colorOf(fieldIndexSafe,normalized);
+      const values=props.map((property,index)=>{
+        const raw=Number(sample[property]);
+        return Number.isFinite(raw)?Math.max(0,Math.min(1,Math.abs(raw)/maxima[index])):0;
+      });
+      const normalized=fieldIndexSafe>=0?values[fieldIndexSafe]:values.reduce((sum,value)=>sum+value,0)/values.length;
+      const value=fieldIndexSafe>=0?Number(sample[props[fieldIndexSafe]])||0:normalized;
+      const color=fieldIndexSafe>=0?colorOf(fieldIndexSafe,normalized):values.reduce((sum,contribution,index)=>{
+        const part=colorOf(index,contribution);
+        return sum.map((channel,channelIndex)=>channel+part[channelIndex]*contribution);
+      },[0,0,0]).map(channel=>Math.round(channel/Math.max(0.000001,values.reduce((sum,value)=>sum+value,0))));
       const sx=originX+px*cellW+py*cellW*.55;
       const sy=originY+(px+py)*cellH*.5-zLayer*depthStep;
       const lift=Math.max(0,Math.min(depthStep*.9,normalized*depthStep*2));
@@ -2641,11 +2650,11 @@ function renderField3DImpl(){
       renderedCells++;if(value>(maxima[fieldIndexSafe]>.99?maxima[fieldIndexSafe]*.001:.001))activeCells++;
     }
   }
-  g.font='bold 12px system-ui';g.fillStyle='rgba(235,242,255,.94)';g.fillText('ISOMETRIC FIELD PREVIEW · '+names[fieldIndexSafe],14,22);
+  g.font='bold 12px system-ui';g.fillStyle='rgba(235,242,255,.94)';g.fillText('ISOMETRIC FIELD PREVIEW · '+fieldName,14,22);
   g.font='10px monospace';g.fillStyle='rgba(180,200,235,.8)';
   g.fillText('samples '+sampleCount+' · active '+activeCells+' · Y '+view.sliceY+' · center '+view.center.x.toFixed(1)+', '+view.center.y.toFixed(1)+', '+view.center.z.toFixed(1),14,h-12);
   window.__worldField3DLayoutRetryCount=0;
-  const diagnosticState={ready:renderedCells>0,renderedCells,sampleCount,activeCells,slices:slices.length,field:names[fieldIndexSafe],view,renderer:'canvas2d-isometric-preview',true3D:false,meshInstances:0,drawCalls:0,triangles:0};
+  const diagnosticState={ready:renderedCells>0,renderedCells,sampleCount,activeCells,slices:slices.length,field:fieldName,view,renderer:'canvas2d-isometric-preview',true3D:false,meshInstances:0,drawCalls:0,triangles:0};
   window.__worldField3DCanvasState=diagnosticState;
   return renderedCells>0;
 }
@@ -2954,7 +2963,7 @@ function setLayer(l){
   });
   if(window.setChunkLayer)window.setChunkLayer(layer);
   const scientificFields=['energy','density','information','entropy','temperature','biology']
-  if(currentRenderMode==='3d' && typeof window.setInfiniteWorldScientificField==='function'){
+  if((currentRenderMode==='3d'||currentRenderMode==='hybrid') && typeof window.setInfiniteWorldScientificField==='function'){
     window.setInfiniteWorldScientificField(layer<0?'all':scientificFields[layer])
   }
   drawGrid();

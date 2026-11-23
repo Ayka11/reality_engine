@@ -263,9 +263,21 @@ export class WorldFieldVolumeRenderer {
       this.scene.add(this.mesh)
     }
 
-    const maximum = Math.max(0.000001, Math.abs(Number(frame.maximum) || 1))
-    const palette = FIELD_PALETTES[Math.max(0, Math.min(FIELD_PALETTES.length - 1, frame.fieldIndex))]
-      ?? FIELD_PALETTES[0]
+    const selectedFieldIndex = Number.isInteger(frame.fieldIndex) && frame.fieldIndex >= 0 && frame.fieldIndex < SCIENTIFIC_FIELD_KEYS.length
+      ? frame.fieldIndex
+      : -1
+    const fieldMaxima = SCIENTIFIC_FIELD_KEYS.map(key => {
+      let observed = 0
+      for (const slice of frame.slices) {
+        for (const sample of slice.data.samples ?? []) {
+          const value = Number(sample?.[key])
+          if (Number.isFinite(value)) observed = Math.max(observed, Math.abs(value))
+        }
+      }
+      return Math.max(observed, 1e-9)
+    })
+    const maximum = Math.max(0.000001, Math.abs(Number(frame.maximum) || fieldMaxima[selectedFieldIndex >= 0 ? selectedFieldIndex : 0]))
+    const palette = FIELD_PALETTES[selectedFieldIndex >= 0 ? selectedFieldIndex : 0]
     let renderedCells = 0
     let activeCells = 0
     let sampleCount = 0
@@ -349,16 +361,24 @@ export class WorldFieldVolumeRenderer {
             profile.m2 += delta * (rawFieldValue - profile.mean)
             if (Math.abs(rawFieldValue) > 0.001) profile.activeCells++
           }
-          const rawValue = Number(sample[frame.property])
+          const selectedRawValue = selectedFieldIndex >= 0 ? Number(sample[SCIENTIFIC_FIELD_KEYS[selectedFieldIndex]]) : null
+          const finiteValues = SCIENTIFIC_FIELD_KEYS.map(key => Number(sample[key]))
+          const validValues = finiteValues.filter(Number.isFinite)
+          const compositeStrength = validValues.length
+            ? finiteValues.reduce((sum, value, index) => sum + (Number.isFinite(value) ? Math.abs(value) / fieldMaxima[index] : 0), 0) / validValues.length
+            : 0
+          const rawValue = selectedFieldIndex >= 0 ? selectedRawValue : compositeStrength
           const value = Number.isFinite(rawValue) ? rawValue : 0
-          if (!Number.isFinite(rawValue)) invalidFieldValues++
+          if (selectedFieldIndex >= 0 && !Number.isFinite(rawValue)) invalidFieldValues++
           fieldValueMin = Math.min(fieldValueMin, value)
           fieldValueMax = Math.max(fieldValueMax, value)
           const valueCount = renderedCells + 1
           const valueDelta = value - fieldValueMean
           fieldValueMean += valueDelta / valueCount
           fieldValueM2 += valueDelta * (value - fieldValueMean)
-          const normalized = THREE.MathUtils.clamp(value / maximum, 0, 1)
+          const normalized = selectedFieldIndex >= 0
+            ? THREE.MathUtils.clamp(Math.abs(value) / maximum, 0, 1)
+            : THREE.MathUtils.clamp(compositeStrength, 0, 1)
           const x = (sampleX - frame.view.center.x) / cellWidth
           const y = (sliceY - centerY) / spacing
           const z = (sampleZ - frame.view.center.z) / cellDepth
@@ -374,7 +394,25 @@ export class WorldFieldVolumeRenderer {
           this.matrix.compose(this.position, this.quaternion, this.scale)
           this.mesh.setMatrixAt(renderedCells, this.matrix)
 
-          this.color.setHex(palette[0]).lerp(this.highColor.setHex(palette[1]), normalized)
+          if (selectedFieldIndex >= 0) {
+            this.color.setHex(palette[0]).lerp(this.highColor.setHex(palette[1]), normalized)
+          } else {
+            let red = 0, green = 0, blue = 0, weight = 0
+            for (let field = 0; field < SCIENTIFIC_FIELD_KEYS.length; field++) {
+              const fieldValue = Number(sample[SCIENTIFIC_FIELD_KEYS[field]])
+              if (!Number.isFinite(fieldValue)) continue
+              const contribution = THREE.MathUtils.clamp(Math.abs(fieldValue) / fieldMaxima[field], 0, 1)
+              if (contribution <= 0) continue
+              const colors = FIELD_PALETTES[field]
+              this.highColor.setHex(colors[0]).lerp(this.color.setHex(colors[1]), contribution)
+              red += this.highColor.r * contribution
+              green += this.highColor.g * contribution
+              blue += this.highColor.b * contribution
+              weight += contribution
+            }
+            if (weight > 0) this.color.setRGB(red / weight, green / weight, blue / weight)
+            else this.color.setHex(0x182235)
+          }
           this.mesh.setColorAt(renderedCells, this.color)
           renderedCells++
           if (normalized > 0.001) activeCells++

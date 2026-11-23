@@ -2555,9 +2555,21 @@ try {
       throw new Error("Changing the displayed scientific field changed or lost the shared sample profiles");
     }
   }
+  // All Fields must render a true composite of all six normalized scalar fields,
+  // not silently alias to Energy. Keep the six independent profiles available.
   await page.evaluate(() => {
-    if (window.getWorldField3DState?.()?.field !== "Energy") window.setLayer?.(0);
+    window.setLayer?.(-1);
+    window.renderField3D?.();
   });
+  await page.waitForFunction(() => window.__worldField3DCanvasState?.field === "All Fields" &&
+    window.__worldField3DCanvasState?.ready === true, { timeout: 10000 });
+  const allFieldsVolume = await page.evaluate(() => window.__worldField3DCanvasState);
+  if (allFieldsVolume.field !== "All Fields" || allFieldsVolume.renderedCells <= 0 ||
+      !expectedFieldProfiles.every(field => allFieldsVolume.volume?.fieldProfiles?.[field]?.sampleCount > 0)) {
+    throw new Error("Volumetric All Fields mode did not render the six-field composite: " + JSON.stringify(allFieldsVolume));
+  }
+  await page.evaluate(() => window.setLayer?.(0));
+  await page.waitForFunction(() => window.__worldField3DCanvasState?.field === "Energy", { timeout: 10000 });
 
   // Verify that the WebGL volume canvas receives pointer input and OrbitControls
   // changes its camera. Move to a clear center point and use Playwright's pointer API.
