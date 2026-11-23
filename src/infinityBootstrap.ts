@@ -178,6 +178,17 @@ export function bootstrapInfiniteWorld() {
       max: { x: view.center.x + radius, y: view.center.y + verticalRadius, z: view.center.z + radius },
     }, resolution)
   }
+  ;(window as any).sampleWorldFieldProfile = (axis: string = 'x', options: any = {}) => {
+    const config = options && typeof options === 'object' ? options : {}
+    const view = worldViewContract.snapshot()
+    const radius = Number.isFinite(config.radius) ? Math.max(1, Math.min(64, config.radius)) : 8
+    const verticalRadius = Number.isFinite(config.verticalRadius) ? Math.max(1, Math.min(32, config.verticalRadius)) : 6
+    const resolution = Number.isSafeInteger(config.resolution) ? Math.max(1, Math.min(201, config.resolution)) : 41
+    return worldFieldMetrics.sampleProfile(axis as 'x' | 'y' | 'z', {
+      min: { x: view.center.x - radius, y: view.center.y - verticalRadius, z: view.center.z - radius },
+      max: { x: view.center.x + radius, y: view.center.y + verticalRadius, z: view.center.z + radius },
+    }, resolution)
+  }
   ;(window as any).getWorldFieldMetricsSnapshot = () => worldFieldMetrics.snapshot()
   ;(window as any).getWorldFieldMetricsSeries = (field: string, limit = 120) => worldFieldMetrics.getSeries(field as any, limit)
   ;(window as any).exportWorldFieldMetricsCSV = () => worldFieldMetrics.exportCSV()
