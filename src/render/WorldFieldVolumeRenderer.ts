@@ -93,6 +93,8 @@ export class WorldFieldVolumeRenderer {
   private width = 0
   private height = 0
   private cameraFramed = false
+  private cameraInteracted = false
+  private lastFramedRadius = 0
   private readonly matrix = new THREE.Matrix4()
   private readonly position = new THREE.Vector3()
   private readonly scale = new THREE.Vector3()
@@ -136,6 +138,9 @@ export class WorldFieldVolumeRenderer {
     this.controls.maxDistance = 100
     this.controls.maxPolarAngle = Math.PI * 0.49
     this.controls.target.set(0, 0, 0)
+    this.controls.addEventListener('start', () => {
+      this.cameraInteracted = true
+    })
     this.controls.addEventListener('change', () => this.draw())
 
     this.scene.add(new THREE.HemisphereLight(0xdbe8ff, 0x253149, 2.1))
@@ -245,6 +250,11 @@ export class WorldFieldVolumeRenderer {
     const cellDepth = (Math.max(1, Number(frame.view.visibleRadius) * 2)) / Math.max(1, frame.rows)
     const cellSize = 0.96
     const centerY = Number.isFinite(frame.view.sliceY) ? frame.view.sliceY : 0
+    const localBounds = {
+      minX: Number.POSITIVE_INFINITY, maxX: Number.NEGATIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY, maxY: Number.NEGATIVE_INFINITY,
+      minZ: Number.POSITIVE_INFINITY, maxZ: Number.NEGATIVE_INFINITY,
+    }
 
     for (let sliceIndex = 0; sliceIndex < frame.slices.length; sliceIndex++) {
       const slice = frame.slices[sliceIndex]
@@ -283,6 +293,12 @@ export class WorldFieldVolumeRenderer {
           const x = (sampleX - frame.view.center.x) / cellWidth
           const y = (sliceY - centerY) / spacing
           const z = (sampleZ - frame.view.center.z) / cellDepth
+          localBounds.minX = Math.min(localBounds.minX, x)
+          localBounds.maxX = Math.max(localBounds.maxX, x)
+          localBounds.minY = Math.min(localBounds.minY, y)
+          localBounds.maxY = Math.max(localBounds.maxY, y)
+          localBounds.minZ = Math.min(localBounds.minZ, z)
+          localBounds.maxZ = Math.max(localBounds.maxZ, z)
 
           this.position.set(x, y, z)
           this.scale.set(cellWidth > 0 ? cellSize : 0, cellSize, cellDepth > 0 ? cellSize : 0)
@@ -348,12 +364,36 @@ export class WorldFieldVolumeRenderer {
     const lowestLayer = layerOffsets.length ? Math.min(...layerOffsets) : 0
     this.gridHelper.position.y = lowestLayer - 0.14
 
-    if (!this.cameraFramed) {
-      const span = Math.max(frame.cols, frame.rows, frame.slices.length, 6)
-      this.camera.position.set(span * 1.45, span * 1.2, span * 1.55)
-      this.controls.target.set(0, 0, 0)
-      this.controls.update()
-      this.cameraFramed = true
+    if (renderedCells > 0) {
+      const center = new THREE.Vector3(
+        (localBounds.minX + localBounds.maxX) / 2,
+        (localBounds.minY + localBounds.maxY) / 2,
+        (localBounds.minZ + localBounds.maxZ) / 2,
+      )
+      const halfWidth = (localBounds.maxX - localBounds.minX) / 2 + cellSize
+      const halfHeight = (localBounds.maxY - localBounds.minY) / 2 + cellSize
+      const halfDepth = (localBounds.maxZ - localBounds.minZ) / 2 + cellSize
+      const radius = Math.max(1, Math.hypot(halfWidth, halfHeight, halfDepth))
+      const shouldFrame = !this.cameraFramed ||
+        (!this.cameraInteracted && radius > this.lastFramedRadius * 1.25)
+      if (shouldFrame) {
+        const verticalHalfFov = THREE.MathUtils.degToRad(this.camera.fov / 2)
+        const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * Math.max(0.1, this.camera.aspect))
+        const limitingHalfFov = Math.max(0.05, Math.min(verticalHalfFov, horizontalHalfFov))
+        const distance = Math.min(this.controls.maxDistance, Math.max(
+          this.controls.minDistance,
+          (radius / Math.sin(limitingHalfFov)) * 1.18,
+        ))
+        const direction = new THREE.Vector3(1, 0.82, 1).normalize()
+        this.controls.target.copy(center)
+        this.camera.position.copy(center).addScaledVector(direction, distance)
+        this.camera.near = Math.max(0.1, distance / 100)
+        this.camera.far = Math.max(500, distance * 8)
+        this.camera.updateProjectionMatrix()
+        this.controls.update()
+        this.lastFramedRadius = radius
+        this.cameraFramed = true
+      }
     }
 
     this.renderer.render(this.scene, this.camera)
