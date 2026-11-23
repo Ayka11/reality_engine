@@ -216,7 +216,7 @@ export class WorldFieldMetrics {
         ...WORLD_FIELD_METRIC_FIELDS.map(field => point.validity?.[field] === true ? 'true' : 'false'),
       ].join(','))
     }
-    return rows.join('\\n')
+    return rows.join('\n')
   }
 
   getStats(field: WorldFieldMetricName): WorldFieldMetricStats {
