@@ -2952,7 +2952,11 @@ function setLayer(l){
   ['sciLayerE','sciLayerD','sciLayerI','sciLayerS','sciLayerT','sciLayerB'].forEach((id,i)=>{
     const el=document.getElementById(id);if(el)el.classList.toggle('active',i===layer);
   });
-  if(window.setChunkLayer)window.setChunkLayer(layer<0?0:layer);
+  if(window.setChunkLayer)window.setChunkLayer(layer);
+  const scientificFields=['energy','density','information','entropy','temperature','biology']
+  if(currentRenderMode==='3d' && typeof window.setInfiniteWorldScientificField==='function'){
+    window.setInfiniteWorldScientificField(layer<0?'all':scientificFields[layer])
+  }
   drawGrid();
   if(currentRenderMode==='field3d')window.renderField3D?.();
   // The connector owns the public getWorldField3DState() contract; keep renderer diagnostics separate.
