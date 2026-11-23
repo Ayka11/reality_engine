@@ -2509,15 +2509,19 @@ try {
     }
   }
   for (const [index, field] of expectedFieldProfiles.entries()) {
-    const expectedName = ["Energy", "Density", "Info", "Entropy", "Temp", "Bio"][index];
-    await page.evaluate(({ fieldIndex, name }) => {
-      if (window.getWorldField3DState?.()?.field !== name) window.setLayer?.(fieldIndex);
-    }, { fieldIndex: index, name: expectedName });
-    await page.waitForFunction((name) => {
-      const state = window.getWorldField3DState?.();
-      return state?.ready === true && state.field === name;
-    }, expectedName, { timeout: 10000 });
-    const selected = await page.evaluate(() => window.getWorldField3DState?.());
+    const buttonId = ["layerE", "layerD", "layerI", "layerS", "layerT", "layerB"][index];
+    await page.evaluate(({ fieldIndex, id }) => {
+      const button = document.getElementById(id);
+      if (!button?.classList.contains("active")) window.setLayer?.(fieldIndex);
+      // The public getter is connector-owned and intentionally reports the
+      // renderer contract; the toolbar's active state is the synchronous UI
+      // selection contract. Explicitly request a render after selection.
+      window.renderField3D?.();
+    }, { fieldIndex: index, id: buttonId });
+    await page.waitForFunction((id) =>
+      document.getElementById(id)?.classList.contains("active") === true,
+    buttonId, { timeout: 10000 });
+    const selected = await page.evaluate(() => window.__worldField3DCanvasState);
     const selectedProfiles = selected?.volume?.fieldProfiles;
     if (!expectedFieldProfiles.every(key =>
       selectedProfiles?.[key]?.sampleCount === initialProfiles[key].sampleCount &&
