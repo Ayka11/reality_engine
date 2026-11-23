@@ -77,8 +77,19 @@ export class SparseVoxelGridPhysicalAddressAdapter {
     return chunk.getCellAtBase(x, y, z);
   }
 
-  /** Return a tracked front-buffer CellState by canonical physical chunk key. */
-  getCell(key: string, localX: number, localY: number, localZ: number): CellState | null {
+  /** Return a tracked back-buffer CellState for a base-resolution coordinate. */
+  getBackCellAtBase(x: number, y: number, z: number): CellState | null {
+    const address = this.resolve(x, y, z);
+    if (!address) return null;
+    const chunk = this.#chunks.get(address.chunk.key);
+    if (!chunk) {
+      throw new Error("Physical address adapter index/store mismatch for " + address.chunk.key);
+    }
+    return chunk.getBackCell(address.localX, address.localY, address.localZ);
+  }
+
+  /** Validate local coordinates once for both physical buffer sides. */
+  #getChunkForLocalCell(key: string, localX: number, localY: number, localZ: number): SparseVoxelGridPhysicalChunk | null {
     const chunk = this.#chunks.get(key);
     if (!chunk) return null;
     if (![localX, localY, localZ].every(Number.isSafeInteger) ||
@@ -87,6 +98,16 @@ export class SparseVoxelGridPhysicalAddressAdapter {
         localZ < 0 || localZ >= 32) {
       throw new RangeError("Physical address adapter local cell coordinates are out of bounds");
     }
-    return chunk.getCell(localX, localY, localZ);
+    return chunk;
+  }
+
+  /** Return a tracked front-buffer CellState by canonical physical chunk key. */
+  getCell(key: string, localX: number, localY: number, localZ: number): CellState | null {
+    return this.#getChunkForLocalCell(key, localX, localY, localZ)?.getCell(localX, localY, localZ) ?? null;
+  }
+
+  /** Return a tracked back-buffer CellState by canonical physical chunk key. */
+  getBackCell(key: string, localX: number, localY: number, localZ: number): CellState | null {
+    return this.#getChunkForLocalCell(key, localX, localY, localZ)?.getBackCell(localX, localY, localZ) ?? null;
   }
 }

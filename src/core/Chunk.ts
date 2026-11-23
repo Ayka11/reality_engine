@@ -187,6 +187,16 @@ export class Chunk {
     return new CellState(this.#_buffer, this.localIdx(lx, ly, lz), () => this.#markMutation());
   }
   /**
+   * Return a revision-tracked cell view into the back buffer.
+   * Back-buffer writes remain isolated from the currently published front state
+   * until swapBuffers() explicitly promotes the prepared buffer.
+   */
+  getBackCell(lx: number, ly: number, lz: number): CellState {
+    const accessTime = Date.now();
+    if (accessTime > this.#_lastAccessed) this.#_lastAccessed = accessTime;
+    return new CellState(this.#_backBuffer, this.localIdx(lx, ly, lz), () => this.#markMutation());
+  }
+  /**
    * Copy a range from the authoritative front buffer into a caller-owned target.
    * The internal source view never escapes; the caller remains responsible for
    * tracking any mutation to its own destination buffer.

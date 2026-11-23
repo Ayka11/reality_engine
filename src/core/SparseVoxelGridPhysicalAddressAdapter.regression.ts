@@ -35,6 +35,20 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
     throw new Error("Physical address adapter did not preserve tracked writes to a coarse cell");
   }
 
+  // Back-buffer preparation is isolated until an explicit buffer swap.
+  const preparedCoarseCell = adapter.getBackCellAtBase(3, 5, 7);
+  if (!preparedCoarseCell || preparedCoarseCell.get(F.ENERGY) !== 0) {
+    throw new Error("Physical address adapter did not expose the independent coarse back buffer");
+  }
+  preparedCoarseCell.set(F.ENERGY, 72);
+  if (adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 44 ||
+      adapter.getBackCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 72) {
+    throw new Error("Physical back-buffer write leaked into or failed to update the front buffer");
+  }
+  if (adapter.getBackCell(fine.key, 0, 0, 0)?.get(F.ENERGY) !== 0) {
+    throw new Error("Physical chunk-key back-buffer access returned the wrong cell");
+  }
+
   // The adjacent level-zero chunk begins exactly at the coarse chunk's exclusive bound.
   const fineAddress = adapter.resolve(64, 0, 0);
   if (!fineAddress || fineAddress.chunk.key !== fine.key ||
@@ -48,8 +62,10 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
 
   // Adapter ownership is detached from the caller's chunk objects.
   coarse.getCell(1, 2, 3).set(F.ENERGY, 100);
-  if (adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 44) {
-    throw new Error("Caller-owned chunk mutation leaked into the address adapter");
+  coarse.getBackCell(1, 2, 3).set(F.ENERGY, 101);
+  if (adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 44 ||
+      adapter.getBackCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 72) {
+    throw new Error("Caller-owned front/back chunk mutation leaked into the address adapter");
   }
 
   expectRejected("overlapping coarse/fine topology", () =>
@@ -63,6 +79,8 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
     new SparseVoxelGridPhysicalAddressAdapter([{} as SparseVoxelGridPhysicalChunk]));
   expectRejected("out-of-range local coordinates", () =>
     adapter.getCell(fine.key, 32, 0, 0));
+  expectRejected("out-of-range back-buffer coordinates", () =>
+    adapter.getBackCell(fine.key, 0, -1, 0));
 
   console.log("SparseVoxelGrid physical address adapter mixed-LOD resolution, boundary, detached ownership and tracked-write regressions: PASS");
 }
