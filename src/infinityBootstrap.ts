@@ -163,15 +163,16 @@ export function bootstrapInfiniteWorld() {
   })
   let worldFieldMetricsTick = 0
   ;(window as any).sampleWorldFieldMetrics = (options: any = {}) => {
+    const config = options && typeof options === 'object' ? options : {}
     const view = worldViewContract.snapshot()
-    const radius = Number.isFinite(options.radius) ? Math.max(1, Math.min(64, options.radius)) : 8
-    const verticalRadius = Number.isFinite(options.verticalRadius) ? Math.max(1, Math.min(32, options.verticalRadius)) : 6
+    const radius = Number.isFinite(config.radius) ? Math.max(1, Math.min(64, config.radius)) : 8
+    const verticalRadius = Number.isFinite(config.verticalRadius) ? Math.max(1, Math.min(32, config.verticalRadius)) : 6
     const resolution = {
-      x: Number.isSafeInteger(options.resolution?.x) ? Math.max(1, Math.min(41, options.resolution.x)) : 9,
-      y: Number.isSafeInteger(options.resolution?.y) ? Math.max(1, Math.min(33, options.resolution.y)) : 7,
-      z: Number.isSafeInteger(options.resolution?.z) ? Math.max(1, Math.min(41, options.resolution.z)) : 9,
+      x: Number.isSafeInteger(config.resolution?.x) ? Math.max(1, Math.min(41, config.resolution.x)) : 9,
+      y: Number.isSafeInteger(config.resolution?.y) ? Math.max(1, Math.min(33, config.resolution.y)) : 7,
+      z: Number.isSafeInteger(config.resolution?.z) ? Math.max(1, Math.min(41, config.resolution.z)) : 9,
     }
-    const tick = Number.isSafeInteger(options.tick) && options.tick >= 0 ? options.tick : ++worldFieldMetricsTick
+    const tick = Number.isSafeInteger(config.tick) && config.tick >= 0 ? config.tick : ++worldFieldMetricsTick
     return worldFieldMetrics.sample(tick, {
       min: { x: view.center.x - radius, y: view.center.y - verticalRadius, z: view.center.z - radius },
       max: { x: view.center.x + radius, y: view.center.y + verticalRadius, z: view.center.z + radius },
@@ -180,6 +181,16 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).getWorldFieldMetricsSnapshot = () => worldFieldMetrics.snapshot()
   ;(window as any).getWorldFieldMetricsSeries = (field: string, limit = 120) => worldFieldMetrics.getSeries(field as any, limit)
   ;(window as any).exportWorldFieldMetricsCSV = () => worldFieldMetrics.exportCSV()
+  ;(window as any).downloadWorldFieldMetricsCSV = () => {
+    const csv = worldFieldMetrics.exportCSV()
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'reality-engine-world-field-metrics.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
   ;(window as any).clearWorldFieldMetrics = () => worldFieldMetrics.clear()
   // Read-only scientific field inspection and deterministic 2D view-window sampling.
   ;(window as any).worldViewContract = worldViewContract
