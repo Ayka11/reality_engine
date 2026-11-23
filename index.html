@@ -2552,7 +2552,16 @@ function renderField3DImpl(){
   const fieldIndex=Number.isInteger(layer)&&layer>=0&&layer<=5?layer:0;
   const names=['Energy','Density','Information','Entropy','Temperature','Biology'];
   const props=['energy','density','information','entropy','temperature','biology'];
-  const maxima=[1000,1,500,1,800,1];
+  // Normalize each field against the actual visible sample window. Fixed global
+  // maxima washed out low-range fields (especially information and entropy).
+  const maxima=props.map(property=>{
+    let observed=0;
+    for(const slice of slices)for(const sample of slice.data.samples||[]){
+      const value=Number(sample?.[property]);
+      if(Number.isFinite(value))observed=Math.max(observed,Math.abs(value));
+    }
+    return Math.max(observed,1e-9);
+  });
   const sampleCount=slices.reduce((total,slice)=>total+(slice.data.samples||[]).filter(Boolean).length,0);
 
   // Preferred path: render the authoritative samples as instanced 3D voxels through WebGL.
