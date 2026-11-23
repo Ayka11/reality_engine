@@ -2894,6 +2894,57 @@ function previewRenderMode(mode){
 }
 window.previewRenderMode=previewRenderMode;
 
+function renderWorldFieldProfile(axis='x'){
+  const panel=document.getElementById('worldFieldProfileResults');
+  if(!panel)return;
+  window.worldFieldProfileAxis=axis;
+  const sampler=window.sampleWorldFieldProfile;
+  if(typeof sampler!=='function'){
+    panel.innerHTML='<div style="color:#ffb6a5;padding:8px">Spatial profile API unavailable.</div>';
+    return;
+  }
+  let profile;
+  try{profile=sampler(axis,{resolution:41});}
+  catch(error){panel.innerHTML='<div style="color:#ffb6a5;padding:8px">'+(error instanceof Error?error.message:String(error))+'</div>';return;}
+  const fields=[
+    ['energy','Energy'],['density','Density'],['information','Information'],
+    ['entropy','Entropy'],['temperature','Temperature'],['biology','Biology'],['material','Material']
+  ];
+  const number=value=>Number.isFinite(value)?Number(value).toFixed(4):'—';
+  const rows=fields.map(([key,label])=>{
+    const stats=profile.stats?.[key]||{};
+    const values=profile.points.map(point=>point.values?.[key]);
+    const valid=values.filter(value=>typeof value==='number'&&Number.isFinite(value));
+    const min=valid.length?Math.min(...valid):0,max=valid.length?Math.max(...valid):0;
+    const span=max-min||1;
+    let segment=[];const paths=[];
+    values.forEach((value,index)=>{
+      if(typeof value!=='number'||!Number.isFinite(value)){
+        if(segment.length)paths.push(segment.join(' '));segment=[];return;
+      }
+      const x=profile.count<=1?120:8+index*224/(profile.count-1);
+      const y=42-((value-min)/span)*34;
+      segment.push((segment.length?'L':'M')+x.toFixed(2)+','+y.toFixed(2));
+    });
+    if(segment.length)paths.push(segment.join(' '));
+    const graph='<svg viewBox="0 0 240 48" role="img" aria-label="'+label+' spatial profile" style="width:240px;height:48px;display:block">'+
+      '<path d="M8 43 H232" stroke="#34415c" stroke-width="1" fill="none"/>'+
+      paths.map(path=>'<path d="'+path+'" stroke="#79b8ff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>').join('')+
+      '</svg>';
+    return '<tr><td style="padding:7px;text-align:left;color:var(--text);white-space:nowrap">'+label+'</td>'+
+      '<td style="padding:4px 8px">'+graph+'</td>'+
+      '<td style="padding:7px;text-align:right">'+number(stats.mean)+'</td>'+
+      '<td style="padding:7px;text-align:right">'+number(stats.min)+' / '+number(stats.max)+'</td>'+
+      '<td style="padding:7px;text-align:right;color:#8bd5a6">'+(stats.count??0)+'</td>'+
+      '<td style="padding:7px;text-align:right;color:'+(stats.invalid?'#ff8d8d':'#8bd5a6')+'">'+(stats.invalid??0)+'</td></tr>';
+  }).join('');
+  panel.innerHTML='<div style="color:#8ea7d8;font-size:11px;margin:0 0 8px">'+profile.count+' authoritative samples · axis '+axis.toUpperCase()+' · other coordinates fixed at view center · on-demand</div>'+
+    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:720px"><thead><tr>'+ 
+    ['Field','Spatial profile','Mean','Min / Max','Valid','Invalid'].map(label=>'<th style="text-align:right;padding:6px;border-bottom:1px solid #293047;color:#9da9c5">'+label+'</th>').join('')+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+window.renderWorldFieldProfile=renderWorldFieldProfile;
+
 function updateMetricsView(){
   const mv=document.getElementById('metricsContent');if(!mv)return;
   const fields=[
@@ -2939,8 +2990,13 @@ function updateMetricsView(){
     ['Causal Events',causal.length],['Diffusion',DIFFUSION.toFixed(4)],
     ['Entropy Base',ENTROPY_BASE.toFixed(6)],['Info Rate',INFO_RATE.toFixed(3)],
   ];
-  mv.innerHTML=metricsHtml+'<section style="margin:14px 0;padding:12px;border:1px solid #25283a;border-radius:8px"><strong style="color:var(--text);font:600 12px system-ui">Legacy finite simulation · separate data source</strong>'+
+  const profileHtml='<section style="margin:14px 0;padding:12px;border:1px solid #25283a;border-radius:8px;background:#0b1020">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px"><strong style="color:var(--text);font:600 12px system-ui">Authoritative Spatial Profiles</strong><div style="display:flex;gap:6px">'+
+    ['x','y','z'].map(axis=>'<button type="button" onclick="renderWorldFieldProfile(\''+axis+'\')" style="padding:5px 10px;border:1px solid #39496b;border-radius:5px;background:'+(window.worldFieldProfileAxis===axis?'#253858':'transparent')+';color:#dbe6ff;cursor:pointer">'+axis.toUpperCase()+'</button>').join('')+
+    '</div></div><div id="worldFieldProfileResults" style="color:#9da9c5">Sampling profile…</div></section>';
+  mv.innerHTML=metricsHtml+profileHtml+'<section style="margin:14px 0;padding:12px;border:1px solid #25283a;border-radius:8px"><strong style="color:var(--text);font:600 12px system-ui">Legacy finite simulation · separate data source</strong>'+
     rows.map(([k,v])=>'<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid #1a1a25"><span>'+k+'</span><span style="color:var(--text)">'+v+'</span></div>').join('')+'</section>';
+  renderWorldFieldProfile(window.worldFieldProfileAxis||'x');
 }
 window.updateMetricsView=updateMetricsView;
 
