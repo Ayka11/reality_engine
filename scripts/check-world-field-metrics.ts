@@ -112,7 +112,7 @@ assert.equal(profileMetrics.getSeries('energy').length, 0, 'profiles must not mu
 
 const profileSeriesBeforeExport = profileMetrics.getSeries('energy')
 const profileCsv = profileMetrics.exportProfileCSV(xProfile)
-const profileCsvRows = profileCsv.split('\\n')
+const profileCsvRows = profileCsv.split('\n')
 const profileCsvHeader = profileCsvRows[0].split(',')
 assert.deepEqual(profileCsvHeader.slice(0, 5), ['axis', 'coordinate', 'x', 'y', 'z'])
 assert.deepEqual(profileCsvHeader.slice(5, 12), [
