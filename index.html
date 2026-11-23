@@ -2938,7 +2938,7 @@ function renderWorldFieldProfile(axis='x'){
       '<td style="padding:7px;text-align:right;color:#8bd5a6">'+(stats.count??0)+'</td>'+
       '<td style="padding:7px;text-align:right;color:'+(stats.invalid?'#ff8d8d':'#8bd5a6')+'">'+(stats.invalid??0)+'</td></tr>';
   }).join('');
-  panel.innerHTML='<div style="color:#8ea7d8;font-size:11px;margin:0 0 8px">'+profile.count+' authoritative samples · axis '+axis.toUpperCase()+' · other coordinates fixed at view center · on-demand</div>'+
+  panel.innerHTML='<div style="color:#8ea7d8;font-size:11px;margin:0 0 8px">'+profile.count+' authoritative samples · axis '+axis.toUpperCase()+' · other coordinates fixed at view center · on-demand · each field independently normalized (shape only; line heights are not cross-field comparable)</div>'+
     '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:720px"><thead><tr>'+ 
     ['Field','Spatial profile','Mean','Min / Max','Valid','Invalid'].map(label=>'<th style="text-align:right;padding:6px;border-bottom:1px solid #293047;color:#9da9c5">'+label+'</th>').join('')+
     '</tr></thead><tbody>'+rows+'</tbody></table></div>';
@@ -2993,7 +2993,7 @@ function updateMetricsView(){
   const profileHtml='<section style="margin:14px 0;padding:12px;border:1px solid #25283a;border-radius:8px;background:#0b1020">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px"><strong style="color:var(--text);font:600 12px system-ui">Authoritative Spatial Profiles</strong><div style="display:flex;gap:6px">'+
     ['x','y','z'].map(axis=>'<button type="button" onclick="renderWorldFieldProfile(\''+axis+'\')" style="padding:5px 10px;border:1px solid #39496b;border-radius:5px;background:'+(window.worldFieldProfileAxis===axis?'#253858':'transparent')+';color:#dbe6ff;cursor:pointer">'+axis.toUpperCase()+'</button>').join('')+
-    '</div></div><div id="worldFieldProfileResults" style="color:#9da9c5">Sampling profile…</div></section>';
+    '<button type="button" onclick="window.downloadWorldFieldProfileCSV?.(window.worldFieldProfileAxis||\'x\',{resolution:41})" style="padding:5px 10px;border:1px solid #39496b;border-radius:5px;background:transparent;color:#dbe6ff;cursor:pointer">Export profile CSV</button></div></div><div id="worldFieldProfileResults" style="color:#9da9c5">Sampling profile…</div></section>';
   mv.innerHTML=metricsHtml+profileHtml+'<section style="margin:14px 0;padding:12px;border:1px solid #25283a;border-radius:8px"><strong style="color:var(--text);font:600 12px system-ui">Legacy finite simulation · separate data source</strong>'+
     rows.map(([k,v])=>'<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid #1a1a25"><span>'+k+'</span><span style="color:var(--text)">'+v+'</span></div>').join('')+'</section>';
   renderWorldFieldProfile(window.worldFieldProfileAxis||'x');
