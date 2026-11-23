@@ -10,7 +10,7 @@ function expectRejected(label: string, operation: () => unknown): void {
 
 export function runSparseVoxelGridPhysicalChunkStoreRegression(): void {
   const store = new SparseVoxelGridPhysicalChunkStore();
-  if (store.revision !== 0 || Number(store.size) !== 0 || store.topology.chunks.length !== 0) {
+  if (store.revision !== 0 || Number(store.size) !== 0 || Number(store.topology.chunks.length) !== 0) {
     throw new Error("Physical chunk store did not initialize as an empty revision-zero owner");
   }
 
@@ -22,7 +22,7 @@ export function runSparseVoxelGridPhysicalChunkStoreRegression(): void {
   coarse.active = false;
   const publishedRevision = store.replaceAll(0, [coarse, fine, separate]);
   if (publishedRevision !== 1 || Number(store.revision) !== 1 || Number(store.size) !== 3 ||
-      store.topology.chunks.length !== 3 ||
+      Number(store.topology.chunks.length) !== 3 ||
       store.topology.chunks.find(item => item.key === coarse.key)?.scale !== 2) {
     throw new Error("Physical chunk store failed to publish a valid mixed-LOD topology atomically");
   }
