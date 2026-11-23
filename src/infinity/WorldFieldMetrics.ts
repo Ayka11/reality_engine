@@ -120,7 +120,7 @@ export class WorldFieldMetrics {
     if (!Number.isSafeInteger(limit) || limit < 0) throw new RangeError('Series limit must be a non-negative safe integer')
     const series = this.history.get(field)
     if (!series) throw new RangeError(`Unknown world field metric: ${field}`)
-    return series.slice(-limit).map(point => ({ ...point }))
+    return (limit === 0 ? [] : series.slice(-limit)).map(point => ({ ...point }))
   }
 
   snapshot(): Record<WorldFieldMetricName, WorldFieldMetricStats> {
