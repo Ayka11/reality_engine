@@ -652,6 +652,7 @@ export function bootstrapInfiniteWorld() {
   ;(window as any).setInfiniteWorldScientificField = (field: string) => {
     const allowed = ['all', 'energy', 'density', 'information', 'entropy', 'temperature', 'biology']
     const selected = allowed.includes(field) ? field : 'all'
+    world.setMaterialMode('field')
     world.setScientificField(selected as 'all' | 'energy' | 'density' | 'information' | 'entropy' | 'temperature' | 'biology')
     return { field: world.getScientificField(), materialMode: 'field' }
   }
