@@ -2595,6 +2595,88 @@ try {
     throw new Error("Metrics view did not expose all seven authoritative fields alongside a separate legacy data source: " +
       JSON.stringify(authoritativeMetrics));
   }
+  const spatialProfileAcceptance = await page.evaluate(() => {
+    const fields = ["energy", "density", "information", "entropy", "temperature", "biology", "material"];
+    if (typeof window.sampleWorldFieldProfile !== "function" ||
+        typeof window.worldFieldSample !== "function" ||
+        typeof window.getWorldFieldMetricsSeries !== "function" ||
+        typeof window.exportWorldFieldProfileCSV !== "function" ||
+        typeof window.renderWorldFieldProfile !== "function") return { available: false };
+    const historyBefore = JSON.stringify(window.getWorldFieldMetricsSeries("energy", 120));
+    const profiles = Object.fromEntries(["x", "y", "z"].map(axis => [
+      axis, window.sampleWorldFieldProfile(axis, { resolution: 5 }),
+    ]));
+    const historyAfter = JSON.stringify(window.getWorldFieldMetricsSeries("energy", 120));
+    const axisChecks = Object.entries(profiles).map(([axis, profile]) => {
+      const selected = axis;
+      const fixed = ["x", "y", "z"].filter(candidate => candidate !== selected);
+      const coordinatesFinite = profile.points.every(point =>
+        Number.isFinite(point.coordinate) &&
+        ["x", "y", "z"].every(key => Number.isFinite(point.position?.[key])));
+      const fixedCoordinates = fixed.every(key =>
+        profile.points.every(point => point.position[key] === profile.points[0].position[key]));
+      const selectedCoordinates = profile.points.every(point =>
+        point.position[selected] === point.coordinate);
+      const fieldShape = profile.points.every(point => fields.every(field =>
+        (point.validity[field] === true && typeof point.values[field] === "number" &&
+          Number.isFinite(point.values[field])) ||
+        (point.validity[field] === false && point.values[field] === null)));
+      const matchesAuthoritativeSampler = profile.points.every(point => {
+        const direct = window.worldFieldSample(point.position.x, point.position.y, point.position.z);
+        return fields.every(field => {
+          if (!point.validity[field]) return point.values[field] === null;
+          return typeof direct?.[field] === "number" &&
+            Math.abs(direct[field] - point.values[field]) <= 1e-10;
+        });
+      });
+      return {
+        axis, count: profile.count, pointCount: profile.points.length,
+        coordinatesFinite, fixedCoordinates, selectedCoordinates,
+        fieldShape, matchesAuthoritativeSampler,
+      };
+    });
+    const csv = window.exportWorldFieldProfileCSV("x", { resolution: 5 });
+    const csvRows = csv.split("\\n");
+    const csvHeader = csvRows[0]?.split(",") ?? [];
+    window.renderWorldFieldProfile("y");
+    const panel = document.getElementById("worldFieldProfileResults");
+    return {
+      available: true,
+      axisChecks,
+      historyUnchanged: historyBefore === historyAfter,
+      csv: {
+        rowCount: csvRows.length,
+        header: csvHeader,
+        axis: csvRows[1]?.split(",")[0],
+        hasValidityColumns: fields.every(field => csvHeader.includes(field + "_valid")),
+      },
+      ui: {
+        selectedAxis: window.worldFieldProfileAxis,
+        graphCount: panel?.querySelectorAll('svg[role="img"][aria-label$="spatial profile"]').length ?? 0,
+        hasNormalizationDisclosure: panel?.innerText.includes("independently normalized") ?? false,
+        hasExportButton: Boolean(document.querySelector("#metricsContent button[onclick*=downloadWorldFieldProfileCSV]")),
+      },
+    };
+  });
+  if (!spatialProfileAcceptance.available ||
+      spatialProfileAcceptance.axisChecks.length !== 3 ||
+      !spatialProfileAcceptance.axisChecks.every(check =>
+        check.count === 5 && check.pointCount === 5 && check.coordinatesFinite &&
+        check.fixedCoordinates && check.selectedCoordinates && check.fieldShape &&
+        check.matchesAuthoritativeSampler) ||
+      !spatialProfileAcceptance.historyUnchanged ||
+      spatialProfileAcceptance.csv.rowCount !== 6 ||
+      spatialProfileAcceptance.csv.header.length !== 19 ||
+      spatialProfileAcceptance.csv.axis !== "x" ||
+      !spatialProfileAcceptance.csv.hasValidityColumns ||
+      spatialProfileAcceptance.ui.selectedAxis !== "y" ||
+      spatialProfileAcceptance.ui.graphCount !== 7 ||
+      !spatialProfileAcceptance.ui.hasNormalizationDisclosure ||
+      !spatialProfileAcceptance.ui.hasExportButton) {
+    throw new Error("Authoritative spatial profile browser acceptance failed: " +
+      JSON.stringify(spatialProfileAcceptance));
+  }
+
   await page.evaluate(() => window.setView?.("field3d", document.getElementById("tabField3d")));
   await page.waitForFunction(() => window.currentRenderMode === "field3d");
 
