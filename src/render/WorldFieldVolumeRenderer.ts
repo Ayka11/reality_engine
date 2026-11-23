@@ -52,6 +52,8 @@ export type WorldFieldVolumeResult = {
     duplicateCoordinates: number
     activeCells: number
     activeRatio: number
+    invalidFieldValues: number
+    fieldValues: { min: number; max: number; mean: number; standardDeviation: number }
     uniqueLayers: number
     min: { x: number; y: number; z: number }
     max: { x: number; y: number; z: number }
@@ -108,6 +110,8 @@ export class WorldFieldVolumeRenderer {
     duplicateCoordinates: 0,
     activeCells: 0,
     activeRatio: 0,
+    invalidFieldValues: 0,
+    fieldValues: { min: 0, max: 0, mean: 0, standardDeviation: 0 },
     uniqueLayers: 0,
     min: { x: 0, y: 0, z: 0 },
     max: { x: 0, y: 0, z: 0 },
@@ -179,6 +183,8 @@ export class WorldFieldVolumeRenderer {
       duplicateCoordinates: 0,
       activeCells: 0,
       activeRatio: 0,
+      invalidFieldValues: 0,
+      fieldValues: { min: 0, max: 0, mean: 0, standardDeviation: 0 },
       uniqueLayers: 0,
       min: { x: 0, y: 0, z: 0 },
       max: { x: 0, y: 0, z: 0 },
@@ -234,6 +240,11 @@ export class WorldFieldVolumeRenderer {
     let activeCells = 0
     let sampleCount = 0
     let invalidSamples = 0
+    let invalidFieldValues = 0
+    let fieldValueMin = Number.POSITIVE_INFINITY
+    let fieldValueMax = Number.NEGATIVE_INFINITY
+    let fieldValueMean = 0
+    let fieldValueM2 = 0
     let duplicateCoordinates = 0
     const coordinateKeys = new Set<string>()
     const layerCoordinates = new Set<number>()
@@ -288,7 +299,15 @@ export class WorldFieldVolumeRenderer {
           bounds.minZ = Math.min(bounds.minZ, sampleZ)
           bounds.maxZ = Math.max(bounds.maxZ, sampleZ)
 
-          const value = Number(sample[frame.property]) || 0
+          const rawValue = Number(sample[frame.property])
+          const value = Number.isFinite(rawValue) ? rawValue : 0
+          if (!Number.isFinite(rawValue)) invalidFieldValues++
+          fieldValueMin = Math.min(fieldValueMin, value)
+          fieldValueMax = Math.max(fieldValueMax, value)
+          const valueCount = renderedCells + 1
+          const valueDelta = value - fieldValueMean
+          fieldValueMean += valueDelta / valueCount
+          fieldValueM2 += valueDelta * (value - fieldValueMean)
           const normalized = THREE.MathUtils.clamp(value / maximum, 0, 1)
           const x = (sampleX - frame.view.center.x) / cellWidth
           const y = (sliceY - centerY) / spacing
@@ -327,6 +346,13 @@ export class WorldFieldVolumeRenderer {
       duplicateCoordinates,
       activeCells,
       activeRatio: renderedCells ? activeCells / renderedCells : 0,
+      invalidFieldValues,
+      fieldValues: {
+        min: renderedCells ? fieldValueMin : 0,
+        max: renderedCells ? fieldValueMax : 0,
+        mean: renderedCells ? fieldValueMean : 0,
+        standardDeviation: renderedCells ? Math.sqrt(fieldValueM2 / renderedCells) : 0,
+      },
       uniqueLayers: sortedLayers.length,
       min: finiteBounds ? { x: bounds.minX, y: bounds.minY, z: bounds.minZ } : { x: 0, y: 0, z: 0 },
       max: finiteBounds ? { x: bounds.maxX, y: bounds.maxY, z: bounds.maxZ } : { x: 0, y: 0, z: 0 },
