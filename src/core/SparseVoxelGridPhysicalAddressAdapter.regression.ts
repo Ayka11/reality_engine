@@ -48,6 +48,16 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
   if (adapter.getBackCell(fine.key, 0, 0, 0)?.get(F.ENERGY) !== 0) {
     throw new Error("Physical chunk-key back-buffer access returned the wrong cell");
   }
+  const preparedRevision = adapter.revision;
+  if (adapter.swapBuffers(preparedRevision) !== preparedRevision + 2 ||
+      adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 72 ||
+      adapter.getBackCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 44) {
+    throw new Error("Physical address adapter did not atomically promote prepared buffers");
+  }
+  expectRejected("a stale buffer publication revision", () => adapter.swapBuffers(preparedRevision));
+  if (adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 72) {
+    throw new Error("Rejected stale buffer publication changed the visible front buffer");
+  }
 
   // The adjacent level-zero chunk begins exactly at the coarse chunk's exclusive bound.
   const fineAddress = adapter.resolve(64, 0, 0);
@@ -63,8 +73,8 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
   // Adapter ownership is detached from the caller's chunk objects.
   coarse.getCell(1, 2, 3).set(F.ENERGY, 100);
   coarse.getBackCell(1, 2, 3).set(F.ENERGY, 101);
-  if (adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 44 ||
-      adapter.getBackCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 72) {
+  if (adapter.getCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 72 ||
+      adapter.getBackCellAtBase(2, 4, 6)?.get(F.ENERGY) !== 44) {
     throw new Error("Caller-owned front/back chunk mutation leaked into the address adapter");
   }
 

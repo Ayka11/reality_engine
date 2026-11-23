@@ -18,6 +18,7 @@ import {
 export class SparseVoxelGridPhysicalAddressAdapter {
   #chunks = new Map<string, SparseVoxelGridPhysicalChunk>();
   #topology: SparseVoxelGridPhysicalTopology;
+  #revision = 0;
 
   constructor(chunks: readonly SparseVoxelGridPhysicalChunk[]) {
     if (!Array.isArray(chunks)) {
@@ -46,12 +47,37 @@ export class SparseVoxelGridPhysicalAddressAdapter {
       copy.backBuffer = source.backBuffer.slice();
       copy.active = source.active;
       copy.lastAccessed = source.lastAccessed;
+      copy.addMutationListener(() => { this.#revision += 1; });
       this.#chunks.set(copy.key, copy);
     }
   }
 
   get size(): number {
     return this.#chunks.size;
+  }
+
+  /** Monotonic revision for tracked physical cell and topology-buffer mutations. */
+  get revision(): number {
+    return this.#revision;
+  }
+
+  /**
+   * Atomically promote every prepared back buffer to front.
+   * The expected revision is checked before the first swap; all swaps are
+   * synchronous and the adapter exposes no callbacks during publication.
+   */
+  swapBuffers(expectedRevision: number): number {
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+      throw new RangeError("Physical address adapter expected revision must be a non-negative safe integer");
+    }
+    if (expectedRevision !== this.#revision) {
+      throw new Error(
+        "Physical address adapter revision conflict: expected " + expectedRevision +
+        ", current " + this.#revision,
+      );
+    }
+    for (const chunk of this.#chunks.values()) chunk.swapBuffers();
+    return this.#revision;
   }
 
   get topology(): SparseVoxelGridPhysicalTopology {
