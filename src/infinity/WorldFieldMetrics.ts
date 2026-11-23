@@ -191,6 +191,34 @@ export class WorldFieldMetrics {
     return { axis, count: points.length, points, stats }
   }
 
+  exportProfileCSV(profile: WorldFieldProfile): string {
+    if (!profile || (profile.axis !== 'x' && profile.axis !== 'y' && profile.axis !== 'z') ||
+        !Array.isArray(profile.points) || profile.count !== profile.points.length) {
+      throw new TypeError('A valid world field profile is required for CSV export')
+    }
+    const headers = [
+      'axis', 'coordinate', 'x', 'y', 'z',
+      ...WORLD_FIELD_METRIC_FIELDS,
+      ...WORLD_FIELD_METRIC_FIELDS.map(field => field + '_valid'),
+    ]
+    const format = (value: number | null): string =>
+      typeof value === 'number' && Number.isFinite(value) ? value.toFixed(6) : ''
+    const rows = [headers.join(',')]
+    for (const point of profile.points) {
+      const coordinates = [point.coordinate, point.position?.x, point.position?.y, point.position?.z]
+      if (!coordinates.every(value => typeof value === 'number' && Number.isFinite(value))) {
+        throw new TypeError('Profile CSV contains a non-finite coordinate')
+      }
+      rows.push([
+        profile.axis,
+        ...coordinates.map(value => format(value as number)),
+        ...WORLD_FIELD_METRIC_FIELDS.map(field => format(point.values?.[field] ?? null)),
+        ...WORLD_FIELD_METRIC_FIELDS.map(field => point.validity?.[field] === true ? 'true' : 'false'),
+      ].join(','))
+    }
+    return rows.join('\\n')
+  }
+
   getStats(field: WorldFieldMetricName): WorldFieldMetricStats {
     const stats = this.latestStats.get(field)
     if (!stats) throw new RangeError(`Unknown world field metric: ${field}`)
