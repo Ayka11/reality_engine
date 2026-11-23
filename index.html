@@ -2896,17 +2896,53 @@ window.previewRenderMode=previewRenderMode;
 
 function updateMetricsView(){
   const mv=document.getElementById('metricsContent');if(!mv)return;
+  const fields=[
+    ['energy','Energy'],['density','Density'],['information','Information'],
+    ['entropy','Entropy'],['temperature','Temperature'],['biology','Biology'],['material','Material']
+  ];
+  const sampleApi=window.sampleWorldFieldMetrics;
+  let snapshot=null,errorText='';
+  if(typeof sampleApi==='function'){
+    try{sampleApi();snapshot=window.getWorldFieldMetricsSnapshot?.()||null;}
+    catch(error){errorText=error instanceof Error?error.message:String(error);}
+  }
+  const number=value=>Number.isFinite(value)?Number(value).toFixed(4):'—';
+  const metricsHtml=snapshot
+    ? '<section style="margin:14px 0;padding:12px;border:1px solid #25283a;border-radius:8px;background:#0b1020">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">'+
+      '<strong style="color:var(--text);font:600 12px system-ui">Authoritative Infinity World · spatial sample</strong>'+
+      '<span style="color:#8ea7d8">9 × 7 × 9 grid · 567 sample points</span></div>'+
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:650px"><thead><tr>'+
+      ['Field','Mean','Min','Max','Std dev','Valid','Invalid'].map(label=>'<th style="text-align:right;padding:6px;border-bottom:1px solid #293047;color:#9da9c5">'+label+'</th>').join('')+
+      '</tr></thead><tbody>'+fields.map(([key,label])=>{
+        const s=snapshot[key]||{};
+        return '<tr><td style="text-align:left;padding:7px;border-bottom:1px solid #1b2235;color:var(--text)">'+label+'</td>'+
+          '<td style="text-align:right;padding:7px">'+number(s.mean)+'</td>'+
+          '<td style="text-align:right;padding:7px">'+number(s.min)+'</td>'+
+          '<td style="text-align:right;padding:7px">'+number(s.max)+'</td>'+
+          '<td style="text-align:right;padding:7px">'+number(s.standardDeviation)+'</td>'+
+          '<td style="text-align:right;padding:7px;color:#8bd5a6">'+(s.count??0)+'</td>'+
+          '<td style="text-align:right;padding:7px;color:'+(s.invalid?'#ff8d8d':'#8bd5a6')+'">'+(s.invalid??0)+'</td></tr>';
+      }).join('')+'</tbody></table></div>'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">'+
+      '<button type="button" onclick="updateMetricsView()" style="padding:6px 10px;border:1px solid #39496b;border-radius:5px;background:#18243b;color:#dbe6ff;cursor:pointer">↻ Resample World</button>'+
+      '<button type="button" onclick="window.clearWorldFieldMetrics?.();updateMetricsView()" style="padding:6px 10px;border:1px solid #39496b;border-radius:5px;background:transparent;color:#aebbd4;cursor:pointer">Clear history</button>'+
+      '<button type="button" onclick="window.downloadWorldFieldMetricsCSV?.()" style="padding:6px 10px;border:1px solid #39496b;border-radius:5px;background:transparent;color:#aebbd4;cursor:pointer">Export CSV</button>'+
+      '<span style="color:#7785a2">Metrics read through the authoritative world-space sampler, not the legacy voxel buffer.</span></div></section>'
+    : '<div style="padding:10px;color:#ffb6a5">Authoritative World Field metrics unavailable: '+(errorText||'runtime API not registered')+'</div>';
   let totE=0,totS=0,totI=0,totB=0,totT=0;
   for(let i=0;i<SZ;i++){totE+=buf[i*NF+FE];totS+=buf[i*NF+FS];totI+=buf[i*NF+FI];totB+=buf[i*NF+FBio];totT+=buf[i*NF+FT];}
   const rows=[
-    ['Tick',tick],['Avg Energy',(totE/SZ).toFixed(2)],['Avg Entropy',(totS/SZ).toFixed(5)],
-    ['Avg Info',(totI/SZ).toFixed(2)],['Avg Bio',(totB/SZ).toFixed(5)],['Avg Temp',(totT/SZ).toFixed(2)],
+    ['Legacy simulation tick',tick],['Legacy avg energy',(totE/SZ).toFixed(2)],['Legacy avg entropy',(totS/SZ).toFixed(5)],
+    ['Legacy avg info',(totI/SZ).toFixed(2)],['Legacy avg bio',(totB/SZ).toFixed(5)],['Legacy avg temp',(totT/SZ).toFixed(2)],
     ['Active Laws',LAWS.filter(l=>l.active).length+'/'+LAWS.length],
     ['Causal Events',causal.length],['Diffusion',DIFFUSION.toFixed(4)],
     ['Entropy Base',ENTROPY_BASE.toFixed(6)],['Info Rate',INFO_RATE.toFixed(3)],
   ];
-  mv.innerHTML=rows.map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid #1a1a25"><span>${k}</span><span style="color:var(--text)">${v}</span></div>`).join('');
+  mv.innerHTML=metricsHtml+'<section style="margin:14px 0;padding:12px;border:1px solid #25283a;border-radius:8px"><strong style="color:var(--text);font:600 12px system-ui">Legacy finite simulation · separate data source</strong>'+
+    rows.map(([k,v])=>'<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid #1a1a25"><span>'+k+'</span><span style="color:var(--text)">'+v+'</span></div>').join('')+'</section>';
 }
+window.updateMetricsView=updateMetricsView;
 
 function toggleSection(hdr){hdr.closest('.section').classList.toggle('collapsed');}
 window.toggleSection=toggleSection;
