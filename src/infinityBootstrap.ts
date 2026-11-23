@@ -649,6 +649,13 @@ export function bootstrapInfiniteWorld() {
     if (isField3DActive() && (window as any).fieldSetMatMode) return (window as any).fieldSetMatMode(m)
     world.setMaterialMode(m as 'field' | 'material' | 'height')
   }
+  ;(window as any).setInfiniteWorldScientificField = (field: string) => {
+    const allowed = ['all', 'energy', 'density', 'information', 'entropy', 'temperature', 'biology']
+    const selected = allowed.includes(field) ? field : 'all'
+    world.setScientificField(selected as 'all' | 'energy' | 'density' | 'information' | 'entropy' | 'temperature' | 'biology')
+    return { field: world.getScientificField(), materialMode: 'field' }
+  }
+  ;(window as any).getInfiniteWorldScientificField = () => world.getScientificField()
 
   // ── Camera Manipulation Shortcuts on window ───────────────────────────────
   ;(window as any).infinityZoom = (delta: number) => world.zoom(delta)
