@@ -71,8 +71,12 @@ assert.match(authoritativeMutation, /this\.#refreshTerrainPatches\(\)/,
 const terrainBuilder = methodBody("buildTerrainPatch");
 assert.match(terrainBuilder, /if\s*\(this\.#materialMode\s*===\s*'field'\)[\s\S]*?this\.#fieldSampler\.sample\(/,
   "field visualization must sample the authoritative scientific field");
-assert.match(terrainBuilder, /const\s+density\s*=\s*Math\.max\(0,\s*Math\.min\(1,\s*field\.density\)\)/,
-  "field visualization must derive vertex color from the sampled field");
+assert.match(terrainBuilder, /const\s+field\s*=\s*this\.#fieldSampler\.sample\(/,
+  "field visualization must sample the authoritative scientific field");
+assert.match(terrainBuilder, /this\.#scientificField\s*===\s*'all'[\s\S]*?field\.density[\s\S]*?field\.biology[\s\S]*?field\.entropy[\s\S]*?field\.energy[\s\S]*?field\.information[\s\S]*?field\.temperature/,
+  "composite All Fields visualization must derive vertex color from all six sampled scientific scalars");
+assert.match(terrainBuilder, /const\s+key\s*=\s*this\.#scientificField[\s\S]*?field\[key\][\s\S]*?color\.setHex\(palettes\[key\]\)/,
+  "single-field visualization must map the selected sampled scalar through its field palette");
 
 const terrainGeometryFinalization = source.slice(source.indexOf("geometry.setIndex(indices)"), source.indexOf("geometry.computeBoundingSphere()", source.indexOf("geometry.setIndex(indices)")));
 assert.match(terrainGeometryFinalization, /geometry\.computeVertexNormals\(\)/,
