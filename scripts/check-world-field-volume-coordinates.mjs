@@ -132,6 +132,47 @@ assert.match(rendererSource, /if \(rawValue !== null\) \{\s*fieldValueCount\+\+/
   'selected-field diagnostics must exclude invalid samples from numeric statistics')
 assert.match(rendererSource, /fieldValueCount \? Math\.sqrt\(fieldValueM2 \/ fieldValueCount\) : 0/,
   'selected-field standard deviation must use only valid values')
+
+ // Missing measurements are not zero-valued measurements. Empty profiles and
+ // all-invalid selected fields must report null for numeric summary statistics.
+assert.match(rendererSource, /min: null,\s*max: null,\s*mean: null,\s*standardDeviation: null/,
+  'empty field profiles must use null rather than fabricated zero statistics')
+assert.match(rendererSource, /fieldValues: \{ min: null, max: null, mean: null, standardDeviation: null \}/,
+  'renderer reset diagnostics must not claim zero-valued field measurements')
+assert.match(rendererSource, /selectedFieldIndex === 6 \|\| !fieldValueCount \? null : fieldValueMin/,
+  'selected numeric field minimum must be null when there are no valid values')
+assert.match(rendererSource, /selectedFieldIndex === 6 \|\| !fieldValueCount \? null : fieldValueMax/,
+  'selected numeric field maximum must be null when there are no valid values')
+assert.match(rendererSource, /selectedFieldIndex === 6 \|\| !fieldValueCount \? null : fieldValueMean/,
+  'selected numeric field mean must be null when there are no valid values')
+assert.match(rendererSource, /key === 'material' \|\| !profile\.sampleCount \? null : profile\.min/,
+  'per-field profile minimum must distinguish no observations from an observed zero')
+assert.match(rendererSource, /key === 'material' \|\| !profile\.sampleCount \? null : profile\.mean/,
+  'per-field profile mean must distinguish no observations from an observed zero')
+assert.match(rendererSource, /: null\s*const rawValue = selectedFieldIndex >= 0 \? selectedRawValue : compositeStrength/,
+  'composite strength must be absent when all six numeric fields are invalid')
+assert.match(rendererSource, /compositeStrength !== null \? THREE\.MathUtils\.clamp\(compositeStrength, 0, 1\) : 0/,
+  'missing composite strength must not be treated as a measured zero')
+assert.match(rendererSource, /finiteValues\.every\(value => value === null\) this\.color\.setHex\(0x7f8794\)/,
+  'samples with no valid scientific field must use the neutral diagnostic color')
+const finiteStats = values => {
+  const finite = values.filter(value => typeof value === 'number' && Number.isFinite(value))
+  return finite.length
+    ? { min: Math.min(...finite), max: Math.max(...finite), mean: finite.reduce((sum, value) => sum + value, 0) / finite.length }
+    : { min: null, max: null, mean: null }
+}
+assert.deepEqual(finiteStats([Number.NaN, Number.POSITIVE_INFINITY, null, undefined]), { min: null, max: null, mean: null },
+  'all-invalid numeric field samples must yield null statistics')
+assert.deepEqual(finiteStats([0, Number.NaN, null]), { min: 0, max: 0, mean: 0 },
+  'a genuine measured zero must remain zero rather than being converted to null')
+const compositeStrengthFixture = values => {
+  const finite = values.slice(0, 6).filter(value => typeof value === 'number' && Number.isFinite(value))
+  return finite.length ? finite.reduce((sum, value) => sum + Math.abs(value), 0) / finite.length : null
+}
+assert.equal(compositeStrengthFixture([null, Number.NaN, undefined, null, Number.POSITIVE_INFINITY, '0', 3]), null,
+  'composite strength must be null when all numeric fields are invalid even if categorical Material exists')
+assert.equal(compositeStrengthFixture([0, null, null, null, null, null, 4]), 0,
+  'a measured zero composite strength must remain distinguishable from missing numeric data')
 assert.match(rendererSource, /if \(rawValue === null\) this\.color\.setHex\(0x7f8794\)/,
   'invalid selected numeric or categorical samples must use a neutral color rather than a valid zero palette color')
 
