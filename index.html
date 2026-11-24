@@ -2602,9 +2602,16 @@ function renderField3DImpl(){
   // maxima washed out low-range fields (especially information and entropy).
   const maxima=props.map(property=>{
     let observed=0;
-    for(const slice of slices)for(const sample of slice.data.samples||[]){
-      const value=sample?.[property];
-      if(typeof value==='number'&&Number.isFinite(value))observed=Math.max(observed,Math.abs(value));
+    for(const slice of slices){
+      if(typeof slice.y!=='number'||!Number.isFinite(slice.y))continue;
+      const data=slice.data;
+      for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
+        const sample=data.samples[py*data.width+px];
+        if(!sample||typeof sample.x!=='number'||!Number.isFinite(sample.x)||
+           typeof sample.z!=='number'||!Number.isFinite(sample.z))continue;
+        const value=sample[property];
+        if(typeof value==='number'&&Number.isFinite(value))observed=Math.max(observed,Math.abs(value));
+      }
     }
     return Math.max(observed,1e-9);
   });
@@ -2614,8 +2621,7 @@ function renderField3DImpl(){
   if(typeof window.renderWorldFieldVolume==='function'){
     try{
       const rendered=window.renderWorldFieldVolume({
-        slices,view,fieldIndex,fieldName,property,
-        maximum:fieldIndex<0?Math.max(...maxima):maxima[fieldIndex],cols,rows,spacing
+        slices,view,fieldIndex,fieldName,property,cols,rows,spacing
       });
       const diagnosticState={
         fieldIndex,
@@ -2671,11 +2677,14 @@ function renderField3DImpl(){
   const originY=h*.5-(cols+rows)*cellH*.25+(depth-1)*depthStep*.5;
   let renderedCells=0,activeCells=0;
   for(let si=0;si<slices.length;si++){
-    const {data}=slices[si];
+    const slice=slices[si];
+    const {data}=slice;
+    if(typeof slice.y!=='number'||!Number.isFinite(slice.y))continue;
     const zLayer=si-Math.floor((slices.length-1)/2);
     for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
       const sample=data.samples[py*data.width+px];
-      if(!sample)continue;
+      if(!sample||typeof sample.x!=='number'||!Number.isFinite(sample.x)||
+         typeof sample.z!=='number'||!Number.isFinite(sample.z))continue;
       const materialCode=sample.material;
       const materialValid=Number.isInteger(materialCode)&&materialCode>=0&&materialCode<=8;
       const values=props.map((property,index)=>{
