@@ -48,8 +48,10 @@ assert.match(rendererSource, /export const isMaterialClassCode = \(value: unknow
   'Material category validation must reject non-integer and out-of-range codes')
 assert.match(rendererSource, /selectedFieldIndex === 6\s*\?\s*\(selectedRawValue !== null \? 1 : 0\)/,
   'Material category zero must remain visible instead of being normalized to zero')
-assert.match(rendererSource, /if \(selectedFieldIndex === 6\) this\.color\.setHex\(materialClassColor\(value\)\)/,
-  'selected Material field must use discrete biome class colors')
+assert.match(rendererSource, /if \(selectedFieldIndex === 6\) this\.color\.setHex\(materialClassColor\(selectedRawValue\)\)/,
+  'selected Material field must use discrete biome class colors and neutral fallback for invalid categories')
+assert.doesNotMatch(rendererSource, /if \(selectedFieldIndex === 6\) this\.color\.setHex\(materialClassColor\(value\)\)/,
+  'invalid Material samples must never be coerced to category zero')
 for (const diagnostic of [
   'invalidSamples',
   'duplicateCoordinates',
