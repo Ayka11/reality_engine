@@ -2668,7 +2668,10 @@ function renderField3DImpl(){
         if(index===6)return materialValid?1:0;
         return typeof raw==='number'&&Number.isFinite(raw)?Math.max(0,Math.min(1,Math.abs(raw)/maxima[index])):0;
       });
-      const normalized=fieldIndexSafe>=0?values[fieldIndexSafe]:values.reduce((sum,value)=>sum+value,0)/values.length;
+      // Material is a categorical color contribution, never a numeric
+      // scalar in composite intensity, lift, opacity, or active-cell scoring.
+      const numericContributions=values.slice(0,6);
+      const normalized=fieldIndexSafe>=0?values[fieldIndexSafe]:numericContributions.reduce((sum,value)=>sum+value,0)/numericContributions.length;
       const selectedRaw=fieldIndexSafe>=0?sample[props[fieldIndexSafe]]:normalized;
       const selectedValueValid=fieldIndexSafe<0||(fieldIndexSafe===6?materialValid:typeof selectedRaw==='number'&&Number.isFinite(selectedRaw));
       const value=selectedValueValid&&typeof selectedRaw==='number'&&Number.isFinite(selectedRaw)?selectedRaw:0;
