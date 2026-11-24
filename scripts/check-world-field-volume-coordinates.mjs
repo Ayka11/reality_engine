@@ -14,6 +14,26 @@ assert.equal(compiled.diagnostics?.some(d => d.category === ts.DiagnosticCategor
 // to avoid rendering the volume as only a handful of isolated sheets.
 assert.match(appSource, /const depth=11,spacing=/,
   'volumetric field must sample eleven vertical slices')
+
+// Both 2D and Field3D sample through the active ScientificFieldProvider.
+// Provider identity/version must participate in cache invalidation even when
+// the World Field mutation revision and view coordinates have not changed.
+const infiniteWorldSource = await readFile(new URL('../src/render/InfiniteWorldRenderer.ts', import.meta.url), 'utf8')
+assert.match(infiniteWorldSource, /getActiveFieldProviderId\(\)\s*\{\s*return this\.#fieldSampler\.registry\.activeProviderId\s*\}/,
+  'world renderer must expose the active scientific field provider identity')
+assert.match(infiniteWorldSource, /getActiveFieldProviderVersion\(\)\s*\{\s*return this\.#fieldSampler\.registry\.getActive\(\)\?\.version \?\? null\s*\}/,
+  'world renderer must expose the active scientific field provider version')
+assert.match(appSource, /function _getWorldFieldProviderCacheIdentity\(\)\s*\{[\s\S]*?getActiveFieldProviderId\?\.\(\)[\s\S]*?getActiveFieldProviderVersion\?\.\(\)/,
+  '2D and Field3D must read the current provider identity/version')
+assert.match(appSource, /fieldState\?\.lastMutation\?\.id \?\? 0, \.\.\._getWorldFieldProviderCacheIdentity\(\)\]\./,
+  '2D cache key must include provider identity/version')
+assert.match(appSource, /fieldState\?\.lastMutation\?\.id\?\?0,\.\.\._getWorldFieldProviderCacheIdentity\(\)\]\./,
+  'Field3D cache key must include provider identity/version')
+const providerCacheIdentity = (id, version) => [id ?? 'unknown', version ?? 'unknown'].join('|')
+assert.notEqual(providerCacheIdentity('generator-field', 'v1'), providerCacheIdentity('authored-field', 'v1'),
+  'switching active provider IDs must invalidate sampled-field caches')
+assert.notEqual(providerCacheIdentity('generator-field', 'v1'), providerCacheIdentity('generator-field', 'v2'),
+  'changing active provider versions must invalidate sampled-field caches')
 assert.match(appSource, /volume:rendered\?\.volume\?\?null/,
   'field-volume diagnostics must be copied into the render state')
 assert.match(appSource, /volume: field3D\?\.volume \?\? volumeRenderer\?\.volume \?\? null/,
