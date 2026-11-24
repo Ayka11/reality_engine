@@ -2557,10 +2557,9 @@ try {
   }
   // Material is the seventh authoritative scalar, supported only by the
   // volumetric renderer. It must never alias to Biology in Infinite World.
-  await page.evaluate(() => {
-    window.setLayer?.(6);
-    window.renderField3D?.();
-  });
+  // The preceding seven-field loop already selected Material (index 6).
+  // setLayer is a toggle, so do not select it a second time here.
+  await page.evaluate(() => window.renderField3D?.());
   await page.waitForFunction(() => window.__worldField3DCanvasState?.field === "Material" &&
     window.__worldField3DCanvasState?.fieldIndex === 6 &&
     window.__worldField3DCanvasState?.ready === true, { timeout: 10000 });
@@ -2571,7 +2570,9 @@ try {
   }));
   if (materialVolume.buttonDisabled || materialVolume.state.renderedCells <= 0 ||
       !materialVolume.profile || materialVolume.profile.sampleCount <= 0 ||
-      materialVolume.profile.invalidValues !== 0) {
+      materialVolume.profile.invalidValues !== 0 ||
+      materialVolume.profile.min < 0 || materialVolume.profile.max > 7 ||
+      materialVolume.profile.min % 1 !== 0 || materialVolume.profile.max % 1 !== 0) {
     throw new Error("Material scalar did not render as an independent volumetric field: " +
       JSON.stringify(materialVolume));
   }

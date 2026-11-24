@@ -42,8 +42,14 @@ assert.match(rendererSource, /const limitingHalfFov = Math\.max/,
   'camera fitting must account for viewport aspect ratio')
 assert.match(rendererSource, /'energy', 'density', 'information', 'entropy', 'temperature', 'biology', 'material'/,
   'volumetric renderer must expose the seventh authoritative Material scalar field')
-assert.match(rendererSource, /\[0x4b2818, 0xffc27a\]/,
-  'Material must have its own copper palette, not reuse Biology colors')
+assert.match(rendererSource, /export const MATERIAL_CLASS_COLORS = \[/,
+  'categorical Material must define a dedicated eight-class biome palette')
+assert.match(rendererSource, /export const isMaterialClassCode = \(value: unknown\): value is number/,
+  'Material category validation must reject non-integer and out-of-range codes')
+assert.match(rendererSource, /selectedFieldIndex === 6\s*\?\s*\(selectedRawValue !== null \? 1 : 0\)/,
+  'Material category zero must remain visible instead of being normalized to zero')
+assert.match(rendererSource, /if \(selectedFieldIndex === 6\) this\.color\.setHex\(materialClassColor\(value\)\)/,
+  'selected Material field must use discrete biome class colors')
 for (const diagnostic of [
   'invalidSamples',
   'duplicateCoordinates',
@@ -95,6 +101,7 @@ assert.match(appSource, /const selectedRaw=fieldIndexSafe>=0\?sample\[props\[fie
   'CPU fallback must also reject coercible Material values')
 assert.match(appSource, /id="layerM" onclick="setLayer\(6\)"/,
   'Material field control must be present in the layer toolbar')
-console.log('PASS: seven scientific scalar fields, including Material, are represented independently')
+console.log('PASS: seven scientific scalar fields, including categorical Material, are represented independently')
+console.log('PASS: Material uses a discrete eight-biome palette and preserves category zero')
 console.log('PASS: invalid non-numeric samples are rejected without coercion')
 console.log('PASS: distinct source slices remain distinct in normalized 3D space')

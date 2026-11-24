@@ -93,6 +93,25 @@ const createEmptyFieldDistributions = (): Record<string, FieldDistribution> =>
 const finiteNumericValue = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null
 
+// WorldGenerator.material is a categorical BIOME_ID (0–7), not a continuous scalar.
+export const MATERIAL_CLASS_COLORS = [
+  0x173b70, // ocean
+  0x2d8aa6, // coast
+  0x8caa5b, // plains
+  0x26734d, // forest
+  0xd5b45c, // desert
+  0x9bb9d6, // tundra
+  0x827b76, // mountain
+  0xf0e6d2, // alpine
+] as const
+
+export const isMaterialClassCode = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) &&
+  value >= 0 && value < MATERIAL_CLASS_COLORS.length
+
+export const materialClassColor = (value: unknown): number =>
+  isMaterialClassCode(value) ? MATERIAL_CLASS_COLORS[value] : 0x7f8794
+
 const FIELD_PALETTES: ReadonlyArray<readonly [number, number]> = [
   [0x183d9b, 0xffad42],
   [0x082d31, 0x75f4c1],
@@ -353,7 +372,7 @@ export class WorldFieldVolumeRenderer {
           for (const key of SCIENTIFIC_FIELD_KEYS) {
             const profile = fieldProfileAccumulators[key]
             const rawFieldValue = finiteNumericValue(sample[key])
-            if (rawFieldValue === null) {
+            if (rawFieldValue === null || (key === 'material' && !isMaterialClassCode(rawFieldValue))) {
               profile.invalidValues++
               continue
             }
@@ -363,10 +382,16 @@ export class WorldFieldVolumeRenderer {
             const delta = rawFieldValue - profile.mean
             profile.mean += delta / profile.sampleCount
             profile.m2 += delta * (rawFieldValue - profile.mean)
-            if (Math.abs(rawFieldValue) > 0.001) profile.activeCells++
+            if (key === 'material' || Math.abs(rawFieldValue) > 0.001) profile.activeCells++
           }
-          const selectedRawValue = selectedFieldIndex >= 0 ? finiteNumericValue(sample[SCIENTIFIC_FIELD_KEYS[selectedFieldIndex]]) : 0
-          const finiteValues = SCIENTIFIC_FIELD_KEYS.map(key => finiteNumericValue(sample[key]))
+          const selectedRawCandidate = selectedFieldIndex >= 0 ? finiteNumericValue(sample[SCIENTIFIC_FIELD_KEYS[selectedFieldIndex]]) : 0
+          const selectedRawValue = selectedFieldIndex === 6 && !isMaterialClassCode(selectedRawCandidate)
+            ? null
+            : selectedRawCandidate
+          const finiteValues = SCIENTIFIC_FIELD_KEYS.map(key => {
+            const value = finiteNumericValue(sample[key])
+            return key === 'material' && !isMaterialClassCode(value) ? null : value
+          })
           const validValues = finiteValues.filter((value): value is number => value !== null)
           const compositeStrength = validValues.length
             ? finiteValues.reduce<number>((sum, value, index) => sum + (value !== null ? Math.abs(value) / fieldMaxima[index] : 0), 0) / validValues.length
@@ -381,7 +406,9 @@ export class WorldFieldVolumeRenderer {
           fieldValueMean += valueDelta / valueCount
           fieldValueM2 += valueDelta * (value - fieldValueMean)
           const normalized = selectedFieldIndex >= 0
-            ? THREE.MathUtils.clamp(Math.abs(value) / maximum, 0, 1)
+            ? (selectedFieldIndex === 6
+              ? (selectedRawValue !== null ? 1 : 0)
+              : THREE.MathUtils.clamp(Math.abs(value) / maximum, 0, 1))
             : THREE.MathUtils.clamp(compositeStrength, 0, 1)
           const x = (sampleX - frame.view.center.x) / cellWidth
           const y = (sliceY - centerY) / spacing
@@ -399,12 +426,22 @@ export class WorldFieldVolumeRenderer {
           this.mesh.setMatrixAt(renderedCells, this.matrix)
 
           if (selectedFieldIndex >= 0) {
-            this.color.setHex(palette[0]).lerp(this.highColor.setHex(palette[1]), normalized)
+            if (selectedFieldIndex === 6) this.color.setHex(materialClassColor(value))
+            else this.color.setHex(palette[0]).lerp(this.highColor.setHex(palette[1]), normalized)
           } else {
             let red = 0, green = 0, blue = 0, weight = 0
             for (let field = 0; field < SCIENTIFIC_FIELD_KEYS.length; field++) {
-              const fieldValue = finiteNumericValue(sample[SCIENTIFIC_FIELD_KEYS[field]])
-              if (fieldValue === null) continue
+              const fieldKey = SCIENTIFIC_FIELD_KEYS[field]
+              const fieldValue = finiteNumericValue(sample[fieldKey])
+              if (fieldValue === null || (fieldKey === 'material' && !isMaterialClassCode(fieldValue))) continue
+              if (fieldKey === 'material') {
+                this.highColor.setHex(materialClassColor(fieldValue))
+                red += this.highColor.r
+                green += this.highColor.g
+                blue += this.highColor.b
+                weight += 1
+                continue
+              }
               const contribution = THREE.MathUtils.clamp(Math.abs(fieldValue) / fieldMaxima[field], 0, 1)
               if (contribution <= 0) continue
               const colors = FIELD_PALETTES[field]
