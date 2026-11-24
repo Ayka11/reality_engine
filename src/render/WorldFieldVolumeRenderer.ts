@@ -439,7 +439,7 @@ export class WorldFieldVolumeRenderer {
           this.mesh.setMatrixAt(renderedCells, this.matrix)
 
           if (selectedFieldIndex >= 0) {
-            if (selectedFieldIndex === 6) this.color.setHex(materialClassColor(value))
+            if (selectedFieldIndex === 6) this.color.setHex(materialClassColor(selectedRawValue))
             else this.color.setHex(palette[0]).lerp(this.highColor.setHex(palette[1]), normalized)
           } else {
             let red = 0, green = 0, blue = 0, weight = 0
