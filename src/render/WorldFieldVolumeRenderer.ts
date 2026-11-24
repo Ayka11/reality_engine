@@ -239,7 +239,7 @@ export class WorldFieldVolumeRenderer {
       activeCells: 0,
       activeRatio: 0,
       invalidFieldValues: 0,
-      fieldValues: { min: 0, max: 0, mean: 0, standardDeviation: 0 },
+      fieldValues: { min: null, max: null, mean: null, standardDeviation: null },
       fieldProfiles: createEmptyFieldDistributions(),
       uniqueLayers: 0,
       min: { x: 0, y: 0, z: 0 },
