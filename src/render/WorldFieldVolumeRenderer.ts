@@ -542,7 +542,6 @@ export class WorldFieldVolumeRenderer {
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
 
     const gridSize = Math.max(8, Math.max(frame.cols, frame.rows) + 2)
-    if (this.gridHelper) this.gridHelper.visible = true
     if (!this.gridHelper || this.gridSize !== gridSize) {
       if (this.gridHelper) {
         this.scene.remove(this.gridHelper)
@@ -555,6 +554,9 @@ export class WorldFieldVolumeRenderer {
       this.gridSize = gridSize
       this.scene.add(this.gridHelper)
     }
+    // Do not leave a grid-only scene visible when every sample was rejected
+    // for invalid world coordinates and no volume cells were rendered.
+    this.gridHelper.visible = renderedCells > 0
     const layerOffsets = frame.slices.map(
       slice => (slice.y - centerY) / spacing,
     )
