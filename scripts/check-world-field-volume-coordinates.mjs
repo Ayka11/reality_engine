@@ -104,6 +104,12 @@ assert.match(rendererSource, /finiteValues\.filter\(\(value, index\) => index !=
   'composite numeric strength must exclude categorical Material codes')
 assert.match(rendererSource, /index !== 6 && value !== null \? Math\.abs\(value\) \/ fieldMaxima\[index\]/,
   'composite numeric normalization must include only the six numeric scientific fields')
+assert.match(rendererSource, /if \(rawValue !== null\) \{\s*fieldValueCount\+\+/,
+  'selected-field diagnostics must exclude invalid samples from numeric statistics')
+assert.match(rendererSource, /fieldValueCount \? Math\.sqrt\(fieldValueM2 \/ fieldValueCount\) : 0/,
+  'selected-field standard deviation must use only valid values')
+assert.match(rendererSource, /if \(rawValue === null\) this\.color\.setHex\(0x7f8794\)/,
+  'invalid selected numeric or categorical samples must use a neutral color rather than a valid zero palette color')
 
 assert.match(appSource, /const selectedRaw=fieldIndexSafe>=0\?sample\[props\[fieldIndexSafe\]\]:normalized/,
   'CPU fallback must also reject coercible Material values')
