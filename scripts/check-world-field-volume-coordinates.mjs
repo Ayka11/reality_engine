@@ -53,7 +53,12 @@ assert.match(rendererSource, /sampleCount,\s*activeCells,\s*volume:/,
 assert.match(rendererSource, /if \(capacity <= 0\) \{[\s\S]*?if \(this\.mesh\) this\.mesh\.count = 0[\s\S]*?if \(this\.gridHelper\) this\.gridHelper\.visible = false[\s\S]*?this\.renderer\.render\(this\.scene, this\.camera\)[\s\S]*?return \{ \.\.\.base, ready: false, reason: 'no-field-samples' \}/,
   'an empty volume frame must clear the previous WebGL image instead of leaving stale voxels visible')
 assert.match(rendererSource, /this\.gridHelper\.visible = renderedCells > 0/,
-assert.doesNotMatch(rendererSource, /if \(this\.gridHelper\) this\.gridHelper\.visible = true/,\n  'renderer must not force a grid-only scene visible when the volume has no valid cells')\nconst gridVisibleForCellCount = renderedCells => renderedCells > 0\nassert.equal(gridVisibleForCellCount(0), false, 'zero rendered cells must hide the volumetric grid')\nassert.equal(gridVisibleForCellCount(1), true, 'a rendered volume must retain its reference grid')\n  'the reference grid must return when valid volume samples arrive after an empty frame')
+  'the reference grid must be visible only when at least one valid volume cell is rendered')
+assert.doesNotMatch(rendererSource, /if \(this\.gridHelper\) this\.gridHelper\.visible = true/,
+  'renderer must not force a grid-only scene visible when the volume has no valid cells')
+const gridVisibleForCellCount = renderedCells => renderedCells > 0
+assert.equal(gridVisibleForCellCount(0), false, 'zero rendered cells must hide the volumetric grid')
+assert.equal(gridVisibleForCellCount(1), true, 'a rendered volume must retain its reference grid')
 assert.doesNotMatch(rendererSource, /sampleCount:\s*renderedCells/,
   'sampleCount must not be substituted with the valid rendered-cell count')
 assert.match(rendererSource, /localBounds\.minX[\s\S]*localBounds\.maxZ/,
