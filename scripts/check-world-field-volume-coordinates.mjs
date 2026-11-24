@@ -125,6 +125,42 @@ assert.match(rendererSource, /const rawFieldValue = finiteNumericValue\(sample\[
   'field distribution metrics must count non-numeric source values as invalid')
 assert.match(rendererSource, /const sampleX = finiteNumericValue\(sample\.x\)/,
   'world coordinates must not coerce missing or string values into valid positions')
+assert.match(rendererSource, /if \(finiteNumericValue\(slice\.y\) === null\) continue[\s\S]*?for \(let py = 0; py < data\.height; py\+\+\)[\s\S]*?for \(let px = 0; px < data\.width; px\+\+\)[\s\S]*?const sample = data\.samples\[py \* data\.width \+ px\][\s\S]*?if \(!sample \|\|\s*finiteNumericValue\(sample\.x\) === null \|\|\s*finiteNumericValue\(sample\.z\) === null\) continue[\s\S]*?const value = finiteNumericValue\(sample\[key\]\)/,
+  'field normalization must use only coordinate-valid samples inside the declared slice dimensions')
+const renderableFieldMaximum = (slices, key) => {
+  let observed = 0
+  for (const slice of slices) {
+    if (typeof slice.y !== 'number' || !Number.isFinite(slice.y)) continue
+    const { width, height, samples } = slice.data
+    for (let py = 0; py < height; py++) {
+      for (let px = 0; px < width; px++) {
+        const sample = samples[py * width + px]
+        if (!sample || typeof sample.x !== 'number' || !Number.isFinite(sample.x) ||
+            typeof sample.z !== 'number' || !Number.isFinite(sample.z)) continue
+        const value = sample[key]
+        if (typeof value === 'number' && Number.isFinite(value)) observed = Math.max(observed, Math.abs(value))
+      }
+    }
+  }
+  return Math.max(observed, 1e-9)
+}
+assert.equal(renderableFieldMaximum([
+  { y: 0, data: { width: 1, height: 1, samples: [
+    { x: 0, z: 0, energy: 2 },
+    { x: 1, z: 1, energy: 1000 },
+  ] } },
+  { y: 0, data: { width: 1, height: 1, samples: [
+    { x: Number.NaN, z: 0, energy: 900 },
+  ] } },
+  { y: Number.POSITIVE_INFINITY, data: { width: 1, height: 1, samples: [
+    { x: 0, z: 0, energy: 800 },
+  ] } },
+  { y: 0, data: { width: 1, height: 1, samples: [
+    { x: 0, z: 0, energy: 4 },
+  ] } },
+], 'energy'), 4,
+  'invalid coordinates and samples beyond slice dimensions must not suppress valid volume contrast')
+
 assert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\.map\(key => \{/,
   'composite rendering must validate each field before including it')
 assert.match(rendererSource, /key === 'material' && !isMaterialClassCode\(value\) \? null : value/,
