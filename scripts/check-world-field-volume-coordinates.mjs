@@ -202,7 +202,7 @@ assert.equal(cpuEligible.length, 2,
 assert.equal(Math.max(...cpuEligible.map(sample => Math.abs(sample.energy))), 4,
   'CPU preview normalization must remain independent of invalid and out-of-window extreme values')
 
-assert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\\.map\\(key => \\{/,
+assert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\.map\(key => \{/,
   'composite rendering must validate each field before including it')
 assert.match(rendererSource, /key === 'material' && !isMaterialClassCode\(value\) \? null : value/,
   'composite rendering must exclude invalid BIOME_ID categories instead of coercing them')
