@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { BIOME_ID, MATERIAL_AIR_CLASS, WorldGenerator } from '../src/infinity/WorldGenerator'
 import {
   MATERIAL_CLASS_COLORS,
@@ -19,6 +20,16 @@ const expected = [
 ] as const
 
 assert.deepEqual(MATERIAL_CLASS_COLORS, expected)
+
+// The legacy 2D field renderer keeps an inline RGB palette. Guard it against
+// drifting away from the authoritative Three.js material registry.
+const appSource = await readFile(new URL('../index.html', import.meta.url), 'utf8')
+const inlinePalette = appSource.match(/const materialColors=\[([\s\S]*?)\];/)
+assert.ok(inlinePalette, 'the 2D Material field must declare its discrete palette')
+const inlineRgb = [...inlinePalette[1].matchAll(/\[(\d+),\s*(\d+),\s*(\d+)\]/g)]
+  .map(match => (Number(match[1]) << 16) | (Number(match[2]) << 8) | Number(match[3]))
+assert.deepEqual(inlineRgb, [...MATERIAL_CLASS_COLORS],
+  '2D and Volumetric Material palettes must use identical category colors')
 
 // Keep the renderer palette aligned with the authoritative terrain generator enum.
 const biomeEntries = Object.entries(BIOME_ID)
@@ -73,6 +84,7 @@ for (const invalid of [null, undefined, true, false, '3', Number.NaN, Infinity, 
   assert.equal(isMaterialClassCode(invalid), false, `invalid category ${String(invalid)} must be rejected`)
   assert.equal(materialClassColor(invalid), 0x7f8794, `invalid category ${String(invalid)} must use the neutral fallback`)
 }
+console.log('PASS: 2D and Volumetric renderers share identical Material category colors')
 console.log('PASS: renderer palette indices match the authoritative BIOME_ID mapping')
 console.log('PASS: all eight BIOME_ID categories plus AIR map to stable discrete colors')
 console.log('PASS: ocean water and above-sea-level air remain distinct material categories')
