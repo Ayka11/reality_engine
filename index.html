@@ -616,6 +616,15 @@ requestAnimationFrame(resize);
 
 // ── COLOR MAP — vivid physically-meaningful palettes ────────────────────────
 function colorOf(l,t){
+  if(l===6){
+    const materialColors=[
+      [23,59,112], [45,138,166], [140,170,91], [38,115,77],
+      [213,180,92], [155,185,214], [130,123,118], [240,230,210]
+    ];
+    return Number.isInteger(t)&&t>=0&&t<materialColors.length
+      ? materialColors[t]
+      : [127,135,148];
+  }
   t=clamp(t,0,1);
   // Energy: indigo → electric blue → cyan → orange → white-hot
   if(l===0){
@@ -658,12 +667,6 @@ function colorOf(l,t){
     if(t<0.5){const s=(t-0.15)/0.35;return[(s*20)|0,(80+s*175)|0,(30+s*60)|0];}
     if(t<0.85){const s=(t-0.5)/0.35;return[(20+s*110)|0,255,(90+s*90)|0];}
     const s=(t-0.85)/0.15;return[(130+s*125)|0,255,(180+s*75)|0];
-  }
-  // Material scalar: dark umber → copper → warm mineral highlight.
-  if(l===6){
-    if(t<0.35){const s=t/0.35;return[(35+s*95)|0,(18+s*42)|0,(12+s*18)|0];}
-    if(t<0.75){const s=(t-0.35)/0.4;return[(130+s*105)|0,(60+s*75)|0,(30+s*35)|0];}
-    const s=(t-0.75)/0.25;return[235,(135+s*100)|0,(65+s*150)|0];
   }
   return[80,80,80];
 }
@@ -2658,24 +2661,30 @@ function renderField3DImpl(){
     for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
       const sample=data.samples[py*data.width+px];
       if(!sample)continue;
+      const materialCode=sample.material;
+      const materialValid=Number.isInteger(materialCode)&&materialCode>=0&&materialCode<=7;
       const values=props.map((property,index)=>{
         const raw=sample[property];
+        if(index===6)return materialValid?1:0;
         return typeof raw==='number'&&Number.isFinite(raw)?Math.max(0,Math.min(1,Math.abs(raw)/maxima[index])):0;
       });
       const normalized=fieldIndexSafe>=0?values[fieldIndexSafe]:values.reduce((sum,value)=>sum+value,0)/values.length;
       const selectedRaw=fieldIndexSafe>=0?sample[props[fieldIndexSafe]]:normalized;
       const value=typeof selectedRaw==='number'&&Number.isFinite(selectedRaw)?selectedRaw:0;
-      const color=fieldIndexSafe>=0?colorOf(fieldIndexSafe,normalized):values.reduce((sum,contribution,index)=>{
-        const part=colorOf(index,contribution);
-        return sum.map((channel,channelIndex)=>channel+part[channelIndex]*contribution);
-      },[0,0,0]).map(channel=>Math.round(channel/Math.max(0.000001,values.reduce((sum,value)=>sum+value,0))));
+      const color=fieldIndexSafe>=0
+        ?colorOf(fieldIndexSafe,fieldIndexSafe===6?value:normalized)
+        :values.reduce((sum,contribution,index)=>{
+          const part=colorOf(index,index===6?materialCode:contribution);
+          return sum.map((channel,channelIndex)=>channel+part[channelIndex]*contribution);
+        },[0,0,0]).map(channel=>Math.round(channel/Math.max(0.000001,values.reduce((sum,value)=>sum+value,0))));
       const sx=originX+px*cellW+py*cellW*.55;
       const sy=originY+(px+py)*cellH*.5-zLayer*depthStep;
       const lift=Math.max(0,Math.min(depthStep*.9,normalized*depthStep*2));
       g.beginPath();g.moveTo(sx,sy-cellH*.5-lift);g.lineTo(sx+cellW*.5,sy-lift);g.lineTo(sx,sy+cellH*.5-lift);g.lineTo(sx-cellW*.5,sy-lift);g.closePath();
       g.fillStyle='rgba('+color[0]+','+color[1]+','+color[2]+','+(0.22+normalized*.72)+')';g.fill();
       g.strokeStyle='rgba(160,190,255,.14)';g.lineWidth=.5;g.stroke();
-      renderedCells++;if(value>(maxima[fieldIndexSafe]>.99?maxima[fieldIndexSafe]*.001:.001))activeCells++;
+      renderedCells++;
+      if(fieldIndexSafe===6?materialValid:value>(maxima[fieldIndexSafe]>.99?maxima[fieldIndexSafe]*.001:.001))activeCells++;
     }
   }
   g.font='bold 12px system-ui';g.fillStyle='rgba(235,242,255,.94)';g.fillText('ISOMETRIC FIELD PREVIEW · '+fieldName,14,22);

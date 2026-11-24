@@ -94,8 +94,10 @@ assert.match(rendererSource, /const rawFieldValue = finiteNumericValue\(sample\[
   'field distribution metrics must count non-numeric source values as invalid')
 assert.match(rendererSource, /const sampleX = finiteNumericValue\(sample\.x\)/,
   'world coordinates must not coerce missing or string values into valid positions')
-assert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\.map\(key => finiteNumericValue\(sample\[key\]\)\)/,
-  'composite rendering must exclude invalid source values rather than coercing them to zero')
+assert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\.map\(key => \{/,
+  'composite rendering must validate each field before including it')
+assert.match(rendererSource, /key === 'material' && !isMaterialClassCode\(value\) \? null : value/,
+  'composite rendering must exclude invalid BIOME_ID categories instead of coercing them')
 
 assert.match(appSource, /const selectedRaw=fieldIndexSafe>=0\?sample\[props\[fieldIndexSafe\]\]:normalized/,
   'CPU fallback must also reject coercible Material values')
