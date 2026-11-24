@@ -137,7 +137,7 @@ assert.match(rendererSource, /fieldValueCount \? Math\.sqrt\(fieldValueM2 \/ fie
  // all-invalid selected fields must report null for numeric summary statistics.
 assert.match(rendererSource, /min: null,\s*max: null,\s*mean: null,\s*standardDeviation: null/,
   'empty field profiles must use null rather than fabricated zero statistics')
-assert.equal((rendererSource.match(/fieldValues: \\{ min: null, max: null, mean: null, standardDeviation: null \\}/g) ?? []).length, 2,
+assert.equal((rendererSource.match(/fieldValues: \{ min: null, max: null, mean: null, standardDeviation: null \}/g) ?? []).length, 2,
   'both initial and per-render reset diagnostics must represent absent measurements as null')
 assert.match(rendererSource, /fieldValues: \{ min: null, max: null, mean: null, standardDeviation: null \}/,
   'renderer reset diagnostics must not claim zero-valued field measurements')
