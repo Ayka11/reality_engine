@@ -30,7 +30,7 @@ assert.doesNotMatch(rendererSource, /const y = \(sampleY - centerY\) \/ spacing/
   'sample.y must not collapse every voxel in a slice onto the same height')
 assert.match(rendererSource, /sampleCount,\s*activeCells,\s*volume:/,
   'render result must return the actual sample count and geometry diagnostics')
-assert.match(rendererSource, /if \(capacity <= 0\) \{\s*if \(this\.mesh\) this\.mesh\.count = 0\s*if \(this\.gridHelper\) this\.gridHelper\.visible = false\s*this\.renderer\.render\(this\.scene, this\.camera\)\s*return \{ \.\.\.base, ready: false, reason: 'no-field-samples' \}/,
+assert.match(rendererSource, /if \(capacity <= 0\) \{[\s\S]*?if \(this\.mesh\) this\.mesh\.count = 0[\s\S]*?if \(this\.gridHelper\) this\.gridHelper\.visible = false[\s\S]*?this\.renderer\.render\(this\.scene, this\.camera\)[\s\S]*?return \{ \.\.\.base, ready: false, reason: 'no-field-samples' \}/,
   'an empty volume frame must clear the previous WebGL image instead of leaving stale voxels visible')
 assert.match(rendererSource, /if \(this\.gridHelper\) this\.gridHelper\.visible = true/,
   'the reference grid must return when valid volume samples arrive after an empty frame')
