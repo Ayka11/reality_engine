@@ -313,6 +313,7 @@ export class WorldFieldVolumeRenderer {
     let fieldValueMax = Number.NEGATIVE_INFINITY
     let fieldValueMean = 0
     let fieldValueM2 = 0
+    let fieldValueCount = 0
     const selectedCategoryCounts = selectedFieldIndex === 6
       ? Object.fromEntries(MATERIAL_CLASS_COLORS.map((_, code) => [String(code), 0])) as Record<string, number>
       : undefined
@@ -416,12 +417,14 @@ export class WorldFieldVolumeRenderer {
           const value = rawValue !== null ? rawValue : 0
           if (selectedCategoryCounts && rawValue !== null) selectedCategoryCounts[String(rawValue)]++
           if (selectedFieldIndex >= 0 && rawValue === null) invalidFieldValues++
-          fieldValueMin = Math.min(fieldValueMin, value)
-          fieldValueMax = Math.max(fieldValueMax, value)
-          const valueCount = renderedCells + 1
-          const valueDelta = value - fieldValueMean
-          fieldValueMean += valueDelta / valueCount
-          fieldValueM2 += valueDelta * (value - fieldValueMean)
+          if (rawValue !== null) {
+            fieldValueCount++
+            fieldValueMin = Math.min(fieldValueMin, value)
+            fieldValueMax = Math.max(fieldValueMax, value)
+            const valueDelta = value - fieldValueMean
+            fieldValueMean += valueDelta / fieldValueCount
+            fieldValueM2 += valueDelta * (value - fieldValueMean)
+          }
           const normalized = selectedFieldIndex >= 0
             ? (selectedFieldIndex === 6
               ? (selectedRawValue !== null ? 1 : 0)
@@ -443,7 +446,8 @@ export class WorldFieldVolumeRenderer {
           this.mesh.setMatrixAt(renderedCells, this.matrix)
 
           if (selectedFieldIndex >= 0) {
-            if (selectedFieldIndex === 6) this.color.setHex(materialClassColor(selectedRawValue))
+            if (rawValue === null) this.color.setHex(0x7f8794)
+            else if (selectedFieldIndex === 6) this.color.setHex(materialClassColor(selectedRawValue))
             else this.color.setHex(palette[0]).lerp(this.highColor.setHex(palette[1]), normalized)
           } else {
             let red = 0, green = 0, blue = 0, weight = 0
@@ -494,10 +498,10 @@ export class WorldFieldVolumeRenderer {
       activeRatio: renderedCells ? activeCells / renderedCells : 0,
       invalidFieldValues,
       fieldValues: {
-        min: selectedFieldIndex === 6 ? null : (renderedCells ? fieldValueMin : 0),
-        max: selectedFieldIndex === 6 ? null : (renderedCells ? fieldValueMax : 0),
-        mean: selectedFieldIndex === 6 ? null : (renderedCells ? fieldValueMean : 0),
-        standardDeviation: selectedFieldIndex === 6 ? null : (renderedCells ? Math.sqrt(fieldValueM2 / renderedCells) : 0),
+        min: selectedFieldIndex === 6 ? null : (fieldValueCount ? fieldValueMin : 0),
+        max: selectedFieldIndex === 6 ? null : (fieldValueCount ? fieldValueMax : 0),
+        mean: selectedFieldIndex === 6 ? null : (fieldValueCount ? fieldValueMean : 0),
+        standardDeviation: selectedFieldIndex === 6 ? null : (fieldValueCount ? Math.sqrt(fieldValueM2 / fieldValueCount) : 0),
         ...(selectedCategoryCounts ? { categoryCounts: { ...selectedCategoryCounts } } : {}),
       },
       fieldProfiles: Object.fromEntries(SCIENTIFIC_FIELD_KEYS.map(key => {
