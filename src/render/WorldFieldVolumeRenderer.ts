@@ -85,10 +85,10 @@ const createEmptyFieldDistributions = (): Record<string, FieldDistribution> =>
     invalidValues: 0,
     activeCells: 0,
     activeRatio: 0,
-    min: key === 'material' ? null : 0,
-    max: key === 'material' ? null : 0,
-    mean: key === 'material' ? null : 0,
-    standardDeviation: key === 'material' ? null : 0,
+    min: null,
+    max: null,
+    mean: null,
+    standardDeviation: null,
     ...(key === 'material' ? { categoryCounts: Object.fromEntries(MATERIAL_CLASS_COLORS.map((_, code) => [String(code), 0])) } : {}),
   }]))
 
@@ -165,7 +165,7 @@ export class WorldFieldVolumeRenderer {
     activeCells: 0,
     activeRatio: 0,
     invalidFieldValues: 0,
-    fieldValues: { min: 0, max: 0, mean: 0, standardDeviation: 0 },
+    fieldValues: { min: null, max: null, mean: null, standardDeviation: null },
     fieldProfiles: createEmptyFieldDistributions(),
     uniqueLayers: 0,
     min: { x: 0, y: 0, z: 0 },
@@ -416,9 +416,9 @@ export class WorldFieldVolumeRenderer {
           const compositeStrength = validNumericValues.length
             ? finiteValues.reduce<number>((sum, value, index) =>
               sum + (index !== 6 && value !== null ? Math.abs(value) / fieldMaxima[index] : 0), 0) / validNumericValues.length
-            : 0
+            : null
           const rawValue = selectedFieldIndex >= 0 ? selectedRawValue : compositeStrength
-          const value = rawValue !== null ? rawValue : 0
+          const value = rawValue ?? 0
           if (selectedCategoryCounts && rawValue !== null) selectedCategoryCounts[String(rawValue)]++
           if (selectedFieldIndex >= 0 && rawValue === null) invalidFieldValues++
           if (rawValue !== null) {
@@ -433,7 +433,7 @@ export class WorldFieldVolumeRenderer {
             ? (selectedFieldIndex === 6
               ? (selectedRawValue !== null ? 1 : 0)
               : THREE.MathUtils.clamp(Math.abs(value) / maximum, 0, 1))
-            : THREE.MathUtils.clamp(compositeStrength, 0, 1)
+            : (compositeStrength !== null ? THREE.MathUtils.clamp(compositeStrength, 0, 1) : 0)
           const x = (sampleX - frame.view.center.x) / cellWidth
           const y = (sliceY - centerY) / spacing
           const z = (sampleZ - frame.view.center.z) / cellDepth
@@ -477,6 +477,7 @@ export class WorldFieldVolumeRenderer {
               weight += contribution
             }
             if (weight > 0) this.color.setRGB(red / weight, green / weight, blue / weight)
+            else if (finiteValues.every(value => value === null)) this.color.setHex(0x7f8794)
             else this.color.setHex(0x182235)
           }
           this.mesh.setColorAt(renderedCells, this.color)
@@ -502,10 +503,10 @@ export class WorldFieldVolumeRenderer {
       activeRatio: renderedCells ? activeCells / renderedCells : 0,
       invalidFieldValues,
       fieldValues: {
-        min: selectedFieldIndex === 6 ? null : (fieldValueCount ? fieldValueMin : 0),
-        max: selectedFieldIndex === 6 ? null : (fieldValueCount ? fieldValueMax : 0),
-        mean: selectedFieldIndex === 6 ? null : (fieldValueCount ? fieldValueMean : 0),
-        standardDeviation: selectedFieldIndex === 6 ? null : (fieldValueCount ? Math.sqrt(fieldValueM2 / fieldValueCount) : 0),
+        min: selectedFieldIndex === 6 || !fieldValueCount ? null : fieldValueMin,
+        max: selectedFieldIndex === 6 || !fieldValueCount ? null : fieldValueMax,
+        mean: selectedFieldIndex === 6 || !fieldValueCount ? null : fieldValueMean,
+        standardDeviation: selectedFieldIndex === 6 || !fieldValueCount ? null : Math.sqrt(fieldValueM2 / fieldValueCount),
         ...(selectedCategoryCounts ? { categoryCounts: { ...selectedCategoryCounts } } : {}),
       },
       fieldProfiles: Object.fromEntries(SCIENTIFIC_FIELD_KEYS.map(key => {
@@ -515,10 +516,10 @@ export class WorldFieldVolumeRenderer {
           invalidValues: profile.invalidValues,
           activeCells: profile.activeCells,
           activeRatio: profile.sampleCount ? profile.activeCells / profile.sampleCount : 0,
-          min: key === 'material' ? null : (profile.sampleCount ? profile.min : 0),
-          max: key === 'material' ? null : (profile.sampleCount ? profile.max : 0),
-          mean: key === 'material' ? null : (profile.sampleCount ? profile.mean : 0),
-          standardDeviation: key === 'material' ? null : (profile.sampleCount ? Math.sqrt(profile.m2 / profile.sampleCount) : 0),
+          min: key === 'material' || !profile.sampleCount ? null : profile.min,
+          max: key === 'material' || !profile.sampleCount ? null : profile.max,
+          mean: key === 'material' || !profile.sampleCount ? null : profile.mean,
+          standardDeviation: key === 'material' || !profile.sampleCount ? null : Math.sqrt(profile.m2 / profile.sampleCount),
           ...(key === 'material' ? { categoryCounts: { ...(profile.categoryCounts as Record<string, number>) } } : {}),
         }]
       })),
