@@ -161,7 +161,48 @@ assert.equal(renderableFieldMaximum([
 ], 'energy'), 4,
   'invalid coordinates and samples beyond slice dimensions must not suppress valid volume contrast')
 
-assert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\.map\(key => \{/,
+// Selected-field WebGL normalization must be owned by the renderer. A stale or
+// independently computed app-side maximum must not override its eligible set.
+assert.doesNotMatch(rendererSource.slice(0, rendererSource.indexOf('export type WorldFieldVolumeResult')),
+  /maximum:\s*number/,
+  'volume frame must not accept an externally supplied normalization maximum')
+assert.match(rendererSource, /const maximum = Math\.max\(0\.000001, fieldMaxima\[selectedFieldIndex >= 0 \? selectedFieldIndex : 0\]\)/,
+  'selected numeric fields must normalize from the renderer-owned eligible sample maximum')
+assert.doesNotMatch(appSource, /maximum:fieldIndex<0\?Math\.max\(\.\.\.maxima\):maxima\[fieldIndex\]/,
+  'app must not pass an external maximum that can override WebGL normalization')
+
+// The CPU preview must use the same renderable-sample contract as WebGL:
+// valid slice plane, finite world X/Z, and samples within declared dimensions.
+assert.match(appSource, /if\(typeof slice\.y!=='number'\|\|!Number\.isFinite\(slice\.y\)\)continue;[\s\S]*?for\(let py=0;py<data\.height;py\+\+\)for\(let px=0;px<data\.width;px\+\+\)[\s\S]*?const sample=data\.samples\[py\*data\.width\+px\][\s\S]*?typeof sample\.x!=='number'\|\|!Number\.isFinite\(sample\.x\)[\s\S]*?typeof sample\.z!=='number'\|\|!Number\.isFinite\(sample\.z\)/,
+  'app-side maxima must use only coordinate-valid samples in declared dimensions')
+assert.match(appSource, /const slice=slices\[si\];\s*const \{data\}=slice;\s*if\(typeof slice\.y!=='number'\|\|!Number\.isFinite\(slice\.y\)\)continue;[\s\S]*?if\(!sample\|\|typeof sample\.x!=='number'\|\|!Number\.isFinite\(sample\.x\)\|\|\s*typeof sample\.z!=='number'\|\|!Number\.isFinite\(sample\.z\)\)continue;/,
+  'CPU fallback must skip invalid slice planes and invalid world coordinates before drawing')
+const eligibleSamples = slices => slices.flatMap(slice => {
+  if (typeof slice.y !== 'number' || !Number.isFinite(slice.y)) return []
+  const { width, height, samples } = slice.data
+  const eligible = []
+  for (let py = 0; py < height; py++) for (let px = 0; px < width; px++) {
+    const sample = samples[py * width + px]
+    if (sample && typeof sample.x === 'number' && Number.isFinite(sample.x) &&
+        typeof sample.z === 'number' && Number.isFinite(sample.z)) eligible.push(sample)
+  }
+  return eligible
+})
+const mixedEligibilityFixture = [
+  { y: 0, data: { width: 1, height: 1, samples: [
+    { x: 0, z: 0, energy: 2 }, { x: 1, z: 1, energy: 1000 },
+  ] } },
+  { y: 0, data: { width: 1, height: 1, samples: [{ x: Number.NaN, z: 0, energy: 900 }] } },
+  { y: Number.POSITIVE_INFINITY, data: { width: 1, height: 1, samples: [{ x: 0, z: 0, energy: 800 }] } },
+  { y: 0, data: { width: 1, height: 1, samples: [{ x: 0, z: 0, energy: 4 }] } },
+]
+const cpuEligible = eligibleSamples(mixedEligibilityFixture)
+assert.equal(cpuEligible.length, 2,
+  'CPU preview must render the same two coordinate-valid samples that determine normalization')
+assert.equal(Math.max(...cpuEligible.map(sample => Math.abs(sample.energy))), 4,
+  'CPU preview normalization must remain independent of invalid and out-of-window extreme values')
+
+assert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\\.map\\(key => \\{/,
   'composite rendering must validate each field before including it')
 assert.match(rendererSource, /key === 'material' && !isMaterialClassCode\(value\) \? null : value/,
   'composite rendering must exclude invalid BIOME_ID categories instead of coercing them')
