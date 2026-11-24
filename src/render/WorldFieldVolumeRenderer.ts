@@ -275,6 +275,10 @@ export class WorldFieldVolumeRenderer {
     )
     if (capacity <= 0) {
       if (this.mesh) this.mesh.count = 0
+      // Clear the previous frame: otherwise WebGL keeps the last submitted
+      // image on the canvas even though diagnostics now report an empty volume.
+      if (this.gridHelper) this.gridHelper.visible = false
+      this.renderer.render(this.scene, this.camera)
       return { ...base, ready: false, reason: 'no-field-samples' }
     }
 
@@ -537,6 +541,7 @@ export class WorldFieldVolumeRenderer {
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
 
     const gridSize = Math.max(8, Math.max(frame.cols, frame.rows) + 2)
+    if (this.gridHelper) this.gridHelper.visible = true
     if (!this.gridHelper || this.gridSize !== gridSize) {
       if (this.gridHelper) {
         this.scene.remove(this.gridHelper)
