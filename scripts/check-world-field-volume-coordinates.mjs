@@ -115,6 +115,8 @@ assert.match(appSource, /const selectedRaw=fieldIndexSafe>=0\?sample\[props\[fie
   'CPU fallback must also reject coercible Material values')
 assert.match(appSource, /const selectedValueValid=fieldIndexSafe<0\|\|\(fieldIndexSafe===6\?materialValid:typeof selectedRaw==='number'&&Number\.isFinite\(selectedRaw\)\)/,
   'CPU fallback must distinguish invalid selected numeric samples and invalid Material category codes')
+assert.match(appSource, /const numericContributions=values\.slice\(0,6\);\s*const normalized=fieldIndexSafe>=0\?values\[fieldIndexSafe\]:numericContributions\.reduce\(\(sum,value\)=>sum\+value,0\)\/numericContributions\.length/,
+  'CPU composite intensity must exclude categorical Material from numeric lift and opacity')
 assert.match(appSource, /\?\(!selectedValueValid\?\[127,135,148\]:colorOf\(fieldIndexSafe,fieldIndexSafe===6\?value:normalized\)\)/,
   'CPU fallback must render invalid selected values with the same neutral diagnostic color as WebGL')
 assert.match(appSource, /id="layerM" onclick="setLayer\(6\)"/,
