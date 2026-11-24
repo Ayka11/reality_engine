@@ -2670,9 +2670,10 @@ function renderField3DImpl(){
       });
       const normalized=fieldIndexSafe>=0?values[fieldIndexSafe]:values.reduce((sum,value)=>sum+value,0)/values.length;
       const selectedRaw=fieldIndexSafe>=0?sample[props[fieldIndexSafe]]:normalized;
-      const value=typeof selectedRaw==='number'&&Number.isFinite(selectedRaw)?selectedRaw:0;
+      const selectedValueValid=fieldIndexSafe<0||(fieldIndexSafe===6?materialValid:typeof selectedRaw==='number'&&Number.isFinite(selectedRaw));
+      const value=selectedValueValid&&typeof selectedRaw==='number'&&Number.isFinite(selectedRaw)?selectedRaw:0;
       const color=fieldIndexSafe>=0
-        ?colorOf(fieldIndexSafe,fieldIndexSafe===6?value:normalized)
+        ?(!selectedValueValid?[127,135,148]:colorOf(fieldIndexSafe,fieldIndexSafe===6?value:normalized))
         :values.reduce((sum,contribution,index)=>{
           const part=colorOf(index,index===6?materialCode:contribution);
           return sum.map((channel,channelIndex)=>channel+part[channelIndex]*contribution);
