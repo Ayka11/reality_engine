@@ -113,6 +113,10 @@ assert.match(rendererSource, /if \(rawValue === null\) this\.color\.setHex\(0x7f
 
 assert.match(appSource, /const selectedRaw=fieldIndexSafe>=0\?sample\[props\[fieldIndexSafe\]\]:normalized/,
   'CPU fallback must also reject coercible Material values')
+assert.match(appSource, /const selectedValueValid=fieldIndexSafe<0\|\|\(fieldIndexSafe===6\?materialValid:typeof selectedRaw==='number'&&Number\.isFinite\(selectedRaw\)\)/,
+  'CPU fallback must distinguish invalid selected numeric samples and invalid Material category codes')
+assert.match(appSource, /\?\(!selectedValueValid\?\[127,135,148\]:colorOf\(fieldIndexSafe,fieldIndexSafe===6\?value:normalized\)\)/,
+  'CPU fallback must render invalid selected values with the same neutral diagnostic color as WebGL')
 assert.match(appSource, /id="layerM" onclick="setLayer\(6\)"/,
   'Material field control must be present in the layer toolbar')
 console.log('PASS: seven scientific scalar fields, including categorical Material, are represented independently')
