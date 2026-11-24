@@ -100,6 +100,10 @@ assert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\.map\(k
   'composite rendering must validate each field before including it')
 assert.match(rendererSource, /key === 'material' && !isMaterialClassCode\(value\) \? null : value/,
   'composite rendering must exclude invalid BIOME_ID categories instead of coercing them')
+assert.match(rendererSource, /finiteValues\.filter\(\(value, index\) => index !== 6 && value !== null\)/,
+  'composite numeric strength must exclude categorical Material codes')
+assert.match(rendererSource, /index !== 6 && value !== null \? Math\.abs\(value\) \/ fieldMaxima\[index\]/,
+  'composite numeric normalization must include only the six numeric scientific fields')
 
 assert.match(appSource, /const selectedRaw=fieldIndexSafe>=0\?sample\[props\[fieldIndexSafe\]\]:normalized/,
   'CPU fallback must also reject coercible Material values')
