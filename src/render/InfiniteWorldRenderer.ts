@@ -231,6 +231,10 @@ export class InfiniteWorldRenderer {
     return this.#fieldSampler.registry.activeProviderId
   }
 
+  getActiveFieldProviderVersion() {
+    return this.#fieldSampler.registry.getActive()?.version ?? null
+  }
+
   getAuthoritativeSculptHistoryState() {
     return {
       undo: this.#authoritativeSculptTransactions.historyLength,
