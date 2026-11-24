@@ -26,7 +26,6 @@ export type WorldFieldVolumeFrame = {
   fieldIndex: number
   fieldName: string
   property: string
-  maximum: number
   cols: number
   rows: number
   spacing: number
@@ -317,7 +316,7 @@ export class WorldFieldVolumeRenderer {
       }
       return Math.max(observed, 1e-9)
     })
-    const maximum = Math.max(0.000001, Math.abs(Number(frame.maximum) || fieldMaxima[selectedFieldIndex >= 0 ? selectedFieldIndex : 0]))
+    const maximum = Math.max(0.000001, fieldMaxima[selectedFieldIndex >= 0 ? selectedFieldIndex : 0])
     const palette = FIELD_PALETTES[selectedFieldIndex >= 0 ? selectedFieldIndex : 0]
     let renderedCells = 0
     let activeCells = 0
