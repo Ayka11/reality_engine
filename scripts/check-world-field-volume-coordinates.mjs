@@ -130,7 +130,7 @@ assert.match(rendererSource, /index !== 6 && value !== null \? Math\.abs\(value\
   'composite numeric normalization must include only the six numeric scientific fields')
 assert.match(rendererSource, /if \(rawValue !== null\) \{\s*fieldValueCount\+\+/,
   'selected-field diagnostics must exclude invalid samples from numeric statistics')
-assert.match(rendererSource, /fieldValueCount \? Math\.sqrt\(fieldValueM2 \/ fieldValueCount\) : 0/,
+assert.match(rendererSource, /selectedFieldIndex === 6 \|\| !fieldValueCount \? null : Math\.sqrt\(fieldValueM2 \/ fieldValueCount\)/,
   'selected-field standard deviation must use only valid values')
 
  // Missing measurements are not zero-valued measurements. Empty profiles and
