@@ -2525,11 +2525,16 @@ try {
   const initialProfiles = field3dDiagnostic.volume?.fieldProfiles;
   for (const field of expectedFieldProfiles) {
     const profile = initialProfiles?.[field];
+    const numericField = field !== 'material';
+    const categoryCounts = profile?.categoryCounts;
+    const categoryTotal = categoryCounts ? Object.values(categoryCounts).reduce((sum, count) => sum + count, 0) : 0;
     if (!profile || profile.sampleCount <= 0 || profile.invalidValues !== 0 ||
-        !Number.isFinite(profile.min) || !Number.isFinite(profile.max) ||
-        !Number.isFinite(profile.mean) || !Number.isFinite(profile.standardDeviation) ||
-        !Number.isFinite(profile.activeRatio) || profile.min > profile.max ||
-        profile.activeRatio < 0 || profile.activeRatio > 1) {
+        (numericField && (!Number.isFinite(profile.min) || !Number.isFinite(profile.max) ||
+          !Number.isFinite(profile.mean) || !Number.isFinite(profile.standardDeviation) || profile.min > profile.max)) ||
+        (!numericField && (profile.min !== null || profile.max !== null || profile.mean !== null ||
+          profile.standardDeviation !== null || !categoryCounts || Object.keys(categoryCounts).length !== 9 ||
+          categoryTotal !== profile.sampleCount)) ||
+        !Number.isFinite(profile.activeRatio) || profile.activeRatio < 0 || profile.activeRatio > 1) {
       throw new Error("3D volume scientific field profile is missing or invalid for " + field +
         ": " + JSON.stringify(profile));
     }
@@ -2571,8 +2576,12 @@ try {
   if (materialVolume.buttonDisabled || materialVolume.state.renderedCells <= 0 ||
       !materialVolume.profile || materialVolume.profile.sampleCount <= 0 ||
       materialVolume.profile.invalidValues !== 0 ||
-      materialVolume.profile.min < 0 || materialVolume.profile.max > 8 ||
-      materialVolume.profile.min % 1 !== 0 || materialVolume.profile.max % 1 !== 0) {
+      materialVolume.profile.min !== null || materialVolume.profile.max !== null ||
+      materialVolume.profile.mean !== null || materialVolume.profile.standardDeviation !== null ||
+      !materialVolume.profile.categoryCounts || Object.keys(materialVolume.profile.categoryCounts).length !== 9 ||
+      Object.values(materialVolume.profile.categoryCounts).reduce((sum, count) => sum + count, 0) !== materialVolume.profile.sampleCount ||
+      !materialVolume.state.volume.fieldValues.categoryCounts ||
+      Object.values(materialVolume.state.volume.fieldValues.categoryCounts).reduce((sum, count) => sum + count, 0) !== materialVolume.profile.sampleCount) {
     throw new Error("Material scalar did not render as an independent volumetric field: " +
       JSON.stringify(materialVolume));
   }

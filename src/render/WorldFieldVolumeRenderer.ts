@@ -53,7 +53,7 @@ export type WorldFieldVolumeResult = {
     activeCells: number
     activeRatio: number
     invalidFieldValues: number
-    fieldValues: { min: number; max: number; mean: number; standardDeviation: number }
+    fieldValues: { min: number | null; max: number | null; mean: number | null; standardDeviation: number | null; categoryCounts?: Record<string, number> }
     fieldProfiles: Record<string, FieldDistribution>
     uniqueLayers: number
     min: { x: number; y: number; z: number }
@@ -68,10 +68,11 @@ type FieldDistribution = {
   invalidValues: number
   activeCells: number
   activeRatio: number
-  min: number
-  max: number
-  mean: number
-  standardDeviation: number
+  min: number | null
+  max: number | null
+  mean: number | null
+  standardDeviation: number | null
+  categoryCounts?: Record<string, number>
 }
 
 const SCIENTIFIC_FIELD_KEYS = [
@@ -84,10 +85,11 @@ const createEmptyFieldDistributions = (): Record<string, FieldDistribution> =>
     invalidValues: 0,
     activeCells: 0,
     activeRatio: 0,
-    min: 0,
-    max: 0,
-    mean: 0,
-    standardDeviation: 0,
+    min: key === 'material' ? null : 0,
+    max: key === 'material' ? null : 0,
+    mean: key === 'material' ? null : 0,
+    standardDeviation: key === 'material' ? null : 0,
+    ...(key === 'material' ? { categoryCounts: Object.fromEntries(MATERIAL_CLASS_COLORS.map((_, code) => [String(code), 0])) } : {}),
   }]))
 
 const finiteNumericValue = (value: unknown): number | null =>
@@ -155,7 +157,7 @@ export class WorldFieldVolumeRenderer {
   private readonly quaternion = new THREE.Quaternion()
   private readonly color = new THREE.Color()
   private readonly highColor = new THREE.Color()
-  private volumeDiagnostics = {
+  private volumeDiagnostics: WorldFieldVolumeResult['volume'] = {
     sampleCount: 0,
     renderedCells: 0,
     invalidSamples: 0,
@@ -311,10 +313,14 @@ export class WorldFieldVolumeRenderer {
     let fieldValueMax = Number.NEGATIVE_INFINITY
     let fieldValueMean = 0
     let fieldValueM2 = 0
+    const selectedCategoryCounts = selectedFieldIndex === 6
+      ? Object.fromEntries(MATERIAL_CLASS_COLORS.map((_, code) => [String(code), 0])) as Record<string, number>
+      : undefined
     const fieldProfileAccumulators = Object.fromEntries(SCIENTIFIC_FIELD_KEYS.map(key => [key, {
       sampleCount: 0, invalidValues: 0, activeCells: 0,
       min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY,
       mean: 0, m2: 0,
+      categoryCounts: key === 'material' ? Object.fromEntries(MATERIAL_CLASS_COLORS.map((_, code) => [String(code), 0])) : null,
     }]))
     let duplicateCoordinates = 0
     const coordinateKeys = new Set<string>()
@@ -380,9 +386,14 @@ export class WorldFieldVolumeRenderer {
             profile.sampleCount++
             profile.min = Math.min(profile.min, rawFieldValue)
             profile.max = Math.max(profile.max, rawFieldValue)
-            const delta = rawFieldValue - profile.mean
-            profile.mean += delta / profile.sampleCount
-            profile.m2 += delta * (rawFieldValue - profile.mean)
+            if (key === 'material') {
+              const categoryCounts = profile.categoryCounts as Record<string, number>
+              categoryCounts[String(rawFieldValue)]++
+            } else {
+              const delta = rawFieldValue - profile.mean
+              profile.mean += delta / profile.sampleCount
+              profile.m2 += delta * (rawFieldValue - profile.mean)
+            }
             if (key === 'material' || Math.abs(rawFieldValue) > 0.001) profile.activeCells++
           }
           const selectedRawCandidate = selectedFieldIndex >= 0 ? finiteNumericValue(sample[SCIENTIFIC_FIELD_KEYS[selectedFieldIndex]]) : 0
@@ -399,6 +410,7 @@ export class WorldFieldVolumeRenderer {
             : 0
           const rawValue = selectedFieldIndex >= 0 ? selectedRawValue : compositeStrength
           const value = rawValue !== null ? rawValue : 0
+          if (selectedCategoryCounts && rawValue !== null) selectedCategoryCounts[String(rawValue)]++
           if (selectedFieldIndex >= 0 && rawValue === null) invalidFieldValues++
           fieldValueMin = Math.min(fieldValueMin, value)
           fieldValueMax = Math.max(fieldValueMax, value)
@@ -478,10 +490,11 @@ export class WorldFieldVolumeRenderer {
       activeRatio: renderedCells ? activeCells / renderedCells : 0,
       invalidFieldValues,
       fieldValues: {
-        min: renderedCells ? fieldValueMin : 0,
-        max: renderedCells ? fieldValueMax : 0,
-        mean: renderedCells ? fieldValueMean : 0,
-        standardDeviation: renderedCells ? Math.sqrt(fieldValueM2 / renderedCells) : 0,
+        min: selectedFieldIndex === 6 ? null : (renderedCells ? fieldValueMin : 0),
+        max: selectedFieldIndex === 6 ? null : (renderedCells ? fieldValueMax : 0),
+        mean: selectedFieldIndex === 6 ? null : (renderedCells ? fieldValueMean : 0),
+        standardDeviation: selectedFieldIndex === 6 ? null : (renderedCells ? Math.sqrt(fieldValueM2 / renderedCells) : 0),
+        ...(selectedCategoryCounts ? { categoryCounts: { ...selectedCategoryCounts } } : {}),
       },
       fieldProfiles: Object.fromEntries(SCIENTIFIC_FIELD_KEYS.map(key => {
         const profile = fieldProfileAccumulators[key]
@@ -490,10 +503,11 @@ export class WorldFieldVolumeRenderer {
           invalidValues: profile.invalidValues,
           activeCells: profile.activeCells,
           activeRatio: profile.sampleCount ? profile.activeCells / profile.sampleCount : 0,
-          min: profile.sampleCount ? profile.min : 0,
-          max: profile.sampleCount ? profile.max : 0,
-          mean: profile.sampleCount ? profile.mean : 0,
-          standardDeviation: profile.sampleCount ? Math.sqrt(profile.m2 / profile.sampleCount) : 0,
+          min: key === 'material' ? null : (profile.sampleCount ? profile.min : 0),
+          max: key === 'material' ? null : (profile.sampleCount ? profile.max : 0),
+          mean: key === 'material' ? null : (profile.sampleCount ? profile.mean : 0),
+          standardDeviation: key === 'material' ? null : (profile.sampleCount ? Math.sqrt(profile.m2 / profile.sampleCount) : 0),
+          ...(key === 'material' ? { categoryCounts: { ...(profile.categoryCounts as Record<string, number>) } } : {}),
         }]
       })),
       uniqueLayers: sortedLayers.length,

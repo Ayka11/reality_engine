@@ -86,6 +86,7 @@ export class WorldGenerator {
     else if (height < this.seaLevel + 2) biome = 'coast'
     else if (temperature < 0.18) biome = height > 34 ? 'alpine' : 'tundra'
     else if (temperature < 0.35) biome = height > 38 ? 'alpine' : 'forest'
+    else if (height > 38) biome = 'mountain'
     else if (moisture < 0.18) biome = 'desert'
     else if (moisture > 0.58) biome = 'forest'
     else biome = 'plains'
