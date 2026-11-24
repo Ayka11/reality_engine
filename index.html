@@ -1014,7 +1014,7 @@ function _drawWorldFieldMultiSlice(){
   renderCanvas.height=ch
   const renderCtx=renderCanvas.getContext('2d')
   if(!renderCtx)return false
-  const value=(s,f)=>[s.energy,s.density,s.information,s.entropy,s.temperature,s.biology][f]??s.energy
+  const value=(s,f)=>[s.energy,s.density,s.information,s.entropy,s.temperature,s.biology][f]
   const meta=[
     {l:0,label:'⚡ Energy',info:'World-space energy field'},
     {l:1,label:'🌫️ Density',info:'World-space density field'},
@@ -1025,11 +1025,15 @@ function _drawWorldFieldMultiSlice(){
   ]
   const drawField=(ox,oy,w,h,f,showStats=true)=>{
     const m=meta[f],cw2=w/data.width,ch2=h/data.height
-    let total=0,min=Infinity,max=-Infinity
+    let total=0,validCount=0,min=Infinity,max=-Infinity
     for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
       const v=value(data.samples[py*data.width+px],f)
-      total+=v
-      if(Number.isFinite(v)){min=Math.min(min,v);max=Math.max(max,v)}
+      if(Number.isFinite(v)){
+        total+=v
+        validCount++
+        min=Math.min(min,v)
+        max=Math.max(max,v)
+      }
     }
     const range=Math.max(1e-9,max-min)
     for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
@@ -1045,7 +1049,10 @@ function _drawWorldFieldMultiSlice(){
     if(showStats){
       renderCtx.fillStyle='rgba(10,10,20,.72)';renderCtx.fillRect(ox,oy+h-22,w,22)
       renderCtx.font='9px monospace';renderCtx.fillStyle='rgba(205,215,255,.85)'
-      renderCtx.fillText(`avg ${(total/data.samples.length).toFixed(2)} min ${(min===Infinity?0:min).toFixed(2)} max ${(max===-Infinity?0:max).toFixed(2)}`,ox+6,oy+h-8)
+      const avgLabel=validCount?(total/validCount).toFixed(2):'n/a'
+      const minLabel=validCount?min.toFixed(2):'n/a'
+      const maxLabel=validCount?max.toFixed(2):'n/a'
+      renderCtx.fillText(`avg ${avgLabel} min ${minLabel} max ${maxLabel}`,ox+6,oy+h-8)
     }
   }
   renderCtx.clearRect(0,0,cw,ch)
