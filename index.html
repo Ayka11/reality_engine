@@ -982,13 +982,21 @@ let worldField2DLinked = true
 let worldField2DCache = null
 let worldField2DRenderCache = null
 
+function _getWorldFieldProviderCacheIdentity() {
+  const world = window.infiniteWorld
+  return [
+    world?.getActiveFieldProviderId?.() ?? 'unknown',
+    world?.getActiveFieldProviderVersion?.() ?? 'unknown',
+  ]
+}
+
 function _getWorldField2DWindow(width, height) {
   const sampler = window.worldFieldViewWindow
   const getView = window.getWorldViewContract
   if (typeof sampler !== 'function' || typeof getView !== 'function') return null
   const view = getView()
   const fieldState = typeof window.worldFieldState === 'function' ? window.worldFieldState()?.field : null
-  const key = [width, height, view.center.x.toFixed(3), view.center.y.toFixed(3), view.center.z.toFixed(3), view.sliceY, view.visibleRadius, view.seed, fieldState?.version ?? 0, fieldState?.mutationCount ?? 0, fieldState?.lastMutation?.id ?? 0].join('|')
+  const key = [width, height, view.center.x.toFixed(3), view.center.y.toFixed(3), view.center.z.toFixed(3), view.sliceY, view.visibleRadius, view.seed, fieldState?.version ?? 0, fieldState?.mutationCount ?? 0, fieldState?.lastMutation?.id ?? 0, ..._getWorldFieldProviderCacheIdentity()].join('|')
   if (worldField2DCache?.key === key) return worldField2DCache
   const data = sampler(width, height, view.sliceY)
   if (!data?.samples?.length) return null
@@ -2573,7 +2581,7 @@ function renderField3DImpl(){
   // Use a denser vertical sampling stack so Field3D reads as a volume,
   // while keeping the bounded X/Z sample window for CPU-friendly previews.
   const depth=11,spacing=Math.max(1,Math.min(8,Math.floor((view.visibleRadius||24)*2/depth)));
-  const cacheKey=[cols,rows,depth,spacing,view.center.x,view.center.y,view.center.z,view.sliceY,view.visibleRadius,view.seed,fieldState?.version??0,fieldState?.mutationCount??0,fieldState?.lastMutation?.id??0].join('|');
+  const cacheKey=[cols,rows,depth,spacing,view.center.x,view.center.y,view.center.z,view.sliceY,view.visibleRadius,view.seed,fieldState?.version??0,fieldState?.mutationCount??0,fieldState?.lastMutation?.id??0,..._getWorldFieldProviderCacheIdentity()].join('|');
   if(!window.__worldField3DCache||window.__worldField3DCache.key!==cacheKey){
     const slices=[];
     for(let k=0;k<depth;k++){
