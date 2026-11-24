@@ -2582,7 +2582,7 @@ try {
       Object.values(materialVolume.profile.categoryCounts).reduce((sum, count) => sum + count, 0) !== materialVolume.profile.sampleCount ||
       !materialVolume.state.volume.fieldValues.categoryCounts ||
       Object.values(materialVolume.state.volume.fieldValues.categoryCounts).reduce((sum, count) => sum + count, 0) !== materialVolume.profile.sampleCount) {
-    throw new Error("Material scalar did not render as an independent volumetric field: " +
+    throw new Error("Categorical Material field did not render as an independent volumetric field: " +
       JSON.stringify(materialVolume));
   }
   await page.evaluate(() => window.setRenderMode?.("3d", document.getElementById("tab3d")));
@@ -2616,7 +2616,8 @@ try {
   await page.waitForFunction(() => window.__worldField3DCanvasState?.field === "Energy", { timeout: 10000 });
 
   // The Metrics view must read the authoritative Infinity World sampler and
-  // expose every scalar field independently from the legacy finite-grid panel.
+  // expose six numeric fields plus a categorical Material distribution, separately
+  // from the legacy finite-grid panel.
   const authoritativeMetrics = await page.evaluate(() => {
     if (typeof window.sampleWorldFieldMetrics !== "function" ||
         typeof window.getWorldFieldMetricsSnapshot !== "function" ||
@@ -2629,11 +2630,17 @@ try {
   });
   const metricsFields = ["energy", "density", "information", "entropy", "temperature", "biology", "material"];
   if (!authoritativeMetrics.available ||
-      !metricsFields.every(field => authoritativeMetrics.snapshot?.[field]?.count === 567 &&
+      !metricsFields.filter(field => field !== "material").every(field => authoritativeMetrics.snapshot?.[field]?.count === 567 &&
         authoritativeMetrics.snapshot?.[field]?.invalid === 0 &&
         Number.isFinite(authoritativeMetrics.snapshot?.[field]?.mean)) ||
-      !metricsFields.every(field => authoritativeMetrics.csv.includes(field)) ||
-      !["Energy", "Density", "Information", "Entropy", "Temperature", "Biology", "Material"]
+      authoritativeMetrics.snapshot?.material?.count !== 567 ||
+      authoritativeMetrics.snapshot?.material?.invalid !== 0 ||
+      authoritativeMetrics.snapshot?.material?.mean !== null ||
+      Object.keys(authoritativeMetrics.snapshot?.material?.categoryCounts ?? {}).length !== 9 ||
+      Object.values(authoritativeMetrics.snapshot?.material?.categoryCounts ?? {}).reduce((sum, count) => sum + count, 0) !== 567 ||
+      !metricsFields.filter(field => field !== "material").every(field => authoritativeMetrics.csv.includes(field)) ||
+      !authoritativeMetrics.csv.includes("material_0_count") || !authoritativeMetrics.csv.includes("material_8_count") ||
+      !["Energy", "Density", "Information", "Entropy", "Temperature", "Biology", "Material", "Category distribution"]
         .every(label => authoritativeMetrics.text.includes(label)) ||
       !authoritativeMetrics.text.includes("Legacy finite simulation")) {
     throw new Error("Metrics view did not expose all seven authoritative fields alongside a separate legacy data source: " +
@@ -2661,10 +2668,14 @@ try {
         profile.points.every(point => point.position[key] === profile.points[0].position[key]));
       const selectedCoordinates = profile.points.every(point =>
         point.position[selected] === point.coordinate);
-      const fieldShape = profile.points.every(point => fields.every(field =>
-        (point.validity[field] === true && typeof point.values[field] === "number" &&
-          Number.isFinite(point.values[field])) ||
-        (point.validity[field] === false && point.values[field] === null)));
+      const fieldShape = profile.points.every(point => fields.every(field => {
+        const value = point.values[field];
+        const valid = field === "material"
+          ? Number.isInteger(value) && value >= 0 && value < 9
+          : typeof value === "number" && Number.isFinite(value);
+        return (point.validity[field] === true && valid) ||
+          (point.validity[field] === false && value === null);
+      }));
       const matchesAuthoritativeSampler = profile.points.every(point => {
         const direct = window.worldFieldSample(point.position.x, point.position.y, point.position.z);
         return fields.every(field => {
@@ -2734,15 +2745,21 @@ try {
     const stats = document.getElementById("worldMetricsOverlayStats");
     const snapshot = window.getWorldFieldMetricsSnapshot?.();
     const historyAfterRefresh = window.getWorldFieldMetricsSeries("energy", 120).length;
-    const allFieldsAccounted = fields.every(field => {
+    const numericFieldsAccounted = fields.filter(field => field !== "material").every(field => {
       const value = snapshot?.[field];
       return value && value.count + value.invalid === 75 &&
         Number.isFinite(value.mean) && Number.isFinite(value.min) && Number.isFinite(value.max);
     });
+    const materialStats = snapshot?.material;
+    const allFieldsAccounted = numericFieldsAccounted && materialStats?.count + materialStats?.invalid === 75 &&
+      materialStats?.mean === null && materialStats?.min === null && materialStats?.max === null &&
+      Object.keys(materialStats?.categoryCounts ?? {}).length === 9 &&
+      Object.values(materialStats?.categoryCounts ?? {}).reduce((sum, count) => sum + count, 0) === materialStats?.count;
     selector.value = "material";
     selector.dispatchEvent(new Event("change", { bubbles: true }));
-    const selectedFieldRendered = stats?.innerText.includes("Mean") &&
-      selector.value === "material" && stats.innerText.includes("Valid");
+    const selectedFieldRendered = stats?.innerText.includes("categories") &&
+      stats?.innerText.includes("Ocean") && selector.value === "material" &&
+      stats.innerText.includes("Valid") && stats.innerText.includes("Invalid");
     const modeChecks = [];
     for (const [mode, tab] of [
       ["field3d", "tabField3d"], ["hybrid", "tabHybrid"], ["3d", "tab3d"],
@@ -2765,7 +2782,7 @@ try {
       hiddenIn2D,
       allFieldsAccounted,
       selectedFieldRendered,
-      hasRangeAndValidity: Boolean(stats?.innerText.includes("Range") && stats.innerText.includes("Invalid")),
+      hasCategoryDistributionAndValidity: Boolean(stats?.innerText.includes("categories") && stats.innerText.includes("Invalid")),
       hasExplicitSamplingStatus: document.getElementById("worldMetricsOverlayStatus")?.innerText.includes("75 on-demand world samples") ?? false,
       samplingDidNotRunOnModeSwitch: historyAfterRefresh === historyAfterModeSwitches,
       finalMode: window.currentRenderMode,
@@ -2777,7 +2794,7 @@ try {
       !scientificOverlayAcceptance.hiddenIn2D ||
       !scientificOverlayAcceptance.allFieldsAccounted ||
       !scientificOverlayAcceptance.selectedFieldRendered ||
-      !scientificOverlayAcceptance.hasRangeAndValidity ||
+      !scientificOverlayAcceptance.hasCategoryDistributionAndValidity ||
       !scientificOverlayAcceptance.hasExplicitSamplingStatus ||
       !scientificOverlayAcceptance.samplingDidNotRunOnModeSwitch ||
       scientificOverlayAcceptance.finalMode !== "field3d") {

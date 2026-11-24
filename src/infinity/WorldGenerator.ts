@@ -135,7 +135,7 @@ export class WorldGenerator {
       // Water columns retain their biome category below sea level; cells above
       // both terrain and sea level are air, never ocean. This keeps category 0
       // meaningful while preserving the existing 0–7 biome encoding.
-      material: y > h && y >= this.seaLevel ? MATERIAL_AIR_CLASS : BIOME_ID[climate.biome],
+      material: y > h && y > this.seaLevel ? MATERIAL_AIR_CLASS : BIOME_ID[climate.biome],
     }
   }
 }

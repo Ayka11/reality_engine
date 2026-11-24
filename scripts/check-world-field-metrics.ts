@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
-import { WorldFieldMetrics } from '../src/infinity/WorldFieldMetrics'
+import { MATERIAL_METRIC_CATEGORY_COUNT, WorldFieldMetrics } from '../src/infinity/WorldFieldMetrics'
+
+assert.equal(MATERIAL_METRIC_CATEGORY_COUNT, 9, 'metric category count must follow the eight biome codes plus AIR')
 import type { FieldSampler } from '../src/infinity/FieldSampler'
 
 let calls = 0
@@ -29,16 +31,49 @@ assert.equal(first.energy.max, 6)
 assert.equal(first.energy.mean, 3)
 assert.equal(first.material.count, 0)
 assert.equal(first.material.invalid, 27)
-assert.equal(first.material.mean, 0)
+assert.equal(first.material.mean, null)
+assert.equal(first.material.min, null)
+assert.equal(first.material.standardDeviation, null)
+assert.equal(Object.values(first.material.categoryCounts ?? {}).reduce((sum, count) => sum + count, 0), 0)
 assert.equal(metrics.getSeries('energy').length, 1)
+assert.equal(metrics.getSeries('material').length, 0, 'categorical material must not be recorded as a numeric mean series')
 assert.equal(metrics.getSeries('energy', 0).length, 0)
 assert.equal(metrics.getStats('temperature').mean, 2)
+
+const categoryMetrics = new WorldFieldMetrics({
+  sample(x: number) { return { energy: x, density: 1, information: 1, entropy: 1, temperature: 1, biology: 1,
+    material: x === 0 ? 0 : x === 1 ? 1 : 8 } }
+} as unknown as FieldSampler)
+const categoryStats = categoryMetrics.sample(1, bounds, { x: 3, y: 1, z: 1 }).material
+assert.equal(categoryStats.count, 3)
+assert.equal(categoryStats.categoryCounts?.['8'], 1, 'AIR category must be counted as a valid material class')
+assert.equal(categoryStats.invalid, 0)
+assert.equal(categoryStats.mean, null)
+assert.deepEqual(categoryStats.categoryCounts, { '0': 1, '1': 1, '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0, '8': 1 })
+assert.equal(categoryMetrics.getSeries('material').length, 0)
+const exposedCounts = categoryMetrics.snapshot().material.categoryCounts!
+exposedCounts['0'] = 999
+assert.equal(categoryMetrics.getStats('material').categoryCounts?.['0'], 1, 'snapshot categories must not expose mutable internal state')
+const returnedCounts = categoryMetrics.sample(2, bounds, { x: 3, y: 1, z: 1 }).material.categoryCounts!
+returnedCounts['1'] = 999
+assert.equal(categoryMetrics.getStats('material').categoryCounts?.['1'], 1, 'sample results must not expose mutable internal state')
+const invalidCategoryMetrics = new WorldFieldMetrics({
+  sample() { return { energy: 0, density: 0, information: 0, entropy: 0, temperature: 0, biology: 0, material: 9 } }
+} as unknown as FieldSampler)
+const invalidCategory = invalidCategoryMetrics.sample(1, bounds, { x: 1, y: 1, z: 1 }).material
+assert.equal(invalidCategory.count, 0)
+assert.equal(invalidCategory.invalid, 1, 'out-of-range categorical codes must be rejected')
+
+const categoryCsv = categoryMetrics.exportCSV()
+assert.match(categoryCsv, /material_0_count.*material_8_count/)
+assert.ok(categoryCsv.split('\n')[1].endsWith(',1,1,0,0,0,0,0,0,1'), 'CSV must export one count per material category')
 
 metrics.sample(11, bounds, { x: 1, y: 1, z: 1 })
 metrics.sample(12, bounds, { x: 1, y: 1, z: 1 })
 assert.deepEqual(metrics.getSeries('energy').map(point => point.tick), [11, 12])
 const csv = metrics.exportCSV()
-assert.match(csv, /^tick,energy,density,information,entropy,temperature,biology,material/m)
+assert.match(csv, /^tick,energy,density,information,entropy,temperature,biology,material_0_count.*material_8_count$/m)
+assert.doesNotMatch(csv, /,material(?:,|$)/m, 'Material must export category counts, never an ordinal scalar')
 assert.match(csv, /11,/)
 assert.match(csv, /12,/)
 
@@ -50,6 +85,8 @@ assert.throws(() => metrics.getSeries('energy', -1), /limit/)
 metrics.clear()
 assert.equal(metrics.getSeries('energy').length, 0)
 assert.equal(metrics.getStats('energy').count, 0)
+assert.equal(metrics.getStats('material').mean, null)
+assert.equal(Object.values(metrics.getStats('material').categoryCounts ?? {}).reduce((sum, count) => sum + count, 0), 0)
 
 let profileCalls = 0
 const profileSampler = {
@@ -62,7 +99,7 @@ const profileSampler = {
       entropy: z,
       temperature: x * 2,
       biology: Number.isFinite(x) ? 1 : Number.NaN,
-      material: profileCalls === 2 ? Number.NaN : z - 1,
+      material: profileCalls === 2 ? Number.NaN : (profileCalls === 1 ? 0 : 8),
     }
   },
 } as unknown as FieldSampler
@@ -83,6 +120,8 @@ assert.equal(xProfile.points[1].values.material, null)
 assert.equal(xProfile.points[1].validity.material, false)
 assert.equal(xProfile.stats.material.count, 2)
 assert.equal(xProfile.stats.material.invalid, 1)
+assert.equal(xProfile.stats.material.mean, null)
+assert.deepEqual(xProfile.stats.material.categoryCounts, { '0': 1, '1': 0, '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0, '8': 1 })
 assert.equal(xProfile.stats.energy.count, 3)
 assert.equal(xProfile.stats.energy.mean, 0)
 

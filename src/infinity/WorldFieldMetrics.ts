@@ -1,5 +1,6 @@
 import type { FieldSampler } from './FieldSampler'
 import type { ScientificFieldSample } from './FieldSampler'
+import { MATERIAL_AIR_CLASS } from './WorldGenerator'
 
 export const WORLD_FIELD_METRIC_FIELDS = [
   'energy', 'density', 'information', 'entropy', 'temperature', 'biology', 'material',
@@ -10,11 +11,25 @@ export type WorldFieldMetricPoint = { tick: number; value: number }
 export type WorldFieldMetricStats = {
   count: number
   invalid: number
-  min: number
-  max: number
-  mean: number
-  standardDeviation: number
+  min: number | null
+  max: number | null
+  mean: number | null
+  standardDeviation: number | null
+  categoryCounts?: Record<string, number>
 }
+
+export const MATERIAL_METRIC_CATEGORY_COUNT = MATERIAL_AIR_CLASS + 1
+const emptyMaterialCategoryCounts = (): Record<string, number> =>
+  Object.fromEntries(Array.from({ length: MATERIAL_METRIC_CATEGORY_COUNT }, (_, code) => [String(code), 0]))
+const isMaterialCategory = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < MATERIAL_METRIC_CATEGORY_COUNT
+const cloneMetricStats = (stats: WorldFieldMetricStats): WorldFieldMetricStats => ({
+  ...stats,
+  ...(stats.categoryCounts ? { categoryCounts: { ...stats.categoryCounts } } : {}),
+})
+const emptyMetricStats = (field: WorldFieldMetricName): WorldFieldMetricStats => field === 'material'
+  ? { count: 0, invalid: 0, min: null, max: null, mean: null, standardDeviation: null, categoryCounts: emptyMaterialCategoryCounts() }
+  : { count: 0, invalid: 0, min: 0, max: 0, mean: 0, standardDeviation: 0 }
 export type WorldFieldMetricBounds = {
   min: { x: number; y: number; z: number }
   max: { x: number; y: number; z: number }
@@ -43,6 +58,7 @@ export class WorldFieldMetrics {
   private readonly capacity: number
   private readonly history = new Map<WorldFieldMetricName, WorldFieldMetricPoint[]>()
   private latestStats = new Map<WorldFieldMetricName, WorldFieldMetricStats>()
+  private readonly materialCategoryHistory: Array<{ tick: number; counts: Record<string, number> }> = []
 
   constructor(private readonly sampler: Pick<FieldSampler, 'sample'>, capacity = 2000, private readonly maxSamples = 250_000) {
     if (!Number.isSafeInteger(capacity) || capacity < 1) throw new RangeError('Metric history capacity must be a positive safe integer')
@@ -50,7 +66,7 @@ export class WorldFieldMetrics {
     this.capacity = capacity
     for (const field of WORLD_FIELD_METRIC_FIELDS) {
       this.history.set(field, [])
-      this.latestStats.set(field, { count: 0, invalid: 0, min: 0, max: 0, mean: 0, standardDeviation: 0 })
+      this.latestStats.set(field, emptyMetricStats(field))
     }
   }
 
@@ -70,8 +86,11 @@ export class WorldFieldMetrics {
       throw new RangeError(`Metric sample count exceeds configured limit (${this.maxSamples})`)
     }
 
-    const accumulators = new Map<WorldFieldMetricName, { count: number; invalid: number; min: number; max: number; mean: number; m2: number }>()
-    for (const field of WORLD_FIELD_METRIC_FIELDS) accumulators.set(field, { count: 0, invalid: 0, min: Infinity, max: -Infinity, mean: 0, m2: 0 })
+    const accumulators = new Map<WorldFieldMetricName, { count: number; invalid: number; min: number; max: number; mean: number; m2: number; categoryCounts: Record<string, number> | null }>()
+    for (const field of WORLD_FIELD_METRIC_FIELDS) accumulators.set(field, {
+      count: 0, invalid: 0, min: Infinity, max: -Infinity, mean: 0, m2: 0,
+      categoryCounts: field === 'material' ? emptyMaterialCategoryCounts() : null,
+    })
 
     const coordinate = (min: number, max: number, index: number, count: number) =>
       count === 1 ? (min + max) / 2 : min + (max - min) * index / (count - 1)
@@ -86,16 +105,21 @@ export class WorldFieldMetrics {
           for (const field of WORLD_FIELD_METRIC_FIELDS) {
             const accumulator = accumulators.get(field)!
             const raw = (sample as ScientificFieldSample)[field]
-            if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+            if (typeof raw !== 'number' || !Number.isFinite(raw) || (field === 'material' && !isMaterialCategory(raw))) {
               accumulator.invalid++
               continue
             }
             accumulator.count++
-            accumulator.min = Math.min(accumulator.min, raw)
-            accumulator.max = Math.max(accumulator.max, raw)
-            const delta = raw - accumulator.mean
-            accumulator.mean += delta / accumulator.count
-            accumulator.m2 += delta * (raw - accumulator.mean)
+            if (field === 'material') {
+              const counts = accumulator.categoryCounts as Record<string, number>
+              counts[String(raw)]++
+            } else {
+              accumulator.min = Math.min(accumulator.min, raw)
+              accumulator.max = Math.max(accumulator.max, raw)
+              const delta = raw - accumulator.mean
+              accumulator.mean += delta / accumulator.count
+              accumulator.m2 += delta * (raw - accumulator.mean)
+            }
           }
         }
       }
@@ -104,20 +128,23 @@ export class WorldFieldMetrics {
     const result = {} as Record<WorldFieldMetricName, WorldFieldMetricStats>
     for (const field of WORLD_FIELD_METRIC_FIELDS) {
       const accumulator = accumulators.get(field)!
-      const stats: WorldFieldMetricStats = {
-        count: accumulator.count,
-        invalid: accumulator.invalid,
-        min: accumulator.count ? accumulator.min : 0,
-        max: accumulator.count ? accumulator.max : 0,
-        mean: accumulator.count ? accumulator.mean : 0,
-        standardDeviation: accumulator.count ? Math.sqrt(accumulator.m2 / accumulator.count) : 0,
-      }
-      result[field] = stats
-      this.latestStats.set(field, stats)
+      const stats: WorldFieldMetricStats = field === 'material'
+        ? { count: accumulator.count, invalid: accumulator.invalid, min: null, max: null, mean: null,
+            standardDeviation: null, categoryCounts: { ...(accumulator.categoryCounts as Record<string, number>) } }
+        : { count: accumulator.count, invalid: accumulator.invalid,
+            min: accumulator.count ? accumulator.min : 0, max: accumulator.count ? accumulator.max : 0,
+            mean: accumulator.count ? accumulator.mean : 0,
+            standardDeviation: accumulator.count ? Math.sqrt(accumulator.m2 / accumulator.count) : 0 }
+      result[field] = cloneMetricStats(stats)
+      this.latestStats.set(field, cloneMetricStats(stats))
       const series = this.history.get(field)!
-      if (stats.count) {
+      if (field !== 'material' && stats.count && stats.mean !== null) {
         series.push({ tick, value: stats.mean })
         if (series.length > this.capacity) series.splice(0, series.length - this.capacity)
+      }
+      if (field === 'material') {
+        this.materialCategoryHistory.push({ tick, counts: { ...(stats.categoryCounts ?? emptyMaterialCategoryCounts()) } })
+        if (this.materialCategoryHistory.length > this.capacity) this.materialCategoryHistory.splice(0, this.materialCategoryHistory.length - this.capacity)
       }
     }
     return result
@@ -146,8 +173,11 @@ export class WorldFieldMetrics {
     }
     const min = bounds.min[axis]
     const max = bounds.max[axis]
-    const accumulators = new Map<WorldFieldMetricName, { count: number; invalid: number; min: number; max: number; mean: number; m2: number }>()
-    for (const field of WORLD_FIELD_METRIC_FIELDS) accumulators.set(field, { count: 0, invalid: 0, min: Infinity, max: -Infinity, mean: 0, m2: 0 })
+    const accumulators = new Map<WorldFieldMetricName, { count: number; invalid: number; min: number; max: number; mean: number; m2: number; categoryCounts: Record<string, number> | null }>()
+    for (const field of WORLD_FIELD_METRIC_FIELDS) accumulators.set(field, {
+      count: 0, invalid: 0, min: Infinity, max: -Infinity, mean: 0, m2: 0,
+      categoryCounts: field === 'material' ? emptyMaterialCategoryCounts() : null,
+    })
     const points: WorldFieldProfilePoint[] = []
 
     for (let index = 0; index < resolution; index++) {
@@ -158,7 +188,7 @@ export class WorldFieldMetrics {
       const validity = {} as Record<WorldFieldMetricName, boolean>
       for (const field of WORLD_FIELD_METRIC_FIELDS) {
         const raw = sample[field]
-        const valid = typeof raw === 'number' && Number.isFinite(raw)
+        const valid = typeof raw === 'number' && Number.isFinite(raw) && (field !== 'material' || isMaterialCategory(raw))
         validity[field] = valid
         values[field] = valid ? raw : null
         const accumulator = accumulators.get(field)!
@@ -167,11 +197,16 @@ export class WorldFieldMetrics {
           continue
         }
         accumulator.count++
-        accumulator.min = Math.min(accumulator.min, raw)
-        accumulator.max = Math.max(accumulator.max, raw)
-        const delta = raw - accumulator.mean
-        accumulator.mean += delta / accumulator.count
-        accumulator.m2 += delta * (raw - accumulator.mean)
+        if (field === 'material') {
+          const counts = accumulator.categoryCounts as Record<string, number>
+          counts[String(raw)]++
+        } else {
+          accumulator.min = Math.min(accumulator.min, raw)
+          accumulator.max = Math.max(accumulator.max, raw)
+          const delta = raw - accumulator.mean
+          accumulator.mean += delta / accumulator.count
+          accumulator.m2 += delta * (raw - accumulator.mean)
+        }
       }
       points.push({ coordinate, position, values, validity })
     }
@@ -179,14 +214,13 @@ export class WorldFieldMetrics {
     const stats = {} as Record<WorldFieldMetricName, WorldFieldMetricStats>
     for (const field of WORLD_FIELD_METRIC_FIELDS) {
       const accumulator = accumulators.get(field)!
-      stats[field] = {
-        count: accumulator.count,
-        invalid: accumulator.invalid,
-        min: accumulator.count ? accumulator.min : 0,
-        max: accumulator.count ? accumulator.max : 0,
-        mean: accumulator.count ? accumulator.mean : 0,
-        standardDeviation: accumulator.count ? Math.sqrt(accumulator.m2 / accumulator.count) : 0,
-      }
+      stats[field] = field === 'material'
+        ? { count: accumulator.count, invalid: accumulator.invalid, min: null, max: null, mean: null,
+            standardDeviation: null, categoryCounts: { ...(accumulator.categoryCounts as Record<string, number>) } }
+        : { count: accumulator.count, invalid: accumulator.invalid,
+            min: accumulator.count ? accumulator.min : 0, max: accumulator.count ? accumulator.max : 0,
+            mean: accumulator.count ? accumulator.mean : 0,
+            standardDeviation: accumulator.count ? Math.sqrt(accumulator.m2 / accumulator.count) : 0 }
     }
     return { axis, count: points.length, points, stats }
   }
@@ -222,7 +256,7 @@ export class WorldFieldMetrics {
   getStats(field: WorldFieldMetricName): WorldFieldMetricStats {
     const stats = this.latestStats.get(field)
     if (!stats) throw new RangeError(`Unknown world field metric: ${field}`)
-    return { ...stats }
+    return cloneMetricStats(stats)
   }
 
   getSeries(field: WorldFieldMetricName, limit = 200): WorldFieldMetricPoint[] {
@@ -239,19 +273,23 @@ export class WorldFieldMetrics {
   }
 
   exportCSV(): string {
-    const rows = ['tick,' + WORLD_FIELD_METRIC_FIELDS.join(',')]
-    const ticks = [...new Set(WORLD_FIELD_METRIC_FIELDS.flatMap(field => this.history.get(field)!.map(point => point.tick)))].sort((a, b) => a - b)
-    const byField = new Map(WORLD_FIELD_METRIC_FIELDS.map(field => [field, new Map(this.history.get(field)!.map(point => [point.tick, point.value]))]))
+    const numericFields = WORLD_FIELD_METRIC_FIELDS.filter(field => field !== 'material')
+    const materialColumns = Array.from({ length: MATERIAL_METRIC_CATEGORY_COUNT }, (_, code) => `material_${code}_count`)
+    const rows = ['tick,' + [...numericFields, ...materialColumns].join(',')]
+    const ticks = [...new Set([...numericFields.flatMap(field => this.history.get(field)!.map(point => point.tick)), ...this.materialCategoryHistory.map(point => point.tick)])].sort((a, b) => a - b)
+    const byField = new Map(numericFields.map(field => [field, new Map(this.history.get(field)!.map(point => [point.tick, point.value]))]))
+    const byMaterialTick = new Map(this.materialCategoryHistory.map(point => [point.tick, point.counts]))
     for (const tick of ticks) {
-      rows.push([String(tick), ...WORLD_FIELD_METRIC_FIELDS.map(field => byField.get(field)!.has(tick) ? byField.get(field)!.get(tick)!.toFixed(6) : '')].join(','))
+      const counts = byMaterialTick.get(tick) ?? emptyMaterialCategoryCounts()
+      rows.push([String(tick), ...numericFields.map(field => byField.get(field)!.has(tick) ? byField.get(field)!.get(tick)!.toFixed(6) : ''),
+        ...Array.from({ length: MATERIAL_METRIC_CATEGORY_COUNT }, (_, code) => String(counts[String(code)] ?? 0))].join(','))
     }
     return rows.join('\n')
   }
 
   clear(): void {
     for (const series of this.history.values()) series.length = 0
-    for (const field of WORLD_FIELD_METRIC_FIELDS) {
-      this.latestStats.set(field, { count: 0, invalid: 0, min: 0, max: 0, mean: 0, standardDeviation: 0 })
-    }
+    for (const field of WORLD_FIELD_METRIC_FIELDS) this.latestStats.set(field, emptyMetricStats(field))
+    this.materialCategoryHistory.length = 0
   }
 }

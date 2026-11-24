@@ -325,7 +325,7 @@ input[type=range]{accent-color:#a397ff}
     <button class="mode-btn" id="layerS" onclick="setLayer(3)" style="padding:3px 9px;font-size:10px">🔥 Entropy</button>
     <button class="mode-btn" id="layerT" onclick="setLayer(4)" style="padding:3px 9px;font-size:10px">🌡️ Temp</button>
     <button class="mode-btn" id="layerB" onclick="setLayer(5)" style="padding:3px 9px;font-size:10px">🧬 Bio</button>
-    <button class="mode-btn" id="layerM" onclick="setLayer(6)" style="padding:3px 9px;font-size:10px" disabled title="Material scalar is available in 3D Volumetric Field; Infinite World uses a separate PBR material system.">🧱 Material</button>
+    <button class="mode-btn" id="layerM" onclick="setLayer(6)" style="padding:3px 9px;font-size:10px" disabled title="Material categorical field is available in 3D Volumetric Field; Infinite World uses a separate PBR material system.">🧱 Material</button>
     <button class="mode-btn" id="worldMetricsOverlayToggle" type="button" aria-pressed="false" onclick="toggleWorldFieldMetricsOverlay()" style="padding:3px 9px;font-size:10px">Scientific Overlay</button>
     <span id="layerHint" style="font-size:10px;color:var(--sub);margin-left:6px;font-style:italic"></span>
     <div style="height:16px;width:1px;background:var(--bd);margin:0 6px;flex-shrink:0"></div>
@@ -2813,6 +2813,15 @@ function renderWorldFieldMetricsOverlay(){
     return;
   }
   const format=value=>Number.isFinite(value)?Number(value).toFixed(4):'—';
+  if(field==='material'){
+    const labels=['Ocean','Coast','Plains','Forest','Desert','Tundra','Mountain','Alpine','Air'];
+    const colors=['#173b70','#2d8aa6','#8caa5b','#26734d','#d5b45c','#9bb9d6','#827b76','#f0e6d2','#9aa6b2'];
+    const counts=stats.categoryCounts||{};
+    const total=Object.values(counts).reduce((sum,value)=>sum+(Number.isFinite(value)?value:0),0);
+    panel.innerHTML='<div style="display:flex;justify-content:space-between;color:#9daecc;font-size:10px"><span>Valid '+(stats.count??0)+'</span><span>Invalid '+(stats.invalid??0)+'</span><span>'+total+' categories</span></div>'+
+      '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px">'+labels.map((label,code)=>'<div style="display:flex;align-items:center;gap:5px;min-width:0;font-size:10px;color:#c8d4ea"><span style="width:9px;height:9px;flex-shrink:0;border-radius:2px;background:'+colors[code]+'"></span><span style="overflow:hidden;text-overflow:ellipsis">'+label+'</span><strong style="margin-left:auto">'+(counts[String(code)]??0)+'</strong></div>').join('')+'</div>';
+    return;
+  }
   const valid=Number.isFinite(stats.count)?stats.count:0;
   const invalid=Number.isFinite(stats.invalid)?stats.invalid:0;
   const total=valid+invalid;
@@ -3017,6 +3026,8 @@ function renderWorldFieldProfile(axis='x'){
     ['entropy','Entropy'],['temperature','Temperature'],['biology','Biology'],['material','Material']
   ];
   const number=value=>Number.isFinite(value)?Number(value).toFixed(4):'—';
+  const materialLabels=['Ocean','Coast','Plains','Forest','Desert','Tundra','Mountain','Alpine','Air'];
+  const materialColors=['#173b70','#2d8aa6','#8caa5b','#26734d','#d5b45c','#9bb9d6','#827b76','#f0e6d2','#9aa6b2'];
   const rows=fields.map(([key,label])=>{
     const stats=profile.stats?.[key]||{};
     const values=profile.points.map(point=>point.values?.[key]);
@@ -3033,20 +3044,15 @@ function renderWorldFieldProfile(axis='x'){
       segment.push((segment.length?'L':'M')+x.toFixed(2)+','+y.toFixed(2));
     });
     if(segment.length)paths.push(segment.join(' '));
-    const graph='<svg viewBox="0 0 240 48" role="img" aria-label="'+label+' spatial profile" style="width:240px;height:48px;display:block">'+
-      '<path d="M8 43 H232" stroke="#34415c" stroke-width="1" fill="none"/>'+
-      paths.map(path=>'<path d="'+path+'" stroke="#79b8ff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>').join('')+
-      '</svg>';
-    return '<tr><td style="padding:7px;text-align:left;color:var(--text);white-space:nowrap">'+label+'</td>'+
-      '<td style="padding:4px 8px">'+graph+'</td>'+
-      '<td style="padding:7px;text-align:right">'+number(stats.mean)+'</td>'+
-      '<td style="padding:7px;text-align:right">'+number(stats.min)+' / '+number(stats.max)+'</td>'+
-      '<td style="padding:7px;text-align:right;color:#8bd5a6">'+(stats.count??0)+'</td>'+
-      '<td style="padding:7px;text-align:right;color:'+(stats.invalid?'#ff8d8d':'#8bd5a6')+'">'+(stats.invalid??0)+'</td></tr>';
+    const graph=key==='material'
+      ? '<svg viewBox="0 0 240 48" role="img" aria-label="Material categorical spatial profile" style="width:240px;height:48px;display:block"><path d="M8 43 H232" stroke="#34415c" stroke-width="1" fill="none"/>'+values.map((value,index)=>{const code=Number.isInteger(value)&&value>=0&&value<9?value:-1;const x=8+index*224/Math.max(1,values.length);return '<rect x="'+x.toFixed(2)+'" y="12" width="'+(224/Math.max(1,values.length)+0.3).toFixed(2)+'" height="30" fill="'+(code>=0?materialColors[code]:'#505866')+'"><title>'+(code>=0?materialLabels[code]:'Invalid')+'</title></rect>';}).join('')+'</svg>'
+      : '<svg viewBox="0 0 240 48" role="img" aria-label="'+label+' spatial profile" style="width:240px;height:48px;display:block"><path d="M8 43 H232" stroke="#34415c" stroke-width="1" fill="none"/>'+paths.map(path=>'<path d="'+path+'" stroke="#79b8ff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>').join('')+'</svg>';
+    const distribution=key==='material'?materialLabels.map((name,code)=>({name,count:stats.categoryCounts?.[String(code)]??0})).filter(item=>item.count>0).map(item=>item.name+': '+item.count).join(' · '):'';
+    return '<tr><td style="padding:7px;text-align:left;color:var(--text);white-space:nowrap">'+label+'</td><td style="padding:4px 8px">'+graph+'</td><td style="padding:7px;text-align:right">'+(key==='material'?'Categorical':number(stats.mean))+'</td><td style="padding:7px;text-align:right">'+(key==='material'?(distribution||'No categories'):number(stats.min)+' / '+number(stats.max))+'</td><td style="padding:7px;text-align:right;color:#8bd5a6">'+(stats.count??0)+'</td><td style="padding:7px;text-align:right;color:'+(stats.invalid?'#ff8d8d':'#8bd5a6')+'">'+(stats.invalid??0)+'</td></tr>';
   }).join('');
   panel.innerHTML='<div style="color:#8ea7d8;font-size:11px;margin:0 0 8px">'+profile.count+' authoritative samples · axis '+axis.toUpperCase()+' · other coordinates fixed at view center · on-demand · each field independently normalized (shape only; line heights are not cross-field comparable)</div>'+
     '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:720px"><thead><tr>'+ 
-    ['Field','Spatial profile','Mean','Min / Max','Valid','Invalid'].map(label=>'<th style="text-align:right;padding:6px;border-bottom:1px solid #293047;color:#9da9c5">'+label+'</th>').join('')+
+    ['Field','Spatial profile','Mean / Type','Range / Categories','Valid','Invalid'].map(label=>'<th style="text-align:right;padding:6px;border-bottom:1px solid #293047;color:#9da9c5">'+label+'</th>').join('')+
     '</tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 window.renderWorldFieldProfile=renderWorldFieldProfile;
@@ -3070,14 +3076,18 @@ function updateMetricsView(){
       '<strong style="color:var(--text);font:600 12px system-ui">Authoritative Infinity World · spatial sample</strong>'+
       '<span style="color:#8ea7d8">9 × 7 × 9 grid · 567 sample points</span></div>'+
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:650px"><thead><tr>'+
-      ['Field','Mean','Min','Max','Std dev','Valid','Invalid'].map(label=>'<th style="text-align:right;padding:6px;border-bottom:1px solid #293047;color:#9da9c5">'+label+'</th>').join('')+
+      ['Field','Mean','Min','Max','Std dev','Category distribution','Valid','Invalid'].map(label=>'<th style="text-align:right;padding:6px;border-bottom:1px solid #293047;color:#9da9c5">'+label+'</th>').join('')+
       '</tr></thead><tbody>'+fields.map(([key,label])=>{
         const s=snapshot[key]||{};
+        const categorical=key==='material';
+        const categoryLabels=['Ocean','Coast','Plains','Forest','Desert','Tundra','Mountain','Alpine','Air'];
+        const distribution=categorical?categoryLabels.map((name,code)=>({name,count:s.categoryCounts?.[String(code)]??0})).filter(item=>item.count>0).map(item=>item.name+': '+item.count).join(' · '):'—';
         return '<tr><td style="text-align:left;padding:7px;border-bottom:1px solid #1b2235;color:var(--text)">'+label+'</td>'+
-          '<td style="text-align:right;padding:7px">'+number(s.mean)+'</td>'+
-          '<td style="text-align:right;padding:7px">'+number(s.min)+'</td>'+
-          '<td style="text-align:right;padding:7px">'+number(s.max)+'</td>'+
-          '<td style="text-align:right;padding:7px">'+number(s.standardDeviation)+'</td>'+
+          '<td style="text-align:right;padding:7px">'+(categorical?'—':number(s.mean))+'</td>'+
+          '<td style="text-align:right;padding:7px">'+(categorical?'—':number(s.min))+'</td>'+
+          '<td style="text-align:right;padding:7px">'+(categorical?'—':number(s.max))+'</td>'+
+          '<td style="text-align:right;padding:7px">'+(categorical?'—':number(s.standardDeviation))+'</td>'+
+          '<td style="text-align:left;padding:7px;min-width:190px">'+distribution+'</td>'+
           '<td style="text-align:right;padding:7px;color:#8bd5a6">'+(s.count??0)+'</td>'+
           '<td style="text-align:right;padding:7px;color:'+(s.invalid?'#ff8d8d':'#8bd5a6')+'">'+(s.invalid??0)+'</td></tr>';
       }).join('')+'</tbody></table></div>'+

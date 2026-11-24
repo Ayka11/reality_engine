@@ -51,6 +51,8 @@ for (let z = -4096; z <= 4096 && !oceanColumn; z += 256) {
 assert.ok(oceanColumn, 'test seed must contain at least one ocean column')
 assert.equal(generator.sampleField(oceanColumn.x, generator.seaLevel - 0.5, oceanColumn.z).material, BIOME_ID.ocean,
   'water below sea level must retain the ocean category')
+assert.equal(generator.sampleField(oceanColumn.x, generator.seaLevel, oceanColumn.z).material, BIOME_ID.ocean,
+  'the sea-level surface must remain part of the water category')
 assert.equal(generator.sampleField(oceanColumn.x, generator.seaLevel + 1, oceanColumn.z).material, MATERIAL_AIR_CLASS,
   'space above sea level must use the dedicated AIR category')
 
