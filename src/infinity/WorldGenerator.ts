@@ -131,10 +131,15 @@ export class WorldGenerator {
       entropy: 0.02 + (1 - climate.moisture) * 0.08,
       temperature: climate.temperature * 280,
       biology: climate.moisture * proximity,
-      material: y > h ? 0 : BIOME_ID[climate.biome],
+      // Water columns retain their biome category below sea level; cells above
+      // both terrain and sea level are air, never ocean. This keeps category 0
+      // meaningful while preserving the existing 0–7 biome encoding.
+      material: y > h && y >= this.seaLevel ? MATERIAL_AIR_CLASS : BIOME_ID[climate.biome],
     }
   }
 }
+
+export const MATERIAL_AIR_CLASS = 8 as const
 
 export const BIOME_ID: Record<Biome, number> = {
   ocean: 0, coast: 1, plains: 2, forest: 3, desert: 4, tundra: 5, mountain: 6, alpine: 7,

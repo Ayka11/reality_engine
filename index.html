@@ -619,7 +619,7 @@ function colorOf(l,t){
   if(l===6){
     const materialColors=[
       [23,59,112], [45,138,166], [140,170,91], [38,115,77],
-      [213,180,92], [155,185,214], [130,123,118], [240,230,210]
+      [213,180,92], [155,185,214], [130,123,118], [240,230,210], [154,166,178]
     ];
     return Number.isInteger(t)&&t>=0&&t<materialColors.length
       ? materialColors[t]
@@ -2662,7 +2662,7 @@ function renderField3DImpl(){
       const sample=data.samples[py*data.width+px];
       if(!sample)continue;
       const materialCode=sample.material;
-      const materialValid=Number.isInteger(materialCode)&&materialCode>=0&&materialCode<=7;
+      const materialValid=Number.isInteger(materialCode)&&materialCode>=0&&materialCode<=8;
       const values=props.map((property,index)=>{
         const raw=sample[property];
         if(index===6)return materialValid?1:0;

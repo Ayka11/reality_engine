@@ -93,7 +93,7 @@ const createEmptyFieldDistributions = (): Record<string, FieldDistribution> =>
 const finiteNumericValue = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null
 
-// WorldGenerator.material is a categorical BIOME_ID (0–7), not a continuous scalar.
+// WorldGenerator.material is categorical: eight BIOME_ID values plus AIR (8).
 export const MATERIAL_CLASS_COLORS = [
   0x173b70, // ocean
   0x2d8aa6, // coast
@@ -103,6 +103,7 @@ export const MATERIAL_CLASS_COLORS = [
   0x9bb9d6, // tundra
   0x827b76, // mountain
   0xf0e6d2, // alpine
+  0x9aa6b2, // air
 ] as const
 
 export const isMaterialClassCode = (value: unknown): value is number =>

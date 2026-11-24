@@ -2571,7 +2571,7 @@ try {
   if (materialVolume.buttonDisabled || materialVolume.state.renderedCells <= 0 ||
       !materialVolume.profile || materialVolume.profile.sampleCount <= 0 ||
       materialVolume.profile.invalidValues !== 0 ||
-      materialVolume.profile.min < 0 || materialVolume.profile.max > 7 ||
+      materialVolume.profile.min < 0 || materialVolume.profile.max > 8 ||
       materialVolume.profile.min % 1 !== 0 || materialVolume.profile.max % 1 !== 0) {
     throw new Error("Material scalar did not render as an independent volumetric field: " +
       JSON.stringify(materialVolume));

@@ -43,7 +43,7 @@ assert.match(rendererSource, /const limitingHalfFov = Math\.max/,
 assert.match(rendererSource, /'energy', 'density', 'information', 'entropy', 'temperature', 'biology', 'material'/,
   'volumetric renderer must expose the seventh authoritative Material scalar field')
 assert.match(rendererSource, /export const MATERIAL_CLASS_COLORS = \[/,
-  'categorical Material must define a dedicated eight-class biome palette')
+  'categorical Material must define a dedicated palette for eight biomes plus AIR')
 assert.match(rendererSource, /export const isMaterialClassCode = \(value: unknown\): value is number/,
   'Material category validation must reject non-integer and out-of-range codes')
 assert.match(rendererSource, /selectedFieldIndex === 6\s*\?\s*\(selectedRawValue !== null \? 1 : 0\)/,
@@ -104,6 +104,6 @@ assert.match(appSource, /const selectedRaw=fieldIndexSafe>=0\?sample\[props\[fie
 assert.match(appSource, /id="layerM" onclick="setLayer\(6\)"/,
   'Material field control must be present in the layer toolbar')
 console.log('PASS: seven scientific scalar fields, including categorical Material, are represented independently')
-console.log('PASS: Material uses a discrete eight-biome palette and preserves category zero')
+console.log('PASS: Material uses a discrete eight-biome-plus-air palette and preserves category zero')
 console.log('PASS: invalid non-numeric samples are rejected without coercion')
 console.log('PASS: distinct source slices remain distinct in normalized 3D space')
