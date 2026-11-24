@@ -296,12 +296,23 @@ export class WorldFieldVolumeRenderer {
     const selectedFieldIndex = Number.isInteger(frame.fieldIndex) && frame.fieldIndex >= 0 && frame.fieldIndex < SCIENTIFIC_FIELD_KEYS.length
       ? frame.fieldIndex
       : -1
+    // Normalize against exactly the samples the render loop can place in
+    // the volume. Invalid coordinates and array entries outside the declared
+    // slice dimensions must not dim otherwise valid cells.
     const fieldMaxima = SCIENTIFIC_FIELD_KEYS.map(key => {
       let observed = 0
       for (const slice of frame.slices) {
-        for (const sample of slice.data.samples ?? []) {
-          const value = finiteNumericValue(sample?.[key])
-          if (value !== null) observed = Math.max(observed, Math.abs(value))
+        if (finiteNumericValue(slice.y) === null) continue
+        const data = slice.data
+        for (let py = 0; py < data.height; py++) {
+          for (let px = 0; px < data.width; px++) {
+            const sample = data.samples[py * data.width + px]
+            if (!sample ||
+                finiteNumericValue(sample.x) === null ||
+                finiteNumericValue(sample.z) === null) continue
+            const value = finiteNumericValue(sample[key])
+            if (value !== null) observed = Math.max(observed, Math.abs(value))
+          }
         }
       }
       return Math.max(observed, 1e-9)
