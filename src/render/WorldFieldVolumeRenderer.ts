@@ -404,9 +404,13 @@ export class WorldFieldVolumeRenderer {
             const value = finiteNumericValue(sample[key])
             return key === 'material' && !isMaterialClassCode(value) ? null : value
           })
-          const validValues = finiteValues.filter((value): value is number => value !== null)
-          const compositeStrength = validValues.length
-            ? finiteValues.reduce<number>((sum, value, index) => sum + (value !== null ? Math.abs(value) / fieldMaxima[index] : 0), 0) / validValues.length
+          // Material is a categorical biome code, not an ordinal scalar.
+          // It contributes its discrete color in composite mode, but never
+          // biases numeric composite strength or active-cell measurements.
+          const validNumericValues = finiteValues.filter((value, index) => index !== 6 && value !== null)
+          const compositeStrength = validNumericValues.length
+            ? finiteValues.reduce<number>((sum, value, index) =>
+              sum + (index !== 6 && value !== null ? Math.abs(value) / fieldMaxima[index] : 0), 0) / validNumericValues.length
             : 0
           const rawValue = selectedFieldIndex >= 0 ? selectedRawValue : compositeStrength
           const value = rawValue !== null ? rawValue : 0
