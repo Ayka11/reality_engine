@@ -119,6 +119,26 @@ assert.match(appSource, /const selectedRaw=fieldIndexSafe>=0\?sample\[props\[fie
   'CPU fallback must also reject coercible Material values')
 assert.match(appSource, /const selectedValueValid=fieldIndexSafe<0\|\|\(fieldIndexSafe===6\?materialValid:typeof selectedRaw==='number'&&Number\.isFinite\(selectedRaw\)\)/,
   'CPU fallback must distinguish invalid selected numeric samples and invalid Material category codes')
+
+// The 2D overview must preserve missing fields as missing rather than silently
+// substituting Energy, and its statistics must use finite samples only.
+assert.match(appSource, /const value=\(s,f\)=>\[s\.energy,s\.density,s\.information,s\.entropy,s\.temperature,s\.biology\]\[f\]/,
+  '2D field lookup must not fall back to Energy when a selected field is absent')
+assert.doesNotMatch(appSource, /\[s\.energy,s\.density,s\.information,s\.entropy,s\.temperature,s\.biology\]\[f\]\?\?s\.energy/,
+  'missing 2D scientific fields must never be rendered as Energy')
+assert.match(appSource, /let total=0,validCount=0,min=Infinity,max=-Infinity[\s\S]*?if\(Number\.isFinite\(v\)\)\{\s*total\+=v\s*validCount\+\+/,
+  '2D statistics must accumulate and count only finite field samples')
+assert.match(appSource, /const avgLabel=validCount\?\(total\/validCount\)\.toFixed\(2\):'n\/a'[\s\S]*?const minLabel=validCount\?min\.toFixed\(2\):'n\/a'[\s\S]*?const maxLabel=validCount\?max\.toFixed\(2\):'n\/a'/,
+  '2D statistics must report n/a when a field has no finite samples')
+const finiteFixture = [2, Number.NaN, 6, Number.POSITIVE_INFINITY, null, 10]
+  .filter(value => typeof value === 'number' && Number.isFinite(value))
+assert.deepEqual({ count: finiteFixture.length, average: finiteFixture.reduce((sum, value) => sum + value, 0) / finiteFixture.length, min: Math.min(...finiteFixture), max: Math.max(...finiteFixture) },
+  { count: 3, average: 6, min: 2, max: 10 },
+  'finite-only 2D statistics must ignore NaN, Infinity, and null samples')
+const emptyFixture = [Number.NaN, Number.POSITIVE_INFINITY, null]
+  .filter(value => typeof value === 'number' && Number.isFinite(value))
+assert.equal(emptyFixture.length, 0, 'all-invalid 2D fields must expose no finite samples')
+
 assert.match(appSource, /const numericContributions=values\.slice\(0,6\);\s*const normalized=fieldIndexSafe>=0\?values\[fieldIndexSafe\]:numericContributions\.reduce\(\(sum,value\)=>sum\+value,0\)\/numericContributions\.length/,
   'CPU composite intensity must exclude categorical Material from numeric lift and opacity')
 assert.match(appSource, /\?\(!selectedValueValid\?\[127,135,148\]:colorOf\(fieldIndexSafe,fieldIndexSafe===6\?value:normalized\)\)/,
