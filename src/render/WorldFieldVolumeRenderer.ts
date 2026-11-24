@@ -75,7 +75,7 @@ type FieldDistribution = {
 }
 
 const SCIENTIFIC_FIELD_KEYS = [
-  'energy', 'density', 'information', 'entropy', 'temperature', 'biology',
+  'energy', 'density', 'information', 'entropy', 'temperature', 'biology', 'material',
 ] as const
 
 const createEmptyFieldDistributions = (): Record<string, FieldDistribution> =>
@@ -100,6 +100,7 @@ const FIELD_PALETTES: ReadonlyArray<readonly [number, number]> = [
   [0x270b18, 0xff526d],
   [0x153d7a, 0xffe16b],
   [0x0d4c29, 0xa1ff65],
+  [0x4b2818, 0xffc27a],
 ]
 
 /**

@@ -2519,9 +2519,9 @@ try {
     throw new Error("3D volume has insufficient vertical sampling depth: " + JSON.stringify(field3dDiagnostic));
   }
 
-  // All six scientific profiles must be measured from the same spatial sample
+  // All seven scientific profiles must be measured from the same spatial sample
   // set, and remain available regardless of which field is currently colored.
-  const expectedFieldProfiles = ["energy", "density", "information", "entropy", "temperature", "biology"];
+  const expectedFieldProfiles = ["energy", "density", "information", "entropy", "temperature", "biology", "material"];
   const initialProfiles = field3dDiagnostic.volume?.fieldProfiles;
   for (const field of expectedFieldProfiles) {
     const profile = initialProfiles?.[field];
@@ -2535,7 +2535,7 @@ try {
     }
   }
   for (const [index, field] of expectedFieldProfiles.entries()) {
-    const buttonId = ["layerE", "layerD", "layerI", "layerS", "layerT", "layerB"][index];
+    const buttonId = ["layerE", "layerD", "layerI", "layerS", "layerT", "layerB", "layerM"][index];
     await page.evaluate(({ fieldIndex, id }) => {
       const button = document.getElementById(id);
       if (!button?.classList.contains("active")) window.setLayer?.(fieldIndex);
@@ -2555,18 +2555,52 @@ try {
       throw new Error("Changing the displayed scientific field changed or lost the shared sample profiles");
     }
   }
-  // All Fields must render a true composite of all six normalized scalar fields,
-  // not silently alias to Energy. Keep the six independent profiles available.
+  // Material is the seventh authoritative scalar, supported only by the
+  // volumetric renderer. It must never alias to Biology in Infinite World.
+  await page.evaluate(() => {
+    window.setLayer?.(6);
+    window.renderField3D?.();
+  });
+  await page.waitForFunction(() => window.__worldField3DCanvasState?.field === "Material" &&
+    window.__worldField3DCanvasState?.fieldIndex === 6 &&
+    window.__worldField3DCanvasState?.ready === true, { timeout: 10000 });
+  const materialVolume = await page.evaluate(() => ({
+    state: window.__worldField3DCanvasState,
+    buttonDisabled: document.getElementById("layerM")?.disabled,
+    profile: window.__worldField3DCanvasState?.volume?.fieldProfiles?.material,
+  }));
+  if (materialVolume.buttonDisabled || materialVolume.state.renderedCells <= 0 ||
+      !materialVolume.profile || materialVolume.profile.sampleCount <= 0 ||
+      materialVolume.profile.invalidValues !== 0) {
+    throw new Error("Material scalar did not render as an independent volumetric field: " +
+      JSON.stringify(materialVolume));
+  }
+  await page.evaluate(() => window.setRenderMode?.("3d", document.getElementById("tab3d")));
+  const materialGuard = await page.evaluate(() => ({
+    disabled: document.getElementById("layerM")?.disabled,
+    layer: window.setLayer?.(6),
+    selectedField: window.getInfiniteWorldScientificField?.(),
+  }));
+  if (!materialGuard.disabled || materialGuard.layer !== false ||
+      materialGuard.selectedField === "material") {
+    throw new Error("Material scalar leaked into the six-field Infinite World/PBR layer contract: " +
+      JSON.stringify(materialGuard));
+  }
+  await page.evaluate(() => window.setRenderMode?.("field3d", document.getElementById("tabField3d")));
+  await page.waitForFunction(() => window.currentRenderMode === "field3d" &&
+    document.getElementById("layerM")?.disabled === false, { timeout: 10000 });
   await page.evaluate(() => {
     window.setLayer?.(-1);
     window.renderField3D?.();
   });
+  // All Fields must render a true composite of all seven normalized scalar fields,
+  // not silently alias to Energy. Keep the seven independent profiles available.
   await page.waitForFunction(() => window.__worldField3DCanvasState?.field === "All Fields" &&
     window.__worldField3DCanvasState?.ready === true, { timeout: 10000 });
   const allFieldsVolume = await page.evaluate(() => window.__worldField3DCanvasState);
   if (allFieldsVolume.field !== "All Fields" || allFieldsVolume.renderedCells <= 0 ||
       !expectedFieldProfiles.every(field => allFieldsVolume.volume?.fieldProfiles?.[field]?.sampleCount > 0)) {
-    throw new Error("Volumetric All Fields mode did not render the six-field composite: " + JSON.stringify(allFieldsVolume));
+    throw new Error("Volumetric All Fields mode did not render the seven-field composite: " + JSON.stringify(allFieldsVolume));
   }
   await page.evaluate(() => window.setLayer?.(0));
   await page.waitForFunction(() => window.__worldField3DCanvasState?.field === "Energy", { timeout: 10000 });

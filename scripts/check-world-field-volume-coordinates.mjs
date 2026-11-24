@@ -40,6 +40,10 @@ assert.match(rendererSource, /this\.controls\.addEventListener\('start'[\s\S]*th
   'manual camera interaction must disable automatic reframing')
 assert.match(rendererSource, /const limitingHalfFov = Math\.max/,
   'camera fitting must account for viewport aspect ratio')
+assert.match(rendererSource, /'energy', 'density', 'information', 'entropy', 'temperature', 'biology', 'material'/,
+  'volumetric renderer must expose the seventh authoritative Material scalar field')
+assert.match(rendererSource, /\[0x4b2818, 0xffc27a\]/,
+  'Material must have its own copper palette, not reuse Biology colors')
 for (const diagnostic of [
   'invalidSamples',
   'duplicateCoordinates',
@@ -74,6 +78,12 @@ assert.ok(slices.every(slice => slice.samples.every(sample => sample.y === cente
 
 assert.match(rendererSource, /typeof value === 'number' && Number\.isFinite\(value\)/,
   'scientific field and coordinate inputs must reject coercible strings, null, and booleans')
+assert.match(appSource, /fieldIndex=Number\.isInteger\(layer\)&&layer>=0&&layer<=6\?layer:-1/,
+  'Volumetric UI must accept Material at index 6 while preserving indices 0–5')
+assert.match(appSource, /if\(l===6&&currentRenderMode!=='field3d'\)return false/,
+  'Material selection must be rejected outside the volumetric renderer')
+assert.match(appSource, /typeof value==='number'&&Number\.isFinite\(value\)/,
+  'visible-window normalization must not coerce invalid scalar values')
 assert.match(rendererSource, /const rawFieldValue = finiteNumericValue\(sample\[key\]\)/,
   'field distribution metrics must count non-numeric source values as invalid')
 assert.match(rendererSource, /const sampleX = finiteNumericValue\(sample\.x\)/,
@@ -81,5 +91,10 @@ assert.match(rendererSource, /const sampleX = finiteNumericValue\(sample\.x\)/,
 assert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\.map\(key => finiteNumericValue\(sample\[key\]\)\)/,
   'composite rendering must exclude invalid source values rather than coercing them to zero')
 
+assert.match(appSource, /const selectedRaw=fieldIndexSafe>=0\?sample\[props\[fieldIndexSafe\]\]:normalized/,
+  'CPU fallback must also reject coercible Material values')
+assert.match(appSource, /id="layerM" onclick="setLayer\(6\)"/,
+  'Material field control must be present in the layer toolbar')
+console.log('PASS: seven scientific scalar fields, including Material, are represented independently')
 console.log('PASS: invalid non-numeric samples are rejected without coercion')
 console.log('PASS: distinct source slices remain distinct in normalized 3D space')

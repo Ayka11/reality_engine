@@ -325,6 +325,7 @@ input[type=range]{accent-color:#a397ff}
     <button class="mode-btn" id="layerS" onclick="setLayer(3)" style="padding:3px 9px;font-size:10px">🔥 Entropy</button>
     <button class="mode-btn" id="layerT" onclick="setLayer(4)" style="padding:3px 9px;font-size:10px">🌡️ Temp</button>
     <button class="mode-btn" id="layerB" onclick="setLayer(5)" style="padding:3px 9px;font-size:10px">🧬 Bio</button>
+    <button class="mode-btn" id="layerM" onclick="setLayer(6)" style="padding:3px 9px;font-size:10px" disabled title="Material scalar is available in 3D Volumetric Field; Infinite World uses a separate PBR material system.">🧱 Material</button>
     <button class="mode-btn" id="worldMetricsOverlayToggle" type="button" aria-pressed="false" onclick="toggleWorldFieldMetricsOverlay()" style="padding:3px 9px;font-size:10px">Scientific Overlay</button>
     <span id="layerHint" style="font-size:10px;color:var(--sub);margin-left:6px;font-style:italic"></span>
     <div style="height:16px;width:1px;background:var(--bd);margin:0 6px;flex-shrink:0"></div>
@@ -657,6 +658,12 @@ function colorOf(l,t){
     if(t<0.5){const s=(t-0.15)/0.35;return[(s*20)|0,(80+s*175)|0,(30+s*60)|0];}
     if(t<0.85){const s=(t-0.5)/0.35;return[(20+s*110)|0,255,(90+s*90)|0];}
     const s=(t-0.85)/0.15;return[(130+s*125)|0,255,(180+s*75)|0];
+  }
+  // Material scalar: dark umber → copper → warm mineral highlight.
+  if(l===6){
+    if(t<0.35){const s=t/0.35;return[(35+s*95)|0,(18+s*42)|0,(12+s*18)|0];}
+    if(t<0.75){const s=(t-0.35)/0.4;return[(130+s*105)|0,(60+s*75)|0,(30+s*35)|0];}
+    const s=(t-0.75)/0.25;return[235,(135+s*100)|0,(65+s*150)|0];
   }
   return[80,80,80];
 }
@@ -2568,9 +2575,9 @@ function renderField3DImpl(){
     window.__worldField3DCache={key:cacheKey,slices};
   }
   const slices=window.__worldField3DCache.slices;
-  const fieldIndex=Number.isInteger(layer)&&layer>=0&&layer<=5?layer:-1;
-  const names=['Energy','Density','Information','Entropy','Temperature','Biology'];
-  const props=['energy','density','information','entropy','temperature','biology'];
+  const fieldIndex=Number.isInteger(layer)&&layer>=0&&layer<=6?layer:-1;
+  const names=['Energy','Density','Information','Entropy','Temperature','Biology','Material'];
+  const props=['energy','density','information','entropy','temperature','biology','material'];
   const fieldName=fieldIndex<0?'All Fields':names[fieldIndex];
   const property=fieldIndex<0?'composite':props[fieldIndex];
   // Normalize each field against the actual visible sample window. Fixed global
@@ -2578,8 +2585,8 @@ function renderField3DImpl(){
   const maxima=props.map(property=>{
     let observed=0;
     for(const slice of slices)for(const sample of slice.data.samples||[]){
-      const value=Number(sample?.[property]);
-      if(Number.isFinite(value))observed=Math.max(observed,Math.abs(value));
+      const value=sample?.[property];
+      if(typeof value==='number'&&Number.isFinite(value))observed=Math.max(observed,Math.abs(value));
     }
     return Math.max(observed,1e-9);
   });
@@ -2593,6 +2600,7 @@ function renderField3DImpl(){
         maximum:fieldIndex<0?Math.max(...maxima):maxima[fieldIndex],cols,rows,spacing
       });
       const diagnosticState={
+        fieldIndex,
         ready:rendered?.ready===true&&Number(rendered?.renderedCells)>0,
         renderer:rendered?.renderer??'unknown',
         true3D:rendered?.true3D===true,
@@ -2651,11 +2659,12 @@ function renderField3DImpl(){
       const sample=data.samples[py*data.width+px];
       if(!sample)continue;
       const values=props.map((property,index)=>{
-        const raw=Number(sample[property]);
-        return Number.isFinite(raw)?Math.max(0,Math.min(1,Math.abs(raw)/maxima[index])):0;
+        const raw=sample[property];
+        return typeof raw==='number'&&Number.isFinite(raw)?Math.max(0,Math.min(1,Math.abs(raw)/maxima[index])):0;
       });
       const normalized=fieldIndexSafe>=0?values[fieldIndexSafe]:values.reduce((sum,value)=>sum+value,0)/values.length;
-      const value=fieldIndexSafe>=0?Number(sample[props[fieldIndexSafe]])||0:normalized;
+      const selectedRaw=fieldIndexSafe>=0?sample[props[fieldIndexSafe]]:normalized;
+      const value=typeof selectedRaw==='number'&&Number.isFinite(selectedRaw)?selectedRaw:0;
       const color=fieldIndexSafe>=0?colorOf(fieldIndexSafe,normalized):values.reduce((sum,contribution,index)=>{
         const part=colorOf(index,contribution);
         return sum.map((channel,channelIndex)=>channel+part[channelIndex]*contribution);
@@ -2673,7 +2682,7 @@ function renderField3DImpl(){
   g.font='10px monospace';g.fillStyle='rgba(180,200,235,.8)';
   g.fillText('samples '+sampleCount+' · active '+activeCells+' · Y '+view.sliceY+' · center '+view.center.x.toFixed(1)+', '+view.center.y.toFixed(1)+', '+view.center.z.toFixed(1),14,h-12);
   window.__worldField3DLayoutRetryCount=0;
-  const diagnosticState={ready:renderedCells>0,renderedCells,sampleCount,activeCells,slices:slices.length,field:fieldName,view,renderer:'canvas2d-isometric-preview',true3D:false,meshInstances:0,drawCalls:0,triangles:0};
+  const diagnosticState={fieldIndex,ready:renderedCells>0,renderedCells,sampleCount,activeCells,slices:slices.length,field:fieldName,view,renderer:'canvas2d-isometric-preview',true3D:false,meshInstances:0,drawCalls:0,triangles:0};
   window.__worldField3DCanvasState=diagnosticState;
   return renderedCells>0;
 }
@@ -2855,6 +2864,7 @@ function setRenderMode(mode,btn){
   window.__worldField3DTrace={phase:'mode-switch-enter',mode,at:Date.now()};
   currentRenderMode=mode;
   window.currentRenderMode=mode;
+  updateLayerControlsForMode();
   updateWorldFieldMetricsOverlayVisibility();
   updateBottomBarContext();
   window.setWorldViewRenderMode?.(mode);
@@ -3116,39 +3126,60 @@ window.setMatMode3D=setMatMode3D;
 window.setCam3D=setCam3D;
 window.toggleParticles3D=toggleParticles3D;
 
+function updateLayerControlsForMode(){
+  const materialButton=document.getElementById('layerM');
+  const materialAvailable=currentRenderMode==='field3d';
+  if(layer===6&&!materialAvailable){
+    layer=-1;
+    if(window.setChunkLayer)window.setChunkLayer(-1);
+    if((currentRenderMode==='3d'||currentRenderMode==='hybrid')&&typeof window.setInfiniteWorldScientificField==='function'){
+      window.setInfiniteWorldScientificField('all');
+    }
+  }
+  if(materialButton){
+    materialButton.disabled=!materialAvailable;
+    materialButton.title=materialAvailable
+      ? 'Display the authoritative Material scalar field in the volumetric renderer.'
+      : 'Material scalar is available in 3D Volumetric Field; Infinite World uses a separate PBR material system.';
+  }
+  const allBtn=document.getElementById('layerAll');
+  if(allBtn)allBtn.classList.toggle('active',layer===-1);
+  ['layerE','layerD','layerI','layerS','layerT','layerB','layerM'].forEach((id,i)=>{
+    const el=document.getElementById(id);if(el)el.classList.toggle('active',i===layer);
+  });
+  const sciAll=document.getElementById('sciLayerAll');
+  if(sciAll)sciAll.classList.toggle('active',layer===-1);
+  ['sciLayerE','sciLayerD','sciLayerI','sciLayerS','sciLayerT','sciLayerB'].forEach((id,i)=>{
+    const el=document.getElementById(id);if(el)el.classList.toggle('active',i===layer);
+  });
+}
 function setLayer(l){
+  if(l===6&&currentRenderMode!=='field3d')return false;
+  if(!Number.isInteger(l)||l < -1||l > 6)return false;
   if(l===-1){layer=-1;}else{layer=(layer===l)?-1:l;}
-  const names=['Energy','Density','Info','Entropy','Temp','Bio'];
+  const names=['Energy','Density','Info','Entropy','Temp','Bio','Material'];
   const HINTS={
     '3d':'height = energy · color = field',
     '2d':layer>=0?'focused full-screen view · click same field to restore 6-field':'6-field overview — click a field to focus',
     'hybrid':'left 2D · right 3D colored by field',
+    'field3d':layer===6?'authoritative Material scalar · copper palette':'7-field volumetric scientific preview',
   };
   const hint=HINTS[currentRenderMode]||'';
   const hintEl=document.getElementById('layerHint');
   if(hintEl)hintEl.textContent=hint;
   const msgName=layer>=0?names[layer]:'All Fields';
   log(`📊 ${msgName}${layer>=0?' · '+hint:''}`);
-  const allBtn=document.getElementById('layerAll');
-  if(allBtn)allBtn.classList.toggle('active',layer===-1);
-  ['layerE','layerD','layerI','layerS','layerT','layerB'].forEach((id,i)=>{
-    const el=document.getElementById(id);if(el)el.classList.toggle('active',i===layer);
-  });
-  // Mirror state on science panel field buttons
-  const sciAll=document.getElementById('sciLayerAll');
-  if(sciAll)sciAll.classList.toggle('active',layer===-1);
-  ['sciLayerE','sciLayerD','sciLayerI','sciLayerS','sciLayerT','sciLayerB'].forEach((id,i)=>{
-    const el=document.getElementById(id);if(el)el.classList.toggle('active',i===layer);
-  });
-  if(window.setChunkLayer)window.setChunkLayer(layer);
-  const scientificFields=['energy','density','information','entropy','temperature','biology']
+  updateLayerControlsForMode();
+  if(window.setChunkLayer)window.setChunkLayer(layer===6?-1:layer);
+  const scientificFields=['energy','density','information','entropy','temperature','biology'];
   if((currentRenderMode==='3d'||currentRenderMode==='hybrid') && typeof window.setInfiniteWorldScientificField==='function'){
-    window.setInfiniteWorldScientificField(layer<0?'all':scientificFields[layer])
+    window.setInfiniteWorldScientificField(layer<0?'all':scientificFields[layer]);
   }
   drawGrid();
   if(currentRenderMode==='field3d')window.renderField3D?.();
-  // The connector owns the public getWorldField3DState() contract; keep renderer diagnostics separate.
+  return true;
 }
+window.updateLayerControlsForMode=updateLayerControlsForMode;
 window.setLayer=setLayer;
 
 function setTool(t,btn){
