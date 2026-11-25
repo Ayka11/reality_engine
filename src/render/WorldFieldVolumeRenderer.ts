@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { normalizeScientificFieldValue } from '../infinity/ScientificFieldDisplay'
 
 type FieldSample = Record<string, unknown> & {
   x?: number
@@ -331,28 +332,8 @@ export class WorldFieldVolumeRenderer {
     const selectedFieldIndex = Number.isInteger(frame.fieldIndex) && frame.fieldIndex >= 0 && frame.fieldIndex < SCIENTIFIC_FIELD_KEYS.length
       ? frame.fieldIndex
       : -1
-    // Normalize against exactly the samples the render loop can place in
-    // the volume. Invalid coordinates and array entries outside the declared
-    // slice dimensions must not dim otherwise valid cells.
-    const fieldMaxima = SCIENTIFIC_FIELD_KEYS.map(key => {
-      let observed = 0
-      for (const slice of frame.slices) {
-        if (finiteNumericValue(slice.y) === null) continue
-        const data = slice.data
-        for (let py = 0; py < data.height; py++) {
-          for (let px = 0; px < data.width; px++) {
-            const sample = data.samples[py * data.width + px]
-            if (!sample ||
-                finiteNumericValue(sample.x) === null ||
-                finiteNumericValue(sample.z) === null) continue
-            const value = finiteNumericValue(sample[key])
-            if (value !== null) observed = Math.max(observed, Math.abs(value))
-          }
-        }
-      }
-      return Math.max(observed, 1e-9)
-    })
-    const maximum = Math.max(0.000001, fieldMaxima[selectedFieldIndex >= 0 ? selectedFieldIndex : 0])
+    // Display normalization is shared with Infinity terrain. The reference
+    // ranges are fixed visualization scales, never mutations to physical data.
     const palette = FIELD_PALETTES[selectedFieldIndex >= 0 ? selectedFieldIndex : 0]
     let renderedCells = 0
     let activeCells = 0
@@ -460,8 +441,13 @@ export class WorldFieldVolumeRenderer {
           // biases numeric composite strength or active-cell measurements.
           const validNumericValues = finiteValues.filter((value, index) => index !== 6 && value !== null)
           const compositeStrength = validNumericValues.length
-            ? finiteValues.reduce<number>((sum, value, index) =>
-              sum + (index !== 6 && value !== null ? Math.abs(value) / fieldMaxima[index] : 0), 0) / validNumericValues.length
+            ? finiteValues.reduce<number>((sum, value, index) => {
+              if (index === 6 || value === null) return sum
+              const fieldKey = SCIENTIFIC_FIELD_KEYS[index]
+              return sum + (fieldKey === 'material' ? 0 : normalizeScientificFieldValue(
+                fieldKey as Exclude<typeof fieldKey, 'material'>, value,
+              ) ?? 0)
+            }, 0) / validNumericValues.length
             : null
           const rawValue = selectedFieldIndex >= 0 ? selectedRawValue : compositeStrength
           const value = rawValue ?? 0
@@ -475,10 +461,16 @@ export class WorldFieldVolumeRenderer {
             fieldValueMean += valueDelta / fieldValueCount
             fieldValueM2 += valueDelta * (value - fieldValueMean)
           }
+          const selectedFieldKey = selectedFieldIndex >= 0
+            ? SCIENTIFIC_FIELD_KEYS[selectedFieldIndex]
+            : null
           const normalized = selectedFieldIndex >= 0
             ? (selectedFieldIndex === 6
               ? (selectedRawValue !== null ? 1 : 0)
-              : THREE.MathUtils.clamp(Math.abs(value) / maximum, 0, 1))
+              : selectedFieldKey === 'material' ? 0
+                : normalizeScientificFieldValue(
+                  selectedFieldKey as Exclude<typeof selectedFieldKey, 'material' | null>, value,
+                ) ?? 0)
             : (compositeStrength !== null ? THREE.MathUtils.clamp(compositeStrength, 0, 1) : 0)
           const x = (sampleX - frame.view.center.x) / cellWidth
           const y = (sliceY - centerY) / spacing
@@ -520,7 +512,9 @@ export class WorldFieldVolumeRenderer {
                 weight += 1
                 continue
               }
-              const contribution = THREE.MathUtils.clamp(Math.abs(fieldValue) / fieldMaxima[field], 0, 1)
+              const contribution = normalizeScientificFieldValue(
+                fieldKey as Exclude<typeof fieldKey, 'material'>, fieldValue,
+              ) ?? 0
               const colors = FIELD_PALETTES[field]
               // Every valid scientific dimension participates in the composite,
               // including a measured zero. Weighting the palette color a second
