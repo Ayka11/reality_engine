@@ -47,7 +47,7 @@ import { worldResourceEconomy } from '../worldLibrary/WorldResourceEconomy'
 import { civilizationRuntime, type CivilizationType } from '../worldLibrary/CivilizationRuntime'
 import { productionInfrastructureRuntime } from '../worldLibrary/ProductionInfrastructureRuntime'
 import { resolveWorldLibraryEntry, resourceVisualKind, visualKindToWorldObject } from '../worldLibrary/WorldLibraryAdapter'
-import { normalizeScientificFieldValue, SCIENTIFIC_FIELD_DISPLAY_RANGES } from '../infinity/ScientificFieldDisplay'
+import { normalizeScientificFieldValue } from '../infinity/ScientificFieldDisplay'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number; edgeLodSignature: string }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
