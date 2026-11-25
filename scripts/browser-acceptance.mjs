@@ -2554,6 +2554,19 @@ try {
     buttonId, { timeout: 10000 });
     const selected = await page.evaluate(() => window.__worldField3DCanvasState);
     const selectedProfiles = selected?.volume?.fieldProfiles;
+    const expectedRenderedField = ["Energy", "Density", "Information", "Entropy", "Temperature", "Biology", "Material"][index];
+    if (selected?.field !== expectedRenderedField ||
+        selected?.fieldIndex !== index ||
+        selected?.ready !== true ||
+        selected?.renderedCells <= 0) {
+      throw new Error("Selecting " + expectedRenderedField +
+        " did not render that exact scientific field: " + JSON.stringify({
+          field: selected?.field,
+          fieldIndex: selected?.fieldIndex,
+          ready: selected?.ready,
+          renderedCells: selected?.renderedCells,
+        }));
+    }
     if (!expectedFieldProfiles.every(key =>
       selectedProfiles?.[key]?.sampleCount === initialProfiles[key].sampleCount &&
       selectedProfiles?.[key]?.invalidValues === 0)) {
