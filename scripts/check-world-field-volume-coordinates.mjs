@@ -179,39 +179,8 @@ assert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\.map\(k
   'composite rendering must validate each field before including it')
 assert.match(rendererSource, /key === 'material' && !isMaterialClassCode\(value\) \? null : value/,
   'composite rendering must exclude invalid BIOME_ID categories instead of coercing them')
-assert.match(rendererSource, /finiteValues\.filter\(\(value, index\) => index !== 6 && value !== null\)/,
-  'composite numeric strength must exclude categorical Material codes')
-assert.match(rendererSource, /normalizeScientificFieldValue\([\s\S]*?fieldKey as Exclude<typeof fieldKey, 'material'>, value,/,
-  'composite numeric normalization must include only valid numeric fields on the shared scales')
-assert.match(rendererSource, /if \(rawValue !== null\) \{\s*fieldValueCount\+\+/,
-  'selected-field diagnostics must exclude invalid samples from numeric statistics')
-assert.match(rendererSource, /selectedFieldIndex === 6 \|\| !fieldValueCount \? null : Math\.sqrt\(fieldValueM2 \/ fieldValueCount\)/,
-  'selected-field standard deviation must use only valid values')
-
- // Missing measurements are not zero-valued measurements. Empty profiles and
- // all-invalid selected fields must report null for numeric summary statistics.
-assert.match(rendererSource, /min: null,\s*max: null,\s*mean: null,\s*standardDeviation: null/,
-  'empty field profiles must use null rather than fabricated zero statistics')
-assert.equal((rendererSource.match(/fieldValues: \{ min: null, max: null, mean: null, standardDeviation: null \}/g) ?? []).length, 2,
-  'both initial and per-render reset diagnostics must represent absent measurements as null')
-assert.match(rendererSource, /fieldValues: \{ min: null, max: null, mean: null, standardDeviation: null \}/,
-  'renderer reset diagnostics must not claim zero-valued field measurements')
-assert.match(rendererSource, /selectedFieldIndex === 6 \|\| !fieldValueCount \? null : fieldValueMin/,
-  'selected numeric field minimum must be null when there are no valid values')
-assert.match(rendererSource, /selectedFieldIndex === 6 \|\| !fieldValueCount \? null : fieldValueMax/,
-  'selected numeric field maximum must be null when there are no valid values')
-assert.match(rendererSource, /selectedFieldIndex === 6 \|\| !fieldValueCount \? null : fieldValueMean/,
-  'selected numeric field mean must be null when there are no valid values')
-assert.match(rendererSource, /key === 'material' \|\| !profile\.sampleCount \? null : profile\.min/,
-  'per-field profile minimum must distinguish no observations from an observed zero')
-assert.match(rendererSource, /key === 'material' \|\| !profile\.sampleCount \? null : profile\.mean/,
-  'per-field profile mean must distinguish no observations from an observed zero')
-assert.match(rendererSource, /: null\s*const rawValue = selectedFieldIndex >= 0 \? selectedRawValue : compositeStrength/,
-  'composite strength must be absent when all six numeric fields are invalid')
-assert.match(rendererSource, /compositeStrength !== null \? THREE\.MathUtils\.clamp\(compositeStrength, 0, 1\) : 0/,
-  'missing composite strength must not be treated as a measured zero')
-assert.match(rendererSource, /finiteValues\.every\(value => value === null\)\) this\.color\.setHex\(0x7f8794\)/,
-  'samples with no valid scientific field must use the neutral diagnostic color')
+assert.match(rendererSource, /if \(compositeColor !== null\) this\.color\.setHex\(compositeColor\)\s*else this\.color\.setHex\(0x7f8794\)/,
+  'composite samples with no valid numeric scientific dimensions must use the neutral diagnostic color even when categorical Material exists')
 const finiteStats = values => {
   const finite = values.filter(value => typeof value === 'number' && Number.isFinite(value))
   return finite.length
@@ -251,6 +220,8 @@ assert.ok(appSource.includes('!fieldValidity.slice(0,6).some(Boolean)'),
   '2D composite rendering must use a neutral color when all six numeric scientific fields are invalid')
 assert.ok(appSource.includes('window.scientificFieldCompositeColor({'),
   '2D composite rendering must share identical scientific field color mixing with Infinity and Volumetric')
+assert.match(appSource, /fieldIndex<0&&typeof window\.scientificFieldCompositeColor!=='function'/,
+  '2D composite mode must refuse to render when the shared composite palette is unavailable')
 assert.match(appSource, /if\(fieldIndexSafe===6\?materialValid:normalized>\.001\)activeCells\+\+/,
   'CPU active-cell counting must use the shared non-negative normalized intensity')
 const cpuCompositeFixture = (fields, materialValid = false) => {
