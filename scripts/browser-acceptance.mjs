@@ -3111,8 +3111,10 @@ try {
   );
   if (volumeTopCamera?.cameraPreset !== "top" ||
       !volumeTopCamera.cameraPosition?.every(Number.isFinite) ||
-      Math.abs(volumeTopCamera.cameraPosition[1] - volumeTopCamera.target[1]) < 1) {
-    throw new Error("Field3D Top camera preset did not reposition the visible volume camera: " +
+      !volumeTopCamera.cameraUp?.every(Number.isFinite) ||
+      Math.abs(volumeTopCamera.cameraPosition[1] - volumeTopCamera.target[1]) < 1 ||
+      Math.abs(volumeTopCamera.cameraUp[2]) < 0.99) {
+    throw new Error("Field3D Top camera preset did not establish a stable vertical camera orientation: " +
       JSON.stringify(volumeTopCamera));
   }
   await page.evaluate(() => window.setCameraPreset?.("orbit"));
@@ -3120,6 +3122,8 @@ try {
     window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
   );
   if (volumeOrbitCamera?.cameraPreset !== "orbit" ||
+      !volumeOrbitCamera.cameraUp?.every(Number.isFinite) ||
+      Math.abs(volumeOrbitCamera.cameraUp[1] - 1) > 1e-6 ||
       Math.abs(volumeOrbitCamera.cameraPosition[0] - volumeOrbitCamera.target[0]) < 1 ||
       Math.abs(volumeOrbitCamera.cameraPosition[2] - volumeOrbitCamera.target[2]) < 1) {
     throw new Error("Field3D Orbit camera preset did not restore an oblique view: " +
