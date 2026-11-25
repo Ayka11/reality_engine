@@ -3340,6 +3340,83 @@ try {
   if (!fieldProbe) {
     throw new Error("No deterministic non-saturated World Field probe coordinate found");
   }
+
+  // Verify the visible Field/PBR/Height controls against the materials attached
+  // to the actual terrain meshes, not only against the selected UI mode string.
+  const readTerrainMaterials = () => page.evaluate(() => ({
+    mode: window.infiniteWorld?.getMaterialMode?.() ?? null,
+    ui: {
+      field: document.getElementById("matField")?.classList.contains("active") ?? false,
+      material: document.getElementById("matMaterial")?.classList.contains("active") ?? false,
+      height: document.getElementById("matHeight")?.classList.contains("active") ?? false,
+    },
+    diagnostics: window.infiniteWorld?.getTerrainMaterialDiagnostics?.() ?? null,
+    nearest: window.infiniteWorld?.getNearestTerrainVertexColor?.(0, 0) ?? null,
+  }));
+
+  await page.locator("#matMaterial").click();
+  await page.waitForFunction(() => window.infiniteWorld?.getMaterialMode?.() === "material");
+  const pbrMaterialState = await readTerrainMaterials();
+  if (pbrMaterialState.mode !== "material" || !pbrMaterialState.ui.material ||
+      pbrMaterialState.ui.field || pbrMaterialState.ui.height ||
+      !pbrMaterialState.diagnostics ||
+      pbrMaterialState.diagnostics.terrainMaterialCount <= 0 ||
+      pbrMaterialState.diagnostics.materials.length === 0 ||
+      pbrMaterialState.diagnostics.materials.some(material =>
+        material.vertexColors !== false ||
+        material.colorHex !== 0x8a8f98 ||
+        Math.abs(material.roughness - 0.72) > 1e-6 ||
+        Math.abs(material.metalness - 0.08) > 1e-6)) {
+    throw new Error("PBR mode did not apply the uniform material to live terrain meshes: " +
+      JSON.stringify(pbrMaterialState));
+  }
+
+  await page.locator("#matHeight").click();
+  await page.waitForFunction(() => window.infiniteWorld?.getMaterialMode?.() === "height");
+  const heightMaterialState = await readTerrainMaterials();
+  if (heightMaterialState.mode !== "height" || !heightMaterialState.ui.height ||
+      heightMaterialState.ui.field || heightMaterialState.ui.material ||
+      !heightMaterialState.diagnostics ||
+      heightMaterialState.diagnostics.terrainMaterialCount <= 0 ||
+      heightMaterialState.diagnostics.materials.length === 0 ||
+      heightMaterialState.diagnostics.materials.some(material =>
+        material.vertexColors !== true ||
+        Math.abs(material.roughness - 0.88) > 1e-6 ||
+        material.colorAttributeCount <= 0) ||
+      !heightMaterialState.nearest?.color?.every(Number.isFinite)) {
+    throw new Error("Height mode did not apply a finite height-gradient material to live terrain meshes: " +
+      JSON.stringify(heightMaterialState));
+  }
+
+  await page.locator("#matField").click();
+  await page.waitForFunction(() => window.infiniteWorld?.getMaterialMode?.() === "field");
+  const fieldMaterialState = await readTerrainMaterials();
+  if (fieldMaterialState.mode !== "field" || !fieldMaterialState.ui.field ||
+      fieldMaterialState.ui.material || fieldMaterialState.ui.height ||
+      !fieldMaterialState.diagnostics ||
+      fieldMaterialState.diagnostics.terrainMaterialCount <= 0 ||
+      fieldMaterialState.diagnostics.materials.length === 0 ||
+      fieldMaterialState.diagnostics.materials.some(material =>
+        material.vertexColors !== true ||
+        Math.abs(material.roughness - 0.95) > 1e-6 ||
+        material.colorAttributeCount <= 0) ||
+      !fieldMaterialState.nearest?.color?.every(Number.isFinite)) {
+    throw new Error("Field Colors mode did not restore field-driven vertex colors on live terrain meshes: " +
+      JSON.stringify(fieldMaterialState));
+  }
+  if (heightMaterialState.nearest && fieldMaterialState.nearest &&
+      Math.hypot(...heightMaterialState.nearest.color.map((value, index) =>
+        value - fieldMaterialState.nearest.color[index])) < 0.01) {
+    throw new Error("Height and Field modes produced indistinguishable terrain vertex colors: " +
+      JSON.stringify({ height: heightMaterialState.nearest, field: fieldMaterialState.nearest }));
+  }
+  console.log("[acceptance] Field/PBR/Height UI applies distinct live terrain material contracts: " +
+    JSON.stringify({
+      pbr: pbrMaterialState.diagnostics.materials[0],
+      height: heightMaterialState.diagnostics.materials[0],
+      field: fieldMaterialState.diagnostics.materials[0],
+    }));
+
   await page.evaluate(() => {
     const world = window.infiniteWorld;
     if (typeof window.setMatMode3D === "function") {
