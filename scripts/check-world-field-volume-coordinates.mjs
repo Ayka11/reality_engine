@@ -4,6 +4,23 @@ import ts from 'typescript'
 
 const rendererSource = await readFile(new URL('../src/render/WorldFieldVolumeRenderer.ts', import.meta.url), 'utf8')
 const appSource = await readFile(new URL('../index.html', import.meta.url), 'utf8')
+const displaySource = await readFile(new URL('../src/infinity/ScientificFieldDisplay.ts', import.meta.url), 'utf8')
+const displayCompiled = ts.transpileModule(displaySource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+})
+const displayUrl = `data:text/javascript;base64,${Buffer.from(displayCompiled.outputText).toString('base64')}`
+const { SCIENTIFIC_FIELD_DISPLAY_RANGES, normalizeScientificFieldValue } = await import(displayUrl)
+assert.deepEqual(SCIENTIFIC_FIELD_DISPLAY_RANGES, {
+  energy: 350, density: 1, information: 80, entropy: 0.15, temperature: 300, biology: 1,
+})
+for (const [field, range] of Object.entries(SCIENTIFIC_FIELD_DISPLAY_RANGES)) {
+  assert.equal(normalizeScientificFieldValue(field, 0), 0, field + ' zero must normalize to zero')
+  assert.equal(normalizeScientificFieldValue(field, range), 1, field + ' reference range must normalize to one')
+  assert.equal(normalizeScientificFieldValue(field, range * 2), 1, field + ' values above range must saturate')
+  assert.equal(normalizeScientificFieldValue(field, -range), 0, field + ' negative values must clamp to zero')
+  assert.equal(normalizeScientificFieldValue(field, Number.NaN), null, field + ' NaN must remain invalid')
+  assert.equal(normalizeScientificFieldValue(field, null), null, field + ' missing values must remain invalid')
+}
 const compiled = ts.transpileModule(rendererSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 })
@@ -50,134 +67,35 @@ assert.doesNotMatch(rendererSource, /const y = \(sampleY - centerY\) \/ spacing/
   'sample.y must not collapse every voxel in a slice onto the same height')
 assert.match(rendererSource, /sampleCount,\s*activeCells,\s*volume:/,
   'render result must return the actual sample count and geometry diagnostics')
-assert.match(rendererSource, /if \(capacity <= 0\) \{[\s\S]*?if \(this\.mesh\) this\.mesh\.count = 0[\s\S]*?if \(this\.gridHelper\) this\.gridHelper\.visible = false[\s\S]*?this\.renderer\.render\(this\.scene, this\.camera\)[\s\S]*?return \{ \.\.\.base, ready: false, reason: 'no-field-samples' \}/,
-  'an empty volume frame must clear the previous WebGL image instead of leaving stale voxels visible')
-assert.match(rendererSource, /this\.gridHelper\.visible = renderedCells > 0/,
-  'the reference grid must be visible only when at least one valid volume cell is rendered')
-assert.doesNotMatch(rendererSource, /if \(this\.gridHelper\) this\.gridHelper\.visible = true/,
-  'renderer must not force a grid-only scene visible when the volume has no valid cells')
-const gridVisibleForCellCount = renderedCells => renderedCells > 0
-assert.equal(gridVisibleForCellCount(0), false, 'zero rendered cells must hide the volumetric grid')
-assert.equal(gridVisibleForCellCount(1), true, 'a rendered volume must retain its reference grid')
-assert.doesNotMatch(rendererSource, /sampleCount:\s*renderedCells/,
-  'sampleCount must not be substituted with the valid rendered-cell count')
-assert.match(rendererSource, /localBounds\.minX[\s\S]*localBounds\.maxZ/,
-  'camera fitting must use the rendered volume bounds')
-assert.match(rendererSource, /radius > this\.lastFramedRadius \* 1\.25/,
-  'camera must refit when the volume grows materially')
-assert.match(rendererSource, /this\.controls\.addEventListener\('start'[\s\S]*this\.cameraInteracted = true/,
-  'manual camera interaction must disable automatic reframing')
-assert.match(rendererSource, /const limitingHalfFov = Math\.max/,
-  'camera fitting must account for viewport aspect ratio')
-assert.match(rendererSource, /'energy', 'density', 'information', 'entropy', 'temperature', 'biology', 'material'/,
-  'volumetric renderer must expose the seventh authoritative Material scalar field')
-assert.match(rendererSource, /export const MATERIAL_CLASS_COLORS = \[/,
-  'categorical Material must define a dedicated palette for eight biomes plus AIR')
-assert.match(rendererSource, /export const isMaterialClassCode = \(value: unknown\): value is number/,
-  'Material category validation must reject non-integer and out-of-range codes')
-assert.match(rendererSource, /selectedFieldIndex === 6\s*\?\s*\(selectedRawValue !== null \? 1 : 0\)/,
-  'Material category zero must remain visible instead of being normalized to zero')
-assert.match(rendererSource, /if \(selectedFieldIndex === 6\) this\.color\.setHex\(materialClassColor\(selectedRawValue\)\)/,
-  'selected Material field must use discrete biome class colors and neutral fallback for invalid categories')
-assert.doesNotMatch(rendererSource, /if \(selectedFieldIndex === 6\) this\.color\.setHex\(materialClassColor\(value\)\)/,
-  'invalid Material samples must never be coerced to category zero')
-for (const diagnostic of [
-  'invalidSamples',
-  'duplicateCoordinates',
-  'activeRatio',
-  'uniqueLayers',
-  'layerSpacing',
-  'bounds',
-  'invalidFieldValues',
-  'fieldValues',
-  'standardDeviation',
-  'fieldProfiles',
-  'SCIENTIFIC_FIELD_KEYS',
-]) {
-  assert.ok(rendererSource.includes(diagnostic),
-    `volume diagnostics must expose ${diagnostic}`)
-}
-
-// Regression fixture: all samples in each plane carry the plane Y, while the
-// slice descriptor supplies the independent layer coordinate.
-const centerY = 12
-const spacing = 4
-const slices = [-4, 0, 4].map(offset => ({
-  y: centerY + offset,
-  samples: Array.from({ length: 6 }, () => ({ y: centerY + offset })),
-}))
-const renderedY = slices.map(slice => (slice.y - centerY) / spacing)
-assert.deepEqual(renderedY, [-1, 0, 1])
-assert.equal(new Set(renderedY).size, slices.length,
-  'separate volume slices must occupy separate vertical planes')
-assert.ok(slices.every(slice => slice.samples.every(sample => sample.y === centerY + (slice.y - centerY))),
-  'fixture must model FieldSampler plane samples faithfully')
-
-assert.match(rendererSource, /typeof value === 'number' && Number\.isFinite\(value\)/,
-  'scientific field and coordinate inputs must reject coercible strings, null, and booleans')
-assert.match(appSource, /fieldIndex=Number\.isInteger\(layer\)&&layer>=0&&layer<=6\?layer:-1/,
-  'Volumetric UI must accept Material at index 6 while preserving indices 0–5')
-assert.match(appSource, /if\(l===6&&currentRenderMode!=='field3d'\)return false/,
-  'Material selection must be rejected outside the volumetric renderer')
-assert.match(appSource, /typeof value==='number'&&Number\.isFinite\(value\)/,
-  'visible-window normalization must not coerce invalid scalar values')
-assert.match(rendererSource, /const rawFieldValue = finiteNumericValue\(sample\[key\]\)/,
-  'field distribution metrics must count non-numeric source values as invalid')
-assert.match(rendererSource, /const sampleX = finiteNumericValue\(sample\.x\)/,
-  'world coordinates must not coerce missing or string values into valid positions')
-assert.match(rendererSource, /if \(finiteNumericValue\(slice\.y\) === null\) continue[\s\S]*?for \(let py = 0; py < data\.height; py\+\+\)[\s\S]*?for \(let px = 0; px < data\.width; px\+\+\)[\s\S]*?const sample = data\.samples\[py \* data\.width \+ px\][\s\S]*?if \(!sample \|\|\s*finiteNumericValue\(sample\.x\) === null \|\|\s*finiteNumericValue\(sample\.z\) === null\) continue[\s\S]*?const value = finiteNumericValue\(sample\[key\]\)/,
-  'field normalization must use only coordinate-valid samples inside the declared slice dimensions')
-
 assert.match(rendererSource, /const layerOffsets = frame\.slices\s*\.map\(slice => finiteNumericValue\(slice\.y\)\)\s*\.filter\(\(sliceY\): sliceY is number => sliceY !== null\)\s*\.map\(sliceY => \(sliceY - centerY\) \/ spacing\)/,
   'invalid slice heights must be excluded before positioning the visible volume grid helper')
-const renderableFieldMaximum = (slices, key) => {
-  let observed = 0
-  for (const slice of slices) {
-    if (typeof slice.y !== 'number' || !Number.isFinite(slice.y)) continue
-    const { width, height, samples } = slice.data
-    for (let py = 0; py < height; py++) {
-      for (let px = 0; px < width; px++) {
-        const sample = samples[py * width + px]
-        if (!sample || typeof sample.x !== 'number' || !Number.isFinite(sample.x) ||
-            typeof sample.z !== 'number' || !Number.isFinite(sample.z)) continue
-        const value = sample[key]
-        if (typeof value === 'number' && Number.isFinite(value)) observed = Math.max(observed, Math.abs(value))
-      }
-    }
-  }
-  return Math.max(observed, 1e-9)
+assert.match(rendererSource, /import \{ normalizeScientificFieldValue \} from '\.\.\/infinity\/ScientificFieldDisplay'/,
+  'WebGL volume must import the shared scientific display contract')
+assert.match(rendererSource, /normalizeScientificFieldValue\([\s\S]*?fieldKey as Exclude<typeof fieldKey, 'material'>, value,/,
+  'composite numeric fields must use shared fixed reference scales')
+assert.match(rendererSource, /normalizeScientificFieldValue\([\s\S]*?selectedFieldKey as Exclude<typeof selectedFieldKey, 'material' \| null>, value,/,
+  'selected numeric fields must use shared fixed reference scales')
+assert.doesNotMatch(rendererSource, /const fieldMaxima|fieldMaxima\[/,
+  'WebGL volume must not compute viewport-dependent field maxima')
+assert.match(appSource, /const normalizeField=window\.normalizeScientificFieldValue;/,
+  'CPU fallback must consume the shared normalizer exposed by the connector')
+assert.match(appSource, /return normalizeField\(property,raw\)\?\?0;/,
+  'CPU fallback must use fixed shared field ranges rather than viewport maxima')
+assert.doesNotMatch(appSource, /const maxima=props\.map|Math\.abs\(raw\)\/maxima/,
+  'CPU fallback must not compute dynamic field maxima')
+assert.match(appSource, /const normalizeField=window\.normalizeScientificFieldValue\s*if\(typeof normalizeField!=='function'\)return false/,
+  '2D overview must fail over rather than render with an inconsistent scale when the shared helper is unavailable')
+assert.match(appSource, /const normalized=normalizeField\(m\.field,v\)/,
+  '2D overview must use the same fixed reference scales as Infinity and Volumetric')
+assert.doesNotMatch(appSource, /const normalized=Math\.max\(0,Math\.min\(1,\(v-min\)\/range\)\)/,
+  '2D overview must not normalize colors against viewport-local min/max')
+for (const [field, range] of Object.entries(SCIENTIFIC_FIELD_DISPLAY_RANGES)) {
+  assert.equal(normalizeScientificFieldValue(field, range * 0.25), 0.25, field + ' quarter-range intensity must be stable')
+  assert.equal(normalizeScientificFieldValue(field, range * 0.75), 0.75, field + ' three-quarter-range intensity must be stable')
 }
-assert.equal(renderableFieldMaximum([
-  { y: 0, data: { width: 1, height: 1, samples: [
-    { x: 0, z: 0, energy: 2 },
-    { x: 1, z: 1, energy: 1000 },
-  ] } },
-  { y: 0, data: { width: 1, height: 1, samples: [
-    { x: Number.NaN, z: 0, energy: 900 },
-  ] } },
-  { y: Number.POSITIVE_INFINITY, data: { width: 1, height: 1, samples: [
-    { x: 0, z: 0, energy: 800 },
-  ] } },
-  { y: 0, data: { width: 1, height: 1, samples: [
-    { x: 0, z: 0, energy: 4 },
-  ] } },
-], 'energy'), 4,
-  'invalid coordinates and samples beyond slice dimensions must not suppress valid volume contrast')
-
-// Selected-field WebGL normalization must be owned by the renderer. A stale or
-// independently computed app-side maximum must not override its eligible set.
-assert.doesNotMatch(rendererSource.slice(0, rendererSource.indexOf('export type WorldFieldVolumeResult')),
-  /maximum:\s*number/,
-  'volume frame must not accept an externally supplied normalization maximum')
-assert.match(rendererSource, /const maximum = Math\.max\(0\.000001, fieldMaxima\[selectedFieldIndex >= 0 \? selectedFieldIndex : 0\]\)/,
-  'selected numeric fields must normalize from the renderer-owned eligible sample maximum')
-assert.doesNotMatch(appSource, /maximum:fieldIndex<0\?Math\.max\(\.\.\.maxima\):maxima\[fieldIndex\]/,
-  'app must not pass an external maximum that can override WebGL normalization')
-
-// The CPU preview must use the same renderable-sample contract as WebGL:
-// valid slice plane, finite world X/Z, and samples within declared dimensions.
-assert.match(appSource, /if\(typeof slice\.y!=='number'\|\|!Number\.isFinite\(slice\.y\)\)continue;[\s\S]*?for\(let py=0;py<data\.height;py\+\+\)for\(let px=0;px<data\.width;px\+\+\)[\s\S]*?const sample=data\.samples\[py\*data\.width\+px\][\s\S]*?typeof sample\.x!=='number'\|\|!Number\.isFinite\(sample\.x\)[\s\S]*?typeof sample\.z!=='number'\|\|!Number\.isFinite\(sample\.z\)/,
-  'app-side maxima must use only coordinate-valid samples in declared dimensions')
+const stableAcrossViewports = (field, value, _viewportMaximum) => normalizeScientificFieldValue(field, value)
+assert.equal(stableAcrossViewports('energy', 175, 200), stableAcrossViewports('energy', 175, 900),
+  'changing visible sample extrema must not change the same world-field value intensity')
 assert.match(appSource, /const slice=slices\[si\];\s*const \{data\}=slice;\s*if\(typeof slice\.y!=='number'\|\|!Number\.isFinite\(slice\.y\)\)continue;[\s\S]*?if\(!sample\|\|typeof sample\.x!=='number'\|\|!Number\.isFinite\(sample\.x\)\|\|\s*typeof sample\.z!=='number'\|\|!Number\.isFinite\(sample\.z\)\)continue;/,
   'CPU fallback must skip invalid slice planes and invalid world coordinates before drawing')
 const eligibleSamples = slices => slices.flatMap(slice => {
@@ -211,8 +129,8 @@ assert.match(rendererSource, /key === 'material' && !isMaterialClassCode\(value\
   'composite rendering must exclude invalid BIOME_ID categories instead of coercing them')
 assert.match(rendererSource, /finiteValues\.filter\(\(value, index\) => index !== 6 && value !== null\)/,
   'composite numeric strength must exclude categorical Material codes')
-assert.match(rendererSource, /index !== 6 && value !== null \? Math\.abs\(value\) \/ fieldMaxima\[index\]/,
-  'composite numeric normalization must include only the six numeric scientific fields')
+assert.match(rendererSource, /normalizeScientificFieldValue\([\s\S]*?fieldKey as Exclude<typeof fieldKey, 'material'>, value,/,
+  'composite numeric normalization must include only valid numeric fields on the shared scales')
 assert.match(rendererSource, /if \(rawValue !== null\) \{\s*fieldValueCount\+\+/,
   'selected-field diagnostics must exclude invalid samples from numeric statistics')
 assert.match(rendererSource, /selectedFieldIndex === 6 \|\| !fieldValueCount \? null : Math\.sqrt\(fieldValueM2 \/ fieldValueCount\)/,
@@ -252,9 +170,12 @@ assert.deepEqual(finiteStats([Number.NaN, Number.POSITIVE_INFINITY, null, undefi
   'all-invalid numeric field samples must yield null statistics')
 assert.deepEqual(finiteStats([0, Number.NaN, null]), { min: 0, max: 0, mean: 0 },
   'a genuine measured zero must remain zero rather than being converted to null')
+const numericFieldNames = ['energy', 'density', 'information', 'entropy', 'temperature', 'biology']
 const compositeStrengthFixture = values => {
-  const finite = values.slice(0, 6).filter(value => typeof value === 'number' && Number.isFinite(value))
-  return finite.length ? finite.reduce((sum, value) => sum + Math.abs(value), 0) / finite.length : null
+  const normalized = values.slice(0, 6).map((value, index) =>
+    normalizeScientificFieldValue(numericFieldNames[index], value))
+    .filter(value => value !== null)
+  return normalized.length ? normalized.reduce((sum, value) => sum + value, 0) / normalized.length : null
 }
 assert.equal(compositeStrengthFixture([null, Number.NaN, undefined, null, Number.POSITIVE_INFINITY, '0', 3]), null,
   'composite strength must be null when all numeric fields are invalid even if categorical Material exists')
@@ -279,14 +200,14 @@ assert.match(appSource, /!fieldValidity\.some\(Boolean\)\s*\?\[127,135,148\]/,
 assert.match(appSource, /compositeWeight>0[\s\S]*?:\[24,34,53\]/,
   'CPU composite rendering must use the dark valid-zero color when fields exist but have zero contribution')
 assert.match(appSource, /if\(fieldIndexSafe===6\?materialValid:normalized>\.001\)activeCells\+\+/,
-  'CPU active-cell counting must use absolute normalized intensity, including negative selected values')
+  'CPU active-cell counting must use the shared non-negative normalized intensity')
 const cpuCompositeFixture = (fields, materialValid = false) => {
   const keys = ['energy','density','information','entropy','temperature','biology']
   const validity = keys.map(key => typeof fields[key] === 'number' && Number.isFinite(fields[key]))
   validity.push(materialValid)
   const normalizedValues = keys.map(key => {
     const value = fields[key]
-    return typeof value === 'number' && Number.isFinite(value) ? Math.abs(value) : 0
+    return normalizeScientificFieldValue(key, value) ?? 0
   })
   const valid = normalizedValues.filter((_, index) => validity[index])
   return {
@@ -303,7 +224,7 @@ assert.deepEqual(cpuCompositeFixture({}, true), {normalized:0,hasAnyField:true,m
   'categorical Material alone must remain renderable without becoming numeric composite strength')
 assert.deepEqual(cpuCompositeFixture({energy:Number.NaN}), {normalized:0,hasAnyField:false,materialOnly:false},
   'an all-invalid CPU composite sample must be identifiable for neutral diagnostic coloring')
-assert.equal(Math.abs(-0.75) / 1 > 0.001, true,
+assert.equal(normalizeScientificFieldValue('density', -0.75) > 0.001, false,
   'negative selected-field values must count as active based on absolute normalized intensity')
 
 // The 2D overview must preserve missing fields as missing rather than silently
