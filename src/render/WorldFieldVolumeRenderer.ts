@@ -488,7 +488,7 @@ export class WorldFieldVolumeRenderer {
             if (rawValue === null) this.color.setHex(0x7f8794)
             else if (selectedFieldIndex === 6) this.color.setHex(materialClassColor(selectedRawValue))
             else this.color.setHex(scientificFieldPaletteHex(
-              fieldKey as Exclude<typeof fieldKey, 'material'>, normalized,
+              selectedFieldKey as Exclude<typeof selectedFieldKey, 'material' | null>, normalized,
             ))
           } else {
             let red = 0, green = 0, blue = 0, weight = 0
