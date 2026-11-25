@@ -567,9 +567,13 @@ export class WorldFieldVolumeRenderer {
     // Do not leave a grid-only scene visible when every sample was rejected
     // for invalid world coordinates and no volume cells were rendered.
     this.gridHelper.visible = renderedCells > 0
-    const layerOffsets = frame.slices.map(
-      slice => (slice.y - centerY) / spacing,
-    )
+    // Invalid slice coordinates are excluded from the volume geometry above.
+    // Exclude them here as well: Math.min(NaN, ...) would otherwise poison the
+    // visible grid helper position even when other slices rendered valid cells.
+    const layerOffsets = frame.slices
+      .map(slice => finiteNumericValue(slice.y))
+      .filter((sliceY): sliceY is number => sliceY !== null)
+      .map(sliceY => (sliceY - centerY) / spacing)
     const lowestLayer = layerOffsets.length ? Math.min(...layerOffsets) : 0
     this.gridHelper.position.y = lowestLayer - 0.14
 
