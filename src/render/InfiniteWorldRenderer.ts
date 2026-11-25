@@ -47,6 +47,7 @@ import { worldResourceEconomy } from '../worldLibrary/WorldResourceEconomy'
 import { civilizationRuntime, type CivilizationType } from '../worldLibrary/CivilizationRuntime'
 import { productionInfrastructureRuntime } from '../worldLibrary/ProductionInfrastructureRuntime'
 import { resolveWorldLibraryEntry, resourceVisualKind, visualKindToWorldObject } from '../worldLibrary/WorldLibraryAdapter'
+import { normalizeScientificFieldValue, SCIENTIFIC_FIELD_DISPLAY_RANGES } from '../infinity/ScientificFieldDisplay'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number; edgeLodSignature: string }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -2400,24 +2401,23 @@ export class InfiniteWorldRenderer {
           // Each scalar uses a domain-specific display range; this affects only
           // visualization and never mutates or rescales the physical field.
           const field = this.#fieldSampler.sample(originX + gx, h, originZ + gz)
-          const ranges = { energy: 350, density: 1, information: 80, entropy: 0.15, temperature: 300, biology: 1 }
           const palettes: Record<string, number> = {
             energy: 0x4f8cff, density: 0x42d6c5, information: 0xb58cff,
             entropy: 0xff647c, temperature: 0xffb347, biology: 0x74d66d,
           }
           if (this.#scientificField === 'all') {
-            const density = THREE.MathUtils.clamp(Number(field.density) || 0, 0, 1)
-            const biology = THREE.MathUtils.clamp(Number(field.biology) || 0, 0, 1)
-            const entropy = THREE.MathUtils.clamp((Number(field.entropy) || 0) / ranges.entropy, 0, 1)
-            const energy = THREE.MathUtils.clamp((Number(field.energy) || 0) / ranges.energy, 0, 1)
-            const information = THREE.MathUtils.clamp((Number(field.information) || 0) / ranges.information, 0, 1)
-            const temperature = THREE.MathUtils.clamp((Number(field.temperature) || 0) / ranges.temperature, 0, 1)
+            const density = normalizeScientificFieldValue('density', field.density) ?? 0
+            const biology = normalizeScientificFieldValue('biology', field.biology) ?? 0
+            const entropy = normalizeScientificFieldValue('entropy', field.entropy) ?? 0
+            const energy = normalizeScientificFieldValue('energy', field.energy) ?? 0
+            const information = normalizeScientificFieldValue('information', field.information) ?? 0
+            const temperature = normalizeScientificFieldValue('temperature', field.temperature) ?? 0
             const hue = THREE.MathUtils.clamp(0.62 - density * 0.24 + biology * 0.12 - entropy * 0.16, 0, 1)
             const brightness = 0.25 + (energy * 0.35 + information * 0.25 + temperature * 0.4) * 0.28
             color.setHSL(hue, 0.82, brightness)
           } else {
             const key = this.#scientificField
-            const normalized = THREE.MathUtils.clamp((Number(field[key]) || 0) / ranges[key], 0, 1)
+            const normalized = normalizeScientificFieldValue(key, field[key]) ?? 0
             color.setHex(palettes[key])
             color.lerp(new THREE.Color(0xffffff), normalized * 0.72)
           }
