@@ -2694,17 +2694,30 @@ function renderField3DImpl(){
       });
       // Material is a categorical color contribution, never a numeric
       // scalar in composite intensity, lift, opacity, or active-cell scoring.
+      const fieldValidity=props.map((property,index)=>index===6
+        ?materialValid
+        :typeof sample[property]==='number'&&Number.isFinite(sample[property]));
       const numericContributions=values.slice(0,6);
-      const normalized=fieldIndexSafe>=0?values[fieldIndexSafe]:numericContributions.reduce((sum,value)=>sum+value,0)/numericContributions.length;
+      const validNumericContributions=numericContributions.filter((value,index)=>fieldValidity[index]);
+      const normalized=fieldIndexSafe>=0
+        ?values[fieldIndexSafe]
+        :(validNumericContributions.length
+          ?validNumericContributions.reduce((sum,value)=>sum+value,0)/validNumericContributions.length
+          :0);
       const selectedRaw=fieldIndexSafe>=0?sample[props[fieldIndexSafe]]:normalized;
       const selectedValueValid=fieldIndexSafe<0||(fieldIndexSafe===6?materialValid:typeof selectedRaw==='number'&&Number.isFinite(selectedRaw));
       const value=selectedValueValid&&typeof selectedRaw==='number'&&Number.isFinite(selectedRaw)?selectedRaw:0;
+      const compositeWeight=values.reduce((sum,value)=>sum+value,0);
       const color=fieldIndexSafe>=0
         ?(!selectedValueValid?[127,135,148]:colorOf(fieldIndexSafe,fieldIndexSafe===6?value:normalized))
-        :values.reduce((sum,contribution,index)=>{
-          const part=colorOf(index,index===6?materialCode:contribution);
-          return sum.map((channel,channelIndex)=>channel+part[channelIndex]*contribution);
-        },[0,0,0]).map(channel=>Math.round(channel/Math.max(0.000001,values.reduce((sum,value)=>sum+value,0))));
+        :(!fieldValidity.some(Boolean)
+          ?[127,135,148]
+          :compositeWeight>0
+            ?values.reduce((sum,contribution,index)=>{
+              const part=colorOf(index,index===6?materialCode:contribution);
+              return sum.map((channel,channelIndex)=>channel+part[channelIndex]*contribution);
+            },[0,0,0]).map(channel=>Math.round(channel/compositeWeight))
+            :[24,34,53]);
       const sx=originX+px*cellW+py*cellW*.55;
       const sy=originY+(px+py)*cellH*.5-zLayer*depthStep;
       const lift=Math.max(0,Math.min(depthStep*.9,normalized*depthStep*2));
@@ -2712,7 +2725,7 @@ function renderField3DImpl(){
       g.fillStyle='rgba('+color[0]+','+color[1]+','+color[2]+','+(0.22+normalized*.72)+')';g.fill();
       g.strokeStyle='rgba(160,190,255,.14)';g.lineWidth=.5;g.stroke();
       renderedCells++;
-      if(fieldIndexSafe===6?materialValid:value>(maxima[fieldIndexSafe]>.99?maxima[fieldIndexSafe]*.001:.001))activeCells++;
+      if(fieldIndexSafe===6?materialValid:normalized>.001)activeCells++;
     }
   }
   g.font='bold 12px system-ui';g.fillStyle='rgba(235,242,255,.94)';g.fillText('ISOMETRIC FIELD PREVIEW · '+fieldName,14,22);
