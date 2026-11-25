@@ -11,6 +11,26 @@ const displayCompiled = ts.transpileModule(displaySource, {
 })
 const displayUrl = `data:text/javascript;base64,${Buffer.from(displayCompiled.outputText).toString('base64')}`
 const { SCIENTIFIC_FIELD_DISPLAY_RANGES, normalizeScientificFieldValue } = await import(displayUrl)
+const paletteSource = await readFile(new URL('../src/infinity/ScientificFieldPalette.ts', import.meta.url), 'utf8')
+const paletteCompiled = ts.transpileModule(paletteSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+})
+const paletteUrl = `data:text/javascript;base64,${Buffer.from(paletteCompiled.outputText).toString('base64')}`
+const { SCIENTIFIC_FIELD_PALETTES, scientificFieldPaletteColor, scientificFieldPaletteHex } = await import(paletteUrl)
+assert.deepEqual(Object.keys(SCIENTIFIC_FIELD_PALETTES), [
+  'energy', 'density', 'information', 'entropy', 'temperature', 'biology',
+])
+for (const [field, stops] of Object.entries(SCIENTIFIC_FIELD_PALETTES)) {
+  assert.deepEqual(scientificFieldPaletteColor(field, 0), [
+    (stops[0] >> 16) & 255, (stops[0] >> 8) & 255, stops[0] & 255,
+  ], field + ' shared low palette endpoint')
+  assert.deepEqual(scientificFieldPaletteColor(field, 1), [
+    (stops[1] >> 16) & 255, (stops[1] >> 8) & 255, stops[1] & 255,
+  ], field + ' shared high palette endpoint')
+  const rgb = scientificFieldPaletteColor(field, 0.5)
+  assert.equal(scientificFieldPaletteHex(field, 0.5), (rgb[0] << 16) | (rgb[1] << 8) | rgb[2],
+    field + ' RGB/hex palette helpers must agree')
+}
 assert.deepEqual(SCIENTIFIC_FIELD_DISPLAY_RANGES, {
   energy: 350, density: 1, information: 80, entropy: 0.15, temperature: 300, biology: 1,
 })
@@ -72,6 +92,14 @@ assert.match(rendererSource, /const layerOffsets = frame\.slices\s*\.map\(slice 
   'invalid slice heights must be excluded before positioning the visible volume grid helper')
 assert.match(rendererSource, /import \{ normalizeScientificFieldValue \} from '\.\.\/infinity\/ScientificFieldDisplay'/,
   'WebGL volume must import the shared scientific display contract')
+assert.match(rendererSource, /scientificFieldPaletteHex/,
+  'WebGL volume must consume the shared scientific palette module')
+assert.match(infiniteWorldSource, /scientificFieldPaletteHex/,
+  'Infinity terrain must consume the shared scientific palette module')
+assert.match(connectorSource, /scientificFieldPaletteColor/,
+  'connector must expose the shared scientific palette to inline 2D rendering')
+assert.match(appSource, /window\\.scientificFieldPaletteColor\\(field,t\\)/,
+  '2D renderer must consume the shared scientific palette module')
 assert.match(rendererSource, /normalizeScientificFieldValue\([\s\S]*?fieldKey as Exclude<typeof fieldKey, 'material'>, value,/,
   'composite numeric fields must use shared fixed reference scales')
 assert.match(rendererSource, /normalizeScientificFieldValue\([\s\S]*?selectedFieldKey as Exclude<typeof selectedFieldKey, 'material' \| null>, value,/,
