@@ -56,6 +56,24 @@ assert.ok(Math.abs(pixel.y - 50) < 1e-9);
 // reference scales must not be redefined independently in renderer code.
 const displayMod = await load("src/infinity/ScientificFieldDisplay.ts");
 const { SCIENTIFIC_FIELD_DISPLAY_RANGES, normalizeScientificFieldValue } = displayMod;
+const paletteMod = await load("src/infinity/ScientificFieldPalette.ts");
+const { SCIENTIFIC_FIELD_PALETTES, scientificFieldPaletteColor, scientificFieldPaletteHex } = paletteMod;
+assert.deepEqual(Object.keys(SCIENTIFIC_FIELD_PALETTES), ["energy", "density", "information", "entropy", "temperature", "biology"]);
+for (const [field, stops] of Object.entries(SCIENTIFIC_FIELD_PALETTES)) {
+  assert.deepEqual(scientificFieldPaletteColor(field, 0), [
+    (stops[0] >> 16) & 255, (stops[0] >> 8) & 255, stops[0] & 255,
+  ], field + " low endpoint must match its shared palette");
+  assert.deepEqual(scientificFieldPaletteColor(field, 1), [
+    (stops[1] >> 16) & 255, (stops[1] >> 8) & 255, stops[1] & 255,
+  ], field + " high endpoint must match its shared palette");
+  assert.equal(scientificFieldPaletteHex(field, 0.5),
+    ((scientificFieldPaletteColor(field, 0.5)[0] << 16) |
+      (scientificFieldPaletteColor(field, 0.5)[1] << 8) |
+      scientificFieldPaletteColor(field, 0.5)[2]),
+    field + " hex and RGB helpers must agree");
+}
+assert.deepEqual(scientificFieldPaletteColor("energy", -1), scientificFieldPaletteColor("energy", 0));
+assert.deepEqual(scientificFieldPaletteColor("energy", 2), scientificFieldPaletteColor("energy", 1));
 assert.deepEqual(SCIENTIFIC_FIELD_DISPLAY_RANGES, {
   energy: 350, density: 1, information: 80, entropy: 0.15, temperature: 300, biology: 1,
 });
@@ -74,6 +92,17 @@ assert.ok(infinityRendererSource.includes("normalizeScientificFieldValue"),
   "Infinity terrain must consume shared scientific display normalization");
 assert.ok(volumeRendererSource.includes("normalizeScientificFieldValue"),
   "Volumetric renderer must consume shared scientific display normalization");
+assert.ok(infinityRendererSource.includes("scientificFieldPaletteHex"),
+  "Infinity terrain must consume the shared scientific palette");
+assert.ok(volumeRendererSource.includes("scientificFieldPaletteHex"),
+  "Volumetric renderer must consume the shared scientific palette");
+const connectorSource = await readFile(new URL("src/connector.ts", root), "utf8");
+const appSource = await readFile(new URL("index.html", root), "utf8");
+assert.ok(connectorSource.includes("win['scientificFieldPaletteColor'] = scientificFieldPaletteColor"),
+  "connector must expose shared palette colors to inline 2D renderers");
+assert.ok(appSource.includes("window.scientificFieldPaletteColor(field,t)"),
+  "2D scientific field rendering must consume the shared palette helper");
+
 assert.ok(!volumeRendererSource.includes("const fieldMaxima"),
   "Volumetric renderer must not dynamically normalize against each viewport sample set");
 
