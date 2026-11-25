@@ -98,7 +98,7 @@ assert.match(infiniteWorldSource, /scientificFieldPaletteHex/,
   'Infinity terrain must consume the shared scientific palette module')
 assert.match(connectorSource, /scientificFieldPaletteColor/,
   'connector must expose the shared scientific palette to inline 2D rendering')
-assert.match(appSource, /window\\.scientificFieldPaletteColor\\(field,t\\)/,
+assert.ok(appSource.includes('window.scientificFieldPaletteColor(field,t)'),
   '2D renderer must consume the shared scientific palette module')
 assert.match(rendererSource, /normalizeScientificFieldValue\([\s\S]*?fieldKey as Exclude<typeof fieldKey, 'material'>, value,/,
   'composite numeric fields must use shared fixed reference scales')
