@@ -57,7 +57,7 @@ assert.ok(Math.abs(pixel.y - 50) < 1e-9);
 const displayMod = await load("src/infinity/ScientificFieldDisplay.ts");
 const { SCIENTIFIC_FIELD_DISPLAY_RANGES, normalizeScientificFieldValue } = displayMod;
 const paletteMod = await load("src/infinity/ScientificFieldPalette.ts");
-const { SCIENTIFIC_FIELD_PALETTES, scientificFieldPaletteColor, scientificFieldPaletteHex } = paletteMod;
+const { SCIENTIFIC_FIELD_PALETTES, scientificFieldPaletteColor, scientificFieldPaletteHex, scientificFieldCompositeColor, scientificFieldCompositeHex } = paletteMod;
 assert.deepEqual(Object.keys(SCIENTIFIC_FIELD_PALETTES), ["energy", "density", "information", "entropy", "temperature", "biology"]);
 for (const [field, stops] of Object.entries(SCIENTIFIC_FIELD_PALETTES)) {
   assert.deepEqual(scientificFieldPaletteColor(field, 0), [
@@ -74,6 +74,16 @@ for (const [field, stops] of Object.entries(SCIENTIFIC_FIELD_PALETTES)) {
 }
 assert.deepEqual(scientificFieldPaletteColor("energy", -1), scientificFieldPaletteColor("energy", 0));
 assert.deepEqual(scientificFieldPaletteColor("energy", 2), scientificFieldPaletteColor("energy", 1));
+const compositeInputs = { energy: 0.5, density: 0, information: null, entropy: 1, temperature: Number.NaN, biology: 0.25 };
+const compositeParts = ["energy", "density", "entropy", "biology"].map(field => scientificFieldPaletteColor(field, compositeInputs[field]));
+const compositeExpected = compositeParts.reduce((sum, rgb) => sum.map((channel, index) => channel + rgb[index]), [0, 0, 0]).map(channel => Math.round(channel / compositeParts.length));
+assert.deepEqual(scientificFieldCompositeColor(compositeInputs), compositeExpected,
+  "composite palette must equally average valid dimensions and preserve measured zero");
+assert.equal(scientificFieldCompositeHex(compositeInputs),
+  (compositeExpected[0] << 16) | (compositeExpected[1] << 8) | compositeExpected[2]);
+assert.equal(scientificFieldCompositeColor({ energy: null, density: Number.NaN }), null,
+  "composite palette must distinguish all-invalid from measured zero");
+
 assert.deepEqual(SCIENTIFIC_FIELD_DISPLAY_RANGES, {
   energy: 350, density: 1, information: 80, entropy: 0.15, temperature: 300, biology: 1,
 });
@@ -96,6 +106,14 @@ assert.ok(infinityRendererSource.includes("scientificFieldPaletteHex"),
   "Infinity terrain must consume the shared scientific palette");
 assert.ok(volumeRendererSource.includes("scientificFieldPaletteHex"),
   "Volumetric renderer must consume the shared scientific palette");
+assert.ok(volumeRendererSource.includes("scientificFieldCompositeHex"),
+  "Volumetric renderer must consume the shared composite palette");
+assert.ok(infinityRendererSource.includes("scientificFieldCompositeHex"),
+  "Infinity terrain must consume the shared composite palette");
+assert.ok(connectorSource.includes("win['scientificFieldCompositeColor'] = scientificFieldCompositeColor"),
+  "connector must expose the shared composite palette to inline renderers");
+assert.ok(appSource.includes("window.scientificFieldCompositeColor({"),
+  "2D renderer must consume the shared composite palette");
 const connectorSource = await readFile(new URL("src/connector.ts", root), "utf8");
 const appSource = await readFile(new URL("index.html", root), "utf8");
 assert.ok(connectorSource.includes("win['scientificFieldPaletteColor'] = scientificFieldPaletteColor"),
