@@ -4915,18 +4915,18 @@ try {
     const button = document.getElementById("greedySurfaceBtn");
     const previousMode = window.currentRenderMode;
     if (!button || typeof window.toggleGreedySurfacePreview !== "function" ||
-        typeof window.fieldSetMatMode !== "function") {
+        typeof window.setFieldMatMode !== "function") {
       return { error: "Greedy surface preview UI is not wired" };
     }
     const trace = [];
     const originalSetGreedy = window.setGreedyMeshingEnabled;
-    const originalSetMatMode = window.fieldSetMatMode;
+    const originalSetMatMode = window.setFieldMatMode;
     window.setGreedyMeshingEnabled = (enabled) => {
       const result = originalSetGreedy?.(enabled);
       trace.push({ operation: "greedy", enabled, result, state: window.getGreedyMeshingState?.() });
       return result;
     };
-    window.fieldSetMatMode = (mode) => {
+    window.setFieldMatMode = (mode) => {
       originalSetMatMode?.(mode);
       trace.push({ operation: "material-mode", mode, state: window.getGreedyMeshingState?.() });
     };
@@ -4934,7 +4934,7 @@ try {
     let restored;
     try {
       // Start from field-color mode so the UI must explicitly select material mode.
-      window.fieldSetMatMode("field");
+      window.setFieldMatMode("field");
       button.click();
       const activeState = window.getGreedyMeshingState?.();
       active = {
@@ -4955,7 +4955,7 @@ try {
       };
     } finally {
       window.setGreedyMeshingEnabled = originalSetGreedy;
-      window.fieldSetMatMode = originalSetMatMode;
+      window.setFieldMatMode = originalSetMatMode;
     }
     return { previousMode, active, restored, trace };
   });
