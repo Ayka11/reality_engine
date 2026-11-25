@@ -500,8 +500,7 @@ export class WorldFieldVolumeRenderer {
             }
             const compositeColor = scientificFieldCompositeHex(compositeValues)
             if (compositeColor !== null) this.color.setHex(compositeColor)
-            else if (finiteValues.every(value => value === null)) this.color.setHex(0x7f8794)
-            else this.color.setHex(0x182235)
+            else this.color.setHex(0x7f8794)
           }
           this.mesh.setColorAt(renderedCells, this.color)
           renderedCells++
