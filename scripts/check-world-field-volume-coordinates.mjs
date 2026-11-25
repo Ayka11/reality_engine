@@ -92,7 +92,7 @@ assert.match(appSource, /const normalized=normalizeField\(m\.field,v\)/,
   '2D overview must use the same fixed reference scales as Infinity and Volumetric')
 assert.doesNotMatch(appSource, /const normalized=Math\.max\(0,Math\.min\(1,\(v-min\)\/range\)\)/,
   '2D overview must not normalize colors against viewport-local min/max')
-assert.match(appSource, /normalization:'shared-scientific-reference-ranges'/,
+assert.match(appSource, /normalization:worldField2DLinked&&typeof window\.normalizeScientificFieldValue==='function'\?'shared-scientific-reference-ranges':'legacy-finite-grid-scale'/,
   '2D and CPU fallback diagnostics must identify the shared reference-scale contract')
 assert.match(appSource, /compositeWeight=fieldValidity\.filter\(Boolean\)\.length/,
   'CPU composite colors must weight every valid field equally, including measured zeroes')
