@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { normalizeScientificFieldValue } from '../infinity/ScientificFieldDisplay'
-import { scientificFieldPaletteHex } from '../infinity/ScientificFieldPalette'
+import { scientificFieldPaletteHex, scientificFieldCompositeHex } from '../infinity/ScientificFieldPalette'
 
 type FieldSample = Record<string, unknown> & {
   x?: number
@@ -491,36 +491,16 @@ export class WorldFieldVolumeRenderer {
               selectedFieldKey as Exclude<typeof selectedFieldKey, 'material' | null>, normalized,
             ))
           } else {
-            let red = 0, green = 0, blue = 0, weight = 0
-            for (let field = 0; field < SCIENTIFIC_FIELD_KEYS.length; field++) {
-              const fieldKey = SCIENTIFIC_FIELD_KEYS[field]
+            const compositeValues: Record<string, number | null> = {}
+            for (const fieldKey of SCIENTIFIC_FIELD_KEYS) {
+              if (fieldKey === 'material') continue
               const fieldValue = finiteNumericValue(sample[fieldKey])
-              if (fieldValue === null || (fieldKey === 'material' && !isMaterialClassCode(fieldValue))) continue
-              if (fieldKey === 'material') {
-                this.highColor.setHex(materialClassColor(fieldValue))
-                red += this.highColor.r
-                green += this.highColor.g
-                blue += this.highColor.b
-                weight += 1
-                continue
-              }
-              const contribution = normalizeScientificFieldValue(
-                fieldKey as Exclude<typeof fieldKey, 'material'>, fieldValue,
-              ) ?? 0
-              // Every valid scientific dimension participates in the composite,
-              // including a measured zero. Weighting the palette color a second
-              // time by magnitude made weak fields disappear and over-amplified
-              // dominant fields. Normalize each field first, then average its
-              // resulting color equally with the other valid dimensions.
-              this.highColor.setHex(scientificFieldPaletteHex(
-                fieldKey as Exclude<typeof fieldKey, 'material'>, contribution,
-              ))
-              red += this.highColor.r
-              green += this.highColor.g
-              blue += this.highColor.b
-              weight += 1
+              compositeValues[fieldKey] = fieldValue === null
+                ? null
+                : normalizeScientificFieldValue(fieldKey, fieldValue)
             }
-            if (weight > 0) this.color.setRGB(red / weight, green / weight, blue / weight)
+            const compositeColor = scientificFieldCompositeHex(compositeValues)
+            if (compositeColor !== null) this.color.setHex(compositeColor)
             else if (finiteValues.every(value => value === null)) this.color.setHex(0x7f8794)
             else this.color.setHex(0x182235)
           }
