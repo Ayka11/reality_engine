@@ -3118,6 +3118,20 @@ try {
     throw new Error("Field3D Height and Field modes changed the mode flag but not the visible InstancedMesh colors: " +
       JSON.stringify({ height: volumeHeightMode, field: volumeFieldMode }));
   }
+  await page.evaluate(() => window.setMatMode3D?.("material", document.getElementById("matMaterial")));
+  const volumeMaterialMode = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
+  );
+  const uniformMaterialColor = volumeMaterialMode?.instanceColorSamples?.[0];
+  if (volumeMaterialMode?.materialMode !== "material" ||
+      !Array.isArray(uniformMaterialColor) ||
+      volumeMaterialMode.instanceColorSamples.some(color =>
+        !Array.isArray(color) || Math.hypot(...color.map((value, index) =>
+          value - uniformMaterialColor[index])) > 1e-5)) {
+    throw new Error("Field3D Material mode did not submit a uniform material color for a numeric field: " +
+      JSON.stringify(volumeMaterialMode));
+  }
+  await page.evaluate(() => window.setMatMode3D?.("field", document.getElementById("matField")));
   await page.evaluate(() => window.setCameraPreset?.("top"));
   const volumeTopCamera = await page.evaluate(() =>
     window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
