@@ -713,6 +713,15 @@ export class WorldFieldVolumeRenderer {
       cameraUp: [this.camera.up.x, this.camera.up.y, this.camera.up.z] as [number, number, number],
       target: [target.x, target.y, target.z] as [number, number, number],
       distance: position.distanceTo(target),
+      // Detached samples make browser acceptance prove that shading controls
+      // changed the colors submitted to the visible InstancedMesh, not merely
+      // the UI mode or an internal setting.
+      instanceColorSamples: Array.from({ length: Math.min(4, this.mesh?.count ?? 0) }, (_, index) => {
+        const attribute = this.mesh?.instanceColor
+        return attribute
+          ? [attribute.getX(index), attribute.getY(index), attribute.getZ(index)] as [number, number, number]
+          : null
+      }),
     }
   }
 
