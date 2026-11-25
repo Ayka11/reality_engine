@@ -2703,18 +2703,20 @@ function renderField3DImpl(){
       const selectedRaw=fieldIndexSafe>=0?sample[props[fieldIndexSafe]]:normalized;
       const selectedValueValid=fieldIndexSafe<0||(fieldIndexSafe===6?materialValid:typeof selectedRaw==='number'&&Number.isFinite(selectedRaw));
       const value=selectedValueValid&&typeof selectedRaw==='number'&&Number.isFinite(selectedRaw)?selectedRaw:0;
-      const compositeWeight=fieldValidity.filter(Boolean).length;
       const color=fieldIndexSafe>=0
         ?(!selectedValueValid?[127,135,148]:colorOf(fieldIndexSafe,fieldIndexSafe===6?value:normalized))
-        :(!fieldValidity.some(Boolean)
+        :(!fieldValidity.slice(0,6).some(Boolean)
           ?[127,135,148]
-          :compositeWeight>0
-            ?values.reduce((sum,contribution,index)=>{
-              if(!fieldValidity[index])return sum;
-              const part=colorOf(index,index===6?materialCode:contribution);
-              return sum.map((channel,channelIndex)=>channel+part[channelIndex]);
-            },[0,0,0]).map(channel=>Math.round(channel/compositeWeight))
-            :[24,34,53]);
+          :(typeof window.scientificFieldCompositeColor==='function'
+            ?window.scientificFieldCompositeColor({
+              energy:fieldValidity[0]?values[0]:null,
+              density:fieldValidity[1]?values[1]:null,
+              information:fieldValidity[2]?values[2]:null,
+              entropy:fieldValidity[3]?values[3]:null,
+              temperature:fieldValidity[4]?values[4]:null,
+              biology:fieldValidity[5]?values[5]:null
+            })??[127,135,148]
+            :[24,34,53]));
       const sx=originX+px*cellW+py*cellW*.55;
       const sy=originY+(px+py)*cellH*.5-zLayer*depthStep;
       const lift=Math.max(0,Math.min(depthStep*.9,normalized*depthStep*2));
