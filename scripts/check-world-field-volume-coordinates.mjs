@@ -137,10 +137,10 @@ assert.doesNotMatch(appSource, /const normalized=Math\.max\(0,Math\.min\(1,\(v-m
   '2D overview must not normalize colors against viewport-local min/max')
 assert.match(appSource, /normalization:worldField2DLinked&&typeof window\.normalizeScientificFieldValue==='function'\?'shared-scientific-reference-ranges':'legacy-finite-grid-scale'/,
   '2D and CPU fallback diagnostics must identify the shared reference-scale contract')
-assert.match(appSource, /compositeWeight=fieldValidity\.filter\(Boolean\)\.length/,
-  'CPU composite colors must weight every valid field equally, including measured zeroes')
-assert.match(appSource, /if\(!fieldValidity\[index\]\)return sum/,
-  'CPU composite colors must exclude invalid fields without weighting by intensity')
+assert.ok(appSource.includes('window.scientificFieldCompositeColor({'),
+  '2D composite colors must use the shared scientific composite palette')
+assert.ok(appSource.includes('energy:fieldValidity[0]?values[0]:null'),
+  '2D composite colors must preserve measured zero and exclude invalid scientific dimensions')
 for (const [field, range] of Object.entries(SCIENTIFIC_FIELD_DISPLAY_RANGES)) {
   assert.equal(normalizeScientificFieldValue(field, range * 0.25), 0.25, field + ' quarter-range intensity must be stable')
   assert.equal(normalizeScientificFieldValue(field, range * 0.75), 0.75, field + ' three-quarter-range intensity must be stable')
@@ -247,10 +247,10 @@ assert.match(appSource, /const validNumericContributions=numericContributions\.f
   'CPU composite normalization must average only valid numeric fields')
 assert.match(appSource, /validNumericContributions\.length\s*\?validNumericContributions\.reduce\(\(sum,value\)=>sum\+value,0\)\/validNumericContributions\.length\s*:0/,
   'CPU composite normalization must match WebGL when only a subset of numeric fields is present')
-assert.match(appSource, /!fieldValidity\.some\(Boolean\)\s*\?\[127,135,148\]/,
-  'CPU composite rendering must use the neutral color when every field is invalid')
-assert.match(appSource, /compositeWeight>0[\s\S]*?:\[24,34,53\]/,
-  'CPU composite rendering must use the dark valid-zero color when fields exist but have zero contribution')
+assert.ok(appSource.includes('!fieldValidity.slice(0,6).some(Boolean)'),
+  '2D composite rendering must use a neutral color when all six numeric scientific fields are invalid')
+assert.ok(appSource.includes('window.scientificFieldCompositeColor({'),
+  '2D composite rendering must share identical scientific field color mixing with Infinity and Volumetric')
 assert.match(appSource, /if\(fieldIndexSafe===6\?materialValid:normalized>\.001\)activeCells\+\+/,
   'CPU active-cell counting must use the shared non-negative normalized intensity')
 const cpuCompositeFixture = (fields, materialValid = false) => {
