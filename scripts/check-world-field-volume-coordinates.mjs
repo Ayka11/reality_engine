@@ -4,6 +4,7 @@ import ts from 'typescript'
 
 const rendererSource = await readFile(new URL('../src/render/WorldFieldVolumeRenderer.ts', import.meta.url), 'utf8')
 const appSource = await readFile(new URL('../index.html', import.meta.url), 'utf8')
+const connectorSource = await readFile(new URL('../src/connector.ts', import.meta.url), 'utf8')
 const displaySource = await readFile(new URL('../src/infinity/ScientificFieldDisplay.ts', import.meta.url), 'utf8')
 const displayCompiled = ts.transpileModule(displaySource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
@@ -77,6 +78,8 @@ assert.match(rendererSource, /normalizeScientificFieldValue\([\s\S]*?selectedFie
   'selected numeric fields must use shared fixed reference scales')
 assert.doesNotMatch(rendererSource, /const fieldMaxima|fieldMaxima\[/,
   'WebGL volume must not compute viewport-dependent field maxima')
+assert.match(connectorSource, /win\['normalizeScientificFieldValue'\] = normalizeScientificFieldValue/,
+  'connector must expose the single shared normalizer to inline HTML renderers')
 assert.match(appSource, /const normalizeField=window\.normalizeScientificFieldValue;/,
   'CPU fallback must consume the shared normalizer exposed by the connector')
 assert.match(appSource, /return normalizeField\(property,raw\)\?\?0;/,
@@ -89,6 +92,12 @@ assert.match(appSource, /const normalized=normalizeField\(m\.field,v\)/,
   '2D overview must use the same fixed reference scales as Infinity and Volumetric')
 assert.doesNotMatch(appSource, /const normalized=Math\.max\(0,Math\.min\(1,\(v-min\)\/range\)\)/,
   '2D overview must not normalize colors against viewport-local min/max')
+assert.match(appSource, /normalization:'shared-scientific-reference-ranges'/,
+  '2D and CPU fallback diagnostics must identify the shared reference-scale contract')
+assert.match(appSource, /compositeWeight=fieldValidity\.filter\(Boolean\)\.length/,
+  'CPU composite colors must weight every valid field equally, including measured zeroes')
+assert.match(appSource, /if\(!fieldValidity\[index\]\)return sum/,
+  'CPU composite colors must exclude invalid fields without weighting by intensity')
 for (const [field, range] of Object.entries(SCIENTIFIC_FIELD_DISPLAY_RANGES)) {
   assert.equal(normalizeScientificFieldValue(field, range * 0.25), 0.25, field + ' quarter-range intensity must be stable')
   assert.equal(normalizeScientificFieldValue(field, range * 0.75), 0.75, field + ' three-quarter-range intensity must be stable')
@@ -120,8 +129,8 @@ const mixedEligibilityFixture = [
 const cpuEligible = eligibleSamples(mixedEligibilityFixture)
 assert.equal(cpuEligible.length, 2,
   'CPU preview must render the same two coordinate-valid samples that determine normalization')
-assert.equal(Math.max(...cpuEligible.map(sample => Math.abs(sample.energy))), 4,
-  'CPU preview normalization must remain independent of invalid and out-of-window extreme values')
+assert.deepEqual(cpuEligible.map(sample => normalizeScientificFieldValue('energy', sample.energy)), [2 / 350, 4 / 350],
+  'CPU preview must apply the shared fixed reference scale to eligible world-field samples')
 
 assert.match(rendererSource, /const finiteValues = SCIENTIFIC_FIELD_KEYS\.map\(key => \{/,
   'composite rendering must validate each field before including it')
@@ -216,16 +225,16 @@ const cpuCompositeFixture = (fields, materialValid = false) => {
     materialOnly: materialValid && valid.length === 0,
   }
 }
-assert.equal(cpuCompositeFixture({energy:0.5}).normalized, 0.5,
+assert.equal(cpuCompositeFixture({energy:175}).normalized, 0.5,
   'a single valid numeric field must not be diluted by five missing fields')
-assert.equal(cpuCompositeFixture({energy:0.5,density:0.25}).normalized, 0.375,
+assert.equal(cpuCompositeFixture({energy:175,density:0.25}).normalized, 0.375,
   'CPU composite strength must average the same valid numeric subset as WebGL')
 assert.deepEqual(cpuCompositeFixture({}, true), {normalized:0,hasAnyField:true,materialOnly:true},
   'categorical Material alone must remain renderable without becoming numeric composite strength')
 assert.deepEqual(cpuCompositeFixture({energy:Number.NaN}), {normalized:0,hasAnyField:false,materialOnly:false},
   'an all-invalid CPU composite sample must be identifiable for neutral diagnostic coloring')
 assert.equal(normalizeScientificFieldValue('density', -0.75) > 0.001, false,
-  'negative selected-field values must count as active based on absolute normalized intensity')
+  'negative selected-field values must clamp to zero intensity')
 
 // The 2D overview must preserve missing fields as missing rather than silently
 // substituting Energy, and its statistics must use finite samples only.
