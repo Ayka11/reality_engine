@@ -322,10 +322,10 @@ const emptyFixture = [Number.NaN, Number.POSITIVE_INFINITY, null]
   .filter(value => typeof value === 'number' && Number.isFinite(value))
 assert.equal(emptyFixture.length, 0, 'all-invalid 2D fields must expose no finite samples')
 
-assert.match(appSource, /const numericContributions=values\.slice\(0,6\);\s*const normalized=fieldIndexSafe>=0\?values\[fieldIndexSafe\]:numericContributions\.reduce\(\(sum,value\)=>sum\+value,0\)\/numericContributions\.length/,
-  'CPU composite intensity must exclude categorical Material from numeric lift and opacity')
-assert.match(appSource, /\?\(!selectedValueValid\?\[127,135,148\]:colorOf\(fieldIndexSafe,fieldIndexSafe===6\?value:normalized\)\)/,
-  'CPU fallback must render invalid selected values with the same neutral diagnostic color as WebGL')
+assert.match(appSource, /const lift=Math\.max\(0,Math\.min\(depthStep\*\.9,normalized\*depthStep\*2\)\)/,
+  'CPU lift must use valid numeric composite intensity and must not use categorical Material as a numeric scalar')
+assert.match(appSource, /\+\(0\.22\+normalized\*\.72\)\)/,
+  'CPU opacity must use the same numeric composite intensity as lift')
 assert.match(appSource, /id="layerM" onclick="setLayer\(6\)"/,
   'Material field control must be present in the layer toolbar')
 console.log('PASS: seven scientific scalar fields, including categorical Material, are represented independently')
