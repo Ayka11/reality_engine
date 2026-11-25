@@ -1958,6 +1958,43 @@ export class InfiniteWorldRenderer {
     }
   }
 
+  /**
+   * Detached diagnostics for the material actually attached to rendered terrain.
+   * This lets browser acceptance distinguish field vertex colors, uniform PBR,
+   * and height-gradient materials without exposing live Three.js objects.
+   */
+  getTerrainMaterialDiagnostics() {
+    const patches = [...this.#patches.values()]
+    const materials: Array<{
+      vertexColors: boolean
+      colorHex: number
+      roughness: number
+      metalness: number
+      colorAttributeCount: number
+    }> = []
+
+    for (const patch of patches) {
+      const mesh = patch.group.children.find(child => child.userData?.terrain) as THREE.Mesh | undefined
+      if (!mesh) continue
+      const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+      if (!(material instanceof THREE.MeshStandardMaterial)) continue
+      materials.push({
+        vertexColors: material.vertexColors,
+        colorHex: material.color.getHex(),
+        roughness: material.roughness,
+        metalness: material.metalness,
+        colorAttributeCount: mesh.geometry.getAttribute('color')?.count ?? 0,
+      })
+    }
+
+    return {
+      materialMode: this.#materialMode,
+      patchCount: patches.length,
+      terrainMaterialCount: materials.length,
+      materials: materials.slice(0, 8),
+    }
+  }
+
   focusGeneratedRegion(padding = 1.35) {
     const objects = this.objects.values()
     if (!objects.length) {
