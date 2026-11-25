@@ -265,6 +265,44 @@ assert.match(appSource, /const selectedRaw=fieldIndexSafe>=0\?sample\[props\[fie
 assert.match(appSource, /const selectedValueValid=fieldIndexSafe<0\|\|\(fieldIndexSafe===6\?materialValid:typeof selectedRaw==='number'&&Number\.isFinite\(selectedRaw\)\)/,
   'CPU fallback must distinguish invalid selected numeric samples and invalid Material category codes')
 
+assert.match(appSource, /const fieldValidity=props\.map\(\(property,index\)=>index===6\?/,
+  'CPU composite mode must retain per-field validity instead of turning missing fields into zero measurements')
+assert.match(appSource, /const validNumericContributions=numericContributions\.filter\(\(value,index\)=>fieldValidity\[index\]\)/,
+  'CPU composite normalization must average only valid numeric fields')
+assert.match(appSource, /validNumericContributions\.length\?validNumericContributions\.reduce\(\(sum,value\)=>sum\+value,0\)\/validNumericContributions\.length:0/,
+  'CPU composite normalization must match WebGL when only a subset of numeric fields is present')
+assert.match(appSource, /!fieldValidity\.some\(Boolean\)\s*\?\[127,135,148\]/,
+  'CPU composite rendering must use the neutral color when every field is invalid')
+assert.match(appSource, /compositeWeight>0[\s\S]*?:\[24,34,53\]/,
+  'CPU composite rendering must use the dark valid-zero color when fields exist but have zero contribution')
+assert.match(appSource, /if\(fieldIndexSafe===6\?materialValid:normalized>\.001\)activeCells\+\+/,
+  'CPU active-cell counting must use absolute normalized intensity, including negative selected values')
+const cpuCompositeFixture = (fields, materialValid = false) => {
+  const keys = ['energy','density','information','entropy','temperature','biology']
+  const validity = keys.map(key => typeof fields[key] === 'number' && Number.isFinite(fields[key]))
+  validity.push(materialValid)
+  const normalizedValues = keys.map(key => {
+    const value = fields[key]
+    return typeof value === 'number' && Number.isFinite(value) ? Math.abs(value) : 0
+  })
+  const valid = normalizedValues.filter((_, index) => validity[index])
+  return {
+    normalized: valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : 0,
+    hasAnyField: validity.some(Boolean),
+    materialOnly: materialValid && valid.length === 0,
+  }
+}
+assert.equal(cpuCompositeFixture({energy:0.5}).normalized, 0.5,
+  'a single valid numeric field must not be diluted by five missing fields')
+assert.equal(cpuCompositeFixture({energy:0.5,density:0.25}).normalized, 0.375,
+  'CPU composite strength must average the same valid numeric subset as WebGL')
+assert.deepEqual(cpuCompositeFixture({}, true), {normalized:0,hasAnyField:true,materialOnly:true},
+  'categorical Material alone must remain renderable without becoming numeric composite strength')
+assert.deepEqual(cpuCompositeFixture({energy:Number.NaN}), {normalized:0,hasAnyField:false,materialOnly:false},
+  'an all-invalid CPU composite sample must be identifiable for neutral diagnostic coloring')
+assert.equal(Math.abs(-0.75) / 1 > 0.001, true,
+  'negative selected-field values must count as active based on absolute normalized intensity')
+
 // The 2D overview must preserve missing fields as missing rather than silently
 // substituting Energy, and its statistics must use finite samples only.
 assert.match(appSource, /const value=\(s,f\)=>\[s\.energy,s\.density,s\.information,s\.entropy,s\.temperature,s\.biology\]\[f\]/,
