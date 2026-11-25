@@ -2068,6 +2068,23 @@ try {
     throw new Error("2D Multi-Slice failed to paint visible canvas pixels: " + JSON.stringify(multiSliceResult));
   }
   console.log("[acceptance] 2D Multi-Slice visible canvas painting PASS: " + JSON.stringify(multiSliceResult));
+  const sharedDisplayContract = await page.evaluate(() => ({
+    normalizerAvailable: typeof window.normalizeScientificFieldValue === "function",
+    normalization: window.getWorldField2DState?.()?.normalization ?? null,
+    energyHalf: window.normalizeScientificFieldValue?.("energy", 175) ?? null,
+    entropyFull: window.normalizeScientificFieldValue?.("entropy", 0.15) ?? null,
+    missingRemainsInvalid: window.normalizeScientificFieldValue?.("density", null) === null,
+  }));
+  if (!sharedDisplayContract.normalizerAvailable ||
+      sharedDisplayContract.normalization !== "shared-scientific-reference-ranges" ||
+      sharedDisplayContract.energyHalf !== 0.5 ||
+      sharedDisplayContract.entropyFull !== 1 ||
+      !sharedDisplayContract.missingRemainsInvalid) {
+    throw new Error("2D Multi-Slice is not using the shared scientific display contract: " +
+      JSON.stringify(sharedDisplayContract));
+  }
+  console.log("[acceptance] 2D/Infinity/Volumetric shared scientific normalization contract PASS: " +
+    JSON.stringify(sharedDisplayContract));
   console.log("[acceptance] hidden renderer pause/resume, Fly Camera control preservation, adaptive DPR diagnostics PASS");
 
   // Bottom-bar counters must describe the selected runtime, not the unrelated legacy 2D grid.
@@ -2509,6 +2526,7 @@ try {
     throw new Error("3D volumetric field did not render sampled cells");
   }
   if (field3dDiagnostic.renderer !== "three-webgl-instanced-volume" ||
+      field3dDiagnostic.normalization !== "shared-scientific-reference-ranges" ||
       field3dDiagnostic.true3D !== true ||
       field3dDiagnostic.meshInstances <= 0 ||
       field3dDiagnostic.drawCalls <= 0 ||
@@ -5262,6 +5280,7 @@ try {
       const state = window.getWorldField3DState?.();
       return state?.field === field &&
         state?.renderer === "canvas2d-isometric-preview" &&
+        state?.normalization === "shared-scientific-reference-ranges" &&
         state?.true3D === false && state?.ready === true &&
         Number(state.renderedCells) > 0 &&
         Number(state.sampleCount) > 0;
@@ -5295,6 +5314,7 @@ try {
     });
     if (result.error || result.state?.field !== target.field ||
         result.state?.renderer !== "canvas2d-isometric-preview" ||
+        result.state?.normalization !== "shared-scientific-reference-ranges" ||
         result.state?.true3D !== false ||
         result.state?.renderedCells <= 0 ||
         result.canvas?.display === "none" ||
