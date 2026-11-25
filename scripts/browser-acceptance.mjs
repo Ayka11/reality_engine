@@ -4918,27 +4918,46 @@ try {
         typeof window.fieldSetMatMode !== "function") {
       return { error: "Greedy surface preview UI is not wired" };
     }
-    // Start from field-color mode so the UI must explicitly select material mode.
-    window.fieldSetMatMode("field");
-    button.click();
-    const activeState = window.getGreedyMeshingState?.();
-    const active = {
-      mode: window.currentRenderMode,
-      buttonPressed: button.getAttribute("aria-pressed"),
-      chunkCanvasDisplay: getComputedStyle(document.getElementById("c3dChunkField")).display,
-      authoritativeCanvasDisplay: getComputedStyle(document.getElementById("c3dField")).display,
-      activeState,
-      rendererMode: window.getGreedyMeshingState?.()?.mode,
+    const trace = [];
+    const originalSetGreedy = window.setGreedyMeshingEnabled;
+    const originalSetMatMode = window.fieldSetMatMode;
+    window.setGreedyMeshingEnabled = (enabled) => {
+      const result = originalSetGreedy?.(enabled);
+      trace.push({ operation: "greedy", enabled, result, state: window.getGreedyMeshingState?.() });
+      return result;
     };
-    button.click();
-    const restored = {
-      mode: window.currentRenderMode,
-      buttonPressed: button.getAttribute("aria-pressed"),
-      chunkCanvasDisplay: getComputedStyle(document.getElementById("c3dChunkField")).display,
-      authoritativeCanvasDisplay: getComputedStyle(document.getElementById("c3dField")).display,
-      greedyState: window.getGreedyMeshingState?.(),
+    window.fieldSetMatMode = (mode) => {
+      originalSetMatMode?.(mode);
+      trace.push({ operation: "material-mode", mode, state: window.getGreedyMeshingState?.() });
     };
-    return { previousMode, active, restored };
+    let active;
+    let restored;
+    try {
+      // Start from field-color mode so the UI must explicitly select material mode.
+      window.fieldSetMatMode("field");
+      button.click();
+      const activeState = window.getGreedyMeshingState?.();
+      active = {
+        mode: window.currentRenderMode,
+        buttonPressed: button.getAttribute("aria-pressed"),
+        chunkCanvasDisplay: getComputedStyle(document.getElementById("c3dChunkField")).display,
+        authoritativeCanvasDisplay: getComputedStyle(document.getElementById("c3dField")).display,
+        activeState,
+        rendererMode: activeState?.mode,
+      };
+      button.click();
+      restored = {
+        mode: window.currentRenderMode,
+        buttonPressed: button.getAttribute("aria-pressed"),
+        chunkCanvasDisplay: getComputedStyle(document.getElementById("c3dChunkField")).display,
+        authoritativeCanvasDisplay: getComputedStyle(document.getElementById("c3dField")).display,
+        greedyState: window.getGreedyMeshingState?.(),
+      };
+    } finally {
+      window.setGreedyMeshingEnabled = originalSetGreedy;
+      window.fieldSetMatMode = originalSetMatMode;
+    }
+    return { previousMode, active, restored, trace };
   });
   if (greedyPreviewUI.error) throw new Error(greedyPreviewUI.error);
   if (greedyPreviewUI.active.mode !== "field3d" ||
