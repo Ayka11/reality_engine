@@ -625,7 +625,13 @@ function colorOf(l,t){
       ? materialColors[t]
       : [127,135,148];
   }
+  const scientificFields=['energy','density','information','entropy','temperature','biology'];
+  const field=scientificFields[l];
+  if(field&&typeof window.scientificFieldPaletteColor==='function'){
+    return window.scientificFieldPaletteColor(field,t);
+  }
   t=clamp(t,0,1);
+  // Legacy fallback is retained only until the shared connector is ready.
   // Energy: indigo → electric blue → cyan → orange → white-hot
   if(l===0){
     if(t<0.12){const s=t/0.12;return[s*30|0,s*20|0,(40+s*160)|0];}
