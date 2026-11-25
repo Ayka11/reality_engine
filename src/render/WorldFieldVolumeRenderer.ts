@@ -150,6 +150,9 @@ export class WorldFieldVolumeRenderer {
   private cameraFramed = false
   private cameraInteracted = false
   private lastFramedRadius = 0
+  private materialMode: 'field' | 'material' | 'height' = 'field'
+  private cameraPreset: 'orbit' | 'top' | 'iso' | 'street' | 'fly' = 'orbit'
+  private lastFrame: WorldFieldVolumeFrame | null = null
   private readonly matrix = new THREE.Matrix4()
   private readonly position = new THREE.Vector3()
   private readonly scale = new THREE.Vector3()
@@ -212,6 +215,32 @@ export class WorldFieldVolumeRenderer {
     this.resize()
   }
 
+  setMaterialMode(mode: 'field' | 'material' | 'height') {
+    this.materialMode = mode
+    if (this.lastFrame) this.render(this.lastFrame)
+    else this.draw()
+    return this.materialMode
+  }
+
+  setCameraPreset(preset: 'orbit' | 'top' | 'iso' | 'street' | 'fly') {
+    this.cameraPreset = preset
+    const target = this.controls.target.clone()
+    const distance = Math.max(this.controls.minDistance, Math.min(this.controls.maxDistance, this.camera.position.distanceTo(target) || 24))
+    const direction = preset === 'top'
+      ? new THREE.Vector3(0.001, 1, 0.001)
+      : preset === 'street' || preset === 'fly'
+        ? new THREE.Vector3(0.001, 0.16, 1)
+        : preset === 'iso'
+          ? new THREE.Vector3(1, 0.82, 1)
+          : new THREE.Vector3(1, 0.62, 1)
+    this.camera.position.copy(target).addScaledVector(direction.normalize(), distance)
+    this.camera.lookAt(target)
+    this.controls.update()
+    this.cameraInteracted = true
+    this.draw()
+    return this.cameraPreset
+  }
+
   resize(): boolean {
     const rect = this.renderer.domElement.getBoundingClientRect()
     if (rect.width < 2 || rect.height < 2) return false
@@ -230,6 +259,7 @@ export class WorldFieldVolumeRenderer {
   }
 
   render(frame: WorldFieldVolumeFrame): WorldFieldVolumeResult {
+    this.lastFrame = frame
     this.volumeDiagnostics = {
       sampleCount: 0,
       renderedCells: 0,
@@ -459,7 +489,14 @@ export class WorldFieldVolumeRenderer {
           this.matrix.compose(this.position, this.quaternion, this.scale)
           this.mesh.setMatrixAt(renderedCells, this.matrix)
 
-          if (selectedFieldIndex >= 0) {
+          if (this.materialMode === 'material') {
+            if (selectedFieldIndex === 6 && rawValue !== null) this.color.setHex(materialClassColor(selectedRawValue))
+            else this.color.setHex(0x8a8f98)
+          } else if (this.materialMode === 'height') {
+            const verticalRange = Math.max(1, Number(frame.view.visibleRadius) * 2)
+            const heightT = THREE.MathUtils.clamp((sliceY - (centerY - verticalRange / 2)) / verticalRange, 0, 1)
+            this.color.setHSL(0.68 - heightT * 0.68, 0.82, 0.28 + heightT * 0.34)
+          } else if (selectedFieldIndex >= 0) {
             if (rawValue === null) this.color.setHex(0x7f8794)
             else if (selectedFieldIndex === 6) this.color.setHex(materialClassColor(selectedRawValue))
             else this.color.setHex(palette[0]).lerp(this.highColor.setHex(palette[1]), normalized)
@@ -637,6 +674,8 @@ export class WorldFieldVolumeRenderer {
       canvasWidth: this.renderer.domElement.width,
       canvasHeight: this.renderer.domElement.height,
       meshInstances: this.mesh?.count ?? 0,
+      materialMode: this.materialMode,
+      cameraPreset: this.cameraPreset,
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,
       volume: {
@@ -662,6 +701,8 @@ export class WorldFieldVolumeRenderer {
       rotating: this.controls.enableRotate,
       zooming: this.controls.enableZoom,
       panning: this.controls.enablePan,
+      materialMode: this.materialMode,
+      cameraPreset: this.cameraPreset,
       cameraPosition: [position.x, position.y, position.z] as [number, number, number],
       target: [target.x, target.y, target.z] as [number, number, number],
       distance: position.distanceTo(target),
