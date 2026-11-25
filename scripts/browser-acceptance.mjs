@@ -2752,7 +2752,7 @@ try {
       })]),
     ], -1, "All Fields"));
     assert(composite.ready && composite.renderedCells === 1 &&
-      Math.abs(composite.volume.fieldValues.mean - (2 / 3)) < 1e-6 &&
+      Math.abs(composite.volume.fieldValues.mean - ((0.5 / 350) / 3)) < 1e-9 &&
       composite.volume.fieldProfiles.energy.sampleCount === 1 &&
       composite.volume.fieldProfiles.density.sampleCount === 0 &&
       composite.volume.fieldProfiles.information.sampleCount === 1 &&
