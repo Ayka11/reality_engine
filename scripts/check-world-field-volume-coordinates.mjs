@@ -324,7 +324,7 @@ assert.equal(emptyFixture.length, 0, 'all-invalid 2D fields must expose no finit
 
 assert.match(appSource, /const lift=Math\.max\(0,Math\.min\(depthStep\*\.9,normalized\*depthStep\*2\)\)/,
   'CPU lift must use valid numeric composite intensity and must not use categorical Material as a numeric scalar')
-assert.match(appSource, /\+\(0\.22\+normalized\*\.72\)\)/,
+assert.match(appSource, /0\.22\s*\+\s*normalized\s*\*\s*\.72/,
   'CPU opacity must use the same numeric composite intensity as lift')
 assert.match(appSource, /id="layerM" onclick="setLayer\(6\)"/,
   'Material field control must be present in the layer toolbar')
