@@ -48,7 +48,7 @@ import { civilizationRuntime, type CivilizationType } from '../worldLibrary/Civi
 import { productionInfrastructureRuntime } from '../worldLibrary/ProductionInfrastructureRuntime'
 import { resolveWorldLibraryEntry, resourceVisualKind, visualKindToWorldObject } from '../worldLibrary/WorldLibraryAdapter'
 import { normalizeScientificFieldValue } from '../infinity/ScientificFieldDisplay'
-import { scientificFieldPaletteHex } from '../infinity/ScientificFieldPalette'
+import { scientificFieldPaletteHex, scientificFieldCompositeHex } from '../infinity/ScientificFieldPalette'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number; edgeLodSignature: string }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -2403,15 +2403,15 @@ export class InfiniteWorldRenderer {
           // visualization and never mutates or rescales the physical field.
           const field = this.#fieldSampler.sample(originX + gx, h, originZ + gz)
           if (this.#scientificField === 'all') {
-            const density = normalizeScientificFieldValue('density', field.density) ?? 0
-            const biology = normalizeScientificFieldValue('biology', field.biology) ?? 0
-            const entropy = normalizeScientificFieldValue('entropy', field.entropy) ?? 0
-            const energy = normalizeScientificFieldValue('energy', field.energy) ?? 0
-            const information = normalizeScientificFieldValue('information', field.information) ?? 0
-            const temperature = normalizeScientificFieldValue('temperature', field.temperature) ?? 0
-            const hue = THREE.MathUtils.clamp(0.62 - density * 0.24 + biology * 0.12 - entropy * 0.16, 0, 1)
-            const brightness = 0.25 + (energy * 0.35 + information * 0.25 + temperature * 0.4) * 0.28
-            color.setHSL(hue, 0.82, brightness)
+            const compositeColor = scientificFieldCompositeHex({
+              energy: normalizeScientificFieldValue('energy', field.energy),
+              density: normalizeScientificFieldValue('density', field.density),
+              information: normalizeScientificFieldValue('information', field.information),
+              entropy: normalizeScientificFieldValue('entropy', field.entropy),
+              temperature: normalizeScientificFieldValue('temperature', field.temperature),
+              biology: normalizeScientificFieldValue('biology', field.biology),
+            })
+            color.setHex(compositeColor ?? 0x7f8794)
           } else {
             const key = this.#scientificField
             const normalized = normalizeScientificFieldValue(key, field[key]) ?? 0
