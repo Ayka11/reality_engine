@@ -228,11 +228,17 @@ export class WorldFieldVolumeRenderer {
     const distance = Math.max(this.controls.minDistance, Math.min(this.controls.maxDistance, this.camera.position.distanceTo(target) || 24))
     const direction = preset === 'top'
       ? new THREE.Vector3(0.001, 1, 0.001)
-      : preset === 'street' || preset === 'fly'
-        ? new THREE.Vector3(0.001, 0.16, 1)
-        : preset === 'iso'
-          ? new THREE.Vector3(1, 0.82, 1)
-          : new THREE.Vector3(1, 0.62, 1)
+      : preset === 'street'
+        ? new THREE.Vector3(0.001, 0.12, 1)
+        : preset === 'fly'
+          ? new THREE.Vector3(0.42, 0.72, 0.55)
+          : preset === 'iso'
+            ? new THREE.Vector3(1, 0.82, 1)
+            : new THREE.Vector3(1, 0.62, 1)
+    // A vertical camera direction is parallel to the default Y-up vector.
+    // Give the top view a stable Z-up screen orientation before OrbitControls
+    // derives its spherical state; restore the conventional up axis otherwise.
+    this.camera.up.set(0, 0, preset === 'top' ? -1 : 1)
     this.camera.position.copy(target).addScaledVector(direction.normalize(), distance)
     this.camera.lookAt(target)
     this.controls.update()
@@ -704,6 +710,7 @@ export class WorldFieldVolumeRenderer {
       materialMode: this.materialMode,
       cameraPreset: this.cameraPreset,
       cameraPosition: [position.x, position.y, position.z] as [number, number, number],
+      cameraUp: [this.camera.up.x, this.camera.up.y, this.camera.up.z] as [number, number, number],
       target: [target.x, target.y, target.z] as [number, number, number],
       distance: position.distanceTo(target),
     }
