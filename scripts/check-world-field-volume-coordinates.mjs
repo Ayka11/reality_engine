@@ -265,7 +265,7 @@ assert.match(appSource, /const selectedRaw=fieldIndexSafe>=0\?sample\[props\[fie
 assert.match(appSource, /const selectedValueValid=fieldIndexSafe<0\|\|\(fieldIndexSafe===6\?materialValid:typeof selectedRaw==='number'&&Number\.isFinite\(selectedRaw\)\)/,
   'CPU fallback must distinguish invalid selected numeric samples and invalid Material category codes')
 
-assert.match(appSource, /const fieldValidity=props\.map\(\(property,index\)=>index===6\?/,
+assert.match(appSource, /const fieldValidity=props\.map\(\(property,index\)=>index===6\s*\?/,
   'CPU composite mode must retain per-field validity instead of turning missing fields into zero measurements')
 assert.match(appSource, /const validNumericContributions=numericContributions\.filter\(\(value,index\)=>fieldValidity\[index\]\)/,
   'CPU composite normalization must average only valid numeric fields')
