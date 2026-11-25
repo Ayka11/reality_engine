@@ -2075,8 +2075,12 @@ try {
     entropyFull: window.normalizeScientificFieldValue?.("entropy", 0.15) ?? null,
     missingRemainsInvalid: window.normalizeScientificFieldValue?.("density", null) === null,
     paletteAvailable: typeof window.scientificFieldPaletteColor === "function",
+    compositePaletteAvailable: typeof window.scientificFieldCompositeColor === "function",
     energyPaletteMidpoint: window.scientificFieldPaletteColor?.("energy", 0.5) ?? null,
     densityPaletteMidpoint: window.scientificFieldPaletteColor?.("density", 0.5) ?? null,
+    compositePaletteSample: window.scientificFieldCompositeColor?.({
+      energy: 0.5, density: 0, information: null, entropy: 1, temperature: Number.NaN, biology: 0.25,
+    }) ?? null,
   }));
   if (!sharedDisplayContract.normalizerAvailable ||
       sharedDisplayContract.normalization !== "shared-scientific-reference-ranges" ||
@@ -2084,12 +2088,16 @@ try {
       sharedDisplayContract.entropyFull !== 1 ||
       !sharedDisplayContract.missingRemainsInvalid ||
       !sharedDisplayContract.paletteAvailable ||
+      !sharedDisplayContract.compositePaletteAvailable ||
+      !Array.isArray(sharedDisplayContract.compositePaletteSample) ||
+      sharedDisplayContract.compositePaletteSample.length !== 3 ||
+      sharedDisplayContract.compositePaletteSample.some(value => !Number.isInteger(value) || value < 0 || value > 255) ||
       JSON.stringify(sharedDisplayContract.energyPaletteMidpoint) !== JSON.stringify([140, 117, 111]) ||
       JSON.stringify(sharedDisplayContract.densityPaletteMidpoint) !== JSON.stringify([63, 145, 121])) {
     throw new Error("2D Multi-Slice is not using the shared scientific display contract: " +
       JSON.stringify(sharedDisplayContract));
   }
-  console.log("[acceptance] 2D/Infinity/Volumetric shared normalization and palette contract PASS: " +
+  console.log("[acceptance] 2D/Infinity/Volumetric shared normalization, individual palette and composite palette contract PASS: " +
     JSON.stringify(sharedDisplayContract));
   console.log("[acceptance] hidden renderer pause/resume, Fly Camera control preservation, adaptive DPR diagnostics PASS");
 
