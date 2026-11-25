@@ -52,6 +52,31 @@ const pixel = contract.worldToSlice(world.x, world.z, 100, 100);
 assert.ok(Math.abs(pixel.x - 50) < 1e-9);
 assert.ok(Math.abs(pixel.y - 50) < 1e-9);
 
+// All 3D renderers share one display-only normalization contract. These
+// reference scales must not be redefined independently in renderer code.
+const displayMod = await load("src/infinity/ScientificFieldDisplay.ts");
+const { SCIENTIFIC_FIELD_DISPLAY_RANGES, normalizeScientificFieldValue } = displayMod;
+assert.deepEqual(SCIENTIFIC_FIELD_DISPLAY_RANGES, {
+  energy: 350, density: 1, information: 80, entropy: 0.15, temperature: 300, biology: 1,
+});
+for (const [field, range] of Object.entries(SCIENTIFIC_FIELD_DISPLAY_RANGES)) {
+  assert.equal(normalizeScientificFieldValue(field, 0), 0, field + " zero must normalize to zero");
+  assert.equal(normalizeScientificFieldValue(field, range), 1, field + " reference range must normalize to one");
+  assert.equal(normalizeScientificFieldValue(field, range * 2), 1, field + " values above reference range must saturate");
+  assert.equal(normalizeScientificFieldValue(field, -range), 0, field + " negative values must follow the shared lower clamp");
+  assert.equal(normalizeScientificFieldValue(field, Number.NaN), null, field + " NaN must remain invalid");
+  assert.equal(normalizeScientificFieldValue(field, Number.POSITIVE_INFINITY), null, field + " infinity must remain invalid");
+  assert.equal(normalizeScientificFieldValue(field, null), null, field + " missing values must remain invalid");
+}
+const infinityRendererSource = await readFile(new URL("src/render/InfiniteWorldRenderer.ts", root), "utf8");
+const volumeRendererSource = await readFile(new URL("src/render/WorldFieldVolumeRenderer.ts", root), "utf8");
+assert.ok(infinityRendererSource.includes("normalizeScientificFieldValue"),
+  "Infinity terrain must consume shared scientific display normalization");
+assert.ok(volumeRendererSource.includes("normalizeScientificFieldValue"),
+  "Volumetric renderer must consume shared scientific display normalization");
+assert.ok(!volumeRendererSource.includes("const fieldMaxima"),
+  "Volumetric renderer must not dynamically normalize against each viewport sample set");
+
 const gridConstants = await load("src/core/ChunkGrid.ts");
 const { F, NF, chunkKey } = gridConstants;
 const workerProviderMod = await load("src/infinity/WorkerWorldFieldChunkProvider.ts", [[
