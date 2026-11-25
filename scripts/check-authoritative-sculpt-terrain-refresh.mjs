@@ -73,8 +73,14 @@ assert.match(terrainBuilder, /if\s*\(this\.#materialMode\s*===\s*'field'\)[\s\S]
   "field visualization must sample the authoritative scientific field");
 assert.match(terrainBuilder, /const\s+field\s*=\s*this\.#fieldSampler\.sample\(/,
   "field visualization must sample the authoritative scientific field");
-assert.match(terrainBuilder, /this\.#scientificField\s*===\s*'all'[\s\S]*?field\.density[\s\S]*?field\.biology[\s\S]*?field\.entropy[\s\S]*?field\.energy[\s\S]*?field\.information[\s\S]*?field\.temperature/,
-  "composite All Fields visualization must derive vertex color from all six sampled scientific scalars");
+const compositeBranch = terrainBuilder.match(/if\s*\(this\.#scientificField\s*===\s*'all'\)\s*\{([\s\S]*?)\n\s*\} else \{/);
+assert.ok(compositeBranch, "composite All Fields visualization branch must exist");
+for (const field of ["energy", "density", "information", "entropy", "temperature", "biology"]) {
+  assert.ok(compositeBranch[1].includes(`${field}: normalizeScientificFieldValue('${field}', field.${field})`),
+    `composite All Fields visualization must normalize the sampled ${field} scalar`);
+}
+assert.match(compositeBranch[1], /scientificFieldCompositeHex\s*\(/,
+  "composite All Fields visualization must use the shared scientific palette mixer");
 assert.match(terrainBuilder, /const\s+key\s*=\s*this\.#scientificField[\s\S]*?normalizeScientificFieldValue\(key, field\[key\]\)[\s\S]*?color\.setHex\(scientificFieldPaletteHex\(key, normalized\)\)/,
   "single-field visualization must normalize the selected sampled scalar and map it through the shared field palette");
 
