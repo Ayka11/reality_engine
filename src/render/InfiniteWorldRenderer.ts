@@ -48,6 +48,7 @@ import { civilizationRuntime, type CivilizationType } from '../worldLibrary/Civi
 import { productionInfrastructureRuntime } from '../worldLibrary/ProductionInfrastructureRuntime'
 import { resolveWorldLibraryEntry, resourceVisualKind, visualKindToWorldObject } from '../worldLibrary/WorldLibraryAdapter'
 import { normalizeScientificFieldValue } from '../infinity/ScientificFieldDisplay'
+import { scientificFieldPaletteHex } from '../infinity/ScientificFieldPalette'
 
 type TerrainPatch = { group: THREE.Group; chunk: WorldChunk; lod: number; edgeLodSignature: string }
 type ObjectMesh = { object: WorldObject; group: THREE.Group }
@@ -2401,10 +2402,6 @@ export class InfiniteWorldRenderer {
           // Each scalar uses a domain-specific display range; this affects only
           // visualization and never mutates or rescales the physical field.
           const field = this.#fieldSampler.sample(originX + gx, h, originZ + gz)
-          const palettes: Record<string, number> = {
-            energy: 0x4f8cff, density: 0x42d6c5, information: 0xb58cff,
-            entropy: 0xff647c, temperature: 0xffb347, biology: 0x74d66d,
-          }
           if (this.#scientificField === 'all') {
             const density = normalizeScientificFieldValue('density', field.density) ?? 0
             const biology = normalizeScientificFieldValue('biology', field.biology) ?? 0
@@ -2418,8 +2415,7 @@ export class InfiniteWorldRenderer {
           } else {
             const key = this.#scientificField
             const normalized = normalizeScientificFieldValue(key, field[key]) ?? 0
-            color.setHex(palettes[key])
-            color.lerp(new THREE.Color(0xffffff), normalized * 0.72)
+            color.setHex(scientificFieldPaletteHex(key, normalized))
           }
         } else if (this.#materialMode === 'height') {
           const t = Math.max(0, Math.min(1, (h + 20) / 120))
