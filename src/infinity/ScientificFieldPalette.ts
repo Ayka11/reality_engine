@@ -38,3 +38,34 @@ export function scientificFieldPaletteHex(
   const [red, green, blue] = scientificFieldPaletteColor(field, normalized)
   return (red << 16) | (green << 8) | blue
 }
+
+/**
+ * Equal-weight composite of the valid numeric scientific dimensions.
+ * Values are already normalized with ScientificFieldDisplay; missing or
+ * non-finite dimensions are excluded, while measured zero remains valid.
+ * Returned channels are sRGB bytes for canvas diagnostics and Three.js hex.
+ */
+export function scientificFieldCompositeColor(
+  values: Partial<Record<ScientificPaletteField, number | null | undefined>>,
+): readonly [number, number, number] | null {
+  let red = 0, green = 0, blue = 0, count = 0
+  for (const field of Object.keys(SCIENTIFIC_FIELD_PALETTES) as ScientificPaletteField[]) {
+    const value = values[field]
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue
+    const [r, g, b] = scientificFieldPaletteColor(field, value)
+    red += r
+    green += g
+    blue += b
+    count++
+  }
+  return count > 0
+    ? [Math.round(red / count), Math.round(green / count), Math.round(blue / count)]
+    : null
+}
+
+export function scientificFieldCompositeHex(
+  values: Partial<Record<ScientificPaletteField, number | null | undefined>>,
+): number | null {
+  const color = scientificFieldCompositeColor(values)
+  return color ? (color[0] << 16) | (color[1] << 8) | color[2] : null
+}
