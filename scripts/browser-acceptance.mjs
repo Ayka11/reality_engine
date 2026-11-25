@@ -2742,6 +2742,29 @@ try {
       "All Fields must average only valid numeric fields and keep Material categorical",
       composite);
 
+    // A measured zero is still a valid scientific dimension. Its low-end
+    // palette color must participate in the composite instead of disappearing
+    // as if the field were missing.
+    const zeroDensityComposite = render(makeFrame([
+      slice(0, [makeSample({
+        energy: 0.5, density: 0, information: null,
+        entropy: null, temperature: null, biology: null, material: null,
+      })]),
+    ], -1, "All Fields"));
+    const zeroDensityColor = window.worldFieldVolumeRenderer?.interactionDiagnostics?.()?.instanceColorSamples?.[0];
+    const missingDensityComposite = render(makeFrame([
+      slice(0, [makeSample({
+        energy: 0.5, density: null, information: null,
+        entropy: null, temperature: null, biology: null, material: null,
+      })]),
+    ], -1, "All Fields"));
+    const missingDensityColor = window.worldFieldVolumeRenderer?.interactionDiagnostics?.()?.instanceColorSamples?.[0];
+    assert(zeroDensityComposite.ready && missingDensityComposite.ready &&
+      Array.isArray(zeroDensityColor) && Array.isArray(missingDensityColor) &&
+      Math.hypot(...zeroDensityColor.map((value, index) => value - missingDensityColor[index])) > 0.01,
+      "All Fields composite must retain a valid zero-valued field as a visible palette contribution",
+      { zeroDensityComposite, missingDensityComposite, zeroDensityColor, missingDensityColor });
+
     const recovered = render(makeFrame([slice(0, [makeSample()])]));
     const recoveredDiagnostics = diagnostics();
     assert(recovered.ready && recovered.renderedCells === 1 &&
