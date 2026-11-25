@@ -5068,6 +5068,155 @@ try {
   // full world renderer in the same Chromium process.
   await new Promise(resolve => setTimeout(resolve, 750));
 
+  // Boot a second independent page with WebGL disabled only for the scientific
+  // volume canvas. The main Infinite World canvas remains WebGL-enabled, allowing
+  // the authoritative CPU isometric fallback to be tested through its real UI path.
+  const fallbackPageErrors = [];
+  const fallbackPage = await browser.newPage({ viewport: { width: 1280, height: 820 } });
+  fallbackPage.on("console", (msg) => console.log(`[cpu-fallback:${msg.type()}] ${msg.text()}`));
+  fallbackPage.on("pageerror", (error) => {
+    fallbackPageErrors.push(error.stack || error.message);
+    console.log(`[cpu-fallback:pageerror] ${error.stack || error.message}`);
+  });
+  await fallbackPage.addInitScript(() => {
+    const nativeGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...args) {
+      if (this.id === "c3dField" &&
+          typeof type === "string" &&
+          /^(webgl2?|experimental-webgl)$/i.test(type)) {
+        return null;
+      }
+      return nativeGetContext.call(this, type, ...args);
+    };
+  });
+  await fallbackPage.addInitScript(() => {
+    if (sessionStorage.getItem("reality-engine-cpu-fallback-cleaned") !== "1") {
+      localStorage.clear();
+      sessionStorage.setItem("reality-engine-cpu-fallback-cleaned", "1");
+    }
+  });
+  console.log("[acceptance] opening isolated CPU-only scientific volume page");
+  await fallbackPage.goto(`http://127.0.0.1:${port}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 30000,
+  });
+  await fallbackPage.waitForSelector("#c3d");
+  await fallbackPage.waitForFunction(() =>
+    typeof window.worldFieldViewWindow === "function" &&
+    typeof window.getWorldViewContract === "function" &&
+    typeof window.renderField3D === "function"
+  );
+  await fallbackPage.locator("#tabField3d").click();
+  await fallbackPage.waitForFunction(() => {
+    const state = window.getWorldField3DState?.();
+    return state?.renderer === "canvas2d-isometric-preview" &&
+      state?.true3D === false && state?.ready === true &&
+      Number(state.renderedCells) > 0;
+  }, null, { timeout: 15000 });
+
+  const cpuFallbackModes = [
+    { layer: 0, field: "Energy" },
+    { layer: 1, field: "Density" },
+    { layer: 2, field: "Information" },
+    { layer: 3, field: "Entropy" },
+    { layer: 4, field: "Temperature" },
+    { layer: 5, field: "Biology" },
+    { layer: 6, field: "Material" },
+    { layer: -1, field: "All Fields" },
+  ];
+  const cpuFallbackResults = [];
+  for (const target of cpuFallbackModes) {
+    await fallbackPage.evaluate(({ layer, field }) => {
+      if (window.getWorldField3DState?.()?.field !== field) {
+        if (typeof window.setLayer !== "function" || window.setLayer(layer) !== true) {
+          throw new Error(`Could not select CPU fallback field ${field}`);
+        }
+      } else {
+        window.renderField3D?.();
+      }
+    }, target);
+    await fallbackPage.waitForFunction((field) => {
+      const state = window.getWorldField3DState?.();
+      return state?.field === field &&
+        state?.renderer === "canvas2d-isometric-preview" &&
+        state?.true3D === false && state?.ready === true &&
+        Number(state.renderedCells) > 0 &&
+        Number(state.sampleCount) > 0;
+    }, target.field, { timeout: 10000 });
+    const result = await fallbackPage.evaluate(() => {
+      const canvas = document.getElementById("c3dField");
+      const context = canvas?.getContext("2d");
+      const state = window.getWorldField3DState?.();
+      if (!canvas || !context) return { error: "CPU fallback canvas has no 2D context", state };
+      const image = context.getImageData(0, 0, canvas.width, canvas.height);
+      const colors = new Set();
+      let nonTransparentPixels = 0;
+      const stride = Math.max(1, Math.floor(image.data.length / 16000 / 4));
+      for (let pixel = 0; pixel < image.data.length / 4; pixel += stride) {
+        const offset = pixel * 4;
+        if (image.data[offset + 3] > 0) nonTransparentPixels++;
+        colors.add((image.data[offset] << 16) | (image.data[offset + 1] << 8) | image.data[offset + 2]);
+      }
+      return {
+        state,
+        canvas: {
+          width: canvas.width,
+          height: canvas.height,
+          display: getComputedStyle(canvas).display,
+          context2d: true,
+          sampledColorCount: colors.size,
+          nonTransparentPixels,
+        },
+        webglRendererAbsent: typeof window.renderWorldFieldVolume !== "function",
+      };
+    });
+    if (result.error || result.state?.field !== target.field ||
+        result.state?.renderer !== "canvas2d-isometric-preview" ||
+        result.state?.true3D !== false ||
+        result.state?.renderedCells <= 0 ||
+        result.canvas?.display === "none" ||
+        result.canvas?.sampledColorCount < 3 ||
+        result.canvas?.nonTransparentPixels <= 100 ||
+        result.webglRendererAbsent !== true) {
+      throw new Error(`CPU fallback failed for ${target.field}: ` + JSON.stringify(result));
+    }
+    cpuFallbackResults.push({
+      field: target.field,
+      renderedCells: result.state.renderedCells,
+      sampleCount: result.state.sampleCount,
+      activeCells: result.state.activeCells,
+      sampledColorCount: result.canvas.sampledColorCount,
+    });
+  }
+
+  const cpuFallbackResizeBefore = await fallbackPage.locator("#c3dField").evaluate(canvas => ({
+    width: canvas.width, height: canvas.height,
+  }));
+  await fallbackPage.setViewportSize({ width: 1080, height: 760 });
+  await fallbackPage.waitForFunction((before) => {
+    const canvas = document.getElementById("c3dField");
+    const state = window.getWorldField3DState?.();
+    return !!canvas && (canvas.width !== before.width || canvas.height !== before.height) &&
+      state?.renderer === "canvas2d-isometric-preview" && state?.ready === true &&
+      state?.renderedCells > 0;
+  }, cpuFallbackResizeBefore, { timeout: 10000 });
+  await fallbackPage.locator("#tab2d").click();
+  await fallbackPage.waitForFunction(() => window.currentRenderMode === "2d");
+  await fallbackPage.locator("#tabField3d").click();
+  await fallbackPage.waitForFunction(() => {
+    const state = window.getWorldField3DState?.();
+    return state?.renderer === "canvas2d-isometric-preview" &&
+      state?.ready === true && state?.renderedCells > 0;
+  }, null, { timeout: 10000 });
+  if (fallbackPageErrors.length > 0) {
+    throw new Error("CPU fallback page raised uncaught browser errors: " + JSON.stringify(fallbackPageErrors));
+  }
+  console.log("[acceptance] CPU-only isometric fallback: seven profiles, All Fields, pixels, resize and mode recovery PASS: " +
+    JSON.stringify({ fields: cpuFallbackResults, resize: cpuFallbackResizeBefore }));
+
+  await fallbackPage.close();
+  await new Promise(resolve => setTimeout(resolve, 500));
+
   // Test Compose World in a fresh, slightly smaller browser page. This keeps the
   // independent generation contract while reducing transient GPU framebuffer pressure.
   const composePage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -5414,8 +5563,12 @@ try {
 
   await composePage.close();
 
-  if (uncaughtPageErrors.length > 0 || composerPageErrors.length > 0) {
-    throw new Error(`Uncaught browser runtime errors: ${JSON.stringify({ primary: uncaughtPageErrors, composer: composerPageErrors })}`);
+  if (uncaughtPageErrors.length > 0 || fallbackPageErrors.length > 0 || composerPageErrors.length > 0) {
+    throw new Error(`Uncaught browser runtime errors: ${JSON.stringify({
+      primary: uncaughtPageErrors,
+      cpuFallback: fallbackPageErrors,
+      composer: composerPageErrors,
+    })}`);
   }
 
   acceptancePassed = true;
