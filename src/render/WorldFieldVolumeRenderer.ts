@@ -239,7 +239,7 @@ export class WorldFieldVolumeRenderer {
     // A vertical camera direction is parallel to the default Y-up vector.
     // Give the top view a stable Z-up screen orientation before OrbitControls
     // derives its spherical state; restore the conventional up axis otherwise.
-    this.camera.up.set(0, 0, preset === 'top' ? -1 : 1)
+    this.camera.up.set(0, preset === 'top' ? 0 : 1, preset === 'top' ? -1 : 0)
     this.camera.position.copy(target).addScaledVector(direction.normalize(), distance)
     this.camera.lookAt(target)
     this.controls.update()
