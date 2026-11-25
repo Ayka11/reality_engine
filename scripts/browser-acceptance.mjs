@@ -3105,6 +3105,19 @@ try {
     throw new Error("Field3D Field shading control did not restore field coloring: " +
       JSON.stringify(volumeFieldMode));
   }
+  const volumeColorSamplesDiffer = Array.isArray(volumeHeightMode?.instanceColorSamples) &&
+    Array.isArray(volumeFieldMode?.instanceColorSamples) &&
+    volumeHeightMode.instanceColorSamples.length > 0 &&
+    volumeFieldMode.instanceColorSamples.length > 0 &&
+    volumeHeightMode.instanceColorSamples.some((color, index) => {
+      const other = volumeFieldMode.instanceColorSamples[index];
+      return Array.isArray(color) && Array.isArray(other) &&
+        Math.hypot(...color.map((value, component) => value - other[component])) > 0.02;
+    });
+  if (!volumeColorSamplesDiffer) {
+    throw new Error("Field3D Height and Field modes changed the mode flag but not the visible InstancedMesh colors: " +
+      JSON.stringify({ height: volumeHeightMode, field: volumeFieldMode }));
+  }
   await page.evaluate(() => window.setCameraPreset?.("top"));
   const volumeTopCamera = await page.evaluate(() =>
     window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
