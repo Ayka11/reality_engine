@@ -16,10 +16,25 @@ const paletteCompiled = ts.transpileModule(paletteSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 })
 const paletteUrl = `data:text/javascript;base64,${Buffer.from(paletteCompiled.outputText).toString('base64')}`
-const { SCIENTIFIC_FIELD_PALETTES, scientificFieldPaletteColor, scientificFieldPaletteHex } = await import(paletteUrl)
+const { SCIENTIFIC_FIELD_PALETTES, scientificFieldPaletteColor, scientificFieldPaletteHex, scientificFieldCompositeColor, scientificFieldCompositeHex } = await import(paletteUrl)
 assert.deepEqual(Object.keys(SCIENTIFIC_FIELD_PALETTES), [
   'energy', 'density', 'information', 'entropy', 'temperature', 'biology',
 ])
+const compositeFixture = {
+  energy: 0.5, density: 0, information: null, entropy: 1,
+  temperature: Number.NaN, biology: 0.25,
+}
+const expectedComposite = ['energy', 'density', 'entropy', 'biology']
+  .map(field => scientificFieldPaletteColor(field, compositeFixture[field]))
+  .reduce((sum, rgb) => sum.map((channel, index) => channel + rgb[index]), [0, 0, 0])
+  .map(channel => Math.round(channel / 4))
+assert.deepEqual(scientificFieldCompositeColor(compositeFixture), expectedComposite,
+  'shared composite palette must average valid scientific fields equally, including zero and excluding invalids')
+assert.equal(scientificFieldCompositeHex(compositeFixture),
+  (expectedComposite[0] << 16) | (expectedComposite[1] << 8) | expectedComposite[2],
+  'shared composite RGB and hex helpers must agree')
+assert.equal(scientificFieldCompositeColor({ energy: null, density: Number.NaN }), null,
+  'shared composite palette must report no color when every scientific measurement is invalid')
 for (const [field, stops] of Object.entries(SCIENTIFIC_FIELD_PALETTES)) {
   assert.deepEqual(scientificFieldPaletteColor(field, 0), [
     (stops[0] >> 16) & 255, (stops[0] >> 8) & 255, stops[0] & 255,
