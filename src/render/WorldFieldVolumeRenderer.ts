@@ -521,13 +521,17 @@ export class WorldFieldVolumeRenderer {
                 continue
               }
               const contribution = THREE.MathUtils.clamp(Math.abs(fieldValue) / fieldMaxima[field], 0, 1)
-              if (contribution <= 0) continue
               const colors = FIELD_PALETTES[field]
+              // Every valid scientific dimension participates in the composite,
+              // including a measured zero. Weighting the palette color a second
+              // time by magnitude made weak fields disappear and over-amplified
+              // dominant fields. Normalize each field first, then average its
+              // resulting color equally with the other valid dimensions.
               this.highColor.setHex(colors[0]).lerp(this.color.setHex(colors[1]), contribution)
-              red += this.highColor.r * contribution
-              green += this.highColor.g * contribution
-              blue += this.highColor.b * contribution
-              weight += contribution
+              red += this.highColor.r
+              green += this.highColor.g
+              blue += this.highColor.b
+              weight += 1
             }
             if (weight > 0) this.color.setRGB(red / weight, green / weight, blue / weight)
             else if (finiteValues.every(value => value === null)) this.color.setHex(0x7f8794)
