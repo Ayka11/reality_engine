@@ -3133,6 +3133,10 @@ try {
   const volumeFlyCamera = await page.evaluate(() =>
     window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
   );
+  await page.evaluate(() => window.setCameraPreset?.("iso"));
+  const volumeIsoCamera = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
+  );
   const cameraDirection = (state) => {
     const delta = state.cameraPosition.map((value, index) => value - state.target[index]);
     const length = Math.hypot(...delta);
@@ -3140,10 +3144,12 @@ try {
   };
   if (!volumeStreetCamera?.cameraUp?.every(Number.isFinite) ||
       !volumeFlyCamera?.cameraUp?.every(Number.isFinite) ||
+      !volumeIsoCamera?.cameraUp?.every(Number.isFinite) ||
       Math.hypot(...cameraDirection(volumeStreetCamera).map((value, index) =>
-        value - cameraDirection(volumeFlyCamera)[index])) < 0.1) {
-    throw new Error("Field3D Street and Fly presets must produce distinct, finite camera orientations: " +
-      JSON.stringify({ street: volumeStreetCamera, fly: volumeFlyCamera }));
+        value - cameraDirection(volumeFlyCamera)[index])) < 0.1 ||
+      Math.abs(cameraDirection(volumeIsoCamera)[1] - cameraDirection(volumeFlyCamera)[1]) < 0.1) {
+    throw new Error("Field3D Street, Fly and ISO presets must produce distinct, finite camera orientations: " +
+      JSON.stringify({ street: volumeStreetCamera, fly: volumeFlyCamera, iso: volumeIsoCamera }));
   }
   await page.evaluate(() => window.setCameraPreset?.("orbit"));
 
