@@ -2434,8 +2434,8 @@ try {
   const expectedScientificFields = ["energy", "density", "information", "entropy", "temperature", "biology"];
   if (renderedWorldField.overviewLayout !== "3x2" ||
       !expectedScientificFields.every(field => renderedWorldField.overviewFields?.includes(field)) ||
-      renderedWorldField.normalization !== "visible-window-min-max") {
-    throw new Error("2D overview does not declare all six adaptive-range scientific panels: " +
+      renderedWorldField.normalization !== "shared-scientific-reference-ranges") {
+    throw new Error("2D overview does not declare all six shared-reference scientific panels: " +
       JSON.stringify(renderedWorldField));
   }
   // The 3D Infinite World must consume the same toolbar field selection, including
