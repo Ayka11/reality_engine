@@ -487,7 +487,9 @@ export class WorldFieldVolumeRenderer {
           } else if (selectedFieldIndex >= 0) {
             if (rawValue === null) this.color.setHex(0x7f8794)
             else if (selectedFieldIndex === 6) this.color.setHex(materialClassColor(selectedRawValue))
-            else this.color.setHex(scientificFieldPaletteHex(\n              fieldKey as Exclude<typeof fieldKey, 'material'>, normalized,\n            ))
+            else this.color.setHex(scientificFieldPaletteHex(
+              fieldKey as Exclude<typeof fieldKey, 'material'>, normalized,
+            ))
           } else {
             let red = 0, green = 0, blue = 0, weight = 0
             for (let field = 0; field < SCIENTIFIC_FIELD_KEYS.length; field++) {
@@ -505,13 +507,14 @@ export class WorldFieldVolumeRenderer {
               const contribution = normalizeScientificFieldValue(
                 fieldKey as Exclude<typeof fieldKey, 'material'>, fieldValue,
               ) ?? 0
-              const colors = FIELD_PALETTES[field]
               // Every valid scientific dimension participates in the composite,
               // including a measured zero. Weighting the palette color a second
               // time by magnitude made weak fields disappear and over-amplified
               // dominant fields. Normalize each field first, then average its
               // resulting color equally with the other valid dimensions.
-              this.highColor.setHex(scientificFieldPaletteHex(\n                fieldKey as Exclude<typeof fieldKey, 'material'>, contribution,\n              ))
+              this.highColor.setHex(scientificFieldPaletteHex(
+                fieldKey as Exclude<typeof fieldKey, 'material'>, contribution,
+              ))
               red += this.highColor.r
               green += this.highColor.g
               blue += this.highColor.b
