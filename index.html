@@ -1006,6 +1006,8 @@ function _getWorldField2DWindow(width, height) {
 
 function _drawWorldFieldMultiSlice(){
   const cw=canvas.width,ch=canvas.height
+  const normalizeField=window.normalizeScientificFieldValue
+  if(typeof normalizeField!=='function')return false
   const windowW=Math.max(1,Math.min(96,Math.floor(cw/8)))
   const windowH=Math.max(1,Math.min(72,Math.floor(ch/8)))
   const data=_getWorldField2DWindow(windowW,windowH)
@@ -1024,12 +1026,12 @@ function _drawWorldFieldMultiSlice(){
   if(!renderCtx)return false
   const value=(s,f)=>[s.energy,s.density,s.information,s.entropy,s.temperature,s.biology][f]
   const meta=[
-    {l:0,label:'⚡ Energy',info:'World-space energy field'},
-    {l:1,label:'🌫️ Density',info:'World-space density field'},
-    {l:2,label:'🧠 Information',info:'World-space information field'},
-    {l:3,label:'🔥 Entropy',info:'World-space entropy field'},
-    {l:4,label:'🌡️ Temperature',info:'World-space temperature field'},
-    {l:5,label:'🧬 Biology',info:'World-space biology field'}
+    {l:0,field:'energy',label:'⚡ Energy',info:'World-space energy field'},
+    {l:1,field:'density',label:'🌫️ Density',info:'World-space density field'},
+    {l:2,field:'information',label:'🧠 Information',info:'World-space information field'},
+    {l:3,field:'entropy',label:'🔥 Entropy',info:'World-space entropy field'},
+    {l:4,field:'temperature',label:'🌡️ Temperature',info:'World-space temperature field'},
+    {l:5,field:'biology',label:'🧬 Biology',info:'World-space biology field'}
   ]
   const drawField=(ox,oy,w,h,f,showStats=true)=>{
     const m=meta[f],cw2=w/data.width,ch2=h/data.height
@@ -1043,11 +1045,10 @@ function _drawWorldFieldMultiSlice(){
         max=Math.max(max,v)
       }
     }
-    const range=Math.max(1e-9,max-min)
     for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
       const v=value(data.samples[py*data.width+px],f)
-      if(!Number.isFinite(v))continue
-      const normalized=Math.max(0,Math.min(1,(v-min)/range))
+      const normalized=normalizeField(m.field,v)
+      if(normalized===null)continue
       const [r,g,b]=colorOf(m.l,normalized)
       renderCtx.fillStyle=`rgb(${r},${g},${b})`
       renderCtx.fillRect(Math.floor(ox+px*cw2),Math.floor(oy+py*ch2),Math.max(1,Math.ceil(cw2)),Math.max(1,Math.ceil(ch2)))
@@ -2598,23 +2599,11 @@ function renderField3DImpl(){
   const props=['energy','density','information','entropy','temperature','biology','material'];
   const fieldName=fieldIndex<0?'All Fields':names[fieldIndex];
   const property=fieldIndex<0?'composite':props[fieldIndex];
-  // Normalize each field against the actual visible sample window. Fixed global
-  // maxima washed out low-range fields (especially information and entropy).
-  const maxima=props.map(property=>{
-    let observed=0;
-    for(const slice of slices){
-      if(typeof slice.y!=='number'||!Number.isFinite(slice.y))continue;
-      const data=slice.data;
-      for(let py=0;py<data.height;py++)for(let px=0;px<data.width;px++){
-        const sample=data.samples[py*data.width+px];
-        if(!sample||typeof sample.x!=='number'||!Number.isFinite(sample.x)||
-           typeof sample.z!=='number'||!Number.isFinite(sample.z))continue;
-        const value=sample[property];
-        if(typeof value==='number'&&Number.isFinite(value))observed=Math.max(observed,Math.abs(value));
-      }
-    }
-    return Math.max(observed,1e-9);
-  });
+  const normalizeField=window.normalizeScientificFieldValue;
+  if(typeof normalizeField!=='function'){
+    window.__worldField3DCanvasState={ready:false,reason:'shared-field-normalization-unavailable',mode};
+    return false;
+  }
   const sampleCount=slices.reduce((total,slice)=>total+(slice.data.samples||[]).filter(Boolean).length,0);
 
   // Preferred path: render the authoritative samples as instanced 3D voxels through WebGL.
@@ -2690,7 +2679,7 @@ function renderField3DImpl(){
       const values=props.map((property,index)=>{
         const raw=sample[property];
         if(index===6)return materialValid?1:0;
-        return typeof raw==='number'&&Number.isFinite(raw)?Math.max(0,Math.min(1,Math.abs(raw)/maxima[index])):0;
+        return normalizeField(property,raw)??0;
       });
       // Material is a categorical color contribution, never a numeric
       // scalar in composite intensity, lift, opacity, or active-cell scoring.
@@ -2707,15 +2696,16 @@ function renderField3DImpl(){
       const selectedRaw=fieldIndexSafe>=0?sample[props[fieldIndexSafe]]:normalized;
       const selectedValueValid=fieldIndexSafe<0||(fieldIndexSafe===6?materialValid:typeof selectedRaw==='number'&&Number.isFinite(selectedRaw));
       const value=selectedValueValid&&typeof selectedRaw==='number'&&Number.isFinite(selectedRaw)?selectedRaw:0;
-      const compositeWeight=values.reduce((sum,value)=>sum+value,0);
+      const compositeWeight=fieldValidity.filter(Boolean).length;
       const color=fieldIndexSafe>=0
         ?(!selectedValueValid?[127,135,148]:colorOf(fieldIndexSafe,fieldIndexSafe===6?value:normalized))
         :(!fieldValidity.some(Boolean)
           ?[127,135,148]
           :compositeWeight>0
             ?values.reduce((sum,contribution,index)=>{
+              if(!fieldValidity[index])return sum;
               const part=colorOf(index,index===6?materialCode:contribution);
-              return sum.map((channel,channelIndex)=>channel+part[channelIndex]*contribution);
+              return sum.map((channel,channelIndex)=>channel+part[channelIndex]);
             },[0,0,0]).map(channel=>Math.round(channel/compositeWeight))
             :[24,34,53]);
       const sx=originX+px*cellW+py*cellW*.55;
