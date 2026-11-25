@@ -3084,6 +3084,48 @@ try {
     throw new Error("3D volumetric field canvas backing resolution was not initialized");
   }
 
+  // Visible Field3D shading and camera controls must target the authoritative
+  // volume renderer, not the hidden sparse-chunk preview renderer.
+  const volumeControlsBefore = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
+  );
+  await page.evaluate(() => window.setMatMode3D?.("height", document.getElementById("matHeight")));
+  const volumeHeightMode = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
+  );
+  if (!volumeControlsBefore || volumeHeightMode?.materialMode !== "height") {
+    throw new Error("Field3D Height shading control was not routed to the visible volume renderer: " +
+      JSON.stringify({ before: volumeControlsBefore, after: volumeHeightMode }));
+  }
+  await page.evaluate(() => window.setMatMode3D?.("field", document.getElementById("matField")));
+  const volumeFieldMode = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
+  );
+  if (volumeFieldMode?.materialMode !== "field") {
+    throw new Error("Field3D Field shading control did not restore field coloring: " +
+      JSON.stringify(volumeFieldMode));
+  }
+  await page.evaluate(() => window.setCameraPreset?.("top"));
+  const volumeTopCamera = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
+  );
+  if (volumeTopCamera?.cameraPreset !== "top" ||
+      !volumeTopCamera.cameraPosition?.every(Number.isFinite) ||
+      Math.abs(volumeTopCamera.cameraPosition[1] - volumeTopCamera.target[1]) < 1) {
+    throw new Error("Field3D Top camera preset did not reposition the visible volume camera: " +
+      JSON.stringify(volumeTopCamera));
+  }
+  await page.evaluate(() => window.setCameraPreset?.("orbit"));
+  const volumeOrbitCamera = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
+  );
+  if (volumeOrbitCamera?.cameraPreset !== "orbit" ||
+      Math.abs(volumeOrbitCamera.cameraPosition[0] - volumeOrbitCamera.target[0]) < 1 ||
+      Math.abs(volumeOrbitCamera.cameraPosition[2] - volumeOrbitCamera.target[2]) < 1) {
+    throw new Error("Field3D Orbit camera preset did not restore an oblique view: " +
+      JSON.stringify(volumeOrbitCamera));
+  }
+
   // The selected layer must affect the field renderer, and center/slice changes must invalidate its sampling cache.
   await page.evaluate(() => {
     if (window.getWorldField3DState?.()?.field !== "Information") window.setLayer?.(2);
