@@ -269,7 +269,7 @@ assert.match(appSource, /const fieldValidity=props\.map\(\(property,index\)=>ind
   'CPU composite mode must retain per-field validity instead of turning missing fields into zero measurements')
 assert.match(appSource, /const validNumericContributions=numericContributions\.filter\(\(value,index\)=>fieldValidity\[index\]\)/,
   'CPU composite normalization must average only valid numeric fields')
-assert.match(appSource, /validNumericContributions\.length\?validNumericContributions\.reduce\(\(sum,value\)=>sum\+value,0\)\/validNumericContributions\.length:0/,
+assert.match(appSource, /validNumericContributions\.length\s*\?validNumericContributions\.reduce\(\(sum,value\)=>sum\+value,0\)\/validNumericContributions\.length\s*:0/,
   'CPU composite normalization must match WebGL when only a subset of numeric fields is present')
 assert.match(appSource, /!fieldValidity\.some\(Boolean\)\s*\?\[127,135,148\]/,
   'CPU composite rendering must use the neutral color when every field is invalid')
