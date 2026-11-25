@@ -3125,6 +3125,27 @@ try {
     throw new Error("Field3D Orbit camera preset did not restore an oblique view: " +
       JSON.stringify(volumeOrbitCamera));
   }
+  await page.evaluate(() => window.setCameraPreset?.("street"));
+  const volumeStreetCamera = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
+  );
+  await page.evaluate(() => window.setCameraPreset?.("fly"));
+  const volumeFlyCamera = await page.evaluate(() =>
+    window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
+  );
+  const cameraDirection = (state) => {
+    const delta = state.cameraPosition.map((value, index) => value - state.target[index]);
+    const length = Math.hypot(...delta);
+    return delta.map(value => value / length);
+  };
+  if (!volumeStreetCamera?.cameraUp?.every(Number.isFinite) ||
+      !volumeFlyCamera?.cameraUp?.every(Number.isFinite) ||
+      Math.hypot(...cameraDirection(volumeStreetCamera).map((value, index) =>
+        value - cameraDirection(volumeFlyCamera)[index])) < 0.1) {
+    throw new Error("Field3D Street and Fly presets must produce distinct, finite camera orientations: " +
+      JSON.stringify({ street: volumeStreetCamera, fly: volumeFlyCamera }));
+  }
+  await page.evaluate(() => window.setCameraPreset?.("orbit"));
 
   // The selected layer must affect the field renderer, and center/slice changes must invalidate its sampling cache.
   await page.evaluate(() => {
