@@ -127,6 +127,9 @@ assert.match(rendererSource, /const sampleX = finiteNumericValue\(sample\.x\)/,
   'world coordinates must not coerce missing or string values into valid positions')
 assert.match(rendererSource, /if \(finiteNumericValue\(slice\.y\) === null\) continue[\s\S]*?for \(let py = 0; py < data\.height; py\+\+\)[\s\S]*?for \(let px = 0; px < data\.width; px\+\+\)[\s\S]*?const sample = data\.samples\[py \* data\.width \+ px\][\s\S]*?if \(!sample \|\|\s*finiteNumericValue\(sample\.x\) === null \|\|\s*finiteNumericValue\(sample\.z\) === null\) continue[\s\S]*?const value = finiteNumericValue\(sample\[key\]\)/,
   'field normalization must use only coordinate-valid samples inside the declared slice dimensions')
+
+assert.match(rendererSource, /const layerOffsets = frame\.slices\s*\.map\(slice => finiteNumericValue\(slice\.y\)\)\s*\.filter\(\(sliceY\): sliceY is number => sliceY !== null\)\s*\.map\(sliceY => \(sliceY - centerY\) \/ spacing\)/,
+  'invalid slice heights must be excluded before positioning the visible volume grid helper')
 const renderableFieldMaximum = (slices, key) => {
   let observed = 0
   for (const slice of slices) {
