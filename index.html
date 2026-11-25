@@ -2610,6 +2610,10 @@ function renderField3DImpl(){
     window.__worldField3DCanvasState={ready:false,reason:'shared-field-normalization-unavailable',mode};
     return false;
   }
+  if(fieldIndex<0&&typeof window.scientificFieldCompositeColor!=='function'){
+    window.__worldField3DCanvasState={ready:false,reason:'shared-composite-palette-unavailable',mode};
+    return false;
+  }
   const sampleCount=slices.reduce((total,slice)=>total+(slice.data.samples||[]).filter(Boolean).length,0);
 
   // Preferred path: render the authoritative samples as instanced 3D voxels through WebGL.
