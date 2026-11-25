@@ -2074,16 +2074,22 @@ try {
     energyHalf: window.normalizeScientificFieldValue?.("energy", 175) ?? null,
     entropyFull: window.normalizeScientificFieldValue?.("entropy", 0.15) ?? null,
     missingRemainsInvalid: window.normalizeScientificFieldValue?.("density", null) === null,
+    paletteAvailable: typeof window.scientificFieldPaletteColor === "function",
+    energyPaletteMidpoint: window.scientificFieldPaletteColor?.("energy", 0.5) ?? null,
+    densityPaletteMidpoint: window.scientificFieldPaletteColor?.("density", 0.5) ?? null,
   }));
   if (!sharedDisplayContract.normalizerAvailable ||
       sharedDisplayContract.normalization !== "shared-scientific-reference-ranges" ||
       sharedDisplayContract.energyHalf !== 0.5 ||
       sharedDisplayContract.entropyFull !== 1 ||
-      !sharedDisplayContract.missingRemainsInvalid) {
+      !sharedDisplayContract.missingRemainsInvalid ||
+      !sharedDisplayContract.paletteAvailable ||
+      JSON.stringify(sharedDisplayContract.energyPaletteMidpoint) !== JSON.stringify([140, 117, 157]) ||
+      JSON.stringify(sharedDisplayContract.densityPaletteMidpoint) !== JSON.stringify([62, 146, 150])) {
     throw new Error("2D Multi-Slice is not using the shared scientific display contract: " +
       JSON.stringify(sharedDisplayContract));
   }
-  console.log("[acceptance] 2D/Infinity/Volumetric shared scientific normalization contract PASS: " +
+  console.log("[acceptance] 2D/Infinity/Volumetric shared normalization and palette contract PASS: " +
     JSON.stringify(sharedDisplayContract));
   console.log("[acceptance] hidden renderer pause/resume, Fly Camera control preservation, adaptive DPR diagnostics PASS");
 
