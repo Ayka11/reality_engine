@@ -2628,6 +2628,145 @@ try {
   await page.evaluate(() => window.setLayer?.(0));
   await page.waitForFunction(() => window.__worldField3DCanvasState?.field === "Energy", { timeout: 10000 });
 
+  // Exercise the real WebGL renderer directly with deterministic edge-case
+  // frames. These checks cover runtime behavior that source assertions alone
+  // cannot prove: invalid coordinates, empty frames, stale-mesh clearing,
+  // invalid measurements, category zero, composite normalization and recovery.
+  const volumeEdgeCases = await page.evaluate(() => {
+    const render = window.renderWorldFieldVolume;
+    const diagnostics = window.getWorldFieldVolumeRendererDiagnostics;
+    if (typeof render !== "function" || typeof diagnostics !== "function") {
+      return { error: "Authoritative WebGL volume renderer diagnostics are unavailable" };
+    }
+    const makeSample = (overrides = {}) => ({
+      x: 0, y: 0, z: 0,
+      energy: 0.5, density: 0.25, information: 0.75,
+      entropy: 0.1, temperature: 0.2, biology: 0.3, material: 0,
+      ...overrides,
+    });
+    const makeFrame = (slices, fieldIndex = 0, fieldName = "Energy") => ({
+      slices,
+      view: { center: { x: 0, y: 0, z: 0 }, sliceY: 0, visibleRadius: 4 },
+      fieldIndex,
+      fieldName,
+      property: fieldIndex === 6 ? "material" : "energy",
+      cols: 1,
+      rows: 1,
+      spacing: 1,
+    });
+    const slice = (y, samples, width = 1, height = 1) => ({
+      y, data: { width, height, samples },
+    });
+    const assert = (condition, message, detail) => {
+      if (!condition) throw new Error(message + ": " + JSON.stringify(detail));
+    };
+
+    const valid = render(makeFrame([slice(0, [makeSample()])]));
+    assert(valid.ready && valid.renderedCells === 1 && valid.meshInstances === 1,
+      "valid fixture must render one WebGL voxel", valid);
+
+    const mixedCoordinates = render(makeFrame([
+      slice(0, [makeSample({ x: Number.NaN, energy: 900 })]),
+      slice(Number.NaN, [makeSample({ energy: 800 })]),
+      // The second array entry is deliberately outside the declared 1x1 extent.
+      slice(2, [makeSample({ x: 2, z: -1, energy: 0.25 }), makeSample({ x: 2, z: -1, energy: 999 })]),
+    ]));
+    assert(mixedCoordinates.ready && mixedCoordinates.renderedCells === 1 &&
+      mixedCoordinates.sampleCount === 3 && mixedCoordinates.volume.invalidSamples === 2 &&
+      mixedCoordinates.volume.fieldProfiles.energy.sampleCount === 1 &&
+      mixedCoordinates.volume.fieldProfiles.energy.max === 0.25,
+      "invalid X/slice-Y and out-of-bounds samples must not affect the rendered sample or normalization",
+      mixedCoordinates);
+
+    const allInvalidCoordinates = render(makeFrame([
+      slice(Number.NaN, [makeSample()]),
+      slice(1, [makeSample({ z: Number.POSITIVE_INFINITY })]),
+    ]));
+    const afterInvalid = diagnostics();
+    assert(!allInvalidCoordinates.ready && allInvalidCoordinates.renderedCells === 0 &&
+      allInvalidCoordinates.reason === "no-valid-field-samples" &&
+      afterInvalid.meshInstances === 0,
+      "all-invalid coordinates must clear the previous WebGL mesh instead of leaving stale voxels",
+      { result: allInvalidCoordinates, diagnostics: afterInvalid });
+
+    const empty = render(makeFrame([]));
+    const afterEmpty = diagnostics();
+    assert(!empty.ready && empty.reason === "no-field-samples" &&
+      afterEmpty.meshInstances === 0,
+      "an empty frame must clear all previous volume instances",
+      { result: empty, diagnostics: afterEmpty });
+
+    const invalidMeasurements = render(makeFrame([
+      slice(0, [makeSample({
+        energy: Number.NaN, density: null, information: undefined,
+        entropy: Number.POSITIVE_INFINITY, temperature: "invalid",
+        biology: Number.NaN, material: 99,
+      })]),
+    ]));
+    assert(invalidMeasurements.ready && invalidMeasurements.renderedCells === 1 &&
+      invalidMeasurements.volume.invalidFieldValues === 1 &&
+      invalidMeasurements.volume.fieldValues.min === null &&
+      invalidMeasurements.volume.fieldValues.max === null &&
+      invalidMeasurements.volume.fieldProfiles.energy.sampleCount === 0 &&
+      invalidMeasurements.volume.fieldProfiles.energy.invalidValues === 1 &&
+      invalidMeasurements.volume.fieldProfiles.material.sampleCount === 0 &&
+      invalidMeasurements.volume.fieldProfiles.material.invalidValues === 1,
+      "invalid measurements must render as diagnostic cells without becoming measured zeroes",
+      invalidMeasurements);
+
+    const materialZero = render(makeFrame([
+      slice(0, [makeSample({
+        energy: Number.NaN, density: null, information: null,
+        entropy: null, temperature: null, biology: null, material: 0,
+      })]),
+    ], 6, "Material"));
+    assert(materialZero.ready && materialZero.renderedCells === 1 &&
+      materialZero.volume.fieldProfiles.material.categoryCounts["0"] === 1 &&
+      materialZero.volume.fieldValues.categoryCounts["0"] === 1 &&
+      materialZero.volume.fieldValues.min === null,
+      "Material category zero must remain a valid categorical observation",
+      materialZero);
+
+    const composite = render(makeFrame([
+      slice(0, [makeSample({
+        energy: 0.5, density: null, information: -0.25,
+        entropy: Number.NaN, temperature: 0, biology: null, material: 2,
+      })]),
+    ], -1, "All Fields"));
+    assert(composite.ready && composite.renderedCells === 1 &&
+      Math.abs(composite.volume.fieldValues.mean - (2 / 3)) < 1e-6 &&
+      composite.volume.fieldProfiles.energy.sampleCount === 1 &&
+      composite.volume.fieldProfiles.density.sampleCount === 0 &&
+      composite.volume.fieldProfiles.information.sampleCount === 1 &&
+      composite.volume.fieldProfiles.material.categoryCounts["2"] === 1,
+      "All Fields must average only valid numeric fields and keep Material categorical",
+      composite);
+
+    const recovered = render(makeFrame([slice(0, [makeSample()])]));
+    const recoveredDiagnostics = diagnostics();
+    assert(recovered.ready && recovered.renderedCells === 1 &&
+      recoveredDiagnostics.meshInstances === 1,
+      "a valid frame must recover after invalid and empty frames",
+      { result: recovered, diagnostics: recoveredDiagnostics });
+
+    return {
+      validCells: valid.renderedCells,
+      rejectedCoordinates: allInvalidCoordinates.volume.invalidSamples,
+      emptyReason: empty.reason,
+      invalidMeasurementCount: invalidMeasurements.volume.invalidFieldValues,
+      materialCategoryZero: materialZero.volume.fieldValues.categoryCounts["0"],
+      compositeMean: composite.volume.fieldValues.mean,
+      recoveredCells: recovered.renderedCells,
+    };
+  });
+  if (volumeEdgeCases.error) throw new Error(volumeEdgeCases.error);
+  console.log("[acceptance] WebGL volume invalid/empty/material/composite/recovery scenarios PASS: " +
+    JSON.stringify(volumeEdgeCases));
+  // Restore the authoritative live World Field after deterministic renderer fixtures.
+  await page.evaluate(() => window.renderField3D?.());
+  await page.waitForFunction(() => window.getWorldField3DState?.()?.ready === true &&
+    window.getWorldField3DState?.()?.renderedCells > 0, { timeout: 10000 });
+
   // The Metrics view must read the authoritative Infinity World sampler and
   // expose six numeric fields plus a categorical Material distribution, separately
   // from the legacy finite-grid panel.
