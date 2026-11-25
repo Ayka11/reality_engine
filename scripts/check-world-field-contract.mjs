@@ -98,6 +98,8 @@ for (const [field, range] of Object.entries(SCIENTIFIC_FIELD_DISPLAY_RANGES)) {
 }
 const infinityRendererSource = await readFile(new URL("src/render/InfiniteWorldRenderer.ts", root), "utf8");
 const volumeRendererSource = await readFile(new URL("src/render/WorldFieldVolumeRenderer.ts", root), "utf8");
+const connectorSource = await readFile(new URL("src/connector.ts", root), "utf8");
+const appSource = await readFile(new URL("index.html", root), "utf8");
 assert.ok(infinityRendererSource.includes("normalizeScientificFieldValue"),
   "Infinity terrain must consume shared scientific display normalization");
 assert.ok(volumeRendererSource.includes("normalizeScientificFieldValue"),
@@ -114,8 +116,6 @@ assert.ok(connectorSource.includes("win['scientificFieldCompositeColor'] = scien
   "connector must expose the shared composite palette to inline renderers");
 assert.ok(appSource.includes("window.scientificFieldCompositeColor({"),
   "2D renderer must consume the shared composite palette");
-const connectorSource = await readFile(new URL("src/connector.ts", root), "utf8");
-const appSource = await readFile(new URL("index.html", root), "utf8");
 assert.ok(connectorSource.includes("win['scientificFieldPaletteColor'] = scientificFieldPaletteColor"),
   "connector must expose shared palette colors to inline 2D renderers");
 assert.ok(appSource.includes("window.scientificFieldPaletteColor(field,t)"),
