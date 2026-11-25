@@ -55,8 +55,12 @@ export function bootstrapInfiniteWorld() {
         render: fieldVolumeRenderer.render.bind(fieldVolumeRenderer),
         diagnostics: fieldVolumeRenderer.diagnostics.bind(fieldVolumeRenderer),
         interactionDiagnostics: fieldVolumeRenderer.interactionDiagnostics.bind(fieldVolumeRenderer),
+        setMaterialMode: fieldVolumeRenderer.setMaterialMode.bind(fieldVolumeRenderer),
+        setCameraPreset: fieldVolumeRenderer.setCameraPreset.bind(fieldVolumeRenderer),
       })
       ;(window as any).worldFieldVolumeRenderer = fieldVolumeRendererApi
+      ;(window as any).fieldSetMatMode = (mode: string) => fieldVolumeRenderer.setMaterialMode(mode as 'field' | 'material' | 'height')
+      ;(window as any).fieldSetCameraPreset = (preset: string) => fieldVolumeRenderer.setCameraPreset(preset as 'orbit' | 'top' | 'iso' | 'street' | 'fly')
       ;(window as any).renderWorldFieldVolume = fieldVolumeRendererApi.render
       ;(window as any).getWorldFieldVolumeRendererDiagnostics = fieldVolumeRendererApi.diagnostics
     } catch (error) {
