@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { normalizeScientificFieldValue } from '../infinity/ScientificFieldDisplay'
+import { scientificFieldPaletteHex } from '../infinity/ScientificFieldPalette'
 
 type FieldSample = Record<string, unknown> & {
   x?: number
@@ -114,16 +115,6 @@ export const isMaterialClassCode = (value: unknown): value is number =>
 
 export const materialClassColor = (value: unknown): number =>
   isMaterialClassCode(value) ? MATERIAL_CLASS_COLORS[value] : 0x7f8794
-
-const FIELD_PALETTES: ReadonlyArray<readonly [number, number]> = [
-  [0x183d9b, 0xffad42],
-  [0x082d31, 0x75f4c1],
-  [0x35105e, 0xbdb5ff],
-  [0x270b18, 0xff526d],
-  [0x153d7a, 0xffe16b],
-  [0x0d4c29, 0xa1ff65],
-  [0x4b2818, 0xffc27a],
-]
 
 /**
  * Actual 3D field preview built from samples read from the authoritative WorldField.
@@ -334,7 +325,6 @@ export class WorldFieldVolumeRenderer {
       : -1
     // Display normalization is shared with Infinity terrain. The reference
     // ranges are fixed visualization scales, never mutations to physical data.
-    const palette = FIELD_PALETTES[selectedFieldIndex >= 0 ? selectedFieldIndex : 0]
     let renderedCells = 0
     let activeCells = 0
     let sampleCount = 0
@@ -497,7 +487,7 @@ export class WorldFieldVolumeRenderer {
           } else if (selectedFieldIndex >= 0) {
             if (rawValue === null) this.color.setHex(0x7f8794)
             else if (selectedFieldIndex === 6) this.color.setHex(materialClassColor(selectedRawValue))
-            else this.color.setHex(palette[0]).lerp(this.highColor.setHex(palette[1]), normalized)
+            else this.color.setHex(scientificFieldPaletteHex(\n              fieldKey as Exclude<typeof fieldKey, 'material'>, normalized,\n            ))
           } else {
             let red = 0, green = 0, blue = 0, weight = 0
             for (let field = 0; field < SCIENTIFIC_FIELD_KEYS.length; field++) {
@@ -521,7 +511,7 @@ export class WorldFieldVolumeRenderer {
               // time by magnitude made weak fields disappear and over-amplified
               // dominant fields. Normalize each field first, then average its
               // resulting color equally with the other valid dimensions.
-              this.highColor.setHex(colors[0]).lerp(this.color.setHex(colors[1]), contribution)
+              this.highColor.setHex(scientificFieldPaletteHex(\n                fieldKey as Exclude<typeof fieldKey, 'material'>, contribution,\n              ))
               red += this.highColor.r
               green += this.highColor.g
               blue += this.highColor.b
