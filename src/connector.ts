@@ -51,9 +51,12 @@ import type { ScientificFieldSample } from './infinity/FieldSampler'
 import { CHUNK_FLOATS, GRID_D, GRID_H, GRID_W, NF, chunkKey } from './core/ChunkGrid'
 import { runtimeProvenance } from './infinity/RuntimeProvenance'
 import { worldViewContract } from './infinity/WorldViewContract'
+import { normalizeScientificFieldValue } from './infinity/ScientificFieldDisplay'
 
 // ── Window alias — must be declared before any top-level win[...] usage ──────
 const win = window as unknown as Record<string, unknown>
+// Shared display-only scales are consumed by the inline 2D and CPU fallback renderers.
+win['normalizeScientificFieldValue'] = normalizeScientificFieldValue
 const clearUiSculptHistory = () => {
   const clear = win['clearSculptTransactionHistory']
   if (typeof clear === 'function') (clear as () => void)()
