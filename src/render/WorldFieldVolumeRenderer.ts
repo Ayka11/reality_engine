@@ -150,7 +150,6 @@ export class WorldFieldVolumeRenderer {
   private readonly scale = new THREE.Vector3()
   private readonly quaternion = new THREE.Quaternion()
   private readonly color = new THREE.Color()
-  private readonly highColor = new THREE.Color()
   private volumeDiagnostics: WorldFieldVolumeResult['volume'] = {
     sampleCount: 0,
     renderedCells: 0,
