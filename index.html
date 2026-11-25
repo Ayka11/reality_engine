@@ -1093,7 +1093,7 @@ function _drawMultiSlice(){
 }
 window.setWorldField2DLinked=(enabled)=>{worldField2DLinked=Boolean(enabled);worldField2DCache=null;worldField2DRenderCache=null;drawGrid()}
 window.getWorldField2DLinked=()=>worldField2DLinked
-window.getWorldField2DState=()=>({linked:worldField2DLinked,view:worldField2DCache?.view??null,sampleCount:worldField2DCache?.samples?.length??0,overviewFields:['energy','density','information','entropy','temperature','biology'],overviewLayout:'3x2',normalization:'visible-window-min-max'})
+window.getWorldField2DState=()=>({linked:worldField2DLinked,view:worldField2DCache?.view??null,sampleCount:worldField2DCache?.samples?.length??0,overviewFields:['energy','density','information','entropy','temperature','biology'],overviewLayout:'3x2',normalization:'shared-scientific-reference-ranges'})
 
 function draw2D(){_drawFlat();}
 
@@ -2625,6 +2625,7 @@ function renderField3DImpl(){
         drawCalls:Number(rendered?.drawCalls??0),
         triangles:Number(rendered?.triangles??0),
         volume:rendered?.volume??null,
+        normalization:'shared-scientific-reference-ranges',
         field:fieldName,
         view,
         reason:rendered?.reason
@@ -2722,7 +2723,7 @@ function renderField3DImpl(){
   g.font='10px monospace';g.fillStyle='rgba(180,200,235,.8)';
   g.fillText('samples '+sampleCount+' · active '+activeCells+' · Y '+view.sliceY+' · center '+view.center.x.toFixed(1)+', '+view.center.y.toFixed(1)+', '+view.center.z.toFixed(1),14,h-12);
   window.__worldField3DLayoutRetryCount=0;
-  const diagnosticState={fieldIndex,ready:renderedCells>0,renderedCells,sampleCount,activeCells,slices:slices.length,field:fieldName,view,renderer:'canvas2d-isometric-preview',true3D:false,meshInstances:0,drawCalls:0,triangles:0};
+  const diagnosticState={fieldIndex,ready:renderedCells>0,renderedCells,sampleCount,activeCells,slices:slices.length,field:fieldName,view,normalization:'shared-scientific-reference-ranges',renderer:'canvas2d-isometric-preview',true3D:false,meshInstances:0,drawCalls:0,triangles:0};
   window.__worldField3DCanvasState=diagnosticState;
   return renderedCells>0;
 }
