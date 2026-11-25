@@ -2084,8 +2084,8 @@ try {
       sharedDisplayContract.entropyFull !== 1 ||
       !sharedDisplayContract.missingRemainsInvalid ||
       !sharedDisplayContract.paletteAvailable ||
-      JSON.stringify(sharedDisplayContract.energyPaletteMidpoint) !== JSON.stringify([140, 117, 157]) ||
-      JSON.stringify(sharedDisplayContract.densityPaletteMidpoint) !== JSON.stringify([62, 146, 150])) {
+      JSON.stringify(sharedDisplayContract.energyPaletteMidpoint) !== JSON.stringify([140, 117, 111]) ||
+      JSON.stringify(sharedDisplayContract.densityPaletteMidpoint) !== JSON.stringify([63, 145, 121])) {
     throw new Error("2D Multi-Slice is not using the shared scientific display contract: " +
       JSON.stringify(sharedDisplayContract));
   }
