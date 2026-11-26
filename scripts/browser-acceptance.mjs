@@ -2571,6 +2571,7 @@ try {
         ": " + JSON.stringify(profile));
     }
   }
+  const numericFieldColorSamples = {};
   for (const [index, field] of expectedFieldProfiles.entries()) {
     const buttonId = ["layerE", "layerD", "layerI", "layerS", "layerT", "layerB", "layerM"][index];
     await page.evaluate(({ fieldIndex, id }) => {
@@ -2604,7 +2605,43 @@ try {
       selectedProfiles?.[key]?.invalidValues === 0)) {
       throw new Error("Changing the displayed scientific field changed or lost the shared sample profiles");
     }
+    if (index < 6) {
+      const colorDiagnostics = await page.evaluate(() =>
+        window.worldFieldVolumeRenderer?.interactionDiagnostics?.() ?? null
+      );
+      const colors = colorDiagnostics?.instanceColorSamples;
+      if (!Array.isArray(colors) || colors.length === 0 ||
+          colors.some(color => !Array.isArray(color) || color.length !== 3 ||
+            color.some(channel => !Number.isFinite(channel)))) {
+        throw new Error("Selecting " + expectedRenderedField +
+          " did not submit valid colors to the visible WebGL InstancedMesh: " +
+          JSON.stringify(colorDiagnostics));
+      }
+      numericFieldColorSamples[field] = colors;
+    }
   }
+  const numericPaletteFields = expectedFieldProfiles.slice(0, 6);
+  for (let left = 0; left < numericPaletteFields.length; left++) {
+    for (let right = left + 1; right < numericPaletteFields.length; right++) {
+      const leftField = numericPaletteFields[left];
+      const rightField = numericPaletteFields[right];
+      const leftColors = numericFieldColorSamples[leftField] ?? [];
+      const rightColors = numericFieldColorSamples[rightField] ?? [];
+      const differs = leftColors.some((color, sampleIndex) => {
+        const other = rightColors[sampleIndex];
+        return Array.isArray(other) &&
+          Math.hypot(...color.map((channel, component) => channel - other[component])) > 0.015;
+      });
+      if (!differs) {
+        throw new Error("Numeric scientific fields " + leftField + " and " + rightField +
+          " selected successfully but submitted indistinguishable visible WebGL palette samples: " +
+          JSON.stringify({ leftColors, rightColors }));
+      }
+    }
+  }
+  console.log("[acceptance] six numeric scientific profiles submit distinct live WebGL palette samples PASS: " +
+    JSON.stringify(Object.fromEntries(Object.entries(numericFieldColorSamples).map(([field, colors]) =>
+      [field, colors.slice(0, 2)]))));
   // Material is the seventh authoritative scalar, supported only by the
   // volumetric renderer. It must never alias to Biology in Infinite World.
   // The preceding seven-field loop already selected Material (index 6).
