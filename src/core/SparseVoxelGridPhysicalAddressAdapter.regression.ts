@@ -72,6 +72,43 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
     throw new Error("Physical address adapter resolved a coordinate outside its topology");
   }
 
+  // Dense-window-local coordinates are translated through the window origin,
+  // then resolved using physical topology rather than level-zero chunk math.
+  const coarseWindow = { width: 2, height: 2, depth: 2, origin: { x: 2, y: 4, z: 6 } };
+  const denseOrigin = adapter.resolveDenseWindowCell(0, 0, 0, coarseWindow);
+  const denseFarCorner = adapter.resolveDenseWindowCell(1, 1, 1, coarseWindow);
+  if (!denseOrigin || !denseFarCorner ||
+      denseOrigin.denseIndex !== 0 || denseFarCorner.denseIndex !== 7 ||
+      denseOrigin.baseX !== 2 || denseOrigin.baseY !== 4 || denseOrigin.baseZ !== 6 ||
+      denseFarCorner.baseX !== 3 || denseFarCorner.baseY !== 5 || denseFarCorner.baseZ !== 7 ||
+      denseOrigin.physical.chunk.key !== coarse.key ||
+      denseFarCorner.physical.chunk.key !== coarse.key ||
+      denseOrigin.physical.cellIndex !== denseFarCorner.physical.cellIndex ||
+      !Object.isFrozen(denseOrigin) || !Object.isFrozen(denseOrigin.physical)) {
+    throw new Error("Physical dense-window bridge failed to map coarse-cell aliases through the global origin");
+  }
+  const boundaryWindow = { width: 1, height: 1, depth: 1, origin: { x: 64, y: 0, z: 0 } };
+  const denseBoundary = adapter.resolveDenseWindowCell(0, 0, 0, boundaryWindow);
+  if (!denseBoundary || denseBoundary.physical.chunk.key !== fine.key ||
+      denseBoundary.physical.localX !== 0) {
+    throw new Error("Physical dense-window bridge failed at a mixed-LOD chunk boundary");
+  }
+  if (adapter.resolveDenseWindowCell(0, 0, 0, {
+    width: 1, height: 1, depth: 1, origin: { x: 96, y: 0, z: 0 },
+  }) !== null) {
+    throw new Error("Physical dense-window bridge resolved a sample outside physical topology");
+  }
+  expectRejected("dense-window local coordinates outside dimensions", () =>
+    adapter.resolveDenseWindowCell(2, 0, 0, coarseWindow));
+  expectRejected("fractional dense-window origin", () =>
+    adapter.resolveDenseWindowCell(0, 0, 0, {
+      width: 1, height: 1, depth: 1, origin: { x: 0.5, y: 0, z: 0 },
+    }));
+  expectRejected("unsafe dense-window global coordinate", () =>
+    adapter.resolveDenseWindowCell(0, 0, 0, {
+      width: 1, height: 1, depth: 1, origin: { x: Number.MAX_SAFE_INTEGER, y: 0, z: 0 },
+    }));
+
   // Adapter ownership is detached from the caller's chunk objects.
   coarse.getCell(1, 2, 3).set(F.ENERGY, 100);
   coarse.getBackCell(1, 2, 3).set(F.ENERGY, 101);
@@ -94,5 +131,5 @@ export function runSparseVoxelGridPhysicalAddressAdapterRegression(): void {
   expectRejected("out-of-range back-buffer coordinates", () =>
     adapter.getBackCell(fine.key, 0, -1, 0));
 
-  console.log("SparseVoxelGrid physical address adapter mixed-LOD resolution, boundary, detached ownership and tracked-write regressions: PASS");
+  console.log("SparseVoxelGrid physical address adapter mixed-LOD resolution, dense-window addressing, alias detection, boundary, detached ownership and tracked-write regressions: PASS");
 }
