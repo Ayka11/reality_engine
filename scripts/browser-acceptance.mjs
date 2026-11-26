@@ -4975,6 +4975,26 @@ try {
       greedyPreviewUI.restored.greedyState?.enabled !== false) {
     throw new Error("Greedy preview UI did not restore the previous renderer: " + JSON.stringify(greedyPreviewUI));
   }
+  const materialModeAppliedByUI = greedyPreviewUI.trace.some(entry =>
+    entry.operation === "material-mode" &&
+    entry.mode === "material" &&
+    entry.state?.mode === "material");
+  const greedyEnabledByUI = greedyPreviewUI.trace.some(entry =>
+    entry.operation === "greedy" &&
+    entry.enabled === true &&
+    entry.result?.active === true &&
+    entry.result?.mode === "material" &&
+    entry.result?.quadCount > 0);
+  const greedyDisabledOnRestore = greedyPreviewUI.trace.some(entry =>
+    entry.operation === "greedy" &&
+    entry.enabled === false &&
+    entry.result?.enabled === false);
+  if (!materialModeAppliedByUI || !greedyEnabledByUI || !greedyDisabledOnRestore) {
+    throw new Error("Greedy preview UI did not call the canonical material/greedy controls in order: " +
+      JSON.stringify(greedyPreviewUI));
+  }
+  console.log("[acceptance] Greedy Surface UI activation, visible canvas and restoration PASS: " +
+    JSON.stringify(greedyPreviewUI));
 
   console.log("[acceptance] terrain persistence across full page reload");
   const savedTerrainOnDisk = await page.evaluate((target) => {
