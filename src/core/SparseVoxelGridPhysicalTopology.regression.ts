@@ -173,6 +173,19 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   expectRejected("native Set.prototype.clear bypass on dirty chunks", () =>
     Set.prototype.clear.call(grid.dirtyChunks));
 
+  // Native forEach must not leak the wrapped target as its third callback
+  // argument. Otherwise a callback can call Map/Set prototype mutators on
+  // that raw instance and bypass the public proxy.
+  expectRejected("native Map.prototype.set bypass through chunks.forEach receiver", () =>
+    grid.chunks.forEach((_chunk, _key, collection) =>
+      Map.prototype.set.call(collection, "1,0,0", new Chunk(1, 0, 0))));
+  expectRejected("native Map.prototype.set bypass through chunkOwners.forEach receiver", () =>
+    grid.chunkOwners.forEach((_owner, _key, collection) =>
+      Map.prototype.set.call(collection, "0,0,0", "bypass")));
+  expectRejected("native Set.prototype.add bypass through dirtyChunks.forEach receiver", () =>
+    grid.dirtyChunks.forEach((_key, _sameKey, collection) =>
+      Set.prototype.add.call(collection, "1,0,0")));
+
   if (!(grid.chunks instanceof Map) || !(grid.chunkOwners instanceof Map) ||
       !(grid.dirtyChunks instanceof Set) ||
       grid.chunks.size !== 1 || !grid.chunks.has("0,0,0") ||
