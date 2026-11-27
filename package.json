@@ -17,6 +17,7 @@
     "test:world-field": "node scripts/check-world-field-contract.mjs && node scripts/check-world-field-view-window.mjs && node scripts/check-world-field-volume-coordinates.mjs && npx --yes tsx scripts/check-material-field-palette.ts",
     "test:water-surface": "npx --yes tsx scripts/check-water-surface-mesh.ts",
     "test:infinity-scale-core": "node scripts/check-infinity-scale-core.mjs",
+    "test:sparse-voxel-grid-physical-topology": "npx --yes tsx scripts/check-sparse-voxel-grid-physical-topology.ts",
     "test:sparse-voxel-grid-recovery": "npx --yes tsx scripts/check-sparse-voxel-grid-recovery.ts",
     "test:causal-graph-recovery": "npx --yes tsx scripts/check-causal-graph-recovery.ts",
     "test:recorder-recovery": "npx --yes tsx scripts/check-recorder-recovery.ts",
