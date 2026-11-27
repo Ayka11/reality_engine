@@ -43,15 +43,21 @@ export interface DenseWindowPhysicalReduction {
 export function stageDenseWindowPhysicalReductions(
   denseValues: ArrayLike<number>,
   coverage: DenseWindowCoverageReport,
+  currentCoverageRevision: number,
 ): readonly DenseWindowPhysicalReduction[] {
   if (!coverage || typeof coverage !== "object" ||
       ![coverage.width, coverage.height, coverage.depth].every(Number.isSafeInteger) ||
       coverage.width <= 0 || coverage.height <= 0 || coverage.depth <= 0 ||
       !Number.isSafeInteger(coverage.revision) || coverage.revision < 0 ||
+      !Number.isSafeInteger(currentCoverageRevision) || currentCoverageRevision < 0 ||
       !Array.isArray(coverage.cells) ||
       typeof coverage.complete !== "boolean" ||
       !Number.isSafeInteger(coverage.incompleteCellCount) || coverage.incompleteCellCount < 0) {
     throw new RangeError("Dense-window physical reduction requires a valid coverage report");
+  }
+
+  if (coverage.revision !== currentCoverageRevision) {
+    throw new Error("Dense-window physical reduction rejected: coverage revision is stale");
   }
 
   const sampleCount = coverage.width * coverage.height * coverage.depth;
