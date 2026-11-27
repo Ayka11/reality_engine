@@ -1,6 +1,7 @@
 import { CELL_FIELDS } from "./CellState";
 import { Chunk, CHUNK_SIZE } from "./Chunk";
 import { SparseVoxelGrid } from "./SparseVoxelGrid";
+import { SparseVoxelGridPhysicalChunk } from "./SparseVoxelGridPhysicalChunk";
 import {
   compileSparseVoxelGridPhysicalTopology,
   formatSparseVoxelGridPhysicalChunkKey,
@@ -166,6 +167,41 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
       grid.resolvePhysicalCellAddress(-1, 0, 0) !== null) {
     throw new Error("SparseVoxelGrid physical topology cache remained stale after chunk deletion");
   }
+
+  // The public legacy map is still structurally mutable for compatibility,
+  // but it must reject a physical LOD chunk even when its numeric coordinates
+  // could be disguised as a level-zero key. This is a critical fail-closed
+  // boundary until the authoritative map is migrated as one transaction.
+  const revisionBeforeRejectedInsert = grid.mutationRevision;
+  const topologyBeforeRejectedInsert = grid.physicalTopology;
+  const coarseChunk = new SparseVoxelGridPhysicalChunk("1:0,0,0");
+  expectRejected("a coarse physical chunk smuggled into the level-zero map", () =>
+    grid.chunks.set("0,0,0", coarseChunk));
+  if (grid.chunks.get("0,0,0") !== originChunk ||
+      grid.mutationRevision !== revisionBeforeRejectedInsert ||
+      grid.physicalTopology !== topologyBeforeRejectedInsert) {
+    throw new Error("Rejected coarse-chunk insertion partially mutated the authoritative level-zero map");
+  }
+
+  const malformedPhysicalIdentity = new Chunk(2, 0, 0) as Chunk & {
+    key?: string; level?: number; scale?: number;
+  };
+  malformedPhysicalIdentity.key = "2:2,0,0";
+  malformedPhysicalIdentity.level = 1;
+  malformedPhysicalIdentity.scale = 2;
+  expectRejected("a physical identity with an inconsistent legacy map key", () =>
+    grid.chunks.set("2,0,0", malformedPhysicalIdentity));
+  if (grid.chunks.has("2,0,0")) {
+    throw new Error("Rejected malformed physical identity appeared in the authoritative map");
+  }
+
+  const levelZeroChunk = new Chunk(2, 0, 0);
+  grid.chunks.set("2,0,0", levelZeroChunk);
+  if (grid.chunks.get("2,0,0") !== levelZeroChunk ||
+      grid.resolvePhysicalCellAddress(64, 0, 0)?.chunk.key !== "2,0,0") {
+    throw new Error("Physical map guard broke compatible level-zero chunk insertion");
+  }
+  grid.chunks.delete("2,0,0");
 
   console.log("SparseVoxelGrid mixed-LOD physical topology preflight, grid index lifecycle and coordinate lookup: PASS");
 }
