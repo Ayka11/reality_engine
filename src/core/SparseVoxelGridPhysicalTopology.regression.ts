@@ -207,6 +207,29 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
     throw new Error("Native Map/Set prototype bypass changed tracked collection state or revision");
   }
 
+  // Chainable tracked mutators must return the public proxy, not their
+  // bound raw target. Otherwise fluent Map.set / Set.add calls leak it.
+  const existingChunk = grid.chunks.get("0,0,0");
+  if (!existingChunk || grid.chunks.set("0,0,0", existingChunk) !== grid.chunks) {
+    throw new Error("Tracked chunks.set did not return the public proxy");
+  }
+  expectRejected("native Map.prototype.set bypass through chunks.set result", () =>
+    Map.prototype.set.call(grid.chunks.set("0,0,0", existingChunk), "1,0,0", new Chunk(1, 0, 0)));
+  const chainedOwners = grid.chunkOwners.set("0,0,0", "owner");
+  if (chainedOwners !== grid.chunkOwners) {
+    throw new Error("Tracked chunkOwners.set did not return the public proxy");
+  }
+  expectRejected("native Map.prototype.set bypass through chunkOwners.set result", () =>
+    Map.prototype.set.call(chainedOwners, "1,0,0", "bypass"));
+  grid.chunkOwners.clear();
+  const chainedDirty = grid.dirtyChunks.add("0,0,0");
+  if (chainedDirty !== grid.dirtyChunks) {
+    throw new Error("Tracked dirtyChunks.add did not return the public proxy");
+  }
+  expectRejected("native Set.prototype.add bypass through dirtyChunks.add result", () =>
+    Set.prototype.add.call(chainedDirty, "1,0,0"));
+  grid.dirtyChunks.clear();
+
   // Seed each collection so forEach actually invokes its callback. Verify that
   // the third callback argument is the public proxy, not the raw target.
   grid.chunkOwners.set("0,0,0", "owner");
