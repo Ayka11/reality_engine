@@ -1404,6 +1404,20 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
     },
     // Changing the target prototype would replace the tracked subclass
     // methods with native Map/Set mutators and reopen the validation bypass.
+    set(target, property, value) {
+      // Mutator methods must remain inherited from the tracked subclass.
+      // Shadowing one would replace validation and mutation-revision tracking.
+      if (property === "add" || property === "set" ||
+          property === "delete" || property === "clear") return false;
+      return Reflect.set(target, property, value, target);
+    },
+    defineProperty(target, property, descriptor) {
+      // Keep Object.defineProperty from installing an own mutator that could
+      // shadow the validated prototype implementation.
+      if (property === "add" || property === "set" ||
+          property === "delete" || property === "clear") return false;
+      return Reflect.defineProperty(target, property, descriptor);
+    },
     setPrototypeOf() {
       return false;
     },
