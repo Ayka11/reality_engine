@@ -133,6 +133,48 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   // authoritative map. Repeated reads reuse the snapshot; cell writes do not
   // invalidate topology, while structural map changes do.
   const grid = new SparseVoxelGrid(1, 1, 1);
+  const guardedTopology = grid.physicalTopology;
+  const guardedRevision = grid.mutationRevision;
+
+  // A native prototype call normally bypasses an overridden subclass method.
+  // The public collection proxies must reject these calls before changing data.
+  expectRejected("native Map.prototype.set bypass on chunks", () =>
+    Map.prototype.set.call(grid.chunks, "1,0,0", new Chunk(1, 0, 0)));
+  expectRejected("native Map.prototype.delete bypass on chunks", () =>
+    Map.prototype.delete.call(grid.chunks, "0,0,0"));
+  expectRejected("native Map.prototype.clear bypass on chunks", () =>
+    Map.prototype.clear.call(grid.chunks));
+  expectRejected("native Map.prototype.set bypass on chunk owners", () =>
+    Map.prototype.set.call(grid.chunkOwners, "0,0,0", "owner"));
+  expectRejected("native Map.prototype.clear bypass on chunk owners", () =>
+    Map.prototype.clear.call(grid.chunkOwners));
+  expectRejected("native Set.prototype.add bypass on dirty chunks", () =>
+    Set.prototype.add.call(grid.dirtyChunks, "0,0,0"));
+  expectRejected("native Set.prototype.delete bypass on dirty chunks", () =>
+    Set.prototype.delete.call(grid.dirtyChunks, "0,0,0"));
+  expectRejected("native Set.prototype.clear bypass on dirty chunks", () =>
+    Set.prototype.clear.call(grid.dirtyChunks));
+
+  if (!(grid.chunks instanceof Map) || !(grid.chunkOwners instanceof Map) ||
+      !(grid.dirtyChunks instanceof Set) ||
+      grid.chunks.size !== 1 || !grid.chunks.has("0,0,0") ||
+      grid.chunkOwners.size !== 0 || grid.dirtyChunks.size !== 0 ||
+      grid.mutationRevision !== guardedRevision || grid.physicalTopology !== guardedTopology) {
+    throw new Error("Native Map/Set prototype bypass changed tracked collection state or revision");
+  }
+
+  // The guarded proxies must retain normal collection behavior and tracking.
+  const normalOwnerRevision = grid.mutationRevision;
+  grid.chunkOwners.set("0,0,0", "owner");
+  grid.dirtyChunks.add("0,0,0");
+  if (grid.chunkOwners.get("0,0,0") !== "owner" ||
+      !grid.dirtyChunks.has("0,0,0") ||
+      grid.mutationRevision <= normalOwnerRevision) {
+    throw new Error("Guarded tracked collections broke ordinary Map/Set mutation behavior");
+  }
+  grid.chunkOwners.clear();
+  grid.dirtyChunks.clear();
+
   const initialTopology = grid.physicalTopology;
   if (initialTopology !== grid.physicalTopology ||
       initialTopology.chunks.length !== grid.chunks.size ||
