@@ -1355,6 +1355,11 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
       boundMethods.set(property, bound);
       return bound;
     },
+    // Changing the target prototype would replace the tracked subclass
+    // methods with native Map/Set mutators and reopen the validation bypass.
+    setPrototypeOf() {
+      return false;
+    },
   });
 }
 
