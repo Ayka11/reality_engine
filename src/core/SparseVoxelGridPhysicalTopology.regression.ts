@@ -343,6 +343,10 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   const mapForEachDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "forEach");
   const mapSizeDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "size");
   const mapIteratorDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, Symbol.iterator);
+  if (!mapGetDescriptor || !mapEntriesDescriptor || !mapForEachDescriptor ||
+      !mapSizeDescriptor || !mapIteratorDescriptor) {
+    throw new Error("Native Map intrinsic descriptors are unavailable for the tampering regression");
+  }
   try {
     Object.defineProperty(Map.prototype, "get", {
       ...mapGetDescriptor,
@@ -388,6 +392,9 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   const setForEachDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "forEach");
   const setSizeDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "size");
   const setIteratorDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, Symbol.iterator);
+  if (!setValuesDescriptor || !setForEachDescriptor || !setSizeDescriptor || !setIteratorDescriptor) {
+    throw new Error("Native Set intrinsic descriptors are unavailable for the tampering regression");
+  }
   try {
     Object.defineProperty(Set.prototype, "values", {
       ...setValuesDescriptor,
