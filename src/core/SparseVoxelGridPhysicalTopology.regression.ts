@@ -339,17 +339,38 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   if (!nativeChunk) throw new Error("Native intrinsic regression requires a seeded chunk");
 
   const mapGetDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "get");
+  const mapHasDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "has");
+  const mapSetDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "set");
+  const mapDeleteDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "delete");
+  const mapClearDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "clear");
   const mapEntriesDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "entries");
   const mapForEachDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "forEach");
   const mapSizeDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "size");
   const mapIteratorDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, Symbol.iterator);
-  if (!mapGetDescriptor || !mapEntriesDescriptor || !mapForEachDescriptor ||
-      !mapSizeDescriptor || !mapIteratorDescriptor) {
+  if (!mapGetDescriptor || !mapHasDescriptor || !mapSetDescriptor ||
+      !mapDeleteDescriptor || !mapClearDescriptor || !mapEntriesDescriptor ||
+      !mapForEachDescriptor || !mapSizeDescriptor || !mapIteratorDescriptor) {
     throw new Error("Native Map intrinsic descriptors are unavailable for the tampering regression");
   }
   try {
     Object.defineProperty(Map.prototype, "get", {
       ...mapGetDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "has", {
+      ...mapHasDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "set", {
+      ...mapSetDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "delete", {
+      ...mapDeleteDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Map.prototype, "clear", {
+      ...mapClearDescriptor,
       value: function (this: unknown) { return this; },
     });
     Object.defineProperty(Map.prototype, "entries", {
@@ -379,8 +400,25 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
     if (mapForEachResult !== undefined || mapForEachCount !== grid.chunks.size) {
       throw new Error("Tracked Map Proxy exposed its target through a replaced forEach intrinsic");
     }
+    const revisionBeforeMapWrites = grid.mutationRevision;
+    const prototypeProbeChunk = new Chunk(99, 0, 0);
+    if (grid.chunks.set("99,0,0", prototypeProbeChunk) !== grid.chunks ||
+        grid.chunks.get("99,0,0") !== prototypeProbeChunk ||
+        !grid.chunks.delete("99,0,0") ||
+        grid.mutationRevision <= revisionBeforeMapWrites) {
+      throw new Error("Tracked Map mutators depended on replaced native Map prototype methods");
+    }
+    grid.chunkOwners.set("0,0,0", "native-prototype-test");
+    grid.chunkOwners.clear();
+    if (grid.chunkOwners.size !== 0) {
+      throw new Error("Tracked owner-map clear depended on replaced native Map prototype methods");
+    }
   } finally {
     if (mapGetDescriptor) Object.defineProperty(Map.prototype, "get", mapGetDescriptor);
+    if (mapHasDescriptor) Object.defineProperty(Map.prototype, "has", mapHasDescriptor);
+    if (mapSetDescriptor) Object.defineProperty(Map.prototype, "set", mapSetDescriptor);
+    if (mapDeleteDescriptor) Object.defineProperty(Map.prototype, "delete", mapDeleteDescriptor);
+    if (mapClearDescriptor) Object.defineProperty(Map.prototype, "clear", mapClearDescriptor);
     if (mapEntriesDescriptor) Object.defineProperty(Map.prototype, "entries", mapEntriesDescriptor);
     if (mapForEachDescriptor) Object.defineProperty(Map.prototype, "forEach", mapForEachDescriptor);
     if (mapSizeDescriptor) Object.defineProperty(Map.prototype, "size", mapSizeDescriptor);
@@ -388,14 +426,36 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
   }
 
   grid.dirtyChunks.add("0,0,0");
+  const setHasDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "has");
+  const setAddDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "add");
+  const setDeleteDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "delete");
+  const setClearDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "clear");
   const setValuesDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "values");
   const setForEachDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "forEach");
   const setSizeDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, "size");
   const setIteratorDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, Symbol.iterator);
-  if (!setValuesDescriptor || !setForEachDescriptor || !setSizeDescriptor || !setIteratorDescriptor) {
+  if (!setHasDescriptor || !setAddDescriptor || !setDeleteDescriptor ||
+      !setClearDescriptor || !setValuesDescriptor || !setForEachDescriptor ||
+      !setSizeDescriptor || !setIteratorDescriptor) {
     throw new Error("Native Set intrinsic descriptors are unavailable for the tampering regression");
   }
   try {
+    Object.defineProperty(Set.prototype, "has", {
+      ...setHasDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, "add", {
+      ...setAddDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, "delete", {
+      ...setDeleteDescriptor,
+      value: function (this: unknown) { return this; },
+    });
+    Object.defineProperty(Set.prototype, "clear", {
+      ...setClearDescriptor,
+      value: function (this: unknown) { return this; },
+    });
     Object.defineProperty(Set.prototype, "values", {
       ...setValuesDescriptor,
       value: function (this: unknown) { return this; },
@@ -422,7 +482,20 @@ export function runSparseVoxelGridPhysicalTopologyRegression(): void {
     if (setForEachResult !== undefined || setForEachCount !== grid.dirtyChunks.size) {
       throw new Error("Tracked Set Proxy exposed its target through a replaced forEach intrinsic");
     }
+    if (!grid.dirtyChunks.has("0,0,0") ||
+        !grid.dirtyChunks.delete("0,0,0") ||
+        !grid.dirtyChunks.add("0,0,0").has("0,0,0")) {
+      throw new Error("Tracked Set mutators depended on replaced native Set prototype methods");
+    }
+    grid.dirtyChunks.clear();
+    if (grid.dirtyChunks.size !== 0) {
+      throw new Error("Tracked Set clear depended on replaced native Set prototype methods");
+    }
   } finally {
+    if (setHasDescriptor) Object.defineProperty(Set.prototype, "has", setHasDescriptor);
+    if (setAddDescriptor) Object.defineProperty(Set.prototype, "add", setAddDescriptor);
+    if (setDeleteDescriptor) Object.defineProperty(Set.prototype, "delete", setDeleteDescriptor);
+    if (setClearDescriptor) Object.defineProperty(Set.prototype, "clear", setClearDescriptor);
     if (setValuesDescriptor) Object.defineProperty(Set.prototype, "values", setValuesDescriptor);
     if (setForEachDescriptor) Object.defineProperty(Set.prototype, "forEach", setForEachDescriptor);
     if (setSizeDescriptor) Object.defineProperty(Set.prototype, "size", setSizeDescriptor);
