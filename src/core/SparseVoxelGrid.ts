@@ -1607,3 +1607,13 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
     this.#onMutation();
   }
 }
+
+/*
+ * The collection instances are intentionally exposed through a Proxy, but
+ * Object.getPrototypeOf(proxy) still returns the shared subclass prototype.
+ * Freeze these prototypes so callers cannot replace tracked mutators for every
+ * live collection through that shared object.
+ */
+Object.freeze(MutationTrackedSet.prototype);
+Object.freeze(MutationTrackedMap.prototype);
+Object.freeze(MutationTrackedChunkMap.prototype);
