@@ -1354,6 +1354,18 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
         boundMethods.set(property, guardedValueOf);
         return guardedValueOf;
       }
+      // Tracked mutators return their bound receiver (the raw target).
+      // Wrap chainable Map.set / Set.add so fluent calls keep the public proxy.
+      if (property === "set" || property === "add") {
+        const cached = boundMethods.get(property);
+        if (cached) return cached;
+        const guardedMutator = (...args: unknown[]) => {
+          const result = Reflect.apply(value, target, args);
+          return result === target ? proxy : result;
+        };
+        boundMethods.set(property, guardedMutator);
+        return guardedMutator;
+      }
       // Map/Set forEach passes its receiver as the callback's third argument.
       // The method must execute against the real target to satisfy native
       // collection internal-slot checks, but must never expose that target to
@@ -1404,7 +1416,7 @@ class MutationTrackedSet<T> extends Set<T> {
   constructor(onMutation: () => void, validateValue?: (value: T) => void) {
     super(); this.#onMutation = onMutation; this.#validateValue = validateValue;
     Object.defineProperties(this, {
-      add: { value: this.add.bind(this), writable: false, configurable: false },
+      add: { value: this.add.bind(this), writable: false, configurable: true },
       delete: { value: this.delete.bind(this), writable: false, configurable: false },
       clear: { value: this.clear.bind(this), writable: false, configurable: false },
     });
@@ -1437,7 +1449,7 @@ class MutationTrackedMap<K, V> extends Map<K, V> {
   constructor(onMutation: () => void, validateEntry?: (key: K, value: V) => void) {
     super(); this.#onMutation = onMutation; this.#validateEntry = validateEntry;
     Object.defineProperties(this, {
-      set: { value: this.set.bind(this), writable: false, configurable: false },
+      set: { value: this.set.bind(this), writable: false, configurable: true },
       delete: { value: this.delete.bind(this), writable: false, configurable: false },
       clear: { value: this.clear.bind(this), writable: false, configurable: false },
     });
@@ -1474,7 +1486,7 @@ class MutationTrackedChunkMap extends Map<string, Chunk> {
     this.#onMutation = onMutation;
     this.#onChunkContentMutation = onChunkContentMutation;
     Object.defineProperties(this, {
-      set: { value: this.set.bind(this), writable: false, configurable: false },
+      set: { value: this.set.bind(this), writable: false, configurable: true },
       delete: { value: this.delete.bind(this), writable: false, configurable: false },
       clear: { value: this.clear.bind(this), writable: false, configurable: false },
     });
