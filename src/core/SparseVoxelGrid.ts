@@ -1354,6 +1354,25 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
         boundMethods.set(property, guardedValueOf);
         return guardedValueOf;
       }
+      // Legacy Object.prototype definition helpers must operate through the
+      // public Proxy. Binding them to the raw target would bypass defineProperty.
+      if (property === "__defineGetter__" || property === "__defineSetter__") {
+        const cached = boundMethods.get(property);
+        if (cached) return cached;
+        const guardedLegacyDefine = (key: PropertyKey, callback: unknown): void => {
+          if (typeof callback !== "function") {
+            throw new TypeError("Legacy collection property definition requires a function");
+          }
+          const descriptor = property === "__defineGetter__"
+            ? { get: callback as () => unknown, configurable: true, enumerable: true }
+            : { set: callback as (value: unknown) => void, configurable: true, enumerable: true };
+          if (!Reflect.defineProperty(proxy, key, descriptor)) {
+            throw new TypeError("Tracked collection property definition was rejected");
+          }
+        };
+        boundMethods.set(property, guardedLegacyDefine);
+        return guardedLegacyDefine;
+      }
       // Tracked mutators return their bound receiver (the raw target).
       // Wrap chainable Map.set / Set.add so fluent calls keep the public proxy.
       if (property === "set" || property === "add") {
@@ -1407,7 +1426,7 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
     set(target, property, value) {
       // Mutator methods must remain inherited from the tracked subclass.
       // Shadowing one would replace validation and mutation-revision tracking.
-      if (property === "add" || property === "set" ||
+      if (property === "__proto__" || property === "add" || property === "set" ||
           property === "delete" || property === "clear") return false;
       return Reflect.set(target, property, value, target);
     },
