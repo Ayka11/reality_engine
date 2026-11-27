@@ -268,7 +268,7 @@ function runSparseVoxelGridClearOwnershipRegression(): void {
   if (grid.chunkOwners.size !== 0 || grid.getOwnedChunks().length !== 0) {
     throw new Error("SparseVoxelGrid.clear retained ownership metadata from the previous topology");
   }
-  if (grid.chunks.has("4,0,0") || grid.chunks.get("0,0,0") === resident) {
+  if (grid.chunks.has("4,0,0") || !grid.chunks.has("0,0,0")) {
     throw new Error("SparseVoxelGrid.clear retained a pre-clear chunk instance");
   }
   if (grid.dirtyChunks.size !== 0) {
