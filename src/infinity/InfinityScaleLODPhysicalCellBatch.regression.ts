@@ -121,5 +121,28 @@ export function runInfinityScaleLODPhysicalCellBatchRegression(): void {
     throw new Error("Staged dense-window reduction was not atomically published to the physical LOD cell");
   }
 
+  // SparseVoxelGrid uses the legacy unprefixed key for LOD0. The bridge
+  // must normalize it to InfinityScaleLODState's explicit level-prefixed key.
+  const fineState = new InfinityScaleLODState(2);
+  fineState.ensureChunk("0:0,0,0", 0);
+  const fineDense = new Float32Array(8 * CELL_FIELDS);
+  fineDense[5 * CELL_FIELDS + F.ENERGY] = 123;
+  const fineCoverage = {
+    width: 2, height: 2, depth: 2, revision: 6,
+    complete: true, incompleteCellCount: 0,
+    cells: [{
+      chunkKey: "0,0,0", cellIndex: 5, level: 0,
+      expectedBaseSamples: 1, observedBaseSamples: 1,
+      denseIndices: [5], complete: true,
+    }],
+  };
+  const fineStaged = stageDenseWindowPhysicalReductions(fineDense, fineCoverage, 6);
+  const fineRevision = fineState.getRevision();
+  commitDenseWindowPhysicalReductions(fineState, fineRevision, fineStaged);
+  const fineChunk = fineState.cloneChunk("0:0,0,0");
+  if (!fineChunk || fineChunk.cells[5 * CELL_FIELDS + F.ENERGY] !== 123) {
+    throw new Error("Level-zero physical key was not normalized and committed to hierarchical state");
+  }
+
   console.log("Infinity Scale physical cell batch atomic preflight, complete-vector publication, revision ownership, duplicate target and rollback-safe rejection regressions: PASS");
 }
