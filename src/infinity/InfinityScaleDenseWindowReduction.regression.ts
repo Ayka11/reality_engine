@@ -33,7 +33,7 @@ export function runInfinityScaleDenseWindowReductionRegression(): void {
       denseIndices: [7, 6, 5, 4, 3, 2, 1, 0], complete: true,
     }],
   };
-  const staged = stageDenseWindowPhysicalReductions(values, completeCoverage);
+  const staged = stageDenseWindowPhysicalReductions(values, completeCoverage, completeCoverage.revision);
   if (staged.length !== 1 || staged[0].chunkKey !== "1:0,0,0" ||
       staged[0].cellIndex !== 7 || staged[0].level !== 1 ||
       staged[0].values[F.ENERGY] !== 36 ||
@@ -55,21 +55,25 @@ export function runInfinityScaleDenseWindowReductionRegression(): void {
       expectedBaseSamples: 1, observedBaseSamples: 1,
       denseIndices: [3], complete: true,
     }],
-  });
+  }, 18);
   if (levelZero.length !== 1 || levelZero[0].values[F.ENERGY] !== 4 ||
       levelZero[0].values[F.DENSITY] !== 13) {
     throw new Error("Coverage-gated dense-window reduction failed exact level-zero copy");
   }
 
+  rejected("stale physical coverage revision", () =>
+    stageDenseWindowPhysicalReductions(values, completeCoverage, completeCoverage.revision + 1),
+  "coverage revision is stale");
+
   rejected("partial coarse-cell coverage", () => stageDenseWindowPhysicalReductions(values, {
     ...completeCoverage, complete: false, incompleteCellCount: 1,
     cells: [{ ...completeCoverage.cells[0], observedBaseSamples: 1, denseIndices: [0], complete: false }],
-  }), "incomplete physical-cell coverage");
+  }), completeCoverage.revision, "incomplete physical-cell coverage");
 
   rejected("incorrect expected sample count", () => stageDenseWindowPhysicalReductions(values, {
     ...completeCoverage,
     cells: [{ ...completeCoverage.cells[0], expectedBaseSamples: 7 }],
-  }), "does not match LOD geometry");
+  }), completeCoverage.revision, "does not match LOD geometry");
 
   rejected("duplicate dense sample ownership", () => stageDenseWindowPhysicalReductions(values, {
     ...completeCoverage,
@@ -77,7 +81,7 @@ export function runInfinityScaleDenseWindowReductionRegression(): void {
       completeCoverage.cells[0],
       { ...completeCoverage.cells[0], chunkKey: "1:1,0,0", cellIndex: 0 },
     ],
-  }), "duplicate physical-cell identity");
+  }), completeCoverage.revision, "duplicate physical-cell identity");
 
   rejected("same dense sample assigned to distinct physical cells", () => stageDenseWindowPhysicalReductions(values, {
     ...completeCoverage,
@@ -89,21 +93,21 @@ export function runInfinityScaleDenseWindowReductionRegression(): void {
         denseIndices: [0, 1, 2, 3, 4, 5, 6, 7], complete: true,
       },
     ],
-  }), "multiply-owned dense sample");
+  }), completeCoverage.revision, "multiply-owned dense sample");
 
   const mixedIdentity = new Float32Array(values);
   mixedIdentity[F.ENTITY_ID] = 41;
   mixedIdentity[7 * CELL_FIELDS + F.ENTITY_ID] = 99;
-  rejected("mixed entity identities", () => stageDenseWindowPhysicalReductions(mixedIdentity, completeCoverage),
+  rejected("mixed entity identities", () => stageDenseWindowPhysicalReductions(mixedIdentity, completeCoverage, completeCoverage.revision),
     "mixed identity/occupancy");
 
   const invalidNumeric = new Float32Array(values);
   invalidNumeric[F.ENERGY] = Number.NaN;
-  rejected("non-finite dense field", () => stageDenseWindowPhysicalReductions(invalidNumeric, completeCoverage),
+  rejected("non-finite dense field", () => stageDenseWindowPhysicalReductions(invalidNumeric, completeCoverage, completeCoverage.revision),
     "finite and Float32-representable");
 
   rejected("dense vector dimension mismatch", () => stageDenseWindowPhysicalReductions(
-    new Float32Array(7 * CELL_FIELDS), completeCoverage,
+    new Float32Array(7 * CELL_FIELDS), completeCoverage, completeCoverage.revision,
   ), "dimensions do not match");
 
   console.log("Infinity Scale coverage-gated dense-window physical reduction staging, full/partial coverage, exact copy, identity validation, and detached result regressions: PASS");
