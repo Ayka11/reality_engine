@@ -38,6 +38,27 @@ const NATIVE_SET_FOR_EACH = Set.prototype.forEach as Function;
 const NATIVE_SET_ITERATOR = Set.prototype[Symbol.iterator] as Function;
 const NATIVE_SET_SIZE_GETTER = Object.getOwnPropertyDescriptor(Set.prototype, "size")?.get as Function;
 
+const NATIVE_OBJECT_TO_STRING = Object.prototype.toString as Function;
+const NATIVE_OBJECT_TO_LOCALE_STRING = Object.prototype.toLocaleString as Function;
+const NATIVE_OBJECT_HAS_OWN_PROPERTY = Object.prototype.hasOwnProperty as Function;
+const NATIVE_OBJECT_IS_PROTOTYPE_OF = Object.prototype.isPrototypeOf as Function;
+const NATIVE_OBJECT_PROPERTY_IS_ENUMERABLE = Object.prototype.propertyIsEnumerable as Function;
+const NATIVE_OBJECT_LOOKUP_GETTER = Object.getOwnPropertyDescriptor(Object.prototype, "__lookupGetter__")?.value as Function;
+const NATIVE_OBJECT_LOOKUP_SETTER = Object.getOwnPropertyDescriptor(Object.prototype, "__lookupSetter__")?.value as Function;
+
+function getNativeObjectMethod(property: PropertyKey): Function | undefined {
+  switch (property) {
+    case "toString": return NATIVE_OBJECT_TO_STRING;
+    case "toLocaleString": return NATIVE_OBJECT_TO_LOCALE_STRING;
+    case "hasOwnProperty": return NATIVE_OBJECT_HAS_OWN_PROPERTY;
+    case "isPrototypeOf": return NATIVE_OBJECT_IS_PROTOTYPE_OF;
+    case "propertyIsEnumerable": return NATIVE_OBJECT_PROPERTY_IS_ENUMERABLE;
+    case "__lookupGetter__": return NATIVE_OBJECT_LOOKUP_GETTER;
+    case "__lookupSetter__": return NATIVE_OBJECT_LOOKUP_SETTER;
+    default: return undefined;
+  }
+}
+
 function getNativeCollectionMethod(isMap: boolean, property: PropertyKey): Function | undefined {
   if (isMap) {
     switch (property) {
@@ -1406,6 +1427,17 @@ function guardNativeCollection<T extends Map<unknown, unknown> | Set<unknown>>(c
       if (property === "size") {
         const getter = isMap ? NATIVE_MAP_SIZE_GETTER : NATIVE_SET_SIZE_GETTER;
         return Reflect.apply(getter, target, []);
+      }
+
+      // Keep inherited Object.prototype helpers on the public Proxy too.
+      // Binding a monkey-patched helper to target could leak the raw Map/Set.
+      const nativeObjectMethod = getNativeObjectMethod(property);
+      if (nativeObjectMethod) {
+        const cached = boundMethods[property];
+        if (cached) return cached;
+        const bound = nativeObjectMethod.bind(proxy) as Function;
+        boundMethods[property] = bound;
+        return bound;
       }
 
       if (property === "valueOf") {
